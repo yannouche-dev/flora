@@ -2,7 +2,7 @@
 // Minimal promise wrapper around IndexedDB. Usable from the window and from workers.
 
 import { config } from '../config.js';
-import { normalizePlace } from './place-model.js';
+import { normalizeCollection } from './place-model.js';
 
 /**
  * Stores:
@@ -11,6 +11,7 @@ import { normalizePlace } from './place-model.js';
  *  - meta:         key/value (dataset version…)
  *  - spots:        harvest places, stored as GeoJSON Features (keyPath id), added in version 2.
  *                  Version 3: a place holds several plants; `by_plant` indexes properties.plantIds.
+ *                  Version 4: collections — `properties.kind` (favorites | list | place); lists have no geometry.
  * @param {IDBDatabase} db @param {IDBTransaction} tx @param {number} oldVersion
  */
 function upgrade(db, tx, oldVersion) {
@@ -30,15 +31,18 @@ function upgrade(db, tx, oldVersion) {
     const spots = db.createObjectStore('spots', { keyPath: 'id' });
     spots.createIndex('by_plant', 'properties.plantIds', { multiEntry: true });
     spots.createIndex('by_updated', 'properties.updatedAt');
-  } else if (oldVersion < 3) {
-    // One plant per spot → places with a list of plants.
+  } else if (oldVersion < 4) {
     const spots = tx.objectStore('spots');
-    spots.deleteIndex('by_plant');
-    spots.createIndex('by_plant', 'properties.plantIds', { multiEntry: true });
+    if (oldVersion < 3) {
+      // One plant per spot → places with a list of plants.
+      spots.deleteIndex('by_plant');
+      spots.createIndex('by_plant', 'properties.plantIds', { multiEntry: true });
+    }
+    // v3 → v4: every stored record becomes a collection of kind 'place'.
     spots.openCursor().onsuccess = event => {
       const cursor = /** @type {IDBCursorWithValue | null} */ (/** @type {IDBRequest} */ (event.target).result);
       if (!cursor) return;
-      const place = normalizePlace(cursor.value);
+      const place = normalizeCollection(cursor.value);
       if (place) cursor.update(place);
       cursor.continue();
     };
@@ -73,7 +77,11 @@ function drop(db) {
 /** @returns {Promise<IDBDatabase>} */
 export function openDb() {
   opening ??= new Promise((resolve, reject) => {
-    const request = indexedDB.open(config.db.name, config.db.version);
+    // Only the page upgrades the schema. The search worker opens whatever version exists: during an app
+    // update the page and the worker can briefly run different versions, and a worker-triggered upgrade
+    // would break the page still running the previous one.
+    const inWorker = typeof window === 'undefined';
+    const request = inWorker ? indexedDB.open(config.db.name) : indexedDB.open(config.db.name, config.db.version);
     request.onupgradeneeded = event => upgrade(request.result, /** @type {IDBTransaction} */ (request.transaction), event.oldVersion);
     request.onsuccess = () => {
       const db = current = request.result;

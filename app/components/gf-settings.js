@@ -1,9 +1,9 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { lastSearchHash } from '../core/query.js';
-import { StoreController } from '../core/store.js';
+import { setHarvestMode, StoreController } from '../core/store.js';
 import { getTrefleToken, setTrefleToken } from '../core/sources.js';
-import { exportGeoJSON, importGeoJSON, lastExportDate, listPlaces, spotEvents } from '../core/spots.js';
+import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, spotEvents } from '../core/collections.js';
 
 export class GfSettings extends LitElement {
   static properties = {
@@ -44,6 +44,8 @@ export class GfSettings extends LitElement {
     .muted { color: var(--gf-text-muted); font-size: 0.9rem; }
     a { color: var(--gf-accent); }
     .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .switch { display: flex; gap: 12px; align-items: flex-start; cursor: pointer; }
+    .switch input { width: 22px; height: 22px; accent-color: var(--gf-accent); flex: none; margin-top: 2px; }
     button:disabled { opacity: 0.5; cursor: default; }
     label.file {
       font: inherit;
@@ -72,7 +74,7 @@ export class GfSettings extends LitElement {
   }
 
   async #countSpots() {
-    this._spotCount = (await listPlaces()).length;
+    this._spotCount = (await listCollections()).length;
   }
 
   async #export() {
@@ -134,11 +136,18 @@ export class GfSettings extends LitElement {
           licence libre (CC0, CC BY, CC BY-SA) sont affichées.
         </p>
 
-        <h2>Mes lieux de récolte</h2>
+        <h2>Mode cueillette</h2>
+        <label class="switch">
+          <input type="checkbox" .checked=${this.#store.state.harvestMode} @change=${e => setHarvestMode(e.target.checked)} />
+          <span>Journal de récolte, qualité, plantes « en saison » / « bientôt », rappels de confusions dangereuses</span>
+        </label>
+        <p class="muted">Désactivé, vos lieux restent de simples « plantes vues ici » ; rien n’est effacé.</p>
+
+        <h2>Mes plantes : favoris, listes et lieux</h2>
         <p class="muted">
-          ${this._spotCount} lieu${this._spotCount > 1 ? 'x' : ''} enregistré${this._spotCount > 1 ? 's' : ''} sur cet appareil uniquement.
+          ${this._spotCount} collection${this._spotCount > 1 ? 's' : ''} enregistrée${this._spotCount > 1 ? 's' : ''} sur cet appareil uniquement.
           ${(() => { const d = lastExportDate(); return d ? `Dernière sauvegarde : ${new Date(d).toLocaleDateString('fr-FR')}.` : 'Aucune sauvegarde pour l’instant.'; })()}
-          Exportez régulièrement : effacer les données du navigateur efface aussi vos lieux.
+          Exportez régulièrement : effacer les données du navigateur efface aussi vos collections.
         </p>
         <div class="row">
           <button type="button" @click=${this.#export} ?disabled=${!this._spotCount}>Exporter (GeoJSON)</button>

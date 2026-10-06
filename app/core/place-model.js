@@ -1,5 +1,6 @@
 // @ts-check
-// Shape of a harvest place, shared by the database upgrade, the app and GeoJSON import.
+// Shape of a collection of plants (favorites, list or place), shared by the database upgrade,
+// the app and GeoJSON import. A place is a collection with a Point; lists have `geometry: null`.
 // No imports: db.js uses it during schema upgrades.
 
 /**
@@ -14,7 +15,9 @@
  * @property {string} notes
  * @property {string} addedAt
  * @property {Harvest[]} harvests        newest first
+ * @typedef {'favorites' | 'list' | 'place'} CollectionKind
  * @typedef {object} PlaceProperties
+ * @property {CollectionKind} kind
  * @property {string} name
  * @property {string} notes
  * @property {number | null} accuracy    GPS accuracy (m) when recorded
@@ -22,8 +25,13 @@
  * @property {string} updatedAt
  * @property {PlantEntry[]} plants
  * @property {number[]} plantIds         derived from `plants`, indexed (multiEntry) for "places of a plant"
- * @typedef {{ type: 'Feature', id: string, geometry: { type: 'Point', coordinates: [number, number] }, properties: PlaceProperties }} Place
+ * @typedef {{ type: 'Point', coordinates: [number, number] }} PointGeometry
+ * @typedef {{ type: 'Feature', id: string, geometry: PointGeometry | null, properties: PlaceProperties }} Collection
+ * @typedef {Collection} Place   a collection, usually with a location
  */
+
+export const FAVORITES_ID = 'favorites';
+const KINDS = ['favorites', 'list', 'place'];
 
 const ABUNDANCES = ['rare', 'moyen', 'abondant'];
 
@@ -54,16 +62,23 @@ export function normalizeEntry(e, fallbackDate) {
 export const plantIdsOf = plants => [...new Set(plants.map(p => p.plantId).filter(isNumber))];
 
 /**
- * Brings any stored or imported place to the current shape. Accepts the first format,
- * where a spot held a single plant directly in its properties (plantId, abundance, harvests…).
- * Returns null when the feature is not a usable point.
+ * Brings any stored or imported collection to the current shape. Accepts the first format,
+ * where a spot held a single plant directly in its properties (plantId, abundance, harvests…),
+ * and features without geometry (lists). Returns null when the feature is unusable.
  * @param {any} feature
- * @returns {Place | null}
+ * @returns {Collection | null}
  */
-export function normalizePlace(feature) {
-  if (feature?.type !== 'Feature' || feature.geometry?.type !== 'Point') return null;
-  const [lon, lat] = feature.geometry.coordinates || [];
-  if (!isNumber(lon) || !isNumber(lat) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+export function normalizeCollection(feature) {
+  if (feature?.type !== 'Feature') return null;
+
+  /** @type {PointGeometry | null} */
+  let geometry = null;
+  if (feature.geometry) {
+    if (feature.geometry.type !== 'Point') return null;
+    const [lon, lat] = feature.geometry.coordinates || [];
+    if (!isNumber(lon) || !isNumber(lat) || Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    geometry = { type: 'Point', coordinates: [lon, lat] };
+  }
 
   const p = feature.properties || {};
   const now = new Date().toISOString();
@@ -79,16 +94,24 @@ export function normalizePlace(feature) {
   } else {
     plants = [];
   }
+  // Without geometry, only lists (and favorites) make sense.
+  const id = typeof feature.id === 'string' && feature.id ? feature.id : (globalThis.crypto?.randomUUID?.() ?? String(Date.now() + Math.random()));
+  let kind = KINDS.includes(p.kind) ? p.kind : geometry ? 'place' : 'list';
+  if (id === FAVORITES_ID) kind = 'favorites';
+  else if (kind === 'favorites') kind = 'list';
+  if (kind === 'place' && !geometry) kind = 'list';
+  if (kind !== 'place') geometry = null;
 
   return {
     type: 'Feature',
-    id: typeof feature.id === 'string' && feature.id ? feature.id : (globalThis.crypto?.randomUUID?.() ?? String(Date.now() + Math.random())),
-    geometry: { type: 'Point', coordinates: [lon, lat] },
+    id,
+    geometry,
     properties: {
-      name: text(p.name ?? p.label, 300),
+      kind,
+      name: kind === 'favorites' ? 'Favoris' : text(p.name ?? p.label, 300),
       // Format 1 notes belonged to the single plant; they now live on its entry.
       notes: Array.isArray(p.plants) ? text(p.notes) : '',
-      accuracy: isNumber(p.accuracy) ? p.accuracy : null,
+      accuracy: geometry && isNumber(p.accuracy) ? p.accuracy : null,
       createdAt,
       updatedAt: typeof p.updatedAt === 'string' ? p.updatedAt : now,
       plants,
@@ -96,3 +119,6 @@ export function normalizePlace(feature) {
     }
   };
 }
+
+/** Former name, kept for the version-3 upgrade path. */
+export const normalizePlace = normalizeCollection;

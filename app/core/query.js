@@ -11,10 +11,10 @@ import { store } from './store.js';
 /** @typedef {keyof import('./store.js').Filters} Facet */
 
 /** @type {Facet[]} */
-export const FACETS = ['status', 'family', 'genus', 'photo', 'french'];
+export const FACETS = ['mine', 'status', 'family', 'genus', 'photo', 'french'];
 
 /** @returns {import('./store.js').Filters} */
-const emptyFilters = () => ({ status: [], family: [], genus: [], photo: [], french: [] });
+const emptyFilters = () => ({ status: [], family: [], genus: [], photo: [], french: [], mine: [] });
 
 /** @param {string} hash @returns {Query} */
 export function fromHash(hash) {

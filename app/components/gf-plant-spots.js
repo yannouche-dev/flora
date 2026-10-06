@@ -1,17 +1,19 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { href } from '../core/router.js';
-import { entryInSeason, findEntry, lastHarvest, placesForPlant, plantCount, spotEvents } from '../core/spots.js';
+import { collectionsForPlant, collectionTitle, entryInSeason, findEntry, lastHarvest, plantCount, spotEvents } from '../core/collections.js';
+import { StoreController } from '../core/store.js';
 import './gf-map.js';
 
 const shortDate = (/** @type {string} */ iso) =>
   new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
 
-/** "Mes lieux de récolte" on a plant page: add button, mini map and list. */
+/** "Dans mes collections" on a plant page: places (mini map + list) and lists (chips). */
 export class GfPlantSpots extends LitElement {
   static properties = {
     plantId: { type: Number, attribute: 'plant-id' },
     _spots: { state: true },
+    _lists: { state: true },
     _error: { state: true }
   };
 
@@ -51,17 +53,30 @@ export class GfPlantSpots extends LitElement {
     }
     li .when { margin-left: auto; color: var(--gf-text-muted); font-size: 0.8rem; }
     li small { color: var(--gf-text-muted); }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+    .chip {
+      padding: 4px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--gf-border);
+      background: var(--gf-surface);
+      color: inherit;
+      text-decoration: none;
+      font-size: 0.85rem;
+    }
     .badge { background: #fde047; color: #422006; border-radius: 999px; padding: 0 8px; font-size: 0.75rem; font-weight: 600; }
     p { color: var(--gf-text-muted); font-size: 0.9rem; margin: 8px 0 0; }
   `;
 
   #onChange = () => this.#load();
+  #store = new StoreController(this);
 
   constructor() {
     super();
     this.plantId = 0;
-    /** @type {import('../core/spots.js').Spot[]} */
+    /** @type {import('../core/collections.js').Spot[]} */
     this._spots = [];
+    /** @type {import('../core/collections.js').Collection[]} */
+    this._lists = [];
     /** @type {string | null} */
     this._error = null;
   }
@@ -84,7 +99,9 @@ export class GfPlantSpots extends LitElement {
   async #load() {
     if (!this.plantId) return;
     try {
-      this._spots = await placesForPlant(this.plantId);
+      const all = await collectionsForPlant(this.plantId);
+      this._spots = all.filter(c => c.properties.kind === 'place' && c.geometry);
+      this._lists = all.filter(c => c.properties.kind !== 'place');
       this._error = null;
     } catch (error) {
       console.error(error);
@@ -94,11 +111,14 @@ export class GfPlantSpots extends LitElement {
 
   render() {
     const spots = this._spots;
+    const lists = this._lists;
     return html`
       <div class="head">
-        <h2>Mes lieux de récolte${spots.length ? ` (${spots.length})` : ''}</h2>
+        <h2>Dans mes collections${spots.length + lists.length ? ` (${spots.length + lists.length})` : ''}</h2>
         <a class="add" href=${href.newSpot(this.plantId)}>📍 Ajouter un lieu</a>
       </div>
+      ${lists.length ? html`<div class="chips">${lists.map(c => html`
+        <a class="chip" href=${href.spot(c.id)}>${c.properties.kind === 'favorites' ? '♥' : '☰'} ${collectionTitle(c)}</a>`)}</div>` : nothing}
       ${this._error ? html`<p role="alert">${this._error} <button type="button" @click=${() => this.#load()}>Réessayer</button></p>` : nothing}
       ${spots.length ? html`
         <gf-map .spots=${spots} fit @spot-select=${e => { location.hash = href.map({ spot: e.detail.id }); }}></gf-map>
@@ -110,11 +130,12 @@ export class GfPlantSpots extends LitElement {
             const others = place.properties.plants.length - 1;
             return html`<li><a href=${href.map({ spot: place.id })}>
               <span>${place.properties.name || 'Lieu ' + (i + 1)}${others > 0 ? html` <small>· ${plantCount(others + 1)}</small>` : nothing}</span>
-              ${entry && entryInSeason(entry) ? html`<span class="badge">En saison</span>` : nothing}
-              <span class="when">${last ? 'Récolté le ' + shortDate(last.date) : 'Aucune récolte'}</span>
+              ${this.#store.state.harvestMode ? html`
+                ${entry && entryInSeason(entry) ? html`<span class="badge">En saison</span>` : nothing}
+                <span class="when">${last ? 'Récolté le ' + shortDate(last.date) : 'Aucune récolte'}</span>` : nothing}
             </a></li>`;
           })}
-        </ul>` : html`<p>Notez ici où vous trouvez cette plante : position GPS, journal de récolte, notes. Un lieu peut réunir plusieurs plantes. Tout reste sur cet appareil.</p>`}
+        </ul>` : lists.length ? nothing : html`<p>Ajoutez cette plante à vos favoris ou à une liste, ou notez où vous la trouvez : un lieu peut réunir plusieurs plantes. Tout reste sur cet appareil.</p>`}
     `;
   }
 }

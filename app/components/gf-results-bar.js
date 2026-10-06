@@ -1,7 +1,8 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { SORTS } from '../config.js';
-import { activeFilterCount, setQuery } from '../core/query.js';
+import { activeFilterCount, setQuery, toHash } from '../core/query.js';
+import { share } from '../core/share.js';
 import { setCompact, store, StoreController } from '../core/store.js';
 import './gf-active-filters.js';
 
@@ -12,7 +13,8 @@ import './gf-active-filters.js';
  */
 export class GfResultsBar extends LitElement {
   static properties = {
-    wide: { type: Boolean }
+    wide: { type: Boolean },
+    _copied: { state: true }
   };
 
   static styles = css`
@@ -52,9 +54,24 @@ export class GfResultsBar extends LitElement {
 
   #store = new StoreController(this);
 
+  /** Shares the current search: text, filters (families, statuses…) and sort are all in the URL. */
+  async #share() {
+    const { query, results } = this.#store.state;
+    const families = query.filters.family;
+    const title = families.length === 1 && !query.q
+      ? `${families[0]} — GeoFlora`
+      : query.q ? `« ${query.q} » — GeoFlora` : 'Recherche GeoFlora';
+    const result = await share({ title, text: `${results.total.toLocaleString('fr-FR')} espèces`, url: toHash(query) });
+    if (result === 'copied') {
+      this._copied = true;
+      setTimeout(() => { this._copied = false; }, 2000);
+    }
+  }
+
   constructor() {
     super();
     this.wide = true;
+    this._copied = false;
   }
 
   /** @param {import('../core/store.js').Suggestion} suggestion */
@@ -83,6 +100,7 @@ export class GfResultsBar extends LitElement {
         </select>
         <button type="button" aria-pressed=${compact ? 'true' : 'false'} title="Affichage compact (sans vignettes)"
           @click=${() => setCompact(!compact)}>Compact</button>
+        <button type="button" title="Partager cette recherche (filtres compris)" @click=${this.#share}>${this._copied ? 'Lien copié' : 'Partager'}</button>
       </div>
 
       <gf-active-filters></gf-active-filters>

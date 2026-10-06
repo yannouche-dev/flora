@@ -4,7 +4,7 @@
 import { config } from '../config.js';
 
 /**
- * @typedef {Record<'status' | 'family' | 'genus' | 'photo' | 'french', string[]>} Filters
+ * @typedef {Record<'status' | 'family' | 'genus' | 'photo' | 'french' | 'mine', string[]>} Filters
  * @typedef {{ q: string, filters: Filters, sort: string }} Query
  * @typedef {{ type: 'family' | 'genus', name: string, count: number }} Suggestion
  * @typedef {object} Results
@@ -23,6 +23,9 @@ import { config } from '../config.js';
  * @property {Query} query
  * @property {Results} results
  * @property {boolean} compact
+ * @property {Set<number>} favorites    plant ids in the ♥ collection
+ * @property {boolean} harvestMode      "Mode cueillette": harvest log, seasons, look-alike warnings
+ * @property {{ id: string, name: string, kind: string, count: number }[]} collections
  */
 
 export class Store extends EventTarget {
@@ -47,10 +50,32 @@ const readCompact = () => {
 export const store = new Store({
   status: 'loading',
   offline: false,
-  query: { q: '', filters: { status: [], family: [], genus: [], photo: [], french: [] }, sort: '' },
+  query: { q: '', filters: { status: [], family: [], genus: [], photo: [], french: [], mine: [] }, sort: '' },
   results: { total: 0, items: [], facets: {}, suggestions: [], fuzzy: 0, sort: 'fr' },
-  compact: readCompact()
+  compact: readCompact(),
+  favorites: new Set(),
+  collections: [],
+  harvestMode: readHarvestMode() ?? false
 });
+
+/** Stored choice, or null when the user never chose (decided at startup from existing harvests). */
+function readHarvestMode() {
+  try {
+    const value = localStorage.getItem(config.storageKeys.harvestMode);
+    return value === null ? null : value === '1';
+  } catch { return null; }
+}
+
+/** @param {boolean} on */
+export function setHarvestMode(on) {
+  try { localStorage.setItem(config.storageKeys.harvestMode, on ? '1' : '0'); } catch { /* not persisted */ }
+  store.set({ harvestMode: on });
+}
+
+/** First launch with this setting: turn harvest mode on if the device already holds harvests. */
+export function initHarvestMode(/** @type {boolean} */ hasHarvests) {
+  if (readHarvestMode() === null) setHarvestMode(hasHarvests);
+}
 
 /** @param {boolean} compact */
 export function setCompact(compact) {

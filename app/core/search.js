@@ -1,6 +1,7 @@
 // @ts-check
 // Main-thread client for workers/search.worker.js (latest request wins).
 
+import { getMembership } from './collections.js';
 import { store } from './store.js';
 
 const worker = new Worker(new URL('../workers/search.worker.js', import.meta.url), { type: 'module' });
@@ -43,7 +44,7 @@ export async function runSearch() {
   const run = ++searchRun;
   let response;
   try {
-    response = await call({ type: 'search', q, filters, sort });
+    response = await call({ type: 'search', q, filters, sort, membership: mineValues(filters) });
   } catch (error) {
     console.error(error);
     if (run === searchRun) store.set({ status: 'error', statusText: 'Recherche impossible : ' + /** @type {Error} */ (error).message });
@@ -56,7 +57,23 @@ export async function runSearch() {
   }
 }
 
-const NO_FILTERS = { status: [], family: [], genus: [], photo: [], french: [] };
+const NO_FILTERS = { status: [], family: [], genus: [], photo: [], french: [], mine: [] };
+
+/**
+ * "Mes plantes" facet values per plant: the collection ids containing it, plus 'place' when
+ * it is in at least one place. Only sent when useful (facet active or counts needed).
+ * @param {Record<string, string[]>} filters
+ * @returns {Record<number, string[]>}
+ */
+function mineValues(filters) {
+  const { byPlant, collections } = getMembership();
+  if (!collections.length && !filters.mine?.length) return {};
+  const places = new Set(collections.filter(c => c.kind === 'place').map(c => c.id));
+  /** @type {Record<number, string[]>} */
+  const out = {};
+  for (const [plantId, ids] of byPlant) out[plantId] = ids.some(id => places.has(id)) ? [...ids, 'place'] : ids;
+  return out;
+}
 
 /**
  * One-off search that leaves the app's search state alone (plant picker of the spot editor).

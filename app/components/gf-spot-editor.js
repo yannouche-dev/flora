@@ -6,10 +6,12 @@ import { GeoController } from '../core/geo.js';
 import { href } from '../core/router.js';
 import { searchPlants } from '../core/search.js';
 import {
-  ABUNDANCE, deletePlace, entryInSeason, entryName, findEntry, formatDistance, getPlace, lastHarvest, nearbyPlaces,
-  newPlace, placeTitle, plantCount, savePlace, withEntry, withoutPlant, withPlant
-} from '../core/spots.js';
-import { whenReady } from '../core/store.js';
+  ABUNDANCE, deletePlace, entryInSeason, entryName, exportGeoJSON, findEntry, formatDistance, getPlace, lastHarvest,
+  nearbyPlaces, newCollection, newPlace, placeTitle, plantCount, savePlace, withEntry, withLocation, withoutPlant, withPlant
+} from '../core/collections.js';
+import { encodeCollection, share } from '../core/share.js';
+import { lookalikes } from '../core/lookalikes.js';
+import { StoreController, whenReady } from '../core/store.js';
 import './gf-map.js';
 
 /** Existing places closer than this are offered instead of creating a duplicate. */
@@ -26,9 +28,12 @@ const shortDate = (/** @type {string} */ iso) =>
   new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
 
 /**
- * Create (`plant-id` optional) or edit (`spot-id`, optional `add-plant`) a harvest place:
- * a location plus a collection of plants, each with abundance, rating, notes and harvest log.
- * New places follow the GPS until the pin is dragged or placed by long press.
+ * One page for every collection: favorites, lists and places.
+ *  - edit (`spot-id`, optional `add-plant` / `pick`): changes are saved automatically;
+ *  - create a list (`kind="list"`, optional `plant-id`): saved automatically from the first change;
+ *  - create a place (`kind="place"`, optional `plant-id`): follows the GPS until "Enregistrer"
+ *    (or until the pin is dragged / placed by long press).
+ * Places show the IGN map; lists can be given a position, which turns them into places.
  */
 export class GfSpotEditor extends LitElement {
   static properties = {
@@ -36,6 +41,8 @@ export class GfSpotEditor extends LitElement {
     plantId: { attribute: 'plant-id', converter: v => (v ? Number(v) : null) },
     addPlant: { attribute: 'add-plant', converter: v => (v ? Number(v) : null) },
     pick: { type: Boolean },
+    kind: {},
+    _saveState: { state: true },
     _place: { state: true },
     _manual: { state: true },
     _open: { state: true },
@@ -44,7 +51,8 @@ export class GfSpotEditor extends LitElement {
     _pickerResults: { state: true },
     _todayFor: { state: true },
     _nearby: { state: true },
-    _error: { state: true }
+    _error: { state: true },
+    _note: { state: true }
   };
 
   static styles = css`
@@ -53,6 +61,34 @@ export class GfSpotEditor extends LitElement {
       display: grid;
       grid-template-rows: minmax(200px, 38%) 1fr;
       min-height: 0;
+    }
+    :host([nogeo]) { grid-template-rows: 1fr; }
+    .title { display: flex; align-items: center; gap: 10px; }
+    .title h1 { margin: 0; font-size: 1.35rem; }
+    .title .kind { font-size: 1.4rem; }
+    .title input { font-size: 1.2rem; font-weight: 600; }
+    .save-state { font-size: 0.8rem; color: var(--gf-text-muted); margin-right: auto; }
+    .save-state.error { color: var(--gf-danger); }
+    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+    .add-location {
+      font: inherit;
+      padding: 9px 14px;
+      border-radius: var(--gf-radius);
+      border: 1px dashed var(--gf-border);
+      background: var(--gf-surface);
+      color: var(--gf-text);
+      cursor: pointer;
+      justify-self: start;
+    }
+    a.button {
+      font: inherit;
+      font-size: 0.9rem;
+      padding: 6px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--gf-border);
+      background: var(--gf-surface);
+      color: var(--gf-text);
+      text-decoration: none;
     }
     gf-map { height: 100%; }
     form {
@@ -204,6 +240,12 @@ export class GfSpotEditor extends LitElement {
     .today { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.95rem; }
     .today input[type='checkbox'] { width: 20px; height: 20px; accent-color: var(--gf-accent); }
     .today input[type='text'] { flex: 1; min-width: 140px; }
+    .lookalikes { border: 1px solid #f59e0b; background: color-mix(in srgb, #f59e0b 12%, var(--gf-surface)); border-radius: 10px; padding: 8px 12px; font-size: 0.85rem; }
+    .lookalikes ul { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+    .lookalikes a { color: inherit; font-weight: 600; }
+    .danger { font-size: 0.75rem; padding: 0 6px; border-radius: 999px; background: var(--gf-surface-2); }
+    .danger.mortel { background: #b91c1c; color: #fff; }
+    .warn-mini { color: #d97706; font-weight: 700; }
     .remove { justify-self: start; color: var(--gf-danger); background: none; border: 0; font: inherit; font-size: 0.85rem; cursor: pointer; padding: 0; }
     .muted { margin: 0; color: var(--gf-text-muted); font-size: 0.9rem; }
     .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; position: sticky; bottom: -24px; padding: 10px 0 14px; background: var(--gf-bg); }
@@ -224,6 +266,9 @@ export class GfSpotEditor extends LitElement {
   `;
 
   #geo = new GeoController(this);
+  #store = new StoreController(this);
+  /** Harvest details (rating, log, "harvested today") only in harvest mode, and only for places. */
+  get #harvest() { return this.#store.state.harvestMode && this.#isPlace; }
 
   constructor() {
     super();
@@ -235,7 +280,13 @@ export class GfSpotEditor extends LitElement {
     this.addPlant = null;
     /** Open the plant picker straight away (map sheet's "+ Plante"). */
     this.pick = false;
-    /** @type {import('../core/spots.js').Place | null | undefined} */
+    /** Kind of collection to create when there is no `spot-id`. @type {'list' | 'place'} */
+    this.kind = 'place';
+    /** @type {'' | 'saving' | 'saved' | 'error'} */
+    this._saveState = '';
+    /** @type {string | null} */
+    this._note = null;
+    /** @type {import('../core/collections.js').Place | null | undefined} */
     this._place = undefined;
     /** Pin placed by hand: stop following the GPS. */
     this._manual = false;
@@ -247,21 +298,89 @@ export class GfSpotEditor extends LitElement {
     this._pickerResults = [];
     /** Plants added during this edit → "harvested today" quantity ('' = yes, no quantity; null = no). @type {Map<number | null, string | null>} */
     this._todayFor = new Map();
-    /** @type {{ place: import('../core/spots.js').Place, distance: number }[]} */
+    /** @type {{ place: import('../core/collections.js').Place, distance: number }[]} */
     this._nearby = [];
     /** @type {string | null} */
     this._error = null;
   }
 
-  get #isNew() { return !this.spotId; }
+  /** A new collection not saved yet. */
+  #persisted = false;
+  get #isNew() { return !this.spotId && !this.#persisted; }
+  /** Only a new place waits for an explicit "Enregistrer" (its position may still be settling). */
+  get #autosave() { return !(this.#isNew && this._place?.properties.kind === 'place'); }
+  get #isPlace() { return this._place?.properties.kind === 'place' && Boolean(this._place?.geometry); }
+
+  /** @type {number | undefined} */ #saveTimer;
+  /** @type {Promise<unknown> | null} */ #saving = null;
+  #dirty = false;
+
+  /** Records an edit: autosaved shortly after, or kept for "Enregistrer" on a new place. */
+  #changed() {
+    this._error = null;
+    if (!this.#autosave) return;
+    this.#dirty = true;
+    this._saveState = 'saving';
+    clearTimeout(this.#saveTimer);
+    this.#saveTimer = setTimeout(() => this.#flush(), 600);
+  }
+
+  async #flush() {
+    clearTimeout(this.#saveTimer);
+    if (!this.#dirty || !this._place) return;
+    if (this.#saving) { await this.#saving; return this.#flush(); }
+    this.#dirty = false;
+    const wasNew = this.#isNew;
+    this.#saving = savePlace(this.#payload())
+      .then(saved => {
+        if (wasNew) {
+          this.#persisted = true;
+          history.replaceState(null, '', href.spot(saved.id));
+        }
+        this._saveState = this.#dirty ? 'saving' : 'saved';
+      })
+      .catch(error => {
+        console.error(error);
+        this.#dirty = true;
+        this._saveState = 'error';
+        this._error = 'Enregistrement impossible : ' + /** @type {Error} */ (error).message;
+      })
+      .finally(() => { this.#saving = null; });
+    await this.#saving;
+  }
+
+  /** What gets stored: the edited collection plus "harvested today" on newly added plants of a place. */
+  #payload() {
+    let place = /** @type {import('../core/collections.js').Collection} */ (this._place);
+    if (place.properties.kind !== 'place' || !this.#store.state.harvestMode) return place;
+    for (const [plantId, quantity] of this._todayFor) {
+      const entry = findEntry(place, plantId);
+      if (quantity === null || !entry) continue;
+      place = withEntry(place, plantId, {
+        harvests: [{ date: today(), quantity: quantity.trim(), note: '' }, ...entry.harvests].sort((a, b) => b.date.localeCompare(a.date))
+      });
+    }
+    return place;
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    // Leaving the page: save what is pending right away.
+    this.#flush();
+  }
+
+  /** @param {Map<string, any>} changed */
+  updated(changed) {
+    if (changed.has('_place')) this.toggleAttribute('nogeo', !this._place?.geometry);
+  }
 
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
-    if (changed.has('spotId') || changed.has('plantId') || changed.has('addPlant')) this.#load();
+    if (changed.has('spotId') || changed.has('plantId') || changed.has('addPlant') || changed.has('kind')) this.#load();
 
     // A new place follows the GPS until the user places it by hand.
     const fix = this.#geo.state.fix;
-    if (this.#isNew && this._place && fix && !this._manual) {
+    if (this.#isNew && this._place?.geometry && fix && !this._manual) {
       const [lon, lat] = this._place.geometry.coordinates;
       if (lon !== fix.coordinates[0] || lat !== fix.coordinates[1] || this._place.properties.accuracy !== Math.round(fix.accuracy)) {
         this._place = {
@@ -290,7 +409,7 @@ export class GfSpotEditor extends LitElement {
     this._nearby = [];
     if (this.spotId) {
       let place = await getPlace(this.spotId);
-      if (place && this.addPlant) {
+      if (place && this.addPlant && place.properties.kind === 'place') {
         if (!findEntry(place, this.addPlant)) {
           const plant = await db.get('plants', this.addPlant);
           if (plant) {
@@ -303,7 +422,17 @@ export class GfSpotEditor extends LitElement {
       this._place = place || null;
       this._picker = this.pick;
       this._manual = true;
+      // Arrived with a plant to add ("Y ajouter…", "Ajouter à…"): that is an edit to save.
+      if (place && this.addPlant && this._todayFor.size) this.#changed();
       document.title = (place ? placeTitle(place) : 'Lieu') + ' — GeoFlora';
+    } else if (this.kind === 'list') {
+      let list = newCollection('list');
+      const plant = this.plantId ? await db.get('plants', this.plantId) : null;
+      if (plant) list = withPlant(list, plant);
+      else this._picker = true;
+      this._place = list;
+      this._manual = true;
+      document.title = 'Nouvelle liste — GeoFlora';
     } else {
       const fix = this.#geo.state.fix;
       // Without a fix yet, start at the centre of France; the pin jumps to the GPS position when it arrives.
@@ -330,15 +459,17 @@ export class GfSpotEditor extends LitElement {
     } catch { this._nearby = []; }
   }
 
-  /** @param {Partial<import('../core/spots.js').Place['properties']>} patch */
+  /** @param {Partial<import('../core/collections.js').Place['properties']>} patch */
   #patch(patch) {
     if (!this._place) return;
     this._place = { ...this._place, properties: { ...this._place.properties, ...patch } };
+    this.#changed();
   }
 
-  /** @param {number | null} plantId @param {Partial<import('../core/spots.js').PlantEntry>} patch */
+  /** @param {number | null} plantId @param {Partial<import('../core/collections.js').PlantEntry>} patch */
   #patchEntry(plantId, patch) {
     if (this._place) this._place = withEntry(this._place, plantId, patch);
+    this.#changed();
   }
 
   /** @param {[number, number]} coordinates */
@@ -351,6 +482,7 @@ export class GfSpotEditor extends LitElement {
       properties: { ...this._place.properties, accuracy: null }
     };
     this.#findNearby();
+    this.#changed();
   }
 
   #useGps() {
@@ -364,6 +496,38 @@ export class GfSpotEditor extends LitElement {
     };
     /** @type {any} */ (this.renderRoot.querySelector('gf-map'))?.flyTo(fix.coordinates, 18);
     this.#findNearby();
+    this.#changed();
+  }
+
+  /** Gives a list a position (GPS, else the centre of France to adjust by hand): it becomes a place. */
+  #addLocation() {
+    if (!this._place) return;
+    const fix = this.#geo.state.fix;
+    this._place = withLocation(this._place, fix?.coordinates || [2.35, 46.6], fix ? Math.round(fix.accuracy) : null);
+    this._manual = !fix;
+    this.#changed();
+  }
+
+  #removeLocation() {
+    if (!this._place || !confirm('Retirer la position ? Le lieu devient une simple liste de plantes.')) return;
+    this._place = withLocation(this._place, null);
+    this.#changed();
+  }
+
+  async #share() {
+    if (!this._place) return;
+    await this.#flush();
+    const place = this.#payload();
+    if (place.properties.kind === 'place' && !confirm('Le lien contiendra la position exacte de ce lieu. Partager ?')) return;
+    const data = await encodeCollection(place);
+    const result = await share({ title: placeTitle(place) + ' — GeoFlora', text: `${placeTitle(place)} · ${plantCount(place.properties.plants.length)}`, url: href.shared(data) });
+    if (result === 'copied') { this._saveState = ''; this._error = null; this._note = 'Lien copié.'; setTimeout(() => { this._note = null; }, 2500); }
+  }
+
+  async #export() {
+    if (!this._place) return;
+    await this.#flush();
+    await exportGeoJSON([this.#payload()]);
   }
 
   /** @param {Event} event */
@@ -378,12 +542,12 @@ export class GfSpotEditor extends LitElement {
     if (!this._place || findEntry(this._place, summary.id)) return;
     const plant = await db.get('plants', summary.id);
     this._place = withPlant(this._place, plant);
-    this._todayFor = new Map(this._todayFor).set(plant.id, '');
+    if (this.#isPlace) this._todayFor = new Map(this._todayFor).set(plant.id, '');
     this._open = plant.id;
     this._pickerQuery = '';
     this._pickerResults = [];
     this._picker = false;
-    this._error = null;
+    this.#changed();
   }
 
   /** @param {number | null} plantId */
@@ -395,6 +559,7 @@ export class GfSpotEditor extends LitElement {
     const todayFor = new Map(this._todayFor);
     todayFor.delete(plantId);
     this._todayFor = todayFor;
+    this.#changed();
   }
 
   /** @param {number | null} plantId @param {Event} event */
@@ -418,7 +583,7 @@ export class GfSpotEditor extends LitElement {
   }
 
   /** Adds the plant being recorded to an existing nearby place instead of creating a new one. */
-  /** @param {import('../core/spots.js').Place} target */
+  /** @param {import('../core/collections.js').Place} target */
   #useExisting(target) {
     const first = this._place?.properties.plants[0];
     location.hash = href.spot(target.id, first?.plantId ?? undefined);
@@ -432,17 +597,15 @@ export class GfSpotEditor extends LitElement {
       this._error = 'Ajoutez au moins une plante, ou donnez un nom au lieu.';
       return;
     }
-    let place = this._place;
-    // "Harvested today" on plants added during this edit.
-    for (const [plantId, quantity] of this._todayFor) {
-      const entry = findEntry(place, plantId);
-      if (quantity === null || !entry) continue;
-      place = withEntry(place, plantId, {
-        harvests: [{ date: today(), quantity: quantity.trim(), note: '' }, ...entry.harvests].sort((a, b) => b.date.localeCompare(a.date))
-      });
+    if (this.#autosave) {
+      // Lists and existing collections are saved as you go: "Terminé" just leaves.
+      await this.#flush();
+      location.hash = this.#doneHref();
+      return;
     }
     try {
-      const saved = await savePlace(place);
+      const saved = await savePlace(this.#payload());
+      this.#persisted = true;
       location.hash = href.map({ spot: saved.id });
     } catch (error) {
       this._error = 'Enregistrement impossible : ' + /** @type {Error} */ (error).message;
@@ -450,11 +613,20 @@ export class GfSpotEditor extends LitElement {
   }
 
   async #delete() {
-    if (!this._place) return;
+    if (!this._place || this._place.properties.kind === 'favorites') return;
     const n = this._place.properties.plants.length;
-    if (!confirm(`Supprimer ce lieu${n ? ` et ses ${plantCount(n)}` : ''}, avec leur journal de récolte ?`)) return;
-    await deletePlace(this._place.id);
-    location.hash = href.map();
+    const what = this.#isPlace ? 'ce lieu' : 'cette liste';
+    if (!confirm(`Supprimer ${what}${n ? ` (${plantCount(n)})` : ''}${this.#isPlace ? ', avec le journal de récolte' : ''} ?`)) return;
+    clearTimeout(this.#saveTimer);
+    this.#dirty = false;
+    const wasPlace = this.#isPlace;
+    if (!this.#isNew) await deletePlace(this._place.id);
+    location.hash = wasPlace ? href.map() : href.collections();
+  }
+
+  #doneHref() {
+    if (this.#isPlace && this._place) return href.map({ spot: this._place.id });
+    return href.collections();
   }
 
   #gpsStatus() {
@@ -495,7 +667,18 @@ export class GfSpotEditor extends LitElement {
       </div>`;
   }
 
-  /** @param {import('../core/spots.js').PlantEntry} entry */
+  /** Look-alike reminder for foragers. @param {import('../core/collections.js').PlantEntry} entry */
+  #warnings(entry) {
+    const list = lookalikes(entry.plantId);
+    if (!list.length) return nothing;
+    return html`<div class="lookalikes" role="note">
+      <strong>⚠ Confusions possibles</strong>
+      <ul>${list.map(w => html`<li><a href=${href.plant(w.id)}>${w.name}</a>
+        <span class="danger ${w.danger}">${w.otherIsToxic ? w.danger : 'comestible, souvent confondu'}</span> — ${w.tip}</li>`)}</ul>
+    </div>`;
+  }
+
+  /** @param {import('../core/collections.js').PlantEntry} entry */
   #entry(entry) {
     const id = entry.plantId;
     const open = this._open === id;
@@ -510,15 +693,19 @@ export class GfSpotEditor extends LitElement {
           <span class="chev" aria-hidden="true">▾</span>
           <span class="summary">
             ${entry.vernacularName ? html`<span class="sci">${entry.scientificName}</span>` : nothing}
-            ${entryInSeason(entry) ? html`<span class="badge">En saison</span>` : nothing}
-            <span>${ABUNDANCE.find(a => a.value === entry.abundance)?.label}</span>
-            ${entry.rating ? html`<span class="mini-stars">${'★'.repeat(entry.rating)}</span>` : nothing}
-            <span>${last ? 'Récolté le ' + shortDate(last.date) : fresh ? 'Nouvelle plante' : 'Aucune récolte'}</span>
+            ${this.#isPlace ? html`
+              ${this.#harvest && entryInSeason(entry) ? html`<span class="badge">En saison</span>` : nothing}
+              ${this.#harvest && lookalikes(entry.plantId).some(w => w.otherIsToxic) ? html`<span class="warn-mini" title="Confusions dangereuses possibles">⚠</span>` : nothing}
+              <span>${ABUNDANCE.find(a => a.value === entry.abundance)?.label}</span>
+              ${this.#harvest && entry.rating ? html`<span class="mini-stars">${'★'.repeat(entry.rating)}</span>` : nothing}
+              ${this.#harvest ? html`<span>${last ? 'Récolté le ' + shortDate(last.date) : fresh ? 'Nouvelle plante' : 'Aucune récolte'}</span>` : nothing}`
+            : entry.notes ? html`<span>${entry.notes.slice(0, 60)}</span>` : nothing}
           </span>
         </button>
         ${open ? html`
           <div class="body">
-            ${fresh ? html`
+            ${this.#harvest ? this.#warnings(entry) : nothing}
+            ${fresh && this.#harvest ? html`
               <div class="today">
                 <input id="today-${id}" type="checkbox" .checked=${todayQuantity !== null}
                   @change=${e => { this._todayFor = new Map(this._todayFor).set(id, e.target.checked ? '' : null); }} />
@@ -527,7 +714,7 @@ export class GfSpotEditor extends LitElement {
                   @input=${e => { this._todayFor = new Map(this._todayFor).set(id, e.target.value); }} />` : nothing}
               </div>` : nothing}
 
-            <fieldset>
+            ${this.#isPlace ? html`<fieldset>
               <legend>Abondance</legend>
               <div class="chips">
                 ${ABUNDANCE.map(a => html`<button type="button" aria-pressed=${entry.abundance === a.value ? 'true' : 'false'}
@@ -535,21 +722,21 @@ export class GfSpotEditor extends LitElement {
               </div>
             </fieldset>
 
-            <fieldset>
+            ${this.#harvest ? html`<fieldset>
               <legend>Qualité</legend>
               <div class="stars" role="radiogroup" aria-label="Qualité">
                 ${[1, 2, 3, 4, 5].map(n => html`<button type="button" role="radio" aria-checked=${entry.rating === n ? 'true' : 'false'}
                   aria-label="${n} sur 5" class=${entry.rating >= n ? 'on' : ''}
                   @click=${() => this.#patchEntry(id, { rating: entry.rating === n ? 0 : n })}>★</button>`)}
               </div>
-            </fieldset>
+            </fieldset>` : nothing}` : nothing}
 
             <label class="field">Notes sur cette plante
               <textarea .value=${entry.notes} placeholder="Stade, partie récoltée, conseils…"
                 @input=${e => this.#patchEntry(id, { notes: e.target.value })}></textarea>
             </label>
 
-            <fieldset>
+            ${this.#harvest ? html`<fieldset>
               <legend>Journal de récolte</legend>
               ${entry.harvests.length ? html`
                 <ul class="harvests">
@@ -566,9 +753,10 @@ export class GfSpotEditor extends LitElement {
                 <input type="text" name="note" placeholder="Remarque (facultatif)" aria-label="Remarque" />
                 <button class="secondary" type="button" @click=${e => this.#addHarvest(id, e)}>+ Ajouter une récolte</button>
               </div>
-            </fieldset>
+            </fieldset>` : nothing}
 
-            <button class="remove" type="button" @click=${() => this.#removePlant(id)}>Retirer cette plante du lieu</button>
+            ${id ? html`<a class="button" href=${href.plant(id)}>Fiche de la plante</a>` : nothing}
+            <button class="remove" type="button" @click=${() => this.#removePlant(id)}>${this.#isPlace ? 'Retirer cette plante du lieu' : 'Retirer de la liste'}</button>
           </div>` : nothing}
       </li>`;
   }
@@ -591,52 +779,77 @@ export class GfSpotEditor extends LitElement {
       </div>`;
   }
 
+  #saveStatus() {
+    if (!this.#autosave) return nothing;
+    const text = { saving: 'Enregistrement…', saved: '✓ Enregistré', error: 'Non enregistré', '': '' }[this._saveState];
+    return html`<span class="save-state ${this._saveState === 'error' ? 'error' : ''}" role="status">${this._note || text}</span>`;
+  }
+
   render() {
     const place = this._place;
-    if (place === undefined) return html`<div></div><form><p>Chargement…</p></form>`;
+    if (place === undefined) return html`<form><p>Chargement…</p></form>`;
     if (place === null) {
-      return html`<div></div><form>
-        <p>${this._error || 'Ce lieu n’existe plus.'}</p>
+      return html`<form>
+        <p>${this._error || 'Cette collection n’existe plus.'}</p>
         ${this._error ? html`<button class="secondary" type="button" @click=${() => this.#load()}>Réessayer</button>` : nothing}
-        <a href=${href.map()}>Retour à la carte</a>
+        <a href=${href.collections()}>Retour à mes plantes</a>
       </form>`;
     }
 
     const p = place.properties;
     const fix = this.#geo.state.fix;
-    const weak = this.#isNew && !this._manual && (!fix || fix.accuracy > config.goodAccuracy);
+    const isPlace = this.#isPlace;
+    const isFavorites = p.kind === 'favorites';
+    const weak = this.#isNew && isPlace && !this._manual && (!fix || fix.accuracy > config.goodAccuracy);
 
     return html`
-      <gf-map
+      ${place.geometry ? html`<gf-map
         .pin=${place.geometry.coordinates}
         track
         fit
         @pin-move=${e => this.#place(e.detail.coordinates)}
         @map-longpress=${e => this.#place(e.detail.coordinates)}
-      ></gf-map>
+      ></gf-map>` : nothing}
 
       <form @submit=${this.#save}>
-        ${this.#gpsStatus()}
-        ${this.#nearbyBanner()}
+        ${isPlace ? this.#gpsStatus() : nothing}
+        ${isPlace ? this.#nearbyBanner() : nothing}
 
-        <label class="field">Nom du lieu
-          <input type="text" .value=${p.name} placeholder="ex. Lisière nord du bois" @input=${e => this.#patch({ name: e.target.value })} />
-        </label>
+        ${isFavorites
+          ? html`<div class="title"><span class="kind" aria-hidden="true">♥</span><h1>Favoris</h1></div>`
+          : html`<label class="field">${isPlace ? 'Nom du lieu' : 'Nom de la liste'}
+              <input type="text" .value=${p.name} placeholder=${isPlace ? 'ex. Lisière nord du bois' : 'ex. Plantes mellifères'}
+                @input=${e => this.#patch({ name: e.target.value })} />
+            </label>`}
+
+        ${!place.geometry && !isFavorites ? html`
+          <button class="add-location" type="button" @click=${this.#addLocation}>📍 Ajouter une position (en faire un lieu)</button>` : nothing}
 
         <h2>Plantes <span class="count">${p.plants.length}</span></h2>
         ${p.plants.length ? html`<ul class="entries">${p.plants.map(entry => this.#entry(entry))}</ul>` : nothing}
         ${this.#pickerView()}
 
-        <label class="field">Notes sur le lieu
-          <textarea .value=${p.notes} placeholder="Accès, stationnement, propriétaire, exposition…" @input=${e => this.#patch({ notes: e.target.value })}></textarea>
-        </label>
+        ${isFavorites ? nothing : html`<label class="field">${isPlace ? 'Notes sur le lieu' : 'Notes'}
+          <textarea .value=${p.notes} placeholder=${isPlace ? 'Accès, stationnement, propriétaire, exposition…' : 'À quoi sert cette liste…'}
+            @input=${e => this.#patch({ notes: e.target.value })}></textarea>
+        </label>`}
+
+        ${this.#isNew ? nothing : html`
+          <div class="toolbar">
+            ${p.plants.length ? html`<button class="secondary" type="button" @click=${this.#share}>Partager</button>` : nothing}
+            <button class="secondary" type="button" @click=${this.#export}>Exporter (GeoJSON)</button>
+            ${isPlace ? html`<a class="button" href=${href.map({ spot: place.id })}>Voir sur la carte</a>` : nothing}
+            ${isPlace ? html`<button class="secondary" type="button" @click=${this.#removeLocation}>Retirer la position</button>` : nothing}
+          </div>`}
 
         ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : nothing}
 
         <div class="actions">
-          <button class="primary ${weak ? 'weak' : ''}" type="submit">Enregistrer</button>
-          <a class="cancel" href=${this.#isNew ? (this.plantId ? href.plant(this.plantId) : href.map()) : href.map({ spot: place.id })}>Annuler</a>
-          ${this.#isNew ? nothing : html`<button class="danger" type="button" @click=${this.#delete}>Supprimer le lieu</button>`}
+          ${this.#autosave
+            ? html`${this.#saveStatus()}<button class="primary" type="submit">Terminé</button>`
+            : html`<button class="primary ${weak ? 'weak' : ''}" type="submit">Enregistrer</button>
+                <a class="cancel" href=${this.plantId ? href.plant(this.plantId) : href.map()}>Annuler</a>`}
+          ${isFavorites || this.#isNew ? nothing : html`<button class="danger" type="button" @click=${this.#delete}>Supprimer</button>`}
         </div>
       </form>
     `;

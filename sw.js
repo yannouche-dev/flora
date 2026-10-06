@@ -5,7 +5,7 @@
 //  - IGN map tiles: cache-first, capped — areas already viewed stay available offline
 //  - remote API JSON: not cached here (app/core/sources.js caches it in IndexedDB)
 
-const VERSION = 'v5';
+const VERSION = 'v7';
 const SHELL_CACHE = 'geoflora-shell-' + VERSION;
 const IMAGE_CACHE = 'geoflora-images-' + VERSION;
 const IMAGE_LIMIT = 400;
@@ -37,17 +37,22 @@ const SHELL = [
   'app/core/geo.js',
   'app/core/highlight.js',
   'app/core/ign.js',
+  'app/core/lookalikes.js',
   'app/core/place-model.js',
   'app/core/query.js',
   'app/core/router.js',
   'app/core/search.js',
   'app/core/sources.js',
-  'app/core/spots.js',
+  'app/core/collections.js',
+  'app/core/share.js',
   'app/core/store.js',
   'app/workers/search.worker.js',
   'app/components/gf-app.js',
   'app/components/gf-active-filters.js',
+  'app/components/gf-add-to.js',
   'app/components/gf-attribution.js',
+  'app/components/gf-capture.js',
+  'app/components/gf-collections.js',
   'app/components/gf-facet.js',
   'app/components/gf-filter-panel.js',
   'app/components/gf-map.js',
@@ -59,7 +64,9 @@ const SHELL = [
   'app/components/gf-results-bar.js',
   'app/components/gf-search-bar.js',
   'app/components/gf-settings.js',
-  'app/components/gf-spot-editor.js'
+  'app/components/gf-shared.js',
+  'app/components/gf-spot-editor.js',
+  'app/components/gf-tabbar.js'
 ];
 
 const IMAGE_HOSTS = [

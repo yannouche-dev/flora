@@ -2,9 +2,12 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { STATUS_SHORT } from '../config.js';
 import { FACETS, activeFilterCount, clearFilters, toggleValue } from '../core/query.js';
-import { StoreController } from '../core/store.js';
+import { store, StoreController } from '../core/store.js';
 
 const LABELS = {
+  mine: (/** @type {string} */ v) => v === 'place' ? '📍 Dans un lieu'
+    : v === 'favorites' ? '♥ Favoris'
+    : store.state.collections.find(c => c.id === v)?.name || 'Collection',
   status: (/** @type {string} */ v) => STATUS_SHORT[v] || v,
   family: (/** @type {string} */ v) => v,
   genus: (/** @type {string} */ v) => html`<i>${v}</i>`,

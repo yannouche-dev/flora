@@ -191,8 +191,10 @@ app/
     query.js             requête (texte, filtres, tri) ↔ URL, recherches récentes
     highlight.js         surlignage insensible aux accents
     sources.js           PlantSources + cache IndexedDB persistant (7 jours)
-    spots.js             lieux de récolte (GeoJSON, plusieurs plantes par lieu), saison, distances, export/import
-    place-model.js       format d'un lieu, migration de l'ancien format
+    collections.js       favoris, listes et lieux (GeoJSON), saison, distances, export/import
+    share.js             partage par lien (collections encodées dans l'URL)
+    lookalikes.js        confusions dangereuses pour la cueillette
+    place-model.js       format d'une collection, migrations des anciens formats
     geo.js               suivi GPS partagé
     ign.js               couches IGN Géoplateforme (WMTS) pour Leaflet
     store.js             état observable + ReactiveController Lit
@@ -235,6 +237,35 @@ python3 -m http.server 8000
 Le workflow `Deploy web app` publie l'application sur GitHub Pages à chaque modification de l'app sur `main` et après chaque build du dataset. Il faut l'activer une fois : **Settings → Pages → Source : GitHub Actions**.
 
 Ajouter un fichier JS ou CSS dans `app/` impose de l'ajouter aussi à la liste `SHELL` de `sw.js` ; le workflow le vérifie. Pour mettre Lit ou Leaflet à jour : `LIT_VERSION=3.x.y LEAFLET_VERSION=1.x.y scripts/vendor.sh`.
+
+### Navigation et saisie rapide
+
+- Sur téléphone, une barre en bas : **Flore · Mes plantes · ＋ Noter ici · Carte · Plus** (réglages, sauvegarde). Sur ordinateur, les mêmes entrées sont dans l'en-tête.
+- **Noter ici** : le GPS démarre, des suggestions s'affichent (plantes des lieux à moins de 200 m, favoris, plantes récentes) ; un toucher sur une plante l'enregistre **dans le lieu le plus proche (< 30 m)** ou dans un nouveau lieu. Un bandeau propose **Annuler** et **Détails**.
+
+### Mode cueillette (module optionnel)
+
+*Plus → Mode cueillette.* Activé automatiquement si l'appareil contient déjà des récoltes, désactivé sinon. Désactivé, un lieu est simplement « des plantes vues ici » (abondance, notes) ; rien n'est effacé. Activé :
+
+- journal de récolte, qualité (★), « Récolté aujourd'hui », bouton « + Récolte » ;
+- badges **En saison** (récolté à ±15 jours de la date, une année quelconque) et **Bientôt** (dans les 30 prochains jours) ;
+- **rappels de confusions dangereuses** (`app/core/lookalikes.js`) : ail des ours ↔ muguet / colchique / gouet, carotte sauvage ↔ ciguës / œnanthe, sureau noir ↔ yèble, etc. Les fiches plantes affichent ces rappels en permanence.
+
+### Mes plantes : favoris, listes et lieux
+
+Une **collection** est un ensemble de plantes, avec ou sans position :
+
+- **Favoris** ♥ : un toucher sur ♡ dans la liste de recherche ou sur la fiche d'une plante.
+- **Listes** (« Mellifères », « À chercher cet été »…) : sans position. « Ajouter à… » sur une fiche plante coche/décoche les collections et en crée une à la volée.
+- **Lieux** : une liste avec une position GPS, visible sur la carte (voir ci-dessous). « 📍 Ajouter une position » transforme une liste en lieu ; « Retirer la position » fait l'inverse.
+
+L'onglet **Mes plantes** les regroupe (lieux triés par distance). Les modifications sont **enregistrées automatiquement**. Dans la recherche, le filtre **Mes plantes** limite les résultats aux favoris, à une liste, à un lieu ou à « dans un de mes lieux ».
+
+**Partager** sans serveur :
+
+- une plante : lien `#/plant/<id>` ;
+- une recherche (famille, statut…) : bouton *Partager* au-dessus des résultats, l'URL contient les filtres ;
+- une liste ou un lieu : le lien contient la collection elle-même (`#/shared?d=…`, JSON compressé deflate + base64url, ~200 caractères pour 30 plantes). Notes et journaux de récolte ne sont **jamais** inclus ; pour un lieu, la position exacte l'est (confirmation demandée). Le destinataire voit un aperçu et peut l'enregistrer comme nouvelle collection.
 
 ### Lieux de récolte
 

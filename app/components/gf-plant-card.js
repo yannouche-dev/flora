@@ -5,6 +5,8 @@ import { highlight } from '../core/highlight.js';
 import { rememberSearch } from '../core/query.js';
 import { href } from '../core/router.js';
 import * as sources from '../core/sources.js';
+import { toggleFavorite } from '../core/collections.js';
+import { StoreController } from '../core/store.js';
 
 /** One result row. Resolves a remote thumbnail when the dataset has none. */
 export class GfPlantCard extends LitElement {
@@ -17,7 +19,26 @@ export class GfPlantCard extends LitElement {
 
   static styles = css`
     :host { display: block; }
+    :host { position: relative; }
+    .fav {
+      position: absolute;
+      top: 50%;
+      right: 4px;
+      transform: translateY(-50%);
+      width: 44px;
+      height: 44px;
+      border: 0;
+      background: none;
+      font-size: 1.3rem;
+      line-height: 1;
+      color: var(--gf-text-muted);
+      cursor: pointer;
+      border-radius: 50%;
+    }
+    .fav[aria-pressed='true'] { color: #e11d48; }
+    .fav:focus-visible { outline: 2px solid var(--gf-accent); }
     a {
+      padding-right: 48px !important;
       display: grid;
       grid-template-columns: 60px 1fr;
       gap: var(--gf-gap);
@@ -60,6 +81,15 @@ export class GfPlantCard extends LitElement {
     :host([compact]) .meta { text-align: right; }
     :host([compact]) .thumb { display: none; }
   `;
+
+  #store = new StoreController(this);
+
+  /** @param {Event} event */
+  async #toggleFavorite(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    try { await toggleFavorite(this.plant); } catch (error) { console.error(error); }
+  }
 
   constructor() {
     super();
@@ -118,6 +148,7 @@ export class GfPlantCard extends LitElement {
 
     const q = this.query;
     const title = p.vernacularName || p.scientificName;
+    const fav = this.#store.state.favorites.has(p.id);
 
     return html`
       <a href=${href.plant(p.id)} @click=${() => rememberSearch(q)}>
@@ -132,6 +163,9 @@ export class GfPlantCard extends LitElement {
           </div>
         </span>
       </a>
+      <button class="fav" type="button" aria-pressed=${fav ? 'true' : 'false'}
+        aria-label=${(fav ? 'Retirer des favoris : ' : 'Ajouter aux favoris : ') + title}
+        @click=${this.#toggleFavorite}>${fav ? '♥' : '♡'}</button>
     `;
   }
 }
