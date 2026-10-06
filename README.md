@@ -13,6 +13,7 @@ Le build TAXREF v18 produit actuellement :
 - **33 121 synonymes scientifiques**
 - **7 177 espèces** avec au moins un nom français
 - **568 espèces** sans nom français disponible dans les données TAXREF utilisées
+- **3 504 espèces** avec une vignette de recherche Wikimedia Commons (**45,24 %**)
 
 Le principe est simple :
 
@@ -47,6 +48,13 @@ Le principe est simple :
   "links": {
     "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/100225",
     "inpn": null
+  },
+  "thumbnail": {
+    "url": "https://upload.wikimedia.org/...",
+    "source": "Wikimedia Commons",
+    "sourceUrl": "https://commons.wikimedia.org/...",
+    "author": "...",
+    "license": "CC BY-SA 4.0"
   }
 }
 ```
@@ -148,7 +156,7 @@ IndexedDB
 Liste de résultats
         │
         ├── données locales immédiates
-        └── vignette distante chargée paresseusement
+        └── thumbnail.url déjà présent dans plants.json
         │
         ▼
 Fiche plante
@@ -178,6 +186,7 @@ La GitHub Action `Build flora dataset` télécharge la source officielle, valide
 
 - `data/plants.json`
 - `data/meta.json`
+- `data/thumbnails.json` (cache d'enrichissement Wikimedia)
 
 ## IndexedDB recommandée
 
