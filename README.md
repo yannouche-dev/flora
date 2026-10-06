@@ -188,15 +188,30 @@ app/
     db.js                IndexedDB : plants, plantDetails, meta
     dataset.js           synchro data/plants.json → IndexedDB selon meta.generatedAt
     search.js            client du worker de recherche
+    query.js             requête (texte, filtres, tri) ↔ URL, recherches récentes
+    highlight.js         surlignage insensible aux accents
     sources.js           PlantSources + cache IndexedDB persistant (7 jours)
     store.js             état observable + ReactiveController Lit
     router.js            routes par hash : #/, #/plant/:id, #/settings
   workers/
-    search.worker.js     recherche insensible aux accents (noms, synonymes, familles)
-  components/            gf-app, gf-search-bar, gf-filters, gf-plant-list (virtualisée),
+    search.worker.js     recherche, filtres à facettes, tri, abréviations, fautes de frappe
+  components/            gf-app, gf-search-bar, gf-results-bar, gf-active-filters,
+                         gf-filter-panel, gf-facet, gf-plant-list (virtualisée),
                          gf-plant-card, gf-plant-detail, gf-attribution, gf-settings
   styles/                tokens.css (thème clair/sombre), app.css
 ```
+
+### Recherche, filtres et tri
+
+- **Texte** : noms français, noms scientifiques, synonymes et familles, sans tenir compte des accents (`benoite` → *Benoîte*).
+- **Abréviations** : chaque mot tapé correspond au début d'un mot du nom, dans l'ordre (`ger rob` → *Geranium robertianum*, `ben vil` → *Benoîte des villes*).
+- **Fautes de frappe** : s'il y a moins de 5 résultats, une seconde passe tolère 1 faute (mots de 5 lettres et plus) ou 2 fautes (8 lettres et plus), avec la mention « résultats approchants » (`pisenlit` → *Taraxacum*).
+- **Suggestions** : les familles et genres qui commencent par le texte saisi sont proposés comme filtres en un clic (`ros` → Rosaceae, *Rosa*).
+- **Filtres à choix multiples** : statut, famille, genre, photo, nom français. Les valeurs d'un même filtre se combinent en OU, les filtres entre eux en ET. Chaque valeur affiche le nombre de résultats qu'on obtiendrait en l'ajoutant.
+- **Tri** : pertinence, nom français, nom scientifique, famille, avec photo d'abord. Un affichage **compact** est disponible.
+- **URL partageable** : `#/?q=ortie&family=Urticaceae,Lamiaceae&status=I,J&photo=avec&sort=sci`.
+
+Sur ordinateur, les filtres sont dans un panneau latéral ; sur mobile, dans un panneau qui s'ouvre depuis le bas de l'écran.
 
 Fonctionnement :
 

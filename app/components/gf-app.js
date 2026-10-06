@@ -1,12 +1,29 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
+import { config } from '../config.js';
+import { activeFilterCount, clearFilters } from '../core/query.js';
 import { href, RouterController } from '../core/router.js';
 import { StoreController } from '../core/store.js';
 import './gf-search-bar.js';
-import './gf-filters.js';
+import './gf-results-bar.js';
+import './gf-filter-panel.js';
 import './gf-plant-list.js';
 import './gf-plant-detail.js';
 import './gf-settings.js';
+
+/** Lit controller tracking a media query (desktop sidebar vs. mobile bottom sheet). */
+class MediaController {
+  /** @param {import('lit').ReactiveControllerHost} host @param {string} query */
+  constructor(host, query) {
+    this.media = matchMedia(query);
+    this.matches = this.media.matches;
+    this.onChange = () => { this.matches = this.media.matches; host.requestUpdate(); };
+    host.addController(this);
+  }
+
+  hostConnected() { this.media.addEventListener('change', this.onChange); }
+  hostDisconnected() { this.media.removeEventListener('change', this.onChange); }
+}
 
 /** App shell: header + route outlet. */
 export class GfApp extends LitElement {
@@ -34,8 +51,10 @@ export class GfApp extends LitElement {
       white-space: nowrap;
     }
     .brand img { width: 28px; height: 28px; }
-    gf-search-bar { flex: 1; }
+    gf-search-bar { flex: 1; min-width: 0; max-width: 720px; }
     .settings {
+      flex: none;
+      margin-left: auto;
       color: var(--gf-text-muted);
       text-decoration: none;
       font-size: 1.3rem;
@@ -43,8 +62,27 @@ export class GfApp extends LitElement {
       padding: 4px;
     }
     main { min-height: 0; display: flex; flex-direction: column; }
-    .search { display: flex; flex-direction: column; min-height: 0; flex: 1; }
-    gf-filters { padding: 8px 16px; border-bottom: 1px solid var(--gf-border); }
+    .search { display: flex; min-height: 0; flex: 1; }
+    aside {
+      width: 280px;
+      flex: none;
+      overflow-y: auto;
+      padding: 4px 16px 24px;
+      border-right: 1px solid var(--gf-border);
+      background: var(--gf-surface);
+    }
+    aside h2, dialog h2 { font-size: 1rem; margin: 12px 0 4px; display: flex; align-items: center; }
+    .link {
+      margin-left: auto;
+      font: inherit;
+      font-size: 0.8rem;
+      font-weight: 400;
+      background: none;
+      border: 0;
+      color: var(--gf-accent);
+      cursor: pointer;
+    }
+    .results { display: flex; flex-direction: column; flex: 1; min-width: 0; }
     gf-plant-list, gf-plant-detail, gf-settings { flex: 1; min-height: 0; }
     .banner {
       padding: 8px 16px;
@@ -52,6 +90,50 @@ export class GfApp extends LitElement {
       background: var(--gf-accent-soft);
     }
     .banner.error { color: var(--gf-danger); }
+
+    /* Mobile filters: bottom sheet. */
+    dialog {
+      position: fixed;
+      inset: auto 0 0 0;
+      width: 100%;
+      max-width: 640px;
+      max-height: 88dvh;
+      margin: 0 auto;
+      padding: 0;
+      border: 0;
+      border-radius: 16px 16px 0 0;
+      background: var(--gf-surface);
+      color: var(--gf-text);
+      display: none;
+      flex-direction: column;
+    }
+    dialog[open] { display: flex; animation: slide-up 0.2s ease-out; }
+    dialog::backdrop { background: rgb(0 0 0 / 40%); }
+    @keyframes slide-up { from { transform: translateY(40px); opacity: 0; } }
+    @media (prefers-reduced-motion: reduce) { dialog[open] { animation: none; } }
+    .sheet-head { padding: 4px 16px 0; border-bottom: 1px solid var(--gf-border); }
+    .sheet-head::before {
+      content: '';
+      display: block;
+      width: 36px;
+      height: 4px;
+      margin: 6px auto 0;
+      border-radius: 2px;
+      background: var(--gf-border);
+    }
+    .sheet-body { overflow-y: auto; padding: 0 16px; flex: 1; }
+    .sheet-foot { padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--gf-border); }
+    .sheet-foot button {
+      width: 100%;
+      font: inherit;
+      font-weight: 600;
+      padding: 12px;
+      border: 0;
+      border-radius: 999px;
+      background: var(--gf-accent);
+      color: var(--gf-accent-contrast);
+      cursor: pointer;
+    }
     @media (max-width: 560px) {
       .brand span { display: none; }
     }
@@ -59,6 +141,19 @@ export class GfApp extends LitElement {
 
   #router = new RouterController(this);
   #store = new StoreController(this);
+  #wide = new MediaController(this, config.wideQuery);
+
+  get #dialog() {
+    return /** @type {HTMLDialogElement | null} */ (this.renderRoot.querySelector('dialog'));
+  }
+
+  #openFilters() {
+    this.#dialog?.showModal();
+  }
+
+  #closeFilters() {
+    this.#dialog?.close();
+  }
 
   render() {
     const route = this.#router.route;
@@ -70,7 +165,7 @@ export class GfApp extends LitElement {
           <img src="assets/icons/icon.svg" alt="" />
           <span>GeoFlora</span>
         </a>
-        ${route.name === 'search' ? html`<gf-search-bar></gf-search-bar>` : html`<span style="flex:1"></span>`}
+        ${route.name === 'search' ? html`<gf-search-bar></gf-search-bar>` : nothing}
         <a class="settings" href=${href.settings()} title="À propos et réglages" aria-label="À propos et réglages">⚙︎</a>
       </header>
       <main>
@@ -82,12 +177,40 @@ export class GfApp extends LitElement {
     `;
   }
 
+  #filtersHeader() {
+    const active = activeFilterCount(this.#store.state.query);
+    return html`
+      <h2>Filtres ${active ? html`<button class="link" type="button" @click=${clearFilters}>Tout effacer</button>` : nothing}</h2>
+    `;
+  }
+
   /** @param {import('../core/router.js').Route} route */
   #outlet(route) {
     switch (route.name) {
-      case 'search':
+      case 'search': {
         document.title = 'GeoFlora — flore de France';
-        return html`<div class="search"><gf-filters></gf-filters><gf-plant-list></gf-plant-list></div>`;
+        const wide = this.#wide.matches;
+        const total = this.#store.state.results.total;
+        return html`
+          <div class="search">
+            ${wide ? html`<aside aria-label="Filtres">${this.#filtersHeader()}<gf-filter-panel></gf-filter-panel></aside>` : nothing}
+            <div class="results">
+              <gf-results-bar .wide=${wide} @open-filters=${this.#openFilters}></gf-results-bar>
+              <gf-plant-list></gf-plant-list>
+            </div>
+          </div>
+          ${wide ? nothing : html`
+            <dialog aria-label="Filtres" @click=${e => { if (e.target === e.currentTarget) this.#closeFilters(); }}>
+              <div class="sheet-head">${this.#filtersHeader()}</div>
+              <div class="sheet-body"><gf-filter-panel></gf-filter-panel></div>
+              <div class="sheet-foot">
+                <button type="button" @click=${this.#closeFilters}>
+                  Voir ${total.toLocaleString('fr-FR')} espèce${total > 1 ? 's' : ''}
+                </button>
+              </div>
+            </dialog>`}
+        `;
+      }
       case 'plant':
         return html`<gf-plant-detail plant-id=${route.id}></gf-plant-detail>`;
       case 'settings':

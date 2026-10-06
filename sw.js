@@ -4,7 +4,7 @@
 //  - remote images (Wikimedia, iNaturalist): stale-while-revalidate, capped
 //  - remote API JSON: not cached here (app/core/sources.js caches it in IndexedDB)
 
-const VERSION = 'v1';
+const VERSION = 'v2';
 const SHELL_CACHE = 'geoflora-shell-' + VERSION;
 const IMAGE_CACHE = 'geoflora-images-' + VERSION;
 const IMAGE_LIMIT = 400;
@@ -24,17 +24,22 @@ const SHELL = [
   'app/styles/app.css',
   'app/core/db.js',
   'app/core/dataset.js',
+  'app/core/highlight.js',
+  'app/core/query.js',
   'app/core/router.js',
   'app/core/search.js',
   'app/core/sources.js',
   'app/core/store.js',
   'app/workers/search.worker.js',
   'app/components/gf-app.js',
+  'app/components/gf-active-filters.js',
   'app/components/gf-attribution.js',
-  'app/components/gf-filters.js',
+  'app/components/gf-facet.js',
+  'app/components/gf-filter-panel.js',
   'app/components/gf-plant-card.js',
   'app/components/gf-plant-detail.js',
   'app/components/gf-plant-list.js',
+  'app/components/gf-results-bar.js',
   'app/components/gf-search-bar.js',
   'app/components/gf-settings.js'
 ];

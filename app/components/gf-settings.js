@@ -1,6 +1,6 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
-import { href } from '../core/router.js';
+import { lastSearchHash } from '../core/query.js';
 import { StoreController } from '../core/store.js';
 import { getTrefleToken, setTrefleToken } from '../core/sources.js';
 
@@ -60,7 +60,7 @@ export class GfSettings extends LitElement {
     const { meta, offline } = this.#store.state;
     return html`
       <article>
-        <a class="back" href=${href.search()}>← Recherche</a>
+        <a class="back" href=${lastSearchHash()}>← Recherche</a>
         <h1>À propos et réglages</h1>
 
         <h2>Données</h2>
