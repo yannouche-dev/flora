@@ -20,18 +20,33 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
       - name: Download official TAXREF v18 archive
         run: |
           mkdir -p .cache/taxref
           curl -L --fail --retry 3 "https://assets.patrinat.fr/files/referentiel/TAXREF_v18_2025.zip" -o .cache/taxref.zip
           unzip -q .cache/taxref.zip -d .cache/taxref
-          echo "Archive files:"
-          find .cache/taxref -maxdepth 2 -type f -printf '%p %k KB\n' | sort
-          echo "Likely TAXREF/TAXVERN headers:"
-          for f in $(find .cache/taxref -type f \( -iname '*taxref*.txt' -o -iname '*taxvern*.txt' \)); do
-            echo "=== $f ==="
-            head -n 2 "$f" | cut -c1-3000
-          done
 
-      - name: Stop after archive inspection
-        run: echo "Official TAXREF archive downloaded successfully"
+      - name: Build dataset
+        run: node scripts/build-plants.mjs
+
+      - name: Validate dataset
+        run: |
+          node -e "const p=require('./data/plants.json'); const m=require('./data/meta.json'); if(!Array.isArray(p)||p.length<4500||p.length>8000) process.exit(1); if(p.length!==m.plants) process.exit(1); console.log(p.length+' plants; '+m.vernacularNames+' French vernacular names')"
+          cat data/meta.json
+
+      - name: Commit generated dataset
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/plants.json data/meta.json
+          if git diff --cached --quiet; then
+            echo "Dataset unchanged"
+          else
+            git commit -m "Build TAXREF v18 flora dataset [skip ci]"
+            git push
+          fi
