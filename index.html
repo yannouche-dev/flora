@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>GeoFlora — flore de France</title>
+  <meta name="description" content="Recherche hors ligne dans la flore vasculaire de France métropolitaine (TAXREF v18)." />
+  <meta name="theme-color" content="#2f6b3a" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="assets/icons/icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
+  <link rel="stylesheet" href="app/styles/tokens.css" />
+  <link rel="stylesheet" href="app/styles/app.css" />
+
+  <!-- Bare specifiers → vendored files. No bundler: the browser resolves modules natively. -->
+  <script type="importmap">
+    {
+      "imports": {
+        "lit": "./vendor/lit.js"
+      }
+    }
+  </script>
+  <link rel="modulepreload" href="vendor/lit.js" />
+  <link rel="modulepreload" href="app/main.js" />
+  <script type="module" src="app/main.js"></script>
+</head>
+<body>
+  <gf-app></gf-app>
+  <div class="gf-boot">
+    <noscript>GeoFlora nécessite JavaScript.</noscript>
+    Chargement de GeoFlora…
+  </div>
+</body>
+</html>
