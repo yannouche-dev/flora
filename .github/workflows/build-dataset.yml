@@ -15,7 +15,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90
 
     steps:
       - name: Checkout
@@ -43,6 +43,14 @@ jobs:
           WIKIMEDIA_DELAY_MS: '2000'
           THUMBNAIL_RETRY_DAYS: '90'
         run: node scripts/enrich-thumbnails.mjs
+
+      - name: Enrich thumbnail fallbacks
+        env:
+          FALLBACK_CONCURRENCY: '4'
+          FALLBACK_DELAY_MS: '180'
+          FALLBACK_RETRY_DAYS: '90'
+          GBIF_MEDIA_LIMIT: '30'
+        run: node scripts/enrich-thumbnail-fallbacks.mjs
 
       - name: Validate dataset
         run: |
