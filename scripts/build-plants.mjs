@@ -216,7 +216,7 @@ async function main() {
         taxref: clean(row.URL) || 'https://taxref.mnhn.fr/taxref-web/taxa/' + id,
         inpn: clean(row.URL_INPN) || null
       },
-      thumbnail: thumbnailCache.get(String(id)) || null,
+      thumbnail: thumbnailCache.get(String(id))?.thumbnail || thumbnailCache.get(String(id)) || null,
       _nameKeys: new Set(),
       _synonymKeys: new Set()
     };
