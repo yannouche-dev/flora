@@ -50,23 +50,31 @@ function fresh(value) {
 }
 
 async function getJson(url, attempt = 1) {
-  const response = await fetch(url, {
-    headers: {
-      accept: 'application/json',
-      'user-agent': USER_AGENT
-    }
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 15000);
 
-  if (!response.ok) {
-    if (attempt < 5 && [429, 500, 502, 503, 504].includes(response.status)) {
-      const retryAfter = Number(response.headers.get('retry-after') || 0);
-      await sleep(retryAfter ? retryAfter * 1000 : 800 * 2 ** (attempt - 1));
-      return getJson(url, attempt + 1);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      headers: {
+        accept: 'application/json',
+        'user-agent': USER_AGENT
+      }
+    });
+
+    if (!response.ok) {
+      if (attempt < 5 && [429, 500, 502, 503, 504].includes(response.status)) {
+        const retryAfter = Number(response.headers.get('retry-after') || 0);
+        await sleep(retryAfter ? retryAfter * 1000 : 800 * 2 ** (attempt - 1));
+        return getJson(url, attempt + 1);
+      }
+      throw new Error(response.status + ' ' + response.statusText + ': ' + url);
     }
-    throw new Error(response.status + ' ' + response.statusText + ': ' + url);
+
+    return response.json();
+  } finally {
+    clearTimeout(timer);
   }
-
-  return response.json();
 }
 
 async function gbifThumbnail(plant) {
