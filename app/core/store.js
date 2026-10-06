@@ -4,7 +4,7 @@
 import { config } from '../config.js';
 
 /**
- * @typedef {Record<'status' | 'family' | 'genus' | 'photo' | 'french', string[]>} Filters
+ * @typedef {Record<'status' | 'family' | 'genus' | 'photo' | 'french' | 'mine', string[]>} Filters
  * @typedef {{ q: string, filters: Filters, sort: string }} Query
  * @typedef {{ type: 'family' | 'genus', name: string, count: number }} Suggestion
  * @typedef {object} Results
@@ -23,6 +23,8 @@ import { config } from '../config.js';
  * @property {Query} query
  * @property {Results} results
  * @property {boolean} compact
+ * @property {Set<number>} favorites    plant ids in the ♥ collection
+ * @property {{ id: string, name: string, kind: string, count: number }[]} collections
  */
 
 export class Store extends EventTarget {
@@ -47,9 +49,11 @@ const readCompact = () => {
 export const store = new Store({
   status: 'loading',
   offline: false,
-  query: { q: '', filters: { status: [], family: [], genus: [], photo: [], french: [] }, sort: '' },
+  query: { q: '', filters: { status: [], family: [], genus: [], photo: [], french: [], mine: [] }, sort: '' },
   results: { total: 0, items: [], facets: {}, suggestions: [], fuzzy: 0, sort: 'fr' },
-  compact: readCompact()
+  compact: readCompact(),
+  favorites: new Set(),
+  collections: []
 });
 
 /** @param {boolean} compact */

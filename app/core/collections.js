@@ -1,13 +1,21 @@
 // @ts-check
-// Harvest places: GeoJSON Point Features kept in IndexedDB, never sent anywhere.
-// A place is a collection of plants, each with its own abundance, rating, notes and harvest log.
+// Collections of plants, kept in IndexedDB as GeoJSON Features and never sent anywhere:
+//  - favorites: the built-in ♥ collection (id 'favorites', no geometry)
+//  - list:      a named list of plants (no geometry)
+//  - place:     a list at a location (Point) — harvest places
+// Each plant entry has its own abundance, rating, notes and harvest log.
 
 import { config } from '../config.js';
 import * as db from './db.js';
-import { normalizeEntry, normalizePlace, plantIdsOf } from './place-model.js';
+import { FAVORITES_ID, normalizeEntry, normalizeCollection, plantIdsOf } from './place-model.js';
+import { store } from './store.js';
+
+export { FAVORITES_ID };
 
 /**
  * @typedef {import('./place-model.js').Place} Place
+ * @typedef {import('./place-model.js').Collection} Collection
+ * @typedef {import('./place-model.js').CollectionKind} CollectionKind
  * @typedef {import('./place-model.js').PlantEntry} PlantEntry
  * @typedef {import('./place-model.js').Harvest} Harvest
  */
@@ -19,28 +27,41 @@ export const ABUNDANCE = [
 ];
 const ABUNDANCE_RANK = { rare: 0, moyen: 1, abondant: 2 };
 
-/** Fired on `spotEvents` whenever places change, so maps and lists refresh. */
+/** Fired on `spotEvents` whenever collections change, so maps and lists refresh. */
 export const spotEvents = new EventTarget();
-const changed = () => spotEvents.dispatchEvent(new Event('change'));
+async function changed() {
+  await refreshMembership().catch(error => console.error(error));
+  spotEvents.dispatchEvent(new Event('change'));
+}
 
-/** Records are migrated on upgrade; normalizing on read also covers places imported mid-upgrade. */
-const read = (/** @type {any} */ record) => record ? normalizePlace(record) : undefined;
+/** Records are migrated on upgrade; normalizing on read also covers collections imported mid-upgrade. */
+const read = (/** @type {any} */ record) => record ? normalizeCollection(record) : undefined;
+const isPlace = (/** @type {Collection} */ c) => c.properties.kind === 'place' && c.geometry !== null;
 
-/** @returns {Promise<Place[]>} */
-export const listPlaces = async () => /** @type {Place[]} */ ((await db.getAll('spots')).map(read).filter(Boolean));
+/** Every collection (favorites, lists, places). @returns {Promise<Collection[]>} */
+export const listCollections = async () => /** @type {Collection[]} */ ((await db.getAll('spots')).map(read).filter(Boolean));
+
+/** Collections with a location. @returns {Promise<Place[]>} */
+export const listPlaces = async () => (await listCollections()).filter(isPlace);
+
+/** Every collection containing a plant. @param {number} plantId @returns {Promise<Collection[]>} */
+export const collectionsForPlant = async plantId =>
+  /** @type {Collection[]} */ ((await db.getAllByIndex('spots', 'by_plant', plantId)).map(read).filter(Boolean));
 
 /** Places where a plant grows. @param {number} plantId @returns {Promise<Place[]>} */
-export const placesForPlant = async plantId =>
-  /** @type {Place[]} */ ((await db.getAllByIndex('spots', 'by_plant', plantId)).map(read).filter(Boolean));
+export const placesForPlant = async plantId => (await collectionsForPlant(plantId)).filter(isPlace);
 
-/** @param {string} id @returns {Promise<Place | undefined>} */
+/** @param {string} id @returns {Promise<Collection | undefined>} */
 export const getPlace = async id => read(await db.get('spots', id)) || undefined;
+export const getCollection = getPlace;
 
 /** @param {string} id */
 export async function deletePlace(id) {
+  if (id === FAVORITES_ID) throw new Error('Les favoris ne peuvent pas être supprimés.');
   await db.remove('spots', id);
-  changed();
+  await changed();
 }
+export const deleteCollection = deletePlace;
 
 /** 7 decimals ≈ 1 cm: plenty, and keeps exports readable. @param {[number, number]} c @returns {[number, number]} */
 const roundCoordinates = ([lon, lat]) => [Math.round(lon * 1e7) / 1e7, Math.round(lat * 1e7) / 1e7];
@@ -51,13 +72,37 @@ const roundCoordinates = ([lon, lat]) => [Math.round(lon * 1e7) / 1e7, Math.roun
  * @returns {Place}
  */
 export function newPlace(coordinates, properties = {}) {
+  return { ...newCollection('place', properties), geometry: { type: 'Point', coordinates: roundCoordinates(coordinates) } };
+}
+
+/**
+ * @param {CollectionKind} kind
+ * @param {Partial<import('./place-model.js').PlaceProperties>} [properties]
+ * @returns {Collection}
+ */
+export function newCollection(kind, properties = {}) {
   const now = new Date().toISOString();
   return {
     type: 'Feature',
-    id: crypto.randomUUID(),
-    geometry: { type: 'Point', coordinates: roundCoordinates(coordinates) },
-    properties: { name: '', notes: '', accuracy: null, createdAt: now, updatedAt: now, plants: [], plantIds: [], ...properties }
+    id: kind === 'favorites' ? FAVORITES_ID : crypto.randomUUID(),
+    geometry: null,
+    properties: {
+      kind, name: kind === 'favorites' ? 'Favoris' : '', notes: '', accuracy: null,
+      createdAt: now, updatedAt: now, plants: [], plantIds: [], ...properties
+    }
   };
+}
+
+/**
+ * Gives a list a location (it becomes a place), or removes it (it becomes a list).
+ * @param {Collection} collection @param {[number, number] | null} coordinates @param {number | null} [accuracy]
+ * @returns {Collection}
+ */
+export function withLocation(collection, coordinates, accuracy = null) {
+  if (collection.properties.kind === 'favorites') return collection;
+  return coordinates
+    ? { ...collection, geometry: { type: 'Point', coordinates: roundCoordinates(coordinates) }, properties: { ...collection.properties, kind: 'place', accuracy } }
+    : { ...collection, geometry: null, properties: { ...collection.properties, kind: 'list', accuracy: null } };
 }
 
 /** A new plant entry from a TAXREF plant record (or search summary). @param {any} plant @returns {PlantEntry} */
@@ -87,17 +132,74 @@ export const withEntry = (place, plantId, patch) =>
 /** @param {Place} place @param {PlantEntry[]} plants @returns {Place} */
 const withPlants = (place, plants) => ({ ...place, properties: { ...place.properties, plants, plantIds: plantIdsOf(plants) } });
 
-/** @param {Place} place */
+/** @param {Collection} place */
 export async function savePlace(place) {
   const saved = {
     ...place,
-    geometry: { type: 'Point', coordinates: roundCoordinates(place.geometry.coordinates) },
+    geometry: place.geometry ? { type: 'Point', coordinates: roundCoordinates(place.geometry.coordinates) } : null,
     properties: { ...place.properties, plantIds: plantIdsOf(place.properties.plants), updatedAt: new Date().toISOString() }
   };
   await db.put('spots', saved);
   markHasSpots();
-  changed();
-  return /** @type {Place} */ (saved);
+  await changed();
+  return /** @type {Collection} */ (saved);
+}
+export const saveCollection = savePlace;
+
+// ── Favorites & membership ────────────────────────────────────────────────
+
+/**
+ * In-memory view of what is in which collection, for cheap lookups in list rows and the search worker.
+ * @typedef {{ id: string, name: string, kind: CollectionKind, count: number }} CollectionSummary
+ * @type {{ favorites: Set<number>, byPlant: Map<number, string[]>, collections: CollectionSummary[] }}
+ */
+let membership = { favorites: new Set(), byPlant: new Map(), collections: [] };
+
+export const getMembership = () => membership;
+
+/** Rebuilds the membership view and publishes it in the store (favorites ♥, "Mes plantes" facet). */
+export async function refreshMembership() {
+  const all = await listCollections();
+  const byPlant = new Map();
+  for (const c of all) {
+    for (const id of c.properties.plantIds) {
+      const list = byPlant.get(id) || [];
+      list.push(c.id);
+      byPlant.set(id, list);
+    }
+  }
+  const favorites = new Set(all.find(c => c.id === FAVORITES_ID)?.properties.plantIds || []);
+  const collections = all
+    .map(c => ({ id: c.id, name: collectionTitle(c), kind: c.properties.kind, count: c.properties.plants.length }))
+    .sort((a, b) => (a.kind === 'favorites' ? -1 : b.kind === 'favorites' ? 1 : 0) || a.name.localeCompare(b.name, 'fr'));
+  membership = { favorites, byPlant, collections };
+  store.set({ favorites, collections });
+}
+
+/** @param {number} plantId */
+export const isFavorite = plantId => membership.favorites.has(plantId);
+
+/**
+ * Adds or removes a plant from the favorites (created on first use).
+ * @param {any} plant TAXREF record or search summary
+ * @returns {Promise<boolean>} new state
+ */
+export async function toggleFavorite(plant) {
+  const current = (await getPlace(FAVORITES_ID)) || newCollection('favorites');
+  const on = !findEntry(current, plant.id);
+  await savePlace(on ? withPlant(current, plant) : withoutPlant(current, plant.id));
+  return on;
+}
+
+/**
+ * Adds or removes a plant from a collection.
+ * @param {string} collectionId @param {any} plant @param {boolean} on
+ */
+export async function setInCollection(collectionId, plant, on) {
+  const current = await getPlace(collectionId) || (collectionId === FAVORITES_ID ? newCollection('favorites') : null);
+  if (!current) throw new Error('Collection introuvable.');
+  if (Boolean(findEntry(current, plant.id)) === on) return current;
+  return savePlace(on ? withPlant(current, plant) : withoutPlant(current, plant.id));
 }
 
 /** Adds a harvest to one plant of a place and saves. @param {Place} place @param {number | null} plantId @param {Harvest} harvest */
@@ -182,14 +284,18 @@ export function placeAbundance(place) {
 /** @param {PlantEntry} entry */
 export const entryName = entry => entry.vernacularName || entry.scientificName || 'Plante';
 
-/** Place name, else its single plant, else "3 plantes". @param {Place} place */
+/** Collection name, else (places) its single plant, else "Benoîte + 2 autres". @param {Collection} place */
 export function placeTitle(place) {
+  if (place.properties.kind === 'favorites') return 'Favoris';
   if (place.properties.name) return place.properties.name;
+  if (place.properties.kind === 'list') return 'Liste sans nom';
   const plants = place.properties.plants;
   if (plants.length === 1) return entryName(plants[0]);
   if (!plants.length) return 'Lieu sans plante';
   return `${entryName(plants[0])} + ${plants.length - 1} autre${plants.length > 2 ? 's' : ''}`;
 }
+
+export const collectionTitle = placeTitle;
 
 /** @param {number} n */
 export const plantCount = n => `${n} plante${n > 1 ? 's' : ''}`;
@@ -224,6 +330,7 @@ export async function nearbyPlaces(coordinates, radius, excludeId) {
 
 /** Link handing the place to the phone's navigation app. @param {Place} place */
 export function directionsUrl(place) {
+  if (!place.geometry) return '#';
   const [lon, lat] = place.geometry.coordinates;
   if (/android/i.test(navigator.userAgent)) return `geo:${lat},${lon}?q=${lat},${lon}`;
   if (/iphone|ipad|ipod|macintosh/i.test(navigator.userAgent)) return `https://maps.apple.com/?daddr=${lat},${lon}`;
@@ -232,18 +339,25 @@ export function directionsUrl(place) {
 
 // ── GeoJSON export / import ───────────────────────────────────────────────
 
-export async function exportGeoJSON() {
-  const features = (await listPlaces()).sort((a, b) => a.properties.createdAt.localeCompare(b.properties.createdAt));
+/**
+ * Exports every collection (or only `only`) as a GeoJSON FeatureCollection file.
+ * @param {Collection[]} [only]
+ */
+export async function exportGeoJSON(only) {
+  const features = (only || await listCollections()).sort((a, b) => a.properties.createdAt.localeCompare(b.properties.createdAt));
   const collection = {
     type: 'FeatureCollection',
-    name: 'GeoFlora — lieux de récolte',
+    name: only?.length === 1 ? 'GeoFlora — ' + collectionTitle(only[0]) : 'GeoFlora — mes plantes',
     generator: 'GeoFlora',
-    formatVersion: 2,
+    formatVersion: 3,
     exportedAt: new Date().toISOString(),
     features
   };
   const date = new Date().toISOString().slice(0, 10);
-  const file = new File([JSON.stringify(collection, null, 2)], `geoflora-lieux-${date}.geojson`, { type: 'application/geo+json' });
+  const slug = only?.length === 1
+    ? collectionTitle(only[0]).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'collection'
+    : 'mes-plantes';
+  const file = new File([JSON.stringify(collection, null, 2)], `geoflora-${slug}-${date}.geojson`, { type: 'application/geo+json' });
 
   try {
     if (navigator.canShare?.({ files: [file] }) && matchMedia('(pointer: coarse)').matches) {
@@ -255,7 +369,9 @@ export async function exportGeoJSON() {
     if (/** @type {Error} */ (error).name === 'AbortError') return { count: features.length, cancelled: true };
     download(file);
   }
-  try { localStorage.setItem(config.storageKeys.lastExport, new Date().toISOString()); } catch { /* not persisted */ }
+  if (!only) {
+    try { localStorage.setItem(config.storageKeys.lastExport, new Date().toISOString()); } catch { /* not persisted */ }
+  }
   return { count: features.length, cancelled: false };
 }
 
@@ -294,15 +410,15 @@ export async function importGeoJSON(file) {
   const plants = await db.getAll('plants');
   const byName = new Map(plants.map(plant => [plant.scientificName.toLowerCase(), plant]));
 
-  const existing = new Map((await listPlaces()).map(place => [place.id, place]));
+  const existing = new Map((await listCollections()).map(place => [place.id, place]));
   const result = { added: 0, updated: 0, unchanged: 0, skipped: 0 };
   /** @type {Place[]} */
   const toSave = [];
 
   for (const feature of features) {
-    const place = normalizePlace(feature);
+    let place = normalizeCollection(feature);
     if (!place) { result.skipped++; continue; }
-    place.geometry.coordinates = roundCoordinates(place.geometry.coordinates);
+    if (place.geometry) place.geometry.coordinates = roundCoordinates(place.geometry.coordinates);
     for (const entry of place.properties.plants) {
       if (entry.plantId !== null || !entry.scientificName) continue;
       const plant = byName.get(entry.scientificName.toLowerCase());
@@ -313,7 +429,13 @@ export async function importGeoJSON(file) {
     place.properties.plantIds = plantIdsOf(place.properties.plants);
 
     const current = existing.get(place.id);
-    if (!current) {
+    if (current && place.id === FAVORITES_ID) {
+      // Favorites from two devices: keep the union rather than one side.
+      const merged = place.properties.plants.reduce((acc, entry) => findEntry(acc, entry.plantId) ? acc : withPlants(acc, [...acc.properties.plants, entry]), current);
+      if (merged === current) { result.unchanged++; continue; }
+      place = { ...merged, properties: { ...merged.properties, updatedAt: new Date().toISOString() } };
+      result.updated++;
+    } else if (!current) {
       result.added++;
     } else if (place.properties.updatedAt > current.properties.updatedAt) {
       result.updated++;
@@ -328,7 +450,7 @@ export async function importGeoJSON(file) {
   if (toSave.length) {
     await db.putAll('spots', toSave);
     markHasSpots();
-    changed();
+    await changed();
   }
   return result;
 }

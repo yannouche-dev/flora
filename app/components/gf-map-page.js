@@ -5,7 +5,7 @@ import { href, parse } from '../core/router.js';
 import {
   ABUNDANCE, addHarvest, directionsUrl, distance, entryInSeason, entryName, formatDistance, inSeason, lastHarvest, listPlaces,
   placeAbundance, placeLastHarvest, placeTitle, plantCount, spotEvents
-} from '../core/spots.js';
+} from '../core/collections.js';
 import { whenReady } from '../core/store.js';
 import './gf-facet.js';
 import './gf-map.js';
@@ -196,7 +196,7 @@ export class GfMapPage extends LitElement {
     super();
     /** @type {any} */
     this.route = { name: 'map', spot: null, plant: null, season: false };
-    /** @type {import('../core/spots.js').Spot[]} */
+    /** @type {import('../core/collections.js').Spot[]} */
     this._spots = [];
     /** @type {string | null} */
     this._error = null;
@@ -255,13 +255,13 @@ export class GfMapPage extends LitElement {
       (!this.route.season || inSeason(place)));
   }
 
-  /** @param {import('../core/spots.js').Place} spot */
+  /** @param {import('../core/collections.js').Place} spot */
   #distanceTo(spot) {
     const fix = this.#geo.state.fix;
     return fix ? distance(fix.coordinates, spot.geometry.coordinates) : null;
   }
 
-  /** @param {import('../core/spots.js').Place} place @param {import('../core/spots.js').PlantEntry} entry */
+  /** @param {import('../core/collections.js').Place} place @param {import('../core/collections.js').PlantEntry} entry */
   async #quickHarvest(place, entry) {
     try {
       await addHarvest(place, entry.plantId, { date: today(), quantity: '', note: '' });
@@ -342,7 +342,7 @@ export class GfMapPage extends LitElement {
     `;
   }
 
-  /** @param {import('../core/spots.js').Place} place */
+  /** @param {import('../core/collections.js').Place} place */
   #sheet(place) {
     const p = place.properties;
     const dist = this.#distanceTo(place);
@@ -390,7 +390,7 @@ export class GfMapPage extends LitElement {
     `;
   }
 
-  /** @param {import('../core/spots.js').Place[]} places */
+  /** @param {import('../core/collections.js').Place[]} places */
   #list(places) {
     const fix = this.#geo.state.fix;
     const rows = places

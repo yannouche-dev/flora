@@ -5,7 +5,8 @@
 import { getAll } from '../core/db.js';
 
 /** Facets, in the order the filter panel shows them. Values within a facet are OR'ed, facets are AND'ed. */
-const FACETS = /** @type {const} */ (['status', 'family', 'genus', 'photo', 'french']);
+const FACETS = /** @type {const} */ (['mine', 'status', 'family', 'genus', 'photo', 'french']);
+const NONE = /** @type {string[]} */ ([]);
 
 /** @param {string} value */
 const normalize = value => String(value ?? '')
@@ -255,9 +256,20 @@ function suggest(q, filters) {
 }
 
 /**
- * @param {{ q: string, filters: Record<string, string[]>, sort: string }} params
+ * Facet values of an entry. Single-valued facets come from the index; "mine" (the user's
+ * collections containing the plant) is multi-valued and supplied with each request.
+ * @param {Entry} entry @param {string} facet @param {Record<number, string[]>} mine
+ * @returns {string | string[]}
  */
-function search({ q: query, filters, sort }) {
+const facetValue = (entry, facet, mine) => facet === 'mine' ? (mine[entry.summary.id] || NONE) : entry.values[facet];
+
+/** @param {string | string[]} value @param {Set<string>} set */
+const matchesFacet = (value, set) => Array.isArray(value) ? value.some(v => set.has(v)) : set.has(value);
+
+/**
+ * @param {{ q: string, filters: Record<string, string[]>, sort: string, membership?: Record<number, string[]> }} params
+ */
+function search({ q: query, filters, sort, membership: mine = {} }) {
   const q = normalize(query);
   const tokens = words(q);
 
@@ -287,27 +299,28 @@ function search({ q: query, filters, sort }) {
   const active = FACETS.filter(f => filters[f]?.length).map(f => /** @type {const} */ ([f, new Set(filters[f])]));
   /** @type {Record<string, Map<string, number>>} */
   const counts = Object.fromEntries(FACETS.map(f => [f, new Map()]));
-  const inc = (/** @type {string} */ facet, /** @type {string} */ value) =>
-    counts[facet].set(value, (counts[facet].get(value) || 0) + 1);
+  const inc = (/** @type {string} */ facet, /** @type {string | string[]} */ value) => {
+    for (const v of Array.isArray(value) ? value : [value]) counts[facet].set(v, (counts[facet].get(v) || 0) + 1);
+  };
 
   /** @type {number[]} */
   const hits = [];
   const candidates = matches ? matches.keys() : entries.keys();
   for (const i of candidates) {
-    const { values } = entries[i];
+    const entry = entries[i];
     let failures = 0;
     let failed = '';
     for (const [facet, set] of active) {
-      if (!set.has(values[facet])) {
+      if (!matchesFacet(facetValue(entry, facet, mine), set)) {
         failed = facet;
         if (++failures > 1) break;
       }
     }
     if (failures === 0) {
       hits.push(i);
-      for (const facet of FACETS) inc(facet, values[facet]);
+      for (const facet of FACETS) inc(facet, facetValue(entry, facet, mine));
     } else if (failures === 1) {
-      inc(failed, values[failed]);
+      inc(failed, facetValue(entry, failed, mine));
     }
   }
 

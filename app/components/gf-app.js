@@ -12,6 +12,8 @@ import './gf-plant-detail.js';
 import './gf-settings.js';
 import './gf-map-page.js';
 import './gf-spot-editor.js';
+import './gf-collections.js';
+import './gf-shared.js';
 
 /** Lit controller tracking a media query (desktop sidebar vs. mobile bottom sheet). */
 class MediaController {
@@ -69,7 +71,7 @@ export class GfApp extends LitElement {
       white-space: nowrap;
     }
     nav.tabs a[aria-current='page'] { background: var(--gf-accent); color: var(--gf-accent-contrast); }
-    gf-map-page, gf-spot-editor { flex: 1; min-height: 0; }
+    gf-map-page, gf-spot-editor, gf-collections, gf-shared { flex: 1; min-height: 0; }
     .settings {
       flex: none;
       margin-left: auto;
@@ -188,7 +190,8 @@ export class GfApp extends LitElement {
         ${route.name === 'search' ? html`<gf-search-bar></gf-search-bar>` : nothing}
         <nav class="tabs" aria-label="Sections">
           <a href=${lastSearchHash()} aria-current=${route.name === 'search' || route.name === 'plant' ? 'page' : 'false'}>Flore</a>
-          <a href=${href.map()} aria-current=${route.name === 'map' || route.name === 'spot' || route.name === 'spot-new' ? 'page' : 'false'}>Carte</a>
+          <a href=${href.collections()} aria-current=${['collections', 'spot', 'spot-new', 'shared'].includes(route.name) ? 'page' : 'false'}>Mes plantes</a>
+          <a href=${href.map()} aria-current=${route.name === 'map' ? 'page' : 'false'}>Carte</a>
         </nav>
         <a class="settings" href=${href.settings()} title="À propos et réglages" aria-label="À propos et réglages">⚙︎</a>
       </header>
@@ -240,8 +243,13 @@ export class GfApp extends LitElement {
         return html`<gf-plant-detail plant-id=${route.id}></gf-plant-detail>`;
       case 'map':
         return html`<gf-map-page .route=${route}></gf-map-page>`;
+      case 'collections':
+        return html`<gf-collections></gf-collections>`;
+      case 'shared':
+        document.title = 'Partage — GeoFlora';
+        return html`<gf-shared .data=${route.data}></gf-shared>`;
       case 'spot-new':
-        return html`<gf-spot-editor plant-id=${route.plant ?? ''}></gf-spot-editor>`;
+        return html`<gf-spot-editor kind=${route.kind} plant-id=${route.plant ?? ''}></gf-spot-editor>`;
       case 'spot':
         return html`<gf-spot-editor spot-id=${route.id} add-plant=${route.add ?? ''} ?pick=${route.pick}></gf-spot-editor>`;
       case 'settings':

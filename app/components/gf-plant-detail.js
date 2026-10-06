@@ -3,10 +3,14 @@ import { LitElement, html, css, nothing } from 'lit';
 import { STATUS_LABELS } from '../config.js';
 import * as db from '../core/db.js';
 import { lastSearchHash } from '../core/query.js';
-import { whenReady } from '../core/store.js';
+import { StoreController, whenReady } from '../core/store.js';
+import { toggleFavorite } from '../core/collections.js';
+import { href } from '../core/router.js';
+import { share } from '../core/share.js';
 import * as sources from '../core/sources.js';
 import './gf-attribution.js';
 import './gf-plant-spots.js';
+import './gf-add-to.js';
 
 /** Remote text is untrusted HTML: keep only its text content (DOMParser never runs scripts). */
 function toText(/** @type {string} */ value) {
@@ -94,7 +98,8 @@ export class GfPlantDetail extends LitElement {
     plantId: { type: Number, attribute: 'plant-id' },
     _plant: { state: true },
     _details: { state: true },
-    _error: { state: true }
+    _error: { state: true },
+    _shareNote: { state: true }
   };
 
   static styles = css`
@@ -146,6 +151,19 @@ export class GfPlantDetail extends LitElement {
     figcaption { padding: 6px 8px; }
     p { margin: 0 0 12px; }
     .muted { color: var(--gf-text-muted); }
+    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 4px; }
+    .actions button {
+      font: inherit;
+      font-size: 0.9rem;
+      padding: 7px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--gf-border);
+      background: var(--gf-surface);
+      color: var(--gf-text);
+      cursor: pointer;
+    }
+    .actions .fav[aria-pressed='true'] { color: #e11d48; border-color: #e11d48; }
+    .share-note { color: var(--gf-text-muted); font-size: 0.85rem; margin: 4px 0 0; }
     .retry {
       font: inherit;
       padding: 8px 18px;
@@ -188,6 +206,8 @@ export class GfPlantDetail extends LitElement {
     this._details = undefined;
     /** @type {string | null} */
     this._error = null;
+    /** @type {string | null} */
+    this._shareNote = null;
   }
 
   /** @type {AbortController | null} */
@@ -240,6 +260,30 @@ export class GfPlantDetail extends LitElement {
     }
   }
 
+  #store = new StoreController(this);
+
+  /** @param {any} plant */
+  #actions(plant) {
+    const fav = this.#store.state.favorites.has(plant.id);
+    const name = plant.vernacularNames?.[0] || plant.scientificName;
+    return html`
+      <div class="actions" role="group" aria-label="Actions">
+        <button type="button" class="fav" aria-pressed=${fav ? 'true' : 'false'} @click=${() => toggleFavorite(plant)}>
+          ${fav ? '♥ Favori' : '♡ Favori'}
+        </button>
+        <button type="button" @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-add-to'))?.open()}>＋ Ajouter à…</button>
+        <button type="button" @click=${() => this.#share(plant, name)}>Partager</button>
+      </div>
+      ${this._shareNote ? html`<p class="share-note" role="status">${this._shareNote}</p>` : nothing}`;
+  }
+
+  /** @param {any} plant @param {string} name */
+  async #share(plant, name) {
+    const result = await share({ title: name + ' — GeoFlora', text: `${name} (${plant.scientificName})`, url: href.plant(plant.id) });
+    this._shareNote = result === 'copied' ? 'Lien copié.' : null;
+    if (this._shareNote) setTimeout(() => { this._shareNote = null; }, 2500);
+  }
+
   render() {
     const plant = this._plant;
     if (plant === undefined) return html`<article><div class="skeleton"></div></article>`;
@@ -271,6 +315,8 @@ export class GfPlantDetail extends LitElement {
         <a class="back" href=${lastSearchHash()}>← Recherche</a>
         <h1>${plant.vernacularNames?.[0] || plant.scientificName}</h1>
         <div class="sci"><i>${plant.scientificName}</i> <span class="author">${plant.author}</span></div>
+        ${this.#actions(plant)}
+        <gf-add-to .plant=${plant}></gf-add-to>
 
         <ul class="tags">
           <li>${plant.family}</li>

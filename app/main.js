@@ -5,7 +5,7 @@ import './components/gf-app.js';
 import { syncDataset } from './core/dataset.js';
 import { startUrlSync } from './core/query.js';
 import { loadIndex, runSearch } from './core/search.js';
-import { hasSpots, requestPersistence } from './core/spots.js';
+import { hasSpots, refreshMembership, requestPersistence, spotEvents } from './core/collections.js';
 import { store } from './core/store.js';
 
 const PHASES = {
@@ -22,6 +22,7 @@ async function start() {
     const { meta, offline } = await syncDataset(({ phase }) => store.set({ statusText: PHASES[phase] }));
     store.set({ meta, offline, statusText: 'Préparation de la recherche…' });
     await loadIndex();
+    await refreshMembership().catch(error => console.error(error));
     await runSearch();
     store.set({ status: 'ready', statusText: '' });
   } catch (error) {
@@ -34,6 +35,9 @@ addEventListener('geoflora-outdated', () => store.set({
   status: 'error',
   statusText: 'GeoFlora vient d’être mis à jour : rechargez la page pour continuer.'
 }));
+
+// Favorites/collections changed: the "Mes plantes" facet and its counts must follow.
+spotEvents.addEventListener('change', () => { if (store.state.status === 'ready') runSearch(); });
 
 addEventListener('online', () => store.set({ offline: false }));
 addEventListener('offline', () => store.set({ offline: true }));

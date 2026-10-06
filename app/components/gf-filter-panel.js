@@ -25,14 +25,22 @@ export class GfFilterPanel extends LitElement {
   }
 
   render() {
-    const { query: { filters }, results: { facets } } = this.#store.state;
+    const { query: { filters }, results: { facets }, collections } = this.#store.state;
     const count = (/** @type {string} */ facet, /** @type {string} */ value) => facets[facet]?.[value] || 0;
 
     const families = [...new Set(genusFamily.values())];
     const genera = [...genusFamily.keys()]
       .filter(genus => !filters.family.length || filters.family.includes(genusFamily.get(genus) || ''));
 
+    const mine = [
+      ...collections.filter(c => c.kind === 'favorites').map(c => ({ value: c.id, label: '♥ Favoris', count: count('mine', c.id) })),
+      ...(collections.some(c => c.kind === 'place') ? [{ value: 'place', label: '📍 Dans un de mes lieux', count: count('mine', 'place') }] : []),
+      ...collections.filter(c => c.kind === 'list').map(c => ({ value: c.id, label: c.name, count: count('mine', c.id) })),
+      ...collections.filter(c => c.kind === 'place').map(c => ({ value: c.id, label: '📍 ' + c.name, count: count('mine', c.id) }))
+    ];
+
     return html`
+      ${mine.length ? html`<gf-facet name="mine" label="Mes plantes" limit="6" .selected=${filters.mine} .options=${mine}></gf-facet>` : ''}
       <gf-facet name="status" label="Statut en France" .selected=${filters.status}
         .options=${STATUS_ORDER.map(code => ({ value: code, label: STATUS_SHORT[code], title: STATUS_LABELS[code] + ' (TAXREF ' + code + ')', count: count('status', code) }))}
       ></gf-facet>

@@ -6,7 +6,7 @@ import * as L from 'leaflet';
 import { config } from '../config.js';
 import { watchLocation } from '../core/geo.js';
 import { FRANCE_BOUNDS, LAYERS, tileLayer } from '../core/ign.js';
-import { inSeason, placeAbundance, placeTitle } from '../core/spots.js';
+import { inSeason, placeAbundance, placeTitle } from '../core/collections.js';
 
 const STYLESHEETS = [
   new URL('../../vendor/leaflet.css', import.meta.url).href,
@@ -15,7 +15,7 @@ const STYLESHEETS = [
 
 const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
 
-/** @param {import('../core/spots.js').Place} spot @param {boolean} selected */
+/** @param {import('../core/collections.js').Place} spot @param {boolean} selected */
 function pinIcon(spot, selected) {
   const color = PIN_COLORS[placeAbundance(spot)] || PIN_COLORS.moyen;
   const n = spot.properties.plants.length;
@@ -77,7 +77,7 @@ export class GfMap extends LitElement {
 
   constructor() {
     super();
-    /** @type {import('../core/spots.js').Spot[]} */
+    /** @type {import('../core/collections.js').Spot[]} */
     this.spots = [];
     /** @type {string | null} */
     this.selectedId = null;
