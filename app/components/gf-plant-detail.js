@@ -146,6 +146,15 @@ export class GfPlantDetail extends LitElement {
     figcaption { padding: 6px 8px; }
     p { margin: 0 0 12px; }
     .muted { color: var(--gf-text-muted); }
+    .retry {
+      font: inherit;
+      padding: 8px 18px;
+      border-radius: 999px;
+      border: 0;
+      background: var(--gf-accent);
+      color: var(--gf-accent-contrast);
+      cursor: pointer;
+    }
     .description { background: var(--gf-surface); border-radius: var(--gf-radius); padding: 12px 14px; margin-bottom: 8px; }
     .description small { display: block; color: var(--gf-text-muted); margin-bottom: 4px; }
     ul.inline { padding: 0; margin: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px 14px; }
@@ -203,9 +212,16 @@ export class GfPlantDetail extends LitElement {
     this._error = null;
     this.scrollTop = 0;
 
-    await whenReady();
-    if (abort.signal.aborted) return;
-    const plant = await db.get('plants', id);
+    let plant;
+    try {
+      await whenReady();
+      if (abort.signal.aborted) return;
+      plant = await db.get('plants', id);
+    } catch (error) {
+      console.error(error);
+      if (!abort.signal.aborted) this._plant = { failed: /** @type {Error} */ (error).message };
+      return;
+    }
     if (abort.signal.aborted) return;
     this._plant = plant || null;
     if (!plant) return;
@@ -227,6 +243,14 @@ export class GfPlantDetail extends LitElement {
   render() {
     const plant = this._plant;
     if (plant === undefined) return html`<article><div class="skeleton"></div></article>`;
+    if (plant?.failed) {
+      return html`<article>
+        <a class="back" href=${lastSearchHash()}>← Recherche</a>
+        <h1>Impossible de lire la flore locale</h1>
+        <p class="muted">${plant.failed}</p>
+        <p><button class="retry" type="button" @click=${() => this.#load(this.plantId)}>Réessayer</button></p>
+      </article>`;
+    }
     if (plant === null) {
       return html`<article><a class="back" href=${lastSearchHash()}>← Recherche</a><h1>Plante introuvable</h1></article>`;
     }

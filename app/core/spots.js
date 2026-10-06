@@ -87,7 +87,7 @@ export async function saveSpot(spot) {
     properties: { ...spot.properties, updatedAt: new Date().toISOString() }
   };
   await db.put('spots', saved);
-  requestPersistence();
+  markHasSpots();
   changed();
   return saved;
 }
@@ -98,11 +98,29 @@ export function addHarvest(spot, harvest) {
   return saveSpot({ ...spot, properties: { ...spot.properties, harvests } });
 }
 
-/** Asks the browser not to evict our storage under pressure (spots exist only on this device). */
+/**
+ * Asks the browser not to evict our storage under pressure (spots exist only on this device).
+ * Granting it can make Chrome close open IndexedDB connections (db.js reconnects), so it is
+ * asked at startup, before the database is opened — and only once spots exist.
+ */
 export async function requestPersistence() {
   try {
     if (navigator.storage?.persist && !(await navigator.storage.persisted())) await navigator.storage.persist();
   } catch { /* best effort */ }
+}
+
+/** Remembers, without opening the database, that this device holds spots worth protecting. */
+function markHasSpots() {
+  try {
+    if (localStorage.getItem(config.storageKeys.hasSpots)) return;
+    localStorage.setItem(config.storageKeys.hasSpots, '1');
+  } catch { /* storage unavailable */ }
+  // First spot ever: ask now (later sessions ask at startup).
+  requestPersistence();
+}
+
+export function hasSpots() {
+  try { return localStorage.getItem(config.storageKeys.hasSpots) === '1'; } catch { return false; }
 }
 
 // ── Season & distance ─────────────────────────────────────────────────────
@@ -290,7 +308,7 @@ export async function importGeoJSON(file) {
 
   if (toSave.length) {
     await db.putAll('spots', toSave);
-    requestPersistence();
+    markHasSpots();
     changed();
   }
   return result;

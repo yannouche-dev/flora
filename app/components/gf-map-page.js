@@ -27,6 +27,7 @@ export class GfMapPage extends LitElement {
     _view: { state: true },
     _plants: { state: true },
     _toast: { state: true },
+    _error: { state: true },
     _plantMenu: { state: true }
   };
 
@@ -183,6 +184,8 @@ export class GfMapPage extends LitElement {
     this.route = { name: 'map', spot: null, plant: null, season: false };
     /** @type {import('../core/spots.js').Spot[]} */
     this._spots = [];
+    /** @type {string | null} */
+    this._error = null;
     /** @type {'map' | 'list'} */
     this._view = 'map';
     /** @type {number[]} */
@@ -212,7 +215,13 @@ export class GfMapPage extends LitElement {
 
   async #load() {
     await whenReady();
-    this._spots = await listSpots();
+    try {
+      this._spots = await listSpots();
+      this._error = null;
+    } catch (error) {
+      console.error(error);
+      this._error = 'Lieux illisibles pour le moment : ' + /** @type {Error} */ (error).message;
+    }
     document.title = 'Carte des lieux — GeoFlora';
   }
 
@@ -240,8 +249,12 @@ export class GfMapPage extends LitElement {
 
   /** @param {import('../core/spots.js').Spot} spot */
   async #quickHarvest(spot) {
-    await addHarvest(spot, { date: today(), quantity: '', note: '' });
-    this.#showToast('Récolte du jour ajoutée au journal');
+    try {
+      await addHarvest(spot, { date: today(), quantity: '', note: '' });
+      this.#showToast('Récolte du jour ajoutée au journal');
+    } catch (error) {
+      this.#showToast('Enregistrement impossible : ' + /** @type {Error} */ (error).message);
+    }
   }
 
   /** @param {string} message */
@@ -308,6 +321,8 @@ export class GfMapPage extends LitElement {
         ${selected && this._view === 'map' ? nothing : html`
           <a class="button fab" href=${href.newSpot(this._plants.length === 1 ? this._plants[0] : null)} aria-label="Ajouter un lieu de récolte">+</a>`}
         ${this._toast ? html`<div class="toast" role="status">${this._toast}</div>` : nothing}
+        ${this._error ? html`<div class="toast" role="alert">${this._error}
+          <button type="button" @click=${() => this.#load()}>Réessayer</button></div>` : nothing}
       </div>
     `;
   }

@@ -11,7 +11,8 @@ const shortDate = (/** @type {string} */ iso) =>
 export class GfPlantSpots extends LitElement {
   static properties = {
     plantId: { type: Number, attribute: 'plant-id' },
-    _spots: { state: true }
+    _spots: { state: true },
+    _error: { state: true }
   };
 
   static styles = css`
@@ -60,6 +61,8 @@ export class GfPlantSpots extends LitElement {
     this.plantId = 0;
     /** @type {import('../core/spots.js').Spot[]} */
     this._spots = [];
+    /** @type {string | null} */
+    this._error = null;
   }
 
   connectedCallback() {
@@ -79,7 +82,13 @@ export class GfPlantSpots extends LitElement {
 
   async #load() {
     if (!this.plantId) return;
-    this._spots = await spotsForPlant(this.plantId);
+    try {
+      this._spots = await spotsForPlant(this.plantId);
+      this._error = null;
+    } catch (error) {
+      console.error(error);
+      this._error = 'Lieux illisibles pour le moment : ' + /** @type {Error} */ (error).message;
+    }
   }
 
   render() {
@@ -89,6 +98,7 @@ export class GfPlantSpots extends LitElement {
         <h2>Mes lieux de récolte${spots.length ? ` (${spots.length})` : ''}</h2>
         <a class="add" href=${href.newSpot(this.plantId)}>📍 Ajouter un lieu</a>
       </div>
+      ${this._error ? html`<p role="alert">${this._error} <button type="button" @click=${() => this.#load()}>Réessayer</button></p>` : nothing}
       ${spots.length ? html`
         <gf-map .spots=${spots} fit @spot-select=${e => { location.hash = href.map({ spot: e.detail.id }); }}></gf-map>
         <ul>

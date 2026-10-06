@@ -45,6 +45,15 @@ const done = tx => new Promise((resolve, reject) => {
 
 /** @type {Promise<IDBDatabase> | null} */
 let opening = null;
+/** @type {IDBDatabase | null} */
+let current = null;
+
+/** Forgets the connection so the next call opens a fresh one. @param {IDBDatabase} [db] */
+function drop(db) {
+  if (db && db !== current) return;
+  current = null;
+  opening = null;
+}
 
 /** @returns {Promise<IDBDatabase>} */
 export function openDb() {
@@ -52,76 +61,94 @@ export function openDb() {
     const request = indexedDB.open(config.db.name, config.db.version);
     request.onupgradeneeded = () => upgrade(request.result);
     request.onsuccess = () => {
-      const db = request.result;
+      const db = current = request.result;
       // Another tab upgraded the schema: close so it can proceed, reopen lazily.
-      db.onversionchange = () => { db.close(); opening = null; };
+      db.onversionchange = () => { db.close(); drop(db); };
+      // The browser can also close a connection on its own (storage switched to persistent,
+      // page frozen in the background, site data cleared…): only a `close` event tells us.
+      db.onclose = () => drop(db);
       resolve(db);
     };
-    request.onerror = () => reject(request.error);
+    request.onerror = () => { opening = null; reject(request.error); };
+    request.onblocked = () => console.warn('IndexedDB upgrade waiting for another GeoFlora tab to close.');
   });
   return opening;
 }
 
+/**
+ * Runs `fn` in a transaction. If the connection turns out to be closing (closed by the
+ * browser without notice), reconnects once and retries, so callers never see a dead connection.
+ * @template T
+ * @param {string | string[]} stores
+ * @param {IDBTransactionMode} mode
+ * @param {(tx: IDBTransaction) => Promise<T>} fn
+ * @returns {Promise<T>}
+ */
+async function run(stores, mode, fn) {
+  for (let attempt = 0; ; attempt++) {
+    const db = await openDb();
+    let tx;
+    try {
+      tx = db.transaction(stores, mode);
+    } catch (error) {
+      if (attempt === 0 && /** @type {DOMException} */ (error).name === 'InvalidStateError') {
+        drop(db);
+        continue;
+      }
+      throw error;
+    }
+    return fn(tx);
+  }
+}
+
 /** @param {string} store @param {IDBValidKey} key */
-export async function get(store, key) {
-  const db = await openDb();
-  return promisify(db.transaction(store).objectStore(store).get(key));
-}
+export const get = (store, key) =>
+  run(store, 'readonly', tx => promisify(tx.objectStore(store).get(key)));
 
 /** @param {string} store */
-export async function getAll(store) {
-  const db = await openDb();
-  return promisify(db.transaction(store).objectStore(store).getAll());
-}
+export const getAll = store =>
+  run(store, 'readonly', tx => promisify(tx.objectStore(store).getAll()));
 
 /** @param {string} store */
-export async function count(store) {
-  const db = await openDb();
-  return promisify(db.transaction(store).objectStore(store).count());
-}
+export const count = store =>
+  run(store, 'readonly', tx => promisify(tx.objectStore(store).count()));
 
 /** @param {string} store @param {string} index @param {IDBValidKey} key */
-export async function getAllByIndex(store, index, key) {
-  const db = await openDb();
-  return promisify(db.transaction(store).objectStore(store).index(index).getAll(key));
-}
+export const getAllByIndex = (store, index, key) =>
+  run(store, 'readonly', tx => promisify(tx.objectStore(store).index(index).getAll(key)));
 
 /** @param {string} store @param {IDBValidKey} key */
-export async function remove(store, key) {
-  const db = await openDb();
-  const tx = db.transaction(store, 'readwrite');
-  tx.objectStore(store).delete(key);
-  return done(tx);
-}
+export const remove = (store, key) =>
+  run(store, 'readwrite', tx => {
+    tx.objectStore(store).delete(key);
+    return done(tx);
+  });
 
 /** @param {string} store @param {any[]} values */
-export async function putAll(store, values) {
-  const db = await openDb();
-  const tx = db.transaction(store, 'readwrite');
-  const objectStore = tx.objectStore(store);
-  for (const value of values) objectStore.put(value);
-  return done(tx);
-}
+export const putAll = (store, values) =>
+  run(store, 'readwrite', tx => {
+    const objectStore = tx.objectStore(store);
+    for (const value of values) objectStore.put(value);
+    return done(tx);
+  });
 
 /** @param {string} store @param {any} value @param {IDBValidKey} [key] */
-export async function put(store, value, key) {
-  const db = await openDb();
-  const tx = db.transaction(store, 'readwrite');
-  tx.objectStore(store).put(value, key);
-  return done(tx);
-}
+export const put = (store, value, key) =>
+  run(store, 'readwrite', tx => {
+    tx.objectStore(store).put(value, key);
+    return done(tx);
+  });
 
 /**
  * Replaces the whole plants store and records the dataset version atomically.
  * @param {any[]} plants
  * @param {any} meta
  */
-export async function replacePlants(plants, meta) {
-  const db = await openDb();
-  const tx = db.transaction(['plants', 'meta'], 'readwrite');
-  const store = tx.objectStore('plants');
-  store.clear();
-  for (const plant of plants) store.put(plant);
-  tx.objectStore('meta').put(meta, 'dataset');
-  return done(tx);
-}
+export const replacePlants = (plants, meta) =>
+  run(['plants', 'meta'], 'readwrite', tx => {
+    const store = tx.objectStore('plants');
+    store.clear();
+    for (const plant of plants) store.put(plant);
+    tx.objectStore('meta').put(meta, 'dataset');
+    return done(tx);
+  });
