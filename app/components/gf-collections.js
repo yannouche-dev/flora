@@ -4,9 +4,9 @@ import * as db from '../core/db.js';
 import { GeoController } from '../core/geo.js';
 import { href } from '../core/router.js';
 import {
-  FAVORITES_ID, collectionTitle, distance, formatDistance, inSeason, listCollections, plantCount, spotEvents
+  FAVORITES_ID, collectionTitle, distance, formatDistance, inSeason, listCollections, plantCount, soon, spotEvents
 } from '../core/collections.js';
-import { whenReady } from '../core/store.js';
+import { StoreController, whenReady } from '../core/store.js';
 
 /** Up to this many thumbnails per collection row. */
 const THUMBS = 4;
@@ -83,12 +83,14 @@ export class GfCollections extends LitElement {
       background: var(--gf-surface-2);
     }
     .thumbs :first-child { margin-left: 0; }
+    .badge.soon { background: var(--gf-accent-soft); color: var(--gf-text); }
     .badge { background: #fde047; color: #422006; border-radius: 999px; padding: 0 8px; font-size: 0.75rem; font-weight: 600; }
     .empty { color: var(--gf-text-muted); font-size: 0.9rem; }
     .error { color: var(--gf-danger); }
   `;
 
   #geo = new GeoController(this);
+  #store = new StoreController(this);
   #onChange = () => this.#load();
 
   constructor() {
@@ -150,7 +152,9 @@ export class GfCollections extends LitElement {
                 : html`<span></span>`)}
             </span>
             ${plantCount(p.plants.length)}
-            ${p.kind === 'place' && inSeason(c) ? html`<span class="badge">En saison</span>` : nothing}
+            ${p.kind !== 'place' || !this.#store.state.harvestMode ? nothing
+              : inSeason(c) ? html`<span class="badge">En saison</span>`
+              : soon(c) ? html`<span class="badge soon">Bientôt</span>` : nothing}
           </span>
         </a>
       </li>`;
@@ -172,7 +176,7 @@ export class GfCollections extends LitElement {
         <p class="lead">Favoris, listes et lieux. Tout reste sur cet appareil ; partagez une collection par un simple lien.</p>
         <div class="new">
           <a href=${href.newList()}>☰ Nouvelle liste</a>
-          <a href=${href.newSpot()}>📍 Nouveau lieu ici</a>
+          <a href=${href.newSpot()} @click=${e => { e.preventDefault(); this.dispatchEvent(new CustomEvent('open-capture', { bubbles: true, composed: true })); }}>📍 Noter une plante ici</a>
         </div>
         ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : nothing}
 

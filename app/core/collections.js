@@ -255,6 +255,40 @@ export function entryInSeason(entry, today = new Date()) {
   });
 }
 
+/**
+ * "Bientôt": harvested, in any year, within the next 30 days of the calendar (and not in season now).
+ * @param {PlantEntry} entry @param {Date} [today]
+ */
+export function entrySoon(entry, today = new Date()) {
+  if (entryInSeason(entry, today)) return false;
+  const now = dayOfYear(today);
+  return entry.harvests.some(h => {
+    const date = new Date(h.date + 'T12:00:00');
+    if (Number.isNaN(date.getTime())) return false;
+    const ahead = (dayOfYear(date) - now + 365) % 365;
+    return ahead > 15 && ahead <= 30;
+  });
+}
+
+/** @param {Place} place @param {Date} [today] */
+export const soon = (place, today = new Date()) => !inSeason(place, today) && place.properties.plants.some(e => entrySoon(e, today));
+
+/** Does any collection hold a harvest? (decides the default of harvest mode) */
+export async function anyHarvest() {
+  return (await listCollections()).some(c => c.properties.plants.some(e => e.harvests.length));
+}
+
+/** Recently used plants (quick capture suggestions). @returns {number[]} */
+export function recentPlants() {
+  try { return JSON.parse(localStorage.getItem(config.storageKeys.recentPlants) || '[]'); } catch { return []; }
+}
+
+/** @param {number} plantId */
+export function rememberPlant(plantId) {
+  const list = [plantId, ...recentPlants().filter(id => id !== plantId)].slice(0, 12);
+  try { localStorage.setItem(config.storageKeys.recentPlants, JSON.stringify(list)); } catch { /* not persisted */ }
+}
+
 /** @param {Place} place @param {Date} [today] */
 export const inSeason = (place, today = new Date()) => place.properties.plants.some(e => entryInSeason(e, today));
 

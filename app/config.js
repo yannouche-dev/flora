@@ -27,7 +27,9 @@ export const config = {
     mapLayer: 'geoflora.mapLayer',
     mapView: 'geoflora.mapView',
     lastExport: 'geoflora.lastExport',
-    hasSpots: 'geoflora.hasSpots'
+    hasSpots: 'geoflora.hasSpots',
+    harvestMode: 'geoflora.harvestMode',
+    recentPlants: 'geoflora.recentPlants'
   },
 
   /** GPS fixes at or under this accuracy (metres) are considered good enough to save. */

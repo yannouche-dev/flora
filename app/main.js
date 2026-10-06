@@ -5,8 +5,8 @@ import './components/gf-app.js';
 import { syncDataset } from './core/dataset.js';
 import { startUrlSync } from './core/query.js';
 import { loadIndex, runSearch } from './core/search.js';
-import { hasSpots, refreshMembership, requestPersistence, spotEvents } from './core/collections.js';
-import { store } from './core/store.js';
+import { anyHarvest, hasSpots, refreshMembership, requestPersistence, spotEvents } from './core/collections.js';
+import { initHarvestMode, store } from './core/store.js';
 
 const PHASES = {
   checking: 'Vérification de la flore…',
@@ -23,6 +23,7 @@ async function start() {
     store.set({ meta, offline, statusText: 'Préparation de la recherche…' });
     await loadIndex();
     await refreshMembership().catch(error => console.error(error));
+    initHarvestMode(await anyHarvest().catch(() => false));
     await runSearch();
     store.set({ status: 'ready', statusText: '' });
   } catch (error) {

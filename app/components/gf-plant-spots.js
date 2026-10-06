@@ -2,6 +2,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { href } from '../core/router.js';
 import { collectionsForPlant, collectionTitle, entryInSeason, findEntry, lastHarvest, plantCount, spotEvents } from '../core/collections.js';
+import { StoreController } from '../core/store.js';
 import './gf-map.js';
 
 const shortDate = (/** @type {string} */ iso) =>
@@ -67,6 +68,7 @@ export class GfPlantSpots extends LitElement {
   `;
 
   #onChange = () => this.#load();
+  #store = new StoreController(this);
 
   constructor() {
     super();
@@ -128,8 +130,9 @@ export class GfPlantSpots extends LitElement {
             const others = place.properties.plants.length - 1;
             return html`<li><a href=${href.map({ spot: place.id })}>
               <span>${place.properties.name || 'Lieu ' + (i + 1)}${others > 0 ? html` <small>· ${plantCount(others + 1)}</small>` : nothing}</span>
-              ${entry && entryInSeason(entry) ? html`<span class="badge">En saison</span>` : nothing}
-              <span class="when">${last ? 'Récolté le ' + shortDate(last.date) : 'Aucune récolte'}</span>
+              ${this.#store.state.harvestMode ? html`
+                ${entry && entryInSeason(entry) ? html`<span class="badge">En saison</span>` : nothing}
+                <span class="when">${last ? 'Récolté le ' + shortDate(last.date) : 'Aucune récolte'}</span>` : nothing}
             </a></li>`;
           })}
         </ul>` : lists.length ? nothing : html`<p>Ajoutez cette plante à vos favoris ou à une liste, ou notez où vous la trouvez : un lieu peut réunir plusieurs plantes. Tout reste sur cet appareil.</p>`}

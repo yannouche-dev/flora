@@ -3,10 +3,10 @@ import { LitElement, html, css, nothing } from 'lit';
 import { GeoController } from '../core/geo.js';
 import { href, parse } from '../core/router.js';
 import {
-  ABUNDANCE, addHarvest, directionsUrl, distance, entryInSeason, entryName, formatDistance, inSeason, lastHarvest, listPlaces,
+  ABUNDANCE, addHarvest, directionsUrl, distance, entryInSeason, entryName, entrySoon, formatDistance, inSeason, lastHarvest, listPlaces,
   placeAbundance, placeLastHarvest, placeTitle, plantCount, spotEvents
 } from '../core/collections.js';
-import { whenReady } from '../core/store.js';
+import { StoreController, whenReady } from '../core/store.js';
 import './gf-facet.js';
 import './gf-map.js';
 
@@ -106,6 +106,8 @@ export class GfMapPage extends LitElement {
       background: var(--c);
       border: 1px solid #fff;
     }
+    /* Phones have the "Noter ici" button in the tab bar. */
+    @media (max-width: 699px) { .fab { display: none !important; } }
     .fab {
       position: absolute;
       z-index: 600;
@@ -144,6 +146,7 @@ export class GfMapPage extends LitElement {
     .sheet .close { position: absolute; top: 10px; right: 10px; border: 0; background: none; font-size: 1.4rem; padding: 4px 8px; }
     .meta { font-size: 0.85rem; color: var(--gf-text-muted); display: flex; gap: 6px 12px; flex-wrap: wrap; }
     .meta .stars { color: #f59e0b; letter-spacing: 1px; }
+    .badge.soon { background: var(--gf-accent-soft); color: var(--gf-text); }
     .badge { background: #fde047; color: #422006; border-radius: 999px; padding: 0 8px; font-size: 0.75rem; font-weight: 600; }
     .sheet .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
     .sheet .actions .main { background: var(--gf-accent); color: var(--gf-accent-contrast); border-color: var(--gf-accent); font-weight: 600; }
@@ -190,6 +193,8 @@ export class GfMapPage extends LitElement {
   `;
 
   #geo = new GeoController(this);
+  #store = new StoreController(this);
+  get #harvest() { return this.#store.state.harvestMode; }
   #onSpotsChange = () => this.#load();
 
   constructor() {
@@ -252,7 +257,7 @@ export class GfMapPage extends LitElement {
     const plants = new Set(this._plants);
     return this._spots.filter(place =>
       (!plants.size || place.properties.plantIds.some(id => plants.has(id))) &&
-      (!this.route.season || inSeason(place)));
+      (!this.route.season || !this.#harvest || inSeason(place)));
   }
 
   /** @param {import('../core/collections.js').Place} spot */
@@ -298,8 +303,8 @@ export class GfMapPage extends LitElement {
     return html`
       <div class="bar">
         <span class="count">${spots.length} lieu${spots.length > 1 ? 'x' : ''}</span>
-        <button type="button" aria-pressed=${this.route.season ? 'true' : 'false'}
-          @click=${() => this.#navigate({ season: !this.route.season, spot: null })}>En saison · ${seasonCount}</button>
+        ${this.#harvest ? html`<button type="button" aria-pressed=${this.route.season ? 'true' : 'false'}
+          @click=${() => this.#navigate({ season: !this.route.season, spot: null })}>En saison · ${seasonCount}</button>` : nothing}
         <button type="button" aria-expanded=${this._plantMenu ? 'true' : 'false'} aria-pressed=${this._plants.length ? 'true' : 'false'}
           @click=${() => { this._plantMenu = !this._plantMenu; }}>Plantes${this._plants.length ? ' · ' + this._plants.length : ''} ▾</button>
         <div class="segmented" role="group" aria-label="Affichage">
@@ -334,7 +339,8 @@ export class GfMapPage extends LitElement {
           </p>` : nothing}
 
         ${selected && this._view === 'map' ? nothing : html`
-          <a class="button fab" href=${href.newSpot(this._plants.length === 1 ? this._plants[0] : null)} aria-label="Ajouter un lieu de récolte">+</a>`}
+          <button class="button fab" type="button" aria-label="Noter une plante ici"
+            @click=${() => this.dispatchEvent(new CustomEvent('open-capture', { bubbles: true, composed: true }))}>+</button>`}
         ${this._toast ? html`<div class="toast" role="status">${this._toast}</div>` : nothing}
         ${this._error ? html`<div class="toast" role="alert">${this._error}
           <button type="button" @click=${() => this.#load()}>Réessayer</button></div>` : nothing}
@@ -360,7 +366,7 @@ export class GfMapPage extends LitElement {
         <h2>${placeTitle(place)}</h2>
         <div class="meta">
           <span>${plantCount(p.plants.length)}</span>
-          ${inSeason(place) ? html`<span class="badge">En saison</span>` : nothing}
+          ${this.#harvest && inSeason(place) ? html`<span class="badge">En saison</span>` : nothing}
           ${dist !== null ? html`<span>à ${formatDistance(dist)}</span>` : nothing}
         </div>
         ${shown.length ? html`
@@ -369,12 +375,14 @@ export class GfMapPage extends LitElement {
               const last = lastHarvest(e);
               return html`<li>
                 <span class="who">
-                  <span class="nm">${entryName(e)}${entryInSeason(e) ? html` <span class="badge">En saison</span>` : nothing}</span>
-                  <span class="sub">${ABUNDANCE.find(a => a.value === e.abundance)?.label}${e.rating ? ' · ' + stars(e.rating) : ''}
-                    · ${last ? 'récolté le ' + shortDate(last.date) : 'aucune récolte'}</span>
+                  <span class="nm">${entryName(e)}${!this.#harvest ? nothing
+                    : entryInSeason(e) ? html` <span class="badge">En saison</span>`
+                    : entrySoon(e) ? html` <span class="badge soon">Bientôt</span>` : nothing}</span>
+                  <span class="sub">${ABUNDANCE.find(a => a.value === e.abundance)?.label}${this.#harvest ? html`${e.rating ? ' · ' + stars(e.rating) : ''}
+                    · ${last ? 'récolté le ' + shortDate(last.date) : 'aucune récolte'}` : e.notes ? ' · ' + e.notes.slice(0, 50) : ''}</span>
                 </span>
-                <button type="button" class="harvest" aria-label="Noter une récolte de ${entryName(e)} aujourd’hui"
-                  @click=${() => this.#quickHarvest(place, e)}>+ Récolte</button>
+                ${this.#harvest ? html`<button type="button" class="harvest" aria-label="Noter une récolte de ${entryName(e)} aujourd’hui"
+                  @click=${() => this.#quickHarvest(place, e)}>+ Récolte</button>` : nothing}
               </li>`;
             })}
           </ul>
@@ -412,9 +420,9 @@ export class GfMapPage extends LitElement {
                 <span class="title">${placeTitle(place)}</span>
                 <span class="dist">${dist !== null ? formatDistance(dist) : ''}</span>
                 <span class="sub">
-                  ${inSeason(place) ? html`<span class="badge">En saison</span> ` : nothing}
-                  ${names.length > 1 || place.properties.name ? names.join(', ') + ' · ' : ''}
-                  ${last ? 'récolté le ' + shortDate(last.harvest.date) : 'aucune récolte'}
+                  ${this.#harvest && inSeason(place) ? html`<span class="badge">En saison</span> ` : nothing}
+                  ${names.length > 1 || place.properties.name ? names.join(', ') : ''}
+                  ${this.#harvest ? (names.length > 1 || place.properties.name ? ' · ' : '') + (last ? 'récolté le ' + shortDate(last.harvest.date) : 'aucune récolte') : ''}
                 </span>
               </a>
             </li>`;

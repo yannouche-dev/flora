@@ -14,6 +14,8 @@ import './gf-map-page.js';
 import './gf-spot-editor.js';
 import './gf-collections.js';
 import './gf-shared.js';
+import './gf-capture.js';
+import './gf-tabbar.js';
 
 /** Lit controller tracking a media query (desktop sidebar vs. mobile bottom sheet). */
 class MediaController {
@@ -29,12 +31,17 @@ class MediaController {
   hostDisconnected() { this.media.removeEventListener('change', this.onChange); }
 }
 
-/** App shell: header + route outlet. */
+/** @param {string} name */
+const tabOf = name => name === 'map' ? 'map'
+  : ['collections', 'spot', 'spot-new', 'shared'].includes(name) ? 'mine'
+  : name === 'settings' ? 'more' : 'flore';
+
+/** App shell: header + route outlet + (phone) bottom tab bar. */
 export class GfApp extends LitElement {
   static styles = css`
     :host {
       display: grid;
-      grid-template-rows: auto 1fr;
+      grid-template-rows: auto 1fr auto;
       height: 100%;
     }
     header {
@@ -71,6 +78,18 @@ export class GfApp extends LitElement {
       white-space: nowrap;
     }
     nav.tabs a[aria-current='page'] { background: var(--gf-accent); color: var(--gf-accent-contrast); }
+    .note {
+      flex: none;
+      font: inherit;
+      font-size: 0.875rem;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 999px;
+      border: 0;
+      background: var(--gf-accent);
+      color: var(--gf-accent-contrast);
+      cursor: pointer;
+    }
     gf-map-page, gf-spot-editor, gf-collections, gf-shared { flex: 1; min-height: 0; }
     .settings {
       flex: none;
@@ -164,6 +183,12 @@ export class GfApp extends LitElement {
   #router = new RouterController(this);
   #store = new StoreController(this);
   #wide = new MediaController(this, config.wideQuery);
+  #phone = new MediaController(this, '(max-width: 699px)');
+
+  constructor() {
+    super();
+    this.addEventListener('open-capture', () => /** @type {any} */ (this.renderRoot.querySelector('gf-capture'))?.open());
+  }
 
   get #dialog() {
     return /** @type {HTMLDialogElement | null} */ (this.renderRoot.querySelector('dialog'));
@@ -180,6 +205,7 @@ export class GfApp extends LitElement {
   render() {
     const route = this.#router.route;
     const { status, statusText, offline } = this.#store.state;
+    const phone = this.#phone.matches;
 
     return html`
       <header>
@@ -188,12 +214,13 @@ export class GfApp extends LitElement {
           <span>GeoFlora</span>
         </a>
         ${route.name === 'search' ? html`<gf-search-bar></gf-search-bar>` : nothing}
-        <nav class="tabs" aria-label="Sections">
+        ${phone ? nothing : html`<nav class="tabs" aria-label="Sections">
           <a href=${lastSearchHash()} aria-current=${route.name === 'search' || route.name === 'plant' ? 'page' : 'false'}>Flore</a>
           <a href=${href.collections()} aria-current=${['collections', 'spot', 'spot-new', 'shared'].includes(route.name) ? 'page' : 'false'}>Mes plantes</a>
           <a href=${href.map()} aria-current=${route.name === 'map' ? 'page' : 'false'}>Carte</a>
         </nav>
-        <a class="settings" href=${href.settings()} title="À propos et réglages" aria-label="À propos et réglages">⚙︎</a>
+        <button class="note" type="button" @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-capture'))?.open()}>+ Noter ici</button>
+        <a class="settings" href=${href.settings()} title="À propos et réglages" aria-label="À propos et réglages">⚙︎</a>`}
       </header>
       <main>
         ${status === 'loading' ? html`<div class="banner" role="status">${statusText || 'Chargement…'}</div>` : nothing}
@@ -202,6 +229,8 @@ export class GfApp extends LitElement {
         ${offline && status === 'ready' && route.name === 'search' ? html`<div class="banner">Hors ligne — recherche sur la copie locale.</div>` : nothing}
         ${this.#outlet(route)}
       </main>
+      ${phone ? html`<gf-tabbar current=${tabOf(route.name)}></gf-tabbar>` : html`<span></span>`}
+      <gf-capture></gf-capture>
     `;
   }
 

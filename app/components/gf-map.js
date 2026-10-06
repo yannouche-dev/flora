@@ -7,6 +7,7 @@ import { config } from '../config.js';
 import { watchLocation } from '../core/geo.js';
 import { FRANCE_BOUNDS, LAYERS, tileLayer } from '../core/ign.js';
 import { inSeason, placeAbundance, placeTitle } from '../core/collections.js';
+import { store as appStore } from '../core/store.js';
 
 const STYLESHEETS = [
   new URL('../../vendor/leaflet.css', import.meta.url).href,
@@ -23,7 +24,7 @@ function pinIcon(spot, selected) {
   const head = n > 1
     ? `<circle cx="15" cy="14.5" r="7.5" fill="#fff"/><text x="15" y="18.5" text-anchor="middle" font-size="11" font-weight="700" font-family="system-ui,sans-serif" fill="#1d2419">${n > 99 ? '99+' : n}</text>`
     : '<circle cx="15" cy="14.5" r="5" fill="#fff"/>';
-  const classes = ['gf-pin', selected ? 'selected' : '', inSeason(spot) ? 'season' : ''].join(' ');
+  const classes = ['gf-pin', selected ? 'selected' : '', appStore.state.harvestMode && inSeason(spot) ? 'season' : ''].join(' ');
   return L.divIcon({
     className: classes,
     iconSize: [30, 40],

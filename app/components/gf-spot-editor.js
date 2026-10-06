@@ -10,7 +10,8 @@ import {
   nearbyPlaces, newCollection, newPlace, placeTitle, plantCount, savePlace, withEntry, withLocation, withoutPlant, withPlant
 } from '../core/collections.js';
 import { encodeCollection, share } from '../core/share.js';
-import { whenReady } from '../core/store.js';
+import { lookalikes } from '../core/lookalikes.js';
+import { StoreController, whenReady } from '../core/store.js';
 import './gf-map.js';
 
 /** Existing places closer than this are offered instead of creating a duplicate. */
@@ -239,6 +240,12 @@ export class GfSpotEditor extends LitElement {
     .today { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.95rem; }
     .today input[type='checkbox'] { width: 20px; height: 20px; accent-color: var(--gf-accent); }
     .today input[type='text'] { flex: 1; min-width: 140px; }
+    .lookalikes { border: 1px solid #f59e0b; background: color-mix(in srgb, #f59e0b 12%, var(--gf-surface)); border-radius: 10px; padding: 8px 12px; font-size: 0.85rem; }
+    .lookalikes ul { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 4px; }
+    .lookalikes a { color: inherit; font-weight: 600; }
+    .danger { font-size: 0.75rem; padding: 0 6px; border-radius: 999px; background: var(--gf-surface-2); }
+    .danger.mortel { background: #b91c1c; color: #fff; }
+    .warn-mini { color: #d97706; font-weight: 700; }
     .remove { justify-self: start; color: var(--gf-danger); background: none; border: 0; font: inherit; font-size: 0.85rem; cursor: pointer; padding: 0; }
     .muted { margin: 0; color: var(--gf-text-muted); font-size: 0.9rem; }
     .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; position: sticky; bottom: -24px; padding: 10px 0 14px; background: var(--gf-bg); }
@@ -259,6 +266,9 @@ export class GfSpotEditor extends LitElement {
   `;
 
   #geo = new GeoController(this);
+  #store = new StoreController(this);
+  /** Harvest details (rating, log, "harvested today") only in harvest mode, and only for places. */
+  get #harvest() { return this.#store.state.harvestMode && this.#isPlace; }
 
   constructor() {
     super();
@@ -342,7 +352,7 @@ export class GfSpotEditor extends LitElement {
   /** What gets stored: the edited collection plus "harvested today" on newly added plants of a place. */
   #payload() {
     let place = /** @type {import('../core/collections.js').Collection} */ (this._place);
-    if (place.properties.kind !== 'place') return place;
+    if (place.properties.kind !== 'place' || !this.#store.state.harvestMode) return place;
     for (const [plantId, quantity] of this._todayFor) {
       const entry = findEntry(place, plantId);
       if (quantity === null || !entry) continue;
@@ -657,6 +667,17 @@ export class GfSpotEditor extends LitElement {
       </div>`;
   }
 
+  /** Look-alike reminder for foragers. @param {import('../core/collections.js').PlantEntry} entry */
+  #warnings(entry) {
+    const list = lookalikes(entry.plantId);
+    if (!list.length) return nothing;
+    return html`<div class="lookalikes" role="note">
+      <strong>⚠ Confusions possibles</strong>
+      <ul>${list.map(w => html`<li><a href=${href.plant(w.id)}>${w.name}</a>
+        <span class="danger ${w.danger}">${w.otherIsToxic ? w.danger : 'comestible, souvent confondu'}</span> — ${w.tip}</li>`)}</ul>
+    </div>`;
+  }
+
   /** @param {import('../core/collections.js').PlantEntry} entry */
   #entry(entry) {
     const id = entry.plantId;
@@ -673,16 +694,18 @@ export class GfSpotEditor extends LitElement {
           <span class="summary">
             ${entry.vernacularName ? html`<span class="sci">${entry.scientificName}</span>` : nothing}
             ${this.#isPlace ? html`
-              ${entryInSeason(entry) ? html`<span class="badge">En saison</span>` : nothing}
+              ${this.#harvest && entryInSeason(entry) ? html`<span class="badge">En saison</span>` : nothing}
+              ${this.#harvest && lookalikes(entry.plantId).some(w => w.otherIsToxic) ? html`<span class="warn-mini" title="Confusions dangereuses possibles">⚠</span>` : nothing}
               <span>${ABUNDANCE.find(a => a.value === entry.abundance)?.label}</span>
-              ${entry.rating ? html`<span class="mini-stars">${'★'.repeat(entry.rating)}</span>` : nothing}
-              <span>${last ? 'Récolté le ' + shortDate(last.date) : fresh ? 'Nouvelle plante' : 'Aucune récolte'}</span>`
+              ${this.#harvest && entry.rating ? html`<span class="mini-stars">${'★'.repeat(entry.rating)}</span>` : nothing}
+              ${this.#harvest ? html`<span>${last ? 'Récolté le ' + shortDate(last.date) : fresh ? 'Nouvelle plante' : 'Aucune récolte'}</span>` : nothing}`
             : entry.notes ? html`<span>${entry.notes.slice(0, 60)}</span>` : nothing}
           </span>
         </button>
         ${open ? html`
           <div class="body">
-            ${fresh && this.#isPlace ? html`
+            ${this.#harvest ? this.#warnings(entry) : nothing}
+            ${fresh && this.#harvest ? html`
               <div class="today">
                 <input id="today-${id}" type="checkbox" .checked=${todayQuantity !== null}
                   @change=${e => { this._todayFor = new Map(this._todayFor).set(id, e.target.checked ? '' : null); }} />
@@ -699,21 +722,21 @@ export class GfSpotEditor extends LitElement {
               </div>
             </fieldset>
 
-            <fieldset>
+            ${this.#harvest ? html`<fieldset>
               <legend>Qualité</legend>
               <div class="stars" role="radiogroup" aria-label="Qualité">
                 ${[1, 2, 3, 4, 5].map(n => html`<button type="button" role="radio" aria-checked=${entry.rating === n ? 'true' : 'false'}
                   aria-label="${n} sur 5" class=${entry.rating >= n ? 'on' : ''}
                   @click=${() => this.#patchEntry(id, { rating: entry.rating === n ? 0 : n })}>★</button>`)}
               </div>
-            </fieldset>` : nothing}
+            </fieldset>` : nothing}` : nothing}
 
             <label class="field">Notes sur cette plante
               <textarea .value=${entry.notes} placeholder="Stade, partie récoltée, conseils…"
                 @input=${e => this.#patchEntry(id, { notes: e.target.value })}></textarea>
             </label>
 
-            ${this.#isPlace ? html`<fieldset>
+            ${this.#harvest ? html`<fieldset>
               <legend>Journal de récolte</legend>
               ${entry.harvests.length ? html`
                 <ul class="harvests">

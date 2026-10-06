@@ -50,7 +50,8 @@ jobs:
       - name: Check modules
         run: |
           for file in sw.js vendor/*.js lib/*.mjs $(find app -name '*.js'); do
-            node --check "$file"
+            # Parse as ES modules: catches import/declaration clashes a script parse misses.
+            node --experimental-default-type=module --check "$file"
           done
           node -e "JSON.parse(require('fs').readFileSync('manifest.webmanifest','utf8'))"
           # Every app file must be precached by the service worker, or offline mode breaks.
