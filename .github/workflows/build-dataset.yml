@@ -40,7 +40,7 @@ jobs:
 
       - name: Enrich search thumbnails
         env:
-          WIKIMEDIA_DELAY_MS: '1400'
+          WIKIMEDIA_DELAY_MS: '2000'
           THUMBNAIL_RETRY_DAYS: '90'
         run: node scripts/enrich-thumbnails.mjs
 
