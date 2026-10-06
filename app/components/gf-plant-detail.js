@@ -2,7 +2,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { STATUS_LABELS } from '../config.js';
 import * as db from '../core/db.js';
-import { href } from '../core/router.js';
+import { lastSearchHash } from '../core/query.js';
 import { whenReady } from '../core/store.js';
 import * as sources from '../core/sources.js';
 import './gf-attribution.js';
@@ -227,7 +227,7 @@ export class GfPlantDetail extends LitElement {
     const plant = this._plant;
     if (plant === undefined) return html`<article><div class="skeleton"></div></article>`;
     if (plant === null) {
-      return html`<article><a class="back" href=${href.search()}>← Recherche</a><h1>Plante introuvable</h1></article>`;
+      return html`<article><a class="back" href=${lastSearchHash()}>← Recherche</a><h1>Plante introuvable</h1></article>`;
     }
 
     const details = this._details;
@@ -243,7 +243,7 @@ export class GfPlantDetail extends LitElement {
 
     return html`
       <article>
-        <a class="back" href=${href.search()}>← Recherche</a>
+        <a class="back" href=${lastSearchHash()}>← Recherche</a>
         <h1>${plant.vernacularNames?.[0] || plant.scientificName}</h1>
         <div class="sci"><i>${plant.scientificName}</i> <span class="author">${plant.author}</span></div>
 

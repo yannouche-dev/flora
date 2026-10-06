@@ -1,6 +1,8 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { config } from '../config.js';
+import { highlight } from '../core/highlight.js';
+import { rememberSearch } from '../core/query.js';
 import { href } from '../core/router.js';
 import * as sources from '../core/sources.js';
 
@@ -8,6 +10,8 @@ import * as sources from '../core/sources.js';
 export class GfPlantCard extends LitElement {
   static properties = {
     plant: { attribute: false },
+    query: {},
+    compact: { type: Boolean, reflect: true },
     _thumb: { state: true }
   };
 
@@ -43,15 +47,26 @@ export class GfPlantCard extends LitElement {
       text-overflow: ellipsis;
     }
     .name { font-weight: 600; }
+    .name.latin { font-family: var(--gf-font-serif); font-style: italic; }
     .sci { font-family: var(--gf-font-serif); font-style: italic; }
     .sci .author { font-style: normal; color: var(--gf-text-muted); font-size: 0.85em; }
     .meta { font-size: 0.8rem; color: var(--gf-text-muted); }
+    .fuzzy { color: var(--gf-warn); }
+    mark { background: var(--gf-accent-soft); color: inherit; border-radius: 2px; padding: 0 1px; }
+
+    /* Compact: one dense line, no thumbnail. */
+    :host([compact]) a { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto; padding: 0 12px; }
+    :host([compact]) .text { display: contents; }
+    :host([compact]) .meta { text-align: right; }
+    :host([compact]) .thumb { display: none; }
   `;
 
   constructor() {
     super();
     /** @type {any} */
     this.plant = null;
+    this.query = '';
+    this.compact = false;
     /** @type {any} */
     this._thumb = undefined;
   }
@@ -66,12 +81,12 @@ export class GfPlantCard extends LitElement {
     if (!changed.has('plant')) return;
     this.#cancel();
     this._thumb = this.plant?.thumbnail?.url ? this.plant.thumbnail : undefined;
-    if (this.plant && !this._thumb && this.isConnected) this.#schedule();
+    if (this.plant && !this._thumb && this.isConnected && !this.compact) this.#schedule();
   }
 
   connectedCallback() {
     super.connectedCallback();
-    if (this.plant && this._thumb === undefined) this.#schedule();
+    if (this.plant && this._thumb === undefined && !this.compact) this.#schedule();
   }
 
   disconnectedCallback() {
@@ -101,15 +116,20 @@ export class GfPlantCard extends LitElement {
     if (!p) return nothing;
     const thumb = this._thumb;
 
+    const q = this.query;
+    const title = p.vernacularName || p.scientificName;
+
     return html`
-      <a href=${href.plant(p.id)}>
-        ${thumb?.url
+      <a href=${href.plant(p.id)} @click=${() => rememberSearch(q)}>
+        ${this.compact ? nothing : thumb?.url
           ? html`<img class="thumb" src=${thumb.url} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
           : html`<span class="thumb" aria-hidden="true">${thumb === undefined ? '' : '🌿'}</span>`}
         <span class="text">
-          <div class="name">${p.vernacularName || p.scientificName}</div>
-          <div class="sci">${p.scientificName} <span class="author">${p.author || ''}</span></div>
-          <div class="meta">${p.family}${p.match ? html` · ${p.match}` : nothing}</div>
+          <div class="name ${p.vernacularName ? '' : 'latin'}">${highlight(title, q)}</div>
+          <div class="sci">${p.vernacularName ? highlight(p.scientificName, q) : nothing} <span class="author">${this.compact ? '' : p.author || ''}</span></div>
+          <div class="meta">
+            ${p.family}${p.match ? html` · ${p.match === 'syn.' ? 'synonyme' : highlight(p.match, q)}` : nothing}${p.fuzzy ? html` · <span class="fuzzy">approchant</span>` : nothing}
+          </div>
         </span>
       </a>
     `;

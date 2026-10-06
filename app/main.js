@@ -3,6 +3,7 @@
 
 import './components/gf-app.js';
 import { syncDataset } from './core/dataset.js';
+import { startUrlSync } from './core/query.js';
 import { loadIndex, runSearch } from './core/search.js';
 import { store } from './core/store.js';
 
@@ -35,4 +36,5 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   });
 }
 
+startUrlSync();
 start();

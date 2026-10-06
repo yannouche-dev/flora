@@ -1,17 +1,28 @@
 // @ts-check
 // Tiny observable store + a Lit reactive controller to re-render subscribers.
 
+import { config } from '../config.js';
+
 /**
+ * @typedef {Record<'status' | 'family' | 'genus' | 'photo' | 'french', string[]>} Filters
+ * @typedef {{ q: string, filters: Filters, sort: string }} Query
+ * @typedef {{ type: 'family' | 'genus', name: string, count: number }} Suggestion
+ * @typedef {object} Results
+ * @property {number} total
+ * @property {any[]} items
+ * @property {Record<string, Record<string, number>>} facets   faceted counts per value
+ * @property {Suggestion[]} suggestions
+ * @property {number} fuzzy   number of typo-tolerant matches included
+ * @property {string} sort    effective sort
+ *
  * @typedef {object} AppState
  * @property {'loading' | 'ready' | 'error'} status
  * @property {string} [statusText]
  * @property {any} [meta]
  * @property {boolean} offline
- * @property {string} query
- * @property {string} family
- * @property {string[]} statuses
- * @property {{ name: string, count: number }[]} families
- * @property {{ total: number, items: any[] }} results
+ * @property {Query} query
+ * @property {Results} results
+ * @property {boolean} compact
  */
 
 export class Store extends EventTarget {
@@ -28,16 +39,24 @@ export class Store extends EventTarget {
   }
 }
 
+const readCompact = () => {
+  try { return localStorage.getItem(config.storageKeys.compact) === '1'; } catch { return false; }
+};
+
 /** @type {Store} */
 export const store = new Store({
   status: 'loading',
   offline: false,
-  query: '',
-  family: '',
-  statuses: [],
-  families: [],
-  results: { total: 0, items: [] }
+  query: { q: '', filters: { status: [], family: [], genus: [], photo: [], french: [] }, sort: '' },
+  results: { total: 0, items: [], facets: {}, suggestions: [], fuzzy: 0, sort: 'fr' },
+  compact: readCompact()
 });
+
+/** @param {boolean} compact */
+export function setCompact(compact) {
+  try { localStorage.setItem(config.storageKeys.compact, compact ? '1' : '0'); } catch { /* not persisted */ }
+  store.set({ compact });
+}
 
 /** Resolves once the local dataset is in IndexedDB (deep links on a first visit must wait for it). */
 export function whenReady() {

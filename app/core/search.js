@@ -25,17 +25,23 @@ function call(message) {
   });
 }
 
+/** Genus → family, to keep genus filters consistent with family filters. @type {Map<string, string>} */
+export const genusFamily = new Map();
+
 /** (Re)builds the search index from IndexedDB. */
 export async function loadIndex() {
-  const { families } = await call({ type: 'load' });
-  store.set({ families });
+  const data = await call({ type: 'load' });
+  genusFamily.clear();
+  for (const [genus, family] of Object.entries(data.genusFamily)) genusFamily.set(genus, family);
 }
 
-/** Runs the search for the current store query/filters and publishes the results. */
+/** Runs the search for the current store query and publishes results, facets and suggestions. */
 export async function runSearch() {
-  const { query, family, statuses } = store.state;
+  const { q, filters, sort } = store.state.query;
   const requestId = lastRequest + 1;
-  const { total, items } = await call({ type: 'search', query, family, statuses });
+  const { total, items, facets, suggestions, fuzzy, sort: effectiveSort } = await call({ type: 'search', q, filters, sort });
   // Drop answers that a newer keystroke already superseded.
-  if (requestId === lastRequest) store.set({ results: { total, items } });
+  if (requestId === lastRequest) {
+    store.set({ results: { total, items, facets, suggestions, fuzzy, sort: effectiveSort } });
+  }
 }

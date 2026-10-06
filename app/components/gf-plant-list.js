@@ -4,6 +4,7 @@ import { StoreController } from '../core/store.js';
 import './gf-plant-card.js';
 
 const ROW_HEIGHT = 76;
+const COMPACT_ROW_HEIGHT = 44;
 const OVERSCAN = 6;
 
 /** Scroll position survives navigating to a plant and back, until the results change. */
@@ -61,7 +62,8 @@ export class GfPlantList extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     this.#resize.disconnect();
-    saved = { items: this.#items, scrollTop: this.scrollTop };
+    // Once detached, the element reports scrollTop 0: keep the last position seen while scrolling.
+    saved = { items: this.#items, scrollTop: this._scrollTop };
   }
 
   /** New results → back to the top; same results (coming back from a plant) → restore. */
@@ -75,22 +77,25 @@ export class GfPlantList extends LitElement {
   }
 
   render() {
-    const { items } = this.#store.state.results;
-    if (this.#store.state.status === 'ready' && !items.length) {
+    const { results: { items }, query: { q }, compact, status } = this.#store.state;
+    if (status === 'ready' && !items.length) {
       return html`<p class="empty">Aucune plante ne correspond à cette recherche.</p>`;
     }
 
-    const first = Math.max(0, Math.floor(this._scrollTop / ROW_HEIGHT) - OVERSCAN);
-    const last = Math.min(items.length, Math.ceil((this._scrollTop + this._height) / ROW_HEIGHT) + OVERSCAN);
+    const rowHeight = compact ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
+    const first = Math.max(0, Math.floor(this._scrollTop / rowHeight) - OVERSCAN);
+    const last = Math.min(items.length, Math.ceil((this._scrollTop + this._height) / rowHeight) + OVERSCAN);
     const visible = items.slice(first, last);
 
     return html`
-      <div class="spacer" role="list" style="height:${items.length * ROW_HEIGHT}px">
+      <div class="spacer" role="list" style="height:${items.length * rowHeight}px">
         ${repeat(visible, plant => plant.id, (plant, i) => html`
           <gf-plant-card
             role="listitem"
-            style="top:${(first + i) * ROW_HEIGHT}px;height:${ROW_HEIGHT}px"
+            style="top:${(first + i) * rowHeight}px;height:${rowHeight}px"
             .plant=${plant}
+            .query=${q}
+            ?compact=${compact}
           ></gf-plant-card>
         `)}
       </div>

@@ -1,0 +1,62 @@
+// @ts-check
+import { LitElement, html, css } from 'lit';
+import { STATUS_LABELS, STATUS_SHORT } from '../config.js';
+import { setFacet } from '../core/query.js';
+import { genusFamily } from '../core/search.js';
+import { StoreController } from '../core/store.js';
+import './gf-facet.js';
+
+const STATUS_ORDER = ['P', 'E', 'S', 'C', 'I', 'J'];
+
+/** All filter groups. Rendered as the desktop sidebar or inside the mobile bottom sheet. */
+export class GfFilterPanel extends LitElement {
+  static styles = css`
+    :host { display: block; }
+  `;
+
+  #store = new StoreController(this);
+
+  constructor() {
+    super();
+    this.addEventListener('facet-change', event => {
+      const { name, values } = /** @type {CustomEvent} */ (event).detail;
+      setFacet(name, values);
+    });
+  }
+
+  render() {
+    const { query: { filters }, results: { facets } } = this.#store.state;
+    const count = (/** @type {string} */ facet, /** @type {string} */ value) => facets[facet]?.[value] || 0;
+
+    const families = [...new Set(genusFamily.values())];
+    const genera = [...genusFamily.keys()]
+      .filter(genus => !filters.family.length || filters.family.includes(genusFamily.get(genus) || ''));
+
+    return html`
+      <gf-facet name="status" label="Statut en France" .selected=${filters.status}
+        .options=${STATUS_ORDER.map(code => ({ value: code, label: STATUS_SHORT[code], title: STATUS_LABELS[code] + ' (TAXREF ' + code + ')', count: count('status', code) }))}
+      ></gf-facet>
+      <gf-facet name="family" label="Famille" searchable limit="8" .selected=${filters.family}
+        .options=${families.map(name => ({ value: name, label: name, count: count('family', name) }))}
+      ></gf-facet>
+      <gf-facet name="genus" label="Genre" searchable limit="8" hide-empty .open=${filters.genus.length > 0 || filters.family.length > 0}
+        .selected=${filters.genus}
+        .options=${genera.map(name => ({ value: name, label: name, count: count('genus', name) }))}
+      ></gf-facet>
+      <gf-facet name="photo" label="Photo" .selected=${filters.photo}
+        .options=${[
+          { value: 'avec', label: 'Avec photo', count: count('photo', 'avec') },
+          { value: 'sans', label: 'Sans photo', count: count('photo', 'sans') }
+        ]}
+      ></gf-facet>
+      <gf-facet name="french" label="Nom français" .selected=${filters.french}
+        .options=${[
+          { value: 'avec', label: 'Avec nom français', count: count('french', 'avec') },
+          { value: 'sans', label: 'Sans nom français', count: count('french', 'sans') }
+        ]}
+      ></gf-facet>
+    `;
+  }
+}
+
+customElements.define('gf-filter-panel', GfFilterPanel);
