@@ -12,6 +12,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: flora-dataset-main
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -33,7 +37,10 @@ jobs:
           unzip -q .cache/taxref.zip -d .cache/taxref
 
       - name: Validate runtime modules
-        run: node --check lib/plant-sources.mjs
+        run: |
+          node --check lib/plant-sources.mjs
+          node --check scripts/enrich-wikidata-bulk.mjs
+          node --check scripts/enrich-thumbnail-fallbacks.mjs
 
       - name: Build dataset
         run: node scripts/build-plants.mjs
@@ -43,6 +50,12 @@ jobs:
           WIKIMEDIA_DELAY_MS: '2000'
           THUMBNAIL_RETRY_DAYS: '90'
         run: node scripts/enrich-thumbnails.mjs
+
+      - name: Bulk-resolve Wikidata thumbnails
+        env:
+          WIKIDATA_BATCH_SIZE: '120'
+          WIKIDATA_BULK_DELAY_MS: '350'
+        run: node scripts/enrich-wikidata-bulk.mjs
 
       - name: Enrich thumbnail fallbacks
         env:
@@ -66,5 +79,6 @@ jobs:
             echo "Dataset unchanged"
           else
             git commit -m "Build TAXREF v18 flora dataset [skip ci]"
+            git pull --rebase origin main
             git push
           fi
