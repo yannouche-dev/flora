@@ -1,6 +1,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 
 const PLANTS_FILE = process.env.PLANTS_FILE || 'data/plants.json';
+const META_FILE = process.env.META_FILE || 'data/meta.json';
 const CACHE_FILE = process.env.THUMBNAILS_FILE || 'data/thumbnails.json';
 const API = 'https://en.wikipedia.org/w/api.php';
 const COMMONS_API = 'https://commons.wikimedia.org/w/api.php';
@@ -239,7 +240,14 @@ async function main() {
 
   for (const plant of plants) {
     const enrichment = cache[plant.id] || {};
-    plant.thumbnail = enrichment.thumbnail || null;
+    const image = enrichment.thumbnail;
+    plant.thumbnail = image?.url ? {
+      url: image.url,
+      source: image.source,
+      sourceUrl: image.sourceUrl,
+      author: image.author || null,
+      license: image.license || null
+    } : null;
 
     if (enrichment.wikidata) {
       plant.identifiers ||= {};
@@ -252,11 +260,24 @@ async function main() {
 
   await writeFile(PLANTS_FILE, JSON.stringify(plants, null, 2) + '\n', 'utf8');
 
+  const thumbnailCoverage = Number((withThumbnail / plants.length * 100).toFixed(2));
+  try {
+    const meta = JSON.parse(await readFile(META_FILE, 'utf8'));
+    meta.thumbnails = {
+      source: 'Wikidata P18 + Wikimedia Commons',
+      withThumbnail,
+      withoutThumbnail: plants.length - withThumbnail,
+      coveragePercent: thumbnailCoverage,
+      withWikidata
+    };
+    await writeFile(META_FILE, JSON.stringify(meta, null, 2) + '\n', 'utf8');
+  } catch {}
+
   console.log(JSON.stringify({
     plants: plants.length,
     withThumbnail,
     withoutThumbnail: plants.length - withThumbnail,
-    thumbnailCoverage: Number((withThumbnail / plants.length * 100).toFixed(2)),
+    thumbnailCoverage,
     withWikidata
   }, null, 2));
 }
