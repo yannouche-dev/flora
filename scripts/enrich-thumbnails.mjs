@@ -4,6 +4,7 @@ const PLANTS_FILE = process.env.PLANTS_FILE || 'data/plants.json';
 const CACHE_FILE = process.env.THUMBNAILS_FILE || 'data/thumbnails.json';
 const API = 'https://en.wikipedia.org/w/api.php';
 const COMMONS_API = 'https://commons.wikimedia.org/w/api.php';
+const WIKIDATA_API = 'https://www.wikidata.org/w/api.php';
 const BATCH_SIZE = 50;
 const DELAY_MS = Number(process.env.WIKIMEDIA_DELAY_MS || 1400);
 const RETRY_AFTER_DAYS = Number(process.env.THUMBNAIL_RETRY_DAYS || 90);
@@ -105,10 +106,41 @@ async function wikipediaPages(plants) {
   return resolved;
 }
 
-async function commonsInfo(pageMap) {
-  const titles = [...new Set(
+async function wikidataImages(pageMap) {
+  const ids = [...new Set(
     [...pageMap.values()]
-      .map(page => fileTitle(page.pageimage))
+      .map(page => page.pageprops?.wikibase_item)
+      .filter(Boolean)
+  )];
+
+  if (!ids.length) return new Map();
+
+  const data = await getJson(WIKIDATA_API, {
+    action: 'wbgetentities',
+    format: 'json',
+    ids: ids.join('|'),
+    props: 'claims',
+    origin: '*'
+  });
+
+  const result = new Map();
+
+  for (const [id, entity] of Object.entries(data.entities || {})) {
+    const claim = entity?.claims?.P18?.find(row =>
+      row?.mainsnak?.snaktype === 'value' &&
+      typeof row?.mainsnak?.datavalue?.value === 'string'
+    );
+    const filename = claim?.mainsnak?.datavalue?.value;
+    if (filename) result.set(id, filename);
+  }
+
+  return result;
+}
+
+async function commonsInfo(titlesInput) {
+  const titles = [...new Set(
+    titlesInput
+      .map(fileTitle)
       .filter(Boolean)
   )];
 
@@ -168,12 +200,23 @@ async function main() {
 
   for (const batch of chunks(pending, BATCH_SIZE)) {
     const pages = await wikipediaPages(batch);
-    const media = await commonsInfo(pages);
+    const wikidata = await wikidataImages(pages);
+
+    const chosenFiles = new Map();
+    for (const plant of batch) {
+      const page = pages.get(plant.id);
+      const qid = page?.pageprops?.wikibase_item;
+      const filename = (qid && wikidata.get(qid)) || page?.pageimage || null;
+      if (filename) chosenFiles.set(plant.id, filename);
+    }
+
+    const media = await commonsInfo([...chosenFiles.values()]);
     const checkedAt = new Date().toISOString();
 
     for (const plant of batch) {
       const page = pages.get(plant.id);
-      const image = page?.pageimage ? media.get(key(fileTitle(page.pageimage))) : null;
+      const filename = chosenFiles.get(plant.id);
+      const image = filename ? media.get(key(fileTitle(filename))) : null;
 
       cache[plant.id] = {
         checkedAt,
