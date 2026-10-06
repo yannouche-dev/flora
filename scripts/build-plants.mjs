@@ -1,5 +1,5 @@
 import { createReadStream } from 'node:fs';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import path from 'node:path';
 
@@ -147,7 +147,17 @@ function frenchVernacularRow(row) {
   return iso === 'fra' || iso === 'fre' || iso === 'fr' || lang === 'francais' || lang === 'french';
 }
 
+async function loadThumbnailCache() {
+  try {
+    const data = JSON.parse(await readFile('data/thumbnails.json', 'utf8'));
+    return new Map(Object.entries(data));
+  } catch {
+    return new Map();
+  }
+}
+
 async function main() {
+  const thumbnailCache = await loadThumbnailCache();
   const acceptedPlants = new Map();
   const cdToRef = new Map();
   const pendingSynonyms = new Map();
@@ -206,6 +216,7 @@ async function main() {
         taxref: clean(row.URL) || 'https://taxref.mnhn.fr/taxref-web/taxa/' + id,
         inpn: clean(row.URL_INPN) || null
       },
+      thumbnail: thumbnailCache.get(String(id)) || null,
       _nameKeys: new Set(),
       _synonymKeys: new Set()
     };
