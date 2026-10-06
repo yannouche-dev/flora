@@ -150,6 +150,7 @@ function frenchVernacularRow(row) {
 async function main() {
   const acceptedPlants = new Map();
   const cdToRef = new Map();
+  const pendingSynonyms = new Map();
 
   console.log('Reading ' + TAXREF_FILE);
 
@@ -161,18 +162,52 @@ async function main() {
       cdToRef.set(cdNom, cdRef);
     }
 
+    const groups = [row.GROUP1_INPN, row.GROUP2_INPN, row.GROUP3_INPN]
+      .map(normalizeKey)
+      .join(' ');
+    const isVascular = groups.includes('tracheophytes') || groups.includes('plantes vasculaires');
+
+    if (
+      row.REGNE === 'Plantae' &&
+      row.RANG === 'ES' &&
+      isVascular &&
+      Number.isFinite(cdNom) &&
+      Number.isFinite(cdRef) &&
+      cdNom !== cdRef
+    ) {
+      const list = pendingSynonyms.get(cdRef) || [];
+      const synonym = clean(row.LB_NOM);
+      if (synonym) list.push(synonym);
+      pendingSynonyms.set(cdRef, list);
+    }
+
     if (!isVascularSpecies(row)) return;
 
     const id = cdNom;
-    const scientific = splitScientificName(row.LB_NOM);
+    const scientificName = clean(row.LB_NOM);
+    const scientific = splitScientificName(scientificName);
 
     const plant = {
       id,
       family: clean(row.FAMILLE),
       genus: scientific.genus,
       species: scientific.species,
+      scientificName,
+      author: clean(row.LB_AUTEUR),
       vernacularNames: [],
-      _nameKeys: new Set()
+      synonyms: [],
+      status: {
+        france: clean(row.FR)
+      },
+      identifiers: {
+        taxref: id
+      },
+      links: {
+        taxref: clean(row.URL) || 'https://taxref.mnhn.fr/taxref-web/taxa/' + id,
+        inpn: clean(row.URL_INPN) || null
+      },
+      _nameKeys: new Set(),
+      _synonymKeys: new Set()
     };
 
     addNames(plant, splitVernacularNames(row.NOM_VERN));
@@ -185,6 +220,19 @@ async function main() {
 
   console.log(taxrefRows + ' TAXREF rows read');
   console.log(acceptedPlants.size + ' accepted metropolitan vascular species retained');
+
+  for (const [cdRef, synonyms] of pendingSynonyms) {
+    const plant = acceptedPlants.get(cdRef);
+    if (!plant) continue;
+
+    for (const raw of synonyms) {
+      const synonym = clean(raw);
+      const key = normalizeKey(synonym);
+      if (!synonym || key === normalizeKey(plant.scientificName) || plant._synonymKeys.has(key)) continue;
+      plant._synonymKeys.add(key);
+      plant.synonyms.push(synonym);
+    }
+  }
 
   console.log('Reading ' + TAXVERN_FILE);
 
@@ -208,7 +256,10 @@ async function main() {
   console.log(attachedVernacularRows + ' French vernacular rows attached');
 
   const plants = [...acceptedPlants.values()]
-    .map(({ _nameKeys, ...plant }) => plant)
+    .map(({ _nameKeys, _synonymKeys, ...plant }) => ({
+      ...plant,
+      synonyms: plant.synonyms.sort((a, b) => a.localeCompare(b, 'fr'))
+    }))
     .filter(plant => plant.family && plant.genus && plant.species)
     .sort((a, b) =>
       a.family.localeCompare(b.family, 'fr') ||
@@ -248,6 +299,8 @@ async function main() {
     genera: new Set(plants.map(plant => plant.genus)).size,
     plantsWithFrenchNames: plants.filter(plant => plant.vernacularNames.length > 0).length,
     vernacularNames: plants.reduce((sum, plant) => sum + plant.vernacularNames.length, 0),
+    synonyms: plants.reduce((sum, plant) => sum + plant.synonyms.length, 0),
+    plantsWithSynonyms: plants.filter(plant => plant.synonyms.length > 0).length,
     plantsWithoutFrenchNames: plants.filter(plant => plant.vernacularNames.length === 0).length
   };
 
