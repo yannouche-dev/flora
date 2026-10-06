@@ -6,7 +6,7 @@ import * as L from 'leaflet';
 import { config } from '../config.js';
 import { watchLocation } from '../core/geo.js';
 import { FRANCE_BOUNDS, LAYERS, tileLayer } from '../core/ign.js';
-import { inSeason, spotTitle } from '../core/spots.js';
+import { inSeason, placeAbundance, placeTitle } from '../core/spots.js';
 
 const STYLESHEETS = [
   new URL('../../vendor/leaflet.css', import.meta.url).href,
@@ -15,9 +15,14 @@ const STYLESHEETS = [
 
 const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
 
-/** @param {import('../core/spots.js').Spot} spot @param {boolean} selected */
+/** @param {import('../core/spots.js').Place} spot @param {boolean} selected */
 function pinIcon(spot, selected) {
-  const color = PIN_COLORS[spot.properties.abundance || 'moyen'] || PIN_COLORS.moyen;
+  const color = PIN_COLORS[placeAbundance(spot)] || PIN_COLORS.moyen;
+  const n = spot.properties.plants.length;
+  // Several plants: show how many in the pin head.
+  const head = n > 1
+    ? `<circle cx="15" cy="14.5" r="7.5" fill="#fff"/><text x="15" y="18.5" text-anchor="middle" font-size="11" font-weight="700" font-family="system-ui,sans-serif" fill="#1d2419">${n > 99 ? '99+' : n}</text>`
+    : '<circle cx="15" cy="14.5" r="5" fill="#fff"/>';
   const classes = ['gf-pin', selected ? 'selected' : '', inSeason(spot) ? 'season' : ''].join(' ');
   return L.divIcon({
     className: classes,
@@ -26,7 +31,7 @@ function pinIcon(spot, selected) {
     html: `<svg width="30" height="40" viewBox="0 0 30 40" aria-hidden="true">
       <path class="ring" d="M15 39C15 39 2 23.5 2 14.5a13 13 0 0 1 26 0C28 23.5 15 39 15 39Z"
         fill="${color}" stroke="#fff" stroke-width="2"/>
-      <circle cx="15" cy="14.5" r="5" fill="#fff"/>
+      ${head}
     </svg>`
   });
 }
@@ -211,7 +216,7 @@ export class GfMap extends LitElement {
       const selected = spot.id === this.selectedId;
       let marker = this.#markers.get(spot.id);
       if (!marker) {
-        marker = L.marker([lat, lon], { icon: pinIcon(spot, selected), title: spotTitle(spot), keyboard: true, riseOnHover: true })
+        marker = L.marker([lat, lon], { icon: pinIcon(spot, selected), title: placeTitle(spot), keyboard: true, riseOnHover: true })
           .on('click', () => this.#emit('spot-select', { id: spot.id }));
         marker.addTo(layer);
         this.#markers.set(spot.id, marker);

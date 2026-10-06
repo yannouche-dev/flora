@@ -3,7 +3,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { lastSearchHash } from '../core/query.js';
 import { StoreController } from '../core/store.js';
 import { getTrefleToken, setTrefleToken } from '../core/sources.js';
-import { exportGeoJSON, importGeoJSON, lastExportDate, listSpots, spotEvents } from '../core/spots.js';
+import { exportGeoJSON, importGeoJSON, lastExportDate, listPlaces, spotEvents } from '../core/spots.js';
 
 export class GfSettings extends LitElement {
   static properties = {
@@ -72,7 +72,7 @@ export class GfSettings extends LitElement {
   }
 
   async #countSpots() {
-    this._spotCount = (await listSpots()).length;
+    this._spotCount = (await listPlaces()).length;
   }
 
   async #export() {

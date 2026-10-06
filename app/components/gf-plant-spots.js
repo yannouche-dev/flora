@@ -1,7 +1,7 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { href } from '../core/router.js';
-import { inSeason, lastHarvest, spotEvents, spotsForPlant } from '../core/spots.js';
+import { entryInSeason, findEntry, lastHarvest, placesForPlant, plantCount, spotEvents } from '../core/spots.js';
 import './gf-map.js';
 
 const shortDate = (/** @type {string} */ iso) =>
@@ -50,6 +50,7 @@ export class GfPlantSpots extends LitElement {
       font-size: 0.9rem;
     }
     li .when { margin-left: auto; color: var(--gf-text-muted); font-size: 0.8rem; }
+    li small { color: var(--gf-text-muted); }
     .badge { background: #fde047; color: #422006; border-radius: 999px; padding: 0 8px; font-size: 0.75rem; font-weight: 600; }
     p { color: var(--gf-text-muted); font-size: 0.9rem; margin: 8px 0 0; }
   `;
@@ -83,7 +84,7 @@ export class GfPlantSpots extends LitElement {
   async #load() {
     if (!this.plantId) return;
     try {
-      this._spots = await spotsForPlant(this.plantId);
+      this._spots = await placesForPlant(this.plantId);
       this._error = null;
     } catch (error) {
       console.error(error);
@@ -102,15 +103,18 @@ export class GfPlantSpots extends LitElement {
       ${spots.length ? html`
         <gf-map .spots=${spots} fit @spot-select=${e => { location.hash = href.map({ spot: e.detail.id }); }}></gf-map>
         <ul>
-          ${spots.map((spot, i) => {
-            const last = lastHarvest(spot);
-            return html`<li><a href=${href.map({ spot: spot.id })}>
-              <span>${spot.properties.label || 'Lieu ' + (i + 1)}</span>
-              ${inSeason(spot) ? html`<span class="badge">En saison</span>` : nothing}
+          ${spots.map((place, i) => {
+            // This plant's own record at the place (season, last harvest), not the place's other plants.
+            const entry = findEntry(place, this.plantId);
+            const last = entry && lastHarvest(entry);
+            const others = place.properties.plants.length - 1;
+            return html`<li><a href=${href.map({ spot: place.id })}>
+              <span>${place.properties.name || 'Lieu ' + (i + 1)}${others > 0 ? html` <small>· ${plantCount(others + 1)}</small>` : nothing}</span>
+              ${entry && entryInSeason(entry) ? html`<span class="badge">En saison</span>` : nothing}
               <span class="when">${last ? 'Récolté le ' + shortDate(last.date) : 'Aucune récolte'}</span>
             </a></li>`;
           })}
-        </ul>` : html`<p>Notez ici où vous trouvez cette plante : position GPS, journal de récolte, notes. Tout reste sur cet appareil.</p>`}
+        </ul>` : html`<p>Notez ici où vous trouvez cette plante : position GPS, journal de récolte, notes. Un lieu peut réunir plusieurs plantes. Tout reste sur cet appareil.</p>`}
     `;
   }
 }

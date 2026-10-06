@@ -3,7 +3,8 @@ import { LitElement, html, css, nothing } from 'lit';
 import { GeoController } from '../core/geo.js';
 import { href, parse } from '../core/router.js';
 import {
-  ABUNDANCE, addHarvest, directionsUrl, distance, formatDistance, inSeason, lastHarvest, listSpots, spotEvents, spotTitle
+  ABUNDANCE, addHarvest, directionsUrl, distance, entryInSeason, entryName, formatDistance, inSeason, lastHarvest, listPlaces,
+  placeAbundance, placeLastHarvest, placeTitle, plantCount, spotEvents
 } from '../core/spots.js';
 import { whenReady } from '../core/store.js';
 import './gf-facet.js';
@@ -19,7 +20,9 @@ const shortDate = (/** @type {string} */ iso) =>
 
 const stars = (/** @type {number} */ n) => n ? '★'.repeat(n) + '☆'.repeat(5 - n) : '';
 
-/** Harvest spots: IGN map or list sorted by distance, filters, selected-spot sheet. */
+const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
+
+/** Harvest places: IGN map or list sorted by distance, filters, selected-place sheet. */
 export class GfMapPage extends LitElement {
   static properties = {
     route: { attribute: false },
@@ -78,6 +81,8 @@ export class GfMapPage extends LitElement {
     }
     .body { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
     gf-map { flex: 1; }
+    /* The place sheet covers the bottom of the map: hide Leaflet's bottom controls meanwhile. */
+    .body:has(.sheet) gf-map .leaflet-bottom { display: none; }
     .legend {
       position: absolute;
       left: 10px;
@@ -143,6 +148,15 @@ export class GfMapPage extends LitElement {
     .sheet .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
     .sheet .actions .main { background: var(--gf-accent); color: var(--gf-accent-contrast); border-color: var(--gf-accent); font-weight: 600; }
     .notes { font-size: 0.9rem; margin: 0; white-space: pre-line; }
+    .sheet { max-height: 70%; overflow-y: auto; }
+    .plants { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+    .plants li { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--gf-border); }
+    .plants .who { flex: 1; min-width: 0; display: grid; }
+    .plants .nm { font-weight: 600; }
+    .plants .sub { font-size: 0.8rem; color: var(--gf-text-muted); }
+    .plants .sub, .plants .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .plants .harvest { flex: none; font-size: 0.85rem; padding: 4px 10px; border-color: var(--gf-accent); color: var(--gf-accent); }
+    .more { font-size: 0.85rem; color: var(--gf-accent); }
     .list { flex: 1; overflow-y: auto; margin: 0; padding: 0 0 96px; list-style: none; background: var(--gf-surface); }
     .list a {
       display: grid;
@@ -216,7 +230,7 @@ export class GfMapPage extends LitElement {
   async #load() {
     await whenReady();
     try {
-      this._spots = await listSpots();
+      this._spots = await listPlaces();
       this._error = null;
     } catch (error) {
       console.error(error);
@@ -236,22 +250,22 @@ export class GfMapPage extends LitElement {
 
   get #filtered() {
     const plants = new Set(this._plants);
-    return this._spots.filter(spot =>
-      (!plants.size || plants.has(/** @type {number} */ (spot.properties.plantId))) &&
-      (!this.route.season || inSeason(spot)));
+    return this._spots.filter(place =>
+      (!plants.size || place.properties.plantIds.some(id => plants.has(id))) &&
+      (!this.route.season || inSeason(place)));
   }
 
-  /** @param {import('../core/spots.js').Spot} spot */
+  /** @param {import('../core/spots.js').Place} spot */
   #distanceTo(spot) {
     const fix = this.#geo.state.fix;
     return fix ? distance(fix.coordinates, spot.geometry.coordinates) : null;
   }
 
-  /** @param {import('../core/spots.js').Spot} spot */
-  async #quickHarvest(spot) {
+  /** @param {import('../core/spots.js').Place} place @param {import('../core/spots.js').PlantEntry} entry */
+  async #quickHarvest(place, entry) {
     try {
-      await addHarvest(spot, { date: today(), quantity: '', note: '' });
-      this.#showToast('Récolte du jour ajoutée au journal');
+      await addHarvest(place, entry.plantId, { date: today(), quantity: '', note: '' });
+      this.#showToast(`${entryName(entry)} : récolte du jour notée`);
     } catch (error) {
       this.#showToast('Enregistrement impossible : ' + /** @type {Error} */ (error).message);
     }
@@ -265,12 +279,13 @@ export class GfMapPage extends LitElement {
 
   #plantOptions() {
     const counts = new Map();
-    for (const spot of this._spots) {
-      const id = spot.properties.plantId;
-      if (id === null) continue;
-      const entry = counts.get(id) || { value: String(id), label: spotTitle(spot), count: 0 };
-      entry.count++;
-      counts.set(id, entry);
+    for (const place of this._spots) {
+      for (const e of place.properties.plants) {
+        if (e.plantId === null) continue;
+        const option = counts.get(e.plantId) || { value: String(e.plantId), label: entryName(e), count: 0 };
+        option.count++;
+        counts.set(e.plantId, option);
+      }
     }
     return [...counts.values()].sort((a, b) => a.label.localeCompare(b.label, 'fr'));
   }
@@ -308,14 +323,14 @@ export class GfMapPage extends LitElement {
             @spot-select=${e => this.#navigate({ spot: e.detail.id })}
           ></gf-map>
           <div class="legend" aria-hidden="true">
-            ${ABUNDANCE.map(a => html`<span style="--c:${{ rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' }[a.value]}">${a.label}</span>`)}
+            ${ABUNDANCE.map(a => html`<span style="--c:${PIN_COLORS[a.value]}">${a.label}</span>`)}
           </div>
           ${selected ? this.#sheet(selected) : nothing}
         ` : this.#list(spots)}
 
         ${!this._spots.length ? html`
           <p class="empty" style=${this._view === 'map' ? 'position:absolute;inset:auto 16px 100px;z-index:550;background:var(--gf-surface);border-radius:16px;box-shadow:0 2px 12px rgb(0 0 0 / 25%)' : ''}>
-            Aucun lieu enregistré. Ouvrez une plante et touchez « Ajouter un lieu de récolte », ou touchez <strong>+</strong> ici, sur place.
+            Aucun lieu enregistré. Sur place, touchez <strong>+</strong> pour créer un lieu et y noter les plantes qui y poussent, ou ouvrez une fiche plante et touchez « Ajouter un lieu ».
           </p>` : nothing}
 
         ${selected && this._view === 'map' ? nothing : html`
@@ -327,59 +342,79 @@ export class GfMapPage extends LitElement {
     `;
   }
 
-  /** @param {import('../core/spots.js').Spot} spot */
-  #sheet(spot) {
-    const p = spot.properties;
-    const last = lastHarvest(spot);
-    const dist = this.#distanceTo(spot);
+  /** @param {import('../core/spots.js').Place} place */
+  #sheet(place) {
+    const p = place.properties;
+    const dist = this.#distanceTo(place);
+    const filter = new Set(this._plants);
+    // Plants in season first, then the filtered ones, then by name.
+    const entries = [...p.plants].sort((a, b) =>
+      Number(entryInSeason(b)) - Number(entryInSeason(a)) ||
+      Number(filter.has(/** @type {number} */ (b.plantId))) - Number(filter.has(/** @type {number} */ (a.plantId))) ||
+      entryName(a).localeCompare(entryName(b), 'fr'));
+    const shown = entries.slice(0, 5);
+
     return html`
       <section class="sheet" aria-label="Lieu sélectionné">
         <button class="close" type="button" aria-label="Fermer" @click=${() => this.#navigate({ spot: null })}>×</button>
-        <h2>${spotTitle(spot)}${p.label ? html` <span style="font-weight:400">· ${p.label}</span>` : nothing}</h2>
-        ${p.vernacularName ? html`<div class="sci">${p.scientificName}</div>` : nothing}
+        <h2>${placeTitle(place)}</h2>
         <div class="meta">
-          ${inSeason(spot) ? html`<span class="badge">En saison</span>` : nothing}
-          <span>${ABUNDANCE.find(a => a.value === p.abundance)?.label || ''}</span>
-          ${p.rating ? html`<span class="stars" aria-label="Qualité ${p.rating} sur 5">${stars(p.rating)}</span>` : nothing}
-          ${last ? html`<span>Dernière récolte : ${shortDate(last.date)}${last.quantity ? ' · ' + last.quantity : ''}</span>` : html`<span>Aucune récolte notée</span>`}
+          <span>${plantCount(p.plants.length)}</span>
+          ${inSeason(place) ? html`<span class="badge">En saison</span>` : nothing}
           ${dist !== null ? html`<span>à ${formatDistance(dist)}</span>` : nothing}
         </div>
+        ${shown.length ? html`
+          <ul class="plants">
+            ${shown.map(e => {
+              const last = lastHarvest(e);
+              return html`<li>
+                <span class="who">
+                  <span class="nm">${entryName(e)}${entryInSeason(e) ? html` <span class="badge">En saison</span>` : nothing}</span>
+                  <span class="sub">${ABUNDANCE.find(a => a.value === e.abundance)?.label}${e.rating ? ' · ' + stars(e.rating) : ''}
+                    · ${last ? 'récolté le ' + shortDate(last.date) : 'aucune récolte'}</span>
+                </span>
+                <button type="button" class="harvest" aria-label="Noter une récolte de ${entryName(e)} aujourd’hui"
+                  @click=${() => this.#quickHarvest(place, e)}>+ Récolte</button>
+              </li>`;
+            })}
+          </ul>
+          ${entries.length > shown.length ? html`<a class="more" href=${href.spot(place.id)}>+ ${entries.length - shown.length} autre${entries.length - shown.length > 1 ? 's' : ''}…</a>` : nothing}`
+        : html`<p class="notes">Aucune plante notée pour ce lieu.</p>`}
         ${p.notes ? html`<p class="notes">${p.notes}</p>` : nothing}
         <div class="actions">
-          <button class="main" type="button" @click=${() => this.#quickHarvest(spot)}>+ Récolte du jour</button>
-          <a class="button" href=${directionsUrl(spot)} target="_blank" rel="noopener">Itinéraire</a>
-          <a class="button" href=${href.spot(spot.id)}>Modifier</a>
-          ${p.plantId ? html`<a class="button" href=${href.plant(p.plantId)}>Fiche plante</a>` : nothing}
+          <a class="button main" href=${href.spot(place.id)}>Ouvrir le lieu</a>
+          <a class="button" href=${href.spot(place.id, null, true)}>+ Plante</a>
+          <a class="button" href=${directionsUrl(place)} target="_blank" rel="noopener">Itinéraire</a>
         </div>
       </section>
     `;
   }
 
-  /** @param {import('../core/spots.js').Spot[]} spots */
-  #list(spots) {
+  /** @param {import('../core/spots.js').Place[]} places */
+  #list(places) {
     const fix = this.#geo.state.fix;
-    const rows = spots
-      .map(spot => ({ spot, dist: this.#distanceTo(spot) }))
+    const rows = places
+      .map(place => ({ place, dist: this.#distanceTo(place) }))
       .sort((a, b) => fix
         ? /** @type {number} */ (a.dist) - /** @type {number} */ (b.dist)
-        : b.spot.properties.updatedAt.localeCompare(a.spot.properties.updatedAt));
+        : b.place.properties.updatedAt.localeCompare(a.place.properties.updatedAt));
 
     if (!rows.length) return html`<ul class="list"></ul>`;
     return html`
       <ul class="list">
-        ${rows.map(({ spot, dist }) => {
-          const last = lastHarvest(spot);
-          const color = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' }[spot.properties.abundance || 'moyen'];
+        ${rows.map(({ place, dist }) => {
+          const last = placeLastHarvest(place);
+          const names = place.properties.plants.map(entryName);
           return html`
             <li>
-              <a href=${href.map({ spot: spot.id })} @click=${() => { this._view = 'map'; }}>
-                <span class="dot" style="--c:${color}"></span>
-                <span class="title">${spotTitle(spot)}${spot.properties.label ? ' · ' + spot.properties.label : ''}</span>
+              <a href=${href.map({ spot: place.id })} @click=${() => { this._view = 'map'; }}>
+                <span class="dot" style="--c:${PIN_COLORS[placeAbundance(place)]}"></span>
+                <span class="title">${placeTitle(place)}</span>
                 <span class="dist">${dist !== null ? formatDistance(dist) : ''}</span>
                 <span class="sub">
-                  ${inSeason(spot) ? html`<span class="badge">En saison</span> ` : nothing}
-                  ${last ? 'Récolté le ' + shortDate(last.date) : 'Aucune récolte notée'}
-                  ${spot.properties.rating ? ' · ' + stars(spot.properties.rating) : ''}
+                  ${inSeason(place) ? html`<span class="badge">En saison</span> ` : nothing}
+                  ${names.length > 1 || place.properties.name ? names.join(', ') + ' · ' : ''}
+                  ${last ? 'récolté le ' + shortDate(last.harvest.date) : 'aucune récolte'}
                 </span>
               </a>
             </li>`;

@@ -30,6 +30,11 @@ async function start() {
   }
 }
 
+addEventListener('geoflora-outdated', () => store.set({
+  status: 'error',
+  statusText: 'GeoFlora vient d’être mis à jour : rechargez la page pour continuer.'
+}));
+
 addEventListener('online', () => store.set({ offline: false }));
 addEventListener('offline', () => store.set({ offline: true }));
 

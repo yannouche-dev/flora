@@ -194,7 +194,8 @@ export class GfApp extends LitElement {
       </header>
       <main>
         ${status === 'loading' ? html`<div class="banner" role="status">${statusText || 'Chargement…'}</div>` : nothing}
-        ${status === 'error' ? html`<div class="banner error" role="alert">${statusText}</div>` : nothing}
+        ${status === 'error' ? html`<div class="banner error" role="alert">${statusText}
+          <button class="link" type="button" @click=${() => location.reload()}>Recharger</button></div>` : nothing}
         ${offline && status === 'ready' && route.name === 'search' ? html`<div class="banner">Hors ligne — recherche sur la copie locale.</div>` : nothing}
         ${this.#outlet(route)}
       </main>
@@ -242,7 +243,7 @@ export class GfApp extends LitElement {
       case 'spot-new':
         return html`<gf-spot-editor plant-id=${route.plant ?? ''}></gf-spot-editor>`;
       case 'spot':
-        return html`<gf-spot-editor spot-id=${route.id}></gf-spot-editor>`;
+        return html`<gf-spot-editor spot-id=${route.id} add-plant=${route.add ?? ''} ?pick=${route.pick}></gf-spot-editor>`;
       case 'settings':
         document.title = 'Réglages — GeoFlora';
         return html`<gf-settings></gf-settings>`;
