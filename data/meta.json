@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-06T18:26:13.127Z",
+  "generatedAt": "2026-10-06T19:04:08.897Z",
   "source": "TAXREF v18 official PatriNat archive",
   "sourceUrl": "https://assets.patrinat.fr/files/referentiel/TAXREF_v18_2025.zip",
   "taxrefVersion": "18.0",
@@ -27,5 +27,7 @@
   "genera": 1245,
   "plantsWithFrenchNames": 7177,
   "vernacularNames": 15487,
+  "synonyms": 33121,
+  "plantsWithSynonyms": 5688,
   "plantsWithoutFrenchNames": 568
 }
