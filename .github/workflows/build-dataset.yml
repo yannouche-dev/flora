@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - scripts/build-plants.mjs
+      - lib/**/*.mjs
       - .github/workflows/build-dataset.yml
 
 permissions:
@@ -30,6 +31,9 @@ jobs:
           mkdir -p .cache/taxref
           curl -L --fail --retry 3 "https://assets.patrinat.fr/files/referentiel/TAXREF_v18_2025.zip" -o .cache/taxref.zip
           unzip -q .cache/taxref.zip -d .cache/taxref
+
+      - name: Validate runtime modules
+        run: node --check lib/plant-sources.mjs
 
       - name: Build dataset
         run: node scripts/build-plants.mjs
