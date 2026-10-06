@@ -5,6 +5,7 @@ import './components/gf-app.js';
 import { syncDataset } from './core/dataset.js';
 import { startUrlSync } from './core/query.js';
 import { loadIndex, runSearch } from './core/search.js';
+import { hasSpots, requestPersistence } from './core/spots.js';
 import { store } from './core/store.js';
 
 const PHASES = {
@@ -16,6 +17,8 @@ const PHASES = {
 
 async function start() {
   try {
+    // Before any IndexedDB connection exists: granting persistence may close open connections.
+    if (hasSpots()) await requestPersistence();
     const { meta, offline } = await syncDataset(({ phase }) => store.set({ statusText: PHASES[phase] }));
     store.set({ meta, offline, statusText: 'Préparation de la recherche…' });
     await loadIndex();

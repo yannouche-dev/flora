@@ -200,6 +200,16 @@ export class GfSpotEditor extends LitElement {
   }
 
   async #load() {
+    try {
+      await this.#read();
+    } catch (error) {
+      console.error(error);
+      this._spot = null;
+      this._error = 'Lecture impossible : ' + /** @type {Error} */ (error).message;
+    }
+  }
+
+  async #read() {
     await whenReady();
     if (this.spotId) {
       const spot = await getSpot(this.spotId);
@@ -337,7 +347,13 @@ export class GfSpotEditor extends LitElement {
   render() {
     const spot = this._spot;
     if (spot === undefined) return html`<div></div><form><p>Chargement…</p></form>`;
-    if (spot === null) return html`<div></div><form><p>Ce lieu n’existe plus.</p><a href=${href.map()}>Retour à la carte</a></form>`;
+    if (spot === null) {
+      return html`<div></div><form>
+        <p>${this._error || 'Ce lieu n’existe plus.'}</p>
+        ${this._error ? html`<button class="secondary" type="button" @click=${() => this.#load()}>Réessayer</button>` : nothing}
+        <a href=${href.map()}>Retour à la carte</a>
+      </form>`;
+    }
 
     const p = spot.properties;
     const fix = this.#geo.state.fix;

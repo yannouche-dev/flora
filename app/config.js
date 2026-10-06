@@ -26,7 +26,8 @@ export const config = {
     compact: 'geoflora.compact',
     mapLayer: 'geoflora.mapLayer',
     mapView: 'geoflora.mapView',
-    lastExport: 'geoflora.lastExport'
+    lastExport: 'geoflora.lastExport',
+    hasSpots: 'geoflora.hasSpots'
   },
 
   /** GPS fixes at or under this accuracy (metres) are considered good enough to save. */

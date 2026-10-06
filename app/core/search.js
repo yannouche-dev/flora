@@ -41,7 +41,15 @@ let searchRun = 0;
 export async function runSearch() {
   const { q, filters, sort } = store.state.query;
   const run = ++searchRun;
-  const { total, items, facets, suggestions, fuzzy, sort: effectiveSort } = await call({ type: 'search', q, filters, sort });
+  let response;
+  try {
+    response = await call({ type: 'search', q, filters, sort });
+  } catch (error) {
+    console.error(error);
+    if (run === searchRun) store.set({ status: 'error', statusText: 'Recherche impossible : ' + /** @type {Error} */ (error).message });
+    return;
+  }
+  const { total, items, facets, suggestions, fuzzy, sort: effectiveSort } = response;
   // Drop answers that a newer keystroke already superseded.
   if (run === searchRun) {
     store.set({ results: { total, items, facets, suggestions, fuzzy, sort: effectiveSort } });
