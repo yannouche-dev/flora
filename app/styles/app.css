@@ -1,0 +1,37 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--gf-bg);
+  color: var(--gf-text);
+  font-family: var(--gf-font);
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+gf-app {
+  height: 100%;
+}
+
+/* Shown until the custom elements are defined (and if JavaScript is off). */
+.gf-boot {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  color: var(--gf-text-muted);
+  text-align: center;
+  padding: 16px;
+}
+
+gf-app:defined + .gf-boot {
+  display: none;
+}

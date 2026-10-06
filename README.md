@@ -171,6 +171,51 @@ Fiche plante
 
 Les réponses distantes peuvent être mises en cache quelques heures ou quelques jours dans IndexedDB. Les fichiers image restent servis par leur source et profitent simplement du cache HTTP du navigateur.
 
+## Application web
+
+GeoFlora est une application HTML5 **sans serveur et sans étape de build** : des modules ES natifs, des composants [Lit](https://lit.dev) et un service worker écrit à la main. Elle est publiée telle quelle sur GitHub Pages et fonctionne hors ligne après la première visite.
+
+```text
+index.html               shell + import map ("lit" → vendor/lit.js)
+manifest.webmanifest     PWA installable
+sw.js                    service worker (shell précaché, images en cache)
+vendor/lit.js            Lit 3 en un seul module ES (scripts/vendor-lit.sh)
+lib/plant-sources.mjs    enrichissement distant (réutilisé tel quel)
+app/
+  main.js                démarrage : synchro du dataset → index de recherche
+  config.js
+  core/
+    db.js                IndexedDB : plants, plantDetails, meta
+    dataset.js           synchro data/plants.json → IndexedDB selon meta.generatedAt
+    search.js            client du worker de recherche
+    sources.js           PlantSources + cache IndexedDB persistant (7 jours)
+    store.js             état observable + ReactiveController Lit
+    router.js            routes par hash : #/, #/plant/:id, #/settings
+  workers/
+    search.worker.js     recherche insensible aux accents (noms, synonymes, familles)
+  components/            gf-app, gf-search-bar, gf-filters, gf-plant-list (virtualisée),
+                         gf-plant-card, gf-plant-detail, gf-attribution, gf-settings
+  styles/                tokens.css (thème clair/sombre), app.css
+```
+
+Fonctionnement :
+
+1. au démarrage, `data/meta.json` est comparé à la version locale ; `data/plants.json` n'est téléchargé que s'il a changé, puis stocké dans IndexedDB ;
+2. un Web Worker construit l'index de recherche depuis IndexedDB ;
+3. la fiche plante appelle `PlantSources.details()` à la demande, et la réponse reste en cache dans IndexedDB ;
+4. sans réseau, la recherche, les fiches déjà consultées et les images déjà vues restent disponibles.
+
+Lancer en local (n'importe quel serveur statique fait l'affaire) :
+
+```bash
+python3 -m http.server 8000
+# puis http://localhost:8000
+```
+
+Le workflow `Deploy web app` publie l'application sur GitHub Pages à chaque modification de l'app sur `main` et après chaque build du dataset. Il faut l'activer une fois : **Settings → Pages → Source : GitHub Actions**.
+
+Ajouter un fichier JS ou CSS dans `app/` impose de l'ajouter aussi à la liste `SHELL` de `sw.js` ; le workflow le vérifie. Pour mettre Lit à jour : `LIT_VERSION=3.x.y scripts/vendor-lit.sh`.
+
 ## Génération locale
 
 Node.js 20+ :

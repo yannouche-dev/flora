@@ -1,0 +1,74 @@
+name: Deploy web app
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - index.html
+      - manifest.webmanifest
+      - sw.js
+      - app/**
+      - assets/**
+      - vendor/**
+      - lib/**
+      - .github/workflows/deploy-pages.yml
+  # Dataset commits are pushed with [skip ci]; redeploy once the dataset build finishes.
+  workflow_run:
+    workflows: [Build flora dataset]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check modules
+        run: |
+          for file in sw.js vendor/lit.js lib/*.mjs $(find app -name '*.js'); do
+            node --check "$file"
+          done
+          node -e "JSON.parse(require('fs').readFileSync('manifest.webmanifest','utf8'))"
+          # Every app file must be precached by the service worker, or offline mode breaks.
+          for file in $(find app -name '*.js' -o -name '*.css' | sort); do
+            grep -q "'$file'" sw.js || { echo "::error file=sw.js::$file missing from SHELL"; exit 1; }
+          done
+
+      - name: Assemble site
+        run: |
+          mkdir -p _site/data
+          cp -r index.html manifest.webmanifest sw.js .nojekyll app assets vendor lib _site/
+          cp data/plants.json data/meta.json _site/data/
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
