@@ -9,7 +9,7 @@ export const config = {
 
   db: {
     name: 'geoflora',
-    version: 1
+    version: 2
   },
 
   /** How long remote enrichment (GBIF, iNaturalist, Commons…) stays cached in IndexedDB. */
@@ -23,8 +23,14 @@ export const config = {
   storageKeys: {
     trefleToken: 'geoflora.trefleToken',
     recentSearches: 'geoflora.recentSearches',
-    compact: 'geoflora.compact'
+    compact: 'geoflora.compact',
+    mapLayer: 'geoflora.mapLayer',
+    mapView: 'geoflora.mapView',
+    lastExport: 'geoflora.lastExport'
   },
+
+  /** GPS fixes at or under this accuracy (metres) are considered good enough to save. */
+  goodAccuracy: 15,
 
   /** Desktop layout (filter sidebar) from this width; below, filters open in a bottom sheet. */
   wideQuery: '(min-width: 900px)'

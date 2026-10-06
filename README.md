@@ -176,29 +176,33 @@ Les réponses distantes peuvent être mises en cache quelques heures ou quelques
 GeoFlora est une application HTML5 **sans serveur et sans étape de build** : des modules ES natifs, des composants [Lit](https://lit.dev) et un service worker écrit à la main. Elle est publiée telle quelle sur GitHub Pages et fonctionne hors ligne après la première visite.
 
 ```text
-index.html               shell + import map ("lit" → vendor/lit.js)
+index.html               shell + import map ("lit", "leaflet" → vendor/)
 manifest.webmanifest     PWA installable
-sw.js                    service worker (shell précaché, images en cache)
-vendor/lit.js            Lit 3 en un seul module ES (scripts/vendor-lit.sh)
+sw.js                    service worker (shell précaché, images et tuiles IGN en cache)
+vendor/                  Lit 3 et Leaflet 1.9 en modules ES autonomes (scripts/vendor.sh)
 lib/plant-sources.mjs    enrichissement distant (réutilisé tel quel)
 app/
   main.js                démarrage : synchro du dataset → index de recherche
   config.js
   core/
-    db.js                IndexedDB : plants, plantDetails, meta
+    db.js                IndexedDB : plants, plantDetails, meta, spots
     dataset.js           synchro data/plants.json → IndexedDB selon meta.generatedAt
     search.js            client du worker de recherche
     query.js             requête (texte, filtres, tri) ↔ URL, recherches récentes
     highlight.js         surlignage insensible aux accents
     sources.js           PlantSources + cache IndexedDB persistant (7 jours)
+    spots.js             lieux de récolte (GeoJSON), saison, distances, export/import
+    geo.js               suivi GPS partagé
+    ign.js               couches IGN Géoplateforme (WMTS) pour Leaflet
     store.js             état observable + ReactiveController Lit
-    router.js            routes par hash : #/, #/plant/:id, #/settings
+    router.js            routes par hash : #/, #/plant/:id, #/map, #/spot/:id, #/settings
   workers/
     search.worker.js     recherche, filtres à facettes, tri, abréviations, fautes de frappe
   components/            gf-app, gf-search-bar, gf-results-bar, gf-active-filters,
                          gf-filter-panel, gf-facet, gf-plant-list (virtualisée),
-                         gf-plant-card, gf-plant-detail, gf-attribution, gf-settings
-  styles/                tokens.css (thème clair/sombre), app.css
+                         gf-plant-card, gf-plant-detail, gf-attribution, gf-settings,
+                         gf-map (Leaflet), gf-map-page, gf-spot-editor, gf-plant-spots
+  styles/                tokens.css (thème clair/sombre), app.css, map.css
 ```
 
 ### Recherche, filtres et tri
@@ -229,7 +233,31 @@ python3 -m http.server 8000
 
 Le workflow `Deploy web app` publie l'application sur GitHub Pages à chaque modification de l'app sur `main` et après chaque build du dataset. Il faut l'activer une fois : **Settings → Pages → Source : GitHub Actions**.
 
-Ajouter un fichier JS ou CSS dans `app/` impose de l'ajouter aussi à la liste `SHELL` de `sw.js` ; le workflow le vérifie. Pour mettre Lit à jour : `LIT_VERSION=3.x.y scripts/vendor-lit.sh`.
+Ajouter un fichier JS ou CSS dans `app/` impose de l'ajouter aussi à la liste `SHELL` de `sw.js` ; le workflow le vérifie. Pour mettre Lit ou Leaflet à jour : `LIT_VERSION=3.x.y LEAFLET_VERSION=1.x.y scripts/vendor.sh`.
+
+### Lieux de récolte
+
+L'onglet **Carte** enregistre les endroits où vous récoltez une plante, sur les **photos aériennes IGN** (Géoplateforme, sans clé ; aussi Plan IGN et parcelles cadastrales).
+
+- **Sur place** : depuis une fiche plante, « 📍 Ajouter un lieu ». Le GPS s'affiche avec sa précision (± m) ; l'épingle peut être déplacée à la main, ou posée par un appui long sur la carte (sans GPS, ou depuis chez soi).
+- **Pour chaque lieu** : nom, abondance, qualité (★), notes, et un **journal de récolte** (date, quantité, remarque). Un lieu est **« en saison »** s'il a été récolté, une année quelconque, à ±15 jours de la date du jour.
+- **Carte** : épingles colorées par abondance, filtres « En saison » et par plante, fiche du lieu avec « + Récolte du jour », itinéraire vers l'application de navigation du téléphone. **Liste** triée par distance.
+- **Hors ligne** : le GPS et les lieux fonctionnent toujours ; les zones de carte déjà affichées restent disponibles (3 000 tuiles en cache).
+- **Confidentialité** : les lieux restent **sur l'appareil** (IndexedDB, stockage persistant demandé). Ils sont stockés au format **GeoJSON** : *Réglages → Exporter* produit un fichier `.geojson` lisible par QGIS, uMap, geojson.io…, et *Importer* le fusionne (même identifiant → la version la plus récente l'emporte). Pensez à exporter régulièrement.
+
+```json
+{
+  "type": "Feature",
+  "id": "c0f3…",
+  "geometry": { "type": "Point", "coordinates": [4.8357, 45.7641] },
+  "properties": {
+    "plantId": 100225, "scientificName": "Geum urbanum", "vernacularName": "Benoîte des villes",
+    "label": "Lisière nord", "abundance": "abondant", "rating": 4, "notes": "",
+    "accuracy": 8, "createdAt": "…", "updatedAt": "…",
+    "harvests": [{ "date": "2026-10-06", "quantity": "300 g", "note": "" }]
+  }
+}
+```
 
 ## Génération locale
 

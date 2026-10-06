@@ -1,0 +1,128 @@
+/* Leaflet maps live in light DOM (gf-map); these rules complement vendor/leaflet.css. */
+
+gf-map {
+  display: block;
+  position: relative;
+  min-height: 200px;
+  background: var(--gf-surface-2);
+}
+
+gf-map .gf-map-root {
+  position: absolute;
+  inset: 0;
+}
+
+gf-map .gf-map-canvas {
+  position: absolute;
+  inset: 0;
+}
+
+gf-map .leaflet-container {
+  font: inherit;
+  background: var(--gf-surface-2);
+}
+
+gf-map .leaflet-control-attribution {
+  font-size: 10px;
+}
+
+/* Spot pins (L.divIcon with inline SVG). */
+.gf-pin {
+  background: none;
+  border: 0;
+}
+
+.gf-pin svg {
+  display: block;
+  filter: drop-shadow(0 1px 2px rgb(0 0 0 / 50%));
+  transition: transform 0.12s ease-out;
+  transform-origin: 50% 100%;
+}
+
+.gf-pin.selected svg {
+  transform: scale(1.35);
+}
+
+.gf-pin.season .ring {
+  stroke: #fde047;
+  stroke-width: 3;
+}
+
+/* Current position: blue dot. */
+.gf-me {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #2563eb;
+  border: 3px solid #fff;
+  box-shadow: 0 0 0 2px rgb(37 99 235 / 35%), 0 1px 4px rgb(0 0 0 / 40%);
+}
+
+/* Floating map buttons. */
+gf-map .gf-map-buttons {
+  position: absolute;
+  z-index: 1000;
+  right: 10px;
+  top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+gf-map .gf-map-buttons button {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 0;
+  background: var(--gf-surface);
+  color: var(--gf-text);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 35%);
+  font-size: 1.2rem;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+gf-map .gf-map-buttons button[aria-pressed='true'] {
+  background: #2563eb;
+  color: #fff;
+}
+
+gf-map .gf-layer-menu {
+  position: absolute;
+  z-index: 1001;
+  right: 62px;
+  top: 10px;
+  background: var(--gf-surface);
+  color: var(--gf-text);
+  border-radius: var(--gf-radius);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 30%);
+  padding: 8px 12px;
+  font-size: 0.875rem;
+  min-width: 200px;
+}
+
+gf-map .gf-layer-menu label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 0;
+  cursor: pointer;
+}
+
+gf-map .gf-layer-menu hr {
+  border: 0;
+  border-top: 1px solid var(--gf-border);
+  margin: 4px 0;
+}
+
+gf-map .gf-layer-menu input {
+  accent-color: var(--gf-accent);
+}
+
+/* Touch screens pinch to zoom: keep the corner free. */
+@media (pointer: coarse) {
+  gf-map .leaflet-control-zoom {
+    display: none;
+  }
+}

@@ -8,6 +8,7 @@ import { config } from '../config.js';
  *  - plants:       the TAXREF dataset (keyPath id) with by_family / by_genus / by_taxon indexes
  *  - plantDetails: remote enrichment cache (keyPath key, e.g. "details:100225", "thumb:100225")
  *  - meta:         key/value (dataset version…)
+ *  - spots:        harvest spots, stored as GeoJSON Features (keyPath id), added in version 2
  */
 function upgrade(db) {
   if (!db.objectStoreNames.contains('plants')) {
@@ -21,6 +22,11 @@ function upgrade(db) {
   }
   if (!db.objectStoreNames.contains('meta')) {
     db.createObjectStore('meta');
+  }
+  if (!db.objectStoreNames.contains('spots')) {
+    const spots = db.createObjectStore('spots', { keyPath: 'id' });
+    spots.createIndex('by_plant', 'properties.plantId');
+    spots.createIndex('by_updated', 'properties.updatedAt');
   }
 }
 
@@ -72,6 +78,29 @@ export async function getAll(store) {
 export async function count(store) {
   const db = await openDb();
   return promisify(db.transaction(store).objectStore(store).count());
+}
+
+/** @param {string} store @param {string} index @param {IDBValidKey} key */
+export async function getAllByIndex(store, index, key) {
+  const db = await openDb();
+  return promisify(db.transaction(store).objectStore(store).index(index).getAll(key));
+}
+
+/** @param {string} store @param {IDBValidKey} key */
+export async function remove(store, key) {
+  const db = await openDb();
+  const tx = db.transaction(store, 'readwrite');
+  tx.objectStore(store).delete(key);
+  return done(tx);
+}
+
+/** @param {string} store @param {any[]} values */
+export async function putAll(store, values) {
+  const db = await openDb();
+  const tx = db.transaction(store, 'readwrite');
+  const objectStore = tx.objectStore(store);
+  for (const value of values) objectStore.put(value);
+  return done(tx);
 }
 
 /** @param {string} store @param {any} value @param {IDBValidKey} [key] */

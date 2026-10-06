@@ -6,6 +6,7 @@ import { lastSearchHash } from '../core/query.js';
 import { whenReady } from '../core/store.js';
 import * as sources from '../core/sources.js';
 import './gf-attribution.js';
+import './gf-plant-spots.js';
 
 /** Remote text is untrusted HTML: keep only its text content (DOMParser never runs scripts). */
 function toText(/** @type {string} */ value) {
@@ -253,6 +254,10 @@ export class GfPlantDetail extends LitElement {
           ${status ? html`<li title="Statut TAXREF ${status}">${STATUS_LABELS[status] || status}</li>` : nothing}
           ${inat?.observationsCount ? html`<li>${inat.observationsCount.toLocaleString('fr-FR')} observations iNaturalist</li>` : nothing}
         </ul>
+
+        <section>
+          <gf-plant-spots plant-id=${plant.id}></gf-plant-spots>
+        </section>
 
         ${plant.vernacularNames?.length > 1 || extraNames.length ? html`
           <section>

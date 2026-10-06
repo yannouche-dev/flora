@@ -11,12 +11,15 @@
   <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
   <link rel="stylesheet" href="app/styles/tokens.css" />
   <link rel="stylesheet" href="app/styles/app.css" />
+  <link rel="stylesheet" href="vendor/leaflet.css" />
+  <link rel="stylesheet" href="app/styles/map.css" />
 
   <!-- Bare specifiers → vendored files. No bundler: the browser resolves modules natively. -->
   <script type="importmap">
     {
       "imports": {
-        "lit": "./vendor/lit.js"
+        "lit": "./vendor/lit.js",
+        "leaflet": "./vendor/leaflet.js"
       }
     }
   </script>
