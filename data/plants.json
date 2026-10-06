@@ -12615,13 +12615,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 114062
+      "taxref": 114062,
+      "wikidata": "Q114110"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/114062",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/114062"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9e/Pleurospermum_austriacum003.jpg/500px-Pleurospermum_austriacum003.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3APleurospermum_austriacum003.jpg",
+      "author": "Meneerke bloem",
+      "license": "CC BY-SA 3.0"
+    }
   },
   {
     "id": 115797,
@@ -12742,7 +12749,8 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 116297
+      "taxref": 116297,
+      "wikidata": "Q17135437"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/116297",
@@ -12778,13 +12786,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 116339
+      "taxref": 116339,
+      "wikidata": "Q3410372"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/116339",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/116339"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/89/Ptychotis_saxifraga_-_col_de_jou_-_66_-_Laurent_Sicart.jpg/500px-Ptychotis_saxifraga_-_col_de_jou_-_66_-_Laurent_Sicart.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3APtychotis_saxifraga_-_col_de_jou_-_66_-_Laurent_Sicart.jpg",
+      "author": "Laurent Sicart",
+      "license": "CC BY 3.0"
+    }
   },
   {
     "id": 117820,
@@ -12844,7 +12859,8 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 118900
+      "taxref": 118900,
+      "wikidata": "Q17136201"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/118900",
@@ -12916,13 +12932,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 121430
+      "taxref": 121430,
+      "wikidata": "Q15592686"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/121430",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/121430"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c0/Scandix_australis_subsp_microcarpa_-_28042010.jpg/500px-Scandix_australis_subsp_microcarpa_-_28042010.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AScandix_australis_subsp_microcarpa_-_28042010.jpg",
+      "author": "Alberto Salguero",
+      "license": "CC BY-SA 4.0"
+    }
   },
   {
     "id": 121449,
@@ -12989,13 +13012,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 121455
+      "taxref": 121455,
+      "wikidata": "Q15594149"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/121455",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/121455"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7b/Description_des_plantes_nouvelles_et_peu_connues_%28Plate_14%29_%289343357694%29.jpg/500px-Description_des_plantes_nouvelles_et_peu_connues_%28Plate_14%29_%289343357694%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ADescription_des_plantes_nouvelles_et_peu_connues_(Plate_14)_(9343357694).jpg",
+      "author": "Cels, Jacques Martin; Redouté, Henri-Joseph; Ventenat, Etienne Pierre",
+      "license": "Public domain"
+    }
   },
   {
     "id": 122326,
@@ -13012,7 +13042,8 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 122326
+      "taxref": 122326,
+      "wikidata": "Q18484286"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/122326",
@@ -13119,7 +13150,8 @@
       "france": "E"
     },
     "identifiers": {
-      "taxref": 123015
+      "taxref": 123015,
+      "wikidata": "Q17132938"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/123015",
@@ -13145,7 +13177,8 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 123023
+      "taxref": 123023,
+      "wikidata": "Q17133066"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/123023",
@@ -13176,7 +13209,8 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 123034
+      "taxref": 123034,
+      "wikidata": "Q17133296"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/123034",
@@ -13211,13 +13245,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 123037
+      "taxref": 123037,
+      "wikidata": "Q17133324"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/123037",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/123037"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/ff/Seseli_montanum_001_GotBot_2016.jpg/500px-Seseli_montanum_001_GotBot_2016.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ASeseli_montanum_001_GotBot_2016.jpg",
+      "author": "Averater",
+      "license": "CC BY 4.0"
+    }
   },
   {
     "id": 123045,
@@ -13234,7 +13275,8 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 123045
+      "taxref": 123045,
+      "wikidata": "Q17133703"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/123045",
@@ -13266,13 +13308,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 123058
+      "taxref": 123058,
+      "wikidata": "Q6126256"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/123058",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/123058"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/8c/Sesseli_tortuosum_01.jpg/500px-Sesseli_tortuosum_01.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ASesseli_tortuosum_01.jpg",
+      "author": "Stefdn",
+      "license": "CC BY-SA 4.0"
+    }
   },
   {
     "id": 123367,
@@ -13396,13 +13445,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 123785
+      "taxref": 123785,
+      "wikidata": "Q21877461"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/123785",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/123785"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/27/Petroselinum_segetum_1.jpg/500px-Petroselinum_segetum_1.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3APetroselinum_segetum_1.jpg",
+      "author": "Aroche",
+      "license": "CC BY-SA 3.0"
+    }
   },
   {
     "id": 123960,
@@ -13503,13 +13559,20 @@
       "france": "C"
     },
     "identifiers": {
-      "taxref": 124004
+      "taxref": 124004,
+      "wikidata": "Q12325136"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/124004",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/124004"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/bc/Smyrnium-perfoliatum-habit.JPG/500px-Smyrnium-perfoliatum-habit.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ASmyrnium-perfoliatum-habit.JPG",
+      "author": "Sten Porse",
+      "license": "CC BY-SA 3.0"
+    }
   },
   {
     "id": 126248,
@@ -13570,7 +13633,8 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 126613
+      "taxref": 126613,
+      "wikidata": "Q17137024"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/126613",
@@ -13612,7 +13676,8 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 126615
+      "taxref": 126615,
+      "wikidata": "Q50876385"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/126615",
@@ -13718,13 +13783,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 611567
+      "taxref": 611567,
+      "wikidata": "Q17137240"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/611567",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/611567"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d2/Torilis_africana_120405183.jpg/500px-Torilis_africana_120405183.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ATorilis_africana_120405183.jpg",
+      "author": "Eleftherios Katsillis",
+      "license": "CC BY 4.0"
+    }
   },
   {
     "id": 126846,
@@ -14082,13 +14154,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 127988
+      "taxref": 127988,
+      "wikidata": "Q3509015"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/127988",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/127988"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7c/Illustration_Turgenia_latifolia0.jpg/500px-Illustration_Turgenia_latifolia0.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AIllustration_Turgenia_latifolia0.jpg",
+      "author": null,
+      "license": "Public domain"
+    }
   },
   {
     "id": 129910,
@@ -14157,7 +14236,8 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 130497
+      "taxref": 130497,
+      "wikidata": "Q17140944"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/130497",
@@ -15841,7 +15921,8 @@
       "france": "I"
     },
     "identifiers": {
-      "taxref": 83776
+      "taxref": 83776,
+      "wikidata": "Q50826253"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/83776",
@@ -15989,7 +16070,8 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 83789
+      "taxref": 83789,
+      "wikidata": "Q6388329"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/83789",
@@ -16111,7 +16193,8 @@
       "france": "S"
     },
     "identifiers": {
-      "taxref": 83796
+      "taxref": 83796,
+      "wikidata": "Q15465816"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/83796",
@@ -16601,13 +16684,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 84286
+      "taxref": 84286,
+      "wikidata": "Q148090"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/84286",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/84286"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/97/Asparagus_tenuifolius1Georgi_Kunev.jpg/500px-Asparagus_tenuifolius1Georgi_Kunev.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAsparagus_tenuifolius1Georgi_Kunev.jpg",
+      "author": "Georgi Kunev",
+      "license": "CC BY 3.0"
+    }
   },
   {
     "id": 85708,
@@ -16629,7 +16719,8 @@
       "france": "I"
     },
     "identifiers": {
-      "taxref": 85708
+      "taxref": 85708,
+      "wikidata": "Q15502124"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/85708",
@@ -16698,13 +16789,20 @@
       "france": "C"
     },
     "identifiers": {
-      "taxref": 85715
+      "taxref": 85715,
+      "wikidata": "Q15502616"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/85715",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/85715"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2d/Bellevalia_trifoliata_kz4.jpg/500px-Bellevalia_trifoliata_kz4.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ABellevalia_trifoliata_kz4.jpg",
+      "author": "Krzysztof Ziarnek, Kenraiz",
+      "license": "CC BY-SA 4.0"
+    }
   },
   {
     "id": 86475,
@@ -16770,7 +16868,8 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 86476
+      "taxref": 86476,
+      "wikidata": "Q15502879"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/86476",
@@ -16879,13 +16978,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 95055
+      "taxref": 95055,
+      "wikidata": "Q1489532"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/95055",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/95055"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/21/Dipcadi_serotinum555.jpg/500px-Dipcadi_serotinum555.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ADipcadi_serotinum555.jpg",
+      "author": "Nanosanchez",
+      "license": "CC BY-SA 3.0"
+    }
   },
   {
     "id": 102930,
@@ -16913,7 +17019,8 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 102930
+      "taxref": 102930,
+      "wikidata": "Q110830123"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/102930",
@@ -17112,7 +17219,8 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 106545
+      "taxref": 106545,
+      "wikidata": "Q127328278"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/106545",
@@ -17226,13 +17334,20 @@
       "france": "I"
     },
     "identifiers": {
-      "taxref": 108005
+      "taxref": 108005,
+      "wikidata": "Q10416534"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/108005",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/108005"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6f/Ornithogalum_arabicum491228475.jpg/500px-Ornithogalum_arabicum491228475.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AOrnithogalum_arabicum491228475.jpg",
+      "author": "tanakawho from Tokyo, Japan",
+      "license": "CC BY 2.0"
+    }
   },
   {
     "id": 1049354,
@@ -17283,7 +17398,8 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 108867
+      "taxref": 108867,
+      "wikidata": "Q47140718"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/108867",
@@ -17306,7 +17422,8 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 788882
+      "taxref": 788882,
+      "wikidata": "Q15522919"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/788882",
@@ -17491,7 +17608,8 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 108896
+      "taxref": 108896,
+      "wikidata": "Q80686377"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/108896",
@@ -17573,7 +17691,8 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 966355
+      "taxref": 966355,
+      "wikidata": "Q15523349"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/966355",
@@ -17627,7 +17746,8 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 109469
+      "taxref": 109469,
+      "wikidata": "Q50970949"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/109469",
@@ -17653,7 +17773,8 @@
       "france": "I"
     },
     "identifiers": {
-      "taxref": 717339
+      "taxref": 717339,
+      "wikidata": "Q50970981"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/717339",
@@ -17695,7 +17816,8 @@
       "france": "I"
     },
     "identifiers": {
-      "taxref": 161776
+      "taxref": 161776,
+      "wikidata": "Q50970988"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/161776",
@@ -17768,13 +17890,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 159762
+      "taxref": 159762,
+      "wikidata": "Q3886094"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/159762",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/159762"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/d/db/Ornithogalum_biflorum_Sardinia_LM.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AOrnithogalum_biflorum_Sardinia_LM.jpg",
+      "author": "Laura Morelli",
+      "license": "CC BY-SA 3.0"
+    }
   },
   {
     "id": 620057,
@@ -17793,13 +17922,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 620057
+      "taxref": 620057,
+      "wikidata": "Q10967219"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/620057",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/620057"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/20/Ornithogalum_kochii1.JPG/500px-Ornithogalum_kochii1.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AOrnithogalum_kochii1.JPG",
+      "author": "Petr Filippov",
+      "license": "CC BY-SA 3.0"
+    }
   },
   {
     "id": 111391,
@@ -18406,7 +18542,8 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 717670
+      "taxref": 717670,
+      "wikidata": "Q80686599"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/717670",
@@ -18472,7 +18609,8 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 128247
+      "taxref": 128247,
+      "wikidata": "Q80686697"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/128247",
@@ -18738,13 +18876,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 84345
+      "taxref": 84345,
+      "wikidata": "Q1720854"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/84345",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/84345"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9d/Asphodelus_cerasiferus_flowers_2.jpg/500px-Asphodelus_cerasiferus_flowers_2.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAsphodelus_cerasiferus_flowers_2.jpg",
+      "author": "Col Ford and Natasha de Vere",
+      "license": "CC BY 2.0"
+    }
   },
   {
     "id": 84355,
@@ -19017,7 +19162,8 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 84466
+      "taxref": 84466,
+      "wikidata": "Q17065823"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/84466",
@@ -19086,13 +19232,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 84476
+      "taxref": 84476,
+      "wikidata": "Q2273882"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/84476",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/84476"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5d/Slezin%C3%ADk_hadcov%C3%BD.jpg/500px-Slezin%C3%ADk_hadcov%C3%BD.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ASlezin%C3%ADk_hadcov%C3%BD.jpg",
+      "author": "Václav Lupínek",
+      "license": "CC BY-SA 3.0 cz"
+    }
   },
   {
     "id": 84483,
@@ -19117,13 +19270,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 84483
+      "taxref": 84483,
+      "wikidata": "Q192019"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/84483",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/84483"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fd/Asplenium_fissum_685983576.jpg/500px-Asplenium_fissum_685983576.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAsplenium_fissum_685983576.jpg",
+      "author": "Mirko Ubović",
+      "license": "CC0"
+    }
   },
   {
     "id": 84485,
@@ -19180,13 +19340,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 923640
+      "taxref": 923640,
+      "wikidata": "Q1450744"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/923640",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/923640"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/7f/Asplenium_foreziense_001.JPG/500px-Asplenium_foreziense_001.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAsplenium_foreziense_001.JPG",
+      "author": "Johan N",
+      "license": "CC BY-SA 3.0"
+    }
   },
   {
     "id": 84494,
@@ -19204,13 +19371,20 @@
       "france": "E"
     },
     "identifiers": {
-      "taxref": 84494
+      "taxref": 84494,
+      "wikidata": "Q1919836"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/84494",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/84494"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/fe/Asplenium_jahandiezii_001.jpg/500px-Asplenium_jahandiezii_001.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAsplenium_jahandiezii_001.jpg",
+      "author": "Johan N",
+      "license": "CC BY-SA 3.0"
+    }
   },
   {
     "id": 84497,
@@ -19231,13 +19405,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 84497
+      "taxref": 84497,
+      "wikidata": "Q148102"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/84497",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/84497"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/5a/Asplenium_lepidum_IMG_5859.jpg/500px-Asplenium_lepidum_IMG_5859.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAsplenium_lepidum_IMG_5859.jpg",
+      "author": "Sdjurovic",
+      "license": "CC BY-SA 4.0"
+    }
   },
   {
     "id": 84501,
@@ -19289,13 +19470,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 84511
+      "taxref": 84511,
+      "wikidata": "Q2075863"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/84511",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/84511"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/83/Asplenium_obovatum_subsp._obovatum_001.JPG/500px-Asplenium_obovatum_subsp._obovatum_001.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAsplenium_obovatum_subsp._obovatum_001.JPG",
+      "author": "Johan N",
+      "license": "CC BY-SA 3.0"
+    }
   },
   {
     "id": 84513,
@@ -19502,13 +19690,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 84525
+      "taxref": 84525,
+      "wikidata": "Q1236262"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/84525",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/84525"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/6/6c/Asplenium_seelosi_Atlas_Alpenflora.jpg/500px-Asplenium_seelosi_Atlas_Alpenflora.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAsplenium_seelosi_Atlas_Alpenflora.jpg",
+      "author": "Anton Hartinger",
+      "license": "Public domain"
+    }
   },
   {
     "id": 84526,
@@ -20250,13 +20445,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 79874
+      "taxref": 79874,
+      "wikidata": "Q15585576"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/79874",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/79874"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/b7/Achillea_chamaemelifolia.jpg/500px-Achillea_chamaemelifolia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAchillea_chamaemelifolia.jpg",
+      "author": "Leonora Enking",
+      "license": "CC BY-SA 2.0"
+    }
   },
   {
     "id": 896277,
@@ -20312,13 +20514,20 @@
       "france": "I"
     },
     "identifiers": {
-      "taxref": 79877
+      "taxref": 79877,
+      "wikidata": "Q15586894"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/79877",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/79877"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/e/ed/Achillea_crithmifolia_Prague_2013_1.jpg/500px-Achillea_crithmifolia_Prague_2013_1.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAchillea_crithmifolia_Prague_2013_1.jpg",
+      "author": "Karelj",
+      "license": "CC BY-SA 3.0"
+    }
   },
   {
     "id": 79886,
@@ -20473,13 +20682,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 79905
+      "taxref": 79905,
+      "wikidata": "Q1290936"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/79905",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/79905"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/3/35/Achillea_macrophylla_Coste1975.png?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAchillea_macrophylla_Coste1975.png",
+      "author": "Hippolyte Coste",
+      "license": "Public domain"
+    }
   },
   {
     "id": 610735,
@@ -20612,13 +20828,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 79913
+      "taxref": 79913,
+      "wikidata": "Q2823129"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/79913",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/79913"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/95/Achillea_nana.JPG/500px-Achillea_nana.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAchillea_nana.JPG",
+      "author": "No machine-readable author provided. Thommybe assumed (based on copyright claims).",
+      "license": "CC BY-SA 3.0"
+    }
   },
   {
     "id": 79914,
@@ -20682,13 +20905,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 79915
+      "taxref": 79915,
+      "wikidata": "Q15586847"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/79915",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/79915"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d7/Achillea_odorata_l-hom-nimes-le-vieux_fraissinet-de-fourques_48_20130709_DSC_8835.jpg/500px-Achillea_odorata_l-hom-nimes-le-vieux_fraissinet-de-fourques_48_20130709_DSC_8835.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAchillea_odorata_l-hom-nimes-le-vieux_fraissinet-de-fourques_48_20130709_DSC_8835.jpg",
+      "author": "Olivier Pichard",
+      "license": "CC BY-SA 4.0"
+    }
   },
   {
     "id": 79921,
@@ -20745,13 +20975,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 79923
+      "taxref": 79923,
+      "wikidata": "Q104249455"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/79923",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/79923"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/21/Achillea_rosealba_%286010893972%29.jpg/500px-Achillea_rosealba_%286010893972%29.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAchillea_rosealba_(6010893972).jpg",
+      "author": "Franco Folini from San Francisco, USA",
+      "license": "CC BY-SA 2.0"
+    }
   },
   {
     "id": 79939,
@@ -20895,13 +21132,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 80190
+      "taxref": 80190,
+      "wikidata": "Q780556"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/80190",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/80190"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c1/Adenostyles_leucophylla.JPG/500px-Adenostyles_leucophylla.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAdenostyles_leucophylla.JPG",
+      "author": "Rémih",
+      "license": "CC BY-SA 3.0"
+    }
   },
   {
     "id": 80387,
@@ -21033,13 +21277,20 @@
       "france": "I"
     },
     "identifiers": {
-      "taxref": 82092
+      "taxref": 82092,
+      "wikidata": "Q5693189"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/82092",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/82092"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1e/Ambrosia_tenuifolia.jpg/500px-Ambrosia_tenuifolia.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAmbrosia_tenuifolia.jpg",
+      "author": "Oceancetaceen - Alice Chodura",
+      "license": "Public domain"
+    }
   },
   {
     "id": 82093,
@@ -21253,7 +21504,8 @@
       "france": "I"
     },
     "identifiers": {
-      "taxref": 966336
+      "taxref": 966336,
+      "wikidata": "Q15582758"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/966336",
@@ -21331,13 +21583,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 82571
+      "taxref": 82571,
+      "wikidata": "Q5675435"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/82571",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/82571"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/7/70/114Andryala_ragusina.JPG/500px-114Andryala_ragusina.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3A114Andryala_ragusina.JPG",
+      "author": "Ziegler175 Rose Ziegler",
+      "license": "CC0"
+    }
   },
   {
     "id": 82582,
@@ -21383,13 +21642,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 82794
+      "taxref": 82794,
+      "wikidata": "Q1464892"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/82794",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/82794"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/9/9b/Antennaria_carpaticum.jpg/500px-Antennaria_carpaticum.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAntennaria_carpaticum.jpg",
+      "author": "User:Tigerente",
+      "license": "CC BY 2.5"
+    }
   },
   {
     "id": 82796,
@@ -21609,13 +21875,20 @@
       "france": "I"
     },
     "identifiers": {
-      "taxref": 610724
+      "taxref": 610724,
+      "wikidata": "Q15572627"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/610724",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/610724"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/4e/Anthemis_ruthenica_%E2%80%94_Flora_Batava_%E2%80%94_Volume_v20.jpg/500px-Anthemis_ruthenica_%E2%80%94_Flora_Batava_%E2%80%94_Volume_v20.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAnthemis_ruthenica_%E2%80%94_Flora_Batava_%E2%80%94_Volume_v20.jpg",
+      "author": "Jan Kops",
+      "license": "Public domain"
+    }
   },
   {
     "id": 82880,
@@ -21636,13 +21909,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 82880
+      "taxref": 82880,
+      "wikidata": "Q15573345"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/82880",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/82880"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f9/Anthemis_secundiramea.jpg/500px-Anthemis_secundiramea.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAnthemis_secundiramea.jpg",
+      "author": "Marc Riera - https://www.inaturalist.org/people/marcriera",
+      "license": "CC BY 4.0"
+    }
   },
   {
     "id": 82889,
@@ -22212,7 +22492,8 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 83943
+      "taxref": 83943,
+      "wikidata": "Q15471012"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/83943",
@@ -22237,13 +22518,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 83945
+      "taxref": 83945,
+      "wikidata": "Q15472497"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/83945",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/83945"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1a/Artemisia_atrata_kz01.jpg/500px-Artemisia_atrata_kz01.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AArtemisia_atrata_kz01.jpg",
+      "author": "Krzysztof Ziarnek, Kenraiz",
+      "license": "CC BY-SA 4.0"
+    }
   },
   {
     "id": 83949,
@@ -22481,13 +22769,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 83969
+      "taxref": 83969,
+      "wikidata": "Q9182669"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/83969",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/83969"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1d/Artemisia_eriantha.jpg/500px-Artemisia_eriantha.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AArtemisia_eriantha.jpg",
+      "author": "Colin Barker",
+      "license": "CC BY-SA 3.0"
+    }
   },
   {
     "id": 83973,
@@ -22511,13 +22806,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 83973
+      "taxref": 83973,
+      "wikidata": "Q254623"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/83973",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/83973"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/a8/Artemisia_genipi.JPG/500px-Artemisia_genipi.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AArtemisia_genipi.JPG",
+      "author": "No machine-readable author provided. Thommybe assumed (based on copyright claims).",
+      "license": "CC BY-SA 3.0"
+    }
   },
   {
     "id": 83974,
@@ -22570,7 +22872,8 @@
       "france": "E"
     },
     "identifiers": {
-      "taxref": 83992
+      "taxref": 83992,
+      "wikidata": "Q2864877"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/83992",
@@ -22633,7 +22936,8 @@
       "france": "E"
     },
     "identifiers": {
-      "taxref": 84005
+      "taxref": 84005,
+      "wikidata": "Q15471318"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/84005",
@@ -22656,13 +22960,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 1077389
+      "taxref": 1077389,
+      "wikidata": "Q2541945"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/1077389",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/1077389"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/2a/Artemisia_pancicii_sl_8.jpg/500px-Artemisia_pancicii_sl_8.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AArtemisia_pancicii_sl_8.jpg",
+      "author": "Stefan.lefnaer",
+      "license": "CC BY-SA 3.0"
+    }
   },
   {
     "id": 84053,
@@ -22927,13 +23238,20 @@
       "france": "S"
     },
     "identifiers": {
-      "taxref": 84699
+      "taxref": 84699,
+      "wikidata": "Q2868393"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/84699",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/84699"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://upload.wikimedia.org/wikipedia/commons/a/a6/Aster_des_Pyr%C3%A9n%C3%A9es.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail_unscaled",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAster_des_Pyr%C3%A9n%C3%A9es.jpg",
+      "author": "Jean Henri Jaume Saint-Hilaire",
+      "license": "Public domain"
+    }
   },
   {
     "id": 159902,
@@ -22950,13 +23268,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 159902
+      "taxref": 159902,
+      "wikidata": "Q15577027"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/159902",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/159902"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/2/22/ASTER_WILLKOMMII_-_BUSA_-_IB-338_%28Aster_de_Willkomm%29.JPG/500px-ASTER_WILLKOMMII_-_BUSA_-_IB-338_%28Aster_de_Willkomm%29.JPG?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AASTER_WILLKOMMII_-_BUSA_-_IB-338_(Aster_de_Willkomm).JPG",
+      "author": "Isidre blanc",
+      "license": "CC BY-SA 4.0"
+    }
   },
   {
     "id": 84738,
@@ -23050,13 +23375,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 85023
+      "taxref": 85023,
+      "wikidata": "Q956873"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/85023",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/85023"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/3f/Atractylis_humilis_Inflorescencia_2010-7-02_LagunadelaMata.jpg/500px-Atractylis_humilis_Inflorescencia_2010-7-02_LagunadelaMata.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAtractylis_humilis_Inflorescencia_2010-7-02_LagunadelaMata.jpg",
+      "author": "Javier martin",
+      "license": "Public domain"
+    }
   },
   {
     "id": 85474,
@@ -23120,13 +23452,20 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 85720
+      "taxref": 85720,
+      "wikidata": "Q931453"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/85720",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/85720"
     },
-    "thumbnail": null
+    "thumbnail": {
+      "url": "https://thumb.wikimedia.org/wikipedia/commons/thumb/3/38/Asteraceae_-_Aster_bellidiastrum.jpg/500px-Asteraceae_-_Aster_bellidiastrum.jpg?utm_source=commons.wikimedia.org&utm_campaign=imageinfo&utm_content=thumbnail",
+      "source": "Wikimedia Commons",
+      "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAsteraceae_-_Aster_bellidiastrum.jpg",
+      "author": "Hectonichus",
+      "license": "CC BY-SA 3.0"
+    }
   },
   {
     "id": 85728,
@@ -201486,7 +201825,7 @@
     },
     "identifiers": {
       "taxref": 121471,
-      "wikidata": "Q94398686"
+      "wikidata": "Q94398750"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/121471",
