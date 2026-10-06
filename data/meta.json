@@ -1,0 +1,31 @@
+{
+  "generatedAt": "2026-10-06T18:26:13.127Z",
+  "source": "TAXREF v18 official PatriNat archive",
+  "sourceUrl": "https://assets.patrinat.fr/files/referentiel/TAXREF_v18_2025.zip",
+  "taxrefVersion": "18.0",
+  "criteria": {
+    "rank": "ES",
+    "acceptedNamesOnly": true,
+    "group": "Plantes vasculaires",
+    "territory": "France métropolitaine (FR)",
+    "statuses": [
+      "P",
+      "N",
+      "E",
+      "S",
+      "C",
+      "I",
+      "J"
+    ]
+  },
+  "taxrefRows": 708685,
+  "taxvernRows": 82966,
+  "frenchVernacularRows": 43642,
+  "attachedVernacularRows": 9882,
+  "plants": 7745,
+  "families": 180,
+  "genera": 1245,
+  "plantsWithFrenchNames": 7177,
+  "vernacularNames": 15487,
+  "plantsWithoutFrenchNames": 568
+}
