@@ -126,7 +126,7 @@ function isVascularSpecies(row) {
     .map(normalizeKey)
     .join(' ');
 
-  return groups.includes('plantes vasculaires');
+  return groups.includes('tracheophytes') || groups.includes('plantes vasculaires');
 }
 
 function splitScientificName(name) {
