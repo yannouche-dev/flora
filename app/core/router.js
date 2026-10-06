@@ -4,7 +4,7 @@
 /**
  * @typedef {{ name: 'search' } | { name: 'plant', id: number } | { name: 'settings' }
  *   | { name: 'map', spot: string | null, plant: number | null, season: boolean }
- *   | { name: 'spot-new', plant: number | null } | { name: 'spot', id: string }
+ *   | { name: 'spot-new', plant: number | null } | { name: 'spot', id: string, add: number | null, pick: boolean }
  *   | { name: 'not-found' }} Route
  */
 
@@ -22,7 +22,7 @@ export function parse(hash) {
   if (path === 'map') return { name: 'map', spot: params.get('spot'), plant: number('plant'), season: params.get('season') === '1' };
   if (path === 'spot/new') return { name: 'spot-new', plant: number('plant') };
   const spot = /^spot\/([\w-]+)$/.exec(path);
-  if (spot) return { name: 'spot', id: spot[1] };
+  if (spot) return { name: 'spot', id: spot[1], add: number('add'), pick: params.get('pick') === '1' };
 
   if (path === 'settings') return { name: 'settings' };
   return { name: 'not-found' };
@@ -41,7 +41,9 @@ export const href = {
     return '#/map' + (search ? '?' + search : '');
   },
   newSpot: (/** @type {number | null | undefined} */ plantId) => '#/spot/new' + (plantId ? '?plant=' + plantId : ''),
-  spot: (/** @type {string} */ id) => '#/spot/' + id
+  /** Edit a place; `add` pre-adds a plant to it, `pick` opens the plant picker. */
+  spot: (/** @type {string} */ id, /** @type {number | null | undefined} */ add, /** @type {boolean} */ pick = false) =>
+    '#/spot/' + id + (add ? '?add=' + add : pick ? '?pick=1' : '')
 };
 
 /** Lit ReactiveController exposing the current route and re-rendering on navigation. */

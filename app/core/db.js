@@ -2,15 +2,18 @@
 // Minimal promise wrapper around IndexedDB. Usable from the window and from workers.
 
 import { config } from '../config.js';
+import { normalizePlace } from './place-model.js';
 
 /**
  * Stores:
  *  - plants:       the TAXREF dataset (keyPath id) with by_family / by_genus / by_taxon indexes
  *  - plantDetails: remote enrichment cache (keyPath key, e.g. "details:100225", "thumb:100225")
  *  - meta:         key/value (dataset version…)
- *  - spots:        harvest spots, stored as GeoJSON Features (keyPath id), added in version 2
+ *  - spots:        harvest places, stored as GeoJSON Features (keyPath id), added in version 2.
+ *                  Version 3: a place holds several plants; `by_plant` indexes properties.plantIds.
+ * @param {IDBDatabase} db @param {IDBTransaction} tx @param {number} oldVersion
  */
-function upgrade(db) {
+function upgrade(db, tx, oldVersion) {
   if (!db.objectStoreNames.contains('plants')) {
     const plants = db.createObjectStore('plants', { keyPath: 'id' });
     plants.createIndex('by_family', 'family');
@@ -25,8 +28,20 @@ function upgrade(db) {
   }
   if (!db.objectStoreNames.contains('spots')) {
     const spots = db.createObjectStore('spots', { keyPath: 'id' });
-    spots.createIndex('by_plant', 'properties.plantId');
+    spots.createIndex('by_plant', 'properties.plantIds', { multiEntry: true });
     spots.createIndex('by_updated', 'properties.updatedAt');
+  } else if (oldVersion < 3) {
+    // One plant per spot → places with a list of plants.
+    const spots = tx.objectStore('spots');
+    spots.deleteIndex('by_plant');
+    spots.createIndex('by_plant', 'properties.plantIds', { multiEntry: true });
+    spots.openCursor().onsuccess = event => {
+      const cursor = /** @type {IDBCursorWithValue | null} */ (/** @type {IDBRequest} */ (event.target).result);
+      if (!cursor) return;
+      const place = normalizePlace(cursor.value);
+      if (place) cursor.update(place);
+      cursor.continue();
+    };
   }
 }
 
@@ -59,11 +74,16 @@ function drop(db) {
 export function openDb() {
   opening ??= new Promise((resolve, reject) => {
     const request = indexedDB.open(config.db.name, config.db.version);
-    request.onupgradeneeded = () => upgrade(request.result);
+    request.onupgradeneeded = event => upgrade(request.result, /** @type {IDBTransaction} */ (request.transaction), event.oldVersion);
     request.onsuccess = () => {
       const db = current = request.result;
-      // Another tab upgraded the schema: close so it can proceed, reopen lazily.
-      db.onversionchange = () => { db.close(); drop(db); };
+      // A newer version of the app (another tab, or after an update) upgrades the schema:
+      // close so it can proceed, and tell the page — this code is now outdated.
+      db.onversionchange = () => {
+        db.close();
+        drop(db);
+        globalThis.dispatchEvent?.(new Event('geoflora-outdated'));
+      };
       // The browser can also close a connection on its own (storage switched to persistent,
       // page frozen in the background, site data cleared…): only a `close` event tells us.
       db.onclose = () => drop(db);

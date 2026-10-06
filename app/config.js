@@ -9,7 +9,7 @@ export const config = {
 
   db: {
     name: 'geoflora',
-    version: 2
+    version: 3
   },
 
   /** How long remote enrichment (GBIF, iNaturalist, Commons…) stays cached in IndexedDB. */

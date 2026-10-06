@@ -185,13 +185,14 @@ app/
   main.js                démarrage : synchro du dataset → index de recherche
   config.js
   core/
-    db.js                IndexedDB : plants, plantDetails, meta, spots
+    db.js                IndexedDB : plants, plantDetails, meta, spots (reconnexion automatique)
     dataset.js           synchro data/plants.json → IndexedDB selon meta.generatedAt
     search.js            client du worker de recherche
     query.js             requête (texte, filtres, tri) ↔ URL, recherches récentes
     highlight.js         surlignage insensible aux accents
     sources.js           PlantSources + cache IndexedDB persistant (7 jours)
-    spots.js             lieux de récolte (GeoJSON), saison, distances, export/import
+    spots.js             lieux de récolte (GeoJSON, plusieurs plantes par lieu), saison, distances, export/import
+    place-model.js       format d'un lieu, migration de l'ancien format
     geo.js               suivi GPS partagé
     ign.js               couches IGN Géoplateforme (WMTS) pour Leaflet
     store.js             état observable + ReactiveController Lit
@@ -237,13 +238,13 @@ Ajouter un fichier JS ou CSS dans `app/` impose de l'ajouter aussi à la liste `
 
 ### Lieux de récolte
 
-L'onglet **Carte** enregistre les endroits où vous récoltez une plante, sur les **photos aériennes IGN** (Géoplateforme, sans clé ; aussi Plan IGN et parcelles cadastrales).
+L'onglet **Carte** enregistre les endroits où vous récoltez, sur les **photos aériennes IGN** (Géoplateforme, sans clé ; aussi Plan IGN et parcelles cadastrales). Un **lieu** est une **collection de plantes** : une lisière peut réunir l'ail des ours, l'ortie et la benoîte.
 
-- **Sur place** : depuis une fiche plante, « 📍 Ajouter un lieu ». Le GPS s'affiche avec sa précision (± m) ; l'épingle peut être déplacée à la main, ou posée par un appui long sur la carte (sans GPS, ou depuis chez soi).
-- **Pour chaque lieu** : nom, abondance, qualité (★), notes, et un **journal de récolte** (date, quantité, remarque). Un lieu est **« en saison »** s'il a été récolté, une année quelconque, à ±15 jours de la date du jour.
-- **Carte** : épingles colorées par abondance, filtres « En saison » et par plante, fiche du lieu avec « + Récolte du jour », itinéraire vers l'application de navigation du téléphone. **Liste** triée par distance.
+- **Sur place** : depuis une fiche plante, « 📍 Ajouter un lieu », ou **+** sur la carte. Le GPS s'affiche avec sa précision (± m) ; l'épingle peut être déplacée à la main, ou posée par un appui long sur la carte. À moins de 100 m d'un lieu existant, l'application propose d'**y ajouter la plante** plutôt que de créer un doublon.
+- **Pour chaque lieu** : nom, notes (accès, propriétaire…), et ses plantes. **Pour chaque plante du lieu** : abondance, qualité (★), notes et **journal de récolte** (date, quantité, remarque). Une plante est **« en saison »** à un lieu si elle y a été récoltée, une année quelconque, à ±15 jours de la date du jour ; un lieu est en saison si l'une de ses plantes l'est.
+- **Carte** : une épingle par lieu, colorée selon l'abondance la plus forte, avec le nombre de plantes quand il y en a plusieurs. Filtres « En saison » et par plante. La fiche du lieu liste ses plantes avec un bouton « + Récolte » chacune, « + Plante », et l'itinéraire vers l'application de navigation. **Liste** triée par distance.
 - **Hors ligne** : le GPS et les lieux fonctionnent toujours ; les zones de carte déjà affichées restent disponibles (3 000 tuiles en cache).
-- **Confidentialité** : les lieux restent **sur l'appareil** (IndexedDB, stockage persistant demandé). Ils sont stockés au format **GeoJSON** : *Réglages → Exporter* produit un fichier `.geojson` lisible par QGIS, uMap, geojson.io…, et *Importer* le fusionne (même identifiant → la version la plus récente l'emporte). Pensez à exporter régulièrement.
+- **Confidentialité** : les lieux restent **sur l'appareil** (IndexedDB, stockage persistant demandé). Ils sont stockés au format **GeoJSON** : *Réglages → Exporter* produit un fichier `.geojson` lisible par QGIS, uMap, geojson.io…, et *Importer* le fusionne (même identifiant → la version la plus récente l'emporte ; l'ancien format à une plante par point est aussi accepté). Pensez à exporter régulièrement.
 
 ```json
 {
@@ -251,10 +252,17 @@ L'onglet **Carte** enregistre les endroits où vous récoltez une plante, sur le
   "id": "c0f3…",
   "geometry": { "type": "Point", "coordinates": [4.8357, 45.7641] },
   "properties": {
-    "plantId": 100225, "scientificName": "Geum urbanum", "vernacularName": "Benoîte des villes",
-    "label": "Lisière nord", "abundance": "abondant", "rating": 4, "notes": "",
+    "name": "Lisière nord",
+    "notes": "Parking au bout du chemin",
     "accuracy": 8, "createdAt": "…", "updatedAt": "…",
-    "harvests": [{ "date": "2026-10-06", "quantity": "300 g", "note": "" }]
+    "plants": [
+      {
+        "plantId": 81541, "scientificName": "Allium ursinum", "vernacularName": "Ail des ours",
+        "abundance": "abondant", "rating": 4, "notes": "", "addedAt": "…",
+        "harvests": [{ "date": "2026-04-12", "quantity": "1 kg", "note": "" }]
+      }
+    ],
+    "plantIds": [81541]
   }
 }
 ```
