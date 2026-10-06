@@ -1,4 +1,4 @@
-/* Lit 3.3.3 (lit, lit/directives/repeat.js, lit/directives/class-map.js) — BSD-3-Clause. Regenerate with scripts/vendor-lit.sh */
+/* Lit 3.3.3 (lit, lit/directives/repeat.js, lit/directives/class-map.js) — BSD-3-Clause. Regenerate with scripts/vendor.sh */
 /**
  * @license
  * Copyright 2019 Google LLC

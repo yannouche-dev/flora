@@ -49,12 +49,12 @@ jobs:
 
       - name: Check modules
         run: |
-          for file in sw.js vendor/lit.js lib/*.mjs $(find app -name '*.js'); do
+          for file in sw.js vendor/*.js lib/*.mjs $(find app -name '*.js'); do
             node --check "$file"
           done
           node -e "JSON.parse(require('fs').readFileSync('manifest.webmanifest','utf8'))"
           # Every app file must be precached by the service worker, or offline mode breaks.
-          for file in $(find app -name '*.js' -o -name '*.css' | sort); do
+          for file in $(find app vendor -name '*.js' -o -name '*.css' | sort); do
             grep -q "'$file'" sw.js || { echo "::error file=sw.js::$file missing from SHELL"; exit 1; }
           done
 

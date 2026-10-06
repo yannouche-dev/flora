@@ -35,13 +35,26 @@ export async function loadIndex() {
   for (const [genus, family] of Object.entries(data.genusFamily)) genusFamily.set(genus, family);
 }
 
+let searchRun = 0;
+
 /** Runs the search for the current store query and publishes results, facets and suggestions. */
 export async function runSearch() {
   const { q, filters, sort } = store.state.query;
-  const requestId = lastRequest + 1;
+  const run = ++searchRun;
   const { total, items, facets, suggestions, fuzzy, sort: effectiveSort } = await call({ type: 'search', q, filters, sort });
   // Drop answers that a newer keystroke already superseded.
-  if (requestId === lastRequest) {
+  if (run === searchRun) {
     store.set({ results: { total, items, facets, suggestions, fuzzy, sort: effectiveSort } });
   }
+}
+
+const NO_FILTERS = { status: [], family: [], genus: [], photo: [], french: [] };
+
+/**
+ * One-off search that leaves the app's search state alone (plant picker of the spot editor).
+ * @param {string} q @param {number} [limit]
+ */
+export async function searchPlants(q, limit = 20) {
+  const { items } = await call({ type: 'search', q, filters: NO_FILTERS, sort: '' });
+  return items.slice(0, limit);
 }

@@ -1,7 +1,7 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { config } from '../config.js';
-import { activeFilterCount, clearFilters } from '../core/query.js';
+import { activeFilterCount, clearFilters, lastSearchHash } from '../core/query.js';
 import { href, RouterController } from '../core/router.js';
 import { StoreController } from '../core/store.js';
 import './gf-search-bar.js';
@@ -10,6 +10,8 @@ import './gf-filter-panel.js';
 import './gf-plant-list.js';
 import './gf-plant-detail.js';
 import './gf-settings.js';
+import './gf-map-page.js';
+import './gf-spot-editor.js';
 
 /** Lit controller tracking a media query (desktop sidebar vs. mobile bottom sheet). */
 class MediaController {
@@ -52,6 +54,22 @@ export class GfApp extends LitElement {
     }
     .brand img { width: 28px; height: 28px; }
     gf-search-bar { flex: 1; min-width: 0; max-width: 720px; }
+    nav.tabs {
+      display: inline-flex;
+      flex: none;
+      border: 1px solid var(--gf-border);
+      border-radius: 999px;
+      overflow: hidden;
+      font-size: 0.875rem;
+    }
+    nav.tabs a {
+      padding: 6px 14px;
+      color: var(--gf-text);
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    nav.tabs a[aria-current='page'] { background: var(--gf-accent); color: var(--gf-accent-contrast); }
+    gf-map-page, gf-spot-editor { flex: 1; min-height: 0; }
     .settings {
       flex: none;
       margin-left: auto;
@@ -136,6 +154,8 @@ export class GfApp extends LitElement {
     }
     @media (max-width: 560px) {
       .brand span { display: none; }
+      header { gap: 8px; padding: 8px 10px; }
+      nav.tabs a { padding: 6px 10px; }
     }
   `;
 
@@ -166,6 +186,10 @@ export class GfApp extends LitElement {
           <span>GeoFlora</span>
         </a>
         ${route.name === 'search' ? html`<gf-search-bar></gf-search-bar>` : nothing}
+        <nav class="tabs" aria-label="Sections">
+          <a href=${lastSearchHash()} aria-current=${route.name === 'search' || route.name === 'plant' ? 'page' : 'false'}>Flore</a>
+          <a href=${href.map()} aria-current=${route.name === 'map' || route.name === 'spot' || route.name === 'spot-new' ? 'page' : 'false'}>Carte</a>
+        </nav>
         <a class="settings" href=${href.settings()} title="À propos et réglages" aria-label="À propos et réglages">⚙︎</a>
       </header>
       <main>
@@ -213,6 +237,12 @@ export class GfApp extends LitElement {
       }
       case 'plant':
         return html`<gf-plant-detail plant-id=${route.id}></gf-plant-detail>`;
+      case 'map':
+        return html`<gf-map-page .route=${route}></gf-map-page>`;
+      case 'spot-new':
+        return html`<gf-spot-editor plant-id=${route.plant ?? ''}></gf-spot-editor>`;
+      case 'spot':
+        return html`<gf-spot-editor spot-id=${route.id}></gf-spot-editor>`;
       case 'settings':
         document.title = 'Réglages — GeoFlora';
         return html`<gf-settings></gf-settings>`;

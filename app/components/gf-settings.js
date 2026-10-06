@@ -3,13 +3,17 @@ import { LitElement, html, css, nothing } from 'lit';
 import { lastSearchHash } from '../core/query.js';
 import { StoreController } from '../core/store.js';
 import { getTrefleToken, setTrefleToken } from '../core/sources.js';
+import { exportGeoJSON, importGeoJSON, lastExportDate, listSpots, spotEvents } from '../core/spots.js';
 
 export class GfSettings extends LitElement {
   static properties = {
-    _saved: { state: true }
+    _saved: { state: true },
+    _spotCount: { state: true },
+    _spotMessage: { state: true }
   };
 
   static styles = css`
+    *, *::before, *::after { box-sizing: border-box; }
     :host { display: block; overflow-y: auto; padding: 16px; }
     article { max-width: 720px; margin: 0 auto; }
     .back { color: var(--gf-accent); text-decoration: none; font-size: 0.9rem; }
@@ -39,13 +43,64 @@ export class GfSettings extends LitElement {
     }
     .muted { color: var(--gf-text-muted); font-size: 0.9rem; }
     a { color: var(--gf-accent); }
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    button:disabled { opacity: 0.5; cursor: default; }
+    label.file {
+      font: inherit;
+      padding: 8px 16px;
+      border-radius: 8px;
+      border: 1px solid var(--gf-accent);
+      color: var(--gf-accent);
+      cursor: pointer;
+    }
+    label.file input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+    label.file:focus-within { outline: 2px solid var(--gf-accent); outline-offset: 2px; }
   `;
 
   #store = new StoreController(this);
+  #onSpots = () => this.#countSpots();
+
+  connectedCallback() {
+    super.connectedCallback();
+    spotEvents.addEventListener('change', this.#onSpots);
+    this.#countSpots();
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    spotEvents.removeEventListener('change', this.#onSpots);
+  }
+
+  async #countSpots() {
+    this._spotCount = (await listSpots()).length;
+  }
+
+  async #export() {
+    const { count, cancelled } = await exportGeoJSON();
+    if (!cancelled) this._spotMessage = `${count} lieu${count > 1 ? 'x' : ''} exporté${count > 1 ? 's' : ''}.`;
+  }
+
+  /** @param {Event} event */
+  async #import(event) {
+    const input = /** @type {HTMLInputElement} */ (event.target);
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    try {
+      const r = await importGeoJSON(file);
+      this._spotMessage = `Import : ${r.added} ajouté(s), ${r.updated} mis à jour, ${r.unchanged} inchangé(s)`
+        + (r.skipped ? `, ${r.skipped} ignoré(s) (non valides)` : '') + '.';
+    } catch (error) {
+      this._spotMessage = /** @type {Error} */ (error).message;
+    }
+  }
 
   constructor() {
     super();
     this._saved = false;
+    this._spotCount = 0;
+    /** @type {string | null} */
+    this._spotMessage = null;
   }
 
   /** @param {SubmitEvent} event */
@@ -78,6 +133,20 @@ export class GfSettings extends LitElement {
           proviennent à la demande de GBIF, iNaturalist, Wikidata et Wikimedia Commons ; seules les images sous
           licence libre (CC0, CC BY, CC BY-SA) sont affichées.
         </p>
+
+        <h2>Mes lieux de récolte</h2>
+        <p class="muted">
+          ${this._spotCount} lieu${this._spotCount > 1 ? 'x' : ''} enregistré${this._spotCount > 1 ? 's' : ''} sur cet appareil uniquement.
+          ${(() => { const d = lastExportDate(); return d ? `Dernière sauvegarde : ${new Date(d).toLocaleDateString('fr-FR')}.` : 'Aucune sauvegarde pour l’instant.'; })()}
+          Exportez régulièrement : effacer les données du navigateur efface aussi vos lieux.
+        </p>
+        <div class="row">
+          <button type="button" @click=${this.#export} ?disabled=${!this._spotCount}>Exporter (GeoJSON)</button>
+          <label class="file">Importer un fichier…
+            <input type="file" accept=".geojson,.json,application/geo+json,application/json" @change=${this.#import} />
+          </label>
+        </div>
+        ${this._spotMessage ? html`<p class="muted" role="status">${this._spotMessage}</p>` : nothing}
 
         <h2>Trefle (optionnel)</h2>
         <p class="muted">
