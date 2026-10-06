@@ -20,23 +20,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Download TAXREF Darwin Core Archive
+      - name: Download official TAXREF v18 archive
         run: |
           mkdir -p .cache/taxref
-          curl -L --fail --retry 3 "https://ipt.gbif.fr/archive.do?r=taxref" -o .cache/taxref.zip
+          curl -L --fail --retry 3 "https://assets.patrinat.fr/files/referentiel/TAXREF_v18_2025.zip" -o .cache/taxref.zip
           unzip -q .cache/taxref.zip -d .cache/taxref
           echo "Archive files:"
           find .cache/taxref -maxdepth 2 -type f -printf '%p %k KB\n' | sort
-          echo "Text headers:"
-          for f in .cache/taxref/*.txt; do
+          echo "Likely TAXREF/TAXVERN headers:"
+          for f in $(find .cache/taxref -type f \( -iname '*taxref*.txt' -o -iname '*taxvern*.txt' \)); do
             echo "=== $f ==="
-            head -n 2 "$f" | cut -c1-2000
+            head -n 2 "$f" | cut -c1-3000
           done
 
       - name: Stop after archive inspection
-        run: echo "TAXREF archive downloaded successfully"
+        run: echo "Official TAXREF archive downloaded successfully"
