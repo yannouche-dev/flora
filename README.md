@@ -1,8 +1,8 @@
 # GeoFlora — flore française
 
-Référentiel léger destiné à une application hors-ligne de recherche dans la flore vasculaire de France métropolitaine.
+Référentiel léger destiné à une application de recherche dans la flore vasculaire de France métropolitaine.
 
-## Dataset actuel
+## Dataset local
 
 Le build TAXREF v18 produit actuellement :
 
@@ -10,10 +10,19 @@ Le build TAXREF v18 produit actuellement :
 - **180 familles**
 - **1 245 genres**
 - **15 487 noms vernaculaires français uniques**
+- **33 121 synonymes scientifiques**
 - **7 177 espèces** avec au moins un nom français
 - **568 espèces** sans nom français disponible dans les données TAXREF utilisées
 
-`data/plants.json` pèse environ 1,5 Mo et contient des objets de la forme :
+Le principe est simple :
+
+- **IndexedDB locale** = recherche, tri, filtres et données taxonomiques de base ;
+- **sources ouvertes distantes** = vignette, photos, répartition, descriptions, traits et liens détaillés ;
+- les images ne sont **pas téléchargées dans le dataset**.
+
+## Structure d'une plante
+
+`data/plants.json` contient notamment :
 
 ```json
 {
@@ -21,39 +30,138 @@ Le build TAXREF v18 produit actuellement :
   "family": "Rosaceae",
   "genus": "Geum",
   "species": "urbanum",
+  "scientificName": "Geum urbanum",
+  "author": "L.",
   "vernacularNames": [
     "Benoîte des villes",
     "Benoîte commune",
     "Herbe de saint Benoît"
-  ]
+  ],
+  "synonyms": [],
+  "status": {
+    "france": "P"
+  },
+  "identifiers": {
+    "taxref": 100225
+  },
+  "links": {
+    "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/100225",
+    "inpn": null
+  }
 }
 ```
 
-- `id` : identifiant TAXREF (`CD_NOM`)
-- `family` : famille botanique
-- `genus` : genre
-- `species` : épithète spécifique
-- `vernacularNames` : noms français disponibles, dédupliqués
+Les identifiants externes (GBIF, iNaturalist, Wikidata, Trefle) sont volontairement résolus **à la demande** au lieu d'être recalculés pour les 7 745 espèces à chaque build.
 
 ## Source et sélection
 
 Le générateur utilise l'archive officielle **TAXREF v18** diffusée par PatriNat/MNHN :
 
-- `TAXREFv18.txt` pour la taxonomie et le statut en France métropolitaine ;
-- `TAXVERNv18.txt` pour enrichir les noms vernaculaires.
+- `TAXREFv18.txt` pour taxonomie, auteurs, synonymes et statut en France métropolitaine ;
+- `TAXVERNv18.txt` pour les noms vernaculaires.
 
 Filtres actuels :
 
 - règne `Plantae` ;
 - rang espèce `ES` ;
 - nom accepté uniquement (`CD_NOM = CD_REF`) ;
-- groupe TAXREF `Trachéophytes` (plantes vasculaires) ;
+- groupe TAXREF `Trachéophytes` ;
 - présence en France métropolitaine ;
 - statuts `P N E S C I J`.
 
-Les noms français de `TAXVERNv18` sont également rattachés au nom accepté lorsqu'ils sont portés par un synonyme TAXREF. Cela permet de conserver davantage de noms vernaculaires utiles à la recherche.
+Les synonymes TAXREF de rang espèce sont rattachés au taxon accepté. Les noms français portés par ces synonymes sont également rattachés à l'espèce acceptée.
 
-Le résultat de 7 745 espèces est volontairement plus large qu'un référentiel limité aux seules indigènes : il inclut aussi les espèces introduites établies retenues par les statuts ci-dessus.
+## Enrichissement distant
+
+`lib/plant-sources.mjs` fournit une couche ES6 sans dépendance pour enrichir une plante au moment où elle devient visible ou lorsque l'utilisateur ouvre sa fiche.
+
+Sources actuellement prises en charge :
+
+- **GBIF** : résolution taxonomique, médias, descriptions, noms vernaculaires, répartition ;
+- **iNaturalist** : taxon, nombre d'observations et photo par défaut lorsque sa licence est libre ;
+- **Wikidata** : résolution sûre par propriété taxonomique `P225` ;
+- **Wikimedia Commons** : photos libres avec URL, miniature, auteur et licence ;
+- **Trefle** : taxon, image principale et fiche détaillée (token gratuit requis).
+
+Exemple :
+
+```js
+import { PlantSources } from './lib/plant-sources.mjs';
+
+const sources = new PlantSources({
+  trefleToken: null
+});
+
+// Pour une ligne visible dans la liste :
+const thumbnail = await sources.thumbnail(plant);
+
+// Quand la fiche est ouverte :
+const details = await sources.details(plant);
+```
+
+Avec un token Trefle :
+
+```js
+const sources = new PlantSources({
+  trefleToken: 'YOUR_TREFLE_TOKEN'
+});
+```
+
+Trefle impose actuellement un token et une limite standard de 60 requêtes par minute. Pour une application publique, il est préférable de placer le token derrière un petit proxy si le quota doit être protégé.
+
+### Politique média
+
+Par défaut, GeoFlora préfère uniquement les médias dont la licence est clairement compatible avec une réutilisation libre :
+
+- CC0 / domaine public
+- CC BY
+- CC BY-SA
+
+Les images iNaturalist sous CC BY-NC ou sans licence exploitable ne sont pas choisies automatiquement. Les résultats Wikimedia Commons sont filtrés de la même manière.
+
+Trefle reste disponible pour ses données structurées et ses images par organes, mais une image dont la licence précise n'est pas vérifiée n'est pas utilisée automatiquement comme miniature, sauf avec l'option :
+
+```js
+new PlantSources({
+  trefleToken: '...',
+  allowUnverifiedMedia: true
+});
+```
+
+## Architecture GeoFlora
+
+```text
+Recherche / filtres
+        │
+        ▼
+IndexedDB
+7 745 espèces
+        │
+        ├── famille
+        ├── genre
+        ├── espèce
+        ├── noms vernaculaires
+        ├── synonymes
+        └── statut TAXREF
+        │
+        ▼
+Liste de résultats
+        │
+        ├── données locales immédiates
+        └── vignette distante chargée paresseusement
+        │
+        ▼
+Fiche plante
+        │
+        ├── photos / organes
+        ├── répartition
+        ├── descriptions
+        ├── traits
+        ├── observations
+        └── ressources externes
+```
+
+Les réponses distantes peuvent être mises en cache quelques heures ou quelques jours dans IndexedDB. Les fichiers image restent servis par leur source et profitent simplement du cache HTTP du navigateur.
 
 ## Génération locale
 
@@ -66,16 +174,12 @@ unzip .cache/taxref.zip -d .cache/taxref
 node scripts/build-plants.mjs
 ```
 
-La GitHub Action `Build flora dataset` télécharge la source officielle, génère, valide puis versionne automatiquement :
+La GitHub Action `Build flora dataset` télécharge la source officielle, valide le module d'enrichissement, génère puis versionne :
 
 - `data/plants.json`
 - `data/meta.json`
 
-## Utilisation GeoFlora
-
-Le fichier est volontairement compact afin d'être importé une seule fois dans IndexedDB puis interrogé totalement hors ligne.
-
-Structure IndexedDB recommandée :
+## IndexedDB recommandée
 
 ```text
 plants
@@ -83,12 +187,25 @@ plants
  ├─ family
  ├─ genus
  ├─ species
- └─ vernacularNames[]
+ ├─ scientificName
+ ├─ vernacularNames[]
+ ├─ synonyms[]
+ └─ status.france
 
-indexes
- ├─ by_family
- ├─ by_genus
- └─ by_taxon [genus, species]
+plantDetails
+ ├─ id
+ ├─ fetchedAt
+ ├─ identifiers
+ ├─ thumbnail
+ └─ remoteData
 ```
 
-Une seconde passe avec BDTFX/Tela Botanica pourra être utilisée pour enrichir encore les noms vernaculaires, notamment pour les espèces actuellement sans nom français dans TAXREF.
+Indexes principaux :
+
+```text
+by_family
+by_genus
+by_taxon [genus, species]
+```
+
+Une future passe pourra encore enrichir les noms vernaculaires via BDTFX/Tela Botanica et ajouter des sources comme Pl@ntNet, Baseflor et TRY.
