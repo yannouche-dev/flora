@@ -139,17 +139,17 @@ async function inaturalistThumbnail(plant) {
 
 async function resolveThumbnail(plant) {
   try {
-    const gbif = await gbifThumbnail(plant);
-    if (gbif) return gbif;
-  } catch (error) {
-    console.warn('GBIF ' + plant.scientificName + ': ' + error.message);
-  }
-
-  try {
     const inaturalist = await inaturalistThumbnail(plant);
     if (inaturalist) return inaturalist;
   } catch (error) {
     console.warn('iNaturalist ' + plant.scientificName + ': ' + error.message);
+  }
+
+  try {
+    const gbif = await gbifThumbnail(plant);
+    if (gbif) return gbif;
+  } catch (error) {
+    console.warn('GBIF ' + plant.scientificName + ': ' + error.message);
   }
 
   return null;
