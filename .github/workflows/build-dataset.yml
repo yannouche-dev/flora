@@ -57,13 +57,6 @@ jobs:
           WIKIDATA_BULK_DELAY_MS: '350'
         run: node scripts/enrich-wikidata-bulk.mjs
 
-      - name: Enrich thumbnail fallbacks
-        env:
-          FALLBACK_CONCURRENCY: '4'
-          FALLBACK_DELAY_MS: '180'
-          FALLBACK_RETRY_DAYS: '90'
-          GBIF_MEDIA_LIMIT: '30'
-        run: node scripts/enrich-thumbnail-fallbacks.mjs
 
       - name: Validate dataset
         run: |
