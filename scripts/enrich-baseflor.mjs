@@ -151,16 +151,47 @@ async function fetchOk(url) {
   return response;
 }
 
+const FILE_EXT = /\.(csv|txt|tsv|zip|xlsx|xls)(\?|$)/i;
+const SEED_PAGES = [DOWNLOADS_PAGE, 'https://www.tela-botanica.org/projets/phytosociologie/'];
+
+/** Anchors of a page: absolute href + visible text. */
+function anchors(html, base) {
+  return [...html.matchAll(/<a\b[^>]*?href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)].map(m => {
+    let href = null;
+    try { href = new URL(m[1].replace(/&amp;/g, '&'), base).href; } catch { /* not a URL */ }
+    return { href, text: m[2].replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim() };
+  }).filter(a => a.href);
+}
+
+/**
+ * Looks for the Baseflor table on the downloads page and the CATMINAT project page: links whose address
+ * or text names Baseflor, following one level of pages. Logs what it sees, to adjust if the site changes.
+ */
 async function findUrl() {
   if (process.env.BASEFLOR_URL) return process.env.BASEFLOR_URL;
-  const html = await (await fetchOk(DOWNLOADS_PAGE)).text();
-  const links = [...html.matchAll(/href\s*=\s*["']([^"']+)["']/gi)]
-    .map(m => new URL(m[1].replace(/&amp;/g, '&'), DOWNLOADS_PAGE).href)
-    .filter(href => /baseflor/i.test(href));
-  console.log('Baseflor links found:', links);
   const rank = href => ['.csv', '.txt', '.tsv', '.zip', '.xlsx', '.xls'].findIndex(ext => href.toLowerCase().split('?')[0].endsWith(ext));
-  const files = links.filter(href => rank(href) >= 0).sort((a, b) => rank(a) - rank(b));
-  if (!files.length) throw new Error('aucun lien Baseflor téléchargeable sur ' + DOWNLOADS_PAGE);
+  const found = [];
+  for (const page of SEED_PAGES) {
+    let html;
+    try { html = await (await fetchOk(page)).text(); } catch (error) { console.log('Page indisponible :', error.message); continue; }
+    const links = anchors(html, page);
+    console.log(`${page}: ${html.length} caractères, ${links.length} liens, titre « ${(/<title>([^<]*)/i.exec(html) || [])[1] || ''} »`);
+    const named = links.filter(a => /baseflor/i.test(a.href + ' ' + a.text));
+    console.log('  liens Baseflor :', named.slice(0, 20));
+    console.log('  fichiers :', links.filter(a => FILE_EXT.test(a.href)).slice(0, 40));
+    for (const link of named) {
+      if (FILE_EXT.test(link.href)) { found.push(link.href); continue; }
+      // A page about Baseflor: look one level down for its files.
+      try {
+        const inner = anchors(await (await fetchOk(link.href)).text(), link.href).filter(a => FILE_EXT.test(a.href));
+        console.log('  ', link.href, '→', inner.slice(0, 20));
+        found.push(...inner.filter(a => /baseflor/i.test(a.href + ' ' + a.text)).map(a => a.href));
+      } catch (error) { console.log('  ', link.href, error.message); }
+    }
+    if (found.length) break;
+  }
+  const files = [...new Set(found)].filter(href => rank(href) >= 0).sort((a, b) => rank(a) - rank(b));
+  if (!files.length) throw new Error('aucun fichier Baseflor trouvé (définir BASEFLOR_URL)');
   return files[0];
 }
 
