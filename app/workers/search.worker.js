@@ -5,7 +5,7 @@
 import { getAll } from '../core/db.js';
 
 /** Facets, in the order the filter panel shows them. Values within a facet are OR'ed, facets are AND'ed. */
-const FACETS = /** @type {const} */ (['mine', 'status', 'family', 'genus', 'photo', 'french']);
+const FACETS = /** @type {const} */ (['mine', 'status', 'legal', 'family', 'genus', 'photo', 'french']);
 const NONE = /** @type {string[]} */ ([]);
 
 /** @param {string} value */
@@ -73,7 +73,8 @@ function toEntry(plant) {
       family: plant.family,
       genus: plant.genus,
       photo: plant.thumbnail?.url ? 'avec' : 'sans',
-      french: plant.vernacularNames?.length ? 'avec' : 'sans'
+      french: plant.vernacularNames?.length ? 'avec' : 'sans',
+      legal: legalValues(plant.statuses)
     },
     rank: { fr: 0, sci: 0, family: 0 }
   };
@@ -253,6 +254,21 @@ function suggest(q, filters) {
     .sort((a, b) => (a.type === 'family' ? 0 : 1) - (b.type === 'family' ? 0 : 1) || b.count - a.count)
     .slice(0, 4)
     .map(({ type, name, count }) => ({ type, name, count }));
+}
+
+/**
+ * "Protection et menace" facet (INPN statuses; several values per plant): protected nationally, protected
+ * somewhere (region or department), harvest regulated somewhere, threatened in France (national Red List).
+ * @param {{ type: string }[] | undefined} statuses
+ */
+function legalValues(statuses) {
+  const types = new Set((statuses || []).map(s => s.type));
+  const values = [];
+  if (types.has('PN')) values.push('nationale');
+  if (types.has('PN') || types.has('PR') || types.has('PD')) values.push('protegee');
+  if (types.has('REGL')) values.push('reglementee');
+  if (types.has('LRN')) values.push('menacee');
+  return values;
 }
 
 /**

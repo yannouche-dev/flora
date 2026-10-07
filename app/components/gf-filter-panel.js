@@ -44,6 +44,14 @@ export class GfFilterPanel extends LitElement {
       <gf-facet name="status" label="Statut en France" .selected=${filters.status}
         .options=${STATUS_ORDER.map(code => ({ value: code, label: STATUS_SHORT[code], title: STATUS_LABELS[code] + ' (TAXREF ' + code + ')', count: count('status', code) }))}
       ></gf-facet>
+      <gf-facet name="legal" label="Protection et menace" .selected=${filters.legal}
+        .options=${[
+          { value: 'nationale', label: 'Protégée en France', title: 'Protection nationale (INPN)', count: count('legal', 'nationale') },
+          { value: 'protegee', label: 'Protégée (France, région ou département)', title: 'Protection nationale, régionale ou départementale (INPN)', count: count('legal', 'protegee') },
+          { value: 'reglementee', label: 'Cueillette réglementée', title: 'Réglementation de la cueillette dans au moins un département (INPN)', count: count('legal', 'reglementee') },
+          { value: 'menacee', label: 'Menacée en France', title: 'Liste rouge nationale : quasi menacée à en danger critique (INPN)', count: count('legal', 'menacee') }
+        ]}
+      ></gf-facet>
       <gf-facet name="family" label="Famille" searchable limit="8" .selected=${filters.family}
         .options=${families.map(name => ({ value: name, label: name, count: count('family', name) }))}
       ></gf-facet>

@@ -10,6 +10,7 @@ import {
   saveCollection, withEntry, withPlant
 } from '../core/collections.js';
 import { store, StoreController } from '../core/store.js';
+import { statusWarning } from './gf-status.js';
 
 /** A plant tapped within this distance of an existing place joins it instead of creating a new one. */
 const JOIN_RADIUS = 30;
@@ -39,6 +40,8 @@ export class GfCapture extends LitElement {
   };
 
   static styles = css`
+    .toast .warn { color: #fecaca; font-weight: 600; font-size: 0.85rem; margin-bottom: 4px; }
+    .toast .warn a { color: inherit; }
     *, *::before, *::after { box-sizing: border-box; }
     dialog {
       position: fixed;
@@ -142,7 +145,7 @@ export class GfCapture extends LitElement {
     this._results = [];
     this._harvestToday = true;
     this._busy = false;
-    /** @type {{ text: string, undo: () => Promise<void>, details: string } | null} */
+    /** @type {{ text: string, undo: () => Promise<void>, details: string, warning?: string | null, plantId?: number } | null} */
     this._toast = null;
   }
 
@@ -241,7 +244,12 @@ export class GfCapture extends LitElement {
       this.#close();
 
       const name = plant.vernacularNames?.[0] || plant.scientificName;
+      // Protected or regulated where it was just noted: say so right away (INPN statuses).
+      const record = plant.statuses ? plant : await db.get('plants', plant.id).catch(() => null);
+      const warning = await statusWarning(record, fix.coordinates);
       this.#showToast({
+        warning,
+        plantId: plant.id,
         text: before ? `${name} ajouté au lieu « ${placeTitle(before)} »${harvest ? ' · récolte notée' : ''}` : `${name} noté ici (nouveau lieu)${harvest ? ' · récolte notée' : ''}`,
         details: href.spot(saved.id),
         undo: async () => {
@@ -318,6 +326,7 @@ export class GfCapture extends LitElement {
         </footer>
       </dialog>
       ${t ? html`<div class="toast" role="status">
+        ${t.warning ? html`<div class="warn" role="alert">${t.warning} — <a href=${href.plant(/** @type {any} */ (t).plantId)}>voir la fiche</a></div>` : nothing}
         <div class="row"><span>${t.text}</span>
           <button type="button" @click=${this.#undo}>Annuler</button>
           <a href=${t.details} @click=${() => { this._toast = null; }}>Détails</a>

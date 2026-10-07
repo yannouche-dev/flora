@@ -13,6 +13,7 @@ import {
 import { encodeCollection, share } from '../core/share.js';
 import { StoreController, whenReady } from '../core/store.js';
 import './gf-map.js';
+import './gf-status.js';
 
 /** Existing places closer than this are offered instead of creating a duplicate. */
 const NEARBY_RADIUS = 100;
@@ -875,6 +876,7 @@ export class GfSpotEditor extends LitElement {
         </button>
         ${open ? html`
           <div class="body">
+            ${id !== null ? html`<gf-status plant-id=${id} .point=${entryPosition(this._place, entry) || null}></gf-status>` : nothing}
             ${fresh && this.#harvest ? html`
               <div class="today">
                 <input id="today-${id}" type="checkbox" .checked=${todayQuantity !== null}

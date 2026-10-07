@@ -4,7 +4,7 @@
 import { config } from '../config.js';
 
 /**
- * @typedef {Record<'status' | 'family' | 'genus' | 'photo' | 'french' | 'mine', string[]>} Filters
+ * @typedef {Record<'status' | 'legal' | 'family' | 'genus' | 'photo' | 'french' | 'mine', string[]>} Filters
  * @typedef {{ q: string, filters: Filters, sort: string }} Query
  * @typedef {{ type: 'family' | 'genus', name: string, count: number }} Suggestion
  * @typedef {object} Results
@@ -50,7 +50,7 @@ const readCompact = () => {
 export const store = new Store({
   status: 'loading',
   offline: false,
-  query: { q: '', filters: { status: [], family: [], genus: [], photo: [], french: [], mine: [] }, sort: '' },
+  query: { q: '', filters: { status: [], legal: [], family: [], genus: [], photo: [], french: [], mine: [] }, sort: '' },
   results: { total: 0, items: [], facets: {}, suggestions: [], fuzzy: 0, sort: 'fr' },
   compact: readCompact(),
   favorites: new Set(),

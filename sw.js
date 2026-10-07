@@ -1,11 +1,12 @@
 // GeoFlora service worker — hand-written, no tooling.
 //  - app shell: precached, then stale-while-revalidate (a deploy is picked up on the next launch)
 //  - data/*.json: network only — the dataset lives in IndexedDB, so it is not duplicated here
+//    (except data/territories.json: department outlines, small and static, precached)
 //  - remote images (Wikimedia, iNaturalist): stale-while-revalidate, capped
 //  - IGN map tiles: cache-first, capped — areas already viewed stay available offline
 //  - remote API JSON: not cached here (app/core/sources.js caches it in IndexedDB)
 
-const VERSION = 'v14';
+const VERSION = 'v15';
 const SHELL_CACHE = 'geoflora-shell-' + VERSION;
 const IMAGE_CACHE = 'geoflora-images-' + VERSION;
 const IMAGE_LIMIT = 400;
@@ -24,6 +25,7 @@ const SHELL = [
   'vendor/leaflet.js',
   'vendor/leaflet.css',
   'lib/plant-sources.mjs',
+  'data/territories.json',
   'assets/icons/icon.svg',
   'assets/icons/icon-192.png',
   'assets/icons/icon-512.png',
@@ -39,6 +41,7 @@ const SHELL = [
   'app/core/ign.js',
   'app/core/place-model.js',
   'app/core/portable.js',
+  'app/core/territory.js',
   'app/core/query.js',
   'app/core/router.js',
   'app/core/search.js',
@@ -67,6 +70,7 @@ const SHELL = [
   'app/components/gf-settings.js',
   'app/components/gf-shared.js',
   'app/components/gf-spot-editor.js',
+  'app/components/gf-status.js',
   'app/components/gf-tabbar.js'
 ];
 
@@ -103,7 +107,8 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
 
   if (url.origin === self.location.origin) {
-    if (url.pathname.includes('/data/')) return;
+    // The flora lives in IndexedDB; only the small, static department outlines are part of the shell.
+    if (url.pathname.includes('/data/') && !url.pathname.endsWith('/territories.json')) return;
     // SPA navigations (any hash route) are served by the cached index.html.
     const key = request.mode === 'navigate' ? 'index.html' : request;
     event.respondWith(staleWhileRevalidate(event, SHELL_CACHE, key));
