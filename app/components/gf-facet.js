@@ -1,5 +1,5 @@
 // @ts-check
-import { LitElement, html, css, nothing } from 'lit';
+import { LitElement, html, css, nothing, repeat } from 'lit';
 import { ui } from '../styles/ui.js';
 
 /**
@@ -9,7 +9,7 @@ import { ui } from '../styles/ui.js';
 const fold = (/** @type {string} */ s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 /**
- * One multi-select filter group: checkboxes with live counts, selected values pinned on top,
+ * One multi-select filter group: checkboxes with live counts (selecting never reorders the list),
  * optional inner search and "voir plus" for long lists.
  * Fires `facet-change` with `{ name, values }`.
  */
@@ -118,16 +118,13 @@ export class GfFacet extends LitElement {
     const selected = new Set(this.selected);
     const filter = fold(this._filter.trim());
 
-    // Selected first (so they never scroll away), then by count, then by name.
+    // By count, then by name. Selecting does not move a value; a selected one past the limit stays shown in place.
     let options = this.options
       .filter(o => selected.has(o.value) || !this.hideEmpty || o.count > 0)
       .filter(o => !filter || fold(o.label).includes(filter));
-    if (this.limit) {
-      options = options.sort((a, b) =>
-        Number(selected.has(b.value)) - Number(selected.has(a.value)) || b.count - a.count || a.label.localeCompare(b.label, 'fr'));
-    }
-    const limit = this.limit && !this._expanded && !filter ? Math.max(this.limit, selected.size) : Infinity;
-    const shown = options.slice(0, limit);
+    if (this.limit) options = options.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'fr'));
+    const limit = this.limit && !this._expanded && !filter ? this.limit : Infinity;
+    const shown = options.filter((o, i) => i < limit || selected.has(o.value));
     const hidden = options.length - shown.length;
 
     return html`
@@ -140,8 +137,9 @@ export class GfFacet extends LitElement {
         ${this.searchable ? html`
           <input type="search" placeholder="Filtrer ${this.label.toLowerCase()}…" aria-label="Filtrer ${this.label}"
             .value=${this._filter} @input=${e => { this._filter = e.target.value; }} />` : nothing}
+        <!-- Keyed rows: selecting reorders the list, and a reused unkeyed checkbox kept its clicked state. -->
         <ul role="group" aria-label=${this.label}>
-          ${shown.map(o => html`
+          ${repeat(shown, o => o.value, o => html`
             <li class=${o.count || selected.has(o.value) ? '' : 'empty'}>
               <label title=${o.title || o.label}>
                 <input type="checkbox" .checked=${selected.has(o.value)} @change=${e => this.#toggle(o.value, e)} />
