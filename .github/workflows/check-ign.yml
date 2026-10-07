@@ -1,0 +1,13 @@
+name: Check IGN services (temporary)
+on:
+  push:
+    branches: [claude/exciting-faraday-c4xk2r]
+    paths: [scripts/check-ign.mjs, .github/workflows/check-ign.yml]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: node scripts/check-ign.mjs
