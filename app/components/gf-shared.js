@@ -9,6 +9,7 @@ import { decodeCollection, decodePortable, isPortableLink } from '../core/share.
 import { whenReady } from '../core/store.js';
 import './gf-map.js';
 import './gf-thumb.js';
+import { ui } from '../styles/ui.js';
 
 /** Preview of a collection received by link (#/shared?d=…), with "Enregistrer dans mes plantes". */
 export class GfShared extends LitElement {
@@ -22,11 +23,9 @@ export class GfShared extends LitElement {
     _done: { state: true }
   };
 
-  static styles = css`
-    *, *::before, *::after { box-sizing: border-box; }
+  static styles = [ui, css`
     :host { display: block; overflow-y: auto; }
     .wrap { max-width: 720px; margin: 0 auto; padding: 14px 16px 40px; display: grid; gap: 12px; }
-    .kicker { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gf-text-muted); }
     h1 { margin: 0; font-size: 1.4rem; }
     gf-map { height: 220px; border-radius: var(--gf-radius); overflow: hidden; }
     ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
@@ -36,32 +35,22 @@ export class GfShared extends LitElement {
       gap: 0 12px;
       align-items: center;
       padding: 6px 10px;
-      border-radius: 10px;
+      border-radius: var(--gf-radius);
       background: var(--gf-surface);
       border: 1px solid var(--gf-border);
       color: inherit;
       text-decoration: none;
     }
+    li a:hover { border-color: var(--gf-accent); }
     li gf-thumb { grid-row: span 2; }
     .nm { font-weight: 600; }
     .sci { font-family: var(--gf-font-serif); font-style: italic; color: var(--gf-text-muted); font-size: 0.85rem; }
-    .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; position: sticky; bottom: 0; padding: 10px 0; background: var(--gf-bg); }
-    button {
-      font: inherit;
-      font-weight: 600;
-      padding: 12px 22px;
-      border-radius: 999px;
-      border: 0;
-      background: var(--gf-accent);
-      color: var(--gf-accent-contrast);
-      cursor: pointer;
-    }
-    a.cancel { color: var(--gf-text-muted); }
-    .muted { color: var(--gf-text-muted); font-size: 0.9rem; margin: 0; }
+    .actions { gap: 14px; position: sticky; bottom: 0; padding: 10px 0; background: var(--gf-bg); }
+    p.muted { font-size: 0.9rem; margin: 0; }
     .error { color: var(--gf-danger); }
     ul.names { display: grid; gap: 4px; }
-    ul.names li { padding: 6px 10px; border-radius: 8px; background: var(--gf-surface); border: 1px solid var(--gf-border); display: flex; justify-content: space-between; }
-  `;
+    ul.names li { padding: 6px 10px; border-radius: var(--gf-radius-sm); background: var(--gf-surface); border: 1px solid var(--gf-border); display: flex; justify-content: space-between; }
+  `];
 
   constructor() {
     super();
@@ -162,10 +151,10 @@ export class GfShared extends LitElement {
         <ul class="names">${features.map(f => html`<li>${label(f)} <span class="muted">${f.properties?.plants?.length || 0}</span></li>`)}</ul>
         ${this._done ? html`
           <p role="status"><strong>Importé :</strong> ${this._done}</p>
-          <div class="actions"><a class="cancel" href=${href.collections()}>Voir mes plantes</a></div>` : html`
+          <div class="actions"><a class="link muted" href=${href.collections()}>Voir mes plantes</a></div>` : html`
           <div class="actions">
-            <button type="button" ?disabled=${this._busy} @click=${this.#importPortable}>Importer</button>
-            <a class="cancel" href=${href.collections()}>Ignorer</a>
+            <button class="primary large" type="button" ?disabled=${this._busy} @click=${this.#importPortable}>Importer</button>
+            <a class="link muted" href=${href.collections()}>Ignorer</a>
           </div>
           <p class="muted">Les collections déjà présentes sur cet appareil sont mises à jour (la version la plus récente l’emporte), sans doublon ; rien n’est envoyé sur Internet.</p>`}
       </div>`;
@@ -198,8 +187,8 @@ export class GfShared extends LitElement {
             </a></li>`)}
         </ul>
         <div class="actions">
-          <button type="button" ?disabled=${this._busy || !this._plants.length} @click=${this.#save}>Enregistrer dans mes plantes</button>
-          <a class="cancel" href=${href.collections()}>Ignorer</a>
+          <button class="primary large" type="button" ?disabled=${this._busy || !this._plants.length} @click=${this.#save}>Enregistrer dans mes plantes</button>
+          <a class="link muted" href=${href.collections()}>Ignorer</a>
         </div>
         <p class="muted">L’enregistrement crée une nouvelle ${shared.kind === 'place' ? 'collection-lieu' : 'liste'} sur cet appareil ; rien n’est envoyé.</p>
       </div>

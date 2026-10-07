@@ -16,6 +16,7 @@ import './gf-collections.js';
 import './gf-shared.js';
 import './gf-capture.js';
 import './gf-tabbar.js';
+import { ui } from '../styles/ui.js';
 
 /** Lit controller tracking a media query (desktop sidebar vs. mobile bottom sheet). */
 class MediaController {
@@ -38,7 +39,7 @@ const tabOf = name => name === 'map' ? 'map'
 
 /** App shell: header + route outlet + (phone) bottom tab bar. */
 export class GfApp extends LitElement {
-  static styles = css`
+  static styles = [ui, css`
     :host {
       display: grid;
       grid-template-rows: auto 1fr auto;
@@ -63,33 +64,9 @@ export class GfApp extends LitElement {
     }
     .brand img { width: 28px; height: 28px; }
     gf-search-bar { flex: 1; min-width: 0; max-width: 720px; }
-    nav.tabs {
-      display: inline-flex;
-      flex: none;
-      border: 1px solid var(--gf-border);
-      border-radius: 999px;
-      overflow: hidden;
-      font-size: 0.875rem;
-    }
-    nav.tabs a {
-      padding: 6px 14px;
-      color: var(--gf-text);
-      text-decoration: none;
-      white-space: nowrap;
-    }
-    nav.tabs a[aria-current='page'] { background: var(--gf-accent); color: var(--gf-accent-contrast); }
-    .note {
-      flex: none;
-      font: inherit;
-      font-size: 0.875rem;
-      font-weight: 600;
-      padding: 6px 14px;
-      border-radius: 999px;
-      border: 0;
-      background: var(--gf-accent);
-      color: var(--gf-accent-contrast);
-      cursor: pointer;
-    }
+    nav.tabs { flex: none; }
+    nav.tabs a { color: var(--gf-text); text-decoration: none; white-space: nowrap; display: inline-flex; align-items: center; }
+    .note { flex: none; }
     gf-map-page, gf-spot-editor, gf-collections, gf-shared { flex: 1; min-height: 0; }
     .settings {
       flex: none;
@@ -111,16 +88,7 @@ export class GfApp extends LitElement {
       background: var(--gf-surface);
     }
     aside h2, dialog h2 { font-size: 1rem; margin: 12px 0 4px; display: flex; align-items: center; }
-    .link {
-      margin-left: auto;
-      font: inherit;
-      font-size: 0.8rem;
-      font-weight: 400;
-      background: none;
-      border: 0;
-      color: var(--gf-accent);
-      cursor: pointer;
-    }
+    h2 .link { margin-left: auto; }
     .results { display: flex; flex-direction: column; flex: 1; min-width: 0; }
     gf-plant-list, gf-plant-detail, gf-settings { flex: 1; min-height: 0; }
     .banner {
@@ -140,7 +108,7 @@ export class GfApp extends LitElement {
       margin: 0 auto;
       padding: 0;
       border: 0;
-      border-radius: 16px 16px 0 0;
+      border-radius: var(--gf-radius-lg) var(--gf-radius-lg) 0 0;
       background: var(--gf-surface);
       color: var(--gf-text);
       display: none;
@@ -162,23 +130,13 @@ export class GfApp extends LitElement {
     }
     .sheet-body { overflow-y: auto; padding: 0 16px; flex: 1; }
     .sheet-foot { padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--gf-border); }
-    .sheet-foot button {
-      width: 100%;
-      font: inherit;
-      font-weight: 600;
-      padding: 12px;
-      border: 0;
-      border-radius: 999px;
-      background: var(--gf-accent);
-      color: var(--gf-accent-contrast);
-      cursor: pointer;
-    }
+    .sheet-foot button { width: 100%; }
     @media (max-width: 560px) {
       .brand span { display: none; }
       header { gap: 8px; padding: 8px 10px; }
-      nav.tabs a { padding: 6px 10px; }
+      nav.tabs a { padding: 4px 10px; }
     }
-  `;
+  `];
 
   #router = new RouterController(this);
   #store = new StoreController(this);
@@ -214,12 +172,12 @@ export class GfApp extends LitElement {
           <span>GeoFlora</span>
         </a>
         ${route.name === 'search' ? html`<gf-search-bar></gf-search-bar>` : nothing}
-        ${phone ? nothing : html`<nav class="tabs" aria-label="Sections">
+        ${phone ? nothing : html`<nav class="tabs segmented" aria-label="Sections">
           <a href=${lastSearchHash()} aria-current=${route.name === 'search' || route.name === 'plant' ? 'page' : 'false'}>Flore</a>
           <a href=${href.collections()} aria-current=${['collections', 'spot', 'spot-new', 'shared'].includes(route.name) ? 'page' : 'false'}>Mes plantes</a>
           <a href=${href.map()} aria-current=${route.name === 'map' ? 'page' : 'false'}>Carte</a>
         </nav>
-        <button class="note" type="button" @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-capture'))?.open()}>+ Noter ici</button>
+        <button class="note primary" type="button" @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-capture'))?.open()}>+ Noter ici</button>
         <a class="settings" href=${href.settings()} title="À propos et réglages" aria-label="À propos et réglages">⚙︎</a>`}
       </header>
       <main>
@@ -261,7 +219,7 @@ export class GfApp extends LitElement {
               <div class="sheet-head">${this.#filtersHeader()}</div>
               <div class="sheet-body"><gf-filter-panel></gf-filter-panel></div>
               <div class="sheet-foot">
-                <button type="button" @click=${this.#closeFilters}>
+                <button class="primary large" type="button" @click=${this.#closeFilters}>
                   Voir ${total.toLocaleString('fr-FR')} espèce${total > 1 ? 's' : ''}
                 </button>
               </div>

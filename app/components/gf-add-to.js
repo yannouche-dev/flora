@@ -3,6 +3,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { FAVORITES_ID, getMembership, matchCollections, newCollection, saveCollection, setInCollection, withPlant } from '../core/collections.js';
 import { href } from '../core/router.js';
 import { StoreController } from '../core/store.js';
+import { ui } from '../styles/ui.js';
 
 /**
  * "Ajouter à…" sheet: check the collections a plant belongs to, create a list on the fly,
@@ -18,8 +19,7 @@ export class GfAddTo extends LitElement {
     _busy: { state: true }
   };
 
-  static styles = css`
-    *, *::before, *::after { box-sizing: border-box; }
+  static styles = [ui, css`
     dialog {
       position: fixed;
       inset: auto 0 0 0;
@@ -29,14 +29,14 @@ export class GfAddTo extends LitElement {
       margin: 0 auto;
       padding: 0;
       border: 0;
-      border-radius: 16px 16px 0 0;
+      border-radius: var(--gf-radius-lg) var(--gf-radius-lg) 0 0;
       background: var(--gf-surface);
       color: var(--gf-text);
       flex-direction: column;
     }
     dialog[open] { display: flex; }
     dialog::backdrop { background: rgb(0 0 0 / 40%); }
-    @media (min-width: 700px) { dialog { inset: 0; margin: auto; border-radius: 16px; height: fit-content; } }
+    @media (min-width: 700px) { dialog { inset: 0; margin: auto; border-radius: var(--gf-radius-lg); height: fit-content; } }
     header { padding: 14px 16px 8px; border-bottom: 1px solid var(--gf-border); }
     h2 { margin: 0; font-size: 1.05rem; }
     header p { margin: 2px 0 0; color: var(--gf-text-muted); font-size: 0.85rem; }
@@ -46,44 +46,21 @@ export class GfAddTo extends LitElement {
       align-items: center;
       gap: 12px;
       padding: 10px 8px;
-      border-radius: 8px;
+      border-radius: var(--gf-radius-sm);
       cursor: pointer;
     }
     li label:hover { background: var(--gf-surface-2); }
-    li input { width: 20px; height: 20px; accent-color: var(--gf-accent); flex: none; }
+    li input { flex: none; }
     .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .count { color: var(--gf-text-muted); font-size: 0.8rem; }
-    .section { padding: 8px 8px 2px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gf-text-muted); }
+    .section { padding: 8px 8px 2px; }
     footer { display: grid; gap: 8px; padding: 10px 16px calc(14px + env(safe-area-inset-bottom)); border-top: 1px solid var(--gf-border); }
     footer form { display: flex; gap: 8px; }
-    footer input {
-      flex: 1;
-      font: inherit;
-      padding: 9px 12px;
-      border-radius: 8px;
-      border: 1px solid var(--gf-border);
-      background: var(--gf-bg);
-      color: var(--gf-text);
-      min-width: 0;
-    }
-    button, a.button {
-      font: inherit;
-      padding: 9px 14px;
-      border-radius: 999px;
-      border: 1px solid var(--gf-border);
-      background: var(--gf-surface);
-      color: var(--gf-text);
-      cursor: pointer;
-      text-decoration: none;
-      text-align: center;
-    }
+    footer input { flex: 1; min-width: 0; }
     .row { display: flex; gap: 8px; flex-wrap: wrap; }
     .row > * { flex: 1; }
     .suggest { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 0.85rem; color: var(--gf-text-muted); }
-    .suggest button { padding: 5px 12px; font-size: 0.85rem; border-color: var(--gf-accent); color: var(--gf-text); }
-    .suggest button[aria-pressed=true] { background: var(--gf-accent-soft); }
-    .done { background: var(--gf-accent); border-color: var(--gf-accent); color: var(--gf-accent-contrast); font-weight: 600; }
-  `;
+  `];
 
   #store = new StoreController(this);
 
@@ -165,8 +142,8 @@ export class GfAddTo extends LitElement {
         </header>
         <ul>
           ${row(favorites, '♥')}
-          ${lists.length ? html`<li class="section">Collections</li>${lists.map(c => row(c, '☰'))}` : nothing}
-          ${places.length ? html`<li class="section">Endroits</li>${places.map(c => row(c, '📍'))}` : nothing}
+          ${lists.length ? html`<li class="section kicker">Collections</li>${lists.map(c => row(c, '☰'))}` : nothing}
+          ${places.length ? html`<li class="section kicker">Endroits</li>${places.map(c => row(c, '📍'))}` : nothing}
         </ul>
         <footer>
           ${this._creating ? html`
@@ -180,13 +157,13 @@ export class GfAddTo extends LitElement {
             <form @submit=${this.#createList}>
               <input type="text" placeholder="Nom de la collection (ex. Mellifères)" aria-label="Nom de la nouvelle collection" autofocus
                 .value=${this._query} @input=${e => { this._query = e.target.value; }} />
-              <button class="done" type="submit" ?disabled=${this._busy}>${suggestions.exact ? 'Ajouter' : 'Créer'}</button>
+              <button class="primary" type="submit" ?disabled=${this._busy}>${suggestions.exact ? 'Ajouter' : 'Créer'}</button>
             </form>` : html`
             <div class="row">
               <button type="button" @click=${() => { this._creating = true; }}>+ Nouvelle collection</button>
               <a class="button" href=${href.newSpot(plant?.id)} @click=${() => this.#close()}>📍 Nouvel endroit ici</a>
             </div>`}
-          <button class="done" type="button" @click=${() => this.#close()}>Terminé</button>
+          <button class="primary" type="button" @click=${() => this.#close()}>Terminé</button>
         </footer>
       </dialog>
     `;

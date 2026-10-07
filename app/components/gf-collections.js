@@ -9,6 +9,7 @@ import {
 } from '../core/collections.js';
 import { config } from '../config.js';
 import { StoreController, whenReady } from '../core/store.js';
+import { ui } from '../styles/ui.js';
 
 /** Up to this many thumbnails per collection row. */
 const THUMBS = 4;
@@ -26,31 +27,14 @@ export class GfCollections extends LitElement {
     _busy: { state: true }
   };
 
-  static styles = css`
-    *, *::before, *::after { box-sizing: border-box; }
+  static styles = [ui, css`
     :host { display: block; overflow-y: auto; }
     .wrap { max-width: 760px; margin: 0 auto; padding: 14px 16px 96px; }
     h1 { font-size: 1.35rem; margin: 4px 0 4px; }
     .lead { color: var(--gf-text-muted); margin: 0 0 14px; font-size: 0.9rem; }
     .new { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
-    .new a {
-      flex: 1 1 160px;
-      text-align: center;
-      font-weight: 600;
-      padding: 11px 14px;
-      border-radius: var(--gf-radius);
-      border: 1px dashed var(--gf-accent);
-      color: var(--gf-accent);
-      text-decoration: none;
-      background: var(--gf-surface);
-    }
-    h2 {
-      font-size: 0.8rem;
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-      color: var(--gf-text-muted);
-      margin: 18px 0 8px;
-    }
+    .new a { flex: 1 1 160px; border-style: dashed; border-color: var(--gf-accent); color: var(--gf-accent); font-weight: 600; min-height: 44px; }
+    h2 { margin: 18px 0 8px; }
     ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
     li a {
       display: grid;
@@ -69,13 +53,13 @@ export class GfCollections extends LitElement {
       grid-row: span 2;
       width: 40px;
       height: 40px;
-      border-radius: 10px;
+      border-radius: var(--gf-radius);
       display: grid;
       place-items: center;
       font-size: 1.2rem;
       background: var(--gf-accent-soft);
     }
-    .icon.fav { color: #e11d48; background: color-mix(in srgb, #e11d48 14%, var(--gf-surface)); }
+    .icon.fav { color: var(--gf-fav); background: color-mix(in srgb, var(--gf-fav) 14%, var(--gf-surface)); }
     .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .side { color: var(--gf-text-muted); font-size: 0.85rem; text-align: right; white-space: nowrap; }
     .sub { grid-column: 2 / -1; display: flex; align-items: center; gap: 8px; color: var(--gf-text-muted); font-size: 0.8rem; min-width: 0; }
@@ -90,36 +74,18 @@ export class GfCollections extends LitElement {
       background: var(--gf-surface-2);
     }
     .thumbs :first-child { margin-left: 0; }
-    .badge.soon { background: var(--gf-accent-soft); color: var(--gf-text); }
-    .badge { background: #fde047; color: #422006; border-radius: 999px; padding: 0 8px; font-size: 0.75rem; font-weight: 600; }
     .empty { color: var(--gf-text-muted); font-size: 0.9rem; }
     .notice {
       display: grid;
       gap: 8px;
       margin: 0 0 16px;
-      padding: 12px 14px;
-      border-radius: var(--gf-radius);
-      background: var(--gf-surface);
-      border: 1px solid var(--gf-border);
       font-size: 0.9rem;
     }
     .notice.restore { border-color: var(--gf-accent); background: var(--gf-accent-soft); }
     .notice p { margin: 0; }
-    .notice .row { display: flex; gap: 8px; flex-wrap: wrap; }
-    .notice button {
-      font: inherit;
-      font-weight: 600;
-      padding: 8px 14px;
-      border-radius: 999px;
-      border: 1px solid var(--gf-accent);
-      background: var(--gf-surface);
-      color: var(--gf-text);
-      cursor: pointer;
-    }
-    .notice button.main { background: var(--gf-accent); color: var(--gf-accent-contrast); }
-    .notice button.link { border: 0; background: none; font-weight: 400; color: var(--gf-text-muted); text-decoration: underline; padding: 8px 4px; }
+    .notice .row { gap: 14px; }
     .error { color: var(--gf-danger); }
-  `;
+  `];
 
   #geo = new GeoController(this);
   #store = new StoreController(this);
@@ -244,21 +210,21 @@ export class GfCollections extends LitElement {
     const missing = this._missing;
     return html`
       ${missing.length ? html`
-        <div class="notice restore" role="alert">
+        <div class="notice card restore" role="alert">
           <p><strong>${missing.length} collection${missing.length > 1 ? 's' : ''} retrouvée${missing.length > 1 ? 's' : ''} dans la copie de secours</strong>
             de cet appareil : ${missing.slice(0, 4).map(c => collectionTitle(c)).join(', ')}${missing.length > 4 ? '…' : ''}.</p>
-          <div class="row">
-            <button class="main" type="button" ?disabled=${this._busy} @click=${this.#restore}>Restaurer</button>
-            <button class="link" type="button" @click=${this.#discard}>Oublier</button>
+          <div class="row actions">
+            <button class="primary" type="button" ?disabled=${this._busy} @click=${this.#restore}>Restaurer</button>
+            <button class="link muted" type="button" @click=${this.#discard}>Oublier</button>
           </div>
         </div>` : nothing}
       ${!missing.length && this.#reminderDue() ? html`
-        <div class="notice">
+        <div class="notice card">
           <p><strong>Sauvegardez vos collections.</strong> Elles ne sont que sur cet appareil : le navigateur peut les effacer.
             ${lastExportDate() ? `Dernière sauvegarde le ${new Date(/** @type {string} */ (lastExportDate())).toLocaleDateString('fr-FR')}.` : 'Aucune sauvegarde pour l’instant.'}</p>
-          <div class="row">
-            <button class="main" type="button" @click=${this.#export}>Exporter</button>
-            <button class="link" type="button" @click=${this.#dismissReminder}>Plus tard</button>
+          <div class="row actions">
+            <button class="primary" type="button" @click=${this.#export}>Exporter</button>
+            <button class="link muted" type="button" @click=${this.#dismissReminder}>Plus tard</button>
           </div>
         </div>` : nothing}
       ${this._note ? html`<p class="empty" role="status">${this._note}</p>` : nothing}`;
@@ -279,8 +245,8 @@ export class GfCollections extends LitElement {
         <h1>Mes plantes</h1>
         <p class="lead">Vos collections de plantes. Une collection qui a des coordonnées GPS est un endroit : touchez-le pour le voir sur la carte. Tout reste sur cet appareil.</p>
         <div class="new">
-          <a href=${href.newList()}>☰ Nouvelle collection</a>
-          <a href=${href.newSpot()} @click=${e => { e.preventDefault(); this.dispatchEvent(new CustomEvent('open-capture', { bubbles: true, composed: true })); }}>📍 Noter une plante ici</a>
+          <a class="button" href=${href.newList()}>☰ Nouvelle collection</a>
+          <a class="button" href=${href.newSpot()} @click=${e => { e.preventDefault(); this.dispatchEvent(new CustomEvent('open-capture', { bubbles: true, composed: true })); }}>📍 Noter une plante ici</a>
         </div>
         ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : nothing}
         ${this.#notices()}
@@ -293,11 +259,11 @@ export class GfCollections extends LitElement {
             </a></li>`}
         </ul>
 
-        <h2>Collections</h2>
+        <h2 class="kicker">Collections</h2>
         ${lists.length ? html`<ul>${lists.map(c => this.#row(c, null))}</ul>`
           : html`<p class="empty">Regroupez des plantes : « Mellifères », « À chercher cet été »… Ajoutez-y des coordonnées GPS pour en faire un endroit.</p>`}
 
-        <h2>Endroits${fix ? ' · par distance' : ''}</h2>
+        <h2 class="kicker">Endroits${fix ? ' · par distance' : ''}</h2>
         ${places.length ? html`<ul>${places.map(({ c, d }) => this.#row(c, d !== null ? formatDistance(d) : null))}</ul>`
           : html`<p class="empty">Un endroit est une collection qui a des coordonnées GPS ; chacune de ses plantes a aussi sa position.</p>`}
       </div>

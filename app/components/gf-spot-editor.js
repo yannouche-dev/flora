@@ -12,6 +12,7 @@ import {
 } from '../core/collections.js';
 import { encodeCollection, share } from '../core/share.js';
 import { StoreController, whenReady } from '../core/store.js';
+import { ui } from '../styles/ui.js';
 import './gf-map.js';
 import './gf-status.js';
 import './gf-thumb.js';
@@ -58,8 +59,7 @@ export class GfSpotEditor extends LitElement {
     _editPos: { state: true }
   };
 
-  static styles = css`
-    *, *::before, *::after { box-sizing: border-box; }
+  static styles = [ui, css`
     :host {
       display: grid;
       grid-template-rows: minmax(200px, 38%) 1fr;
@@ -73,26 +73,8 @@ export class GfSpotEditor extends LitElement {
     .save-state { font-size: 0.8rem; color: var(--gf-text-muted); margin-right: auto; }
     .save-state.error { color: var(--gf-danger); }
     .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
-    .add-location {
-      font: inherit;
-      padding: 9px 14px;
-      border-radius: var(--gf-radius);
-      border: 1px dashed var(--gf-border);
-      background: var(--gf-surface);
-      color: var(--gf-text);
-      cursor: pointer;
-      justify-self: start;
-    }
-    a.button {
-      font: inherit;
-      font-size: 0.9rem;
-      padding: 6px 14px;
-      border-radius: 999px;
-      border: 1px solid var(--gf-border);
-      background: var(--gf-surface);
-      color: var(--gf-text);
-      text-decoration: none;
-    }
+    /* Dashed "add" buttons: something new goes here. */
+    .add { border-style: dashed; border-color: var(--gf-accent); color: var(--gf-accent); font-weight: 600; justify-self: start; }
     .map-area { position: relative; min-height: 0; }
     gf-map { height: 100%; }
     .map-tools {
@@ -106,26 +88,14 @@ export class GfSpotEditor extends LitElement {
       flex-wrap: wrap;
       max-width: calc(100% - 80px); /* clear of the layer / locate buttons on the right */
     }
-    .map-tools button {
-      font: inherit;
-      font-size: 0.875rem;
-      font-weight: 600;
-      padding: 8px 14px;
-      border-radius: 999px;
-      border: 0;
-      background: var(--gf-surface);
-      color: var(--gf-text);
-      box-shadow: 0 2px 8px rgb(0 0 0 / 35%);
-      cursor: pointer;
-    }
-    .map-tools button.done { background: var(--gf-accent); color: var(--gf-accent-contrast); }
+    .map-tools button { border-color: transparent; box-shadow: var(--gf-shadow-float); font-weight: 600; }
     .map-tools .tip {
       flex-basis: 100%;
       font-size: 0.78rem;
       padding: 4px 10px;
-      border-radius: 999px;
+      border-radius: var(--gf-radius-pill);
       background: color-mix(in srgb, var(--gf-surface) 90%, transparent);
-      box-shadow: 0 1px 4px rgb(0 0 0 / 25%);
+      box-shadow: var(--gf-shadow-float);
     }
     form {
       overflow-y: auto;
@@ -142,9 +112,6 @@ export class GfSpotEditor extends LitElement {
       flex-wrap: wrap;
       font-size: 0.875rem;
       padding: 8px 12px;
-      border-radius: var(--gf-radius);
-      background: var(--gf-surface);
-      border: 1px solid var(--gf-border);
     }
     .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--gf-text-muted); flex: none; }
     .dot.good { background: #16a34a; }
@@ -153,10 +120,8 @@ export class GfSpotEditor extends LitElement {
     .gps .hint { color: var(--gf-text-muted); flex-basis: 100%; font-size: 0.8rem; }
     .gps button { margin-left: auto; }
     .nearby {
-      border: 1px solid var(--gf-accent);
+      border-color: var(--gf-accent);
       background: var(--gf-accent-soft);
-      border-radius: var(--gf-radius);
-      padding: 10px 12px;
       font-size: 0.9rem;
       display: grid;
       gap: 8px;
@@ -165,48 +130,22 @@ export class GfSpotEditor extends LitElement {
     .nearby li { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
     .nearby li span { flex: 1; min-width: 140px; }
     .nearby small { color: var(--gf-text-muted); }
-    label.field { display: grid; gap: 4px; font-size: 0.85rem; color: var(--gf-text-muted); }
-    input[type='text'], input[type='search'], input[type='date'], textarea {
-      font: inherit;
-      font-size: 1rem;
-      color: var(--gf-text);
-      background: var(--gf-surface);
-      border: 1px solid var(--gf-border);
-      border-radius: 8px;
-      padding: 9px 12px;
-      width: 100%;
-    }
-    textarea { min-height: 64px; resize: vertical; }
+    textarea { min-height: 64px; }
     .chips { display: flex; gap: 8px; flex-wrap: wrap; }
-    .chips button, button.secondary {
-      font: inherit;
-      font-size: 0.9rem;
-      padding: 6px 14px;
-      border-radius: 999px;
-      border: 1px solid var(--gf-border);
-      background: var(--gf-surface);
-      color: var(--gf-text);
-      cursor: pointer;
-    }
-    .chips button[aria-pressed='true'] { background: var(--gf-accent); border-color: var(--gf-accent); color: var(--gf-accent-contrast); }
     .stars button {
       font-size: 1.5rem;
       line-height: 1;
+      min-height: 0;
       background: none;
       border: 0;
       padding: 2px;
-      cursor: pointer;
       color: var(--gf-border);
     }
-    .stars button.on { color: #f59e0b; }
+    .stars button.on { color: var(--gf-star); }
     h2 { font-size: 1rem; margin: 6px 0 0; display: flex; align-items: center; gap: 8px; }
     h2 .count { color: var(--gf-text-muted); font-weight: 400; }
     .entries { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-    .entry {
-      border: 1px solid var(--gf-border);
-      border-radius: var(--gf-radius);
-      background: var(--gf-surface);
-    }
+    .entry { padding: 0; }
     .entry.open { border-color: var(--gf-accent); }
     .entry > button.head {
       width: 100%;
@@ -215,12 +154,12 @@ export class GfSpotEditor extends LitElement {
       gap: 2px 10px;
       align-items: center;
       text-align: left;
-      font: inherit;
-      color: inherit;
+      font-size: 1rem;
+      font-weight: 400;
       background: none;
       border: 0;
+      border-radius: var(--gf-radius);
       padding: 10px 12px;
-      cursor: pointer;
     }
     .head .name { font-weight: 600; }
     .head .sci { font-family: var(--gf-font-serif); font-style: italic; color: var(--gf-text-muted); font-size: 0.85rem; }
@@ -230,91 +169,56 @@ export class GfSpotEditor extends LitElement {
     .head .chev { grid-row: 1; grid-column: 3; color: var(--gf-text-muted); transition: transform 0.15s; }
     .entry.open .chev { transform: rotate(180deg); }
     .entry .body { padding: 12px; display: grid; gap: 12px; border-top: 1px solid var(--gf-border); }
-    .badge { background: #fde047; color: #422006; border-radius: 999px; padding: 0 8px; font-size: 0.75rem; font-weight: 600; }
-    .mini-stars { color: #f59e0b; letter-spacing: 1px; }
+    .entry .body > .button, .entry .body > .link { justify-self: start; }
+    .mini-stars { color: var(--gf-star); letter-spacing: 1px; }
     fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 6px; }
     legend { font-size: 0.85rem; color: var(--gf-text-muted); padding: 0; margin-bottom: 6px; }
-    .picker ul { list-style: none; margin: 6px 0 0; padding: 0; border: 1px solid var(--gf-border); border-radius: 8px; overflow: hidden; }
+    .picker ul { list-style: none; margin: 6px 0 0; padding: 0; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-sm); overflow: hidden; }
     .picker li button {
       width: 100%;
+      justify-content: flex-start;
       text-align: left;
-      font: inherit;
-      padding: 9px 12px;
+      font-size: 1rem;
+      font-weight: 400;
+      padding: 8px 12px;
       border: 0;
       border-bottom: 1px solid var(--gf-border);
-      background: var(--gf-surface);
-      color: var(--gf-text);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
+      border-radius: 0;
       gap: 10px;
     }
     .picker li button span { min-width: 0; }
     .picker li:last-child button { border-bottom: 0; }
-    .picker li button[disabled] { opacity: 0.5; cursor: default; }
     .picker i { color: var(--gf-text-muted); font-family: var(--gf-font-serif); }
-    .add-plant {
-      font: inherit;
-      font-weight: 600;
-      padding: 10px 14px;
-      border-radius: var(--gf-radius);
-      border: 1px dashed var(--gf-accent);
-      background: none;
-      color: var(--gf-accent);
-      cursor: pointer;
-      justify-self: start;
-    }
     .harvests { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
     .harvests li {
       display: flex;
       gap: 8px;
-      align-items: baseline;
-      padding: 6px 10px;
-      border-radius: 8px;
+      align-items: center;
+      padding: 4px 4px 4px 10px;
+      border-radius: var(--gf-radius-sm);
       background: var(--gf-bg);
       font-size: 0.9rem;
     }
     .harvests li .what { flex: 1; color: var(--gf-text-muted); }
-    .harvests li button { background: none; border: 0; color: var(--gf-text-muted); cursor: pointer; font-size: 1.1rem; }
+    .harvests .icon-btn { width: 32px; height: 32px; font-size: 1.1rem; }
     .add-harvest { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
     .add-harvest input[name='note'] { grid-column: 1 / -1; }
     .add-harvest button { grid-column: 1 / -1; justify-self: start; }
     .today { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.95rem; }
-    .today input[type='checkbox'] { width: 20px; height: 20px; accent-color: var(--gf-accent); }
-    .today input[type='text'] { flex: 1; min-width: 140px; }
+    .today input[type='text'] { flex: 1; min-width: 140px; width: auto; }
     .name-suggest { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: -4px; font-size: 0.85rem; color: var(--gf-text-muted); }
     .name-suggest span { flex-basis: 100%; }
-    .name-suggest button {
-      font: inherit;
-      padding: 6px 12px;
-      border-radius: 999px;
-      border: 1px solid var(--gf-accent);
-      background: var(--gf-accent-soft);
-      color: var(--gf-text);
-      cursor: pointer;
-    }
     .name-suggest small { color: var(--gf-text-muted); margin-left: 4px; }
     .name-hint { margin: -4px 0 0; color: var(--gf-text-muted); font-size: 0.85rem; }
     .plant-pos { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 0.85rem; }
     .plant-pos span { flex-basis: 100%; }
     .plant-pos small { color: var(--gf-text-muted); flex-basis: 100%; }
-    .remove { justify-self: start; color: var(--gf-danger); background: none; border: 0; font: inherit; font-size: 0.85rem; cursor: pointer; padding: 0; }
-    .muted { margin: 0; color: var(--gf-text-muted); font-size: 0.9rem; }
-    .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; position: sticky; bottom: -24px; padding: 10px 0 14px; background: var(--gf-bg); }
-    .primary {
-      font: inherit;
-      font-weight: 600;
-      padding: 12px 22px;
-      border-radius: 999px;
-      border: 0;
-      background: var(--gf-accent);
-      color: var(--gf-accent-contrast);
-      cursor: pointer;
-    }
-    .primary.weak { background: var(--gf-surface-2); color: var(--gf-text); border: 1px solid var(--gf-border); }
-    a.cancel { color: var(--gf-text-muted); }
+    p.muted { margin: 0; font-size: 0.9rem; }
+    .footer { position: sticky; bottom: -24px; padding: 10px 0 14px; background: var(--gf-bg); gap: 10px; }
+    .footer .danger { margin-left: auto; }
+    .primary.weak { background: var(--gf-surface-2); color: var(--gf-text); border-color: var(--gf-border); }
     .error { color: var(--gf-danger); font-size: 0.9rem; margin: 0; }
-  `;
+  `];
 
   #geo = new GeoController(this);
   #store = new StoreController(this);
@@ -804,19 +708,19 @@ export class GfSpotEditor extends LitElement {
   #gpsStatus() {
     const { fix, error } = this.#geo.state;
     if (this._manual) {
-      return html`<div class="gps"><span class="dot good"></span> Point de l’endroit ${this.#isNew ? 'placé à la main' : 'enregistré'}
-        ${fix && this._editPos ? html`<button class="secondary" type="button" @click=${this.#useGps}>Utiliser le GPS</button>` : nothing}
+      return html`<div class="gps card"><span class="dot good"></span> Point de l’endroit ${this.#isNew ? 'placé à la main' : 'enregistré'}
+        ${fix && this._editPos ? html`<button type="button" @click=${this.#useGps}>Utiliser le GPS</button>` : nothing}
         <span class="hint">${this._editPos
           ? 'Le carré vert est le point de l’endroit, les ronds sont les plantes : faites-les glisser pour les ajuster.'
           : 'Le carré vert est le point de l’endroit, les ronds sont les plantes. « Modifier les positions » pour les déplacer.'}</span></div>`;
     }
     if (!fix) {
-      return html`<div class="gps"><span class="dot ${error ? 'none' : ''}"></span>
+      return html`<div class="gps card"><span class="dot ${error ? 'none' : ''}"></span>
         ${error || 'Recherche de la position GPS…'}
         <span class="hint">Appui long sur la carte pour placer le lieu à la main.</span></div>`;
     }
     const good = fix.accuracy <= config.goodAccuracy;
-    return html`<div class="gps" aria-live="polite">
+    return html`<div class="gps card" aria-live="polite">
       <span class="dot ${good ? 'good' : 'weak'}"></span>
       Position GPS <strong>± ${Math.round(fix.accuracy)} m</strong>
       <span class="hint">${good ? 'Précision suffisante.' : 'Précision faible : patientez à découvert, ou ajustez l’épingle.'}</span>
@@ -827,13 +731,13 @@ export class GfSpotEditor extends LitElement {
     if (!this.#isNew || !this._nearby.length || !this._place) return nothing;
     const first = this._place.properties.plants[0];
     return html`
-      <div class="nearby" role="region" aria-label="Lieux à proximité">
+      <div class="nearby card" role="region" aria-label="Lieux à proximité">
         <strong>Vous êtes près d’un lieu déjà enregistré</strong>
         <ul>
           ${this._nearby.slice(0, 3).map(({ place, distance }) => html`
             <li>
               <span>${placeTitle(place)} <small>· ${formatDistance(distance)} · ${plantCount(place.properties.plants.length)}</small></span>
-              <button class="secondary" type="button" @click=${() => this.#useExisting(place)}>
+              <button type="button" @click=${() => this.#useExisting(place)}>
                 ${first && !findEntry(place, first.plantId) ? `Y ajouter ${entryName(first)}` : 'Ouvrir ce lieu'}
               </button>
             </li>`)}
@@ -850,11 +754,11 @@ export class GfSpotEditor extends LitElement {
     const fix = this.#geo.state.fix;
     return html`<div class="plant-pos">
       <span>📍 ${away < 3 ? 'Au point de l’endroit' : `À ${formatDistance(away)} du point de l’endroit`}${entry.accuracy ? ` · ± ${entry.accuracy} m` : ''}</span>
-      <button class="secondary" type="button" @click=${() => this.#showOnMap(own)}>Voir sur la carte</button>
+      <button type="button" @click=${() => this.#showOnMap(own)}>Voir sur la carte</button>
       ${this._editPos ? html`
-        <button class="secondary" type="button" ?disabled=${!fix} @click=${() => this.#plantHere(entry.plantId)}>Ici (GPS)</button>
+        <button type="button" ?disabled=${!fix} @click=${() => this.#plantHere(entry.plantId)}>Ici (GPS)</button>
         <small>Ou faites glisser son rond sur la carte.</small>` : html`
-        <button class="secondary" type="button" @click=${() => this.#editPlantPosition(own)}>Déplacer</button>`}
+        <button type="button" @click=${() => this.#editPlantPosition(own)}>Déplacer</button>`}
     </div>`;
   }
 
@@ -867,7 +771,7 @@ export class GfSpotEditor extends LitElement {
     const todayQuantity = this._todayFor.get(id);
 
     return html`
-      <li class="entry ${open ? 'open' : ''}">
+      <li class="entry card ${open ? 'open' : ''}">
         <button class="head" type="button" aria-expanded=${open ? 'true' : 'false'} @click=${() => { this._open = open ? null : id; }}>
           <gf-thumb plant-id=${id ?? 0} size="44"></gf-thumb>
           <span class="name">${entryName(entry)}</span>
@@ -924,20 +828,20 @@ export class GfSpotEditor extends LitElement {
                     <li>
                       <strong>${formatDate(h.date)}</strong>
                       <span class="what">${[h.quantity, h.note].filter(Boolean).join(' · ')}</span>
-                      <button type="button" aria-label="Supprimer cette récolte" @click=${() => this.#removeHarvest(id, i)}>×</button>
+                      <button class="icon-btn" type="button" aria-label="Supprimer cette récolte" @click=${() => this.#removeHarvest(id, i)}>×</button>
                     </li>`)}
                 </ul>` : html`<p class="muted">Aucune récolte notée.</p>`}
               <div class="add-harvest">
                 <input type="date" name="date" .value=${today()} max=${today()} aria-label="Date" />
                 <input type="text" name="quantity" placeholder="Quantité" aria-label="Quantité" />
                 <input type="text" name="note" placeholder="Remarque (facultatif)" aria-label="Remarque" />
-                <button class="secondary" type="button" @click=${e => this.#addHarvest(id, e)}>+ Ajouter une récolte</button>
+                <button type="button" @click=${e => this.#addHarvest(id, e)}>+ Ajouter une récolte</button>
               </div>
             </fieldset>` : nothing}
 
             ${this.#isPlace ? this.#plantPosition(entry) : nothing}
             ${id ? html`<a class="button" href=${href.plant(id)}>Fiche de la plante</a>` : nothing}
-            <button class="remove" type="button" @click=${() => this.#removePlant(id)}>${this.#isPlace ? 'Retirer cette plante de l’endroit' : 'Retirer de la collection'}</button>
+            <button class="link danger" type="button" @click=${() => this.#removePlant(id)}>${this.#isPlace ? 'Retirer cette plante de l’endroit' : 'Retirer de la collection'}</button>
           </div>` : nothing}
       </li>`;
   }
@@ -945,7 +849,7 @@ export class GfSpotEditor extends LitElement {
   #pickerView() {
     const place = this._place;
     if (!this._picker) {
-      return html`<button class="add-plant" type="button" @click=${() => { this._picker = true; }}>+ Ajouter une plante</button>`;
+      return html`<button class="add add-plant" type="button" @click=${() => { this._picker = true; }}>+ Ajouter une plante</button>`;
     }
     return html`
       <div class="picker">
@@ -979,7 +883,7 @@ export class GfSpotEditor extends LitElement {
       <div class="name-suggest" role="group" aria-label="Collections existantes">
         <span>${plants ? 'Ajouter plutôt à une collection existante :' : 'Ouvrir une collection existante :'}</span>
         ${matches.map(c => html`
-          <button type="button" @click=${() => this.#mergeInto(c.id)}>${c.kind === 'place' ? '📍' : '☰'} ${c.name}
+          <button class="chip" type="button" @click=${() => this.#mergeInto(c.id)}>${c.kind === 'place' ? '📍' : '☰'} ${c.name}
             <small>${plantCount(c.count)}</small></button>`)}
       </div>`;
   }
@@ -990,7 +894,7 @@ export class GfSpotEditor extends LitElement {
     if (place === null) {
       return html`<form>
         <p>${this._error || 'Cette collection n’existe plus.'}</p>
-        ${this._error ? html`<button class="secondary" type="button" @click=${() => this.#load()}>Réessayer</button>` : nothing}
+        ${this._error ? html`<button type="button" @click=${() => this.#load()}>Réessayer</button>` : nothing}
         <a href=${href.collections()}>Retour à mes plantes</a>
       </form>`;
     }
@@ -1019,7 +923,7 @@ export class GfSpotEditor extends LitElement {
         ></gf-map>
         <div class="map-tools">
           ${this._editPos ? html`
-            <button class="done" type="button" @click=${this.#endEditPositions}>✓ Valider</button>
+            <button class="primary" type="button" @click=${this.#endEditPositions}>✓ Valider</button>
             ${this.#posBefore ? html`<button type="button" @click=${this.#cancelEditPositions}>Annuler</button>` : nothing}
             <span class="tip">Glissez le carré (endroit) ou les ronds (plantes)${this.#isNew ? ' · appui long pour placer l’endroit' : ''}</span>` : html`
             <button type="button" @click=${this.#startEditPositions}>✎ Modifier les positions</button>`}
@@ -1039,7 +943,7 @@ export class GfSpotEditor extends LitElement {
             ${this.#nameSuggestions()}`}
 
         ${!place.geometry && !isFavorites ? html`
-          <button class="add-location" type="button" @click=${this.#addLocation}>📍 Ajouter des coordonnées GPS (la collection devient un endroit)</button>` : nothing}
+          <button class="add add-location" type="button" @click=${this.#addLocation}>📍 Ajouter des coordonnées GPS (la collection devient un endroit)</button>` : nothing}
 
         <h2>Plantes <span class="count">${p.plants.length}</span></h2>
         ${p.plants.length ? html`<ul class="entries">${p.plants.map(entry => this.#entry(entry))}</ul>` : nothing}
@@ -1052,19 +956,19 @@ export class GfSpotEditor extends LitElement {
 
         ${this.#isNew ? nothing : html`
           <div class="toolbar">
-            ${p.plants.length ? html`<button class="secondary" type="button" @click=${this.#share}>Partager</button>` : nothing}
-            <button class="secondary" type="button" @click=${this.#export}>Exporter (GeoJSON)</button>
+            ${p.plants.length ? html`<button type="button" @click=${this.#share}>Partager</button>` : nothing}
+            <button type="button" @click=${this.#export}>Exporter (GeoJSON)</button>
             ${isPlace ? html`<a class="button" href=${href.map({ spot: place.id })}>Voir sur la carte</a>` : nothing}
-            ${isPlace ? html`<button class="secondary" type="button" @click=${this.#removeLocation}>Retirer la position</button>` : nothing}
+            ${isPlace ? html`<button type="button" @click=${this.#removeLocation}>Retirer la position</button>` : nothing}
           </div>`}
 
         ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : nothing}
 
-        <div class="actions">
+        <div class="actions footer">
           ${this.#autosave
-            ? html`${this.#saveStatus()}<button class="primary" type="submit">Terminé</button>`
-            : html`<button class="primary ${weak ? 'weak' : ''}" type="submit">Enregistrer</button>
-                <a class="cancel" href=${this.plantId ? href.plant(this.plantId) : href.map()}>Annuler</a>`}
+            ? html`${this.#saveStatus()}<button class="primary large" type="submit">Terminé</button>`
+            : html`<button class="primary large ${weak ? 'weak' : ''}" type="submit">Enregistrer</button>
+                <a class="link muted" href=${this.plantId ? href.plant(this.plantId) : href.map()}>Annuler</a>`}
           ${isFavorites || this.#isNew ? nothing : html`<button class="danger" type="button" @click=${this.#delete}>Supprimer</button>`}
         </div>
       </form>

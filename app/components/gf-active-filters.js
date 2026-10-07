@@ -3,6 +3,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { STATUS_SHORT } from '../config.js';
 import { FACETS, activeFilterCount, clearFilters, toggleValue } from '../core/query.js';
 import { store, StoreController } from '../core/store.js';
+import { ui } from '../styles/ui.js';
 
 const LABELS = {
   mine: (/** @type {string} */ v) => v === 'place' ? '📍 Dans un lieu'
@@ -18,7 +19,7 @@ const LABELS = {
 
 /** Removable chips for every active filter value + "Tout effacer". */
 export class GfActiveFilters extends LitElement {
-  static styles = css`
+  static styles = [ui, css`
     :host { display: block; }
     :host([hidden]) { display: none; }
     ul {
@@ -32,23 +33,9 @@ export class GfActiveFilters extends LitElement {
     }
     ul::-webkit-scrollbar { display: none; }
     li { flex: none; }
-    button {
-      font: inherit;
-      font-size: 0.8rem;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      border-radius: 999px;
-      padding: 3px 6px 3px 10px;
-      border: 1px solid var(--gf-accent);
-      background: var(--gf-accent-soft);
-      color: var(--gf-text);
-      cursor: pointer;
-      white-space: nowrap;
-    }
+    button { white-space: nowrap; padding-right: 8px; }
     button .x { font-size: 1rem; line-height: 1; color: var(--gf-text-muted); }
-    button.reset { border-color: transparent; background: none; color: var(--gf-accent); padding: 3px 6px; }
-  `;
+  `];
 
   #store = new StoreController(this);
 
@@ -62,11 +49,11 @@ export class GfActiveFilters extends LitElement {
       <ul aria-label="Filtres actifs">
         ${FACETS.flatMap(facet => query.filters[facet].map(value => html`
           <li>
-            <button type="button" aria-label="Retirer le filtre ${value}" @click=${() => toggleValue(facet, value)}>
+            <button class="chip" aria-pressed="true" type="button" aria-label="Retirer le filtre ${value}" @click=${() => toggleValue(facet, value)}>
               ${LABELS[facet](value)} <span class="x" aria-hidden="true">×</span>
             </button>
           </li>`))}
-        ${total > 1 ? html`<li><button class="reset" type="button" @click=${clearFilters}>Tout effacer</button></li>` : nothing}
+        ${total > 1 ? html`<li><button class="link" type="button" @click=${clearFilters}>Tout effacer</button></li>` : nothing}
       </ul>
     `;
   }
