@@ -20,6 +20,7 @@ import { config } from '../config.js';
  * @property {string} [statusText]
  * @property {any} [meta]
  * @property {boolean} offline
+ * @property {boolean} [updateReady]  a new version of the app is installed: reloading shows it
  * @property {Query} query
  * @property {Results} results
  * @property {boolean} compact

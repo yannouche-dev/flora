@@ -85,7 +85,7 @@ export class GfApp extends LitElement {
 
   render() {
     const route = this.#router.route;
-    const { status, statusText, offline } = this.#store.state;
+    const { status, statusText, offline, updateReady } = this.#store.state;
     const phone = this.#phone.matches;
 
     return html`
@@ -103,6 +103,8 @@ export class GfApp extends LitElement {
         <a class="settings" href=${href.settings()} title="À propos et réglages" aria-label="À propos et réglages">⚙︎</a>`}
       </header>
       <main>
+        ${updateReady ? html`<div class="banner" role="status">Nouvelle version de GeoFlora disponible.
+          <button class="link" type="button" @click=${() => location.reload()}>Recharger</button></div>` : nothing}
         ${status === 'loading' ? html`<div class="banner" role="status">${statusText || 'Chargement…'}</div>` : nothing}
         ${status === 'error' ? html`<div class="banner error" role="alert">${statusText}
           <button class="link" type="button" @click=${() => location.reload()}>Recharger</button></div>` : nothing}

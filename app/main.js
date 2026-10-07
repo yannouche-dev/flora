@@ -46,8 +46,15 @@ addEventListener('online', () => store.set({ offline: false }));
 addEventListener('offline', () => store.set({ offline: true }));
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  // A deploy is installed in the background while the cached version runs: offer to reload once the new
+  // worker takes over (not on the very first install, when there is nothing to update).
+  const updating = Boolean(navigator.serviceWorker.controller);
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (updating) store.set({ updateReady: true }); });
   addEventListener('load', () => {
-    navigator.serviceWorker.register('sw.js').catch(error => console.warn('Service worker:', error));
+    navigator.serviceWorker.register('sw.js').then(registration => {
+      // An installed app resumed from the background does not reload: check for a deploy then too.
+      document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') registration.update().catch(() => {}); });
+    }).catch(error => console.warn('Service worker:', error));
   });
 }
 
