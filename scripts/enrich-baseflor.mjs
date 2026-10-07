@@ -109,7 +109,10 @@ export function columns(header) {
  * @returns {{ periods: Map<string, [number, number]>, rows: number, columns: ReturnType<typeof columns> }}
  */
 export function floweringByName(rows) {
-  const [header, ...data] = rows;
+  // The header is the first row (of the first 20) naming both the taxon and its flowering.
+  const usable = c => c.name >= 0 && (c.single >= 0 || (c.first >= 0 && c.last >= 0));
+  const at = Math.max(0, rows.slice(0, 20).findIndex(row => usable(columns(row))));
+  const [header, ...data] = rows.slice(at);
   const cols = columns(header || []);
   const periods = new Map();
   const fromInfra = new Set();
@@ -153,6 +156,9 @@ async function fetchOk(url) {
 
 const FILE_EXT = /\.(csv|txt|tsv|zip|xlsx|xls)(\?|$)/i;
 const SEED_PAGES = [DOWNLOADS_PAGE, 'https://www.tela-botanica.org/projets/phytosociologie/'];
+// Baseflor in Tela Botanica's document store (Cumulus), as linked from its eFlore metadata page.
+const KNOWN_DOCS = ['https://api.tela-botanica.org/service:cumulus:doc/c6f031b23d74373071094f2b1347b5813a3fc2c7'];
+const CUMULUS = /https?:\/\/api\.tela-botanica\.org\/service:cumulus:doc\/[0-9a-f]{40}/gi;
 
 /** Anchors of a page: absolute href + visible text. */
 function anchors(html, base) {
@@ -168,7 +174,6 @@ function anchors(html, base) {
  * or text names Baseflor, following one level of pages. Logs what it sees, to adjust if the site changes.
  */
 async function findUrl() {
-  if (process.env.BASEFLOR_URL) return process.env.BASEFLOR_URL;
   const rank = href => ['.csv', '.txt', '.tsv', '.zip', '.xlsx', '.xls'].findIndex(ext => href.toLowerCase().split('?')[0].endsWith(ext));
   const found = [];
   for (const page of SEED_PAGES) {
@@ -181,18 +186,22 @@ async function findUrl() {
     console.log('  fichiers :', links.filter(a => FILE_EXT.test(a.href)).slice(0, 40));
     for (const link of named) {
       if (FILE_EXT.test(link.href)) { found.push(link.href); continue; }
-      // A page about Baseflor: look one level down for its files.
+      // A page about Baseflor: look one level down for its files, and Cumulus document links in its source.
       try {
-        const inner = anchors(await (await fetchOk(link.href)).text(), link.href).filter(a => FILE_EXT.test(a.href));
-        console.log('  ', link.href, '→', inner.slice(0, 20));
-        found.push(...inner.filter(a => /baseflor/i.test(a.href + ' ' + a.text)).map(a => a.href));
+        const innerHtml = await (await fetchOk(link.href)).text();
+        const inner = anchors(innerHtml, link.href).filter(a => FILE_EXT.test(a.href));
+        const docs = [...new Set(innerHtml.match(CUMULUS) || [])];
+        console.log('  ', link.href, '→', inner.slice(0, 20), docs.slice(0, 20));
+        found.push(...inner.filter(a => /baseflor/i.test(a.href + ' ' + a.text)).map(a => a.href), ...docs);
       } catch (error) { console.log('  ', link.href, error.message); }
     }
     if (found.length) break;
   }
-  const files = [...new Set(found)].filter(href => rank(href) >= 0).sort((a, b) => rank(a) - rank(b));
-  if (!files.length) throw new Error('aucun fichier Baseflor trouvé (définir BASEFLOR_URL)');
-  return files[0];
+  // Files with a known extension first, then extension-less document links (format sniffed on download).
+  const files = [...new Set([...found, ...KNOWN_DOCS])]
+    .sort((a, b) => (rank(a) < 0 ? 99 : rank(a)) - (rank(b) < 0 ? 99 : rank(b)));
+  console.log('Candidats :', files);
+  return files;
 }
 
 const decode = bytes => {
@@ -207,34 +216,55 @@ async function readSpreadsheet(path) {
   return sheets.sort((a, b) => b.length - a.length)[0].map(row => row.map(String));
 }
 
+/** File kind from its first bytes: xlsx/zip ("PK"), legacy xls (OLE2), else text. */
+function sniff(bytes) {
+  if (bytes[0] === 0x50 && bytes[1] === 0x4b) {
+    const head = new TextDecoder('latin1').decode(bytes.subarray(0, 4000));
+    return /\[Content_Types\]\.xml|xl\//.test(head) ? 'xlsx' : 'zip';
+  }
+  if (bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0) return 'xls';
+  return 'txt';
+}
+
 async function readRows(url) {
-  const bytes = new Uint8Array(await (await fetchOk(url)).arrayBuffer());
+  const response = await fetchOk(url);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  const kind = sniff(bytes);
+  console.log(`${url}: ${bytes.length} octets, ${response.headers.get('content-type')}, ${response.headers.get('content-disposition') || ''} → ${kind}`);
   const dir = await mkdtemp(join(tmpdir(), 'baseflor-'));
-  const ext = url.toLowerCase().split('?')[0].split('.').pop();
-  let file = join(dir, 'baseflor.' + ext);
+  let file = join(dir, 'baseflor.' + kind);
   await writeFile(file, bytes);
-  if (ext === 'zip') {
+  if (kind === 'zip') {
     execFileSync('unzip', ['-q', '-o', file, '-d', dir]);
     const inner = (await readdir(dir, { recursive: true })).map(String).filter(f => /\.(csv|txt|tsv|xlsx|xls)$/i.test(f));
+    console.log('Archive :', inner);
     if (!inner.length) throw new Error('archive sans tableau');
-    file = join(dir, inner[0]);
+    file = join(dir, inner.sort((a, b) => Number(!/baseflor/i.test(a)) - Number(!/baseflor/i.test(b)))[0]);
   }
   if (/\.(xlsx|xls)$/i.test(file)) return readSpreadsheet(file);
-  return parseDelimited(decode(await readFile(file)));
+  const text = decode(await readFile(file));
+  if (/^\s*</.test(text)) throw new Error('page HTML au lieu d’un tableau');
+  return parseDelimited(text);
 }
 
 async function main() {
   const plants = JSON.parse(await readFile(PLANTS_FILE, 'utf8'));
   const meta = JSON.parse(await readFile(META_FILE, 'utf8'));
-  let url;
   try {
-    url = await findUrl();
-    console.log('Baseflor:', url);
-    const rows = await readRows(url);
-    const { periods, rows: count, columns: cols } = floweringByName(rows);
-    console.log('Header:', rows[0]?.slice(0, 40));
-    console.log('Columns:', cols, '—', count, 'rows,', periods.size, 'names with a flowering period');
-    if (!periods.size) throw new Error('colonnes de floraison introuvables');
+    const candidates = process.env.BASEFLOR_URL ? [process.env.BASEFLOR_URL] : await findUrl();
+    let result = null, url = null;
+    for (const candidate of candidates) {
+      try {
+        const rows = await readRows(candidate);
+        const parsed = floweringByName(rows);
+        console.log('Premières lignes :', rows.slice(0, 3).map(r => r.slice(0, 60)));
+        console.log('Colonnes :', parsed.columns, '—', parsed.rows, 'lignes,', parsed.periods.size, 'noms avec une floraison');
+        if (parsed.periods.size) { result = parsed; url = candidate; break; }
+      } catch (error) { console.log('  ', candidate, ':', error.message); }
+    }
+    if (!result) throw new Error('aucun tableau Baseflor exploitable (définir la variable BASEFLOR_URL)');
+    const { periods, rows: count } = result;
+    console.log('Baseflor :', url);
     const matched = applyFlowering(plants, periods);
     meta.sources = { ...(meta.sources || {}), baseflor: { url, license: LICENSE, rows: count, matched, fetchedAt: new Date().toISOString() } };
     console.log(`Baseflor: flowering months for ${matched} / ${plants.length} plants`);
