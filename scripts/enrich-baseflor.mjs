@@ -100,13 +100,15 @@ export function columns(header) {
   const first = find(c => /flor/.test(c) && /(debut|deb\b|begin|start|premier|^flor.*1$)/.test(c));
   const last = find(c => /flor/.test(c) && /(fin\b|fin$|end|dernier|^flor.*2$)/.test(c));
   const single = first < 0 || last < 0 ? find(c => /floraison|flowering/.test(c)) : -1;
-  return { name, first, last, single };
+  const ref = find(c => c === 'cd_ref');
+  return { name, first, last, single, ref };
 }
 
 /**
  * Flowering period per binomial. Species rows win over subspecies/varieties of the same binomial.
  * @param {string[][]} rows header first
- * @returns {{ periods: Map<string, [number, number]>, rows: number, columns: ReturnType<typeof columns> }}
+ * Also keyed by TAXREF CD_REF when the table carries it (the dataset's plant ids are TAXREF CD_REF).
+ * @returns {{ periods: Map<string, [number, number]>, byRef: Map<number, [number, number]>, rows: number, columns: ReturnType<typeof columns> }}
  */
 export function floweringByName(rows) {
   // The header is the first row (of the first 20) naming both the taxon and its flowering.
@@ -115,8 +117,9 @@ export function floweringByName(rows) {
   const [header, ...data] = rows.slice(at);
   const cols = columns(header || []);
   const periods = new Map();
+  const byRef = new Map();
   const fromInfra = new Set();
-  if (cols.name < 0 || (cols.single < 0 && (cols.first < 0 || cols.last < 0))) return { periods, rows: data.length, columns: cols };
+  if (cols.name < 0 || (cols.single < 0 && (cols.first < 0 || cols.last < 0))) return { periods, byRef, rows: data.length, columns: cols };
   for (const row of data) {
     const { key, infra } = binomial(row[cols.name]);
     if (!key) continue;
@@ -125,25 +128,30 @@ export function floweringByName(rows) {
       return first && last ? /** @type {[number, number]} */ ([first, last]) : null;
     })();
     if (!value) continue;
+    const ref = cols.ref >= 0 ? Number(row[cols.ref]) : NaN;
+    if (Number.isInteger(ref) && ref > 0 && (!infra || !byRef.has(ref))) byRef.set(ref, value);
     if (!infra) { periods.set(key, value); fromInfra.delete(key); }
     else if (!periods.has(key)) { periods.set(key, value); fromInfra.add(key); }
   }
-  return { periods, rows: data.length, columns: cols };
+  return { periods, byRef, rows: data.length, columns: cols };
 }
 
 /**
- * Writes `flowering` on plants whose accepted name (else a synonym) matches; returns the count.
- * @param {any[]} plants @param {Map<string, [number, number]>} periods
+ * Writes `flowering` on plants: by TAXREF id (CD_REF) first, else accepted name, else a synonym.
+ * @param {any[]} plants @param {Map<string, [number, number]>} periods @param {Map<number, [number, number]>} [byRef]
+ * @returns {{ matched: number, byId: number }}
  */
-export function applyFlowering(plants, periods) {
-  let matched = 0;
+export function applyFlowering(plants, periods, byRef = new Map()) {
+  let matched = 0, byId = 0;
   for (const plant of plants) {
+    const fromRef = byRef.get(plant.id);
     const names = [plant.scientificName, ...(plant.synonyms || [])];
-    const hit = names.map(n => binomial(n).key).find(key => key && periods.has(key));
-    if (hit) { plant.flowering = periods.get(hit); matched++; }
+    const hit = fromRef ? null : names.map(n => binomial(n).key).find(key => key && periods.has(key));
+    const value = fromRef || (hit && periods.get(hit));
+    if (value) { plant.flowering = value; matched++; if (fromRef) byId++; }
     else delete plant.flowering;
   }
-  return matched;
+  return { matched, byId };
 }
 
 // ── Download ────────────────────────────────────────────────────────────────
@@ -263,9 +271,10 @@ async function main() {
       } catch (error) { console.log('  ', candidate, ':', error.message); }
     }
     if (!result) throw new Error('aucun tableau Baseflor exploitable (définir la variable BASEFLOR_URL)');
-    const { periods, rows: count } = result;
+    const { periods, byRef, rows: count } = result;
     console.log('Baseflor :', url);
-    const matched = applyFlowering(plants, periods);
+    const { matched, byId } = applyFlowering(plants, periods, byRef);
+    console.log(`  dont ${byId} par identifiant TAXREF (CD_REF), ${matched - byId} par nom`);
     meta.sources = { ...(meta.sources || {}), baseflor: { url, license: LICENSE, rows: count, matched, fetchedAt: new Date().toISOString() } };
     console.log(`Baseflor: flowering months for ${matched} / ${plants.length} plants`);
   } catch (error) {
