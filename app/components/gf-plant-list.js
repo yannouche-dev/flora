@@ -26,7 +26,8 @@ export const COLUMNS = [
 ];
 
 /** Columns dropped when the results pane is narrow. @param {number} width */
-const hiddenColumns = width => new Set(width < 760 ? ['genus', 'status'] : []);
+const NARROW = 760;
+const hiddenColumns = width => new Set(width < NARROW ? ['genus', 'status'] : []);
 
 /** Scroll position survives navigating to a plant and back, until the results change. */
 let saved = { items: /** @type {any[] | null} */ (null), scrollTop: 0 };
@@ -111,8 +112,10 @@ export class GfPlantList extends LitElement {
 
   #store = new StoreController(this);
   #resize = new ResizeObserver(([entry]) => {
-    this._height = entry.contentRect.height;
-    this._width = entry.contentRect.width;
+    const { width, height } = entry.contentRect;
+    this._height = height;
+    // Re-render on a width change only when it shows or hides columns (a pane being dragged changes it every frame).
+    if ((width < NARROW) !== (this._width < NARROW)) this._width = width;
   });
   /** @type {any[] | null} */
   #items = null;
