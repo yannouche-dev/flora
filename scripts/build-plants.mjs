@@ -129,12 +129,21 @@ function isVascularSpecies(row) {
   return groups.includes('tracheophytes') || groups.includes('plantes vasculaires');
 }
 
+// TAXREF writes the hybrid sign as a lowercase "x" ("x Anacamptorchis bassoulsii", "Alisma x rhicnocarpum").
+const isHybridSign = part => part === 'x' || part === '×';
+
 function splitScientificName(name) {
   const text = clean(name);
   const parts = text.split(/\s+/).filter(Boolean);
+
+  // Intergeneric hybrid: the sign belongs to the genus ("× Anacamptorchis").
+  if (isHybridSign(parts[0]) && parts[1]) {
+    return { genus: '× ' + parts[1], species: parts[2] || '' };
+  }
+
   const genus = parts.shift() || '';
 
-  if (parts[0] === '×' && parts[1]) {
+  if (isHybridSign(parts[0]) && parts[1]) {
     return { genus, species: '× ' + parts[1] };
   }
 
