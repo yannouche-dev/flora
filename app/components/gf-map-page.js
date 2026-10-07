@@ -4,7 +4,7 @@ import { GeoController } from '../core/geo.js';
 import { href, parse } from '../core/router.js';
 import {
   ABUNDANCE, addHarvest, directionsUrl, entryPosition, plantMarkers, distance, entryInSeason, entryName, entrySoon, formatDistance, inSeason, lastHarvest, listPlaces,
-  placeAbundance, placeLastHarvest, placeTitle, plantCount, spotEvents
+  placeAbundance, placeLastHarvest, placeTitle, plantCount, savePlace, spotEvents, withEntry
 } from '../core/collections.js';
 import { RADII, exploreUrl, observationsAround, saveRadius, savedRadius, speciesAround } from '../core/nearby.js';
 import { StoreController, whenReady } from '../core/store.js';
@@ -22,6 +22,8 @@ const shortDate = (/** @type {string} */ iso) =>
 
 const stars = (/** @type {number} */ n) => n ? '★'.repeat(n) + '☆'.repeat(5 - n) : '';
 
+const round = (/** @type {[number, number]} */ [x, y]) => /** @type {[number, number]} */ ([Math.round(x * 1e7) / 1e7, Math.round(y * 1e7) / 1e7]);
+
 const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
 
 /** Harvest places: IGN map or list sorted by distance, filters, selected-place sheet. */
@@ -34,7 +36,8 @@ export class GfMapPage extends LitElement {
     _toast: { state: true },
     _error: { state: true },
     _plantMenu: { state: true },
-    _around: { state: true }
+    _around: { state: true },
+    _edit: { state: true }
   };
 
   static styles = css`
@@ -242,6 +245,48 @@ export class GfMapPage extends LitElement {
      *   obs?: import('../core/nearby.js').NearbyObservation[] | null, frame: string }}
      */
     this._around = null;
+    /** Position editing of the selected place on this map: a working copy, saved on "Valider". @type {any} */
+    this._edit = null;
+    this._editFrames = 0;
+  }
+
+  /** @param {import('../core/collections.js').Place} place */
+  #startEdit(place) {
+    this.#aroundAbort?.abort();
+    this._around = null;
+    this._edit = { place, frame: 'edit:' + place.id + ':' + (++this._editFrames) };
+  }
+
+  /** @param {[number, number]} coordinates */
+  #movePin(coordinates) {
+    if (!this._edit) return;
+    const place = this._edit.place;
+    this._edit = { ...this._edit, place: { ...place, geometry: { type: 'Point', coordinates: round(coordinates) }, properties: { ...place.properties, accuracy: null } } };
+  }
+
+  /** @param {number | null} plantId @param {[number, number]} coordinates */
+  #moveEditedPlant(plantId, coordinates) {
+    if (!this._edit) return;
+    this._edit = { ...this._edit, place: withEntry(this._edit.place, plantId, { coordinates: round(coordinates), accuracy: null }) };
+  }
+
+  async #saveEdit() {
+    const edit = this._edit;
+    if (!edit) return;
+    try {
+      await savePlace(edit.place);
+      this._edit = null;
+      this.#showToast('Positions enregistrées');
+    } catch (error) {
+      this.#showToast('Enregistrement impossible : ' + /** @type {Error} */ (error).message);
+    }
+  }
+
+  get #editFrame() {
+    const e = this._edit;
+    if (!e) return null;
+    const place = e.place;
+    return { key: e.frame, points: [place.geometry.coordinates, ...place.properties.plants.map(p => entryPosition(place, p))], bottom: 0.15 };
   }
 
   /** @type {AbortController | null} */ #aroundAbort = null;
@@ -489,7 +534,7 @@ export class GfMapPage extends LitElement {
           @click=${() => this.#navigate({ season: !this.route.season, spot: null })}>En saison · ${seasonCount}</button>` : nothing}
         <button type="button" aria-expanded=${this._plantMenu ? 'true' : 'false'} aria-pressed=${this._plants.length ? 'true' : 'false'}
           @click=${() => { this._plantMenu = !this._plantMenu; }}>Plantes${this._plants.length ? ' · ' + this._plants.length : ''} ▾</button>
-        <button type="button" class="around-toggle" aria-pressed=${this._around ? 'true' : 'false'}
+        <button type="button" class="around-toggle" ?disabled=${Boolean(this._edit)} aria-pressed=${this._around ? 'true' : 'false'}
           title="Plantes observées autour (iNaturalist)" @click=${() => this.#toggleAround()}>Autour</button>
         <div class="segmented" role="group" aria-label="Affichage">
           <button type="button" aria-pressed=${this._view === 'map' ? 'true' : 'false'} @click=${() => { this._view = 'map'; }}>Carte</button>
@@ -505,23 +550,39 @@ export class GfMapPage extends LitElement {
       <div class="body" @click=${() => { if (this._plantMenu) this._plantMenu = false; }}>
         ${this._view === 'map' ? html`
           <gf-map
-            .spots=${spots}
-            .selectedId=${this.route.spot}
-            .plants=${this.#plantMarkers(spots)}
+            .spots=${this._edit ? spots.filter(s => s.id !== this._edit.place.id) : spots}
+            .selectedId=${this._edit ? null : this.route.spot}
+            .plants=${this._edit ? plantMarkers([this._edit.place], () => true, this.#harvest) : this.#plantMarkers(spots)}
+            .pin=${this._edit ? this._edit.place.geometry.coordinates : null}
+            .pinDraggable=${Boolean(this._edit)}
+            ?draggable-plants=${Boolean(this._edit)}
+            plant-zoom=${this._edit ? 0 : 16}
+            @pin-move=${e => this.#movePin(e.detail.coordinates)}
+            @plant-move=${e => this.#moveEditedPlant(e.detail.plantId, e.detail.coordinates)}
+            @map-longpress=${e => this.#movePin(e.detail.coordinates)}
             .selectedPlant=${this.route.spot && this.route.focus ? this.route.spot + ':' + this.route.focus : null}
             remember
-            .frame=${this.#aroundFrame || this.#frame}
+            .frame=${this.#editFrame || this.#aroundFrame || this.#frame}
             .area=${this.#area}
             ?fit=${Boolean(this._plants.length && !this.#frameKey)}
-            @spot-select=${e => this.#navigate({ spot: e.detail.id })}
-            @plant-select=${e => this.#navigate({ spot: e.detail.placeId, focus: e.detail.plantId })}
+            @spot-select=${e => { if (!this._edit) this.#navigate({ spot: e.detail.id }); }}
+            @plant-select=${e => { if (!this._edit) this.#navigate({ spot: e.detail.placeId, focus: e.detail.plantId }); }}
           ></gf-map>
           <div class="legend" aria-hidden="true">
             <span class="kind"><i class="place"></i>Endroit</span>
             <span class="kind"><i class="plant"></i>Plante (en zoomant)</span>
             ${ABUNDANCE.map(a => html`<span style="--c:${PIN_COLORS[a.value]}">${a.label}</span>`)}
           </div>
-          ${this._around ? this.#aroundPanel() : selected ? this.#sheet(selected) : nothing}
+          ${this._edit ? html`
+            <section class="sheet editbar" aria-label="Modifier les positions">
+              <h2>${placeTitle(this._edit.place)}</h2>
+              <p class="notes">Glissez le carré (l’endroit) ou les ronds (les plantes) à leur place.</p>
+              <div class="actions">
+                <button class="button main" type="button" @click=${() => this.#saveEdit()}>✓ Valider</button>
+                <button class="button" type="button" @click=${() => { this._edit = null; }}>Annuler</button>
+              </div>
+            </section>`
+          : this._around ? this.#aroundPanel() : selected ? this.#sheet(selected) : nothing}
         ` : this.#list(spots)}
 
         ${!this._spots.length ? html`
@@ -594,6 +655,7 @@ export class GfMapPage extends LitElement {
         ${p.notes ? html`<p class="notes">${p.notes}</p>` : nothing}
         <div class="actions">
           <a class="button main" href=${href.spot(place.id)}>Ouvrir le lieu</a>
+          <button class="button" type="button" @click=${() => this.#startEdit(place)}>✎ Positions</button>
           <a class="button" href=${href.spot(place.id, null, true)}>+ Plante</a>
           <a class="button" href=${directionsUrl(place)} target="_blank" rel="noopener">Itinéraire</a>
         </div>
