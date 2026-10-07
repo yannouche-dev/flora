@@ -18,7 +18,7 @@ export class GfSearchBar extends LitElement {
       font: inherit;
       font-size: 1rem;
       padding: 10px 14px;
-      border-radius: 999px;
+      border-radius: var(--gf-radius-pill);
       border: 1px solid var(--gf-border);
       background: var(--gf-surface);
       color: var(--gf-text);
@@ -26,7 +26,7 @@ export class GfSearchBar extends LitElement {
     }
     input:focus-visible {
       border-color: var(--gf-accent);
-      box-shadow: 0 0 0 3px var(--gf-accent-soft);
+      box-shadow: var(--gf-focus);
     }
     [role='listbox'] {
       position: absolute;
@@ -40,7 +40,7 @@ export class GfSearchBar extends LitElement {
       background: var(--gf-surface);
       border: 1px solid var(--gf-border);
       border-radius: var(--gf-radius);
-      box-shadow: 0 8px 24px rgb(0 0 0 / 15%);
+      box-shadow: var(--gf-shadow-float);
     }
     .title {
       display: flex;
@@ -49,8 +49,8 @@ export class GfSearchBar extends LitElement {
       color: var(--gf-text-muted);
       padding: 4px 8px;
     }
-    .title button { font: inherit; background: none; border: 0; color: var(--gf-accent); cursor: pointer; }
-    [role='option'] { padding: 8px 10px; border-radius: 6px; cursor: pointer; }
+    .title button { font: inherit; background: none; border: 0; color: var(--gf-accent); cursor: pointer; text-decoration: underline; }
+    [role='option'] { padding: 8px 10px; border-radius: var(--gf-radius-sm); cursor: pointer; }
     [role='option'][aria-selected='true'], [role='option']:hover { background: var(--gf-surface-2); }
   `;
 

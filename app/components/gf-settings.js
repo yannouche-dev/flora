@@ -6,6 +6,7 @@ import { getTrefleToken, setTrefleToken } from '../core/sources.js';
 import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
+import { ui } from '../styles/ui.js';
 
 export class GfSettings extends LitElement {
   static properties = {
@@ -20,56 +21,30 @@ export class GfSettings extends LitElement {
     _transfer: { state: true }
   };
 
-  static styles = css`
-    *, *::before, *::after { box-sizing: border-box; }
+  static styles = [ui, css`
     :host { display: block; overflow-y: auto; padding: 16px; }
     article { max-width: 720px; margin: 0 auto; }
-    .back { color: var(--gf-accent); text-decoration: none; font-size: 0.9rem; }
+    .back { font-size: 0.9rem; }
     h1 { font-size: 1.4rem; }
     h2 { font-size: 1rem; margin-top: 28px; }
     dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; }
     dt { color: var(--gf-text-muted); }
     dd { margin: 0; }
     form { display: flex; gap: 8px; flex-wrap: wrap; }
-    input {
-      flex: 1 1 240px;
-      font: inherit;
-      padding: 8px 12px;
-      border-radius: 8px;
-      border: 1px solid var(--gf-border);
-      background: var(--gf-surface);
-      color: var(--gf-text);
-    }
-    button {
-      font: inherit;
-      padding: 8px 16px;
-      border-radius: 8px;
-      border: 0;
-      background: var(--gf-accent);
-      color: var(--gf-accent-contrast);
-      cursor: pointer;
-    }
-    .muted { color: var(--gf-text-muted); font-size: 0.9rem; }
+    form input { flex: 1 1 240px; width: auto; }
+    .muted { font-size: 0.9rem; }
     a { color: var(--gf-accent); }
     .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
     .switch { display: flex; gap: 12px; align-items: flex-start; cursor: pointer; }
-    .switch input { width: 22px; height: 22px; accent-color: var(--gf-accent); flex: none; margin-top: 2px; }
-    button:disabled { opacity: 0.5; cursor: default; }
-    label.file {
-      font: inherit;
-      padding: 8px 16px;
-      border-radius: 8px;
-      border: 1px solid var(--gf-accent);
-      color: var(--gf-accent);
-      cursor: pointer;
-    }
+    .switch input { flex: none; margin-top: 2px; }
     .diag { font-size: 0.85rem; }
-    select { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--gf-border); background: var(--gf-surface); color: var(--gf-text); max-width: 100%; }
+    select { max-width: 100%; }
     details { margin-top: 10px; }
     summary { cursor: pointer; }
+    label.file { position: relative; }
     label.file input { position: absolute; width: 1px; height: 1px; opacity: 0; }
-    label.file:focus-within { outline: 2px solid var(--gf-accent); outline-offset: 2px; }
-  `;
+    label.file:focus-within { box-shadow: var(--gf-focus); }
+  `];
 
   #store = new StoreController(this);
   #onSpots = () => this.#countSpots();
@@ -105,7 +80,7 @@ export class GfSettings extends LitElement {
       ${r.persisted ? html`<p class="muted">✓ Données protégées : le navigateur ne les effacera pas pour faire de la place.</p>` : html`
         <p class="muted">Données <strong>non protégées</strong> : le navigateur peut les effacer s’il manque de place.
           Installer l’application (menu du navigateur → « Installer l’application » ou « Ajouter à l’écran d’accueil ») aide à les faire protéger.</p>
-        <div class="row"><button type="button" @click=${this.#protect}>Protéger mes données</button></div>`}
+        <div class="row"><button class="primary" type="button" @click=${this.#protect}>Protéger mes données</button></div>`}
       <details>
         <summary class="muted">Diagnostic du stockage</summary>
         <dl class="diag">
@@ -203,7 +178,7 @@ export class GfSettings extends LitElement {
     const { meta, offline } = this.#store.state;
     return html`
       <article>
-        <a class="back" href=${lastSearchHash()}>← Recherche</a>
+        <a class="back link" href=${lastSearchHash()}>← Recherche</a>
         <h1>À propos et réglages</h1>
 
         <h2>Données</h2>
@@ -254,8 +229,8 @@ export class GfSettings extends LitElement {
           Exportez régulièrement : effacer les données du navigateur efface aussi vos collections.
         </p>
         <div class="row">
-          <button type="button" @click=${this.#export} ?disabled=${!this._spotCount}>Exporter (fichier GeoJSON)</button>
-          <label class="file">Importer un fichier…
+          <button class="primary" type="button" @click=${this.#export} ?disabled=${!this._spotCount}>Exporter (fichier GeoJSON)</button>
+          <label class="file button">Importer un fichier…
             <input type="file" accept=".geojson,.json,application/geo+json,application/json" @change=${this.#import} />
           </label>
         </div>
@@ -267,7 +242,7 @@ export class GfSettings extends LitElement {
           <input type="checkbox" .checked=${this._personal} @change=${e => { this._personal = e.target.checked; }} />
           <span>Inclure mes notes et journaux de récolte</span>
         </label>
-        <div class="row"><button type="button" @click=${this.#transfer} ?disabled=${!this._spotCount}>Créer le lien de transfert</button></div>
+        <div class="row"><button class="primary" type="button" @click=${this.#transfer} ?disabled=${!this._spotCount}>Créer le lien de transfert</button></div>
         ${this._transfer ? html`<p class="muted" role="status">${this._transfer}</p>` : nothing}
         ${this.#diagnostic()}
 
@@ -278,7 +253,7 @@ export class GfSettings extends LitElement {
         </p>
         <form @submit=${this.#save}>
           <input type="password" autocomplete="off" placeholder="Token Trefle" .value=${getTrefleToken() || ''} @input=${() => { this._saved = false; }} />
-          <button type="submit">Enregistrer</button>
+          <button class="primary" type="submit">Enregistrer</button>
         </form>
         ${this._saved ? html`<p class="muted">Enregistré.</p>` : nothing}
       </article>

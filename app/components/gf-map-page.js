@@ -8,6 +8,7 @@ import {
 } from '../core/collections.js';
 import { RADII, exploreUrl, observationsAround, saveRadius, savedRadius, speciesAround } from '../core/nearby.js';
 import { StoreController, whenReady } from '../core/store.js';
+import { ui } from '../styles/ui.js';
 import './gf-facet.js';
 import './gf-map.js';
 import './gf-thumb.js';
@@ -40,8 +41,7 @@ export class GfMapPage extends LitElement {
     _edit: { state: true }
   };
 
-  static styles = css`
-    *, *::before, *::after { box-sizing: border-box; }
+  static styles = [ui, css`
     :host { display: flex; flex-direction: column; min-height: 0; position: relative; }
     .bar {
       display: flex;
@@ -56,22 +56,6 @@ export class GfMapPage extends LitElement {
       z-index: 2;
     }
     .bar .count { margin-right: auto; font-weight: 600; }
-    button, .button {
-      font: inherit;
-      color: var(--gf-text);
-      background: var(--gf-surface);
-      border: 1px solid var(--gf-border);
-      border-radius: 999px;
-      padding: 5px 12px;
-      cursor: pointer;
-      text-decoration: none;
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-    }
-    button[aria-pressed='true'] { background: var(--gf-accent); border-color: var(--gf-accent); color: var(--gf-accent-contrast); }
-    .segmented { display: inline-flex; border: 1px solid var(--gf-border); border-radius: 999px; overflow: hidden; }
-    .segmented button { border: 0; border-radius: 0; }
     .plant-menu {
       position: absolute;
       top: calc(100% + 4px);
@@ -82,7 +66,7 @@ export class GfMapPage extends LitElement {
       background: var(--gf-surface);
       border: 1px solid var(--gf-border);
       border-radius: var(--gf-radius);
-      box-shadow: 0 8px 24px rgb(0 0 0 / 20%);
+      box-shadow: var(--gf-shadow-float);
       padding: 0 12px 8px;
     }
     .body { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
@@ -95,12 +79,14 @@ export class GfMapPage extends LitElement {
       top: 10px;
       z-index: 500;
       display: flex;
-      gap: 10px;
+      flex-wrap: wrap;
+      gap: 2px 10px;
+      max-width: calc(100% - 76px); /* clear of the layer / locate buttons */
       font-size: 0.75rem;
       background: color-mix(in srgb, var(--gf-surface) 88%, transparent);
       padding: 4px 10px;
-      border-radius: 999px;
-      box-shadow: 0 1px 4px rgb(0 0 0 / 25%);
+      border-radius: var(--gf-radius-pill);
+      box-shadow: var(--gf-shadow-float);
     }
     .legend span::before {
       content: '';
@@ -128,8 +114,9 @@ export class GfMapPage extends LitElement {
       font-size: 2rem;
       line-height: 1;
       justify-content: center;
-      box-shadow: 0 3px 10px rgb(0 0 0 / 35%);
+      box-shadow: var(--gf-shadow-float);
       padding: 0;
+      min-height: 0;
     }
     .sheet {
       position: absolute;
@@ -141,21 +128,18 @@ export class GfMapPage extends LitElement {
       margin: 0 auto;
       background: var(--gf-surface);
       color: var(--gf-text);
-      border-radius: 16px;
-      box-shadow: 0 6px 24px rgb(0 0 0 / 35%);
+      border-radius: var(--gf-radius-lg);
+      box-shadow: var(--gf-shadow-float);
       padding: 14px 16px;
       display: grid;
       gap: 8px;
     }
     .sheet h2 { margin: 0; font-size: 1.1rem; padding-right: 32px; }
     .sheet .sci { font-family: var(--gf-font-serif); font-style: italic; color: var(--gf-text-muted); }
-    .sheet .close { position: absolute; top: 10px; right: 10px; border: 0; background: none; font-size: 1.4rem; padding: 4px 8px; }
+    .sheet .close { position: absolute; top: 4px; right: 4px; }
     .meta { font-size: 0.85rem; color: var(--gf-text-muted); display: flex; gap: 6px 12px; flex-wrap: wrap; }
-    .meta .stars { color: #f59e0b; letter-spacing: 1px; }
-    .badge.soon { background: var(--gf-accent-soft); color: var(--gf-text); }
-    .badge { background: #fde047; color: #422006; border-radius: 999px; padding: 0 8px; font-size: 0.75rem; font-weight: 600; }
-    .sheet .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
-    .sheet .actions .main { background: var(--gf-accent); color: var(--gf-accent-contrast); border-color: var(--gf-accent); font-weight: 600; }
+    .meta .stars { color: var(--gf-star); letter-spacing: 1px; }
+    .sheet .actions { margin-top: 4px; }
     .notes { font-size: 0.9rem; margin: 0; white-space: pre-line; }
     .sheet { max-height: 70%; overflow-y: auto; }
     .plants { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
@@ -164,24 +148,21 @@ export class GfMapPage extends LitElement {
     .plants .nm { font-weight: 600; }
     .plants .sub { font-size: 0.8rem; color: var(--gf-text-muted); }
     .plants .sub, .plants .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .plants li.focus { background: var(--gf-accent-soft); border-radius: 8px; padding-left: 6px; padding-right: 6px; }
+    .plants li.focus { background: var(--gf-accent-soft); border-radius: var(--gf-radius-sm); padding-left: 6px; padding-right: 6px; }
     .plants gf-thumb { box-shadow: 0 0 0 2.5px var(--c); margin: 3px; }
     .legend .kind i { display: inline-block; vertical-align: -1px; margin-right: 4px; background: var(--gf-text-muted); }
     .legend .kind i.place { width: 10px; height: 10px; border-radius: 3px; }
     .legend .kind i.plant { width: 9px; height: 9px; border-radius: 50%; }
     .legend .kind::before { display: none; }
-    .plants .harvest { flex: none; font-size: 0.85rem; padding: 4px 10px; border-color: var(--gf-accent); color: var(--gf-accent); }
-    .more { font-size: 0.85rem; color: var(--gf-accent); }
+    .plants .harvest { flex: none; }
     .around { max-height: 55%; }
     .around .radii { display: flex; gap: 6px; flex-wrap: wrap; }
-    .around .radii button { padding: 3px 10px; font-size: 0.85rem; }
-    button.link { border: 0; background: none; padding: 0; color: var(--gf-accent); text-decoration: underline; font-size: 0.85rem; border-radius: 0; }
-    .around .back { justify-self: start; }
+        .around .back { justify-self: start; }
     .species li { padding: 0; }
-    .species .pick { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; border: 0; border-radius: 8px; padding: 6px 4px; background: none; }
+    .species .pick { width: 100%; justify-content: flex-start; text-align: left; font-size: 1rem; font-weight: 400; gap: 10px; border: 0; border-radius: var(--gf-radius-sm); padding: 6px 4px; background: none; }
     .species .pick:hover { background: var(--gf-surface-2); }
     .species .n { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--gf-text-muted); }
-    .around .ph { width: 38px; height: 38px; border-radius: 8px; object-fit: cover; flex: none; background: var(--gf-surface-2); }
+    .around .ph { width: 38px; height: 38px; border-radius: var(--gf-radius-sm); object-fit: cover; flex: none; background: var(--gf-surface-2); }
     .species-head { display: flex; gap: 12px; align-items: center; }
     .species-head .ph { width: 56px; height: 56px; }
     .source { font-size: 0.75rem; color: var(--gf-text-muted); margin: 0; }
@@ -209,14 +190,8 @@ export class GfMapPage extends LitElement {
       left: 50%;
       transform: translateX(-50%);
       top: 12px;
-      background: var(--gf-text);
-      color: var(--gf-bg);
-      padding: 8px 16px;
-      border-radius: 999px;
-      font-size: 0.875rem;
-      box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
     }
-  `;
+  `];
 
   #geo = new GeoController(this);
   #store = new StoreController(this);
@@ -360,7 +335,7 @@ export class GfMapPage extends LitElement {
     const a = /** @type {NonNullable<typeof this._around>} */ (this._around);
     const km = r => r < 1000 ? r + ' m' : r / 1000 + ' km';
     const head = html`
-      <button class="close" type="button" aria-label="Fermer" @click=${() => this.#toggleAround()}>×</button>
+      <button class="close icon-btn" type="button" aria-label="Fermer" @click=${() => this.#toggleAround()}>×</button>
       <h2>Autour · ${km(a.radius)}</h2>
       <div class="meta"><span>Centre : ${a.where}</span>
         <button type="button" class="link" @click=${() => {
@@ -382,7 +357,7 @@ export class GfMapPage extends LitElement {
     const s = a.species;
     if (s) {
       return html`<section class="sheet around" aria-label="Autour">
-        <button class="close" type="button" aria-label="Fermer" @click=${() => this.#toggleAround()}>×</button>
+        <button class="close icon-btn" type="button" aria-label="Fermer" @click=${() => this.#toggleAround()}>×</button>
         <button type="button" class="link back" @click=${() => this.#pickSpecies(null)}>← Toutes les espèces</button>
         <div class="species-head">
           ${s.plantId ? html`<gf-thumb plant-id=${s.plantId} size="56"></gf-thumb>` : s.photo ? html`<img class="ph" src=${s.photo} alt="" referrerpolicy="no-referrer" />` : nothing}
@@ -391,7 +366,7 @@ export class GfMapPage extends LitElement {
         <div class="meta"><span>${s.count} observation${s.count > 1 ? 's' : ''} dans le cercle</span>
           <span>${a.obs === null ? 'Chargement des points…' : a.obs?.length ? `${a.obs.length} point${a.obs.length > 1 ? 's' : ''} sur la carte${a.obs.length < s.count ? ' (les plus récents)' : ''}` : 'Aucun point localisé'}</span></div>
         <div class="actions">
-          ${s.plantId ? html`<a class="button main" href=${href.plant(s.plantId)}>Fiche de la plante</a>` : html`<span class="notes">Absente de la flore de l’app (TAXREF).</span>`}
+          ${s.plantId ? html`<a class="button primary" href=${href.plant(s.plantId)}>Fiche de la plante</a>` : html`<span class="notes">Absente de la flore de l’app (TAXREF).</span>`}
           <a class="button" href=${exploreUrl(a.center, a.radius, s.taxonId)} target="_blank" rel="noopener">Observations</a>
         </div>
         ${source}
@@ -578,7 +553,7 @@ export class GfMapPage extends LitElement {
               <h2>${placeTitle(this._edit.place)}</h2>
               <p class="notes">Glissez le carré (l’endroit) ou les ronds (les plantes) à leur place.</p>
               <div class="actions">
-                <button class="button main" type="button" @click=${() => this.#saveEdit()}>✓ Valider</button>
+                <button class="button primary" type="button" @click=${() => this.#saveEdit()}>✓ Valider</button>
                 <button class="button" type="button" @click=${() => { this._edit = null; }}>Annuler</button>
               </div>
             </section>`
@@ -591,7 +566,7 @@ export class GfMapPage extends LitElement {
           </p>` : nothing}
 
         ${selected && this._view === 'map' ? nothing : html`
-          <button class="button fab" type="button" aria-label="Noter une plante ici"
+          <button class="fab" type="button" aria-label="Noter une plante ici"
             @click=${() => this.dispatchEvent(new CustomEvent('open-capture', { bubbles: true, composed: true }))}>+</button>`}
         ${this._toast ? html`<div class="toast" role="status">${this._toast}</div>` : nothing}
         ${this._error ? html`<div class="toast" role="alert">${this._error}
@@ -623,7 +598,7 @@ export class GfMapPage extends LitElement {
 
     return html`
       <section class="sheet" aria-label="Lieu sélectionné">
-        <button class="close" type="button" aria-label="Fermer" @click=${() => this.#navigate({ spot: null })}>×</button>
+        <button class="close icon-btn" type="button" aria-label="Fermer" @click=${() => this.#navigate({ spot: null })}>×</button>
         <h2>${placeTitle(place)}</h2>
         <div class="meta">
           <span>${plantCount(p.plants.length)}</span>
@@ -645,16 +620,16 @@ export class GfMapPage extends LitElement {
                   <span class="sub">${away >= 3 ? `à ${formatDistance(away)} du point · ` : ''}${ABUNDANCE.find(a => a.value === e.abundance)?.label}${this.#harvest ? html`${e.rating ? ' · ' + stars(e.rating) : ''}
                     · ${last ? 'récolté le ' + shortDate(last.date) : 'aucune récolte'}` : e.notes ? ' · ' + e.notes.slice(0, 50) : ''}</span>
                 </span>
-                ${this.#harvest ? html`<button type="button" class="harvest" aria-label="Noter une récolte de ${entryName(e)} aujourd’hui"
+                ${this.#harvest ? html`<button type="button" class="harvest small" aria-label="Noter une récolte de ${entryName(e)} aujourd’hui"
                   @click=${() => this.#quickHarvest(place, e)}>+ Récolte</button>` : nothing}
               </li>`;
             })}
           </ul>
-          ${entries.length > shown.length ? html`<a class="more" href=${href.spot(place.id)}>+ ${entries.length - shown.length} autre${entries.length - shown.length > 1 ? 's' : ''}…</a>` : nothing}`
+          ${entries.length > shown.length ? html`<a class="link" href=${href.spot(place.id)}>+ ${entries.length - shown.length} autre${entries.length - shown.length > 1 ? 's' : ''}…</a>` : nothing}`
         : html`<p class="notes">Aucune plante notée pour ce lieu.</p>`}
         ${p.notes ? html`<p class="notes">${p.notes}</p>` : nothing}
         <div class="actions">
-          <a class="button main" href=${href.spot(place.id)}>Ouvrir le lieu</a>
+          <a class="button primary" href=${href.spot(place.id)}>Ouvrir le lieu</a>
           <button class="button" type="button" @click=${() => this.#startEdit(place)}>✎ Positions</button>
           <a class="button" href=${href.spot(place.id, null, true)}>+ Plante</a>
           <a class="button" href=${directionsUrl(place)} target="_blank" rel="noopener">Itinéraire</a>

@@ -17,9 +17,21 @@
   --gf-danger: #a3332b;
 
   --gf-radius: 10px;
+  --gf-radius-sm: 8px;
+  --gf-radius-lg: 16px;
+  --gf-radius-pill: 999px;
   --gf-gap: 12px;
   --gf-header-h: 56px;
+  --gf-control-h: 40px;
   --gf-shadow: 0 1px 2px rgb(0 0 0 / 6%), 0 2px 8px rgb(0 0 0 / 5%);
+  /* Floating things: map buttons, sheets, menus, toasts. */
+  --gf-shadow-float: 0 4px 16px rgb(0 0 0 / 22%);
+  --gf-focus: 0 0 0 3px color-mix(in srgb, var(--gf-accent) 40%, transparent);
+
+  --gf-fav: #e11d48;
+  --gf-season: #fde047;
+  --gf-season-text: #422006;
+  --gf-star: #f59e0b;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -36,5 +48,6 @@
     --gf-warn: #e0a54a;
     --gf-danger: #f08a80;
     --gf-shadow: none;
+    --gf-shadow-float: 0 4px 16px rgb(0 0 0 / 55%);
   }
 }

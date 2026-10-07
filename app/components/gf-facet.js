@@ -1,5 +1,6 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
+import { ui } from '../styles/ui.js';
 
 /**
  * @typedef {{ value: string, label: string, count: number, title?: string }} FacetOption
@@ -26,7 +27,7 @@ export class GfFacet extends LitElement {
     _expanded: { state: true }
   };
 
-  static styles = css`
+  static styles = [ui, css`
     :host { display: block; border-bottom: 1px solid var(--gf-border); }
     details { padding: 10px 0; }
     summary {
@@ -54,32 +55,13 @@ export class GfFacet extends LitElement {
     .badge {
       background: var(--gf-accent);
       color: var(--gf-accent-contrast);
-      border-radius: 999px;
+      border-radius: var(--gf-radius-pill);
       font-size: 0.7rem;
       padding: 0 7px;
       line-height: 1.5;
     }
-    .clear {
-      font: inherit;
-      font-size: 0.75rem;
-      font-weight: 400;
-      background: none;
-      border: 0;
-      color: var(--gf-accent);
-      cursor: pointer;
-      padding: 0;
-    }
-    input[type='search'] {
-      width: 100%;
-      margin: 8px 0 4px;
-      font: inherit;
-      font-size: 0.85rem;
-      padding: 6px 10px;
-      border-radius: 8px;
-      border: 1px solid var(--gf-border);
-      background: var(--gf-surface);
-      color: var(--gf-text);
-    }
+    .link { font-size: 0.8rem; }
+    input[type='search'] { margin: 8px 0 4px; font-size: 0.85rem; min-height: 34px; padding: 6px 12px; }
     ul { list-style: none; margin: 6px 0 0; padding: 0; }
     li label {
       display: flex;
@@ -91,27 +73,13 @@ export class GfFacet extends LitElement {
       border-radius: 6px;
     }
     li label:hover { background: var(--gf-surface-2); }
-    input[type='checkbox'] {
-      width: 16px;
-      height: 16px;
-      margin: 0;
-      accent-color: var(--gf-accent);
-      flex: none;
-    }
+    input[type='checkbox'] { width: 16px; height: 16px; margin: 0; flex: none; }
     .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .count { color: var(--gf-text-muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
     li.empty label { opacity: 0.45; }
-    .more {
-      font: inherit;
-      font-size: 0.8rem;
-      background: none;
-      border: 0;
-      color: var(--gf-accent);
-      cursor: pointer;
-      padding: 6px 2px 0;
-    }
+    .link.more { display: block; margin-top: 6px; }
     .none { font-size: 0.8rem; color: var(--gf-text-muted); padding: 4px 2px; }
-  `;
+  `];
 
   constructor() {
     super();
@@ -165,7 +133,7 @@ export class GfFacet extends LitElement {
         <summary>
           ${this.label}
           ${selected.size ? html`<span class="badge">${selected.size}</span>
-            <button class="clear" type="button" @click=${e => { e.preventDefault(); this.#emit([]); }}>effacer</button>` : nothing}
+            <button class="link clear" type="button" @click=${e => { e.preventDefault(); this.#emit([]); }}>effacer</button>` : nothing}
         </summary>
         ${this.searchable ? html`
           <input type="search" placeholder="Filtrer ${this.label.toLowerCase()}…" aria-label="Filtrer ${this.label}"
@@ -181,8 +149,8 @@ export class GfFacet extends LitElement {
             </li>`)}
         </ul>
         ${!shown.length ? html`<div class="none">Aucune valeur</div>` : nothing}
-        ${hidden > 0 ? html`<button class="more" type="button" @click=${() => { this._expanded = true; }}>Voir plus (${hidden})</button>` : nothing}
-        ${this._expanded && !filter && this.limit && options.length > this.limit ? html`<button class="more" type="button" @click=${() => { this._expanded = false; }}>Voir moins</button>` : nothing}
+        ${hidden > 0 ? html`<button class="link more" type="button" @click=${() => { this._expanded = true; }}>Voir plus (${hidden})</button>` : nothing}
+        ${this._expanded && !filter && this.limit && options.length > this.limit ? html`<button class="link more" type="button" @click=${() => { this._expanded = false; }}>Voir moins</button>` : nothing}
       </details>
     `;
   }

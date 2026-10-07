@@ -2,6 +2,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import * as db from '../core/db.js';
 import { myRegion, sortStatuses, territoryFor } from '../core/territory.js';
+import { ui } from '../styles/ui.js';
 
 /** @typedef {import('../core/territory.js').Status} Status */
 
@@ -40,11 +41,11 @@ export class GfStatus extends LitElement {
     _open: { state: true }
   };
 
-  static styles = css`
+  static styles = [ui, css`
     :host { display: block; }
     .box { display: grid; gap: 6px; }
     .alert {
-      border-radius: 10px;
+      border-radius: var(--gf-radius);
       padding: 8px 12px;
       font-size: 0.9rem;
       line-height: 1.35;
@@ -57,9 +58,9 @@ export class GfStatus extends LitElement {
     .muted { color: var(--gf-text-muted); font-size: 0.8rem; }
     ul { margin: 4px 0 0; padding-left: 18px; }
     li { margin: 2px 0; }
-    button.link { font: inherit; font-size: 0.8rem; border: 0; background: none; color: var(--gf-accent); padding: 0; cursor: pointer; text-decoration: underline; }
+    .link { font-size: 0.8rem; }
     a { color: var(--gf-accent); }
-  `;
+  `];
 
   constructor() {
     super();

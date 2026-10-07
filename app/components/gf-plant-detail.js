@@ -13,6 +13,7 @@ import './gf-plant-spots.js';
 import './gf-calendar.js';
 import './gf-status.js';
 import './gf-add-to.js';
+import { ui } from '../styles/ui.js';
 
 /** Remote text is untrusted HTML: keep only its text content (DOMParser never runs scripts). */
 function toText(/** @type {string} */ value) {
@@ -104,14 +105,14 @@ export class GfPlantDetail extends LitElement {
     _shareNote: { state: true }
   };
 
-  static styles = css`
+  static styles = [ui, css`
     :host {
       display: block;
       overflow-y: auto;
       padding: 16px;
     }
     article { max-width: 920px; margin: 0 auto; }
-    .back { color: var(--gf-accent); text-decoration: none; font-size: 0.9rem; }
+    .back { font-size: 0.9rem; }
     h1 { margin: 8px 0 0; font-size: 1.6rem; line-height: 1.2; }
     .sci { font-family: var(--gf-font-serif); font-size: 1.2rem; }
     .sci i { font-style: italic; }
@@ -119,7 +120,7 @@ export class GfPlantDetail extends LitElement {
     .tags { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0; padding: 0; list-style: none; }
     .tags li {
       background: var(--gf-accent-soft);
-      border-radius: 999px;
+      border-radius: var(--gf-radius-pill);
       padding: 2px 10px;
       font-size: 0.8rem;
     }
@@ -129,6 +130,7 @@ export class GfPlantDetail extends LitElement {
       text-transform: uppercase;
       letter-spacing: 0.06em;
       color: var(--gf-text-muted);
+      font-weight: 600;
       margin: 0 0 8px;
     }
     .gallery {
@@ -152,29 +154,10 @@ export class GfPlantDetail extends LitElement {
     }
     figcaption { padding: 6px 8px; }
     p { margin: 0 0 12px; }
-    .muted { color: var(--gf-text-muted); }
-    .actions { display: flex; gap: 8px; flex-wrap: wrap; margin: 12px 0 4px; }
-    .actions button {
-      font: inherit;
-      font-size: 0.9rem;
-      padding: 7px 14px;
-      border-radius: 999px;
-      border: 1px solid var(--gf-border);
-      background: var(--gf-surface);
-      color: var(--gf-text);
-      cursor: pointer;
-    }
-    .actions .fav[aria-pressed='true'] { color: #e11d48; border-color: #e11d48; }
+    .actions { margin: 12px 0 4px; }
+    .actions .fav { min-height: var(--gf-control-h); padding: 8px 16px; font-size: 0.9rem; }
+    .actions .fav[aria-pressed='true'] { color: var(--gf-fav); border-color: var(--gf-fav); background: color-mix(in srgb, var(--gf-fav) 10%, var(--gf-surface)); }
     .share-note { color: var(--gf-text-muted); font-size: 0.85rem; margin: 4px 0 0; }
-    .retry {
-      font: inherit;
-      padding: 8px 18px;
-      border-radius: 999px;
-      border: 0;
-      background: var(--gf-accent);
-      color: var(--gf-accent-contrast);
-      cursor: pointer;
-    }
     .description { background: var(--gf-surface); border-radius: var(--gf-radius); padding: 12px 14px; margin-bottom: 8px; }
     .description small { display: block; color: var(--gf-text-muted); margin-bottom: 4px; }
     ul.inline { padding: 0; margin: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px 14px; }
@@ -182,11 +165,12 @@ export class GfPlantDetail extends LitElement {
       display: inline-block;
       color: var(--gf-accent);
       border: 1px solid var(--gf-border);
-      border-radius: 999px;
+      border-radius: var(--gf-radius-pill);
       padding: 4px 12px;
       text-decoration: none;
       background: var(--gf-surface);
     }
+    .links a:hover { background: var(--gf-surface-2); }
     .skeleton {
       height: 180px;
       border-radius: var(--gf-radius);
@@ -196,7 +180,7 @@ export class GfPlantDetail extends LitElement {
     }
     @keyframes pulse { from { background-position: 100% 0; } to { background-position: -100% 0; } }
     @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
-  `;
+  `];
 
   constructor() {
     super();
@@ -291,14 +275,14 @@ export class GfPlantDetail extends LitElement {
     if (plant === undefined) return html`<article><div class="skeleton"></div></article>`;
     if (plant?.failed) {
       return html`<article>
-        <a class="back" href=${lastSearchHash()}>← Recherche</a>
+        <a class="back link" href=${lastSearchHash()}>← Recherche</a>
         <h1>Impossible de lire la flore locale</h1>
         <p class="muted">${plant.failed}</p>
-        <p><button class="retry" type="button" @click=${() => this.#load(this.plantId)}>Réessayer</button></p>
+        <p><button class="primary" type="button" @click=${() => this.#load(this.plantId)}>Réessayer</button></p>
       </article>`;
     }
     if (plant === null) {
-      return html`<article><a class="back" href=${lastSearchHash()}>← Recherche</a><h1>Plante introuvable</h1></article>`;
+      return html`<article><a class="back link" href=${lastSearchHash()}>← Recherche</a><h1>Plante introuvable</h1></article>`;
     }
 
     const details = this._details;
@@ -314,7 +298,7 @@ export class GfPlantDetail extends LitElement {
 
     return html`
       <article>
-        <a class="back" href=${lastSearchHash()}>← Recherche</a>
+        <a class="back link" href=${lastSearchHash()}>← Recherche</a>
         <h1>${plant.vernacularNames?.[0] || plant.scientificName}</h1>
         <div class="sci"><i>${plant.scientificName}</i> <span class="author">${plant.author}</span></div>
         ${this.#actions(plant)}

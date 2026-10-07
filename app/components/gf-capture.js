@@ -11,6 +11,7 @@ import {
 } from '../core/collections.js';
 import { store, StoreController } from '../core/store.js';
 import { statusWarning } from './gf-status.js';
+import { ui } from '../styles/ui.js';
 import './gf-thumb.js';
 
 /** A plant tapped within this distance of an existing place joins it instead of creating a new one. */
@@ -40,10 +41,7 @@ export class GfCapture extends LitElement {
     _toast: { state: true }
   };
 
-  static styles = css`
-    .toast .warn { color: #fecaca; font-weight: 600; font-size: 0.85rem; margin-bottom: 4px; }
-    .toast .warn a { color: inherit; }
-    *, *::before, *::after { box-sizing: border-box; }
+  static styles = [ui, css`
     dialog {
       position: fixed;
       inset: auto 0 0 0;
@@ -53,7 +51,7 @@ export class GfCapture extends LitElement {
       margin: 0 auto;
       padding: 0;
       border: 0;
-      border-radius: 16px 16px 0 0;
+      border-radius: var(--gf-radius-lg) var(--gf-radius-lg) 0 0;
       background: var(--gf-surface);
       color: var(--gf-text);
       flex-direction: column;
@@ -67,37 +65,26 @@ export class GfCapture extends LitElement {
     .dot.good { background: #16a34a; }
     .dot.weak { background: #f59e0b; }
     .dot.none { background: var(--gf-danger); }
-    input[type='search'] {
-      width: 100%;
-      font: inherit;
-      font-size: 1rem;
-      padding: 10px 14px;
-      border-radius: 999px;
-      border: 1px solid var(--gf-border);
-      background: var(--gf-bg);
-      color: var(--gf-text);
-    }
     .body { overflow-y: auto; padding: 8px 16px 16px; flex: 1; }
-    h3 { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gf-text-muted); margin: 12px 0 6px; }
+    h3 { margin: 12px 0 6px; }
     .chips { display: flex; flex-wrap: wrap; gap: 8px; }
-    .chips button, .results button {
-      font: inherit;
-      color: var(--gf-text);
-      background: var(--gf-bg);
-      border: 1px solid var(--gf-border);
-      cursor: pointer;
-    }
-    .chips button { border-radius: 999px; padding: 4px 14px 4px 4px; display: inline-flex; align-items: center; gap: 8px; }
+    .chips button { padding: 3px 14px 3px 3px; gap: 8px; }
     .chips small { color: var(--gf-text-muted); }
     .results { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
-    .results button { width: 100%; text-align: left; padding: 6px 12px 6px 6px; border-radius: 10px; display: flex; align-items: center; gap: 10px; }
+    .results button {
+      width: 100%;
+      justify-content: flex-start;
+      text-align: left;
+      font-size: 1rem;
+      font-weight: 400;
+      padding: 6px 12px 6px 6px;
+      border-radius: var(--gf-radius);
+      gap: 10px;
+    }
     .results i { color: var(--gf-text-muted); font-family: var(--gf-font-serif); }
-    button:disabled { opacity: 0.5; cursor: default; }
     footer { padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--gf-border); display: flex; align-items: center; gap: 10px; }
     footer label { display: flex; align-items: center; gap: 8px; flex: 1; font-size: 0.9rem; }
-    footer input { width: 20px; height: 20px; accent-color: var(--gf-accent); }
-    footer .close { font: inherit; padding: 8px 16px; border-radius: 999px; border: 1px solid var(--gf-border); background: var(--gf-surface); color: var(--gf-text); cursor: pointer; }
-    .muted { color: var(--gf-text-muted); font-size: 0.9rem; }
+    p.muted { font-size: 0.9rem; }
     .toast {
       position: fixed;
       z-index: 2000;
@@ -105,29 +92,14 @@ export class GfCapture extends LitElement {
       transform: translateX(-50%);
       bottom: calc(84px + env(safe-area-inset-bottom));
       width: min(520px, calc(100% - 24px));
-      background: var(--gf-text);
-      color: var(--gf-bg);
-      border-radius: 14px;
-      padding: 10px 14px;
-      box-shadow: 0 6px 20px rgb(0 0 0 / 35%);
       display: grid;
       gap: 6px;
-      font-size: 0.9rem;
     }
-    .toast .row { display: flex; gap: 8px; align-items: center; }
+    .toast .warn { color: #fecaca; font-weight: 600; font-size: 0.85rem; margin-bottom: 4px; }
+    .toast .warn a { color: inherit; }
+    .toast .row { display: flex; gap: 12px; align-items: center; }
     .toast .row span { flex: 1; }
-    .toast button, .toast a {
-      font: inherit;
-      font-weight: 600;
-      color: #8cc98f;
-      background: none;
-      border: 0;
-      cursor: pointer;
-      text-decoration: none;
-      padding: 4px 6px;
-    }
-    @media (prefers-color-scheme: dark) { .toast button, .toast a { color: #2f6b3a; } }
-  `;
+  `];
 
   #store = new StoreController(this);
   /** @type {(() => void) | null} */ #unwatch = null;
@@ -282,7 +254,7 @@ export class GfCapture extends LitElement {
   /** @param {string} title @param {any[]} plants */
   #chips(title, plants) {
     if (!plants.length) return nothing;
-    return html`<h3>${title}</h3><div class="chips">${plants.map(p => html`
+    return html`<h3 class="kicker">${title}</h3><div class="chips">${plants.map(p => html`
       <button type="button" ?disabled=${!this._fix || this._busy} @click=${() => this.#capture(p)}>
         <gf-thumb .plant=${p} size="30" round></gf-thumb>
         ${p.vernacularNames?.[0] || p.scientificName}${p.d !== undefined ? html` <small>· ${Math.round(p.d)} m</small>` : nothing}
@@ -325,14 +297,14 @@ export class GfCapture extends LitElement {
         <footer>
           ${harvestMode ? html`<label><input type="checkbox" .checked=${this._harvestToday}
             @change=${e => { this._harvestToday = e.target.checked; }} /> Noter aussi une récolte aujourd’hui</label>` : html`<span style="flex:1"></span>`}
-          <button class="close" type="button" @click=${() => this.#close()}>Fermer</button>
+          <button type="button" @click=${() => this.#close()}>Fermer</button>
         </footer>
       </dialog>
       ${t ? html`<div class="toast" role="status">
         ${t.warning ? html`<div class="warn" role="alert">${t.warning} — <a href=${href.plant(/** @type {any} */ (t).plantId)}>voir la fiche</a></div>` : nothing}
         <div class="row"><span>${t.text}</span>
-          <button type="button" @click=${this.#undo}>Annuler</button>
-          <a href=${t.details} @click=${() => { this._toast = null; }}>Détails</a>
+          <button class="link" type="button" @click=${this.#undo}>Annuler</button>
+          <a class="link" href=${t.details} @click=${() => { this._toast = null; }}>Détails</a>
         </div>
       </div>` : nothing}
     `;

@@ -5,6 +5,7 @@ import { activeFilterCount, setQuery, toHash } from '../core/query.js';
 import { share } from '../core/share.js';
 import { setCompact, store, StoreController } from '../core/store.js';
 import './gf-active-filters.js';
+import { ui } from '../styles/ui.js';
 
 /**
  * Above the list: filters button (mobile), result count, sort, density, active filter chips,
@@ -17,7 +18,7 @@ export class GfResultsBar extends LitElement {
     _copied: { state: true }
   };
 
-  static styles = css`
+  static styles = [ui, css`
     :host {
       display: grid;
       gap: 8px;
@@ -28,29 +29,15 @@ export class GfResultsBar extends LitElement {
     }
     .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
     .count { font-weight: 600; margin-right: auto; white-space: nowrap; }
-    button, select {
-      font: inherit;
-      color: var(--gf-text);
-      background: var(--gf-surface);
-      border: 1px solid var(--gf-border);
-      border-radius: 999px;
-      padding: 5px 12px;
-      cursor: pointer;
-    }
-    .filters { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
-    .filters .badge {
-      background: var(--gf-accent);
-      color: var(--gf-accent-contrast);
-      border-radius: 999px;
-      font-size: 0.7rem;
-      padding: 0 7px;
-    }
-    button[aria-pressed='true'] { background: var(--gf-accent-soft); border-color: var(--gf-accent); }
+    button, select { min-height: 32px; padding: 4px 12px; font-size: 0.85rem; }
+    select { padding-right: 28px; border-radius: var(--gf-radius-pill); }
+    .filters { font-weight: 600; }
+    .filters .badge { background: var(--gf-accent); color: var(--gf-accent-contrast); font-size: 0.7rem; padding: 0 7px; }
     .suggestions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; color: var(--gf-text-muted); }
-    .suggestions button { border-style: dashed; color: var(--gf-text); }
+    .suggestions button { border-style: dashed; }
     .suggestions small { color: var(--gf-text-muted); }
     .note { color: var(--gf-warn); }
-  `;
+  `];
 
   #store = new StoreController(this);
 

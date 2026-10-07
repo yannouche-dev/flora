@@ -134,16 +134,25 @@ gf-map .gf-map-buttons button {
   border: 0;
   background: var(--gf-surface);
   color: var(--gf-text);
-  box-shadow: 0 1px 4px rgb(0 0 0 / 35%);
+  box-shadow: var(--gf-shadow-float);
   font-size: 1.2rem;
   cursor: pointer;
   display: grid;
   place-items: center;
 }
 
+gf-map .gf-map-buttons button:hover {
+  background: var(--gf-surface-2);
+}
+
+gf-map .gf-map-buttons button:focus-visible {
+  outline: none;
+  box-shadow: var(--gf-shadow-float), var(--gf-focus);
+}
+
 gf-map .gf-map-buttons button[aria-pressed='true'] {
-  background: #2563eb;
-  color: #fff;
+  background: var(--gf-accent);
+  color: var(--gf-accent-contrast);
 }
 
 gf-map .gf-layer-menu {
@@ -154,7 +163,7 @@ gf-map .gf-layer-menu {
   background: var(--gf-surface);
   color: var(--gf-text);
   border-radius: var(--gf-radius);
-  box-shadow: 0 4px 16px rgb(0 0 0 / 30%);
+  box-shadow: var(--gf-shadow-float);
   padding: 8px 12px;
   font-size: 0.875rem;
   min-width: 200px;
