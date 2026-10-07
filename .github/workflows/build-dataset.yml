@@ -42,6 +42,7 @@ jobs:
           node --check scripts/enrich-wikidata-bulk.mjs
           node --check scripts/enrich-thumbnail-fallbacks.mjs
           node --check scripts/enrich-baseflor.mjs
+          node --check scripts/enrich-statuses.mjs
 
       - name: Build dataset
         run: node scripts/build-plants.mjs
@@ -53,6 +54,12 @@ jobs:
         run: |
           npm install --no-save --no-package-lock xlsx@0.18.5
           node scripts/enrich-baseflor.mjs
+
+      - name: Add INPN statuses (protection, harvest regulation, Red Lists)
+        continue-on-error: true
+        env:
+          BDC_URL: ${{ vars.BDC_URL }}
+        run: node scripts/enrich-statuses.mjs
 
       - name: Enrich search thumbnails
         env:
@@ -69,7 +76,7 @@ jobs:
 
       - name: Validate dataset
         run: |
-          node -e "const p=require('./data/plants.json'); const m=require('./data/meta.json'); const n=p.filter(x=>x.thumbnail?.url).length; if(!Array.isArray(p)||p.length<4500||p.length>8000) process.exit(1); if(p.length!==m.plants) process.exit(1); if(n<3000) throw new Error('Thumbnail coverage unexpectedly low: '+n); console.log(p.length+' plants; '+m.vernacularNames+' French vernacular names; '+n+' thumbnails; '+p.filter(x=>x.flowering).length+' with Baseflor flowering')"
+          node -e "const p=require('./data/plants.json'); const m=require('./data/meta.json'); const n=p.filter(x=>x.thumbnail?.url).length; if(!Array.isArray(p)||p.length<4500||p.length>8000) process.exit(1); if(p.length!==m.plants) process.exit(1); if(n<3000) throw new Error('Thumbnail coverage unexpectedly low: '+n); console.log(p.length+' plants; '+m.vernacularNames+' French vernacular names; '+n+' thumbnails; '+p.filter(x=>x.flowering).length+' with Baseflor flowering; '+p.filter(x=>x.statuses?.some(s=>/^P[NRD]$/.test(s.type))).length+' protected; '+p.filter(x=>x.statuses?.some(s=>s.type==='REGL')).length+' regulated')"
           cat data/meta.json
 
       - name: Commit generated dataset
