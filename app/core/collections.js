@@ -236,6 +236,30 @@ export async function refreshMembership() {
   store.set({ favorites, collections });
 }
 
+/** @param {string} text */
+const foldName = text => text.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+/**
+ * Existing collections whose name contains the typed text (accents and case ignored): suggestions for
+ * every "collection name" field, so typing "mell" offers « Mellifères » rather than creating a twin.
+ * @param {CollectionSummary[]} collections
+ * @param {string} text
+ * @param {number} [limit]
+ * @returns {{ matches: CollectionSummary[], exact: CollectionSummary | null }}
+ */
+export function matchCollections(collections, text, limit = 6) {
+  const query = foldName(text);
+  if (!query) return { matches: [], exact: null };
+  const scored = collections
+    .map(c => ({ c, at: foldName(c.name).indexOf(query) }))
+    .filter(m => m.at >= 0)
+    .sort((a, b) => (a.c.kind === 'favorites' ? -1 : b.c.kind === 'favorites' ? 1 : 0) || a.at - b.at || a.c.name.localeCompare(b.c.name, 'fr'));
+  return {
+    matches: scored.slice(0, limit).map(m => m.c),
+    exact: collections.find(c => foldName(c.name) === query) || null
+  };
+}
+
 /** @param {number} plantId */
 export const isFavorite = plantId => membership.favorites.has(plantId);
 

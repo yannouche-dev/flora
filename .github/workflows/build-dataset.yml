@@ -41,9 +41,16 @@ jobs:
           node --check lib/plant-sources.mjs
           node --check scripts/enrich-wikidata-bulk.mjs
           node --check scripts/enrich-thumbnail-fallbacks.mjs
+          node --check scripts/enrich-baseflor.mjs
 
       - name: Build dataset
         run: node scripts/build-plants.mjs
+
+      - name: Add Baseflor flowering months (Ph. Julve, Tela Botanica — CC BY-SA)
+        continue-on-error: true
+        run: |
+          npm install --no-save --no-package-lock xlsx@0.18.5
+          node scripts/enrich-baseflor.mjs
 
       - name: Enrich search thumbnails
         env:
@@ -60,7 +67,7 @@ jobs:
 
       - name: Validate dataset
         run: |
-          node -e "const p=require('./data/plants.json'); const m=require('./data/meta.json'); const n=p.filter(x=>x.thumbnail?.url).length; if(!Array.isArray(p)||p.length<4500||p.length>8000) process.exit(1); if(p.length!==m.plants) process.exit(1); if(n<3000) throw new Error('Thumbnail coverage unexpectedly low: '+n); console.log(p.length+' plants; '+m.vernacularNames+' French vernacular names; '+n+' thumbnails')"
+          node -e "const p=require('./data/plants.json'); const m=require('./data/meta.json'); const n=p.filter(x=>x.thumbnail?.url).length; if(!Array.isArray(p)||p.length<4500||p.length>8000) process.exit(1); if(p.length!==m.plants) process.exit(1); if(n<3000) throw new Error('Thumbnail coverage unexpectedly low: '+n); console.log(p.length+' plants; '+m.vernacularNames+' French vernacular names; '+n+' thumbnails; '+p.filter(x=>x.flowering).length+' with Baseflor flowering')"
           cat data/meta.json
 
       - name: Commit generated dataset

@@ -1,6 +1,6 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
-import { FAVORITES_ID, getMembership, newCollection, saveCollection, setInCollection, withPlant } from '../core/collections.js';
+import { FAVORITES_ID, getMembership, matchCollections, newCollection, saveCollection, setInCollection, withPlant } from '../core/collections.js';
 import { href } from '../core/router.js';
 import { StoreController } from '../core/store.js';
 
@@ -8,10 +8,13 @@ import { StoreController } from '../core/store.js';
  * "Ajouter à…" sheet: check the collections a plant belongs to, create a list on the fly,
  * or start a new place here. Call `open()`; the plant comes from the `plant` property.
  */
+const ICONS = { favorites: '♥', list: '☰', place: '📍' };
+
 export class GfAddTo extends LitElement {
   static properties = {
     plant: { attribute: false },
     _creating: { state: true },
+    _query: { state: true },
     _busy: { state: true }
   };
 
@@ -76,6 +79,9 @@ export class GfAddTo extends LitElement {
     }
     .row { display: flex; gap: 8px; flex-wrap: wrap; }
     .row > * { flex: 1; }
+    .suggest { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 0.85rem; color: var(--gf-text-muted); }
+    .suggest button { padding: 5px 12px; font-size: 0.85rem; border-color: var(--gf-accent); color: var(--gf-text); }
+    .suggest button[aria-pressed=true] { background: var(--gf-accent-soft); }
     .done { background: var(--gf-accent); border-color: var(--gf-accent); color: var(--gf-accent-contrast); font-weight: 600; }
   `;
 
@@ -86,11 +92,13 @@ export class GfAddTo extends LitElement {
     /** @type {any} */
     this.plant = null;
     this._creating = false;
+    this._query = '';
     this._busy = false;
   }
 
   open() {
     this._creating = false;
+    this._query = '';
     /** @type {HTMLDialogElement} */ (this.renderRoot.querySelector('dialog')).showModal();
   }
 
@@ -111,10 +119,24 @@ export class GfAddTo extends LitElement {
     const input = /** @type {HTMLInputElement} */ (this.renderRoot.querySelector('footer input'));
     const name = input.value.trim();
     if (!name) { input.focus(); return; }
+    // Same name as an existing collection: add to it instead of creating a twin.
+    const { exact } = matchCollections(this.#store.state.collections, name);
+    if (exact) return this.#addToExisting(exact.id);
     this._busy = true;
     try {
       await saveCollection(withPlant(newCollection('list', { name }), this.plant));
       this._creating = false;
+      this._query = '';
+    } finally { this._busy = false; }
+  }
+
+  /** A suggested existing collection was picked while typing a new name. @param {string} id */
+  async #addToExisting(id) {
+    this._busy = true;
+    try {
+      await setInCollection(id, this.plant, true);
+      this._creating = false;
+      this._query = '';
     } finally { this._busy = false; }
   }
 
@@ -126,6 +148,7 @@ export class GfAddTo extends LitElement {
     const favorites = collections.find(c => c.kind === 'favorites') || { id: FAVORITES_ID, name: 'Favoris', kind: 'favorites', count: 0 };
     const lists = collections.filter(c => c.kind === 'list');
     const places = collections.filter(c => c.kind === 'place');
+    const suggestions = matchCollections(collections, this._query);
 
     const row = (/** @type {{ id: string, name: string, count: number }} */ c, /** @type {string} */ icon) => html`
       <li><label>
@@ -142,18 +165,26 @@ export class GfAddTo extends LitElement {
         </header>
         <ul>
           ${row(favorites, '♥')}
-          ${lists.length ? html`<li class="section">Listes</li>${lists.map(c => row(c, '☰'))}` : nothing}
-          ${places.length ? html`<li class="section">Lieux</li>${places.map(c => row(c, '📍'))}` : nothing}
+          ${lists.length ? html`<li class="section">Collections</li>${lists.map(c => row(c, '☰'))}` : nothing}
+          ${places.length ? html`<li class="section">Endroits</li>${places.map(c => row(c, '📍'))}` : nothing}
         </ul>
         <footer>
           ${this._creating ? html`
+            ${suggestions.matches.length ? html`
+              <div class="suggest" role="group" aria-label="Collections existantes">
+                Déjà :
+                ${suggestions.matches.map(c => html`
+                  <button type="button" aria-pressed=${inIds.has(c.id) ? 'true' : 'false'} ?disabled=${this._busy || inIds.has(c.id)}
+                    @click=${() => this.#addToExisting(c.id)}>${ICONS[c.kind] || '☰'} ${c.name}${inIds.has(c.id) ? ' ✓' : ''}</button>`)}
+              </div>` : nothing}
             <form @submit=${this.#createList}>
-              <input type="text" placeholder="Nom de la liste (ex. Mellifères)" aria-label="Nom de la nouvelle liste" autofocus />
-              <button class="done" type="submit" ?disabled=${this._busy}>Créer</button>
+              <input type="text" placeholder="Nom de la collection (ex. Mellifères)" aria-label="Nom de la nouvelle collection" autofocus
+                .value=${this._query} @input=${e => { this._query = e.target.value; }} />
+              <button class="done" type="submit" ?disabled=${this._busy}>${suggestions.exact ? 'Ajouter' : 'Créer'}</button>
             </form>` : html`
             <div class="row">
-              <button type="button" @click=${() => { this._creating = true; }}>+ Nouvelle liste</button>
-              <a class="button" href=${href.newSpot(plant?.id)} @click=${() => this.#close()}>📍 Nouveau lieu ici</a>
+              <button type="button" @click=${() => { this._creating = true; }}>+ Nouvelle collection</button>
+              <a class="button" href=${href.newSpot(plant?.id)} @click=${() => this.#close()}>📍 Nouvel endroit ici</a>
             </div>`}
           <button class="done" type="button" @click=${() => this.#close()}>Terminé</button>
         </footer>

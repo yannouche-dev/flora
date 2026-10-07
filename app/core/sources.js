@@ -72,5 +72,15 @@ export function details(plant, signal) {
   return cached('details:' + plant.id, () => sources.details(plant, { signal }));
 }
 
+/**
+ * Flowering / fruiting observations per month in France (iNaturalist), cached like the details.
+ * @param {any} plant
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<{ all: number[], flowering: number[], fruiting: number[], taxonId: number, sourceUrl: string } | null>}
+ */
+export function phenology(plant, signal) {
+  return cached('phenology:' + plant.id, () => sources.phenology(plant, { signal }));
+}
+
 /** @param {any} plant */
 export const links = plant => sources.links(plant);

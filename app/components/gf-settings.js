@@ -135,6 +135,12 @@ export class GfSettings extends LitElement {
           proviennent à la demande de GBIF, iNaturalist, Wikidata et Wikimedia Commons ; seules les images sous
           licence libre (CC0, CC BY, CC BY-SA) sont affichées.
         </p>
+        <p class="muted">
+          Calendrier des fiches : mois de floraison de <a href="https://www.tela-botanica.org/ressources/donnees/telechargements/" target="_blank" rel="noopener">Baseflor</a>
+          (Ph. Julve, programme CATMINAT, Tela Botanica — données CC BY-SA 2.0, base ODbL 1.0)${meta?.sources?.baseflor ? ` pour ${meta.sources.baseflor.matched.toLocaleString('fr-FR')} espèces` : ''},
+          et observations « en fleurs » / « en fruits » en France d’<a href="https://www.inaturalist.org/" target="_blank" rel="noopener">iNaturalist</a>.
+          Ce sont des indications de floraison et de fructification, pas des dates de cueillette.
+        </p>
 
         <h2>Mode cueillette</h2>
         <label class="switch">
