@@ -15,6 +15,8 @@
  * @property {string} notes
  * @property {string} addedAt
  * @property {Harvest[]} harvests        newest first
+ * @property {[number, number] | null} coordinates   where this plant grows [lon, lat]; null outside places
+ * @property {number | null} accuracy    GPS accuracy (m) when recorded
  * @typedef {'favorites' | 'list' | 'place'} CollectionKind
  * @typedef {object} PlaceProperties
  * @property {CollectionKind} kind
@@ -44,8 +46,20 @@ export const normalizeHarvests = list => (Array.isArray(list) ? list : [])
   .map(h => ({ date: String(h.date).slice(0, 10), quantity: text(h.quantity, 200), note: text(h.note, 1000) }))
   .sort((a, b) => b.date.localeCompare(a.date));
 
-/** @param {any} e @param {string} fallbackDate @returns {PlantEntry} */
-export function normalizeEntry(e, fallbackDate) {
+/** 7 decimals ≈ 1 cm. @param {unknown} c @returns {[number, number] | null} */
+export function validCoordinates(c) {
+  if (!Array.isArray(c) || !isNumber(c[0]) || !isNumber(c[1]) || Math.abs(c[1]) > 90 || Math.abs(c[0]) > 180) return null;
+  return [Math.round(c[0] * 1e7) / 1e7, Math.round(c[1] * 1e7) / 1e7];
+}
+
+/**
+ * @param {any} e @param {string} fallbackDate
+ * @param {[number, number] | null} [placeCoordinates] the place's point: plants of a place always have a
+ *   position (their own, else the place's); plants of lists have none.
+ * @returns {PlantEntry}
+ */
+export function normalizeEntry(e, fallbackDate, placeCoordinates = null) {
+  const own = placeCoordinates ? validCoordinates(e?.coordinates) : null;
   return {
     plantId: isNumber(e?.plantId) ? e.plantId : null,
     scientificName: text(e?.scientificName, 300),
@@ -54,7 +68,9 @@ export function normalizeEntry(e, fallbackDate) {
     rating: isNumber(e?.rating) ? Math.max(0, Math.min(5, Math.round(e.rating))) : 0,
     notes: text(e?.notes),
     addedAt: typeof e?.addedAt === 'string' ? e.addedAt : fallbackDate,
-    harvests: normalizeHarvests(e?.harvests)
+    harvests: normalizeHarvests(e?.harvests),
+    coordinates: own || (placeCoordinates ? [placeCoordinates[0], placeCoordinates[1]] : null),
+    accuracy: own && isNumber(e?.accuracy) ? e.accuracy : null
   };
 }
 
@@ -84,16 +100,6 @@ export function normalizeCollection(feature) {
   const now = new Date().toISOString();
   const createdAt = typeof p.createdAt === 'string' ? p.createdAt : now;
 
-  /** @type {PlantEntry[]} */
-  let plants;
-  if (Array.isArray(p.plants)) {
-    plants = p.plants.map(e => normalizeEntry(e, createdAt)).filter(e => e.plantId !== null || e.scientificName);
-  } else if (isNumber(p.plantId) || p.scientificName) {
-    // Format 1: one plant per spot, its fields at the top level.
-    plants = [normalizeEntry({ ...p, addedAt: createdAt }, createdAt)];
-  } else {
-    plants = [];
-  }
   // Without geometry, only lists (and favorites) make sense.
   const id = typeof feature.id === 'string' && feature.id ? feature.id : (globalThis.crypto?.randomUUID?.() ?? String(Date.now() + Math.random()));
   let kind = KINDS.includes(p.kind) ? p.kind : geometry ? 'place' : 'list';
@@ -101,6 +107,18 @@ export function normalizeCollection(feature) {
   else if (kind === 'favorites') kind = 'list';
   if (kind === 'place' && !geometry) kind = 'list';
   if (kind !== 'place') geometry = null;
+  const placePoint = geometry ? geometry.coordinates : null;
+
+  /** @type {PlantEntry[]} */
+  let plants;
+  if (Array.isArray(p.plants)) {
+    plants = p.plants.map(e => normalizeEntry(e, createdAt, placePoint)).filter(e => e.plantId !== null || e.scientificName);
+  } else if (isNumber(p.plantId) || p.scientificName) {
+    // Format 1: one plant per spot, its fields at the top level (its position is the spot's).
+    plants = [normalizeEntry({ ...p, coordinates: null, addedAt: createdAt }, createdAt, placePoint)];
+  } else {
+    plants = [];
+  }
 
   return {
     type: 'Feature',

@@ -224,9 +224,11 @@ export class GfCapture extends LitElement {
       const plant = summaryOrPlant.vernacularNames ? summaryOrPlant : await db.get('plants', summaryOrPlant.id);
       const [nearest] = await nearbyPlaces(fix.coordinates, JOIN_RADIUS);
       const before = nearest?.place ? structuredClone(nearest.place) : null;
+      // The plant is noted exactly where you stand; the place keeps its own point.
+      const here = { coordinates: fix.coordinates, accuracy: Math.round(fix.accuracy) };
       let place = before
-        ? withPlant(before, plant)
-        : withPlant(newPlace(fix.coordinates, { accuracy: Math.round(fix.accuracy) }), plant);
+        ? withPlant(before, plant, here)
+        : withPlant(newPlace(fix.coordinates, { accuracy: here.accuracy }), plant, here);
       const harvest = this.#store.state.harvestMode && this._harvestToday;
       if (harvest) {
         const entry = /** @type {any} */ (findEntry(place, plant.id));

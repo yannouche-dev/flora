@@ -16,39 +16,72 @@ const STYLESHEETS = [
 
 const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
 
-/** @param {import('../core/collections.js').Place} spot @param {boolean} selected */
-function pinIcon(spot, selected) {
-  const color = PIN_COLORS[placeAbundance(spot)] || PIN_COLORS.moyen;
-  const n = spot.properties.plants.length;
-  // Several plants: show how many in the pin head.
-  const head = n > 1
-    ? `<circle cx="15" cy="14.5" r="7.5" fill="#fff"/><text x="15" y="18.5" text-anchor="middle" font-size="11" font-weight="700" font-family="system-ui,sans-serif" fill="#1d2419">${n > 99 ? '99+' : n}</text>`
-    : '<circle cx="15" cy="14.5" r="5" fill="#fff"/>';
-  const classes = ['gf-pin', selected ? 'selected' : '', appStore.state.harvestMode && inSeason(spot) ? 'season' : ''].join(' ');
+/** Plants are drawn from this zoom level on (places are always drawn). */
+export const PLANT_ZOOM = 16;
+
+/**
+ * Place: a rounded-square marker on a stem, with the number of plants — unlike plants (small circles).
+ * @param {string} color @param {number} count @param {string} className
+ */
+function placeIconOf(color, count, className) {
+  const label = count > 99 ? '99+' : String(count);
   return L.divIcon({
-    className: classes,
-    iconSize: [30, 40],
-    iconAnchor: [15, 39],
-    html: `<svg width="30" height="40" viewBox="0 0 30 40" aria-hidden="true">
-      <path class="ring" d="M15 39C15 39 2 23.5 2 14.5a13 13 0 0 1 26 0C28 23.5 15 39 15 39Z"
-        fill="${color}" stroke="#fff" stroke-width="2"/>
-      ${head}
+    className: 'gf-place ' + className,
+    iconSize: [34, 44],
+    iconAnchor: [17, 43],
+    html: `<svg width="34" height="44" viewBox="0 0 34 44" aria-hidden="true">
+      <path d="M17 43 L12 33 H22 Z" fill="#fff"/>
+      <rect class="ring" x="2" y="2" width="30" height="30" rx="8" fill="${color}" stroke="#fff" stroke-width="2.5"/>
+      ${count > 0
+        ? `<text x="17" y="22" text-anchor="middle" font-size="${label.length > 2 ? 11 : 14}" font-weight="800" font-family="system-ui,sans-serif" fill="#1d2419">${label}</text>`
+        : '<rect x="12" y="12" width="10" height="10" rx="2" fill="#fff"/>'}
     </svg>`
   });
 }
 
+/** @param {import('../core/collections.js').Place} spot @param {boolean} selected */
+function pinIcon(spot, selected) {
+  const color = PIN_COLORS[placeAbundance(spot)] || PIN_COLORS.moyen;
+  const classes = [selected ? 'selected' : '', appStore.state.harvestMode && inSeason(spot) ? 'season' : ''].join(' ');
+  return placeIconOf(color, spot.properties.plants.length, classes);
+}
+
+/** Leaf glyph for plant markers. */
+const LEAF = '<path d="M7 15c0-5 3-8 8-8 0 5-3 8-8 8Zm0 0 4-4" fill="#fff" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/>';
+
+/**
+ * Plant: a small circle with a leaf, coloured by its abundance.
+ * @param {PlantMarker} plant @param {boolean} selected @param {boolean} draggable
+ */
+function plantIcon(plant, selected, draggable) {
+  const color = PIN_COLORS[plant.abundance] || PIN_COLORS.moyen;
+  const classes = ['gf-plant', selected ? 'selected' : '', plant.season ? 'season' : '', draggable ? 'draggable' : ''].join(' ');
+  return L.divIcon({
+    className: classes,
+    iconSize: [24, 24],
+    iconAnchor: [12, 12],
+    html: `<svg width="24" height="24" viewBox="0 0 22 22" aria-hidden="true">
+      <circle class="ring" cx="11" cy="11" r="9.5" fill="${color}" stroke="#fff" stroke-width="2"/>
+      <g transform="translate(0 0)">${LEAF}</g>
+    </svg>`
+  });
+}
+
+/**
+ * @typedef {object} PlantMarker
+ * @property {string} key          unique: placeId + ':' + plantId
+ * @property {string} placeId
+ * @property {number | null} plantId
+ * @property {[number, number]} coordinates
+ * @property {string} abundance
+ * @property {string} label
+ * @property {boolean} season
+ */
+
 const meIcon = L.divIcon({ className: 'gf-me', iconSize: [18, 18], iconAnchor: [9, 9] });
 
-/** Draggable "new spot" pin. */
-const editIcon = L.divIcon({
-  className: 'gf-pin selected',
-  iconSize: [30, 40],
-  iconAnchor: [15, 39],
-  html: `<svg width="30" height="40" viewBox="0 0 30 40" aria-hidden="true">
-    <path d="M15 39C15 39 2 23.5 2 14.5a13 13 0 0 1 26 0C28 23.5 15 39 15 39Z" fill="#16a34a" stroke="#fff" stroke-width="2"/>
-    <circle cx="15" cy="14.5" r="5" fill="#fff"/>
-  </svg>`
-});
+/** Draggable place pin of the editor (same shape as places, in green). */
+const editIcon = placeIconOf('#16a34a', 0, 'selected editing');
 
 const readStored = (/** @type {string} */ key, fallback) => {
   try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; }
@@ -59,18 +92,27 @@ const store = (/** @type {string} */ key, value) => {
 
 /**
  * Properties:
- *  - spots: GeoJSON spot features to show as pins
- *  - selectedId: highlighted spot
- *  - pin: [lon, lat] of an editable, draggable pin (spot editor), or null
+ *  - spots: places (GeoJSON features) to show as place markers
+ *  - selectedId: highlighted place
+ *  - pin: [lon, lat] of an editable, draggable place pin (place editor), or null
+ *  - plants: plant markers (each plant of a place has its own position)
+ *  - plantZoom: minimum zoom to show plant markers (0 = always)
+ *  - selectedPlant: highlighted plant marker key
+ *  - draggablePlants: plant markers can be dragged (place editor)
  *  - track: show the live GPS position
- *  - fit: zoom to the spots (or the pin) on first data
- * Events: spot-select {id}, pin-move {coordinates}, map-longpress {coordinates}
+ *  - fit: zoom to the content on first data
+ * Events: spot-select {id}, plant-select {placeId, plantId}, pin-move {coordinates},
+ *         plant-move {placeId, plantId, coordinates}, map-longpress {coordinates}
  */
 export class GfMap extends LitElement {
   static properties = {
     spots: { attribute: false },
     selectedId: { attribute: false },
     pin: { attribute: false },
+    plants: { attribute: false },
+    plantZoom: { type: Number, attribute: 'plant-zoom' },
+    selectedPlant: { attribute: false },
+    draggablePlants: { type: Boolean, attribute: 'draggable-plants' },
     track: { type: Boolean },
     fit: { type: Boolean },
     remember: { type: Boolean }
@@ -84,6 +126,12 @@ export class GfMap extends LitElement {
     this.selectedId = null;
     /** @type {[number, number] | null} */
     this.pin = null;
+    /** @type {PlantMarker[]} */
+    this.plants = [];
+    this.plantZoom = PLANT_ZOOM;
+    /** @type {string | null} */
+    this.selectedPlant = null;
+    this.draggablePlants = false;
     this.track = false;
     this.fit = false;
     /** Persist the last viewed area (main map only). */
@@ -104,6 +152,8 @@ export class GfMap extends LitElement {
   #cadastre = Boolean(readStored(config.storageKeys.mapLayer, { cadastre: false }).cadastre);
   /** @type {L.LayerGroup | null} */ #spotLayer = null;
   /** @type {Map<string, L.Marker>} */ #markers = new Map();
+  /** @type {L.LayerGroup | null} */ #plantLayer = null;
+  /** @type {Map<string, L.Marker>} */ #plantMarkers = new Map();
   /** @type {L.Marker | null} */ #editMarker = null;
   /** @type {L.Marker | null} */ #me = null;
   /** @type {L.Circle | null} */ #meCircle = null;
@@ -141,6 +191,8 @@ export class GfMap extends LitElement {
     if (this.#cadastre) this.#layers.cadastre.addTo(map);
 
     this.#spotLayer = L.layerGroup().addTo(map);
+    this.#plantLayer = L.layerGroup();
+    map.on('zoomend', () => this.#syncPlantVisibility());
 
     const view = this.remember ? readStored(config.storageKeys.mapView, null) : null;
     if (view) map.setView([view.lat, view.lng], view.zoom);
@@ -171,6 +223,8 @@ export class GfMap extends LitElement {
     if (!this.#map) return;
     if (changed.has('spots') || changed.has('selectedId')) this.#syncSpots();
     if (changed.has('pin')) this.#syncPin();
+    if (changed.has('plants') || changed.has('selectedPlant') || changed.has('draggablePlants')) this.#syncPlants();
+    if (changed.has('plantZoom')) this.#syncPlantVisibility();
     if (changed.has('track')) this.#syncTracking();
     if (this.fit && !this.#fitted) this.#fitToContent();
     if (changed.has('selectedId') && this.selectedId) this.#reveal(this.selectedId);
@@ -199,6 +253,7 @@ export class GfMap extends LitElement {
   #syncAll() {
     this.#syncSpots();
     this.#syncPin();
+    this.#syncPlants();
     this.#syncTracking();
     if (this.fit) this.#fitToContent();
   }
@@ -232,6 +287,55 @@ export class GfMap extends LitElement {
       marker.remove();
       this.#markers.delete(id);
     }
+  }
+
+  #syncPlants() {
+    const layer = /** @type {L.LayerGroup} */ (this.#plantLayer);
+    const seen = new Set();
+    for (const plant of this.plants) {
+      seen.add(plant.key);
+      const [lon, lat] = plant.coordinates;
+      const selected = plant.key === this.selectedPlant;
+      let marker = this.#plantMarkers.get(plant.key);
+      if (!marker) {
+        marker = L.marker([lat, lon], {
+          icon: plantIcon(plant, selected, this.draggablePlants),
+          title: plant.label,
+          keyboard: true,
+          riseOnHover: true,
+          draggable: this.draggablePlants,
+          autoPan: this.draggablePlants
+        });
+        const current = plant;
+        marker.on('click', () => this.#emit('plant-select', { placeId: current.placeId, plantId: current.plantId }));
+        marker.on('dragend', () => {
+          const { lat: y, lng: x } = /** @type {L.Marker} */ (this.#plantMarkers.get(current.key)).getLatLng();
+          this.#emit('plant-move', { placeId: current.placeId, plantId: current.plantId, coordinates: [x, y] });
+        });
+        marker.addTo(layer);
+        this.#plantMarkers.set(plant.key, marker);
+      } else {
+        marker.setLatLng([lat, lon]);
+        marker.setIcon(plantIcon(plant, selected, this.draggablePlants));
+      }
+      marker.setZIndexOffset(selected ? 1200 : 500);
+    }
+    for (const [key, marker] of this.#plantMarkers) {
+      if (seen.has(key)) continue;
+      marker.remove();
+      this.#plantMarkers.delete(key);
+    }
+    this.#syncPlantVisibility();
+  }
+
+  /** Plants only from `plantZoom` on: from afar the map shows places. */
+  #syncPlantVisibility() {
+    const map = this.#map;
+    const layer = this.#plantLayer;
+    if (!map || !layer) return;
+    const visible = this.plants.length > 0 && map.getZoom() >= this.plantZoom;
+    if (visible && !map.hasLayer(layer)) layer.addTo(map);
+    else if (!visible && map.hasLayer(layer)) layer.remove();
   }
 
   #syncPin() {
@@ -288,7 +392,10 @@ export class GfMap extends LitElement {
 
   #fitToContent() {
     const map = /** @type {L.Map} */ (this.#map);
-    const points = this.pin ? [this.pin] : this.spots.map(s => s.geometry.coordinates);
+    const points = [
+      ...(this.pin ? [this.pin] : this.spots.map(s => s.geometry.coordinates)),
+      ...(this.pin || !this.spots.length ? this.plants.map(p => p.coordinates) : [])
+    ];
     // Not laid out yet: fitting now would compute a view for a 0×0 map.
     if (!points.length || !map.getSize().x) return;
     this.#fitted = true;

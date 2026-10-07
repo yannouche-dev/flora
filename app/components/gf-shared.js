@@ -97,7 +97,8 @@ export class GfShared extends LitElement {
         ? newPlace(shared.coordinates, { name: shared.name })
         : newCollection('list', { name: shared.name });
       for (const plant of this._plants) {
-        collection = withPlant(collection, plant);
+        const coordinates = shared.plants.find(p => p.plantId === plant.id)?.coordinates;
+        collection = withPlant(collection, plant, coordinates ? { coordinates, accuracy: null } : undefined);
         const abundance = shared.plants.find(p => p.plantId === plant.id)?.abundance;
         if (abundance) collection = withEntry(collection, plant.id, { abundance: /** @type {any} */ (abundance) });
       }

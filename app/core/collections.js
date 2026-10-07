@@ -100,10 +100,60 @@ export function newCollection(kind, properties = {}) {
  */
 export function withLocation(collection, coordinates, accuracy = null) {
   if (collection.properties.kind === 'favorites') return collection;
-  return coordinates
-    ? { ...collection, geometry: { type: 'Point', coordinates: roundCoordinates(coordinates) }, properties: { ...collection.properties, kind: 'place', accuracy } }
-    : { ...collection, geometry: null, properties: { ...collection.properties, kind: 'list', accuracy: null } };
+  if (!coordinates) {
+    // A list's plants have no position.
+    const plants = collection.properties.plants.map(e => ({ ...e, coordinates: null, accuracy: null }));
+    return { ...collection, geometry: null, properties: { ...collection.properties, kind: 'list', accuracy: null, plants } };
+  }
+  const point = roundCoordinates(coordinates);
+  // Plants without their own position start at the place's point.
+  const plants = collection.properties.plants.map(e => e.coordinates ? e : { ...e, coordinates: point, accuracy: null });
+  return { ...collection, geometry: { type: 'Point', coordinates: point }, properties: { ...collection.properties, kind: 'place', accuracy, plants } };
 }
+
+/** Plants are offered the GPS position only when standing near the place (else: the place's point). */
+const NEAR_PLACE = 100;
+
+/**
+ * Default position of a plant added to a place: the current GPS fix if within 100 m of the place,
+ * otherwise the place's point (e.g. when adding from home).
+ * @param {Collection} place @param {{ coordinates: [number, number], accuracy: number } | null | undefined} fix
+ * @returns {{ coordinates: [number, number] | null, accuracy: number | null }}
+ */
+export function defaultPlantPosition(place, fix) {
+  if (!place.geometry) return { coordinates: null, accuracy: null };
+  if (fix && distance(fix.coordinates, place.geometry.coordinates) <= NEAR_PLACE) {
+    return { coordinates: roundCoordinates(fix.coordinates), accuracy: Math.round(fix.accuracy) };
+  }
+  return { coordinates: place.geometry.coordinates, accuracy: null };
+}
+
+/**
+ * Map markers for the plants of places (each at its own position).
+ * @param {Collection[]} places @param {(entry: PlantEntry) => boolean} [keep] @param {boolean} [harvestMode]
+ */
+export function plantMarkers(places, keep = () => true, harvestMode = false) {
+  const out = [];
+  for (const place of places) {
+    if (!place.geometry) continue;
+    for (const entry of place.properties.plants) {
+      if (!keep(entry)) continue;
+      out.push({
+        key: place.id + ':' + entry.plantId,
+        placeId: place.id,
+        plantId: entry.plantId,
+        coordinates: entryPosition(place, entry),
+        abundance: entry.abundance,
+        label: entryName(entry) + (place.properties.name ? ' · ' + place.properties.name : ''),
+        season: harvestMode && entryInSeason(entry)
+      });
+    }
+  }
+  return out;
+}
+
+/** Where a plant of a place grows (its own position, else the place's). @param {Collection} place @param {PlantEntry} entry */
+export const entryPosition = (place, entry) => entry.coordinates || place.geometry?.coordinates || null;
 
 /** A new plant entry from a TAXREF plant record (or search summary). @param {any} plant @returns {PlantEntry} */
 export const newEntry = plant => normalizeEntry({
@@ -116,10 +166,20 @@ export const newEntry = plant => normalizeEntry({
 /** @param {Place} place @param {number | null} plantId */
 export const findEntry = (place, plantId) => place.properties.plants.find(e => e.plantId === plantId) || null;
 
-/** Returns a copy of the place with the plant added (no-op if already there). @param {Place} place @param {any} plant */
-export function withPlant(place, plant) {
+/**
+ * Returns a copy of the collection with the plant added (no-op if already there). In a place, the plant
+ * gets `position` (default: the place's point); in a list, no position.
+ * @param {Collection} place @param {any} plant
+ * @param {{ coordinates: [number, number] | null, accuracy: number | null }} [position]
+ */
+export function withPlant(place, plant, position) {
   if (findEntry(place, plant.id)) return place;
-  return withPlants(place, [...place.properties.plants, newEntry(plant)]);
+  const entry = newEntry(plant);
+  if (place.geometry) {
+    entry.coordinates = position?.coordinates ? roundCoordinates(position.coordinates) : place.geometry.coordinates;
+    entry.accuracy = position?.coordinates ? position.accuracy ?? null : null;
+  }
+  return withPlants(place, [...place.properties.plants, entry]);
 }
 
 /** @param {Place} place @param {number | null} plantId */
@@ -383,7 +443,7 @@ export async function exportGeoJSON(only) {
     type: 'FeatureCollection',
     name: only?.length === 1 ? 'GeoFlora — ' + collectionTitle(only[0]) : 'GeoFlora — mes plantes',
     generator: 'GeoFlora',
-    formatVersion: 3,
+    formatVersion: 4,
     exportedAt: new Date().toISOString(),
     features
   };
