@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-07T08:09:48.356Z",
+  "generatedAt": "2026-10-07T09:44:12.734Z",
   "source": "TAXREF v18 official PatriNat archive",
   "sourceUrl": "https://assets.patrinat.fr/files/referentiel/TAXREF_v18_2025.zip",
   "taxrefVersion": "18.0",
@@ -35,8 +35,8 @@
       "url": "https://api.tela-botanica.org/service:cumulus:doc/c6f031b23d74373071094f2b1347b5813a3fc2c7",
       "license": "CC BY-SA 2.0 (données), ODbL 1.0 (base) — Ph. Julve, Tela Botanica",
       "rows": 8292,
-      "matched": 3784,
-      "fetchedAt": "2026-10-07T08:10:00.740Z"
+      "matched": 3879,
+      "fetchedAt": "2026-10-07T09:44:21.810Z"
     }
   },
   "thumbnails": {

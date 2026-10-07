@@ -25414,7 +25414,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AB%C3%A9rardie_laineuse.jpg",
       "author": "Douchet Quentin",
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 85940,
@@ -27499,7 +27503,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AGRUISSAN.JPG",
       "author": "Bertrand benazeth",
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 89579,
@@ -28802,7 +28810,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/90656",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/90656"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 717139,
@@ -29285,7 +29297,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ACirsium_creticum_sl1.jpg",
       "author": "Stefan.lefnaer",
       "license": "CC BY-SA 4.0"
-    }
+    },
+    "flowering": [
+      8,
+      8
+    ]
   },
   {
     "id": 91322,
@@ -31585,7 +31601,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/93140",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/93140"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      5,
+      5
+    ]
   },
   {
     "id": 93144,
@@ -31858,7 +31878,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/717746",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/717746"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 93673,
@@ -32219,7 +32243,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ADoronicum_austriacum_a3.jpg",
       "author": "Opioła Jerzy",
       "license": "CC BY 2.5"
-    }
+    },
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 95215,
@@ -34161,7 +34189,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AGTragopogon_longirostris.jpg",
       "author": "איתן פרמן",
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      5,
+      5
+    ]
   },
   {
     "id": 611295,
@@ -38722,7 +38754,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/101957",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/101957"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      8,
+      8
+    ]
   },
   {
     "id": 101958,
@@ -41508,7 +41544,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/102182",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/102182"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      9,
+      9
+    ]
   },
   {
     "id": 102183,
@@ -42455,7 +42495,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AHieracium_nobile.jpeg",
       "author": "JmGuasch",
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      9,
+      9
+    ]
   },
   {
     "id": 1017939,
@@ -43751,7 +43795,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/102400",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/102400"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 719012,
@@ -44798,7 +44846,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/102478",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/102478"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 102482,
@@ -45387,7 +45439,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/102554",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/102554"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 1017988,
@@ -45582,7 +45638,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/102573",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/102573"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 1017990,
@@ -47532,7 +47592,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AHypochaeris_maculata_(Flecken-Ferkelkraut)_3022_IMG.JPG",
       "author": "HermannSchachner",
       "license": "CC0"
-    }
+    },
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 103375,
@@ -47665,7 +47729,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AHypochoeris_uniflora_ENBLA01.jpg",
       "author": "Enrico Blasutto",
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 103385,
@@ -48677,7 +48745,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AJacobaea_paludosa_1.jpg",
       "author": "Pieter Pelser",
       "license": "CC BY 3.0"
-    }
+    },
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 610654,
@@ -49029,7 +49101,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AKlasea_lycopifolia_kz02.jpg",
       "author": "Krzysztof Ziarnek, Kenraiz",
       "license": "CC BY-SA 4.0"
-    }
+    },
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 717783,
@@ -49120,7 +49196,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ACicerbita_alpina_2005.07.31_11.58.41.jpg",
       "author": "Michael Becker",
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 104760,
@@ -49341,7 +49421,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ALactuca_quercina_Herbar.jpg",
       "author": null,
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      8,
+      8
+    ]
   },
   {
     "id": 104767,
@@ -51210,7 +51294,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ANotobasis_syriaca.jpg",
       "author": "Hans Hillewaert",
       "license": "CC BY-SA 4.0"
-    }
+    },
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 110061,
@@ -54371,7 +54459,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ALeuzea_cynaroides1.JPG",
       "author": "Jesús Alba Svitil",
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      8,
+      8
+    ]
   },
   {
     "id": 611455,
@@ -55005,7 +55097,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AScolymus_grandiflorus_Monte_Pellegrino_02.jpg",
       "author": "tato grasso",
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 121901,
@@ -55115,7 +55211,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/121937",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/121937"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 121939,
@@ -56881,7 +56981,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/124231",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/124231"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 124232,
@@ -60740,7 +60844,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/611683",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/611683"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      4,
+      4
+    ]
   },
   {
     "id": 717614,
@@ -63946,7 +64054,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ATephroseris_balbisiana_(2).jpg",
       "author": "U.Ferrando",
       "license": "CC BY-SA 4.0"
-    }
+    },
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 125894,
@@ -63991,7 +64103,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ATephroseris_helenitis_-0916_-_Flickr_-_Ragnhild_%26_Neil_Crawford.jpg",
       "author": "Ragnhild&Neil Crawford from Sweden",
       "license": "CC BY-SA 2.0"
-    }
+    },
+    "flowering": [
+      5,
+      5
+    ]
   },
   {
     "id": 125895,
@@ -64033,7 +64149,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ATephroseris_integrifolia_(Steppen-Aschenkraut)_IMG_7456.JPG",
       "author": "HermannSchachner",
       "license": "CC0"
-    }
+    },
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 125899,
@@ -64917,7 +65037,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AWillemetia_stipitata_Atlas_Alpenflora.jpg",
       "author": "Anton Hartinger",
       "license": "Public domain"
-    }
+    },
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 130337,
@@ -65809,7 +65933,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAlnus_cordata.jpg",
       "author": "Franz Xaver",
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      2,
+      2
+    ]
   },
   {
     "id": 81569,
@@ -65977,7 +66105,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ABetula_nana0.jpg",
       "author": "USDA photo, uploader user:MPF",
       "license": "Public domain"
-    }
+    },
+    "flowering": [
+      5,
+      5
+    ]
   },
   {
     "id": 85903,
@@ -68002,7 +68134,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/969506",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/969506"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 610595,
@@ -69959,7 +70095,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ASymphytum_kurdicum.jpg",
       "author": "Musa geçit",
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      5,
+      5
+    ]
   },
   {
     "id": 125355,
@@ -72327,7 +72467,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ABiscutella_didyma.JPG",
       "author": "Eitan Ferman",
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 86034,
@@ -75432,7 +75576,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/95333",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/95333"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 95337,
@@ -76787,7 +76935,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/103006",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/103006"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 966498,
@@ -76866,7 +77018,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AHormathophylla_pyrenaica_1.jpg",
       "author": "Alain Bigou",
       "license": "CC BY-SA 2.0 fr"
-    }
+    },
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 966497,
@@ -84382,7 +84538,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ACeltis_australis_20150404_a.jpg",
       "author": "Luis Fernández García",
       "license": "CC BY-SA 4.0"
-    }
+    },
+    "flowering": [
+      4,
+      4
+    ]
   },
   {
     "id": 160921,
@@ -94919,7 +95079,7 @@
     },
     "thumbnail": null,
     "flowering": [
-      7,
+      8,
       8
     ]
   },
@@ -101812,7 +101972,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ACornusMas_Fruits_01.jpg",
       "author": "B.navez",
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      3,
+      3
+    ]
   },
   {
     "id": 92501,
@@ -104787,7 +104951,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ACypress_Halefka.JPG",
       "author": "Chneophytou",
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      4,
+      4
+    ]
   },
   {
     "id": 1030434,
@@ -104854,7 +105022,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3APoint_Lobos._2010_04_17_-_panoramio_-_Vadim_Manuylov_(7).jpg",
       "author": "Vadim Manuylov",
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 104397,
@@ -104925,7 +105097,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AJuniperus_macrocarpa_Paros3.jpg",
       "author": "pandemia on Flickr",
       "license": "CC BY 2.0"
-    }
+    },
+    "flowering": [
+      5,
+      5
+    ]
   },
   {
     "id": 104409,
@@ -104963,7 +105139,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ACade1.jpg",
       "author": "Jean Tosti",
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      5,
+      5
+    ]
   },
   {
     "id": 104410,
@@ -158602,7 +158782,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ATulipa_gesneriana_001.jpg",
       "author": "Katalinks (who is also \"Екатерина\"). Original uploader was Katalinks at ru.wikipedia",
       "license": "Public domain"
-    }
+    },
+    "flowering": [
+      5,
+      5
+    ]
   },
   {
     "id": 127956,
@@ -161536,7 +161720,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ATilia_cordata%2C_Lipa2009.jpg",
       "author": "ImreKiss",
       "license": "CC BY 3.0"
-    }
+    },
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 126650,
@@ -162230,7 +162418,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ABois'd_Arc_-osage_orange-_tree.JPG",
       "author": "Gale French",
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 108810,
@@ -162972,7 +163164,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AFraxinus_ornus_JPG2.jpg",
       "author": "Jean-Pol GRANDMONT",
       "license": "CC BY 3.0"
-    }
+    },
+    "flowering": [
+      5,
+      5
+    ]
   },
   {
     "id": 104036,
@@ -169097,7 +169293,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AEpipactis_helleborine_flowers1_220703.jpg",
       "author": null,
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 521628,
@@ -171216,7 +171416,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AOphrys_holserica_01.jpg",
       "author": null,
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 610967,
@@ -171239,7 +171443,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/610967",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/610967"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      4,
+      4
+    ]
   },
   {
     "id": 110331,
@@ -171269,7 +171477,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AOphrys_holserica_01.jpg",
       "author": null,
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      4,
+      4
+    ]
   },
   {
     "id": 610969,
@@ -171897,7 +172109,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/110368",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/110368"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      5,
+      5
+    ]
   },
   {
     "id": 110372,
@@ -182694,7 +182910,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/611038",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/611038"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 810946,
@@ -187336,7 +187556,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAbies_grandis_crownoldtree.jpg",
       "author": "Chris Schnepf, University of Idaho, United States",
       "license": "CC BY 3.0 us"
-    }
+    },
+    "flowering": [
+      4,
+      4
+    ]
   },
   {
     "id": 79345,
@@ -187371,7 +187595,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAbies_nordmanniana_forest%2C_Gagra%2C_Abkhazia_2.jpg",
       "author": "Vyacheslav Argenberg from Seattle, WA, USA",
       "license": "CC BY 2.0"
-    }
+    },
+    "flowering": [
+      4,
+      4
+    ]
   },
   {
     "id": 717039,
@@ -187619,7 +187847,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AZirbe01.jpg",
       "author": "Tigerente at German Wikipedia",
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 113665,
@@ -187874,7 +188106,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AEastern_White_Pine_(Pinus_strobus)_-_Killarney%2C_Ontario_01.jpg",
       "author": "Ryan Hodnett",
       "license": "CC BY-SA 4.0"
-    }
+    },
+    "flowering": [
+      5,
+      5
+    ]
   },
   {
     "id": 113703,
@@ -209143,7 +209379,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/104602",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/104602"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 104613,
@@ -226964,7 +227204,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAnemone_apennina.jpg",
       "author": "Giuseppe Cristiano",
       "license": "Public domain"
-    }
+    },
+    "flowering": [
+      4,
+      4
+    ]
   },
   {
     "id": 82600,
@@ -226999,7 +227243,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAnemone_baldensis_(Baldo-Windr%C3%B6schen)_IMG_8122.jpg",
       "author": "HermannSchachner",
       "license": "CC0"
-    }
+    },
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 82607,
@@ -227159,7 +227407,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAnemone_palmata_var._albida_Enfoque_2013-4-11_SierraMadrona.jpg",
       "author": "Javier martin",
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      4,
+      4
+    ]
   },
   {
     "id": 82656,
@@ -227401,7 +227653,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/83245",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/83245"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 83250,
@@ -233370,7 +233626,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ADelphinium_officinale_-_K%C3%B6hler%E2%80%93s_Medizinal-Pflanzen-052.jpg",
       "author": "Franz Eugen Köhler, Köhler's Medizinal-Pflanzen",
       "license": "Public domain"
-    }
+    },
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 717569,
@@ -233402,7 +233662,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/717569",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/717569"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 126070,
@@ -237049,7 +237313,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ASorbus_aria-3420.jpg",
       "author": "Julie Anne Workman",
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      5,
+      5
+    ]
   },
   {
     "id": 84135,
@@ -237956,7 +238224,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AMedlar_pomes_and_leaves.jpg",
       "author": null,
       "license": "CC BY-SA 2.0"
-    }
+    },
+    "flowering": [
+      5,
+      5
+    ]
   },
   {
     "id": 92864,
@@ -238342,7 +238614,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AQuince_flowers.jpg",
       "author": "Fir0002 at English Wikipedia",
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      5,
+      5
+    ]
   },
   {
     "id": 94464,
@@ -239453,7 +239729,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ASorbus_latifolia_Morton_261-93-5.jpg",
       "author": "Bruce Marlin",
       "license": "CC BY-SA 2.5"
-    }
+    },
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 975604,
@@ -241757,7 +242037,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3APrunus_brigantiaca_29072004.JPG",
       "author": "H Brisse (upload by Abalg)",
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      5,
+      5
+    ]
   },
   {
     "id": 116053,
@@ -241960,7 +242244,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AKarayemi%C5%9F-8.jpg",
       "author": "Karduelis",
       "license": "Public domain"
-    }
+    },
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 116093,
@@ -242231,7 +242519,7 @@
     },
     "flowering": [
       4,
-      5
+      4
     ]
   },
   {
@@ -242295,7 +242583,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AFeuerdorn_(Pyracantha_coccinea).JPG",
       "author": "noebse",
       "license": "CC BY-SA 2.5"
-    }
+    },
+    "flowering": [
+      5,
+      5
+    ]
   },
   {
     "id": 116574,
@@ -242380,7 +242672,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AFroitos_Pyrus_cordata%2C_pereira_brava%2C_Xard%C3%ADn_bot%C3%A1nico_de_Culleredo_2.jpg",
       "author": "Elisardojm",
       "license": "CC BY-SA 4.0"
-    }
+    },
+    "flowering": [
+      4,
+      4
+    ]
   },
   {
     "id": 116594,
@@ -244693,7 +244989,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/118932",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/118932"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 118933,
@@ -245810,7 +246110,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/118983",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/118983"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 118985,
@@ -248422,7 +248726,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/119118",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/119118"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 119119,
@@ -249134,7 +249442,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/119152",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/119152"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 966598,
@@ -252228,7 +252540,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ARubus_radula_-_Botanischer_Garten%2C_Frankfurt_am_Main_-_DSC02462.JPG",
       "author": "Daderot",
       "license": "CC0"
-    }
+    },
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 1039222,
@@ -252726,7 +253042,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/119320",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/119320"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 1039391,
@@ -252878,7 +253198,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/810952",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/810952"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 119328,
@@ -252905,7 +253229,11 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/119328",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/119328"
     },
-    "thumbnail": null
+    "thumbnail": null,
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 119331,
@@ -253066,7 +253394,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ARubus_silvaticus_-_Botanischer_Garten%2C_Frankfurt_am_Main_-_DSC02485.JPG",
       "author": "Daderot",
       "license": "CC0"
-    }
+    },
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 717510,
@@ -253215,7 +253547,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ARubus_sprengelii_-_Botanischer_Garten%2C_Frankfurt_am_Main_-_DSC02495.JPG",
       "author": "Daderot",
       "license": "CC0"
-    }
+    },
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 119346,
@@ -253413,7 +253749,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ARubus_sulcatus_-_Botanischer_Garten%2C_Frankfurt_am_Main_-_DSC02454.JPG",
       "author": "Daderot",
       "license": "CC0"
-    }
+    },
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 1039393,
@@ -253882,7 +254222,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AThierry_Helminger_herbarium_sheet_Rubus_pyramidalis.jpg",
       "author": "Musée national d'histoire naturelle Luxembourg",
       "license": "CC BY 4.0"
-    }
+    },
+    "flowering": [
+      7,
+      7
+    ]
   },
   {
     "id": 119375,
@@ -254849,7 +255193,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ASorbus_torminalis_fruits-001.jpg",
       "author": "Amada44",
       "license": "Public domain"
-    }
+    },
+    "flowering": [
+      5,
+      5
+    ]
   },
   {
     "id": 84296,
@@ -260588,7 +260936,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAcer_campestre_02_by-dpc.jpg",
       "author": "David Perez",
       "license": "CC BY 3.0"
-    }
+    },
+    "flowering": [
+      5,
+      5
+    ]
   },
   {
     "id": 79735,
@@ -260658,7 +261010,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AAcer_monspessulanum_fg02.jpg",
       "author": "Fritz Geller-Grimm",
       "license": "CC BY-SA 2.5"
-    }
+    },
+    "flowering": [
+      4,
+      4
+    ]
   },
   {
     "id": 79766,
@@ -260831,7 +261187,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AID_1211_Bergahorn_0011.jpg",
       "author": "Christian Pirkl",
       "license": "CC BY-SA 3.0 at"
-    }
+    },
+    "flowering": [
+      5,
+      5
+    ]
   },
   {
     "id": 717049,
@@ -261132,7 +261492,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AND_678.N.59_Hofers_Kastanien_in_Wettringen.jpg",
       "author": "Stephan van Helden",
       "license": "CC BY-SA 4.0"
-    }
+    },
+    "flowering": [
+      5,
+      5
+    ]
   },
   {
     "id": 161030,
@@ -267100,7 +267464,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3A20130817Staphylea_pinnata1.jpg",
       "author": "AnRo0002",
       "license": "CC0"
-    }
+    },
+    "flowering": [
+      5,
+      5
+    ]
   },
   {
     "id": 125247,
@@ -267134,7 +267502,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AStyrax_officinalis_tree.JPG",
       "author": "איתן פרמן",
       "license": "CC BY-SA 3.0"
-    }
+    },
+    "flowering": [
+      5,
+      5
+    ]
   },
   {
     "id": 109135,
@@ -267407,7 +267779,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3ATaxus_baccata_tree.jpg",
       "author": "Sitomon",
       "license": "CC BY-SA 2.0"
-    }
+    },
+    "flowering": [
+      4,
+      4
+    ]
   },
   {
     "id": 959293,
@@ -271932,7 +272308,11 @@
       "sourceUrl": "https://commons.wikimedia.org/wiki/File%3AVitis_vinifera_-_K%C3%B6hler%E2%80%93s_Medizinal-Pflanzen-145.jpg",
       "author": "Franz Eugen Köhler, Köhler's Medizinal-Pflanzen",
       "license": "Public domain"
-    }
+    },
+    "flowering": [
+      6,
+      6
+    ]
   },
   {
     "id": 1078349,
