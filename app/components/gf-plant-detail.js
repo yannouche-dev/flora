@@ -11,6 +11,7 @@ import * as sources from '../core/sources.js';
 import './gf-attribution.js';
 import './gf-plant-spots.js';
 import './gf-calendar.js';
+import './gf-status.js';
 import './gf-add-to.js';
 
 /** Remote text is untrusted HTML: keep only its text content (DOMParser never runs scripts). */
@@ -318,6 +319,7 @@ export class GfPlantDetail extends LitElement {
         <div class="sci"><i>${plant.scientificName}</i> <span class="author">${plant.author}</span></div>
         ${this.#actions(plant)}
         <gf-add-to .plant=${plant}></gf-add-to>
+        <gf-status .plant=${plant}></gf-status>
 
         <ul class="tags">
           <li>${plant.family}</li>

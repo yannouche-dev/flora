@@ -12,6 +12,7 @@ const LABELS = {
   family: (/** @type {string} */ v) => v,
   genus: (/** @type {string} */ v) => html`<i>${v}</i>`,
   photo: (/** @type {string} */ v) => v === 'avec' ? 'Avec photo' : 'Sans photo',
+  legal: (/** @type {string} */ v) => ({ nationale: 'Protégée en France', protegee: 'Protégée', reglementee: 'Cueillette réglementée', menacee: 'Menacée en France' })[v] || v,
   french: (/** @type {string} */ v) => v === 'avec' ? 'Avec nom français' : 'Sans nom français'
 };
 

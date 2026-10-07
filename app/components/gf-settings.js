@@ -5,6 +5,7 @@ import { setHarvestMode, StoreController } from '../core/store.js';
 import { getTrefleToken, setTrefleToken } from '../core/sources.js';
 import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
 import { share } from '../core/share.js';
+import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
 
 export class GfSettings extends LitElement {
   static properties = {
@@ -13,6 +14,9 @@ export class GfSettings extends LitElement {
     _spotMessage: { state: true },
     _report: { state: true },
     _personal: { state: true },
+    _regions: { state: true },
+    _region: { state: true },
+    _regionNote: { state: true },
     _transfer: { state: true }
   };
 
@@ -60,6 +64,7 @@ export class GfSettings extends LitElement {
       cursor: pointer;
     }
     .diag { font-size: 0.85rem; }
+    select { font: inherit; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--gf-border); background: var(--gf-surface); color: var(--gf-text); max-width: 100%; }
     details { margin-top: 10px; }
     summary { cursor: pointer; }
     label.file input { position: absolute; width: 1px; height: 1px; opacity: 0; }
@@ -143,8 +148,31 @@ export class GfSettings extends LitElement {
     /** @type {Awaited<ReturnType<typeof storageReport>> | null} */
     this._report = null;
     this._personal = true;
+    /** @type {{ iso: string, name: string }[]} */
+    this._regions = [];
+    this._region = myRegion();
+    /** @type {string | null} */
+    this._regionNote = null;
+    territories().then(t => { this._regions = t.regions; }).catch(() => {});
     /** @type {string | null} */
     this._transfer = null;
+  }
+
+  /** @param {string | null} iso */
+  #setRegion(iso) {
+    setMyRegion(iso);
+    this._region = iso;
+    this._regionNote = null;
+  }
+
+  #regionFromGps() {
+    this._regionNote = 'Recherche de la position…';
+    navigator.geolocation.getCurrentPosition(async pos => {
+      const here = await territoryAt([pos.coords.longitude, pos.coords.latitude]).catch(() => null);
+      if (!here) { this._regionNote = 'Position hors de France métropolitaine.'; return; }
+      this.#setRegion(here.region);
+      this._regionNote = `${here.regionName} (${here.deptName}).`;
+    }, () => { this._regionNote = 'Position indisponible.'; }, { enableHighAccuracy: false, timeout: 15000, maximumAge: 600000 });
   }
 
   /** Long links still work in browsers, but some messaging apps cut them. */
@@ -199,6 +227,18 @@ export class GfSettings extends LitElement {
           et observations « en fleurs » / « en fruits » en France d’<a href="https://www.inaturalist.org/" target="_blank" rel="noopener">iNaturalist</a>.
           Ce sont des indications de floraison et de fructification, pas des dates de cueillette.
         </p>
+
+        <h2>Ma région</h2>
+        <p class="muted">Pour savoir si une plante est protégée ou si sa cueillette est réglementée chez vous (statuts INPN).
+          Dans un endroit, c’est sa position GPS qui compte.</p>
+        <div class="row">
+          <select aria-label="Ma région" .value=${this._region || ''} @change=${e => this.#setRegion(e.target.value || null)}>
+            <option value="">— Non précisée —</option>
+            ${this._regions.map(r => html`<option value=${r.iso} ?selected=${r.iso === this._region}>${r.name}</option>`)}
+          </select>
+          <button type="button" @click=${this.#regionFromGps}>Utiliser ma position</button>
+        </div>
+        ${this._regionNote ? html`<p class="muted" role="status">${this._regionNote}</p>` : nothing}
 
         <h2>Mode cueillette</h2>
         <label class="switch">
