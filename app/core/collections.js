@@ -31,6 +31,7 @@ const ABUNDANCE_RANK = { rare: 0, moyen: 1, abondant: 2 };
 export const spotEvents = new EventTarget();
 async function changed() {
   await refreshMembership().catch(error => console.error(error));
+  await writeBackup().catch(error => console.error(error));
   spotEvents.dispatchEvent(new Event('change'));
 }
 
@@ -59,6 +60,8 @@ export const getCollection = getPlace;
 export async function deletePlace(id) {
   if (id === FAVORITES_ID) throw new Error('Les favoris ne peuvent pas être supprimés.');
   await db.remove('spots', id);
+  // A deliberate deletion may leave nothing: the backup must follow, not keep the deleted collection.
+  allowEmptyBackup = true;
   await changed();
 }
 export const deleteCollection = deletePlace;
@@ -455,6 +458,99 @@ export function directionsUrl(place) {
   return `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}`;
 }
 
+// ── Local backup copy ─────────────────────────────────────────────────────
+// A second copy of every collection in localStorage, rewritten on each change. If IndexedDB loses the
+// collections (failed upgrade, partial wipe, bug), "Mes plantes" offers to restore them. A full wipe of
+// the site's data by the browser removes this copy too: only an exported file survives that.
+
+/** Above this size the copy is not written (localStorage holds ~5 MB per site). */
+const BACKUP_LIMIT = 2_500_000;
+/** Set by a deliberate deletion: an empty list may then overwrite a non-empty backup. */
+let allowEmptyBackup = false;
+
+/** @typedef {{ savedAt: string, features: any[] }} Backup */
+
+/** @returns {Backup | null} */
+export function readBackup() {
+  try {
+    const data = JSON.parse(localStorage.getItem(config.storageKeys.backup) || 'null');
+    return data && Array.isArray(data.features) ? data : null;
+  } catch { return null; }
+}
+
+/**
+ * Rewrites the backup from the database. Never replaces a backup holding collections with an empty
+ * one unless the user just deleted something: an empty database is exactly what it must survive.
+ * @returns {Promise<'saved' | 'kept' | 'too-large' | 'failed'>}
+ */
+export async function writeBackup() {
+  const all = (await listCollections()).filter(c => c.properties.plants.length || c.properties.kind !== 'favorites');
+  const previous = readBackup();
+  if (!all.length && previous?.features.length && !allowEmptyBackup) return 'kept';
+  allowEmptyBackup = false;
+  const json = JSON.stringify({ savedAt: new Date().toISOString(), features: all });
+  if (json.length > BACKUP_LIMIT) return 'too-large';
+  try {
+    localStorage.setItem(config.storageKeys.backup, json);
+    return 'saved';
+  } catch { return 'failed'; }
+}
+
+/** Collections in the backup that the database no longer has. @returns {Promise<Collection[]>} */
+export async function missingFromBackup() {
+  const backup = readBackup();
+  if (!backup?.features.length) return [];
+  const present = new Set((await listCollections()).map(c => c.id));
+  return backup.features.map(normalizeCollection).filter(c => c && !present.has(c.id) && (c.properties.plants.length || c.properties.kind !== 'favorites'));
+}
+
+/** Puts the missing collections back. @returns {Promise<number>} how many were restored */
+export async function restoreBackup() {
+  const missing = await missingFromBackup();
+  if (!missing.length) return 0;
+  const { added, updated } = await importFeatures(missing);
+  return added + updated;
+}
+
+/** Forgets collections the user chose not to restore (the backup then follows the database). */
+export async function discardMissingBackup() {
+  allowEmptyBackup = true;
+  await writeBackup();
+}
+
+/**
+ * Storage health, for the diagnostic in Réglages.
+ * @returns {Promise<{ dbVersion: number | null, collections: number, persisted: boolean | null,
+ *   usage: number | null, quota: number | null, backupAt: string | null, backupCount: number,
+ *   markedHasSpots: boolean, lastExport: string | null }>}
+ */
+export async function storageReport() {
+  const [conn, all, persisted, estimate] = await Promise.all([
+    db.openDb().catch(() => null),
+    listCollections().catch(() => []),
+    navigator.storage?.persisted?.().catch(() => null) ?? null,
+    navigator.storage?.estimate?.().catch(() => null) ?? null
+  ]);
+  const backup = readBackup();
+  return {
+    dbVersion: conn?.version ?? null,
+    collections: all.length,
+    persisted: persisted ?? null,
+    usage: estimate?.usage ?? null,
+    quota: estimate?.quota ?? null,
+    backupAt: backup?.savedAt ?? null,
+    backupCount: backup?.features.length ?? 0,
+    markedHasSpots: hasSpots(),
+    lastExport: lastExportDate()
+  };
+}
+
+/** Asks for persistent storage now (from a button: a user gesture). @returns {Promise<boolean | null>} granted */
+export async function protectStorage() {
+  await requestPersistence();
+  try { return await navigator.storage.persisted(); } catch { return null; }
+}
+
 // ── GeoJSON export / import ───────────────────────────────────────────────
 
 /**
@@ -524,7 +620,15 @@ export async function importGeoJSON(file) {
   }
   const features = data?.type === 'FeatureCollection' ? data.features : data?.type === 'Feature' ? [data] : null;
   if (!Array.isArray(features)) throw new Error('Le fichier ne contient pas de FeatureCollection GeoJSON.');
+  return importFeatures(features);
+}
 
+/**
+ * Merges features (GeoJSON or collections) into the local ones: same id → the most recently updated wins.
+ * @param {any[]} features
+ * @returns {Promise<{ added: number, updated: number, unchanged: number, skipped: number }>}
+ */
+async function importFeatures(features) {
   const plants = await db.getAll('plants');
   const byName = new Map(plants.map(plant => [plant.scientificName.toLowerCase(), plant]));
 
