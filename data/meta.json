@@ -41,17 +41,28 @@
   },
   "thumbnails": {
     "source": "Wikidata P18 + Wikimedia Commons",
-    "withThumbnail": 4469,
-    "withoutThumbnail": 3276,
-    "coveragePercent": 57.7,
+    "withThumbnail": 5680,
+    "withoutThumbnail": 2065,
+    "coveragePercent": 73.34,
     "withWikidata": 6247,
     "bySource": {
-      "Wikimedia Commons": 4469
+      "Wikimedia Commons": 4469,
+      "iNaturalist": 460,
+      "GBIF": 751
     },
     "wikidataBulk": {
       "checked": 3276,
       "matched": 1770,
       "freeP18ImagesAdded": 0
+    },
+    "fallbacks": {
+      "gbif": true,
+      "inaturalist": true,
+      "acceptedLicenses": [
+        "CC0",
+        "CC BY",
+        "CC BY-SA"
+      ]
     }
   }
 }
