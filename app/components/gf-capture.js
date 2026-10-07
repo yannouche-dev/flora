@@ -11,6 +11,7 @@ import {
 } from '../core/collections.js';
 import { store, StoreController } from '../core/store.js';
 import { statusWarning } from './gf-status.js';
+import './gf-thumb.js';
 
 /** A plant tapped within this distance of an existing place joins it instead of creating a new one. */
 const JOIN_RADIUS = 30;
@@ -86,10 +87,10 @@ export class GfCapture extends LitElement {
       border: 1px solid var(--gf-border);
       cursor: pointer;
     }
-    .chips button { border-radius: 999px; padding: 8px 14px; }
+    .chips button { border-radius: 999px; padding: 4px 14px 4px 4px; display: inline-flex; align-items: center; gap: 8px; }
     .chips small { color: var(--gf-text-muted); }
     .results { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
-    .results button { width: 100%; text-align: left; padding: 10px 12px; border-radius: 10px; }
+    .results button { width: 100%; text-align: left; padding: 6px 12px 6px 6px; border-radius: 10px; display: flex; align-items: center; gap: 10px; }
     .results i { color: var(--gf-text-muted); font-family: var(--gf-font-serif); }
     button:disabled { opacity: 0.5; cursor: default; }
     footer { padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--gf-border); display: flex; align-items: center; gap: 10px; }
@@ -283,6 +284,7 @@ export class GfCapture extends LitElement {
     if (!plants.length) return nothing;
     return html`<h3>${title}</h3><div class="chips">${plants.map(p => html`
       <button type="button" ?disabled=${!this._fix || this._busy} @click=${() => this.#capture(p)}>
+        <gf-thumb .plant=${p} size="30" round></gf-thumb>
         ${p.vernacularNames?.[0] || p.scientificName}${p.d !== undefined ? html` <small>· ${Math.round(p.d)} m</small>` : nothing}
       </button>`)}</div>`;
   }
@@ -310,7 +312,8 @@ export class GfCapture extends LitElement {
         <div class="body">
           ${this._results.length ? html`<ul class="results">${this._results.map(r => html`
             <li><button type="button" ?disabled=${!this._fix || this._busy} @click=${() => this.#capture(r)}>
-              ${r.vernacularName || r.scientificName} <i>${r.scientificName}</i></button></li>`)}</ul>`
+              <gf-thumb .plant=${r} size="40"></gf-thumb>
+              <span>${r.vernacularName || r.scientificName} <i>${r.scientificName}</i></span></button></li>`)}</ul>`
             : html`
               ${this.#chips('Autour de vous', around)}
               ${this.#chips('Favoris', favorites)}

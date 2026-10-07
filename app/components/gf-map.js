@@ -8,6 +8,7 @@ import { watchLocation } from '../core/geo.js';
 import { FRANCE_BOUNDS, LAYERS, tileLayer } from '../core/ign.js';
 import { inSeason, placeAbundance, placeTitle } from '../core/collections.js';
 import { store as appStore } from '../core/store.js';
+import { cachedThumb, thumbUrl } from '../core/thumb.js';
 
 const STYLESHEETS = [
   new URL('../../vendor/leaflet.css', import.meta.url).href,
@@ -49,13 +50,25 @@ function pinIcon(spot, selected) {
 /** Leaf glyph for plant markers. */
 const LEAF = '<path d="M7 15c0-5 3-8 8-8 0 5-3 8-8 8Zm0 0 4-4" fill="#fff" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/>';
 
+const escapeAttr = (/** @type {string} */ s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+
 /**
- * Plant: a small circle with a leaf, coloured by its abundance.
+ * Plant: its photo in a circle ringed with its abundance colour (a leaf until / unless a photo is known).
  * @param {PlantMarker} plant @param {boolean} selected @param {boolean} draggable
  */
 function plantIcon(plant, selected, draggable) {
   const color = PIN_COLORS[plant.abundance] || PIN_COLORS.moyen;
-  const classes = ['gf-plant', selected ? 'selected' : '', plant.season ? 'season' : '', draggable ? 'draggable' : ''].join(' ');
+  const url = plant.plantId ? cachedThumb(plant.plantId) : null;
+  const classes = ['gf-plant', url ? 'photo' : '', selected ? 'selected' : '', plant.season ? 'season' : '', draggable ? 'draggable' : ''].join(' ');
+  if (url) {
+    return L.divIcon({
+      className: classes,
+      iconSize: [34, 34],
+      iconAnchor: [17, 17],
+      html: `<span class="ring" style="--c:${color}"><img src="${escapeAttr(url)}" alt="" referrerpolicy="no-referrer" decoding="async"
+        onerror="this.remove()" /></span>`
+    });
+  }
   return L.divIcon({
     className: classes,
     iconSize: [24, 24],
@@ -345,6 +358,16 @@ export class GfMap extends LitElement {
     this.#syncPlantVisibility();
   }
 
+  /** Once a plant's photo URL is known, its markers are redrawn with it. @param {number} plantId */
+  async #loadThumb(plantId) {
+    const url = await thumbUrl(plantId);
+    if (!url || !this.isConnected) return;
+    for (const plant of this.plants) {
+      if (plant.plantId !== plantId) continue;
+      this.#plantMarkers.get(plant.key)?.setIcon(plantIcon(plant, plant.key === this.selectedPlant, this.draggablePlants));
+    }
+  }
+
   /** Plants only from `plantZoom` on: from afar the map shows places. */
   #syncPlantVisibility() {
     const map = this.#map;
@@ -353,6 +376,10 @@ export class GfMap extends LitElement {
     const visible = this.plants.length > 0 && map.getZoom() >= this.plantZoom;
     if (visible && !map.hasLayer(layer)) layer.addTo(map);
     else if (!visible && map.hasLayer(layer)) layer.remove();
+    // Photos are looked up only for plants actually drawn.
+    if (visible) {
+      for (const id of new Set(this.plants.map(p => p.plantId))) if (id && cachedThumb(id) === undefined) this.#loadThumb(id);
+    }
   }
 
   // The place pin stays below plant markers (z 500+): a plant on the place point covers only the tip of

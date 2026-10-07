@@ -14,6 +14,7 @@ import { encodeCollection, share } from '../core/share.js';
 import { StoreController, whenReady } from '../core/store.js';
 import './gf-map.js';
 import './gf-status.js';
+import './gf-thumb.js';
 
 /** Existing places closer than this are offered instead of creating a duplicate. */
 const NEARBY_RADIUS = 100;
@@ -210,7 +211,7 @@ export class GfSpotEditor extends LitElement {
     .entry > button.head {
       width: 100%;
       display: grid;
-      grid-template-columns: 1fr auto;
+      grid-template-columns: auto 1fr auto;
       gap: 2px 10px;
       align-items: center;
       text-align: left;
@@ -223,8 +224,10 @@ export class GfSpotEditor extends LitElement {
     }
     .head .name { font-weight: 600; }
     .head .sci { font-family: var(--gf-font-serif); font-style: italic; color: var(--gf-text-muted); font-size: 0.85rem; }
-    .head .summary { grid-column: 1 / -1; font-size: 0.8rem; color: var(--gf-text-muted); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    .head .chev { grid-row: 1; grid-column: 2; color: var(--gf-text-muted); transition: transform 0.15s; }
+    .head gf-thumb { grid-row: 1 / span 2; grid-column: 1; }
+    .head .name { grid-column: 2; }
+    .head .summary { grid-column: 2 / -1; font-size: 0.8rem; color: var(--gf-text-muted); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .head .chev { grid-row: 1; grid-column: 3; color: var(--gf-text-muted); transition: transform 0.15s; }
     .entry.open .chev { transform: rotate(180deg); }
     .entry .body { padding: 12px; display: grid; gap: 12px; border-top: 1px solid var(--gf-border); }
     .badge { background: #fde047; color: #422006; border-radius: 999px; padding: 0 8px; font-size: 0.75rem; font-weight: 600; }
@@ -242,7 +245,11 @@ export class GfSpotEditor extends LitElement {
       background: var(--gf-surface);
       color: var(--gf-text);
       cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 10px;
     }
+    .picker li button span { min-width: 0; }
     .picker li:last-child button { border-bottom: 0; }
     .picker li button[disabled] { opacity: 0.5; cursor: default; }
     .picker i { color: var(--gf-text-muted); font-family: var(--gf-font-serif); }
@@ -862,6 +869,7 @@ export class GfSpotEditor extends LitElement {
     return html`
       <li class="entry ${open ? 'open' : ''}">
         <button class="head" type="button" aria-expanded=${open ? 'true' : 'false'} @click=${() => { this._open = open ? null : id; }}>
+          <gf-thumb plant-id=${id ?? 0} size="44"></gf-thumb>
           <span class="name">${entryName(entry)}</span>
           <span class="chev" aria-hidden="true">▾</span>
           <span class="summary">
@@ -947,7 +955,8 @@ export class GfSpotEditor extends LitElement {
         ${this._pickerResults.length ? html`<ul>${this._pickerResults.map(r => {
           const already = Boolean(place && findEntry(place, r.id));
           return html`<li><button type="button" ?disabled=${already} @click=${() => this.#pickPlant(r)}>
-            ${r.vernacularName || r.scientificName} <i>${r.scientificName}</i>${already ? ' · déjà dans ce lieu' : ''}</button></li>`;
+            <gf-thumb .plant=${r} size="36"></gf-thumb>
+            <span>${r.vernacularName || r.scientificName} <i>${r.scientificName}</i>${already ? ' · déjà dans ce lieu' : ''}</span></button></li>`;
         })}</ul>` : nothing}
       </div>`;
   }

@@ -6,7 +6,7 @@
 //  - IGN map tiles: cache-first, capped — areas already viewed stay available offline
 //  - remote API JSON: not cached here (app/core/sources.js caches it in IndexedDB)
 
-const VERSION = 'v15';
+const VERSION = 'v16';
 const SHELL_CACHE = 'geoflora-shell-' + VERSION;
 const IMAGE_CACHE = 'geoflora-images-' + VERSION;
 const IMAGE_LIMIT = 400;
@@ -42,6 +42,7 @@ const SHELL = [
   'app/core/place-model.js',
   'app/core/portable.js',
   'app/core/territory.js',
+  'app/core/thumb.js',
   'app/core/query.js',
   'app/core/router.js',
   'app/core/search.js',
@@ -71,15 +72,10 @@ const SHELL = [
   'app/components/gf-shared.js',
   'app/components/gf-spot-editor.js',
   'app/components/gf-status.js',
+  'app/components/gf-thumb.js',
   'app/components/gf-tabbar.js'
 ];
 
-const IMAGE_HOSTS = [
-  'upload.wikimedia.org',
-  'thumb.wikimedia.org',
-  'inaturalist-open-data.s3.amazonaws.com',
-  'static.inaturalist.org'
-];
 
 self.addEventListener('install', event => {
   event.waitUntil(
@@ -120,7 +116,8 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  if (request.destination === 'image' && IMAGE_HOSTS.includes(url.hostname)) {
+  // Plant photos (Wikimedia, iNaturalist, herbaria…): whatever host the dataset points to.
+  if (request.destination === 'image') {
     event.respondWith(staleWhileRevalidate(event, IMAGE_CACHE, request, IMAGE_LIMIT));
   }
 });

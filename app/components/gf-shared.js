@@ -8,6 +8,7 @@ import { hasPersonal } from '../core/portable.js';
 import { decodeCollection, decodePortable, isPortableLink } from '../core/share.js';
 import { whenReady } from '../core/store.js';
 import './gf-map.js';
+import './gf-thumb.js';
 
 /** Preview of a collection received by link (#/shared?d=…), with "Enregistrer dans mes plantes". */
 export class GfShared extends LitElement {
@@ -41,7 +42,7 @@ export class GfShared extends LitElement {
       color: inherit;
       text-decoration: none;
     }
-    li img, li .ph { grid-row: span 2; width: 44px; height: 44px; border-radius: 8px; object-fit: cover; background: var(--gf-surface-2); }
+    li gf-thumb { grid-row: span 2; }
     .nm { font-weight: 600; }
     .sci { font-family: var(--gf-font-serif); font-style: italic; color: var(--gf-text-muted); font-size: 0.85rem; }
     .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; position: sticky; bottom: 0; padding: 10px 0; background: var(--gf-bg); }
@@ -191,7 +192,7 @@ export class GfShared extends LitElement {
         <ul>
           ${this._plants.map(plant => html`
             <li><a href=${href.plant(plant.id)}>
-              ${plant.thumbnail?.url ? html`<img src=${plant.thumbnail.url} alt="" loading="lazy" referrerpolicy="no-referrer" />` : html`<span class="ph"></span>`}
+              <gf-thumb .plant=${plant} size="44"></gf-thumb>
               <span class="nm">${plant.vernacularNames?.[0] || plant.scientificName}</span>
               <span class="sci">${plant.scientificName}</span>
             </a></li>`)}
