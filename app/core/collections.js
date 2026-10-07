@@ -234,11 +234,14 @@ export async function refreshMembership() {
     }
   }
   const favorites = new Set(all.find(c => c.id === FAVORITES_ID)?.properties.plantIds || []);
+  // Plant → one place where it is noted (📍 in the results grid opens it on the map).
+  const placed = new Map();
+  for (const c of all) if (isPlace(c)) for (const id of c.properties.plantIds) if (!placed.has(id)) placed.set(id, c.id);
   const collections = all
     .map(c => ({ id: c.id, name: collectionTitle(c), kind: c.properties.kind, count: c.properties.plants.length }))
     .sort((a, b) => (a.kind === 'favorites' ? -1 : b.kind === 'favorites' ? 1 : 0) || a.name.localeCompare(b.name, 'fr'));
   membership = { favorites, byPlant, collections };
-  store.set({ favorites, collections });
+  store.set({ favorites, placed, collections });
 }
 
 /** @param {string} text */

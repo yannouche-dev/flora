@@ -25,6 +25,8 @@ import { config } from '../config.js';
  * @property {Results} results
  * @property {boolean} compact
  * @property {Set<number>} favorites    plant ids in the ♥ collection
+ * @property {Map<number, string>} placed  plant id → one of my places where it is noted
+ * @property {GridView} gridView         results grid: standard, illustrated (big photos) or scientific (all columns)
  * @property {boolean} harvestMode      "Mode cueillette": harvest log, seasons, look-alike warnings
  * @property {{ id: string, name: string, kind: string, count: number }[]} collections
  */
@@ -43,6 +45,16 @@ export class Store extends EventTarget {
   }
 }
 
+/** @typedef {'standard' | 'illustrated' | 'scientific'} GridView */
+export const GRID_VIEWS = /** @type {const} */ (['standard', 'illustrated', 'scientific']);
+
+const readGridView = () => {
+  try {
+    const v = localStorage.getItem(config.storageKeys.gridView);
+    return /** @type {GridView} */ (GRID_VIEWS.includes(/** @type {any} */ (v)) ? v : 'standard');
+  } catch { return 'standard'; }
+};
+
 const readCompact = () => {
   try { return localStorage.getItem(config.storageKeys.compact) === '1'; } catch { return false; }
 };
@@ -55,6 +67,8 @@ export const store = new Store({
   results: { total: 0, items: [], facets: {}, suggestions: [], fuzzy: 0, sort: 'fr' },
   compact: readCompact(),
   favorites: new Set(),
+  placed: new Map(),
+  gridView: readGridView(),
   collections: [],
   harvestMode: readHarvestMode() ?? false
 });
@@ -82,6 +96,12 @@ export function initHarvestMode(/** @type {boolean} */ hasHarvests) {
 export function setCompact(compact) {
   try { localStorage.setItem(config.storageKeys.compact, compact ? '1' : '0'); } catch { /* not persisted */ }
   store.set({ compact });
+}
+
+/** @param {GridView} gridView */
+export function setGridView(gridView) {
+  try { localStorage.setItem(config.storageKeys.gridView, gridView); } catch { /* not persisted */ }
+  store.set({ gridView });
 }
 
 /** Resolves once the local dataset is in IndexedDB (deep links on a first visit must wait for it). */
