@@ -67,6 +67,15 @@ gf-map .leaflet-control-attribution {
   cursor: grab;
 }
 
+/* Position editing: the place point and the plants can be dragged. */
+.gf-place.editing {
+  cursor: grab;
+}
+.gf-place.editing svg,
+.gf-plant.draggable svg {
+  filter: drop-shadow(0 0 3px #fff) drop-shadow(0 0 6px #16a34a);
+}
+
 /* Current position: blue dot. */
 .gf-me {
   width: 18px;

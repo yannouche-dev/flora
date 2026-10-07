@@ -82,6 +82,8 @@ const meIcon = L.divIcon({ className: 'gf-me', iconSize: [18, 18], iconAnchor: [
 
 /** Draggable place pin of the editor (same shape as places, in green). */
 const editIcon = placeIconOf('#16a34a', 0, 'selected editing');
+/** The same place point when positions are locked (read-only map). */
+const lockedIcon = placeIconOf('#16a34a', 0, 'selected');
 
 const readStored = (/** @type {string} */ key, fallback) => {
   try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; }
@@ -99,6 +101,7 @@ const store = (/** @type {string} */ key, value) => {
  *  - plantZoom: minimum zoom to show plant markers (0 = always)
  *  - selectedPlant: highlighted plant marker key
  *  - draggablePlants: plant markers can be dragged (place editor)
+ *  - pinDraggable: the place pin can be dragged and long-press emits map-longpress (default true)
  *  - track: show the live GPS position
  *  - fit: zoom to the content on first data
  *  - frame: {key, points, bottom?} — zoom once on these [lon, lat] points (again when the key changes);
@@ -115,6 +118,7 @@ export class GfMap extends LitElement {
     plantZoom: { type: Number, attribute: 'plant-zoom' },
     selectedPlant: { attribute: false },
     draggablePlants: { type: Boolean, attribute: 'draggable-plants' },
+    pinDraggable: { attribute: false },
     track: { type: Boolean },
     fit: { type: Boolean },
     frame: { attribute: false },
@@ -135,6 +139,7 @@ export class GfMap extends LitElement {
     /** @type {string | null} */
     this.selectedPlant = null;
     this.draggablePlants = false;
+    this.pinDraggable = true;
     this.track = false;
     this.fit = false;
     /** @type {{ key: string, points: [number, number][], bottom?: number } | null} */
@@ -211,6 +216,7 @@ export class GfMap extends LitElement {
     });
     map.on('dragstart', () => this.#setFollow(false));
     map.on('contextmenu', event => {
+      if (this.pin && !this.pinDraggable) return;
       const { lat, lng } = /** @type {L.LeafletMouseEvent} */ (event).latlng;
       this.#emit('map-longpress', { coordinates: [lng, lat] });
     });
@@ -229,7 +235,10 @@ export class GfMap extends LitElement {
   updated(changed) {
     if (!this.#map) return;
     if (changed.has('spots') || changed.has('selectedId')) this.#syncSpots();
-    if (changed.has('pin')) this.#syncPin();
+    // Switching position editing on or off: rebuild the markers rather than toggling Leaflet's drag handlers.
+    if (changed.has('pinDraggable') && changed.get('pinDraggable') !== undefined) this.#clearPin();
+    if (changed.has('draggablePlants') && changed.get('draggablePlants') !== undefined) this.#clearPlants();
+    if (changed.has('pin') || changed.has('pinDraggable')) this.#syncPin();
     if (changed.has('plants') || changed.has('selectedPlant') || changed.has('draggablePlants')) this.#syncPlants();
     if (changed.has('plantZoom')) this.#syncPlantVisibility();
     if (changed.has('track')) this.#syncTracking();
@@ -346,6 +355,18 @@ export class GfMap extends LitElement {
     else if (!visible && map.hasLayer(layer)) layer.remove();
   }
 
+  // The place pin stays below plant markers (z 500+): a plant on the place point covers only the tip of
+  // the pin's stem, so both remain grabbable (the pin by its square).
+  #clearPin() {
+    this.#editMarker?.remove();
+    this.#editMarker = null;
+  }
+
+  #clearPlants() {
+    for (const marker of this.#plantMarkers.values()) marker.remove();
+    this.#plantMarkers.clear();
+  }
+
   #syncPin() {
     const map = /** @type {L.Map} */ (this.#map);
     if (!this.pin) {
@@ -355,7 +376,7 @@ export class GfMap extends LitElement {
     }
     const [lon, lat] = this.pin;
     if (!this.#editMarker) {
-      this.#editMarker = L.marker([lat, lon], { icon: editIcon, draggable: true, autoPan: true, zIndexOffset: 2000 })
+      this.#editMarker = L.marker([lat, lon], { icon: this.pinDraggable ? editIcon : lockedIcon, draggable: this.pinDraggable, autoPan: true, zIndexOffset: 100 })
         .on('dragend', () => {
           const { lat: y, lng: x } = /** @type {L.Marker} */ (this.#editMarker).getLatLng();
           this.#emit('pin-move', { coordinates: [x, y] });

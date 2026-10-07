@@ -52,7 +52,8 @@ export class GfSpotEditor extends LitElement {
     _todayFor: { state: true },
     _nearby: { state: true },
     _error: { state: true },
-    _note: { state: true }
+    _note: { state: true },
+    _editPos: { state: true }
   };
 
   static styles = css`
@@ -90,7 +91,40 @@ export class GfSpotEditor extends LitElement {
       color: var(--gf-text);
       text-decoration: none;
     }
+    .map-area { position: relative; min-height: 0; }
     gf-map { height: 100%; }
+    .map-tools {
+      position: absolute;
+      left: 10px;
+      top: 10px;
+      z-index: 800;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+      max-width: calc(100% - 80px); /* clear of the layer / locate buttons on the right */
+    }
+    .map-tools button {
+      font: inherit;
+      font-size: 0.875rem;
+      font-weight: 600;
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 0;
+      background: var(--gf-surface);
+      color: var(--gf-text);
+      box-shadow: 0 2px 8px rgb(0 0 0 / 35%);
+      cursor: pointer;
+    }
+    .map-tools button.done { background: var(--gf-accent); color: var(--gf-accent-contrast); }
+    .map-tools .tip {
+      flex-basis: 100%;
+      font-size: 0.78rem;
+      padding: 4px 10px;
+      border-radius: 999px;
+      background: color-mix(in srgb, var(--gf-surface) 90%, transparent);
+      box-shadow: 0 1px 4px rgb(0 0 0 / 25%);
+    }
     form {
       overflow-y: auto;
       padding: 14px 16px 24px;
@@ -299,6 +333,8 @@ export class GfSpotEditor extends LitElement {
     this._place = undefined;
     /** Pin placed by hand: stop following the GPS. */
     this._manual = false;
+    /** Positions editing: off for a saved place (read-only map), on while creating one. */
+    this._editPos = false;
     /** Plant entry whose details are expanded. @type {number | null} */
     this._open = null;
     this._picker = false;
@@ -436,6 +472,8 @@ export class GfSpotEditor extends LitElement {
     this._todayFor = new Map();
     this._nearby = [];
     this.#createdHere = !this.spotId;
+    this._editPos = !this.spotId && this.kind !== 'list';
+    this.#posBefore = null;
     if (this.spotId) {
       let place = await getPlace(this.spotId);
       if (place && this.addPlant && place.properties.kind === 'place') {
@@ -501,9 +539,54 @@ export class GfSpotEditor extends LitElement {
     this.#changed();
   }
 
+  /** Positions before "Modifier les positions", for "Annuler". @type {any} */
+  #posBefore = null;
+
+  #startEditPositions() {
+    const place = this._place;
+    if (!place?.geometry) return;
+    this.#posBefore = {
+      geometry: place.geometry,
+      accuracy: place.properties.accuracy,
+      manual: this._manual,
+      plants: new Map(place.properties.plants.map(e => [e.plantId, { coordinates: e.coordinates, accuracy: e.accuracy }]))
+    };
+    this._editPos = true;
+  }
+
+  #endEditPositions() {
+    this.#posBefore = null;
+    this._editPos = false;
+  }
+
+  #cancelEditPositions() {
+    const before = this.#posBefore;
+    const place = this._place;
+    if (before && place) {
+      this._place = {
+        ...place,
+        geometry: before.geometry,
+        properties: {
+          ...place.properties,
+          accuracy: before.accuracy,
+          plants: place.properties.plants.map(e => before.plants.has(e.plantId) ? { ...e, ...before.plants.get(e.plantId) } : e)
+        }
+      };
+      this._manual = before.manual;
+      this.#changed();
+    }
+    this.#endEditPositions();
+  }
+
+  /** "Déplacer" on a plant: switch to position editing and show it. @param {[number, number] | null} coordinates */
+  #editPlantPosition(coordinates) {
+    if (!this._editPos) this.#startEditPositions();
+    this.#showOnMap(coordinates);
+  }
+
   /** @param {[number, number]} coordinates */
   #place(coordinates) {
-    if (!this._place) return;
+    if (!this._place || !this._editPos) return;
     this._manual = true;
     this._place = this.#movePlace(coordinates, null);
     this.#findNearby();
@@ -512,6 +595,7 @@ export class GfSpotEditor extends LitElement {
 
   /** A plant marker was dragged on the editor map. @param {number | null} plantId @param {[number, number]} coordinates */
   #movePlant(plantId, coordinates) {
+    if (!this._editPos) return;
     this.#patchEntry(plantId, { coordinates: [Math.round(coordinates[0] * 1e7) / 1e7, Math.round(coordinates[1] * 1e7) / 1e7], accuracy: null });
   }
 
@@ -544,12 +628,15 @@ export class GfSpotEditor extends LitElement {
     const fix = this.#geo.state.fix;
     this._place = withLocation(this._place, fix?.coordinates || [2.35, 46.6], fix ? Math.round(fix.accuracy) : null);
     this._manual = !fix;
+    this.#posBefore = null;
+    this._editPos = true;
     this.#changed();
   }
 
   #removeLocation() {
     if (!this._place || !confirm('Retirer la position ? L’endroit redevient une simple collection de plantes.')) return;
     this._place = withLocation(this._place, null);
+    this.#endEditPositions();
     this.#changed();
   }
 
@@ -710,8 +797,10 @@ export class GfSpotEditor extends LitElement {
     const { fix, error } = this.#geo.state;
     if (this._manual) {
       return html`<div class="gps"><span class="dot good"></span> Point de l’endroit ${this.#isNew ? 'placé à la main' : 'enregistré'}
-        ${fix ? html`<button class="secondary" type="button" @click=${this.#useGps}>Utiliser le GPS</button>` : nothing}
-        <span class="hint">Le carré vert est le point de l’endroit, les ronds sont les plantes : faites-les glisser pour les ajuster.</span></div>`;
+        ${fix && this._editPos ? html`<button class="secondary" type="button" @click=${this.#useGps}>Utiliser le GPS</button>` : nothing}
+        <span class="hint">${this._editPos
+          ? 'Le carré vert est le point de l’endroit, les ronds sont les plantes : faites-les glisser pour les ajuster.'
+          : 'Le carré vert est le point de l’endroit, les ronds sont les plantes. « Modifier les positions » pour les déplacer.'}</span></div>`;
     }
     if (!fix) {
       return html`<div class="gps"><span class="dot ${error ? 'none' : ''}"></span>
@@ -753,9 +842,11 @@ export class GfSpotEditor extends LitElement {
     const fix = this.#geo.state.fix;
     return html`<div class="plant-pos">
       <span>📍 ${away < 3 ? 'Au point de l’endroit' : `À ${formatDistance(away)} du point de l’endroit`}${entry.accuracy ? ` · ± ${entry.accuracy} m` : ''}</span>
-      <button class="secondary" type="button" ?disabled=${!fix} @click=${() => this.#plantHere(entry.plantId)}>Ici (GPS)</button>
       <button class="secondary" type="button" @click=${() => this.#showOnMap(own)}>Voir sur la carte</button>
-      <small>Ou faites glisser son rond sur la carte.</small>
+      ${this._editPos ? html`
+        <button class="secondary" type="button" ?disabled=${!fix} @click=${() => this.#plantHere(entry.plantId)}>Ici (GPS)</button>
+        <small>Ou faites glisser son rond sur la carte.</small>` : html`
+        <button class="secondary" type="button" @click=${() => this.#editPlantPosition(own)}>Déplacer</button>`}
     </div>`;
   }
 
@@ -900,19 +991,29 @@ export class GfSpotEditor extends LitElement {
     const weak = this.#isNew && isPlace && !this._manual && (!fix || fix.accuracy > config.goodAccuracy);
 
     return html`
-      ${place.geometry ? html`<gf-map
-        .pin=${place.geometry.coordinates}
-        .plants=${plantMarkers([place], () => true, this.#store.state.harvestMode)}
-        .selectedPlant=${this._open !== null ? place.id + ':' + this._open : null}
-        plant-zoom="0"
-        draggable-plants
-        @plant-move=${e => this.#movePlant(e.detail.plantId, e.detail.coordinates)}
-        @plant-select=${e => { this._open = e.detail.plantId; }}
-        track
-        fit
-        @pin-move=${e => this.#place(e.detail.coordinates)}
-        @map-longpress=${e => this.#place(e.detail.coordinates)}
-      ></gf-map>` : nothing}
+      ${place.geometry ? html`<div class="map-area">
+        <gf-map
+          .pin=${place.geometry.coordinates}
+          .pinDraggable=${this._editPos}
+          .plants=${plantMarkers([place], () => true, this.#store.state.harvestMode)}
+          .selectedPlant=${this._open !== null ? place.id + ':' + this._open : null}
+          plant-zoom="0"
+          ?draggable-plants=${this._editPos}
+          @plant-move=${e => this.#movePlant(e.detail.plantId, e.detail.coordinates)}
+          @plant-select=${e => { this._open = e.detail.plantId; }}
+          track
+          fit
+          @pin-move=${e => this.#place(e.detail.coordinates)}
+          @map-longpress=${e => this.#place(e.detail.coordinates)}
+        ></gf-map>
+        <div class="map-tools">
+          ${this._editPos ? html`
+            <button class="done" type="button" @click=${this.#endEditPositions}>✓ Valider</button>
+            ${this.#posBefore ? html`<button type="button" @click=${this.#cancelEditPositions}>Annuler</button>` : nothing}
+            <span class="tip">Glissez le carré (endroit) ou les ronds (plantes)${this.#isNew ? ' · appui long pour placer l’endroit' : ''}</span>` : html`
+            <button type="button" @click=${this.#startEditPositions}>✎ Modifier les positions</button>`}
+        </div>
+      </div>` : nothing}
 
       <form @submit=${this.#save}>
         ${isPlace ? this.#gpsStatus() : nothing}
