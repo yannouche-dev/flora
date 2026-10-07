@@ -257,7 +257,7 @@ Une **collection** est un ensemble de plantes, avec ou sans position :
 - **Listes** (« Mellifères », « À chercher cet été »…) : sans position. « Ajouter à… » sur une fiche plante coche/décoche les collections et en crée une à la volée.
 - **Lieux** : une liste avec une position GPS, visible sur la carte (voir ci-dessous). « 📍 Ajouter une position » transforme une liste en lieu ; « Retirer la position » fait l'inverse.
 
-L'onglet **Mes plantes** les regroupe (lieux triés par distance). Les modifications sont **enregistrées automatiquement**. Dans la recherche, le filtre **Mes plantes** limite les résultats aux favoris, à une liste, à un lieu ou à « dans un de mes lieux ».
+L'onglet **Mes plantes** les regroupe : collections, puis endroits triés par distance. Une collection à laquelle on ajoute des coordonnées GPS devient un endroit ; toucher un endroit ouvre la carte cadrée sur son point et toutes ses plantes. Les modifications sont **enregistrées automatiquement**. Dans la recherche, le filtre **Mes plantes** limite les résultats aux favoris, à une liste, à un lieu ou à « dans un de mes lieux ».
 
 **Partager** sans serveur :
 

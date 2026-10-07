@@ -236,6 +236,27 @@ export class GfMapPage extends LitElement {
     if (changed.has('route') && this.route.plant && !this._plants.includes(this.route.plant)) {
       this._plants = [this.route.plant];
     }
+    // Arriving on a place from elsewhere (Mes plantes, the editor, a link): frame it with all its plants.
+    if (changed.has('route') && !this.#internalRoute && this.route.spot) {
+      if (!this.route.plant) this._plants = [];
+      this.#frameKey = this.route.spot + ':' + (++this.#frames);
+    }
+    this.#internalRoute = false;
+  }
+
+  #internalRoute = false;
+  #frames = 0;
+  /** @type {string | null} */ #frameKey = null;
+
+  /** Zoom target for the map: the arrived-on place, its point and every plant's own position. */
+  get #frame() {
+    const place = this.#frameKey && this._spots.find(s => s.id === this.route.spot);
+    if (!place || !this.#frameKey?.startsWith(place.id + ':')) return null;
+    return {
+      key: this.#frameKey,
+      points: [place.geometry.coordinates, ...place.properties.plants.map(e => entryPosition(place, e))],
+      bottom: 0.4
+    };
   }
 
   async #load() {
@@ -261,6 +282,8 @@ export class GfMapPage extends LitElement {
       plant: this._plants.length === 1 ? this._plants[0] : undefined
     });
     history.replaceState(null, '', hash);
+    if (next.spot !== this.route.spot) this.#frameKey = null;
+    this.#internalRoute = true;
     this.route = parse(hash);
   }
 
@@ -337,7 +360,8 @@ export class GfMapPage extends LitElement {
             .plants=${this.#plantMarkers(spots)}
             .selectedPlant=${this.route.spot && this.route.focus ? this.route.spot + ':' + this.route.focus : null}
             remember
-            ?fit=${Boolean(this.route.spot || this._plants.length)}
+            .frame=${this.#frame}
+            ?fit=${Boolean(this._plants.length && !this.#frameKey)}
             @spot-select=${e => this.#navigate({ spot: e.detail.id })}
             @plant-select=${e => this.#navigate({ spot: e.detail.placeId, focus: e.detail.plantId })}
           ></gf-map>

@@ -11,7 +11,7 @@ import { StoreController, whenReady } from '../core/store.js';
 /** Up to this many thumbnails per collection row. */
 const THUMBS = 4;
 
-/** "Mes plantes": favorites, lists and places in one place. */
+/** "Mes plantes": favorites, lists and places in one place. Places open on the map, framed on their points. */
 export class GfCollections extends LitElement {
   static properties = {
     _collections: { state: true },
@@ -141,7 +141,7 @@ export class GfCollections extends LitElement {
     const icon = p.kind === 'favorites' ? '♥' : p.kind === 'place' ? '📍' : '☰';
     return html`
       <li>
-        <a href=${href.spot(c.id)}>
+        <a href=${p.kind === 'place' ? href.map({ spot: c.id }) : href.spot(c.id)}>
           <span class="icon ${p.kind === 'favorites' ? 'fav' : ''}" aria-hidden="true">${icon}</span>
           <span class="name">${collectionTitle(c)}</span>
           <span class="side">${side || ''}</span>
@@ -173,9 +173,9 @@ export class GfCollections extends LitElement {
     return html`
       <div class="wrap">
         <h1>Mes plantes</h1>
-        <p class="lead">Favoris, listes et lieux. Tout reste sur cet appareil ; partagez une collection par un simple lien.</p>
+        <p class="lead">Vos collections de plantes. Une collection qui a des coordonnées GPS est un endroit : touchez-le pour le voir sur la carte. Tout reste sur cet appareil.</p>
         <div class="new">
-          <a href=${href.newList()}>☰ Nouvelle liste</a>
+          <a href=${href.newList()}>☰ Nouvelle collection</a>
           <a href=${href.newSpot()} @click=${e => { e.preventDefault(); this.dispatchEvent(new CustomEvent('open-capture', { bubbles: true, composed: true })); }}>📍 Noter une plante ici</a>
         </div>
         ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : nothing}
@@ -188,13 +188,13 @@ export class GfCollections extends LitElement {
             </a></li>`}
         </ul>
 
-        <h2>Listes</h2>
+        <h2>Collections</h2>
         ${lists.length ? html`<ul>${lists.map(c => this.#row(c, null))}</ul>`
-          : html`<p class="empty">Regroupez des plantes sans lieu : « Mellifères », « À chercher cet été »…</p>`}
+          : html`<p class="empty">Regroupez des plantes : « Mellifères », « À chercher cet été »… Ajoutez-y des coordonnées GPS pour en faire un endroit.</p>`}
 
-        <h2>Lieux${fix ? ' · par distance' : ''}</h2>
+        <h2>Endroits${fix ? ' · par distance' : ''}</h2>
         ${places.length ? html`<ul>${places.map(({ c, d }) => this.#row(c, d !== null ? formatDistance(d) : null))}</ul>`
-          : html`<p class="empty">Un lieu est une liste de plantes à un endroit précis, visible sur la carte.</p>`}
+          : html`<p class="empty">Un endroit est une collection qui a des coordonnées GPS ; chacune de ses plantes a aussi sa position.</p>`}
       </div>
     `;
   }
