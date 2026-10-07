@@ -26,26 +26,45 @@ gf-map .leaflet-control-attribution {
   font-size: 10px;
 }
 
-/* Spot pins (L.divIcon with inline SVG). */
-.gf-pin {
+/* Places: rounded squares on a stem (L.divIcon with inline SVG). */
+.gf-place,
+.gf-plant {
   background: none;
   border: 0;
 }
 
-.gf-pin svg {
+.gf-place svg,
+.gf-plant svg {
   display: block;
   filter: drop-shadow(0 1px 2px rgb(0 0 0 / 50%));
   transition: transform 0.12s ease-out;
+}
+
+.gf-place svg {
   transform-origin: 50% 100%;
 }
 
-.gf-pin.selected svg {
-  transform: scale(1.35);
+.gf-place.selected svg {
+  transform: scale(1.25);
 }
 
-.gf-pin.season .ring {
+.gf-place.season .ring,
+.gf-plant.season .ring {
   stroke: #fde047;
   stroke-width: 3;
+}
+
+/* Plants: small circles with a leaf, each at its own position. */
+.gf-plant svg {
+  transform-origin: 50% 50%;
+}
+
+.gf-plant.selected svg {
+  transform: scale(1.4);
+}
+
+.gf-plant.draggable {
+  cursor: grab;
 }
 
 /* Current position: blue dot. */

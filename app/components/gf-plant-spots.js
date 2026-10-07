@@ -1,7 +1,7 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { href } from '../core/router.js';
-import { collectionsForPlant, collectionTitle, entryInSeason, findEntry, lastHarvest, plantCount, spotEvents } from '../core/collections.js';
+import { collectionsForPlant, collectionTitle, plantMarkers, entryInSeason, findEntry, lastHarvest, plantCount, spotEvents } from '../core/collections.js';
 import { StoreController } from '../core/store.js';
 import './gf-map.js';
 
@@ -121,14 +121,19 @@ export class GfPlantSpots extends LitElement {
         <a class="chip" href=${href.spot(c.id)}>${c.properties.kind === 'favorites' ? '♥' : '☰'} ${collectionTitle(c)}</a>`)}</div>` : nothing}
       ${this._error ? html`<p role="alert">${this._error} <button type="button" @click=${() => this.#load()}>Réessayer</button></p>` : nothing}
       ${spots.length ? html`
-        <gf-map .spots=${spots} fit @spot-select=${e => { location.hash = href.map({ spot: e.detail.id }); }}></gf-map>
+        <gf-map
+          .plants=${plantMarkers(spots, e => e.plantId === this.plantId)}
+          plant-zoom="0"
+          fit
+          @plant-select=${e => { location.hash = href.map({ spot: e.detail.placeId, focus: e.detail.plantId }); }}
+        ></gf-map>
         <ul>
           ${spots.map((place, i) => {
             // This plant's own record at the place (season, last harvest), not the place's other plants.
             const entry = findEntry(place, this.plantId);
             const last = entry && lastHarvest(entry);
             const others = place.properties.plants.length - 1;
-            return html`<li><a href=${href.map({ spot: place.id })}>
+            return html`<li><a href=${href.map({ spot: place.id, focus: this.plantId })}>
               <span>${place.properties.name || 'Lieu ' + (i + 1)}${others > 0 ? html` <small>· ${plantCount(others + 1)}</small>` : nothing}</span>
               ${this.#store.state.harvestMode ? html`
                 ${entry && entryInSeason(entry) ? html`<span class="badge">En saison</span>` : nothing}

@@ -3,7 +3,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { GeoController } from '../core/geo.js';
 import { href, parse } from '../core/router.js';
 import {
-  ABUNDANCE, addHarvest, directionsUrl, distance, entryInSeason, entryName, entrySoon, formatDistance, inSeason, lastHarvest, listPlaces,
+  ABUNDANCE, addHarvest, directionsUrl, entryPosition, plantMarkers, distance, entryInSeason, entryName, entrySoon, formatDistance, inSeason, lastHarvest, listPlaces,
   placeAbundance, placeLastHarvest, placeTitle, plantCount, spotEvents
 } from '../core/collections.js';
 import { StoreController, whenReady } from '../core/store.js';
@@ -158,6 +158,12 @@ export class GfMapPage extends LitElement {
     .plants .nm { font-weight: 600; }
     .plants .sub { font-size: 0.8rem; color: var(--gf-text-muted); }
     .plants .sub, .plants .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .plants li.focus { background: var(--gf-accent-soft); border-radius: 8px; padding-left: 6px; padding-right: 6px; }
+    .plants .dot { flex: none; width: 12px; height: 12px; border-radius: 50%; background: var(--c); border: 2px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 20%); }
+    .legend .kind i { display: inline-block; vertical-align: -1px; margin-right: 4px; background: var(--gf-text-muted); }
+    .legend .kind i.place { width: 10px; height: 10px; border-radius: 3px; }
+    .legend .kind i.plant { width: 9px; height: 9px; border-radius: 50%; }
+    .legend .kind::before { display: none; }
     .plants .harvest { flex: none; font-size: 0.85rem; padding: 4px 10px; border-color: var(--gf-accent); color: var(--gf-accent); }
     .more { font-size: 0.85rem; color: var(--gf-accent); }
     .list { flex: 1; overflow-y: auto; margin: 0; padding: 0 0 96px; list-style: none; background: var(--gf-surface); }
@@ -245,10 +251,15 @@ export class GfMapPage extends LitElement {
   }
 
   /** Keeps the URL in sync with selection/filters without adding history entries. */
-  /** @param {{ spot?: string | null, season?: boolean }} patch */
+  /** @param {{ spot?: string | null, focus?: number | null, season?: boolean }} patch */
   #navigate(patch) {
-    const next = { ...this.route, ...patch };
-    const hash = href.map({ spot: next.spot || undefined, season: next.season, plant: this._plants.length === 1 ? this._plants[0] : undefined });
+    const next = { ...this.route, ...(patch.spot !== undefined && !('focus' in patch) ? { focus: null } : {}), ...patch };
+    const hash = href.map({
+      spot: next.spot || undefined,
+      focus: next.spot && next.focus ? next.focus : undefined,
+      season: next.season,
+      plant: this._plants.length === 1 ? this._plants[0] : undefined
+    });
     history.replaceState(null, '', hash);
     this.route = parse(hash);
   }
@@ -323,11 +334,16 @@ export class GfMapPage extends LitElement {
           <gf-map
             .spots=${spots}
             .selectedId=${this.route.spot}
+            .plants=${this.#plantMarkers(spots)}
+            .selectedPlant=${this.route.spot && this.route.focus ? this.route.spot + ':' + this.route.focus : null}
             remember
             ?fit=${Boolean(this.route.spot || this._plants.length)}
             @spot-select=${e => this.#navigate({ spot: e.detail.id })}
+            @plant-select=${e => this.#navigate({ spot: e.detail.placeId, focus: e.detail.plantId })}
           ></gf-map>
           <div class="legend" aria-hidden="true">
+            <span class="kind"><i class="place"></i>Endroit</span>
+            <span class="kind"><i class="plant"></i>Plante (en zoomant)</span>
             ${ABUNDANCE.map(a => html`<span style="--c:${PIN_COLORS[a.value]}">${a.label}</span>`)}
           </div>
           ${selected ? this.#sheet(selected) : nothing}
@@ -348,13 +364,22 @@ export class GfMapPage extends LitElement {
     `;
   }
 
+  /** Plant markers of the shown places (only the filtered plants when a plant filter is on). */
+  /** @param {import('../core/collections.js').Place[]} places */
+  #plantMarkers(places) {
+    const filter = new Set(this._plants);
+    return plantMarkers(places, e => !filter.size || filter.has(/** @type {number} */ (e.plantId)), this.#harvest);
+  }
+
   /** @param {import('../core/collections.js').Place} place */
   #sheet(place) {
     const p = place.properties;
     const dist = this.#distanceTo(place);
     const filter = new Set(this._plants);
-    // Plants in season first, then the filtered ones, then by name.
+    const focus = this.route.focus;
+    // The tapped plant first, then plants in season, then the filtered ones, then by name.
     const entries = [...p.plants].sort((a, b) =>
+      Number(b.plantId === focus) - Number(a.plantId === focus) ||
       Number(entryInSeason(b)) - Number(entryInSeason(a)) ||
       Number(filter.has(/** @type {number} */ (b.plantId))) - Number(filter.has(/** @type {number} */ (a.plantId))) ||
       entryName(a).localeCompare(entryName(b), 'fr'));
@@ -373,12 +398,15 @@ export class GfMapPage extends LitElement {
           <ul class="plants">
             ${shown.map(e => {
               const last = lastHarvest(e);
-              return html`<li>
+              const own = entryPosition(place, e);
+              const away = own && place.geometry ? distance(own, place.geometry.coordinates) : 0;
+              return html`<li class=${e.plantId === focus ? 'focus' : ''}>
+                <span class="dot" style="--c:${PIN_COLORS[e.abundance]}" aria-hidden="true"></span>
                 <span class="who">
                   <span class="nm">${entryName(e)}${!this.#harvest ? nothing
                     : entryInSeason(e) ? html` <span class="badge">En saison</span>`
                     : entrySoon(e) ? html` <span class="badge soon">Bientôt</span>` : nothing}</span>
-                  <span class="sub">${ABUNDANCE.find(a => a.value === e.abundance)?.label}${this.#harvest ? html`${e.rating ? ' · ' + stars(e.rating) : ''}
+                  <span class="sub">${away >= 3 ? `à ${formatDistance(away)} du point · ` : ''}${ABUNDANCE.find(a => a.value === e.abundance)?.label}${this.#harvest ? html`${e.rating ? ' · ' + stars(e.rating) : ''}
                     · ${last ? 'récolté le ' + shortDate(last.date) : 'aucune récolte'}` : e.notes ? ' · ' + e.notes.slice(0, 50) : ''}</span>
                 </span>
                 ${this.#harvest ? html`<button type="button" class="harvest" aria-label="Noter une récolte de ${entryName(e)} aujourd’hui"

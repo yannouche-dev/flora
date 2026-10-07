@@ -12,6 +12,7 @@ import { normalizeCollection } from './place-model.js';
  *  - spots:        harvest places, stored as GeoJSON Features (keyPath id), added in version 2.
  *                  Version 3: a place holds several plants; `by_plant` indexes properties.plantIds.
  *                  Version 4: collections — `properties.kind` (favorites | list | place); lists have no geometry.
+ *                  Version 5: each plant of a place has its own `coordinates` (initially the place's point).
  * @param {IDBDatabase} db @param {IDBTransaction} tx @param {number} oldVersion
  */
 function upgrade(db, tx, oldVersion) {
@@ -31,14 +32,14 @@ function upgrade(db, tx, oldVersion) {
     const spots = db.createObjectStore('spots', { keyPath: 'id' });
     spots.createIndex('by_plant', 'properties.plantIds', { multiEntry: true });
     spots.createIndex('by_updated', 'properties.updatedAt');
-  } else if (oldVersion < 4) {
+  } else if (oldVersion < 5) {
     const spots = tx.objectStore('spots');
     if (oldVersion < 3) {
       // One plant per spot → places with a list of plants.
       spots.deleteIndex('by_plant');
       spots.createIndex('by_plant', 'properties.plantIds', { multiEntry: true });
     }
-    // v3 → v4: every stored record becomes a collection of kind 'place'.
+    // → v4: every stored record becomes a collection of kind 'place'; → v5: plants get their own position.
     spots.openCursor().onsuccess = event => {
       const cursor = /** @type {IDBCursorWithValue | null} */ (/** @type {IDBRequest} */ (event.target).result);
       if (!cursor) return;

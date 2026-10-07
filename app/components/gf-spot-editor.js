@@ -6,7 +6,8 @@ import { GeoController } from '../core/geo.js';
 import { href } from '../core/router.js';
 import { searchPlants } from '../core/search.js';
 import {
-  ABUNDANCE, deletePlace, entryInSeason, entryName, exportGeoJSON, findEntry, formatDistance, getPlace, lastHarvest,
+  ABUNDANCE, defaultPlantPosition, deletePlace, distance, entryInSeason, entryName, entryPosition, exportGeoJSON, findEntry,
+  formatDistance, getPlace, lastHarvest, plantMarkers,
   nearbyPlaces, newCollection, newPlace, placeTitle, plantCount, savePlace, withEntry, withLocation, withoutPlant, withPlant
 } from '../core/collections.js';
 import { encodeCollection, share } from '../core/share.js';
@@ -239,6 +240,9 @@ export class GfSpotEditor extends LitElement {
     .today { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.95rem; }
     .today input[type='checkbox'] { width: 20px; height: 20px; accent-color: var(--gf-accent); }
     .today input[type='text'] { flex: 1; min-width: 140px; }
+    .plant-pos { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 0.85rem; }
+    .plant-pos span { flex-basis: 100%; }
+    .plant-pos small { color: var(--gf-text-muted); flex-basis: 100%; }
     .remove { justify-self: start; color: var(--gf-danger); background: none; border: 0; font: inherit; font-size: 0.85rem; cursor: pointer; padding: 0; }
     .muted { margin: 0; color: var(--gf-text-muted); font-size: 0.9rem; }
     .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; position: sticky; bottom: -24px; padding: 10px 0 14px; background: var(--gf-bg); }
@@ -375,14 +379,31 @@ export class GfSpotEditor extends LitElement {
     if (this.#isNew && this._place?.geometry && fix && !this._manual) {
       const [lon, lat] = this._place.geometry.coordinates;
       if (lon !== fix.coordinates[0] || lat !== fix.coordinates[1] || this._place.properties.accuracy !== Math.round(fix.accuracy)) {
-        this._place = {
-          ...this._place,
-          geometry: { type: 'Point', coordinates: fix.coordinates },
-          properties: { ...this._place.properties, accuracy: Math.round(fix.accuracy) }
-        };
+        this._place = this.#movePlace(fix.coordinates, Math.round(fix.accuracy));
         this.#findNearby();
       }
     }
+  }
+
+  /**
+   * Moves the place's point. While a new place is being recorded, its plants that were not
+   * placed individually (still on the place's point) move along with it.
+   * @param {[number, number]} coordinates @param {number | null} accuracy
+   */
+  #movePlace(coordinates, accuracy) {
+    const place = /** @type {import('../core/collections.js').Collection} */ (this._place);
+    const old = place.geometry?.coordinates;
+    const follow = (/** @type {import('../core/collections.js').PlantEntry} */ e) =>
+      this.#isNew && old && e.coordinates && e.coordinates[0] === old[0] && e.coordinates[1] === old[1];
+    return {
+      ...place,
+      geometry: { type: 'Point', coordinates },
+      properties: {
+        ...place.properties,
+        accuracy,
+        plants: place.properties.plants.map(e => follow(e) ? { ...e, coordinates, accuracy } : e)
+      }
+    };
   }
 
   async #load() {
@@ -405,7 +426,7 @@ export class GfSpotEditor extends LitElement {
         if (!findEntry(place, this.addPlant)) {
           const plant = await db.get('plants', this.addPlant);
           if (plant) {
-            place = withPlant(place, plant);
+            place = withPlant(place, plant, defaultPlantPosition(place, this.#geo.state.fix));
             this._todayFor = new Map([[plant.id, '']]);
           }
         }
@@ -431,7 +452,7 @@ export class GfSpotEditor extends LitElement {
       let place = newPlace(fix?.coordinates || [2.35, 46.6], { accuracy: fix ? Math.round(fix.accuracy) : null });
       const plant = this.plantId ? await db.get('plants', this.plantId) : null;
       if (plant) {
-        place = withPlant(place, plant);
+        place = withPlant(place, plant, fix ? { coordinates: fix.coordinates, accuracy: Math.round(fix.accuracy) } : undefined);
         this._todayFor = new Map([[plant.id, '']]);
         this._open = plant.id;
       } else {
@@ -468,24 +489,34 @@ export class GfSpotEditor extends LitElement {
   #place(coordinates) {
     if (!this._place) return;
     this._manual = true;
-    this._place = {
-      ...this._place,
-      geometry: { type: 'Point', coordinates },
-      properties: { ...this._place.properties, accuracy: null }
-    };
+    this._place = this.#movePlace(coordinates, null);
     this.#findNearby();
     this.#changed();
+  }
+
+  /** A plant marker was dragged on the editor map. @param {number | null} plantId @param {[number, number]} coordinates */
+  #movePlant(plantId, coordinates) {
+    this.#patchEntry(plantId, { coordinates: [Math.round(coordinates[0] * 1e7) / 1e7, Math.round(coordinates[1] * 1e7) / 1e7], accuracy: null });
+  }
+
+  /** "Ici (GPS)": the plant is where I stand. @param {number | null} plantId */
+  #plantHere(plantId) {
+    const fix = this.#geo.state.fix;
+    if (!fix) return;
+    this.#patchEntry(plantId, { coordinates: fix.coordinates, accuracy: Math.round(fix.accuracy) });
+    /** @type {any} */ (this.renderRoot.querySelector('gf-map'))?.flyTo(fix.coordinates, 19);
+  }
+
+  /** @param {[number, number] | null} coordinates */
+  #showOnMap(coordinates) {
+    if (coordinates) /** @type {any} */ (this.renderRoot.querySelector('gf-map'))?.flyTo(coordinates, 19);
   }
 
   #useGps() {
     const fix = this.#geo.state.fix;
     if (!fix || !this._place) return;
     this._manual = false;
-    this._place = {
-      ...this._place,
-      geometry: { type: 'Point', coordinates: fix.coordinates },
-      properties: { ...this._place.properties, accuracy: Math.round(fix.accuracy) }
-    };
+    this._place = this.#movePlace(fix.coordinates, Math.round(fix.accuracy));
     /** @type {any} */ (this.renderRoot.querySelector('gf-map'))?.flyTo(fix.coordinates, 18);
     this.#findNearby();
     this.#changed();
@@ -533,7 +564,7 @@ export class GfSpotEditor extends LitElement {
   async #pickPlant(summary) {
     if (!this._place || findEntry(this._place, summary.id)) return;
     const plant = await db.get('plants', summary.id);
-    this._place = withPlant(this._place, plant);
+    this._place = withPlant(this._place, plant, defaultPlantPosition(this._place, this.#geo.state.fix));
     if (this.#isPlace) this._todayFor = new Map(this._todayFor).set(plant.id, '');
     this._open = plant.id;
     this._pickerQuery = '';
@@ -624,9 +655,9 @@ export class GfSpotEditor extends LitElement {
   #gpsStatus() {
     const { fix, error } = this.#geo.state;
     if (this._manual) {
-      return html`<div class="gps"><span class="dot good"></span> Position ${this.#isNew ? 'placée à la main' : 'enregistrée'}
+      return html`<div class="gps"><span class="dot good"></span> Point de l’endroit ${this.#isNew ? 'placé à la main' : 'enregistré'}
         ${fix ? html`<button class="secondary" type="button" @click=${this.#useGps}>Utiliser le GPS</button>` : nothing}
-        <span class="hint">Faites glisser l’épingle verte pour l’ajuster.</span></div>`;
+        <span class="hint">Le carré vert est le point de l’endroit, les ronds sont les plantes : faites-les glisser pour les ajuster.</span></div>`;
     }
     if (!fix) {
       return html`<div class="gps"><span class="dot ${error ? 'none' : ''}"></span>
@@ -657,6 +688,21 @@ export class GfSpotEditor extends LitElement {
             </li>`)}
         </ul>
       </div>`;
+  }
+
+  /** Where this plant grows: distance from the place's point, GPS, show on map. */
+  /** @param {import('../core/collections.js').PlantEntry} entry */
+  #plantPosition(entry) {
+    const place = /** @type {import('../core/collections.js').Collection} */ (this._place);
+    const own = entryPosition(place, entry);
+    const away = own && place.geometry ? distance(own, place.geometry.coordinates) : 0;
+    const fix = this.#geo.state.fix;
+    return html`<div class="plant-pos">
+      <span>📍 ${away < 3 ? 'Au point de l’endroit' : `À ${formatDistance(away)} du point de l’endroit`}${entry.accuracy ? ` · ± ${entry.accuracy} m` : ''}</span>
+      <button class="secondary" type="button" ?disabled=${!fix} @click=${() => this.#plantHere(entry.plantId)}>Ici (GPS)</button>
+      <button class="secondary" type="button" @click=${() => this.#showOnMap(own)}>Voir sur la carte</button>
+      <small>Ou faites glisser son rond sur la carte.</small>
+    </div>`;
   }
 
   /** @param {import('../core/collections.js').PlantEntry} entry */
@@ -734,6 +780,7 @@ export class GfSpotEditor extends LitElement {
               </div>
             </fieldset>` : nothing}
 
+            ${this.#isPlace ? this.#plantPosition(entry) : nothing}
             ${id ? html`<a class="button" href=${href.plant(id)}>Fiche de la plante</a>` : nothing}
             <button class="remove" type="button" @click=${() => this.#removePlant(id)}>${this.#isPlace ? 'Retirer cette plante du lieu' : 'Retirer de la liste'}</button>
           </div>` : nothing}
@@ -784,6 +831,12 @@ export class GfSpotEditor extends LitElement {
     return html`
       ${place.geometry ? html`<gf-map
         .pin=${place.geometry.coordinates}
+        .plants=${plantMarkers([place], () => true, this.#store.state.harvestMode)}
+        .selectedPlant=${this._open !== null ? place.id + ':' + this._open : null}
+        plant-zoom="0"
+        draggable-plants
+        @plant-move=${e => this.#movePlant(e.detail.plantId, e.detail.coordinates)}
+        @plant-select=${e => { this._open = e.detail.plantId; }}
         track
         fit
         @pin-move=${e => this.#place(e.detail.coordinates)}

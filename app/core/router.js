@@ -3,7 +3,7 @@
 
 /**
  * @typedef {{ name: 'search' } | { name: 'plant', id: number } | { name: 'settings' } | { name: 'collections' }
- *   | { name: 'map', spot: string | null, plant: number | null, season: boolean }
+ *   | { name: 'map', spot: string | null, plant: number | null, focus: number | null, season: boolean }
  *   | { name: 'spot-new', plant: number | null, kind: 'list' | 'place' }
  *   | { name: 'spot', id: string, add: number | null, pick: boolean }
  *   | { name: 'shared', data: string }
@@ -21,7 +21,7 @@ export function parse(hash) {
   const plant = /^plant\/(\d+)$/.exec(path);
   if (plant) return { name: 'plant', id: Number(plant[1]) };
 
-  if (path === 'map') return { name: 'map', spot: params.get('spot'), plant: number('plant'), season: params.get('season') === '1' };
+  if (path === 'map') return { name: 'map', spot: params.get('spot'), plant: number('plant'), focus: number('focus'), season: params.get('season') === '1' };
   if (path === 'collections') return { name: 'collections' };
   // "spot/…" are the links of earlier versions; collections are the same records.
   if (path === 'collection/new' || path === 'spot/new') {
@@ -40,9 +40,11 @@ export const href = {
   plant: (/** @type {number} */ id) => '#/plant/' + id,
   settings: () => '#/settings',
   collections: () => '#/collections',
-  map: (/** @type {{ spot?: string, plant?: number, season?: boolean }} */ options = {}) => {
+  /** `focus`: a plant of the selected place (its marker highlighted, listed first). */
+  map: (/** @type {{ spot?: string, plant?: number, focus?: number, season?: boolean }} */ options = {}) => {
     const params = new URLSearchParams();
     if (options.spot) params.set('spot', options.spot);
+    if (options.focus) params.set('focus', String(options.focus));
     if (options.plant) params.set('plant', String(options.plant));
     if (options.season) params.set('season', '1');
     const search = params.toString();

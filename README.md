@@ -263,15 +263,16 @@ L'onglet **Mes plantes** les regroupe (lieux triés par distance). Les modificat
 
 - une plante : lien `#/plant/<id>` ;
 - une recherche (famille, statut…) : bouton *Partager* au-dessus des résultats, l'URL contient les filtres ;
-- une liste ou un lieu : le lien contient la collection elle-même (`#/shared?d=…`, JSON compressé deflate + base64url, ~200 caractères pour 30 plantes). Notes et journaux de récolte ne sont **jamais** inclus ; pour un lieu, la position exacte l'est (confirmation demandée). Le destinataire voit un aperçu et peut l'enregistrer comme nouvelle collection.
+- une liste ou un lieu : le lien contient la collection elle-même (`#/shared?d=…`, JSON compressé deflate + base64url, ~200 caractères pour 30 plantes). Notes et journaux de récolte ne sont **jamais** inclus ; pour un lieu, la position exacte l'est (confirmation demandée), ainsi que celle de chaque plante. Le destinataire voit un aperçu et peut l'enregistrer comme nouvelle collection.
 
 ### Lieux de récolte
 
-L'onglet **Carte** enregistre les endroits où vous récoltez, sur les **photos aériennes IGN** (Géoplateforme, sans clé ; aussi Plan IGN et parcelles cadastrales). Un **lieu** est une **collection de plantes** : une lisière peut réunir l'ail des ours, l'ortie et la benoîte.
+L'onglet **Carte** enregistre les endroits où vous récoltez, sur les **photos aériennes IGN** (Géoplateforme, sans clé ; aussi Plan IGN et parcelles cadastrales). Un **lieu** (endroit) est une **collection de plantes qui a des coordonnées GPS** : une lisière peut réunir l'ail des ours, l'ortie et la benoîte. **Chaque plante du lieu a aussi sa propre position GPS.**
 
 - **Sur place** : depuis une fiche plante, « 📍 Ajouter un lieu », ou **+** sur la carte. Le GPS s'affiche avec sa précision (± m) ; l'épingle peut être déplacée à la main, ou posée par un appui long sur la carte. À moins de 100 m d'un lieu existant, l'application propose d'**y ajouter la plante** plutôt que de créer un doublon.
+- **Position de chaque plante** : « Noter ici » enregistre la plante à votre position GPS (et la rattache au lieu le plus proche à moins de 30 m). Ajoutée depuis l'éditeur, une plante prend votre position GPS si vous êtes à moins de 100 m du lieu, sinon le point du lieu. Dans l'éditeur, chaque plante est un rond déplaçable sur la carte, avec « Ici (GPS) » et la distance au point du lieu.
 - **Pour chaque lieu** : nom, notes (accès, propriétaire…), et ses plantes. **Pour chaque plante du lieu** : abondance, qualité (★), notes et **journal de récolte** (date, quantité, remarque). Une plante est **« en saison »** à un lieu si elle y a été récoltée, une année quelconque, à ±15 jours de la date du jour ; un lieu est en saison si l'une de ses plantes l'est.
-- **Carte** : une épingle par lieu, colorée selon l'abondance la plus forte, avec le nombre de plantes quand il y en a plusieurs. Filtres « En saison » et par plante. La fiche du lieu liste ses plantes avec un bouton « + Récolte » chacune, « + Plante », et l'itinéraire vers l'application de navigation. **Liste** triée par distance.
+- **Carte** : deux icônes distinctes. Un **lieu** est un carré sur pied, coloré selon l'abondance la plus forte, avec le nombre de plantes ; il est toujours visible. Une **plante** est un rond avec une feuille, à sa propre position, visible **en zoomant** (niveau 16 et plus) ; la toucher ouvre la fiche du lieu avec cette plante en tête. Filtres « En saison » et par plante. La fiche du lieu liste ses plantes avec un bouton « + Récolte » chacune, « + Plante », et l'itinéraire vers l'application de navigation. **Liste** triée par distance.
 - **Hors ligne** : le GPS et les lieux fonctionnent toujours ; les zones de carte déjà affichées restent disponibles (3 000 tuiles en cache).
 - **Confidentialité** : les lieux restent **sur l'appareil** (IndexedDB, stockage persistant demandé). Ils sont stockés au format **GeoJSON** : *Réglages → Exporter* produit un fichier `.geojson` lisible par QGIS, uMap, geojson.io…, et *Importer* le fusionne (même identifiant → la version la plus récente l'emporte ; l'ancien format à une plante par point est aussi accepté). Pensez à exporter régulièrement.
 
@@ -287,6 +288,7 @@ L'onglet **Carte** enregistre les endroits où vous récoltez, sur les **photos 
     "plants": [
       {
         "plantId": 81541, "scientificName": "Allium ursinum", "vernacularName": "Ail des ours",
+        "coordinates": [4.83581, 45.76402], "accuracy": 6,
         "abundance": "abondant", "rating": 4, "notes": "", "addedAt": "…",
         "harvests": [{ "date": "2026-04-12", "quantity": "1 kg", "note": "" }]
       }

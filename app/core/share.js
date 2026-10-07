@@ -52,7 +52,7 @@ const canCompress = () => typeof CompressionStream === 'function' && typeof Deco
  * @property {string} name
  * @property {'list' | 'place'} kind
  * @property {[number, number] | null} coordinates
- * @property {{ plantId: number, abundance?: string }[]} plants
+ * @property {{ plantId: number, abundance?: string, coordinates?: [number, number] }[]} plants
  */
 
 /**
@@ -68,7 +68,15 @@ export async function encodeCollection(collection) {
     n: p.kind === 'favorites' ? 'Favoris partagés' : p.name,
     k: isPlace ? 'place' : 'list',
     ...(isPlace ? { c: collection.geometry?.coordinates } : {}),
-    p: p.plants.filter(e => e.plantId !== null).map(e => isPlace && e.abundance !== 'moyen' ? [e.plantId, e.abundance[0]] : [e.plantId])
+    p: p.plants.filter(e => e.plantId !== null).map(e => {
+      if (!isPlace) return [e.plantId];
+      // Plant position as an offset from the place, in 1e-6 degrees (≈ 0.1 m): short integers.
+      const origin = /** @type {[number, number]} */ (collection.geometry?.coordinates);
+      const dx = e.coordinates ? Math.round((e.coordinates[0] - origin[0]) * 1e6) : 0;
+      const dy = e.coordinates ? Math.round((e.coordinates[1] - origin[1]) * 1e6) : 0;
+      const code = e.abundance !== 'moyen' ? e.abundance[0] : 0;
+      return dx || dy ? [e.plantId, code, dx, dy] : code ? [e.plantId, code] : [e.plantId];
+    })
   };
   const bytes = new TextEncoder().encode(JSON.stringify(compact));
   return canCompress() ? 'z' + toBase64Url(await deflate(bytes, 'compress')) : 'j' + toBase64Url(bytes);
@@ -107,7 +115,16 @@ export async function decodeCollection(data) {
   const plants = json.p
     .filter(row => Array.isArray(row) && Number.isInteger(row[0]) && !seen.has(row[0]) && seen.add(row[0]))
     .slice(0, 2000)
-    .map(row => ({ plantId: row[0], ...(ABUNDANCE_CODES[row[1]] ? { abundance: ABUNDANCE_CODES[row[1]] } : {}) }));
+    .map(row => {
+      /** @type {{ plantId: number, abundance?: string, coordinates?: [number, number] }} */
+      const plant = { plantId: row[0] };
+      if (ABUNDANCE_CODES[row[1]]) plant.abundance = ABUNDANCE_CODES[row[1]];
+      // Offsets from the place (1e-6°), bounded to ~10 km; older links have none.
+      if (c && Number.isInteger(row[2]) && Number.isInteger(row[3]) && Math.abs(row[2]) <= 1e5 && Math.abs(row[3]) <= 1e5) {
+        plant.coordinates = [Math.round((c[0] + row[2] / 1e6) * 1e7) / 1e7, Math.round((c[1] + row[3] / 1e6) * 1e7) / 1e7];
+      }
+      return plant;
+    });
 
   return {
     name: typeof json.n === 'string' ? json.n.slice(0, 300) : '',
