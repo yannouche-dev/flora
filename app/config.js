@@ -24,6 +24,7 @@ export const config = {
     trefleToken: 'geoflora.trefleToken',
     recentSearches: 'geoflora.recentSearches',
     compact: 'geoflora.compact',
+    gridView: 'geoflora.gridView',
     mapLayer: 'geoflora.mapLayer',
     mapView: 'geoflora.mapView',
     lastExport: 'geoflora.lastExport',

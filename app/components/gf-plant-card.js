@@ -16,7 +16,10 @@ export class GfPlantCard extends LitElement {
     compact: { type: Boolean, reflect: true },
     grid: { type: Boolean, reflect: true },
     current: { type: Boolean, reflect: true },
-    hide: { attribute: false },
+    /** Grid: visible column keys, in order (gf-plant-list). */
+    columns: { attribute: false },
+    /** Grid view: standard, illustrated, scientific. */
+    view: { reflect: true },
     _thumb: { state: true }
   };
 
@@ -40,7 +43,7 @@ export class GfPlantCard extends LitElement {
     }
     .fav[aria-pressed='true'] { color: #e11d48; }
     .fav:focus-visible { outline: 2px solid var(--gf-accent); }
-    a {
+    a.row {
       padding-right: 48px !important;
       display: grid;
       grid-template-columns: 60px 1fr;
@@ -52,7 +55,7 @@ export class GfPlantCard extends LitElement {
       text-decoration: none;
       border-bottom: 1px solid var(--gf-border);
     }
-    a:hover, a:focus-visible { background: var(--gf-surface-2); outline: none; }
+    a.row:hover, a.row:focus-visible { background: var(--gf-surface-2); outline: none; }
     .thumb {
       width: 60px;
       height: 60px;
@@ -79,7 +82,7 @@ export class GfPlantCard extends LitElement {
     mark { background: var(--gf-accent-soft); color: inherit; border-radius: 2px; padding: 0 1px; }
 
     /* Compact: one dense line, no thumbnail. */
-    :host([compact]) a { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto; padding: 0 12px; }
+    :host([compact]) a.row { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr) auto; padding: 0 12px; }
     :host([compact]) .text { display: contents; }
     :host([compact]) .meta { text-align: right; }
     :host([compact]) .thumb { display: none; }
@@ -90,22 +93,42 @@ export class GfPlantCard extends LitElement {
       grid-template-columns: var(--gf-cols);
       align-items: center;
       column-gap: 12px;
-      padding-left: 12px;
+      padding: 0 8px 0 12px;
       border-bottom: 1px solid var(--gf-border);
     }
-    :host([grid]) a { display: contents; }
+    :host([grid]) a.row { display: contents; }
     :host([grid]:hover), :host([grid]:focus-within) { background: var(--gf-surface-2); }
     :host([grid]) .fav { position: static; transform: none; justify-self: center; }
     :host([grid]) .thumb { width: 40px; height: 40px; font-size: 1.1rem; }
     :host([grid]) .cell { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9rem; }
     :host([grid]) .cell.sci { font-family: var(--gf-font-serif); font-style: italic; }
+    :host([grid]) .author { font-family: var(--gf-font); font-style: normal; font-size: 0.78rem; color: var(--gf-text-muted); }
+    :host([grid]) .pin {
+      justify-self: center;
+      display: grid;
+      place-items: center;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      text-decoration: none;
+      font-size: 1.15rem;
+      filter: grayscale(1);
+      opacity: 0.45;
+    }
+    :host([grid]) .pin:hover, :host([grid]) .pin:focus-visible { opacity: 1; filter: none; background: var(--gf-surface-2); }
+    :host([grid]) .pin.on { filter: none; opacity: 1; }
+    /* Illustrated view: big photo, French name over the full scientific name. */
+    :host([view='illustrated']) .thumb { width: 96px; height: 96px; font-size: 2rem; border-radius: var(--gf-radius); }
+    :host([view='illustrated']) .stack { display: grid; gap: 4px; white-space: normal; }
+    :host([view='illustrated']) .stack .fr { font-size: 1.1rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    :host([view='illustrated']) .stack .full { font-family: var(--gf-font-serif); font-style: italic; color: var(--gf-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     :host([grid]) .muted { color: var(--gf-text-muted); }
     :host([grid]) [hidden] { display: none; }
     .legal { display: flex; gap: 4px; overflow: hidden; }
     .tag { flex: none; font-size: 0.72rem; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--gf-surface-2); color: var(--gf-text); }
     .tag.pn, .tag.pr { background: color-mix(in srgb, #dc2626 16%, var(--gf-surface)); color: color-mix(in srgb, #dc2626 70%, var(--gf-text)); }
     .tag.re { background: color-mix(in srgb, #f59e0b 22%, var(--gf-surface)); }
-    :host([current]) a, :host([current][grid]) { background: var(--gf-accent-soft); box-shadow: inset 3px 0 0 var(--gf-accent); }
+    :host([current]) a.row, :host([current][grid]) { background: var(--gf-accent-soft); box-shadow: inset 3px 0 0 var(--gf-accent); }
   `;
 
   #store = new StoreController(this);
@@ -127,8 +150,9 @@ export class GfPlantCard extends LitElement {
     this.grid = false;
     /** The plant shown in the plant pane. */
     this.current = false;
-    /** Grid columns hidden by the list (narrow results pane). @type {Set<string>} */
-    this.hide = new Set();
+    /** @type {string[]} */
+    this.columns = [];
+    this.view = '';
     /** @type {any} */
     this._thumb = undefined;
   }
@@ -173,30 +197,43 @@ export class GfPlantCard extends LitElement {
     this.#abort = null;
   }
 
-  /** Grid row: the plant's values in the columns that mirror the filters. @param {Set<string>} hide */
-  #gridRow(p, thumb, q, title, fav, hide) {
+  /** Grid row: one cell per visible column, in the order of the header. */
+  #gridRow(p, thumb, q, title, fav) {
     const legal = p.legal || [];
-    const tags = [
-      legal.includes('nationale') ? html`<span class="tag pn" title="Protégée en France (protection nationale)">Protégée FR</span>`
-        : legal.includes('protegee') ? html`<span class="tag pr" title="Protégée dans une région ou un département">Protégée</span>` : nothing,
-      legal.includes('reglementee') ? html`<span class="tag re" title="Cueillette réglementée quelque part">Réglementée</span>` : nothing,
-      legal.includes('menacee') ? html`<span class="tag" title="Menacée en France (Liste rouge nationale)">Menacée</span>` : nothing
-    ];
+    const placeId = this.#store.state.placed.get(p.id);
+    const illustrated = this.view === 'illustrated';
+    const cells = {
+      photo: () => thumb?.url
+        ? html`<img class="thumb" src=${thumb.url} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
+        : html`<span class="thumb" aria-hidden="true">${thumb === undefined ? '' : '🌿'}</span>`,
+      fr: () => illustrated
+        ? html`<span class="cell name stack">
+            <span class="fr">${p.vernacularName ? highlight(p.vernacularName, q) : html`<span class="muted">Sans nom français</span>`}</span>
+            <span class="full">${highlight(p.scientificName, q)} <span class="author">${p.author || ''}</span></span>
+          </span>`
+        : html`<span class="cell name">${p.vernacularName ? highlight(p.vernacularName, q) : html`<span class="muted">—</span>`}</span>`,
+      family: () => html`<span class="cell">${p.family}</span>`,
+      genus: () => html`<span class="cell"><i>${p.genus || ''}</i></span>`,
+      species: () => html`<span class="cell sci" title=${p.scientificName + (p.author ? ' ' + p.author : '')}>${highlight(p.species || p.scientificName, q)}${p.fuzzy ? html` <span class="fuzzy">≈</span>` : nothing}${this.view === 'scientific' && p.author ? html` <span class="author">${p.author}</span>` : nothing}</span>`,
+      status: () => html`<span class="cell muted" title=${STATUS_LABELS[p.status] || ''}>${STATUS_SHORT[p.status] || '—'}</span>`,
+      legal: () => html`<span class="cell legal">
+        ${legal.includes('nationale') ? html`<span class="tag pn" title="Protégée en France (protection nationale)">Protégée FR</span>`
+          : legal.includes('protegee') ? html`<span class="tag pr" title="Protégée dans une région ou un département">Protégée</span>` : nothing}
+        ${legal.includes('reglementee') ? html`<span class="tag re" title="Cueillette réglementée quelque part">Réglementée</span>` : nothing}
+        ${legal.includes('menacee') ? html`<span class="tag" title="Menacée en France (Liste rouge nationale)">Menacée</span>` : nothing}
+      </span>`
+    };
+    const keys = this.columns.filter(k => k in cells);
     return html`
-      <a href=${href.plant(p.id)} @click=${() => rememberSearch(q)}>
-        ${thumb?.url
-          ? html`<img class="thumb" src=${thumb.url} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
-          : html`<span class="thumb" aria-hidden="true">${thumb === undefined ? '' : '🌿'}</span>`}
-        <span class="cell name">${p.vernacularName ? highlight(p.vernacularName, q) : html`<span class="muted">—</span>`}</span>
-        <span class="cell sci">${highlight(p.scientificName, q)}${p.fuzzy ? html` <span class="fuzzy">≈</span>` : nothing}</span>
-        <span class="cell" ?hidden=${hide.has('family')}>${p.family}</span>
-        <span class="cell" ?hidden=${hide.has('genus')}><i>${p.genus || ''}</i></span>
-        <span class="cell muted" ?hidden=${hide.has('status')} title=${STATUS_LABELS[p.status] || ''}>${STATUS_SHORT[p.status] || '—'}</span>
-        <span class="cell legal" ?hidden=${hide.has('legal')}>${tags}</span>
-      </a>
-      <button class="fav" type="button" aria-pressed=${fav ? 'true' : 'false'}
+      <a class="row" href=${href.plant(p.id)} @click=${() => rememberSearch(q)}>${keys.map(k => cells[k]())}</a>
+      ${this.columns.includes('fav') ? html`<button class="fav" type="button" aria-pressed=${fav ? 'true' : 'false'}
         aria-label=${(fav ? 'Retirer des favoris : ' : 'Ajouter aux favoris : ') + title}
-        @click=${this.#toggleFavorite}>${fav ? '♥' : '♡'}</button>`;
+        title=${fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+        @click=${this.#toggleFavorite}>${fav ? '♥' : '♡'}</button>` : nothing}
+      ${this.columns.includes('pin') ? html`<a class="pin ${placeId ? 'on' : ''}"
+        href=${placeId ? href.map({ spot: placeId, focus: p.id }) : href.newSpot(p.id)}
+        title=${placeId ? 'Notée dans un de mes lieux : voir sur la carte' : 'Noter où je la trouve'}
+        aria-label=${(placeId ? 'Voir sur la carte : ' : 'Noter où je la trouve : ') + title}>📍</a>` : nothing}`;
   }
 
   render() {
@@ -204,7 +241,7 @@ export class GfPlantCard extends LitElement {
     if (!p) return nothing;
     const thumb = this._thumb;
     if (this.grid) {
-      return this.#gridRow(p, thumb, this.query, p.vernacularName || p.scientificName, this.#store.state.favorites.has(p.id), this.hide);
+      return this.#gridRow(p, thumb, this.query, p.vernacularName || p.scientificName, this.#store.state.favorites.has(p.id));
     }
 
     const q = this.query;
@@ -212,7 +249,7 @@ export class GfPlantCard extends LitElement {
     const fav = this.#store.state.favorites.has(p.id);
 
     return html`
-      <a href=${href.plant(p.id)} @click=${() => rememberSearch(q)}>
+      <a class="row" href=${href.plant(p.id)} @click=${() => rememberSearch(q)}>
         ${this.compact ? nothing : thumb?.url
           ? html`<img class="thumb" src=${thumb.url} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
           : html`<span class="thumb" aria-hidden="true">${thumb === undefined ? '' : '🌿'}</span>`}

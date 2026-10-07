@@ -57,6 +57,7 @@ function toEntry(plant) {
       vernacularName: plant.vernacularNames?.[0] || null,
       family: plant.family,
       genus: plant.genus,
+      species: plant.species,
       status: plant.status?.france || null,
       legal: legalValues(plant.statuses),
       thumbnail: plant.thumbnail || null
