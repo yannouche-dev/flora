@@ -10,7 +10,6 @@ import {
   nearbyPlaces, newCollection, newPlace, placeTitle, plantCount, savePlace, withEntry, withLocation, withoutPlant, withPlant
 } from '../core/collections.js';
 import { encodeCollection, share } from '../core/share.js';
-import { lookalikes } from '../core/lookalikes.js';
 import { StoreController, whenReady } from '../core/store.js';
 import './gf-map.js';
 
@@ -240,12 +239,6 @@ export class GfSpotEditor extends LitElement {
     .today { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.95rem; }
     .today input[type='checkbox'] { width: 20px; height: 20px; accent-color: var(--gf-accent); }
     .today input[type='text'] { flex: 1; min-width: 140px; }
-    .lookalikes { border: 1px solid #f59e0b; background: color-mix(in srgb, #f59e0b 12%, var(--gf-surface)); border-radius: 10px; padding: 8px 12px; font-size: 0.85rem; }
-    .lookalikes ul { margin: 4px 0 0; padding-left: 18px; display: grid; gap: 4px; }
-    .lookalikes a { color: inherit; font-weight: 600; }
-    .danger { font-size: 0.75rem; padding: 0 6px; border-radius: 999px; background: var(--gf-surface-2); }
-    .danger.mortel { background: #b91c1c; color: #fff; }
-    .warn-mini { color: #d97706; font-weight: 700; }
     .remove { justify-self: start; color: var(--gf-danger); background: none; border: 0; font: inherit; font-size: 0.85rem; cursor: pointer; padding: 0; }
     .muted { margin: 0; color: var(--gf-text-muted); font-size: 0.9rem; }
     .actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; position: sticky; bottom: -24px; padding: 10px 0 14px; background: var(--gf-bg); }
@@ -260,7 +253,6 @@ export class GfSpotEditor extends LitElement {
       cursor: pointer;
     }
     .primary.weak { background: var(--gf-surface-2); color: var(--gf-text); border: 1px solid var(--gf-border); }
-    .danger { margin-left: auto; color: var(--gf-danger); background: none; border: 0; font: inherit; cursor: pointer; }
     a.cancel { color: var(--gf-text-muted); }
     .error { color: var(--gf-danger); font-size: 0.9rem; margin: 0; }
   `;
@@ -667,17 +659,6 @@ export class GfSpotEditor extends LitElement {
       </div>`;
   }
 
-  /** Look-alike reminder for foragers. @param {import('../core/collections.js').PlantEntry} entry */
-  #warnings(entry) {
-    const list = lookalikes(entry.plantId);
-    if (!list.length) return nothing;
-    return html`<div class="lookalikes" role="note">
-      <strong>⚠ Confusions possibles</strong>
-      <ul>${list.map(w => html`<li><a href=${href.plant(w.id)}>${w.name}</a>
-        <span class="danger ${w.danger}">${w.otherIsToxic ? w.danger : 'comestible, souvent confondu'}</span> — ${w.tip}</li>`)}</ul>
-    </div>`;
-  }
-
   /** @param {import('../core/collections.js').PlantEntry} entry */
   #entry(entry) {
     const id = entry.plantId;
@@ -695,7 +676,6 @@ export class GfSpotEditor extends LitElement {
             ${entry.vernacularName ? html`<span class="sci">${entry.scientificName}</span>` : nothing}
             ${this.#isPlace ? html`
               ${this.#harvest && entryInSeason(entry) ? html`<span class="badge">En saison</span>` : nothing}
-              ${this.#harvest && lookalikes(entry.plantId).some(w => w.otherIsToxic) ? html`<span class="warn-mini" title="Confusions dangereuses possibles">⚠</span>` : nothing}
               <span>${ABUNDANCE.find(a => a.value === entry.abundance)?.label}</span>
               ${this.#harvest && entry.rating ? html`<span class="mini-stars">${'★'.repeat(entry.rating)}</span>` : nothing}
               ${this.#harvest ? html`<span>${last ? 'Récolté le ' + shortDate(last.date) : fresh ? 'Nouvelle plante' : 'Aucune récolte'}</span>` : nothing}`
@@ -704,7 +684,6 @@ export class GfSpotEditor extends LitElement {
         </button>
         ${open ? html`
           <div class="body">
-            ${this.#harvest ? this.#warnings(entry) : nothing}
             ${fresh && this.#harvest ? html`
               <div class="today">
                 <input id="today-${id}" type="checkbox" .checked=${todayQuantity !== null}
