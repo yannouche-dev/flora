@@ -67,6 +67,36 @@ gf-map .leaflet-control-attribution {
   cursor: grab;
 }
 
+/* Plants with a photo: the photo in a circle ringed with the abundance colour. */
+.gf-plant .ring:is(span) {
+  display: block;
+  box-sizing: border-box;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid var(--c);
+  background: var(--c);
+  box-shadow: 0 0 0 1.5px #fff, 0 1px 4px rgb(0 0 0 / 55%);
+  transition: transform 0.12s ease-out;
+}
+.gf-plant .ring img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.gf-plant.photo.selected .ring {
+  transform: scale(1.35);
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--gf-accent, #16a34a), 0 1px 4px rgb(0 0 0 / 55%);
+}
+.gf-plant.photo.season .ring {
+  border-color: #fde047;
+}
+.gf-plant.photo.draggable .ring {
+  box-shadow: 0 0 0 1.5px #fff, 0 0 6px 2px #16a34a;
+}
+
 /* Position editing: the place point and the plants can be dragged. */
 .gf-place.editing {
   cursor: grab;

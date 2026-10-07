@@ -9,6 +9,7 @@ import {
 import { StoreController, whenReady } from '../core/store.js';
 import './gf-facet.js';
 import './gf-map.js';
+import './gf-thumb.js';
 
 const today = () => {
   const d = new Date();
@@ -159,7 +160,7 @@ export class GfMapPage extends LitElement {
     .plants .sub { font-size: 0.8rem; color: var(--gf-text-muted); }
     .plants .sub, .plants .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .plants li.focus { background: var(--gf-accent-soft); border-radius: 8px; padding-left: 6px; padding-right: 6px; }
-    .plants .dot { flex: none; width: 12px; height: 12px; border-radius: 50%; background: var(--c); border: 2px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 20%); }
+    .plants gf-thumb { box-shadow: 0 0 0 2.5px var(--c); margin: 3px; }
     .legend .kind i { display: inline-block; vertical-align: -1px; margin-right: 4px; background: var(--gf-text-muted); }
     .legend .kind i.place { width: 10px; height: 10px; border-radius: 3px; }
     .legend .kind i.plant { width: 9px; height: 9px; border-radius: 50%; }
@@ -425,7 +426,7 @@ export class GfMapPage extends LitElement {
               const own = entryPosition(place, e);
               const away = own && place.geometry ? distance(own, place.geometry.coordinates) : 0;
               return html`<li class=${e.plantId === focus ? 'focus' : ''}>
-                <span class="dot" style="--c:${PIN_COLORS[e.abundance]}" aria-hidden="true"></span>
+                <gf-thumb plant-id=${e.plantId ?? 0} size="38" round style="--c:${PIN_COLORS[e.abundance]}"></gf-thumb>
                 <span class="who">
                   <span class="nm">${entryName(e)}${!this.#harvest ? nothing
                     : entryInSeason(e) ? html` <span class="badge">En saison</span>`
