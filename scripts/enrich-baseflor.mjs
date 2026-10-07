@@ -54,6 +54,9 @@ export function month(value) {
 
 /** A single "floraison" cell such as "5-7", "4 à 6", "mai-juillet". */
 export function period(value) {
+  // A single month ("6"): flowering within that month.
+  const single = month(value);
+  if (single) return [single, single];
   const parts = fold(value).split(/\s*(?:-|–|\/)\s*|\s+(?:a|au|jusqu'a)\s+/).filter(Boolean);
   if (parts.length !== 2) return null;
   const first = month(parts[0]), last = month(parts[1]);
@@ -119,6 +122,7 @@ export function floweringByName(rows) {
   const periods = new Map();
   const byRef = new Map();
   const fromInfra = new Set();
+  const unparsed = new Map();
   if (cols.name < 0 || (cols.single < 0 && (cols.first < 0 || cols.last < 0))) return { periods, byRef, rows: data.length, columns: cols };
   for (const row of data) {
     const { key, infra } = binomial(row[cols.name]);
@@ -127,12 +131,17 @@ export function floweringByName(rows) {
       const first = month(row[cols.first]), last = month(row[cols.last]);
       return first && last ? /** @type {[number, number]} */ ([first, last]) : null;
     })();
-    if (!value) continue;
+    if (!value) {
+      const raw = String((cols.single >= 0 ? row[cols.single] : row[cols.first] + '|' + row[cols.last]) ?? '').trim();
+      if (raw && raw !== '|') unparsed.set(raw, (unparsed.get(raw) || 0) + 1);
+      continue;
+    }
     const ref = cols.ref >= 0 ? Number(row[cols.ref]) : NaN;
     if (Number.isInteger(ref) && ref > 0 && (!infra || !byRef.has(ref))) byRef.set(ref, value);
     if (!infra) { periods.set(key, value); fromInfra.delete(key); }
     else if (!periods.has(key)) { periods.set(key, value); fromInfra.add(key); }
   }
+  if (unparsed.size) console.log('Floraisons non lues :', [...unparsed].sort((x, y) => y[1] - x[1]).slice(0, 40));
   return { periods, byRef, rows: data.length, columns: cols };
 }
 
@@ -265,7 +274,7 @@ async function main() {
       try {
         const rows = await readRows(candidate);
         const parsed = floweringByName(rows);
-        console.log('Premières lignes :', rows.slice(0, 3).map(r => r.slice(0, 60)));
+        console.log('En-tête :', rows[0]?.slice(0, 20));
         console.log('Colonnes :', parsed.columns, '—', parsed.rows, 'lignes,', parsed.periods.size, 'noms avec une floraison');
         if (parsed.periods.size) { result = parsed; url = candidate; break; }
       } catch (error) { console.log('  ', candidate, ':', error.message); }
@@ -274,6 +283,7 @@ async function main() {
     const { periods, byRef, rows: count } = result;
     console.log('Baseflor :', url);
     const { matched, byId } = applyFlowering(plants, periods, byRef);
+
     console.log(`  dont ${byId} par identifiant TAXREF (CD_REF), ${matched - byId} par nom`);
     meta.sources = { ...(meta.sources || {}), baseflor: { url, license: LICENSE, rows: count, matched, fetchedAt: new Date().toISOString() } };
     console.log(`Baseflor: flowering months for ${matched} / ${plants.length} plants`);
