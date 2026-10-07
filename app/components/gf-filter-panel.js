@@ -40,24 +40,23 @@ export class GfFilterPanel extends LitElement {
     ];
 
     return html`
-      ${mine.length ? html`<gf-facet name="mine" label="Mes plantes" limit="6" .selected=${filters.mine} .options=${mine}></gf-facet>` : ''}
-      <gf-facet name="status" label="Statut en France" .selected=${filters.status}
+      <gf-facet name="family" label="Famille" searchable limit="8" .selected=${filters.family}
+        .options=${families.map(name => ({ value: name, label: name, count: count('family', name) }))}
+      ></gf-facet>
+      <gf-facet name="genus" label="Genre" searchable limit="8" hide-empty
+        .selected=${filters.genus}
+        .options=${genera.map(name => ({ value: name, label: name, count: count('genus', name) }))}
+      ></gf-facet>
+      <gf-facet name="status" label="Statut en France" .open=${filters.status.length > 0} .selected=${filters.status}
         .options=${STATUS_ORDER.map(code => ({ value: code, label: STATUS_SHORT[code], title: STATUS_LABELS[code] + ' (TAXREF ' + code + ')', count: count('status', code) }))}
       ></gf-facet>
-      <gf-facet name="legal" label="Protection et menace" .selected=${filters.legal}
+      <gf-facet name="legal" label="Protection et menace" .open=${filters.legal.length > 0} .selected=${filters.legal}
         .options=${[
           { value: 'nationale', label: 'Protégée en France', title: 'Protection nationale (INPN)', count: count('legal', 'nationale') },
           { value: 'protegee', label: 'Protégée (France, région ou département)', title: 'Protection nationale, régionale ou départementale (INPN)', count: count('legal', 'protegee') },
           { value: 'reglementee', label: 'Cueillette réglementée', title: 'Réglementation de la cueillette dans au moins un département (INPN)', count: count('legal', 'reglementee') },
           { value: 'menacee', label: 'Menacée en France', title: 'Liste rouge nationale : quasi menacée à en danger critique (INPN)', count: count('legal', 'menacee') }
         ]}
-      ></gf-facet>
-      <gf-facet name="family" label="Famille" searchable limit="8" .selected=${filters.family}
-        .options=${families.map(name => ({ value: name, label: name, count: count('family', name) }))}
-      ></gf-facet>
-      <gf-facet name="genus" label="Genre" searchable limit="8" hide-empty .open=${filters.genus.length > 0 || filters.family.length > 0}
-        .selected=${filters.genus}
-        .options=${genera.map(name => ({ value: name, label: name, count: count('genus', name) }))}
       ></gf-facet>
       <gf-facet name="photo" label="Photo" .selected=${filters.photo}
         .options=${[
@@ -71,6 +70,7 @@ export class GfFilterPanel extends LitElement {
           { value: 'sans', label: 'Sans nom français', count: count('french', 'sans') }
         ]}
       ></gf-facet>
+      ${mine.length ? html`<gf-facet name="mine" label="Mes plantes" limit="6" .selected=${filters.mine} .options=${mine}></gf-facet>` : ''}
     `;
   }
 }
