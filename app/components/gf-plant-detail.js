@@ -10,6 +10,7 @@ import { share } from '../core/share.js';
 import * as sources from '../core/sources.js';
 import './gf-attribution.js';
 import './gf-plant-spots.js';
+import './gf-calendar.js';
 import './gf-add-to.js';
 
 /** Remote text is untrusted HTML: keep only its text content (DOMParser never runs scripts). */
@@ -327,6 +328,9 @@ export class GfPlantDetail extends LitElement {
 
         <section>
           <gf-plant-spots plant-id=${plant.id}></gf-plant-spots>
+        </section>
+        <section>
+          <gf-calendar .plant=${plant}></gf-calendar>
         </section>
 
         ${plant.vernacularNames?.length > 1 || extraNames.length ? html`

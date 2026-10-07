@@ -7,7 +7,7 @@ import { href } from '../core/router.js';
 import { searchPlants } from '../core/search.js';
 import {
   ABUNDANCE, defaultPlantPosition, deletePlace, distance, entryInSeason, entryName, entryPosition, exportGeoJSON, findEntry,
-  formatDistance, getPlace, lastHarvest, plantMarkers,
+  formatDistance, getPlace, lastHarvest, matchCollections, plantMarkers,
   nearbyPlaces, newCollection, newPlace, placeTitle, plantCount, savePlace, withEntry, withLocation, withoutPlant, withPlant
 } from '../core/collections.js';
 import { encodeCollection, share } from '../core/share.js';
@@ -240,6 +240,19 @@ export class GfSpotEditor extends LitElement {
     .today { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 0.95rem; }
     .today input[type='checkbox'] { width: 20px; height: 20px; accent-color: var(--gf-accent); }
     .today input[type='text'] { flex: 1; min-width: 140px; }
+    .name-suggest { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: -4px; font-size: 0.85rem; color: var(--gf-text-muted); }
+    .name-suggest span { flex-basis: 100%; }
+    .name-suggest button {
+      font: inherit;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--gf-accent);
+      background: var(--gf-accent-soft);
+      color: var(--gf-text);
+      cursor: pointer;
+    }
+    .name-suggest small { color: var(--gf-text-muted); margin-left: 4px; }
+    .name-hint { margin: -4px 0 0; color: var(--gf-text-muted); font-size: 0.85rem; }
     .plant-pos { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 0.85rem; }
     .plant-pos span { flex-basis: 100%; }
     .plant-pos small { color: var(--gf-text-muted); flex-basis: 100%; }
@@ -302,6 +315,8 @@ export class GfSpotEditor extends LitElement {
 
   /** A new collection not saved yet. */
   #persisted = false;
+  /** Opened as a new collection/place in this editor (an autosaved draft can then be dropped). */
+  #createdHere = false;
   get #isNew() { return !this.spotId && !this.#persisted; }
   /** Only a new place waits for an explicit "Enregistrer" (its position may still be settling). */
   get #autosave() { return !(this.#isNew && this._place?.properties.kind === 'place'); }
@@ -420,6 +435,7 @@ export class GfSpotEditor extends LitElement {
     await whenReady();
     this._todayFor = new Map();
     this._nearby = [];
+    this.#createdHere = !this.spotId;
     if (this.spotId) {
       let place = await getPlace(this.spotId);
       if (place && this.addPlant && place.properties.kind === 'place') {
@@ -603,6 +619,44 @@ export class GfSpotEditor extends LitElement {
   #removeHarvest(plantId, index) {
     const entry = this._place && findEntry(this._place, plantId);
     if (entry) this.#patchEntry(plantId, { harvests: entry.harvests.filter((_, i) => i !== index) });
+  }
+
+  /**
+   * The name typed for a new collection is an existing one's: put this draft's plants (with their notes,
+   * abundance, harvests and, place to place, their own positions) into it, drop the draft, open it.
+   * @param {string} targetId
+   */
+  async #mergeInto(targetId) {
+    if (!this._place) return;
+    clearTimeout(this.#saveTimer);
+    this.#dirty = false;
+    await this.#saving;
+    const draft = this.#payload();
+    try {
+      let target = await getPlace(targetId);
+      if (!target) throw new Error('Collection introuvable.');
+      for (const e of draft.properties.plants) {
+        if (e.plantId === null || findEntry(target, e.plantId)) continue;
+        const own = draft.geometry && e.coordinates ? { coordinates: e.coordinates, accuracy: e.accuracy } : null;
+        const position = target.geometry ? own || defaultPlantPosition(target, this.#geo.state.fix) : undefined;
+        target = withPlant(target, { id: e.plantId, scientificName: e.scientificName, vernacularName: e.vernacularName }, position);
+        target = withEntry(target, e.plantId, { abundance: e.abundance, rating: e.rating, notes: e.notes, harvests: e.harvests });
+      }
+      await savePlace(target);
+      if (this.#persisted && this.#createdHere) await deletePlace(draft.id);
+      this.#persisted = false;
+      location.hash = href.spot(targetId);
+    } catch (error) {
+      this._error = 'Ajout impossible : ' + /** @type {Error} */ (error).message;
+    }
+  }
+
+  /** Existing collections matching the name being typed (not this one). */
+  #nameMatches() {
+    const p = this._place?.properties;
+    if (!p || p.kind === 'favorites') return { matches: [], exact: null };
+    const others = this.#store.state.collections.filter(c => c.id !== this._place?.id && c.kind !== 'favorites');
+    return matchCollections(others, p.name);
   }
 
   /** Adds the plant being recorded to an existing nearby place instead of creating a new one. */
@@ -811,6 +865,23 @@ export class GfSpotEditor extends LitElement {
     return html`<span class="save-state ${this._saveState === 'error' ? 'error' : ''}" role="status">${this._note || text}</span>`;
   }
 
+  #nameSuggestions() {
+    const { matches, exact } = this.#nameMatches();
+    if (!matches.length) return nothing;
+    const plants = this._place?.properties.plants.length || 0;
+    // An existing collection being renamed: only warn about a twin name, never merge on its behalf.
+    if (!this.#createdHere) {
+      return exact ? html`<p class="name-hint">Une autre collection s’appelle déjà « ${exact.name} ».</p>` : nothing;
+    }
+    return html`
+      <div class="name-suggest" role="group" aria-label="Collections existantes">
+        <span>${plants ? 'Ajouter plutôt à une collection existante :' : 'Ouvrir une collection existante :'}</span>
+        ${matches.map(c => html`
+          <button type="button" @click=${() => this.#mergeInto(c.id)}>${c.kind === 'place' ? '📍' : '☰'} ${c.name}
+            <small>${plantCount(c.count)}</small></button>`)}
+      </div>`;
+  }
+
   render() {
     const place = this._place;
     if (place === undefined) return html`<form><p>Chargement…</p></form>`;
@@ -852,7 +923,8 @@ export class GfSpotEditor extends LitElement {
           : html`<label class="field">${isPlace ? 'Nom de l’endroit' : 'Nom de la collection'}
               <input type="text" .value=${p.name} placeholder=${isPlace ? 'ex. Lisière nord du bois' : 'ex. Plantes mellifères'}
                 @input=${e => this.#patch({ name: e.target.value })} />
-            </label>`}
+            </label>
+            ${this.#nameSuggestions()}`}
 
         ${!place.geometry && !isFavorites ? html`
           <button class="add-location" type="button" @click=${this.#addLocation}>📍 Ajouter des coordonnées GPS (la collection devient un endroit)</button>` : nothing}

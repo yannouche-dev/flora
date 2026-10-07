@@ -39,6 +39,7 @@ Le principe est simple :
     "Herbe de saint Benoît"
   ],
   "synonyms": [],
+  "flowering": [4, 10],
   "status": {
     "france": "P"
   },
@@ -79,6 +80,8 @@ Filtres actuels :
 
 Les synonymes TAXREF de rang espèce sont rattachés au taxon accepté. Les noms français portés par ces synonymes sont également rattachés à l'espèce acceptée.
 
+**Floraison** : `scripts/enrich-baseflor.mjs` ajoute `flowering: [premier mois, dernier mois]` (1–12 ; un dernier mois plus petit que le premier signifie une floraison à cheval sur l'année) depuis **Baseflor**, l'index botanique, écologique et chorologique de la flore de France de Philippe Julve (programme CATMINAT), diffusé par [Tela Botanica](https://www.tela-botanica.org/ressources/donnees/telechargements/) : données sous licence **CC BY-SA 2.0**, base sous **ODbL 1.0**. Les noms sont rapprochés par binôme latin (nom accepté, puis synonymes TAXREF) ; la ligne de l'espèce l'emporte sur celles de ses sous-espèces. Si le téléchargement échoue, le jeu de données est publié sans floraison.
+
 ## Enrichissement distant
 
 `lib/plant-sources.mjs` fournit une couche ES6 sans dépendance pour enrichir une plante au moment où elle devient visible ou lorsque l'utilisateur ouvre sa fiche.
@@ -86,7 +89,7 @@ Les synonymes TAXREF de rang espèce sont rattachés au taxon accepté. Les noms
 Sources actuellement prises en charge :
 
 - **GBIF** : résolution taxonomique, médias, descriptions, noms vernaculaires, répartition ;
-- **iNaturalist** : taxon, nombre d'observations et photo par défaut lorsque sa licence est libre ;
+- **iNaturalist** : taxon, nombre d'observations et photo par défaut lorsque sa licence est libre ; **phénologie** : observations en France par mois, annotées « en fleurs » / « en fruits » (`phenology()`, histogramme `month_of_year`, `place_id=6753`) ;
 - **Wikidata** : résolution sûre par propriété taxonomique `P225` ;
 - **Wikimedia Commons** : photos libres avec URL, miniature, auteur et licence ;
 - **Trefle** : taxon, image principale et fiche détaillée (token gratuit requis).
@@ -256,6 +259,9 @@ Une **collection** est un ensemble de plantes, avec ou sans position :
 - **Favoris** ♥ : un toucher sur ♡ dans la liste de recherche ou sur la fiche d'une plante.
 - **Listes** (« Mellifères », « À chercher cet été »…) : sans position. « Ajouter à… » sur une fiche plante coche/décoche les collections et en crée une à la volée.
 - **Lieux** : une liste avec une position GPS, visible sur la carte (voir ci-dessous). « 📍 Ajouter une position » transforme une liste en lieu ; « Retirer la position » fait l'inverse.
+- **Noms** : dans chaque champ de nom de collection (« Ajouter à… → Nouvelle collection », éditeur d'une nouvelle collection), les collections existantes qui correspondent sont proposées ; en choisir une y ajoute la plante au lieu de créer un doublon.
+
+**Calendrier** sur la fiche plante, chargé automatiquement : floraison Baseflor (hors ligne, dans le jeu de données) et observations iNaturalist en fleurs / en fruits en France, mois par mois, chaque ligne avec sa source. Ce sont des indications de floraison et de fructification, **pas des dates de cueillette**.
 
 L'onglet **Mes plantes** les regroupe : collections, puis endroits triés par distance. Une collection à laquelle on ajoute des coordonnées GPS devient un endroit ; toucher un endroit ouvre la carte cadrée sur son point et toutes ses plantes. Les modifications sont **enregistrées automatiquement**. Dans la recherche, le filtre **Mes plantes** limite les résultats aux favoris, à une liste, à un lieu ou à « dans un de mes lieux ».
 
