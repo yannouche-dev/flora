@@ -54,6 +54,9 @@ export function month(value) {
 
 /** A single "floraison" cell such as "5-7", "4 à 6", "mai-juillet". */
 export function period(value) {
+  // A single month ("6"): flowering within that month.
+  const single = month(value);
+  if (single) return [single, single];
   const parts = fold(value).split(/\s*(?:-|–|\/)\s*|\s+(?:a|au|jusqu'a)\s+/).filter(Boolean);
   if (parts.length !== 2) return null;
   const first = month(parts[0]), last = month(parts[1]);
@@ -271,6 +274,10 @@ async function main() {
       try {
         const rows = await readRows(candidate);
         const parsed = floweringByName(rows);
+        for (const name of ['allium ursinum', 'sambucus nigra', 'urtica dioica']) {
+          const hits = rows.filter(r => r.some(c => typeof c === 'string' && c.toLowerCase().startsWith(name)));
+          console.log(`Lignes « ${name} » :`, hits.length, hits.slice(0, 3).map(r => r.slice(0, 18)));
+        }
         console.log('Premières lignes :', rows.slice(0, 3).map(r => r.slice(0, 60)));
         console.log('Colonnes :', parsed.columns, '—', parsed.rows, 'lignes,', parsed.periods.size, 'noms avec une floraison');
         if (parsed.periods.size) { result = parsed; url = candidate; break; }
