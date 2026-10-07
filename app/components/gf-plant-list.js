@@ -1,11 +1,32 @@
 // @ts-check
-import { LitElement, html, css, repeat } from 'lit';
+import { LitElement, html, css, nothing, repeat } from 'lit';
+import { setQuery } from '../core/query.js';
 import { StoreController } from '../core/store.js';
 import './gf-plant-card.js';
 
 const ROW_HEIGHT = 76;
 const COMPACT_ROW_HEIGHT = 44;
+const GRID_ROW_HEIGHT = 52;
+const HEADER_HEIGHT = 38;
 const OVERSCAN = 6;
+
+/**
+ * Grid columns, in the order of the filters (gf-filter-panel): each sortable column sorts the results,
+ * and shows how many values of its filter are selected.
+ */
+export const COLUMNS = [
+  { key: 'photo', label: 'Photo', sort: 'photo', facet: 'photo', width: '40px' },
+  { key: 'fr', label: 'Nom français', sort: 'fr', facet: 'french', width: 'minmax(120px, 1.3fr)' },
+  { key: 'sci', label: 'Nom scientifique', sort: 'sci', width: 'minmax(120px, 1.3fr)' },
+  { key: 'family', label: 'Famille', sort: 'family', facet: 'family', width: 'minmax(90px, 1fr)' },
+  { key: 'genus', label: 'Genre', sort: 'genus', facet: 'genus', width: 'minmax(80px, 0.9fr)' },
+  { key: 'status', label: 'Statut', sort: 'status', facet: 'status', width: 'minmax(80px, 0.8fr)' },
+  { key: 'legal', label: 'Protection', sort: 'legal', facet: 'legal', width: 'minmax(96px, 1.1fr)' },
+  { key: 'fav', label: '', width: '44px' }
+];
+
+/** Columns dropped when the results pane is narrow. @param {number} width */
+const hiddenColumns = width => new Set(width < 760 ? ['genus', 'status'] : []);
 
 /** Scroll position survives navigating to a plant and back, until the results change. */
 let saved = { items: /** @type {any[] | null} */ (null), scrollTop: 0 };
@@ -13,8 +34,13 @@ let saved = { items: /** @type {any[] | null} */ (null), scrollTop: 0 };
 /** Virtualized result list: only the rows in (or near) the viewport are in the DOM. */
 export class GfPlantList extends LitElement {
   static properties = {
+    /** Results grid (columns mirroring the filters) rather than cards. */
+    grid: { type: Boolean, reflect: true },
+    /** Id of the plant open in the plant pane. */
+    current: { type: Number },
     _scrollTop: { state: true },
-    _height: { state: true }
+    _height: { state: true },
+    _width: { state: true }
   };
 
   static styles = css`
@@ -36,10 +62,58 @@ export class GfPlantList extends LitElement {
       text-align: center;
       color: var(--gf-text-muted);
     }
+    .head {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      display: grid;
+      grid-template-columns: var(--gf-cols);
+      align-items: center;
+      column-gap: 12px;
+      height: ${HEADER_HEIGHT}px;
+      padding-left: 12px;
+      background: var(--gf-bg);
+      border-bottom: 1px solid var(--gf-border);
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--gf-text-muted);
+    }
+    .th { display: flex; align-items: center; gap: 2px; min-width: 0; }
+    .th button {
+      font: inherit;
+      color: inherit;
+      background: none;
+      border: 0;
+      padding: 4px 2px;
+      cursor: pointer;
+      border-radius: 6px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      text-align: left;
+    }
+    .th button:hover { color: var(--gf-text); }
+    .th button:focus-visible { outline: none; box-shadow: var(--gf-focus); }
+    .th [aria-sort='ascending'], .th [aria-sort='descending'] { color: var(--gf-accent); }
+    .th .sort[data-active] { color: var(--gf-accent); }
+    .th .funnel {
+      flex: none;
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 999px;
+      background: var(--gf-accent);
+      color: var(--gf-accent-contrast);
+    }
+    .th .funnel:hover { color: var(--gf-accent-contrast); }
+    [hidden] { display: none !important; }
   `;
 
   #store = new StoreController(this);
-  #resize = new ResizeObserver(([entry]) => { this._height = entry.contentRect.height; });
+  #resize = new ResizeObserver(([entry]) => {
+    this._height = entry.contentRect.height;
+    this._width = entry.contentRect.width;
+  });
   /** @type {any[] | null} */
   #items = null;
   #frame = 0;
@@ -48,6 +122,10 @@ export class GfPlantList extends LitElement {
     super();
     this._scrollTop = 0;
     this._height = 800;
+    this._width = 1000;
+    this.grid = false;
+    /** @type {number | null} */
+    this.current = null;
     this.addEventListener('scroll', () => {
       cancelAnimationFrame(this.#frame);
       this.#frame = requestAnimationFrame(() => { this._scrollTop = this.scrollTop; });
@@ -76,18 +154,53 @@ export class GfPlantList extends LitElement {
     this._scrollTop = top;
   }
 
+  /** Header click: sort by the column, again to reverse. @param {string} key */
+  #sortBy(key) {
+    const sort = this.#store.state.results.sort;
+    setQuery({ sort: sort === key ? '-' + key : key });
+  }
+
+  /** Funnel of a column: show its filter (filters pane or sheet). @param {string} facet */
+  #showFacet(facet) {
+    this.dispatchEvent(new CustomEvent('focus-facet', { detail: { facet }, bubbles: true, composed: true }));
+  }
+
+  /** @param {Set<string>} hide */
+  #header(hide) {
+    const { results: { sort }, query: { filters } } = this.#store.state;
+    return html`<div class="head" role="row">
+      ${COLUMNS.map(c => {
+        const active = c.sort && (sort === c.sort ? 'ascending' : sort === '-' + c.sort ? 'descending' : null);
+        const count = c.facet ? filters[c.facet]?.length || 0 : 0;
+        return html`<div class="th" role="columnheader" aria-sort=${active || 'none'} ?hidden=${hide.has(c.key)}>
+          ${c.sort ? html`<button class="sort" type="button" ?data-active=${Boolean(active)}
+            title=${'Trier par ' + c.label.toLowerCase() + (active === 'ascending' ? ' (ordre inverse)' : '')}
+            @click=${() => this.#sortBy(/** @type {string} */ (c.sort))}>${c.label}${active === 'ascending' ? ' ▲' : active === 'descending' ? ' ▼' : ''}</button>` : nothing}
+          ${count ? html`<button class="funnel" type="button" title=${`Filtre ${c.label.toLowerCase()} : ${count} valeur${count > 1 ? 's' : ''}`}
+            @click=${() => this.#showFacet(/** @type {string} */ (c.facet))}>⏷ ${count}</button>` : nothing}
+        </div>`;
+      })}
+    </div>`;
+  }
+
   render() {
     const { results: { items }, query: { q }, compact, status } = this.#store.state;
+    const hide = this.grid ? hiddenColumns(this._width) : new Set();
+    if (this.grid) this.style.setProperty('--gf-cols', COLUMNS.filter(c => !hide.has(c.key)).map(c => c.width).join(' '));
+    const header = this.grid ? this.#header(hide) : nothing;
     if (status === 'ready' && !items.length) {
-      return html`<p class="empty">Aucune plante ne correspond à cette recherche.</p>`;
+      return html`${header}<p class="empty">Aucune plante ne correspond à cette recherche.</p>`;
     }
 
-    const rowHeight = compact ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
-    const first = Math.max(0, Math.floor(this._scrollTop / rowHeight) - OVERSCAN);
-    const last = Math.min(items.length, Math.ceil((this._scrollTop + this._height) / rowHeight) + OVERSCAN);
+    const rowHeight = this.grid ? GRID_ROW_HEIGHT : compact ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
+    const offset = this.grid ? HEADER_HEIGHT : 0;
+    const top = Math.max(0, this._scrollTop - offset);
+    const first = Math.max(0, Math.floor(top / rowHeight) - OVERSCAN);
+    const last = Math.min(items.length, Math.ceil((top + this._height) / rowHeight) + OVERSCAN);
     const visible = items.slice(first, last);
 
     return html`
+      ${header}
       <div class="spacer" role="list" style="height:${items.length * rowHeight}px">
         ${repeat(visible, plant => plant.id, (plant, i) => html`
           <gf-plant-card
@@ -95,7 +208,10 @@ export class GfPlantList extends LitElement {
             style="top:${(first + i) * rowHeight}px;height:${rowHeight}px"
             .plant=${plant}
             .query=${q}
-            ?compact=${compact}
+            .hide=${hide}
+            ?compact=${compact && !this.grid}
+            ?grid=${this.grid}
+            ?current=${plant.id === this.current}
           ></gf-plant-card>
         `)}
       </div>

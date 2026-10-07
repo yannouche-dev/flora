@@ -4,8 +4,8 @@ import { config } from '../config.js';
 import { clearRecentSearches, recentSearches, rememberSearch, setQuery } from '../core/query.js';
 import { StoreController } from '../core/store.js';
 
-/** Search input with a recent-searches menu (shown when focused and empty). */
-export class GfSearchBar extends LitElement {
+/** Plant search (top of the results), with a recent-searches menu (shown when focused and empty). */
+export class GfPlantSearch extends LitElement {
   static properties = {
     _open: { state: true },
     _active: { state: true }
@@ -17,10 +17,10 @@ export class GfSearchBar extends LitElement {
       width: 100%;
       font: inherit;
       font-size: 1rem;
-      padding: 10px 14px;
+      padding: 9px 14px 9px 38px;
       border-radius: var(--gf-radius-pill);
+      background: var(--gf-surface) no-repeat 13px 50% / 16px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-4-4'/%3E%3C/svg%3E");
       border: 1px solid var(--gf-border);
-      background: var(--gf-surface);
       color: var(--gf-text);
       outline: none;
     }
@@ -111,7 +111,8 @@ export class GfSearchBar extends LitElement {
         aria-expanded=${recent.length ? 'true' : 'false'}
         aria-controls="recent"
         aria-activedescendant=${this._active >= 0 ? 'recent-' + this._active : ''}
-        placeholder="Nom français, scientifique (ger rob), synonyme, famille…"
+        placeholder="Ex. : ortie, Urtica dioica, ger rob, Lamiaceae"
+        title="Nom français, nom scientifique (ou ses débuts : « ger rob »), synonyme ou famille"
         aria-label="Rechercher une plante"
         .value=${q}
         ?disabled=${status !== 'ready'}
@@ -134,4 +135,4 @@ export class GfSearchBar extends LitElement {
   }
 }
 
-customElements.define('gf-search-bar', GfSearchBar);
+customElements.define('gf-plant-search', GfPlantSearch);

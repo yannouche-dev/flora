@@ -214,6 +214,13 @@ app/
   styles/                tokens.css (thème clair/sombre), app.css, map.css
 ```
 
+### Onglet Flore : filtres, résultats, plante
+
+- **Ordinateur** : trois panneaux côte à côte, **Filtres ┃ Résultats ┃ Plante**. Chacun se replie (« / ») en une fine barre verticale et se redimensionne en tirant les séparateurs (ou ←/→ au clavier, double-clic pour la largeur par défaut) ; largeurs et panneaux repliés sont mémorisés. Toucher un résultat ouvre la fiche dans le panneau Plante (l'adresse `#/plant/<id>` reste partageable) ; ⤢ la passe en pleine largeur, × la ferme.
+- **Recherche** en haut des résultats (« Ex. : ortie, Urtica dioica, ger rob, Lamiaceae »).
+- **Grille des résultats** : colonnes Photo, Nom français, Nom scientifique, Famille, Genre, Statut, Protection — dans l'ordre des filtres. Cliquer un en-tête trie par cette colonne, recliquer inverse l'ordre (`sort=-family` dans l'URL) ; un en-tête dont le filtre est actif affiche son nombre de valeurs, qui ouvre ce filtre. Quand le panneau est étroit, Genre et Statut se masquent, puis la liste repasse en fiches.
+- **Tablette** : filtres en feuille, Résultats ┃ Plante. **Téléphone** : fiches, et la plante s'ouvre en plein écran par-dessus la liste (« ← Résultats » revient au même endroit).
+
 ### Recherche, filtres et tri
 
 - **Texte** : noms français, noms scientifiques, synonymes et familles, sans tenir compte des accents (`benoite` → *Benoîte*).

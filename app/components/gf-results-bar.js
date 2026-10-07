@@ -5,6 +5,7 @@ import { activeFilterCount, setQuery, toHash } from '../core/query.js';
 import { share } from '../core/share.js';
 import { setCompact, store, StoreController } from '../core/store.js';
 import './gf-active-filters.js';
+import './gf-plant-search.js';
 import { ui } from '../styles/ui.js';
 
 /**
@@ -12,9 +13,15 @@ import { ui } from '../styles/ui.js';
  * family/genus suggestions and the "approximate results" note.
  * Fires `open-filters` when the mobile filter button is pressed.
  */
+const COLUMN_LABELS = { fr: 'Nom français', sci: 'Nom scientifique', family: 'Famille', genus: 'Genre', status: 'Statut', legal: 'Protection', photo: 'Photo' };
+/** Sort chosen in the grid (e.g. "-family") shown in the card view's menu. @param {string} sort */
+const columnSortLabel = sort => (COLUMN_LABELS[sort.replace(/^-/, '')] || sort) + (sort.startsWith('-') ? ' (inverse)' : '');
+
 export class GfResultsBar extends LitElement {
   static properties = {
     wide: { type: Boolean },
+    /** The list is a grid whose column headers sort: no sort menu or density toggle then. */
+    grid: { type: Boolean },
     _copied: { state: true }
   };
 
@@ -28,6 +35,9 @@ export class GfResultsBar extends LitElement {
       font-size: 0.875rem;
     }
     .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .search { display: flex; gap: 8px; align-items: center; }
+    .search gf-plant-search { flex: 1; min-width: 0; }
+    .search .filters { min-height: 40px; }
     .count { font-weight: 600; margin-right: auto; white-space: nowrap; }
     button, select { min-height: 32px; padding: 4px 12px; font-size: 0.85rem; }
     select { padding-right: 28px; border-radius: var(--gf-radius-pill); }
@@ -58,6 +68,7 @@ export class GfResultsBar extends LitElement {
   constructor() {
     super();
     this.wide = true;
+    this.grid = false;
     this._copied = false;
   }
 
@@ -73,20 +84,25 @@ export class GfResultsBar extends LitElement {
     const sorts = SORTS.filter(s => s.value !== 'relevance' || query.q);
 
     return html`
-      <div class="row">
+      <div class="search">
         ${this.wide ? nothing : html`
           <button class="filters" type="button" @click=${() => this.dispatchEvent(new CustomEvent('open-filters', { bubbles: true, composed: true }))}>
             Filtres ${active ? html`<span class="badge">${active}</span>` : nothing}
           </button>`}
+        <gf-plant-search></gf-plant-search>
+      </div>
+      <div class="row">
         <span class="count" aria-live="polite">
           ${status === 'ready' ? html`${results.total.toLocaleString('fr-FR')} espèce${results.total > 1 ? 's' : ''}` : nothing}
         </span>
-        <select aria-label="Trier par" .value=${results.sort}
-          @change=${e => setQuery({ sort: e.target.value })}>
-          ${sorts.map(s => html`<option value=${s.value} ?selected=${s.value === results.sort}>${s.label}</option>`)}
-        </select>
-        <button type="button" aria-pressed=${compact ? 'true' : 'false'} title="Affichage compact (sans vignettes)"
-          @click=${() => setCompact(!compact)}>Compact</button>
+        ${this.grid ? (results.sort === 'relevance' || !query.q ? nothing : html`<button type="button" title="Trier par pertinence" @click=${() => setQuery({ sort: '' })}>Pertinence</button>`) : html`
+          <select aria-label="Trier par" .value=${results.sort}
+            @change=${e => setQuery({ sort: e.target.value })}>
+            ${sorts.map(s => html`<option value=${s.value} ?selected=${s.value === results.sort}>${s.label}</option>`)}
+            ${sorts.some(s => s.value === results.sort) ? nothing : html`<option value=${results.sort} selected>${columnSortLabel(results.sort)}</option>`}
+          </select>
+          <button type="button" aria-pressed=${compact ? 'true' : 'false'} title="Affichage compact (sans vignettes)"
+            @click=${() => setCompact(!compact)}>Compact</button>`}
         <button type="button" title="Partager cette recherche (filtres compris)" @click=${this.#share}>${this._copied ? 'Lien copié' : 'Partager'}</button>
       </div>
 
