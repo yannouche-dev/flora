@@ -4,19 +4,26 @@ import * as db from '../core/db.js';
 import { GeoController } from '../core/geo.js';
 import { href } from '../core/router.js';
 import {
-  FAVORITES_ID, collectionTitle, distance, formatDistance, inSeason, listCollections, plantCount, soon, spotEvents
+  FAVORITES_ID, collectionTitle, discardMissingBackup, distance, exportGeoJSON, formatDistance, inSeason, lastExportDate,
+  listCollections, missingFromBackup, plantCount, restoreBackup, soon, spotEvents
 } from '../core/collections.js';
+import { config } from '../config.js';
 import { StoreController, whenReady } from '../core/store.js';
 
 /** Up to this many thumbnails per collection row. */
 const THUMBS = 4;
+/** Suggest an export when the last one is older than this. */
+const REMIND_AFTER = 14 * 86400000;
 
 /** "Mes plantes": favorites, lists and places in one place. Places open on the map, framed on their points. */
 export class GfCollections extends LitElement {
   static properties = {
     _collections: { state: true },
     _thumbs: { state: true },
-    _error: { state: true }
+    _error: { state: true },
+    _missing: { state: true },
+    _note: { state: true },
+    _busy: { state: true }
   };
 
   static styles = css`
@@ -86,6 +93,31 @@ export class GfCollections extends LitElement {
     .badge.soon { background: var(--gf-accent-soft); color: var(--gf-text); }
     .badge { background: #fde047; color: #422006; border-radius: 999px; padding: 0 8px; font-size: 0.75rem; font-weight: 600; }
     .empty { color: var(--gf-text-muted); font-size: 0.9rem; }
+    .notice {
+      display: grid;
+      gap: 8px;
+      margin: 0 0 16px;
+      padding: 12px 14px;
+      border-radius: var(--gf-radius);
+      background: var(--gf-surface);
+      border: 1px solid var(--gf-border);
+      font-size: 0.9rem;
+    }
+    .notice.restore { border-color: var(--gf-accent); background: var(--gf-accent-soft); }
+    .notice p { margin: 0; }
+    .notice .row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .notice button {
+      font: inherit;
+      font-weight: 600;
+      padding: 8px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--gf-accent);
+      background: var(--gf-surface);
+      color: var(--gf-text);
+      cursor: pointer;
+    }
+    .notice button.main { background: var(--gf-accent); color: var(--gf-accent-contrast); }
+    .notice button.link { border: 0; background: none; font-weight: 400; color: var(--gf-text-muted); text-decoration: underline; padding: 8px 4px; }
     .error { color: var(--gf-danger); }
   `;
 
@@ -101,6 +133,11 @@ export class GfCollections extends LitElement {
     this._thumbs = new Map();
     /** @type {string | null} */
     this._error = null;
+    /** Collections found in the local backup but missing from the database. @type {import('../core/collections.js').Collection[]} */
+    this._missing = [];
+    /** @type {string | null} */
+    this._note = null;
+    this._busy = false;
   }
 
   connectedCallback() {
@@ -128,6 +165,7 @@ export class GfCollections extends LitElement {
         thumbs.set(id, plant?.thumbnail?.url || null);
       }));
       this._thumbs = thumbs;
+      this._missing = await missingFromBackup().catch(() => []);
       this._error = null;
     } catch (error) {
       console.error(error);
@@ -160,6 +198,72 @@ export class GfCollections extends LitElement {
       </li>`;
   }
 
+  async #restore() {
+    this._busy = true;
+    try {
+      const n = await restoreBackup();
+      this._note = `${n} collection${n > 1 ? 's' : ''} restaurée${n > 1 ? 's' : ''}.`;
+    } catch (error) {
+      this._note = 'Restauration impossible : ' + /** @type {Error} */ (error).message;
+    } finally {
+      this._busy = false;
+      this.#load();
+    }
+  }
+
+  async #discard() {
+    if (!confirm('Oublier ces collections ? La copie de secours ne les gardera plus.')) return;
+    await discardMissingBackup();
+    this._missing = [];
+  }
+
+  async #export() {
+    const { cancelled } = await exportGeoJSON();
+    if (!cancelled) this._note = 'Sauvegarde exportée. Gardez le fichier (Drive, e-mail…) : il permet de tout restaurer.';
+    this.requestUpdate();
+  }
+
+  #dismissReminder() {
+    try { localStorage.setItem(config.storageKeys.backupReminder, new Date().toISOString()); } catch { /* not persisted */ }
+    this.requestUpdate();
+  }
+
+  /** An export is due: collections with plants exist, none exported for 14 days, not dismissed since the last change. */
+  #reminderDue() {
+    const withPlants = this._collections.filter(c => c.properties.plants.length);
+    if (!withPlants.length) return false;
+    const last = lastExportDate();
+    if (last && Date.now() - Date.parse(last) < REMIND_AFTER) return false;
+    let dismissed = null;
+    try { dismissed = localStorage.getItem(config.storageKeys.backupReminder); } catch { /* storage unavailable */ }
+    const latest = withPlants.reduce((m, c) => (c.properties.updatedAt > m ? c.properties.updatedAt : m), '');
+    return !dismissed || dismissed < latest;
+  }
+
+  #notices() {
+    const missing = this._missing;
+    return html`
+      ${missing.length ? html`
+        <div class="notice restore" role="alert">
+          <p><strong>${missing.length} collection${missing.length > 1 ? 's' : ''} retrouvée${missing.length > 1 ? 's' : ''} dans la copie de secours</strong>
+            de cet appareil : ${missing.slice(0, 4).map(c => collectionTitle(c)).join(', ')}${missing.length > 4 ? '…' : ''}.</p>
+          <div class="row">
+            <button class="main" type="button" ?disabled=${this._busy} @click=${this.#restore}>Restaurer</button>
+            <button class="link" type="button" @click=${this.#discard}>Oublier</button>
+          </div>
+        </div>` : nothing}
+      ${!missing.length && this.#reminderDue() ? html`
+        <div class="notice">
+          <p><strong>Sauvegardez vos collections.</strong> Elles ne sont que sur cet appareil : le navigateur peut les effacer.
+            ${lastExportDate() ? `Dernière sauvegarde le ${new Date(/** @type {string} */ (lastExportDate())).toLocaleDateString('fr-FR')}.` : 'Aucune sauvegarde pour l’instant.'}</p>
+          <div class="row">
+            <button class="main" type="button" @click=${this.#export}>Exporter</button>
+            <button class="link" type="button" @click=${this.#dismissReminder}>Plus tard</button>
+          </div>
+        </div>` : nothing}
+      ${this._note ? html`<p class="empty" role="status">${this._note}</p>` : nothing}`;
+  }
+
   render() {
     const all = this._collections;
     const favorites = all.find(c => c.id === FAVORITES_ID);
@@ -179,6 +283,7 @@ export class GfCollections extends LitElement {
           <a href=${href.newSpot()} @click=${e => { e.preventDefault(); this.dispatchEvent(new CustomEvent('open-capture', { bubbles: true, composed: true })); }}>📍 Noter une plante ici</a>
         </div>
         ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : nothing}
+        ${this.#notices()}
 
         <ul>
           ${favorites ? this.#row(favorites, null) : html`

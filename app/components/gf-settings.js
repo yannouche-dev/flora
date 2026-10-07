@@ -3,13 +3,14 @@ import { LitElement, html, css, nothing } from 'lit';
 import { lastSearchHash } from '../core/query.js';
 import { setHarvestMode, StoreController } from '../core/store.js';
 import { getTrefleToken, setTrefleToken } from '../core/sources.js';
-import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, spotEvents } from '../core/collections.js';
+import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectStorage, spotEvents, storageReport } from '../core/collections.js';
 
 export class GfSettings extends LitElement {
   static properties = {
     _saved: { state: true },
     _spotCount: { state: true },
-    _spotMessage: { state: true }
+    _spotMessage: { state: true },
+    _report: { state: true }
   };
 
   static styles = css`
@@ -55,6 +56,9 @@ export class GfSettings extends LitElement {
       color: var(--gf-accent);
       cursor: pointer;
     }
+    .diag { font-size: 0.85rem; }
+    details { margin-top: 10px; }
+    summary { cursor: pointer; }
     label.file input { position: absolute; width: 1px; height: 1px; opacity: 0; }
     label.file:focus-within { outline: 2px solid var(--gf-accent); outline-offset: 2px; }
   `;
@@ -74,7 +78,37 @@ export class GfSettings extends LitElement {
   }
 
   async #countSpots() {
-    this._spotCount = (await listCollections()).length;
+    this._spotCount = (await listCollections().catch(() => [])).length;
+    this._report = await storageReport().catch(() => null);
+  }
+
+  async #protect() {
+    await protectStorage();
+    this._report = await storageReport().catch(() => null);
+  }
+
+  #diagnostic() {
+    const r = this._report;
+    if (!r) return nothing;
+    const date = (/** @type {string | null} */ d) => (d ? new Date(d).toLocaleString('fr-FR') : 'jamais');
+    const mb = (/** @type {number | null} */ n) => (n === null ? '?' : (n / 1e6).toLocaleString('fr-FR', { maximumFractionDigits: 1 }) + ' Mo');
+    return html`
+      <h2>Protection des données</h2>
+      ${r.persisted ? html`<p class="muted">✓ Données protégées : le navigateur ne les effacera pas pour faire de la place.</p>` : html`
+        <p class="muted">Données <strong>non protégées</strong> : le navigateur peut les effacer s’il manque de place.
+          Installer l’application (menu du navigateur → « Installer l’application » ou « Ajouter à l’écran d’accueil ») aide à les faire protéger.</p>
+        <div class="row"><button type="button" @click=${this.#protect}>Protéger mes données</button></div>`}
+      <details>
+        <summary class="muted">Diagnostic du stockage</summary>
+        <dl class="diag">
+          <dt>Base locale</dt><dd>version ${r.dbVersion ?? '?'} · ${r.collections} collection${r.collections > 1 ? 's' : ''}</dd>
+          <dt>Protégée</dt><dd>${r.persisted === null ? 'inconnu' : r.persisted ? 'oui' : 'non'}</dd>
+          <dt>Espace utilisé</dt><dd>${mb(r.usage)} sur ${mb(r.quota)}</dd>
+          <dt>Copie de secours</dt><dd>${r.backupCount} collection${r.backupCount > 1 ? 's' : ''} · ${date(r.backupAt)}</dd>
+          <dt>Dernier export</dt><dd>${date(r.lastExport)}</dd>
+          <dt>Collections déjà créées ici</dt><dd>${r.markedHasSpots ? 'oui' : 'non'}</dd>
+        </dl>
+      </details>`;
   }
 
   async #export() {
@@ -103,6 +137,8 @@ export class GfSettings extends LitElement {
     this._spotCount = 0;
     /** @type {string | null} */
     this._spotMessage = null;
+    /** @type {Awaited<ReturnType<typeof storageReport>> | null} */
+    this._report = null;
   }
 
   /** @param {SubmitEvent} event */
@@ -162,6 +198,7 @@ export class GfSettings extends LitElement {
           </label>
         </div>
         ${this._spotMessage ? html`<p class="muted" role="status">${this._spotMessage}</p>` : nothing}
+        ${this.#diagnostic()}
 
         <h2>Trefle (optionnel)</h2>
         <p class="muted">
