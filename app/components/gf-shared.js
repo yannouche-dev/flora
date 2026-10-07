@@ -2,8 +2,10 @@
 import { LitElement, html, css, nothing } from 'lit';
 import * as db from '../core/db.js';
 import { href } from '../core/router.js';
-import { newCollection, newPlace, plantCount, saveCollection, withEntry, withPlant } from '../core/collections.js';
-import { decodeCollection } from '../core/share.js';
+import { importPortable, newCollection, newPlace, plantCount, saveCollection, withEntry, withPlant } from '../core/collections.js';
+import { FAVORITES_ID } from '../core/place-model.js';
+import { hasPersonal } from '../core/portable.js';
+import { decodeCollection, decodePortable, isPortableLink } from '../core/share.js';
 import { whenReady } from '../core/store.js';
 import './gf-map.js';
 
@@ -14,7 +16,9 @@ export class GfShared extends LitElement {
     _shared: { state: true },
     _plants: { state: true },
     _error: { state: true },
-    _busy: { state: true }
+    _busy: { state: true },
+    _portable: { state: true },
+    _done: { state: true }
   };
 
   static styles = css`
@@ -54,6 +58,8 @@ export class GfShared extends LitElement {
     a.cancel { color: var(--gf-text-muted); }
     .muted { color: var(--gf-text-muted); font-size: 0.9rem; margin: 0; }
     .error { color: var(--gf-danger); }
+    ul.names { display: grid; gap: 4px; }
+    ul.names li { padding: 6px 10px; border-radius: 8px; background: var(--gf-surface); border: 1px solid var(--gf-border); display: flex; justify-content: space-between; }
   `;
 
   constructor() {
@@ -66,6 +72,10 @@ export class GfShared extends LitElement {
     /** @type {string | null} */
     this._error = null;
     this._busy = false;
+    /** A transfer link: several collections as slim GeoJSON. @type {any} */
+    this._portable = null;
+    /** @type {string | null} */
+    this._done = null;
   }
 
   /** @param {Map<string, any>} changed */
@@ -75,7 +85,18 @@ export class GfShared extends LitElement {
 
   async #load() {
     this._shared = null;
+    this._portable = null;
+    this._done = null;
     this._error = null;
+    if (isPortableLink(this.data)) {
+      try {
+        this._portable = await decodePortable(this.data);
+        document.title = 'Transfert de collections — GeoFlora';
+      } catch (error) {
+        this._error = /** @type {Error} */ (error).message;
+      }
+      return;
+    }
     try {
       const shared = await decodeCollection(this.data);
       await whenReady();
@@ -111,7 +132,46 @@ export class GfShared extends LitElement {
     }
   }
 
+  async #importPortable() {
+    this._busy = true;
+    try {
+      await whenReady();
+      const r = await importPortable(this._portable);
+      this._done = `${r.added} ajoutée${r.added > 1 ? 's' : ''}, ${r.updated} mise${r.updated > 1 ? 's' : ''} à jour, ${r.unchanged} déjà à jour`
+        + (r.skipped ? `, ${r.skipped} ignorée${r.skipped > 1 ? 's' : ''}` : '') + '.';
+    } catch (error) {
+      this._error = 'Import impossible : ' + /** @type {Error} */ (error).message;
+    } finally {
+      this._busy = false;
+    }
+  }
+
+  #portableView() {
+    const features = this._portable.features;
+    const kindOf = (/** @type {any} */ f) => f.id === FAVORITES_ID ? 'favorites' : f.geometry ? 'place' : 'list';
+    const places = features.filter(f => kindOf(f) === 'place').length;
+    const lists = features.filter(f => kindOf(f) === 'list').length;
+    const plants = features.reduce((n, f) => n + (f.properties?.plants?.length || 0), 0);
+    const label = (/** @type {any} */ f) => kindOf(f) === 'favorites' ? '♥ Favoris' : (kindOf(f) === 'place' ? '📍 ' : '☰ ') + (f.properties?.name || 'Sans nom');
+    return html`
+      <div class="wrap">
+        <span class="kicker">Transfert de collections</span>
+        <h1>${features.length} collection${features.length > 1 ? 's' : ''}</h1>
+        <p class="muted">${lists} collection${lists > 1 ? 's' : ''}, ${places} endroit${places > 1 ? 's' : ''}, ${plantCount(plants)}${hasPersonal(this._portable) ? ' · avec notes et récoltes' : ' · sans notes ni récoltes'}${this._portable.exportedAt ? ` · créé le ${new Date(this._portable.exportedAt).toLocaleDateString('fr-FR')}` : ''}.</p>
+        <ul class="names">${features.map(f => html`<li>${label(f)} <span class="muted">${f.properties?.plants?.length || 0}</span></li>`)}</ul>
+        ${this._done ? html`
+          <p role="status"><strong>Importé :</strong> ${this._done}</p>
+          <div class="actions"><a class="cancel" href=${href.collections()}>Voir mes plantes</a></div>` : html`
+          <div class="actions">
+            <button type="button" ?disabled=${this._busy} @click=${this.#importPortable}>Importer</button>
+            <a class="cancel" href=${href.collections()}>Ignorer</a>
+          </div>
+          <p class="muted">Les collections déjà présentes sur cet appareil sont mises à jour (la version la plus récente l’emporte), sans doublon ; rien n’est envoyé sur Internet.</p>`}
+      </div>`;
+  }
+
   render() {
+    if (this._portable && !this._error) return this.#portableView();
     if (this._error) {
       return html`<div class="wrap"><h1>Lien de partage</h1><p class="error" role="alert">${this._error}</p>
         <a href=${href.collections()}>Mes plantes</a></div>`;
