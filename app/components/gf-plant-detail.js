@@ -99,6 +99,8 @@ function gbifFrenchNames(plant, details) {
 export class GfPlantDetail extends LitElement {
   static properties = {
     plantId: { type: Number, attribute: 'plant-id' },
+    /** Shown in the Flore tab's plant pane: compact padding, the pane has its own close / back controls. */
+    embedded: { type: Boolean, reflect: true },
     _plant: { state: true },
     _details: { state: true },
     _error: { state: true },
@@ -112,6 +114,9 @@ export class GfPlantDetail extends LitElement {
       padding: 16px;
     }
     article { max-width: 920px; margin: 0 auto; }
+    :host([embedded]) { padding: 4px 14px 24px; }
+    :host([embedded]) .back { display: none; }
+    :host([embedded]) h1 { margin-top: 4px; }
     .back { font-size: 0.9rem; }
     h1 { margin: 8px 0 0; font-size: 1.6rem; line-height: 1.2; }
     .sci { font-family: var(--gf-font-serif); font-size: 1.2rem; }

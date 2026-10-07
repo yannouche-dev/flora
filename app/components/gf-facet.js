@@ -29,6 +29,8 @@ export class GfFacet extends LitElement {
 
   static styles = [ui, css`
     :host { display: block; border-bottom: 1px solid var(--gf-border); }
+    :host(.flash) { animation: flash 1.2s ease-out; }
+    @keyframes flash { from { background: var(--gf-accent-soft); } }
     details { padding: 10px 0; }
     summary {
       display: flex;

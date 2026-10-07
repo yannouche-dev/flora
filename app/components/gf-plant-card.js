@@ -1,6 +1,6 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
-import { config } from '../config.js';
+import { config, STATUS_LABELS, STATUS_SHORT } from '../config.js';
 import { highlight } from '../core/highlight.js';
 import { rememberSearch } from '../core/query.js';
 import { href } from '../core/router.js';
@@ -14,6 +14,9 @@ export class GfPlantCard extends LitElement {
     plant: { attribute: false },
     query: {},
     compact: { type: Boolean, reflect: true },
+    grid: { type: Boolean, reflect: true },
+    current: { type: Boolean, reflect: true },
+    hide: { attribute: false },
     _thumb: { state: true }
   };
 
@@ -80,6 +83,29 @@ export class GfPlantCard extends LitElement {
     :host([compact]) .text { display: contents; }
     :host([compact]) .meta { text-align: right; }
     :host([compact]) .thumb { display: none; }
+
+    /* Grid row: same columns as the header of gf-plant-list (--gf-cols). */
+    :host([grid]) {
+      display: grid;
+      grid-template-columns: var(--gf-cols);
+      align-items: center;
+      column-gap: 12px;
+      padding-left: 12px;
+      border-bottom: 1px solid var(--gf-border);
+    }
+    :host([grid]) a { display: contents; }
+    :host([grid]:hover), :host([grid]:focus-within) { background: var(--gf-surface-2); }
+    :host([grid]) .fav { position: static; transform: none; justify-self: center; }
+    :host([grid]) .thumb { width: 40px; height: 40px; font-size: 1.1rem; }
+    :host([grid]) .cell { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.9rem; }
+    :host([grid]) .cell.sci { font-family: var(--gf-font-serif); font-style: italic; }
+    :host([grid]) .muted { color: var(--gf-text-muted); }
+    :host([grid]) [hidden] { display: none; }
+    .legal { display: flex; gap: 4px; overflow: hidden; }
+    .tag { flex: none; font-size: 0.72rem; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--gf-surface-2); color: var(--gf-text); }
+    .tag.pn, .tag.pr { background: color-mix(in srgb, #dc2626 16%, var(--gf-surface)); color: color-mix(in srgb, #dc2626 70%, var(--gf-text)); }
+    .tag.re { background: color-mix(in srgb, #f59e0b 22%, var(--gf-surface)); }
+    :host([current]) a, :host([current][grid]) { background: var(--gf-accent-soft); box-shadow: inset 3px 0 0 var(--gf-accent); }
   `;
 
   #store = new StoreController(this);
@@ -97,6 +123,12 @@ export class GfPlantCard extends LitElement {
     this.plant = null;
     this.query = '';
     this.compact = false;
+    /** Row of the results grid (columns mirroring the filters) instead of a card. */
+    this.grid = false;
+    /** The plant shown in the plant pane. */
+    this.current = false;
+    /** Grid columns hidden by the list (narrow results pane). @type {Set<string>} */
+    this.hide = new Set();
     /** @type {any} */
     this._thumb = undefined;
   }
@@ -111,12 +143,12 @@ export class GfPlantCard extends LitElement {
     if (!changed.has('plant')) return;
     this.#cancel();
     this._thumb = this.plant?.thumbnail?.url ? this.plant.thumbnail : undefined;
-    if (this.plant && !this._thumb && this.isConnected && !this.compact) this.#schedule();
+    if (this.plant && !this._thumb && this.isConnected && (!this.compact || this.grid)) this.#schedule();
   }
 
   connectedCallback() {
     super.connectedCallback();
-    if (this.plant && this._thumb === undefined && !this.compact) this.#schedule();
+    if (this.plant && this._thumb === undefined && (!this.compact || this.grid)) this.#schedule();
   }
 
   disconnectedCallback() {
@@ -141,10 +173,39 @@ export class GfPlantCard extends LitElement {
     this.#abort = null;
   }
 
+  /** Grid row: the plant's values in the columns that mirror the filters. @param {Set<string>} hide */
+  #gridRow(p, thumb, q, title, fav, hide) {
+    const legal = p.legal || [];
+    const tags = [
+      legal.includes('nationale') ? html`<span class="tag pn" title="Protégée en France (protection nationale)">Protégée FR</span>`
+        : legal.includes('protegee') ? html`<span class="tag pr" title="Protégée dans une région ou un département">Protégée</span>` : nothing,
+      legal.includes('reglementee') ? html`<span class="tag re" title="Cueillette réglementée quelque part">Réglementée</span>` : nothing,
+      legal.includes('menacee') ? html`<span class="tag" title="Menacée en France (Liste rouge nationale)">Menacée</span>` : nothing
+    ];
+    return html`
+      <a href=${href.plant(p.id)} @click=${() => rememberSearch(q)}>
+        ${thumb?.url
+          ? html`<img class="thumb" src=${thumb.url} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
+          : html`<span class="thumb" aria-hidden="true">${thumb === undefined ? '' : '🌿'}</span>`}
+        <span class="cell name">${p.vernacularName ? highlight(p.vernacularName, q) : html`<span class="muted">—</span>`}</span>
+        <span class="cell sci">${highlight(p.scientificName, q)}${p.fuzzy ? html` <span class="fuzzy">≈</span>` : nothing}</span>
+        <span class="cell" ?hidden=${hide.has('family')}>${p.family}</span>
+        <span class="cell" ?hidden=${hide.has('genus')}><i>${p.genus || ''}</i></span>
+        <span class="cell muted" ?hidden=${hide.has('status')} title=${STATUS_LABELS[p.status] || ''}>${STATUS_SHORT[p.status] || '—'}</span>
+        <span class="cell legal" ?hidden=${hide.has('legal')}>${tags}</span>
+      </a>
+      <button class="fav" type="button" aria-pressed=${fav ? 'true' : 'false'}
+        aria-label=${(fav ? 'Retirer des favoris : ' : 'Ajouter aux favoris : ') + title}
+        @click=${this.#toggleFavorite}>${fav ? '♥' : '♡'}</button>`;
+  }
+
   render() {
     const p = this.plant;
     if (!p) return nothing;
     const thumb = this._thumb;
+    if (this.grid) {
+      return this.#gridRow(p, thumb, this.query, p.vernacularName || p.scientificName, this.#store.state.favorites.has(p.id), this.hide);
+    }
 
     const q = this.query;
     const title = p.vernacularName || p.scientificName;

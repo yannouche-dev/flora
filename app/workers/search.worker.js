@@ -58,6 +58,7 @@ function toEntry(plant) {
       family: plant.family,
       genus: plant.genus,
       status: plant.status?.france || null,
+      legal: legalValues(plant.statuses),
       thumbnail: plant.thumbnail || null
     },
     sci,
@@ -76,7 +77,7 @@ function toEntry(plant) {
       french: plant.vernacularNames?.length ? 'avec' : 'sans',
       legal: legalValues(plant.statuses)
     },
-    rank: { fr: 0, sci: 0, family: 0 }
+    rank: { fr: 0, sci: 0, family: 0, genus: 0, status: 0, legal: 0 }
   };
 }
 
@@ -86,7 +87,7 @@ function buildIndex(plants) {
   // Sort positions computed once, so sorting results is a cheap integer comparison.
   const collator = new Intl.Collator('fr', { sensitivity: 'base', numeric: true });
   const label = (/** @type {Entry} */ e) => e.summary.vernacularName || e.summary.scientificName;
-  const assign = (/** @type {'fr' | 'sci' | 'family'} */ key, compare) =>
+  const assign = (/** @type {'fr' | 'sci' | 'family' | 'genus' | 'status' | 'legal'} */ key, compare) =>
     entries.slice().sort(compare).forEach((entry, i) => { entry.rank[key] = i; });
 
   assign('sci', (a, b) => collator.compare(a.summary.scientificName, b.summary.scientificName));
@@ -94,6 +95,13 @@ function buildIndex(plants) {
   assign('fr', (a, b) =>
     (a.summary.vernacularName ? 0 : 1) - (b.summary.vernacularName ? 0 : 1) || collator.compare(label(a), label(b)));
   assign('family', (a, b) => collator.compare(a.summary.family, b.summary.family) || a.rank.sci - b.rank.sci);
+  assign('genus', (a, b) => collator.compare(a.summary.genus || '', b.summary.genus || '') || a.rank.sci - b.rank.sci);
+  // Status code order (P présent, E endémique…), plants without status last.
+  assign('status', (a, b) => (a.values.status ? 0 : 1) - (b.values.status ? 0 : 1) || collator.compare(a.values.status, b.values.status) || a.rank.fr - b.rank.fr);
+  // Strongest legal status first: national protection, protection somewhere, regulated, threatened, none.
+  const strength = (/** @type {Entry} */ e) => ['nationale', 'protegee', 'reglementee', 'menacee'].findIndex(v => e.values.legal.includes(v));
+  const level = (/** @type {Entry} */ e) => { const i = strength(e); return i < 0 ? 9 : i; };
+  assign('legal', (a, b) => level(a) - level(b) || a.rank.fr - b.rank.fr);
 
   vocabulary = new Map();
   entries.forEach((entry, i) => {
@@ -341,16 +349,23 @@ function search({ q: query, filters, sort, membership: mine = {} }) {
   }
 
   const effectiveSort = sort || (q ? 'relevance' : 'fr');
+  // "-family": the same order, reversed (column header clicked twice).
+  const desc = effectiveSort.startsWith('-');
+  const key = desc ? effectiveSort.slice(1) : effectiveSort;
   const by = {
     relevance: (a, b) => /** @type {any} */ (matches).get(a).score - /** @type {any} */ (matches).get(b).score || entries[a].rank.fr - entries[b].rank.fr,
     fr: (a, b) => entries[a].rank.fr - entries[b].rank.fr,
     sci: (a, b) => entries[a].rank.sci - entries[b].rank.sci,
     family: (a, b) => entries[a].rank.family - entries[b].rank.family,
+    genus: (a, b) => entries[a].rank.genus - entries[b].rank.genus,
+    status: (a, b) => entries[a].rank.status - entries[b].rank.status,
+    legal: (a, b) => entries[a].rank.legal - entries[b].rank.legal,
     photo: (a, b) =>
       (entries[a].values.photo === 'avec' ? 0 : 1) - (entries[b].values.photo === 'avec' ? 0 : 1) ||
       entries[a].rank.fr - entries[b].rank.fr
   };
-  hits.sort(by[effectiveSort === 'relevance' && !matches ? 'fr' : effectiveSort] || by.fr);
+  const compare = by[key === 'relevance' && !matches ? 'fr' : key] || by.fr;
+  hits.sort(desc ? (a, b) => compare(b, a) : compare);
 
   return {
     total: hits.length,
