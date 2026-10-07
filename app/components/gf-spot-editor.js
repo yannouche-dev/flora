@@ -445,7 +445,7 @@ export class GfSpotEditor extends LitElement {
       else this._picker = true;
       this._place = list;
       this._manual = true;
-      document.title = 'Nouvelle liste — GeoFlora';
+      document.title = 'Nouvelle collection — GeoFlora';
     } else {
       const fix = this.#geo.state.fix;
       // Without a fix yet, start at the centre of France; the pin jumps to the GPS position when it arrives.
@@ -532,7 +532,7 @@ export class GfSpotEditor extends LitElement {
   }
 
   #removeLocation() {
-    if (!this._place || !confirm('Retirer la position ? Le lieu devient une simple liste de plantes.')) return;
+    if (!this._place || !confirm('Retirer la position ? L’endroit redevient une simple collection de plantes.')) return;
     this._place = withLocation(this._place, null);
     this.#changed();
   }
@@ -638,7 +638,7 @@ export class GfSpotEditor extends LitElement {
   async #delete() {
     if (!this._place || this._place.properties.kind === 'favorites') return;
     const n = this._place.properties.plants.length;
-    const what = this.#isPlace ? 'ce lieu' : 'cette liste';
+    const what = this.#isPlace ? 'cet endroit' : 'cette collection';
     if (!confirm(`Supprimer ${what}${n ? ` (${plantCount(n)})` : ''}${this.#isPlace ? ', avec le journal de récolte' : ''} ?`)) return;
     clearTimeout(this.#saveTimer);
     this.#dirty = false;
@@ -782,7 +782,7 @@ export class GfSpotEditor extends LitElement {
 
             ${this.#isPlace ? this.#plantPosition(entry) : nothing}
             ${id ? html`<a class="button" href=${href.plant(id)}>Fiche de la plante</a>` : nothing}
-            <button class="remove" type="button" @click=${() => this.#removePlant(id)}>${this.#isPlace ? 'Retirer cette plante du lieu' : 'Retirer de la liste'}</button>
+            <button class="remove" type="button" @click=${() => this.#removePlant(id)}>${this.#isPlace ? 'Retirer cette plante de l’endroit' : 'Retirer de la collection'}</button>
           </div>` : nothing}
       </li>`;
   }
@@ -849,20 +849,20 @@ export class GfSpotEditor extends LitElement {
 
         ${isFavorites
           ? html`<div class="title"><span class="kind" aria-hidden="true">♥</span><h1>Favoris</h1></div>`
-          : html`<label class="field">${isPlace ? 'Nom du lieu' : 'Nom de la liste'}
+          : html`<label class="field">${isPlace ? 'Nom de l’endroit' : 'Nom de la collection'}
               <input type="text" .value=${p.name} placeholder=${isPlace ? 'ex. Lisière nord du bois' : 'ex. Plantes mellifères'}
                 @input=${e => this.#patch({ name: e.target.value })} />
             </label>`}
 
         ${!place.geometry && !isFavorites ? html`
-          <button class="add-location" type="button" @click=${this.#addLocation}>📍 Ajouter une position (en faire un lieu)</button>` : nothing}
+          <button class="add-location" type="button" @click=${this.#addLocation}>📍 Ajouter des coordonnées GPS (la collection devient un endroit)</button>` : nothing}
 
         <h2>Plantes <span class="count">${p.plants.length}</span></h2>
         ${p.plants.length ? html`<ul class="entries">${p.plants.map(entry => this.#entry(entry))}</ul>` : nothing}
         ${this.#pickerView()}
 
         ${isFavorites ? nothing : html`<label class="field">${isPlace ? 'Notes sur le lieu' : 'Notes'}
-          <textarea .value=${p.notes} placeholder=${isPlace ? 'Accès, stationnement, propriétaire, exposition…' : 'À quoi sert cette liste…'}
+          <textarea .value=${p.notes} placeholder=${isPlace ? 'Accès, stationnement, propriétaire, exposition…' : 'À quoi sert cette collection…'}
             @input=${e => this.#patch({ notes: e.target.value })}></textarea>
         </label>`}
 

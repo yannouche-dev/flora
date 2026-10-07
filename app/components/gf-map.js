@@ -101,6 +101,8 @@ const store = (/** @type {string} */ key, value) => {
  *  - draggablePlants: plant markers can be dragged (place editor)
  *  - track: show the live GPS position
  *  - fit: zoom to the content on first data
+ *  - frame: {key, points, bottom?} — zoom once on these [lon, lat] points (again when the key changes);
+ *    `bottom` is the share of the height kept free below them (e.g. for a sheet)
  * Events: spot-select {id}, plant-select {placeId, plantId}, pin-move {coordinates},
  *         plant-move {placeId, plantId, coordinates}, map-longpress {coordinates}
  */
@@ -115,6 +117,7 @@ export class GfMap extends LitElement {
     draggablePlants: { type: Boolean, attribute: 'draggable-plants' },
     track: { type: Boolean },
     fit: { type: Boolean },
+    frame: { attribute: false },
     remember: { type: Boolean }
   };
 
@@ -134,6 +137,8 @@ export class GfMap extends LitElement {
     this.draggablePlants = false;
     this.track = false;
     this.fit = false;
+    /** @type {{ key: string, points: [number, number][], bottom?: number } | null} */
+    this.frame = null;
     /** Persist the last viewed area (main map only). */
     this.remember = false;
   }
@@ -161,6 +166,7 @@ export class GfMap extends LitElement {
   /** @type {[number, number] | null} */ #fix = null;
   #follow = false;
   #fitted = false;
+  /** @type {string | null} */ #framedKey = null;
   /** @type {HTMLElement | null} */ #buttons = null;
   /** @type {HTMLElement | null} */ #menu = null;
 
@@ -213,6 +219,7 @@ export class GfMap extends LitElement {
     // The element may have been laid out after Leaflet measured it.
     new ResizeObserver(() => {
       map.invalidateSize();
+      this.#applyFrame();
       if (this.fit && !this.#fitted) this.#fitToContent();
     }).observe(this);
     this.#syncAll();
@@ -226,8 +233,9 @@ export class GfMap extends LitElement {
     if (changed.has('plants') || changed.has('selectedPlant') || changed.has('draggablePlants')) this.#syncPlants();
     if (changed.has('plantZoom')) this.#syncPlantVisibility();
     if (changed.has('track')) this.#syncTracking();
+    const framed = changed.has('frame') && this.#applyFrame();
     if (this.fit && !this.#fitted) this.#fitToContent();
-    if (changed.has('selectedId') && this.selectedId) this.#reveal(this.selectedId);
+    if (changed.has('selectedId') && this.selectedId && !framed) this.#reveal(this.selectedId);
   }
 
   /** Brings a selected spot into view if it is off-screen. @param {string} id */
@@ -255,7 +263,7 @@ export class GfMap extends LitElement {
     this.#syncPin();
     this.#syncPlants();
     this.#syncTracking();
-    if (this.fit) this.#fitToContent();
+    if (!this.#applyFrame() && this.fit) this.#fitToContent();
   }
 
   /** @param {string} name @param {any} detail */
@@ -388,6 +396,25 @@ export class GfMap extends LitElement {
       this.#meCircle?.setLatLng([lat, lon]).setRadius(fix.accuracy);
     }
     if (this.#follow) map.panTo([lat, lon], { animate: true });
+  }
+
+  /** Zooms on `frame` once per key; true when it did. */
+  #applyFrame() {
+    const map = /** @type {L.Map} */ (this.#map);
+    const frame = this.frame;
+    const size = map.getSize();
+    if (!frame || frame.key === this.#framedKey || !frame.points.length || !size.x) return false;
+    this.#framedKey = frame.key;
+    this.#fitted = true;
+    const bottom = Math.round(size.y * (frame.bottom || 0));
+    const bounds = L.latLngBounds(frame.points.map(([lon, lat]) => [lat, lon]));
+    // A single point (or plants all on it) has no extent: fitBounds then uses maxZoom.
+    const single = bounds.getNorthEast().equals(bounds.getSouthWest());
+    map.fitBounds(bounds, { paddingTopLeft: [40, 56], paddingBottomRight: [40, 40 + bottom], maxZoom: single ? 18 : 19, animate: false });
+    if (map.getZoom() < PLANT_ZOOM && bounds.getNorthEast().distanceTo(bounds.getSouthWest()) < 300) {
+      map.setZoom(PLANT_ZOOM, { animate: false });
+    }
+    return true;
   }
 
   #fitToContent() {
