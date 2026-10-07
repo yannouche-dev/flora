@@ -184,3 +184,19 @@ gf-map .gf-layer-menu input {
     display: none;
   }
 }
+
+/* "Autour": the searched circle and iNaturalist observations of one species. */
+.gf-area {
+  stroke: #7c3aed;
+  stroke-width: 2;
+  stroke-dasharray: 6 6;
+  fill: #7c3aed;
+  fill-opacity: 0.06;
+}
+.gf-obs {
+  stroke: #fff;
+  stroke-width: 2;
+  fill: #7c3aed;
+  fill-opacity: 0.9;
+  cursor: pointer;
+}

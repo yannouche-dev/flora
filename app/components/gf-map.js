@@ -117,6 +117,7 @@ const store = (/** @type {string} */ key, value) => {
  *  - pinDraggable: the place pin can be dragged and long-press emits map-longpress (default true)
  *  - track: show the live GPS position
  *  - fit: zoom to the content on first data
+ *  - area: {center, radius, points?} — a circle (metres) and observation dots inside it ("Autour")
  *  - frame: {key, points, bottom?} — zoom once on these [lon, lat] points (again when the key changes);
  *    `bottom` is the share of the height kept free below them (e.g. for a sheet)
  * Events: spot-select {id}, plant-select {placeId, plantId}, pin-move {coordinates},
@@ -135,6 +136,7 @@ export class GfMap extends LitElement {
     track: { type: Boolean },
     fit: { type: Boolean },
     frame: { attribute: false },
+    area: { attribute: false },
     remember: { type: Boolean }
   };
 
@@ -157,6 +159,8 @@ export class GfMap extends LitElement {
     this.fit = false;
     /** @type {{ key: string, points: [number, number][], bottom?: number } | null} */
     this.frame = null;
+    /** @type {{ center: [number, number], radius: number, points?: { coordinates: [number, number], title: string, url?: string }[] } | null} */
+    this.area = null;
     /** Persist the last viewed area (main map only). */
     this.remember = false;
   }
@@ -178,6 +182,7 @@ export class GfMap extends LitElement {
   /** @type {L.LayerGroup | null} */ #plantLayer = null;
   /** @type {Map<string, L.Marker>} */ #plantMarkers = new Map();
   /** @type {L.Marker | null} */ #editMarker = null;
+  /** @type {L.LayerGroup | null} */ #areaLayer = null;
   /** @type {L.Marker | null} */ #me = null;
   /** @type {L.Circle | null} */ #meCircle = null;
   /** @type {(() => void) | null} */ #unwatch = null;
@@ -214,6 +219,7 @@ export class GfMap extends LitElement {
     this.#layers[this.#base]?.addTo(map);
     if (this.#cadastre) this.#layers.cadastre.addTo(map);
 
+    this.#areaLayer = L.layerGroup().addTo(map);
     this.#spotLayer = L.layerGroup().addTo(map);
     this.#plantLayer = L.layerGroup();
     map.on('zoomend', () => this.#syncPlantVisibility());
@@ -255,6 +261,7 @@ export class GfMap extends LitElement {
     if (changed.has('plants') || changed.has('selectedPlant') || changed.has('draggablePlants')) this.#syncPlants();
     if (changed.has('plantZoom')) this.#syncPlantVisibility();
     if (changed.has('track')) this.#syncTracking();
+    if (changed.has('area')) this.#syncArea();
     const framed = changed.has('frame') && this.#applyFrame();
     if (this.fit && !this.#fitted) this.#fitToContent();
     if (changed.has('selectedId') && this.selectedId && !framed) this.#reveal(this.selectedId);
@@ -285,6 +292,7 @@ export class GfMap extends LitElement {
     this.#syncPin();
     this.#syncPlants();
     this.#syncTracking();
+    this.#syncArea();
     if (!this.#applyFrame() && this.fit) this.#fitToContent();
   }
 
@@ -444,6 +452,28 @@ export class GfMap extends LitElement {
       this.#meCircle?.setLatLng([lat, lon]).setRadius(fix.accuracy);
     }
     if (this.#follow) map.panTo([lat, lon], { animate: true });
+  }
+
+  /** "Autour": the searched circle and the observations of the chosen species. */
+  #syncArea() {
+    const layer = /** @type {L.LayerGroup} */ (this.#areaLayer);
+    layer.clearLayers();
+    const area = this.area;
+    if (!area) return;
+    const [lon, lat] = area.center;
+    L.circle([lat, lon], { radius: area.radius, className: 'gf-area', interactive: false }).addTo(layer);
+    for (const point of area.points || []) {
+      const [x, y] = point.coordinates;
+      const dot = L.circleMarker([y, x], { radius: 6, className: 'gf-obs', bubblingMouseEvents: false }).addTo(layer);
+      dot.bindTooltip(point.title, { direction: 'top' });
+      if (point.url) dot.on('click', () => open(point.url, '_blank', 'noopener'));
+    }
+  }
+
+  /** Map centre as [lon, lat]. @returns {[number, number] | null} */
+  center() {
+    const c = this.#map?.getCenter();
+    return c ? [c.lng, c.lat] : null;
   }
 
   /** Zooms on `frame` once per key; true when it did. */

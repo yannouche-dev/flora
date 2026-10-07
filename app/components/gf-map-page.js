@@ -6,6 +6,7 @@ import {
   ABUNDANCE, addHarvest, directionsUrl, entryPosition, plantMarkers, distance, entryInSeason, entryName, entrySoon, formatDistance, inSeason, lastHarvest, listPlaces,
   placeAbundance, placeLastHarvest, placeTitle, plantCount, spotEvents
 } from '../core/collections.js';
+import { RADII, exploreUrl, observationsAround, saveRadius, savedRadius, speciesAround } from '../core/nearby.js';
 import { StoreController, whenReady } from '../core/store.js';
 import './gf-facet.js';
 import './gf-map.js';
@@ -32,7 +33,8 @@ export class GfMapPage extends LitElement {
     _plants: { state: true },
     _toast: { state: true },
     _error: { state: true },
-    _plantMenu: { state: true }
+    _plantMenu: { state: true },
+    _around: { state: true }
   };
 
   static styles = css`
@@ -167,6 +169,20 @@ export class GfMapPage extends LitElement {
     .legend .kind::before { display: none; }
     .plants .harvest { flex: none; font-size: 0.85rem; padding: 4px 10px; border-color: var(--gf-accent); color: var(--gf-accent); }
     .more { font-size: 0.85rem; color: var(--gf-accent); }
+    .around { max-height: 55%; }
+    .around .radii { display: flex; gap: 6px; flex-wrap: wrap; }
+    .around .radii button { padding: 3px 10px; font-size: 0.85rem; }
+    button.link { border: 0; background: none; padding: 0; color: var(--gf-accent); text-decoration: underline; font-size: 0.85rem; border-radius: 0; }
+    .around .back { justify-self: start; }
+    .species li { padding: 0; }
+    .species .pick { width: 100%; display: flex; align-items: center; gap: 10px; text-align: left; border: 0; border-radius: 8px; padding: 6px 4px; background: none; }
+    .species .pick:hover { background: var(--gf-surface-2); }
+    .species .n { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--gf-text-muted); }
+    .around .ph { width: 38px; height: 38px; border-radius: 8px; object-fit: cover; flex: none; background: var(--gf-surface-2); }
+    .species-head { display: flex; gap: 12px; align-items: center; }
+    .species-head .ph { width: 56px; height: 56px; }
+    .source { font-size: 0.75rem; color: var(--gf-text-muted); margin: 0; }
+    .source a { color: inherit; }
     .list { flex: 1; overflow-y: auto; margin: 0; padding: 0 0 96px; list-style: none; background: var(--gf-surface); }
     .list a {
       display: grid;
@@ -219,6 +235,137 @@ export class GfMapPage extends LitElement {
     /** @type {string | null} */
     this._toast = null;
     this._plantMenu = false;
+    /**
+     * "Autour": iNaturalist species observed in a circle.
+     * @type {null | { center: [number, number], radius: number, where: string, status: 'loading' | 'ok' | 'error',
+     *   error?: string, result?: import('../core/nearby.js').NearbyResult, species?: import('../core/nearby.js').NearbySpecies | null,
+     *   obs?: import('../core/nearby.js').NearbyObservation[] | null, frame: string }}
+     */
+    this._around = null;
+  }
+
+  /** @type {AbortController | null} */ #aroundAbort = null;
+  #aroundFrames = 0;
+
+  /** Opens "Autour" on the selected place, else my position, else the map centre. */
+  #toggleAround() {
+    if (this._around) { this.#aroundAbort?.abort(); this._around = null; return; }
+    const selected = this._spots.find(s => s.id === this.route.spot);
+    const fix = this.#geo.state.fix;
+    const map = /** @type {any} */ (this.renderRoot.querySelector('gf-map'));
+    if (selected) this.#searchAround(selected.geometry.coordinates, placeTitle(selected));
+    else if (fix) this.#searchAround(fix.coordinates, 'ma position');
+    else if (map?.center()) this.#searchAround(map.center(), 'centre de la carte');
+  }
+
+  /** @param {[number, number]} center @param {string} where @param {number} [radius] */
+  async #searchAround(center, where, radius = this._around?.radius ?? savedRadius()) {
+    this.#aroundAbort?.abort();
+    const abort = this.#aroundAbort = new AbortController();
+    this._view = 'map';
+    this._around = { center, radius, where, status: 'loading', species: null, obs: null, frame: 'around:' + (++this.#aroundFrames) };
+    try {
+      const result = await speciesAround(center, radius, abort.signal);
+      if (abort.signal.aborted) return;
+      this._around = { ...this._around, status: 'ok', result };
+    } catch (error) {
+      if (abort.signal.aborted) return;
+      this._around = { ...this._around, status: 'error',
+        error: navigator.onLine === false ? 'Hors ligne : les observations ne peuvent pas être chargées.' : 'iNaturalist ne répond pas pour le moment.' };
+    }
+  }
+
+  /** @param {import('../core/nearby.js').NearbySpecies | null} species */
+  async #pickSpecies(species) {
+    const around = this._around;
+    if (!around) return;
+    this._around = { ...around, species, obs: null };
+    if (!species) return;
+    try {
+      const obs = await observationsAround(species.taxonId, around.center, around.radius);
+      if (this._around?.species === species) this._around = { ...this._around, obs };
+    } catch {
+      if (this._around?.species === species) this._around = { ...this._around, obs: [] };
+    }
+  }
+
+  /** The circle for gf-map, with the chosen species' observations. */
+  get #area() {
+    const a = this._around;
+    if (!a) return null;
+    const name = a.species ? a.species.common || a.species.name : '';
+    return {
+      center: a.center,
+      radius: a.radius,
+      points: (a.obs || []).map(o => ({ coordinates: o.coordinates, title: name + (o.date ? ' · ' + shortDate(o.date) : ''), url: o.url }))
+    };
+  }
+
+  /** Frames the whole circle above the panel. */
+  get #aroundFrame() {
+    const a = this._around;
+    if (!a) return null;
+    const [lon, lat] = a.center;
+    const dLat = a.radius / 111320;
+    const dLon = a.radius / (111320 * Math.cos(lat * Math.PI / 180));
+    return { key: a.frame + ':' + a.radius, points: [[lon - dLon, lat - dLat], [lon + dLon, lat + dLat]], bottom: 0.45 };
+  }
+
+  #aroundPanel() {
+    const a = /** @type {NonNullable<typeof this._around>} */ (this._around);
+    const km = r => r < 1000 ? r + ' m' : r / 1000 + ' km';
+    const head = html`
+      <button class="close" type="button" aria-label="Fermer" @click=${() => this.#toggleAround()}>×</button>
+      <h2>Autour · ${km(a.radius)}</h2>
+      <div class="meta"><span>Centre : ${a.where}</span>
+        <button type="button" class="link" @click=${() => {
+          const c = /** @type {any} */ (this.renderRoot.querySelector('gf-map'))?.center();
+          if (c) this.#searchAround(c, 'centre de la carte');
+        }}>Chercher au centre de la carte</button></div>
+      <div class="radii" role="group" aria-label="Rayon">
+        ${RADII.map(r => html`<button type="button" aria-pressed=${r === a.radius ? 'true' : 'false'}
+          @click=${() => { saveRadius(r); this.#searchAround(a.center, a.where, r); }}>${km(r)}</button>`)}
+      </div>`;
+    const source = html`<p class="source">Source : <a href=${a.species ? exploreUrl(a.center, a.radius, a.species.taxonId) : exploreUrl(a.center, a.radius)}
+      target="_blank" rel="noopener">iNaturalist</a>, observations validées (niveau recherche), toutes dates.</p>`;
+
+    if (a.status === 'loading') return html`<section class="sheet around" aria-label="Autour">${head}<p class="notes">Chargement des observations…</p></section>`;
+    if (a.status === 'error') return html`<section class="sheet around" aria-label="Autour">${head}<p class="notes">${a.error}</p>
+      <div class="actions"><button type="button" @click=${() => this.#searchAround(a.center, a.where)}>Réessayer</button></div></section>`;
+
+    const result = /** @type {import('../core/nearby.js').NearbyResult} */ (a.result);
+    const s = a.species;
+    if (s) {
+      return html`<section class="sheet around" aria-label="Autour">
+        <button class="close" type="button" aria-label="Fermer" @click=${() => this.#toggleAround()}>×</button>
+        <button type="button" class="link back" @click=${() => this.#pickSpecies(null)}>← Toutes les espèces</button>
+        <div class="species-head">
+          ${s.plantId ? html`<gf-thumb plant-id=${s.plantId} size="56"></gf-thumb>` : s.photo ? html`<img class="ph" src=${s.photo} alt="" referrerpolicy="no-referrer" />` : nothing}
+          <div><h2>${s.common || s.name}</h2>${s.common ? html`<span class="sci">${s.name}</span>` : nothing}</div>
+        </div>
+        <div class="meta"><span>${s.count} observation${s.count > 1 ? 's' : ''} dans le cercle</span>
+          <span>${a.obs === null ? 'Chargement des points…' : a.obs?.length ? `${a.obs.length} point${a.obs.length > 1 ? 's' : ''} sur la carte${a.obs.length < s.count ? ' (les plus récents)' : ''}` : 'Aucun point localisé'}</span></div>
+        <div class="actions">
+          ${s.plantId ? html`<a class="button main" href=${href.plant(s.plantId)}>Fiche de la plante</a>` : html`<span class="notes">Absente de la flore de l’app (TAXREF).</span>`}
+          <a class="button" href=${exploreUrl(a.center, a.radius, s.taxonId)} target="_blank" rel="noopener">Observations</a>
+        </div>
+        ${source}
+      </section>`;
+    }
+    return html`<section class="sheet around" aria-label="Autour">
+      ${head}
+      <div class="meta"><span><strong>${result.species.length}</strong> espèce${result.species.length > 1 ? 's' : ''}</span>
+        <span>${result.observations.toLocaleString('fr-FR')} observation${result.observations > 1 ? 's' : ''}</span></div>
+      ${result.species.length ? html`<ul class="plants species">
+        ${result.species.map(sp => html`<li><button type="button" class="pick" @click=${() => this.#pickSpecies(sp)}>
+          ${sp.plantId ? html`<gf-thumb plant-id=${sp.plantId} size="38"></gf-thumb>`
+            : sp.photo ? html`<img class="ph" src=${sp.photo} alt="" loading="lazy" referrerpolicy="no-referrer" />` : html`<gf-thumb size="38"></gf-thumb>`}
+          <span class="who"><span class="nm">${sp.common || sp.name}</span>${sp.common ? html`<span class="sub">${sp.name}</span>` : nothing}</span>
+          <span class="n">${sp.count}</span>
+        </button></li>`)}
+      </ul>` : html`<p class="notes">Aucune observation validée de plante dans ce cercle. Essayez un rayon plus grand.</p>`}
+      ${source}
+    </section>`;
   }
 
   connectedCallback() {
@@ -342,6 +489,8 @@ export class GfMapPage extends LitElement {
           @click=${() => this.#navigate({ season: !this.route.season, spot: null })}>En saison · ${seasonCount}</button>` : nothing}
         <button type="button" aria-expanded=${this._plantMenu ? 'true' : 'false'} aria-pressed=${this._plants.length ? 'true' : 'false'}
           @click=${() => { this._plantMenu = !this._plantMenu; }}>Plantes${this._plants.length ? ' · ' + this._plants.length : ''} ▾</button>
+        <button type="button" class="around-toggle" aria-pressed=${this._around ? 'true' : 'false'}
+          title="Plantes observées autour (iNaturalist)" @click=${() => this.#toggleAround()}>Autour</button>
         <div class="segmented" role="group" aria-label="Affichage">
           <button type="button" aria-pressed=${this._view === 'map' ? 'true' : 'false'} @click=${() => { this._view = 'map'; }}>Carte</button>
           <button type="button" aria-pressed=${this._view === 'list' ? 'true' : 'false'} @click=${() => { this._view = 'list'; }}>Liste</button>
@@ -361,7 +510,8 @@ export class GfMapPage extends LitElement {
             .plants=${this.#plantMarkers(spots)}
             .selectedPlant=${this.route.spot && this.route.focus ? this.route.spot + ':' + this.route.focus : null}
             remember
-            .frame=${this.#frame}
+            .frame=${this.#aroundFrame || this.#frame}
+            .area=${this.#area}
             ?fit=${Boolean(this._plants.length && !this.#frameKey)}
             @spot-select=${e => this.#navigate({ spot: e.detail.id })}
             @plant-select=${e => this.#navigate({ spot: e.detail.placeId, focus: e.detail.plantId })}
@@ -371,7 +521,7 @@ export class GfMapPage extends LitElement {
             <span class="kind"><i class="plant"></i>Plante (en zoomant)</span>
             ${ABUNDANCE.map(a => html`<span style="--c:${PIN_COLORS[a.value]}">${a.label}</span>`)}
           </div>
-          ${selected ? this.#sheet(selected) : nothing}
+          ${this._around ? this.#aroundPanel() : selected ? this.#sheet(selected) : nothing}
         ` : this.#list(spots)}
 
         ${!this._spots.length ? html`
