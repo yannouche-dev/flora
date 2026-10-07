@@ -48,6 +48,8 @@ jobs:
 
       - name: Add Baseflor flowering months (Ph. Julve, Tela Botanica — CC BY-SA)
         continue-on-error: true
+        env:
+          BASEFLOR_URL: ${{ vars.BASEFLOR_URL }}
         run: |
           npm install --no-save --no-package-lock xlsx@0.18.5
           node scripts/enrich-baseflor.mjs
@@ -71,6 +73,7 @@ jobs:
           cat data/meta.json
 
       - name: Commit generated dataset
+        if: github.ref == 'refs/heads/main'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
