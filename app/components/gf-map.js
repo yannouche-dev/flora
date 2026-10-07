@@ -5,10 +5,13 @@ import { LitElement, html } from 'lit';
 import * as L from 'leaflet';
 import { config } from '../config.js';
 import { watchLocation } from '../core/geo.js';
-import { FRANCE_BOUNDS, LAYERS, tileLayer } from '../core/ign.js';
+import { BASES, FRANCE_BOUNDS, OVERLAYS, tileLayer } from '../core/ign.js';
 import { inSeason, placeAbundance, placeTitle } from '../core/collections.js';
 import { store as appStore } from '../core/store.js';
 import { cachedThumb, thumbUrl } from '../core/thumb.js';
+import './gf-map-panel.js';
+import './gf-map-search.js';
+import './gf-point-card.js';
 
 const STYLESHEETS = [
   new URL('../../vendor/leaflet.css', import.meta.url).href,
@@ -101,6 +104,24 @@ const lockedIcon = placeIconOf('#16a34a', 0, 'selected');
 const readStored = (/** @type {string} */ key, fallback) => {
   try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; }
 };
+/** Map look chosen last; `cadastre: true` from earlier versions becomes an overlay. */
+function readLayers() {
+  const saved = readStored(config.storageKeys.mapLayer, {});
+  const overlays = Array.isArray(saved.overlays) ? saved.overlays : saved.cadastre ? ['cadastre'] : [];
+  return {
+    base: saved.base in BASES ? saved.base : 'photo',
+    overlays: overlays.filter(k => k in OVERLAYS)
+  };
+}
+
+/** A point picked on the map (long press, search result). */
+const pointIcon = L.divIcon({
+  className: 'gf-point',
+  iconSize: [26, 36],
+  iconAnchor: [13, 35],
+  html: '<svg width="26" height="36" viewBox="0 0 26 36" aria-hidden="true"><path d="M13 35C13 35 2 21 2 13a11 11 0 0 1 22 0c0 8-11 22-11 22Z" fill="#dc2626" stroke="#fff" stroke-width="2"/><circle cx="13" cy="13" r="4" fill="#fff"/></svg>'
+});
+
 const store = (/** @type {string} */ key, value) => {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* not persisted */ }
 };
@@ -120,8 +141,11 @@ const store = (/** @type {string} */ key, value) => {
  *  - area: {center, radius, points?} — a circle (metres) and observation dots inside it ("Autour")
  *  - frame: {key, points, bottom?} — zoom once on these [lon, lat] points (again when the key changes);
  *    `bottom` is the share of the height kept free below them (e.g. for a sheet)
+ *  - search: address search pill on top (with the ▦ "Carte" panel button); legend: legend in the panel
+ *  - no-create: the point card (long press) has no "Créer un endroit ici"
  * Events: spot-select {id}, plant-select {placeId, plantId}, pin-move {coordinates},
- *         plant-move {placeId, plantId, coordinates}, map-longpress {coordinates}
+ *         plant-move {placeId, plantId, coordinates}, map-longpress {coordinates} (while the pin can be placed),
+ *         point-info {coordinates} (long press elsewhere: the point card opens), point-close
  */
 export class GfMap extends LitElement {
   static properties = {
@@ -137,7 +161,10 @@ export class GfMap extends LitElement {
     fit: { type: Boolean },
     frame: { attribute: false },
     area: { attribute: false },
-    remember: { type: Boolean }
+    remember: { type: Boolean },
+    search: { type: Boolean, reflect: true },
+    legend: { type: Boolean },
+    noCreate: { type: Boolean, attribute: 'no-create' }
   };
 
   constructor() {
@@ -163,6 +190,9 @@ export class GfMap extends LitElement {
     this.area = null;
     /** Persist the last viewed area (main map only). */
     this.remember = false;
+    this.search = false;
+    this.legend = false;
+    this.noCreate = false;
   }
 
   createRenderRoot() { return this; }
@@ -174,9 +204,12 @@ export class GfMap extends LitElement {
   get #root() { return /** @type {HTMLElement} */ (this.querySelector('.gf-map-root')); }
 
   /** @type {L.Map | null} */ #map = null;
-  /** @type {Record<string, L.TileLayer>} */ #layers = {};
-  #base = /** @type {'photo' | 'plan'} */ (readStored(config.storageKeys.mapLayer, { base: 'photo' }).base);
-  #cadastre = Boolean(readStored(config.storageKeys.mapLayer, { cadastre: false }).cadastre);
+  /** @type {Record<string, L.Layer>} */ #layers = {};
+  #base = /** @type {'photo' | 'plan'} */ (readLayers().base);
+  /** @type {string[]} */ #overlays = readLayers().overlays;
+  /** @type {any} */ #panel = null;
+  /** @type {L.Marker | null} */ #pointMarker = null;
+  /** @type {any} */ #pointCard = null;
   /** @type {L.LayerGroup | null} */ #spotLayer = null;
   /** @type {Map<string, L.Marker>} */ #markers = new Map();
   /** @type {L.LayerGroup | null} */ #plantLayer = null;
@@ -191,7 +224,6 @@ export class GfMap extends LitElement {
   #fitted = false;
   /** @type {string | null} */ #framedKey = null;
   /** @type {HTMLElement | null} */ #buttons = null;
-  /** @type {HTMLElement | null} */ #menu = null;
 
   firstUpdated() {
     // Light DOM, but possibly inside another component's shadow root: bring the map CSS along.
@@ -215,9 +247,8 @@ export class GfMap extends LitElement {
     L.control.zoom({ position: 'bottomleft' }).addTo(map);
     L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(map);
 
-    this.#layers = { photo: tileLayer('photo'), plan: tileLayer('plan'), cadastre: tileLayer('cadastre') };
-    this.#layers[this.#base]?.addTo(map);
-    if (this.#cadastre) this.#layers.cadastre.addTo(map);
+    this.#layer(this.#base).addTo(map);
+    for (const key of this.#overlays) this.#layer(key).addTo(map);
 
     this.#areaLayer = L.layerGroup().addTo(map);
     this.#spotLayer = L.layerGroup().addTo(map);
@@ -235,12 +266,14 @@ export class GfMap extends LitElement {
     });
     map.on('dragstart', () => this.#setFollow(false));
     map.on('contextmenu', event => {
-      if (this.pin && !this.pinDraggable) return;
       const { lat, lng } = /** @type {L.LeafletMouseEvent} */ (event).latlng;
-      this.#emit('map-longpress', { coordinates: [lng, lat] });
+      // Placing the place pin (editor, position editing): the long press moves it.
+      if (this.pin && this.pinDraggable) this.#emit('map-longpress', { coordinates: [lng, lat] });
+      else this.showPoint([lng, lat]);
     });
 
     this.#buildButtons();
+    if (this.search) this.#buildSearch();
     // The element may have been laid out after Leaflet measured it.
     new ResizeObserver(() => {
       map.invalidateSize();
@@ -536,62 +569,103 @@ export class GfMap extends LitElement {
 
   #buildButtons() {
     const buttons = this.#buttons = Object.assign(document.createElement('div'), { className: 'gf-map-buttons' });
+    // With the search pill, ▦ lives at its end; otherwise it is a round button like "locate".
     buttons.innerHTML = `
-      <button type="button" class="layers" aria-label="Fonds de carte" title="Fonds de carte" aria-expanded="false">▦</button>
+      ${this.search ? '' : '<button type="button" class="layers" aria-label="Carte : fond, couches, légende" title="Carte : fond, couches, légende">▦</button>'}
       <button type="button" class="locate" aria-label="Me localiser" title="Me localiser" aria-pressed="false">◎</button>`;
     buttons.querySelector('.locate')?.addEventListener('click', () => this.#locate());
-    buttons.querySelector('.layers')?.addEventListener('click', () => this.#toggleMenu());
+    buttons.querySelector('.layers')?.addEventListener('click', () => this.openPanel());
     L.DomEvent.disableClickPropagation(buttons);
     this.#root.append(buttons);
   }
 
-  #toggleMenu() {
-    const button = this.#buttons?.querySelector('.layers');
-    if (this.#menu) {
-      this.#menu.remove();
-      this.#menu = null;
-      button?.setAttribute('aria-expanded', 'false');
-      return;
+  #buildSearch() {
+    const search = Object.assign(document.createElement('gf-map-search'), { className: 'gf-map-search' });
+    search.addEventListener('open-panel', () => this.openPanel());
+    search.addEventListener('place-pick', (/** @type {any} */ e) => {
+      const [lon, lat] = e.detail.coordinates;
+      this.#setFollow(false);
+      this.#map?.flyTo([lat, lon], Math.max(this.#map.getZoom(), 15), { duration: 0.6 });
+      this.showPoint(e.detail.coordinates, e.detail.label);
+    });
+    L.DomEvent.disableClickPropagation(search);
+    L.DomEvent.disableScrollPropagation(search);
+    this.#root.append(search);
+  }
+
+  /** The "Carte" panel: background, overlays, legend, sources. */
+  openPanel() {
+    if (!this.#panel) {
+      const panel = this.#panel = document.createElement('gf-map-panel');
+      panel.addEventListener('base-change', (/** @type {any} */ e) => this.#setBase(e.detail.key));
+      panel.addEventListener('overlay-toggle', (/** @type {any} */ e) => this.#setOverlay(e.detail.key, e.detail.on));
+      this.#root.append(panel);
     }
-    const menu = this.#menu = Object.assign(document.createElement('div'), { className: 'gf-layer-menu' });
-    const radio = (/** @type {'photo' | 'plan'} */ key) => {
-      const label = document.createElement('label');
-      const input = Object.assign(document.createElement('input'), { type: 'radio', name: 'gf-base', checked: this.#base === key });
-      input.addEventListener('change', () => this.#setBase(key));
-      label.append(input, LAYERS[key].label);
-      return label;
-    };
-    const overlay = document.createElement('label');
-    const check = Object.assign(document.createElement('input'), { type: 'checkbox', checked: this.#cadastre });
-    check.addEventListener('change', () => this.#setCadastre(check.checked));
-    overlay.append(check, LAYERS.cadastre.label);
-    menu.append(radio('photo'), radio('plan'), document.createElement('hr'), overlay);
-    L.DomEvent.disableClickPropagation(menu);
-    this.#root.append(menu);
-    button?.setAttribute('aria-expanded', 'true');
+    Object.assign(this.#panel, { base: this.#base, overlays: [...this.#overlays], legend: this.legend });
+    this.#panel.updateComplete.then(() => this.#panel.open());
+  }
+
+  /** Point card (long press or search result): address, altitude, coordinates. @param {[number, number]} point @param {string} [label] */
+  showPoint(point, label = '') {
+    const map = /** @type {L.Map} */ (this.#map);
+    const [lon, lat] = point;
+    if (!this.#pointMarker) {
+      this.#pointMarker = L.marker([lat, lon], { icon: pointIcon, interactive: false, keyboard: false, zIndexOffset: 1400 }).addTo(map);
+    } else {
+      this.#pointMarker.setLatLng([lat, lon]);
+    }
+    if (!this.#pointCard) {
+      const card = this.#pointCard = Object.assign(document.createElement('gf-point-card'), { className: 'gf-point-card' });
+      card.addEventListener('close', () => this.hidePoint());
+      L.DomEvent.disableClickPropagation(card);
+      this.#root.append(card);
+    }
+    Object.assign(this.#pointCard, { point, label, create: !this.noCreate });
+    this.#emit('point-info', { coordinates: point });
+  }
+
+  hidePoint() {
+    if (!this.#pointCard) return;
+    this.#pointMarker?.remove();
+    this.#pointMarker = null;
+    this.#pointCard.remove();
+    this.#pointCard = null;
+    this.#emit('point-close', {});
+  }
+
+  /** @param {string} key */
+  #layer(key) {
+    this.#layers[key] ??= tileLayer(key);
+    return this.#layers[key];
   }
 
   /** @param {'photo' | 'plan'} key */
   #setBase(key) {
     const map = /** @type {L.Map} */ (this.#map);
-    this.#layers[this.#base].remove();
+    if (key === this.#base || !(key in BASES)) return;
+    this.#layer(this.#base).remove();
     this.#base = key;
-    this.#layers[key].addTo(map);
-    this.#layers[key].bringToBack();
+    /** @type {L.TileLayer} */ (this.#layer(key).addTo(map)).bringToBack();
     this.#saveLayers();
   }
 
-  /** @param {boolean} on */
-  #setCadastre(on) {
+  /** @param {string} key @param {boolean} on */
+  #setOverlay(key, on) {
     const map = /** @type {L.Map} */ (this.#map);
-    this.#cadastre = on;
-    if (on) this.#layers.cadastre.addTo(map);
-    else this.#layers.cadastre.remove();
+    if (!(key in OVERLAYS)) return;
+    this.#overlays = this.#overlays.filter(k => k !== key);
+    if (on) {
+      this.#overlays.push(key);
+      this.#layer(key).addTo(map);
+    } else {
+      this.#layer(key).remove();
+    }
     this.#saveLayers();
   }
 
   #saveLayers() {
-    store(config.storageKeys.mapLayer, { base: this.#base, cadastre: this.#cadastre });
+    store(config.storageKeys.mapLayer, { base: this.#base, overlays: this.#overlays });
+    if (this.#panel) Object.assign(this.#panel, { base: this.#base, overlays: [...this.#overlays] });
   }
 }
 

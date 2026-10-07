@@ -8,6 +8,7 @@ import {
 } from '../core/collections.js';
 import { RADII, exploreUrl, observationsAround, saveRadius, savedRadius, speciesAround } from '../core/nearby.js';
 import { StoreController, whenReady } from '../core/store.js';
+import { addressAt, altitudeAt } from '../core/geoservices.js';
 import { ui } from '../styles/ui.js';
 import './gf-facet.js';
 import './gf-map.js';
@@ -38,7 +39,9 @@ export class GfMapPage extends LitElement {
     _error: { state: true },
     _plantMenu: { state: true },
     _around: { state: true },
-    _edit: { state: true }
+    _edit: { state: true },
+    _geo: { state: true },
+    _point: { state: true }
   };
 
   static styles = [ui, css`
@@ -73,31 +76,6 @@ export class GfMapPage extends LitElement {
     gf-map { flex: 1; }
     /* The place sheet covers the bottom of the map: hide Leaflet's bottom controls meanwhile. */
     .body:has(.sheet) gf-map .leaflet-bottom { display: none; }
-    .legend {
-      position: absolute;
-      left: 10px;
-      top: 10px;
-      z-index: 500;
-      display: flex;
-      flex-wrap: wrap;
-      gap: 2px 10px;
-      max-width: calc(100% - 76px); /* clear of the layer / locate buttons */
-      font-size: 0.75rem;
-      background: color-mix(in srgb, var(--gf-surface) 88%, transparent);
-      padding: 4px 10px;
-      border-radius: var(--gf-radius-pill);
-      box-shadow: var(--gf-shadow-float);
-    }
-    .legend span::before {
-      content: '';
-      display: inline-block;
-      width: 9px;
-      height: 9px;
-      border-radius: 50%;
-      margin-right: 4px;
-      background: var(--c);
-      border: 1px solid #fff;
-    }
     /* Phones have the "Noter ici" button in the tab bar. */
     @media (max-width: 699px) { .fab { display: none !important; } }
     .fab {
@@ -150,10 +128,6 @@ export class GfMapPage extends LitElement {
     .plants .sub, .plants .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .plants li.focus { background: var(--gf-accent-soft); border-radius: var(--gf-radius-sm); padding-left: 6px; padding-right: 6px; }
     .plants gf-thumb { box-shadow: 0 0 0 2.5px var(--c); margin: 3px; }
-    .legend .kind i { display: inline-block; vertical-align: -1px; margin-right: 4px; background: var(--gf-text-muted); }
-    .legend .kind i.place { width: 10px; height: 10px; border-radius: 3px; }
-    .legend .kind i.plant { width: 9px; height: 9px; border-radius: 50%; }
-    .legend .kind::before { display: none; }
     .plants .harvest { flex: none; }
     .around { max-height: 55%; }
     .around .radii { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -223,6 +197,20 @@ export class GfMapPage extends LitElement {
     /** Position editing of the selected place on this map: a working copy, saved on "Valider". @type {any} */
     this._edit = null;
     this._editFrames = 0;
+    /** Commune and altitude of places, looked up once (IGN, cached). @type {Map<string, { city?: string, alt?: number | null }>} */
+    this._geo = new Map();
+  }
+
+  /** @param {import('../core/collections.js').Place} place */
+  #placeGeo(place) {
+    const key = place.id + ':' + place.geometry.coordinates.join(',');
+    if (!this._geo.has(key)) {
+      this._geo.set(key, {});
+      const set = patch => { this._geo = new Map(this._geo).set(key, { ...this._geo.get(key), ...patch }); };
+      addressAt(place.geometry.coordinates).then(a => set({ city: a?.city || '' })).catch(() => {});
+      altitudeAt(place.geometry.coordinates).then(alt => set({ alt })).catch(() => {});
+    }
+    return /** @type {{ city?: string, alt?: number | null }} */ (this._geo.get(key));
   }
 
   /** @param {import('../core/collections.js').Place} place */
@@ -267,9 +255,23 @@ export class GfMapPage extends LitElement {
   /** @type {AbortController | null} */ #aroundAbort = null;
   #aroundFrames = 0;
 
+  /** A point was picked on the map (long press, search): its card replaces the place sheet. */
+  #onPointInfo() {
+    this._point = true;
+    if (this._edit) return;
+    this.#aroundAbort?.abort();
+    this._around = null;
+    if (this.route.spot) this.#navigate({ spot: null });
+  }
+
+  #hidePoint() {
+    /** @type {any} */ (this.renderRoot.querySelector('gf-map'))?.hidePoint();
+  }
+
   /** Opens "Autour" on the selected place, else my position, else the map centre. */
   #toggleAround() {
     if (this._around) { this.#aroundAbort?.abort(); this._around = null; return; }
+    this.#hidePoint();
     const selected = this._spots.find(s => s.id === this.route.spot);
     const fix = this.#geo.state.fix;
     const map = /** @type {any} */ (this.renderRoot.querySelector('gf-map'));
@@ -537,17 +539,16 @@ export class GfMapPage extends LitElement {
             @map-longpress=${e => this.#movePin(e.detail.coordinates)}
             .selectedPlant=${this.route.spot && this.route.focus ? this.route.spot + ':' + this.route.focus : null}
             remember
+            search
+            legend
+            @point-info=${() => this.#onPointInfo()}
+            @point-close=${() => { this._point = false; }}
             .frame=${this.#editFrame || this.#aroundFrame || this.#frame}
             .area=${this.#area}
             ?fit=${Boolean(this._plants.length && !this.#frameKey)}
-            @spot-select=${e => { if (!this._edit) this.#navigate({ spot: e.detail.id }); }}
+            @spot-select=${e => { if (!this._edit) { this.#hidePoint(); this.#navigate({ spot: e.detail.id }); } }}
             @plant-select=${e => { if (!this._edit) this.#navigate({ spot: e.detail.placeId, focus: e.detail.plantId }); }}
           ></gf-map>
-          <div class="legend" aria-hidden="true">
-            <span class="kind"><i class="place"></i>Endroit</span>
-            <span class="kind"><i class="plant"></i>Plante (en zoomant)</span>
-            ${ABUNDANCE.map(a => html`<span style="--c:${PIN_COLORS[a.value]}">${a.label}</span>`)}
-          </div>
           ${this._edit ? html`
             <section class="sheet editbar" aria-label="Modifier les positions">
               <h2>${placeTitle(this._edit.place)}</h2>
@@ -560,7 +561,7 @@ export class GfMapPage extends LitElement {
           : this._around ? this.#aroundPanel() : selected ? this.#sheet(selected) : nothing}
         ` : this.#list(spots)}
 
-        ${!this._spots.length ? html`
+        ${!this._spots.length && !this._point ? html`
           <p class="empty" style=${this._view === 'map' ? 'position:absolute;inset:auto 16px 100px;z-index:550;background:var(--gf-surface);border-radius:16px;box-shadow:0 2px 12px rgb(0 0 0 / 25%)' : ''}>
             Aucun lieu enregistré. Sur place, touchez <strong>+</strong> pour créer un lieu et y noter les plantes qui y poussent, ou ouvrez une fiche plante et touchez « Ajouter un lieu ».
           </p>` : nothing}
@@ -604,6 +605,7 @@ export class GfMapPage extends LitElement {
           <span>${plantCount(p.plants.length)}</span>
           ${this.#harvest && inSeason(place) ? html`<span class="badge">En saison</span>` : nothing}
           ${dist !== null ? html`<span>à ${formatDistance(dist)}</span>` : nothing}
+          ${(geo => html`${geo.city ? html`<span>📍 ${geo.city}</span>` : nothing}${geo.alt != null ? html`<span>⛰ ${geo.alt} m</span>` : nothing}`)(this.#placeGeo(place))}
         </div>
         ${shown.length ? html`
           <ul class="plants">

@@ -4,7 +4,7 @@
 /**
  * @typedef {{ name: 'search' } | { name: 'plant', id: number } | { name: 'settings' } | { name: 'collections' }
  *   | { name: 'map', spot: string | null, plant: number | null, focus: number | null, season: boolean }
- *   | { name: 'spot-new', plant: number | null, kind: 'list' | 'place' }
+ *   | { name: 'spot-new', plant: number | null, kind: 'list' | 'place', at: [number, number] | null }
  *   | { name: 'spot', id: string, add: number | null, pick: boolean }
  *   | { name: 'shared', data: string }
  *   | { name: 'not-found' }} Route
@@ -25,7 +25,11 @@ export function parse(hash) {
   if (path === 'collections') return { name: 'collections' };
   // "spot/…" are the links of earlier versions; collections are the same records.
   if (path === 'collection/new' || path === 'spot/new') {
-    return { name: 'spot-new', plant: number('plant'), kind: params.get('kind') === 'list' ? 'list' : 'place' };
+    const at = (params.get('at') || '').split(',').map(Number);
+    return {
+      name: 'spot-new', plant: number('plant'), kind: params.get('kind') === 'list' ? 'list' : 'place',
+      at: at.length === 2 && at.every(Number.isFinite) ? /** @type {[number, number]} */ ([at[1], at[0]]) : null
+    };
   }
   const spot = /^(?:collection|spot)\/([\w-]+)$/.exec(path);
   if (spot) return { name: 'spot', id: spot[1], add: number('add'), pick: params.get('pick') === '1' };
@@ -50,8 +54,9 @@ export const href = {
     const search = params.toString();
     return '#/map' + (search ? '?' + search : '');
   },
-  /** New place (GPS), optionally with a first plant. */
-  newSpot: (/** @type {number | null | undefined} */ plantId) => '#/collection/new?kind=place' + (plantId ? '&plant=' + plantId : ''),
+  /** New place (GPS, or `at` [lon, lat] picked on the map), optionally with a first plant. */
+  newSpot: (/** @type {number | null | undefined} */ plantId, /** @type {[number, number] | null | undefined} */ at) =>
+    '#/collection/new?kind=place' + (plantId ? '&plant=' + plantId : '') + (at ? `&at=${at[1].toFixed(6)},${at[0].toFixed(6)}` : ''),
   /** New list, optionally with a first plant. */
   newList: (/** @type {number | null | undefined} */ plantId) => '#/collection/new?kind=list' + (plantId ? '&plant=' + plantId : ''),
   /** A collection; `add` pre-adds a plant to it, `pick` opens the plant picker. */

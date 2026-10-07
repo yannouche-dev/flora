@@ -12,6 +12,7 @@ import {
 } from '../core/collections.js';
 import { encodeCollection, share } from '../core/share.js';
 import { StoreController, whenReady } from '../core/store.js';
+import { addressAt, altitudeAt, formatCoordinates } from '../core/geoservices.js';
 import { ui } from '../styles/ui.js';
 import './gf-map.js';
 import './gf-status.js';
@@ -45,6 +46,7 @@ export class GfSpotEditor extends LitElement {
     addPlant: { attribute: 'add-plant', converter: v => (v ? Number(v) : null) },
     pick: { type: Boolean },
     kind: {},
+    at: { attribute: false },
     _saveState: { state: true },
     _place: { state: true },
     _manual: { state: true },
@@ -56,6 +58,7 @@ export class GfSpotEditor extends LitElement {
     _nearby: { state: true },
     _error: { state: true },
     _note: { state: true },
+    _where: { state: true },
     _editPos: { state: true }
   };
 
@@ -118,6 +121,8 @@ export class GfSpotEditor extends LitElement {
     .dot.weak { background: #f59e0b; }
     .dot.none { background: var(--gf-danger); }
     .gps .hint { color: var(--gf-text-muted); flex-basis: 100%; font-size: 0.8rem; }
+    .gps .where { flex-basis: 100%; font-size: 0.85rem; }
+    .gps .coords { font-variant-numeric: tabular-nums; color: var(--gf-text-muted); }
     .gps button { margin-left: auto; }
     .nearby {
       border-color: var(--gf-accent);
@@ -237,6 +242,10 @@ export class GfSpotEditor extends LitElement {
     this.pick = false;
     /** Kind of collection to create when there is no `spot-id`. @type {'list' | 'place'} */
     this.kind = 'place';
+    /** @type {[number, number] | null} point picked on the map for a new place */
+    this.at = null;
+    /** Address and altitude of the place point (IGN). @type {{ key: string, address?: string | null, alt?: number | null }} */
+    this._where = { key: '' };
     /** @type {'' | 'saving' | 'saved' | 'error'} */
     this._saveState = '';
     /** @type {string | null} */
@@ -335,7 +344,8 @@ export class GfSpotEditor extends LitElement {
 
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
-    if (changed.has('spotId') || changed.has('plantId') || changed.has('addPlant') || changed.has('kind')) this.#load();
+    if (changed.has('spotId') || changed.has('plantId') || changed.has('addPlant') || changed.has('kind') || changed.has('at')) this.#load();
+    if (changed.has('_place')) this.#updateWhere();
 
     // A new place follows the GPS until the user places it by hand.
     const fix = this.#geo.state.fix;
@@ -413,9 +423,10 @@ export class GfSpotEditor extends LitElement {
       this._manual = true;
       document.title = 'Nouvelle collection — GeoFlora';
     } else {
-      const fix = this.#geo.state.fix;
+      // A point picked on the map ("Créer un endroit ici") wins over the GPS.
+      const fix = this.at ? null : this.#geo.state.fix;
       // Without a fix yet, start at the centre of France; the pin jumps to the GPS position when it arrives.
-      let place = newPlace(fix?.coordinates || [2.35, 46.6], { accuracy: fix ? Math.round(fix.accuracy) : null });
+      let place = newPlace(this.at || fix?.coordinates || [2.35, 46.6], { accuracy: fix ? Math.round(fix.accuracy) : null });
       const plant = this.plantId ? await db.get('plants', this.plantId) : null;
       if (plant) {
         place = withPlant(place, plant, fix ? { coordinates: fix.coordinates, accuracy: Math.round(fix.accuracy) } : undefined);
@@ -425,9 +436,9 @@ export class GfSpotEditor extends LitElement {
         this._picker = true;
       }
       this._place = place;
-      this._manual = false;
+      this._manual = Boolean(this.at);
       document.title = 'Nouveau lieu — GeoFlora';
-      if (fix) this.#findNearby();
+      if (fix || this.at) this.#findNearby();
     }
   }
 
@@ -705,11 +716,37 @@ export class GfSpotEditor extends LitElement {
     return href.collections();
   }
 
+  /** Looks up the address and altitude of the place point once it settles. */
+  #updateWhere() {
+    const point = this._place?.geometry?.coordinates;
+    const key = point ? point.map(n => n.toFixed(5)).join(',') : '';
+    if (this._where.key === key) return;
+    this._where = { key };
+    clearTimeout(this.#whereTimer);
+    if (!point) return;
+    this.#whereTimer = setTimeout(() => {
+      const set = patch => { if (this._where.key === key) this._where = { ...this._where, ...patch }; };
+      addressAt(point).then(a => set({ address: a?.label || null })).catch(() => set({ address: null }));
+      altitudeAt(point).then(alt => set({ alt })).catch(() => set({ alt: null }));
+    }, 600);
+  }
+
+  /** "📍 address · ⛰ altitude · coordinates" of the place point. */
+  #whereLine() {
+    const point = this._place?.geometry?.coordinates;
+    if (!point) return nothing;
+    const w = this._where;
+    return html`<span class="where">${w.address ? html`📍 ${w.address} · ` : nothing}${w.alt != null ? html`⛰ ${w.alt} m · ` : nothing}<span class="coords">${formatCoordinates(point)}</span></span>`;
+  }
+
+  /** @type {number | undefined} */ #whereTimer;
+
   #gpsStatus() {
     const { fix, error } = this.#geo.state;
     if (this._manual) {
       return html`<div class="gps card"><span class="dot good"></span> Point de l’endroit ${this.#isNew ? 'placé à la main' : 'enregistré'}
         ${fix && this._editPos ? html`<button type="button" @click=${this.#useGps}>Utiliser le GPS</button>` : nothing}
+        ${this.#whereLine()}
         <span class="hint">${this._editPos
           ? 'Le carré vert est le point de l’endroit, les ronds sont les plantes : faites-les glisser pour les ajuster.'
           : 'Le carré vert est le point de l’endroit, les ronds sont les plantes. « Modifier les positions » pour les déplacer.'}</span></div>`;
@@ -918,6 +955,7 @@ export class GfSpotEditor extends LitElement {
           @plant-select=${e => { this._open = e.detail.plantId; }}
           track
           fit
+          no-create
           @pin-move=${e => this.#place(e.detail.coordinates)}
           @map-longpress=${e => this.#place(e.detail.coordinates)}
         ></gf-map>
