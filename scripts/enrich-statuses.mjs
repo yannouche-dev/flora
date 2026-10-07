@@ -28,6 +28,17 @@ export const LICENSE = 'INPN — Base de connaissance Statuts (PatriNat, OFB-MNH
 
 const fold = value => String(value ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
+/** Red List categories shown: extinct in the area, critically endangered … near threatened. */
+export const THREATENED = ['RE', 'CR', 'EN', 'VU', 'NT'];
+
+const OVERSEAS = /guadeloupe|martinique|guyane|reunion|mayotte|saint pierre|miquelon|polynesie|nouvelle caledonie|wallis|futuna|terres australes|taaf|saint martin|saint barthelemy|clipperton|outre mer/;
+
+/** Statuses of overseas territories do not concern metropolitan plants' harvest. */
+export function overseas(area, iso) {
+  if (/^FR-(97|98|GP|MQ|GF|RE|YT|PM|PF|NC|WF|TF|MF|BL|CP)/.test(iso || '') || /^(GP|MQ|GF|RE|YT|PM|PF|NC|WF|TF|MF|BL)$/.test(iso || '')) return true;
+  return OVERSEAS.test(fold(area).replace(/-/g, ' '));
+}
+
 /** Status types kept. Regulation: picking / trade rules, not invasive-species control. */
 export function kindOf(type, typeLabel) {
   const t = String(type || '').toUpperCase();
@@ -77,6 +88,7 @@ export async function collect(lines, ids) {
   const byPlant = new Map();
   const seenTypes = new Map();
   let cols = null, sep = ';', rows = 0;
+  const samples = [];
   for await (const raw of lines) {
     const line = raw.replace(/\r$/, '');
     if (!line.trim()) continue;
@@ -94,20 +106,25 @@ export async function collect(lines, ids) {
     seenTypes.set(key, (seenTypes.get(key) || 0) + 1);
     const kind = kindOf(type, typeLabel);
     if (!kind) continue;
-    const iso1 = cols.iso1 >= 0 ? cells[cols.iso1] : 'FR';
-    if (iso1 && iso1 !== 'FR' && kind !== 'LRN') continue; // overseas or foreign territories
+    if (overseas(cells[cols.area], cols.iso >= 0 ? cells[cols.iso] : '')) continue;
+    const code = (cells[cols.code] || '').trim();
+    // Red Lists: only threatened (or regionally extinct) categories are worth a line.
+    if ((kind === 'LRN' || kind === 'LRR') && !THREATENED.includes(code)) continue;
+    if (kind === 'PN' && samples.length < 3) samples.push(cells);
     const status = {
       type: kind,
-      code: (cells[cols.code] || '').trim(),
+      code,
       label: (cells[cols.label] || typeLabel || '').trim(),
       area: (cells[cols.area] || '').trim(),
       level: (cells[cols.level] || '').trim(),
       iso: cols.iso >= 0 ? (cells[cols.iso] || '').trim() : ''
     };
     const list = byPlant.get(ref) || [];
-    if (!list.some(s => s.type === status.type && s.code === status.code && s.area === status.area)) list.push(status);
+    // One entry per type and territory (an order's several articles add nothing for the user).
+    if (!list.some(s => s.type === status.type && s.area === status.area)) list.push(status);
     byPlant.set(ref, list);
   }
+  if (samples.length) console.log('Exemples PN :', samples.map(c => c.slice(0, 30)));
   return { byPlant, seenTypes, rows, columns: cols };
 }
 
