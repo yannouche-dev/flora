@@ -1,5 +1,5 @@
 // @ts-check
-import { LitElement, html, css, nothing } from 'lit';
+import { LitElement, html, css, nothing, repeat } from 'lit';
 import { ui } from '../styles/ui.js';
 
 /**
@@ -140,8 +140,9 @@ export class GfFacet extends LitElement {
         ${this.searchable ? html`
           <input type="search" placeholder="Filtrer ${this.label.toLowerCase()}…" aria-label="Filtrer ${this.label}"
             .value=${this._filter} @input=${e => { this._filter = e.target.value; }} />` : nothing}
+        <!-- Keyed rows: selecting reorders the list, and a reused unkeyed checkbox kept its clicked state. -->
         <ul role="group" aria-label=${this.label}>
-          ${shown.map(o => html`
+          ${repeat(shown, o => o.value, o => html`
             <li class=${o.count || selected.has(o.value) ? '' : 'empty'}>
               <label title=${o.title || o.label}>
                 <input type="checkbox" .checked=${selected.has(o.value)} @change=${e => this.#toggle(o.value, e)} />
