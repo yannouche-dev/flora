@@ -18,19 +18,15 @@ const layers = [...caps.matchAll(/<Layer>([\s\S]*?)<\/Layer>/g)].map(m => {
   return { id, title, formats, sets, styleIds, zooms: limits.length ? limits[0] + '-' + limits[limits.length - 1] : '' };
 });
 console.log('total layers', layers.length);
-const re = /FORET|PROTECTED|PARC|PNR|RESERV|NATURA|ZNIEFF|RANDO|SENTIER|ELEVATION|CONTOUR|HYDRO|CADASTRAL/i;
-for (const l of layers.filter(l => re.test(l.id + ' ' + l.title))) console.log(JSON.stringify(l));
-const s = await get('https://data.geopf.fr/geocodage/search?q=Vaulx-en-Velin&limit=2');
-console.log(JSON.stringify(s).slice(0, 1500));
-const p = await get('https://data.geopf.fr/geocodage/search?q=Grenoble&index=address,poi&limit=3');
-console.log(JSON.stringify(p).slice(0, 1500));
-const c = await get('https://data.geopf.fr/geocodage/completion?text=chamonix&maximumResponses=3');
-console.log(JSON.stringify(c).slice(0, 1200));
-const r = await get('https://data.geopf.fr/geocodage/reverse?lon=4.8357&lat=45.7641&limit=1');
-console.log(JSON.stringify(r).slice(0, 1500));
-const a = await get('https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?lon=4.8357&lat=45.7641&resource=ign_rge_alti_wld&zonly=true');
-console.log(JSON.stringify(a).slice(0, 500));
-for (const name of ['FORETS.PUBLIQUES', 'PROTECTEDAREAS.PN', 'PROTECTEDAREAS.RN']) {
-  const t = await fetch(`https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${name}&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX=12&TILEROW=1462&TILECOL=2103&FORMAT=image/png`, { headers: ua });
-  console.log('tile', name, t.status, t.headers.get('content-type'), t.headers.get('access-control-allow-origin'));
+for (const l of layers.filter(l => /^Patrinat|PROTECTED|PARC NATIONAL|RESERVE|NATURA|ZPS|SIC|APB|BIOTOPE/i.test(l.id + ' ' + l.title))) console.log(JSON.stringify(l));
+const tile = async (layer, style, set, z, x, y) => {
+  const t = await fetch(`https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${layer}&STYLE=${encodeURIComponent(style)}&TILEMATRIXSET=${set}&TILEMATRIX=${z}&TILEROW=${y}&TILECOL=${x}&FORMAT=image/png`, { headers: ua });
+  const body = t.ok ? '' : (await t.text()).slice(0, 200);
+  console.log('tile', layer, style, set, z, t.status, t.headers.get('content-type'), t.headers.get('content-length'), body);
+};
+// z14 tile over the Chartreuse / Vercors area and Fontainebleau
+for (const [layer, style] of [['FORETS.PUBLIQUES', 'FORETS PUBLIQUES ONF'], ['Patrinat_PNR', 'normal'], ['ELEVATION.CONTOUR.LINE', 'normal']]) {
+  await tile(layer, style, 'PM', 14, 8441, 5852);
+  await tile(layer, style, 'PM', 12, 2110, 1463);
 }
+for (const l of layers.filter(l => /^Patrinat/.test(l.id))) await tile(l.id, l.styleIds.split(',')[0], 'PM', 12, 2110, 1463);
