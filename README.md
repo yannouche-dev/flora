@@ -283,27 +283,30 @@ L'onglet **Carte** enregistre les endroits où vous récoltez, sur les **photos 
 - **Sécurité des données** : une **copie de secours** de toutes les collections est réécrite dans le `localStorage` à chaque modification (jamais remplacée par une liste vide, sauf suppression volontaire). Si la base IndexedDB perd des collections, « Mes plantes » propose de les **restaurer**. La protection du stockage est demandée au navigateur dès la première collection, et *Réglages → Protéger mes données* la redemande ; « Mes plantes » rappelle d'**exporter** quand la dernière sauvegarde a plus de 14 jours. Seul un fichier exporté survit à l'effacement complet des données du site par le navigateur. Réglages affiche un diagnostic du stockage (version, nombre de collections, protection, espace, dates de copie et d'export).
 - **Confidentialité** : les lieux restent **sur l'appareil** (IndexedDB, stockage persistant demandé). Ils sont stockés au format **GeoJSON** : *Réglages → Exporter* produit un fichier `.geojson` lisible par QGIS, uMap, geojson.io…, et *Importer* le fusionne (même identifiant → la version la plus récente l'emporte ; l'ancien format à une plante par point est aussi accepté). Pensez à exporter régulièrement.
 
+Format d'échange (`formatVersion` 5) : un **GeoJSON allégé** qui ne contient que **vos saisies**. Ce que l'application connaît déjà (noms des plantes, familles…) n'y figure pas : les plantes sont désignées par leur identifiant TAXREF et leurs noms sont retrouvés à l'import. Les valeurs par défaut (abondance « moyen », note 0, notes vides…), les champs calculés et la position d'une plante quand c'est celle de l'endroit sont omis ; le fichier est écrit sur une ligne. Les anciens fichiers (formats 1 à 4) restent importables.
+
 ```json
 {
-  "type": "Feature",
-  "id": "c0f3…",
-  "geometry": { "type": "Point", "coordinates": [4.8357, 45.7641] },
-  "properties": {
-    "name": "Lisière nord",
-    "notes": "Parking au bout du chemin",
-    "accuracy": 8, "createdAt": "…", "updatedAt": "…",
-    "plants": [
-      {
-        "plantId": 81541, "scientificName": "Allium ursinum", "vernacularName": "Ail des ours",
-        "coordinates": [4.83581, 45.76402], "accuracy": 6,
-        "abundance": "abondant", "rating": 4, "notes": "", "addedAt": "…",
-        "harvests": [{ "date": "2026-04-12", "quantity": "1 kg", "note": "" }]
-      }
-    ],
-    "plantIds": [81541]
-  }
+  "type": "FeatureCollection", "generator": "GeoFlora", "formatVersion": 5, "exportedAt": "…",
+  "features": [{
+    "type": "Feature", "id": "c0f3…",
+    "geometry": { "type": "Point", "coordinates": [4.8357, 45.7641] },
+    "properties": {
+      "name": "Lisière nord", "notes": "Parking au bout du chemin", "accuracy": 8,
+      "createdAt": "…", "updatedAt": "…",
+      "plants": [
+        { "plantId": 81541, "abundance": "abondant", "rating": 4,
+          "harvests": [{ "date": "2026-04-12", "quantity": "1 kg" }] },
+        { "plantId": 128268, "coordinates": [4.83581, 45.76402], "accuracy": 6 }
+      ]
+    }
+  }]
 }
 ```
+
+Une collection sans `geometry` est une liste ; l'identifiant `favorites` désigne les favoris.
+
+**Transférer vers un autre appareil** (*Réglages*) : le même GeoJSON allégé, compressé (deflate + base64url), voyage dans un lien `#/shared?d=g…` — rien ne passe par un serveur. À l'ouverture, un aperçu liste les collections ; « Importer » les ajoute ou les met à jour (même identifiant → la plus récente l'emporte, sans doublon). Une case permet d'inclure ou non les notes et journaux de récolte ; une copie plus récente sans notes ne supprime pas celles déjà présentes sur l'appareil.
 
 ## Génération locale
 

@@ -3,14 +3,17 @@ import { LitElement, html, css, nothing } from 'lit';
 import { lastSearchHash } from '../core/query.js';
 import { setHarvestMode, StoreController } from '../core/store.js';
 import { getTrefleToken, setTrefleToken } from '../core/sources.js';
-import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectStorage, spotEvents, storageReport } from '../core/collections.js';
+import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
+import { share } from '../core/share.js';
 
 export class GfSettings extends LitElement {
   static properties = {
     _saved: { state: true },
     _spotCount: { state: true },
     _spotMessage: { state: true },
-    _report: { state: true }
+    _report: { state: true },
+    _personal: { state: true },
+    _transfer: { state: true }
   };
 
   static styles = css`
@@ -139,6 +142,25 @@ export class GfSettings extends LitElement {
     this._spotMessage = null;
     /** @type {Awaited<ReturnType<typeof storageReport>> | null} */
     this._report = null;
+    this._personal = true;
+    /** @type {string | null} */
+    this._transfer = null;
+  }
+
+  /** Long links still work in browsers, but some messaging apps cut them. */
+  static LONG_LINK = 30000;
+
+  async #transfer() {
+    try {
+      const { url, count } = await transferLink({ personal: this._personal });
+      const absolute = new URL(url, location.href).href;
+      const result = await share({ title: 'Mes plantes GeoFlora', text: `${count} collection${count > 1 ? 's' : ''} GeoFlora`, url });
+      this._transfer = (result === 'copied' ? 'Lien copié' : result === 'shared' ? 'Lien partagé' : result === 'cancelled' ? 'Partage annulé' : 'Lien prêt')
+        + ` (${absolute.length.toLocaleString('fr-FR')} caractères). Ouvrez-le sur l’autre appareil puis touchez « Importer ».`
+        + (absolute.length > GfSettings.LONG_LINK ? ' Lien long : certaines messageries le coupent, préférez le fichier.' : '');
+    } catch (error) {
+      this._transfer = 'Transfert impossible : ' + /** @type {Error} */ (error).message;
+    }
   }
 
   /** @param {SubmitEvent} event */
@@ -192,12 +214,21 @@ export class GfSettings extends LitElement {
           Exportez régulièrement : effacer les données du navigateur efface aussi vos collections.
         </p>
         <div class="row">
-          <button type="button" @click=${this.#export} ?disabled=${!this._spotCount}>Exporter (GeoJSON)</button>
+          <button type="button" @click=${this.#export} ?disabled=${!this._spotCount}>Exporter (fichier GeoJSON)</button>
           <label class="file">Importer un fichier…
             <input type="file" accept=".geojson,.json,application/geo+json,application/json" @change=${this.#import} />
           </label>
         </div>
         ${this._spotMessage ? html`<p class="muted" role="status">${this._spotMessage}</p>` : nothing}
+
+        <h2>Transférer vers un autre appareil</h2>
+        <p class="muted">Un lien contient toutes vos collections (compressées, sans passer par un serveur). Ouvrez-le sur l’autre téléphone ou ordinateur : elles y sont ajoutées ou mises à jour. Gardé dans un e-mail ou une note, il sert aussi de sauvegarde.</p>
+        <label class="switch">
+          <input type="checkbox" .checked=${this._personal} @change=${e => { this._personal = e.target.checked; }} />
+          <span>Inclure mes notes et journaux de récolte</span>
+        </label>
+        <div class="row"><button type="button" @click=${this.#transfer} ?disabled=${!this._spotCount}>Créer le lien de transfert</button></div>
+        ${this._transfer ? html`<p class="muted" role="status">${this._transfer}</p>` : nothing}
         ${this.#diagnostic()}
 
         <h2>Trefle (optionnel)</h2>

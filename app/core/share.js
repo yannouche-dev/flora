@@ -133,3 +133,38 @@ export async function decodeCollection(data) {
     plants
   };
 }
+
+// ── Portable payload (several collections, slim GeoJSON) ──────────────────
+// Prefix "g" = deflate-raw + base64url of the slim GeoJSON (app/core/portable.js), "k" = uncompressed.
+
+/** Whether a #/shared payload holds several collections (a transfer) rather than one shared collection. */
+export const isPortableLink = (/** @type {string} */ data) => data[0] === 'g' || data[0] === 'k';
+
+/** @param {object} featureCollection @returns {Promise<string>} */
+export async function encodePortable(featureCollection) {
+  const bytes = new TextEncoder().encode(JSON.stringify(featureCollection));
+  return canCompress() ? 'g' + toBase64Url(await deflate(bytes, 'compress')) : 'k' + toBase64Url(bytes);
+}
+
+/**
+ * @param {string} data
+ * @returns {Promise<{ type: 'FeatureCollection', features: any[], name?: string, exportedAt?: string }>}
+ */
+export async function decodePortable(data) {
+  let json;
+  try {
+    const bytes = fromBase64Url(data.slice(1));
+    if (data[0] === 'g') {
+      if (!canCompress()) throw new Error('unsupported');
+      json = JSON.parse(new TextDecoder().decode(await deflate(bytes, 'decompress')));
+    } else {
+      json = JSON.parse(new TextDecoder().decode(bytes));
+    }
+  } catch (error) {
+    throw new Error(/** @type {Error} */ (error).message === 'unsupported'
+      ? 'Ce navigateur ne sait pas ouvrir ce lien compressé.'
+      : 'Ce lien de transfert est incomplet ou abîmé.');
+  }
+  if (json?.type !== 'FeatureCollection' || !Array.isArray(json.features)) throw new Error('Ce lien de transfert n’est pas reconnu.');
+  return json;
+}

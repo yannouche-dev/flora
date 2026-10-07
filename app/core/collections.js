@@ -9,6 +9,8 @@ import { config } from '../config.js';
 import * as db from './db.js';
 import { FAVORITES_ID, normalizeEntry, normalizeCollection, plantIdsOf } from './place-model.js';
 import { store } from './store.js';
+import { toPortable } from './portable.js';
+import { encodePortable } from './share.js';
 
 export { FAVORITES_ID };
 
@@ -488,7 +490,7 @@ export async function writeBackup() {
   const previous = readBackup();
   if (!all.length && previous?.features.length && !allowEmptyBackup) return 'kept';
   allowEmptyBackup = false;
-  const json = JSON.stringify({ savedAt: new Date().toISOString(), features: all });
+  const json = JSON.stringify({ savedAt: new Date().toISOString(), features: toPortable(all).features });
   if (json.length > BACKUP_LIMIT) return 'too-large';
   try {
     localStorage.setItem(config.storageKeys.backup, json);
@@ -501,7 +503,10 @@ export async function missingFromBackup() {
   const backup = readBackup();
   if (!backup?.features.length) return [];
   const present = new Set((await listCollections()).map(c => c.id));
-  return backup.features.map(normalizeCollection).filter(c => c && !present.has(c.id) && (c.properties.plants.length || c.properties.kind !== 'favorites'));
+  const missing = /** @type {Collection[]} */ (backup.features.map(normalizeCollection)
+    .filter(c => c && !present.has(c.id) && (c.properties.plants.length || c.properties.kind !== 'favorites')));
+  if (missing.length) fillNames(missing, await db.getAll('plants'));
+  return missing;
 }
 
 /** Puts the missing collections back. @returns {Promise<number>} how many were restored */
@@ -559,19 +564,12 @@ export async function protectStorage() {
  */
 export async function exportGeoJSON(only) {
   const features = (only || await listCollections()).sort((a, b) => a.properties.createdAt.localeCompare(b.properties.createdAt));
-  const collection = {
-    type: 'FeatureCollection',
-    name: only?.length === 1 ? 'GeoFlora — ' + collectionTitle(only[0]) : 'GeoFlora — mes plantes',
-    generator: 'GeoFlora',
-    formatVersion: 4,
-    exportedAt: new Date().toISOString(),
-    features
-  };
+  const collection = toPortable(features, { name: only?.length === 1 ? 'GeoFlora — ' + collectionTitle(only[0]) : 'GeoFlora — mes plantes' });
   const date = new Date().toISOString().slice(0, 10);
   const slug = only?.length === 1
     ? collectionTitle(only[0]).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'collection'
     : 'mes-plantes';
-  const file = new File([JSON.stringify(collection, null, 2)], `geoflora-${slug}-${date}.geojson`, { type: 'application/geo+json' });
+  const file = new File([JSON.stringify(collection)], `geoflora-${slug}-${date}.geojson`, { type: 'application/geo+json' });
 
   try {
     if (navigator.canShare?.({ files: [file] }) && matchMedia('(pointer: coarse)').matches) {
@@ -604,6 +602,58 @@ export function lastExportDate() {
   try { return localStorage.getItem(config.storageKeys.lastExport); } catch { return null; }
 }
 
+/** Merges a decoded transfer link (slim GeoJSON). @param {{ features: any[] }} featureCollection */
+export const importPortable = featureCollection => importFeatures(featureCollection.features);
+
+/**
+ * Link carrying every collection, to open on another device (#/shared?d=g…).
+ * @param {{ personal: boolean }} options personal: include notes and harvest logs
+ * @returns {Promise<{ url: string, count: number }>}
+ */
+export async function transferLink({ personal }) {
+  const all = (await listCollections()).filter(c => c.properties.plants.length || c.properties.kind !== 'favorites');
+  const data = await encodePortable(toPortable(all, { personal }));
+  return { url: '#/shared?d=' + data, count: all.length };
+}
+
+/**
+ * A newer copy without notes or harvest logs (a link shared without them) must not erase this
+ * device's: keep them wherever the incoming copy has none.
+ * @param {Collection} incoming @param {Collection} current @returns {Collection}
+ */
+function keepPersonal(incoming, current) {
+  const plants = incoming.properties.plants.map(entry => {
+    const mine = findEntry(current, entry.plantId);
+    if (!mine) return entry;
+    return {
+      ...entry,
+      notes: entry.notes || mine.notes,
+      harvests: entry.harvests.length ? entry.harvests : mine.harvests
+    };
+  });
+  return { ...incoming, properties: { ...incoming.properties, notes: incoming.properties.notes || current.properties.notes, plants } };
+}
+
+/**
+ * Portable files and links carry plants by TAXREF id only: put the names back from the local flora.
+ * Plants given by scientific name only (older files) get their id when the flora knows them.
+ * @param {Collection[]} collections @param {any[]} plants the dataset
+ */
+function fillNames(collections, plants) {
+  const byId = new Map(plants.map(plant => [plant.id, plant]));
+  const byName = new Map(plants.map(plant => [plant.scientificName.toLowerCase(), plant]));
+  for (const c of collections) {
+    for (const entry of c.properties.plants) {
+      const plant = entry.plantId !== null ? byId.get(entry.plantId) : entry.scientificName ? byName.get(entry.scientificName.toLowerCase()) : null;
+      if (!plant) continue;
+      entry.plantId = plant.id;
+      if (!entry.scientificName) entry.scientificName = plant.scientificName;
+      entry.vernacularName ??= plant.vernacularNames?.[0] || null;
+    }
+    c.properties.plantIds = plantIdsOf(c.properties.plants);
+  }
+}
+
 /**
  * Merges a GeoJSON file into the local places: same id → the most recently updated wins.
  * Accepts both the current format (properties.plants) and the first one (one plant per feature).
@@ -630,7 +680,6 @@ export async function importGeoJSON(file) {
  */
 async function importFeatures(features) {
   const plants = await db.getAll('plants');
-  const byName = new Map(plants.map(plant => [plant.scientificName.toLowerCase(), plant]));
 
   const existing = new Map((await listCollections()).map(place => [place.id, place]));
   const result = { added: 0, updated: 0, unchanged: 0, skipped: 0 };
@@ -641,13 +690,7 @@ async function importFeatures(features) {
     let place = normalizeCollection(feature);
     if (!place) { result.skipped++; continue; }
     if (place.geometry) place.geometry.coordinates = roundCoordinates(place.geometry.coordinates);
-    for (const entry of place.properties.plants) {
-      if (entry.plantId !== null || !entry.scientificName) continue;
-      const plant = byName.get(entry.scientificName.toLowerCase());
-      if (!plant) continue;
-      entry.plantId = plant.id;
-      entry.vernacularName ??= plant.vernacularNames?.[0] || null;
-    }
+    fillNames([place], plants);
     place.properties.plantIds = plantIdsOf(place.properties.plants);
 
     const current = existing.get(place.id);
@@ -660,6 +703,7 @@ async function importFeatures(features) {
     } else if (!current) {
       result.added++;
     } else if (place.properties.updatedAt > current.properties.updatedAt) {
+      place = keepPersonal(place, current);
       result.updated++;
     } else {
       result.unchanged++;
