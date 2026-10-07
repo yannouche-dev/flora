@@ -236,7 +236,7 @@ export class GfApp extends LitElement {
         document.title = 'Partage — GeoFlora';
         return html`<gf-shared .data=${route.data}></gf-shared>`;
       case 'spot-new':
-        return html`<gf-spot-editor kind=${route.kind} plant-id=${route.plant ?? ''}></gf-spot-editor>`;
+        return html`<gf-spot-editor kind=${route.kind} plant-id=${route.plant ?? ''} .at=${route.at}></gf-spot-editor>`;
       case 'spot':
         return html`<gf-spot-editor spot-id=${route.id} add-plant=${route.add ?? ''} ?pick=${route.pick}></gf-spot-editor>`;
       case 'settings':

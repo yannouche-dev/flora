@@ -279,6 +279,14 @@ L'onglet **Mes plantes** les regroupe : collections, puis endroits triés par di
 
 Partout où des plantes sont listées (lieu ou collection, ajout d'une plante, « Noter ici », fiche du lieu sur la carte, lien partagé), chaque nom est précédé de la **miniature de sa photo**, comme dans les résultats de recherche ; les photos déjà vues restent disponibles hors ligne (cache du service worker, 400 images).
 
+### Carte : recherche, réglages, infos d'un point
+
+- **Barre de recherche** en haut de la Carte : adresse, commune ou lieu-dit avec suggestions (géocodage IGN) ; le résultat choisi est centré et sa fiche s'ouvre.
+- **▦ Carte** (au bout de la barre, ou bouton rond sur les autres cartes) : un seul panneau pour tout ce qui règle l'affichage — **fond** (photos aériennes, plan IGN), **couches** de terrain (parcelles cadastrales, courbes de niveau) et de **règles de cueillette** (forêts publiques ONF, parcs nationaux, réserves naturelles nationales et régionales, arrêtés de protection de biotope — données INPN / PatriNat servies par l'IGN), **légende** et **sources**. Les choix sont mémorisés.
+- **Appui long** n'importe où sur la carte : fiche du point avec l'**adresse la plus proche**, l'**altitude** (RGE ALTI®), les **coordonnées** (copiables), « Créer un endroit ici » et « Itinéraire ». La fiche d'un endroit affiche sa commune et son altitude, l'éditeur l'adresse, l'altitude et les coordonnées de son point.
+
+Source : IGN – Géoplateforme (WMTS, géocodage, altimétrie ; gratuit, sans clé, Licence Ouverte). Adresses et altitudes déjà vues sont gardées sur l'appareil.
+
 ### Autour : les plantes observées dans un périmètre
 
 Sur la **Carte**, le bouton **Autour** trace un cercle (5 km par défaut ; 500 m, 1, 2, 5 ou 10 km) autour de l'endroit sélectionné, sinon de votre position, sinon du centre de la carte, et liste **toutes les espèces de plantes observées dans ce cercle**, classées par nombre d'observations (toutes dates confondues). Toucher une espèce place ses observations sur la carte (les 200 plus récentes ; toucher un point ouvre l'observation) et mène à sa fiche quand elle fait partie de la flore de l'app (rapprochement par nom scientifique ou synonyme TAXREF).
