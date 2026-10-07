@@ -23,44 +23,67 @@ export class GfFacet extends LitElement {
     limit: { type: Number },
     hideEmpty: { type: Boolean, attribute: 'hide-empty' },
     open: { type: Boolean, reflect: true },
+    /** Position among the filters: where the header stacks once stuck. */
+    stack: { type: Number },
     _filter: { state: true },
     _expanded: { state: true }
   };
 
   static styles = [ui, css`
-    :host { display: block; border-bottom: 1px solid var(--gf-border); }
-    :host(.flash) { animation: flash 1.2s ease-out; }
-    @keyframes flash { from { background: var(--gf-accent-soft); } }
-    details { padding: 10px 0; }
-    /* The header stays at the top of the filters while its list scrolls: it can be folded from anywhere. */
-    summary {
+    /*
+     * The host has no box: the header's sticky box is then bounded by the whole filter list, not by this facet.
+     * Headers stay stuck once scrolled past, stacked in order (--stack: this facet's position).
+     */
+    :host { display: contents; --head-h: 40px; }
+    .head {
       position: sticky;
-      top: 0;
-      z-index: 1;
-      background: var(--gf-surface);
-      min-height: 32px;
-      box-shadow: 0 6px 6px -6px rgb(0 0 0 / 18%);
+      top: calc(var(--stack, 0) * var(--head-h));
+      z-index: 2;
+      height: var(--head-h);
+      box-sizing: border-box;
       display: flex;
       align-items: center;
       gap: 8px;
-      cursor: pointer;
-      list-style: none;
+      background: var(--gf-surface);
+      border-bottom: 1px solid var(--gf-border);
+    }
+    :host(.flash) .head, :host(.flash) .body { animation: flash 1.2s ease-out; }
+    @keyframes flash { from { background: var(--gf-accent-soft); } }
+    .toggle {
+      flex: 1;
+      min-width: 0;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: flex-start;
+      gap: 8px;
+      padding: 0;
+      border: 0;
+      border-radius: 0;
+      background: none;
+      color: var(--gf-text);
       font-weight: 600;
       font-size: 0.9rem;
-      padding: 2px 0;
+      text-align: left;
     }
-    summary::-webkit-details-marker { display: none; }
-    summary::after {
+    .toggle::after {
       content: '';
-      margin-left: auto;
+      margin: 0 4px 0 auto;
       width: 8px;
       height: 8px;
       border-right: 2px solid var(--gf-text-muted);
       border-bottom: 2px solid var(--gf-text-muted);
-      transform: rotate(45deg);
+      transform: translateY(-2px) rotate(45deg);
       transition: transform 0.15s;
     }
-    details[open] summary::after { transform: rotate(-135deg); }
+    :host([open]) .toggle::after { transform: translateY(2px) rotate(-135deg); }
+    .toggle:focus-visible { box-shadow: var(--gf-focus); }
+    .body {
+      padding: 2px 0 12px;
+      border-bottom: 1px solid var(--gf-border);
+      /* Scrolled to (funnel in the results grid): lands just below the stacked headers. */
+      scroll-margin-top: calc((var(--stack, 0) + 1) * var(--head-h));
+    }
     .badge {
       background: var(--gf-accent);
       color: var(--gf-accent-contrast);
@@ -102,8 +125,21 @@ export class GfFacet extends LitElement {
     this.limit = 0;
     this.hideEmpty = false;
     this.open = true;
+    this.stack = 0;
     this._filter = '';
     this._expanded = false;
+  }
+
+  /** @param {Map<string, any>} changed */
+  updated(changed) {
+    if (changed.has('stack')) this.style.setProperty('--stack', String(this.stack));
+  }
+
+  /** Opens the facet and scrolls its list into view, below the stacked headers. */
+  async reveal() {
+    this.open = true;
+    await this.updateComplete;
+    this.renderRoot.querySelector('.body')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }
 
   /** @param {string[]} values */
@@ -135,16 +171,19 @@ export class GfFacet extends LitElement {
     const hidden = options.length - shown.length;
 
     return html`
-      <details ?open=${this.open} @toggle=${e => { this.open = e.target.open; }}>
-        <summary>
+      <div class="head">
+        <button class="toggle" type="button" aria-expanded=${this.open ? 'true' : 'false'} aria-controls="body"
+          @click=${() => { this.open = !this.open; }}>
           ${this.label}
-          ${selected.size ? html`<span class="badge">${selected.size}</span>
-            <button class="link clear" type="button" @click=${e => { e.preventDefault(); this.#emit([]); }}>effacer</button>` : nothing}
-        </summary>
+          ${selected.size ? html`<span class="badge">${selected.size}</span>` : nothing}
+        </button>
+        ${selected.size ? html`<button class="link clear" type="button" @click=${() => this.#emit([])}>effacer</button>` : nothing}
+      </div>
+      ${this.open ? html`<div class="body" id="body">
         ${this.searchable ? html`
           <input type="search" placeholder="Filtrer ${this.label.toLowerCase()}…" aria-label="Filtrer ${this.label}"
             .value=${this._filter} @input=${e => { this._filter = e.target.value; }} />` : nothing}
-        <!-- Keyed rows: selecting reorders the list, and a reused unkeyed checkbox kept its clicked state. -->
+        <!-- Keyed rows: a checkbox stays with its value when counts reorder the list. -->
         <ul role="group" aria-label=${this.label}>
           ${repeat(shown, o => o.value, o => html`
             <li class=${o.count || selected.has(o.value) ? '' : 'empty'}>
@@ -158,7 +197,7 @@ export class GfFacet extends LitElement {
         ${!shown.length ? html`<div class="none">Aucune valeur</div>` : nothing}
         ${hidden > 0 ? html`<button class="link more" type="button" @click=${() => { this._expanded = true; }}>Voir plus (${hidden})</button>` : nothing}
         ${this._expanded && !filter && this.limit && options.length > this.limit ? html`<button class="link more" type="button" @click=${() => { this._expanded = false; }}>Voir moins</button>` : nothing}
-      </details>
+      </div>` : nothing}
     `;
   }
 }

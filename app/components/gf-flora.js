@@ -346,8 +346,7 @@ export class GfFlora extends LitElement {
     await panel?.updateComplete;
     const el = /** @type {any} */ (panel?.renderRoot?.querySelector(`gf-facet[name="${facet}"]`));
     if (!el) return;
-    el.open = true;
-    el.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    await el.reveal();
     el.classList.add('flash');
     setTimeout(() => el.classList.remove('flash'), 1200);
   }
