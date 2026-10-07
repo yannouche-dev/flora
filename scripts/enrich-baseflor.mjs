@@ -274,11 +274,7 @@ async function main() {
       try {
         const rows = await readRows(candidate);
         const parsed = floweringByName(rows);
-        for (const name of ['allium ursinum', 'sambucus nigra', 'urtica dioica']) {
-          const hits = rows.filter(r => r.some(c => typeof c === 'string' && c.toLowerCase().startsWith(name)));
-          console.log(`Lignes « ${name} » :`, hits.length, hits.slice(0, 3).map(r => r.slice(0, 18)));
-        }
-        console.log('Premières lignes :', rows.slice(0, 3).map(r => r.slice(0, 60)));
+        console.log('En-tête :', rows[0]?.slice(0, 20));
         console.log('Colonnes :', parsed.columns, '—', parsed.rows, 'lignes,', parsed.periods.size, 'noms avec une floraison');
         if (parsed.periods.size) { result = parsed; url = candidate; break; }
       } catch (error) { console.log('  ', candidate, ':', error.message); }
@@ -287,10 +283,7 @@ async function main() {
     const { periods, byRef, rows: count } = result;
     console.log('Baseflor :', url);
     const { matched, byId } = applyFlowering(plants, periods, byRef);
-    for (const name of ['Allium ursinum', 'Sambucus nigra', 'Urtica dioica', 'Taraxacum officinale']) {
-      const plant = plants.find(p => p.scientificName === name);
-      console.log(`  ${name} (${plant?.id}) :`, plant?.flowering ?? 'absente', '— par nom :', periods.get(binomial(name).key) ?? '—');
-    }
+
     console.log(`  dont ${byId} par identifiant TAXREF (CD_REF), ${matched - byId} par nom`);
     meta.sources = { ...(meta.sources || {}), baseflor: { url, license: LICENSE, rows: count, matched, fetchedAt: new Date().toISOString() } };
     console.log(`Baseflor: flowering months for ${matched} / ${plants.length} plants`);
