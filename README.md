@@ -279,6 +279,12 @@ L'onglet **Mes plantes** les regroupe : collections, puis endroits triés par di
 
 Partout où des plantes sont listées (lieu ou collection, ajout d'une plante, « Noter ici », fiche du lieu sur la carte, lien partagé), chaque nom est précédé de la **miniature de sa photo**, comme dans les résultats de recherche ; les photos déjà vues restent disponibles hors ligne (cache du service worker, 400 images).
 
+### Autour : les plantes observées dans un périmètre
+
+Sur la **Carte**, le bouton **Autour** trace un cercle (5 km par défaut ; 500 m, 1, 2, 5 ou 10 km) autour de l'endroit sélectionné, sinon de votre position, sinon du centre de la carte, et liste **toutes les espèces de plantes observées dans ce cercle**, classées par nombre d'observations (toutes dates confondues). Toucher une espèce place ses observations sur la carte (les 200 plus récentes ; toucher un point ouvre l'observation) et mène à sa fiche quand elle fait partie de la flore de l'app (rapprochement par nom scientifique ou synonyme TAXREF).
+
+Source : API **iNaturalist** (`observations/species_counts` et `observations`), observations de **niveau recherche** uniquement (identification confirmée par la communauté) ; résultats gardés 24 h sur l'appareil.
+
 ### Lieux de récolte
 
 L'onglet **Carte** enregistre les endroits où vous récoltez, sur les **photos aériennes IGN** (Géoplateforme, sans clé ; aussi Plan IGN et parcelles cadastrales). Un **lieu** (endroit) est une **collection de plantes qui a des coordonnées GPS** : une lisière peut réunir l'ail des ours, l'ortie et la benoîte. **Chaque plante du lieu a aussi sa propre position GPS.**
