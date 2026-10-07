@@ -3,7 +3,6 @@ import { LitElement, html, css, nothing } from 'lit';
 import { config } from '../config.js';
 import * as db from '../core/db.js';
 import { watchLocation } from '../core/geo.js';
-import { lookalikes } from '../core/lookalikes.js';
 import { href } from '../core/router.js';
 import { searchPlants } from '../core/search.js';
 import {
@@ -124,8 +123,6 @@ export class GfCapture extends LitElement {
       padding: 4px 6px;
     }
     @media (prefers-color-scheme: dark) { .toast button, .toast a { color: #2f6b3a; } }
-    .toast .warn { color: #fbbf24; font-size: 0.85rem; }
-    @media (prefers-color-scheme: dark) { .toast .warn { color: #92400e; } }
   `;
 
   #store = new StoreController(this);
@@ -145,7 +142,7 @@ export class GfCapture extends LitElement {
     this._results = [];
     this._harvestToday = true;
     this._busy = false;
-    /** @type {{ text: string, warn: string | null, undo: () => Promise<void>, details: string } | null} */
+    /** @type {{ text: string, undo: () => Promise<void>, details: string } | null} */
     this._toast = null;
   }
 
@@ -242,10 +239,8 @@ export class GfCapture extends LitElement {
       this.#close();
 
       const name = plant.vernacularNames?.[0] || plant.scientificName;
-      const toxic = this.#store.state.harvestMode ? lookalikes(plant.id).filter(w => w.otherIsToxic) : [];
       this.#showToast({
         text: before ? `${name} ajouté au lieu « ${placeTitle(before)} »${harvest ? ' · récolte notée' : ''}` : `${name} noté ici (nouveau lieu)${harvest ? ' · récolte notée' : ''}`,
-        warn: toxic.length ? `⚠ Ne pas confondre avec : ${toxic.map(w => w.name).join(', ')}` : null,
         details: href.spot(saved.id),
         undo: async () => {
           if (before) await saveCollection(before);
@@ -264,7 +259,7 @@ export class GfCapture extends LitElement {
   #showToast(toast) {
     clearTimeout(this.#toastTimer);
     this._toast = toast;
-    this.#toastTimer = setTimeout(() => { this._toast = null; }, toast.warn ? 12000 : 7000);
+    this.#toastTimer = setTimeout(() => { this._toast = null; }, 7000);
   }
 
   async #undo() {
@@ -325,7 +320,6 @@ export class GfCapture extends LitElement {
           <button type="button" @click=${this.#undo}>Annuler</button>
           <a href=${t.details} @click=${() => { this._toast = null; }}>Détails</a>
         </div>
-        ${t.warn ? html`<div class="warn">${t.warn}</div>` : nothing}
       </div>` : nothing}
     `;
   }

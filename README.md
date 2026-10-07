@@ -193,7 +193,6 @@ app/
     sources.js           PlantSources + cache IndexedDB persistant (7 jours)
     collections.js       favoris, listes et lieux (GeoJSON), saison, distances, export/import
     share.js             partage par lien (collections encodées dans l'URL)
-    lookalikes.js        confusions dangereuses pour la cueillette
     place-model.js       format d'une collection, migrations des anciens formats
     geo.js               suivi GPS partagé
     ign.js               couches IGN Géoplateforme (WMTS) pour Leaflet
@@ -249,7 +248,6 @@ Ajouter un fichier JS ou CSS dans `app/` impose de l'ajouter aussi à la liste `
 
 - journal de récolte, qualité (★), « Récolté aujourd'hui », bouton « + Récolte » ;
 - badges **En saison** (récolté à ±15 jours de la date, une année quelconque) et **Bientôt** (dans les 30 prochains jours) ;
-- **rappels de confusions dangereuses** (`app/core/lookalikes.js`) : ail des ours ↔ muguet / colchique / gouet, carotte sauvage ↔ ciguës / œnanthe, sureau noir ↔ yèble, etc. Les fiches plantes affichent ces rappels en permanence.
 
 ### Mes plantes : favoris, listes et lieux
 

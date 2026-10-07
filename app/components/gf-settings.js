@@ -139,7 +139,7 @@ export class GfSettings extends LitElement {
         <h2>Mode cueillette</h2>
         <label class="switch">
           <input type="checkbox" .checked=${this.#store.state.harvestMode} @change=${e => setHarvestMode(e.target.checked)} />
-          <span>Journal de récolte, qualité, plantes « en saison » / « bientôt », rappels de confusions dangereuses</span>
+          <span>Journal de récolte, qualité, plantes « en saison » / « bientôt »</span>
         </label>
         <p class="muted">Désactivé, vos lieux restent de simples « plantes vues ici » ; rien n’est effacé.</p>
 

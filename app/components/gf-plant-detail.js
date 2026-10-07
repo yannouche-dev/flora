@@ -7,7 +7,6 @@ import { StoreController, whenReady } from '../core/store.js';
 import { toggleFavorite } from '../core/collections.js';
 import { href } from '../core/router.js';
 import { share } from '../core/share.js';
-import { lookalikes } from '../core/lookalikes.js';
 import * as sources from '../core/sources.js';
 import './gf-attribution.js';
 import './gf-plant-spots.js';
@@ -165,12 +164,6 @@ export class GfPlantDetail extends LitElement {
     }
     .actions .fav[aria-pressed='true'] { color: #e11d48; border-color: #e11d48; }
     .share-note { color: var(--gf-text-muted); font-size: 0.85rem; margin: 4px 0 0; }
-    .lookalikes { margin: 12px 0; border: 1px solid #f59e0b; background: color-mix(in srgb, #f59e0b 12%, var(--gf-surface)); border-radius: var(--gf-radius); padding: 10px 14px; font-size: 0.9rem; }
-    .lookalikes ul { margin: 6px 0; padding-left: 18px; display: grid; gap: 4px; }
-    .lookalikes a { color: inherit; font-weight: 600; }
-    .lookalikes small { color: var(--gf-text-muted); }
-    .danger { font-size: 0.75rem; padding: 0 6px; border-radius: 999px; background: var(--gf-surface-2); }
-    .danger.mortel { background: #b91c1c; color: #fff; }
     .retry {
       font: inherit;
       padding: 8px 18px;
@@ -284,19 +277,6 @@ export class GfPlantDetail extends LitElement {
       ${this._shareNote ? html`<p class="share-note" role="status">${this._shareNote}</p>` : nothing}`;
   }
 
-  /** @param {any} plant */
-  #lookalikes(plant) {
-    const list = lookalikes(plant.id);
-    if (!list.length) return nothing;
-    const toxicHere = list.some(w => !w.otherIsToxic);
-    return html`<aside class="lookalikes" role="note">
-      <strong>⚠ ${toxicHere ? 'Plante dangereuse, confondue avec des plantes comestibles' : 'Confusions dangereuses possibles'}</strong>
-      <ul>${list.map(w => html`<li><a href=${href.plant(w.id)}>${w.name}</a>
-        <span class="danger ${w.danger}">${w.otherIsToxic ? w.danger : 'comestible'}</span> — ${w.tip}</li>`)}</ul>
-      <small>Rappel, pas une garantie : ne consommez jamais une plante sans identification certaine.</small>
-    </aside>`;
-  }
-
   /** @param {any} plant @param {string} name */
   async #share(plant, name) {
     const result = await share({ title: name + ' — GeoFlora', text: `${name} (${plant.scientificName})`, url: href.plant(plant.id) });
@@ -337,7 +317,6 @@ export class GfPlantDetail extends LitElement {
         <div class="sci"><i>${plant.scientificName}</i> <span class="author">${plant.author}</span></div>
         ${this.#actions(plant)}
         <gf-add-to .plant=${plant}></gf-add-to>
-        ${this.#lookalikes(plant)}
 
         <ul class="tags">
           <li>${plant.family}</li>
