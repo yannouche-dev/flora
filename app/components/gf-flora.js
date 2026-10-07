@@ -41,7 +41,31 @@ export class GfFlora extends LitElement {
 
   static styles = [ui, css`
     :host { display: flex; flex-direction: column; min-height: 0; flex: 1; }
-    .panes { display: flex; flex: 1; min-height: 0; }
+    .panes { display: flex; flex: 1; min-height: 0; position: relative; }
+    /* Resize guide: follows the pointer while a separator is dragged. */
+    .guide {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: -1px;
+      width: 3px;
+      background: var(--gf-accent);
+      z-index: 5;
+      pointer-events: none;
+      will-change: transform;
+    }
+    .guide span {
+      position: absolute;
+      top: 50%;
+      left: 8px;
+      padding: 2px 8px;
+      border-radius: var(--gf-radius-pill);
+      background: var(--gf-accent);
+      color: var(--gf-accent-contrast);
+      font-size: 0.75rem;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
     .pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--gf-surface); }
     .pane.results { flex: 1 1 0; background: var(--gf-bg); }
     .pane.results.fill-plant { flex: 0 0 auto; }
@@ -58,7 +82,8 @@ export class GfFlora extends LitElement {
     }
     .pane-head h2 { margin: 0; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gf-text-muted); flex: 1; display: flex; gap: 8px; align-items: center; }
     .pane-head .icon-btn { width: 32px; height: 32px; font-size: 1rem; }
-    .pane-body { flex: 1; min-height: 0; overflow-y: auto; }
+    /* Each pane lays out on its own: resizing one does not re-lay out the content of the others. */
+    .pane-body { flex: 1; min-height: 0; overflow-y: auto; contain: strict; }
     .filters .pane-body { padding: 0 14px 24px; }
     .results .pane-body { overflow: hidden; display: flex; flex-direction: column; }
     gf-plant-list { flex: 1; min-height: 0; }
@@ -230,24 +255,58 @@ export class GfFlora extends LitElement {
     if (w !== this._layout[pane]) this._layout = { ...this._layout, [pane]: w };
   }
 
-  /** @param {PointerEvent} e @param {'filters' | 'plant'} pane */
+  /**
+   * Dragging moves a guide line only; the panes take the new width once, on release. Reflowing the results and
+   * the plant sheet (photos, map) on every frame froze the page.
+   * @param {PointerEvent} e @param {'filters' | 'plant'} pane
+   */
   #startDrag(e, pane) {
+    if (e.button !== 0) return;
     const handle = /** @type {HTMLElement} */ (e.currentTarget);
+    const el = this.renderRoot.querySelector(`.pane.${pane}`);
+    const panes = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.panes'));
+    if (!el || !panes) return;
+    e.preventDefault();
     handle.setPointerCapture(e.pointerId);
     handle.classList.add('dragging');
     this.classList.add('resizing');
+    const box = panes.getBoundingClientRect();
+    const rect = el.getBoundingClientRect();
     const x0 = e.clientX;
     const w0 = this._layout[pane];
-    const move = (/** @type {PointerEvent} */ ev) => this.#resize(pane, pane === 'filters' ? w0 + ev.clientX - x0 : w0 - (ev.clientX - x0));
+    const max = this.#max(pane);
+    const guide = document.createElement('div');
+    guide.className = 'guide';
+    const label = guide.appendChild(document.createElement('span'));
+    panes.append(guide);
+    let width = w0;
+    let frame = 0;
+    const paint = () => {
+      frame = 0;
+      const edge = pane === 'filters' ? rect.left + width : rect.right - width;
+      guide.style.transform = `translateX(${Math.round(edge - box.left)}px)`;
+      label.textContent = width + ' px';
+    };
+    paint();
+    const move = (/** @type {PointerEvent} */ ev) => {
+      const dx = ev.clientX - x0;
+      width = Math.round(Math.min(max, Math.max(MIN[pane], pane === 'filters' ? w0 + dx : w0 - dx)));
+      if (!frame) frame = requestAnimationFrame(paint);
+    };
     const end = () => {
+      cancelAnimationFrame(frame);
       handle.removeEventListener('pointermove', move);
+      handle.removeEventListener('pointerup', end);
+      handle.removeEventListener('pointercancel', end);
       handle.classList.remove('dragging');
       this.classList.remove('resizing');
+      guide.remove();
+      if (width !== this._layout[pane]) this._layout = { ...this._layout, [pane]: width };
       this.#save();
     };
     handle.addEventListener('pointermove', move);
-    handle.addEventListener('pointerup', end, { once: true });
-    handle.addEventListener('pointercancel', end, { once: true });
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
   }
 
   /** @param {KeyboardEvent} e @param {'filters' | 'plant'} pane */

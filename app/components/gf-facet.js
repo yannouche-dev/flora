@@ -32,7 +32,14 @@ export class GfFacet extends LitElement {
     :host(.flash) { animation: flash 1.2s ease-out; }
     @keyframes flash { from { background: var(--gf-accent-soft); } }
     details { padding: 10px 0; }
+    /* The header stays at the top of the filters while its list scrolls: it can be folded from anywhere. */
     summary {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: var(--gf-surface);
+      min-height: 32px;
+      box-shadow: 0 6px 6px -6px rgb(0 0 0 / 18%);
       display: flex;
       align-items: center;
       gap: 8px;
