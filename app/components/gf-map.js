@@ -15,6 +15,7 @@ import { href } from '../core/router.js';
 import './gf-map-panel.js';
 import './gf-map-search.js';
 import './gf-point-card.js';
+import { icon, iconHref, iconMarkup } from '../core/icons.js';
 
 const STYLESHEETS = [
   new URL('../../vendor/leaflet.css', import.meta.url).href,
@@ -56,7 +57,8 @@ function pinIcon(spot, selected, movable = false) {
 }
 
 /** Leaf glyph for plant markers. */
-const LEAF = '<path d="M7 15c0-5 3-8 8-8 0 5-3 8-8 8Zm0 0 4-4" fill="#fff" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/>';
+/** A plant without a photo: a flower (Bootstrap Icons) in its circle. */
+const FLOWER = `<svg x="5" y="5" width="12" height="12" viewBox="0 0 16 16" fill="#fff"><use href="${iconHref('flower1')}"></use></svg>`;
 
 const escapeAttr = (/** @type {string} */ s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
@@ -83,7 +85,7 @@ function plantIcon(plant, selected, draggable) {
     iconAnchor: [12, 12],
     html: `<svg width="24" height="24" viewBox="0 0 22 22" aria-hidden="true">
       <circle class="ring" cx="11" cy="11" r="9.5" fill="${color}" stroke="#fff" stroke-width="2"/>
-      <g transform="translate(0 0)">${LEAF}</g>
+      ${FLOWER}
     </svg>`
   });
 }
@@ -259,20 +261,20 @@ export class GfMap extends LitElement {
 
   get #areasKey() { return this._areas.map(a => a.id).sort().join(','); }
 
-  /** « 🛡 Réserve naturelle de … — la cueillette y est souvent interdite ou réglementée » (not while editing). */
+  /** « Réserve naturelle de … — la cueillette y est souvent interdite ou réglementée » (not while editing). */
   #protectedBanner() {
     const areas = this._areas;
     if (!areas.length || this.editing || this.#areasKey === this._areasClosed) return nothing;
     const shown = this._areasOpen ? areas : areas.slice(0, 2);
     const more = areas.length - shown.length;
     return html`<div class="gf-map-protected" role="status">
-      <span class="what">🛡 ${shown.map((a, i) => html`${i ? ' · ' : ''}${a.url
+      <span class="what">${icon('shield-check')} ${shown.map((a, i) => html`${i ? ' · ' : ''}${a.url
         ? html`<a href=${a.url} target="_blank" rel="noopener" title=${a.kind}>${a.name}</a>` : html`<b title=${a.kind}>${a.name}</b>`}
         <span class="kind">(${a.kind})</span>`)}${more > 0
-        ? html` · <button type="button" class="more" @click=${() => { this._areasOpen = true; }}>+ ${more} autre${more > 1 ? 's' : ''}</button>` : nothing}
+        ? html` · <button type="button" class="more" @click=${() => { this._areasOpen = true; }}>${icon('plus-lg')} ${more} autre${more > 1 ? 's' : ''}</button>` : nothing}
         — la cueillette y est souvent interdite ou réglementée : vérifiez les règles du site.</span>
       <button type="button" class="close" aria-label="Masquer" title="Masquer"
-        @click=${() => { this._areasClosed = this.#areasKey; }}>×</button>
+        @click=${() => { this._areasClosed = this.#areasKey; }}>${icon('x-lg')}</button>
     </div>`;
   }
 
@@ -827,11 +829,11 @@ export class GfMap extends LitElement {
 
   #buildButtons() {
     const buttons = this.#buttons = Object.assign(document.createElement('div'), { className: 'gf-map-buttons' });
-    // With the search pill, ▦ lives at its end; otherwise it is a round button like "locate".
+    // With the search pill, the layers button lives at its end; otherwise it is a round button like "locate".
     buttons.innerHTML = `
-      ${this.#hasSearch ? '' : '<button type="button" class="layers" aria-label="Carte : fond, couches, légende" title="Carte : fond, couches, légende">▦</button>'}
-      <button type="button" class="locate" aria-label="Me localiser" title="Me localiser" aria-pressed="false">◎</button>
-      <button type="button" class="edit" aria-label="Modifier les positions" title="Modifier les positions" aria-pressed="false" hidden>✎</button>`;
+      ${this.#hasSearch ? '' : `<button type="button" class="layers" aria-label="Carte : fond, couches, légende" title="Carte : fond, couches, légende">${iconMarkup('layers')}</button>`}
+      <button type="button" class="locate" aria-label="Me localiser" title="Me localiser" aria-pressed="false">${iconMarkup('crosshair')}</button>
+      <button type="button" class="edit" aria-label="Modifier les positions" title="Modifier les positions" aria-pressed="false" hidden>${iconMarkup('pencil')}</button>`;
     buttons.querySelector('.locate')?.addEventListener('click', () => this.#locate());
     buttons.querySelector('.layers')?.addEventListener('click', () => this.openPanel());
     buttons.querySelector('.edit')?.addEventListener('click', () => {

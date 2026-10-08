@@ -15,6 +15,7 @@ import { statusWarning } from './gf-status.js';
 import { ui } from '../styles/ui.js';
 import './gf-thumb.js';
 import './gf-voice-button.js';
+import { icon } from '../core/icons.js';
 
 /** A plant tapped within this distance of an existing place joins it instead of creating a new one. */
 const JOIN_RADIUS = 30;
@@ -124,7 +125,7 @@ export class GfCapture extends LitElement {
     this._results = [];
     this._harvestToday = true;
     this._busy = false;
-    /** @type {{ text: string, undo: () => Promise<void>, details: string, warning?: string | null, lookalike?: string | null, plantId?: number } | null} */
+    /** @type {{ text: string, undo: () => Promise<void>, details: string, warning?: string | null, lookalike?: { toxic: boolean, text: string } | null, plantId?: number } | null} */
     this._toast = null;
   }
 
@@ -318,8 +319,8 @@ export class GfCapture extends LitElement {
         </footer>
       </dialog>
       ${t ? html`<div class="toast" role="status">
-        ${t.warning ? html`<div class="warn" role="alert">${t.warning} — <a href=${href.plant(/** @type {any} */ (t).plantId)}>voir la fiche</a></div>` : nothing}
-        ${t.lookalike ? html`<div class="warn lookalike" role="alert">${t.lookalike} — <a href=${href.plant(/** @type {any} */ (t).plantId)}>comment les distinguer</a></div>` : nothing}
+        ${t.warning ? html`<div class="warn" role="alert">${icon('exclamation-triangle-fill')} ${t.warning} — <a href=${href.plant(/** @type {any} */ (t).plantId)}>voir la fiche</a></div>` : nothing}
+        ${t.lookalike ? html`<div class="warn lookalike" role="alert">${icon(t.lookalike.toxic ? 'exclamation-octagon-fill' : 'exclamation-triangle-fill')} ${t.lookalike.text} — <a href=${href.plant(/** @type {any} */ (t).plantId)}>comment les distinguer</a></div>` : nothing}
         <div class="row"><span>${t.text}</span>
           <button class="link" type="button" @click=${this.#undo}>Annuler</button>
           <a class="link" href=${t.details} @click=${() => { this._toast = null; }}>Détails</a>

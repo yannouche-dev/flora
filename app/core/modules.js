@@ -31,9 +31,9 @@ export const MODULES = [
   { key: 'trefle', name: 'Trefle', hosts: 'trefle.io', needsToken: true,
     provides: 'Données de culture et descriptions (en anglais), avec votre jeton personnel.' },
   { key: 'photos', name: 'Photos en ligne', hosts: 'thumb.wikimedia.org, inaturalist-open-data, herbiers…',
-    provides: 'Vignettes et photos des plantes (liste, carte, fiche). Désactivé : 🌿 à la place des photos.' },
+    provides: 'Vignettes et photos des plantes (liste, carte, fiche). Désactivé : une fleur à la place des photos.' },
   { key: 'voice', name: 'Dictée vocale (navigateur)', hosts: 'reconnaissance vocale du navigateur',
-    provides: 'Bouton 🎙 pour chercher une plante à la voix (Flore, Noter ici). Sur Chrome, l’audio est traité par les serveurs de Google ; sur Safari, par Apple ou sur l’appareil.' }
+    provides: 'Bouton micro pour chercher une plante à la voix (Flore, Noter ici). Sur Chrome, l’audio est traité par les serveurs de Google ; sur Safari, par Apple ou sur l’appareil.' }
 ];
 
 /** A module is switched off: its data is not available. */

@@ -4,6 +4,7 @@ import { directionsUrl } from '../core/collections.js';
 import { addressAt, altitudeAt, formatCoordinates } from '../core/geoservices.js';
 import { href } from '../core/router.js';
 import { ui } from '../styles/ui.js';
+import { icon } from '../core/icons.js';
 
 /**
  * A point of the map (long press, search result): nearest address, altitude, coordinates (copy),
@@ -77,16 +78,16 @@ export class GfPointCard extends LitElement {
     const title = this.label || (this._address === undefined ? 'Recherche de l’adresse…' : this._address || 'Point sur la carte');
     return html`<section class="card" aria-label="Point sur la carte">
       <button class="close icon-btn" type="button" aria-label="Fermer"
-        @click=${() => this.dispatchEvent(new CustomEvent('close', { bubbles: true, composed: true }))}>×</button>
+        @click=${() => this.dispatchEvent(new CustomEvent('close', { bubbles: true, composed: true }))}>${icon('x-lg')}</button>
       <h2>${title}</h2>
       ${this.label && this._address ? html`<div class="meta">${this._address}</div>` : nothing}
       <div class="meta">
-        <span>⛰ ${this._altitude === undefined ? '…' : this._altitude === null ? 'altitude inconnue' : this._altitude + ' m'}</span>
+        <span>${icon('triangle')} ${this._altitude === undefined ? '…' : this._altitude === null ? 'altitude inconnue' : this._altitude + ' m'}</span>
         <span class="coords">${formatCoordinates(p)}</span>
-        <button class="link" type="button" @click=${this.#copy}>${this._copied ? 'Copié ✓' : 'Copier'}</button>
+        <button class="link" type="button" @click=${this.#copy}>${this._copied ? html`Copié ${icon('check-lg')}` : 'Copier'}</button>
       </div>
       <div class="actions">
-        ${this.create ? html`<a class="primary small" href=${href.newSpot(null, p)}>📍 Créer un endroit ici</a>` : nothing}
+        ${this.create ? html`<a class="primary small" href=${href.newSpot(null, p)}>${icon('geo-alt-fill')} Créer un endroit ici</a>` : nothing}
         <a class="button small" href=${directionsUrl({ geometry: { type: 'Point', coordinates: p } })} target="_blank" rel="noopener">Itinéraire</a>
       </div>
     </section>`;

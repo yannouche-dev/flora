@@ -10,6 +10,7 @@ import { whenReady } from '../core/store.js';
 import './gf-map.js';
 import './gf-thumb.js';
 import { ui } from '../styles/ui.js';
+import { kindIcon } from '../core/icons.js';
 
 /** Preview of a collection received by link (#/shared?d=…), with "Enregistrer dans mes plantes". */
 export class GfShared extends LitElement {
@@ -142,7 +143,7 @@ export class GfShared extends LitElement {
     const places = features.filter(f => kindOf(f) === 'place').length;
     const lists = features.filter(f => kindOf(f) === 'list').length;
     const plants = features.reduce((n, f) => n + (f.properties?.plants?.length || 0), 0);
-    const label = (/** @type {any} */ f) => kindOf(f) === 'favorites' ? '♥ Favoris' : (kindOf(f) === 'place' ? '📍 ' : '☰ ') + (f.properties?.name || 'Sans nom');
+    const label = (/** @type {any} */ f) => html`${kindIcon(kindOf(f))} ${kindOf(f) === 'favorites' ? 'Favoris' : f.properties?.name || 'Sans nom'}`;
     return html`
       <div class="wrap">
         <span class="kicker">Transfert de collections</span>

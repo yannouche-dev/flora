@@ -16,6 +16,7 @@ import './gf-status.js';
 import './gf-lookalikes.js';
 import './gf-add-to.js';
 import { ui } from '../styles/ui.js';
+import { icon } from '../core/icons.js';
 
 /** Remote text is untrusted HTML: keep only its text content (DOMParser never runs scripts). */
 function toText(/** @type {string} */ value) {
@@ -410,9 +411,9 @@ export class GfPlantDetail extends LitElement {
     return html`
       <div class="actions" role="group" aria-label="Actions">
         <button type="button" class="fav" aria-pressed=${fav ? 'true' : 'false'} @click=${() => toggleFavorite(plant)}>
-          ${fav ? '♥ Favori' : '♡ Favori'}
+          ${icon(fav ? 'heart-fill' : 'heart')} Favori
         </button>
-        <button type="button" @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-add-to'))?.open()}>＋ Ajouter à…</button>
+        <button type="button" @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-add-to'))?.open()}>${icon('plus-lg')} Ajouter à…</button>
         <button type="button" @click=${() => this.#share(plant, name)}>Partager</button>
       </div>
       ${this._shareNote ? html`<p class="share-note" role="status">${this._shareNote}</p>` : nothing}`;
@@ -430,14 +431,14 @@ export class GfPlantDetail extends LitElement {
     if (plant === undefined) return html`<article><div class="skeleton"></div></article>`;
     if (plant?.failed) {
       return html`<article>
-        <a class="back link" href=${lastSearchHash()}>← Recherche</a>
+        <a class="back link" href=${lastSearchHash()}>${icon('arrow-left')} Recherche</a>
         <h1>Impossible de lire la flore locale</h1>
         <p class="muted">${plant.failed}</p>
         <p><button class="primary" type="button" @click=${() => this.#load(this.plantId)}>Réessayer</button></p>
       </article>`;
     }
     if (plant === null) {
-      return html`<article><a class="back link" href=${lastSearchHash()}>← Recherche</a><h1>Plante introuvable</h1></article>`;
+      return html`<article><a class="back link" href=${lastSearchHash()}>${icon('arrow-left')} Recherche</a><h1>Plante introuvable</h1></article>`;
     }
 
     const ctx = this.#context(plant);
@@ -467,7 +468,7 @@ export class GfPlantDetail extends LitElement {
   /** @param {any} ctx */
   #title({ plant, name }) {
     return html`
-      <a class="back link" href=${lastSearchHash()}>← Recherche</a>
+      <a class="back link" href=${lastSearchHash()}>${icon('arrow-left')} Recherche</a>
       <h1>${name}</h1>
       <div class="sci"><i>${plant.scientificName}</i> <span class="author">${plant.author}</span></div>`;
   }
@@ -544,7 +545,7 @@ export class GfPlantDetail extends LitElement {
         <figure class="hero">
           ${hero ? html`<img src=${hero.url} alt=${plant.scientificName} decoding="async" referrerpolicy="no-referrer" />
             <figcaption><gf-attribution .media=${hero}></gf-attribution></figcaption>`
-            : html`<div class=${loading && !ctx.photosOff ? 'skeleton' : 'no-photo'} aria-hidden="true">${loading && !ctx.photosOff ? '' : '🌿'}</div>`}
+            : html`<div class=${loading && !ctx.photosOff ? 'skeleton' : 'no-photo'} aria-hidden="true">${loading && !ctx.photosOff ? '' : icon('flower1')}</div>`}
         </figure>
         <h1>${name}</h1>
         <div class="sci"><i>${plant.scientificName}</i> <span class="author">${plant.author}</span></div>
@@ -556,24 +557,24 @@ export class GfPlantDetail extends LitElement {
           ${current ? html`
             <button class="primary large add" type="button" aria-pressed=${inTarget ? 'true' : 'false'}
               @click=${() => setInCollection(current.id, plant, !inTarget).then(() => setTarget(current.id)).catch(console.error)}>
-              ${inTarget ? '✓ Dans ' : '＋ Ajouter à '}${current.kind === 'place' ? '📍 ' : ''}${current.name}
+              ${icon(inTarget ? 'check-lg' : 'plus-lg')} ${inTarget ? 'Dans ' : 'Ajouter à '}${current.kind === 'place' ? html`${icon('geo-alt-fill')} ` : ''}${current.name}
             </button>` : nothing}
           <select class="target" aria-label="Collection en cours" .value=${current?.id || ''}
             @change=${e => this.#pickTarget(e.target)}>
             <option value="" ?selected=${!current} disabled>${current ? 'Changer…' : 'Choisir où ajouter…'}</option>
-            ${places.length ? html`<optgroup label="Mes lieux">${places.map(c => html`<option value=${c.id} ?selected=${c.id === current?.id}>📍 ${c.name}</option>`)}</optgroup>` : nothing}
+            ${places.length ? html`<optgroup label="Mes lieux">${places.map(c => html`<option value=${c.id} ?selected=${c.id === current?.id}>${c.name}</option>`)}</optgroup>` : nothing}
             ${lists.length ? html`<optgroup label="Mes collections">${lists.map(c => html`<option value=${c.id} ?selected=${c.id === current?.id}>${c.name}</option>`)}</optgroup>` : nothing}
-            <option value="__new">＋ Nouvelle collection…</option>
+            <option value="__new">Nouvelle collection…</option>
           </select>
         </div>
         <div class="quick" role="group" aria-label="Actions">
-          <button type="button" class="fav" aria-pressed=${fav ? 'true' : 'false'} @click=${() => toggleFavorite(plant)}>${fav ? '♥' : '♡'} Favori</button>
-          <a class="button" href=${href.newSpot(plant.id)}>📍 Noter ici</a>
+          <button type="button" class="fav" aria-pressed=${fav ? 'true' : 'false'} @click=${() => toggleFavorite(plant)}>${icon(fav ? 'heart-fill' : 'heart')} Favori</button>
+          <a class="button" href=${href.newSpot(plant.id)}>${icon('geo-alt-fill')} Noter ici</a>
           <button type="button" @click=${() => this.#share(plant, name)}>Partager</button>
         </div>
         ${this._shareNote ? html`<p class="share-note" role="status">${this._shareNote}</p>` : nothing}
         <gf-add-to .plant=${plant}></gf-add-to>
-        <p class="more"><button class="link" type="button" @click=${() => setPlantView('standard')}>Plus d’infos →</button></p>
+        <p class="more"><button class="link" type="button" @click=${() => setPlantView('standard')}>Plus d’infos ${icon('arrow-right')}</button></p>
       </article>`;
   }
 

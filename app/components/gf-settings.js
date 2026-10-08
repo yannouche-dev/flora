@@ -5,7 +5,7 @@ import { MODE_LABELS, setHarvestMode, setMode, StoreController } from '../core/s
 import './gf-mode-switch.js';
 import { getTrefleToken, setTrefleToken } from '../core/sources.js';
 import { MODE_KEYS, MODULES, setModule } from '../core/modules.js';
-import { MODE_ICONS } from '../core/icons.js';
+import { icon, MODE_ICONS } from '../core/icons.js';
 import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
@@ -92,7 +92,7 @@ export class GfSettings extends LitElement {
     const mb = (/** @type {number | null} */ n) => (n === null ? '?' : (n / 1e6).toLocaleString('fr-FR', { maximumFractionDigits: 1 }) + ' Mo');
     return html`
       <h2>Protection des données</h2>
-      ${r.persisted ? html`<p class="muted">✓ Données protégées : le navigateur ne les effacera pas pour faire de la place.</p>` : html`
+      ${r.persisted ? html`<p class="muted">${icon('check-lg')} Données protégées : le navigateur ne les effacera pas pour faire de la place.</p>` : html`
         <p class="muted">Données <strong>non protégées</strong> : le navigateur peut les effacer s’il manque de place.
           Installer l’application (menu du navigateur → « Installer l’application » ou « Ajouter à l’écran d’accueil ») aide à les faire protéger.</p>
         <div class="row"><button class="primary" type="button" @click=${this.#protect}>Protéger mes données</button></div>`}
@@ -231,7 +231,7 @@ export class GfSettings extends LitElement {
     const { meta, offline } = this.#store.state;
     return html`
       <article>
-        <a class="back link" href=${lastSearchHash()}>← Recherche</a>
+        <a class="back link" href=${lastSearchHash()}>${icon('arrow-left')} Recherche</a>
         <h1>À propos et réglages</h1>
 
         <h2>Données</h2>

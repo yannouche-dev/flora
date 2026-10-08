@@ -55,15 +55,15 @@ export async function lookalikesOf(plant) {
 
 /**
  * One line for the harvest toasts: what this plant can be mistaken for (or that it is the toxic one).
- * @param {any} plant @returns {Promise<string | null>}
+ * @param {any} plant @returns {Promise<{ toxic: boolean, text: string } | null>}
  */
 export async function lookalikeWarning(plant) {
   const list = await lookalikesOf(plant).catch(() => []);
   const edible = list.filter(l => l.side === 'edible');
   if (edible.length) {
     const names = edible.flatMap(l => l.others.map(o => o.label + (l.pair.severity === 'mortel' ? ' (mortel)' : '')));
-    return '⚠ Ne pas confondre avec : ' + [...new Set(names)].join(', ');
+    return { toxic: false, text: 'Ne pas confondre avec : ' + [...new Set(names)].join(', ') };
   }
   const toxic = list.find(l => l.side === 'toxic');
-  return toxic ? `☠ Plante ${toxic.pair.severity === 'mortel' ? 'mortelle' : 'toxique'}, confondue avec : ${toxic.others.map(o => o.label).join(', ')}` : null;
+  return toxic ? { toxic: true, text: `Plante ${toxic.pair.severity === 'mortel' ? 'mortelle' : 'toxique'}, confondue avec : ${toxic.others.map(o => o.label).join(', ')}` } : null;
 }

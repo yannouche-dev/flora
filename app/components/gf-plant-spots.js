@@ -5,6 +5,7 @@ import { collectionsForPlant, collectionTitle, plantMarkers, entryInSeason, find
 import { StoreController } from '../core/store.js';
 import './gf-map.js';
 import { ui } from '../styles/ui.js';
+import { icon, kindIcon } from '../core/icons.js';
 
 const shortDate = (/** @type {string} */ iso) =>
   new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -101,10 +102,10 @@ export class GfPlantSpots extends LitElement {
     return html`
       <div class="head">
         <h2 class="kicker" style="margin:0">Dans mes collections${spots.length + lists.length ? ` (${spots.length + lists.length})` : ''}</h2>
-        <a class="primary add" href=${href.newSpot(this.plantId)}>📍 Ajouter un lieu</a>
+        <a class="primary add" href=${href.newSpot(this.plantId)}>${icon('geo-alt-fill')} Ajouter un lieu</a>
       </div>
       ${lists.length ? html`<div class="chips">${lists.map(c => html`
-        <a class="button chip" href=${href.spot(c.id)}>${c.properties.kind === 'favorites' ? '♥' : '☰'} ${collectionTitle(c)}</a>`)}</div>` : nothing}
+        <a class="button chip" href=${href.spot(c.id)}>${kindIcon(c.properties.kind)} ${collectionTitle(c)}</a>`)}</div>` : nothing}
       ${this._error ? html`<p role="alert">${this._error} <button type="button" @click=${() => this.#load()}>Réessayer</button></p>` : nothing}
       ${spots.length ? html`
         <gf-map

@@ -20,7 +20,8 @@ export class GfPlantSearch extends LitElement {
       font-size: 1rem;
       padding: 9px 14px 9px 38px;
       border-radius: var(--gf-radius-pill);
-      background: var(--gf-surface) no-repeat 13px 50% / 16px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-4-4'/%3E%3C/svg%3E");
+      /* Bootstrap Icons « search » */
+      background: var(--gf-surface) no-repeat 14px 50% / 15px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23888'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0'/%3E%3C/svg%3E");
       border: 1px solid var(--gf-border);
       color: var(--gf-text);
       outline: none;

@@ -214,6 +214,10 @@ app/
   styles/                tokens.css (thème clair/sombre), app.css, map.css
 ```
 
+### Icônes
+
+Toutes les icônes de l'application sont des [Bootstrap Icons](https://icons.getbootstrap.com) (licence MIT) : un seul fichier `assets/icons/bi.svg` ne contenant que celles utilisées (36), mis en cache hors ligne, et `icon('heart')` (`app/core/icons.js`) pour les afficher. Elles prennent la taille et la couleur du texte. Pour en ajouter une : son nom dans `scripts/build-icons.mjs`, puis `node scripts/build-icons.mjs <dossier du paquet bootstrap-icons>`. Sur téléphone, le bouton des filtres est une icône d'entonnoir (pleine quand un filtre est actif, avec leur nombre).
+
 ### Onglet Flore : filtres, résultats, plante
 
 - **Ordinateur** : trois panneaux côte à côte, **Filtres ┃ Résultats ┃ Plante**. Chacun se replie (« / ») en une fine barre verticale et se redimensionne en tirant les séparateurs (ou ←/→ au clavier, double-clic pour la largeur par défaut) ; largeurs et panneaux repliés sont mémorisés. Toucher un résultat ouvre la fiche dans le panneau Plante (l'adresse `#/plant/<id>` reste partageable) ; ⤢ la passe en pleine largeur, × la ferme.

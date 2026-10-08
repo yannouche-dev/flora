@@ -1,6 +1,7 @@
 // @ts-check
 import { LitElement, html, css } from 'lit';
 import { knownThumb, thumbUrl } from '../core/thumb.js';
+import { icon } from '../core/icons.js';
 
 /**
  * Small plant photo for list rows (like the search results): a rounded square, 🌿 while loading or
@@ -72,7 +73,7 @@ export class GfThumb extends LitElement {
     return this._url && !this._broken
       ? html`<img src=${this._url} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"
           @error=${() => { this._broken = true; }} />`
-      : html`<span aria-hidden="true">${this._url === undefined ? '' : '🌿'}</span>`;
+      : html`<span aria-hidden="true">${this._url === undefined ? '' : icon('flower1')}</span>`;
   }
 }
 

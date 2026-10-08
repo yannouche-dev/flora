@@ -2,6 +2,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { StoreController } from '../core/store.js';
 import { listen, voiceAvailable, voiceError } from '../core/voice.js';
+import { icon } from '../core/icons.js';
 
 /**
  * 🎙 Dictate a search. Hidden when the browser can't, or when « Dictée vocale » is off (Réglages › Modules).
@@ -33,7 +34,7 @@ export class GfVoiceButton extends LitElement {
     button[aria-pressed='true'] { background: var(--gf-danger, #dc2626); color: #fff; animation: pulse 1.2s ease-in-out infinite; }
     @keyframes pulse { 50% { box-shadow: 0 0 0 6px color-mix(in srgb, #dc2626 25%, transparent); } }
     @media (prefers-reduced-motion: reduce) { button[aria-pressed='true'] { animation: none; } }
-    svg { width: 18px; height: 18px; }
+    svg { width: 18px; height: 18px; flex: none; }
     .note {
       position: absolute;
       right: 0;
@@ -87,9 +88,7 @@ export class GfVoiceButton extends LitElement {
       <button type="button" aria-pressed=${this._listening ? 'true' : 'false'}
         aria-label=${this._listening ? 'Arrêter la dictée' : 'Chercher à la voix'} title=${this._listening ? 'Arrêter la dictée' : 'Chercher à la voix'}
         @mousedown=${(/** @type {Event} */ e) => e.preventDefault()} @click=${this.#toggle}>
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>
-        </svg>
+        ${icon(this._listening ? 'mic-fill' : 'mic')}
       </button>
       ${this._note ? html`<span class="note" role="status">${this._note}</span>` : nothing}`;
   }

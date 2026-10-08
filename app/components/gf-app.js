@@ -14,6 +14,7 @@ import './gf-capture.js';
 import './gf-tabbar.js';
 import './gf-mode-switch.js';
 import { ui } from '../styles/ui.js';
+import { icon } from '../core/icons.js';
 
 /** @param {string} name */
 const tabOf = name => name === 'map' ? 'map'
@@ -102,8 +103,8 @@ export class GfApp extends LitElement {
         </nav>
         <gf-mode-switch class="mode" scope="toute l’application" value=${this.#store.state.mode}
           @mode-change=${e => setMode(e.detail.mode || 'standard')}></gf-mode-switch>
-        <button class="note primary" type="button" @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-capture'))?.open()}>+ Noter ici</button>
-        <a class="settings" href=${href.settings()} title="À propos et réglages" aria-label="À propos et réglages">⚙︎</a>`}
+        <button class="note primary" type="button" @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-capture'))?.open()}>${icon('plus-lg')} Noter ici</button>
+        <a class="settings" href=${href.settings()} title="À propos et réglages" aria-label="À propos et réglages">${icon('gear')}</a>`}
       </header>
       <main>
         ${updateReady ? html`<div class="banner" role="status">Nouvelle version de GeoFlora disponible.

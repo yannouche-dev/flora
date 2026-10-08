@@ -2,6 +2,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { searchPlaces } from '../core/geoservices.js';
 import { ui } from '../styles/ui.js';
+import { icon } from '../core/icons.js';
 
 /**
  * Search pill on top of the map: addresses, lieux-dits, communes (IGN). The ▦ button at its end opens the
@@ -106,13 +107,13 @@ export class GfMapSearch extends LitElement {
     const open = this._active && (this._results.length || this._status);
     return html`
       <div class="pill">
-        <span class="ico" aria-hidden="true">🔍</span>
+        <span class="ico" aria-hidden="true">${icon('search')}</span>
         <input type="search" placeholder="Adresse, commune, lieu-dit…" aria-label="Aller à une adresse" autocomplete="off"
           .value=${this._query} @input=${this.#input}
           @focus=${() => { this._active = true; }}
           @keydown=${e => { if (e.key === 'Enter' && this._results[0]) this.#pick(this._results[0]); if (e.key === 'Escape') this._active = false; }} />
         <button class="icon-btn" type="button" aria-label="Carte : fond, couches, légende" title="Carte : fond, couches, légende"
-          @click=${() => this.dispatchEvent(new CustomEvent('open-panel', { bubbles: true, composed: true }))}>▦</button>
+          @click=${() => this.dispatchEvent(new CustomEvent('open-panel', { bubbles: true, composed: true }))}>${icon('layers')}</button>
       </div>
       ${open ? html`<ul role="listbox" aria-label="Résultats">
         ${this._results.map(r => html`<li><button type="button" @click=${() => this.#pick(r)}>

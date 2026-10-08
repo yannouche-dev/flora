@@ -4,10 +4,11 @@ import { STATUS_SHORT } from '../config.js';
 import { FACETS, activeFilterCount, clearFilters, toggleValue } from '../core/query.js';
 import { store, StoreController } from '../core/store.js';
 import { ui } from '../styles/ui.js';
+import { icon } from '../core/icons.js';
 
 const LABELS = {
-  mine: (/** @type {string} */ v) => v === 'place' ? '📍 Dans un lieu'
-    : v === 'favorites' ? '♥ Favoris'
+  mine: (/** @type {string} */ v) => v === 'place' ? html`${icon('geo-alt-fill')} Dans un lieu`
+    : v === 'favorites' ? html`${icon('heart-fill')} Favoris`
     : store.state.collections.find(c => c.id === v)?.name || 'Collection',
   status: (/** @type {string} */ v) => STATUS_SHORT[v] || v,
   family: (/** @type {string} */ v) => v,
@@ -50,7 +51,7 @@ export class GfActiveFilters extends LitElement {
         ${FACETS.flatMap(facet => query.filters[facet].map(value => html`
           <li>
             <button class="chip" aria-pressed="true" type="button" aria-label="Retirer le filtre ${value}" @click=${() => toggleValue(facet, value)}>
-              ${LABELS[facet](value)} <span class="x" aria-hidden="true">×</span>
+              ${LABELS[facet](value)} <span class="x" aria-hidden="true">${icon('x')}</span>
             </button>
           </li>`))}
         ${total > 1 ? html`<li><button class="link" type="button" @click=${clearFilters}>Tout effacer</button></li>` : nothing}

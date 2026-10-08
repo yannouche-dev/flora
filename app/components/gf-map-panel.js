@@ -2,6 +2,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { BASES, OVERLAYS } from '../core/ign.js';
 import { ui } from '../styles/ui.js';
+import { icon } from '../core/icons.js';
 
 const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
 
@@ -92,14 +93,14 @@ export class GfMapPanel extends LitElement {
       <dialog aria-label="Carte" @click=${e => { if (e.target === e.currentTarget) this.close(); }}>
         <header>
           <h2>Carte</h2>
-          <button class="icon-btn" type="button" aria-label="Fermer" @click=${() => this.close()}>×</button>
+          <button class="icon-btn" type="button" aria-label="Fermer" @click=${() => this.close()}>${icon('x-lg')}</button>
         </header>
         <div class="body">
           <h3 class="kicker">Fond</h3>
           <div class="bases" role="group" aria-label="Fond de carte">
             ${Object.entries(BASES).map(([key, def]) => html`
               <button type="button" aria-pressed=${this.base === key ? 'true' : 'false'} @click=${() => this.#emit('base-change', { key })}>
-                <span class="ico" aria-hidden="true">${key === 'photo' ? '🛰️' : '🗺️'}</span>${def.label}
+                <span class="ico" aria-hidden="true">${icon(key === 'photo' ? 'globe-europe-africa' : 'map')}</span>${def.label}
               </button>`)}
           </div>
 

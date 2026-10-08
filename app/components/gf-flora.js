@@ -10,6 +10,7 @@ import './gf-filter-panel.js';
 import './gf-plant-list.js';
 import './gf-plant-detail.js';
 import './gf-mode-switch.js';
+import { icon } from '../core/icons.js';
 
 /** Results pane narrower than this: cards instead of the grid. */
 const GRID_MIN = 560;
@@ -419,8 +420,8 @@ export class GfFlora extends LitElement {
             ${this.#head('plant', 'Plante', html`
               ${plantSwitch}
               <a class="icon-btn" href=${'#/plant/' + plantId} title="Ouvrir la fiche seule" aria-label="Ouvrir la fiche seule"
-                @click=${e => { e.preventDefault(); this.#fold('results', true); }}>⤢</a>
-              <button class="icon-btn" type="button" title="Fermer la fiche" aria-label="Fermer la fiche" @click=${() => this.#closePlant()}>×</button>`)}
+                @click=${e => { e.preventDefault(); this.#fold('results', true); }}>${icon('arrows-angle-expand')}</a>
+              <button class="icon-btn" type="button" title="Fermer la fiche" aria-label="Fermer la fiche" @click=${() => this.#closePlant()}>${icon('x-lg')}</button>`)}
             <div class="pane-body">${plantDetail}</div>
           </section>`) : nothing}
       </div>
@@ -428,7 +429,7 @@ export class GfFlora extends LitElement {
       ${phone && plantId !== null ? html`
         <section class="sheet-plant" aria-label="Plante">
           <div class="pane-head">
-            <button class="link back" type="button" @click=${() => this.#closePlant()}>← Résultats</button>
+            <button class="link back" type="button" @click=${() => this.#closePlant()}>${icon('arrow-left')} Résultats</button>
             <h2></h2>
             ${plantSwitch}
           </div>

@@ -10,6 +10,7 @@ import {
 import { config } from '../config.js';
 import { StoreController, whenReady } from '../core/store.js';
 import { ui } from '../styles/ui.js';
+import { icon, kindIcon } from '../core/icons.js';
 
 /** Up to this many thumbnails per collection row. */
 const THUMBS = 4;
@@ -142,11 +143,10 @@ export class GfCollections extends LitElement {
   /** @param {import('../core/collections.js').Collection} c @param {string | null} side */
   #row(c, side) {
     const p = c.properties;
-    const icon = p.kind === 'favorites' ? '♥' : p.kind === 'place' ? '📍' : '☰';
     return html`
       <li>
         <a href=${p.kind === 'place' ? href.map({ spot: c.id }) : href.spot(c.id)}>
-          <span class="icon ${p.kind === 'favorites' ? 'fav' : ''}" aria-hidden="true">${icon}</span>
+          <span class="icon ${p.kind === 'favorites' ? 'fav' : ''}" aria-hidden="true">${kindIcon(p.kind)}</span>
           <span class="name">${collectionTitle(c)}</span>
           <span class="side">${side || ''}</span>
           <span class="sub">
@@ -245,8 +245,8 @@ export class GfCollections extends LitElement {
         <h1>Mes plantes</h1>
         <p class="lead">Vos collections de plantes. Une collection qui a des coordonnées GPS est un endroit : touchez-le pour le voir sur la carte. Tout reste sur cet appareil.</p>
         <div class="new">
-          <a class="button" href=${href.newList()}>☰ Nouvelle collection</a>
-          <a class="button" href=${href.newSpot()} @click=${e => { e.preventDefault(); this.dispatchEvent(new CustomEvent('open-capture', { bubbles: true, composed: true })); }}>📍 Noter une plante ici</a>
+          <a class="button" href=${href.newList()}>${icon('list-ul')} Nouvelle collection</a>
+          <a class="button" href=${href.newSpot()} @click=${e => { e.preventDefault(); this.dispatchEvent(new CustomEvent('open-capture', { bubbles: true, composed: true })); }}>${icon('geo-alt-fill')} Noter une plante ici</a>
         </div>
         ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : nothing}
         ${this.#notices()}
@@ -254,8 +254,8 @@ export class GfCollections extends LitElement {
         <ul>
           ${favorites ? this.#row(favorites, null) : html`
             <li><a href=${href.spot(FAVORITES_ID)}>
-              <span class="icon fav" aria-hidden="true">♥</span><span class="name">Favoris</span><span class="side"></span>
-              <span class="sub">Touchez ♡ sur une plante pour l’ajouter.</span>
+              <span class="icon fav" aria-hidden="true">${icon('heart-fill')}</span><span class="name">Favoris</span><span class="side"></span>
+              <span class="sub">Touchez ${icon('heart')} sur une plante pour l’ajouter.</span>
             </a></li>`}
         </ul>
 

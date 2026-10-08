@@ -1,9 +1,10 @@
 // @ts-check
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { ui } from '../styles/ui.js';
+import { icon } from '../core/icons.js';
 
 /**
- * @typedef {{ value: string, label: string, count: number, title?: string }} FacetOption
+ * @typedef {{ value: string, label: string, count: number, title?: string, icon?: import('../core/icons.js').IconName }} FacetOption
  */
 
 const fold = (/** @type {string} */ s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
@@ -195,7 +196,7 @@ export class GfFacet extends LitElement {
             <li class=${o.count || selected.has(o.value) ? '' : 'empty'}>
               <label title=${o.title || o.label}>
                 <input type="checkbox" .checked=${selected.has(o.value)} @change=${e => this.#toggle(o.value, e)} />
-                <span class="name">${o.label}</span>
+                <span class="name">${o.icon ? html`${icon(o.icon)} ` : nothing}${o.label}</span>
                 <span class="count">${o.count.toLocaleString('fr-FR')}</span>
               </label>
             </li>`)}

@@ -29,6 +29,7 @@ const SHELL = [
   'data/territories.json',
   'data/lookalikes.json',
   'assets/icons/icon.svg',
+  'assets/icons/bi.svg',
   'assets/icons/icon-192.png',
   'assets/icons/icon-512.png',
   'app/main.js',

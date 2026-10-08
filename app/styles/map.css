@@ -360,3 +360,6 @@ gf-map .gf-point-card {
 gf-map:has(.gf-point-card) .leaflet-bottom {
   display: none;
 }
+
+/* Bootstrap Icons (app/core/icons.js) outside shadow roots. */
+.bi { flex: none; vertical-align: -0.125em; }

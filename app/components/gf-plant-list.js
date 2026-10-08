@@ -3,6 +3,7 @@ import { LitElement, html, css, nothing, repeat } from 'lit';
 import { setQuery } from '../core/query.js';
 import { StoreController, gridViewOf } from '../core/store.js';
 import './gf-plant-card.js';
+import { icon } from '../core/icons.js';
 
 const ROW_HEIGHT = 76;
 const COMPACT_ROW_HEIGHT = 44;
@@ -211,9 +212,9 @@ export class GfPlantList extends LitElement {
         return html`<div class="th" role="columnheader" aria-sort=${active || 'none'}>
           ${c.sort ? html`<button class="sort" type="button" ?data-active=${Boolean(active)}
             title=${'Trier par ' + c.label.toLowerCase() + (active === 'ascending' ? ' (ordre inverse)' : '')}
-            @click=${() => this.#sortBy(/** @type {string} */ (c.sort))}>${c.label}${active === 'ascending' ? ' ▲' : active === 'descending' ? ' ▼' : ''}</button>` : nothing}
+            @click=${() => this.#sortBy(/** @type {string} */ (c.sort))}>${c.label}${active === 'ascending' ? html` ${icon('caret-up-fill')}` : active === 'descending' ? html` ${icon('caret-down-fill')}` : ''}</button>` : nothing}
           ${count ? html`<button class="funnel" type="button" title=${`Filtre ${c.label.toLowerCase()} : ${count} valeur${count > 1 ? 's' : ''}`}
-            @click=${() => this.#showFacet(/** @type {string} */ (c.facet))}>⏷ ${count}</button>` : nothing}
+            @click=${() => this.#showFacet(/** @type {string} */ (c.facet))}>${icon('funnel-fill')} ${count}</button>` : nothing}
         </div>`;
       })}
     </div>`;

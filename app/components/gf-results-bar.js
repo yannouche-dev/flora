@@ -8,6 +8,7 @@ import './gf-mode-switch.js';
 import './gf-active-filters.js';
 import './gf-plant-search.js';
 import { ui } from '../styles/ui.js';
+import { icon } from '../core/icons.js';
 
 /**
  * Above the list: filters button (mobile), result count, sort, density, active filter chips,
@@ -87,8 +88,9 @@ export class GfResultsBar extends LitElement {
     return html`
       <div class="search">
         ${this.wide ? nothing : html`
-          <button class="filters" type="button" @click=${() => this.dispatchEvent(new CustomEvent('open-filters', { bubbles: true, composed: true }))}>
-            Filtres ${active ? html`<span class="badge">${active}</span>` : nothing}
+          <button class="filters icon-btn" type="button" aria-label=${active ? `Filtres (${active} actif${active > 1 ? 's' : ''})` : 'Filtres'} title="Filtres"
+            @click=${() => this.dispatchEvent(new CustomEvent('open-filters', { bubbles: true, composed: true }))}>
+            ${icon(active ? 'funnel-fill' : 'funnel')}${active ? html`<span class="badge">${active}</span>` : nothing}
           </button>`}
         <gf-plant-search></gf-plant-search>
       </div>
