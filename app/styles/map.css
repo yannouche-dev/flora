@@ -12,6 +12,27 @@ gf-map .gf-map-root {
   inset: 0;
 }
 
+/* « IGN – fonds de carte » switched off (Réglages › Modules). */
+gf-map .gf-map-off {
+  position: absolute;
+  z-index: 650;
+  left: 12px;
+  /* Clear of the locate button on the right. */
+  right: 64px;
+  /* Below the map search pill; the bottom is taken by the place / Autour sheets. */
+  top: 70px;
+  width: fit-content;
+  margin: 0 auto;
+  padding: 6px 12px;
+  border-radius: var(--gf-radius-pill);
+  background: var(--gf-surface);
+  color: var(--gf-text);
+  box-shadow: var(--gf-shadow-float);
+  font-size: 0.8rem;
+  text-align: center;
+}
+gf-map .gf-map-off a { color: var(--gf-accent); }
+
 gf-map .gf-map-canvas {
   position: absolute;
   inset: 0;

@@ -4,6 +4,8 @@ import { lastSearchHash } from '../core/query.js';
 import { MODE_LABELS, setHarvestMode, setMode, StoreController } from '../core/store.js';
 import './gf-mode-switch.js';
 import { getTrefleToken, setTrefleToken } from '../core/sources.js';
+import { MODE_KEYS, MODULES, setModule } from '../core/modules.js';
+import { MODE_ICONS } from '../core/icons.js';
 import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
@@ -46,6 +48,17 @@ export class GfSettings extends LitElement {
     label.file input { position: absolute; width: 1px; height: 1px; opacity: 0; }
     label.file:focus-within { box-shadow: var(--gf-focus); }
     .mode-line { display: flex; align-items: center; gap: 10px; }
+    .modules { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+    .module { border: 1px solid var(--gf-border); border-radius: var(--gf-radius); padding: 10px 12px; background: var(--gf-surface); }
+    .module.on { border-color: color-mix(in srgb, var(--gf-accent) 45%, var(--gf-border)); }
+    .module .muted { margin: 4px 0 0; font-size: 0.85rem; }
+    .module .host { color: var(--gf-text-muted); font-weight: 400; margin-left: 4px; }
+    .module .state { margin-left: 6px; color: var(--gf-text-muted); font-style: italic; }
+    .module form { margin-top: 8px; }
+    .module .modes { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; }
+    .module .mode { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer; }
+    .module .mode svg { color: var(--gf-text-muted); }
+    .module .mode input { width: 18px; height: 18px; margin: 0; }
   `];
 
   #store = new StoreController(this);
@@ -171,9 +184,47 @@ export class GfSettings extends LitElement {
   /** @param {SubmitEvent} event */
   #save(event) {
     event.preventDefault();
-    const input = /** @type {HTMLInputElement} */ (this.renderRoot.querySelector('input'));
+    const input = /** @type {HTMLInputElement} */ (this.renderRoot.querySelector('input[name=trefle]'));
     setTrefleToken(input.value.trim() || null);
     this._saved = true;
+  }
+
+  /** Réglages › Modules: one card per online service, with its switch (Trefle: its token too). */
+  #modules() {
+    const on = this.#store.state.modules;
+    const token = getTrefleToken();
+    return html`
+      <h2 id="modules">Modules : services en ligne</h2>
+      <p class="muted">Tout fonctionne hors ligne avec la flore locale ; chaque module ajoute des données d’un service en ligne.
+        Cochez les modes où il sert : la fiche plante suit son affichage, la grille des résultats le sien, la carte et le reste le mode
+        de l’application. Décoché, le service n’est pas appelé dans ce mode et ses données ne s’y affichent pas.</p>
+      <ul class="modules">
+        ${MODULES.map(m => {
+          const blocked = Boolean(m.needsToken && !token);
+          const any = !blocked && MODE_KEYS.some(mode => on[m.key][mode]);
+          return html`<li class="module ${any ? 'on' : ''}">
+            <div class="title"><strong>${m.name}</strong> <small class="host">${m.hosts}</small>
+              ${blocked ? html`<small class="state">jeton requis</small>` : nothing}</div>
+            <p class="muted">${m.provides}</p>
+            <div class="modes" role="group" aria-label=${'Modes où ' + m.name + ' est utilisé'}>
+              ${MODE_KEYS.map(mode => html`<label class="mode">
+                <input type="checkbox" .checked=${on[m.key][mode] && !blocked} ?disabled=${blocked}
+                  @change=${e => setModule(m.key, mode, e.target.checked)} />
+                ${MODE_ICONS[mode]}<span>${MODE_LABELS[mode]}</span>
+              </label>`)}
+            </div>
+            ${m.key === 'trefle' ? html`
+              <p class="muted">Un <a href="https://trefle.io" target="_blank" rel="noopener">jeton Trefle</a> gratuit ;
+                il reste dans ce navigateur uniquement.</p>
+              <form class="row" @submit=${this.#save}>
+                <input name="trefle" type="password" autocomplete="off" placeholder="Jeton Trefle" .value=${token || ''}
+                  @input=${() => { this._saved = false; }} />
+                <button class="primary" type="submit">Enregistrer</button>
+              </form>
+              ${this._saved ? html`<p class="muted" role="status">Enregistré.</p>` : nothing}` : nothing}
+          </li>`;
+        })}
+      </ul>`;
   }
 
   render() {
@@ -195,7 +246,7 @@ export class GfSettings extends LitElement {
           </dl>` : nothing}
         <p class="muted">
           La flore est stockée localement (IndexedDB) et fonctionne hors ligne. Photos, descriptions et répartition
-          proviennent à la demande de GBIF, iNaturalist, Wikidata et Wikimedia Commons ; seules les images sous
+          proviennent à la demande des services listés plus bas dans « Modules » ; seules les images sous
           licence libre (CC0, CC BY, CC BY-SA) sont affichées.
         </p>
         <p class="muted">
@@ -225,6 +276,8 @@ export class GfSettings extends LitElement {
         </p>
         <p class="muted">Épuré : grandes photos et actions rapides (ajouter à la collection en cours). Standard : l’essentiel pour tous.
           Scientifique : toutes les données, locales et distantes. La grille et la fiche plante ont aussi leur propre choix, qui revient au mode de l’application quand celui-ci change.</p>
+
+        ${this.#modules()}
 
         <h2>Mode cueillette</h2>
         <label class="switch">
@@ -257,16 +310,6 @@ export class GfSettings extends LitElement {
         ${this._transfer ? html`<p class="muted" role="status">${this._transfer}</p>` : nothing}
         ${this.#diagnostic()}
 
-        <h2>Trefle (optionnel)</h2>
-        <p class="muted">
-          Un <a href="https://trefle.io" target="_blank" rel="noopener">token Trefle</a> gratuit ajoute des données
-          botaniques. Il reste dans ce navigateur uniquement.
-        </p>
-        <form @submit=${this.#save}>
-          <input type="password" autocomplete="off" placeholder="Token Trefle" .value=${getTrefleToken() || ''} @input=${() => { this._saved = false; }} />
-          <button class="primary" type="submit">Enregistrer</button>
-        </form>
-        ${this._saved ? html`<p class="muted">Enregistré.</p>` : nothing}
       </article>
     `;
   }

@@ -221,6 +221,22 @@ app/
 - **Grille des résultats** : Photo, Nom français, puis Famille, Genre, Espèce (l'épithète, le genre ayant sa colonne), Statut, Protection, et les actions ♥ (favori) et 📍 (noter où je la trouve ; pleine si la plante est déjà dans un de mes lieux, elle ouvre alors la carte). Trois affichages, au choix par les icônes au-dessus de la grille (lignes · photo · tableau) : **Standard** (sans statut ni protection), **Épuré** (grandes photos, nom français sur le nom scientifique complet) et **Scientifique** (toutes les colonnes, auteur compris). Cliquer un en-tête trie par cette colonne, recliquer inverse l'ordre (`sort=-family` dans l'URL) ; un en-tête dont le filtre est actif affiche son nombre de valeurs, qui ouvre ce filtre. Quand le panneau est étroit, Genre (et Statut) se masquent, puis la liste repasse en fiches.
 - **Tablette** : filtres en feuille, Résultats ┃ Plante. **Téléphone** : fiches, et la plante s'ouvre en plein écran par-dessus la liste (« ← Résultats » revient au même endroit).
 
+### Modules : les services en ligne, un par un
+
+L'app fonctionne hors ligne avec la flore locale ; chaque service en ligne est un **module** qu'on active **mode par mode** dans **Réglages › Modules** : trois cases, Épuré · Standard · Scientifique (toutes cochées par défaut ; Trefle demande un jeton). La fiche plante suit son affichage, la grille des résultats le sien, la carte et le reste le mode de l'application. Dans un mode où il est décoché, un module n'est jamais appelé et ses données ne s'affichent pas, copies en cache comprises :
+
+| Module | Service | Apporte |
+|---|---|---|
+| IGN – fonds de carte | data.geopf.fr (WMTS) | photos aériennes, plan, cadastre, courbes de niveau, forêts, espaces protégés ; désactivé, seules les zones déjà vues restent affichées (tuiles du cache, sans réseau) |
+| IGN – adresses et altitudes | data.geopf.fr (géocodage, altimétrie) | recherche d'adresse, adresse et altitude d'un point ou d'un lieu |
+| iNaturalist | api.inaturalist.org | Autour, courbes de floraison et fructification, nombre d'observations, photos de repli |
+| GBIF | api.gbif.org | descriptions, noms étrangers, répartition, médias, occurrences en France |
+| Wikidata | www.wikidata.org | classification, statut UICN, identifiants ; donne l'article Wikipédia |
+| Wikipédia | fr.wikipedia.org | résumé de l'article (nécessite Wikidata) |
+| Wikimedia Commons | commons.wikimedia.org | galerie de photos libres, vignettes de repli |
+| Trefle | trefle.io | données de culture, avec votre jeton (saisi dans sa carte) |
+| Photos en ligne | thumb.wikimedia.org, inaturalist-open-data, herbiers… | vignettes et photos ; désactivé, 🌿 à la place |
+
 ### Modes d'affichage : Épuré, Standard, Scientifique
 
 Un mode pour toute l'application, choisi par trois icônes dans l'en-tête (ou dans Réglages › Affichage sur téléphone) :

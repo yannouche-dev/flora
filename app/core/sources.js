@@ -4,6 +4,7 @@
 import { PlantSources } from '../../lib/plant-sources.mjs';
 import { config } from '../config.js';
 import * as db from './db.js';
+import { appMode, moduleEvents, moduleOn, modulesSignature } from './modules.js';
 
 /** @returns {string | null} */
 export function getTrefleToken() {
@@ -16,11 +17,31 @@ export function setTrefleToken(token) {
     if (token) localStorage.setItem(config.storageKeys.trefleToken, token);
     else localStorage.removeItem(config.storageKeys.trefleToken);
   } catch { /* storage unavailable: the token simply won't persist */ }
-  sources = createSources();
+  instances.clear();
 }
 
-const createSources = () => new PlantSources({ trefleToken: getTrefleToken() });
-let sources = createSources();
+/** @typedef {import('./modules.js').Mode} Mode */
+
+/** One PlantSources per mode, each calling only the modules that mode uses. @type {Map<string, PlantSources>} */
+const instances = new Map();
+/** @param {Mode} [mode] the surface's mode (plant sheet, grid); the app mode when omitted */
+const sourcesFor = mode => {
+  const m = mode || appMode();
+  let instance = instances.get(m);
+  if (!instance) {
+    instance = new PlantSources({ trefleToken: getTrefleToken(), enabled: (/** @type {any} */ k) => moduleOn(k, m) });
+    instances.set(m, instance);
+  }
+  return instance;
+};
+// A module switched on again must not get an empty answer from the in-memory cache of an old instance.
+moduleEvents.addEventListener('change', () => instances.clear());
+
+/** Cache key of a plant's remote data: it changes with the modules off in that mode, so their data never shows. */
+const key = (/** @type {string} */ kind, /** @type {number} */ id, /** @type {Mode | undefined} */ mode) => {
+  const off = modulesSignature(mode);
+  return kind + ':' + id + (off ? '|off:' + off : '');
+};
 
 /** Requests in flight, shared so two components asking for the same plant hit the network once. */
 const pending = new Map();
@@ -57,19 +78,21 @@ async function cached(key, loader) {
  * Thumbnail for a list row: the one embedded in plants.json, otherwise a remote lookup.
  * @param {any} plant
  * @param {AbortSignal} [signal]
+ * @param {Mode} [mode]
  */
-export function thumbnail(plant, signal) {
+export function thumbnail(plant, signal, mode) {
   if (plant.thumbnail?.url) return Promise.resolve(plant.thumbnail);
-  return cached('thumb:' + plant.id, () => sources.thumbnail(plant, { signal }));
+  return cached(key('thumb', plant.id, mode), () => sourcesFor(mode).thumbnail(plant, { signal }));
 }
 
 /**
  * Everything the detail page needs (identifiers, GBIF, Commons, Trefle, links).
  * @param {any} plant
  * @param {AbortSignal} [signal]
+ * @param {Mode} [mode]
  */
-export function details(plant, signal) {
-  return cached('details:' + plant.id, () => sources.details(plant, { signal }));
+export function details(plant, signal, mode) {
+  return cached(key('details', plant.id, mode), () => sourcesFor(mode).details(plant, { signal }));
 }
 
 /**
@@ -78,12 +101,12 @@ export function details(plant, signal) {
  * @param {AbortSignal} [signal]
  * @returns {Promise<{ all: number[], flowering: number[], fruiting: number[], taxonId: number, sourceUrl: string } | null>}
  */
-export function phenology(plant, signal) {
-  return cached('phenology:' + plant.id, () => sources.phenology(plant, { signal }));
+export function phenology(plant, signal, /** @type {Mode | undefined} */ mode) {
+  return cached(key('phenology', plant.id, mode), () => sourcesFor(mode).phenology(plant, { signal }));
 }
 
 /** @param {any} plant */
-export const links = plant => sources.links(plant);
+export const links = plant => sourcesFor().links(plant);
 
 /**
  * French Wikipedia lead paragraph, through the plant's Wikidata item.
@@ -92,11 +115,11 @@ export const links = plant => sources.links(plant);
  * @param {AbortSignal} [signal]
  * @returns {Promise<{ title: string, extract: string, url: string } | null>}
  */
-export function wikipedia(plant, qid, signal) {
+export function wikipedia(plant, qid, signal, /** @type {Mode | undefined} */ mode) {
   if (!qid) return Promise.resolve(null);
-  return cached('wikipedia:' + plant.id, async () => {
-    const claims = await sources.wikidataClaims(qid, { signal });
-    return claims?.frwiki ? sources.wikipediaSummary(claims.frwiki, { signal }) : null;
+  return cached(key('wikipedia', plant.id, mode), async () => {
+    const claims = await sourcesFor(mode).wikidataClaims(qid, { signal });
+    return claims?.frwiki ? sourcesFor(mode).wikipediaSummary(claims.frwiki, { signal }) : null;
   });
 }
 
@@ -106,9 +129,9 @@ export function wikipedia(plant, qid, signal) {
  * @param {string | null | undefined} qid
  * @param {AbortSignal} [signal]
  */
-export function wikidataScience(plant, qid, signal) {
+export function wikidataScience(plant, qid, signal, /** @type {Mode | undefined} */ mode) {
   if (!qid) return Promise.resolve(null);
-  return cached('wikidata-science:' + plant.id, () => sources.wikidataScience(qid, { signal }));
+  return cached(key('wikidata-science', plant.id, mode), () => sourcesFor(mode).wikidataScience(qid, { signal }));
 }
 
 /**
@@ -118,7 +141,7 @@ export function wikidataScience(plant, qid, signal) {
  * @param {AbortSignal} [signal]
  * @returns {Promise<number | null>}
  */
-export function occurrencesFR(plant, gbifKey, signal) {
+export function occurrencesFR(plant, gbifKey, signal, /** @type {Mode | undefined} */ mode) {
   if (!gbifKey) return Promise.resolve(null);
-  return cached('gbif-fr:' + plant.id, () => sources.gbifOccurrencesFR(gbifKey, { signal }));
+  return cached(key('gbif-fr', plant.id, mode), () => sourcesFor(mode).gbifOccurrencesFR(gbifKey, { signal }));
 }

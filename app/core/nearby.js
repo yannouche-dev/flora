@@ -4,6 +4,7 @@
 // Species are matched to the local flora (TAXREF) by scientific name or synonym.
 
 import * as db from './db.js';
+import { ModuleOffError, moduleOn } from './modules.js';
 
 const API = 'https://api.inaturalist.org/v1';
 /** Results kept a day (offline: an older copy is better than nothing). */
@@ -85,6 +86,7 @@ function nameIndex() {
  * @returns {Promise<NearbyResult>}
  */
 export async function speciesAround(point, radius, signal) {
+  if (!moduleOn('inaturalist')) throw new ModuleOffError('inaturalist');
   const key = `around:${area(point, radius)}`;
   const raw = await cached(key, async () => {
     const data = await json(`${API}/observations/species_counts?${area(point, radius)}&iconic_taxa=Plantae&quality_grade=research&locale=fr&per_page=500`, signal);
@@ -124,6 +126,7 @@ export async function speciesAround(point, radius, signal) {
  * @returns {Promise<NearbyObservation[]>}
  */
 export function observationsAround(taxonId, point, radius, signal) {
+  if (!moduleOn('inaturalist')) return Promise.reject(new ModuleOffError('inaturalist'));
   return cached(`around-obs:${taxonId}:${area(point, radius)}`, async () => {
     const data = await json(`${API}/observations?taxon_id=${taxonId}&${area(point, radius)}&quality_grade=research&per_page=200&order_by=observed_on`, signal);
     return (data.results || [])

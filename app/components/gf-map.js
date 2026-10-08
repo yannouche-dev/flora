@@ -1,7 +1,7 @@
 // @ts-check
 // Leaflet map on IGN imagery. Rendered in light DOM so Leaflet's global CSS and events just work.
 
-import { LitElement, html } from 'lit';
+import { LitElement, html, nothing } from 'lit';
 import * as L from 'leaflet';
 import { config } from '../config.js';
 import { watchLocation } from '../core/geo.js';
@@ -9,6 +9,8 @@ import { BASES, FRANCE_BOUNDS, OVERLAYS, tileLayer } from '../core/ign.js';
 import { inSeason, placeAbundance, placeTitle } from '../core/collections.js';
 import { store as appStore } from '../core/store.js';
 import { cachedThumb, thumbUrl } from '../core/thumb.js';
+import { moduleEvents, moduleOn } from '../core/modules.js';
+import { href } from '../core/router.js';
 import './gf-map-panel.js';
 import './gf-map-search.js';
 import './gf-point-card.js';
@@ -199,7 +201,22 @@ export class GfMap extends LitElement {
 
   // Lit owns this one wrapper; Leaflet and the map buttons live inside it, out of Lit's way
   // (anything appended straight to the host would be cleared by Lit's next render).
-  render() { return html`<div class="gf-map-root"></div>`; }
+  render() {
+    return html`<div class="gf-map-root"></div>
+      ${moduleOn('ignMaps') ? nothing : html`<div class="gf-map-off" role="status">Fonds IGN désactivés : seules les zones déjà vues s’affichent.
+        <a href=${href.settings()}>Réglages › Modules</a></div>`}`;
+  }
+
+  /** « IGN – fonds de carte » switched on or off: rebuild the tile layers (network or cache only). */
+  #onModules = () => {
+    this.requestUpdate();
+    const map = this.#map;
+    if (!map) return;
+    for (const layer of Object.values(this.#layers)) layer.remove();
+    this.#layers = {};
+    /** @type {L.TileLayer} */ (this.#layer(this.#base).addTo(map)).bringToBack();
+    for (const key of this.#overlays) this.#layer(key).addTo(map);
+  };
 
   get #root() { return /** @type {HTMLElement} */ (this.querySelector('.gf-map-root')); }
 
@@ -311,11 +328,13 @@ export class GfMap extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    moduleEvents.addEventListener('change', this.#onModules);
     if (this.#map) this.#syncTracking();
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    moduleEvents.removeEventListener('change', this.#onModules);
     this.#unwatch?.();
     this.#unwatch = null;
   }
