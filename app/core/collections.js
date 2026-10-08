@@ -148,6 +148,7 @@ export function plantMarkers(places, keep = () => true, harvestMode = false) {
         placeId: place.id,
         plantId: entry.plantId,
         coordinates: entryPosition(place, entry),
+        own: Boolean(entry.coordinates),
         abundance: entry.abundance,
         label: entryName(entry) + (place.properties.name ? ' · ' + place.properties.name : ''),
         season: harvestMode && entryInSeason(entry)

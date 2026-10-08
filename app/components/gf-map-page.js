@@ -42,7 +42,7 @@ export class GfMapPage extends LitElement {
     _error: { state: true },
     _plantMenu: { state: true },
     _around: { state: true },
-    _edit: { state: true },
+    _editing: { state: true },
     _geo: { state: true },
     _point: { state: true }
   };
@@ -201,9 +201,8 @@ export class GfMapPage extends LitElement {
      *   obs?: import('../core/nearby.js').NearbyObservation[] | null, frame: string }}
      */
     this._around = null;
-    /** Position editing of the selected place on this map: a working copy, saved on "Valider". @type {any} */
-    this._edit = null;
-    this._editFrames = 0;
+    /** The map is in position editing (its ✎ control): the sheets and Autour wait. */
+    this._editing = false;
     /** Commune and altitude of places, looked up once (IGN, cached). @type {Map<string, { city?: string, alt?: number | null }>} */
     this._geo = new Map();
   }
@@ -220,43 +219,27 @@ export class GfMapPage extends LitElement {
     return /** @type {{ city?: string, alt?: number | null }} */ (this._geo.get(key));
   }
 
-  /** @param {import('../core/collections.js').Place} place */
-  #startEdit(place) {
-    this.#aroundAbort?.abort();
-    this._around = null;
-    this._edit = { place, frame: 'edit:' + place.id + ':' + (++this._editFrames) };
-  }
-
-  /** @param {[number, number]} coordinates */
-  #movePin(coordinates) {
-    if (!this._edit) return;
-    const place = this._edit.place;
-    this._edit = { ...this._edit, place: { ...place, geometry: { type: 'Point', coordinates: round(coordinates) }, properties: { ...place.properties, accuracy: null } } };
-  }
-
-  /** @param {number | null} plantId @param {[number, number]} coordinates */
-  #moveEditedPlant(plantId, coordinates) {
-    if (!this._edit) return;
-    this._edit = { ...this._edit, place: withEntry(this._edit.place, plantId, { coordinates: round(coordinates), accuracy: null }) };
-  }
-
-  async #saveEdit() {
-    const edit = this._edit;
-    if (!edit) return;
+  /**
+   * ✓ Valider on the map: moved places and plants, saved place by place.
+   * @param {{ places: { id: string, coordinates: [number, number] }[], plants: { placeId: string, plantId: number | null, coordinates: [number, number] }[] }} moves
+   */
+  async #savePositions({ places, plants }) {
+    const changed = new Map();
+    const get = (/** @type {string} */ id) => changed.get(id) || this._spots.find(s => s.id === id);
+    for (const { id, coordinates } of places) {
+      const place = get(id);
+      if (place) changed.set(id, { ...place, geometry: { type: 'Point', coordinates: round(coordinates) }, properties: { ...place.properties, accuracy: null } });
+    }
+    for (const { placeId, plantId, coordinates } of plants) {
+      const place = get(placeId);
+      if (place) changed.set(placeId, withEntry(place, plantId, { coordinates: round(coordinates), accuracy: null }));
+    }
     try {
-      await savePlace(edit.place);
-      this._edit = null;
-      this.#showToast('Positions enregistrées');
+      for (const place of changed.values()) await savePlace(place);
+      this.#showToast(changed.size > 1 ? `Positions enregistrées (${changed.size} lieux)` : 'Positions enregistrées');
     } catch (error) {
       this.#showToast('Enregistrement impossible : ' + /** @type {Error} */ (error).message);
     }
-  }
-
-  get #editFrame() {
-    const e = this._edit;
-    if (!e) return null;
-    const place = e.place;
-    return { key: e.frame, points: [place.geometry.coordinates, ...place.properties.plants.map(p => entryPosition(place, p))], bottom: 0.15 };
   }
 
   /** @type {AbortController | null} */ #aroundAbort = null;
@@ -265,7 +248,7 @@ export class GfMapPage extends LitElement {
   /** A point was picked on the map (long press, search): its card replaces the place sheet. */
   #onPointInfo() {
     this._point = true;
-    if (this._edit) return;
+    if (this._editing) return;
     this.#aroundAbort?.abort();
     this._around = null;
     if (this.route.spot) this.#navigate({ spot: null });
@@ -471,6 +454,17 @@ export class GfMapPage extends LitElement {
 
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
+    // Lit re-applies object properties on every parent render: the app passing its (unchanged) route again
+    // must not undo the selection this page made with replaceState.
+    if (changed.has('route') && !this.#internalRoute) {
+      if (this.route === this.#parentRoute && this.#ownRoute) {
+        this.route = this.#ownRoute;
+        this.#internalRoute = true;
+      } else {
+        this.#parentRoute = this.route;
+        this.#ownRoute = null;
+      }
+    }
     if (changed.has('route') && this.route.plant && !this._plants.includes(this.route.plant)) {
       this._plants = [this.route.plant];
     }
@@ -483,6 +477,9 @@ export class GfMapPage extends LitElement {
   }
 
   #internalRoute = false;
+  /** Route last received from the app, and the one this page navigated to since (replaceState). @type {any} */
+  #parentRoute = null;
+  /** @type {any} */ #ownRoute = null;
   #frames = 0;
   /** @type {string | null} */ #frameKey = null;
 
@@ -520,9 +517,10 @@ export class GfMapPage extends LitElement {
       plant: this._plants.length === 1 ? this._plants[0] : undefined
     });
     history.replaceState(null, '', hash);
-    if (next.spot !== this.route.spot) this.#frameKey = null;
+    // Every place selected is framed with all its plants (above its sheet).
+    if (next.spot !== this.route.spot) this.#frameKey = next.spot ? next.spot + ':' + (++this.#frames) : null;
     this.#internalRoute = true;
-    this.route = parse(hash);
+    this.route = this.#ownRoute = parse(hash);
   }
 
   get #filtered() {
@@ -579,11 +577,11 @@ export class GfMapPage extends LitElement {
           @click=${() => this.#navigate({ season: !this.route.season, spot: null })}>En saison · ${seasonCount}</button>` : nothing}
         <button type="button" aria-expanded=${this._plantMenu ? 'true' : 'false'} aria-pressed=${this._plants.length ? 'true' : 'false'}
           @click=${() => { this._plantMenu = !this._plantMenu; }}>Plantes${this._plants.length ? ' · ' + this._plants.length : ''} ▾</button>
-        <button type="button" class="around-toggle" ?disabled=${Boolean(this._edit)} aria-pressed=${this._around ? 'true' : 'false'}
+        <button type="button" class="around-toggle" ?disabled=${this._editing} aria-pressed=${this._around ? 'true' : 'false'}
           title="Plantes observées autour (iNaturalist)" @click=${() => this.#toggleAround()}>Autour</button>
         <div class="segmented" role="group" aria-label="Affichage">
           <button type="button" aria-pressed=${this._view === 'map' ? 'true' : 'false'} @click=${() => { this._view = 'map'; }}>Carte</button>
-          <button type="button" aria-pressed=${this._view === 'list' ? 'true' : 'false'} @click=${() => { this._view = 'list'; }}>Liste</button>
+          <button type="button" ?disabled=${this._editing} aria-pressed=${this._view === 'list' ? 'true' : 'false'} @click=${() => { this._view = 'list'; }}>Liste</button>
         </div>
         ${this._plantMenu ? html`
           <div class="plant-menu">
@@ -595,38 +593,28 @@ export class GfMapPage extends LitElement {
       <div class="body" @click=${() => { if (this._plantMenu) this._plantMenu = false; }}>
         ${this._view === 'map' ? html`
           <gf-map
-            .spots=${this._edit ? spots.filter(s => s.id !== this._edit.place.id) : spots}
-            .selectedId=${this._edit ? null : this.route.spot}
-            .plants=${this._edit ? plantMarkers([this._edit.place], () => true, this.#harvest) : this.#plantMarkers(spots)}
-            .pin=${this._edit ? this._edit.place.geometry.coordinates : null}
-            .pinDraggable=${Boolean(this._edit)}
-            ?draggable-plants=${Boolean(this._edit)}
-            plant-zoom=${this._edit ? 0 : 16}
-            @pin-move=${e => this.#movePin(e.detail.coordinates)}
-            @plant-move=${e => this.#moveEditedPlant(e.detail.plantId, e.detail.coordinates)}
-            @map-longpress=${e => this.#movePin(e.detail.coordinates)}
+            .spots=${spots}
+            .selectedId=${this.route.spot}
+            .plants=${this.#plantMarkers(spots)}
+            plant-zoom="16"
+            editable
+            ?editing=${this._editing}
+            @edit-change=${e => {
+              this._editing = e.detail.editing;
+              if (this._editing) { this.#aroundAbort?.abort(); this._around = null; }
+            }}
+            @positions-save=${e => this.#savePositions(e.detail)}
             .selectedPlant=${this.route.spot && this.route.focus ? this.route.spot + ':' + this.route.focus : null}
             remember
-            search
-            legend
             @point-info=${() => this.#onPointInfo()}
             @point-close=${() => { this._point = false; }}
-            .frame=${this.#editFrame || this.#aroundFrame || this.#frame}
+            .frame=${this.#aroundFrame || this.#frame}
             .area=${this.#area}
             ?fit=${Boolean(this._plants.length && !this.#frameKey)}
-            @spot-select=${e => { if (!this._edit) { this.#hidePoint(); this.#navigate({ spot: e.detail.id }); } }}
-            @plant-select=${e => { if (!this._edit) this.#navigate({ spot: e.detail.placeId, focus: e.detail.plantId }); }}
+            @spot-select=${e => { this.#hidePoint(); this.#navigate({ spot: e.detail.id }); }}
+            @plant-select=${e => this.#navigate({ spot: e.detail.placeId, focus: e.detail.plantId })}
           ></gf-map>
-          ${this._edit ? html`
-            <section class="sheet editbar" aria-label="Modifier les positions">
-              <h2>${placeTitle(this._edit.place)}</h2>
-              <p class="notes">Glissez le carré (l’endroit) ou les ronds (les plantes) à leur place.</p>
-              <div class="actions">
-                <button class="button primary" type="button" @click=${() => this.#saveEdit()}>✓ Valider</button>
-                <button class="button" type="button" @click=${() => { this._edit = null; }}>Annuler</button>
-              </div>
-            </section>`
-          : this._around ? this.#aroundPanel() : selected ? this.#sheet(selected) : nothing}
+          ${this._editing ? nothing : this._around ? this.#aroundPanel() : selected ? this.#sheet(selected) : nothing}
         ` : this.#list(spots)}
 
         ${!this._spots.length && !this._point ? html`
@@ -634,7 +622,7 @@ export class GfMapPage extends LitElement {
             Aucun lieu enregistré. Sur place, touchez <strong>+</strong> pour créer un lieu et y noter les plantes qui y poussent, ou ouvrez une fiche plante et touchez « Ajouter un lieu ».
           </p>` : nothing}
 
-        ${selected && this._view === 'map' ? nothing : html`
+        ${(selected || this._editing) && this._view === 'map' ? nothing : html`
           <button class="fab" type="button" aria-label="Noter une plante ici"
             @click=${() => this.dispatchEvent(new CustomEvent('open-capture', { bubbles: true, composed: true }))}>+</button>`}
         ${this._toast ? html`<div class="toast" role="status">${this._toast}</div>` : nothing}
@@ -700,7 +688,6 @@ export class GfMapPage extends LitElement {
         ${p.notes ? html`<p class="notes">${p.notes}</p>` : nothing}
         <div class="actions">
           <a class="button primary" href=${href.spot(place.id)}>Ouvrir le lieu</a>
-          <button class="button" type="button" @click=${() => this.#startEdit(place)}>✎ Positions</button>
           <a class="button" href=${href.spot(place.id, null, true)}>+ Plante</a>
           <a class="button" href=${directionsUrl(place)} target="_blank" rel="noopener">Itinéraire</a>
         </div>
