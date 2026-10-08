@@ -16,6 +16,7 @@ import { ui } from '../styles/ui.js';
 import './gf-thumb.js';
 import './gf-voice-button.js';
 import { icon } from '../core/icons.js';
+import { voiceAvailable } from '../core/voice.js';
 
 /** A plant tapped within this distance of an existing place joins it instead of creating a new one. */
 const JOIN_RADIUS = 30;
@@ -63,8 +64,25 @@ export class GfCapture extends LitElement {
     dialog::backdrop { background: rgb(0 0 0 / 40%); }
     header { padding: 14px 16px 10px; border-bottom: 1px solid var(--gf-border); display: grid; gap: 6px; }
     .ask { position: relative; display: grid; }
-    .ask gf-voice-button { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); }
-    .ask:has(gf-voice-button:not([hidden])) input { padding-right: 44px; }
+    /* Right of the field: [✕ effacer] [micro], side by side; the input leaves them room (padding set in render). */
+    input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; display: none; }
+    .tools { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 2px; }
+    .clear {
+      width: 32px;
+      height: 32px;
+      min-height: 0;
+      display: grid;
+      place-items: center;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--gf-text-muted);
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+    .clear:hover { background: var(--gf-surface-2); color: var(--gf-text); }
+    .clear:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     h2 { margin: 0; font-size: 1.1rem; }
     .gps { font-size: 0.85rem; color: var(--gf-text-muted); display: flex; align-items: center; gap: 8px; }
     .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--gf-text-muted); flex: none; }
@@ -196,6 +214,12 @@ export class GfCapture extends LitElement {
     await this.#find(/** @type {HTMLInputElement} */ (event.target).value);
   }
 
+  /** ✕: empty the search, keep typing. */
+  #clear() {
+    this.#find('');
+    /** @type {HTMLInputElement | null} */ (this.renderRoot.querySelector('.ask input'))?.focus();
+  }
+
   /** Typed or dictated. @param {string} q */
   async #find(q) {
     this._query = q;
@@ -295,8 +319,13 @@ export class GfCapture extends LitElement {
           <div class="gps" role="status">${this.#gps()}</div>
           <div class="ask">
             <input type="search" placeholder="Quelle plante ?" aria-label="Chercher une plante" autocomplete="off"
+              style="padding-right:${12 + 34 * (Number(Boolean(this._query)) + Number(voiceAvailable()))}px"
               .value=${this._query} @input=${this.#search} />
-            <gf-voice-button @voice-text=${e => this.#find(e.detail.text)}></gf-voice-button>
+            <span class="tools">
+              ${this._query ? html`<button class="clear" type="button" aria-label="Effacer la recherche" title="Effacer"
+                @mousedown=${e => e.preventDefault()} @click=${this.#clear}>${icon('x-lg')}</button>` : nothing}
+              <gf-voice-button @voice-text=${e => this.#find(e.detail.text)}></gf-voice-button>
+            </span>
           </div>
         </header>
         <div class="body">
