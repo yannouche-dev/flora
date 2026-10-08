@@ -3,6 +3,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { config } from '../config.js';
 import { clearRecentSearches, recentSearches, rememberSearch, setQuery } from '../core/query.js';
 import { StoreController } from '../core/store.js';
+import './gf-voice-button.js';
 
 /** Plant search (top of the results), with a recent-searches menu (shown when focused and empty). */
 export class GfPlantSearch extends LitElement {
@@ -24,6 +25,8 @@ export class GfPlantSearch extends LitElement {
       color: var(--gf-text);
       outline: none;
     }
+    :host(:has(gf-voice-button:not([hidden]))) input { padding-right: 44px; }
+    gf-voice-button { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); }
     input:focus-visible {
       border-color: var(--gf-accent);
       box-shadow: var(--gf-focus);
@@ -68,6 +71,13 @@ export class GfPlantSearch extends LitElement {
     setQuery({ q }, { debounce: config.searchDebounce });
     this._open = !q;
     this._active = -1;
+  }
+
+  /** Dictated: the query follows the voice, and is remembered once final. @param {CustomEvent<{ text: string, final: boolean }>} event */
+  #onVoice({ detail: { text, final } }) {
+    setQuery({ q: text });
+    this._open = false;
+    if (final && text) rememberSearch(text);
   }
 
   /** @param {string} q */
@@ -121,6 +131,7 @@ export class GfPlantSearch extends LitElement {
         @focus=${() => { this._open = true; }}
         @blur=${() => { setTimeout(() => { this._open = false; }, 150); }}
       />
+      ${status === 'ready' ? html`<gf-voice-button @voice-text=${this.#onVoice}></gf-voice-button>` : nothing}
       ${recent.length ? html`
         <ul id="recent" role="listbox" aria-label="Recherches récentes">
           <li class="title" role="presentation">

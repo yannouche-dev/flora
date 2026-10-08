@@ -10,9 +10,11 @@ import {
   saveCollection, withEntry, withPlant
 } from '../core/collections.js';
 import { store, StoreController } from '../core/store.js';
+import { lookalikeWarning } from '../core/lookalikes.js';
 import { statusWarning } from './gf-status.js';
 import { ui } from '../styles/ui.js';
 import './gf-thumb.js';
+import './gf-voice-button.js';
 
 /** A plant tapped within this distance of an existing place joins it instead of creating a new one. */
 const JOIN_RADIUS = 30;
@@ -59,6 +61,9 @@ export class GfCapture extends LitElement {
     dialog[open] { display: flex; }
     dialog::backdrop { background: rgb(0 0 0 / 40%); }
     header { padding: 14px 16px 10px; border-bottom: 1px solid var(--gf-border); display: grid; gap: 6px; }
+    .ask { position: relative; display: grid; }
+    .ask gf-voice-button { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); }
+    .ask:has(gf-voice-button:not([hidden])) input { padding-right: 44px; }
     h2 { margin: 0; font-size: 1.1rem; }
     .gps { font-size: 0.85rem; color: var(--gf-text-muted); display: flex; align-items: center; gap: 8px; }
     .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--gf-text-muted); flex: none; }
@@ -97,6 +102,7 @@ export class GfCapture extends LitElement {
     }
     .toast .warn { color: #fecaca; font-weight: 600; font-size: 0.85rem; margin-bottom: 4px; }
     .toast .warn a { color: inherit; }
+    .toast .warn.lookalike { color: #fde68a; }
     .toast .row { display: flex; gap: 12px; align-items: center; }
     .toast .row span { flex: 1; }
   `];
@@ -118,7 +124,7 @@ export class GfCapture extends LitElement {
     this._results = [];
     this._harvestToday = true;
     this._busy = false;
-    /** @type {{ text: string, undo: () => Promise<void>, details: string, warning?: string | null, plantId?: number } | null} */
+    /** @type {{ text: string, undo: () => Promise<void>, details: string, warning?: string | null, lookalike?: string | null, plantId?: number } | null} */
     this._toast = null;
   }
 
@@ -186,9 +192,14 @@ export class GfCapture extends LitElement {
 
   /** @param {Event} event */
   async #search(event) {
-    const q = /** @type {HTMLInputElement} */ (event.target).value;
+    await this.#find(/** @type {HTMLInputElement} */ (event.target).value);
+  }
+
+  /** Typed or dictated. @param {string} q */
+  async #find(q) {
     this._query = q;
-    this._results = q.trim().length >= 2 ? await searchPlants(q, 10) : [];
+    const results = q.trim().length >= 2 ? await searchPlants(q, 10) : [];
+    if (this._query === q) this._results = results;
   }
 
   /** Records the plant here. @param {any} summaryOrPlant */
@@ -220,8 +231,11 @@ export class GfCapture extends LitElement {
       // Protected or regulated where it was just noted: say so right away (INPN statuses).
       const record = plant.statuses ? plant : await db.get('plants', plant.id).catch(() => null);
       const warning = await statusWarning(record, fix.coordinates);
+      // Mode cueillette: the plants it can be mistaken for (Anses / Centres antipoison).
+      const lookalike = this.#store.state.harvestMode ? await lookalikeWarning(plant) : null;
       this.#showToast({
         warning,
+        lookalike,
         plantId: plant.id,
         text: before ? `${name} ajouté au lieu « ${placeTitle(before)} »${harvest ? ' · récolte notée' : ''}` : `${name} noté ici (nouveau lieu)${harvest ? ' · récolte notée' : ''}`,
         details: href.spot(saved.id),
@@ -242,7 +256,7 @@ export class GfCapture extends LitElement {
   #showToast(toast) {
     clearTimeout(this.#toastTimer);
     this._toast = toast;
-    this.#toastTimer = setTimeout(() => { this._toast = null; }, 7000);
+    this.#toastTimer = setTimeout(() => { this._toast = null; }, toast.lookalike ? 12000 : 7000);
   }
 
   async #undo() {
@@ -278,8 +292,11 @@ export class GfCapture extends LitElement {
         <header>
           <h2>Noter ici</h2>
           <div class="gps" role="status">${this.#gps()}</div>
-          <input type="search" placeholder="Quelle plante ?" aria-label="Chercher une plante" autocomplete="off"
-            .value=${this._query} @input=${this.#search} />
+          <div class="ask">
+            <input type="search" placeholder="Quelle plante ?" aria-label="Chercher une plante" autocomplete="off"
+              .value=${this._query} @input=${this.#search} />
+            <gf-voice-button @voice-text=${e => this.#find(e.detail.text)}></gf-voice-button>
+          </div>
         </header>
         <div class="body">
           ${this._results.length ? html`<ul class="results">${this._results.map(r => html`
@@ -302,6 +319,7 @@ export class GfCapture extends LitElement {
       </dialog>
       ${t ? html`<div class="toast" role="status">
         ${t.warning ? html`<div class="warn" role="alert">${t.warning} — <a href=${href.plant(/** @type {any} */ (t).plantId)}>voir la fiche</a></div>` : nothing}
+        ${t.lookalike ? html`<div class="warn lookalike" role="alert">${t.lookalike} — <a href=${href.plant(/** @type {any} */ (t).plantId)}>comment les distinguer</a></div>` : nothing}
         <div class="row"><span>${t.text}</span>
           <button class="link" type="button" @click=${this.#undo}>Annuler</button>
           <a class="link" href=${t.details} @click=${() => { this._toast = null; }}>Détails</a>

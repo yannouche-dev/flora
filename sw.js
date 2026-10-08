@@ -1,12 +1,13 @@
 // GeoFlora service worker — hand-written, no tooling.
 //  - app shell: precached, then stale-while-revalidate (a deploy is picked up on the next launch)
 //  - data/*.json: network only — the dataset lives in IndexedDB, so it is not duplicated here
-//    (except data/territories.json: department outlines, small and static, precached)
+//    (except data/territories.json and data/lookalikes.json: small and static, precached — the look-alike
+//    warnings must work offline, where the picking happens)
 //  - remote images (Wikimedia, iNaturalist): stale-while-revalidate, capped
 //  - IGN map tiles: cache-first, capped — areas already viewed stay available offline
 //  - remote API JSON: not cached here (app/core/sources.js caches it in IndexedDB)
 
-const VERSION = 'v32';
+const VERSION = 'v33';
 const SHELL_CACHE = 'geoflora-shell-' + VERSION;
 const IMAGE_CACHE = 'geoflora-images-' + VERSION;
 const IMAGE_LIMIT = 400;
@@ -26,6 +27,7 @@ const SHELL = [
   'vendor/leaflet.css',
   'lib/plant-sources.mjs',
   'data/territories.json',
+  'data/lookalikes.json',
   'assets/icons/icon.svg',
   'assets/icons/icon-192.png',
   'assets/icons/icon-512.png',
@@ -43,6 +45,9 @@ const SHELL = [
   'app/core/portable.js',
   'app/core/territory.js',
   'app/core/thumb.js',
+  'app/core/lookalikes.js',
+  'app/core/protected.js',
+  'app/core/voice.js',
   'app/core/nearby.js',
   'app/core/geoservices.js',
   'app/core/media.js',
@@ -56,6 +61,8 @@ const SHELL = [
   'app/core/store.js',
   'app/workers/search.worker.js',
   'app/components/gf-app.js',
+  'app/components/gf-lookalikes.js',
+  'app/components/gf-voice-button.js',
   'app/components/gf-active-filters.js',
   'app/components/gf-add-to.js',
   'app/components/gf-attribution.js',
@@ -115,7 +122,7 @@ self.addEventListener('fetch', event => {
 
   if (url.origin === self.location.origin) {
     // The flora lives in IndexedDB; only the small, static department outlines are part of the shell.
-    if (url.pathname.includes('/data/') && !url.pathname.endsWith('/territories.json')) return;
+    if (url.pathname.includes('/data/') && !/\/(territories|lookalikes)\.json$/.test(url.pathname)) return;
     // SPA navigations (any hash route) are served by the cached index.html.
     const key = request.mode === 'navigate' ? 'index.html' : request;
     event.respondWith(staleWhileRevalidate(event, SHELL_CACHE, key));

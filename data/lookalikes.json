@@ -1,0 +1,178 @@
+{
+  "about": "Plantes comestibles et plantes toxiques avec lesquelles elles sont confondues. Uniquement les confusions et critères cités par les sources ci-dessous (Anses et Centres antipoison). Un taxon d'un seul mot désigne tout le genre (« Digitalis sp. » dans la source).",
+  "sources": {
+    "aide-memoire": {
+      "title": "Plantes toxiques et plantes comestibles : attention aux confusions ! (aide-mémoire)",
+      "publisher": "Anses et Centres antipoison",
+      "date": "2020-02",
+      "url": "https://www.anses.fr/fr/system/files/2020-02_aide_memoire-plantes_toxiques.pdf"
+    },
+    "vigilanses-8": {
+      "title": "Confusion entre plantes comestibles et toxiques : gare aux ressemblances ! (Vigil’Anses n°8)",
+      "publisher": "Anses, réseau des Centres antipoison",
+      "date": "2019-06",
+      "url": "https://vigilanses.anses.fr/sites/default/files/VigilAnsesN8_Juin2019_1.pdf"
+    },
+    "colchique": {
+      "title": "Confusion entre colchique et ail des ours : des intoxications parfois mortelles",
+      "publisher": "Anses et Centres antipoison",
+      "date": "2025-04-07",
+      "url": "https://www.anses.fr/fr/content/actu-confusion-colchique-ail-des-ours"
+    },
+    "gare-aux-confusions": {
+      "title": "Plante comestible et plante toxique : gare aux confusions",
+      "publisher": "Anses et Centres antipoison",
+      "date": "2020-08-17",
+      "url": "https://www.anses.fr/fr/content/plante-comestible-et-plante-toxique-gare-aux-confusions"
+    },
+    "ete": {
+      "title": "Cet été, à quelles plantes faire attention pour éviter les intoxications ?",
+      "publisher": "Anses (S. Sinno-Tellier), republié de The Conversation",
+      "date": "2022-08-01",
+      "url": "https://www.anses.fr/fr/content/cet-ete-quelles-plantes-faire-attention-pour-eviter-les-intoxications"
+    }
+  },
+  "pairs": [
+    {
+      "toxic": [{ "taxon": "Colchicum", "label": "Colchique" }],
+      "edible": [{ "taxon": "Allium ursinum", "label": "Ail des ours" }, { "taxon": "Allium polyanthum", "label": "Poireau sauvage" }],
+      "part": "feuilles",
+      "severity": "mortel",
+      "tell": [
+        "Ail des ours : odeur d’ail quand on froisse la feuille ; feuilles ovales et pointues, portées par une tige ; bulbe blanc et allongé.",
+        "Colchique : feuilles plus rigides, charnues, à bout arrondi, sans tige, qui semblent sortir directement du sol ; bulbe rond et foncé ; fleurs mauves seulement en automne.",
+        "Vérifier l’odeur d’ail au froissage de chaque feuille, ne pas cueillir par brassées."
+      ],
+      "symptoms": "Signes digestifs (vomissements, diarrhée), vertiges, alopécie, agranulocytose, troubles du rythme, arrêt cardiaque, coma (voire décès).",
+      "sources": ["colchique", "aide-memoire", "vigilanses-8"]
+    },
+    {
+      "toxic": [{ "taxon": "Convallaria majalis", "label": "Muguet" }],
+      "edible": [{ "taxon": "Allium ursinum", "label": "Ail des ours" }],
+      "part": "feuilles",
+      "severity": "toxique",
+      "tell": [],
+      "sources": ["vigilanses-8"]
+    },
+    {
+      "toxic": [{ "taxon": "Digitalis", "label": "Digitale" }],
+      "edible": [{ "taxon": "Symphytum", "label": "Consoude" }],
+      "part": "feuilles",
+      "severity": "mortel",
+      "tell": ["Confusion des feuilles, surtout quand la digitale n’est pas fleurie. Toutes les parties de la digitale sont toxiques."],
+      "symptoms": "Signes digestifs (vomissements, diarrhée), bradycardie sévère, hypotension artérielle, vertiges, céphalées (voire décès).",
+      "sources": ["aide-memoire", "vigilanses-8", "ete"]
+    },
+    {
+      "toxic": [{ "taxon": "Veratrum", "label": "Vérâtre" }],
+      "edible": [{ "taxon": "Gentiana lutea", "label": "Gentiane jaune" }],
+      "part": "racines",
+      "severity": "mortel",
+      "tell": ["Confusion des racines, récoltées l’été pour les apéritifs et liqueurs ; celles du vérâtre blanc concentrent ses alcaloïdes."],
+      "symptoms": "Signes digestifs (vomissements, diarrhée), céphalées, troubles du rythme, hypotension artérielle, hypersudation (voire convulsions, choc cardiovasculaire, décès).",
+      "sources": ["aide-memoire", "vigilanses-8", "ete"]
+    },
+    {
+      "toxic": [{ "taxon": "Oenanthe crocata", "label": "Œnanthe safranée" }],
+      "edible": [{ "taxon": "Daucus carota", "label": "Carotte sauvage" }],
+      "part": "racine",
+      "severity": "mortel",
+      "tell": ["Confusion de la racine ou du tubercule."],
+      "symptoms": "Signes digestifs (vomissements, diarrhée), céphalées, insuffisance rénale aiguë, arrêt cardiaque (voire convulsions, coma, décès).",
+      "sources": ["aide-memoire", "vigilanses-8", "gare-aux-confusions"]
+    },
+    {
+      "toxic": [{ "taxon": "Aconitum napellus", "label": "Aconit napel" }],
+      "edible": [{ "taxon": "Molopospermum peloponnesiacum", "label": "Couscouil" }],
+      "part": "feuilles",
+      "severity": "mortel",
+      "tell": ["Confusion d’une plante non fleurie : les fleurs bleu-violacé en forme de casque de l’aconit n’étaient pas encore visibles."],
+      "sources": ["vigilanses-8"]
+    },
+    {
+      "toxic": [{ "taxon": "Atropa bella-donna", "label": "Belladone" }],
+      "edible": [{ "taxon": "Vitis vinifera", "label": "Raisin" }, { "taxon": "Vaccinium", "label": "Myrtille" }, { "taxon": "Ribes nigrum", "label": "Cassis" }],
+      "part": "baies",
+      "severity": "mortel",
+      "tell": ["Belladone : baies noires et luisantes, comme de petites cerises, à la saveur douce et sucrée trompeuse."],
+      "symptoms": "Sécheresse buccale et oculaire, troubles de la vue, tachycardie, hallucinations, confusion, coma (voire décès).",
+      "sources": ["aide-memoire", "vigilanses-8", "ete"]
+    },
+    {
+      "toxic": [{ "taxon": "Conium maculatum", "label": "Grande ciguë" }, { "taxon": "Aethusa cynapium", "label": "Petite ciguë" }],
+      "edible": [{ "taxon": "Petroselinum crispum", "label": "Persil plat" }],
+      "part": "feuilles",
+      "severity": "toxique",
+      "tell": [],
+      "sources": ["vigilanses-8"]
+    },
+    {
+      "toxic": [{ "taxon": "Arum", "label": "Arum" }],
+      "edible": [{ "taxon": "Rumex", "label": "Oseille" }],
+      "part": "feuilles",
+      "severity": "toxique",
+      "tell": [],
+      "symptoms": "Douleurs abdominales, irritation oropharyngée (voire brûlure et œdème buccal).",
+      "sources": ["aide-memoire", "vigilanses-8"]
+    },
+    {
+      "toxic": [{ "taxon": "Laburnum anagyroides", "label": "Cytise" }],
+      "edible": [{ "taxon": "Robinia pseudoacacia", "label": "Acacia (robinier)" }],
+      "part": "fleurs",
+      "severity": "toxique",
+      "tell": ["Confusion des fleurs, celles de l’acacia étant consommées en beignets."],
+      "symptoms": "Signes digestifs (vomissements, diarrhée), tachycardie, asthénie, vertiges, céphalées (voire tremblements, confusion, convulsions).",
+      "sources": ["aide-memoire", "vigilanses-8"]
+    },
+    {
+      "toxic": [{ "taxon": "Aesculus hippocastanum", "label": "Marron d’Inde" }],
+      "edible": [{ "taxon": "Castanea sativa", "label": "Châtaigne" }],
+      "part": "graines",
+      "severity": "toxique",
+      "tell": [
+        "Châtaigne : graine aplatie, bogue aux piquants longs et nombreux.",
+        "Marron d’Inde : graine arrondie, bogue aux petits pics courts et espacés."
+      ],
+      "symptoms": "Signes digestifs (vomissements, diarrhée), irritation oro-pharyngée.",
+      "sources": ["aide-memoire", "vigilanses-8"]
+    },
+    {
+      "toxic": [{ "taxon": "Sambucus ebulus", "label": "Sureau yèble" }],
+      "edible": [{ "taxon": "Sambucus nigra", "label": "Sureau noir" }],
+      "part": "baies",
+      "severity": "toxique",
+      "tell": [
+        "Sureau yèble : fruits dressés vers le haut ; plante herbacée, sans bois.",
+        "Sureau noir : fruits pendants ; arbuste."
+      ],
+      "sources": ["ete"]
+    },
+    {
+      "toxic": [{ "taxon": "Lonicera nigra", "label": "Chèvrefeuille à baies noires" }],
+      "edible": [{ "taxon": "Vaccinium myrtillus", "label": "Myrtille" }],
+      "part": "baies",
+      "severity": "toxique",
+      "tell": [
+        "Chèvrefeuille à baies noires : baies soudées par deux.",
+        "Myrtille : baies bleuâtres et isolées."
+      ],
+      "sources": ["ete"]
+    },
+    {
+      "toxic": [{ "taxon": "Nerium oleander", "label": "Laurier rose" }, { "taxon": "Prunus laurocerasus", "label": "Laurier cerise" }],
+      "edible": [{ "taxon": "Laurus nobilis", "label": "Laurier sauce" }],
+      "part": "feuilles",
+      "severity": "toxique",
+      "tell": ["Seul le laurier sauce (Laurus nobilis) est comestible ; le laurier rose est hautement toxique."],
+      "sources": ["ete", "vigilanses-8"]
+    },
+    {
+      "toxic": [{ "taxon": "Datura stramonium", "label": "Datura" }],
+      "edible": [{ "taxon": "Tetragonia tetragonoides", "label": "Tétragone cornue" }],
+      "part": "feuilles",
+      "severity": "toxique",
+      "tell": [],
+      "sources": ["gare-aux-confusions"]
+    }
+  ]
+}
