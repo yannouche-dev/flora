@@ -3,6 +3,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { config } from '../config.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
 import { activeFilterCount, clearFilters, lastSearchHash } from '../core/query.js';
+import { href } from '../core/router.js';
 import { plantViewOf, setPlantView, StoreController } from '../core/store.js';
 import { ui } from '../styles/ui.js';
 import './gf-results-bar.js';
@@ -38,7 +39,8 @@ export class GfFlora extends LitElement {
   static properties = {
     route: { attribute: false },
     _layout: { state: true },
-    _grid: { state: true }
+    _grid: { state: true },
+    _slide: { state: true }
   };
 
   static styles = [ui, css`
@@ -150,6 +152,18 @@ export class GfFlora extends LitElement {
     @keyframes slide-in { from { transform: translateX(30%); opacity: 0; } }
     @media (prefers-reduced-motion: reduce) { .sheet-plant { animation: none; } }
 
+    /* Previous / next plant of the results: arrows in the plant header, swipe on the sheet. */
+    .nav { display: flex; align-items: center; gap: 0; flex: none; }
+    .nav .pos { font-size: 0.75rem; color: var(--gf-text-muted); font-variant-numeric: tabular-nums; min-width: 3.5em; text-align: center; }
+    .nav .icon-btn[disabled] { opacity: 0.35; cursor: default; }
+    .swipe { flex: 1; min-height: 0; display: flex; flex-direction: column; touch-action: pan-y; }
+    .swipe.dragging { transition: none; }
+    .swipe.next { animation: from-right 0.18s ease-out; }
+    .swipe.prev { animation: from-left 0.18s ease-out; }
+    @keyframes from-right { from { transform: translateX(24px); opacity: 0.4; } }
+    @keyframes from-left { from { transform: translateX(-24px); opacity: 0.4; } }
+    @media (prefers-reduced-motion: reduce) { .swipe.next, .swipe.prev { animation: none; } }
+
     /* Filters (tablet and phone): bottom sheet. */
     dialog {
       position: fixed;
@@ -195,6 +209,99 @@ export class GfFlora extends LitElement {
     this.route = { name: 'search' };
     this._layout = readLayout();
     this._grid = false;
+    /** Direction of the last previous / next move, for its short slide. @type {'' | 'next' | 'prev'} */
+    this._slide = '';
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    addEventListener('keydown', this.#onKey);
+  }
+
+  // ── Previous / next plant of the results ─────────────────────────────────
+
+  /** Where the open plant sits in the results (null when it is not among them, e.g. opened from a link). */
+  #position() {
+    const id = this.#plantId;
+    const items = this.#store.state.results.items;
+    const i = id === null ? -1 : items.findIndex(p => p.id === id);
+    return i < 0 ? null : { i, n: items.length, prev: items[i - 1]?.id ?? null, next: items[i + 1]?.id ?? null };
+  }
+
+  /** @param {'prev' | 'next'} dir */
+  #step(dir) {
+    const pos = this.#position();
+    const id = pos?.[dir];
+    if (!id) return;
+    this._slide = dir;
+    // Replace, not push: « Résultats » / back still leads to the list.
+    location.replace(href.plant(id));
+  }
+
+  /** ← → on the keyboard, when not typing. @param {KeyboardEvent} e */
+  #onKey = e => {
+    if (this.#plantId === null || e.altKey || e.ctrlKey || e.metaKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+    const target = /** @type {HTMLElement} */ (e.composedPath()[0]);
+    if (target?.closest?.('input, textarea, select, [contenteditable], gf-map') || target?.isContentEditable) return;
+    e.preventDefault();
+    this.#step(e.key === 'ArrowLeft' ? 'prev' : 'next');
+  };
+
+  /** Swipe: a mostly horizontal stroke on the sheet, not started on a map, a field or something that scrolls sideways. */
+  #touch = /** @type {{ x: number, y: number, t: number, el: HTMLElement } | null} */ (null);
+
+  /** @param {TouchEvent} e */
+  #onTouchStart(e) {
+    if (e.touches.length !== 1) { this.#touch = null; return; }
+    const path = /** @type {HTMLElement[]} */ (e.composedPath());
+    const blocked = path.some(el => el instanceof HTMLElement && (el.matches('input, textarea, select, gf-map, .gallery, .leaflet-container')
+      || (el.scrollWidth > el.clientWidth + 2 && /auto|scroll/.test(getComputedStyle(el).overflowX))));
+    const t = e.touches[0];
+    this.#touch = blocked ? null : { x: t.clientX, y: t.clientY, t: Date.now(), el: /** @type {HTMLElement} */ (e.currentTarget) };
+  }
+
+  /** @param {TouchEvent} e */
+  #onTouchMove(e) {
+    const s = this.#touch;
+    if (!s) return;
+    const t = e.touches[0];
+    const dx = t.clientX - s.x, dy = t.clientY - s.y;
+    if (Math.abs(dx) > 12 && Math.abs(dx) > 1.5 * Math.abs(dy)) {
+      s.el.classList.add('dragging');
+      s.el.style.transform = `translateX(${dx * 0.35}px)`;
+    }
+  }
+
+  /** @param {TouchEvent} e */
+  #onTouchEnd(e) {
+    const s = this.#touch;
+    this.#touch = null;
+    if (!s) return;
+    s.el.classList.remove('dragging');
+    s.el.style.transform = '';
+    const t = e.changedTouches[0];
+    const dx = t.clientX - s.x, dy = t.clientY - s.y;
+    if (Math.abs(dx) >= 60 && Math.abs(dx) > 1.5 * Math.abs(dy) && Date.now() - s.t < 800) this.#step(dx < 0 ? 'next' : 'prev');
+  }
+
+  /** Arrows and « 3 / 17 ». */
+  #nav() {
+    const pos = this.#position();
+    if (!pos || pos.n < 2) return nothing;
+    return html`<span class="nav" role="group" aria-label="Plantes des résultats">
+      <button class="icon-btn" type="button" title="Plante précédente (←)" aria-label="Plante précédente" ?disabled=${!pos.prev}
+        @click=${() => this.#step('prev')}>${icon('chevron-left')}</button>
+      <span class="pos" aria-live="polite">${pos.i + 1} / ${pos.n.toLocaleString('fr-FR')}</span>
+      <button class="icon-btn" type="button" title="Plante suivante (→)" aria-label="Plante suivante" ?disabled=${!pos.next}
+        @click=${() => this.#step('next')}>${icon('chevron-right')}</button>
+    </span>`;
+  }
+
+  /** The plant sheet inside its swipe surface (keyed by plant, so the slide plays on each move). @param {any} detail */
+  #swipe(detail) {
+    return html`<div class="swipe ${this._slide}" @touchstart=${this.#onTouchStart} @touchmove=${this.#onTouchMove}
+      @touchend=${this.#onTouchEnd} @touchcancel=${() => { this.#touch = null; }}
+      @animationend=${() => { this._slide = ''; }}>${detail}</div>`;
   }
 
   /** @param {Map<string, any>} changed */
@@ -219,6 +326,7 @@ export class GfFlora extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    removeEventListener('keydown', this.#onKey);
     this.#resultsObserver.disconnect();
     this.#observed = null;
   }
@@ -418,11 +526,12 @@ export class GfFlora extends LitElement {
           ${resultsFolded ? nothing : this.#split('plant')}
           <section class="pane plant ${resultsFolded ? 'fill' : ''}" aria-label="Plante" style=${resultsFolded ? '' : `width:${this._layout.plant}px`}>
             ${this.#head('plant', 'Plante', html`
+              ${this.#nav()}
               ${plantSwitch}
               <a class="icon-btn" href=${'#/plant/' + plantId} title="Ouvrir la fiche seule" aria-label="Ouvrir la fiche seule"
                 @click=${e => { e.preventDefault(); this.#fold('results', true); }}>${icon('arrows-angle-expand')}</a>
               <button class="icon-btn" type="button" title="Fermer la fiche" aria-label="Fermer la fiche" @click=${() => this.#closePlant()}>${icon('x-lg')}</button>`)}
-            <div class="pane-body">${plantDetail}</div>
+            <div class="pane-body">${this.#swipe(plantDetail)}</div>
           </section>`) : nothing}
       </div>
 
@@ -431,9 +540,10 @@ export class GfFlora extends LitElement {
           <div class="pane-head">
             <button class="link back" type="button" @click=${() => this.#closePlant()}>${icon('arrow-left')} Résultats</button>
             <h2></h2>
+            ${this.#nav()}
             ${plantSwitch}
           </div>
-          <div class="pane-body" style="display:flex;flex-direction:column;overflow:hidden">${plantDetail}</div>
+          <div class="pane-body" style="display:flex;flex-direction:column;overflow:hidden">${this.#swipe(plantDetail)}</div>
         </section>` : nothing}
 
       ${wide ? nothing : html`

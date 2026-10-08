@@ -178,7 +178,9 @@ export class GfPlantList extends LitElement {
    * A new search → back to the top. The same search refreshed (♥, a collection changed: a line action)
    * → the list stays where it is. Coming back from a plant → where it was.
    */
-  updated() {
+  /** @param {Map<string, unknown>} changed */
+  updated(changed) {
+    if (changed.has('current')) this.#reveal();
     const { results: { items }, query } = this.#store.state;
     if (items === this.#items) return;
     const key = searchKey(query);
@@ -189,6 +191,23 @@ export class GfPlantList extends LitElement {
     const top = first && saved.key === key ? saved.scrollTop : 0;
     this.scrollTop = top;
     this._scrollTop = top;
+  }
+
+  /** Height of a row in the current display. */
+  get #rowHeight() {
+    const gridView = gridViewOf(this.#store.state);
+    return this.grid ? (gridView === 'epure' ? ILLUSTRATED_ROW_HEIGHT : GRID_ROW_HEIGHT) : this.#store.state.compact ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
+  }
+
+  /** The open plant's row stays in view as the plant sheet moves to the previous / next one. */
+  #reveal() {
+    const i = this.current === null ? -1 : this.#store.state.results.items.findIndex(p => p.id === this.current);
+    if (i < 0 || !this.clientHeight) return;
+    const h = this.#rowHeight, offset = this.grid ? HEADER_HEIGHT : 0;
+    const top = offset + i * h;
+    if (top < this.scrollTop + offset) this.scrollTop = top - offset;
+    else if (top + h > this.scrollTop + this.clientHeight) this.scrollTop = top + h - this.clientHeight;
+    this._scrollTop = this.scrollTop;
   }
 
   /** Header click: sort by the column, again to reverse. @param {string} key */
@@ -230,7 +249,7 @@ export class GfPlantList extends LitElement {
       return html`${header}<p class="empty">Aucune plante ne correspond à cette recherche.</p>`;
     }
 
-    const rowHeight = this.grid ? (gridView === 'epure' ? ILLUSTRATED_ROW_HEIGHT : GRID_ROW_HEIGHT) : compact ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
+    const rowHeight = this.#rowHeight;
     const offset = this.grid ? HEADER_HEIGHT : 0;
     const top = Math.max(0, this._scrollTop - offset);
     const first = Math.max(0, Math.floor(top / rowHeight) - OVERSCAN);
