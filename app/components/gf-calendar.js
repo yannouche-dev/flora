@@ -43,6 +43,8 @@ export class GfCalendar extends LitElement {
     plant: { attribute: false },
     /** Mode of the sheet showing the calendar: its modules decide whether iNaturalist is asked. */
     mode: {},
+    /** Inside a titled block (plant sheet): no title of its own. */
+    notitle: { type: Boolean },
     _phenology: { state: true }
   };
 
@@ -82,7 +84,12 @@ export class GfCalendar extends LitElement {
     this.plant = null;
     /** undefined = loading, null = unavailable. @type {any} */
     this._phenology = undefined;
+    this.notitle = false;
+    this._empty = false;
   }
+
+  /** Nothing to show: hidden, so the block holding it is not shown either. */
+  updated() { this.hidden = this._empty; }
 
   /** @type {AbortController | null} */
   #abort = null;
@@ -136,11 +143,12 @@ export class GfCalendar extends LitElement {
     const bloomTotal = sum(ph?.flowering);
     const fruitTotal = sum(ph?.fruiting);
     const max = (/** @type {number[]} */ a) => Math.max(1, ...a);
-    if (!flowering.size && !loading && !bloomTotal && !fruitTotal) return nothing;
+    this._empty = !flowering.size && !loading && !bloomTotal && !fruitTotal;
+    if (this._empty) return nothing;
     const now = new Date().getMonth();
 
     return html`
-      <h2>Calendrier</h2>
+      ${this.notitle ? nothing : html`<h2>Calendrier</h2>`}
       <div class="grid" role="table" aria-label="Floraison et fructification par mois">
         <span></span>
         ${MONTHS.map((m, i) => html`<span class="head ${i === now ? 'now' : ''}" aria-label=${MONTH_NAMES[i]}>${m}</span>`)}

@@ -14,6 +14,8 @@ const shortDate = (/** @type {string} */ iso) =>
 export class GfPlantSpots extends LitElement {
   static properties = {
     plantId: { type: Number, attribute: 'plant-id' },
+    /** Inside a titled block (plant sheet): no heading of its own. */
+    notitle: { type: Boolean },
     _spots: { state: true },
     _lists: { state: true },
     _error: { state: true }
@@ -101,7 +103,7 @@ export class GfPlantSpots extends LitElement {
     const lists = this._lists;
     return html`
       <div class="head">
-        <h2 class="kicker" style="margin:0">Dans mes collections${spots.length + lists.length ? ` (${spots.length + lists.length})` : ''}</h2>
+        ${this.notitle ? nothing : html`<h2 class="kicker" style="margin:0">Dans mes collections${spots.length + lists.length ? ` (${spots.length + lists.length})` : ''}</h2>`}
         <a class="primary add" href=${href.newSpot(this.plantId)}>${icon('geo-alt-fill')} Ajouter un lieu</a>
       </div>
       ${lists.length ? html`<div class="chips">${lists.map(c => html`

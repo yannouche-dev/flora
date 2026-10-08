@@ -41,6 +41,10 @@ export class GfStatus extends LitElement {
     _open: { state: true }
   };
 
+  /** Nothing to show for this plant here: hidden (the plant sheet then hides its block). */
+  _empty = true;
+  updated() { this.hidden = this._empty; }
+
   static styles = [ui, css`
     :host { display: block; }
     .box { display: grid; gap: 6px; }
@@ -113,6 +117,7 @@ export class GfStatus extends LitElement {
   render() {
     const plant = this._plant;
     const statuses = plant?.statuses;
+    this._empty = true;
     if (!statuses?.length || this._territory === undefined) return nothing;
     const territory = this._territory;
     const { national, here, elsewhere } = sortStatuses(statuses, territory);
@@ -121,6 +126,7 @@ export class GfStatus extends LitElement {
     const redLists = [...national, ...here].filter(s => s.type === 'LRN' || s.type === 'LRR');
     const away = elsewhere.filter(s => PROTECTION.includes(s.type) || s.type === 'REGL');
     if (!protections.length && !rules.length && !redLists.length && !away.length) return nothing;
+    this._empty = false;
     const place = territory ? (territory.deptName ? `${territory.deptName}, ${territory.regionName}` : territory.regionName) : null;
 
     return html`

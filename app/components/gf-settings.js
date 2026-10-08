@@ -9,6 +9,7 @@ import { icon, MODE_ICONS } from '../core/icons.js';
 import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
+import { SHEET_BLOCKS, blockOrder, blockTitle, isCustomOrder, resetBlockOrder } from '../core/sheet-blocks.js';
 import { ui } from '../styles/ui.js';
 
 export class GfSettings extends LitElement {
@@ -58,6 +59,12 @@ export class GfSettings extends LitElement {
     .module .modes { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; }
     .module .mode { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer; }
     .module .mode svg { color: var(--gf-text-muted); }
+    .block-orders { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin: 8px 0 16px; }
+    .block-order { padding: 10px 12px; }
+    .block-order .head { display: flex; align-items: center; gap: 8px; }
+    .block-order .head button { margin-left: auto; }
+    .block-order ol { margin: 8px 0 0; padding-left: 22px; font-size: 0.88rem; }
+    .block-order li { margin: 2px 0; }
     .module .mode input { width: 18px; height: 18px; margin: 0; }
   `];
 
@@ -227,6 +234,23 @@ export class GfSettings extends LitElement {
       </ul>`;
   }
 
+  /** « Ordre des blocs de la fiche »: each mode's order, and back to the default one. */
+  #blockOrders() {
+    void this.#store.state.sheetBlocks;
+    return html`
+      <h3>Ordre des blocs de la fiche</h3>
+      <p class="muted">Dans une fiche plante, glissez un bloc par sa poignée ${icon('grip-vertical')} pour le déplacer (ou ↑ ↓ au clavier). Chaque mode garde son ordre.</p>
+      <div class="block-orders">
+        ${MODE_KEYS.filter(mode => SHEET_BLOCKS[mode]).map(mode => html`
+          <div class="card block-order">
+            <div class="head">${MODE_ICONS[mode]}<strong>${MODE_LABELS[mode]}</strong>
+              <button type="button" class="small" ?disabled=${!isCustomOrder(mode)} @click=${() => resetBlockOrder(mode)}>Ordre par défaut</button>
+            </div>
+            <ol>${blockOrder(mode).map(k => html`<li>${blockTitle(mode, k)}</li>`)}</ol>
+          </div>`)}
+      </div>`;
+  }
+
   render() {
     const { meta, offline } = this.#store.state;
     return html`
@@ -276,6 +300,8 @@ export class GfSettings extends LitElement {
         </p>
         <p class="muted">Épuré : grandes photos et actions rapides (ajouter à la collection en cours). Standard : l’essentiel pour tous.
           Scientifique : toutes les données, locales et distantes. La grille et la fiche plante ont aussi leur propre choix, qui revient au mode de l’application quand celui-ci change.</p>
+
+        ${this.#blockOrders()}
 
         ${this.#modules()}
 

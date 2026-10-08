@@ -1,5 +1,5 @@
 // @ts-check
-import { LitElement, html, css, nothing } from 'lit';
+import { LitElement, html, css, nothing, repeat } from 'lit';
 import { STATUS_LABELS } from '../config.js';
 import * as db from '../core/db.js';
 import { lastSearchHash } from '../core/query.js';
@@ -17,6 +17,7 @@ import './gf-lookalikes.js';
 import './gf-add-to.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
+import { blockOrder, blockTitle, setBlockOrder } from '../core/sheet-blocks.js';
 
 /** Remote text is untrusted HTML: keep only its text content (DOMParser never runs scripts). */
 function toText(/** @type {string} */ value) {
@@ -186,7 +187,9 @@ export class GfPlantDetail extends LitElement {
     _plant: { state: true },
     _details: { state: true },
     _error: { state: true },
-    _shareNote: { state: true }
+    _shareNote: { state: true },
+    _dragKey: { state: true },
+    _dragOrder: { state: true }
   };
 
   static styles = [ui, css`
@@ -212,6 +215,34 @@ export class GfPlantDetail extends LitElement {
       font-size: 0.8rem;
     }
     section { margin-top: 24px; }
+    /* Blocks below the header: a title with its grip, then the content. Reordered by dragging the grip. */
+    .blocks { display: flex; flex-direction: column; }
+    .block { margin-top: 20px; border-radius: var(--gf-radius); transition: box-shadow 0.15s, background 0.15s; }
+    .block-title { display: flex; align-items: center; gap: 2px; margin: 0 0 8px -6px; }
+    .grip {
+      flex: none;
+      width: 26px;
+      height: 26px;
+      min-height: 0;
+      padding: 0;
+      display: grid;
+      place-items: center;
+      border: 0;
+      border-radius: var(--gf-radius-sm);
+      background: none;
+      color: var(--gf-text-muted);
+      font-size: 0.95rem;
+      cursor: grab;
+      touch-action: none;
+      opacity: 0.6;
+    }
+    .grip:hover, .grip:focus-visible { opacity: 1; background: var(--gf-surface-2); color: var(--gf-text); }
+    .grip:focus-visible { outline: none; box-shadow: var(--gf-focus); }
+    .block.dragging { position: relative; z-index: 2; background: var(--gf-surface); box-shadow: var(--gf-shadow-float); outline: 2px solid var(--gf-accent); outline-offset: 4px; }
+    .block.dragging .grip { cursor: grabbing; opacity: 1; color: var(--gf-accent); }
+    /* A block whose part has nothing to show for this plant (no protection, no look-alike…) is not shown, title included. */
+    .block:has(> .content > [hidden]:only-child) { display: none; }
+    @media (prefers-reduced-motion: reduce) { .block { transition: none; } }
     h2 {
       font-size: 0.8rem;
       text-transform: uppercase;
@@ -315,6 +346,10 @@ export class GfPlantDetail extends LitElement {
     /** @type {string | null} */
     this._shareNote = null;
     this.view = 'standard';
+    /** Block being dragged, and the order shown meanwhile (else the saved one). @type {string | null} */
+    this._dragKey = null;
+    /** @type {string[] | null} */
+    this._dragOrder = null;
     /** @type {any} */ this._wiki = undefined;
     /** @type {any} */ this._science = undefined;
     /** @type {number | null | undefined} */ this._occurrences = undefined;
@@ -483,22 +518,19 @@ export class GfPlantDetail extends LitElement {
     </ul>`;
   }
 
-  /** @param {any} ctx @param {number} [max] */
+  /** Photos of the plant (licensed), or why there are none. @param {any} ctx @param {number} [max] */
   #gallery({ plant, images, loading, photosOff }, max = Infinity) {
     const shown = images.slice(0, max);
-    return html`<section>
-      <h2>Photos</h2>
-      ${photosOff ? html`<p class="muted">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>` : shown.length ? html`
-        <div class="gallery">
-          ${shown.map(image => html`
-            <figure>
-              <a href=${image.sourceUrl || image.pageUrl || image.url} target="_blank" rel="noopener">
-                <img src=${image.url} alt=${plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" />
-              </a>
-              <figcaption><gf-attribution .media=${image}></gf-attribution></figcaption>
-            </figure>`)}
-        </div>` : loading ? html`<div class="skeleton"></div>` : html`<p class="muted">Aucune photo sous licence libre trouvée.</p>`}
-    </section>`;
+    return photosOff ? html`<p class="muted">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>` : shown.length ? html`
+      <div class="gallery">
+        ${shown.map(image => html`
+          <figure>
+            <a href=${image.sourceUrl || image.pageUrl || image.url} target="_blank" rel="noopener">
+              <img src=${image.url} alt=${plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" />
+            </a>
+            <figcaption><gf-attribution .media=${image}></gf-attribution></figcaption>
+          </figure>`)}
+      </div>` : loading ? html`<div class="skeleton"></div>` : html`<p class="muted">Aucune photo sous licence libre trouvée.</p>`;
   }
 
   #wikipedia() {
@@ -513,19 +545,137 @@ export class GfPlantDetail extends LitElement {
 
   /** @param {any} ctx */
   #resources({ details, inat, wikidata, links }) {
-    return html`<section class="links">
-      <h2>Ressources</h2>
-      <ul class="inline">
-        ${links.inpn ? html`<li><a href=${links.inpn} target="_blank" rel="noopener">INPN</a></li>` : nothing}
-        ${links.taxref ? html`<li><a href=${links.taxref} target="_blank" rel="noopener">TAXREF</a></li>` : nothing}
-        <li><a href=${details?.identifiers?.gbif?.id ? 'https://www.gbif.org/species/' + details.identifiers.gbif.id : links.gbif} target="_blank" rel="noopener">GBIF</a></li>
-        <li><a href=${inat?.id ? 'https://www.inaturalist.org/taxa/' + inat.id : links.inaturalist} target="_blank" rel="noopener">iNaturalist</a></li>
-        <li><a href=${wikidata ? 'https://www.wikidata.org/wiki/' + wikidata : links.wikidata} target="_blank" rel="noopener">Wikidata</a></li>
-        <li><a href=${links.wikimedia} target="_blank" rel="noopener">Wikimedia Commons</a></li>
-        ${this._wiki?.url || inat?.wikipediaUrl ? html`<li><a href=${this._wiki?.url || inat.wikipediaUrl} target="_blank" rel="noopener">Wikipédia</a></li>` : nothing}
-      </ul>
+    return html`<ul class="inline links">
+      ${links.inpn ? html`<li><a href=${links.inpn} target="_blank" rel="noopener">INPN</a></li>` : nothing}
+      ${links.taxref ? html`<li><a href=${links.taxref} target="_blank" rel="noopener">TAXREF</a></li>` : nothing}
+      <li><a href=${details?.identifiers?.gbif?.id ? 'https://www.gbif.org/species/' + details.identifiers.gbif.id : links.gbif} target="_blank" rel="noopener">GBIF</a></li>
+      <li><a href=${inat?.id ? 'https://www.inaturalist.org/taxa/' + inat.id : links.inaturalist} target="_blank" rel="noopener">iNaturalist</a></li>
+      <li><a href=${wikidata ? 'https://www.wikidata.org/wiki/' + wikidata : links.wikidata} target="_blank" rel="noopener">Wikidata</a></li>
+      <li><a href=${links.wikimedia} target="_blank" rel="noopener">Wikimedia Commons</a></li>
+      ${this._wiki?.url || inat?.wikipediaUrl ? html`<li><a href=${this._wiki?.url || inat.wikipediaUrl} target="_blank" rel="noopener">Wikipédia</a></li>` : nothing}
+    </ul>`;
+  }
+
+  // ── Blocks: below the header, titled, in the order chosen for this view (drag the grip ⠿, or ↑ ↓) ─────
+
+  /**
+   * The view's blocks, in order. `content`: block key → its content, or `nothing` when it has none here
+   * (no title is shown for it either).
+   * @param {Record<string, unknown>} content
+   */
+  #blocks(content) {
+    const keys = (this._dragOrder || blockOrder(this.view)).filter(k => content[k] !== undefined && content[k] !== nothing);
+    return html`<div class="blocks">${repeat(keys, k => k, k => this.#block(k, content[k]))}</div>`;
+  }
+
+  /** @param {string} key @param {unknown} content */
+  #block(key, content) {
+    const title = blockTitle(this.view, key);
+    return html`<section class="block ${this._dragKey === key ? 'dragging' : ''}" data-key=${key}>
+      <h2 class="block-title">
+        <button class="grip" type="button" aria-label="Déplacer le bloc « ${title} »" title="Glisser pour déplacer (↑ ↓ au clavier)"
+          @pointerdown=${e => this.#dragStart(e, key)} @keydown=${e => this.#gripKey(e, key)}>${icon('grip-vertical')}</button>
+        <span>${title}</span>
+      </h2>
+      <div class="content">${content}</div>
     </section>`;
   }
+
+  /** Keys of the blocks on screen (rendered and not empty), top to bottom. */
+  #shownKeys() {
+    return [...this.renderRoot.querySelectorAll('.block')]
+      .filter(el => /** @type {HTMLElement} */ (el).offsetHeight > 0)
+      .map(el => /** @type {HTMLElement} */ (el).dataset.key || '');
+  }
+
+  /**
+   * The full order with the shown blocks rearranged: they take the slots the shown blocks had, so blocks
+   * hidden here (no content for this plant) keep their place. @param {string[]} full @param {string[]} shown
+   */
+  #arrange(full, shown) {
+    const slots = new Set(shown);
+    const next = [...shown];
+    return full.map(k => slots.has(k) ? /** @type {string} */ (next.shift()) : k);
+  }
+
+  /** @param {string} key @param {-1 | 1} delta @param {string[]} full */
+  #moved(key, delta, full) {
+    const shown = this.#shownKeys();
+    const i = shown.indexOf(key), j = i + delta;
+    if (i < 0 || j < 0 || j >= shown.length) return null;
+    [shown[i], shown[j]] = [shown[j], shown[i]];
+    return this.#arrange(full, shown);
+  }
+
+  /** ↑ ↓ on a focused grip: one place up or down, saved; the grip keeps the focus. @param {KeyboardEvent} e @param {string} key */
+  async #gripKey(e, key) {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    e.preventDefault();
+    const order = this.#moved(key, e.key === 'ArrowUp' ? -1 : 1, blockOrder(this.view));
+    if (!order) return;
+    setBlockOrder(this.view, order);
+    await this.updateComplete;
+    /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(`.block[data-key="${key}"] .grip`))?.focus();
+  }
+
+  /** @type {{ key: string, view: any, scroller: Element | null, moved: boolean } | null} */
+  #drag = null;
+
+  /** The element that scrolls the sheet (the pane, the phone sheet or the page). */
+  #scroller() {
+    /** @type {any} */ let el = this;
+    while (el) {
+      el = el.parentNode || el.host;
+      if (el instanceof Element && /auto|scroll/.test(getComputedStyle(el).overflowY) && el.scrollHeight > el.clientHeight) return el;
+    }
+    return document.scrollingElement;
+  }
+
+  /** @param {PointerEvent} e @param {string} key */
+  #dragStart(e, key) {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    this.#drag = { key, view: this.view, scroller: this.#scroller(), moved: false };
+    this._dragKey = key;
+    this._dragOrder = blockOrder(this.view);
+    addEventListener('pointermove', this.#dragMove);
+    addEventListener('pointerup', this.#dragEnd);
+    addEventListener('pointercancel', this.#dragEnd);
+  }
+
+  /** Past a neighbour's middle, the dragged block takes its place; near an edge, the sheet scrolls. @param {PointerEvent} e */
+  #dragMove = e => {
+    const drag = this.#drag;
+    if (!drag || !this._dragOrder) return;
+    const y = e.clientY;
+    const scroller = drag.scroller;
+    if (scroller) {
+      const box = scroller === document.scrollingElement ? { top: 0, bottom: innerHeight } : scroller.getBoundingClientRect();
+      if (y < box.top + 48) scroller.scrollTop -= 14;
+      else if (y > box.bottom - 48) scroller.scrollTop += 14;
+    }
+    const blocks = [...this.renderRoot.querySelectorAll('.block')].filter(el => /** @type {HTMLElement} */ (el).offsetHeight > 0);
+    const i = blocks.findIndex(el => /** @type {HTMLElement} */ (el).dataset.key === drag.key);
+    const mid = (/** @type {Element | undefined} */ el) => { const r = /** @type {Element} */ (el).getBoundingClientRect(); return r.top + r.height / 2; };
+    let delta = /** @type {0 | -1 | 1} */ (0);
+    if (i > 0 && y < mid(blocks[i - 1])) delta = -1;
+    else if (i >= 0 && i < blocks.length - 1 && y > mid(blocks[i + 1])) delta = 1;
+    if (!delta) return;
+    const order = this.#moved(drag.key, delta, this._dragOrder);
+    if (order) { drag.moved = true; this._dragOrder = order; }
+  };
+
+  #dragEnd = () => {
+    removeEventListener('pointermove', this.#dragMove);
+    removeEventListener('pointerup', this.#dragEnd);
+    removeEventListener('pointercancel', this.#dragEnd);
+    const drag = this.#drag;
+    const order = this._dragOrder;
+    this.#drag = null;
+    this._dragKey = null;
+    this._dragOrder = null;
+    if (drag?.moved && order) setBlockOrder(drag.view, order);
+  };
 
   // ── Épuré: the plant at a glance, and one tap to put it in the current collection ──────────────────────
 
@@ -542,39 +692,41 @@ export class GfPlantDetail extends LitElement {
     const lists = choices.filter(c => c.kind !== 'place');
     return html`
       <article class="epure">
-        <figure class="hero">
-          ${hero ? html`<img src=${hero.url} alt=${plant.scientificName} decoding="async" referrerpolicy="no-referrer" />
-            <figcaption><gf-attribution .media=${hero}></gf-attribution></figcaption>`
-            : html`<div class=${loading && !ctx.photosOff ? 'skeleton' : 'no-photo'} aria-hidden="true">${loading && !ctx.photosOff ? '' : icon('flower1')}</div>`}
-        </figure>
         <h1>${name}</h1>
         <div class="sci"><i>${plant.scientificName}</i> <span class="author">${plant.author}</span></div>
         <p class="meta">${plant.family}${bloom ? html` · Floraison ${bloom.text}${bloom.now ? html` <span class="season">en fleur</span>` : nothing}` : nothing}</p>
-        <gf-status .plant=${plant}></gf-status>
-        <gf-lookalikes .plant=${plant} compact></gf-lookalikes>
-
-        <div class="gate" role="group" aria-label="Ajouter à la collection en cours">
-          ${current ? html`
-            <button class="primary large add" type="button" aria-pressed=${inTarget ? 'true' : 'false'}
-              @click=${() => setInCollection(current.id, plant, !inTarget).then(() => setTarget(current.id)).catch(console.error)}>
-              ${icon(inTarget ? 'check-lg' : 'plus-lg')} ${inTarget ? 'Dans ' : 'Ajouter à '}${current.kind === 'place' ? html`${icon('geo-alt-fill')} ` : ''}${current.name}
-            </button>` : nothing}
-          <select class="target" aria-label="Collection en cours" .value=${current?.id || ''}
-            @change=${e => this.#pickTarget(e.target)}>
-            <option value="" ?selected=${!current} disabled>${current ? 'Changer…' : 'Choisir où ajouter…'}</option>
-            ${places.length ? html`<optgroup label="Mes lieux">${places.map(c => html`<option value=${c.id} ?selected=${c.id === current?.id}>${c.name}</option>`)}</optgroup>` : nothing}
-            ${lists.length ? html`<optgroup label="Mes collections">${lists.map(c => html`<option value=${c.id} ?selected=${c.id === current?.id}>${c.name}</option>`)}</optgroup>` : nothing}
-            <option value="__new">Nouvelle collection…</option>
-          </select>
-        </div>
-        <div class="quick" role="group" aria-label="Actions">
-          <button type="button" class="fav" aria-pressed=${fav ? 'true' : 'false'} @click=${() => toggleFavorite(plant)}>${icon(fav ? 'heart-fill' : 'heart')} Favori</button>
-          <a class="button" href=${href.newSpot(plant.id)}>${icon('geo-alt-fill')} Noter ici</a>
-          <button type="button" @click=${() => this.#share(plant, name)}>Partager</button>
-        </div>
-        ${this._shareNote ? html`<p class="share-note" role="status">${this._shareNote}</p>` : nothing}
         <gf-add-to .plant=${plant}></gf-add-to>
-        <p class="more"><button class="link" type="button" @click=${() => setPlantView('standard')}>Plus d’infos ${icon('arrow-right')}</button></p>
+        ${this.#blocks({
+          photo: html`<figure class="hero">
+            ${hero ? html`<img src=${hero.url} alt=${plant.scientificName} decoding="async" referrerpolicy="no-referrer" />
+              <figcaption><gf-attribution .media=${hero}></gf-attribution></figcaption>`
+              : html`<div class=${loading && !ctx.photosOff ? 'skeleton' : 'no-photo'} aria-hidden="true">${loading && !ctx.photosOff ? '' : icon('flower1')}</div>`}
+          </figure>`,
+          status: html`<gf-status .plant=${plant}></gf-status>`,
+          lookalikes: html`<gf-lookalikes .plant=${plant} compact></gf-lookalikes>`,
+          collect: html`
+            <div class="gate" role="group" aria-label="Ajouter à la collection en cours">
+              ${current ? html`
+                <button class="primary large add" type="button" aria-pressed=${inTarget ? 'true' : 'false'}
+                  @click=${() => setInCollection(current.id, plant, !inTarget).then(() => setTarget(current.id)).catch(console.error)}>
+                  ${icon(inTarget ? 'check-lg' : 'plus-lg')} ${inTarget ? 'Dans ' : 'Ajouter à '}${current.kind === 'place' ? html`${icon('geo-alt-fill')} ` : ''}${current.name}
+                </button>` : nothing}
+              <select class="target" aria-label="Collection en cours" .value=${current?.id || ''}
+                @change=${e => this.#pickTarget(e.target)}>
+                <option value="" ?selected=${!current} disabled>${current ? 'Changer…' : 'Choisir où ajouter…'}</option>
+                ${places.length ? html`<optgroup label="Mes lieux">${places.map(c => html`<option value=${c.id} ?selected=${c.id === current?.id}>${c.name}</option>`)}</optgroup>` : nothing}
+                ${lists.length ? html`<optgroup label="Mes collections">${lists.map(c => html`<option value=${c.id} ?selected=${c.id === current?.id}>${c.name}</option>`)}</optgroup>` : nothing}
+                <option value="__new">Nouvelle collection…</option>
+              </select>
+            </div>
+            <div class="quick" role="group" aria-label="Actions">
+              <button type="button" class="fav" aria-pressed=${fav ? 'true' : 'false'} @click=${() => toggleFavorite(plant)}>${icon(fav ? 'heart-fill' : 'heart')} Favori</button>
+              <a class="button" href=${href.newSpot(plant.id)}>${icon('geo-alt-fill')} Noter ici</a>
+              <button type="button" @click=${() => this.#share(plant, name)}>Partager</button>
+            </div>
+            ${this._shareNote ? html`<p class="share-note" role="status">${this._shareNote}</p>` : nothing}
+            <p class="more"><button class="link" type="button" @click=${() => setPlantView('standard')}>Plus d’infos ${icon('arrow-right')}</button></p>`
+        })}
       </article>`;
   }
 
@@ -602,33 +754,26 @@ export class GfPlantDetail extends LitElement {
         ${this.#title(ctx)}
         ${this.#actions(plant)}
         <gf-add-to .plant=${plant}></gf-add-to>
-        <gf-status .plant=${plant}></gf-status>
-        <gf-lookalikes .plant=${plant}></gf-lookalikes>
-        ${this.#tags(ctx)}
-
-        <div class="mine">
-          <span>${count ? `Dans ${count} de mes collections` : 'Dans aucune de mes collections'}</span>
-          <button class="link" type="button" aria-expanded=${this._spotsOpen ? 'true' : 'false'}
-            @click=${() => { this._spotsOpen = !this._spotsOpen; }}>${this._spotsOpen ? 'Masquer' : count ? 'Voir' : 'Lieux'}</button>
-        </div>
-        ${this._spotsOpen ? html`<section><gf-plant-spots plant-id=${plant.id}></gf-plant-spots></section>` : nothing}
-
-        <section><gf-calendar .plant=${plant} mode=${this.view}></gf-calendar></section>
-        ${this.#gallery(ctx, 6)}
         ${this._error ? html`<p class="muted">${this._error}</p>` : nothing}
-
-        ${this._wiki || fr ? html`<section>
-          <h2>Description</h2>
-          ${this._wiki ? this.#wikipedia() : html`<div class="description"><small>${fr.type || 'Description'} — GBIF</small>${fr.text}</div>`}
-        </section>` : nothing}
-
-        ${plant.vernacularNames?.length > 1 || extraNames.length ? html`
-          <section>
-            <h2>Noms français</h2>
-            <p>${[...plant.vernacularNames, ...extraNames].join(' · ')}</p>
-          </section>` : nothing}
-
-        ${this.#resources(ctx)}
+        ${this.#blocks({
+          status: html`<gf-status .plant=${plant}></gf-status>`,
+          lookalikes: html`<gf-lookalikes .plant=${plant}></gf-lookalikes>`,
+          about: this.#tags(ctx),
+          mine: html`
+            <div class="mine">
+              <span>${count ? `Dans ${count} de mes collections` : 'Dans aucune de mes collections'}</span>
+              <button class="link" type="button" aria-expanded=${this._spotsOpen ? 'true' : 'false'}
+                @click=${() => { this._spotsOpen = !this._spotsOpen; }}>${this._spotsOpen ? 'Masquer' : count ? 'Voir' : 'Lieux'}</button>
+            </div>
+            ${this._spotsOpen ? html`<gf-plant-spots plant-id=${plant.id} notitle></gf-plant-spots>` : nothing}`,
+          calendar: html`<gf-calendar .plant=${plant} mode=${this.view} notitle></gf-calendar>`,
+          photos: this.#gallery(ctx, 6),
+          description: this._wiki || fr
+            ? (this._wiki ? this.#wikipedia() : html`<div class="description"><small>${fr.type || 'Description'} — GBIF</small>${fr.text}</div>`)
+            : nothing,
+          names: plant.vernacularNames?.length > 1 || extraNames.length ? html`<p>${[...plant.vernacularNames, ...extraNames].join(' · ')}</p>` : nothing,
+          resources: this.#resources(ctx)
+        })}
       </article>`;
   }
 
@@ -668,75 +813,52 @@ export class GfPlantDetail extends LitElement {
         ${this.#actions(plant)}
         <gf-add-to .plant=${plant}></gf-add-to>
         ${this._error ? html`<p class="muted">${this._error}</p>` : nothing}
-        <gf-lookalikes .plant=${plant} detailed></gf-lookalikes>
-
-        <section>
-          <h2>Taxonomie</h2>
-          <dl class="facts">
-            <dt>Classification</dt>
-            <dd>${chain.length ? html`${chain.map(t => html`<span class="rank"><i>${t.name || t.label}</i></span> › `)}<i>${plant.scientificName}</i>`
-              : sci === undefined && wikidata ? pending : html`${plant.family} › <i>${plant.genus}</i> › <i>${plant.scientificName}</i>`}</dd>
-            <dt>Famille · genre · espèce</dt><dd>${plant.family} · <i>${plant.genus}</i> · <i>${plant.species}</i></dd>
-            <dt>Auteur</dt><dd>${plant.author || '—'}</dd>
-            <dt>Statut en France</dt><dd>${status ? `${STATUS_LABELS[status] || status} (TAXREF ${status})` : '—'}</dd>
-            ${plant.synonyms?.length ? html`<dt>Synonymes (${plant.synonyms.length})</dt><dd class="sci-list"><i>${plant.synonyms.join(' · ')}</i></dd>` : nothing}
-            <dt>Noms français</dt><dd>${[...(plant.vernacularNames || []), ...extraNames].join(' · ') || '—'}${inat?.commonName ? html` <span class="muted">(iNaturalist : ${inat.commonName})</span>` : nothing}</dd>
-            ${foreign.length ? html`<dt>Autres langues (GBIF)</dt><dd>${foreign.map(([lang, names]) => html`<span class="lang">${lang || '?'}</span> ${names.join(', ')} `)}</dd>` : nothing}
-          </dl>
-          <p class="credit">Sources : TAXREF v18 (PatriNat) · Wikidata (classification) · GBIF, iNaturalist (noms).</p>
-        </section>
-
-        <section>
-          <h2>Statuts</h2>
-          <dl class="facts">
-            <dt>UICN (monde)</dt><dd>${sci?.iucn ? sci.iucn.label || sci.iucn.id : sci === undefined && wikidata ? pending : '—'}</dd>
-          </dl>
-          ${statuses.length ? html`<table class="statuses">
-            <thead><tr><th>Type</th><th>Territoire</th><th>Statut</th></tr></thead>
-            <tbody>${statuses.map(st => html`<tr><td>${STATUS_TYPES[st.type] || st.type}</td><td>${st.area}${st.level ? html` <span class="muted">(${st.level})</span>` : nothing}</td><td>${st.code && st.code !== st.label ? html`<b>${st.code}</b> ` : nothing}${st.label}</td></tr>`)}</tbody>
-          </table>` : html`<p class="muted">Aucune protection, réglementation ni liste rouge connue (INPN).</p>`}
-          <p class="credit">Sources : INPN – Base de connaissance Statuts (PatriNat) · Wikidata (UICN).</p>
-        </section>
-
-        <section><gf-calendar .plant=${plant} mode=${this.view}></gf-calendar></section>
-
-        <section>
-          <h2>Occurrences et répartition</h2>
-          <dl class="facts">
-            <dt>Observations iNaturalist</dt><dd>${inat?.observationsCount != null ? inat.observationsCount.toLocaleString('fr-FR') : '—'}</dd>
-            <dt>Occurrences GBIF en France</dt><dd>${this._occurrences != null ? html`<a href=${'https://www.gbif.org/occurrence/search?country=FR&taxon_key=' + (gbif?.nubKey ?? gbif?.id)} target="_blank" rel="noopener">${this._occurrences.toLocaleString('fr-FR')}</a>` : this._occurrences === undefined && gbif ? pending : '—'}</dd>
-          </dl>
-          ${places.length ? html`<h3>Répartition (GBIF)</h3>
-            <ul class="inline">${places.map(row => html`<li>${row.place}${row.means ? html` <span class="muted">(${row.means.toLowerCase()})</span>` : nothing}</li>`)}</ul>` : nothing}
-        </section>
-
-        ${this._wiki || texts.length ? html`<section>
-          <h2>Descriptions</h2>
-          ${this.#wikipedia()}
-          ${texts.map(row => html`<div class="description"><small>${row.type || 'Description'}${row.source ? ' — ' + row.source : ''} · ${row.language} · GBIF</small>${row.text}</div>`)}
-        </section>` : nothing}
-
-        ${this.#gallery(ctx)}
-        ${media.length ? html`<section>
-          <h2>Médias GBIF</h2>
-          <div class="gallery">${media.map(image => html`<figure>
+        ${this.#blocks({
+          lookalikes: html`<gf-lookalikes .plant=${plant} detailed></gf-lookalikes>`,
+          taxonomy: html`
+            <dl class="facts">
+              <dt>Classification</dt>
+              <dd>${chain.length ? html`${chain.map(t => html`<span class="rank"><i>${t.name || t.label}</i></span> › `)}<i>${plant.scientificName}</i>`
+                : sci === undefined && wikidata ? pending : html`${plant.family} › <i>${plant.genus}</i> › <i>${plant.scientificName}</i>`}</dd>
+              <dt>Famille · genre · espèce</dt><dd>${plant.family} · <i>${plant.genus}</i> · <i>${plant.species}</i></dd>
+              <dt>Auteur</dt><dd>${plant.author || '—'}</dd>
+              <dt>Statut en France</dt><dd>${status ? `${STATUS_LABELS[status] || status} (TAXREF ${status})` : '—'}</dd>
+              ${plant.synonyms?.length ? html`<dt>Synonymes (${plant.synonyms.length})</dt><dd class="sci-list"><i>${plant.synonyms.join(' · ')}</i></dd>` : nothing}
+              <dt>Noms français</dt><dd>${[...(plant.vernacularNames || []), ...extraNames].join(' · ') || '—'}${inat?.commonName ? html` <span class="muted">(iNaturalist : ${inat.commonName})</span>` : nothing}</dd>
+              ${foreign.length ? html`<dt>Autres langues (GBIF)</dt><dd>${foreign.map(([lang, names]) => html`<span class="lang">${lang || '?'}</span> ${names.join(', ')} `)}</dd>` : nothing}
+            </dl>
+            <p class="credit">Sources : TAXREF v18 (PatriNat) · Wikidata (classification) · GBIF, iNaturalist (noms).</p>`,
+          statuses: html`
+            <dl class="facts">
+              <dt>UICN (monde)</dt><dd>${sci?.iucn ? sci.iucn.label || sci.iucn.id : sci === undefined && wikidata ? pending : '—'}</dd>
+            </dl>
+            ${statuses.length ? html`<table class="statuses">
+              <thead><tr><th>Type</th><th>Territoire</th><th>Statut</th></tr></thead>
+              <tbody>${statuses.map(st => html`<tr><td>${STATUS_TYPES[st.type] || st.type}</td><td>${st.area}${st.level ? html` <span class="muted">(${st.level})</span>` : nothing}</td><td>${st.code && st.code !== st.label ? html`<b>${st.code}</b> ` : nothing}${st.label}</td></tr>`)}</tbody>
+            </table>` : html`<p class="muted">Aucune protection, réglementation ni liste rouge connue (INPN).</p>`}
+            <p class="credit">Sources : INPN – Base de connaissance Statuts (PatriNat) · Wikidata (UICN).</p>`,
+          calendar: html`<gf-calendar .plant=${plant} mode=${this.view} notitle></gf-calendar>`,
+          occurrences: html`
+            <dl class="facts">
+              <dt>Observations iNaturalist</dt><dd>${inat?.observationsCount != null ? inat.observationsCount.toLocaleString('fr-FR') : '—'}</dd>
+              <dt>Occurrences GBIF en France</dt><dd>${this._occurrences != null ? html`<a href=${'https://www.gbif.org/occurrence/search?country=FR&taxon_key=' + (gbif?.nubKey ?? gbif?.id)} target="_blank" rel="noopener">${this._occurrences.toLocaleString('fr-FR')}</a>` : this._occurrences === undefined && gbif ? pending : '—'}</dd>
+            </dl>
+            ${places.length ? html`<h3>Répartition (GBIF)</h3>
+              <ul class="inline">${places.map(row => html`<li>${row.place}${row.means ? html` <span class="muted">(${row.means.toLowerCase()})</span>` : nothing}</li>`)}</ul>` : nothing}`,
+          descriptions: this._wiki || texts.length ? html`
+            ${this.#wikipedia()}
+            ${texts.map(row => html`<div class="description"><small>${row.type || 'Description'}${row.source ? ' — ' + row.source : ''} · ${row.language} · GBIF</small>${row.text}</div>`)}` : nothing,
+          photos: this.#gallery(ctx),
+          gbifMedia: media.length ? html`<div class="gallery">${media.map(image => html`<figure>
             <a href=${image.sourceUrl || image.url} target="_blank" rel="noopener"><img src=${image.url} alt=${plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" /></a>
-            <figcaption><gf-attribution .media=${image}></gf-attribution></figcaption></figure>`)}</div>
-        </section>` : nothing}
-
-        ${facts.length ? html`<section>
-          <h2>Trefle</h2>
-          <dl class="facts">${facts.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl>
-          <p class="credit">Source : Trefle (données en anglais, avec votre jeton).</p>
-        </section>` : nothing}
-
-        <section>
-          <h2>Identifiants</h2>
-          <dl class="facts ids">${ids.map(([label, id, url]) => html`<dt>${label}</dt><dd>${url ? html`<a href=${url} target="_blank" rel="noopener">${id}</a>` : id}</dd>`)}</dl>
-        </section>
-
-        <section><gf-plant-spots plant-id=${plant.id}></gf-plant-spots></section>
-        ${this.#resources(ctx)}
+            <figcaption><gf-attribution .media=${image}></gf-attribution></figcaption></figure>`)}</div>` : nothing,
+          trefle: facts.length ? html`
+            <dl class="facts">${facts.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl>
+            <p class="credit">Source : Trefle (données en anglais, avec votre jeton).</p>` : nothing,
+          ids: html`<dl class="facts ids">${ids.map(([label, id, url]) => html`<dt>${label}</dt><dd>${url ? html`<a href=${url} target="_blank" rel="noopener">${id}</a>` : id}</dd>`)}</dl>`,
+          mine: html`<gf-plant-spots plant-id=${plant.id} notitle></gf-plant-spots>`,
+          resources: this.#resources(ctx)
+        })}
       </article>`;
   }
 }

@@ -30,6 +30,7 @@ import { moduleEvents, modulesState, useModeSource } from './modules.js';
  * @property {Mode} mode                  display mode of the app: épuré (actions, big photos), standard, scientifique
  * @property {Mode | null} gridView      results grid override of the mode (null: follow the mode)
  * @property {Mode | null} plantView     plant sheet override of the mode (null: follow the mode)
+ * @property {Partial<Record<Mode, string[]>>} sheetBlocks  order of the plant sheet blocks, per view (only the views reordered by hand)
  * @property {string | null} target       collection or place the Épuré plant sheet adds to in one tap (last used)
  * @property {Record<import('./modules.js').ModuleKey, Record<Mode, boolean>>} modules  online services used in each mode (Réglages › Modules)
  * @property {boolean} harvestMode      "Mode cueillette": harvest log, seasons, look-alike warnings
@@ -72,6 +73,12 @@ const readCompact = () => {
 };
 
 /** @returns {string | null} */
+const readSheetBlocks = () => {
+  try {
+    const value = JSON.parse(localStorage.getItem(config.storageKeys.sheetBlocks) || '{}');
+    return value && typeof value === 'object' ? value : {};
+  } catch { return {}; }
+};
 const readTarget = () => { try { return localStorage.getItem(config.storageKeys.target); } catch { return null; } };
 
 const initialMode = readMode(config.storageKeys.mode) || 'standard';
@@ -90,6 +97,7 @@ export const store = new Store({
   mode: initialMode,
   gridView: readOverride(config.storageKeys.gridView),
   plantView: readOverride(config.storageKeys.plantView),
+  sheetBlocks: readSheetBlocks(),
   target: readTarget(),
   modules: modulesState(),
   collections: [],
