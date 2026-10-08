@@ -76,10 +76,12 @@ function mineValues(filters) {
 }
 
 /**
- * One-off search that leaves the app's search state alone (plant picker of the spot editor).
- * @param {string} q @param {number} [limit]
+ * One-off search that leaves the app's search state alone (plant pickers: « Ajouter une plante », « Noter ici »).
+ * Same engine, matching and order as the Flore search; `total` is the full count, as Flore shows it.
+ * @param {string} q @param {{ limit?: number }} [options]
+ * @returns {Promise<{ total: number, items: any[] }>}
  */
-export async function searchPlants(q, limit = 20) {
-  const { items } = await call({ type: 'search', q, filters: NO_FILTERS, sort: '' });
-  return items.slice(0, limit);
+export async function searchPlants(q, { limit = 30 } = {}) {
+  const { total, items } = await call({ type: 'search', q, filters: NO_FILTERS, sort: '' });
+  return { total, items: items.slice(0, limit) };
 }

@@ -4,7 +4,6 @@ import { config } from '../config.js';
 import * as db from '../core/db.js';
 import { watchLocation } from '../core/geo.js';
 import { href } from '../core/router.js';
-import { searchPlants } from '../core/search.js';
 import {
   deleteCollection, distance, findEntry, listPlaces, nearbyPlaces, newPlace, placeTitle, recentPlants, rememberPlant,
   saveCollection, withEntry, withPlant
@@ -17,6 +16,7 @@ import './gf-thumb.js';
 import './gf-voice-button.js';
 import { icon } from '../core/icons.js';
 import { voiceAvailable } from '../core/voice.js';
+import './gf-plant-pick-list.js';
 
 /** A plant tapped within this distance of an existing place joins it instead of creating a new one. */
 const JOIN_RADIUS = 30;
@@ -39,7 +39,6 @@ export class GfCapture extends LitElement {
     _gpsError: { state: true },
     _suggest: { state: true },
     _query: { state: true },
-    _results: { state: true },
     _harvestToday: { state: true },
     _busy: { state: true },
     _toast: { state: true }
@@ -94,18 +93,6 @@ export class GfCapture extends LitElement {
     .chips { display: flex; flex-wrap: wrap; gap: 8px; }
     .chips button { padding: 3px 14px 3px 3px; gap: 8px; }
     .chips small { color: var(--gf-text-muted); }
-    .results { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 4px; }
-    .results button {
-      width: 100%;
-      justify-content: flex-start;
-      text-align: left;
-      font-size: 1rem;
-      font-weight: 400;
-      padding: 6px 12px 6px 6px;
-      border-radius: var(--gf-radius);
-      gap: 10px;
-    }
-    .results i { color: var(--gf-text-muted); font-family: var(--gf-font-serif); }
     footer { padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--gf-border); display: flex; align-items: center; gap: 10px; }
     footer label { display: flex; align-items: center; gap: 8px; flex: 1; font-size: 0.9rem; }
     p.muted { font-size: 0.9rem; }
@@ -139,8 +126,6 @@ export class GfCapture extends LitElement {
     /** @type {{ around: any[], favorites: any[], recent: any[] }} */
     this._suggest = { around: [], favorites: [], recent: [] };
     this._query = '';
-    /** @type {any[]} */
-    this._results = [];
     this._harvestToday = true;
     this._busy = false;
     /** @type {{ text: string, undo: () => Promise<void>, details: string, warning?: string | null, lookalike?: { toxic: boolean, text: string } | null, plantId?: number } | null} */
@@ -151,7 +136,6 @@ export class GfCapture extends LitElement {
 
   open() {
     this._query = '';
-    this._results = [];
     this.#dialog.showModal();
     this.#unwatch ??= watchLocation(({ fix, error }) => {
       const firstFix = !this._fix && fix;
@@ -220,11 +204,9 @@ export class GfCapture extends LitElement {
     /** @type {HTMLInputElement | null} */ (this.renderRoot.querySelector('.ask input'))?.focus();
   }
 
-  /** Typed or dictated. @param {string} q */
-  async #find(q) {
+  /** Typed or dictated: the list below follows (gf-plant-pick-list). @param {string} q */
+  #find(q) {
     this._query = q;
-    const results = q.trim().length >= 2 ? await searchPlants(q, 10) : [];
-    if (this._query === q) this._results = results;
   }
 
   /** Records the plant here. @param {any} summaryOrPlant */
@@ -329,10 +311,8 @@ export class GfCapture extends LitElement {
           </div>
         </header>
         <div class="body">
-          ${this._results.length ? html`<ul class="results">${this._results.map(r => html`
-            <li><button type="button" ?disabled=${!this._fix || this._busy} @click=${() => this.#capture(r)}>
-              <gf-thumb .plant=${r} size="40"></gf-thumb>
-              <span>${r.vernacularName || r.scientificName} <i>${r.scientificName}</i></span></button></li>`)}</ul>`
+          ${this._query.trim().length >= 2 ? html`<gf-plant-pick-list .query=${this._query} ?disabled=${!this._fix || this._busy}
+              @plant-pick=${e => this.#capture(e.detail.plant)}></gf-plant-pick-list>`
             : html`
               ${this.#chips('Autour de vous', around)}
               ${this.#chips('Favoris', favorites)}

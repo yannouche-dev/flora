@@ -4,7 +4,6 @@ import { config } from '../config.js';
 import * as db from '../core/db.js';
 import { GeoController } from '../core/geo.js';
 import { href } from '../core/router.js';
-import { searchPlants } from '../core/search.js';
 import {
   ABUNDANCE, defaultPlantPosition, deletePlace, distance, entryInSeason, entryName, entryPosition, exportGeoJSON, findEntry,
   formatDistance, getPlace, lastHarvest, matchCollections, plantMarkers,
@@ -19,6 +18,7 @@ import './gf-map.js';
 import './gf-status.js';
 import './gf-thumb.js';
 import { icon, kindIcon } from '../core/icons.js';
+import './gf-plant-pick-list.js';
 
 /** Existing places closer than this are offered instead of creating a duplicate. */
 const NEARBY_RADIUS = 100;
@@ -65,7 +65,6 @@ export class GfSpotEditor extends LitElement {
     _open: { state: true },
     _picker: { state: true },
     _pickerQuery: { state: true },
-    _pickerResults: { state: true },
     _todayFor: { state: true },
     _nearby: { state: true },
     _error: { state: true },
@@ -174,22 +173,6 @@ export class GfSpotEditor extends LitElement {
     .mini-stars { color: var(--gf-star); letter-spacing: 1px; }
     fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 6px; }
     legend { font-size: 0.85rem; color: var(--gf-text-muted); padding: 0; margin-bottom: 6px; }
-    .picker ul { list-style: none; margin: 6px 0 0; padding: 0; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-sm); overflow: hidden; }
-    .picker li button {
-      width: 100%;
-      justify-content: flex-start;
-      text-align: left;
-      font-size: 1rem;
-      font-weight: 400;
-      padding: 8px 12px;
-      border: 0;
-      border-bottom: 1px solid var(--gf-border);
-      border-radius: 0;
-      gap: 10px;
-    }
-    .picker li button span { min-width: 0; }
-    .picker li:last-child button { border-bottom: 0; }
-    .picker i { color: var(--gf-text-muted); font-family: var(--gf-font-serif); }
     .harvests { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
     .harvests li {
       display: flex;
@@ -260,8 +243,6 @@ export class GfSpotEditor extends LitElement {
     this._open = null;
     this._picker = false;
     this._pickerQuery = '';
-    /** @type {any[]} */
-    this._pickerResults = [];
     /** Plants added during this edit → "harvested today" quantity ('' = yes, no quantity; null = no). @type {Map<number | null, string | null>} */
     this._todayFor = new Map();
     /** @type {{ place: import('../core/collections.js').Place, distance: number }[]} */
@@ -585,10 +566,8 @@ export class GfSpotEditor extends LitElement {
   }
 
   /** @param {Event} event */
-  async #pickerInput(event) {
-    const q = /** @type {HTMLInputElement} */ (event.target).value;
-    this._pickerQuery = q;
-    this._pickerResults = q.trim().length >= 2 ? await searchPlants(q, 8) : [];
+  #pickerInput(event) {
+    this._pickerQuery = /** @type {HTMLInputElement} */ (event.target).value;
   }
 
   /** @param {any} summary */
@@ -599,7 +578,6 @@ export class GfSpotEditor extends LitElement {
     if (this.#isPlace) this._todayFor = new Map(this._todayFor).set(plant.id, '');
     this._open = plant.id;
     this._pickerQuery = '';
-    this._pickerResults = [];
     this._picker = false;
     this.#changed();
   }
@@ -907,12 +885,10 @@ export class GfSpotEditor extends LitElement {
         <label class="field">Ajouter une plante
           <input type="search" placeholder="Nom de la plante…" autocomplete="off" .value=${this._pickerQuery} @input=${this.#pickerInput} />
         </label>
-        ${this._pickerResults.length ? html`<ul>${this._pickerResults.map(r => {
-          const already = Boolean(place && findEntry(place, r.id));
-          return html`<li><button type="button" ?disabled=${already} @click=${() => this.#pickPlant(r)}>
-            <gf-thumb .plant=${r} size="36"></gf-thumb>
-            <span>${r.vernacularName || r.scientificName} <i>${r.scientificName}</i>${already ? ' · déjà dans ce lieu' : ''}</span></button></li>`;
-        })}</ul>` : nothing}
+        <gf-plant-pick-list .query=${this._pickerQuery}
+          .taken=${new Set((place?.properties.plants || []).map(e => e.plantId))}
+          taken-label=${this.#isPlace ? 'déjà dans ce lieu' : 'déjà dans la collection'}
+          @plant-pick=${e => this.#pickPlant(e.detail.plant)}></gf-plant-pick-list>
       </div>`;
   }
 

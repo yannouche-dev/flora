@@ -256,6 +256,7 @@ La grille des résultats et la fiche plante ont chacune leurs trois icônes pour
 ### Recherche, filtres et tri
 
 - **Texte** : noms français, noms scientifiques, synonymes et familles, sans tenir compte des accents (`benoite` → *Benoîte*).
+- **Partout la même recherche** : « Ajouter une plante » (liste, lieu) et « Noter ici » trouvent les mêmes plantes, dans le même ordre, que l'onglet Flore, avec leur nombre et « Afficher plus » jusqu'à la dernière.
 - **La liste ne bouge pas** sous les actions d'une ligne (♥ favori…) : elle ne revient en haut que pour une nouvelle recherche (texte, filtres, tri), et retrouve sa position au retour d'une fiche plante.
 - **Abréviations** : chaque mot tapé correspond au début d'un mot du nom, dans l'ordre (`ger rob` → *Geranium robertianum*, `ben vil` → *Benoîte des villes*).
 - **Fautes de frappe** : s'il y a moins de 5 résultats, une seconde passe tolère 1 faute (mots de 5 lettres et plus) ou 2 fautes (8 lettres et plus), avec la mention « résultats approchants » (`pisenlit` → *Taraxacum*).
