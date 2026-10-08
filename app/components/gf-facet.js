@@ -22,6 +22,8 @@ export class GfFacet extends LitElement {
     searchable: { type: Boolean },
     limit: { type: Number },
     hideEmpty: { type: Boolean, attribute: 'hide-empty' },
+    /** Keep the options in the given order (no re-sorting by live counts). */
+    ordered: { type: Boolean },
     open: { type: Boolean, reflect: true },
     /** Position among the filters: where the header stacks once stuck. */
     stack: { type: Number },
@@ -124,6 +126,7 @@ export class GfFacet extends LitElement {
     this.searchable = false;
     this.limit = 0;
     this.hideEmpty = false;
+    this.ordered = false;
     this.open = true;
     this.stack = 0;
     this._filter = '';
@@ -165,7 +168,7 @@ export class GfFacet extends LitElement {
     let options = this.options
       .filter(o => selected.has(o.value) || !this.hideEmpty || o.count > 0)
       .filter(o => !filter || fold(o.label).includes(filter));
-    if (this.limit) options = options.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'fr'));
+    if (this.limit && !this.ordered) options = options.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'fr'));
     const limit = this.limit && !this._expanded && !filter ? this.limit : Infinity;
     const shown = options.filter((o, i) => i < limit || selected.has(o.value));
     const hidden = options.length - shown.length;
@@ -173,7 +176,10 @@ export class GfFacet extends LitElement {
     return html`
       <div class="head">
         <button class="toggle" type="button" aria-expanded=${this.open ? 'true' : 'false'} aria-controls="body"
-          @click=${() => { this.open = !this.open; }}>
+          @click=${() => {
+            this.open = !this.open;
+            this.dispatchEvent(new CustomEvent('facet-toggle', { detail: { name: this.name, open: this.open }, bubbles: true, composed: true }));
+          }}>
           ${this.label}
           ${selected.size ? html`<span class="badge">${selected.size}</span>` : nothing}
         </button>
