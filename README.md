@@ -216,7 +216,7 @@ app/
 
 ### Icônes
 
-Toutes les icônes de l'application sont des [Bootstrap Icons](https://icons.getbootstrap.com) (licence MIT) : un seul fichier `assets/icons/bi.svg` ne contenant que celles utilisées (36), mis en cache hors ligne, et `icon('heart')` (`app/core/icons.js`) pour les afficher. Elles prennent la taille et la couleur du texte. Pour en ajouter une : son nom dans `scripts/build-icons.mjs`, puis `node scripts/build-icons.mjs <dossier du paquet bootstrap-icons>`. Sur téléphone, le bouton des filtres est une icône d'entonnoir (pleine quand un filtre est actif, avec leur nombre).
+Toutes les icônes de l'application sont des [Bootstrap Icons](https://icons.getbootstrap.com) (licence MIT) : un seul fichier `assets/icons/bi.svg` ne contenant que celles utilisées (38), mis en cache hors ligne, et `icon('heart')` (`app/core/icons.js`) pour les afficher. Elles prennent la taille et la couleur du texte. Pour en ajouter une : son nom dans `scripts/build-icons.mjs`, puis `node scripts/build-icons.mjs <dossier du paquet bootstrap-icons>`. Sur téléphone, le bouton des filtres est une icône d'entonnoir (pleine quand un filtre est actif, avec leur nombre) ; « Compact » et « Partager » au-dessus des résultats sont aussi des icônes.
 
 ### Onglet Flore : filtres, résultats, plante
 

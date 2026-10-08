@@ -8,10 +8,10 @@ import { html } from 'lit';
 const SPRITE = new URL('../../assets/icons/bi.svg', import.meta.url).href;
 
 /**
- * @typedef {'arrow-counterclockwise' | 'arrow-left' | 'arrow-right' | 'arrows-angle-expand' | 'caret-down-fill' | 'caret-up-fill'
+ * @typedef {'arrow-counterclockwise' | 'arrow-left' | 'arrow-right' | 'arrows-angle-expand' | 'arrows-collapse' | 'caret-down-fill' | 'caret-up-fill'
  *   | 'check-lg' | 'chevron-down' | 'crosshair' | 'exclamation-octagon-fill' | 'exclamation-triangle-fill' | 'flower1'
  *   | 'funnel' | 'funnel-fill' | 'gear' | 'geo-alt-fill' | 'globe-europe-africa' | 'heart' | 'heart-fill' | 'image' | 'layers'
- *   | 'list-ul' | 'map' | 'mic' | 'mic-fill' | 'pencil' | 'plus-lg' | 'search' | 'shield-check' | 'star' | 'star-fill' | 'table'
+ *   | 'list-ul' | 'map' | 'mic' | 'mic-fill' | 'pencil' | 'plus-lg' | 'search' | 'share' | 'shield-check' | 'star' | 'star-fill' | 'table'
  *   | 'three-dots' | 'triangle' | 'x' | 'x-lg'} IconName
  */
 

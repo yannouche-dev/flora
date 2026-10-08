@@ -36,13 +36,16 @@ export class GfResultsBar extends LitElement {
       border-bottom: 1px solid var(--gf-border);
       font-size: 0.875rem;
     }
-    .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .row { display: flex; align-items: center; gap: 8px; }
+    /* Icon-only toggles and actions of the row (compact, share): round, same height as the other controls. */
+    .tool { flex: none; width: 34px; height: 34px; min-height: 0; padding: 0; display: inline-grid; place-items: center; font-size: 1rem; }
     .search { display: flex; gap: 8px; align-items: center; }
     .search gf-plant-search { flex: 1; min-width: 0; }
     .search .filters { min-height: 40px; }
     .count { font-weight: 600; margin-right: auto; white-space: nowrap; }
     button, select { min-height: 32px; padding: 4px 12px; font-size: 0.85rem; }
-    select { padding-right: 28px; border-radius: var(--gf-radius-pill); }
+    /* One line on phones too: the sort menu gives way rather than pushing the icons below. */
+    select { padding-right: 28px; border-radius: var(--gf-radius-pill); min-width: 0; flex: 0 1 auto; }
     .filters { font-weight: 600; }
     .filters .badge { background: var(--gf-accent); color: var(--gf-accent-contrast); font-size: 0.7rem; padding: 0 7px; }
     .suggestions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; color: var(--gf-text-muted); }
@@ -107,9 +110,11 @@ export class GfResultsBar extends LitElement {
             ${sorts.map(s => html`<option value=${s.value} ?selected=${s.value === results.sort}>${s.label}</option>`)}
             ${sorts.some(s => s.value === results.sort) ? nothing : html`<option value=${results.sort} selected>${columnSortLabel(results.sort)}</option>`}
           </select>
-          <button type="button" aria-pressed=${compact ? 'true' : 'false'} title="Affichage compact (sans vignettes)"
-            @click=${() => setCompact(!compact)}>Compact</button>`}
-        <button type="button" title="Partager cette recherche (filtres compris)" @click=${this.#share}>${this._copied ? 'Lien copié' : 'Partager'}</button>
+          <button class="tool" type="button" aria-pressed=${compact ? 'true' : 'false'}
+            title="Affichage compact (sans vignettes)" aria-label="Affichage compact (sans vignettes)"
+            @click=${() => setCompact(!compact)}>${icon('arrows-collapse')}</button>`}
+        <button class="tool" type="button" title=${this._copied ? 'Lien copié' : 'Partager cette recherche (filtres compris)'}
+          aria-label=${this._copied ? 'Lien copié' : 'Partager cette recherche (filtres compris)'} @click=${this.#share}>${icon(this._copied ? 'check-lg' : 'share')}</button>
       </div>
 
       <gf-active-filters></gf-active-filters>
