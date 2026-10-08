@@ -379,7 +379,7 @@ export class GfMapPage extends LitElement {
         <button class="close icon-btn" type="button" aria-label="Fermer" @click=${() => this.#toggleAround()}>×</button>
         <button type="button" class="link back" @click=${() => this.#pickSpecies(null)}>← Toutes les espèces</button>
         <div class="species-head">
-          ${s.plantId ? html`<gf-thumb plant-id=${s.plantId} size="56"></gf-thumb>` : s.photo && this.#store.state.modules.photos ? html`<img class="ph" src=${s.photo} alt="" referrerpolicy="no-referrer" />` : nothing}
+          ${s.plantId ? html`<gf-thumb plant-id=${s.plantId} size="56"></gf-thumb>` : s.photo && this.#store.state.modules.photos[this.#store.state.mode] ? html`<img class="ph" src=${s.photo} alt="" referrerpolicy="no-referrer" />` : nothing}
           <div><h2>${s.common || s.name}</h2>${s.common ? html`<span class="sci">${s.name}</span>` : nothing}</div>
         </div>
         <div class="meta"><span>${s.count} observation${s.count > 1 ? 's' : ''} dans le cercle</span>
@@ -447,7 +447,7 @@ export class GfMapPage extends LitElement {
         ${shown.length ? html`<ul class="plants species">
           ${shown.map(sp => html`<li><button type="button" class="pick" @click=${() => this.#pickSpecies(sp)}>
             ${sp.plantId ? html`<gf-thumb plant-id=${sp.plantId} size="38"></gf-thumb>`
-              : sp.photo && this.#store.state.modules.photos ? html`<img class="ph" src=${sp.photo} alt="" loading="lazy" referrerpolicy="no-referrer" />` : html`<gf-thumb size="38"></gf-thumb>`}
+              : sp.photo && this.#store.state.modules.photos[this.#store.state.mode] ? html`<img class="ph" src=${sp.photo} alt="" loading="lazy" referrerpolicy="no-referrer" />` : html`<gf-thumb size="38"></gf-thumb>`}
             <span class="who"><span class="nm">${sp.common || sp.name}</span>
               <span class="sub">${sp.common ? html`<i>${sp.name}</i>` : nothing}${sp.common && sp.family ? ' · ' : ''}${sp.family || ''}</span></span>
             <span class="n">${sp.count}</span>

@@ -42,36 +42,60 @@ export class ModuleOffError extends Error {
   }
 }
 
-/** @returns {Partial<Record<ModuleKey, boolean>>} only the switched-off modules are stored */
+/** Display modes (same keys as store.js; kept here so this module has no dependency on the store). */
+export const MODE_KEYS = /** @type {const} */ (['epure', 'standard', 'scientific']);
+/** @typedef {typeof MODE_KEYS[number]} Mode */
+
+/**
+ * Only the exceptions are stored: { gbif: { epure: false } } = GBIF off in Épuré, on elsewhere.
+ * @returns {Partial<Record<ModuleKey, Partial<Record<Mode, boolean>>>>}
+ */
 function read() {
   try {
     const value = JSON.parse(localStorage.getItem(config.storageKeys.modules) || '{}');
-    return value && typeof value === 'object' ? value : {};
+    if (!value || typeof value !== 'object') return {};
+    // A module switched off everywhere was stored as `false`.
+    for (const [k, v] of Object.entries(value)) if (v === false) value[k] = { epure: false, standard: false, scientific: false };
+    return value;
   } catch { return {}; }
 }
 
 let state = read();
 
-/** Fires `change` when a module is switched on or off. */
+/** The mode a call happens in when the caller does not say (the app-wide mode); set by the store. */
+let currentMode = () => /** @type {Mode} */ ('standard');
+/** @param {() => Mode} source */
+export function useModeSource(source) { currentMode = source; }
+/** The mode modules follow when a caller does not give one. */
+export const appMode = () => currentMode();
+
+/** Fires `change` when a module is switched on or off, or when the mode modules follow changes. */
 export const moduleEvents = new EventTarget();
 
-/** @param {ModuleKey} key */
-export const moduleOn = key => state[key] !== false;
+/**
+ * Is this service used in this mode? The plant sheet asks with its own view, the results grid with its own,
+ * everything else (maps, Autour, lists) with the app mode.
+ * @param {ModuleKey} key @param {Mode} [mode]
+ */
+export const moduleOn = (key, mode = currentMode()) => state[key]?.[mode] !== false;
 
-/** Off modules, as a short stable string: part of cache keys, so data of a module switched off never shows. */
-export const modulesSignature = () => MODULES.filter(m => !moduleOn(m.key)).map(m => m.key).join(',');
+/** Modules off in a mode, as a short stable string: part of cache keys, so their data never shows. @param {Mode} [mode] */
+export const modulesSignature = (mode = currentMode()) => MODULES.filter(m => !moduleOn(m.key, mode)).map(m => m.key).join(',');
 
-/** @returns {Record<ModuleKey, boolean>} */
-export const modulesState = () => /** @type {any} */ (Object.fromEntries(MODULES.map(m => [m.key, moduleOn(m.key)])));
+/** Every module × mode. @returns {Record<ModuleKey, Record<Mode, boolean>>} */
+export const modulesState = () => /** @type {any} */ (Object.fromEntries(MODULES.map(m =>
+  [m.key, Object.fromEntries(MODE_KEYS.map(mode => [mode, moduleOn(m.key, mode)]))])));
 
-/** @param {ModuleKey} key @param {boolean} on */
-export function setModule(key, on) {
+/** @param {ModuleKey} key @param {Mode} mode @param {boolean} on */
+export function setModule(key, mode, on) {
+  const modes = { ...state[key] };
+  if (on) delete modes[mode]; else modes[mode] = false;
   const next = { ...state };
-  if (on) delete next[key]; else next[key] = false;
+  if (Object.keys(modes).length) next[key] = modes; else delete next[key];
   state = next;
   try {
     if (Object.keys(next).length) localStorage.setItem(config.storageKeys.modules, JSON.stringify(next));
     else localStorage.removeItem(config.storageKeys.modules);
   } catch { /* not persisted */ }
-  moduleEvents.dispatchEvent(new CustomEvent('change', { detail: { key, on } }));
+  moduleEvents.dispatchEvent(new CustomEvent('change', { detail: { key, mode, on } }));
 }

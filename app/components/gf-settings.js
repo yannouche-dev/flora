@@ -4,7 +4,8 @@ import { lastSearchHash } from '../core/query.js';
 import { MODE_LABELS, setHarvestMode, setMode, StoreController } from '../core/store.js';
 import './gf-mode-switch.js';
 import { getTrefleToken, setTrefleToken } from '../core/sources.js';
-import { MODULES, setModule } from '../core/modules.js';
+import { MODE_KEYS, MODULES, setModule } from '../core/modules.js';
+import { MODE_ICONS } from '../core/icons.js';
 import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
@@ -54,6 +55,10 @@ export class GfSettings extends LitElement {
     .module .host { color: var(--gf-text-muted); font-weight: 400; margin-left: 4px; }
     .module .state { margin-left: 6px; color: var(--gf-text-muted); font-style: italic; }
     .module form { margin-top: 8px; }
+    .module .modes { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; }
+    .module .mode { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer; }
+    .module .mode svg { color: var(--gf-text-muted); }
+    .module .mode input { width: 18px; height: 18px; margin: 0; }
   `];
 
   #store = new StoreController(this);
@@ -191,18 +196,23 @@ export class GfSettings extends LitElement {
     return html`
       <h2 id="modules">Modules : services en ligne</h2>
       <p class="muted">Tout fonctionne hors ligne avec la flore locale ; chaque module ajoute des données d’un service en ligne.
-        Désactivé, il n’est plus jamais appelé et ses données ne s’affichent plus.</p>
+        Cochez les modes où il sert : la fiche plante suit son affichage, la grille des résultats le sien, la carte et le reste le mode
+        de l’application. Décoché, le service n’est pas appelé dans ce mode et ses données ne s’y affichent pas.</p>
       <ul class="modules">
         ${MODULES.map(m => {
           const blocked = Boolean(m.needsToken && !token);
-          return html`<li class="module ${on[m.key] && !blocked ? 'on' : ''}">
-            <label class="switch">
-              <input type="checkbox" .checked=${on[m.key] && !blocked} ?disabled=${blocked}
-                @change=${e => setModule(m.key, e.target.checked)} />
-              <span><strong>${m.name}</strong> <small class="host">${m.hosts}</small>
-                ${blocked ? html`<small class="state">jeton requis</small>` : nothing}</span>
-            </label>
+          const any = !blocked && MODE_KEYS.some(mode => on[m.key][mode]);
+          return html`<li class="module ${any ? 'on' : ''}">
+            <div class="title"><strong>${m.name}</strong> <small class="host">${m.hosts}</small>
+              ${blocked ? html`<small class="state">jeton requis</small>` : nothing}</div>
             <p class="muted">${m.provides}</p>
+            <div class="modes" role="group" aria-label=${'Modes où ' + m.name + ' est utilisé'}>
+              ${MODE_KEYS.map(mode => html`<label class="mode">
+                <input type="checkbox" .checked=${on[m.key][mode] && !blocked} ?disabled=${blocked}
+                  @change=${e => setModule(m.key, mode, e.target.checked)} />
+                ${MODE_ICONS[mode]}<span>${MODE_LABELS[mode]}</span>
+              </label>`)}
+            </div>
             ${m.key === 'trefle' ? html`
               <p class="muted">Un <a href="https://trefle.io" target="_blank" rel="noopener">jeton Trefle</a> gratuit ;
                 il reste dans ce navigateur uniquement.</p>

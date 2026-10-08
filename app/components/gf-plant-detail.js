@@ -8,6 +8,7 @@ import { getMembership, setInCollection, toggleFavorite } from '../core/collecti
 import { href } from '../core/router.js';
 import { share } from '../core/share.js';
 import * as sources from '../core/sources.js';
+import { modulesSignature } from '../core/modules.js';
 import './gf-attribution.js';
 import './gf-plant-spots.js';
 import './gf-calendar.js';
@@ -326,6 +327,8 @@ export class GfPlantDetail extends LitElement {
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
     if (changed.has('plantId')) this.#load(this.plantId);
+    // Another view may use other modules (Réglages › Modules): reload what depends on them.
+    else if (changed.has('view') && changed.get('view') !== undefined && modulesSignature(this.view) !== modulesSignature(changed.get('view'))) this.#load(this.plantId);
     else if (changed.has('view') && this._plant && this._details !== undefined) this.#loadExtras(this._plant, this._details, this.#abort?.signal);
   }
 
@@ -364,7 +367,7 @@ export class GfPlantDetail extends LitElement {
     document.title = (plant.vernacularNames?.[0] || plant.scientificName) + ' — GeoFlora';
 
     try {
-      const details = await sources.details(plant, abort.signal);
+      const details = await sources.details(plant, abort.signal, this.view);
       if (!abort.signal.aborted) this._details = details;
       if (!abort.signal.aborted) this.#loadExtras(plant, details, abort.signal);
     } catch (error) {
@@ -390,11 +393,11 @@ export class GfPlantDetail extends LitElement {
       task.then(v => { if (!signal?.aborted && this._plant === plant) set(v ?? null); })
         .catch(() => { if (!signal?.aborted && this._plant === plant) set(null); });
     const once = (/** @type {string} */ key) => !this.#requested.has(key) && Boolean(this.#requested.add(key));
-    if (once('wiki')) settle(sources.wikipedia(plant, qid, signal), v => { this._wiki = v; });
+    if (once('wiki')) settle(sources.wikipedia(plant, qid, signal, this.view), v => { this._wiki = v; });
     if (this.view !== 'scientific') return;
-    if (once('science')) settle(sources.wikidataScience(plant, qid, signal), v => { this._science = v; });
+    if (once('science')) settle(sources.wikidataScience(plant, qid, signal, this.view), v => { this._science = v; });
     const gbif = details?.identifiers?.gbif;
-    if (once('occurrences')) settle(sources.occurrencesFR(plant, gbif?.nubKey ?? gbif?.id, signal), v => { this._occurrences = v; });
+    if (once('occurrences')) settle(sources.occurrencesFR(plant, gbif?.nubKey ?? gbif?.id, signal, this.view), v => { this._occurrences = v; });
   }
 
   #store = new StoreController(this);
@@ -450,8 +453,8 @@ export class GfPlantDetail extends LitElement {
       loading: details === undefined,
       name: plant.vernacularNames?.[0] || plant.scientificName,
       // Photos en ligne switched off (Réglages › Modules): no remote image anywhere on the sheet.
-      photosOff: !this.#store.state.modules.photos,
-      images: this.#store.state.modules.photos ? gallery(plant, details) : [],
+      photosOff: !this.#store.state.modules.photos[this.view],
+      images: this.#store.state.modules.photos[this.view] ? gallery(plant, details) : [],
       inat,
       wikidata: plant.identifiers?.wikidata || details?.identifiers?.wikidata?.id,
       links: sources.links(plant),
@@ -606,7 +609,7 @@ export class GfPlantDetail extends LitElement {
         </div>
         ${this._spotsOpen ? html`<section><gf-plant-spots plant-id=${plant.id}></gf-plant-spots></section>` : nothing}
 
-        <section><gf-calendar .plant=${plant}></gf-calendar></section>
+        <section><gf-calendar .plant=${plant} mode=${this.view}></gf-calendar></section>
         ${this.#gallery(ctx, 6)}
         ${this._error ? html`<p class="muted">${this._error}</p>` : nothing}
 
@@ -690,7 +693,7 @@ export class GfPlantDetail extends LitElement {
           <p class="credit">Sources : INPN – Base de connaissance Statuts (PatriNat) · Wikidata (UICN).</p>
         </section>
 
-        <section><gf-calendar .plant=${plant}></gf-calendar></section>
+        <section><gf-calendar .plant=${plant} mode=${this.view}></gf-calendar></section>
 
         <section>
           <h2>Occurrences et répartition</h2>

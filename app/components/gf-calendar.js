@@ -41,6 +41,8 @@ const range = months => {
 export class GfCalendar extends LitElement {
   static properties = {
     plant: { attribute: false },
+    /** Mode of the sheet showing the calendar: its modules decide whether iNaturalist is asked. */
+    mode: {},
     _phenology: { state: true }
   };
 
@@ -87,7 +89,7 @@ export class GfCalendar extends LitElement {
 
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
-    if (changed.has('plant')) this.#load();
+    if (changed.has('plant') || changed.has('mode')) this.#load();
   }
 
   disconnectedCallback() {
@@ -101,7 +103,7 @@ export class GfCalendar extends LitElement {
     if (!this.plant) return;
     const abort = this.#abort = new AbortController();
     try {
-      const data = await sources.phenology(this.plant, abort.signal);
+      const data = await sources.phenology(this.plant, abort.signal, this.mode || undefined);
       if (!abort.signal.aborted) this._phenology = data;
     } catch {
       if (!abort.signal.aborted) this._phenology = null;

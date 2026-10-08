@@ -6,7 +6,7 @@ import { rememberSearch } from '../core/query.js';
 import { href } from '../core/router.js';
 import * as sources from '../core/sources.js';
 import { toggleFavorite } from '../core/collections.js';
-import { StoreController } from '../core/store.js';
+import { gridViewOf, StoreController } from '../core/store.js';
 
 /** One result row. Resolves a remote thumbnail when the dataset has none. */
 export class GfPlantCard extends LitElement {
@@ -132,6 +132,8 @@ export class GfPlantCard extends LitElement {
   `;
 
   #store = new StoreController(this);
+  /** Photos en ligne used in the results' display mode (Réglages › Modules). */
+  get #photos() { return this.#store.state.modules.photos[gridViewOf(this.#store.state)]; }
 
   /** @param {Event} event */
   async #toggleFavorite(event) {
@@ -183,10 +185,10 @@ export class GfPlantCard extends LitElement {
   // Wait a little so fast scrolling doesn't fire hundreds of API calls.
   #schedule() {
     const plant = this.plant;
-    if (!this.#store.state.modules.photos) return;
+    if (!this.#photos) return;
     this.#timer = setTimeout(() => {
       this.#abort = new AbortController();
-      sources.thumbnail(plant, this.#abort.signal)
+      sources.thumbnail(plant, this.#abort.signal, gridViewOf(this.#store.state))
         .then(thumb => { if (this.plant === plant) this._thumb = thumb || null; })
         .catch(() => { if (this.plant === plant) this._thumb = null; });
     }, config.thumbnailDelay);
@@ -241,7 +243,7 @@ export class GfPlantCard extends LitElement {
     const p = this.plant;
     if (!p) return nothing;
     // Photos en ligne switched off (Réglages › Modules): 🌿 instead of any remote image.
-    const thumb = this.#store.state.modules.photos ? this._thumb : null;
+    const thumb = this.#photos ? this._thumb : null;
     if (this.grid) {
       return this.#gridRow(p, thumb, this.query, p.vernacularName || p.scientificName, this.#store.state.favorites.has(p.id));
     }

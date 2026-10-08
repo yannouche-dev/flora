@@ -223,7 +223,7 @@ app/
 
 ### Modules : les services en ligne, un par un
 
-L'app fonctionne hors ligne avec la flore locale ; chaque service en ligne est un **module** qu'on active ou désactive dans **Réglages › Modules** (tous activés par défaut, sauf Trefle qui demande un jeton). Un module désactivé n'est plus jamais appelé et ses données ne s'affichent plus, copies en cache comprises :
+L'app fonctionne hors ligne avec la flore locale ; chaque service en ligne est un **module** qu'on active **mode par mode** dans **Réglages › Modules** : trois cases, Épuré · Standard · Scientifique (toutes cochées par défaut ; Trefle demande un jeton). La fiche plante suit son affichage, la grille des résultats le sien, la carte et le reste le mode de l'application. Dans un mode où il est décoché, un module n'est jamais appelé et ses données ne s'affichent pas, copies en cache comprises :
 
 | Module | Service | Apporte |
 |---|---|---|
