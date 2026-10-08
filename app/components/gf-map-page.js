@@ -252,7 +252,7 @@ export class GfMapPage extends LitElement {
     const id = this.route.spot;
     if (editor && id && places.every(p => p.id === id) && plants.every(p => p.placeId === id)) {
       editor.savePositions({ pin: places[0]?.coordinates ?? null, plants });
-      this.#showToast('Positions enregistrées');
+      this.#showToast('Position enregistrée');
       return;
     }
     const changed = new Map();
@@ -267,7 +267,7 @@ export class GfMapPage extends LitElement {
     }
     try {
       for (const place of changed.values()) await savePlace(place);
-      this.#showToast(changed.size > 1 ? `Positions enregistrées (${changed.size} lieux)` : 'Positions enregistrées');
+      this.#showToast('Position enregistrée');
     } catch (error) {
       this.#showToast('Enregistrement impossible : ' + /** @type {Error} */ (error).message);
     }
