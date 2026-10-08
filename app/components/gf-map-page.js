@@ -28,6 +28,9 @@ const round = (/** @type {[number, number]} */ [x, y]) => /** @type {[number, nu
 
 const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
 
+/** Lower case without accents, for the "Autour" list filter. */
+const fold = (/** @type {string} */ s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+
 /** Harvest places: IGN map or list sorted by distance, filters, selected-place sheet. */
 export class GfMapPage extends LitElement {
   static properties = {
@@ -137,6 +140,10 @@ export class GfMapPage extends LitElement {
     .species .pick:hover { background: var(--gf-surface-2); }
     .species .n { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--gf-text-muted); }
     .around .ph { width: 38px; height: 38px; border-radius: var(--gf-radius-sm); object-fit: cover; flex: none; background: var(--gf-surface-2); }
+    .recap { margin: 2px 0 0; font-size: 0.9rem; }
+    .recap .muted { color: var(--gf-text-muted); font-size: 0.8rem; }
+    .around-facets { margin-top: -4px; }
+    .around .filter { min-height: 38px; padding: 7px 12px; font-size: 0.9rem; }
     .species-head { display: flex; gap: 12px; align-items: center; }
     .species-head .ph { width: 56px; height: 56px; }
     .source { font-size: 0.75rem; color: var(--gf-text-muted); margin: 0; }
@@ -285,7 +292,8 @@ export class GfMapPage extends LitElement {
     this.#aroundAbort?.abort();
     const abort = this.#aroundAbort = new AbortController();
     this._view = 'map';
-    this._around = { center, radius, where, status: 'loading', species: null, obs: null, frame: 'around:' + (++this.#aroundFrames) };
+    this._around = { center, radius, where, status: 'loading', species: null, obs: null, frame: 'around:' + (++this.#aroundFrames),
+      filter: { q: '', families: /** @type {string[]} */ ([]), genera: /** @type {string[]} */ ([]), open: { families: false, genera: false } } };
     try {
       const result = await speciesAround(center, radius, abort.signal);
       if (abort.signal.aborted) return;
@@ -309,6 +317,12 @@ export class GfMapPage extends LitElement {
     } catch {
       if (this._around?.species === species) this._around = { ...this._around, obs: [] };
     }
+  }
+
+  /** Search text / family chip of the species list (kept while a species is open). @param {object} patch */
+  #filterAround(patch) {
+    const a = this._around;
+    if (a) this._around = { ...a, filter: { ...a.filter, ...patch } };
   }
 
   /** The circle for gf-map, with the chosen species' observations. */
@@ -374,18 +388,69 @@ export class GfMapPage extends LitElement {
         ${source}
       </section>`;
     }
+    const all = result.species;
+    const plural = (/** @type {number} */ n, /** @type {string} */ word) => `${n.toLocaleString('fr-FR')} ${word}${n > 1 ? 's' : ''}`;
+    const familyCount = new Set(all.map(sp => sp.family).filter(Boolean)).size;
+    const genusCount = new Set(all.map(sp => sp.genus).filter(Boolean)).size;
+    const outside = all.filter(sp => !sp.plantId).length;
+
+    // Search + two multi-select filters (Famille, Genre). Each filter's counts take the others into account.
+    const { q, families, genera, open } = a.filter;
+    const needle = fold(q.trim());
+    const bySearch = (/** @type {any} */ sp) => !needle || fold([sp.common, sp.name, sp.genus, sp.family].filter(Boolean).join(' ')).includes(needle);
+    const byFamily = (/** @type {any} */ sp) => !families.length || families.includes(sp.family);
+    const byGenus = (/** @type {any} */ sp) => !genera.length || genera.includes(sp.genus);
+    const shown = all.filter(sp => bySearch(sp) && byFamily(sp) && byGenus(sp));
+    const filtered = Boolean(needle || families.length || genera.length);
+    const tally = (/** @type {any[]} */ list, /** @type {'family' | 'genus'} */ key) => {
+      const counts = new Map();
+      for (const sp of list) if (sp[key]) counts.set(sp[key], (counts.get(sp[key]) || 0) + 1);
+      return counts;
+    };
+    const familyHits = tally(all.filter(sp => bySearch(sp) && byGenus(sp)), 'family');
+    const genusHits = tally(all.filter(sp => bySearch(sp) && byFamily(sp)), 'genus');
+    // Fixed order (most species in the circle first): choosing a value never reorders the lists.
+    const ranked = (/** @type {Map<string, number>} */ totals) => [...totals].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0], 'fr')).map(([v]) => v);
+    const familyOptions = ranked(tally(all, 'family')).map(f => ({ value: f, label: f, count: familyHits.get(f) || 0 }));
+    // Genera of the chosen families only (as in the Flore filters).
+    const genusOptions = ranked(tally(all.filter(byFamily), 'genus')).map(g => ({ value: g, label: g, count: genusHits.get(g) || 0 }));
+
     return html`<section class="sheet around" aria-label="Autour">
       ${head}
-      <div class="meta"><span><strong>${result.species.length}</strong> espèce${result.species.length > 1 ? 's' : ''}</span>
-        <span>${result.observations.toLocaleString('fr-FR')} observation${result.observations > 1 ? 's' : ''}</span></div>
-      ${result.species.length ? html`<ul class="plants species">
-        ${result.species.map(sp => html`<li><button type="button" class="pick" @click=${() => this.#pickSpecies(sp)}>
-          ${sp.plantId ? html`<gf-thumb plant-id=${sp.plantId} size="38"></gf-thumb>`
-            : sp.photo ? html`<img class="ph" src=${sp.photo} alt="" loading="lazy" referrerpolicy="no-referrer" />` : html`<gf-thumb size="38"></gf-thumb>`}
-          <span class="who"><span class="nm">${sp.common || sp.name}</span>${sp.common ? html`<span class="sub">${sp.name}</span>` : nothing}</span>
-          <span class="n">${sp.count}</span>
-        </button></li>`)}
-      </ul>` : html`<p class="notes">Aucune observation validée de plante dans ce cercle. Essayez un rayon plus grand.</p>`}
+      <p class="recap">
+        <strong>${plural(all.length, 'espèce')}</strong> · <strong>${plural(familyCount, 'famille')}</strong>
+        · <strong>${plural(genusCount, 'genre')}</strong> · ${plural(result.observations, 'observation')}
+        ${outside ? html`<span class="muted" title="Absentes de la flore de l’app (TAXREF) : famille inconnue">(${outside} hors flore)</span>` : nothing}
+      </p>
+      ${all.length ? html`
+        <input type="search" class="filter" placeholder="Filtrer : nom, genre, famille…" aria-label="Filtrer les espèces"
+          .value=${q} @input=${e => this.#filterAround({ q: e.target.value })} />
+        <div class="around-facets" @facet-change=${e => {
+          e.stopPropagation();
+          const { name, values } = e.detail;
+          if (name === 'families') {
+            // Genera outside the chosen families no longer apply.
+            const keep = new Set(all.filter(sp => !values.length || values.includes(sp.family)).map(sp => sp.genus));
+            this.#filterAround({ families: values, genera: genera.filter(g => keep.has(g)) });
+          } else this.#filterAround({ genera: values });
+        }} @facet-toggle=${e => { e.stopPropagation(); this.#filterAround({ open: { ...open, [e.detail.name]: e.detail.open } }); }}>
+          ${familyOptions.length ? html`<gf-facet name="families" label="Famille" stack="0" searchable ordered limit="6" .open=${open.families || families.length > 0}
+            .selected=${families} .options=${familyOptions}></gf-facet>` : nothing}
+          <gf-facet name="genera" label="Genre" stack="1" searchable ordered limit="6" hide-empty .open=${open.genera || genera.length > 0}
+            .selected=${genera} .options=${genusOptions}></gf-facet>
+        </div>
+        ${filtered ? html`<div class="meta"><span><strong>${shown.length}</strong> / ${plural(all.length, 'espèce')}</span>
+          <button type="button" class="link" @click=${() => this.#filterAround({ q: '', families: [], genera: [] })}>Effacer</button></div>` : nothing}
+        ${shown.length ? html`<ul class="plants species">
+          ${shown.map(sp => html`<li><button type="button" class="pick" @click=${() => this.#pickSpecies(sp)}>
+            ${sp.plantId ? html`<gf-thumb plant-id=${sp.plantId} size="38"></gf-thumb>`
+              : sp.photo ? html`<img class="ph" src=${sp.photo} alt="" loading="lazy" referrerpolicy="no-referrer" />` : html`<gf-thumb size="38"></gf-thumb>`}
+            <span class="who"><span class="nm">${sp.common || sp.name}</span>
+              <span class="sub">${sp.common ? html`<i>${sp.name}</i>` : nothing}${sp.common && sp.family ? ' · ' : ''}${sp.family || ''}</span></span>
+            <span class="n">${sp.count}</span>
+          </button></li>`)}
+        </ul>` : html`<p class="notes">Aucune espèce ne correspond.</p>`}`
+      : html`<p class="notes">Aucune observation validée de plante dans ce cercle. Essayez un rayon plus grand.</p>`}
       ${source}
     </section>`;
   }
