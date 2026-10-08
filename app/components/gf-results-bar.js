@@ -1,9 +1,9 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { SORTS } from '../config.js';
-import { activeFilterCount, setQuery, toHash } from '../core/query.js';
+import { activeFilterCount, applySuggestion, setQuery, toHash } from '../core/query.js';
 import { share } from '../core/share.js';
-import { gridViewOf, setCompact, setGridView, store, StoreController } from '../core/store.js';
+import { gridViewOf, setCompact, setGridView, StoreController } from '../core/store.js';
 import './gf-mode-switch.js';
 import './gf-active-filters.js';
 import './gf-plant-search.js';
@@ -75,8 +75,7 @@ export class GfResultsBar extends LitElement {
 
   /** @param {import('../core/store.js').Suggestion} suggestion */
   #applySuggestion(suggestion) {
-    const { filters } = store.state.query;
-    setQuery({ q: '', filters: { ...filters, [suggestion.type]: [...filters[suggestion.type], suggestion.name] } });
+    applySuggestion(suggestion.type, suggestion.name);
   }
 
   render() {

@@ -60,12 +60,32 @@ export function setQuery(patch, { debounce = 0 } = {}) {
   else runSearch();
 }
 
+/**
+ * The text a « Filtrer par » suggestion turned into a filter: removing that filter gives the text back
+ * (unless something else was typed since). @type {{ facet: Facet, value: string, q: string } | null}
+ */
+let replacedText = null;
+
+/** « Filtrer par : Urtica · genre »: the typed text becomes a filter. @param {Facet} facet @param {string} value */
+export function applySuggestion(facet, value) {
+  const { q, filters } = store.state.query;
+  replacedText = q ? { facet, value, q } : null;
+  setQuery({ q: '', filters: { ...filters, [facet]: [...filters[facet], value] } });
+}
+
 /** @param {Facet} facet @param {string[]} values */
 export function setFacet(facet, values) {
   const filters = { ...store.state.query.filters, [facet]: values };
   // Genera only make sense inside the selected families.
   if (facet === 'family' && values.length) {
     filters.genus = filters.genus.filter(genus => values.includes(genusFamily.get(genus) || ''));
+  }
+  // The filter a « Filtrer par » suggestion made from the search text is removed: the text comes back
+  // (unless something else was typed since).
+  const made = replacedText;
+  if (made && !filters[made.facet].includes(made.value)) {
+    replacedText = null;
+    if (!store.state.query.q) return setQuery({ q: made.q, filters });
   }
   setQuery({ filters });
 }
