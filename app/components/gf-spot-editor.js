@@ -516,6 +516,8 @@ export class GfSpotEditor extends LitElement {
       this._place = withEntry(this._place, plantId, { coordinates: [Math.round(coordinates[0] * 1e7) / 1e7, Math.round(coordinates[1] * 1e7) / 1e7], accuracy: null });
     }
     this.#changed();
+    // Validated on the map: saved right away, so the markers get their new positions back at once.
+    if (this.#autosave) this.#flush();
   }
 
   /** "Déplacer" on a plant: switch to position editing and show it. @param {[number, number] | null} coordinates */

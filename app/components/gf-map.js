@@ -239,7 +239,7 @@ export class GfMap extends LitElement {
     const n = movesCount(this._moves);
     const hint = this.pin ? 'Glissez le lieu et ses plantes · appui long : placer le lieu'
       : this.selectedId ? 'Glissez le lieu ou ses plantes · appui long : placer le lieu'
-      : this.spots.length ? 'Glissez les lieux pour les déplacer' : 'Glissez les plantes pour les déplacer';
+      : this.spots.length ? 'Glissez les lieux et les plantes (en zoomant) pour les déplacer' : 'Glissez les plantes pour les déplacer';
     // The frame goes full screen while editing positions: in the browser's top layer (popover), so no
     // ancestor (a pane with `contain`, the header, the tab bar) can clip or cover it.
     return html`<div class="gf-map-frame" popover="manual"><div class="gf-map-root"></div>
@@ -318,8 +318,8 @@ export class GfMap extends LitElement {
   /** @param {PlantMarker} plant */
   #plantMovable(plant) {
     if (!this.editable) return this.draggablePlants;
-    // The pin's plants (editor), the selected place's, or — on a map of plants only — every plant.
-    return this.editing && Boolean(this.pin || (this.selectedId ? plant.placeId === this.selectedId : !this.spots.length));
+    // The pin's plants (editor), the selected place's, or — nothing selected — every plant.
+    return this.editing && Boolean(this.pin || !this.selectedId || plant.placeId === this.selectedId);
   }
 
   /** Where a place is drawn: moved in the working copy, else its saved point. @param {any} spot @returns {[number, number]} */
@@ -356,8 +356,10 @@ export class GfMap extends LitElement {
           return { placeId: plant?.placeId, plantId: plant?.plantId ?? null, coordinates };
         })
       });
-      // Shown where they were dropped until the caller passes the saved data back.
+      // Shown where they were dropped until the caller passes the saved data back (or gives up saving).
       this.#keepMoves = true;
+      clearTimeout(this.#keepTimer);
+      this.#keepTimer = setTimeout(() => { if (this.#keepMoves && !this.editing) this.#dropKeptMoves(); }, 8000);
     } else {
       this._moves = emptyMoves();
     }
@@ -378,6 +380,24 @@ export class GfMap extends LitElement {
 
   /** The moves were saved: forget them once the new data arrives. */
   #keepMoves = false;
+  /** @type {ReturnType<typeof setTimeout> | undefined} */ #keepTimer;
+
+  #dropKeptMoves() {
+    clearTimeout(this.#keepTimer);
+    this.#keepMoves = false;
+    this._moves = emptyMoves();
+  }
+
+  /** Do the spots / plants / pin passed in now sit where they were dropped? */
+  #movesLanded() {
+    const same = (/** @type {[number, number] | null | undefined} */ a, /** @type {[number, number]} */ b) =>
+      Boolean(a) && Math.abs(a[0] - b[0]) < 2e-6 && Math.abs(a[1] - b[1]) < 2e-6;
+    const { pin, places, plants } = this._moves;
+    if (pin && !same(this.pin, pin)) return false;
+    for (const [id, at] of places) if (!same(this.spots.find(s => s.id === id)?.geometry.coordinates, at)) return false;
+    for (const [key, at] of plants) if (!same(this.plants.find(p => p.key === key)?.coordinates, at)) return false;
+    return true;
+  }
 
   /** @param {(m: Moves) => void} change */
   #move(change) {
@@ -490,10 +510,10 @@ export class GfMap extends LitElement {
   /** @param {Map<string, any>} changed */
   updated(changed) {
     if (!this.#map) return;
-    // Saved moves are dropped once the caller passes the saved data back.
-    if (this.#keepMoves && (changed.has('spots') || changed.has('plants') || changed.has('pin'))) {
-      this.#keepMoves = false;
-      this._moves = emptyMoves();
+    // Saved moves are dropped once the caller passes back data that has them (a re-render with the old
+    // positions, before the save lands, must not send the markers back where they were).
+    if (this.#keepMoves && (changed.has('spots') || changed.has('plants') || changed.has('pin')) && this.#movesLanded()) {
+      this.#dropKeptMoves();
     }
     if (changed.has('editing') && changed.get('editing') !== undefined) {
       // Editing turned off by the caller: drop the working copy (unless just saved).
