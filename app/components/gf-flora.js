@@ -3,12 +3,13 @@ import { LitElement, html, css, nothing } from 'lit';
 import { config } from '../config.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
 import { activeFilterCount, clearFilters, lastSearchHash } from '../core/query.js';
-import { StoreController } from '../core/store.js';
+import { plantViewOf, setPlantView, StoreController } from '../core/store.js';
 import { ui } from '../styles/ui.js';
 import './gf-results-bar.js';
 import './gf-filter-panel.js';
 import './gf-plant-list.js';
 import './gf-plant-detail.js';
+import './gf-mode-switch.js';
 
 /** Results pane narrower than this: cards instead of the grid. */
 const GRID_MIN = 560;
@@ -135,7 +136,8 @@ export class GfFlora extends LitElement {
     /* Phone: the plant slides over the results, full screen. */
     .sheet-plant {
       position: fixed;
-      inset: 0 0 calc(64px + env(safe-area-inset-bottom)) 0;
+      /* Down to the tab bar (60px + its 1px border), which stays visible. */
+      inset: 0 0 calc(61px + env(safe-area-inset-bottom)) 0;
       z-index: 900;
       display: flex;
       flex-direction: column;
@@ -388,7 +390,10 @@ export class GfFlora extends LitElement {
     const resultsFolded = folded.results && showPlant && !folded.plant;
     const plantFolded = showPlant && folded.plant;
 
-    const plantDetail = html`<gf-plant-detail embedded plant-id=${plantId}></gf-plant-detail>`;
+    const plantView = plantViewOf(this.#store.state);
+    const plantDetail = html`<gf-plant-detail embedded plant-id=${plantId} view=${plantView}></gf-plant-detail>`;
+    const plantSwitch = html`<gf-mode-switch scope="la fiche" value=${plantView} ?overridden=${this.#store.state.plantView !== null}
+      @mode-change=${e => setPlantView(e.detail.mode)}></gf-mode-switch>`;
 
     return html`
       <div class="panes">
@@ -412,6 +417,7 @@ export class GfFlora extends LitElement {
           ${resultsFolded ? nothing : this.#split('plant')}
           <section class="pane plant ${resultsFolded ? 'fill' : ''}" aria-label="Plante" style=${resultsFolded ? '' : `width:${this._layout.plant}px`}>
             ${this.#head('plant', 'Plante', html`
+              ${plantSwitch}
               <a class="icon-btn" href=${'#/plant/' + plantId} title="Ouvrir la fiche seule" aria-label="Ouvrir la fiche seule"
                 @click=${e => { e.preventDefault(); this.#fold('results', true); }}>⤢</a>
               <button class="icon-btn" type="button" title="Fermer la fiche" aria-label="Fermer la fiche" @click=${() => this.#closePlant()}>×</button>`)}
@@ -424,6 +430,7 @@ export class GfFlora extends LitElement {
           <div class="pane-head">
             <button class="link back" type="button" @click=${() => this.#closePlant()}>← Résultats</button>
             <h2></h2>
+            ${plantSwitch}
           </div>
           <div class="pane-body" style="display:flex;flex-direction:column;overflow:hidden">${plantDetail}</div>
         </section>` : nothing}

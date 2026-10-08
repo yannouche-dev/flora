@@ -18,7 +18,7 @@ export class GfPlantCard extends LitElement {
     current: { type: Boolean, reflect: true },
     /** Grid: visible column keys, in order (gf-plant-list). */
     columns: { attribute: false },
-    /** Grid view: standard, illustrated, scientific. */
+    /** Grid view: epure (big photos), standard, scientific. */
     view: { reflect: true },
     _thumb: { state: true }
   };
@@ -118,10 +118,10 @@ export class GfPlantCard extends LitElement {
     :host([grid]) .pin:hover, :host([grid]) .pin:focus-visible { opacity: 1; filter: none; background: var(--gf-surface-2); }
     :host([grid]) .pin.on { filter: none; opacity: 1; }
     /* Illustrated view: big photo, French name over the full scientific name. */
-    :host([view='illustrated']) .thumb { width: 96px; height: 96px; font-size: 2rem; border-radius: var(--gf-radius); }
-    :host([view='illustrated']) .stack { display: grid; gap: 4px; white-space: normal; }
-    :host([view='illustrated']) .stack .fr { font-size: 1.1rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    :host([view='illustrated']) .stack .full { font-family: var(--gf-font-serif); font-style: italic; color: var(--gf-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    :host([view='epure']) .thumb { width: 96px; height: 96px; font-size: 2rem; border-radius: var(--gf-radius); }
+    :host([view='epure']) .stack { display: grid; gap: 4px; white-space: normal; }
+    :host([view='epure']) .stack .fr { font-size: 1.1rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    :host([view='epure']) .stack .full { font-family: var(--gf-font-serif); font-style: italic; color: var(--gf-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     :host([grid]) .muted { color: var(--gf-text-muted); }
     :host([grid]) [hidden] { display: none; }
     .legal { display: flex; gap: 4px; overflow: hidden; }
@@ -201,7 +201,7 @@ export class GfPlantCard extends LitElement {
   #gridRow(p, thumb, q, title, fav) {
     const legal = p.legal || [];
     const placeId = this.#store.state.placed.get(p.id);
-    const illustrated = this.view === 'illustrated';
+    const illustrated = this.view === 'epure';
     const cells = {
       photo: () => thumb?.url
         ? html`<img class="thumb" src=${thumb.url} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`

@@ -2,7 +2,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { FAVORITES_ID, getMembership, matchCollections, newCollection, saveCollection, setInCollection, withPlant } from '../core/collections.js';
 import { href } from '../core/router.js';
-import { StoreController } from '../core/store.js';
+import { setTarget, StoreController } from '../core/store.js';
 import { ui } from '../styles/ui.js';
 
 /**
@@ -87,7 +87,11 @@ export class GfAddTo extends LitElement {
   async #toggle(id, event) {
     const on = /** @type {HTMLInputElement} */ (event.target).checked;
     this._busy = true;
-    try { await setInCollection(id, this.plant, on); } finally { this._busy = false; }
+    try {
+      await setInCollection(id, this.plant, on);
+      // The last collection added to becomes the one-tap target of the Épuré sheet.
+      if (on && id !== FAVORITES_ID) setTarget(id);
+    } finally { this._busy = false; }
   }
 
   /** @param {SubmitEvent} event */
@@ -101,7 +105,9 @@ export class GfAddTo extends LitElement {
     if (exact) return this.#addToExisting(exact.id);
     this._busy = true;
     try {
-      await saveCollection(withPlant(newCollection('list', { name }), this.plant));
+      const created = newCollection('list', { name });
+      await saveCollection(withPlant(created, this.plant));
+      setTarget(created.id);
       this._creating = false;
       this._query = '';
     } finally { this._busy = false; }
@@ -112,6 +118,7 @@ export class GfAddTo extends LitElement {
     this._busy = true;
     try {
       await setInCollection(id, this.plant, true);
+      setTarget(id);
       this._creating = false;
       this._query = '';
     } finally { this._busy = false; }

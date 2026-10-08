@@ -1,7 +1,8 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { lastSearchHash } from '../core/query.js';
-import { setHarvestMode, StoreController } from '../core/store.js';
+import { MODE_LABELS, setHarvestMode, setMode, StoreController } from '../core/store.js';
+import './gf-mode-switch.js';
 import { getTrefleToken, setTrefleToken } from '../core/sources.js';
 import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
 import { share } from '../core/share.js';
@@ -44,6 +45,7 @@ export class GfSettings extends LitElement {
     label.file { position: relative; }
     label.file input { position: absolute; width: 1px; height: 1px; opacity: 0; }
     label.file:focus-within { box-shadow: var(--gf-focus); }
+    .mode-line { display: flex; align-items: center; gap: 10px; }
   `];
 
   #store = new StoreController(this);
@@ -214,6 +216,15 @@ export class GfSettings extends LitElement {
           <button type="button" @click=${this.#regionFromGps}>Utiliser ma position</button>
         </div>
         ${this._regionNote ? html`<p class="muted" role="status">${this._regionNote}</p>` : nothing}
+
+        <h2>Affichage</h2>
+        <p class="mode-line">
+          <gf-mode-switch scope="toute l’application" value=${this.#store.state.mode}
+            @mode-change=${e => setMode(e.detail.mode || 'standard')}></gf-mode-switch>
+          <strong>${MODE_LABELS[this.#store.state.mode]}</strong>
+        </p>
+        <p class="muted">Épuré : grandes photos et actions rapides (ajouter à la collection en cours). Standard : l’essentiel pour tous.
+          Scientifique : toutes les données, locales et distantes. La grille et la fiche plante ont aussi leur propre choix, qui revient au mode de l’application quand celui-ci change.</p>
 
         <h2>Mode cueillette</h2>
         <label class="switch">

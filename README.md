@@ -218,8 +218,18 @@ app/
 
 - **Ordinateur** : trois panneaux côte à côte, **Filtres ┃ Résultats ┃ Plante**. Chacun se replie (« / ») en une fine barre verticale et se redimensionne en tirant les séparateurs (ou ←/→ au clavier, double-clic pour la largeur par défaut) ; largeurs et panneaux repliés sont mémorisés. Toucher un résultat ouvre la fiche dans le panneau Plante (l'adresse `#/plant/<id>` reste partageable) ; ⤢ la passe en pleine largeur, × la ferme.
 - **Recherche** en haut des résultats (« Ex. : ortie, Urtica dioica, ger rob, Lamiaceae »).
-- **Grille des résultats** : Photo, Nom français, puis Famille, Genre, Espèce (l'épithète, le genre ayant sa colonne), Statut, Protection, et les actions ♥ (favori) et 📍 (noter où je la trouve ; pleine si la plante est déjà dans un de mes lieux, elle ouvre alors la carte). Trois affichages : **Standard** (sans statut ni protection), **Illustrée** (grandes photos, nom français sur le nom scientifique complet) et **Scientifique** (toutes les colonnes, auteur compris) ; le choix est mémorisé. Cliquer un en-tête trie par cette colonne, recliquer inverse l'ordre (`sort=-family` dans l'URL) ; un en-tête dont le filtre est actif affiche son nombre de valeurs, qui ouvre ce filtre. Quand le panneau est étroit, Genre (et Statut) se masquent, puis la liste repasse en fiches.
+- **Grille des résultats** : Photo, Nom français, puis Famille, Genre, Espèce (l'épithète, le genre ayant sa colonne), Statut, Protection, et les actions ♥ (favori) et 📍 (noter où je la trouve ; pleine si la plante est déjà dans un de mes lieux, elle ouvre alors la carte). Trois affichages, au choix par les icônes au-dessus de la grille (lignes · photo · tableau) : **Standard** (sans statut ni protection), **Épuré** (grandes photos, nom français sur le nom scientifique complet) et **Scientifique** (toutes les colonnes, auteur compris). Cliquer un en-tête trie par cette colonne, recliquer inverse l'ordre (`sort=-family` dans l'URL) ; un en-tête dont le filtre est actif affiche son nombre de valeurs, qui ouvre ce filtre. Quand le panneau est étroit, Genre (et Statut) se masquent, puis la liste repasse en fiches.
 - **Tablette** : filtres en feuille, Résultats ┃ Plante. **Téléphone** : fiches, et la plante s'ouvre en plein écran par-dessus la liste (« ← Résultats » revient au même endroit).
+
+### Modes d'affichage : Épuré, Standard, Scientifique
+
+Un mode pour toute l'application, choisi par trois icônes dans l'en-tête (ou dans Réglages › Affichage sur téléphone) :
+
+- **Épuré** — grandes photos et actions rapides. La fiche plante devient une « porte de collection » : photo, noms, famille, floraison, alertes de protection, et un gros bouton **« ＋ Ajouter à <collection en cours> »** (« ✓ Dans … » une fois ajoutée, un nouvel appui la retire). La collection ou le lieu en cours se choisit dans la liste juste dessous et reste mémorisé ; c'est aussi la dernière collection utilisée dans « Ajouter à… ».
+- **Standard** — grand public : calendrier, photos, description (résumé Wikipédia, sinon GBIF), noms ; « Dans mes collections » tient en une ligne qu'on déplie.
+- **Scientifique** — tout ce que l'application connaît ou peut obtenir, sources citées : classification (Wikidata, jusqu'à l'ordre), auteur, synonymes, noms dans d'autres langues, tous les statuts INPN par territoire, statut UICN mondial, phénologie, observations iNaturalist, occurrences GBIF en France, répartition et descriptions GBIF, médias GBIF, données Trefle (avec votre jeton), identifiants (TAXREF, INPN, GBIF, iNaturalist, Wikidata, Tela Botanica, IPNI, POWO).
+
+La grille des résultats et la fiche plante ont chacune leurs trois icônes pour s'écarter du mode (un point ↺ ramène au mode de l'application) ; changer le mode de l'application les réaligne.
 
 ### Recherche, filtres et tri
 
