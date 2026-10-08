@@ -219,7 +219,9 @@ export class GfPlantDetail extends LitElement {
     /* Blocks below the header: a title (drag it to move the block) with its grip and trash / revive icon, then the content. */
     .blocks { display: flex; flex-direction: column; }
     .block { margin-top: 20px; border-radius: var(--gf-radius); transition: box-shadow 0.15s, background 0.15s, opacity 0.15s; }
-    .block-title { display: flex; align-items: center; gap: 2px; margin: 0 0 8px -6px; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+    .block-title { display: flex; align-items: center; gap: 2px; margin: 0 0 8px; }
+    /* « Mode King »: the title is a handle. */
+    .king .block-title { margin-left: -6px; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
     .block-title .name { flex: 1; min-width: 0; }
     .off-note { flex: none; font-size: 0.7rem; text-transform: none; letter-spacing: 0; font-weight: 400; }
     .grip, .block-title .tool {
@@ -381,6 +383,7 @@ export class GfPlantDetail extends LitElement {
 
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
+    if (!this.#store.state.kingMode && this.#drag) this.#dragEnd();
     const signature = modulesSignature(this.view);
     const hidden = this.#store.state.sheetHidden;
     const modulesChanged = this.#signature !== null && !changed.has('view') && signature !== this.#signature;
@@ -605,10 +608,21 @@ export class GfPlantDetail extends LitElement {
 
   /** @param {any} ctx */
   #blocks(ctx) {
+    const king = this.#store.state.kingMode;
     const order = this._dragOrder || blockOrder(this.view);
     const sorting = Boolean(this._dragOrder);
-    return html`<div class="blocks ${sorting ? 'sorting' : ''}">${repeat(blockOrder(this.view), k => k, k =>
-      this.#block(k, ctx, sorting ? order.indexOf(k) : null))}</div>`;
+    // Outside « Mode King », folded blocks are not there at all.
+    const keys = blockOrder(this.view).filter(k => king || !isHidden(this.view, k));
+    return html`<div class="blocks ${king ? 'king' : ''} ${sorting ? 'sorting' : ''}">${repeat(keys, k => k, k =>
+      king ? this.#block(k, ctx, sorting ? order.indexOf(k) : null) : this.#plainBlock(k, ctx))}</div>`;
+  }
+
+  /** A block as read outside « Mode King »: its title, its content. @param {string} key @param {any} ctx */
+  #plainBlock(key, ctx) {
+    return html`<section class="block" data-key=${key}>
+      <h2 class="block-title"><span class="name">${blockTitle(key)}</span></h2>
+      <div class="content">${this.#content(key, ctx)}</div>
+    </section>`;
   }
 
   /** @param {string} key @param {any} ctx @param {number | null} slot  place shown while dragging (CSS order: the nodes do not move) */

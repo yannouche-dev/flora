@@ -1,5 +1,5 @@
 // @ts-check
-// Icons: Bootstrap Icons (https://icons.getbootstrap.com, MIT), from one sprite of the ones the app uses
+// Icons: Bootstrap Icons (https://icons.getbootstrap.com, MIT; plus a crown drawn for the app), from one sprite of the ones the app uses
 // (assets/icons/bi.svg, built by scripts/build-icons.mjs, precached). Drawn in currentColor, 1em square,
 // so they take the size and colour of the text around them. Decorative: the control carries the label.
 
@@ -9,10 +9,10 @@ const SPRITE = new URL('../../assets/icons/bi.svg', import.meta.url).href;
 
 /**
  * @typedef {'arrow-counterclockwise' | 'arrow-left' | 'arrow-right' | 'arrows-angle-expand' | 'arrows-collapse' | 'caret-down-fill' | 'caret-up-fill'
- *   | 'check-lg' | 'chevron-down' | 'chevron-left' | 'chevron-right' | 'crosshair' | 'exclamation-octagon-fill' | 'exclamation-triangle-fill' | 'flower1'
+ *   | 'check-lg' | 'chevron-down' | 'chevron-left' | 'chevron-right' | 'crosshair' | 'crown' | 'exclamation-octagon-fill' | 'exclamation-triangle-fill' | 'flower1'
  *   | 'funnel' | 'funnel-fill' | 'gear' | 'geo-alt-fill' | 'globe-europe-africa' | 'grip-vertical' | 'heart' | 'heart-fill' | 'image' | 'layers'
  *   | 'list-ul' | 'map' | 'mic' | 'mic-fill' | 'pencil' | 'plus-lg' | 'search' | 'share' | 'shield-check' | 'star' | 'star-fill' | 'table'
- *   | 'three-dots' | 'triangle' | 'x' | 'x-lg'} IconName
+ *   | 'three-dots' | 'trash3' | 'triangle' | 'x' | 'x-lg'} IconName
  */
 
 /** An icon in a Lit template. @param {IconName} name */

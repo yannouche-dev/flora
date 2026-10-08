@@ -3,7 +3,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { lastSearchHash } from '../core/query.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
 import { href, RouterController } from '../core/router.js';
-import { setMode, StoreController } from '../core/store.js';
+import { setKingMode, setMode, StoreController } from '../core/store.js';
 import './gf-flora.js';
 import './gf-settings.js';
 import './gf-map-page.js';
@@ -69,6 +69,38 @@ export class GfApp extends LitElement {
     }
     .banner.error { color: var(--gf-danger); }
 
+    /* « Mode King »: the crown, bottom centre, above the tab bar on a phone; touching it leaves the mode. */
+    .king {
+      position: fixed;
+      /* Above the phone plant sheet (900); dialogs still cover it. */
+      z-index: 1000;
+      left: 50%;
+      bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+      transform: translateX(-50%);
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 44px;
+      padding: 8px 18px 8px 14px;
+      border: 2px solid #d4a017;
+      border-radius: var(--gf-radius-pill);
+      background: #2b2410;
+      color: #f5c518;
+      font: inherit;
+      font-weight: 700;
+      white-space: nowrap;
+      cursor: pointer;
+      box-shadow: 0 6px 20px rgb(0 0 0 / 0.35), 0 0 0 0 rgb(212 160 23 / 0.6);
+      animation: king 2s ease-in-out infinite;
+    }
+    .king svg { font-size: 1.35rem; }
+    .king small { font-weight: 400; color: #e8d9a8; }
+    .king:hover { background: #3a3014; }
+    .king:focus-visible { outline: none; box-shadow: var(--gf-focus); }
+    :host([phone]) .king { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+    @keyframes king { 50% { box-shadow: 0 6px 20px rgb(0 0 0 / 0.35), 0 0 0 8px rgb(212 160 23 / 0); } }
+    @media (prefers-reduced-motion: reduce) { .king { animation: none; } }
+
     @media (max-width: 560px) {
       .brand span { display: none; }
       header { gap: 8px; padding: 8px 10px; }
@@ -117,8 +149,12 @@ export class GfApp extends LitElement {
       </main>
       ${phone ? html`<gf-tabbar current=${tabOf(route.name)}></gf-tabbar>` : html`<span></span>`}
       <gf-capture></gf-capture>
+      ${this.#store.state.kingMode ? html`<button class="king" type="button" aria-pressed="true" aria-label="Quitter le mode King"
+        title="Mode King actif : touchez pour quitter" @click=${() => setKingMode(false)}>${icon('crown')} Mode King <small>· quitter</small></button>` : nothing}
     `;
   }
+
+  updated() { this.toggleAttribute('phone', this.#phone.matches); }
 
   /** @param {import('../core/router.js').Route} route */
   #outlet(route) {

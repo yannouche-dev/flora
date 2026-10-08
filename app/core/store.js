@@ -34,6 +34,7 @@ import { moduleEvents, modulesState, useModeSource } from './modules.js';
  * @property {Partial<Record<Mode, string[]>>} sheetHidden  plant sheet blocks folded away, per view (blocks of a module follow the module instead)
  * @property {string | null} target       collection or place the Épuré plant sheet adds to in one tap (last used)
  * @property {Record<import('./modules.js').ModuleKey, Record<Mode, boolean>>} modules  online services used in each mode (Réglages › Modules)
+ * @property {boolean} kingMode         « Mode King »: the plant sheet blocks can be moved, folded and revived (left with the crown)
  * @property {boolean} harvestMode      "Mode cueillette": harvest log, seasons, look-alike warnings
  * @property {{ id: string, name: string, kind: string, count: number }[]} collections
  */
@@ -103,6 +104,7 @@ export const store = new Store({
   target: readTarget(),
   modules: modulesState(),
   collections: [],
+  kingMode: (() => { try { return localStorage.getItem(config.storageKeys.kingMode) === '1'; } catch { return false; } })(),
   harvestMode: readHarvestMode() ?? false
 });
 
@@ -122,6 +124,12 @@ function readHarvestMode() {
 export function setHarvestMode(on) {
   try { localStorage.setItem(config.storageKeys.harvestMode, on ? '1' : '0'); } catch { /* not persisted */ }
   store.set({ harvestMode: on });
+}
+
+/** Enter or leave « Mode King » (editing the plant sheet blocks); kept until left. @param {boolean} on */
+export function setKingMode(on) {
+  try { if (on) localStorage.setItem(config.storageKeys.kingMode, '1'); else localStorage.removeItem(config.storageKeys.kingMode); } catch { /* not persisted */ }
+  store.set({ kingMode: on });
 }
 
 /** First launch with this setting: turn harvest mode on if the device already holds harvests. */

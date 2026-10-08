@@ -14,13 +14,19 @@ const NAMES = [
   'three-dots', 'trash3', 'triangle', 'x', 'x-lg'
 ];
 
+// Drawn for the app, in the same 16 × 16 grid, where Bootstrap Icons has none.
+const EXTRA = {
+  // « Mode King » (no crown in Bootstrap Icons 1.13).
+  crown: '<path d="M1 4.5 4.6 7.6 8 2l3.4 5.6L15 4.5 13.6 12H2.4zM2.4 13h11.2v1.5H2.4z"/>'
+};
+
 const pkg = process.argv[2] || 'node_modules/bootstrap-icons';
 const { version } = JSON.parse(readFileSync(join(pkg, 'package.json'), 'utf8'));
 const symbols = NAMES.map(name => {
   const svg = readFileSync(join(pkg, 'icons', name + '.svg'), 'utf8');
   const body = svg.replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '').trim().replace(/\s*\n\s*/g, '');
   return `<symbol id="${name}" viewBox="0 0 16 16">${body}</symbol>`;
-});
+}).concat(Object.entries(EXTRA).map(([name, body]) => `<symbol id="${name}" viewBox="0 0 16 16" fill="currentColor">${body}</symbol>`));
 writeFileSync('assets/icons/bi.svg', `<svg xmlns="http://www.w3.org/2000/svg">
 <!-- Bootstrap Icons v${version} (https://icons.getbootstrap.com), © The Bootstrap Authors, MIT License. Built by scripts/build-icons.mjs. -->
 ${symbols.join('\n')}
