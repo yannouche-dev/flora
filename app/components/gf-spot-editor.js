@@ -8,12 +8,13 @@ import { searchPlants } from '../core/search.js';
 import {
   ABUNDANCE, defaultPlantPosition, deletePlace, distance, entryInSeason, entryName, entryPosition, exportGeoJSON, findEntry,
   formatDistance, getPlace, lastHarvest, matchCollections, plantMarkers,
-  nearbyPlaces, newCollection, newPlace, placeTitle, plantCount, savePlace, withEntry, withLocation, withoutPlant, withPlant
+  nearbyPlaces, newCollection, newPlace, placeTitle, plantCount, savePlace, spotEvents, withEntry, withLocation, withoutPlant, withPlant
 } from '../core/collections.js';
 import { encodeCollection, share } from '../core/share.js';
 import { StoreController, whenReady } from '../core/store.js';
 import { addressAt, altitudeAt, formatCoordinates } from '../core/geoservices.js';
 import { ui } from '../styles/ui.js';
+import './gf-lookalikes.js';
 import './gf-map.js';
 import './gf-status.js';
 import './gf-thumb.js';
@@ -38,6 +39,11 @@ const shortDate = (/** @type {string} */ iso) =>
  *  - create a place (`kind="place"`, optional `plant-id`): follows the GPS until "Enregistrer"
  *    (or until the pin is dragged / placed by long press).
  * Places show the IGN map; lists can be given a position, which turns them into places.
+ *
+ * A saved place lives on the Carte (`embedded`, in its panel): the Carte's map is the place's map. The editor
+ * then asks it through events — map-fly {coordinates, zoom}, map-edit (✎ positions), plant-focus {plantId},
+ * panel-close — and the Carte hands moves back with `savePositions()`. Opened on its own, a saved place
+ * redirects to the Carte.
  */
 export class GfSpotEditor extends LitElement {
   static properties = {
@@ -47,6 +53,11 @@ export class GfSpotEditor extends LitElement {
     pick: { type: Boolean },
     kind: {},
     at: { attribute: false },
+    embedded: { type: Boolean, reflect: true },
+    /** Embedded: the Carte's map is editing positions. */
+    mapEditing: { attribute: false },
+    /** Embedded: the plant tapped on the map (its entry opens). */
+    focus: { attribute: false },
     _saveState: { state: true },
     _place: { state: true },
     _manual: { state: true },
@@ -69,6 +80,10 @@ export class GfSpotEditor extends LitElement {
       min-height: 0;
     }
     :host([nogeo]) { grid-template-rows: 1fr; }
+    /* In the Carte's panel: the panel scrolls, the map is the Carte's. */
+    :host([embedded]) { display: block; }
+    :host([embedded]) form { overflow: visible; padding-top: 4px; }
+    :host([embedded]) .footer { bottom: 0; }
     .title { display: flex; align-items: center; gap: 10px; }
     .title h1 { margin: 0; font-size: 1.35rem; }
     .title .kind { font-size: 1.4rem; }
@@ -224,6 +239,10 @@ export class GfSpotEditor extends LitElement {
     this.kind = 'place';
     /** @type {[number, number] | null} point picked on the map for a new place */
     this.at = null;
+    this.embedded = false;
+    this.mapEditing = false;
+    /** @type {number | null} */
+    this.focus = null;
     /** Address and altitude of the place point (IGN). @type {{ key: string, address?: string | null, alt?: number | null }} */
     this._where = { key: '' };
     /** @type {'' | 'saving' | 'saved' | 'error'} */
@@ -281,6 +300,7 @@ export class GfSpotEditor extends LitElement {
     const wasNew = this.#isNew;
     this.#saving = savePlace(this.#payload())
       .then(saved => {
+        this.#savedAt = saved.properties.updatedAt;
         if (wasNew) {
           this.#persisted = true;
           history.replaceState(null, '', href.spot(saved.id));
@@ -311,10 +331,42 @@ export class GfSpotEditor extends LitElement {
     return place;
   }
 
+  /** updatedAt of the version this editor last read or wrote: anything newer was changed elsewhere. */
+  #savedAt = '';
+
+  /** Embedded on the Carte: « Noter ici » or the map may change this place meanwhile; reload it then. */
+  #onSpotsChange = async () => {
+    if (!this.embedded || !this.spotId || this.#dirty || this.#saving) return;
+    const place = await getPlace(this.spotId).catch(() => null);
+    if (!place || this.#dirty || this.#saving || place.properties.updatedAt === this.#savedAt) return;
+    this.#savedAt = place.properties.updatedAt;
+    // Today's harvests of the added plants are saved in it already.
+    this._todayFor = new Map();
+    this._place = place;
+  };
+
+  connectedCallback() {
+    super.connectedCallback();
+    spotEvents.addEventListener('change', this.#onSpotsChange);
+  }
+
   disconnectedCallback() {
     super.disconnectedCallback();
+    spotEvents.removeEventListener('change', this.#onSpotsChange);
     // Leaving the page: save what is pending right away.
     this.#flush();
+  }
+
+  /** Positions editing: the Carte's map when embedded, else this page's. */
+  get #editing() { return this.embedded ? Boolean(this.mapEditing) : this._editPos; }
+
+  /** @param {string} type @param {any} [detail] */
+  #emit(type, detail) { this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true })); }
+
+  /** @param {[number, number]} coordinates @param {number} zoom */
+  #fly(coordinates, zoom) {
+    if (this.embedded) this.#emit('map-fly', { coordinates, zoom });
+    else /** @type {any} */ (this.renderRoot.querySelector('gf-map'))?.flyTo(coordinates, zoom);
   }
 
   /** @param {Map<string, any>} changed */
@@ -325,6 +377,7 @@ export class GfSpotEditor extends LitElement {
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
     if (changed.has('spotId') || changed.has('plantId') || changed.has('addPlant') || changed.has('kind') || changed.has('at')) this.#load();
+    if (changed.has('focus') && this.focus != null) this._open = this.focus;
     if (changed.has('_place')) this.#updateWhere();
 
     // A new place follows the GPS until the user places it by hand.
@@ -377,6 +430,13 @@ export class GfSpotEditor extends LitElement {
     this._editPos = !this.spotId && this.kind !== 'list';
     if (this.spotId) {
       let place = await getPlace(this.spotId);
+      // A saved place is shown on the Carte, in its panel (same map, same page).
+      if (place?.geometry && place.properties.kind === 'place' && !this.embedded) {
+        location.replace(href.map({ spot: place.id, add: this.addPlant ?? undefined, pick: this.pick }));
+        return;
+      }
+      this.#savedAt = place?.properties.updatedAt || '';
+      if (this.embedded && this.focus != null) this._open = this.focus;
       if (place && this.addPlant && place.properties.kind === 'place') {
         if (!findEntry(place, this.addPlant)) {
           const plant = await db.get('plants', this.addPlant);
@@ -392,7 +452,7 @@ export class GfSpotEditor extends LitElement {
       this._manual = true;
       // Arrived with a plant to add ("Y ajouter…", "Ajouter à…"): that is an edit to save.
       if (place && this.addPlant && this._todayFor.size) this.#changed();
-      document.title = (place ? placeTitle(place) : 'Lieu') + ' — GeoFlora';
+      if (!this.embedded) document.title = (place ? placeTitle(place) : 'Lieu') + ' — GeoFlora';
     } else if (this.kind === 'list') {
       let list = newCollection('list');
       const plant = this.plantId ? await db.get('plants', this.plantId) : null;
@@ -445,7 +505,7 @@ export class GfSpotEditor extends LitElement {
    * ✓ Valider on the map (✎): the place point, then the plants (a new place's plants on its point follow it).
    * @param {{ pin: [number, number] | null, plants: { plantId: number | null, coordinates: [number, number] }[] }} moves
    */
-  #savePositions({ pin, plants }) {
+  savePositions({ pin, plants }) {
     if (!this._place) return;
     if (pin) {
       this._manual = true;
@@ -456,11 +516,14 @@ export class GfSpotEditor extends LitElement {
       this._place = withEntry(this._place, plantId, { coordinates: [Math.round(coordinates[0] * 1e7) / 1e7, Math.round(coordinates[1] * 1e7) / 1e7], accuracy: null });
     }
     this.#changed();
+    // Validated on the map: saved right away, so the markers get their new positions back at once.
+    if (this.#autosave) this.#flush();
   }
 
   /** "Déplacer" on a plant: switch to position editing and show it. @param {[number, number] | null} coordinates */
   #editPlantPosition(coordinates) {
-    this._editPos = true;
+    if (this.embedded) this.#emit('map-edit');
+    else this._editPos = true;
     this.#showOnMap(coordinates);
   }
 
@@ -469,12 +532,12 @@ export class GfSpotEditor extends LitElement {
     const fix = this.#geo.state.fix;
     if (!fix) return;
     this.#patchEntry(plantId, { coordinates: fix.coordinates, accuracy: Math.round(fix.accuracy) });
-    /** @type {any} */ (this.renderRoot.querySelector('gf-map'))?.flyTo(fix.coordinates, 19);
+    this.#fly(fix.coordinates, 19);
   }
 
   /** @param {[number, number] | null} coordinates */
   #showOnMap(coordinates) {
-    if (coordinates) /** @type {any} */ (this.renderRoot.querySelector('gf-map'))?.flyTo(coordinates, 19);
+    if (coordinates) this.#fly(coordinates, 19);
   }
 
   #useGps() {
@@ -482,7 +545,7 @@ export class GfSpotEditor extends LitElement {
     if (!fix || !this._place) return;
     this._manual = false;
     this._place = this.#movePlace(fix.coordinates, Math.round(fix.accuracy));
-    /** @type {any} */ (this.renderRoot.querySelector('gf-map'))?.flyTo(fix.coordinates, 18);
+    this.#fly(fix.coordinates, 18);
     this.#findNearby();
     this.#changed();
   }
@@ -628,7 +691,8 @@ export class GfSpotEditor extends LitElement {
     if (this.#autosave) {
       // Lists and existing collections are saved as you go: "Terminé" just leaves.
       await this.#flush();
-      location.hash = this.#doneHref();
+      if (this.embedded) this.#emit('panel-close');
+      else location.hash = this.#doneHref();
       return;
     }
     try {
@@ -686,9 +750,9 @@ export class GfSpotEditor extends LitElement {
     const { fix, error } = this.#geo.state;
     if (this._manual) {
       return html`<div class="gps card"><span class="dot good"></span> Point de l’endroit ${this.#isNew ? 'placé à la main' : 'enregistré'}
-        ${fix && this._editPos ? html`<button type="button" @click=${this.#useGps}>Utiliser le GPS</button>` : nothing}
+        ${fix && this.#editing ? html`<button type="button" @click=${this.#useGps}>Utiliser le GPS</button>` : nothing}
         ${this.#whereLine()}
-        <span class="hint">${this._editPos
+        <span class="hint">${this.#editing
           ? 'Le carré vert est le point de l’endroit, les ronds sont les plantes : faites-les glisser pour les ajuster.'
           : 'Le carré vert est le point de l’endroit, les ronds sont les plantes. ✎ sur la carte pour les déplacer.'}</span></div>`;
     }
@@ -733,11 +797,17 @@ export class GfSpotEditor extends LitElement {
     return html`<div class="plant-pos">
       <span>📍 ${away < 3 ? 'Au point de l’endroit' : `À ${formatDistance(away)} du point de l’endroit`}${entry.accuracy ? ` · ± ${entry.accuracy} m` : ''}</span>
       <button type="button" @click=${() => this.#showOnMap(own)}>Voir sur la carte</button>
-      ${this._editPos ? html`
+      ${this.#editing ? html`
         <button type="button" ?disabled=${!fix} @click=${() => this.#plantHere(entry.plantId)}>Ici (GPS)</button>
         <small>Ou faites glisser son rond sur la carte.</small>` : html`
         <button type="button" @click=${() => this.#editPlantPosition(own)}>Déplacer</button>`}
     </div>`;
+  }
+
+  /** Opens or closes a plant's details; on the Carte, its marker is highlighted. @param {number | null} id */
+  #toggleEntry(id) {
+    this._open = id;
+    if (this.embedded) this.#emit('plant-focus', { plantId: id });
   }
 
   /** @param {import('../core/collections.js').PlantEntry} entry */
@@ -750,7 +820,7 @@ export class GfSpotEditor extends LitElement {
 
     return html`
       <li class="entry card ${open ? 'open' : ''}">
-        <button class="head" type="button" aria-expanded=${open ? 'true' : 'false'} @click=${() => { this._open = open ? null : id; }}>
+        <button class="head" type="button" aria-expanded=${open ? 'true' : 'false'} @click=${() => this.#toggleEntry(open ? null : id)}>
           <gf-thumb plant-id=${id ?? 0} size="44"></gf-thumb>
           <span class="name">${entryName(entry)}</span>
           <span class="chev" aria-hidden="true">▾</span>
@@ -767,6 +837,8 @@ export class GfSpotEditor extends LitElement {
         ${open ? html`
           <div class="body">
             ${id !== null ? html`<gf-status plant-id=${id} .point=${entryPosition(this._place, entry) || null}></gf-status>` : nothing}
+            ${id !== null && this.#harvest ? html`<gf-lookalikes compact
+              .plant=${{ id, scientificName: entry.scientificName, genus: entry.scientificName.split(' ')[0] }}></gf-lookalikes>` : nothing}
             ${fresh && this.#harvest ? html`
               <div class="today">
                 <input id="today-${id}" type="checkbox" .checked=${todayQuantity !== null}
@@ -884,7 +956,7 @@ export class GfSpotEditor extends LitElement {
     const weak = this.#isNew && isPlace && !this._manual && (!fix || fix.accuracy > config.goodAccuracy);
 
     return html`
-      ${place.geometry ? html`<div class="map-area">
+      ${place.geometry && !this.embedded ? html`<div class="map-area">
         <gf-map
           .pin=${place.geometry.coordinates}
           .plants=${plantMarkers([place], () => true, this.#store.state.harvestMode)}
@@ -893,7 +965,7 @@ export class GfSpotEditor extends LitElement {
           editable
           ?editing=${this._editPos}
           @edit-change=${e => { this._editPos = e.detail.editing; }}
-          @positions-save=${e => this.#savePositions(e.detail)}
+          @positions-save=${e => this.savePositions(e.detail)}
           @plant-select=${e => { this._open = e.detail.plantId; }}
           track
           fit
@@ -902,7 +974,7 @@ export class GfSpotEditor extends LitElement {
       </div>` : nothing}
 
       <form @submit=${this.#save}>
-        ${isPlace ? this.#gpsStatus() : nothing}
+        ${isPlace && !this.embedded ? this.#gpsStatus() : nothing}
         ${isPlace ? this.#nearbyBanner() : nothing}
 
         ${isFavorites
@@ -925,11 +997,13 @@ export class GfSpotEditor extends LitElement {
             @input=${e => this.#patch({ notes: e.target.value })}></textarea>
         </label>`}
 
+        ${isPlace && this.embedded ? this.#gpsStatus() : nothing}
+
         ${this.#isNew ? nothing : html`
           <div class="toolbar">
             ${p.plants.length ? html`<button type="button" @click=${this.#share}>Partager</button>` : nothing}
             <button type="button" @click=${this.#export}>Exporter (GeoJSON)</button>
-            ${isPlace ? html`<a class="button" href=${href.map({ spot: place.id })}>Voir sur la carte</a>` : nothing}
+            ${isPlace && !this.embedded ? html`<a class="button" href=${href.map({ spot: place.id })}>Voir sur la carte</a>` : nothing}
             ${isPlace ? html`<button type="button" @click=${this.#removeLocation}>Retirer la position</button>` : nothing}
           </div>`}
 
