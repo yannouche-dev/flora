@@ -18,7 +18,8 @@ export class GfLookalikes extends LitElement {
     compact: { type: Boolean },
     detailed: { type: Boolean },
     _list: { state: true },
-    _open: { state: true }
+    _open: { state: true },
+    _loading: { state: true }
   };
 
   static styles = [ui, css`
@@ -54,6 +55,7 @@ export class GfLookalikes extends LitElement {
     /** @type {Lookalike[]} */
     this._list = [];
     this._open = false;
+    this._loading = false;
   }
 
   /** @param {Map<string, unknown>} changed */
@@ -61,8 +63,10 @@ export class GfLookalikes extends LitElement {
     if (changed.has('plant') && this.plant?.id !== /** @type {any} */ (changed.get('plant'))?.id) {
       this._list = [];
       this._open = false;
+      this._loading = true;
       const plant = this.plant;
-      lookalikesOf(plant).then(list => { if (this.plant === plant) this._list = list; }).catch(console.error);
+      lookalikesOf(plant).then(list => { if (this.plant === plant) this._list = list; }).catch(console.error)
+        .finally(() => { if (this.plant === plant) this._loading = false; });
     }
   }
 
@@ -89,7 +93,11 @@ export class GfLookalikes extends LitElement {
     </div>`;
   }
 
-  updated() { this.hidden = !this._list.length; }
+  updated() {
+    this.hidden = !this._list.length;
+    // Still reading the list: the sheet waits before saying there is nothing.
+    this.toggleAttribute('loading', this._loading);
+  }
 
   render() {
     const list = this._list;

@@ -28,6 +28,7 @@ export const config = {
     gridView: 'geoflora.gridView',
     plantView: 'geoflora.plantView',
     sheetBlocks: 'geoflora.sheetBlocks',
+    sheetHidden: 'geoflora.sheetHidden',
     target: 'geoflora.target',
     mapLayer: 'geoflora.mapLayer',
     mapView: 'geoflora.mapView',

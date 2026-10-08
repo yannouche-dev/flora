@@ -9,7 +9,7 @@ import { icon, MODE_ICONS } from '../core/icons.js';
 import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
-import { SHEET_BLOCKS, blockOrder, blockTitle, isCustomOrder, resetBlockOrder } from '../core/sheet-blocks.js';
+import { blockModuleName, blockOrder, blockTitle, isCustom, isHidden, resetBlocks, setHidden } from '../core/sheet-blocks.js';
 import { ui } from '../styles/ui.js';
 
 export class GfSettings extends LitElement {
@@ -65,6 +65,8 @@ export class GfSettings extends LitElement {
     .block-order .head button { margin-left: auto; }
     .block-order ol { margin: 8px 0 0; padding-left: 22px; font-size: 0.88rem; }
     .block-order li { margin: 2px 0; }
+    .block-order label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+    .block-order input { margin: 0; }
     .module .mode input { width: 18px; height: 18px; margin: 0; }
   `];
 
@@ -234,19 +236,27 @@ export class GfSettings extends LitElement {
       </ul>`;
   }
 
-  /** « Ordre des blocs de la fiche »: each mode's order, and back to the default one. */
+  /** « Blocs de la fiche »: each mode's order and shown blocks (the same switches as the sheet and the modules), and back to the default. */
   #blockOrders() {
     void this.#store.state.sheetBlocks;
+    void this.#store.state.sheetHidden;
+    void this.#store.state.modules;
     return html`
-      <h3>Ordre des blocs de la fiche</h3>
-      <p class="muted">Dans une fiche plante, glissez un bloc par sa poignée ${icon('grip-vertical')} pour le déplacer (ou ↑ ↓ au clavier). Chaque mode garde son ordre.</p>
+      <h3>Blocs de la fiche</h3>
+      <p class="muted">Dans une fiche plante, glissez un bloc par son titre pour le déplacer (ou ↑ ↓ sur sa poignée ${icon('grip-vertical')}),
+        repliez-le avec ${icon('trash3')} et réaffichez-le avec ${icon('arrow-counterclockwise')}. Chaque mode garde son ordre et ses blocs ;
+        replier un bloc de service (Wikipédia, GBIF, Trefle, photos) coupe ce module dans ce mode.</p>
       <div class="block-orders">
-        ${MODE_KEYS.filter(mode => SHEET_BLOCKS[mode]).map(mode => html`
+        ${MODE_KEYS.map(mode => html`
           <div class="card block-order">
             <div class="head">${MODE_ICONS[mode]}<strong>${MODE_LABELS[mode]}</strong>
-              <button type="button" class="small" ?disabled=${!isCustomOrder(mode)} @click=${() => resetBlockOrder(mode)}>Ordre par défaut</button>
+              <button type="button" class="small" ?disabled=${!isCustom(mode) && !blockOrder(mode).some(k => isHidden(mode, k))}
+                @click=${() => resetBlocks(mode)}>Par défaut</button>
             </div>
-            <ol>${blockOrder(mode).map(k => html`<li>${blockTitle(mode, k)}</li>`)}</ol>
+            <ol>${blockOrder(mode).map(k => html`<li><label>
+              <input type="checkbox" .checked=${!isHidden(mode, k)} @change=${e => setHidden(mode, k, !e.target.checked)} />
+              ${blockTitle(k)}${blockModuleName(k) ? html` <small class="muted">(module ${blockModuleName(k)})</small>` : nothing}
+            </label></li>`)}</ol>
           </div>`)}
       </div>`;
   }

@@ -11,7 +11,7 @@ const NAMES = [
   'check-lg', 'chevron-down', 'chevron-left', 'chevron-right', 'crosshair', 'exclamation-octagon-fill', 'exclamation-triangle-fill', 'flower1',
   'funnel', 'funnel-fill', 'gear', 'geo-alt-fill', 'globe-europe-africa', 'grip-vertical', 'heart', 'heart-fill', 'image', 'layers',
   'list-ul', 'map', 'mic', 'mic-fill', 'pencil', 'plus-lg', 'search', 'share', 'shield-check', 'star', 'star-fill', 'table',
-  'three-dots', 'triangle', 'x', 'x-lg'
+  'three-dots', 'trash3', 'triangle', 'x', 'x-lg'
 ];
 
 const pkg = process.argv[2] || 'node_modules/bootstrap-icons';

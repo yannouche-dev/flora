@@ -31,6 +31,7 @@ import { moduleEvents, modulesState, useModeSource } from './modules.js';
  * @property {Mode | null} gridView      results grid override of the mode (null: follow the mode)
  * @property {Mode | null} plantView     plant sheet override of the mode (null: follow the mode)
  * @property {Partial<Record<Mode, string[]>>} sheetBlocks  order of the plant sheet blocks, per view (only the views reordered by hand)
+ * @property {Partial<Record<Mode, string[]>>} sheetHidden  plant sheet blocks folded away, per view (blocks of a module follow the module instead)
  * @property {string | null} target       collection or place the Épuré plant sheet adds to in one tap (last used)
  * @property {Record<import('./modules.js').ModuleKey, Record<Mode, boolean>>} modules  online services used in each mode (Réglages › Modules)
  * @property {boolean} harvestMode      "Mode cueillette": harvest log, seasons, look-alike warnings
@@ -72,10 +73,10 @@ const readCompact = () => {
   try { return localStorage.getItem(config.storageKeys.compact) === '1'; } catch { return false; }
 };
 
-/** @returns {string | null} */
-const readSheetBlocks = () => {
+/** @param {string} key @returns {Partial<Record<Mode, string[]>>} */
+const readPerView = key => {
   try {
-    const value = JSON.parse(localStorage.getItem(config.storageKeys.sheetBlocks) || '{}');
+    const value = JSON.parse(localStorage.getItem(key) || '{}');
     return value && typeof value === 'object' ? value : {};
   } catch { return {}; }
 };
@@ -97,7 +98,8 @@ export const store = new Store({
   mode: initialMode,
   gridView: readOverride(config.storageKeys.gridView),
   plantView: readOverride(config.storageKeys.plantView),
-  sheetBlocks: readSheetBlocks(),
+  sheetBlocks: readPerView(config.storageKeys.sheetBlocks),
+  sheetHidden: readPerView(config.storageKeys.sheetHidden),
   target: readTarget(),
   modules: modulesState(),
   collections: [],

@@ -43,7 +43,11 @@ export class GfStatus extends LitElement {
 
   /** Nothing to show for this plant here: hidden (the plant sheet then hides its block). */
   _empty = true;
-  updated() { this.hidden = this._empty; }
+  updated() {
+    this.hidden = this._empty;
+    // Still finding where we are: the sheet waits before saying there is nothing.
+    this.toggleAttribute('loading', this._territory === undefined);
+  }
 
   static styles = [ui, css`
     :host { display: block; }
