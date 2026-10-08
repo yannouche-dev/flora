@@ -31,8 +31,10 @@ import { moduleEvents, modulesState, useModeSource } from './modules.js';
  * @property {Mode | null} gridView      results grid override of the mode (null: follow the mode)
  * @property {Mode | null} plantView     plant sheet override of the mode (null: follow the mode)
  * @property {Partial<Record<Mode, string[]>>} sheetBlocks  order of the plant sheet blocks, per view (only the views reordered by hand)
+ * @property {Partial<Record<Mode, string[]>>} sheetHidden  plant sheet blocks folded away, per view (blocks of a module follow the module instead)
  * @property {string | null} target       collection or place the Épuré plant sheet adds to in one tap (last used)
  * @property {Record<import('./modules.js').ModuleKey, Record<Mode, boolean>>} modules  online services used in each mode (Réglages › Modules)
+ * @property {boolean} kingMode         « Mode King »: the plant sheet blocks can be moved, folded and revived (left with the crown)
  * @property {boolean} harvestMode      "Mode cueillette": harvest log, seasons, look-alike warnings
  * @property {{ id: string, name: string, kind: string, count: number }[]} collections
  */
@@ -72,10 +74,10 @@ const readCompact = () => {
   try { return localStorage.getItem(config.storageKeys.compact) === '1'; } catch { return false; }
 };
 
-/** @returns {string | null} */
-const readSheetBlocks = () => {
+/** @param {string} key @returns {Partial<Record<Mode, string[]>>} */
+const readPerView = key => {
   try {
-    const value = JSON.parse(localStorage.getItem(config.storageKeys.sheetBlocks) || '{}');
+    const value = JSON.parse(localStorage.getItem(key) || '{}');
     return value && typeof value === 'object' ? value : {};
   } catch { return {}; }
 };
@@ -97,10 +99,12 @@ export const store = new Store({
   mode: initialMode,
   gridView: readOverride(config.storageKeys.gridView),
   plantView: readOverride(config.storageKeys.plantView),
-  sheetBlocks: readSheetBlocks(),
+  sheetBlocks: readPerView(config.storageKeys.sheetBlocks),
+  sheetHidden: readPerView(config.storageKeys.sheetHidden),
   target: readTarget(),
   modules: modulesState(),
   collections: [],
+  kingMode: (() => { try { return localStorage.getItem(config.storageKeys.kingMode) === '1'; } catch { return false; } })(),
   harvestMode: readHarvestMode() ?? false
 });
 
@@ -120,6 +124,12 @@ function readHarvestMode() {
 export function setHarvestMode(on) {
   try { localStorage.setItem(config.storageKeys.harvestMode, on ? '1' : '0'); } catch { /* not persisted */ }
   store.set({ harvestMode: on });
+}
+
+/** Enter or leave « Mode King » (editing the plant sheet blocks); kept until left. @param {boolean} on */
+export function setKingMode(on) {
+  try { if (on) localStorage.setItem(config.storageKeys.kingMode, '1'); else localStorage.removeItem(config.storageKeys.kingMode); } catch { /* not persisted */ }
+  store.set({ kingMode: on });
 }
 
 /** First launch with this setting: turn harvest mode on if the device already holds harvests. */

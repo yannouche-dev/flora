@@ -1,7 +1,7 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { lastSearchHash } from '../core/query.js';
-import { MODE_LABELS, setHarvestMode, setMode, StoreController } from '../core/store.js';
+import { MODE_LABELS, setHarvestMode, setKingMode, setMode, StoreController } from '../core/store.js';
 import './gf-mode-switch.js';
 import { getTrefleToken, setTrefleToken } from '../core/sources.js';
 import { MODE_KEYS, MODULES, setModule } from '../core/modules.js';
@@ -9,7 +9,7 @@ import { icon, MODE_ICONS } from '../core/icons.js';
 import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
-import { SHEET_BLOCKS, blockOrder, blockTitle, isCustomOrder, resetBlockOrder } from '../core/sheet-blocks.js';
+import { blockModuleName, blockOrder, blockTitle, isCustom, isHidden, resetBlocks, setHidden } from '../core/sheet-blocks.js';
 import { ui } from '../styles/ui.js';
 
 export class GfSettings extends LitElement {
@@ -59,12 +59,19 @@ export class GfSettings extends LitElement {
     .module .modes { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; }
     .module .mode { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer; }
     .module .mode svg { color: var(--gf-text-muted); }
+    .king-card { margin: 12px 0 20px; border: 2px solid color-mix(in srgb, #d4a017 40%, var(--gf-border)); }
+    .king-card.on { border-color: #d4a017; background: color-mix(in srgb, #f5c518 8%, var(--gf-surface)); }
+    .king-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .king-head h2 { margin: 0; flex: 1; }
+    .king-card .crown { font-size: 1.6rem; color: #b8860b; display: inline-flex; }
     .block-orders { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin: 8px 0 16px; }
     .block-order { padding: 10px 12px; }
     .block-order .head { display: flex; align-items: center; gap: 8px; }
     .block-order .head button { margin-left: auto; }
     .block-order ol { margin: 8px 0 0; padding-left: 22px; font-size: 0.88rem; }
     .block-order li { margin: 2px 0; }
+    .block-order label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+    .block-order input { margin: 0; }
     .module .mode input { width: 18px; height: 18px; margin: 0; }
   `];
 
@@ -234,19 +241,42 @@ export class GfSettings extends LitElement {
       </ul>`;
   }
 
-  /** « Ordre des blocs de la fiche »: each mode's order, and back to the default one. */
+  /** « Mode King »: editing the plant sheet blocks, left with the crown at the bottom of the screen. */
+  #king() {
+    const on = this.#store.state.kingMode;
+    return html`
+      <section class="card king-card ${on ? 'on' : ''}" aria-labelledby="king">
+        <div class="king-head">
+          <span class="crown">${icon('crown')}</span>
+          <h2 id="king">Mode King</h2>
+          <button type="button" class=${on ? '' : 'primary'} aria-pressed=${on ? 'true' : 'false'}
+            @click=${() => setKingMode(!on)}>${on ? 'Quitter le mode King' : 'Entrer en mode King'}</button>
+        </div>
+        <p class="muted">Personnalisez la fiche plante : glissez les blocs par leur titre, masquez-les avec la corbeille ${icon('trash3')},
+          réaffichez-les avec ${icon('arrow-counterclockwise')}. Tout est enregistré automatiquement, pour chaque mode d’affichage ;
+          masquer un bloc de service (Wikipédia, GBIF, Trefle, photos) coupe ce module dans ce mode. Quittez en touchant la couronne en bas de l’écran.</p>
+        ${on ? this.#blockOrders() : nothing}
+      </section>`;
+  }
+
+  /** « Blocs de la fiche »: each mode's order and shown blocks (the same switches as the sheet and the modules), and back to the default. */
   #blockOrders() {
     void this.#store.state.sheetBlocks;
+    void this.#store.state.sheetHidden;
+    void this.#store.state.modules;
     return html`
-      <h3>Ordre des blocs de la fiche</h3>
-      <p class="muted">Dans une fiche plante, glissez un bloc par sa poignée ${icon('grip-vertical')} pour le déplacer (ou ↑ ↓ au clavier). Chaque mode garde son ordre.</p>
+      <h3>Blocs de la fiche</h3>
       <div class="block-orders">
-        ${MODE_KEYS.filter(mode => SHEET_BLOCKS[mode]).map(mode => html`
+        ${MODE_KEYS.map(mode => html`
           <div class="card block-order">
             <div class="head">${MODE_ICONS[mode]}<strong>${MODE_LABELS[mode]}</strong>
-              <button type="button" class="small" ?disabled=${!isCustomOrder(mode)} @click=${() => resetBlockOrder(mode)}>Ordre par défaut</button>
+              <button type="button" class="small" ?disabled=${!isCustom(mode) && !blockOrder(mode).some(k => isHidden(mode, k))}
+                @click=${() => resetBlocks(mode)}>Par défaut</button>
             </div>
-            <ol>${blockOrder(mode).map(k => html`<li>${blockTitle(mode, k)}</li>`)}</ol>
+            <ol>${blockOrder(mode).map(k => html`<li><label>
+              <input type="checkbox" .checked=${!isHidden(mode, k)} @change=${e => setHidden(mode, k, !e.target.checked)} />
+              ${blockTitle(k)}${blockModuleName(k) ? html` <small class="muted">(module ${blockModuleName(k)})</small>` : nothing}
+            </label></li>`)}</ol>
           </div>`)}
       </div>`;
   }
@@ -257,6 +287,7 @@ export class GfSettings extends LitElement {
       <article>
         <a class="back link" href=${lastSearchHash()}>${icon('arrow-left')} Recherche</a>
         <h1>À propos et réglages</h1>
+        ${this.#king()}
 
         <h2>Données</h2>
         ${meta ? html`
@@ -301,7 +332,6 @@ export class GfSettings extends LitElement {
         <p class="muted">Épuré : grandes photos et actions rapides (ajouter à la collection en cours). Standard : l’essentiel pour tous.
           Scientifique : toutes les données, locales et distantes. La grille et la fiche plante ont aussi leur propre choix, qui revient au mode de l’application quand celui-ci change.</p>
 
-        ${this.#blockOrders()}
 
         ${this.#modules()}
 
