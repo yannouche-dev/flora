@@ -2,6 +2,7 @@
 import { LitElement, html, css } from 'lit';
 import { lastSearchHash } from '../core/query.js';
 import { href } from '../core/router.js';
+import { icon } from '../core/icons.js';
 
 /**
  * Mobile bottom navigation: Flore · Mes plantes · [+ Noter ici] · Carte · Plus.
@@ -60,18 +61,18 @@ export class GfTabbar extends LitElement {
   }
 
   render() {
-    const tab = (/** @type {string} */ id, /** @type {string} */ link, /** @type {string} */ icon, /** @type {string} */ label) => html`
-      <a href=${link} aria-current=${this.current === id ? 'page' : 'false'}><span class="icon" aria-hidden="true">${icon}</span><span>${label}</span></a>`;
+    const tab = (/** @type {string} */ id, /** @type {string} */ link, /** @type {import('../core/icons.js').IconName} */ name, /** @type {string} */ label) => html`
+      <a href=${link} aria-current=${this.current === id ? 'page' : 'false'}><span class="icon" aria-hidden="true">${icon(name)}</span><span>${label}</span></a>`;
     return html`
       <nav aria-label="Navigation principale">
-        ${tab('flore', lastSearchHash(), '🔍', 'Flore')}
-        ${tab('mine', href.collections(), '♥', 'Mes plantes')}
+        ${tab('flore', lastSearchHash(), 'search', 'Flore')}
+        ${tab('mine', href.collections(), 'heart', 'Mes plantes')}
         <button class="capture" type="button" aria-label="Noter une plante ici"
           @click=${() => this.dispatchEvent(new CustomEvent('open-capture', { bubbles: true, composed: true }))}>
-          <span class="icon" aria-hidden="true">+</span><span>Noter ici</span>
+          <span class="icon" aria-hidden="true">${icon('plus-lg')}</span><span>Noter ici</span>
         </button>
-        ${tab('map', href.map(), '🗺', 'Carte')}
-        ${tab('more', href.settings(), '⋯', 'Plus')}
+        ${tab('map', href.map(), 'map', 'Carte')}
+        ${tab('more', href.settings(), 'three-dots', 'Plus')}
       </nav>
     `;
   }

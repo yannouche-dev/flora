@@ -35,3 +35,6 @@ gf-app {
 gf-app:defined + .gf-boot {
   display: none;
 }
+
+/* Bootstrap Icons (app/core/icons.js) outside shadow roots. */
+.bi { flex: none; vertical-align: -0.125em; }

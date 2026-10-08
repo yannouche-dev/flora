@@ -7,6 +7,7 @@ import { href } from '../core/router.js';
 import * as sources from '../core/sources.js';
 import { toggleFavorite } from '../core/collections.js';
 import { gridViewOf, StoreController } from '../core/store.js';
+import { icon } from '../core/icons.js';
 
 /** One result row. Resolves a remote thumbnail when the dataset has none. */
 export class GfPlantCard extends LitElement {
@@ -208,7 +209,7 @@ export class GfPlantCard extends LitElement {
     const cells = {
       photo: () => thumb?.url
         ? html`<img class="thumb" src=${thumb.url} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
-        : html`<span class="thumb" aria-hidden="true">${thumb === undefined ? '' : '🌿'}</span>`,
+        : html`<span class="thumb" aria-hidden="true">${thumb === undefined ? '' : icon('flower1')}</span>`,
       fr: () => illustrated
         ? html`<span class="cell name stack">
             <span class="fr">${p.vernacularName ? highlight(p.vernacularName, q) : html`<span class="muted">Sans nom français</span>`}</span>
@@ -232,11 +233,11 @@ export class GfPlantCard extends LitElement {
       ${this.columns.includes('fav') ? html`<button class="fav" type="button" aria-pressed=${fav ? 'true' : 'false'}
         aria-label=${(fav ? 'Retirer des favoris : ' : 'Ajouter aux favoris : ') + title}
         title=${fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-        @click=${this.#toggleFavorite}>${fav ? '♥' : '♡'}</button>` : nothing}
+        @click=${this.#toggleFavorite}>${icon(fav ? 'heart-fill' : 'heart')}</button>` : nothing}
       ${this.columns.includes('pin') ? html`<a class="pin ${placeId ? 'on' : ''}"
         href=${placeId ? href.map({ spot: placeId, focus: p.id }) : href.newSpot(p.id)}
         title=${placeId ? 'Notée dans un de mes lieux : voir sur la carte' : 'Noter où je la trouve'}
-        aria-label=${(placeId ? 'Voir sur la carte : ' : 'Noter où je la trouve : ') + title}>📍</a>` : nothing}`;
+        aria-label=${(placeId ? 'Voir sur la carte : ' : 'Noter où je la trouve : ') + title}>${icon('geo-alt-fill')}</a>` : nothing}`;
   }
 
   render() {
@@ -256,7 +257,7 @@ export class GfPlantCard extends LitElement {
       <a class="row" href=${href.plant(p.id)} @click=${() => rememberSearch(q)}>
         ${this.compact ? nothing : thumb?.url
           ? html`<img class="thumb" src=${thumb.url} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
-          : html`<span class="thumb" aria-hidden="true">${thumb === undefined ? '' : '🌿'}</span>`}
+          : html`<span class="thumb" aria-hidden="true">${thumb === undefined ? '' : icon('flower1')}</span>`}
         <span class="text">
           <div class="name ${p.vernacularName ? '' : 'latin'}">${highlight(title, q)}</div>
           <div class="sci">${p.vernacularName ? highlight(p.scientificName, q) : nothing} <span class="author">${this.compact ? '' : p.author || ''}</span></div>
@@ -267,7 +268,7 @@ export class GfPlantCard extends LitElement {
       </a>
       <button class="fav" type="button" aria-pressed=${fav ? 'true' : 'false'}
         aria-label=${(fav ? 'Retirer des favoris : ' : 'Ajouter aux favoris : ') + title}
-        @click=${this.#toggleFavorite}>${fav ? '♥' : '♡'}</button>
+        @click=${this.#toggleFavorite}>${icon(fav ? 'heart-fill' : 'heart')}</button>
     `;
   }
 }

@@ -1,14 +1,31 @@
 // @ts-check
-// Line icons drawn in currentColor, for buttons without text (the button carries the label).
+// Icons: Bootstrap Icons (https://icons.getbootstrap.com, MIT), from one sprite of the ones the app uses
+// (assets/icons/bi.svg, built by scripts/build-icons.mjs, precached). Drawn in currentColor, 1em square,
+// so they take the size and colour of the text around them. Decorative: the control carries the label.
 
-import { svg } from 'lit';
+import { html } from 'lit';
 
-const frame = (/** @type {import('lit').SVGTemplateResult} */ body) => svg`<svg viewBox="0 0 24 24" width="18" height="18" fill="none"
-  stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${body}</svg>`;
+const SPRITE = new URL('../../assets/icons/bi.svg', import.meta.url).href;
 
-/** Display modes: Épuré (photo), Standard (lines), Scientifique (table). */
-export const MODE_ICONS = {
-  epure: frame(svg`<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="9" cy="9.5" r="1.8"/><path d="M4 18l5.5-5.5 3.5 3.5 2.5-2.5L20 18"/>`),
-  standard: frame(svg`<circle cx="5" cy="6.5" r="1.1" fill="currentColor"/><circle cx="5" cy="12" r="1.1" fill="currentColor"/><circle cx="5" cy="17.5" r="1.1" fill="currentColor"/><path d="M9 6.5h11M9 12h11M9 17.5h11"/>`),
-  scientific: frame(svg`<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M3 14.5h18M9.5 4v16M15.5 4v16"/>`)
-};
+/**
+ * @typedef {'arrow-counterclockwise' | 'arrow-left' | 'arrow-right' | 'arrows-angle-expand' | 'arrows-collapse' | 'caret-down-fill' | 'caret-up-fill'
+ *   | 'check-lg' | 'chevron-down' | 'chevron-left' | 'chevron-right' | 'crosshair' | 'exclamation-octagon-fill' | 'exclamation-triangle-fill' | 'flower1'
+ *   | 'funnel' | 'funnel-fill' | 'gear' | 'geo-alt-fill' | 'globe-europe-africa' | 'heart' | 'heart-fill' | 'image' | 'layers'
+ *   | 'list-ul' | 'map' | 'mic' | 'mic-fill' | 'pencil' | 'plus-lg' | 'search' | 'share' | 'shield-check' | 'star' | 'star-fill' | 'table'
+ *   | 'three-dots' | 'triangle' | 'x' | 'x-lg'} IconName
+ */
+
+/** An icon in a Lit template. @param {IconName} name */
+export const icon = name => html`<svg class="bi" width="1em" height="1em" fill="currentColor" aria-hidden="true" focusable="false"><use href="${SPRITE}#${name}"></use></svg>`;
+
+/** The same icon as markup, for DOM built by hand (Leaflet markers and controls). @param {IconName} name */
+export const iconMarkup = name => `<svg class="bi" width="1em" height="1em" fill="currentColor" aria-hidden="true" focusable="false"><use href="${SPRITE}#${name}"></use></svg>`;
+
+/** The sprite symbol URL, for an SVG built by hand (`<use href>`). @param {IconName} name */
+export const iconHref = name => `${SPRITE}#${name}`;
+
+/** What a collection is: favorites, list or place. @param {string} kind */
+export const kindIcon = kind => icon(kind === 'favorites' ? 'heart-fill' : kind === 'place' ? 'geo-alt-fill' : 'list-ul');
+
+/** Display modes: Épuré (photo), Standard (list), Scientifique (table). */
+export const MODE_ICONS = { epure: icon('image'), standard: icon('list-ul'), scientific: icon('table') };

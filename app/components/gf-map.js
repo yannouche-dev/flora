@@ -15,6 +15,7 @@ import { href } from '../core/router.js';
 import './gf-map-panel.js';
 import './gf-map-search.js';
 import './gf-point-card.js';
+import { icon, iconHref, iconMarkup } from '../core/icons.js';
 
 const STYLESHEETS = [
   new URL('../../vendor/leaflet.css', import.meta.url).href,
@@ -56,7 +57,8 @@ function pinIcon(spot, selected, movable = false) {
 }
 
 /** Leaf glyph for plant markers. */
-const LEAF = '<path d="M7 15c0-5 3-8 8-8 0 5-3 8-8 8Zm0 0 4-4" fill="#fff" stroke="#fff" stroke-width="1.2" stroke-linecap="round"/>';
+/** A plant without a photo: a flower (Bootstrap Icons) in its circle. */
+const FLOWER = `<svg x="5" y="5" width="12" height="12" viewBox="0 0 16 16" fill="#fff"><use href="${iconHref('flower1')}"></use></svg>`;
 
 const escapeAttr = (/** @type {string} */ s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
@@ -83,7 +85,7 @@ function plantIcon(plant, selected, draggable) {
     iconAnchor: [12, 12],
     html: `<svg width="24" height="24" viewBox="0 0 22 22" aria-hidden="true">
       <circle class="ring" cx="11" cy="11" r="9.5" fill="${color}" stroke="#fff" stroke-width="2"/>
-      <g transform="translate(0 0)">${LEAF}</g>
+      ${FLOWER}
     </svg>`
   });
 }
@@ -157,9 +159,9 @@ const store = (/** @type {string} */ key, value) => {
  *  - search (default on; `no-search` removes it): address search pill on top, with the ▦ "Carte" panel button;
  *    legend (default on): legend in the panel
  *  - no-create: the point card (long press) has no "Créer un endroit ici"
- *  - editable: the ✎ control (always shown) switches position editing on. While `editing`: with a `pin` (place
- *    editor), the pin and the plants move; with a selected place, that place and its plants; otherwise every
- *    place. Moves stay a working copy until ✓ Valider, which emits positions-save; Annuler drops them.
+ *  - editable: the ✎ control (always shown) switches position editing on. While `editing`, every marker
+ *    (places, plants, the pin) is dragged freely; each drop (or long press: place the pin / selected place)
+ *    emits positions-save with that one move, for the caller to store at once. « Terminé » or ✎ ends it.
  * Events: spot-select {id}, plant-select {placeId, plantId}, pin-move {coordinates},
  *         plant-move {placeId, plantId, coordinates}, map-longpress {coordinates} (while the pin can be placed),
  *         point-info {coordinates} (long press elsewhere: the point card opens), point-close,
@@ -236,10 +238,9 @@ export class GfMap extends LitElement {
   // Lit owns this one wrapper; Leaflet and the map buttons live inside it, out of Lit's way
   // (anything appended straight to the host would be cleared by Lit's next render).
   render() {
-    const n = movesCount(this._moves);
-    const hint = this.pin ? 'Glissez le lieu et ses plantes · appui long : placer le lieu'
-      : this.selectedId ? 'Glissez le lieu ou ses plantes · appui long : placer le lieu'
-      : this.spots.length ? 'Glissez les lieux et les plantes (en zoomant) pour les déplacer' : 'Glissez les plantes pour les déplacer';
+    const hint = (this.pin || this.selectedId ? 'Glissez le lieu ou ses plantes · appui long : placer le lieu'
+      : this.spots.length ? 'Glissez les lieux et les plantes (en zoomant)' : 'Glissez les plantes')
+      + ' — enregistré dès que vous lâchez';
     // The frame goes full screen while editing positions: in the browser's top layer (popover), so no
     // ancestor (a pane with `contain`, the header, the tab bar) can clip or cover it.
     return html`<div class="gf-map-frame" popover="manual"><div class="gf-map-root"></div>
@@ -249,10 +250,9 @@ export class GfMap extends LitElement {
         ${this.#protectedBanner()}
       </div>
       ${this.editing ? html`<div class="gf-map-editbar" role="group" aria-label="Modifier les positions">
-        <span class="hint">${n ? `${n} déplacement${n > 1 ? 's' : ''} · ` : ''}${hint}</span>
+        <span class="hint">${hint}</span>
         <span class="actions">
-          <button type="button" @click=${() => this.#endEdit(false)}>Annuler</button>
-          <button type="button" class="primary" @click=${() => this.#endEdit(true)}>✓ Valider</button>
+          <button type="button" class="primary" @click=${() => this.#setEditing(false)}>Terminé</button>
         </span>
       </div>` : nothing}</div>`;
   }
@@ -261,20 +261,20 @@ export class GfMap extends LitElement {
 
   get #areasKey() { return this._areas.map(a => a.id).sort().join(','); }
 
-  /** « 🛡 Réserve naturelle de … — la cueillette y est souvent interdite ou réglementée » (not while editing). */
+  /** « Réserve naturelle de … — la cueillette y est souvent interdite ou réglementée » (not while editing). */
   #protectedBanner() {
     const areas = this._areas;
     if (!areas.length || this.editing || this.#areasKey === this._areasClosed) return nothing;
     const shown = this._areasOpen ? areas : areas.slice(0, 2);
     const more = areas.length - shown.length;
     return html`<div class="gf-map-protected" role="status">
-      <span class="what">🛡 ${shown.map((a, i) => html`${i ? ' · ' : ''}${a.url
+      <span class="what">${icon('shield-check')} ${shown.map((a, i) => html`${i ? ' · ' : ''}${a.url
         ? html`<a href=${a.url} target="_blank" rel="noopener" title=${a.kind}>${a.name}</a>` : html`<b title=${a.kind}>${a.name}</b>`}
         <span class="kind">(${a.kind})</span>`)}${more > 0
-        ? html` · <button type="button" class="more" @click=${() => { this._areasOpen = true; }}>+ ${more} autre${more > 1 ? 's' : ''}</button>` : nothing}
+        ? html` · <button type="button" class="more" @click=${() => { this._areasOpen = true; }}>${icon('plus-lg')} ${more} autre${more > 1 ? 's' : ''}</button>` : nothing}
         — la cueillette y est souvent interdite ou réglementée : vérifiez les règles du site.</span>
       <button type="button" class="close" aria-label="Masquer" title="Masquer"
-        @click=${() => { this._areasClosed = this.#areasKey; }}>×</button>
+        @click=${() => { this._areasClosed = this.#areasKey; }}>${icon('x-lg')}</button>
     </div>`;
   }
 
@@ -312,14 +312,13 @@ export class GfMap extends LitElement {
   /** The pin moves: while editing (editable maps), else when the caller says so. */
   get #pinMovable() { return this.editable ? this.editing : this.pinDraggable; }
 
-  /** @param {string} id */
-  #placeMovable(id) { return this.editing && !this.pin && (!this.selectedId || id === this.selectedId); }
+  /** While editing, every marker moves freely. @param {string} id */
+  #placeMovable(id) { return this.editing && !this.pin && Boolean(id); }
 
   /** @param {PlantMarker} plant */
   #plantMovable(plant) {
     if (!this.editable) return this.draggablePlants;
-    // The pin's plants (editor), the selected place's, or — nothing selected — every plant.
-    return this.editing && Boolean(this.pin || !this.selectedId || plant.placeId === this.selectedId);
+    return this.editing && Boolean(plant);
   }
 
   /** Where a place is drawn: moved in the working copy, else its saved point. @param {any} spot @returns {[number, number]} */
@@ -344,26 +343,24 @@ export class GfMap extends LitElement {
     this.#emit('edit-change', { editing: on });
   }
 
-  /** ✓ Valider (save) or Annuler. @param {boolean} save */
-  #endEdit(save) {
-    const moves = this._moves;
-    if (save && movesCount(moves)) {
-      this.#emit('positions-save', {
-        pin: moves.pin,
-        places: [...moves.places].map(([id, coordinates]) => ({ id, coordinates })),
-        plants: [...moves.plants].map(([key, coordinates]) => {
-          const plant = this.plants.find(p => p.key === key);
-          return { placeId: plant?.placeId, plantId: plant?.plantId ?? null, coordinates };
-        })
-      });
-      // Shown where they were dropped until the caller passes the saved data back (or gives up saving).
-      this.#keepMoves = true;
-      clearTimeout(this.#keepTimer);
-      this.#keepTimer = setTimeout(() => { if (this.#keepMoves && !this.editing) this.#dropKeptMoves(); }, 8000);
-    } else {
-      this._moves = emptyMoves();
-    }
-    this.#setEditing(false);
+  /**
+   * A marker was dropped (or placed by long press): shown there at once, and saved right away by the
+   * caller (positions-save with that one move). The working copy keeps it until the data passed back
+   * has it, so a re-render with the old positions (GPS, a toast…) never sends it back.
+   * @param {(m: Moves) => void} change
+   * @param {{ pin?: [number, number], place?: { id: string, coordinates: [number, number] }, plant?: { key: string, coordinates: [number, number] } }} what
+   */
+  #drop(change, what) {
+    this.#move(change);
+    const plant = what.plant && this.plants.find(p => p.key === what.plant?.key);
+    this.#emit('positions-save', {
+      pin: what.pin || null,
+      places: what.place ? [what.place] : [],
+      plants: what.plant ? [{ placeId: plant?.placeId, plantId: plant?.plantId ?? null, coordinates: what.plant.coordinates }] : []
+    });
+    // A save that never comes back (error) must not pin the marker forever.
+    const snapshot = this._moves;
+    setTimeout(() => { if (this._moves === snapshot && !this.editing) this._moves = emptyMoves(); }, 10000);
   }
 
   /** Full screen while editing, back in place afterwards. @param {boolean} on */
@@ -378,25 +375,27 @@ export class GfMap extends LitElement {
     }
   }
 
-  /** The moves were saved: forget them once the new data arrives. */
-  #keepMoves = false;
-  /** @type {ReturnType<typeof setTimeout> | undefined} */ #keepTimer;
-
-  #dropKeptMoves() {
-    clearTimeout(this.#keepTimer);
-    this.#keepMoves = false;
-    this._moves = emptyMoves();
-  }
-
-  /** Do the spots / plants / pin passed in now sit where they were dropped? */
-  #movesLanded() {
+  /** Forgets the moves the data passed in now has. */
+  #pruneMoves() {
     const same = (/** @type {[number, number] | null | undefined} */ a, /** @type {[number, number]} */ b) =>
       Boolean(a) && Math.abs(a[0] - b[0]) < 2e-6 && Math.abs(a[1] - b[1]) < 2e-6;
     const { pin, places, plants } = this._moves;
-    if (pin && !same(this.pin, pin)) return false;
-    for (const [id, at] of places) if (!same(this.spots.find(s => s.id === id)?.geometry.coordinates, at)) return false;
-    for (const [key, at] of plants) if (!same(this.plants.find(p => p.key === key)?.coordinates, at)) return false;
-    return true;
+    const keep = {
+      pin: pin && !same(this.pin, pin) ? pin : null,
+      places: new Map([...places].filter(([id, at]) => !same(this.spots.find(s => s.id === id)?.geometry.coordinates, at))),
+      plants: new Map([...plants].filter(([key, at]) => !same(this.plants.find(p => p.key === key)?.coordinates, at)))
+    };
+    if (movesCount(keep) !== movesCount(this._moves)) this._moves = keep;
+  }
+
+  /** Markers being dragged right now: never moved or redrawn under the finger. @type {Set<L.Marker>} */
+  #dragging = new Set();
+
+  /** @param {L.Marker} marker */
+  #trackDrag(marker) {
+    marker.on('dragstart', () => this.#dragging.add(marker));
+    marker.on('dragend', () => this.#dragging.delete(marker));
+    return marker;
   }
 
   /** @param {(m: Moves) => void} change */
@@ -487,8 +486,11 @@ export class GfMap extends LitElement {
       const { lat, lng } = /** @type {L.LeafletMouseEvent} */ (event).latlng;
       // Editing: the long press places the pin, or the selected place.
       if (this.editing) {
-        if (this.pin) this.#move(m => { m.pin = [lng, lat]; });
-        else if (this.selectedId) { const id = this.selectedId; this.#move(m => m.places.set(id, [lng, lat])); }
+        if (this.pin) this.#drop(m => { m.pin = [lng, lat]; }, { pin: [lng, lat] });
+        else if (this.selectedId) {
+          const id = this.selectedId;
+          this.#drop(m => m.places.set(id, [lng, lat]), { place: { id, coordinates: [lng, lat] } });
+        }
         return;
       }
       if (this.pin && this.pinDraggable && !this.editable) this.#emit('map-longpress', { coordinates: [lng, lat] });
@@ -510,14 +512,9 @@ export class GfMap extends LitElement {
   /** @param {Map<string, any>} changed */
   updated(changed) {
     if (!this.#map) return;
-    // Saved moves are dropped once the caller passes back data that has them (a re-render with the old
-    // positions, before the save lands, must not send the markers back where they were).
-    if (this.#keepMoves && (changed.has('spots') || changed.has('plants') || changed.has('pin')) && this.#movesLanded()) {
-      this.#dropKeptMoves();
-    }
+    // Dropped markers stay where they were dropped until the caller passes back data that has them.
+    if (movesCount(this._moves) && (changed.has('spots') || changed.has('plants') || changed.has('pin'))) this.#pruneMoves();
     if (changed.has('editing') && changed.get('editing') !== undefined) {
-      // Editing turned off by the caller: drop the working copy (unless just saved).
-      if (!this.editing && !this.#keepMoves) this._moves = emptyMoves();
       // Draggability is set when a marker is created: rebuild them.
       this.#spotLayer?.clearLayers();
       this.#markers.clear();
@@ -599,11 +596,11 @@ export class GfMap extends LitElement {
         const id = spot.id;
         marker.on('dragend', () => {
           const { lat: y, lng: x } = /** @type {L.Marker} */ (this.#markers.get(id)).getLatLng();
-          this.#move(m => m.places.set(id, [x, y]));
+          this.#drop(m => m.places.set(id, [x, y]), { place: { id, coordinates: [x, y] } });
         });
-        marker.addTo(layer);
+        this.#trackDrag(marker).addTo(layer);
         this.#markers.set(spot.id, marker);
-      } else {
+      } else if (!this.#dragging.has(marker)) {
         marker.setLatLng([lat, lon]);
         marker.setIcon(pinIcon(spot, selected, movable));
       }
@@ -639,12 +636,12 @@ export class GfMap extends LitElement {
         marker.on('click', () => { if (!this.editing) this.#emit('plant-select', { placeId: current.placeId, plantId: current.plantId }); });
         marker.on('dragend', () => {
           const { lat: y, lng: x } = /** @type {L.Marker} */ (this.#plantMarkers.get(current.key)).getLatLng();
-          if (this.editable) this.#move(m => m.plants.set(current.key, [x, y]));
+          if (this.editable) this.#drop(m => m.plants.set(current.key, [x, y]), { plant: { key: current.key, coordinates: [x, y] } });
           else this.#emit('plant-move', { placeId: current.placeId, plantId: current.plantId, coordinates: [x, y] });
         });
-        marker.addTo(layer);
+        this.#trackDrag(marker).addTo(layer);
         this.#plantMarkers.set(plant.key, marker);
-      } else {
+      } else if (!this.#dragging.has(marker)) {
         marker.setLatLng([lat, lon]);
         marker.setIcon(plantIcon(plant, selected, movable));
       }
@@ -706,14 +703,14 @@ export class GfMap extends LitElement {
     const [lon, lat] = this._moves.pin || this.pin;
     if (!this.#editMarker) {
       const movable = this.#pinMovable;
-      this.#editMarker = L.marker([lat, lon], { icon: movable ? editIcon : lockedIcon, draggable: movable, autoPan: true, zIndexOffset: 100 })
+      this.#editMarker = this.#trackDrag(L.marker([lat, lon], { icon: movable ? editIcon : lockedIcon, draggable: movable, autoPan: true, zIndexOffset: 100 }))
         .on('dragend', () => {
           const { lat: y, lng: x } = /** @type {L.Marker} */ (this.#editMarker).getLatLng();
-          if (this.editable) this.#move(m => { m.pin = [x, y]; });
+          if (this.editable) this.#drop(m => { m.pin = [x, y]; }, { pin: [x, y] });
           else this.#emit('pin-move', { coordinates: [x, y] });
         })
         .addTo(map);
-    } else {
+    } else if (!this.#dragging.has(this.#editMarker)) {
       this.#editMarker.setLatLng([lat, lon]);
     }
   }
@@ -832,16 +829,15 @@ export class GfMap extends LitElement {
 
   #buildButtons() {
     const buttons = this.#buttons = Object.assign(document.createElement('div'), { className: 'gf-map-buttons' });
-    // With the search pill, ▦ lives at its end; otherwise it is a round button like "locate".
+    // With the search pill, the layers button lives at its end; otherwise it is a round button like "locate".
     buttons.innerHTML = `
-      ${this.#hasSearch ? '' : '<button type="button" class="layers" aria-label="Carte : fond, couches, légende" title="Carte : fond, couches, légende">▦</button>'}
-      <button type="button" class="locate" aria-label="Me localiser" title="Me localiser" aria-pressed="false">◎</button>
-      <button type="button" class="edit" aria-label="Modifier les positions" title="Modifier les positions" aria-pressed="false" hidden>✎</button>`;
+      ${this.#hasSearch ? '' : `<button type="button" class="layers" aria-label="Carte : fond, couches, légende" title="Carte : fond, couches, légende">${iconMarkup('layers')}</button>`}
+      <button type="button" class="locate" aria-label="Me localiser" title="Me localiser" aria-pressed="false">${iconMarkup('crosshair')}</button>
+      <button type="button" class="edit" aria-label="Modifier les positions" title="Modifier les positions" aria-pressed="false" hidden>${iconMarkup('pencil')}</button>`;
     buttons.querySelector('.locate')?.addEventListener('click', () => this.#locate());
     buttons.querySelector('.layers')?.addEventListener('click', () => this.openPanel());
     buttons.querySelector('.edit')?.addEventListener('click', () => {
-      if (this.editing) this.#endEdit(true);
-      else this.#setEditing(true);
+      this.#setEditing(!this.editing);
     });
     L.DomEvent.disableClickPropagation(buttons);
     this.#root.append(buttons);
@@ -857,7 +853,7 @@ export class GfMap extends LitElement {
     edit.hidden = !this.editable;
     const nothing = !this.pin && !this.spots.length && !this.plants.length;
     edit.disabled = nothing && !this.editing;
-    edit.title = nothing ? 'Aucun lieu à déplacer' : this.editing ? 'Valider les positions' : 'Modifier les positions';
+    edit.title = nothing ? 'Aucun lieu à déplacer' : this.editing ? 'Terminer la modification' : 'Modifier les positions';
     edit.setAttribute('aria-pressed', String(this.editing));
   }
 

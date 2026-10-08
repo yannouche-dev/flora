@@ -4,7 +4,6 @@ import { config } from '../config.js';
 import * as db from '../core/db.js';
 import { GeoController } from '../core/geo.js';
 import { href } from '../core/router.js';
-import { searchPlants } from '../core/search.js';
 import {
   ABUNDANCE, defaultPlantPosition, deletePlace, distance, entryInSeason, entryName, entryPosition, exportGeoJSON, findEntry,
   formatDistance, getPlace, lastHarvest, matchCollections, plantMarkers,
@@ -18,6 +17,8 @@ import './gf-lookalikes.js';
 import './gf-map.js';
 import './gf-status.js';
 import './gf-thumb.js';
+import { icon, kindIcon } from '../core/icons.js';
+import './gf-plant-pick-list.js';
 
 /** Existing places closer than this are offered instead of creating a duplicate. */
 const NEARBY_RADIUS = 100;
@@ -64,7 +65,6 @@ export class GfSpotEditor extends LitElement {
     _open: { state: true },
     _picker: { state: true },
     _pickerQuery: { state: true },
-    _pickerResults: { state: true },
     _todayFor: { state: true },
     _nearby: { state: true },
     _error: { state: true },
@@ -173,22 +173,6 @@ export class GfSpotEditor extends LitElement {
     .mini-stars { color: var(--gf-star); letter-spacing: 1px; }
     fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 6px; }
     legend { font-size: 0.85rem; color: var(--gf-text-muted); padding: 0; margin-bottom: 6px; }
-    .picker ul { list-style: none; margin: 6px 0 0; padding: 0; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-sm); overflow: hidden; }
-    .picker li button {
-      width: 100%;
-      justify-content: flex-start;
-      text-align: left;
-      font-size: 1rem;
-      font-weight: 400;
-      padding: 8px 12px;
-      border: 0;
-      border-bottom: 1px solid var(--gf-border);
-      border-radius: 0;
-      gap: 10px;
-    }
-    .picker li button span { min-width: 0; }
-    .picker li:last-child button { border-bottom: 0; }
-    .picker i { color: var(--gf-text-muted); font-family: var(--gf-font-serif); }
     .harvests { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
     .harvests li {
       display: flex;
@@ -259,8 +243,6 @@ export class GfSpotEditor extends LitElement {
     this._open = null;
     this._picker = false;
     this._pickerQuery = '';
-    /** @type {any[]} */
-    this._pickerResults = [];
     /** Plants added during this edit → "harvested today" quantity ('' = yes, no quantity; null = no). @type {Map<number | null, string | null>} */
     this._todayFor = new Map();
     /** @type {{ place: import('../core/collections.js').Place, distance: number }[]} */
@@ -584,10 +566,8 @@ export class GfSpotEditor extends LitElement {
   }
 
   /** @param {Event} event */
-  async #pickerInput(event) {
-    const q = /** @type {HTMLInputElement} */ (event.target).value;
-    this._pickerQuery = q;
-    this._pickerResults = q.trim().length >= 2 ? await searchPlants(q, 8) : [];
+  #pickerInput(event) {
+    this._pickerQuery = /** @type {HTMLInputElement} */ (event.target).value;
   }
 
   /** @param {any} summary */
@@ -598,7 +578,6 @@ export class GfSpotEditor extends LitElement {
     if (this.#isPlace) this._todayFor = new Map(this._todayFor).set(plant.id, '');
     this._open = plant.id;
     this._pickerQuery = '';
-    this._pickerResults = [];
     this._picker = false;
     this.#changed();
   }
@@ -741,7 +720,7 @@ export class GfSpotEditor extends LitElement {
     const point = this._place?.geometry?.coordinates;
     if (!point) return nothing;
     const w = this._where;
-    return html`<span class="where">${w.address ? html`📍 ${w.address} · ` : nothing}${w.alt != null ? html`⛰ ${w.alt} m · ` : nothing}<span class="coords">${formatCoordinates(point)}</span></span>`;
+    return html`<span class="where">${w.address ? html`${icon('geo-alt-fill')} ${w.address} · ` : nothing}${w.alt != null ? html`${icon('triangle')} ${w.alt} m · ` : nothing}<span class="coords">${formatCoordinates(point)}</span></span>`;
   }
 
   /** @type {number | undefined} */ #whereTimer;
@@ -754,7 +733,7 @@ export class GfSpotEditor extends LitElement {
         ${this.#whereLine()}
         <span class="hint">${this.#editing
           ? 'Le carré vert est le point de l’endroit, les ronds sont les plantes : faites-les glisser pour les ajuster.'
-          : 'Le carré vert est le point de l’endroit, les ronds sont les plantes. ✎ sur la carte pour les déplacer.'}</span></div>`;
+          : html`Le carré vert est le point de l’endroit, les ronds sont les plantes. ${icon('pencil')} sur la carte pour les déplacer.`}</span></div>`;
     }
     if (!fix) {
       return html`<div class="gps card"><span class="dot ${error ? 'none' : ''}"></span>
@@ -795,7 +774,7 @@ export class GfSpotEditor extends LitElement {
     const away = own && place.geometry ? distance(own, place.geometry.coordinates) : 0;
     const fix = this.#geo.state.fix;
     return html`<div class="plant-pos">
-      <span>📍 ${away < 3 ? 'Au point de l’endroit' : `À ${formatDistance(away)} du point de l’endroit`}${entry.accuracy ? ` · ± ${entry.accuracy} m` : ''}</span>
+      <span>${icon('geo-alt-fill')} ${away < 3 ? 'Au point de l’endroit' : `À ${formatDistance(away)} du point de l’endroit`}${entry.accuracy ? ` · ± ${entry.accuracy} m` : ''}</span>
       <button type="button" @click=${() => this.#showOnMap(own)}>Voir sur la carte</button>
       ${this.#editing ? html`
         <button type="button" ?disabled=${!fix} @click=${() => this.#plantHere(entry.plantId)}>Ici (GPS)</button>
@@ -823,13 +802,13 @@ export class GfSpotEditor extends LitElement {
         <button class="head" type="button" aria-expanded=${open ? 'true' : 'false'} @click=${() => this.#toggleEntry(open ? null : id)}>
           <gf-thumb plant-id=${id ?? 0} size="44"></gf-thumb>
           <span class="name">${entryName(entry)}</span>
-          <span class="chev" aria-hidden="true">▾</span>
+          <span class="chev" aria-hidden="true">${icon('chevron-down')}</span>
           <span class="summary">
             ${entry.vernacularName ? html`<span class="sci">${entry.scientificName}</span>` : nothing}
             ${this.#isPlace ? html`
               ${this.#harvest && entryInSeason(entry) ? html`<span class="badge">En saison</span>` : nothing}
               <span>${ABUNDANCE.find(a => a.value === entry.abundance)?.label}</span>
-              ${this.#harvest && entry.rating ? html`<span class="mini-stars">${'★'.repeat(entry.rating)}</span>` : nothing}
+              ${this.#harvest && entry.rating ? html`<span class="mini-stars" aria-label="${entry.rating} sur 5">${Array.from({ length: entry.rating }, () => icon('star-fill'))}</span>` : nothing}
               ${this.#harvest ? html`<span>${last ? 'Récolté le ' + shortDate(last.date) : fresh ? 'Nouvelle plante' : 'Aucune récolte'}</span>` : nothing}`
             : entry.notes ? html`<span>${entry.notes.slice(0, 60)}</span>` : nothing}
           </span>
@@ -861,7 +840,7 @@ export class GfSpotEditor extends LitElement {
               <div class="stars" role="radiogroup" aria-label="Qualité">
                 ${[1, 2, 3, 4, 5].map(n => html`<button type="button" role="radio" aria-checked=${entry.rating === n ? 'true' : 'false'}
                   aria-label="${n} sur 5" class=${entry.rating >= n ? 'on' : ''}
-                  @click=${() => this.#patchEntry(id, { rating: entry.rating === n ? 0 : n })}>★</button>`)}
+                  @click=${() => this.#patchEntry(id, { rating: entry.rating === n ? 0 : n })}>${icon(entry.rating >= n ? 'star-fill' : 'star')}</button>`)}
               </div>
             </fieldset>` : nothing}` : nothing}
 
@@ -878,14 +857,14 @@ export class GfSpotEditor extends LitElement {
                     <li>
                       <strong>${formatDate(h.date)}</strong>
                       <span class="what">${[h.quantity, h.note].filter(Boolean).join(' · ')}</span>
-                      <button class="icon-btn" type="button" aria-label="Supprimer cette récolte" @click=${() => this.#removeHarvest(id, i)}>×</button>
+                      <button class="icon-btn" type="button" aria-label="Supprimer cette récolte" @click=${() => this.#removeHarvest(id, i)}>${icon('x-lg')}</button>
                     </li>`)}
                 </ul>` : html`<p class="muted">Aucune récolte notée.</p>`}
               <div class="add-harvest">
                 <input type="date" name="date" .value=${today()} max=${today()} aria-label="Date" />
                 <input type="text" name="quantity" placeholder="Quantité" aria-label="Quantité" />
                 <input type="text" name="note" placeholder="Remarque (facultatif)" aria-label="Remarque" />
-                <button type="button" @click=${e => this.#addHarvest(id, e)}>+ Ajouter une récolte</button>
+                <button type="button" @click=${e => this.#addHarvest(id, e)}>${icon('plus-lg')} Ajouter une récolte</button>
               </div>
             </fieldset>` : nothing}
 
@@ -899,25 +878,23 @@ export class GfSpotEditor extends LitElement {
   #pickerView() {
     const place = this._place;
     if (!this._picker) {
-      return html`<button class="add add-plant" type="button" @click=${() => { this._picker = true; }}>+ Ajouter une plante</button>`;
+      return html`<button class="add add-plant" type="button" @click=${() => { this._picker = true; }}>${icon('plus-lg')} Ajouter une plante</button>`;
     }
     return html`
       <div class="picker">
         <label class="field">Ajouter une plante
           <input type="search" placeholder="Nom de la plante…" autocomplete="off" .value=${this._pickerQuery} @input=${this.#pickerInput} />
         </label>
-        ${this._pickerResults.length ? html`<ul>${this._pickerResults.map(r => {
-          const already = Boolean(place && findEntry(place, r.id));
-          return html`<li><button type="button" ?disabled=${already} @click=${() => this.#pickPlant(r)}>
-            <gf-thumb .plant=${r} size="36"></gf-thumb>
-            <span>${r.vernacularName || r.scientificName} <i>${r.scientificName}</i>${already ? ' · déjà dans ce lieu' : ''}</span></button></li>`;
-        })}</ul>` : nothing}
+        <gf-plant-pick-list .query=${this._pickerQuery}
+          .taken=${new Set((place?.properties.plants || []).map(e => e.plantId))}
+          taken-label=${this.#isPlace ? 'déjà dans ce lieu' : 'déjà dans la collection'}
+          @plant-pick=${e => this.#pickPlant(e.detail.plant)}></gf-plant-pick-list>
       </div>`;
   }
 
   #saveStatus() {
     if (!this.#autosave) return nothing;
-    const text = { saving: 'Enregistrement…', saved: '✓ Enregistré', error: 'Non enregistré', '': '' }[this._saveState];
+    const text = { saving: 'Enregistrement…', saved: html`${icon('check-lg')} Enregistré`, error: 'Non enregistré', '': '' }[this._saveState];
     return html`<span class="save-state ${this._saveState === 'error' ? 'error' : ''}" role="status">${this._note || text}</span>`;
   }
 
@@ -933,7 +910,7 @@ export class GfSpotEditor extends LitElement {
       <div class="name-suggest" role="group" aria-label="Collections existantes">
         <span>${plants ? 'Ajouter plutôt à une collection existante :' : 'Ouvrir une collection existante :'}</span>
         ${matches.map(c => html`
-          <button class="chip" type="button" @click=${() => this.#mergeInto(c.id)}>${c.kind === 'place' ? '📍' : '☰'} ${c.name}
+          <button class="chip" type="button" @click=${() => this.#mergeInto(c.id)}>${kindIcon(c.kind)} ${c.name}
             <small>${plantCount(c.count)}</small></button>`)}
       </div>`;
   }
@@ -978,7 +955,7 @@ export class GfSpotEditor extends LitElement {
         ${isPlace ? this.#nearbyBanner() : nothing}
 
         ${isFavorites
-          ? html`<div class="title"><span class="kind" aria-hidden="true">♥</span><h1>Favoris</h1></div>`
+          ? html`<div class="title"><span class="kind" aria-hidden="true">${icon('heart-fill')}</span><h1>Favoris</h1></div>`
           : html`<label class="field">${isPlace ? 'Nom de l’endroit' : 'Nom de la collection'}
               <input type="text" .value=${p.name} placeholder=${isPlace ? 'ex. Lisière nord du bois' : 'ex. Plantes mellifères'}
                 @input=${e => this.#patch({ name: e.target.value })} />
@@ -986,7 +963,7 @@ export class GfSpotEditor extends LitElement {
             ${this.#nameSuggestions()}`}
 
         ${!place.geometry && !isFavorites ? html`
-          <button class="add add-location" type="button" @click=${this.#addLocation}>📍 Ajouter des coordonnées GPS (la collection devient un endroit)</button>` : nothing}
+          <button class="add add-location" type="button" @click=${this.#addLocation}>${icon('geo-alt-fill')} Ajouter des coordonnées GPS (la collection devient un endroit)</button>` : nothing}
 
         <h2>Plantes <span class="count">${p.plants.length}</span></h2>
         ${p.plants.length ? html`<ul class="entries">${p.plants.map(entry => this.#entry(entry))}</ul>` : nothing}

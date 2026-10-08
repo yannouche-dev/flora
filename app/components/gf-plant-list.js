@@ -3,6 +3,7 @@ import { LitElement, html, css, nothing, repeat } from 'lit';
 import { setQuery } from '../core/query.js';
 import { StoreController, gridViewOf } from '../core/store.js';
 import './gf-plant-card.js';
+import { icon } from '../core/icons.js';
 
 const ROW_HEIGHT = 76;
 const COMPACT_ROW_HEIGHT = 44;
@@ -50,8 +51,11 @@ const columnWidth = (key, view) => key === 'photo' && view === 'epure' ? '96px'
   : key === 'fr' && view === 'epure' ? 'minmax(160px, 2fr)'
   : /** @type {any} */ (COLUMNS.find(c => c.key === key)).width;
 
-/** Scroll position survives navigating to a plant and back, until the results change. */
-let saved = { items: /** @type {any[] | null} */ (null), scrollTop: 0 };
+/** The search itself (text, filters, sort): results refreshed for the same search keep their scroll. @param {any} query */
+const searchKey = query => JSON.stringify([query.q, query.filters, query.sort]);
+
+/** Scroll position survives navigating to a plant and back, until the search changes. */
+let saved = { key: '', scrollTop: 0 };
 
 /** Virtualized result list: only the rows in (or near) the viewport are in the DOM. */
 export class GfPlantList extends LitElement {
@@ -140,6 +144,8 @@ export class GfPlantList extends LitElement {
   });
   /** @type {any[] | null} */
   #items = null;
+  /** Search the shown results answer (see `searchKey`). @type {string | null} */
+  #key = null;
   #frame = 0;
 
   constructor() {
@@ -165,17 +171,43 @@ export class GfPlantList extends LitElement {
     super.disconnectedCallback();
     this.#resize.disconnect();
     // Once detached, the element reports scrollTop 0: keep the last position seen while scrolling.
-    saved = { items: this.#items, scrollTop: this._scrollTop };
+    saved = { key: this.#key || '', scrollTop: this._scrollTop };
   }
 
-  /** New results → back to the top; same results (coming back from a plant) → restore. */
-  updated() {
-    const items = this.#store.state.results.items;
+  /**
+   * A new search → back to the top. The same search refreshed (♥, a collection changed: a line action)
+   * → the list stays where it is. Coming back from a plant → where it was.
+   */
+  /** @param {Map<string, unknown>} changed */
+  updated(changed) {
+    if (changed.has('current')) this.#reveal();
+    const { results: { items }, query } = this.#store.state;
     if (items === this.#items) return;
+    const key = searchKey(query);
+    const first = this.#items === null;
     this.#items = items;
-    const top = saved.items === items ? saved.scrollTop : 0;
+    if (key === this.#key) return;
+    this.#key = key;
+    const top = first && saved.key === key ? saved.scrollTop : 0;
     this.scrollTop = top;
     this._scrollTop = top;
+  }
+
+  /** Height of a row in the current display. */
+  get #rowHeight() {
+    const gridView = gridViewOf(this.#store.state);
+    return this.grid ? (gridView === 'epure' ? ILLUSTRATED_ROW_HEIGHT : GRID_ROW_HEIGHT) : this.#store.state.compact ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
+  }
+
+  /** The open plant's row stays in view as the plant sheet moves to the previous / next one. */
+  #reveal() {
+    const i = this.current === null ? -1 : this.#store.state.results.items.findIndex(p => p.id === this.current);
+    if (i < 0 || !this.clientHeight) return;
+    const h = this.#rowHeight, offset = this.grid ? HEADER_HEIGHT : 0;
+    const top = offset + i * h;
+    if (top < this.scrollTop + offset) this.scrollTop = top - offset;
+    else if (top + h > this.scrollTop + this.clientHeight) this.scrollTop = top + h - this.clientHeight;
+    this._scrollTop = this.scrollTop;
   }
 
   /** Header click: sort by the column, again to reverse. @param {string} key */
@@ -199,9 +231,9 @@ export class GfPlantList extends LitElement {
         return html`<div class="th" role="columnheader" aria-sort=${active || 'none'}>
           ${c.sort ? html`<button class="sort" type="button" ?data-active=${Boolean(active)}
             title=${'Trier par ' + c.label.toLowerCase() + (active === 'ascending' ? ' (ordre inverse)' : '')}
-            @click=${() => this.#sortBy(/** @type {string} */ (c.sort))}>${c.label}${active === 'ascending' ? ' ▲' : active === 'descending' ? ' ▼' : ''}</button>` : nothing}
+            @click=${() => this.#sortBy(/** @type {string} */ (c.sort))}>${c.label}${active === 'ascending' ? html` ${icon('caret-up-fill')}` : active === 'descending' ? html` ${icon('caret-down-fill')}` : ''}</button>` : nothing}
           ${count ? html`<button class="funnel" type="button" title=${`Filtre ${c.label.toLowerCase()} : ${count} valeur${count > 1 ? 's' : ''}`}
-            @click=${() => this.#showFacet(/** @type {string} */ (c.facet))}>⏷ ${count}</button>` : nothing}
+            @click=${() => this.#showFacet(/** @type {string} */ (c.facet))}>${icon('funnel-fill')} ${count}</button>` : nothing}
         </div>`;
       })}
     </div>`;
@@ -217,7 +249,7 @@ export class GfPlantList extends LitElement {
       return html`${header}<p class="empty">Aucune plante ne correspond à cette recherche.</p>`;
     }
 
-    const rowHeight = this.grid ? (gridView === 'epure' ? ILLUSTRATED_ROW_HEIGHT : GRID_ROW_HEIGHT) : compact ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
+    const rowHeight = this.#rowHeight;
     const offset = this.grid ? HEADER_HEIGHT : 0;
     const top = Math.max(0, this._scrollTop - offset);
     const first = Math.max(0, Math.floor(top / rowHeight) - OVERSCAN);

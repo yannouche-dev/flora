@@ -13,6 +13,7 @@ import './gf-facet.js';
 import './gf-map.js';
 import './gf-spot-editor.js';
 import './gf-thumb.js';
+import { icon } from '../core/icons.js';
 
 const shortDate = (/** @type {string} */ iso) =>
   new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -252,7 +253,7 @@ export class GfMapPage extends LitElement {
     const id = this.route.spot;
     if (editor && id && places.every(p => p.id === id) && plants.every(p => p.placeId === id)) {
       editor.savePositions({ pin: places[0]?.coordinates ?? null, plants });
-      this.#showToast('Positions enregistrées');
+      this.#showToast('Position enregistrée');
       return;
     }
     const changed = new Map();
@@ -267,7 +268,7 @@ export class GfMapPage extends LitElement {
     }
     try {
       for (const place of changed.values()) await savePlace(place);
-      this.#showToast(changed.size > 1 ? `Positions enregistrées (${changed.size} lieux)` : 'Positions enregistrées');
+      this.#showToast('Position enregistrée');
     } catch (error) {
       this.#showToast('Enregistrement impossible : ' + /** @type {Error} */ (error).message);
     }
@@ -366,7 +367,7 @@ export class GfMapPage extends LitElement {
     const a = /** @type {NonNullable<typeof this._around>} */ (this._around);
     const km = r => r < 1000 ? r + ' m' : r / 1000 + ' km';
     const head = html`
-      <button class="close icon-btn" type="button" aria-label="Fermer" @click=${() => this.#toggleAround()}>×</button>
+      <button class="close icon-btn" type="button" aria-label="Fermer" @click=${() => this.#toggleAround()}>${icon('x-lg')}</button>
       <h2>Autour · ${km(a.radius)}</h2>
       <div class="meta"><span>Centre : ${a.where}</span>
         <button type="button" class="link" @click=${() => {
@@ -390,8 +391,8 @@ export class GfMapPage extends LitElement {
     const s = a.species;
     if (s) {
       return html`<section class="sheet around" aria-label="Autour">
-        <button class="close icon-btn" type="button" aria-label="Fermer" @click=${() => this.#toggleAround()}>×</button>
-        <button type="button" class="link back" @click=${() => this.#pickSpecies(null)}>← Toutes les espèces</button>
+        <button class="close icon-btn" type="button" aria-label="Fermer" @click=${() => this.#toggleAround()}>${icon('x-lg')}</button>
+        <button type="button" class="link back" @click=${() => this.#pickSpecies(null)}>${icon('arrow-left')} Toutes les espèces</button>
         <div class="species-head">
           ${s.plantId ? html`<gf-thumb plant-id=${s.plantId} size="56"></gf-thumb>` : s.photo && this.#store.state.modules.photos[this.#store.state.mode] ? html`<img class="ph" src=${s.photo} alt="" referrerpolicy="no-referrer" />` : nothing}
           <div><h2>${s.common || s.name}</h2>${s.common ? html`<span class="sci">${s.name}</span>` : nothing}</div>
@@ -600,7 +601,7 @@ export class GfMapPage extends LitElement {
         ${this.#harvest ? html`<button type="button" aria-pressed=${this.route.season ? 'true' : 'false'}
           @click=${() => this.#navigate({ season: !this.route.season, spot: null })}>En saison · ${seasonCount}</button>` : nothing}
         <button type="button" aria-expanded=${this._plantMenu ? 'true' : 'false'} aria-pressed=${this._plants.length ? 'true' : 'false'}
-          @click=${() => { this._plantMenu = !this._plantMenu; }}>Plantes${this._plants.length ? ' · ' + this._plants.length : ''} ▾</button>
+          @click=${() => { this._plantMenu = !this._plantMenu; }}>Plantes${this._plants.length ? ' · ' + this._plants.length : ''} ${icon('chevron-down')}</button>
         <button type="button" class="around-toggle" ?disabled=${this._editing} aria-pressed=${this._around ? 'true' : 'false'}
           title="Plantes observées autour (iNaturalist)" @click=${() => this.#toggleAround()}>Autour</button>
         <div class="segmented" role="group" aria-label="Affichage">
@@ -674,10 +675,10 @@ export class GfMapPage extends LitElement {
         <div class="panel-head">
           <button class="grip" type="button" aria-label=${this._panelFull ? 'Réduire la fiche' : 'Agrandir la fiche'}
             aria-expanded=${this._panelFull ? 'true' : 'false'} @click=${() => { this._panelFull = !this._panelFull; }}></button>
-          <h2>📍 ${placeTitle(place)}</h2>
+          <h2>${icon('geo-alt-fill')} ${placeTitle(place)}</h2>
           <span class="meta">${plantCount(place.properties.plants.length)}${dist !== null ? ` · à ${formatDistance(dist)}` : ''}</span>
           <a class="button small" href=${directionsUrl(place)} target="_blank" rel="noopener">Itinéraire</a>
-          <button class="close icon-btn" type="button" aria-label="Fermer" @click=${() => this.#navigate({ spot: null })}>×</button>
+          <button class="close icon-btn" type="button" aria-label="Fermer" @click=${() => this.#navigate({ spot: null })}>${icon('x-lg')}</button>
         </div>
         ${repeat([place], p => p.id, () => html`<gf-spot-editor embedded spot-id=${place.id}
           add-plant=${arrival?.add ?? ''} ?pick=${Boolean(arrival?.pick)}

@@ -22,9 +22,9 @@ export async function statusWarning(plant, point) {
   if (!plant?.statuses?.length) return null;
   const { national, here } = sortStatuses(plant.statuses, await territoryFor(point).catch(() => null));
   const protection = [...national, ...here].find(s => PROTECTION.includes(s.type));
-  if (protection) return `⚠ Espèce protégée (${protection.type === 'PN' ? 'France' : protection.area})`;
+  if (protection) return `Espèce protégée (${protection.type === 'PN' ? 'France' : protection.area})`;
   const rule = here.find(s => s.type === 'REGL');
-  return rule ? `⚠ Cueillette réglementée (${rule.area})` : null;
+  return rule ? `Cueillette réglementée (${rule.area})` : null;
 }
 
 /**

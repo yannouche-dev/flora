@@ -16,6 +16,9 @@ export const ui = css`
   :host { -webkit-tap-highlight-color: transparent; }
   *, *::before, *::after { box-sizing: border-box; }
 
+  /* Bootstrap Icons (app/core/icons.js): sit on the text baseline, never squeezed. */
+  .bi { flex: none; vertical-align: -0.125em; }
+
   /* ── Buttons ─────────────────────────────────────────────── */
   :where(button, .button, a.primary, a.secondary, a.danger) {
     font: inherit;

@@ -4,12 +4,12 @@ import { FAVORITES_ID, getMembership, matchCollections, newCollection, saveColle
 import { href } from '../core/router.js';
 import { setTarget, StoreController } from '../core/store.js';
 import { ui } from '../styles/ui.js';
+import { icon, kindIcon } from '../core/icons.js';
 
 /**
  * "Ajouter à…" sheet: check the collections a plant belongs to, create a list on the fly,
  * or start a new place here. Call `open()`; the plant comes from the `plant` property.
  */
-const ICONS = { favorites: '♥', list: '☰', place: '📍' };
 
 export class GfAddTo extends LitElement {
   static properties = {
@@ -134,10 +134,10 @@ export class GfAddTo extends LitElement {
     const places = collections.filter(c => c.kind === 'place');
     const suggestions = matchCollections(collections, this._query);
 
-    const row = (/** @type {{ id: string, name: string, count: number }} */ c, /** @type {string} */ icon) => html`
+    const row = (/** @type {{ id: string, name: string, count: number }} */ c, /** @type {string} */ kind) => html`
       <li><label>
         <input type="checkbox" .checked=${inIds.has(c.id)} ?disabled=${this._busy} @change=${e => this.#toggle(c.id, e)} />
-        <span class="name">${icon} ${c.name}</span>
+        <span class="name">${kindIcon(kind)} ${c.name}</span>
         <span class="count">${c.count}</span>
       </label></li>`;
 
@@ -148,9 +148,9 @@ export class GfAddTo extends LitElement {
           <p>${name}</p>
         </header>
         <ul>
-          ${row(favorites, '♥')}
-          ${lists.length ? html`<li class="section kicker">Collections</li>${lists.map(c => row(c, '☰'))}` : nothing}
-          ${places.length ? html`<li class="section kicker">Endroits</li>${places.map(c => row(c, '📍'))}` : nothing}
+          ${row(favorites, 'favorites')}
+          ${lists.length ? html`<li class="section kicker">Collections</li>${lists.map(c => row(c, 'list'))}` : nothing}
+          ${places.length ? html`<li class="section kicker">Endroits</li>${places.map(c => row(c, 'place'))}` : nothing}
         </ul>
         <footer>
           ${this._creating ? html`
@@ -159,7 +159,7 @@ export class GfAddTo extends LitElement {
                 Déjà :
                 ${suggestions.matches.map(c => html`
                   <button type="button" aria-pressed=${inIds.has(c.id) ? 'true' : 'false'} ?disabled=${this._busy || inIds.has(c.id)}
-                    @click=${() => this.#addToExisting(c.id)}>${ICONS[c.kind] || '☰'} ${c.name}${inIds.has(c.id) ? ' ✓' : ''}</button>`)}
+                    @click=${() => this.#addToExisting(c.id)}>${kindIcon(c.kind)} ${c.name}${inIds.has(c.id) ? html` ${icon('check-lg')}` : ''}</button>`)}
               </div>` : nothing}
             <form @submit=${this.#createList}>
               <input type="text" placeholder="Nom de la collection (ex. Mellifères)" aria-label="Nom de la nouvelle collection" autofocus
@@ -167,8 +167,8 @@ export class GfAddTo extends LitElement {
               <button class="primary" type="submit" ?disabled=${this._busy}>${suggestions.exact ? 'Ajouter' : 'Créer'}</button>
             </form>` : html`
             <div class="row">
-              <button type="button" @click=${() => { this._creating = true; }}>+ Nouvelle collection</button>
-              <a class="button" href=${href.newSpot(plant?.id)} @click=${() => this.#close()}>📍 Nouvel endroit ici</a>
+              <button type="button" @click=${() => { this._creating = true; }}>${icon('plus-lg')} Nouvelle collection</button>
+              <a class="button" href=${href.newSpot(plant?.id)} @click=${() => this.#close()}>${icon('geo-alt-fill')} Nouvel endroit ici</a>
             </div>`}
           <button class="primary" type="button" @click=${() => this.#close()}>Terminé</button>
         </footer>

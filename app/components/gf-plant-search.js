@@ -4,6 +4,8 @@ import { config } from '../config.js';
 import { clearRecentSearches, recentSearches, rememberSearch, setQuery } from '../core/query.js';
 import { StoreController } from '../core/store.js';
 import './gf-voice-button.js';
+import { icon } from '../core/icons.js';
+import { voiceAvailable } from '../core/voice.js';
 
 /** Plant search (top of the results), with a recent-searches menu (shown when focused and empty). */
 export class GfPlantSearch extends LitElement {
@@ -20,13 +22,31 @@ export class GfPlantSearch extends LitElement {
       font-size: 1rem;
       padding: 9px 14px 9px 38px;
       border-radius: var(--gf-radius-pill);
-      background: var(--gf-surface) no-repeat 13px 50% / 16px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23888' stroke-width='2.4' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m20 20-4-4'/%3E%3C/svg%3E");
+      /* Bootstrap Icons « search » */
+      background: var(--gf-surface) no-repeat 14px 50% / 15px url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16' fill='%23888'%3E%3Cpath d='M11.742 10.344a6.5 6.5 0 1 0-1.397 1.398h-.001q.044.06.098.115l3.85 3.85a1 1 0 0 0 1.415-1.414l-3.85-3.85a1 1 0 0 0-.115-.1zM12 6.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0'/%3E%3C/svg%3E");
       border: 1px solid var(--gf-border);
       color: var(--gf-text);
       outline: none;
     }
-    :host(:has(gf-voice-button:not([hidden]))) input { padding-right: 44px; }
-    gf-voice-button { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); }
+    /* Right of the field: [✕ effacer] [micro], side by side; the input leaves them room (padding set in render). */
+    input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; display: none; }
+    .tools { position: absolute; right: 6px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; gap: 2px; }
+    .clear {
+      width: 32px;
+      height: 32px;
+      min-height: 0;
+      display: grid;
+      place-items: center;
+      padding: 0;
+      border: 0;
+      border-radius: 50%;
+      background: transparent;
+      color: var(--gf-text-muted);
+      font-size: 0.95rem;
+      cursor: pointer;
+    }
+    .clear:hover { background: var(--gf-surface-2); color: var(--gf-text); }
+    .clear:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     input:focus-visible {
       border-color: var(--gf-accent);
       box-shadow: var(--gf-focus);
@@ -80,6 +100,12 @@ export class GfPlantSearch extends LitElement {
     if (final && text) rememberSearch(text);
   }
 
+  /** ✕: empty the search, keep typing. */
+  #clear() {
+    setQuery({ q: '' });
+    /** @type {HTMLInputElement | null} */ (this.renderRoot.querySelector('input'))?.focus();
+  }
+
   /** @param {string} q */
   #pick(q) {
     setQuery({ q });
@@ -110,6 +136,9 @@ export class GfPlantSearch extends LitElement {
   render() {
     const { query: { q }, status } = this.#store.state;
     const recent = this._open && !q ? recentSearches() : [];
+    const mic = status === 'ready' && voiceAvailable();
+    // Room for the tools on the right: 34 px each.
+    const pad = 12 + 34 * (Number(Boolean(q)) + Number(mic));
 
     return html`
       <input
@@ -125,13 +154,18 @@ export class GfPlantSearch extends LitElement {
         title="Nom français, nom scientifique (ou ses débuts : « ger rob »), synonyme ou famille"
         aria-label="Rechercher une plante"
         .value=${q}
+        style="padding-right:${pad}px"
         ?disabled=${status !== 'ready'}
         @input=${this.#onInput}
         @keydown=${this.#onKeyDown}
         @focus=${() => { this._open = true; }}
         @blur=${() => { setTimeout(() => { this._open = false; }, 150); }}
       />
-      ${status === 'ready' ? html`<gf-voice-button @voice-text=${this.#onVoice}></gf-voice-button>` : nothing}
+      <span class="tools">
+        ${q ? html`<button class="clear" type="button" aria-label="Effacer la recherche" title="Effacer"
+          @mousedown=${e => e.preventDefault()} @click=${this.#clear}>${icon('x-lg')}</button>` : nothing}
+        ${status === 'ready' ? html`<gf-voice-button @voice-text=${this.#onVoice}></gf-voice-button>` : nothing}
+      </span>
       ${recent.length ? html`
         <ul id="recent" role="listbox" aria-label="Recherches récentes">
           <li class="title" role="presentation">

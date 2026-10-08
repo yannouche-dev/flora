@@ -33,10 +33,10 @@ export class GfFilterPanel extends LitElement {
       .filter(genus => !filters.family.length || filters.family.includes(genusFamily.get(genus) || ''));
 
     const mine = [
-      ...collections.filter(c => c.kind === 'favorites').map(c => ({ value: c.id, label: '♥ Favoris', count: count('mine', c.id) })),
-      ...(collections.some(c => c.kind === 'place') ? [{ value: 'place', label: '📍 Dans un de mes lieux', count: count('mine', 'place') }] : []),
-      ...collections.filter(c => c.kind === 'list').map(c => ({ value: c.id, label: c.name, count: count('mine', c.id) })),
-      ...collections.filter(c => c.kind === 'place').map(c => ({ value: c.id, label: '📍 ' + c.name, count: count('mine', c.id) }))
+      ...collections.filter(c => c.kind === 'favorites').map(c => ({ value: c.id, label: 'Favoris', icon: 'heart-fill', count: count('mine', c.id) })),
+      ...(collections.some(c => c.kind === 'place') ? [{ value: 'place', label: 'Dans un de mes lieux', icon: 'geo-alt-fill', count: count('mine', 'place') }] : []),
+      ...collections.filter(c => c.kind === 'list').map(c => ({ value: c.id, label: c.name, icon: 'list-ul', count: count('mine', c.id) })),
+      ...collections.filter(c => c.kind === 'place').map(c => ({ value: c.id, label: c.name, icon: 'geo-alt-fill', count: count('mine', c.id) }))
     ];
 
     return html`

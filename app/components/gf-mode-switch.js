@@ -3,6 +3,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { MODE_ICONS } from '../core/icons.js';
 import { MODES, MODE_LABELS } from '../core/store.js';
 import { ui } from '../styles/ui.js';
+import { icon } from '../core/icons.js';
 
 /**
  * Three icon buttons: Épuré · Standard · Scientifique. For the app-wide mode, or for one surface (grid,
@@ -22,7 +23,7 @@ export class GfModeSwitch extends LitElement {
     :host { display: inline-flex; align-items: center; gap: 4px; }
     .segmented > button { min-height: 30px; padding: 3px 9px; display: inline-grid; place-items: center; color: var(--gf-text-muted); }
     .segmented > button[aria-pressed='true'] { color: var(--gf-accent-contrast); }
-    .segmented > button svg { display: block; }
+    .segmented > button svg { display: block; width: 17px; height: 17px; }
     .reset { position: relative; width: 26px; height: 26px; font-size: 0.95rem; color: var(--gf-accent); }
     .reset::after {
       content: '';
@@ -57,7 +58,7 @@ export class GfModeSwitch extends LitElement {
           @click=${() => this.#emit(mode)}>${MODE_ICONS[mode]}</button>`)}
       </div>
       ${this.overridden ? html`<button class="reset icon-btn" type="button" title="Revenir au mode de l’application"
-        aria-label="Revenir au mode de l’application" @click=${() => this.#emit(null)}>↺</button>` : nothing}
+        aria-label="Revenir au mode de l’application" @click=${() => this.#emit(null)}>${icon('arrow-counterclockwise')}</button>` : nothing}
     `;
   }
 }

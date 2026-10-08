@@ -3,6 +3,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { lookalikesOf } from '../core/lookalikes.js';
 import { href } from '../core/router.js';
 import { ui } from '../styles/ui.js';
+import { icon } from '../core/icons.js';
 
 /** @typedef {import('../core/lookalikes.js').Lookalike} Lookalike */
 
@@ -76,8 +77,8 @@ export class GfLookalikes extends LitElement {
     const { pair, side, others } = l;
     const names = others.map((o, i) => html`${i ? ', ' : ''}${this.#other(o)}`);
     const head = side === 'edible'
-      ? html`<strong>⚠ Peut être confondue avec ${names}</strong>`
-      : html`<strong>☠ Plante toxique, confondue avec ${names}</strong>`;
+      ? html`<strong>${icon('exclamation-triangle-fill')} Peut être confondue avec ${names}</strong>`
+      : html`<strong>${icon('exclamation-octagon-fill')} Plante toxique, confondue avec ${names}</strong>`;
     const full = !this.compact || this._open;
     return html`<div class="alert ${pair.severity}" role="note">
       ${head}<span class="sev">${pair.severity}</span> <span class="muted">· ${pair.part}</span>
