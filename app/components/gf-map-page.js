@@ -1,30 +1,21 @@
 // @ts-check
-import { LitElement, html, css, nothing } from 'lit';
+import { LitElement, html, css, nothing, repeat } from 'lit';
 import { GeoController } from '../core/geo.js';
 import { href, parse } from '../core/router.js';
 import {
-  ABUNDANCE, addHarvest, directionsUrl, entryPosition, plantMarkers, distance, entryInSeason, entryName, entrySoon, formatDistance, inSeason, lastHarvest, listPlaces,
+  directionsUrl, entryPosition, plantMarkers, distance, entryName, formatDistance, inSeason, listPlaces,
   placeAbundance, placeLastHarvest, placeTitle, plantCount, savePlace, spotEvents, withEntry
 } from '../core/collections.js';
 import { RADII, exploreUrl, observationsAround, saveRadius, savedRadius, speciesAround } from '../core/nearby.js';
 import { StoreController, whenReady } from '../core/store.js';
-import { addressAt, altitudeAt } from '../core/geoservices.js';
-import * as db from '../core/db.js';
-import { lookalikeWarning } from '../core/lookalikes.js';
 import { ui } from '../styles/ui.js';
 import './gf-facet.js';
 import './gf-map.js';
+import './gf-spot-editor.js';
 import './gf-thumb.js';
-
-const today = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-};
 
 const shortDate = (/** @type {string} */ iso) =>
   new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
-
-const stars = (/** @type {number} */ n) => n ? '★'.repeat(n) + '☆'.repeat(5 - n) : '';
 
 const round = (/** @type {[number, number]} */ [x, y]) => /** @type {[number, number]} */ ([Math.round(x * 1e7) / 1e7, Math.round(y * 1e7) / 1e7]);
 
@@ -33,7 +24,10 @@ const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
 /** Lower case without accents, for the "Autour" list filter. */
 const fold = (/** @type {string} */ s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
-/** Harvest places: IGN map or list sorted by distance, filters, selected-place sheet. */
+/**
+ * Harvest places: IGN map or list sorted by distance, filters. A selected place opens in full beside the map
+ * (below it on phones): the place editor, embedded — the Carte's map is the place's map.
+ */
 export class GfMapPage extends LitElement {
   static properties = {
     route: { attribute: false },
@@ -45,7 +39,7 @@ export class GfMapPage extends LitElement {
     _plantMenu: { state: true },
     _around: { state: true },
     _editing: { state: true },
-    _geo: { state: true },
+    _panelFull: { state: true },
     _point: { state: true }
   };
 
@@ -78,7 +72,46 @@ export class GfMapPage extends LitElement {
       padding: 0 12px 8px;
     }
     .body { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; }
-    gf-map { flex: 1; }
+    gf-map { flex: 1; min-height: 0; }
+    /* The selected place, in full: beside the map on wide screens, below it on phones (half, or most of the height). */
+    .panel {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: var(--gf-bg);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      flex: 0 0 52%;
+      border-top: 1px solid var(--gf-border);
+      box-shadow: 0 -4px 14px rgb(0 0 0 / 10%);
+      z-index: 1;
+    }
+    .panel.full { flex-basis: 84%; }
+    .body.with-panel gf-map { min-height: 120px; }
+    @media (min-width: 900px) {
+      .body.with-panel { flex-direction: row; }
+      .panel, .panel.full { flex: 0 0 min(440px, 42%); border-top: 0; border-left: 1px solid var(--gf-border); box-shadow: -4px 0 14px rgb(0 0 0 / 8%); }
+      .panel .grip { display: none; }
+    }
+    .panel-head {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      display: grid;
+      grid-template-columns: 1fr auto auto;
+      align-items: center;
+      gap: 2px 8px;
+      padding: 6px 8px 8px 16px;
+      background: var(--gf-bg);
+      border-bottom: 1px solid var(--gf-border);
+    }
+    .panel-head h2 { margin: 0; font-size: 1.05rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .panel-head .meta { grid-column: 1; grid-row: 3; }
+    .panel-head .button.small { grid-column: 2; grid-row: 2 / span 2; min-height: 34px; padding: 4px 12px; font-size: 0.85rem; }
+    .panel-head .close { grid-column: 3; grid-row: 2 / span 2; }
+    .panel-head h2 { grid-column: 1; grid-row: 2; }
+    .grip { grid-column: 1 / -1; grid-row: 1; justify-self: center; width: 56px; height: 18px; min-height: 0; padding: 0; border: 0; background: none; position: relative; }
+    .grip::before { content: ''; position: absolute; left: 12px; right: 12px; top: 7px; height: 4px; border-radius: 2px; background: var(--gf-border); }
     /* The place sheet covers the bottom of the map: hide Leaflet's bottom controls meanwhile. */
     .body:has(.sheet) gf-map .leaflet-bottom { display: none; }
     /* Phones have the "Noter ici" button in the tab bar. */
@@ -205,20 +238,8 @@ export class GfMapPage extends LitElement {
     this._around = null;
     /** The map is in position editing (its ✎ control): the sheets and Autour wait. */
     this._editing = false;
-    /** Commune and altitude of places, looked up once (IGN, cached). @type {Map<string, { city?: string, alt?: number | null }>} */
-    this._geo = new Map();
-  }
-
-  /** @param {import('../core/collections.js').Place} place */
-  #placeGeo(place) {
-    const key = place.id + ':' + place.geometry.coordinates.join(',');
-    if (!this._geo.has(key)) {
-      this._geo.set(key, {});
-      const set = patch => { this._geo = new Map(this._geo).set(key, { ...this._geo.get(key), ...patch }); };
-      addressAt(place.geometry.coordinates).then(a => set({ city: a?.city || '' })).catch(() => {});
-      altitudeAt(place.geometry.coordinates).then(alt => set({ alt })).catch(() => {});
-    }
-    return /** @type {{ city?: string, alt?: number | null }} */ (this._geo.get(key));
+    /** Phones: the place panel takes most of the height (else half, the map above). */
+    this._panelFull = false;
   }
 
   /**
@@ -226,6 +247,14 @@ export class GfMapPage extends LitElement {
    * @param {{ places: { id: string, coordinates: [number, number] }[], plants: { placeId: string, plantId: number | null, coordinates: [number, number] }[] }} moves
    */
   async #savePositions({ places, plants }) {
+    // Only the selected place moved: its panel's editor holds it, it saves the moves with its other edits.
+    const editor = /** @type {any} */ (this.renderRoot.querySelector('gf-spot-editor'));
+    const id = this.route.spot;
+    if (editor && id && places.every(p => p.id === id) && plants.every(p => p.placeId === id)) {
+      editor.savePositions({ pin: places[0]?.coordinates ?? null, plants });
+      this.#showToast('Positions enregistrées');
+      return;
+    }
     const changed = new Map();
     const get = (/** @type {string} */ id) => changed.get(id) || this._spots.find(s => s.id === id);
     for (const { id, coordinates } of places) {
@@ -473,12 +502,15 @@ export class GfMapPage extends LitElement {
     // Arriving on a place from elsewhere (Mes plantes, the editor, a link): frame it with all its plants.
     if (changed.has('route') && !this.#internalRoute && this.route.spot) {
       if (!this.route.plant) this._plants = [];
+      if (this.route.add || this.route.pick) this.#arrival = { spot: this.route.spot, add: this.route.add, pick: this.route.pick };
       this.#frameKey = this.route.spot + ':' + (++this.#frames);
     }
     this.#internalRoute = false;
   }
 
   #internalRoute = false;
+  /** « Add this plant » / « pick a plant » asked for a place when arriving on it; kept while it stays selected. @type {{ spot: string, add: number | null, pick: boolean } | null} */
+  #arrival = null;
   /** Route last received from the app, and the one this page navigated to since (replaceState). @type {any} */
   #parentRoute = null;
   /** @type {any} */ #ownRoute = null;
@@ -491,8 +523,7 @@ export class GfMapPage extends LitElement {
     if (!place || !this.#frameKey?.startsWith(place.id + ':')) return null;
     return {
       key: this.#frameKey,
-      points: [place.geometry.coordinates, ...place.properties.plants.map(e => entryPosition(place, e))],
-      bottom: 0.4
+      points: [place.geometry.coordinates, ...place.properties.plants.map(e => entryPosition(place, e))]
     };
   }
 
@@ -519,6 +550,7 @@ export class GfMapPage extends LitElement {
       plant: this._plants.length === 1 ? this._plants[0] : undefined
     });
     history.replaceState(null, '', hash);
+    if (next.spot !== this.#arrival?.spot) this.#arrival = null;
     // Every place selected is framed with all its plants (above its sheet).
     if (next.spot !== this.route.spot) this.#frameKey = next.spot ? next.spot + ':' + (++this.#frames) : null;
     this.#internalRoute = true;
@@ -538,23 +570,10 @@ export class GfMapPage extends LitElement {
     return fix ? distance(fix.coordinates, spot.geometry.coordinates) : null;
   }
 
-  /** @param {import('../core/collections.js').Place} place @param {import('../core/collections.js').PlantEntry} entry */
-  async #quickHarvest(place, entry) {
-    try {
-      await addHarvest(place, entry.plantId, { date: today(), quantity: '', note: '' });
-      // What it can be mistaken for (Anses / Centres antipoison), right when the harvest is logged.
-      const plant = entry.plantId === null ? null : await db.get('plants', entry.plantId).catch(() => null);
-      const lookalike = plant ? await lookalikeWarning(plant) : null;
-      this.#showToast(`${entryName(entry)} : récolte du jour notée${lookalike ? ' · ' + lookalike : ''}`, lookalike ? 9000 : 2500);
-    } catch (error) {
-      this.#showToast('Enregistrement impossible : ' + /** @type {Error} */ (error).message);
-    }
-  }
-
-  /** @param {string} message @param {number} [duration] */
-  #showToast(message, duration = 2500) {
+  /** @param {string} message */
+  #showToast(message) {
     this._toast = message;
-    setTimeout(() => { if (this._toast === message) this._toast = null; }, duration);
+    setTimeout(() => { if (this._toast === message) this._toast = null; }, 2500);
   }
 
   #plantOptions() {
@@ -595,7 +614,7 @@ export class GfMapPage extends LitElement {
           </div>` : nothing}
       </div>
 
-      <div class="body" @click=${() => { if (this._plantMenu) this._plantMenu = false; }}>
+      <div class="body ${selected && this._view === 'map' && !this._around ? 'with-panel' : ''}" @click=${() => { if (this._plantMenu) this._plantMenu = false; }}>
         ${this._view === 'map' ? html`
           <gf-map
             .spots=${spots}
@@ -619,7 +638,8 @@ export class GfMapPage extends LitElement {
             @spot-select=${e => { this.#hidePoint(); this.#navigate({ spot: e.detail.id }); }}
             @plant-select=${e => this.#navigate({ spot: e.detail.placeId, focus: e.detail.plantId })}
           ></gf-map>
-          ${this._editing ? nothing : this._around ? this.#aroundPanel() : selected ? this.#sheet(selected) : nothing}
+          ${this._editing || !this._around ? nothing : this.#aroundPanel()}
+          ${selected && !this._around ? this.#panel(selected) : nothing}
         ` : this.#list(spots)}
 
         ${!this._spots.length && !this._point ? html`
@@ -644,60 +664,30 @@ export class GfMapPage extends LitElement {
     return plantMarkers(places, e => !filter.size || filter.has(/** @type {number} */ (e.plantId)), this.#harvest);
   }
 
-  /** @param {import('../core/collections.js').Place} place */
-  #sheet(place) {
-    const p = place.properties;
+  /** The selected place, in full: header (distance, route, close), then its editor. @param {import('../core/collections.js').Place} place */
+  #panel(place) {
     const dist = this.#distanceTo(place);
-    const filter = new Set(this._plants);
-    const focus = this.route.focus;
-    // The tapped plant first, then plants in season, then the filtered ones, then by name.
-    const entries = [...p.plants].sort((a, b) =>
-      Number(b.plantId === focus) - Number(a.plantId === focus) ||
-      Number(entryInSeason(b)) - Number(entryInSeason(a)) ||
-      Number(filter.has(/** @type {number} */ (b.plantId))) - Number(filter.has(/** @type {number} */ (a.plantId))) ||
-      entryName(a).localeCompare(entryName(b), 'fr'));
-    const shown = entries.slice(0, 5);
-
+    // Arrived with « add this plant » / « pick a plant » for this place (links to a place, « Y ajouter… »).
+    const arrival = this.#arrival?.spot === place.id ? this.#arrival : null;
     return html`
-      <section class="sheet" aria-label="Lieu sélectionné">
-        <button class="close icon-btn" type="button" aria-label="Fermer" @click=${() => this.#navigate({ spot: null })}>×</button>
-        <h2>${placeTitle(place)}</h2>
-        <div class="meta">
-          <span>${plantCount(p.plants.length)}</span>
-          ${this.#harvest && inSeason(place) ? html`<span class="badge">En saison</span>` : nothing}
-          ${dist !== null ? html`<span>à ${formatDistance(dist)}</span>` : nothing}
-          ${(geo => html`${geo.city ? html`<span>📍 ${geo.city}</span>` : nothing}${geo.alt != null ? html`<span>⛰ ${geo.alt} m</span>` : nothing}`)(this.#placeGeo(place))}
+      <section class="panel ${this._panelFull ? 'full' : ''}" aria-label="Lieu sélectionné">
+        <div class="panel-head">
+          <button class="grip" type="button" aria-label=${this._panelFull ? 'Réduire la fiche' : 'Agrandir la fiche'}
+            aria-expanded=${this._panelFull ? 'true' : 'false'} @click=${() => { this._panelFull = !this._panelFull; }}></button>
+          <h2>📍 ${placeTitle(place)}</h2>
+          <span class="meta">${plantCount(place.properties.plants.length)}${dist !== null ? ` · à ${formatDistance(dist)}` : ''}</span>
+          <a class="button small" href=${directionsUrl(place)} target="_blank" rel="noopener">Itinéraire</a>
+          <button class="close icon-btn" type="button" aria-label="Fermer" @click=${() => this.#navigate({ spot: null })}>×</button>
         </div>
-        ${shown.length ? html`
-          <ul class="plants">
-            ${shown.map(e => {
-              const last = lastHarvest(e);
-              const own = entryPosition(place, e);
-              const away = own && place.geometry ? distance(own, place.geometry.coordinates) : 0;
-              return html`<li class=${e.plantId === focus ? 'focus' : ''}>
-                <gf-thumb plant-id=${e.plantId ?? 0} size="38" round style="--c:${PIN_COLORS[e.abundance]}"></gf-thumb>
-                <span class="who">
-                  <span class="nm">${entryName(e)}${!this.#harvest ? nothing
-                    : entryInSeason(e) ? html` <span class="badge">En saison</span>`
-                    : entrySoon(e) ? html` <span class="badge soon">Bientôt</span>` : nothing}</span>
-                  <span class="sub">${away >= 3 ? `à ${formatDistance(away)} du point · ` : ''}${ABUNDANCE.find(a => a.value === e.abundance)?.label}${this.#harvest ? html`${e.rating ? ' · ' + stars(e.rating) : ''}
-                    · ${last ? 'récolté le ' + shortDate(last.date) : 'aucune récolte'}` : e.notes ? ' · ' + e.notes.slice(0, 50) : ''}</span>
-                </span>
-                ${this.#harvest ? html`<button type="button" class="harvest small" aria-label="Noter une récolte de ${entryName(e)} aujourd’hui"
-                  @click=${() => this.#quickHarvest(place, e)}>+ Récolte</button>` : nothing}
-              </li>`;
-            })}
-          </ul>
-          ${entries.length > shown.length ? html`<a class="link" href=${href.spot(place.id)}>+ ${entries.length - shown.length} autre${entries.length - shown.length > 1 ? 's' : ''}…</a>` : nothing}`
-        : html`<p class="notes">Aucune plante notée pour ce lieu.</p>`}
-        ${p.notes ? html`<p class="notes">${p.notes}</p>` : nothing}
-        <div class="actions">
-          <a class="button primary" href=${href.spot(place.id)}>Ouvrir le lieu</a>
-          <a class="button" href=${href.spot(place.id, null, true)}>+ Plante</a>
-          <a class="button" href=${directionsUrl(place)} target="_blank" rel="noopener">Itinéraire</a>
-        </div>
-      </section>
-    `;
+        ${repeat([place], p => p.id, () => html`<gf-spot-editor embedded spot-id=${place.id}
+          add-plant=${arrival?.add ?? ''} ?pick=${Boolean(arrival?.pick)}
+          .focus=${this.route.focus} .mapEditing=${this._editing}
+          @map-fly=${e => /** @type {any} */ (this.renderRoot.querySelector('gf-map'))?.flyTo(e.detail.coordinates, e.detail.zoom)}
+          @map-edit=${() => { this._editing = true; }}
+          @plant-focus=${e => this.#navigate({ spot: place.id, focus: e.detail.plantId })}
+          @panel-close=${() => this.#navigate({ spot: null })}></gf-spot-editor>`)}
+
+      </section>`;
   }
 
   /** @param {import('../core/collections.js').Place[]} places */
