@@ -9,7 +9,7 @@ import { icon, MODE_ICONS } from '../core/icons.js';
 import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
-import { blockModuleName, blockOrder, blockTitle, isCustom, isHidden, resetBlocks, setHidden } from '../core/sheet-blocks.js';
+import { blockModuleName, blockOrder, blockTitle, isCustom, isHidden, resetBlocks, setBlockOrder, setHidden } from '../core/sheet-blocks.js';
 import { ui } from '../styles/ui.js';
 
 export class GfSettings extends LitElement {
@@ -22,7 +22,8 @@ export class GfSettings extends LitElement {
     _regions: { state: true },
     _region: { state: true },
     _regionNote: { state: true },
-    _transfer: { state: true }
+    _transfer: { state: true },
+    _sort: { state: true }
   };
 
   static styles = [ui, css`
@@ -68,10 +69,17 @@ export class GfSettings extends LitElement {
     .block-order { padding: 10px 12px; }
     .block-order .head { display: flex; align-items: center; gap: 8px; }
     .block-order .head button { margin-left: auto; }
-    .block-order ol { margin: 8px 0 0; padding-left: 22px; font-size: 0.88rem; }
-    .block-order li { margin: 2px 0; }
-    .block-order label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
-    .block-order input { margin: 0; }
+    .block-order ol { margin: 8px 0 0; padding: 0; list-style: none; font-size: 0.88rem; display: flex; flex-direction: column; gap: 2px; }
+    .block-order li { display: flex; align-items: center; gap: 4px; padding: 2px 4px 2px 0; border-radius: var(--gf-radius-sm); cursor: grab; user-select: none; -webkit-user-select: none; background: var(--gf-surface); }
+    .block-order li:hover { background: var(--gf-surface-2); }
+    .block-order li.dragging { position: relative; z-index: 2; cursor: grabbing; box-shadow: var(--gf-shadow-float); outline: 2px solid var(--gf-accent); }
+    .block-order .n { min-width: 1.6em; text-align: right; color: var(--gf-text-muted); font-variant-numeric: tabular-nums; }
+    .block-order .grip { flex: none; width: 24px; height: 24px; min-height: 0; padding: 0; display: grid; place-items: center; border: 0; background: none; color: var(--gf-text-muted); cursor: grab; border-radius: var(--gf-radius-sm); touch-action: none; }
+    /* By finger the page scrolls through the list: drag by the grip, made bigger. */
+    @media (pointer: coarse) { .block-order .grip { width: 34px; height: 34px; font-size: 1.05rem; } }
+    .block-order .grip:focus-visible { outline: none; box-shadow: var(--gf-focus); }
+    .block-order label { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+    .block-order input { flex: none; margin: 0; }
     .module .mode input { width: 18px; height: 18px; margin: 0; }
   `];
 
@@ -146,6 +154,8 @@ export class GfSettings extends LitElement {
   constructor() {
     super();
     this._saved = false;
+    /** A block list being reordered: its mode, the dragged block, the order shown meanwhile, the pointer offset. @type {{ mode: any, key: string, order: string[], dy: number } | null} */
+    this._sort = null;
     this._spotCount = 0;
     /** @type {string | null} */
     this._spotMessage = null;
@@ -252,7 +262,7 @@ export class GfSettings extends LitElement {
           <button type="button" class=${on ? '' : 'primary'} aria-pressed=${on ? 'true' : 'false'}
             @click=${() => setKingMode(!on)}>${on ? 'Quitter le mode King' : 'Entrer en mode King'}</button>
         </div>
-        <p class="muted">Personnalisez la fiche plante : glissez les blocs par leur titre, masquez-les avec la corbeille ${icon('trash3')},
+        <p class="muted">Personnalisez la fiche plante : glissez les blocs par leur titre (ou ci-dessous, par leur poignée ${icon('grip-vertical')}), masquez-les avec la corbeille ${icon('trash3')},
           réaffichez-les avec ${icon('arrow-counterclockwise')}. Tout est enregistré automatiquement, pour chaque mode d’affichage ;
           masquer un bloc de service (Wikipédia, GBIF, Trefle, photos) coupe ce module dans ce mode. Quittez en touchant la couronne en bas de l’écran.</p>
         ${on ? this.#blockOrders() : nothing}
@@ -273,13 +283,115 @@ export class GfSettings extends LitElement {
               <button type="button" class="small" ?disabled=${!isCustom(mode) && !blockOrder(mode).some(k => isHidden(mode, k))}
                 @click=${() => resetBlocks(mode)}>Par défaut</button>
             </div>
-            <ol>${blockOrder(mode).map(k => html`<li><label>
-              <input type="checkbox" .checked=${!isHidden(mode, k)} @change=${e => setHidden(mode, k, !e.target.checked)} />
-              ${blockTitle(k)}${blockModuleName(k) ? html` <small class="muted">(module ${blockModuleName(k)})</small>` : nothing}
-            </label></li>`)}</ol>
+            <ol class="sortable" aria-label=${'Ordre des blocs, ' + MODE_LABELS[mode]}>${blockOrder(mode).map(k => {
+              const sort = this._sort?.mode === mode ? this._sort : null;
+              const slot = (sort ? sort.order : blockOrder(mode)).indexOf(k);
+              const dragging = sort?.key === k;
+              return html`<li class=${dragging ? 'dragging' : ''} data-key=${k}
+                style=${sort ? `order:${slot}${dragging ? `;transform:translateY(${sort.dy}px)` : ''}` : ''}
+                @pointerdown=${e => this.#press(e, mode, k)}>
+                <button class="grip" type="button" aria-label="Déplacer « ${blockTitle(k)} »" title="Glisser pour déplacer (↑ ↓ au clavier)"
+                  @keydown=${e => this.#gripKey(e, mode, k)}>${icon('grip-vertical')}</button>
+                <span class="n">${slot + 1}.</span>
+                <label>
+                  <input type="checkbox" .checked=${!isHidden(mode, k)} @change=${e => setHidden(mode, k, !e.target.checked)} />
+                  ${blockTitle(k)}${blockModuleName(k) ? html` <small class="muted">(module ${blockModuleName(k)})</small>` : nothing}
+                </label>
+              </li>`;
+            })}</ol>
           </div>`)}
       </div>`;
   }
+
+  /** @param {string[]} order @param {string} key @param {-1 | 1} delta */
+  #swap(order, key, delta) {
+    const i = order.indexOf(key), j = i + delta;
+    if (i < 0 || j < 0 || j >= order.length) return null;
+    const next = [...order];
+    [next[i], next[j]] = [next[j], next[i]];
+    return next;
+  }
+
+  /** ↑ ↓ on a focused grip: one place up or down, saved; the grip keeps the focus. @param {KeyboardEvent} e @param {any} mode @param {string} key */
+  async #gripKey(e, mode, key) {
+    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+    e.preventDefault();
+    const order = this.#swap(blockOrder(mode), key, e.key === 'ArrowUp' ? -1 : 1);
+    if (!order) return;
+    setBlockOrder(mode, order);
+    await this.updateComplete;
+    /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(`.block-order:nth-child(${MODE_KEYS.indexOf(mode) + 1}) li[data-key="${key}"] .grip`))?.focus();
+  }
+
+  /**
+   * Dragging a row (not its checkbox): past a few pixels the row follows the pointer and takes a neighbour's
+   * place past its middle. Rows only change their CSS order meanwhile (the pressed node stays put); saved on release.
+   * @type {{ mode: any, key: string, y0: number, started: boolean, list: Element } | null}
+   */
+  #drag = null;
+
+  /** @param {PointerEvent} e @param {any} mode @param {string} key */
+  #press(e, mode, key) {
+    const target = /** @type {Element} */ (e.target);
+    if (e.button !== 0 || target.closest('input')) return;
+    // By finger, only the grip: elsewhere the touch scrolls the page.
+    if (e.pointerType === 'touch' && !target.closest('.grip')) return;
+    const li = /** @type {HTMLElement} */ (e.currentTarget);
+    this.#drag = { mode, key, y0: e.clientY, started: false, list: /** @type {Element} */ (li.parentElement) };
+    li.setPointerCapture?.(e.pointerId);
+    addEventListener('pointermove', this.#move);
+    addEventListener('pointerup', this.#release);
+    addEventListener('pointercancel', this.#release);
+  }
+
+  /** Middle of a row where it sits in the list (without the drag offset). @param {string} key */
+  #mid(key) {
+    const el = this.#drag?.list.querySelector(`li[data-key="${key}"]`);
+    if (!el) return 0;
+    const r = el.getBoundingClientRect();
+    return r.top + r.height / 2 - (this._sort?.key === key ? this._sort.dy : 0);
+  }
+
+  /** @param {PointerEvent} e */
+  #move = async e => {
+    const drag = this.#drag;
+    if (!drag) return;
+    const y = e.clientY;
+    if (!drag.started) {
+      if (Math.abs(y - drag.y0) < 5) return;
+      drag.started = true;
+      this._sort = { mode: drag.mode, key: drag.key, order: blockOrder(drag.mode), dy: 0 };
+      await this.updateComplete;
+    }
+    e.preventDefault();
+    // Past several rows at once (a fast move): one place at a time until the pointer is between its neighbours.
+    for (let step = 0; step < 20 && this._sort && this.#drag === drag; step++) {
+      const sort = this._sort;
+      const i = sort.order.indexOf(drag.key);
+      let next = null;
+      if (i > 0 && y < this.#mid(sort.order[i - 1])) next = this.#swap(sort.order, drag.key, -1);
+      else if (i < sort.order.length - 1 && y > this.#mid(sort.order[i + 1])) next = this.#swap(sort.order, drag.key, 1);
+      if (!next) break;
+      this._sort = { ...sort, order: next };
+      await this.updateComplete;
+    }
+    if (this._sort && this.#drag === drag) this._sort = { ...this._sort, dy: Math.round(y - this.#mid(drag.key)) };
+  };
+
+  /** @param {PointerEvent} e */
+  #release = e => {
+    removeEventListener('pointermove', this.#move);
+    removeEventListener('pointerup', this.#release);
+    removeEventListener('pointercancel', this.#release);
+    const drag = this.#drag;
+    const sort = this._sort;
+    this.#drag = null;
+    this._sort = null;
+    if (!drag?.started || !sort) return;
+    setBlockOrder(sort.mode, sort.order);
+    // A drag that ends on the name is not a click on its checkbox.
+    if (e.type === 'pointerup') addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); }, { capture: true, once: true });
+  };
 
   render() {
     const { meta, offline } = this.#store.state;
