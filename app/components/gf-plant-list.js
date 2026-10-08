@@ -50,8 +50,11 @@ const columnWidth = (key, view) => key === 'photo' && view === 'epure' ? '96px'
   : key === 'fr' && view === 'epure' ? 'minmax(160px, 2fr)'
   : /** @type {any} */ (COLUMNS.find(c => c.key === key)).width;
 
-/** Scroll position survives navigating to a plant and back, until the results change. */
-let saved = { items: /** @type {any[] | null} */ (null), scrollTop: 0 };
+/** The search itself (text, filters, sort): results refreshed for the same search keep their scroll. @param {any} query */
+const searchKey = query => JSON.stringify([query.q, query.filters, query.sort]);
+
+/** Scroll position survives navigating to a plant and back, until the search changes. */
+let saved = { key: '', scrollTop: 0 };
 
 /** Virtualized result list: only the rows in (or near) the viewport are in the DOM. */
 export class GfPlantList extends LitElement {
@@ -140,6 +143,8 @@ export class GfPlantList extends LitElement {
   });
   /** @type {any[] | null} */
   #items = null;
+  /** Search the shown results answer (see `searchKey`). @type {string | null} */
+  #key = null;
   #frame = 0;
 
   constructor() {
@@ -165,15 +170,22 @@ export class GfPlantList extends LitElement {
     super.disconnectedCallback();
     this.#resize.disconnect();
     // Once detached, the element reports scrollTop 0: keep the last position seen while scrolling.
-    saved = { items: this.#items, scrollTop: this._scrollTop };
+    saved = { key: this.#key || '', scrollTop: this._scrollTop };
   }
 
-  /** New results → back to the top; same results (coming back from a plant) → restore. */
+  /**
+   * A new search → back to the top. The same search refreshed (♥, a collection changed: a line action)
+   * → the list stays where it is. Coming back from a plant → where it was.
+   */
   updated() {
-    const items = this.#store.state.results.items;
+    const { results: { items }, query } = this.#store.state;
     if (items === this.#items) return;
+    const key = searchKey(query);
+    const first = this.#items === null;
     this.#items = items;
-    const top = saved.items === items ? saved.scrollTop : 0;
+    if (key === this.#key) return;
+    this.#key = key;
+    const top = first && saved.key === key ? saved.scrollTop : 0;
     this.scrollTop = top;
     this._scrollTop = top;
   }
