@@ -12,6 +12,33 @@ gf-map .gf-map-root {
   inset: 0;
 }
 
+/* Holds the map and its controls; full screen while editing positions (top layer, see gf-map.js). */
+gf-map .gf-map-frame,
+gf-map .gf-map-frame[popover]:not(:popover-open) {
+  display: block;
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  overflow: visible;
+  background: transparent;
+  color: inherit;
+}
+gf-map .gf-map-frame:popover-open,
+gf-map .gf-map-frame.fullscreen {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  z-index: 5000;
+  background: var(--gf-surface-2);
+}
+
 /* « IGN – fonds de carte » switched off (Réglages › Modules). */
 gf-map .gf-map-off {
   position: absolute;

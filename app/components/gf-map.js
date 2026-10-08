@@ -229,7 +229,9 @@ export class GfMap extends LitElement {
     const hint = this.pin ? 'Glissez le lieu et ses plantes · appui long : placer le lieu'
       : this.selectedId ? 'Glissez le lieu ou ses plantes · appui long : placer le lieu'
       : this.spots.length ? 'Glissez les lieux pour les déplacer' : 'Glissez les plantes pour les déplacer';
-    return html`<div class="gf-map-root"></div>
+    // The frame goes full screen while editing positions: in the browser's top layer (popover), so no
+    // ancestor (a pane with `contain`, the header, the tab bar) can clip or cover it.
+    return html`<div class="gf-map-frame" popover="manual"><div class="gf-map-root"></div>
       ${moduleOn('ignMaps') ? nothing : html`<div class="gf-map-off" role="status">Fonds IGN désactivés : seules les zones déjà vues s’affichent.
         <a href=${href.settings()}>Réglages › Modules</a></div>`}
       ${this.editing ? html`<div class="gf-map-editbar" role="group" aria-label="Modifier les positions">
@@ -238,7 +240,7 @@ export class GfMap extends LitElement {
           <button type="button" @click=${() => this.#endEdit(false)}>Annuler</button>
           <button type="button" class="primary" @click=${() => this.#endEdit(true)}>✓ Valider</button>
         </span>
-      </div>` : nothing}`;
+      </div>` : nothing}</div>`;
   }
 
   // ── Position editing ───────────────────────────────────────────────────────────────────────────
@@ -296,6 +298,18 @@ export class GfMap extends LitElement {
       this._moves = emptyMoves();
     }
     this.#setEditing(false);
+  }
+
+  /** Full screen while editing, back in place afterwards. @param {boolean} on */
+  #fullScreen(on) {
+    const frame = /** @type {any} */ (this.querySelector('.gf-map-frame'));
+    if (!frame) return;
+    try {
+      if (on) frame.showPopover(); else frame.hidePopover();
+    } catch {
+      // No popover support: fixed position (enough outside contained panes).
+      frame.classList.toggle('fullscreen', on);
+    }
   }
 
   /** The moves were saved: forget them once the new data arrives. */
@@ -403,7 +417,7 @@ export class GfMap extends LitElement {
       map.invalidateSize();
       this.#applyFrame();
       if (this.fit && !this.#fitted) this.#fitToContent();
-    }).observe(this);
+    }).observe(this.#root);
     this.#syncAll();
   }
 
@@ -424,6 +438,7 @@ export class GfMap extends LitElement {
       this.#clearPin();
       this.#clearPlants();
       this.#syncButtons();
+      this.#fullScreen(this.editing);
     }
     if (changed.has('_moves') || (changed.has('editing') && changed.get('editing') !== undefined) || (changed.has('selectedId') && this.editing)) {
       this.#syncSpots();
