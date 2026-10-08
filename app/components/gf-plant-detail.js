@@ -13,6 +13,7 @@ import './gf-attribution.js';
 import './gf-plant-spots.js';
 import './gf-calendar.js';
 import './gf-status.js';
+import './gf-lookalikes.js';
 import './gf-add-to.js';
 import { ui } from '../styles/ui.js';
 
@@ -549,6 +550,7 @@ export class GfPlantDetail extends LitElement {
         <div class="sci"><i>${plant.scientificName}</i> <span class="author">${plant.author}</span></div>
         <p class="meta">${plant.family}${bloom ? html` · Floraison ${bloom.text}${bloom.now ? html` <span class="season">en fleur</span>` : nothing}` : nothing}</p>
         <gf-status .plant=${plant}></gf-status>
+        <gf-lookalikes .plant=${plant} compact></gf-lookalikes>
 
         <div class="gate" role="group" aria-label="Ajouter à la collection en cours">
           ${current ? html`
@@ -600,6 +602,7 @@ export class GfPlantDetail extends LitElement {
         ${this.#actions(plant)}
         <gf-add-to .plant=${plant}></gf-add-to>
         <gf-status .plant=${plant}></gf-status>
+        <gf-lookalikes .plant=${plant}></gf-lookalikes>
         ${this.#tags(ctx)}
 
         <div class="mine">
@@ -664,6 +667,7 @@ export class GfPlantDetail extends LitElement {
         ${this.#actions(plant)}
         <gf-add-to .plant=${plant}></gf-add-to>
         ${this._error ? html`<p class="muted">${this._error}</p>` : nothing}
+        <gf-lookalikes .plant=${plant} detailed></gf-lookalikes>
 
         <section>
           <h2>Taxonomie</h2>

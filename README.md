@@ -229,6 +229,7 @@ L'app fonctionne hors ligne avec la flore locale ; chaque service en ligne est u
 |---|---|---|
 | IGN – fonds de carte | data.geopf.fr (WMTS) | photos aériennes, plan, cadastre, courbes de niveau, forêts, espaces protégés ; désactivé, seules les zones déjà vues restent affichées (tuiles du cache, sans réseau) |
 | IGN – adresses et altitudes | data.geopf.fr (géocodage, altimétrie) | recherche d'adresse, adresse et altitude d'un point ou d'un lieu |
+| IGN – espaces protégés | data.geopf.fr (WFS, couches INPN / PatriNat) | bandeau sur les cartes quand la vue touche un espace protégé (dès le zoom 11) |
 | iNaturalist | api.inaturalist.org | Autour, courbes de floraison et fructification, nombre d'observations, photos de repli |
 | GBIF | api.gbif.org | descriptions, noms étrangers, répartition, médias, occurrences en France |
 | Wikidata | www.wikidata.org | classification, statut UICN, identifiants ; donne l'article Wikipédia |
@@ -236,6 +237,7 @@ L'app fonctionne hors ligne avec la flore locale ; chaque service en ligne est u
 | Wikimedia Commons | commons.wikimedia.org | galerie de photos libres, vignettes de repli |
 | Trefle | trefle.io | données de culture, avec votre jeton (saisi dans sa carte) |
 | Photos en ligne | thumb.wikimedia.org, inaturalist-open-data, herbiers… | vignettes et photos ; désactivé, 🌿 à la place |
+| Dictée vocale (navigateur) | reconnaissance vocale du navigateur | bouton 🎙 dans la recherche Flore et dans « Noter ici » ; sur Chrome, l'audio est traité par Google |
 
 ### Modes d'affichage : Épuré, Standard, Scientifique
 
@@ -281,6 +283,7 @@ Ajouter un fichier JS ou CSS dans `app/` impose de l'ajouter aussi à la liste `
 
 - Sur téléphone, une barre en bas : **Flore · Mes plantes · ＋ Noter ici · Carte · Plus** (réglages, sauvegarde). Sur ordinateur, les mêmes entrées sont dans l'en-tête.
 - **Noter ici** : le GPS démarre, des suggestions s'affichent (plantes des lieux à moins de 200 m, favoris, plantes récentes) ; un toucher sur une plante l'enregistre **dans le lieu le plus proche (< 30 m)** ou dans un nouveau lieu. Un bandeau propose **Annuler** et **Détails**.
+- **Recherche vocale** 🎙 (recherche Flore et « Noter ici ») : on dit le nom, la recherche se lance. Elle utilise la reconnaissance vocale du navigateur, en français (sur Chrome l'audio part chez Google, sur Safari chez Apple ou reste sur l'appareil) ; le bouton n'apparaît que si le navigateur la propose et si le module « Dictée vocale » est actif.
 
 ### Mode cueillette (module optionnel)
 
@@ -288,6 +291,13 @@ Ajouter un fichier JS ou CSS dans `app/` impose de l'ajouter aussi à la liste `
 
 - journal de récolte, qualité (★), « Récolté aujourd'hui », bouton « + Récolte » ;
 - badges **En saison** (récolté à ±15 jours de la date, une année quelconque) et **Bientôt** (dans les 30 prochains jours) ;
+- **plantes à confondre** : noter une plante avec « Noter ici » ou « + Récolte » rappelle les plantes toxiques avec lesquelles elle est confondue (ci-dessous).
+
+### Plantes à confondre (Anses, Centres antipoison)
+
+Sur la fiche d'une plante comestible souvent confondue avec une plante toxique — ou de la plante toxique elle-même —, un encadré **« Peut être confondue avec… »** (rouge si l'intoxication peut être mortelle) donne la partie concernée, les **critères pour les distinguer**, les symptômes (vue Scientifique) et les sources. En vue Épurée, une ligne, les critères sur demande. Exemples : ail des ours ↔ colchique et muguet, consoude ↔ digitale, gentiane jaune ↔ vérâtre, carotte sauvage ↔ œnanthe safranée, sureau noir ↔ sureau yèble, châtaignier ↔ marronnier d'Inde.
+
+Les données (`data/lookalikes.json`, 15 confusions) ne reprennent **que** les confusions et critères publiés par l'Anses et les Centres antipoison : aide-mémoire *Plantes toxiques et plantes comestibles : attention aux confusions !* (2020), *Vigil'Anses* n°8 (2019), articles de l'Anses sur le colchique et l'ail des ours (2025), « gare aux confusions » (2020) et les plantes de l'été (2022). Un genre entier (« Digitalis sp. ») y est noté par son seul nom. Le fichier est inclus dans l'application : l'avertissement fonctionne hors ligne.
 
 ### Mes plantes : favoris, listes et lieux
 
@@ -316,9 +326,10 @@ Partout où des plantes sont listées (lieu ou collection, ajout d'une plante, �
 
 - **Barre de recherche** en haut de la Carte : adresse, commune ou lieu-dit avec suggestions (géocodage IGN) ; le résultat choisi est centré et sa fiche s'ouvre.
 - **▦ Carte** (au bout de la barre, ou bouton rond sur les autres cartes) : un seul panneau pour tout ce qui règle l'affichage — **fond** (photos aériennes, plan IGN), **couches** de terrain (parcelles cadastrales, courbes de niveau) et de **règles de cueillette** (forêts publiques ONF, parcs nationaux, réserves naturelles nationales et régionales, arrêtés de protection de biotope — données INPN / PatriNat servies par l'IGN), **légende** et **sources**. Les choix sont mémorisés.
+- **Espaces protégés** : dès le zoom 11, sur toutes les cartes (Carte, éditeur d'un lieu, fiche plante, lien partagé), un petit bandeau nomme le **parc national** (cœur), la **réserve naturelle** nationale ou régionale ou l'**arrêté de protection de biotope** que la vue touche, avec le lien vers sa fiche INPN : « la cueillette y est souvent interdite ou réglementée : vérifiez les règles du site ». × le masque pour ces espaces ; il ne s'affiche pas pendant le déplacement des positions. Données INPN / PatriNat interrogées sur le WFS de l'IGN (noms seulement), gardées un mois sur l'appareil ; module « IGN – espaces protégés ».
 - **Appui long** n'importe où sur la carte : fiche du point avec l'**adresse la plus proche**, l'**altitude** (RGE ALTI®), les **coordonnées** (copiables), « Créer un endroit ici » et « Itinéraire ». La fiche d'un endroit affiche sa commune et son altitude, l'éditeur l'adresse, l'altitude et les coordonnées de son point.
 
-Source : IGN – Géoplateforme (WMTS, géocodage, altimétrie ; gratuit, sans clé, Licence Ouverte). Adresses et altitudes déjà vues sont gardées sur l'appareil.
+Source : IGN – Géoplateforme (WMTS, WFS, géocodage, altimétrie ; gratuit, sans clé, Licence Ouverte). Adresses et altitudes déjà vues sont gardées sur l'appareil.
 
 ### Autour : les plantes observées dans un périmètre
 

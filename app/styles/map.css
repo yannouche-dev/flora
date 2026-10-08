@@ -39,8 +39,8 @@ gf-map .gf-map-frame.fullscreen {
   background: var(--gf-surface-2);
 }
 
-/* « IGN – fonds de carte » switched off (Réglages › Modules). */
-gf-map .gf-map-off {
+/* Notes over the map: « IGN – fonds de carte » switched off, protected areas in view. */
+gf-map .gf-map-notes {
   position: absolute;
   z-index: 650;
   left: 12px;
@@ -48,16 +48,45 @@ gf-map .gf-map-off {
   right: 64px;
   /* Below the map search pill; the bottom is taken by the place / Autour sheets. */
   top: 70px;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+gf-map .gf-map-off, gf-map .gf-map-protected {
+  pointer-events: auto;
   width: fit-content;
-  margin: 0 auto;
+  max-width: 100%;
   padding: 6px 12px;
   border-radius: var(--gf-radius-pill);
   background: var(--gf-surface);
   color: var(--gf-text);
   box-shadow: var(--gf-shadow-float);
-  font-size: 0.8rem;
-  text-align: center;
+  font-size: 0.85rem;
+  line-height: 1.35;
 }
+
+gf-map .gf-map-protected {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  border-radius: var(--gf-radius);
+  border-left: 4px solid #15803d;
+}
+gf-map .gf-map-protected a { color: var(--gf-accent); font-weight: 600; }
+gf-map .gf-map-protected .kind { color: var(--gf-text-muted); font-size: 0.78rem; }
+gf-map .gf-map-protected button {
+  font: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--gf-accent);
+  cursor: pointer;
+}
+gf-map .gf-map-protected .more { text-decoration: underline; }
+gf-map .gf-map-protected .close { font-size: 1.2rem; line-height: 1; color: var(--gf-text-muted); padding: 0 2px; }
+
 gf-map .gf-map-off a { color: var(--gf-accent); }
 
 gf-map .gf-map-canvas {

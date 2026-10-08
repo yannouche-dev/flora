@@ -10,6 +10,7 @@ import { inSeason, placeAbundance, placeTitle } from '../core/collections.js';
 import { store as appStore } from '../core/store.js';
 import { cachedThumb, thumbUrl } from '../core/thumb.js';
 import { moduleEvents, moduleOn } from '../core/modules.js';
+import { protectedAreasIn } from '../core/protected.js';
 import { href } from '../core/router.js';
 import './gf-map-panel.js';
 import './gf-map-search.js';
@@ -24,6 +25,8 @@ const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
 
 /** Plants are drawn from this zoom level on (places are always drawn). */
 export const PLANT_ZOOM = 16;
+/** From this zoom on (a few km across), maps say which protected areas are in view. */
+export const PROTECTED_ZOOM = 11;
 
 /**
  * Place: a rounded-square marker on a stem, with the number of plants — unlike plants (small circles).
@@ -183,7 +186,10 @@ export class GfMap extends LitElement {
     noSearch: { type: Boolean, attribute: 'no-search' },
     editable: { type: Boolean },
     editing: { type: Boolean, reflect: true },
-    _moves: { state: true }
+    _moves: { state: true },
+    _areas: { state: true },
+    _areasClosed: { state: true },
+    _areasOpen: { state: true }
   };
 
   constructor() {
@@ -218,6 +224,11 @@ export class GfMap extends LitElement {
     this.editing = false;
     /** Working copy while editing positions. */
     this._moves = emptyMoves();
+    /** Protected areas in view (« IGN – espaces protégés »). @type {import('../core/protected.js').ProtectedArea[]} */
+    this._areas = [];
+    /** The set of areas whose banner was closed (it comes back for other areas). */
+    this._areasClosed = '';
+    this._areasOpen = false;
   }
 
   createRenderRoot() { return this; }
@@ -232,8 +243,11 @@ export class GfMap extends LitElement {
     // The frame goes full screen while editing positions: in the browser's top layer (popover), so no
     // ancestor (a pane with `contain`, the header, the tab bar) can clip or cover it.
     return html`<div class="gf-map-frame" popover="manual"><div class="gf-map-root"></div>
-      ${moduleOn('ignMaps') ? nothing : html`<div class="gf-map-off" role="status">Fonds IGN désactivés : seules les zones déjà vues s’affichent.
-        <a href=${href.settings()}>Réglages › Modules</a></div>`}
+      <div class="gf-map-notes">
+        ${moduleOn('ignMaps') ? nothing : html`<div class="gf-map-off" role="status">Fonds IGN désactivés : seules les zones déjà vues s’affichent.
+          <a href=${href.settings()}>Réglages › Modules</a></div>`}
+        ${this.#protectedBanner()}
+      </div>
       ${this.editing ? html`<div class="gf-map-editbar" role="group" aria-label="Modifier les positions">
         <span class="hint">${n ? `${n} déplacement${n > 1 ? 's' : ''} · ` : ''}${hint}</span>
         <span class="actions">
@@ -241,6 +255,56 @@ export class GfMap extends LitElement {
           <button type="button" class="primary" @click=${() => this.#endEdit(true)}>✓ Valider</button>
         </span>
       </div>` : nothing}</div>`;
+  }
+
+  // ── Protected areas ────────────────────────────────────────────────────────────────────────────
+
+  get #areasKey() { return this._areas.map(a => a.id).sort().join(','); }
+
+  /** « 🛡 Réserve naturelle de … — la cueillette y est souvent interdite ou réglementée » (not while editing). */
+  #protectedBanner() {
+    const areas = this._areas;
+    if (!areas.length || this.editing || this.#areasKey === this._areasClosed) return nothing;
+    const shown = this._areasOpen ? areas : areas.slice(0, 2);
+    const more = areas.length - shown.length;
+    return html`<div class="gf-map-protected" role="status">
+      <span class="what">🛡 ${shown.map((a, i) => html`${i ? ' · ' : ''}${a.url
+        ? html`<a href=${a.url} target="_blank" rel="noopener" title=${a.kind}>${a.name}</a>` : html`<b title=${a.kind}>${a.name}</b>`}
+        <span class="kind">(${a.kind})</span>`)}${more > 0
+        ? html` · <button type="button" class="more" @click=${() => { this._areasOpen = true; }}>+ ${more} autre${more > 1 ? 's' : ''}</button>` : nothing}
+        — la cueillette y est souvent interdite ou réglementée : vérifiez les règles du site.</span>
+      <button type="button" class="close" aria-label="Masquer" title="Masquer"
+        @click=${() => { this._areasClosed = this.#areasKey; }}>×</button>
+    </div>`;
+  }
+
+  /** @type {ReturnType<typeof setTimeout> | undefined} */ #areasTimer;
+  /** @type {AbortController | null} */ #areasAbort = null;
+
+  /** The view moved: look for protected areas in it, once it settles. */
+  #scheduleAreas() {
+    clearTimeout(this.#areasTimer);
+    this.#areasTimer = setTimeout(() => this.#checkAreas(), 600);
+  }
+
+  async #checkAreas() {
+    const map = this.#map;
+    this.#areasAbort?.abort();
+    this.#areasAbort = null;
+    if (!map || !map.getSize().x || map.getZoom() < PROTECTED_ZOOM || !moduleOn('ignProtected')) {
+      this._areas = [];
+      return;
+    }
+    const abort = this.#areasAbort = new AbortController();
+    const b = map.getBounds();
+    try {
+      const areas = await protectedAreasIn({ south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() }, abort.signal);
+      if (abort.signal.aborted) return;
+      this._areas = areas;
+      this._areasOpen = false;
+    } catch (error) {
+      if (!abort.signal.aborted) this._areas = [];
+    }
   }
 
   // ── Position editing ───────────────────────────────────────────────────────────────────────────
@@ -325,6 +389,7 @@ export class GfMap extends LitElement {
   /** « IGN – fonds de carte » switched on or off: rebuild the tile layers (network or cache only). */
   #onModules = () => {
     this.requestUpdate();
+    this.#scheduleAreas();
     const map = this.#map;
     if (!map) return;
     for (const layer of Object.values(this.#layers)) layer.remove();
@@ -392,6 +457,7 @@ export class GfMap extends LitElement {
     else map.fitBounds(FRANCE_BOUNDS);
 
     map.on('moveend', () => {
+      this.#scheduleAreas();
       if (!this.remember) return;
       const center = map.getCenter();
       store(config.storageKeys.mapView, { lat: center.lat, lng: center.lng, zoom: map.getZoom() });
@@ -478,6 +544,8 @@ export class GfMap extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     moduleEvents.removeEventListener('change', this.#onModules);
+    clearTimeout(this.#areasTimer);
+    this.#areasAbort?.abort();
     this.#unwatch?.();
     this.#unwatch = null;
   }

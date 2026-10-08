@@ -9,6 +9,8 @@ import {
 import { RADII, exploreUrl, observationsAround, saveRadius, savedRadius, speciesAround } from '../core/nearby.js';
 import { StoreController, whenReady } from '../core/store.js';
 import { addressAt, altitudeAt } from '../core/geoservices.js';
+import * as db from '../core/db.js';
+import { lookalikeWarning } from '../core/lookalikes.js';
 import { ui } from '../styles/ui.js';
 import './gf-facet.js';
 import './gf-map.js';
@@ -540,16 +542,19 @@ export class GfMapPage extends LitElement {
   async #quickHarvest(place, entry) {
     try {
       await addHarvest(place, entry.plantId, { date: today(), quantity: '', note: '' });
-      this.#showToast(`${entryName(entry)} : récolte du jour notée`);
+      // What it can be mistaken for (Anses / Centres antipoison), right when the harvest is logged.
+      const plant = entry.plantId === null ? null : await db.get('plants', entry.plantId).catch(() => null);
+      const lookalike = plant ? await lookalikeWarning(plant) : null;
+      this.#showToast(`${entryName(entry)} : récolte du jour notée${lookalike ? ' · ' + lookalike : ''}`, lookalike ? 9000 : 2500);
     } catch (error) {
       this.#showToast('Enregistrement impossible : ' + /** @type {Error} */ (error).message);
     }
   }
 
-  /** @param {string} message */
-  #showToast(message) {
+  /** @param {string} message @param {number} [duration] */
+  #showToast(message, duration = 2500) {
     this._toast = message;
-    setTimeout(() => { if (this._toast === message) this._toast = null; }, 2500);
+    setTimeout(() => { if (this._toast === message) this._toast = null; }, duration);
   }
 
   #plantOptions() {

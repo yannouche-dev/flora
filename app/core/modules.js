@@ -6,7 +6,7 @@
 import { config } from '../config.js';
 
 /**
- * @typedef {'ignMaps' | 'ignGeo' | 'inaturalist' | 'gbif' | 'wikidata' | 'wikipedia' | 'commons' | 'trefle' | 'photos'} ModuleKey
+ * @typedef {'ignMaps' | 'ignGeo' | 'ignProtected' | 'voice' | 'inaturalist' | 'gbif' | 'wikidata' | 'wikipedia' | 'commons' | 'trefle' | 'photos'} ModuleKey
  * @typedef {{ key: ModuleKey, name: string, provides: string, hosts: string, needsToken?: boolean }} ModuleInfo
  */
 
@@ -16,6 +16,8 @@ export const MODULES = [
     provides: 'Photos aériennes, plan IGN, cadastre, courbes de niveau, forêts publiques, espaces protégés. Désactivé : seules les zones déjà vues restent affichées.' },
   { key: 'ignGeo', name: 'IGN – adresses et altitudes', hosts: 'data.geopf.fr (géocodage, altimétrie)',
     provides: 'Recherche d’adresse sur la carte, adresse et altitude d’un point ou d’un lieu.' },
+  { key: 'ignProtected', name: 'IGN – espaces protégés', hosts: 'data.geopf.fr (WFS, couches INPN / PatriNat)',
+    provides: 'Bandeau sur les cartes quand la vue touche un parc national, une réserve naturelle ou un arrêté de biotope (dès le zoom 11).' },
   { key: 'inaturalist', name: 'iNaturalist', hosts: 'api.inaturalist.org',
     provides: 'Autour (plantes observées dans un cercle), courbes de floraison et fructification, nombre d’observations, photos de repli.' },
   { key: 'gbif', name: 'GBIF', hosts: 'api.gbif.org',
@@ -29,7 +31,9 @@ export const MODULES = [
   { key: 'trefle', name: 'Trefle', hosts: 'trefle.io', needsToken: true,
     provides: 'Données de culture et descriptions (en anglais), avec votre jeton personnel.' },
   { key: 'photos', name: 'Photos en ligne', hosts: 'thumb.wikimedia.org, inaturalist-open-data, herbiers…',
-    provides: 'Vignettes et photos des plantes (liste, carte, fiche). Désactivé : 🌿 à la place des photos.' }
+    provides: 'Vignettes et photos des plantes (liste, carte, fiche). Désactivé : 🌿 à la place des photos.' },
+  { key: 'voice', name: 'Dictée vocale (navigateur)', hosts: 'reconnaissance vocale du navigateur',
+    provides: 'Bouton 🎙 pour chercher une plante à la voix (Flore, Noter ici). Sur Chrome, l’audio est traité par les serveurs de Google ; sur Safari, par Apple ou sur l’appareil.' }
 ];
 
 /** A module is switched off: its data is not available. */
