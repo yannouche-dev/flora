@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-07T22:55:30.432Z",
+  "generatedAt": "2026-10-08T06:55:47.637Z",
   "source": "TAXREF v18 official PatriNat archive",
   "sourceUrl": "https://assets.patrinat.fr/files/referentiel/TAXREF_v18_2025.zip",
   "taxrefVersion": "18.0",
@@ -36,22 +36,22 @@
       "license": "CC BY-SA 2.0 (données), ODbL 1.0 (base) — Ph. Julve, Tela Botanica",
       "rows": 8292,
       "matched": 3879,
-      "fetchedAt": "2026-10-07T22:55:40.643Z"
+      "fetchedAt": "2026-10-08T06:55:56.761Z"
     },
     "bdcStatuts": {
-      "url": "https://assets.patrinat.fr/files/referentiel/BDC.zip",
+      "url": "https://geonature.fr/data/inpn/taxonomie/BDC-STATUTS-v18.zip",
       "license": "INPN — Base de connaissance Statuts (PatriNat, OFB-MNHN-CNRS), données ouvertes",
-      "rows": 447664,
-      "plants": 3772,
+      "rows": 456086,
+      "plants": 3813,
       "byType": {
-        "PN": 389,
+        "PN": 390,
         "PR": 1448,
         "PD": 504,
         "REGL": 1125,
-        "LRN": 719,
-        "LRR": 2623
+        "LRN": 720,
+        "LRR": 2673
       },
-      "fetchedAt": "2026-10-07T22:55:52.212Z"
+      "fetchedAt": "2026-10-08T06:56:16.523Z"
     }
   },
   "thumbnails": {
@@ -69,15 +69,6 @@
       "checked": 2065,
       "matched": 641,
       "freeP18ImagesAdded": 0
-    },
-    "fallbacks": {
-      "gbif": true,
-      "inaturalist": true,
-      "acceptedLicenses": [
-        "CC0",
-        "CC BY",
-        "CC BY-SA"
-      ]
     }
   }
 }
