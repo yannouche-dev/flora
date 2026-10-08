@@ -3,7 +3,8 @@ import { LitElement, html, css, nothing } from 'lit';
 import { SORTS } from '../config.js';
 import { activeFilterCount, setQuery, toHash } from '../core/query.js';
 import { share } from '../core/share.js';
-import { setCompact, setGridView, store, StoreController } from '../core/store.js';
+import { gridViewOf, setCompact, setGridView, store, StoreController } from '../core/store.js';
+import './gf-mode-switch.js';
 import './gf-active-filters.js';
 import './gf-plant-search.js';
 import { ui } from '../styles/ui.js';
@@ -13,11 +14,6 @@ import { ui } from '../styles/ui.js';
  * family/genus suggestions and the "approximate results" note.
  * Fires `open-filters` when the mobile filter button is pressed.
  */
-const VIEWS = [
-  { value: 'standard', label: 'Standard', title: 'Photo, noms, famille, genre, espèce' },
-  { value: 'illustrated', label: 'Illustrée', title: 'Grandes photos' },
-  { value: 'scientific', label: 'Scientifique', title: 'Toutes les colonnes : auteur, statut, protection' }
-];
 const COLUMN_LABELS = { fr: 'Nom français', sci: 'Nom scientifique', family: 'Famille', genus: 'Genre', status: 'Statut', legal: 'Protection', photo: 'Photo' };
 /** Sort chosen in the grid (e.g. "-family") shown in the card view's menu. @param {string} sort */
 const columnSortLabel = sort => (COLUMN_LABELS[sort.replace(/^-/, '')] || sort) + (sort.startsWith('-') ? ' (inverse)' : '');
@@ -85,6 +81,7 @@ export class GfResultsBar extends LitElement {
 
   render() {
     const { query, results, compact, status, gridView } = this.#store.state;
+    const view = gridViewOf(this.#store.state);
     const active = activeFilterCount(query);
     const sorts = SORTS.filter(s => s.value !== 'relevance' || query.q);
 
@@ -102,10 +99,8 @@ export class GfResultsBar extends LitElement {
         </span>
         ${this.grid ? html`
           ${results.sort === 'relevance' || !query.q ? nothing : html`<button type="button" title="Trier par pertinence" @click=${() => setQuery({ sort: '' })}>Pertinence</button>`}
-          <div class="segmented views" role="group" aria-label="Affichage de la grille">
-            ${VIEWS.map(v => html`<button type="button" title=${v.title} aria-pressed=${gridView === v.value ? 'true' : 'false'}
-              @click=${() => setGridView(/** @type {any} */ (v.value))}>${v.label}</button>`)}
-          </div>` : html`
+          <gf-mode-switch class="views" scope="la grille" value=${view} ?overridden=${gridView !== null}
+            @mode-change=${e => setGridView(e.detail.mode)}></gf-mode-switch>` : html`
           <select aria-label="Trier par" .value=${results.sort}
             @change=${e => setQuery({ sort: e.target.value })}>
             ${sorts.map(s => html`<option value=${s.value} ?selected=${s.value === results.sort}>${s.label}</option>`)}

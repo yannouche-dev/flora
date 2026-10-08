@@ -84,3 +84,41 @@ export function phenology(plant, signal) {
 
 /** @param {any} plant */
 export const links = plant => sources.links(plant);
+
+/**
+ * French Wikipedia lead paragraph, through the plant's Wikidata item.
+ * @param {any} plant
+ * @param {string | null | undefined} qid
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<{ title: string, extract: string, url: string } | null>}
+ */
+export function wikipedia(plant, qid, signal) {
+  if (!qid) return Promise.resolve(null);
+  return cached('wikipedia:' + plant.id, async () => {
+    const claims = await sources.wikidataClaims(qid, { signal });
+    return claims?.frwiki ? sources.wikipediaSummary(claims.frwiki, { signal }) : null;
+  });
+}
+
+/**
+ * Scientific view: Wikidata classification (P171 chain), IUCN status and identifiers.
+ * @param {any} plant
+ * @param {string | null | undefined} qid
+ * @param {AbortSignal} [signal]
+ */
+export function wikidataScience(plant, qid, signal) {
+  if (!qid) return Promise.resolve(null);
+  return cached('wikidata-science:' + plant.id, () => sources.wikidataScience(qid, { signal }));
+}
+
+/**
+ * GBIF occurrences recorded in France.
+ * @param {any} plant
+ * @param {number | null | undefined} gbifKey
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<number | null>}
+ */
+export function occurrencesFR(plant, gbifKey, signal) {
+  if (!gbifKey) return Promise.resolve(null);
+  return cached('gbif-fr:' + plant.id, () => sources.gbifOccurrencesFR(gbifKey, { signal }));
+}

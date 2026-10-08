@@ -26,7 +26,10 @@ import { config } from '../config.js';
  * @property {boolean} compact
  * @property {Set<number>} favorites    plant ids in the ♥ collection
  * @property {Map<number, string>} placed  plant id → one of my places where it is noted
- * @property {GridView} gridView         results grid: standard, illustrated (big photos) or scientific (all columns)
+ * @property {Mode} mode                  display mode of the app: épuré (actions, big photos), standard, scientifique
+ * @property {Mode | null} gridView      results grid override of the mode (null: follow the mode)
+ * @property {Mode | null} plantView     plant sheet override of the mode (null: follow the mode)
+ * @property {string | null} target       collection or place the Épuré plant sheet adds to in one tap (last used)
  * @property {boolean} harvestMode      "Mode cueillette": harvest log, seasons, look-alike warnings
  * @property {{ id: string, name: string, kind: string, count: number }[]} collections
  */
@@ -45,19 +48,33 @@ export class Store extends EventTarget {
   }
 }
 
-/** @typedef {'standard' | 'illustrated' | 'scientific'} GridView */
-export const GRID_VIEWS = /** @type {const} */ (['standard', 'illustrated', 'scientific']);
+/** @typedef {'epure' | 'standard' | 'scientific'} Mode */
+export const MODES = /** @type {const} */ (['epure', 'standard', 'scientific']);
+export const MODE_LABELS = { epure: 'Épuré', standard: 'Standard', scientific: 'Scientifique' };
 
-const readGridView = () => {
-  try {
-    const v = localStorage.getItem(config.storageKeys.gridView);
-    return /** @type {GridView} */ (GRID_VIEWS.includes(/** @type {any} */ (v)) ? v : 'standard');
-  } catch { return 'standard'; }
+/** @param {any} v @returns {Mode | null} */
+const asMode = v => MODES.includes(v) ? v : v === 'illustrated' ? 'epure' : null;
+
+/** @param {string} key */
+const readMode = key => {
+  try { return asMode(localStorage.getItem(key)); } catch { return null; }
+};
+
+/** @param {string} key @param {string | null} value */
+const writeKey = (key, value) => {
+  try { if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value); } catch { /* not persisted */ }
 };
 
 const readCompact = () => {
   try { return localStorage.getItem(config.storageKeys.compact) === '1'; } catch { return false; }
 };
+
+/** @returns {string | null} */
+const readTarget = () => { try { return localStorage.getItem(config.storageKeys.target); } catch { return null; } };
+
+const initialMode = readMode(config.storageKeys.mode) || 'standard';
+/** An override equal to the mode is no override. @param {string} key */
+const readOverride = key => { const v = readMode(key); return v === initialMode ? null : v; };
 
 /** @type {Store} */
 export const store = new Store({
@@ -68,7 +85,10 @@ export const store = new Store({
   compact: readCompact(),
   favorites: new Set(),
   placed: new Map(),
-  gridView: readGridView(),
+  mode: initialMode,
+  gridView: readOverride(config.storageKeys.gridView),
+  plantView: readOverride(config.storageKeys.plantView),
+  target: readTarget(),
   collections: [],
   harvestMode: readHarvestMode() ?? false
 });
@@ -98,11 +118,38 @@ export function setCompact(compact) {
   store.set({ compact });
 }
 
-/** @param {GridView} gridView */
-export function setGridView(gridView) {
-  try { localStorage.setItem(config.storageKeys.gridView, gridView); } catch { /* not persisted */ }
+/** App-wide mode: applies everywhere, so it clears the grid and plant sheet overrides. @param {Mode} mode */
+export function setMode(mode) {
+  writeKey(config.storageKeys.mode, mode);
+  writeKey(config.storageKeys.gridView, null);
+  writeKey(config.storageKeys.plantView, null);
+  store.set({ mode, gridView: null, plantView: null });
+}
+
+/** Results grid override; null (or the mode itself) follows the mode. @param {Mode | null} view */
+export function setGridView(view) {
+  const gridView = view === store.state.mode ? null : view;
+  writeKey(config.storageKeys.gridView, gridView);
   store.set({ gridView });
 }
+
+/** Plant sheet override; null (or the mode itself) follows the mode. @param {Mode | null} view */
+export function setPlantView(view) {
+  const plantView = view === store.state.mode ? null : view;
+  writeKey(config.storageKeys.plantView, plantView);
+  store.set({ plantView });
+}
+
+/** The one-tap target of the Épuré plant sheet: set when chosen there, or when a plant is added to a collection. @param {string | null} target */
+export function setTarget(target) {
+  writeKey(config.storageKeys.target, target);
+  if (target !== store.state.target) store.set({ target });
+}
+
+/** @param {AppState} state @returns {Mode} */
+export const gridViewOf = state => state.gridView ?? state.mode;
+/** @param {AppState} state @returns {Mode} */
+export const plantViewOf = state => state.plantView ?? state.mode;
 
 /** Resolves once the local dataset is in IndexedDB (deep links on a first visit must wait for it). */
 export function whenReady() {

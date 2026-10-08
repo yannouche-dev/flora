@@ -1,7 +1,7 @@
 // @ts-check
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { setQuery } from '../core/query.js';
-import { StoreController } from '../core/store.js';
+import { StoreController, gridViewOf } from '../core/store.js';
 import './gf-plant-card.js';
 
 const ROW_HEIGHT = 76;
@@ -31,7 +31,7 @@ export const COLUMNS = [
 /** Columns of each grid view. */
 const VIEW_COLUMNS = {
   standard: ['photo', 'fr', 'family', 'genus', 'species', 'fav', 'pin'],
-  illustrated: ['photo', 'fr', 'family', 'genus', 'species', 'fav', 'pin'],
+  epure: ['photo', 'fr', 'family', 'genus', 'species', 'fav', 'pin'],
   scientific: COLUMNS.map(c => c.key)
 };
 
@@ -46,8 +46,8 @@ export function gridColumns(view, width) {
 }
 
 /** @param {string} key @param {string} view */
-const columnWidth = (key, view) => key === 'photo' && view === 'illustrated' ? '96px'
-  : key === 'fr' && view === 'illustrated' ? 'minmax(160px, 2fr)'
+const columnWidth = (key, view) => key === 'photo' && view === 'epure' ? '96px'
+  : key === 'fr' && view === 'epure' ? 'minmax(160px, 2fr)'
   : /** @type {any} */ (COLUMNS.find(c => c.key === key)).width;
 
 /** Scroll position survives navigating to a plant and back, until the results change. */
@@ -208,7 +208,8 @@ export class GfPlantList extends LitElement {
   }
 
   render() {
-    const { results: { items }, query: { q }, compact, status, gridView } = this.#store.state;
+    const { results: { items }, query: { q }, compact, status } = this.#store.state;
+    const gridView = gridViewOf(this.#store.state);
     const columns = this.grid ? gridColumns(gridView, this._width) : [];
     if (this.grid) this.style.setProperty('--gf-cols', columns.map(k => columnWidth(k, gridView)).join(' '));
     const header = this.grid ? this.#header(columns) : nothing;
@@ -216,7 +217,7 @@ export class GfPlantList extends LitElement {
       return html`${header}<p class="empty">Aucune plante ne correspond à cette recherche.</p>`;
     }
 
-    const rowHeight = this.grid ? (gridView === 'illustrated' ? ILLUSTRATED_ROW_HEIGHT : GRID_ROW_HEIGHT) : compact ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
+    const rowHeight = this.grid ? (gridView === 'epure' ? ILLUSTRATED_ROW_HEIGHT : GRID_ROW_HEIGHT) : compact ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
     const offset = this.grid ? HEADER_HEIGHT : 0;
     const top = Math.max(0, this._scrollTop - offset);
     const first = Math.max(0, Math.floor(top / rowHeight) - OVERSCAN);
