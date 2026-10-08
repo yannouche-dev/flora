@@ -14,7 +14,7 @@ export const RADII = [500, 1000, 2000, 5000, 10000];
 export const DEFAULT_RADIUS = 5000;
 
 /**
- * @typedef {{ taxonId: number, name: string, common: string | null, count: number, photo: string | null, plantId: number | null }} NearbySpecies
+ * @typedef {{ taxonId: number, name: string, common: string | null, count: number, photo: string | null, plantId: number | null, family: string | null, genus: string | null }} NearbySpecies
  * @typedef {{ species: NearbySpecies[], observations: number, sourceUrl: string, fetchedAt: number }} NearbyResult
  * @typedef {{ coordinates: [number, number], date: string | null, url: string }} NearbyObservation
  */
@@ -51,17 +51,26 @@ async function cached(key, load) {
 export const binomial = (/** @type {string} */ name) =>
   String(name || '').toLowerCase().replace(/\s+[×x]\s+/, ' x ').split(/\s+/).slice(0, 2).join(' ');
 
-/** @type {Promise<Map<string, number>> | null} */
+/** First word of a scientific name; an intergeneric hybrid keeps its sign ("× Anacamptorchis"). */
+const genusOf = (/** @type {string} */ name) => {
+  const [first, second] = String(name || '').split(/\s+/);
+  return (first === 'x' || first === '×') && second ? '× ' + second : first || null;
+};
+
+/** @typedef {{ id: number, family: string, genus: string }} FloraMatch */
+
+/** @type {Promise<Map<string, FloraMatch>> | null} */
 let index = null;
-/** Scientific names and synonyms of the local flora → TAXREF id. */
+/** Scientific names and synonyms of the local flora → TAXREF id, family, genus. */
 function nameIndex() {
   index ??= db.getAll('plants').then(plants => {
     const map = new Map();
+    const match = (/** @type {any} */ p) => ({ id: p.id, family: p.family, genus: p.genus });
     for (const p of plants) {
-      for (const name of p.synonyms || []) if (!map.has(binomial(name))) map.set(binomial(name), p.id);
+      for (const name of p.synonyms || []) if (!map.has(binomial(name))) map.set(binomial(name), match(p));
     }
     // Accepted names win over synonyms.
-    for (const p of plants) map.set(binomial(p.scientificName), p.id);
+    for (const p of plants) map.set(binomial(p.scientificName), match(p));
     return map;
   });
   index.catch(() => { index = null; });
@@ -88,7 +97,16 @@ export async function speciesAround(point, radius, signal) {
     }));
   });
   const names = await nameIndex().catch(() => new Map());
-  const species = raw.map(s => ({ ...s, plantId: names.get(binomial(s.name)) ?? null }));
+  const species = raw.map(s => {
+    const local = names.get(binomial(s.name));
+    return {
+      ...s,
+      plantId: local?.id ?? null,
+      // Family only from the local flora (TAXREF); the genus is the first word of the name otherwise.
+      family: local?.family || null,
+      genus: local?.genus || genusOf(s.name)
+    };
+  });
   return {
     species,
     observations: species.reduce((sum, s) => sum + s.count, 0),
