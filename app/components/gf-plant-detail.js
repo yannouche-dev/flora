@@ -449,7 +449,9 @@ export class GfPlantDetail extends LitElement {
       details,
       loading: details === undefined,
       name: plant.vernacularNames?.[0] || plant.scientificName,
-      images: gallery(plant, details),
+      // Photos en ligne switched off (Réglages › Modules): no remote image anywhere on the sheet.
+      photosOff: !this.#store.state.modules.photos,
+      images: this.#store.state.modules.photos ? gallery(plant, details) : [],
       inat,
       wikidata: plant.identifiers?.wikidata || details?.identifiers?.wikidata?.id,
       links: sources.links(plant),
@@ -477,11 +479,11 @@ export class GfPlantDetail extends LitElement {
   }
 
   /** @param {any} ctx @param {number} [max] */
-  #gallery({ plant, images, loading }, max = Infinity) {
+  #gallery({ plant, images, loading, photosOff }, max = Infinity) {
     const shown = images.slice(0, max);
     return html`<section>
       <h2>Photos</h2>
-      ${shown.length ? html`
+      ${photosOff ? html`<p class="muted">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>` : shown.length ? html`
         <div class="gallery">
           ${shown.map(image => html`
             <figure>
@@ -538,7 +540,7 @@ export class GfPlantDetail extends LitElement {
         <figure class="hero">
           ${hero ? html`<img src=${hero.url} alt=${plant.scientificName} decoding="async" referrerpolicy="no-referrer" />
             <figcaption><gf-attribution .media=${hero}></gf-attribution></figcaption>`
-            : html`<div class=${loading ? 'skeleton' : 'no-photo'} aria-hidden="true">${loading ? '' : '🌿'}</div>`}
+            : html`<div class=${loading && !ctx.photosOff ? 'skeleton' : 'no-photo'} aria-hidden="true">${loading && !ctx.photosOff ? '' : '🌿'}</div>`}
         </figure>
         <h1>${name}</h1>
         <div class="sci"><i>${plant.scientificName}</i> <span class="author">${plant.author}</span></div>
@@ -632,7 +634,7 @@ export class GfPlantDetail extends LitElement {
     const places = distributions(details);
     const extraNames = gbifFrenchNames(plant, details);
     const foreign = otherNames(details);
-    const media = gbifMedia(details);
+    const media = ctx.photosOff ? [] : gbifMedia(details);
     const facts = trefleFacts(details);
     const sci = this._science;
     const claims = sci?.claims;

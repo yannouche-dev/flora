@@ -66,7 +66,7 @@ export class GfMapSearch extends LitElement {
     this._query = '';
     /** @type {import('../core/geoservices.js').GeoResult[]} */
     this._results = [];
-    /** @type {'' | 'loading' | 'empty' | 'error'} */
+    /** @type {'' | 'loading' | 'empty' | 'error' | 'off'} */
     this._status = '';
     this._active = false;
   }
@@ -89,8 +89,8 @@ export class GfMapSearch extends LitElement {
         if (abort.signal.aborted) return;
         this._results = results;
         this._status = results.length ? '' : 'empty';
-      } catch {
-        if (!abort.signal.aborted) { this._results = []; this._status = 'error'; }
+      } catch (error) {
+        if (!abort.signal.aborted) { this._results = []; this._status = /** @type {Error} */ (error).name === 'ModuleOffError' ? 'off' : 'error'; }
       }
     }, 300);
   }
@@ -119,6 +119,7 @@ export class GfMapSearch extends LitElement {
           <span>${r.label}</span><small>${[r.kind, r.detail].filter(Boolean).join(' · ')}</small></button></li>`)}
         ${this._status === 'loading' ? html`<li class="status">Recherche…</li>` : nothing}
         ${this._status === 'empty' ? html`<li class="status">Aucun résultat.</li>` : nothing}
+        ${this._status === 'off' ? html`<li class="status">Recherche d’adresse désactivée (Réglages › Modules).</li>` : nothing}
         ${this._status === 'error' ? html`<li class="status">${navigator.onLine === false ? 'Hors ligne : recherche indisponible.' : 'Recherche indisponible pour le moment.'}</li>` : nothing}
       </ul>` : nothing}
     `;

@@ -4,6 +4,7 @@
 import { PlantSources } from '../../lib/plant-sources.mjs';
 import { config } from '../config.js';
 import * as db from './db.js';
+import { moduleEvents, moduleOn, modulesSignature } from './modules.js';
 
 /** @returns {string | null} */
 export function getTrefleToken() {
@@ -19,8 +20,16 @@ export function setTrefleToken(token) {
   sources = createSources();
 }
 
-const createSources = () => new PlantSources({ trefleToken: getTrefleToken() });
+const createSources = () => new PlantSources({ trefleToken: getTrefleToken(), enabled: (/** @type {any} */ key) => moduleOn(key) });
 let sources = createSources();
+// A module switched on again must not get an empty answer from the in-memory cache of the old instance.
+moduleEvents.addEventListener('change', () => { sources = createSources(); });
+
+/** Cache key of a plant's remote data: it changes with the modules switched off, so their data never shows. */
+const key = (/** @type {string} */ kind, /** @type {number} */ id) => {
+  const off = modulesSignature();
+  return kind + ':' + id + (off ? '|off:' + off : '');
+};
 
 /** Requests in flight, shared so two components asking for the same plant hit the network once. */
 const pending = new Map();
@@ -60,7 +69,7 @@ async function cached(key, loader) {
  */
 export function thumbnail(plant, signal) {
   if (plant.thumbnail?.url) return Promise.resolve(plant.thumbnail);
-  return cached('thumb:' + plant.id, () => sources.thumbnail(plant, { signal }));
+  return cached(key('thumb', plant.id), () => sources.thumbnail(plant, { signal }));
 }
 
 /**
@@ -69,7 +78,7 @@ export function thumbnail(plant, signal) {
  * @param {AbortSignal} [signal]
  */
 export function details(plant, signal) {
-  return cached('details:' + plant.id, () => sources.details(plant, { signal }));
+  return cached(key('details', plant.id), () => sources.details(plant, { signal }));
 }
 
 /**
@@ -79,7 +88,7 @@ export function details(plant, signal) {
  * @returns {Promise<{ all: number[], flowering: number[], fruiting: number[], taxonId: number, sourceUrl: string } | null>}
  */
 export function phenology(plant, signal) {
-  return cached('phenology:' + plant.id, () => sources.phenology(plant, { signal }));
+  return cached(key('phenology', plant.id), () => sources.phenology(plant, { signal }));
 }
 
 /** @param {any} plant */
@@ -94,7 +103,7 @@ export const links = plant => sources.links(plant);
  */
 export function wikipedia(plant, qid, signal) {
   if (!qid) return Promise.resolve(null);
-  return cached('wikipedia:' + plant.id, async () => {
+  return cached(key('wikipedia', plant.id), async () => {
     const claims = await sources.wikidataClaims(qid, { signal });
     return claims?.frwiki ? sources.wikipediaSummary(claims.frwiki, { signal }) : null;
   });
@@ -108,7 +117,7 @@ export function wikipedia(plant, qid, signal) {
  */
 export function wikidataScience(plant, qid, signal) {
   if (!qid) return Promise.resolve(null);
-  return cached('wikidata-science:' + plant.id, () => sources.wikidataScience(qid, { signal }));
+  return cached(key('wikidata-science', plant.id), () => sources.wikidataScience(qid, { signal }));
 }
 
 /**
@@ -120,5 +129,5 @@ export function wikidataScience(plant, qid, signal) {
  */
 export function occurrencesFR(plant, gbifKey, signal) {
   if (!gbifKey) return Promise.resolve(null);
-  return cached('gbif-fr:' + plant.id, () => sources.gbifOccurrencesFR(gbifKey, { signal }));
+  return cached(key('gbif-fr', plant.id), () => sources.gbifOccurrencesFR(gbifKey, { signal }));
 }

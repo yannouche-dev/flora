@@ -37,7 +37,8 @@ export const config = {
     backup: 'geoflora.backup',
     backupReminder: 'geoflora.backupReminder',
     region: 'geoflora.region',
-    floraLayout: 'geoflora.floraLayout'
+    floraLayout: 'geoflora.floraLayout',
+    modules: 'geoflora.modules'
   },
 
   /** GPS fixes at or under this accuracy (metres) are considered good enough to save. */

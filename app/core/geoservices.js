@@ -3,6 +3,7 @@
 // Point lookups are cached in IndexedDB so places already seen keep their address and altitude offline.
 
 import * as db from './db.js';
+import { ModuleOffError, moduleOn } from './modules.js';
 
 const GEOCODING = 'https://data.geopf.fr/geocodage';
 const ALTIMETRY = 'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json';
@@ -45,6 +46,7 @@ const KINDS = { municipality: 'Commune', locality: 'Lieu-dit', street: 'Voie', h
 export async function searchPlaces(text, signal) {
   const q = text.trim();
   if (q.length < 3) return [];
+  if (!moduleOn('ignGeo')) throw new ModuleOffError('ignGeo');
   const data = await json(`${GEOCODING}/completion?text=${encodeURIComponent(q)}&maximumResponses=6`, signal);
   return (data.results || [])
     .filter(r => Number.isFinite(r.x) && Number.isFinite(r.y))
@@ -65,6 +67,7 @@ export async function searchPlaces(text, signal) {
  * @returns {Promise<{ label: string, city: string, distance: number } | null>}
  */
 export function addressAt(point) {
+  if (!moduleOn('ignGeo')) return Promise.resolve(null);
   return cached('geo:rev:' + key5(point), async () => {
     const data = await json(`${GEOCODING}/reverse?lon=${point[0]}&lat=${point[1]}&limit=1`);
     const p = data.features?.[0]?.properties;
@@ -80,6 +83,7 @@ export function addressAt(point) {
  * @returns {Promise<number | null>}
  */
 export function altitudeAt(point) {
+  if (!moduleOn('ignGeo')) return Promise.resolve(null);
   return cached('geo:alt:' + key5(point), async () => {
     const data = await json(`${ALTIMETRY}?lon=${point[0]}&lat=${point[1]}&resource=ign_rge_alti_wld&zonly=true`);
     const z = data.elevations?.[0];

@@ -300,8 +300,9 @@ export class GfMapPage extends LitElement {
       this._around = { ...this._around, status: 'ok', result };
     } catch (error) {
       if (abort.signal.aborted) return;
-      this._around = { ...this._around, status: 'error',
-        error: navigator.onLine === false ? 'Hors ligne : les observations ne peuvent pas être chargées.' : 'iNaturalist ne répond pas pour le moment.' };
+      this._around = { ...this._around, status: 'error', off: /** @type {Error} */ (error).name === 'ModuleOffError',
+        error: /** @type {Error} */ (error).name === 'ModuleOffError' ? 'Le module iNaturalist est désactivé.'
+          : navigator.onLine === false ? 'Hors ligne : les observations ne peuvent pas être chargées.' : 'iNaturalist ne répond pas pour le moment.' };
     }
   }
 
@@ -367,7 +368,9 @@ export class GfMapPage extends LitElement {
 
     if (a.status === 'loading') return html`<section class="sheet around" aria-label="Autour">${head}<p class="notes">Chargement des observations…</p></section>`;
     if (a.status === 'error') return html`<section class="sheet around" aria-label="Autour">${head}<p class="notes">${a.error}</p>
-      <div class="actions"><button type="button" @click=${() => this.#searchAround(a.center, a.where)}>Réessayer</button></div></section>`;
+      <div class="actions">${a.off
+        ? html`<a class="button" href=${href.settings()}>Réglages › Modules</a>`
+        : html`<button type="button" @click=${() => this.#searchAround(a.center, a.where)}>Réessayer</button>`}</div></section>`;
 
     const result = /** @type {import('../core/nearby.js').NearbyResult} */ (a.result);
     const s = a.species;
@@ -376,7 +379,7 @@ export class GfMapPage extends LitElement {
         <button class="close icon-btn" type="button" aria-label="Fermer" @click=${() => this.#toggleAround()}>×</button>
         <button type="button" class="link back" @click=${() => this.#pickSpecies(null)}>← Toutes les espèces</button>
         <div class="species-head">
-          ${s.plantId ? html`<gf-thumb plant-id=${s.plantId} size="56"></gf-thumb>` : s.photo ? html`<img class="ph" src=${s.photo} alt="" referrerpolicy="no-referrer" />` : nothing}
+          ${s.plantId ? html`<gf-thumb plant-id=${s.plantId} size="56"></gf-thumb>` : s.photo && this.#store.state.modules.photos ? html`<img class="ph" src=${s.photo} alt="" referrerpolicy="no-referrer" />` : nothing}
           <div><h2>${s.common || s.name}</h2>${s.common ? html`<span class="sci">${s.name}</span>` : nothing}</div>
         </div>
         <div class="meta"><span>${s.count} observation${s.count > 1 ? 's' : ''} dans le cercle</span>
@@ -444,7 +447,7 @@ export class GfMapPage extends LitElement {
         ${shown.length ? html`<ul class="plants species">
           ${shown.map(sp => html`<li><button type="button" class="pick" @click=${() => this.#pickSpecies(sp)}>
             ${sp.plantId ? html`<gf-thumb plant-id=${sp.plantId} size="38"></gf-thumb>`
-              : sp.photo ? html`<img class="ph" src=${sp.photo} alt="" loading="lazy" referrerpolicy="no-referrer" />` : html`<gf-thumb size="38"></gf-thumb>`}
+              : sp.photo && this.#store.state.modules.photos ? html`<img class="ph" src=${sp.photo} alt="" loading="lazy" referrerpolicy="no-referrer" />` : html`<gf-thumb size="38"></gf-thumb>`}
             <span class="who"><span class="nm">${sp.common || sp.name}</span>
               <span class="sub">${sp.common ? html`<i>${sp.name}</i>` : nothing}${sp.common && sp.family ? ' · ' : ''}${sp.family || ''}</span></span>
             <span class="n">${sp.count}</span>

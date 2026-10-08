@@ -2,6 +2,7 @@
 // Tiny observable store + a Lit reactive controller to re-render subscribers.
 
 import { config } from '../config.js';
+import { moduleEvents, modulesState } from './modules.js';
 
 /**
  * @typedef {Record<'status' | 'legal' | 'family' | 'genus' | 'photo' | 'french' | 'mine', string[]>} Filters
@@ -30,6 +31,7 @@ import { config } from '../config.js';
  * @property {Mode | null} gridView      results grid override of the mode (null: follow the mode)
  * @property {Mode | null} plantView     plant sheet override of the mode (null: follow the mode)
  * @property {string | null} target       collection or place the Épuré plant sheet adds to in one tap (last used)
+ * @property {Record<import('./modules.js').ModuleKey, boolean>} modules  online services switched on (Réglages › Modules)
  * @property {boolean} harvestMode      "Mode cueillette": harvest log, seasons, look-alike warnings
  * @property {{ id: string, name: string, kind: string, count: number }[]} collections
  */
@@ -89,9 +91,12 @@ export const store = new Store({
   gridView: readOverride(config.storageKeys.gridView),
   plantView: readOverride(config.storageKeys.plantView),
   target: readTarget(),
+  modules: modulesState(),
   collections: [],
   harvestMode: readHarvestMode() ?? false
 });
+
+moduleEvents.addEventListener('change', () => store.set({ modules: modulesState() }));
 
 /** Stored choice, or null when the user never chose (decided at startup from existing harvests). */
 function readHarvestMode() {

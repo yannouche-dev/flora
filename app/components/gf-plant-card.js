@@ -183,6 +183,7 @@ export class GfPlantCard extends LitElement {
   // Wait a little so fast scrolling doesn't fire hundreds of API calls.
   #schedule() {
     const plant = this.plant;
+    if (!this.#store.state.modules.photos) return;
     this.#timer = setTimeout(() => {
       this.#abort = new AbortController();
       sources.thumbnail(plant, this.#abort.signal)
@@ -239,7 +240,8 @@ export class GfPlantCard extends LitElement {
   render() {
     const p = this.plant;
     if (!p) return nothing;
-    const thumb = this._thumb;
+    // Photos en ligne switched off (Réglages › Modules): 🌿 instead of any remote image.
+    const thumb = this.#store.state.modules.photos ? this._thumb : null;
     if (this.grid) {
       return this.#gridRow(p, thumb, this.query, p.vernacularName || p.scientificName, this.#store.state.favorites.has(p.id));
     }
