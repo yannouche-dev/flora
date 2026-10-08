@@ -244,6 +244,45 @@ gf-map[search] .gf-map-buttons {
   top: 66px;
 }
 
+/* Position editing: the bar with Valider / Annuler (all maps). */
+gf-map .gf-map-editbar {
+  position: absolute;
+  z-index: 1003;
+  left: 10px;
+  right: 10px;
+  bottom: calc(10px + env(safe-area-inset-bottom));
+  max-width: 560px;
+  margin: 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 10px 12px;
+  border-radius: var(--gf-radius-lg);
+  background: var(--gf-surface);
+  color: var(--gf-text);
+  box-shadow: var(--gf-shadow-float);
+  font-size: 0.85rem;
+}
+gf-map .gf-map-editbar .hint { flex: 1 1 200px; color: var(--gf-text-muted); }
+gf-map .gf-map-editbar .actions { display: flex; gap: 8px; margin-left: auto; }
+gf-map .gf-map-editbar button {
+  font: inherit;
+  font-weight: 600;
+  min-height: 38px;
+  padding: 6px 16px;
+  border-radius: var(--gf-radius-pill);
+  border: 1px solid var(--gf-border);
+  background: var(--gf-surface);
+  color: var(--gf-text);
+  cursor: pointer;
+}
+gf-map .gf-map-editbar button.primary { background: var(--gf-accent); border-color: var(--gf-accent); color: var(--gf-accent-contrast); }
+gf-map .gf-map-buttons button.edit[aria-pressed='true'] { background: #16a34a; color: #fff; }
+gf-map .gf-map-buttons button:disabled { opacity: 0.45; cursor: default; }
+gf-map .gf-map-buttons button[hidden] { display: none; }
+gf-map[editing] .gf-map-search, gf-map[editing] .gf-map-buttons .layers { visibility: hidden; }
+
 /* Point picked on the map, and its card. */
 .gf-point {
   background: none;

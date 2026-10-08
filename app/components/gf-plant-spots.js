@@ -1,7 +1,7 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { href } from '../core/router.js';
-import { collectionsForPlant, collectionTitle, plantMarkers, entryInSeason, findEntry, lastHarvest, plantCount, spotEvents } from '../core/collections.js';
+import { collectionsForPlant, collectionTitle, plantMarkers, entryInSeason, findEntry, lastHarvest, plantCount, savePlace, spotEvents, withEntry } from '../core/collections.js';
 import { StoreController } from '../core/store.js';
 import './gf-map.js';
 import { ui } from '../styles/ui.js';
@@ -85,6 +85,16 @@ export class GfPlantSpots extends LitElement {
     }
   }
 
+  /** ✓ Valider on the map (✎): this plant's new position in each place it was moved in. @param {{ placeId: string, plantId: number | null, coordinates: [number, number] }[]} moves */
+  async #savePositions(moves) {
+    for (const { placeId, plantId, coordinates } of moves) {
+      const place = this._spots.find(p => p.id === placeId);
+      if (!place) continue;
+      const rounded = /** @type {[number, number]} */ (coordinates.map(v => Math.round(v * 1e7) / 1e7));
+      await savePlace(withEntry(place, plantId, { coordinates: rounded, accuracy: null })).catch(error => { this._error = 'Enregistrement impossible : ' + error.message; });
+    }
+  }
+
   render() {
     const spots = this._spots;
     const lists = this._lists;
@@ -101,6 +111,8 @@ export class GfPlantSpots extends LitElement {
           .plants=${plantMarkers(spots, e => e.plantId === this.plantId)}
           plant-zoom="0"
           fit
+          editable
+          @positions-save=${e => this.#savePositions(e.detail.plants)}
           @plant-select=${e => { location.hash = href.map({ spot: e.detail.placeId, focus: e.detail.plantId }); }}
         ></gf-map>
         <ul>

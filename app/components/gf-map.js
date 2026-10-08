@@ -45,10 +45,10 @@ function placeIconOf(color, count, className) {
   });
 }
 
-/** @param {import('../core/collections.js').Place} spot @param {boolean} selected */
-function pinIcon(spot, selected) {
+/** @param {import('../core/collections.js').Place} spot @param {boolean} selected @param {boolean} [movable] */
+function pinIcon(spot, selected, movable = false) {
   const color = PIN_COLORS[placeAbundance(spot)] || PIN_COLORS.moyen;
-  const classes = [selected ? 'selected' : '', appStore.state.harvestMode && inSeason(spot) ? 'season' : ''].join(' ');
+  const classes = [selected ? 'selected' : '', appStore.state.harvestMode && inSeason(spot) ? 'season' : '', movable ? 'editing' : ''].join(' ');
   return placeIconOf(color, spot.properties.plants.length, classes);
 }
 
@@ -94,6 +94,7 @@ function plantIcon(plant, selected, draggable) {
  * @property {string} abundance
  * @property {string} label
  * @property {boolean} season
+ * @property {boolean} [own]       has its own position (otherwise it sits on the place point and follows it)
  */
 
 const meIcon = L.divIcon({ className: 'gf-me', iconSize: [18, 18], iconAnchor: [9, 9] });
@@ -124,6 +125,13 @@ const pointIcon = L.divIcon({
   html: '<svg width="26" height="36" viewBox="0 0 26 36" aria-hidden="true"><path d="M13 35C13 35 2 21 2 13a11 11 0 0 1 22 0c0 8-11 22-11 22Z" fill="#dc2626" stroke="#fff" stroke-width="2"/><circle cx="13" cy="13" r="4" fill="#fff"/></svg>'
 });
 
+/**
+ * @typedef {{ pin: [number, number] | null, places: Map<string, [number, number]>, plants: Map<string, [number, number]> }} Moves
+ * @returns {Moves}
+ */
+const emptyMoves = () => ({ pin: null, places: new Map(), plants: new Map() });
+const movesCount = (/** @type {Moves} */ m) => (m.pin ? 1 : 0) + m.places.size + m.plants.size;
+
 const store = (/** @type {string} */ key, value) => {
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* not persisted */ }
 };
@@ -143,11 +151,16 @@ const store = (/** @type {string} */ key, value) => {
  *  - area: {center, radius, points?} — a circle (metres) and observation dots inside it ("Autour")
  *  - frame: {key, points, bottom?} — zoom once on these [lon, lat] points (again when the key changes);
  *    `bottom` is the share of the height kept free below them (e.g. for a sheet)
- *  - search: address search pill on top (with the ▦ "Carte" panel button); legend: legend in the panel
+ *  - search (default on; `no-search` removes it): address search pill on top, with the ▦ "Carte" panel button;
+ *    legend (default on): legend in the panel
  *  - no-create: the point card (long press) has no "Créer un endroit ici"
+ *  - editable: the ✎ control (always shown) switches position editing on. While `editing`: with a `pin` (place
+ *    editor), the pin and the plants move; with a selected place, that place and its plants; otherwise every
+ *    place. Moves stay a working copy until ✓ Valider, which emits positions-save; Annuler drops them.
  * Events: spot-select {id}, plant-select {placeId, plantId}, pin-move {coordinates},
  *         plant-move {placeId, plantId, coordinates}, map-longpress {coordinates} (while the pin can be placed),
- *         point-info {coordinates} (long press elsewhere: the point card opens), point-close
+ *         point-info {coordinates} (long press elsewhere: the point card opens), point-close,
+ *         edit-change {editing}, positions-save {pin, places: [{id, coordinates}], plants: [{placeId, plantId, coordinates}]}
  */
 export class GfMap extends LitElement {
   static properties = {
@@ -164,9 +177,13 @@ export class GfMap extends LitElement {
     frame: { attribute: false },
     area: { attribute: false },
     remember: { type: Boolean },
-    search: { type: Boolean, reflect: true },
+    search: { type: Boolean },
     legend: { type: Boolean },
-    noCreate: { type: Boolean, attribute: 'no-create' }
+    noCreate: { type: Boolean, attribute: 'no-create' },
+    noSearch: { type: Boolean, attribute: 'no-search' },
+    editable: { type: Boolean },
+    editing: { type: Boolean, reflect: true },
+    _moves: { state: true }
   };
 
   constructor() {
@@ -192,9 +209,15 @@ export class GfMap extends LitElement {
     this.area = null;
     /** Persist the last viewed area (main map only). */
     this.remember = false;
-    this.search = false;
-    this.legend = false;
+    // The same controls on every map: address search, layers and legend.
+    this.search = true;
+    this.legend = true;
     this.noCreate = false;
+    this.noSearch = false;
+    this.editable = false;
+    this.editing = false;
+    /** Working copy while editing positions. */
+    this._moves = emptyMoves();
   }
 
   createRenderRoot() { return this; }
@@ -202,9 +225,87 @@ export class GfMap extends LitElement {
   // Lit owns this one wrapper; Leaflet and the map buttons live inside it, out of Lit's way
   // (anything appended straight to the host would be cleared by Lit's next render).
   render() {
+    const n = movesCount(this._moves);
+    const hint = this.pin ? 'Glissez le lieu et ses plantes · appui long : placer le lieu'
+      : this.selectedId ? 'Glissez le lieu ou ses plantes · appui long : placer le lieu'
+      : this.spots.length ? 'Glissez les lieux pour les déplacer' : 'Glissez les plantes pour les déplacer';
     return html`<div class="gf-map-root"></div>
       ${moduleOn('ignMaps') ? nothing : html`<div class="gf-map-off" role="status">Fonds IGN désactivés : seules les zones déjà vues s’affichent.
-        <a href=${href.settings()}>Réglages › Modules</a></div>`}`;
+        <a href=${href.settings()}>Réglages › Modules</a></div>`}
+      ${this.editing ? html`<div class="gf-map-editbar" role="group" aria-label="Modifier les positions">
+        <span class="hint">${n ? `${n} déplacement${n > 1 ? 's' : ''} · ` : ''}${hint}</span>
+        <span class="actions">
+          <button type="button" @click=${() => this.#endEdit(false)}>Annuler</button>
+          <button type="button" class="primary" @click=${() => this.#endEdit(true)}>✓ Valider</button>
+        </span>
+      </div>` : nothing}`;
+  }
+
+  // ── Position editing ───────────────────────────────────────────────────────────────────────────
+
+  /** The pin moves: while editing (editable maps), else when the caller says so. */
+  get #pinMovable() { return this.editable ? this.editing : this.pinDraggable; }
+
+  /** @param {string} id */
+  #placeMovable(id) { return this.editing && !this.pin && (!this.selectedId || id === this.selectedId); }
+
+  /** @param {PlantMarker} plant */
+  #plantMovable(plant) {
+    if (!this.editable) return this.draggablePlants;
+    // The pin's plants (editor), the selected place's, or — on a map of plants only — every plant.
+    return this.editing && Boolean(this.pin || (this.selectedId ? plant.placeId === this.selectedId : !this.spots.length));
+  }
+
+  /** Where a place is drawn: moved in the working copy, else its saved point. @param {any} spot @returns {[number, number]} */
+  #spotAt(spot) { return this._moves.places.get(spot.id) || spot.geometry.coordinates; }
+
+  /** A plant without its own position follows its place (or the pin) while it is being moved. @param {PlantMarker} plant @returns {[number, number]} */
+  #plantAt(plant) {
+    const moved = this._moves.plants.get(plant.key);
+    if (moved) return moved;
+    if (!plant.own) {
+      const place = this._moves.places.get(plant.placeId) || (this.pin ? this._moves.pin : null);
+      if (place) return place;
+    }
+    return plant.coordinates;
+  }
+
+  /** @param {boolean} on */
+  #setEditing(on) {
+    if (on === this.editing) return;
+    this.editing = on;
+    if (on) this.hidePoint();
+    this.#emit('edit-change', { editing: on });
+  }
+
+  /** ✓ Valider (save) or Annuler. @param {boolean} save */
+  #endEdit(save) {
+    const moves = this._moves;
+    if (save && movesCount(moves)) {
+      this.#emit('positions-save', {
+        pin: moves.pin,
+        places: [...moves.places].map(([id, coordinates]) => ({ id, coordinates })),
+        plants: [...moves.plants].map(([key, coordinates]) => {
+          const plant = this.plants.find(p => p.key === key);
+          return { placeId: plant?.placeId, plantId: plant?.plantId ?? null, coordinates };
+        })
+      });
+      // Shown where they were dropped until the caller passes the saved data back.
+      this.#keepMoves = true;
+    } else {
+      this._moves = emptyMoves();
+    }
+    this.#setEditing(false);
+  }
+
+  /** The moves were saved: forget them once the new data arrives. */
+  #keepMoves = false;
+
+  /** @param {(m: Moves) => void} change */
+  #move(change) {
+    const next = { pin: this._moves.pin, places: new Map(this._moves.places), plants: new Map(this._moves.plants) };
+    change(next);
+    this._moves = next;
   }
 
   /** « IGN – fonds de carte » switched on or off: rebuild the tile layers (network or cache only). */
@@ -284,13 +385,19 @@ export class GfMap extends LitElement {
     map.on('dragstart', () => this.#setFollow(false));
     map.on('contextmenu', event => {
       const { lat, lng } = /** @type {L.LeafletMouseEvent} */ (event).latlng;
-      // Placing the place pin (editor, position editing): the long press moves it.
-      if (this.pin && this.pinDraggable) this.#emit('map-longpress', { coordinates: [lng, lat] });
+      // Editing: the long press places the pin, or the selected place.
+      if (this.editing) {
+        if (this.pin) this.#move(m => { m.pin = [lng, lat]; });
+        else if (this.selectedId) { const id = this.selectedId; this.#move(m => m.places.set(id, [lng, lat])); }
+        return;
+      }
+      if (this.pin && this.pinDraggable && !this.editable) this.#emit('map-longpress', { coordinates: [lng, lat] });
       else this.showPoint([lng, lat]);
     });
 
     this.#buildButtons();
-    if (this.search) this.#buildSearch();
+    this.toggleAttribute('search', this.#hasSearch);
+    if (this.#hasSearch) this.#buildSearch();
     // The element may have been laid out after Leaflet measured it.
     new ResizeObserver(() => {
       map.invalidateSize();
@@ -303,9 +410,30 @@ export class GfMap extends LitElement {
   /** @param {Map<string, any>} changed */
   updated(changed) {
     if (!this.#map) return;
+    // Saved moves are dropped once the caller passes the saved data back.
+    if (this.#keepMoves && (changed.has('spots') || changed.has('plants') || changed.has('pin'))) {
+      this.#keepMoves = false;
+      this._moves = emptyMoves();
+    }
+    if (changed.has('editing') && changed.get('editing') !== undefined) {
+      // Editing turned off by the caller: drop the working copy (unless just saved).
+      if (!this.editing && !this.#keepMoves) this._moves = emptyMoves();
+      // Draggability is set when a marker is created: rebuild them.
+      this.#spotLayer?.clearLayers();
+      this.#markers.clear();
+      this.#clearPin();
+      this.#clearPlants();
+      this.#syncButtons();
+    }
+    if (changed.has('_moves') || (changed.has('editing') && changed.get('editing') !== undefined) || (changed.has('selectedId') && this.editing)) {
+      this.#syncSpots();
+      this.#syncPin();
+      this.#syncPlants();
+    }
     if (changed.has('spots') || changed.has('selectedId')) this.#syncSpots();
     // Switching position editing on or off: rebuild the markers rather than toggling Leaflet's drag handlers.
     if (changed.has('pinDraggable') && changed.get('pinDraggable') !== undefined) this.#clearPin();
+    if (changed.has('spots') || changed.has('plants') || changed.has('pin') || changed.has('editable')) this.#syncButtons();
     if (changed.has('draggablePlants') && changed.get('draggablePlants') !== undefined) this.#clearPlants();
     if (changed.has('pin') || changed.has('pinDraggable')) this.#syncPin();
     if (changed.has('plants') || changed.has('selectedPlant') || changed.has('draggablePlants')) this.#syncPlants();
@@ -358,23 +486,30 @@ export class GfMap extends LitElement {
     const seen = new Set();
     for (const spot of this.spots) {
       seen.add(spot.id);
-      const [lon, lat] = spot.geometry.coordinates;
+      const [lon, lat] = this.#spotAt(spot);
       const selected = spot.id === this.selectedId;
+      const movable = this.#placeMovable(spot.id);
       let marker = this.#markers.get(spot.id);
       if (!marker) {
-        marker = L.marker([lat, lon], { icon: pinIcon(spot, selected), title: placeTitle(spot), keyboard: true, riseOnHover: true })
-          .on('click', () => this.#emit('spot-select', { id: spot.id }));
+        marker = L.marker([lat, lon], { icon: pinIcon(spot, selected, movable), title: placeTitle(spot), keyboard: true, riseOnHover: true, draggable: movable, autoPan: movable })
+          .on('click', () => { if (!this.editing) this.#emit('spot-select', { id: spot.id }); });
+        const id = spot.id;
+        marker.on('dragend', () => {
+          const { lat: y, lng: x } = /** @type {L.Marker} */ (this.#markers.get(id)).getLatLng();
+          this.#move(m => m.places.set(id, [x, y]));
+        });
         marker.addTo(layer);
         this.#markers.set(spot.id, marker);
       } else {
         marker.setLatLng([lat, lon]);
-        marker.setIcon(pinIcon(spot, selected));
+        marker.setIcon(pinIcon(spot, selected, movable));
       }
-      marker.setZIndexOffset(selected ? 1000 : 0);
+      // While editing, places stay below plants (z 500+): a plant on its place point remains grabbable.
+      marker.setZIndexOffset(selected && !this.editing ? 1000 : 0);
     }
     for (const [id, marker] of this.#markers) {
       if (seen.has(id)) continue;
-      marker.remove();
+      layer.removeLayer(marker);
       this.#markers.delete(id);
     }
   }
@@ -384,35 +519,38 @@ export class GfMap extends LitElement {
     const seen = new Set();
     for (const plant of this.plants) {
       seen.add(plant.key);
-      const [lon, lat] = plant.coordinates;
+      const [lon, lat] = this.#plantAt(plant);
       const selected = plant.key === this.selectedPlant;
+      const movable = this.#plantMovable(plant);
       let marker = this.#plantMarkers.get(plant.key);
       if (!marker) {
         marker = L.marker([lat, lon], {
-          icon: plantIcon(plant, selected, this.draggablePlants),
+          icon: plantIcon(plant, selected, movable),
           title: plant.label,
           keyboard: true,
           riseOnHover: true,
-          draggable: this.draggablePlants,
-          autoPan: this.draggablePlants
+          draggable: movable,
+          autoPan: movable
         });
         const current = plant;
-        marker.on('click', () => this.#emit('plant-select', { placeId: current.placeId, plantId: current.plantId }));
+        marker.on('click', () => { if (!this.editing) this.#emit('plant-select', { placeId: current.placeId, plantId: current.plantId }); });
         marker.on('dragend', () => {
           const { lat: y, lng: x } = /** @type {L.Marker} */ (this.#plantMarkers.get(current.key)).getLatLng();
-          this.#emit('plant-move', { placeId: current.placeId, plantId: current.plantId, coordinates: [x, y] });
+          if (this.editable) this.#move(m => m.plants.set(current.key, [x, y]));
+          else this.#emit('plant-move', { placeId: current.placeId, plantId: current.plantId, coordinates: [x, y] });
         });
         marker.addTo(layer);
         this.#plantMarkers.set(plant.key, marker);
       } else {
         marker.setLatLng([lat, lon]);
-        marker.setIcon(plantIcon(plant, selected, this.draggablePlants));
+        marker.setIcon(plantIcon(plant, selected, movable));
       }
       marker.setZIndexOffset(selected ? 1200 : 500);
     }
     for (const [key, marker] of this.#plantMarkers) {
       if (seen.has(key)) continue;
-      marker.remove();
+      // Out of the group too, or it would come back when the plant layer is shown again.
+      layer.removeLayer(marker);
       this.#plantMarkers.delete(key);
     }
     this.#syncPlantVisibility();
@@ -424,7 +562,7 @@ export class GfMap extends LitElement {
     if (!url || !this.isConnected) return;
     for (const plant of this.plants) {
       if (plant.plantId !== plantId) continue;
-      this.#plantMarkers.get(plant.key)?.setIcon(plantIcon(plant, plant.key === this.selectedPlant, this.draggablePlants));
+      this.#plantMarkers.get(plant.key)?.setIcon(plantIcon(plant, plant.key === this.selectedPlant, this.#plantMovable(plant)));
     }
   }
 
@@ -433,7 +571,8 @@ export class GfMap extends LitElement {
     const map = this.#map;
     const layer = this.#plantLayer;
     if (!map || !layer) return;
-    const visible = this.plants.length > 0 && map.getZoom() >= this.plantZoom;
+    // Moving a selected place's plants: they show at any zoom.
+    const visible = this.plants.length > 0 && (map.getZoom() >= this.plantZoom || (this.editing && Boolean(this.selectedId || this.pin || !this.spots.length)));
     if (visible && !map.hasLayer(layer)) layer.addTo(map);
     else if (!visible && map.hasLayer(layer)) layer.remove();
     // Photos are looked up only for plants actually drawn.
@@ -450,7 +589,7 @@ export class GfMap extends LitElement {
   }
 
   #clearPlants() {
-    for (const marker of this.#plantMarkers.values()) marker.remove();
+    this.#plantLayer?.clearLayers();
     this.#plantMarkers.clear();
   }
 
@@ -461,12 +600,14 @@ export class GfMap extends LitElement {
       this.#editMarker = null;
       return;
     }
-    const [lon, lat] = this.pin;
+    const [lon, lat] = this._moves.pin || this.pin;
     if (!this.#editMarker) {
-      this.#editMarker = L.marker([lat, lon], { icon: this.pinDraggable ? editIcon : lockedIcon, draggable: this.pinDraggable, autoPan: true, zIndexOffset: 100 })
+      const movable = this.#pinMovable;
+      this.#editMarker = L.marker([lat, lon], { icon: movable ? editIcon : lockedIcon, draggable: movable, autoPan: true, zIndexOffset: 100 })
         .on('dragend', () => {
           const { lat: y, lng: x } = /** @type {L.Marker} */ (this.#editMarker).getLatLng();
-          this.#emit('pin-move', { coordinates: [x, y] });
+          if (this.editable) this.#move(m => { m.pin = [x, y]; });
+          else this.#emit('pin-move', { coordinates: [x, y] });
         })
         .addTo(map);
     } else {
@@ -590,12 +731,31 @@ export class GfMap extends LitElement {
     const buttons = this.#buttons = Object.assign(document.createElement('div'), { className: 'gf-map-buttons' });
     // With the search pill, ▦ lives at its end; otherwise it is a round button like "locate".
     buttons.innerHTML = `
-      ${this.search ? '' : '<button type="button" class="layers" aria-label="Carte : fond, couches, légende" title="Carte : fond, couches, légende">▦</button>'}
-      <button type="button" class="locate" aria-label="Me localiser" title="Me localiser" aria-pressed="false">◎</button>`;
+      ${this.#hasSearch ? '' : '<button type="button" class="layers" aria-label="Carte : fond, couches, légende" title="Carte : fond, couches, légende">▦</button>'}
+      <button type="button" class="locate" aria-label="Me localiser" title="Me localiser" aria-pressed="false">◎</button>
+      <button type="button" class="edit" aria-label="Modifier les positions" title="Modifier les positions" aria-pressed="false" hidden>✎</button>`;
     buttons.querySelector('.locate')?.addEventListener('click', () => this.#locate());
     buttons.querySelector('.layers')?.addEventListener('click', () => this.openPanel());
+    buttons.querySelector('.edit')?.addEventListener('click', () => {
+      if (this.editing) this.#endEdit(true);
+      else this.#setEditing(true);
+    });
     L.DomEvent.disableClickPropagation(buttons);
     this.#root.append(buttons);
+    this.#syncButtons();
+  }
+
+  get #hasSearch() { return this.search && !this.noSearch; }
+
+  /** ✎: shown on editable maps, disabled when there is nothing to move. */
+  #syncButtons() {
+    const edit = /** @type {HTMLButtonElement | null | undefined} */ (this.#buttons?.querySelector('.edit'));
+    if (!edit) return;
+    edit.hidden = !this.editable;
+    const nothing = !this.pin && !this.spots.length && !this.plants.length;
+    edit.disabled = nothing && !this.editing;
+    edit.title = nothing ? 'Aucun lieu à déplacer' : this.editing ? 'Valider les positions' : 'Modifier les positions';
+    edit.setAttribute('aria-pressed', String(this.editing));
   }
 
   #buildSearch() {
