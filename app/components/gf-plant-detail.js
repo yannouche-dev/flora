@@ -104,17 +104,6 @@ function gbifFrenchNames(plant, details) {
   return names.slice(0, 12);
 }
 
-const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
-
-/** Baseflor flowering months, and whether this month is one of them. @param {any} plant */
-function flowering(plant) {
-  const [first, last] = plant.flowering || [];
-  if (!first || !last) return null;
-  const month = new Date().getMonth() + 1;
-  const now = first <= last ? month >= first && month <= last : month >= first || month <= last;
-  return { text: first === last ? MONTHS[first - 1] : MONTHS[first - 1] + ' → ' + MONTHS[last - 1], now };
-}
-
 const STATUS_TYPES = {
   PN: 'Protection nationale',
   PR: 'Protection régionale',
@@ -348,7 +337,6 @@ export class GfPlantDetail extends LitElement {
     .hero figcaption { padding: 4px 10px; }
     .epure h1 { font-size: 1.8rem; }
     .meta { color: var(--gf-text-muted); margin: 6px 0 10px; }
-    .season { background: var(--gf-season, var(--gf-accent-soft)); color: var(--gf-text); border-radius: var(--gf-radius-pill); padding: 1px 8px; font-size: 0.8rem; font-weight: 600; }
     .gate { display: grid; gap: 8px; margin: 16px 0 8px; }
     .gate .add { width: 100%; justify-content: center; }
     .gate .add[aria-pressed='true'] { background: var(--gf-accent-soft); color: var(--gf-accent); border: 2px solid var(--gf-accent); }
@@ -585,17 +573,16 @@ export class GfPlantDetail extends LitElement {
       inat,
       wikidata: plant.identifiers?.wikidata || details?.identifiers?.wikidata?.id,
       links: sources.links(plant),
-      status: plant.status?.france,
-      bloom: flowering(plant)
+      status: plant.status?.france
     };
   }
 
-  /** The « Nom » block: French and scientific names (Épuré: family and flowering too). @param {any} ctx */
-  #name({ plant, name, bloom }) {
+  /** The « Nom » block: French and scientific names (Épuré: the family too; flowering is the Calendrier's). @param {any} ctx */
+  #name({ plant, name }) {
     return html`
       <h1>${name}</h1>
       <div class="sci"><i>${plant.scientificName}</i> <span class="author">${plant.author}</span></div>
-      ${this.view === 'epure' ? html`<p class="meta">${plant.family}${bloom ? html` · Floraison ${bloom.text}${bloom.now ? html` <span class="season">en fleur</span>` : nothing}` : nothing}</p>` : nothing}`;
+      ${this.view === 'epure' ? html`<p class="meta">${plant.family}</p>` : nothing}`;
   }
 
   /** @param {any} ctx */

@@ -257,7 +257,7 @@ L'app fonctionne hors ligne avec la flore locale ; chaque service en ligne est u
 
 Un mode pour toute l'application, choisi par trois icônes dans l'en-tête (ou dans Réglages › Affichage sur téléphone) :
 
-- **Épuré** — grandes photos et actions rapides. La fiche plante devient une « porte de collection » : photo, noms, famille, floraison, alertes de protection, et un gros bouton **« ＋ Ajouter à <collection en cours> »** (« ✓ Dans … » une fois ajoutée, un nouvel appui la retire). La collection ou le lieu en cours se choisit dans la liste juste dessous et reste mémorisé ; c'est aussi la dernière collection utilisée dans « Ajouter à… ».
+- **Épuré** — grandes photos et actions rapides. La fiche plante devient une « porte de collection » : photo, noms, famille, alertes de protection, calendrier de floraison, et un gros bouton **« ＋ Ajouter à <collection en cours> »** (« ✓ Dans … » une fois ajoutée, un nouvel appui la retire). La collection ou le lieu en cours se choisit dans la liste juste dessous et reste mémorisé ; c'est aussi la dernière collection utilisée dans « Ajouter à… ».
 - **Standard** — grand public : calendrier, photos, description (résumé Wikipédia, sinon GBIF), noms ; « Dans mes collections » tient en une ligne qu'on déplie.
 - **Scientifique** — tout ce que l'application connaît ou peut obtenir, sources citées : classification (Wikidata, jusqu'à l'ordre), auteur, synonymes, noms dans d'autres langues, tous les statuts INPN par territoire, statut UICN mondial, phénologie, observations iNaturalist, occurrences GBIF en France, répartition et descriptions GBIF, médias GBIF, données Trefle (avec votre jeton), identifiants (TAXREF, INPN, GBIF, iNaturalist, Wikidata, Tela Botanica, IPNI, POWO).
 
