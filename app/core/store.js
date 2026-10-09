@@ -30,8 +30,7 @@ import { moduleEvents, modulesState, useModeSource } from './modules.js';
  * @property {Mode} mode                  display mode of the app: épuré (actions, big photos), standard, scientifique
  * @property {Mode | null} gridView      results grid override of the mode (null: follow the mode)
  * @property {Mode | null} plantView     plant sheet override of the mode (null: follow the mode)
- * @property {Partial<Record<Mode, string[]>>} sheetBlocks  order of the plant sheet blocks, per view (only the views reordered by hand)
- * @property {Partial<Record<Mode, string[]>>} sheetHidden  plant sheet blocks folded away, per view (blocks of a module follow the module instead)
+ * @property {SheetLayout} sheetLayout  the plant sheet as arranged in « Mode King » (see sheet-blocks.js)
  * @property {string | null} target       collection or place the Épuré plant sheet adds to in one tap (last used)
  * @property {Record<import('./modules.js').ModuleKey, Record<Mode, boolean>>} modules  online services used in each mode (Réglages › Modules)
  * @property {boolean} kingMode         « Mode King »: the plant sheet blocks can be moved, folded and revived (left with the crown)
@@ -74,12 +73,30 @@ const readCompact = () => {
   try { return localStorage.getItem(config.storageKeys.compact) === '1'; } catch { return false; }
 };
 
-/** @param {string} key @returns {Partial<Record<Mode, string[]>>} */
-const readPerView = key => {
+/**
+ * The plant sheet layout: per view, block order and folded blocks, sub-block order and hidden sub-blocks;
+ * block titles changed by hand; the note blocks created. Only what differs from the defaults is kept.
+ * @typedef {{ order: Partial<Record<Mode, string[]>>, hidden: Partial<Record<Mode, string[]>>,
+ *   subOrder: Partial<Record<Mode, Record<string, string[]>>>, subHidden: Partial<Record<Mode, Record<string, string[]>>>,
+ *   titles: Record<string, string>, notes: { id: string, title: string }[] }} SheetLayout
+ */
+
+/** @returns {SheetLayout} */
+export const emptyLayout = () => ({ order: {}, hidden: {}, subOrder: {}, subHidden: {}, titles: {}, notes: [] });
+
+/** @param {string} key */
+const readJSON = key => {
   try {
-    const value = JSON.parse(localStorage.getItem(key) || '{}');
-    return value && typeof value === 'object' ? value : {};
-  } catch { return {}; }
+    const value = JSON.parse(localStorage.getItem(key) || 'null');
+    return value && typeof value === 'object' ? value : null;
+  } catch { return null; }
+};
+
+/** The saved layout, or the one of earlier versions (block order and folded blocks only). @returns {SheetLayout} */
+const readLayout = () => {
+  const saved = readJSON(config.storageKeys.sheetLayout);
+  if (saved) return { ...emptyLayout(), ...saved };
+  return { ...emptyLayout(), order: readJSON(config.storageKeys.sheetBlocks) || {}, hidden: readJSON(config.storageKeys.sheetHidden) || {} };
 };
 const readTarget = () => { try { return localStorage.getItem(config.storageKeys.target); } catch { return null; } };
 
@@ -99,8 +116,7 @@ export const store = new Store({
   mode: initialMode,
   gridView: readOverride(config.storageKeys.gridView),
   plantView: readOverride(config.storageKeys.plantView),
-  sheetBlocks: readPerView(config.storageKeys.sheetBlocks),
-  sheetHidden: readPerView(config.storageKeys.sheetHidden),
+  sheetLayout: readLayout(),
   target: readTarget(),
   modules: modulesState(),
   collections: [],

@@ -27,8 +27,11 @@ export const config = {
     mode: 'geoflora.mode',
     gridView: 'geoflora.gridView',
     plantView: 'geoflora.plantView',
+    // Before sheetLayout (read once, to carry the order and folded blocks over).
     sheetBlocks: 'geoflora.sheetBlocks',
     sheetHidden: 'geoflora.sheetHidden',
+    sheetLayout: 'geoflora.sheetLayout',
+    plantNotes: 'geoflora.plantNotes',
     kingMode: 'geoflora.kingMode',
     target: 'geoflora.target',
     mapLayer: 'geoflora.mapLayer',

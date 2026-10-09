@@ -9,7 +9,11 @@ import { icon, MODE_ICONS } from '../core/icons.js';
 import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
-import { blockModuleName, blockOrder, blockTitle, isCustom, isHidden, resetBlocks, setBlockOrder, setHidden } from '../core/sheet-blocks.js';
+import {
+  SUBS, blockModuleName, blockOrder, blockTitle, createNote, deleteNote, exportLayout, importLayout, isCustom, isHidden, isNote,
+  isSubHidden, renameBlock, resetAll, resetBlocks, setBlockOrder, setHidden, setSubHidden, setSubOrder, subOrder, subTitle
+} from '../core/sheet-blocks.js';
+import './gf-sortable-list.js';
 import { ui } from '../styles/ui.js';
 
 export class GfSettings extends LitElement {
@@ -23,7 +27,8 @@ export class GfSettings extends LitElement {
     _region: { state: true },
     _regionNote: { state: true },
     _transfer: { state: true },
-    _sort: { state: true }
+    _newNote: { state: true },
+    _layoutNote: { state: true }
   };
 
   static styles = [ui, css`
@@ -65,21 +70,12 @@ export class GfSettings extends LitElement {
     .king-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .king-head h2 { margin: 0; flex: 1; }
     .king-card .crown { font-size: 1.6rem; color: #b8860b; display: inline-flex; }
-    .block-orders { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin: 8px 0 16px; }
+    .block-orders { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; margin: 8px 0 16px; }
     .block-order { padding: 10px 12px; }
     .block-order .head { display: flex; align-items: center; gap: 8px; }
     .block-order .head button { margin-left: auto; }
-    .block-order ol { margin: 8px 0 0; padding: 0; list-style: none; font-size: 0.88rem; display: flex; flex-direction: column; gap: 2px; }
-    .block-order li { display: flex; align-items: center; gap: 4px; padding: 2px 4px 2px 0; border-radius: var(--gf-radius-sm); cursor: grab; user-select: none; -webkit-user-select: none; background: var(--gf-surface); }
-    .block-order li:hover { background: var(--gf-surface-2); }
-    .block-order li.dragging { position: relative; z-index: 2; cursor: grabbing; box-shadow: var(--gf-shadow-float); outline: 2px solid var(--gf-accent); }
-    .block-order .n { min-width: 1.6em; text-align: right; color: var(--gf-text-muted); font-variant-numeric: tabular-nums; }
-    .block-order .grip { flex: none; width: 24px; height: 24px; min-height: 0; padding: 0; display: grid; place-items: center; border: 0; background: none; color: var(--gf-text-muted); cursor: grab; border-radius: var(--gf-radius-sm); touch-action: none; }
-    /* By finger the page scrolls through the list: drag by the grip, made bigger. */
-    @media (pointer: coarse) { .block-order .grip { width: 34px; height: 34px; font-size: 1.05rem; } }
-    .block-order .grip:focus-visible { outline: none; box-shadow: var(--gf-focus); }
-    .block-order label { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
-    .block-order input { flex: none; margin: 0; }
+    .layout-tools { margin-top: 8px; gap: 8px; }
+    .layout-tools form { gap: 6px; }
     .module .mode input { width: 18px; height: 18px; margin: 0; }
   `];
 
@@ -154,8 +150,10 @@ export class GfSettings extends LitElement {
   constructor() {
     super();
     this._saved = false;
-    /** A block list being reordered: its mode, the dragged block, the order shown meanwhile, the pointer offset. @type {{ mode: any, key: string, order: string[], dy: number } | null} */
-    this._sort = null;
+    /** Naming a new note block. */
+    this._newNote = false;
+    /** What the last export / import / reset did. @type {string | null} */
+    this._layoutNote = null;
     this._spotCount = 0;
     /** @type {string | null} */
     this._spotMessage = null;
@@ -269,10 +267,9 @@ export class GfSettings extends LitElement {
       </section>`;
   }
 
-  /** « Blocs de la fiche »: each mode's order and shown blocks (the same switches as the sheet and the modules), and back to the default. */
+  /** « Blocs de la fiche »: each mode's blocks and sub-blocks (the same switches as the sheet and the modules), notes, file. */
   #blockOrders() {
-    void this.#store.state.sheetBlocks;
-    void this.#store.state.sheetHidden;
+    void this.#store.state.sheetLayout;
     void this.#store.state.modules;
     return html`
       <h3>Blocs de la fiche</h3>
@@ -283,115 +280,80 @@ export class GfSettings extends LitElement {
               <button type="button" class="small" ?disabled=${!isCustom(mode) && !blockOrder(mode).some(k => isHidden(mode, k))}
                 @click=${() => resetBlocks(mode)}>Par défaut</button>
             </div>
-            <ol class="sortable" aria-label=${'Ordre des blocs, ' + MODE_LABELS[mode]}>${blockOrder(mode).map(k => {
-              const sort = this._sort?.mode === mode ? this._sort : null;
-              const slot = (sort ? sort.order : blockOrder(mode)).indexOf(k);
-              const dragging = sort?.key === k;
-              return html`<li class=${dragging ? 'dragging' : ''} data-key=${k}
-                style=${sort ? `order:${slot}${dragging ? `;transform:translateY(${sort.dy}px)` : ''}` : ''}
-                @pointerdown=${e => this.#press(e, mode, k)}>
-                <button class="grip" type="button" aria-label="Déplacer « ${blockTitle(k)} »" title="Glisser pour déplacer (↑ ↓ au clavier)"
-                  @keydown=${e => this.#gripKey(e, mode, k)}>${icon('grip-vertical')}</button>
-                <span class="n">${slot + 1}.</span>
-                <label>
-                  <input type="checkbox" .checked=${!isHidden(mode, k)} @change=${e => setHidden(mode, k, !e.target.checked)} />
-                  ${blockTitle(k)}${blockModuleName(k) ? html` <small class="muted">(module ${blockModuleName(k)})</small>` : nothing}
-                </label>
-              </li>`;
-            })}</ol>
+            <gf-sortable-list label=${'Blocs de la fiche, ' + MODE_LABELS[mode]}
+              .items=${blockOrder(mode).map(k => ({
+                key: k, label: blockTitle(k), checked: !isHidden(mode, k), renamable: true, removable: isNote(k), nested: Boolean(SUBS[k]),
+                note: blockModuleName(k) ? `(module ${blockModuleName(k)})` : isNote(k) ? '(note)' : ''
+              }))}
+              .renderNested=${(/** @type {string} */ k) => this.#subList(mode, k)}
+              @reorder=${e => setBlockOrder(mode, e.detail.keys)}
+              @toggle=${e => setHidden(mode, e.detail.key, !e.detail.on)}
+              @rename=${e => renameBlock(e.detail.key, e.detail.title)}
+              @remove=${e => this.#removeNote(e.detail.key)}></gf-sortable-list>
           </div>`)}
-      </div>`;
+      </div>
+      <div class="row layout-tools">
+        ${this._newNote ? html`<form class="row" @submit=${this.#addNote}>
+            <input name="title" aria-label="Nom du bloc Note" placeholder="Nom du bloc (ex. Récolte)" maxlength="60" required />
+            <button class="primary" type="submit">Créer</button>
+            <button type="button" @click=${() => { this._newNote = false; }}>Annuler</button>
+          </form>`
+          : html`<button type="button" @click=${async () => { this._newNote = true; await this.updateComplete; /** @type {HTMLInputElement | null} */ (this.renderRoot.querySelector('.layout-tools input'))?.focus(); }}>${icon('plus-lg')} Nouveau bloc Note</button>`}
+        <button type="button" @click=${this.#exportLayout}>${icon('download')} Exporter la mise en page</button>
+        <label class="button file">${icon('upload')} Importer…
+          <input type="file" accept="application/json,.json" @change=${this.#importLayout} /></label>
+        <button type="button" @click=${() => { if (confirm('Tout réinitialiser ? Ordre, blocs masqués, sous-blocs, titres et blocs Note (avec leur texte) reviennent par défaut.')) { resetAll(); this._layoutNote = 'Mise en page réinitialisée.'; } }}>Tout réinitialiser</button>
+      </div>
+      ${this._layoutNote ? html`<p class="muted" role="status">${this._layoutNote}</p>` : nothing}`;
   }
 
-  /** @param {string[]} order @param {string} key @param {-1 | 1} delta */
-  #swap(order, key, delta) {
-    const i = order.indexOf(key), j = i + delta;
-    if (i < 0 || j < 0 || j >= order.length) return null;
-    const next = [...order];
-    [next[i], next[j]] = [next[j], next[i]];
-    return next;
+  /** A block's sub-blocks in a mode. @param {any} mode @param {string} block */
+  #subList(mode, block) {
+    return html`<gf-sortable-list label=${'Sous-blocs de ' + blockTitle(block)}
+      .items=${subOrder(mode, block).map(k => ({ key: k, label: subTitle(block, k), checked: !isSubHidden(mode, block, k) }))}
+      @reorder=${e => setSubOrder(mode, block, e.detail.keys)}
+      @toggle=${e => setSubHidden(mode, block, e.detail.key, !e.detail.on)}></gf-sortable-list>`;
   }
 
-  /** ↑ ↓ on a focused grip: one place up or down, saved; the grip keeps the focus. @param {KeyboardEvent} e @param {any} mode @param {string} key */
-  async #gripKey(e, mode, key) {
-    if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+  /** @param {SubmitEvent} e */
+  #addNote(e) {
     e.preventDefault();
-    const order = this.#swap(blockOrder(mode), key, e.key === 'ArrowUp' ? -1 : 1);
-    if (!order) return;
-    setBlockOrder(mode, order);
-    await this.updateComplete;
-    /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(`.block-order:nth-child(${MODE_KEYS.indexOf(mode) + 1}) li[data-key="${key}"] .grip`))?.focus();
+    const input = /** @type {HTMLFormElement} */ (e.target).elements.namedItem('title');
+    createNote(/** @type {HTMLInputElement} */ (input).value);
+    this._newNote = false;
+    this._layoutNote = 'Bloc Note créé : il est en fin de fiche dans chaque mode.';
   }
 
-  /**
-   * Dragging a row (not its checkbox): past a few pixels the row follows the pointer and takes a neighbour's
-   * place past its middle. Rows only change their CSS order meanwhile (the pressed node stays put); saved on release.
-   * @type {{ mode: any, key: string, y0: number, started: boolean, list: Element } | null}
-   */
-  #drag = null;
-
-  /** @param {PointerEvent} e @param {any} mode @param {string} key */
-  #press(e, mode, key) {
-    const target = /** @type {Element} */ (e.target);
-    if (e.button !== 0 || target.closest('input')) return;
-    // By finger, only the grip: elsewhere the touch scrolls the page.
-    if (e.pointerType === 'touch' && !target.closest('.grip')) return;
-    const li = /** @type {HTMLElement} */ (e.currentTarget);
-    this.#drag = { mode, key, y0: e.clientY, started: false, list: /** @type {Element} */ (li.parentElement) };
-    li.setPointerCapture?.(e.pointerId);
-    addEventListener('pointermove', this.#move);
-    addEventListener('pointerup', this.#release);
-    addEventListener('pointercancel', this.#release);
+  /** @param {string} key */
+  #removeNote(key) {
+    if (confirm(`Supprimer le bloc « ${blockTitle(key)} » et tout ce qui y est écrit ?`)) deleteNote(key);
   }
 
-  /** Middle of a row where it sits in the list (without the drag offset). @param {string} key */
-  #mid(key) {
-    const el = this.#drag?.list.querySelector(`li[data-key="${key}"]`);
-    if (!el) return 0;
-    const r = el.getBoundingClientRect();
-    return r.top + r.height / 2 - (this._sort?.key === key ? this._sort.dy : 0);
-  }
-
-  /** @param {PointerEvent} e */
-  #move = async e => {
-    const drag = this.#drag;
-    if (!drag) return;
-    const y = e.clientY;
-    if (!drag.started) {
-      if (Math.abs(y - drag.y0) < 5) return;
-      drag.started = true;
-      this._sort = { mode: drag.mode, key: drag.key, order: blockOrder(drag.mode), dy: 0 };
-      await this.updateComplete;
+  async #exportLayout() {
+    const file = new File([exportLayout()], 'geoflora-mise-en-page.json', { type: 'application/json' });
+    if (navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: 'Mise en page GeoFlora' }); this._layoutNote = 'Mise en page partagée.'; return; } catch { /* fall back to a download */ }
     }
-    e.preventDefault();
-    // Past several rows at once (a fast move): one place at a time until the pointer is between its neighbours.
-    for (let step = 0; step < 20 && this._sort && this.#drag === drag; step++) {
-      const sort = this._sort;
-      const i = sort.order.indexOf(drag.key);
-      let next = null;
-      if (i > 0 && y < this.#mid(sort.order[i - 1])) next = this.#swap(sort.order, drag.key, -1);
-      else if (i < sort.order.length - 1 && y > this.#mid(sort.order[i + 1])) next = this.#swap(sort.order, drag.key, 1);
-      if (!next) break;
-      this._sort = { ...sort, order: next };
-      await this.updateComplete;
-    }
-    if (this._sort && this.#drag === drag) this._sort = { ...this._sort, dy: Math.round(y - this.#mid(drag.key)) };
-  };
+    const url = URL.createObjectURL(file);
+    const a = Object.assign(document.createElement('a'), { href: url, download: file.name });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    this._layoutNote = 'Mise en page exportée (geoflora-mise-en-page.json).';
+  }
 
-  /** @param {PointerEvent} e */
-  #release = e => {
-    removeEventListener('pointermove', this.#move);
-    removeEventListener('pointerup', this.#release);
-    removeEventListener('pointercancel', this.#release);
-    const drag = this.#drag;
-    const sort = this._sort;
-    this.#drag = null;
-    this._sort = null;
-    if (!drag?.started || !sort) return;
-    setBlockOrder(sort.mode, sort.order);
-    // A drag that ends on the name is not a click on its checkbox.
-    if (e.type === 'pointerup') addEventListener('click', ev => { ev.preventDefault(); ev.stopPropagation(); }, { capture: true, once: true });
-  };
+  /** @param {Event} e */
+  async #importLayout(e) {
+    const input = /** @type {HTMLInputElement} */ (e.target);
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    try {
+      importLayout(await file.text());
+      this._layoutNote = 'Mise en page importée.';
+    } catch (error) {
+      this._layoutNote = 'Import impossible : ' + /** @type {Error} */ (error).message;
+    }
+  }
 
   render() {
     const { meta, offline } = this.#store.state;
