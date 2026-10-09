@@ -69,6 +69,15 @@
       "checked": 1945,
       "matched": 641,
       "freeP18ImagesAdded": 0
+    },
+    "fallbacks": {
+      "gbif": true,
+      "inaturalist": true,
+      "acceptedLicenses": [
+        "CC0",
+        "CC BY",
+        "CC BY-SA"
+      ]
     }
   }
 }
