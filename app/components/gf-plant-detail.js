@@ -18,7 +18,7 @@ import './gf-add-to.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 import {
-  SUBS, blockModuleName, blockOrder, blockTitle, createNote, deleteNote, isHidden, isNote, isSubHidden, noteText, renameBlock,
+  STYLES, SUBS, blockModuleName, blockOrder, blockStyle, blockTitle, isTitleShown, setBlockStyle, setTitleShown, createNote, deleteNote, isHidden, isNote, isSubHidden, noteText, renameBlock,
   setBlockOrder, setHidden, setNoteText, setSubHidden, setSubOrder, shownSubs, subOrder, subTitle
 } from '../core/sheet-blocks.js';
 import './gf-sortable-list.js';
@@ -102,17 +102,6 @@ function gbifFrenchNames(plant, details) {
     .map(row => row.vernacularName)
     .filter(name => name && !known.has(name.toLowerCase()) && known.add(name.toLowerCase()));
   return names.slice(0, 12);
-}
-
-const MONTHS = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
-
-/** Baseflor flowering months, and whether this month is one of them. @param {any} plant */
-function flowering(plant) {
-  const [first, last] = plant.flowering || [];
-  if (!first || !last) return null;
-  const month = new Date().getMonth() + 1;
-  const now = first <= last ? month >= first && month <= last : month >= first || month <= last;
-  return { text: first === last ? MONTHS[first - 1] : MONTHS[first - 1] + ' → ' + MONTHS[last - 1], now };
 }
 
 const STATUS_TYPES = {
@@ -256,8 +245,15 @@ export class GfPlantDetail extends LitElement {
     .block.headless:first-child { margin-top: 0; }
     .block[data-key='name'] h1 { margin-top: 4px; }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .names-list { margin: 0; }
     .block-title input.rename { flex: 1; min-width: 0; font: inherit; text-transform: none; letter-spacing: 0; padding: 2px 6px; border: 1px solid var(--gf-accent); border-radius: var(--gf-radius-sm); background: var(--gf-surface); color: var(--gf-text); }
-    .block-title .tool[aria-expanded='true'] { opacity: 1; color: var(--gf-accent); }
+    .block-title .tool[aria-expanded='true'], .block-title .tool[aria-pressed='true'] { opacity: 1; color: var(--gf-accent); }
+    /* Mode King: a title hidden outside the mode reads faded and struck. */
+    .block.untitled > .block-title .name { opacity: 0.55; text-decoration: line-through; }
+    .block-title .styles { display: inline-flex; flex: none; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill); overflow: hidden; margin-right: 4px; }
+    .block-title .styles button { min-height: 0; padding: 2px 8px; border: 0; border-radius: 0; background: var(--gf-surface); color: var(--gf-text-muted); font-size: 0.7rem; text-transform: none; letter-spacing: 0; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+    .block-title .styles button[aria-pressed='true'] { background: var(--gf-accent-soft); color: var(--gf-accent); }
+    .block-title .styles button:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     .subs-editor { margin: 0 0 10px 20px; padding: 8px 10px; border: 1px dashed var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface); }
     .note-text { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface); color: var(--gf-text); resize: vertical; }
     .note-text:focus-visible { outline: none; border-color: var(--gf-accent); box-shadow: var(--gf-focus); }
@@ -341,7 +337,6 @@ export class GfPlantDetail extends LitElement {
     .hero figcaption { padding: 4px 10px; }
     .epure h1 { font-size: 1.8rem; }
     .meta { color: var(--gf-text-muted); margin: 6px 0 10px; }
-    .season { background: var(--gf-season, var(--gf-accent-soft)); color: var(--gf-text); border-radius: var(--gf-radius-pill); padding: 1px 8px; font-size: 0.8rem; font-weight: 600; }
     .gate { display: grid; gap: 8px; margin: 16px 0 8px; }
     .gate .add { width: 100%; justify-content: center; }
     .gate .add[aria-pressed='true'] { background: var(--gf-accent-soft); color: var(--gf-accent); border: 2px solid var(--gf-accent); }
@@ -578,17 +573,16 @@ export class GfPlantDetail extends LitElement {
       inat,
       wikidata: plant.identifiers?.wikidata || details?.identifiers?.wikidata?.id,
       links: sources.links(plant),
-      status: plant.status?.france,
-      bloom: flowering(plant)
+      status: plant.status?.france
     };
   }
 
-  /** The « Nom » block: French and scientific names (Épuré: family and flowering too). @param {any} ctx */
-  #name({ plant, name, bloom }) {
+  /** The « Nom » block: French and scientific names (Épuré: the family too; flowering is the Calendrier's). @param {any} ctx */
+  #name({ plant, name }) {
     return html`
       <h1>${name}</h1>
       <div class="sci"><i>${plant.scientificName}</i> <span class="author">${plant.author}</span></div>
-      ${this.view === 'epure' ? html`<p class="meta">${plant.family}${bloom ? html` · Floraison ${bloom.text}${bloom.now ? html` <span class="season">en fleur</span>` : nothing}` : nothing}</p>` : nothing}`;
+      ${this.view === 'epure' ? html`<p class="meta">${plant.family}</p>` : nothing}`;
   }
 
   /** @param {any} ctx */
@@ -622,7 +616,7 @@ export class GfPlantDetail extends LitElement {
     if (!wiki) return nothing;
     return html`<div class="description wiki">
       ${wiki.extract}
-      <p class="credit"><a href=${wiki.url} target="_blank" rel="noopener">Lire l’article</a> · texte sous licence CC BY-SA 4.0</p>
+      <p class="credit">Source : <a href=${wiki.url} target="_blank" rel="noopener">article Wikipédia</a> · texte sous licence CC BY-SA 4.0</p>
     </div>`;
   }
 
@@ -655,8 +649,8 @@ export class GfPlantDetail extends LitElement {
       ${king && !sorting ? this.#newNote() : nothing}`;
   }
 
-  /** The name and the actions read without a title. @param {string} key */
-  #headless = key => key === 'name' || key === 'actions';
+  /** A block read without its title (Mode King › title on/off, per view). @param {string} key */
+  #headless = key => !isTitleShown(this.view, key);
 
   /** A block as read outside « Mode King »: its title, its content. @param {string} key @param {any} ctx */
   #plainBlock(key, ctx) {
@@ -674,7 +668,8 @@ export class GfPlantDetail extends LitElement {
     const dragging = this._dragKey === key;
     const subsOpen = this._subsOpen.has(key);
     const style = slot === null ? '' : `order:${slot}${dragging ? `;transform:translateY(${this._dragY}px)` : ''}`;
-    return html`<section class="block ${off ? 'off' : ''} ${dragging ? 'dragging' : ''}" data-key=${key} style=${style}>
+    const titled = isTitleShown(this.view, key);
+    return html`<section class="block ${off ? 'off' : ''} ${dragging ? 'dragging' : ''} ${titled ? '' : 'untitled'}" data-key=${key} style=${style}>
       <h2 class="block-title" title="Glisser pour déplacer" @pointerdown=${e => this.#press(e, key)}>
         <button class="grip" type="button" aria-label="Déplacer le bloc « ${title} »" title="Glisser pour déplacer (↑ ↓ au clavier)"
           @keydown=${e => this.#gripKey(e, key)}>${icon('grip-vertical')}</button>
@@ -684,8 +679,14 @@ export class GfPlantDetail extends LitElement {
               @blur=${e => this.#rename(key, e.target.value)} />`
           : html`<span class="name">${title}</span>`}
         ${off && module ? html`<small class="off-note">module ${module} désactivé dans ce mode</small>` : nothing}
+        <button class="tool" type="button" aria-pressed=${titled ? 'true' : 'false'} aria-label=${(titled ? 'Masquer' : 'Montrer') + ` le titre « ${title} » hors mode King`}
+          title=${titled ? 'Titre affiché (toucher pour le cacher)' : 'Titre caché hors mode King (toucher pour l’afficher)'}
+          @click=${() => setTitleShown(this.view, key, !titled)}>${icon('type-h2')}</button>
         ${this._renaming === key ? nothing : html`<button class="tool" type="button" aria-label="Renommer le bloc « ${title} »" title=${isNote(key) ? 'Renommer' : 'Renommer (vide : nom d’origine)'}
           @click=${() => this.#startRename(key)}>${icon('pencil')}</button>`}
+        ${STYLES[key] && !off ? html`<span class="styles" role="group" aria-label="Style du bloc « ${title} »">${STYLES[key].styles.map(st => html`
+          <button type="button" aria-pressed=${blockStyle(this.view, key) === st.key ? 'true' : 'false'} title=${'Style : ' + st.title}
+            @click=${() => setBlockStyle(this.view, key, st.key)}>${icon(st.key === 'list' ? 'list-ul' : 'table')} ${st.title}</button>`)}</span>` : nothing}
         ${SUBS[key] && !off ? html`<button class="tool" type="button" aria-expanded=${subsOpen ? 'true' : 'false'} aria-label="Sous-blocs de « ${title} »" title="Sous-blocs : ordre et présence"
           @click=${() => { const open = new Set(this._subsOpen); if (subsOpen) open.delete(key); else open.add(key); this._subsOpen = open; }}>${icon('list-nested')}</button>` : nothing}
         ${off
@@ -811,6 +812,8 @@ export class GfPlantDetail extends LitElement {
         const names = [...(plant.vernacularNames || []), ...gbifFrenchNames(plant, details)];
         const foreign = v === 'scientific' ? otherNames(details) : [];
         if (!names.length && !foreign.length) return loading ? pending : empty('Aucun nom français connu.');
+        // « Liste » (Épuré's default): just the French names.
+        if (blockStyle(v, 'names') === 'list') return shownSubs(v, 'names').includes('french') && names.length ? html`<p class="names-list">${names.join(' · ')}</p>` : nothing;
         return html`<dl class="facts">${this.#subs('names', {
           french: () => html`<dt>Noms français</dt><dd>${names.join(' · ') || '—'}${ctx.inat?.commonName ? html` <span class="muted">(iNaturalist : ${ctx.inat.commonName})</span>` : nothing}</dd>`,
           foreign: () => foreign.length ? html`<dt>Autres langues (GBIF)</dt><dd>${foreign.map(([lang, list]) => html`<span class="lang">${lang || '?'}</span> ${list.join(', ')} `)}</dd>` : nothing

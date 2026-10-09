@@ -11,7 +11,7 @@ const NAMES = [
   'check-lg', 'chevron-down', 'download', 'chevron-left', 'chevron-right', 'crosshair', 'exclamation-octagon-fill', 'exclamation-triangle-fill', 'flower1',
   'funnel', 'funnel-fill', 'gear', 'geo-alt-fill', 'globe-europe-africa', 'grip-vertical', 'heart', 'heart-fill', 'image', 'layers',
   'list-nested', 'list-ul', 'map', 'mic', 'mic-fill', 'pencil', 'plus-lg', 'search', 'share', 'shield-check', 'star', 'star-fill', 'table',
-  'three-dots', 'trash3', 'triangle', 'upload', 'x', 'x-lg'
+  'three-dots', 'trash3', 'triangle', 'type-h2', 'upload', 'x', 'x-lg'
 ];
 
 // Drawn for the app, in the same 16 × 16 grid, where Bootstrap Icons has none.
