@@ -623,7 +623,7 @@ export class GfPlantDetail extends LitElement {
     if (!wiki) return nothing;
     return html`<div class="description wiki">
       ${wiki.extract}
-      <p class="credit"><a href=${wiki.url} target="_blank" rel="noopener">Lire l’article</a> · texte sous licence CC BY-SA 4.0</p>
+      <p class="credit">Source : <a href=${wiki.url} target="_blank" rel="noopener">article Wikipédia</a> · texte sous licence CC BY-SA 4.0</p>
     </div>`;
   }
 
@@ -656,8 +656,8 @@ export class GfPlantDetail extends LitElement {
       ${king && !sorting ? this.#newNote() : nothing}`;
   }
 
-  /** The name, the actions and the photos read without a title. @param {string} key */
-  #headless = key => ['name', 'actions', 'photos'].includes(key);
+  /** The name, the actions, the photos and the Wikipédia summary (its source line names it) read without a title. @param {string} key */
+  #headless = key => ['name', 'actions', 'photos', 'wikipedia'].includes(key);
 
   /** A block as read outside « Mode King »: its title, its content. @param {string} key @param {any} ctx */
   #plainBlock(key, ctx) {
