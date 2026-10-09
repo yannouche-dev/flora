@@ -32,8 +32,11 @@ export class GfTabbar extends LitElement {
       text-decoration: none;
       -webkit-tap-highlight-color: transparent;
     }
-    .icon { font-size: 1.25rem; line-height: 1; }
+    .icon { font-size: 1.25rem; line-height: 1; display: grid; place-items: center; width: 56px; height: 30px; border-radius: var(--gf-radius-pill); transition: background 0.15s; }
+    /* The current tab: its icon filled, on a pill, the label in the accent colour. */
     a[aria-current='page'] { color: var(--gf-accent); font-weight: 600; }
+    a[aria-current='page'] .icon { background: var(--gf-accent-soft); }
+    @media (prefers-reduced-motion: reduce) { .icon { transition: none; } }
     a:focus-visible { outline: none; box-shadow: var(--gf-focus); border-radius: var(--gf-radius-sm); }
   `;
 
@@ -44,14 +47,17 @@ export class GfTabbar extends LitElement {
   }
 
   render() {
-    const tab = (/** @type {string} */ id, /** @type {string} */ link, /** @type {import('../core/icons.js').IconName} */ name, /** @type {string} */ label) => html`
-      <a href=${link} aria-current=${this.current === id ? 'page' : 'false'}><span class="icon" aria-hidden="true">${icon(name)}</span><span>${label}</span></a>`;
+    /** @typedef {import('../core/icons.js').IconName} IconName */
+    const tab = (/** @type {string} */ id, /** @type {string} */ link, /** @type {IconName} */ name, /** @type {IconName} */ active, /** @type {string} */ label) => {
+      const current = this.current === id;
+      return html`<a href=${link} aria-current=${current ? 'page' : 'false'}><span class="icon" aria-hidden="true">${icon(current ? active : name)}</span><span>${label}</span></a>`;
+    };
     return html`
       <nav aria-label="Navigation principale">
-        ${tab('flore', lastSearchHash(), 'leaf', 'Flore')}
-        ${tab('map', href.map(), 'map', 'Carte')}
-        ${tab('mine', href.collections(), 'collection', 'Mes collections')}
-        ${tab('more', href.settings(), 'gear', 'Réglages')}
+        ${tab('flore', lastSearchHash(), 'leaf', 'leaf-fill', 'Flore')}
+        ${tab('map', href.map(), 'map', 'map-fill', 'Carte')}
+        ${tab('mine', href.collections(), 'collection', 'collection-fill', 'Mes collections')}
+        ${tab('more', href.settings(), 'gear', 'gear-fill', 'Réglages')}
       </nav>
     `;
   }
