@@ -9,7 +9,11 @@ import { icon, MODE_ICONS } from '../core/icons.js';
 import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
-import { blockModuleName, blockOrder, blockTitle, isCustom, isHidden, resetBlocks, setHidden } from '../core/sheet-blocks.js';
+import {
+  SUBS, blockModuleName, blockOrder, blockTitle, createNote, deleteNote, exportLayout, importLayout, isCustom, isHidden, isNote,
+  isSubHidden, renameBlock, resetAll, resetBlocks, setBlockOrder, setHidden, setSubHidden, setSubOrder, subOrder, subTitle
+} from '../core/sheet-blocks.js';
+import './gf-sortable-list.js';
 import { ui } from '../styles/ui.js';
 
 export class GfSettings extends LitElement {
@@ -22,7 +26,9 @@ export class GfSettings extends LitElement {
     _regions: { state: true },
     _region: { state: true },
     _regionNote: { state: true },
-    _transfer: { state: true }
+    _transfer: { state: true },
+    _newNote: { state: true },
+    _layoutNote: { state: true }
   };
 
   static styles = [ui, css`
@@ -64,14 +70,12 @@ export class GfSettings extends LitElement {
     .king-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .king-head h2 { margin: 0; flex: 1; }
     .king-card .crown { font-size: 1.6rem; color: #b8860b; display: inline-flex; }
-    .block-orders { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin: 8px 0 16px; }
+    .block-orders { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; margin: 8px 0 16px; }
     .block-order { padding: 10px 12px; }
     .block-order .head { display: flex; align-items: center; gap: 8px; }
     .block-order .head button { margin-left: auto; }
-    .block-order ol { margin: 8px 0 0; padding-left: 22px; font-size: 0.88rem; }
-    .block-order li { margin: 2px 0; }
-    .block-order label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
-    .block-order input { margin: 0; }
+    .layout-tools { margin-top: 8px; gap: 8px; }
+    .layout-tools form { gap: 6px; }
     .module .mode input { width: 18px; height: 18px; margin: 0; }
   `];
 
@@ -146,6 +150,10 @@ export class GfSettings extends LitElement {
   constructor() {
     super();
     this._saved = false;
+    /** Naming a new note block. */
+    this._newNote = false;
+    /** What the last export / import / reset did. @type {string | null} */
+    this._layoutNote = null;
     this._spotCount = 0;
     /** @type {string | null} */
     this._spotMessage = null;
@@ -252,17 +260,16 @@ export class GfSettings extends LitElement {
           <button type="button" class=${on ? '' : 'primary'} aria-pressed=${on ? 'true' : 'false'}
             @click=${() => setKingMode(!on)}>${on ? 'Quitter le mode King' : 'Entrer en mode King'}</button>
         </div>
-        <p class="muted">Personnalisez la fiche plante : glissez les blocs par leur titre, masquez-les avec la corbeille ${icon('trash3')},
+        <p class="muted">Personnalisez la fiche plante : glissez les blocs par leur titre (ou ci-dessous, par leur poignée ${icon('grip-vertical')}), masquez-les avec la corbeille ${icon('trash3')},
           réaffichez-les avec ${icon('arrow-counterclockwise')}. Tout est enregistré automatiquement, pour chaque mode d’affichage ;
           masquer un bloc de service (Wikipédia, GBIF, Trefle, photos) coupe ce module dans ce mode. Quittez en touchant la couronne en bas de l’écran.</p>
         ${on ? this.#blockOrders() : nothing}
       </section>`;
   }
 
-  /** « Blocs de la fiche »: each mode's order and shown blocks (the same switches as the sheet and the modules), and back to the default. */
+  /** « Blocs de la fiche »: each mode's blocks and sub-blocks (the same switches as the sheet and the modules), notes, file. */
   #blockOrders() {
-    void this.#store.state.sheetBlocks;
-    void this.#store.state.sheetHidden;
+    void this.#store.state.sheetLayout;
     void this.#store.state.modules;
     return html`
       <h3>Blocs de la fiche</h3>
@@ -273,12 +280,79 @@ export class GfSettings extends LitElement {
               <button type="button" class="small" ?disabled=${!isCustom(mode) && !blockOrder(mode).some(k => isHidden(mode, k))}
                 @click=${() => resetBlocks(mode)}>Par défaut</button>
             </div>
-            <ol>${blockOrder(mode).map(k => html`<li><label>
-              <input type="checkbox" .checked=${!isHidden(mode, k)} @change=${e => setHidden(mode, k, !e.target.checked)} />
-              ${blockTitle(k)}${blockModuleName(k) ? html` <small class="muted">(module ${blockModuleName(k)})</small>` : nothing}
-            </label></li>`)}</ol>
+            <gf-sortable-list label=${'Blocs de la fiche, ' + MODE_LABELS[mode]}
+              .items=${blockOrder(mode).map(k => ({
+                key: k, label: blockTitle(k), checked: !isHidden(mode, k), renamable: true, removable: isNote(k), nested: Boolean(SUBS[k]),
+                note: blockModuleName(k) ? `(module ${blockModuleName(k)})` : isNote(k) ? '(note)' : ''
+              }))}
+              .renderNested=${(/** @type {string} */ k) => this.#subList(mode, k)}
+              @reorder=${e => setBlockOrder(mode, e.detail.keys)}
+              @toggle=${e => setHidden(mode, e.detail.key, !e.detail.on)}
+              @rename=${e => renameBlock(e.detail.key, e.detail.title)}
+              @remove=${e => this.#removeNote(e.detail.key)}></gf-sortable-list>
           </div>`)}
-      </div>`;
+      </div>
+      <div class="row layout-tools">
+        ${this._newNote ? html`<form class="row" @submit=${this.#addNote}>
+            <input name="title" aria-label="Nom du bloc Note" placeholder="Nom du bloc (ex. Récolte)" maxlength="60" required />
+            <button class="primary" type="submit">Créer</button>
+            <button type="button" @click=${() => { this._newNote = false; }}>Annuler</button>
+          </form>`
+          : html`<button type="button" @click=${async () => { this._newNote = true; await this.updateComplete; /** @type {HTMLInputElement | null} */ (this.renderRoot.querySelector('.layout-tools input'))?.focus(); }}>${icon('plus-lg')} Nouveau bloc Note</button>`}
+        <button type="button" @click=${this.#exportLayout}>${icon('download')} Exporter la mise en page</button>
+        <label class="button file">${icon('upload')} Importer…
+          <input type="file" accept="application/json,.json" @change=${this.#importLayout} /></label>
+        <button type="button" @click=${() => { if (confirm('Tout réinitialiser ? Ordre, blocs masqués, sous-blocs, titres et blocs Note (avec leur texte) reviennent par défaut.')) { resetAll(); this._layoutNote = 'Mise en page réinitialisée.'; } }}>Tout réinitialiser</button>
+      </div>
+      ${this._layoutNote ? html`<p class="muted" role="status">${this._layoutNote}</p>` : nothing}`;
+  }
+
+  /** A block's sub-blocks in a mode. @param {any} mode @param {string} block */
+  #subList(mode, block) {
+    return html`<gf-sortable-list label=${'Sous-blocs de ' + blockTitle(block)}
+      .items=${subOrder(mode, block).map(k => ({ key: k, label: subTitle(block, k), checked: !isSubHidden(mode, block, k) }))}
+      @reorder=${e => setSubOrder(mode, block, e.detail.keys)}
+      @toggle=${e => setSubHidden(mode, block, e.detail.key, !e.detail.on)}></gf-sortable-list>`;
+  }
+
+  /** @param {SubmitEvent} e */
+  #addNote(e) {
+    e.preventDefault();
+    const input = /** @type {HTMLFormElement} */ (e.target).elements.namedItem('title');
+    createNote(/** @type {HTMLInputElement} */ (input).value);
+    this._newNote = false;
+    this._layoutNote = 'Bloc Note créé : il est en fin de fiche dans chaque mode.';
+  }
+
+  /** @param {string} key */
+  #removeNote(key) {
+    if (confirm(`Supprimer le bloc « ${blockTitle(key)} » et tout ce qui y est écrit ?`)) deleteNote(key);
+  }
+
+  async #exportLayout() {
+    const file = new File([exportLayout()], 'geoflora-mise-en-page.json', { type: 'application/json' });
+    if (navigator.canShare?.({ files: [file] })) {
+      try { await navigator.share({ files: [file], title: 'Mise en page GeoFlora' }); this._layoutNote = 'Mise en page partagée.'; return; } catch { /* fall back to a download */ }
+    }
+    const url = URL.createObjectURL(file);
+    const a = Object.assign(document.createElement('a'), { href: url, download: file.name });
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    this._layoutNote = 'Mise en page exportée (geoflora-mise-en-page.json).';
+  }
+
+  /** @param {Event} e */
+  async #importLayout(e) {
+    const input = /** @type {HTMLInputElement} */ (e.target);
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    try {
+      importLayout(await file.text());
+      this._layoutNote = 'Mise en page importée.';
+    } catch (error) {
+      this._layoutNote = 'Import impossible : ' + /** @type {Error} */ (error).message;
+    }
   }
 
   render() {

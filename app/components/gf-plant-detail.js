@@ -17,7 +17,11 @@ import './gf-lookalikes.js';
 import './gf-add-to.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
-import { blockModuleName, blockOrder, blockTitle, isHidden, setBlockOrder, setHidden } from '../core/sheet-blocks.js';
+import {
+  SUBS, blockModuleName, blockOrder, blockTitle, createNote, deleteNote, isHidden, isNote, isSubHidden, noteText, renameBlock,
+  setBlockOrder, setHidden, setNoteText, setSubHidden, setSubOrder, shownSubs, subOrder, subTitle
+} from '../core/sheet-blocks.js';
+import './gf-sortable-list.js';
 
 /** Remote text is untrusted HTML: keep only its text content (DOMParser never runs scripts). */
 function toText(/** @type {string} */ value) {
@@ -190,7 +194,11 @@ export class GfPlantDetail extends LitElement {
     _shareNote: { state: true },
     _dragKey: { state: true },
     _dragOrder: { state: true },
-    _dragY: { state: true }
+    _dragY: { state: true },
+    _renaming: { state: true },
+    _subsOpen: { state: true },
+    _newNote: { state: true },
+    _noteSaved: { state: true }
   };
 
   static styles = [ui, css`
@@ -243,6 +251,18 @@ export class GfPlantDetail extends LitElement {
     .block-title .tool { cursor: pointer; }
     .grip:hover, .grip:focus-visible, .block-title .tool:hover, .block-title .tool:focus-visible { opacity: 1; background: var(--gf-surface-2); color: var(--gf-text); }
     .grip:focus-visible, .block-title .tool:focus-visible { outline: none; box-shadow: var(--gf-focus); }
+    /* The name and the actions read without a title (Mode King titles them, to move them like the others). */
+    .block.headless { margin-top: 8px; }
+    .block.headless:first-child { margin-top: 0; }
+    .block[data-key='name'] h1 { margin-top: 4px; }
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .block-title input.rename { flex: 1; min-width: 0; font: inherit; text-transform: none; letter-spacing: 0; padding: 2px 6px; border: 1px solid var(--gf-accent); border-radius: var(--gf-radius-sm); background: var(--gf-surface); color: var(--gf-text); }
+    .block-title .tool[aria-expanded='true'] { opacity: 1; color: var(--gf-accent); }
+    .subs-editor { margin: 0 0 10px 20px; padding: 8px 10px; border: 1px dashed var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface); }
+    .note-text { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface); color: var(--gf-text); resize: vertical; }
+    .note-text:focus-visible { outline: none; border-color: var(--gf-accent); box-shadow: var(--gf-focus); }
+    .new-note { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0; }
+    .new-note input { flex: 1; min-width: 160px; }
     /* Folded away: the title only, faded; ↺ brings it back. */
     .block.off { opacity: 0.45; }
     .block.off .block-title { margin-bottom: 0; }
@@ -325,8 +345,6 @@ export class GfPlantDetail extends LitElement {
     .gate { display: grid; gap: 8px; margin: 16px 0 8px; }
     .gate .add { width: 100%; justify-content: center; }
     .gate .add[aria-pressed='true'] { background: var(--gf-accent-soft); color: var(--gf-accent); border: 2px solid var(--gf-accent); }
-    .quick { display: flex; flex-wrap: wrap; gap: 8px; }
-    .quick .fav[aria-pressed='true'] { color: var(--gf-fav); border-color: var(--gf-fav); }
     .more { margin-top: 18px; }
 
     /* Standard: collections as one discreet line. */
@@ -366,6 +384,13 @@ export class GfPlantDetail extends LitElement {
     /** @type {string[] | null} */
     this._dragOrder = null;
     this._dragY = 0;
+    /** King mode: the block being renamed, the blocks showing their sub-blocks list, naming a new note block. @type {string | null} */
+    this._renaming = null;
+    /** @type {Set<string>} */
+    this._subsOpen = new Set();
+    this._newNote = false;
+    /** Note block whose text was just saved. @type {string | null} */
+    this._noteSaved = null;
     /** @type {any} */ this._wiki = undefined;
     /** @type {any} */ this._science = undefined;
     /** @type {number | null | undefined} */ this._occurrences = undefined;
@@ -385,7 +410,7 @@ export class GfPlantDetail extends LitElement {
   willUpdate(changed) {
     if (!this.#store.state.kingMode && this.#drag) this.#dragEnd();
     const signature = modulesSignature(this.view);
-    const hidden = this.#store.state.sheetHidden;
+    const hidden = this.#store.state.sheetLayout;
     const modulesChanged = this.#signature !== null && !changed.has('view') && signature !== this.#signature;
     const hiddenChanged = hidden !== this.#hidden;
     this.#signature = signature;
@@ -487,18 +512,28 @@ export class GfPlantDetail extends LitElement {
 
   #store = new StoreController(this);
 
+  /**
+   * The parts of a block this view shows, in the order chosen for it (Mode King › Sous-blocs). `parts`: sub-block
+   * key → its markup, or nothing when this view or this plant has none.
+   * @param {string} block @param {Record<string, () => unknown>} parts
+   */
+  #subs(block, parts) {
+    return shownSubs(this.view, block).map(k => parts[k]?.() ?? nothing).filter(x => x !== nothing);
+  }
+
   /** @param {any} plant */
   #actions(plant) {
     const fav = this.#store.state.favorites.has(plant.id);
     const name = plant.vernacularNames?.[0] || plant.scientificName;
+    const buttons = this.#subs('actions', {
+      fav: () => html`<button type="button" class="fav" aria-pressed=${fav ? 'true' : 'false'} @click=${() => toggleFavorite(plant)}>
+        ${icon(fav ? 'heart-fill' : 'heart')} Favori</button>`,
+      addTo: () => html`<button type="button" @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-add-to'))?.open()}>${icon('plus-lg')} Ajouter à…</button>`,
+      share: () => html`<button type="button" @click=${() => this.#share(plant, name)}>${icon('share')} Partager</button>`,
+      spot: () => html`<a class="button" href=${href.newSpot(plant.id)}>${icon('geo-alt-fill')} Noter ici</a>`
+    });
     return html`
-      <div class="actions" role="group" aria-label="Actions">
-        <button type="button" class="fav" aria-pressed=${fav ? 'true' : 'false'} @click=${() => toggleFavorite(plant)}>
-          ${icon(fav ? 'heart-fill' : 'heart')} Favori
-        </button>
-        <button type="button" @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-add-to'))?.open()}>${icon('plus-lg')} Ajouter à…</button>
-        <button type="button" @click=${() => this.#share(plant, name)}>Partager</button>
-      </div>
+      <div class="actions" role="group" aria-label="Actions">${buttons}</div>
       ${this._shareNote ? html`<p class="share-note" role="status">${this._shareNote}</p>` : nothing}`;
   }
 
@@ -548,22 +583,23 @@ export class GfPlantDetail extends LitElement {
     };
   }
 
-  /** @param {any} ctx */
-  #title({ plant, name }) {
+  /** The « Nom » block: French and scientific names (Épuré: family and flowering too). @param {any} ctx */
+  #name({ plant, name, bloom }) {
     return html`
-      <a class="back link" href=${lastSearchHash()}>${icon('arrow-left')} Recherche</a>
       <h1>${name}</h1>
-      <div class="sci"><i>${plant.scientificName}</i> <span class="author">${plant.author}</span></div>`;
+      <div class="sci"><i>${plant.scientificName}</i> <span class="author">${plant.author}</span></div>
+      ${this.view === 'epure' ? html`<p class="meta">${plant.family}${bloom ? html` · Floraison ${bloom.text}${bloom.now ? html` <span class="season">en fleur</span>` : nothing}` : nothing}</p>` : nothing}`;
   }
 
   /** @param {any} ctx */
   #tags({ plant, status, inat }) {
-    return html`<ul class="tags">
-      <li>${plant.family}</li>
-      <li>Genre <i>${plant.genus}</i></li>
-      ${status ? html`<li title="Statut TAXREF ${status}">${STATUS_LABELS[status] || status}</li>` : nothing}
-      ${inat?.observationsCount ? html`<li>${inat.observationsCount.toLocaleString('fr-FR')} observations iNaturalist</li>` : nothing}
-    </ul>`;
+    return html`<ul class="tags">${this.#subs('taxonomy', {
+      ranks: () => html`<li>${plant.family}</li><li>Genre <i>${plant.genus}</i></li>`,
+      author: () => plant.author ? html`<li>${plant.author}</li>` : nothing,
+      france: () => status ? html`<li title="Statut TAXREF ${status}">${STATUS_LABELS[status] || status}</li>` : nothing,
+      synonyms: () => plant.synonyms?.length ? html`<li>${plant.synonyms.length} synonyme${plant.synonyms.length > 1 ? 's' : ''}</li>` : nothing,
+      inat: () => inat?.observationsCount ? html`<li>${inat.observationsCount.toLocaleString('fr-FR')} observations iNaturalist</li>` : nothing
+    })}</ul>`;
   }
 
   /** Photos of the plant (licensed), or why there are none. @param {any} ctx @param {number} [max] */
@@ -592,15 +628,16 @@ export class GfPlantDetail extends LitElement {
 
   /** @param {any} ctx */
   #resources({ details, inat, wikidata, links }) {
-    return html`<ul class="inline links">
-      ${links.inpn ? html`<li><a href=${links.inpn} target="_blank" rel="noopener">INPN</a></li>` : nothing}
-      ${links.taxref ? html`<li><a href=${links.taxref} target="_blank" rel="noopener">TAXREF</a></li>` : nothing}
-      <li><a href=${details?.identifiers?.gbif?.id ? 'https://www.gbif.org/species/' + details.identifiers.gbif.id : links.gbif} target="_blank" rel="noopener">GBIF</a></li>
-      <li><a href=${inat?.id ? 'https://www.inaturalist.org/taxa/' + inat.id : links.inaturalist} target="_blank" rel="noopener">iNaturalist</a></li>
-      <li><a href=${wikidata ? 'https://www.wikidata.org/wiki/' + wikidata : links.wikidata} target="_blank" rel="noopener">Wikidata</a></li>
-      <li><a href=${links.wikimedia} target="_blank" rel="noopener">Wikimedia Commons</a></li>
-      ${this._wiki?.url || inat?.wikipediaUrl ? html`<li><a href=${this._wiki?.url || inat.wikipediaUrl} target="_blank" rel="noopener">Wikipédia</a></li>` : nothing}
-    </ul>`;
+    const link = (/** @type {string} */ url, /** @type {string} */ label) => url ? html`<li><a href=${url} target="_blank" rel="noopener">${label}</a></li>` : nothing;
+    return html`<ul class="inline links">${this.#subs('resources', {
+      inpn: () => link(links.inpn, 'INPN'),
+      taxref: () => link(links.taxref, 'TAXREF'),
+      gbif: () => link(details?.identifiers?.gbif?.id ? 'https://www.gbif.org/species/' + details.identifiers.gbif.id : links.gbif, 'GBIF'),
+      inaturalist: () => link(inat?.id ? 'https://www.inaturalist.org/taxa/' + inat.id : links.inaturalist, 'iNaturalist'),
+      wikidata: () => link(wikidata ? 'https://www.wikidata.org/wiki/' + wikidata : links.wikidata, 'Wikidata'),
+      commons: () => link(links.wikimedia, 'Wikimedia Commons'),
+      wikipedia: () => link(this._wiki?.url || inat?.wikipediaUrl, 'Wikipédia')
+    })}</ul>`;
   }
 
   // ── Blocks: below the header, titled, the same in every view, in the order chosen for it ────────────────
@@ -614,13 +651,17 @@ export class GfPlantDetail extends LitElement {
     // Outside « Mode King », folded blocks are not there at all.
     const keys = blockOrder(this.view).filter(k => king || !isHidden(this.view, k));
     return html`<div class="blocks ${king ? 'king' : ''} ${sorting ? 'sorting' : ''}">${repeat(keys, k => k, k =>
-      king ? this.#block(k, ctx, sorting ? order.indexOf(k) : null) : this.#plainBlock(k, ctx))}</div>`;
+      king ? this.#block(k, ctx, sorting ? order.indexOf(k) : null) : this.#plainBlock(k, ctx))}</div>
+      ${king && !sorting ? this.#newNote() : nothing}`;
   }
+
+  /** The name and the actions read without a title. @param {string} key */
+  #headless = key => key === 'name' || key === 'actions';
 
   /** A block as read outside « Mode King »: its title, its content. @param {string} key @param {any} ctx */
   #plainBlock(key, ctx) {
-    return html`<section class="block" data-key=${key}>
-      <h2 class="block-title"><span class="name">${blockTitle(key)}</span></h2>
+    return html`<section class="block ${this.#headless(key) ? 'headless' : ''}" data-key=${key}>
+      ${this.#headless(key) ? nothing : html`<h2 class="block-title"><span class="name">${blockTitle(key)}</span></h2>`}
       <div class="content">${this.#content(key, ctx)}</div>
     </section>`;
   }
@@ -631,21 +672,89 @@ export class GfPlantDetail extends LitElement {
     const off = isHidden(this.view, key);
     const module = blockModuleName(key);
     const dragging = this._dragKey === key;
+    const subsOpen = this._subsOpen.has(key);
     const style = slot === null ? '' : `order:${slot}${dragging ? `;transform:translateY(${this._dragY}px)` : ''}`;
     return html`<section class="block ${off ? 'off' : ''} ${dragging ? 'dragging' : ''}" data-key=${key} style=${style}>
       <h2 class="block-title" title="Glisser pour déplacer" @pointerdown=${e => this.#press(e, key)}>
         <button class="grip" type="button" aria-label="Déplacer le bloc « ${title} »" title="Glisser pour déplacer (↑ ↓ au clavier)"
           @keydown=${e => this.#gripKey(e, key)}>${icon('grip-vertical')}</button>
-        <span class="name">${title}</span>
+        ${this._renaming === key
+          ? html`<input class="rename" aria-label="Nouveau nom du bloc « ${title} »" .value=${title} maxlength="60"
+              @keydown=${e => { if (e.key === 'Enter') this.#rename(key, e.target.value); else if (e.key === 'Escape') this._renaming = null; }}
+              @blur=${e => this.#rename(key, e.target.value)} />`
+          : html`<span class="name">${title}</span>`}
         ${off && module ? html`<small class="off-note">module ${module} désactivé dans ce mode</small>` : nothing}
+        ${this._renaming === key ? nothing : html`<button class="tool" type="button" aria-label="Renommer le bloc « ${title} »" title=${isNote(key) ? 'Renommer' : 'Renommer (vide : nom d’origine)'}
+          @click=${() => this.#startRename(key)}>${icon('pencil')}</button>`}
+        ${SUBS[key] && !off ? html`<button class="tool" type="button" aria-expanded=${subsOpen ? 'true' : 'false'} aria-label="Sous-blocs de « ${title} »" title="Sous-blocs : ordre et présence"
+          @click=${() => { const open = new Set(this._subsOpen); if (subsOpen) open.delete(key); else open.add(key); this._subsOpen = open; }}>${icon('list-nested')}</button>` : nothing}
         ${off
           ? html`<button class="tool" type="button" aria-label="Réafficher le bloc « ${title} »" title="Réafficher"
               @click=${() => setHidden(this.view, key, false)}>${icon('arrow-counterclockwise')}</button>`
           : html`<button class="tool" type="button" aria-label="Masquer le bloc « ${title} »" title=${module ? `Masquer (coupe le module ${module} dans ce mode)` : 'Masquer'}
               @click=${() => setHidden(this.view, key, true)}>${icon('trash3')}</button>`}
+        ${isNote(key) ? html`<button class="tool" type="button" aria-label="Supprimer le bloc « ${title} »" title="Supprimer le bloc et ses textes"
+          @click=${() => { if (confirm(`Supprimer le bloc « ${title} » et tout ce qui y est écrit ?`)) deleteNote(key); }}>${icon('x-lg')}</button>` : nothing}
       </h2>
+      ${subsOpen && !off ? html`<div class="subs-editor">
+        <gf-sortable-list label=${'Sous-blocs de ' + title}
+          .items=${subOrder(this.view, key).map(k => ({ key: k, label: subTitle(key, k), checked: !isSubHidden(this.view, key, k) }))}
+          @reorder=${e => setSubOrder(this.view, key, e.detail.keys)}
+          @toggle=${e => setSubHidden(this.view, key, e.detail.key, !e.detail.on)}></gf-sortable-list>
+      </div>` : nothing}
       ${off ? nothing : html`<div class="content">${this.#content(key, ctx)}</div>`}
     </section>`;
+  }
+
+  /** @param {string} key */
+  async #startRename(key) {
+    this._renaming = key;
+    await this.updateComplete;
+    const input = /** @type {HTMLInputElement | null} */ (this.renderRoot.querySelector('.block-title input.rename'));
+    input?.focus();
+    input?.select();
+  }
+
+  /** @param {string} key @param {string} title */
+  #rename(key, title) {
+    if (this._renaming !== key) return;
+    this._renaming = null;
+    renameBlock(key, title);
+  }
+
+  /** King mode, after the blocks: a new « Note » block. */
+  #newNote() {
+    return this._newNote
+      ? html`<form class="new-note" @submit=${e => {
+          e.preventDefault();
+          const key = createNote(e.target.elements.title.value);
+          this._newNote = false;
+          this.updateComplete.then(() => this.renderRoot.querySelector(`.block[data-key="${key}"] textarea`)?.focus());
+        }}>
+          <input name="title" aria-label="Nom du bloc Note" placeholder="Nom du bloc (ex. Récolte)" maxlength="60" required />
+          <button class="primary" type="submit">Créer</button>
+          <button type="button" @click=${() => { this._newNote = false; }}>Annuler</button>
+        </form>`
+      : html`<p class="new-note"><button type="button" @click=${async () => {
+          this._newNote = true;
+          await this.updateComplete;
+          /** @type {HTMLInputElement | null} */ (this.renderRoot.querySelector('.new-note input'))?.focus();
+        }}>${icon('plus-lg')} Bloc Note</button></p>`;
+  }
+
+  /** @type {number | undefined} */
+  #noteTimer;
+
+  /** A note block: free text for this plant, saved as it is typed. @param {string} key @param {any} plant */
+  #note(key, plant) {
+    return html`<textarea class="note-text" rows="3" aria-label=${blockTitle(key)} placeholder="Votre note sur cette plante"
+      .value=${noteText(key, plant.id)}
+      @input=${e => {
+        const text = e.target.value;
+        clearTimeout(this.#noteTimer);
+        this.#noteTimer = setTimeout(() => { setNoteText(key, plant.id, text); this._noteSaved = key; setTimeout(() => { if (this._noteSaved === key) this._noteSaved = null; }, 1500); }, 400);
+      }}></textarea>
+      <p class="credit" aria-live="polite">${this._noteSaved === key ? 'Enregistré sur cet appareil.' : 'Note personnelle, gardée sur cet appareil.'}</p>`;
   }
 
   /** A block's content, as this view shows it. @param {string} key @param {any} ctx */
@@ -656,7 +765,10 @@ export class GfPlantDetail extends LitElement {
     const empty = (/** @type {string} */ text) => html`<p class="muted">${text}</p>`;
     // After a part that hides itself when it has nothing for this plant.
     const ifEmpty = (/** @type {string} */ text) => html`<p class="muted if-empty">${text}</p>`;
+    if (isNote(key)) return this.#note(key, plant);
     switch (key) {
+      case 'name': return this.#name(ctx);
+      case 'actions': return this.#actions(plant);
       case 'photos': {
         if (v !== 'epure') return this.#gallery(ctx, v === 'standard' ? 6 : Infinity);
         const hero = ctx.images[0];
@@ -699,10 +811,10 @@ export class GfPlantDetail extends LitElement {
         const names = [...(plant.vernacularNames || []), ...gbifFrenchNames(plant, details)];
         const foreign = v === 'scientific' ? otherNames(details) : [];
         if (!names.length && !foreign.length) return loading ? pending : empty('Aucun nom français connu.');
-        return html`<dl class="facts">
-          <dt>Noms français</dt><dd>${names.join(' · ') || '—'}${ctx.inat?.commonName ? html` <span class="muted">(iNaturalist : ${ctx.inat.commonName})</span>` : nothing}</dd>
-          ${foreign.length ? html`<dt>Autres langues (GBIF)</dt><dd>${foreign.map(([lang, list]) => html`<span class="lang">${lang || '?'}</span> ${list.join(', ')} `)}</dd>` : nothing}
-        </dl>
+        return html`<dl class="facts">${this.#subs('names', {
+          french: () => html`<dt>Noms français</dt><dd>${names.join(' · ') || '—'}${ctx.inat?.commonName ? html` <span class="muted">(iNaturalist : ${ctx.inat.commonName})</span>` : nothing}</dd>`,
+          foreign: () => foreign.length ? html`<dt>Autres langues (GBIF)</dt><dd>${foreign.map(([lang, list]) => html`<span class="lang">${lang || '?'}</span> ${list.join(', ')} `)}</dd>` : nothing
+        })}</dl>
         <p class="credit">Sources : TAXREF v18 · GBIF${ctx.inat?.commonName ? ' · iNaturalist' : ''}.</p>`;
       }
       case 'occurrences': return this.#occurrences(ctx);
@@ -727,20 +839,21 @@ export class GfPlantDetail extends LitElement {
   }
 
   /** @param {any} ctx */
-  #taxonomy({ plant, wikidata, status }) {
+  #taxonomy({ plant, wikidata, status, inat }) {
     const sci = this._science;
     const chain = [...(sci?.classification || [])].reverse();
     return html`
-      <dl class="facts">
-        <dt>Classification</dt>
-        <dd>${chain.length ? html`${chain.map(t => html`<span class="rank"><i>${t.name || t.label}</i></span> › `)}<i>${plant.scientificName}</i>`
-          : sci === undefined && wikidata ? html`<span class="muted">chargement…</span>` : html`${plant.family} › <i>${plant.genus}</i> › <i>${plant.scientificName}</i>`}</dd>
-        <dt>Famille · genre · espèce</dt><dd>${plant.family} · <i>${plant.genus}</i> · <i>${plant.species}</i></dd>
-        <dt>Auteur</dt><dd>${plant.author || '—'}</dd>
-        <dt>Statut en France</dt><dd>${status ? `${STATUS_LABELS[status] || status} (TAXREF ${status})` : '—'}</dd>
-        ${plant.synonyms?.length ? html`<dt>Synonymes (${plant.synonyms.length})</dt><dd class="sci-list"><i>${plant.synonyms.join(' · ')}</i></dd>` : nothing}
-      </dl>
-      <p class="credit">Sources : TAXREF v18 (PatriNat) · Wikidata (classification).</p>`;
+      <dl class="facts">${this.#subs('taxonomy', {
+        chain: () => html`<dt>Classification</dt>
+          <dd>${chain.length ? html`${chain.map(t => html`<span class="rank"><i>${t.name || t.label}</i></span> › `)}<i>${plant.scientificName}</i>`
+            : sci === undefined && wikidata ? html`<span class="muted">chargement…</span>` : html`${plant.family} › <i>${plant.genus}</i> › <i>${plant.scientificName}</i>`}</dd>`,
+        ranks: () => html`<dt>Famille · genre · espèce</dt><dd>${plant.family} · <i>${plant.genus}</i> · <i>${plant.species}</i></dd>`,
+        author: () => html`<dt>Auteur</dt><dd>${plant.author || '—'}</dd>`,
+        france: () => html`<dt>Statut en France</dt><dd>${status ? `${STATUS_LABELS[status] || status} (TAXREF ${status})` : '—'}</dd>`,
+        synonyms: () => plant.synonyms?.length ? html`<dt>Synonymes (${plant.synonyms.length})</dt><dd class="sci-list"><i>${plant.synonyms.join(' · ')}</i></dd>` : nothing,
+        inat: () => inat?.observationsCount != null ? html`<dt>Observations iNaturalist</dt><dd>${inat.observationsCount.toLocaleString('fr-FR')}</dd>` : nothing
+      })}</dl>
+      <p class="credit">Sources : TAXREF v18 (PatriNat) · Wikidata (classification)${inat?.observationsCount != null ? ' · iNaturalist' : ''}.</p>`;
   }
 
   /** @param {any} ctx */
@@ -749,13 +862,15 @@ export class GfPlantDetail extends LitElement {
     const statuses = [...(plant.statuses || [])].sort((a, b) =>
       Object.keys(STATUS_TYPES).indexOf(a.type) - Object.keys(STATUS_TYPES).indexOf(b.type) || String(a.area).localeCompare(String(b.area), 'fr'));
     return html`
-      <dl class="facts">
-        <dt>UICN (monde)</dt><dd>${sci?.iucn ? sci.iucn.label || sci.iucn.id : sci === undefined && wikidata ? html`<span class="muted">chargement…</span>` : '—'}</dd>
-      </dl>
-      ${statuses.length ? html`<table class="statuses">
-        <thead><tr><th>Type</th><th>Territoire</th><th>Statut</th></tr></thead>
-        <tbody>${statuses.map(st => html`<tr><td>${STATUS_TYPES[st.type] || st.type}</td><td>${st.area}${st.level ? html` <span class="muted">(${st.level})</span>` : nothing}</td><td>${st.code && st.code !== st.label ? html`<b>${st.code}</b> ` : nothing}${st.label}</td></tr>`)}</tbody>
-      </table>` : html`<p class="muted">Aucune protection, réglementation ni liste rouge connue (INPN).</p>`}
+      ${this.#subs('status', {
+        iucn: () => html`<dl class="facts">
+          <dt>UICN (monde)</dt><dd>${sci?.iucn ? sci.iucn.label || sci.iucn.id : sci === undefined && wikidata ? html`<span class="muted">chargement…</span>` : '—'}</dd>
+        </dl>`,
+        table: () => statuses.length ? html`<table class="statuses">
+          <thead><tr><th>Type</th><th>Territoire</th><th>Statut</th></tr></thead>
+          <tbody>${statuses.map(st => html`<tr><td>${STATUS_TYPES[st.type] || st.type}</td><td>${st.area}${st.level ? html` <span class="muted">(${st.level})</span>` : nothing}</td><td>${st.code && st.code !== st.label ? html`<b>${st.code}</b> ` : nothing}${st.label}</td></tr>`)}</tbody>
+        </table>` : html`<p class="muted">Aucune protection, réglementation ni liste rouge connue (INPN).</p>`
+      })}
       <p class="credit">Sources : INPN – Base de connaissance Statuts (PatriNat) · Wikidata (UICN).</p>`;
   }
 
@@ -764,65 +879,60 @@ export class GfPlantDetail extends LitElement {
     const gbif = details?.identifiers?.gbif;
     const places = distributions(details);
     const pending = html`<span class="muted">chargement…</span>`;
-    return html`
-      <dl class="facts">
-        <dt>Observations iNaturalist</dt><dd>${inat?.observationsCount != null ? inat.observationsCount.toLocaleString('fr-FR') : details === undefined ? pending : '—'}</dd>
-        <dt>Occurrences GBIF en France</dt><dd>${this._occurrences != null ? html`<a href=${'https://www.gbif.org/occurrence/search?country=FR&taxon_key=' + (gbif?.nubKey ?? gbif?.id)} target="_blank" rel="noopener">${this._occurrences.toLocaleString('fr-FR')}</a>` : (this._occurrences === undefined && gbif) || details === undefined ? pending : '—'}</dd>
-      </dl>
-      ${places.length ? html`<h3>Répartition (GBIF)</h3>
-        <ul class="inline">${places.map(row => html`<li>${row.place}${row.means ? html` <span class="muted">(${row.means.toLowerCase()})</span>` : nothing}</li>`)}</ul>` : nothing}`;
+    return html`${this.#subs('occurrences', {
+      inat: () => html`<dl class="facts"><dt>Observations iNaturalist</dt><dd>${inat?.observationsCount != null ? inat.observationsCount.toLocaleString('fr-FR') : details === undefined ? pending : '—'}</dd></dl>`,
+      gbif: () => html`<dl class="facts"><dt>Occurrences GBIF en France</dt><dd>${this._occurrences != null ? html`<a href=${'https://www.gbif.org/occurrence/search?country=FR&taxon_key=' + (gbif?.nubKey ?? gbif?.id)} target="_blank" rel="noopener">${this._occurrences.toLocaleString('fr-FR')}</a>` : (this._occurrences === undefined && gbif) || details === undefined ? pending : '—'}</dd></dl>`,
+      distribution: () => places.length ? html`<h3>Répartition (GBIF)</h3>
+        <ul class="inline">${places.map(row => html`<li>${row.place}${row.means ? html` <span class="muted">(${row.means.toLowerCase()})</span>` : nothing}</li>`)}</ul>` : nothing
+    })}`;
   }
 
   /** @param {any} ctx */
   #ids({ plant, details, inat, wikidata }) {
     const claims = this._science?.claims;
     const gbif = details?.identifiers?.gbif;
-    const ids = [
-      ['TAXREF (cd_nom)', plant.id, plant.links?.taxref],
-      ['INPN', plant.id, plant.links?.inpn],
-      ['GBIF', gbif?.id, gbif?.id ? 'https://www.gbif.org/species/' + gbif.id : null],
-      ['iNaturalist', inat?.id, inat?.id ? 'https://www.inaturalist.org/taxa/' + inat.id : null],
-      ['Wikidata', wikidata, wikidata ? 'https://www.wikidata.org/wiki/' + wikidata : null],
-      ['Tela Botanica', claims?.tela, claims?.tela ? 'https://www.tela-botanica.org/bdtfx-nn-' + claims.tela : null],
-      ['IPNI', claims?.ipni, claims?.ipni ? 'https://www.ipni.org/n/' + claims.ipni : null],
-      ['POWO', claims?.powo, claims?.powo ? 'https://powo.science.kew.org/taxon/' + claims.powo : null],
-      ['Trefle', details?.identifiers?.trefle?.id, details?.identifiers?.trefle?.slug ? 'https://trefle.io/species/' + details.identifiers.trefle.slug : null]
-    ].filter(row => row[1]);
+    /** @type {Record<string, [string, unknown, string | null | undefined]>} */
+    const all = {
+      taxref: ['TAXREF (cd_nom)', plant.id, plant.links?.taxref],
+      inpn: ['INPN', plant.id, plant.links?.inpn],
+      gbif: ['GBIF', gbif?.id, gbif?.id ? 'https://www.gbif.org/species/' + gbif.id : null],
+      inaturalist: ['iNaturalist', inat?.id, inat?.id ? 'https://www.inaturalist.org/taxa/' + inat.id : null],
+      wikidata: ['Wikidata', wikidata, wikidata ? 'https://www.wikidata.org/wiki/' + wikidata : null],
+      tela: ['Tela Botanica', claims?.tela, claims?.tela ? 'https://www.tela-botanica.org/bdtfx-nn-' + claims.tela : null],
+      ipni: ['IPNI', claims?.ipni, claims?.ipni ? 'https://www.ipni.org/n/' + claims.ipni : null],
+      powo: ['POWO', claims?.powo, claims?.powo ? 'https://powo.science.kew.org/taxon/' + claims.powo : null],
+      trefle: ['Trefle', details?.identifiers?.trefle?.id, details?.identifiers?.trefle?.slug ? 'https://trefle.io/species/' + details.identifiers.trefle.slug : null]
+    };
+    const ids = shownSubs(this.view, 'ids').map(k => all[k]).filter(row => row?.[1]);
     return html`<dl class="facts ids">${ids.map(([label, id, url]) => html`<dt>${label}</dt><dd>${url ? html`<a href=${url} target="_blank" rel="noopener">${id}</a>` : id}</dd>`)}</dl>`;
   }
 
-  /** One tap to put the plant in the current collection (Épuré: also favourite, note here, share). @param {any} ctx */
-  #collect({ plant, name }) {
-    const { collections, target, favorites } = this.#store.state;
+  /** One tap to put the plant in the current collection, which to choose, and (Épuré) more about it. @param {any} ctx */
+  #collect({ plant }) {
+    const { collections, target } = this.#store.state;
     const choices = collections.filter(c => c.kind !== 'favorites');
     const current = choices.find(c => c.id === target) || null;
     const inTarget = current ? (getMembership().byPlant.get(plant.id) || []).includes(current.id) : false;
-    const fav = favorites.has(plant.id);
     const places = choices.filter(c => c.kind === 'place');
     const lists = choices.filter(c => c.kind !== 'place');
-    return html`
-      <div class="gate" role="group" aria-label="Ajouter à la collection en cours">
-        ${current ? html`
-          <button class="primary large add" type="button" aria-pressed=${inTarget ? 'true' : 'false'}
-            @click=${() => setInCollection(current.id, plant, !inTarget).then(() => setTarget(current.id)).catch(console.error)}>
-            ${icon(inTarget ? 'check-lg' : 'plus-lg')} ${inTarget ? 'Dans ' : 'Ajouter à '}${current.kind === 'place' ? html`${icon('geo-alt-fill')} ` : ''}${current.name}
-          </button>` : nothing}
+    const parts = this.#subs('collect', {
+      add: () => current ? html`
+        <button class="primary large add" type="button" aria-pressed=${inTarget ? 'true' : 'false'}
+          @click=${() => setInCollection(current.id, plant, !inTarget).then(() => setTarget(current.id)).catch(console.error)}>
+          ${icon(inTarget ? 'check-lg' : 'plus-lg')} ${inTarget ? 'Dans ' : 'Ajouter à '}${current.kind === 'place' ? html`${icon('geo-alt-fill')} ` : ''}${current.name}
+        </button>` : nothing,
+      choose: () => html`
         <select class="target" aria-label="Collection en cours" .value=${current?.id || ''}
           @change=${e => this.#pickTarget(e.target)}>
           <option value="" ?selected=${!current} disabled>${current ? 'Changer…' : 'Choisir où ajouter…'}</option>
           ${places.length ? html`<optgroup label="Mes lieux">${places.map(c => html`<option value=${c.id} ?selected=${c.id === current?.id}>${c.name}</option>`)}</optgroup>` : nothing}
           ${lists.length ? html`<optgroup label="Mes collections">${lists.map(c => html`<option value=${c.id} ?selected=${c.id === current?.id}>${c.name}</option>`)}</optgroup>` : nothing}
           <option value="__new">Nouvelle collection…</option>
-        </select>
-      </div>
-      ${this.view === 'epure' ? html`
-        <div class="quick" role="group" aria-label="Actions">
-          <button type="button" class="fav" aria-pressed=${fav ? 'true' : 'false'} @click=${() => toggleFavorite(plant)}>${icon(fav ? 'heart-fill' : 'heart')} Favori</button>
-          <a class="button" href=${href.newSpot(plant.id)}>${icon('geo-alt-fill')} Noter ici</a>
-          <button type="button" @click=${() => this.#share(plant, name)}>Partager</button>
-        </div>
-        ${this._shareNote ? html`<p class="share-note" role="status">${this._shareNote}</p>` : nothing}
-        <p class="more"><button class="link" type="button" @click=${() => setPlantView('standard')}>Plus d’infos ${icon('arrow-right')}</button></p>` : nothing}`;
+        </select>`,
+      more: () => this.view === 'epure'
+        ? html`<p class="more"><button class="link" type="button" @click=${() => setPlantView('standard')}>Plus d’infos ${icon('arrow-right')}</button></p>` : nothing
+    });
+    return html`<div class="gate" role="group" aria-label="Ajouter à la collection en cours">${parts}</div>`;
   }
 
   /** @param {HTMLSelectElement} select */
@@ -948,13 +1058,9 @@ export class GfPlantDetail extends LitElement {
 
   /** Épuré: the plant at a glance, and one tap to put it in the current collection. @param {any} ctx */
   #epure(ctx) {
-    const { plant, name, bloom } = ctx;
     return html`
       <article class="epure">
-        <h1>${name}</h1>
-        <div class="sci"><i>${plant.scientificName}</i> <span class="author">${plant.author}</span></div>
-        <p class="meta">${plant.family}${bloom ? html` · Floraison ${bloom.text}${bloom.now ? html` <span class="season">en fleur</span>` : nothing}` : nothing}</p>
-        <gf-add-to .plant=${plant}></gf-add-to>
+        <gf-add-to .plant=${ctx.plant}></gf-add-to>
         ${this.#blocks(ctx)}
       </article>`;
   }
@@ -963,8 +1069,7 @@ export class GfPlantDetail extends LitElement {
   #full(ctx) {
     return html`
       <article class=${this.view === 'scientific' ? 'science' : ''}>
-        ${this.#title(ctx)}
-        ${this.#actions(ctx.plant)}
+        <a class="back link" href=${lastSearchHash()}>${icon('arrow-left')} Recherche</a>
         <gf-add-to .plant=${ctx.plant}></gf-add-to>
         ${this._error ? html`<p class="muted">${this._error}</p>` : nothing}
         ${this.#blocks(ctx)}
