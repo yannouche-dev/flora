@@ -330,7 +330,7 @@ Une **collection** est un ensemble de plantes, avec ou sans position :
 
 **Calendrier** sur la fiche plante, chargé automatiquement : floraison Baseflor (hors ligne, dans le jeu de données) et observations iNaturalist en fleurs / en fruits en France, mois par mois, chaque ligne avec sa source. Ce sont des indications de floraison et de fructification, **pas des dates de cueillette**.
 
-L'onglet **Mes plantes** les regroupe : collections, puis endroits triés par distance. Une collection à laquelle on ajoute des coordonnées GPS devient un endroit ; toucher un endroit ouvre la carte cadrée sur son point et toutes ses plantes. Les modifications sont **enregistrées automatiquement**. Dans la recherche, le filtre **Mes plantes** limite les résultats aux favoris, à une liste, à un lieu ou à « dans un de mes lieux ».
+L'onglet **Mes plantes** les regroupe : collections, puis endroits triés par distance. Une collection à laquelle on ajoute des coordonnées GPS devient un endroit ; toucher un endroit ouvre la carte cadrée sur son point et toutes ses plantes. Sur chaque ligne (Favoris, collection, endroit), **Partager** envoie un lien qui contient la collection (la position exacte d'un endroit, après confirmation) et le chevron **déplie la liste de ses plantes** (photo, nom, lien vers la fiche) ; ce qui est déplié est mémorisé. Le rappel « Sauvegardez vos collections » est en bas de la page. Les modifications sont **enregistrées automatiquement**. Dans la recherche, le filtre **Mes plantes** limite les résultats aux favoris, à une liste, à un lieu ou à « dans un de mes lieux ».
 
 **Partager** sans serveur :
 

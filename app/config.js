@@ -44,6 +44,8 @@ export const config = {
     backupReminder: 'geoflora.backupReminder',
     region: 'geoflora.region',
     floraLayout: 'geoflora.floraLayout',
+    // Mes plantes: the collections unfolded to show their plants.
+    collectionsOpen: 'geoflora.collectionsOpen',
     modules: 'geoflora.modules'
   },
 
