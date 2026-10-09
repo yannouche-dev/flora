@@ -93,7 +93,7 @@ export class GfFlora extends LitElement {
     .results .pane-body { overflow: hidden; display: flex; flex-direction: column; }
     gf-plant-list { flex: 1; min-height: 0; }
     gf-plant-detail { flex: 1; min-height: 0; }
-    .plant .pane-body { display: flex; flex-direction: column; overflow: hidden; }
+    .plant .pane-body { display: flex; flex-direction: column; overflow: hidden; background: var(--gf-surface-2); }
 
     /* Folded pane: a narrow rail with its title written vertically. */
     .rail {
@@ -157,13 +157,49 @@ export class GfFlora extends LitElement {
     .nav { display: flex; align-items: center; gap: 0; flex: none; }
     .nav .pos { font-size: 0.75rem; color: var(--gf-text-muted); font-variant-numeric: tabular-nums; min-width: 3.5em; text-align: center; }
     .nav .icon-btn[disabled] { opacity: 0.35; cursor: default; }
-    .swipe { flex: 1; min-height: 0; display: flex; flex-direction: column; touch-action: pan-y; }
-    .swipe.dragging { transition: none; }
-    .swipe.next { animation: from-right 0.18s ease-out; }
-    .swipe.prev { animation: from-left 0.18s ease-out; }
-    @keyframes from-right { from { transform: translateX(24px); opacity: 0.4; } }
-    @keyframes from-left { from { transform: translateX(-24px); opacity: 0.4; } }
-    @media (prefers-reduced-motion: reduce) { .swipe.next, .swipe.prev { animation: none; } }
+    /* The plant sheet is a card (Tinder-like): it follows the finger and tilts, a stamp says where it goes;
+       let go past the threshold, it flies off and the next plant rises from below; short of it, it springs back. */
+    .swipe {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      touch-action: pan-y;
+      background: var(--gf-surface);
+      transform-origin: 50% 110%;
+    }
+    .swipe.dragging { transform: translateX(var(--dx, 0px)) rotate(var(--rot, 0deg)); transition: none; box-shadow: var(--gf-shadow-float); border-radius: var(--gf-radius-lg); }
+    .swipe.settle { transition: transform 0.32s cubic-bezier(0.2, 1.4, 0.4, 1), box-shadow 0.32s; }
+    .swipe.fly-next, .swipe.fly-prev { transition: transform 0.24s ease-in, opacity 0.24s ease-in; opacity: 0; pointer-events: none; box-shadow: var(--gf-shadow-float); border-radius: var(--gf-radius-lg); }
+    .swipe.fly-next { transform: translateX(-130%) rotate(-16deg); }
+    .swipe.fly-prev { transform: translateX(130%) rotate(16deg); }
+    .swipe.enter { animation: card-in 0.28s cubic-bezier(0.2, 0.9, 0.3, 1.15); }
+    @keyframes card-in { from { transform: scale(0.92) translateY(16px); opacity: 0.35; } }
+    /* The stamp: « Suivante » top right when swiping left, « Précédente » top left when swiping right. */
+    .swipe[data-hint]::before {
+      content: attr(data-hint);
+      position: absolute;
+      z-index: 5;
+      top: 18px;
+      padding: 4px 12px;
+      border: 3px solid var(--gf-accent);
+      border-radius: 8px;
+      background: color-mix(in srgb, var(--gf-surface) 85%, transparent);
+      color: var(--gf-accent);
+      font-weight: 800;
+      font-size: 1.05rem;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      opacity: var(--hint, 0);
+      pointer-events: none;
+    }
+    .swipe[data-dir='next']::before { right: 16px; transform: rotate(12deg); }
+    .swipe[data-dir='prev']::before { left: 16px; transform: rotate(-12deg); }
+    @media (prefers-reduced-motion: reduce) {
+      .swipe.enter { animation: none; }
+      .swipe.settle, .swipe.fly-next, .swipe.fly-prev { transition: none; }
+    }
 
     /* Filters (tablet and phone): bottom sheet. */
     dialog {
@@ -210,7 +246,7 @@ export class GfFlora extends LitElement {
     this.route = { name: 'search' };
     this._layout = readLayout();
     this._grid = false;
-    /** Direction of the last previous / next move, for its short slide. @type {'' | 'next' | 'prev'} */
+    /** The next plant's card rising after a move. @type {'' | 'enter'} */
     this._slide = '';
   }
 
@@ -229,14 +265,27 @@ export class GfFlora extends LitElement {
     return i < 0 ? null : { i, n: items.length, prev: items[i - 1]?.id ?? null, next: items[i + 1]?.id ?? null };
   }
 
-  /** @param {'prev' | 'next'} dir */
+  /** The card (the plant sheet's swipe surface). */
+  get #card() { return /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.swipe')); }
+
+  #reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
+
+  /** To the previous / next plant of the results: the card flies off that way, then the new one rises. @param {'prev' | 'next'} dir */
   #step(dir) {
-    const pos = this.#position();
-    const id = pos?.[dir];
+    const id = this.#position()?.[dir];
     if (!id) return;
-    this._slide = dir;
-    // Each plant is a view: Back returns to the one before (« Résultats » goes straight to the list).
-    location.hash = href.plant(id);
+    const card = this.#card;
+    const go = () => {
+      if (card) { card.className = 'swipe'; card.removeAttribute('data-hint'); card.removeAttribute('data-dir'); card.style.cssText = ''; }
+      this._slide = 'enter';
+      // Each plant is a view: Back returns to the one before (« Résultats » goes straight to the list).
+      location.hash = href.plant(id);
+    };
+    if (!card || this.#reducedMotion.matches) { go(); return; }
+    if (card.classList.contains('fly-next') || card.classList.contains('fly-prev')) return;
+    card.classList.remove('dragging', 'settle');
+    card.classList.add('fly-' + dir);
+    setTimeout(go, 240);
   }
 
   /** ← → on the keyboard, when not typing. @param {KeyboardEvent} e */
@@ -261,28 +310,46 @@ export class GfFlora extends LitElement {
     this.#touch = blocked ? null : { x: t.clientX, y: t.clientY, t: Date.now(), el: /** @type {HTMLElement} */ (e.currentTarget) };
   }
 
-  /** @param {TouchEvent} e */
+  /** The card follows the finger, tilting; no plant that way: it resists. @param {TouchEvent} e */
   #onTouchMove(e) {
     const s = this.#touch;
     if (!s) return;
     const t = e.touches[0];
     const dx = t.clientX - s.x, dy = t.clientY - s.y;
-    if (Math.abs(dx) > 12 && Math.abs(dx) > 1.5 * Math.abs(dy)) {
-      s.el.classList.add('dragging');
-      s.el.style.transform = `translateX(${dx * 0.35}px)`;
-    }
+    if (!s.el.classList.contains('dragging') && !(Math.abs(dx) > 12 && Math.abs(dx) > 1.5 * Math.abs(dy))) return;
+    const dir = dx < 0 ? 'next' : 'prev';
+    const can = Boolean(this.#position()?.[dir]);
+    const x = can ? dx : dx * 0.25;
+    s.el.classList.remove('settle');
+    s.el.classList.add('dragging');
+    s.el.style.setProperty('--dx', x + 'px');
+    s.el.style.setProperty('--rot', Math.max(-20, Math.min(20, x / 18)) + 'deg');
+    s.el.style.setProperty('--hint', String(can ? Math.min(1, Math.abs(dx) / 110) : 0));
+    s.el.dataset.dir = dir;
+    s.el.dataset.hint = dir === 'next' ? 'Suivante' : 'Précédente';
   }
 
-  /** @param {TouchEvent} e */
+  /** Let go: far or fast enough, the card flies off to that plant; else it springs back. @param {TouchEvent} e */
   #onTouchEnd(e) {
     const s = this.#touch;
     this.#touch = null;
-    if (!s) return;
-    s.el.classList.remove('dragging');
-    s.el.style.transform = '';
+    if (!s || !s.el.classList.contains('dragging')) return;
     const t = e.changedTouches[0];
-    const dx = t.clientX - s.x, dy = t.clientY - s.y;
-    if (Math.abs(dx) >= 60 && Math.abs(dx) > 1.5 * Math.abs(dy) && Date.now() - s.t < 800) this.#step(dx < 0 ? 'next' : 'prev');
+    const dx = t.clientX - s.x;
+    const fast = Math.abs(dx) / Math.max(1, Date.now() - s.t) > 0.6;
+    const dir = dx < 0 ? 'next' : 'prev';
+    if ((Math.abs(dx) >= 90 || (fast && Math.abs(dx) >= 40)) && this.#position()?.[dir]) { this.#step(dir); return; }
+    this.#settle(s.el);
+  }
+
+  /** Back to its place, with a little bounce. @param {HTMLElement} el */
+  #settle(el) {
+    el.classList.remove('dragging');
+    el.classList.add('settle');
+    el.style.removeProperty('--dx');
+    el.style.removeProperty('--rot');
+    el.style.setProperty('--hint', '0');
+    el.addEventListener('transitionend', () => { el.classList.remove('settle'); el.removeAttribute('data-hint'); el.removeAttribute('data-dir'); }, { once: true });
   }
 
   /** Arrows and « 3 / 17 ». */
@@ -301,7 +368,7 @@ export class GfFlora extends LitElement {
   /** The plant sheet inside its swipe surface (keyed by plant, so the slide plays on each move). @param {any} detail */
   #swipe(detail) {
     return html`<div class="swipe ${this._slide}" @touchstart=${this.#onTouchStart} @touchmove=${this.#onTouchMove}
-      @touchend=${this.#onTouchEnd} @touchcancel=${() => { this.#touch = null; }}
+      @touchend=${this.#onTouchEnd} @touchcancel=${() => { const s = this.#touch; this.#touch = null; if (s?.el.classList.contains('dragging')) this.#settle(s.el); }}
       @animationend=${() => { this._slide = ''; }}>${detail}</div>`;
   }
 
@@ -545,7 +612,7 @@ export class GfFlora extends LitElement {
             ${this.#nav()}
             ${plantSwitch}
           </div>
-          <div class="pane-body" style="display:flex;flex-direction:column;overflow:hidden">${this.#swipe(plantDetail)}</div>
+          <div class="pane-body" style="display:flex;flex-direction:column;overflow:hidden;background:var(--gf-surface-2)">${this.#swipe(plantDetail)}</div>
         </section>` : nothing}
 
       ${wide ? nothing : html`
