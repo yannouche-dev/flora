@@ -115,13 +115,12 @@ export class GfMapPage extends LitElement {
     .grip::before { content: ''; position: absolute; left: 12px; right: 12px; top: 7px; height: 4px; border-radius: 2px; background: var(--gf-border); }
     /* The place sheet covers the bottom of the map: hide Leaflet's bottom controls meanwhile. */
     .body:has(.sheet) gf-map .leaflet-bottom { display: none; }
-    /* Phones have the "Noter ici" button in the tab bar. */
-    @media (max-width: 699px) { .fab { display: none !important; } }
     .fab {
       position: absolute;
       z-index: 600;
       right: 16px;
-      bottom: calc(24px + env(safe-area-inset-bottom));
+      /* Above the tab bar on a phone (the tab bar is outside this page, so no safe-area here). */
+      bottom: 24px;
       width: 58px;
       height: 58px;
       border-radius: 50%;

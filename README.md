@@ -297,13 +297,13 @@ Ajouter un fichier JS ou CSS dans `app/` impose de l'ajouter aussi à la liste `
 
 ### Navigation et saisie rapide
 
-- Sur téléphone, une barre en bas : **Flore · Mes plantes · ＋ Noter ici · Carte · Plus** (réglages, sauvegarde). Sur ordinateur, les mêmes entrées sont dans l'en-tête.
+- Sur téléphone, une barre en bas : **Flore** (feuille) · **Carte** · **Mes collections** · **Réglages** (engrenage ; sauvegarde). « Noter ici » est dans Mes collections, sur la carte (+) et dans les Actions de la fiche plante. Sur ordinateur, les mêmes entrées sont dans l'en-tête.
 - **Noter ici** : le GPS démarre, des suggestions s'affichent (plantes des lieux à moins de 200 m, favoris, plantes récentes) ; un toucher sur une plante l'enregistre **dans le lieu le plus proche (< 30 m)** ou dans un nouveau lieu. Un bandeau propose **Annuler** et **Détails**.
 - **Recherche vocale** 🎙 (recherche Flore et « Noter ici ») : on dit le nom, la recherche se lance. Elle utilise la reconnaissance vocale du navigateur, en français (sur Chrome l'audio part chez Google, sur Safari chez Apple ou reste sur l'appareil) ; le bouton n'apparaît que si le navigateur la propose et si le module « Dictée vocale » est actif.
 
 ### Mode cueillette (module optionnel)
 
-*Plus → Mode cueillette.* Activé automatiquement si l'appareil contient déjà des récoltes, désactivé sinon. Désactivé, un lieu est simplement « des plantes vues ici » (abondance, notes) ; rien n'est effacé. Activé :
+*Réglages → Mode cueillette.* Activé automatiquement si l'appareil contient déjà des récoltes, désactivé sinon. Désactivé, un lieu est simplement « des plantes vues ici » (abondance, notes) ; rien n'est effacé. Activé :
 
 - journal de récolte, qualité (★), « Récolté aujourd'hui », bouton « + Récolte » ;
 - badges **En saison** (récolté à ±15 jours de la date, une année quelconque) et **Bientôt** (dans les 30 prochains jours) ;

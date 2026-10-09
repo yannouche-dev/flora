@@ -5,8 +5,8 @@ import { href } from '../core/router.js';
 import { icon } from '../core/icons.js';
 
 /**
- * Mobile bottom navigation: Flore · Mes plantes · [+ Noter ici] · Carte · Plus.
- * The centre button fires `open-capture` (handled by gf-app).
+ * Mobile bottom navigation: Flore · Carte · Mes collections · Réglages. Noting a plant here lives in Mes
+ * collections, on the map (+) and in a plant's Actions.
  */
 export class GfTabbar extends LitElement {
   static properties = {
@@ -20,8 +20,8 @@ export class GfTabbar extends LitElement {
       border-top: 1px solid var(--gf-border);
       padding-bottom: env(safe-area-inset-bottom);
     }
-    nav { display: grid; grid-template-columns: repeat(5, 1fr); align-items: end; height: 60px; }
-    a, button {
+    nav { display: grid; grid-template-columns: repeat(4, 1fr); align-items: center; height: 60px; }
+    a {
       display: grid;
       justify-items: center;
       gap: 2px;
@@ -30,33 +30,16 @@ export class GfTabbar extends LitElement {
       font-size: 0.7rem;
       color: var(--gf-text-muted);
       text-decoration: none;
-      background: none;
-      border: 0;
-      cursor: pointer;
       -webkit-tap-highlight-color: transparent;
     }
     .icon { font-size: 1.25rem; line-height: 1; }
     a[aria-current='page'] { color: var(--gf-accent); font-weight: 600; }
-    .capture { align-self: center; }
-    .capture .icon {
-      width: 52px;
-      height: 52px;
-      margin-top: -22px;
-      border-radius: 50%;
-      background: var(--gf-accent);
-      color: var(--gf-accent-contrast);
-      display: grid;
-      place-items: center;
-      font-size: 1.8rem;
-      box-shadow: 0 3px 10px rgb(0 0 0 / 30%);
-      border: 3px solid var(--gf-surface);
-    }
-    .capture span:last-child { color: var(--gf-accent); font-weight: 600; }
+    a:focus-visible { outline: none; box-shadow: var(--gf-focus); border-radius: var(--gf-radius-sm); }
   `;
 
   constructor() {
     super();
-    /** 'flore' | 'mine' | 'map' | 'more' */
+    /** 'flore' | 'map' | 'mine' | 'more' */
     this.current = 'flore';
   }
 
@@ -65,14 +48,10 @@ export class GfTabbar extends LitElement {
       <a href=${link} aria-current=${this.current === id ? 'page' : 'false'}><span class="icon" aria-hidden="true">${icon(name)}</span><span>${label}</span></a>`;
     return html`
       <nav aria-label="Navigation principale">
-        ${tab('flore', lastSearchHash(), 'search', 'Flore')}
-        ${tab('mine', href.collections(), 'heart', 'Mes plantes')}
-        <button class="capture" type="button" aria-label="Noter une plante ici"
-          @click=${() => this.dispatchEvent(new CustomEvent('open-capture', { bubbles: true, composed: true }))}>
-          <span class="icon" aria-hidden="true">${icon('plus-lg')}</span><span>Noter ici</span>
-        </button>
+        ${tab('flore', lastSearchHash(), 'leaf', 'Flore')}
         ${tab('map', href.map(), 'map', 'Carte')}
-        ${tab('more', href.settings(), 'three-dots', 'Plus')}
+        ${tab('mine', href.collections(), 'collection', 'Mes collections')}
+        ${tab('more', href.settings(), 'gear', 'Réglages')}
       </nav>
     `;
   }

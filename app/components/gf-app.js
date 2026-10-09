@@ -97,7 +97,7 @@ export class GfApp extends LitElement {
     .king small { font-weight: 400; color: #e8d9a8; }
     .king:hover { background: #3a3014; }
     .king:focus-visible { outline: none; box-shadow: var(--gf-focus); }
-    :host([phone]) .king { bottom: calc(96px + env(safe-area-inset-bottom, 0px)); }
+    :host([phone]) .king { bottom: calc(74px + env(safe-area-inset-bottom, 0px)); }
     @keyframes king { 50% { box-shadow: 0 6px 20px rgb(0 0 0 / 0.35), 0 0 0 8px rgb(212 160 23 / 0); } }
     @media (prefers-reduced-motion: reduce) { .king { animation: none; } }
 
