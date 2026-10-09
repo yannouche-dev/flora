@@ -174,6 +174,8 @@ export class GfPlantDetail extends LitElement {
     plantId: { type: Number, attribute: 'plant-id' },
     /** Shown in the Flore tab's plant pane: compact padding, the pane has its own close / back controls. */
     embedded: { type: Boolean, reflect: true },
+    /** The plant waiting under the swiped card (Flore): not the page's plant yet, so it leaves the title alone. */
+    preview: { type: Boolean },
     /** Épuré (photo and one-tap actions), standard (general public), scientific (every data). */
     view: { reflect: true },
     _wiki: { state: true },
@@ -457,6 +459,8 @@ export class GfPlantDetail extends LitElement {
     this.#signature = signature;
     this.#hidden = hidden;
     if (changed.has('plantId')) this.#load(this.plantId);
+    // The card underneath became the sheet.
+    else if (changed.has('preview') && !this.preview) this.#title();
     // A module switched on or off (a block folded or revived, or Réglages): its data comes or goes.
     else if (modulesChanged) this.#refresh();
     else if (hiddenChanged && this._plant && this._details !== undefined) this.#loadExtras(this._plant, this._details, this.#abort?.signal);
@@ -468,6 +472,12 @@ export class GfPlantDetail extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     this.#abort?.abort();
+  }
+
+  /** The page's title: this plant, unless it is only a preview. */
+  #title() {
+    const plant = this._plant;
+    if (!this.preview && plant && !plant.failed) document.title = (plant.vernacularNames?.[0] || plant.scientificName) + ' — GeoFlora';
   }
 
   /** @param {number} id */
@@ -497,7 +507,7 @@ export class GfPlantDetail extends LitElement {
     if (abort.signal.aborted) return;
     this._plant = plant || null;
     if (!plant) return;
-    document.title = (plant.vernacularNames?.[0] || plant.scientificName) + ' — GeoFlora';
+    this.#title();
 
     try {
       const details = await sources.details(plant, abort.signal, this.view);
