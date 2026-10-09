@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
 import { activeFilterCount, clearFilters, lastSearchHash } from '../core/query.js';
 import { href } from '../core/router.js';
+import { backTo, depth, openModal } from '../core/history.js';
 import { plantViewOf, setPlantView, StoreController } from '../core/store.js';
 import { ui } from '../styles/ui.js';
 import './gf-results-bar.js';
@@ -200,8 +201,8 @@ export class GfFlora extends LitElement {
     const grid = entry.contentRect.width >= GRID_MIN && !this.#phone.matches;
     if (grid !== this._grid) this._grid = grid;
   });
-  /** The plant was opened from the list in this session: "← Résultats" can simply go back. */
-  #fromList = false;
+  /** Depth in history of the list the plant was opened from (null: opened from elsewhere). @type {number | null} */
+  #listDepth = null;
 
   constructor() {
     super();
@@ -234,8 +235,8 @@ export class GfFlora extends LitElement {
     const id = pos?.[dir];
     if (!id) return;
     this._slide = dir;
-    // Replace, not push: « Résultats » / back still leads to the list.
-    location.replace(href.plant(id));
+    // Each plant is a view: Back returns to the one before (« Résultats » goes straight to the list).
+    location.hash = href.plant(id);
   }
 
   /** ← → on the keyboard, when not typing. @param {KeyboardEvent} e */
@@ -308,7 +309,8 @@ export class GfFlora extends LitElement {
   willUpdate(changed) {
     if (changed.has('route')) {
       const before = changed.get('route');
-      if (this.route.name === 'plant') this.#fromList = before?.name === 'search' || (before?.name === 'plant' && this.#fromList);
+      // The list's place in history: from the search to a plant, kept while stepping plant to plant.
+      if (this.route.name === 'plant') this.#listDepth = before?.name === 'search' ? depth() - 1 : before?.name === 'plant' ? this.#listDepth : null;
       if (this.route.name === 'search') document.title = 'GeoFlora — flore de France';
     }
   }
@@ -344,8 +346,8 @@ export class GfFlora extends LitElement {
   }
 
   #closePlant() {
-    if (this.#phone.matches && this.#fromList) history.back();
-    else location.hash = lastSearchHash();
+    // Back to the list (past the plants browsed with ‹ ›), else to the search as a new view.
+    backTo(this.#listDepth, lastSearchHash());
   }
 
   // ── Resizing ───────────────────────────────────────────────────────────────
@@ -450,7 +452,7 @@ export class GfFlora extends LitElement {
     if (this.#wide.matches) {
       if (this._layout.folded.filters) this.#fold('filters', false);
     } else {
-      this.#dialog?.showModal();
+      openModal(this.#dialog);
     }
     await this.updateComplete;
     const panel = /** @type {any} */ (this.renderRoot.querySelector(this.#wide.matches ? '.pane.filters gf-filter-panel' : 'dialog gf-filter-panel'));
@@ -517,7 +519,7 @@ export class GfFlora extends LitElement {
           <section class="pane results" aria-label="Résultats" @focus-facet=${this.#focusFacet}>
             ${showPlant ? this.#head('results', 'Résultats') : nothing}
             <div class="pane-body">
-              <gf-results-bar .wide=${wide} ?grid=${this._grid} @open-filters=${() => this.#dialog?.showModal()}></gf-results-bar>
+              <gf-results-bar .wide=${wide} ?grid=${this._grid} @open-filters=${() => openModal(this.#dialog)}></gf-results-bar>
               <gf-plant-list ?grid=${this._grid} .current=${plantId}></gf-plant-list>
             </div>
           </section>`}

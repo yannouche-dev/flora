@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import * as db from '../core/db.js';
 import { GeoController } from '../core/geo.js';
 import { href } from '../core/router.js';
+import { back, replaceHash } from '../core/history.js';
 import {
   ABUNDANCE, defaultPlantPosition, deletePlace, distance, entryInSeason, entryName, entryPosition, exportGeoJSON, findEntry,
   formatDistance, getPlace, lastHarvest, matchCollections, plantMarkers,
@@ -285,7 +286,7 @@ export class GfSpotEditor extends LitElement {
         this.#savedAt = saved.properties.updatedAt;
         if (wasNew) {
           this.#persisted = true;
-          history.replaceState(null, '', href.spot(saved.id));
+          replaceHash(href.spot(saved.id));
         }
         this._saveState = this.#dirty ? 'saving' : 'saved';
       })
@@ -638,7 +639,8 @@ export class GfSpotEditor extends LitElement {
       await savePlace(target);
       if (this.#persisted && this.#createdHere) await deletePlace(draft.id);
       this.#persisted = false;
-      location.hash = href.spot(targetId);
+      // In place of this draft: Back does not return to it.
+      location.replace(href.spot(targetId));
     } catch (error) {
       this._error = 'Ajout impossible : ' + /** @type {Error} */ (error).message;
     }
@@ -656,7 +658,7 @@ export class GfSpotEditor extends LitElement {
   /** @param {import('../core/collections.js').Place} target */
   #useExisting(target) {
     const first = this._place?.properties.plants[0];
-    location.hash = href.spot(target.id, first?.plantId ?? undefined);
+    location.replace(href.spot(target.id, first?.plantId ?? undefined));
   }
 
   /** @param {SubmitEvent} event */
@@ -668,16 +670,17 @@ export class GfSpotEditor extends LitElement {
       return;
     }
     if (this.#autosave) {
-      // Lists and existing collections are saved as you go: "Terminé" just leaves.
+      // Lists and existing collections are saved as you go: "Terminé" just leaves, back to the previous view.
       await this.#flush();
       if (this.embedded) this.#emit('panel-close');
-      else location.hash = this.#doneHref();
+      else back(this.#doneHref());
       return;
     }
     try {
       const saved = await savePlace(this.#payload());
       this.#persisted = true;
-      location.hash = href.map({ spot: saved.id });
+      // The new place replaces its form in history.
+      location.replace(href.map({ spot: saved.id }));
     } catch (error) {
       this._error = 'Enregistrement impossible : ' + /** @type {Error} */ (error).message;
     }
@@ -692,7 +695,8 @@ export class GfSpotEditor extends LitElement {
     this.#dirty = false;
     const wasPlace = this.#isPlace;
     if (!this.#isNew) await deletePlace(this._place.id);
-    location.hash = wasPlace ? href.map() : href.collections();
+    // Gone: Back must not lead to it.
+    location.replace(wasPlace ? href.map() : href.collections());
   }
 
   #doneHref() {

@@ -2,6 +2,7 @@
 // Search query state (text, multi-select filters, sort): store ↔ URL hash ↔ worker.
 // URL form: #/?q=ortie&family=Urticaceae,Rosaceae&status=I,J&photo=avec&sort=sci
 
+import { replaceHash } from './history.js';
 import { config } from '../config.js';
 import { parse } from './router.js';
 import { genusFamily, runSearch } from './search.js';
@@ -54,7 +55,7 @@ export function setQuery(patch, { debounce = 0 } = {}) {
   const query = { ...store.state.query, ...patch };
   store.set({ query });
   // replaceState (not push): the back button leaves the list instead of undoing filters one by one.
-  if (parse(location.hash).name === 'search') history.replaceState(null, '', toHash(query));
+  if (parse(location.hash).name === 'search') replaceHash(toHash(query));
   clearTimeout(timer);
   if (debounce) timer = setTimeout(runSearch, debounce);
   else runSearch();

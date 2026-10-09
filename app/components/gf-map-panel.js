@@ -3,6 +3,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { BASES, OVERLAYS } from '../core/ign.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
+import { openModal } from '../core/history.js';
 
 const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
 
@@ -71,7 +72,7 @@ export class GfMapPanel extends LitElement {
     this.legend = false;
   }
 
-  open() { /** @type {HTMLDialogElement} */ (this.renderRoot.querySelector('dialog'))?.showModal(); }
+  open() { openModal(/** @type {HTMLDialogElement} */ (this.renderRoot.querySelector('dialog'))); }
   close() { /** @type {HTMLDialogElement} */ (this.renderRoot.querySelector('dialog'))?.close(); }
 
   /** @param {string} name @param {any} detail */
