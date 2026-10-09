@@ -170,7 +170,7 @@ export class GfApp extends LitElement {
       case 'map':
         return html`<gf-map-page .route=${route}></gf-map-page>`;
       case 'collections':
-        return html`<gf-collections></gf-collections>`;
+        return html`<gf-collections .route=${route}></gf-collections>`;
       case 'shared':
         document.title = 'Partage — GeoFlora';
         return html`<gf-shared .data=${route.data}></gf-shared>`;

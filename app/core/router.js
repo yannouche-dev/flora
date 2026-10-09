@@ -4,7 +4,7 @@
 import './history.js';
 
 /**
- * @typedef {{ name: 'search' } | { name: 'plant', id: number } | { name: 'settings' } | { name: 'collections' }
+ * @typedef {{ name: 'search' } | { name: 'plant', id: number } | { name: 'settings' } | { name: 'collections', open: string | null, plant: number | null }
  *   | { name: 'map', spot: string | null, plant: number | null, focus: number | null, season: boolean, add: number | null, pick: boolean }
  *   | { name: 'spot-new', plant: number | null, kind: 'list' | 'place', at: [number, number] | null }
  *   | { name: 'spot', id: string, add: number | null, pick: boolean }
@@ -29,7 +29,7 @@ export function parse(hash) {
       add: number('add'), pick: params.get('pick') === '1'
     };
   }
-  if (path === 'collections') return { name: 'collections' };
+  if (path === 'collections') return { name: 'collections', open: params.get('c'), plant: number('plant') };
   // "spot/…" are the links of earlier versions; collections are the same records.
   if (path === 'collection/new' || path === 'spot/new') {
     const at = (params.get('at') || '').split(',').map(Number);
@@ -50,7 +50,14 @@ export const href = {
   search: () => '#/',
   plant: (/** @type {number} */ id) => '#/plant/' + id,
   settings: () => '#/settings',
-  collections: () => '#/collections',
+  /** Mes plantes; `open`: the collection shown (a place: its map too), `plant`: the plant sheet beside. */
+  collections: (/** @type {{ open?: string | null, plant?: number | null }} */ options = {}) => {
+    const params = new URLSearchParams();
+    if (options.open) params.set('c', options.open);
+    if (options.plant) params.set('plant', String(options.plant));
+    const search = params.toString();
+    return '#/collections' + (search ? '?' + search : '');
+  },
   /**
    * `focus`: a plant of the selected place (its marker highlighted, its details open); `add` pre-adds a plant
    * to the selected place, `pick` opens its plant picker.

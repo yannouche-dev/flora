@@ -5,7 +5,12 @@ gf-map {
   position: relative;
   min-height: 200px;
   background: var(--gf-surface-2);
+  /* Leaflet's panes and controls carry z-indexes up to 1000: kept inside the map, so a map in a scrolling
+     sheet passes under the sticky action bar, the headers and the tab bar instead of over them. */
+  isolation: isolate;
 }
+/* Full screen without the top layer (no popover support): the frame must rise above the page again. */
+gf-map:has(.gf-map-frame.fullscreen) { isolation: auto; }
 
 gf-map .gf-map-root {
   position: absolute;
