@@ -98,6 +98,8 @@ export class GfApp extends LitElement {
     .king:hover { background: #3a3014; }
     .king:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     :host([phone]) .king { bottom: calc(74px + env(safe-area-inset-bottom, 0px)); }
+    /* A plant sheet has its action bar there: the crown goes above it. */
+    :host([phone][plant]) .king { bottom: calc(134px + env(safe-area-inset-bottom, 0px)); }
     @keyframes king { 50% { box-shadow: 0 6px 20px rgb(0 0 0 / 0.35), 0 0 0 8px rgb(212 160 23 / 0); } }
     @media (prefers-reduced-motion: reduce) { .king { animation: none; } }
 
@@ -154,7 +156,10 @@ export class GfApp extends LitElement {
     `;
   }
 
-  updated() { this.toggleAttribute('phone', this.#phone.matches); }
+  updated() {
+    this.toggleAttribute('phone', this.#phone.matches);
+    this.toggleAttribute('plant', this.#router.route.name === 'plant');
+  }
 
   /** @param {import('../core/router.js').Route} route */
   #outlet(route) {

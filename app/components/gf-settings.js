@@ -274,6 +274,18 @@ export class GfSettings extends LitElement {
     void this.#store.state.sheetLayout;
     void this.#store.state.modules;
     return html`
+      <h3>Barre d’actions</h3>
+      <p class="muted">En bas de la fiche, au-dessus du menu : cochez les actions de chaque mode, glissez-les pour les ordonner.</p>
+      <div class="block-orders">
+        ${MODE_KEYS.map(mode => html`
+          <div class="card block-order action-order">
+            <div class="head">${MODE_ICONS[mode]}<strong>${MODE_LABELS[mode]}</strong></div>
+            <gf-sortable-list label=${'Barre d’actions, ' + MODE_LABELS[mode]}
+              .items=${subOrder(mode, 'actions').map(k => ({ key: k, label: subTitle('actions', k), checked: !isSubHidden(mode, 'actions', k) }))}
+              @reorder=${e => setSubOrder(mode, 'actions', e.detail.keys)}
+              @toggle=${e => setSubHidden(mode, 'actions', e.detail.key, !e.detail.on)}></gf-sortable-list>
+          </div>`)}
+      </div>
       <h3>Blocs de la fiche</h3>
       <div class="block-orders">
         ${MODE_KEYS.map(mode => html`
