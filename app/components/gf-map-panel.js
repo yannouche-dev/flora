@@ -15,6 +15,9 @@ export class GfMapPanel extends LitElement {
   static properties = {
     base: { type: String },
     overlays: { attribute: false },
+    /** Name of the plant whose GBIF distribution can be shown (null: none offered). */
+    distribution: { attribute: false },
+    distributionOn: { attribute: false },
     legend: { type: Boolean }
   };
 
@@ -70,6 +73,9 @@ export class GfMapPanel extends LitElement {
     /** @type {string[]} */
     this.overlays = [];
     this.legend = false;
+    /** @type {string | null} */
+    this.distribution = null;
+    this.distributionOn = false;
   }
 
   open() { openModal(/** @type {HTMLDialogElement} */ (this.renderRoot.querySelector('dialog'))); }
@@ -105,6 +111,14 @@ export class GfMapPanel extends LitElement {
               </button>`)}
           </div>
 
+          ${this.distribution ? html`
+            <h3 class="kicker">Répartition</h3>
+            <label class="layer">
+              <input type="checkbox" .checked=${this.distributionOn}
+                @change=${e => this.#emit('distribution-toggle', { on: e.target.checked })} />
+              <span>Répartition GBIF : ${this.distribution}<small>densité des occurrences connues</small></span>
+            </label>` : nothing}
+
           <h3 class="kicker">Terrain</h3>
           ${group('terrain').map(k => this.#layer(k))}
 
@@ -126,6 +140,7 @@ export class GfMapPanel extends LitElement {
           <p class="sources">
             Fonds, cadastre, courbes de niveau, adresses et altitudes : <a href="https://geoservices.ign.fr/" target="_blank" rel="noopener">IGN – Géoplateforme</a>.
             Forêts publiques : ONF. Espaces protégés : <a href="https://inpn.mnhn.fr/" target="_blank" rel="noopener">INPN – PatriNat</a>.
+            ${this.distribution ? html`Répartition : <a href="https://www.gbif.org/" target="_blank" rel="noopener">GBIF.org</a>.` : nothing}
           </p>
         </div>
       </dialog>

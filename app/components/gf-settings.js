@@ -10,7 +10,7 @@ import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectS
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
 import {
-  STYLES, SUBS, blockModuleName, blockStyle, isTitleShown, setBlockStyle, setTitleShown, blockOrder, blockTitle, createNote, deleteNote, exportLayout, importLayout, isCustom, isHidden, isNote,
+  STYLES, SUBS, canBeEmpty, hidesEmpty, setHidesEmpty, blockModuleName, blockStyle, isTitleShown, setBlockStyle, setTitleShown, blockOrder, blockTitle, createNote, deleteNote, exportLayout, importLayout, isCustom, isHidden, isNote,
   isSubHidden, renameBlock, resetAll, resetBlocks, setBlockOrder, setHidden, setSubHidden, setSubOrder, subOrder, subTitle
 } from '../core/sheet-blocks.js';
 import './gf-sortable-list.js';
@@ -306,6 +306,7 @@ export class GfSettings extends LitElement {
               .items=${blockOrder(mode).map(k => ({
                 key: k, label: blockTitle(k), checked: !isHidden(mode, k), renamable: true, removable: isNote(k), nested: Boolean(SUBS[k]),
                 titled: isTitleShown(mode, k),
+                emptyHidden: canBeEmpty(k) ? hidesEmpty(mode, k) : undefined,
                 choices: STYLES[k]?.styles.map(st => ({ key: st.key, label: st.title })), choice: blockStyle(mode, k) ?? undefined,
                 note: blockModuleName(k) ? `(module ${blockModuleName(k)})` : isNote(k) ? '(note)' : ''
               }))}
@@ -315,6 +316,7 @@ export class GfSettings extends LitElement {
               @rename=${e => renameBlock(e.detail.key, e.detail.title)}
               @choose=${e => setBlockStyle(mode, e.detail.key, e.detail.value)}
               @titled=${e => setTitleShown(mode, e.detail.key, e.detail.shown)}
+              @empty=${e => setHidesEmpty(mode, e.detail.key, e.detail.hidden)}
               @remove=${e => this.#removeNote(e.detail.key)}></gf-sortable-list>
           </div>`)}
       </div>

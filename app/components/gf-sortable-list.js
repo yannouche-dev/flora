@@ -4,7 +4,7 @@ import { icon } from '../core/icons.js';
 
 /**
  * @typedef {{ key: string, label: string, note?: string, checked: boolean, renamable?: boolean, removable?: boolean, nested?: boolean,
- *   choices?: { key: string, label: string }[], choice?: string, titled?: boolean }} SortItem
+ *   choices?: { key: string, label: string }[], choice?: string, titled?: boolean, emptyHidden?: boolean }} SortItem
  */
 
 /**
@@ -12,8 +12,8 @@ import { icon } from '../core/icons.js';
  * keyboard: ↑ ↓ on the grip), tick it on or off, rename it ✎, remove it ✕, open what it holds (« Sous-blocs »,
  * from `renderNested(key)`). Rows only change their CSS order while dragging (the pressed node stays put).
  * A row may offer a choice (a block's style). Events (not bubbling, so a list inside another stays its own):
- * reorder {keys}, toggle {key, on}, rename {key, title}, remove {key}, choose {key, value}, titled {key, shown}
- * (a row with `titled` defined gets a « title shown » switch).
+ * reorder {keys}, toggle {key, on}, rename {key, title}, remove {key}, choose {key, value}, titled {key, shown},
+ * empty {key, hidden} (a row with `titled` defined gets a « title shown » switch; with `emptyHidden`, a « left out when empty » one).
  */
 export class GfSortableList extends LitElement {
   static properties = {
@@ -209,6 +209,10 @@ export class GfSortableList extends LitElement {
         ${item.titled !== undefined ? html`<button class="icon" type="button" aria-pressed=${item.titled ? 'true' : 'false'}
           aria-label=${(item.titled ? 'Masquer' : 'Montrer') + ` le titre « ${item.label} »`} title=${item.titled ? 'Titre affiché' : 'Titre caché'}
           @click=${() => this.#emit('titled', { key, shown: !item.titled })}>${icon('type-h2')}</button>` : nothing}
+        ${item.emptyHidden !== undefined ? html`<button class="icon" type="button" aria-pressed=${item.emptyHidden ? 'true' : 'false'}
+          aria-label=${item.emptyHidden ? `Afficher « ${item.label} » même vide` : `Ne pas afficher « ${item.label} » s’il est vide`}
+          title=${item.emptyHidden ? 'Masqué quand il est vide' : 'Affiché même vide'}
+          @click=${() => this.#emit('empty', { key, hidden: !item.emptyHidden })}>${icon('eye-slash')}</button>` : nothing}
         ${item.nested ? html`<button class="icon" type="button" aria-expanded=${open ? 'true' : 'false'} aria-label="Sous-blocs de « ${item.label} »" title="Sous-blocs"
           @click=${() => this.#toggleOpen(key)}>${icon('list-nested')}</button>` : nothing}
         ${item.renamable && !editing ? html`<button class="icon" type="button" aria-label="Renommer « ${item.label} »" title="Renommer"

@@ -12,6 +12,7 @@ import { cachedThumb, thumbUrl } from '../core/thumb.js';
 import { moduleEvents, moduleOn } from '../core/modules.js';
 import { protectedAreasIn } from '../core/protected.js';
 import { href } from '../core/router.js';
+import { gbifTileUrl } from '../core/sources.js';
 import './gf-map-panel.js';
 import './gf-map-search.js';
 import './gf-point-card.js';
@@ -118,7 +119,8 @@ function readLayers() {
   const overlays = Array.isArray(saved.overlays) ? saved.overlays : saved.cadastre ? ['cadastre'] : [];
   return {
     base: saved.base in BASES ? saved.base : 'photo',
-    overlays: overlays.filter(k => k in OVERLAYS)
+    overlays: overlays.filter(k => k in OVERLAYS),
+    distribution: saved.distribution === true
   };
 }
 
@@ -188,6 +190,8 @@ export class GfMap extends LitElement {
     noSearch: { type: Boolean, attribute: 'no-search' },
     editable: { type: Boolean },
     editing: { type: Boolean, reflect: true },
+    /** A plant whose GBIF distribution the Carte panel offers as a layer: { key (GBIF taxon), label }. */
+    distribution: { attribute: false },
     _moves: { state: true },
     _areas: { state: true },
     _areasClosed: { state: true },
@@ -415,7 +419,25 @@ export class GfMap extends LitElement {
     this.#layers = {};
     /** @type {L.TileLayer} */ (this.#layer(this.#base).addTo(map)).bringToBack();
     for (const key of this.#overlays) this.#layer(key).addTo(map);
+    this.#syncDistribution();
   };
+
+  /** The GBIF distribution layer of the plant given, when switched on in the panel (and GBIF is on). */
+  #syncDistribution() {
+    const map = this.#map;
+    const want = this.distribution && this.#distributionOn && moduleOn('gbif') ? this.distribution.key : null;
+    if (this.#distributionLayer && (!want || /** @type {any} */ (this.#distributionLayer).gfKey !== want)) {
+      this.#distributionLayer.remove();
+      this.#distributionLayer = null;
+    }
+    if (!map || !want || this.#distributionLayer) return;
+    const layer = this.#distributionLayer = L.tileLayer(gbifTileUrl(want), {
+      attribution: 'Occurrences : <a href="https://www.gbif.org/" target="_blank" rel="noopener">GBIF.org</a>',
+      opacity: 0.85, crossOrigin: 'anonymous', maxNativeZoom: 16, maxZoom: 21, zIndex: 20, className: 'gf-tiles-gbif'
+    });
+    /** @type {any} */ (layer).gfKey = want;
+    layer.addTo(map);
+  }
 
   get #root() { return /** @type {HTMLElement} */ (this.querySelector('.gf-map-root')); }
 
@@ -423,6 +445,8 @@ export class GfMap extends LitElement {
   /** @type {Record<string, L.Layer>} */ #layers = {};
   #base = /** @type {'photo' | 'plan'} */ (readLayers().base);
   /** @type {string[]} */ #overlays = readLayers().overlays;
+  #distributionOn = readLayers().distribution;
+  /** @type {L.TileLayer | null} */ #distributionLayer = null;
   /** @type {any} */ #panel = null;
   /** @type {L.Marker | null} */ #pointMarker = null;
   /** @type {any} */ #pointCard = null;
@@ -512,6 +536,10 @@ export class GfMap extends LitElement {
   /** @param {Map<string, any>} changed */
   updated(changed) {
     if (!this.#map) return;
+    if (changed.has('distribution')) {
+      this.#syncDistribution();
+      if (this.#panel) Object.assign(this.#panel, this.#distributionInfo());
+    }
     // Dropped markers stay where they were dropped until the caller passes back data that has them.
     if (movesCount(this._moves) && (changed.has('spots') || changed.has('plants') || changed.has('pin'))) this.#pruneMoves();
     if (changed.has('editing') && changed.get('editing') !== undefined) {
@@ -877,9 +905,14 @@ export class GfMap extends LitElement {
       const panel = this.#panel = document.createElement('gf-map-panel');
       panel.addEventListener('base-change', (/** @type {any} */ e) => this.#setBase(e.detail.key));
       panel.addEventListener('overlay-toggle', (/** @type {any} */ e) => this.#setOverlay(e.detail.key, e.detail.on));
+      panel.addEventListener('distribution-toggle', (/** @type {any} */ e) => {
+        this.#distributionOn = e.detail.on;
+        this.#saveLayers();
+        this.#syncDistribution();
+      });
       this.#root.append(panel);
     }
-    Object.assign(this.#panel, { base: this.#base, overlays: [...this.#overlays], legend: this.legend });
+    Object.assign(this.#panel, { base: this.#base, overlays: [...this.#overlays], legend: this.legend, ...this.#distributionInfo() });
     this.#panel.updateComplete.then(() => this.#panel.open());
   }
 
@@ -942,8 +975,13 @@ export class GfMap extends LitElement {
   }
 
   #saveLayers() {
-    store(config.storageKeys.mapLayer, { base: this.#base, overlays: this.#overlays });
-    if (this.#panel) Object.assign(this.#panel, { base: this.#base, overlays: [...this.#overlays] });
+    store(config.storageKeys.mapLayer, { base: this.#base, overlays: this.#overlays, distribution: this.#distributionOn });
+    if (this.#panel) Object.assign(this.#panel, { base: this.#base, overlays: [...this.#overlays], ...this.#distributionInfo() });
+  }
+
+  /** What the panel says of the GBIF layer: nothing without a plant (or with GBIF off). */
+  #distributionInfo() {
+    return { distribution: this.distribution && moduleOn('gbif') ? this.distribution.label : null, distributionOn: this.#distributionOn };
   }
 }
 

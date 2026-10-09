@@ -30,6 +30,8 @@ export const BLOCKS = [
   { key: 'names', title: 'Noms' },
   { key: 'occurrences', title: 'Occurrences et répartition', module: 'gbif' },
   { key: 'gbifMedia', title: 'Médias GBIF', module: 'gbif' },
+  { key: 'gbifProfile', title: 'Habitat et écologie (GBIF)', module: 'gbif' },
+  { key: 'literature', title: 'Publications (GBIF)', module: 'gbif' },
   { key: 'trefle', title: 'Trefle', module: 'trefle' },
   { key: 'ids', title: 'Identifiants' },
   { key: 'resources', title: 'Ressources' }
@@ -42,10 +44,17 @@ export const SUBS = {
   ],
   taxonomy: [
     { key: 'chain', title: 'Classification complète' }, { key: 'ranks', title: 'Famille, genre' }, { key: 'author', title: 'Auteur' },
-    { key: 'france', title: 'Statut en France' }, { key: 'synonyms', title: 'Synonymes' }, { key: 'inat', title: 'Observations iNaturalist' }
+    { key: 'france', title: 'Statut en France' }, { key: 'synonyms', title: 'Synonymes' }, { key: 'gbifSynonyms', title: 'Synonymes GBIF' },
+    { key: 'inat', title: 'Observations iNaturalist' }
   ],
   status: [{ key: 'iucn', title: 'UICN (Scientifique)' }, { key: 'table', title: 'Statuts INPN' }],
-  occurrences: [{ key: 'inat', title: 'Observations iNaturalist' }, { key: 'gbif', title: 'Occurrences GBIF en France' }, { key: 'distribution', title: 'Répartition' }],
+  occurrences: [
+    { key: 'inat', title: 'Observations iNaturalist' }, { key: 'gbif', title: 'Occurrences GBIF en France' }, { key: 'map', title: 'Carte de répartition (GBIF)' },
+    { key: 'near', title: 'Près d’ici (GBIF)' }, { key: 'months', title: 'Par mois (GBIF)' }, { key: 'years', title: 'Par année (GBIF)' },
+    { key: 'regions', title: 'Régions et départements (GBIF)' }, { key: 'basis', title: 'Types de relevés (GBIF)' }, { key: 'datasets', title: 'Principales sources (GBIF)' },
+    { key: 'distribution', title: 'Répartition dans le monde' }
+  ],
+  gbifMedia: [{ key: 'photos', title: 'Photos d’observation' }, { key: 'herbarium', title: 'Planches d’herbier' }],
   names: [{ key: 'french', title: 'Noms français' }, { key: 'foreign', title: 'Autres langues' }],
   resources: [
     { key: 'inpn', title: 'INPN' }, { key: 'taxref', title: 'TAXREF' }, { key: 'gbif', title: 'GBIF' }, { key: 'inaturalist', title: 'iNaturalist' },
@@ -72,9 +81,9 @@ export const ACTIONS = SUBS.actions;
 
 /** Default order of each mode: what the mode is about first. Note blocks follow, in their creation order. @type {Record<Mode, string[]>} */
 const DEFAULTS = {
-  epure: ['name', 'photos', 'status', 'lookalikes', 'calendar', 'wikipedia', 'names', 'taxonomy', 'mine', 'descriptions', 'occurrences', 'gbifMedia', 'trefle', 'ids', 'resources'],
-  standard: ['name', 'status', 'lookalikes', 'taxonomy', 'mine', 'calendar', 'photos', 'wikipedia', 'descriptions', 'names', 'resources', 'occurrences', 'gbifMedia', 'trefle', 'ids'],
-  scientific: ['name', 'lookalikes', 'taxonomy', 'status', 'calendar', 'occurrences', 'wikipedia', 'descriptions', 'photos', 'gbifMedia', 'trefle', 'ids', 'mine', 'resources', 'names']
+  epure: ['name', 'photos', 'status', 'lookalikes', 'calendar', 'wikipedia', 'names', 'taxonomy', 'mine', 'descriptions', 'occurrences', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids', 'resources'],
+  standard: ['name', 'status', 'lookalikes', 'taxonomy', 'mine', 'calendar', 'photos', 'wikipedia', 'descriptions', 'names', 'resources', 'occurrences', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids'],
+  scientific: ['name', 'lookalikes', 'taxonomy', 'status', 'calendar', 'occurrences', 'wikipedia', 'descriptions', 'gbifProfile', 'photos', 'gbifMedia', 'trefle', 'literature', 'ids', 'mine', 'resources', 'names']
 };
 
 /** Keys of earlier versions (one list per mode) → today's block. */
@@ -125,20 +134,20 @@ export const blockOrder = view =>
 /** Has this view been arranged by hand? @param {Mode} view */
 export function isCustom(view) {
   const l = layout();
-  return Boolean(l.order[view] || l.hidden[view] || l.subOrder[view] || l.subHidden[view] || l.styles?.[view] || l.titleShown?.[view]);
+  return Boolean(l.order[view] || l.hidden[view] || l.subOrder[view] || l.subHidden[view] || l.styles?.[view] || l.titleShown?.[view] || l.hideEmpty?.[view]);
 }
 
 /** Saves a new layout (only what differs from the defaults). @param {Partial<SheetLayout>} patch */
 function save(patch) {
   const next = { ...layout(), ...patch };
-  for (const part of /** @type {const} */ (['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown'])) {
+  for (const part of /** @type {const} */ (['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown', 'hideEmpty'])) {
     for (const [view, value] of Object.entries(next[part])) {
       const empty = Array.isArray(value) ? false : !Object.keys(value || {}).length;
       if (!value || empty) delete next[part][/** @type {Mode} */ (view)];
     }
   }
   const isEmpty = !next.notes.length && !Object.keys(next.titles).length
-    && ['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown'].every(p => !Object.keys(/** @type {any} */ (next)[p] || {}).length);
+    && ['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown', 'hideEmpty'].every(p => !Object.keys(/** @type {any} */ (next)[p] || {}).length);
   try {
     if (isEmpty) localStorage.removeItem(config.storageKeys.sheetLayout);
     else localStorage.setItem(config.storageKeys.sheetLayout, JSON.stringify(next));
@@ -223,8 +232,21 @@ export const subTitle = (block, key) => SUBS[block]?.find(s => s.key === key)?.t
 export const subOrder = (view, block) =>
   merge(layout().subOrder[view]?.[block] || [], (SUBS[block] || []).map(s => s.key));
 
+/**
+ * Sub-blocks a mode leaves out until shown in Mode King (a block's list, once changed, is kept whole).
+ * @type {Record<Mode, Record<string, string[]>>}
+ */
+const SUB_HIDDEN = {
+  epure: { occurrences: ['months', 'years', 'regions', 'basis', 'datasets', 'distribution'], gbifMedia: ['herbarium'], taxonomy: ['gbifSynonyms'] },
+  standard: { occurrences: ['years', 'basis', 'datasets'], taxonomy: ['gbifSynonyms'] },
+  scientific: {}
+};
+
+/** The sub-blocks a view leaves out of a block. @param {Mode} view @param {string} block @returns {string[]} */
+const hiddenSubs = (view, block) => layout().subHidden[view]?.[block] ?? SUB_HIDDEN[view]?.[block] ?? [];
+
 /** @param {Mode} view @param {string} block @param {string} key */
-export const isSubHidden = (view, block, key) => (layout().subHidden[view]?.[block] || []).includes(key);
+export const isSubHidden = (view, block, key) => hiddenSubs(view, block).includes(key);
 
 /** The sub-blocks a view shows, in order. @param {Mode} view @param {string} block */
 export const shownSubs = (view, block) => subOrder(view, block).filter(k => !isSubHidden(view, block, k));
@@ -242,9 +264,11 @@ export function setSubOrder(view, block, keys) {
 export function setSubHidden(view, block, key, hidden) {
   const all = { ...layout().subHidden };
   const mine = { ...all[view] };
-  const keys = new Set(mine[block] || []);
+  const keys = new Set(hiddenSubs(view, block));
   if (hidden) keys.add(key); else keys.delete(key);
-  if (keys.size) mine[block] = [...keys]; else delete mine[block];
+  const byDefault = new Set(SUB_HIDDEN[view]?.[block] || []);
+  // Back to the mode's own choice: nothing stored; otherwise the whole list (an empty one included).
+  if (keys.size === byDefault.size && [...keys].every(k => byDefault.has(k))) delete mine[block]; else mine[block] = [...keys];
   all[view] = mine;
   save({ subHidden: all });
 }
@@ -288,6 +312,38 @@ export function setTitleShown(view, key, shown) {
   if (shown === !UNTITLED.includes(key)) delete mine[key]; else mine[key] = shown;
   all[view] = mine;
   save({ titleShown: all });
+}
+
+// ── Left out when empty ────────────────────────────────────────────────────
+
+/**
+ * Blocks that can have nothing for a plant (no protection, no look-alike, no article…): each mode chooses to
+ * show them anyway, with a « nothing known » line, or to leave them out. Name, classification, identifiers
+ * and resources always have something.
+ */
+export const CAN_BE_EMPTY = ['photos', 'status', 'lookalikes', 'mine', 'calendar', 'wikipedia', 'descriptions', 'names', 'occurrences', 'gbifMedia', 'gbifProfile', 'trefle', 'literature'];
+
+/** Left out when empty unless asked otherwise (as they always were). */
+const EMPTY_HIDDEN = ['wikipedia', 'names', 'gbifProfile', 'literature'];
+
+/** Can this block be left out when empty? (note blocks too: no text for this plant) @param {string} key */
+export const canBeEmpty = key => CAN_BE_EMPTY.includes(key) || isNote(key);
+
+/** Is this block left out of this view when it has nothing for the plant (outside Mode King)? @param {Mode} view @param {string} key */
+export function hidesEmpty(view, key) {
+  if (!canBeEmpty(key)) return false;
+  const chosen = layout().hideEmpty?.[view]?.[key];
+  return typeof chosen === 'boolean' ? chosen : EMPTY_HIDDEN.includes(key);
+}
+
+/** @param {Mode} view @param {string} key @param {boolean} on */
+export function setHidesEmpty(view, key, on) {
+  if (!canBeEmpty(key)) return;
+  const all = { ...layout().hideEmpty };
+  const mine = { ...all[view] };
+  if (on === EMPTY_HIDDEN.includes(key)) delete mine[key]; else mine[key] = on;
+  all[view] = mine;
+  save({ hideEmpty: all });
 }
 
 // ── Titles and note blocks ─────────────────────────────────────────────────
@@ -360,7 +416,7 @@ const foldedModules = view => blockModules().filter(m => !moduleOn(m, view));
 export function resetBlocks(view) {
   const l = layout();
   const without = (/** @type {any} */ per) => { const next = { ...per }; delete next[view]; return next; };
-  save({ order: without(l.order), hidden: without(l.hidden), subOrder: without(l.subOrder), subHidden: without(l.subHidden), styles: without(l.styles || {}), titleShown: without(l.titleShown || {}) });
+  save({ order: without(l.order), hidden: without(l.hidden), subOrder: without(l.subOrder), subHidden: without(l.subHidden), styles: without(l.styles || {}), titleShown: without(l.titleShown || {}), hideEmpty: without(l.hideEmpty || {}) });
   for (const b of BLOCKS) if (b.module && isHidden(view, b.key)) setHidden(view, b.key, false);
 }
 
@@ -401,6 +457,7 @@ export function importLayout(text) {
   const valid = perView(l.order || {}, isKeyList) && perView(l.hidden || {}, isKeyList)
     && perView(l.subOrder || {}, perBlock) && perView(l.subHidden || {}, perBlock)
     && perView(l.titleShown || {}, (/** @type {any} */ x) => x && typeof x === 'object' && Object.values(x).every(v => typeof v === 'boolean'))
+    && perView(l.hideEmpty || {}, (/** @type {any} */ x) => x && typeof x === 'object' && Object.values(x).every(v => typeof v === 'boolean'))
     && perView(l.styles || {}, (/** @type {any} */ x) => x && typeof x === 'object' && Object.entries(x).every(([block, st]) => STYLES[block]?.styles.some(s => s.key === st)))
     && l.titles && typeof l.titles === 'object' && Object.values(l.titles).every(t => typeof t === 'string' && t.length <= 60)
     && Array.isArray(l.notes) && l.notes.every((/** @type {any} */ n) => typeof n?.id === 'string' && /^[a-z0-9]{1,24}$/.test(n.id) && typeof n.title === 'string' && n.title.length <= 60)
@@ -408,7 +465,7 @@ export function importLayout(text) {
     && (!data.modulesOff || perView(data.modulesOff, x => Array.isArray(x) && x.every(m => MODULES.some(mm => mm.key === m))));
   if (!valid) throw new Error('Mise en page illisible ou incomplète.');
   writeNotes(data.notes || {});
-  save({ ...emptyLayout(), order: l.order || {}, hidden: l.hidden || {}, subOrder: l.subOrder || {}, subHidden: l.subHidden || {}, styles: l.styles || {}, titleShown: l.titleShown || {}, titles: l.titles, notes: l.notes });
+  save({ ...emptyLayout(), order: l.order || {}, hidden: l.hidden || {}, subOrder: l.subOrder || {}, subHidden: l.subHidden || {}, styles: l.styles || {}, titleShown: l.titleShown || {}, hideEmpty: l.hideEmpty || {}, titles: l.titles, notes: l.notes });
   for (const view of MODE_KEYS) {
     const off = data.modulesOff?.[view] || [];
     for (const m of blockModules()) setModule(m, view, !off.includes(m));

@@ -79,11 +79,12 @@ const readCompact = () => {
  * @typedef {{ order: Partial<Record<Mode, string[]>>, hidden: Partial<Record<Mode, string[]>>,
  *   subOrder: Partial<Record<Mode, Record<string, string[]>>>, subHidden: Partial<Record<Mode, Record<string, string[]>>>,
  *   styles: Partial<Record<Mode, Record<string, string>>>, titleShown: Partial<Record<Mode, Record<string, boolean>>>,
+ *   hideEmpty: Partial<Record<Mode, Record<string, boolean>>>,
  *   titles: Record<string, string>, notes: { id: string, title: string }[] }} SheetLayout
  */
 
 /** @returns {SheetLayout} */
-export const emptyLayout = () => ({ order: {}, hidden: {}, subOrder: {}, subHidden: {}, styles: {}, titleShown: {}, titles: {}, notes: [] });
+export const emptyLayout = () => ({ order: {}, hidden: {}, subOrder: {}, subHidden: {}, styles: {}, titleShown: {}, hideEmpty: {}, titles: {}, notes: [] });
 
 /** @param {string} key */
 const readJSON = key => {

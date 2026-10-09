@@ -7,7 +7,7 @@
 //  - IGN map tiles: cache-first, capped — areas already viewed stay available offline
 //  - remote API JSON: not cached here (app/core/sources.js caches it in IndexedDB)
 
-const VERSION = 'v58';
+const VERSION = 'v59';
 const SHELL_CACHE = 'geoflora-shell-' + VERSION;
 const IMAGE_CACHE = 'geoflora-images-' + VERSION;
 const IMAGE_LIMIT = 400;
@@ -75,6 +75,7 @@ const SHELL = [
   'app/components/gf-facet.js',
   'app/components/gf-filter-panel.js',
   'app/components/gf-map.js',
+  'app/components/gf-gbif-map.js',
   'app/components/gf-map-page.js',
   'app/components/gf-plant-card.js',
   'app/components/gf-plant-detail.js',
@@ -134,7 +135,8 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  if (url.hostname === TILE_HOST && url.pathname.startsWith('/wmts')) {
+  // IGN map tiles, and GBIF distribution tiles (plant sheet, Carte).
+  if ((url.hostname === TILE_HOST && url.pathname.startsWith('/wmts')) || (url.hostname === 'api.gbif.org' && url.pathname.startsWith('/v2/map/'))) {
     event.respondWith(cacheFirstTile(event));
     return;
   }
