@@ -78,11 +78,12 @@ const readCompact = () => {
  * block titles changed by hand; the note blocks created. Only what differs from the defaults is kept.
  * @typedef {{ order: Partial<Record<Mode, string[]>>, hidden: Partial<Record<Mode, string[]>>,
  *   subOrder: Partial<Record<Mode, Record<string, string[]>>>, subHidden: Partial<Record<Mode, Record<string, string[]>>>,
+ *   styles: Partial<Record<Mode, Record<string, string>>>,
  *   titles: Record<string, string>, notes: { id: string, title: string }[] }} SheetLayout
  */
 
 /** @returns {SheetLayout} */
-export const emptyLayout = () => ({ order: {}, hidden: {}, subOrder: {}, subHidden: {}, titles: {}, notes: [] });
+export const emptyLayout = () => ({ order: {}, hidden: {}, subOrder: {}, subHidden: {}, styles: {}, titles: {}, notes: [] });
 
 /** @param {string} key */
 const readJSON = key => {

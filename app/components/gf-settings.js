@@ -10,7 +10,7 @@ import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectS
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
 import {
-  SUBS, blockModuleName, blockOrder, blockTitle, createNote, deleteNote, exportLayout, importLayout, isCustom, isHidden, isNote,
+  STYLES, SUBS, blockModuleName, blockStyle, setBlockStyle, blockOrder, blockTitle, createNote, deleteNote, exportLayout, importLayout, isCustom, isHidden, isNote,
   isSubHidden, renameBlock, resetAll, resetBlocks, setBlockOrder, setHidden, setSubHidden, setSubOrder, subOrder, subTitle
 } from '../core/sheet-blocks.js';
 import './gf-sortable-list.js';
@@ -283,12 +283,14 @@ export class GfSettings extends LitElement {
             <gf-sortable-list label=${'Blocs de la fiche, ' + MODE_LABELS[mode]}
               .items=${blockOrder(mode).map(k => ({
                 key: k, label: blockTitle(k), checked: !isHidden(mode, k), renamable: true, removable: isNote(k), nested: Boolean(SUBS[k]),
+                choices: STYLES[k]?.styles.map(st => ({ key: st.key, label: st.title })), choice: blockStyle(mode, k) ?? undefined,
                 note: blockModuleName(k) ? `(module ${blockModuleName(k)})` : isNote(k) ? '(note)' : ''
               }))}
               .renderNested=${(/** @type {string} */ k) => this.#subList(mode, k)}
               @reorder=${e => setBlockOrder(mode, e.detail.keys)}
               @toggle=${e => setHidden(mode, e.detail.key, !e.detail.on)}
               @rename=${e => renameBlock(e.detail.key, e.detail.title)}
+              @choose=${e => setBlockStyle(mode, e.detail.key, e.detail.value)}
               @remove=${e => this.#removeNote(e.detail.key)}></gf-sortable-list>
           </div>`)}
       </div>

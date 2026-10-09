@@ -3,15 +3,16 @@ import { LitElement, html, css, nothing, repeat } from 'lit';
 import { icon } from '../core/icons.js';
 
 /**
- * @typedef {{ key: string, label: string, note?: string, checked: boolean, renamable?: boolean, removable?: boolean, nested?: boolean }} SortItem
+ * @typedef {{ key: string, label: string, note?: string, checked: boolean, renamable?: boolean, removable?: boolean, nested?: boolean,
+ *   choices?: { key: string, label: string }[], choice?: string }} SortItem
  */
 
 /**
  * An ordered list to rearrange: drag a row (mouse: the whole row; finger: its grip ⠿, the rest scrolls the page;
  * keyboard: ↑ ↓ on the grip), tick it on or off, rename it ✎, remove it ✕, open what it holds (« Sous-blocs »,
  * from `renderNested(key)`). Rows only change their CSS order while dragging (the pressed node stays put).
- * Events (not bubbling, so a list inside another stays its own): reorder {keys}, toggle {key, on},
- * rename {key, title}, remove {key}.
+ * A row may offer a choice (a block's style). Events (not bubbling, so a list inside another stays its own):
+ * reorder {keys}, toggle {key, on}, rename {key, title}, remove {key}, choose {key, value}.
  */
 export class GfSortableList extends LitElement {
   static properties = {
@@ -46,6 +47,7 @@ export class GfSortableList extends LitElement {
     label input { flex: none; margin: 0; }
     .muted { color: var(--gf-text-muted); font-size: 0.8em; }
     .edit { flex: 1; min-width: 0; font: inherit; padding: 2px 6px; border: 1px solid var(--gf-accent); border-radius: var(--gf-radius-sm); background: var(--gf-surface); color: var(--gf-text); }
+    select.choice { flex: none; min-height: 0; font: inherit; font-size: 0.8rem; padding: 1px 4px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-sm); background: var(--gf-surface); color: var(--gf-text); }
     .nested { margin: 2px 0 6px 30px; padding-left: 8px; border-left: 2px solid var(--gf-border); }
   `;
 
@@ -95,7 +97,7 @@ export class GfSortableList extends LitElement {
   /** @param {PointerEvent} e @param {string} key */
   #press(e, key) {
     const target = /** @type {Element} */ (e.target);
-    if (e.button !== 0 || this._editing || target.closest('input, button:not(.grip)')) return;
+    if (e.button !== 0 || this._editing || target.closest('input, select, button:not(.grip)')) return;
     // By finger, only the grip: elsewhere the touch scrolls the page.
     if (e.pointerType === 'touch' && !target.closest('.grip')) return;
     this.#drag = { key, y0: e.clientY, started: false };
@@ -198,6 +200,10 @@ export class GfSortableList extends LitElement {
             <input type="checkbox" .checked=${item.checked} @change=${(/** @type {Event} */ e) => this.#emit('toggle', { key, on: /** @type {HTMLInputElement} */ (e.target).checked })} />
             <span>${item.label}${item.note ? html` <span class="muted">${item.note}</span>` : nothing}</span>
           </label>`}
+        ${item.choices ? html`<select class="choice" aria-label="Style de « ${item.label} »" title="Style"
+          @change=${(/** @type {Event} */ e) => this.#emit('choose', { key, value: /** @type {HTMLSelectElement} */ (e.target).value })}>
+          ${item.choices.map(c => html`<option value=${c.key} ?selected=${c.key === item.choice}>${c.label}</option>`)}
+        </select>` : nothing}
         ${item.nested ? html`<button class="icon" type="button" aria-expanded=${open ? 'true' : 'false'} aria-label="Sous-blocs de « ${item.label} »" title="Sous-blocs"
           @click=${() => this.#toggleOpen(key)}>${icon('list-nested')}</button>` : nothing}
         ${item.renamable && !editing ? html`<button class="icon" type="button" aria-label="Renommer « ${item.label} »" title="Renommer"

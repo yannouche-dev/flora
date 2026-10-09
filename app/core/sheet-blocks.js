@@ -63,6 +63,15 @@ export const SUBS = {
   ]
 };
 
+/**
+ * Blocks shown in more than one style, chosen per mode in Mode King: the first style is the default, except
+ * where the mode's own default is given.
+ * @type {Record<string, { styles: { key: string, title: string }[], defaults?: Partial<Record<Mode, string>> }>}
+ */
+export const STYLES = {
+  names: { styles: [{ key: 'table', title: 'Tableau' }, { key: 'list', title: 'Liste' }], defaults: { epure: 'list' } }
+};
+
 /** Default order of each mode: what the mode is about first. Note blocks follow, in their creation order. @type {Record<Mode, string[]>} */
 const DEFAULTS = {
   epure: ['name', 'photos', 'status', 'lookalikes', 'collect', 'actions', 'calendar', 'wikipedia', 'names', 'taxonomy', 'mine', 'descriptions', 'occurrences', 'gbifMedia', 'trefle', 'ids', 'resources'],
@@ -118,20 +127,20 @@ export const blockOrder = view =>
 /** Has this view been arranged by hand? @param {Mode} view */
 export function isCustom(view) {
   const l = layout();
-  return Boolean(l.order[view] || l.hidden[view] || l.subOrder[view] || l.subHidden[view]);
+  return Boolean(l.order[view] || l.hidden[view] || l.subOrder[view] || l.subHidden[view] || l.styles?.[view]);
 }
 
 /** Saves a new layout (only what differs from the defaults). @param {Partial<SheetLayout>} patch */
 function save(patch) {
   const next = { ...layout(), ...patch };
-  for (const part of /** @type {const} */ (['order', 'hidden', 'subOrder', 'subHidden'])) {
+  for (const part of /** @type {const} */ (['order', 'hidden', 'subOrder', 'subHidden', 'styles'])) {
     for (const [view, value] of Object.entries(next[part])) {
       const empty = Array.isArray(value) ? false : !Object.keys(value || {}).length;
       if (!value || empty) delete next[part][/** @type {Mode} */ (view)];
     }
   }
   const isEmpty = !next.notes.length && !Object.keys(next.titles).length
-    && ['order', 'hidden', 'subOrder', 'subHidden'].every(p => !Object.keys(/** @type {any} */ (next)[p]).length);
+    && ['order', 'hidden', 'subOrder', 'subHidden', 'styles'].every(p => !Object.keys(/** @type {any} */ (next)[p] || {}).length);
   try {
     if (isEmpty) localStorage.removeItem(config.storageKeys.sheetLayout);
     else localStorage.setItem(config.storageKeys.sheetLayout, JSON.stringify(next));
@@ -208,6 +217,27 @@ export function setSubHidden(view, block, key, hidden) {
   save({ subHidden: all });
 }
 
+// ── Styles ─────────────────────────────────────────────────────────────────
+
+/** The style a block is shown in, in a view (null: the block has one style). @param {Mode} view @param {string} block */
+export function blockStyle(view, block) {
+  const def = STYLES[block];
+  if (!def) return null;
+  const chosen = layout().styles?.[view]?.[block];
+  return def.styles.some(s => s.key === chosen) ? /** @type {string} */ (chosen) : def.defaults?.[view] || def.styles[0].key;
+}
+
+/** @param {Mode} view @param {string} block @param {string} style */
+export function setBlockStyle(view, block, style) {
+  const def = STYLES[block];
+  if (!def?.styles.some(s => s.key === style)) return;
+  const all = { ...layout().styles };
+  const mine = { ...all[view] };
+  if (style === (def.defaults?.[view] || def.styles[0].key)) delete mine[block]; else mine[block] = style;
+  all[view] = mine;
+  save({ styles: all });
+}
+
 // ── Titles and note blocks ─────────────────────────────────────────────────
 
 /** Rename a block; an empty title gives it back its own. @param {string} key @param {string} title */
@@ -275,7 +305,7 @@ const foldedModules = view => [...new Set(BLOCKS.filter(b => b.module && isHidde
 export function resetBlocks(view) {
   const l = layout();
   const without = (/** @type {any} */ per) => { const next = { ...per }; delete next[view]; return next; };
-  save({ order: without(l.order), hidden: without(l.hidden), subOrder: without(l.subOrder), subHidden: without(l.subHidden) });
+  save({ order: without(l.order), hidden: without(l.hidden), subOrder: without(l.subOrder), subHidden: without(l.subHidden), styles: without(l.styles || {}) });
   for (const b of BLOCKS) if (b.module && isHidden(view, b.key)) setHidden(view, b.key, false);
 }
 
@@ -315,13 +345,14 @@ export function importLayout(text) {
   const l = data.layout || {};
   const valid = perView(l.order || {}, isKeyList) && perView(l.hidden || {}, isKeyList)
     && perView(l.subOrder || {}, perBlock) && perView(l.subHidden || {}, perBlock)
+    && perView(l.styles || {}, (/** @type {any} */ x) => x && typeof x === 'object' && Object.entries(x).every(([block, st]) => STYLES[block]?.styles.some(s => s.key === st)))
     && l.titles && typeof l.titles === 'object' && Object.values(l.titles).every(t => typeof t === 'string' && t.length <= 60)
     && Array.isArray(l.notes) && l.notes.every((/** @type {any} */ n) => typeof n?.id === 'string' && /^[a-z0-9]{1,24}$/.test(n.id) && typeof n.title === 'string' && n.title.length <= 60)
     && (!data.notes || (typeof data.notes === 'object' && Object.values(data.notes).every(byPlant => byPlant && typeof byPlant === 'object' && Object.values(byPlant).every(t => typeof t === 'string'))))
     && (!data.modulesOff || perView(data.modulesOff, x => Array.isArray(x) && x.every(m => MODULES.some(mm => mm.key === m))));
   if (!valid) throw new Error('Mise en page illisible ou incomplète.');
   writeNotes(data.notes || {});
-  save({ ...emptyLayout(), order: l.order || {}, hidden: l.hidden || {}, subOrder: l.subOrder || {}, subHidden: l.subHidden || {}, titles: l.titles, notes: l.notes });
+  save({ ...emptyLayout(), order: l.order || {}, hidden: l.hidden || {}, subOrder: l.subOrder || {}, subHidden: l.subHidden || {}, styles: l.styles || {}, titles: l.titles, notes: l.notes });
   for (const view of MODE_KEYS) {
     const off = data.modulesOff?.[view] || [];
     for (const b of BLOCKS) if (b.module) setHidden(view, b.key, off.includes(b.module));
