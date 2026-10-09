@@ -358,6 +358,8 @@ export class GfPlantDetail extends LitElement {
     .credit { font-size: 0.75rem; color: var(--gf-text-muted); margin: 8px 0 0; }
     .credit a { color: inherit; }
     .wiki p.credit { margin-top: 6px; }
+    /* The Wikipédia summary reads like the other blocks: flush left, no card (its source line names it). */
+    .description.wiki { background: none; padding: 0; border-radius: 0; }
     @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
   `];
 
