@@ -4,7 +4,7 @@ import { icon } from '../core/icons.js';
 
 /**
  * @typedef {{ key: string, label: string, note?: string, checked: boolean, renamable?: boolean, removable?: boolean, nested?: boolean,
- *   choices?: { key: string, label: string }[], choice?: string }} SortItem
+ *   choices?: { key: string, label: string }[], choice?: string, titled?: boolean }} SortItem
  */
 
 /**
@@ -12,7 +12,8 @@ import { icon } from '../core/icons.js';
  * keyboard: ↑ ↓ on the grip), tick it on or off, rename it ✎, remove it ✕, open what it holds (« Sous-blocs »,
  * from `renderNested(key)`). Rows only change their CSS order while dragging (the pressed node stays put).
  * A row may offer a choice (a block's style). Events (not bubbling, so a list inside another stays its own):
- * reorder {keys}, toggle {key, on}, rename {key, title}, remove {key}, choose {key, value}.
+ * reorder {keys}, toggle {key, on}, rename {key, title}, remove {key}, choose {key, value}, titled {key, shown}
+ * (a row with `titled` defined gets a « title shown » switch).
  */
 export class GfSortableList extends LitElement {
   static properties = {
@@ -39,7 +40,8 @@ export class GfSortableList extends LitElement {
     }
     button.icon:hover { color: var(--gf-text); background: var(--gf-surface-2); }
     button.icon:focus-visible, input:focus-visible { outline: none; box-shadow: var(--gf-focus); }
-    button.icon[aria-expanded='true'] { color: var(--gf-accent); }
+    button.icon[aria-expanded='true'], button.icon[aria-pressed='true'] { color: var(--gf-accent); }
+    button.icon[aria-pressed='false'] { opacity: 0.45; }
     .grip { cursor: grab; touch-action: none; }
     /* By finger the page scrolls through the list: drag by the grip, made bigger. */
     @media (pointer: coarse) { .grip { width: 34px; height: 34px; font-size: 1.05rem; } }
@@ -204,6 +206,9 @@ export class GfSortableList extends LitElement {
           @change=${(/** @type {Event} */ e) => this.#emit('choose', { key, value: /** @type {HTMLSelectElement} */ (e.target).value })}>
           ${item.choices.map(c => html`<option value=${c.key} ?selected=${c.key === item.choice}>${c.label}</option>`)}
         </select>` : nothing}
+        ${item.titled !== undefined ? html`<button class="icon" type="button" aria-pressed=${item.titled ? 'true' : 'false'}
+          aria-label=${(item.titled ? 'Masquer' : 'Montrer') + ` le titre « ${item.label} »`} title=${item.titled ? 'Titre affiché' : 'Titre caché'}
+          @click=${() => this.#emit('titled', { key, shown: !item.titled })}>${icon('type-h2')}</button>` : nothing}
         ${item.nested ? html`<button class="icon" type="button" aria-expanded=${open ? 'true' : 'false'} aria-label="Sous-blocs de « ${item.label} »" title="Sous-blocs"
           @click=${() => this.#toggleOpen(key)}>${icon('list-nested')}</button>` : nothing}
         ${item.renamable && !editing ? html`<button class="icon" type="button" aria-label="Renommer « ${item.label} »" title="Renommer"

@@ -127,20 +127,20 @@ export const blockOrder = view =>
 /** Has this view been arranged by hand? @param {Mode} view */
 export function isCustom(view) {
   const l = layout();
-  return Boolean(l.order[view] || l.hidden[view] || l.subOrder[view] || l.subHidden[view] || l.styles?.[view]);
+  return Boolean(l.order[view] || l.hidden[view] || l.subOrder[view] || l.subHidden[view] || l.styles?.[view] || l.titleShown?.[view]);
 }
 
 /** Saves a new layout (only what differs from the defaults). @param {Partial<SheetLayout>} patch */
 function save(patch) {
   const next = { ...layout(), ...patch };
-  for (const part of /** @type {const} */ (['order', 'hidden', 'subOrder', 'subHidden', 'styles'])) {
+  for (const part of /** @type {const} */ (['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown'])) {
     for (const [view, value] of Object.entries(next[part])) {
       const empty = Array.isArray(value) ? false : !Object.keys(value || {}).length;
       if (!value || empty) delete next[part][/** @type {Mode} */ (view)];
     }
   }
   const isEmpty = !next.notes.length && !Object.keys(next.titles).length
-    && ['order', 'hidden', 'subOrder', 'subHidden', 'styles'].every(p => !Object.keys(/** @type {any} */ (next)[p] || {}).length);
+    && ['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown'].every(p => !Object.keys(/** @type {any} */ (next)[p] || {}).length);
   try {
     if (isEmpty) localStorage.removeItem(config.storageKeys.sheetLayout);
     else localStorage.setItem(config.storageKeys.sheetLayout, JSON.stringify(next));
@@ -238,6 +238,26 @@ export function setBlockStyle(view, block, style) {
   save({ styles: all });
 }
 
+// ── Titles shown or not ────────────────────────────────────────────────────
+
+/** Blocks read without a title unless asked: the name, the actions, the photos, the Wikipédia summary (its source line names it). */
+const UNTITLED = ['name', 'actions', 'photos', 'wikipedia'];
+
+/** Does this block show its title in this view (outside Mode King)? @param {Mode} view @param {string} key */
+export function isTitleShown(view, key) {
+  const chosen = layout().titleShown?.[view]?.[key];
+  return typeof chosen === 'boolean' ? chosen : !UNTITLED.includes(key);
+}
+
+/** @param {Mode} view @param {string} key @param {boolean} shown */
+export function setTitleShown(view, key, shown) {
+  const all = { ...layout().titleShown };
+  const mine = { ...all[view] };
+  if (shown === !UNTITLED.includes(key)) delete mine[key]; else mine[key] = shown;
+  all[view] = mine;
+  save({ titleShown: all });
+}
+
 // ── Titles and note blocks ─────────────────────────────────────────────────
 
 /** Rename a block; an empty title gives it back its own. @param {string} key @param {string} title */
@@ -305,7 +325,7 @@ const foldedModules = view => [...new Set(BLOCKS.filter(b => b.module && isHidde
 export function resetBlocks(view) {
   const l = layout();
   const without = (/** @type {any} */ per) => { const next = { ...per }; delete next[view]; return next; };
-  save({ order: without(l.order), hidden: without(l.hidden), subOrder: without(l.subOrder), subHidden: without(l.subHidden), styles: without(l.styles || {}) });
+  save({ order: without(l.order), hidden: without(l.hidden), subOrder: without(l.subOrder), subHidden: without(l.subHidden), styles: without(l.styles || {}), titleShown: without(l.titleShown || {}) });
   for (const b of BLOCKS) if (b.module && isHidden(view, b.key)) setHidden(view, b.key, false);
 }
 
@@ -345,6 +365,7 @@ export function importLayout(text) {
   const l = data.layout || {};
   const valid = perView(l.order || {}, isKeyList) && perView(l.hidden || {}, isKeyList)
     && perView(l.subOrder || {}, perBlock) && perView(l.subHidden || {}, perBlock)
+    && perView(l.titleShown || {}, (/** @type {any} */ x) => x && typeof x === 'object' && Object.values(x).every(v => typeof v === 'boolean'))
     && perView(l.styles || {}, (/** @type {any} */ x) => x && typeof x === 'object' && Object.entries(x).every(([block, st]) => STYLES[block]?.styles.some(s => s.key === st)))
     && l.titles && typeof l.titles === 'object' && Object.values(l.titles).every(t => typeof t === 'string' && t.length <= 60)
     && Array.isArray(l.notes) && l.notes.every((/** @type {any} */ n) => typeof n?.id === 'string' && /^[a-z0-9]{1,24}$/.test(n.id) && typeof n.title === 'string' && n.title.length <= 60)
@@ -352,7 +373,7 @@ export function importLayout(text) {
     && (!data.modulesOff || perView(data.modulesOff, x => Array.isArray(x) && x.every(m => MODULES.some(mm => mm.key === m))));
   if (!valid) throw new Error('Mise en page illisible ou incomplète.');
   writeNotes(data.notes || {});
-  save({ ...emptyLayout(), order: l.order || {}, hidden: l.hidden || {}, subOrder: l.subOrder || {}, subHidden: l.subHidden || {}, styles: l.styles || {}, titles: l.titles, notes: l.notes });
+  save({ ...emptyLayout(), order: l.order || {}, hidden: l.hidden || {}, subOrder: l.subOrder || {}, subHidden: l.subHidden || {}, styles: l.styles || {}, titleShown: l.titleShown || {}, titles: l.titles, notes: l.notes });
   for (const view of MODE_KEYS) {
     const off = data.modulesOff?.[view] || [];
     for (const b of BLOCKS) if (b.module) setHidden(view, b.key, off.includes(b.module));

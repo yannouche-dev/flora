@@ -18,7 +18,7 @@ import './gf-add-to.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 import {
-  STYLES, SUBS, blockModuleName, blockOrder, blockStyle, blockTitle, setBlockStyle, createNote, deleteNote, isHidden, isNote, isSubHidden, noteText, renameBlock,
+  STYLES, SUBS, blockModuleName, blockOrder, blockStyle, blockTitle, isTitleShown, setBlockStyle, setTitleShown, createNote, deleteNote, isHidden, isNote, isSubHidden, noteText, renameBlock,
   setBlockOrder, setHidden, setNoteText, setSubHidden, setSubOrder, shownSubs, subOrder, subTitle
 } from '../core/sheet-blocks.js';
 import './gf-sortable-list.js';
@@ -258,7 +258,9 @@ export class GfPlantDetail extends LitElement {
     .actions { display: flex; flex-wrap: wrap; gap: 8px; }
     .names-list { margin: 0; }
     .block-title input.rename { flex: 1; min-width: 0; font: inherit; text-transform: none; letter-spacing: 0; padding: 2px 6px; border: 1px solid var(--gf-accent); border-radius: var(--gf-radius-sm); background: var(--gf-surface); color: var(--gf-text); }
-    .block-title .tool[aria-expanded='true'] { opacity: 1; color: var(--gf-accent); }
+    .block-title .tool[aria-expanded='true'], .block-title .tool[aria-pressed='true'] { opacity: 1; color: var(--gf-accent); }
+    /* Mode King: a title hidden outside the mode reads faded and struck. */
+    .block.untitled > .block-title .name { opacity: 0.55; text-decoration: line-through; }
     .block-title .styles { display: inline-flex; flex: none; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill); overflow: hidden; margin-right: 4px; }
     .block-title .styles button { min-height: 0; padding: 2px 8px; border: 0; border-radius: 0; background: var(--gf-surface); color: var(--gf-text-muted); font-size: 0.7rem; text-transform: none; letter-spacing: 0; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
     .block-title .styles button[aria-pressed='true'] { background: var(--gf-accent-soft); color: var(--gf-accent); }
@@ -660,8 +662,8 @@ export class GfPlantDetail extends LitElement {
       ${king && !sorting ? this.#newNote() : nothing}`;
   }
 
-  /** The name, the actions, the photos and the Wikipédia summary (its source line names it) read without a title. @param {string} key */
-  #headless = key => ['name', 'actions', 'photos', 'wikipedia'].includes(key);
+  /** A block read without its title (Mode King › title on/off, per view). @param {string} key */
+  #headless = key => !isTitleShown(this.view, key);
 
   /** A block as read outside « Mode King »: its title, its content. @param {string} key @param {any} ctx */
   #plainBlock(key, ctx) {
@@ -679,7 +681,8 @@ export class GfPlantDetail extends LitElement {
     const dragging = this._dragKey === key;
     const subsOpen = this._subsOpen.has(key);
     const style = slot === null ? '' : `order:${slot}${dragging ? `;transform:translateY(${this._dragY}px)` : ''}`;
-    return html`<section class="block ${off ? 'off' : ''} ${dragging ? 'dragging' : ''}" data-key=${key} style=${style}>
+    const titled = isTitleShown(this.view, key);
+    return html`<section class="block ${off ? 'off' : ''} ${dragging ? 'dragging' : ''} ${titled ? '' : 'untitled'}" data-key=${key} style=${style}>
       <h2 class="block-title" title="Glisser pour déplacer" @pointerdown=${e => this.#press(e, key)}>
         <button class="grip" type="button" aria-label="Déplacer le bloc « ${title} »" title="Glisser pour déplacer (↑ ↓ au clavier)"
           @keydown=${e => this.#gripKey(e, key)}>${icon('grip-vertical')}</button>
@@ -689,6 +692,9 @@ export class GfPlantDetail extends LitElement {
               @blur=${e => this.#rename(key, e.target.value)} />`
           : html`<span class="name">${title}</span>`}
         ${off && module ? html`<small class="off-note">module ${module} désactivé dans ce mode</small>` : nothing}
+        <button class="tool" type="button" aria-pressed=${titled ? 'true' : 'false'} aria-label=${(titled ? 'Masquer' : 'Montrer') + ` le titre « ${title} » hors mode King`}
+          title=${titled ? 'Titre affiché (toucher pour le cacher)' : 'Titre caché hors mode King (toucher pour l’afficher)'}
+          @click=${() => setTitleShown(this.view, key, !titled)}>${icon('type-h2')}</button>
         ${this._renaming === key ? nothing : html`<button class="tool" type="button" aria-label="Renommer le bloc « ${title} »" title=${isNote(key) ? 'Renommer' : 'Renommer (vide : nom d’origine)'}
           @click=${() => this.#startRename(key)}>${icon('pencil')}</button>`}
         ${STYLES[key] && !off ? html`<span class="styles" role="group" aria-label="Style du bloc « ${title} »">${STYLES[key].styles.map(st => html`
