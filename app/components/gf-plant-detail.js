@@ -104,6 +104,9 @@ function gbifFrenchNames(plant, details) {
   return names.slice(0, 12);
 }
 
+/** Same name, case and accents aside. @param {string | undefined} a @param {string | undefined} b */
+const sameName = (a, b) => Boolean(a && b) && String(a).localeCompare(String(b), 'fr', { sensitivity: 'base' }) === 0;
+
 const STATUS_TYPES = {
   PN: 'Protection nationale',
   PR: 'Protection régionale',
@@ -647,7 +650,8 @@ export class GfPlantDetail extends LitElement {
     const order = this._dragOrder || blockOrder(this.view);
     const sorting = Boolean(this._dragOrder);
     // Outside « Mode King », folded blocks are not there at all.
-    const keys = blockOrder(this.view).filter(k => king || !isHidden(this.view, k));
+    // Outside it too, the Noms block when the plant has no other name.
+    const keys = blockOrder(this.view).filter(k => king || (!isHidden(this.view, k) && !(k === 'names' && this.#namesEmpty(ctx))));
     return html`<div class="blocks ${king ? 'king' : ''} ${sorting ? 'sorting' : ''}">${repeat(keys, k => k, k =>
       king ? this.#block(k, ctx, sorting ? order.indexOf(k) : null) : this.#plainBlock(k, ctx))}</div>
       ${king && !sorting ? this.#newNote() : nothing}`;
@@ -762,6 +766,26 @@ export class GfPlantDetail extends LitElement {
       <p class="credit" aria-live="polite">${this._noteSaved === key ? 'Enregistré sur cet appareil.' : 'Note personnelle, gardée sur cet appareil.'}</p>`;
   }
 
+  /**
+   * The plant's other French names (TAXREF, GBIF, iNaturalist), without the one it is shown under and without
+   * repeats (case and accents aside).
+   * @param {any} ctx @returns {string[]}
+   */
+  #otherFrench({ plant, details, inat, name }) {
+    /** @type {string[]} */
+    const out = [];
+    for (const n of [...(plant.vernacularNames || []), ...gbifFrenchNames(plant, details), inat?.commonName].filter(Boolean)) {
+      if (!sameName(n, name) && !out.some(o => sameName(o, n))) out.push(n);
+    }
+    return out;
+  }
+
+  /** The Noms block has nothing to show here (outside Mode King it is then left out). @param {any} ctx */
+  #namesEmpty(ctx) {
+    if (this.#otherFrench(ctx).length) return false;
+    return blockStyle(this.view, 'names') === 'list' || this.view !== 'scientific' || !otherNames(ctx.details).length;
+  }
+
   /** A block's content, as this view shows it. @param {string} key @param {any} ctx */
   #content(key, ctx) {
     const v = this.view;
@@ -813,16 +837,16 @@ export class GfPlantDetail extends LitElement {
           : loading ? pending : empty(v === 'scientific' ? 'Aucune description sur GBIF.' : 'Aucune description en français sur GBIF.');
       }
       case 'names': {
-        const names = [...(plant.vernacularNames || []), ...gbifFrenchNames(plant, details)];
+        const names = this.#otherFrench(ctx);
         const foreign = v === 'scientific' ? otherNames(details) : [];
-        if (!names.length && !foreign.length) return loading ? pending : empty('Aucun nom français connu.');
+        if (!names.length && !foreign.length) return loading ? pending : empty('Aucun autre nom français connu.');
         // « Liste » (Épuré's default): just the French names.
         if (blockStyle(v, 'names') === 'list') return shownSubs(v, 'names').includes('french') && names.length ? html`<p class="names-list">${names.join(' · ')}</p>` : nothing;
         return html`<dl class="facts">${this.#subs('names', {
-          french: () => html`<dt>Noms français</dt><dd>${names.join(' · ') || '—'}${ctx.inat?.commonName ? html` <span class="muted">(iNaturalist : ${ctx.inat.commonName})</span>` : nothing}</dd>`,
+          french: () => names.length ? html`<dt>Autres noms français</dt><dd>${names.join(' · ')}</dd>` : nothing,
           foreign: () => foreign.length ? html`<dt>Autres langues (GBIF)</dt><dd>${foreign.map(([lang, list]) => html`<span class="lang">${lang || '?'}</span> ${list.join(', ')} `)}</dd>` : nothing
         })}</dl>
-        <p class="credit">Sources : TAXREF v18 · GBIF${ctx.inat?.commonName ? ' · iNaturalist' : ''}.</p>`;
+        <p class="credit">Sources : TAXREF v18 · GBIF${names.some(n => sameName(n, ctx.inat?.commonName)) ? ' · iNaturalist' : ''}.</p>`;
       }
       case 'occurrences': return this.#occurrences(ctx);
       case 'gbifMedia': {
