@@ -157,27 +157,61 @@ export function setBlockOrder(view, keys) {
   save({ order });
 }
 
-/** Is this block folded in this view? A block of a module is folded when the module is off. @param {Mode} view @param {string} key */
-export function isHidden(view, key) {
-  const module = blockOf(key)?.module;
-  if (module) return !moduleOn(module, view) || (module === 'wikipedia' && !moduleOn('wikidata', view));
-  return (layout().hidden[view] || []).includes(key);
-}
+/** The blocks that show a module (GBIF has several). @param {ModuleKey} module */
+const blocksOf = module => BLOCKS.filter(b => b.module === module).map(b => b.key);
 
-/** Fold a block away, or bring it back. @param {Mode} view @param {string} key @param {boolean} hidden */
-export function setHidden(view, key, hidden) {
-  const module = blockOf(key)?.module;
-  if (module) {
-    setModule(module, view, !hidden);
-    // The Wikipédia article is found through Wikidata.
-    if (module === 'wikipedia' && !hidden && !moduleOn('wikidata', view)) setModule('wikidata', view, true);
-    return;
-  }
-  const keys = new Set(layout().hidden[view] || []);
-  if (hidden) keys.add(key); else keys.delete(key);
+/** @param {Mode} view @param {Set<string>} keys */
+function writeHidden(view, keys) {
   const all = { ...layout().hidden };
   if (keys.size) all[view] = [...keys]; else delete all[view];
   save({ hidden: all });
+}
+
+/**
+ * Is this block folded in this view? A block of a module is folded when the module is off, or when it was
+ * folded itself (a module may have several blocks: folding one leaves the others).
+ * @param {Mode} view @param {string} key
+ */
+export function isHidden(view, key) {
+  const module = blockOf(key)?.module;
+  const own = (layout().hidden[view] || []).includes(key);
+  if (module) return own || !moduleOn(module, view) || (module === 'wikipedia' && !moduleOn('wikidata', view));
+  return own;
+}
+
+/**
+ * Fold a block away, or bring it back. A module goes off with the last of its blocks, and comes back on
+ * with the first one (its other blocks staying folded).
+ * @param {Mode} view @param {string} key @param {boolean} hidden
+ */
+export function setHidden(view, key, hidden) {
+  const keys = new Set(layout().hidden[view] || []);
+  const module = blockOf(key)?.module;
+  if (!module) {
+    if (hidden) keys.add(key); else keys.delete(key);
+    writeHidden(view, keys);
+    return;
+  }
+  const siblings = blocksOf(module);
+  if (hidden) {
+    keys.add(key);
+    if (siblings.every(k => keys.has(k))) {
+      // The last one: the module goes off (Réglages › Modules), its blocks folded with it.
+      for (const k of siblings) keys.delete(k);
+      writeHidden(view, keys);
+      setModule(module, view, false);
+      return;
+    }
+    writeHidden(view, keys);
+    return;
+  }
+  // The module was off: only this block comes back.
+  if (!moduleOn(module, view)) for (const k of siblings) keys.add(k);
+  keys.delete(key);
+  writeHidden(view, keys);
+  setModule(module, view, true);
+  // The Wikipédia article is found through Wikidata.
+  if (module === 'wikipedia' && !moduleOn('wikidata', view)) setModule('wikidata', view, true);
 }
 
 // ── Sub-blocks ─────────────────────────────────────────────────────────────
@@ -316,8 +350,11 @@ export function setNoteText(key, plantId, text) {
 
 // ── Reset, export, import ──────────────────────────────────────────────────
 
-/** Module blocks folded in a view (the module switches they mirror). @param {Mode} view */
-const foldedModules = view => [...new Set(BLOCKS.filter(b => b.module && isHidden(view, b.key)).map(b => /** @type {ModuleKey} */ (b.module)))];
+/** The modules that have blocks. */
+const blockModules = () => [...new Set(BLOCKS.filter(b => b.module).map(b => /** @type {ModuleKey} */ (b.module)))];
+
+/** Modules with blocks that are off in a view (each block's own folding is in the layout). @param {Mode} view */
+const foldedModules = view => blockModules().filter(m => !moduleOn(m, view));
 
 /** Back to the default order, every block and sub-block shown (modules included). Titles and notes stay. @param {Mode} view */
 export function resetBlocks(view) {
@@ -374,6 +411,7 @@ export function importLayout(text) {
   save({ ...emptyLayout(), order: l.order || {}, hidden: l.hidden || {}, subOrder: l.subOrder || {}, subHidden: l.subHidden || {}, styles: l.styles || {}, titleShown: l.titleShown || {}, titles: l.titles, notes: l.notes });
   for (const view of MODE_KEYS) {
     const off = data.modulesOff?.[view] || [];
-    for (const b of BLOCKS) if (b.module) setHidden(view, b.key, off.includes(b.module));
+    for (const m of blockModules()) setModule(m, view, !off.includes(m));
+    if (!off.includes('wikipedia') && !moduleOn('wikidata', view)) setModule('wikidata', view, true);
   }
 }
