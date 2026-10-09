@@ -258,8 +258,8 @@ export class GfFlora extends LitElement {
     return i < 0 ? null : { i, n: items.length, prev: items[i - 1]?.id ?? null, next: items[i + 1]?.id ?? null };
   }
 
-  /** The card (the plant sheet's swipe surface). */
-  get #card() { return /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.swipe')); }
+  /** The card on top (the open plant's sheet), not the one waiting underneath. */
+  get #card() { return /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.swipe:not(.under)')); }
 
   #reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
 
