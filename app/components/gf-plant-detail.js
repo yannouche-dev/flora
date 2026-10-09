@@ -4,7 +4,9 @@ import { STATUS_LABELS } from '../config.js';
 import * as db from '../core/db.js';
 import { lastSearchHash } from '../core/query.js';
 import { StoreController, whenReady } from '../core/store.js';
-import { getMembership, toggleFavorite } from '../core/collections.js';
+import { formatDistance, getMembership, toggleFavorite } from '../core/collections.js';
+import { lastFix, watchLocation } from '../core/geo.js';
+import { savedRadius } from '../core/nearby.js';
 import { href } from '../core/router.js';
 import { share } from '../core/share.js';
 import * as sources from '../core/sources.js';
@@ -15,10 +17,12 @@ import './gf-calendar.js';
 import './gf-status.js';
 import './gf-lookalikes.js';
 import './gf-add-to.js';
+import './gf-sheet-map.js';
+import { OVERLAYS } from '../core/ign.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 import {
-  STYLES, SUBS, blockModuleName, blockOrder, blockStyle, blockTitle, isTitleShown, setBlockStyle, setTitleShown, createNote, deleteNote, isHidden, isNote, isSubHidden, noteText, renameBlock,
+  STYLES, SUBS, canBeEmpty, hidesEmpty, setHidesEmpty, isMap, isAddedMap, mapConfig, setMapConfig, createMap, deleteMap, blockModuleName, blockOrder, blockStyle, blockTitle, isTitleShown, setBlockStyle, setTitleShown, createNote, deleteNote, isHidden, isNote, isSubHidden, noteText, renameBlock,
   setBlockOrder, setHidden, setNoteText, setSubHidden, setSubOrder, shownSubs, subOrder, subTitle
 } from '../core/sheet-blocks.js';
 import './gf-sortable-list.js';
@@ -68,9 +72,9 @@ function gallery(plant, details) {
   return images;
 }
 
-/** GBIF descriptions, French first, then English; one per type. */
-function descriptions(details) {
-  const rows = details?.gbif?.descriptions?.results || [];
+/** GBIF descriptions, French first, then English; one per type. @param {any} gbif the sheet's GBIF data */
+function descriptions(gbif) {
+  const rows = gbif?.descriptions?.results || [];
   const order = { fra: 0, fre: 0, fr: 0, eng: 1, en: 1 };
   const byType = new Map();
   rows
@@ -83,8 +87,9 @@ function descriptions(details) {
   return [...byType.values()].filter(row => row.text).slice(0, 4);
 }
 
-function distributions(details) {
-  const rows = details?.gbif?.distributions?.results || [];
+/** @param {any} gbif */
+function distributions(gbif) {
+  const rows = gbif?.distributions?.results || [];
   const seen = new Set();
   return rows
     .map(row => ({
@@ -95,9 +100,10 @@ function distributions(details) {
     .slice(0, 24);
 }
 
-function gbifFrenchNames(plant, details) {
+/** @param {any} plant @param {any} gbif */
+function gbifFrenchNames(plant, gbif) {
   const known = new Set((plant.vernacularNames || []).map(name => name.toLowerCase()));
-  const names = (details?.gbif?.vernacularNames?.results || [])
+  const names = (gbif?.vernacularNames?.results || [])
     .filter(row => /^(fra|fre|fr)$/.test(row.language || ''))
     .map(row => row.vernacularName)
     .filter(name => name && !known.has(name.toLowerCase()) && known.add(name.toLowerCase()));
@@ -116,26 +122,105 @@ const STATUS_TYPES = {
   LRR: 'Liste rouge régionale'
 };
 
-/** GBIF species media: still images under a free licence, credited. */
-function gbifMedia(details) {
-  const free = (/** @type {string} */ l) => /creativecommons\.org\/(licenses\/by(-sa)?\/|publicdomain)|^cc0|^cc[ -]by/i.test(l || '');
-  return (details?.gbif?.media?.results || [])
-    .filter(m => m.identifier && (!m.type || m.type === 'StillImage') && free(m.license))
-    .slice(0, 12)
-    .map(m => ({
-      url: m.identifier,
-      author: m.creator || m.rightsHolder || '',
-      license: /publicdomain|cc0/i.test(m.license) ? 'CC0 / domaine public' : /by-sa/i.test(m.license) ? 'CC BY-SA' : 'CC BY',
-      licenseUrl: /^https?:/.test(m.license) ? m.license : '',
-      source: 'GBIF',
-      sourceUrl: m.references || (details?.identifiers?.gbif?.id ? 'https://www.gbif.org/species/' + details.identifiers.gbif.id : '')
-    }));
+/** « 12 % » of a total. @param {number} n @param {number} total */
+const percent = (n, total) => total ? (n / total * 100).toLocaleString('fr-FR', { maximumFractionDigits: n / total < 0.1 ? 1 : 0 }) + ' %' : '';
+
+/** « Près d’ici » was asked once in this visit: later sheets look around without asking again. */
+let nearAllowed = false;
+
+/**
+ * One GPS fix, or why there is none (20 s at most).
+ * @returns {Promise<{ coordinates: [number, number], timestamp: number } | { error: string } | null>}
+ */
+function oneFix() {
+  return new Promise(resolve => {
+    /** @type {(() => void) | null} */ let stop = null;
+    let done = false;
+    const finish = (/** @type {any} */ value) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      // The watch calls back synchronously once before `stop` is known.
+      queueMicrotask(() => stop?.());
+      resolve(value);
+    };
+    const timer = setTimeout(() => finish(null), 20000);
+    stop = watchLocation(state => {
+      if (state.fix && Date.now() - state.fix.timestamp < 5 * 60000) finish(state.fix);
+      else if (state.error) finish({ error: state.error });
+    });
+  });
 }
 
-/** Vernacular names in other languages (GBIF), grouped by language. */
-function otherNames(details) {
+/** Kinds of GBIF records, in French. */
+const BASIS_LABELS = {
+  HUMAN_OBSERVATION: 'Observations', OBSERVATION: 'Observations (autres)', MACHINE_OBSERVATION: 'Observations automatiques',
+  PRESERVED_SPECIMEN: 'Spécimens d’herbier', LIVING_SPECIMEN: 'Spécimens vivants (jardins)', MATERIAL_SAMPLE: 'Échantillons',
+  MATERIAL_CITATION: 'Citations de publications', FOSSIL_SPECIMEN: 'Fossiles', OCCURRENCE: 'Non précisé'
+};
+
+/** IUCN Red List categories, in French. */
+const IUCN_LABELS = {
+  EX: 'Éteinte', EW: 'Éteinte à l’état sauvage', CR: 'En danger critique', EN: 'En danger', VU: 'Vulnérable',
+  NT: 'Quasi menacée', LC: 'Préoccupation mineure', DD: 'Données insuffisantes', NE: 'Non évaluée'
+};
+
+/** Habitats and life forms of GBIF species profiles that read the same in any checklist, in French. */
+const HABITATS = [[/terrestr|terr[ií]cola/i, 'terrestre'], [/fresh|dulce|douce|dulcícola/i, 'eau douce'], [/brackish|saumâtre|salobre/i, 'eau saumâtre'], [/marine|marin/i, 'marin']];
+const LIFE_FORMS = [
+  [/^(herb|herbaceous|hierba|erva|herbacée)s?$/i, 'herbacée'], [/^(shrub|arbusto|arbuste)s?$/i, 'arbuste'], [/^(subshrub|subarbusto|sous-arbrisseau)s?$/i, 'sous-arbrisseau'],
+  [/^(tree|árbol|arbre|árvore)s?$/i, 'arbre'], [/climb|vine|liana|trepadeira|grimpante/i, 'grimpante'],
+  [/geophyt/i, 'géophyte'], [/hemicryptophyt/i, 'hémicryptophyte'], [/chamaephyt/i, 'chaméphyte'], [/therophyt/i, 'thérophyte'], [/phanerophyt/i, 'phanérophyte']
+];
+
+/**
+ * What GBIF species profiles agree on: habitats and life forms (only values that translate cleanly), and the
+ * checklists that flag the plant as invasive somewhere. @param {any} gbif
+ */
+function profile(gbif) {
+  const rows = gbif?.speciesProfiles?.results || [];
+  /** @type {Map<string, number>} */ const habitats = new Map();
+  /** @type {Map<string, number>} */ const forms = new Map();
+  /** @type {string[]} */ const invasive = [];
+  const count = (/** @type {Map<string, number>} */ m, /** @type {string} */ k) => m.set(k, (m.get(k) || 0) + 1);
+  for (const r of rows) {
+    const found = new Set();
+    for (const [re, label] of HABITATS) if (re.test(String(r.habitat || ''))) found.add(label);
+    if (r.terrestrial) found.add('terrestre');
+    if (r.freshwater) found.add('eau douce');
+    if (r.marine) found.add('marin');
+    found.forEach(h => count(habitats, h));
+    const lifeForm = String(r.lifeForm || '');
+    if (lifeForm && !lifeForm.startsWith('{')) for (const part of lifeForm.split(/[,;|/]/)) {
+      const label = LIFE_FORMS.find(([re]) => re.test(part.trim()))?.[1];
+      if (label) count(forms, label);
+    }
+    if (r.isInvasive === true && r.source && !invasive.includes(r.source)) invasive.push(r.source);
+  }
+  const sorted = (/** @type {Map<string, number>} */ m) => [...m].sort((a, b) => b[1] - a[1]);
+  return { habitats: sorted(habitats), forms: sorted(forms), invasive, sources: rows.length };
+}
+
+/** GBIF synonyms that TAXREF does not list (names compared without authors). @param {any} plant @param {any} gbif */
+function gbifSynonyms(plant, gbif) {
+  const known = (plant.synonyms || []).map((/** @type {string} */ n) => n.toLowerCase());
+  /** @type {string[]} */ const out = [];
+  for (const r of gbif?.synonyms?.results || []) {
+    const canonical = r.canonicalName || r.scientificName;
+    // Shown with its rank and author (« Urtica dioica subsp. eudioica Selander »), compared without them.
+    const name = r.scientificName || canonical;
+    if (!canonical || out.includes(name)) continue;
+    const lower = canonical.toLowerCase();
+    if (lower === String(plant.scientificName).toLowerCase() || known.some((/** @type {string} */ k) => k === lower || k.startsWith(lower + ' '))) continue;
+    out.push(name);
+  }
+  return out.slice(0, 30);
+}
+
+/** Vernacular names in other languages (GBIF), grouped by language. @param {any} gbif */
+function otherNames(gbif) {
   const byLang = new Map();
-  for (const row of details?.gbif?.vernacularNames?.results || []) {
+  for (const row of gbif?.vernacularNames?.results || []) {
     const lang = row.language || '';
     if (!row.vernacularName || /^(fra|fre|fr)$/.test(lang)) continue;
     const list = byLang.get(lang) || [];
@@ -180,7 +265,8 @@ export class GfPlantDetail extends LitElement {
     view: { reflect: true },
     _wiki: { state: true },
     _science: { state: true },
-    _occurrences: { state: true },
+    _gbif: { state: true },
+    _near: { state: true },
     _spotsOpen: { state: true },
     _plant: { state: true },
     _details: { state: true },
@@ -191,6 +277,7 @@ export class GfPlantDetail extends LitElement {
     _dragY: { state: true },
     _renaming: { state: true },
     _subsOpen: { state: true },
+    _mapsOpen: { state: true },
     _newNote: { state: true },
     _noteSaved: { state: true }
   };
@@ -301,6 +388,12 @@ export class GfPlantDetail extends LitElement {
     .block-title .styles button { min-height: 0; padding: 2px 8px; border: 0; border-radius: 0; background: var(--gf-surface); color: var(--gf-text-muted); font-size: 0.7rem; text-transform: none; letter-spacing: 0; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
     .block-title .styles button[aria-pressed='true'] { background: var(--gf-accent-soft); color: var(--gf-accent); }
     .block-title .styles button:focus-visible { outline: none; box-shadow: var(--gf-focus); }
+    .map-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 0 0 10px; padding: 10px; border: 1px dashed var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface); font-size: 0.85rem; }
+    .map-form fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 6px; align-content: start; }
+    .map-form legend { font-weight: 700; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--gf-text-muted); padding: 0; margin-bottom: 2px; }
+    .map-form label { display: grid; gap: 2px; }
+    .map-form label.check { display: flex; gap: 6px; align-items: center; }
+    .map-placeholder { border-radius: var(--gf-radius); background: var(--gf-surface-2); }
     .subs-editor { margin: 0 0 10px 20px; padding: 8px 10px; border: 1px dashed var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface); }
     .note-text { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface); color: var(--gf-text); resize: vertical; }
     .note-text:focus-visible { outline: none; border-color: var(--gf-accent); box-shadow: var(--gf-focus); }
@@ -321,6 +414,8 @@ export class GfPlantDetail extends LitElement {
     .block.dragging .grip { opacity: 1; color: var(--gf-accent); }
     /* A part with nothing for this plant hides itself; the block then says so. */
     .content .if-empty { display: none; }
+    /* Left out when empty: a block whose component found nothing for this plant. */
+    .block.hide-empty:has(> .content > [hidden]:not([loading])) { display: none; }
     .content > [hidden]:not([loading]) ~ .if-empty { display: block; }
     @media (prefers-reduced-motion: reduce) { .block { transition: none; } }
     h2 {
@@ -402,6 +497,28 @@ export class GfPlantDetail extends LitElement {
     .statuses th { color: var(--gf-text-muted); font-weight: 600; }
     .science p.muted { font-size: 0.9rem; }
     .credit { font-size: 0.75rem; color: var(--gf-text-muted); margin: 8px 0 0; }
+    /* GBIF charts: one bar per month or year (no library). */
+    .bars { display: flex; align-items: flex-end; gap: 3px; height: 84px; margin: 4px 0 0; }
+    .bars .bar { flex: 1; min-width: 0; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; }
+    .bars .bar i { display: block; width: 100%; min-height: 1px; background: var(--gf-accent); border-radius: 3px 3px 0 0; opacity: 0.85; }
+    .bars.months { height: 100px; }
+    .bars.months .bar b { font-size: 0.65rem; font-weight: 600; color: var(--gf-text-muted); line-height: 1.4; }
+    .bars.years { gap: 1px; height: 64px; }
+    .axis { display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--gf-text-muted); }
+    .small { font-size: 0.8rem; }
+    .counts { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; font-size: 0.9rem; }
+    .counts li { display: grid; grid-template-columns: 1fr auto 3.6em; gap: 10px; align-items: baseline; }
+    .counts li > :first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .counts b { font-variant-numeric: tabular-nums; font-weight: 600; }
+    .counts small { color: var(--gf-text-muted); text-align: right; font-variant-numeric: tabular-nums; }
+    .near { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; font-size: 0.88rem; }
+    .near li { display: grid; grid-template-columns: 4.5em 1fr auto; gap: 10px; align-items: baseline; }
+    .near li span { color: var(--gf-text-muted); min-width: 0; overflow-wrap: anywhere; }
+    .papers { margin: 0; padding-left: 18px; display: grid; gap: 8px; font-size: 0.9rem; }
+    .papers small { display: block; color: var(--gf-text-muted); }
+    /* Herbarium sheets are tall: shown whole, not cropped. */
+    .gallery.herbarium img { aspect-ratio: 3 / 4; object-fit: contain; background: #f4f1ea; }
+    .specimen { display: block; font-size: 0.75rem; font-weight: 600; margin-bottom: 2px; }
     .credit a { color: inherit; }
     .wiki p.credit { margin-top: 6px; }
     /* The Wikipédia summary reads like the other blocks: flush left, no card (its source line names it). */
@@ -431,12 +548,22 @@ export class GfPlantDetail extends LitElement {
     this._renaming = null;
     /** @type {Set<string>} */
     this._subsOpen = new Set();
+    /** King mode: the map blocks showing their settings. @type {Set<string>} */
+    this._mapsOpen = new Set();
     this._newNote = false;
     /** Note block whose text was just saved. @type {string | null} */
     this._noteSaved = null;
     /** @type {any} */ this._wiki = undefined;
     /** @type {any} */ this._science = undefined;
-    /** @type {number | null | undefined} */ this._occurrences = undefined;
+    /**
+     * GBIF data of the plant, each part loaded when a block or sub-block shows it (undefined: not yet; null: none):
+     * vernacularNames, descriptions, distributions, speciesProfiles, synonyms, iucn, stats, photos, herbarium,
+     * literature; names of datasets and areas in `titles`.
+     * @type {Record<string, any>}
+     */
+    this._gbif = {};
+    /** « Près d’ici »: not asked, looking for the position, loading, the result, or what went wrong. @type {any} */
+    this._near = undefined;
     this._spotsOpen = false;
   }
 
@@ -489,7 +616,8 @@ export class GfPlantDetail extends LitElement {
     this._error = null;
     this._wiki = undefined;
     this._science = undefined;
-    this._occurrences = undefined;
+    this._gbif = {};
+    this._near = undefined;
     this._spotsOpen = false;
     this.#requested.clear();
     this.scrollTop = 0;
@@ -533,7 +661,8 @@ export class GfPlantDetail extends LitElement {
     this.#requested.clear();
     this._wiki = undefined;
     this._science = undefined;
-    this._occurrences = undefined;
+    this._gbif = {};
+    this._near = undefined;
     const details = await sources.details(plant, abort.signal, this.view).catch(() => null);
     if (abort.signal.aborted) return;
     this._details = details;
@@ -557,8 +686,69 @@ export class GfPlantDetail extends LitElement {
     if (shown('wikipedia') && once('wiki')) settle(sources.wikipedia(plant, qid, signal, v), x => { this._wiki = x; });
     const science = shown('ids') || (v === 'scientific' && (shown('taxonomy') || shown('status')));
     if (science && once('science')) settle(sources.wikidataScience(plant, qid, signal, v), x => { this._science = x; });
-    const gbif = details?.identifiers?.gbif;
-    if (shown('occurrences') && once('occurrences')) settle(sources.occurrencesFR(plant, gbif?.nubKey ?? gbif?.id, signal, v), x => { this._occurrences = x; });
+    this.#loadGbif(plant, details, signal, settle, once, shown);
+  }
+
+  /**
+   * GBIF, part by part: only what the shown blocks and sub-blocks use (the Backbone key comes with the details).
+   * @param {any} plant @param {any} details @param {AbortSignal | undefined} signal
+   * @param {(task: Promise<any>, set: (v: any) => void) => void} settle @param {(key: string) => boolean} once
+   * @param {(key: string) => boolean} shown
+   */
+  #loadGbif(plant, details, signal, settle, once, shown) {
+    const v = this.view;
+    if (details === undefined) return;
+    const key = details?.identifiers?.gbif?.id ?? null;
+    const sub = (/** @type {string} */ block, /** @type {string} */ k) => shown(block) && !isSubHidden(v, block, k);
+    const put = (/** @type {string} */ name, /** @type {any} */ value) => { this._gbif = { ...this._gbif, [name]: value }; };
+    const part = (/** @type {string} */ name, /** @type {() => Promise<any>} */ load) => {
+      if (!once('gbif:' + name)) return;
+      if (!key) { put(name, null); return; }
+      settle(load(), x => put(name, x));
+    };
+    const species = (/** @type {string} */ name, /** @type {string} */ api = name) => part(name, () => sources.gbifSpecies(plant, key, api, signal, v));
+    if (shown('names')) species('vernacularNames');
+    if (shown('descriptions')) species('descriptions');
+    if (sub('occurrences', 'distribution')) species('distributions');
+    if (shown('gbifProfile')) species('speciesProfiles');
+    if (v === 'scientific' && sub('taxonomy', 'gbifSynonyms')) species('synonyms');
+    if (v === 'scientific' && sub('status', 'iucn')) species('iucn', 'iucnRedListCategory');
+    if (['gbif', 'months', 'years', 'regions', 'basis', 'datasets'].some(k => sub('occurrences', k))) {
+      part('stats', () => sources.gbifStats(plant, key, signal, v).then(stats => { this.#loadTitles(stats, signal); return stats; }));
+    }
+    if (!this.#store.state.modules.photos[v]) { if (once('gbif:noPhotos')) { put('photos', []); put('herbarium', []); } }
+    else {
+      if (sub('gbifMedia', 'photos')) part('photos', () => sources.gbifMedia(plant, key, 'photos', signal, v));
+      if (sub('gbifMedia', 'herbarium')) part('herbarium', () => sources.gbifMedia(plant, key, 'herbarium', signal, v));
+    }
+    if (shown('literature')) part('literature', () => sources.gbifLiterature(plant, key, signal, v));
+    // « Près d’ici » asked on an earlier sheet of this visit: look around again, without asking.
+    if (nearAllowed && key && sub('occurrences', 'near') && once('gbif:near')) queueMicrotask(() => this.#findNear());
+    // Arrived before the region and source names were shown: name them now.
+    if (this._gbif.stats) this.#loadTitles(this._gbif.stats, signal);
+  }
+
+  /** Names of the top sources and of the areas the plant is found in (each fetched once, then cached). @param {any} stats @param {AbortSignal} [signal] */
+  #loadTitles(stats, signal) {
+    if (!stats) return;
+    const v = this.view;
+    const shown = (/** @type {string} */ k) => !isHidden(v, 'occurrences') && !isSubHidden(v, 'occurrences', k);
+    /** @type {[string, Promise<string | null>][]} */
+    const wanted = [];
+    const titles = this._gbif.titles || {};
+    if (shown('datasets')) for (const d of stats.datasets) if (!(d.key in titles)) wanted.push([d.key, sources.gbifDatasetTitle(d.key, signal, v)]);
+    if (shown('regions')) {
+      for (const r of stats.regions) if (!(r.gid in titles)) wanted.push([r.gid, sources.gadmName(r.gid, signal, v)]);
+      for (const d of stats.departments.slice(0, 5)) if (!(d.gid in titles)) wanted.push([d.gid, sources.gadmName(d.gid, signal, v)]);
+    }
+    if (!wanted.length) return;
+    const plant = this._plant;
+    // Placeholders first: asked once.
+    this._gbif = { ...this._gbif, titles: { ...titles, ...Object.fromEntries(wanted.map(([k]) => [k, undefined])) } };
+    Promise.all(wanted.map(([k, task]) => task.catch(() => null).then(name => [k, name]))).then(named => {
+      if (signal?.aborted || this._plant !== plant) return;
+      this._gbif = { ...this._gbif, titles: { ...this._gbif.titles, ...Object.fromEntries(named) } };
+    });
   }
 
   #store = new StoreController(this);
@@ -718,7 +908,7 @@ export class GfPlantDetail extends LitElement {
     const sorting = Boolean(this._dragOrder);
     // Outside « Mode King », folded blocks are not there at all.
     // Outside it too, a block with nothing for this plant (no other name, no Wikipédia article).
-    const keys = blockOrder(this.view).filter(k => king || (!isHidden(this.view, k) && !this.#emptyHere(k, ctx)));
+    const keys = blockOrder(this.view).filter(k => king || (!isHidden(this.view, k) && !(hidesEmpty(this.view, k) && this.#emptyHere(k, ctx))));
     return html`<div class="blocks ${king ? 'king' : ''} ${sorting ? 'sorting' : ''}">${repeat(keys, k => k, k =>
       king ? this.#block(k, ctx, sorting ? order.indexOf(k) : null) : this.#plainBlock(k, ctx))}</div>
       ${king && !sorting ? this.#newNote() : nothing}`;
@@ -729,7 +919,8 @@ export class GfPlantDetail extends LitElement {
 
   /** A block as read outside « Mode King »: its title, its content. @param {string} key @param {any} ctx */
   #plainBlock(key, ctx) {
-    return html`<section class="block ${this.#headless(key) ? 'headless' : ''}" data-key=${key}>
+    // A component that hides itself when it has nothing (protection, look-alikes, calendar): the block goes with it (CSS).
+    return html`<section class="block ${this.#headless(key) ? 'headless' : ''} ${hidesEmpty(this.view, key) ? 'hide-empty' : ''}" data-key=${key}>
       ${this.#headless(key) ? nothing : html`<h2 class="block-title"><span class="name">${blockTitle(key)}</span></h2>`}
       <div class="content">${this.#content(key, ctx)}</div>
     </section>`;
@@ -757,6 +948,10 @@ export class GfPlantDetail extends LitElement {
         <button class="tool" type="button" aria-pressed=${titled ? 'true' : 'false'} aria-label=${(titled ? 'Masquer' : 'Montrer') + ` le titre « ${title} » hors mode King`}
           title=${titled ? 'Titre affiché (toucher pour le cacher)' : 'Titre caché hors mode King (toucher pour l’afficher)'}
           @click=${() => setTitleShown(this.view, key, !titled)}>${icon('type-h2')}</button>
+        ${canBeEmpty(key) ? html`<button class="tool" type="button" aria-pressed=${hidesEmpty(this.view, key) ? 'true' : 'false'}
+          aria-label=${hidesEmpty(this.view, key) ? `Afficher « ${title} » même vide, hors mode King` : `Ne pas afficher « ${title} » s’il est vide, hors mode King`}
+          title=${hidesEmpty(this.view, key) ? 'Masqué quand il est vide (toucher pour l’afficher quand même)' : 'Affiché même vide (toucher pour le masquer quand il est vide)'}
+          @click=${() => setHidesEmpty(this.view, key, !hidesEmpty(this.view, key))}>${icon('eye-slash')}</button>` : nothing}
         ${this._renaming === key ? nothing : html`<button class="tool" type="button" aria-label="Renommer le bloc « ${title} »" title=${isNote(key) ? 'Renommer' : 'Renommer (vide : nom d’origine)'}
           @click=${() => this.#startRename(key)}>${icon('pencil')}</button>`}
         ${STYLES[key] && !off ? html`<span class="styles" role="group" aria-label="Style du bloc « ${title} »">${STYLES[key].styles.map(st => html`
@@ -769,8 +964,12 @@ export class GfPlantDetail extends LitElement {
               @click=${() => setHidden(this.view, key, false)}>${icon('arrow-counterclockwise')}</button>`
           : html`<button class="tool" type="button" aria-label="Masquer le bloc « ${title} »" title=${module ? `Masquer (coupe le module ${module} dans ce mode)` : 'Masquer'}
               @click=${() => setHidden(this.view, key, true)}>${icon('trash3')}</button>`}
+        ${isMap(key) && !off ? html`<button class="tool" type="button" aria-expanded=${this._mapsOpen.has(key) ? 'true' : 'false'} aria-label="Configurer la carte « ${title} »" title="Ce que la carte montre et permet"
+          @click=${() => { const open = new Set(this._mapsOpen); if (open.has(key)) open.delete(key); else open.add(key); this._mapsOpen = open; }}>${icon('gear')}</button>` : nothing}
         ${isNote(key) ? html`<button class="tool" type="button" aria-label="Supprimer le bloc « ${title} »" title="Supprimer le bloc et ses textes"
           @click=${() => { if (confirm(`Supprimer le bloc « ${title} » et tout ce qui y est écrit ?`)) deleteNote(key); }}>${icon('x-lg')}</button>` : nothing}
+        ${isAddedMap(key) ? html`<button class="tool" type="button" aria-label="Supprimer le bloc « ${title} »" title="Supprimer cette carte"
+          @click=${() => { if (confirm(`Supprimer la carte « ${title} » ?`)) deleteMap(key); }}>${icon('x-lg')}</button>` : nothing}
       </h2>
       ${subsOpen && !off ? html`<div class="subs-editor">
         <gf-sortable-list label=${'Sous-blocs de ' + title}
@@ -778,6 +977,7 @@ export class GfPlantDetail extends LitElement {
           @reorder=${e => setSubOrder(this.view, key, e.detail.keys)}
           @toggle=${e => setSubHidden(this.view, key, e.detail.key, !e.detail.on)}></gf-sortable-list>
       </div>` : nothing}
+      ${isMap(key) && !off && this._mapsOpen.has(key) ? this.#mapForm(key) : nothing}
       ${off ? nothing : html`<div class="content">${this.#content(key, ctx)}</div>`}
     </section>`;
   }
@@ -815,7 +1015,65 @@ export class GfPlantDetail extends LitElement {
           this._newNote = true;
           await this.updateComplete;
           /** @type {HTMLInputElement | null} */ (this.renderRoot.querySelector('.new-note input'))?.focus();
-        }}>${icon('plus-lg')} Bloc Note</button></p>`;
+        }}>${icon('plus-lg')} Bloc Note</button>
+        <button type="button" @click=${async () => {
+          const key = createMap('Carte');
+          this._mapsOpen = new Set([...this._mapsOpen, key]);
+          await this.updateComplete;
+          this.renderRoot.querySelector(`.block[data-key="${key}"]`)?.scrollIntoView({ block: 'center' });
+        }}>${icon('plus-lg')} Bloc Carte</button></p>`;
+  }
+
+  /**
+   * A « Carte » block: the map component, set up as configured (the card under a swiped one shows a
+   * placeholder rather than a second map). @param {string} key @param {any} ctx
+   */
+  #map(key, { plant, details, inat }) {
+    const config = mapConfig(key);
+    if (this.preview) return html`<div class="map-placeholder" style=${`height:${{ s: 180, m: 260, l: 380 }[config.height]}px`}></div>`;
+    return html`<gf-sheet-map .plant=${plant} .gbifKey=${details?.identifiers?.gbif?.id ?? null} .inatId=${inat?.id ?? null}
+      .config=${config} mode=${this.view}
+      @map-layers=${(/** @type {CustomEvent} */ e) => {
+        const { base, overlays } = e.detail;
+        if (base !== config.base || overlays.join() !== config.overlays.join()) setMapConfig(key, { base, overlays });
+      }}></gf-sheet-map>`;
+  }
+
+  /** Mode King: what a map block shows and lets do (the same in every mode). @param {string} key */
+  #mapForm(key) {
+    const c = mapConfig(key);
+    const set = (/** @type {any} */ patch) => setMapConfig(key, patch);
+    /** @param {string} label @param {string} field @param {[string, string][]} options */
+    const select = (label, field, options) => html`<label>${label}
+      <select @change=${(/** @type {any} */ e) => set({ [field]: e.target.value })}>
+        ${options.map(([value, text]) => html`<option value=${value} ?selected=${/** @type {any} */ (c)[field] === value}>${text}</option>`)}
+      </select></label>`;
+    const check = (/** @type {string} */ label, /** @type {boolean} */ on, /** @type {(on: boolean) => void} */ change) =>
+      html`<label class="check"><input type="checkbox" .checked=${on} @change=${(/** @type {any} */ e) => change(e.target.checked)} /> ${label}</label>`;
+    const action = (/** @type {keyof typeof c.actions} */ a, /** @type {string} */ label) => check(label, c.actions[a], on => set({ actions: { [a]: on } }));
+    return html`<div class="map-form" role="group" aria-label="Réglages de la carte">
+      <fieldset><legend>Couches</legend>
+        ${select('Répartition GBIF', 'gbif', [['fr', 'France'], ['world', 'Monde'], ['off', 'Non']])}
+        ${check('Mes lieux de cette plante (et chaque plant)', c.places, on => set({ places: on }))}
+        ${select('Observations proches', 'near', [['off', 'Non'], ['both', 'iNaturalist et GBIF'], ['inat', 'iNaturalist'], ['gbif', 'GBIF']])}
+      </fieldset>
+      <fieldset><legend>Fond et couches IGN</legend>
+        ${select('Fond', 'base', [['plan', 'Plan IGN'], ['photo', 'Photos aériennes']])}
+        ${Object.entries(OVERLAYS).map(([k, def]) => check(def.label, c.overlays.includes(k),
+          on => set({ overlays: on ? [...c.overlays, k] : c.overlays.filter(o => o !== k) })))}
+      </fieldset>
+      <fieldset><legend>Affichage</legend>
+        ${select('Cadrage', 'frame', [['france', 'France entière'], ['content', 'Ajusté à ce qui est affiché'], ['me', 'Autour de moi']])}
+        ${select('Hauteur', 'height', [['s', 'Petite'], ['m', 'Moyenne'], ['l', 'Grande']])}
+      </fieldset>
+      <fieldset><legend>Actions</legend>
+        ${action('open', 'Ouvrir dans la Carte')}
+        ${action('create', 'Créer un endroit ici (appui long)')}
+        ${action('edit', 'Déplacer mes plants (✎)')}
+        ${action('spot', 'Noter ici')}
+        ${action('locate', 'Me localiser')}
+      </fieldset>
+    </div>`;
   }
 
   /** @type {number | undefined} */
@@ -838,10 +1096,10 @@ export class GfPlantDetail extends LitElement {
    * and accents aside). Not iNaturalist's common name: it comes in English when there is no French one.
    * @param {any} ctx @returns {string[]}
    */
-  #otherFrench({ plant, details, name }) {
+  #otherFrench({ plant, name }) {
     /** @type {string[]} */
     const out = [];
-    for (const n of [...(plant.vernacularNames || []), ...gbifFrenchNames(plant, details)].filter(Boolean)) {
+    for (const n of [...(plant.vernacularNames || []), ...gbifFrenchNames(plant, this._gbif)].filter(Boolean)) {
       if (!sameName(n, name) && !out.some(o => sameName(o, n))) out.push(n);
     }
     return out;
@@ -853,15 +1111,33 @@ export class GfPlantDetail extends LitElement {
    * @param {string} key @param {any} ctx
    */
   #emptyHere(key, ctx) {
-    if (key === 'names') return this.#namesEmpty(ctx);
-    if (key === 'wikipedia') return !this._wiki;
-    return false;
+    const v = this.view;
+    const g = this._gbif;
+    const loaded = (/** @type {any} */ x) => x !== undefined;
+    if (isNote(key)) return !noteText(key, ctx.plant.id);
+    switch (key) {
+      case 'names': return this.#namesEmpty(ctx);
+      // Wikipédia: shown when the summary arrives.
+      case 'wikipedia': return !this._wiki;
+      case 'photos': return ctx.photosOff || (!ctx.loading && !ctx.images.length);
+      // Épuré and Standard: the component hides itself when empty (CSS, see .hide-empty).
+      case 'status': return v === 'scientific' && !ctx.plant.statuses?.length && loaded(this._science) && !this._science?.iucn && loaded(g.iucn) && !g.iucn?.code;
+      case 'mine': return !(getMembership().byPlant.get(ctx.plant.id) || []).length;
+      case 'descriptions': return loaded(g.descriptions) && !descriptions(g).filter(row => v === 'scientific' || /^(fra|fre|fr)$/.test(row.language || '')).length;
+      case 'occurrences': return !ctx.loading && !ctx.details?.identifiers?.gbif?.id && !ctx.inat?.observationsCount;
+      case 'gbifMedia': return ctx.photosOff || shownSubs(v, 'gbifMedia').every(k => loaded(g[k]) && !g[k]?.length);
+      case 'gbifProfile': { const p = profile(g); return !p.habitats.length && !p.forms.length && !p.invasive.length; }
+      case 'literature': return !g.literature?.items?.length;
+      case 'trefle': return !ctx.loading && !trefleFacts(ctx.details).length;
+      default: return false;
+    }
   }
+
 
   /** The Noms block has nothing to show here. @param {any} ctx */
   #namesEmpty(ctx) {
     if (this.#otherFrench(ctx).length) return false;
-    return blockStyle(this.view, 'names') === 'list' || this.view !== 'scientific' || !otherNames(ctx.details).length;
+    return blockStyle(this.view, 'names') === 'list' || this.view !== 'scientific' || !otherNames(this._gbif).length;
   }
 
   /** A block's content, as this view shows it. @param {string} key @param {any} ctx */
@@ -873,6 +1149,7 @@ export class GfPlantDetail extends LitElement {
     // After a part that hides itself when it has nothing for this plant.
     const ifEmpty = (/** @type {string} */ text) => html`<p class="muted if-empty">${text}</p>`;
     if (isNote(key)) return this.#note(key, plant);
+    if (isMap(key)) return this.#map(key, ctx);
     switch (key) {
       case 'name': return this.#name(ctx);
       case 'photos': {
@@ -907,15 +1184,15 @@ export class GfPlantDetail extends LitElement {
       case 'wikipedia':
         return this._wiki ? this.#wikipedia() : this._wiki === undefined ? pending : empty('Pas d’article Wikipédia en français trouvé.');
       case 'descriptions': {
-        const texts = descriptions(details).filter(row => v === 'scientific' || /^(fra|fre|fr)$/.test(row.language || ''));
+        const texts = descriptions(this._gbif).filter(row => v === 'scientific' || /^(fra|fre|fr)$/.test(row.language || ''));
         return texts.length
           ? texts.map(row => html`<div class="description"><small>${row.type || 'Description'}${row.source ? ' — ' + row.source : ''} · ${row.language} · GBIF</small>${row.text}</div>`)
-          : loading ? pending : empty(v === 'scientific' ? 'Aucune description sur GBIF.' : 'Aucune description en français sur GBIF.');
+          : this._gbif.descriptions === undefined ? pending : empty(v === 'scientific' ? 'Aucune description sur GBIF.' : 'Aucune description en français sur GBIF.');
       }
       case 'names': {
         const names = this.#otherFrench(ctx);
-        const foreign = v === 'scientific' ? otherNames(details) : [];
-        if (!names.length && !foreign.length) return loading ? pending : empty('Aucun autre nom français connu.');
+        const foreign = v === 'scientific' ? otherNames(this._gbif) : [];
+        if (!names.length && !foreign.length) return this._gbif.vernacularNames === undefined ? pending : empty('Aucun autre nom français connu.');
         // « Liste » (Épuré's default): just the French names.
         if (blockStyle(v, 'names') === 'list') return shownSubs(v, 'names').includes('french') && names.length ? html`<p class="names-list">${names.join(' · ')}</p>` : nothing;
         return html`<dl class="facts">${this.#subs('names', {
@@ -925,13 +1202,9 @@ export class GfPlantDetail extends LitElement {
         <p class="credit">Sources : TAXREF v18 · GBIF.</p>`;
       }
       case 'occurrences': return this.#occurrences(ctx);
-      case 'gbifMedia': {
-        const media = ctx.photosOff ? [] : gbifMedia(details);
-        return media.length ? html`<div class="gallery">${media.map(image => html`<figure>
-          <a href=${image.sourceUrl || image.url} target="_blank" rel="noopener"><img src=${image.url} alt=${plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" /></a>
-          <figcaption><gf-attribution .media=${image}></gf-attribution></figcaption></figure>`)}</div>`
-          : loading ? pending : empty(ctx.photosOff ? 'Photos en ligne désactivées dans ce mode.' : 'Aucun média sur GBIF.');
-      }
+      case 'gbifMedia': return this.#gbifMedia(ctx);
+      case 'gbifProfile': return this.#gbifProfile();
+      case 'literature': return this.#literature(ctx);
       case 'trefle': {
         const facts = trefleFacts(details);
         if (facts.length) return html`<dl class="facts">${facts.map(([k, val]) => html`<dt>${k}</dt><dd>${val}</dd>`)}</dl>
@@ -949,6 +1222,7 @@ export class GfPlantDetail extends LitElement {
   #taxonomy({ plant, wikidata, status, inat }) {
     const sci = this._science;
     const chain = [...(sci?.classification || [])].reverse();
+    const gbifSyn = shownSubs(this.view, 'taxonomy').includes('gbifSynonyms') ? gbifSynonyms(plant, this._gbif) : [];
     return html`
       <dl class="facts">${this.#subs('taxonomy', {
         chain: () => html`<dt>Classification</dt>
@@ -958,41 +1232,202 @@ export class GfPlantDetail extends LitElement {
         author: () => html`<dt>Auteur</dt><dd>${plant.author || '—'}</dd>`,
         france: () => html`<dt>Statut en France</dt><dd>${status ? `${STATUS_LABELS[status] || status} (TAXREF ${status})` : '—'}</dd>`,
         synonyms: () => plant.synonyms?.length ? html`<dt>Synonymes (${plant.synonyms.length})</dt><dd class="sci-list"><i>${plant.synonyms.join(' · ')}</i></dd>` : nothing,
+        gbifSynonyms: () => gbifSyn.length ? html`<dt>Synonymes GBIF absents de TAXREF (${gbifSyn.length})</dt><dd class="sci-list"><i>${gbifSyn.join(' · ')}</i></dd>` : nothing,
         inat: () => inat?.observationsCount != null ? html`<dt>Observations iNaturalist</dt><dd>${inat.observationsCount.toLocaleString('fr-FR')}</dd>` : nothing
       })}</dl>
-      <p class="credit">Sources : TAXREF v18 (PatriNat) · Wikidata (classification)${inat?.observationsCount != null ? ' · iNaturalist' : ''}.</p>`;
+      <p class="credit">Sources : TAXREF v18 (PatriNat) · Wikidata (classification)${inat?.observationsCount != null ? ' · iNaturalist' : ''}${gbifSyn.length ? ' · GBIF Backbone (synonymes)' : ''}.</p>`;
   }
 
   /** @param {any} ctx */
   #statuses({ plant, wikidata }) {
     const sci = this._science;
+    // Global IUCN category from GBIF (IUCN Red List checklist) when Wikidata has none.
+    const gbifIucn = !sci?.iucn && this._gbif.iucn?.code ? String(this._gbif.iucn.code) : null;
     const statuses = [...(plant.statuses || [])].sort((a, b) =>
       Object.keys(STATUS_TYPES).indexOf(a.type) - Object.keys(STATUS_TYPES).indexOf(b.type) || String(a.area).localeCompare(String(b.area), 'fr'));
     return html`
       ${this.#subs('status', {
         iucn: () => html`<dl class="facts">
-          <dt>UICN (monde)</dt><dd>${sci?.iucn ? sci.iucn.label || sci.iucn.id : sci === undefined && wikidata ? html`<span class="muted">chargement…</span>` : '—'}</dd>
+          <dt>UICN (monde)</dt><dd>${sci?.iucn ? sci.iucn.label || sci.iucn.id
+            : gbifIucn ? `${IUCN_LABELS[/** @type {keyof typeof IUCN_LABELS} */ (gbifIucn)] || gbifIucn} (${gbifIucn}) — GBIF`
+            : (sci === undefined && wikidata) || this._gbif.iucn === undefined ? html`<span class="muted">chargement…</span>` : '—'}</dd>
         </dl>`,
         table: () => statuses.length ? html`<table class="statuses">
           <thead><tr><th>Type</th><th>Territoire</th><th>Statut</th></tr></thead>
           <tbody>${statuses.map(st => html`<tr><td>${STATUS_TYPES[st.type] || st.type}</td><td>${st.area}${st.level ? html` <span class="muted">(${st.level})</span>` : nothing}</td><td>${st.code && st.code !== st.label ? html`<b>${st.code}</b> ` : nothing}${st.label}</td></tr>`)}</tbody>
         </table>` : html`<p class="muted">Aucune protection, réglementation ni liste rouge connue (INPN).</p>`
       })}
-      <p class="credit">Sources : INPN – Base de connaissance Statuts (PatriNat) · Wikidata (UICN).</p>`;
+      <p class="credit">Sources : INPN – Base de connaissance Statuts (PatriNat) · ${gbifIucn ? 'GBIF (Liste rouge UICN)' : 'Wikidata (UICN)'}.</p>`;
   }
 
   /** @param {any} ctx */
   #occurrences({ details, inat }) {
-    const gbif = details?.identifiers?.gbif;
-    const places = distributions(details);
+    const key = details?.identifiers?.gbif?.id ?? null;
+    const g = this._gbif;
+    const stats = g.stats;
+    const places = distributions(g);
     const pending = html`<span class="muted">chargement…</span>`;
+    const search = 'https://www.gbif.org/occurrence/search?country=FR&occurrence_status=present&has_geospatial_issue=false&taxon_key=' + key;
+    const statsShown = ['gbif', 'months', 'years', 'regions', 'basis', 'datasets'].some(k => shownSubs(this.view, 'occurrences').includes(k));
     return html`${this.#subs('occurrences', {
       inat: () => html`<dl class="facts"><dt>Observations iNaturalist</dt><dd>${inat?.observationsCount != null ? inat.observationsCount.toLocaleString('fr-FR') : details === undefined ? pending : '—'}</dd></dl>`,
-      gbif: () => html`<dl class="facts"><dt>Occurrences GBIF en France</dt><dd>${this._occurrences != null ? html`<a href=${'https://www.gbif.org/occurrence/search?country=FR&taxon_key=' + (gbif?.nubKey ?? gbif?.id)} target="_blank" rel="noopener">${this._occurrences.toLocaleString('fr-FR')}</a>` : (this._occurrences === undefined && gbif) || details === undefined ? pending : '—'}</dd></dl>`,
-      distribution: () => places.length ? html`<h3>Répartition (GBIF)</h3>
+      gbif: () => html`<dl class="facts"><dt>Occurrences GBIF en France</dt><dd>${stats?.count != null
+        ? html`<a href=${search} target="_blank" rel="noopener">${stats.count.toLocaleString('fr-FR')}</a>`
+        : details === undefined || (key && stats === undefined) ? pending : '—'}</dd></dl>`,
+      near: () => key ? this.#nearView() : nothing,
+      months: () => stats?.count ? this.#monthBars(stats.months) : nothing,
+      years: () => stats?.years?.length ? this.#yearBars(stats.years) : nothing,
+      regions: () => stats?.count ? this.#areas(stats) : nothing,
+      basis: () => stats?.basis?.length ? html`<h3>Types de relevés</h3><ul class="counts">${stats.basis.map((/** @type {any} */ b) => html`
+        <li><span>${BASIS_LABELS[/** @type {keyof typeof BASIS_LABELS} */ (b.basis)] || b.basis}</span><b>${b.count.toLocaleString('fr-FR')}</b>
+          <small>${percent(b.count, stats.count)}</small></li>`)}</ul>` : nothing,
+      datasets: () => stats?.datasets?.length ? html`<h3>Principales sources</h3><ul class="counts">${stats.datasets.map((/** @type {any} */ d) => html`
+        <li><a href=${'https://www.gbif.org/dataset/' + d.key} target="_blank" rel="noopener">${g.titles?.[d.key] ?? '…'}</a><b>${d.count.toLocaleString('fr-FR')}</b>
+          <small>${percent(d.count, stats.count)}</small></li>`)}</ul>` : nothing,
+      distribution: () => places.length ? html`<h3>Répartition dans le monde (listes GBIF)</h3>
         <ul class="inline">${places.map(row => html`<li>${row.place}${row.means ? html` <span class="muted">(${row.means.toLowerCase()})</span>` : nothing}</li>`)}</ul>` : nothing
+    })}
+    ${key && statsShown && stats ? html`<p class="credit">Source : <a href=${search} target="_blank" rel="noopener">GBIF.org</a> — occurrences en France : présences seulement, coordonnées sans problème connu.</p>` : nothing}`;
+  }
+
+  /** Occurrences per month, January to December. @param {number[]} months */
+  #monthBars(months) {
+    const max = Math.max(1, ...months);
+    const names = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+    return html`<h3>Occurrences par mois</h3>
+      <div class="bars months" role="img" aria-label=${'Occurrences GBIF en France par mois : ' + months.map((c, i) => `${names[i]} ${c}`).join(', ')}>
+        ${months.map((c, i) => html`<span class="bar" title=${`${names[i]} : ${c.toLocaleString('fr-FR')}`}><i style=${`height:${Math.round(c / max * 100)}%`}></i><b>${'JFMAMJJASOND'[i]}</b></span>`)}
+      </div>`;
+  }
+
+  /** Occurrences per year, the last 60 years (older ones summed). @param {{ year: number, count: number }[]} years */
+  #yearBars(years) {
+    const last = years[years.length - 1].year;
+    const first = Math.max(years[0].year, last - 59);
+    const by = new Map(years.map(y => [y.year, y.count]));
+    /** @type {[number, number][]} */ const list = [];
+    for (let y = first; y <= last; y++) list.push([y, by.get(y) || 0]);
+    const max = Math.max(1, ...list.map(([, c]) => c));
+    const older = years.filter(y => y.year < first).reduce((n, y) => n + y.count, 0);
+    return html`<h3>Occurrences par année</h3>
+      <div class="bars years" role="img" aria-label=${`Occurrences GBIF en France par année, de ${first} à ${last}`}>
+        ${list.map(([y, c]) => html`<span class="bar" title=${`${y} : ${c.toLocaleString('fr-FR')}`}><i style=${`height:${Math.round(c / max * 100)}%`}></i></span>`)}
+      </div>
+      <div class="axis"><span>${first}</span><span>${last}</span></div>
+      ${older ? html`<p class="muted small">Et ${older.toLocaleString('fr-FR')} avant ${first}.</p>` : nothing}`;
+  }
+
+  /** Regions and départements (GADM areas of France) with occurrences. @param {any} stats */
+  #areas(stats) {
+    // Points near a border may fall in a neighbour's areas: France's only (GADM ids FRA.*).
+    const regions = stats.regions.filter((/** @type {any} */ r) => r.gid.startsWith('FRA.'));
+    const departments = stats.departments.filter((/** @type {any} */ d) => d.gid.startsWith('FRA.'));
+    if (!regions.length && !departments.length) return nothing;
+    const t = this._gbif.titles || {};
+    const name = (/** @type {any} */ a) => html`${t[a.gid] ?? '…'} <small class="muted">(${a.count.toLocaleString('fr-FR')})</small>`;
+    return html`<h3>Régions et départements</h3>
+      <p>Occurrences dans <strong>${departments.length}</strong> département${departments.length > 1 ? 's' : ''} et <strong>${regions.length}</strong> région${regions.length > 1 ? 's' : ''}.</p>
+      <dl class="facts">
+        ${departments.length ? html`<dt>Départements les plus cités</dt><dd>${departments.slice(0, 5).map((/** @type {any} */ d, /** @type {number} */ i) => html`${i ? ' · ' : ''}${name(d)}`)}</dd>` : nothing}
+        ${regions.length ? html`<dt>Régions</dt><dd>${regions.map((/** @type {any} */ r, /** @type {number} */ i) => html`${i ? ' · ' : ''}${name(r)}`)}</dd>` : nothing}
+      </dl>
+      <p class="credit">Découpage administratif : GADM, via GBIF.</p>`;
+  }
+
+  /** « Près d’ici »: GBIF occurrences around the user, on demand (the position is sent to GBIF). */
+  #nearView() {
+    const n = this._near;
+    const radius = savedRadius();
+    const head = html`<h3>Près d’ici</h3>`;
+    if (!n) return html`${head}
+      <p><button type="button" class="near-ask" @click=${() => this.#findNear()}>${icon('crosshair')} Chercher autour de moi (${formatDistance(radius)})</button></p>
+      <p class="credit">Votre position est envoyée à GBIF pour cette recherche, sans être enregistrée.</p>`;
+    if (n.state === 'locating') return html`${head}<p class="muted">Recherche de votre position…</p>`;
+    if (n.state === 'loading') return html`${head}<p class="muted">chargement…</p>`;
+    if (n.state === 'error') return html`${head}<p class="muted">${n.message} <button class="link" type="button" @click=${() => this.#findNear()}>Réessayer</button></p>`;
+    return html`${head}
+      ${n.total ? html`<p><strong>${n.total.toLocaleString('fr-FR')}</strong> occurrence${n.total > 1 ? 's' : ''} GBIF à moins de ${formatDistance(n.radius)}${n.nearest.length ? ' ; les plus proches :' : '.'}</p>
+        <ul class="near">${n.nearest.map((/** @type {any} */ o) => html`<li title=${o.dataset || ''}>
+          <strong>${formatDistance(o.distance)}</strong>
+          <span>${o.date ? new Date(o.date).toLocaleDateString('fr-FR', { year: 'numeric', month: 'short', day: 'numeric' }) : 'date inconnue'}
+            · ${BASIS_LABELS[/** @type {keyof typeof BASIS_LABELS} */ (o.basis)] || o.basis || ''}</span>
+          <a href=${'https://www.gbif.org/occurrence/' + o.key} target="_blank" rel="noopener">voir</a></li>`)}</ul>`
+        : html`<p class="muted">Aucune occurrence GBIF à moins de ${formatDistance(n.radius)}.</p>`}
+      <p class="credit">Source : GBIF.org — présences, coordonnées sans problème connu. Rayon : celui d’« Autour » (Carte).</p>`;
+  }
+
+  /** Looks for GBIF occurrences around the user's position (a recent one, else asks the GPS once). */
+  async #findNear() {
+    const key = this._details?.identifiers?.gbif?.id;
+    const plant = this._plant;
+    if (!key) return;
+    nearAllowed = true;
+    this._near = { state: 'locating' };
+    const known = lastFix();
+    const fix = known && Date.now() - known.timestamp < 5 * 60000 ? known : await oneFix();
+    if (this._plant !== plant) return;
+    if (!fix || 'error' in fix) { this._near = { state: 'error', message: fix && 'error' in fix ? fix.error : 'Position introuvable pour le moment.' }; return; }
+    const radius = savedRadius();
+    this._near = { state: 'loading' };
+    try {
+      const result = await sources.gbifNear(key, fix.coordinates, radius, undefined, this.view);
+      if (this._plant === plant) this._near = result ? { state: 'done', radius, ...result } : { state: 'error', message: 'GBIF est désactivé dans ce mode.' };
+    } catch {
+      if (this._plant === plant) this._near = { state: 'error', message: 'GBIF ne répond pas pour le moment.' };
+    }
+  }
+
+  /** « Médias GBIF »: field photos and herbarium sheets, apart. @param {any} ctx */
+  #gbifMedia({ plant, photosOff }) {
+    if (photosOff) return html`<p class="muted">Photos en ligne désactivées dans ce mode.</p>`;
+    const g = this._gbif;
+    return html`${this.#subs('gbifMedia', {
+      photos: () => this.#mediaGallery(plant, 'Photos d’observation (France)', g.photos, 'Aucune photo d’observation sous licence libre sur GBIF.', false),
+      herbarium: () => this.#mediaGallery(plant, 'Planches d’herbier', g.herbarium, 'Aucune planche d’herbier sous licence libre sur GBIF.', true)
     })}`;
   }
+
+  /** @param {any} plant @param {string} title @param {any[] | null | undefined} list @param {string} none @param {boolean} herbarium */
+  #mediaGallery(plant, title, list, none, herbarium) {
+    const head = html`<h3>${title}</h3>`;
+    if (list === undefined) return html`${head}<p class="muted">chargement…</p>`;
+    if (!list?.length) return html`${head}<p class="muted">${none}</p>`;
+    return html`${head}<div class="gallery ${herbarium ? 'herbarium' : ''}">${list.map(image => html`<figure>
+      <a href=${image.sourceUrl || image.url} target="_blank" rel="noopener"><img src=${image.url} alt=${(herbarium ? 'Planche d’herbier de ' : '') + plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" /></a>
+      <figcaption>
+        ${herbarium ? html`<span class="specimen">${[image.institution, image.catalogNumber && 'n° ' + image.catalogNumber, image.year, image.country].filter(Boolean).join(' · ')}</span>` : nothing}
+        <gf-attribution .media=${image}></gf-attribution>
+      </figcaption></figure>`)}</div>`;
+  }
+
+  /** « Habitat et écologie (GBIF) »: what the species profiles of GBIF checklists say. */
+  #gbifProfile() {
+    if (this._gbif.speciesProfiles === undefined) return html`<p class="muted">chargement…</p>`;
+    const p = profile(this._gbif);
+    if (!p.habitats.length && !p.forms.length && !p.invasive.length) return html`<p class="muted">Aucun profil d’espèce exploitable sur GBIF.</p>`;
+    const key = this._details?.identifiers?.gbif?.id;
+    return html`<dl class="facts">
+        ${p.habitats.length ? html`<dt>Milieu</dt><dd>${p.habitats.map(([h]) => h).join(' · ')}</dd>` : nothing}
+        ${p.forms.length ? html`<dt>Port</dt><dd>${p.forms.map(([f]) => f).join(' · ')}</dd>` : nothing}
+        ${p.invasive.length ? html`<dt>Signalée envahissante</dt><dd>${p.invasive.slice(0, 4).join(' · ')}${p.invasive.length > 4 ? ` et ${p.invasive.length - 4} autres listes` : ''}</dd>` : nothing}
+      </dl>
+      <p class="credit">Source : <a href=${'https://www.gbif.org/species/' + key} target="_blank" rel="noopener">GBIF.org</a> — profils d’espèce de ${p.sources} liste${p.sources > 1 ? 's' : ''} de référence.</p>`;
+  }
+
+  /** « Publications (GBIF) »: the latest papers that used GBIF data on this taxon. @param {any} ctx */
+  #literature({ details }) {
+    const l = this._gbif.literature;
+    if (l === undefined) return html`<p class="muted">chargement…</p>`;
+    if (!l?.items?.length) return html`<p class="muted">Aucune publication citant des données GBIF sur cette espèce.</p>`;
+    const key = details?.identifiers?.gbif?.id;
+    return html`<ul class="papers">${l.items.map((/** @type {any} */ r) => html`<li>
+        ${r.url ? html`<a href=${r.url} target="_blank" rel="noopener">${r.title}</a>` : r.title}
+        <small>${[r.authors.slice(0, 3).join(', ') + (r.authors.length > 3 ? ' et al.' : ''), r.source, r.year].filter(Boolean).join(' · ')}</small>
+      </li>`)}</ul>
+      <p class="credit">${l.total.toLocaleString('fr-FR')} publication${l.total > 1 ? 's' : ''} utilisant des données GBIF sur cette espèce —
+        <a href=${'https://www.gbif.org/resource/search?contentType=literature&gbifTaxonKey=' + key} target="_blank" rel="noopener">toutes sur GBIF.org</a>.</p>`;
+  }
+
 
   /** @param {any} ctx */
   #ids({ plant, details, inat, wikidata }) {

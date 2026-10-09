@@ -8,6 +8,7 @@
 
 import { config } from '../config.js';
 import { MODE_KEYS, MODULES, moduleOn, setModule } from './modules.js';
+import { OVERLAYS } from './ign.js';
 import { emptyLayout, store } from './store.js';
 
 /** @typedef {import('./modules.js').Mode} Mode */
@@ -29,7 +30,10 @@ export const BLOCKS = [
   { key: 'descriptions', title: 'Descriptions', module: 'gbif' },
   { key: 'names', title: 'Noms' },
   { key: 'occurrences', title: 'Occurrences et répartition', module: 'gbif' },
+  { key: 'map', title: 'Carte' },
   { key: 'gbifMedia', title: 'Médias GBIF', module: 'gbif' },
+  { key: 'gbifProfile', title: 'Habitat et écologie (GBIF)', module: 'gbif' },
+  { key: 'literature', title: 'Publications (GBIF)', module: 'gbif' },
   { key: 'trefle', title: 'Trefle', module: 'trefle' },
   { key: 'ids', title: 'Identifiants' },
   { key: 'resources', title: 'Ressources' }
@@ -42,10 +46,17 @@ export const SUBS = {
   ],
   taxonomy: [
     { key: 'chain', title: 'Classification complète' }, { key: 'ranks', title: 'Famille, genre' }, { key: 'author', title: 'Auteur' },
-    { key: 'france', title: 'Statut en France' }, { key: 'synonyms', title: 'Synonymes' }, { key: 'inat', title: 'Observations iNaturalist' }
+    { key: 'france', title: 'Statut en France' }, { key: 'synonyms', title: 'Synonymes' }, { key: 'gbifSynonyms', title: 'Synonymes GBIF' },
+    { key: 'inat', title: 'Observations iNaturalist' }
   ],
   status: [{ key: 'iucn', title: 'UICN (Scientifique)' }, { key: 'table', title: 'Statuts INPN' }],
-  occurrences: [{ key: 'inat', title: 'Observations iNaturalist' }, { key: 'gbif', title: 'Occurrences GBIF en France' }, { key: 'distribution', title: 'Répartition' }],
+  occurrences: [
+    { key: 'inat', title: 'Observations iNaturalist' }, { key: 'gbif', title: 'Occurrences GBIF en France' },
+    { key: 'near', title: 'Près d’ici (GBIF)' }, { key: 'months', title: 'Par mois (GBIF)' }, { key: 'years', title: 'Par année (GBIF)' },
+    { key: 'regions', title: 'Régions et départements (GBIF)' }, { key: 'basis', title: 'Types de relevés (GBIF)' }, { key: 'datasets', title: 'Principales sources (GBIF)' },
+    { key: 'distribution', title: 'Répartition dans le monde' }
+  ],
+  gbifMedia: [{ key: 'photos', title: 'Photos d’observation' }, { key: 'herbarium', title: 'Planches d’herbier' }],
   names: [{ key: 'french', title: 'Noms français' }, { key: 'foreign', title: 'Autres langues' }],
   resources: [
     { key: 'inpn', title: 'INPN' }, { key: 'taxref', title: 'TAXREF' }, { key: 'gbif', title: 'GBIF' }, { key: 'inaturalist', title: 'iNaturalist' },
@@ -72,9 +83,9 @@ export const ACTIONS = SUBS.actions;
 
 /** Default order of each mode: what the mode is about first. Note blocks follow, in their creation order. @type {Record<Mode, string[]>} */
 const DEFAULTS = {
-  epure: ['name', 'photos', 'status', 'lookalikes', 'calendar', 'wikipedia', 'names', 'taxonomy', 'mine', 'descriptions', 'occurrences', 'gbifMedia', 'trefle', 'ids', 'resources'],
-  standard: ['name', 'status', 'lookalikes', 'taxonomy', 'mine', 'calendar', 'photos', 'wikipedia', 'descriptions', 'names', 'resources', 'occurrences', 'gbifMedia', 'trefle', 'ids'],
-  scientific: ['name', 'lookalikes', 'taxonomy', 'status', 'calendar', 'occurrences', 'wikipedia', 'descriptions', 'photos', 'gbifMedia', 'trefle', 'ids', 'mine', 'resources', 'names']
+  epure: ['name', 'photos', 'status', 'lookalikes', 'calendar', 'wikipedia', 'names', 'taxonomy', 'mine', 'descriptions', 'occurrences', 'map', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids', 'resources'],
+  standard: ['name', 'status', 'lookalikes', 'taxonomy', 'mine', 'calendar', 'photos', 'wikipedia', 'descriptions', 'names', 'resources', 'occurrences', 'map', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids'],
+  scientific: ['name', 'lookalikes', 'taxonomy', 'status', 'calendar', 'occurrences', 'map', 'wikipedia', 'descriptions', 'gbifProfile', 'photos', 'gbifMedia', 'trefle', 'literature', 'ids', 'mine', 'resources', 'names']
 };
 
 /** Keys of earlier versions (one list per mode) → today's block. */
@@ -85,14 +96,23 @@ const layout = () => store.state.sheetLayout;
 /** Note blocks created by hand. @returns {SheetBlock[]} */
 const noteBlocks = () => layout().notes.map(n => ({ key: 'note:' + n.id, title: n.title, note: true }));
 
-/** Every block, notes included. */
-export const allBlocks = () => [...BLOCKS, ...noteBlocks()];
+/** Map blocks added by hand (« + Bloc Carte »), besides the built-in « Carte ». @returns {SheetBlock[]} */
+const mapBlocks = () => (layout().mapBlocks || []).map(m => ({ key: 'map:' + m.id, title: m.title }));
+
+/** Every block, notes and added maps included. */
+export const allBlocks = () => [...BLOCKS, ...noteBlocks(), ...mapBlocks()];
 
 /** @param {string} key */
 export const blockOf = key => allBlocks().find(b => b.key === key);
 
 /** @param {string} key */
 export const isNote = key => key.startsWith('note:');
+
+/** A map block: the built-in « Carte » or one added by hand. @param {string} key */
+export const isMap = key => key === 'map' || key.startsWith('map:');
+
+/** A map block added by hand (it can be deleted). @param {string} key */
+export const isAddedMap = key => key.startsWith('map:');
 
 /** Title of a block (as renamed, else its own). @param {string} key */
 export const blockTitle = key => layout().titles[key] || blockOf(key)?.title || key;
@@ -104,7 +124,7 @@ export const defaultTitle = key => blockOf(key)?.title || key;
 export const blockModuleName = key => MODULES.find(m => m.key === blockOf(key)?.module)?.name || null;
 
 /** @param {Mode} view */
-const defaults = view => [...DEFAULTS[view], ...noteBlocks().map(b => b.key)];
+const defaults = view => [...DEFAULTS[view], ...noteBlocks().map(b => b.key), ...mapBlocks().map(b => b.key)];
 
 /** Merge a saved order with the current keys: unknown ones dropped, new ones at their default place. @param {string[]} saved @param {string[]} keys */
 function merge(saved, keys) {
@@ -125,20 +145,20 @@ export const blockOrder = view =>
 /** Has this view been arranged by hand? @param {Mode} view */
 export function isCustom(view) {
   const l = layout();
-  return Boolean(l.order[view] || l.hidden[view] || l.subOrder[view] || l.subHidden[view] || l.styles?.[view] || l.titleShown?.[view]);
+  return Boolean(l.order[view] || l.hidden[view] || l.subOrder[view] || l.subHidden[view] || l.styles?.[view] || l.titleShown?.[view] || l.hideEmpty?.[view]);
 }
 
 /** Saves a new layout (only what differs from the defaults). @param {Partial<SheetLayout>} patch */
 function save(patch) {
   const next = { ...layout(), ...patch };
-  for (const part of /** @type {const} */ (['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown'])) {
+  for (const part of /** @type {const} */ (['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown', 'hideEmpty'])) {
     for (const [view, value] of Object.entries(next[part])) {
       const empty = Array.isArray(value) ? false : !Object.keys(value || {}).length;
       if (!value || empty) delete next[part][/** @type {Mode} */ (view)];
     }
   }
-  const isEmpty = !next.notes.length && !Object.keys(next.titles).length
-    && ['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown'].every(p => !Object.keys(/** @type {any} */ (next)[p] || {}).length);
+  const isEmpty = !next.notes.length && !Object.keys(next.titles).length && !next.mapBlocks?.length && !Object.keys(next.maps || {}).length
+    && ['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown', 'hideEmpty'].every(p => !Object.keys(/** @type {any} */ (next)[p] || {}).length);
   try {
     if (isEmpty) localStorage.removeItem(config.storageKeys.sheetLayout);
     else localStorage.setItem(config.storageKeys.sheetLayout, JSON.stringify(next));
@@ -157,27 +177,61 @@ export function setBlockOrder(view, keys) {
   save({ order });
 }
 
-/** Is this block folded in this view? A block of a module is folded when the module is off. @param {Mode} view @param {string} key */
-export function isHidden(view, key) {
-  const module = blockOf(key)?.module;
-  if (module) return !moduleOn(module, view) || (module === 'wikipedia' && !moduleOn('wikidata', view));
-  return (layout().hidden[view] || []).includes(key);
-}
+/** The blocks that show a module (GBIF has several). @param {ModuleKey} module */
+const blocksOf = module => BLOCKS.filter(b => b.module === module).map(b => b.key);
 
-/** Fold a block away, or bring it back. @param {Mode} view @param {string} key @param {boolean} hidden */
-export function setHidden(view, key, hidden) {
-  const module = blockOf(key)?.module;
-  if (module) {
-    setModule(module, view, !hidden);
-    // The Wikipédia article is found through Wikidata.
-    if (module === 'wikipedia' && !hidden && !moduleOn('wikidata', view)) setModule('wikidata', view, true);
-    return;
-  }
-  const keys = new Set(layout().hidden[view] || []);
-  if (hidden) keys.add(key); else keys.delete(key);
+/** @param {Mode} view @param {Set<string>} keys */
+function writeHidden(view, keys) {
   const all = { ...layout().hidden };
   if (keys.size) all[view] = [...keys]; else delete all[view];
   save({ hidden: all });
+}
+
+/**
+ * Is this block folded in this view? A block of a module is folded when the module is off, or when it was
+ * folded itself (a module may have several blocks: folding one leaves the others).
+ * @param {Mode} view @param {string} key
+ */
+export function isHidden(view, key) {
+  const module = blockOf(key)?.module;
+  const own = (layout().hidden[view] || []).includes(key);
+  if (module) return own || !moduleOn(module, view) || (module === 'wikipedia' && !moduleOn('wikidata', view));
+  return own;
+}
+
+/**
+ * Fold a block away, or bring it back. A module goes off with the last of its blocks, and comes back on
+ * with the first one (its other blocks staying folded).
+ * @param {Mode} view @param {string} key @param {boolean} hidden
+ */
+export function setHidden(view, key, hidden) {
+  const keys = new Set(layout().hidden[view] || []);
+  const module = blockOf(key)?.module;
+  if (!module) {
+    if (hidden) keys.add(key); else keys.delete(key);
+    writeHidden(view, keys);
+    return;
+  }
+  const siblings = blocksOf(module);
+  if (hidden) {
+    keys.add(key);
+    if (siblings.every(k => keys.has(k))) {
+      // The last one: the module goes off (Réglages › Modules), its blocks folded with it.
+      for (const k of siblings) keys.delete(k);
+      writeHidden(view, keys);
+      setModule(module, view, false);
+      return;
+    }
+    writeHidden(view, keys);
+    return;
+  }
+  // The module was off: only this block comes back.
+  if (!moduleOn(module, view)) for (const k of siblings) keys.add(k);
+  keys.delete(key);
+  writeHidden(view, keys);
+  setModule(module, view, true);
+  // The Wikipédia article is found through Wikidata.
+  if (module === 'wikipedia' && !moduleOn('wikidata', view)) setModule('wikidata', view, true);
 }
 
 // ── Sub-blocks ─────────────────────────────────────────────────────────────
@@ -189,8 +243,21 @@ export const subTitle = (block, key) => SUBS[block]?.find(s => s.key === key)?.t
 export const subOrder = (view, block) =>
   merge(layout().subOrder[view]?.[block] || [], (SUBS[block] || []).map(s => s.key));
 
+/**
+ * Sub-blocks a mode leaves out until shown in Mode King (a block's list, once changed, is kept whole).
+ * @type {Record<Mode, Record<string, string[]>>}
+ */
+const SUB_HIDDEN = {
+  epure: { occurrences: ['months', 'years', 'regions', 'basis', 'datasets', 'distribution'], gbifMedia: ['herbarium'], taxonomy: ['gbifSynonyms'] },
+  standard: { occurrences: ['years', 'basis', 'datasets'], taxonomy: ['gbifSynonyms'] },
+  scientific: {}
+};
+
+/** The sub-blocks a view leaves out of a block. @param {Mode} view @param {string} block @returns {string[]} */
+const hiddenSubs = (view, block) => layout().subHidden[view]?.[block] ?? SUB_HIDDEN[view]?.[block] ?? [];
+
 /** @param {Mode} view @param {string} block @param {string} key */
-export const isSubHidden = (view, block, key) => (layout().subHidden[view]?.[block] || []).includes(key);
+export const isSubHidden = (view, block, key) => hiddenSubs(view, block).includes(key);
 
 /** The sub-blocks a view shows, in order. @param {Mode} view @param {string} block */
 export const shownSubs = (view, block) => subOrder(view, block).filter(k => !isSubHidden(view, block, k));
@@ -208,9 +275,11 @@ export function setSubOrder(view, block, keys) {
 export function setSubHidden(view, block, key, hidden) {
   const all = { ...layout().subHidden };
   const mine = { ...all[view] };
-  const keys = new Set(mine[block] || []);
+  const keys = new Set(hiddenSubs(view, block));
   if (hidden) keys.add(key); else keys.delete(key);
-  if (keys.size) mine[block] = [...keys]; else delete mine[block];
+  const byDefault = new Set(SUB_HIDDEN[view]?.[block] || []);
+  // Back to the mode's own choice: nothing stored; otherwise the whole list (an empty one included).
+  if (keys.size === byDefault.size && [...keys].every(k => byDefault.has(k))) delete mine[block]; else mine[block] = [...keys];
   all[view] = mine;
   save({ subHidden: all });
 }
@@ -256,6 +325,38 @@ export function setTitleShown(view, key, shown) {
   save({ titleShown: all });
 }
 
+// ── Left out when empty ────────────────────────────────────────────────────
+
+/**
+ * Blocks that can have nothing for a plant (no protection, no look-alike, no article…): each mode chooses to
+ * show them anyway, with a « nothing known » line, or to leave them out. Name, classification, identifiers
+ * and resources always have something.
+ */
+export const CAN_BE_EMPTY = ['photos', 'status', 'lookalikes', 'mine', 'calendar', 'wikipedia', 'descriptions', 'names', 'occurrences', 'gbifMedia', 'gbifProfile', 'trefle', 'literature'];
+
+/** Left out when empty unless asked otherwise (as they always were). */
+const EMPTY_HIDDEN = ['wikipedia', 'names', 'gbifProfile', 'literature'];
+
+/** Can this block be left out when empty? (note blocks too: no text for this plant) @param {string} key */
+export const canBeEmpty = key => CAN_BE_EMPTY.includes(key) || isNote(key);
+
+/** Is this block left out of this view when it has nothing for the plant (outside Mode King)? @param {Mode} view @param {string} key */
+export function hidesEmpty(view, key) {
+  if (!canBeEmpty(key)) return false;
+  const chosen = layout().hideEmpty?.[view]?.[key];
+  return typeof chosen === 'boolean' ? chosen : EMPTY_HIDDEN.includes(key);
+}
+
+/** @param {Mode} view @param {string} key @param {boolean} on */
+export function setHidesEmpty(view, key, on) {
+  if (!canBeEmpty(key)) return;
+  const all = { ...layout().hideEmpty };
+  const mine = { ...all[view] };
+  if (on === EMPTY_HIDDEN.includes(key)) delete mine[key]; else mine[key] = on;
+  all[view] = mine;
+  save({ hideEmpty: all });
+}
+
 // ── Titles and note blocks ─────────────────────────────────────────────────
 
 /** Rename a block; an empty title gives it back its own. @param {string} key @param {string} title */
@@ -264,6 +365,11 @@ export function renameBlock(key, title) {
   if (isNote(key)) {
     if (!text) return;
     save({ notes: layout().notes.map(n => 'note:' + n.id === key ? { ...n, title: text } : n) });
+    return;
+  }
+  if (isAddedMap(key)) {
+    if (!text) return;
+    save({ mapBlocks: (layout().mapBlocks || []).map(m => 'map:' + m.id === key ? { ...m, title: text } : m) });
     return;
   }
   const titles = { ...layout().titles };
@@ -301,6 +407,64 @@ export function deleteNote(key) {
   save({ notes: layout().notes.filter(n => n.id !== id), order: strip(layout().order), hidden: strip(layout().hidden) });
 }
 
+// ── Map blocks ─────────────────────────────────────────────────────────────
+
+/**
+ * What a map block shows and lets do (the same in every mode).
+ * @typedef {{ gbif: 'fr' | 'world' | 'off', places: boolean, near: 'off' | 'gbif' | 'inat' | 'both', base: 'plan' | 'photo',
+ *   overlays: string[], frame: 'france' | 'content' | 'me', height: 's' | 'm' | 'l',
+ *   actions: { open: boolean, create: boolean, edit: boolean, spot: boolean, locate: boolean } }} MapConfig
+ */
+
+/** @type {MapConfig} */
+export const MAP_DEFAULTS = {
+  gbif: 'fr', places: true, near: 'off', base: 'plan', overlays: [], frame: 'france', height: 'm',
+  actions: { open: true, create: true, edit: true, spot: true, locate: true }
+};
+
+const MAP_CHOICES = { gbif: ['fr', 'world', 'off'], near: ['off', 'gbif', 'inat', 'both'], base: ['plan', 'photo'], frame: ['france', 'content', 'me'], height: ['s', 'm', 'l'] };
+
+/** A map's configuration, cleaned (unknown values give the default). @param {any} saved @returns {MapConfig} */
+function cleanMap(saved) {
+  const c = saved && typeof saved === 'object' ? saved : {};
+  /** @type {any} */ const out = { ...MAP_DEFAULTS, actions: { ...MAP_DEFAULTS.actions } };
+  for (const [k, values] of Object.entries(MAP_CHOICES)) if (values.includes(c[k])) out[k] = c[k];
+  if (typeof c.places === 'boolean') out.places = c.places;
+  if (Array.isArray(c.overlays)) out.overlays = c.overlays.filter((/** @type {any} */ o) => typeof o === 'string' && o in OVERLAYS);
+  for (const a of Object.keys(MAP_DEFAULTS.actions)) if (typeof c.actions?.[a] === 'boolean') out.actions[a] = c.actions[a];
+  return out;
+}
+
+/** @param {string} key @returns {MapConfig} */
+export const mapConfig = key => cleanMap(layout().maps?.[key]);
+
+/** Changes a map's configuration (`actions` merged). @param {string} key @param {Partial<MapConfig>} patch */
+export function setMapConfig(key, patch) {
+  const current = mapConfig(key);
+  const next = cleanMap({ ...current, ...patch, actions: { ...current.actions, ...(patch.actions || {}) } });
+  const maps = { ...(layout().maps || {}) };
+  if (JSON.stringify(next) === JSON.stringify(MAP_DEFAULTS)) delete maps[key]; else maps[key] = next;
+  save({ maps });
+}
+
+/** A new map block, at the end of every mode. @param {string} title @returns {string} its key */
+export function createMap(title) {
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  save({ mapBlocks: [...(layout().mapBlocks || []), { id, title: title.trim().slice(0, 60) || 'Carte' }] });
+  return 'map:' + id;
+}
+
+/** Delete an added map block everywhere. @param {string} key */
+export function deleteMap(key) {
+  if (!isAddedMap(key)) return;
+  const id = key.slice('map:'.length);
+  const strip = (/** @type {Partial<Record<Mode, string[]>>} */ per) =>
+    Object.fromEntries(Object.entries(per).map(([v, keys]) => [v, (keys || []).filter(k => k !== key)]));
+  const maps = { ...(layout().maps || {}) };
+  delete maps[key];
+  save({ mapBlocks: (layout().mapBlocks || []).filter(m => m.id !== id), maps, order: strip(layout().order), hidden: strip(layout().hidden) });
+}
+
 /** @param {string} key @param {number} plantId */
 export const noteText = (key, plantId) => readNotes()[key.slice('note:'.length)]?.[plantId] || '';
 
@@ -316,14 +480,17 @@ export function setNoteText(key, plantId, text) {
 
 // ── Reset, export, import ──────────────────────────────────────────────────
 
-/** Module blocks folded in a view (the module switches they mirror). @param {Mode} view */
-const foldedModules = view => [...new Set(BLOCKS.filter(b => b.module && isHidden(view, b.key)).map(b => /** @type {ModuleKey} */ (b.module)))];
+/** The modules that have blocks. */
+const blockModules = () => [...new Set(BLOCKS.filter(b => b.module).map(b => /** @type {ModuleKey} */ (b.module)))];
+
+/** Modules with blocks that are off in a view (each block's own folding is in the layout). @param {Mode} view */
+const foldedModules = view => blockModules().filter(m => !moduleOn(m, view));
 
 /** Back to the default order, every block and sub-block shown (modules included). Titles and notes stay. @param {Mode} view */
 export function resetBlocks(view) {
   const l = layout();
   const without = (/** @type {any} */ per) => { const next = { ...per }; delete next[view]; return next; };
-  save({ order: without(l.order), hidden: without(l.hidden), subOrder: without(l.subOrder), subHidden: without(l.subHidden), styles: without(l.styles || {}), titleShown: without(l.titleShown || {}) });
+  save({ order: without(l.order), hidden: without(l.hidden), subOrder: without(l.subOrder), subHidden: without(l.subHidden), styles: without(l.styles || {}), titleShown: without(l.titleShown || {}), hideEmpty: without(l.hideEmpty || {}) });
   for (const b of BLOCKS) if (b.module && isHidden(view, b.key)) setHidden(view, b.key, false);
 }
 
@@ -364,16 +531,21 @@ export function importLayout(text) {
   const valid = perView(l.order || {}, isKeyList) && perView(l.hidden || {}, isKeyList)
     && perView(l.subOrder || {}, perBlock) && perView(l.subHidden || {}, perBlock)
     && perView(l.titleShown || {}, (/** @type {any} */ x) => x && typeof x === 'object' && Object.values(x).every(v => typeof v === 'boolean'))
+    && perView(l.hideEmpty || {}, (/** @type {any} */ x) => x && typeof x === 'object' && Object.values(x).every(v => typeof v === 'boolean'))
     && perView(l.styles || {}, (/** @type {any} */ x) => x && typeof x === 'object' && Object.entries(x).every(([block, st]) => STYLES[block]?.styles.some(s => s.key === st)))
     && l.titles && typeof l.titles === 'object' && Object.values(l.titles).every(t => typeof t === 'string' && t.length <= 60)
     && Array.isArray(l.notes) && l.notes.every((/** @type {any} */ n) => typeof n?.id === 'string' && /^[a-z0-9]{1,24}$/.test(n.id) && typeof n.title === 'string' && n.title.length <= 60)
+    && (!l.mapBlocks || (Array.isArray(l.mapBlocks) && l.mapBlocks.every((/** @type {any} */ m) => typeof m?.id === 'string' && /^[a-z0-9]{1,24}$/.test(m.id) && typeof m.title === 'string' && m.title.length <= 60)))
+    && (!l.maps || (typeof l.maps === 'object' && !Array.isArray(l.maps) && Object.keys(l.maps).every(k => k === 'map' || /^map:[a-z0-9]{1,24}$/.test(k))))
     && (!data.notes || (typeof data.notes === 'object' && Object.values(data.notes).every(byPlant => byPlant && typeof byPlant === 'object' && Object.values(byPlant).every(t => typeof t === 'string'))))
     && (!data.modulesOff || perView(data.modulesOff, x => Array.isArray(x) && x.every(m => MODULES.some(mm => mm.key === m))));
   if (!valid) throw new Error('Mise en page illisible ou incomplète.');
   writeNotes(data.notes || {});
-  save({ ...emptyLayout(), order: l.order || {}, hidden: l.hidden || {}, subOrder: l.subOrder || {}, subHidden: l.subHidden || {}, styles: l.styles || {}, titleShown: l.titleShown || {}, titles: l.titles, notes: l.notes });
+  save({ ...emptyLayout(), order: l.order || {}, hidden: l.hidden || {}, subOrder: l.subOrder || {}, subHidden: l.subHidden || {}, styles: l.styles || {}, titleShown: l.titleShown || {}, hideEmpty: l.hideEmpty || {}, titles: l.titles, notes: l.notes,
+    mapBlocks: l.mapBlocks || [], maps: Object.fromEntries(Object.entries(l.maps || {}).map(([k, c]) => [k, cleanMap(c)])) });
   for (const view of MODE_KEYS) {
     const off = data.modulesOff?.[view] || [];
-    for (const b of BLOCKS) if (b.module) setHidden(view, b.key, off.includes(b.module));
+    for (const m of blockModules()) setModule(m, view, !off.includes(m));
+    if (!off.includes('wikipedia') && !moduleOn('wikidata', view)) setModule('wikidata', view, true);
   }
 }

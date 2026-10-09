@@ -92,7 +92,8 @@ export function thumbnail(plant, signal, mode) {
  * @param {Mode} [mode]
  */
 export function details(plant, signal, mode) {
-  return cached(key('details', plant.id, mode), () => sourcesFor(mode).details(plant, { signal }));
+  // 'details2': GBIF data is no longer in it (it comes part by part, below).
+  return cached(key('details2', plant.id, mode), () => sourcesFor(mode).details(plant, { signal }));
 }
 
 /**
@@ -135,13 +136,84 @@ export function wikidataScience(plant, qid, signal, /** @type {Mode | undefined}
 }
 
 /**
- * GBIF occurrences recorded in France.
+ * GBIF occurrences recorded in France (presences, coordinates without known issue).
  * @param {any} plant
  * @param {number | null | undefined} gbifKey
  * @param {AbortSignal} [signal]
  * @returns {Promise<number | null>}
  */
 export function occurrencesFR(plant, gbifKey, signal, /** @type {Mode | undefined} */ mode) {
-  if (!gbifKey) return Promise.resolve(null);
-  return cached(key('gbif-fr', plant.id, mode), () => sourcesFor(mode).gbifOccurrencesFR(gbifKey, { signal }));
+  return gbifStats(plant, gbifKey, signal, mode).then(stats => stats?.count ?? null);
 }
+
+// ── GBIF, part by part: each block asks only for what it shows ────────────────────────────────────────
+
+/**
+ * The plant's GBIF Backbone taxon (key and match), for pages that need it without the whole sheet (Carte).
+ * @param {any} plant @param {AbortSignal} [signal] @param {Mode} [mode]
+ */
+export function gbifTaxon(plant, signal, mode) {
+  return cached(key('gbif-taxon', plant.id, mode), () => sourcesFor(mode).gbifTaxon(plant, { signal }));
+}
+
+/**
+ * One kind of species data: 'vernacularNames' | 'descriptions' | 'distributions' | 'speciesProfiles' | 'synonyms' | 'iucnRedListCategory'.
+ * @param {any} plant @param {number | null | undefined} gbifKey @param {string} part @param {AbortSignal} [signal] @param {Mode} [mode]
+ */
+export function gbifSpecies(plant, gbifKey, part, signal, mode) {
+  if (!gbifKey) return Promise.resolve(null);
+  return cached(key('gbif-' + part, plant.id, mode), () => sourcesFor(mode).gbifSpecies(gbifKey, part, { signal }));
+}
+
+/**
+ * Occurrences in France: count, by month, year, kind of record, dataset, region and département.
+ * @param {any} plant @param {number | null | undefined} gbifKey @param {AbortSignal} [signal] @param {Mode} [mode]
+ */
+export function gbifStats(plant, gbifKey, signal, mode) {
+  if (!gbifKey) return Promise.resolve(null);
+  return cached(key('gbif-stats', plant.id, mode), () => sourcesFor(mode).gbifOccurrenceStats(gbifKey, { signal }));
+}
+
+/**
+ * Images of occurrences: 'herbarium' (preserved specimens) or 'photos' (field observations in France).
+ * @param {any} plant @param {number | null | undefined} gbifKey @param {'herbarium' | 'photos'} kind @param {AbortSignal} [signal] @param {Mode} [mode]
+ */
+export function gbifMedia(plant, gbifKey, kind, signal, mode) {
+  if (!gbifKey) return Promise.resolve([]);
+  return cached(key('gbif-media-' + kind, plant.id, mode), () => sourcesFor(mode).gbifOccurrenceMedia(gbifKey, kind, { signal }));
+}
+
+/** @param {any} plant @param {number | null | undefined} gbifKey @param {AbortSignal} [signal] @param {Mode} [mode] */
+export function gbifLiterature(plant, gbifKey, signal, mode) {
+  if (!gbifKey) return Promise.resolve(null);
+  return cached(key('gbif-literature', plant.id, mode), () => sourcesFor(mode).gbifLiterature(gbifKey, { signal }));
+}
+
+/** Title of a GBIF dataset (cached for every plant). @param {string} datasetKey @param {AbortSignal} [signal] @param {Mode} [mode] */
+export function gbifDatasetTitle(datasetKey, signal, mode) {
+  if (!moduleOn('gbif', mode || appMode())) return Promise.resolve(null);
+  return cached('gbif-dataset:' + datasetKey, () => sourcesFor(mode).gbifDatasetTitle(datasetKey, { signal }));
+}
+
+/** Name of a region or département (GADM id). @param {string} gid @param {AbortSignal} [signal] @param {Mode} [mode] */
+export function gadmName(gid, signal, mode) {
+  if (!moduleOn('gbif', mode || appMode())) return Promise.resolve(null);
+  return cached('gadm:' + gid, () => sourcesFor(mode).gadmName(gid, { signal }));
+}
+
+/**
+ * GBIF occurrences around a point (never cached: the position changes).
+ * @param {number | null | undefined} gbifKey @param {[number, number]} point [lon, lat] @param {number} radius metres
+ * @param {AbortSignal} [signal] @param {Mode} [mode] @param {number} [limit] how many of the nearest
+ */
+export function gbifNear(gbifKey, point, radius, signal, mode, limit = 5) {
+  if (!gbifKey) return Promise.resolve(null);
+  return sourcesFor(mode).gbifNear(gbifKey, point, radius, { signal, limit });
+}
+
+/**
+ * GBIF density map tiles of a taxon (v2 maps API), optionally in one country.
+ * @param {number} gbifKey @param {string} [country]
+ */
+export const gbifTileUrl = (gbifKey, country) =>
+  `https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@1x.png?srs=EPSG:3857&style=classic.point&taxonKey=${gbifKey}${country ? '&country=' + country : ''}`;

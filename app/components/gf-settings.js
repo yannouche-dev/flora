@@ -10,7 +10,7 @@ import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectS
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
 import {
-  STYLES, SUBS, blockModuleName, blockStyle, isTitleShown, setBlockStyle, setTitleShown, blockOrder, blockTitle, createNote, deleteNote, exportLayout, importLayout, isCustom, isHidden, isNote,
+  STYLES, SUBS, canBeEmpty, hidesEmpty, setHidesEmpty, blockModuleName, blockStyle, isTitleShown, setBlockStyle, setTitleShown, blockOrder, blockTitle, createNote, deleteNote, createMap, deleteMap, isAddedMap, exportLayout, importLayout, isCustom, isHidden, isNote,
   isSubHidden, renameBlock, resetAll, resetBlocks, setBlockOrder, setHidden, setSubHidden, setSubOrder, subOrder, subTitle
 } from '../core/sheet-blocks.js';
 import './gf-sortable-list.js';
@@ -76,7 +76,7 @@ export class GfSettings extends LitElement {
     .block-order { padding: 10px 12px; }
     .block-order .head { display: flex; align-items: center; gap: 8px; }
     .block-order .head button { margin-left: auto; }
-    .layout-tools { margin-top: 8px; gap: 8px; }
+    .layout-tools, .layout-file { margin-top: 8px; gap: 8px; }
     .layout-tools form { gap: 6px; }
     .module .mode input { width: 18px; height: 18px; margin: 0; }
   `];
@@ -264,7 +264,15 @@ export class GfSettings extends LitElement {
         </div>
         <p class="muted">Personnalisez la fiche plante : glissez les blocs par leur titre (ou ci-dessous, par leur poignée ${icon('grip-vertical')}), masquez-les avec la corbeille ${icon('trash3')},
           réaffichez-les avec ${icon('arrow-counterclockwise')}. Tout est enregistré automatiquement, pour chaque mode d’affichage ;
-          masquer un bloc de service (Wikipédia, GBIF, Trefle, photos) coupe ce module dans ce mode. Quittez en touchant la couronne en bas de l’écran.</p>
+          masquer un bloc de service (Wikipédia, GBIF, Trefle, photos) coupe ce module dans ce mode. Quittez en touchant la couronne en bas de l’écran.
+          La mise en page s’exporte en fichier JSON (pour la sauvegarder ou la copier sur un autre appareil).</p>
+        <div class="row layout-file">
+          <button type="button" @click=${this.#exportLayout}>${icon('download')} Exporter la mise en page</button>
+          <label class="button file">${icon('upload')} Importer…
+            <input type="file" accept="application/json,.json" @change=${this.#importLayout} /></label>
+          <button type="button" @click=${() => { if (confirm('Tout réinitialiser ? Ordre, blocs masqués, sous-blocs, titres et blocs Note (avec leur texte) reviennent par défaut.')) { resetAll(); this._layoutNote = 'Mise en page réinitialisée.'; } }}>Tout réinitialiser</button>
+        </div>
+        ${this._layoutNote ? html`<p class="muted" role="status">${this._layoutNote}</p>` : nothing}
         ${on ? this.#blockOrders() : nothing}
       </section>`;
   }
@@ -296,10 +304,11 @@ export class GfSettings extends LitElement {
             </div>
             <gf-sortable-list label=${'Blocs de la fiche, ' + MODE_LABELS[mode]}
               .items=${blockOrder(mode).map(k => ({
-                key: k, label: blockTitle(k), checked: !isHidden(mode, k), renamable: true, removable: isNote(k), nested: Boolean(SUBS[k]),
+                key: k, label: blockTitle(k), checked: !isHidden(mode, k), renamable: true, removable: isNote(k) || isAddedMap(k), nested: Boolean(SUBS[k]),
                 titled: isTitleShown(mode, k),
+                emptyHidden: canBeEmpty(k) ? hidesEmpty(mode, k) : undefined,
                 choices: STYLES[k]?.styles.map(st => ({ key: st.key, label: st.title })), choice: blockStyle(mode, k) ?? undefined,
-                note: blockModuleName(k) ? `(module ${blockModuleName(k)})` : isNote(k) ? '(note)' : ''
+                note: blockModuleName(k) ? `(module ${blockModuleName(k)})` : isNote(k) ? '(note)' : isAddedMap(k) || k === 'map' ? '(carte, réglée sur la fiche)' : ''
               }))}
               .renderNested=${(/** @type {string} */ k) => this.#subList(mode, k)}
               @reorder=${e => setBlockOrder(mode, e.detail.keys)}
@@ -307,6 +316,7 @@ export class GfSettings extends LitElement {
               @rename=${e => renameBlock(e.detail.key, e.detail.title)}
               @choose=${e => setBlockStyle(mode, e.detail.key, e.detail.value)}
               @titled=${e => setTitleShown(mode, e.detail.key, e.detail.shown)}
+              @empty=${e => setHidesEmpty(mode, e.detail.key, e.detail.hidden)}
               @remove=${e => this.#removeNote(e.detail.key)}></gf-sortable-list>
           </div>`)}
       </div>
@@ -317,12 +327,8 @@ export class GfSettings extends LitElement {
             <button type="button" @click=${() => { this._newNote = false; }}>Annuler</button>
           </form>`
           : html`<button type="button" @click=${async () => { this._newNote = true; await this.updateComplete; /** @type {HTMLInputElement | null} */ (this.renderRoot.querySelector('.layout-tools input'))?.focus(); }}>${icon('plus-lg')} Nouveau bloc Note</button>`}
-        <button type="button" @click=${this.#exportLayout}>${icon('download')} Exporter la mise en page</button>
-        <label class="button file">${icon('upload')} Importer…
-          <input type="file" accept="application/json,.json" @change=${this.#importLayout} /></label>
-        <button type="button" @click=${() => { if (confirm('Tout réinitialiser ? Ordre, blocs masqués, sous-blocs, titres et blocs Note (avec leur texte) reviennent par défaut.')) { resetAll(); this._layoutNote = 'Mise en page réinitialisée.'; } }}>Tout réinitialiser</button>
-      </div>
-      ${this._layoutNote ? html`<p class="muted" role="status">${this._layoutNote}</p>` : nothing}`;
+        <button type="button" @click=${() => { createMap('Carte'); this._layoutNote = 'Bloc Carte créé : il est en fin de fiche dans chaque mode ; réglez-le sur la fiche (⚙).'; }}>${icon('plus-lg')} Nouveau bloc Carte</button>
+      </div>`;
   }
 
   /** A block's sub-blocks in a mode. @param {any} mode @param {string} block */
@@ -344,6 +350,7 @@ export class GfSettings extends LitElement {
 
   /** @param {string} key */
   #removeNote(key) {
+    if (isAddedMap(key)) { if (confirm(`Supprimer la carte « ${blockTitle(key)} » ?`)) deleteMap(key); return; }
     if (confirm(`Supprimer le bloc « ${blockTitle(key)} » et tout ce qui y est écrit ?`)) deleteNote(key);
   }
 

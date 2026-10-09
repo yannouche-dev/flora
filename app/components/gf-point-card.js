@@ -15,6 +15,8 @@ export class GfPointCard extends LitElement {
     point: { attribute: false },
     label: { type: String },
     create: { type: Boolean },
+    /** A plant to put in the place created here. */
+    plant: { attribute: false },
     _address: { state: true },
     _altitude: { state: true },
     _copied: { state: true }
@@ -45,6 +47,8 @@ export class GfPointCard extends LitElement {
     this.point = null;
     this.label = '';
     this.create = true;
+    /** @type {number | null} */
+    this.plant = null;
     /** @type {string | null | undefined} undefined while loading */
     this._address = undefined;
     /** @type {number | null | undefined} */
@@ -87,7 +91,7 @@ export class GfPointCard extends LitElement {
         <button class="link" type="button" @click=${this.#copy}>${this._copied ? html`Copié ${icon('check-lg')}` : 'Copier'}</button>
       </div>
       <div class="actions">
-        ${this.create ? html`<a class="primary small" href=${href.newSpot(null, p)}>${icon('geo-alt-fill')} Créer un endroit ici</a>` : nothing}
+        ${this.create ? html`<a class="primary small" href=${href.newSpot(this.plant ?? null, p)}>${icon('geo-alt-fill')} Créer un endroit ici</a>` : nothing}
         <a class="button small" href=${directionsUrl({ geometry: { type: 'Point', coordinates: p } })} target="_blank" rel="noopener">Itinéraire</a>
       </div>
     </section>`;

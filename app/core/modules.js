@@ -21,7 +21,7 @@ export const MODULES = [
   { key: 'inaturalist', name: 'iNaturalist', hosts: 'api.inaturalist.org',
     provides: 'Autour (plantes observées dans un cercle), courbes de floraison et fructification, nombre d’observations, photos de repli.' },
   { key: 'gbif', name: 'GBIF', hosts: 'api.gbif.org',
-    provides: 'Descriptions, noms dans d’autres langues, répartition, médias, occurrences en France.' },
+    provides: 'Descriptions, noms dans d’autres langues, occurrences en France (carte de répartition, mois, années, départements, sources), photos d’observation et planches d’herbier, habitat, synonymes, statut UICN, publications. « Près d’ici » envoie votre position à GBIF, seulement quand vous le demandez.' },
   { key: 'wikidata', name: 'Wikidata', hosts: 'www.wikidata.org',
     provides: 'Classification, statut UICN, identifiants (Tela Botanica, IPNI, POWO) ; donne aussi l’article Wikipédia.' },
   { key: 'wikipedia', name: 'Wikipédia', hosts: 'fr.wikipedia.org',

@@ -15,6 +15,8 @@ import './gf-map.js';
 import './gf-spot-editor.js';
 import './gf-thumb.js';
 import { icon } from '../core/icons.js';
+import * as db from '../core/db.js';
+import { gbifTaxon } from '../core/sources.js';
 
 const shortDate = (/** @type {string} */ iso) =>
   new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -42,7 +44,8 @@ export class GfMapPage extends LitElement {
     _around: { state: true },
     _editing: { state: true },
     _panelFull: { state: true },
-    _point: { state: true }
+    _point: { state: true },
+    _distribution: { state: true }
   };
 
   static styles = [ui, css`
@@ -227,6 +230,8 @@ export class GfMapPage extends LitElement {
     this._view = 'map';
     /** @type {number[]} */
     this._plants = [];
+    /** One plant filtered: its GBIF distribution, offered in the Carte panel. @type {{ key: number, label: string } | null} */
+    this._distribution = null;
     /** @type {string | null} */
     this._toast = null;
     this._plantMenu = false;
@@ -485,6 +490,29 @@ export class GfMapPage extends LitElement {
   }
 
   /** @param {Map<string, any>} changed */
+  updated(changed) {
+    if (changed.has('_plants')) this.#findDistribution();
+  }
+
+  /** Exactly one plant filtered: look up its GBIF taxon, for the distribution layer. */
+  async #findDistribution() {
+    const id = this._plants.length === 1 ? this._plants[0] : null;
+    if (id === null) { this._distribution = null; return; }
+    if (this._distribution && this.#distributionFor === id) return;
+    this.#distributionFor = id;
+    this._distribution = null;
+    try {
+      const plant = await db.get('plants', id);
+      const taxon = plant ? await gbifTaxon(plant) : null;
+      if (this.#distributionFor === id && taxon?.id) {
+        this._distribution = { key: taxon.id, label: plant.vernacularNames?.[0] || plant.scientificName };
+      }
+    } catch { /* GBIF off or unreachable: no layer offered */ }
+  }
+
+  /** @type {number | null} */ #distributionFor = null;
+
+  /** @param {Map<string, any>} changed */
   willUpdate(changed) {
     // Lit re-applies object properties on every parent render: the app passing its (unchanged) route again
     // must not undo the selection this page made with replaceState.
@@ -646,6 +674,7 @@ export class GfMapPage extends LitElement {
             .spots=${spots}
             .selectedId=${this.route.spot}
             .plants=${this.#plantMarkers(spots)}
+            .distribution=${this._distribution}
             plant-zoom="16"
             editable
             ?editing=${this._editing}
