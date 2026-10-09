@@ -650,8 +650,8 @@ export class GfPlantDetail extends LitElement {
     const order = this._dragOrder || blockOrder(this.view);
     const sorting = Boolean(this._dragOrder);
     // Outside « Mode King », folded blocks are not there at all.
-    // Outside it too, the Noms block when the plant has no other name.
-    const keys = blockOrder(this.view).filter(k => king || (!isHidden(this.view, k) && !(k === 'names' && this.#namesEmpty(ctx))));
+    // Outside it too, a block with nothing for this plant (no other name, no Wikipédia article).
+    const keys = blockOrder(this.view).filter(k => king || (!isHidden(this.view, k) && !this.#emptyHere(k, ctx)));
     return html`<div class="blocks ${king ? 'king' : ''} ${sorting ? 'sorting' : ''}">${repeat(keys, k => k, k =>
       king ? this.#block(k, ctx, sorting ? order.indexOf(k) : null) : this.#plainBlock(k, ctx))}</div>
       ${king && !sorting ? this.#newNote() : nothing}`;
@@ -767,20 +767,31 @@ export class GfPlantDetail extends LitElement {
   }
 
   /**
-   * The plant's other French names (TAXREF, GBIF, iNaturalist), without the one it is shown under and without
-   * repeats (case and accents aside).
+   * The plant's other French names (TAXREF, GBIF), without the one it is shown under and without repeats (case
+   * and accents aside). Not iNaturalist's common name: it comes in English when there is no French one.
    * @param {any} ctx @returns {string[]}
    */
-  #otherFrench({ plant, details, inat, name }) {
+  #otherFrench({ plant, details, name }) {
     /** @type {string[]} */
     const out = [];
-    for (const n of [...(plant.vernacularNames || []), ...gbifFrenchNames(plant, details), inat?.commonName].filter(Boolean)) {
+    for (const n of [...(plant.vernacularNames || []), ...gbifFrenchNames(plant, details)].filter(Boolean)) {
       if (!sameName(n, name) && !out.some(o => sameName(o, n))) out.push(n);
     }
     return out;
   }
 
-  /** The Noms block has nothing to show here (outside Mode King it is then left out). @param {any} ctx */
+  /**
+   * A block with nothing to show for this plant, left out outside Mode King: Noms with no other name, Wikipédia
+   * with no article (or not yet: it appears when the summary arrives).
+   * @param {string} key @param {any} ctx
+   */
+  #emptyHere(key, ctx) {
+    if (key === 'names') return this.#namesEmpty(ctx);
+    if (key === 'wikipedia') return !this._wiki;
+    return false;
+  }
+
+  /** The Noms block has nothing to show here. @param {any} ctx */
   #namesEmpty(ctx) {
     if (this.#otherFrench(ctx).length) return false;
     return blockStyle(this.view, 'names') === 'list' || this.view !== 'scientific' || !otherNames(ctx.details).length;
@@ -846,7 +857,7 @@ export class GfPlantDetail extends LitElement {
           french: () => names.length ? html`<dt>Autres noms français</dt><dd>${names.join(' · ')}</dd>` : nothing,
           foreign: () => foreign.length ? html`<dt>Autres langues (GBIF)</dt><dd>${foreign.map(([lang, list]) => html`<span class="lang">${lang || '?'}</span> ${list.join(', ')} `)}</dd>` : nothing
         })}</dl>
-        <p class="credit">Sources : TAXREF v18 · GBIF${names.some(n => sameName(n, ctx.inat?.commonName)) ? ' · iNaturalist' : ''}.</p>`;
+        <p class="credit">Sources : TAXREF v18 · GBIF.</p>`;
       }
       case 'occurrences': return this.#occurrences(ctx);
       case 'gbifMedia': {
