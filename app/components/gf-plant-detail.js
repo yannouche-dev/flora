@@ -3,8 +3,8 @@ import { LitElement, html, css, nothing, repeat } from 'lit';
 import { STATUS_LABELS } from '../config.js';
 import * as db from '../core/db.js';
 import { lastSearchHash } from '../core/query.js';
-import { setPlantView, setTarget, StoreController, whenReady } from '../core/store.js';
-import { getMembership, setInCollection, toggleFavorite } from '../core/collections.js';
+import { StoreController, whenReady } from '../core/store.js';
+import { getMembership, toggleFavorite } from '../core/collections.js';
 import { href } from '../core/router.js';
 import { share } from '../core/share.js';
 import * as sources from '../core/sources.js';
@@ -197,10 +197,12 @@ export class GfPlantDetail extends LitElement {
     :host {
       display: block;
       overflow-y: auto;
-      padding: 16px;
+      /* No bottom padding: the action bar docks at the very bottom (the article keeps the space). */
+      padding: 16px 16px 0;
     }
+    article { padding-bottom: 24px; }
     article { max-width: 920px; margin: 0 auto; }
-    :host([embedded]) { padding: 4px 14px 24px; }
+    :host([embedded]) { padding: 4px 14px 0; }
     :host([embedded]) .back { display: none; }
     :host([embedded]) h1 { margin-top: 4px; }
     .back { font-size: 0.9rem; }
@@ -243,6 +245,46 @@ export class GfPlantDetail extends LitElement {
     .block-title .tool { cursor: pointer; }
     .grip:hover, .grip:focus-visible, .block-title .tool:hover, .block-title .tool:focus-visible { opacity: 1; background: var(--gf-surface-2); color: var(--gf-text); }
     .grip:focus-visible, .block-title .tool:focus-visible { outline: none; box-shadow: var(--gf-focus); }
+    /* The action bar: docked at the bottom of the sheet (above the tab bar on a phone), equal buttons. */
+    .action-bar {
+      position: sticky;
+      bottom: 0;
+      z-index: 6;
+      margin: 0 -16px;
+      padding: 6px 8px;
+      background: var(--gf-surface);
+      border-top: 1px solid var(--gf-border);
+      box-shadow: 0 -4px 14px rgb(0 0 0 / 0.06);
+    }
+    :host([embedded]) .action-bar { margin: 0 -14px; }
+    .action-bar .acts { display: flex; gap: 4px; max-width: 920px; margin: 0 auto; }
+    .action-bar .act { position: relative; flex: 1; min-width: 0; display: flex; }
+    .action-bar .act > button, .action-bar .act > a.button {
+      flex: 1;
+      min-width: 0;
+      display: grid;
+      justify-items: center;
+      gap: 2px;
+      padding: 6px 4px;
+      min-height: 0;
+      border: 0;
+      border-radius: var(--gf-radius);
+      background: none;
+      color: var(--gf-text);
+      font-size: 0.72rem;
+      font-weight: 600;
+      text-decoration: none;
+      box-shadow: none;
+    }
+    .action-bar .act svg { font-size: 1.2rem; }
+    .action-bar .act span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+    .action-bar .act > button:hover, .action-bar .act > a.button:hover { background: var(--gf-surface-2); }
+    .action-bar .fav[aria-pressed='true'] { color: var(--gf-fav); }
+    .action-bar .share-note { position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); margin: 0; padding: 4px 10px; border-radius: var(--gf-radius-pill); background: var(--gf-text); color: var(--gf-surface); white-space: nowrap; }
+    /* Mode King: every action, each with its ☑; an action hidden in this view is faded and does nothing. */
+    .action-bar .act-toggle { position: absolute; top: 0; right: 2px; display: grid; place-items: center; width: 22px; height: 22px; cursor: pointer; }
+    .action-bar .act-toggle input { margin: 0; width: 16px; height: 16px; }
+    .action-bar .act.off > button, .action-bar .act.off > a.button { opacity: 0.4; text-decoration: line-through; pointer-events: none; }
     /* The name and the actions read without a title (Mode King titles them, to move them like the others). */
     .block.headless { margin-top: 8px; }
     .block.headless:first-child { margin-top: 0; }
@@ -342,9 +384,6 @@ export class GfPlantDetail extends LitElement {
     .hero figcaption { padding: 4px 10px; }
     .epure h1 { font-size: 1.8rem; }
     .meta { color: var(--gf-text-muted); margin: 6px 0 10px; }
-    .gate { display: grid; gap: 8px; margin: 16px 0 8px; }
-    .gate .add { width: 100%; justify-content: center; }
-    .gate .add[aria-pressed='true'] { background: var(--gf-accent-soft); color: var(--gf-accent); border: 2px solid var(--gf-accent); }
     .more { margin-top: 18px; }
 
     /* Standard: collections as one discreet line. */
@@ -523,20 +562,38 @@ export class GfPlantDetail extends LitElement {
     return shownSubs(this.view, block).map(k => parts[k]?.() ?? nothing).filter(x => x !== nothing);
   }
 
-  /** @param {any} plant */
-  #actions(plant) {
+  /**
+   * The action bar, docked at the bottom of the sheet (above the tab bar on a phone): the actions this view
+   * shows, in its order. Mode King shows them all, each with its ☑ (shown or not in this view).
+   * @param {any} plant
+   */
+  #actionBar(plant) {
+    const v = this.view;
+    const king = this.#store.state.kingMode;
     const fav = this.#store.state.favorites.has(plant.id);
     const name = plant.vernacularNames?.[0] || plant.scientificName;
-    const buttons = this.#subs('actions', {
+    /** @type {Record<string, () => unknown>} */
+    const buttons = {
       fav: () => html`<button type="button" class="fav" aria-pressed=${fav ? 'true' : 'false'} @click=${() => toggleFavorite(plant)}>
-        ${icon(fav ? 'heart-fill' : 'heart')} Favori</button>`,
-      addTo: () => html`<button type="button" @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-add-to'))?.open()}>${icon('plus-lg')} Ajouter à…</button>`,
-      share: () => html`<button type="button" @click=${() => this.#share(plant, name)}>${icon('share')} Partager</button>`,
-      spot: () => html`<a class="button" href=${href.newSpot(plant.id)}>${icon('geo-alt-fill')} Noter ici</a>`
-    });
-    return html`
-      <div class="actions" role="group" aria-label="Actions">${buttons}</div>
-      ${this._shareNote ? html`<p class="share-note" role="status">${this._shareNote}</p>` : nothing}`;
+        ${icon(fav ? 'heart-fill' : 'heart')}<span>Favori</span></button>`,
+      addTo: () => html`<button type="button" @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-add-to'))?.open()}>${icon('plus-lg')}<span>Ajouter à…</span></button>`,
+      share: () => html`<button type="button" @click=${() => this.#share(plant, name)}>${icon('share')}<span>Partager</span></button>`,
+      spot: () => html`<a class="button" href=${href.newSpot(plant.id)}>${icon('geo-alt-fill')}<span>Noter ici</span></a>`
+    };
+    const keys = subOrder(v, 'actions').filter(k => buttons[k] && (king || !isSubHidden(v, 'actions', k)));
+    if (!keys.length) return nothing;
+    return html`<nav class="action-bar ${king ? 'king' : ''}" aria-label="Actions">
+      ${this._shareNote ? html`<p class="share-note" role="status">${this._shareNote}</p>` : nothing}
+      <div class="acts">${keys.map(k => {
+        const off = isSubHidden(v, 'actions', k);
+        return html`<span class="act ${off ? 'off' : ''}" data-key=${k}>
+          ${buttons[k]()}
+          ${king ? html`<label class="act-toggle" title=${off ? 'Afficher cette action dans ce mode' : 'Masquer cette action dans ce mode'}>
+            <input type="checkbox" .checked=${!off} aria-label=${`« ${subTitle('actions', k)} » dans la barre d’actions`}
+              @change=${e => setSubHidden(v, 'actions', k, !e.target.checked)} /></label>` : nothing}
+        </span>`;
+      })}</div>
+    </nav>`;
   }
 
   /** @param {any} plant @param {string} name */
@@ -808,7 +865,6 @@ export class GfPlantDetail extends LitElement {
     if (isNote(key)) return this.#note(key, plant);
     switch (key) {
       case 'name': return this.#name(ctx);
-      case 'actions': return this.#actions(plant);
       case 'photos': {
         if (v !== 'epure') return this.#gallery(ctx, v === 'standard' ? 6 : Infinity);
         const hero = ctx.images[0];
@@ -824,7 +880,6 @@ export class GfPlantDetail extends LitElement {
       case 'lookalikes':
         return html`<gf-lookalikes .plant=${plant} ?compact=${v === 'epure'} ?detailed=${v === 'scientific'}></gf-lookalikes>
           ${ifEmpty('Aucune confusion signalée par l’Anses et les Centres antipoison.')}`;
-      case 'collect': return this.#collect(ctx);
       case 'taxonomy': return v === 'scientific' ? this.#taxonomy(ctx) : this.#tags(ctx);
       case 'mine': {
         if (v === 'scientific') return html`<gf-plant-spots plant-id=${plant.id} notitle></gf-plant-spots>`;
@@ -949,45 +1004,6 @@ export class GfPlantDetail extends LitElement {
     return html`<dl class="facts ids">${ids.map(([label, id, url]) => html`<dt>${label}</dt><dd>${url ? html`<a href=${url} target="_blank" rel="noopener">${id}</a>` : id}</dd>`)}</dl>`;
   }
 
-  /** One tap to put the plant in the current collection, which to choose, and (Épuré) more about it. @param {any} ctx */
-  #collect({ plant }) {
-    const { collections, target } = this.#store.state;
-    const choices = collections.filter(c => c.kind !== 'favorites');
-    const current = choices.find(c => c.id === target) || null;
-    const inTarget = current ? (getMembership().byPlant.get(plant.id) || []).includes(current.id) : false;
-    const places = choices.filter(c => c.kind === 'place');
-    const lists = choices.filter(c => c.kind !== 'place');
-    const parts = this.#subs('collect', {
-      add: () => current ? html`
-        <button class="primary large add" type="button" aria-pressed=${inTarget ? 'true' : 'false'}
-          @click=${() => setInCollection(current.id, plant, !inTarget).then(() => setTarget(current.id)).catch(console.error)}>
-          ${icon(inTarget ? 'check-lg' : 'plus-lg')} ${inTarget ? 'Dans ' : 'Ajouter à '}${current.kind === 'place' ? html`${icon('geo-alt-fill')} ` : ''}${current.name}
-        </button>` : nothing,
-      choose: () => html`
-        <select class="target" aria-label="Collection en cours" .value=${current?.id || ''}
-          @change=${e => this.#pickTarget(e.target)}>
-          <option value="" ?selected=${!current} disabled>${current ? 'Changer…' : 'Choisir où ajouter…'}</option>
-          ${places.length ? html`<optgroup label="Mes lieux">${places.map(c => html`<option value=${c.id} ?selected=${c.id === current?.id}>${c.name}</option>`)}</optgroup>` : nothing}
-          ${lists.length ? html`<optgroup label="Mes collections">${lists.map(c => html`<option value=${c.id} ?selected=${c.id === current?.id}>${c.name}</option>`)}</optgroup>` : nothing}
-          <option value="__new">Nouvelle collection…</option>
-        </select>`,
-      more: () => this.view === 'epure'
-        ? html`<p class="more"><button class="link" type="button" @click=${() => setPlantView('standard')}>Plus d’infos ${icon('arrow-right')}</button></p>` : nothing
-    });
-    return html`<div class="gate" role="group" aria-label="Ajouter à la collection en cours">${parts}</div>`;
-  }
-
-  /** @param {HTMLSelectElement} select */
-  #pickTarget(select) {
-    const value = select.value;
-    if (value === '__new') {
-      select.value = this.#store.state.target || '';
-      /** @type {any} */ (this.renderRoot.querySelector('gf-add-to'))?.open();
-      return;
-    }
-    if (value) setTarget(value);
-  }
-
   /** @param {string} key @param {-1 | 1} delta @param {string[]} order */
   #moved(key, delta, order) {
     const i = order.indexOf(key), j = i + delta;
@@ -1104,7 +1120,8 @@ export class GfPlantDetail extends LitElement {
       <article class="epure">
         <gf-add-to .plant=${ctx.plant}></gf-add-to>
         ${this.#blocks(ctx)}
-      </article>`;
+      </article>
+      ${this.#actionBar(ctx.plant)}`;
   }
 
   /** Standard (for everyone) and Scientifique (everything the app holds or can fetch, each with its source). @param {any} ctx */
@@ -1115,7 +1132,8 @@ export class GfPlantDetail extends LitElement {
         <gf-add-to .plant=${ctx.plant}></gf-add-to>
         ${this._error ? html`<p class="muted">${this._error}</p>` : nothing}
         ${this.#blocks(ctx)}
-      </article>`;
+      </article>
+      ${this.#actionBar(ctx.plant)}`;
   }
 }
 

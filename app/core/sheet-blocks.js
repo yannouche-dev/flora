@@ -19,11 +19,9 @@ import { emptyLayout, store } from './store.js';
 /** The blocks every sheet has. @type {SheetBlock[]} */
 export const BLOCKS = [
   { key: 'name', title: 'Nom' },
-  { key: 'actions', title: 'Actions' },
   { key: 'photos', title: 'Photos', module: 'photos' },
   { key: 'status', title: 'Protection et statuts' },
   { key: 'lookalikes', title: 'Plantes à confondre' },
-  { key: 'collect', title: 'Ajouter à ma collection' },
   { key: 'taxonomy', title: 'Classification' },
   { key: 'mine', title: 'Mes collections' },
   { key: 'calendar', title: 'Calendrier' },
@@ -41,9 +39,6 @@ export const BLOCKS = [
 export const SUBS = {
   actions: [
     { key: 'fav', title: 'Favori' }, { key: 'addTo', title: 'Ajouter à…' }, { key: 'share', title: 'Partager' }, { key: 'spot', title: 'Noter ici' }
-  ],
-  collect: [
-    { key: 'add', title: 'Ajout en un geste' }, { key: 'choose', title: 'Choix de la collection' }, { key: 'more', title: 'Plus d’infos (Épuré)' }
   ],
   taxonomy: [
     { key: 'chain', title: 'Classification complète' }, { key: 'ranks', title: 'Famille, genre' }, { key: 'author', title: 'Auteur' },
@@ -72,11 +67,14 @@ export const STYLES = {
   names: { styles: [{ key: 'table', title: 'Tableau' }, { key: 'list', title: 'Liste' }], defaults: { epure: 'list' } }
 };
 
+/** The action bar docked at the bottom of the sheet: its actions, shown or not and ordered per mode (sub-blocks of 'actions'). */
+export const ACTIONS = SUBS.actions;
+
 /** Default order of each mode: what the mode is about first. Note blocks follow, in their creation order. @type {Record<Mode, string[]>} */
 const DEFAULTS = {
-  epure: ['name', 'photos', 'status', 'lookalikes', 'collect', 'actions', 'calendar', 'wikipedia', 'names', 'taxonomy', 'mine', 'descriptions', 'occurrences', 'gbifMedia', 'trefle', 'ids', 'resources'],
-  standard: ['name', 'actions', 'status', 'lookalikes', 'taxonomy', 'mine', 'calendar', 'photos', 'wikipedia', 'descriptions', 'names', 'resources', 'collect', 'occurrences', 'gbifMedia', 'trefle', 'ids'],
-  scientific: ['name', 'actions', 'lookalikes', 'taxonomy', 'status', 'calendar', 'occurrences', 'wikipedia', 'descriptions', 'photos', 'gbifMedia', 'trefle', 'ids', 'mine', 'resources', 'names', 'collect']
+  epure: ['name', 'photos', 'status', 'lookalikes', 'calendar', 'wikipedia', 'names', 'taxonomy', 'mine', 'descriptions', 'occurrences', 'gbifMedia', 'trefle', 'ids', 'resources'],
+  standard: ['name', 'status', 'lookalikes', 'taxonomy', 'mine', 'calendar', 'photos', 'wikipedia', 'descriptions', 'names', 'resources', 'occurrences', 'gbifMedia', 'trefle', 'ids'],
+  scientific: ['name', 'lookalikes', 'taxonomy', 'status', 'calendar', 'occurrences', 'wikipedia', 'descriptions', 'photos', 'gbifMedia', 'trefle', 'ids', 'mine', 'resources', 'names']
 };
 
 /** Keys of earlier versions (one list per mode) → today's block. */
