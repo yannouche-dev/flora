@@ -286,6 +286,9 @@ gf-map .gf-layer-menu input {
   fill-opacity: 0.9;
   cursor: pointer;
 }
+/* Observations around, by source (map blocks of the plant sheet). */
+.gf-obs-inat { fill: #74ac00; }
+.gf-obs-gbif { fill: #4e7b9f; }
 
 /* Search pill on top of the map (Carte tab). */
 gf-map .gf-map-search {

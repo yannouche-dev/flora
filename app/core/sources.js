@@ -204,11 +204,11 @@ export function gadmName(gid, signal, mode) {
 /**
  * GBIF occurrences around a point (never cached: the position changes).
  * @param {number | null | undefined} gbifKey @param {[number, number]} point [lon, lat] @param {number} radius metres
- * @param {AbortSignal} [signal] @param {Mode} [mode]
+ * @param {AbortSignal} [signal] @param {Mode} [mode] @param {number} [limit] how many of the nearest
  */
-export function gbifNear(gbifKey, point, radius, signal, mode) {
+export function gbifNear(gbifKey, point, radius, signal, mode, limit = 5) {
   if (!gbifKey) return Promise.resolve(null);
-  return sourcesFor(mode).gbifNear(gbifKey, point, radius, { signal });
+  return sourcesFor(mode).gbifNear(gbifKey, point, radius, { signal, limit });
 }
 
 /**

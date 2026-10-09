@@ -192,6 +192,17 @@ export class GfMap extends LitElement {
     editing: { type: Boolean, reflect: true },
     /** A plant whose GBIF distribution the Carte panel offers as a layer: { key (GBIF taxon), label }. */
     distribution: { attribute: false },
+    /** Shows the `distribution` layer without the panel (a map block configured to). */
+    distributionOn: { type: Boolean, attribute: 'distribution-on' },
+    /** This map's own background and overlays (not the shared choice of the Carte); changes emit `layers-change`. */
+    base: { attribute: false },
+    overlays: { attribute: false },
+    /** Points drawn as small circles: [{ coordinates, title, url?, kind? }] (kind: 'gbif' | 'inat', its colour). */
+    points: { attribute: false },
+    /** The point card's « Créer un endroit ici » makes a place with this plant already in it. */
+    createPlant: { type: Number, attribute: 'create-plant' },
+    /** No « Me localiser » button. */
+    noLocate: { type: Boolean, attribute: 'no-locate' },
     _moves: { state: true },
     _areas: { state: true },
     _areasClosed: { state: true },
@@ -225,6 +236,16 @@ export class GfMap extends LitElement {
     this.search = true;
     this.legend = true;
     this.noCreate = false;
+    this.distributionOn = false;
+    /** @type {string | null} */
+    this.base = null;
+    /** @type {string[] | null} */
+    this.overlays = null;
+    /** @type {{ coordinates: [number, number], title: string, url?: string, kind?: string }[]} */
+    this.points = [];
+    /** @type {number | null} */
+    this.createPlant = null;
+    this.noLocate = false;
     this.noSearch = false;
     this.editable = false;
     this.editing = false;
@@ -425,13 +446,14 @@ export class GfMap extends LitElement {
   /** The GBIF distribution layer of the plant given, when switched on in the panel (and GBIF is on). */
   #syncDistribution() {
     const map = this.#map;
-    const want = this.distribution && this.#distributionOn && moduleOn('gbif') ? this.distribution.key : null;
+    const d = this.distribution;
+    const want = d && (this.#distributionOn || this.distributionOn) && moduleOn('gbif') ? d.key + ':' + (d.country || '') : null;
     if (this.#distributionLayer && (!want || /** @type {any} */ (this.#distributionLayer).gfKey !== want)) {
       this.#distributionLayer.remove();
       this.#distributionLayer = null;
     }
     if (!map || !want || this.#distributionLayer) return;
-    const layer = this.#distributionLayer = L.tileLayer(gbifTileUrl(want), {
+    const layer = this.#distributionLayer = L.tileLayer(gbifTileUrl(/** @type {any} */ (d).key, /** @type {any} */ (d).country), {
       attribution: 'Occurrences : <a href="https://www.gbif.org/" target="_blank" rel="noopener">GBIF.org</a>',
       opacity: 0.85, crossOrigin: 'anonymous', maxNativeZoom: 16, maxZoom: 21, zIndex: 20, className: 'gf-tiles-gbif'
     });
@@ -456,6 +478,7 @@ export class GfMap extends LitElement {
   /** @type {Map<string, L.Marker>} */ #plantMarkers = new Map();
   /** @type {L.Marker | null} */ #editMarker = null;
   /** @type {L.LayerGroup | null} */ #areaLayer = null;
+  /** @type {L.LayerGroup | null} */ #pointsLayer = null;
   /** @type {L.Marker | null} */ #me = null;
   /** @type {L.Circle | null} */ #meCircle = null;
   /** @type {(() => void) | null} */ #unwatch = null;
@@ -487,10 +510,13 @@ export class GfMap extends LitElement {
     L.control.zoom({ position: 'bottomleft' }).addTo(map);
     L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(map);
 
+    if (this.base && this.base in BASES) this.#base = /** @type {'photo' | 'plan'} */ (this.base);
+    if (this.overlays) this.#overlays = this.overlays.filter(k => k in OVERLAYS);
     this.#layer(this.#base).addTo(map);
     for (const key of this.#overlays) this.#layer(key).addTo(map);
 
     this.#areaLayer = L.layerGroup().addTo(map);
+    this.#pointsLayer = L.layerGroup().addTo(map);
     this.#spotLayer = L.layerGroup().addTo(map);
     this.#plantLayer = L.layerGroup();
     map.on('zoomend', () => this.#syncPlantVisibility());
@@ -536,7 +562,15 @@ export class GfMap extends LitElement {
   /** @param {Map<string, any>} changed */
   updated(changed) {
     if (!this.#map) return;
-    if (changed.has('distribution')) {
+    if (changed.has('base') && this.base && this.base !== this.#base) this.#setBase(/** @type {any} */ (this.base));
+    if (changed.has('overlays') && this.overlays) {
+      for (const key of Object.keys(OVERLAYS)) {
+        const on = this.overlays.includes(key);
+        if (on !== this.#overlays.includes(key)) this.#setOverlay(key, on);
+      }
+    }
+    if (changed.has('points')) this.#syncPoints();
+    if (changed.has('distribution') || changed.has('distributionOn')) {
       this.#syncDistribution();
       if (this.#panel) Object.assign(this.#panel, this.#distributionInfo());
     }
@@ -559,7 +593,7 @@ export class GfMap extends LitElement {
     if (changed.has('spots') || changed.has('selectedId')) this.#syncSpots();
     // Switching position editing on or off: rebuild the markers rather than toggling Leaflet's drag handlers.
     if (changed.has('pinDraggable') && changed.get('pinDraggable') !== undefined) this.#clearPin();
-    if (changed.has('spots') || changed.has('plants') || changed.has('pin') || changed.has('editable')) this.#syncButtons();
+    if (changed.has('spots') || changed.has('plants') || changed.has('pin') || changed.has('editable') || changed.has('noLocate')) this.#syncButtons();
     if (changed.has('draggablePlants') && changed.get('draggablePlants') !== undefined) this.#clearPlants();
     if (changed.has('pin') || changed.has('pinDraggable')) this.#syncPin();
     if (changed.has('plants') || changed.has('selectedPlant') || changed.has('draggablePlants')) this.#syncPlants();
@@ -601,7 +635,21 @@ export class GfMap extends LitElement {
     this.#syncPlants();
     this.#syncTracking();
     this.#syncArea();
+    this.#syncPoints();
     if (!this.#applyFrame() && this.fit) this.#fitToContent();
+  }
+
+  /** Observations around (iNaturalist, GBIF): small circles in their source's colour, each linking to its record. */
+  #syncPoints() {
+    const layer = this.#pointsLayer;
+    if (!layer) return;
+    layer.clearLayers();
+    for (const point of this.points || []) {
+      const [x, y] = point.coordinates;
+      const dot = L.circleMarker([y, x], { radius: 6, className: 'gf-obs' + (point.kind ? ' gf-obs-' + point.kind : ''), bubblingMouseEvents: false }).addTo(layer);
+      dot.bindTooltip(point.title, { direction: 'top' });
+      if (point.url) dot.on('click', () => open(point.url, '_blank', 'noopener'));
+    }
   }
 
   /** @param {string} name @param {any} detail */
@@ -820,7 +868,8 @@ export class GfMap extends LitElement {
     const map = /** @type {L.Map} */ (this.#map);
     const points = [
       ...(this.pin ? [this.pin] : this.spots.map(s => s.geometry.coordinates)),
-      ...(this.pin || !this.spots.length ? this.plants.map(p => p.coordinates) : [])
+      ...(this.pin || !this.spots.length ? this.plants.map(p => p.coordinates) : []),
+      ...(this.points || []).map(p => p.coordinates)
     ];
     // Not laid out yet: fitting now would compute a view for a 0×0 map.
     if (!points.length || !map.getSize().x) return;
@@ -879,6 +928,8 @@ export class GfMap extends LitElement {
     const edit = /** @type {HTMLButtonElement | null | undefined} */ (this.#buttons?.querySelector('.edit'));
     if (!edit) return;
     edit.hidden = !this.editable;
+    const locate = /** @type {HTMLButtonElement | null | undefined} */ (this.#buttons?.querySelector('.locate'));
+    if (locate) locate.hidden = this.noLocate;
     const nothing = !this.pin && !this.spots.length && !this.plants.length;
     edit.disabled = nothing && !this.editing;
     edit.title = nothing ? 'Aucun lieu à déplacer' : this.editing ? 'Terminer la modification' : 'Modifier les positions';
@@ -931,7 +982,7 @@ export class GfMap extends LitElement {
       L.DomEvent.disableClickPropagation(card);
       this.#root.append(card);
     }
-    Object.assign(this.#pointCard, { point, label, create: !this.noCreate });
+    Object.assign(this.#pointCard, { point, label, create: !this.noCreate, plant: this.createPlant });
     this.#emit('point-info', { coordinates: point });
   }
 
@@ -975,12 +1026,16 @@ export class GfMap extends LitElement {
   }
 
   #saveLayers() {
-    store(config.storageKeys.mapLayer, { base: this.#base, overlays: this.#overlays, distribution: this.#distributionOn });
+    // A map with its own layers (map block): tell its owner, leave the Carte's choice alone.
+    if (this.base) this.#emit('layers-change', { base: this.#base, overlays: [...this.#overlays] });
+    else store(config.storageKeys.mapLayer, { base: this.#base, overlays: this.#overlays, distribution: this.#distributionOn });
     if (this.#panel) Object.assign(this.#panel, { base: this.#base, overlays: [...this.#overlays], ...this.#distributionInfo() });
   }
 
   /** What the panel says of the GBIF layer: nothing without a plant (or with GBIF off). */
   #distributionInfo() {
+    // Set by its owner (map block): not a panel choice.
+    if (this.distributionOn) return { distribution: null, distributionOn: false };
     return { distribution: this.distribution && moduleOn('gbif') ? this.distribution.label : null, distributionOn: this.#distributionOn };
   }
 }

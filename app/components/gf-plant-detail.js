@@ -17,11 +17,12 @@ import './gf-calendar.js';
 import './gf-status.js';
 import './gf-lookalikes.js';
 import './gf-add-to.js';
-import './gf-gbif-map.js';
+import './gf-sheet-map.js';
+import { OVERLAYS } from '../core/ign.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 import {
-  STYLES, SUBS, canBeEmpty, hidesEmpty, setHidesEmpty, blockModuleName, blockOrder, blockStyle, blockTitle, isTitleShown, setBlockStyle, setTitleShown, createNote, deleteNote, isHidden, isNote, isSubHidden, noteText, renameBlock,
+  STYLES, SUBS, canBeEmpty, hidesEmpty, setHidesEmpty, isMap, isAddedMap, mapConfig, setMapConfig, createMap, deleteMap, blockModuleName, blockOrder, blockStyle, blockTitle, isTitleShown, setBlockStyle, setTitleShown, createNote, deleteNote, isHidden, isNote, isSubHidden, noteText, renameBlock,
   setBlockOrder, setHidden, setNoteText, setSubHidden, setSubOrder, shownSubs, subOrder, subTitle
 } from '../core/sheet-blocks.js';
 import './gf-sortable-list.js';
@@ -276,6 +277,7 @@ export class GfPlantDetail extends LitElement {
     _dragY: { state: true },
     _renaming: { state: true },
     _subsOpen: { state: true },
+    _mapsOpen: { state: true },
     _newNote: { state: true },
     _noteSaved: { state: true }
   };
@@ -386,6 +388,12 @@ export class GfPlantDetail extends LitElement {
     .block-title .styles button { min-height: 0; padding: 2px 8px; border: 0; border-radius: 0; background: var(--gf-surface); color: var(--gf-text-muted); font-size: 0.7rem; text-transform: none; letter-spacing: 0; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
     .block-title .styles button[aria-pressed='true'] { background: var(--gf-accent-soft); color: var(--gf-accent); }
     .block-title .styles button:focus-visible { outline: none; box-shadow: var(--gf-focus); }
+    .map-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin: 0 0 10px; padding: 10px; border: 1px dashed var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface); font-size: 0.85rem; }
+    .map-form fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 6px; align-content: start; }
+    .map-form legend { font-weight: 700; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--gf-text-muted); padding: 0; margin-bottom: 2px; }
+    .map-form label { display: grid; gap: 2px; }
+    .map-form label.check { display: flex; gap: 6px; align-items: center; }
+    .map-placeholder { border-radius: var(--gf-radius); background: var(--gf-surface-2); }
     .subs-editor { margin: 0 0 10px 20px; padding: 8px 10px; border: 1px dashed var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface); }
     .note-text { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface); color: var(--gf-text); resize: vertical; }
     .note-text:focus-visible { outline: none; border-color: var(--gf-accent); box-shadow: var(--gf-focus); }
@@ -508,7 +516,6 @@ export class GfPlantDetail extends LitElement {
     .near li span { color: var(--gf-text-muted); min-width: 0; overflow-wrap: anywhere; }
     .papers { margin: 0; padding-left: 18px; display: grid; gap: 8px; font-size: 0.9rem; }
     .papers small { display: block; color: var(--gf-text-muted); }
-    gf-gbif-map { margin-bottom: 4px; }
     /* Herbarium sheets are tall: shown whole, not cropped. */
     .gallery.herbarium img { aspect-ratio: 3 / 4; object-fit: contain; background: #f4f1ea; }
     .specimen { display: block; font-size: 0.75rem; font-weight: 600; margin-bottom: 2px; }
@@ -541,6 +548,8 @@ export class GfPlantDetail extends LitElement {
     this._renaming = null;
     /** @type {Set<string>} */
     this._subsOpen = new Set();
+    /** King mode: the map blocks showing their settings. @type {Set<string>} */
+    this._mapsOpen = new Set();
     this._newNote = false;
     /** Note block whose text was just saved. @type {string | null} */
     this._noteSaved = null;
@@ -955,8 +964,12 @@ export class GfPlantDetail extends LitElement {
               @click=${() => setHidden(this.view, key, false)}>${icon('arrow-counterclockwise')}</button>`
           : html`<button class="tool" type="button" aria-label="Masquer le bloc « ${title} »" title=${module ? `Masquer (coupe le module ${module} dans ce mode)` : 'Masquer'}
               @click=${() => setHidden(this.view, key, true)}>${icon('trash3')}</button>`}
+        ${isMap(key) && !off ? html`<button class="tool" type="button" aria-expanded=${this._mapsOpen.has(key) ? 'true' : 'false'} aria-label="Configurer la carte « ${title} »" title="Ce que la carte montre et permet"
+          @click=${() => { const open = new Set(this._mapsOpen); if (open.has(key)) open.delete(key); else open.add(key); this._mapsOpen = open; }}>${icon('gear')}</button>` : nothing}
         ${isNote(key) ? html`<button class="tool" type="button" aria-label="Supprimer le bloc « ${title} »" title="Supprimer le bloc et ses textes"
           @click=${() => { if (confirm(`Supprimer le bloc « ${title} » et tout ce qui y est écrit ?`)) deleteNote(key); }}>${icon('x-lg')}</button>` : nothing}
+        ${isAddedMap(key) ? html`<button class="tool" type="button" aria-label="Supprimer le bloc « ${title} »" title="Supprimer cette carte"
+          @click=${() => { if (confirm(`Supprimer la carte « ${title} » ?`)) deleteMap(key); }}>${icon('x-lg')}</button>` : nothing}
       </h2>
       ${subsOpen && !off ? html`<div class="subs-editor">
         <gf-sortable-list label=${'Sous-blocs de ' + title}
@@ -964,6 +977,7 @@ export class GfPlantDetail extends LitElement {
           @reorder=${e => setSubOrder(this.view, key, e.detail.keys)}
           @toggle=${e => setSubHidden(this.view, key, e.detail.key, !e.detail.on)}></gf-sortable-list>
       </div>` : nothing}
+      ${isMap(key) && !off && this._mapsOpen.has(key) ? this.#mapForm(key) : nothing}
       ${off ? nothing : html`<div class="content">${this.#content(key, ctx)}</div>`}
     </section>`;
   }
@@ -1001,7 +1015,65 @@ export class GfPlantDetail extends LitElement {
           this._newNote = true;
           await this.updateComplete;
           /** @type {HTMLInputElement | null} */ (this.renderRoot.querySelector('.new-note input'))?.focus();
-        }}>${icon('plus-lg')} Bloc Note</button></p>`;
+        }}>${icon('plus-lg')} Bloc Note</button>
+        <button type="button" @click=${async () => {
+          const key = createMap('Carte');
+          this._mapsOpen = new Set([...this._mapsOpen, key]);
+          await this.updateComplete;
+          this.renderRoot.querySelector(`.block[data-key="${key}"]`)?.scrollIntoView({ block: 'center' });
+        }}>${icon('plus-lg')} Bloc Carte</button></p>`;
+  }
+
+  /**
+   * A « Carte » block: the map component, set up as configured (the card under a swiped one shows a
+   * placeholder rather than a second map). @param {string} key @param {any} ctx
+   */
+  #map(key, { plant, details, inat }) {
+    const config = mapConfig(key);
+    if (this.preview) return html`<div class="map-placeholder" style=${`height:${{ s: 180, m: 260, l: 380 }[config.height]}px`}></div>`;
+    return html`<gf-sheet-map .plant=${plant} .gbifKey=${details?.identifiers?.gbif?.id ?? null} .inatId=${inat?.id ?? null}
+      .config=${config} mode=${this.view}
+      @map-layers=${(/** @type {CustomEvent} */ e) => {
+        const { base, overlays } = e.detail;
+        if (base !== config.base || overlays.join() !== config.overlays.join()) setMapConfig(key, { base, overlays });
+      }}></gf-sheet-map>`;
+  }
+
+  /** Mode King: what a map block shows and lets do (the same in every mode). @param {string} key */
+  #mapForm(key) {
+    const c = mapConfig(key);
+    const set = (/** @type {any} */ patch) => setMapConfig(key, patch);
+    /** @param {string} label @param {string} field @param {[string, string][]} options */
+    const select = (label, field, options) => html`<label>${label}
+      <select @change=${(/** @type {any} */ e) => set({ [field]: e.target.value })}>
+        ${options.map(([value, text]) => html`<option value=${value} ?selected=${/** @type {any} */ (c)[field] === value}>${text}</option>`)}
+      </select></label>`;
+    const check = (/** @type {string} */ label, /** @type {boolean} */ on, /** @type {(on: boolean) => void} */ change) =>
+      html`<label class="check"><input type="checkbox" .checked=${on} @change=${(/** @type {any} */ e) => change(e.target.checked)} /> ${label}</label>`;
+    const action = (/** @type {keyof typeof c.actions} */ a, /** @type {string} */ label) => check(label, c.actions[a], on => set({ actions: { [a]: on } }));
+    return html`<div class="map-form" role="group" aria-label="Réglages de la carte">
+      <fieldset><legend>Couches</legend>
+        ${select('Répartition GBIF', 'gbif', [['fr', 'France'], ['world', 'Monde'], ['off', 'Non']])}
+        ${check('Mes lieux de cette plante (et chaque plant)', c.places, on => set({ places: on }))}
+        ${select('Observations proches', 'near', [['off', 'Non'], ['both', 'iNaturalist et GBIF'], ['inat', 'iNaturalist'], ['gbif', 'GBIF']])}
+      </fieldset>
+      <fieldset><legend>Fond et couches IGN</legend>
+        ${select('Fond', 'base', [['plan', 'Plan IGN'], ['photo', 'Photos aériennes']])}
+        ${Object.entries(OVERLAYS).map(([k, def]) => check(def.label, c.overlays.includes(k),
+          on => set({ overlays: on ? [...c.overlays, k] : c.overlays.filter(o => o !== k) })))}
+      </fieldset>
+      <fieldset><legend>Affichage</legend>
+        ${select('Cadrage', 'frame', [['france', 'France entière'], ['content', 'Ajusté à ce qui est affiché'], ['me', 'Autour de moi']])}
+        ${select('Hauteur', 'height', [['s', 'Petite'], ['m', 'Moyenne'], ['l', 'Grande']])}
+      </fieldset>
+      <fieldset><legend>Actions</legend>
+        ${action('open', 'Ouvrir dans la Carte')}
+        ${action('create', 'Créer un endroit ici (appui long)')}
+        ${action('edit', 'Déplacer mes plants (✎)')}
+        ${action('spot', 'Noter ici')}
+        ${action('locate', 'Me localiser')}
+      </fieldset>
+    </div>`;
   }
 
   /** @type {number | undefined} */
@@ -1077,6 +1149,7 @@ export class GfPlantDetail extends LitElement {
     // After a part that hides itself when it has nothing for this plant.
     const ifEmpty = (/** @type {string} */ text) => html`<p class="muted if-empty">${text}</p>`;
     if (isNote(key)) return this.#note(key, plant);
+    if (isMap(key)) return this.#map(key, ctx);
     switch (key) {
       case 'name': return this.#name(ctx);
       case 'photos': {
@@ -1201,7 +1274,6 @@ export class GfPlantDetail extends LitElement {
       gbif: () => html`<dl class="facts"><dt>Occurrences GBIF en France</dt><dd>${stats?.count != null
         ? html`<a href=${search} target="_blank" rel="noopener">${stats.count.toLocaleString('fr-FR')}</a>`
         : details === undefined || (key && stats === undefined) ? pending : '—'}</dd></dl>`,
-      map: () => key ? html`<h3>Répartition en France</h3><gf-gbif-map taxon-key=${key}></gf-gbif-map>` : nothing,
       near: () => key ? this.#nearView() : nothing,
       months: () => stats?.count ? this.#monthBars(stats.months) : nothing,
       years: () => stats?.years?.length ? this.#yearBars(stats.years) : nothing,
