@@ -256,6 +256,7 @@ export class GfPlantDetail extends LitElement {
     .block.headless:first-child { margin-top: 0; }
     .block[data-key='name'] h1 { margin-top: 4px; }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .names-list { margin: 0; }
     .block-title input.rename { flex: 1; min-width: 0; font: inherit; text-transform: none; letter-spacing: 0; padding: 2px 6px; border: 1px solid var(--gf-accent); border-radius: var(--gf-radius-sm); background: var(--gf-surface); color: var(--gf-text); }
     .block-title .tool[aria-expanded='true'] { opacity: 1; color: var(--gf-accent); }
     .subs-editor { margin: 0 0 10px 20px; padding: 8px 10px; border: 1px dashed var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface); }
@@ -655,8 +656,8 @@ export class GfPlantDetail extends LitElement {
       ${king && !sorting ? this.#newNote() : nothing}`;
   }
 
-  /** The name and the actions read without a title. @param {string} key */
-  #headless = key => key === 'name' || key === 'actions';
+  /** The name, the actions and the photos read without a title. @param {string} key */
+  #headless = key => ['name', 'actions', 'photos'].includes(key);
 
   /** A block as read outside « Mode King »: its title, its content. @param {string} key @param {any} ctx */
   #plainBlock(key, ctx) {
@@ -811,6 +812,8 @@ export class GfPlantDetail extends LitElement {
         const names = [...(plant.vernacularNames || []), ...gbifFrenchNames(plant, details)];
         const foreign = v === 'scientific' ? otherNames(details) : [];
         if (!names.length && !foreign.length) return loading ? pending : empty('Aucun nom français connu.');
+        // Épuré: just the French names.
+        if (v === 'epure') return shownSubs(v, 'names').includes('french') && names.length ? html`<p class="names-list">${names.join(' · ')}</p>` : nothing;
         return html`<dl class="facts">${this.#subs('names', {
           french: () => html`<dt>Noms français</dt><dd>${names.join(' · ') || '—'}${ctx.inat?.commonName ? html` <span class="muted">(iNaturalist : ${ctx.inat.commonName})</span>` : nothing}</dd>`,
           foreign: () => foreign.length ? html`<dt>Autres langues (GBIF)</dt><dd>${foreign.map(([lang, list]) => html`<span class="lang">${lang || '?'}</span> ${list.join(', ')} `)}</dd>` : nothing
