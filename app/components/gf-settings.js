@@ -15,6 +15,7 @@ import {
 } from '../core/sheet-blocks.js';
 import './gf-sortable-list.js';
 import { ui } from '../styles/ui.js';
+import { contextBarOn, setContextBar } from '../core/context.js';
 
 export class GfSettings extends LitElement {
   static properties = {
@@ -435,6 +436,12 @@ export class GfSettings extends LitElement {
 
 
         ${this.#modules()}
+
+        <h2>Barre de contexte</h2>
+        <label class="switch">
+          <input type="checkbox" .checked=${contextBarOn()} @change=${e => setContextBar(e.target.checked)} />
+          <span>Sous l’en-tête : la plante, la collection et la recherche en cours, pour y revenir d’un geste</span>
+        </label>
 
         <h2>Mode cueillette</h2>
         <label class="switch">

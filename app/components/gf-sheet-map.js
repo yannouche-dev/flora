@@ -3,7 +3,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { href } from '../core/router.js';
 import { collectionsForPlant, formatDistance, plantMarkers, savePlace, spotEvents, withEntry } from '../core/collections.js';
 import { lastFix, watchLocation } from '../core/geo.js';
-import { FRANCE_BOUNDS } from '../core/ign.js';
+import { FRANCE_BOUNDS, WORLD_BOUNDS } from '../core/ign.js';
 import { moduleOn } from '../core/modules.js';
 import { observationsAround, savedRadius } from '../core/nearby.js';
 import * as sources from '../core/sources.js';
@@ -170,21 +170,41 @@ export class GfSheetMap extends LitElement {
 
   /** Framing: France, the content shown, or the circle around me. */
   get #frame() {
-    const c = this.config;
-    if (c.frame === 'me') {
-      const near = this._near;
-      const center = near?.point || lastFix()?.coordinates;
-      if (center) {
-        const r = (near?.radius || savedRadius()) / 111320;
-        const [lon, lat] = center;
-        const dLon = r / Math.cos(lat * Math.PI / 180);
-        return { key: 'me:' + center.join(), points: [[lon - dLon, lat - r], [lon + dLon, lat + r]] };
-      }
-    }
-    if (c.frame === 'content' && (this._spots.length || this._near?.points?.length)) return null;
-    const sw = FRANCE_BOUNDS.getSouthWest(), ne = FRANCE_BOUNDS.getNorthEast();
-    return { key: 'fr', points: [[sw.lng, sw.lat], [ne.lng, ne.lat]] };
+    return this.#framing().frame;
   }
+
+  /**
+   * What the map frames, from its settings and what it shows: « Automatique » follows the layers — the circle
+   * around me once looked, else my places and their plants, else the world for a worldwide GBIF distribution,
+   * else France. Any change of setting or data frames it again (the key changes); moving the map by hand stays.
+   * @returns {{ frame: { key: string, points: [number, number][] }, world: boolean }}
+   */
+  #framing() {
+    const c = this.config;
+    const near = this._near?.state === 'done' && c.near !== 'off' ? this._near : null;
+    const plantId = this.plant?.id;
+    const content = /** @type {[number, number][]} */ ([
+      ...(c.places ? this._spots.flatMap(s => [s.geometry.coordinates, ...s.properties.plants.filter((/** @type {any} */ e) => e.plantId === plantId && e.coordinates).map((/** @type {any} */ e) => e.coordinates)]) : []),
+      ...(near ? near.points.map((/** @type {any} */ p) => p.coordinates) : [])
+    ]);
+    const center = near?.point || (c.frame === 'me' ? lastFix()?.coordinates : null);
+    const circle = () => {
+      const r = (near?.radius || savedRadius()) / 111320;
+      const [lon, lat] = /** @type {[number, number]} */ (center);
+      const dLon = r / Math.cos(lat * Math.PI / 180);
+      return /** @type {[number, number][]} */ ([[lon - dLon, lat - r], [lon + dLon, lat + r]]);
+    };
+    const box = (/** @type {any} */ bounds) => /** @type {[number, number][]} */ ([[bounds.getWest(), bounds.getSouth()], [bounds.getEast(), bounds.getNorth()]]);
+    /** @type {string} */ let kind = c.frame;
+    if (kind === 'auto') kind = near ? 'me' : content.length ? 'content' : c.gbif === 'world' ? 'world' : 'france';
+    if (kind === 'me' && !center) kind = content.length ? 'content' : 'france';
+    if (kind === 'content' && !content.length) kind = c.gbif === 'world' ? 'world' : 'france';
+    const points = kind === 'me' ? circle() : kind === 'content' ? content : kind === 'world' ? box(WORLD_BOUNDS) : box(FRANCE_BOUNDS);
+    // Framed again whenever what it shows changes (settings, data, size), not when the user moves it.
+    const key = [kind, c.gbif, c.places, c.near, c.height, points.length, center?.join() || ''].join('|');
+    return { frame: { key, points }, world: kind === 'world' || c.gbif === 'world' };
+  }
+
 
   render() {
     const c = this.config;
@@ -201,8 +221,8 @@ export class GfSheetMap extends LitElement {
           .plants=${c.places ? plantMarkers(this._spots, e => e.plantId === plant.id) : []}
           plant-zoom="0"
           ?editable=${c.actions.edit && c.places && this._spots.length > 0}
-          ?fit=${c.frame === 'content'}
           .frame=${frame}
+          min-zoom=${this.#framing().world ? 1 : 5}
           .area=${near?.state === 'done' && c.near !== 'off' ? { center: near.point, radius: near.radius } : null}
           .points=${c.near !== 'off' && near?.state === 'done' ? near.points : []}
           .distribution=${gbifOn ? { key: this.gbifKey, label: plant.vernacularNames?.[0] || plant.scientificName, country: c.gbif === 'fr' ? 'FR' : '' } : null}

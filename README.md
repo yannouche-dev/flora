@@ -323,6 +323,23 @@ Sur la fiche d'une plante comestible souvent confondue avec une plante toxique �
 
 Les données (`data/lookalikes.json`, 15 confusions) ne reprennent **que** les confusions et critères publiés par l'Anses et les Centres antipoison : aide-mémoire *Plantes toxiques et plantes comestibles : attention aux confusions !* (2020), *Vigil'Anses* n°8 (2019), articles de l'Anses sur le colchique et l'ail des ours (2025), « gare aux confusions » (2020) et les plantes de l'été (2022). Un genre entier (« Digitalis sp. ») y est noté par son seul nom. Le fichier est inclus dans l'application : l'avertissement fonctionne hors ligne.
 
+### Contexte et passerelles Flore ⇄ lieux
+
+L'application retient où vous en êtes dans chaque partie, aussi après un rechargement :
+
+- **Flore** : la recherche (texte, filtres, tri) et la plante ouverte. L'onglet Flore rouvre la plante ; touché une seconde fois, il revient à la liste. Rouvert ailleurs (Carte, lien), la recherche est restaurée : les flèches ‹ › d'une fiche parcourent les mêmes résultats.
+- **Mes plantes** : la collection ou l'endroit ouvert et la plante à côté. **Carte** : le lieu choisi et le filtre de plantes.
+- **Plante courante** : la dernière ouverte, où que ce soit. **Collection courante** : la dernière collection ou le dernier lieu ouvert.
+
+Passerelles :
+
+- d'une **fiche** : « Carte » (l'onglet Carte filtré sur la plante, avec sa répartition GBIF) et « + *collection courante* », qui ajoute la plante d'un geste à la dernière collection ou au dernier lieu ouvert (le bouton disparaît une fois la plante ajoutée) ; deux actions de la barre, à afficher ou non par mode ;
+- d'une **collection ou d'un lieu** : « Voir dans Flore » (Mes plantes, éditeur de collection, fiche d'un lieu sur la Carte) ouvre la recherche filtrée sur ses plantes ;
+- des **résultats Flore** : l'icône carte ouvre la Carte limitée à mes lieux qui ont une plante de ces résultats (puce « Recherche Flore » pour l'enlever) ;
+- la **barre de contexte**, sous l'en-tête : la plante, la collection et la recherche en cours, chacune un lien pour y revenir et ✕ pour l'oublier ; ce que la page montre déjà n'y figure pas. Elle se masque dans *Réglages › Barre de contexte*.
+
+Le **cadrage** d'un bloc Carte suit ses réglages : « Automatique » (par défaut) cadre le cercle autour de moi quand les observations proches sont affichées, sinon mes lieux et leurs plants, sinon le monde pour une répartition GBIF mondiale, sinon la France ; « Monde entier » permet de dézoomer jusqu'au planisphère. Chaque changement de réglage recadre la carte ; la déplacer à la main reste jusqu'au réglage suivant.
+
 ### Mes plantes : favoris, listes et lieux
 
 Une **collection** est un ensemble de plantes, avec ou sans position :

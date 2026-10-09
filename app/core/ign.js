@@ -62,14 +62,14 @@ const CachedTileLayer = L.TileLayer.extend({
   }
 });
 
-/** @param {WmtsLayer} def @param {boolean} base @param {string} key */
-function wmts(def, base, key) {
+/** @param {WmtsLayer} def @param {boolean} base @param {string} key @param {number} [minZoom] how far out the map goes */
+function wmts(def, base, key, minZoom = 5) {
   const Layer = moduleOn('ignMaps') ? L.TileLayer : CachedTileLayer;
   return new Layer(`${WMTS}&LAYER=${def.id}&STYLE=${encodeURIComponent(def.style || 'normal')}&FORMAT=${encodeURIComponent(def.format)}`, {
     attribution: ATTRIBUTION,
     minNativeZoom: def.minNative ?? 0,
     maxNativeZoom: def.maxNative ?? 19,
-    minZoom: Math.max(5, def.minNative ?? 5),
+    minZoom: Math.max(minZoom, def.minNative ?? minZoom),
     maxZoom: 21,
     // CORS requests give the service worker readable responses (opaque ones cost ~7 MB of quota each).
     crossOrigin: 'anonymous',
@@ -78,13 +78,20 @@ function wmts(def, base, key) {
   });
 }
 
-/** A background map or an overlay as one Leaflet layer. @param {string} key */
-export function tileLayer(key) {
+/**
+ * A background map or an overlay as one Leaflet layer. `minZoom`: from how far out it shows (the IGN plan and
+ * photos cover the whole world at small scales; 5 frames France).
+ * @param {string} key @param {number} [minZoom]
+ */
+export function tileLayer(key, minZoom) {
   const base = key in BASES;
   const def = base ? BASES[/** @type {'photo' | 'plan'} */ (key)] : OVERLAYS[key];
-  const layers = def.layers.map(l => wmts(l, base, key));
+  const layers = def.layers.map(l => wmts(l, base, key, minZoom));
   return layers.length === 1 ? layers[0] : L.layerGroup(layers);
 }
+
+/** The whole world (inhabited latitudes), for a map showing a worldwide distribution. */
+export const WORLD_BOUNDS = L.latLngBounds([-56, -170], [75, 180]);
 
 /** Metropolitan France, for the initial view when there is nothing else to show. */
 export const FRANCE_BOUNDS = L.latLngBounds([41.3, -5.2], [51.1, 9.6]);

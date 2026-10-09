@@ -42,7 +42,8 @@ export const BLOCKS = [
 /** The parts of a block that can be moved and hidden inside it, in their default order. @type {Record<string, SubBlock[]>} */
 export const SUBS = {
   actions: [
-    { key: 'fav', title: 'Favori' }, { key: 'addTo', title: 'Ajouter à…' }, { key: 'share', title: 'Partager' }, { key: 'spot', title: 'Noter ici' }
+    { key: 'fav', title: 'Favori' }, { key: 'addTo', title: 'Ajouter à…' }, { key: 'addCurrent', title: 'Ajouter à la collection courante' },
+    { key: 'share', title: 'Partager' }, { key: 'map', title: 'Sur la Carte' }, { key: 'spot', title: 'Noter ici' }
   ],
   taxonomy: [
     { key: 'chain', title: 'Classification complète' }, { key: 'ranks', title: 'Famille, genre' }, { key: 'author', title: 'Auteur' },
@@ -412,17 +413,17 @@ export function deleteNote(key) {
 /**
  * What a map block shows and lets do (the same in every mode).
  * @typedef {{ gbif: 'fr' | 'world' | 'off', places: boolean, near: 'off' | 'gbif' | 'inat' | 'both', base: 'plan' | 'photo',
- *   overlays: string[], frame: 'france' | 'content' | 'me', height: 's' | 'm' | 'l',
+ *   overlays: string[], frame: 'auto' | 'france' | 'world' | 'content' | 'me', height: 's' | 'm' | 'l',
  *   actions: { open: boolean, create: boolean, edit: boolean, spot: boolean, locate: boolean } }} MapConfig
  */
 
 /** @type {MapConfig} */
 export const MAP_DEFAULTS = {
-  gbif: 'fr', places: true, near: 'off', base: 'plan', overlays: [], frame: 'france', height: 'm',
+  gbif: 'fr', places: true, near: 'off', base: 'plan', overlays: [], frame: 'auto', height: 'm',
   actions: { open: true, create: true, edit: true, spot: true, locate: true }
 };
 
-const MAP_CHOICES = { gbif: ['fr', 'world', 'off'], near: ['off', 'gbif', 'inat', 'both'], base: ['plan', 'photo'], frame: ['france', 'content', 'me'], height: ['s', 'm', 'l'] };
+const MAP_CHOICES = { gbif: ['fr', 'world', 'off'], near: ['off', 'gbif', 'inat', 'both'], base: ['plan', 'photo'], frame: ['auto', 'france', 'world', 'content', 'me'], height: ['s', 'm', 'l'] };
 
 /** A map's configuration, cleaned (unknown values give the default). @param {any} saved @returns {MapConfig} */
 function cleanMap(saved) {

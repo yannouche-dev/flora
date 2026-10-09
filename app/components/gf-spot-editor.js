@@ -982,6 +982,7 @@ export class GfSpotEditor extends LitElement {
 
         ${this.#isNew ? nothing : html`
           <div class="toolbar">
+            ${p.plants.length && !this.#isNew ? html`<a class="button" href=${href.inFlore(/** @type {any} */ (this._place).id)}>${icon('leaf')} Voir dans Flore</a>` : nothing}
             ${p.plants.length ? html`<button type="button" @click=${this.#share}>Partager</button>` : nothing}
             <button type="button" @click=${this.#export}>Exporter (GeoJSON)</button>
             ${isPlace && !this.embedded ? html`<a class="button" href=${href.map({ spot: place.id })}>Voir sur la carte</a>` : nothing}

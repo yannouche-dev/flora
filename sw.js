@@ -7,7 +7,7 @@
 //  - IGN map tiles: cache-first, capped — areas already viewed stay available offline
 //  - remote API JSON: not cached here (app/core/sources.js caches it in IndexedDB)
 
-const VERSION = 'v62';
+const VERSION = 'v63';
 const SHELL_CACHE = 'geoflora-shell-' + VERSION;
 const IMAGE_CACHE = 'geoflora-images-' + VERSION;
 const IMAGE_LIMIT = 400;
@@ -38,6 +38,7 @@ const SHELL = [
   'app/styles/app.css',
   'app/styles/map.css',
   'app/core/db.js',
+  'app/core/context.js',
   'app/core/dataset.js',
   'app/core/geo.js',
   'app/core/highlight.js',
@@ -76,6 +77,7 @@ const SHELL = [
   'app/components/gf-filter-panel.js',
   'app/components/gf-map.js',
   'app/components/gf-sheet-map.js',
+  'app/components/gf-context-bar.js',
   'app/components/gf-map-page.js',
   'app/components/gf-plant-card.js',
   'app/components/gf-plant-detail.js',

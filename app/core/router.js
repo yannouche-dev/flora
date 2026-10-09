@@ -5,7 +5,7 @@ import './history.js';
 
 /**
  * @typedef {{ name: 'search' } | { name: 'plant', id: number } | { name: 'settings' } | { name: 'collections', open: string | null, plant: number | null }
- *   | { name: 'map', spot: string | null, plant: number | null, focus: number | null, season: boolean, add: number | null, pick: boolean }
+ *   | { name: 'map', spot: string | null, plant: number | null, focus: number | null, season: boolean, add: number | null, pick: boolean, flore: boolean }
  *   | { name: 'spot-new', plant: number | null, kind: 'list' | 'place', at: [number, number] | null }
  *   | { name: 'spot', id: string, add: number | null, pick: boolean }
  *   | { name: 'shared', data: string }
@@ -26,7 +26,7 @@ export function parse(hash) {
   if (path === 'map') {
     return {
       name: 'map', spot: params.get('spot'), plant: number('plant'), focus: number('focus'), season: params.get('season') === '1',
-      add: number('add'), pick: params.get('pick') === '1'
+      add: number('add'), pick: params.get('pick') === '1', flore: params.get('from') === 'flore'
     };
   }
   if (path === 'collections') return { name: 'collections', open: params.get('c'), plant: number('plant') };
@@ -48,6 +48,8 @@ export function parse(hash) {
 
 export const href = {
   search: () => '#/',
+  /** Flore filtered on the plants of a collection or place (the « Mes plantes » facet). */
+  inFlore: (/** @type {string} */ id) => '#/?mine=' + encodeURIComponent(id),
   plant: (/** @type {number} */ id) => '#/plant/' + id,
   settings: () => '#/settings',
   /** Mes plantes; `open`: the collection shown (a place: its map too), `plant`: the plant sheet beside. */
@@ -62,7 +64,7 @@ export const href = {
    * `focus`: a plant of the selected place (its marker highlighted, its details open); `add` pre-adds a plant
    * to the selected place, `pick` opens its plant picker.
    */
-  map: (/** @type {{ spot?: string, plant?: number, focus?: number, season?: boolean, add?: number, pick?: boolean }} */ options = {}) => {
+  map: (/** @type {{ spot?: string, plant?: number, focus?: number, season?: boolean, add?: number, pick?: boolean, flore?: boolean }} */ options = {}) => {
     const params = new URLSearchParams();
     if (options.spot) params.set('spot', options.spot);
     if (options.spot && options.add) params.set('add', String(options.add));
@@ -70,6 +72,8 @@ export const href = {
     if (options.focus) params.set('focus', String(options.focus));
     if (options.plant) params.set('plant', String(options.plant));
     if (options.season) params.set('season', '1');
+    // The places holding plants of the current Flore search.
+    if (options.flore) params.set('from', 'flore');
     const search = params.toString();
     return '#/map' + (search ? '?' + search : '');
   },

@@ -32,6 +32,8 @@ import { moduleEvents, modulesState, useModeSource } from './modules.js';
  * @property {Mode | null} plantView     plant sheet override of the mode (null: follow the mode)
  * @property {SheetLayout} sheetLayout  the plant sheet as arranged in « Mode King » (see sheet-blocks.js)
  * @property {string | null} target       collection or place the Épuré plant sheet adds to in one tap (last used)
+ * @property {import('./context.js').Context} [context]  where the user is in each part (see context.js)
+ * @property {boolean} [contextBar]  the context bar under the header is shown
  * @property {Record<import('./modules.js').ModuleKey, Record<Mode, boolean>>} modules  online services used in each mode (Réglages › Modules)
  * @property {boolean} kingMode         « Mode King »: the plant sheet blocks can be moved, folded and revived (left with the crown)
  * @property {boolean} harvestMode      "Mode cueillette": harvest log, seasons, look-alike warnings

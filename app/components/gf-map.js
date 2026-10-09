@@ -201,6 +201,8 @@ export class GfMap extends LitElement {
     points: { attribute: false },
     /** The point card's « Créer un endroit ici » makes a place with this plant already in it. */
     createPlant: { type: Number, attribute: 'create-plant' },
+    /** How far out the map can go (5: France; 1: the world). */
+    minZoom: { type: Number, attribute: 'min-zoom' },
     /** No « Me localiser » button. */
     noLocate: { type: Boolean, attribute: 'no-locate' },
     _moves: { state: true },
@@ -246,6 +248,7 @@ export class GfMap extends LitElement {
     /** @type {number | null} */
     this.createPlant = null;
     this.noLocate = false;
+    this.minZoom = 5;
     this.noSearch = false;
     this.editable = false;
     this.editing = false;
@@ -504,7 +507,7 @@ export class GfMap extends LitElement {
       attributionControl: true,
       tapHold: true,
       maxZoom: 21,
-      minZoom: 5
+      minZoom: this.minZoom
     });
     map.attributionControl.setPrefix(false);
     L.control.zoom({ position: 'bottomleft' }).addTo(map);
@@ -570,6 +573,12 @@ export class GfMap extends LitElement {
       }
     }
     if (changed.has('points')) this.#syncPoints();
+    if (changed.has('minZoom') && changed.get('minZoom') !== undefined) {
+      // Tile layers are made for a zoom range: rebuild them for the new one. The limit is set without
+      // setMinZoom, whose animated zoom would land after (and undo) the framing done just below.
+      this.#map.options.minZoom = this.minZoom;
+      this.#onModules();
+    }
     if (changed.has('distribution') || changed.has('distributionOn')) {
       this.#syncDistribution();
       if (this.#panel) Object.assign(this.#panel, this.#distributionInfo());
@@ -839,6 +848,9 @@ export class GfMap extends LitElement {
     }
   }
 
+  /** Current zoom level (null before the map exists). */
+  zoom() { return this.#map ? this.#map.getZoom() : null; }
+
   /** Map centre as [lon, lat]. @returns {[number, number] | null} */
   center() {
     const c = this.#map?.getCenter();
@@ -997,7 +1009,7 @@ export class GfMap extends LitElement {
 
   /** @param {string} key */
   #layer(key) {
-    this.#layers[key] ??= tileLayer(key);
+    this.#layers[key] ??= tileLayer(key, this.minZoom);
     return this.#layers[key];
   }
 

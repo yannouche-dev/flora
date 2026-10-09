@@ -46,6 +46,9 @@ export const config = {
     floraLayout: 'geoflora.floraLayout',
     // Mes plantes: the collections unfolded to show their plants.
     collectionsOpen: 'geoflora.collectionsOpen',
+    // Where the user is in each part (search, plant, collection, Carte): kept across tabs and reloads.
+    context: 'geoflora.context',
+    contextBar: 'geoflora.contextBar',
     modules: 'geoflora.modules'
   },
 

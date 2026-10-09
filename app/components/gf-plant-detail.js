@@ -4,7 +4,8 @@ import { STATUS_LABELS } from '../config.js';
 import * as db from '../core/db.js';
 import { lastSearchHash } from '../core/query.js';
 import { StoreController, whenReady } from '../core/store.js';
-import { formatDistance, getMembership, toggleFavorite } from '../core/collections.js';
+import { formatDistance, getMembership, setInCollection, toggleFavorite } from '../core/collections.js';
+import { context } from '../core/context.js';
 import { lastFix, watchLocation } from '../core/geo.js';
 import { savedRadius } from '../core/nearby.js';
 import { href } from '../core/router.js';
@@ -778,9 +779,18 @@ export class GfPlantDetail extends LitElement {
         ${icon(fav ? 'heart-fill' : 'heart')}<span>Favori</span></button>`,
       addTo: () => html`<button type="button" @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-add-to'))?.open()}>${icon('plus-lg')}<span>Ajouter à…</span></button>`,
       share: () => html`<button type="button" @click=${() => this.#share(plant, name)}>${icon('share')}<span>Partager</span></button>`,
+      // The Carte filtered on this plant (its places, its GBIF distribution).
+      map: () => html`<a class="button" href=${href.map({ plant: plant.id })}>${icon('map')}<span>Carte</span></a>`,
+      // In one tap, into the collection or place last opened (context.js), when it is not there yet.
+      addCurrent: () => {
+        const current = this.#currentCollection(plant);
+        if (!current) return king ? html`<button type="button" disabled title="Ouvrez une collection ou un lieu : il devient la collection courante">${icon('plus-lg')}<span>Collection courante</span></button>` : nothing;
+        return html`<button type="button" title=${'Ajouter à « ' + current.name + ' »'} @click=${() => this.#addCurrent(plant, current)}>
+          ${icon(current.kind === 'place' ? 'geo-alt-fill' : 'plus-lg')}<span class="short">${current.name}</span></button>`;
+      },
       spot: () => html`<a class="button" href=${href.newSpot(plant.id)}>${icon('geo-alt-fill')}<span>Noter ici</span></a>`
     };
-    const keys = subOrder(v, 'actions').filter(k => buttons[k] && (king || !isSubHidden(v, 'actions', k)));
+    const keys = subOrder(v, 'actions').filter(k => buttons[k] && (king || (!isSubHidden(v, 'actions', k) && (k !== 'addCurrent' || this.#currentCollection(plant)))));
     if (!keys.length) return nothing;
     return html`<nav class="action-bar ${king ? 'king' : ''}" aria-label="Actions">
       ${this._shareNote ? html`<p class="share-note" role="status">${this._shareNote}</p>` : nothing}
@@ -794,6 +804,26 @@ export class GfPlantDetail extends LitElement {
         </span>`;
       })}</div>
     </nav>`;
+  }
+
+  /** The current collection or place (context.js), when this plant is not in it yet. @param {any} plant */
+  #currentCollection(plant) {
+    const id = context().collection;
+    if (!id) return null;
+    const summary = this.#store.state.collections.find((/** @type {any} */ c) => c.id === id);
+    if (!summary || (getMembership().byPlant.get(plant.id) || []).includes(id)) return null;
+    return summary;
+  }
+
+  /** @param {any} plant @param {{ id: string, name: string, kind: string }} current */
+  async #addCurrent(plant, current) {
+    try {
+      await setInCollection(current.id, plant, true);
+      this._shareNote = `Ajoutée à « ${current.name} ».`;
+    } catch (error) {
+      this._shareNote = 'Ajout impossible : ' + /** @type {Error} */ (error).message;
+    }
+    setTimeout(() => { this._shareNote = null; }, 3000);
   }
 
   /** @param {any} plant @param {string} name */
@@ -1063,7 +1093,7 @@ export class GfPlantDetail extends LitElement {
           on => set({ overlays: on ? [...c.overlays, k] : c.overlays.filter(o => o !== k) })))}
       </fieldset>
       <fieldset><legend>Affichage</legend>
-        ${select('Cadrage', 'frame', [['france', 'France entière'], ['content', 'Ajusté à ce qui est affiché'], ['me', 'Autour de moi']])}
+        ${select('Cadrage', 'frame', [['auto', 'Automatique (selon les couches)'], ['france', 'France entière'], ['world', 'Monde entier'], ['content', 'Ajusté à ce qui est affiché'], ['me', 'Autour de moi']])}
         ${select('Hauteur', 'height', [['s', 'Petite'], ['m', 'Moyenne'], ['l', 'Grande']])}
       </fieldset>
       <fieldset><legend>Actions</legend>

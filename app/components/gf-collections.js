@@ -278,6 +278,7 @@ export class GfCollections extends LitElement {
             : html`<a class="main" href=${editor}>${head}</a>`}
           ${has ? html`<span class="tools">
             <button class="icon-btn share" type="button" title="Partager" aria-label=${'Partager « ' + title + ' »'} @click=${() => this.#share(c)}>${icon('share')}</button>
+            <a class="icon-btn flore" href=${href.inFlore(c.id)} title="Voir ses plantes dans Flore" aria-label=${'Voir les plantes de « ' + title + ' » dans Flore'}>${icon('leaf')}</a>
             <a class="icon-btn open" href=${editor} title=${isPlace ? 'Ouvrir sur la Carte' : 'Ouvrir la collection'}
               aria-label=${(isPlace ? 'Ouvrir sur la Carte « ' : 'Ouvrir « ') + title + ' »'}>${icon(isPlace ? 'map' : 'pencil')}</a>
           </span>` : nothing}

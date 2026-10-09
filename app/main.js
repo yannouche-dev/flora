@@ -3,7 +3,9 @@
 
 import './components/gf-app.js';
 import { syncDataset } from './core/dataset.js';
-import { startUrlSync } from './core/query.js';
+import { fromHash, startUrlSync } from './core/query.js';
+import { context } from './core/context.js';
+import { parse } from './core/router.js';
 import { loadIndex, runSearch } from './core/search.js';
 import { anyHarvest, hasSpots, refreshMembership, requestPersistence, spotEvents, writeBackup } from './core/collections.js';
 import { initHarvestMode, store } from './core/store.js';
@@ -26,6 +28,10 @@ async function start() {
     // Collections saved before the backup existed get one now (an empty database never erases it).
     writeBackup().catch(error => console.error(error));
     initHarvestMode(await anyHarvest().catch(() => false));
+    // Opened elsewhere than the list (a plant, the Carte, after a reload): the search left last comes back, so
+    // the Flore tab and a plant's ‹ › find the same results.
+    const saved = context().query;
+    if (parse(location.hash).name !== 'search' && saved) store.set({ query: fromHash(saved) });
     await runSearch();
     store.set({ status: 'ready', statusText: '' });
   } catch (error) {

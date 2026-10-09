@@ -22,7 +22,11 @@ addEventListener('hashchange', () => {
 /** Updates the URL of the current view (no new entry), keeping its place in history. @param {string} hash */
 export function replaceHash(hash) {
   history.replaceState({ ...state(), gfDepth: depth() }, '', hash);
+  moved();
 }
+
+/** The URL changed without a hashchange (replaceHash, pushHash shown by its page): for those that follow it (context.js). */
+const moved = () => dispatchEvent(new Event('gf-location'));
 
 /**
  * A new view, made by the app rather than by a link. The router follows it like a link, unless the page
@@ -33,6 +37,7 @@ export function pushHash(hash, extra = {}, notify = true) {
   history.pushState({ ...extra, gfDepth: depth() + 1 }, '', hash);
   last = depth();
   if (notify) dispatchEvent(new HashChangeEvent('hashchange'));
+  else moved();
 }
 
 /** Keeps values in the current entry's state (read back with entryValue, also after Back / Forward). @param {Record<string, unknown>} values */
