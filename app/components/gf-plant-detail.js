@@ -258,6 +258,8 @@ export class GfPlantDetail extends LitElement {
     .note-text { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface); color: var(--gf-text); resize: vertical; }
     .note-text:focus-visible { outline: none; border-color: var(--gf-accent); box-shadow: var(--gf-focus); }
     .new-note { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0; }
+    /* Mode King: room at the end so the crown, floating at the bottom, never covers the last controls. */
+    .blocks.king ~ .new-note { padding-bottom: 80px; }
     .new-note input { flex: 1; min-width: 160px; }
     /* Folded away: the title only, faded; ↺ brings it back. */
     .block.off { opacity: 0.45; }

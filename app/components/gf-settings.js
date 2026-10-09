@@ -66,6 +66,8 @@ export class GfSettings extends LitElement {
     .module .mode { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer; }
     .module .mode svg { color: var(--gf-text-muted); }
     .king-card { margin: 12px 0 20px; border: 2px solid color-mix(in srgb, #d4a017 40%, var(--gf-border)); }
+    /* Mode King: room at the end of the page so the floating crown never covers the last rows. */
+    :host([king]) article { padding-bottom: 96px; }
     .king-card.on { border-color: #d4a017; background: color-mix(in srgb, #f5c518 8%, var(--gf-surface)); }
     .king-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .king-head h2 { margin: 0; flex: 1; }
@@ -358,6 +360,8 @@ export class GfSettings extends LitElement {
       this._layoutNote = 'Import impossible : ' + /** @type {Error} */ (error).message;
     }
   }
+
+  updated() { this.toggleAttribute('king', this.#store.state.kingMode); }
 
   render() {
     const { meta, offline } = this.#store.state;

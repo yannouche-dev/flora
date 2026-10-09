@@ -9,9 +9,9 @@ const SPRITE = new URL('../../assets/icons/bi.svg', import.meta.url).href;
 
 /**
  * @typedef {'arrow-counterclockwise' | 'arrow-left' | 'arrow-right' | 'arrows-angle-expand' | 'arrows-collapse' | 'caret-down-fill' | 'caret-up-fill'
- *   | 'check-lg' | 'chevron-down' | 'chevron-left' | 'chevron-right' | 'collection' | 'crosshair' | 'crown' | 'download' | 'exclamation-octagon-fill' | 'exclamation-triangle-fill' | 'flower1'
- *   | 'funnel' | 'funnel-fill' | 'gear' | 'geo-alt-fill' | 'globe-europe-africa' | 'grip-vertical' | 'heart' | 'heart-fill' | 'image' | 'layers'
- *   | 'leaf' | 'list-nested' | 'list-ul' | 'map' | 'mic' | 'mic-fill' | 'pencil' | 'plus-lg' | 'search' | 'share' | 'shield-check' | 'star' | 'star-fill' | 'table'
+ *   | 'check-lg' | 'chevron-down' | 'chevron-left' | 'chevron-right' | 'collection' | 'collection-fill' | 'crosshair' | 'crown' | 'download' | 'exclamation-octagon-fill' | 'exclamation-triangle-fill' | 'flower1'
+ *   | 'funnel' | 'funnel-fill' | 'gear' | 'gear-fill' | 'geo-alt-fill' | 'globe-europe-africa' | 'grip-vertical' | 'heart' | 'heart-fill' | 'image' | 'layers'
+ *   | 'leaf' | 'leaf-fill' | 'list-nested' | 'list-ul' | 'map' | 'map-fill' | 'mic' | 'mic-fill' | 'pencil' | 'plus-lg' | 'search' | 'share' | 'shield-check' | 'star' | 'star-fill' | 'table'
  *   | 'three-dots' | 'trash3' | 'triangle' | 'type-h2' | 'upload' | 'x' | 'x-lg'} IconName
  */
 

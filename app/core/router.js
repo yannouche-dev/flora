@@ -1,5 +1,7 @@
 // @ts-check
 // Hash router: deep links work on GitHub Pages without server rewrites.
+// history.js first: it marks each new entry with its depth before the app routes.
+import './history.js';
 
 /**
  * @typedef {{ name: 'search' } | { name: 'plant', id: number } | { name: 'settings' } | { name: 'collections' }

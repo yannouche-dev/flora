@@ -4,6 +4,7 @@ import { config } from '../config.js';
 import * as db from '../core/db.js';
 import { watchLocation } from '../core/geo.js';
 import { href } from '../core/router.js';
+import { openModal } from '../core/history.js';
 import {
   deleteCollection, distance, findEntry, listPlaces, nearbyPlaces, newPlace, placeTitle, recentPlants, rememberPlant,
   saveCollection, withEntry, withPlant
@@ -136,7 +137,7 @@ export class GfCapture extends LitElement {
 
   open() {
     this._query = '';
-    this.#dialog.showModal();
+    openModal(this.#dialog);
     this.#unwatch ??= watchLocation(({ fix, error }) => {
       const firstFix = !this._fix && fix;
       this._fix = fix;

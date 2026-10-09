@@ -2,6 +2,7 @@
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { GeoController } from '../core/geo.js';
 import { href, parse } from '../core/router.js';
+import { backTo, depth, entryValue, markEntry, pushHash, replaceHash } from '../core/history.js';
 import {
   directionsUrl, entryPosition, plantMarkers, distance, entryName, formatDistance, inSeason, listPlaces,
   placeAbundance, placeLastHarvest, placeTitle, plantCount, savePlace, spotEvents, withEntry
@@ -487,6 +488,7 @@ export class GfMapPage extends LitElement {
   willUpdate(changed) {
     // Lit re-applies object properties on every parent render: the app passing its (unchanged) route again
     // must not undo the selection this page made with replaceState.
+    if (changed.has('route') && !this.#internalRoute) this.#markBase(changed.get('route'));
     if (changed.has('route') && !this.#internalRoute) {
       if (this.route === this.#parentRoute && this.#ownRoute) {
         this.route = this.#ownRoute;
@@ -506,9 +508,25 @@ export class GfMapPage extends LitElement {
       this.#frameKey = this.route.spot + ':' + (++this.#frames);
     }
     this.#internalRoute = false;
+    const base = entryValue('gfMapBase');
+    this.#base = this.route.spot && typeof base === 'number' ? base : null;
   }
 
   #internalRoute = false;
+
+  /**
+   * A place opened by a link (a list row, a marker) or reached by Back / Forward: remember in its history
+   * entry where the map was before the first place opened, so closing it goes back there.
+   * @param {any} before the previous route
+   */
+  #markBase(before) {
+    if (!this.route?.spot || typeof entryValue('gfMapBase') === 'number') return;
+    if (before?.name !== 'map') return;
+    markEntry({ gfMapBase: before.spot && typeof this.#base === 'number' ? this.#base : depth() - 1 });
+  }
+
+  /** The base of the place shown last (see #markBase). @type {number | null} */
+  #base = null;
   /** « Add this plant » / « pick a plant » asked for a place when arriving on it; kept while it stays selected. @type {{ spot: string, add: number | null, pick: boolean } | null} */
   #arrival = null;
   /** Route last received from the app, and the one this page navigated to since (replaceState). @type {any} */
@@ -539,7 +557,10 @@ export class GfMapPage extends LitElement {
     document.title = 'Carte des lieux — GeoFlora';
   }
 
-  /** Keeps the URL in sync with selection/filters without adding history entries. */
+  /**
+   * Keeps the URL in sync with selection and filters. Opening a place is a view (Back closes it, closing it
+   * goes back); the focused plant, the season and the plant filter update the view in place.
+   */
   /** @param {{ spot?: string | null, focus?: number | null, season?: boolean }} patch */
   #navigate(patch) {
     const next = { ...this.route, ...(patch.spot !== undefined && !('focus' in patch) ? { focus: null } : {}), ...patch };
@@ -549,7 +570,12 @@ export class GfMapPage extends LitElement {
       season: next.season,
       plant: this._plants.length === 1 ? this._plants[0] : undefined
     });
-    history.replaceState(null, '', hash);
+    const opened = (next.spot || null) !== (this.route.spot || null);
+    // The map's entry before the first place opened: closing a place goes back there.
+    const base = entryValue('gfMapBase');
+    if (opened && next.spot) pushHash(hash, { gfMapBase: typeof base === 'number' ? base : depth() }, false);
+    else if (opened && typeof base === 'number') backTo(base, hash);
+    else replaceHash(hash);
     if (next.spot !== this.#arrival?.spot) this.#arrival = null;
     // Every place selected is framed with all its plants (above its sheet).
     if (next.spot !== this.route.spot) this.#frameKey = next.spot ? next.spot + ':' + (++this.#frames) : null;

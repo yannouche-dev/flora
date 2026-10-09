@@ -2,6 +2,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { FAVORITES_ID, getMembership, matchCollections, newCollection, saveCollection, setInCollection, withPlant } from '../core/collections.js';
 import { href } from '../core/router.js';
+import { openModal } from '../core/history.js';
 import { setTarget, StoreController } from '../core/store.js';
 import { ui } from '../styles/ui.js';
 import { icon, kindIcon } from '../core/icons.js';
@@ -76,7 +77,7 @@ export class GfAddTo extends LitElement {
   open() {
     this._creating = false;
     this._query = '';
-    /** @type {HTMLDialogElement} */ (this.renderRoot.querySelector('dialog')).showModal();
+    openModal(/** @type {HTMLDialogElement} */ (this.renderRoot.querySelector('dialog')));
   }
 
   #close() {
