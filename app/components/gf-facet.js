@@ -97,10 +97,13 @@ export class GfFacet extends LitElement {
     }
     .link { font-size: 0.8rem; }
     /* Its filter stays under the header while its list scrolls; it leaves with the end of the facet. */
-    input[type='search'] { margin: 8px 0 4px; font-size: 0.85rem; min-height: 34px; padding: 6px 12px;
-      position: sticky; top: calc((var(--stack, 0) + 1) * var(--head-h) + 6px); z-index: 1;
-      box-shadow: 0 -7px 0 var(--gf-surface), 0 5px 0 var(--gf-surface); }
-    input[type='search']:focus-visible { box-shadow: 0 -7px 0 var(--gf-surface), 0 5px 0 var(--gf-surface), var(--gf-focus); }
+    /*
+     * Its filter, in a band of solid background stuck right under the header while the list scrolls: stuck where
+     * it already is (the body has no top padding when it has a filter), so it does not move when it sticks.
+     */
+    .body.filtered { padding-top: 0; }
+    .filter { position: sticky; top: calc((var(--stack, 0) + 1) * var(--head-h)); z-index: 1; padding: 10px 0 6px; background: var(--gf-surface); }
+    .filter input[type='search'] { display: block; width: 100%; margin: 0; font-size: 0.85rem; min-height: 34px; padding: 6px 12px; }
     ul { list-style: none; margin: 6px 0 0; padding: 0; }
     li label {
       display: flex;
@@ -190,10 +193,10 @@ export class GfFacet extends LitElement {
         </button>
         ${selected.size ? html`<button class="link clear" type="button" @click=${() => this.#emit([])}>effacer</button>` : nothing}
       </div>
-      ${this.open ? html`<div class="body" id="body">
+      ${this.open ? html`<div class="body ${this.searchable ? 'filtered' : ''}" id="body">
         ${this.searchable ? html`
-          <input type="search" placeholder="Filtrer ${this.label.toLowerCase()}…" aria-label="Filtrer ${this.label}"
-            .value=${this._filter} @input=${e => { this._filter = e.target.value; }} />` : nothing}
+          <div class="filter"><input type="search" placeholder="Filtrer ${this.label.toLowerCase()}…" aria-label="Filtrer ${this.label}"
+            .value=${this._filter} @input=${e => { this._filter = e.target.value; }} /></div>` : nothing}
         <!-- Keyed rows: a checkbox stays with its value when counts reorder the list. -->
         <ul role="group" aria-label=${this.label}>
           ${repeat(shown, o => o.value, o => html`
