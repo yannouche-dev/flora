@@ -1,13 +1,13 @@
 // GeoFlora service worker — hand-written, no tooling.
 //  - app shell: precached, then stale-while-revalidate (a deploy is picked up on the next launch)
 //  - data/*.json: network only — the dataset lives in IndexedDB, so it is not duplicated here
-//    (except data/territories.json and data/lookalikes.json: small and static, precached — the look-alike
-//    warnings must work offline, where the picking happens)
+//    (except data/territories.json, data/lookalikes.json and data/safety.json: small and static, precached —
+//    the look-alike and toxicity warnings must work offline, where the picking happens)
 //  - remote images (Wikimedia, iNaturalist): stale-while-revalidate, capped
 //  - IGN map tiles: cache-first, capped — areas already viewed stay available offline
 //  - remote API JSON: not cached here (app/core/sources.js caches it in IndexedDB)
 
-const VERSION = 'v67';
+const VERSION = 'v68';
 const SHELL_CACHE = 'geoflora-shell-' + VERSION;
 const IMAGE_CACHE = 'geoflora-images-' + VERSION;
 const IMAGE_LIMIT = 400;
@@ -28,6 +28,7 @@ const SHELL = [
   'lib/plant-sources.mjs',
   'data/territories.json',
   'data/lookalikes.json',
+  'data/safety.json',
   'assets/icons/icon.svg',
   'assets/icons/bi.svg',
   'assets/icons/icon-192.png',
@@ -44,6 +45,7 @@ const SHELL = [
   'app/core/open-data.js',
   'app/core/charts.js',
   'app/core/categories.js',
+  'app/core/uses.js',
   'app/core/dataset.js',
   'app/core/geo.js',
   'app/core/highlight.js',
@@ -137,7 +139,7 @@ self.addEventListener('fetch', event => {
 
   if (url.origin === self.location.origin) {
     // The flora lives in IndexedDB; only the small, static department outlines are part of the shell.
-    if (url.pathname.includes('/data/') && !/\/(territories|lookalikes)\.json$/.test(url.pathname)) return;
+    if (url.pathname.includes('/data/') && !/\/(territories|lookalikes|safety)\.json$/.test(url.pathname)) return;
     // SPA navigations (any hash route) are served by the cached index.html.
     const key = request.mode === 'navigate' ? 'index.html' : request;
     event.respondWith(staleWhileRevalidate(event, SHELL_CACHE, key));

@@ -43,6 +43,7 @@ jobs:
           node --check scripts/enrich-thumbnail-fallbacks.mjs
           node --check scripts/enrich-baseflor.mjs
           node --check scripts/enrich-statuses.mjs
+          node --check scripts/build-safety.mjs
 
       - name: Build dataset
         run: node scripts/build-plants.mjs
@@ -60,6 +61,13 @@ jobs:
         env:
           BDC_URL: ${{ vars.BDC_URL }}
         run: node scripts/enrich-statuses.mjs
+
+      - name: Add ANSM lists A/B and TPPT toxicity (data/safety.json)
+        continue-on-error: true
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
+          npm install --no-save --no-package-lock xlsx@0.18.5
+          node scripts/build-safety.mjs
 
       - name: Enrich search thumbnails
         env:
@@ -84,7 +92,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/plants.json data/meta.json data/thumbnails.json
+          git add data/plants.json data/meta.json data/thumbnails.json data/safety.json
           if git diff --cached --quiet; then
             echo "Dataset unchanged"
           else

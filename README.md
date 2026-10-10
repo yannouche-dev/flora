@@ -347,6 +347,12 @@ GeoFlora croise la flore avec des API ouvertes appelées directement par le navi
   - *Zones naturelles* (module IGN – zones naturelles au point, API Carto) : ZNIEFF I et II, sites Natura 2000 (habitats, oiseaux), parcs nationaux et régionaux, réserves naturelles qui contiennent le point, avec leur fiche INPN ;
   - *Plantes vues ici* (iNaturalist, observations validées à moins de 500 m) : les plus observées, celles de la flore ouvrent leur fiche, celles du lieu sont signalées ;
   - *Pollens aujourd'hui* (CAMS via Open-Meteo) et *Climat du lieu* (diagramme : pluie par mois en barres, température en courbe, moyennes sur 10 ans, ERA5).
+- **Usages et cuisine sauvage** (bloc de la fiche, catégorie Savoirs) — la prudence d'abord, chaque ligne avec sa source et la partie de la plante concernée ; l'app ne dit jamais qu'une plante est « comestible » :
+  - *Prudence* : Pharmacopée française, **liste B** de l'ANSM (plantes dont les effets indésirables potentiels l'emportent sur le bénéfice attendu) et parties toxiques citées par la **liste A** ; toxicité de la base **TPPT** d'Agroscope (plantes toxiques d'Europe centrale : niveau, parties toxiques, principales toxines) ; risque de confusion (Anses) ; espèce protégée ou cueillette réglementée (INPN). Ces données sont dans `data/safety.json`, construit en CI (`scripts/build-safety.mjs`) et disponible hors ligne. S'il y a un risque, les usages sont titrés « non vérifiés ».
+  - *Usages rapportés* : usages déclarés sur Wikidata (alimentation, médecine traditionnelle, autres) et, pour la liste A de l'ANSM, les parties utilisées ;
+  - *Parties et produits* (tableau ou liste) : ce que l'on tire de la plante et de quelle partie (Wikidata) ;
+  - *En cuisine* : plats qui l'utilisent (Wikidata) et recettes de Wikibooks (module « Wikibooks (recettes) ») ;
+  - *Pour aller plus loin* : PFAF (identifiant Wikidata), monographies de l'Agence européenne du médicament, Pharmacopée française.
 - La **floraison observée** (iNaturalist, observations annotées « en fleurs » / « en fruits » en France) était déjà dans le bloc Calendrier, à côté de la floraison Baseflor.
 
 ### Plantes à confondre (Anses, Centres antipoison)
