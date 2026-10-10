@@ -19,6 +19,7 @@ import {
 import './gf-sortable-list.js';
 import { ui } from '../styles/ui.js';
 import { contextBarOn, setContextBar } from '../core/context.js';
+import { discoverEvents, discovering, finishDiscover, restartDiscover } from '../core/discover.js';
 
 /** French names of the icons a mode can have. */
 const ICON_NAMES = { image: 'Photo', 'list-ul': 'Liste', table: 'Tableau', images: 'Médias', map: 'Carte', leaf: 'Feuille', flower1: 'Fleur', 'diagram-3': 'Réseau', star: 'Étoile', layers: 'Couches', search: 'Loupe', crown: 'Couronne' };
@@ -101,16 +102,19 @@ export class GfSettings extends LitElement {
 
   #store = new StoreController(this);
   #onSpots = () => this.#countSpots();
+  #onDiscover = () => this.requestUpdate();
 
   connectedCallback() {
     super.connectedCallback();
     spotEvents.addEventListener('change', this.#onSpots);
+    discoverEvents.addEventListener('change', this.#onDiscover);
     this.#countSpots();
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     spotEvents.removeEventListener('change', this.#onSpots);
+    discoverEvents.removeEventListener('change', this.#onDiscover);
   }
 
   async #countSpots() {
@@ -437,12 +441,22 @@ export class GfSettings extends LitElement {
       ${this._modeNote ? html`<p class="muted" role="status">${this._modeNote}</p>` : nothing}`;
   }
 
+  /** « Premiers pas »: the guided start (Découvrir), on or over. */
+  #firstSteps() {
+    const on = discovering();
+    return html`<h2 id="first-steps">Premiers pas</h2>
+      <p class="muted">${on ? 'La découverte guidée est en cours : les onglets arrivent à mesure qu’ils servent, avec une astuce à la fois.'
+        : 'Tous les outils sont là. La découverte guidée (Découvrir, une astuce à la fois, les onglets qui arrivent un à un) peut être refaite.'}</p>
+      <p>${on ? html`<button class="secondary" type="button" @click=${() => finishDiscover()}>Tout montrer maintenant</button>`
+        : html`<button class="secondary" type="button" @click=${() => { restartDiscover(); location.hash = '#/discover'; }}>Recommencer la découverte</button>`}</p>`;
+  }
   render() {
     const { meta, offline } = this.#store.state;
     return html`
       <article>
         <a class="back link" href=${lastSearchHash()}>${icon('arrow-left')} Recherche</a>
         <h1>À propos et réglages</h1>
+        ${this.#firstSteps()}
         ${this.#king()}
 
         <h2>Données</h2>

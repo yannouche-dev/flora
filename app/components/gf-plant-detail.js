@@ -127,6 +127,18 @@ function gbifFrenchNames(plant, gbif) {
   return names.slice(0, 12);
 }
 
+/**
+ * Wikipédia's sections by theme: their name, and the block of the sheet that shows them beside its own data
+ * (none: they stay in the Wikipédia block).
+ */
+const WIKI_THEMES = /** @type {Record<string, [string, string | null]>} */ ({
+  description: ['Description', 'descriptions'], biology: ['Biologie et floraison', 'calendar'], ecology: ['Habitat et écologie', 'gbifProfile'],
+  distribution: ['Répartition', 'occurrences'], toxicity: ['Toxicité et confusions', 'uses'], food: ['Alimentation', 'uses'], uses: ['Usages', 'uses'],
+  names: ['Noms et étymologie', 'names'], history: ['Histoire et symbolique', null], taxonomy: ['Taxonomie', null], other: ['Autres sujets', null]
+});
+/** A section's text: at first, its beginning only. */
+const WIKI_SHORT = 600;
+
 /** Same name, case and accents aside. @param {string | undefined} a @param {string | undefined} b */
 const sameName = (a, b) => Boolean(a && b) && nameKey(String(a)) === nameKey(String(b));
 
@@ -320,6 +332,10 @@ export class GfPlantDetail extends LitElement {
     /** Épuré (photo and one-tap actions), standard (general public), scientific (every data). */
     view: { reflect: true },
     _wiki: { state: true },
+    /** Wikipédia: the sections read whole, the themes opened in its block. */
+    _wikiOpen: { state: true },
+    /** The theme of the article being read (lit in its menu). */
+    _wikiActive: { state: true },
     _science: { state: true },
     _gbif: { state: true },
     _near: { state: true },
@@ -634,6 +650,32 @@ export class GfPlantDetail extends LitElement {
     .wiki p.credit { margin-top: 6px; }
     /* The Wikipédia summary reads like the other blocks: flush left, no card (its source line names it). */
     .description.wiki { background: none; padding: 0; border-radius: 0; }
+    .description.wiki p { margin: 0 0 8px; }
+    .wiki-desc { font-style: italic; color: var(--gf-text-muted); }
+    /* The article's menu: in the block's header, stuck at the top of the sheet while reading it. */
+    .wiki-menu { position: sticky; top: 0; z-index: 6; display: flex; gap: 4px; align-items: center; overflow-x: auto; scrollbar-width: none; margin: 0 -4px 10px; padding: 6px 4px;
+      background: color-mix(in srgb, var(--gf-surface) 94%, transparent); backdrop-filter: blur(6px); border-bottom: 1px solid var(--gf-border);
+      mask-image: linear-gradient(90deg, #000 calc(100% - 16px), transparent); }
+    .wiki-menu::-webkit-scrollbar { display: none; }
+    .wiki-logo { flex: none; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--gf-border); font-family: Georgia, serif; font-weight: 700; font-size: 0.8rem; color: var(--gf-text-muted); }
+    .wiki-menu a { flex: none; padding: 4px 10px; border-radius: var(--gf-radius-pill); font-size: 0.8rem; color: var(--gf-text-muted); text-decoration: none; white-space: nowrap; }
+    .wiki-menu a:hover { color: var(--gf-text); background: var(--gf-surface-2); }
+    .wiki-menu a.on { background: var(--gf-accent-soft); color: var(--gf-accent); font-weight: 600; }
+    .wiki-menu a:focus-visible { outline: none; box-shadow: var(--gf-focus); }
+    .wiki-theme { border-top: 1px solid var(--gf-border); scroll-margin-top: 52px; }
+    .wiki-theme > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; padding: 10px 0; cursor: pointer; font-weight: 600; list-style: none; }
+    .wiki-theme > summary::-webkit-details-marker { display: none; }
+    .wiki-theme > summary::before { content: '›'; display: inline-block; transition: transform 0.15s; color: var(--gf-text-muted); }
+    .wiki-theme[open] > summary::before { transform: rotate(90deg); }
+    .wiki-theme > summary small { font-weight: 400; color: var(--gf-text-muted); font-size: 0.75rem; }
+    .wiki-theme > summary .also { margin-left: auto; font-size: 0.75rem; font-weight: 400; }
+    .wiki-theme[data-flash] { animation: flash 1.2s ease-out; }
+    .wiki-in { padding: 0 0 10px 14px; }
+    /* Wikipédia's words, under a block's own data. */
+    .wiki-bits { margin-top: 12px; padding: 10px 12px; border-left: 3px solid color-mix(in srgb, var(--gf-accent) 40%, transparent); background: color-mix(in srgb, var(--gf-surface) 70%, transparent); border-radius: 0 var(--gf-radius-sm) var(--gf-radius-sm) 0; }
+    .wiki-x h3 { margin: 0 0 4px; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--gf-text-muted); }
+    .wiki-x p { margin: 0 0 6px; font-size: 0.92rem; line-height: 1.5; }
+    .wiki-x + .wiki-x { margin-top: 10px; }
     ${unsafeCSS(chartStyles)}
     .prudence { border: 1px solid #d97706; background: color-mix(in srgb, #f59e0b 12%, var(--gf-surface)); border-radius: var(--gf-radius); padding: 8px 12px; margin-bottom: 10px; }
     .prudence.grave { border-color: #b91c1c; background: color-mix(in srgb, #ef4444 10%, var(--gf-surface)); }
@@ -831,6 +873,10 @@ export class GfPlantDetail extends LitElement {
     /** Note block whose text was just saved. @type {string | null} */
     this._noteSaved = null;
     /** @type {any} */ this._wiki = undefined;
+    /** @type {Set<string>} */
+    this._wikiOpen = new Set();
+    /** @type {string | null} */
+    this._wikiActive = null;
     /** @type {any} */ this._science = undefined;
     /**
      * GBIF data of the plant, each part loaded when a block or sub-block shows it (undefined: not yet; null: none):
@@ -911,6 +957,9 @@ export class GfPlantDetail extends LitElement {
       if (changed.has('_subsOpen')) sheetSession.subsOpen = this._subsOpen;
       if (changed.has('_mapsOpen')) sheetSession.mapsOpen = this._mapsOpen;
       if (changed.has('_maxEdge')) sheetSession.maxEdge = this._maxEdge;
+      if (changed.has('_spotsOpen')) sheetSession.spotsOpen = this._spotsOpen;
+      // The themes of the article opened or closed (not the sections read whole, which are this plant's).
+      if (changed.has('_wikiOpen')) sheetSession.wikiThemes = new Set([...this._wikiOpen].filter(k => /^(theme|closed):/.test(k)));
     }
     const signature = modulesSignature(this.view);
     const hidden = this.#store.state.sheetLayout;
@@ -949,10 +998,12 @@ export class GfPlantDetail extends LitElement {
     this._details = undefined;
     this._error = null;
     this._wiki = undefined;
+    this._wikiOpen = new Set(sheetSession.wikiThemes);
+    this._wikiActive = null;
     this._science = undefined;
     this._gbif = {};
     this._near = undefined;
-    this._spotsOpen = false;
+    this._spotsOpen = sheetSession.spotsOpen;
     this._focus = noFocus();
     this._open = {};
     this._alerts = null;
@@ -1023,7 +1074,8 @@ export class GfPlantDetail extends LitElement {
       task.then(v => { if (!signal?.aborted && this._plant === plant) set(v ?? null); })
         .catch(() => { if (!signal?.aborted && this._plant === plant) set(null); });
     const once = (/** @type {string} */ key) => !this.#requested.has(key) && Boolean(this.#requested.add(key));
-    if (shown('wikipedia') && once('wiki')) settle(sources.wikipedia(plant, qid, signal, v), x => { this._wiki = x; });
+    // Wikipédia feeds its block and, by theme, Descriptions, Calendrier, Habitat, Occurrences, Usages and Noms.
+    if (['wikipedia', 'descriptions', 'calendar', 'gbifProfile', 'occurrences', 'uses', 'names'].some(shown) && once('wiki')) settle(sources.wikipedia(plant, qid, signal, v), x => { this._wiki = x; });
     const science = shown('ids') || (baseOf(v) === 'scientific' && (shown('taxonomy') || shown('status')));
     if (science && once('science')) settle(sources.wikidataScience(plant, qid, signal, v), x => { this._science = x; });
     this.#loadGbif(plant, details, signal, settle, once, shown);
@@ -1328,13 +1380,100 @@ export class GfPlantDetail extends LitElement {
       </div>${this.#allMedia()}` : loading ? html`<div class="skeleton"></div>` : html`<p class="muted">Aucune photo sous licence libre trouvée.</p>`;
   }
 
+  /** The block that shows a theme of the article beside its own data, when it is in the sheet. @param {string} theme */
+  #wikiHost(theme) {
+    const host = WIKI_THEMES[theme]?.[1];
+    return host && !this.only && !isHidden(this.view, host) && !placeOf(this.view, host) ? host : null;
+  }
+
+  /** The article's sections of these themes. @param {string[]} themes */
+  #wikiSections(themes) { return (this._wiki?.sections || []).filter((/** @type {any} */ x) => themes.includes(x.theme)); }
+
+  /**
+   * The article's sections of these themes: their title, their beginning (« Lire la suite »: whole). Under a
+   * block's own data (`under`), with the credit and a way to the article, at that theme.
+   * @param {string[]} themes @param {boolean} [under]
+   */
+  #wikiBits(themes, under = true) {
+    const list = this.#wikiSections(themes);
+    if (!list.length) return nothing;
+    const reader = !this.only && !isHidden(this.view, 'wikipedia') && !placeOf(this.view, 'wikipedia');
+    return html`<div class=${under ? 'wiki-bits' : 'wiki-in'}>${list.map((/** @type {any} */ x) => {
+      const id = x.theme + ':' + x.title, whole = this._wikiOpen.has(id) || x.text.length <= WIKI_SHORT + 80;
+      const text = whole ? x.text : x.text.slice(0, WIKI_SHORT).replace(/\s+\S*$/, '') + '…';
+      return html`<section class="wiki-x"><h3>${x.title.split(' › ').pop()}</h3>${text.split('\n').map(p => html`<p>${p}</p>`)}
+        ${whole ? nothing : html`<button class="link" type="button" @click=${() => { this._wikiOpen = new Set([...this._wikiOpen, id]); }}>Lire la suite</button>`}</section>`;
+    })}${under ? html`<p class="credit">D’après <a href=${this._wiki.url} target="_blank" rel="noopener">Wikipédia</a> · CC BY-SA 4.0
+      ${reader ? html` · <button class="link" type="button" @click=${() => this.#wikiGo(themes[0])}>Lire dans l’article</button>` : nothing}</p>` : nothing}</div>`;
+  }
+
+  /** The themes of the article, in the menu's order. */
+  get #wikiThemes() { return Object.keys(WIKI_THEMES).filter(t => this.#wikiSections([t]).length); }
+
+  /** A theme of the article open: Description from the start, the others when asked. @param {string} t */
+  #wikiThemeOpen(t) { return this._wikiOpen.has('theme:' + t) || (t === 'description' && !this._wikiOpen.has('closed:description')); }
+
+  /** To a theme of the article (its anchor in the Wikipédia block): opened, scrolled to, lit. @param {string} t */
+  async #wikiGo(t) {
+    if (!this.#wikiThemeOpen(t)) this._wikiOpen = new Set([...this._wikiOpen, 'theme:' + t]);
+    await this.updateComplete;
+    const el = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('#wiki-' + t));
+    if (!el) return;
+    el.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+    el.removeAttribute('data-flash'); void el.offsetWidth; el.setAttribute('data-flash', '');
+    setTimeout(() => el.removeAttribute('data-flash'), 1300);
+    this._wikiActive = t;
+  }
+
+  /**
+   * The Wikipédia block, read like an article: in its header, the menu of its themes (stuck while reading, the
+   * one read lit); the description and the lead; each theme folded under its anchor, Description open.
+   * A theme also shown in a block of the sheet (Usages, Habitat…) says so.
+   */
   #wikipedia() {
     const wiki = this._wiki;
     if (!wiki) return nothing;
+    if (!wiki.extract) {
+      return wiki.english ? html`<p class="muted">Pas d’article Wikipédia en français. <a href=${wiki.english} target="_blank" rel="noopener">Lire l’article en anglais</a></p>` : nothing;
+    }
+    const themes = this.#wikiThemes;
+    const date = wiki.touched ? new Date(wiki.touched).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : null;
     return html`<div class="description wiki">
-      ${wiki.extract}
-      <p class="credit">Source : <a href=${wiki.url} target="_blank" rel="noopener">article Wikipédia</a> · texte sous licence CC BY-SA 4.0</p>
+      ${themes.length ? html`<nav class="wiki-menu" aria-label="Sommaire de l’article Wikipédia">
+        <span class="wiki-logo" aria-hidden="true">W</span>
+        ${themes.map(t => html`<a href=${'#wiki-' + t} class=${this._wikiActive === t ? 'on' : ''} aria-current=${this._wikiActive === t ? 'true' : 'false'}
+          @click=${(/** @type {Event} */ e) => { e.preventDefault(); this.#wikiGo(t); }}>${WIKI_THEMES[t][0]}</a>`)}
+      </nav>` : nothing}
+      ${wiki.description ? html`<p class="wiki-desc">${wiki.description}</p>` : nothing}
+      ${wiki.extract.split('\n').map((/** @type {string} */ p) => html`<p>${p}</p>`)}
+      ${themes.map(t => {
+        const host = this.#wikiHost(t), open = this.#wikiThemeOpen(t);
+        return html`<details class="wiki-theme" id=${'wiki-' + t} data-theme=${t} ?open=${open}
+            @toggle=${(/** @type {Event} */ e) => {
+              const now = /** @type {HTMLDetailsElement} */ (e.currentTarget).open;
+              if (now === this.#wikiThemeOpen(t)) return;
+              const o = new Set(this._wikiOpen);
+              if (now) { o.add('theme:' + t); o.delete('closed:' + t); } else { o.delete('theme:' + t); o.add('closed:' + t); }
+              this._wikiOpen = o;
+            }}>
+          <summary>${WIKI_THEMES[t][0]} <small>${this.#wikiSections([t]).length} section${this.#wikiSections([t]).length > 1 ? 's' : ''}</small>
+            ${host ? html`<button class="link also" type="button" title=${`Aussi dans « ${blockTitle(host)} », avec ses autres données`}
+              @click=${(/** @type {Event} */ e) => { e.preventDefault(); e.stopPropagation(); this.goTo(host); }}>aussi dans « ${blockTitle(host)} » →</button>` : nothing}</summary>
+          ${open ? this.#wikiBits([t], false) : nothing}
+        </details>`;
+      })}
+      <p class="credit">Source : <a href=${wiki.url} target="_blank" rel="noopener">article Wikipédia</a> · texte sous licence CC BY-SA 4.0${date ? ' · modifié le ' + date : ''}</p>
     </div>`;
+  }
+
+  /** The theme of the article at the top of the sheet (its menu lights it). @param {HTMLElement} scroller */
+  #wikiSpy(scroller) {
+    const themes = /** @type {NodeListOf<HTMLElement>} */ (this.renderRoot.querySelectorAll('.wiki-theme'));
+    if (!themes.length) return;
+    const top = scroller.getBoundingClientRect().top + 110;
+    let current = null;
+    for (const el of themes) if (el.getBoundingClientRect().top <= top) current = el.dataset.theme || null;
+    if (current !== this._wikiActive) this._wikiActive = current;
   }
 
   /** @param {any} ctx */
@@ -1546,6 +1685,8 @@ export class GfPlantDetail extends LitElement {
   /** To a rubric's block, asked by the host's rail. @param {string} key */
   goTo(key) {
     sheetSession.anchor = blockCategory(key);
+    sheetSession.anchorBlock = key;
+    sheetSession.anchorOffset = 0;
     return this.#goTo(key);
   }
 
@@ -1579,16 +1720,24 @@ export class GfPlantDetail extends LitElement {
     this.#scrollFrame = requestAnimationFrame(() => {
       this.#scrollFrame = 0;
       let current = null;
+      /** @type {HTMLElement | null} */ let currentEl = null;
       const scroller = this.#sheetScroller;
       if (this.#restoring) return;
-      const top = scroller.getBoundingClientRect().top + 72;
+      const scTop = scroller.getBoundingClientRect().top, top = scTop + 72;
       for (const el of /** @type {NodeListOf<HTMLElement>} */ (this.renderRoot.querySelectorAll('.blocks > .block'))) {
-        if (el.getBoundingClientRect().top <= top) current = el.dataset.key; else break;
+        if (el.getBoundingClientRect().top <= top) { current = el.dataset.key; currentEl = el; } else break;
       }
       const cat = current ? blockCategory(current) : null;
       if (cat !== this._activeCat) this._activeCat = cat;
+      this.#wikiSpy(scroller);
       // Read by the user: the next plant opens at the same rubric (the top: from the top).
-      if (!this.preview && !this.only && this._plant) sheetSession.anchor = scroller.scrollTop < 40 ? null : cat;
+      if (!this.preview && !this.only && this._plant) {
+        const atTop = scroller.scrollTop < 40;
+        sheetSession.anchor = atTop ? null : cat;
+        // The block itself, and how far into it (the next plant opens there, not at the rubric's first block).
+        sheetSession.anchorBlock = atTop ? null : current;
+        sheetSession.anchorOffset = atTop || !currentEl ? 0 : Math.round(scTop - currentEl.getBoundingClientRect().top);
+      }
     });
   };
   #scrollFrame = 0;
@@ -1604,13 +1753,23 @@ export class GfPlantDetail extends LitElement {
     const cat = sheetSession.anchor;
     if (!cat || this.preview || this.only) return;
     await this.updateComplete;
-    // The rubric's first block in the sheet's flow (on an edge or in the pane, it is already in view).
-    const first = () => /** @type {HTMLElement | undefined} */ ([...this.renderRoot.querySelectorAll('.blocks > .block')]
-      .find(el => blockCategory(/** @type {HTMLElement} */ (el).dataset.key || '') === cat));
+    // The block read on the previous plant when this one has it, else the rubric's first block in the sheet's
+    // flow (on an edge or in the pane, it is already in view).
+    const blocks = () => /** @type {HTMLElement[]} */ ([...this.renderRoot.querySelectorAll('.blocks > .block')]);
+    const same = () => sheetSession.anchorBlock ? blocks().find(el => el.dataset.key === sheetSession.anchorBlock) : undefined;
+    const first = () => same() || blocks().find(el => blockCategory(el.dataset.key || '') === cat);
     if (!first()) return;
+    const offset = sheetSession.anchorOffset;
     this.#restoring = true;
     const scroller = this.#sheetScroller;
-    const pin = () => first()?.scrollIntoView({ behavior: 'auto', block: 'start' });
+    const pin = () => {
+      const el = first();
+      if (!el) return;
+      // As far into the block as before (within it), else at its top.
+      const into = same() === el ? Math.max(-80, Math.min(offset, el.offsetHeight - 60)) : null;
+      if (into === null) { el.scrollIntoView({ behavior: 'auto', block: 'start' }); return; }
+      scroller.scrollTop += el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + into;
+    };
     pin();
     this._activeCat = cat;
     const body = this.renderRoot.querySelector('article') || scroller;
@@ -1669,6 +1828,12 @@ export class GfPlantDetail extends LitElement {
     // The sheet scrolls in its middle when it has edges: the host itself does not.
     this.toggleAttribute('edged', Boolean(this.renderRoot.querySelector('.frame.edged')));
     this.#sendRail();
+    // The theme read stays in sight in the article's menu.
+    const menu = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.wiki-menu'));
+    const on = /** @type {HTMLElement | null} */ (menu?.querySelector('a.on'));
+    if (menu && on && (on.offsetLeft < menu.scrollLeft || on.offsetLeft + on.offsetWidth > menu.scrollLeft + menu.clientWidth - 16)) {
+      menu.scrollTo({ left: on.offsetLeft - menu.clientWidth / 2 + on.offsetWidth / 2, behavior: 'smooth' });
+    }
     // The plant is drawn (and read, not a card waiting underneath): at the rubric read on the previous one.
     if (!this.#restored && this._plant && !this._plant.failed && !this.preview && !this.only) { this.#restored = true; this.#restoreAnchor(); }
   }
@@ -1884,7 +2049,7 @@ export class GfPlantDetail extends LitElement {
   }
 
   #otherFrench({ plant, name }) {
-    return dedupNames([...(plant.vernacularNames || []), ...gbifFrenchNames(plant, this._gbif)], [name]);
+    return dedupNames([...(plant.vernacularNames || []), ...gbifFrenchNames(plant, this._gbif), ...(this._wiki?.aliases || [])], [name]);
   }
 
   /**
@@ -1900,19 +2065,19 @@ export class GfPlantDetail extends LitElement {
     switch (key) {
       case 'names': return this.#namesEmpty(ctx);
       // Wikipédia: shown when the summary arrives.
-      case 'wikipedia': return !this._wiki;
+      case 'wikipedia': return !this._wiki || (!this._wiki.extract && !this._wiki.english);
       case 'photos': return ctx.photosOff || (!ctx.loading && !ctx.images.length);
       case 'media': return ctx.photosOff || (!ctx.loading && !ctx.images.length && loaded(this._gbif.photos) && !this._gbif.photos?.length);
       // Épuré and Standard: the component hides itself when empty (CSS, see .hide-empty).
       case 'status': return baseOf(v) === 'scientific' && !ctx.plant.statuses?.length && loaded(this._science) && !this._science?.iucn && loaded(g.iucn) && !g.iucn?.code;
       case 'mine': return !(getMembership().byPlant.get(ctx.plant.id) || []).length;
-      case 'descriptions': return loaded(g.descriptions) && !descriptions(g).filter(row => baseOf(v) === 'scientific' || /^(fra|fre|fr)$/.test(row.language || '')).length;
+      case 'descriptions': return !this.#wikiSections(['description']).length && loaded(g.descriptions) && !descriptions(g).filter(row => baseOf(v) === 'scientific' || /^(fra|fre|fr)$/.test(row.language || '')).length;
       case 'occurrences': return !ctx.loading && !ctx.details?.identifiers?.gbif?.id && !ctx.inat?.observationsCount;
       case 'gbifMedia': return ctx.photosOff || shownSubs(v, 'gbifMedia').every(k => loaded(g[k]) && !g[k]?.length);
-      case 'gbifProfile': { const p = profile(g); return !p.habitats.length && !p.forms.length && !p.invasive.length; }
+      case 'gbifProfile': { const p = profile(g); return !this.#wikiSections(['ecology']).length && !p.habitats.length && !p.forms.length && !p.invasive.length; }
       case 'literature': return !g.literature?.items?.length;
       case 'interactions': return loaded(this._open.interactions) && !this._open.interactions?.roles?.length;
-      case 'uses': { const o = this._open; return loaded(o.safety) && !o.safety && !o.confusions && loaded(o.wdUses) && !o.wdUses?.uses?.length && !o.wdUses?.products?.length && !o.wdUses?.dishes?.length && !o.recipes?.length && !this.#danger(ctx.plant).length; }
+      case 'uses': { const o = this._open; return !this.#wikiSections(['toxicity', 'food', 'uses']).length && loaded(o.safety) && !o.safety && !o.confusions && loaded(o.wdUses) && !o.wdUses?.uses?.length && !o.wdUses?.products?.length && !o.wdUses?.dishes?.length && !o.recipes?.length && !this.#danger(ctx.plant).length; }
       case 'climate': return !openData.pollenOf(ctx.plant) && loaded(this._open.niche) && !this._open.niche?.points?.length;
       case 'trefle': return !ctx.loading && !trefleFacts(ctx.details).length;
       default: return false;
@@ -1922,7 +2087,7 @@ export class GfPlantDetail extends LitElement {
 
   /** The Noms block has nothing to show here. @param {any} ctx */
   #namesEmpty(ctx) {
-    if (this.#otherFrench(ctx).length) return false;
+    if (this.#otherFrench(ctx).length || this.#wikiSections(['names']).length) return false;
     return blockStyle(this.view, 'names') === 'list' || baseOf(this.view) !== 'scientific' || !otherNames(this._gbif).length;
   }
 
@@ -1972,11 +2137,12 @@ export class GfPlantDetail extends LitElement {
           ${this._spotsOpen ? html`<gf-plant-spots plant-id=${plant.id} notitle ?map-linked=${this.#hasMap} .focus=${this._focus}></gf-plant-spots>` : nothing}`;
       }
       case 'calendar':
-        return html`<gf-calendar .plant=${plant} mode=${v} notitle></gf-calendar>${ifEmpty('Aucune période de floraison ni d’observation connue.')}`;
+        return html`<gf-calendar .plant=${plant} mode=${v} notitle></gf-calendar>${this.#wikiSections(['biology']).length ? this.#wikiBits(['biology']) : ifEmpty('Aucune période de floraison ni d’observation connue.')}`;
       case 'wikipedia':
         return this._wiki ? this.#wikipedia() : this._wiki === undefined ? pending : empty('Pas d’article Wikipédia en français trouvé.');
       case 'descriptions': {
         const texts = descriptions(this._gbif).filter(row => baseOf(v) === 'scientific' || /^(fra|fre|fr)$/.test(row.language || ''));
+        if (this.#wikiSections(['description']).length) return html`${this.#wikiBits(['description'])}${texts.map(row => html`<div class="description"><small>${row.type || 'Description'}${row.source ? ' — ' + row.source : ''} · ${row.language} · GBIF</small>${row.text}</div>`)}`;
         return texts.length
           ? texts.map(row => html`<div class="description"><small>${row.type || 'Description'}${row.source ? ' — ' + row.source : ''} · ${row.language} · GBIF</small>${row.text}</div>`)
           : this._gbif.descriptions === undefined ? pending : empty(baseOf(v) === 'scientific' ? 'Aucune description sur GBIF.' : 'Aucune description en français sur GBIF.');
@@ -1984,22 +2150,28 @@ export class GfPlantDetail extends LitElement {
       case 'names': {
         const names = this.#otherFrench(ctx);
         const foreign = baseOf(v) === 'scientific' ? otherNames(this._gbif) : [];
-        if (!names.length && !foreign.length) return this._gbif.vernacularNames === undefined ? pending : empty('Aucun autre nom français connu.');
+        const wikiNames = this.#wikiBits(['names']);
+        if (!names.length && !foreign.length) return wikiNames !== nothing ? wikiNames : this._gbif.vernacularNames === undefined ? pending : empty('Aucun autre nom français connu.');
         // « Liste » (Épuré's default): just the French names.
-        if (blockStyle(v, 'names') === 'list') return shownSubs(v, 'names').includes('french') && names.length ? html`<p class="names-list">${this.#nameList(names)}</p>` : nothing;
+        if (blockStyle(v, 'names') === 'list') return html`${shownSubs(v, 'names').includes('french') && names.length ? html`<p class="names-list">${this.#nameList(names)}</p>` : nothing}${wikiNames}`;
         return html`<dl class="facts">${this.#subs('names', {
           french: () => names.length ? html`<dt>Autres noms français</dt><dd class="names">${this.#nameList(names)}</dd>` : nothing,
           foreign: () => foreign.length ? html`<dt>Autres langues (GBIF)</dt><dd class="names">${foreign.map(([lang, list]) => html`<span class="lang">${lang || '?'}</span> ${this.#nameList(/** @type {string[]} */ (list))} `)}</dd>` : nothing
         })}</dl>
-        <p class="credit">Sources : TAXREF v18 · GBIF.</p>`;
+        <p class="credit">Sources : TAXREF v18 · GBIF${this._wiki?.aliases?.length ? ' · Wikidata' : ''}.</p>${wikiNames}`;
       }
-      case 'occurrences': return this.#occurrences(ctx);
+      case 'occurrences': return html`${this.#occurrences(ctx)}${this.#wikiBits(['distribution'])}`;
       case 'gbifMedia': return this.#gbifMedia(ctx);
-      case 'gbifProfile': return this.#gbifProfile();
+      case 'gbifProfile': {
+        const w = this.#wikiBits(['ecology']);
+        if (w === nothing) return this.#gbifProfile();
+        const p = profile(this._gbif);
+        return html`${p.habitats.length || p.forms.length || p.invasive.length ? this.#gbifProfile() : nothing}${w}`;
+      }
       case 'literature': return this.#literature(ctx);
       case 'interactions': return this.#interactions(ctx);
       case 'climate': return this.#climate(ctx);
-      case 'uses': return this.#uses(ctx);
+      case 'uses': return html`${this.#uses(ctx)}${this.#wikiBits(['toxicity', 'food', 'uses'])}`;
       case 'trefle': {
         const facts = trefleFacts(details);
         if (facts.length) return html`<dl class="facts">${facts.map(([k, val]) => html`<dt>${k}</dt><dd>${val}</dd>`)}</dl>

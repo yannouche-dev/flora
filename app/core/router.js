@@ -8,7 +8,7 @@ import './history.js';
  *   | { name: 'map', spot: string | null, plant: number | null, focus: number | null, season: boolean, add: number | null, pick: boolean, flore: boolean }
  *   | { name: 'spot-new', plant: number | null, kind: 'list' | 'place', at: [number, number] | null }
  *   | { name: 'spot', id: string, add: number | null, pick: boolean }
- *   | { name: 'shared', data: string }
+ *   | { name: 'shared', data: string } | { name: 'discover', plant: number | null, scenario: string | null }
  *   | { name: 'not-found' }} Route
  */
 
@@ -47,6 +47,8 @@ export function parse(hash) {
   if (path === 'shared') return { name: 'shared', data: params.get('d') || '' };
 
   if (path === 'settings') return { name: 'settings' };
+  // « Découvrir »: the flora around; ?p=<id> the plant open.
+  if (path === 'discover') return { name: 'discover', plant: number('p'), scenario: /^[a-z]{2,12}$/.test(params.get('s') || '') ? params.get('s') : null };
   return { name: 'not-found' };
 }
 
@@ -59,6 +61,14 @@ export const href = {
   plantPane: (/** @type {number} */ id, /** @type {string} */ pane, /** @type {number | null} */ at = null) =>
     '#/plant/' + id + '?pane=' + encodeURIComponent(pane) + (at != null ? '&i=' + at : ''),
   settings: () => '#/settings',
+  /** « Découvrir » (the flora around), with a plant open. */
+  discover: (/** @type {number | null | undefined} */ plantId = null, /** @type {string | null | undefined} */ scenario = null) => {
+    const params = new URLSearchParams();
+    if (scenario && scenario !== 'meet') params.set('s', scenario);
+    if (plantId) params.set('p', String(plantId));
+    const q = params.toString();
+    return '#/discover' + (q ? '?' + q : '');
+  },
   /** Mes plantes; `open`: the collection shown (a place: its map too), `plant`: the plant sheet beside. */
   collections: (/** @type {{ open?: string | null, plant?: number | null }} */ options = {}) => {
     const params = new URLSearchParams();

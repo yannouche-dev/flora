@@ -32,7 +32,7 @@ export const MODULES = [
   { key: 'wikidata', category: 'names', also: ['knowledge', 'safety'], name: 'Wikidata', hosts: 'www.wikidata.org',
     provides: 'Classification, statut UICN, identifiants (Tela Botanica, IPNI, POWO) ; donne aussi l’article Wikipédia.' },
   { key: 'wikipedia', category: 'knowledge', also: [], name: 'Wikipédia', hosts: 'fr.wikipedia.org',
-    provides: 'Résumé de l’article en français (nécessite Wikidata).' },
+    provides: 'L’article en français : son résumé, et ses sections (description, écologie, toxicité, alimentation, usages, noms…) chacune dans le bloc de la fiche qui en parle ; sans article français, le lien vers l’anglais (nécessite Wikidata).' },
   { key: 'wikibooks', category: 'knowledge', also: [], name: 'Wikibooks (recettes)', hosts: 'fr.wikibooks.org, en.wikibooks.org',
     provides: 'Recettes de cuisine sauvage citant la plante (livres de recettes de Wikibooks, en français et en anglais), dans le bloc « Usages et cuisine sauvage ».' },
   { key: 'commons', category: 'images', also: [], name: 'Wikimedia Commons', hosts: 'commons.wikimedia.org',
