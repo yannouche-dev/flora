@@ -9,7 +9,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
-      - name: Trefle probe (token from the repository secret, masked)
+      - name: Trefle probe (token from the repository secret, masked) — run 2
         run: |
           if [ -z "$TREFLE_TOKEN" ]; then echo "SECRET TREFLE_TOKEN MISSING"; exit 0; fi
           echo "::add-mask::$TREFLE_TOKEN"
