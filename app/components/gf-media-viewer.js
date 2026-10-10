@@ -2,18 +2,22 @@
 // « Médias »: every image of a plant in one viewer, with one zoom that works the way photo apps do.
 //  - The image shows at once from its thumbnail (blurred), then its display size fades in; zooming past what
 //    the display size holds loads the original, on its own — there is nothing to choose.
+//  - « Plein cadre »: an image taller than the stage fills its width (when the map of it still fits beside),
+//    the map of the whole image laid over the right edge, at the stage's height, showing the part seen.
 //  - Zoom in place: double-click / double-tap (at that point), pinch, Ctrl + wheel (and the wheel alone when
-//    the viewer is alone in a pane), + / − / 0 keys, the − % + buttons; drag to move around. While zoomed, a
-//    small map of the whole image shows where you are, and dragging on it moves there.
+//    the viewer is alone in a pane), + / − / 0 keys, the − % + buttons; drag to move around, or on the map.
 //  - Browse: ‹ ›, the filmstrip, ← → (when the viewer has the focus), a swipe when not zoomed.
 //  - Calm: the credit in one line under the image, « ⓘ » for the details; the controls fade when the pointer rests.
+//  - Parts (Trefle): flower, leaf, fruit, bark, habit — an icon menu filtering every presentation.
+//  - The same display from one plant to the next (filters, zoom choice, details, slideshow): sheet-session.js.
 // Two sizes: in a pane (beside the sheet, full screen…) and `compact`, the « Médias » block of the sheet, whose
-// frame follows the image's shape (portrait herbarium sheets stay readable) and where the wheel scrolls the sheet.
+// frame keeps one shape (nothing jumps from one plant to the next) and where the wheel scrolls the sheet.
 
 import { LitElement, html, css, nothing } from 'lit';
 import * as db from '../core/db.js';
 import { icon } from '../core/icons.js';
-import { imageKey, loadMedia } from '../core/media-items.js';
+import { imageKey, loadMedia, PARTS } from '../core/media-items.js';
+import { sheetSession, setMediaSession } from '../core/sheet-session.js';
 import { ui } from '../styles/ui.js';
 import './gf-attribution.js';
 
@@ -21,6 +25,11 @@ import './gf-attribution.js';
 
 const KINDS = /** @type {const} */ ([['all', 'Tous les médias'], ['photo', 'Photos'], ['observation', 'Observations'], ['herbarium', 'Herbier']]);
 const KIND_LABEL = { photo: 'Photo', observation: 'Photo d’observation', herbarium: 'Planche d’herbier' };
+/** The part menu: label and icon of each part. */
+const PART_INFO = { all: ['Toutes les parties', 'images'], flower: ['Fleur', 'flower3'], leaf: ['Feuille', 'leaf'], fruit: ['Fruit', 'fruit'],
+  bark: ['Écorce', 'bark'], habit: ['Port', 'tree'], other: ['Autre', 'three-dots'] };
+/** Plein cadre: the map beside the filled image takes at most this share of the stage's width. */
+const MAP_SHARE = 0.45, MAP_SHARE_NARROW = 0.35;
 const nf = new Intl.NumberFormat('fr-FR');
 /** @param {number} v @param {number} a @param {number} b */
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
@@ -48,6 +57,7 @@ export class GfMediaViewer extends LitElement {
     _done: { state: true },
     _key: { state: true },
     _filter: { state: true },
+    _part: { state: true },
     /** Zoom: scale over « fit » (1 = the whole image) and offset of its centre from the stage's, in px. */
     _z: { state: true },
     _tx: { state: true },
@@ -78,6 +88,9 @@ export class GfMediaViewer extends LitElement {
     .stage { position: relative; min-height: 200px; background: #111; overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: none; cursor: zoom-in; outline: none; }
     :host([compact]) .stage { touch-action: pan-y; }
     :host([compact]) .stage.zoomed { touch-action: none; }
+    /* In the sheet: one shape whatever the image (nothing jumps from one plant to the next). */
+    :host([compact]) .stage { aspect-ratio: 4 / 3; max-height: 72vh; }
+    @container (min-width: 560px) { :host([compact]) .stage { aspect-ratio: 3 / 2; } }
     .stage.zoomed { cursor: grab; }
     .stage.dragging { cursor: grabbing; }
     .frame { position: absolute; left: 50%; top: 50%; transform-origin: center; will-change: transform; overflow: hidden; }
@@ -102,19 +115,21 @@ export class GfMediaViewer extends LitElement {
     /* The controls fade while the pointer rests (wide, mouse). */
     .stage.idle .nav, .stage.idle .zoombar { opacity: 0; }
     .stage:focus-visible { box-shadow: inset var(--gf-focus); }
-    /* While zoomed: the whole image, and where we are on it. */
-    .minimap { position: absolute; right: 8px; top: 8px; z-index: 3; width: clamp(80px, 22%, 160px); border: 2px solid rgb(255 255 255 / 85%); border-radius: 6px; overflow: hidden;
-      background: #000; box-shadow: 0 2px 10px rgb(0 0 0 / 50%); cursor: crosshair; touch-action: none; }
-    .minimap img { display: block; width: 100%; height: auto; opacity: 0.85; pointer-events: none; }
-    .minimap .view { position: absolute; border: 2px solid #f59e0b; box-shadow: 0 0 0 9999px rgb(0 0 0 / 35%); pointer-events: none; }
-    .stage.idle .minimap { opacity: 0.55; }
+    /* The image past the stage: the whole of it laid over the right edge, at the stage's height, and the part seen. */
+    .minimap { position: absolute; right: 8px; top: 8px; z-index: 3; border: 1px solid rgb(255 255 255 / 45%); border-radius: 4px; overflow: hidden;
+      background: rgb(0 0 0 / 70%); box-shadow: 0 2px 12px rgb(0 0 0 / 45%); cursor: crosshair; touch-action: none; transition: opacity 0.3s; }
+    .minimap img { display: block; width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
+    .minimap .view { position: absolute; border: 1px solid rgb(255 255 255 / 85%); border-radius: 2px; box-shadow: 0 0 0 9999px rgb(0 0 0 / 18%); pointer-events: none; }
+    .stage.idle .minimap { opacity: 0.9; }
+    .nav.next { right: calc(var(--map-w, -8px) + 14px); }
+    .zoombar { right: calc(var(--map-w, -8px) + 16px); }
 
     /* The credit under the image, one line; « ⓘ » for the details. */
     .caption { flex: none; display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 12px; border-top: 1px solid var(--gf-border); font-size: 0.78rem; color: var(--gf-text-muted); min-height: 34px; }
     .caption .what { white-space: nowrap; }
     .caption gf-attribution { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.78rem; }
     .caption .icon-btn { width: 30px; height: 30px; min-height: 0; flex: none; }
-    .info { padding: 12px 14px; display: grid; gap: 8px; align-content: start; font-size: 0.9rem; background: var(--gf-surface); overflow: auto; }
+    .info { padding: 12px 14px; display: grid; gap: 8px; align-content: start; font-size: 0.9rem; background: var(--gf-surface); overflow: hidden auto; }
     .info h3 { margin: 0; font-size: 0.95rem; }
     .info .kind { color: var(--gf-text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
     .info dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 0.85rem; }
@@ -128,7 +143,9 @@ export class GfMediaViewer extends LitElement {
     @container (max-width: 759px) { .main.with-info .info { position: absolute; left: 0; right: 0; bottom: 0; z-index: 5; max-height: 70%; border-top: 1px solid var(--gf-border); box-shadow: 0 -8px 20px rgb(0 0 0 / 25%); } }
 
     .strip { flex: none; border-top: 1px solid var(--gf-border); background: var(--gf-surface-2); padding: 6px 8px; }
-    .thumbs { display: flex; gap: 6px; overflow-x: auto; scroll-behavior: smooth; scrollbar-width: thin; }
+    .thumbs { display: flex; gap: 6px; overflow-x: auto; scroll-behavior: smooth; scrollbar-width: none;
+      mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 12px), transparent 100%); padding-inline: 4px; }
+    .thumbs::-webkit-scrollbar { display: none; }
     .thumbs button { flex: none; width: 64px; height: 64px; padding: 0; border: 2px solid transparent; border-radius: var(--gf-radius-sm); overflow: hidden; background: var(--gf-surface); cursor: pointer; opacity: 0.8; }
     .thumbs button[aria-current="true"] { border-color: var(--gf-accent); opacity: 1; }
     .thumbs button:hover { opacity: 1; }
@@ -153,10 +170,26 @@ export class GfMediaViewer extends LitElement {
     /* In the sheet: framed, the stage takes the image's shape (within limits). */
     :host([compact]) { flex: none; border: 1px solid var(--gf-border); border-radius: var(--gf-radius); overflow: hidden; }
     :host([compact]) .bar { min-height: 38px; padding: 2px 4px 2px 10px; }
-    :host([compact]) .stage { max-height: 72vh; }
     .empty { padding: 24px; color: var(--gf-text-muted); text-align: center; }
+    /* Parts of the plant (Trefle): one icon each. */
+    .parts { display: flex; gap: 1px; padding: 2px; border-radius: var(--gf-radius-pill); background: var(--gf-surface-2); }
+    .parts button { width: 30px; height: 28px; min-height: 0; padding: 0; border: 0; border-radius: var(--gf-radius-pill); background: none; color: var(--gf-text-muted);
+      display: grid; place-items: center; cursor: pointer; }
+    .parts button:hover:not(:disabled) { color: var(--gf-text); background: var(--gf-surface); }
+    .parts button[aria-checked="true"] { background: var(--gf-surface); color: var(--gf-accent); box-shadow: 0 1px 3px rgb(0 0 0 / 15%); }
+    .parts button:disabled { opacity: 0.3; cursor: default; }
+    .parts button:focus-visible { outline: none; box-shadow: var(--gf-focus); }
+    /* Loading: the viewer's shape at once, so the sheet does not move when the images come. */
+    .skel { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    .skel .stage { cursor: default; background: linear-gradient(100deg, #1b1b1b 40%, #262626 50%, #1b1b1b 60%) 0 0 / 300% 100%; animation: shimmer 1.4s linear infinite; }
+    .skel .stage .spinner { position: absolute; inset: auto 0 12px; text-align: center; color: rgb(255 255 255 / 60%); font-size: 0.8rem; }
+    .skel .caption i { display: block; height: 10px; width: 45%; border-radius: 5px; background: var(--gf-surface-2); }
+    .skel .thumbs i { flex: none; width: 64px; height: 64px; border-radius: var(--gf-radius-sm); background: var(--gf-surface); }
+    :host([compact]) .skel .thumbs i { width: 52px; height: 52px; }
+    @keyframes shimmer { to { background-position: -300% 0; } }
     @media (prefers-reduced-motion: reduce) {
       .thumbs { scroll-behavior: auto; } .mosaic img, .frame .disp, .frame .hd, .stage.animate .frame { transition: none; }
+      .skel .stage { animation: none; }
     }
   `];
 
@@ -175,7 +208,9 @@ export class GfMediaViewer extends LitElement {
     this.local = false;
     /** @type {string} */
     this.presentation = 'scene';
-    this._opened = false;
+    // The display chosen on the previous plant.
+    const m = sheetSession.media;
+    this._opened = m.opened;
     this._playing = false;
     /** @type {any} */
     this._plant = null;
@@ -185,7 +220,9 @@ export class GfMediaViewer extends LitElement {
     /** The item shown, by key (items arriving later do not move it). @type {string | null} */
     this._key = null;
     /** @type {'all' | 'photo' | 'observation' | 'herbarium'} */
-    this._filter = 'all';
+    this._filter = /** @type {any} */ (m.filter);
+    /** @type {string} */
+    this._part = m.part;
     this._z = 1; this._tx = 0; this._ty = 0;
     this._stage = { w: 0, h: 0 };
     /** @type {{ w: number, h: number } | null} */
@@ -193,7 +230,7 @@ export class GfMediaViewer extends LitElement {
     this._loaded = false;
     /** @type {'none' | 'loading' | 'on' | 'error'} */
     this._hd = 'none';
-    this._info = false;
+    this._info = m.info;
     this._idle = false;
     /** Images that failed at a size: key → the next URL tried. @type {Map<string, string>} */
     this._failed = new Map();
@@ -204,6 +241,7 @@ export class GfMediaViewer extends LitElement {
   firstUpdated() {
     // Alone in a pane: the keys are the viewer's at once (in the sheet, after a click in it).
     if (!this.compact && !this.local) this.focus({ preventScroll: true });
+    if (sheetSession.media.playing && this.presentation === 'slideshow') this.#play(true);
   }
 
   connectedCallback() {
@@ -234,12 +272,18 @@ export class GfMediaViewer extends LitElement {
       if (found) { this._filter = 'all'; this.#select(found); }
     }
     if (changed.has('_key')) this.#resetImage();
+    // Until the user zooms or moves, the image keeps the chosen view (its shape and the stage's can still change).
+    if (!this.#touched && (changed.has('_key') || changed.has('_stage') || changed.has('_natural'))) this.#toHome();
+    // The display follows to the next plant.
+    if (changed.has('_filter') || changed.has('_part') || changed.has('_info') || changed.has('_opened') || changed.has('_playing')) {
+      setMediaSession({ filter: this._filter, part: this._part, info: this._info, opened: this._opened, playing: this._playing });
+    }
   }
 
   async #load() {
     this.#abort?.abort();
     const abort = this.#abort = new AbortController();
-    this._items = []; this._done = false; this._key = null; this._filter = 'all';
+    this._items = []; this._done = false; this._key = null;
     const plant = await db.get('plants', /** @type {number} */ (this.plantId)).catch(() => null);
     if (abort.signal.aborted) return;
     this._plant = plant;
@@ -254,13 +298,26 @@ export class GfMediaViewer extends LitElement {
       }
       // The URL's index: once every source has answered (before, the order can still change).
       if (this._key === null && done && items.length) this._key = items[Math.min(Math.max(0, this.index || 0), items.length - 1)].key;
+      // An image asked for (address, photo clicked) that the filters chosen earlier would hide: they open up.
+      if (this._key !== null && !this.#shown.some(i => i.key === this._key) && (this.startUrl || this.index) && items.some(i => i.key === this._key)) { this._filter = 'all'; this._part = 'all'; }
       this.#announce();
     });
   }
 
   // ── Current item, browsing ─────────────────────────────────────────────
 
-  get #shown() { return this._filter === 'all' ? this._items : this._items.filter(i => i.kind === this._filter); }
+  /**
+   * The items of the kind and part chosen. A choice with nothing for this plant shows them all (the choice is
+   * kept for the next plant); while loading, nothing yet (no image that would be replaced at once).
+   */
+  get #shown() {
+    const kind = this._filter, part = this._part;
+    const list = this._items.filter(i => (kind === 'all' || i.kind === kind) && (part === 'all' || i.part === part));
+    if (list.length || (kind === 'all' && part === 'all')) return list;
+    if (!this._done) return [];
+    const ofKind = kind === 'all' ? this._items : this._items.filter(i => i.kind === kind);
+    return ofKind.length ? ofKind : this._items;
+  }
 
   get #current() {
     const shown = this.#shown;
@@ -289,20 +346,24 @@ export class GfMediaViewer extends LitElement {
     this.#announce();
   }
 
-  /** A new image: fitted, its layers from the start; its shape from the source when known. */
+  /** A new image: in the chosen view, its layers from the start; its shape from the source when known. */
   #resetImage() {
     const item = this._items.find(i => i.key === this._key);
     this._z = 1; this._tx = 0; this._ty = 0;
     this._loaded = false; this._hd = 'none';
     this._natural = item?.width && item?.height ? { w: item.width, h: item.height } : null;
     this.#guessed = false;
+    this.#touched = false;
   }
+  /** The user zoomed or moved this image: its view is theirs. */
+  #touched = false;
   /** The shape comes from the thumbnail only (its size is not the original's yet). */
   #guessed = false;
 
-  /** @param {string} kind */
-  #setFilter(kind) {
+  /** @param {string} kind @param {string} [part] */
+  #setFilter(kind, part = this._part) {
     this._filter = /** @type {any} */ (kind);
+    this._part = part;
     const shown = this.#shown;
     // The image shown is not of that kind: the first one that is (its own key, so it is drawn afresh).
     if (shown.length && !shown.some(i => i.key === this._key)) { this._key = shown[0].key; this.#announce(); }
@@ -315,12 +376,12 @@ export class GfMediaViewer extends LitElement {
     if (target?.closest?.('input, textarea, select, [contenteditable]')) return;
     /** @param {() => void} f */
     const take = f => { e.preventDefault(); e.stopPropagation(); f(); };
-    const zoomed = this._z > 1.01;
+    const zoomed = this._z > this.#home + 0.01;
     if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
       // Zoomed: the arrows move around the image; else they browse.
-      if (zoomed) take(() => this.#panBy(e.key === 'ArrowLeft' ? 80 : -80, 0));
+      if (zoomed && this.#overflowX) take(() => this.#panBy(e.key === 'ArrowLeft' ? 80 : -80, 0));
       else take(() => this.#go(e.key === 'ArrowLeft' ? -1 : 1));
-    } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && zoomed) take(() => this.#panBy(0, e.key === 'ArrowUp' ? 80 : -80));
+    } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && this._z > 1.01 && !this.compact) take(() => this.#panBy(0, e.key === 'ArrowUp' ? 80 : -80));
     else if (e.key === 'Home' || e.key === 'End') take(() => this.#go(e.key === 'Home' ? -Infinity : Infinity));
     else if (e.key === '+' || e.key === '=') take(() => this.#zoomAt(this._z * 1.5, 0, 0, true));
     else if (e.key === '-') take(() => this.#zoomAt(this._z / 1.5, 0, 0, true));
@@ -349,7 +410,7 @@ export class GfMediaViewer extends LitElement {
     this._playing = on;
     if (!on) return;
     this.#timer = setInterval(() => {
-      if (this._z > 1.01) return;
+      if (this._z > this.#home + 0.01) return;
       const shown = this.#shown, at = shown.indexOf(/** @type {MediaItem} */ (this.#current));
       if (shown.length > 1) this.#select(shown[(at + 1) % shown.length]);
     }, 5000);
@@ -381,6 +442,48 @@ export class GfMediaViewer extends LitElement {
   /** Up to twice the original's pixels (at least ×4). */
   get #maxZoom() { return Math.max(4, this.#oneToOne * 2); }
 
+  /**
+   * Plein cadre: the zoom at which an image taller than the stage fills its width — when the map of the whole
+   * image, at the stage's height, still fits beside (else 1, the whole image).
+   */
+  get #fill() {
+    const n = this._natural, { w, h } = this._stage, fit = this.#fit;
+    if (!n || !fit || !w || !h) return 1;
+    const share = (n.w / n.h) / (w / h);
+    if (share > (w < 420 ? MAP_SHARE_NARROW : MAP_SHARE)) return 1;
+    const z = w / fit.w;
+    return z > 1.01 && z <= this.#maxZoom ? z : 1;
+  }
+
+  /** The view chosen (and kept from one image, one plant to the next): plein cadre, whole image or 100 %. */
+  get #home() {
+    const pref = sheetSession.media.zoom;
+    return pref === 'fit' ? 1 : pref === 'one' ? clamp(this.#oneToOne, 1, this.#maxZoom) : this.#fill;
+  }
+
+  /** The image wider than the stage (it moves sideways). */
+  get #overflowX() { const fit = this.#fit; return !!fit && fit.w * this._z > this._stage.w + 1; }
+
+  /** Back to the chosen view, centred. @param {boolean} [animate] */
+  #toHome(animate = false) {
+    this._z = this.#home; this._tx = 0; this._ty = 0;
+    this.#clampPan();
+    if (animate) this.#animate(true);
+    this.#maybeHd();
+  }
+
+  /** « Ajusté » → « Plein cadre » (when there is one) → « 100 % » → « Ajusté »…: the choice is kept. */
+  #cycleView() {
+    const z = this._z, fill = this.#fill, one = clamp(this.#oneToOne, 1, this.#maxZoom);
+    const near = (/** @type {number} */ a) => Math.abs(z - a) < 0.02;
+    /** @type {'auto' | 'fit' | 'one'} */
+    const next = near(1) ? (fill > 1 ? 'auto' : 'one') : near(fill) && fill > 1 ? (one > fill + 0.02 ? 'one' : 'fit') : 'fit';
+    setMediaSession({ zoom: next });
+    this.#touched = false;
+    this.#toHome(true);
+    this.requestUpdate();
+  }
+
   /** Keeps the image over the stage (no empty band beyond its edges). */
   #clampPan() {
     const fit = this.#fit;
@@ -395,6 +498,7 @@ export class GfMediaViewer extends LitElement {
    * @param {number} z @param {number} px @param {number} py @param {boolean} [animate]
    */
   #zoomAt(z, px, py, animate = false) {
+    this.#touched = true;
     const z2 = clamp(z, 1, this.#maxZoom), k = z2 / this._z;
     this._tx = px - (px - this._tx) * k;
     this._ty = py - (py - this._ty) * k;
@@ -405,10 +509,11 @@ export class GfMediaViewer extends LitElement {
     this.#maybeHd();
   }
 
-  #reset() { this._z = 1; this._tx = 0; this._ty = 0; this.#animate(true); }
+  /** Back to the chosen view (plein cadre, whole image or 100 %). */
+  #reset() { this.#touched = false; this.#toHome(true); }
 
   /** @param {number} dx @param {number} dy */
-  #panBy(dx, dy) { this._tx += dx; this._ty += dy; this.#clampPan(); this.#animate(true); }
+  #panBy(dx, dy) { this.#touched = true; this._tx += dx; this._ty += dy; this.#clampPan(); this.#animate(true); }
 
   /** A smooth move for buttons, keys and double taps (not for fingers, which follow at once). @param {boolean} on */
   #animate(on) {
@@ -429,9 +534,10 @@ export class GfMediaViewer extends LitElement {
 
   /** Double click / double tap: in to the point (×3, or 100 % when it is about that), or back to the whole image. @param {number} px @param {number} py */
   #toggleZoom(px, py) {
-    if (this._z > 1.01) { this.#reset(); return; }
+    const home = this.#home;
+    if (this._z > home + 0.01) { this.#reset(); return; }
     const one = this.#oneToOne;
-    this.#zoomAt(one > 1.3 && one < 5 ? one : 3, px, py, true);
+    this.#zoomAt(Math.max(home * 2, one > 1.3 && one < 5 ? one : 3), px, py, true);
   }
 
   // Pointers: one drags (zoomed) or swipes (not zoomed); two pinch. A quick second tap zooms.
@@ -470,6 +576,7 @@ export class GfMediaViewer extends LitElement {
     this.#pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
     if (this.#pinch && this.#pointers.size >= 2) {
       const [a, b] = [...this.#pointers.values()], p = this.#pinch;
+      this.#touched = true;
       const z = clamp(p.z * Math.hypot(a.x - b.x, a.y - b.y) / p.d, 1, this.#maxZoom), k = z / p.z;
       const [cx, cy] = this.#local(/** @type {any} */ ({ clientX: (a.x + b.x) / 2, clientY: (a.y + b.y) / 2 }));
       // The point under the fingers stays under them, and follows them.
@@ -483,6 +590,7 @@ export class GfMediaViewer extends LitElement {
     if (Math.hypot(dx, dy) > 4) d.moved = true;
     if (this._z > 1.01) {
       /** @type {HTMLElement} */ (e.currentTarget).classList.add('dragging');
+      if (d.moved) this.#touched = true;
       this._tx = d.tx + dx; this._ty = d.ty + dy;
       this.#clampPan();
     }
@@ -493,15 +601,15 @@ export class GfMediaViewer extends LitElement {
     /** @type {HTMLElement} */ (e.currentTarget).classList.remove('dragging');
     this.#pointers.delete(e.pointerId);
     if (this.#pinch) {
-      if (this.#pointers.size < 2) { this.#pinch = null; if (this._z <= 1.02) this.#reset(); else this.#maybeHd(); }
+      if (this.#pointers.size < 2) { this.#pinch = null; if (this._z <= 1.02) { this._z = 1; this._tx = 0; this._ty = 0; } this.#maybeHd(); }
       return;
     }
     const d = this.#drag;
     this.#drag = null;
     if (!d || e.type === 'pointercancel') return;
     const dx = e.clientX - d.x, dy = e.clientY - d.y;
-    // Not zoomed: a quick sideways swipe browses.
-    if (this._z <= 1.01 && Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && Date.now() - d.t < 700) { this.#go(dx < 0 ? 1 : -1); return; }
+    // Nothing to move sideways: a quick sideways swipe browses.
+    if (!this.#overflowX && Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && Date.now() - d.t < 700) { this.#go(dx < 0 ? 1 : -1); return; }
     if (d.moved) { this.#maybeHd(); return; }
     // A tap: the second one, close in time and place, zooms (a mouse uses dblclick).
     if (e.pointerType === 'mouse') return;
@@ -528,7 +636,7 @@ export class GfMediaViewer extends LitElement {
    * @param {WheelEvent} e
    */
   #wheel(e) {
-    if (!e.ctrlKey && (this.compact || this._z <= 1.01 && this.local)) return;
+    if (!e.ctrlKey && (this.compact || this._z <= this.#home + 0.01 && this.local)) return;
     e.preventDefault();
     const [px, py] = this.#local(e);
     this.#zoomAt(this._z * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0025)), px, py);
@@ -538,6 +646,7 @@ export class GfMediaViewer extends LitElement {
   #mapPoint(e) {
     const el = /** @type {HTMLElement} */ (e.currentTarget), r = el.getBoundingClientRect(), fit = this.#fit;
     if (!fit) return;
+    this.#touched = true;
     const fx = clamp((e.clientX - r.left) / r.width, 0, 1) - 0.5, fy = clamp((e.clientY - r.top) / r.height, 0, 1) - 0.5;
     this._tx = -fx * fit.w * this._z; this._ty = -fy * fit.h * this._z;
     this.#clampPan();
@@ -596,6 +705,7 @@ export class GfMediaViewer extends LitElement {
         ${this.presentation === 'mosaic' && this._opened ? html`<button class="link back-mosaic" type="button" @click=${() => { this._opened = false; }}>${icon('chevron-left')} Mosaïque</button>` : nothing}
         ${kinds.length > 2 ? html`<select aria-label="Type de média" @change=${(/** @type {any} */ e) => this.#setFilter(e.target.value)}>
           ${kinds.map(([k, label]) => html`<option value=${k} ?selected=${this._filter === k}>${label} (${k === 'all' ? this._items.length : this._items.filter(i => i.kind === k).length})</option>`)}</select>` : nothing}
+        ${this.#partMenu()}
         ${item ? html`<span class="count" aria-live="polite">${at + 1} / ${shown.length}</span>` : this._done ? nothing : html`<span class="count">chargement…</span>`}
         ${this.#view === 'slideshow' && shown.length > 1 ? html`<button class="icon-btn" type="button" aria-pressed=${String(this._playing)}
           title=${this._playing ? 'Arrêter le diaporama' : 'Lancer le diaporama (une image toutes les 5 s)'} aria-label=${this._playing ? 'Arrêter le diaporama' : 'Lancer le diaporama'}
@@ -603,7 +713,7 @@ export class GfMediaViewer extends LitElement {
         ${this.compact ? html`<button class="icon-btn" type="button" title="Ouvrir en grand, à côté de la fiche" aria-label="Ouvrir les médias en volet"
           @click=${() => this.#toPane()}>${icon('arrows-angle-expand')}</button>` : nothing}
       </div>
-      ${!item ? this.#empty(plant) : this.#view === 'mosaic' ? this.#mosaic(shown) : html`
+      ${!item ? (this._done ? this.#empty(plant) : this.#skeleton()) : this.#view === 'mosaic' ? this.#mosaic(shown) : html`
         <div class="main ${this._info ? 'with-info' : ''} ${this.#view === 'slideshow' ? 'slideshow' : ''}">${this.#stage(item, at, shown.length)}${this._info ? this.#details(item) : nothing}</div>
         ${this.#caption(item)}
         ${this.#view === 'slideshow' || shown.length < 2 ? nothing : html`<div class="strip">${this.#thumbs(shown, item)}</div>`}`}`;
@@ -611,7 +721,31 @@ export class GfMediaViewer extends LitElement {
 
   /** @param {any} plant */
   #empty(plant) {
-    return html`<div class="empty">${this._done ? (plant ? 'Aucune image sous licence libre pour cette plante (ou modules photos désactivés).' : 'Plante introuvable.') : html`<span class="spinner">chargement des médias…</span>`}</div>`;
+    return html`<div class="empty">${plant ? 'Aucune image sous licence libre pour cette plante (ou modules photos désactivés).' : 'Plante introuvable.'}</div>`;
+  }
+
+  /** While loading: the stage, the credit line and the strip, empty — the viewer's size from the start. */
+  #skeleton() {
+    return html`<div class="skel" aria-busy="true">
+      <div class="main"><div class="stage"><span class="spinner">chargement des médias…</span></div></div>
+      <div class="caption"><i></i></div>
+      ${this.#view === 'slideshow' ? nothing : html`<div class="strip"><div class="thumbs">${[0, 1, 2, 3, 4, 5].map(() => html`<i></i>`)}</div></div>`}
+    </div>`;
+  }
+
+  /** The parts of the plant (Trefle's photos): shown only when some image has one. */
+  #partMenu() {
+    const items = this._filter === 'all' ? this._items : this._items.filter(i => i.kind === this._filter);
+    if (!this._items.some(i => i.part)) return nothing;
+    const count = (/** @type {string} */ p) => p === 'all' ? items.length : items.filter(i => i.part === p).length;
+    return html`<div class="parts" role="radiogroup" aria-label="Partie de la plante">
+      ${['all', ...PARTS].map(p => {
+        const n = count(p), [label, ic] = PART_INFO[/** @type {keyof PART_INFO} */ (p)];
+        if (p === 'other' && !n) return nothing;
+        return html`<button type="button" role="radio" aria-checked=${String(this._part === p)} ?disabled=${!n} title=${label + ' (' + n + ')'}
+          aria-label=${label + ', ' + n + ' image' + (n > 1 ? 's' : '')} @click=${() => this.#setFilter(this._filter, p)}>${icon(/** @type {any} */ (ic))}</button>`;
+      })}
+    </div>`;
   }
 
   /** @param {MediaItem[]} shown @param {MediaItem} item */
@@ -646,16 +780,13 @@ export class GfMediaViewer extends LitElement {
 
   /** @param {MediaItem} item @param {number} at @param {number} n */
   #stage(item, at, n) {
-    const fit = this.#fit, z = this._z, zoomed = z > 1.01;
+    const fit = this.#fit, z = this._z, home = this.#home, zoomed = z > home + 0.01, over = z > 1.01;
     const src = this._failed.get(item.key) || item.display;
-    const nat = this._natural;
-    // In the sheet the stage takes the image's shape (portrait sheets of herbaria stay readable).
-    const ratio = nat ? clamp(nat.w / nat.h, 0.6, 2) : 4 / 3;
     const frame = fit ? `width:${fit.w}px;height:${fit.h}px;transform:translate(calc(-50% + ${this._tx}px), calc(-50% + ${this._ty}px)) scale(${z})` : 'display:none';
     const pct = Math.round(z / this.#oneToOne * 100);
     const one = this.#oneToOne;
-    return html`<div class="stage ${zoomed ? 'zoomed' : ''} ${this._idle ? 'idle' : ''}" tabindex="0"
-        style=${this.compact ? `aspect-ratio:${ratio}` : ''}
+    const map = over && fit ? this.#mapSize(fit) : null;
+    return html`<div class="stage ${zoomed ? 'zoomed' : ''} ${this._idle ? 'idle' : ''}" tabindex="0" style=${map ? `--map-w:${map.w}px` : ''}
         aria-label=${(KIND_LABEL[item.kind] || 'Image') + (this._plant ? ' de ' + this._plant.scientificName : '') + ' — double-clic pour zoomer'}
         @pointerdown=${this.#down} @pointermove=${this.#move} @pointerup=${this.#up} @pointercancel=${this.#up}
         @dblclick=${this.#dblclick} @wheel=${this.#wheel} @pointerleave=${() => { if (!this.#drag) this._idle = matchMedia('(hover: hover)').matches; }}>
@@ -670,22 +801,45 @@ export class GfMediaViewer extends LitElement {
       ${fit ? nothing : html`<img class="probe" src=${item.thumb} alt="" referrerpolicy="no-referrer" hidden @load=${(/** @type {Event} */ e) => this.#guessShape(/** @type {HTMLImageElement} */ (e.target))} />`}
       <button class="nav prev" type="button" aria-label="Média précédent" ?disabled=${at <= 0} @click=${() => this.#go(-1)}>${icon('chevron-left')}</button>
       <button class="nav next" type="button" aria-label="Média suivant" ?disabled=${at >= n - 1} @click=${() => this.#go(1)}>${icon('chevron-right')}</button>
-      ${zoomed && fit ? this.#minimap(item, fit) : nothing}
+      ${map && fit ? this.#minimap(item, fit, map) : nothing}
       ${this._hd === 'loading' ? html`<span class="hd-state" role="status">Chargement de l’original…</span>` : this._hd === 'on' && zoomed ? html`<span class="hd-state">Original</span>` : nothing}
       <div class="zoombar" role="group" aria-label="Zoom">
-        <button type="button" aria-label="Dézoomer" title="Dézoomer (−)" ?disabled=${!zoomed} @click=${() => this.#zoomAt(z / 1.5, 0, 0, true)}>−</button>
-        <button type="button" class="pct" title=${zoomed ? 'Voir l’image entière (0)' : '100 % : un pixel de l’original par pixel d’écran'}
-          aria-label=${zoomed ? 'Voir l’image entière' : 'Zoom 100 %'} @click=${() => zoomed ? this.#reset() : this.#zoomAt(Math.max(1.5, one), 0, 0, true)}>${zoomed ? nf.format(pct) + ' %' : 'Ajusté'}</button>
+        <button type="button" aria-label="Dézoomer" title="Dézoomer (−)" ?disabled=${!over} @click=${() => this.#zoomAt(z / 1.5, 0, 0, true)}>−</button>
+        ${this.#viewButton(z, pct, one)}
         <button type="button" aria-label="Zoomer" title="Zoomer (+)" ?disabled=${z >= this.#maxZoom - 0.01} @click=${() => this.#zoomAt(z * 1.5, 0, 0, true)}>+</button>
       </div>
     </div>`;
   }
 
-  /** The whole image, and the part of it on the stage. @param {MediaItem} item @param {{ w: number, h: number }} fit */
-  #minimap(item, fit) {
+  /**
+   * The view button: the view shown (« Ajusté », « Plein cadre », « 100 % » or the zoom), a touch for the next
+   * one — the choice is kept for the next images and plants.
+   * @param {number} z @param {number} pct @param {number} one
+   */
+  #viewButton(z, pct, one) {
+    const near = (/** @type {number} */ a) => Math.abs(z - a) < 0.02, fill = this.#fill;
+    const label = near(1) ? 'Ajusté' : fill > 1 && near(fill) ? 'Plein cadre' : nf.format(pct) + ' %';
+    const next = near(1) ? (fill > 1 ? 'Plein cadre' : '100 %') : fill > 1 && near(fill) && clamp(one, 1, this.#maxZoom) > fill + 0.02 ? '100 %' : 'l’image entière';
+    return html`<button type="button" class="pct" title=${'Passer à : ' + next + ' (gardé pour les images suivantes)'} aria-label=${label + ' — passer à ' + next}
+      @click=${() => this.#cycleView()}>${label}</button>`;
+  }
+
+  /**
+   * The map's size: the stage's height (less its margins) when the image is narrow enough for it (as in plein
+   * cadre); else a smaller map, at most 30 % of the stage's width.
+   * @param {{ w: number, h: number }} fit
+   */
+  #mapSize(fit) {
+    const a = fit.w / fit.h, H = Math.max(40, this._stage.h - 16), full = this._stage.w * (this._stage.w < 420 ? MAP_SHARE_NARROW : MAP_SHARE);
+    const h = H * a <= full ? H : Math.min(H, this._stage.w * MAP_SHARE_NARROW / a);
+    return { w: Math.round(h * a), h: Math.round(h) };
+  }
+
+  /** The whole image, and the part of it on the stage. @param {MediaItem} item @param {{ w: number, h: number }} fit @param {{ w: number, h: number }} size */
+  #minimap(item, fit, size) {
     const z = this._z, vw = Math.min(1, this._stage.w / (fit.w * z)), vh = Math.min(1, this._stage.h / (fit.h * z));
     const cx = 0.5 - this._tx / (fit.w * z), cy = 0.5 - this._ty / (fit.h * z);
-    return html`<div class="minimap" role="img" aria-label="Où se trouve la vue sur l’image entière"
+    return html`<div class="minimap" role="img" aria-label="Où se trouve la vue sur l’image entière" style=${`width:${size.w}px;height:${size.h}px`}
         @pointerdown=${(/** @type {PointerEvent} */ e) => { e.stopPropagation(); /** @type {HTMLElement} */ (e.currentTarget).setPointerCapture(e.pointerId); this.#mapPoint(e); }}
         @pointermove=${(/** @type {PointerEvent} */ e) => { if (e.buttons) this.#mapPoint(e); }}>
       <img src=${item.thumb} alt="" referrerpolicy="no-referrer" draggable="false" />

@@ -37,6 +37,9 @@ import { chartStyles, climateChart, groupColor, groupLegend, networkChart, niche
 import { unsafeCSS } from 'lit';
 import './gf-sortable-list.js';
 import './gf-media-viewer.js';
+import './gf-sheet-rail.js';
+import { alertsOf } from '../core/alerts.js';
+import { sheetSession } from '../core/sheet-session.js';
 import { openModal } from '../core/history.js';
 
 /** Remote text is untrusted HTML: keep only its text content (DOMParser never runs scripts). */
@@ -125,7 +128,44 @@ function gbifFrenchNames(plant, gbif) {
 }
 
 /** Same name, case and accents aside. @param {string | undefined} a @param {string | undefined} b */
-const sameName = (a, b) => Boolean(a && b) && String(a).localeCompare(String(b), 'fr', { sensitivity: 'base' }) === 0;
+const sameName = (a, b) => Boolean(a && b) && nameKey(String(a)) === nameKey(String(b));
+
+/**
+ * A name's key, for the duplicates written differently: case, accents, hyphens and apostrophes, an article in
+ * front (« la », « l’ »), plurals (« Orties »), spaces. @param {string} name
+ */
+function nameKey(name) {
+  return name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+    .replace(/[-‐‑’'`´_.]/g, ' ').replace(/\s+/g, ' ').trim()
+    .replace(/^(le|la|les|l|the|der|die|das|el|il|lo|los|las)\s+/, '')
+    .split(' ').map(w => w.length > 3 ? w.replace(/(s|x)$/, '') : w).join(' ');
+}
+
+/** How well a name is written: its accents (the first letter gets its capital anyway). @param {string} name */
+const nameCare = name => name.normalize('NFD').length - name.length;
+
+/**
+ * Names without their duplicates: lists split (« grande ortie, ortie dioïque »), the same name written
+ * differently counted once — its best-written form kept, at the place of its first one; the first letter in
+ * capital. `except`: names already shown elsewhere (the title).
+ * @param {(string | null | undefined)[]} names @param {(string | null | undefined)[]} [except] @returns {string[]}
+ */
+export function dedupNames(names, except = []) {
+  const skip = new Set(except.filter(Boolean).map(n => nameKey(String(n))));
+  /** @type {Map<string, string>} */
+  const kept = new Map();
+  for (const raw of names) {
+    for (const part of String(raw || '').split(/\s*[,;\/]\s*|\s+ou\s+/)) {
+      const name = part.replace(/\s+/g, ' ').trim();
+      if (name.length < 2) continue;
+      const key = nameKey(name);
+      if (!key || skip.has(key)) continue;
+      const had = kept.get(key);
+      if (!had || nameCare(name) > nameCare(had)) kept.set(key, name);
+    }
+  }
+  return [...kept.values()].map(n => n.charAt(0).toLocaleUpperCase('fr') + n.slice(1));
+}
 
 const STATUS_TYPES = {
   PN: 'Protection nationale',
@@ -239,11 +279,9 @@ function otherNames(gbif) {
   for (const row of gbif?.vernacularNames?.results || []) {
     const lang = row.language || '';
     if (!row.vernacularName || /^(fra|fre|fr)$/.test(lang)) continue;
-    const list = byLang.get(lang) || [];
-    if (!list.includes(row.vernacularName) && list.length < 4) list.push(row.vernacularName);
-    byLang.set(lang, list);
+    byLang.set(lang, [...byLang.get(lang) || [], row.vernacularName]);
   }
-  return [...byLang].slice(0, 12);
+  return [...byLang].map(([lang, list]) => [lang, dedupNames(list).slice(0, 4)]).slice(0, 12);
 }
 
 /** Trefle species record (user's own token): its scalar facts, flattened. */
@@ -277,6 +315,8 @@ export class GfPlantDetail extends LitElement {
     embedded: { type: Boolean, reflect: true },
     /** The plant waiting under the swiped card (Flore): not the page's plant yet, so it leaves the title alone. */
     preview: { type: Boolean },
+    /** The rubrics are shown by the host (the header of Flore's plant pane): the sheet tells them (`sheet-rail`). */
+    outerRail: { type: Boolean, attribute: 'outer-rail' },
     /** Épuré (photo and one-tap actions), standard (general public), scientific (every data). */
     view: { reflect: true },
     _wiki: { state: true },
@@ -300,6 +340,10 @@ export class GfPlantDetail extends LitElement {
     _paneDialog: { state: true },
     /** The category of the block at the top of the sheet (lit in the side rail). */
     _activeCat: { state: true },
+    /** The plant's alerts, as counts on the rubric icons (alerts.js). */
+    _alerts: { state: true },
+    /** The sheet is wide enough for the rubrics in a column on its left. */
+    _railCol: { state: true },
     /** The edge shown over the whole plant pane for now (Échap or its button puts it back). */
     _maxEdge: { state: true },
     /** The sheet is wide enough for columns on its left and right edges (else they are bands at the top). */
@@ -420,7 +464,9 @@ export class GfPlantDetail extends LitElement {
     .block.headless:first-child { margin-top: 0; }
     .block[data-key='name'] h1 { margin-top: 4px; }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; }
-    .names-list { margin: 0; }
+    /* Other names: a quiet list, in italics. */
+    .names-list, .names { margin: 0; font-style: italic; font-size: 0.88rem; color: var(--gf-text-muted); line-height: 1.5; }
+    .names-list .sep, .names .sep { font-style: normal; opacity: 0.5; padding: 0 0.3em; }
     .block-title input.rename { flex: 1; min-width: 0; font: inherit; text-transform: none; letter-spacing: 0; padding: 2px 6px; border: 1px solid var(--gf-accent); border-radius: var(--gf-radius-sm); background: var(--gf-surface); color: var(--gf-text); }
     .block-title .tool[aria-expanded='true'], .block-title .tool[aria-pressed='true'] { opacity: 1; color: var(--gf-accent); }
     /* Mode King: a title hidden outside the mode reads faded and struck. */
@@ -528,7 +574,7 @@ export class GfPlantDetail extends LitElement {
     .pane-bar { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 14px; border-bottom: 1px solid var(--gf-border); }
     .pane-bar h2 { flex: 1; margin: 0; font-size: 1rem; }
     /* A block alone, at full size (a pane). */
-    :host([only]) { display: flex; flex-direction: column; min-height: 0; overflow: auto; }
+    :host([only]) { display: flex; flex-direction: column; min-height: 0; overflow: hidden auto; }
     :host([only='media']) { overflow: hidden; }
     :host([only]) gf-media-viewer { flex: 1; min-height: 0; }
     .only-pad { padding: 12px 16px; }
@@ -556,7 +602,7 @@ export class GfPlantDetail extends LitElement {
     .facts { display: grid; grid-template-columns: minmax(120px, max-content) 1fr; gap: 6px 14px; margin: 0; font-size: 0.9rem; }
     .facts dt { color: var(--gf-text-muted); }
     .facts dd { margin: 0; min-width: 0; overflow-wrap: anywhere; }
-    .facts .lang { font-size: 0.75rem; font-weight: 700; color: var(--gf-text-muted); text-transform: uppercase; }
+    .facts .lang { font-style: normal; font-size: 0.75rem; font-weight: 700; color: var(--gf-text-muted); text-transform: uppercase; }
     .statuses { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin-top: 10px; }
     .statuses th, .statuses td { text-align: left; padding: 5px 8px 5px 0; border-bottom: 1px solid var(--gf-border); vertical-align: top; }
     .statuses th { color: var(--gf-text-muted); font-weight: 600; }
@@ -667,6 +713,7 @@ export class GfPlantDetail extends LitElement {
     .edge.max { grid-area: auto !important; position: absolute; inset: 0; z-index: 30; width: auto !important; height: auto !important; border: 0; box-shadow: var(--gf-shadow-float); }
     .edge-bar { flex: none; display: flex; align-items: center; gap: 4px; min-height: 36px; padding: 2px 6px 2px 8px; color: var(--gf-text-muted); font-size: 0.75rem; }
     .edge-tabs { flex: 1; min-width: 0; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+    .edge-tabs::-webkit-scrollbar { display: none; }
     .edge-tabs button { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 2px 8px; border: 0; border-radius: var(--gf-radius-sm); background: none;
       color: var(--gf-text-muted); font: inherit; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; cursor: pointer; }
     .edge-tabs button[aria-selected='true'] { background: var(--gf-surface); color: var(--gf-accent); box-shadow: var(--gf-shadow); }
@@ -732,33 +779,19 @@ export class GfPlantDetail extends LitElement {
      * stuck at the top; wide: a column stuck on the left. Hover (or focus): the category's blocks.
      */
     .railed { --rail-h: 44px; }
-    .rail { position: sticky; top: -16px; z-index: 9; display: flex; gap: 2px; margin: -16px -16px 6px; padding: 4px 10px; background: var(--gf-surface);
-      border-bottom: 1px solid var(--gf-border); flex-wrap: wrap; }
+    .rail { position: sticky; top: -16px; z-index: 9; margin: -16px -16px 6px; padding: 4px 10px; background: var(--gf-surface); border-bottom: 1px solid var(--gf-border); }
     :host([embedded]) .rail { top: -4px; margin: -4px -14px 6px; }
-    .rail-item { position: relative; flex: none; }
-    .rail-item > button { width: 36px; height: 36px; min-height: 0; padding: 0; display: grid; place-items: center; border: 0; border-radius: var(--gf-radius-sm);
-      background: none; color: var(--gf-text-muted); font-size: 1.05rem; cursor: pointer; }
-    .rail-item > button:hover { background: var(--gf-surface-2); color: var(--gf-text); }
-    .rail-item > button.on { background: var(--gf-accent-soft); color: var(--gf-accent); }
-    .rail-item > button:focus-visible { outline: none; box-shadow: var(--gf-focus); }
-    .rail-pop { display: none; position: absolute; z-index: 20; top: 100%; left: 0; min-width: 200px; padding: 6px; background: var(--gf-surface); border: 1px solid var(--gf-border);
-      border-radius: var(--gf-radius); box-shadow: var(--gf-shadow-float); }
-    .rail-pop strong { display: block; padding: 2px 8px 4px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gf-text-muted); }
-    .rail-pop button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 6px 8px; border-radius: var(--gf-radius-sm); font: inherit; font-size: 0.9rem; color: var(--gf-text); cursor: pointer; }
-    .rail-pop button:hover, .rail-pop button:focus-visible { background: var(--gf-accent-soft); outline: none; }
-    @media (hover: hover) { .rail-item:hover .rail-pop, .rail-item:focus-within .rail-pop { display: block; } }
     .block { scroll-margin-top: calc(var(--rail-h, 0px) + 8px); }
     .block[data-flash] { animation: flash 1.2s ease-out; }
     @keyframes flash { from { box-shadow: 0 0 0 3px var(--gf-accent); } to { box-shadow: 0 0 0 3px transparent; } }
     @container (min-width: 560px) {
       .railed { --rail-h: 0px; display: grid; grid-template-columns: 44px minmax(0, 1fr); column-gap: 8px; }
-      .rail { flex-direction: column; flex-wrap: nowrap; top: 0; align-self: start; margin: 0 0 0 -8px; padding: 6px 4px; border: 0; border-right: 1px solid var(--gf-border); background: none; }
+      .rail { top: 0; align-self: start; margin: 0 0 0 -8px; padding: 6px 4px; border: 0; border-right: 1px solid var(--gf-border); background: none; }
       :host([embedded]) .rail { top: 0; margin: 0 0 0 -6px; }
-      .rail-pop { top: 0; left: 100%; margin-left: 6px; }
       .railed-sheet { min-width: 0; }
       /* With edges: the rail beside the frame, both as high as the pane. */
       :host([edged]) .railed { display: grid; grid-template-rows: minmax(0, 1fr); column-gap: 0; }
-      :host([edged]) .rail { margin: 0; padding: 6px 4px; overflow-y: auto; border-right: 1px solid var(--gf-border); }
+      :host([edged]) .rail { margin: 0; padding: 6px 4px; border-right: 1px solid var(--gf-border); }
     }
     @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } .block[data-flash] { animation: none; } }
   `];
@@ -783,10 +816,17 @@ export class GfPlantDetail extends LitElement {
     this._dragY = 0;
     /** King mode: the block being renamed, the blocks showing their sub-blocks list, naming a new note block. @type {string | null} */
     this._renaming = null;
+    // Panels opened on the previous plant stay open on this one (sheet-session.js).
     /** @type {Set<string>} */
-    this._subsOpen = new Set();
+    this._subsOpen = sheetSession.subsOpen;
     /** King mode: the map blocks showing their settings. @type {Set<string>} */
-    this._mapsOpen = new Set();
+    this._mapsOpen = sheetSession.mapsOpen;
+    /** @type {string | null} */
+    this._maxEdge = sheetSession.maxEdge;
+    /** @type {{ safety: any, edible: any } | null} */
+    this._alerts = null;
+    this._railCol = false;
+    this.outerRail = false;
     this._newNote = false;
     /** Note block whose text was just saved. @type {string | null} */
     this._noteSaved = null;
@@ -818,6 +858,8 @@ export class GfPlantDetail extends LitElement {
     this.style.setProperty('--host-h', Math.round(entry.contentRect.height + this.#padY()) + 'px');
     const wide = entry.contentRect.width >= 640;
     if (wide !== this._wideSheet) this._wideSheet = wide;
+    const col = entry.contentRect.width >= 560;
+    if (col !== this._railCol) this._railCol = col;
   });
 
   #padY() {
@@ -864,6 +906,12 @@ export class GfPlantDetail extends LitElement {
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
     if (!this.#store.state.kingMode && this.#drag) this.#dragEnd();
+    // The panels opened follow to the next plant (not from a preview card, which is not read).
+    if (!this.preview && !this.only) {
+      if (changed.has('_subsOpen')) sheetSession.subsOpen = this._subsOpen;
+      if (changed.has('_mapsOpen')) sheetSession.mapsOpen = this._mapsOpen;
+      if (changed.has('_maxEdge')) sheetSession.maxEdge = this._maxEdge;
+    }
     const signature = modulesSignature(this.view);
     const hidden = this.#store.state.sheetLayout;
     const modulesChanged = this.#signature !== null && !changed.has('view') && signature !== this.#signature;
@@ -907,8 +955,10 @@ export class GfPlantDetail extends LitElement {
     this._spotsOpen = false;
     this._focus = noFocus();
     this._open = {};
+    this._alerts = null;
     this.#requested.clear();
     this.scrollTop = 0;
+    this.#restored = false;
 
     let plant;
     try {
@@ -924,6 +974,7 @@ export class GfPlantDetail extends LitElement {
     this._plant = plant || null;
     if (!plant) return;
     this.#title();
+    alertsOf(plant).then(a => { if (!abort.signal.aborted) this._alerts = a; }, () => {});
 
     try {
       const details = await sources.details(plant, abort.signal, this.view);
@@ -1456,24 +1507,50 @@ export class GfPlantDetail extends LitElement {
     return blockOrder(this.view).filter(k => blockCategory(k) === cat && k !== 'name' && this.#visible(k, ctx) && !isHidden(this.view, k));
   }
 
-  /** @param {any} ctx */
-  #rail(ctx) {
-    if (this.preview || this.only) return nothing;
-    const cats = CATEGORIES.filter(c => this.#categoryBlocks(ctx, c.key).length);
-    if (cats.length < 2) return nothing;
-    return html`<nav class="rail" aria-label="Aller à une catégorie de la fiche">${cats.map(c => {
-      const keys = this.#categoryBlocks(ctx, c.key);
-      return html`<div class="rail-item">
-        <button type="button" class=${this._activeCat === c.key ? 'on' : ''} title=${c.label + ' — ' + c.question} aria-label=${c.label}
-          aria-current=${this._activeCat === c.key ? 'true' : 'false'} @click=${() => this.#goTo(keys[0])}>${icon(c.icon)}</button>
-        <div class="rail-pop" role="menu" aria-label=${c.label}><strong>${c.label}</strong>
-          ${keys.map(k => html`<button type="button" role="menuitem" @click=${() => this.#goTo(k)}>${blockTitle(k)}${placeOf(this.view, k) ? html` <small>(${GfPlantDetail.PLACE_INFO[/** @type {string} */ (placeOf(this.view, k))][0].toLowerCase()})</small>` : nothing}</button>`)}</div>
-      </div>`;
-    })}</nav>`;
+  /**
+   * The rubrics of the sheet (categories with blocks shown), their blocks and alerts: for the rail, here or in
+   * the host's header. @param {any} ctx @returns {import('./gf-sheet-rail.js').RailItem[]}
+   */
+  #railItems(ctx) {
+    const usesCat = blockCategory('uses');
+    const items = CATEGORIES.map(c => ({
+      key: c.key, label: c.label, question: c.question, icon: c.icon,
+      blocks: this.#categoryBlocks(ctx, c.key).map(k => ({ key: k, title: blockTitle(k), note: placeOf(this.view, k) ? GfPlantDetail.PLACE_INFO[/** @type {string} */ (placeOf(this.view, k))][0].toLowerCase() : undefined })),
+      badge: c.key === 'safety' ? this._alerts?.safety : c.key === usesCat ? this._alerts?.edible : null
+    })).filter(c => c.blocks.length);
+    return items.length < 2 ? [] : items;
   }
 
-  /** To a block: its place in the sheet, the dock (unfolded) or the pane. @param {string} key */
-  async #goTo(key) {
+  /** The rubrics, beside or above the sheet (or told to the host, which shows them in its header). @param {any} ctx */
+  #rail(ctx) {
+    if (this.preview || this.only) return nothing;
+    const items = this.#railItems(ctx);
+    if (this.outerRail) { this.#railOut = items; return nothing; }
+    if (!items.length) return nothing;
+    return html`<div class="rail"><gf-sheet-rail .items=${items} .active=${this._activeCat} orientation=${this._railCol ? 'column' : 'row'}
+      @rail-go=${(/** @type {CustomEvent} */ e) => this.goTo(e.detail.key)}></gf-sheet-rail></div>`;
+  }
+  /** @type {any[] | null} */ #railOut = null;
+  /** @type {string} */ #railSent = '';
+
+  /** Tells the host the rubrics (and the one read), when they change. */
+  #sendRail() {
+    if (!this.outerRail || this.preview || this.only || !this.#railOut) return;
+    const items = this.#railOut, active = this._activeCat;
+    const sig = JSON.stringify([items, active]);
+    if (sig === this.#railSent) return;
+    this.#railSent = sig;
+    this.dispatchEvent(new CustomEvent('sheet-rail', { detail: { items, active, plantId: this.plantId }, bubbles: true, composed: true }));
+  }
+
+  /** To a rubric's block, asked by the host's rail. @param {string} key */
+  goTo(key) {
+    sheetSession.anchor = blockCategory(key);
+    return this.#goTo(key);
+  }
+
+  /** To a block: its place in the sheet, the dock (unfolded) or the pane. @param {string} key @param {{ instant?: boolean }} [opts] */
+  async #goTo(key, { instant = false } = {}) {
     const king = this.#store.state.kingMode;
     const place = placeOf(this.view, key);
     if (!king && place === 'beside') { this.#openPane(key); return; }
@@ -1482,6 +1559,11 @@ export class GfPlantDetail extends LitElement {
     await this.updateComplete;
     const section = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(`.block[data-key="${CSS.escape(key)}"]`));
     if (!section) return;
+    if (instant) {
+      section.scrollIntoView({ behavior: 'auto', block: 'start' });
+      this._activeCat = blockCategory(key);
+      return;
+    }
     section.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
     // An attribute, not a class: the block's class is the template's, rewritten on the next render.
     section.removeAttribute('data-flash');
@@ -1491,22 +1573,60 @@ export class GfPlantDetail extends LitElement {
     this._activeCat = blockCategory(key);
   }
 
-  /** The block at the top of the sheet: its category lights up in the rail. */
+  /** The block at the top of the sheet: its category lights up in the rail (and is kept for the next plant). */
   #onScroll = () => {
     if (this.#scrollFrame) return;
     this.#scrollFrame = requestAnimationFrame(() => {
       this.#scrollFrame = 0;
       let current = null;
-      const scroller = /** @type {HTMLElement} */ (this.renderRoot.querySelector('.frame.edged > .main') || this);
+      const scroller = this.#sheetScroller;
+      if (this.#restoring) return;
       const top = scroller.getBoundingClientRect().top + 72;
       for (const el of /** @type {NodeListOf<HTMLElement>} */ (this.renderRoot.querySelectorAll('.blocks > .block'))) {
         if (el.getBoundingClientRect().top <= top) current = el.dataset.key; else break;
       }
       const cat = current ? blockCategory(current) : null;
       if (cat !== this._activeCat) this._activeCat = cat;
+      // Read by the user: the next plant opens at the same rubric (the top: from the top).
+      if (!this.preview && !this.only && this._plant) sheetSession.anchor = scroller.scrollTop < 40 ? null : cat;
     });
   };
   #scrollFrame = 0;
+
+  /** The sheet's scrolling part: its middle when it has edges, else itself. */
+  get #sheetScroller() { return /** @type {HTMLElement} */ (this.renderRoot.querySelector('.frame.edged > .main') || this); }
+
+  /**
+   * A new plant opens at the rubric read on the previous one; while its blocks come in (and grow), it stays
+   * there — until the user scrolls, or after 2.5 s.
+   */
+  async #restoreAnchor() {
+    const cat = sheetSession.anchor;
+    if (!cat || this.preview || this.only) return;
+    await this.updateComplete;
+    // The rubric's first block in the sheet's flow (on an edge or in the pane, it is already in view).
+    const first = () => /** @type {HTMLElement | undefined} */ ([...this.renderRoot.querySelectorAll('.blocks > .block')]
+      .find(el => blockCategory(/** @type {HTMLElement} */ (el).dataset.key || '') === cat));
+    if (!first()) return;
+    this.#restoring = true;
+    const scroller = this.#sheetScroller;
+    const pin = () => first()?.scrollIntoView({ behavior: 'auto', block: 'start' });
+    pin();
+    this._activeCat = cat;
+    const body = this.renderRoot.querySelector('article') || scroller;
+    const grow = new ResizeObserver(() => pin());
+    grow.observe(body);
+    const stop = () => {
+      grow.disconnect();
+      clearTimeout(timer);
+      for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) scroller.removeEventListener(ev, stop);
+      requestAnimationFrame(() => { this.#restoring = false; });
+    };
+    const timer = setTimeout(stop, 2500);
+    for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) scroller.addEventListener(ev, stop, { passive: true, once: true });
+  }
+  #restoring = false;
+  #restored = false;
 
   /**
    * The sheet, with its edges when blocks are stuck to them: a grid — top band, left column, the sheet,
@@ -1548,6 +1668,9 @@ export class GfPlantDetail extends LitElement {
   updated() {
     // The sheet scrolls in its middle when it has edges: the host itself does not.
     this.toggleAttribute('edged', Boolean(this.renderRoot.querySelector('.frame.edged')));
+    this.#sendRail();
+    // The plant is drawn (and read, not a card waiting underneath): at the rubric read on the previous one.
+    if (!this.#restored && this._plant && !this._plant.failed && !this.preview && !this.only) { this.#restored = true; this.#restoreAnchor(); }
   }
 
   /** A block read without its title (Mode King › title on/off, per view). @param {string} key */
@@ -1755,13 +1878,13 @@ export class GfPlantDetail extends LitElement {
    * and accents aside). Not iNaturalist's common name: it comes in English when there is no French one.
    * @param {any} ctx @returns {string[]}
    */
+  /** Names separated by a light dot. @param {string[]} names */
+  #nameList(names) {
+    return names.map((n, i) => html`${i ? html`<span class="sep" aria-hidden="true">·</span>` : nothing}${n}`);
+  }
+
   #otherFrench({ plant, name }) {
-    /** @type {string[]} */
-    const out = [];
-    for (const n of [...(plant.vernacularNames || []), ...gbifFrenchNames(plant, this._gbif)].filter(Boolean)) {
-      if (!sameName(n, name) && !out.some(o => sameName(o, n))) out.push(n);
-    }
-    return out;
+    return dedupNames([...(plant.vernacularNames || []), ...gbifFrenchNames(plant, this._gbif)], [name]);
   }
 
   /**
@@ -1863,10 +1986,10 @@ export class GfPlantDetail extends LitElement {
         const foreign = baseOf(v) === 'scientific' ? otherNames(this._gbif) : [];
         if (!names.length && !foreign.length) return this._gbif.vernacularNames === undefined ? pending : empty('Aucun autre nom français connu.');
         // « Liste » (Épuré's default): just the French names.
-        if (blockStyle(v, 'names') === 'list') return shownSubs(v, 'names').includes('french') && names.length ? html`<p class="names-list">${names.join(' · ')}</p>` : nothing;
+        if (blockStyle(v, 'names') === 'list') return shownSubs(v, 'names').includes('french') && names.length ? html`<p class="names-list">${this.#nameList(names)}</p>` : nothing;
         return html`<dl class="facts">${this.#subs('names', {
-          french: () => names.length ? html`<dt>Autres noms français</dt><dd>${names.join(' · ')}</dd>` : nothing,
-          foreign: () => foreign.length ? html`<dt>Autres langues (GBIF)</dt><dd>${foreign.map(([lang, list]) => html`<span class="lang">${lang || '?'}</span> ${list.join(', ')} `)}</dd>` : nothing
+          french: () => names.length ? html`<dt>Autres noms français</dt><dd class="names">${this.#nameList(names)}</dd>` : nothing,
+          foreign: () => foreign.length ? html`<dt>Autres langues (GBIF)</dt><dd class="names">${foreign.map(([lang, list]) => html`<span class="lang">${lang || '?'}</span> ${this.#nameList(/** @type {string[]} */ (list))} `)}</dd>` : nothing
         })}</dl>
         <p class="credit">Sources : TAXREF v18 · GBIF.</p>`;
       }
