@@ -110,17 +110,24 @@ export function phenology(plant, signal, /** @type {Mode | undefined} */ mode) {
 export const links = plant => sourcesFor().links(plant);
 
 /**
- * French Wikipedia lead paragraph, through the plant's Wikidata item.
+ * The plant's French Wikipedia article (lead, description, sections by theme), through its Wikidata item —
+ * with the item's other French names; no French article: the English one's address only.
  * @param {any} plant
  * @param {string | null | undefined} qid
  * @param {AbortSignal} [signal]
- * @returns {Promise<{ title: string, extract: string, url: string } | null>}
+ * @returns {Promise<{ title?: string, extract?: string, url: string | null, description?: string | null, touched?: string | null,
+ *   sections: { theme: string, title: string, text: string }[], aliases: string[], english?: string | null } | null>}
  */
 export function wikipedia(plant, qid, signal, /** @type {Mode | undefined} */ mode) {
   if (!qid) return Promise.resolve(null);
-  return cached(key('wikipedia', plant.id, mode), async () => {
+  return cached(key('wikipedia2', plant.id, mode), async () => {
     const claims = await sourcesFor(mode).wikidataClaims(qid, { signal });
-    return claims?.frwiki ? sourcesFor(mode).wikipediaSummary(claims.frwiki, { signal }) : null;
+    if (!claims) return null;
+    const aliases = claims.aliases || [];
+    const english = claims.enwiki ? 'https://en.wikipedia.org/wiki/' + encodeURIComponent(claims.enwiki.replace(/ /g, '_')) : null;
+    const article = claims.frwiki ? await sourcesFor(mode).wikipediaArticle(claims.frwiki, { signal }) : null;
+    if (article) return { ...article, aliases, english };
+    return aliases.length || english ? { url: null, extract: '', sections: [], aliases, english } : null;
   });
 }
 
