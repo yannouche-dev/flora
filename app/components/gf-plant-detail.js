@@ -25,8 +25,9 @@ import { icon } from '../core/icons.js';
 import {
   STYLES, SUBS, canBeEmpty, hidesEmpty, setHidesEmpty, isMap, isAddedMap, mapConfig, setMapConfig, createMap, deleteMap, blockModuleName, blockOrder, blockStyle, blockTitle, isTitleShown, setBlockStyle, setTitleShown, createNote, deleteNote, isHidden, isNote, isSubHidden, noteText, renameBlock,
   setBlockOrder, setHidden, setNoteText, setSubHidden, setSubOrder, shownSubs, subOrder, subTitle,
-  DOCK_SIZES, dockState, isPinned, pinnedBlocks, setDockState, setPinned
+  DOCK_SIZES, dockState, isPinned, pinnedBlocks, setDockState, setPinned, orderByCategory
 } from '../core/sheet-blocks.js';
+import { CATEGORIES, blockCategory, categoryOf } from '../core/categories.js';
 import { FOCUS_EVENT, isFocused, noFocus, toggleFocus } from '../core/map-focus.js';
 import * as openData from '../core/open-data.js';
 import { chartStyles, climateChart, groupColor, groupLegend, networkChart, nicheChart } from '../core/charts.js';
@@ -328,6 +329,9 @@ export class GfPlantDetail extends LitElement {
     /* « Mode King »: the title is a handle. */
     .king .block-title { margin-left: -6px; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
     .block-title .name { flex: 1; min-width: 0; }
+    /* Mode King: the block's category (what the data says about the plant). */
+    .block-title .cat { flex: none; padding: 0 8px; border-radius: var(--gf-radius-pill); background: var(--gf-surface-2); color: var(--gf-text-muted); font-size: 0.66rem; font-weight: 600; text-transform: none; letter-spacing: 0; margin-right: 2px; }
+    @container (max-width: 420px) { .block-title .cat { display: none; } }
     .off-note { flex: none; font-size: 0.7rem; text-transform: none; letter-spacing: 0; font-weight: 400; }
     .grip, .block-title .tool {
       flex: none;
@@ -1190,6 +1194,7 @@ export class GfPlantDetail extends LitElement {
               @keydown=${e => { if (e.key === 'Enter') this.#rename(key, e.target.value); else if (e.key === 'Escape') this._renaming = null; }}
               @blur=${e => this.#rename(key, e.target.value)} />`
           : html`<span class="name">${title}</span>`}
+        <span class="cat" title=${categoryOf(blockCategory(key)).question}>${categoryOf(blockCategory(key)).label}</span>
         ${off && module ? html`<small class="off-note">module ${module} désactivé dans ce mode</small>` : nothing}
         <button class="tool" type="button" aria-pressed=${titled ? 'true' : 'false'} aria-label=${(titled ? 'Masquer' : 'Montrer') + ` le titre « ${title} » hors mode King`}
           title=${titled ? 'Titre affiché (toucher pour le cacher)' : 'Titre caché hors mode King (toucher pour l’afficher)'}
@@ -1271,7 +1276,9 @@ export class GfPlantDetail extends LitElement {
           this._mapsOpen = new Set([...this._mapsOpen, key]);
           await this.updateComplete;
           this.renderRoot.querySelector(`.block[data-key="${key}"]`)?.scrollIntoView({ block: 'center' });
-        }}>${icon('plus-lg')} Bloc Carte</button></p>`;
+        }}>${icon('plus-lg')} Bloc Carte</button>
+        <button type="button" title="Les blocs d’une même catégorie ensemble (Noms, Images, Savoirs…), dans ce mode"
+          @click=${() => orderByCategory(this.view, k => CATEGORIES.findIndex(c => c.key === blockCategory(k)))}>${icon('list-nested')} Ranger par catégorie</button></p>`;
   }
 
   /**

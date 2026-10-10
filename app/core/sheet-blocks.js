@@ -142,6 +142,16 @@ export const blockModuleName = key => MODULES.find(m => m.key === blockOf(key)?.
 /** @param {Mode} view */
 const defaults = view => [...DEFAULTS[view], ...noteBlocks().map(b => b.key), ...mapBlocks().map(b => b.key)];
 
+/**
+ * The order of a view, blocks of the same category together (in the categories' order), each keeping its
+ * place among its own. @param {Mode} view @param {(key: string) => number} rank
+ */
+export function orderByCategory(view, rank) {
+  const order = blockOrder(view);
+  const next = [...order].sort((a, b) => rank(a) - rank(b) || order.indexOf(a) - order.indexOf(b));
+  setBlockOrder(view, next);
+}
+
 /** Merge a saved order with the current keys: unknown ones dropped, new ones at their default place. @param {string[]} saved @param {string[]} keys */
 function merge(saved, keys) {
   const order = [...new Set(saved)].filter(k => keys.includes(k));
