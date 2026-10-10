@@ -20,7 +20,11 @@ export const sheetSession = {
   /** Map blocks whose settings are open. @type {Set<string>} */
   mapsOpen: new Set(),
   /** The edge maximised to the whole sheet. @type {string | null} */
-  maxEdge: null
+  maxEdge: null,
+  /** Wikipédia: the themes opened (« theme:x ») or closed (« closed:x ») in its block. @type {Set<string>} */
+  wikiThemes: new Set(),
+  /** « Mes lieux » unfolded. */
+  spotsOpen: false
 };
 
 /** @param {Partial<MediaSession>} patch */

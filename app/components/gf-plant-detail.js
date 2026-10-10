@@ -957,6 +957,9 @@ export class GfPlantDetail extends LitElement {
       if (changed.has('_subsOpen')) sheetSession.subsOpen = this._subsOpen;
       if (changed.has('_mapsOpen')) sheetSession.mapsOpen = this._mapsOpen;
       if (changed.has('_maxEdge')) sheetSession.maxEdge = this._maxEdge;
+      if (changed.has('_spotsOpen')) sheetSession.spotsOpen = this._spotsOpen;
+      // The themes of the article opened or closed (not the sections read whole, which are this plant's).
+      if (changed.has('_wikiOpen')) sheetSession.wikiThemes = new Set([...this._wikiOpen].filter(k => /^(theme|closed):/.test(k)));
     }
     const signature = modulesSignature(this.view);
     const hidden = this.#store.state.sheetLayout;
@@ -995,12 +998,12 @@ export class GfPlantDetail extends LitElement {
     this._details = undefined;
     this._error = null;
     this._wiki = undefined;
-    this._wikiOpen = new Set();
+    this._wikiOpen = new Set(sheetSession.wikiThemes);
     this._wikiActive = null;
     this._science = undefined;
     this._gbif = {};
     this._near = undefined;
-    this._spotsOpen = false;
+    this._spotsOpen = sheetSession.spotsOpen;
     this._focus = noFocus();
     this._open = {};
     this._alerts = null;

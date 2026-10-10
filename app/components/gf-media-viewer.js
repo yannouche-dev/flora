@@ -31,6 +31,17 @@ const PART_INFO = { all: ['Toutes les parties', 'images'], flower: ['Fleur', 'fl
 /** The map of the whole image: at the stage's height when it takes at most this share of its width (else smaller). */
 const MAP_SHARE = 0.45, MAP_SHARE_NARROW = 0.35;
 const nf = new Intl.NumberFormat('fr-FR');
+
+/** The image's height in the sheet, as a proportion of its width (the grip); null: the default shape. */
+const RATIO_KEY = 'geoflora.mediaRatio';
+let stageRatio = (() => { try { const r = Number(localStorage.getItem(RATIO_KEY)); return r >= 0.3 && r <= 2 ? r : null; } catch { return null; } })();
+const ratioEvents = new EventTarget();
+/** @param {number | null} r */
+function setStageRatio(r) {
+  stageRatio = r == null ? null : Math.min(2, Math.max(0.3, r));
+  try { if (stageRatio == null) localStorage.removeItem(RATIO_KEY); else localStorage.setItem(RATIO_KEY, stageRatio.toFixed(3)); } catch { /* this visit */ }
+  ratioEvents.dispatchEvent(new Event('change'));
+}
 /** @param {number} v @param {number} a @param {number} b */
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
@@ -85,12 +96,19 @@ export class GfMediaViewer extends LitElement {
     @container (min-width: 760px) { .main.with-info { grid-template-columns: minmax(0, 1fr) clamp(240px, 30%, 380px); } }
 
     /* The stage: the image fitted, zoomed and moved by one transform. */
-    .stage { position: relative; min-height: 200px; background: #111; overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: none; cursor: zoom-in; outline: none; }
+    /* Its own stacking context: the zoomed image (and its layers) never paints over what is beside it. */
+    .stage { isolation: isolate; z-index: 0; position: relative; min-height: 200px; background: #111; overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: none; cursor: zoom-in; outline: none; }
     :host([compact]) .stage { touch-action: pan-y; }
     :host([compact]) .stage.zoomed { touch-action: none; }
     /* In the sheet: one shape whatever the image (nothing jumps from one plant to the next). */
-    :host([compact]) .stage { aspect-ratio: 4 / 3; max-height: 72vh; }
+    :host([compact]) .stage { aspect-ratio: 4 / 3; max-height: 80vh; }
     @container (min-width: 560px) { :host([compact]) .stage { aspect-ratio: 3 / 2; } }
+    /* Its height chosen with the grip: a proportion of its width (it follows the width), kept everywhere. */
+    :host([compact][sized]) .stage { aspect-ratio: var(--stage-ratio); }
+    .grip { flex: none; height: 12px; display: grid; place-items: center; cursor: row-resize; touch-action: none; background: var(--gf-surface-2); border-top: 1px solid var(--gf-border); }
+    .grip::before { content: ''; width: 44px; height: 4px; border-radius: 2px; background: var(--gf-border-strong, #b8bfb8); }
+    .grip:hover::before, .grip:focus-visible::before { background: var(--gf-accent); }
+    .grip:focus-visible { outline: none; }
     .stage.zoomed { cursor: grab; }
     .stage.dragging { cursor: grabbing; }
     /* Where the image does not cover the stage: the same image, enlarged and blurred, behind it. */
@@ -139,7 +157,7 @@ export class GfMediaViewer extends LitElement {
     .caption .what { white-space: nowrap; }
     .caption gf-attribution { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.78rem; }
     .caption .icon-btn { width: 30px; height: 30px; min-height: 0; flex: none; }
-    .info { padding: 12px 14px; display: grid; gap: 8px; align-content: start; font-size: 0.9rem; background: var(--gf-surface); overflow: hidden auto; }
+    .info { position: relative; z-index: 1; padding: 12px 14px; display: grid; gap: 8px; align-content: start; font-size: 0.9rem; background: var(--gf-surface); overflow: hidden auto; }
     .info h3 { margin: 0; font-size: 0.95rem; }
     .info .kind { color: var(--gf-text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
     .info dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 3px 10px; font-size: 0.85rem; }
@@ -150,7 +168,12 @@ export class GfMediaViewer extends LitElement {
     .info .tip { color: var(--gf-text-muted); font-size: 0.8rem; margin: 0; }
     .info gf-attribution { white-space: normal; font-size: 0.82rem; }
     @container (min-width: 760px) { .main.with-info .info { border-left: 1px solid var(--gf-border); } }
-    @container (max-width: 759px) { .main.with-info .info { position: absolute; left: 0; right: 0; bottom: 0; z-index: 5; max-height: 70%; border-top: 1px solid var(--gf-border); box-shadow: 0 -8px 20px rgb(0 0 0 / 25%); } }
+    /* Narrow: the details under the image (never over it: whole, whatever the zoom). */
+    @container (max-width: 759px) {
+      .main.with-info { grid-template-rows: minmax(0, 1fr) auto; }
+      .main.with-info .info { max-height: 45vh; border-top: 1px solid var(--gf-border); }
+    }
+    :host([compact]) .main.with-info .info { max-height: none; }
 
     .strip { flex: none; border-top: 1px solid var(--gf-border); background: var(--gf-surface-2); padding: 6px 8px; }
     .thumbs { display: flex; gap: 6px; overflow-x: auto; scroll-behavior: smooth; scrollbar-width: none;
@@ -254,8 +277,15 @@ export class GfMediaViewer extends LitElement {
     if (sheetSession.media.playing && this.presentation === 'slideshow') this.#play(true);
   }
 
+  #applyRatio = () => {
+    this.toggleAttribute('sized', stageRatio != null);
+    if (stageRatio != null) this.style.setProperty('--stage-ratio', `1 / ${stageRatio}`); else this.style.removeProperty('--stage-ratio');
+  };
+
   connectedCallback() {
     super.connectedCallback();
+    ratioEvents.addEventListener('change', this.#applyRatio);
+    this.#applyRatio();
     // The keys belong to the viewer only while it has the focus: the page (and ← → for plants) keeps its own.
     this.addEventListener('keydown', this.#onKey);
     if (!this.hasAttribute('tabindex')) this.tabIndex = -1;
@@ -263,6 +293,7 @@ export class GfMediaViewer extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    ratioEvents.removeEventListener('change', this.#applyRatio);
     this.removeEventListener('keydown', this.#onKey);
     this.#abort?.abort();
     clearTimeout(this.#settleTimer);
@@ -781,9 +812,35 @@ export class GfMediaViewer extends LitElement {
       </div>
       ${!item ? (this._done ? this.#empty(plant) : this.#skeleton()) : this.#view === 'mosaic' ? this.#mosaic(shown) : html`
         <div class="main ${this._info ? 'with-info' : ''} ${this.#view === 'slideshow' ? 'slideshow' : ''}">${this.#stage(item, at, shown.length)}${this._info ? this.#details(item) : nothing}</div>
+        ${this.compact ? this.#grip() : nothing}
         ${this.#caption(item)}
         ${this.#view === 'slideshow' || (shown.length < 2 && this._done) ? nothing : html`<div class="strip">${this.#thumbs(shown, item)}</div>`}`}`;
   }
+
+  /**
+   * The grip under the image (in the sheet): dragged, the image's height; ↑ ↓ too; a double-click, the default.
+   * Kept as a proportion of the width (so it follows the screen), for every plant and visit.
+   */
+  #grip() {
+    return html`<div class="grip" role="separator" aria-orientation="horizontal" tabindex="0" title="Glisser pour agrandir ou réduire l’image (double-clic : taille par défaut)"
+      aria-label="Hauteur de l’image" @pointerdown=${this.#gripDown} @dblclick=${() => setStageRatio(null)}
+      @keydown=${(/** @type {KeyboardEvent} */ e) => {
+        if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+        e.preventDefault(); e.stopPropagation();
+        const st = /** @type {HTMLElement} */ (this.renderRoot.querySelector('.stage'));
+        setStageRatio((st.offsetHeight + (e.key === 'ArrowDown' ? 40 : -40)) / st.offsetWidth);
+      }}></div>`;
+  }
+
+  #gripDown = (/** @type {PointerEvent} */ e) => {
+    const grip = /** @type {HTMLElement} */ (e.currentTarget), st = /** @type {HTMLElement} */ (this.renderRoot.querySelector('.stage'));
+    if (!st) return;
+    try { grip.setPointerCapture(e.pointerId); } catch { /* synthetic */ }
+    const y0 = e.clientY, h0 = st.offsetHeight, w = st.offsetWidth;
+    const move = (/** @type {PointerEvent} */ m) => setStageRatio((h0 + m.clientY - y0) / w);
+    const up = () => { grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', up); };
+    grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', up);
+  };
 
   /** @param {any} plant */
   #empty(plant) {
@@ -794,6 +851,7 @@ export class GfMediaViewer extends LitElement {
   #skeleton() {
     return html`<div class="skel" aria-busy="true">
       <div class="main"><div class="stage"><span class="spinner">chargement des médias…</span></div></div>
+      ${this.compact ? html`<div class="grip" aria-hidden="true"></div>` : nothing}
       <div class="caption"><i></i></div>
       ${this.#view === 'slideshow' ? nothing : html`<div class="strip"><div class="thumbs">${[0, 1, 2, 3, 4, 5].map(() => html`<i></i>`)}</div></div>`}
     </div>`;
