@@ -319,6 +319,20 @@ Ajouter un fichier JS ou CSS dans `app/` impose de l'ajouter aussi à la liste `
 - badges **En saison** (récolté à ±15 jours de la date, une année quelconque) et **Bientôt** (dans les 30 prochains jours) ;
 - **plantes à confondre** : noter une plante avec « Noter ici » ou « + Récolte » rappelle les plantes toxiques avec lesquelles elle est confondue (ci-dessous).
 
+### Données ouvertes croisées : interactions, climat, pollens, zones naturelles
+
+GeoFlora croise la flore avec des API ouvertes appelées directement par le navigateur, sans clé (vérifié depuis le site déployé). Chacune est un **module** (*Réglages › Modules*) ; désactivé, il n'est jamais appelé. Les réponses sont gardées en cache (IndexedDB).
+
+- **Pollinisateurs et interactions** (bloc de la fiche, module GloBI) : ce que [GloBI](https://www.globalbioticinteractions.org/) recense pour l'espèce, regroupé par rôle — pollinisateurs et visiteurs des fleurs, ce qui la mange ou la parasite (chenilles, pucerons, rouilles…), symbioses (mycorhizes), ce qu'elle-même parasite, autres — et par groupe (abeilles et bourdons, syrphes, papillons, coléoptères, champignons…). Trois styles au choix en mode King : **tableau** (par défaut : espèce, groupe, nombre de mentions), **liste** (groupes puis espèces) ou **réseau** (la plante au centre, chaque partenaire coloré par groupe et dimensionné par ses mentions). Chaque rôle est un sous-bloc. Source : nombre de mentions et d'études.
+- **Climat et pollen** (bloc de la fiche, module Open-Meteo) :
+  - *Niche climatique* : le climat (température moyenne annuelle, pluie annuelle ; ERA5 via Open-Meteo, deux ans) de 24 occurrences GBIF de l'espèce réparties en France, en nuage de points ; le cadre réunit 80 % d'entre elles. « Me situer » ajoute votre position (arrondie à 100 m) : dans sa niche ou non, et le diagramme climatique de chez vous (10 ans).
+  - *Pollen aujourd'hui* : pour les plantes dont le modèle européen CAMS prévoit le pollen (aulne, bouleau, graminées, armoise, olivier, ambroisie), le niveau du jour autour de vous.
+- **Autour d'un lieu ou d'un point** (panneau d'un endroit sur la Carte et dans Mes plantes ; « Ici : zones naturelles… » dans la fiche d'un point de la carte, appui long) :
+  - *Zones naturelles* (module IGN – zones naturelles au point, API Carto) : ZNIEFF I et II, sites Natura 2000 (habitats, oiseaux), parcs nationaux et régionaux, réserves naturelles qui contiennent le point, avec leur fiche INPN ;
+  - *Plantes vues ici* (iNaturalist, observations validées à moins de 500 m) : les plus observées, celles de la flore ouvrent leur fiche, celles du lieu sont signalées ;
+  - *Pollens aujourd'hui* (CAMS via Open-Meteo) et *Climat du lieu* (diagramme : pluie par mois en barres, température en courbe, moyennes sur 10 ans, ERA5).
+- La **floraison observée** (iNaturalist, observations annotées « en fleurs » / « en fruits » en France) était déjà dans le bloc Calendrier, à côté de la floraison Baseflor.
+
 ### Plantes à confondre (Anses, Centres antipoison)
 
 Sur la fiche d'une plante comestible souvent confondue avec une plante toxique — ou de la plante toxique elle-même —, un encadré **« Peut être confondue avec… »** (rouge si l'intoxication peut être mortelle) donne la partie concernée, les **critères pour les distinguer**, les symptômes (vue Scientifique) et les sources. En vue Épurée, une ligne, les critères sur demande. Exemples : ail des ours ↔ colchique et muguet, consoude ↔ digitale, gentiane jaune ↔ vérâtre, carotte sauvage ↔ œnanthe safranée, sureau noir ↔ sureau yèble, châtaignier ↔ marronnier d'Inde.
