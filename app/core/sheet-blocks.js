@@ -7,7 +7,8 @@
 // The layout can be exported to a file and imported back.
 
 import { config } from '../config.js';
-import { MODE_KEYS, MODULES, moduleOn, setModule } from './modules.js';
+import { MODULES, moduleOn, setModule } from './modules.js';
+import { baseOf, importModes, modeKeys, ownModes } from './modes.js';
 import { OVERLAYS } from './ign.js';
 import { emptyLayout, store } from './store.js';
 
@@ -120,7 +121,7 @@ const DEFAULTS = {
 const DEFAULT_HIDDEN = { epure: ['media'], standard: ['photos', 'gbifMedia'], scientific: ['photos', 'gbifMedia'] };
 
 /** The blocks folded by hand (or by default) in a view. @param {Mode} view @returns {string[]} */
-const hiddenList = view => layout().hidden[view] ?? DEFAULT_HIDDEN[view] ?? [];
+const hiddenList = view => layout().hidden[view] ?? DEFAULT_HIDDEN[baseOf(view)] ?? [];
 
 /** Keys of earlier versions (one list per mode) → today's block. */
 const RENAMED = { photo: 'photos', about: 'taxonomy', statuses: 'status', description: 'wikipedia' };
@@ -158,7 +159,7 @@ export const defaultTitle = key => blockOf(key)?.title || key;
 export const blockModuleName = key => MODULES.find(m => m.key === blockOf(key)?.module)?.name || null;
 
 /** @param {Mode} view */
-const defaults = view => [...DEFAULTS[view], ...noteBlocks().map(b => b.key), ...mapBlocks().map(b => b.key)];
+const defaults = view => [...DEFAULTS[baseOf(view)], ...noteBlocks().map(b => b.key), ...mapBlocks().map(b => b.key)];
 
 /**
  * The order of a view, blocks of the same category together (in the categories' order), each keeping its
@@ -227,7 +228,7 @@ const blocksOf = module => BLOCKS.filter(b => b.module === module).map(b => b.ke
 /** @param {Mode} view @param {Set<string>} keys */
 function writeHidden(view, keys) {
   const all = { ...layout().hidden };
-  const byDefault = DEFAULT_HIDDEN[view] || [];
+  const byDefault = DEFAULT_HIDDEN[baseOf(view)] || [];
   // The defaults: nothing kept; anything else, kept whole (an empty list too: everything shown).
   if (keys.size === byDefault.length && byDefault.every(k => keys.has(k))) delete all[view]; else all[view] = [...keys];
   save({ hidden: all });
@@ -300,7 +301,7 @@ const SUB_HIDDEN = {
 };
 
 /** The sub-blocks a view leaves out of a block. @param {Mode} view @param {string} block @returns {string[]} */
-const hiddenSubs = (view, block) => layout().subHidden[view]?.[block] ?? SUB_HIDDEN[view]?.[block] ?? [];
+const hiddenSubs = (view, block) => layout().subHidden[view]?.[block] ?? SUB_HIDDEN[baseOf(view)]?.[block] ?? [];
 
 /** @param {Mode} view @param {string} block @param {string} key */
 export const isSubHidden = (view, block, key) => hiddenSubs(view, block).includes(key);
@@ -323,7 +324,7 @@ export function setSubHidden(view, block, key, hidden) {
   const mine = { ...all[view] };
   const keys = new Set(hiddenSubs(view, block));
   if (hidden) keys.add(key); else keys.delete(key);
-  const byDefault = new Set(SUB_HIDDEN[view]?.[block] || []);
+  const byDefault = new Set(SUB_HIDDEN[baseOf(view)]?.[block] || []);
   // Back to the mode's own choice: nothing stored; otherwise the whole list (an empty one included).
   if (keys.size === byDefault.size && [...keys].every(k => byDefault.has(k))) delete mine[block]; else mine[block] = [...keys];
   all[view] = mine;
@@ -337,7 +338,7 @@ export function blockStyle(view, block) {
   const def = STYLES[block];
   if (!def) return null;
   const chosen = layout().styles?.[view]?.[block];
-  return def.styles.some(s => s.key === chosen) ? /** @type {string} */ (chosen) : def.defaults?.[view] || def.styles[0].key;
+  return def.styles.some(s => s.key === chosen) ? /** @type {string} */ (chosen) : def.defaults?.[baseOf(view)] || def.styles[0].key;
 }
 
 /** @param {Mode} view @param {string} block @param {string} style */
@@ -346,7 +347,7 @@ export function setBlockStyle(view, block, style) {
   if (!def?.styles.some(s => s.key === style)) return;
   const all = { ...layout().styles };
   const mine = { ...all[view] };
-  if (style === (def.defaults?.[view] || def.styles[0].key)) delete mine[block]; else mine[block] = style;
+  if (style === (def.defaults?.[baseOf(view)] || def.styles[0].key)) delete mine[block]; else mine[block] = style;
   all[view] = mine;
   save({ styles: all });
 }
@@ -428,17 +429,24 @@ export function setPaned(view, key, on) {
 /** Size of the dock (s, m, l: a third, half, 60 % of the sheet) and whether it is folded to its title, per mode. */
 export const DOCK_SIZES = /** @type {const} */ (['s', 'm', 'l']);
 
-/** @param {Mode} view @returns {{ size: 's' | 'm' | 'l', folded: boolean }} */
+/**
+ * Where the dock sticks in the sheet: 'auto' (a column on the right of a wide sheet, a band at the top of a
+ * narrow one), or always 'left' / 'right' (column; a band at the top when narrow), 'top' or 'bottom' (band).
+ */
+export const DOCK_SIDES = /** @type {const} */ (['auto', 'left', 'right', 'top', 'bottom']);
+/** @typedef {typeof DOCK_SIDES[number]} DockSide */
+
+/** @param {Mode} view @returns {{ size: 's' | 'm' | 'l', folded: boolean, side: DockSide }} */
 export function dockState(view) {
   const d = layout().dock?.[view] || {};
-  return { size: DOCK_SIZES.includes(d.size) ? d.size : 'm', folded: d.folded === true };
+  return { size: DOCK_SIZES.includes(d.size) ? d.size : 'm', folded: d.folded === true, side: DOCK_SIDES.includes(d.side) ? d.side : 'auto' };
 }
 
-/** @param {Mode} view @param {Partial<{ size: 's' | 'm' | 'l', folded: boolean }>} patch */
+/** @param {Mode} view @param {Partial<{ size: 's' | 'm' | 'l', folded: boolean, side: DockSide }>} patch */
 export function setDockState(view, patch) {
   const next = { ...dockState(view), ...patch };
   const all = { ...layout().dock };
-  if (next.size === 'm' && !next.folded) delete all[view]; else all[view] = next;
+  if (next.size === 'm' && !next.folded && next.side === 'auto') delete all[view]; else all[view] = next;
   save({ dock: all });
 }
 
@@ -615,7 +623,7 @@ export function resetBlocks(view) {
 export function resetAll() {
   for (const n of layout().notes) deleteNote('note:' + n.id);
   save(emptyLayout());
-  for (const view of MODE_KEYS) resetBlocks(view);
+  for (const view of modeKeys()) resetBlocks(view);
 }
 
 /** The layout as a file: blocks, sub-blocks, titles, note blocks and their texts, folded modules. */
@@ -624,14 +632,15 @@ export function exportLayout() {
     app: 'geoflora', kind: 'sheet-layout', version: 1,
     layout: layout(),
     notes: readNotes(),
-    modulesOff: Object.fromEntries(MODE_KEYS.map(v => [v, foldedModules(v)]))
+    modes: ownModes(),
+    modulesOff: Object.fromEntries(modeKeys().map(v => [v, foldedModules(v)]))
   }, null, 2);
 }
 
 /** @param {any} v */
 const isKeyList = v => Array.isArray(v) && v.every(k => typeof k === 'string' && k.length < 80);
 /** @param {any} v @param {(x: any) => boolean} ok */
-const perView = (v, ok) => v && typeof v === 'object' && !Array.isArray(v) && Object.entries(v).every(([view, x]) => MODE_KEYS.includes(/** @type {Mode} */ (view)) && ok(x));
+const perView = (v, ok) => v && typeof v === 'object' && !Array.isArray(v) && Object.entries(v).every(([view, x]) => (modeKeys().includes(view) || /^m[a-z0-9]{2,12}$/.test(view)) && ok(x));
 /** @param {any} v */
 const perBlock = v => v && typeof v === 'object' && !Array.isArray(v) && Object.entries(v).every(([block, keys]) => block in SUBS && isKeyList(keys));
 
@@ -659,12 +668,41 @@ export function importLayout(text) {
     && (!data.notes || (typeof data.notes === 'object' && Object.values(data.notes).every(byPlant => byPlant && typeof byPlant === 'object' && Object.values(byPlant).every(t => typeof t === 'string'))))
     && (!data.modulesOff || perView(data.modulesOff, x => Array.isArray(x) && x.every(m => MODULES.some(mm => mm.key === m))));
   if (!valid) throw new Error('Mise en page illisible ou incomplète.');
+  importModes(data.modes || []);
   writeNotes(data.notes || {});
   save({ ...emptyLayout(), order: l.order || {}, hidden: l.hidden || {}, subOrder: l.subOrder || {}, subHidden: l.subHidden || {}, styles: l.styles || {}, titleShown: l.titleShown || {}, hideEmpty: l.hideEmpty || {}, pinned: l.pinned || {}, paned: l.paned || {}, dock: l.dock || {}, titles: l.titles, notes: l.notes,
     mapBlocks: l.mapBlocks || [], maps: Object.fromEntries(Object.entries(l.maps || {}).map(([k, c]) => [k, cleanMap(c)])) });
-  for (const view of MODE_KEYS) {
+  for (const view of modeKeys()) {
     const off = data.modulesOff?.[view] || [];
     for (const m of blockModules()) setModule(m, view, !off.includes(m));
     if (!off.includes('wikipedia') && !moduleOn('wikidata', view)) setModule('wikidata', view, true);
   }
+}
+
+// ── Modes made here ────────────────────────────────────────────────────────
+
+/** The parts of the layout kept per mode. */
+const PER_MODE = /** @type {const} */ (['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown', 'hideEmpty', 'pinned', 'paned', 'dock']);
+
+/** A new mode starts with its model's layout (what differs from the defaults; the defaults are its model's). @param {Mode} from @param {Mode} to */
+export function copyLayout(from, to) {
+  const l = layout();
+  /** @type {any} */
+  const patch = {};
+  for (const part of PER_MODE) {
+    const per = { .../** @type {any} */ (l)[part] };
+    if (per[from] !== undefined) per[to] = structuredClone(per[from]); else delete per[to];
+    patch[part] = per;
+  }
+  // A map's settings are per block, the same in every mode: nothing to copy.
+  save(patch);
+}
+
+/** A mode deleted: its layout goes. @param {Mode} mode */
+export function dropLayout(mode) {
+  const l = layout();
+  /** @type {any} */
+  const patch = {};
+  for (const part of PER_MODE) { const per = { .../** @type {any} */ (l)[part] }; delete per[mode]; patch[part] = per; }
+  save(patch);
 }

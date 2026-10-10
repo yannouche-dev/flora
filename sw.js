@@ -47,6 +47,8 @@ const SHELL = [
   'app/core/categories.js',
   'app/core/uses.js',
   'app/core/media-items.js',
+  'app/core/modes.js',
+  'app/core/mode-admin.js',
   'app/core/dataset.js',
   'app/core/geo.js',
   'app/core/highlight.js',

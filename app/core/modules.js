@@ -4,6 +4,7 @@
 // Everything works offline with the local flora; modules only add data.
 
 import { config } from '../config.js';
+import { modeKeys } from './modes.js';
 
 /**
  * @typedef {'ignMaps' | 'ignGeo' | 'ignProtected' | 'ignNature' | 'voice' | 'globi' | 'openmeteo' | 'wikibooks' | 'inaturalist' | 'gbif' | 'wikidata' | 'wikipedia' | 'commons' | 'trefle' | 'photos'} ModuleKey
@@ -54,9 +55,7 @@ export class ModuleOffError extends Error {
   }
 }
 
-/** Display modes (same keys as store.js; kept here so this module has no dependency on the store). */
-export const MODE_KEYS = /** @type {const} */ (['epure', 'standard', 'scientific']);
-/** @typedef {typeof MODE_KEYS[number]} Mode */
+/** @typedef {import('./modes.js').Mode} Mode */
 
 /**
  * Only the exceptions are stored: { gbif: { epure: false } } = GBIF off in Épuré, on elsewhere.
@@ -96,7 +95,7 @@ export const modulesSignature = (mode = currentMode()) => MODULES.filter(m => !m
 
 /** Every module × mode. @returns {Record<ModuleKey, Record<Mode, boolean>>} */
 export const modulesState = () => /** @type {any} */ (Object.fromEntries(MODULES.map(m =>
-  [m.key, Object.fromEntries(MODE_KEYS.map(mode => [mode, moduleOn(m.key, mode)]))])));
+  [m.key, Object.fromEntries(modeKeys().map(mode => [mode, moduleOn(m.key, mode)]))])));
 
 /** @param {ModuleKey} key @param {Mode} mode @param {boolean} on */
 export function setModule(key, mode, on) {
@@ -110,4 +109,37 @@ export function setModule(key, mode, on) {
     else localStorage.removeItem(config.storageKeys.modules);
   } catch { /* not persisted */ }
   moduleEvents.dispatchEvent(new CustomEvent('change', { detail: { key, mode, on } }));
+}
+
+/** Store the exceptions of every module at once. @param {typeof state} next */
+function writeAll(next) {
+  state = next;
+  try {
+    if (Object.keys(next).length) localStorage.setItem(config.storageKeys.modules, JSON.stringify(next));
+    else localStorage.removeItem(config.storageKeys.modules);
+  } catch { /* not persisted */ }
+  moduleEvents.dispatchEvent(new CustomEvent('change', { detail: {} }));
+}
+
+/** A new mode uses the services of its model. @param {Mode} from @param {Mode} to */
+export function copyModules(from, to) {
+  const next = { ...state };
+  for (const m of MODULES) {
+    const modes = { ...next[m.key] };
+    if (moduleOn(m.key, from)) delete modes[to]; else modes[to] = false;
+    if (Object.keys(modes).length) next[m.key] = modes; else delete next[m.key];
+  }
+  writeAll(next);
+}
+
+/** A mode deleted: its choices go. @param {Mode} mode */
+export function dropModules(mode) {
+  const next = { ...state };
+  for (const [k, modes] of Object.entries(next)) {
+    if (!modes || !(mode in modes)) continue;
+    const rest = { ...modes };
+    delete rest[mode];
+    if (Object.keys(rest).length) next[/** @type {ModuleKey} */ (k)] = rest; else delete next[/** @type {ModuleKey} */ (k)];
+  }
+  writeAll(next);
 }

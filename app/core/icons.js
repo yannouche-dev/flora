@@ -4,6 +4,7 @@
 // so they take the size and colour of the text around them. Decorative: the control carries the label.
 
 import { html } from 'lit';
+import { modeInfo } from './modes.js';
 
 const SPRITE = new URL('../../assets/icons/bi.svg', import.meta.url).href;
 
@@ -29,4 +30,5 @@ export const iconHref = name => `${SPRITE}#${name}`;
 export const kindIcon = kind => icon(kind === 'favorites' ? 'heart-fill' : kind === 'place' ? 'geo-alt-fill' : 'list-ul');
 
 /** Display modes: Épuré (photo), Standard (list), Scientifique (table). */
-export const MODE_ICONS = { epure: icon('image'), standard: icon('list-ul'), scientific: icon('table') };
+/** A display mode's icon (the app's three, and the ones made from them). @param {import('./modes.js').Mode} mode */
+export const modeIcon = mode => icon(/** @type {IconName} */ (modeInfo(mode).icon));

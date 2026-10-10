@@ -1,12 +1,14 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { lastSearchHash } from '../core/query.js';
-import { MODE_LABELS, setHarvestMode, setKingMode, setMode, StoreController } from '../core/store.js';
+import { setHarvestMode, setKingMode, setMode, StoreController } from '../core/store.js';
+import { MODE_ICON_CHOICES, modeLabel } from '../core/modes.js';
+import { createMode, deleteMode, editMode } from '../core/mode-admin.js';
 import './gf-mode-switch.js';
 import { getTrefleToken, setTrefleToken } from '../core/sources.js';
-import { MODE_KEYS, MODULES, setModule } from '../core/modules.js';
+import { MODULES, setModule } from '../core/modules.js';
 import { CATEGORIES, blockCategory, categoryOf } from '../core/categories.js';
-import { icon, MODE_ICONS } from '../core/icons.js';
+import { icon, modeIcon } from '../core/icons.js';
 import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
@@ -17,6 +19,9 @@ import {
 import './gf-sortable-list.js';
 import { ui } from '../styles/ui.js';
 import { contextBarOn, setContextBar } from '../core/context.js';
+
+/** French names of the icons a mode can have. */
+const ICON_NAMES = { image: 'Photo', 'list-ul': 'Liste', table: 'Tableau', images: 'Médias', map: 'Carte', leaf: 'Feuille', flower1: 'Fleur', 'diagram-3': 'Réseau', star: 'Étoile', layers: 'Couches', search: 'Loupe', crown: 'Couronne' };
 
 export class GfSettings extends LitElement {
   static properties = {
@@ -30,10 +35,16 @@ export class GfSettings extends LitElement {
     _regionNote: { state: true },
     _transfer: { state: true },
     _newNote: { state: true },
-    _layoutNote: { state: true }
+    _layoutNote: { state: true },
+    _modeNote: { state: true }
   };
 
   static styles = [ui, css`
+    .mode-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
+    .mode-item { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-sm); background: var(--gf-surface); }
+    .mode-item .mode-icon { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--gf-accent-soft); color: var(--gf-accent); }
+    .mode-item .mode-name { max-width: 220px; }
+    .mode-item .mode-actions { margin-left: auto; display: inline-flex; gap: 6px; }
     :host { display: block; overflow-y: auto; padding: 16px; }
     article { max-width: 720px; margin: 0 auto; }
     .back { font-size: 0.9rem; }
@@ -234,17 +245,17 @@ export class GfSettings extends LitElement {
       <ul class="modules">
         ${MODULES.filter(m => m.category === c.key).map(m => {
           const blocked = Boolean(m.needsToken && !token);
-          const any = !blocked && MODE_KEYS.some(mode => on[m.key][mode]);
+          const any = !blocked && this.#modeKeys.some(mode => on[m.key][mode]);
           return html`<li class="module ${any ? 'on' : ''}">
             <div class="title"><strong>${m.name}</strong> <small class="host">${m.hosts}</small>
               ${blocked ? html`<small class="state">jeton requis</small>` : nothing}</div>
             <p class="muted">${m.provides}</p>
             ${m.also.length ? html`<p class="also">Sert aussi : ${m.also.map(k => html`<span class="cat-chip">${categoryOf(k).label}</span>`)}</p>` : nothing}
             <div class="modes" role="group" aria-label=${'Modes où ' + m.name + ' est utilisé'}>
-              ${MODE_KEYS.map(mode => html`<label class="mode">
+              ${this.#modeKeys.map(mode => html`<label class="mode">
                 <input type="checkbox" .checked=${on[m.key][mode] && !blocked} ?disabled=${blocked}
                   @change=${e => setModule(m.key, mode, e.target.checked)} />
-                ${MODE_ICONS[mode]}<span>${MODE_LABELS[mode]}</span>
+                ${modeIcon(mode)}<span>${modeLabel(mode)}</span>
               </label>`)}
             </div>
             ${m.key === 'trefle' ? html`
@@ -295,10 +306,10 @@ export class GfSettings extends LitElement {
       <h3>Barre d’actions</h3>
       <p class="muted">En bas de la fiche, au-dessus du menu : cochez les actions de chaque mode, glissez-les pour les ordonner.</p>
       <div class="block-orders">
-        ${MODE_KEYS.map(mode => html`
+        ${this.#modeKeys.map(mode => html`
           <div class="card block-order action-order">
-            <div class="head">${MODE_ICONS[mode]}<strong>${MODE_LABELS[mode]}</strong></div>
-            <gf-sortable-list label=${'Barre d’actions, ' + MODE_LABELS[mode]}
+            <div class="head">${modeIcon(mode)}<strong>${modeLabel(mode)}</strong></div>
+            <gf-sortable-list label=${'Barre d’actions, ' + modeLabel(mode)}
               .items=${subOrder(mode, 'actions').map(k => ({ key: k, label: subTitle('actions', k), checked: !isSubHidden(mode, 'actions', k) }))}
               @reorder=${e => setSubOrder(mode, 'actions', e.detail.keys)}
               @toggle=${e => setSubHidden(mode, 'actions', e.detail.key, !e.detail.on)}></gf-sortable-list>
@@ -306,15 +317,15 @@ export class GfSettings extends LitElement {
       </div>
       <h3>Blocs de la fiche</h3>
       <div class="block-orders">
-        ${MODE_KEYS.map(mode => html`
+        ${this.#modeKeys.map(mode => html`
           <div class="card block-order">
-            <div class="head">${MODE_ICONS[mode]}<strong>${MODE_LABELS[mode]}</strong>
+            <div class="head">${modeIcon(mode)}<strong>${modeLabel(mode)}</strong>
               <button type="button" class="small" ?disabled=${!isCustom(mode) && !blockOrder(mode).some(k => isHidden(mode, k))}
                 @click=${() => resetBlocks(mode)}>Par défaut</button>
               <button type="button" class="small" title="Les blocs d’une même catégorie ensemble (Noms, Images, Savoirs…), chacun gardant sa place parmi les siens"
                 @click=${() => orderByCategory(mode, k => CATEGORIES.findIndex(c => c.key === blockCategory(k)))}>Ranger par catégorie</button>
             </div>
-            <gf-sortable-list label=${'Blocs de la fiche, ' + MODE_LABELS[mode]}
+            <gf-sortable-list label=${'Blocs de la fiche, ' + modeLabel(mode)}
               .items=${blockOrder(mode).map(k => ({
                 key: k, label: blockTitle(k), checked: !isHidden(mode, k), renamable: true, removable: isNote(k) || isAddedMap(k), nested: Boolean(SUBS[k]),
                 titled: isTitleShown(mode, k),
@@ -399,6 +410,35 @@ export class GfSettings extends LitElement {
 
   updated() { this.toggleAttribute('king', this.#store.state.kingMode); }
 
+  /** Every mode's key (the app's three, then the ones made here). */
+  get #modeKeys() { return this.#store.state.modes.map(m => m.key); }
+
+  /** « Modes d'affichage »: make a mode from another, rename it, change its icon, delete it. */
+  #modes() {
+    const modes = this.#store.state.modes;
+    return html`<h3 id="modes">Modes d’affichage</h3>
+      <p class="muted">Créez vos modes à partir d’un autre (ses blocs, sa disposition, ses volets, ses modules et sa grille sont copiés) :
+        par exemple une visionneuse de médias toute simple, ou un poste scientifique qui croise toutes les données. Chacun s’arrange ensuite
+        en mode King et dans les modules ; il s’affiche à la manière de son modèle (Épuré, Standard ou Scientifique).</p>
+      <ul class="mode-list">
+        ${modes.map(m => html`<li class="mode-item">
+          <span class="mode-icon">${modeIcon(m.key)}</span>
+          ${m.builtIn ? html`<strong>${m.label}</strong>` : html`<input class="mode-name" aria-label=${'Nom du mode ' + m.label} .value=${m.label} maxlength="40"
+            @change=${(/** @type {any} */ e) => editMode(m.key, { label: e.target.value })} />`}
+          <small class="muted">${m.builtIn ? 'mode de l’application' : 'à la manière de ' + modeLabel(m.base)}</small>
+          ${m.builtIn ? nothing : html`<select aria-label=${'Icône du mode ' + m.label} @change=${(/** @type {any} */ e) => editMode(m.key, { icon: e.target.value })}>
+            ${MODE_ICON_CHOICES.map(i => html`<option value=${i} ?selected=${i === m.icon}>${ICON_NAMES[i] || i}</option>`)}</select>`}
+          <span class="mode-actions">
+            <button type="button" class="small" title=${'Nouveau mode à partir de « ' + m.label + ' »'}
+              @click=${() => { const key = createMode(m.label + ' (copie)', m.key); this._modeNote = `Mode « ${modeLabel(key)} » créé : choisissez-le dans les sélecteurs d’affichage, puis arrangez-le en mode King.`; }}>${icon('plus-lg')} Dupliquer</button>
+            ${m.builtIn ? nothing : html`<button type="button" class="small" aria-label=${'Supprimer le mode ' + m.label}
+              @click=${() => { if (confirm(`Supprimer le mode « ${m.label} », sa mise en page et ses choix de modules ?`)) deleteMode(m.key); }}>${icon('trash3')} Supprimer</button>`}
+          </span>
+        </li>`)}
+      </ul>
+      ${this._modeNote ? html`<p class="muted" role="status">${this._modeNote}</p>` : nothing}`;
+  }
+
   render() {
     const { meta, offline } = this.#store.state;
     return html`
@@ -445,10 +485,11 @@ export class GfSettings extends LitElement {
         <p class="mode-line">
           <gf-mode-switch scope="toute l’application" value=${this.#store.state.mode}
             @mode-change=${e => setMode(e.detail.mode || 'standard')}></gf-mode-switch>
-          <strong>${MODE_LABELS[this.#store.state.mode]}</strong>
+          <strong>${modeLabel(this.#store.state.mode)}</strong>
         </p>
         <p class="muted">Épuré : grandes photos et actions rapides (ajouter à la collection en cours). Standard : l’essentiel pour tous.
           Scientifique : toutes les données, locales et distantes. La grille et la fiche plante ont aussi leur propre choix, qui revient au mode de l’application quand celui-ci change.</p>
+        ${this.#modes()}
 
 
         ${this.#modules()}

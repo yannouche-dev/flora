@@ -1,12 +1,12 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
-import { MODE_ICONS } from '../core/icons.js';
-import { MODES, MODE_LABELS } from '../core/store.js';
+import { modeIcon } from '../core/icons.js';
+import { StoreController } from '../core/store.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 
 /**
- * Three icon buttons: Épuré · Standard · Scientifique. For the app-wide mode, or for one surface (grid,
+ * One icon button per display mode: Épuré · Standard · Scientifique, then the modes made from them. For the app-wide mode, or for one surface (grid,
  * plant sheet) that may override it: then a dot marks the override and ↺ goes back to the app mode.
  * Fires `mode-change` with `{ mode }` (null: follow the app mode).
  */
@@ -44,6 +44,8 @@ export class GfModeSwitch extends LitElement {
     this.scope = '';
   }
 
+  #store = new StoreController(this);
+
   /** @param {string | null} mode */
   #emit(mode) {
     this.dispatchEvent(new CustomEvent('mode-change', { detail: { mode }, bubbles: true, composed: true }));
@@ -53,9 +55,9 @@ export class GfModeSwitch extends LitElement {
     const where = this.scope ? ' — ' + this.scope : '';
     return html`
       <div class="segmented" role="group" aria-label=${'Affichage' + where}>
-        ${MODES.map(mode => html`<button type="button" aria-pressed=${this.value === mode ? 'true' : 'false'}
-          title=${MODE_LABELS[mode] + where} aria-label=${MODE_LABELS[mode] + where}
-          @click=${() => this.#emit(mode)}>${MODE_ICONS[mode]}</button>`)}
+        ${this.#store.state.modes.map(({ key: mode, label }) => html`<button type="button" aria-pressed=${this.value === mode ? 'true' : 'false'}
+          title=${label + where} aria-label=${label + where}
+          @click=${() => this.#emit(mode)}>${modeIcon(mode)}</button>`)}
       </div>
       ${this.overridden ? html`<button class="reset icon-btn" type="button" title="Revenir au mode de l’application"
         aria-label="Revenir au mode de l’application" @click=${() => this.#emit(null)}>${icon('arrow-counterclockwise')}</button>` : nothing}

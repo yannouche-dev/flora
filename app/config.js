@@ -51,7 +51,9 @@ export const config = {
     // Where the user is in each part (search, plant, collection, Carte): kept across tabs and reloads.
     context: 'geoflora.context',
     contextBar: 'geoflora.contextBar',
-    modules: 'geoflora.modules'
+    modules: 'geoflora.modules',
+    // Display modes made from the app's three (Réglages › Modes d'affichage).
+    modes: 'geoflora.modes'
   },
 
   /** GPS fixes at or under this accuracy (metres) are considered good enough to save. */
