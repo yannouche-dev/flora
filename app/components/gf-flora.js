@@ -15,7 +15,7 @@ import './gf-mode-switch.js';
 import './gf-pager.js';
 import './gf-media-viewer.js';
 import { icon } from '../core/icons.js';
-import { blockTitle, blocksAt, hasColumns } from '../core/sheet-blocks.js';
+import { blockTitle, hasColumns } from '../core/sheet-blocks.js';
 
 /** Results pane narrower than this: cards instead of the grid. */
 const GRID_MIN = 560;
@@ -465,22 +465,17 @@ export class GfFlora extends LitElement {
   get #plantId() { return this.route.name === 'plant' ? this.route.id : null; }
 
   // ── A block in a pane: beside the sheet, in place of the results (phone: over the sheet) ──────────────
-  // ?pane=<block> in the address (⤢ on a block, a photo touched for « Médias »), or the first block placed
-  // « en volet » for this mode (Mode King), opened with the plant on a wide screen.
+  // ?pane=<block> in the address: ⤢ on a block, a photo touched for « Médias », a block placed « À côté ».
 
   /** The block in the pane, null when there is none. */
   get #pane() {
-    if (this.route.name !== 'plant') return null;
-    if (this.route.pane) return this.route.pane;
-    if (this.#phone.matches || this.#dismissed === this.route.id) return null;
-    return blocksAt(plantViewOf(this.#store.state), 'beside')[0] ?? null;
+    // Only when asked (⤢, a photo touched, « À côté : … »): opening a plant keeps Filtres ┃ Résultats ┃ Plante.
+    return this.route.name === 'plant' ? this.route.pane : null;
   }
 
-  /** The pane comes from the address (else from the layout, and closing it only puts it away for this plant). */
+  /** The pane is in the address (always: it opens only when asked). */
   get #paneInUrl() { return this.route.name === 'plant' && Boolean(this.route.pane); }
 
-  /** A placed pane closed for this plant. @type {number | null} */
-  #dismissed = null;
   /** The image touched on the sheet, for the media viewer to open at. @type {string | null} */
   #paneStart = null;
   /** The pane was opened from the sheet (a step in history: closing it goes back). */
@@ -511,7 +506,6 @@ export class GfFlora extends LitElement {
     const id = this.#plantId;
     this._paneFull = false;
     this.#paneStart = null;
-    if (!this.#paneInUrl) { this.#dismissed = id; this.requestUpdate(); return; }
     if (this.#panePushed) { this.#panePushed = false; history.back(); }
     else if (id !== null) location.replace(href.plant(id));
   };
