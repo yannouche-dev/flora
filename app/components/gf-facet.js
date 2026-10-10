@@ -96,7 +96,11 @@ export class GfFacet extends LitElement {
       line-height: 1.5;
     }
     .link { font-size: 0.8rem; }
-    input[type='search'] { margin: 8px 0 4px; font-size: 0.85rem; min-height: 34px; padding: 6px 12px; }
+    /* Its filter stays under the header while its list scrolls; it leaves with the end of the facet. */
+    input[type='search'] { margin: 8px 0 4px; font-size: 0.85rem; min-height: 34px; padding: 6px 12px;
+      position: sticky; top: calc((var(--stack, 0) + 1) * var(--head-h) + 6px); z-index: 1;
+      box-shadow: 0 -7px 0 var(--gf-surface), 0 5px 0 var(--gf-surface); }
+    input[type='search']:focus-visible { box-shadow: 0 -7px 0 var(--gf-surface), 0 5px 0 var(--gf-surface), var(--gf-focus); }
     ul { list-style: none; margin: 6px 0 0; padding: 0; }
     li label {
       display: flex;
