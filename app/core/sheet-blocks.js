@@ -7,7 +7,8 @@
 // The layout can be exported to a file and imported back.
 
 import { config } from '../config.js';
-import { MODE_KEYS, MODULES, moduleOn, setModule } from './modules.js';
+import { MODULES, moduleOn, setModule } from './modules.js';
+import { baseOf, importModes, modeKeys, ownModes } from './modes.js';
 import { OVERLAYS } from './ign.js';
 import { emptyLayout, store } from './store.js';
 
@@ -20,6 +21,7 @@ import { emptyLayout, store } from './store.js';
 /** The blocks every sheet has. @type {SheetBlock[]} */
 export const BLOCKS = [
   { key: 'name', title: 'Nom' },
+  { key: 'media', title: 'Médias', module: 'photos' },
   { key: 'photos', title: 'Photos', module: 'photos' },
   { key: 'status', title: 'Protection et statuts' },
   { key: 'lookalikes', title: 'Plantes à confondre' },
@@ -105,10 +107,21 @@ export const ACTIONS = SUBS.actions;
 
 /** Default order of each mode: what the mode is about first. Note blocks follow, in their creation order. @type {Record<Mode, string[]>} */
 const DEFAULTS = {
-  epure: ['name', 'photos', 'status', 'lookalikes', 'uses', 'calendar', 'interactions', 'wikipedia', 'names', 'taxonomy', 'mine', 'descriptions', 'occurrences', 'map', 'climate', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids', 'resources'],
-  standard: ['name', 'status', 'lookalikes', 'uses', 'taxonomy', 'mine', 'calendar', 'interactions', 'photos', 'wikipedia', 'descriptions', 'names', 'resources', 'occurrences', 'map', 'climate', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids'],
-  scientific: ['name', 'lookalikes', 'taxonomy', 'status', 'calendar', 'occurrences', 'map', 'climate', 'interactions', 'wikipedia', 'descriptions', 'gbifProfile', 'photos', 'gbifMedia', 'trefle', 'literature', 'ids', 'mine', 'resources', 'uses', 'names']
+  epure: ['name', 'photos', 'media', 'status', 'lookalikes', 'uses', 'calendar', 'interactions', 'wikipedia', 'names', 'taxonomy', 'mine', 'descriptions', 'occurrences', 'map', 'climate', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids', 'resources'],
+  standard: ['name', 'status', 'lookalikes', 'uses', 'taxonomy', 'mine', 'calendar', 'interactions', 'media', 'photos', 'wikipedia', 'descriptions', 'names', 'resources', 'occurrences', 'map', 'climate', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids'],
+  scientific: ['name', 'lookalikes', 'taxonomy', 'status', 'calendar', 'occurrences', 'map', 'climate', 'interactions', 'wikipedia', 'descriptions', 'gbifProfile', 'media', 'photos', 'gbifMedia', 'trefle', 'literature', 'ids', 'mine', 'resources', 'uses', 'names']
 };
+
+/**
+ * Blocks a mode leaves folded until shown (Mode King), its list once changed being kept whole: « Médias »
+ * (every image, in a viewer) takes the place of « Photos » and « Médias GBIF » in Standard and Scientifique;
+ * Épuré keeps its large photo (touching it opens the viewer).
+ * @type {Record<Mode, string[]>}
+ */
+const DEFAULT_HIDDEN = { epure: ['media'], standard: ['photos', 'gbifMedia'], scientific: ['photos', 'gbifMedia'] };
+
+/** The blocks folded by hand (or by default) in a view. @param {Mode} view @returns {string[]} */
+const hiddenList = view => layout().hidden[view] ?? DEFAULT_HIDDEN[baseOf(view)] ?? [];
 
 /** Keys of earlier versions (one list per mode) → today's block. */
 const RENAMED = { photo: 'photos', about: 'taxonomy', statuses: 'status', description: 'wikipedia' };
@@ -146,7 +159,7 @@ export const defaultTitle = key => blockOf(key)?.title || key;
 export const blockModuleName = key => MODULES.find(m => m.key === blockOf(key)?.module)?.name || null;
 
 /** @param {Mode} view */
-const defaults = view => [...DEFAULTS[view], ...noteBlocks().map(b => b.key), ...mapBlocks().map(b => b.key)];
+const defaults = view => [...DEFAULTS[baseOf(view)], ...noteBlocks().map(b => b.key), ...mapBlocks().map(b => b.key)];
 
 /**
  * The order of a view, blocks of the same category together (in the categories' order), each keeping its
@@ -177,7 +190,7 @@ export const blockOrder = view =>
 /** Has this view been arranged by hand? @param {Mode} view */
 export function isCustom(view) {
   const l = layout();
-  return Boolean(l.order[view] || l.hidden[view] || l.subOrder[view] || l.subHidden[view] || l.styles?.[view] || l.titleShown?.[view] || l.hideEmpty?.[view] || l.pinned?.[view] || l.dock?.[view]);
+  return Boolean(l.order[view] || l.hidden[view] || l.subOrder[view] || l.subHidden[view] || l.styles?.[view] || l.titleShown?.[view] || l.hideEmpty?.[view] || l.pinned?.[view] || l.paned?.[view] || l.dock?.[view]);
 }
 
 /** Saves a new layout (only what differs from the defaults). @param {Partial<SheetLayout>} patch */
@@ -190,7 +203,7 @@ function save(patch) {
     }
   }
   const isEmpty = !next.notes.length && !Object.keys(next.titles).length && !next.mapBlocks?.length && !Object.keys(next.maps || {}).length
-    && ['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown', 'hideEmpty', 'pinned', 'dock'].every(p => !Object.keys(/** @type {any} */ (next)[p] || {}).length);
+    && ['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown', 'hideEmpty', 'pinned', 'paned', 'dock'].every(p => !Object.keys(/** @type {any} */ (next)[p] || {}).length);
   try {
     if (isEmpty) localStorage.removeItem(config.storageKeys.sheetLayout);
     else localStorage.setItem(config.storageKeys.sheetLayout, JSON.stringify(next));
@@ -215,7 +228,9 @@ const blocksOf = module => BLOCKS.filter(b => b.module === module).map(b => b.ke
 /** @param {Mode} view @param {Set<string>} keys */
 function writeHidden(view, keys) {
   const all = { ...layout().hidden };
-  if (keys.size) all[view] = [...keys]; else delete all[view];
+  const byDefault = DEFAULT_HIDDEN[baseOf(view)] || [];
+  // The defaults: nothing kept; anything else, kept whole (an empty list too: everything shown).
+  if (keys.size === byDefault.length && byDefault.every(k => keys.has(k))) delete all[view]; else all[view] = [...keys];
   save({ hidden: all });
 }
 
@@ -226,7 +241,7 @@ function writeHidden(view, keys) {
  */
 export function isHidden(view, key) {
   const module = blockOf(key)?.module;
-  const own = (layout().hidden[view] || []).includes(key);
+  const own = hiddenList(view).includes(key);
   if (module) return own || !moduleOn(module, view) || (module === 'wikipedia' && !moduleOn('wikidata', view));
   return own;
 }
@@ -237,7 +252,7 @@ export function isHidden(view, key) {
  * @param {Mode} view @param {string} key @param {boolean} hidden
  */
 export function setHidden(view, key, hidden) {
-  const keys = new Set(layout().hidden[view] || []);
+  const keys = new Set(hiddenList(view));
   const module = blockOf(key)?.module;
   if (!module) {
     if (hidden) keys.add(key); else keys.delete(key);
@@ -286,7 +301,7 @@ const SUB_HIDDEN = {
 };
 
 /** The sub-blocks a view leaves out of a block. @param {Mode} view @param {string} block @returns {string[]} */
-const hiddenSubs = (view, block) => layout().subHidden[view]?.[block] ?? SUB_HIDDEN[view]?.[block] ?? [];
+const hiddenSubs = (view, block) => layout().subHidden[view]?.[block] ?? SUB_HIDDEN[baseOf(view)]?.[block] ?? [];
 
 /** @param {Mode} view @param {string} block @param {string} key */
 export const isSubHidden = (view, block, key) => hiddenSubs(view, block).includes(key);
@@ -309,7 +324,7 @@ export function setSubHidden(view, block, key, hidden) {
   const mine = { ...all[view] };
   const keys = new Set(hiddenSubs(view, block));
   if (hidden) keys.add(key); else keys.delete(key);
-  const byDefault = new Set(SUB_HIDDEN[view]?.[block] || []);
+  const byDefault = new Set(SUB_HIDDEN[baseOf(view)]?.[block] || []);
   // Back to the mode's own choice: nothing stored; otherwise the whole list (an empty one included).
   if (keys.size === byDefault.size && [...keys].every(k => byDefault.has(k))) delete mine[block]; else mine[block] = [...keys];
   all[view] = mine;
@@ -323,7 +338,7 @@ export function blockStyle(view, block) {
   const def = STYLES[block];
   if (!def) return null;
   const chosen = layout().styles?.[view]?.[block];
-  return def.styles.some(s => s.key === chosen) ? /** @type {string} */ (chosen) : def.defaults?.[view] || def.styles[0].key;
+  return def.styles.some(s => s.key === chosen) ? /** @type {string} */ (chosen) : def.defaults?.[baseOf(view)] || def.styles[0].key;
 }
 
 /** @param {Mode} view @param {string} block @param {string} style */
@@ -332,7 +347,7 @@ export function setBlockStyle(view, block, style) {
   if (!def?.styles.some(s => s.key === style)) return;
   const all = { ...layout().styles };
   const mine = { ...all[view] };
-  if (style === (def.defaults?.[view] || def.styles[0].key)) delete mine[block]; else mine[block] = style;
+  if (style === (def.defaults?.[baseOf(view)] || def.styles[0].key)) delete mine[block]; else mine[block] = style;
   all[view] = mine;
   save({ styles: all });
 }
@@ -340,7 +355,7 @@ export function setBlockStyle(view, block, style) {
 // ── Titles shown or not ────────────────────────────────────────────────────
 
 /** Blocks read without a title unless asked: the name, the actions, the photos, the Wikipédia summary (its source line names it). */
-const UNTITLED = ['name', 'actions', 'photos', 'wikipedia'];
+const UNTITLED = ['name', 'actions', 'media', 'photos', 'wikipedia'];
 
 /** Does this block show its title in this view (outside Mode King)? @param {Mode} view @param {string} key */
 export function isTitleShown(view, key) {
@@ -378,23 +393,60 @@ export function setPinned(view, key, on) {
   if (on) mine.push(key);
   const all = { ...layout().pinned };
   if (mine.length) all[view] = mine; else delete all[view];
-  save({ pinned: all });
+  const paned = { ...layout().paned };
+  if (on && paned[view]?.includes(key)) { paned[view] = paned[view].filter(k => k !== key); if (!paned[view].length) delete paned[view]; }
+  save({ pinned: all, paned });
+}
+
+// ── Blocks in a pane ───────────────────────────────────────────────────────
+
+/**
+ * Blocks placed « en volet », per mode: they leave the sheet for a pane of their own beside it (in Flore, in
+ * place of the results; on a phone, over the sheet), at full size — the media viewer, a large map, whole
+ * tables. The sheet keeps a button for each; the first one opens with the plant on a wide screen.
+ * Any block can also be opened in the pane once, from its ⤢ button, without being placed there.
+ * @param {Mode} view @returns {string[]}
+ */
+export function panedBlocks(view) {
+  const keys = allBlocks().map(b => b.key);
+  return (layout().paned?.[view] || []).filter(k => keys.includes(k));
+}
+
+/** @param {Mode} view @param {string} key */
+export const isPaned = (view, key) => panedBlocks(view).includes(key);
+
+/** Places a block in the pane, or back in the sheet (a block is pinned or in the pane, not both). @param {Mode} view @param {string} key @param {boolean} on */
+export function setPaned(view, key, on) {
+  const mine = panedBlocks(view).filter(k => k !== key);
+  if (on) mine.push(key);
+  const all = { ...layout().paned };
+  if (mine.length) all[view] = mine; else delete all[view];
+  const pinned = { ...layout().pinned };
+  if (on && pinned[view]?.includes(key)) { pinned[view] = pinned[view].filter(k => k !== key); if (!pinned[view].length) delete pinned[view]; }
+  save({ paned: all, pinned });
 }
 
 /** Size of the dock (s, m, l: a third, half, 60 % of the sheet) and whether it is folded to its title, per mode. */
 export const DOCK_SIZES = /** @type {const} */ (['s', 'm', 'l']);
 
-/** @param {Mode} view @returns {{ size: 's' | 'm' | 'l', folded: boolean }} */
+/**
+ * Where the dock sticks in the sheet: 'auto' (a column on the right of a wide sheet, a band at the top of a
+ * narrow one), or always 'left' / 'right' (column; a band at the top when narrow), 'top' or 'bottom' (band).
+ */
+export const DOCK_SIDES = /** @type {const} */ (['auto', 'left', 'right', 'top', 'bottom']);
+/** @typedef {typeof DOCK_SIDES[number]} DockSide */
+
+/** @param {Mode} view @returns {{ size: 's' | 'm' | 'l', folded: boolean, side: DockSide }} */
 export function dockState(view) {
   const d = layout().dock?.[view] || {};
-  return { size: DOCK_SIZES.includes(d.size) ? d.size : 'm', folded: d.folded === true };
+  return { size: DOCK_SIZES.includes(d.size) ? d.size : 'm', folded: d.folded === true, side: DOCK_SIDES.includes(d.side) ? d.side : 'auto' };
 }
 
-/** @param {Mode} view @param {Partial<{ size: 's' | 'm' | 'l', folded: boolean }>} patch */
+/** @param {Mode} view @param {Partial<{ size: 's' | 'm' | 'l', folded: boolean, side: DockSide }>} patch */
 export function setDockState(view, patch) {
   const next = { ...dockState(view), ...patch };
   const all = { ...layout().dock };
-  if (next.size === 'm' && !next.folded) delete all[view]; else all[view] = next;
+  if (next.size === 'm' && !next.folded && next.side === 'auto') delete all[view]; else all[view] = next;
   save({ dock: all });
 }
 
@@ -405,7 +457,7 @@ export function setDockState(view, patch) {
  * show them anyway, with a « nothing known » line, or to leave them out. Name, classification, identifiers
  * and resources always have something.
  */
-export const CAN_BE_EMPTY = ['photos', 'status', 'lookalikes', 'mine', 'calendar', 'wikipedia', 'descriptions', 'names', 'occurrences', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'interactions', 'climate', 'uses'];
+export const CAN_BE_EMPTY = ['media', 'photos', 'status', 'lookalikes', 'mine', 'calendar', 'wikipedia', 'descriptions', 'names', 'occurrences', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'interactions', 'climate', 'uses'];
 
 /** Left out when empty unless asked otherwise (as they always were). */
 const EMPTY_HIDDEN = ['wikipedia', 'names', 'gbifProfile', 'literature'];
@@ -477,7 +529,7 @@ export function deleteNote(key) {
   const notes = readNotes();
   delete notes[id];
   writeNotes(notes);
-  save({ notes: layout().notes.filter(n => n.id !== id), order: strip(layout().order), hidden: strip(layout().hidden), pinned: strip(layout().pinned || {}) });
+  save({ notes: layout().notes.filter(n => n.id !== id), order: strip(layout().order), hidden: strip(layout().hidden), pinned: strip(layout().pinned || {}), paned: strip(layout().paned || {}) });
 }
 
 // ── Map blocks ─────────────────────────────────────────────────────────────
@@ -535,7 +587,7 @@ export function deleteMap(key) {
     Object.fromEntries(Object.entries(per).map(([v, keys]) => [v, (keys || []).filter(k => k !== key)]));
   const maps = { ...(layout().maps || {}) };
   delete maps[key];
-  save({ mapBlocks: (layout().mapBlocks || []).filter(m => m.id !== id), maps, order: strip(layout().order), hidden: strip(layout().hidden), pinned: strip(layout().pinned || {}) });
+  save({ mapBlocks: (layout().mapBlocks || []).filter(m => m.id !== id), maps, order: strip(layout().order), hidden: strip(layout().hidden), pinned: strip(layout().pinned || {}), paned: strip(layout().paned || {}) });
 }
 
 /** @param {string} key @param {number} plantId */
@@ -563,15 +615,15 @@ const foldedModules = view => blockModules().filter(m => !moduleOn(m, view));
 export function resetBlocks(view) {
   const l = layout();
   const without = (/** @type {any} */ per) => { const next = { ...per }; delete next[view]; return next; };
-  save({ order: without(l.order), hidden: without(l.hidden), subOrder: without(l.subOrder), subHidden: without(l.subHidden), styles: without(l.styles || {}), titleShown: without(l.titleShown || {}), hideEmpty: without(l.hideEmpty || {}), pinned: without(l.pinned || {}), dock: without(l.dock || {}) });
-  for (const b of BLOCKS) if (b.module && isHidden(view, b.key)) setHidden(view, b.key, false);
+  save({ order: without(l.order), hidden: without(l.hidden), subOrder: without(l.subOrder), subHidden: without(l.subHidden), styles: without(l.styles || {}), titleShown: without(l.titleShown || {}), hideEmpty: without(l.hideEmpty || {}), pinned: without(l.pinned || {}), paned: without(l.paned || {}), dock: without(l.dock || {}) });
+  for (const b of BLOCKS) if (b.module && !moduleOn(b.module, view)) setHidden(view, b.key, false);
 }
 
 /** Everything back to the defaults, note blocks and titles included (the notes' texts are deleted). */
 export function resetAll() {
   for (const n of layout().notes) deleteNote('note:' + n.id);
   save(emptyLayout());
-  for (const view of MODE_KEYS) resetBlocks(view);
+  for (const view of modeKeys()) resetBlocks(view);
 }
 
 /** The layout as a file: blocks, sub-blocks, titles, note blocks and their texts, folded modules. */
@@ -580,14 +632,15 @@ export function exportLayout() {
     app: 'geoflora', kind: 'sheet-layout', version: 1,
     layout: layout(),
     notes: readNotes(),
-    modulesOff: Object.fromEntries(MODE_KEYS.map(v => [v, foldedModules(v)]))
+    modes: ownModes(),
+    modulesOff: Object.fromEntries(modeKeys().map(v => [v, foldedModules(v)]))
   }, null, 2);
 }
 
 /** @param {any} v */
 const isKeyList = v => Array.isArray(v) && v.every(k => typeof k === 'string' && k.length < 80);
 /** @param {any} v @param {(x: any) => boolean} ok */
-const perView = (v, ok) => v && typeof v === 'object' && !Array.isArray(v) && Object.entries(v).every(([view, x]) => MODE_KEYS.includes(/** @type {Mode} */ (view)) && ok(x));
+const perView = (v, ok) => v && typeof v === 'object' && !Array.isArray(v) && Object.entries(v).every(([view, x]) => (modeKeys().includes(view) || /^m[a-z0-9]{2,12}$/.test(view)) && ok(x));
 /** @param {any} v */
 const perBlock = v => v && typeof v === 'object' && !Array.isArray(v) && Object.entries(v).every(([block, keys]) => block in SUBS && isKeyList(keys));
 
@@ -606,7 +659,7 @@ export function importLayout(text) {
     && perView(l.titleShown || {}, (/** @type {any} */ x) => x && typeof x === 'object' && Object.values(x).every(v => typeof v === 'boolean'))
     && perView(l.hideEmpty || {}, (/** @type {any} */ x) => x && typeof x === 'object' && Object.values(x).every(v => typeof v === 'boolean'))
     && perView(l.styles || {}, (/** @type {any} */ x) => x && typeof x === 'object' && Object.entries(x).every(([block, st]) => STYLES[block]?.styles.some(s => s.key === st)))
-    && perView(l.pinned || {}, isKeyList)
+    && perView(l.pinned || {}, isKeyList) && perView(l.paned || {}, isKeyList)
     && perView(l.dock || {}, (/** @type {any} */ x) => x && typeof x === 'object' && !Array.isArray(x))
     && l.titles && typeof l.titles === 'object' && Object.values(l.titles).every(t => typeof t === 'string' && t.length <= 60)
     && Array.isArray(l.notes) && l.notes.every((/** @type {any} */ n) => typeof n?.id === 'string' && /^[a-z0-9]{1,24}$/.test(n.id) && typeof n.title === 'string' && n.title.length <= 60)
@@ -615,12 +668,41 @@ export function importLayout(text) {
     && (!data.notes || (typeof data.notes === 'object' && Object.values(data.notes).every(byPlant => byPlant && typeof byPlant === 'object' && Object.values(byPlant).every(t => typeof t === 'string'))))
     && (!data.modulesOff || perView(data.modulesOff, x => Array.isArray(x) && x.every(m => MODULES.some(mm => mm.key === m))));
   if (!valid) throw new Error('Mise en page illisible ou incomplète.');
+  importModes(data.modes || []);
   writeNotes(data.notes || {});
-  save({ ...emptyLayout(), order: l.order || {}, hidden: l.hidden || {}, subOrder: l.subOrder || {}, subHidden: l.subHidden || {}, styles: l.styles || {}, titleShown: l.titleShown || {}, hideEmpty: l.hideEmpty || {}, pinned: l.pinned || {}, dock: l.dock || {}, titles: l.titles, notes: l.notes,
+  save({ ...emptyLayout(), order: l.order || {}, hidden: l.hidden || {}, subOrder: l.subOrder || {}, subHidden: l.subHidden || {}, styles: l.styles || {}, titleShown: l.titleShown || {}, hideEmpty: l.hideEmpty || {}, pinned: l.pinned || {}, paned: l.paned || {}, dock: l.dock || {}, titles: l.titles, notes: l.notes,
     mapBlocks: l.mapBlocks || [], maps: Object.fromEntries(Object.entries(l.maps || {}).map(([k, c]) => [k, cleanMap(c)])) });
-  for (const view of MODE_KEYS) {
+  for (const view of modeKeys()) {
     const off = data.modulesOff?.[view] || [];
     for (const m of blockModules()) setModule(m, view, !off.includes(m));
     if (!off.includes('wikipedia') && !moduleOn('wikidata', view)) setModule('wikidata', view, true);
   }
+}
+
+// ── Modes made here ────────────────────────────────────────────────────────
+
+/** The parts of the layout kept per mode. */
+const PER_MODE = /** @type {const} */ (['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown', 'hideEmpty', 'pinned', 'paned', 'dock']);
+
+/** A new mode starts with its model's layout (what differs from the defaults; the defaults are its model's). @param {Mode} from @param {Mode} to */
+export function copyLayout(from, to) {
+  const l = layout();
+  /** @type {any} */
+  const patch = {};
+  for (const part of PER_MODE) {
+    const per = { .../** @type {any} */ (l)[part] };
+    if (per[from] !== undefined) per[to] = structuredClone(per[from]); else delete per[to];
+    patch[part] = per;
+  }
+  // A map's settings are per block, the same in every mode: nothing to copy.
+  save(patch);
+}
+
+/** A mode deleted: its layout goes. @param {Mode} mode */
+export function dropLayout(mode) {
+  const l = layout();
+  /** @type {any} */
+  const patch = {};
+  for (const part of PER_MODE) { const per = { .../** @type {any} */ (l)[part] }; delete per[mode]; patch[part] = per; }
+  save(patch);
 }

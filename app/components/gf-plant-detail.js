@@ -12,6 +12,7 @@ import { href } from '../core/router.js';
 import { share } from '../core/share.js';
 import * as sources from '../core/sources.js';
 import { moduleOn, modulesSignature } from '../core/modules.js';
+import { baseOf } from '../core/modes.js';
 import './gf-attribution.js';
 import './gf-plant-spots.js';
 import './gf-calendar.js';
@@ -25,7 +26,7 @@ import { icon } from '../core/icons.js';
 import {
   STYLES, SUBS, canBeEmpty, hidesEmpty, setHidesEmpty, isMap, isAddedMap, mapConfig, setMapConfig, createMap, deleteMap, blockModuleName, blockOrder, blockStyle, blockTitle, isTitleShown, setBlockStyle, setTitleShown, createNote, deleteNote, isHidden, isNote, isSubHidden, noteText, renameBlock,
   setBlockOrder, setHidden, setNoteText, setSubHidden, setSubOrder, shownSubs, subOrder, subTitle,
-  DOCK_SIZES, dockState, isPinned, pinnedBlocks, setDockState, setPinned, orderByCategory
+  DOCK_SIDES, DOCK_SIZES, dockState, isPinned, pinnedBlocks, setDockState, setPinned, orderByCategory, isPaned, panedBlocks, setPaned
 } from '../core/sheet-blocks.js';
 import { CATEGORIES, blockCategory, categoryOf } from '../core/categories.js';
 import { FOCUS_EVENT, isFocused, noFocus, toggleFocus } from '../core/map-focus.js';
@@ -35,6 +36,8 @@ import { lookalikesOf } from '../core/lookalikes.js';
 import { chartStyles, climateChart, groupColor, groupLegend, networkChart, nicheChart } from '../core/charts.js';
 import { unsafeCSS } from 'lit';
 import './gf-sortable-list.js';
+import './gf-media-viewer.js';
+import { openModal } from '../core/history.js';
 
 /** Remote text is untrusted HTML: keep only its text content (DOMParser never runs scripts). */
 function toText(/** @type {string} */ value) {
@@ -283,6 +286,20 @@ export class GfPlantDetail extends LitElement {
     _spotsOpen: { state: true },
     _plant: { state: true },
     _details: { state: true },
+    /**
+     * Only this block, at full size: the sheet's block shown in a pane beside it (Flore), or over the page.
+     * Only its data is loaded.
+     */
+    only: {},
+    /** In a pane (`only` media): the image to open at, by URL (a photo touched) or by place (the address). */
+    paneStart: { attribute: false },
+    paneAt: { attribute: false },
+    /** The block shown in the pane beside this sheet (Flore): only a line here, not twice. */
+    inPane: { attribute: false },
+    /** A block opened over the page (outside Flore, where there is no pane): its key and the image it starts at. */
+    _paneDialog: { state: true },
+    /** The category of the block at the top of the sheet (lit in the side rail). */
+    _activeCat: { state: true },
     _error: { state: true },
     _shareNote: { state: true },
     _dragKey: { state: true },
@@ -499,6 +516,30 @@ export class GfPlantDetail extends LitElement {
     .hero img, .hero .skeleton, .hero .no-photo { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; height: auto; border-radius: 0; }
     .hero .no-photo { display: grid; place-items: center; font-size: 3rem; }
     .hero figcaption { padding: 4px 10px; }
+    .hero a, .gallery a { cursor: zoom-in; }
+    .all-media { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; }
+    dialog.pane { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; display: flex; flex-direction: column; background: var(--gf-surface); }
+    dialog.pane:not([open]) { display: none; }
+    dialog.pane gf-plant-detail { flex: 1; min-height: 0; }
+    .pane-bar { display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 14px; border-bottom: 1px solid var(--gf-border); }
+    .pane-bar h2 { flex: 1; margin: 0; font-size: 1rem; }
+    /* A block alone, at full size (a pane). */
+    :host([only]) { display: flex; flex-direction: column; min-height: 0; overflow: auto; }
+    :host([only='media']) { overflow: hidden; }
+    :host([only]) gf-media-viewer { flex: 1; min-height: 0; }
+    .only-pad { padding: 12px 16px; }
+    .block.only { margin: 0; }
+    .only-pad.fill, .only-pad.fill > .block, .only-pad.fill > .block > .content { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    /* ⤢: a block in the pane beside the sheet. */
+    .block { position: relative; }
+    .to-pane { width: 30px; height: 30px; min-height: 0; font-size: 0.85rem; flex: none; opacity: 0; transition: opacity 0.15s; color: var(--gf-text-muted); }
+    .block > .to-pane { position: absolute; top: 0; right: 0; z-index: 2; }
+    .block:hover .to-pane, .to-pane:focus-visible { opacity: 1; }
+    @media (hover: none) { .block-title .to-pane { opacity: 0.6; } }
+    .in-pane { display: flex; align-items: center; gap: 6px; font-size: 0.9rem; }
+    .paned { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 10px; font-size: 0.85rem; color: var(--gf-text-muted); }
+    .paned button { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--gf-border); background: var(--gf-surface); border-radius: var(--gf-radius-pill); padding: 3px 10px; font: inherit; color: var(--gf-text); cursor: pointer; }
+    .paned button:hover { border-color: var(--gf-accent); }
     .epure h1 { font-size: 1.8rem; }
     .meta { color: var(--gf-text-muted); margin: 6px 0 10px; }
     .more { margin-top: 18px; }
@@ -643,19 +684,57 @@ export class GfPlantDetail extends LitElement {
     .dock-body > .block.map-block > .content { flex: 1; display: flex; flex-direction: column; min-height: 0; }
     .dock-body .map-placeholder.fill { flex: 1; height: auto !important; }
     gf-sheet-map[fill] { flex: 1; min-height: 0; }
+    .dock-sides button { display: inline-grid; place-items: center; padding: 2px 6px; }
+    /* Stuck at the bottom (Mode King › position): a band over the bottom of the sheet. */
+    .frame.side-bottom .dock { order: 1; top: auto; bottom: -16px; margin: 4px -16px -16px; border-bottom: 0; border-top: 1px solid var(--gf-border); box-shadow: 0 -6px 14px -10px rgb(0 0 0 / 0.35); }
+    :host([embedded]) .frame.side-bottom .dock { bottom: -4px; margin: 4px -14px -4px; }
     @container (min-width: 640px) {
-      .frame.docked { grid-template-columns: minmax(0, 1fr) var(--dock-w, 45%); column-gap: 18px; align-items: start; }
-      .frame.docked[data-size='s'] { --dock-w: 34%; }
-      .frame.docked[data-size='l'] { --dock-w: 58%; }
-      .dock, .dock[data-size] { order: 1; top: 0; height: calc(var(--host-h, 80vh) - 32px); margin: 0; padding: 0 0 12px; background: none; border: 0; box-shadow: none; }
-      :host([embedded]) .dock, :host([embedded]) .dock[data-size] { top: 0; height: calc(var(--host-h, 80vh) - 16px); margin: 0; padding: 0 0 12px; }
-      .dock.folded { height: calc(var(--host-h, 80vh) - 32px); padding-bottom: 12px; }
-      :host([embedded]) .dock.folded { height: calc(var(--host-h, 80vh) - 16px); }
-      .dock.folded .dock-body { display: flex; }
-      .dock-fold { display: none; }
-      .frame.docked .action-bar { margin-right: 0; }
+      .frame.docked.col { grid-template-columns: minmax(0, 1fr) var(--dock-w, 45%); column-gap: 18px; align-items: start; }
+      .frame.docked.col.side-left { grid-template-columns: var(--dock-w, 45%) minmax(0, 1fr); }
+      .frame.docked.col[data-size='s'] { --dock-w: 34%; }
+      .frame.docked.col[data-size='l'] { --dock-w: 58%; }
+      .col .dock, .col .dock[data-size] { order: 1; top: 0; height: calc(var(--host-h, 80vh) - 32px); margin: 0; padding: 0 0 12px; background: none; border: 0; box-shadow: none; }
+      .col.side-left .dock { order: -1; }
+      :host([embedded]) .col .dock, :host([embedded]) .col .dock[data-size] { top: 0; height: calc(var(--host-h, 80vh) - 16px); margin: 0; padding: 0 0 12px; }
+      .col .dock.folded { height: calc(var(--host-h, 80vh) - 32px); padding-bottom: 12px; }
+      :host([embedded]) .col .dock.folded { height: calc(var(--host-h, 80vh) - 16px); }
+      .col .dock.folded .dock-body { display: flex; }
+      .col .dock-fold { display: none; }
+      .frame.docked.col .action-bar { margin-right: 0; }
     }
-    @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+    /*
+     * Side rail: an icon per category of the sheet's blocks (Noms, Images, Protection…). Narrow sheet: a strip
+     * stuck at the top; wide: a column stuck on the left. Hover (or focus): the category's blocks.
+     */
+    .railed { --rail-h: 44px; }
+    .rail { position: sticky; top: -16px; z-index: 9; display: flex; gap: 2px; margin: -16px -16px 6px; padding: 4px 10px; background: var(--gf-surface);
+      border-bottom: 1px solid var(--gf-border); flex-wrap: wrap; }
+    :host([embedded]) .rail { top: -4px; margin: -4px -14px 6px; }
+    .railed .dock { top: calc(-16px + var(--rail-h)); }
+    :host([embedded]) .railed .dock { top: calc(-4px + var(--rail-h)); }
+    .rail-item { position: relative; flex: none; }
+    .rail-item > button { width: 36px; height: 36px; min-height: 0; padding: 0; display: grid; place-items: center; border: 0; border-radius: var(--gf-radius-sm);
+      background: none; color: var(--gf-text-muted); font-size: 1.05rem; cursor: pointer; }
+    .rail-item > button:hover { background: var(--gf-surface-2); color: var(--gf-text); }
+    .rail-item > button.on { background: var(--gf-accent-soft); color: var(--gf-accent); }
+    .rail-item > button:focus-visible { outline: none; box-shadow: var(--gf-focus); }
+    .rail-pop { display: none; position: absolute; z-index: 20; top: 100%; left: 0; min-width: 200px; padding: 6px; background: var(--gf-surface); border: 1px solid var(--gf-border);
+      border-radius: var(--gf-radius); box-shadow: var(--gf-shadow-float); }
+    .rail-pop strong { display: block; padding: 2px 8px 4px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gf-text-muted); }
+    .rail-pop button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 6px 8px; border-radius: var(--gf-radius-sm); font: inherit; font-size: 0.9rem; color: var(--gf-text); cursor: pointer; }
+    .rail-pop button:hover, .rail-pop button:focus-visible { background: var(--gf-accent-soft); outline: none; }
+    @media (hover: hover) { .rail-item:hover .rail-pop, .rail-item:focus-within .rail-pop { display: block; } }
+    .block { scroll-margin-top: calc(var(--rail-h, 0px) + 8px); }
+    .block[data-flash] { animation: flash 1.2s ease-out; }
+    @keyframes flash { from { box-shadow: 0 0 0 3px var(--gf-accent); } to { box-shadow: 0 0 0 3px transparent; } }
+    @container (min-width: 560px) {
+      .railed { --rail-h: 0px; display: grid; grid-template-columns: 44px minmax(0, 1fr); column-gap: 8px; }
+      .rail { flex-direction: column; flex-wrap: nowrap; top: 0; align-self: start; margin: 0 0 0 -8px; padding: 6px 4px; border: 0; border-right: 1px solid var(--gf-border); background: none; }
+      :host([embedded]) .rail { top: 0; margin: 0 0 0 -6px; }
+      .rail-pop { top: 0; left: 100%; margin-left: 6px; }
+      .railed-sheet { min-width: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } .block[data-flash] { animation: none; } }
   `];
 
   constructor() {
@@ -719,6 +798,7 @@ export class GfPlantDetail extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.#resize.observe(this);
+    this.addEventListener('scroll', this.#onScroll, { passive: true });
   }
 
   /** @type {AbortController | null} */
@@ -759,7 +839,7 @@ export class GfPlantDetail extends LitElement {
   /** The page's title: this plant, unless it is only a preview. */
   #title() {
     const plant = this._plant;
-    if (!this.preview && plant && !plant.failed) document.title = (plant.vernacularNames?.[0] || plant.scientificName) + ' — GeoFlora';
+    if (!this.preview && !this.only && plant && !plant.failed) document.title = (plant.vernacularNames?.[0] || plant.scientificName) + ' — GeoFlora';
   }
 
   /** @param {number} id */
@@ -834,14 +914,15 @@ export class GfPlantDetail extends LitElement {
    */
   #loadExtras(plant, details, signal) {
     const v = this.view;
-    const shown = (/** @type {string} */ key) => !isHidden(v, key);
+    // In a pane: that block's data only.
+    const shown = (/** @type {string} */ key) => this.only ? key === this.only : !isHidden(v, key);
     const qid = plant.identifiers?.wikidata || details?.identifiers?.wikidata?.id;
     const settle = (/** @type {Promise<any>} */ task, /** @type {(v: any) => void} */ set) =>
       task.then(v => { if (!signal?.aborted && this._plant === plant) set(v ?? null); })
         .catch(() => { if (!signal?.aborted && this._plant === plant) set(null); });
     const once = (/** @type {string} */ key) => !this.#requested.has(key) && Boolean(this.#requested.add(key));
     if (shown('wikipedia') && once('wiki')) settle(sources.wikipedia(plant, qid, signal, v), x => { this._wiki = x; });
-    const science = shown('ids') || (v === 'scientific' && (shown('taxonomy') || shown('status')));
+    const science = shown('ids') || (baseOf(v) === 'scientific' && (shown('taxonomy') || shown('status')));
     if (science && once('science')) settle(sources.wikidataScience(plant, qid, signal, v), x => { this._science = x; });
     this.#loadGbif(plant, details, signal, settle, once, shown);
     const putOpen = (/** @type {string} */ k, /** @type {any} */ x) => { this._open = { ...this._open, [k]: x }; };
@@ -909,8 +990,8 @@ export class GfPlantDetail extends LitElement {
     if (shown('descriptions')) species('descriptions');
     if (sub('occurrences', 'distribution')) species('distributions');
     if (shown('gbifProfile')) species('speciesProfiles');
-    if (v === 'scientific' && sub('taxonomy', 'gbifSynonyms')) species('synonyms');
-    if (v === 'scientific' && sub('status', 'iucn')) species('iucn', 'iucnRedListCategory');
+    if (baseOf(v) === 'scientific' && sub('taxonomy', 'gbifSynonyms')) species('synonyms');
+    if (baseOf(v) === 'scientific' && sub('status', 'iucn')) species('iucn', 'iucnRedListCategory');
     if (['gbif', 'months', 'years', 'regions', 'basis', 'datasets'].some(k => sub('occurrences', k))) {
       part('stats', () => sources.gbifStats(plant, key, signal, v).then(stats => { this.#loadTitles(stats, signal); return stats; }));
     }
@@ -1046,7 +1127,50 @@ export class GfPlantDetail extends LitElement {
     }
 
     const ctx = this.#context(plant);
-    return this.view === 'epure' ? this.#epure(ctx) : this.#full(ctx);
+    if (this.only) return this.#onlyBlock(this.only, ctx);
+    const pane = this._paneDialog;
+    return html`${baseOf(this.view) === 'epure' ? this.#epure(ctx) : this.#full(ctx)}${pane ? html`
+      <dialog class="pane" aria-label=${blockTitle(pane.key)} @close=${() => { this._paneDialog = null; }}>
+        <div class="pane-bar"><h2>${blockTitle(pane.key)} — <i>${plant.scientificName}</i></h2>
+          <button class="icon-btn" type="button" aria-label="Fermer" title="Fermer" @click=${(/** @type {Event} */ e) => /** @type {HTMLElement} */ (e.currentTarget).closest('dialog')?.close()}>${icon('x-lg')}</button></div>
+        <gf-plant-detail embedded only=${pane.key} plant-id=${plant.id} view=${this.view} .paneStart=${pane.url}
+          @media-close=${(/** @type {Event} */ e) => /** @type {HTMLElement} */ (e.currentTarget).closest('dialog')?.close()}></gf-plant-detail>
+      </dialog>` : nothing}`;
+  }
+
+  /** One block at full size (a pane): the media viewer fills it, any other block scrolls in it. @param {string} key @param {any} ctx */
+  #onlyBlock(key, ctx) {
+    if (key === 'media') {
+      return ctx.photosOff ? html`<p class="muted only-pad">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`
+        : html`<gf-media-viewer plant-id=${ctx.plant.id} .view=${this.view} .index=${this.paneAt ?? 0} .startUrl=${this.paneStart ?? null}></gf-media-viewer>`;
+    }
+    return html`<div class="only-pad ${isMap(key) ? 'fill' : ''}"><section class="block only ${isMap(key) ? 'map-block' : ''}" data-key=${key}><div class="content">${this.#content(key, ctx)}</div></section></div>`;
+  }
+
+  /**
+   * A block in the pane beside the sheet (⤢ on the block, a photo touched for « Médias »). Flore shows it in a
+   * pane in place of the results (a phone: over the sheet); elsewhere (Mes plantes, Carte) it opens over the page.
+   * @param {string} key @param {string | null} [url] the image to open at
+   */
+  #openPane(key, url = null) {
+    const plant = this._plant;
+    if (!plant || this.preview || this.only) return;
+    const asked = new CustomEvent('open-pane', { detail: { plantId: plant.id, key, url }, bubbles: true, composed: true, cancelable: true });
+    if (!this.dispatchEvent(asked)) return;
+    this._paneDialog = { key, url };
+    this.updateComplete.then(() => openModal(/** @type {HTMLDialogElement | null} */ (this.renderRoot.querySelector('dialog.pane'))));
+  }
+
+
+  /** A photo touched: the « Médias » viewer at that image, in the pane. @param {Event} e @param {string | null} [url] */
+  #openMedia(e, url = null) {
+    e.preventDefault();
+    this.#openPane('media', url);
+  }
+
+  /** « Tous les médias »: the viewer from its first image. */
+  #allMedia() {
+    return html`<button class="link all-media" type="button" @click=${(/** @type {Event} */ e) => this.#openMedia(e)}>${icon('images')} Tous les médias</button>`;
   }
 
   /** Everything the views share, computed once per render. @param {any} plant */
@@ -1073,7 +1197,7 @@ export class GfPlantDetail extends LitElement {
     return html`
       <h1>${name}</h1>
       <div class="sci"><i>${plant.scientificName}</i> <span class="author">${plant.author}</span></div>
-      ${this.view === 'epure' ? html`<p class="meta">${plant.family}</p>` : nothing}`;
+      ${baseOf(this.view) === 'epure' ? html`<p class="meta">${plant.family}</p>` : nothing}`;
   }
 
   /** @param {any} ctx */
@@ -1094,12 +1218,12 @@ export class GfPlantDetail extends LitElement {
       <div class="gallery">
         ${shown.map(image => html`
           <figure>
-            <a href=${image.sourceUrl || image.pageUrl || image.url} target="_blank" rel="noopener">
+            <a href=${image.sourceUrl || image.pageUrl || image.url} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, image.url)}>
               <img src=${image.url} alt=${plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" />
             </a>
             <figcaption><gf-attribution .media=${image}></gf-attribution></figcaption>
           </figure>`)}
-      </div>` : loading ? html`<div class="skeleton"></div>` : html`<p class="muted">Aucune photo sous licence libre trouvée.</p>`;
+      </div>${this.#allMedia()}` : loading ? html`<div class="skeleton"></div>` : html`<p class="muted">Aucune photo sous licence libre trouvée.</p>`;
   }
 
   #wikipedia() {
@@ -1136,8 +1260,12 @@ export class GfPlantDetail extends LitElement {
     // Pinned blocks are in the dock, not in the flow.
     // Outside « Mode King », folded blocks are not there at all.
     // Outside it too, a block with nothing for this plant (no other name, no Wikipédia article).
-    const keys = blockOrder(this.view).filter(k => !isPinned(this.view, k) && this.#visible(k, ctx));
-    return html`<div class="blocks ${king ? 'king' : ''} ${sorting ? 'sorting' : ''}">${repeat(keys, k => k, k =>
+    // Blocks placed in the pane: a button each (Mode King: in the flow, to arrange them).
+    const keys = blockOrder(this.view).filter(k => !isPinned(this.view, k) && (king || !isPaned(this.view, k)) && this.#visible(k, ctx));
+    const paned = king ? [] : panedBlocks(this.view).filter(k => this.#visible(k, ctx));
+    return html`${paned.length ? html`<div class="paned">${icon('arrows-angle-expand')} En volet :
+        ${paned.map(k => html`<button type="button" @click=${() => this.#openPane(k)}>${blockTitle(k)}</button>`)}</div>` : nothing}
+      <div class="blocks ${king ? 'king' : ''} ${sorting ? 'sorting' : ''}">${repeat(keys, k => k, k =>
       king ? this.#block(k, ctx, sorting ? order.indexOf(k) : null) : this.#plainBlock(k, ctx))}</div>
       ${king && !sorting ? this.#newNote() : nothing}`;
   }
@@ -1164,8 +1292,9 @@ export class GfPlantDetail extends LitElement {
    */
   #dock(ctx, keys) {
     const king = this.#store.state.kingMode;
-    const { size, folded } = dockState(this.view);
+    const { size, folded, side } = dockState(this.view);
     const names = { s: 'Petit', m: 'Moyen', l: 'Grand' };
+    const sides = { auto: ['Automatique (à droite, en haut si étroit)', 'layers'], left: ['À gauche', 'chevron-bar-left'], right: ['À droite', 'chevron-bar-right'], top: ['En haut', 'chevron-up'], bottom: ['En bas', 'chevron-down'] };
     return html`<aside class="dock ${folded ? 'folded' : ''} ${king ? 'king' : ''}" data-size=${size} aria-label="Blocs épinglés">
       <div class="dock-bar">
         ${icon('pin-angle-fill')}
@@ -1173,6 +1302,9 @@ export class GfPlantDetail extends LitElement {
         <span class="dock-sizes" role="group" aria-label="Taille du volet épinglé">${DOCK_SIZES.map(z => html`<button type="button"
           aria-pressed=${z === size ? 'true' : 'false'} title=${'Volet ' + names[z].toLowerCase()} aria-label=${'Volet ' + names[z].toLowerCase()}
           @click=${() => setDockState(this.view, { size: z, folded: false })}>${z.toUpperCase()}</button>`)}</span>
+        ${king ? html`<span class="dock-sizes dock-sides" role="group" aria-label="Position du volet épinglé">${DOCK_SIDES.map(d => html`<button type="button"
+          aria-pressed=${d === side ? 'true' : 'false'} title=${'Volet épinglé : ' + sides[d][0].toLowerCase()} aria-label=${'Volet épinglé ' + sides[d][0].toLowerCase()}
+          @click=${() => setDockState(this.view, { side: d })}>${icon(/** @type {any} */ (sides[d][1]))}</button>`)}</span>` : nothing}
         <button class="dock-fold" type="button" aria-expanded=${folded ? 'false' : 'true'} aria-label=${folded ? 'Déplier le volet épinglé' : 'Replier le volet épinglé'}
           @click=${() => setDockState(this.view, { folded: !folded })}>${icon(folded ? 'chevron-down' : 'chevron-up')}</button>
       </div>
@@ -1180,11 +1312,76 @@ export class GfPlantDetail extends LitElement {
     </aside>`;
   }
 
-  /** The sheet, with the dock of pinned blocks when there are some. @param {any} ctx @param {unknown} article */
+  /** The sheet, with the side rail of categories and the dock of pinned blocks when there are some. @param {any} ctx @param {unknown} article */
   #layout(ctx, article) {
+    const rail = this.#rail(ctx);
+    const sheet = this.#docked(ctx, article);
+    return rail === nothing ? sheet : html`<div class="railed">${rail}<div class="railed-sheet">${sheet}</div></div>`;
+  }
+
+  // ── Side rail: the categories of the sheet's blocks, one icon each ─────────────────────────────────────
+
+  /** The blocks of the sheet a category leads to, in order (flow, pinned, in the pane). @param {any} ctx @param {string} cat */
+  #categoryBlocks(ctx, cat) {
+    return blockOrder(this.view).filter(k => blockCategory(k) === cat && k !== 'name' && this.#visible(k, ctx) && !isHidden(this.view, k));
+  }
+
+  /** @param {any} ctx */
+  #rail(ctx) {
+    if (this.preview || this.only) return nothing;
+    const cats = CATEGORIES.filter(c => this.#categoryBlocks(ctx, c.key).length);
+    if (cats.length < 2) return nothing;
+    return html`<nav class="rail" aria-label="Aller à une catégorie de la fiche">${cats.map(c => {
+      const keys = this.#categoryBlocks(ctx, c.key);
+      return html`<div class="rail-item">
+        <button type="button" class=${this._activeCat === c.key ? 'on' : ''} title=${c.label + ' — ' + c.question} aria-label=${c.label}
+          aria-current=${this._activeCat === c.key ? 'true' : 'false'} @click=${() => this.#goTo(keys[0])}>${icon(c.icon)}</button>
+        <div class="rail-pop" role="menu" aria-label=${c.label}><strong>${c.label}</strong>
+          ${keys.map(k => html`<button type="button" role="menuitem" @click=${() => this.#goTo(k)}>${blockTitle(k)}${isPaned(this.view, k) ? html` <small>(volet)</small>` : isPinned(this.view, k) ? html` <small>(épinglé)</small>` : nothing}</button>`)}</div>
+      </div>`;
+    })}</nav>`;
+  }
+
+  /** To a block: its place in the sheet, the dock (unfolded) or the pane. @param {string} key */
+  async #goTo(key) {
+    const king = this.#store.state.kingMode;
+    if (!king && isPaned(this.view, key)) { this.#openPane(key); return; }
+    if (isPinned(this.view, key) && dockState(this.view).folded) setDockState(this.view, { folded: false });
+    await this.updateComplete;
+    const section = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(`.block[data-key="${CSS.escape(key)}"]`));
+    if (!section) return;
+    section.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+    // An attribute, not a class: the block's class is the template's, rewritten on the next render.
+    section.removeAttribute('data-flash');
+    void section.offsetWidth;
+    section.setAttribute('data-flash', '');
+    setTimeout(() => section.removeAttribute('data-flash'), 1300);
+    this._activeCat = blockCategory(key);
+  }
+
+  /** The block at the top of the sheet: its category lights up in the rail. */
+  #onScroll = () => {
+    if (this.#scrollFrame) return;
+    this.#scrollFrame = requestAnimationFrame(() => {
+      this.#scrollFrame = 0;
+      const top = this.getBoundingClientRect().top + 72;
+      let current = null;
+      for (const el of /** @type {NodeListOf<HTMLElement>} */ (this.renderRoot.querySelectorAll('.blocks > .block'))) {
+        if (el.getBoundingClientRect().top <= top) current = el.dataset.key; else break;
+      }
+      const cat = current ? blockCategory(current) : null;
+      if (cat !== this._activeCat) this._activeCat = cat;
+    });
+  };
+  #scrollFrame = 0;
+
+  /** The sheet, with the dock of pinned blocks when there are some. @param {any} ctx @param {unknown} article */
+  #docked(ctx, article) {
     const pinned = this.#pinned(ctx);
     if (!pinned.length) return html`${article}${this.#actionBar(ctx.plant)}`;
-    return html`<div class="frame docked" data-size=${dockState(this.view).size}>
+    const { size, side } = dockState(this.view);
+    // A column (beside the sheet when it is wide enough) or a band (top / bottom).
+    return html`<div class="frame docked side-${side} ${['top', 'bottom'].includes(side) ? 'band' : 'col'}" data-size=${size}>
       <div class="main">${article}${this.#actionBar(ctx.plant)}</div>
       ${this.#dock(ctx, pinned)}
     </div>`;
@@ -1196,10 +1393,26 @@ export class GfPlantDetail extends LitElement {
   /** A block as read outside « Mode King »: its title, its content. @param {string} key @param {any} ctx */
   #plainBlock(key, ctx) {
     // A component that hides itself when it has nothing (protection, look-alikes, calendar): the block goes with it (CSS).
-    return html`<section class="block ${this.#headless(key) ? 'headless' : ''} ${hidesEmpty(this.view, key) ? 'hide-empty' : ''} ${isMap(key) ? 'map-block' : ''}" data-key=${key}>
-      ${this.#headless(key) ? nothing : html`<h2 class="block-title"><span class="name">${blockTitle(key)}</span></h2>`}
-      <div class="content">${this.#content(key, ctx)}</div>
+    const headless = this.#headless(key);
+    return html`<section class="block ${headless ? 'headless' : ''} ${hidesEmpty(this.view, key) ? 'hide-empty' : ''} ${isMap(key) ? 'map-block' : ''}" data-key=${key}>
+      ${headless ? this.#paneButton(key) : html`<h2 class="block-title"><span class="name">${blockTitle(key)}</span>${this.#paneButton(key)}</h2>`}
+      <div class="content">${this.inPane === key ? this.#shownInPane(key) : this.#content(key, ctx)}</div>
     </section>`;
+  }
+
+  /** A block open in the pane beside: a line saying so (and bringing it back). @param {string} key */
+  #shownInPane(key) {
+    return html`<p class="muted in-pane">${icon('arrows-angle-expand')} « ${blockTitle(key)} » affiché dans le volet, à côté.</p>`;
+  }
+
+  /** Blocks that make no sense alone in a pane. */
+  static NO_PANE = ['name', 'actions', 'media'];
+
+  /** ⤢ on a block: open it in the pane beside the sheet. @param {string} key */
+  #paneButton(key) {
+    if (this.preview || GfPlantDetail.NO_PANE.includes(key) || isNote(key)) return nothing;
+    return html`<button class="icon-btn to-pane" type="button" title="Ouvrir en volet, à côté de la fiche" aria-label=${`Ouvrir « ${blockTitle(key)} » en volet`}
+      @click=${() => this.#openPane(key)}>${icon('arrows-angle-expand')}</button>`;
   }
 
   /** @param {string} key @param {any} ctx @param {number | null} slot  place shown while dragging (CSS order: the nodes do not move) */
@@ -1234,6 +1447,10 @@ export class GfPlantDetail extends LitElement {
           aria-label=${pinned ? `Détacher le bloc « ${title} » du volet épinglé` : `Épingler le bloc « ${title} » (volet fixe)`}
           title=${pinned ? 'Épinglé : reste visible pendant le défilement (toucher pour le remettre dans la fiche)' : 'Épingler : un volet fixe à côté de la fiche (en haut sur téléphone)'}
           @click=${() => setPinned(this.view, key, !pinned)}>${icon(pinned ? 'pin-angle-fill' : 'pin-angle')}</button>
+        ${GfPlantDetail.NO_PANE.includes(key) && key !== 'media' ? nothing : html`<button class="tool" type="button" aria-pressed=${isPaned(this.view, key) ? 'true' : 'false'}
+          aria-label=${isPaned(this.view, key) ? `Remettre « ${title} » dans la fiche` : `Placer « ${title} » en volet`}
+          title=${isPaned(this.view, key) ? 'En volet : quitte la fiche pour un volet à côté, ouvert avec la plante sur grand écran (toucher pour le remettre dans la fiche)' : 'Placer en volet : à côté de la fiche, en grand (ouvert avec la plante sur grand écran)'}
+          @click=${() => setPaned(this.view, key, !isPaned(this.view, key))}>${icon('arrows-angle-expand')}</button>`}
         ${this._renaming === key ? nothing : html`<button class="tool" type="button" aria-label="Renommer le bloc « ${title} »" title=${isNote(key) ? 'Renommer' : 'Renommer (vide : nom d’origine)'}
           @click=${() => this.#startRename(key)}>${icon('pencil')}</button>`}
         ${STYLES[key] && !off ? html`<span class="styles" role="group" aria-label="Style du bloc « ${title} »">${STYLES[key].styles.map(st => html`
@@ -1314,7 +1531,8 @@ export class GfPlantDetail extends LitElement {
    */
   #map(key, { plant, details, inat }) {
     const config = mapConfig(key);
-    const fill = isPinned(this.view, key);
+    // Pinned, or alone in a pane: the map fills the room.
+    const fill = isPinned(this.view, key) || this.only === key;
     if (this.preview) return html`<div class="map-placeholder ${fill ? 'fill' : ''}" style=${`height:${{ s: 180, m: 260, l: 380 }[config.height]}px`}></div>`;
     return html`<gf-sheet-map .plant=${plant} .gbifKey=${details?.identifiers?.gbif?.id ?? null} .inatId=${inat?.id ?? null}
       .config=${config} mode=${this.view} ?fill=${fill} .focus=${this._focus}
@@ -1406,10 +1624,11 @@ export class GfPlantDetail extends LitElement {
       // Wikipédia: shown when the summary arrives.
       case 'wikipedia': return !this._wiki;
       case 'photos': return ctx.photosOff || (!ctx.loading && !ctx.images.length);
+      case 'media': return ctx.photosOff || (!ctx.loading && !ctx.images.length && loaded(this._gbif.photos) && !this._gbif.photos?.length);
       // Épuré and Standard: the component hides itself when empty (CSS, see .hide-empty).
-      case 'status': return v === 'scientific' && !ctx.plant.statuses?.length && loaded(this._science) && !this._science?.iucn && loaded(g.iucn) && !g.iucn?.code;
+      case 'status': return baseOf(v) === 'scientific' && !ctx.plant.statuses?.length && loaded(this._science) && !this._science?.iucn && loaded(g.iucn) && !g.iucn?.code;
       case 'mine': return !(getMembership().byPlant.get(ctx.plant.id) || []).length;
-      case 'descriptions': return loaded(g.descriptions) && !descriptions(g).filter(row => v === 'scientific' || /^(fra|fre|fr)$/.test(row.language || '')).length;
+      case 'descriptions': return loaded(g.descriptions) && !descriptions(g).filter(row => baseOf(v) === 'scientific' || /^(fra|fre|fr)$/.test(row.language || '')).length;
       case 'occurrences': return !ctx.loading && !ctx.details?.identifiers?.gbif?.id && !ctx.inat?.observationsCount;
       case 'gbifMedia': return ctx.photosOff || shownSubs(v, 'gbifMedia').every(k => loaded(g[k]) && !g[k]?.length);
       case 'gbifProfile': { const p = profile(g); return !p.habitats.length && !p.forms.length && !p.invasive.length; }
@@ -1426,7 +1645,7 @@ export class GfPlantDetail extends LitElement {
   /** The Noms block has nothing to show here. @param {any} ctx */
   #namesEmpty(ctx) {
     if (this.#otherFrench(ctx).length) return false;
-    return blockStyle(this.view, 'names') === 'list' || this.view !== 'scientific' || !otherNames(this._gbif).length;
+    return blockStyle(this.view, 'names') === 'list' || baseOf(this.view) !== 'scientific' || !otherNames(this._gbif).length;
   }
 
   /** A block's content, as this view shows it. @param {string} key @param {any} ctx */
@@ -1441,24 +1660,28 @@ export class GfPlantDetail extends LitElement {
     if (isMap(key)) return this.#map(key, ctx);
     switch (key) {
       case 'name': return this.#name(ctx);
+      case 'media':
+        return ctx.photosOff ? html`<p class="muted">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`
+          : html`<gf-media-viewer compact plant-id=${plant.id} .view=${this.view} .label=${isTitleShown(this.view, 'media') ? null : blockTitle('media')}
+            @open-pane=${(/** @type {CustomEvent} */ e) => { e.stopPropagation(); this.#openPane('media', e.detail.url); }}></gf-media-viewer>`;
       case 'photos': {
-        if (v !== 'epure') return this.#gallery(ctx, v === 'standard' ? 6 : Infinity);
+        if (baseOf(v) !== 'epure') return this.#gallery(ctx, baseOf(v) === 'standard' ? 6 : Infinity);
         const hero = ctx.images[0];
         return html`<figure class="hero">
-          ${hero ? html`<img src=${hero.url} alt=${plant.scientificName} decoding="async" referrerpolicy="no-referrer" />
+          ${hero ? html`<a href=${hero.sourceUrl || hero.url} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, hero.url)}><img src=${hero.url} alt=${plant.scientificName} decoding="async" referrerpolicy="no-referrer" /></a>
             <figcaption><gf-attribution .media=${hero}></gf-attribution></figcaption>`
             : html`<div class=${loading ? 'skeleton' : 'no-photo'} aria-hidden="true">${loading ? '' : icon('flower1')}</div>`}
         </figure>`;
       }
       case 'status':
-        return v === 'scientific' ? this.#statuses(ctx)
+        return baseOf(v) === 'scientific' ? this.#statuses(ctx)
           : html`<gf-status .plant=${plant}></gf-status>${ifEmpty('Aucune protection, réglementation ni liste rouge connue (INPN).')}`;
       case 'lookalikes':
-        return html`<gf-lookalikes .plant=${plant} ?compact=${v === 'epure'} ?detailed=${v === 'scientific'} ?map-linked=${this.#hasMap} .focus=${this._focus}></gf-lookalikes>
+        return html`<gf-lookalikes .plant=${plant} ?compact=${baseOf(v) === 'epure'} ?detailed=${baseOf(v) === 'scientific'} ?map-linked=${this.#hasMap} .focus=${this._focus}></gf-lookalikes>
           ${ifEmpty('Aucune confusion signalée par l’Anses et les Centres antipoison.')}`;
-      case 'taxonomy': return v === 'scientific' ? this.#taxonomy(ctx) : this.#tags(ctx);
+      case 'taxonomy': return baseOf(v) === 'scientific' ? this.#taxonomy(ctx) : this.#tags(ctx);
       case 'mine': {
-        if (v === 'scientific') return html`<gf-plant-spots plant-id=${plant.id} notitle ?map-linked=${this.#hasMap} .focus=${this._focus}></gf-plant-spots>`;
+        if (baseOf(v) === 'scientific') return html`<gf-plant-spots plant-id=${plant.id} notitle ?map-linked=${this.#hasMap} .focus=${this._focus}></gf-plant-spots>`;
         const count = (getMembership().byPlant.get(plant.id) || []).length;
         return html`
           <div class="mine">
@@ -1473,14 +1696,14 @@ export class GfPlantDetail extends LitElement {
       case 'wikipedia':
         return this._wiki ? this.#wikipedia() : this._wiki === undefined ? pending : empty('Pas d’article Wikipédia en français trouvé.');
       case 'descriptions': {
-        const texts = descriptions(this._gbif).filter(row => v === 'scientific' || /^(fra|fre|fr)$/.test(row.language || ''));
+        const texts = descriptions(this._gbif).filter(row => baseOf(v) === 'scientific' || /^(fra|fre|fr)$/.test(row.language || ''));
         return texts.length
           ? texts.map(row => html`<div class="description"><small>${row.type || 'Description'}${row.source ? ' — ' + row.source : ''} · ${row.language} · GBIF</small>${row.text}</div>`)
-          : this._gbif.descriptions === undefined ? pending : empty(v === 'scientific' ? 'Aucune description sur GBIF.' : 'Aucune description en français sur GBIF.');
+          : this._gbif.descriptions === undefined ? pending : empty(baseOf(v) === 'scientific' ? 'Aucune description sur GBIF.' : 'Aucune description en français sur GBIF.');
       }
       case 'names': {
         const names = this.#otherFrench(ctx);
-        const foreign = v === 'scientific' ? otherNames(this._gbif) : [];
+        const foreign = baseOf(v) === 'scientific' ? otherNames(this._gbif) : [];
         if (!names.length && !foreign.length) return this._gbif.vernacularNames === undefined ? pending : empty('Aucun autre nom français connu.');
         // « Liste » (Épuré's default): just the French names.
         if (blockStyle(v, 'names') === 'list') return shownSubs(v, 'names').includes('french') && names.length ? html`<p class="names-list">${names.join(' · ')}</p>` : nothing;
@@ -1746,7 +1969,7 @@ export class GfPlantDetail extends LitElement {
     return html`${this.#subs('gbifMedia', {
       photos: () => this.#mediaGallery(plant, 'Photos d’observation (France)', g.photos, 'Aucune photo d’observation sous licence libre sur GBIF.', false),
       herbarium: () => this.#mediaGallery(plant, 'Planches d’herbier', g.herbarium, 'Aucune planche d’herbier sous licence libre sur GBIF.', true)
-    })}`;
+    })}${g.photos?.length || g.herbarium?.length ? this.#allMedia() : nothing}`;
   }
 
   /** @param {any} plant @param {string} title @param {any[] | null | undefined} list @param {string} none @param {boolean} herbarium */
@@ -1755,7 +1978,7 @@ export class GfPlantDetail extends LitElement {
     if (list === undefined) return html`${head}<p class="muted">chargement…</p>`;
     if (!list?.length) return html`${head}<p class="muted">${none}</p>`;
     return html`${head}<div class="gallery ${herbarium ? 'herbarium' : ''}">${list.map(image => html`<figure>
-      <a href=${image.sourceUrl || image.url} target="_blank" rel="noopener"><img src=${image.url} alt=${(herbarium ? 'Planche d’herbier de ' : '') + plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" /></a>
+      <a href=${image.sourceUrl || image.url} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, image.url)}><img src=${image.url} alt=${(herbarium ? 'Planche d’herbier de ' : '') + plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" /></a>
       <figcaption>
         ${herbarium ? html`<span class="specimen">${[image.institution, image.catalogNumber && 'n° ' + image.catalogNumber, image.year, image.country].filter(Boolean).join(' · ')}</span>` : nothing}
         ${image.coordinates && this.#hasMap ? this.#focusable({ kind: 'point', label: (herbarium ? 'Planche ' : 'Photo ') + ([image.institution, image.year].filter(Boolean).join(' ') || 'GBIF'), coordinates: image.coordinates, url: image.sourceUrl },
@@ -1944,7 +2167,7 @@ export class GfPlantDetail extends LitElement {
             <strong>${rains[0].toLocaleString('fr-FR')} à ${rains[rains.length - 1].toLocaleString('fr-FR')} mm</strong> de pluie par an (${niche.points.length} lieux, cadre : 80 % d’entre eux).
             ${mine ? html`Chez vous : ${mine.temp} °C, ${mine.precip.toLocaleString('fr-FR')} mm — ${inside ? 'dans sa niche' : 'en dehors du cœur de sa niche'}.` : nothing}</p>
           ${!mine && !here ? ask('Me situer sur ce graphique') : hereState || nothing}
-          ${mine && v !== 'epure' ? html`<details class="here-climate"><summary>Climat chez vous (${here.climate.years})</summary>${climateChart(here.climate.temp, here.climate.precip)}</details>` : nothing}
+          ${mine && baseOf(v) !== 'epure' ? html`<details class="here-climate"><summary>Climat chez vous (${here.climate.years})</summary>${climateChart(here.climate.temp, here.climate.precip)}</details>` : nothing}
           <p class="credit">Climat : ERA5 via <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (moyennes ${niche.years}, CC BY 4.0) aux occurrences de <a href=${'https://www.gbif.org/species/' + (this._details?.identifiers?.gbif?.id ?? '')} target="_blank" rel="noopener">GBIF.org</a>.</p>`;
       }
     })}`;
@@ -2107,7 +2330,7 @@ export class GfPlantDetail extends LitElement {
   /** Standard (for everyone) and Scientifique (everything the app holds or can fetch, each with its source). @param {any} ctx */
   #full(ctx) {
     return this.#layout(ctx, html`
-      <article class=${this.view === 'scientific' ? 'science' : ''}>
+      <article class=${baseOf(this.view) === 'scientific' ? 'science' : ''}>
         <a class="back link" href=${lastSearchHash()}>${icon('arrow-left')} Recherche</a>
         <gf-add-to .plant=${ctx.plant}></gf-add-to>
         ${this._error ? html`<p class="muted">${this._error}</p>` : nothing}

@@ -3,6 +3,7 @@
 
 import { config } from '../config.js';
 import { moduleEvents, modulesState, useModeSource } from './modules.js';
+import { baseOf, isMode, modeEvents, modeList } from './modes.js';
 
 /**
  * @typedef {Record<'status' | 'legal' | 'family' | 'genus' | 'photo' | 'french' | 'mine', string[]>} Filters
@@ -35,6 +36,7 @@ import { moduleEvents, modulesState, useModeSource } from './modules.js';
  * @property {import('./context.js').Context} [context]  where the user is in each part (see context.js)
  * @property {boolean} [contextBar]  the context bar under the header is shown
  * @property {Record<import('./modules.js').ModuleKey, Record<Mode, boolean>>} modules  online services used in each mode (Réglages › Modules)
+ * @property {import('./modes.js').ModeInfo[]} modes  the display modes: the app's three and the ones made from them
  * @property {boolean} kingMode         « Mode King »: the plant sheet blocks can be moved, folded and revived (left with the crown)
  * @property {boolean} harvestMode      "Mode cueillette": harvest log, seasons, look-alike warnings
  * @property {{ id: string, name: string, kind: string, count: number }[]} collections
@@ -54,12 +56,10 @@ export class Store extends EventTarget {
   }
 }
 
-/** @typedef {'epure' | 'standard' | 'scientific'} Mode */
-export const MODES = /** @type {const} */ (['epure', 'standard', 'scientific']);
-export const MODE_LABELS = { epure: 'Épuré', standard: 'Standard', scientific: 'Scientifique' };
+/** @typedef {import('./modes.js').Mode} Mode */
 
 /** @param {any} v @returns {Mode | null} */
-const asMode = v => MODES.includes(v) ? v : v === 'illustrated' ? 'epure' : null;
+const asMode = v => isMode(v) ? v : v === 'illustrated' ? 'epure' : null;
 
 /** @param {string} key */
 const readMode = key => {
@@ -81,13 +81,13 @@ const readCompact = () => {
  * @typedef {{ order: Partial<Record<Mode, string[]>>, hidden: Partial<Record<Mode, string[]>>,
  *   subOrder: Partial<Record<Mode, Record<string, string[]>>>, subHidden: Partial<Record<Mode, Record<string, string[]>>>,
  *   styles: Partial<Record<Mode, Record<string, string>>>, titleShown: Partial<Record<Mode, Record<string, boolean>>>,
- *   hideEmpty: Partial<Record<Mode, Record<string, boolean>>>, pinned?: Partial<Record<Mode, string[]>>,
- *   dock?: Partial<Record<Mode, { size: 's' | 'm' | 'l', folded: boolean }>>, mapBlocks: { id: string, title: string }[], maps: Record<string, any>,
+ *   hideEmpty: Partial<Record<Mode, Record<string, boolean>>>, pinned?: Partial<Record<Mode, string[]>>, paned?: Partial<Record<Mode, string[]>>,
+ *   dock?: Partial<Record<Mode, { size: 's' | 'm' | 'l', folded: boolean, side?: string }>>, mapBlocks: { id: string, title: string }[], maps: Record<string, any>,
  *   titles: Record<string, string>, notes: { id: string, title: string }[] }} SheetLayout
  */
 
 /** @returns {SheetLayout} */
-export const emptyLayout = () => ({ order: {}, hidden: {}, subOrder: {}, subHidden: {}, styles: {}, titleShown: {}, hideEmpty: {}, pinned: {}, dock: {}, titles: {}, notes: [], mapBlocks: [], maps: {} });
+export const emptyLayout = () => ({ order: {}, hidden: {}, subOrder: {}, subHidden: {}, styles: {}, titleShown: {}, hideEmpty: {}, pinned: {}, paned: {}, dock: {}, titles: {}, notes: [], mapBlocks: [], maps: {} });
 
 /** @param {string} key */
 const readJSON = key => {
@@ -124,12 +124,22 @@ export const store = new Store({
   sheetLayout: readLayout(),
   target: readTarget(),
   modules: modulesState(),
+  modes: modeList(),
   collections: [],
   kingMode: (() => { try { return localStorage.getItem(config.storageKeys.kingMode) === '1'; } catch { return false; } })(),
   harvestMode: readHarvestMode() ?? false
 });
 
 moduleEvents.addEventListener('change', () => store.set({ modules: modulesState() }));
+// A mode made or deleted: the switches list it; a deleted one in use gives way to its model.
+modeEvents.addEventListener('change', () => {
+  const { mode, gridView, plantView } = store.state;
+  const fallback = (/** @type {Mode} */ m) => isMode(m) ? m : 'standard';
+  if (!isMode(mode)) setMode(fallback(baseOf(mode)));
+  if (gridView && !isMode(gridView)) setGridView(null);
+  if (plantView && !isMode(plantView)) setPlantView(null);
+  store.set({ modes: modeList(), modules: modulesState() });
+});
 // Modules asked without a mode follow the app mode (maps, Autour, lists).
 useModeSource(() => store.state.mode);
 

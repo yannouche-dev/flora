@@ -2,6 +2,7 @@
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { setQuery } from '../core/query.js';
 import { StoreController, gridViewOf } from '../core/store.js';
+import { baseOf } from '../core/modes.js';
 import './gf-plant-card.js';
 import { icon } from '../core/icons.js';
 
@@ -41,14 +42,14 @@ const NARROW = 760;
 
 /** Visible column keys for a view and a pane width. @param {string} view @param {number} width @returns {string[]} */
 export function gridColumns(view, width) {
-  const keys = VIEW_COLUMNS[view] || VIEW_COLUMNS.standard;
-  const drop = width < NARROW ? (view === 'scientific' ? ['genus', 'status'] : ['genus']) : [];
+  const keys = VIEW_COLUMNS[baseOf(view)] || VIEW_COLUMNS.standard;
+  const drop = width < NARROW ? (baseOf(view) === 'scientific' ? ['genus', 'status'] : ['genus']) : [];
   return keys.filter(k => !drop.includes(k));
 }
 
 /** @param {string} key @param {string} view */
-const columnWidth = (key, view) => key === 'photo' && view === 'epure' ? '96px'
-  : key === 'fr' && view === 'epure' ? 'minmax(160px, 2fr)'
+const columnWidth = (key, view) => key === 'photo' && baseOf(view) === 'epure' ? '96px'
+  : key === 'fr' && baseOf(view) === 'epure' ? 'minmax(160px, 2fr)'
   : /** @type {any} */ (COLUMNS.find(c => c.key === key)).width;
 
 /** The search itself (text, filters, sort): results refreshed for the same search keep their scroll. @param {any} query */
@@ -196,7 +197,7 @@ export class GfPlantList extends LitElement {
   /** Height of a row in the current display. */
   get #rowHeight() {
     const gridView = gridViewOf(this.#store.state);
-    return this.grid ? (gridView === 'epure' ? ILLUSTRATED_ROW_HEIGHT : GRID_ROW_HEIGHT) : this.#store.state.compact ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
+    return this.grid ? (baseOf(gridView) === 'epure' ? ILLUSTRATED_ROW_HEIGHT : GRID_ROW_HEIGHT) : this.#store.state.compact ? COMPACT_ROW_HEIGHT : ROW_HEIGHT;
   }
 
   /** The open plant's row stays in view as the plant sheet moves to the previous / next one. */
@@ -266,7 +267,7 @@ export class GfPlantList extends LitElement {
             .plant=${plant}
             .query=${q}
             .columns=${columns}
-            view=${this.grid ? gridView : ''}
+            view=${this.grid ? baseOf(gridView) : ''}
             ?compact=${compact && !this.grid}
             ?grid=${this.grid}
             ?current=${plant.id === this.current}

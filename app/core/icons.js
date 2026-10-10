@@ -4,6 +4,7 @@
 // so they take the size and colour of the text around them. Decorative: the control carries the label.
 
 import { html } from 'lit';
+import { modeInfo } from './modes.js';
 
 const SPRITE = new URL('../../assets/icons/bi.svg', import.meta.url).href;
 
@@ -12,7 +13,8 @@ const SPRITE = new URL('../../assets/icons/bi.svg', import.meta.url).href;
  *   | 'check-lg' | 'chevron-bar-left' | 'chevron-bar-right' | 'chevron-down' | 'chevron-up' | 'chevron-left' | 'chevron-right' | 'collection' | 'collection-fill' | 'crosshair' | 'crown' | 'diagram-3' | 'download' | 'exclamation-octagon-fill' | 'exclamation-triangle-fill' | 'flower1'
  *   | 'eye-slash' | 'funnel' | 'funnel-fill' | 'gear' | 'gear-fill' | 'geo-alt-fill' | 'globe-europe-africa' | 'grip-vertical' | 'heart' | 'heart-fill' | 'image' | 'layers'
  *   | 'leaf' | 'leaf-fill' | 'list-nested' | 'list-ul' | 'map' | 'map-fill' | 'mic' | 'mic-fill' | 'pencil' | 'pin-angle' | 'pin-angle-fill' | 'plus-lg' | 'search' | 'share' | 'shield-check' | 'star' | 'star-fill' | 'table'
- *   | 'three-dots' | 'trash3' | 'triangle' | 'type-h2' | 'upload' | 'x' | 'x-lg'} IconName
+ *   | 'three-dots' | 'trash3' | 'triangle' | 'type-h2' | 'upload' | 'x' | 'x-lg'
+ *   | 'arrows-fullscreen' | 'box-arrow-up-right' | 'fullscreen-exit' | 'images' | 'zoom-in'} IconName
  */
 
 /** An icon in a Lit template. @param {IconName} name */
@@ -28,4 +30,5 @@ export const iconHref = name => `${SPRITE}#${name}`;
 export const kindIcon = kind => icon(kind === 'favorites' ? 'heart-fill' : kind === 'place' ? 'geo-alt-fill' : 'list-ul');
 
 /** Display modes: Épuré (photo), Standard (list), Scientifique (table). */
-export const MODE_ICONS = { epure: icon('image'), standard: icon('list-ul'), scientific: icon('table') };
+/** A display mode's icon (the app's three, and the ones made from them). @param {import('./modes.js').Mode} mode */
+export const modeIcon = mode => icon(/** @type {IconName} */ (modeInfo(mode).icon));
