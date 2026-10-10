@@ -5,12 +5,13 @@ import { MODE_LABELS, setHarvestMode, setKingMode, setMode, StoreController } fr
 import './gf-mode-switch.js';
 import { getTrefleToken, setTrefleToken } from '../core/sources.js';
 import { MODE_KEYS, MODULES, setModule } from '../core/modules.js';
+import { CATEGORIES, blockCategory, categoryOf } from '../core/categories.js';
 import { icon, MODE_ICONS } from '../core/icons.js';
 import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
 import {
-  STYLES, SUBS, canBeEmpty, hidesEmpty, setHidesEmpty, isPinned, setPinned, blockModuleName, blockStyle, isTitleShown, setBlockStyle, setTitleShown, blockOrder, blockTitle, createNote, deleteNote, createMap, deleteMap, isAddedMap, exportLayout, importLayout, isCustom, isHidden, isNote,
+  STYLES, SUBS, orderByCategory, canBeEmpty, hidesEmpty, setHidesEmpty, isPinned, setPinned, blockModuleName, blockStyle, isTitleShown, setBlockStyle, setTitleShown, blockOrder, blockTitle, createNote, deleteNote, createMap, deleteMap, isAddedMap, exportLayout, importLayout, isCustom, isHidden, isNote,
   isSubHidden, renameBlock, resetAll, resetBlocks, setBlockOrder, setHidden, setSubHidden, setSubOrder, subOrder, subTitle
 } from '../core/sheet-blocks.js';
 import './gf-sortable-list.js';
@@ -57,6 +58,11 @@ export class GfSettings extends LitElement {
     label.file:focus-within { box-shadow: var(--gf-focus); }
     .mode-line { display: flex; align-items: center; gap: 10px; }
     .modules { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+    h3.category { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin: 18px 0 8px; font-size: 0.95rem; }
+    h3.category svg { color: var(--gf-accent); align-self: center; }
+    h3.category small { font-weight: 400; color: var(--gf-text-muted); font-size: 0.82rem; }
+    .also { margin: 4px 0 0; font-size: 0.78rem; color: var(--gf-text-muted); display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+    .cat-chip { display: inline-block; padding: 0 8px; border-radius: var(--gf-radius-pill); background: var(--gf-surface-2); color: var(--gf-text-muted); font-size: 0.72rem; font-weight: 600; }
     .module { border: 1px solid var(--gf-border); border-radius: var(--gf-radius); padding: 10px 12px; background: var(--gf-surface); }
     .module.on { border-color: color-mix(in srgb, var(--gf-accent) 45%, var(--gf-border)); }
     .module .muted { margin: 4px 0 0; font-size: 0.85rem; }
@@ -223,14 +229,17 @@ export class GfSettings extends LitElement {
       <p class="muted">Tout fonctionne hors ligne avec la flore locale ; chaque module ajoute des données d’un service en ligne.
         Cochez les modes où il sert : la fiche plante suit son affichage, la grille des résultats le sien, la carte et le reste le mode
         de l’application. Décoché, le service n’est pas appelé dans ce mode et ses données ne s’y affichent pas.</p>
+      ${CATEGORIES.filter(c => MODULES.some(m => m.category === c.key)).map(c => html`
+      <h3 class="category">${icon(c.icon)} ${c.label} <small>${c.question}</small></h3>
       <ul class="modules">
-        ${MODULES.map(m => {
+        ${MODULES.filter(m => m.category === c.key).map(m => {
           const blocked = Boolean(m.needsToken && !token);
           const any = !blocked && MODE_KEYS.some(mode => on[m.key][mode]);
           return html`<li class="module ${any ? 'on' : ''}">
             <div class="title"><strong>${m.name}</strong> <small class="host">${m.hosts}</small>
               ${blocked ? html`<small class="state">jeton requis</small>` : nothing}</div>
             <p class="muted">${m.provides}</p>
+            ${m.also.length ? html`<p class="also">Sert aussi : ${m.also.map(k => html`<span class="cat-chip">${categoryOf(k).label}</span>`)}</p>` : nothing}
             <div class="modes" role="group" aria-label=${'Modes où ' + m.name + ' est utilisé'}>
               ${MODE_KEYS.map(mode => html`<label class="mode">
                 <input type="checkbox" .checked=${on[m.key][mode] && !blocked} ?disabled=${blocked}
@@ -249,7 +258,7 @@ export class GfSettings extends LitElement {
               ${this._saved ? html`<p class="muted" role="status">Enregistré.</p>` : nothing}` : nothing}
           </li>`;
         })}
-      </ul>`;
+      </ul>`)}`;
   }
 
   /** « Mode King »: editing the plant sheet blocks, left with the crown at the bottom of the screen. */
@@ -302,6 +311,8 @@ export class GfSettings extends LitElement {
             <div class="head">${MODE_ICONS[mode]}<strong>${MODE_LABELS[mode]}</strong>
               <button type="button" class="small" ?disabled=${!isCustom(mode) && !blockOrder(mode).some(k => isHidden(mode, k))}
                 @click=${() => resetBlocks(mode)}>Par défaut</button>
+              <button type="button" class="small" title="Les blocs d’une même catégorie ensemble (Noms, Images, Savoirs…), chacun gardant sa place parmi les siens"
+                @click=${() => orderByCategory(mode, k => CATEGORIES.findIndex(c => c.key === blockCategory(k)))}>Ranger par catégorie</button>
             </div>
             <gf-sortable-list label=${'Blocs de la fiche, ' + MODE_LABELS[mode]}
               .items=${blockOrder(mode).map(k => ({
@@ -309,6 +320,7 @@ export class GfSettings extends LitElement {
                 titled: isTitleShown(mode, k),
                 emptyHidden: canBeEmpty(k) ? hidesEmpty(mode, k) : undefined,
                 pinned: isPinned(mode, k),
+                tag: categoryOf(blockCategory(k)).label,
                 choices: STYLES[k]?.styles.map(st => ({ key: st.key, label: st.title })), choice: blockStyle(mode, k) ?? undefined,
                 note: blockModuleName(k) ? `(module ${blockModuleName(k)})` : isNote(k) ? '(note)' : isAddedMap(k) || k === 'map' ? '(carte, réglée sur la fiche)' : ''
               }))}

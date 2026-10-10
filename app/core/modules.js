@@ -7,38 +7,38 @@ import { config } from '../config.js';
 
 /**
  * @typedef {'ignMaps' | 'ignGeo' | 'ignProtected' | 'ignNature' | 'voice' | 'globi' | 'openmeteo' | 'inaturalist' | 'gbif' | 'wikidata' | 'wikipedia' | 'commons' | 'trefle' | 'photos'} ModuleKey
- * @typedef {{ key: ModuleKey, name: string, provides: string, hosts: string, needsToken?: boolean }} ModuleInfo
+ * @typedef {{ key: ModuleKey, category: import('./categories.js').CategoryKey, also: import('./categories.js').CategoryKey[], name: string, provides: string, hosts: string, needsToken?: boolean }} ModuleInfo
  */
 
 /** @type {ModuleInfo[]} */
 export const MODULES = [
-  { key: 'ignMaps', name: 'IGN – fonds de carte', hosts: 'data.geopf.fr (WMTS)',
+  { key: 'ignMaps', category: 'territory', also: [], name: 'IGN – fonds de carte', hosts: 'data.geopf.fr (WMTS)',
     provides: 'Photos aériennes, plan IGN, cadastre, courbes de niveau, forêts publiques, espaces protégés. Désactivé : seules les zones déjà vues restent affichées.' },
-  { key: 'ignGeo', name: 'IGN – adresses et altitudes', hosts: 'data.geopf.fr (géocodage, altimétrie)',
+  { key: 'ignGeo', category: 'territory', also: [], name: 'IGN – adresses et altitudes', hosts: 'data.geopf.fr (géocodage, altimétrie)',
     provides: 'Recherche d’adresse sur la carte, adresse et altitude d’un point ou d’un lieu.' },
-  { key: 'ignProtected', name: 'IGN – espaces protégés', hosts: 'data.geopf.fr (WFS, couches INPN / PatriNat)',
+  { key: 'ignProtected', category: 'territory', also: ['safety'], name: 'IGN – espaces protégés', hosts: 'data.geopf.fr (WFS, couches INPN / PatriNat)',
     provides: 'Bandeau sur les cartes quand la vue touche un parc national, une réserve naturelle ou un arrêté de biotope (dès le zoom 11).' },
-  { key: 'ignNature', name: 'IGN – zones naturelles au point', hosts: 'apicarto.ign.fr (API Carto, module nature)',
+  { key: 'ignNature', category: 'territory', also: ['ecology'], name: 'IGN – zones naturelles au point', hosts: 'apicarto.ign.fr (API Carto, module nature)',
     provides: 'Pour un lieu ou un point de la carte : les ZNIEFF, sites Natura 2000, parcs et réserves qui le contiennent, avec leur fiche INPN. Envoie les coordonnées du point.' },
-  { key: 'inaturalist', name: 'iNaturalist', hosts: 'api.inaturalist.org',
+  { key: 'inaturalist', category: 'distribution', also: ['seasons', 'images'], name: 'iNaturalist', hosts: 'api.inaturalist.org',
     provides: 'Autour (plantes observées dans un cercle), courbes de floraison et fructification, nombre d’observations, photos de repli.' },
-  { key: 'gbif', name: 'GBIF', hosts: 'api.gbif.org',
+  { key: 'gbif', category: 'distribution', also: ['names', 'images', 'knowledge', 'ecology', 'safety'], name: 'GBIF', hosts: 'api.gbif.org',
     provides: 'Descriptions, noms dans d’autres langues, occurrences en France (carte de répartition, mois, années, départements, sources), photos d’observation et planches d’herbier, habitat, synonymes, statut UICN, publications. « Près d’ici » envoie votre position à GBIF, seulement quand vous le demandez.' },
-  { key: 'globi', name: 'GloBI (interactions)', hosts: 'api.globalbioticinteractions.org',
+  { key: 'globi', category: 'ecology', also: [], name: 'GloBI (interactions)', hosts: 'api.globalbioticinteractions.org',
     provides: 'Pollinisateurs, visiteurs, insectes hôtes, parasites et autres interactions de la plante (Global Biotic Interactions), avec leurs sources.' },
-  { key: 'openmeteo', name: 'Open-Meteo (climat, pollens)', hosts: 'archive-api.open-meteo.com, air-quality-api.open-meteo.com',
+  { key: 'openmeteo', category: 'ecology', also: ['seasons'], name: 'Open-Meteo (climat, pollens)', hosts: 'archive-api.open-meteo.com, air-quality-api.open-meteo.com',
     provides: 'Pollens du jour (CAMS, Europe), climat d’un lieu (températures et pluies par mois, ERA5) et niche climatique d’une espèce (climat de ses occurrences GBIF). Envoie les coordonnées des points.' },
-  { key: 'wikidata', name: 'Wikidata', hosts: 'www.wikidata.org',
+  { key: 'wikidata', category: 'names', also: ['knowledge', 'safety'], name: 'Wikidata', hosts: 'www.wikidata.org',
     provides: 'Classification, statut UICN, identifiants (Tela Botanica, IPNI, POWO) ; donne aussi l’article Wikipédia.' },
-  { key: 'wikipedia', name: 'Wikipédia', hosts: 'fr.wikipedia.org',
+  { key: 'wikipedia', category: 'knowledge', also: [], name: 'Wikipédia', hosts: 'fr.wikipedia.org',
     provides: 'Résumé de l’article en français (nécessite Wikidata).' },
-  { key: 'commons', name: 'Wikimedia Commons', hosts: 'commons.wikimedia.org',
+  { key: 'commons', category: 'images', also: [], name: 'Wikimedia Commons', hosts: 'commons.wikimedia.org',
     provides: 'Galerie de photos sous licence libre, vignettes de repli.' },
-  { key: 'trefle', name: 'Trefle', hosts: 'trefle.io', needsToken: true,
+  { key: 'trefle', category: 'knowledge', also: [], name: 'Trefle', hosts: 'trefle.io', needsToken: true,
     provides: 'Données de culture et descriptions (en anglais), avec votre jeton personnel.' },
-  { key: 'photos', name: 'Photos en ligne', hosts: 'thumb.wikimedia.org, inaturalist-open-data, herbiers…',
+  { key: 'photos', category: 'images', also: [], name: 'Photos en ligne', hosts: 'thumb.wikimedia.org, inaturalist-open-data, herbiers…',
     provides: 'Vignettes et photos des plantes (liste, carte, fiche). Désactivé : une fleur à la place des photos.' },
-  { key: 'voice', name: 'Dictée vocale (navigateur)', hosts: 'reconnaissance vocale du navigateur',
+  { key: 'voice', category: 'tools', also: [], name: 'Dictée vocale (navigateur)', hosts: 'reconnaissance vocale du navigateur',
     provides: 'Bouton micro pour chercher une plante à la voix (Flore, Noter ici). Sur Chrome, l’audio est traité par les serveurs de Google ; sur Safari, par Apple ou sur l’appareil.' }
 ];
 

@@ -4,7 +4,7 @@ import { icon } from '../core/icons.js';
 
 /**
  * @typedef {{ key: string, label: string, note?: string, checked: boolean, renamable?: boolean, removable?: boolean, nested?: boolean,
- *   choices?: { key: string, label: string }[], choice?: string, titled?: boolean, emptyHidden?: boolean, pinned?: boolean }} SortItem
+ *   choices?: { key: string, label: string }[], choice?: string, titled?: boolean, emptyHidden?: boolean, pinned?: boolean, tag?: string }} SortItem
  */
 
 /**
@@ -28,6 +28,7 @@ export class GfSortableList extends LitElement {
 
   static styles = css`
     :host { display: block; }
+    .tag { display: inline-block; margin-left: 4px; padding: 0 7px; border-radius: 999px; background: var(--gf-surface-2); color: var(--gf-text-muted); font-size: 0.7rem; font-weight: 600; white-space: nowrap; }
     ol { margin: 0; padding: 0; list-style: none; font-size: 0.88rem; display: flex; flex-direction: column; gap: 2px; }
     li { border-radius: var(--gf-radius-sm); background: var(--gf-surface); }
     .row { display: flex; align-items: center; gap: 4px; padding: 2px 4px 2px 0; border-radius: var(--gf-radius-sm); cursor: grab; user-select: none; -webkit-user-select: none; }
@@ -201,7 +202,7 @@ export class GfSortableList extends LitElement {
             @blur=${(/** @type {FocusEvent} */ e) => this.#finishEdit(key, /** @type {HTMLInputElement} */ (e.target), true)} />`
           : html`<label>
             <input type="checkbox" .checked=${item.checked} @change=${(/** @type {Event} */ e) => this.#emit('toggle', { key, on: /** @type {HTMLInputElement} */ (e.target).checked })} />
-            <span>${item.label}${item.note ? html` <span class="muted">${item.note}</span>` : nothing}</span>
+            <span>${item.label}${item.tag ? html` <span class="tag">${item.tag}</span>` : nothing}${item.note ? html` <span class="muted">${item.note}</span>` : nothing}</span>
           </label>`}
         ${item.choices ? html`<select class="choice" aria-label="Style de « ${item.label} »" title="Style"
           @change=${(/** @type {Event} */ e) => this.#emit('choose', { key, value: /** @type {HTMLSelectElement} */ (e.target).value })}>

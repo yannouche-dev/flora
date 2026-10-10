@@ -248,6 +248,22 @@ Toutes les icônes de l'application sont des [Bootstrap Icons](https://icons.get
 
 L'app fonctionne hors ligne avec la flore locale ; chaque service en ligne est un **module** qu'on active **mode par mode** dans **Réglages › Modules** : trois cases, Épuré · Standard · Scientifique (toutes cochées par défaut ; Trefle demande un jeton). La fiche plante suit son affichage, la grille des résultats le sien, la carte et le reste le mode de l'application. Dans un mode où il est décoché, un module n'est jamais appelé et ses données ne s'affichent pas, copies en cache comprises :
 
+**Catégories.** Les services, comme les blocs de la fiche, sont rangés par ce que la donnée dit de la plante, quel qu'en soit le fournisseur (GBIF, par exemple, sert à plusieurs) :
+
+| Catégorie | Question | Services |
+|---|---|---|
+| Noms | Comment s'appelle-t-elle ? | Wikidata (TAXREF en local ; aussi GBIF) |
+| Images | À quoi ressemble-t-elle ? | Wikimedia Commons, Photos en ligne (aussi GBIF, iNaturalist) |
+| Protection et risques | Puis-je la cueillir sans danger ? | statuts INPN et plantes à confondre en local (aussi GBIF, Wikidata, IGN espaces protégés) |
+| Saisons | Quand la voir ? | Baseflor en local (aussi iNaturalist, Open-Meteo pollens) |
+| Répartition | Où pousse-t-elle ? | iNaturalist, GBIF |
+| Écologie et climat | Avec qui et dans quel milieu vit-elle ? | GloBI, Open-Meteo (aussi GBIF, IGN zones naturelles) |
+| Savoirs | Que sait-on d'elle ? | Wikipédia, Trefle (aussi GBIF, Wikidata) |
+| Carte et territoire | Où suis-je, qu'y a-t-il ici ? | IGN : fonds de carte, adresses et altitudes, espaces protégés, zones naturelles au point |
+| Outils et notes | Vos actions et vos notes | Dictée vocale ; blocs Note, barre d'actions |
+
+*Réglages › Modules* présente les services sous ces catégories (« Sert aussi : … » pour les autres). En mode King, chaque bloc porte sa catégorie (dans la fiche et dans *Réglages › Mode King*) et **« Ranger par catégorie »** regroupe les blocs d'un mode dans cet ordre, chacun gardant sa place parmi les siens.
+
 | Module | Service | Apporte |
 |---|---|---|
 | IGN – fonds de carte | data.geopf.fr (WMTS) | photos aériennes, plan, cadastre, courbes de niveau, forêts, espaces protégés ; désactivé, seules les zones déjà vues restent affichées (tuiles du cache, sans réseau) |
