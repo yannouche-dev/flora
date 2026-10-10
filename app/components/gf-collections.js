@@ -351,7 +351,7 @@ export class GfCollections extends LitElement {
     const i = ids.indexOf(plantId);
     if (ids.length < 2) return nothing;
     if (ids.some(id => !this._plants.has(id))) queueMicrotask(() => this.#loadPlantsOf(ids));
-    const plant = (/** @type {number | undefined} */ id) => { const p = id === undefined ? null : this._plants.get(id); return p ? { name: p.name, thumb: p.thumb } : id === undefined ? null : { name: '…' }; };
+    const plant = (/** @type {number | undefined} */ id) => { const p = id === undefined ? null : this._plants.get(id); return p ? { name: p.name } : id === undefined ? null : { name: '…' }; };
     return html`<gf-pager ?simple=${simple} .index=${i} .total=${ids.length} source=${collectionTitle(c)}
       .prev=${plant(ids[i - 1])} .next=${plant(ids[i + 1])}
       @page=${(/** @type {CustomEvent} */ e) => { location.hash = href.collections({ open: this.route.open || c.id, plant: ids[e.detail.index] }); }}></gf-pager>`;

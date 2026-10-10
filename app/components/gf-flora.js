@@ -385,7 +385,7 @@ export class GfFlora extends LitElement {
     const pos = this.#position();
     if (!pos || pos.n < 2) return nothing;
     const items = this.#store.state.results.items;
-    const plant = (/** @type {any} */ p) => p ? { name: p.vernacularName || p.scientificName, thumb: p.thumbnail?.url || null } : null;
+    const plant = (/** @type {any} */ p) => p ? { name: p.vernacularName || p.scientificName } : null;
     const q = this.#store.state.query.q?.trim();
     return html`<gf-pager ?simple=${simple} .index=${pos.i} .total=${pos.n} source=${q ? `Résultats « ${q} »` : 'Résultats'}
       .prev=${plant(items[pos.i - 1])} .next=${plant(items[pos.i + 1])}
