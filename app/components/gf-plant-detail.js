@@ -545,6 +545,7 @@ export class GfPlantDetail extends LitElement {
     .description.wiki { background: none; padding: 0; border-radius: 0; }
     ${unsafeCSS(chartStyles)}
     .prudence { border: 1px solid #d97706; background: color-mix(in srgb, #f59e0b 12%, var(--gf-surface)); border-radius: var(--gf-radius); padding: 8px 12px; margin-bottom: 10px; }
+    .prudence.grave { border-color: #b91c1c; background: color-mix(in srgb, #ef4444 10%, var(--gf-surface)); }
     .prudence ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
     .prudence li { display: flex; gap: 8px; align-items: baseline; font-size: 0.9rem; line-height: 1.35; }
     .prudence li svg { flex: none; color: #d97706; }
@@ -1823,7 +1824,8 @@ export class GfPlantDetail extends LitElement {
     const st = plant.statuses || [];
     if (st.some((/** @type {any} */ x) => /^P[NRD]$/.test(x.type))) out.push({ level: 'stop', text: html`<b>Espèce protégée</b> (${[...new Set(st.filter((/** @type {any} */ x) => /^P[NRD]$/.test(x.type)).map((/** @type {any} */ x) => x.area || x.label))].slice(0, 3).join(', ')}) : cueillette interdite là où elle l’est. <span class="src">INPN</span>` });
     else if (st.some((/** @type {any} */ x) => x.type === 'REGL')) out.push({ level: 'warn', text: html`<b>Cueillette réglementée</b> dans certains départements (voir « ${blockTitle('status')} »). <span class="src">INPN</span>` });
-    return out;
+    // The gravest first (stable sort: the source order stays within a level).
+    return out.sort((a, b) => (a.level === 'stop' ? 0 : 1) - (b.level === 'stop' ? 0 : 1));
   }
 
   /** « Usages et cuisine sauvage »: safety first, then sourced uses, parts and products, dishes and recipes. @param {any} ctx */
@@ -1836,7 +1838,7 @@ export class GfPlantDetail extends LitElement {
     const pending = html`<p class="muted">chargement…</p>`;
     const KIND = { food: 'Alimentation', medicine: 'Médecine traditionnelle', other: 'Autres usages' };
     return html`${this.#subs('uses', {
-      safety: () => danger.length ? html`<div class="prudence">
+      safety: () => danger.length ? html`<div class="prudence ${danger.some(d => d.level === 'stop') ? 'grave' : ''}">
           <ul>${danger.map(d => html`<li class=${d.level}>${icon(d.level === 'stop' ? 'exclamation-octagon-fill' : 'exclamation-triangle-fill')}<span>${d.text}</span></li>`)}</ul>
           <p class="small">En cas de doute, ne pas consommer. Centre antipoison 24 h/24 ; le 15 en cas de détresse vitale. <span class="src">Anses</span></p>
         </div>` : nothing,
