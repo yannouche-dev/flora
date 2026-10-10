@@ -183,6 +183,15 @@ export function gbifMedia(plant, gbifKey, kind, signal, mode) {
   return cached(key('gbif-media2-' + kind, plant.id, mode), () => sourcesFor(mode).gbifOccurrenceMedia(gbifKey, kind, { signal }));
 }
 
+/**
+ * The photos chosen for the taxon on iNaturalist (free licences, every size), for the media viewer.
+ * @param {any} plant @param {number | null | undefined} taxonId @param {AbortSignal} [signal] @param {Mode} [mode]
+ */
+export function inaturalistPhotos(plant, taxonId, signal, mode) {
+  if (!taxonId) return Promise.resolve([]);
+  return cached(key('inat-photos', plant.id, mode), () => sourcesFor(mode).inaturalistPhotos(taxonId, { signal }));
+}
+
 /** @param {any} plant @param {number | null | undefined} gbifKey @param {AbortSignal} [signal] @param {Mode} [mode] */
 export function gbifLiterature(plant, gbifKey, signal, mode) {
   if (!gbifKey) return Promise.resolve(null);

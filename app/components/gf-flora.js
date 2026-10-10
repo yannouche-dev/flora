@@ -13,6 +13,7 @@ import './gf-plant-list.js';
 import './gf-plant-detail.js';
 import './gf-mode-switch.js';
 import './gf-pager.js';
+import './gf-media-viewer.js';
 import { icon } from '../core/icons.js';
 import { pinnedBlocks } from '../core/sheet-blocks.js';
 
@@ -43,7 +44,8 @@ export class GfFlora extends LitElement {
     route: { attribute: false },
     _layout: { state: true },
     _grid: { state: true },
-    _under: { state: true }
+    _under: { state: true },
+    _mediaFull: { state: true }
   };
 
   static styles = [ui, css`
@@ -78,6 +80,11 @@ export class GfFlora extends LitElement {
     .pane.results.fill-plant { flex: 0 0 auto; }
     .pane.plant.fill { flex: 1 1 0; }
     .pane.filters, .pane.plant { flex: none; }
+    /* « Médias »: in place of the results (kept mounted, hidden, so the list keeps its scroll). */
+    .pane.media { flex: 1 1 0; }
+    .pane.results[hidden] { display: none; }
+    .pane.media.full { position: absolute; inset: 0; z-index: 6; }
+    .sheet-media { position: fixed; inset: 0 0 calc(61px + env(safe-area-inset-bottom)) 0; z-index: 901; display: flex; flex-direction: column; background: var(--gf-surface); }
     .pane-head {
       display: flex;
       align-items: center;
@@ -247,6 +254,8 @@ export class GfFlora extends LitElement {
     this._grid = false;
     /** The plant waiting under the card while it is swiped (its sheet is ready when the card flies off). @type {number | null} */
     this._under = null;
+    /** The « Médias » pane over all the panes. */
+    this._mediaFull = false;
   }
 
   connectedCallback() {
@@ -308,6 +317,8 @@ export class GfFlora extends LitElement {
 
   /** ← → on the keyboard, when not typing. @param {KeyboardEvent} e */
   #onKey = e => {
+    // The media viewer browses its own images with ← →.
+    if (this.#media !== null) return;
     if (this.#plantId === null || e.altKey || e.ctrlKey || e.metaKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
     const target = /** @type {HTMLElement} */ (e.composedPath()[0]);
     if (target?.closest?.('input, textarea, select, [contenteditable], gf-map') || target?.isContentEditable) return;
@@ -423,6 +434,8 @@ export class GfFlora extends LitElement {
         deck?.style.removeProperty('--p');
       }
       if (this.route.name === 'search') document.title = 'GeoFlora — flore de France';
+      // Media closed (Back, another plant): not full screen any more; a viewer opened by a link is not ours to go back from.
+      if (this.#media === null) { this._mediaFull = false; this.#mediaPushed = false; this.#mediaStart = null; }
     }
   }
 
@@ -445,6 +458,51 @@ export class GfFlora extends LitElement {
   }
 
   get #plantId() { return this.route.name === 'plant' ? this.route.id : null; }
+
+  // ── « Médias »: the media viewer of the open plant, beside its sheet (phone: over it) ─────────────────
+
+  /** The image asked for by the URL (?media=n), null when the viewer is closed. */
+  get #media() { return this.route.name === 'plant' ? this.route.media ?? null : null; }
+
+  /** The image clicked on the sheet, to open the viewer at. @type {string | null} */
+  #mediaStart = null;
+  /** The viewer was opened from the sheet (a step in history: closing it goes back). */
+  #mediaPushed = false;
+
+  /** A photo of the sheet clicked: the viewer opens at it. @param {CustomEvent} e */
+  #openMedia = e => {
+    const id = this.#plantId;
+    if (id === null || e.detail?.plantId !== id) return;
+    e.preventDefault();
+    this.#mediaStart = e.detail.url || null;
+    if (this.#media !== null) { this.requestUpdate(); return; }
+    this.#mediaPushed = true;
+    location.hash = href.plantMedia(id, 0);
+  };
+
+  /** The viewer moved to another image: the address follows (no new step in history). @param {CustomEvent} e */
+  #mediaIndex = e => {
+    const id = this.#plantId;
+    if (id === null || this.#media === null) return;
+    const url = href.plantMedia(id, e.detail.index);
+    if (location.hash !== url) history.replaceState(history.state, '', url);
+  };
+
+  #closeMedia = () => {
+    const id = this.#plantId;
+    this._mediaFull = false;
+    this.#mediaStart = null;
+    if (this.#mediaPushed) { this.#mediaPushed = false; history.back(); }
+    else if (id !== null) location.replace(href.plant(id));
+  };
+
+  /** @param {boolean} phone */
+  #mediaPane(phone) {
+    const id = this.#plantId;
+    return html`<gf-media-viewer plant-id=${id} .view=${plantViewOf(this.#store.state)} .index=${this.#media ?? 0} .startUrl=${this.#mediaStart}
+      ?full=${this._mediaFull || phone} .canFull=${!phone} @media-index=${this.#mediaIndex} @media-close=${this.#closeMedia}
+      @media-full=${(/** @type {CustomEvent} */ e) => { this._mediaFull = e.detail.on; }}></gf-media-viewer>`;
+  }
 
   #save() {
     try { localStorage.setItem(config.storageKeys.floraLayout, JSON.stringify(this._layout)); } catch { /* not persisted */ }
@@ -597,7 +655,11 @@ export class GfFlora extends LitElement {
   #rail(pane, right = false) {
     const active = pane === 'filters' ? activeFilterCount(this.#store.state.query) : 0;
     return html`<button class="rail ${right ? 'right' : ''}" type="button" aria-expanded="false"
-      title=${'Déplier : ' + TITLES[pane]} @click=${() => this.#fold(pane, false)}>
+      title=${'Déplier : ' + TITLES[pane]} @click=${() => {
+        // The media viewer takes the filters' room: unfolding them closes it.
+        if (pane === 'filters' && this.#media !== null) this.#closeMedia();
+        this.#fold(pane, false);
+      }}>
       ${right ? '‹' : '›'} ${TITLES[pane]} ${active ? html`<span class="badge">${active}</span>` : nothing}</button>`;
   }
 
@@ -619,6 +681,7 @@ export class GfFlora extends LitElement {
     const { folded } = this._layout;
     const total = this.#store.state.results.total;
     const showPlant = plantId !== null && !phone;
+    const media = showPlant && this.#media !== null;
     // Folding results while a plant is open gives the plant the room.
     const resultsFolded = folded.results && showPlant && !folded.plant;
     const plantFolded = showPlant && folded.plant;
@@ -629,15 +692,16 @@ export class GfFlora extends LitElement {
 
     return html`
       <div class="panes">
-        ${wide ? (folded.filters ? this.#rail('filters') : html`
+        ${wide ? (folded.filters || media ? this.#rail('filters') : html`
           <section class="pane filters" aria-label="Filtres" style="width:${this._layout.filters}px">
             ${this.#head('filters', this.#filtersTitle())}
             <div class="pane-body"><gf-filter-panel></gf-filter-panel></div>
           </section>
           ${this.#split('filters')}`) : nothing}
 
-        ${resultsFolded ? this.#rail('results') : html`
-          <section class="pane results" aria-label="Résultats" @focus-facet=${this.#focusFacet}>
+        ${media ? html`<section class="pane media ${this._mediaFull ? 'full' : ''}" aria-label="Médias">${this.#mediaPane(false)}</section>` : nothing}
+        ${resultsFolded ? (media ? nothing : this.#rail('results')) : html`
+          <section class="pane results" aria-label="Résultats" ?hidden=${media} @focus-facet=${this.#focusFacet}>
             ${showPlant ? this.#head('results', 'Résultats') : nothing}
             <div class="pane-body">
               <gf-results-bar .wide=${wide} ?grid=${this._grid} @open-filters=${() => openModal(this.#dialog)}></gf-results-bar>
@@ -646,8 +710,9 @@ export class GfFlora extends LitElement {
           </section>`}
 
         ${showPlant ? (plantFolded ? this.#rail('plant', true) : html`
-          ${resultsFolded ? nothing : this.#split('plant')}
-          <section class="pane plant ${resultsFolded ? 'fill' : ''}" aria-label="Plante" style=${resultsFolded ? '' : `width:${Math.min(this.#width('plant'), this.#max('plant'))}px`}>
+          ${resultsFolded && !media ? nothing : this.#split('plant')}
+          <section class="pane plant ${resultsFolded && !media ? 'fill' : ''}" aria-label="Plante" @open-media=${this.#openMedia}
+            style=${resultsFolded && !media ? '' : `width:${Math.min(this.#width('plant'), this.#max('plant'))}px`}>
             ${this.#head('plant', 'Plante', html`
               ${plantSwitch}
               <a class="icon-btn" href=${'#/plant/' + plantId} title="Ouvrir la fiche seule" aria-label="Ouvrir la fiche seule"
@@ -658,7 +723,7 @@ export class GfFlora extends LitElement {
       </div>
 
       ${phone && plantId !== null ? html`
-        <section class="sheet-plant" aria-label="Plante">
+        <section class="sheet-plant" aria-label="Plante" @open-media=${this.#openMedia}>
           <div class="pane-head">
             <button class="link back" type="button" @click=${() => this.#closePlant()}>${icon('arrow-left')} Résultats</button>
             <h2></h2>
@@ -666,6 +731,8 @@ export class GfFlora extends LitElement {
           </div>
           <div class="pane-body" style="display:flex;flex-direction:column;overflow:hidden;background:var(--gf-surface-2)">${this.#swipe(plantId, plantView, true)}${this.#pager(true)}</div>
         </section>` : nothing}
+
+      ${phone && plantId !== null && this.#media !== null ? html`<section class="sheet-media" aria-label="Médias">${this.#mediaPane(true)}</section>` : nothing}
 
       ${wide ? nothing : html`
         <dialog aria-label="Filtres" @click=${e => { if (e.target === e.currentTarget) this.#dialog?.close(); }}>

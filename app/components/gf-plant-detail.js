@@ -35,6 +35,8 @@ import { lookalikesOf } from '../core/lookalikes.js';
 import { chartStyles, climateChart, groupColor, groupLegend, networkChart, nicheChart } from '../core/charts.js';
 import { unsafeCSS } from 'lit';
 import './gf-sortable-list.js';
+import './gf-media-viewer.js';
+import { openModal } from '../core/history.js';
 
 /** Remote text is untrusted HTML: keep only its text content (DOMParser never runs scripts). */
 function toText(/** @type {string} */ value) {
@@ -283,6 +285,8 @@ export class GfPlantDetail extends LitElement {
     _spotsOpen: { state: true },
     _plant: { state: true },
     _details: { state: true },
+    /** The media viewer opened over the page (outside Flore): the image it starts at. */
+    _mediaDialog: { state: true },
     _error: { state: true },
     _shareNote: { state: true },
     _dragKey: { state: true },
@@ -499,6 +503,11 @@ export class GfPlantDetail extends LitElement {
     .hero img, .hero .skeleton, .hero .no-photo { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; height: auto; border-radius: 0; }
     .hero .no-photo { display: grid; place-items: center; font-size: 3rem; }
     .hero figcaption { padding: 4px 10px; }
+    .hero a, .gallery a { cursor: zoom-in; }
+    .all-media { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; }
+    dialog.media { width: 100vw; height: 100dvh; max-width: none; max-height: none; margin: 0; padding: 0; border: 0; display: flex; }
+    dialog.media:not([open]) { display: none; }
+    dialog.media gf-media-viewer { flex: 1; }
     .epure h1 { font-size: 1.8rem; }
     .meta { color: var(--gf-text-muted); margin: 6px 0 10px; }
     .more { margin-top: 18px; }
@@ -1046,7 +1055,31 @@ export class GfPlantDetail extends LitElement {
     }
 
     const ctx = this.#context(plant);
-    return this.view === 'epure' ? this.#epure(ctx) : this.#full(ctx);
+    return html`${this.view === 'epure' ? this.#epure(ctx) : this.#full(ctx)}${this._mediaDialog ? html`
+      <dialog class="media" aria-label="Médias" @close=${() => { this._mediaDialog = null; }}>
+        <gf-media-viewer plant-id=${plant.id} .view=${this.view} .startUrl=${this._mediaDialog.url} full .canFull=${false}
+          @media-close=${(/** @type {Event} */ e) => /** @type {HTMLElement} */ (e.currentTarget).closest('dialog')?.close()}></gf-media-viewer>
+      </dialog>` : nothing}`;
+  }
+
+  /**
+   * A photo clicked: the « Médias » viewer at that image. The Flore tab shows it in a pane beside the sheet;
+   * elsewhere (Mes plantes, Carte) it opens full screen over the page.
+   * @param {Event} e @param {string | null} [url]
+   */
+  #openMedia(e, url = null) {
+    e.preventDefault();
+    const plant = this._plant;
+    if (!plant || this.preview) return;
+    const asked = new CustomEvent('open-media', { detail: { plantId: plant.id, url }, bubbles: true, composed: true, cancelable: true });
+    if (!this.dispatchEvent(asked)) return;
+    this._mediaDialog = { url };
+    this.updateComplete.then(() => openModal(/** @type {HTMLDialogElement | null} */ (this.renderRoot.querySelector('dialog.media'))));
+  }
+
+  /** « Tous les médias »: the viewer from its first image. */
+  #allMedia() {
+    return html`<button class="link all-media" type="button" @click=${(/** @type {Event} */ e) => this.#openMedia(e)}>${icon('images')} Tous les médias</button>`;
   }
 
   /** Everything the views share, computed once per render. @param {any} plant */
@@ -1094,12 +1127,12 @@ export class GfPlantDetail extends LitElement {
       <div class="gallery">
         ${shown.map(image => html`
           <figure>
-            <a href=${image.sourceUrl || image.pageUrl || image.url} target="_blank" rel="noopener">
+            <a href=${image.sourceUrl || image.pageUrl || image.url} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, image.url)}>
               <img src=${image.url} alt=${plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" />
             </a>
             <figcaption><gf-attribution .media=${image}></gf-attribution></figcaption>
           </figure>`)}
-      </div>` : loading ? html`<div class="skeleton"></div>` : html`<p class="muted">Aucune photo sous licence libre trouvée.</p>`;
+      </div>${this.#allMedia()}` : loading ? html`<div class="skeleton"></div>` : html`<p class="muted">Aucune photo sous licence libre trouvée.</p>`;
   }
 
   #wikipedia() {
@@ -1445,7 +1478,7 @@ export class GfPlantDetail extends LitElement {
         if (v !== 'epure') return this.#gallery(ctx, v === 'standard' ? 6 : Infinity);
         const hero = ctx.images[0];
         return html`<figure class="hero">
-          ${hero ? html`<img src=${hero.url} alt=${plant.scientificName} decoding="async" referrerpolicy="no-referrer" />
+          ${hero ? html`<a href=${hero.sourceUrl || hero.url} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, hero.url)}><img src=${hero.url} alt=${plant.scientificName} decoding="async" referrerpolicy="no-referrer" /></a>
             <figcaption><gf-attribution .media=${hero}></gf-attribution></figcaption>`
             : html`<div class=${loading ? 'skeleton' : 'no-photo'} aria-hidden="true">${loading ? '' : icon('flower1')}</div>`}
         </figure>`;
@@ -1746,7 +1779,7 @@ export class GfPlantDetail extends LitElement {
     return html`${this.#subs('gbifMedia', {
       photos: () => this.#mediaGallery(plant, 'Photos d’observation (France)', g.photos, 'Aucune photo d’observation sous licence libre sur GBIF.', false),
       herbarium: () => this.#mediaGallery(plant, 'Planches d’herbier', g.herbarium, 'Aucune planche d’herbier sous licence libre sur GBIF.', true)
-    })}`;
+    })}${g.photos?.length || g.herbarium?.length ? this.#allMedia() : nothing}`;
   }
 
   /** @param {any} plant @param {string} title @param {any[] | null | undefined} list @param {string} none @param {boolean} herbarium */
@@ -1755,7 +1788,7 @@ export class GfPlantDetail extends LitElement {
     if (list === undefined) return html`${head}<p class="muted">chargement…</p>`;
     if (!list?.length) return html`${head}<p class="muted">${none}</p>`;
     return html`${head}<div class="gallery ${herbarium ? 'herbarium' : ''}">${list.map(image => html`<figure>
-      <a href=${image.sourceUrl || image.url} target="_blank" rel="noopener"><img src=${image.url} alt=${(herbarium ? 'Planche d’herbier de ' : '') + plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" /></a>
+      <a href=${image.sourceUrl || image.url} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, image.url)}><img src=${image.url} alt=${(herbarium ? 'Planche d’herbier de ' : '') + plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" /></a>
       <figcaption>
         ${herbarium ? html`<span class="specimen">${[image.institution, image.catalogNumber && 'n° ' + image.catalogNumber, image.year, image.country].filter(Boolean).join(' · ')}</span>` : nothing}
         ${image.coordinates && this.#hasMap ? this.#focusable({ kind: 'point', label: (herbarium ? 'Planche ' : 'Photo ') + ([image.institution, image.year].filter(Boolean).join(' ') || 'GBIF'), coordinates: image.coordinates, url: image.sourceUrl },

@@ -3,11 +3,11 @@
 //  - data/*.json: network only — the dataset lives in IndexedDB, so it is not duplicated here
 //    (except data/territories.json, data/lookalikes.json and data/safety.json: small and static, precached —
 //    the look-alike and toxicity warnings must work offline, where the picking happens)
-//  - remote images (Wikimedia, iNaturalist): stale-while-revalidate, capped
+//  - remote images (Wikimedia, iNaturalist): stale-while-revalidate, capped (not the originals of the media viewer)
 //  - IGN map tiles: cache-first, capped — areas already viewed stay available offline
 //  - remote API JSON: not cached here (app/core/sources.js caches it in IndexedDB)
 
-const VERSION = 'v68';
+const VERSION = 'v69';
 const SHELL_CACHE = 'geoflora-shell-' + VERSION;
 const IMAGE_CACHE = 'geoflora-images-' + VERSION;
 const IMAGE_LIMIT = 400;
@@ -46,6 +46,7 @@ const SHELL = [
   'app/core/charts.js',
   'app/core/categories.js',
   'app/core/uses.js',
+  'app/core/media-items.js',
   'app/core/dataset.js',
   'app/core/geo.js',
   'app/core/highlight.js',
@@ -73,6 +74,7 @@ const SHELL = [
   'app/workers/search.worker.js',
   'app/components/gf-app.js',
   'app/components/gf-lookalikes.js',
+  'app/components/gf-media-viewer.js',
   'app/components/gf-voice-button.js',
   'app/components/gf-active-filters.js',
   'app/components/gf-add-to.js',
@@ -153,10 +155,16 @@ self.addEventListener('fetch', event => {
   }
 
   // Plant photos (Wikimedia, iNaturalist, herbaria…): whatever host the dataset points to.
-  if (request.destination === 'image') {
+  // Not the originals the media viewer zooms on (megabytes each): straight from the network.
+  if (request.destination === 'image' && !isOriginal(url)) {
     event.respondWith(staleWhileRevalidate(event, IMAGE_CACHE, request, IMAGE_LIMIT));
   }
 });
+
+/** An original file: iNaturalist « original », a Commons file outside /thumb/. */
+function isOriginal(url) {
+  return /\/photos\/\d+\/original\./.test(url.pathname) || (url.hostname === 'upload.wikimedia.org' && !url.pathname.includes('/thumb/'));
+}
 
 async function staleWhileRevalidate(event, cacheName, key, limit) {
   const { request } = event;

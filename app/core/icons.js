@@ -12,7 +12,8 @@ const SPRITE = new URL('../../assets/icons/bi.svg', import.meta.url).href;
  *   | 'check-lg' | 'chevron-bar-left' | 'chevron-bar-right' | 'chevron-down' | 'chevron-up' | 'chevron-left' | 'chevron-right' | 'collection' | 'collection-fill' | 'crosshair' | 'crown' | 'diagram-3' | 'download' | 'exclamation-octagon-fill' | 'exclamation-triangle-fill' | 'flower1'
  *   | 'eye-slash' | 'funnel' | 'funnel-fill' | 'gear' | 'gear-fill' | 'geo-alt-fill' | 'globe-europe-africa' | 'grip-vertical' | 'heart' | 'heart-fill' | 'image' | 'layers'
  *   | 'leaf' | 'leaf-fill' | 'list-nested' | 'list-ul' | 'map' | 'map-fill' | 'mic' | 'mic-fill' | 'pencil' | 'pin-angle' | 'pin-angle-fill' | 'plus-lg' | 'search' | 'share' | 'shield-check' | 'star' | 'star-fill' | 'table'
- *   | 'three-dots' | 'trash3' | 'triangle' | 'type-h2' | 'upload' | 'x' | 'x-lg'} IconName
+ *   | 'three-dots' | 'trash3' | 'triangle' | 'type-h2' | 'upload' | 'x' | 'x-lg'
+ *   | 'arrows-fullscreen' | 'box-arrow-up-right' | 'fullscreen-exit' | 'images' | 'zoom-in'} IconName
  */
 
 /** An icon in a Lit template. @param {IconName} name */
