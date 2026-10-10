@@ -22,6 +22,8 @@ const KINDS = /** @type {const} */ ([['all', 'Tout'], ['photo', 'Photos'], ['obs
 const KIND_LABEL = { photo: 'Photo', observation: 'Photo d’observation', herbarium: 'Planche d’herbier' };
 const FACTORS = [2, 3, 4, 6, 8];
 const nf = new Intl.NumberFormat('fr-FR');
+/** @param {number} v */
+const clamp01 = v => Math.min(1, Math.max(0, v));
 
 export class GfMediaViewer extends LitElement {
   static properties = {
@@ -35,6 +37,23 @@ export class GfMediaViewer extends LitElement {
     startUrl: { attribute: 'start-url' },
     /** In the sheet: a block among the others (the keys are its own only while it has the focus). */
     compact: { type: Boolean, reflect: true },
+    /** Stuck to an edge of the plant pane: the full viewer, its keys only while it has the focus. */
+    local: { type: Boolean, reflect: true },
+    /** 'scene' (stage, details, filmstrip), 'mosaic' (every image in a grid) or 'slideshow' (one image, full frame). */
+    presentation: { reflect: true },
+    /** Mosaic: an image opened in the scene, until « ← Mosaïque ». */
+    _opened: { state: true },
+    /** Slideshow: playing (the next image every few seconds). */
+    _playing: { state: true },
+    /** The magnifier over the photo ('overlay') or in the column beside it ('pinned', when there is room). */
+    _panel: { state: true },
+    /** Exploration: three linked views of the image — whole, medium, 100 % (original pixels). */
+    _explore: { state: true },
+    /** Exploration: the point looked at (0–1 across the image) and the medium view's magnification. */
+    _center: { state: true },
+    _medium: { state: true },
+    /** Exploration: sizes of the three views (measured). */
+    _boxes: { state: true },
     _plant: { state: true },
     _items: { state: true },
     _done: { state: true },
@@ -107,6 +126,51 @@ export class GfMediaViewer extends LitElement {
     .thumbs button:focus-visible { box-shadow: var(--gf-focus); outline: none; }
     .thumbs img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .thumbs .herbarium img { object-fit: contain; background: #f4f1e8; }
+    /* Overlay or pinned magnifier. */
+    .seg { display: inline-flex; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill); overflow: hidden; flex: none; }
+    .seg button { border: 0; background: var(--gf-surface); padding: 3px 9px; font: inherit; font-size: 0.75rem; color: var(--gf-text-muted); cursor: pointer; }
+    .seg button[aria-pressed='true'] { background: var(--gf-accent-soft); color: var(--gf-accent); font-weight: 600; }
+    /* Exploration: the whole image, a medium view and 100 %, linked. */
+    .explore { flex: 1; min-height: 0; display: grid; gap: 6px; padding: 6px; background: #0d0d0d;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: minmax(110px, 30%) minmax(0, 1fr) auto; grid-template-areas: 'whole whole' 'medium one' 'tip tip'; }
+    @container (min-width: 760px) {
+      .explore { grid-template-columns: clamp(180px, 24%, 300px) minmax(0, 1fr) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) auto; grid-template-areas: 'whole medium one' 'tip tip tip'; }
+    }
+    :host([compact]) .explore { min-height: 520px; }
+    .xview { position: relative; overflow: hidden; border-radius: var(--gf-radius-sm); background: #151515; cursor: grab; touch-action: none; user-select: none; min-height: 0; }
+    .xview:active { cursor: grabbing; }
+    .v-whole { grid-area: whole; cursor: crosshair; }
+    .v-medium { grid-area: medium; }
+    .v-one { grid-area: one; }
+    .xview img { position: absolute; max-width: none; pointer-events: none; }
+    .v-one img { image-rendering: auto; }
+    .frame-medium, .frame-one { position: absolute; pointer-events: none; box-sizing: border-box; }
+    .frame-medium { border: 2px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 60%); }
+    .frame-one { border: 2px solid #f59e0b; box-shadow: 0 0 0 1px rgb(0 0 0 / 60%); }
+    .xlabel { position: absolute; left: 6px; top: 6px; padding: 2px 8px; border-radius: var(--gf-radius-pill); background: rgb(0 0 0 / 60%); color: #fff; font-size: 0.72rem; pointer-events: none; }
+    .v-medium .xlabel { border-left: 3px solid #fff; } .v-one .xlabel { border-left: 3px solid #f59e0b; }
+    .xtip { grid-area: tip; margin: 0; color: #bbb; font-size: 0.75rem; text-align: center; }
+    /* Mosaic: every image in a grid. */
+    .mosaic-wrap { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; display: grid; gap: 8px; align-content: start; background: var(--gf-surface-2); }
+    .mosaic { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+    .mosaic button { padding: 0; border: 0; border-radius: var(--gf-radius-sm); overflow: hidden; aspect-ratio: 1; background: var(--gf-surface); cursor: zoom-in; }
+    .mosaic button:focus-visible { box-shadow: var(--gf-focus); outline: none; }
+    .mosaic img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.2s; }
+    .mosaic button:hover img { transform: scale(1.04); }
+    .mosaic .herbarium img { object-fit: contain; background: #f4f1e8; }
+    :host([compact]) .mosaic-wrap { max-height: 70vh; }
+    :host([compact]) .mosaic { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+    .back-mosaic { display: inline-flex; align-items: center; gap: 4px; font-size: 0.85rem; }
+    /* Slideshow: the image alone, full frame, its credit over it. */
+    .main.slideshow { position: relative; grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: minmax(0, 1fr) !important; }
+    .slideshow .caption { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; display: grid; gap: 2px; padding: 18px 12px 8px;
+      background: linear-gradient(transparent, rgb(0 0 0 / 70%)); color: #fff; font-size: 0.8rem; pointer-events: none; }
+    .slideshow .caption gf-attribution { color: #e5e5e5; pointer-events: auto; }
+    .slideshow .stage .hint { bottom: auto; top: 8px; }
+    .play, .pause { font-size: 0.75rem; font-weight: 700; }
+    @media (prefers-reduced-motion: reduce) { .mosaic img { transition: none; } }
+    /* Stuck to an edge: fills it. */
+    :host([local]) { min-height: 0; }
     /* In the sheet: one column, a 4:3 stage, a smaller filmstrip. */
     :host([compact]) { flex: none; border: 1px solid var(--gf-border); border-radius: var(--gf-radius); overflow: hidden; }
     :host([compact]) .bar { min-height: 40px; padding: 2px 4px 2px 10px; }
@@ -132,6 +196,18 @@ export class GfMediaViewer extends LitElement {
     /** @type {string | null} */
     this.startUrl = null;
     this.compact = false;
+    this.local = false;
+    /** @type {string} */
+    this.presentation = 'scene';
+    this._opened = false;
+    this._playing = false;
+    /** @type {'overlay' | 'pinned'} */
+    this._panel = (() => { try { return localStorage.getItem('geoflora.zoomPanel') === 'overlay' ? 'overlay' : 'pinned'; } catch { return 'pinned'; } })();
+    this._explore = false;
+    this._center = { x: 0.5, y: 0.5 };
+    this._medium = 3;
+    /** @type {Record<string, { w: number, h: number }>} */
+    this._boxes = {};
     /** @type {any} */
     this._plant = null;
     /** @type {MediaItem[]} */
@@ -160,13 +236,13 @@ export class GfMediaViewer extends LitElement {
 
   firstUpdated() {
     // In a pane: the keys are the viewer's (the focus leaves the sheet's block that opened it).
-    if (!this.compact) this.focus({ preventScroll: true });
+    if (!this.#isLocal) this.focus({ preventScroll: true });
   }
 
   connectedCallback() {
     super.connectedCallback();
     // In a pane the viewer takes ← → for itself; in the sheet, only when it has the focus.
-    if (!this.compact) addEventListener('keydown', this.#onKey);
+    if (!this.#isLocal) addEventListener('keydown', this.#onKey);
     else this.addEventListener('keydown', this.#onKey);
     if (!this.hasAttribute('tabindex')) this.tabIndex = -1;
   }
@@ -176,6 +252,9 @@ export class GfMediaViewer extends LitElement {
     removeEventListener('keydown', this.#onKey);
     this.removeEventListener('keydown', this.#onKey);
     this.#abort?.abort();
+    clearInterval(this.#timer);
+    this.#exploreObserver.disconnect();
+    this.#observedViews = [];
   }
 
   /** @param {Map<string, any>} changed */
@@ -262,9 +341,30 @@ export class GfMediaViewer extends LitElement {
     if (e.key in keys) { e.preventDefault(); e.stopImmediatePropagation(); this.#go(keys[/** @type {keyof typeof keys} */ (e.key)]); }
     else if (e.key === 'Escape') {
       if (this._zoom) { this._zoom = false; this._locked = false; this._lens = null; }
-      else if (!this.compact) this.#close();
+      else if (this._opened) this._opened = false;
+      else if (!this.#isLocal) this.#close();
     } else if (e.key === '+' || e.key === '-') this.#zoomStep(e.key === '+' ? 1 : -1);
   };
+
+  /** In the sheet or on an edge: keys only while it has the focus; alone in a pane: for the whole page. */
+  get #isLocal() { return this.compact || this.local || this.hasAttribute('compact') || this.hasAttribute('local'); }
+
+  /** What is shown: the presentation chosen, or the scene of an image opened from the mosaic. */
+  get #view() { return this.presentation === 'mosaic' ? (this._opened ? 'scene' : 'mosaic') : this.presentation === 'slideshow' ? 'slideshow' : 'scene'; }
+
+  /** Slideshow: plays or stops. */
+  #play(on = !this._playing) {
+    clearInterval(this.#timer);
+    this._playing = on;
+    if (!on) return;
+    this.#timer = setInterval(() => {
+      // Not while the magnifier is open.
+      if (this._zoom) return;
+      const shown = this.#shown, at = shown.indexOf(/** @type {MediaItem} */ (this.#current));
+      if (shown.length > 1) this.#select(shown[(at + 1) % shown.length]);
+    }, 5000);
+  }
+  /** @type {any} */ #timer = 0;
 
   #close() { this.dispatchEvent(new CustomEvent('media-close', { bubbles: true, composed: true })); }
 
@@ -357,12 +457,161 @@ export class GfMediaViewer extends LitElement {
     const side = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.side'));
     const stage = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.stage'));
     if (!stage) return null;
-    if (this.#wide && side) return { w: side.clientWidth, h: side.clientHeight, top: false };
+    if (this.#pinned && side) return { w: side.clientWidth, h: side.clientHeight, top: false };
     const top = cy > stage.clientHeight / 2;
     return { w: stage.clientWidth, h: stage.clientHeight / 2, top };
   }
 
-  get #wide() { return !this.compact && this.getBoundingClientRect().width >= 700; }
+  get #wide() { return !this.compact && this.#view === 'scene' && this.getBoundingClientRect().width >= 700; }
+
+  /** The magnifier in the column beside the photo: chosen, and room for it. */
+  get #pinned() { return this._panel === 'pinned' && this.#wide; }
+
+  /** @param {'overlay' | 'pinned'} panel */
+  #setPanel(panel) {
+    this._panel = panel;
+    try { localStorage.setItem('geoflora.zoomPanel', panel); } catch { /* not kept */ }
+    if (this._lens) this.#place(this._lens.cx, this._lens.cy);
+  }
+
+  // ── Exploration: whole image · medium · 100 % ──────────────────────────
+  // Three views of the same image, each from the source that fits it: the thumbnail for the whole image, the
+  // display size for the medium view, the original for 100 %. Each shows where the next ones look (frames);
+  // touching or dragging any of them moves all three.
+
+  /** Size of the image the views are computed on: the original's (known or measured), else the display's. @param {MediaItem} item */
+  #natural(item) {
+    const o = this.#originalSize(item);
+    if (o) return o;
+    const img = /** @type {HTMLImageElement | null} */ (this.renderRoot.querySelector('img.photo'));
+    return img?.naturalWidth ? { w: img.naturalWidth, h: img.naturalHeight } : { w: 1600, h: 1200 };
+  }
+
+  /** Scale (screen px per image px) of a view. @param {'whole' | 'medium' | 'one'} view @param {{ w: number, h: number }} n */
+  #scale(view, n) {
+    const b = this._boxes[view];
+    if (!b) return 0;
+    const fit = Math.min(b.w / n.w, b.h / n.h);
+    return view === 'whole' ? fit : view === 'medium' ? Math.min(1, fit * this._medium) : 1;
+  }
+
+  /** The field a view shows, in 0–1 image units (centred on the point looked at, kept inside the image). @param {'medium' | 'one'} view @param {{ w: number, h: number }} n */
+  #field(view, n) {
+    const b = this._boxes[view], sc = this.#scale(view, n);
+    if (!b || !sc) return null;
+    const w = Math.min(1, b.w / (n.w * sc)), h = Math.min(1, b.h / (n.h * sc));
+    const x = Math.min(1 - w / 2, Math.max(w / 2, this._center.x)), y = Math.min(1 - h / 2, Math.max(h / 2, this._center.y));
+    return { x: x - w / 2, y: y - h / 2, w, h, cx: x, cy: y };
+  }
+
+  #exploreObserver = new ResizeObserver(entries => {
+    const boxes = { ...this._boxes };
+    for (const e of entries) boxes[/** @type {HTMLElement} */ (e.target).dataset.view || ''] = { w: e.contentRect.width, h: e.contentRect.height };
+    this._boxes = boxes;
+  });
+  /** @type {Element[]} */ #observedViews = [];
+
+  /** @type {{ view: string, x: number, y: number, cx: number, cy: number, moved: boolean, id: number } | null} */
+  #pan = null;
+
+  /** @param {PointerEvent} e @param {'whole' | 'medium' | 'one'} view */
+  #viewDown(e, view) {
+    const el = /** @type {HTMLElement} */ (e.currentTarget);
+    el.setPointerCapture(e.pointerId);
+    this.#pan = { view, x: e.clientX, y: e.clientY, cx: this._center.x, cy: this._center.y, moved: false, id: e.pointerId };
+    if (view === 'whole') this.#centerAt(e, el, view);
+    e.preventDefault();
+  }
+
+  /** @param {PointerEvent} e */
+  #viewMove(e) {
+    const p = this.#pan, item = this.#current;
+    if (!p || p.id !== e.pointerId || !item) return;
+    const el = /** @type {HTMLElement} */ (e.currentTarget);
+    if (Math.hypot(e.clientX - p.x, e.clientY - p.y) > 3) p.moved = true;
+    if (p.view === 'whole') { this.#centerAt(e, el, 'whole'); return; }
+    // Medium and 100 %: dragging moves the image under the finger.
+    const n = this.#natural(item), sc = this.#scale(/** @type {any} */ (p.view), n);
+    if (!sc) return;
+    this._center = { x: clamp01(p.cx - (e.clientX - p.x) / (n.w * sc)), y: clamp01(p.cy - (e.clientY - p.y) / (n.h * sc)) };
+  }
+
+  /** @param {PointerEvent} e */
+  #viewUp(e) {
+    const p = this.#pan;
+    this.#pan = null;
+    // A tap (no drag) in the medium or 100 % view: look there.
+    if (p && !p.moved && p.view !== 'whole') this.#centerAt(e, /** @type {HTMLElement} */ (e.currentTarget), /** @type {any} */ (p.view));
+  }
+
+  /** The point under the pointer, in a view, becomes the point looked at. @param {PointerEvent} e @param {HTMLElement} el @param {'whole' | 'medium' | 'one'} view */
+  #centerAt(e, el, view) {
+    const item = this.#current;
+    if (!item) return;
+    const n = this.#natural(item), r = el.getBoundingClientRect(), sc = this.#scale(view, n);
+    if (!sc) return;
+    if (view === 'whole') {
+      const ox = (r.width - n.w * sc) / 2, oy = (r.height - n.h * sc) / 2;
+      this._center = { x: clamp01((e.clientX - r.left - ox) / (n.w * sc)), y: clamp01((e.clientY - r.top - oy) / (n.h * sc)) };
+      return;
+    }
+    const f = this.#field(view, n);
+    if (!f) return;
+    this._center = { x: clamp01(f.x + (e.clientX - r.left) / r.width * f.w), y: clamp01(f.y + (e.clientY - r.top) / r.height * f.h) };
+  }
+
+  /** Mouse wheel on the medium view: its magnification. @param {WheelEvent} e */
+  #mediumWheel(e) {
+    e.preventDefault();
+    this._medium = Math.min(12, Math.max(1.5, this._medium * (e.deltaY < 0 ? 1.25 : 0.8)));
+  }
+
+  /** One view: the image from its source, placed for the point looked at; frames of the closer views. @param {MediaItem} item @param {'whole' | 'medium' | 'one'} view */
+  #exploreView(item, view) {
+    const n = this.#natural(item), sc = this.#scale(view, n), b = this._boxes[view];
+    const original = this._originals.get(item.key);
+    const src = view === 'whole' ? item.thumb : view === 'medium' ? (this._failed.get(item.key) || item.display) : original && original !== 'error' ? item.original : (this._failed.get(item.key) || item.display);
+    let style = 'display:none';
+    if (sc && b) {
+      const w = n.w * sc, h = n.h * sc;
+      let left, top;
+      if (view === 'whole') { left = (b.w - w) / 2; top = (b.h - h) / 2; }
+      else {
+        const f = /** @type {any} */ (this.#field(view, n));
+        left = w <= b.w ? (b.w - w) / 2 : -f.x * w; top = h <= b.h ? (b.h - h) / 2 : -f.y * h;
+      }
+      style = `width:${w}px;height:${h}px;left:${left}px;top:${top}px`;
+    }
+    /** A frame showing, in this view, the field of a closer one. @param {'medium' | 'one'} closer */
+    const frame = closer => {
+      const f = this.#field(closer, n), here = view === 'whole' ? null : this.#field(view, n);
+      if (!f || !sc || !b) return nothing;
+      const w = n.w * sc, h = n.h * sc;
+      const ox = view === 'whole' ? (b.w - w) / 2 : w <= b.w ? (b.w - w) / 2 : -(/** @type {any} */ (here)).x * w;
+      const oy = view === 'whole' ? (b.h - h) / 2 : h <= b.h ? (b.h - h) / 2 : -(/** @type {any} */ (here)).y * h;
+      return html`<div class="frame-${closer}" style=${`left:${ox + f.x * w}px;top:${oy + f.y * h}px;width:${f.w * w}px;height:${f.h * h}px`}></div>`;
+    };
+    const labels = { whole: 'Image entière', medium: `Moyenne ×${nf.format(Math.round(this._medium * 10) / 10)}`, one: original === 'error' ? '100 % — original indisponible' : original === undefined ? '100 % — chargement de l’original…' : '100 % (original)' };
+    return html`<div class="xview v-${view}" data-view=${view} role="img" aria-label=${labels[view]}
+        @pointerdown=${(/** @type {PointerEvent} */ e) => this.#viewDown(e, view)} @pointermove=${this.#viewMove} @pointerup=${this.#viewUp} @pointercancel=${() => { this.#pan = null; }}
+        @wheel=${view === 'medium' ? this.#mediumWheel : null}>
+      <img src=${src} alt="" draggable="false" decoding="async" referrerpolicy="no-referrer" style=${style}
+        @error=${() => { if (view !== 'one') this.#broken(item, src); }} />
+      ${view === 'whole' ? html`${frame('medium')}${frame('one')}` : view === 'medium' ? frame('one') : nothing}
+      <span class="xlabel">${labels[view]}</span>
+    </div>`;
+  }
+
+  /** @param {MediaItem} item */
+  #exploration(item) {
+    this.#loadOriginal(item);
+    return html`<div class="explore">
+      ${this.#exploreView(item, 'whole')}
+      ${this.#exploreView(item, 'medium')}
+      ${this.#exploreView(item, 'one')}
+      <p class="xtip">Touchez ou faites glisser dans n’importe quelle vue : les trois suivent. Molette sur la vue moyenne : son grossissement.</p>
+    </div>`;
+  }
 
   /** A mouse (or pen) that hovers: the magnifier follows it; else a tap starts it. */
   #hover = matchMedia('(hover: hover)');
@@ -443,6 +692,13 @@ export class GfMediaViewer extends LitElement {
   // ── Render ─────────────────────────────────────────────────────────────
 
   updated() {
+    // Exploration: measure its views (their sizes place the images).
+    const views = [...this.renderRoot.querySelectorAll('.xview')];
+    if (views.length !== this.#observedViews.length || views.some((v, i) => v !== this.#observedViews[i])) {
+      this.#exploreObserver.disconnect();
+      for (const v of views) this.#exploreObserver.observe(v);
+      this.#observedViews = views;
+    }
     // Keep the current thumbnail in view (in the strip only: the page itself does not scroll).
     const strip = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.thumbs'));
     const cur = /** @type {HTMLElement | null} */ (strip?.querySelector('[aria-current="true"]'));
@@ -465,31 +721,69 @@ export class GfMediaViewer extends LitElement {
     return html`
       <div class="bar">
         ${this.compact ? html`${icon('images')}<h2>${this.label || 'Médias'}</h2>` : html`<h2></h2>`}
+        ${this.presentation === 'mosaic' && this._opened ? html`<button class="link back-mosaic" type="button" @click=${() => { this._opened = false; }}>${icon('chevron-left')} Mosaïque</button>` : nothing}
         ${item ? html`<span class="count" aria-live="polite">${at + 1} / ${shown.length}</span>` : nothing}
-        <button class="icon-btn" type="button" aria-pressed=${String(this._loupe)} title="Loupe sur l’original (survol)" aria-label="Loupe sur l’original"
-          @click=${() => { this._loupe = !this._loupe; this._zoom = false; this._locked = false; this._lens = null; }}>${icon('zoom-in')}</button>
+        ${this.#view === 'slideshow' && shown.length > 1 ? html`<button class="icon-btn" type="button" aria-pressed=${String(this._playing)}
+          title=${this._playing ? 'Arrêter le diaporama' : 'Lancer le diaporama (une image toutes les 5 s)'} aria-label=${this._playing ? 'Arrêter le diaporama' : 'Lancer le diaporama'}
+          @click=${() => this.#play()}>${this._playing ? html`<b class="pause">❚❚</b>` : html`<b class="play">▶</b>`}</button>` : nothing}
+        ${this.#view === 'scene' && item ? html`
+        <button class="icon-btn" type="button" aria-pressed=${String(this._explore)} title="Exploration : image entière, vue moyenne et 100 %, liées" aria-label="Exploration en trois vues"
+          @click=${() => { this._explore = !this._explore; this._zoom = false; this._lens = null; this._center = { x: 0.5, y: 0.5 }; }}>${icon('layers')}</button>` : nothing}
+        ${this._explore ? nothing : html`<button class="icon-btn" type="button" aria-pressed=${String(this._loupe)} title="Loupe sur l’original (survol)" aria-label="Loupe sur l’original"
+          @click=${() => { this._loupe = !this._loupe; this._zoom = false; this._locked = false; this._lens = null; }}>${icon('zoom-in')}</button>`}
+        ${this._loupe && !this._explore && this.#view === 'scene' && !this.compact ? html`<span class="seg" role="group" aria-label="Panneau de la loupe">
+          <button type="button" aria-pressed=${String(this._panel === 'overlay')} title="Loupe par-dessus la photo" @click=${() => this.#setPanel('overlay')}>Par-dessus</button>
+          <button type="button" aria-pressed=${String(this._panel === 'pinned')} title="Loupe dans la colonne à côté (s’il y a la place)" @click=${() => this.#setPanel('pinned')}>À côté</button></span>` : nothing}
         ${this.compact ? html`<button class="icon-btn" type="button" title="Ouvrir en volet (grand, loupe à côté)" aria-label="Ouvrir les médias en volet"
           @click=${() => this.#toPane()}>${icon('arrows-angle-expand')}</button>` : nothing}
       </div>
-      ${!item ? html`<div class="empty">${this._done ? (plant ? 'Aucune image sous licence libre pour cette plante (ou modules photos désactivés).' : 'Plante introuvable.') : html`<span class="spinner">chargement des médias…</span>`}</div>` : html`
-        <div class="main">
+      ${!item ? this.#empty(plant) : this.#view === 'mosaic' ? this.#mosaic(shown, counts) : this.#view === 'slideshow' ? html`
+        <div class="main slideshow">${this.#stage(item, at, shown.length)}${this.#caption(item)}</div>` : html`
+        ${this._explore ? this.#exploration(item) : html`<div class="main">
           ${this.#stage(item, at, shown.length)}
-          <aside class="side" aria-label="À propos de l’image">${this._zoom && this._lens && this.#wide ? this.#magnifier(item) : this.#info(item)}</aside>
-        </div>
-        <div class="strip">
-          <div class="chips" role="group" aria-label="Type de média">
-            ${KINDS.map(([k, label]) => html`<button type="button" aria-pressed=${String(this._filter === k)} ?disabled=${!counts[k] && k !== 'all'}
-              @click=${() => this.#setFilter(k)}>${label} ${counts[k]}</button>`)}
-            ${this._done ? nothing : html`<span class="muted small">chargement…</span>`}
-          </div>
-          <div class="thumbs" role="listbox" aria-label="Médias">
-            ${shown.map(i => html`<button type="button" role="option" class=${i.kind} aria-current=${String(i.key === item.key)} aria-selected=${String(i.key === item.key)}
-              title=${[KIND_LABEL[i.kind], i.source].join(' · ')} @click=${() => this.#select(i)}>
-              <img src=${i.thumb} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"
-                @error=${(/** @type {Event} */ e) => { const img = /** @type {HTMLImageElement} */ (e.target); if (img.src !== i.src) img.src = i.src; }} />
-            </button>`)}
-          </div>
-        </div>`}`;
+          <aside class="side" aria-label="À propos de l’image">${this._zoom && this._lens && this.#pinned ? this.#magnifier(item) : this.#info(item)}</aside>
+        </div>`}
+        <div class="strip">${this.#chips(counts)}${this.#thumbs(shown, item)}</div>`}`;
+  }
+
+  /** @param {any} plant */
+  #empty(plant) {
+    return html`<div class="empty">${this._done ? (plant ? 'Aucune image sous licence libre pour cette plante (ou modules photos désactivés).' : 'Plante introuvable.') : html`<span class="spinner">chargement des médias…</span>`}</div>`;
+  }
+
+  /** @param {Record<string, number>} counts */
+  #chips(counts) {
+    return html`<div class="chips" role="group" aria-label="Type de média">
+      ${KINDS.map(([k, label]) => html`<button type="button" aria-pressed=${String(this._filter === k)} ?disabled=${!counts[k] && k !== 'all'}
+        @click=${() => this.#setFilter(k)}>${label} ${counts[k]}</button>`)}
+      ${this._done ? nothing : html`<span class="muted small">chargement…</span>`}
+    </div>`;
+  }
+
+  /** @param {MediaItem[]} shown @param {MediaItem} item */
+  #thumbs(shown, item) {
+    return html`<div class="thumbs" role="listbox" aria-label="Médias">
+      ${shown.map(i => html`<button type="button" role="option" class=${i.kind} aria-current=${String(i.key === item.key)} aria-selected=${String(i.key === item.key)}
+        title=${[KIND_LABEL[i.kind], i.source].join(' · ')} @click=${() => this.#select(i)}>
+        <img src=${i.thumb} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"
+          @error=${(/** @type {Event} */ e) => { const img = /** @type {HTMLImageElement} */ (e.target); if (img.src !== i.src) img.src = i.src; }} />
+      </button>`)}
+    </div>`;
+  }
+
+  /** Mosaic: every image of the filter, in a grid; one touched opens in the scene. @param {MediaItem[]} shown @param {Record<string, number>} counts */
+  #mosaic(shown, counts) {
+    return html`<div class="mosaic-wrap">${this.#chips(counts)}
+      <div class="mosaic" role="list" aria-label="Médias">${shown.map(i => html`<button type="button" role="listitem" class=${i.kind}
+        title=${[KIND_LABEL[i.kind], i.source, i.author].filter(Boolean).join(' · ')} @click=${() => { this.#select(i); this._key = i.key; this._opened = true; }}>
+        <img src=${i.thumb} alt=${KIND_LABEL[i.kind]} loading="lazy" decoding="async" referrerpolicy="no-referrer"
+          @error=${(/** @type {Event} */ e) => { const img = /** @type {HTMLImageElement} */ (e.target); if (img.src !== i.src) img.src = i.src; }} />
+      </button>`)}</div></div>`;
+  }
+
+  /** Slideshow: the image's credit over the bottom of the frame. @param {MediaItem} item */
+  #caption(item) {
+    return html`<div class="caption"><span>${KIND_LABEL[item.kind]} · ${item.source}</span><gf-attribution .media=${item}></gf-attribution></div>`;
   }
 
   /** @param {MediaItem} item @param {number} at @param {number} n */
@@ -505,7 +799,7 @@ export class GfMediaViewer extends LitElement {
       <button class="nav prev" type="button" aria-label="Média précédent" ?disabled=${at <= 0} @click=${() => this.#go(-1)}>${icon('chevron-left')}</button>
       <button class="nav next" type="button" aria-label="Média suivant" ?disabled=${at >= n - 1} @click=${() => this.#go(1)}>${icon('chevron-right')}</button>
       ${lens ? html`<div class="lens" style="left:${lens.x}px;top:${lens.y}px;width:${lens.w}px;height:${lens.h}px"></div>` : nothing}
-      ${lens && !this.#wide ? this.#magnifier(item) : nothing}
+      ${lens && !this.#pinned ? this.#magnifier(item) : nothing}
       ${this._loupe && !this._zoom ? html`<span class="hint">${this.#hover.matches ? 'Survolez la photo : loupe sur l’original · molette : grossissement' : 'Touchez la photo : loupe sur l’original'}</span>`
         : this._zoom && original === undefined ? html`<span class="hint">Chargement de l’original…</span>` : nothing}
     </div>`;

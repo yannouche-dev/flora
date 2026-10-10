@@ -13,7 +13,7 @@ import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectS
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
 import {
-  STYLES, SUBS, orderByCategory, canBeEmpty, hidesEmpty, setHidesEmpty, isPinned, setPinned, isPaned, setPaned, blockModuleName, blockStyle, isTitleShown, setBlockStyle, setTitleShown, blockOrder, blockTitle, createNote, deleteNote, createMap, deleteMap, isAddedMap, exportLayout, importLayout, isCustom, isHidden, isNote,
+  STYLES, SUBS, orderByCategory, canBeEmpty, hidesEmpty, setHidesEmpty, placeOf, setPlace, blockModuleName, blockStyle, isTitleShown, setBlockStyle, setTitleShown, blockOrder, blockTitle, createNote, deleteNote, createMap, deleteMap, isAddedMap, exportLayout, importLayout, isCustom, isHidden, isNote,
   isSubHidden, renameBlock, resetAll, resetBlocks, setBlockOrder, setHidden, setSubHidden, setSubOrder, subOrder, subTitle
 } from '../core/sheet-blocks.js';
 import './gf-sortable-list.js';
@@ -330,8 +330,7 @@ export class GfSettings extends LitElement {
                 key: k, label: blockTitle(k), checked: !isHidden(mode, k), renamable: true, removable: isNote(k) || isAddedMap(k), nested: Boolean(SUBS[k]),
                 titled: isTitleShown(mode, k),
                 emptyHidden: canBeEmpty(k) ? hidesEmpty(mode, k) : undefined,
-                pinned: isPinned(mode, k),
-                paned: ['name', 'actions'].includes(k) || isNote(k) ? undefined : isPaned(mode, k),
+                place: ['name', 'actions'].includes(k) ? undefined : placeOf(mode, k) || '',
                 tag: categoryOf(blockCategory(k)).label,
                 choices: STYLES[k]?.styles.map(st => ({ key: st.key, label: st.title })), choice: blockStyle(mode, k) ?? undefined,
                 note: blockModuleName(k) ? `(module ${blockModuleName(k)})` : isNote(k) ? '(note)' : isAddedMap(k) || k === 'map' ? '(carte, réglée sur la fiche)' : ''
@@ -343,8 +342,7 @@ export class GfSettings extends LitElement {
               @choose=${e => setBlockStyle(mode, e.detail.key, e.detail.value)}
               @titled=${e => setTitleShown(mode, e.detail.key, e.detail.shown)}
               @empty=${e => setHidesEmpty(mode, e.detail.key, e.detail.hidden)}
-              @pin=${e => setPinned(mode, e.detail.key, e.detail.on)}
-              @pane=${e => setPaned(mode, e.detail.key, e.detail.on)}
+              @place=${e => setPlace(mode, e.detail.key, e.detail.place || null)}
               @remove=${e => this.#removeNote(e.detail.key)}></gf-sortable-list>
           </div>`)}
       </div>
