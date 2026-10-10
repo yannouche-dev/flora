@@ -7,7 +7,7 @@
 // « Toutes » shows every card. A tip at a time on the real element; the other tabs come as they become useful
 // (discover.js).
 
-import { LitElement, html, css, nothing } from 'lit';
+import { LitElement, html, css, nothing, repeat } from 'lit';
 import * as db from '../core/db.js';
 import { icon } from '../core/icons.js';
 import { speciesAround } from '../core/nearby.js';
@@ -15,7 +15,10 @@ import { searchPlaces, addressAt } from '../core/geoservices.js';
 import { watchLocation } from '../core/geo.js';
 import { alertsOf } from '../core/alerts.js';
 import { setHarvestMode, StoreController, whenReady } from '../core/store.js';
-import { discoverEvents, discoverState, finishDiscover, plantSeen, resetPassed, setDiscoverPoint, setDiscoverRadius, swiped, tipDone, tipSeen, PLANTS_BEFORE_FLORE } from '../core/discover.js';
+import { discoverEvents, discoverState, finishDiscover, plantSeen, resetPassed, setDiscoverPoint, setDiscoverRadius, swiped, tipDone, tipSeen, unswipe, PLANTS_BEFORE_FLORE } from '../core/discover.js';
+import { lookalikesOf } from '../core/lookalikes.js';
+import { scenarioOf } from '../core/scenarios.js';
+import { sheetSession } from '../core/sheet-session.js';
 import { isFavorite, toggleFavorite } from '../core/collections.js';
 import { href } from '../core/router.js';
 import { depth, replaceHash } from '../core/history.js';
@@ -27,15 +30,16 @@ import './gf-plant-detail.js';
 const DISTANCES = [200, 500, 1000, 2000, 5000, 10000, 20000, 50000];
 /** @param {number} m */
 const distLabel = m => m >= 1000 ? (m / 1000).toLocaleString('fr-FR') + ' km' : m + ' m';
-/** The view chosen (Rencontres, Matchs, Toutes), kept while the app is open. */
-let lastView = 'swipe';
+/** The view chosen (Rencontres, Matchs, Toutes) in each scenario, kept while the app is open. @type {Record<string, string>} */
+const lastView = {};
 /** A word for the distance, for fun. @param {number} m */
 const distMood = m => m <= 200 ? 'Juste devant la porte' : m <= 1000 ? 'Le quartier' : m <= 5000 ? 'Une balade à pied' : m <= 20000 ? 'Un tour à vélo' : 'Toute la région';
 const PAGE = 12;
 const MONTH = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
 /**
- * @typedef {{ plant: any, count: number, photo: string | null, blooming: boolean, alerts: { safety: any, edible: any } | null }} Card
+ * @typedef {{ plant: any, count: number, photo: string | null, blooming: boolean, alerts: { safety: any, edible: any } | null,
+ *   confusions?: import('../core/lookalikes.js').Lookalike[] }} Card
  * @typedef {{ id: string, anchor: () => Element | null | undefined, text: string }} Tip
  */
 
@@ -43,6 +47,12 @@ export class GfDiscover extends LitElement {
   static properties = {
     /** The plant open (the address's ?p=). */
     open: { type: Number },
+    /** The scenario (the address's ?s=): 'meet' (Rencontres), 'harvest' (Cueillette prudente), 'mosaic'. */
+    scenario: {},
+    /** Mosaïque: only the plants in flower now. */
+    _bloomOnly: { state: true },
+    /** ↺: the last swipes, to undo. */
+    _history: { state: true },
     _point: { state: true },
     _place: { state: true },
     _cards: { state: true },
@@ -107,6 +117,20 @@ export class GfDiscover extends LitElement {
     .ask { margin-top: 16px; padding: 14px 16px; border-radius: var(--gf-radius); background: var(--gf-surface); box-shadow: var(--gf-shadow); display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
     .ask p { margin: 0; flex: 1 1 240px; }
     .src { margin-top: 18px; font-size: 0.75rem; color: var(--gf-text-muted); text-align: center; }
+
+    /* Scenarios. */
+    .banner-warn { margin: 0 0 12px; padding: 10px 12px; border-radius: var(--gf-radius); background: #fde2df; color: #7a1d16; font-size: 0.88rem; display: flex; gap: 8px; align-items: flex-start; }
+    .bloom-only { display: flex; gap: 6px; align-items: center; justify-content: center; margin: 0 0 10px; font-size: 0.9rem; }
+    .grid.mosaic { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); grid-auto-flow: dense; gap: 6px; }
+    .grid.mosaic .card { border-radius: 10px; }
+    .grid.mosaic .card:nth-child(5n + 1) { grid-column: span 2; grid-row: span 2; }
+    .grid.mosaic .card .ph { aspect-ratio: 1; height: 100%; }
+    .grid.mosaic .card .txt { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 8px 6px; background: linear-gradient(transparent, rgb(0 0 0 / 70%)); color: #fff; }
+    .grid.mosaic .card i { color: #e6e6e6; }
+    .mwrap { position: relative; display: grid; }
+    .unmatch { position: absolute; z-index: 3; right: 6px; bottom: 6px; min-height: 28px; padding: 2px 10px; border-radius: var(--gf-radius-pill); border: 1px solid var(--gf-border); background: var(--gf-surface); font: inherit; font-size: 0.75rem; display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
+    .round.undo { width: 46px; height: 46px; font-size: 1.05rem; color: #d4a017; }
+    .round:disabled { opacity: 0.35; cursor: default; }
 
     /* How far. */
     .dist { display: grid; gap: 4px; justify-items: center; }
@@ -196,7 +220,12 @@ export class GfDiscover extends LitElement {
     this._cards = null;
     this._radius = s.radius || 1000;
     this._asking = false;
-    this._view = lastView;
+    /** @type {string | null} */
+    this.scenario = null;
+    this._view = 'swipe';
+    this._bloomOnly = false;
+    /** @type {{ id: number, liked: boolean, fav: boolean }[]} */
+    this._history = [];
     /** @type {Card | null} */
     this._match = null;
     /** @type {number[]} */
@@ -255,7 +284,12 @@ export class GfDiscover extends LitElement {
 
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
-    if (changed.has('_view')) lastView = this._view;
+    const sc = scenarioOf(this.scenario).key;
+    // Another scenario: its own view (Mosaïque: the grid), the cards filtered for it.
+    if (changed.has('scenario')) {
+      this._view = lastView[sc] || (sc === 'mosaic' ? 'all' : 'swipe');
+      if (changed.get('scenario') !== undefined && this._point && !this._asking) this.#load();
+    } else if (changed.has('_view')) lastView[sc] = this._view;
     if (changed.has('open') && this.open != null) plantSeen(this.open);
     this.toggleAttribute('opened', this.open != null);
   }
@@ -329,9 +363,20 @@ export class GfDiscover extends LitElement {
         return card;
       }))).filter(Boolean);
       if (abort.signal.aborted) return;
-      // In flower now first, then the most observed.
-      cards.sort((a, b) => Number(b.blooming) - Number(a.blooming) || b.count - a.count);
-      this._cards = /** @type {Card[]} */ (cards);
+      /** @type {Card[]} */
+      let list = /** @type {Card[]} */ (cards);
+      if (scenarioOf(this.scenario).key === 'harvest') {
+        // Cueillette prudente: only the plants of the Anses / Centres antipoison confusions, the deadly first.
+        for (const c of list) c.confusions = await lookalikesOf(c.plant).catch(() => []);
+        if (abort.signal.aborted) return;
+        const deadly = (/** @type {Card} */ c) => Number((c.confusions || []).some(l => l.pair.severity === 'mortel'));
+        list = list.filter(c => c.confusions?.length)
+          .sort((a, b) => deadly(b) - deadly(a) || Number(b.confusions?.some(l => l.side === 'edible')) - Number(a.confusions?.some(l => l.side === 'edible')) || b.count - a.count);
+      } else {
+        // In flower now first, then the most observed.
+        list.sort((a, b) => Number(b.blooming) - Number(a.blooming) || b.count - a.count);
+      }
+      this._cards = list;
       // The alerts of each plant (local data), as they come.
       for (const c of this._cards) alertsOf(c.plant).then(a => { c.alerts = a; this.requestUpdate(); }, () => {});
     } catch (error) {
@@ -351,14 +396,14 @@ export class GfDiscover extends LitElement {
   #openPlant(id, ids) {
     this._sheetIds = ids || (this._cards || []).map(c => c.plant.id);
     this.#openedHere = true;
-    location.hash = href.discover(id);
+    location.hash = href.discover(id, this.scenario);
   }
   /** The plant was opened from the list (Back returns to it), not by a link. */
   #openedHere = false;
 
   #close() {
     if (depth() > 0 && this.#openedHere) history.back();
-    else location.hash = href.discover();
+    else location.hash = href.discover(null, this.scenario);
   }
 
   /** @param {number} dir */
@@ -368,7 +413,7 @@ export class GfDiscover extends LitElement {
     const next = list[at + dir];
     if (!next) return;
     if (this._view === 'all' && at + dir >= this._shown) this._shown = at + dir + 1;
-    replaceHash(href.discover(next.plant.id));
+    replaceHash(href.discover(next.plant.id, this.scenario));
     this.open = next.plant.id;
   }
 
@@ -422,7 +467,9 @@ export class GfDiscover extends LitElement {
     const r = /** @type {Element} */ (tip.anchor()).getBoundingClientRect();
     const w = Math.min(300, innerWidth - 24), below = r.bottom + 170 < innerHeight;
     const x = Math.max(12, Math.min(innerWidth - w - 12, r.left + r.width / 2 - w / 2));
-    const y = below ? r.bottom + 14 : Math.max(12, r.top - 14 - 150);
+    // A large element (the card): the bubble inside its top, never over the buttons under it.
+    const big = r.height > innerHeight * 0.4;
+    const y = big ? Math.max(12, r.top + 16) : below ? r.bottom + 14 : Math.max(12, r.top - 14 - 150);
     const box = this._tipBox;
     if (tip !== this._tip || !box || Math.abs(box.ring.top - r.top) > 1 || Math.abs(box.ring.left - r.left) > 1 || Math.abs(box.ring.width - r.width) > 1) {
       this._tip = tip;
@@ -504,13 +551,19 @@ export class GfDiscover extends LitElement {
     const km = distLabel(this._radius);
     const s = discoverState();
     const matches = this.#matchCards.length;
-    return html`<section class="list">
+    const sc = scenarioOf(this.scenario);
+    return html`<section class="list ${sc.key}">
       <div class="head">
-        <h1>Autour ${this._place ? 'de ' + this._place : 'de vous'}</h1>
+        <h1>${sc.key === 'meet' ? '' : sc.title + ' · '}Autour ${this._place ? 'de ' + this._place : 'de vous'}</h1>
         <span class="where">${cards ? `${cards.length} plantes à moins de ${km}${cards.some(c => c.blooming) ? ` · ${cards.filter(c => c.blooming).length} en fleur en ${month}` : ''}` : ''}</span>
         <button class="link" type="button" @click=${() => { this._asking = true; }}>Distance : ${km}</button>
         <button class="link" type="button" @click=${() => { this._point = null; this._cards = null; }}>Changer de lieu</button>
       </div>
+      ${sc.key === 'harvest' ? html`<p class="banner-warn" role="note">${icon('exclamation-triangle-fill')} Ne cueillez jamais une plante sans identification certaine :
+        chacune de ces plantes a un sosie dangereux (liste de l’Anses et des Centres antipoison).</p>` : nothing}
+      ${sc.key === 'harvest' && cards && !cards.length && !this._loading ? html`<div class="deck-end"><p><b>Aucune plante de cueillette observée à moins de ${km}.</b></p>
+        ${DISTANCES.find(d => d > this._radius) ? html`<button class="primary" type="button" @click=${() => { const n = /** @type {number} */ (DISTANCES.find(d => d > this._radius)); this._radius = n; setDiscoverRadius(n); this.#load(); }}>Chercher jusqu’à ${distLabel(/** @type {number} */ (DISTANCES.find(d => d > this._radius)))}</button>` : nothing}</div>` : nothing}
+      ${sc.key === 'mosaic' && cards?.length ? html`<label class="bloom-only"><input type="checkbox" .checked=${this._bloomOnly} @change=${(/** @type {any} */ e) => { this._bloomOnly = e.target.checked; }} /> En fleur maintenant (${cards.filter(c => c.blooming).length})</label>` : nothing}
       ${cards && cards.length ? html`<div class="views segmented" role="tablist" aria-label="Affichage">
         ${[['swipe', 'Rencontres'], ['matches', `Matchs${matches ? ' · ' + matches : ''}`], ['all', 'Toutes']].map(([k, l]) => html`<button type="button" role="tab"
           aria-selected=${String(this._view === k)} @click=${() => { this._view = k; }}>${l}</button>`)}
@@ -519,10 +572,11 @@ export class GfDiscover extends LitElement {
       ${this._error ? html`<p class="error" role="alert">${this._error} <button class="link" type="button" @click=${() => this.#load()}>Réessayer</button></p>` : nothing}
       ${cards && !cards.length && !this._loading ? html`<p class="muted">Aucune plante observée ici pour le moment. Essayez une autre commune.</p>` : nothing}
       ${cards && this._view === 'swipe' ? this.#deckView() : nothing}
-      ${cards && this._view === 'matches' ? (matches ? html`<div class="grid">${this.#matchCards.map(c => this.#card(c, this.#matchCards.map(x => x.plant.id)))}</div>`
+      ${cards && this._view === 'matches' ? (matches ? html`<div class="grid">${this.#matchCards.map(c => html`<div class="mwrap">${this.#card(c, this.#matchCards.map(x => x.plant.id))}
+          <button class="unmatch" type="button" title="Retirer ce match (et des favoris)" aria-label=${'Retirer ' + (c.plant.vernacularNames?.[0] || c.plant.scientificName) + ' des matchs'}
+            @click=${() => this.#unmatch(c)}>${icon('x-lg')} Retirer</button></div>`)}</div>`
         : html`<p class="muted empty">Pas encore de match. Glissez à droite une plante qui vous plaît dans « Rencontres ».</p>`) : nothing}
-      ${cards && this._view === 'all' ? html`<div class="grid">${cards.slice(0, this._shown).map(c => this.#card(c))}</div>
-        ${cards.length > this._shown ? html`<button class="secondary more" type="button" @click=${() => { this._shown += PAGE; }}>Voir plus (${cards.length - this._shown})</button>` : nothing}` : nothing}
+      ${cards && this._view === 'all' ? this.#allView(cards, sc.key === 'mosaic') : nothing}
       ${cards ? html`
         ${s.seen.length >= 3 && !tipSeen('harvest') ? html`<div class="ask"><p>${icon('lightbulb')} Vous cueillez des plantes sauvages ? Le mode cueillette met les confusions dangereuses en premier, avec la saison et les recettes.</p>
           <button class="primary" type="button" @click=${() => { setHarvestMode(true); tipDone('harvest'); }}>Oui, l’activer</button>
@@ -533,6 +587,31 @@ export class GfDiscover extends LitElement {
   }
 
   // ── Swiping ───────────────────────────────────────────────────────────
+
+  /** « Toutes »: the grid (Mosaïque: large photos, the names over them; « En fleur » filters). @param {Card[]} all @param {boolean} mosaic */
+  #allView(all, mosaic) {
+    const cards = mosaic && this._bloomOnly ? all.filter(c => c.blooming) : all;
+    const ids = cards.map(c => c.plant.id);
+    return html`<div class="grid ${mosaic ? 'mosaic' : ''}">${cards.slice(0, this._shown).map(c => this.#card(c, ids, mosaic))}</div>
+      ${cards.length > this._shown ? html`<button class="secondary more" type="button" @click=${() => { this._shown += PAGE; }}>Voir plus (${cards.length - this._shown})</button>` : nothing}`;
+  }
+
+  /** A match taken back: out of the matches and the favourites. @param {Card} c */
+  #unmatch(c) {
+    unswipe(c.plant.id);
+    if (isFavorite(c.plant.id)) toggleFavorite(c.plant).catch(() => {});
+  }
+
+  /** ↺: the last card swiped comes back on top (a match undone: out of the favourites too, if it put it there). */
+  #rewind() {
+    const last = this._history[this._history.length - 1];
+    if (!last) return;
+    this._history = this._history.slice(0, -1);
+    unswipe(last.id);
+    const card = (this._cards || []).find(c => c.plant.id === last.id);
+    if (last.fav && card && isFavorite(last.id)) toggleFavorite(card.plant).catch(() => {});
+    this._match = null;
+  }
 
   /** The deck: the card on top (dragged), the next one under it, and the three buttons. */
   #deckView() {
@@ -550,10 +629,10 @@ export class GfDiscover extends LitElement {
     const [top, under] = deck;
     return html`<div class="deck-wrap">
       <div class="deck">
-        ${under ? this.#swipeCard(under, false) : nothing}
-        ${this.#swipeCard(top, true)}
+        ${repeat(under ? [under, top] : [top], c => c.plant.id, c => this.#swipeCard(c, c === top))}
       </div>
       <div class="actions" role="group" aria-label="Votre réponse">
+        <button class="round undo" type="button" aria-label="Revenir à la carte précédente" title="Revenir à la carte précédente" ?disabled=${!this._history.length} @click=${() => this.#rewind()}>${icon('arrow-counterclockwise')}</button>
         <button class="round pass" type="button" aria-label="Passer" title="Passer (←)" @click=${() => this.#decide(top, false)}>${icon('x-lg')}</button>
         <button class="round info" type="button" aria-label="Voir sa fiche" title="Sa fiche (↑)" @click=${() => this.#openPlant(top.plant.id, this.#deck.map(c => c.plant.id))}>${icon('three-dots')}</button>
         <button class="round like" type="button" aria-label="J’aime : c’est un match" title="Match (→)" @click=${() => this.#decide(top, true)}>${icon('heart-fill')}</button>
@@ -579,6 +658,12 @@ export class GfDiscover extends LitElement {
   /** A short bio, from the plant's real data — with a wink. @param {Card} c @returns {string[]} */
   #bio(c) {
     const p = c.plant, a = c.alerts, out = [];
+    // Cueillette prudente: the confusion first.
+    for (const l of (c.confusions || []).slice(0, 2)) {
+      const others = l.others.map(o => o.label).join(', ');
+      out.push(l.side === 'edible' ? `⚠️ Ne me confondez pas avec ${others}${l.pair.severity === 'mortel' ? ' (mortel)' : ' (toxique)'}. Partie : ${l.pair.part}.`
+        : `☠️ Je suis le sosie ${l.pair.severity === 'mortel' ? 'mortel' : 'toxique'} de ${others}.`);
+    }
     const months = floweringMonths(p.flowering);
     if (c.blooming) out.push('🌼 En fleur en ce moment : je suis à mon avantage.');
     else if (months.size) out.push(`🗓️ Je fleuris de ${MONTH[[...months][0]]} à ${MONTH[[...months][months.size - 1]]}. Repassez me voir.`);
@@ -590,12 +675,12 @@ export class GfDiscover extends LitElement {
     return out.slice(0, 4);
   }
 
-  /** @type {{ id: number, x: number, y: number, dx: number, dy: number, el: HTMLElement } | null} */ #drag = null;
+  /** @type {{ id: number, x: number, y: number, dx: number, dy: number, el: HTMLElement, t: number, vx: number, lx: number, lt: number } | null} */ #drag = null;
 
   #dragStart = (/** @type {PointerEvent} */ e) => {
     const el = /** @type {HTMLElement} */ (e.currentTarget);
     try { el.setPointerCapture(e.pointerId); } catch { /* synthetic */ }
-    this.#drag = { id: Number(el.dataset.id), x: e.clientX, y: e.clientY, dx: 0, dy: 0, el };
+    this.#drag = { id: Number(el.dataset.id), x: e.clientX, y: e.clientY, dx: 0, dy: 0, el, t: performance.now(), vx: 0, lx: e.clientX, lt: performance.now() };
     el.classList.add('dragging');
   };
 
@@ -603,9 +688,13 @@ export class GfDiscover extends LitElement {
     const d = this.#drag;
     if (!d) return;
     d.dx = e.clientX - d.x; d.dy = e.clientY - d.y;
+    // The speed of the throw (px / ms), smoothed.
+    const now = performance.now();
+    if (now > d.lt) { d.vx = 0.7 * d.vx + 0.3 * (e.clientX - d.lx) / (now - d.lt); d.lx = e.clientX; d.lt = now; }
     d.el.style.transform = `translate(${d.dx}px, ${d.dy}px) rotate(${d.dx / 18}deg)`;
-    d.el.style.setProperty('--like', String(Math.max(0, Math.min(1, d.dx / 110))));
-    d.el.style.setProperty('--nope', String(Math.max(0, Math.min(1, -d.dx / 110))));
+    const reach = (d.el.offsetWidth || 300) * 0.3;
+    d.el.style.setProperty('--like', String(Math.max(0, Math.min(1, d.dx / reach))));
+    d.el.style.setProperty('--nope', String(Math.max(0, Math.min(1, -d.dx / reach))));
   };
 
   #dragEnd = () => {
@@ -614,8 +703,11 @@ export class GfDiscover extends LitElement {
     if (!d) return;
     d.el.classList.remove('dragging');
     const card = (this._cards || []).find(c => c.plant.id === d.id);
-    if (card && Math.abs(d.dx) > 110) { this.#decide(card, d.dx > 0, d.el); return; }
-    if (card && d.dy < -120 && Math.abs(d.dx) < 80) { this.#reset(d.el); this.#openPlant(card.plant.id, this.#deck.map(c => c.plant.id)); return; }
+    // Far enough (30 % of the card's width), or thrown (fast enough, the same way).
+    const w = d.el.offsetWidth || 300, h = d.el.offsetHeight || 400;
+    const thrown = Math.abs(d.dx) > 40 && Math.abs(d.vx) > 0.6 && Math.sign(d.vx) === Math.sign(d.dx);
+    if (card && (Math.abs(d.dx) > w * 0.3 || thrown)) { this.#decide(card, d.dx > 0, d.el); return; }
+    if (card && d.dy < -h * 0.18 && Math.abs(d.dx) < w * 0.25) { this.#reset(d.el); this.#openPlant(card.plant.id, this.#deck.map(c => c.plant.id)); return; }
     // A touch without moving: its sheet.
     if (card && Math.hypot(d.dx, d.dy) < 6) { this.#reset(d.el); this.#openPlant(card.plant.id, this.#deck.map(c => c.plant.id)); return; }
     this.#reset(d.el);
@@ -632,9 +724,12 @@ export class GfDiscover extends LitElement {
     const node = el || /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.swipe-card.top'));
     const done = () => {
       if (node) { node.style.transition = 'none'; this.#reset(node); node.classList.remove('fly'); requestAnimationFrame(() => { node.style.transition = ''; }); }
+      const fav = liked && !isFavorite(card.plant.id);
+      this._history = [...this._history, { id: card.plant.id, liked, fav }].slice(-30);
       swiped(card.plant.id, liked);
       if (liked) {
-        if (!isFavorite(card.plant.id)) toggleFavorite(card.plant).catch(() => {});
+        if (fav) toggleFavorite(card.plant).catch(() => {});
+        if (matchMedia('(pointer: coarse)').matches) navigator.vibrate?.(30);
         this._match = card;
         clearTimeout(this.#matchTimer);
         // The first match waits for the user; the next ones pass by themselves.
@@ -662,12 +757,12 @@ export class GfDiscover extends LitElement {
     </div>`;
   }
 
-  /** @param {Card} c @param {number[]} [ids] */
-  #card(c, ids) {
+  /** @param {Card} c @param {number[]} [ids] @param {boolean} [mosaic] Mosaïque: a touch opens the plant at its images */
+  #card(c, ids, mosaic = false) {
     const p = c.plant, name = p.vernacularNames?.[0] || p.scientificName;
     const a = c.alerts, danger = a?.safety?.tone === 'danger' || a?.edible?.tone === 'danger';
     const n = (a?.safety?.count || 0) + (a?.edible?.count || 0);
-    return html`<button class="card" type="button" aria-current=${String(this.open === p.id)} @click=${() => this.#openPlant(p.id, ids)}>
+    return html`<button class="card" type="button" aria-current=${String(this.open === p.id)} @click=${() => { if (mosaic) { sheetSession.anchor = 'images'; sheetSession.anchorBlock = 'media'; sheetSession.anchorOffset = 0; } this.#openPlant(p.id, ids); }}>
       ${discoverState().matches.includes(p.id) ? html`<span class="heart" aria-label="Match">${icon('heart-fill')}</span>` : nothing}
       <div class="ph">${c.photo ? html`<img src=${c.photo} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" />` : nothing}</div>
       <div class="chips">${c.blooming ? html`<span class="chip bloom">En fleur</span>` : nothing}

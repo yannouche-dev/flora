@@ -113,7 +113,12 @@ export class GfMediaViewer extends LitElement {
     .zoombar button { min-height: 0; height: 30px; min-width: 30px; padding: 0 8px; border: 0; border-radius: var(--gf-radius-pill); background: none; color: #fff; font: inherit; font-size: 0.8rem; font-variant-numeric: tabular-nums; cursor: pointer; }
     .zoombar button:hover { background: rgb(255 255 255 / 15%); }
     .zoombar button:disabled { opacity: 0.4; cursor: default; }
-    .zoombar .pct { min-width: 58px; }
+    .zoombar .pct { min-width: 92px; }
+    /* The map comes in softly. */
+    .minimap { animation: map-in 0.25s ease-out; }
+    @keyframes map-in { from { opacity: 0; transform: translateX(8px); } }
+    /* The frame's size follows the image's shape smoothly (a guessed shape corrected). */
+    .stage.animate .frame { transition: transform 0.22s ease-out, width 0.22s ease-out, height 0.22s ease-out; }
     .hd-state { position: absolute; left: 8px; bottom: 8px; z-index: 3; padding: 3px 9px; border-radius: var(--gf-radius-pill); background: rgb(0 0 0 / 55%); color: #fff; font-size: 0.72rem; pointer-events: none; }
     /* The controls fade while the pointer rests (wide, mouse). */
     .stage.idle .nav, .stage.idle .zoombar { opacity: 0; }
@@ -130,7 +135,7 @@ export class GfMediaViewer extends LitElement {
     .zoombar { right: calc(var(--map-w, -8px) + 16px); }
 
     /* The credit under the image, one line; « ⓘ » for the details. */
-    .caption { flex: none; display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 12px; border-top: 1px solid var(--gf-border); font-size: 0.78rem; color: var(--gf-text-muted); min-height: 34px; }
+    .caption { flex: none; display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 12px; border-top: 1px solid var(--gf-border); font-size: 0.78rem; color: var(--gf-text-muted); min-height: 39px; }
     .caption .what { white-space: nowrap; }
     .caption gf-attribution { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.78rem; }
     .caption .icon-btn { width: 30px; height: 30px; min-height: 0; flex: none; }
@@ -260,6 +265,7 @@ export class GfMediaViewer extends LitElement {
     super.disconnectedCallback();
     this.removeEventListener('keydown', this.#onKey);
     this.#abort?.abort();
+    clearTimeout(this.#settleTimer);
     clearInterval(this.#timer);
     clearTimeout(this.#idleTimer);
     this.#stageObserver.disconnect();
@@ -278,7 +284,8 @@ export class GfMediaViewer extends LitElement {
     }
     if (changed.has('_key')) this.#resetImage();
     // Until the user zooms or moves, the image keeps the chosen view (its shape and the stage's can still change).
-    if (!this.#touched && (changed.has('_key') || changed.has('_stage') || changed.has('_natural'))) this.#toHome();
+    // The true shape arriving (or the stage resized) eases the image into place; a new image starts there.
+    if (!this.#touched && (changed.has('_key') || changed.has('_stage') || changed.has('_natural'))) this.#toHome(!changed.has('_key') && this._loaded);
     // The display follows to the next plant.
     if (changed.has('_filter') || changed.has('_part') || changed.has('_info') || changed.has('_opened') || changed.has('_playing')) {
       setMediaSession({ filter: this._filter, part: this._part, info: this._info, opened: this._opened, playing: this._playing });
@@ -289,6 +296,8 @@ export class GfMediaViewer extends LitElement {
     this.#abort?.abort();
     const abort = this.#abort = new AbortController();
     this._items = []; this._done = false; this._key = null;
+    this.#settled = false;
+    clearTimeout(this.#settleTimer);
     const plant = await db.get('plants', /** @type {number} */ (this.plantId)).catch(() => null);
     if (abort.signal.aborted) return;
     this._plant = plant;
@@ -301,12 +310,30 @@ export class GfMediaViewer extends LitElement {
         const found = items.find(i => i.key === want);
         if (found) this._key = found.key;
       }
-      // The URL's index: once every source has answered (before, the order can still change).
-      if (this._key === null && done && items.length) this._key = items[Math.min(Math.max(0, this.index || 0), items.length - 1)].key;
+      // The image shown is chosen once, when every source has answered or 0.9 s after the first images (before,
+      // the order still changes as sources come: the image would change under the eyes); till then, the skeleton.
+      if (this._key !== null) this.#settled = true;
+      else if (done) this.#settle();
+      else if (items.length && !this.#settleTimer) this.#settleTimer = setTimeout(() => this.#settle(), 900);
       // An image asked for (address, photo clicked) that the filters chosen earlier would hide: they open up.
       if (this._key !== null && !this.#shown.some(i => i.key === this._key) && (this.startUrl || this.index) && items.some(i => i.key === this._key)) { this._filter = 'all'; this._part = 'all'; }
       this.#announce();
     });
+  }
+
+  /** The image to show is chosen (see #load). */
+  #settled = false;
+  /** @type {any} */ #settleTimer = 0;
+
+  #settle() {
+    clearTimeout(this.#settleTimer);
+    this.#settleTimer = 0;
+    if (this.#settled) return;
+    this.#settled = true;
+    const shown = this.#shown;
+    if (this._key === null && shown.length) this._key = shown[Math.min(Math.max(0, this.index || 0), shown.length - 1)].key;
+    this.#announce();
+    this.requestUpdate();
   }
 
   // ── Current item, browsing ─────────────────────────────────────────────
@@ -325,6 +352,7 @@ export class GfMediaViewer extends LitElement {
   }
 
   get #current() {
+    if (!this.#settled) return null;
     const shown = this.#shown;
     return shown.find(i => i.key === this._key) || (this._key === null ? shown[Math.min(Math.max(0, this.index || 0), shown.length - 1)] : shown[0]) || null;
   }
@@ -754,7 +782,7 @@ export class GfMediaViewer extends LitElement {
       ${!item ? (this._done ? this.#empty(plant) : this.#skeleton()) : this.#view === 'mosaic' ? this.#mosaic(shown) : html`
         <div class="main ${this._info ? 'with-info' : ''} ${this.#view === 'slideshow' ? 'slideshow' : ''}">${this.#stage(item, at, shown.length)}${this._info ? this.#details(item) : nothing}</div>
         ${this.#caption(item)}
-        ${this.#view === 'slideshow' || shown.length < 2 ? nothing : html`<div class="strip">${this.#thumbs(shown, item)}</div>`}`}`;
+        ${this.#view === 'slideshow' || (shown.length < 2 && this._done) ? nothing : html`<div class="strip">${this.#thumbs(shown, item)}</div>`}`}`;
   }
 
   /** @param {any} plant */

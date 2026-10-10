@@ -102,6 +102,9 @@ export function swiped(id, liked) {
   plantSeen(id);
 }
 
+/** A card back in the deck (« ↺ »: the last swipe undone, or a match taken back). @param {number} id */
+export const unswipe = id => save({ matches: state.matches.filter(x => x !== id), passed: state.passed.filter(x => x !== id) });
+
 /** The cards passed, to see them again. */
 export const resetPassed = () => save({ passed: [] });
 

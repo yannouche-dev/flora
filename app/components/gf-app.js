@@ -15,6 +15,7 @@ import './gf-capture.js';
 import './gf-tabbar.js';
 import './gf-mode-switch.js';
 import './gf-discover.js';
+import './gf-scenarios.js';
 import { discoverEvents, tabShown, UNLOCKS } from '../core/discover.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
@@ -65,6 +66,7 @@ export class GfApp extends LitElement {
     @keyframes up { from { transform: translate(-50%, 20px); opacity: 0; } }
     @media (prefers-reduced-motion: reduce) { .unlocked { animation: none; } }
     nav.tabs { margin-left: auto; }
+    .phone-scenarios { margin-left: auto; }
     .settings {
       flex: none;
       color: var(--gf-text-muted);
@@ -176,7 +178,9 @@ export class GfApp extends LitElement {
         ${tabShown('flore') ? html`<gf-mode-switch class="mode" scope="toute l’application" value=${this.#store.state.mode}
           @mode-change=${e => setMode(e.detail.mode || 'standard')}></gf-mode-switch>` : nothing}
         ${tabShown('map') ? html`<button class="note primary" type="button" @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-capture'))?.open()}>${icon('plus-lg')} Noter ici</button>` : nothing}
+        <gf-scenarios></gf-scenarios>
         <a class="settings" href=${href.settings()} title="À propos et réglages" aria-label="À propos et réglages">${icon('gear')}</a>`}
+        ${phone ? html`<gf-scenarios class="phone-scenarios"></gf-scenarios>` : nothing}
       </header>
       <main>
         ${updateReady ? html`<div class="banner" role="status">Nouvelle version de GeoFlora disponible.
@@ -219,9 +223,9 @@ export class GfApp extends LitElement {
     switch (route.name) {
       case 'discover':
         document.title = 'Découvrir — GeoFlora';
-        return html`<gf-discover .open=${route.plant}></gf-discover>`;
+        return html`<gf-discover .open=${route.plant} .scenario=${route.scenario}></gf-discover>`;
       case 'search':
-        if (!tabShown('flore')) return html`<gf-discover .open=${null}></gf-discover>`;
+        if (!tabShown('flore')) return html`<gf-discover .open=${null} .scenario=${null}></gf-discover>`;
         return html`<gf-flora .route=${route}></gf-flora>`;
       case 'plant':
         return html`<gf-flora .route=${route}></gf-flora>`;
