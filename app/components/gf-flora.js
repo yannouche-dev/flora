@@ -13,12 +13,13 @@ import './gf-plant-list.js';
 import './gf-plant-detail.js';
 import './gf-mode-switch.js';
 import { icon } from '../core/icons.js';
+import { pinnedBlocks } from '../core/sheet-blocks.js';
 
 /** Results pane narrower than this: cards instead of the grid. */
 const GRID_MIN = 560;
 const MIN = { filters: 220, results: 280, plant: 360 };
 const MAX = { filters: 480 };
-const DEFAULTS = { filters: 280, plant: 480, folded: { filters: false, results: false, plant: false } };
+const DEFAULTS = { filters: 280, plant: 480, plantPinned: 900, folded: { filters: false, results: false, plant: false } };
 const TITLES = { filters: 'Filtres', results: 'Résultats', plant: 'Plante' };
 
 /** @typedef {'filters' | 'results' | 'plant'} Pane */
@@ -460,12 +461,23 @@ export class GfFlora extends LitElement {
 
   // ── Resizing ───────────────────────────────────────────────────────────────
 
+  /**
+   * Where a pane's width is kept: the plant pane has a second one, wider, for a sheet with pinned blocks
+   * (the sheet and its pinned map side by side). @param {'filters' | 'plant'} pane @returns {'filters' | 'plant' | 'plantPinned'}
+   */
+  #key(pane) {
+    return pane === 'plant' && pinnedBlocks(plantViewOf(this.#store.state)).length ? 'plantPinned' : pane;
+  }
+
+  /** @param {'filters' | 'plant'} pane */
+  #width(pane) { return this._layout[this.#key(pane)] ?? DEFAULTS[this.#key(pane)]; }
+
   /** Largest width a side pane may take, leaving the other panes their minimum. @param {'filters' | 'plant'} pane */
   #max(pane) {
     const total = this.renderRoot.querySelector('.panes')?.getBoundingClientRect().width || innerWidth;
     const { folded } = this._layout;
     const others = pane === 'filters'
-      ? (folded.results ? 0 : MIN.results) + (this.#plantId && !folded.plant ? this._layout.plant : 0)
+      ? (folded.results ? 0 : MIN.results) + (this.#plantId && !folded.plant ? this.#width('plant') : 0)
       : (folded.results ? 0 : MIN.results) + (this.#wide.matches ? (folded.filters ? 40 : this._layout.filters) : 0);
     return Math.max(MIN[pane], Math.min(MAX[pane] || Infinity, total - others - 16));
   }
@@ -473,7 +485,7 @@ export class GfFlora extends LitElement {
   /** @param {'filters' | 'plant'} pane @param {number} width */
   #resize(pane, width) {
     const w = Math.round(Math.min(this.#max(pane), Math.max(MIN[pane], width)));
-    if (w !== this._layout[pane]) this._layout = { ...this._layout, [pane]: w };
+    if (w !== this.#width(pane)) this._layout = { ...this._layout, [this.#key(pane)]: w };
   }
 
   /**
@@ -494,7 +506,7 @@ export class GfFlora extends LitElement {
     const box = panes.getBoundingClientRect();
     const rect = el.getBoundingClientRect();
     const x0 = e.clientX;
-    const w0 = this._layout[pane];
+    const w0 = Math.min(this.#width(pane), this.#max(pane));
     const max = this.#max(pane);
     const guide = document.createElement('div');
     guide.className = 'guide';
@@ -522,7 +534,7 @@ export class GfFlora extends LitElement {
       handle.classList.remove('dragging');
       this.classList.remove('resizing');
       guide.remove();
-      if (width !== this._layout[pane]) this._layout = { ...this._layout, [pane]: width };
+      if (width !== this.#width(pane)) this._layout = { ...this._layout, [this.#key(pane)]: width };
       this.#save();
     };
     handle.addEventListener('pointermove', move);
@@ -536,18 +548,18 @@ export class GfFlora extends LitElement {
     const dir = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
     if (!dir) return;
     e.preventDefault();
-    this.#resize(pane, this._layout[pane] + (pane === 'filters' ? dir : -dir) * step);
+    this.#resize(pane, Math.min(this.#width(pane), this.#max(pane)) + (pane === 'filters' ? dir : -dir) * step);
     this.#save();
   }
 
   /** @param {'filters' | 'plant'} pane */
   #split(pane) {
     return html`<div class="split" role="separator" aria-orientation="vertical" tabindex="0"
-      aria-label=${'Largeur du panneau ' + TITLES[pane].toLowerCase()} aria-valuenow=${this._layout[pane]}
+      aria-label=${'Largeur du panneau ' + TITLES[pane].toLowerCase()} aria-valuenow=${this.#width(pane)}
       aria-valuemin=${MIN[pane]} title="Glisser pour redimensionner · double-clic : largeur par défaut"
       @pointerdown=${e => this.#startDrag(e, pane)}
       @keydown=${e => this.#keyResize(e, pane)}
-      @dblclick=${() => { this._layout = { ...this._layout, [pane]: DEFAULTS[pane] }; this.#save(); }}></div>`;
+      @dblclick=${() => { this._layout = { ...this._layout, [this.#key(pane)]: DEFAULTS[this.#key(pane)] }; this.#save(); }}></div>`;
   }
 
   // ── Filters ────────────────────────────────────────────────────────────────
@@ -633,7 +645,7 @@ export class GfFlora extends LitElement {
 
         ${showPlant ? (plantFolded ? this.#rail('plant', true) : html`
           ${resultsFolded ? nothing : this.#split('plant')}
-          <section class="pane plant ${resultsFolded ? 'fill' : ''}" aria-label="Plante" style=${resultsFolded ? '' : `width:${this._layout.plant}px`}>
+          <section class="pane plant ${resultsFolded ? 'fill' : ''}" aria-label="Plante" style=${resultsFolded ? '' : `width:${Math.min(this.#width('plant'), this.#max('plant'))}px`}>
             ${this.#head('plant', 'Plante', html`
               ${this.#nav()}
               ${plantSwitch}

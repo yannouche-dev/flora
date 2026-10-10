@@ -371,3 +371,13 @@ gf-map:has(.gf-point-card) .leaflet-bottom {
 
 /* Bootstrap Icons (app/core/icons.js) outside shadow roots. */
 .bi { flex: none; vertical-align: -0.125em; }
+
+/* A value touched in the plant sheet (an occurrence near here, a herbarium sheet, a place): ringed, named. */
+.gf-focus-point {
+  fill: #e11d48;
+  fill-opacity: 0.9;
+  stroke: #fff;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 4px rgb(225 29 72 / 0.8));
+}
+.gf-focus-tip { font-weight: 600; }

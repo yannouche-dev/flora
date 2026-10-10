@@ -16,6 +16,7 @@ import './gf-plant-detail.js';
 import { ui } from '../styles/ui.js';
 import { icon, kindIcon } from '../core/icons.js';
 import { encodeCollection, share } from '../core/share.js';
+import { pinnedBlocks } from '../core/sheet-blocks.js';
 
 /** Up to this many thumbnails per collection row. */
 const THUMBS = 4;
@@ -64,6 +65,8 @@ export class GfCollections extends LitElement {
     .pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--gf-surface); }
     .pane.map-pane { flex: 1 1 0; }
     .pane.plant-pane { flex: 0 0 440px; border-left: 1px solid var(--gf-border); }
+    /* A sheet with pinned blocks (a map beside it) takes more room. */
+    .pane.plant-pane.pinned { flex-basis: min(860px, 64%); }
     .side-panes > .pane:only-child { flex: 1 1 0; border-left: 0; }
     @media (max-width: 1099px) {
       .layout.with-side .list-pane { flex-basis: 320px; }
@@ -492,7 +495,7 @@ export class GfCollections extends LitElement {
               @click=${() => location.replace(href.collections({ plant: plantId }))}>${icon('x-lg')}</button></div>
           <div class="pane-body">${this.#placeMap(place)}</div>
         </section>` : nothing}
-        ${plantId && !phone ? html`<section class="pane plant-pane" aria-label="Plante">
+        ${plantId && !phone ? html`<section class="pane plant-pane ${pinnedBlocks(plantViewOf(this.#store.state)).length ? 'pinned' : ''}" aria-label="Plante">
           <div class="pane-head"><h2>Plante</h2>
             <a class="icon-btn" href=${href.plant(plantId)} title="Ouvrir la fiche dans Flore" aria-label="Ouvrir la fiche dans Flore">${icon('arrows-angle-expand')}</a>
             <button class="icon-btn" type="button" title="Fermer la fiche" aria-label="Fermer la fiche"

@@ -6,6 +6,7 @@ import { StoreController } from '../core/store.js';
 import './gf-map.js';
 import { ui } from '../styles/ui.js';
 import { icon, kindIcon } from '../core/icons.js';
+import { isFocused, sendFocus } from '../core/map-focus.js';
 
 const shortDate = (/** @type {string} */ iso) =>
   new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -16,6 +17,10 @@ export class GfPlantSpots extends LitElement {
     plantId: { type: Number, attribute: 'plant-id' },
     /** Inside a titled block (plant sheet): no heading of its own. */
     notitle: { type: Boolean },
+    /** The sheet has a map: each place gets a « show on the map » button (map-focus.js). */
+    mapLinked: { type: Boolean, attribute: 'map-linked' },
+    /** The sheet's map focus, to show which place is on the map. */
+    focus: { attribute: false },
     _spots: { state: true },
     _lists: { state: true },
     _error: { state: true }
@@ -40,6 +45,10 @@ export class GfPlantSpots extends LitElement {
       font-size: 0.9rem;
     }
     li a:hover { border-color: var(--gf-accent); }
+    li.linked { display: flex; gap: 6px; }
+    li.linked a { flex: 1; min-width: 0; }
+    .on-map { flex: none; min-height: 0; padding: 0 10px; border-radius: var(--gf-radius); font-size: 1rem; }
+    .on-map[aria-pressed='true'] { color: #e11d48; border-color: #e11d48; }
     li .when { margin-left: auto; color: var(--gf-text-muted); font-size: 0.8rem; }
     li small { color: var(--gf-text-muted); }
     .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
@@ -124,12 +133,19 @@ export class GfPlantSpots extends LitElement {
             const entry = findEntry(place, this.plantId);
             const last = entry && lastHarvest(entry);
             const others = place.properties.plants.length - 1;
-            return html`<li><a href=${href.map({ spot: place.id, focus: this.plantId })}>
+            const name = place.properties.name || 'Lieu ' + (i + 1);
+            const at = /** @type {[number, number]} */ (entry?.coordinates || place.geometry.coordinates);
+            /** @type {import('../core/map-focus.js').PointFocus} */
+            const point = { kind: 'point', label: name, coordinates: at };
+            const on = isFocused(this.focus, point);
+            return html`<li class=${this.mapLinked ? 'linked' : ''}><a href=${href.map({ spot: place.id, focus: this.plantId })}>
               <span>${place.properties.name || 'Lieu ' + (i + 1)}${others > 0 ? html` <small>· ${plantCount(others + 1)}</small>` : nothing}</span>
               ${this.#store.state.harvestMode ? html`
                 ${entry && entryInSeason(entry) ? html`<span class="badge">En saison</span>` : nothing}
                 <span class="when">${last ? 'Récolté le ' + shortDate(last.date) : 'Aucune récolte'}</span>` : nothing}
-            </a></li>`;
+            </a>${this.mapLinked ? html`<button class="on-map" type="button" aria-pressed=${on ? 'true' : 'false'}
+              aria-label=${`« ${name} » sur la carte de la fiche`} title=${on ? 'Retirer de la carte' : 'Voir sur la carte de la fiche'}
+              @click=${() => sendFocus(this, point)}>${icon('geo-alt-fill')}</button>` : nothing}</li>`;
           })}
         </ul>` : lists.length ? nothing : html`<p>Ajoutez cette plante à vos favoris ou à une liste, ou notez où vous la trouvez : un lieu peut réunir plusieurs plantes. Tout reste sur cet appareil.</p>`}
     `;

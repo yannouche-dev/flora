@@ -24,8 +24,10 @@ import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 import {
   STYLES, SUBS, canBeEmpty, hidesEmpty, setHidesEmpty, isMap, isAddedMap, mapConfig, setMapConfig, createMap, deleteMap, blockModuleName, blockOrder, blockStyle, blockTitle, isTitleShown, setBlockStyle, setTitleShown, createNote, deleteNote, isHidden, isNote, isSubHidden, noteText, renameBlock,
-  setBlockOrder, setHidden, setNoteText, setSubHidden, setSubOrder, shownSubs, subOrder, subTitle
+  setBlockOrder, setHidden, setNoteText, setSubHidden, setSubOrder, shownSubs, subOrder, subTitle,
+  DOCK_SIZES, dockState, isPinned, pinnedBlocks, setDockState, setPinned
 } from '../core/sheet-blocks.js';
+import { FOCUS_EVENT, isFocused, noFocus, toggleFocus } from '../core/map-focus.js';
 import './gf-sortable-list.js';
 
 /** Remote text is untrusted HTML: keep only its text content (DOMParser never runs scripts). */
@@ -95,7 +97,9 @@ function distributions(gbif) {
   return rows
     .map(row => ({
       place: row.locality || row.country || row.locationId,
-      means: row.establishmentMeans
+      means: row.establishmentMeans,
+      // An ISO country code (some checklists): the map can show the occurrences there.
+      country: /^[A-Z]{2}$/.test(row.country || '') ? row.country : /^ISO3166:[A-Z]{2}$/i.test(row.locationId || '') ? row.locationId.slice(-2).toUpperCase() : null
     }))
     .filter(row => row.place && !seen.has(row.place) && seen.add(row.place))
     .slice(0, 24);
@@ -280,7 +284,9 @@ export class GfPlantDetail extends LitElement {
     _subsOpen: { state: true },
     _mapsOpen: { state: true },
     _newNote: { state: true },
-    _noteSaved: { state: true }
+    _noteSaved: { state: true },
+    /** What the sheet's maps show beyond their settings: a filter, a point, a compared plant (map-focus.js). */
+    _focus: { state: true }
   };
 
   static styles = [ui, css`
@@ -524,6 +530,101 @@ export class GfPlantDetail extends LitElement {
     .wiki p.credit { margin-top: 6px; }
     /* The Wikipédia summary reads like the other blocks: flush left, no card (its source line names it). */
     .description.wiki { background: none; padding: 0; border-radius: 0; }
+    /* Tabular data (style « Tableau », the default; « Liste » keeps the compact rows). */
+    table.data { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin: 2px 0 6px; }
+    table.data th, table.data td { text-align: left; padding: 5px 8px 5px 0; border-bottom: 1px solid var(--gf-border); vertical-align: baseline; }
+    table.data thead th { color: var(--gf-text-muted); font-weight: 600; font-size: 0.75rem; }
+    table.data tbody th { color: var(--gf-text-muted); font-weight: 600; width: 40%; }
+    table.data .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    table.data.counts-table td:first-child { max-width: 0; width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    table.data .pct { width: 7.5em; }
+    .meter { display: inline-block; width: 3em; height: 6px; margin-right: 6px; border-radius: 3px; background: var(--gf-surface-2); overflow: hidden; vertical-align: middle; }
+    .meter i { display: block; height: 100%; background: var(--gf-accent); opacity: 0.8; }
+    table.data td > button.focusable, table.data td .with-link > button.focusable { margin: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+    table.data .with-link { display: flex; gap: 6px; min-width: 0; align-items: baseline; }
+    table.data .ext { flex: none; text-decoration: none; }
+    h4 { font-size: 0.78rem; margin: 10px 0 2px; color: var(--gf-text-muted); font-weight: 600; }
+    ul.plain { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 0.9rem; }
+
+    /* A value that shows on the sheet's maps when touched (the sheet has a map): dotted underline, highlighted while shown. */
+    button.focusable {
+      display: inline; min-height: 0; padding: 0 3px; margin: 0 -3px; border: 0; border-radius: 4px; background: none; box-shadow: none;
+      color: inherit; font: inherit; font-weight: inherit; text-align: inherit; cursor: pointer;
+      text-decoration: underline dotted color-mix(in srgb, var(--gf-accent) 70%, transparent); text-underline-offset: 3px;
+    }
+    button.focusable:hover { color: var(--gf-accent); }
+    button.focusable[aria-pressed='true'] { background: color-mix(in srgb, #f59e0b 28%, transparent); text-decoration: none; }
+    button.focusable:focus-visible { outline: none; box-shadow: var(--gf-focus); }
+    .counts li > button.focusable { display: block; margin: 0; padding: 0 3px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .counts .with-link { display: flex; gap: 6px; min-width: 0; align-items: baseline; }
+    .counts .with-link > button.focusable { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .counts .ext { flex: none; text-decoration: none; }
+    .bars button.bar { padding: 0; margin: 0; border: 0; border-radius: 3px 3px 0 0; background: none; text-decoration: none; }
+    .bars button.bar:hover i { opacity: 1; background: color-mix(in srgb, var(--gf-accent) 80%, #000); }
+    .bars button.bar[aria-pressed='true'] { background: none; }
+    .bars button.bar[aria-pressed='true'] i { background: #f59e0b; opacity: 1; }
+    .bars button.bar[aria-pressed='true'] b { color: #b45309; }
+    figcaption button.where { display: flex; gap: 4px; align-items: center; margin: 0 0 4px; font-size: 0.72rem; color: var(--gf-text-muted); text-align: left; }
+    .focus-hint { font-size: 0.75rem; color: var(--gf-text-muted); margin: 6px 0 0; }
+
+    /*
+     * Pinned blocks (Mode King › 📌): the dock, a pane of the layout that stays while the sheet scrolls —
+     * a band at the top of a narrow sheet (phone, narrow pane), a column beside a wide one.
+     */
+    :host { container-type: inline-size; }
+    .frame.docked { display: grid; grid-template-columns: minmax(0, 1fr); }
+    .frame.docked .main { min-width: 0; }
+    .dock {
+      order: -1;
+      position: sticky;
+      /* Flush with the top of the sheet (over its padding). */
+      top: -16px;
+      z-index: 7;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      margin: -16px -16px 4px;
+      padding: 6px 12px 8px;
+      background: var(--gf-bg, var(--gf-surface-2));
+      border-bottom: 1px solid var(--gf-border);
+      box-shadow: 0 6px 14px -10px rgb(0 0 0 / 0.35);
+    }
+    :host([embedded]) .dock { top: -4px; margin: -4px -14px 4px; padding-top: 4px; }
+    /* Outside Mode King the dock's bar names its blocks: no second title. */
+    .dock:not(.king) .dock-body > .block > h2.block-title { display: none; }
+    .dock[data-size='s'] { height: calc(var(--host-h, 80vh) * 0.3); }
+    .dock[data-size='m'] { height: calc(var(--host-h, 80vh) * 0.45); }
+    .dock[data-size='l'] { height: calc(var(--host-h, 80vh) * 0.6); }
+    .dock.folded { height: auto; padding-bottom: 0; }
+    .dock.folded .dock-body { display: none; }
+    .dock-bar { flex: none; display: flex; align-items: center; gap: 6px; min-height: 34px; color: var(--gf-text-muted); font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    .dock-bar > svg { color: var(--gf-accent); flex: none; }
+    .dock-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .dock-sizes { display: inline-flex; flex: none; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill); overflow: hidden; }
+    .dock-sizes button { min-height: 0; padding: 2px 8px; border: 0; border-radius: 0; background: var(--gf-surface); color: var(--gf-text-muted); font-size: 0.68rem; font-weight: 700; cursor: pointer; }
+    .dock-sizes button[aria-pressed='true'] { background: var(--gf-accent-soft); color: var(--gf-accent); }
+    .dock-fold { flex: none; width: 30px; height: 30px; min-height: 0; padding: 0; display: grid; place-items: center; border: 0; border-radius: var(--gf-radius-sm); background: none; color: var(--gf-text-muted); cursor: pointer; }
+    .dock-sizes button:focus-visible, .dock-fold:focus-visible { outline: none; box-shadow: var(--gf-focus); }
+    .dock-body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; overscroll-behavior: contain; }
+    .dock-body > .block { margin-top: 10px; }
+    .dock-body > .block:first-child { margin-top: 0; }
+    /* A pinned map fills the dock. */
+    .dock-body > .block.map-block { flex: 1 0 200px; display: flex; flex-direction: column; min-height: 0; }
+    .dock-body > .block.map-block > .content { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .dock-body .map-placeholder.fill { flex: 1; height: auto !important; }
+    gf-sheet-map[fill] { flex: 1; min-height: 0; }
+    @container (min-width: 640px) {
+      .frame.docked { grid-template-columns: minmax(0, 1fr) var(--dock-w, 45%); column-gap: 18px; align-items: start; }
+      .frame.docked[data-size='s'] { --dock-w: 34%; }
+      .frame.docked[data-size='l'] { --dock-w: 58%; }
+      .dock, .dock[data-size] { order: 1; top: 0; height: calc(var(--host-h, 80vh) - 32px); margin: 0; padding: 0 0 12px; background: none; border: 0; box-shadow: none; }
+      :host([embedded]) .dock, :host([embedded]) .dock[data-size] { top: 0; height: calc(var(--host-h, 80vh) - 16px); margin: 0; padding: 0 0 12px; }
+      .dock.folded { height: calc(var(--host-h, 80vh) - 32px); padding-bottom: 12px; }
+      :host([embedded]) .dock.folded { height: calc(var(--host-h, 80vh) - 16px); }
+      .dock.folded .dock-body { display: flex; }
+      .dock-fold { display: none; }
+      .frame.docked .action-bar { margin-right: 0; }
+    }
     @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
   `];
 
@@ -566,6 +667,26 @@ export class GfPlantDetail extends LitElement {
     /** « Près d’ici »: not asked, looking for the position, loading, the result, or what went wrong. @type {any} */
     this._near = undefined;
     this._spotsOpen = false;
+    /** @type {import('../core/map-focus.js').SheetFocus} */
+    this._focus = noFocus();
+    // A value touched in a block: the maps show it (touched again, it goes).
+    this.addEventListener(FOCUS_EVENT, e => {
+      e.stopPropagation();
+      this._focus = toggleFocus(this._focus, /** @type {CustomEvent} */ (e).detail);
+    });
+  }
+
+  /** The sheet's height, for the dock (pinned blocks) to fill it. */
+  #resize = new ResizeObserver(([entry]) => this.style.setProperty('--host-h', Math.round(entry.contentRect.height + this.#padY()) + 'px'));
+
+  #padY() {
+    const cs = getComputedStyle(this);
+    return parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    this.#resize.observe(this);
   }
 
   /** @type {AbortController | null} */
@@ -599,6 +720,7 @@ export class GfPlantDetail extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    this.#resize.disconnect();
     this.#abort?.abort();
   }
 
@@ -620,6 +742,7 @@ export class GfPlantDetail extends LitElement {
     this._gbif = {};
     this._near = undefined;
     this._spotsOpen = false;
+    this._focus = noFocus();
     this.#requested.clear();
     this.scrollTop = 0;
 
@@ -936,12 +1059,61 @@ export class GfPlantDetail extends LitElement {
     const king = this.#store.state.kingMode;
     const order = this._dragOrder || blockOrder(this.view);
     const sorting = Boolean(this._dragOrder);
+    // Pinned blocks are in the dock, not in the flow.
     // Outside « Mode King », folded blocks are not there at all.
     // Outside it too, a block with nothing for this plant (no other name, no Wikipédia article).
-    const keys = blockOrder(this.view).filter(k => king || (!isHidden(this.view, k) && !(hidesEmpty(this.view, k) && this.#emptyHere(k, ctx))));
+    const keys = blockOrder(this.view).filter(k => !isPinned(this.view, k) && this.#visible(k, ctx));
     return html`<div class="blocks ${king ? 'king' : ''} ${sorting ? 'sorting' : ''}">${repeat(keys, k => k, k =>
       king ? this.#block(k, ctx, sorting ? order.indexOf(k) : null) : this.#plainBlock(k, ctx))}</div>
       ${king && !sorting ? this.#newNote() : nothing}`;
+  }
+
+  /** Shown here: everything in Mode King; outside it, not folded, not left out for being empty. @param {string} k @param {any} ctx */
+  #visible(k, ctx) {
+    return this.#store.state.kingMode || (!isHidden(this.view, k) && !(hidesEmpty(this.view, k) && this.#emptyHere(k, ctx)));
+  }
+
+  /** The pinned blocks shown, in their order. @param {any} ctx */
+  #pinned(ctx) {
+    return pinnedBlocks(this.view).filter(k => this.#visible(k, ctx));
+  }
+
+  /** Does the sheet show a map (in the flow or pinned)? Its data can then be touched to show on it. */
+  get #hasMap() {
+    return blockOrder(this.view).some(k => isMap(k) && !isHidden(this.view, k));
+  }
+
+  /**
+   * The dock: the pinned blocks, a pane of the layout. On a wide sheet a column beside it, on a narrow one
+   * a band above it (S / M / L high, foldable to its bar); either way it stays while the sheet scrolls.
+   * @param {any} ctx @param {string[]} keys
+   */
+  #dock(ctx, keys) {
+    const king = this.#store.state.kingMode;
+    const { size, folded } = dockState(this.view);
+    const names = { s: 'Petit', m: 'Moyen', l: 'Grand' };
+    return html`<aside class="dock ${folded ? 'folded' : ''} ${king ? 'king' : ''}" data-size=${size} aria-label="Blocs épinglés">
+      <div class="dock-bar">
+        ${icon('pin-angle-fill')}
+        <span class="dock-title">${keys.map(k => blockTitle(k)).join(' · ')}</span>
+        <span class="dock-sizes" role="group" aria-label="Taille du volet épinglé">${DOCK_SIZES.map(z => html`<button type="button"
+          aria-pressed=${z === size ? 'true' : 'false'} title=${'Volet ' + names[z].toLowerCase()} aria-label=${'Volet ' + names[z].toLowerCase()}
+          @click=${() => setDockState(this.view, { size: z, folded: false })}>${z.toUpperCase()}</button>`)}</span>
+        <button class="dock-fold" type="button" aria-expanded=${folded ? 'false' : 'true'} aria-label=${folded ? 'Déplier le volet épinglé' : 'Replier le volet épinglé'}
+          @click=${() => setDockState(this.view, { folded: !folded })}>${icon(folded ? 'chevron-down' : 'chevron-up')}</button>
+      </div>
+      <div class="dock-body">${repeat(keys, k => k, k => king ? this.#block(k, ctx, null) : this.#plainBlock(k, ctx))}</div>
+    </aside>`;
+  }
+
+  /** The sheet, with the dock of pinned blocks when there are some. @param {any} ctx @param {unknown} article */
+  #layout(ctx, article) {
+    const pinned = this.#pinned(ctx);
+    if (!pinned.length) return html`${article}${this.#actionBar(ctx.plant)}`;
+    return html`<div class="frame docked" data-size=${dockState(this.view).size}>
+      <div class="main">${article}${this.#actionBar(ctx.plant)}</div>
+      ${this.#dock(ctx, pinned)}
+    </div>`;
   }
 
   /** A block read without its title (Mode King › title on/off, per view). @param {string} key */
@@ -950,7 +1122,7 @@ export class GfPlantDetail extends LitElement {
   /** A block as read outside « Mode King »: its title, its content. @param {string} key @param {any} ctx */
   #plainBlock(key, ctx) {
     // A component that hides itself when it has nothing (protection, look-alikes, calendar): the block goes with it (CSS).
-    return html`<section class="block ${this.#headless(key) ? 'headless' : ''} ${hidesEmpty(this.view, key) ? 'hide-empty' : ''}" data-key=${key}>
+    return html`<section class="block ${this.#headless(key) ? 'headless' : ''} ${hidesEmpty(this.view, key) ? 'hide-empty' : ''} ${isMap(key) ? 'map-block' : ''}" data-key=${key}>
       ${this.#headless(key) ? nothing : html`<h2 class="block-title"><span class="name">${blockTitle(key)}</span></h2>`}
       <div class="content">${this.#content(key, ctx)}</div>
     </section>`;
@@ -965,7 +1137,8 @@ export class GfPlantDetail extends LitElement {
     const subsOpen = this._subsOpen.has(key);
     const style = slot === null ? '' : `order:${slot}${dragging ? `;transform:translateY(${this._dragY}px)` : ''}`;
     const titled = isTitleShown(this.view, key);
-    return html`<section class="block ${off ? 'off' : ''} ${dragging ? 'dragging' : ''} ${titled ? '' : 'untitled'}" data-key=${key} style=${style}>
+    const pinned = isPinned(this.view, key);
+    return html`<section class="block ${off ? 'off' : ''} ${dragging ? 'dragging' : ''} ${titled ? '' : 'untitled'} ${isMap(key) ? 'map-block' : ''}" data-key=${key} style=${style}>
       <h2 class="block-title" title="Glisser pour déplacer" @pointerdown=${e => this.#press(e, key)}>
         <button class="grip" type="button" aria-label="Déplacer le bloc « ${title} »" title="Glisser pour déplacer (↑ ↓ au clavier)"
           @keydown=${e => this.#gripKey(e, key)}>${icon('grip-vertical')}</button>
@@ -982,6 +1155,10 @@ export class GfPlantDetail extends LitElement {
           aria-label=${hidesEmpty(this.view, key) ? `Afficher « ${title} » même vide, hors mode King` : `Ne pas afficher « ${title} » s’il est vide, hors mode King`}
           title=${hidesEmpty(this.view, key) ? 'Masqué quand il est vide (toucher pour l’afficher quand même)' : 'Affiché même vide (toucher pour le masquer quand il est vide)'}
           @click=${() => setHidesEmpty(this.view, key, !hidesEmpty(this.view, key))}>${icon('eye-slash')}</button>` : nothing}
+        <button class="tool pin" type="button" aria-pressed=${pinned ? 'true' : 'false'}
+          aria-label=${pinned ? `Détacher le bloc « ${title} » du volet épinglé` : `Épingler le bloc « ${title} » (volet fixe)`}
+          title=${pinned ? 'Épinglé : reste visible pendant le défilement (toucher pour le remettre dans la fiche)' : 'Épingler : un volet fixe à côté de la fiche (en haut sur téléphone)'}
+          @click=${() => setPinned(this.view, key, !pinned)}>${icon(pinned ? 'pin-angle-fill' : 'pin-angle')}</button>
         ${this._renaming === key ? nothing : html`<button class="tool" type="button" aria-label="Renommer le bloc « ${title} »" title=${isNote(key) ? 'Renommer' : 'Renommer (vide : nom d’origine)'}
           @click=${() => this.#startRename(key)}>${icon('pencil')}</button>`}
         ${STYLES[key] && !off ? html`<span class="styles" role="group" aria-label="Style du bloc « ${title} »">${STYLES[key].styles.map(st => html`
@@ -1060,9 +1237,11 @@ export class GfPlantDetail extends LitElement {
    */
   #map(key, { plant, details, inat }) {
     const config = mapConfig(key);
-    if (this.preview) return html`<div class="map-placeholder" style=${`height:${{ s: 180, m: 260, l: 380 }[config.height]}px`}></div>`;
+    const fill = isPinned(this.view, key);
+    if (this.preview) return html`<div class="map-placeholder ${fill ? 'fill' : ''}" style=${`height:${{ s: 180, m: 260, l: 380 }[config.height]}px`}></div>`;
     return html`<gf-sheet-map .plant=${plant} .gbifKey=${details?.identifiers?.gbif?.id ?? null} .inatId=${inat?.id ?? null}
-      .config=${config} mode=${this.view}
+      .config=${config} mode=${this.view} ?fill=${fill} .focus=${this._focus}
+      @focus-clear=${(/** @type {CustomEvent} */ e) => { this._focus = { ...this._focus, [e.detail.kind]: null }; }}
       @map-layers=${(/** @type {CustomEvent} */ e) => {
         const { base, overlays } = e.detail;
         if (base !== config.base || overlays.join() !== config.overlays.join()) setMapConfig(key, { base, overlays });
@@ -1195,11 +1374,11 @@ export class GfPlantDetail extends LitElement {
         return v === 'scientific' ? this.#statuses(ctx)
           : html`<gf-status .plant=${plant}></gf-status>${ifEmpty('Aucune protection, réglementation ni liste rouge connue (INPN).')}`;
       case 'lookalikes':
-        return html`<gf-lookalikes .plant=${plant} ?compact=${v === 'epure'} ?detailed=${v === 'scientific'}></gf-lookalikes>
+        return html`<gf-lookalikes .plant=${plant} ?compact=${v === 'epure'} ?detailed=${v === 'scientific'} ?map-linked=${this.#hasMap} .focus=${this._focus}></gf-lookalikes>
           ${ifEmpty('Aucune confusion signalée par l’Anses et les Centres antipoison.')}`;
       case 'taxonomy': return v === 'scientific' ? this.#taxonomy(ctx) : this.#tags(ctx);
       case 'mine': {
-        if (v === 'scientific') return html`<gf-plant-spots plant-id=${plant.id} notitle></gf-plant-spots>`;
+        if (v === 'scientific') return html`<gf-plant-spots plant-id=${plant.id} notitle ?map-linked=${this.#hasMap} .focus=${this._focus}></gf-plant-spots>`;
         const count = (getMembership().byPlant.get(plant.id) || []).length;
         return html`
           <div class="mine">
@@ -1207,7 +1386,7 @@ export class GfPlantDetail extends LitElement {
             <button class="link" type="button" aria-expanded=${this._spotsOpen ? 'true' : 'false'}
               @click=${() => { this._spotsOpen = !this._spotsOpen; }}>${this._spotsOpen ? 'Masquer' : count ? 'Voir' : 'Lieux'}</button>
           </div>
-          ${this._spotsOpen ? html`<gf-plant-spots plant-id=${plant.id} notitle></gf-plant-spots>` : nothing}`;
+          ${this._spotsOpen ? html`<gf-plant-spots plant-id=${plant.id} notitle ?map-linked=${this.#hasMap} .focus=${this._focus}></gf-plant-spots>` : nothing}`;
       }
       case 'calendar':
         return html`<gf-calendar .plant=${plant} mode=${v} notitle></gf-calendar>${ifEmpty('Aucune période de floraison ni d’observation connue.')}`;
@@ -1290,6 +1469,43 @@ export class GfPlantDetail extends LitElement {
       <p class="credit">Sources : INPN – Base de connaissance Statuts (PatriNat) · ${gbifIucn ? 'GBIF (Liste rouge UICN)' : 'Wikidata (UICN)'}.</p>`;
   }
 
+  /**
+   * A value of the sheet that shows on its maps when touched (map-focus.js): a button when the sheet has a
+   * map, plain text otherwise. @param {import('../core/map-focus.js').MapFocus} f @param {unknown} content @param {string} [cls]
+   */
+  #focusable(f, content, cls = '') {
+    if (!this.#hasMap) return content;
+    const on = isFocused(this._focus, f);
+    return html`<button type="button" class="focusable ${cls}" aria-pressed=${on ? 'true' : 'false'}
+      title=${on ? 'Retirer de la carte' : 'Voir sur la carte de la fiche'} @click=${() => this.#focusOn(f)}>${content}</button>`;
+  }
+
+  /** Shows a value on the maps (or takes it off); a map out of sight comes into view. @param {import('../core/map-focus.js').MapFocus} f */
+  async #focusOn(f) {
+    this._focus = toggleFocus(this._focus, f);
+    if (!isFocused(this._focus, f)) return;
+    await this.updateComplete;
+    const maps = [...this.renderRoot.querySelectorAll('gf-sheet-map')];
+    const box = this.getBoundingClientRect();
+    const seen = maps.some(m => { const r = m.getBoundingClientRect(); return r.height && r.bottom > box.top + 20 && r.top < box.bottom - 20; });
+    if (!seen) maps[0]?.scrollIntoView({ block: 'nearest', behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+  }
+
+  /**
+   * Counts as a table (value, occurrences, share with a small bar) or as a list, as the block's style says.
+   * @param {string} head @param {{ label: unknown, count: number }[]} rows @param {number} total
+   */
+  #counts(head, rows, total) {
+    if (blockStyle(this.view, 'occurrences') === 'list') return html`<ul class="counts">${rows.map(r => html`
+      <li>${r.label}<b>${r.count.toLocaleString('fr-FR')}</b><small>${percent(r.count, total)}</small></li>`)}</ul>`;
+    const max = Math.max(1, ...rows.map(r => r.count));
+    return html`<table class="data counts-table">
+      <thead><tr><th scope="col">${head}</th><th scope="col" class="num">Occurrences</th><th scope="col" class="num">Part</th></tr></thead>
+      <tbody>${rows.map(r => html`<tr><td>${r.label}</td><td class="num">${r.count.toLocaleString('fr-FR')}</td>
+        <td class="num pct"><span class="meter" aria-hidden="true"><i style=${`width:${Math.round(r.count / max * 100)}%`}></i></span>${percent(r.count, total)}</td></tr>`)}</tbody>
+    </table>`;
+  }
+
   /** @param {any} ctx */
   #occurrences({ details, inat }) {
     const key = details?.identifiers?.gbif?.id ?? null;
@@ -1308,16 +1524,24 @@ export class GfPlantDetail extends LitElement {
       months: () => stats?.count ? this.#monthBars(stats.months) : nothing,
       years: () => stats?.years?.length ? this.#yearBars(stats.years) : nothing,
       regions: () => stats?.count ? this.#areas(stats) : nothing,
-      basis: () => stats?.basis?.length ? html`<h3>Types de relevés</h3><ul class="counts">${stats.basis.map((/** @type {any} */ b) => html`
-        <li><span>${BASIS_LABELS[/** @type {keyof typeof BASIS_LABELS} */ (b.basis)] || b.basis}</span><b>${b.count.toLocaleString('fr-FR')}</b>
-          <small>${percent(b.count, stats.count)}</small></li>`)}</ul>` : nothing,
-      datasets: () => stats?.datasets?.length ? html`<h3>Principales sources</h3><ul class="counts">${stats.datasets.map((/** @type {any} */ d) => html`
-        <li><a href=${'https://www.gbif.org/dataset/' + d.key} target="_blank" rel="noopener">${g.titles?.[d.key] ?? '…'}</a><b>${d.count.toLocaleString('fr-FR')}</b>
-          <small>${percent(d.count, stats.count)}</small></li>`)}</ul>` : nothing,
+      basis: () => stats?.basis?.length ? html`<h3>Types de relevés</h3>${this.#counts('Type', stats.basis.map((/** @type {any} */ b) => {
+        const label = BASIS_LABELS[/** @type {keyof typeof BASIS_LABELS} */ (b.basis)] || b.basis;
+        return { count: b.count, label: this.#focusable({ kind: 'filter', label, params: { basisOfRecord: b.basis } }, html`<span>${label}</span>`) };
+      }), stats.count)}` : nothing,
+      datasets: () => stats?.datasets?.length ? html`<h3>Principales sources</h3>${this.#counts('Source', stats.datasets.map((/** @type {any} */ d) => ({
+        count: d.count,
+        label: this.#hasMap
+          ? html`<span class="with-link">${this.#focusable({ kind: 'filter', label: g.titles?.[d.key] ?? 'source GBIF', params: { datasetKey: d.key } }, html`<span>${g.titles?.[d.key] ?? '…'}</span>`)}
+              <a class="ext" href=${'https://www.gbif.org/dataset/' + d.key} target="_blank" rel="noopener" title="Le jeu de données sur GBIF.org" aria-label="Le jeu de données sur GBIF.org">↗</a></span>`
+          : html`<a href=${'https://www.gbif.org/dataset/' + d.key} target="_blank" rel="noopener">${g.titles?.[d.key] ?? '…'}</a>`
+      })), stats.count)}` : nothing,
       distribution: () => places.length ? html`<h3>Répartition dans le monde (listes GBIF)</h3>
-        <ul class="inline">${places.map(row => html`<li>${row.place}${row.means ? html` <span class="muted">(${row.means.toLowerCase()})</span>` : nothing}</li>`)}</ul>` : nothing
+        <ul class="inline">${places.map(row => html`<li>${row.country
+          ? this.#focusable({ kind: 'filter', label: row.place, params: { country: row.country } }, row.place, 'chip')
+          : row.place}${row.means ? html` <span class="muted">(${row.means.toLowerCase()})</span>` : nothing}</li>`)}</ul>` : nothing
     })}
-    ${key && statsShown && stats ? html`<p class="credit">Source : <a href=${search} target="_blank" rel="noopener">GBIF.org</a> — occurrences en France : présences seulement, coordonnées sans problème connu.</p>` : nothing}`;
+    ${key && statsShown && stats ? html`<p class="credit">Source : <a href=${search} target="_blank" rel="noopener">GBIF.org</a> — occurrences en France : présences seulement, coordonnées sans problème connu.</p>` : nothing}
+    ${key && statsShown && stats?.count && this.#hasMap ? html`<p class="focus-hint">${icon('map')} Touchez une zone, un mois, une année, un type de relevé ou une source : la carte de la fiche n’affiche que ces occurrences.</p>` : nothing}`;
   }
 
   /** Occurrences per month, January to December. @param {number[]} months */
@@ -1326,7 +1550,14 @@ export class GfPlantDetail extends LitElement {
     const names = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
     return html`<h3>Occurrences par mois</h3>
       <div class="bars months" role="img" aria-label=${'Occurrences GBIF en France par mois : ' + months.map((c, i) => `${names[i]} ${c}`).join(', ')}>
-        ${months.map((c, i) => html`<span class="bar" title=${`${names[i]} : ${c.toLocaleString('fr-FR')}`}><i style=${`height:${Math.round(c / max * 100)}%`}></i><b>${'JFMAMJJASOND'[i]}</b></span>`)}
+        ${months.map((c, i) => {
+          const bar = html`<i style=${`height:${Math.round(c / max * 100)}%`}></i><b>${'JFMAMJJASOND'[i]}</b>`;
+          if (!this.#hasMap) return html`<span class="bar" title=${`${names[i]} : ${c.toLocaleString('fr-FR')}`}>${bar}</span>`;
+          /** @type {import('../core/map-focus.js').FilterFocus} */ const f = { kind: 'filter', label: names[i], params: { month: String(i + 1) } };
+          const on = isFocused(this._focus, f);
+          return html`<button type="button" class="bar focusable" aria-pressed=${on ? 'true' : 'false'} aria-label=${`${names[i]} : ${c} occurrences, sur la carte`}
+            title=${`${names[i]} : ${c.toLocaleString('fr-FR')} — ${on ? 'retirer de la carte' : 'voir sur la carte'}`} @click=${() => this.#focusOn(f)}>${bar}</button>`;
+        })}
       </div>`;
   }
 
@@ -1341,7 +1572,14 @@ export class GfPlantDetail extends LitElement {
     const older = years.filter(y => y.year < first).reduce((n, y) => n + y.count, 0);
     return html`<h3>Occurrences par année</h3>
       <div class="bars years" role="img" aria-label=${`Occurrences GBIF en France par année, de ${first} à ${last}`}>
-        ${list.map(([y, c]) => html`<span class="bar" title=${`${y} : ${c.toLocaleString('fr-FR')}`}><i style=${`height:${Math.round(c / max * 100)}%`}></i></span>`)}
+        ${list.map(([y, c]) => {
+          const bar = html`<i style=${`height:${Math.round(c / max * 100)}%`}></i>`;
+          if (!this.#hasMap || !c) return html`<span class="bar" title=${`${y} : ${c.toLocaleString('fr-FR')}`}>${bar}</span>`;
+          /** @type {import('../core/map-focus.js').FilterFocus} */ const f = { kind: 'filter', label: String(y), params: { year: String(y) } };
+          const on = isFocused(this._focus, f);
+          return html`<button type="button" class="bar focusable" aria-pressed=${on ? 'true' : 'false'} aria-label=${`${y} : ${c} occurrences, sur la carte`}
+            title=${`${y} : ${c.toLocaleString('fr-FR')} — ${on ? 'retirer de la carte' : 'voir sur la carte'}`} @click=${() => this.#focusOn(f)}>${bar}</button>`;
+        })}
       </div>
       <div class="axis"><span>${first}</span><span>${last}</span></div>
       ${older ? html`<p class="muted small">Et ${older.toLocaleString('fr-FR')} avant ${first}.</p>` : nothing}`;
@@ -1354,14 +1592,24 @@ export class GfPlantDetail extends LitElement {
     const departments = stats.departments.filter((/** @type {any} */ d) => d.gid.startsWith('FRA.'));
     if (!regions.length && !departments.length) return nothing;
     const t = this._gbif.titles || {};
-    const name = (/** @type {any} */ a) => html`${t[a.gid] ?? '…'} <small class="muted">(${a.count.toLocaleString('fr-FR')})</small>`;
-    return html`<h3>Régions et départements</h3>
-      <p>Occurrences dans <strong>${departments.length}</strong> département${departments.length > 1 ? 's' : ''} et <strong>${regions.length}</strong> région${regions.length > 1 ? 's' : ''}.</p>
+    const name = (/** @type {any} */ a) => this.#focusable({ kind: 'filter', label: t[a.gid] ?? a.gid, params: { gadmGid: a.gid } },
+      html`${t[a.gid] ?? '…'} <small class="muted">(${a.count.toLocaleString('fr-FR')})</small>`, 'chip');
+    const head = html`<h3>Régions et départements</h3>
+      <p>Occurrences dans <strong>${departments.length}</strong> département${departments.length > 1 ? 's' : ''} et <strong>${regions.length}</strong> région${regions.length > 1 ? 's' : ''}.</p>`;
+    const credit = html`<p class="credit">Découpage administratif : GADM, via GBIF.</p>`;
+    if (blockStyle(this.view, 'occurrences') !== 'list') {
+      const label = (/** @type {any} */ a) => this.#focusable({ kind: 'filter', label: t[a.gid] ?? a.gid, params: { gadmGid: a.gid } }, html`<span>${t[a.gid] ?? '…'}</span>`);
+      return html`${head}
+        ${regions.length ? html`<h4>Régions</h4>${this.#counts('Région', regions.map((/** @type {any} */ r) => ({ label: label(r), count: r.count })), stats.count)}` : nothing}
+        ${departments.length ? html`<h4>Départements les plus cités</h4>${this.#counts('Département', departments.slice(0, 8).map((/** @type {any} */ d) => ({ label: label(d), count: d.count })), stats.count)}` : nothing}
+        ${credit}`;
+    }
+    return html`${head}
       <dl class="facts">
         ${departments.length ? html`<dt>Départements les plus cités</dt><dd>${departments.slice(0, 5).map((/** @type {any} */ d, /** @type {number} */ i) => html`${i ? ' · ' : ''}${name(d)}`)}</dd>` : nothing}
         ${regions.length ? html`<dt>Régions</dt><dd>${regions.map((/** @type {any} */ r, /** @type {number} */ i) => html`${i ? ' · ' : ''}${name(r)}`)}</dd>` : nothing}
       </dl>
-      <p class="credit">Découpage administratif : GADM, via GBIF.</p>`;
+      ${credit}`;
   }
 
   /** « Près d’ici »: GBIF occurrences around the user, on demand (the position is sent to GBIF). */
@@ -1378,7 +1626,8 @@ export class GfPlantDetail extends LitElement {
     return html`${head}
       ${n.total ? html`<p><strong>${n.total.toLocaleString('fr-FR')}</strong> occurrence${n.total > 1 ? 's' : ''} GBIF à moins de ${formatDistance(n.radius)}${n.nearest.length ? ' ; les plus proches :' : '.'}</p>
         <ul class="near">${n.nearest.map((/** @type {any} */ o) => html`<li title=${o.dataset || ''}>
-          <strong>${formatDistance(o.distance)}</strong>
+          ${this.#focusable({ kind: 'point', label: 'GBIF à ' + formatDistance(o.distance), coordinates: o.coordinates, url: 'https://www.gbif.org/occurrence/' + o.key },
+            html`<strong>${formatDistance(o.distance)}</strong>`)}
           <span>${o.date ? new Date(o.date).toLocaleDateString('fr-FR', { year: 'numeric', month: 'short', day: 'numeric' }) : 'date inconnue'}
             · ${BASIS_LABELS[/** @type {keyof typeof BASIS_LABELS} */ (o.basis)] || o.basis || ''}</span>
           <a href=${'https://www.gbif.org/occurrence/' + o.key} target="_blank" rel="noopener">voir</a></li>`)}</ul>`
@@ -1426,6 +1675,8 @@ export class GfPlantDetail extends LitElement {
       <a href=${image.sourceUrl || image.url} target="_blank" rel="noopener"><img src=${image.url} alt=${(herbarium ? 'Planche d’herbier de ' : '') + plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" /></a>
       <figcaption>
         ${herbarium ? html`<span class="specimen">${[image.institution, image.catalogNumber && 'n° ' + image.catalogNumber, image.year, image.country].filter(Boolean).join(' · ')}</span>` : nothing}
+        ${image.coordinates && this.#hasMap ? this.#focusable({ kind: 'point', label: (herbarium ? 'Planche ' : 'Photo ') + ([image.institution, image.year].filter(Boolean).join(' ') || 'GBIF'), coordinates: image.coordinates, url: image.sourceUrl },
+          html`${icon('geo-alt-fill')} ${image.locality ? image.locality.slice(0, 60) + (image.locality.length > 60 ? '…' : '') : 'Lieu de récolte'}`, 'where') : nothing}
         <gf-attribution .media=${image}></gf-attribution>
       </figcaption></figure>`)}</div>`;
   }
@@ -1436,6 +1687,12 @@ export class GfPlantDetail extends LitElement {
     const p = profile(this._gbif);
     if (!p.habitats.length && !p.forms.length && !p.invasive.length) return html`<p class="muted">Aucun profil d’espèce exploitable sur GBIF.</p>`;
     const key = this._details?.identifiers?.gbif?.id;
+    const credit = html`<p class="credit">Source : <a href=${'https://www.gbif.org/species/' + key} target="_blank" rel="noopener">GBIF.org</a> — profils d’espèce de ${p.sources} liste${p.sources > 1 ? 's' : ''} de référence.</p>`;
+    if (blockStyle(this.view, 'gbifProfile') === 'list') return html`<ul class="plain">
+        ${p.habitats.length ? html`<li><b>Milieu :</b> ${p.habitats.map(([h]) => h).join(' · ')}</li>` : nothing}
+        ${p.forms.length ? html`<li><b>Port :</b> ${p.forms.map(([f]) => f).join(' · ')}</li>` : nothing}
+        ${p.invasive.length ? html`<li><b>Signalée envahissante :</b> ${p.invasive.slice(0, 4).join(' · ')}${p.invasive.length > 4 ? ` et ${p.invasive.length - 4} autres listes` : ''}</li>` : nothing}
+      </ul>${credit}`;
     return html`<dl class="facts">
         ${p.habitats.length ? html`<dt>Milieu</dt><dd>${p.habitats.map(([h]) => h).join(' · ')}</dd>` : nothing}
         ${p.forms.length ? html`<dt>Port</dt><dd>${p.forms.map(([f]) => f).join(' · ')}</dd>` : nothing}
@@ -1450,6 +1707,15 @@ export class GfPlantDetail extends LitElement {
     if (l === undefined) return html`<p class="muted">chargement…</p>`;
     if (!l?.items?.length) return html`<p class="muted">Aucune publication citant des données GBIF sur cette espèce.</p>`;
     const key = details?.identifiers?.gbif?.id;
+    const authors = (/** @type {any} */ r) => r.authors.slice(0, 3).join(', ') + (r.authors.length > 3 ? ' et al.' : '');
+    if (blockStyle(this.view, 'literature') !== 'list') return html`<table class="data papers-table">
+        <thead><tr><th scope="col">Titre</th><th scope="col">Auteurs</th><th scope="col">Revue</th><th scope="col" class="num">Année</th></tr></thead>
+        <tbody>${l.items.map((/** @type {any} */ r) => html`<tr>
+          <td>${r.url ? html`<a href=${r.url} target="_blank" rel="noopener">${r.title}</a>` : r.title}</td>
+          <td>${authors(r)}</td><td>${r.source}</td><td class="num">${r.year ?? ''}</td></tr>`)}</tbody>
+      </table>
+      <p class="credit">${l.total.toLocaleString('fr-FR')} publication${l.total > 1 ? 's' : ''} utilisant des données GBIF sur cette espèce —
+        <a href=${'https://www.gbif.org/resource/search?contentType=literature&gbifTaxonKey=' + key} target="_blank" rel="noopener">toutes sur GBIF.org</a>.</p>`;
     return html`<ul class="papers">${l.items.map((/** @type {any} */ r) => html`<li>
         ${r.url ? html`<a href=${r.url} target="_blank" rel="noopener">${r.title}</a>` : r.title}
         <small>${[r.authors.slice(0, 3).join(', ') + (r.authors.length > 3 ? ' et al.' : ''), r.source, r.year].filter(Boolean).join(' · ')}</small>
@@ -1476,7 +1742,21 @@ export class GfPlantDetail extends LitElement {
       trefle: ['Trefle', details?.identifiers?.trefle?.id, details?.identifiers?.trefle?.slug ? 'https://trefle.io/species/' + details.identifiers.trefle.slug : null]
     };
     const ids = shownSubs(this.view, 'ids').map(k => all[k]).filter(row => row?.[1]);
-    return html`<dl class="facts ids">${ids.map(([label, id, url]) => html`<dt>${label}</dt><dd>${url ? html`<a href=${url} target="_blank" rel="noopener">${id}</a>` : id}</dd>`)}</dl>`;
+    const value = (/** @type {any} */ id, /** @type {any} */ url) => url ? html`<a href=${url} target="_blank" rel="noopener">${id}</a>` : id;
+    if (blockStyle(this.view, 'ids') === 'list') return html`<ul class="inline ids">${ids.map(([label, id, url]) => html`<li><span class="muted">${label}</span> ${value(id, url)}</li>`)}</ul>`;
+    return html`<table class="data ids"><tbody>${ids.map(([label, id, url]) => html`<tr><th scope="row">${label}</th><td>${value(id, url)}</td></tr>`)}</tbody></table>`;
+  }
+
+  /** An order of the flow, with the pinned blocks back where they were. @param {any} view @param {string[]} order */
+  #withPinned(view, order) {
+    const all = blockOrder(view);
+    const out = [...order];
+    all.forEach((k, i) => {
+      if (out.includes(k)) return;
+      const before = all.slice(0, i).reverse().find(b => out.includes(b));
+      out.splice(before ? out.indexOf(before) + 1 : 0, 0, k);
+    });
+    return out;
   }
 
   /** @param {string} key @param {-1 | 1} delta @param {string[]} order */
@@ -1492,9 +1772,9 @@ export class GfPlantDetail extends LitElement {
   async #gripKey(e, key) {
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
     e.preventDefault();
-    const order = this.#moved(key, e.key === 'ArrowUp' ? -1 : 1, blockOrder(this.view));
+    const order = this.#moved(key, e.key === 'ArrowUp' ? -1 : 1, blockOrder(this.view).filter(k => !isPinned(this.view, k)));
     if (!order) return;
-    setBlockOrder(this.view, order);
+    setBlockOrder(this.view, this.#withPinned(this.view, order));
     await this.updateComplete;
     /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(`.block[data-key="${key}"] .grip`))?.focus();
   }
@@ -1550,7 +1830,8 @@ export class GfPlantDetail extends LitElement {
       drag.scroller = this.#scroller();
       this._dragKey = drag.key;
       this._dragY = 0;
-      this._dragOrder = blockOrder(this.view);
+      // Pinned blocks are not in the flow: they keep their place in the order.
+      this._dragOrder = blockOrder(this.view).filter(k => !isPinned(this.view, k));
       await this.updateComplete;
       // Folded, the list is short: bring the dragged title under the pointer.
       const off = this.#mid(drag.key) - y;
@@ -1582,7 +1863,7 @@ export class GfPlantDetail extends LitElement {
     this._dragKey = null;
     this._dragOrder = null;
     this._dragY = 0;
-    if (order) setBlockOrder(drag.view, order);
+    if (order) setBlockOrder(drag.view, this.#withPinned(drag.view, order));
     await this.updateComplete;
     this.#section(drag.key)?.scrollIntoView({ block: 'nearest' });
   };
@@ -1591,24 +1872,22 @@ export class GfPlantDetail extends LitElement {
 
   /** Épuré: the plant at a glance, and one tap to put it in the current collection. @param {any} ctx */
   #epure(ctx) {
-    return html`
+    return this.#layout(ctx, html`
       <article class="epure">
         <gf-add-to .plant=${ctx.plant}></gf-add-to>
         ${this.#blocks(ctx)}
-      </article>
-      ${this.#actionBar(ctx.plant)}`;
+      </article>`);
   }
 
   /** Standard (for everyone) and Scientifique (everything the app holds or can fetch, each with its source). @param {any} ctx */
   #full(ctx) {
-    return html`
+    return this.#layout(ctx, html`
       <article class=${this.view === 'scientific' ? 'science' : ''}>
         <a class="back link" href=${lastSearchHash()}>${icon('arrow-left')} Recherche</a>
         <gf-add-to .plant=${ctx.plant}></gf-add-to>
         ${this._error ? html`<p class="muted">${this._error}</p>` : nothing}
         ${this.#blocks(ctx)}
-      </article>
-      ${this.#actionBar(ctx.plant)}`;
+      </article>`);
   }
 }
 
