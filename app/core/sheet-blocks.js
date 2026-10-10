@@ -10,7 +10,7 @@ import { config } from '../config.js';
 import { MODULES, moduleOn, setModule } from './modules.js';
 import { baseOf, importModes, modeKeys, ownModes } from './modes.js';
 import { OVERLAYS } from './ign.js';
-import { emptyLayout, store } from './store.js';
+import { emptyLayout, migratePlaces, store } from './store.js';
 
 /** @typedef {import('./modules.js').Mode} Mode */
 /** @typedef {import('./modules.js').ModuleKey} ModuleKey */
@@ -99,7 +99,9 @@ export const STYLES = {
   ids: { styles: TABLE_LIST },
   uses: { styles: TABLE_LIST, defaults: { epure: 'list' } },
   // Interactions also as a network around the plant.
-  interactions: { styles: [...TABLE_LIST, { key: 'graph', title: 'Réseau' }], defaults: { epure: 'list' } }
+  interactions: { styles: [...TABLE_LIST, { key: 'graph', title: 'Réseau' }], defaults: { epure: 'list' } },
+  // Médias: the stage and its filmstrip, every image in a grid, or one image after the other, full frame.
+  media: { styles: [{ key: 'scene', title: 'Scène' }, { key: 'mosaic', title: 'Mosaïque' }, { key: 'slideshow', title: 'Diaporama' }] }
 };
 
 /** The action bar docked at the bottom of the sheet: its actions, shown or not and ordered per mode (sub-blocks of 'actions'). */
@@ -190,7 +192,7 @@ export const blockOrder = view =>
 /** Has this view been arranged by hand? @param {Mode} view */
 export function isCustom(view) {
   const l = layout();
-  return Boolean(l.order[view] || l.hidden[view] || l.subOrder[view] || l.subHidden[view] || l.styles?.[view] || l.titleShown?.[view] || l.hideEmpty?.[view] || l.pinned?.[view] || l.paned?.[view] || l.dock?.[view]);
+  return Boolean(l.order[view] || l.hidden[view] || l.subOrder[view] || l.subHidden[view] || l.styles?.[view] || l.titleShown?.[view] || l.hideEmpty?.[view] || l.place?.[view] || l.edges?.[view]);
 }
 
 /** Saves a new layout (only what differs from the defaults). @param {Partial<SheetLayout>} patch */
@@ -203,7 +205,7 @@ function save(patch) {
     }
   }
   const isEmpty = !next.notes.length && !Object.keys(next.titles).length && !next.mapBlocks?.length && !Object.keys(next.maps || {}).length
-    && ['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown', 'hideEmpty', 'pinned', 'paned', 'dock'].every(p => !Object.keys(/** @type {any} */ (next)[p] || {}).length);
+    && ['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown', 'hideEmpty', 'place', 'edges'].every(p => !Object.keys(/** @type {any} */ (next)[p] || {}).length);
   try {
     if (isEmpty) localStorage.removeItem(config.storageKeys.sheetLayout);
     else localStorage.setItem(config.storageKeys.sheetLayout, JSON.stringify(next));
@@ -372,82 +374,79 @@ export function setTitleShown(view, key, shown) {
   save({ titleShown: all });
 }
 
-// ── Pinned blocks ──────────────────────────────────────────────────────────
+// ── Positions: where each block sits in the plant pane ─────────────────────
 
 /**
- * Blocks pinned as a pane of the layout, per mode (in their order): they leave the scrolling sheet for the
- * dock, a column beside it on a wide screen, a band above it on a phone — a map stays in view while the
- * sheet scrolls. @param {Mode} view @returns {string[]}
+ * A block is in the scrolling sheet (no place), or stuck to an edge of the plant pane — 'top', 'bottom',
+ * 'left', 'right' — or 'beside' it (a pane of its own in the parent layout: in Flore, in place of the
+ * results). Per mode. Several edges at once; several blocks on one edge are its tabs.
  */
-export function pinnedBlocks(view) {
-  const keys = allBlocks().map(b => b.key);
-  return (layout().pinned?.[view] || []).filter(k => keys.includes(k));
+export const PLACES = /** @type {const} */ (['top', 'bottom', 'left', 'right', 'beside']);
+/** @typedef {typeof PLACES[number]} Place */
+/** The edges of the plant pane (not 'beside'). */
+export const EDGES = /** @type {const} */ (['top', 'left', 'right', 'bottom']);
+/** @typedef {typeof EDGES[number]} Edge */
+
+/** @param {Mode} view @param {string} key @returns {Place | null} */
+export function placeOf(view, key) {
+  const p = layout().place?.[view]?.[key];
+  return PLACES.includes(/** @type {any} */ (p)) && blockOf(key) ? /** @type {Place} */ (p) : null;
 }
 
-/** @param {Mode} view @param {string} key */
-export const isPinned = (view, key) => pinnedBlocks(view).includes(key);
-
-/** @param {Mode} view @param {string} key @param {boolean} on */
-export function setPinned(view, key, on) {
-  const mine = pinnedBlocks(view).filter(k => k !== key);
-  if (on) mine.push(key);
-  const all = { ...layout().pinned };
-  if (mine.length) all[view] = mine; else delete all[view];
-  const paned = { ...layout().paned };
-  if (on && paned[view]?.includes(key)) { paned[view] = paned[view].filter(k => k !== key); if (!paned[view].length) delete paned[view]; }
-  save({ pinned: all, paned });
+/** Moves a block to an edge, beside the sheet, or back in the sheet (null). @param {Mode} view @param {string} key @param {Place | null} place */
+export function setPlace(view, key, place) {
+  const all = { ...layout().place };
+  const mine = { ...all[view] };
+  if (place && PLACES.includes(place)) mine[key] = place; else delete mine[key];
+  if (Object.keys(mine).length) all[view] = mine; else delete all[view];
+  // Arriving on an edge: its tab, unfolded.
+  const edges = { ...layout().edges };
+  if (place && place !== 'beside') edges[view] = { ...edges[view], [place]: { ...edges[view]?.[place], tab: key, folded: false } };
+  save({ place: all, edges });
 }
 
-// ── Blocks in a pane ───────────────────────────────────────────────────────
+/** The blocks at a place, in the sheet's order. @param {Mode} view @param {Place} place */
+export const blocksAt = (view, place) => blockOrder(view).filter(k => placeOf(view, k) === place);
+
+/** Blocks on the left or right edge: the plant pane is made wider to hold the columns. @param {Mode} view */
+export const hasColumns = view => blocksAt(view, 'left').length + blocksAt(view, 'right').length > 0;
+
+/** Is the block stuck to an edge (not in the sheet, not beside)? @param {Mode} view @param {string} key */
+export const isOnEdge = (view, key) => { const p = placeOf(view, key); return Boolean(p && p !== 'beside'); };
+
+/** Sizes of an edge (s, m, l: about a third, half, 60 % of the pane), unless dragged to its own size. */
+export const EDGE_SIZES = /** @type {const} */ (['s', 'm', 'l']);
 
 /**
- * Blocks placed « en volet », per mode: they leave the sheet for a pane of their own beside it (in Flore, in
- * place of the results; on a phone, over the sheet), at full size — the media viewer, a large map, whole
- * tables. The sheet keeps a button for each; the first one opens with the plant on a wide screen.
- * Any block can also be opened in the pane once, from its ⤢ button, without being placed there.
- * @param {Mode} view @returns {string[]}
+ * How an edge shows. `size` S / M / L, or `px` when its border was dragged; `folded`: its bar only (the
+ * block opens on touch); `full`: across the whole pane (a top / bottom band over the left and right
+ * columns, a column from top to bottom); `bare`: no title or frame, the block fills the edge (tabs as icons);
+ * `tab`: the block shown when the edge has several.
+ * @typedef {{ size: 's' | 'm' | 'l', px: number | null, folded: boolean, full: boolean, bare: boolean, tab: string | null }} EdgeState
  */
-export function panedBlocks(view) {
-  const keys = allBlocks().map(b => b.key);
-  return (layout().paned?.[view] || []).filter(k => keys.includes(k));
+
+/** @param {Mode} view @param {Edge} edge @returns {EdgeState} */
+export function edgeState(view, edge) {
+  const e = layout().edges?.[view]?.[edge] || {};
+  return {
+    size: EDGE_SIZES.includes(e.size) ? e.size : 'm',
+    px: typeof e.px === 'number' && e.px >= 80 && e.px <= 4000 ? Math.round(e.px) : null,
+    folded: e.folded === true, full: e.full === true, bare: e.bare === true,
+    tab: typeof e.tab === 'string' ? e.tab : null
+  };
 }
 
-/** @param {Mode} view @param {string} key */
-export const isPaned = (view, key) => panedBlocks(view).includes(key);
-
-/** Places a block in the pane, or back in the sheet (a block is pinned or in the pane, not both). @param {Mode} view @param {string} key @param {boolean} on */
-export function setPaned(view, key, on) {
-  const mine = panedBlocks(view).filter(k => k !== key);
-  if (on) mine.push(key);
-  const all = { ...layout().paned };
-  if (mine.length) all[view] = mine; else delete all[view];
-  const pinned = { ...layout().pinned };
-  if (on && pinned[view]?.includes(key)) { pinned[view] = pinned[view].filter(k => k !== key); if (!pinned[view].length) delete pinned[view]; }
-  save({ paned: all, pinned });
-}
-
-/** Size of the dock (s, m, l: a third, half, 60 % of the sheet) and whether it is folded to its title, per mode. */
-export const DOCK_SIZES = /** @type {const} */ (['s', 'm', 'l']);
-
-/**
- * Where the dock sticks in the sheet: 'auto' (a column on the right of a wide sheet, a band at the top of a
- * narrow one), or always 'left' / 'right' (column; a band at the top when narrow), 'top' or 'bottom' (band).
- */
-export const DOCK_SIDES = /** @type {const} */ (['auto', 'left', 'right', 'top', 'bottom']);
-/** @typedef {typeof DOCK_SIDES[number]} DockSide */
-
-/** @param {Mode} view @returns {{ size: 's' | 'm' | 'l', folded: boolean, side: DockSide }} */
-export function dockState(view) {
-  const d = layout().dock?.[view] || {};
-  return { size: DOCK_SIZES.includes(d.size) ? d.size : 'm', folded: d.folded === true, side: DOCK_SIDES.includes(d.side) ? d.side : 'auto' };
-}
-
-/** @param {Mode} view @param {Partial<{ size: 's' | 'm' | 'l', folded: boolean, side: DockSide }>} patch */
-export function setDockState(view, patch) {
-  const next = { ...dockState(view), ...patch };
-  const all = { ...layout().dock };
-  if (next.size === 'm' && !next.folded && next.side === 'auto') delete all[view]; else all[view] = next;
-  save({ dock: all });
+/** @param {Mode} view @param {Edge} edge @param {Partial<EdgeState>} patch */
+export function setEdgeState(view, edge, patch) {
+  const next = { ...edgeState(view, edge), ...patch };
+  // S / M / L chosen: the dragged size goes.
+  if (patch.size) next.px = null;
+  const all = { ...layout().edges };
+  const mine = { ...all[view] };
+  const plain = next.size === 'm' && next.px === null && !next.folded && !next.full && !next.bare && !next.tab;
+  if (plain) delete mine[edge]; else mine[edge] = next;
+  if (Object.keys(mine).length) all[view] = mine; else delete all[view];
+  save({ edges: all });
 }
 
 // ── Left out when empty ────────────────────────────────────────────────────
@@ -522,6 +521,13 @@ const writeNotes = notes => {
 };
 
 /** Delete a note block everywhere, with what was written in it. @param {string} key */
+/** A deleted block leaves every mode's places. @param {string} key */
+const unplace = key => Object.fromEntries(Object.entries(layout().place || {}).map(([v, per]) => {
+  const rest = { ...per };
+  delete rest[key];
+  return [v, rest];
+}).filter(([, per]) => Object.keys(per).length));
+
 export function deleteNote(key) {
   const id = key.slice('note:'.length);
   const strip = (/** @type {Partial<Record<Mode, string[]>>} */ per) =>
@@ -529,7 +535,7 @@ export function deleteNote(key) {
   const notes = readNotes();
   delete notes[id];
   writeNotes(notes);
-  save({ notes: layout().notes.filter(n => n.id !== id), order: strip(layout().order), hidden: strip(layout().hidden), pinned: strip(layout().pinned || {}), paned: strip(layout().paned || {}) });
+  save({ notes: layout().notes.filter(n => n.id !== id), order: strip(layout().order), hidden: strip(layout().hidden), place: unplace(key) });
 }
 
 // ── Map blocks ─────────────────────────────────────────────────────────────
@@ -587,7 +593,7 @@ export function deleteMap(key) {
     Object.fromEntries(Object.entries(per).map(([v, keys]) => [v, (keys || []).filter(k => k !== key)]));
   const maps = { ...(layout().maps || {}) };
   delete maps[key];
-  save({ mapBlocks: (layout().mapBlocks || []).filter(m => m.id !== id), maps, order: strip(layout().order), hidden: strip(layout().hidden), pinned: strip(layout().pinned || {}), paned: strip(layout().paned || {}) });
+  save({ mapBlocks: (layout().mapBlocks || []).filter(m => m.id !== id), maps, order: strip(layout().order), hidden: strip(layout().hidden), place: unplace(key) });
 }
 
 /** @param {string} key @param {number} plantId */
@@ -615,7 +621,7 @@ const foldedModules = view => blockModules().filter(m => !moduleOn(m, view));
 export function resetBlocks(view) {
   const l = layout();
   const without = (/** @type {any} */ per) => { const next = { ...per }; delete next[view]; return next; };
-  save({ order: without(l.order), hidden: without(l.hidden), subOrder: without(l.subOrder), subHidden: without(l.subHidden), styles: without(l.styles || {}), titleShown: without(l.titleShown || {}), hideEmpty: without(l.hideEmpty || {}), pinned: without(l.pinned || {}), paned: without(l.paned || {}), dock: without(l.dock || {}) });
+  save({ order: without(l.order), hidden: without(l.hidden), subOrder: without(l.subOrder), subHidden: without(l.subHidden), styles: without(l.styles || {}), titleShown: without(l.titleShown || {}), hideEmpty: without(l.hideEmpty || {}), place: without(l.place || {}), edges: without(l.edges || {}) });
   for (const b of BLOCKS) if (b.module && !moduleOn(b.module, view)) setHidden(view, b.key, false);
 }
 
@@ -653,14 +659,15 @@ export function importLayout(text) {
   try { data = JSON.parse(text); } catch { throw new Error('Ce fichier n’est pas du JSON.'); }
   if (data?.app !== 'geoflora' || data?.kind !== 'sheet-layout') throw new Error('Ce fichier n’est pas une mise en page de fiche GeoFlora.');
   if (data.version !== 1) throw new Error('Version de mise en page inconnue : ' + data.version);
-  const l = data.layout || {};
+  // Layouts of earlier versions: pinned blocks, their dock and blocks « en volet » become places.
+  const l = migratePlaces(data.layout || {});
   const valid = perView(l.order || {}, isKeyList) && perView(l.hidden || {}, isKeyList)
     && perView(l.subOrder || {}, perBlock) && perView(l.subHidden || {}, perBlock)
     && perView(l.titleShown || {}, (/** @type {any} */ x) => x && typeof x === 'object' && Object.values(x).every(v => typeof v === 'boolean'))
     && perView(l.hideEmpty || {}, (/** @type {any} */ x) => x && typeof x === 'object' && Object.values(x).every(v => typeof v === 'boolean'))
     && perView(l.styles || {}, (/** @type {any} */ x) => x && typeof x === 'object' && Object.entries(x).every(([block, st]) => STYLES[block]?.styles.some(s => s.key === st)))
-    && perView(l.pinned || {}, isKeyList) && perView(l.paned || {}, isKeyList)
-    && perView(l.dock || {}, (/** @type {any} */ x) => x && typeof x === 'object' && !Array.isArray(x))
+    && perView(l.place || {}, (/** @type {any} */ x) => x && typeof x === 'object' && !Array.isArray(x) && Object.values(x).every(p => PLACES.includes(/** @type {any} */ (p))))
+    && perView(l.edges || {}, (/** @type {any} */ x) => x && typeof x === 'object' && !Array.isArray(x) && Object.keys(x).every(e => EDGES.includes(/** @type {any} */ (e))))
     && l.titles && typeof l.titles === 'object' && Object.values(l.titles).every(t => typeof t === 'string' && t.length <= 60)
     && Array.isArray(l.notes) && l.notes.every((/** @type {any} */ n) => typeof n?.id === 'string' && /^[a-z0-9]{1,24}$/.test(n.id) && typeof n.title === 'string' && n.title.length <= 60)
     && (!l.mapBlocks || (Array.isArray(l.mapBlocks) && l.mapBlocks.every((/** @type {any} */ m) => typeof m?.id === 'string' && /^[a-z0-9]{1,24}$/.test(m.id) && typeof m.title === 'string' && m.title.length <= 60)))
@@ -670,7 +677,7 @@ export function importLayout(text) {
   if (!valid) throw new Error('Mise en page illisible ou incomplète.');
   importModes(data.modes || []);
   writeNotes(data.notes || {});
-  save({ ...emptyLayout(), order: l.order || {}, hidden: l.hidden || {}, subOrder: l.subOrder || {}, subHidden: l.subHidden || {}, styles: l.styles || {}, titleShown: l.titleShown || {}, hideEmpty: l.hideEmpty || {}, pinned: l.pinned || {}, paned: l.paned || {}, dock: l.dock || {}, titles: l.titles, notes: l.notes,
+  save({ ...emptyLayout(), order: l.order || {}, hidden: l.hidden || {}, subOrder: l.subOrder || {}, subHidden: l.subHidden || {}, styles: l.styles || {}, titleShown: l.titleShown || {}, hideEmpty: l.hideEmpty || {}, place: l.place || {}, edges: l.edges || {}, titles: l.titles, notes: l.notes,
     mapBlocks: l.mapBlocks || [], maps: Object.fromEntries(Object.entries(l.maps || {}).map(([k, c]) => [k, cleanMap(c)])) });
   for (const view of modeKeys()) {
     const off = data.modulesOff?.[view] || [];
@@ -682,7 +689,7 @@ export function importLayout(text) {
 // ── Modes made here ────────────────────────────────────────────────────────
 
 /** The parts of the layout kept per mode. */
-const PER_MODE = /** @type {const} */ (['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown', 'hideEmpty', 'pinned', 'paned', 'dock']);
+const PER_MODE = /** @type {const} */ (['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown', 'hideEmpty', 'place', 'edges']);
 
 /** A new mode starts with its model's layout (what differs from the defaults; the defaults are its model's). @param {Mode} from @param {Mode} to */
 export function copyLayout(from, to) {

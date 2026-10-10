@@ -81,13 +81,13 @@ const readCompact = () => {
  * @typedef {{ order: Partial<Record<Mode, string[]>>, hidden: Partial<Record<Mode, string[]>>,
  *   subOrder: Partial<Record<Mode, Record<string, string[]>>>, subHidden: Partial<Record<Mode, Record<string, string[]>>>,
  *   styles: Partial<Record<Mode, Record<string, string>>>, titleShown: Partial<Record<Mode, Record<string, boolean>>>,
- *   hideEmpty: Partial<Record<Mode, Record<string, boolean>>>, pinned?: Partial<Record<Mode, string[]>>, paned?: Partial<Record<Mode, string[]>>,
- *   dock?: Partial<Record<Mode, { size: 's' | 'm' | 'l', folded: boolean, side?: string }>>, mapBlocks: { id: string, title: string }[], maps: Record<string, any>,
+ *   hideEmpty: Partial<Record<Mode, Record<string, boolean>>>, place?: Partial<Record<Mode, Record<string, string>>>, edges?: Partial<Record<Mode, Record<string, any>>>,
+ *   mapBlocks: { id: string, title: string }[], maps: Record<string, any>,
  *   titles: Record<string, string>, notes: { id: string, title: string }[] }} SheetLayout
  */
 
 /** @returns {SheetLayout} */
-export const emptyLayout = () => ({ order: {}, hidden: {}, subOrder: {}, subHidden: {}, styles: {}, titleShown: {}, hideEmpty: {}, pinned: {}, paned: {}, dock: {}, titles: {}, notes: [], mapBlocks: [], maps: {} });
+export const emptyLayout = () => ({ order: {}, hidden: {}, subOrder: {}, subHidden: {}, styles: {}, titleShown: {}, hideEmpty: {}, place: {}, edges: {}, titles: {}, notes: [], mapBlocks: [], maps: {} });
 
 /** @param {string} key */
 const readJSON = key => {
@@ -97,10 +97,34 @@ const readJSON = key => {
   } catch { return null; }
 };
 
+/**
+ * Layouts of earlier versions: blocks « pinned » (one dock, on one side) and « en volet » become places —
+ * the dock's side ('auto' was on the right) and size go to that edge. Nothing else changes.
+ * @param {any} l @returns {any}
+ */
+export function migratePlaces(l) {
+  if (!l || (!l.pinned && !l.paned && !l.dock)) return l;
+  const place = { ...(l.place || {}) }, edges = { ...(l.edges || {}) };
+  const views = new Set([...Object.keys(l.pinned || {}), ...Object.keys(l.paned || {}), ...Object.keys(l.dock || {})]);
+  for (const view of views) {
+    const dock = l.dock?.[view] || {};
+    const edge = ['left', 'right', 'top', 'bottom'].includes(dock.side) ? dock.side : 'right';
+    const mine = { ...(place[view] || {}) };
+    for (const k of l.pinned?.[view] || []) mine[k] ??= edge;
+    for (const k of l.paned?.[view] || []) mine[k] ??= 'beside';
+    if (Object.keys(mine).length) place[view] = mine;
+    if ((l.pinned?.[view] || []).length && (dock.size || dock.folded)) {
+      edges[view] = { ...(edges[view] || {}), [edge]: { size: ['s', 'm', 'l'].includes(dock.size) ? dock.size : 'm', folded: dock.folded === true } };
+    }
+  }
+  const { pinned, paned, dock, ...rest } = l;
+  return { ...rest, place, edges };
+}
+
 /** The saved layout, or the one of earlier versions (block order and folded blocks only). @returns {SheetLayout} */
 const readLayout = () => {
   const saved = readJSON(config.storageKeys.sheetLayout);
-  if (saved) return { ...emptyLayout(), ...saved };
+  if (saved) return { ...emptyLayout(), ...migratePlaces(saved) };
   return { ...emptyLayout(), order: readJSON(config.storageKeys.sheetBlocks) || {}, hidden: readJSON(config.storageKeys.sheetHidden) || {} };
 };
 const readTarget = () => { try { return localStorage.getItem(config.storageKeys.target); } catch { return null; } };

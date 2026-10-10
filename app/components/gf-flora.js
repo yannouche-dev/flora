@@ -15,7 +15,7 @@ import './gf-mode-switch.js';
 import './gf-pager.js';
 import './gf-media-viewer.js';
 import { icon } from '../core/icons.js';
-import { blockTitle, panedBlocks, pinnedBlocks } from '../core/sheet-blocks.js';
+import { blockTitle, blocksAt, hasColumns } from '../core/sheet-blocks.js';
 
 /** Results pane narrower than this: cards instead of the grid. */
 const GRID_MIN = 560;
@@ -473,7 +473,7 @@ export class GfFlora extends LitElement {
     if (this.route.name !== 'plant') return null;
     if (this.route.pane) return this.route.pane;
     if (this.#phone.matches || this.#dismissed === this.route.id) return null;
-    return panedBlocks(plantViewOf(this.#store.state))[0] ?? null;
+    return blocksAt(plantViewOf(this.#store.state), 'beside')[0] ?? null;
   }
 
   /** The pane comes from the address (else from the layout, and closing it only puts it away for this plant). */
@@ -562,7 +562,7 @@ export class GfFlora extends LitElement {
    * (the sheet and its pinned map side by side). @param {'filters' | 'plant'} pane @returns {'filters' | 'plant' | 'plantPinned'}
    */
   #key(pane) {
-    return pane === 'plant' && pinnedBlocks(plantViewOf(this.#store.state)).length ? 'plantPinned' : pane;
+    return pane === 'plant' && hasColumns(plantViewOf(this.#store.state)) ? 'plantPinned' : pane;
   }
 
   /** @param {'filters' | 'plant'} pane */

@@ -35,6 +35,14 @@ export class GfMediaViewer extends LitElement {
     startUrl: { attribute: 'start-url' },
     /** In the sheet: a block among the others (the keys are its own only while it has the focus). */
     compact: { type: Boolean, reflect: true },
+    /** Stuck to an edge of the plant pane: the full viewer, its keys only while it has the focus. */
+    local: { type: Boolean, reflect: true },
+    /** 'scene' (stage, details, filmstrip), 'mosaic' (every image in a grid) or 'slideshow' (one image, full frame). */
+    presentation: { reflect: true },
+    /** Mosaic: an image opened in the scene, until « ← Mosaïque ». */
+    _opened: { state: true },
+    /** Slideshow: playing (the next image every few seconds). */
+    _playing: { state: true },
     _plant: { state: true },
     _items: { state: true },
     _done: { state: true },
@@ -107,6 +115,27 @@ export class GfMediaViewer extends LitElement {
     .thumbs button:focus-visible { box-shadow: var(--gf-focus); outline: none; }
     .thumbs img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .thumbs .herbarium img { object-fit: contain; background: #f4f1e8; }
+    /* Mosaic: every image in a grid. */
+    .mosaic-wrap { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; display: grid; gap: 8px; align-content: start; background: var(--gf-surface-2); }
+    .mosaic { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+    .mosaic button { padding: 0; border: 0; border-radius: var(--gf-radius-sm); overflow: hidden; aspect-ratio: 1; background: var(--gf-surface); cursor: zoom-in; }
+    .mosaic button:focus-visible { box-shadow: var(--gf-focus); outline: none; }
+    .mosaic img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform 0.2s; }
+    .mosaic button:hover img { transform: scale(1.04); }
+    .mosaic .herbarium img { object-fit: contain; background: #f4f1e8; }
+    :host([compact]) .mosaic-wrap { max-height: 70vh; }
+    :host([compact]) .mosaic { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+    .back-mosaic { display: inline-flex; align-items: center; gap: 4px; font-size: 0.85rem; }
+    /* Slideshow: the image alone, full frame, its credit over it. */
+    .main.slideshow { position: relative; grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: minmax(0, 1fr) !important; }
+    .slideshow .caption { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; display: grid; gap: 2px; padding: 18px 12px 8px;
+      background: linear-gradient(transparent, rgb(0 0 0 / 70%)); color: #fff; font-size: 0.8rem; pointer-events: none; }
+    .slideshow .caption gf-attribution { color: #e5e5e5; pointer-events: auto; }
+    .slideshow .stage .hint { bottom: auto; top: 8px; }
+    .play, .pause { font-size: 0.75rem; font-weight: 700; }
+    @media (prefers-reduced-motion: reduce) { .mosaic img { transition: none; } }
+    /* Stuck to an edge: fills it. */
+    :host([local]) { min-height: 0; }
     /* In the sheet: one column, a 4:3 stage, a smaller filmstrip. */
     :host([compact]) { flex: none; border: 1px solid var(--gf-border); border-radius: var(--gf-radius); overflow: hidden; }
     :host([compact]) .bar { min-height: 40px; padding: 2px 4px 2px 10px; }
@@ -132,6 +161,11 @@ export class GfMediaViewer extends LitElement {
     /** @type {string | null} */
     this.startUrl = null;
     this.compact = false;
+    this.local = false;
+    /** @type {string} */
+    this.presentation = 'scene';
+    this._opened = false;
+    this._playing = false;
     /** @type {any} */
     this._plant = null;
     /** @type {MediaItem[]} */
@@ -160,13 +194,13 @@ export class GfMediaViewer extends LitElement {
 
   firstUpdated() {
     // In a pane: the keys are the viewer's (the focus leaves the sheet's block that opened it).
-    if (!this.compact) this.focus({ preventScroll: true });
+    if (!this.#isLocal) this.focus({ preventScroll: true });
   }
 
   connectedCallback() {
     super.connectedCallback();
     // In a pane the viewer takes ← → for itself; in the sheet, only when it has the focus.
-    if (!this.compact) addEventListener('keydown', this.#onKey);
+    if (!this.#isLocal) addEventListener('keydown', this.#onKey);
     else this.addEventListener('keydown', this.#onKey);
     if (!this.hasAttribute('tabindex')) this.tabIndex = -1;
   }
@@ -176,6 +210,7 @@ export class GfMediaViewer extends LitElement {
     removeEventListener('keydown', this.#onKey);
     this.removeEventListener('keydown', this.#onKey);
     this.#abort?.abort();
+    clearInterval(this.#timer);
   }
 
   /** @param {Map<string, any>} changed */
@@ -262,9 +297,30 @@ export class GfMediaViewer extends LitElement {
     if (e.key in keys) { e.preventDefault(); e.stopImmediatePropagation(); this.#go(keys[/** @type {keyof typeof keys} */ (e.key)]); }
     else if (e.key === 'Escape') {
       if (this._zoom) { this._zoom = false; this._locked = false; this._lens = null; }
-      else if (!this.compact) this.#close();
+      else if (this._opened) this._opened = false;
+      else if (!this.#isLocal) this.#close();
     } else if (e.key === '+' || e.key === '-') this.#zoomStep(e.key === '+' ? 1 : -1);
   };
+
+  /** In the sheet or on an edge: keys only while it has the focus; alone in a pane: for the whole page. */
+  get #isLocal() { return this.compact || this.local || this.hasAttribute('compact') || this.hasAttribute('local'); }
+
+  /** What is shown: the presentation chosen, or the scene of an image opened from the mosaic. */
+  get #view() { return this.presentation === 'mosaic' ? (this._opened ? 'scene' : 'mosaic') : this.presentation === 'slideshow' ? 'slideshow' : 'scene'; }
+
+  /** Slideshow: plays or stops. */
+  #play(on = !this._playing) {
+    clearInterval(this.#timer);
+    this._playing = on;
+    if (!on) return;
+    this.#timer = setInterval(() => {
+      // Not while the magnifier is open.
+      if (this._zoom) return;
+      const shown = this.#shown, at = shown.indexOf(/** @type {MediaItem} */ (this.#current));
+      if (shown.length > 1) this.#select(shown[(at + 1) % shown.length]);
+    }, 5000);
+  }
+  /** @type {any} */ #timer = 0;
 
   #close() { this.dispatchEvent(new CustomEvent('media-close', { bubbles: true, composed: true })); }
 
@@ -362,7 +418,7 @@ export class GfMediaViewer extends LitElement {
     return { w: stage.clientWidth, h: stage.clientHeight / 2, top };
   }
 
-  get #wide() { return !this.compact && this.getBoundingClientRect().width >= 700; }
+  get #wide() { return !this.compact && this.#view === 'scene' && this.getBoundingClientRect().width >= 700; }
 
   /** A mouse (or pen) that hovers: the magnifier follows it; else a tap starts it. */
   #hover = matchMedia('(hover: hover)');
@@ -465,31 +521,63 @@ export class GfMediaViewer extends LitElement {
     return html`
       <div class="bar">
         ${this.compact ? html`${icon('images')}<h2>${this.label || 'Médias'}</h2>` : html`<h2></h2>`}
+        ${this.presentation === 'mosaic' && this._opened ? html`<button class="link back-mosaic" type="button" @click=${() => { this._opened = false; }}>${icon('chevron-left')} Mosaïque</button>` : nothing}
         ${item ? html`<span class="count" aria-live="polite">${at + 1} / ${shown.length}</span>` : nothing}
+        ${this.#view === 'slideshow' && shown.length > 1 ? html`<button class="icon-btn" type="button" aria-pressed=${String(this._playing)}
+          title=${this._playing ? 'Arrêter le diaporama' : 'Lancer le diaporama (une image toutes les 5 s)'} aria-label=${this._playing ? 'Arrêter le diaporama' : 'Lancer le diaporama'}
+          @click=${() => this.#play()}>${this._playing ? html`<b class="pause">❚❚</b>` : html`<b class="play">▶</b>`}</button>` : nothing}
         <button class="icon-btn" type="button" aria-pressed=${String(this._loupe)} title="Loupe sur l’original (survol)" aria-label="Loupe sur l’original"
           @click=${() => { this._loupe = !this._loupe; this._zoom = false; this._locked = false; this._lens = null; }}>${icon('zoom-in')}</button>
         ${this.compact ? html`<button class="icon-btn" type="button" title="Ouvrir en volet (grand, loupe à côté)" aria-label="Ouvrir les médias en volet"
           @click=${() => this.#toPane()}>${icon('arrows-angle-expand')}</button>` : nothing}
       </div>
-      ${!item ? html`<div class="empty">${this._done ? (plant ? 'Aucune image sous licence libre pour cette plante (ou modules photos désactivés).' : 'Plante introuvable.') : html`<span class="spinner">chargement des médias…</span>`}</div>` : html`
+      ${!item ? this.#empty(plant) : this.#view === 'mosaic' ? this.#mosaic(shown, counts) : this.#view === 'slideshow' ? html`
+        <div class="main slideshow">${this.#stage(item, at, shown.length)}${this.#caption(item)}</div>` : html`
         <div class="main">
           ${this.#stage(item, at, shown.length)}
           <aside class="side" aria-label="À propos de l’image">${this._zoom && this._lens && this.#wide ? this.#magnifier(item) : this.#info(item)}</aside>
         </div>
-        <div class="strip">
-          <div class="chips" role="group" aria-label="Type de média">
-            ${KINDS.map(([k, label]) => html`<button type="button" aria-pressed=${String(this._filter === k)} ?disabled=${!counts[k] && k !== 'all'}
-              @click=${() => this.#setFilter(k)}>${label} ${counts[k]}</button>`)}
-            ${this._done ? nothing : html`<span class="muted small">chargement…</span>`}
-          </div>
-          <div class="thumbs" role="listbox" aria-label="Médias">
-            ${shown.map(i => html`<button type="button" role="option" class=${i.kind} aria-current=${String(i.key === item.key)} aria-selected=${String(i.key === item.key)}
-              title=${[KIND_LABEL[i.kind], i.source].join(' · ')} @click=${() => this.#select(i)}>
-              <img src=${i.thumb} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"
-                @error=${(/** @type {Event} */ e) => { const img = /** @type {HTMLImageElement} */ (e.target); if (img.src !== i.src) img.src = i.src; }} />
-            </button>`)}
-          </div>
-        </div>`}`;
+        <div class="strip">${this.#chips(counts)}${this.#thumbs(shown, item)}</div>`}`;
+  }
+
+  /** @param {any} plant */
+  #empty(plant) {
+    return html`<div class="empty">${this._done ? (plant ? 'Aucune image sous licence libre pour cette plante (ou modules photos désactivés).' : 'Plante introuvable.') : html`<span class="spinner">chargement des médias…</span>`}</div>`;
+  }
+
+  /** @param {Record<string, number>} counts */
+  #chips(counts) {
+    return html`<div class="chips" role="group" aria-label="Type de média">
+      ${KINDS.map(([k, label]) => html`<button type="button" aria-pressed=${String(this._filter === k)} ?disabled=${!counts[k] && k !== 'all'}
+        @click=${() => this.#setFilter(k)}>${label} ${counts[k]}</button>`)}
+      ${this._done ? nothing : html`<span class="muted small">chargement…</span>`}
+    </div>`;
+  }
+
+  /** @param {MediaItem[]} shown @param {MediaItem} item */
+  #thumbs(shown, item) {
+    return html`<div class="thumbs" role="listbox" aria-label="Médias">
+      ${shown.map(i => html`<button type="button" role="option" class=${i.kind} aria-current=${String(i.key === item.key)} aria-selected=${String(i.key === item.key)}
+        title=${[KIND_LABEL[i.kind], i.source].join(' · ')} @click=${() => this.#select(i)}>
+        <img src=${i.thumb} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"
+          @error=${(/** @type {Event} */ e) => { const img = /** @type {HTMLImageElement} */ (e.target); if (img.src !== i.src) img.src = i.src; }} />
+      </button>`)}
+    </div>`;
+  }
+
+  /** Mosaic: every image of the filter, in a grid; one touched opens in the scene. @param {MediaItem[]} shown @param {Record<string, number>} counts */
+  #mosaic(shown, counts) {
+    return html`<div class="mosaic-wrap">${this.#chips(counts)}
+      <div class="mosaic" role="list" aria-label="Médias">${shown.map(i => html`<button type="button" role="listitem" class=${i.kind}
+        title=${[KIND_LABEL[i.kind], i.source, i.author].filter(Boolean).join(' · ')} @click=${() => { this.#select(i); this._key = i.key; this._opened = true; }}>
+        <img src=${i.thumb} alt=${KIND_LABEL[i.kind]} loading="lazy" decoding="async" referrerpolicy="no-referrer"
+          @error=${(/** @type {Event} */ e) => { const img = /** @type {HTMLImageElement} */ (e.target); if (img.src !== i.src) img.src = i.src; }} />
+      </button>`)}</div></div>`;
+  }
+
+  /** Slideshow: the image's credit over the bottom of the frame. @param {MediaItem} item */
+  #caption(item) {
+    return html`<div class="caption"><span>${KIND_LABEL[item.kind]} · ${item.source}</span><gf-attribution .media=${item}></gf-attribution></div>`;
   }
 
   /** @param {MediaItem} item @param {number} at @param {number} n */

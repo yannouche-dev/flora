@@ -26,7 +26,7 @@ import { icon } from '../core/icons.js';
 import {
   STYLES, SUBS, canBeEmpty, hidesEmpty, setHidesEmpty, isMap, isAddedMap, mapConfig, setMapConfig, createMap, deleteMap, blockModuleName, blockOrder, blockStyle, blockTitle, isTitleShown, setBlockStyle, setTitleShown, createNote, deleteNote, isHidden, isNote, isSubHidden, noteText, renameBlock,
   setBlockOrder, setHidden, setNoteText, setSubHidden, setSubOrder, shownSubs, subOrder, subTitle,
-  DOCK_SIDES, DOCK_SIZES, dockState, isPinned, pinnedBlocks, setDockState, setPinned, orderByCategory, isPaned, panedBlocks, setPaned
+  EDGE_SIZES, PLACES, blocksAt, edgeState, isOnEdge, placeOf, setEdgeState, setPlace, orderByCategory
 } from '../core/sheet-blocks.js';
 import { CATEGORIES, blockCategory, categoryOf } from '../core/categories.js';
 import { FOCUS_EVENT, isFocused, noFocus, toggleFocus } from '../core/map-focus.js';
@@ -300,6 +300,10 @@ export class GfPlantDetail extends LitElement {
     _paneDialog: { state: true },
     /** The category of the block at the top of the sheet (lit in the side rail). */
     _activeCat: { state: true },
+    /** The edge shown over the whole plant pane for now (Échap or its button puts it back). */
+    _maxEdge: { state: true },
+    /** The sheet is wide enough for columns on its left and right edges (else they are bands at the top). */
+    _wideSheet: { state: true },
     _error: { state: true },
     _shareNote: { state: true },
     _dragKey: { state: true },
@@ -639,69 +643,90 @@ export class GfPlantDetail extends LitElement {
     .focus-hint { font-size: 0.75rem; color: var(--gf-text-muted); margin: 6px 0 0; }
 
     /*
-     * Pinned blocks (Mode King › 📌): the dock, a pane of the layout that stays while the sheet scrolls —
-     * a band at the top of a narrow sheet (phone, narrow pane), a column beside a wide one.
+     * Edges of the plant pane (Mode King › Position): blocks stuck to the top, left, right or bottom; the
+     * sheet scrolls between them. Bands S / M / L high (or dragged), columns S / M / L wide.
      */
     :host { container-type: inline-size; }
-    .frame.docked { display: grid; grid-template-columns: minmax(0, 1fr); }
-    .frame.docked .main { min-width: 0; }
-    .dock {
-      order: -1;
-      position: sticky;
-      /* Flush with the top of the sheet (over its padding). */
-      top: -16px;
-      z-index: 7;
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-      margin: -16px -16px 4px;
-      padding: 6px 12px 8px;
-      background: var(--gf-bg, var(--gf-surface-2));
-      border-bottom: 1px solid var(--gf-border);
-      box-shadow: 0 6px 14px -10px rgb(0 0 0 / 0.35);
-    }
-    :host([embedded]) .dock { top: -4px; margin: -4px -14px 4px; padding-top: 4px; }
-    /* Outside Mode King the dock's bar names its blocks: no second title. */
-    .dock:not(.king) .dock-body > .block > h2.block-title { display: none; }
-    .dock[data-size='s'] { height: calc(var(--host-h, 80vh) * 0.3); }
-    .dock[data-size='m'] { height: calc(var(--host-h, 80vh) * 0.45); }
-    .dock[data-size='l'] { height: calc(var(--host-h, 80vh) * 0.6); }
-    .dock.folded { height: auto; padding-bottom: 0; }
-    .dock.folded .dock-body { display: none; }
-    .dock-bar { flex: none; display: flex; align-items: center; gap: 6px; min-height: 34px; color: var(--gf-text-muted); font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
-    .dock-bar > svg { color: var(--gf-accent); flex: none; }
-    .dock-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .dock-sizes { display: inline-flex; flex: none; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill); overflow: hidden; }
-    .dock-sizes button { min-height: 0; padding: 2px 8px; border: 0; border-radius: 0; background: var(--gf-surface); color: var(--gf-text-muted); font-size: 0.68rem; font-weight: 700; cursor: pointer; }
-    .dock-sizes button[aria-pressed='true'] { background: var(--gf-accent-soft); color: var(--gf-accent); }
-    .dock-fold { flex: none; width: 30px; height: 30px; min-height: 0; padding: 0; display: grid; place-items: center; border: 0; border-radius: var(--gf-radius-sm); background: none; color: var(--gf-text-muted); cursor: pointer; }
-    .dock-sizes button:focus-visible, .dock-fold:focus-visible { outline: none; box-shadow: var(--gf-focus); }
-    .dock-body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; overscroll-behavior: contain; }
-    .dock-body > .block { margin-top: 10px; }
-    .dock-body > .block:first-child { margin-top: 0; }
-    /* A pinned map fills the dock. */
-    .dock-body > .block.map-block { flex: 1 0 200px; display: flex; flex-direction: column; min-height: 0; }
-    .dock-body > .block.map-block > .content { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-    .dock-body .map-placeholder.fill { flex: 1; height: auto !important; }
+    :host([edged]) { overflow: hidden; display: flex; flex-direction: column; padding: 0; }
+    :host([edged]) .railed { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    :host([edged]) .railed-sheet { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    :host([edged]) .rail { position: static; margin: 0; }
+    .frame.edged { position: relative; flex: 1; min-height: 0; display: grid; }
+    :host([edged]) > .frame.edged { height: 100%; }
+    .frame.edged > .main { grid-area: main; min-width: 0; min-height: 0; overflow-y: auto; padding: 16px 16px 0; }
+    :host([embedded]) .frame.edged > .main { padding: 4px 14px 0; }
+    .edge { position: relative; z-index: 7; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--gf-bg, var(--gf-surface-2)); }
+    .edge[data-edge='top'] { grid-area: top; border-bottom: 1px solid var(--gf-border); }
+    .edge[data-edge='bottom'] { grid-area: bottom; border-top: 1px solid var(--gf-border); }
+    .edge[data-edge='left'] { grid-area: left; }
+    .edge[data-edge='right'] { grid-area: right; }
+    .edge.col[data-edge='left'] { border-right: 1px solid var(--gf-border); }
+    .edge.col[data-edge='right'] { border-left: 1px solid var(--gf-border); }
+    .edge.band[data-edge='left'], .edge.band[data-edge='right'] { border-bottom: 1px solid var(--gf-border); }
+    /* Absolute in a grid: no area, so the frame itself holds it (an area would be its box). */
+    .edge.max { grid-area: auto !important; position: absolute; inset: 0; z-index: 30; width: auto !important; height: auto !important; border: 0; box-shadow: var(--gf-shadow-float); }
+    .edge-bar { flex: none; display: flex; align-items: center; gap: 4px; min-height: 36px; padding: 2px 6px 2px 8px; color: var(--gf-text-muted); font-size: 0.75rem; }
+    .edge-tabs { flex: 1; min-width: 0; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+    .edge-tabs button { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 2px 8px; border: 0; border-radius: var(--gf-radius-sm); background: none;
+      color: var(--gf-text-muted); font: inherit; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; cursor: pointer; }
+    .edge-tabs button[aria-selected='true'] { background: var(--gf-surface); color: var(--gf-accent); box-shadow: var(--gf-shadow); }
+    .edge-tabs:has(button:only-child) button { background: none; box-shadow: none; cursor: default; }
+    .edge-sizes { display: inline-flex; flex: none; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill); overflow: hidden; }
+    .edge-sizes button { min-height: 0; padding: 2px 8px; border: 0; border-radius: 0; background: var(--gf-surface); color: var(--gf-text-muted); font-size: 0.68rem; font-weight: 700; cursor: pointer; }
+    .edge-sizes button[aria-pressed='true'] { background: var(--gf-accent-soft); color: var(--gf-accent); }
+    .edge-btn { flex: none; width: 30px; height: 30px; min-height: 0; padding: 0; display: grid; place-items: center; border: 0; border-radius: var(--gf-radius-sm); background: none;
+      color: var(--gf-text-muted); cursor: pointer; list-style: none; }
+    .edge-btn::-webkit-details-marker { display: none; }
+    .edge-btn:hover { background: var(--gf-surface); color: var(--gf-text); }
+    .edge-sizes button:focus-visible, .edge-btn:focus-visible, .edge-tabs button:focus-visible { outline: none; box-shadow: var(--gf-focus); }
+    .edge-opts { position: relative; flex: none; }
+    .opts-pop { position: absolute; right: 0; top: 100%; z-index: 40; display: grid; gap: 6px; min-width: 230px; padding: 10px 12px; background: var(--gf-surface);
+      border: 1px solid var(--gf-border); border-radius: var(--gf-radius); box-shadow: var(--gf-shadow-float); color: var(--gf-text); font-size: 0.85rem; text-transform: none; letter-spacing: 0; font-weight: 400; }
+    .edge[data-edge='bottom'] .opts-pop { top: auto; bottom: 100%; }
+    .opts-pop label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+    .edge-body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; padding: 4px 12px 10px; overscroll-behavior: contain; }
+    .edge.bare .edge-body { padding: 0; }
+    .edge.bare .edge-body > .block { margin: 0; }
+    /* The bar names the edge's blocks: no second title (Mode King shows the block's tools). */
+    .edge:not(.king) .edge-body > .block > h2.block-title, .edge:not(.king) .edge-body > .block > .to-pane { display: none; }
+    .edge-body > .block { margin-top: 0; }
+    .edge-body > .block.map-block, .edge-body > .block[data-key='media'] { flex: 1 0 200px; display: flex; flex-direction: column; min-height: 0; }
+    .edge-body > .block.map-block > .content, .edge-body > .block[data-key='media'] > .content { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .edge-body .map-placeholder.fill { flex: 1; height: auto !important; }
+    .edge-body gf-media-viewer { flex: 1; min-height: 0; }
     gf-sheet-map[fill] { flex: 1; min-height: 0; }
-    .dock-sides button { display: inline-grid; place-items: center; padding: 2px 6px; }
-    /* Stuck at the bottom (Mode King › position): a band over the bottom of the sheet. */
-    .frame.side-bottom .dock { order: 1; top: auto; bottom: -16px; margin: 4px -16px -16px; border-bottom: 0; border-top: 1px solid var(--gf-border); box-shadow: 0 -6px 14px -10px rgb(0 0 0 / 0.35); }
-    :host([embedded]) .frame.side-bottom .dock { bottom: -4px; margin: 4px -14px -4px; }
-    @container (min-width: 640px) {
-      .frame.docked.col { grid-template-columns: minmax(0, 1fr) var(--dock-w, 45%); column-gap: 18px; align-items: start; }
-      .frame.docked.col.side-left { grid-template-columns: var(--dock-w, 45%) minmax(0, 1fr); }
-      .frame.docked.col[data-size='s'] { --dock-w: 34%; }
-      .frame.docked.col[data-size='l'] { --dock-w: 58%; }
-      .col .dock, .col .dock[data-size] { order: 1; top: 0; height: calc(var(--host-h, 80vh) - 32px); margin: 0; padding: 0 0 12px; background: none; border: 0; box-shadow: none; }
-      .col.side-left .dock { order: -1; }
-      :host([embedded]) .col .dock, :host([embedded]) .col .dock[data-size] { top: 0; height: calc(var(--host-h, 80vh) - 16px); margin: 0; padding: 0 0 12px; }
-      .col .dock.folded { height: calc(var(--host-h, 80vh) - 32px); padding-bottom: 12px; }
-      :host([embedded]) .col .dock.folded { height: calc(var(--host-h, 80vh) - 16px); }
-      .col .dock.folded .dock-body { display: flex; }
-      .col .dock-fold { display: none; }
-      .frame.docked.col .action-bar { margin-right: 0; }
-    }
+    /* Folded: its bar only (a column: a strip of its blocks' icons). */
+    .edge.col.folded { width: 44px; }
+    .edge.col.folded .edge-bar { flex-direction: column; padding: 6px 4px; gap: 6px; }
+    .edge.col.folded .edge-tabs { flex-direction: column; overflow: visible; }
+    .edge.col.folded .tab-name { display: none; }
+    .edge.col .edge-tabs .tab-name { overflow: hidden; text-overflow: ellipsis; }
+    /* Without title or frame: the block fills the edge; its tabs and « agrandir » float over it. */
+    .edge-float { position: absolute; top: 6px; left: 6px; z-index: 3; display: flex; gap: 4px; padding: 2px; border-radius: var(--gf-radius-sm); background: color-mix(in srgb, var(--gf-surface) 85%, transparent); box-shadow: var(--gf-shadow); }
+    .edge-float .tab-name { display: none; }
+    /* Dragging an edge's inner border. */
+    .edge-grip { position: absolute; z-index: 8; touch-action: none; }
+    .edge-grip::after { content: ''; position: absolute; background: transparent; transition: background 0.12s; }
+    .edge-grip:hover::after { background: var(--gf-accent); }
+    .edge.band .edge-grip { left: 0; right: 0; height: 10px; cursor: row-resize; }
+    .edge.band .edge-grip::after { left: 0; right: 0; top: 4px; height: 2px; }
+    .edge.col .edge-grip { top: 0; bottom: 0; width: 10px; cursor: col-resize; }
+    .edge.col .edge-grip::after { top: 0; bottom: 0; left: 4px; width: 2px; }
+    .edge[data-edge='top'] .edge-grip, .edge.band[data-edge='left'] .edge-grip, .edge.band[data-edge='right'] .edge-grip { bottom: -5px; }
+    .edge[data-edge='bottom'] .edge-grip { top: -5px; }
+    .edge.col[data-edge='left'] .edge-grip { right: -5px; }
+    .edge.col[data-edge='right'] .edge-grip { left: -5px; }
+    /* Mode King: the position of a block — a cross of buttons. */
+    .place-pick { position: relative; flex: none; }
+    .place-pick > summary { list-style: none; display: inline-grid; place-items: center; cursor: pointer; }
+    .place-pick > summary::-webkit-details-marker { display: none; }
+    .place-grid { position: absolute; right: 0; top: 100%; z-index: 40; display: grid; grid-template-columns: repeat(3, 34px); grid-template-areas: '. t .' 'l s r' '. b .' 'x x x';
+      gap: 3px; padding: 8px; background: var(--gf-surface); border: 1px solid var(--gf-border); border-radius: var(--gf-radius); box-shadow: var(--gf-shadow-float); }
+    .place-grid button { height: 30px; min-height: 0; padding: 0; display: grid; place-items: center; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-sm); background: var(--gf-surface); color: var(--gf-text-muted); cursor: pointer; }
+    .place-grid button[aria-pressed='true'] { background: var(--gf-accent); border-color: var(--gf-accent); color: var(--gf-accent-contrast); }
+    .place-grid .p-top { grid-area: t; } .place-grid .p-left { grid-area: l; } .place-grid .p-sheet { grid-area: s; } .place-grid .p-right { grid-area: r; } .place-grid .p-bottom { grid-area: b; }
+    .place-grid .p-beside { grid-area: x; }
+    .edge[data-edge='bottom'] .place-grid { top: auto; bottom: 100%; }
     /*
      * Side rail: an icon per category of the sheet's blocks (Noms, Images, Protection…). Narrow sheet: a strip
      * stuck at the top; wide: a column stuck on the left. Hover (or focus): the category's blocks.
@@ -710,8 +735,6 @@ export class GfPlantDetail extends LitElement {
     .rail { position: sticky; top: -16px; z-index: 9; display: flex; gap: 2px; margin: -16px -16px 6px; padding: 4px 10px; background: var(--gf-surface);
       border-bottom: 1px solid var(--gf-border); flex-wrap: wrap; }
     :host([embedded]) .rail { top: -4px; margin: -4px -14px 6px; }
-    .railed .dock { top: calc(-16px + var(--rail-h)); }
-    :host([embedded]) .railed .dock { top: calc(-4px + var(--rail-h)); }
     .rail-item { position: relative; flex: none; }
     .rail-item > button { width: 36px; height: 36px; min-height: 0; padding: 0; display: grid; place-items: center; border: 0; border-radius: var(--gf-radius-sm);
       background: none; color: var(--gf-text-muted); font-size: 1.05rem; cursor: pointer; }
@@ -733,6 +756,9 @@ export class GfPlantDetail extends LitElement {
       :host([embedded]) .rail { top: 0; margin: 0 0 0 -6px; }
       .rail-pop { top: 0; left: 100%; margin-left: 6px; }
       .railed-sheet { min-width: 0; }
+      /* With edges: the rail beside the frame, both as high as the pane. */
+      :host([edged]) .railed { display: grid; grid-template-rows: minmax(0, 1fr); column-gap: 0; }
+      :host([edged]) .rail { margin: 0; padding: 6px 4px; overflow-y: auto; border-right: 1px solid var(--gf-border); }
     }
     @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } .block[data-flash] { animation: none; } }
   `];
@@ -788,7 +814,11 @@ export class GfPlantDetail extends LitElement {
   }
 
   /** The sheet's height, for the dock (pinned blocks) to fill it. */
-  #resize = new ResizeObserver(([entry]) => this.style.setProperty('--host-h', Math.round(entry.contentRect.height + this.#padY()) + 'px'));
+  #resize = new ResizeObserver(([entry]) => {
+    this.style.setProperty('--host-h', Math.round(entry.contentRect.height + this.#padY()) + 'px');
+    const wide = entry.contentRect.width >= 640;
+    if (wide !== this._wideSheet) this._wideSheet = wide;
+  });
 
   #padY() {
     const cs = getComputedStyle(this);
@@ -798,8 +828,29 @@ export class GfPlantDetail extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.#resize.observe(this);
+    // The sheet scrolls itself, or its middle when edges are used (scroll does not bubble: caught on the way down).
+    this.renderRoot.addEventListener('scroll', this.#onScroll, { passive: true, capture: true });
     this.addEventListener('scroll', this.#onScroll, { passive: true });
+    this.addEventListener('keydown', this.#onEdgeKey);
+    // A menu (position, edge options) closes when touching elsewhere.
+    this.renderRoot.addEventListener('pointerdown', this.#closeMenus, { capture: true });
   }
+
+  /** @param {Event} e */
+  #closeMenus = e => {
+    const path = e.composedPath();
+    for (const d of /** @type {NodeListOf<HTMLDetailsElement>} */ (this.renderRoot.querySelectorAll('details.place-pick[open], details.edge-opts[open]'))) {
+      if (!path.includes(d)) d.removeAttribute('open');
+    }
+  };
+
+  /** Échap: an edge shown over the pane goes back. @param {KeyboardEvent} e */
+  #onEdgeKey = e => {
+    if (e.key !== 'Escape') return;
+    const open = this.renderRoot.querySelector('details.edge-opts[open], details.place-pick[open]');
+    if (open) { e.stopPropagation(); open.removeAttribute('open'); return; }
+    if (this._maxEdge) { e.stopPropagation(); this._maxEdge = null; }
+  };
 
   /** @type {AbortController | null} */
   #abort = null;
@@ -1142,7 +1193,7 @@ export class GfPlantDetail extends LitElement {
   #onlyBlock(key, ctx) {
     if (key === 'media') {
       return ctx.photosOff ? html`<p class="muted only-pad">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`
-        : html`<gf-media-viewer plant-id=${ctx.plant.id} .view=${this.view} .index=${this.paneAt ?? 0} .startUrl=${this.paneStart ?? null}></gf-media-viewer>`;
+        : html`<gf-media-viewer plant-id=${ctx.plant.id} .view=${this.view} presentation=${blockStyle(this.view, 'media')} .index=${this.paneAt ?? 0} .startUrl=${this.paneStart ?? null}></gf-media-viewer>`;
     }
     return html`<div class="only-pad ${isMap(key) ? 'fill' : ''}"><section class="block only ${isMap(key) ? 'map-block' : ''}" data-key=${key}><div class="content">${this.#content(key, ctx)}</div></section></div>`;
   }
@@ -1257,14 +1308,14 @@ export class GfPlantDetail extends LitElement {
     const king = this.#store.state.kingMode;
     const order = this._dragOrder || blockOrder(this.view);
     const sorting = Boolean(this._dragOrder);
-    // Pinned blocks are in the dock, not in the flow.
+    // Blocks stuck to an edge are there, not in the flow.
     // Outside « Mode King », folded blocks are not there at all.
     // Outside it too, a block with nothing for this plant (no other name, no Wikipédia article).
-    // Blocks placed in the pane: a button each (Mode King: in the flow, to arrange them).
-    const keys = blockOrder(this.view).filter(k => !isPinned(this.view, k) && (king || !isPaned(this.view, k)) && this.#visible(k, ctx));
-    const paned = king ? [] : panedBlocks(this.view).filter(k => this.#visible(k, ctx));
-    return html`${paned.length ? html`<div class="paned">${icon('arrows-angle-expand')} En volet :
-        ${paned.map(k => html`<button type="button" @click=${() => this.#openPane(k)}>${blockTitle(k)}</button>`)}</div>` : nothing}
+    // Blocks placed beside the sheet: a button each (Mode King: in the flow, to arrange them).
+    const keys = blockOrder(this.view).filter(k => !isOnEdge(this.view, k) && (king || placeOf(this.view, k) !== 'beside') && this.#visible(k, ctx));
+    const beside = king ? [] : blocksAt(this.view, 'beside').filter(k => this.#visible(k, ctx));
+    return html`${beside.length ? html`<div class="paned">${icon('arrows-angle-expand')} À côté :
+        ${beside.map(k => html`<button type="button" @click=${() => this.#openPane(k)}>${blockTitle(k)}</button>`)}</div>` : nothing}
       <div class="blocks ${king ? 'king' : ''} ${sorting ? 'sorting' : ''}">${repeat(keys, k => k, k =>
       king ? this.#block(k, ctx, sorting ? order.indexOf(k) : null) : this.#plainBlock(k, ctx))}</div>
       ${king && !sorting ? this.#newNote() : nothing}`;
@@ -1275,9 +1326,9 @@ export class GfPlantDetail extends LitElement {
     return this.#store.state.kingMode || (!isHidden(this.view, k) && !(hidesEmpty(this.view, k) && this.#emptyHere(k, ctx)));
   }
 
-  /** The pinned blocks shown, in their order. @param {any} ctx */
-  #pinned(ctx) {
-    return pinnedBlocks(this.view).filter(k => this.#visible(k, ctx));
+  /** The blocks shown on an edge, in order. @param {any} ctx @param {import('../core/sheet-blocks.js').Edge} edge */
+  #edgeBlocks(ctx, edge) {
+    return blocksAt(this.view, edge).filter(k => this.#visible(k, ctx));
   }
 
   /** Does the sheet show a map (in the flow or pinned)? Its data can then be touched to show on it. */
@@ -1285,31 +1336,110 @@ export class GfPlantDetail extends LitElement {
     return blockOrder(this.view).some(k => isMap(k) && !isHidden(this.view, k));
   }
 
+  /** Icons and names of the places a block can take. */
+  static PLACE_INFO = /** @type {Record<string, [string, import('../core/icons.js').IconName]>} */ ({
+    sheet: ['Dans la fiche', 'list-ul'], top: ['En haut', 'chevron-up'], left: ['À gauche', 'chevron-bar-left'],
+    right: ['À droite', 'chevron-bar-right'], bottom: ['En bas', 'chevron-down'], beside: ['À côté de la fiche', 'arrows-angle-expand']
+  });
+
   /**
-   * The dock: the pinned blocks, a pane of the layout. On a wide sheet a column beside it, on a narrow one
-   * a band above it (S / M / L high, foldable to its bar); either way it stays while the sheet scrolls.
-   * @param {any} ctx @param {string[]} keys
+   * Mode King: where a block sits — in the sheet, stuck to an edge of the plant pane, or beside it.
+   * A cross of buttons: ↑ ← fiche → ↓, and « À côté ».
+   * @param {string} key
    */
-  #dock(ctx, keys) {
-    const king = this.#store.state.kingMode;
-    const { size, folded, side } = dockState(this.view);
-    const names = { s: 'Petit', m: 'Moyen', l: 'Grand' };
-    const sides = { auto: ['Automatique (à droite, en haut si étroit)', 'layers'], left: ['À gauche', 'chevron-bar-left'], right: ['À droite', 'chevron-bar-right'], top: ['En haut', 'chevron-up'], bottom: ['En bas', 'chevron-down'] };
-    return html`<aside class="dock ${folded ? 'folded' : ''} ${king ? 'king' : ''}" data-size=${size} aria-label="Blocs épinglés">
-      <div class="dock-bar">
-        ${icon('pin-angle-fill')}
-        <span class="dock-title">${keys.map(k => blockTitle(k)).join(' · ')}</span>
-        <span class="dock-sizes" role="group" aria-label="Taille du volet épinglé">${DOCK_SIZES.map(z => html`<button type="button"
-          aria-pressed=${z === size ? 'true' : 'false'} title=${'Volet ' + names[z].toLowerCase()} aria-label=${'Volet ' + names[z].toLowerCase()}
-          @click=${() => setDockState(this.view, { size: z, folded: false })}>${z.toUpperCase()}</button>`)}</span>
-        ${king ? html`<span class="dock-sizes dock-sides" role="group" aria-label="Position du volet épinglé">${DOCK_SIDES.map(d => html`<button type="button"
-          aria-pressed=${d === side ? 'true' : 'false'} title=${'Volet épinglé : ' + sides[d][0].toLowerCase()} aria-label=${'Volet épinglé ' + sides[d][0].toLowerCase()}
-          @click=${() => setDockState(this.view, { side: d })}>${icon(/** @type {any} */ (sides[d][1]))}</button>`)}</span>` : nothing}
-        <button class="dock-fold" type="button" aria-expanded=${folded ? 'false' : 'true'} aria-label=${folded ? 'Déplier le volet épinglé' : 'Replier le volet épinglé'}
-          @click=${() => setDockState(this.view, { folded: !folded })}>${icon(folded ? 'chevron-down' : 'chevron-up')}</button>
+  #placePicker(key) {
+    const title = blockTitle(key);
+    const now = placeOf(this.view, key) || 'sheet';
+    const info = GfPlantDetail.PLACE_INFO;
+    const pick = (/** @type {Event} */ e, /** @type {string} */ place) => {
+      /** @type {HTMLDetailsElement | null} */ ((/** @type {HTMLElement} */ (e.currentTarget)).closest('details'))?.removeAttribute('open');
+      setPlace(this.view, key, place === 'sheet' ? null : /** @type {any} */ (place));
+    };
+    const cell = (/** @type {string} */ place) => html`<button type="button" class="p-${place}" aria-pressed=${now === place ? 'true' : 'false'}
+      title=${info[place][0]} aria-label=${`« ${title} » : ${info[place][0].toLowerCase()}`} @click=${(/** @type {Event} */ e) => pick(e, place)}>${icon(info[place][1])}</button>`;
+    return html`<details class="place-pick" @keydown=${(/** @type {KeyboardEvent} */ e) => { if (e.key === 'Escape') { e.stopPropagation(); /** @type {HTMLDetailsElement} */ (e.currentTarget).removeAttribute('open'); } }}>
+      <summary class="tool" title=${'Position : ' + info[now][0].toLowerCase()} aria-label=${`Position de « ${title} » : ${info[now][0].toLowerCase()}`}>${icon(info[now][1])}</summary>
+      <div class="place-grid" role="group" aria-label=${'Position de « ' + title + ' »'}>
+        ${cell('top')}${cell('left')}${cell('sheet')}${cell('right')}${cell('bottom')}${cell('beside')}
       </div>
-      <div class="dock-body">${repeat(keys, k => k, k => king ? this.#block(k, ctx, null) : this.#plainBlock(k, ctx))}</div>
+    </details>`;
+  }
+
+  /**
+   * An edge of the plant pane: its blocks (tabs when several), sized S / M / L or dragged, foldable to its bar,
+   * across the whole pane or not (bands), without title or frame, shown over the whole pane for a while.
+   * @param {any} ctx @param {import('../core/sheet-blocks.js').Edge} edge @param {string[]} keys @param {boolean} wide
+   */
+  #edge(ctx, edge, keys, wide) {
+    const king = this.#store.state.kingMode;
+    const st = edgeState(this.view, edge);
+    const tab = keys.includes(/** @type {string} */ (st.tab)) ? /** @type {string} */ (st.tab) : keys[0];
+    const column = wide && (edge === 'left' || edge === 'right');
+    const max = this._maxEdge === edge;
+    const bare = st.bare && !king && !max;
+    const names = { s: 'Petit', m: 'Moyen', l: 'Grand' };
+    const where = GfPlantDetail.PLACE_INFO[edge][0].toLowerCase();
+    const f = { s: 0.3, m: 0.45, l: 0.6 }[st.size], cw = { s: 34, m: 45, l: 58 }[st.size];
+    // Bands share the height with the sheet, which keeps at least 220 px between them.
+    const room = 'calc((var(--host-h, 80vh) - 220px) / var(--bands, 1))';
+    const size = st.folded || max ? '' : column ? `width:${st.px ? `min(${st.px}px, 80cqw)` : cw + 'cqw'}`
+      : `height:min(${st.px ? st.px + 'px' : `calc(var(--host-h, 80vh) * ${f})`}, ${room})`;
+    const tabs = html`<span class="edge-tabs" role="tablist" aria-label=${'Blocs ' + where}>${keys.map(k => html`<button type="button" role="tab"
+      aria-selected=${k === tab ? 'true' : 'false'} title=${blockTitle(k)} @click=${() => setEdgeState(this.view, edge, { tab: k, folded: false })}>
+      ${icon(categoryOf(blockCategory(k)).icon)}<span class="tab-name">${blockTitle(k)}</span></button>`)}</span>`;
+    return html`<aside class="edge ${column ? 'col' : 'band'} ${st.folded && !max ? 'folded' : ''} ${bare ? 'bare' : ''} ${max ? 'max' : ''} ${king ? 'king' : ''}"
+        data-edge=${edge} style=${size} aria-label=${'Volet ' + where}>
+      ${bare ? html`<div class="edge-float">${keys.length > 1 ? tabs : nothing}
+          <button class="edge-btn" type="button" title="Agrandir à tout le panneau" aria-label=${'Agrandir le volet ' + where} @click=${() => { this._maxEdge = edge; }}>${icon('arrows-fullscreen')}</button></div>`
+        : html`<div class="edge-bar">
+        ${tabs}
+        ${king ? this.#placePicker(tab) : nothing}
+        ${st.folded && !max ? nothing : html`<span class="edge-sizes" role="group" aria-label=${'Taille du volet ' + where}>${EDGE_SIZES.map(z => html`<button type="button"
+          aria-pressed=${z === st.size && !st.px ? 'true' : 'false'} title=${'Volet ' + names[z].toLowerCase()} aria-label=${'Volet ' + where + ' ' + names[z].toLowerCase()}
+          @click=${() => setEdgeState(this.view, edge, { size: z, folded: false })}>${z.toUpperCase()}</button>`)}</span>
+        <details class="edge-opts">
+          <summary class="edge-btn" title="Options d’affichage" aria-label=${'Options d’affichage du volet ' + where}>${icon('gear')}</summary>
+          <div class="opts-pop">
+            ${column ? nothing : html`<label><input type="checkbox" .checked=${st.full} @change=${(/** @type {any} */ e) => setEdgeState(this.view, edge, { full: e.target.checked })} /> Pleine largeur du panneau</label>`}
+            <label><input type="checkbox" .checked=${st.bare} @change=${(/** @type {any} */ e) => setEdgeState(this.view, edge, { bare: e.target.checked })} /> Sans titre ni cadre</label>
+            <label><input type="checkbox" .checked=${st.folded} @change=${(/** @type {any} */ e) => setEdgeState(this.view, edge, { folded: e.target.checked })} /> Replié (s’ouvre au toucher)</label>
+            ${st.px ? html`<button type="button" class="link" @click=${() => setEdgeState(this.view, edge, { size: st.size })}>Taille ${st.size.toUpperCase()} (oublier la taille tirée)</button>` : nothing}
+          </div>
+        </details>`}
+        <button class="edge-btn" type="button" title=${max ? 'Remettre à sa place (Échap)' : 'Agrandir à tout le panneau'}
+          aria-label=${(max ? 'Remettre le volet ' : 'Agrandir le volet ') + where} @click=${() => { this._maxEdge = max ? null : edge; }}>${icon(max ? 'fullscreen-exit' : 'arrows-fullscreen')}</button>
+        ${max ? nothing : html`<button class="edge-btn" type="button" aria-expanded=${st.folded ? 'false' : 'true'} aria-label=${(st.folded ? 'Déplier le volet ' : 'Replier le volet ') + where}
+          @click=${() => setEdgeState(this.view, edge, { folded: !st.folded })}>${icon(st.folded ? (edge === 'bottom' ? 'chevron-up' : 'chevron-down') : (edge === 'bottom' ? 'chevron-down' : 'chevron-up'))}</button>`}
+      </div>`}
+      ${st.folded && !max ? nothing : html`<div class="edge-body">${repeat([tab], k => k, k => king ? this.#block(k, ctx, null) : this.#plainBlock(k, ctx))}</div>`}
+      ${st.folded || max || bare ? nothing : html`<div class="edge-grip" role="separator" aria-orientation=${column ? 'vertical' : 'horizontal'} aria-label=${'Taille du volet ' + where}
+        title="Tirer pour changer la taille" @pointerdown=${(/** @type {PointerEvent} */ e) => this.#gripDown(e, edge, column)}></div>`}
     </aside>`;
+  }
+
+  /** Dragging an edge's border: its own size, kept for the mode. @param {PointerEvent} e @param {import('../core/sheet-blocks.js').Edge} edge @param {boolean} column */
+  #gripDown(e, edge, column) {
+    const grip = /** @type {HTMLElement} */ (e.currentTarget);
+    const el = /** @type {HTMLElement} */ (grip.closest('.edge'));
+    e.preventDefault();
+    grip.setPointerCapture(e.pointerId);
+    const start = column ? e.clientX : e.clientY;
+    const size0 = column ? el.getBoundingClientRect().width : el.getBoundingClientRect().height;
+    const sign = edge === 'right' || edge === 'bottom' ? -1 : 1;
+    let px = size0;
+    const move = (/** @type {PointerEvent} */ ev) => {
+      px = Math.max(80, size0 + sign * ((column ? ev.clientX : ev.clientY) - start));
+      el.style.setProperty(column ? 'width' : 'height', px + 'px');
+    };
+    const up = () => {
+      grip.removeEventListener('pointermove', move);
+      grip.removeEventListener('pointerup', up);
+      grip.removeEventListener('pointercancel', up);
+      if (Math.abs(px - size0) > 2) setEdgeState(this.view, edge, { px: Math.round(px) });
+    };
+    grip.addEventListener('pointermove', move);
+    grip.addEventListener('pointerup', up);
+    grip.addEventListener('pointercancel', up);
   }
 
   /** The sheet, with the side rail of categories and the dock of pinned blocks when there are some. @param {any} ctx @param {unknown} article */
@@ -1337,7 +1467,7 @@ export class GfPlantDetail extends LitElement {
         <button type="button" class=${this._activeCat === c.key ? 'on' : ''} title=${c.label + ' — ' + c.question} aria-label=${c.label}
           aria-current=${this._activeCat === c.key ? 'true' : 'false'} @click=${() => this.#goTo(keys[0])}>${icon(c.icon)}</button>
         <div class="rail-pop" role="menu" aria-label=${c.label}><strong>${c.label}</strong>
-          ${keys.map(k => html`<button type="button" role="menuitem" @click=${() => this.#goTo(k)}>${blockTitle(k)}${isPaned(this.view, k) ? html` <small>(volet)</small>` : isPinned(this.view, k) ? html` <small>(épinglé)</small>` : nothing}</button>`)}</div>
+          ${keys.map(k => html`<button type="button" role="menuitem" @click=${() => this.#goTo(k)}>${blockTitle(k)}${placeOf(this.view, k) ? html` <small>(${GfPlantDetail.PLACE_INFO[/** @type {string} */ (placeOf(this.view, k))][0].toLowerCase()})</small>` : nothing}</button>`)}</div>
       </div>`;
     })}</nav>`;
   }
@@ -1345,8 +1475,10 @@ export class GfPlantDetail extends LitElement {
   /** To a block: its place in the sheet, the dock (unfolded) or the pane. @param {string} key */
   async #goTo(key) {
     const king = this.#store.state.kingMode;
-    if (!king && isPaned(this.view, key)) { this.#openPane(key); return; }
-    if (isPinned(this.view, key) && dockState(this.view).folded) setDockState(this.view, { folded: false });
+    const place = placeOf(this.view, key);
+    if (!king && place === 'beside') { this.#openPane(key); return; }
+    // On an edge: its tab, unfolded.
+    if (place && place !== 'beside') setEdgeState(this.view, place, { tab: key, folded: false });
     await this.updateComplete;
     const section = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(`.block[data-key="${CSS.escape(key)}"]`));
     if (!section) return;
@@ -1364,8 +1496,9 @@ export class GfPlantDetail extends LitElement {
     if (this.#scrollFrame) return;
     this.#scrollFrame = requestAnimationFrame(() => {
       this.#scrollFrame = 0;
-      const top = this.getBoundingClientRect().top + 72;
       let current = null;
+      const scroller = /** @type {HTMLElement} */ (this.renderRoot.querySelector('.frame.edged > .main') || this);
+      const top = scroller.getBoundingClientRect().top + 72;
       for (const el of /** @type {NodeListOf<HTMLElement>} */ (this.renderRoot.querySelectorAll('.blocks > .block'))) {
         if (el.getBoundingClientRect().top <= top) current = el.dataset.key; else break;
       }
@@ -1375,16 +1508,46 @@ export class GfPlantDetail extends LitElement {
   };
   #scrollFrame = 0;
 
-  /** The sheet, with the dock of pinned blocks when there are some. @param {any} ctx @param {unknown} article */
+  /**
+   * The sheet, with its edges when blocks are stuck to them: a grid — top band, left column, the sheet,
+   * right column, bottom band — the sheet alone scrolling between them. A band « across the whole pane » runs
+   * over the columns. On a narrow sheet the columns are bands at the top.
+   * @param {any} ctx @param {unknown} article
+   */
   #docked(ctx, article) {
-    const pinned = this.#pinned(ctx);
-    if (!pinned.length) return html`${article}${this.#actionBar(ctx.plant)}`;
-    const { size, side } = dockState(this.view);
-    // A column (beside the sheet when it is wide enough) or a band (top / bottom).
-    return html`<div class="frame docked side-${side} ${['top', 'bottom'].includes(side) ? 'band' : 'col'}" data-size=${size}>
+    const wide = this._wideSheet !== false;
+    /** @type {Record<string, string[]>} */
+    const at = {};
+    for (const edge of /** @type {const} */ (['top', 'left', 'right', 'bottom'])) { const keys = this.#edgeBlocks(ctx, edge); if (keys.length) at[edge] = keys; }
+    const edges = /** @type {import('../core/sheet-blocks.js').Edge[]} */ (Object.keys(at));
+    if (!edges.length) return html`${article}${this.#actionBar(ctx.plant)}`;
+    /** @type {string[][]} */
+    let rows;
+    let cols, heights;
+    if (wide) {
+      const line = [...(at.left ? ['left'] : []), 'main', ...(at.right ? ['right'] : [])];
+      const band = (/** @type {'top' | 'bottom'} */ e) => line.map(c => c === 'main' || edgeState(this.view, e).full ? e : c);
+      rows = [...(at.top ? [band('top')] : []), line, ...(at.bottom ? [band('bottom')] : [])];
+      cols = line.map(c => c === 'main' ? 'minmax(0, 1fr)' : 'auto').join(' ');
+      heights = [...(at.top ? ['auto'] : []), 'minmax(0, 1fr)', ...(at.bottom ? ['auto'] : [])].join(' ');
+    } else {
+      const order = ['top', 'left', 'right', 'main', 'bottom'].filter(e => e === 'main' || at[e]);
+      rows = order.map(e => [e]);
+      cols = 'minmax(0, 1fr)';
+      heights = order.map(e => e === 'main' ? 'minmax(0, 1fr)' : 'auto').join(' ');
+    }
+    const areas = rows.map(r => `"${r.join(' ')}"`).join(' ');
+    // Bands unfolded (the columns too on a narrow sheet): they share the height left to the sheet.
+    const bands = edges.filter(e => (!wide || e === 'top' || e === 'bottom') && !edgeState(this.view, e).folded).length || 1;
+    return html`<div class="frame edged ${this._maxEdge ? 'maxed' : ''}" style=${`--bands:${bands};grid-template-areas:${areas};grid-template-columns:${cols};grid-template-rows:${heights}`}>
       <div class="main">${article}${this.#actionBar(ctx.plant)}</div>
-      ${this.#dock(ctx, pinned)}
+      ${edges.map(edge => this.#edge(ctx, edge, at[edge], wide))}
     </div>`;
+  }
+
+  updated() {
+    // The sheet scrolls in its middle when it has edges: the host itself does not.
+    this.toggleAttribute('edged', Boolean(this.renderRoot.querySelector('.frame.edged')));
   }
 
   /** A block read without its title (Mode King › title on/off, per view). @param {string} key */
@@ -1424,7 +1587,6 @@ export class GfPlantDetail extends LitElement {
     const subsOpen = this._subsOpen.has(key);
     const style = slot === null ? '' : `order:${slot}${dragging ? `;transform:translateY(${this._dragY}px)` : ''}`;
     const titled = isTitleShown(this.view, key);
-    const pinned = isPinned(this.view, key);
     return html`<section class="block ${off ? 'off' : ''} ${dragging ? 'dragging' : ''} ${titled ? '' : 'untitled'} ${isMap(key) ? 'map-block' : ''}" data-key=${key} style=${style}>
       <h2 class="block-title" title="Glisser pour déplacer" @pointerdown=${e => this.#press(e, key)}>
         <button class="grip" type="button" aria-label="Déplacer le bloc « ${title} »" title="Glisser pour déplacer (↑ ↓ au clavier)"
@@ -1443,19 +1605,12 @@ export class GfPlantDetail extends LitElement {
           aria-label=${hidesEmpty(this.view, key) ? `Afficher « ${title} » même vide, hors mode King` : `Ne pas afficher « ${title} » s’il est vide, hors mode King`}
           title=${hidesEmpty(this.view, key) ? 'Masqué quand il est vide (toucher pour l’afficher quand même)' : 'Affiché même vide (toucher pour le masquer quand il est vide)'}
           @click=${() => setHidesEmpty(this.view, key, !hidesEmpty(this.view, key))}>${icon('eye-slash')}</button>` : nothing}
-        <button class="tool pin" type="button" aria-pressed=${pinned ? 'true' : 'false'}
-          aria-label=${pinned ? `Détacher le bloc « ${title} » du volet épinglé` : `Épingler le bloc « ${title} » (volet fixe)`}
-          title=${pinned ? 'Épinglé : reste visible pendant le défilement (toucher pour le remettre dans la fiche)' : 'Épingler : un volet fixe à côté de la fiche (en haut sur téléphone)'}
-          @click=${() => setPinned(this.view, key, !pinned)}>${icon(pinned ? 'pin-angle-fill' : 'pin-angle')}</button>
-        ${GfPlantDetail.NO_PANE.includes(key) && key !== 'media' ? nothing : html`<button class="tool" type="button" aria-pressed=${isPaned(this.view, key) ? 'true' : 'false'}
-          aria-label=${isPaned(this.view, key) ? `Remettre « ${title} » dans la fiche` : `Placer « ${title} » en volet`}
-          title=${isPaned(this.view, key) ? 'En volet : quitte la fiche pour un volet à côté, ouvert avec la plante sur grand écran (toucher pour le remettre dans la fiche)' : 'Placer en volet : à côté de la fiche, en grand (ouvert avec la plante sur grand écran)'}
-          @click=${() => setPaned(this.view, key, !isPaned(this.view, key))}>${icon('arrows-angle-expand')}</button>`}
+        ${GfPlantDetail.NO_PANE.includes(key) && key !== 'media' ? nothing : this.#placePicker(key)}
         ${this._renaming === key ? nothing : html`<button class="tool" type="button" aria-label="Renommer le bloc « ${title} »" title=${isNote(key) ? 'Renommer' : 'Renommer (vide : nom d’origine)'}
           @click=${() => this.#startRename(key)}>${icon('pencil')}</button>`}
         ${STYLES[key] && !off ? html`<span class="styles" role="group" aria-label="Style du bloc « ${title} »">${STYLES[key].styles.map(st => html`
           <button type="button" aria-pressed=${blockStyle(this.view, key) === st.key ? 'true' : 'false'} title=${'Style : ' + st.title}
-            @click=${() => setBlockStyle(this.view, key, st.key)}>${icon(st.key === 'list' ? 'list-ul' : st.key === 'graph' ? 'diagram-3' : 'table')} ${st.title}</button>`)}</span>` : nothing}
+            @click=${() => setBlockStyle(this.view, key, st.key)}>${icon(/** @type {any} */ ({ list: 'list-ul', graph: 'diagram-3', scene: 'image', mosaic: 'images', slideshow: 'arrows-fullscreen' })[st.key] || 'table')} ${st.title}</button>`)}</span>` : nothing}
         ${SUBS[key] && !off ? html`<button class="tool" type="button" aria-expanded=${subsOpen ? 'true' : 'false'} aria-label="Sous-blocs de « ${title} »" title="Sous-blocs : ordre et présence"
           @click=${() => { const open = new Set(this._subsOpen); if (subsOpen) open.delete(key); else open.add(key); this._subsOpen = open; }}>${icon('list-nested')}</button>` : nothing}
         ${off
@@ -1532,7 +1687,7 @@ export class GfPlantDetail extends LitElement {
   #map(key, { plant, details, inat }) {
     const config = mapConfig(key);
     // Pinned, or alone in a pane: the map fills the room.
-    const fill = isPinned(this.view, key) || this.only === key;
+    const fill = isOnEdge(this.view, key) || this.only === key;
     if (this.preview) return html`<div class="map-placeholder ${fill ? 'fill' : ''}" style=${`height:${{ s: 180, m: 260, l: 380 }[config.height]}px`}></div>`;
     return html`<gf-sheet-map .plant=${plant} .gbifKey=${details?.identifiers?.gbif?.id ?? null} .inatId=${inat?.id ?? null}
       .config=${config} mode=${this.view} ?fill=${fill} .focus=${this._focus}
@@ -1662,7 +1817,9 @@ export class GfPlantDetail extends LitElement {
       case 'name': return this.#name(ctx);
       case 'media':
         return ctx.photosOff ? html`<p class="muted">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`
-          : html`<gf-media-viewer compact plant-id=${plant.id} .view=${this.view} .label=${isTitleShown(this.view, 'media') ? null : blockTitle('media')}
+          // In the sheet: compact; stuck to an edge: the full viewer, filling it (its keys only when it has the focus).
+          : html`<gf-media-viewer ?compact=${!isOnEdge(this.view, 'media')} ?local=${isOnEdge(this.view, 'media')} plant-id=${plant.id} .view=${this.view}
+            presentation=${blockStyle(this.view, 'media')} .label=${isTitleShown(this.view, 'media') ? null : blockTitle('media')}
             @open-pane=${(/** @type {CustomEvent} */ e) => { e.stopPropagation(); this.#openPane('media', e.detail.url); }}></gf-media-viewer>`;
       case 'photos': {
         if (baseOf(v) !== 'epure') return this.#gallery(ctx, baseOf(v) === 'standard' ? 6 : Infinity);
@@ -2220,7 +2377,7 @@ export class GfPlantDetail extends LitElement {
   async #gripKey(e, key) {
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
     e.preventDefault();
-    const order = this.#moved(key, e.key === 'ArrowUp' ? -1 : 1, blockOrder(this.view).filter(k => !isPinned(this.view, k)));
+    const order = this.#moved(key, e.key === 'ArrowUp' ? -1 : 1, blockOrder(this.view).filter(k => !isOnEdge(this.view, k)));
     if (!order) return;
     setBlockOrder(this.view, this.#withPinned(this.view, order));
     await this.updateComplete;
@@ -2247,7 +2404,7 @@ export class GfPlantDetail extends LitElement {
 
   /** @param {PointerEvent} e @param {string} key */
   #press(e, key) {
-    if (e.button !== 0 || /** @type {Element} */ (e.target).closest('button:not(.grip)')) return;
+    if (e.button !== 0 || /** @type {Element} */ (e.target).closest('button:not(.grip), summary, details')) return;
     this.#drag = { key, view: this.view, y0: e.clientY, started: false, scroller: null };
     /** @type {Element} */ (e.currentTarget).setPointerCapture?.(e.pointerId);
     addEventListener('pointermove', this.#dragMove);
@@ -2279,7 +2436,7 @@ export class GfPlantDetail extends LitElement {
       this._dragKey = drag.key;
       this._dragY = 0;
       // Pinned blocks are not in the flow: they keep their place in the order.
-      this._dragOrder = blockOrder(this.view).filter(k => !isPinned(this.view, k));
+      this._dragOrder = blockOrder(this.view).filter(k => !isOnEdge(this.view, k));
       await this.updateComplete;
       // Folded, the list is short: bring the dragged title under the pointer.
       const off = this.#mid(drag.key) - y;

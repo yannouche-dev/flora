@@ -4,7 +4,7 @@ import { icon } from '../core/icons.js';
 
 /**
  * @typedef {{ key: string, label: string, note?: string, checked: boolean, renamable?: boolean, removable?: boolean, nested?: boolean,
- *   choices?: { key: string, label: string }[], choice?: string, titled?: boolean, emptyHidden?: boolean, pinned?: boolean, paned?: boolean, tag?: string }} SortItem
+ *   choices?: { key: string, label: string }[], choice?: string, titled?: boolean, emptyHidden?: boolean, place?: string, tag?: string }} SortItem
  */
 
 /**
@@ -14,8 +14,11 @@ import { icon } from '../core/icons.js';
  * A row may offer a choice (a block's style). Events (not bubbling, so a list inside another stays its own):
  * reorder {keys}, toggle {key, on}, rename {key, title}, remove {key}, choose {key, value}, titled {key, shown},
  * empty {key, hidden}, pin {key, on} (a row with `titled` defined gets a « title shown » switch; with `emptyHidden`, a « left out when empty »
- * one; with `pinned`, a « pinned as a pane » one; with `paned`, a « in the pane beside the sheet » one).
+ * one; with `place`, where the block sits: in the sheet, on an edge of the plant pane, or beside it).
  */
+/** Where a block sits (sheet-blocks.js › PLACES), for the « Position » list. */
+const PLACE_OPTIONS = [['', 'Dans la fiche'], ['top', 'En haut'], ['bottom', 'En bas'], ['left', 'À gauche'], ['right', 'À droite'], ['beside', 'À côté']];
+
 export class GfSortableList extends LitElement {
   static properties = {
     items: { attribute: false },
@@ -51,7 +54,7 @@ export class GfSortableList extends LitElement {
     label input { flex: none; margin: 0; }
     .muted { color: var(--gf-text-muted); font-size: 0.8em; }
     .edit { flex: 1; min-width: 0; font: inherit; padding: 2px 6px; border: 1px solid var(--gf-accent); border-radius: var(--gf-radius-sm); background: var(--gf-surface); color: var(--gf-text); }
-    select.choice { flex: none; min-height: 0; font: inherit; font-size: 0.8rem; padding: 1px 4px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-sm); background: var(--gf-surface); color: var(--gf-text); }
+    select.choice, select.place { flex: none; min-height: 0; font: inherit; font-size: 0.8rem; padding: 1px 4px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-sm); background: var(--gf-surface); color: var(--gf-text); }
     .nested { margin: 2px 0 6px 30px; padding-left: 8px; border-left: 2px solid var(--gf-border); }
   `;
 
@@ -215,14 +218,9 @@ export class GfSortableList extends LitElement {
           aria-label=${item.emptyHidden ? `Afficher « ${item.label} » même vide` : `Ne pas afficher « ${item.label} » s’il est vide`}
           title=${item.emptyHidden ? 'Masqué quand il est vide' : 'Affiché même vide'}
           @click=${() => this.#emit('empty', { key, hidden: !item.emptyHidden })}>${icon('eye-slash')}</button>` : nothing}
-        ${item.pinned !== undefined ? html`<button class="icon" type="button" aria-pressed=${item.pinned ? 'true' : 'false'}
-          aria-label=${item.pinned ? `Détacher « ${item.label} » du volet épinglé` : `Épingler « ${item.label} » (volet fixe)`}
-          title=${item.pinned ? 'Épinglé : volet fixe à côté de la fiche' : 'Épingler : volet fixe à côté de la fiche'}
-          @click=${() => this.#emit('pin', { key, on: !item.pinned })}>${icon(item.pinned ? 'pin-angle-fill' : 'pin-angle')}</button>` : nothing}
-        ${item.paned !== undefined ? html`<button class="icon" type="button" aria-pressed=${item.paned ? 'true' : 'false'}
-          aria-label=${item.paned ? `Remettre « ${item.label} » dans la fiche` : `Placer « ${item.label} » en volet`}
-          title=${item.paned ? 'En volet : à côté de la fiche, en grand' : 'Placer en volet : à côté de la fiche, en grand'}
-          @click=${() => this.#emit('pane', { key, on: !item.paned })}>${icon('arrows-angle-expand')}</button>` : nothing}
+        ${item.place !== undefined ? html`<select class="place" aria-label=${'Position de « ' + item.label + ' »'} title="Position dans le panneau Plante"
+          @change=${(/** @type {any} */ e) => this.#emit('place', { key, place: e.target.value })}>
+          ${PLACE_OPTIONS.map(([v, l]) => html`<option value=${v} ?selected=${item.place === v}>${l}</option>`)}</select>` : nothing}
         ${item.nested ? html`<button class="icon" type="button" aria-expanded=${open ? 'true' : 'false'} aria-label="Sous-blocs de « ${item.label} »" title="Sous-blocs"
           @click=${() => this.#toggleOpen(key)}>${icon('list-nested')}</button>` : nothing}
         ${item.renamable && !editing ? html`<button class="icon" type="button" aria-label="Renommer « ${item.label} »" title="Renommer"

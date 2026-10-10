@@ -17,7 +17,7 @@ import './gf-pager.js';
 import { ui } from '../styles/ui.js';
 import { icon, kindIcon } from '../core/icons.js';
 import { encodeCollection, share } from '../core/share.js';
-import { pinnedBlocks } from '../core/sheet-blocks.js';
+import { hasColumns } from '../core/sheet-blocks.js';
 import { PaneSizer, paneStyles } from '../core/panes.js';
 
 /** Up to this many thumbnails per collection row. */
@@ -510,7 +510,7 @@ export class GfCollections extends LitElement {
   }
 
   /** The plant pane keeps a wider width when the mode has pinned blocks (the sheet and its pinned map side by side). */
-  get #plantKey() { return pinnedBlocks(plantViewOf(this.#store.state)).length ? 'plantPinned' : 'plant'; }
+  get #plantKey() { return hasColumns(plantViewOf(this.#store.state)) ? 'plantPinned' : 'plant'; }
 
   /** The place open, when it has coordinates (its map is shown). */
   get #place() {
