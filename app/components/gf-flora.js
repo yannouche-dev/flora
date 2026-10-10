@@ -321,8 +321,7 @@ export class GfFlora extends LitElement {
 
   /** ← → on the keyboard, when not typing. @param {KeyboardEvent} e */
   #onKey = e => {
-    // The media viewer browses its own images with ← →.
-    if (this.#pane === 'media') return;
+    // The media viewer takes ← → while it has the focus (it stops them there); elsewhere they go to the plants.
     if (this.#plantId === null || e.altKey || e.ctrlKey || e.metaKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
     const target = /** @type {HTMLElement} */ (e.composedPath()[0]);
     if (target?.closest?.('input, textarea, select, [contenteditable], gf-map') || target?.isContentEditable) return;
