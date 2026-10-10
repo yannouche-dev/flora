@@ -1682,6 +1682,8 @@ export class GfPlantDetail extends LitElement {
   /** To a rubric's block, asked by the host's rail. @param {string} key */
   goTo(key) {
     sheetSession.anchor = blockCategory(key);
+    sheetSession.anchorBlock = key;
+    sheetSession.anchorOffset = 0;
     return this.#goTo(key);
   }
 
@@ -1715,17 +1717,24 @@ export class GfPlantDetail extends LitElement {
     this.#scrollFrame = requestAnimationFrame(() => {
       this.#scrollFrame = 0;
       let current = null;
+      /** @type {HTMLElement | null} */ let currentEl = null;
       const scroller = this.#sheetScroller;
       if (this.#restoring) return;
-      const top = scroller.getBoundingClientRect().top + 72;
+      const scTop = scroller.getBoundingClientRect().top, top = scTop + 72;
       for (const el of /** @type {NodeListOf<HTMLElement>} */ (this.renderRoot.querySelectorAll('.blocks > .block'))) {
-        if (el.getBoundingClientRect().top <= top) current = el.dataset.key; else break;
+        if (el.getBoundingClientRect().top <= top) { current = el.dataset.key; currentEl = el; } else break;
       }
       const cat = current ? blockCategory(current) : null;
       if (cat !== this._activeCat) this._activeCat = cat;
       this.#wikiSpy(scroller);
       // Read by the user: the next plant opens at the same rubric (the top: from the top).
-      if (!this.preview && !this.only && this._plant) sheetSession.anchor = scroller.scrollTop < 40 ? null : cat;
+      if (!this.preview && !this.only && this._plant) {
+        const atTop = scroller.scrollTop < 40;
+        sheetSession.anchor = atTop ? null : cat;
+        // The block itself, and how far into it (the next plant opens there, not at the rubric's first block).
+        sheetSession.anchorBlock = atTop ? null : current;
+        sheetSession.anchorOffset = atTop || !currentEl ? 0 : Math.round(scTop - currentEl.getBoundingClientRect().top);
+      }
     });
   };
   #scrollFrame = 0;
@@ -1741,13 +1750,23 @@ export class GfPlantDetail extends LitElement {
     const cat = sheetSession.anchor;
     if (!cat || this.preview || this.only) return;
     await this.updateComplete;
-    // The rubric's first block in the sheet's flow (on an edge or in the pane, it is already in view).
-    const first = () => /** @type {HTMLElement | undefined} */ ([...this.renderRoot.querySelectorAll('.blocks > .block')]
-      .find(el => blockCategory(/** @type {HTMLElement} */ (el).dataset.key || '') === cat));
+    // The block read on the previous plant when this one has it, else the rubric's first block in the sheet's
+    // flow (on an edge or in the pane, it is already in view).
+    const blocks = () => /** @type {HTMLElement[]} */ ([...this.renderRoot.querySelectorAll('.blocks > .block')]);
+    const same = () => sheetSession.anchorBlock ? blocks().find(el => el.dataset.key === sheetSession.anchorBlock) : undefined;
+    const first = () => same() || blocks().find(el => blockCategory(el.dataset.key || '') === cat);
     if (!first()) return;
+    const offset = sheetSession.anchorOffset;
     this.#restoring = true;
     const scroller = this.#sheetScroller;
-    const pin = () => first()?.scrollIntoView({ behavior: 'auto', block: 'start' });
+    const pin = () => {
+      const el = first();
+      if (!el) return;
+      // As far into the block as before (within it), else at its top.
+      const into = same() === el ? Math.max(-80, Math.min(offset, el.offsetHeight - 60)) : null;
+      if (into === null) { el.scrollIntoView({ behavior: 'auto', block: 'start' }); return; }
+      scroller.scrollTop += el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + into;
+    };
     pin();
     this._activeCat = cat;
     const body = this.renderRoot.querySelector('article') || scroller;
