@@ -18,6 +18,9 @@ import { icon } from '../core/icons.js';
 import * as db from '../core/db.js';
 import { gbifTaxon } from '../core/sources.js';
 import { context, setContext } from '../core/context.js';
+import { MediaController } from '../core/media.js';
+import { PaneSizer, paneStyles } from '../core/panes.js';
+import { config } from '../config.js';
 
 const shortDate = (/** @type {string} */ iso) =>
   new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -50,7 +53,7 @@ export class GfMapPage extends LitElement {
     _flore: { state: true }
   };
 
-  static styles = [ui, css`
+  static styles = [ui, paneStyles, css`
     :host { display: flex; flex-direction: column; min-height: 0; position: relative; }
     .bar {
       display: flex;
@@ -97,8 +100,12 @@ export class GfMapPage extends LitElement {
     .body.with-panel gf-map { min-height: 120px; }
     @media (min-width: 900px) {
       .body.with-panel { flex-direction: row; }
-      .panel, .panel.full { flex: 0 0 min(440px, 42%); border-top: 0; border-left: 1px solid var(--gf-border); box-shadow: -4px 0 14px rgb(0 0 0 / 8%); }
+      .panel, .panel.full { flex: none; border-top: 0; border-left: 1px solid var(--gf-border); box-shadow: -4px 0 14px rgb(0 0 0 / 8%); }
       .panel .grip { display: none; }
+      /* Wide screens: the place panel is a pane like Flore's, resizable by its separator, foldable (»). */
+      .panel-head .fold { grid-column: 4; grid-row: 2 / span 2; }
+      .panel-head { grid-template-columns: 1fr auto auto auto; }
+      .body.with-panel > .rail { z-index: 1; }
     }
     .panel-head {
       position: sticky;
@@ -739,12 +746,21 @@ export class GfMapPage extends LitElement {
   }
 
   /** The selected place, in full: header (distance, route, close), then its editor. @param {import('../core/collections.js').Place} place */
+  /** Wide screens: the place panel's width and fold (resizable and foldable like Flore's panes). */
+  #wide = new MediaController(this, '(min-width: 900px)');
+  #panes = new PaneSizer(this, config.storageKeys.mapLayout, { place: { width: 440, min: 320, title: 'Lieu' } });
+
   #panel(place) {
+    const wide = this.#wide.matches;
+    const p = this.#panes;
+    if (wide && p.folded('place')) return p.rail('place', true);
+    const max = () => (this.getBoundingClientRect().width || innerWidth) - 320;
     const dist = this.#distanceTo(place);
     // Arrived with « add this plant » / « pick a plant » for this place (links to a place, « Y ajouter… »).
     const arrival = this.#arrival?.spot === place.id ? this.#arrival : null;
     return html`
-      <section class="panel ${this._panelFull ? 'full' : ''}" aria-label="Lieu sélectionné">
+      ${wide ? p.split('place', 'right', max) : nothing}
+      <section class="panel ${this._panelFull ? 'full' : ''}" aria-label="Lieu sélectionné" style=${wide ? `width:${Math.min(p.width('place'), Math.max(320, max()))}px` : ''}>
         <div class="panel-head">
           <button class="grip" type="button" aria-label=${this._panelFull ? 'Réduire la fiche' : 'Agrandir la fiche'}
             aria-expanded=${this._panelFull ? 'true' : 'false'} @click=${() => { this._panelFull = !this._panelFull; }}></button>
@@ -752,6 +768,8 @@ export class GfMapPage extends LitElement {
           <span class="meta">${plantCount(place.properties.plants.length)}${dist !== null ? ` · à ${formatDistance(dist)}` : ''}</span>
           <a class="button small" href=${directionsUrl(place)} target="_blank" rel="noopener">Itinéraire</a>
           <button class="close icon-btn" type="button" aria-label="Fermer" @click=${() => this.#navigate({ spot: null })}>${icon('x-lg')}</button>
+          ${wide ? html`<button class="icon-btn fold" type="button" aria-expanded="true" title="Replier : Lieu" aria-label="Replier le panneau lieu"
+            @click=${() => p.fold('place', true)}>»</button>` : nothing}
         </div>
         ${repeat([place], p => p.id, () => html`<gf-spot-editor embedded spot-id=${place.id}
           add-plant=${arrival?.add ?? ''} ?pick=${Boolean(arrival?.pick)}

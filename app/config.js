@@ -44,6 +44,8 @@ export const config = {
     backupReminder: 'geoflora.backupReminder',
     region: 'geoflora.region',
     floraLayout: 'geoflora.floraLayout',
+    collectionsLayout: 'geoflora.collectionsLayout',
+    mapLayout: 'geoflora.mapLayout',
     // Mes plantes: the collections unfolded to show their plants.
     collectionsOpen: 'geoflora.collectionsOpen',
     // Where the user is in each part (search, plant, collection, Carte): kept across tabs and reloads.
