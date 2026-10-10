@@ -1,0 +1,50 @@
+name: tmp-check
+on:
+  push:
+    paths: [.github/workflows/tmp-check.yml]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          set +e
+          sudo apt-get install -y -qq poppler-utils >/dev/null 2>&1; which pdftotext
+          echo "=== TPPT package"
+          curl -sL -m 60 "https://opendata.swiss/api/3/action/package_show?id=giftpflanzen-phytotoxin-datenbank" -o /tmp/p.json
+          python3 -c "
+          import json; d=json.load(open('/tmp/p.json'))['result']
+          print('license', d.get('license_id'), d.get('license_title'), d.get('terms_of_use'))
+          for r in d.get('resources',[]): print(' res', r.get('format'), r.get('download_url') or r.get('url'), r.get('rights'))
+          "
+          for u in $(python3 -c "
+          import json; d=json.load(open('/tmp/p.json'))['result']
+          print(' '.join((r.get('download_url') or r.get('url')) for r in d.get('resources',[]) if (r.get('format') or '').upper() in ('XLSX','XLS','CSV')))
+          "); do echo "--- $u"; curl -sL -m 120 "$u" -o /tmp/tppt.bin; file /tmp/tppt.bin; ls -la /tmp/tppt.bin; done
+          pip install -q openpyxl 2>/dev/null
+          python3 -c "
+          import openpyxl
+          wb=openpyxl.load_workbook('/tmp/tppt.bin', read_only=True)
+          for ws in wb.worksheets:
+            print('SHEET', ws.title, ws.max_row, ws.max_column)
+            for i,row in enumerate(ws.iter_rows(values_only=True)):
+              print('  ', [str(c)[:40] if c is not None else '' for c in row][:16])
+              if i>6: break
+          " 2>&1 | head -80
+          python3 -c "
+          import openpyxl
+          wb=openpyxl.load_workbook('/tmp/tppt.bin', read_only=True)
+          for ws in wb.worksheets:
+            for row in ws.iter_rows(values_only=True):
+              s=' | '.join(str(c) for c in row if c is not None)
+              if any(k in s for k in ['Colchicum','Sambucus nigra','Urtica dioica','Digitalis purpurea','Allium ursinum','Taxus baccata']): print(ws.title, '::', s[:400])
+          " 2>&1 | head -40
+          echo "=== ANSM"
+          for l in a b; do curl -sL -m 60 "https://ansm.sante.fr/uploads/2026/01/05/liste-$l-janvier-2026.pdf" -o /tmp/$l.pdf; ls -la /tmp/$l.pdf; pdftotext -layout /tmp/$l.pdf /tmp/$l.txt; wc -l /tmp/$l.txt; sed -n '1,45p' /tmp/$l.txt; echo ...; grep -n -i "urtica\|sambucus\|colchicum\|digitalis\|taraxacum\|allium ursinum" /tmp/$l.txt | head -12; done
+          echo "=== WD"
+          Q='SELECT ?kind ?val ?valLabel ?part ?partLabel ?site WHERE { VALUES ?taxon { wd:Q155909 } { ?taxon wdt:P366 ?val . BIND("use" AS ?kind) } UNION { { ?taxon p:P1672 ?st . ?st ps:P1672 ?val . OPTIONAL { ?st pq:P518 ?part } } UNION { ?val wdt:P1582 ?taxon . OPTIONAL { ?val wdt:P518 ?part } } BIND("product" AS ?kind) } UNION { { ?val wdt:P527|wdt:P186|wdt:P4330 ?taxon } UNION { ?p wdt:P1582 ?taxon . ?val wdt:P527|wdt:P186|wdt:P4330 ?p . } ?val wdt:P31/wdt:P279* wd:Q746549 . BIND("dish" AS ?kind) OPTIONAL { ?site schema:about ?val ; schema:isPartOf <https://fr.wikipedia.org/> } } UNION { ?taxon wdt:P4301 ?val . BIND("pfaf" AS ?kind) } SERVICE wikibase:label { bd:serviceParam wikibase:language "fr,en". } }'
+          U="https://query.wikidata.org/sparql?format=json&query=$(python3 -c 'import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))' "$Q")"
+          curl -s -m 60 -w "\ntime %{time_total}\n" -H 'User-Agent: GeoFlora-probe/1.0' "$U" -o /tmp/w.json; python3 -c "
+          import json; d=json.load(open('/tmp/w.json'))
+          for b in d['results']['bindings']: print(' ', b['kind']['value'], '|', b.get('valLabel',b['val'])['value'], '|', b.get('partLabel',{}).get('value',''), '|', b.get('site',{}).get('value',''))
+          "
+          curl -s -m 60 -o /dev/null -w "wd time %{time_total}\n" -H 'User-Agent: GeoFlora-probe/1.0' "$U"
