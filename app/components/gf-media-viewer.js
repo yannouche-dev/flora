@@ -130,10 +130,10 @@ export class GfMediaViewer extends LitElement {
     .seg { display: inline-flex; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill); overflow: hidden; flex: none; }
     .seg button { border: 0; background: var(--gf-surface); padding: 3px 9px; font: inherit; font-size: 0.75rem; color: var(--gf-text-muted); cursor: pointer; }
     .seg button[aria-pressed='true'] { background: var(--gf-accent-soft); color: var(--gf-accent); font-weight: 600; }
-    /* Exploration: the medium view with the whole image on its right; 100 % below, across the full width. */
+    /* Exploration: 100 % on top, across the full width; below, the medium view with the whole image on its right. */
     .explore { flex: 1; min-height: 0; display: grid; gap: 6px; padding: 6px; background: #0d0d0d;
-      grid-template-columns: minmax(0, 1fr) clamp(120px, 28%, 320px); grid-template-rows: minmax(0, 1fr) minmax(0, 1.2fr) auto;
-      grid-template-areas: 'medium whole' 'one one' 'tip tip'; }
+      grid-template-columns: minmax(0, 1fr) clamp(120px, 28%, 320px); grid-template-rows: minmax(0, 1.2fr) minmax(0, 1fr) auto;
+      grid-template-areas: 'one one' 'medium whole' 'tip tip'; }
     :host([compact]) .explore { min-height: 520px; }
     .xview { position: relative; overflow: hidden; border-radius: var(--gf-radius-sm); background: #151515; cursor: grab; touch-action: none; user-select: none; min-height: 0; }
     .xview:active { cursor: grabbing; }
@@ -604,10 +604,10 @@ export class GfMediaViewer extends LitElement {
   #exploration(item) {
     this.#loadOriginal(item);
     return html`<div class="explore">
-      ${this.#exploreView(item, 'whole')}
-      ${this.#exploreView(item, 'medium')}
       ${this.#exploreView(item, 'one')}
-      <p class="xtip">Vue moyenne, image entière à droite, 100 % en dessous : touchez ou faites glisser dans n’importe laquelle, les trois suivent. Molette sur la vue moyenne : son grossissement.</p>
+      ${this.#exploreView(item, 'medium')}
+      ${this.#exploreView(item, 'whole')}
+      <p class="xtip">100 % en haut, vue moyenne et image entière à droite en dessous : touchez ou faites glisser dans n’importe laquelle, les trois suivent. Molette sur la vue moyenne : son grossissement.</p>
     </div>`;
   }
 
