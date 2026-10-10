@@ -4,7 +4,7 @@
 import './history.js';
 
 /**
- * @typedef {{ name: 'search' } | { name: 'plant', id: number, media: number | null } | { name: 'settings' } | { name: 'collections', open: string | null, plant: number | null }
+ * @typedef {{ name: 'search' } | { name: 'plant', id: number, pane: string | null, at: number | null } | { name: 'settings' } | { name: 'collections', open: string | null, plant: number | null }
  *   | { name: 'map', spot: string | null, plant: number | null, focus: number | null, season: boolean, add: number | null, pick: boolean, flore: boolean }
  *   | { name: 'spot-new', plant: number | null, kind: 'list' | 'place', at: [number, number] | null }
  *   | { name: 'spot', id: string, add: number | null, pick: boolean }
@@ -21,7 +21,11 @@ export function parse(hash) {
   if (path === '') return { name: 'search' };
 
   const plant = /^plant\/(\d+)$/.exec(path);
-  if (plant) return { name: 'plant', id: Number(plant[1]), media: number('media') ?? (params.has('media') ? 0 : null) };
+  // ?pane=<block>: a block of the sheet in a pane beside it (&i=n: the media viewer's n-th image); ?media=n: earlier links.
+  if (plant) {
+    const pane = params.get('pane') || (params.has('media') ? 'media' : null);
+    return { name: 'plant', id: Number(plant[1]), pane: pane && /^[\w:-]{1,40}$/.test(pane) ? pane : null, at: number('i') ?? number('media') };
+  }
 
   if (path === 'map') {
     return {
@@ -51,8 +55,9 @@ export const href = {
   /** Flore filtered on the plants of a collection or place (the « Mes plantes » facet). */
   inFlore: (/** @type {string} */ id) => '#/?mine=' + encodeURIComponent(id),
   plant: (/** @type {number} */ id) => '#/plant/' + id,
-  /** The « Médias » viewer of a plant, at its n-th image. */
-  plantMedia: (/** @type {number} */ id, /** @type {number} */ n = 0) => '#/plant/' + id + '?media=' + n,
+  /** A block of the plant's sheet in a pane beside it (`at`: the media viewer's n-th image). */
+  plantPane: (/** @type {number} */ id, /** @type {string} */ pane, /** @type {number | null} */ at = null) =>
+    '#/plant/' + id + '?pane=' + encodeURIComponent(pane) + (at != null ? '&i=' + at : ''),
   settings: () => '#/settings',
   /** Mes plantes; `open`: the collection shown (a place: its map too), `plant`: the plant sheet beside. */
   collections: (/** @type {{ open?: string | null, plant?: number | null }} */ options = {}) => {

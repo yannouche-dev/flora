@@ -4,7 +4,7 @@ import { icon } from '../core/icons.js';
 
 /**
  * @typedef {{ key: string, label: string, note?: string, checked: boolean, renamable?: boolean, removable?: boolean, nested?: boolean,
- *   choices?: { key: string, label: string }[], choice?: string, titled?: boolean, emptyHidden?: boolean, pinned?: boolean, tag?: string }} SortItem
+ *   choices?: { key: string, label: string }[], choice?: string, titled?: boolean, emptyHidden?: boolean, pinned?: boolean, paned?: boolean, tag?: string }} SortItem
  */
 
 /**
@@ -14,7 +14,7 @@ import { icon } from '../core/icons.js';
  * A row may offer a choice (a block's style). Events (not bubbling, so a list inside another stays its own):
  * reorder {keys}, toggle {key, on}, rename {key, title}, remove {key}, choose {key, value}, titled {key, shown},
  * empty {key, hidden}, pin {key, on} (a row with `titled` defined gets a « title shown » switch; with `emptyHidden`, a « left out when empty »
- * one; with `pinned`, a « pinned as a pane » one).
+ * one; with `pinned`, a « pinned as a pane » one; with `paned`, a « in the pane beside the sheet » one).
  */
 export class GfSortableList extends LitElement {
   static properties = {
@@ -219,6 +219,10 @@ export class GfSortableList extends LitElement {
           aria-label=${item.pinned ? `Détacher « ${item.label} » du volet épinglé` : `Épingler « ${item.label} » (volet fixe)`}
           title=${item.pinned ? 'Épinglé : volet fixe à côté de la fiche' : 'Épingler : volet fixe à côté de la fiche'}
           @click=${() => this.#emit('pin', { key, on: !item.pinned })}>${icon(item.pinned ? 'pin-angle-fill' : 'pin-angle')}</button>` : nothing}
+        ${item.paned !== undefined ? html`<button class="icon" type="button" aria-pressed=${item.paned ? 'true' : 'false'}
+          aria-label=${item.paned ? `Remettre « ${item.label} » dans la fiche` : `Placer « ${item.label} » en volet`}
+          title=${item.paned ? 'En volet : à côté de la fiche, en grand' : 'Placer en volet : à côté de la fiche, en grand'}
+          @click=${() => this.#emit('pane', { key, on: !item.paned })}>${icon('arrows-angle-expand')}</button>` : nothing}
         ${item.nested ? html`<button class="icon" type="button" aria-expanded=${open ? 'true' : 'false'} aria-label="Sous-blocs de « ${item.label} »" title="Sous-blocs"
           @click=${() => this.#toggleOpen(key)}>${icon('list-nested')}</button>` : nothing}
         ${item.renamable && !editing ? html`<button class="icon" type="button" aria-label="Renommer « ${item.label} »" title="Renommer"

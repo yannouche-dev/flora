@@ -5,6 +5,9 @@
 // becomes a magnifier showing the ORIGINAL file under the lens (loaded on the first hover); the mouse wheel
 // changes the magnification (×2 … ×8, « 1:1 » = one pixel of the original per screen pixel).
 // Touch: swipe to browse; tap the photo to start the magnifier, drag to move the lens, tap again to stop.
+// Two sizes: in a pane (beside the sheet, full screen…: its host gives the title, ✕ and full screen) and
+// `compact`, as the « Médias » block of the sheet (stage, filmstrip, the magnifier over half the stage, ⤢ to
+// open it in the pane at the image shown).
 
 import { LitElement, html, css, nothing } from 'lit';
 import * as db from '../core/db.js';
@@ -23,14 +26,15 @@ const nf = new Intl.NumberFormat('fr-FR');
 export class GfMediaViewer extends LitElement {
   static properties = {
     plantId: { type: Number, attribute: 'plant-id' },
+    /** The block's title (compact). */
+    label: {},
     view: {},
     /** Open at this item (the URL's ?media=n), applied once the media are loaded. */
     index: { type: Number },
     /** Open at the image of this URL (a photo clicked on the sheet). */
     startUrl: { attribute: 'start-url' },
-    full: { type: Boolean, reflect: true },
-    /** The host can show it over everything (not on a phone, where it already is). */
-    canFull: { type: Boolean, attribute: 'can-full' },
+    /** In the sheet: a block among the others (the keys are its own only while it has the focus). */
+    compact: { type: Boolean, reflect: true },
     _plant: { state: true },
     _items: { state: true },
     _done: { state: true },
@@ -103,6 +107,15 @@ export class GfMediaViewer extends LitElement {
     .thumbs button:focus-visible { box-shadow: var(--gf-focus); outline: none; }
     .thumbs img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .thumbs .herbarium img { object-fit: contain; background: #f4f1e8; }
+    /* In the sheet: one column, a 4:3 stage, a smaller filmstrip. */
+    :host([compact]) { flex: none; border: 1px solid var(--gf-border); border-radius: var(--gf-radius); overflow: hidden; }
+    :host([compact]) .bar { min-height: 40px; padding: 2px 4px 2px 10px; }
+    :host([compact]) .main { grid-template-columns: minmax(0, 1fr) !important; grid-template-rows: auto auto !important; }
+    :host([compact]) .stage { aspect-ratio: 4 / 3; max-height: 70vh; }
+    :host([compact]) .side { border-left: 0 !important; }
+    :host([compact]) .info { padding: 8px 10px; gap: 4px; }
+    :host([compact]) .info .tip, :host([compact]) .info dl, :host([compact]) .info .links { display: none; }
+    :host([compact]) .thumbs button { width: 60px; height: 60px; }
     .empty { padding: 24px; color: var(--gf-text-muted); text-align: center; }
     @media (prefers-reduced-motion: reduce) { .thumbs { scroll-behavior: auto; } }
   `];
@@ -111,13 +124,14 @@ export class GfMediaViewer extends LitElement {
     super();
     /** @type {number | null} */
     this.plantId = null;
+    /** @type {string | null} */
+    this.label = null;
     /** @type {any} */
     this.view = 'standard';
     this.index = 0;
     /** @type {string | null} */
     this.startUrl = null;
-    this.full = false;
-    this.canFull = true;
+    this.compact = false;
     /** @type {any} */
     this._plant = null;
     /** @type {MediaItem[]} */
@@ -144,20 +158,31 @@ export class GfMediaViewer extends LitElement {
 
   /** @type {AbortController | null} */ #abort = null;
 
+  firstUpdated() {
+    // In a pane: the keys are the viewer's (the focus leaves the sheet's block that opened it).
+    if (!this.compact) this.focus({ preventScroll: true });
+  }
+
   connectedCallback() {
     super.connectedCallback();
-    addEventListener('keydown', this.#onKey);
+    // In a pane the viewer takes ← → for itself; in the sheet, only when it has the focus.
+    if (!this.compact) addEventListener('keydown', this.#onKey);
+    else this.addEventListener('keydown', this.#onKey);
+    if (!this.hasAttribute('tabindex')) this.tabIndex = -1;
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     removeEventListener('keydown', this.#onKey);
+    this.removeEventListener('keydown', this.#onKey);
     this.#abort?.abort();
   }
 
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
     if ((changed.has('plantId') || changed.has('view')) && this.plantId != null) this.#load();
+    // Another image asked by the address (Back / Forward, a link) while the viewer is open.
+    else if (changed.has('index') && changed.get('index') !== undefined && this._done && this._items[this.index]) { this._filter = 'all'; this.#select(this._items[this.index]); }
     // Another photo clicked on the sheet while the viewer is open.
     else if (changed.has('startUrl') && this.startUrl) {
       const want = imageKey(this.startUrl);
@@ -237,11 +262,16 @@ export class GfMediaViewer extends LitElement {
     if (e.key in keys) { e.preventDefault(); e.stopImmediatePropagation(); this.#go(keys[/** @type {keyof typeof keys} */ (e.key)]); }
     else if (e.key === 'Escape') {
       if (this._zoom) { this._zoom = false; this._locked = false; this._lens = null; }
-      else this.#close();
+      else if (!this.compact) this.#close();
     } else if (e.key === '+' || e.key === '-') this.#zoomStep(e.key === '+' ? 1 : -1);
   };
 
   #close() { this.dispatchEvent(new CustomEvent('media-close', { bubbles: true, composed: true })); }
+
+  /** ⤢ (in the sheet): the viewer in the pane, at the image shown. */
+  #toPane() {
+    this.dispatchEvent(new CustomEvent('open-pane', { detail: { key: 'media', url: this.#current?.src || null }, bubbles: true, composed: true }));
+  }
 
   // ── Smart zoom ─────────────────────────────────────────────────────────
 
@@ -332,7 +362,7 @@ export class GfMediaViewer extends LitElement {
     return { w: stage.clientWidth, h: stage.clientHeight / 2, top };
   }
 
-  get #wide() { return this.getBoundingClientRect().width >= 700; }
+  get #wide() { return !this.compact && this.getBoundingClientRect().width >= 700; }
 
   /** A mouse (or pen) that hovers: the magnifier follows it; else a tap starts it. */
   #hover = matchMedia('(hover: hover)');
@@ -434,14 +464,12 @@ export class GfMediaViewer extends LitElement {
     const counts = Object.fromEntries(KINDS.map(([k]) => [k, k === 'all' ? items.length : items.filter(i => i.kind === k).length]));
     return html`
       <div class="bar">
-        ${icon('images')}
-        <h2>Médias${plant ? html` — <i>${plant.scientificName}</i>` : nothing}</h2>
+        ${this.compact ? html`${icon('images')}<h2>${this.label || 'Médias'}</h2>` : html`<h2></h2>`}
         ${item ? html`<span class="count" aria-live="polite">${at + 1} / ${shown.length}</span>` : nothing}
         <button class="icon-btn" type="button" aria-pressed=${String(this._loupe)} title="Loupe sur l’original (survol)" aria-label="Loupe sur l’original"
           @click=${() => { this._loupe = !this._loupe; this._zoom = false; this._locked = false; this._lens = null; }}>${icon('zoom-in')}</button>
-        ${this.canFull ? html`<button class="icon-btn" type="button" aria-pressed=${String(this.full)} title=${this.full ? 'Quitter le plein écran' : 'Plein écran'} aria-label="Plein écran"
-          @click=${() => this.dispatchEvent(new CustomEvent('media-full', { detail: { on: !this.full }, bubbles: true, composed: true }))}>${icon(this.full ? 'fullscreen-exit' : 'arrows-fullscreen')}</button>` : nothing}
-        <button class="icon-btn" type="button" title="Fermer les médias" aria-label="Fermer les médias" @click=${() => this.#close()}>${icon('x-lg')}</button>
+        ${this.compact ? html`<button class="icon-btn" type="button" title="Ouvrir en volet (grand, loupe à côté)" aria-label="Ouvrir les médias en volet"
+          @click=${() => this.#toPane()}>${icon('arrows-angle-expand')}</button>` : nothing}
       </div>
       ${!item ? html`<div class="empty">${this._done ? (plant ? 'Aucune image sous licence libre pour cette plante (ou modules photos désactivés).' : 'Plante introuvable.') : html`<span class="spinner">chargement des médias…</span>`}</div>` : html`
         <div class="main">

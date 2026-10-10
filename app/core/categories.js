@@ -30,7 +30,7 @@ export const categoryOf = key => CATEGORIES.find(c => c.key === key) || CATEGORI
  */
 const BLOCK_CATEGORIES = {
   name: 'names', names: 'names', taxonomy: 'names', ids: 'names',
-  photos: 'images', gbifMedia: 'images',
+  media: 'images', photos: 'images', gbifMedia: 'images',
   wikipedia: 'knowledge', uses: 'knowledge', descriptions: 'knowledge', literature: 'knowledge', trefle: 'knowledge', resources: 'knowledge',
   status: 'safety', lookalikes: 'safety',
   occurrences: 'distribution', map: 'distribution', mine: 'distribution',

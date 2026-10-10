@@ -15,7 +15,7 @@ import './gf-mode-switch.js';
 import './gf-pager.js';
 import './gf-media-viewer.js';
 import { icon } from '../core/icons.js';
-import { pinnedBlocks } from '../core/sheet-blocks.js';
+import { blockTitle, panedBlocks, pinnedBlocks } from '../core/sheet-blocks.js';
 
 /** Results pane narrower than this: cards instead of the grid. */
 const GRID_MIN = 560;
@@ -45,7 +45,7 @@ export class GfFlora extends LitElement {
     _layout: { state: true },
     _grid: { state: true },
     _under: { state: true },
-    _mediaFull: { state: true }
+    _paneFull: { state: true }
   };
 
   static styles = [ui, css`
@@ -80,11 +80,14 @@ export class GfFlora extends LitElement {
     .pane.results.fill-plant { flex: 0 0 auto; }
     .pane.plant.fill { flex: 1 1 0; }
     .pane.filters, .pane.plant { flex: none; }
-    /* « Médias »: in place of the results (kept mounted, hidden, so the list keeps its scroll). */
-    .pane.media { flex: 1 1 0; }
+    /* A block in a pane, in place of the results (kept mounted, hidden, so the list keeps its scroll). */
+    .pane.block-pane { flex: 1 1 0; }
     .pane.results[hidden] { display: none; }
-    .pane.media.full { position: absolute; inset: 0; z-index: 6; }
-    .sheet-media { position: fixed; inset: 0 0 calc(61px + env(safe-area-inset-bottom)) 0; z-index: 901; display: flex; flex-direction: column; background: var(--gf-surface); }
+    .pane.block-pane.full { position: absolute; inset: 0; z-index: 6; }
+    .block-pane gf-plant-detail, .sheet-pane gf-plant-detail { flex: 1; min-height: 0; }
+    .pane-plant { font-family: var(--gf-font-serif); font-style: italic; font-weight: 500; color: var(--gf-text-muted); margin-left: 4px; }
+    .sheet-pane { position: fixed; inset: 0 0 calc(61px + env(safe-area-inset-bottom)) 0; z-index: 901; display: flex; flex-direction: column; background: var(--gf-surface); }
+    .sheet-pane .back { font-weight: 600; }
     .pane-head {
       display: flex;
       align-items: center;
@@ -254,8 +257,8 @@ export class GfFlora extends LitElement {
     this._grid = false;
     /** The plant waiting under the card while it is swiped (its sheet is ready when the card flies off). @type {number | null} */
     this._under = null;
-    /** The « Médias » pane over all the panes. */
-    this._mediaFull = false;
+    /** The pane over all the panes. */
+    this._paneFull = false;
   }
 
   connectedCallback() {
@@ -289,7 +292,8 @@ export class GfFlora extends LitElement {
     if (!id) return;
     const card = this.#card;
     // Each plant is a view: Back returns to the one before (« Résultats » goes straight to the list).
-    const go = () => { location.hash = href.plant(id); };
+    // The pane stays open (the next plant's map, media…).
+    const go = () => { location.hash = this.#paneInUrl ? href.plantPane(id, /** @type {string} */ (/** @type {any} */ (this.route).pane)) : href.plant(id); };
     if (!card || this.#reducedMotion.matches) { this._under = null; go(); return; }
     if (this.#moving) return;
     this.#moving = true;
@@ -318,7 +322,7 @@ export class GfFlora extends LitElement {
   /** ← → on the keyboard, when not typing. @param {KeyboardEvent} e */
   #onKey = e => {
     // The media viewer browses its own images with ← →.
-    if (this.#media !== null) return;
+    if (this.#pane === 'media') return;
     if (this.#plantId === null || e.altKey || e.ctrlKey || e.metaKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
     const target = /** @type {HTMLElement} */ (e.composedPath()[0]);
     if (target?.closest?.('input, textarea, select, [contenteditable], gf-map') || target?.isContentEditable) return;
@@ -415,7 +419,7 @@ export class GfFlora extends LitElement {
       ?inert=${id === under} aria-hidden=${id === under ? 'true' : 'false'}
       @touchstart=${touch ? this.#onTouchStart : null} @touchmove=${touch ? this.#onTouchMove : null} @touchend=${touch ? this.#onTouchEnd : null}
       @touchcancel=${touch ? () => { const s = this.#touch; this.#touch = null; if (s?.el.classList.contains('dragging')) this.#settle(s.el); } : null}
-      ><gf-plant-detail embedded ?preview=${id === under} plant-id=${id} view=${view}></gf-plant-detail></div>`)}</div>`;
+      ><gf-plant-detail embedded ?preview=${id === under} plant-id=${id} view=${view} .inPane=${id === this.#plantId ? this.#pane : null}></gf-plant-detail></div>`)}</div>`;
   }
 
 
@@ -434,8 +438,9 @@ export class GfFlora extends LitElement {
         deck?.style.removeProperty('--p');
       }
       if (this.route.name === 'search') document.title = 'GeoFlora — flore de France';
-      // Media closed (Back, another plant): not full screen any more; a viewer opened by a link is not ours to go back from.
-      if (this.#media === null) { this._mediaFull = false; this.#mediaPushed = false; this.#mediaStart = null; }
+      // Pane closed (Back): not full screen any more; a pane opened by a link is not ours to go back from.
+      if (!this.#paneInUrl) { this.#panePushed = false; this.#paneStart = null; }
+      if (this.#pane === null) this._paneFull = false;
     }
   }
 
@@ -459,49 +464,80 @@ export class GfFlora extends LitElement {
 
   get #plantId() { return this.route.name === 'plant' ? this.route.id : null; }
 
-  // ── « Médias »: the media viewer of the open plant, beside its sheet (phone: over it) ─────────────────
+  // ── A block in a pane: beside the sheet, in place of the results (phone: over the sheet) ──────────────
+  // ?pane=<block> in the address (⤢ on a block, a photo touched for « Médias »), or the first block placed
+  // « en volet » for this mode (Mode King), opened with the plant on a wide screen.
 
-  /** The image asked for by the URL (?media=n), null when the viewer is closed. */
-  get #media() { return this.route.name === 'plant' ? this.route.media ?? null : null; }
+  /** The block in the pane, null when there is none. */
+  get #pane() {
+    if (this.route.name !== 'plant') return null;
+    if (this.route.pane) return this.route.pane;
+    if (this.#phone.matches || this.#dismissed === this.route.id) return null;
+    return panedBlocks(plantViewOf(this.#store.state))[0] ?? null;
+  }
 
-  /** The image clicked on the sheet, to open the viewer at. @type {string | null} */
-  #mediaStart = null;
-  /** The viewer was opened from the sheet (a step in history: closing it goes back). */
-  #mediaPushed = false;
+  /** The pane comes from the address (else from the layout, and closing it only puts it away for this plant). */
+  get #paneInUrl() { return this.route.name === 'plant' && Boolean(this.route.pane); }
 
-  /** A photo of the sheet clicked: the viewer opens at it. @param {CustomEvent} e */
-  #openMedia = e => {
+  /** A placed pane closed for this plant. @type {number | null} */
+  #dismissed = null;
+  /** The image touched on the sheet, for the media viewer to open at. @type {string | null} */
+  #paneStart = null;
+  /** The pane was opened from the sheet (a step in history: closing it goes back). */
+  #panePushed = false;
+
+  /** ⤢ on a block, or a photo touched. @param {CustomEvent} e */
+  #openPane = e => {
     const id = this.#plantId;
     if (id === null || e.detail?.plantId !== id) return;
     e.preventDefault();
-    this.#mediaStart = e.detail.url || null;
-    if (this.#media !== null) { this.requestUpdate(); return; }
-    this.#mediaPushed = true;
-    location.hash = href.plantMedia(id, 0);
+    const key = e.detail.key;
+    this.#paneStart = e.detail.url || null;
+    if (this.#pane === key && this.#paneInUrl) { this.requestUpdate(); return; }
+    if (this.#paneInUrl) { location.replace(href.plantPane(id, key)); return; }
+    this.#panePushed = true;
+    location.hash = href.plantPane(id, key);
   };
 
-  /** The viewer moved to another image: the address follows (no new step in history). @param {CustomEvent} e */
+  /** The media viewer moved to another image: the address follows (no new step in history). @param {CustomEvent} e */
   #mediaIndex = e => {
     const id = this.#plantId;
-    if (id === null || this.#media === null) return;
-    const url = href.plantMedia(id, e.detail.index);
+    if (id === null || !this.#paneInUrl || this.#pane !== 'media') return;
+    const url = href.plantPane(id, 'media', e.detail.index);
     if (location.hash !== url) history.replaceState(history.state, '', url);
   };
 
-  #closeMedia = () => {
+  #closePane = () => {
     const id = this.#plantId;
-    this._mediaFull = false;
-    this.#mediaStart = null;
-    if (this.#mediaPushed) { this.#mediaPushed = false; history.back(); }
+    this._paneFull = false;
+    this.#paneStart = null;
+    if (!this.#paneInUrl) { this.#dismissed = id; this.requestUpdate(); return; }
+    if (this.#panePushed) { this.#panePushed = false; history.back(); }
     else if (id !== null) location.replace(href.plant(id));
   };
 
-  /** @param {boolean} phone */
-  #mediaPane(phone) {
+  /** The pane: its bar (block, plant, full screen, close) and the block alone. @param {boolean} phone */
+  #paneSection(phone) {
+    const id = this.#plantId, key = /** @type {string} */ (this.#pane);
+    const view = plantViewOf(this.#store.state);
+    const route = /** @type {any} */ (this.route);
+    return html`<section class=${phone ? 'sheet-pane' : `pane block-pane ${this._paneFull ? 'full' : ''}`} aria-label=${blockTitle(key)}
+        @media-index=${this.#mediaIndex} @media-close=${this.#closePane}>
+      <div class="pane-head">
+        ${phone ? html`<button class="link back" type="button" @click=${this.#closePane}>${icon('arrow-left')} Fiche</button>` : nothing}
+        <h2>${blockTitle(key)} <span class="pane-plant">${this.#paneName}</span></h2>
+        ${phone ? nothing : html`<button class="icon-btn" type="button" aria-pressed=${String(this._paneFull)} title=${this._paneFull ? 'Quitter le plein écran' : 'Plein écran'}
+          aria-label="Plein écran" @click=${() => { this._paneFull = !this._paneFull; }}>${icon(this._paneFull ? 'fullscreen-exit' : 'arrows-fullscreen')}</button>`}
+        <button class="icon-btn" type="button" title="Fermer le volet" aria-label="Fermer le volet" @click=${this.#closePane}>${icon('x-lg')}</button>
+      </div>
+      <gf-plant-detail embedded only=${key} plant-id=${id} view=${view} .paneAt=${route.at ?? null} .paneStart=${this.#paneStart}></gf-plant-detail>
+    </section>`;
+  }
+
+  /** The plant's scientific name, for the pane's title (from the results, when it is among them). */
+  get #paneName() {
     const id = this.#plantId;
-    return html`<gf-media-viewer plant-id=${id} .view=${plantViewOf(this.#store.state)} .index=${this.#media ?? 0} .startUrl=${this.#mediaStart}
-      ?full=${this._mediaFull || phone} .canFull=${!phone} @media-index=${this.#mediaIndex} @media-close=${this.#closeMedia}
-      @media-full=${(/** @type {CustomEvent} */ e) => { this._mediaFull = e.detail.on; }}></gf-media-viewer>`;
+    return this.#store.state.results.items.find(p => p.id === id)?.scientificName || '';
   }
 
   #save() {
@@ -657,7 +693,7 @@ export class GfFlora extends LitElement {
     return html`<button class="rail ${right ? 'right' : ''}" type="button" aria-expanded="false"
       title=${'Déplier : ' + TITLES[pane]} @click=${() => {
         // The media viewer takes the filters' room: unfolding them closes it.
-        if (pane === 'filters' && this.#media !== null) this.#closeMedia();
+        if (pane === 'filters' && this.#pane !== null) this.#closePane();
         this.#fold(pane, false);
       }}>
       ${right ? '‹' : '›'} ${TITLES[pane]} ${active ? html`<span class="badge">${active}</span>` : nothing}</button>`;
@@ -681,7 +717,7 @@ export class GfFlora extends LitElement {
     const { folded } = this._layout;
     const total = this.#store.state.results.total;
     const showPlant = plantId !== null && !phone;
-    const media = showPlant && this.#media !== null;
+    const media = showPlant && this.#pane !== null;
     // Folding results while a plant is open gives the plant the room.
     const resultsFolded = folded.results && showPlant && !folded.plant;
     const plantFolded = showPlant && folded.plant;
@@ -699,7 +735,7 @@ export class GfFlora extends LitElement {
           </section>
           ${this.#split('filters')}`) : nothing}
 
-        ${media ? html`<section class="pane media ${this._mediaFull ? 'full' : ''}" aria-label="Médias">${this.#mediaPane(false)}</section>` : nothing}
+        ${media ? this.#paneSection(false) : nothing}
         ${resultsFolded ? (media ? nothing : this.#rail('results')) : html`
           <section class="pane results" aria-label="Résultats" ?hidden=${media} @focus-facet=${this.#focusFacet}>
             ${showPlant ? this.#head('results', 'Résultats') : nothing}
@@ -711,7 +747,7 @@ export class GfFlora extends LitElement {
 
         ${showPlant ? (plantFolded ? this.#rail('plant', true) : html`
           ${resultsFolded && !media ? nothing : this.#split('plant')}
-          <section class="pane plant ${resultsFolded && !media ? 'fill' : ''}" aria-label="Plante" @open-media=${this.#openMedia}
+          <section class="pane plant ${resultsFolded && !media ? 'fill' : ''}" aria-label="Plante" @open-pane=${this.#openPane}
             style=${resultsFolded && !media ? '' : `width:${Math.min(this.#width('plant'), this.#max('plant'))}px`}>
             ${this.#head('plant', 'Plante', html`
               ${plantSwitch}
@@ -723,7 +759,7 @@ export class GfFlora extends LitElement {
       </div>
 
       ${phone && plantId !== null ? html`
-        <section class="sheet-plant" aria-label="Plante" @open-media=${this.#openMedia}>
+        <section class="sheet-plant" aria-label="Plante" @open-pane=${this.#openPane}>
           <div class="pane-head">
             <button class="link back" type="button" @click=${() => this.#closePlant()}>${icon('arrow-left')} Résultats</button>
             <h2></h2>
@@ -732,7 +768,7 @@ export class GfFlora extends LitElement {
           <div class="pane-body" style="display:flex;flex-direction:column;overflow:hidden;background:var(--gf-surface-2)">${this.#swipe(plantId, plantView, true)}${this.#pager(true)}</div>
         </section>` : nothing}
 
-      ${phone && plantId !== null && this.#media !== null ? html`<section class="sheet-media" aria-label="Médias">${this.#mediaPane(true)}</section>` : nothing}
+      ${phone && plantId !== null && this.#pane !== null ? this.#paneSection(true) : nothing}
 
       ${wide ? nothing : html`
         <dialog aria-label="Filtres" @click=${e => { if (e.target === e.currentTarget) this.#dialog?.close(); }}>
