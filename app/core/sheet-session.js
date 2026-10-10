@@ -13,6 +13,8 @@ export const sheetSession = {
   /** The block read in it (« Carte » in Répartition), and how far into it, in px. @type {string | null} */
   anchorBlock: null,
   anchorOffset: 0,
+  /** In the Wikipédia block: the theme read (its anchor). @type {string | null} */
+  anchorWiki: null,
   /** @type {MediaSession} */
   media: { filter: 'all', part: 'all', info: false, playing: false, opened: false, zoom: 'auto' },
   /** Blocks whose sub-blocks list is open. @type {Set<string>} */

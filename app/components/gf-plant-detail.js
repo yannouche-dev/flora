@@ -1687,6 +1687,7 @@ export class GfPlantDetail extends LitElement {
     sheetSession.anchor = blockCategory(key);
     sheetSession.anchorBlock = key;
     sheetSession.anchorOffset = 0;
+    sheetSession.anchorWiki = null;
     return this.#goTo(key);
   }
 
@@ -1724,8 +1725,12 @@ export class GfPlantDetail extends LitElement {
       const scroller = this.#sheetScroller;
       if (this.#restoring) return;
       const scTop = scroller.getBoundingClientRect().top, top = scTop + 72;
+      /** The block under the top edge of the sheet (the anchor), not the one lit a little lower. @type {HTMLElement | null} */
+      let atEdge = null;
       for (const el of /** @type {NodeListOf<HTMLElement>} */ (this.renderRoot.querySelectorAll('.blocks > .block'))) {
-        if (el.getBoundingClientRect().top <= top) { current = el.dataset.key; currentEl = el; } else break;
+        const t = el.getBoundingClientRect().top;
+        if (t <= scTop + 4) atEdge = el;
+        if (t <= top) { current = el.dataset.key; currentEl = el; } else break;
       }
       const cat = current ? blockCategory(current) : null;
       if (cat !== this._activeCat) this._activeCat = cat;
@@ -1735,8 +1740,10 @@ export class GfPlantDetail extends LitElement {
         const atTop = scroller.scrollTop < 40;
         sheetSession.anchor = atTop ? null : cat;
         // The block itself, and how far into it (the next plant opens there, not at the rubric's first block).
-        sheetSession.anchorBlock = atTop ? null : current;
-        sheetSession.anchorOffset = atTop || !currentEl ? 0 : Math.round(scTop - currentEl.getBoundingClientRect().top);
+        const anchorEl = atEdge || currentEl;
+        sheetSession.anchorBlock = atTop || !anchorEl ? null : anchorEl.dataset.key || null;
+        sheetSession.anchorOffset = atTop || !anchorEl ? 0 : Math.round(scTop - anchorEl.getBoundingClientRect().top);
+        sheetSession.anchorWiki = !atTop && sheetSession.anchorBlock === 'wikipedia' ? this._wikiActive : null;
       }
     });
   };
@@ -1758,11 +1765,14 @@ export class GfPlantDetail extends LitElement {
     const blocks = () => /** @type {HTMLElement[]} */ ([...this.renderRoot.querySelectorAll('.blocks > .block')]);
     const same = () => sheetSession.anchorBlock ? blocks().find(el => el.dataset.key === sheetSession.anchorBlock) : undefined;
     const first = () => same() || blocks().find(el => blockCategory(el.dataset.key || '') === cat);
-    if (!first()) return;
-    const offset = sheetSession.anchorOffset;
+    // The blocks of the rubric may come later (their data loading): no return — they are waited for below.
+    const offset = sheetSession.anchorOffset, theme = sheetSession.anchorWiki;
     this.#restoring = true;
     const scroller = this.#sheetScroller;
     const pin = () => {
+      // In the article: at the theme read (its anchor), once the article is there.
+      const wiki = theme && sheetSession.anchorBlock === 'wikipedia' ? /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('#wiki-' + theme)) : null;
+      if (wiki) { scroller.scrollTop += wiki.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 52; this._wikiActive = theme; return; }
       const el = first();
       if (!el) return;
       // As far into the block as before (within it), else at its top.
@@ -1773,15 +1783,19 @@ export class GfPlantDetail extends LitElement {
     pin();
     this._activeCat = cat;
     const body = this.renderRoot.querySelector('article') || scroller;
+    // Blocks appearing (a block's data arriving) are watched too, not only growing ones.
+    const appear = new MutationObserver(() => pin());
+    appear.observe(body, { childList: true, subtree: true });
     const grow = new ResizeObserver(() => pin());
     grow.observe(body);
     const stop = () => {
       grow.disconnect();
+      appear.disconnect();
       clearTimeout(timer);
       for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) scroller.removeEventListener(ev, stop);
       requestAnimationFrame(() => { this.#restoring = false; });
     };
-    const timer = setTimeout(stop, 2500);
+    const timer = setTimeout(stop, 6000);
     for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) scroller.addEventListener(ev, stop, { passive: true, once: true });
   }
   #restoring = false;

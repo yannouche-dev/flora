@@ -72,6 +72,8 @@ export class GfDiscover extends LitElement {
     _query: { state: true },
     _places: { state: true },
     _tip: { state: true },
+    /** The rubrics of the plant open, in the sheet's header (as in Flore). */
+    _rail: { state: true },
     _tipBox: { state: true }
   };
 
@@ -188,6 +190,8 @@ export class GfDiscover extends LitElement {
       :host([opened]) .list { margin-right: min(560px, 48vw); }
     }
     .sheet-head { flex: none; display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--gf-border); }
+    .sheet-head gf-sheet-rail { flex: 1; min-width: 0; }
+    .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     .sheet-head strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .sheet gf-plant-detail { flex: 1; min-height: 0; }
     .pager { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px calc(6px + env(safe-area-inset-bottom)); border-top: 1px solid var(--gf-border); background: var(--gf-surface); }
@@ -438,7 +442,7 @@ export class GfDiscover extends LitElement {
   #nextTip() {
     const seen = discoverState().seen.length;
     const d = this.#sheet?.shadowRoot;
-    const rail = () => d?.querySelector('gf-sheet-rail')?.shadowRoot;
+    const rail = () => (this.renderRoot.querySelector('.sheet-head gf-sheet-rail') || d?.querySelector('gf-sheet-rail'))?.shadowRoot;
     /** @type {Tip[]} */
     const tips = this.open == null ? [
       { id: 'cards', anchor: () => this.renderRoot.querySelector('.swipe-card.top, .card'), text: 'Glissez à droite si elle vous plaît (c’est un match, gardé dans vos favoris), à gauche pour passer, vers le haut — ou touchez — pour sa fiche.' }
@@ -779,9 +783,10 @@ export class GfDiscover extends LitElement {
     return html`<section class="sheet" aria-label="Plante" @touchstart=${this.#touchStart} @touchend=${this.#touchEnd}>
       <div class="sheet-head">
         <button class="icon-btn" type="button" aria-label="Retour aux plantes autour" title="Retour (Échap)" @click=${() => this.#close()}>${icon('arrow-left')}</button>
-        <strong>${name}</strong>
+        ${this._rail && this._rail.plantId === this.open && this._rail.items.length ? html`<span class="visually-hidden">${name}</span><gf-sheet-rail .items=${this._rail.items} .active=${this._rail.active} orientation="row"
+          @rail-go=${(/** @type {CustomEvent} */ e) => this.#sheet?.goTo(e.detail.key)}></gf-sheet-rail>` : html`<strong>${name}</strong>`}
       </div>
-      <gf-plant-detail embedded plant-id=${this.open} view="epure"></gf-plant-detail>
+      <gf-plant-detail embedded outer-rail plant-id=${this.open} view="epure" @sheet-rail=${(/** @type {CustomEvent} */ e) => { this._rail = e.detail; }}></gf-plant-detail>
       ${at >= 0 ? html`<nav class="pager" aria-label="Plantes autour">
         <button class="secondary prev" type="button" ?disabled=${at <= 0} @click=${() => this.#step(-1)}>${icon('chevron-left')} Préc.</button>
         <span>${at + 1} / ${list.length}</span>
