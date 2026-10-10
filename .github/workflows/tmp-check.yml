@@ -1,0 +1,83 @@
+name: tmp-check
+on: { push: { branches: [claude/exciting-faraday-c4xk2r] } }
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    env:
+      TREFLE_TOKEN: ${{ secrets.TREFLE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - name: Trefle probe (token from the repository secret, masked)
+        run: |
+          if [ -z "$TREFLE_TOKEN" ]; then echo "SECRET TREFLE_TOKEN MISSING"; exit 0; fi
+          echo "::add-mask::$TREFLE_TOKEN"
+          cat > /tmp/probe.mjs <<'JS'
+          import { readFileSync } from 'node:fs';
+          const T = process.env.TREFLE_TOKEN;
+          const API = 'https://trefle.io/api/v1';
+          const sleep = ms => new Promise(r => setTimeout(r, ms));
+          async function get(path, q = {}) {
+            const u = new URL(API + path); for (const [k, v] of Object.entries(q)) u.searchParams.set(k, v); u.searchParams.set('token', T);
+            const t0 = Date.now(); const r = await fetch(u, { headers: { accept: 'application/json' } }); await sleep(450);
+            const text = await r.text(); let body = null; try { body = JSON.parse(text); } catch { body = text.slice(0, 200); }
+            return { status: r.status, ms: Date.now() - t0, body };
+          }
+          const k = await get('/kingdoms');
+          console.log('STATE /kingdoms', k.status, k.ms + 'ms', JSON.stringify(k.body).slice(0, 300));
+          if (k.status !== 200) process.exit(0);
+          const data = JSON.parse(readFileSync('data/plants.json', 'utf8'));
+          const plants = (data.plants || data).filter(p => p.rank === 'ES' || /^[A-Z][a-z-]+ [a-z-]+$/.test(p.scientificName));
+          // fixed seed sample of 200 + three named
+          let seed = 42; const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+          const pick = new Set(['Urtica dioica', 'Quercus robur']);
+          while (pick.size < 200) pick.add(plants[Math.floor(rnd() * plants.length)].scientificName);
+          const names = [...pick];
+          const paths = {
+            light: d => d.growth?.light, atm_humidity: d => d.growth?.atmospheric_humidity, soil_humidity: d => d.growth?.soil_humidity,
+            soil_nutriments: d => d.growth?.soil_nutriments, soil_salinity: d => d.growth?.soil_salinity, ph: d => d.growth?.ph_minimum ?? d.growth?.ph_maximum,
+            min_temp: d => d.growth?.minimum_temperature?.deg_c, precipitation: d => d.growth?.minimum_precipitation?.mm ?? d.growth?.maximum_precipitation?.mm,
+            bloom_months: d => d.growth?.bloom_months, fruit_months: d => d.growth?.fruit_months, growth_months: d => d.growth?.growth_months,
+            avg_height: d => d.specifications?.average_height?.cm, max_height: d => d.specifications?.maximum_height?.cm,
+            growth_habit: d => d.specifications?.growth_habit, growth_form: d => d.specifications?.growth_form, toxicity: d => d.specifications?.toxicity,
+            ligneous: d => d.specifications?.ligneous_type, flower_color: d => d.flower?.color, foliage_color: d => d.foliage?.color,
+            leaf_retention: d => d.foliage?.leaf_retention, fruit_color: d => d.fruit_or_seed?.color, edible: d => d.edible, edible_part: d => d.edible_part,
+            vegetable: d => d.vegetable, fr_names: d => d.common_names?.fra, native: d => d.distributions?.native, introduced: d => d.distributions?.introduced,
+            img_flower: d => d.images?.flower, img_leaf: d => d.images?.leaf, img_fruit: d => d.images?.fruit, img_bark: d => d.images?.bark, img_habit: d => d.images?.habit
+          };
+          const has = v => v !== null && v !== undefined && v !== '' && !(Array.isArray(v) && !v.length) && !(typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length);
+          const cov = Object.fromEntries(Object.keys(paths).map(p => [p, 0]));
+          let found = 0; const copyrights = {}; const sources = {}; const examples = {};
+          for (const name of names) {
+            const s = await get('/species/search', { q: name, limit: 5 });
+            const hit = (s.body?.data || []).find(r => (r.scientific_name || '').toLowerCase() === name.toLowerCase());
+            if (!hit) continue;
+            const d = (await get('/species/' + hit.id)).body?.data;
+            if (!d) continue;
+            found++;
+            for (const [p, f] of Object.entries(paths)) if (has(f(d))) cov[p]++;
+            for (const part of ['flower', 'leaf', 'fruit', 'bark', 'habit', 'other']) for (const im of d.images?.[part] || []) { const c = String(im.copyright || '(none)').replace(/\d{4}/g, '').slice(0, 40); copyrights[c] = (copyrights[c] || 0) + 1; }
+            for (const src of d.sources || []) sources[src.name] = (sources[src.name] || 0) + 1;
+            if (name === 'Urtica dioica' || name === 'Quercus robur' || (!examples.rare && found > 20)) examples[name === 'Urtica dioica' || name === 'Quercus robur' ? name : 'rare'] = { name, d };
+          }
+          console.log(`FOUND ${found} / ${names.length} sampled species`);
+          console.log('COVERAGE (share of the 200 sampled)');
+          for (const [p, n] of Object.entries(cov)) console.log(`  ${p.padEnd(16)} ${String(Math.round(n / names.length * 100)).padStart(3)} %  (${n}, of found: ${found ? Math.round(n / found * 100) : 0} %)`);
+          console.log('IMAGE COPYRIGHTS (top 15)', JSON.stringify(Object.entries(copyrights).sort((a, b) => b[1] - a[1]).slice(0, 15)));
+          console.log('SOURCES (top 15)', JSON.stringify(Object.entries(sources).sort((a, b) => b[1] - a[1]).slice(0, 15)));
+          for (const [k2, e] of Object.entries(examples)) {
+            const d = e.d; const keep = { scientific_name: d.scientific_name, common_name: d.common_name, duration: d.duration, edible: d.edible, edible_part: d.edible_part, vegetable: d.vegetable,
+              flower: d.flower, foliage: d.foliage, fruit_or_seed: d.fruit_or_seed, specifications: d.specifications, growth: d.growth, fr: d.common_names?.fra,
+              native: (d.distributions?.native || []).slice(0, 8).map(z => z.name), introduced: (d.distributions?.introduced || []).length, images: Object.fromEntries(Object.entries(d.images || {}).map(([p, l]) => [p, l.length])) };
+            console.log('EXAMPLE ' + k2 + ' ' + JSON.stringify(keep).slice(0, 2500));
+          }
+          const fra = await get('/distributions/fra/plants');
+          console.log('ZONE fra', fra.status, 'total', fra.body?.meta?.total, 'first', JSON.stringify((fra.body?.data || []).slice(0, 3).map(p => p.scientific_name)));
+          const ver = await get('/plants', { 'filter[common_name]': 'stinging nettle' });
+          console.log('PLANTS filter status', ver.status, 'meta', JSON.stringify(ver.body?.meta || {}).slice(0, 200));
+          JS
+          node /tmp/probe.mjs 2>&1 | sed "s/$TREFLE_TOKEN/***/g"
+          echo "== licence page"
+          curl -s -m 20 https://trefle.io/ | grep -oiE '(ODbL|CC[- ]BY[^<"]{0,20}|licen[cs]e[^<"]{0,80}|open data[^<"]{0,60})' | sort -u | head -15
+          curl -s -m 20 https://docs.trefle.io/docs/advanced/client-side-apps 2>/dev/null | grep -oiE 'client[- ]side[^<]{0,120}' | head -3 || true
