@@ -12,6 +12,7 @@ import './gf-filter-panel.js';
 import './gf-plant-list.js';
 import './gf-plant-detail.js';
 import './gf-mode-switch.js';
+import './gf-pager.js';
 import { icon } from '../core/icons.js';
 import { pinnedBlocks } from '../core/sheet-blocks.js';
 
@@ -154,10 +155,8 @@ export class GfFlora extends LitElement {
     @keyframes slide-in { from { transform: translateX(30%); opacity: 0; } }
     @media (prefers-reduced-motion: reduce) { .sheet-plant { animation: none; } }
 
-    /* Previous / next plant of the results: arrows in the plant header, swipe on the sheet. */
-    .nav { display: flex; align-items: center; gap: 0; flex: none; }
-    .nav .pos { font-size: 0.75rem; color: var(--gf-text-muted); font-variant-numeric: tabular-nums; min-width: 3.5em; text-align: center; }
-    .nav .icon-btn[disabled] { opacity: 0.35; cursor: default; }
+    /* Previous / next plant of the results: the pager at the bottom of the pane, swipe on the sheet, ← →. */
+    gf-pager { flex: none; }
     /* Phone: the plant sheet is a card (Tinder-like). It follows the finger and tilts, the plant that way already
        waits underneath, growing as the card moves away; let go past the threshold, the card carries on off the
        screen and the one underneath is the sheet; short of it, it springs back.
@@ -273,10 +272,11 @@ export class GfFlora extends LitElement {
   /**
    * To the previous / next plant of the results. Phone: the card flies off that way, uncovering it. Larger
    * screens: its sheet fades in over the current one. Either way that sheet, already loaded, becomes the open one.
-   * @param {'prev' | 'next'} dir
+   * A jump further away goes the same way, to that plant.
+   * @param {'prev' | 'next'} dir @param {number | null} [to]
    */
-  async #step(dir) {
-    const id = this.#position()?.[dir];
+  async #step(dir, to) {
+    const id = to ?? this.#position()?.[dir];
     if (!id) return;
     const card = this.#card;
     // Each plant is a view: Back returns to the one before (« Résultats » goes straight to the list).
@@ -377,17 +377,19 @@ export class GfFlora extends LitElement {
     }, { once: true });
   }
 
-  /** Arrows and « 3 / 17 ». */
-  #nav() {
+  /**
+   * Previous / next plant of the results, at the bottom of the plant pane (above the menu on a phone):
+   * simple on a phone, complete on larger screens. @param {boolean} simple
+   */
+  #pager(simple) {
     const pos = this.#position();
     if (!pos || pos.n < 2) return nothing;
-    return html`<span class="nav" role="group" aria-label="Plantes des résultats">
-      <button class="icon-btn" type="button" title="Plante précédente (←)" aria-label="Plante précédente" ?disabled=${!pos.prev}
-        @click=${() => this.#step('prev')}>${icon('chevron-left')}</button>
-      <span class="pos" aria-live="polite">${pos.i + 1} / ${pos.n.toLocaleString('fr-FR')}</span>
-      <button class="icon-btn" type="button" title="Plante suivante (→)" aria-label="Plante suivante" ?disabled=${!pos.next}
-        @click=${() => this.#step('next')}>${icon('chevron-right')}</button>
-    </span>`;
+    const items = this.#store.state.results.items;
+    const plant = (/** @type {any} */ p) => p ? { name: p.vernacularName || p.scientificName, thumb: p.thumbnail?.url || null } : null;
+    const q = this.#store.state.query.q?.trim();
+    return html`<gf-pager ?simple=${simple} .index=${pos.i} .total=${pos.n} source=${q ? `Résultats « ${q} »` : 'Résultats'}
+      .prev=${plant(items[pos.i - 1])} .next=${plant(items[pos.i + 1])}
+      @page=${(/** @type {CustomEvent} */ e) => this.#step(e.detail.dir || (e.detail.index < pos.i ? 'prev' : 'next'), items[e.detail.index]?.id ?? null)}></gf-pager>`;
   }
 
   /**
@@ -647,12 +649,11 @@ export class GfFlora extends LitElement {
           ${resultsFolded ? nothing : this.#split('plant')}
           <section class="pane plant ${resultsFolded ? 'fill' : ''}" aria-label="Plante" style=${resultsFolded ? '' : `width:${Math.min(this.#width('plant'), this.#max('plant'))}px`}>
             ${this.#head('plant', 'Plante', html`
-              ${this.#nav()}
               ${plantSwitch}
               <a class="icon-btn" href=${'#/plant/' + plantId} title="Ouvrir la fiche seule" aria-label="Ouvrir la fiche seule"
                 @click=${e => { e.preventDefault(); this.#fold('results', true); }}>${icon('arrows-angle-expand')}</a>
               <button class="icon-btn" type="button" title="Fermer la fiche" aria-label="Fermer la fiche" @click=${() => this.#closePlant()}>${icon('x-lg')}</button>`)}
-            <div class="pane-body">${this.#swipe(plantId, plantView)}</div>
+            <div class="pane-body">${this.#swipe(plantId, plantView)}${this.#pager(false)}</div>
           </section>`) : nothing}
       </div>
 
@@ -661,10 +662,9 @@ export class GfFlora extends LitElement {
           <div class="pane-head">
             <button class="link back" type="button" @click=${() => this.#closePlant()}>${icon('arrow-left')} Résultats</button>
             <h2></h2>
-            ${this.#nav()}
             ${plantSwitch}
           </div>
-          <div class="pane-body" style="display:flex;flex-direction:column;overflow:hidden;background:var(--gf-surface-2)">${this.#swipe(plantId, plantView, true)}</div>
+          <div class="pane-body" style="display:flex;flex-direction:column;overflow:hidden;background:var(--gf-surface-2)">${this.#swipe(plantId, plantView, true)}${this.#pager(true)}</div>
         </section>` : nothing}
 
       ${wide ? nothing : html`

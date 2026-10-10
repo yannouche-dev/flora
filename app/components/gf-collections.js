@@ -13,6 +13,7 @@ import { MediaController, PHONE_QUERY } from '../core/media.js';
 import { back } from '../core/history.js';
 import './gf-map.js';
 import './gf-plant-detail.js';
+import './gf-pager.js';
 import { ui } from '../styles/ui.js';
 import { icon, kindIcon } from '../core/icons.js';
 import { encodeCollection, share } from '../core/share.js';
@@ -79,6 +80,7 @@ export class GfCollections extends LitElement {
     .pane-body { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; overflow: hidden; }
     .pane-body gf-map { position: absolute; inset: 0; min-height: 0; }
     .pane-body gf-plant-detail { flex: 1; min-height: 0; }
+    .pane-body gf-pager { flex: none; }
     /* Phone: the plant slides over the page, down to the tab bar. */
     .sheet-plant { position: fixed; inset: 0 0 calc(61px + env(safe-area-inset-bottom)) 0; z-index: 900; display: flex; flex-direction: column; background: var(--gf-surface); animation: slide-in 0.2s ease-out; }
     .sheet-plant .back { font-weight: 600; }
@@ -216,6 +218,7 @@ export class GfCollections extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     spotEvents.addEventListener('change', this.#onChange);
+    addEventListener('keydown', this.#onKey);
     document.title = 'Mes plantes — GeoFlora';
     this.#load();
   }
@@ -223,6 +226,7 @@ export class GfCollections extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     spotEvents.removeEventListener('change', this.#onChange);
+    removeEventListener('keydown', this.#onKey);
   }
 
   async #load() {
@@ -332,6 +336,56 @@ export class GfCollections extends LitElement {
       <span class="psci">${plant?.sci ?? ''}</span>
     </a></li>`;
   }
+
+  /**
+   * Previous / next plant of the collection or place the open plant was picked in (the one open, else an
+   * unfolded one that has it), at the bottom of the plant pane: simple on a phone, complete otherwise.
+   * @param {number} plantId @param {boolean} simple
+   */
+  #pager(plantId, simple) {
+    const has = (/** @type {any} */ c) => c?.properties.plantIds.includes(plantId);
+    const opened = this._collections.find(c => c.id === this.route.open);
+    const c = has(opened) ? opened : this._collections.find(x => this._open.has(x.id) && has(x));
+    if (!c) return nothing;
+    const ids = c.properties.plantIds;
+    const i = ids.indexOf(plantId);
+    if (ids.length < 2) return nothing;
+    if (ids.some(id => !this._plants.has(id))) queueMicrotask(() => this.#loadPlantsOf(ids));
+    const plant = (/** @type {number | undefined} */ id) => { const p = id === undefined ? null : this._plants.get(id); return p ? { name: p.name, thumb: p.thumb } : id === undefined ? null : { name: '…' }; };
+    return html`<gf-pager ?simple=${simple} .index=${i} .total=${ids.length} source=${collectionTitle(c)}
+      .prev=${plant(ids[i - 1])} .next=${plant(ids[i + 1])}
+      @page=${(/** @type {CustomEvent} */ e) => { location.hash = href.collections({ open: this.route.open || c.id, plant: ids[e.detail.index] }); }}></gf-pager>`;
+  }
+
+  /** ← → : the previous / next plant of the list (not while typing). @param {KeyboardEvent} e */
+  #onKey = e => {
+    if ((e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || e.altKey || e.ctrlKey || e.metaKey || !this.route.plant) return;
+    const t = /** @type {HTMLElement} */ (e.composedPath()[0]);
+    if (t?.closest?.('input, textarea, select, [contenteditable]')) return;
+    const pager = /** @type {any} */ (this.renderRoot.querySelector('gf-pager'));
+    if (!pager) return;
+    const k = pager.index + (e.key === 'ArrowLeft' ? -1 : 1);
+    if (k < 0 || k >= pager.total) return;
+    e.preventDefault();
+    pager.dispatchEvent(new CustomEvent('page', { detail: { index: k } }));
+  };
+
+  /** Names and photos of these plants (the pager's neighbours). @param {number[]} ids */
+  async #loadPlantsOf(ids) {
+    const missing = ids.filter(id => !this._plants.has(id));
+    if (!missing.length || this.#loadingPager) return;
+    this.#loadingPager = true;
+    await whenReady();
+    const plants = new Map(this._plants);
+    await Promise.all(missing.map(async id => {
+      const plant = await db.get('plants', id).catch(() => null);
+      plants.set(id, plant ? { name: plant.vernacularNames?.[0] || plant.scientificName, sci: plant.vernacularNames?.[0] ? plant.scientificName : '', thumb: plant.thumbnail?.url || null } : null);
+    }));
+    this.#loadingPager = false;
+    this._plants = plants;
+  }
+
+  #loadingPager = false;
 
   /** Unfolds or folds a collection's plants. @param {string} id */
   #toggle(id) {
@@ -500,7 +554,7 @@ export class GfCollections extends LitElement {
             <a class="icon-btn" href=${href.plant(plantId)} title="Ouvrir la fiche dans Flore" aria-label="Ouvrir la fiche dans Flore">${icon('arrows-angle-expand')}</a>
             <button class="icon-btn" type="button" title="Fermer la fiche" aria-label="Fermer la fiche"
               @click=${() => location.replace(href.collections({ open: this.route.open }))}>${icon('x-lg')}</button></div>
-          <div class="pane-body"><gf-plant-detail embedded plant-id=${plantId} view=${plantViewOf(this.#store.state)}></gf-plant-detail></div>
+          <div class="pane-body"><gf-plant-detail embedded plant-id=${plantId} view=${plantViewOf(this.#store.state)}></gf-plant-detail>${this.#pager(plantId, false)}</div>
         </section>` : nothing}
       </div>` : nothing}
       </div>
@@ -510,7 +564,7 @@ export class GfCollections extends LitElement {
           <h2></h2>
           <a class="icon-btn" href=${href.plant(plantId)} title="Ouvrir la fiche dans Flore" aria-label="Ouvrir la fiche dans Flore">${icon('arrows-angle-expand')}</a>
         </div>
-        <div class="pane-body"><gf-plant-detail embedded plant-id=${plantId} view=${plantViewOf(this.#store.state)}></gf-plant-detail></div>
+        <div class="pane-body"><gf-plant-detail embedded plant-id=${plantId} view=${plantViewOf(this.#store.state)}></gf-plant-detail>${this.#pager(plantId, true)}</div>
       </section>` : nothing}
     `;
   }

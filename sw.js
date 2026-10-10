@@ -81,6 +81,7 @@ const SHELL = [
   'app/components/gf-context-bar.js',
   'app/components/gf-map-page.js',
   'app/components/gf-plant-card.js',
+  'app/components/gf-pager.js',
   'app/components/gf-plant-detail.js',
   'app/components/gf-plant-list.js',
   'app/components/gf-plant-pick-list.js',
