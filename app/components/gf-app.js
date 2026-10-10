@@ -1,6 +1,6 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
-import { lastSearchHash } from '../core/query.js';
+import { tabHref } from '../core/context.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
 import { href, RouterController } from '../core/router.js';
 import { setKingMode, setMode, StoreController } from '../core/store.js';
@@ -9,6 +9,7 @@ import './gf-settings.js';
 import './gf-map-page.js';
 import './gf-spot-editor.js';
 import './gf-collections.js';
+import './gf-context-bar.js';
 import './gf-shared.js';
 import './gf-capture.js';
 import './gf-tabbar.js';
@@ -98,8 +99,8 @@ export class GfApp extends LitElement {
     .king:hover { background: #3a3014; }
     .king:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     :host([phone]) .king { bottom: calc(74px + env(safe-area-inset-bottom, 0px)); }
-    /* A plant sheet has its action bar there: the crown goes above it. */
-    :host([phone][plant]) .king { bottom: calc(134px + env(safe-area-inset-bottom, 0px)); }
+    /* A plant sheet has its action bar and pager there: the crown goes above them. */
+    :host([phone][plant]) .king { bottom: calc(184px + env(safe-area-inset-bottom, 0px)); }
     @keyframes king { 50% { box-shadow: 0 6px 20px rgb(0 0 0 / 0.35), 0 0 0 8px rgb(212 160 23 / 0); } }
     @media (prefers-reduced-motion: reduce) { .king { animation: none; } }
 
@@ -131,9 +132,9 @@ export class GfApp extends LitElement {
           <span>GeoFlora</span>
         </a>
         ${phone ? nothing : html`<nav class="tabs segmented" aria-label="Sections">
-          <a href=${lastSearchHash()} aria-current=${route.name === 'search' || route.name === 'plant' ? 'page' : 'false'}>Flore</a>
-          <a href=${href.collections()} aria-current=${['collections', 'spot', 'spot-new', 'shared'].includes(route.name) ? 'page' : 'false'}>Mes plantes</a>
-          <a href=${href.map()} aria-current=${route.name === 'map' ? 'page' : 'false'}>Carte</a>
+          <a href=${tabHref('flore', tabOf(route.name) === 'flore')} aria-current=${route.name === 'search' || route.name === 'plant' ? 'page' : 'false'}>Flore</a>
+          <a href=${tabHref('mine', tabOf(route.name) === 'mine')} aria-current=${['collections', 'spot', 'spot-new', 'shared'].includes(route.name) ? 'page' : 'false'}>Mes plantes</a>
+          <a href=${tabHref('map', tabOf(route.name) === 'map')} aria-current=${route.name === 'map' ? 'page' : 'false'}>Carte</a>
         </nav>
         <gf-mode-switch class="mode" scope="toute l’application" value=${this.#store.state.mode}
           @mode-change=${e => setMode(e.detail.mode || 'standard')}></gf-mode-switch>
@@ -147,6 +148,7 @@ export class GfApp extends LitElement {
         ${status === 'error' ? html`<div class="banner error" role="alert">${statusText}
           <button class="link" type="button" @click=${() => location.reload()}>Recharger</button></div>` : nothing}
         ${offline && status === 'ready' && route.name === 'search' ? html`<div class="banner">Hors ligne — recherche sur la copie locale.</div>` : nothing}
+        <gf-context-bar .route=${route}></gf-context-bar>
         ${this.#outlet(route)}
       </main>
       ${phone ? html`<gf-tabbar current=${tabOf(route.name)}></gf-tabbar>` : html`<span></span>`}
@@ -170,7 +172,7 @@ export class GfApp extends LitElement {
       case 'map':
         return html`<gf-map-page .route=${route}></gf-map-page>`;
       case 'collections':
-        return html`<gf-collections></gf-collections>`;
+        return html`<gf-collections .route=${route}></gf-collections>`;
       case 'shared':
         document.title = 'Partage — GeoFlora';
         return html`<gf-shared .data=${route.data}></gf-shared>`;

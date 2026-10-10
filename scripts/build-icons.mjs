@@ -8,9 +8,9 @@ import { join } from 'node:path';
 
 const NAMES = [
   'arrow-counterclockwise', 'arrow-left', 'arrow-right', 'arrows-angle-expand', 'arrows-collapse', 'caret-down-fill', 'caret-up-fill',
-  'check-lg', 'chevron-down', 'download', 'chevron-left', 'chevron-right', 'collection', 'collection-fill', 'crosshair', 'exclamation-octagon-fill', 'exclamation-triangle-fill', 'flower1',
+  'check-lg', 'chevron-bar-left', 'chevron-bar-right', 'chevron-down', 'chevron-up', 'download', 'chevron-left', 'chevron-right', 'collection', 'collection-fill', 'crosshair', 'exclamation-octagon-fill', 'exclamation-triangle-fill', 'flower1',
   'eye-slash', 'funnel', 'funnel-fill', 'gear', 'gear-fill', 'geo-alt-fill', 'globe-europe-africa', 'grip-vertical', 'heart', 'heart-fill', 'image', 'layers',
-  'leaf', 'leaf-fill', 'list-nested', 'list-ul', 'map', 'map-fill', 'mic', 'mic-fill', 'pencil', 'plus-lg', 'search', 'share', 'shield-check', 'star', 'star-fill', 'table',
+  'leaf', 'leaf-fill', 'list-nested', 'list-ul', 'map', 'map-fill', 'mic', 'mic-fill', 'pencil', 'pin-angle', 'pin-angle-fill', 'plus-lg', 'search', 'share', 'shield-check', 'star', 'star-fill', 'table',
   'three-dots', 'trash3', 'triangle', 'type-h2', 'upload', 'x', 'x-lg'
 ];
 

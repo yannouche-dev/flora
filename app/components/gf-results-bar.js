@@ -9,6 +9,7 @@ import './gf-active-filters.js';
 import './gf-plant-search.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
+import { href } from '../core/router.js';
 
 /**
  * Above the list: filters button (mobile), result count, sort, density, active filter chips,
@@ -113,6 +114,8 @@ export class GfResultsBar extends LitElement {
           <button class="tool" type="button" aria-pressed=${compact ? 'true' : 'false'}
             title="Affichage compact (sans vignettes)" aria-label="Affichage compact (sans vignettes)"
             @click=${() => setCompact(!compact)}>${icon('arrows-collapse')}</button>`}
+        ${this.#store.state.placed.size ? html`<a class="tool button" href=${href.map({ flore: true })} title="Sur la Carte : mes lieux qui ont une plante de ces résultats"
+          aria-label="Sur la Carte : mes lieux qui ont une plante de ces résultats">${icon('map')}</a>` : nothing}
         <button class="tool" type="button" title=${this._copied ? 'Lien copié' : 'Partager cette recherche (filtres compris)'}
           aria-label=${this._copied ? 'Lien copié' : 'Partager cette recherche (filtres compris)'} @click=${this.#share}>${icon(this._copied ? 'check-lg' : 'share')}</button>
       </div>

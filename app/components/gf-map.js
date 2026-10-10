@@ -192,8 +192,12 @@ export class GfMap extends LitElement {
     editing: { type: Boolean, reflect: true },
     /** A plant whose GBIF distribution the Carte panel offers as a layer: { key (GBIF taxon), label }. */
     distribution: { attribute: false },
-    /** Shows the `distribution` layer without the panel (a map block configured to). */
+    /** Shows the `distribution` layer without the panel (a map block configured to). `distribution.filter`: GBIF filter params. */
     distributionOn: { type: Boolean, attribute: 'distribution-on' },
+    /** A second plant's GBIF occurrences, in another colour: { key, label, country? }. */
+    compare: { attribute: false },
+    /** A point to show and fly to (a value touched in the plant sheet): { coordinates, title, url? }. */
+    focusPoint: { attribute: false },
     /** This map's own background and overlays (not the shared choice of the Carte); changes emit `layers-change`. */
     base: { attribute: false },
     overlays: { attribute: false },
@@ -201,6 +205,8 @@ export class GfMap extends LitElement {
     points: { attribute: false },
     /** The point card's « Créer un endroit ici » makes a place with this plant already in it. */
     createPlant: { type: Number, attribute: 'create-plant' },
+    /** How far out the map can go (5: France; 1: the world). */
+    minZoom: { type: Number, attribute: 'min-zoom' },
     /** No « Me localiser » button. */
     noLocate: { type: Boolean, attribute: 'no-locate' },
     _moves: { state: true },
@@ -237,6 +243,10 @@ export class GfMap extends LitElement {
     this.legend = true;
     this.noCreate = false;
     this.distributionOn = false;
+    /** @type {{ key: number, label: string, country?: string } | null} */
+    this.compare = null;
+    /** @type {{ coordinates: [number, number], title: string, url?: string } | null} */
+    this.focusPoint = null;
     /** @type {string | null} */
     this.base = null;
     /** @type {string[] | null} */
@@ -246,6 +256,7 @@ export class GfMap extends LitElement {
     /** @type {number | null} */
     this.createPlant = null;
     this.noLocate = false;
+    this.minZoom = 5;
     this.noSearch = false;
     this.editable = false;
     this.editing = false;
@@ -443,22 +454,44 @@ export class GfMap extends LitElement {
     this.#syncDistribution();
   };
 
-  /** The GBIF distribution layer of the plant given, when switched on in the panel (and GBIF is on). */
+  /**
+   * The GBIF distribution layer of the plant given, when switched on in the panel (and GBIF is on), filtered
+   * when asked; and the compared plant's, in purple.
+   */
   #syncDistribution() {
-    const map = this.#map;
     const d = this.distribution;
-    const want = d && (this.#distributionOn || this.distributionOn) && moduleOn('gbif') ? d.key + ':' + (d.country || '') : null;
-    if (this.#distributionLayer && (!want || /** @type {any} */ (this.#distributionLayer).gfKey !== want)) {
-      this.#distributionLayer.remove();
-      this.#distributionLayer = null;
-    }
-    if (!map || !want || this.#distributionLayer) return;
-    const layer = this.#distributionLayer = L.tileLayer(gbifTileUrl(/** @type {any} */ (d).key, /** @type {any} */ (d).country), {
+    const on = d && (this.#distributionOn || this.distributionOn) && moduleOn('gbif');
+    this.#distributionLayer = this.#syncGbifLayer(this.#distributionLayer, on ? /** @type {any} */ (d) : null, 'classic.point', 20);
+    const c = this.compare;
+    this.#compareLayer = this.#syncGbifLayer(this.#compareLayer, c && moduleOn('gbif') ? { key: c.key, country: c.country, filter: null } : null, 'purpleYellow.point', 21);
+  }
+
+  /** @param {L.TileLayer | null} layer @param {{ key: number, country?: string, filter?: Record<string, string> | null } | null} d @param {string} style @param {number} zIndex */
+  #syncGbifLayer(layer, d, style, zIndex) {
+    const map = this.#map;
+    const url = d ? gbifTileUrl(d.key, d.country, d.filter, style) : null;
+    if (layer && /** @type {any} */ (layer).gfUrl !== url) { layer.remove(); layer = null; }
+    if (!map || !url || layer) return layer;
+    layer = L.tileLayer(url, {
       attribution: 'Occurrences : <a href="https://www.gbif.org/" target="_blank" rel="noopener">GBIF.org</a>',
-      opacity: 0.85, crossOrigin: 'anonymous', maxNativeZoom: 16, maxZoom: 21, zIndex: 20, className: 'gf-tiles-gbif'
+      opacity: 0.85, crossOrigin: 'anonymous', maxNativeZoom: 16, maxZoom: 21, zIndex, className: 'gf-tiles-gbif'
     });
-    /** @type {any} */ (layer).gfKey = want;
-    layer.addTo(map);
+    /** @type {any} */ (layer).gfUrl = url;
+    return layer.addTo(map);
+  }
+
+  /** The point touched in the sheet: a ringed marker, the map flies to it. */
+  #syncFocusPoint() {
+    const layer = this.#focusLayer;
+    if (!layer || !this.#map) return;
+    layer.clearLayers();
+    const p = this.focusPoint;
+    if (!p) return;
+    const [x, y] = p.coordinates;
+    const dot = L.circleMarker([y, x], { radius: 9, className: 'gf-focus-point', bubblingMouseEvents: false }).addTo(layer);
+    dot.bindTooltip(p.title, { direction: 'top', permanent: true, className: 'gf-focus-tip' });
+    if (p.url) dot.on('click', () => open(p.url, '_blank', 'noopener'));
+    if (this.#map.getSize().x) this.#map.flyTo([y, x], Math.max(this.#map.getZoom(), 11), { duration: 0.6 });
   }
 
   get #root() { return /** @type {HTMLElement} */ (this.querySelector('.gf-map-root')); }
@@ -469,6 +502,8 @@ export class GfMap extends LitElement {
   /** @type {string[]} */ #overlays = readLayers().overlays;
   #distributionOn = readLayers().distribution;
   /** @type {L.TileLayer | null} */ #distributionLayer = null;
+  /** @type {L.TileLayer | null} */ #compareLayer = null;
+  /** @type {L.LayerGroup | null} */ #focusLayer = null;
   /** @type {any} */ #panel = null;
   /** @type {L.Marker | null} */ #pointMarker = null;
   /** @type {any} */ #pointCard = null;
@@ -504,7 +539,7 @@ export class GfMap extends LitElement {
       attributionControl: true,
       tapHold: true,
       maxZoom: 21,
-      minZoom: 5
+      minZoom: this.minZoom
     });
     map.attributionControl.setPrefix(false);
     L.control.zoom({ position: 'bottomleft' }).addTo(map);
@@ -517,6 +552,7 @@ export class GfMap extends LitElement {
 
     this.#areaLayer = L.layerGroup().addTo(map);
     this.#pointsLayer = L.layerGroup().addTo(map);
+    this.#focusLayer = L.layerGroup().addTo(map);
     this.#spotLayer = L.layerGroup().addTo(map);
     this.#plantLayer = L.layerGroup();
     map.on('zoomend', () => this.#syncPlantVisibility());
@@ -570,7 +606,14 @@ export class GfMap extends LitElement {
       }
     }
     if (changed.has('points')) this.#syncPoints();
-    if (changed.has('distribution') || changed.has('distributionOn')) {
+    if (changed.has('minZoom') && changed.get('minZoom') !== undefined) {
+      // Tile layers are made for a zoom range: rebuild them for the new one. The limit is set without
+      // setMinZoom, whose animated zoom would land after (and undo) the framing done just below.
+      this.#map.options.minZoom = this.minZoom;
+      this.#onModules();
+    }
+    if (changed.has('focusPoint')) this.#syncFocusPoint();
+    if (changed.has('distribution') || changed.has('distributionOn') || changed.has('compare')) {
       this.#syncDistribution();
       if (this.#panel) Object.assign(this.#panel, this.#distributionInfo());
     }
@@ -637,6 +680,7 @@ export class GfMap extends LitElement {
     this.#syncArea();
     this.#syncPoints();
     if (!this.#applyFrame() && this.fit) this.#fitToContent();
+    if (this.focusPoint && !this.#focusLayer?.getLayers().length) this.#syncFocusPoint();
   }
 
   /** Observations around (iNaturalist, GBIF): small circles in their source's colour, each linking to its record. */
@@ -839,6 +883,9 @@ export class GfMap extends LitElement {
     }
   }
 
+  /** Current zoom level (null before the map exists). */
+  zoom() { return this.#map ? this.#map.getZoom() : null; }
+
   /** Map centre as [lon, lat]. @returns {[number, number] | null} */
   center() {
     const c = this.#map?.getCenter();
@@ -997,7 +1044,7 @@ export class GfMap extends LitElement {
 
   /** @param {string} key */
   #layer(key) {
-    this.#layers[key] ??= tileLayer(key);
+    this.#layers[key] ??= tileLayer(key, this.minZoom);
     return this.#layers[key];
   }
 

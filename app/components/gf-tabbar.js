@@ -1,7 +1,8 @@
 // @ts-check
 import { LitElement, html, css } from 'lit';
-import { lastSearchHash } from '../core/query.js';
 import { href } from '../core/router.js';
+import { tabHref } from '../core/context.js';
+import { StoreController } from '../core/store.js';
 import { icon } from '../core/icons.js';
 
 /**
@@ -40,6 +41,9 @@ export class GfTabbar extends LitElement {
     a:focus-visible { outline: none; box-shadow: var(--gf-focus); border-radius: var(--gf-radius-sm); }
   `;
 
+  // Tabs lead back to where each part was left (context.js), which changes as the user moves.
+  #store = new StoreController(this);
+
   constructor() {
     super();
     /** 'flore' | 'map' | 'mine' | 'more' */
@@ -54,9 +58,9 @@ export class GfTabbar extends LitElement {
     };
     return html`
       <nav aria-label="Navigation principale">
-        ${tab('flore', lastSearchHash(), 'leaf', 'leaf-fill', 'Flore')}
-        ${tab('map', href.map(), 'map', 'map-fill', 'Carte')}
-        ${tab('mine', href.collections(), 'collection', 'collection-fill', 'Mes collections')}
+        ${tab('flore', tabHref('flore', this.current === 'flore'), 'leaf', 'leaf-fill', 'Flore')}
+        ${tab('map', tabHref('map', this.current === 'map'), 'map', 'map-fill', 'Carte')}
+        ${tab('mine', tabHref('mine', this.current === 'mine'), 'collection', 'collection-fill', 'Mes collections')}
         ${tab('more', href.settings(), 'gear', 'gear-fill', 'Réglages')}
       </nav>
     `;

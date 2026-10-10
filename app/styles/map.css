@@ -5,7 +5,12 @@ gf-map {
   position: relative;
   min-height: 200px;
   background: var(--gf-surface-2);
+  /* Leaflet's panes and controls carry z-indexes up to 1000: kept inside the map, so a map in a scrolling
+     sheet passes under the sticky action bar, the headers and the tab bar instead of over them. */
+  isolation: isolate;
 }
+/* Full screen without the top layer (no popover support): the frame must rise above the page again. */
+gf-map:has(.gf-map-frame.fullscreen) { isolation: auto; }
 
 gf-map .gf-map-root {
   position: absolute;
@@ -366,3 +371,13 @@ gf-map:has(.gf-point-card) .leaflet-bottom {
 
 /* Bootstrap Icons (app/core/icons.js) outside shadow roots. */
 .bi { flex: none; vertical-align: -0.125em; }
+
+/* A value touched in the plant sheet (an occurrence near here, a herbarium sheet, a place): ringed, named. */
+.gf-focus-point {
+  fill: #e11d48;
+  fill-opacity: 0.9;
+  stroke: #fff;
+  stroke-width: 3;
+  filter: drop-shadow(0 0 4px rgb(225 29 72 / 0.8));
+}
+.gf-focus-tip { font-weight: 600; }

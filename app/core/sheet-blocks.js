@@ -42,7 +42,8 @@ export const BLOCKS = [
 /** The parts of a block that can be moved and hidden inside it, in their default order. @type {Record<string, SubBlock[]>} */
 export const SUBS = {
   actions: [
-    { key: 'fav', title: 'Favori' }, { key: 'addTo', title: 'Ajouter à…' }, { key: 'share', title: 'Partager' }, { key: 'spot', title: 'Noter ici' }
+    { key: 'fav', title: 'Favori' }, { key: 'addTo', title: 'Ajouter à…' }, { key: 'addCurrent', title: 'Ajouter à la collection courante' },
+    { key: 'share', title: 'Partager' }, { key: 'map', title: 'Sur la Carte' }, { key: 'spot', title: 'Noter ici' }
   ],
   taxonomy: [
     { key: 'chain', title: 'Classification complète' }, { key: 'ranks', title: 'Famille, genre' }, { key: 'author', title: 'Auteur' },
@@ -74,8 +75,14 @@ export const SUBS = {
  * where the mode's own default is given.
  * @type {Record<string, { styles: { key: string, title: string }[], defaults?: Partial<Record<Mode, string>> }>}
  */
+const TABLE_LIST = [{ key: 'table', title: 'Tableau' }, { key: 'list', title: 'Liste' }];
 export const STYLES = {
-  names: { styles: [{ key: 'table', title: 'Tableau' }, { key: 'list', title: 'Liste' }], defaults: { epure: 'list' } }
+  names: { styles: TABLE_LIST, defaults: { epure: 'list' } },
+  // Tabular data: a table by default, or a list.
+  occurrences: { styles: TABLE_LIST },
+  gbifProfile: { styles: TABLE_LIST },
+  literature: { styles: TABLE_LIST },
+  ids: { styles: TABLE_LIST }
 };
 
 /** The action bar docked at the bottom of the sheet: its actions, shown or not and ordered per mode (sub-blocks of 'actions'). */
@@ -145,7 +152,7 @@ export const blockOrder = view =>
 /** Has this view been arranged by hand? @param {Mode} view */
 export function isCustom(view) {
   const l = layout();
-  return Boolean(l.order[view] || l.hidden[view] || l.subOrder[view] || l.subHidden[view] || l.styles?.[view] || l.titleShown?.[view] || l.hideEmpty?.[view]);
+  return Boolean(l.order[view] || l.hidden[view] || l.subOrder[view] || l.subHidden[view] || l.styles?.[view] || l.titleShown?.[view] || l.hideEmpty?.[view] || l.pinned?.[view] || l.dock?.[view]);
 }
 
 /** Saves a new layout (only what differs from the defaults). @param {Partial<SheetLayout>} patch */
@@ -158,7 +165,7 @@ function save(patch) {
     }
   }
   const isEmpty = !next.notes.length && !Object.keys(next.titles).length && !next.mapBlocks?.length && !Object.keys(next.maps || {}).length
-    && ['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown', 'hideEmpty'].every(p => !Object.keys(/** @type {any} */ (next)[p] || {}).length);
+    && ['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown', 'hideEmpty', 'pinned', 'dock'].every(p => !Object.keys(/** @type {any} */ (next)[p] || {}).length);
   try {
     if (isEmpty) localStorage.removeItem(config.storageKeys.sheetLayout);
     else localStorage.setItem(config.storageKeys.sheetLayout, JSON.stringify(next));
@@ -325,6 +332,47 @@ export function setTitleShown(view, key, shown) {
   save({ titleShown: all });
 }
 
+// ── Pinned blocks ──────────────────────────────────────────────────────────
+
+/**
+ * Blocks pinned as a pane of the layout, per mode (in their order): they leave the scrolling sheet for the
+ * dock, a column beside it on a wide screen, a band above it on a phone — a map stays in view while the
+ * sheet scrolls. @param {Mode} view @returns {string[]}
+ */
+export function pinnedBlocks(view) {
+  const keys = allBlocks().map(b => b.key);
+  return (layout().pinned?.[view] || []).filter(k => keys.includes(k));
+}
+
+/** @param {Mode} view @param {string} key */
+export const isPinned = (view, key) => pinnedBlocks(view).includes(key);
+
+/** @param {Mode} view @param {string} key @param {boolean} on */
+export function setPinned(view, key, on) {
+  const mine = pinnedBlocks(view).filter(k => k !== key);
+  if (on) mine.push(key);
+  const all = { ...layout().pinned };
+  if (mine.length) all[view] = mine; else delete all[view];
+  save({ pinned: all });
+}
+
+/** Size of the dock (s, m, l: a third, half, 60 % of the sheet) and whether it is folded to its title, per mode. */
+export const DOCK_SIZES = /** @type {const} */ (['s', 'm', 'l']);
+
+/** @param {Mode} view @returns {{ size: 's' | 'm' | 'l', folded: boolean }} */
+export function dockState(view) {
+  const d = layout().dock?.[view] || {};
+  return { size: DOCK_SIZES.includes(d.size) ? d.size : 'm', folded: d.folded === true };
+}
+
+/** @param {Mode} view @param {Partial<{ size: 's' | 'm' | 'l', folded: boolean }>} patch */
+export function setDockState(view, patch) {
+  const next = { ...dockState(view), ...patch };
+  const all = { ...layout().dock };
+  if (next.size === 'm' && !next.folded) delete all[view]; else all[view] = next;
+  save({ dock: all });
+}
+
 // ── Left out when empty ────────────────────────────────────────────────────
 
 /**
@@ -404,7 +452,7 @@ export function deleteNote(key) {
   const notes = readNotes();
   delete notes[id];
   writeNotes(notes);
-  save({ notes: layout().notes.filter(n => n.id !== id), order: strip(layout().order), hidden: strip(layout().hidden) });
+  save({ notes: layout().notes.filter(n => n.id !== id), order: strip(layout().order), hidden: strip(layout().hidden), pinned: strip(layout().pinned || {}) });
 }
 
 // ── Map blocks ─────────────────────────────────────────────────────────────
@@ -412,17 +460,17 @@ export function deleteNote(key) {
 /**
  * What a map block shows and lets do (the same in every mode).
  * @typedef {{ gbif: 'fr' | 'world' | 'off', places: boolean, near: 'off' | 'gbif' | 'inat' | 'both', base: 'plan' | 'photo',
- *   overlays: string[], frame: 'france' | 'content' | 'me', height: 's' | 'm' | 'l',
+ *   overlays: string[], frame: 'auto' | 'france' | 'world' | 'content' | 'me', height: 's' | 'm' | 'l',
  *   actions: { open: boolean, create: boolean, edit: boolean, spot: boolean, locate: boolean } }} MapConfig
  */
 
 /** @type {MapConfig} */
 export const MAP_DEFAULTS = {
-  gbif: 'fr', places: true, near: 'off', base: 'plan', overlays: [], frame: 'france', height: 'm',
+  gbif: 'fr', places: true, near: 'off', base: 'plan', overlays: [], frame: 'auto', height: 'm',
   actions: { open: true, create: true, edit: true, spot: true, locate: true }
 };
 
-const MAP_CHOICES = { gbif: ['fr', 'world', 'off'], near: ['off', 'gbif', 'inat', 'both'], base: ['plan', 'photo'], frame: ['france', 'content', 'me'], height: ['s', 'm', 'l'] };
+const MAP_CHOICES = { gbif: ['fr', 'world', 'off'], near: ['off', 'gbif', 'inat', 'both'], base: ['plan', 'photo'], frame: ['auto', 'france', 'world', 'content', 'me'], height: ['s', 'm', 'l'] };
 
 /** A map's configuration, cleaned (unknown values give the default). @param {any} saved @returns {MapConfig} */
 function cleanMap(saved) {
@@ -462,7 +510,7 @@ export function deleteMap(key) {
     Object.fromEntries(Object.entries(per).map(([v, keys]) => [v, (keys || []).filter(k => k !== key)]));
   const maps = { ...(layout().maps || {}) };
   delete maps[key];
-  save({ mapBlocks: (layout().mapBlocks || []).filter(m => m.id !== id), maps, order: strip(layout().order), hidden: strip(layout().hidden) });
+  save({ mapBlocks: (layout().mapBlocks || []).filter(m => m.id !== id), maps, order: strip(layout().order), hidden: strip(layout().hidden), pinned: strip(layout().pinned || {}) });
 }
 
 /** @param {string} key @param {number} plantId */
@@ -490,7 +538,7 @@ const foldedModules = view => blockModules().filter(m => !moduleOn(m, view));
 export function resetBlocks(view) {
   const l = layout();
   const without = (/** @type {any} */ per) => { const next = { ...per }; delete next[view]; return next; };
-  save({ order: without(l.order), hidden: without(l.hidden), subOrder: without(l.subOrder), subHidden: without(l.subHidden), styles: without(l.styles || {}), titleShown: without(l.titleShown || {}), hideEmpty: without(l.hideEmpty || {}) });
+  save({ order: without(l.order), hidden: without(l.hidden), subOrder: without(l.subOrder), subHidden: without(l.subHidden), styles: without(l.styles || {}), titleShown: without(l.titleShown || {}), hideEmpty: without(l.hideEmpty || {}), pinned: without(l.pinned || {}), dock: without(l.dock || {}) });
   for (const b of BLOCKS) if (b.module && isHidden(view, b.key)) setHidden(view, b.key, false);
 }
 
@@ -533,6 +581,8 @@ export function importLayout(text) {
     && perView(l.titleShown || {}, (/** @type {any} */ x) => x && typeof x === 'object' && Object.values(x).every(v => typeof v === 'boolean'))
     && perView(l.hideEmpty || {}, (/** @type {any} */ x) => x && typeof x === 'object' && Object.values(x).every(v => typeof v === 'boolean'))
     && perView(l.styles || {}, (/** @type {any} */ x) => x && typeof x === 'object' && Object.entries(x).every(([block, st]) => STYLES[block]?.styles.some(s => s.key === st)))
+    && perView(l.pinned || {}, isKeyList)
+    && perView(l.dock || {}, (/** @type {any} */ x) => x && typeof x === 'object' && !Array.isArray(x))
     && l.titles && typeof l.titles === 'object' && Object.values(l.titles).every(t => typeof t === 'string' && t.length <= 60)
     && Array.isArray(l.notes) && l.notes.every((/** @type {any} */ n) => typeof n?.id === 'string' && /^[a-z0-9]{1,24}$/.test(n.id) && typeof n.title === 'string' && n.title.length <= 60)
     && (!l.mapBlocks || (Array.isArray(l.mapBlocks) && l.mapBlocks.every((/** @type {any} */ m) => typeof m?.id === 'string' && /^[a-z0-9]{1,24}$/.test(m.id) && typeof m.title === 'string' && m.title.length <= 60)))
@@ -541,7 +591,7 @@ export function importLayout(text) {
     && (!data.modulesOff || perView(data.modulesOff, x => Array.isArray(x) && x.every(m => MODULES.some(mm => mm.key === m))));
   if (!valid) throw new Error('Mise en page illisible ou incomplète.');
   writeNotes(data.notes || {});
-  save({ ...emptyLayout(), order: l.order || {}, hidden: l.hidden || {}, subOrder: l.subOrder || {}, subHidden: l.subHidden || {}, styles: l.styles || {}, titleShown: l.titleShown || {}, hideEmpty: l.hideEmpty || {}, titles: l.titles, notes: l.notes,
+  save({ ...emptyLayout(), order: l.order || {}, hidden: l.hidden || {}, subOrder: l.subOrder || {}, subHidden: l.subHidden || {}, styles: l.styles || {}, titleShown: l.titleShown || {}, hideEmpty: l.hideEmpty || {}, pinned: l.pinned || {}, dock: l.dock || {}, titles: l.titles, notes: l.notes,
     mapBlocks: l.mapBlocks || [], maps: Object.fromEntries(Object.entries(l.maps || {}).map(([k, c]) => [k, cleanMap(c)])) });
   for (const view of MODE_KEYS) {
     const off = data.modulesOff?.[view] || [];

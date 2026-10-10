@@ -180,7 +180,7 @@ export function gbifStats(plant, gbifKey, signal, mode) {
  */
 export function gbifMedia(plant, gbifKey, kind, signal, mode) {
   if (!gbifKey) return Promise.resolve([]);
-  return cached(key('gbif-media-' + kind, plant.id, mode), () => sourcesFor(mode).gbifOccurrenceMedia(gbifKey, kind, { signal }));
+  return cached(key('gbif-media2-' + kind, plant.id, mode), () => sourcesFor(mode).gbifOccurrenceMedia(gbifKey, kind, { signal }));
 }
 
 /** @param {any} plant @param {number | null | undefined} gbifKey @param {AbortSignal} [signal] @param {Mode} [mode] */
@@ -212,8 +212,24 @@ export function gbifNear(gbifKey, point, radius, signal, mode, limit = 5) {
 }
 
 /**
- * GBIF density map tiles of a taxon (v2 maps API), optionally in one country.
- * @param {number} gbifKey @param {string} [country]
+ * The extent of a taxon's occurrences matching a filter (see PlantSources.gbifOccurrenceBounds).
+ * @param {number | null | undefined} gbifKey @param {Record<string, string>} filter @param {AbortSignal} [signal] @param {Mode} [mode]
  */
-export const gbifTileUrl = (gbifKey, country) =>
-  `https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@1x.png?srs=EPSG:3857&style=classic.point&taxonKey=${gbifKey}${country ? '&country=' + country : ''}`;
+export function gbifBounds(gbifKey, filter, signal, mode) {
+  if (!gbifKey) return Promise.resolve(null);
+  const id = Object.entries(filter).sort().map(([k, v]) => k + '=' + v).join('&');
+  return cached('gbif-bounds:' + gbifKey + ':' + id, () => sourcesFor(mode).gbifOccurrenceBounds(gbifKey, filter, { signal }));
+}
+
+/**
+ * GBIF map tiles of a taxon (v2 maps API), optionally in one country: the precomputed density, or, with a
+ * filter (GADM area, month, year, kind of record, dataset, country), tiles drawn for it (presences with
+ * clean coordinates). `style`: GBIF's palette (another one tells a compared plant apart).
+ * @param {number} gbifKey @param {string} [country] @param {Record<string, string> | null} [filter] @param {string} [style]
+ */
+export function gbifTileUrl(gbifKey, country, filter, style = 'classic.point') {
+  const base = `{z}/{x}/{y}@1x.png?srs=EPSG:3857&style=${style}&taxonKey=${gbifKey}`;
+  if (!filter || !Object.keys(filter).length) return `https://api.gbif.org/v2/map/occurrence/density/${base}${country ? '&country=' + country : ''}`;
+  const all = { ...(country && !filter.gadmGid && !filter.country ? { country } : {}), ...filter, occurrenceStatus: 'PRESENT', hasGeospatialIssue: 'false' };
+  return `https://api.gbif.org/v2/map/occurrence/adhoc/${base}&` + Object.entries(all).map(([k, v]) => k + '=' + encodeURIComponent(v)).join('&');
+}
