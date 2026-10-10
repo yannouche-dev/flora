@@ -6,7 +6,7 @@
 import { config } from '../config.js';
 
 /**
- * @typedef {'ignMaps' | 'ignGeo' | 'ignProtected' | 'ignNature' | 'voice' | 'globi' | 'openmeteo' | 'inaturalist' | 'gbif' | 'wikidata' | 'wikipedia' | 'commons' | 'trefle' | 'photos'} ModuleKey
+ * @typedef {'ignMaps' | 'ignGeo' | 'ignProtected' | 'ignNature' | 'voice' | 'globi' | 'openmeteo' | 'wikibooks' | 'inaturalist' | 'gbif' | 'wikidata' | 'wikipedia' | 'commons' | 'trefle' | 'photos'} ModuleKey
  * @typedef {{ key: ModuleKey, category: import('./categories.js').CategoryKey, also: import('./categories.js').CategoryKey[], name: string, provides: string, hosts: string, needsToken?: boolean }} ModuleInfo
  */
 
@@ -32,6 +32,8 @@ export const MODULES = [
     provides: 'Classification, statut UICN, identifiants (Tela Botanica, IPNI, POWO) ; donne aussi l’article Wikipédia.' },
   { key: 'wikipedia', category: 'knowledge', also: [], name: 'Wikipédia', hosts: 'fr.wikipedia.org',
     provides: 'Résumé de l’article en français (nécessite Wikidata).' },
+  { key: 'wikibooks', category: 'knowledge', also: [], name: 'Wikibooks (recettes)', hosts: 'fr.wikibooks.org, en.wikibooks.org',
+    provides: 'Recettes de cuisine sauvage citant la plante (livres de recettes de Wikibooks, en français et en anglais), dans le bloc « Usages et cuisine sauvage ».' },
   { key: 'commons', category: 'images', also: [], name: 'Wikimedia Commons', hosts: 'commons.wikimedia.org',
     provides: 'Galerie de photos sous licence libre, vignettes de repli.' },
   { key: 'trefle', category: 'knowledge', also: [], name: 'Trefle', hosts: 'trefle.io', needsToken: true,

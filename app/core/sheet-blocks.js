@@ -23,6 +23,7 @@ export const BLOCKS = [
   { key: 'photos', title: 'Photos', module: 'photos' },
   { key: 'status', title: 'Protection et statuts' },
   { key: 'lookalikes', title: 'Plantes à confondre' },
+  { key: 'uses', title: 'Usages et cuisine sauvage' },
   { key: 'taxonomy', title: 'Classification' },
   { key: 'mine', title: 'Mes collections' },
   { key: 'calendar', title: 'Calendrier' },
@@ -64,6 +65,10 @@ export const SUBS = {
     { key: 'pollination', title: 'Pollinisateurs et visiteurs' }, { key: 'herbivores', title: 'Mangée ou parasitée par' },
     { key: 'symbioses', title: 'Symbioses' }, { key: 'consumer', title: 'Elle-même parasite ou consommatrice' }, { key: 'other', title: 'Autres interactions' }
   ],
+  uses: [
+    { key: 'safety', title: 'Prudence' }, { key: 'uses', title: 'Usages rapportés' }, { key: 'parts', title: 'Parties et produits' },
+    { key: 'kitchen', title: 'En cuisine' }, { key: 'links', title: 'Pour aller plus loin' }
+  ],
   climate: [{ key: 'pollen', title: 'Pollen aujourd’hui' }, { key: 'niche', title: 'Niche climatique' }],
   names: [{ key: 'french', title: 'Noms français' }, { key: 'foreign', title: 'Autres langues' }],
   resources: [
@@ -90,6 +95,7 @@ export const STYLES = {
   gbifProfile: { styles: TABLE_LIST },
   literature: { styles: TABLE_LIST },
   ids: { styles: TABLE_LIST },
+  uses: { styles: TABLE_LIST, defaults: { epure: 'list' } },
   // Interactions also as a network around the plant.
   interactions: { styles: [...TABLE_LIST, { key: 'graph', title: 'Réseau' }], defaults: { epure: 'list' } }
 };
@@ -99,9 +105,9 @@ export const ACTIONS = SUBS.actions;
 
 /** Default order of each mode: what the mode is about first. Note blocks follow, in their creation order. @type {Record<Mode, string[]>} */
 const DEFAULTS = {
-  epure: ['name', 'photos', 'status', 'lookalikes', 'calendar', 'interactions', 'wikipedia', 'names', 'taxonomy', 'mine', 'descriptions', 'occurrences', 'map', 'climate', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids', 'resources'],
-  standard: ['name', 'status', 'lookalikes', 'taxonomy', 'mine', 'calendar', 'interactions', 'photos', 'wikipedia', 'descriptions', 'names', 'resources', 'occurrences', 'map', 'climate', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids'],
-  scientific: ['name', 'lookalikes', 'taxonomy', 'status', 'calendar', 'occurrences', 'map', 'climate', 'interactions', 'wikipedia', 'descriptions', 'gbifProfile', 'photos', 'gbifMedia', 'trefle', 'literature', 'ids', 'mine', 'resources', 'names']
+  epure: ['name', 'photos', 'status', 'lookalikes', 'uses', 'calendar', 'interactions', 'wikipedia', 'names', 'taxonomy', 'mine', 'descriptions', 'occurrences', 'map', 'climate', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids', 'resources'],
+  standard: ['name', 'status', 'lookalikes', 'uses', 'taxonomy', 'mine', 'calendar', 'interactions', 'photos', 'wikipedia', 'descriptions', 'names', 'resources', 'occurrences', 'map', 'climate', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids'],
+  scientific: ['name', 'lookalikes', 'taxonomy', 'status', 'calendar', 'occurrences', 'map', 'climate', 'interactions', 'wikipedia', 'descriptions', 'gbifProfile', 'photos', 'gbifMedia', 'trefle', 'literature', 'ids', 'mine', 'resources', 'uses', 'names']
 };
 
 /** Keys of earlier versions (one list per mode) → today's block. */
@@ -274,7 +280,7 @@ export const subOrder = (view, block) =>
  * @type {Record<Mode, Record<string, string[]>>}
  */
 const SUB_HIDDEN = {
-  epure: { occurrences: ['months', 'years', 'regions', 'basis', 'datasets', 'distribution'], gbifMedia: ['herbarium'], taxonomy: ['gbifSynonyms'], interactions: ['consumer', 'other'] },
+  epure: { occurrences: ['months', 'years', 'regions', 'basis', 'datasets', 'distribution'], gbifMedia: ['herbarium'], taxonomy: ['gbifSynonyms'], interactions: ['consumer', 'other'], uses: ['parts', 'links'] },
   standard: { occurrences: ['years', 'basis', 'datasets'], taxonomy: ['gbifSynonyms'], interactions: ['other'] },
   scientific: {}
 };
@@ -399,7 +405,7 @@ export function setDockState(view, patch) {
  * show them anyway, with a « nothing known » line, or to leave them out. Name, classification, identifiers
  * and resources always have something.
  */
-export const CAN_BE_EMPTY = ['photos', 'status', 'lookalikes', 'mine', 'calendar', 'wikipedia', 'descriptions', 'names', 'occurrences', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'interactions', 'climate'];
+export const CAN_BE_EMPTY = ['photos', 'status', 'lookalikes', 'mine', 'calendar', 'wikipedia', 'descriptions', 'names', 'occurrences', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'interactions', 'climate', 'uses'];
 
 /** Left out when empty unless asked otherwise (as they always were). */
 const EMPTY_HIDDEN = ['wikipedia', 'names', 'gbifProfile', 'literature'];

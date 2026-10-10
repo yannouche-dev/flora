@@ -11,7 +11,7 @@ import { savedRadius } from '../core/nearby.js';
 import { href } from '../core/router.js';
 import { share } from '../core/share.js';
 import * as sources from '../core/sources.js';
-import { modulesSignature } from '../core/modules.js';
+import { moduleOn, modulesSignature } from '../core/modules.js';
 import './gf-attribution.js';
 import './gf-plant-spots.js';
 import './gf-calendar.js';
@@ -30,6 +30,8 @@ import {
 import { CATEGORIES, blockCategory, categoryOf } from '../core/categories.js';
 import { FOCUS_EVENT, isFocused, noFocus, toggleFocus } from '../core/map-focus.js';
 import * as openData from '../core/open-data.js';
+import * as usesData from '../core/uses.js';
+import { lookalikesOf } from '../core/lookalikes.js';
 import { chartStyles, climateChart, groupColor, groupLegend, networkChart, nicheChart } from '../core/charts.js';
 import { unsafeCSS } from 'lit';
 import './gf-sortable-list.js';
@@ -542,6 +544,15 @@ export class GfPlantDetail extends LitElement {
     /* The Wikipédia summary reads like the other blocks: flush left, no card (its source line names it). */
     .description.wiki { background: none; padding: 0; border-radius: 0; }
     ${unsafeCSS(chartStyles)}
+    .prudence { border: 1px solid #d97706; background: color-mix(in srgb, #f59e0b 12%, var(--gf-surface)); border-radius: var(--gf-radius); padding: 8px 12px; margin-bottom: 10px; }
+    .prudence ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+    .prudence li { display: flex; gap: 8px; align-items: baseline; font-size: 0.9rem; line-height: 1.35; }
+    .prudence li svg { flex: none; color: #d97706; }
+    .prudence li.stop svg { color: #b91c1c; }
+    .prudence p { margin: 8px 0 0; }
+    .src { font-size: 0.72rem; color: var(--gf-text-muted); white-space: nowrap; }
+    .src::before { content: '— '; }
+    ul.recipes { margin: 4px 0 0; padding-left: 18px; font-size: 0.9rem; display: grid; gap: 3px; }
     .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin: 0 5px 0 2px; vertical-align: 0; }
     .partner em, .partners em { font-family: var(--gf-font-serif); }
     .pollen .level { display: inline-block; padding: 1px 10px; border-radius: var(--gf-radius-pill); font-weight: 700; font-size: 0.85rem; background: var(--gf-surface-2); }
@@ -837,6 +848,21 @@ export class GfPlantDetail extends LitElement {
     const gbifKey = details?.identifiers?.gbif?.id ?? null;
     if (shown('climate') && !isSubHidden(v, 'climate', 'niche') && details !== undefined && once('niche')) {
       if (gbifKey) settle(openData.climateNiche(gbifKey, signal, v), x => putOpen('niche', x)); else putOpen('niche', null);
+    }
+    // « Usages et cuisine sauvage »: the local safety file first, then Wikidata and Wikibooks.
+    if (shown('uses')) {
+      if (once('uses:safety')) {
+        settle(usesData.safetyOf(plant), x => putOpen('safety', x));
+        settle(lookalikesOf(plant).then(list => list.length), x => putOpen('confusions', x || 0));
+      }
+      const usesQid = plant.identifiers?.wikidata || details?.identifiers?.wikidata?.id;
+      if (details !== undefined && once('uses:wikidata')) {
+        if (usesQid && moduleOn('wikidata', v)) settle(usesData.wikidataUses(usesQid, signal, v), x => putOpen('wdUses', x)); else putOpen('wdUses', null);
+      }
+      if (!isSubHidden(v, 'uses', 'kitchen') && once('uses:recipes')) {
+        if (moduleOn('wikibooks', v)) settle(usesData.recipes({ french: plant.vernacularNames?.[0] || null, latin: plant.scientificName }, signal), x => putOpen('recipes', x));
+        else putOpen('recipes', null);
+      }
     }
     // My position already known in this visit: its pollen and climate come with the sheet.
     if (shown('climate') && hereAllowed && once('here')) queueMicrotask(() => this.#findHere());
@@ -1388,6 +1414,7 @@ export class GfPlantDetail extends LitElement {
       case 'gbifProfile': { const p = profile(g); return !p.habitats.length && !p.forms.length && !p.invasive.length; }
       case 'literature': return !g.literature?.items?.length;
       case 'interactions': return loaded(this._open.interactions) && !this._open.interactions?.roles?.length;
+      case 'uses': { const o = this._open; return loaded(o.safety) && !o.safety && !o.confusions && loaded(o.wdUses) && !o.wdUses?.uses?.length && !o.wdUses?.products?.length && !o.wdUses?.dishes?.length && !o.recipes?.length && !this.#danger(ctx.plant).length; }
       case 'climate': return !openData.pollenOf(ctx.plant) && loaded(this._open.niche) && !this._open.niche?.points?.length;
       case 'trefle': return !ctx.loading && !trefleFacts(ctx.details).length;
       default: return false;
@@ -1468,6 +1495,7 @@ export class GfPlantDetail extends LitElement {
       case 'literature': return this.#literature(ctx);
       case 'interactions': return this.#interactions(ctx);
       case 'climate': return this.#climate(ctx);
+      case 'uses': return this.#uses(ctx);
       case 'trefle': {
         const facts = trefleFacts(details);
         if (facts.length) return html`<dl class="facts">${facts.map(([k, val]) => html`<dt>${k}</dt><dd>${val}</dd>`)}</dl>
@@ -1778,6 +1806,79 @@ export class GfPlantDetail extends LitElement {
         <a href=${'https://www.gbif.org/resource/search?contentType=literature&gbifTaxonKey=' + key} target="_blank" rel="noopener">toutes sur GBIF.org</a>.</p>`;
   }
 
+
+  /**
+   * What says to be careful with this plant, each with its source: ANSM liste B, TPPT toxicity, confusions
+   * with toxic plants (Anses), protection and harvest rules (INPN). @param {any} plant
+   */
+  #danger(plant) {
+    const o = this._open;
+    /** @type {{ level: 'stop' | 'warn', text: unknown }[]} */
+    const out = [];
+    const ansm = /** @type {any[]} */ (o.safety?.ansm || []), tppt = o.safety?.tppt;
+    for (const b of ansm.filter(a => a.list === 'B')) out.push({ level: 'stop', text: html`<b>Pharmacopée française, liste B</b>${b.genus ? ' (tout le genre)' : ''} : plante médicinale dont les effets indésirables potentiels l’emportent sur le bénéfice attendu${b.parts ? html` — partie concernée : ${b.parts}` : nothing}. <span class="src">ANSM</span>` });
+    for (const a of ansm.filter(a => a.list === 'A' && a.toxicParts)) out.push({ level: 'warn', text: html`<b>Parties toxiques</b> : ${a.toxicParts}. <span class="src">ANSM, Pharmacopée liste A</span>` });
+    if (tppt) out.push({ level: tppt.level >= 3 ? 'stop' : 'warn', text: html`<b>${tppt.level >= 2 ? 'Plante toxique' : 'Attention'}</b>${tppt.levelLabel ? ` (${tppt.levelLabel})` : ''}${tppt.parts ? html` — ${tppt.level >= 2 ? 'parties toxiques' : 'parties concernées'} : ${tppt.parts}` : nothing}${tppt.toxins?.length ? html` ; substances : ${tppt.toxins.slice(0, 4).join(', ')}` : nothing}. <span class="src">Agroscope, base TPPT</span>` });
+    if (o.confusions) out.push({ level: 'warn', text: html`<b>Risque de confusion</b> avec une plante toxique : voir « ${blockTitle('lookalikes')} ». <span class="src">Anses, Centres antipoison</span>` });
+    const st = plant.statuses || [];
+    if (st.some((/** @type {any} */ x) => /^P[NRD]$/.test(x.type))) out.push({ level: 'stop', text: html`<b>Espèce protégée</b> (${[...new Set(st.filter((/** @type {any} */ x) => /^P[NRD]$/.test(x.type)).map((/** @type {any} */ x) => x.area || x.label))].slice(0, 3).join(', ')}) : cueillette interdite là où elle l’est. <span class="src">INPN</span>` });
+    else if (st.some((/** @type {any} */ x) => x.type === 'REGL')) out.push({ level: 'warn', text: html`<b>Cueillette réglementée</b> dans certains départements (voir « ${blockTitle('status')} »). <span class="src">INPN</span>` });
+    return out;
+  }
+
+  /** « Usages et cuisine sauvage »: safety first, then sourced uses, parts and products, dishes and recipes. @param {any} ctx */
+  #uses({ plant }) {
+    const o = this._open;
+    const style = blockStyle(this.view, 'uses');
+    const danger = this.#danger(plant);
+    const wd = o.wdUses;
+    const ansmA = (/** @type {any[]} */ (o.safety?.ansm || [])).filter(a => a.list === 'A');
+    const pending = html`<p class="muted">chargement…</p>`;
+    const KIND = { food: 'Alimentation', medicine: 'Médecine traditionnelle', other: 'Autres usages' };
+    return html`${this.#subs('uses', {
+      safety: () => danger.length ? html`<div class="prudence">
+          <ul>${danger.map(d => html`<li class=${d.level}>${icon(d.level === 'stop' ? 'exclamation-octagon-fill' : 'exclamation-triangle-fill')}<span>${d.text}</span></li>`)}</ul>
+          <p class="small">En cas de doute, ne pas consommer. Centre antipoison 24 h/24 ; le 15 en cas de détresse vitale. <span class="src">Anses</span></p>
+        </div>` : nothing,
+      uses: () => {
+        const head = html`<h3>${danger.length ? 'Usages rapportés (non vérifiés, voir Prudence)' : 'Usages rapportés'}</h3>`;
+        const groups = /** @type {Record<string, any[]>} */ ({});
+        for (const u of wd?.uses || []) (groups[u.kind] ||= []).push(u);
+        if (wd === undefined && !ansmA.length) return html`${head}${pending}`;
+        if (!wd?.uses?.length && !ansmA.length) return nothing;
+        return html`${head}
+          ${ansmA.length ? html`<p class="small"><b>Pharmacopée française, liste A</b> : plante médicinale utilisée traditionnellement — partie${ansmA.length > 1 || /,/.test(ansmA[0].parts || '') ? 's' : ''} utilisée${ansmA.length > 1 || /,/.test(ansmA[0].parts || '') ? 's' : ''} : ${ansmA.map(a => a.parts).filter(Boolean).join(' ; ') || 'non précisée'}. <span class="src">ANSM</span></p>` : nothing}
+          ${Object.keys(groups).length ? html`<dl class="facts">${['food', 'medicine', 'other'].filter(k => groups[k]).map(k => html`<dt>${KIND[/** @type {'food'} */ (k)]}</dt>
+            <dd>${groups[k].map((u, i) => html`${i ? ' · ' : ''}<a href=${'https://www.wikidata.org/wiki/' + u.id} target="_blank" rel="noopener">${u.label}</a>`)}</dd>`)}</dl>
+            <p class="credit">Usages déclarés sur <a href=${'https://www.wikidata.org/wiki/' + wd?.qid} target="_blank" rel="noopener">Wikidata</a> (CC0), sans source détaillée : à recouper.</p>` : nothing}`;
+      },
+      parts: () => {
+        if (!wd?.products?.length) return nothing;
+        const rows = wd.products;
+        return html`<h3>Parties et produits</h3>${style === 'list'
+          ? html`<p class="small">${rows.map((p, i) => html`${i ? ' · ' : ''}${p.label}${p.parts.length ? html` <span class="muted">(${p.parts.join(', ')})</span>` : nothing}`)}</p>`
+          : html`<table class="data"><thead><tr><th scope="col">Produit</th><th scope="col">Partie de la plante</th></tr></thead>
+            <tbody>${rows.map(p => html`<tr><td><a href=${'https://www.wikidata.org/wiki/' + p.id} target="_blank" rel="noopener">${p.label}</a></td><td>${p.parts.join(', ') || html`<span class="muted">—</span>`}</td></tr>`)}</tbody></table>`}
+          <p class="credit">Source : Wikidata (CC0).</p>`;
+      },
+      kitchen: () => {
+        const dishes = wd?.dishes || [];
+        const books = o.recipes || [];
+        if (!dishes.length && !books.length) return o.recipes === undefined && wd === undefined ? html`<h3>En cuisine</h3>${pending}` : nothing;
+        return html`<h3>En cuisine</h3>
+          ${dishes.length ? html`<p class="small"><b>Plats</b> : ${dishes.map((d, i) => html`${i ? ' · ' : ''}<a href=${d.url || 'https://www.wikidata.org/wiki/' + d.id} target="_blank" rel="noopener">${d.label}</a>`)}</p>` : nothing}
+          ${books.length ? html`<ul class="recipes">${books.map((/** @type {any} */ r) => html`<li><a href=${r.url} target="_blank" rel="noopener">${r.title.replace(/^Cookbook:/, '')}</a> <span class="muted">(${r.lang === 'fr' ? 'Wikibooks' : 'Wikibooks, en anglais'})</span></li>`)}</ul>` : nothing}
+          <p class="credit">Plats : Wikidata (CC0) ; recettes : Wikibooks (CC BY-SA), non vérifiées.</p>`;
+      },
+      links: () => {
+        const links = [];
+        if (wd?.pfaf) links.push(html`<a href=${'https://pfaf.org/user/Plant.aspx?LatinName=' + encodeURIComponent(wd.pfaf.replace(/_/g, ' '))} target="_blank" rel="noopener">Plants For A Future (PFAF)</a>`);
+        links.push(html`<a href=${'https://www.ema.europa.eu/en/search?search_api_fulltext=' + encodeURIComponent(plant.scientificName.split(' ').slice(0, 2).join(' '))} target="_blank" rel="noopener">Monographies de plantes (EMA)</a>`);
+        if (o.safety?.ansm?.length) links.push(html`<a href="https://ansm.sante.fr/pharmacopee/liste-des-plantes-medicinales-utilisees-traditionnellement" target="_blank" rel="noopener">Pharmacopée française (ANSM)</a>`);
+        return html`<h3>Pour aller plus loin</h3><ul class="inline links">${links.map(l => html`<li>${l}</li>`)}</ul>`;
+      }
+    })}`;
+  }
 
   /** « Pollinisateurs et interactions » (GloBI): by role, as a table, a list or a network. @param {any} ctx */
   #interactions({ plant }) {

@@ -2,39 +2,27 @@ name: tmp-check
 on:
   push:
     paths: [.github/workflows/tmp-check.yml]
+permissions:
+  contents: write
 jobs:
-  probe:
+  safety:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
       - run: |
-          set +e
-          sudo apt-get update -qq >/dev/null 2>&1; sudo apt-get install -y -qq poppler-utils >/dev/null 2>&1; which pdftotext
-          UA='User-Agent: GeoFlora/1.0 (https://github.com/yannouche-dev/flora)'
-          echo "=== TPPT package"
-          curl -sL -m 60 -H "$UA" -H 'Accept: application/json' "https://ckan.opendata.swiss/api/3/action/package_show?id=giftpflanzen-phytotoxin-datenbank" -o /tmp/p.json; head -c 200 /tmp/p.json; echo
-          python3 -c "
-          import json; d=json.load(open('/tmp/p.json'))['result']
-          print('license', d.get('license_id'), d.get('license_title'))
-          for r in d.get('resources',[]): print(' res', r.get('format'), r.get('download_url') or r.get('url'), (r.get('rights') or '')[:200])
+          sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
+          npm install --no-save --no-package-lock xlsx@0.18.5
+          node scripts/build-safety.mjs
+          node -e "
+          const s=require('./data/safety.json'); const p=require('./data/plants.json'); const by=new Map(p.map(x=>[x.id,x]));
+          const n=k=>Object.values(s.plants).filter(e=>e[k]).length;
+          console.log('plants', Object.keys(s.plants).length, 'ansm', n('ansm'), 'tppt', n('tppt'), 'listB', Object.values(s.plants).filter(e=>e.ansm?.some(a=>a.list==='B')).length);
+          for (const name of ['Urtica dioica','Colchicum autumnale','Sambucus nigra','Allium ursinum','Digitalis purpurea','Digitalis lutea','Taxus baccata','Taraxacum officinale','Aconitum napellus','Sambucus ebulus','Artemisia absinthium']) { const pl=p.find(x=>x.scientificName===name); console.log(name, JSON.stringify(pl && s.plants[pl.id])); }
           "
-          for u in $(python3 -c "
-          import json; d=json.load(open('/tmp/p.json'))['result']
-          print(' '.join((r.get('download_url') or r.get('url')) for r in d.get('resources',[])))
-          "); do echo "--- $u"; curl -sL -m 120 -H "$UA" "$u" -o /tmp/f; file /tmp/f; ls -la /tmp/f; case "$(file -b /tmp/f)" in *Excel*|*Zip*|*OOXML*) cp /tmp/f /tmp/tppt.xlsx;; *SQLite*) cp /tmp/f /tmp/tppt.sqlite;; esac; done
-          pip install -q openpyxl 2>/dev/null
-          python3 -c "
-          import openpyxl
-          wb=openpyxl.load_workbook('/tmp/tppt.xlsx', read_only=True)
-          for ws in wb.worksheets:
-            print('SHEET', ws.title, ws.max_row, ws.max_column)
-            for i,row in enumerate(ws.iter_rows(values_only=True)):
-              print('  ', [str(c)[:50] if c is not None else '' for c in row][:20])
-              if i>4: break
-          for ws in wb.worksheets:
-            for row in ws.iter_rows(values_only=True):
-              s=' | '.join(str(c) for c in row if c is not None)
-              if any(k in s for k in ['Colchicum autumnale','Sambucus nigra','Urtica dioica','Digitalis purpurea','Allium ursinum','Taxus baccata']): print(ws.title, '::', s[:500])
-          " 2>&1 | head -120
-          [ -f /tmp/tppt.sqlite ] && sqlite3 /tmp/tppt.sqlite ".tables" && sqlite3 /tmp/tppt.sqlite ".schema" | head -60
-          echo "=== ANSM"
-          for l in a b; do curl -sL -m 60 -H "$UA" "https://ansm.sante.fr/uploads/2026/01/05/liste-$l-janvier-2026.pdf" -o /tmp/$l.pdf; pdftotext -layout /tmp/$l.pdf /tmp/$l.txt; wc -l /tmp/$l.txt; sed -n '1,50p' /tmp/$l.txt; echo ...; sed -n '200,215p' /tmp/$l.txt; grep -n -i "urtica\|sambucus\|colchicum\|digitalis\|taraxacum\|allium ursinum" /tmp/$l.txt | head -12; done
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/safety.json
+          git commit -m "Build data/safety.json (ANSM lists A/B, Agroscope TPPT)" && git push origin HEAD:${GITHUB_REF_NAME}

@@ -14,6 +14,7 @@ on:
       - lib/**
       - data/territories.json
       - data/lookalikes.json
+      - data/safety.json
       - .github/workflows/deploy-pages.yml
   # Dataset commits are pushed with [skip ci]; redeploy once the dataset build finishes.
   workflow_run:
@@ -65,7 +66,7 @@ jobs:
         run: |
           mkdir -p _site/data
           cp -r index.html manifest.webmanifest sw.js .nojekyll app assets vendor lib _site/
-          cp data/plants.json data/meta.json data/territories.json data/lookalikes.json _site/data/
+          cp data/plants.json data/meta.json data/territories.json data/lookalikes.json data/safety.json _site/data/
           # The service worker precaches its SHELL in one go: a single missing file and it never installs.
           for path in $(sed -n "/^const SHELL = \[/,/^\];/p" sw.js | grep -o "'[^']*'" | tr -d "'"); do
             [ "$path" = ./ ] || [ -f "_site/$path" ] || { echo "::error file=sw.js::$path is precached but not deployed"; exit 1; }
