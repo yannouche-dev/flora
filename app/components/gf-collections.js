@@ -18,6 +18,7 @@ import { ui } from '../styles/ui.js';
 import { icon, kindIcon } from '../core/icons.js';
 import { encodeCollection, share } from '../core/share.js';
 import { pinnedBlocks } from '../core/sheet-blocks.js';
+import { PaneSizer, paneStyles } from '../core/panes.js';
 
 /** Up to this many thumbnails per collection row. */
 const THUMBS = 4;
@@ -55,28 +56,26 @@ export class GfCollections extends LitElement {
     _shareNote: { state: true }
   };
 
-  static styles = [ui, css`
+  static styles = [ui, paneStyles, css`
     :host { display: flex; min-height: 0; overflow: hidden; }
-    /* List | place map | plant: three panes on a large screen; on a tablet the map and the plant share the right
-       column, one above the other. */
-    .list-pane { flex: 1 1 auto; min-width: 0; overflow-y: auto; }
-    .layout { display: flex; flex: 1; min-width: 0; min-height: 0; }
-    .layout.with-side .list-pane { flex: 0 0 360px; border-right: 1px solid var(--gf-border); }
-    .side-panes { flex: 1; min-width: 0; display: flex; }
-    .pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--gf-surface); }
-    .pane.map-pane { flex: 1 1 0; }
-    .pane.plant-pane { flex: 0 0 440px; border-left: 1px solid var(--gf-border); }
-    /* A sheet with pinned blocks (a map beside it) takes more room. */
-    .pane.plant-pane.pinned { flex-basis: min(860px, 64%); }
-    .side-panes > .pane:only-child { flex: 1 1 0; border-left: 0; }
+    /* List | place map | plant, as in Flore: each pane resizable (its separator) and foldable (« »). The list
+       keeps its width whatever opens beside it. Tablet: the map and the plant share the right column. */
+    .layout { display: flex; flex: 1; min-width: 0; min-height: 0; position: relative; }
+    .pane.list-pane { flex: none; }
+    .list-pane .pane-body.scroll { overflow-y: auto; }
+    .list-pane.phone { flex: 1; min-width: 0; overflow-y: auto; }
+    .side-panes { flex: 1; min-width: 0; display: flex; border-left: 1px solid var(--gf-border); }
+    .pane.map-pane, .pane.empty-pane, .pane.plant-pane.fill { flex: 1 1 0; }
+    .pane.plant-pane { flex: none; }
+    .empty-pane .pane-body { display: grid; place-items: center; background: var(--gf-surface-2); }
+    .empty-pane .hint { max-width: 30ch; text-align: center; color: var(--gf-text-muted); font-size: 0.9rem; line-height: 1.5; }
+    .empty-pane .hint svg { display: block; margin: 0 auto 8px; font-size: 1.6rem; }
     @media (max-width: 1099px) {
-      .layout.with-side .list-pane { flex-basis: 320px; }
       .side-panes { flex-direction: column; }
-      .pane.plant-pane { flex: 1 1 0; border-left: 0; border-top: 1px solid var(--gf-border); }
+      .pane.plant-pane { flex: 1 1 0; border-top: 1px solid var(--gf-border); }
       .side-panes > .pane.map-pane:not(:only-child) { flex: 0 0 42%; }
+      .side-panes .rail { writing-mode: horizontal-tb; width: auto; padding: 8px 14px; border: 0; border-top: 1px solid var(--gf-border); }
     }
-    .pane-head { display: flex; align-items: center; gap: 4px; padding: 6px 8px 6px 14px; border-bottom: 1px solid var(--gf-border); min-height: 48px; }
-    .pane-head h2 { flex: 1; margin: 0; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gf-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .pane-body { flex: 1; min-height: 0; position: relative; display: flex; flex-direction: column; overflow: hidden; }
     .pane-body gf-map { position: absolute; inset: 0; min-height: 0; }
     .pane-body gf-plant-detail { flex: 1; min-height: 0; }
@@ -89,6 +88,7 @@ export class GfCollections extends LitElement {
     .inline-map { position: relative; height: 220px; margin: 0 12px 10px; border-radius: var(--gf-radius); overflow: hidden; border: 1px solid var(--gf-border); }
     .inline-map gf-map { position: absolute; inset: 0; min-height: 0; }
     .wrap { max-width: 760px; margin: 0 auto; padding: 14px 16px 96px; }
+    .pane .wrap { padding-top: 10px; }
     h1 { font-size: 1.35rem; margin: 4px 0 4px; }
     .lead { color: var(--gf-text-muted); margin: 0 0 14px; font-size: 0.9rem; }
     .new { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 18px; }
@@ -178,6 +178,8 @@ export class GfCollections extends LitElement {
 
   #geo = new GeoController(this);
   #phone = new MediaController(this, PHONE_QUERY);
+  /** Tablet: the map and the plant share the right column, one above the other. */
+  #tablet = new MediaController(this, '(max-width: 1099px)');
   #store = new StoreController(this);
   #onChange = () => this.#load();
 
@@ -495,7 +497,35 @@ export class GfCollections extends LitElement {
       ${this._note ? html`<p class="empty" role="status">${this._note}</p>` : nothing}`;
   }
 
-  render() {
+  /** The widest a pane may be now, the others keeping their minimum. @param {'list' | 'plant'} pane */
+  #max(pane) {
+    const total = this.getBoundingClientRect().width || innerWidth;
+    const p = this.#panes;
+    const list = p.folded('list') ? 40 : p.width('list');
+    // Tablet: the map and the plant are one above the other, beside the list.
+    if (this.#tablet.matches) return pane === 'list' ? total - 360 - 16 : total - list - 16;
+    const plant = this.route.plant && !p.folded('plant') ? p.width(this.#plantKey) : 0;
+    const map = this.#place && !p.folded('map') ? 280 : 0;
+    return pane === 'list' ? total - plant - map - 16 : total - list - map - 16;
+  }
+
+  /** The plant pane keeps a wider width when the mode has pinned blocks (the sheet and its pinned map side by side). */
+  get #plantKey() { return pinnedBlocks(plantViewOf(this.#store.state)).length ? 'plantPinned' : 'plant'; }
+
+  /** The place open, when it has coordinates (its map is shown). */
+  get #place() {
+    return this._collections.find(c => c.id === this.route.open && c.properties.kind === 'place' && c.geometry) || null;
+  }
+
+  #panes = new PaneSizer(this, config.storageKeys.collectionsLayout, {
+    list: { width: 380, min: 280, title: 'Mes plantes' },
+    map: { width: 0, min: 280, title: 'Carte du lieu' },
+    plant: { width: 480, min: 360, title: 'Plante' },
+    plantPinned: { width: 860, min: 560, title: 'Plante' }
+  });
+
+  /** The list of collections, favorites and places. @param {boolean} phone */
+  #list(phone) {
     const all = this._collections;
     const favorites = all.find(c => c.id === FAVORITES_ID);
     const lists = all.filter(c => c.properties.kind === 'list')
@@ -504,16 +534,8 @@ export class GfCollections extends LitElement {
     const places = all.filter(c => c.properties.kind === 'place' && c.geometry)
       .map(c => ({ c, d: fix && c.geometry ? distance(fix.coordinates, c.geometry.coordinates) : null }))
       .sort((a, b) => a.d !== null && b.d !== null ? a.d - b.d : b.c.properties.updatedAt.localeCompare(a.c.properties.updatedAt));
-
-    const phone = this.#phone.matches;
-    const place = this._collections.find(c => c.id === this.route.open && c.properties.kind === 'place' && c.geometry) || null;
-    const plantId = this.route.plant;
-    const sides = phone ? [] : [place ? 'map' : null, plantId ? 'plant' : null].filter(Boolean);
-    return html`
-      <div class="layout ${sides.length ? 'with-side' : ''}">
-      <section class="list-pane" aria-label="Mes plantes">
-      <div class="wrap">
-        <h1>Mes plantes</h1>
+    return html`<div class="wrap">
+        ${phone ? html`<h1>Mes plantes</h1>` : nothing}
         <p class="lead">Vos collections de plantes. Touchez une collection pour voir ses plantes, une plante pour sa fiche ; un endroit (une collection avec des coordonnées GPS) montre aussi sa carte. Tout reste sur cet appareil.</p>
         <div class="new">
           <a class="button" href=${href.newList()}>${icon('list-ul')} Nouvelle collection</a>
@@ -539,33 +561,66 @@ export class GfCollections extends LitElement {
           : html`<p class="empty">Un endroit est une collection qui a des coordonnées GPS ; chacune de ses plantes a aussi sa position.</p>`}
 
         ${this.#backupNotice()}
-      </div>
-      </section>
-      ${sides.length ? html`<div class="side-panes">
-        ${place && !phone ? html`<section class="pane map-pane" aria-label="Carte du lieu">
-          <div class="pane-head"><h2>${collectionTitle(place)}</h2>
-            <a class="icon-btn" href=${href.map({ spot: place.id })} title="Ouvrir sur la Carte" aria-label="Ouvrir sur la Carte">${icon('arrows-angle-expand')}</a>
-            <button class="icon-btn" type="button" title="Fermer la carte" aria-label="Fermer la carte"
-              @click=${() => location.replace(href.collections({ plant: plantId }))}>${icon('x-lg')}</button></div>
-          <div class="pane-body">${this.#placeMap(place)}</div>
-        </section>` : nothing}
-        ${plantId && !phone ? html`<section class="pane plant-pane ${pinnedBlocks(plantViewOf(this.#store.state)).length ? 'pinned' : ''}" aria-label="Plante">
-          <div class="pane-head"><h2>Plante</h2>
+      </div>`;
+  }
+
+  render() {
+    const phone = this.#phone.matches;
+    const plantId = this.route.plant;
+    if (phone) {
+      return html`
+        <section class="list-pane phone" aria-label="Mes plantes">${this.#list(true)}</section>
+        ${plantId ? html`<section class="sheet-plant" aria-label="Plante">
+          <div class="pane-head">
+            <button class="link back" type="button" @click=${() => back(href.collections({ open: this.route.open }))}>${icon('arrow-left')} Mes plantes</button>
+            <h2></h2>
             <a class="icon-btn" href=${href.plant(plantId)} title="Ouvrir la fiche dans Flore" aria-label="Ouvrir la fiche dans Flore">${icon('arrows-angle-expand')}</a>
-            <button class="icon-btn" type="button" title="Fermer la fiche" aria-label="Fermer la fiche"
-              @click=${() => location.replace(href.collections({ open: this.route.open }))}>${icon('x-lg')}</button></div>
-          <div class="pane-body"><gf-plant-detail embedded plant-id=${plantId} view=${plantViewOf(this.#store.state)}></gf-plant-detail>${this.#pager(plantId, false)}</div>
-        </section>` : nothing}
-      </div>` : nothing}
-      </div>
-      ${phone && plantId ? html`<section class="sheet-plant" aria-label="Plante">
-        <div class="pane-head">
-          <button class="link back" type="button" @click=${() => back(href.collections({ open: this.route.open }))}>${icon('arrow-left')} Mes plantes</button>
-          <h2></h2>
-          <a class="icon-btn" href=${href.plant(plantId)} title="Ouvrir la fiche dans Flore" aria-label="Ouvrir la fiche dans Flore">${icon('arrows-angle-expand')}</a>
+          </div>
+          <div class="pane-body"><gf-plant-detail embedded plant-id=${plantId} view=${plantViewOf(this.#store.state)}></gf-plant-detail>${this.#pager(plantId, true)}</div>
+        </section>` : nothing}`;
+    }
+    // List | place map | plant, as in Flore: each pane resizable and foldable. The list keeps its width
+    // whatever opens beside it, so nothing moves under the pointer.
+    const p = this.#panes;
+    const place = this.#place;
+    const listFolded = p.folded('list');
+    const mapFolded = Boolean(place) && p.folded('map');
+    const plantFolded = Boolean(plantId) && p.folded('plant');
+    const mapOpen = place && !mapFolded;
+    const plantOpen = plantId && !plantFolded;
+    // The plant fills the room left when the map is not beside it.
+    const plantFills = plantOpen && !mapOpen;
+    return html`
+      <div class="layout">
+        ${listFolded ? p.rail('list') : html`<section class="pane list-pane" aria-label="Mes plantes" style=${`width:${Math.min(p.width('list'), Math.max(280, this.#max('list')))}px`}>
+          ${p.head('list', 'Mes plantes')}
+          <div class="pane-body scroll">${this.#list(false)}</div>
+        </section>
+        ${p.split('list', 'left', () => this.#max('list'))}`}
+        <div class="side-panes">
+          ${!place && !plantId ? html`<section class="pane empty-pane" aria-label="Aperçu">
+            <div class="pane-head"><h2>Aperçu</h2></div>
+            <div class="pane-body"><p class="hint">${icon('collection')} Touchez un endroit pour voir sa carte, une plante pour sa fiche : elles s’ouvrent ici.</p></div>
+          </section>` : nothing}
+          ${place ? (mapFolded ? p.rail('map') : html`<section class="pane map-pane" aria-label="Carte du lieu">
+            ${p.head('map', collectionTitle(place), html`
+              <a class="icon-btn" href=${href.map({ spot: place.id })} title="Ouvrir sur la Carte" aria-label="Ouvrir sur la Carte">${icon('arrows-angle-expand')}</a>
+              <button class="icon-btn" type="button" title="Fermer la carte" aria-label="Fermer la carte"
+                @click=${() => location.replace(href.collections({ plant: plantId }))}>${icon('x-lg')}</button>`)}
+            <div class="pane-body">${this.#placeMap(place)}</div>
+          </section>`) : nothing}
+          ${plantId ? (plantFolded ? p.rail('plant', true) : html`
+            ${mapOpen && !this.#tablet.matches ? p.split(this.#plantKey, 'right', () => this.#max('plant')) : nothing}
+            <section class="pane plant-pane ${plantFills ? 'fill' : ''}" aria-label="Plante"
+              style=${plantFills || this.#tablet.matches ? '' : `width:${Math.min(p.width(this.#plantKey), Math.max(360, this.#max('plant')))}px`}>
+              ${p.head('plant', 'Plante', html`
+                <a class="icon-btn" href=${href.plant(plantId)} title="Ouvrir la fiche dans Flore" aria-label="Ouvrir la fiche dans Flore">${icon('arrows-angle-expand')}</a>
+                <button class="icon-btn" type="button" title="Fermer la fiche" aria-label="Fermer la fiche"
+                  @click=${() => location.replace(href.collections({ open: this.route.open }))}>${icon('x-lg')}</button>`, true)}
+              <div class="pane-body"><gf-plant-detail embedded plant-id=${plantId} view=${plantViewOf(this.#store.state)}></gf-plant-detail>${this.#pager(plantId, false)}</div>
+            </section>`) : nothing}
         </div>
-        <div class="pane-body"><gf-plant-detail embedded plant-id=${plantId} view=${plantViewOf(this.#store.state)}></gf-plant-detail>${this.#pager(plantId, true)}</div>
-      </section>` : nothing}
+      </div>
     `;
   }
 }

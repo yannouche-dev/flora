@@ -4,6 +4,7 @@ import { directionsUrl } from '../core/collections.js';
 import { addressAt, altitudeAt, formatCoordinates } from '../core/geoservices.js';
 import { href } from '../core/router.js';
 import { ui } from '../styles/ui.js';
+import './gf-place-insights.js';
 import { icon } from '../core/icons.js';
 
 /**
@@ -19,7 +20,8 @@ export class GfPointCard extends LitElement {
     plant: { attribute: false },
     _address: { state: true },
     _altitude: { state: true },
-    _copied: { state: true }
+    _copied: { state: true },
+    _insights: { state: true }
   };
 
   static styles = [ui, css`
@@ -39,6 +41,9 @@ export class GfPointCard extends LitElement {
     .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 0.85rem; color: var(--gf-text-muted); }
     .coords { font-variant-numeric: tabular-nums; }
     .actions { margin-top: 4px; }
+    details.insights summary { cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--gf-accent); }
+    details.insights[open] summary { margin-bottom: 8px; }
+    details.insights gf-place-insights { max-height: 42vh; overflow-y: auto; }
   `];
 
   constructor() {
@@ -54,6 +59,7 @@ export class GfPointCard extends LitElement {
     /** @type {number | null | undefined} */
     this._altitude = undefined;
     this._copied = false;
+    this._insights = false;
   }
 
   /** @param {Map<string, any>} changed */
@@ -63,6 +69,7 @@ export class GfPointCard extends LitElement {
     this._address = undefined;
     this._altitude = undefined;
     this._copied = false;
+    this._insights = false;
     addressAt(point).then(a => { if (this.point === point) this._address = a?.label || null; }).catch(() => { if (this.point === point) this._address = null; });
     altitudeAt(point).then(z => { if (this.point === point) this._altitude = z; }).catch(() => { if (this.point === point) this._altitude = null; });
   }
@@ -94,6 +101,10 @@ export class GfPointCard extends LitElement {
         ${this.create ? html`<a class="primary small" href=${href.newSpot(this.plant ?? null, p)}>${icon('geo-alt-fill')} Créer un endroit ici</a>` : nothing}
         <a class="button small" href=${directionsUrl({ geometry: { type: 'Point', coordinates: p } })} target="_blank" rel="noopener">Itinéraire</a>
       </div>
+      <details class="insights" ?open=${this._insights} @toggle=${(/** @type {Event} */ e) => { this._insights = /** @type {HTMLDetailsElement} */ (e.target).open; }}>
+        <summary>Ici : zones naturelles, plantes vues, pollens</summary>
+        ${this._insights ? html`<gf-place-insights compact .point=${p}></gf-place-insights>` : nothing}
+      </details>
     </section>`;
   }
 }

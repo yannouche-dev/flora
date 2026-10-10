@@ -31,6 +31,8 @@ export const BLOCKS = [
   { key: 'names', title: 'Noms' },
   { key: 'occurrences', title: 'Occurrences et répartition', module: 'gbif' },
   { key: 'map', title: 'Carte' },
+  { key: 'interactions', title: 'Pollinisateurs et interactions', module: 'globi' },
+  { key: 'climate', title: 'Climat et pollen', module: 'openmeteo' },
   { key: 'gbifMedia', title: 'Médias GBIF', module: 'gbif' },
   { key: 'gbifProfile', title: 'Habitat et écologie (GBIF)', module: 'gbif' },
   { key: 'literature', title: 'Publications (GBIF)', module: 'gbif' },
@@ -58,6 +60,11 @@ export const SUBS = {
     { key: 'distribution', title: 'Répartition dans le monde' }
   ],
   gbifMedia: [{ key: 'photos', title: 'Photos d’observation' }, { key: 'herbarium', title: 'Planches d’herbier' }],
+  interactions: [
+    { key: 'pollination', title: 'Pollinisateurs et visiteurs' }, { key: 'herbivores', title: 'Mangée ou parasitée par' },
+    { key: 'symbioses', title: 'Symbioses' }, { key: 'consumer', title: 'Elle-même parasite ou consommatrice' }, { key: 'other', title: 'Autres interactions' }
+  ],
+  climate: [{ key: 'pollen', title: 'Pollen aujourd’hui' }, { key: 'niche', title: 'Niche climatique' }],
   names: [{ key: 'french', title: 'Noms français' }, { key: 'foreign', title: 'Autres langues' }],
   resources: [
     { key: 'inpn', title: 'INPN' }, { key: 'taxref', title: 'TAXREF' }, { key: 'gbif', title: 'GBIF' }, { key: 'inaturalist', title: 'iNaturalist' },
@@ -82,7 +89,9 @@ export const STYLES = {
   occurrences: { styles: TABLE_LIST },
   gbifProfile: { styles: TABLE_LIST },
   literature: { styles: TABLE_LIST },
-  ids: { styles: TABLE_LIST }
+  ids: { styles: TABLE_LIST },
+  // Interactions also as a network around the plant.
+  interactions: { styles: [...TABLE_LIST, { key: 'graph', title: 'Réseau' }], defaults: { epure: 'list' } }
 };
 
 /** The action bar docked at the bottom of the sheet: its actions, shown or not and ordered per mode (sub-blocks of 'actions'). */
@@ -90,9 +99,9 @@ export const ACTIONS = SUBS.actions;
 
 /** Default order of each mode: what the mode is about first. Note blocks follow, in their creation order. @type {Record<Mode, string[]>} */
 const DEFAULTS = {
-  epure: ['name', 'photos', 'status', 'lookalikes', 'calendar', 'wikipedia', 'names', 'taxonomy', 'mine', 'descriptions', 'occurrences', 'map', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids', 'resources'],
-  standard: ['name', 'status', 'lookalikes', 'taxonomy', 'mine', 'calendar', 'photos', 'wikipedia', 'descriptions', 'names', 'resources', 'occurrences', 'map', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids'],
-  scientific: ['name', 'lookalikes', 'taxonomy', 'status', 'calendar', 'occurrences', 'map', 'wikipedia', 'descriptions', 'gbifProfile', 'photos', 'gbifMedia', 'trefle', 'literature', 'ids', 'mine', 'resources', 'names']
+  epure: ['name', 'photos', 'status', 'lookalikes', 'calendar', 'interactions', 'wikipedia', 'names', 'taxonomy', 'mine', 'descriptions', 'occurrences', 'map', 'climate', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids', 'resources'],
+  standard: ['name', 'status', 'lookalikes', 'taxonomy', 'mine', 'calendar', 'interactions', 'photos', 'wikipedia', 'descriptions', 'names', 'resources', 'occurrences', 'map', 'climate', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids'],
+  scientific: ['name', 'lookalikes', 'taxonomy', 'status', 'calendar', 'occurrences', 'map', 'climate', 'interactions', 'wikipedia', 'descriptions', 'gbifProfile', 'photos', 'gbifMedia', 'trefle', 'literature', 'ids', 'mine', 'resources', 'names']
 };
 
 /** Keys of earlier versions (one list per mode) → today's block. */
@@ -255,8 +264,8 @@ export const subOrder = (view, block) =>
  * @type {Record<Mode, Record<string, string[]>>}
  */
 const SUB_HIDDEN = {
-  epure: { occurrences: ['months', 'years', 'regions', 'basis', 'datasets', 'distribution'], gbifMedia: ['herbarium'], taxonomy: ['gbifSynonyms'] },
-  standard: { occurrences: ['years', 'basis', 'datasets'], taxonomy: ['gbifSynonyms'] },
+  epure: { occurrences: ['months', 'years', 'regions', 'basis', 'datasets', 'distribution'], gbifMedia: ['herbarium'], taxonomy: ['gbifSynonyms'], interactions: ['consumer', 'other'] },
+  standard: { occurrences: ['years', 'basis', 'datasets'], taxonomy: ['gbifSynonyms'], interactions: ['other'] },
   scientific: {}
 };
 
@@ -380,7 +389,7 @@ export function setDockState(view, patch) {
  * show them anyway, with a « nothing known » line, or to leave them out. Name, classification, identifiers
  * and resources always have something.
  */
-export const CAN_BE_EMPTY = ['photos', 'status', 'lookalikes', 'mine', 'calendar', 'wikipedia', 'descriptions', 'names', 'occurrences', 'gbifMedia', 'gbifProfile', 'trefle', 'literature'];
+export const CAN_BE_EMPTY = ['photos', 'status', 'lookalikes', 'mine', 'calendar', 'wikipedia', 'descriptions', 'names', 'occurrences', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'interactions', 'climate'];
 
 /** Left out when empty unless asked otherwise (as they always were). */
 const EMPTY_HIDDEN = ['wikipedia', 'names', 'gbifProfile', 'literature'];

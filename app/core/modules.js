@@ -6,7 +6,7 @@
 import { config } from '../config.js';
 
 /**
- * @typedef {'ignMaps' | 'ignGeo' | 'ignProtected' | 'voice' | 'inaturalist' | 'gbif' | 'wikidata' | 'wikipedia' | 'commons' | 'trefle' | 'photos'} ModuleKey
+ * @typedef {'ignMaps' | 'ignGeo' | 'ignProtected' | 'ignNature' | 'voice' | 'globi' | 'openmeteo' | 'inaturalist' | 'gbif' | 'wikidata' | 'wikipedia' | 'commons' | 'trefle' | 'photos'} ModuleKey
  * @typedef {{ key: ModuleKey, name: string, provides: string, hosts: string, needsToken?: boolean }} ModuleInfo
  */
 
@@ -18,10 +18,16 @@ export const MODULES = [
     provides: 'Recherche d’adresse sur la carte, adresse et altitude d’un point ou d’un lieu.' },
   { key: 'ignProtected', name: 'IGN – espaces protégés', hosts: 'data.geopf.fr (WFS, couches INPN / PatriNat)',
     provides: 'Bandeau sur les cartes quand la vue touche un parc national, une réserve naturelle ou un arrêté de biotope (dès le zoom 11).' },
+  { key: 'ignNature', name: 'IGN – zones naturelles au point', hosts: 'apicarto.ign.fr (API Carto, module nature)',
+    provides: 'Pour un lieu ou un point de la carte : les ZNIEFF, sites Natura 2000, parcs et réserves qui le contiennent, avec leur fiche INPN. Envoie les coordonnées du point.' },
   { key: 'inaturalist', name: 'iNaturalist', hosts: 'api.inaturalist.org',
     provides: 'Autour (plantes observées dans un cercle), courbes de floraison et fructification, nombre d’observations, photos de repli.' },
   { key: 'gbif', name: 'GBIF', hosts: 'api.gbif.org',
     provides: 'Descriptions, noms dans d’autres langues, occurrences en France (carte de répartition, mois, années, départements, sources), photos d’observation et planches d’herbier, habitat, synonymes, statut UICN, publications. « Près d’ici » envoie votre position à GBIF, seulement quand vous le demandez.' },
+  { key: 'globi', name: 'GloBI (interactions)', hosts: 'api.globalbioticinteractions.org',
+    provides: 'Pollinisateurs, visiteurs, insectes hôtes, parasites et autres interactions de la plante (Global Biotic Interactions), avec leurs sources.' },
+  { key: 'openmeteo', name: 'Open-Meteo (climat, pollens)', hosts: 'archive-api.open-meteo.com, air-quality-api.open-meteo.com',
+    provides: 'Pollens du jour (CAMS, Europe), climat d’un lieu (températures et pluies par mois, ERA5) et niche climatique d’une espèce (climat de ses occurrences GBIF). Envoie les coordonnées des points.' },
   { key: 'wikidata', name: 'Wikidata', hosts: 'www.wikidata.org',
     provides: 'Classification, statut UICN, identifiants (Tela Botanica, IPNI, POWO) ; donne aussi l’article Wikipédia.' },
   { key: 'wikipedia', name: 'Wikipédia', hosts: 'fr.wikipedia.org',

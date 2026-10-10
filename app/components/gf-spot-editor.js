@@ -20,6 +20,7 @@ import './gf-status.js';
 import './gf-thumb.js';
 import { icon, kindIcon } from '../core/icons.js';
 import './gf-plant-pick-list.js';
+import './gf-place-insights.js';
 
 /** Existing places closer than this are offered instead of creating a duplicate. */
 const NEARBY_RADIUS = 100;
@@ -75,6 +76,9 @@ export class GfSpotEditor extends LitElement {
   };
 
   static styles = [ui, css`
+    details.insights { margin: 16px 0 4px; padding: 10px 12px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface); }
+    details.insights summary { cursor: pointer; font-weight: 600; font-size: 0.9rem; display: flex; gap: 6px; align-items: center; }
+    details.insights[open] summary { margin-bottom: 10px; }
     :host {
       display: grid;
       grid-template-rows: minmax(200px, 38%) 1fr;
@@ -979,6 +983,11 @@ export class GfSpotEditor extends LitElement {
         </label>`}
 
         ${isPlace && this.embedded ? this.#gpsStatus() : nothing}
+
+        ${isPlace && !this.#isNew ? html`<details class="insights" ?open=${this.embedded}>
+          <summary>${icon('globe-europe-africa')} Autour de ce lieu : zones naturelles, plantes vues, pollens, climat</summary>
+          <gf-place-insights .point=${place.geometry?.coordinates} .plantIds=${p.plants.map(e => e.plantId)}></gf-place-insights>
+        </details>` : nothing}
 
         ${this.#isNew ? nothing : html`
           <div class="toolbar">

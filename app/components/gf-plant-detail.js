@@ -28,6 +28,9 @@ import {
   DOCK_SIZES, dockState, isPinned, pinnedBlocks, setDockState, setPinned
 } from '../core/sheet-blocks.js';
 import { FOCUS_EVENT, isFocused, noFocus, toggleFocus } from '../core/map-focus.js';
+import * as openData from '../core/open-data.js';
+import { chartStyles, climateChart, groupColor, groupLegend, networkChart, nicheChart } from '../core/charts.js';
+import { unsafeCSS } from 'lit';
 import './gf-sortable-list.js';
 
 /** Remote text is untrusted HTML: keep only its text content (DOMParser never runs scripts). */
@@ -132,6 +135,8 @@ const percent = (n, total) => total ? (n / total * 100).toLocaleString('fr-FR', 
 
 /** « Près d’ici » was asked once in this visit: later sheets look around without asking again. */
 let nearAllowed = false;
+/** My position used for pollen and climate once in this visit: later sheets show them without asking. */
+let hereAllowed = false;
 
 /**
  * One GPS fix, or why there is none (20 s at most).
@@ -286,7 +291,9 @@ export class GfPlantDetail extends LitElement {
     _newNote: { state: true },
     _noteSaved: { state: true },
     /** What the sheet's maps show beyond their settings: a filter, a point, a compared plant (map-focus.js). */
-    _focus: { state: true }
+    _focus: { state: true },
+    /** Open data crossed with the plant: GloBI interactions, climate niche; « here » (pollen and climate of my position). */
+    _open: { state: true }
   };
 
   static styles = [ui, css`
@@ -530,6 +537,13 @@ export class GfPlantDetail extends LitElement {
     .wiki p.credit { margin-top: 6px; }
     /* The Wikipédia summary reads like the other blocks: flush left, no card (its source line names it). */
     .description.wiki { background: none; padding: 0; border-radius: 0; }
+    ${unsafeCSS(chartStyles)}
+    .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin: 0 5px 0 2px; vertical-align: 0; }
+    .partner em, .partners em { font-family: var(--gf-font-serif); }
+    .pollen .level { display: inline-block; padding: 1px 10px; border-radius: var(--gf-radius-pill); font-weight: 700; font-size: 0.85rem; background: var(--gf-surface-2); }
+    .pollen .level.l1 { background: #e8f5e9; color: #2e7d32; } .pollen .level.l2 { background: #fff8e1; color: #b26a00; }
+    .pollen .level.l3 { background: #ffe0b2; color: #c43e00; } .pollen .level.l4 { background: #ffcdd2; color: #b71c1c; }
+    details.here-climate summary { cursor: pointer; font-size: 0.85rem; font-weight: 600; margin: 6px 0; }
     /* Tabular data (style « Tableau », the default; « Liste » keeps the compact rows). */
     table.data { width: 100%; border-collapse: collapse; font-size: 0.85rem; margin: 2px 0 6px; }
     table.data th, table.data td { text-align: left; padding: 5px 8px 5px 0; border-bottom: 1px solid var(--gf-border); vertical-align: baseline; }
@@ -669,6 +683,8 @@ export class GfPlantDetail extends LitElement {
     this._spotsOpen = false;
     /** @type {import('../core/map-focus.js').SheetFocus} */
     this._focus = noFocus();
+    /** @type {{ interactions?: any, niche?: any, here?: any }} */
+    this._open = {};
     // A value touched in a block: the maps show it (touched again, it goes).
     this.addEventListener(FOCUS_EVENT, e => {
       e.stopPropagation();
@@ -743,6 +759,7 @@ export class GfPlantDetail extends LitElement {
     this._near = undefined;
     this._spotsOpen = false;
     this._focus = noFocus();
+    this._open = {};
     this.#requested.clear();
     this.scrollTop = 0;
 
@@ -811,6 +828,32 @@ export class GfPlantDetail extends LitElement {
     const science = shown('ids') || (v === 'scientific' && (shown('taxonomy') || shown('status')));
     if (science && once('science')) settle(sources.wikidataScience(plant, qid, signal, v), x => { this._science = x; });
     this.#loadGbif(plant, details, signal, settle, once, shown);
+    const putOpen = (/** @type {string} */ k, /** @type {any} */ x) => { this._open = { ...this._open, [k]: x }; };
+    if (shown('interactions') && once('globi')) settle(openData.interactions(plant.scientificName, signal, v), x => putOpen('interactions', x));
+    const gbifKey = details?.identifiers?.gbif?.id ?? null;
+    if (shown('climate') && !isSubHidden(v, 'climate', 'niche') && details !== undefined && once('niche')) {
+      if (gbifKey) settle(openData.climateNiche(gbifKey, signal, v), x => putOpen('niche', x)); else putOpen('niche', null);
+    }
+    // My position already known in this visit: its pollen and climate come with the sheet.
+    if (shown('climate') && hereAllowed && once('here')) queueMicrotask(() => this.#findHere());
+  }
+
+  /** Pollen and climate at my position (asked once; later sheets of the visit reuse it). */
+  async #findHere() {
+    const plant = this._plant;
+    hereAllowed = true;
+    this._open = { ...this._open, here: { state: 'locating' } };
+    const known = lastFix();
+    const fix = known && Date.now() - known.timestamp < 30 * 60000 ? known : await oneFix();
+    if (this._plant !== plant) return;
+    if (!fix || 'error' in fix) { this._open = { ...this._open, here: { state: 'error', message: fix && 'error' in fix ? fix.error : 'Position introuvable pour le moment.' } }; return; }
+    const point = /** @type {[number, number]} */ (fix.coordinates);
+    this._open = { ...this._open, here: { state: 'loading', point } };
+    const [pollen, climate] = await Promise.all([
+      openData.pollensAt(point).catch(() => null),
+      openData.climateAt(point).catch(() => null)
+    ]);
+    if (this._plant === plant) this._open = { ...this._open, here: { state: 'done', point, pollen, climate } };
   }
 
   /**
@@ -1163,7 +1206,7 @@ export class GfPlantDetail extends LitElement {
           @click=${() => this.#startRename(key)}>${icon('pencil')}</button>`}
         ${STYLES[key] && !off ? html`<span class="styles" role="group" aria-label="Style du bloc « ${title} »">${STYLES[key].styles.map(st => html`
           <button type="button" aria-pressed=${blockStyle(this.view, key) === st.key ? 'true' : 'false'} title=${'Style : ' + st.title}
-            @click=${() => setBlockStyle(this.view, key, st.key)}>${icon(st.key === 'list' ? 'list-ul' : 'table')} ${st.title}</button>`)}</span>` : nothing}
+            @click=${() => setBlockStyle(this.view, key, st.key)}>${icon(st.key === 'list' ? 'list-ul' : st.key === 'graph' ? 'diagram-3' : 'table')} ${st.title}</button>`)}</span>` : nothing}
         ${SUBS[key] && !off ? html`<button class="tool" type="button" aria-expanded=${subsOpen ? 'true' : 'false'} aria-label="Sous-blocs de « ${title} »" title="Sous-blocs : ordre et présence"
           @click=${() => { const open = new Set(this._subsOpen); if (subsOpen) open.delete(key); else open.add(key); this._subsOpen = open; }}>${icon('list-nested')}</button>` : nothing}
         ${off
@@ -1337,6 +1380,8 @@ export class GfPlantDetail extends LitElement {
       case 'gbifMedia': return ctx.photosOff || shownSubs(v, 'gbifMedia').every(k => loaded(g[k]) && !g[k]?.length);
       case 'gbifProfile': { const p = profile(g); return !p.habitats.length && !p.forms.length && !p.invasive.length; }
       case 'literature': return !g.literature?.items?.length;
+      case 'interactions': return loaded(this._open.interactions) && !this._open.interactions?.roles?.length;
+      case 'climate': return !openData.pollenOf(ctx.plant) && loaded(this._open.niche) && !this._open.niche?.points?.length;
       case 'trefle': return !ctx.loading && !trefleFacts(ctx.details).length;
       default: return false;
     }
@@ -1414,6 +1459,8 @@ export class GfPlantDetail extends LitElement {
       case 'gbifMedia': return this.#gbifMedia(ctx);
       case 'gbifProfile': return this.#gbifProfile();
       case 'literature': return this.#literature(ctx);
+      case 'interactions': return this.#interactions(ctx);
+      case 'climate': return this.#climate(ctx);
       case 'trefle': {
         const facts = trefleFacts(details);
         if (facts.length) return html`<dl class="facts">${facts.map(([k, val]) => html`<dt>${k}</dt><dd>${val}</dd>`)}</dl>
@@ -1724,6 +1771,74 @@ export class GfPlantDetail extends LitElement {
         <a href=${'https://www.gbif.org/resource/search?contentType=literature&gbifTaxonKey=' + key} target="_blank" rel="noopener">toutes sur GBIF.org</a>.</p>`;
   }
 
+
+  /** « Pollinisateurs et interactions » (GloBI): by role, as a table, a list or a network. @param {any} ctx */
+  #interactions({ plant }) {
+    const data = this._open.interactions;
+    if (data === undefined) return html`<p class="muted">chargement…</p>`;
+    if (!data?.roles?.length) return html`<p class="muted">Aucune interaction connue de GloBI pour cette espèce.</p>`;
+    const keys = shownSubs(this.view, 'interactions');
+    const roles = data.roles.filter((/** @type {any} */ r) => keys.includes(r.key));
+    const style = blockStyle(this.view, 'interactions');
+    const credit = html`<p class="credit">Source : <a href=${data.url} target="_blank" rel="noopener">GloBI — Global Biotic Interactions</a> :
+      ${data.total.toLocaleString('fr-FR')} mention${data.total > 1 ? 's' : ''} tirées de ${data.studies.toLocaleString('fr-FR')} étude${data.studies > 1 ? 's' : ''} ou jeu${data.studies > 1 ? 'x' : ''} de données (CC BY selon les sources).</p>`;
+    if (!roles.length) return html`<p class="muted">Aucune interaction de ce type connue de GloBI.</p>${credit}`;
+    const partner = (/** @type {any} */ p) => html`<span class="partner"><i class="dot" style=${`background:${groupColor(p.group)}`}></i><em>${p.name}</em></span>`;
+    if (style === 'graph') return html`${networkChart(plant.scientificName, roles)}${groupLegend(roles)}${credit}`;
+    if (style === 'list') return html`${roles.map((/** @type {any} */ r) => {
+      const groups = new Map();
+      for (const p of r.partners) groups.set(p.group, (groups.get(p.group) || 0) + 1);
+      return html`<h3>${r.label} <small class="muted">(${r.count})</small></h3>
+        <p class="small">${[...groups].sort((a, b) => b[1] - a[1]).map(([g, n], i) => html`${i ? ' · ' : ''}<i class="dot" style=${`background:${groupColor(g)}`}></i>${g} (${n})`)}</p>
+        <p class="small partners">${r.partners.slice(0, 12).map((/** @type {any} */ p, /** @type {number} */ i) => html`${i ? ', ' : ''}<em>${p.name}</em>`)}${r.count > 12 ? ` et ${r.count - 12} autres` : ''}.</p>`;
+    })}${credit}`;
+    return html`${roles.map((/** @type {any} */ r) => html`<h3>${r.label} <small class="muted">(${r.count} espèce${r.count > 1 ? 's' : ''} ou groupe${r.count > 1 ? 's' : ''})</small></h3>
+      <table class="data counts-table"><thead><tr><th scope="col">Espèce ou groupe</th><th scope="col">Groupe</th><th scope="col" class="num">Mentions</th></tr></thead>
+        <tbody>${r.partners.slice(0, 12).map((/** @type {any} */ p) => html`<tr><td>${partner(p)}</td><td>${p.group}</td><td class="num">${p.count}</td></tr>`)}</tbody></table>
+      ${r.count > 12 ? html`<p class="muted small">Et ${r.count - 12} autres sur <a href=${data.url} target="_blank" rel="noopener">GloBI</a>.</p>` : nothing}`)}${credit}`;
+  }
+
+  /** « Climat et pollen » (Open-Meteo × GBIF): today's pollen of the plant, its climate niche, my position on it. @param {any} ctx */
+  #climate({ plant }) {
+    const v = this.view;
+    const here = this._open.here;
+    const pollen = openData.pollenOf(plant);
+    const ask = (/** @type {string} */ label) => html`<p><button type="button" class="here-ask" @click=${() => this.#findHere()}>${icon('crosshair')} ${label}</button></p>
+      <p class="credit">Votre position (arrondie à 100 m) est envoyée à Open-Meteo pour ce calcul, sans être enregistrée.</p>`;
+    const hereState = !here ? null : here.state === 'locating' ? html`<p class="muted">Recherche de votre position…</p>` : here.state === 'loading' ? html`<p class="muted">chargement…</p>`
+      : here.state === 'error' ? html`<p class="muted">${here.message} <button class="link" type="button" @click=${() => this.#findHere()}>Réessayer</button></p>` : null;
+    return html`${this.#subs('climate', {
+      pollen: () => {
+        if (!pollen) return nothing;
+        const head = html`<h3>Pollen de ${pollen.label.toLowerCase()} aujourd’hui</h3>`;
+        if (!here) return html`${head}${ask('Voir le pollen là où je suis')}`;
+        if (hereState) return html`${head}${hereState}`;
+        const value = here.pollen?.values?.[pollen.key];
+        if (value == null) return html`${head}<p class="muted">Pas de prévision de pollen ici (le modèle CAMS couvre l’Europe).</p>`;
+        const lvl = openData.pollenLevel(value);
+        return html`${head}<p class="pollen"><span class="level l${lvl.level}">${lvl.label}</span> — jusqu’à <strong>${Math.round(value)}</strong> grains/m³ aujourd’hui autour de vous.</p>
+          <p class="credit">Prévision : Copernicus CAMS via <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (CC BY 4.0).</p>`;
+      },
+      niche: () => {
+        const niche = this._open.niche;
+        const head = html`<h3>Niche climatique en France</h3>`;
+        if (niche === undefined) return html`${head}<p class="muted">chargement…</p>`;
+        if (!niche?.points?.length) return html`${head}<p class="muted">Pas assez d’occurrences GBIF localisées en France pour situer son climat.</p>`;
+        const temps = niche.points.map((/** @type {any} */ p) => p.temp).sort((/** @type {number} */ a, /** @type {number} */ b) => a - b);
+        const rains = niche.points.map((/** @type {any} */ p) => p.precip).sort((/** @type {number} */ a, /** @type {number} */ b) => a - b);
+        const mine = here?.state === 'done' && here.climate ? { temp: here.climate.annualTemp, precip: here.climate.annualPrecip, label: 'chez vous' } : null;
+        const inside = mine && mine.temp >= temps[Math.floor(temps.length * 0.1)] && mine.temp <= temps[Math.ceil(temps.length * 0.9) - 1]
+          && mine.precip >= rains[Math.floor(rains.length * 0.1)] && mine.precip <= rains[Math.ceil(rains.length * 0.9) - 1];
+        return html`${head}${nicheChart(niche.points, mine)}
+          <p class="small">Là où elle a été observée : <strong>${temps[0]} à ${temps[temps.length - 1]} °C</strong> de moyenne annuelle,
+            <strong>${rains[0].toLocaleString('fr-FR')} à ${rains[rains.length - 1].toLocaleString('fr-FR')} mm</strong> de pluie par an (${niche.points.length} lieux, cadre : 80 % d’entre eux).
+            ${mine ? html`Chez vous : ${mine.temp} °C, ${mine.precip.toLocaleString('fr-FR')} mm — ${inside ? 'dans sa niche' : 'en dehors du cœur de sa niche'}.` : nothing}</p>
+          ${!mine && !here ? ask('Me situer sur ce graphique') : hereState || nothing}
+          ${mine && v !== 'epure' ? html`<details class="here-climate"><summary>Climat chez vous (${here.climate.years})</summary>${climateChart(here.climate.temp, here.climate.precip)}</details>` : nothing}
+          <p class="credit">Climat : ERA5 via <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (moyennes ${niche.years}, CC BY 4.0) aux occurrences de <a href=${'https://www.gbif.org/species/' + (this._details?.identifiers?.gbif?.id ?? '')} target="_blank" rel="noopener">GBIF.org</a>.</p>`;
+      }
+    })}`;
+  }
 
   /** @param {any} ctx */
   #ids({ plant, details, inat, wikidata }) {
