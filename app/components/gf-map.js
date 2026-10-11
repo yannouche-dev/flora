@@ -215,6 +215,8 @@ const store = (/** @type {string} */ key, value) => {
  */
 export class GfMap extends LitElement {
   static properties = {
+    /** A point (observation, occurrence) clicked: 'open' its record (default), 'pick' (a `point-pick` event), 'none'. */
+    pointClick: { attribute: 'point-click' },
     spots: { attribute: false },
     selectedId: { attribute: false },
     pin: { attribute: false },
@@ -559,7 +561,7 @@ export class GfMap extends LitElement {
     const [x, y] = p.coordinates;
     const dot = L.circleMarker([y, x], { radius: 9, className: 'gf-focus-point', bubblingMouseEvents: false }).addTo(layer);
     dot.bindTooltip(p.title, { direction: 'top', permanent: true, className: 'gf-focus-tip' });
-    if (p.url) dot.on('click', () => open(p.url, '_blank', 'noopener'));
+    this.#onPoint(dot, p);
     if (this.#map.getSize().x) this.#map.flyTo([y, x], Math.max(this.#map.getZoom(), 11), { duration: 0.6 });
   }
 
@@ -719,6 +721,9 @@ export class GfMap extends LitElement {
     if (changed.has('plantZoom')) this.#syncPlantVisibility();
     if (changed.has('track')) this.#syncTracking();
     if (changed.has('area')) this.#syncArea();
+    // Another way to answer a click: the points drawn again with it.
+    else if (changed.has('pointClick') && changed.get('pointClick') !== undefined) this.#syncArea();
+    if (changed.has('pointClick') && changed.get('pointClick') !== undefined && !changed.has('cluster')) { this.#clusterKey = ''; this.#syncCluster(); }
     if (changed.has('highlight')) this.#syncHighlight();
     if (changed.has('zone')) this.#syncZone();
     if (changed.has('cluster')) this.#syncCluster();
@@ -774,7 +779,7 @@ export class GfMap extends LitElement {
       const [x, y] = point.coordinates;
       const dot = L.circleMarker([y, x], { radius: 6, className: 'gf-obs' + (point.kind ? ' gf-obs-' + point.kind : ''), bubblingMouseEvents: false }).addTo(layer);
       dot.bindTooltip(point.title, { direction: 'top' });
-      if (point.url) dot.on('click', () => open(point.url, '_blank', 'noopener'));
+      this.#onPoint(dot, point);
     }
   }
 
@@ -950,6 +955,9 @@ export class GfMap extends LitElement {
   }
 
   /** "Autour": the searched circle and the observations of the chosen species. */
+  /** The room kept free last framed (area.inset). */
+  #areaInset = 'null';
+
   #syncArea() {
     const layer = /** @type {L.LayerGroup} */ (this.#areaLayer);
     layer.clearLayers();
@@ -962,9 +970,11 @@ export class GfMap extends LitElement {
     const bounds = area.fit ? circle.getBounds() : null;
     // The same circle again (the points arrived): no move; another one: the view eases to it (the old tiles
     // glide while the new ones come; the page gives the map a background of its colour, no pale flash).
-    const moved = bounds && !(this.#areaBounds && this.#areaBounds.equals(bounds, 1e-9));
+    const inset = JSON.stringify(/** @type {any} */ (area).inset || null);
+    const moved = bounds && (!(this.#areaBounds && this.#areaBounds.equals(bounds, 1e-9)) || inset !== this.#areaInset);
     const first = !this.#areaBounds;
     this.#areaBounds = bounds;
+    this.#areaInset = inset;
     if (moved) this.#fitArea(!first);
     for (const [i, point] of (area.points || []).entries()) {
       const [x, y] = point.coordinates;
@@ -979,8 +989,20 @@ export class GfMap extends LitElement {
       if (touch) dot.bindPopup(obsCard(p), { className: 'gf-obs-tip', closeButton: false, offset: [0, -10], autoPanPadding: [12, 12] });
       else if (fancy && (p.photo || p.sci)) dot.bindTooltip(obsCard(p), { direction: 'top', offset: [0, -14], className: 'gf-obs-tip', opacity: 1 });
       else dot.bindTooltip(point.title, { direction: 'top', offset: fancy ? [0, -8] : [0, 0] });
-      if (point.url && !touch) dot.on('click', () => open(point.url, '_blank', 'noopener'));
+      if (!touch || this.pointClick === 'pick') this.#onPoint(dot, point);
     }
+  }
+
+  /**
+   * A point clicked, as `point-click` says: its record opened in a new tab, a `point-pick` event (the page shows
+   * that plant: Découvrir), or nothing (its tooltip only).
+   * @param {L.Layer} dot @param {any} p
+   */
+  #onPoint(dot, p) {
+    const how = this.pointClick || 'open';
+    if (how === 'none') return;
+    if (how === 'pick') { dot.on('click', () => this.dispatchEvent(new CustomEvent('point-pick', { detail: { point: p }, bubbles: true, composed: true }))); return; }
+    if (p.url) dot.on('click', () => open(p.url, '_blank', 'noopener'));
   }
 
   /** @type {L.LatLngBounds | null} */ #areaBounds = null;
@@ -1013,7 +1035,7 @@ export class GfMap extends LitElement {
       const dot = L.circleMarker(spot, { radius: 7, className: 'gf-occ gf-occ-' + (/** @type {any} */ (p).kind || kind), bubblingMouseEvents: false }).addTo(layer);
       const q = /** @type {any} */ (p);
       dot.bindTooltip(q.photo || q.sci ? obsCard(q) : p.title, q.photo || q.sci ? { direction: 'top', className: 'gf-obs-tip', opacity: 1 } : { direction: 'top' });
-      if (p.url) dot.on('click', () => open(/** @type {string} */ (p.url), '_blank', 'noopener'));
+      this.#onPoint(dot, p);
     });
     L.circleMarker(at, { radius: 5, className: 'gf-spread-center', interactive: false }).addTo(layer);
     map.once('click zoomstart', () => this.#gather());
@@ -1072,7 +1094,7 @@ export class GfMap extends LitElement {
         const p = cell.pts[0];
         const dot = L.circleMarker([p.coordinates[1], p.coordinates[0]], { radius: 6, className: 'gf-occ gf-occ-' + (/** @type {any} */ (p).kind || 'occ'), bubblingMouseEvents: false }).addTo(layer);
         dot.bindTooltip(p.title, { direction: 'top' });
-        if (p.url) dot.on('click', () => open(/** @type {string} */ (p.url), '_blank', 'noopener'));
+        this.#onPoint(dot, p);
         continue;
       }
       const size = Math.round(Math.min(54, 26 + Math.log2(n) * 6));
@@ -1116,7 +1138,9 @@ export class GfMap extends LitElement {
     const map = this.#map, b = this.#areaBounds;
     if (!map || !b || !map.getSize().x) return;
     this.#lastFit = 'area';
-    map.fitBounds(b, { padding: [16, 16], animate: ease });
+    // area.inset: room kept free of the circle (a panel over the map: its height below, its width on the right).
+    const inset = /** @type {any} */ (this.area)?.inset || {};
+    map.fitBounds(b, { paddingTopLeft: [16, 16], paddingBottomRight: [16 + (inset.right || 0), 16 + (inset.bottom || 0)], animate: ease });
   }
 
   /** Current zoom level (null before the map exists). */

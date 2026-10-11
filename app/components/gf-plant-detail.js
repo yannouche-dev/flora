@@ -791,6 +791,8 @@ export class GfPlantDetail extends LitElement {
     .band-cell:not(.folded):has(gf-media-viewer:not([compact])) { min-height: 400px; }
     .panes-only .band-cell.grow { flex: 1 0 300px; height: auto; }
     .frame.edged.narrow.panes-only { overflow-y: auto; }
+    /* Panes only (Découvrir): the tree left without its sheet fills the whole frame — one pane alone too. */
+    .frame.edged.panes-only:not(.narrow) > * { flex: 1 1 0; min-width: 0; }
     .edge { position: relative; z-index: 7; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--gf-bg, var(--gf-surface-2)); }
     /* Over the whole plant pane for a while (the frame holds it: the cells are not positioned). */
     .edge.max { position: absolute; inset: 0; z-index: 30; box-shadow: var(--gf-shadow-float); }

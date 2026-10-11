@@ -178,14 +178,14 @@ export function observationsInBox(taxonId, [w, s, e, n], signal) {
  */
 export function observationPointsAround(point, radius, signal) {
   if (!moduleOn('inaturalist')) return Promise.reject(new ModuleOffError('inaturalist'));
-  return cached(`around-points3:${area(point, radius)}`, async () => {
+  return cached(`around-points4:${area(point, radius)}`, async () => {
     const data = await json(`${API}/observations?${area(point, radius)}&iconic_taxa=Plantae&quality_grade=research&locale=fr&per_page=100&order_by=observed_on`, signal);
     const points = (data.results || []).filter(o => Array.isArray(o.geojson?.coordinates)).map(o => {
       const photo = o.photos?.[0]?.url || o.taxon?.default_photo?.square_url || null;
       const common = o.taxon?.preferred_common_name || null, sci = o.taxon?.name || '';
       return {
         coordinates: /** @type {[number, number]} */ (o.geojson.coordinates),
-        title: common || sci || 'Plante', common, sci,
+        title: common || sci || 'Plante', common, sci, taxonId: o.taxon?.id ?? null,
         photo: photo ? photo.replace(/\/(square|thumb|small|medium)\./, '/square.') : null,
         date: o.observed_on || null, place: o.place_guess || null,
         url: o.uri || `https://www.inaturalist.org/observations/${o.id}`
@@ -196,7 +196,7 @@ export function observationPointsAround(point, radius, signal) {
 }
 
 /**
- * @typedef {{ coordinates: [number, number], title: string, common: string | null, sci: string, photo: string | null,
+ * @typedef {{ coordinates: [number, number], title: string, common: string | null, sci: string, taxonId: number | null, photo: string | null,
  *   date: string | null, place: string | null, url: string }} AroundPoint
  */
 

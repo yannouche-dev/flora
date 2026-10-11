@@ -132,6 +132,8 @@ export class GfApp extends LitElement {
   _unlocked = null;
   #onDiscover = () => this.requestUpdate();
   #onUnlock = (/** @type {Event} */ e) => {
+    // Discovering: no « Nouveau : … » over the steps — the tab just appears in the bar.
+    if (this.#tab(this.#router.route) === 'discover') return;
     this._unlocked = /** @type {CustomEvent} */ (e).detail;
     this.requestUpdate();
     clearTimeout(this.#unlockTimer);

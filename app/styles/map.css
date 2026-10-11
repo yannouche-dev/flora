@@ -202,37 +202,49 @@ gf-map .leaflet-control-attribution {
 gf-map .gf-map-buttons {
   position: absolute;
   z-index: 1000;
-  right: 10px;
-  top: 10px;
+  right: 8px;
+  top: 8px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
+/* Discreet: small, see-through, the map first; plain on hover or focus. */
 gf-map .gf-map-buttons button {
-  width: 44px;
-  height: 44px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  border: 0;
-  background: var(--gf-surface);
-  color: var(--gf-text);
-  box-shadow: var(--gf-shadow-float);
-  font-size: 1.2rem;
+  border: 1px solid color-mix(in srgb, var(--gf-border) 70%, transparent);
+  background: color-mix(in srgb, var(--gf-surface) 72%, transparent);
+  backdrop-filter: blur(4px);
+  color: var(--gf-text-muted);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 14%);
+  font-size: 0.92rem;
   cursor: pointer;
   display: grid;
   place-items: center;
+  opacity: 0.85;
+  transition: opacity 0.15s, background 0.15s, color 0.15s;
+}
+
+@media (pointer: coarse) {
+  gf-map .gf-map-buttons button { width: 36px; height: 36px; }
 }
 
 gf-map .gf-map-buttons button:hover {
-  background: var(--gf-surface-2);
+  background: var(--gf-surface);
+  color: var(--gf-text);
+  opacity: 1;
 }
 
 gf-map .gf-map-buttons button:focus-visible {
   outline: none;
-  box-shadow: var(--gf-shadow-float), var(--gf-focus);
+  opacity: 1;
+  box-shadow: var(--gf-focus);
 }
 
 gf-map .gf-map-buttons button[aria-pressed='true'] {
+  opacity: 1;
   background: var(--gf-accent);
   color: var(--gf-accent-contrast);
 }
