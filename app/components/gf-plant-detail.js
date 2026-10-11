@@ -675,7 +675,7 @@ export class GfPlantDetail extends LitElement {
     .wiki-menu a:hover { color: var(--gf-text); background: var(--gf-surface-2); }
     .wiki-menu a.on { background: var(--gf-accent-soft); color: var(--gf-accent); font-weight: 600; }
     .wiki-menu a:focus-visible { outline: none; box-shadow: var(--gf-focus); }
-    .wiki-theme { border-top: 1px solid var(--gf-border); scroll-margin-top: 52px; }
+    .wiki-theme { border-top: 1px solid var(--gf-border); scroll-margin-top: var(--wiki-menu-h, 40px); scroll-snap-align: start; }
     .wiki-theme > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; padding: 10px 0; cursor: pointer; font-weight: 600; list-style: none; }
     .wiki-theme > summary::-webkit-details-marker { display: none; }
     .wiki-theme > summary::before { content: '›'; display: inline-block; transition: transform 0.15s; color: var(--gf-text-muted); }
@@ -871,7 +871,12 @@ export class GfPlantDetail extends LitElement {
     .railed { --rail-h: 44px; }
     .rail { position: sticky; top: -16px; z-index: 9; margin: -16px -16px 6px; padding: 4px 10px; background: var(--gf-surface); border-bottom: 1px solid var(--gf-border); }
     :host([embedded]) .rail { top: -4px; margin: -4px -14px 6px; }
-    .block { scroll-margin-top: calc(var(--rail-h, 0px) + 8px); }
+    /* A block (or a theme of the article) stopped near: the sheet settles on it, exactly as a touch on its rubric
+       puts it (gently: far from any, the sheet stays where it is). */
+    .block { scroll-margin-top: var(--rail-h, 0px); }
+    .blocks > .block { scroll-snap-align: start; }
+    .frame.edged .main[data-drop-node='sheet'] { scroll-snap-type: y proximity; }
+    :host(:not([edged]):not([preview])) { scroll-snap-type: y proximity; }
     .block[data-flash] { animation: flash 1.2s ease-out; }
     @keyframes flash { from { box-shadow: 0 0 0 3px var(--gf-accent); } to { box-shadow: 0 0 0 3px transparent; } }
     @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } .block[data-flash] { animation: none; } }
@@ -1547,7 +1552,7 @@ export class GfPlantDetail extends LitElement {
     const themes = /** @type {NodeListOf<HTMLElement>} */ (this.renderRoot.querySelectorAll('.wiki-theme'));
     if (!themes.length) return;
     // The same reading line, under the article's menu.
-    const top = this.#readingTop(scroller) + this.#wikiMenuH + READ_LINE;
+    const top = this.#readingTop(scroller) + this.#wikiMenuH + this.#readingLine(scroller);
     let current = null;
     for (const el of themes) if (el.getBoundingClientRect().top <= top) current = el.dataset.theme || null;
     if (current !== this._wikiActive) this._wikiActive = current;
@@ -1881,7 +1886,8 @@ export class GfPlantDetail extends LitElement {
       this.#scrollFrame = 0;
       const scroller = this.#sheetScroller;
       if (this.#restoring) return;
-      const line = this.#readingTop(scroller) + READ_LINE;
+      // The block read: the one whose title has come into the top third of the sheet (its title in sight up there).
+      const line = this.#readingTop(scroller) + this.#readingLine(scroller);
       let current = null;
       for (const el of /** @type {NodeListOf<HTMLElement>} */ (this.renderRoot.querySelectorAll('.blocks > .block'))) {
         if (el.getBoundingClientRect().top <= line) current = el.dataset.key || null; else break;
@@ -1902,6 +1908,9 @@ export class GfPlantDetail extends LitElement {
       }
     });
   };
+
+  /** How far under the top a title counts as read: the top third of what is seen (at least READ_LINE). @param {HTMLElement} scroller */
+  #readingLine(scroller) { return Math.max(READ_LINE, Math.round(scroller.clientHeight / 3)); }
 
   /** The top of what can be read: the sheet's top, under the rubrics stuck over a sheet that scrolls itself. @param {HTMLElement} scroller */
   #readingTop(scroller) {
@@ -2017,6 +2026,8 @@ export class GfPlantDetail extends LitElement {
     this.#sendRail();
     // The theme read stays in sight in the article's menu.
     const menu = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.wiki-menu'));
+    // Its height: a theme settles right under it (as a touch on it puts it).
+    if (menu?.offsetHeight && this.style.getPropertyValue('--wiki-menu-h') !== menu.offsetHeight + 'px') this.style.setProperty('--wiki-menu-h', menu.offsetHeight + 'px');
     const on = /** @type {HTMLElement | null} */ (menu?.querySelector('a.on'));
     if (menu && on && (on.offsetLeft < menu.scrollLeft || on.offsetLeft + on.offsetWidth > menu.scrollLeft + menu.clientWidth - 16)) {
       menu.scrollTo({ left: on.offsetLeft - menu.clientWidth / 2 + on.offsetWidth / 2, behavior: 'smooth' });
