@@ -132,11 +132,11 @@ export class GfMediaViewer extends LitElement {
     .frame .disp, .frame .hd { opacity: 0; transition: opacity 0.25s; }
     .frame .disp.on, .frame .hd.on { opacity: 1; }
     .stage.animate .frame { transition: transform 0.22s ease-out; }
-    /* ‹ ›: always at the same place, zoomed or not — over the map when it is there. */
-    .nav { position: absolute; top: 50%; translate: 0 -50%; z-index: 4; width: 40px; height: 56px; border: 0; border-radius: var(--gf-radius-sm);
+    /* ‹ ›: at the bottom of the stage, one in each corner — always there, zoomed or not, over the map when it reaches down. */
+    .nav { position: absolute; bottom: 8px; z-index: 4; width: 44px; height: 34px; border: 0; border-radius: var(--gf-radius-pill);
       background: rgb(0 0 0 / 38%); color: #fff; font-size: 1.2rem; display: grid; place-items: center; cursor: pointer; transition: opacity 0.2s; }
     .nav:hover { background: rgb(0 0 0 / 62%); }
-    .nav.prev { left: 6px; } .nav.next { right: 6px; }
+    .nav.prev { left: 8px; } .nav.next { right: 8px; }
     .nav:disabled { visibility: hidden; }
     .zoombar { position: absolute; right: 8px; bottom: 8px; z-index: 3; display: flex; align-items: center; gap: 2px; padding: 2px; border-radius: var(--gf-radius-pill);
       background: rgb(0 0 0 / 55%); color: #fff; transition: opacity 0.2s; }
@@ -158,7 +158,8 @@ export class GfMediaViewer extends LitElement {
     .stage.dragging .minimap .view, .minimap.dragging .view { transition: none; }
     .minimap .view { position: absolute; border: 1px solid rgb(255 255 255 / 85%); border-radius: 2px; box-shadow: 0 0 0 9999px rgb(0 0 0 / 18%); pointer-events: none; }
     .stage.idle .minimap { opacity: 0.9; }
-    .zoombar { right: calc(var(--map-w, -8px) + 16px); }
+    /* The zoom bar beside the next arrow; left of the map when there is one. */
+    .zoombar { right: max(60px, calc(var(--map-w, 0px) + 16px)); }
 
     /* The credit under the image, one discreet line (nothing laid over the image); « ⓘ » for the details. */
     .caption { flex: none; display: flex; align-items: center; gap: 6px; padding: 2px 4px 2px 10px; border-top: 1px solid var(--gf-border); font-size: 0.72rem; line-height: 1.2;
