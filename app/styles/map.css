@@ -168,6 +168,11 @@ gf-map .leaflet-control-attribution {
   height: 100%;
   object-fit: cover;
 }
+/* A plant's occurrences lit together (Parcours): the other plants step back. */
+.gf-sel-many .gf-plant:not(.selected) {
+  opacity: 0.45;
+  transition: opacity 0.2s;
+}
 .gf-plant.photo.selected .ring {
   transform: scale(1.35);
   box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--gf-accent, #16a34a), 0 1px 4px rgb(0 0 0 / 55%);

@@ -197,7 +197,7 @@ const store = (/** @type {string} */ key, value) => {
  *  - pin: [lon, lat] of an editable, draggable place pin (place editor), or null
  *  - plants: plant markers (each plant of a place has its own position)
  *  - plantZoom: minimum zoom to show plant markers (0 = always)
- *  - selectedPlant: highlighted plant marker key
+ *  - selectedPlant: highlighted plant marker key — or keys (an array: a plant's occurrences, the others dimmed)
  *  - draggablePlants: plant markers can be dragged (place editor)
  *  - pinDraggable: the place pin can be dragged and long-press emits map-longpress (default true)
  *  - track: show the live GPS position
@@ -830,13 +830,17 @@ export class GfMap extends LitElement {
     }
   }
 
+  /** @param {string} key */
+  #isSelected(key) { return Array.isArray(this.selectedPlant) ? this.selectedPlant.includes(key) : key === this.selectedPlant; }
+
   #syncPlants() {
     const layer = /** @type {L.LayerGroup} */ (this.#plantLayer);
+    this.#map?.getContainer().classList.toggle('gf-sel-many', Array.isArray(this.selectedPlant) && this.selectedPlant.length > 0);
     const seen = new Set();
     for (const plant of this.plants) {
       seen.add(plant.key);
       const [lon, lat] = this.#plantAt(plant);
-      const selected = plant.key === this.selectedPlant;
+      const selected = this.#isSelected(plant.key);
       const movable = this.#plantMovable(plant);
       let marker = this.#plantMarkers.get(plant.key);
       if (!marker) {
@@ -878,7 +882,7 @@ export class GfMap extends LitElement {
     if (!url || !this.isConnected) return;
     for (const plant of this.plants) {
       if (plant.plantId !== plantId) continue;
-      this.#plantMarkers.get(plant.key)?.setIcon(plantIcon(plant, plant.key === this.selectedPlant, this.#plantMovable(plant)));
+      this.#plantMarkers.get(plant.key)?.setIcon(plantIcon(plant, this.#isSelected(plant.key), this.#plantMovable(plant)));
     }
   }
 

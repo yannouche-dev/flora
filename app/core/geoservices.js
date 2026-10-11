@@ -154,7 +154,15 @@ export function adminShape(type, name) {
 const wfsFeatures = async (typename, filter, count, signal) => {
   const q = new URLSearchParams({ SERVICE: 'WFS', VERSION: '2.0.0', REQUEST: 'GetFeature', TYPENAMES: typename,
     outputFormat: 'application/json', COUNT: String(count), CQL_FILTER: filter });
-  return /** @type {any[]} */ ((await json(`${WFS}?${q}`, signal)).features || []);
+  const get = async () => /** @type {any[]} */ ((await json(`${WFS}?${q}`, signal)).features || []);
+  try {
+    return await get();
+  } catch (error) {
+    // Too many requests at once (the map's tiles come from the same servers): once more, a moment later.
+    if (signal?.aborted || !/ (429|503)$/.test(String(/** @type {Error} */ (error).message))) throw error;
+    await new Promise(done => setTimeout(done, 1200 + Math.random() * 800));
+    return get();
+  }
 };
 
 /** Metres between two [lon, lat] points (equirectangular: fine at these distances). @param {number[]} a @param {number[]} b */
@@ -210,7 +218,9 @@ const GENERIC = /** @type {Record<string, string>} */ ({
   vallée: 'à la', montagne: 'à la', crête: 'à la', gorge: 'à la', dune: 'à la', plage: 'à la', promenade: 'à la', roseraie: 'à la', coulée: 'à la',
   combe: 'à la', côte: 'à la', pointe: 'à la', dent: 'à la', cascade: 'à la', tourbière: 'à la', lande: 'à la', butte: 'à la', colline: 'à la',
   gorges: 'aux', rochers: 'aux', jardins: 'aux', monts: 'aux', puys: 'aux', landes: 'aux', étangs: 'aux',
-  arboretum: 'à l’', étang: 'à l’', île: 'à l’', ile: 'à l’', aiguille: 'à l’', allée: 'à l’', espace: 'à l’'
+  arboretum: 'à l’', étang: 'à l’', île: 'à l’', ile: 'à l’', aiguille: 'à l’', allée: 'à l’', espace: 'à l’',
+  château: 'au', moulin: 'au', hameau: 'au', lac: 'au', prieuré: 'au', manoir: 'au', chalet: 'au', refuge: 'au', cimetière: 'au',
+  ferme: 'à la', source: 'à la', fontaine: 'à la', chapelle: 'à la', grange: 'à la', abbaye: 'à l’', ermitage: 'à l’'
 });
 
 /**

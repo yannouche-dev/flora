@@ -16,6 +16,7 @@ import './gf-mode-switch.js';
 import './gf-discover.js';
 import './gf-scenarios.js';
 import { discoverEvents, tabShown, UNLOCKS } from '../core/discover.js';
+import { scenarioOf } from '../core/scenarios.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 
@@ -57,6 +58,9 @@ export class GfApp extends LitElement {
       transition: background 0.15s;
     }
     .brand:hover { background: var(--gf-accent-soft); }
+    span.brand:hover { background: none; }
+    /* A scenario played as an app of its own (the Parcours): the rest of GeoFlora dimmed, out of reach. */
+    header.locked .off { opacity: 0.38; filter: grayscale(1); pointer-events: none; }
     .brand:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     .brand img { width: 38px; height: 38px; filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.12)); }
     .brand span { font-size: 1.12rem; font-weight: 600; letter-spacing: 0.01em; }
@@ -168,6 +172,7 @@ export class GfApp extends LitElement {
   constructor() {
     super();
     this.addEventListener('open-capture', () => /** @type {any} */ (this.renderRoot.querySelector('gf-capture'))?.open());
+    this.addEventListener('open-scenarios', () => /** @type {any} */ ([...this.renderRoot.querySelectorAll('gf-scenarios')].find(s => s.getClientRects().length))?.open());
   }
 
   render() {
@@ -175,25 +180,25 @@ export class GfApp extends LitElement {
     const tab = this.#tab(route);
     const { status, statusText, offline, updateReady } = this.#store.state;
     const phone = this.#phone.matches;
+    // The Parcours botanique, an app of its own: the rest of GeoFlora out of reach (dimmed) until another scenario is chosen.
+    const locked = route.name === 'discover' && scenarioOf(route.scenario).key === 'trail';
+    const brand = html`<img src="assets/icons/icon.svg" alt="" /><span>GeoFlora</span>`;
 
     return html`
-      <header>
-        <div class="side">${phone ? nothing : html`<nav class="tabs segmented" aria-label="Sections">
+      <header class=${locked ? 'locked' : ''}>
+        <div class="side">${phone ? nothing : html`<nav class="tabs segmented off" aria-label="Sections" ?inert=${locked} aria-disabled=${locked ? 'true' : 'false'}>
           <a href=${href.discover()} aria-current=${tab === 'discover' ? 'page' : 'false'}>Découvrir</a>
           ${tabShown('flore') ? html`<a href=${tabHref('flore', tab === 'flore')} aria-current=${route.name === 'search' || route.name === 'plant' ? 'page' : 'false'}>Flore</a>` : nothing}
           ${tabShown('mine') ? html`<a href=${tabHref('mine', tab === 'mine')} aria-current=${['collections', 'spot', 'spot-new', 'shared'].includes(route.name) ? 'page' : 'false'}>Mes plantes</a>` : nothing}
           ${tabShown('map') ? html`<a href=${tabHref('map', tab === 'map')} aria-current=${route.name === 'map' ? 'page' : 'false'}>Carte</a>` : nothing}
         </nav>`}</div>
-        <a class="brand" href=${href.search()} aria-label="GeoFlora — accueil">
-          <img src="assets/icons/icon.svg" alt="" />
-          <span>GeoFlora</span>
-        </a>
+        ${locked ? html`<span class="brand" aria-label="GeoFlora">${brand}</span>` : html`<a class="brand" href=${href.search()} aria-label="GeoFlora — accueil">${brand}</a>`}
         <div class="side end">${phone ? html`<gf-scenarios class="phone-scenarios"></gf-scenarios>` : html`
-        ${tabShown('flore') ? html`<gf-mode-switch class="mode" scope="toute l’application" value=${this.#store.state.mode}
+        ${tabShown('flore') ? html`<gf-mode-switch class="mode off" ?inert=${locked} scope="toute l’application" value=${this.#store.state.mode}
           @mode-change=${e => setMode(e.detail.mode || 'standard')}></gf-mode-switch>` : nothing}
-        ${tabShown('map') ? html`<button class="note primary" type="button" aria-label="Noter ici" @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-capture'))?.open()}>${icon('plus-lg')}<span class="lbl"> Noter ici</span></button>` : nothing}
+        ${tabShown('map') ? html`<button class="note primary off" type="button" aria-label="Noter ici" ?disabled=${locked} @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-capture'))?.open()}>${icon('plus-lg')}<span class="lbl"> Noter ici</span></button>` : nothing}
         <gf-scenarios></gf-scenarios>
-        <a class="settings" href=${href.settings()} title="À propos et réglages" aria-label="À propos et réglages">${icon('gear')}</a>`}</div>
+        <a class="settings off" href=${href.settings()} title="À propos et réglages" aria-label="À propos et réglages" ?inert=${locked}>${icon('gear')}</a>`}</div>
       </header>
       <main>
         ${updateReady ? html`<div class="banner" role="status">Nouvelle version de GeoFlora disponible.
@@ -204,7 +209,7 @@ export class GfApp extends LitElement {
         ${offline && status === 'ready' && route.name === 'search' ? html`<div class="banner">Hors ligne — recherche sur la copie locale.</div>` : nothing}
         ${this.#outlet(route)}
       </main>
-      ${phone ? html`<gf-tabbar current=${tab}></gf-tabbar>` : html`<span></span>`}
+      ${phone ? html`<gf-tabbar current=${tab} ?locked=${locked}></gf-tabbar>` : html`<span></span>`}
       ${this._unlocked ? this.#unlockedView(/** @type {keyof typeof UNLOCKS} */ (this._unlocked)) : nothing}
       <gf-capture></gf-capture>
       ${this.#store.state.kingMode ? html`<button class="king" type="button" aria-pressed="true" aria-label="Quitter le mode King"

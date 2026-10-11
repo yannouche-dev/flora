@@ -337,6 +337,8 @@ export class GfPlantDetail extends LitElement {
     embedded: { type: Boolean, reflect: true },
     /** The plant waiting under the swiped card (Flore): not the page's plant yet, so it leaves the title alone. */
     preview: { type: Boolean },
+    /** Opened in a scenario played as an app of its own (the Parcours): no action leading out of it (Carte, Noter ici). */
+    scoped: { type: Boolean },
     /** The rubrics are shown by the host (the header of Flore's plant pane): the sheet tells them (`sheet-rail`). */
     outerRail: { type: Boolean, attribute: 'outer-rail' },
     /** The panes of the tree only, not the sheet (Découvrir: the panes its steps add, beside the cards). */
@@ -1286,7 +1288,8 @@ export class GfPlantDetail extends LitElement {
       },
       spot: () => html`<a class="button" href=${href.newSpot(plant.id)}>${icon('geo-alt-fill')}<span>Noter ici</span></a>`
     };
-    const keys = subOrder(v, 'actions').filter(k => buttons[k] && (king || (!isSubHidden(v, 'actions', k) && (k !== 'addCurrent' || this.#currentCollection(plant)))));
+    const keys = subOrder(v, 'actions').filter(k => buttons[k] && !(this.scoped && (k === 'map' || k === 'spot'))
+      && (king || (!isSubHidden(v, 'actions', k) && (k !== 'addCurrent' || this.#currentCollection(plant)))));
     if (!keys.length) return nothing;
     return html`<nav class="action-bar ${king ? 'king' : ''}" aria-label="Actions">
       ${this._shareNote ? html`<p class="share-note" role="status">${this._shareNote}</p>` : nothing}

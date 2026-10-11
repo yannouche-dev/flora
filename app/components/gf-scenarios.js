@@ -35,6 +35,9 @@ export class GfScenarios extends LitElement {
 
   get #dialog() { return /** @type {HTMLDialogElement | null} */ (this.renderRoot.querySelector('dialog')); }
 
+  /** The scenarios, shown (from elsewhere: « Autres scénarios » of the Parcours). */
+  async open() { this.requestUpdate(); await this.updateComplete; openModal(this.#dialog); }
+
   render() {
     return html`<button class="open" type="button" title="Scénarios : des façons de découvrir la flore" aria-label="Scénarios"
         @click=${() => { this.requestUpdate(); openModal(this.#dialog); }}>${icon('camera-reels')}</button>

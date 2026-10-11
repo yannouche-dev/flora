@@ -678,7 +678,8 @@ export class GfDiscover extends LitElement {
   #openedHere = false;
 
   #close() {
-    if (depth() > 0 && this.#openedHere) history.back();
+    // The Parcours: its plants open by a link of its list — Back returns to it.
+    if (depth() > 0 && (this.#openedHere || scenarioOf(this.scenario).key === 'trail')) history.back();
     else location.hash = href.discover(null, this.scenario);
   }
 
@@ -711,8 +712,9 @@ export class GfDiscover extends LitElement {
   // ── Render ────────────────────────────────────────────────────────────
 
   render() {
-    // Parcours botanique: its own little app (the place, the search, the plants added, their map).
-    if (scenarioOf(this.scenario).key === 'trail') return html`<gf-trail></gf-trail>`;
+    // Parcours botanique: its own little app (the place, the search, the plants added, their map); a plant of it
+    // opens here, over it — never in Flore.
+    if (scenarioOf(this.scenario).key === 'trail') return html`<gf-trail></gf-trail>${this.open != null ? this.#plantSheet() : nothing}`;
     const guided = this.#guided;
     return html`${!this._point ? this.#welcome() : guided ? this.#guidedView() : this._asking || (!this._cards && !this._loading && !this._error) ? this.#distance() : this.#list()}
       ${this._match ? this.#matchView(this._match) : nothing}
@@ -1471,11 +1473,11 @@ export class GfDiscover extends LitElement {
     const name = at >= 0 ? list[at].plant.vernacularNames?.[0] || list[at].plant.scientificName : '';
     return html`<section class="sheet" aria-label="Plante" @touchstart=${this.#touchStart} @touchend=${this.#touchEnd}>
       <div class="sheet-head">
-        <button class="icon-btn" type="button" aria-label="Retour aux plantes autour" title="Retour (Échap)" @click=${() => this.#close()}>${icon('arrow-left')}</button>
+        <button class="icon-btn" type="button" aria-label=${scenarioOf(this.scenario).key === 'trail' ? 'Retour au parcours' : 'Retour aux plantes autour'} title="Retour (Échap)" @click=${() => this.#close()}>${icon('arrow-left')}</button>
         ${this._rail && this._rail.plantId === this.open && this._rail.items.length ? html`<span class="visually-hidden">${name}</span><gf-sheet-rail .items=${this._rail.items} .active=${this._rail.active} .at=${this._rail.at} .entity=${this._rail.entity} orientation="row"
           @rail-go=${(/** @type {CustomEvent} */ e) => this.#sheet?.goTo(e.detail.key)}></gf-sheet-rail>` : html`<strong>${name}</strong>`}
       </div>
-      <gf-plant-detail embedded outer-rail plant-id=${this.open} view="epure" @sheet-rail=${(/** @type {CustomEvent} */ e) => { this._rail = e.detail; }}></gf-plant-detail>
+      <gf-plant-detail embedded outer-rail plant-id=${this.open} view="epure" ?scoped=${scenarioOf(this.scenario).key === 'trail'} @sheet-rail=${(/** @type {CustomEvent} */ e) => { this._rail = e.detail; }}></gf-plant-detail>
       ${at >= 0 ? html`<nav class="pager" aria-label="Plantes autour">
         <button class="secondary prev" type="button" ?disabled=${at <= 0} @click=${() => this.#step(-1)}>${icon('chevron-left')} Préc.</button>
         <span>${at + 1} / ${list.length}</span>
