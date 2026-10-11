@@ -159,6 +159,17 @@ export class GfFacet extends LitElement {
     this.renderRoot.querySelector('.body')?.scrollIntoView({ block: 'start', behavior: smooth ? 'smooth' : 'auto' });
   }
 
+  /**
+   * Typing in its filter can shorten the list a lot (one family left): the facet then ends above, and its band
+   * — the field being typed in — would leave the screen with it. The list comes back under the header, the
+   * band stuck where it was, the field in view.
+   */
+  #keepBand() {
+    const band = this.renderRoot.querySelector('.filter'), head = this.renderRoot.querySelector('.head'), body = this.renderRoot.querySelector('.body');
+    if (!band || !head || !body) return;
+    if (band.getBoundingClientRect().top < head.getBoundingClientRect().bottom - 1) body.scrollIntoView({ block: 'start', behavior: 'instant' });
+  }
+
   /** The scrolling box of the filters (across shadow roots). */
   #scroller() {
     /** @type {Node | null} */ let n = this;
@@ -231,7 +242,7 @@ export class GfFacet extends LitElement {
       ${this.open ? html`<div class="body ${this.searchable ? 'filtered' : ''}" id="body">
         ${this.searchable ? html`
           <div class="filter"><input type="search" placeholder="Filtrer ${this.label.toLowerCase()}…" aria-label="Filtrer ${this.label}"
-            .value=${this._filter} @input=${e => { this._filter = e.target.value; }} /></div>` : nothing}
+            .value=${this._filter} @input=${e => { this._filter = e.target.value; this.updateComplete.then(() => this.#keepBand()); }} /></div>` : nothing}
         <!-- Keyed rows: a checkbox stays with its value when counts reorder the list. -->
         <ul role="group" aria-label=${this.label}>
           ${repeat(shown, o => o.value, o => html`
