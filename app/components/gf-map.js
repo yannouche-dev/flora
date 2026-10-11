@@ -57,6 +57,16 @@ function pinIcon(spot, selected, movable = false) {
   return placeIconOf(color, spot.properties.plants.length, classes);
 }
 
+/** An observation around (Découvrir): a small leaf in a disc, popping in after `delay` ms. @param {number} delay */
+function leafIcon(delay) {
+  return L.divIcon({
+    className: 'gf-obs-leaf',
+    iconSize: [22, 22],
+    iconAnchor: [11, 11],
+    html: `<span class="pop" style="animation-delay:${delay}ms">${iconMarkup('leaf-fill')}</span>`
+  });
+}
+
 /** Leaf glyph for plant markers. */
 /** A plant without a photo: a flower (Bootstrap Icons) in its circle. */
 const FLOWER = `<svg x="5" y="5" width="12" height="12" viewBox="0 0 16 16" fill="#fff"><use href="${iconHref('flower1')}"></use></svg>`;
@@ -210,6 +220,8 @@ export class GfMap extends LitElement {
     minZoom: { type: Number, attribute: 'min-zoom' },
     /** No « Me localiser » button. */
     noLocate: { type: Boolean, attribute: 'no-locate' },
+    /** No « protected areas in view » notice (also under any element marked `no-areas`: Découvrir). */
+    noAreas: { type: Boolean, attribute: 'no-areas' },
     _moves: { state: true },
     _areas: { state: true },
     _areasClosed: { state: true },
@@ -257,6 +269,7 @@ export class GfMap extends LitElement {
     /** @type {number | null} */
     this.createPlant = null;
     this.noLocate = false;
+    this.noAreas = false;
     this.minZoom = 5;
     this.noSearch = false;
     this.editable = false;
@@ -324,11 +337,21 @@ export class GfMap extends LitElement {
     this.#areasTimer = setTimeout(() => this.#checkAreas(), 600);
   }
 
+  /** Marked (or inside something marked) `no-areas`: the discovery screens show no zone alerts. */
+  #quietAreas() {
+    /** @type {Node | null} */ let n = this;
+    while (n) {
+      if (n instanceof Element && n.hasAttribute('no-areas')) return true;
+      n = n.parentNode || (n instanceof ShadowRoot ? n.host : null);
+    }
+    return false;
+  }
+
   async #checkAreas() {
     const map = this.#map;
     this.#areasAbort?.abort();
     this.#areasAbort = null;
-    if (!map || !map.getSize().x || map.getZoom() < PROTECTED_ZOOM || !moduleOn('ignProtected')) {
+    if (!map || !map.getSize().x || map.getZoom() < PROTECTED_ZOOM || !moduleOn('ignProtected') || this.#quietAreas()) {
       this._areas = [];
       return;
     }
@@ -876,24 +899,33 @@ export class GfMap extends LitElement {
     const area = this.area;
     if (!area) return;
     const [lon, lat] = area.center;
-    const circle = L.circle([lat, lon], { radius: area.radius, className: 'gf-area', interactive: false }).addTo(layer);
-    this.#areaBounds = area.fit ? circle.getBounds() : null;
-    this.#fitArea();
-    for (const point of area.points || []) {
+    // `leaves`: the observations as small leaves popping in one after the other, the circle glowing (Découvrir).
+    const fancy = Boolean(area.leaves);
+    const circle = L.circle([lat, lon], { radius: area.radius, className: fancy ? 'gf-area gf-area-glow' : 'gf-area', interactive: false }).addTo(layer);
+    const bounds = area.fit ? circle.getBounds() : null;
+    // The same circle again (the points arrived): no move; another one: the view eases to it (the old tiles
+    // glide while the new ones come; the page gives the map a background of its colour, no pale flash).
+    const moved = bounds && !(this.#areaBounds && this.#areaBounds.equals(bounds, 1e-9));
+    const first = !this.#areaBounds;
+    this.#areaBounds = bounds;
+    if (moved) this.#fitArea(!first);
+    for (const [i, point] of (area.points || []).entries()) {
       const [x, y] = point.coordinates;
-      const dot = L.circleMarker([y, x], { radius: 6, className: 'gf-obs', bubblingMouseEvents: false }).addTo(layer);
-      dot.bindTooltip(point.title, { direction: 'top' });
+      const dot = fancy
+        ? L.marker([y, x], { icon: leafIcon(Math.min(i, 40) * 25), keyboard: false, bubblingMouseEvents: false }).addTo(layer)
+        : L.circleMarker([y, x], { radius: 6, className: 'gf-obs', bubblingMouseEvents: false }).addTo(layer);
+      dot.bindTooltip(point.title, { direction: 'top', offset: fancy ? [0, -8] : [0, 0] });
       if (point.url) dot.on('click', () => open(point.url, '_blank', 'noopener'));
     }
   }
 
   /** @type {L.LatLngBounds | null} */ #areaBounds = null;
 
-  /** The circle framed (area.fit), with a margin. */
-  #fitArea() {
+  /** The circle framed (area.fit), with a margin; `ease`: a short zoom animation. @param {boolean} [ease] */
+  #fitArea(ease = false) {
     const map = this.#map, b = this.#areaBounds;
     if (!map || !b || !map.getSize().x) return;
-    map.fitBounds(b, { padding: [16, 16], animate: false });
+    map.fitBounds(b, { padding: [16, 16], animate: ease });
   }
 
   /** Current zoom level (null before the map exists). */

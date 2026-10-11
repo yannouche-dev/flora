@@ -8,7 +8,7 @@
 //  - Scientifique: the scientific mode, every tool.
 // Others are announced (« bientôt »).
 
-import { href } from './router.js';
+import { href, parse } from './router.js';
 import { setHarvestMode, setMode } from './store.js';
 import { discoverState, finishDiscover, resetChoices, restartDiscover } from './discover.js';
 
@@ -16,15 +16,18 @@ import { discoverState, finishDiscover, resetChoices, restartDiscover } from './
  * @typedef {{ key: string, title: string, pitch: string, icon: import('./icons.js').IconName, play?: () => void, played?: () => boolean, soon?: boolean }} Scenario
  */
 
+/** The scenario on screen (Découvrir with it): played again, it starts over; another one keeps the place chosen. @param {string} key */
+const current = key => { const r = parse(location.hash); return r.name === 'discover' && (r.scenario || 'meet') === key; };
+
 /** @type {Scenario[]} */
 export const SCENARIOS = [
   { key: 'meet', title: 'Rencontres', icon: 'heart-fill', pitch: 'Les plantes observées autour de vous, une carte à la fois : à droite si elle vous plaît, à gauche sinon.',
     // Played again: from the very start (place, distance, cards, matches, steps, fork, tabs).
     play: () => { restartDiscover(); location.hash = href.discover(null, 'meet'); }, played: () => { const s = discoverState(); return Boolean(s.point || s.matches.length || s.step); } },
   { key: 'harvest', title: 'Cueillette prudente', icon: 'leaf', pitch: 'Ce qui se cueille autour de vous… et ses sosies dangereux, les mortels d’abord. Le mode cueillette s’allume.',
-    play: () => { resetChoices(); setHarvestMode(true); location.hash = href.discover(null, 'harvest'); }, played: () => Boolean(discoverState().point) },
+    play: () => { if (current('harvest')) resetChoices(); setHarvestMode(true); location.hash = href.discover(null, 'harvest'); }, played: () => current('harvest') },
   { key: 'mosaic', title: 'Mosaïque', icon: 'images', pitch: 'Toutes les photos des plantes du coin, en grand. Une image touchée : toutes celles de la plante.',
-    play: () => { resetChoices(); location.hash = href.discover(null, 'mosaic'); }, played: () => Boolean(discoverState().point) },
+    play: () => { if (current('mosaic')) resetChoices(); location.hash = href.discover(null, 'mosaic'); }, played: () => current('mosaic') },
   { key: 'science', title: 'Scientifique', icon: 'table', pitch: 'Toutes les données et tous les outils : la flore complète, les fiches en mode Scientifique.',
     play: () => { setMode('scientific'); finishDiscover(); location.hash = href.search(); } },
   { key: 'map', title: 'La carte d’abord', icon: 'map', pitch: 'La carte au centre, la flore et la fiche en panneaux autour.', soon: true },

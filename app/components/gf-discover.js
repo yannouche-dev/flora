@@ -216,6 +216,8 @@ export class GfDiscover extends LitElement {
     /* How far, over the map of what was observed in the circle. */
     .distance-wrap { position: relative; min-height: 100%; display: grid; }
     .distance-wrap gf-map { position: absolute; inset: 0; display: block; }
+    /* Under the tiles, the colour of the aerial photo: a zoom out (a larger circle) shows no pale flash. */
+    .distance-wrap gf-map .leaflet-container { background: #2f4a2c; }
     .distance-wrap .welcome { position: relative; z-index: 1; align-self: end; margin: auto auto 24px; width: min(560px, calc(100% - 24px)); padding: 18px 18px 16px;
       border-radius: 18px; background: color-mix(in srgb, var(--gf-surface) 92%, transparent); box-shadow: var(--gf-shadow-float); backdrop-filter: blur(6px); gap: 10px; }
     .distance-wrap .welcome .leaf { display: none; }
@@ -367,6 +369,8 @@ export class GfDiscover extends LitElement {
     super.connectedCallback();
     discoverEvents.addEventListener('change', this.#onChange);
     discoverEvents.addEventListener('reset', this.#onReset);
+    // The discovery screens: no zone alerts on their maps (gf-map).
+    this.setAttribute('no-areas', '');
     addEventListener('keydown', this.#onKey);
     if (this._point && !this._cards) this.#load();
   }
@@ -571,7 +575,7 @@ export class GfDiscover extends LitElement {
     return html`<section class="welcome">
       <div class="leaf" aria-hidden="true">${icon('binoculars')}</div>
       <h1>Découvrez les plantes autour de vous !</h1>
-      <p>Des célibataires à feuilles vous attendent près d’ici. Glissez à droite celles qui vous plaisent, à gauche les autres.
+      <p>Orties farceuses, pissenlits voyageurs, chênes centenaires : tout un petit monde vert pousse près d’ici. Un coup de cœur à droite, au suivant à gauche.
         Votre position ne sert qu’à cette recherche.</p>
       <button class="primary go" type="button" ?disabled=${this._locating} @click=${() => this.#locate()}>${icon('geo-alt-fill')} ${this._locating ? 'Localisation…' : 'Autour de moi'}</button>
       ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : nothing}
@@ -591,11 +595,11 @@ export class GfDiscover extends LitElement {
     const at = Math.max(0, DISTANCES.indexOf(this._radius));
     const point = /** @type {[number, number]} */ (this._point);
     return html`<div class="distance-wrap">
-      <gf-map no-search no-create no-locate .area=${{ center: point, radius: this._radius, fit: true, points: this._obs }}></gf-map>
+      <gf-map no-search no-create no-locate .area=${{ center: point, radius: this._radius, fit: true, leaves: true, points: this._obs }}></gf-map>
       <section class="welcome distance">
       <div class="leaf" aria-hidden="true">${icon('geo-alt-fill')}</div>
-      <h1>Jusqu’où cherchez-vous ?</h1>
-      <p>Autour ${this._place ? 'de ' + this._place : 'de vous'}. Plus c’est loin, plus il y a de prétendantes — et moins elles sont à portée de pied.</p>
+      <h1>Jusqu’où part l’expédition ?</h1>
+      <p>Autour ${this._place ? 'de ' + this._place : 'de vous'}. Plus le cercle est grand, plus la récolte de rencontres est riche — et plus il faudra marcher pour aller les saluer.</p>
       <div class="dist">
         <output>${distLabel(this._radius)}</output>
         <span class="mood">${distMood(this._radius)}</span>
@@ -604,7 +608,7 @@ export class GfDiscover extends LitElement {
         <div class="ticks" aria-hidden="true"><span>200 m</span><span>50 km</span></div>
         <span class="obs" aria-live="polite">${this._obs.length ? `${this._obs.length >= 200 ? '200 dernières observations' : this._obs.length + ' observation' + (this._obs.length > 1 ? 's' : '')} de plantes sur la carte` : ''}</span>
       </div>
-      <button class="primary go" type="button" @click=${() => { setDiscoverRadius(this._radius); this._asking = false; this._view = 'swipe'; this.#load(); }}>${icon('binoculars')} Voir qui est dans le coin</button>
+      <button class="primary go" type="button" @click=${() => { setDiscoverRadius(this._radius); this._asking = false; this._view = 'swipe'; this.#load(); }}>${icon('binoculars')} Qui pousse par ici ?</button>
       <button class="link skip" type="button" @click=${() => { this._point = null; this._asking = false; }}>Changer de lieu</button>
     </section></div>`;
   }
@@ -700,9 +704,9 @@ export class GfDiscover extends LitElement {
       return html`<div class="deck-end">
         <p class="big">${icon('flower3')}</p>
         <p><b>Vous avez rencontré toutes les plantes du coin !</b></p>
-        <p class="muted">${this.#matchCards.length ? `${this.#matchCards.length} match${this.#matchCards.length > 1 ? 's' : ''} — elles vous attendent dans « Matchs ».` : 'Aucun match ? Exigeant·e. Les autres sont peut-être un peu plus loin.'}</p>
+        <p class="muted">${this.#matchCards.length ? `${this.#matchCards.length} match${this.#matchCards.length > 1 ? 's' : ''} dans votre herbier — à retrouver dans « Matchs ».` : 'Aucun coup de cœur ? Le prochain se cache peut-être un peu plus loin, derrière la haie.'}</p>
         <div class="row">${next ? html`<button class="primary" type="button" @click=${() => { this._radius = next; setDiscoverRadius(next); this.#load(); }}>Chercher jusqu’à ${distLabel(next)}</button>` : nothing}
-          ${discoverState().passed.length ? html`<button class="secondary" type="button" @click=${() => resetPassed()}>Revoir celles passées</button>` : nothing}</div>
+          ${discoverState().passed.length ? html`<button class="secondary" type="button" @click=${() => resetPassed()}>Revoir les plantes passées</button>` : nothing}</div>
       </div>`;
     }
     const [top, under] = deck;
@@ -774,12 +778,12 @@ export class GfDiscover extends LitElement {
         : `☠️ Je suis le sosie ${l.pair.severity === 'mortel' ? 'mortel' : 'toxique'} de ${others}.`);
     }
     const months = floweringMonths(p.flowering);
-    if (c.blooming) out.push('🌼 En fleur en ce moment : je suis à mon avantage.');
+    if (c.blooming) out.push('🌼 En fleur en ce moment : c’est le jour de la photo.');
     else if (months.size) out.push(`🗓️ Je fleuris de ${MONTH[[...months][0]]} à ${MONTH[[...months][months.size - 1]]}. Repassez me voir.`);
     if (a?.safety?.tone === 'danger') out.push('☠️ ' + (a.safety.text.find(t => /toxi|mortel|ANSM/i.test(t)) || a.safety.text[0]) + '. On regarde, on ne goûte pas.');
-    else if (a?.safety?.text.some(t => /Protégée/.test(t))) out.push('🛡️ Espèce protégée : on se plaît, mais on ne me cueille pas.');
-    if (a?.edible) out.push(`🍽️ Comestible, mais j’ai des sosies dangereux (${a.edible.text.length}). Lisez ma fiche avant de m’emmener dîner.`);
-    out.push(c.count >= 50 ? `📸 Très populaire ici : ${c.count} observations.` : c.count <= 3 ? `🤫 Discrète : vue ${c.count} fois dans le coin.` : `👀 Vue ${c.count} fois dans le coin.`);
+    else if (a?.safety?.text.some(t => /Protégée/.test(t))) out.push('🛡️ Espèce protégée : on m’admire, on ne me cueille pas.');
+    if (a?.edible) out.push(`🍽️ Comestible, mais j’ai des sosies dangereux (${a.edible.text.length}). Lisez ma fiche avant de passer à table.`);
+    out.push(c.count >= 50 ? `📸 Très populaire ici : ${c.count} observations.` : c.count <= 3 ? `🤫 Rare par ici : ${c.count} observation${c.count > 1 ? 's' : ''}.` : `👀 ${c.count} observations dans le coin.`);
     if (p.family) out.push(`👪 De la famille des ${p.family}.`);
     return out.slice(0, 4);
   }
@@ -860,7 +864,7 @@ export class GfDiscover extends LitElement {
     return html`<div class="match" role="alertdialog" aria-modal="true" aria-label="C’est un match" aria-describedby="match-text">
       <p class="title">C’est un match !</p>
       ${c.photo ? html`<img src=${c.photo} alt="" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} />` : nothing}
-      <p id="match-text">Vous et <b>${name}</b> vous plaisez mutuellement. Elle est gardée dans vos favoris (♥).</p>
+      <p id="match-text">Coup de cœur pour <b>${name}</b> ! Direction votre herbier (♥ favoris) — et ce n’est que le début de l’exploration.</p>
       <div class="row">
         <button class="primary" type="button" autofocus @click=${() => { firstMatchShown(); this._match = null; this.#openPlant(c.plant.id, this.#deck.map(x => x.plant.id)); }}>Découvrir cette plante</button>
       </div>

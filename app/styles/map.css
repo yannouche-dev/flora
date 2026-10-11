@@ -291,6 +291,42 @@ gf-map .gf-layer-menu input {
   fill-opacity: 0.9;
   cursor: pointer;
 }
+/* Découvrir: the circle well seen, breathing softly; the observations as leaves popping in one after the other. */
+.gf-area.gf-area-glow {
+  stroke: #2e7d32;
+  stroke-width: 3;
+  stroke-dasharray: none;
+  fill: #66bb6a;
+  fill-opacity: 0.1;
+  filter: drop-shadow(0 0 6px rgb(46 125 50 / 55%));
+  animation: gf-area-breathe 3.2s ease-in-out infinite;
+}
+@keyframes gf-area-breathe {
+  50% { fill-opacity: 0.18; stroke-opacity: 0.75; }
+}
+.gf-obs-leaf { background: none; border: 0; }
+.gf-obs-leaf .pop {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #fff;
+  color: #2e7d32;
+  font-size: 12px;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 35%), 0 0 0 2px rgb(46 125 50 / 35%);
+  cursor: pointer;
+  animation: gf-leaf-pop 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.gf-obs-leaf .pop:hover { color: #fff; background: #2e7d32; }
+@keyframes gf-leaf-pop {
+  from { transform: scale(0) rotate(-40deg); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .gf-area.gf-area-glow, .gf-obs-leaf .pop { animation: none; }
+}
+
 /* Observations around, by source (map blocks of the plant sheet). */
 .gf-obs-inat { fill: #74ac00; }
 .gf-obs-gbif { fill: #4e7b9f; }
