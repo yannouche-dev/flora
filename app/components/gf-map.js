@@ -57,12 +57,16 @@ function pinIcon(spot, selected, movable = false) {
   return placeIconOf(color, spot.properties.plants.length, classes);
 }
 
-/** An observation around (Découvrir): a small leaf in a disc, popping in after `delay` ms. @param {number} delay */
-function leafIcon(delay) {
+/**
+ * An observation around (Découvrir): a small leaf in a disc, popping in after `delay` ms; `hl`: the plant in view,
+ * larger and in its own colour.
+ * @param {number} delay @param {boolean} [hl]
+ */
+function leafIcon(delay, hl = false) {
   return L.divIcon({
-    className: 'gf-obs-leaf',
-    iconSize: [22, 22],
-    iconAnchor: [11, 11],
+    className: hl ? 'gf-obs-leaf hl' : 'gf-obs-leaf',
+    iconSize: hl ? [34, 34] : [22, 22],
+    iconAnchor: hl ? [17, 17] : [11, 11],
     html: `<span class="pop" style="animation-delay:${delay}ms">${iconMarkup('leaf-fill')}</span>`
   });
 }
@@ -194,6 +198,8 @@ export class GfMap extends LitElement {
     fit: { type: Boolean },
     frame: { attribute: false },
     area: { attribute: false },
+    /** Over the area: where one plant was observed ({key, points}), larger leaves of another colour (Découvrir). */
+    highlight: { attribute: false },
     remember: { type: Boolean },
     search: { type: Boolean },
     legend: { type: Boolean },
@@ -249,6 +255,8 @@ export class GfMap extends LitElement {
     this.frame = null;
     /** @type {{ center: [number, number], radius: number, points?: { coordinates: [number, number], title: string, url?: string }[] } | null} */
     this.area = null;
+    /** @type {{ key: string, points: { coordinates: [number, number], title: string }[] } | null} */
+    this.highlight = null;
     /** Persist the last viewed area (main map only). */
     this.remember = false;
     // The same controls on every map: address search, layers and legend.
@@ -577,6 +585,7 @@ export class GfMap extends LitElement {
     this.#areaLayer = L.layerGroup().addTo(map);
     this.#pointsLayer = L.layerGroup().addTo(map);
     this.#focusLayer = L.layerGroup().addTo(map);
+    this.#hlLayer = L.layerGroup().addTo(map);
     this.#spotLayer = L.layerGroup().addTo(map);
     this.#plantLayer = L.layerGroup();
     map.on('zoomend', () => this.#syncPlantVisibility());
@@ -668,6 +677,7 @@ export class GfMap extends LitElement {
     if (changed.has('plantZoom')) this.#syncPlantVisibility();
     if (changed.has('track')) this.#syncTracking();
     if (changed.has('area')) this.#syncArea();
+    if (changed.has('highlight')) this.#syncHighlight();
     const framed = changed.has('frame') && this.#applyFrame();
     if (this.fit && !this.#fitted) this.#fitToContent();
     if (changed.has('selectedId') && this.selectedId && !framed) this.#reveal(this.selectedId);
@@ -703,6 +713,7 @@ export class GfMap extends LitElement {
     this.#syncPlants();
     this.#syncTracking();
     this.#syncArea();
+    this.#syncHighlight();
     this.#syncPoints();
     if (!this.#applyFrame() && this.fit) this.#fitToContent();
     if (this.focusPoint && !this.#focusLayer?.getLayers().length) this.#syncFocusPoint();
@@ -920,6 +931,24 @@ export class GfMap extends LitElement {
   }
 
   /** @type {L.LatLngBounds | null} */ #areaBounds = null;
+  /** @type {L.LayerGroup | null} */ #hlLayer = null;
+  #hlKey = '';
+
+  /** One plant's observations over the area: larger leaves, in their own colour; the others fade. */
+  #syncHighlight() {
+    const layer = this.#hlLayer, hl = this.highlight;
+    if (!layer) return;
+    const key = hl ? hl.key + ':' + hl.points.length : '';
+    this.#map?.getContainer().classList.toggle('gf-hl-on', Boolean(hl?.points.length));
+    if (key === this.#hlKey) return;
+    this.#hlKey = key;
+    layer.clearLayers();
+    for (const [i, point] of (hl?.points || []).entries()) {
+      const [x, y] = point.coordinates;
+      L.marker([y, x], { icon: leafIcon(Math.min(i, 30) * 30, true), keyboard: false, bubblingMouseEvents: false, zIndexOffset: 1000 })
+        .bindTooltip(point.title, { direction: 'top', offset: [0, -12] }).addTo(layer);
+    }
+  }
 
   /** The circle framed (area.fit), with a margin; `ease`: a short zoom animation. @param {boolean} [ease] */
   #fitArea(ease = false) {

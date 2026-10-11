@@ -319,6 +319,16 @@ gf-map .gf-layer-menu input {
   animation: gf-leaf-pop 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 .gf-obs-leaf .pop:hover { color: #fff; background: #2e7d32; }
+/* The plant in view (Découvrir): its observations larger, in pink and gold; the others step back. */
+.gf-obs-leaf.hl .pop {
+  width: 34px;
+  height: 34px;
+  font-size: 18px;
+  color: #fff;
+  background: radial-gradient(circle at 35% 30%, #ff6f9c, #e0245e 70%);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 40%), 0 0 0 3px #ffd166;
+}
+.gf-hl-on .gf-obs-leaf:not(.hl) { opacity: 0.45; transition: opacity 0.3s; }
 @keyframes gf-leaf-pop {
   from { transform: scale(0) rotate(-40deg); opacity: 0; }
   to { transform: none; opacity: 1; }

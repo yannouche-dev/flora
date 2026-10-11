@@ -2161,7 +2161,7 @@ export class GfPlantDetail extends LitElement {
       case 'media':
         return ctx.photosOff ? html`<p class="muted">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`
           // In the sheet: compact; stuck to an edge: the full viewer, filling it (its keys only when it has the focus).
-          : html`<gf-media-viewer ?prefer-photos=${this.panesOnly} ?compact=${!isOnEdge(this.view, 'media')} ?local=${isOnEdge(this.view, 'media')} plant-id=${plant.id} .view=${this.view}
+          : html`<gf-media-viewer ?prefer-photos=${this.panesOnly} ?showcase=${this.panesOnly} ?compact=${!isOnEdge(this.view, 'media')} ?local=${isOnEdge(this.view, 'media')} plant-id=${plant.id} .view=${this.view}
             presentation=${blockStyle(this.view, 'media')} .label=${isTitleShown(this.view, 'media') ? null : blockTitle('media')}
             @open-pane=${(/** @type {CustomEvent} */ e) => { e.stopPropagation(); this.#openPane('media', e.detail.url); }}></gf-media-viewer>`;
       case 'photos': {

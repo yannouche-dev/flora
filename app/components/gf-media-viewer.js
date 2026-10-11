@@ -71,6 +71,9 @@ export class GfMediaViewer extends LitElement {
     preferPhotos: { type: Boolean, attribute: 'prefer-photos' },
     /** 'scene' (stage and filmstrip), 'mosaic' (every image in a grid) or 'slideshow' (one image, full frame). */
     presentation: { reflect: true },
+    /** Showing what it can do (Découvrir): the first image zooms in by itself, a tip says how; the zoom bar stays. */
+    showcase: { type: Boolean, reflect: true },
+    _tip: { state: true },
     _opened: { state: true },
     _playing: { state: true },
     _plant: { state: true },
@@ -151,6 +154,12 @@ export class GfMediaViewer extends LitElement {
     @keyframes map-in { from { opacity: 0; transform: translateX(8px); } }
     /* The controls fade while the pointer rests (wide, mouse). */
     .stage.idle .nav, .stage.idle .zoombar { opacity: 0; }
+    /* Showcase: the zoom bar stays, a slow first zoom, a tip above the bar. */
+    :host([showcase]) .stage.idle .zoombar { opacity: 1; }
+    .stage.showing .frame { transition: transform 1.2s cubic-bezier(0.22, 0.8, 0.3, 1); }
+    .zoom-tip { position: absolute; z-index: 5; left: 50%; bottom: 48px; transform: translateX(-50%); width: max-content; max-width: calc(100% - 24px); margin: 0; padding: 6px 12px;
+      border-radius: var(--gf-radius-pill); background: rgb(0 0 0 / 72%); color: #fff; font-size: 0.8rem; line-height: 1.3; text-align: center; pointer-events: none; animation: tip-in 0.4s ease-out; }
+    @keyframes tip-in { from { opacity: 0; transform: translate(-50%, 6px); } }
     .stage:focus-visible { box-shadow: inset var(--gf-focus); }
     /* The image past the stage: the whole of it laid over the right edge, at the stage's height, and the part seen. */
     .minimap { position: absolute; right: 8px; top: 8px; z-index: 3; border: 1px solid rgb(255 255 255 / 45%); border-radius: 4px; overflow: hidden;
@@ -239,7 +248,7 @@ export class GfMediaViewer extends LitElement {
     :host([compact]) .skel .thumbs i { width: 52px; height: 52px; }
     @keyframes shimmer { to { background-position: -300% 0; } }
     @media (prefers-reduced-motion: reduce) {
-      .thumbs { scroll-behavior: auto; } .mosaic img, .frame .disp, .frame .hd, .stage.animate .frame { transition: none; } .caption .hd-dot { animation: none; }
+      .thumbs { scroll-behavior: auto; } .mosaic img, .frame .disp, .frame .hd, .stage.animate .frame, .stage.showing .frame { transition: none; } .zoom-tip { animation: none; } .caption .hd-dot { animation: none; }
       .skel .stage { animation: none; }
     }
   `];
@@ -1009,6 +1018,7 @@ export class GfMediaViewer extends LitElement {
       <button class="nav prev" type="button" aria-label="Média précédent" ?disabled=${at <= 0} @click=${() => this.#go(-1)}>${icon('chevron-left')}</button>
       <button class="nav next" type="button" aria-label="Média suivant" ?disabled=${at >= n - 1} @click=${() => this.#go(1)}>${icon('chevron-right')}</button>
       ${map && fit ? this.#minimap(item, fit, map) : nothing}
+      ${this._tip ? html`<p class="zoom-tip" role="status">${icon('zoom-in')} Molette, pincer ou double-clic pour zoomer ; ${icon('unlock')} garde le zoom pour les photos suivantes.</p>` : nothing}
       <div class="zoombar" role="group" aria-label="Zoom">
         <button type="button" aria-label="Dézoomer" title="Dézoomer (−)" ?disabled=${!over} @click=${() => this.#zoomAt(z / 1.5, 0, 0, true)}>−</button>
         ${this.#viewButton(z, pct, one)}
@@ -1069,7 +1079,21 @@ export class GfMediaViewer extends LitElement {
     if ((!this._natural || this.#guessed) && img.naturalWidth) { this._natural = { w: img.naturalWidth, h: img.naturalHeight }; this.#guessed = false; }
     this._loaded = true;
     this.#maybeHd();
+    if (this.showcase && !this.#showcased && !this.#touched) {
+      this.#showcased = true;
+      // A moment on the whole image, then a slow zoom into its middle (the map of the image appears); the tip says how.
+      setTimeout(() => {
+        if (this.#touched || item.key !== this.#current?.key) return;
+        this._tip = true;
+        this.#zoomAt(this.#home * 2.2, 0, 0, true);
+        this.renderRoot.querySelector('.stage')?.classList.add('showing');
+        setTimeout(() => this.renderRoot.querySelector('.stage')?.classList.remove('showing'), 1300);
+        setTimeout(() => { this._tip = false; }, 7000);
+      }, 900);
+    }
   }
+  /** The zoom shown once (showcase). */
+  #showcased = false;
 
   /** The thumbnail gives the shape before the display size arrives. @param {HTMLImageElement} img */
   #guessShape(img) {
