@@ -975,8 +975,11 @@ export class GfMap extends LitElement {
     if (key === this.#clusterKey && !rezoom) return;
     this.#clusterKey = key;
     layer.clearLayers();
-    if (!c?.points.length || !map.getSize().x) return;
-    const CELL = 46, zoom = map.getZoom();
+    if (!c?.points.length || !map.getSize().x) { map.getContainer().classList.remove('gf-hl-cluster'); return; }
+    // Cells of ~70 px: a few clear groups rather than many small ones.
+    const CELL = 72, zoom = map.getZoom();
+    // The plant in view among them (Découvrir): the others step back.
+    map.getContainer().classList.toggle('gf-hl-cluster', c.points.some(p => /** @type {any} */ (p).kind === 'hl'));
     /** @type {Map<string, { pts: typeof c.points, x: number, y: number }>} */
     const cells = new Map();
     for (const p of c.points) {

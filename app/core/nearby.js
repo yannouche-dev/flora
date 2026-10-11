@@ -127,27 +127,60 @@ export async function speciesAround(point, radius, signal) {
  */
 export function observationsAround(taxonId, point, radius, signal) {
   if (!moduleOn('inaturalist')) return Promise.reject(new ModuleOffError('inaturalist'));
-  return cached(`around-obs:${taxonId}:${area(point, radius)}`, async () => {
-    const data = await json(`${API}/observations?taxon_id=${taxonId}&${area(point, radius)}&quality_grade=research&per_page=200&order_by=observed_on`, signal);
-    return (data.results || [])
-      .filter(o => Array.isArray(o.geojson?.coordinates))
-      .map(o => ({ coordinates: /** @type {[number, number]} */ (o.geojson.coordinates), date: o.observed_on || null, url: o.uri || `https://www.inaturalist.org/observations/${o.id}` }));
+  return cached(`around-obs2:${taxonId}:${area(point, radius)}`, async () => {
+    const { results } = await paged(`taxon_id=${taxonId}&${area(point, radius)}&quality_grade=research&order_by=observed_on`, 600, signal);
+    return results.map(toObservation);
+  });
+}
+
+/** An iNaturalist observation, for a map. @param {any} o @returns {NearbyObservation} */
+const toObservation = o => ({ coordinates: /** @type {[number, number]} */ (o.geojson.coordinates), date: o.observed_on || null, url: o.uri || `https://www.inaturalist.org/observations/${o.id}` });
+
+/**
+ * Up to `max` observations of a query (200 a page, iNaturalist's most: the first page tells how many there are,
+ * the next ones are asked together), with their true total.
+ * @param {string} query @param {number} max @param {AbortSignal} [signal]
+ * @returns {Promise<{ results: any[], total: number }>}
+ */
+async function paged(query, max, signal) {
+  const PER = 200;
+  const first = await json(`${API}/observations?${query}&per_page=${PER}&page=1`, signal);
+  const total = Number(first.total_results) || (first.results || []).length;
+  const pages = Math.min(Math.ceil(Math.min(total, max) / PER), Math.ceil(max / PER));
+  const rest = await Promise.all(Array.from({ length: Math.max(0, pages - 1) }, (_, i) =>
+    json(`${API}/observations?${query}&per_page=${PER}&page=${i + 2}`, signal).catch(() => ({ results: [] }))));
+  const results = [first, ...rest].flatMap(d => d.results || []).filter(o => Array.isArray(o.geojson?.coordinates));
+  return { results, total };
+}
+
+/**
+ * Where one species was observed in a box (a région, a country, the world): up to 1000 of the latest
+ * research-grade observations, and how many there are in all. Cached a day.
+ * @param {number} taxonId @param {[number, number, number, number]} box [west, south, east, north]
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<{ points: NearbyObservation[], total: number }>}
+ */
+export function observationsInBox(taxonId, [w, s, e, n], signal) {
+  if (!moduleOn('inaturalist')) return Promise.reject(new ModuleOffError('inaturalist'));
+  const box = `swlat=${s.toFixed(3)}&swlng=${w.toFixed(3)}&nelat=${n.toFixed(3)}&nelng=${e.toFixed(3)}`;
+  return cached(`box-obs:${taxonId}:${box}`, async () => {
+    const { results, total } = await paged(`taxon_id=${taxonId}&${box}&quality_grade=research&order_by=observed_on`, 1000, signal);
+    return { points: results.map(toObservation), total };
   });
 }
 
 /**
- * Where plants were observed in the circle (the 200 most recent research-grade observations, every species),
- * for a map behind the distance chosen. Cached for a day like the rest.
+ * Where plants were observed in the circle (up to the 1000 most recent research-grade observations, every
+ * species — 200 a page, the pages asked together), and how many there are in all; for a map behind the distance
+ * chosen. Cached for a day like the rest.
  * @param {[number, number]} point @param {number} radius @param {AbortSignal} [signal]
- * @returns {Promise<{ coordinates: [number, number], title: string }[]>}
+ * @returns {Promise<{ points: { coordinates: [number, number], title: string }[], total: number }>}
  */
 export function observationPointsAround(point, radius, signal) {
   if (!moduleOn('inaturalist')) return Promise.reject(new ModuleOffError('inaturalist'));
-  return cached(`around-points:${area(point, radius)}`, async () => {
-    const data = await json(`${API}/observations?${area(point, radius)}&iconic_taxa=Plantae&quality_grade=research&locale=fr&per_page=200&order_by=observed_on`, signal);
-    return (data.results || [])
-      .filter(o => Array.isArray(o.geojson?.coordinates))
-      .map(o => ({ coordinates: /** @type {[number, number]} */ (o.geojson.coordinates), title: o.taxon?.preferred_common_name || o.taxon?.name || 'Plante' }));
+  return cached(`around-points2:${area(point, radius)}`, async () => {
+    const { results, total } = await paged(`${area(point, radius)}&iconic_taxa=Plantae&quality_grade=research&locale=fr&order_by=observed_on`, 1000, signal);
+    return { points: results.map(o => ({ coordinates: /** @type {[number, number]} */ (o.geojson.coordinates), title: o.taxon?.preferred_common_name || o.taxon?.name || 'Plante' })), total };
   });
 }
 

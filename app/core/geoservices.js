@@ -107,8 +107,17 @@ const WFS = 'https://data.geopf.fr/wfs/ows';
 export function zoneShape(gid, name) {
   const level = /^FRA\./.test(gid || '') ? gid.split('.').length - 1 : 0;
   const type = level === 1 ? 'region' : level === 2 ? 'departement' : null;
-  if (!type || !name || !moduleOn('ignGeo')) return Promise.resolve(null);
-  return cached('geo:zone:' + gid, async () => {
+  return type ? adminShape(type, name) : Promise.resolve(null);
+}
+
+/**
+ * The outline of a French région or département by its official name (IGN ADMIN EXPRESS), lightened.
+ * @param {'region' | 'departement'} type @param {string} name
+ * @returns {Promise<{ type: 'Feature', geometry: any, properties: { name: string } } | null>}
+ */
+export function adminShape(type, name) {
+  if (!name || !moduleOn('ignGeo')) return Promise.resolve(null);
+  return cached(`geo:admin:${type}:${name}`, async () => {
     const q = new URLSearchParams({
       SERVICE: 'WFS', VERSION: '2.0.0', REQUEST: 'GetFeature', TYPENAMES: `ADMINEXPRESS-COG-CARTO.LATEST:${type}`,
       outputFormat: 'application/json', count: '1', CQL_FILTER: `nom_officiel='${name.replace(/'/g, "''")}'`

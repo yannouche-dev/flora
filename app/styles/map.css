@@ -454,3 +454,8 @@ gf-map:has(.gf-point-card) .leaflet-bottom {
 .gf-occ.gf-occ-gbif { fill: #4e7b9f; }
 .gf-occ-group-inat span { background: radial-gradient(circle at 35% 30%, #a3d23a, #5c8a00 75%); box-shadow: 0 0 0 4px rgb(116 172 0 / 30%), 0 2px 8px rgb(0 0 0 / 35%); }
 .gf-occ-group-gbif span { background: radial-gradient(circle at 35% 30%, #7aa6c8, #3a6283 75%); box-shadow: 0 0 0 4px rgb(78 123 159 / 30%), 0 2px 8px rgb(0 0 0 / 35%); }
+/* Découvrir: the plant in view, in a wider scope (a région, France…), grouped in pink and gold. */
+.gf-occ.gf-occ-hl { fill: #e0245e; stroke: #ffd166; }
+.gf-occ-group-hl span { background: radial-gradient(circle at 35% 30%, #ff6f9c, #e0245e 75%); box-shadow: 0 0 0 3px #ffd166, 0 2px 8px rgb(0 0 0 / 35%); }
+/* The plant in view lit (its leaves, or its groups in a wider scope): the observations of every plant step back. */
+.gf-hl-on .gf-occ-group-inat, .gf-hl-on .gf-occ-inat, .gf-hl-cluster .gf-occ-group-inat, .gf-hl-cluster .gf-occ-inat { opacity: 0.35; transition: opacity 0.3s; }
