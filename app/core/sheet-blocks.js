@@ -42,7 +42,9 @@ export const BLOCKS = [
   { key: 'literature', title: 'Publications (GBIF)', module: 'gbif' },
   { key: 'trefle', title: 'Trefle', module: 'trefle' },
   { key: 'ids', title: 'Identifiants' },
-  { key: 'resources', title: 'Ressources' }
+  { key: 'resources', title: 'Ressources' },
+  // Another site, in a frame: in a pane, the app's links to other sites open there.
+  { key: 'web', title: 'Page web' }
 ];
 
 /** The parts of a block that can be moved and hidden inside it, in their default order. @type {Record<string, SubBlock[]>} */
@@ -110,9 +112,9 @@ export const ACTIONS = SUBS.actions;
 
 /** Default order of each mode: what the mode is about first. Note blocks follow, in their creation order. @type {Record<Mode, string[]>} */
 const DEFAULTS = {
-  epure: ['name', 'photos', 'media', 'status', 'lookalikes', 'uses', 'calendar', 'interactions', 'wikipedia', 'names', 'taxonomy', 'mine', 'descriptions', 'occurrences', 'map', 'climate', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids', 'resources'],
-  standard: ['name', 'status', 'lookalikes', 'uses', 'taxonomy', 'mine', 'calendar', 'interactions', 'media', 'photos', 'wikipedia', 'descriptions', 'names', 'resources', 'occurrences', 'map', 'climate', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids'],
-  scientific: ['name', 'lookalikes', 'taxonomy', 'status', 'calendar', 'occurrences', 'map', 'climate', 'interactions', 'wikipedia', 'descriptions', 'gbifProfile', 'media', 'photos', 'gbifMedia', 'trefle', 'literature', 'ids', 'mine', 'resources', 'uses', 'names']
+  epure: ['name', 'photos', 'media', 'status', 'lookalikes', 'uses', 'calendar', 'interactions', 'wikipedia', 'names', 'taxonomy', 'mine', 'descriptions', 'occurrences', 'map', 'climate', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids', 'resources', 'web'],
+  standard: ['name', 'status', 'lookalikes', 'uses', 'taxonomy', 'mine', 'calendar', 'interactions', 'media', 'photos', 'wikipedia', 'descriptions', 'names', 'resources', 'occurrences', 'map', 'climate', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids', 'web'],
+  scientific: ['name', 'lookalikes', 'taxonomy', 'status', 'calendar', 'occurrences', 'map', 'climate', 'interactions', 'wikipedia', 'descriptions', 'gbifProfile', 'media', 'photos', 'gbifMedia', 'trefle', 'literature', 'ids', 'mine', 'resources', 'uses', 'names', 'web']
 };
 
 /**
@@ -121,7 +123,7 @@ const DEFAULTS = {
  * Épuré keeps its large photo (touching it opens the viewer).
  * @type {Record<Mode, string[]>}
  */
-const DEFAULT_HIDDEN = { epure: ['media'], standard: ['photos', 'gbifMedia'], scientific: ['photos', 'gbifMedia'] };
+const DEFAULT_HIDDEN = { epure: ['media', 'web'], standard: ['photos', 'gbifMedia', 'web'], scientific: ['photos', 'gbifMedia', 'web'] };
 
 /** The blocks folded by hand (or by default) in a view. @param {Mode} view @returns {string[]} */
 const hiddenList = view => layout().hidden[view] ?? DEFAULT_HIDDEN[baseOf(view)] ?? [];

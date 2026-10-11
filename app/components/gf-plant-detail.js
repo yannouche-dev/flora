@@ -39,6 +39,8 @@ import { chartStyles, climateChart, groupColor, groupLegend, networkChart, niche
 import { unsafeCSS } from 'lit';
 import './gf-sortable-list.js';
 import './gf-media-viewer.js';
+import './gf-web-pane.js';
+import { registerWebPane, unregisterWebPane } from '../core/web-pane.js';
 import './gf-sheet-rail.js';
 import { alertsOf } from '../core/alerts.js';
 import { sheetSession } from '../core/sheet-session.js';
@@ -830,6 +832,9 @@ export class GfPlantDetail extends LitElement {
     .edge-body > .block.map-block > .content, .edge-body > .block[data-key='media'] > .content { flex: 1; display: flex; flex-direction: column; min-height: 0; }
     .edge-body .map-placeholder.fill { flex: 1; height: auto !important; }
     .edge-body gf-media-viewer { flex: 1; min-height: 0; }
+    .edge-body > .block[data-key='web'] { flex: 1 0 260px; display: flex; flex-direction: column; min-height: 0; }
+    .edge-body > .block[data-key='web'] > .content { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .edge-body:has(> .block[data-key='web']) { padding: 0; }
     gf-sheet-map[fill] { flex: 1; min-height: 0; }
     /* Folded: its bar only (a column: a strip of its blocks' icons). */
     .edge.col.folded { width: 44px; }
@@ -1022,6 +1027,7 @@ export class GfPlantDetail extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    unregisterWebPane(this);
     this.#resize.disconnect();
     this.#abort?.abort();
   }
@@ -1580,6 +1586,8 @@ export class GfPlantDetail extends LitElement {
 
   /** Shown here: everything in Mode King; outside it, not folded, not left out for being empty. @param {string} k @param {any} ctx */
   #visible(k, ctx) {
+    // « Page web » works in a pane only: elsewhere, Mode King alone shows it (to be placed).
+    if (k === 'web') return this.#store.state.kingMode || Boolean(paneOf(this.view, 'web'));
     return this.#store.state.kingMode || (!isHidden(this.view, k) && !(hidesEmpty(this.view, k) && this.#emptyHere(k, ctx)));
   }
 
@@ -1630,7 +1638,7 @@ export class GfPlantDetail extends LitElement {
     const tabs = html`<span class="edge-tabs" role="tablist" aria-label=${'Blocs du volet ' + where}>${keys.map(k => html`<button type="button" role="tab" data-drag-key=${k}
       aria-selected=${k === tab ? 'true' : 'false'} title=${blockTitle(k)} @click=${() => setStackState(this.view, node.id, { active: k, folded: false })}
       @pointerdown=${king ? (/** @type {PointerEvent} */ e) => this.#press(e, k) : null}>
-      ${icon(categoryOf(blockCategory(k)).icon)}<span class="tab-name">${blockTitle(k)}</span></button>`)}</span>`;
+      ${icon(k === 'web' ? 'globe-europe-africa' : categoryOf(blockCategory(k)).icon)}<span class="tab-name">${blockTitle(k)}</span></button>`)}</span>`;
     return html`<aside class="edge ${column ? 'col' : 'band'} ${folded ? 'folded' : ''} ${bare ? 'bare' : ''} ${max ? 'max' : ''} ${king ? 'king' : ''}"
         data-pane=${node.id} data-drop-node=${node.id} aria-label=${'Volet ' + where}>
       ${bare ? html`<div class="edge-float">${keys.length > 1 ? tabs : nothing}${tab === 'media' ? this.#mediaControls() : nothing}
@@ -1995,7 +2003,15 @@ export class GfPlantDetail extends LitElement {
     return html`<div class="frame edged ${this._maxEdge ? 'maxed' : ''}" data-drop-node="root">${this.#node(ctx, tree, sheet)}</div>`;
   }
 
+  /** A page arrived for the « Page web » pane: its tab shown, unfolded. */
+  revealWeb() {
+    const pane = paneOf(this.view, 'web');
+    if (pane && (pane.active !== 'web' || pane.folded)) setStackState(this.view, pane.id, { active: 'web', folded: false });
+  }
+
   updated() {
+    // A « Page web » pane in this layout: the app's links to other sites come to it.
+    if (paneOf(this.view, 'web') && !this.only) registerWebPane(this); else unregisterWebPane(this);
     // The sheet scrolls in its middle when it has edges: the host itself does not.
     this.toggleAttribute('edged', Boolean(this.renderRoot.querySelector('.frame.edged')));
     this.#sendRail();
@@ -2032,7 +2048,7 @@ export class GfPlantDetail extends LitElement {
   }
 
   /** Blocks that make no sense alone in a pane. */
-  static NO_PANE = ['name', 'actions', 'media'];
+  static NO_PANE = ['name', 'actions', 'media', 'web'];
 
   /** ⤢ on a block: open it in the pane beside the sheet. @param {string} key */
   #paneButton(key) {
@@ -2278,6 +2294,7 @@ export class GfPlantDetail extends LitElement {
     if (isMap(key)) return this.#map(key, ctx);
     switch (key) {
       case 'name': return this.#name(ctx);
+      case 'web': return html`<gf-web-pane ?inactive=${!paneOf(v, 'web')}></gf-web-pane>`;
       case 'media':
         return ctx.photosOff ? html`<p class="muted">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`
           // In the sheet: compact; stuck to an edge: the full viewer, filling it (its keys only when it has the focus).
