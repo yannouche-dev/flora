@@ -144,6 +144,8 @@ export class GfMediaViewer extends LitElement {
     .zoombar button:hover { background: rgb(255 255 255 / 15%); }
     .zoombar button:disabled { opacity: 0.4; cursor: default; }
     .zoombar .pct { min-width: 92px; }
+    .zoombar .lock { font-size: 0.85rem; opacity: 0.75; }
+    .zoombar .lock[aria-pressed='true'] { opacity: 1; color: #ffd166; }
     /* The map comes in softly. */
     .minimap { animation: map-in 0.25s ease-out; }
     @keyframes map-in { from { opacity: 0; transform: translateX(8px); } }
@@ -532,23 +534,26 @@ export class GfMediaViewer extends LitElement {
   get #maxZoom() { return Math.max(4, this.#oneToOne * 2); }
 
   /**
-   * Plein cadre: the zoom at which the image fills the stage's width — whenever its definition allows it (its
-   * pixels cover the width on this screen, a little enlargement aside), else 1, the whole image.
+   * Plein cadre: the zoom at which the image fills the stage's width — the first view of every image, unless its
+   * definition is far too low for it (enlarged more than twice), then the whole image.
    */
   get #fill() {
     const n = this._natural, { w } = this._stage, fit = this.#fit;
     if (!n || !fit || !w || this.#guessed) return 1;
     const z = w / fit.w;
     if (z <= 1.01) return 1;
-    if (w * (devicePixelRatio || 1) > n.w * 1.25) return 1;
+    if (w > n.w * 2) return 1;
     return Math.min(z, this.#maxZoom);
   }
 
-  /** The view chosen (and kept from one image, one plant to the next): plein cadre, whole image or 100 %. */
-  get #home() {
-    const pref = sheetSession.media.zoom;
-    return pref === 'fit' ? 1 : pref === 'one' ? clamp(this.#oneToOne, 1, this.#maxZoom) : this.#fill;
+  /** The zoom kept with the padlock (its % of the original's pixels), on this image. */
+  get #locked() {
+    const pct = sheetSession.media.lock;
+    return pct ? clamp(pct / 100 * this.#oneToOne, 1, this.#maxZoom) : null;
   }
+
+  /** The first view of an image: filling the stage's width — or the zoom locked with the padlock. */
+  get #home() { return this.#locked ?? this.#fill; }
 
   /** The image wider than the stage (it moves sideways). */
   get #overflowX() { const fit = this.#fit; return !!fit && fit.w * this._z > this._stage.w + 1; }
@@ -561,15 +566,28 @@ export class GfMediaViewer extends LitElement {
     this.#maybeHd();
   }
 
-  /** « Ajusté » → « Plein cadre » (when there is one) → « 100 % » → « Ajusté »…: the choice is kept. */
+  /** « Ajusté » → « Plein cadre » (when there is one) → « 100 % » → « Ajusté »…, on this image (the padlock keeps it). */
   #cycleView() {
     const z = this._z, fill = this.#fill, one = clamp(this.#oneToOne, 1, this.#maxZoom);
     const near = (/** @type {number} */ a) => Math.abs(z - a) < 0.02;
-    /** @type {'auto' | 'fit' | 'one'} */
-    const next = near(1) ? (fill > 1 ? 'auto' : 'one') : near(fill) && fill > 1 ? (one > fill + 0.02 ? 'one' : 'fit') : 'fit';
-    setMediaSession({ zoom: next });
-    this.#touched = false;
-    this.#toHome(true);
+    const next = near(1) ? (fill > 1 ? fill : one) : near(fill) && fill > 1 ? (one > fill + 0.02 ? one : 1) : 1;
+    this._z = next; this._tx = 0; this._ty = 0;
+    this.#touched = true;
+    this.#clampPan();
+    this.#animate(true);
+    this.#maybeHd();
+    this.#keepLock();
+    this.requestUpdate();
+  }
+
+  /** Locked: the zoom now shown is the one kept for the next images. */
+  #keepLock() {
+    if (sheetSession.media.lock) setMediaSession({ lock: Math.round(this._z / this.#oneToOne * 1000) / 10 });
+  }
+
+  /** The padlock: keep the zoom shown for the next images and plants, or let each one start filling the width. */
+  #toggleLock() {
+    setMediaSession({ lock: sheetSession.media.lock ? null : Math.round(this._z / this.#oneToOne * 1000) / 10 });
     this.requestUpdate();
   }
 
@@ -602,6 +620,7 @@ export class GfMediaViewer extends LitElement {
    */
   #zoomAt(z, px, py, animate = false) {
     this.#touched = true;
+    queueMicrotask(() => this.#keepLock());
     const z2 = clamp(z, 1, this.#maxZoom), k = z2 / this._z;
     this._tx = px - (px - this._tx) * k;
     this._ty = py - (py - this._ty) * k;
@@ -994,6 +1013,7 @@ export class GfMediaViewer extends LitElement {
         <button type="button" aria-label="Dézoomer" title="Dézoomer (−)" ?disabled=${!over} @click=${() => this.#zoomAt(z / 1.5, 0, 0, true)}>−</button>
         ${this.#viewButton(z, pct, one)}
         <button type="button" aria-label="Zoomer" title="Zoomer (+)" ?disabled=${z >= this.#maxZoom - 0.01} @click=${() => this.#zoomAt(z * 1.5, 0, 0, true)}>+</button>
+        ${this.#lockButton()}
       </div>
     </div>`;
   }
@@ -1003,11 +1023,18 @@ export class GfMediaViewer extends LitElement {
    * one — the choice is kept for the next images and plants.
    * @param {number} z @param {number} pct @param {number} one
    */
+  #lockButton() {
+    const on = Boolean(sheetSession.media.lock);
+    return html`<button type="button" class="lock" aria-pressed=${String(on)}
+      title=${on ? `Zoom verrouillé à ${nf.format(/** @type {number} */ (sheetSession.media.lock))} % pour les images suivantes — toucher pour déverrouiller` : 'Verrouiller ce zoom pour les images suivantes (sinon chaque image s’ouvre à la largeur du cadre)'}
+      aria-label=${on ? 'Déverrouiller le zoom' : 'Verrouiller le zoom'} @click=${() => this.#toggleLock()}>${icon(on ? 'lock-fill' : 'unlock')}</button>`;
+  }
+
   #viewButton(z, pct, one) {
     const near = (/** @type {number} */ a) => Math.abs(z - a) < 0.02, fill = this.#fill;
     const label = near(1) ? 'Ajusté' : fill > 1 && near(fill) ? 'Plein cadre' : nf.format(pct) + ' %';
     const next = near(1) ? (fill > 1 ? 'Plein cadre' : '100 %') : fill > 1 && near(fill) && clamp(one, 1, this.#maxZoom) > fill + 0.02 ? '100 %' : 'l’image entière';
-    return html`<button type="button" class="pct" title=${'Passer à : ' + next + ' (gardé pour les images suivantes)'} aria-label=${label + ' — passer à ' + next}
+    return html`<button type="button" class="pct" title=${'Passer à : ' + next} aria-label=${label + ' — passer à ' + next}
       @click=${() => this.#cycleView()}>${label}</button>`;
   }
 

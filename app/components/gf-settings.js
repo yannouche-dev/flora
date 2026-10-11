@@ -9,11 +9,12 @@ import { getTrefleToken, setTrefleToken } from '../core/sources.js';
 import { MODULES, setModule } from '../core/modules.js';
 import { CATEGORIES, blockCategory, categoryOf } from '../core/categories.js';
 import { icon, modeIcon } from '../core/icons.js';
+import { pressDock } from '../core/dock-drag.js';
 import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
 import {
-  STYLES, SUBS, orderByCategory, canBeEmpty, hidesEmpty, setHidesEmpty, placeOf, setPlace, blockModuleName, blockStyle, isTitleShown, setBlockStyle, setTitleShown, blockOrder, blockTitle, createNote, deleteNote, createMap, deleteMap, isAddedMap, exportLayout, importLayout, isCustom, isHidden, isNote,
+  STYLES, SUBS, orderByCategory, canBeEmpty, hidesEmpty, setHidesEmpty, placeOf, setPlace, treeOf, paneOf, dockBlock, toSheet, blockModuleName, blockStyle, isTitleShown, setBlockStyle, setTitleShown, blockOrder, blockTitle, createNote, deleteNote, createMap, deleteMap, isAddedMap, exportLayout, importLayout, isCustom, isHidden, isNote,
   isSubHidden, renameBlock, resetAll, resetBlocks, setBlockOrder, setHidden, setSubHidden, setSubOrder, subOrder, subTitle
 } from '../core/sheet-blocks.js';
 import './gf-sortable-list.js';
@@ -92,6 +93,19 @@ export class GfSettings extends LitElement {
     .king-card .crown { font-size: 1.6rem; color: #b8860b; display: inline-flex; }
     .block-orders { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; margin: 8px 0 16px; }
     .block-order { padding: 10px 12px; }
+    /* The plant pane in miniature (the tree of panes), chips to drag. */
+    .mini-tree { display: flex; height: 190px; margin: 6px 0 10px; padding: 4px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-sm); background: var(--gf-surface-2); }
+    .mini-tree > * { flex: 1; min-width: 0; }
+    .mt-split { display: flex; gap: 4px; min-width: 0; min-height: 0; }
+    .mt-split.row { flex-direction: row; } .mt-split.col { flex-direction: column; }
+    .mt-cell { display: flex; min-width: 0; min-height: 0; } .mt-cell > * { flex: 1; min-width: 0; min-height: 0; }
+    .mt-sheet, .mt-pane { overflow: auto; padding: 4px; border-radius: 4px; background: var(--gf-surface); border: 1px solid var(--gf-border); font-size: 0.7rem; }
+    .mt-sheet b { display: block; margin-bottom: 2px; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gf-text-muted); }
+    .mt-pane { border-color: var(--gf-accent); background: var(--gf-accent-soft); }
+    .mt-pane.folded { opacity: 0.7; }
+    .mt-chips { display: flex; flex-wrap: wrap; gap: 3px; }
+    .mt-chip { min-height: 0; padding: 1px 6px; border: 1px solid var(--gf-border); border-radius: 999px; background: var(--gf-surface); font: inherit; font-size: 0.68rem; cursor: grab; touch-action: none; white-space: nowrap; }
+    .mt-chip.off { opacity: 0.5; text-decoration: line-through; }
     .block-order .head { display: flex; align-items: center; gap: 8px; }
     .block-order .head button { margin-left: auto; }
     .layout-tools, .layout-file { margin-top: 8px; gap: 8px; }
@@ -328,6 +342,7 @@ export class GfSettings extends LitElement {
               <button type="button" class="small" title="Les blocs d’une même catégorie ensemble (Noms, Images, Savoirs…), chacun gardant sa place parmi les siens"
                 @click=${() => orderByCategory(mode, k => CATEGORIES.findIndex(c => c.key === blockCategory(k)))}>Ranger par catégorie</button>
             </div>
+            ${this.#miniTree(mode)}
             <gf-sortable-list label=${'Blocs de la fiche, ' + modeLabel(mode)}
               .items=${blockOrder(mode).map(k => ({
                 key: k, label: blockTitle(k), checked: !isHidden(mode, k), renamable: true, removable: isNote(k) || isAddedMap(k), nested: Boolean(SUBS[k]),
@@ -345,7 +360,7 @@ export class GfSettings extends LitElement {
               @choose=${e => setBlockStyle(mode, e.detail.key, e.detail.value)}
               @titled=${e => setTitleShown(mode, e.detail.key, e.detail.shown)}
               @empty=${e => setHidesEmpty(mode, e.detail.key, e.detail.hidden)}
-              @place=${e => setPlace(mode, e.detail.key, e.detail.place || null)}
+              @place=${e => { if (e.detail.place !== 'pane') setPlace(mode, e.detail.key, e.detail.place || null); }}
               @remove=${e => this.#removeNote(e.detail.key)}></gf-sortable-list>
           </div>`)}
       </div>
@@ -358,6 +373,32 @@ export class GfSettings extends LitElement {
           : html`<button type="button" @click=${async () => { this._newNote = true; await this.updateComplete; /** @type {HTMLInputElement | null} */ (this.renderRoot.querySelector('.layout-tools input'))?.focus(); }}>${icon('plus-lg')} Nouveau bloc Note</button>`}
         <button type="button" @click=${() => { createMap('Carte'); this._layoutNote = 'Bloc Carte créé : il est en fin de fiche dans chaque mode ; réglez-le sur la fiche (⚙).'; }}>${icon('plus-lg')} Nouveau bloc Carte</button>
       </div>`;
+  }
+
+  /**
+   * The plant pane of a mode in miniature — the same tree of panes as on the sheet (Mode King): the sheet and
+   * its blocks, the panes and their tabs. Drag a chip to a side of a box (a new pane), in its middle (a tab),
+   * or into the sheet; the sheet changes with it.
+   * @param {any} mode
+   */
+  #miniTree(mode) {
+    const tree = treeOf(mode);
+    const press = (/** @type {PointerEvent} */ e, /** @type {string} */ key) => {
+      const scope = /** @type {HTMLElement} */ (/** @type {HTMLElement} */ (e.currentTarget).closest('.mini-tree'));
+      pressDock(e, { root: scope, key, label: blockTitle(key),
+        onDrop: ({ target, zone }) => { if (zone === 'sheet') toSheet(mode, key); else dockBlock(mode, key, target, zone); } });
+    };
+    const chip = (/** @type {string} */ k) => html`<button type="button" class="mt-chip ${isHidden(mode, k) ? 'off' : ''}" data-drag-key=${k} title=${'Glisser « ' + blockTitle(k) + ' » vers un volet'}
+      @pointerdown=${(/** @type {PointerEvent} */ e) => press(e, k)}>${blockTitle(k)}</button>`;
+    /** @param {any} n @returns {unknown} */
+    const node = n => {
+      if (n.t === 'sheet') return html`<div class="mt-sheet" data-drop-node="sheet"><b>Fiche</b>
+        <span class="mt-chips">${blockOrder(mode).filter(k => !paneOf(mode, k) && !isHidden(mode, k) && !['name', 'actions'].includes(k)).map(chip)}</span></div>`;
+      if (n.t === 'stack') return html`<div class="mt-pane ${n.folded ? 'folded' : ''}" data-drop-node=${n.id}><span class="edge-tabs mt-chips">${n.tabs.map(chip)}</span></div>`;
+      const total = n.sizes.reduce((/** @type {number} */ a, /** @type {number} */ b) => a + b, 0);
+      return html`<div class="mt-split ${n.dir}">${n.kids.map((/** @type {any} */ k, /** @type {number} */ i) => html`<div class="mt-cell" style=${`flex:${n.sizes[i] / total} 1 0`}>${node(k)}</div>`)}</div>`;
+    };
+    return html`<div class="mini-tree" data-drop-node="root" aria-label=${'Volets du panneau Plante, ' + modeLabel(mode) + ' : glisser un bloc vers un bord (nouveau volet), au centre d’un volet (onglet) ou dans la fiche'}>${node(tree)}</div>`;
   }
 
   /** A block's sub-blocks in a mode. @param {any} mode @param {string} block */
