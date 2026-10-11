@@ -524,7 +524,8 @@ export class GfDiscover extends LitElement {
     this.#hlFor = key;
     // Another plant: its leaves come (the old ones go); another scope of the same plant: the map stays until its
     // observations are in (no empty map in between).
-    if (!this._hl || !key || !this._hl.key.startsWith(id + ':')) this._hl = null;
+    // Back to the circle (from another scope, or another step): never the wider scope's groups meanwhile.
+    if (!this._hl || !key || !this._hl.key.startsWith(id + ':') || (scope === 'around' && this._hl.scope !== 'around')) this._hl = null;
     const card = key ? (this._cards || []).find(c => c.plant.id === id) : null;
     if (!card?.taxonId) { this._hl = null; return; }
     this.#loadHighlight(key, card, scope);
@@ -939,7 +940,8 @@ export class GfDiscover extends LitElement {
     if (a?.safety?.tone === 'danger') out.push('☠️ ' + (a.safety.text.find(t => /toxi|mortel|ANSM/i.test(t)) || a.safety.text[0]) + '. On regarde, on ne goûte pas.');
     else if (a?.safety?.text.some(t => /Protégée/.test(t))) out.push('🛡️ Espèce protégée : on m’admire, on ne me cueille pas.');
     if (a?.edible) out.push(`🍽️ Comestible, mais j’ai des sosies dangereux (${a.edible.text.length}). Lisez ma fiche avant de passer à table.`);
-    out.push(c.count >= 50 ? `📸 Très populaire ici : ${c.count} observations.` : c.count <= 3 ? `🤫 Rare par ici : ${c.count} observation${c.count > 1 ? 's' : ''}.` : `👀 ${c.count} observations dans le coin.`);
+    // How often it is seen here, in words (no count on the card).
+    out.push(c.count >= 50 ? '📸 Très populaire par ici.' : c.count <= 3 ? '🤫 Rare par ici : une belle rencontre.' : '👀 Assez présente dans le coin.');
     if (p.family) out.push(`👪 De la famille des ${p.family}.`);
     return out.slice(0, 4);
   }
@@ -1141,8 +1143,9 @@ export class GfDiscover extends LitElement {
   /** The scope shown for the plant in view: chosen after a match (its scope bar), else the circle. */
   get #scopeNow() {
     const id = this.#focusId;
-    // From the first match on: the scope chosen, for the card in view.
-    return id != null && discoverState().firstMatch ? this._scope : 'around';
+    // From the first match on: the scope chosen, for the card in view — from the Photos step on (the Carte and
+    // Rencontres steps are only the map around you, the place and the cards).
+    return id != null && discoverState().firstMatch && this.#stage >= 2 ? this._scope : 'around';
   }
 
   /** The département and région of the place chosen (from its IGN address), once. */
@@ -1189,6 +1192,17 @@ export class GfDiscover extends LitElement {
     const found = await observationsInBox(card.taxonId, box).catch(() => null);
     if (found && this.#hlFor === key) this._hl = { key, scope, box, points: found.points.map(p => ({ coordinates: p.coordinates, title, url: p.url })), total: found.total };
   }
+
+  /**
+   * Rencontres (quiet): the plant in view lit by leaves only, the MANY latest at most — never numbered groups.
+   */
+  get #quietHighlight() {
+    const hl = this._hl;
+    if (!hl || hl.points.length <= MANY) return hl;
+    if (this.#qhMemo?.key !== hl.key) this.#qhMemo = { key: hl.key, value: { ...hl, key: hl.key + ':quiet', points: hl.points.slice(0, MANY) } };
+    return this.#qhMemo.value;
+  }
+  /** @type {any} */ #qhMemo = null;
 
   /** The plant's observations in a wider scope, many: grouped (pink and gold). */
   get #guidedCluster() {
@@ -1445,16 +1459,19 @@ export class GfDiscover extends LitElement {
     const id = this.#focusId;
     const card = asking ? undefined : cards.find(c => c.plant.id === id);
     const panes = !asking && step >= 1;
+    // Rencontres: the map, the place (distance) and the cards — no legend, no « Où pousse-t-elle encore ? ».
+    const quiet = this.#stage === 1;
     return html`<section class="guided ${asking ? 'asking' : ''} ${panes ? 'with-panes' : ''} ${step >= 4 && !asking ? 'listed' : ''}" aria-label="Découverte">
       ${this.#steps()}
       <div class="g-scroll">
         <div class="g-map">
-          <div class="g-mapbox"><gf-map no-search no-create no-locate point-click=${asking ? 'none' : 'pick'} @point-pick=${(/** @type {CustomEvent} */ e) => this.#pick(e)} .area=${this.#area} .highlight=${!asking && this._hl && this._hl.points.length <= MANY ? this._hl : null}
-              .cluster=${asking ? null : this.#guidedCluster} .frame=${asking ? null : this.#scopeFrame} .zone=${asking ? null : this.#scopeZone}></gf-map>${asking ? this.#launch() : this.#radiusBar()}
+          <div class="g-mapbox"><gf-map no-search no-create no-locate point-click=${asking ? 'none' : 'pick'} @point-pick=${(/** @type {CustomEvent} */ e) => this.#pick(e)}
+              .area=${this.#area} .highlight=${asking ? null : quiet ? this.#quietHighlight : this._hl && this._hl.points.length <= MANY ? this._hl : null}
+              .cluster=${asking || quiet ? null : this.#guidedCluster} .frame=${asking ? null : this.#scopeFrame} .zone=${asking ? null : this.#scopeZone}></gf-map>${asking ? this.#launch() : this.#radiusBar()}
             ${asking ? nothing
               : this._note ? html`<p class="g-legend" role="status">${this._note}</p>`
-              : card ? html`<p class="g-legend" aria-live="polite"><span class="dot"></span>${card.plant.vernacularNames?.[0] || card.plant.scientificName} · ${this.#hlLine()}</p>` : nothing}
-            ${asking ? nothing : this.#scopeBar(card)}</div>
+              : card && !quiet ? html`<p class="g-legend" aria-live="polite"><span class="dot"></span>${card.plant.vernacularNames?.[0] || card.plant.scientificName} · ${this.#hlLine()}</p>` : nothing}
+            ${asking || quiet ? nothing : this.#scopeBar(card)}</div>
           ${step >= 4 && !asking ? this.#aroundList(cards) : nothing}
         </div>
         <div class="g-deck">${asking ? nothing : this._cards ? this.#deckView() : html`<p class="muted g-wait">Recherche des plantes observées autour…</p>`}</div>
