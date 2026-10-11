@@ -32,24 +32,34 @@ export class GfApp extends LitElement {
       grid-template-rows: auto 1fr auto;
       height: 100%;
     }
+    /* Three parts: the sections (left), the logo (centred), the tools (right). */
     header {
-      display: flex;
+      display: grid;
+      grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
       align-items: center;
       gap: var(--gf-gap);
-      padding: 8px 16px;
+      padding: 6px 16px;
       background: var(--gf-surface);
       border-bottom: 1px solid var(--gf-border);
     }
+    header .side { display: flex; align-items: center; gap: var(--gf-gap); min-width: 0; }
+    header .side.end { justify-content: flex-end; }
+    /* The logo: bigger, centred, in sight — and quiet (the accent, a light wordmark). */
     .brand {
       display: flex;
       align-items: center;
-      gap: 8px;
-      font-weight: 700;
+      gap: 9px;
       color: var(--gf-accent);
       text-decoration: none;
       white-space: nowrap;
+      padding: 2px 10px 2px 4px;
+      border-radius: var(--gf-radius-pill);
+      transition: background 0.15s;
     }
-    .brand img { width: 28px; height: 28px; }
+    .brand:hover { background: var(--gf-accent-soft); }
+    .brand:focus-visible { outline: none; box-shadow: var(--gf-focus); }
+    .brand img { width: 38px; height: 38px; filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.12)); }
+    .brand span { font-size: 1.12rem; font-weight: 600; letter-spacing: 0.01em; }
     nav.tabs { flex: none; }
     nav.tabs a { color: var(--gf-text); text-decoration: none; white-space: nowrap; display: inline-flex; align-items: center; }
     .note, .mode { flex: none; }
@@ -64,8 +74,6 @@ export class GfApp extends LitElement {
     .unlocked button { background: none; border: 0; color: #cfd8cf; font: inherit; cursor: pointer; min-height: 32px; }
     @keyframes up { from { transform: translate(-50%, 20px); opacity: 0; } }
     @media (prefers-reduced-motion: reduce) { .unlocked { animation: none; } }
-    nav.tabs { margin-left: auto; }
-    .phone-scenarios { margin-left: auto; }
     .settings {
       flex: none;
       color: var(--gf-text-muted);
@@ -117,9 +125,13 @@ export class GfApp extends LitElement {
     @keyframes king { 50% { box-shadow: 0 6px 20px rgb(0 0 0 / 0.35), 0 0 0 8px rgb(212 160 23 / 0); } }
     @media (prefers-reduced-motion: reduce) { .king { animation: none; } }
 
+    /* Not much room: the logo alone, « Noter ici » as an icon. */
+    @media (min-width: 700px) and (max-width: 1099px) { .brand span { display: none; } }
+    @media (min-width: 700px) and (max-width: 899px) { .note .lbl { display: none; } .note { padding-inline: 10px; } }
     @media (max-width: 560px) {
-      .brand span { display: none; }
-      header { gap: 8px; padding: 8px 10px; }
+      header { gap: 8px; padding: 6px 10px; }
+      .brand img { width: 34px; height: 34px; }
+      .brand span { font-size: 1.02rem; }
       nav.tabs a { padding: 4px 10px; }
     }
   `];
@@ -166,22 +178,22 @@ export class GfApp extends LitElement {
 
     return html`
       <header>
-        <a class="brand" href=${href.search()}>
-          <img src="assets/icons/icon.svg" alt="" />
-          <span>GeoFlora</span>
-        </a>
-        ${phone ? nothing : html`<nav class="tabs segmented" aria-label="Sections">
+        <div class="side">${phone ? nothing : html`<nav class="tabs segmented" aria-label="Sections">
           <a href=${href.discover()} aria-current=${tab === 'discover' ? 'page' : 'false'}>Découvrir</a>
           ${tabShown('flore') ? html`<a href=${tabHref('flore', tab === 'flore')} aria-current=${route.name === 'search' || route.name === 'plant' ? 'page' : 'false'}>Flore</a>` : nothing}
           ${tabShown('mine') ? html`<a href=${tabHref('mine', tab === 'mine')} aria-current=${['collections', 'spot', 'spot-new', 'shared'].includes(route.name) ? 'page' : 'false'}>Mes plantes</a>` : nothing}
           ${tabShown('map') ? html`<a href=${tabHref('map', tab === 'map')} aria-current=${route.name === 'map' ? 'page' : 'false'}>Carte</a>` : nothing}
-        </nav>
+        </nav>`}</div>
+        <a class="brand" href=${href.search()} aria-label="GeoFlora — accueil">
+          <img src="assets/icons/icon.svg" alt="" />
+          <span>GeoFlora</span>
+        </a>
+        <div class="side end">${phone ? html`<gf-scenarios class="phone-scenarios"></gf-scenarios>` : html`
         ${tabShown('flore') ? html`<gf-mode-switch class="mode" scope="toute l’application" value=${this.#store.state.mode}
           @mode-change=${e => setMode(e.detail.mode || 'standard')}></gf-mode-switch>` : nothing}
-        ${tabShown('map') ? html`<button class="note primary" type="button" @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-capture'))?.open()}>${icon('plus-lg')} Noter ici</button>` : nothing}
+        ${tabShown('map') ? html`<button class="note primary" type="button" aria-label="Noter ici" @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-capture'))?.open()}>${icon('plus-lg')}<span class="lbl"> Noter ici</span></button>` : nothing}
         <gf-scenarios></gf-scenarios>
-        <a class="settings" href=${href.settings()} title="À propos et réglages" aria-label="À propos et réglages">${icon('gear')}</a>`}
-        ${phone ? html`<gf-scenarios class="phone-scenarios"></gf-scenarios>` : nothing}
+        <a class="settings" href=${href.settings()} title="À propos et réglages" aria-label="À propos et réglages">${icon('gear')}</a>`}</div>
       </header>
       <main>
         ${updateReady ? html`<div class="banner" role="status">Nouvelle version de GeoFlora disponible.

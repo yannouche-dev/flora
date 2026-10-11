@@ -4,8 +4,9 @@
 // suggests them, one touch adds each where you stand; the map of the parcours shows them as you go. A small card
 // tells the parcours (its name, its plants, your position); « Terminer » closes it (it stays in Mes plantes).
 
-import { LitElement, html, svg, css, nothing, repeat } from 'lit';
+import { LitElement, html, css, nothing, repeat } from 'lit';
 import { icon } from '../core/icons.js';
+import { scene, sceneStyles } from '../core/scenes.js';
 import { watchLocation } from '../core/geo.js';
 import { searchPlaces } from '../core/geoservices.js';
 import { findPlants } from '../core/search.js';
@@ -28,62 +29,6 @@ const timeOf = (/** @type {string} */ iso) => { try { return new Date(iso).toLoc
 const STEP = 12;
 
 
-// ── The start's picture: a walk among flowers ────────────────────────────────
-// Flat, outlined shapes drawn upright from their base (0, 0); each pops up in turn along the path, then sways.
-
-/** @param {number} x @param {number} y @param {number} s scale @param {number} d delay (s) @param {any} body */
-const plant = (x, y, s, d, body) => svg`<g transform="translate(${x} ${y}) scale(${s})"><g class="pop" style="--d:${d}s">${body}</g></g>`;
-
-const daisy = svg`<path class="stem" d="M0 0 Q-2 -12 0 -22"/><path class="o" d="M0 -9 Q-10 -14 -11 -6 Q-5 -4 0 -9Z" fill="var(--leaf2)"/>
-  ${[0, 45, 90, 135, 180, 225, 270, 315].map(a => svg`<ellipse class="o" cx="0" cy="-33" rx="3.2" ry="6.5" fill="var(--petal)" transform="rotate(${a} 0 -26)"/>`)}
-  <circle class="o" cx="0" cy="-26" r="4.4" fill="var(--sun)"/>`;
-const tulip = svg`<path class="stem" d="M0 0 Q3 -12 0 -24"/><path class="o" d="M0 -6 Q12 -10 12 -20 Q4 -16 0 -6Z" fill="var(--leaf)"/>
-  <path class="o" d="M-8 -26 Q-9 -40 -4 -42 L0 -36 L4 -42 Q9 -40 8 -26 Q0 -20 -8 -26Z" fill="var(--red)"/>`;
-const bell = svg`<path class="stem" d="M0 0 Q-1 -16 6 -26"/><path class="o" d="M0 -10 Q-9 -16 -10 -8 Q-4 -6 0 -10Z" fill="var(--leaf2)"/>
-  <path class="o" d="M1 -24 Q2 -36 9 -35 Q15 -33 13 -22 L11 -20 L9 -23 L7 -20 L5 -23 L3 -20 Z" fill="var(--violet)"/>`;
-const poppy = svg`<path class="stem" d="M0 0 Q-3 -14 0 -26"/>
-  ${[[-6, -30], [6, -30], [-5, -38], [5, -38]].map(([cx, cy]) => svg`<circle class="o" cx=${cx} cy=${cy} r="6.4" fill="var(--pink)"/>`)}
-  <circle class="o" cx="0" cy="-34" r="3.4" fill="var(--ink)"/>`;
-const puff = svg`<path class="stem" d="M0 0 Q2 -14 0 -26"/>
-  <g class="spin"><circle cx="0" cy="-35" r="9.5" fill="var(--petal)" stroke="var(--ink)" stroke-width="1.4" stroke-dasharray="1.6 3"/>
-  ${[0, 60, 120, 180, 240, 300].map(a => svg`<path d="M0 -35 L0 -43" stroke="var(--ink)" stroke-width="1.2" stroke-linecap="round" transform="rotate(${a} 0 -35)"/>`)}</g>
-  <circle cx="0" cy="-35" r="2" fill="var(--ink)"/>`;
-const sprout = svg`<path class="stem" d="M0 0 Q-1 -7 0 -12"/>
-  <path class="o" d="M0 -9 Q-13 -16 -15 -4 Q-6 -2 0 -9Z" fill="var(--leaf2)"/>
-  <path class="o" d="M0 -11 Q12 -20 15 -8 Q6 -5 0 -11Z" fill="var(--leaf)"/>`;
-const leaf = svg`<path class="o" d="M0 0 Q-9 -12 0 -22 Q9 -12 0 0Z" fill="var(--leaf)"/><path d="M0 -2 L0 -18" stroke="var(--ink)" stroke-width="1" stroke-linecap="round"/>`;
-
-/** The walk: a start pin, a dotted path drawing itself, flowers and leaves along it, a flag, a butterfly. */
-const trailArt = () => html`<svg class="art" viewBox="0 -6 320 196" role="img" aria-label="Un chemin parmi les fleurs">
-  <defs><mask id="walk-mask" maskUnits="userSpaceOnUse" x="0" y="0" width="320" height="190">
-    <path class="walk" pathLength="1" d="M34 156 C 92 158 66 104 126 104 S 190 150 232 114 S 272 54 292 48" fill="none" stroke="#fff" stroke-width="14" stroke-linecap="round"/>
-  </mask></defs>
-  <path d="M8 168 Q 70 136 150 150 T 312 138 L 312 190 L 8 190 Z" fill="var(--ground)"/>
-  <ellipse cx="250" cy="70" rx="56" ry="14" fill="var(--ground)" opacity="0.7"/>
-  <path class="trail" mask="url(#walk-mask)" d="M34 156 C 92 158 66 104 126 104 S 190 150 232 114 S 272 54 292 48"/>
-  ${plant(68, 138, 1.35, 0.25, daisy)}
-  ${plant(100, 122, 1.1, 0.45, sprout)}
-  ${plant(150, 98, 1.3, 0.6, tulip)}
-  ${plant(172, 150, 1.25, 0.75, bell)}
-  ${plant(206, 104, 1, 0.9, daisy)}
-  ${plant(218, 168, 1.1, 1.0, sprout)}
-  ${plant(250, 142, 1.2, 1.1, puff)}
-  ${plant(262, 76, 1.15, 1.25, poppy)}
-  ${plant(22, 184, 0.9, 0.15, leaf)}
-  ${plant(120, 176, 0.8, 0.55, leaf)}
-  ${plant(302, 172, 0.95, 1.35, leaf)}
-  <g transform="translate(34 156) scale(1.25)"><g class="pop" style="--d:0s">
-    <path class="o" d="M0 0 C -8 -10 -10 -14 -10 -20 A10 10 0 1 1 10 -20 C 10 -14 8 -10 0 0Z" fill="var(--path)"/>
-    <circle cx="0" cy="-20" r="4" fill="var(--petal)"/></g></g>
-  <g transform="translate(292 48) scale(1.25)"><g class="pop" style="--d:1.45s">
-    <path d="M0 0 L0 -30" stroke="var(--ink)" stroke-width="2.2" stroke-linecap="round"/>
-    <path class="o" d="M0 -30 Q10 -33 20 -27 Q10 -23 0 -19Z" fill="var(--sun)"/></g></g>
-  <g transform="translate(104 36) scale(1.2)"><g class="fly">
-    <ellipse class="o wing" cx="-6" cy="0" rx="7" ry="9" fill="var(--sun)"/>
-    <ellipse class="o wing r" cx="6" cy="0" rx="7" ry="9" fill="var(--pink)"/>
-    <path d="M0 -8 L0 8" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round"/></g></g>
-</svg>`;
-
 export class GfTrail extends LitElement {
   static properties = {
     _trail: { state: true },
@@ -102,7 +47,7 @@ export class GfTrail extends LitElement {
     _shown: { state: true }
   };
 
-  static styles = [ui, css`
+  static styles = [ui, sceneStyles, css`
     :host { display: block; position: relative; height: 100%; background: var(--gf-bg, var(--gf-surface-2)); container-type: inline-size; }
     .wrap { display: grid; grid-template-columns: minmax(0, 1fr); min-height: 100%; }
     /*
@@ -129,26 +74,6 @@ export class GfTrail extends LitElement {
     .col { padding: 14px 14px 90px; display: grid; align-content: start; gap: 12px; max-width: 640px; width: 100%; margin: 0 auto; box-sizing: border-box; }
     /* Starting: one action. */
     .start { text-align: center; gap: 14px; padding-top: 40px; }
-    /* The start: a walk drawn as a dotted path, flowers and leaves popping up along it (flat, outlined, a bit funky). */
-    .art { justify-self: center; width: min(380px, 100%); height: auto; overflow: visible;
-      --ink: var(--gf-text, #1f2a1f); --leaf: #4f9a5c; --leaf2: #7cc36b; --sun: #f5c518; --red: #e4572e; --pink: #f28ab2; --violet: #8e6cc8; --petal: #ffffff;
-      --ground: var(--gf-accent-soft, #e2eedf); --path: var(--gf-accent, #2f6b3a); }
-    .art .o { stroke: var(--ink); stroke-width: 1.6; stroke-linejoin: round; stroke-linecap: round; }
-    .art .stem { fill: none; stroke: var(--leaf); stroke-width: 2.4; stroke-linecap: round; }
-    .art .trail { fill: none; stroke: var(--path); stroke-width: 3.2; stroke-linecap: round; stroke-dasharray: 0.1 9; }
-    .art .pop { transform-box: fill-box; transform-origin: 50% 100%; animation: pop 0.55s cubic-bezier(0.3, 1.7, 0.5, 1) both, sway 3.4s ease-in-out infinite; animation-delay: var(--d, 0s), calc(var(--d, 0s) + 0.6s); }
-    .art .walk { stroke-dasharray: 1; stroke-dashoffset: 1; animation: walk 1.6s ease-out 0.1s forwards; }
-    .art .fly { animation: fly 4.5s ease-in-out infinite; }
-    .art .wing { transform-box: fill-box; transform-origin: 100% 50%; animation: flap 0.35s ease-in-out infinite alternate; }
-    .art .wing.r { transform-origin: 0% 50%; }
-    .art .spin { transform-box: fill-box; transform-origin: center; animation: spin 18s linear infinite; }
-    @keyframes pop { from { transform: scale(0); } }
-    @keyframes sway { 0%, 100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
-    @keyframes walk { to { stroke-dashoffset: 0; } }
-    @keyframes fly { 0%, 100% { transform: translate(0, 0); } 25% { transform: translate(10px, -8px); } 50% { transform: translate(22px, 2px); } 75% { transform: translate(8px, 8px); } }
-    @keyframes flap { to { transform: scaleX(0.45); } }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    @media (prefers-reduced-motion: reduce) { .art .pop, .art .fly, .art .wing, .art .spin { animation: none; } .art .walk { animation: none; stroke-dashoffset: 0; } }
     .start h1 { margin: 0; font-size: 1.6rem; line-height: 1.2; }
     .start p { margin: 0; color: var(--gf-text-muted); }
     .start .go { justify-self: center; min-height: 52px; padding: 12px 28px; font-size: 1.08rem; display: inline-flex; gap: 8px; align-items: center; }
@@ -525,7 +450,7 @@ export class GfTrail extends LitElement {
   /** No parcours yet: one action — start here (or in a commune); or take one up again. */
   #starting() {
     return html`<div class="wrap"><div class="col start">
-      ${trailArt()}
+      ${scene('trail')}
       <h1>Votre parcours botanique</h1>
       <p>Marchez, nommez les plantes que vous croisez : chacune prend sa place sur la carte de votre parcours.</p>
       <button class="primary go" type="button" ?disabled=${this._locating} @click=${() => this.#startHere()}>${icon('geo-alt-fill')} ${this._locating ? 'Localisation…' : 'Commencer ici'}</button>

@@ -51,6 +51,7 @@ const SHELL = [
   'app/core/alerts.js',
   'app/core/discover.js',
   'app/core/scenarios.js',
+  'app/core/scenes.js',
   'app/core/modes.js',
   'app/core/mode-admin.js',
   'app/core/dataset.js',

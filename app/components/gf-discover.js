@@ -26,6 +26,7 @@ import { dockBlock, paneOf, setStackState } from '../core/sheet-blocks.js';
 import { stepBack, chooseBranch, discoverEvents, discoverState, discovering, finishDiscover, firstMatchShown, plantSeen, resetPassed, setDiscoverPoint, setDiscoverRadius, setStep, swiped, unswipe, LAST_STEP, PLANTS_BEFORE_FLORE } from '../core/discover.js';
 import { lookalikesOf } from '../core/lookalikes.js';
 import { scenarioOf } from '../core/scenarios.js';
+import { scene, sceneStyles } from '../core/scenes.js';
 import { sheetSession } from '../core/sheet-session.js';
 import { isFavorite, toggleFavorite } from '../core/collections.js';
 import { href, parse } from '../core/router.js';
@@ -120,9 +121,9 @@ export class GfDiscover extends LitElement {
     _hl: { state: true }
   };
 
-  static styles = [ui, css`
+  static styles = [ui, sceneStyles, css`
     :host { display: block; position: relative; min-height: 0; overflow-y: auto; background: var(--gf-bg, var(--gf-surface-2)); container-type: inline-size; }
-    .welcome { max-width: 560px; margin: 0 auto; padding: 48px 20px 32px; display: grid; gap: 18px; text-align: center; }
+    .welcome { max-width: 560px; margin: 0 auto; padding: 28px 20px 32px; display: grid; gap: 18px; text-align: center; }
     .welcome .leaf { font-size: 3rem; color: var(--gf-accent); }
     .welcome h1 { margin: 0; font-size: 1.7rem; line-height: 1.2; }
     .welcome p { margin: 0; color: var(--gf-text-muted); }
@@ -719,11 +720,17 @@ export class GfDiscover extends LitElement {
   }
 
   #welcome() {
+    const sc = scenarioOf(this.scenario).key;
+    // Each scenario its picture and its words (Rencontres: the cards; Cueillette: the basket; Mosaïque: the photos).
+    const [title, words] = sc === 'harvest'
+      ? ['Cueillette prudente', 'Ce qui se cueille autour de vous… et ses sosies dangereux, les mortels d’abord. Ne cueillez jamais sans être sûr de vous.']
+      : sc === 'mosaic'
+        ? ['La mosaïque du coin', 'Toutes les photos des plantes observées près d’ici, en grand. Une image touchée : toutes celles de la plante.']
+        : ['Découvrez les plantes autour de vous !', 'Orties farceuses, pissenlits voyageurs, chênes centenaires : tout un petit monde vert pousse près d’ici. Un coup de cœur à droite, au suivant à gauche.'];
     return html`<section class="welcome">
-      <div class="leaf" aria-hidden="true">${icon('binoculars')}</div>
-      <h1>Découvrez les plantes autour de vous !</h1>
-      <p>Orties farceuses, pissenlits voyageurs, chênes centenaires : tout un petit monde vert pousse près d’ici. Un coup de cœur à droite, au suivant à gauche.
-        Votre position ne sert qu’à cette recherche.</p>
+      ${scene(sc)}
+      <h1>${title}</h1>
+      <p>${words} Votre position ne sert qu’à cette recherche.</p>
       <button class="primary go" type="button" ?disabled=${this._locating} @click=${() => this.#locate()}>${icon('geo-alt-fill')} ${this._locating ? 'Localisation…' : 'Autour de moi'}</button>
       ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : nothing}
       <span class="or">ou</span>
