@@ -104,6 +104,9 @@ const FLOWER = `<svg x="5" y="5" width="12" height="12" viewBox="0 0 16 16" fill
 /** Past this many points, a group touched is zoomed in on before its points are spread. */
 const SPREAD_MAX = 24;
 
+/** Room between a point and its card. @param {{ gap?: number }} o */
+const gap = o => o.gap ?? 8;
+
 const escapeAttr = (/** @type {string} */ s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
 /**
@@ -630,6 +633,11 @@ export class GfMap extends LitElement {
     this.#spotLayer = L.layerGroup().addTo(map);
     this.#plantLayer = L.layerGroup();
     map.on('zoomend', () => { this.#syncPlantVisibility(); this.#syncCluster(true); });
+    // The plants' little cards float above everything (the map's buttons and panels, the page's around it).
+    const tip = this.#floatTip = Object.assign(document.createElement('div'), { className: 'gf-float-tip', role: 'tooltip' });
+    if ('popover' in tip) tip.popover = 'manual';
+    root.append(tip);
+    map.on('movestart zoomstart click', () => this.#hideTip());
 
     const view = this.remember ? readStored(config.storageKeys.mapView, null) : null;
     if (view) map.setView([view.lat, view.lng], view.zoom);
@@ -778,7 +786,7 @@ export class GfMap extends LitElement {
     for (const point of this.points || []) {
       const [x, y] = point.coordinates;
       const dot = L.circleMarker([y, x], { radius: 6, className: 'gf-obs' + (point.kind ? ' gf-obs-' + point.kind : ''), bubblingMouseEvents: false }).addTo(layer);
-      dot.bindTooltip(point.title, { direction: 'top' });
+      this.#tip(dot, point.title);
       this.#onPoint(dot, point);
     }
   }
@@ -986,11 +994,61 @@ export class GfMap extends LitElement {
       // A touch screen has no hover: a touch opens the plant's card (a popup, until the next touch on the map);
       // with a mouse, it shows on hover and a click opens the record.
       const touch = fancy && (p.photo || p.sci) && matchMedia('(hover: none)').matches;
-      if (touch) dot.bindPopup(obsCard(p), { className: 'gf-obs-tip', closeButton: false, offset: [0, -10], autoPanPadding: [12, 12] });
-      else if (fancy && (p.photo || p.sci)) dot.bindTooltip(obsCard(p), { direction: 'top', offset: [0, -14], className: 'gf-obs-tip', opacity: 1 });
-      else dot.bindTooltip(point.title, { direction: 'top', offset: fancy ? [0, -8] : [0, 0] });
+      if (fancy && (p.photo || p.sci)) this.#tip(dot, obsCard(p), { card: true, gap: 6 });
+      else this.#tip(dot, point.title);
       if (!touch || this.pointClick === 'pick') this.#onPoint(dot, point);
     }
+  }
+
+  /** @type {HTMLElement | null} */ #floatTip = null;
+  /** @type {L.Layer | null} */ #tipOwner = null;
+
+  /**
+   * A point's little card (or its name), floating above all the rest — the top layer where the browser has it, so no
+   * button, panel or bar of the map (or of the page) covers it. Hover shows it; on a touch screen, a touch (another
+   * touch on the map hides it).
+   * @param {L.Layer} dot @param {string} content HTML for a card, else plain text @param {{ card?: boolean, gap?: number }} [o]
+   */
+  #tip(dot, content, o = {}) {
+    const show = () => this.#showTip(dot, content, o);
+    if (matchMedia('(hover: none)').matches) dot.on('click', show);
+    else { dot.on('mouseover', show); dot.on('mouseout', () => this.#hideTip(dot)); }
+    dot.on('remove', () => this.#hideTip(dot));
+  }
+
+  /** @param {L.Layer} dot @param {string} content @param {{ card?: boolean, gap?: number }} o */
+  #showTip(dot, content, o) {
+    const tip = this.#floatTip;
+    const el = /** @type {any} */ (dot).getElement?.();
+    if (!tip || !el) return;
+    this.#tipOwner = dot;
+    tip.className = 'gf-float-tip' + (o.card ? ' card' : '');
+    if (o.card) tip.innerHTML = content; else tip.textContent = content;
+    // Its photo arriving changes nothing (fixed size), but placed again once there, to be sure.
+    tip.querySelector('img')?.addEventListener('load', () => { if (this.#tipOwner === dot) this.#placeTip(el, gap(o)); }, { once: true });
+    try { if (tip.popover && !tip.matches(':popover-open')) tip.showPopover(); } catch { /* not connected */ }
+    tip.classList.add('on');
+    this.#placeTip(el, gap(o));
+  }
+
+  /** Above its point (below it when there is no room), within the window. @param {Element} el @param {number} g */
+  #placeTip(el, g) {
+    const tip = /** @type {HTMLElement} */ (this.#floatTip);
+    const r = el.getBoundingClientRect(), w = tip.offsetWidth, h = tip.offsetHeight;
+    const left = Math.max(6, Math.min(innerWidth - w - 6, r.left + r.width / 2 - w / 2));
+    let top = r.top - h - g;
+    if (top < 6) top = r.bottom + g;
+    tip.style.left = left + 'px';
+    tip.style.top = Math.max(6, Math.min(innerHeight - h - 6, top)) + 'px';
+  }
+
+  /** @param {L.Layer} [dot] only if it is that point's */
+  #hideTip(dot) {
+    const tip = this.#floatTip;
+    if (!tip || (dot && this.#tipOwner !== dot)) return;
+    this.#tipOwner = null;
+    tip.classList.remove('on');
+    try { if (tip.popover && tip.matches(':popover-open')) tip.hidePopover(); } catch { /* closed */ }
   }
 
   /**
@@ -1034,7 +1092,7 @@ export class GfMap extends LitElement {
       L.polyline([at, spot], { className: 'gf-spread-thread', interactive: false }).addTo(layer);
       const dot = L.circleMarker(spot, { radius: 7, className: 'gf-occ gf-occ-' + (/** @type {any} */ (p).kind || kind), bubblingMouseEvents: false }).addTo(layer);
       const q = /** @type {any} */ (p);
-      dot.bindTooltip(q.photo || q.sci ? obsCard(q) : p.title, q.photo || q.sci ? { direction: 'top', className: 'gf-obs-tip', opacity: 1 } : { direction: 'top' });
+      if (q.photo || q.sci) this.#tip(dot, obsCard(q), { card: true }); else this.#tip(dot, p.title);
       this.#onPoint(dot, p);
     });
     L.circleMarker(at, { radius: 5, className: 'gf-spread-center', interactive: false }).addTo(layer);
@@ -1093,7 +1151,7 @@ export class GfMap extends LitElement {
       if (n === 1) {
         const p = cell.pts[0];
         const dot = L.circleMarker([p.coordinates[1], p.coordinates[0]], { radius: 6, className: 'gf-occ gf-occ-' + (/** @type {any} */ (p).kind || 'occ'), bubblingMouseEvents: false }).addTo(layer);
-        dot.bindTooltip(p.title, { direction: 'top' });
+        this.#tip(dot, p.title);
         this.#onPoint(dot, p);
         continue;
       }
@@ -1124,8 +1182,8 @@ export class GfMap extends LitElement {
     layer.clearLayers();
     for (const [i, point] of (hl?.points || []).entries()) {
       const [x, y] = point.coordinates;
-      L.marker([y, x], { icon: leafIcon(Math.min(i, 30) * 30, true), keyboard: false, bubblingMouseEvents: false, zIndexOffset: 1000 })
-        .bindTooltip(point.title, { direction: 'top', offset: [0, -12] }).addTo(layer);
+      const dot = L.marker([y, x], { icon: leafIcon(Math.min(i, 30) * 30, true), keyboard: false, bubblingMouseEvents: false, zIndexOffset: 1000 }).addTo(layer);
+      this.#tip(dot, point.title, { gap: 4 });
     }
   }
 

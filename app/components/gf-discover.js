@@ -308,7 +308,7 @@ export class GfDiscover extends LitElement {
     .g-mapbox { position: relative; flex: 1; min-height: 0; isolation: isolate; }
     .g-mapbox gf-map { position: absolute; inset: 0; display: block; }
     .g-mapbox gf-map .leaflet-container { background: #2f4a2c; }
-    .g-radius { position: absolute; z-index: 500; left: 10px; right: 10px; top: 10px; display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 12px; border-radius: 14px;
+    .g-radius { position: absolute; z-index: 500; left: 10px; right: 50px; top: 10px; display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 12px; border-radius: 14px;
       background: color-mix(in srgb, var(--gf-surface) 92%, transparent); box-shadow: var(--gf-shadow); backdrop-filter: blur(6px); }
     .g-radius label { flex: 1; min-width: 0; display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 0 8px; }
     .g-radius .d { font-weight: 800; color: var(--gf-accent); font-variant-numeric: tabular-nums; }
