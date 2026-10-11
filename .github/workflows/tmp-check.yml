@@ -1,0 +1,25 @@
+name: tmp-check
+on:
+  push:
+    branches: [claude/exciting-faraday-c4xk2r]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          G=https://data.geopf.fr/geocodage
+          W=https://data.geopf.fr/wfs/ows
+          echo "== typenames (BDTOPO, nommés)"
+          curl -s "$W?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetCapabilities" | grep -o '<Name>BDTOPO_V3:[^<]*</Name>' | sed 's/<[^>]*>//g' | grep -Ei 'foret|lieu|topon|parc|vegetation|habitation|bois|detail_orographique|zone_d_activite' | tr '\n' ' '; echo
+          for P in "chatel1 3.040 45.925" "chatel2 3.030 45.930" "chatel3 3.035 45.915" "chatel4 3.050 45.935" "vincennes 2.4330 48.8283" "fontainebleau 2.6400 48.4065" "rambouillet 1.8000 48.6500" "rural 2.3500 46.6000" "paris 2.3522 48.8566"; do
+            set -- $P; N=$1; LON=$2; LAT=$3
+            echo; echo "######## $N ($LAT, $LON)"
+            echo "-- reverse address"; curl -s "$G/reverse?lon=$LON&lat=$LAT&limit=1" | jq -c '.features[0].properties | {label, name, city, locality, district, distance, type, context}'
+            echo "-- reverse poi (5)"; curl -s "$G/reverse?lon=$LON&lat=$LAT&index=poi&limit=5" | jq -c '.features[] | .properties | {toponym, name, category, distance, city, extrafields}' | head -5
+            echo "-- foret_publique intersects"; curl -s "$W?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=BDTOPO_V3:foret_publique&OUTPUTFORMAT=application/json&COUNT=3&CQL_FILTER=INTERSECTS(geometrie,POINT($LAT%20$LON))" | jq -c '[.features[]?.properties | {toponyme, nature}] , .numberReturned' 2>/dev/null | head -3
+            echo "-- zone_de_vegetation intersects"; curl -s "$W?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=BDTOPO_V3:zone_de_vegetation&OUTPUTFORMAT=application/json&COUNT=2&CQL_FILTER=INTERSECTS(geometrie,POINT($LAT%20$LON))" | jq -c '[.features[]?.properties | with_entries(select(.value != null))]' 2>/dev/null | cut -c1-400
+            echo "-- lieu_dit_non_habite dwithin 1000m"; curl -s "$W?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=BDTOPO_V3:lieu_dit_non_habite&OUTPUTFORMAT=application/json&COUNT=5&CQL_FILTER=DWITHIN(geometrie,POINT($LAT%20$LON),1000,meters)" | jq -c '[.features[]?.properties | {toponyme, nature}]' 2>/dev/null | cut -c1-400
+            echo "-- zone_d_habitation dwithin 800m"; curl -s "$W?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=BDTOPO_V3:zone_d_habitation&OUTPUTFORMAT=application/json&COUNT=5&CQL_FILTER=DWITHIN(geometrie,POINT($LAT%20$LON),800,meters)" | jq -c '[.features[]?.properties | {toponyme, nature}]' 2>/dev/null | cut -c1-400
+          done
+          echo; echo "== CORS (poi)"; curl -s -I -H "Origin: https://yannouche-dev.github.io" "$G/reverse?lon=3.04&lat=45.925&index=poi&limit=1" | grep -i access-control
+          echo "== CORS (wfs)"; curl -s -I -H "Origin: https://yannouche-dev.github.io" "$W?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=BDTOPO_V3:foret_publique&OUTPUTFORMAT=application/json&COUNT=1&CQL_FILTER=INTERSECTS(geometrie,POINT(48.4065%202.64))" | grep -i access-control
