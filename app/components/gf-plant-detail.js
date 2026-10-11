@@ -327,6 +327,8 @@ function trefleFacts(details) {
 
 /** The reading line, this far under the top of what can be read: the block (or theme) past it is the one read. */
 const READ_LINE = 24;
+/** Stopped this near the start of the block read: settled on it. */
+const SETTLE = 28;
 
 export class GfPlantDetail extends LitElement {
   static properties = {
@@ -675,7 +677,7 @@ export class GfPlantDetail extends LitElement {
     .wiki-menu a:hover { color: var(--gf-text); background: var(--gf-surface-2); }
     .wiki-menu a.on { background: var(--gf-accent-soft); color: var(--gf-accent); font-weight: 600; }
     .wiki-menu a:focus-visible { outline: none; box-shadow: var(--gf-focus); }
-    .wiki-theme { border-top: 1px solid var(--gf-border); scroll-margin-top: var(--wiki-menu-h, 40px); scroll-snap-align: start; }
+    .wiki-theme { border-top: 1px solid var(--gf-border); scroll-margin-top: var(--wiki-menu-h, 40px); }
     .wiki-theme > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; padding: 10px 0; cursor: pointer; font-weight: 600; list-style: none; }
     .wiki-theme > summary::-webkit-details-marker { display: none; }
     .wiki-theme > summary::before { content: '›'; display: inline-block; transition: transform 0.15s; color: var(--gf-text-muted); }
@@ -871,12 +873,7 @@ export class GfPlantDetail extends LitElement {
     .railed { --rail-h: 44px; }
     .rail { position: sticky; top: -16px; z-index: 9; margin: -16px -16px 6px; padding: 4px 10px; background: var(--gf-surface); border-bottom: 1px solid var(--gf-border); }
     :host([embedded]) .rail { top: -4px; margin: -4px -14px 6px; }
-    /* A block (or a theme of the article) stopped near: the sheet settles on it, exactly as a touch on its rubric
-       puts it (gently: far from any, the sheet stays where it is). */
     .block { scroll-margin-top: var(--rail-h, 0px); }
-    .blocks > .block { scroll-snap-align: start; }
-    .frame.edged .main[data-drop-node='sheet'] { scroll-snap-type: y proximity; }
-    :host(:not([edged]):not([preview])) { scroll-snap-type: y proximity; }
     .block[data-flash] { animation: flash 1.2s ease-out; }
     @keyframes flash { from { box-shadow: 0 0 0 3px var(--gf-accent); } to { box-shadow: 0 0 0 3px transparent; } }
     @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } .block[data-flash] { animation: none; } }
@@ -961,6 +958,8 @@ export class GfPlantDetail extends LitElement {
     this.#resize.observe(this);
     // The sheet scrolls itself, or its middle when edges are used (scroll does not bubble: caught on the way down).
     this.renderRoot.addEventListener('scroll', this.#onScroll, { passive: true, capture: true });
+    // The hand scrolling (not a touch on a rubric): the sheet may settle where it stops.
+    for (const ev of ['wheel', 'touchmove', 'keydown']) this.addEventListener(ev, () => { this.#handAt = Date.now(); }, { passive: true, capture: true });
     // The media's controls drawn in its pane's header follow the viewer.
     this.renderRoot.addEventListener('media-bar', () => this.requestUpdate());
     this.addEventListener('scroll', this.#onScroll, { passive: true });
@@ -1551,10 +1550,8 @@ export class GfPlantDetail extends LitElement {
   #wikiSpy(scroller) {
     const themes = /** @type {NodeListOf<HTMLElement>} */ (this.renderRoot.querySelectorAll('.wiki-theme'));
     if (!themes.length) return;
-    // The same reading line, under the article's menu.
-    const top = this.#readingTop(scroller) + this.#wikiMenuH + this.#readingLine(scroller);
-    let current = null;
-    for (const el of themes) if (el.getBoundingClientRect().top <= top) current = el.dataset.theme || null;
+    // The same rule, under the article's menu.
+    const current = this.#readAt([...themes], this.#readingTop(scroller) + this.#wikiMenuH, scroller)?.dataset.theme || null;
     if (current !== this._wikiActive) this._wikiActive = current;
   }
 
@@ -1886,18 +1883,15 @@ export class GfPlantDetail extends LitElement {
       this.#scrollFrame = 0;
       const scroller = this.#sheetScroller;
       if (this.#restoring) return;
-      // The block read: the one whose title has come into the top third of the sheet (its title in sight up there).
-      const line = this.#readingTop(scroller) + this.#readingLine(scroller);
-      let current = null;
-      for (const el of /** @type {NodeListOf<HTMLElement>} */ (this.renderRoot.querySelectorAll('.blocks > .block'))) {
-        if (el.getBoundingClientRect().top <= line) current = el.dataset.key || null; else break;
-      }
+      let current = this.#readAt(/** @type {HTMLElement[]} */ ([...this.renderRoot.querySelectorAll('.blocks > .block')]), this.#readingTop(scroller), scroller)?.dataset.key || null;
       const atTop = scroller.scrollTop < 40;
       if (atTop) current = null;
       const cat = current ? blockCategory(current) : null;
       if (cat !== this._activeCat) this._activeCat = cat;
       if (current !== this._activeBlock) this._activeBlock = current;
       this.#wikiSpy(scroller);
+      clearTimeout(this.#settleTimer);
+      this.#settleTimer = setTimeout(() => this.#settle(), 180);
       // Read by the user: the next plant opens there (the top: from the top) — unless the anchor is locked (the
       // padlock of the rubrics): then it stays where it was locked.
       if (!this.preview && !this.only && this._plant && !sheetSession.anchorLock) {
@@ -1909,8 +1903,43 @@ export class GfPlantDetail extends LitElement {
     });
   };
 
-  /** How far under the top a title counts as read: the top third of what is seen (at least READ_LINE). @param {HTMLElement} scroller */
-  #readingLine(scroller) { return Math.max(READ_LINE, Math.round(scroller.clientHeight / 3)); }
+  /**
+   * The one read among `els` (in order), `top` being the top of what can be read: the one at the top — when it
+   * starts there (put there by a touch, or settled), it is the one; when it was scrolled into, the next one
+   * once its title has come into the top third.
+   * @param {HTMLElement[]} els @param {number} top @param {HTMLElement} scroller
+   */
+  #readAt(els, top, scroller) {
+    let at = null, next = null;
+    for (const el of els) {
+      const t = el.getBoundingClientRect().top;
+      if (t <= top + READ_LINE) at = { el, t }; else { next = { el, t }; break; }
+    }
+    if (at && at.t >= top - 2) return at.el;
+    if (next && next.t <= top + Math.max(READ_LINE, scroller.clientHeight / 3)) return next.el;
+    return at?.el || null;
+  }
+
+  /**
+   * Scrolled by hand and stopped near the start of the block (or theme) read — within SETTLE px —: settled
+   * exactly there, as a touch on its rubric puts it. Farther, the sheet stays where it was left.
+   */
+  #settle() {
+    if (this.#restoring || this.preview || this.only || Date.now() - this.#handAt > 600) return;
+    const scroller = this.#sheetScroller;
+    const wiki = this._activeBlock === 'wikipedia' && this._wikiActive ? /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('#wiki-' + this._wikiActive)) : null;
+    const block = this._activeBlock ? /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(`.blocks > .block[data-key="${CSS.escape(this._activeBlock)}"]`)) : null;
+    const top = this.#readingTop(scroller);
+    for (const [el, under] of /** @type {[HTMLElement | null, number][]} */ ([[wiki, this.#wikiMenuH], [block, 0]])) {
+      if (!el) continue;
+      const d = el.getBoundingClientRect().top - (top + under);
+      if (Math.abs(d) >= 1 && Math.abs(d) <= SETTLE) { this.#scrollTo(el, { smooth: true, under }); return; }
+      if (Math.abs(d) < 1) return;
+    }
+  }
+  /** When the hand last scrolled the sheet (wheel, touch, keys). */
+  #handAt = 0;
+  /** @type {any} */ #settleTimer = 0;
 
   /** The top of what can be read: the sheet's top, under the rubrics stuck over a sheet that scrolls itself. @param {HTMLElement} scroller */
   #readingTop(scroller) {
