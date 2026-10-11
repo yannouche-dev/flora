@@ -786,6 +786,19 @@ export class GfPlantDetail extends LitElement {
     /* Over the whole plant pane for a while (the frame holds it: the cells are not positioned). */
     .edge.max { position: absolute; inset: 0; z-index: 30; box-shadow: var(--gf-shadow-float); }
     .edge-bar { flex: none; display: flex; align-items: center; gap: 4px; min-height: 36px; padding: 2px 6px 2px 8px; color: var(--gf-text-muted); font-size: 0.75rem; }
+    /* The media's controls in its header (type, part, count): what the viewer's own line held. */
+    .media-ctl { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 6px; overflow-x: auto; scrollbar-width: none; color: var(--gf-text); }
+    .media-ctl:empty { display: none; }
+    .media-ctl::-webkit-scrollbar { display: none; }
+    .media-ctl select { font: inherit; font-size: 0.78rem; padding: 2px 4px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-sm); background: var(--gf-surface); color: var(--gf-text); max-width: 150px; min-height: 0; height: 28px; }
+    .media-ctl .count { color: var(--gf-text-muted); font-variant-numeric: tabular-nums; font-size: 0.78rem; white-space: nowrap; }
+    .media-ctl .parts { flex: none; display: flex; gap: 1px; padding: 2px; border-radius: var(--gf-radius-pill); background: var(--gf-surface-2); }
+    .media-ctl .parts button { width: 26px; height: 24px; min-height: 0; padding: 0; border: 0; border-radius: var(--gf-radius-pill); background: none; color: var(--gf-text-muted); display: grid; place-items: center; cursor: pointer; font-size: 0.8rem; }
+    .media-ctl .parts button[aria-checked='true'] { background: var(--gf-surface); color: var(--gf-accent); box-shadow: 0 1px 3px rgb(0 0 0 / 15%); }
+    .media-ctl .parts button:disabled { opacity: 0.3; cursor: default; }
+    .media-ctl .icon-btn { width: 28px; height: 28px; min-height: 0; }
+    .media-ctl .back-mosaic { white-space: nowrap; font-size: 0.78rem; }
+    .edge-bar:has(.media-ctl:not(:empty)) .edge-tabs .tab-name { display: none; }
     .edge-tabs { flex: 1; min-width: 0; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
     .edge-tabs::-webkit-scrollbar { display: none; }
     .edge-tabs button { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 2px 8px; border: 0; border-radius: var(--gf-radius-sm); background: none;
@@ -935,6 +948,8 @@ export class GfPlantDetail extends LitElement {
     this.#resize.observe(this);
     // The sheet scrolls itself, or its middle when edges are used (scroll does not bubble: caught on the way down).
     this.renderRoot.addEventListener('scroll', this.#onScroll, { passive: true, capture: true });
+    // The media's controls drawn in its pane's header follow the viewer.
+    this.renderRoot.addEventListener('media-bar', () => this.requestUpdate());
     this.addEventListener('scroll', this.#onScroll, { passive: true });
     this.addEventListener('keydown', this.#onEdgeKey);
     // A menu (position, edge options) closes when touching elsewhere.
@@ -1606,10 +1621,11 @@ export class GfPlantDetail extends LitElement {
       ${icon(categoryOf(blockCategory(k)).icon)}<span class="tab-name">${blockTitle(k)}</span></button>`)}</span>`;
     return html`<aside class="edge ${column ? 'col' : 'band'} ${folded ? 'folded' : ''} ${bare ? 'bare' : ''} ${max ? 'max' : ''} ${king ? 'king' : ''}"
         data-pane=${node.id} data-drop-node=${node.id} aria-label=${'Volet ' + where}>
-      ${bare ? html`<div class="edge-float">${keys.length > 1 ? tabs : nothing}
+      ${bare ? html`<div class="edge-float">${keys.length > 1 ? tabs : nothing}${tab === 'media' ? this.#mediaControls() : nothing}
           <button class="edge-btn" type="button" title="Agrandir à tout le panneau" aria-label=${'Agrandir le volet ' + where} @click=${() => { this._maxEdge = node.id; }}>${icon('arrows-fullscreen')}</button></div>`
         : html`<div class="edge-bar">
         ${tabs}
+        ${tab === 'media' && !folded ? this.#mediaControls() : nothing}
         ${king ? this.#placePicker(tab) : nothing}
         ${folded ? nothing : html`<details class="edge-opts">
           <summary class="edge-btn" title="Options d’affichage" aria-label=${'Options d’affichage du volet ' + where}>${icon('gear')}</summary>
@@ -1625,6 +1641,12 @@ export class GfPlantDetail extends LitElement {
       </div>`}
       ${folded ? nothing : html`<div class="edge-body">${repeat([tab], k => k, k => king ? this.#block(k, ctx, null) : this.#plainBlock(k, ctx))}</div>`}
     </aside>`;
+  }
+
+  /** The media's controls (type, part of the plant, count) in its pane's header: one line less. */
+  #mediaControls() {
+    const viewer = /** @type {any} */ (this.renderRoot.querySelector('.edge gf-media-viewer[bar-out]'));
+    return html`<span class="media-ctl">${viewer ? viewer.controls() : nothing}</span>`;
   }
 
   /**
@@ -2224,7 +2246,7 @@ export class GfPlantDetail extends LitElement {
       case 'media':
         return ctx.photosOff ? html`<p class="muted">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`
           // In the sheet: compact; stuck to an edge: the full viewer, filling it (its keys only when it has the focus).
-          : html`<gf-media-viewer ?prefer-photos=${this.panesOnly} ?showcase=${this.panesOnly} ?compact=${!isOnEdge(this.view, 'media')} ?local=${isOnEdge(this.view, 'media')} plant-id=${plant.id} .view=${this.view}
+          : html`<gf-media-viewer ?prefer-photos=${this.panesOnly} ?showcase=${this.panesOnly} ?bar-out=${isOnEdge(this.view, 'media')} ?compact=${!isOnEdge(this.view, 'media')} ?local=${isOnEdge(this.view, 'media')} plant-id=${plant.id} .view=${this.view}
             presentation=${blockStyle(this.view, 'media')} .label=${isTitleShown(this.view, 'media') ? null : blockTitle('media')}
             @open-pane=${(/** @type {CustomEvent} */ e) => { e.stopPropagation(); this.#openPane('media', e.detail.url); }}></gf-media-viewer>`;
       case 'photos': {
