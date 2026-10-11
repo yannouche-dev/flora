@@ -548,7 +548,7 @@ export function deleteNote(key) {
 /**
  * What a map block shows and lets do (the same in every mode).
  * @typedef {{ gbif: 'fr' | 'world' | 'off', places: boolean, near: 'off' | 'gbif' | 'inat' | 'both', base: 'plan' | 'photo',
- *   overlays: string[], frame: 'auto' | 'france' | 'world' | 'content' | 'me', height: 's' | 'm' | 'l',
+ *   overlays: string[], frame: 'auto' | 'france' | 'world' | 'content' | 'me' | 'region', height: 's' | 'm' | 'l',
  *   actions: { open: boolean, create: boolean, edit: boolean, spot: boolean, locate: boolean } }} MapConfig
  */
 
@@ -558,7 +558,7 @@ export const MAP_DEFAULTS = {
   actions: { open: true, create: true, edit: true, spot: true, locate: true }
 };
 
-const MAP_CHOICES = { gbif: ['fr', 'world', 'off'], near: ['off', 'gbif', 'inat', 'both'], base: ['plan', 'photo'], frame: ['auto', 'france', 'world', 'content', 'me'], height: ['s', 'm', 'l'] };
+const MAP_CHOICES = { gbif: ['fr', 'world', 'off'], near: ['off', 'gbif', 'inat', 'both'], base: ['plan', 'photo'], frame: ['auto', 'france', 'world', 'content', 'me', 'region'], height: ['s', 'm', 'l'] };
 
 /** A map's configuration, cleaned (unknown values give the default). @param {any} saved @returns {MapConfig} */
 function cleanMap(saved) {

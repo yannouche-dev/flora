@@ -112,6 +112,7 @@ const SHELL = [
   'app/core/pane-tree.js',
   'app/core/dock-drag.js',
   'app/core/web-pane.js',
+  'app/core/regions.js',
   'app/components/gf-web-pane.js',
   'app/core/modules.js',
   'app/components/gf-settings.js',

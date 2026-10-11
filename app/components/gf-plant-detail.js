@@ -2170,6 +2170,7 @@ export class GfPlantDetail extends LitElement {
     if (this.preview) return html`<div class="map-placeholder ${fill ? 'fill' : ''}" style=${`height:${{ s: 180, m: 260, l: 380 }[config.height]}px`}></div>`;
     return html`<gf-sheet-map .plant=${plant} .gbifKey=${details?.identifiers?.gbif?.id ?? null} .inatId=${inat?.id ?? null}
       .config=${config} mode=${this.view} ?fill=${fill} .focus=${this._focus}
+      @map-config=${(/** @type {CustomEvent} */ e) => setMapConfig(key, e.detail)}
       @focus-clear=${(/** @type {CustomEvent} */ e) => { this._focus = { ...this._focus, [e.detail.kind]: null }; }}
       @map-layers=${(/** @type {CustomEvent} */ e) => {
         const { base, overlays } = e.detail;
@@ -2201,7 +2202,7 @@ export class GfPlantDetail extends LitElement {
           on => set({ overlays: on ? [...c.overlays, k] : c.overlays.filter(o => o !== k) })))}
       </fieldset>
       <fieldset><legend>Affichage</legend>
-        ${select('Cadrage', 'frame', [['auto', 'Automatique (selon les couches)'], ['france', 'France entière'], ['world', 'Monde entier'], ['content', 'Ajusté à ce qui est affiché'], ['me', 'Autour de moi']])}
+        ${select('Cadrage', 'frame', [['auto', 'Automatique (selon les couches)'], ['france', 'France entière'], ['world', 'Monde entier'], ['content', 'Ajusté à ce qui est affiché'], ['me', 'Autour de moi'], ['region', 'Ma région']])}
         ${select('Hauteur', 'height', [['s', 'Petite'], ['m', 'Moyenne'], ['l', 'Grande']])}
       </fieldset>
       <fieldset><legend>Actions</legend>

@@ -35,6 +35,9 @@ export class GfSheetRail extends LitElement {
 
   static styles = [ui, css`
     :host { display: block; min-width: 0; }
+    /* The entity stays in place, the rubrics scroll beside it. */
+    :host([orientation='row']) { display: flex; align-items: center; }
+    :host([orientation='row']) nav { flex: 1; min-width: 0; }
     nav { display: flex; gap: 2px; align-items: center; }
     :host([orientation='row']) nav { overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
       mask-image: linear-gradient(90deg, #000 calc(100% - 14px), transparent); padding-right: 10px; }
@@ -148,7 +151,7 @@ export class GfSheetRail extends LitElement {
   render() {
     if (!this.items.length) return nothing;
     const pop = this._pop && this.items.find(i => i.key === this._pop?.key);
-    return html`<nav aria-label="Aller à une rubrique de la fiche">${this.entity ? html`<span class="entity">${this.entity}</span>` : nothing}${this.items.map(c => {
+    return html`${this.entity ? html`<span class="entity">${this.entity}</span>` : nothing}<nav aria-label="Aller à une rubrique de la fiche">${this.items.map(c => {
       const b = c.badge;
       const label = c.label + (b ? ` — ${b.count} alerte${b.count > 1 ? 's' : ''}` : '');
       return html`<div class="item" @mouseenter=${(/** @type {Event} */ e) => this.#open(c.key, e)} @mouseleave=${() => this.#close()}

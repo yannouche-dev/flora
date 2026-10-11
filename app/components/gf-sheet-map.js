@@ -5,7 +5,10 @@ import { collectionsForPlant, formatDistance, plantMarkers, savePlace, spotEvent
 import { lastFix, watchLocation } from '../core/geo.js';
 import { FRANCE_BOUNDS, WORLD_BOUNDS } from '../core/ign.js';
 import { moduleOn } from '../core/modules.js';
-import { observationsAround, savedRadius } from '../core/nearby.js';
+import { observationsAround, RADII, savedRadius, saveRadius } from '../core/nearby.js';
+import { addressAt } from '../core/geoservices.js';
+import { discoverState } from '../core/discover.js';
+import { regionOf } from '../core/regions.js';
 import * as sources from '../core/sources.js';
 import { MAP_DEFAULTS } from '../core/sheet-blocks.js';
 import { focusId, isPlaceFilter, noFocus } from '../core/map-focus.js';
@@ -67,7 +70,9 @@ export class GfSheetMap extends LitElement {
     _spots: { state: true },
     _near: { state: true },
     _compare: { state: true },
-    _bounds: { state: true }
+    _bounds: { state: true },
+    /** The region where I am (from my position, or the place chosen in Découvrir), for « Ma région ». */
+    _region: { state: true }
   };
 
   static styles = [ui, css`
@@ -89,6 +94,17 @@ export class GfSheetMap extends LitElement {
     .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; font-size: 0.78rem; color: var(--gf-text-muted); }
     .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; border: 1px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 20%); }
     .hint { font-size: 0.78rem; color: var(--gf-text-muted); margin: 6px 0 0; }
+    /* What the map can show: how to frame it, how far around me, which data. */
+    .scope { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 8px; align-items: center; margin-top: 8px; font-size: 0.78rem; }
+    .scope > b { color: var(--gf-text-muted); font-weight: 600; white-space: nowrap; }
+    .scope .row { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+    .scope button { min-height: 0; height: 26px; padding: 0 10px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill); background: var(--gf-surface);
+      color: var(--gf-text); font: inherit; font-size: 0.78rem; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap; }
+    .scope button:hover { background: var(--gf-surface-2); }
+    .scope button[aria-pressed='true'] { background: var(--gf-accent-soft); border-color: var(--gf-accent); color: var(--gf-accent); font-weight: 600; }
+    .scope button:focus-visible { outline: none; box-shadow: var(--gf-focus); }
+    .scope button i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+    .scope small { color: var(--gf-text-muted); font-weight: 400; }
   `];
 
   #onChange = () => this.#loadSpots();
@@ -115,11 +131,47 @@ export class GfSheetMap extends LitElement {
     this._spots = [];
     /** Observations around: not asked, looking, the result, or what went wrong. @type {any} */
     this._near = undefined;
+    /** @type {{ name: string, bounds: [number, number, number, number] } | null} */
+    this._region = null;
   }
 
   connectedCallback() {
     super.connectedCallback();
     spotEvents.addEventListener('change', this.#onChange);
+    this.#findRegion();
+  }
+
+  /** Where I am, as far as the app knows without asking: my last position, else the place chosen in Découvrir. */
+  get #whereIAm() {
+    return /** @type {[number, number] | null} */ (this._near?.point || lastFix()?.coordinates || discoverState().point || null);
+  }
+
+  /** My region (IGN address of where I am), once. */
+  async #findRegion() {
+    const point = this.#whereIAm;
+    if (!point || this.#regionFor === point.join()) return;
+    this.#regionFor = point.join();
+    const a = await addressAt(point).catch(() => null);
+    this._region = a ? regionOf(a.context) : null;
+  }
+  #regionFor = '';
+
+  /** A setting of this map changed here (the scope bar): the sheet keeps it, per map. @param {any} patch */
+  #set(patch) {
+    if ('near' in patch && patch.near !== 'off') nearAllowed = true;
+    this.dispatchEvent(new CustomEvent('map-config', { detail: patch }));
+  }
+
+  /** « Autour de moi »: framed on the circle around me (located first if needed). */
+  async #aroundMe() {
+    this.#set({ frame: 'me' });
+    if (!lastFix() && !this._near?.point) { const fix = await locate(); if (fix && !('error' in fix)) { this.#findRegion(); this.requestUpdate(); } }
+  }
+
+  /** Another radius: kept (as in the Carte), the observations around looked for again. @param {number} r */
+  #setRadius(r) {
+    saveRadius(r);
+    if (this.config.near !== 'off' && this._near?.state === 'done') this.#findNear(); else this.requestUpdate();
   }
 
   disconnectedCallback() {
@@ -129,6 +181,7 @@ export class GfSheetMap extends LitElement {
 
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
+    if (changed.has('_near')) this.#findRegion();
     if (changed.has('plant')) { this._near = undefined; this.#loadSpots(); }
     if (changed.has('focus') || changed.has('gbifKey')) this.#loadFocus();
     const near = this.config.near;
@@ -250,11 +303,14 @@ export class GfSheetMap extends LitElement {
     const box = (/** @type {any} */ bounds) => /** @type {[number, number][]} */ ([[bounds.getWest(), bounds.getSouth()], [bounds.getEast(), bounds.getNorth()]]);
     /** @type {string} */ let kind = c.frame;
     if (kind === 'auto') kind = near ? 'me' : content.length ? 'content' : c.gbif === 'world' ? 'world' : 'france';
+    if (kind === 'region' && !this._region) kind = 'france';
     if (kind === 'me' && !center) kind = content.length ? 'content' : 'france';
     if (kind === 'content' && !content.length) kind = c.gbif === 'world' ? 'world' : 'france';
-    const points = kind === 'me' ? circle() : kind === 'content' ? content : kind === 'world' ? box(WORLD_BOUNDS) : box(FRANCE_BOUNDS);
+    const region = this._region?.bounds;
+    const points = kind === 'me' ? circle() : kind === 'content' ? content : kind === 'world' ? box(WORLD_BOUNDS)
+      : kind === 'region' && region ? /** @type {[number, number][]} */ ([[region[0], region[1]], [region[2], region[3]]]) : box(FRANCE_BOUNDS);
     // Framed again whenever what it shows changes (settings, data, size), not when the user moves it.
-    const key = [kind, c.gbif, c.places, c.near, c.height, points.length, center?.join() || ''].join('|');
+    const key = [kind, c.gbif, c.places, c.near, c.height, points.length, center?.join() || '', kind === 'me' ? near?.radius || savedRadius() : '', kind === 'region' ? this._region?.name : ''].join('|');
     return { frame: { key, points }, world: kind === 'world' || c.gbif === 'world' };
   }
 
@@ -301,6 +357,7 @@ export class GfSheetMap extends LitElement {
         ></gf-map>
         ${this.#chips(f)}
       </div>
+      ${this.#scope(gbifReady)}
       ${this.#legend(gbifOn)}
       <div class="actions">
         ${c.near !== 'off' && (!near || near.state === 'error') ? html`<button type="button" class="near-ask" @click=${() => this.#findNear()}>${icon('crosshair')} Observations autour de moi (${formatDistance(savedRadius())})</button>` : nothing}
@@ -334,6 +391,45 @@ export class GfSheetMap extends LitElement {
         <i style="background:#e11d48"></i><span>${f.point.label}</span>${icon('x-lg')}</button>`);
     }
     return chips.length ? html`<div class="chips">${chips}</div>` : nothing;
+  }
+
+  /**
+   * What this map can show, suggested from what is known: how to frame it (my region when it is known, around me,
+   * the points shown, France, the world), how far around me once located, and the data it can show — the GBIF
+   * distribution, my places with this plant, the observations around me (iNaturalist, GBIF) — each with a touch.
+   * @param {boolean} gbifReady
+   */
+  #scope(gbifReady) {
+    const c = this.config, near = this._near;
+    const located = Boolean(this.#whereIAm);
+    const hasContent = (c.places && this._spots.length > 0) || (near?.state === 'done' && near.points.length > 0);
+    /** @param {string} value @param {unknown} label @param {string} [title] @param {() => void} [act] */
+    const frameBtn = (value, label, title, act) => html`<button type="button" aria-pressed=${String(c.frame === value)}
+      title=${title || ''} data-frame=${value} @click=${act || (() => this.#set({ frame: value }))}>${label}</button>`;
+    const inatReady = Boolean(this.inatId) && moduleOn('inaturalist', /** @type {any} */ (this.mode));
+    const gbifNear = c.near === 'gbif' || c.near === 'both', inatNear = c.near === 'inat' || c.near === 'both';
+    const nearOf = (/** @type {boolean} */ g, /** @type {boolean} */ i) => g && i ? 'both' : g ? 'gbif' : i ? 'inat' : 'off';
+    const r = near?.radius || savedRadius();
+    const showRadius = c.frame === 'me' || c.near !== 'off';
+    return html`<div class="scope" role="group" aria-label="Ce que la carte montre">
+      <b>Cadrer</b><div class="row">
+        ${frameBtn('auto', 'Auto', 'Selon ce qui est affiché')}
+        ${this._region ? frameBtn('region', html`Ma région <small>${this._region.name}</small>`, 'La région où vous êtes') : nothing}
+        ${frameBtn('me', html`${icon('crosshair')} Autour de moi`, located ? 'Le cercle autour de vous' : 'Vous localiser, puis le cercle autour de vous', () => this.#aroundMe())}
+        ${hasContent ? frameBtn('content', 'Les points', 'Ajusté aux points affichés') : nothing}
+        ${frameBtn('france', 'France')}
+        ${frameBtn('world', 'Monde')}
+      </div>
+      ${showRadius ? html`<b>Rayon</b><div class="row">${RADII.map(d => html`<button type="button" data-radius=${d} aria-pressed=${String(r === d)}
+        @click=${() => this.#setRadius(d)}>${formatDistance(d)}</button>`)}</div>` : nothing}
+      <b>Afficher</b><div class="row">
+        ${gbifReady ? html`<button type="button" data-layer="gbif-fr" aria-pressed=${String(c.gbif === 'fr')} title="Répartition GBIF en France" @click=${() => this.#set({ gbif: c.gbif === 'fr' ? 'off' : 'fr' })}><i style="background:#f97316"></i>Répartition France</button>
+          <button type="button" data-layer="gbif-world" aria-pressed=${String(c.gbif === 'world')} title="Répartition GBIF dans le monde" @click=${() => this.#set({ gbif: c.gbif === 'world' ? 'off' : 'world' })}><i style="background:#f97316"></i>Monde</button>` : nothing}
+        ${this._spots.length ? html`<button type="button" data-layer="places" aria-pressed=${String(c.places)} @click=${() => this.#set({ places: !c.places })}>${icon('geo-alt-fill')} Mes lieux <small>${this._spots.length}</small></button>` : nothing}
+        ${inatReady ? html`<button type="button" data-layer="inat" aria-pressed=${String(inatNear)} title="Observations iNaturalist autour de moi" @click=${() => this.#set({ near: nearOf(gbifNear, !inatNear) })}><i style="background:#74ac00"></i>iNaturalist autour${near?.state === 'done' && near.inatOn ? html` <small>${near.inatCount ?? 0}</small>` : nothing}</button>` : nothing}
+        ${gbifReady ? html`<button type="button" data-layer="gbif-near" aria-pressed=${String(gbifNear)} title="Occurrences GBIF autour de moi" @click=${() => this.#set({ near: nearOf(!gbifNear, inatNear) })}><i style="background:#4e7b9f"></i>GBIF autour${near?.state === 'done' && near.gbifOn ? html` <small>${(near.gbifTotal ?? 0).toLocaleString('fr-FR')}</small>` : nothing}</button>` : nothing}
+      </div>
+    </div>`;
   }
 
   /** What the colours mean, and where the data comes from. @param {any} gbifOn */

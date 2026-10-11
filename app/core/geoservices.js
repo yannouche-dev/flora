@@ -62,18 +62,18 @@ export async function searchPlaces(text, signal) {
 }
 
 /**
- * Nearest address (within ~500 m) and commune of a point.
+ * Nearest address (within ~500 m) and commune of a point, and its context (« 34, Hérault, Occitanie »).
  * @param {[number, number]} point [lon, lat]
- * @returns {Promise<{ label: string, city: string, distance: number } | null>}
+ * @returns {Promise<{ label: string, city: string, distance: number, context: string } | null>}
  */
 export function addressAt(point) {
   if (!moduleOn('ignGeo')) return Promise.resolve(null);
-  return cached('geo:rev:' + key5(point), async () => {
+  return cached('geo:rev2:' + key5(point), async () => {
     const data = await json(`${GEOCODING}/reverse?lon=${point[0]}&lat=${point[1]}&limit=1`);
     const p = data.features?.[0]?.properties;
     if (!p) return null;
     const far = Number(p.distance) > 500;
-    return { label: far ? p.city : p.label, city: p.city || '', distance: Number(p.distance) || 0 };
+    return { label: far ? p.city : p.label, city: p.city || '', distance: Number(p.distance) || 0, context: p.context || '' };
   });
 }
 
