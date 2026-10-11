@@ -109,6 +109,8 @@ const SHELL = [
   'app/components/gf-mode-switch.js',
   'app/core/icons.js',
   'app/core/img.js',
+  'app/core/pane-tree.js',
+  'app/core/dock-drag.js',
   'app/core/modules.js',
   'app/components/gf-settings.js',
   'app/components/gf-sortable-list.js',

@@ -4,6 +4,7 @@
 import { config } from '../config.js';
 import { moduleEvents, modulesState, useModeSource } from './modules.js';
 import { baseOf, isMode, modeEvents, modeList } from './modes.js';
+import { treeFromPlaces } from './pane-tree.js';
 
 /**
  * @typedef {Record<'status' | 'legal' | 'family' | 'genus' | 'photo' | 'french' | 'mine', string[]>} Filters
@@ -80,13 +81,13 @@ const readCompact = () => {
  * @typedef {{ order: Partial<Record<Mode, string[]>>, hidden: Partial<Record<Mode, string[]>>,
  *   subOrder: Partial<Record<Mode, Record<string, string[]>>>, subHidden: Partial<Record<Mode, Record<string, string[]>>>,
  *   styles: Partial<Record<Mode, Record<string, string>>>, titleShown: Partial<Record<Mode, Record<string, boolean>>>,
- *   hideEmpty: Partial<Record<Mode, Record<string, boolean>>>, place?: Partial<Record<Mode, Record<string, string>>>, edges?: Partial<Record<Mode, Record<string, any>>>,
+ *   hideEmpty: Partial<Record<Mode, Record<string, boolean>>>, tree: Partial<Record<Mode, import('./pane-tree.js').PaneNode>>,
  *   mapBlocks: { id: string, title: string }[], maps: Record<string, any>,
  *   titles: Record<string, string>, notes: { id: string, title: string }[] }} SheetLayout
  */
 
 /** @returns {SheetLayout} */
-export const emptyLayout = () => ({ order: {}, hidden: {}, subOrder: {}, subHidden: {}, styles: {}, titleShown: {}, hideEmpty: {}, place: {}, edges: {}, titles: {}, notes: [], mapBlocks: [], maps: {} });
+export const emptyLayout = () => ({ order: {}, hidden: {}, subOrder: {}, subHidden: {}, styles: {}, titleShown: {}, hideEmpty: {}, tree: {}, titles: {}, notes: [], mapBlocks: [], maps: {} });
 
 /** @param {string} key */
 const readJSON = key => {
@@ -120,10 +121,27 @@ export function migratePlaces(l) {
   return { ...rest, place, edges };
 }
 
+/**
+ * Layouts of the previous version: blocks stuck to an edge of the plant pane (`place`, `edges`) become the tree
+ * of panes (pane-tree.js), mode by mode. Nothing else changes.
+ * @param {any} l @returns {any}
+ */
+export function migrateTree(l) {
+  if (!l || (!l.place && !l.edges)) return l;
+  const tree = { ...(l.tree || {}) };
+  for (const view of new Set([...Object.keys(l.place || {}), ...Object.keys(l.edges || {})])) {
+    if (tree[view]) continue;
+    const t = treeFromPlaces(l.place?.[view] || {}, l.edges?.[view] || {}, l.order?.[view] || []);
+    if (t) tree[view] = t;
+  }
+  const { place, edges, ...rest } = l;
+  return { ...rest, tree };
+}
+
 /** The saved layout, or the one of earlier versions (block order and folded blocks only). @returns {SheetLayout} */
 const readLayout = () => {
   const saved = readJSON(config.storageKeys.sheetLayout);
-  if (saved) return { ...emptyLayout(), ...migratePlaces(saved) };
+  if (saved) return { ...emptyLayout(), ...migrateTree(migratePlaces(saved)) };
   return { ...emptyLayout(), order: readJSON(config.storageKeys.sheetBlocks) || {}, hidden: readJSON(config.storageKeys.sheetHidden) || {} };
 };
 const readTarget = () => { try { return localStorage.getItem(config.storageKeys.target); } catch { return null; } };

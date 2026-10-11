@@ -16,8 +16,8 @@ import { icon } from '../core/icons.js';
  * empty {key, hidden}, pin {key, on} (a row with `titled` defined gets a « title shown » switch; with `emptyHidden`, a « left out when empty »
  * one; with `place`, where the block sits: in the sheet, on an edge of the plant pane, or beside it).
  */
-/** Where a block sits (sheet-blocks.js › PLACES), for the « Position » list. */
-const PLACE_OPTIONS = [['', 'Dans la fiche'], ['top', 'En haut'], ['bottom', 'En bas'], ['left', 'À gauche'], ['right', 'À droite'], ['beside', 'À côté']];
+/** Where a block sits (sheet-blocks.js › tree of panes): the sheet, a pane, or a new pane on a side of the sheet. */
+const PLACE_OPTIONS = [['', 'Dans la fiche'], ['pane', 'Dans un volet'], ['right', 'Nouveau volet à droite'], ['left', 'Nouveau volet à gauche'], ['top', 'Nouveau volet en haut'], ['bottom', 'Nouveau volet en bas']];
 
 export class GfSortableList extends LitElement {
   static properties = {
@@ -220,7 +220,7 @@ export class GfSortableList extends LitElement {
           @click=${() => this.#emit('empty', { key, hidden: !item.emptyHidden })}>${icon('eye-slash')}</button>` : nothing}
         ${item.place !== undefined ? html`<select class="place" aria-label=${'Position de « ' + item.label + ' »'} title="Position dans le panneau Plante"
           @change=${(/** @type {any} */ e) => this.#emit('place', { key, place: e.target.value })}>
-          ${PLACE_OPTIONS.map(([v, l]) => html`<option value=${v} ?selected=${item.place === v}>${l}</option>`)}</select>` : nothing}
+          ${PLACE_OPTIONS.map(([v, l]) => html`<option value=${v} ?selected=${item.place === v} ?disabled=${v === 'pane' && item.place !== 'pane'}>${l}</option>`)}</select>` : nothing}
         ${item.nested ? html`<button class="icon" type="button" aria-expanded=${open ? 'true' : 'false'} aria-label="Sous-blocs de « ${item.label} »" title="Sous-blocs"
           @click=${() => this.#toggleOpen(key)}>${icon('list-nested')}</button>` : nothing}
         ${item.renamable && !editing ? html`<button class="icon" type="button" aria-label="Renommer « ${item.label} »" title="Renommer"
