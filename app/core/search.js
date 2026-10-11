@@ -61,11 +61,12 @@ const NO_FILTERS = { status: [], family: [], genus: [], photo: [], french: [], m
 
 /**
  * The plants of the flora matching a text (French or scientific names, typos forgiven), the closest first —
- * apart from the search on screen (its filters are not used). For a quick pick (Parcours botanique).
+ * apart from the search on screen (its filters are not used): the same plants as the main search, all of them
+ * unless `limit`. For a quick pick (Parcours botanique).
  * @param {string} q @param {number} [limit]
  * @returns {Promise<{ id: number, scientificName: string, vernacularName: string | null, family: string, thumbnail: any }[]>}
  */
-export async function findPlants(q, limit = 8) {
+export async function findPlants(q, limit = Infinity) {
   if (!q.trim()) return [];
   const response = await call({ type: 'search', q, filters: NO_FILTERS, sort: 'relevance', membership: {} });
   return (response.items || []).slice(0, limit);
