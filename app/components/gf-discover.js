@@ -685,7 +685,7 @@ export class GfDiscover extends LitElement {
     const at = Math.max(0, DISTANCES.indexOf(this._radius));
     const point = /** @type {[number, number]} */ (this._point);
     return html`<div class="distance-wrap">
-      <gf-map no-search no-create no-locate .area=${this.#area} .cluster=${this.#obsCluster}></gf-map>
+      <gf-map no-search no-create no-locate .area=${this.#area}></gf-map>
       <section class="welcome distance">
       <div class="leaf" aria-hidden="true">${icon('geo-alt-fill')}</div>
       <h1>Jusqu’où part l’expédition ?</h1>
@@ -1158,14 +1158,14 @@ export class GfDiscover extends LitElement {
     if (found && this.#hlFor === key) this._hl = { key, scope, box, points: found.points.map(p => ({ coordinates: p.coordinates, title, url: p.url })), total: found.total };
   }
 
-  /** The plant's observations in its scope, many: grouped (pink and gold); the circle's too, when many. */
+  /** The plant's observations in a wider scope, many: grouped (pink and gold). */
   get #guidedCluster() {
-    const hl = this._hl, obs = this.#obsCluster;
+    const hl = this._hl;
     const many = hl && hl.points.length > MANY ? hl : null;
-    const key = (obs?.key || '') + '|' + (many?.key || '');
-    if (key === '|') return null;
+    if (!many) return null;
+    const key = many.key;
     if (this.#gcMemo?.key === key) return this.#gcMemo.value;
-    const value = { key, points: [...(obs?.points || []), ...(many ? many.points.map((/** @type {any} */ p) => ({ ...p, kind: 'hl' })) : [])] };
+    const value = { key, points: many.points.map((/** @type {any} */ p) => ({ ...p, kind: 'hl' })) };
     this.#gcMemo = { key, value };
     return value;
   }
@@ -1231,20 +1231,9 @@ export class GfDiscover extends LitElement {
     const point = /** @type {[number, number]} */ (this._point), radius = this._radius, obs = this._obs;
     const a = this.#areaMemo;
     if (a && a.center === point && a.radius === radius && a.obs === obs) return a;
-    // A few: each a leaf popping in; many: grouped (#obsCluster).
-    return (this.#areaMemo = { center: point, radius, fit: true, leaves: true, points: obs.length > MANY ? [] : obs, obs });
+    // The 100 latest, each its plant's photo popping in (a small card of the plant on hover).
+    return (this.#areaMemo = { center: point, radius, fit: true, leaves: true, points: obs, obs });
   }
-
-  /** Many observations in the circle: grouped by the map, in green. */
-  get #obsCluster() {
-    const obs = this._obs;
-    if (obs.length <= MANY) return null;
-    if (this.#clusterMemo?.obs === obs) return this.#clusterMemo.value;
-    const value = { key: 'obs:' + this._point + ':' + this._radius + ':' + obs.length, points: obs.map(o => ({ ...o, kind: 'inat' })) };
-    this.#clusterMemo = { obs, value };
-    return value;
-  }
-  /** @type {any} */ #clusterMemo = null;
 
   /** How many observations: all of them, and how many are on the map. */
   #obsLine() {

@@ -71,6 +71,32 @@ function leafIcon(delay, hl = false) {
   });
 }
 
+/**
+ * An observation around with its photo (Découvrir): the plant's thumbnail in a ring, popping in after `delay` ms.
+ * @param {string} photo @param {number} delay
+ */
+function photoIcon(photo, delay) {
+  return L.divIcon({
+    className: 'gf-obs-leaf gf-obs-photo',
+    iconSize: [30, 30],
+    iconAnchor: [15, 15],
+    html: `<span class="pop" style="animation-delay:${delay}ms"><img src="${escapeAttr(photo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></span>`
+  });
+}
+
+/**
+ * The small plant card shown over an observation: its photo, its names, when and where.
+ * @param {{ title: string, common?: string | null, sci?: string, photo?: string | null, date?: string | null, place?: string | null }} p
+ */
+function obsCard(p) {
+  const esc = (/** @type {string} */ t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const big = p.photo ? p.photo.replace('/square.', '/small.') : null;
+  const when = p.date ? new Date(p.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+  return `<div class="gf-obs-card">${big ? `<img src="${escapeAttr(big)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
+    <div class="t"><b>${esc(p.common || p.sci || p.title)}</b>${p.common && p.sci ? `<i>${esc(p.sci)}</i>` : ''}
+    ${when || p.place ? `<small>${esc([when, p.place].filter(Boolean).join(' · '))}</small>` : ''}</div></div>`;
+}
+
 /** Leaf glyph for plant markers. */
 /** A plant without a photo: a flower (Bootstrap Icons) in its circle. */
 const FLOWER = `<svg x="5" y="5" width="12" height="12" viewBox="0 0 16 16" fill="#fff"><use href="${iconHref('flower1')}"></use></svg>`;
@@ -936,10 +962,13 @@ export class GfMap extends LitElement {
     if (moved) this.#fitArea(!first);
     for (const [i, point] of (area.points || []).entries()) {
       const [x, y] = point.coordinates;
+      const p = /** @type {any} */ (point);
       const dot = fancy
-        ? L.marker([y, x], { icon: leafIcon(Math.min(i, 40) * 25), keyboard: false, bubblingMouseEvents: false }).addTo(layer)
+        ? L.marker([y, x], { icon: p.photo ? photoIcon(p.photo, Math.min(i, 40) * 25) : leafIcon(Math.min(i, 40) * 25), keyboard: false, bubblingMouseEvents: false }).addTo(layer)
         : L.circleMarker([y, x], { radius: 6, className: 'gf-obs', bubblingMouseEvents: false }).addTo(layer);
-      dot.bindTooltip(point.title, { direction: 'top', offset: fancy ? [0, -8] : [0, 0] });
+      // With a photo: a small card of the plant on hover; else its name.
+      if (fancy && (p.photo || p.sci)) dot.bindTooltip(obsCard(p), { direction: 'top', offset: [0, -14], className: 'gf-obs-tip', opacity: 1 });
+      else dot.bindTooltip(point.title, { direction: 'top', offset: fancy ? [0, -8] : [0, 0] });
       if (point.url) dot.on('click', () => open(point.url, '_blank', 'noopener'));
     }
   }
