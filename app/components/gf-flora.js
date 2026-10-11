@@ -106,7 +106,8 @@ export class GfFlora extends LitElement {
     .pane-head .icon-btn { width: 32px; height: 32px; font-size: 1rem; }
     /* Each pane lays out on its own: resizing one does not re-lay out the content of the others. */
     .pane-body { flex: 1; min-height: 0; overflow-y: auto; contain: strict; }
-    .filters .pane-body { padding: 0 14px 24px; }
+    /* No bottom padding: the headers still to come sit right on the bottom edge (gf-facet); the room is the panel's. */
+    .filters .pane-body { padding: 0 14px; }
     .results .pane-body { overflow: hidden; display: flex; flex-direction: column; }
     gf-plant-list { flex: 1; min-height: 0; }
     gf-plant-detail { flex: 1; min-height: 0; }
@@ -433,6 +434,14 @@ export class GfFlora extends LitElement {
       const before = changed.get('route');
       // The list's place in history: from the search to a plant, kept while stepping plant to plant.
       if (this.route.name === 'plant') this.#listDepth = before?.name === 'search' ? depth() - 1 : before?.name === 'plant' ? this.#listDepth : null;
+      // A plant opened from the list: the search field lets go of the keys (← → then go from plant to plant).
+      if (this.route.name === 'plant' && before?.name !== 'plant') {
+        let el = document.activeElement;
+        while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
+        /** @type {Node | null} */ let n = el;
+        while (n && n !== this) n = n.parentNode || (n instanceof ShadowRoot ? n.host : null);
+        if (n && el instanceof HTMLInputElement && el.type === 'search') el.blur();
+      }
       // Another plant (the card underneath came up, or Back): nothing waits under it any more.
       if ((before?.name === 'plant' ? before.id : null) !== this.#plantId) {
         this._under = null;
@@ -700,7 +709,8 @@ export class GfFlora extends LitElement {
   /** The plant's rubrics, in its pane's header: a touch goes there in the sheet shown. */
   #plantRail() {
     const rail = this._rail;
-    if (!rail || rail.plantId !== this.#plantId || !rail.items.length) return 'Plante';
+    // The previous plant's rubrics stay until the new sheet tells its own: the header does not blink.
+    if (!rail || !rail.items.length) return 'Plante';
     return html`<span class="visually-hidden">Plante</span><gf-sheet-rail .items=${rail.items} .active=${rail.active} orientation="row"
       @rail-go=${(/** @type {CustomEvent} */ e) => {
         const sheet = /** @type {any} */ (this.renderRoot.querySelector('.swipe:not(.under) gf-plant-detail'));
@@ -713,13 +723,16 @@ export class GfFlora extends LitElement {
     if (e.detail.plantId === this.#plantId) this._rail = e.detail;
   };
 
-  /** @param {Pane} pane @param {any} title @param {any} [extra] */
-  #head(pane, title, extra = nothing) {
+  /**
+   * The head stays when there is nothing to fold (the list alone): the list does not move down when a plant opens.
+   * @param {Pane} pane @param {any} title @param {any} [extra] @param {boolean} [fixed]
+   */
+  #head(pane, title, extra = nothing, fixed = false) {
     const right = pane === 'plant';
     return html`<div class="pane-head">
       <h2>${title}</h2>
       ${extra}
-      <button class="icon-btn" type="button" aria-expanded="true" title=${'Replier : ' + TITLES[pane]}
+      <button class="icon-btn" type="button" aria-expanded="true" ?hidden=${fixed} title=${'Replier : ' + TITLES[pane]}
         aria-label=${'Replier le panneau ' + TITLES[pane].toLowerCase()} @click=${() => this.#fold(pane, true)}>${right ? '»' : '«'}</button>
     </div>`;
   }
@@ -752,7 +765,7 @@ export class GfFlora extends LitElement {
         ${media ? this.#paneSection(false) : nothing}
         ${resultsFolded ? (media ? nothing : this.#rail('results')) : html`
           <section class="pane results" aria-label="Résultats" ?hidden=${media} @focus-facet=${this.#focusFacet}>
-            ${showPlant ? this.#head('results', 'Résultats') : nothing}
+            ${phone ? nothing : this.#head('results', 'Résultats', nothing, !showPlant)}
             <div class="pane-body">
               <gf-results-bar .wide=${wide} ?grid=${this._grid} @open-filters=${() => openModal(this.#dialog)}></gf-results-bar>
               <gf-plant-list ?grid=${this._grid} .current=${plantId}></gf-plant-list>

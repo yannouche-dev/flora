@@ -12,7 +12,7 @@ const NAMES = [
   'eye-slash', 'funnel', 'funnel-fill', 'gear', 'gear-fill', 'geo-alt-fill', 'globe-europe-africa', 'grip-vertical', 'heart', 'heart-fill', 'image', 'layers',
   'leaf', 'leaf-fill', 'list-nested', 'list-ul', 'map', 'map-fill', 'mic', 'mic-fill', 'pencil', 'pin-angle', 'pin-angle-fill', 'plus-lg', 'search', 'share', 'shield-check', 'star', 'star-fill', 'table',
   'three-dots', 'trash3', 'triangle', 'type-h2', 'upload', 'x', 'x-lg',
-  'arrows-fullscreen', 'box-arrow-up-right', 'fullscreen-exit', 'images', 'zoom-in', 'tree', 'flower3'
+  'arrows-fullscreen', 'box-arrow-up-right', 'fullscreen-exit', 'images', 'zoom-in', 'tree', 'flower3', 'card-text', 'wikipedia', 'basket'
 ];
 
 // Drawn for the app, in the same 16 × 16 grid, where Bootstrap Icons has none.

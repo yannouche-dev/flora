@@ -20,6 +20,8 @@ export const paneStyles = css`
     border-bottom: 1px solid var(--gf-border);
     background: var(--gf-surface);
   }
+  .pane-head h2 gf-sheet-rail { flex: 1; min-width: 0; text-transform: none; letter-spacing: 0; }
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .pane-head h2 { margin: 0; min-width: 0; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gf-text-muted); flex: 1; display: flex; gap: 8px; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pane-head .icon-btn { width: 32px; height: 32px; font-size: 1rem; flex: none; }
   .guide { position: absolute; top: 0; bottom: 0; left: -1px; width: 3px; background: var(--gf-accent); z-index: 5; pointer-events: none; will-change: transform; }

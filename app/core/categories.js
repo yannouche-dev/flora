@@ -4,19 +4,24 @@
 // GBIF, for one, feeds names, images, distribution and ecology.
 
 /**
- * @typedef {'names' | 'images' | 'knowledge' | 'safety' | 'distribution' | 'seasons' | 'ecology' | 'territory' | 'tools'} CategoryKey
+ * @typedef {'names' | 'images' | 'safety' | 'uses' | 'seasons' | 'knowledge' | 'ecology' | 'distribution' | 'territory' | 'tools'} CategoryKey
  * @typedef {{ key: CategoryKey, label: string, question: string, icon: import('./icons.js').IconName }} Category
  */
 
-/** @type {Category[]} */
+/**
+ * In the order of the questions one asks in front of a plant: what is it, what does it look like, is it a danger,
+ * what is it good for, when to see it; then what is known of it (the encyclopedia), its life, where it grows.
+ * @type {Category[]}
+ */
 export const CATEGORIES = [
-  { key: 'names', label: 'Noms', question: 'Comment s’appelle-t-elle ?', icon: 'type-h2' },
-  { key: 'images', label: 'Images', question: 'À quoi ressemble-t-elle ?', icon: 'image' },
-  { key: 'safety', label: 'Protection et risques', question: 'Puis-je la cueillir sans danger ?', icon: 'shield-check' },
+  { key: 'names', label: 'L’essentiel', question: 'Qui est-elle, en quelques mots ?', icon: 'card-text' },
+  { key: 'images', label: 'Images', question: 'À quoi ressemble-t-elle ?', icon: 'images' },
+  { key: 'safety', label: 'Alertes', question: 'Puis-je la cueillir sans danger ?', icon: 'shield-check' },
+  { key: 'uses', label: 'Usages', question: 'À quoi sert-elle, se mange-t-elle ?', icon: 'basket' },
   { key: 'seasons', label: 'Saisons', question: 'Quand la voir ?', icon: 'flower1' },
-  { key: 'distribution', label: 'Répartition', question: 'Où pousse-t-elle ?', icon: 'map' },
+  { key: 'knowledge', label: 'Encyclopédie', question: 'Que sait-on d’elle ?', icon: 'wikipedia' },
   { key: 'ecology', label: 'Écologie et climat', question: 'Avec qui et dans quel milieu vit-elle ?', icon: 'diagram-3' },
-  { key: 'knowledge', label: 'Savoirs', question: 'Que sait-on d’elle ?', icon: 'list-ul' },
+  { key: 'distribution', label: 'Répartition', question: 'Où pousse-t-elle ?', icon: 'map' },
   { key: 'territory', label: 'Carte et territoire', question: 'Où suis-je, qu’y a-t-il ici ?', icon: 'geo-alt-fill' },
   { key: 'tools', label: 'Outils et notes', question: 'Vos actions et vos notes', icon: 'gear' }
 ];
@@ -31,7 +36,8 @@ export const categoryOf = key => CATEGORIES.find(c => c.key === key) || CATEGORI
 const BLOCK_CATEGORIES = {
   name: 'names', names: 'names', taxonomy: 'names', ids: 'names',
   media: 'images', photos: 'images', gbifMedia: 'images',
-  wikipedia: 'knowledge', uses: 'knowledge', descriptions: 'knowledge', literature: 'knowledge', trefle: 'knowledge', resources: 'knowledge',
+  uses: 'uses',
+  wikipedia: 'knowledge', descriptions: 'knowledge', literature: 'knowledge', trefle: 'knowledge', resources: 'knowledge',
   status: 'safety', lookalikes: 'safety',
   occurrences: 'distribution', map: 'distribution', mine: 'distribution',
   calendar: 'seasons',

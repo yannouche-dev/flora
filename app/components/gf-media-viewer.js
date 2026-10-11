@@ -44,6 +44,10 @@ function setStageRatio(r) {
 }
 /** @param {number} v @param {number} a @param {number} b */
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+/** An image that fails, hidden (no broken-image sign); shown again when its next address loads. @param {Event} e */
+const hide = e => { /** @type {HTMLElement} */ (e.target).style.visibility = 'hidden'; };
+/** @param {Event} e */
+const unhide = e => { /** @type {HTMLElement} */ (e.target).style.removeProperty('visibility'); };
 
 export class GfMediaViewer extends LitElement {
   static properties = {
@@ -81,7 +85,8 @@ export class GfMediaViewer extends LitElement {
     _hd: { state: true },
     _info: { state: true },
     _idle: { state: true },
-    _failed: { state: true }
+    _failed: { state: true },
+    _lost: { state: true }
   };
 
   static styles = [ui, css`
@@ -135,9 +140,6 @@ export class GfMediaViewer extends LitElement {
     /* The map comes in softly. */
     .minimap { animation: map-in 0.25s ease-out; }
     @keyframes map-in { from { opacity: 0; transform: translateX(8px); } }
-    /* The frame's size follows the image's shape smoothly (a guessed shape corrected). */
-    .stage.animate .frame { transition: transform 0.22s ease-out, width 0.22s ease-out, height 0.22s ease-out; }
-    .hd-state { position: absolute; left: 8px; bottom: 8px; z-index: 3; padding: 3px 9px; border-radius: var(--gf-radius-pill); background: rgb(0 0 0 / 55%); color: #fff; font-size: 0.72rem; pointer-events: none; }
     /* The controls fade while the pointer rests (wide, mouse). */
     .stage.idle .nav, .stage.idle .zoombar { opacity: 0; }
     .stage:focus-visible { box-shadow: inset var(--gf-focus); }
@@ -152,11 +154,18 @@ export class GfMediaViewer extends LitElement {
     .nav.next { right: calc(var(--map-w, -8px) + 14px); }
     .zoombar { right: calc(var(--map-w, -8px) + 16px); }
 
-    /* The credit under the image, one line; « ⓘ » for the details. */
-    .caption { flex: none; display: flex; align-items: center; gap: 8px; padding: 4px 6px 4px 12px; border-top: 1px solid var(--gf-border); font-size: 0.78rem; color: var(--gf-text-muted); min-height: 39px; }
+    /* The credit under the image, one discreet line (nothing laid over the image); « ⓘ » for the details. */
+    .caption { flex: none; display: flex; align-items: center; gap: 6px; padding: 2px 4px 2px 10px; border-top: 1px solid var(--gf-border); font-size: 0.72rem; line-height: 1.2;
+      color: var(--gf-text-muted); min-height: 30px; }
+    .caption > :not(.icon-btn) { opacity: 0.8; }
     .caption .what { white-space: nowrap; }
-    .caption gf-attribution { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.78rem; }
-    .caption .icon-btn { width: 30px; height: 30px; min-height: 0; flex: none; }
+    .caption gf-attribution { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.72rem; }
+    .caption .icon-btn { width: 26px; height: 26px; min-height: 0; flex: none; font-size: 0.85rem; opacity: 0.75; }
+    .caption .icon-btn:hover, .caption .icon-btn[aria-pressed='true'] { opacity: 1; }
+    /* The original: a dot in the credit line (pulsing while it loads), never a label over the image. */
+    .caption .hd-dot { flex: none; width: 6px; height: 6px; border-radius: 50%; background: var(--gf-accent); opacity: 0.8; }
+    .caption .hd-dot.loading { background: var(--gf-text-muted); animation: hd-pulse 1s ease-in-out infinite alternate; }
+    @keyframes hd-pulse { to { opacity: 0.25; } }
     .info { position: relative; z-index: 1; padding: 12px 14px; display: grid; gap: 8px; align-content: start; font-size: 0.9rem; background: var(--gf-surface); overflow: hidden auto; }
     .info h3 { margin: 0; font-size: 0.95rem; }
     .info .kind { color: var(--gf-text-muted); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -221,7 +230,7 @@ export class GfMediaViewer extends LitElement {
     :host([compact]) .skel .thumbs i { width: 52px; height: 52px; }
     @keyframes shimmer { to { background-position: -300% 0; } }
     @media (prefers-reduced-motion: reduce) {
-      .thumbs { scroll-behavior: auto; } .mosaic img, .frame .disp, .frame .hd, .stage.animate .frame { transition: none; }
+      .thumbs { scroll-behavior: auto; } .mosaic img, .frame .disp, .frame .hd, .stage.animate .frame { transition: none; } .caption .hd-dot { animation: none; }
       .skel .stage { animation: none; }
     }
   `];
@@ -267,6 +276,8 @@ export class GfMediaViewer extends LitElement {
     this._idle = false;
     /** Images that failed at a size: key → the next URL tried. @type {Map<string, string>} */
     this._failed = new Map();
+    /** Images that failed at every size: gone from the stage, the strip, the mosaic and the counts. @type {Set<string>} */
+    this._lost = new Set();
   }
 
   /** @type {AbortController | null} */ #abort = null;
@@ -315,8 +326,8 @@ export class GfMediaViewer extends LitElement {
     }
     if (changed.has('_key')) this.#resetImage();
     // Until the user zooms or moves, the image keeps the chosen view (its shape and the stage's can still change).
-    // The true shape arriving (or the stage resized) eases the image into place; a new image starts there.
-    if (!this.#touched && (changed.has('_key') || changed.has('_stage') || changed.has('_natural'))) this.#toHome(!changed.has('_key') && this._loaded);
+    // Put there at once, never animated: no « speed zoom » when the true shape arrives — the image only fades in.
+    if (!this.#touched && (changed.has('_key') || changed.has('_stage') || changed.has('_natural'))) this.#toHome(false);
     // The display follows to the next plant.
     if (changed.has('_filter') || changed.has('_part') || changed.has('_info') || changed.has('_opened') || changed.has('_playing')) {
       setMediaSession({ filter: this._filter, part: this._part, info: this._info, opened: this._opened, playing: this._playing });
@@ -326,7 +337,7 @@ export class GfMediaViewer extends LitElement {
   async #load() {
     this.#abort?.abort();
     const abort = this.#abort = new AbortController();
-    this._items = []; this._done = false; this._key = null;
+    this._items = []; this._done = false; this._key = null; this._lost = new Set();
     this.#settled = false;
     clearTimeout(this.#settleTimer);
     const plant = await db.get('plants', /** @type {number} */ (this.plantId)).catch(() => null);
@@ -374,13 +385,16 @@ export class GfMediaViewer extends LitElement {
    * kept for the next plant); while loading, nothing yet (no image that would be replaced at once).
    */
   get #shown() {
-    const kind = this._filter, part = this._part;
-    const list = this._items.filter(i => (kind === 'all' || i.kind === kind) && (part === 'all' || i.part === part));
+    const kind = this._filter, part = this._part, items = this.#alive;
+    const list = items.filter(i => (kind === 'all' || i.kind === kind) && (part === 'all' || i.part === part));
     if (list.length || (kind === 'all' && part === 'all')) return list;
     if (!this._done) return [];
-    const ofKind = kind === 'all' ? this._items : this._items.filter(i => i.kind === kind);
-    return ofKind.length ? ofKind : this._items;
+    const ofKind = kind === 'all' ? items : items.filter(i => i.kind === kind);
+    return ofKind.length ? ofKind : items;
   }
+
+  /** The items that load (the lost ones left out). */
+  get #alive() { return this._lost.size ? this._items.filter(i => !this._lost.has(i.key)) : this._items; }
 
   get #current() {
     if (!this.#settled) return null;
@@ -762,6 +776,27 @@ export class GfMediaViewer extends LitElement {
     const next = [item.display, item.src, item.original].find(u => u !== url && !this.#tried.has(item.key + ' ' + u));
     this.#tried.add(item.key + ' ' + url);
     if (next) this._failed = new Map(this._failed).set(item.key, next);
+    else this.#lose(item);
+  }
+
+  /** An image that loads at no size: it goes, and the stage shows the next one (no empty frame). @param {MediaItem} item */
+  #lose(item) {
+    if (this._lost.has(item.key)) return;
+    const shown = this.#shown, at = shown.findIndex(i => i.key === item.key);
+    this._lost = new Set(this._lost).add(item.key);
+    if (this.#current?.key === item.key || this._key === item.key) {
+      const rest = shown.filter(i => i.key !== item.key);
+      const next = rest[Math.min(Math.max(0, at), rest.length - 1)];
+      this._key = next ? next.key : null;
+      if (next) this.#announce();
+    }
+  }
+
+  /** A thumbnail that fails: its full size tried, then the image goes. @param {Event} e @param {MediaItem} i */
+  #thumbError(e, i) {
+    const img = /** @type {HTMLImageElement} */ (e.target);
+    if (img.src !== i.src && !this.#tried.has(i.key + ' thumb')) { this.#tried.add(i.key + ' thumb'); img.src = i.src; }
+    else this.#lose(i);
   }
   #tried = new Set();
 
@@ -795,13 +830,13 @@ export class GfMediaViewer extends LitElement {
   render() {
     const plant = this._plant, item = this.#current, shown = this.#shown;
     const at = item ? shown.indexOf(item) : -1;
-    const kinds = KINDS.filter(([k]) => k === 'all' || this._items.some(i => i.kind === k));
+    const kinds = KINDS.filter(([k]) => k === 'all' || this.#alive.some(i => i.kind === k));
     return html`
       <div class="bar">
         ${this.compact ? html`${icon('images')}<h2>${this.label || 'Médias'}</h2>` : html`<h2></h2>`}
         ${this.presentation === 'mosaic' && this._opened ? html`<button class="link back-mosaic" type="button" @click=${() => { this._opened = false; }}>${icon('chevron-left')} Mosaïque</button>` : nothing}
         ${kinds.length > 2 ? html`<select aria-label="Type de média" @change=${(/** @type {any} */ e) => this.#setFilter(e.target.value)}>
-          ${kinds.map(([k, label]) => html`<option value=${k} ?selected=${this._filter === k}>${label} (${k === 'all' ? this._items.length : this._items.filter(i => i.kind === k).length})</option>`)}</select>` : nothing}
+          ${kinds.map(([k, label]) => html`<option value=${k} ?selected=${this._filter === k}>${label} (${k === 'all' ? this.#alive.length : this.#alive.filter(i => i.kind === k).length})</option>`)}</select>` : nothing}
         ${this.#partMenu()}
         ${item ? html`<span class="count" aria-live="polite">${at + 1} / ${shown.length}</span>` : this._done ? nothing : html`<span class="count">chargement…</span>`}
         ${this.#view === 'slideshow' && shown.length > 1 ? html`<button class="icon-btn" type="button" aria-pressed=${String(this._playing)}
@@ -878,7 +913,7 @@ export class GfMediaViewer extends LitElement {
       ${shown.map(i => html`<button type="button" role="option" class=${i.kind} aria-current=${String(i.key === item.key)} aria-selected=${String(i.key === item.key)}
         title=${[KIND_LABEL[i.kind], i.source].join(' · ')} @click=${() => this.#select(i)}>
         <img src=${i.thumb} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"
-          @error=${(/** @type {Event} */ e) => { const img = /** @type {HTMLImageElement} */ (e.target); if (img.src !== i.src) img.src = i.src; }} />
+          @error=${(/** @type {Event} */ e) => this.#thumbError(e, i)} />
       </button>`)}
     </div>`;
   }
@@ -888,13 +923,15 @@ export class GfMediaViewer extends LitElement {
     return html`<div class="mosaic-wrap"><div class="mosaic" role="list" aria-label="Médias">${shown.map(i => html`<button type="button" role="listitem" class=${i.kind}
       title=${[KIND_LABEL[i.kind], i.source, i.author].filter(Boolean).join(' · ')} @click=${() => { this.#select(i); this._key = i.key; this._opened = true; }}>
       <img src=${i.thumb} alt=${KIND_LABEL[i.kind]} loading="lazy" decoding="async" referrerpolicy="no-referrer"
-        @error=${(/** @type {Event} */ e) => { const img = /** @type {HTMLImageElement} */ (e.target); if (img.src !== i.src) img.src = i.src; }} />
+        @error=${(/** @type {Event} */ e) => this.#thumbError(e, i)} />
     </button>`)}</div></div>`;
   }
 
   /** The credit, one line, under the image; « ⓘ » opens the details. @param {MediaItem} item */
   #caption(item) {
     return html`<div class="caption">
+      ${this._hd === 'loading' ? html`<span class="hd-dot loading" role="status" title="Chargement de l’original…" aria-label="Chargement de l’original"></span>`
+        : this._hd === 'on' ? html`<span class="hd-dot" title="Original affiché" aria-label="Original affiché"></span>` : nothing}
       <span class="what">${KIND_LABEL[item.kind]} · ${item.source}</span>
       <gf-attribution .media=${item}></gf-attribution>
       <button class="icon-btn" type="button" aria-pressed=${String(this._info)} title="À propos de cette image" aria-label="À propos de cette image"
@@ -914,9 +951,9 @@ export class GfMediaViewer extends LitElement {
         aria-label=${(KIND_LABEL[item.kind] || 'Image') + (this._plant ? ' de ' + this._plant.scientificName : '') + ' — double-clic pour zoomer'}
         @pointerdown=${this.#down} @pointermove=${this.#move} @pointerup=${this.#up} @pointercancel=${this.#up}
         @dblclick=${this.#dblclick} @wheel=${this.#wheel} @pointerleave=${() => { if (!this.#drag) this._idle = matchMedia('(hover: hover)').matches; }}>
-      ${fit ? html`<img class="backdrop" src=${item.thumb} alt="" aria-hidden="true" decoding="async" referrerpolicy="no-referrer" draggable="false" />` : nothing}
+      ${fit ? html`<img class="backdrop" src=${item.thumb} alt="" aria-hidden="true" decoding="async" referrerpolicy="no-referrer" draggable="false" @error=${hide} @load=${unhide} />` : nothing}
       <div class="frame ${this._loaded ? 'ready' : ''}" style=${frame}>
-        <img class="ph" src=${item.thumb} alt="" decoding="async" referrerpolicy="no-referrer" draggable="false" />
+        <img class="ph" src=${item.thumb} alt="" decoding="async" referrerpolicy="no-referrer" draggable="false" @error=${hide} @load=${unhide} />
         <img class="disp ${this._loaded ? 'on' : ''}" src=${src} alt=${(KIND_LABEL[item.kind] || 'Image') + (this._plant ? ' de ' + this._plant.scientificName : '')}
           decoding="async" referrerpolicy="no-referrer" draggable="false"
           @load=${(/** @type {Event} */ e) => this.#displayLoaded(item, /** @type {HTMLImageElement} */ (e.target))} @error=${() => this.#broken(item, src)} />
@@ -927,7 +964,6 @@ export class GfMediaViewer extends LitElement {
       <button class="nav prev" type="button" aria-label="Média précédent" ?disabled=${at <= 0} @click=${() => this.#go(-1)}>${icon('chevron-left')}</button>
       <button class="nav next" type="button" aria-label="Média suivant" ?disabled=${at >= n - 1} @click=${() => this.#go(1)}>${icon('chevron-right')}</button>
       ${map && fit ? this.#minimap(item, fit, map) : nothing}
-      ${this._hd === 'loading' ? html`<span class="hd-state" role="status">Chargement de l’original…</span>` : this._hd === 'on' && zoomed ? html`<span class="hd-state">Original</span>` : nothing}
       <div class="zoombar" role="group" aria-label="Zoom">
         <button type="button" aria-label="Dézoomer" title="Dézoomer (−)" ?disabled=${!over} @click=${() => this.#zoomAt(z / 1.5, 0, 0, true)}>−</button>
         ${this.#viewButton(z, pct, one)}

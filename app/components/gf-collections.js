@@ -13,12 +13,14 @@ import { MediaController, PHONE_QUERY } from '../core/media.js';
 import { back } from '../core/history.js';
 import './gf-map.js';
 import './gf-plant-detail.js';
+import './gf-sheet-rail.js';
 import './gf-pager.js';
 import { ui } from '../styles/ui.js';
 import { icon, kindIcon } from '../core/icons.js';
 import { encodeCollection, share } from '../core/share.js';
 import { hasColumns } from '../core/sheet-blocks.js';
 import { PaneSizer, paneStyles } from '../core/panes.js';
+import { hideImg, showImg } from '../core/img.js';
 
 /** Up to this many thumbnails per collection row. */
 const THUMBS = 4;
@@ -43,6 +45,8 @@ function readOpen() {
  */
 export class GfCollections extends LitElement {
   static properties = {
+    /** The rubrics of the plant shown, for the header of its pane (told by the sheet: `sheet-rail`). */
+    _rail: { state: true },
     route: { attribute: false },
     _collections: { state: true },
     _thumbs: { state: true },
@@ -270,7 +274,7 @@ export class GfCollections extends LitElement {
       <span class="sub">
         <span class="thumbs" aria-hidden="true">
           ${p.plantIds.slice(0, THUMBS).map(id => this._thumbs.get(id)
-            ? html`<img src=${/** @type {string} */ (this._thumbs.get(id))} alt="" loading="lazy" referrerpolicy="no-referrer" />`
+            ? html`<img src=${/** @type {string} */ (this._thumbs.get(id))} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />`
             : html`<span></span>`)}
         </span>
         ${plantCount(p.plants.length)}
@@ -333,7 +337,7 @@ export class GfCollections extends LitElement {
     if (plant === null) return nothing;
     const current = this.route.plant === id && (!this.route.open || this.route.open === c.id);
     return html`<li><a href=${href.collections({ open: this.route.open === c.id || c.properties.kind === 'place' ? c.id : this.route.open, plant: id })} aria-current=${current ? 'true' : 'false'}>
-      ${plant?.thumb ? html`<img src=${plant.thumb} alt="" loading="lazy" referrerpolicy="no-referrer" />` : html`<span class="ph" aria-hidden="true"></span>`}
+      ${plant?.thumb ? html`<img src=${plant.thumb} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />` : html`<span class="ph" aria-hidden="true"></span>`}
       <span class="pname">${plant?.name ?? '…'}</span>
       <span class="psci">${plant?.sci ?? ''}</span>
     </a></li>`;
@@ -564,6 +568,18 @@ export class GfCollections extends LitElement {
       </div>`;
   }
 
+
+  /** The plant's rubrics, in its pane's header (as in Flore): a touch goes there in the sheet. @param {number} plantId */
+  #plantRail(plantId) {
+    const rail = this._rail;
+    // The previous plant's rubrics stay until the new sheet tells its own: the header does not blink.
+    if (!rail || !rail.items.length) return 'Plante';
+    return html`<span class="visually-hidden">Plante</span><gf-sheet-rail .items=${rail.items} .active=${rail.active} orientation="row"
+      @rail-go=${(/** @type {CustomEvent} */ e) => /** @type {any} */ (this.renderRoot.querySelector('gf-plant-detail'))?.goTo(e.detail.key)}></gf-sheet-rail>`;
+  }
+
+  /** @param {CustomEvent} e */
+  #onSheetRail = e => { this._rail = e.detail; };
   render() {
     const phone = this.#phone.matches;
     const plantId = this.route.plant;
@@ -573,10 +589,10 @@ export class GfCollections extends LitElement {
         ${plantId ? html`<section class="sheet-plant" aria-label="Plante">
           <div class="pane-head">
             <button class="link back" type="button" @click=${() => back(href.collections({ open: this.route.open }))}>${icon('arrow-left')} Mes plantes</button>
-            <h2></h2>
+            <h2>${this.#plantRail(plantId)}</h2>
             <a class="icon-btn" href=${href.plant(plantId)} title="Ouvrir la fiche dans Flore" aria-label="Ouvrir la fiche dans Flore">${icon('arrows-angle-expand')}</a>
           </div>
-          <div class="pane-body"><gf-plant-detail embedded plant-id=${plantId} view=${plantViewOf(this.#store.state)}></gf-plant-detail>${this.#pager(plantId, true)}</div>
+          <div class="pane-body" @sheet-rail=${this.#onSheetRail}><gf-plant-detail embedded outer-rail plant-id=${plantId} view=${plantViewOf(this.#store.state)}></gf-plant-detail>${this.#pager(plantId, true)}</div>
         </section>` : nothing}`;
     }
     // List | place map | plant, as in Flore: each pane resizable and foldable. The list keeps its width
@@ -613,11 +629,11 @@ export class GfCollections extends LitElement {
             ${mapOpen && !this.#tablet.matches ? p.split(this.#plantKey, 'right', () => this.#max('plant')) : nothing}
             <section class="pane plant-pane ${plantFills ? 'fill' : ''}" aria-label="Plante"
               style=${plantFills || this.#tablet.matches ? '' : `width:${Math.min(p.width(this.#plantKey), Math.max(360, this.#max('plant')))}px`}>
-              ${p.head('plant', 'Plante', html`
+              ${p.head('plant', this.#plantRail(plantId), html`
                 <a class="icon-btn" href=${href.plant(plantId)} title="Ouvrir la fiche dans Flore" aria-label="Ouvrir la fiche dans Flore">${icon('arrows-angle-expand')}</a>
                 <button class="icon-btn" type="button" title="Fermer la fiche" aria-label="Fermer la fiche"
                   @click=${() => location.replace(href.collections({ open: this.route.open }))}>${icon('x-lg')}</button>`, true)}
-              <div class="pane-body"><gf-plant-detail embedded plant-id=${plantId} view=${plantViewOf(this.#store.state)}></gf-plant-detail>${this.#pager(plantId, false)}</div>
+              <div class="pane-body" @sheet-rail=${this.#onSheetRail}><gf-plant-detail embedded outer-rail plant-id=${plantId} view=${plantViewOf(this.#store.state)}></gf-plant-detail>${this.#pager(plantId, false)}</div>
             </section>`) : nothing}
         </div>
       </div>

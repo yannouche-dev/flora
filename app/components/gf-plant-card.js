@@ -8,6 +8,7 @@ import * as sources from '../core/sources.js';
 import { toggleFavorite } from '../core/collections.js';
 import { gridViewOf, StoreController } from '../core/store.js';
 import { icon } from '../core/icons.js';
+import { hideImg, showImg } from '../core/img.js';
 
 /** One result row. Resolves a remote thumbnail when the dataset has none. */
 export class GfPlantCard extends LitElement {
@@ -208,7 +209,7 @@ export class GfPlantCard extends LitElement {
     const illustrated = this.view === 'epure';
     const cells = {
       photo: () => thumb?.url
-        ? html`<img class="thumb" src=${thumb.url} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
+        ? html`<img class="thumb" src=${thumb.url} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />`
         : html`<span class="thumb" aria-hidden="true">${thumb === undefined ? '' : icon('flower1')}</span>`,
       fr: () => illustrated
         ? html`<span class="cell name stack">
@@ -256,7 +257,7 @@ export class GfPlantCard extends LitElement {
     return html`
       <a class="row" href=${href.plant(p.id)} @click=${() => rememberSearch(q)}>
         ${this.compact ? nothing : thumb?.url
-          ? html`<img class="thumb" src=${thumb.url} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" />`
+          ? html`<img class="thumb" src=${thumb.url} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />`
           : html`<span class="thumb" aria-hidden="true">${thumb === undefined ? '' : icon('flower1')}</span>`}
         <span class="text">
           <div class="name ${p.vernacularName ? '' : 'latin'}">${highlight(title, q)}</div>

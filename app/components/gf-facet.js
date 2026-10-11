@@ -35,12 +35,14 @@ export class GfFacet extends LitElement {
   static styles = [ui, css`
     /*
      * The host has no box: the header's sticky box is then bounded by the whole filter list, not by this facet.
-     * Headers stay stuck once scrolled past, stacked in order (--stack: this facet's position).
+     * Headers stay stuck once scrolled past, stacked in order at the top (--stack: this facet's position); those
+     * still to come wait stacked at the bottom (--count: the number of facets). Every header is always in view.
      */
     :host { display: contents; --head-h: 40px; }
     .head {
       position: sticky;
       top: calc(var(--stack, 0) * var(--head-h));
+      bottom: calc((var(--count, 1) - var(--stack, 0) - 1) * var(--head-h));
       z-index: 2;
       height: var(--head-h);
       box-sizing: border-box;
@@ -86,7 +88,10 @@ export class GfFacet extends LitElement {
       border-bottom: 1px solid var(--gf-border);
       /* Scrolled to (funnel in the results grid): lands just below the stacked headers. */
       scroll-margin-top: calc((var(--stack, 0) + 1) * var(--head-h));
+      scroll-margin-bottom: calc((var(--count, 1) - var(--stack, 0) - 1) * var(--head-h));
     }
+    /* A line above too: stuck at the bottom, the list goes under it cleanly. */
+    .head { box-shadow: 0 -1px 0 var(--gf-border); }
     .badge {
       background: var(--gf-accent);
       color: var(--gf-accent-contrast);
@@ -150,8 +155,41 @@ export class GfFacet extends LitElement {
   async reveal() {
     this.open = true;
     await this.updateComplete;
-    this.renderRoot.querySelector('.body')?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    const smooth = !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    this.renderRoot.querySelector('.body')?.scrollIntoView({ block: 'start', behavior: smooth ? 'smooth' : 'auto' });
   }
+
+  /** The scrolling box of the filters (across shadow roots). */
+  #scroller() {
+    /** @type {Node | null} */ let n = this;
+    while (n) {
+      n = /** @type {any} */ (n).assignedSlot || n.parentNode || /** @type {any} */ (n).host || null;
+      if (n instanceof HTMLElement && /(auto|scroll)/.test(getComputedStyle(n).overflowY) && n.scrollHeight > n.clientHeight) return n;
+    }
+    return null;
+  }
+
+  /** Its list in view, between the headers stacked at the top and those at the bottom. */
+  #bodyInView() {
+    const body = this.renderRoot.querySelector('.body'), sc = this.#scroller();
+    if (!body || !sc) return true;
+    const head = this.renderRoot.querySelector('.head')?.getBoundingClientRect().height || 40;
+    const count = Number(getComputedStyle(this).getPropertyValue('--count')) || 1;
+    const r = body.getBoundingClientRect(), s = sc.getBoundingClientRect();
+    return r.top < s.bottom - (count - this.stack - 1) * head - 24 && r.bottom > s.top + (this.stack + 1) * head + 24;
+  }
+
+  /**
+   * A header touched: folded, it opens and its list comes into view; open with its list out of sight (the header
+   * stuck at the top or the bottom), the list comes into view; open and in view, it folds.
+   */
+  #onHead() {
+    if (this.open && !this.#bodyInView()) { this.reveal(); return; }
+    this.open = !this.open;
+    this.dispatchEvent(new CustomEvent('facet-toggle', { detail: { name: this.name, open: this.open }, bubbles: true, composed: true }));
+    if (this.open) this.updateComplete.then(() => { if (!this.#bodyInView()) this.reveal(); });
+  }
+
 
   /** @param {string[]} values */
   #emit(values) {
@@ -184,10 +222,7 @@ export class GfFacet extends LitElement {
     return html`
       <div class="head">
         <button class="toggle" type="button" aria-expanded=${this.open ? 'true' : 'false'} aria-controls="body"
-          @click=${() => {
-            this.open = !this.open;
-            this.dispatchEvent(new CustomEvent('facet-toggle', { detail: { name: this.name, open: this.open }, bubbles: true, composed: true }));
-          }}>
+          @click=${() => this.#onHead()}>
           ${this.label}
           ${selected.size ? html`<span class="badge">${selected.size}</span>` : nothing}
         </button>

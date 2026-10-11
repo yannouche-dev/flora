@@ -1,7 +1,7 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { SORTS } from '../config.js';
-import { activeFilterCount, applySuggestion, setQuery, toHash } from '../core/query.js';
+import { activeFilterCount, applySuggestion, heldSuggestions, setQuery, toHash } from '../core/query.js';
 import { share } from '../core/share.js';
 import { gridViewOf, setCompact, setGridView, StoreController } from '../core/store.js';
 import './gf-mode-switch.js';
@@ -51,6 +51,7 @@ export class GfResultsBar extends LitElement {
     .filters .badge { background: var(--gf-accent); color: var(--gf-accent-contrast); font-size: 0.7rem; padding: 0 7px; }
     .suggestions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; color: var(--gf-text-muted); }
     .suggestions button { border-style: dashed; }
+    .suggestions button[aria-pressed='true'] { border-style: solid; border-color: var(--gf-accent); background: var(--gf-accent-soft); color: var(--gf-accent); }
     .suggestions small { color: var(--gf-text-muted); }
     .note { color: var(--gf-warn); }
   `];
@@ -81,6 +82,25 @@ export class GfResultsBar extends LitElement {
   /** @param {import('../core/store.js').Suggestion} suggestion */
   #applySuggestion(suggestion) {
     applySuggestion(suggestion.type, suggestion.name);
+  }
+
+  /**
+   * « Filtrer par » : the families and genera matching the text. One chosen, the others stay (the one chosen
+   * on, touched again: off). @param {any} query
+   */
+  #suggestions(query) {
+    const list = (!query.q && heldSuggestions()) || this.#store.state.results.suggestions;
+    if (!list.length) return nothing;
+    return html`<div class="suggestions">
+      Filtrer par :
+      ${list.map((/** @type {any} */ s) => {
+        const on = query.filters[s.type]?.includes(s.name);
+        return html`<button type="button" aria-pressed=${String(Boolean(on))} @click=${() => this.#applySuggestion(s)}>
+          ${on ? icon('check-lg') : nothing}${s.type === 'genus' ? html`<i>${s.name}</i>` : s.name}
+          <small>· ${s.type === 'family' ? 'famille' : 'genre'} · ${s.count}</small>
+        </button>`;
+      })}
+    </div>`;
   }
 
   render() {
@@ -122,15 +142,7 @@ export class GfResultsBar extends LitElement {
 
       <gf-active-filters></gf-active-filters>
 
-      ${results.suggestions.length ? html`
-        <div class="suggestions">
-          Filtrer par :
-          ${results.suggestions.map(s => html`
-            <button type="button" @click=${() => this.#applySuggestion(s)}>
-              ${s.type === 'genus' ? html`<i>${s.name}</i>` : s.name}
-              <small>· ${s.type === 'family' ? 'famille' : 'genre'} · ${s.count}</small>
-            </button>`)}
-        </div>` : nothing}
+      ${this.#suggestions(query)}
 
       ${results.fuzzy ? html`
         <div class="note">

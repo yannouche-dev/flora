@@ -41,6 +41,7 @@ import './gf-sheet-rail.js';
 import { alertsOf } from '../core/alerts.js';
 import { sheetSession } from '../core/sheet-session.js';
 import { openModal } from '../core/history.js';
+import { hideImg, dropFigure, showImg } from '../core/img.js';
 
 /** Remote text is untrusted HTML: keep only its text content (DOMParser never runs scripts). */
 function toText(/** @type {string} */ value) {
@@ -359,7 +360,6 @@ export class GfPlantDetail extends LitElement {
     /** The plant's alerts, as counts on the rubric icons (alerts.js). */
     _alerts: { state: true },
     /** The sheet is wide enough for the rubrics in a column on its left. */
-    _railCol: { state: true },
     /** The edge shown over the whole plant pane for now (Échap or its button puts it back). */
     _maxEdge: { state: true },
     /** The sheet is wide enough for columns on its left and right edges (else they are bands at the top). */
@@ -657,7 +657,7 @@ export class GfPlantDetail extends LitElement {
       background: color-mix(in srgb, var(--gf-surface) 94%, transparent); backdrop-filter: blur(6px); border-bottom: 1px solid var(--gf-border);
       mask-image: linear-gradient(90deg, #000 calc(100% - 16px), transparent); }
     .wiki-menu::-webkit-scrollbar { display: none; }
-    .wiki-logo { flex: none; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--gf-border); font-family: Georgia, serif; font-weight: 700; font-size: 0.8rem; color: var(--gf-text-muted); }
+    .wiki-logo { flex: none; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--gf-border); font-size: 0.85rem; color: var(--gf-text-muted); }
     .wiki-menu a { flex: none; padding: 4px 10px; border-radius: var(--gf-radius-pill); font-size: 0.8rem; color: var(--gf-text-muted); text-decoration: none; white-space: nowrap; }
     .wiki-menu a:hover { color: var(--gf-text); background: var(--gf-surface-2); }
     .wiki-menu a.on { background: var(--gf-accent-soft); color: var(--gf-accent); font-weight: 600; }
@@ -817,8 +817,8 @@ export class GfPlantDetail extends LitElement {
     .place-grid .p-beside { grid-area: x; }
     .edge[data-edge='bottom'] .place-grid { top: auto; bottom: 100%; }
     /*
-     * Side rail: an icon per category of the sheet's blocks (Noms, Images, Protection…). Narrow sheet: a strip
-     * stuck at the top; wide: a column stuck on the left. Hover (or focus): the category's blocks.
+     * The rubrics (when no host shows them in its header): a strip stuck at the top, whatever the width — the
+     * same skeleton as every other sheet, never a side column. Hover (or focus): the rubric's blocks.
      */
     .railed { --rail-h: 44px; }
     .rail { position: sticky; top: -16px; z-index: 9; margin: -16px -16px 6px; padding: 4px 10px; background: var(--gf-surface); border-bottom: 1px solid var(--gf-border); }
@@ -826,15 +826,6 @@ export class GfPlantDetail extends LitElement {
     .block { scroll-margin-top: calc(var(--rail-h, 0px) + 8px); }
     .block[data-flash] { animation: flash 1.2s ease-out; }
     @keyframes flash { from { box-shadow: 0 0 0 3px var(--gf-accent); } to { box-shadow: 0 0 0 3px transparent; } }
-    @container (min-width: 560px) {
-      .railed { --rail-h: 0px; display: grid; grid-template-columns: 44px minmax(0, 1fr); column-gap: 8px; }
-      .rail { top: 0; align-self: start; margin: 0 0 0 -8px; padding: 6px 4px; border: 0; border-right: 1px solid var(--gf-border); background: none; }
-      :host([embedded]) .rail { top: 0; margin: 0 0 0 -6px; }
-      .railed-sheet { min-width: 0; }
-      /* With edges: the rail beside the frame, both as high as the pane. */
-      :host([edged]) .railed { display: grid; grid-template-rows: minmax(0, 1fr); column-gap: 0; }
-      :host([edged]) .rail { margin: 0; padding: 6px 4px; border-right: 1px solid var(--gf-border); }
-    }
     @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } .block[data-flash] { animation: none; } }
   `];
 
@@ -867,7 +858,6 @@ export class GfPlantDetail extends LitElement {
     this._maxEdge = sheetSession.maxEdge;
     /** @type {{ safety: any, edible: any } | null} */
     this._alerts = null;
-    this._railCol = false;
     this.outerRail = false;
     this._newNote = false;
     /** Note block whose text was just saved. @type {string | null} */
@@ -904,8 +894,6 @@ export class GfPlantDetail extends LitElement {
     this.style.setProperty('--host-h', Math.round(entry.contentRect.height + this.#padY()) + 'px');
     const wide = entry.contentRect.width >= 640;
     if (wide !== this._wideSheet) this._wideSheet = wide;
-    const col = entry.contentRect.width >= 560;
-    if (col !== this._railCol) this._railCol = col;
   });
 
   #padY() {
@@ -1373,7 +1361,7 @@ export class GfPlantDetail extends LitElement {
         ${shown.map(image => html`
           <figure>
             <a href=${image.sourceUrl || image.pageUrl || image.url} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, image.url)}>
-              <img src=${image.url} alt=${plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" />
+              <img src=${image.url} alt=${plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${dropFigure} @load=${showImg} />
             </a>
             <figcaption><gf-attribution .media=${image}></gf-attribution></figcaption>
           </figure>`)}
@@ -1418,7 +1406,8 @@ export class GfPlantDetail extends LitElement {
     if (!this.#wikiThemeOpen(t)) this._wikiOpen = new Set([...this._wikiOpen, 'theme:' + t]);
     await this.updateComplete;
     const el = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('#wiki-' + t));
-    if (!el) return;
+    // The article elsewhere (an edge, a pane) or not drawn yet: to the block itself.
+    if (!el) { this.#goTo('wikipedia'); return; }
     el.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
     el.removeAttribute('data-flash'); void el.offsetWidth; el.setAttribute('data-flash', '');
     setTimeout(() => el.removeAttribute('data-flash'), 1300);
@@ -1440,7 +1429,7 @@ export class GfPlantDetail extends LitElement {
     const date = wiki.touched ? new Date(wiki.touched).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : null;
     return html`<div class="description wiki">
       ${themes.length ? html`<nav class="wiki-menu" aria-label="Sommaire de l’article Wikipédia">
-        <span class="wiki-logo" aria-hidden="true">W</span>
+        <span class="wiki-logo" aria-hidden="true">${icon('wikipedia')}</span>
         ${themes.map(t => html`<a href=${'#wiki-' + t} class=${this._wikiActive === t ? 'on' : ''} aria-current=${this._wikiActive === t ? 'true' : 'false'}
           @click=${(/** @type {Event} */ e) => { e.preventDefault(); this.#wikiGo(t); }}>${WIKI_THEMES[t][0]}</a>`)}
       </nav>` : nothing}
@@ -1654,7 +1643,9 @@ export class GfPlantDetail extends LitElement {
     const usesCat = blockCategory('uses');
     const items = CATEGORIES.map(c => ({
       key: c.key, label: c.label, question: c.question, icon: c.icon,
-      blocks: this.#categoryBlocks(ctx, c.key).map(k => ({ key: k, title: blockTitle(k), note: placeOf(this.view, k) ? GfPlantDetail.PLACE_INFO[/** @type {string} */ (placeOf(this.view, k))][0].toLowerCase() : undefined })),
+      blocks: this.#categoryBlocks(ctx, c.key).map(k => ({ key: k, title: blockTitle(k), note: placeOf(this.view, k) ? GfPlantDetail.PLACE_INFO[/** @type {string} */ (placeOf(this.view, k))][0].toLowerCase() : undefined,
+        // The article's themes, each to its anchor in the Wikipédia block.
+        subs: k === 'wikipedia' && !placeOf(this.view, k) ? this.#wikiThemes.map(t => ({ key: 'wiki:' + t, title: WIKI_THEMES[t][0] })) : undefined })),
       badge: c.key === 'safety' ? this._alerts?.safety : c.key === usesCat ? this._alerts?.edible : null
     })).filter(c => c.blocks.length);
     return items.length < 2 ? [] : items;
@@ -1666,7 +1657,7 @@ export class GfPlantDetail extends LitElement {
     const items = this.#railItems(ctx);
     if (this.outerRail) { this.#railOut = items; return nothing; }
     if (!items.length) return nothing;
-    return html`<div class="rail"><gf-sheet-rail .items=${items} .active=${this._activeCat} orientation=${this._railCol ? 'column' : 'row'}
+    return html`<div class="rail"><gf-sheet-rail .items=${items} .active=${this._activeCat} orientation="row"
       @rail-go=${(/** @type {CustomEvent} */ e) => this.goTo(e.detail.key)}></gf-sheet-rail></div>`;
   }
   /** @type {any[] | null} */ #railOut = null;
@@ -1682,11 +1673,20 @@ export class GfPlantDetail extends LitElement {
     this.dispatchEvent(new CustomEvent('sheet-rail', { detail: { items, active, plantId: this.plantId }, bubbles: true, composed: true }));
   }
 
-  /** To a rubric's block, asked by the host's rail. @param {string} key */
+  /** To a rubric's block (or a theme of the article, « wiki:<theme> »), asked by the host's rail. @param {string} key */
   goTo(key) {
+    if (key.startsWith('wiki:')) {
+      const theme = key.slice(5);
+      sheetSession.anchor = blockCategory('wikipedia');
+      sheetSession.anchorBlock = 'wikipedia';
+      sheetSession.anchorOffset = 0;
+      sheetSession.anchorWiki = theme;
+      return this.#wikiGo(theme);
+    }
     sheetSession.anchor = blockCategory(key);
     sheetSession.anchorBlock = key;
     sheetSession.anchorOffset = 0;
+    sheetSession.anchorWiki = null;
     return this.#goTo(key);
   }
 
@@ -1724,8 +1724,12 @@ export class GfPlantDetail extends LitElement {
       const scroller = this.#sheetScroller;
       if (this.#restoring) return;
       const scTop = scroller.getBoundingClientRect().top, top = scTop + 72;
+      /** The block under the top edge of the sheet (the anchor), not the one lit a little lower. @type {HTMLElement | null} */
+      let atEdge = null;
       for (const el of /** @type {NodeListOf<HTMLElement>} */ (this.renderRoot.querySelectorAll('.blocks > .block'))) {
-        if (el.getBoundingClientRect().top <= top) { current = el.dataset.key; currentEl = el; } else break;
+        const t = el.getBoundingClientRect().top;
+        if (t <= scTop + 4) atEdge = el;
+        if (t <= top) { current = el.dataset.key; currentEl = el; } else break;
       }
       const cat = current ? blockCategory(current) : null;
       if (cat !== this._activeCat) this._activeCat = cat;
@@ -1735,8 +1739,10 @@ export class GfPlantDetail extends LitElement {
         const atTop = scroller.scrollTop < 40;
         sheetSession.anchor = atTop ? null : cat;
         // The block itself, and how far into it (the next plant opens there, not at the rubric's first block).
-        sheetSession.anchorBlock = atTop ? null : current;
-        sheetSession.anchorOffset = atTop || !currentEl ? 0 : Math.round(scTop - currentEl.getBoundingClientRect().top);
+        const anchorEl = atEdge || currentEl;
+        sheetSession.anchorBlock = atTop || !anchorEl ? null : anchorEl.dataset.key || null;
+        sheetSession.anchorOffset = atTop || !anchorEl ? 0 : Math.round(scTop - anchorEl.getBoundingClientRect().top);
+        sheetSession.anchorWiki = !atTop && sheetSession.anchorBlock === 'wikipedia' ? this._wikiActive : null;
       }
     });
   };
@@ -1758,11 +1764,14 @@ export class GfPlantDetail extends LitElement {
     const blocks = () => /** @type {HTMLElement[]} */ ([...this.renderRoot.querySelectorAll('.blocks > .block')]);
     const same = () => sheetSession.anchorBlock ? blocks().find(el => el.dataset.key === sheetSession.anchorBlock) : undefined;
     const first = () => same() || blocks().find(el => blockCategory(el.dataset.key || '') === cat);
-    if (!first()) return;
-    const offset = sheetSession.anchorOffset;
+    // The blocks of the rubric may come later (their data loading): no return — they are waited for below.
+    const offset = sheetSession.anchorOffset, theme = sheetSession.anchorWiki;
     this.#restoring = true;
     const scroller = this.#sheetScroller;
     const pin = () => {
+      // In the article: at the theme read (its anchor), once the article is there.
+      const wiki = theme && sheetSession.anchorBlock === 'wikipedia' ? /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('#wiki-' + theme)) : null;
+      if (wiki) { scroller.scrollTop += wiki.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 52; this._wikiActive = theme; return; }
       const el = first();
       if (!el) return;
       // As far into the block as before (within it), else at its top.
@@ -1773,15 +1782,19 @@ export class GfPlantDetail extends LitElement {
     pin();
     this._activeCat = cat;
     const body = this.renderRoot.querySelector('article') || scroller;
+    // Blocks appearing (a block's data arriving) are watched too, not only growing ones.
+    const appear = new MutationObserver(() => pin());
+    appear.observe(body, { childList: true, subtree: true });
     const grow = new ResizeObserver(() => pin());
     grow.observe(body);
     const stop = () => {
       grow.disconnect();
+      appear.disconnect();
       clearTimeout(timer);
       for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) scroller.removeEventListener(ev, stop);
       requestAnimationFrame(() => { this.#restoring = false; });
     };
-    const timer = setTimeout(stop, 2500);
+    const timer = setTimeout(stop, 6000);
     for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) scroller.addEventListener(ev, stop, { passive: true, once: true });
   }
   #restoring = false;
@@ -2113,7 +2126,7 @@ export class GfPlantDetail extends LitElement {
         if (baseOf(v) !== 'epure') return this.#gallery(ctx, baseOf(v) === 'standard' ? 6 : Infinity);
         const hero = ctx.images[0];
         return html`<figure class="hero">
-          ${hero ? html`<a href=${hero.sourceUrl || hero.url} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, hero.url)}><img src=${hero.url} alt=${plant.scientificName} decoding="async" referrerpolicy="no-referrer" /></a>
+          ${hero ? html`<a href=${hero.sourceUrl || hero.url} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, hero.url)}><img src=${hero.url} alt=${plant.scientificName} decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} /></a>
             <figcaption><gf-attribution .media=${hero}></gf-attribution></figcaption>`
             : html`<div class=${loading ? 'skeleton' : 'no-photo'} aria-hidden="true">${loading ? '' : icon('flower1')}</div>`}
         </figure>`;
@@ -2430,7 +2443,7 @@ export class GfPlantDetail extends LitElement {
     if (list === undefined) return html`${head}<p class="muted">chargement…</p>`;
     if (!list?.length) return html`${head}<p class="muted">${none}</p>`;
     return html`${head}<div class="gallery ${herbarium ? 'herbarium' : ''}">${list.map(image => html`<figure>
-      <a href=${image.sourceUrl || image.url} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, image.url)}><img src=${image.url} alt=${(herbarium ? 'Planche d’herbier de ' : '') + plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" /></a>
+      <a href=${image.sourceUrl || image.url} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, image.url)}><img src=${image.url} alt=${(herbarium ? 'Planche d’herbier de ' : '') + plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${dropFigure} @load=${showImg} /></a>
       <figcaption>
         ${herbarium ? html`<span class="specimen">${[image.institution, image.catalogNumber && 'n° ' + image.catalogNumber, image.year, image.country].filter(Boolean).join(' · ')}</span>` : nothing}
         ${image.coordinates && this.#hasMap ? this.#focusable({ kind: 'point', label: (herbarium ? 'Planche ' : 'Photo ') + ([image.institution, image.year].filter(Boolean).join(' ') || 'GBIF'), coordinates: image.coordinates, url: image.sourceUrl },

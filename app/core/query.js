@@ -52,6 +52,8 @@ let timer;
  * @param {{ debounce?: number }} [options]
  */
 export function setQuery(patch, { debounce = 0 } = {}) {
+  // Something typed: the suggestions kept from the text before give way to the new ones.
+  if (patch.q) held = null;
   const query = { ...store.state.query, ...patch };
   store.set({ query });
   // replaceState (not push): the back button leaves the list instead of undoing filters one by one.
@@ -62,15 +64,21 @@ export function setQuery(patch, { debounce = 0 } = {}) {
 }
 
 /**
- * The text a « Filtrer par » suggestion turned into a filter: removing that filter gives the text back
- * (unless something else was typed since). @type {{ facet: Facet, value: string, q: string } | null}
+ * The « Filtrer par » suggestions of the text typed, kept once one is chosen (the text gives way to the filter):
+ * the others stay offered, the one chosen shown on; removing every filter they made gives the text back
+ * (unless something else was typed since).
+ * @type {{ q: string, list: { type: Facet, name: string, count: number }[] } | null}
  */
-let replacedText = null;
+let held = null;
 
-/** « Filtrer par : Urtica · genre »: the typed text becomes a filter. @param {Facet} facet @param {string} value */
+/** The suggestions kept from the text (see `held`), or null. */
+export const heldSuggestions = () => held?.list || null;
+
+/** « Filtrer par : Urtica · genre »: the typed text becomes a filter (again: another one, or off). @param {Facet} facet @param {string} value */
 export function applySuggestion(facet, value) {
   const { q, filters } = store.state.query;
-  replacedText = q ? { facet, value, q } : null;
+  if (q) held = { q, list: /** @type {any} */ (store.state.results.suggestions) };
+  if (filters[facet].includes(value)) return setFacet(facet, filters[facet].filter(v => v !== value));
   setQuery({ q: '', filters: { ...filters, [facet]: [...filters[facet], value] } });
 }
 
@@ -81,11 +89,11 @@ export function setFacet(facet, values) {
   if (facet === 'family' && values.length) {
     filters.genus = filters.genus.filter(genus => values.includes(genusFamily.get(genus) || ''));
   }
-  // The filter a « Filtrer par » suggestion made from the search text is removed: the text comes back
+  // Every filter the « Filtrer par » suggestions made from the search text is removed: the text comes back
   // (unless something else was typed since).
-  const made = replacedText;
-  if (made && !filters[made.facet].includes(made.value)) {
-    replacedText = null;
+  const made = held;
+  if (made && !made.list.some(x => filters[x.type]?.includes(x.name))) {
+    held = null;
     if (!store.state.query.q) return setQuery({ q: made.q, filters });
   }
   setQuery({ filters });
