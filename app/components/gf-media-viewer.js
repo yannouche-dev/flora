@@ -24,12 +24,16 @@ import './gf-attribution.js';
 /** @typedef {import('../core/media-items.js').MediaItem} MediaItem */
 
 const KINDS = /** @type {const} */ ([['all', 'Tous les médias'], ['photo', 'Photos'], ['observation', 'Observations'], ['herbarium', 'Herbier']]);
+/** Photos first, herbarium sheets last (prefer-photos). @type {Record<string, number>} */
+const PHOTO_RANK = { photo: 0, observation: 1, herbarium: 2 };
 const KIND_LABEL = { photo: 'Photo', observation: 'Photo d’observation', herbarium: 'Planche d’herbier' };
 /** The part menu: label and icon of each part. */
 const PART_INFO = { all: ['Toutes les parties', 'images'], flower: ['Fleur', 'flower3'], leaf: ['Feuille', 'leaf'], fruit: ['Fruit', 'fruit'],
   bark: ['Écorce', 'bark'], habit: ['Port', 'tree'], other: ['Autre', 'three-dots'] };
 /** The map of the whole image: at the stage's height when it takes at most this share of its width (else smaller). */
 const MAP_SHARE = 0.45, MAP_SHARE_NARROW = 0.35;
+/** Zoomed, the image may be moved this far clear of the map (px), so nothing of it stays hidden under the map. */
+const MAP_GAP = 12;
 const nf = new Intl.NumberFormat('fr-FR');
 
 /** The image's height in the sheet, as a proportion of its width (the grip); null: the default shape. */
@@ -63,6 +67,8 @@ export class GfMediaViewer extends LitElement {
     compact: { type: Boolean, reflect: true },
     /** Stuck to an edge of the plant pane. */
     local: { type: Boolean, reflect: true },
+    /** Photos first (photos, then observation photos; herbarium sheets last), whatever the sheet chose (Découvrir). */
+    preferPhotos: { type: Boolean, attribute: 'prefer-photos' },
     /** 'scene' (stage and filmstrip), 'mosaic' (every image in a grid) or 'slideshow' (one image, full frame). */
     presentation: { reflect: true },
     _opened: { state: true },
@@ -126,7 +132,8 @@ export class GfMediaViewer extends LitElement {
     .frame .disp, .frame .hd { opacity: 0; transition: opacity 0.25s; }
     .frame .disp.on, .frame .hd.on { opacity: 1; }
     .stage.animate .frame { transition: transform 0.22s ease-out; }
-    .nav { position: absolute; top: 50%; translate: 0 -50%; z-index: 3; width: 40px; height: 56px; border: 0; border-radius: var(--gf-radius-sm);
+    /* ‹ ›: always at the same place, zoomed or not — over the map when it is there. */
+    .nav { position: absolute; top: 50%; translate: 0 -50%; z-index: 4; width: 40px; height: 56px; border: 0; border-radius: var(--gf-radius-sm);
       background: rgb(0 0 0 / 38%); color: #fff; font-size: 1.2rem; display: grid; place-items: center; cursor: pointer; transition: opacity 0.2s; }
     .nav:hover { background: rgb(0 0 0 / 62%); }
     .nav.prev { left: 6px; } .nav.next { right: 6px; }
@@ -151,7 +158,6 @@ export class GfMediaViewer extends LitElement {
     .stage.dragging .minimap .view, .minimap.dragging .view { transition: none; }
     .minimap .view { position: absolute; border: 1px solid rgb(255 255 255 / 85%); border-radius: 2px; box-shadow: 0 0 0 9999px rgb(0 0 0 / 18%); pointer-events: none; }
     .stage.idle .minimap { opacity: 0.9; }
-    .nav.next { right: calc(var(--map-w, -8px) + 14px); }
     .zoombar { right: calc(var(--map-w, -8px) + 16px); }
 
     /* The credit under the image, one discreet line (nothing laid over the image); « ⓘ » for the details. */
@@ -248,6 +254,7 @@ export class GfMediaViewer extends LitElement {
     this.startUrl = null;
     this.compact = false;
     this.local = false;
+    this.preferPhotos = false;
     /** @type {string} */
     this.presentation = 'scene';
     // The display chosen on the previous plant.
@@ -328,8 +335,10 @@ export class GfMediaViewer extends LitElement {
     // Until the user zooms or moves, the image keeps the chosen view (its shape and the stage's can still change).
     // Put there at once, never animated: no « speed zoom » when the true shape arrives — the image only fades in.
     if (!this.#touched && (changed.has('_key') || changed.has('_stage') || changed.has('_natural'))) this.#toHome(false);
-    // The display follows to the next plant.
-    if (changed.has('_filter') || changed.has('_part') || changed.has('_info') || changed.has('_opened') || changed.has('_playing')) {
+    // Photos first (Découvrir): every medium, in that order — not the type or part the sheet was left on.
+    if (changed.has('preferPhotos') && this.preferPhotos) { this._filter = 'all'; this._part = 'all'; }
+    // The display follows to the next plant (not from a viewer that has its own start).
+    if (!this.preferPhotos && (changed.has('_filter') || changed.has('_part') || changed.has('_info') || changed.has('_opened') || changed.has('_playing'))) {
       setMediaSession({ filter: this._filter, part: this._part, info: this._info, opened: this._opened, playing: this._playing });
     }
   }
@@ -385,7 +394,8 @@ export class GfMediaViewer extends LitElement {
    * kept for the next plant); while loading, nothing yet (no image that would be replaced at once).
    */
   get #shown() {
-    const kind = this._filter, part = this._part, items = this.#alive;
+    const kind = this._filter, part = this._part;
+    const items = this.preferPhotos ? [...this.#alive].sort((a, b) => PHOTO_RANK[a.kind] - PHOTO_RANK[b.kind]) : this.#alive;
     const list = items.filter(i => (kind === 'all' || i.kind === kind) && (part === 'all' || i.part === part));
     if (list.length || (kind === 'all' && part === 'all')) return list;
     if (!this._done) return [];
@@ -562,13 +572,27 @@ export class GfMediaViewer extends LitElement {
     this.requestUpdate();
   }
 
-  /** Keeps the image over the stage (no empty band beyond its edges). */
+  /**
+   * Keeps the image over the stage (no empty band beyond its edges) — except on the map's sides: zoomed, the map
+   * covers the stage's top right, so the image may go further left, until its right edge clears the map, and
+   * (a map shorter than the stage) further down, until its top edge passes under it. Every part of the image can
+   * then be seen, the map never hiding any.
+   */
   #clampPan() {
     const fit = this.#fit;
     if (!fit) return;
-    const mx = Math.max(0, (fit.w * this._z - this._stage.w) / 2), my = Math.max(0, (fit.h * this._z - this._stage.h) / 2);
-    this._tx = clamp(this._tx, -mx, mx);
-    this._ty = clamp(this._ty, -my, my);
+    const W = this._stage.w, H = this._stage.h, iw = fit.w * this._z, ih = fit.h * this._z;
+    const mx = Math.max(0, (iw - W) / 2), my = Math.max(0, (ih - H) / 2);
+    let minX = -mx, maxY = my;
+    const map = this._z > 1.01 ? this.#mapSize(fit) : null;
+    if (map) {
+      // The map's box (8 px from the edges) and a margin: its right edge, the top one if the map leaves room under it.
+      const room = map.w + 8 + MAP_GAP;
+      minX = Math.min(minX, W / 2 - room - iw / 2);
+      if (map.h + 16 < H - 1) maxY = Math.max(maxY, map.h + 8 + MAP_GAP - H / 2 + ih / 2);
+    }
+    this._tx = clamp(this._tx, minX, mx);
+    this._ty = clamp(this._ty, -my, maxY);
   }
 
   /**
@@ -709,12 +733,13 @@ export class GfMediaViewer extends LitElement {
   }
 
   /**
-   * Wheel: zooms with Ctrl (and a trackpad's pinch), or always when the viewer is alone in a pane; in the
-   * sheet the wheel alone scrolls the sheet.
+   * Wheel: the viewer stuck to an edge of the sheet or alone in a pane (a pane, a pane under it, the bare plant
+   * of Découvrir) — the wheel zooms, in and out; in the flow of the sheet (compact), it scrolls the sheet, and
+   * Ctrl + wheel (a trackpad's pinch) zooms.
    * @param {WheelEvent} e
    */
   #wheel(e) {
-    if (!e.ctrlKey && (this.compact || this._z <= this.#home + 0.01 && this.local)) return;
+    if (!e.ctrlKey && this.compact) return;
     e.preventDefault();
     const [px, py] = this.#local(e);
     this.#zoomAt(this._z * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0025)), px, py);
@@ -1000,11 +1025,13 @@ export class GfMediaViewer extends LitElement {
   #minimap(item, fit, size) {
     const z = this._z, vw = Math.min(1, this._stage.w / (fit.w * z)), vh = Math.min(1, this._stage.h / (fit.h * z));
     const cx = 0.5 - this._tx / (fit.w * z), cy = 0.5 - this._ty / (fit.h * z);
+    // The part seen, its frame always whole inside the map — also when the image is moved clear of the map.
+    const left = clamp(cx - vw / 2, 0, 1 - vw), top = clamp(cy - vh / 2, 0, 1 - vh);
     return html`<div class="minimap" role="img" aria-label="Où se trouve la vue sur l’image entière" style=${`width:${size.w}px;height:${size.h}px`}
         @pointerdown=${(/** @type {PointerEvent} */ e) => this.#mapDown(e)} @pointermove=${(/** @type {PointerEvent} */ e) => this.#mapMove(e)}
         @pointerup=${() => this.#mapUp()} @pointercancel=${() => this.#mapUp()}>
       <img src=${item.thumb} alt="" referrerpolicy="no-referrer" draggable="false" />
-      <div class="view" style=${`left:${(cx - vw / 2) * 100}%;top:${(cy - vh / 2) * 100}%;width:${vw * 100}%;height:${vh * 100}%`}></div>
+      <div class="view" style=${`left:${left * 100}%;top:${top * 100}%;width:${vw * 100}%;height:${vh * 100}%`}></div>
     </div>`;
   }
 
@@ -1047,7 +1074,7 @@ export class GfMediaViewer extends LitElement {
         ${page ? html`<a href=${page} target="_blank" rel="noopener">${icon('box-arrow-up-right')} Voir à la source</a>` : nothing}
         <a href=${item.original} target="_blank" rel="noopener">${icon('image')} Ouvrir l’original</a>
       </div>
-      <p class="tip">Double-clic ou double-tap : zoomer là ; pincer ou Ctrl + molette : zoom progressif ; glisser : se déplacer. Au-delà de l’image d’affichage, l’original se charge tout seul.</p>
+      <p class="tip">Double-clic ou double-tap : zoomer là ; molette (Ctrl + molette dans la fiche) ou pincer : zoom progressif ; glisser : se déplacer. Au-delà de l’image d’affichage, l’original se charge tout seul.</p>
     </aside>`;
   }
 }

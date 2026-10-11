@@ -1026,7 +1026,7 @@ export class GfDiscover extends LitElement {
       <div class="nude-body">
         ${step >= 4 ? this.#aroundList(cards) : nothing}
         <div class="nude-main">
-          <div class="nude-media">${step >= 1 ? html`<gf-media-viewer local plant-id=${this.open} .view=${'standard'}></gf-media-viewer>`
+          <div class="nude-media">${step >= 1 ? html`<gf-media-viewer local prefer-photos plant-id=${this.open} .view=${'standard'}></gf-media-viewer>`
             : html`<div class="bare-photo"><span class="nophoto">${icon('leaf')}</span>${card?.photo ? html`<img src=${card.photo.replace('/medium.', '/large.')} alt=${name} decoding="async" referrerpolicy="no-referrer" style="position:absolute" @error=${hideImg} @load=${showImg} />` : nothing}</div>`}</div>
           ${step >= 2 ? html`<div class="nude-wiki">${branch ? this.#dashboard(branch) : nothing}<gf-plant-detail embedded only="wikipedia" plant-id=${this.open} view="standard"></gf-plant-detail></div>` : nothing}
         </div>
