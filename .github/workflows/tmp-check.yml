@@ -1,0 +1,17 @@
+name: tmp-check
+on:
+  push:
+    branches: [claude/exciting-faraday-c4xk2r]
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          for q in "region&CQL_FILTER=nom='Nouvelle-Aquitaine'" "departement&CQL_FILTER=nom='Gironde'"; do
+            u="https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=ADMINEXPRESS-COG-CARTO.LATEST:${q}&outputFormat=application/json&count=1"
+            u="${u// /%20}"
+            echo "== $q"
+            curl -sS -D h.txt -o b.json "$u"; grep -iE "^HTTP|access-control-allow-origin|content-type" h.txt
+            python3 -c "import json;d=json.load(open('b.json'));f=d.get('features',[]);print('features',len(f));g=f[0]['geometry'] if f else None;print(g and g['type']);c=g and (g['coordinates'][0][0][0] if g['type']=='MultiPolygon' else g['coordinates'][0][0]);print('first',c);import os;print('bytes',os.path.getsize('b.json'));print('props',f and {k:v for k,v in f[0]['properties'].items() if k in ('nom','code_insee','insee_reg')})" || head -c 600 b.json
+          done
+          curl -sS -o /dev/null -w "gbif gadm: %{http_code}\n" "https://api.gbif.org/v1/occurrence/search?taxonKey=5361871&gadmGid=FRA.10_1&limit=1"
