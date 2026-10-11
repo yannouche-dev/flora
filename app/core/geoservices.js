@@ -145,3 +145,181 @@ export function adminShape(type, name) {
     return { type: 'Feature', geometry: { type: geometry.type, coordinates }, properties: { name } };
   });
 }
+
+// ── The finest name of a place ───────────────────────────────────────────────
+// For a new parcours: the most precise name the IGN knows where you stand — a public forest you are in, a named
+// wood or place nearby (BD TOPO), a hamlet or a neighbourhood — and the commune around it.
+
+/** @param {string} typename @param {string} filter @param {number} count @param {AbortSignal} [signal] */
+const wfsFeatures = async (typename, filter, count, signal) => {
+  const q = new URLSearchParams({ SERVICE: 'WFS', VERSION: '2.0.0', REQUEST: 'GetFeature', TYPENAMES: typename,
+    outputFormat: 'application/json', COUNT: String(count), CQL_FILTER: filter });
+  return /** @type {any[]} */ ((await json(`${WFS}?${q}`, signal)).features || []);
+};
+
+/** Metres between two [lon, lat] points (equirectangular: fine at these distances). @param {number[]} a @param {number[]} b */
+const metres = (a, b) => {
+  const x = (b[0] - a[0]) * Math.cos(((a[1] + b[1]) / 2) * Math.PI / 180), y = b[1] - a[1];
+  return Math.hypot(x, y) * 111320;
+};
+
+/**
+ * How far a feature is from a point (0 inside its polygon): its geometry's nearest vertex otherwise.
+ * Coordinates read as [lon, lat] whatever the server's axis order (France: latitudes over 41°).
+ * @param {any} geometry @param {[number, number]} point
+ */
+function distanceTo(geometry, point) {
+  if (!geometry?.coordinates) return Infinity;
+  /** @param {number[]} p */
+  const ll = p => (Math.abs(p[0]) > 40 && Math.abs(p[1]) < 15 ? [p[1], p[0]] : p);
+  /** @type {number[][][]} */ let rings = [];
+  if (geometry.type === 'Point') return metres(point, ll(geometry.coordinates));
+  if (geometry.type === 'MultiPoint') return Math.min(...geometry.coordinates.map((/** @type {number[]} */ p) => metres(point, ll(p))));
+  if (geometry.type === 'Polygon') rings = [geometry.coordinates[0]];
+  else if (geometry.type === 'MultiPolygon') rings = geometry.coordinates.map((/** @type {number[][][]} */ poly) => poly[0]);
+  else if (geometry.type === 'LineString') rings = [geometry.coordinates];
+  else if (geometry.type === 'MultiLineString') rings = geometry.coordinates;
+  let best = Infinity;
+  for (const raw of rings) {
+    const ring = raw.map(ll);
+    // Inside (ray casting): no distance at all.
+    if (geometry.type.endsWith('Polygon')) {
+      let inside = false;
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const [xi, yi] = ring[i], [xj, yj] = ring[j];
+        if ((yi > point[1]) !== (yj > point[1]) && point[0] < ((xj - xi) * (point[1] - yi)) / (yj - yi) + xi) inside = !inside;
+      }
+      if (inside) return 0;
+    }
+    for (const p of ring) best = Math.min(best, metres(point, p));
+  }
+  return best;
+}
+
+/** Accents, case, hyphens aside: « Châtel-Guyon » = « chatel guyon ». @param {string} s */
+const fold = s => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[-'’\s]+/g, ' ').trim();
+
+/** « Forêt Domaniale de Fontainebleau » → « Forêt de Fontainebleau » (its everyday name). @param {string} name */
+const everyday = name => name.trim()
+  .replace(/^(Forêt|Bois)\s+(Domaniale|Communale|Intercommunale|Départementale|Régionale|Sectionn?ale|Indivise|Syndicale|Privée)\s+/i, (_, f) => f + ' ');
+
+/** Words naming a kind of place, before its proper name, and how « à » goes with them (« en forêt », « au bois »…). */
+const GENERIC = /** @type {Record<string, string>} */ ({
+  forêt: 'en', bois: 'au', parc: 'au', jardin: 'au', square: 'au', puy: 'au', mont: 'au', col: 'au', pic: 'au', roc: 'au', rocher: 'au',
+  signal: 'au', plateau: 'au', cirque: 'au', vallon: 'au', ravin: 'au', sentier: 'au', marais: 'au', massif: 'au', domaine: 'au', bec: 'au',
+  vallée: 'à la', montagne: 'à la', crête: 'à la', gorge: 'à la', dune: 'à la', plage: 'à la', promenade: 'à la', roseraie: 'à la', coulée: 'à la',
+  combe: 'à la', côte: 'à la', pointe: 'à la', dent: 'à la', cascade: 'à la', tourbière: 'à la', lande: 'à la', butte: 'à la', colline: 'à la',
+  gorges: 'aux', rochers: 'aux', jardins: 'aux', monts: 'aux', puys: 'aux', landes: 'aux', étangs: 'aux',
+  arboretum: 'à l’', étang: 'à l’', île: 'à l’', ile: 'à l’', aiguille: 'à l’', allée: 'à l’', espace: 'à l’'
+});
+
+/**
+ * « en forêt de Fontainebleau », « au bois de Vincennes », « au jardin des Plantes », « au puy de Dôme (Orcines) »,
+ * « au Roc Errant (Châtel-Guyon) », « aux Ulis », « à La Bourboule » — the place after « Mon parcours botanique »:
+ * the word naming its kind in lower case (French usage), « à » contracted; a lieu-dit, a hamlet, a summit with
+ * their commune, unless their name says it. A commune's name is never touched but for « Le/Les » (« au Mont-Dore »).
+ * @param {{ name: string, kind: string, commune: string }} place
+ */
+export function atPlace({ name, kind, commune }) {
+  let n = name.trim(), at;
+  const [first] = n.split(' ');
+  const generic = kind !== 'commune' && GENERIC[first.toLowerCase()];
+  if (generic) {
+    n = first.toLowerCase() + n.slice(first.length);
+    at = generic === 'à l’' ? 'à l’' + n : `${generic} ${n}`;
+  } else if (/^le\s/i.test(n)) at = 'au ' + n.slice(3);
+  else if (/^les\s/i.test(n)) at = 'aux ' + n.slice(4);
+  else at = 'à ' + n;
+  return ['spot', 'hamlet', 'relief'].includes(kind) && commune && !fold(n).includes(fold(commune)) ? `${at} (${commune})` : at;
+}
+
+/** How far around a point each kind of relief names it, metres (by its BD TOPO nature). @param {string} nature */
+const reliefReach = nature => (/^(Vallée|Gorge|Cirque|Plaine|Dépression|Vallon)/i.test(nature) ? 700
+  : /^(Montagne|Volcan|Crête|Dune|Plage|Cap|Ile|Île|Isthme|Plateau|Massif)/i.test(nature) ? 400 : 200);
+
+/** How far a named wood (a point in the BD TOPO) names the place: as far as it is big (its `importance`, 3 = 2-5 km²… 6 = under 10 ha). @param {any} importance */
+const woodReach = importance => ({ 3: 1200, 4: 800, 5: 300, 6: 150 })[Number(importance)] || 250;
+
+/** A park, a garden, a square, an arboretum (a zone of activity or interest of the BD TOPO). @param {any} p */
+const isPark = p => p.nature === 'Sentier de découverte' || p.nature === 'Parc zoologique'
+  || /^(parcs?|jardins?|square|arboretum|promenade|roseraie|coulée verte|bois|forêt)\b/i.test(String(p.nature_detaillee || p.toponyme || ''));
+
+/**
+ * The finest name among what the IGN answered at `point` (`layers`: the features of each layer asked), and the
+ * commune it lies in. In this order: a park or a garden you are in; a public forest you are in; a named wood near
+ * enough for its size; a summit, a col, a valley; the nearest lieu-dit or hamlet (250 m); a neighbourhood you are
+ * in; the commune. Historical names, unnamed or generic ones, and the commune's own name are left aside.
+ * @param {{ parks?: any[], forests?: any[], woods?: any[], spots?: any[], relief?: any[], homes?: any[], communes?: any[] }} layers
+ * @param {[number, number]} point [lon, lat]
+ * @returns {{ name: string, kind: 'park' | 'forest' | 'wood' | 'relief' | 'spot' | 'hamlet' | 'commune', commune: string } | null}
+ */
+export function finestName(layers, point) {
+  const c = (layers.communes || [])[0]?.properties || {};
+  const commune = String(c.nom_officiel || c.nom || '');
+  /** Named for good: a name of its own, still in use. @param {any} p */
+  const named = p => {
+    const t = String(p?.toponyme || '').trim();
+    return t && p.statut_du_toponyme !== 'Historique' && fold(t) !== fold(String(p.nature || '')) && fold(t) !== fold(commune)
+      && !/^(lieu dit (non )?habite|zone d habitation|detail orographique)$/.test(fold(t));
+  };
+  /** The features of `list` kept by `keep`, nearest first, each within its reach. @param {any[] | undefined} list @param {(p: any) => boolean} keep @param {(p: any) => number} reach */
+  const near = (list, keep, reach) => (list || [])
+    .filter(f => named(f.properties) && keep(f.properties))
+    .map(f => ({ p: f.properties, d: distanceTo(f.geometry, point) }))
+    .filter(x => x.d <= reach(x.p))
+    .sort((a, b) => a.d - b.d || (Number(b.p.importance) || 0) - (Number(a.p.importance) || 0));
+  /** Of the areas containing the point, the most local one (its `importance` the highest). @param {any[] | undefined} list @param {(p: any) => boolean} keep */
+  const inside = (list, keep) => (list || []).map(f => f.properties).filter(p => named(p) && keep(p))
+    .sort((a, b) => (Number(b.importance) || 0) - (Number(a.importance) || 0))[0];
+  const all = (/** @type {any} */ _) => true;
+  /** @param {string} name @param {any} kind */
+  const found = (name, kind) => ({ name, kind, commune });
+
+  const park = inside(layers.parks, isPark);
+  if (park) return found(everyday(park.toponyme), 'park');
+  const forest = inside(layers.forests, all);
+  if (forest) return found(everyday(forest.toponyme), 'forest');
+  const wood = near(layers.woods, p => /^(Bois|Forêt)$/i.test(p.nature || '') || /^(bois|forêt)\b/i.test(p.toponyme), p => woodReach(p.importance))[0];
+  if (wood) return found(everyday(wood.p.toponyme), 'wood');
+  const relief = near(layers.relief, all, p => reliefReach(String(p.nature || '')))[0];
+  if (relief) return found(relief.p.toponyme, 'relief');
+  const spot = near(layers.spots, p => p.nature === 'Lieu-dit non habité', p => (Number(p.importance) === 6 ? 150 : 250))[0];
+  const hamlet = near(layers.homes, p => ['Lieu-dit habité', 'Hameau', 'Château', 'Moulin', 'Ruines', 'Grange', 'Habitat temporaire'].includes(p.nature), () => 250)[0];
+  const local = [spot, hamlet].filter(Boolean).sort((a, b) => /** @type {any} */ (a).d - /** @type {any} */ (b).d)[0];
+  if (local) return found(local.p.toponyme, local === spot ? 'spot' : 'hamlet');
+  const quarter = near(layers.homes, p => p.nature === 'Quartier', () => 0)[0];
+  if (quarter) return found(quarter.p.toponyme, 'hamlet');
+  return commune ? found(commune, 'commune') : null;
+}
+
+/**
+ * The finest name the IGN knows at a point, and its commune (see `finestName`): seven small WFS requests at once
+ * (BD TOPO, ADMIN EXPRESS), kept a year. Null when nothing answers there; an error when the IGN is out of reach.
+ * @param {[number, number]} point [lon, lat]
+ * @returns {Promise<ReturnType<typeof finestName>>}
+ */
+export function placeNameAt(point) {
+  if (!moduleOn('ignGeo')) return Promise.resolve(null);
+  return cached('geo:name2:' + key5(point), async () => {
+    const at = `POINT(${point[1]} ${point[0]})`;
+    /** @type {[string, string, string, number][]} */
+    const asked = [
+      ['parks', 'BDTOPO_V3:zone_d_activite_ou_d_interet', `INTERSECTS(geometrie,${at})`, 10],
+      ['forests', 'BDTOPO_V3:foret_publique', `INTERSECTS(geometrie,${at})`, 5],
+      ['woods', 'BDTOPO_V3:lieu_dit_non_habite', `nature='Bois' AND DWITHIN(geometrie,${at},1500,meters)`, 30],
+      ['spots', 'BDTOPO_V3:lieu_dit_non_habite', `DWITHIN(geometrie,${at},300,meters)`, 40],
+      ['relief', 'BDTOPO_V3:detail_orographique', `DWITHIN(geometrie,${at},800,meters)`, 20],
+      ['homes', 'BDTOPO_V3:zone_d_habitation', `DWITHIN(geometrie,${at},300,meters)`, 20],
+      ['communes', 'ADMINEXPRESS-COG-CARTO.LATEST:commune', `INTERSECTS(geometrie,${at})`, 1]
+    ];
+    const answers = await Promise.allSettled(asked.map(([, type, filter, count]) => wfsFeatures(type, filter, count)));
+    // Nothing at all: out of reach (not kept, asked again next time). The commune alone missing: not kept either.
+    if (answers[6].status === 'rejected') throw new Error('Géoplateforme injoignable');
+    /** @type {Record<string, any[]>} */
+    const layers = {};
+    asked.forEach(([key], i) => { const a = answers[i]; layers[key] = a.status === 'fulfilled' ? a.value : []; });
+    // The woods asked near the point (300 m) count too, should the wider request fail.
+    layers.woods = [...layers.woods, ...layers.spots];
+    return finestName(layers, point);
+  });
+}

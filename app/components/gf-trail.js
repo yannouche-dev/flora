@@ -8,7 +8,7 @@ import { LitElement, html, css, nothing, repeat } from 'lit';
 import { icon } from '../core/icons.js';
 import { scene, sceneStyles } from '../core/scenes.js';
 import { watchLocation } from '../core/geo.js';
-import { searchPlaces } from '../core/geoservices.js';
+import { atPlace, placeNameAt, searchPlaces } from '../core/geoservices.js';
 import { findPlants } from '../core/search.js';
 import { entriesOf, getPlace, lastEntry, newPlace, plantMarkers, savePlace, spotEvents, withPlant, withoutPlant, refreshMembership } from '../core/collections.js';
 import * as db from '../core/db.js';
@@ -22,7 +22,8 @@ const KEY = 'geoflora.trail', LIST = 'geoflora.trails';
 const read = (/** @type {string} */ k, /** @type {any} */ d) => { try { return JSON.parse(localStorage.getItem(k) || 'null') ?? d; } catch { return d; } };
 const write = (/** @type {string} */ k, /** @type {any} */ v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* not kept */ } };
 
-const dayName = () => new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+/** A new parcours' name, until the place where it starts is known (« Mon parcours botanique en forêt de … »). */
+const NAMED = 'Mon parcours botanique';
 const timeOf = (/** @type {string} */ iso) => { try { return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }); } catch { return ''; } };
 
 /** Plants proposed at first, and added by each « Voir plus ». */
@@ -90,15 +91,26 @@ export class GfTrail extends LitElement {
     .past button small { color: var(--gf-text-muted); }
     /* Walking: the parcours' card, the search, the plants. */
     .card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 12px 14px; border-radius: 16px; background: var(--gf-surface); box-shadow: var(--gf-shadow); }
-    .card .pin { grid-row: span 2; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--gf-accent); color: #fff; font-size: 1.1rem; }
-    .card .title { display: flex; align-items: center; gap: 6px; min-width: 0; border-radius: 8px; padding: 2px 6px; margin-left: -6px; cursor: text; }
+    .card .pin { grid-row: 1 / 3; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--gf-accent); color: #fff; font-size: 1.1rem; }
+    /* The name, whole (the card's width, on two lines at most); a touch on it or on the pencil edits it, in the field laid over it. */
+    .card .title { grid-column: 2 / 4; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 6px; min-width: 0; border-radius: 8px; padding: 2px 6px; margin-left: -6px; cursor: text; }
     .card .title:hover, .card .title:focus-within { background: var(--gf-surface-2); }
     .card .title:focus-within { box-shadow: inset 0 -2px 0 var(--gf-accent); }
-    .card .name { flex: 1; min-width: 0; font: inherit; font-weight: 700; font-size: 1.05rem; border: 0; background: none; padding: 2px 0; color: var(--gf-text); outline: none; text-overflow: ellipsis; }
+    .card .shown, .card .name { grid-area: 1 / 1; font: inherit; font-weight: 700; font-size: 1.05rem; line-height: 1.25; color: var(--gf-text); }
+    .card .shown { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; overflow-wrap: anywhere; padding: 2px 0; }
+    .card .name { min-width: 0; border: 0; background: none; padding: 2px 0; outline: none; text-overflow: ellipsis; opacity: 0; }
+    .card .title:focus-within .shown { visibility: hidden; }
+    .card .title:focus-within .name { opacity: 1; }
+    .card .name:focus, .card .name:focus-visible { box-shadow: none; }
     .card .title .bi { color: var(--gf-text-muted); font-size: 0.85rem; flex: none; }
-    .card .meta { grid-column: 2; font-size: 0.8rem; color: var(--gf-text-muted); display: flex; gap: 8px; flex-wrap: wrap; }
+    .card .meta { grid-column: 2; grid-row: 2; font-size: 0.8rem; color: var(--gf-text-muted); display: flex; gap: 8px; flex-wrap: wrap; }
     .card .meta .gps.off { color: var(--gf-warn); }
-    .card .end { grid-row: span 2; }
+    /* « Terminer »: discreet, on the line under the name — a walk is not ended by mistake, nor looked for long. */
+    .card .end { grid-column: 3; grid-row: 2; justify-self: end; display: inline-flex; align-items: center; gap: 5px; min-height: 32px; padding: 0 6px; margin-right: -6px;
+      border: 0; border-radius: 8px; background: none; color: var(--gf-text-muted); font: inherit; font-size: 0.8rem; cursor: pointer; }
+    .card .end:hover { color: var(--gf-text); background: var(--gf-surface-2); }
+    .card .end:focus-visible { outline: none; box-shadow: var(--gf-focus); }
+    .card .end .bi { font-size: 0.75rem; }
     .search { position: relative; }
     .search input { padding: 13px 48px 13px 46px; font-size: 1.08rem; }
     .bar { display: flex; align-items: center; gap: 10px; }
@@ -138,8 +150,7 @@ export class GfTrail extends LitElement {
     @container (max-width: 899px) {
       .card { padding: 8px 10px; gap: 2px 10px; border-radius: 14px; }
       .card .pin { width: 32px; height: 32px; font-size: 0.95rem; }
-      .card .name { font-size: 1rem; }
-      .card .end { min-height: 36px; padding: 0 12px; }
+      .card .shown, .card .name { font-size: 1rem; }
     }
     @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
   `];
@@ -214,14 +225,22 @@ export class GfTrail extends LitElement {
     this._locating = true;
     this._geoError = null;
     const stop = watchLocation(s => {
-      if (s.fix) { queueMicrotask(() => stop()); this._locating = false; this.#create(s.fix.coordinates, null); }
+      if (s.fix) { queueMicrotask(() => stop()); this._locating = false; this.#create(s.fix.coordinates, null, s.fix.accuracy); }
       else if (s.error) { queueMicrotask(() => stop()); this._locating = false; this._geoError = s.error + ' Choisissez plutôt une commune.'; }
     });
   }
 
-  /** @param {[number, number]} at @param {string | null} where */
-  async #create(at, where) {
-    const place = newPlace(at, { name: 'Parcours du ' + dayName() + (where ? ' · ' + where : ''), notes: 'Parcours botanique' });
+  /**
+   * A new parcours at `at`: named after the commune chosen (`where`), or — started here — after the finest place the
+   * IGN knows there (a park, a forest, a wood, a summit, a lieu-dit, a hamlet, the commune), as soon as it answers —
+   * the commune only when the position is rough (over 250 m).
+   * @param {[number, number]} at @param {string | null} where @param {number} [accuracy] metres
+   */
+  async #create(at, where, accuracy = 0) {
+    const name = where ? `${NAMED} ${atPlace({ name: where, kind: 'commune', commune: '' })}` : NAMED;
+    const place = newPlace(at, { name: name.slice(0, 80), notes: 'Parcours botanique' });
+    // Asked at once; given once the parcours is saved (it may answer first: from the cache).
+    const found = where ? null : this.#placeName(at, accuracy > 250);
     await savePlace(place);
     write(KEY, place.id);
     write(LIST, [place.id, ...(/** @type {string[]} */ (read(LIST, []))).filter(x => x !== place.id)].slice(0, 20));
@@ -230,6 +249,7 @@ export class GfTrail extends LitElement {
     this.#follow();
     await this.updateComplete;
     /** @type {HTMLInputElement | null} */ (this.renderRoot.querySelector('.search input'))?.focus();
+    if (found) this.#nameAfter(place.id, found);
   }
 
   /** @type {any} */ #placeTimer = 0;
@@ -331,6 +351,29 @@ export class GfTrail extends LitElement {
     this.#reload();
   }
 
+  /**
+   * The finest place name at `at` (its commune only, `rough`), or null (the IGN silent 8 s, off, out of reach).
+   * @param {[number, number]} at @param {boolean} rough @returns {Promise<{ name: string, kind: string, commune: string } | null>}
+   */
+  async #placeName(at, rough) {
+    const found = await Promise.race([placeNameAt(at).catch(() => null), new Promise(done => setTimeout(() => done(null), 8000))]);
+    if (!found || !rough || found.kind === 'commune') return found;
+    return found.commune ? { name: found.commune, kind: 'commune', commune: found.commune } : null;
+  }
+
+  /**
+   * The parcours `id` named after the place where it starts, when the IGN answers — unless it was renamed
+   * meanwhile, or its name is being edited.
+   * @param {string} id @param {Promise<{ name: string, kind: string, commune: string } | null>} pending
+   */
+  async #nameAfter(id, pending) {
+    const found = await pending;
+    const t = this._trail;
+    if (!found || t?.id !== id || t.properties.name !== NAMED) return;
+    if (this.renderRoot.querySelector('input.name:focus')) return;
+    await this.#rename(`${NAMED} ${atPlace(found)}`);
+  }
+
   /** @param {string} name */
   async #rename(name) {
     const n = name.trim();
@@ -406,6 +449,7 @@ export class GfTrail extends LitElement {
     return html`<div class="card" aria-label="Le parcours">
       <span class="pin" aria-hidden="true">${icon('geo-alt-fill')}</span>
       <label class="title" title="Renommer le parcours">
+        <span class="shown" aria-hidden="true">${t.properties.name}</span>
         <input class="name" .value=${t.properties.name} aria-label="Nom du parcours" maxlength="80" enterkeyhint="done" autocomplete="off"
           @keydown=${(/** @type {KeyboardEvent} */ e) => { const i = /** @type {HTMLInputElement} */ (e.target);
             if (e.key === 'Enter') i.blur();
@@ -414,7 +458,7 @@ export class GfTrail extends LitElement {
           @blur=${(/** @type {any} */ e) => { if (!e.target.value.trim()) e.target.value = t.properties.name; }} />
         ${icon('pencil')}
       </label>
-      <button class="end secondary" type="button" @click=${() => this.#end()}>Terminer</button>
+      <button class="end" type="button" title="Terminer le parcours (il reste dans Mes plantes)" @click=${() => this.#end()}>${icon('flag-fill')} Terminer</button>
       <span class="meta"><span>${this.#count(t)}</span><span class="gps ${this._fix ? '' : 'off'}">${gps}</span></span>
     </div>`;
   }

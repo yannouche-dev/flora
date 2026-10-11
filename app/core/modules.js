@@ -15,8 +15,8 @@ import { modeKeys } from './modes.js';
 export const MODULES = [
   { key: 'ignMaps', category: 'territory', also: [], name: 'IGN – fonds de carte', hosts: 'data.geopf.fr (WMTS)',
     provides: 'Photos aériennes, plan IGN, cadastre, courbes de niveau, forêts publiques, espaces protégés. Désactivé : seules les zones déjà vues restent affichées.' },
-  { key: 'ignGeo', category: 'territory', also: [], name: 'IGN – adresses et altitudes', hosts: 'data.geopf.fr (géocodage, altimétrie)',
-    provides: 'Recherche d’adresse sur la carte, adresse et altitude d’un point ou d’un lieu.' },
+  { key: 'ignGeo', category: 'territory', also: [], name: 'IGN – adresses et altitudes', hosts: 'data.geopf.fr (géocodage, altimétrie, toponymes BD TOPO)',
+    provides: 'Recherche d’adresse sur la carte, adresse et altitude d’un point ou d’un lieu, nom du lieu où commence un parcours botanique.' },
   { key: 'ignProtected', category: 'territory', also: ['safety'], name: 'IGN – espaces protégés', hosts: 'data.geopf.fr (WFS, couches INPN / PatriNat)',
     provides: 'Bandeau sur les cartes quand la vue touche un parc national, une réserve naturelle ou un arrêté de biotope (dès le zoom 11).' },
   { key: 'ignNature', category: 'territory', also: ['ecology'], name: 'IGN – zones naturelles au point', hosts: 'apicarto.ign.fr (API Carto, module nature)',
