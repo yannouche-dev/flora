@@ -434,6 +434,14 @@ export class GfFlora extends LitElement {
       const before = changed.get('route');
       // The list's place in history: from the search to a plant, kept while stepping plant to plant.
       if (this.route.name === 'plant') this.#listDepth = before?.name === 'search' ? depth() - 1 : before?.name === 'plant' ? this.#listDepth : null;
+      // A plant opened from the list: the search field lets go of the keys (← → then go from plant to plant).
+      if (this.route.name === 'plant' && before?.name !== 'plant') {
+        let el = document.activeElement;
+        while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
+        /** @type {Node | null} */ let n = el;
+        while (n && n !== this) n = n.parentNode || (n instanceof ShadowRoot ? n.host : null);
+        if (n && el instanceof HTMLInputElement && el.type === 'search') el.blur();
+      }
       // Another plant (the card underneath came up, or Back): nothing waits under it any more.
       if ((before?.name === 'plant' ? before.id : null) !== this.#plantId) {
         this._under = null;

@@ -236,12 +236,14 @@ L'icône film de l'en-tête (ordinateur et téléphone) propose des façons d'en
 - **La découverte pas à pas** : la plante s'ouvre **« nue »**, en plein écran, sans en-tête ni onglets ni réglages — son nom, ✕ (passer) et ♥ (garder). Chaque étape est proposée par un **bandeau avec une question** (Oui / Plus tard ; « Plus tard » la repropose à la plante suivante) :
   1. « Cette plante a d'autres photos… On les regarde ? » → la **visionneuse de médias**, en grand ;
   2. un moment après : « Qui est-elle vraiment ?… On en apprend plus ? » → l'écran se partage : **médias collés en haut (la moitié), Wikipédia dessous** (le sommaire de l'article et ses thèmes) ;
-  3. deux plantes plus loin : « D'autres plantes poussent autour de vous… » → **la liste des voisines** (vignette, nom, « en fleur », nombre d'observations, ♥), colonne à gauche sur ordinateur, tiroir en bas sur téléphone ; une touche ouvre la plante ;
-  4. deux plantes plus loin : « Prêt·e pour la flore complète ? » → la fiche complète dans Flore, sur cette plante, avec tous les onglets.
+  3. **un embranchement** : « Qu'aimeriez-vous savoir des plantes ? Ce qui se cueille, ou ce qu'en dit la science ? » — **La cueillette** ajoute sous les photos un tableau de bord *Usages et cuisine sauvage · À ne pas confondre · Sa saison* ; **La science**, un tableau de bord *Carte · Occurrences et répartition · Climat · Classification* (en vue Scientifique) ; l'article Wikipédia suit ;
+  4. deux plantes plus loin : « D'autres plantes poussent autour de vous… » → **la liste des voisines** (vignette, nom, « en fleur », nombre d'observations, ♥), colonne à gauche sur ordinateur, tiroir en bas sur téléphone ; une touche ouvre la plante ;
+  5. deux plantes plus loin : « Prêt·e pour la flore complète ? » → la fiche complète dans Flore, sur cette plante, avec tous les onglets — le mode cueillette allumé, ou le mode Scientifique, selon le chemin choisi.
   On passe d'une plante à l'autre **comme avec les cartes** : → ou ♥ ou glisser à droite la garde (un match, dans les favoris) et passe à la suivante, ← ou ✕ ou glisser à gauche la passe.
 - **La fiche**, hors découverte (une fois tout montré, ou une carte touchée avant le premier match), s'ouvre en Épuré, par-dessus la liste sur téléphone, à côté sur ordinateur, avec « ‹ Préc. · 3 / 15 · Suivante › » (et ← →, le balayage) ; l'adresse `#/discover?p=<id>` la garde.
 - **Les outils arrivent quand ils servent** : la barre d'onglets ne montre d'abord que Découvrir (et Réglages) ; **Mes plantes** vient avec le premier match ou favori, la **Carte** avec le premier lieu noté, **Flore** (toute la flore, recherche et filtres) après 5 plantes rencontrées — chaque fois annoncé (« Nouveau : la Carte — … », l'onglet s'éclaire). Pas de micro-astuces : les outils se présentent par les étapes.
 - Quelqu'un qui utilisait déjà l'application garde tout, tout de suite. *Réglages › Premiers pas* : « Tout montrer maintenant » ou « Recommencer la découverte ».
+- **Rejouer** (icône film › Rencontres, ou « Recommencer la découverte ») repart de zéro : lieu, distance, cartes passées, matchs, étapes, embranchement et onglets venus sont oubliés (les favoris restent). Rejouer Cueillette prudente ou Mosaïque oublie le lieu, la distance et les cartes.
 
 ### Onglet Flore : filtres, résultats, plante
 

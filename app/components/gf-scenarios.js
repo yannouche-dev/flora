@@ -37,7 +37,7 @@ export class GfScenarios extends LitElement {
 
   render() {
     return html`<button class="open" type="button" title="Scénarios : des façons de découvrir la flore" aria-label="Scénarios"
-        @click=${() => openModal(this.#dialog)}>${icon('camera-reels')}</button>
+        @click=${() => { this.requestUpdate(); openModal(this.#dialog); }}>${icon('camera-reels')}</button>
       <dialog aria-label="Scénarios" @click=${(/** @type {Event} */ e) => { if (e.target === e.currentTarget) this.#dialog?.close(); }}>
         <div class="head">${icon('camera-reels')}<h2>Scénarios</h2>
           <button class="icon-btn" type="button" aria-label="Fermer" @click=${() => this.#dialog?.close()}>${icon('x-lg')}</button></div>
@@ -46,7 +46,8 @@ export class GfScenarios extends LitElement {
           <span class="ic" aria-hidden="true">${icon(s.icon)}</span>
           <b>${s.title}</b>
           <p>${s.pitch}</p>
-          ${s.soon ? html`<span class="tag">Bientôt</span>` : html`<button class="primary" type="button" @click=${() => { s.play?.(); this.#dialog?.close(); }}>Jouer</button>`}
+          ${s.soon ? html`<span class="tag">Bientôt</span>` : html`<button class="primary" type="button" title=${s.played?.() ? 'Tout reprendre du début : lieu, distance, cartes, étapes' : ''}
+            @click=${() => { s.play?.(); this.#dialog?.close(); this.requestUpdate(); }}>${s.played?.() ? 'Rejouer' : 'Jouer'}</button>`}
         </li>`)}</ul>
       </dialog>`;
   }

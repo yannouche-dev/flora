@@ -5,7 +5,8 @@
 // most photographed first — each with what is said of it (Wikipédia: its names, its history) and a short « bio »
 // from its real data. Swipe right: a match (kept in the favourites); left: passed; up (or ⓘ): its sheet.
 // The first match opens the plant bare, and the app shows itself step by step, each step a question in a banner
-// (discover.js): its photos, its encyclopedia, the plants around, then the whole sheet and every tool.
+// (discover.js): its photos, its encyclopedia, then a fork — picking (its uses, look-alikes and season beside it)
+// or science (maps, distribution, climate, classification) —, the plants around, then the whole app that way.
 
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import * as db from '../core/db.js';
@@ -15,8 +16,8 @@ import * as sources from '../core/sources.js';
 import { searchPlaces, addressAt } from '../core/geoservices.js';
 import { watchLocation } from '../core/geo.js';
 import { alertsOf } from '../core/alerts.js';
-import { StoreController, whenReady } from '../core/store.js';
-import { discoverEvents, discoverState, discovering, finishDiscover, firstMatchShown, plantSeen, resetPassed, setDiscoverPoint, setDiscoverRadius, setStep, swiped, unswipe, PLANTS_BEFORE_FLORE } from '../core/discover.js';
+import { setHarvestMode, setMode, StoreController, whenReady } from '../core/store.js';
+import { chooseBranch, discoverEvents, discoverState, discovering, finishDiscover, firstMatchShown, plantSeen, resetPassed, setDiscoverPoint, setDiscoverRadius, setStep, swiped, unswipe, LAST_STEP, PLANTS_BEFORE_FLORE } from '../core/discover.js';
 import { lookalikesOf } from '../core/lookalikes.js';
 import { scenarioOf } from '../core/scenarios.js';
 import { sheetSession } from '../core/sheet-session.js';
@@ -39,6 +40,9 @@ const lastView = {};
 /** A word for the distance, for fun. @param {number} m */
 const distMood = m => m <= 200 ? 'Juste devant la porte' : m <= 1000 ? 'Le quartier' : m <= 5000 ? 'Une balade à pied' : m <= 20000 ? 'Un tour à vélo' : 'Toute la région';
 const PAGE = 12;
+/** The dashboards of the fork: the blocks of the sheet that join the plant, picking or science. */
+const DASH_HARVEST = /** @type {const} */ ([['uses', 'Usages et cuisine sauvage'], ['lookalikes', 'À ne pas confondre'], ['calendar', 'Sa saison']]);
+const DASH_SCIENCE = /** @type {const} */ ([['map', 'Carte'], ['occurrences', 'Occurrences et répartition'], ['climate', 'Climat'], ['taxonomy', 'Classification']]);
 const MONTH = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
 /**
@@ -243,6 +247,16 @@ export class GfDiscover extends LitElement {
     .nude.split .nude-media { flex: 0 0 50%; }
     .nude-wiki { flex: 1; min-height: 0; display: flex; flex-direction: column; border-top: 1px solid var(--gf-border); }
     .nude-wiki gf-plant-detail { flex: 1; min-height: 0; }
+    /* The fork's dashboard: tiles of the sheet's blocks, over the article; the whole column scrolls. */
+    .nude.dashed .nude-wiki { overflow-y: auto; }
+    .nude.dashed .nude-wiki > gf-plant-detail { flex: none; min-height: 60vh; }
+    .dash { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 10px; padding: 10px; background: var(--gf-surface-2); }
+    .dash .tile { min-width: 0; display: flex; flex-direction: column; border-radius: var(--gf-radius); background: var(--gf-surface); box-shadow: var(--gf-shadow); overflow: hidden; }
+    .dash .tile h3 { margin: 0; padding: 8px 12px 0; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--gf-text-muted); }
+    .dash .tile gf-plant-detail { display: block; max-height: 420px; overflow: auto; }
+    .dash.science .tile[data-key='map'] { grid-column: 1 / -1; }
+    .dash.science .tile[data-key='map'] gf-plant-detail { height: 320px; max-height: none; }
+    .step-banner .yes.fork { display: inline-flex; gap: 6px; align-items: center; }
     /* Step 3: the plants around — a column on a wide screen, a drawer from the bottom on a phone. */
     .around { flex: none; width: 270px; border-right: 1px solid var(--gf-border); display: flex; flex-direction: column; min-height: 0; background: var(--gf-surface); }
     .around h2 { margin: 0; padding: 10px 12px 6px; font-size: 0.95rem; display: flex; justify-content: space-between; align-items: center; gap: 6px; }
@@ -320,6 +334,14 @@ export class GfDiscover extends LitElement {
   }
 
   #onChange = () => this.requestUpdate();
+  /** Played again from the start: what this screen remembered goes too (the cards, ↺, the steps counted). */
+  #onReset = () => {
+    this.#abort?.abort();
+    this._point = null; this._place = null; this._cards = null; this._radius = 1000; this._asking = false;
+    this._history = []; this._match = null; this._ethno = new Map(); this._obs = []; this._later = null; this._error = null;
+    this._view = 'swipe'; this._loading = false;
+    this.#navs = 0; this.#navsAtStep = 0;
+  };
   #onKey = (/** @type {KeyboardEvent} */ e) => {
     if (e.altKey || e.ctrlKey || e.metaKey) return;
     // The first match waits for its one button: no key closes it.
@@ -344,6 +366,7 @@ export class GfDiscover extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     discoverEvents.addEventListener('change', this.#onChange);
+    discoverEvents.addEventListener('reset', this.#onReset);
     addEventListener('keydown', this.#onKey);
     if (this._point && !this._cards) this.#load();
   }
@@ -351,6 +374,7 @@ export class GfDiscover extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     discoverEvents.removeEventListener('change', this.#onChange);
+    discoverEvents.removeEventListener('reset', this.#onReset);
     removeEventListener('keydown', this.#onKey);
     clearTimeout(this.#dwellTimer);
     clearTimeout(this.#obsTimer);
@@ -908,26 +932,51 @@ export class GfDiscover extends LitElement {
   /**
    * The step to offer now, if any: its photos at once; its encyclopedia after a moment on it (or the next plant);
    * the plants around, then everything, each after two more plants.
-   * @returns {{ step: number, text: string, question: string } | null}
+   * @returns {{ step: number, text: string, question: string, fork?: boolean } | null}
    */
   #offer() {
     const step = discoverState().step, navs = this.#navs - this.#navsAtStep;
     if (this._later === step) return null;
     if (step === 0) return { step: 1, text: 'Cette plante a d’autres photos, prises près d’ici et ailleurs : fleurs, feuilles, fruits…', question: 'On les regarde ?' };
     if (step === 1 && (this._dwell || navs >= 1)) return { step: 2, text: 'Belle, mais qui est-elle vraiment ? Son nom, son histoire, ses usages, ce qu’en dit l’encyclopédie.', question: 'On en apprend plus ?' };
-    if (step === 2 && navs >= 2) return { step: 3, text: 'D’autres plantes poussent autour de vous, tout près de celle-ci.', question: 'On les voit toutes ?' };
-    if (step === 3 && navs >= 2) return { step: 4, text: 'Vous connaissez le coin ! La fiche complète vous attend : saisons, alertes, carte, et tous les outils pour garder vos trouvailles.', question: 'Prêt·e pour la flore complète ?' };
+    if (step === 2 && (this._dwell || navs >= 1)) return { step: 3, fork: true, text: 'Et vous, qu’aimeriez-vous savoir des plantes ?', question: 'Ce qui se cueille, ou ce qu’en dit la science ?' };
+    if (step === 3 && navs >= 2) return { step: 4, text: 'D’autres plantes poussent autour de vous, tout près de celle-ci.', question: 'On les voit toutes ?' };
+    if (step === 4 && navs >= 2) return { step: LAST_STEP, text: discoverState().branch === 'science'
+      ? 'Vous connaissez le coin ! La flore complète vous attend en mode Scientifique : toutes les données, toutes les cartes.'
+      : 'Vous connaissez le coin ! La flore complète vous attend, en mode cueillette : la saison, les sosies, vos lieux de récolte.', question: 'Prêt·e pour la flore complète ?' };
     return null;
   }
 
-  /** @param {{ step: number, text: string, question: string }} o */
+  /** The step offered; at the fork, the two ways. @param {{ step: number, text: string, question: string, fork?: boolean }} o */
   #banner(o) {
     return html`<div class="step-banner" role="dialog" aria-label=${'Étape suivante : ' + o.question}>
       <p>${o.text} <span class="q">${o.question}</span></p>
       <div class="row">
         <button class="later" type="button" @click=${() => { this._later = discoverState().step; }}>Plus tard</button>
-        <button class="yes" type="button" @click=${() => this.#accept(o.step)}>Oui</button>
+        ${o.fork ? html`<button class="yes fork" type="button" data-branch="harvest" @click=${() => this.#fork('harvest')}>${icon('basket')} La cueillette</button>
+          <button class="yes fork" type="button" data-branch="science" @click=${() => this.#fork('science')}>${icon('diagram-3')} La science</button>`
+        : html`<button class="yes" type="button" @click=${() => this.#accept(o.step)}>Oui</button>`}
       </div>
+    </div>`;
+  }
+
+  /** The fork: picking or science; its dashboard joins the plant. @param {'harvest' | 'science'} branch */
+  #fork(branch) {
+    this.#navsAtStep = this.#navs;
+    chooseBranch(branch);
+    this.requestUpdate();
+  }
+
+  /**
+   * The dashboard of the way chosen, under the photos: picking — its uses (prudence first), what it is mistaken
+   * for, its season; science — its maps, where it is recorded, its climate, its classification. Then the article.
+   * @param {'harvest' | 'science'} branch
+   */
+  #dashboard(branch) {
+    const blocks = branch === 'harvest' ? DASH_HARVEST : DASH_SCIENCE;
+    return html`<div class="dash ${branch}" aria-label=${branch === 'harvest' ? 'Tableau de bord cueillette' : 'Tableau de bord scientifique'}>
+      ${blocks.map(([key, label]) => html`<section class="tile" data-key=${key}><h3>${label}</h3>
+        <gf-plant-detail embedded only=${key} plant-id=${this.open} view=${branch === 'science' ? 'scientific' : 'standard'}></gf-plant-detail></section>`)}
     </div>`;
   }
 
@@ -938,8 +987,10 @@ export class GfDiscover extends LitElement {
     clearTimeout(this.#dwellTimer);
     this.#dwellTimer = setTimeout(() => { this._dwell = true; }, 6000);
     const id = this.open;
+    // The whole app, the way chosen at the fork.
+    if (step >= LAST_STEP) { if (discoverState().branch === 'science') setMode('scientific'); else if (discoverState().branch === 'harvest') setHarvestMode(true); }
     setStep(step);
-    if (step >= 4 && id != null) location.hash = href.plant(id);
+    if (step >= LAST_STEP && id != null) location.hash = href.plant(id);
     this.requestUpdate();
   }
 
@@ -963,7 +1014,8 @@ export class GfDiscover extends LitElement {
     const name = plant ? plant.vernacularNames?.[0] || plant.scientificName : '';
     const offer = this.#offer();
     const kept = this.open != null && discoverState().matches.includes(this.open);
-    return html`<section class="nude ${step >= 2 ? 'split' : ''} ${step >= 3 ? 'listed' : ''}" role="dialog" aria-modal="true" aria-label=${name || 'Plante'}
+    const branch = step >= 3 ? discoverState().branch : null;
+    return html`<section class="nude ${step >= 2 ? 'split' : ''} ${step >= 4 ? 'listed' : ''} ${branch ? 'dashed' : ''}" role="dialog" aria-modal="true" aria-label=${name || 'Plante'}
         @touchstart=${this.#nudeTouchStart} @touchend=${this.#nudeTouchEnd}>
       <div class="nude-bar">
         <button class="icon-btn" type="button" aria-label="Retour aux rencontres" title="Retour aux rencontres (Échap)" @click=${() => this.#close()}>${icon('arrow-left')}</button>
@@ -972,11 +1024,11 @@ export class GfDiscover extends LitElement {
         <button class="round like" type="button" aria-pressed=${String(kept)} aria-label="Garder : plante suivante" title="Garder ♥ et suivante (→)" @click=${() => this.#nudeNext(true)}>${icon('heart-fill')}</button>
       </div>
       <div class="nude-body">
-        ${step >= 3 ? this.#aroundList(cards) : nothing}
+        ${step >= 4 ? this.#aroundList(cards) : nothing}
         <div class="nude-main">
           <div class="nude-media">${step >= 1 ? html`<gf-media-viewer local plant-id=${this.open} .view=${'standard'}></gf-media-viewer>`
             : html`<div class="bare-photo"><span class="nophoto">${icon('leaf')}</span>${card?.photo ? html`<img src=${card.photo.replace('/medium.', '/large.')} alt=${name} decoding="async" referrerpolicy="no-referrer" style="position:absolute" @error=${hideImg} @load=${showImg} />` : nothing}</div>`}</div>
-          ${step >= 2 ? html`<div class="nude-wiki"><gf-plant-detail embedded only="wikipedia" plant-id=${this.open} view="standard"></gf-plant-detail></div>` : nothing}
+          ${step >= 2 ? html`<div class="nude-wiki">${branch ? this.#dashboard(branch) : nothing}<gf-plant-detail embedded only="wikipedia" plant-id=${this.open} view="standard"></gf-plant-detail></div>` : nothing}
         </div>
         ${offer ? this.#banner(offer) : nothing}
       </div>
