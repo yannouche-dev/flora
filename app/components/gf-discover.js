@@ -16,13 +16,14 @@ import * as sources from '../core/sources.js';
 import { searchPlaces, addressAt } from '../core/geoservices.js';
 import { watchLocation } from '../core/geo.js';
 import { alertsOf } from '../core/alerts.js';
-import { setHarvestMode, setMode, StoreController, whenReady } from '../core/store.js';
+import { plantViewOf, setHarvestMode, setMode, StoreController, whenReady } from '../core/store.js';
+import { dockBlock, paneOf, setStackState } from '../core/sheet-blocks.js';
 import { chooseBranch, discoverEvents, discoverState, discovering, finishDiscover, firstMatchShown, plantSeen, resetPassed, setDiscoverPoint, setDiscoverRadius, setStep, swiped, unswipe, LAST_STEP, PLANTS_BEFORE_FLORE } from '../core/discover.js';
 import { lookalikesOf } from '../core/lookalikes.js';
 import { scenarioOf } from '../core/scenarios.js';
 import { sheetSession } from '../core/sheet-session.js';
 import { isFavorite, toggleFavorite } from '../core/collections.js';
-import { href } from '../core/router.js';
+import { href, parse } from '../core/router.js';
 import { depth, replaceHash } from '../core/history.js';
 import { floweringMonths } from './gf-calendar.js';
 import { hideImg, showImg } from '../core/img.js';
@@ -40,9 +41,8 @@ const lastView = {};
 /** A word for the distance, for fun. @param {number} m */
 const distMood = m => m <= 200 ? 'Juste devant la porte' : m <= 1000 ? 'Le quartier' : m <= 5000 ? 'Une balade à pied' : m <= 20000 ? 'Un tour à vélo' : 'Toute la région';
 const PAGE = 12;
-/** The dashboards of the fork: the blocks of the sheet that join the plant, picking or science. */
-const DASH_HARVEST = /** @type {const} */ ([['uses', 'Usages et cuisine sauvage'], ['lookalikes', 'À ne pas confondre'], ['calendar', 'Sa saison']]);
-const DASH_SCIENCE = /** @type {const} */ ([['map', 'Carte'], ['occurrences', 'Occurrences et répartition'], ['climate', 'Climat'], ['taxonomy', 'Classification']]);
+/** The fork's pane: the blocks of the sheet that join the layout, picking or science (the first one shown). */
+const FORK_BLOCKS = { harvest: ['uses', 'lookalikes', 'calendar'], science: ['map', 'occurrences', 'climate', 'taxonomy'] };
 const MONTH = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
 /**
@@ -89,7 +89,9 @@ export class GfDiscover extends LitElement {
     /** The step offered « Plus tard »: its banner waits for the next plant. */
     _later: { state: true },
     /** On the plant for a while: the next step can be offered. */
-    _dwell: { state: true }
+    _dwell: { state: true },
+    /** The plant the panes show while discovering (the one matched, or chosen among the plants around); else the top card. */
+    _focus: { state: true }
   };
 
   static styles = [ui, css`
@@ -231,34 +233,23 @@ export class GfDiscover extends LitElement {
     .burst { position: absolute; z-index: 5; left: 50%; top: 45%; font-size: 4rem; color: #e0245e; pointer-events: none; animation: burst 0.9s ease-out forwards; }
     @keyframes burst { from { transform: translate(-50%, -50%) scale(0.4); opacity: 0; } 30% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); } to { transform: translate(-50%, -120%) scale(1); opacity: 0; } }
 
-    /* The plant bare: over everything (no header, no tabs), the plant only. */
-    .nude { position: fixed; inset: 0; z-index: 1002; display: flex; flex-direction: column; background: var(--gf-surface); color: var(--gf-text); }
-    .nude-bar { flex: none; display: flex; align-items: center; gap: 8px; padding: 6px 8px calc(6px); padding-top: calc(6px + env(safe-area-inset-top)); border-bottom: 1px solid var(--gf-border); }
-    .nude-bar .who { flex: 1; min-width: 0; display: grid; line-height: 1.15; }
-    .nude-bar .who b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .nude-bar .who i { font-size: 0.8rem; color: var(--gf-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .nude-bar .round { width: 42px; height: 42px; font-size: 1.1rem; box-shadow: none; border: 1px solid var(--gf-border); }
-    .nude-body { flex: 1; min-height: 0; display: flex; }
-    .nude-main { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
-    .nude-media { flex: 1; min-height: 0; display: flex; flex-direction: column; background: #111; }
-    .nude-media gf-media-viewer { flex: 1; min-height: 0; }
-    .nude-media .bare-photo { flex: 1; min-height: 0; position: relative; display: grid; place-items: center; overflow: hidden; }
-    .nude-media .bare-photo img { max-width: 100%; max-height: 100%; object-fit: contain; }
-    .nude-media .bare-photo .nophoto { font-size: 4rem; color: #fff; opacity: 0.4; }
-    /* Step 2: the media stuck in the top half, the encyclopedia under it. */
-    .nude.split .nude-media { flex: 0 0 50%; }
-    .nude-wiki { flex: 1; min-height: 0; display: flex; flex-direction: column; border-top: 1px solid var(--gf-border); }
-    .nude-wiki gf-plant-detail { flex: 1; min-height: 0; }
-    /* The fork's dashboard: tiles of the sheet's blocks, over the article; the whole column scrolls. */
-    .nude.dashed .nude-wiki { overflow-y: auto; }
-    .nude.dashed .nude-wiki > gf-plant-detail { flex: none; min-height: 60vh; }
-    .dash { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 10px; padding: 10px; background: var(--gf-surface-2); }
-    .dash .tile { min-width: 0; display: flex; flex-direction: column; border-radius: var(--gf-radius); background: var(--gf-surface); box-shadow: var(--gf-shadow); overflow: hidden; }
-    .dash .tile h3 { margin: 0; padding: 8px 12px 0; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--gf-text-muted); }
-    .dash .tile gf-plant-detail { display: block; max-height: 420px; overflow: auto; }
-    .dash.science .tile[data-key='map'] { grid-column: 1 / -1; }
-    .dash.science .tile[data-key='map'] gf-plant-detail { height: 320px; max-height: none; }
-    .step-banner .yes.fork { display: inline-flex; gap: 6px; align-items: center; }
+    /* Discovering: the cards, and the panes the steps add beside them. */
+    .guided { position: absolute; inset: 0; display: flex; gap: 0; background: var(--gf-bg, var(--gf-surface-2)); }
+    .g-deck { flex: 0 0 min(400px, 42%); min-width: 0; overflow-y: auto; padding: 14px 12px 90px; border-right: 1px solid var(--gf-border); }
+    .g-deck .deck { max-height: calc(100dvh - 320px); min-height: 300px; }
+    .g-plant { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--gf-surface); isolation: isolate; }
+    .g-plant gf-plant-detail { flex: 1; min-height: 0; }
+    .g-empty { height: 100%; display: grid; place-content: center; justify-items: center; gap: 8px; padding: 24px; text-align: center; color: var(--gf-text-muted); font-size: 0.95rem; }
+    .g-empty .bi { font-size: 2.4rem; opacity: 0.5; }
+    .g-empty p { margin: 0; max-width: 300px; }
+    @media (max-width: 899px) {
+      .guided { flex-direction: column; }
+      .g-deck { flex: none; max-height: 52%; border-right: 0; border-bottom: 1px solid var(--gf-border); padding: 8px 10px; }
+      .g-deck .deck { max-height: 34dvh; min-height: 220px; aspect-ratio: 3 / 3.4; }
+      .g-deck .left { display: none; }
+      .g-deck .actions { gap: 14px; }
+      .g-deck .round { width: 50px; height: 50px; font-size: 1.3rem; }
+    }
     /* Step 3: the plants around — a column on a wide screen, a drawer from the bottom on a phone. */
     .around { flex: none; width: 270px; border-right: 1px solid var(--gf-border); display: flex; flex-direction: column; min-height: 0; background: var(--gf-surface); }
     .around h2 { margin: 0; padding: 10px 12px 6px; font-size: 0.95rem; display: flex; justify-content: space-between; align-items: center; gap: 6px; }
@@ -276,13 +267,13 @@ export class GfDiscover extends LitElement {
         border-radius: 16px 16px 0 0; box-shadow: 0 -8px 24px rgb(0 0 0 / 18%); transform: translateY(calc(100% - 46px)); transition: transform 0.25s ease-out; }
       .around.up { transform: none; }
       .around h2 { cursor: pointer; min-height: 46px; box-sizing: border-box; }
-      .nude.listed .nude-main { padding-bottom: 46px; }
+      .guided.listed .g-plant { padding-bottom: 46px; }
     }
-    .nude-body { position: relative; }
+
     /* The step offered: a banner with its question, Oui / Plus tard. */
-    .step-banner { position: absolute; z-index: 6; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(520px, calc(100% - 24px));
+    .step-banner { position: absolute; z-index: 20; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(520px, calc(100% - 24px));
       display: grid; gap: 10px; padding: 14px 16px; border-radius: 16px; background: #1f2a1f; color: #fff; box-shadow: 0 12px 34px rgb(0 0 0 / 35%); animation: rise 0.3s ease-out; }
-    .nude.listed .step-banner { bottom: calc(58px + env(safe-area-inset-bottom)); }
+    .guided.listed .step-banner { bottom: calc(58px + env(safe-area-inset-bottom)); }
     .step-banner p { margin: 0; font-size: 0.98rem; line-height: 1.4; }
     .step-banner .q { font-weight: 700; }
     .step-banner .row { justify-content: flex-end; margin: 0; }
@@ -333,6 +324,8 @@ export class GfDiscover extends LitElement {
     /** @type {number | null} */
     this._later = null;
     this._dwell = false;
+    /** @type {number | null} */
+    this._focus = null;
   }
 
   #onChange = () => this.requestUpdate();
@@ -361,7 +354,7 @@ export class GfDiscover extends LitElement {
     const t = /** @type {HTMLElement} */ (e.composedPath()[0]);
     if (t?.closest?.('input, textarea, select, [contenteditable], gf-media-viewer')) return;
     // Bare: → keeps the plant and goes on, ← passes it — as with the cards.
-    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); if (this.#nude) this.#nudeNext(e.key === 'ArrowRight'); else this.#step(e.key === 'ArrowRight' ? 1 : -1); }
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); this.#step(e.key === 'ArrowRight' ? 1 : -1); }
     else if (e.key === 'Escape') { e.preventDefault(); this.#close(); }
   };
 
@@ -395,14 +388,9 @@ export class GfDiscover extends LitElement {
       if (changed.get('scenario') !== undefined && this._point && !this._asking) this.#load();
     } else if (changed.has('_view')) lastView[sc] = this._view;
     if (changed.has('open') && this.open != null) plantSeen(this.open);
-    // Another plant (bare): a step put off comes back; the next one is offered after a while on it.
-    if (changed.has('open')) {
-      if (changed.get('open') != null && this.open != null) this.#navs++;
-      this._later = null;
-      this._dwell = false;
-      clearTimeout(this.#dwellTimer);
-      if (this.open != null) this.#dwellTimer = setTimeout(() => { this._dwell = true; }, 6000);
-    }
+    // Another plant in the panes (a card decided, one chosen around): a step put off comes back; the next one
+    // is offered after a while on it.
+    if (changed.has('_focus') && this.#guided) this.#restartDwell();
     // The distance changed: the map's observations follow (a moment after the slider stops).
     if ((changed.has('_radius') || changed.has('_asking') || changed.has('_point')) && this._asking && this._point) {
       clearTimeout(this.#obsTimer);
@@ -412,7 +400,13 @@ export class GfDiscover extends LitElement {
   }
   /** @type {any} */ #dwellTimer = 0;
   /** @type {any} */ #obsTimer = 0;
-  /** Plants stepped through bare (each step after the second waits for two of them). */
+  #restartDwell() {
+    this._later = null;
+    this._dwell = false;
+    clearTimeout(this.#dwellTimer);
+    this.#dwellTimer = setTimeout(() => { this._dwell = true; }, 6000);
+  }
+  /** Plants stepped through while discovering (each step after the second waits for two of them). */
   #navs = 0;
   /** The number of plants stepped through when the current step began. */
   #navsAtStep = 0;
@@ -449,6 +443,9 @@ export class GfDiscover extends LitElement {
   /** @param {[number, number]} point @param {string | null} place */
   async #setPoint(point, place) {
     this._point = point; this._place = place; this._query = ''; this._places = [];
+    // The start page (#/) shows Découvrir only until Flore comes: the discovery gets its own address, so a tab
+    // arriving midway does not take the screen away.
+    if (parse(location.hash).name !== 'discover') { replaceHash(href.discover(null, this.scenario)); dispatchEvent(new HashChangeEvent('hashchange')); }
     setDiscoverPoint(point, place);
     this._cards = null;
     this._asking = true;
@@ -566,9 +563,10 @@ export class GfDiscover extends LitElement {
   // ── Render ────────────────────────────────────────────────────────────
 
   render() {
-    return html`${!this._point ? this.#welcome() : this._asking || (!this._cards && !this._loading && !this._error) ? this.#distance() : this.#list()}
+    const guided = this.#guided;
+    return html`${!this._point ? this.#welcome() : this._asking || (!this._cards && !this._loading && !this._error) ? this.#distance() : guided ? this.#guidedView() : this.#list()}
       ${this._match ? this.#matchView(this._match) : nothing}
-      ${this.open != null ? (this.#nude ? this.#nudeView() : this.#plantSheet()) : nothing}`;
+      ${this.open != null && !guided ? this.#plantSheet() : nothing}`;
   }
 
   #welcome() {
@@ -840,6 +838,8 @@ export class GfDiscover extends LitElement {
       const fav = liked && !isFavorite(card.plant.id);
       this._history = [...this._history, { id: card.plant.id, liked, fav }].slice(-30);
       swiped(card.plant.id, liked);
+      // Discovering: the panes go on with the next card.
+      if (this.#guided) { this._focus = null; this.#navs++; this.#restartDwell(); }
       if (liked) {
         if (fav) toggleFavorite(card.plant).catch(() => {});
         if (matchMedia('(pointer: coarse)').matches) navigator.vibrate?.(30);
@@ -866,7 +866,7 @@ export class GfDiscover extends LitElement {
       ${c.photo ? html`<img src=${c.photo} alt="" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} />` : nothing}
       <p id="match-text">Coup de cœur pour <b>${name}</b> ! Direction votre herbier (♥ favoris) — et ce n’est que le début de l’exploration.</p>
       <div class="row">
-        <button class="primary" type="button" autofocus @click=${() => { firstMatchShown(); this._match = null; this.#openPlant(c.plant.id, this.#deck.map(x => x.plant.id)); }}>Découvrir cette plante</button>
+        <button class="primary" type="button" autofocus @click=${() => { firstMatchShown(); this._match = null; this._focus = c.plant.id; this.#restartDwell(); }}>Découvrir cette plante</button>
       </div>
     </div>`;
   }
@@ -886,52 +886,49 @@ export class GfDiscover extends LitElement {
     </button>`;
   }
 
-  // ── Bare: the plant alone, the app shown step by step ─────────────────
+  // ── Discovering: the cards, and beside them the panes the steps add to the layout ──
 
-  /** The plant opened bare: while discovering (the first steps), in Rencontres. */
-  get #nude() { return this.open != null && discovering() && discoverState().firstMatch && scenarioOf(this.scenario).key === 'meet'; }
+  /** Discovering (Rencontres, after the first match): the guided view — the cards stay, panes come beside them. */
+  get #guided() { return discovering() && discoverState().firstMatch && scenarioOf(this.scenario).key === 'meet' && Boolean(this._cards); }
 
-  /**
-   * Bare, as with the cards: kept (→, a match) or passed (←), then the next plant of the deck. A plant already
-   * matched stays a match when passed by.
-   * @param {boolean} keep
-   */
-  #nudeNext(keep) {
-    const card = (this._cards || []).find(c => c.plant.id === this.open);
-    if (card) {
-      const s = discoverState();
-      if (keep && !s.matches.includes(card.plant.id)) {
-        if (!isFavorite(card.plant.id)) toggleFavorite(card.plant).catch(() => {});
-        swiped(card.plant.id, true);
-      } else if (!keep && !s.matches.includes(card.plant.id)) swiped(card.plant.id, false);
-    }
-    const next = this.#deck.find(c => c.plant.id !== this.open);
-    if (!next) { this.#close(); return; }
-    replaceHash(href.discover(next.plant.id, this.scenario));
-    this.open = next.plant.id;
-  }
+  /** The mode whose layout the steps build (the one the plant sheet shows in Flore). */
+  get #view() { return plantViewOf(this.#store.state); }
 
-  /** A plant of the list around, opened bare. @param {number} id */
-  #nudeGo(id) {
-    if (id === this.open) return;
-    replaceHash(href.discover(id, this.scenario));
-    this.open = id;
+  /** The plant shown in the panes. */
+  get #focusId() { return this._focus ?? this.#deck[0]?.plant.id ?? null; }
+
+  /** A plant of the list around, shown in the panes. @param {number} id */
+  #aroundGo(id) {
+    if (id === this.#focusId) return;
+    this._focus = id;
+    this.#navs++;
     this._aroundUp = false;
   }
   /** Phone: the list of the plants around pulled up. */
   _aroundUp = false;
 
-  /** A swipe on the bare plant (not on the photos, which have their own): right keeps, left passes. */
-  #nudeTouchStart = (/** @type {TouchEvent} */ e) => {
-    const t = /** @type {HTMLElement} */ (e.composedPath()[0]);
-    this.#touch = t?.closest?.('gf-media-viewer, gf-plant-detail, .around, button') ? null : { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
-  };
-  #nudeTouchEnd = (/** @type {TouchEvent} */ e) => {
-    const s = this.#touch; this.#touch = null;
-    if (!s) return;
-    const dx = e.changedTouches[0].clientX - s.x, dy = e.changedTouches[0].clientY - s.y;
-    if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.6 && Date.now() - s.t < 600) this.#nudeNext(dx > 0);
-  };
+  /**
+   * A block into the layout (once): a new pane beside another block's pane (or, if that one is in no pane,
+   * on the right of the sheet; `root`: across the whole plant pane).
+   * @param {string} key @param {string | null} near @param {'left' | 'right' | 'top' | 'bottom'} side @param {boolean} [root]
+   */
+  #dockAt(key, near, side, root = false) {
+    const v = this.#view;
+    if (paneOf(v, key)) return;
+    const p = near ? paneOf(v, near) : null;
+    dockBlock(v, key, root ? 'root' : p ? p.id : 'sheet', root || p ? side : 'right');
+  }
+
+  /** Several blocks as the tabs of one new pane (the first one shown). @param {string[]} keys @param {'left' | 'right' | 'top' | 'bottom'} side */
+  #dockTabs(keys, side) {
+    const v = this.#view;
+    this.#dockAt(keys[0], null, side, true);
+    const pane = paneOf(v, keys[0]);
+    if (!pane) return;
+    for (const k of keys.slice(1)) if (!paneOf(v, k)) dockBlock(v, k, pane.id, 'center');
+    const after = paneOf(v, keys[0]);
+    if (after) setStackState(v, after.id, { active: keys[0] });
+  }
 
   /**
    * The step to offer now, if any: its photos at once; its encyclopedia after a moment on it (or the next plant);
@@ -967,30 +964,22 @@ export class GfDiscover extends LitElement {
   /** The fork: picking or science; its dashboard joins the plant. @param {'harvest' | 'science'} branch */
   #fork(branch) {
     this.#navsAtStep = this.#navs;
+    this.#dockTabs(FORK_BLOCKS[branch], 'right');
     chooseBranch(branch);
     this.requestUpdate();
   }
 
-  /**
-   * The dashboard of the way chosen, under the photos: picking — its uses (prudence first), what it is mistaken
-   * for, its season; science — its maps, where it is recorded, its climate, its classification. Then the article.
-   * @param {'harvest' | 'science'} branch
-   */
-  #dashboard(branch) {
-    const blocks = branch === 'harvest' ? DASH_HARVEST : DASH_SCIENCE;
-    return html`<div class="dash ${branch}" aria-label=${branch === 'harvest' ? 'Tableau de bord cueillette' : 'Tableau de bord scientifique'}>
-      ${blocks.map(([key, label]) => html`<section class="tile" data-key=${key}><h3>${label}</h3>
-        <gf-plant-detail embedded only=${key} plant-id=${this.open} view=${branch === 'science' ? 'scientific' : 'standard'}></gf-plant-detail></section>`)}
-    </div>`;
-  }
-
-  /** A step accepted; the last one leaves the bare view for the whole app, on this plant. @param {number} step */
+  /** A step accepted: its pane joins the layout; the last one leaves for the whole app, on this plant. @param {number} step */
   #accept(step) {
     this.#navsAtStep = this.#navs;
     this._dwell = false;
     clearTimeout(this.#dwellTimer);
     this.#dwellTimer = setTimeout(() => { this._dwell = true; }, 6000);
-    const id = this.open;
+    const id = this.#focusId;
+    // Each step adds its pane to the layout of the mode (Flore will show the same): the photos beside the sheet,
+    // the encyclopedia under them.
+    if (step === 1) this.#dockAt('media', null, 'right');
+    if (step === 2) this.#dockAt('wikipedia', 'media', 'bottom');
     // The whole app, the way chosen at the fork.
     if (step >= LAST_STEP) { if (discoverState().branch === 'science') setMode('scientific'); else if (discoverState().branch === 'harvest') setHarvestMode(true); }
     setStep(step);
@@ -1002,40 +991,33 @@ export class GfDiscover extends LitElement {
   #aroundList(cards) {
     return html`<aside class="around ${this._aroundUp ? 'up' : ''}" aria-label="Les plantes autour">
       <h2 @click=${() => { this._aroundUp = !this._aroundUp; this.requestUpdate(); }}>Les voisines <small class="muted">${cards.length}</small></h2>
-      <ul>${repeat(cards, c => c.plant.id, c => html`<li><button type="button" aria-current=${String(c.plant.id === this.open)} @click=${() => this.#nudeGo(c.plant.id)}>
+      <ul>${repeat(cards, c => c.plant.id, c => html`<li><button type="button" aria-current=${String(c.plant.id === this.#focusId)} @click=${() => this.#aroundGo(c.plant.id)}>
         <span class="th">${c.photo ? html`<img src=${c.photo.replace('/medium.', '/square.')} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />` : nothing}</span>
         <span class="t"><b>${c.plant.vernacularNames?.[0] || c.plant.scientificName}</b><small>${c.blooming ? 'En fleur · ' : ''}${c.count} obs.${discoverState().matches.includes(c.plant.id) ? ' · ♥' : ''}</small></span>
       </button></li>`)}</ul>
     </aside>`;
   }
 
-  /** The plant bare: no header, no tabs — its photos, then its encyclopedia, then the plants around. */
-  #nudeView() {
+  /**
+   * Discovering: the cards stay (left, or on top on a phone); beside them, the panes of the mode's layout for the
+   * plant in view — each step accepted adds one (its photos, its encyclopedia, the fork's pane); at step 4 the
+   * plants around. The step offered: a banner with its question.
+   */
+  #guidedView() {
     const step = discoverState().step;
     const cards = this._cards || [];
-    const card = cards.find(c => c.plant.id === this.open);
-    const plant = card?.plant;
-    const name = plant ? plant.vernacularNames?.[0] || plant.scientificName : '';
+    const id = this.#focusId;
     const offer = this.#offer();
-    const kept = this.open != null && discoverState().matches.includes(this.open);
-    const branch = step >= 3 ? discoverState().branch : null;
-    return html`<section class="nude ${step >= 2 ? 'split' : ''} ${step >= 4 ? 'listed' : ''} ${branch ? 'dashed' : ''}" role="dialog" aria-modal="true" aria-label=${name || 'Plante'}
-        @touchstart=${this.#nudeTouchStart} @touchend=${this.#nudeTouchEnd}>
-      <div class="nude-bar">
-        <button class="icon-btn" type="button" aria-label="Retour aux rencontres" title="Retour aux rencontres (Échap)" @click=${() => this.#close()}>${icon('arrow-left')}</button>
-        <div class="who"><b>${name}</b>${plant ? html`<i>${plant.scientificName}</i>` : nothing}</div>
-        <button class="round pass" type="button" aria-label="Passer : plante suivante" title="Passer (←)" @click=${() => this.#nudeNext(false)}>${icon('x-lg')}</button>
-        <button class="round like" type="button" aria-pressed=${String(kept)} aria-label="Garder : plante suivante" title="Garder ♥ et suivante (→)" @click=${() => this.#nudeNext(true)}>${icon('heart-fill')}</button>
+    const card = cards.find(c => c.plant.id === id);
+    return html`<section class="guided ${step >= 4 ? 'listed' : ''}" aria-label="Découverte">
+      ${step >= 4 ? this.#aroundList(cards) : nothing}
+      <div class="g-deck">${this.#deckView()}</div>
+      <div class="g-plant" aria-label=${card ? 'Volets : ' + (card.plant.vernacularNames?.[0] || card.plant.scientificName) : 'Volets'}>
+        ${id != null ? html`<gf-plant-detail embedded panes-only plant-id=${id} view=${this.#view}>
+          <div class="g-empty">${icon('binoculars')}<p>Ses photos, son histoire, ses secrets viendront s’installer ici, à côté des cartes.</p></div>
+        </gf-plant-detail>` : nothing}
       </div>
-      <div class="nude-body">
-        ${step >= 4 ? this.#aroundList(cards) : nothing}
-        <div class="nude-main">
-          <div class="nude-media">${step >= 1 ? html`<gf-media-viewer local prefer-photos plant-id=${this.open} .view=${'standard'}></gf-media-viewer>`
-            : html`<div class="bare-photo"><span class="nophoto">${icon('leaf')}</span>${card?.photo ? html`<img src=${card.photo.replace('/medium.', '/large.')} alt=${name} decoding="async" referrerpolicy="no-referrer" style="position:absolute" @error=${hideImg} @load=${showImg} />` : nothing}</div>`}</div>
-          ${step >= 2 ? html`<div class="nude-wiki">${branch ? this.#dashboard(branch) : nothing}<gf-plant-detail embedded only="wikipedia" plant-id=${this.open} view="standard"></gf-plant-detail></div>` : nothing}
-        </div>
-        ${offer ? this.#banner(offer) : nothing}
-      </div>
+      ${offer ? this.#banner(offer) : nothing}
     </section>`;
   }
 

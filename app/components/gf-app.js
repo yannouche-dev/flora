@@ -216,6 +216,12 @@ export class GfApp extends LitElement {
       <button type="button" aria-label="Fermer" @click=${() => { this._unlocked = null; this.requestUpdate(); }}>${icon('x-lg')}</button></div>`;
   }
 
+  /**
+   * One template for Découvrir, at its address or as the start page: going from one to the other keeps the same
+   * element (its place, its cards, the step reached). @param {number | null} plant @param {string | null} scenario
+   */
+  #discover(plant, scenario) { return html`<gf-discover .open=${plant} .scenario=${scenario}></gf-discover>`; }
+
   /** @param {import('../core/router.js').Route} route */
   #flora(route) { return html`<gf-flora .route=${route}></gf-flora>`; }
 
@@ -224,10 +230,10 @@ export class GfApp extends LitElement {
     switch (route.name) {
       case 'discover':
         document.title = 'Découvrir — GeoFlora';
-        return html`<gf-discover .open=${route.plant} .scenario=${route.scenario}></gf-discover>`;
+        return this.#discover(route.plant, route.scenario);
       case 'search':
       case 'plant':
-        if (route.name === 'search' && !tabShown('flore')) return html`<gf-discover .open=${null} .scenario=${null}></gf-discover>`;
+        if (route.name === 'search' && !tabShown('flore')) return this.#discover(null, null);
         // One template for the list and a plant: Lit keeps the same gf-flora (its list, filters, scroll), only the route changes.
         return this.#flora(route);
       case 'map':
