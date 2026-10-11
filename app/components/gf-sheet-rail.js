@@ -1,5 +1,5 @@
 // @ts-check
-// The rubrics of the plant sheet, one icon each (Noms, Images, Protection et risques, Saisons…): a touch goes to
+// The rubrics of the plant sheet, one icon each (L’essentiel, Images, Alertes, Usages, Saisons…): a touch goes to
 // the rubric, hovering one lists its blocks. An icon can carry a count, like messages waiting: the alerts of
 // the plant (protection, toxicity; for an edible plant, what it is mistaken for), red when it is a danger.
 // A row (the header of the plant pane, the top of a narrow sheet) or a column (the left of a wide sheet);
@@ -11,7 +11,8 @@ import { ui } from '../styles/ui.js';
 
 /**
  * @typedef {{ count: number, tone: 'danger' | 'warn', text: string[] }} Badge
- * @typedef {{ key: string, label: string, question: string, icon: string, blocks: { key: string, title: string, note?: string }[], badge?: Badge | null }} RailItem
+ * @typedef {{ key: string, title: string, note?: string, subs?: { key: string, title: string }[] }} RailBlock
+ * @typedef {{ key: string, label: string, question: string, icon: string, blocks: RailBlock[], badge?: Badge | null }} RailItem
  */
 
 export class GfSheetRail extends LitElement {
@@ -52,6 +53,9 @@ export class GfSheetRail extends LitElement {
     .pop strong { display: block; padding: 2px 8px 4px; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gf-text-muted); }
     .pop button { display: block; width: 100%; text-align: left; border: 0; background: none; padding: 6px 8px; border-radius: var(--gf-radius-sm); font: inherit; font-size: 0.9rem; color: var(--gf-text); cursor: pointer; }
     .pop button:hover, .pop button:focus-visible { background: var(--gf-accent-soft); outline: none; }
+    /* Sub-anchors (the article's themes): under their block, indented, smaller. */
+    .pop button.sub { padding: 4px 8px 4px 22px; font-size: 0.82rem; color: var(--gf-text-muted); }
+    .pop { max-height: min(70vh, 520px); overflow-y: auto; }
     .pop ul { margin: 2px 0 6px; padding: 0 8px 0 24px; font-size: 0.8rem; }
     .pop li { margin: 2px 0; }
     .pop .alerts.danger { color: var(--gf-danger); } .pop .alerts.warn { color: var(--gf-warn); }
@@ -114,7 +118,8 @@ export class GfSheetRail extends LitElement {
         @mouseenter=${() => clearTimeout(this.#closing)} @mouseleave=${() => this.#close()} @focusin=${() => clearTimeout(this.#closing)} @focusout=${() => this.#close()}>
       <strong>${pop.label}</strong>
       ${pop.badge ? html`<ul class="alerts ${pop.badge.tone}">${pop.badge.text.map(t => html`<li>${t}</li>`)}</ul>` : nothing}
-      ${pop.blocks.map(k => html`<button type="button" role="menuitem" @click=${() => this.#go(k.key)}>${k.title}${k.note ? html` <small>(${k.note})</small>` : nothing}</button>`)}
+      ${pop.blocks.map(k => html`<button type="button" role="menuitem" @click=${() => this.#go(k.key)}>${k.title}${k.note ? html` <small>(${k.note})</small>` : nothing}</button>
+        ${k.subs?.map(x => html`<button type="button" role="menuitem" class="sub" @click=${() => this.#go(x.key)}>${x.title}</button>`)}`)}
     </div>` : nothing}`;
   }
 }

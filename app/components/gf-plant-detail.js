@@ -657,7 +657,7 @@ export class GfPlantDetail extends LitElement {
       background: color-mix(in srgb, var(--gf-surface) 94%, transparent); backdrop-filter: blur(6px); border-bottom: 1px solid var(--gf-border);
       mask-image: linear-gradient(90deg, #000 calc(100% - 16px), transparent); }
     .wiki-menu::-webkit-scrollbar { display: none; }
-    .wiki-logo { flex: none; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--gf-border); font-family: Georgia, serif; font-weight: 700; font-size: 0.8rem; color: var(--gf-text-muted); }
+    .wiki-logo { flex: none; width: 24px; height: 24px; display: grid; place-items: center; border-radius: 50%; border: 1px solid var(--gf-border); font-size: 0.85rem; color: var(--gf-text-muted); }
     .wiki-menu a { flex: none; padding: 4px 10px; border-radius: var(--gf-radius-pill); font-size: 0.8rem; color: var(--gf-text-muted); text-decoration: none; white-space: nowrap; }
     .wiki-menu a:hover { color: var(--gf-text); background: var(--gf-surface-2); }
     .wiki-menu a.on { background: var(--gf-accent-soft); color: var(--gf-accent); font-weight: 600; }
@@ -1406,7 +1406,8 @@ export class GfPlantDetail extends LitElement {
     if (!this.#wikiThemeOpen(t)) this._wikiOpen = new Set([...this._wikiOpen, 'theme:' + t]);
     await this.updateComplete;
     const el = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('#wiki-' + t));
-    if (!el) return;
+    // The article elsewhere (an edge, a pane) or not drawn yet: to the block itself.
+    if (!el) { this.#goTo('wikipedia'); return; }
     el.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
     el.removeAttribute('data-flash'); void el.offsetWidth; el.setAttribute('data-flash', '');
     setTimeout(() => el.removeAttribute('data-flash'), 1300);
@@ -1428,7 +1429,7 @@ export class GfPlantDetail extends LitElement {
     const date = wiki.touched ? new Date(wiki.touched).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : null;
     return html`<div class="description wiki">
       ${themes.length ? html`<nav class="wiki-menu" aria-label="Sommaire de l’article Wikipédia">
-        <span class="wiki-logo" aria-hidden="true">W</span>
+        <span class="wiki-logo" aria-hidden="true">${icon('wikipedia')}</span>
         ${themes.map(t => html`<a href=${'#wiki-' + t} class=${this._wikiActive === t ? 'on' : ''} aria-current=${this._wikiActive === t ? 'true' : 'false'}
           @click=${(/** @type {Event} */ e) => { e.preventDefault(); this.#wikiGo(t); }}>${WIKI_THEMES[t][0]}</a>`)}
       </nav>` : nothing}
@@ -1642,7 +1643,9 @@ export class GfPlantDetail extends LitElement {
     const usesCat = blockCategory('uses');
     const items = CATEGORIES.map(c => ({
       key: c.key, label: c.label, question: c.question, icon: c.icon,
-      blocks: this.#categoryBlocks(ctx, c.key).map(k => ({ key: k, title: blockTitle(k), note: placeOf(this.view, k) ? GfPlantDetail.PLACE_INFO[/** @type {string} */ (placeOf(this.view, k))][0].toLowerCase() : undefined })),
+      blocks: this.#categoryBlocks(ctx, c.key).map(k => ({ key: k, title: blockTitle(k), note: placeOf(this.view, k) ? GfPlantDetail.PLACE_INFO[/** @type {string} */ (placeOf(this.view, k))][0].toLowerCase() : undefined,
+        // The article's themes, each to its anchor in the Wikipédia block.
+        subs: k === 'wikipedia' && !placeOf(this.view, k) ? this.#wikiThemes.map(t => ({ key: 'wiki:' + t, title: WIKI_THEMES[t][0] })) : undefined })),
       badge: c.key === 'safety' ? this._alerts?.safety : c.key === usesCat ? this._alerts?.edible : null
     })).filter(c => c.blocks.length);
     return items.length < 2 ? [] : items;
@@ -1670,8 +1673,16 @@ export class GfPlantDetail extends LitElement {
     this.dispatchEvent(new CustomEvent('sheet-rail', { detail: { items, active, plantId: this.plantId }, bubbles: true, composed: true }));
   }
 
-  /** To a rubric's block, asked by the host's rail. @param {string} key */
+  /** To a rubric's block (or a theme of the article, « wiki:<theme> »), asked by the host's rail. @param {string} key */
   goTo(key) {
+    if (key.startsWith('wiki:')) {
+      const theme = key.slice(5);
+      sheetSession.anchor = blockCategory('wikipedia');
+      sheetSession.anchorBlock = 'wikipedia';
+      sheetSession.anchorOffset = 0;
+      sheetSession.anchorWiki = theme;
+      return this.#wikiGo(theme);
+    }
     sheetSession.anchor = blockCategory(key);
     sheetSession.anchorBlock = key;
     sheetSession.anchorOffset = 0;
