@@ -106,7 +106,8 @@ export class GfFlora extends LitElement {
     .pane-head .icon-btn { width: 32px; height: 32px; font-size: 1rem; }
     /* Each pane lays out on its own: resizing one does not re-lay out the content of the others. */
     .pane-body { flex: 1; min-height: 0; overflow-y: auto; contain: strict; }
-    .filters .pane-body { padding: 0 14px 24px; }
+    /* No bottom padding: the headers still to come sit right on the bottom edge (gf-facet); the room is the panel's. */
+    .filters .pane-body { padding: 0 14px; }
     .results .pane-body { overflow: hidden; display: flex; flex-direction: column; }
     gf-plant-list { flex: 1; min-height: 0; }
     gf-plant-detail { flex: 1; min-height: 0; }

@@ -11,7 +11,7 @@ const STATUS_ORDER = ['P', 'E', 'S', 'C', 'I', 'J'];
 /** All filter groups. Rendered as the desktop sidebar or inside the mobile bottom sheet. */
 export class GfFilterPanel extends LitElement {
   static styles = css`
-    :host { display: block; }
+    :host { display: block; padding-bottom: 24px; }
   `;
 
   #store = new StoreController(this);
@@ -39,6 +39,8 @@ export class GfFilterPanel extends LitElement {
       ...collections.filter(c => c.kind === 'place').map(c => ({ value: c.id, label: c.name, icon: 'geo-alt-fill', count: count('mine', c.id) }))
     ];
 
+    // The number of facets: those still to come wait stacked at the bottom (gf-facet).
+    this.style.setProperty('--count', String(mine.length ? 7 : 6));
     return html`
       <gf-facet name="family" stack="0" label="Famille" searchable limit="8" .selected=${filters.family}
         .options=${families.map(name => ({ value: name, label: name, count: count('family', name) }))}
