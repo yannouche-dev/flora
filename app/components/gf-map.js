@@ -1142,11 +1142,11 @@ export class GfMap extends LitElement {
     const single = bounds.getNorthEast().equals(bounds.getSouthWest());
     this.#lastFit = 'frame';
     this.#framedBounds = bounds;
-    const opts = { paddingTopLeft: /** @type {[number, number]} */ ([40, 56]), paddingBottomRight: /** @type {[number, number]} */ ([40, 40 + bottom]), maxZoom: single ? 18 : 19 };
+    const opts = { paddingTopLeft: /** @type {[number, number]} */ ([40, 56]), paddingBottomRight: /** @type {[number, number]} */ ([40, 40 + bottom]), maxZoom: /** @type {any} */ (frame).maxZoom || (single ? 18 : 19) };
     // Eased: from the view shown to the next one, smoothly (an area touched in the sheet, and back).
     if (/** @type {any} */ (frame).ease && !matchMedia('(prefers-reduced-motion: reduce)').matches) { map.flyToBounds(bounds, { ...opts, duration: 0.8 }); return true; }
     map.fitBounds(bounds, { ...opts, animate: false });
-    if (map.getZoom() < PLANT_ZOOM && bounds.getNorthEast().distanceTo(bounds.getSouthWest()) < 300) {
+    if (!/** @type {any} */ (frame).maxZoom && map.getZoom() < PLANT_ZOOM && bounds.getNorthEast().distanceTo(bounds.getSouthWest()) < 300) {
       map.setZoom(PLANT_ZOOM, { animate: false });
     }
     return true;

@@ -225,7 +225,17 @@ L'icône film de l'en-tête (ordinateur et téléphone) propose des façons d'en
 - **Cueillette prudente** : autour de vous, seulement les plantes qui comptent pour la cueillette — les comestibles de la liste de l'Anses et des Centres antipoison et leurs sosies toxiques —, les confusions mortelles d'abord ; la bio de chaque carte commence par la confusion (« Ne me confondez pas avec Colchique (mortel). Partie : feuilles. ») ; un bandeau rappelle de ne jamais cueillir sans identification certaine ; le mode cueillette s'allume.
 - **Mosaïque** : toutes les photos des plantes du coin en grande mosaïque, filtre « En fleur maintenant » ; une photo touchée ouvre la fiche à ses images.
 - **Scientifique** : le mode Scientifique, tous les outils, la flore complète.
+- **Parcours botanique** : marchez et nommez les plantes que vous croisez (ci-dessous).
 - Bientôt : « La carte d'abord », « Tableau de bord scientifique ».
+
+### Parcours botanique
+
+Le plus simple des modes : un parcours, c'est un lieu de « Mes plantes » où chaque plante notée garde l'endroit où vous l'avez vue.
+- **Démarrer** : « Commencer ici » (votre position) ou une commune ; les parcours déjà commencés se reprennent d'un toucher.
+- **La carte du parcours** (petite, sobre) : son nom (touché, il se renomme), le nombre de plantes, la précision du GPS, « Terminer ».
+- **Nommer une plante** : un grand champ, au clavier ou à la voix (micro) ; la flore propose les plantes qui correspondent, avec photo, famille et un gros bouton « ＋ Ajouter » (Entrée ajoute la première). La plante est posée là où vous êtes ; « Annuler » la retire aussitôt.
+- **La liste** des plantes du parcours (la dernière en haut, avec l'heure), chacune vers sa fiche, ✕ pour la retirer.
+- **La carte** : le parcours et un marqueur par plante ajoutée, avec votre position qui suit ; à côté de la liste sur grand écran, onglets « Liste | Carte » sur téléphone.
 
 ### Découvrir : les plantes autour de vous (premiers pas)
 

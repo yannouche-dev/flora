@@ -83,6 +83,7 @@ const SHELL = [
   'app/components/gf-media-viewer.js',
   'app/components/gf-sheet-rail.js',
   'app/components/gf-discover.js',
+  'app/components/gf-trail.js',
   'app/components/gf-scenarios.js',
   'app/components/gf-voice-button.js',
   'app/components/gf-active-filters.js',

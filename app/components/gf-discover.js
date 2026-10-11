@@ -36,6 +36,7 @@ import { ui } from '../styles/ui.js';
 import './gf-plant-detail.js';
 import './gf-media-viewer.js';
 import './gf-map.js';
+import './gf-trail.js';
 
 /** How far to look, in metres (iNaturalist searches a circle; beyond 50 km the list is a region's, not « around »). */
 const DISTANCES = [200, 500, 1000, 2000, 5000, 10000, 20000, 50000];
@@ -467,7 +468,7 @@ export class GfDiscover extends LitElement {
     // Another scenario: its own view (Mosaïque: the grid), the cards filtered for it.
     if (changed.has('scenario')) {
       this._view = lastView[sc] || (sc === 'mosaic' ? 'all' : 'swipe');
-      if (changed.get('scenario') !== undefined && this._point && !this._asking) this.#load();
+      if (changed.get('scenario') !== undefined && sc !== 'trail' && this._point && !this._asking) this.#load();
     } else if (changed.has('_view')) lastView[sc] = this._view;
     if (changed.has('open') && this.open != null) plantSeen(this.open);
     // Another plant in the panes (a card decided, one chosen around): a step put off comes back; the next one
@@ -678,6 +679,8 @@ export class GfDiscover extends LitElement {
   // ── Render ────────────────────────────────────────────────────────────
 
   render() {
+    // Parcours botanique: its own little app (the place, the search, the plants added, their map).
+    if (scenarioOf(this.scenario).key === 'trail') return html`<gf-trail></gf-trail>`;
     const guided = this.#guided;
     return html`${!this._point ? this.#welcome() : guided ? this.#guidedView() : this._asking || (!this._cards && !this._loading && !this._error) ? this.#distance() : this.#list()}
       ${this._match ? this.#matchView(this._match) : nothing}

@@ -60,6 +60,18 @@ export async function runSearch() {
 const NO_FILTERS = { status: [], family: [], genus: [], photo: [], french: [], mine: [] };
 
 /**
+ * The plants of the flora matching a text (French or scientific names, typos forgiven), the closest first —
+ * apart from the search on screen (its filters are not used). For a quick pick (Parcours botanique).
+ * @param {string} q @param {number} [limit]
+ * @returns {Promise<{ id: number, scientificName: string, vernacularName: string | null, family: string, thumbnail: any }[]>}
+ */
+export async function findPlants(q, limit = 8) {
+  if (!q.trim()) return [];
+  const response = await call({ type: 'search', q, filters: NO_FILTERS, sort: 'relevance', membership: {} });
+  return (response.items || []).slice(0, limit);
+}
+
+/**
  * "Mes plantes" facet values per plant: the collection ids containing it, plus 'place' when
  * it is in at least one place. Only sent when useful (facet active or counts needed).
  * @param {Record<string, string[]>} filters
