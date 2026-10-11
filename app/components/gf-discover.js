@@ -43,6 +43,8 @@ const lastView = {};
 /** A word for the distance, for fun. @param {number} m */
 const distMood = m => m <= 200 ? 'Juste devant la porte' : m <= 1000 ? 'Le quartier' : m <= 5000 ? 'Une balade à pied' : m <= 20000 ? 'Un tour à vélo' : 'Toute la région';
 const PAGE = 12;
+/** The deck has shown it can be swiped (once while the app is open). */
+let hinted = false;
 /** The fork's pane: the blocks of the sheet that join the layout, picking or science (the first one shown). */
 const FORK_BLOCKS = { harvest: ['uses', 'lookalikes', 'calendar'], science: ['map', 'occurrences', 'climate', 'taxonomy'] };
 const MONTH = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
@@ -173,6 +175,13 @@ export class GfDiscover extends LitElement {
       touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; transition: transform 0.25s ease-out; }
     .swipe-card.dragging { transition: none; cursor: grabbing; }
     .swipe-card.fly { transition: transform 0.26s ease-in; }
+    /* The first time: a little swipe right, then left (its stamps showing a moment), and back. */
+    .swipe-card.hint { animation: swipe-hint 1.6s ease-in-out; }
+    .swipe-card.hint .stamp.like { animation: hint-like 1.6s ease-in-out; }
+    .swipe-card.hint .stamp.nope { animation: hint-nope 1.6s ease-in-out; }
+    @keyframes swipe-hint { 25% { transform: translateX(46px) rotate(5deg); } 40% { transform: none; } 65% { transform: translateX(-46px) rotate(-5deg); } 80%, to { transform: none; } }
+    @keyframes hint-like { 25% { opacity: 0.7; } 40%, to { opacity: 0; } }
+    @keyframes hint-nope { 0%, 40% { opacity: 0; } 65% { opacity: 0.7; } 80%, to { opacity: 0; } }
     .swipe-card.under { transform: scale(0.94) translateY(10px); filter: brightness(0.9); pointer-events: none; }
     .swipe-card img, .swipe-card .nophoto { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
     .swipe-card .nophoto { display: grid; place-items: center; font-size: 4rem; opacity: 0.4; }
@@ -426,6 +435,7 @@ export class GfDiscover extends LitElement {
     this.toggleAttribute('opened', this.open != null);
   }
   updated() {
+    this.#hintSwipe();
     // Discovering: the plant in view lit on the map (where it was seen in the circle).
     const id = this.#guided ? this.#focusId : null;
     const key = id == null || !this._point ? '' : `${id}:${this._radius}:${this._point}`;
@@ -439,6 +449,20 @@ export class GfDiscover extends LitElement {
       .then(pts => { if (this.#hlFor === key) this._hl = { key, points: pts.map(p => ({ coordinates: p.coordinates, title })) }; }, () => {});
   }
   #hlFor = '';
+
+  /** The cards just there: the one on top leans a little right, then left — they can be swiped (once). */
+  #hintSwipe() {
+    if (hinted || this._view !== 'swipe' || this.open != null || this._match) return;
+    const el = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.swipe-card.top'));
+    if (!el) return;
+    hinted = true;
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    setTimeout(() => {
+      if (!el.isConnected || el.classList.contains('dragging')) return;
+      el.classList.add('hint');
+      el.addEventListener('animationend', () => el.classList.remove('hint'), { once: true });
+    }, 700);
+  }
 
   /** @type {any} */ #dwellTimer = 0;
   /** @type {any} */ #obsTimer = 0;
@@ -834,6 +858,7 @@ export class GfDiscover extends LitElement {
     const el = /** @type {HTMLElement} */ (e.currentTarget);
     try { el.setPointerCapture(e.pointerId); } catch { /* synthetic */ }
     this.#drag = { id: Number(el.dataset.id), x: e.clientX, y: e.clientY, dx: 0, dy: 0, el, t: performance.now(), vx: 0, lx: e.clientX, lt: performance.now() };
+    el.classList.remove('hint');
     el.classList.add('dragging');
   };
 
@@ -893,6 +918,7 @@ export class GfDiscover extends LitElement {
         else { this._burst++; const n = this._burst; setTimeout(() => { if (this._burst === n) this._burst = 0; }, 900); }
       }
     };
+    node?.classList.remove('hint');
     if (!node || matchMedia('(prefers-reduced-motion: reduce)').matches) { done(); return; }
     node.classList.add('fly');
     node.style.transform = `translate(${liked ? 140 : -140}vw, -40px) rotate(${liked ? 30 : -30}deg)`;
