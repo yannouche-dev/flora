@@ -31,6 +31,8 @@ function slimHarvest(h) {
 function slimEntry(e, at, personal) {
   /** @type {Record<string, any>} */
   const out = {};
+  // An occurrence's own id (a plant noted several times in a place): kept, so devices agree on which is which.
+  if (e.id && e.id !== 'p' + e.plantId) out.id = e.id;
   if (e.plantId !== null) out.plantId = e.plantId;
   else out.scientificName = e.scientificName; // unknown to this flora: the name is all there is
   if (e.abundance && e.abundance !== 'moyen') out.abundance = e.abundance;

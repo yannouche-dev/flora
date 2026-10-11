@@ -99,11 +99,11 @@ export class GfPlantSpots extends LitElement {
 
   /** ✓ Valider on the map (✎): this plant's new position in each place it was moved in. @param {{ placeId: string, plantId: number | null, coordinates: [number, number] }[]} moves */
   async #savePositions(moves) {
-    for (const { placeId, plantId, coordinates } of moves) {
+    for (const { placeId, entryId, plantId, coordinates } of moves) {
       const place = this._spots.find(p => p.id === placeId);
       if (!place) continue;
       const rounded = /** @type {[number, number]} */ (coordinates.map(v => Math.round(v * 1e7) / 1e7));
-      await savePlace(withEntry(place, plantId, { coordinates: rounded, accuracy: null })).catch(error => { this._error = 'Enregistrement impossible : ' + error.message; });
+      await savePlace(withEntry(place, entryId ?? plantId, { coordinates: rounded, accuracy: null })).catch(error => { this._error = 'Enregistrement impossible : ' + error.message; });
     }
   }
 
@@ -125,7 +125,7 @@ export class GfPlantSpots extends LitElement {
           fit
           editable
           @positions-save=${e => this.#savePositions(e.detail.plants)}
-          @plant-select=${e => { location.hash = href.map({ spot: e.detail.placeId, focus: e.detail.plantId }); }}
+          @plant-select=${e => { location.hash = href.map({ spot: e.detail.placeId, focus: e.detail.entryId ?? e.detail.plantId }); }}
         ></gf-map>
         <ul>
           ${spots.map((place, i) => {

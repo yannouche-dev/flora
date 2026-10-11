@@ -5,7 +5,7 @@ import './history.js';
 
 /**
  * @typedef {{ name: 'search' } | { name: 'plant', id: number, pane: string | null, at: number | null } | { name: 'settings' } | { name: 'collections', open: string | null, plant: number | null }
- *   | { name: 'map', spot: string | null, plant: number | null, focus: number | null, season: boolean, add: number | null, pick: boolean, flore: boolean }
+ *   | { name: 'map', spot: string | null, plant: number | null, focus: string | null, season: boolean, add: number | null, pick: boolean, flore: boolean }
  *   | { name: 'spot-new', plant: number | null, kind: 'list' | 'place', at: [number, number] | null }
  *   | { name: 'spot', id: string, add: number | null, pick: boolean }
  *   | { name: 'shared', data: string } | { name: 'discover', plant: number | null, scenario: string | null }
@@ -13,6 +13,9 @@ import './history.js';
  */
 
 /** @param {string} hash @returns {Route} */
+/** A plant of a place in an address: an occurrence id, or a plant id (older links). @param {string | null} v */
+const focusParam = v => v && /^[\w-]{1,48}$/.test(v) ? v : null;
+
 export function parse(hash) {
   const [path, search = ''] = hash.replace(/^#\/?/, '').split('?');
   const params = new URLSearchParams(search);
@@ -29,7 +32,7 @@ export function parse(hash) {
 
   if (path === 'map') {
     return {
-      name: 'map', spot: params.get('spot'), plant: number('plant'), focus: number('focus'), season: params.get('season') === '1',
+      name: 'map', spot: params.get('spot'), plant: number('plant'), focus: focusParam(params.get('focus')), season: params.get('season') === '1',
       add: number('add'), pick: params.get('pick') === '1', flore: params.get('from') === 'flore'
     };
   }
@@ -81,7 +84,7 @@ export const href = {
    * `focus`: a plant of the selected place (its marker highlighted, its details open); `add` pre-adds a plant
    * to the selected place, `pick` opens its plant picker.
    */
-  map: (/** @type {{ spot?: string, plant?: number, focus?: number, season?: boolean, add?: number, pick?: boolean, flore?: boolean }} */ options = {}) => {
+  map: (/** @type {{ spot?: string, plant?: number, focus?: string | number, season?: boolean, add?: number, pick?: boolean, flore?: boolean }} */ options = {}) => {
     const params = new URLSearchParams();
     if (options.spot) params.set('spot', options.spot);
     if (options.spot && options.add) params.set('add', String(options.add));

@@ -486,6 +486,14 @@ gf-map:has(.gf-point-card) .leaflet-bottom {
 .gf-obs-card small { color: var(--gf-text-muted, #5b6b5b); font-size: 0.72rem; margin-top: 2px; }
 .leaflet-popup.gf-obs-tip .leaflet-popup-content-wrapper { padding: 0; border-radius: 12px; overflow: hidden; }
 .leaflet-popup.gf-obs-tip .leaflet-popup-content { margin: 0; width: auto !important; }
+/* The points' little cards: floating above everything (the top layer), never under a button or a panel. */
+gf-map .gf-float-tip { position: fixed; inset: auto; left: 0; top: 0; z-index: 6000; margin: 0; padding: 4px 9px; border: 0; border-radius: 8px; overflow: hidden;
+  background: var(--gf-surface, #fff); color: var(--gf-text, #1f2a1f); box-shadow: 0 6px 20px rgb(0 0 0 / 28%); font: 12.5px/1.3 system-ui, sans-serif;
+  white-space: nowrap; pointer-events: none; display: none; }
+gf-map .gf-float-tip.on { display: block; }
+gf-map .gf-float-tip.card { padding: 0; border-radius: 12px; white-space: normal; box-shadow: 0 8px 24px rgb(0 0 0 / 30%); }
+gf-map .gf-float-tip::backdrop { display: none; }
+gf-map .gf-float-tip .gf-obs-card img { width: 180px; height: 120px; }
 /* A group touched: its points spread around it, each on a thread. */
 .gf-spread-thread { stroke: #3d4a3d; stroke-width: 1.2; stroke-opacity: 0.55; fill: none; }
 .gf-spread-center { stroke: #fff; stroke-width: 2; fill: #3d4a3d; fill-opacity: 0.8; }

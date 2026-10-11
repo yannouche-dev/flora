@@ -6,9 +6,8 @@ import { watchLocation } from '../core/geo.js';
 import { href } from '../core/router.js';
 import { openModal } from '../core/history.js';
 import {
-  deleteCollection, distance, findEntry, listPlaces, nearbyPlaces, newPlace, placeTitle, recentPlants, rememberPlant,
-  saveCollection, withEntry, withPlant
-} from '../core/collections.js';
+  deleteCollection, distance, listPlaces, nearbyPlaces, newPlace, placeTitle, recentPlants, rememberPlant,
+  saveCollection, withEntry, withPlant, entriesOf, lastEntry } from '../core/collections.js';
 import { store, StoreController } from '../core/store.js';
 import { lookalikeWarning } from '../core/lookalikes.js';
 import { statusWarning } from './gf-status.js';
@@ -34,6 +33,9 @@ const today = () => {
  * within 30 m, or in a new place. Suggestions first: plants around you, favorites, recent.
  * Opened with `open()`; shows an undo toast afterwards.
  */
+
+/** Within this distance (m), the plant noted again is the same occurrence; farther, another one. */
+const SAME_SPOT = 15;
 export class GfCapture extends LitElement {
   static properties = {
     _fix: { state: true },
@@ -221,14 +223,17 @@ export class GfCapture extends LitElement {
       const before = nearest?.place ? structuredClone(nearest.place) : null;
       // The plant is noted exactly where you stand; the place keeps its own point.
       const here = { coordinates: fix.coordinates, accuracy: Math.round(fix.accuracy) };
-      let place = before
-        ? withPlant(before, plant, here)
+      // Already noted right here (within a few metres): the same occurrence (today's harvest goes on it);
+      // elsewhere in the place: another occurrence of it, at this spot.
+      const same = before ? entriesOf(before, plant.id).find(e => e.coordinates && distance(e.coordinates, here.coordinates) <= SAME_SPOT) : null;
+      let place = same && before ? before
+        : before ? withPlant(before, plant, here, { again: true })
         : withPlant(newPlace(fix.coordinates, { accuracy: here.accuracy }), plant, here);
       const harvest = this.#store.state.harvestMode && this._harvestToday;
       if (harvest) {
-        const entry = /** @type {any} */ (findEntry(place, plant.id));
+        const entry = /** @type {any} */ (same || lastEntry(place));
         if (!entry.harvests.some(h => h.date === today())) {
-          place = withEntry(place, plant.id, { harvests: [{ date: today(), quantity: '', note: '' }, ...entry.harvests] });
+          place = withEntry(place, entry.id, { harvests: [{ date: today(), quantity: '', note: '' }, ...entry.harvests] });
         }
       }
       const saved = await saveCollection(place);

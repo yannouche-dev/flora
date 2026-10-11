@@ -5,8 +5,7 @@ import { GeoController } from '../core/geo.js';
 import { href } from '../core/router.js';
 import {
   FAVORITES_ID, collectionTitle, discardMissingBackup, distance, exportGeoJSON, formatDistance, inSeason, lastExportDate,
-  listCollections, missingFromBackup, plantCount, plantMarkers, restoreBackup, soon, spotEvents
-} from '../core/collections.js';
+  listCollections, missingFromBackup, plantCount, plantMarkers, restoreBackup, soon, spotEvents, findEntry } from '../core/collections.js';
 import { config } from '../config.js';
 import { StoreController, plantViewOf, whenReady } from '../core/store.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
@@ -325,8 +324,8 @@ export class GfCollections extends LitElement {
       .plants=${plants}
       plant-zoom="0"
       no-search
-      .frame=${{ key: place.id + ':' + points.length, points }}
-      .selectedPlant=${this.route.plant ? place.id + ':' + this.route.plant : null}
+      .frame=${{ key: place.id + ':' + points.map(c => c.join(',')).join(';'), points, ease: true }}
+      .selectedPlant=${this.route.plant && findEntry(place, this.route.plant) ? place.id + ':' + findEntry(place, this.route.plant)?.id : null}
       @plant-select=${(/** @type {CustomEvent} */ e) => { location.hash = href.collections({ open: place.id, plant: e.detail.plantId }); }}
     ></gf-map>`;
   }

@@ -6,7 +6,9 @@
 /**
  * @typedef {{ date: string, quantity?: string, note?: string }} Harvest
  * @typedef {'rare' | 'moyen' | 'abondant'} Abundance
- * @typedef {object} PlantEntry          one plant growing at a place
+ * @typedef {object} PlantEntry          one plant growing at a place — in a place, the same species may be noted
+ *                                       several times (along a walk), each occurrence its own entry
+ * @property {string} id                 the entry's own id (stable; « p<plantId> » for entries older than it)
  * @property {number | null} plantId
  * @property {string} scientificName
  * @property {string | null} vernacularName
@@ -60,8 +62,11 @@ export function validCoordinates(c) {
  */
 export function normalizeEntry(e, fallbackDate, placeCoordinates = null) {
   const own = placeCoordinates ? validCoordinates(e?.coordinates) : null;
+  const plantId = isNumber(e?.plantId) ? e.plantId : null;
   return {
-    plantId: isNumber(e?.plantId) ? e.plantId : null,
+    // Entries from before occurrences had no id: one derived from the plant, the same at every read.
+    id: typeof e?.id === 'string' && ENTRY_ID.test(e.id) ? e.id : 'p' + (plantId ?? text(e?.scientificName, 40).replace(/[^\w-]+/g, '_')),
+    plantId,
     scientificName: text(e?.scientificName, 300),
     vernacularName: e?.vernacularName ? text(e.vernacularName, 300) : null,
     abundance: ABUNDANCES.includes(e?.abundance) ? e.abundance : 'moyen',
@@ -72,6 +77,22 @@ export function normalizeEntry(e, fallbackDate, placeCoordinates = null) {
     coordinates: own || (placeCoordinates ? [placeCoordinates[0], placeCoordinates[1]] : null),
     accuracy: own && isNumber(e?.accuracy) ? e.accuracy : null
   };
+}
+
+const ENTRY_ID = /^[\w-]{1,48}$/;
+
+/** A new entry id: unique on this device (time + random). */
+export const newEntryId = () => 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+/** Entry ids unique within a collection (an import may repeat one): the later ones get a suffix, the same each time. @param {PlantEntry[]} plants */
+function uniqueIds(plants) {
+  const seen = new Set();
+  return plants.map(e => {
+    let id = e.id;
+    for (let n = 2; seen.has(id); n++) id = `${e.id}-${n}`.slice(-48);
+    seen.add(id);
+    return id === e.id ? e : { ...e, id };
+  });
 }
 
 /** @param {PlantEntry[]} plants */
@@ -112,7 +133,7 @@ export function normalizeCollection(feature) {
   /** @type {PlantEntry[]} */
   let plants;
   if (Array.isArray(p.plants)) {
-    plants = p.plants.map(e => normalizeEntry(e, createdAt, placePoint)).filter(e => e.plantId !== null || e.scientificName);
+    plants = uniqueIds(p.plants.map(e => normalizeEntry(e, createdAt, placePoint)).filter(e => e.plantId !== null || e.scientificName));
   } else if (isNumber(p.plantId) || p.scientificName) {
     // Format 1: one plant per spot, its fields at the top level (its position is the spot's).
     plants = [normalizeEntry({ ...p, coordinates: null, addedAt: createdAt }, createdAt, placePoint)];
