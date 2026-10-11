@@ -170,19 +170,35 @@ export function observationsInBox(taxonId, [w, s, e, n], signal) {
 }
 
 /**
- * Where plants were observed in the circle (up to the 1000 most recent research-grade observations, every
- * species — 200 a page, the pages asked together), and how many there are in all; for a map behind the distance
- * chosen. Cached for a day like the rest.
+ * Where plants were observed in the circle: the 100 most recent research-grade observations (every species), each
+ * with its photo, names, date and place — for a map behind the distance chosen —, and how many there are in all.
+ * Cached for a day like the rest.
  * @param {[number, number]} point @param {number} radius @param {AbortSignal} [signal]
- * @returns {Promise<{ points: { coordinates: [number, number], title: string }[], total: number }>}
+ * @returns {Promise<{ points: AroundPoint[], total: number }>}
  */
 export function observationPointsAround(point, radius, signal) {
   if (!moduleOn('inaturalist')) return Promise.reject(new ModuleOffError('inaturalist'));
-  return cached(`around-points2:${area(point, radius)}`, async () => {
-    const { results, total } = await paged(`${area(point, radius)}&iconic_taxa=Plantae&quality_grade=research&locale=fr&order_by=observed_on`, 1000, signal);
-    return { points: results.map(o => ({ coordinates: /** @type {[number, number]} */ (o.geojson.coordinates), title: o.taxon?.preferred_common_name || o.taxon?.name || 'Plante' })), total };
+  return cached(`around-points3:${area(point, radius)}`, async () => {
+    const data = await json(`${API}/observations?${area(point, radius)}&iconic_taxa=Plantae&quality_grade=research&locale=fr&per_page=100&order_by=observed_on`, signal);
+    const points = (data.results || []).filter(o => Array.isArray(o.geojson?.coordinates)).map(o => {
+      const photo = o.photos?.[0]?.url || o.taxon?.default_photo?.square_url || null;
+      const common = o.taxon?.preferred_common_name || null, sci = o.taxon?.name || '';
+      return {
+        coordinates: /** @type {[number, number]} */ (o.geojson.coordinates),
+        title: common || sci || 'Plante', common, sci,
+        photo: photo ? photo.replace(/\/(square|thumb|small|medium)\./, '/square.') : null,
+        date: o.observed_on || null, place: o.place_guess || null,
+        url: o.uri || `https://www.inaturalist.org/observations/${o.id}`
+      };
+    });
+    return { points, total: Number(data.total_results) || points.length };
   });
 }
+
+/**
+ * @typedef {{ coordinates: [number, number], title: string, common: string | null, sci: string, photo: string | null,
+ *   date: string | null, place: string | null, url: string }} AroundPoint
+ */
 
 /** The radius chosen last (Carte → Autour). */
 export function savedRadius() {

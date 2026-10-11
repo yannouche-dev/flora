@@ -28,6 +28,8 @@ export const SCENARIOS = [
     play: () => { if (current('harvest')) resetChoices(); setHarvestMode(true); location.hash = href.discover(null, 'harvest'); }, played: () => current('harvest') },
   { key: 'mosaic', title: 'Mosaïque', icon: 'images', pitch: 'Toutes les photos des plantes du coin, en grand. Une image touchée : toutes celles de la plante.',
     play: () => { if (current('mosaic')) resetChoices(); location.hash = href.discover(null, 'mosaic'); }, played: () => current('mosaic') },
+  { key: 'trail', title: 'Parcours botanique', icon: 'geo-alt-fill', pitch: 'Marchez, nommez les plantes que vous croisez : chacune prend sa place sur la carte de votre parcours.',
+    play: () => { location.hash = href.discover(null, 'trail'); }, played: () => current('trail') },
   { key: 'science', title: 'Scientifique', icon: 'table', pitch: 'Toutes les données et tous les outils : la flore complète, les fiches en mode Scientifique.',
     play: () => { setMode('scientific'); finishDiscover(); location.hash = href.search(); } },
   { key: 'map', title: 'La carte d’abord', icon: 'map', pitch: 'La carte au centre, la flore et la fiche en panneaux autour.', soon: true },

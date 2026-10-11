@@ -341,6 +341,8 @@ export class GfPlantDetail extends LitElement {
     outerRail: { type: Boolean, attribute: 'outer-rail' },
     /** The panes of the tree only, not the sheet (Découvrir: the panes its steps add, beside the cards). */
     panesOnly: { type: Boolean, attribute: 'panes-only' },
+    /** Panes only: the blocks shown in them (Découvrir: those its steps added), the others left out. */
+    paneKeys: { attribute: false },
     /** Épuré (photo and one-tap actions), standard (general public), scientific (every data). */
     view: { reflect: true },
     _wiki: { state: true },
@@ -911,6 +913,8 @@ export class GfPlantDetail extends LitElement {
     this._alerts = null;
     this.outerRail = false;
     this.panesOnly = false;
+    /** @type {string[] | null} */
+    this.paneKeys = null;
     this._newNote = false;
     /** Note block whose text was just saved. @type {string | null} */
     this._noteSaved = null;
@@ -1356,7 +1360,12 @@ export class GfPlantDetail extends LitElement {
     /** @param {any} n @returns {any} */
     const drop = n => {
       if (!n || n.t === 'sheet') return null;
-      if (n.t === 'stack') return n;
+      if (n.t === 'stack') {
+        const keys = this.paneKeys;
+        if (!keys) return n;
+        const tabs = n.tabs.filter((/** @type {string} */ k) => keys.includes(k));
+        return tabs.length ? { ...n, tabs } : null;
+      }
       const kids = [], sizes = [];
       n.kids.forEach((/** @type {any} */ k, /** @type {number} */ i) => { const c = drop(k); if (c) { kids.push(c); sizes.push(n.sizes[i]); } });
       return !kids.length ? null : kids.length === 1 ? kids[0] : { ...n, kids, sizes };
