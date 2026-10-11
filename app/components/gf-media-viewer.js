@@ -24,6 +24,8 @@ import './gf-attribution.js';
 /** @typedef {import('../core/media-items.js').MediaItem} MediaItem */
 
 const KINDS = /** @type {const} */ ([['all', 'Tous les médias'], ['photo', 'Photos'], ['observation', 'Observations'], ['herbarium', 'Herbier']]);
+/** Photos first, herbarium sheets last (prefer-photos). @type {Record<string, number>} */
+const PHOTO_RANK = { photo: 0, observation: 1, herbarium: 2 };
 const KIND_LABEL = { photo: 'Photo', observation: 'Photo d’observation', herbarium: 'Planche d’herbier' };
 /** The part menu: label and icon of each part. */
 const PART_INFO = { all: ['Toutes les parties', 'images'], flower: ['Fleur', 'flower3'], leaf: ['Feuille', 'leaf'], fruit: ['Fruit', 'fruit'],
@@ -65,6 +67,8 @@ export class GfMediaViewer extends LitElement {
     compact: { type: Boolean, reflect: true },
     /** Stuck to an edge of the plant pane. */
     local: { type: Boolean, reflect: true },
+    /** Photos first (photos, then observation photos; herbarium sheets last), whatever the sheet chose (Découvrir). */
+    preferPhotos: { type: Boolean, attribute: 'prefer-photos' },
     /** 'scene' (stage and filmstrip), 'mosaic' (every image in a grid) or 'slideshow' (one image, full frame). */
     presentation: { reflect: true },
     _opened: { state: true },
@@ -250,6 +254,7 @@ export class GfMediaViewer extends LitElement {
     this.startUrl = null;
     this.compact = false;
     this.local = false;
+    this.preferPhotos = false;
     /** @type {string} */
     this.presentation = 'scene';
     // The display chosen on the previous plant.
@@ -330,8 +335,10 @@ export class GfMediaViewer extends LitElement {
     // Until the user zooms or moves, the image keeps the chosen view (its shape and the stage's can still change).
     // Put there at once, never animated: no « speed zoom » when the true shape arrives — the image only fades in.
     if (!this.#touched && (changed.has('_key') || changed.has('_stage') || changed.has('_natural'))) this.#toHome(false);
-    // The display follows to the next plant.
-    if (changed.has('_filter') || changed.has('_part') || changed.has('_info') || changed.has('_opened') || changed.has('_playing')) {
+    // Photos first (Découvrir): every medium, in that order — not the type or part the sheet was left on.
+    if (changed.has('preferPhotos') && this.preferPhotos) { this._filter = 'all'; this._part = 'all'; }
+    // The display follows to the next plant (not from a viewer that has its own start).
+    if (!this.preferPhotos && (changed.has('_filter') || changed.has('_part') || changed.has('_info') || changed.has('_opened') || changed.has('_playing'))) {
       setMediaSession({ filter: this._filter, part: this._part, info: this._info, opened: this._opened, playing: this._playing });
     }
   }
@@ -387,7 +394,8 @@ export class GfMediaViewer extends LitElement {
    * kept for the next plant); while loading, nothing yet (no image that would be replaced at once).
    */
   get #shown() {
-    const kind = this._filter, part = this._part, items = this.#alive;
+    const kind = this._filter, part = this._part;
+    const items = this.preferPhotos ? [...this.#alive].sort((a, b) => PHOTO_RANK[a.kind] - PHOTO_RANK[b.kind]) : this.#alive;
     const list = items.filter(i => (kind === 'all' || i.kind === kind) && (part === 'all' || i.part === part));
     if (list.length || (kind === 'all' && part === 'all')) return list;
     if (!this._done) return [];
