@@ -219,16 +219,19 @@ export class GfApp extends LitElement {
   }
 
   /** @param {import('../core/router.js').Route} route */
+  #flora(route) { return html`<gf-flora .route=${route}></gf-flora>`; }
+
+  /** @param {import('../core/router.js').Route} route */
   #outlet(route) {
     switch (route.name) {
       case 'discover':
         document.title = 'Découvrir — GeoFlora';
         return html`<gf-discover .open=${route.plant} .scenario=${route.scenario}></gf-discover>`;
       case 'search':
-        if (!tabShown('flore')) return html`<gf-discover .open=${null} .scenario=${null}></gf-discover>`;
-        return html`<gf-flora .route=${route}></gf-flora>`;
       case 'plant':
-        return html`<gf-flora .route=${route}></gf-flora>`;
+        if (route.name === 'search' && !tabShown('flore')) return html`<gf-discover .open=${null} .scenario=${null}></gf-discover>`;
+        // One template for the list and a plant: Lit keeps the same gf-flora (its list, filters, scroll), only the route changes.
+        return this.#flora(route);
       case 'map':
         return html`<gf-map-page .route=${route}></gf-map-page>`;
       case 'collections':

@@ -359,7 +359,6 @@ export class GfPlantDetail extends LitElement {
     /** The plant's alerts, as counts on the rubric icons (alerts.js). */
     _alerts: { state: true },
     /** The sheet is wide enough for the rubrics in a column on its left. */
-    _railCol: { state: true },
     /** The edge shown over the whole plant pane for now (Échap or its button puts it back). */
     _maxEdge: { state: true },
     /** The sheet is wide enough for columns on its left and right edges (else they are bands at the top). */
@@ -817,8 +816,8 @@ export class GfPlantDetail extends LitElement {
     .place-grid .p-beside { grid-area: x; }
     .edge[data-edge='bottom'] .place-grid { top: auto; bottom: 100%; }
     /*
-     * Side rail: an icon per category of the sheet's blocks (Noms, Images, Protection…). Narrow sheet: a strip
-     * stuck at the top; wide: a column stuck on the left. Hover (or focus): the category's blocks.
+     * The rubrics (when no host shows them in its header): a strip stuck at the top, whatever the width — the
+     * same skeleton as every other sheet, never a side column. Hover (or focus): the rubric's blocks.
      */
     .railed { --rail-h: 44px; }
     .rail { position: sticky; top: -16px; z-index: 9; margin: -16px -16px 6px; padding: 4px 10px; background: var(--gf-surface); border-bottom: 1px solid var(--gf-border); }
@@ -826,15 +825,6 @@ export class GfPlantDetail extends LitElement {
     .block { scroll-margin-top: calc(var(--rail-h, 0px) + 8px); }
     .block[data-flash] { animation: flash 1.2s ease-out; }
     @keyframes flash { from { box-shadow: 0 0 0 3px var(--gf-accent); } to { box-shadow: 0 0 0 3px transparent; } }
-    @container (min-width: 560px) {
-      .railed { --rail-h: 0px; display: grid; grid-template-columns: 44px minmax(0, 1fr); column-gap: 8px; }
-      .rail { top: 0; align-self: start; margin: 0 0 0 -8px; padding: 6px 4px; border: 0; border-right: 1px solid var(--gf-border); background: none; }
-      :host([embedded]) .rail { top: 0; margin: 0 0 0 -6px; }
-      .railed-sheet { min-width: 0; }
-      /* With edges: the rail beside the frame, both as high as the pane. */
-      :host([edged]) .railed { display: grid; grid-template-rows: minmax(0, 1fr); column-gap: 0; }
-      :host([edged]) .rail { margin: 0; padding: 6px 4px; border-right: 1px solid var(--gf-border); }
-    }
     @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } .block[data-flash] { animation: none; } }
   `];
 
@@ -867,7 +857,6 @@ export class GfPlantDetail extends LitElement {
     this._maxEdge = sheetSession.maxEdge;
     /** @type {{ safety: any, edible: any } | null} */
     this._alerts = null;
-    this._railCol = false;
     this.outerRail = false;
     this._newNote = false;
     /** Note block whose text was just saved. @type {string | null} */
@@ -904,8 +893,6 @@ export class GfPlantDetail extends LitElement {
     this.style.setProperty('--host-h', Math.round(entry.contentRect.height + this.#padY()) + 'px');
     const wide = entry.contentRect.width >= 640;
     if (wide !== this._wideSheet) this._wideSheet = wide;
-    const col = entry.contentRect.width >= 560;
-    if (col !== this._railCol) this._railCol = col;
   });
 
   #padY() {
@@ -1666,7 +1653,7 @@ export class GfPlantDetail extends LitElement {
     const items = this.#railItems(ctx);
     if (this.outerRail) { this.#railOut = items; return nothing; }
     if (!items.length) return nothing;
-    return html`<div class="rail"><gf-sheet-rail .items=${items} .active=${this._activeCat} orientation=${this._railCol ? 'column' : 'row'}
+    return html`<div class="rail"><gf-sheet-rail .items=${items} .active=${this._activeCat} orientation="row"
       @rail-go=${(/** @type {CustomEvent} */ e) => this.goTo(e.detail.key)}></gf-sheet-rail></div>`;
   }
   /** @type {any[] | null} */ #railOut = null;

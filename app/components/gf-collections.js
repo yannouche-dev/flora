@@ -571,7 +571,8 @@ export class GfCollections extends LitElement {
   /** The plant's rubrics, in its pane's header (as in Flore): a touch goes there in the sheet. @param {number} plantId */
   #plantRail(plantId) {
     const rail = this._rail;
-    if (!rail || rail.plantId !== plantId || !rail.items.length) return 'Plante';
+    // The previous plant's rubrics stay until the new sheet tells its own: the header does not blink.
+    if (!rail || !rail.items.length) return 'Plante';
     return html`<span class="visually-hidden">Plante</span><gf-sheet-rail .items=${rail.items} .active=${rail.active} orientation="row"
       @rail-go=${(/** @type {CustomEvent} */ e) => /** @type {any} */ (this.renderRoot.querySelector('gf-plant-detail'))?.goTo(e.detail.key)}></gf-sheet-rail>`;
   }

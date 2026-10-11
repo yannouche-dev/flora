@@ -98,8 +98,11 @@ export class GfContextBar extends LitElement {
     this.#count = 0;
     if (!contextBarOn() || r.name === 'settings' || r.name === 'not-found') return nothing;
 
+    // Flore (its list, a plant beside it) shows its own search and plant: none of their chips there, on the list as
+    // on a plant — the bar stays the same from one to the other, and nothing under it moves.
+    const flore = r.name === 'search' || r.name === 'plant';
     // The plant: unless it is the one shown.
-    const shownPlant = r.name === 'plant' ? r.id : r.name === 'collections' ? r.plant : r.name === 'map' ? (r.focus || r.plant) : null;
+    const shownPlant = flore ? c.plant : r.name === 'collections' ? r.plant : r.name === 'map' ? (r.focus || r.plant) : null;
     if (c.plant && c.plant !== shownPlant) {
       this.#name(c.plant);
       chips.push(this.#chip(href.plant(c.plant), icon('leaf'), this._names.get(c.plant) || '…', 'la plante', () => clearContext('plant')));
@@ -113,8 +116,8 @@ export class GfContextBar extends LitElement {
       else if (summary) chips.push(this.#chip(href.collections({ open: summary.id }), kindIcon(summary.kind), summary.name, 'la collection', () => clearContext('collection')));
     }
 
-    // The Flore search: unless Flore's list is shown, or there is nothing searched.
-    if (c.query && r.name !== 'search') {
+    // The Flore search: unless in Flore, or there is nothing searched.
+    if (c.query && !flore) {
       const q = fromHash(c.query);
       const filters = activeFilterCount(q);
       if (q.q || filters) {
