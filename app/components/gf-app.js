@@ -9,7 +9,6 @@ import './gf-settings.js';
 import './gf-map-page.js';
 import './gf-spot-editor.js';
 import './gf-collections.js';
-import './gf-context-bar.js';
 import './gf-shared.js';
 import './gf-capture.js';
 import './gf-tabbar.js';
@@ -189,7 +188,6 @@ export class GfApp extends LitElement {
         ${status === 'error' ? html`<div class="banner error" role="alert">${statusText}
           <button class="link" type="button" @click=${() => location.reload()}>Recharger</button></div>` : nothing}
         ${offline && status === 'ready' && route.name === 'search' ? html`<div class="banner">Hors ligne — recherche sur la copie locale.</div>` : nothing}
-        <gf-context-bar .route=${route}></gf-context-bar>
         ${this.#outlet(route)}
       </main>
       ${phone ? html`<gf-tabbar current=${tab}></gf-tabbar>` : html`<span></span>`}

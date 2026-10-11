@@ -50,7 +50,6 @@ export const config = {
     collectionsOpen: 'geoflora.collectionsOpen',
     // Where the user is in each part (search, plant, collection, Carte): kept across tabs and reloads.
     context: 'geoflora.context',
-    contextBar: 'geoflora.contextBar',
     modules: 'geoflora.modules',
     // Display modes made from the app's three (Réglages › Modes d'affichage).
     modes: 'geoflora.modes'

@@ -34,7 +34,6 @@ import { baseOf, isMode, modeEvents, modeList } from './modes.js';
  * @property {SheetLayout} sheetLayout  the plant sheet as arranged in « Mode King » (see sheet-blocks.js)
  * @property {string | null} target       collection or place the Épuré plant sheet adds to in one tap (last used)
  * @property {import('./context.js').Context} [context]  where the user is in each part (see context.js)
- * @property {boolean} [contextBar]  the context bar under the header is shown
  * @property {Record<import('./modules.js').ModuleKey, Record<Mode, boolean>>} modules  online services used in each mode (Réglages › Modules)
  * @property {import('./modes.js').ModeInfo[]} modes  the display modes: the app's three and the ones made from them
  * @property {boolean} kingMode         « Mode King »: the plant sheet blocks can be moved, folded and revived (left with the crown)

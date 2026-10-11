@@ -7,6 +7,7 @@ import * as openData from '../core/open-data.js';
 import { chartStyles, climateChart } from '../core/charts.js';
 import { icon } from '../core/icons.js';
 import { ui } from '../styles/ui.js';
+import { hideImg, showImg } from '../core/img.js';
 
 /** Radius of « Plantes vues ici » (metres). */
 const SEEN_RADIUS = 500;
@@ -118,7 +119,7 @@ export class GfPlaceInsights extends LitElement {
         : !s.species.length ? html`<p class="muted">Aucune plante observée (et validée) à moins de ${SEEN_RADIUS} m sur iNaturalist.</p>`
         : html`<p class="summary"><strong>${s.species.length}</strong> espèce${s.species.length > 1 ? 's' : ''} observée${s.species.length > 1 ? 's' : ''}, ${s.observations.toLocaleString('fr-FR')} observation${s.observations > 1 ? 's' : ''} ; les plus vues :</p>
           <ul class="seen">${s.species.slice(0, max).map((/** @type {any} */ x) => {
-            const inner = html`${x.photo ? html`<img src=${x.photo} alt="" loading="lazy" referrerpolicy="no-referrer" />` : html`<span class="ph"></span>`}
+            const inner = html`${x.photo ? html`<img src=${x.photo} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />` : html`<span class="ph"></span>`}
               <span class="txt"><b>${x.common || x.name}</b><small>${this.plantIds.includes(x.plantId) ? html`<span class="here">dans ce lieu · </span>` : nothing}${x.count} obs.</small></span>`;
             return html`<li>${x.plantId ? html`<a href=${href.plant(x.plantId)} title=${x.name}>${inner}</a>` : html`<span class="plain" title=${x.name}>${inner}</span>`}</li>`;
           })}</ul>

@@ -51,31 +51,6 @@ export function setContext(patch) {
 }
 
 /**
- * Forgets one part of the context (the bar's ✕): the plant, the collection or place, or the search; the tabs
- * that showed it go back to their start.
- * @param {'plant' | 'collection' | 'query'} key
- */
-export function clearContext(key) {
-  const c = context();
-  if (key === 'plant') {
-    setContext({ plant: null, flore: c.flore?.startsWith('#/plant/') ? c.query : c.flore, mine: c.mine && dropParam(c.mine, 'plant'), map: c.map && dropParam(dropParam(c.map, 'plant'), 'focus') });
-  } else if (key === 'collection') {
-    setContext({ collection: null, mine: c.mine && dropParam(dropParam(c.mine, 'c'), 'plant'), map: c.map && dropParam(dropParam(c.map, 'spot'), 'focus') });
-  } else {
-    setContext({ query: null, flore: c.flore?.startsWith('#/plant/') ? c.flore : null });
-  }
-}
-
-/** @param {string} hash @param {string} key */
-function dropParam(hash, key) {
-  const [path, search = ''] = hash.split('?');
-  const params = new URLSearchParams(search);
-  params.delete(key);
-  const rest = params.toString();
-  return path + (rest ? '?' + rest : '');
-}
-
-/**
  * Where a tab goes: back to where it was left; when it is the tab already shown, to its start (the search list,
  * Mes plantes, the whole Carte), so there is always a way back.
  * @param {'flore' | 'mine' | 'map'} tab @param {boolean} [current]
@@ -105,15 +80,7 @@ function follow() {
   }
 }
 
-/** The context bar (under the header) is shown unless switched off in Réglages. */
-export const contextBarOn = () => store.state.contextBar !== false;
-/** @param {boolean} on */
-export function setContextBar(on) {
-  try { if (on) localStorage.removeItem(config.storageKeys.contextBar); else localStorage.setItem(config.storageKeys.contextBar, '0'); } catch { /* this visit only */ }
-  store.set({ contextBar: on });
-}
-
-store.set({ context: read(), contextBar: (() => { try { return localStorage.getItem(config.storageKeys.contextBar) !== '0'; } catch { return true; } })() });
+store.set({ context: read() });
 addEventListener('hashchange', follow);
 addEventListener('popstate', follow);
 addEventListener('gf-location', follow);

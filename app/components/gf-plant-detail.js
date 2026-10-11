@@ -41,6 +41,7 @@ import './gf-sheet-rail.js';
 import { alertsOf } from '../core/alerts.js';
 import { sheetSession } from '../core/sheet-session.js';
 import { openModal } from '../core/history.js';
+import { hideImg, dropFigure, showImg } from '../core/img.js';
 
 /** Remote text is untrusted HTML: keep only its text content (DOMParser never runs scripts). */
 function toText(/** @type {string} */ value) {
@@ -1360,7 +1361,7 @@ export class GfPlantDetail extends LitElement {
         ${shown.map(image => html`
           <figure>
             <a href=${image.sourceUrl || image.pageUrl || image.url} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, image.url)}>
-              <img src=${image.url} alt=${plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" />
+              <img src=${image.url} alt=${plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${dropFigure} @load=${showImg} />
             </a>
             <figcaption><gf-attribution .media=${image}></gf-attribution></figcaption>
           </figure>`)}
@@ -2114,7 +2115,7 @@ export class GfPlantDetail extends LitElement {
         if (baseOf(v) !== 'epure') return this.#gallery(ctx, baseOf(v) === 'standard' ? 6 : Infinity);
         const hero = ctx.images[0];
         return html`<figure class="hero">
-          ${hero ? html`<a href=${hero.sourceUrl || hero.url} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, hero.url)}><img src=${hero.url} alt=${plant.scientificName} decoding="async" referrerpolicy="no-referrer" /></a>
+          ${hero ? html`<a href=${hero.sourceUrl || hero.url} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, hero.url)}><img src=${hero.url} alt=${plant.scientificName} decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} /></a>
             <figcaption><gf-attribution .media=${hero}></gf-attribution></figcaption>`
             : html`<div class=${loading ? 'skeleton' : 'no-photo'} aria-hidden="true">${loading ? '' : icon('flower1')}</div>`}
         </figure>`;
@@ -2431,7 +2432,7 @@ export class GfPlantDetail extends LitElement {
     if (list === undefined) return html`${head}<p class="muted">chargement…</p>`;
     if (!list?.length) return html`${head}<p class="muted">${none}</p>`;
     return html`${head}<div class="gallery ${herbarium ? 'herbarium' : ''}">${list.map(image => html`<figure>
-      <a href=${image.sourceUrl || image.url} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, image.url)}><img src=${image.url} alt=${(herbarium ? 'Planche d’herbier de ' : '') + plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" /></a>
+      <a href=${image.sourceUrl || image.url} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, image.url)}><img src=${image.url} alt=${(herbarium ? 'Planche d’herbier de ' : '') + plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${dropFigure} @load=${showImg} /></a>
       <figcaption>
         ${herbarium ? html`<span class="specimen">${[image.institution, image.catalogNumber && 'n° ' + image.catalogNumber, image.year, image.country].filter(Boolean).join(' · ')}</span>` : nothing}
         ${image.coordinates && this.#hasMap ? this.#focusable({ kind: 'point', label: (herbarium ? 'Planche ' : 'Photo ') + ([image.institution, image.year].filter(Boolean).join(' ') || 'GBIF'), coordinates: image.coordinates, url: image.sourceUrl },

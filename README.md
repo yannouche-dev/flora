@@ -421,7 +421,6 @@ Passerelles :
 - d'une **fiche** : « Carte » (l'onglet Carte filtré sur la plante, avec sa répartition GBIF) et « + *collection courante* », qui ajoute la plante d'un geste à la dernière collection ou au dernier lieu ouvert (le bouton disparaît une fois la plante ajoutée) ; deux actions de la barre, à afficher ou non par mode ;
 - d'une **collection ou d'un lieu** : « Voir dans Flore » (Mes plantes, éditeur de collection, fiche d'un lieu sur la Carte) ouvre la recherche filtrée sur ses plantes ;
 - des **résultats Flore** : l'icône carte ouvre la Carte limitée à mes lieux qui ont une plante de ces résultats (puce « Recherche Flore » pour l'enlever) ;
-- la **barre de contexte**, sous l'en-tête : la plante, la collection et la recherche en cours, chacune un lien pour y revenir et ✕ pour l'oublier ; ce que la page montre déjà n'y figure pas. Elle se masque dans *Réglages › Barre de contexte*.
 
 **Les données de la fiche parlent à ses cartes.** Quand la fiche a une carte (épinglée ou dans la fiche), ses valeurs se touchent (soulignées en pointillés) et la carte les montre :
 - une **région** ou un **département**, un **mois**, une **année**, un **type de relevé** (spécimens d'herbier…), une **source** (jeu de données) : la carte n'affiche plus que ces occurrences GBIF (tuiles GBIF filtrées, présences aux coordonnées sans problème connu) ; une région ou un pays recadre la carte sur ses occurrences ;
