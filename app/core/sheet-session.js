@@ -4,7 +4,9 @@
 // long as the browsing (a new visit starts from the top of the sheet).
 
 /**
- * @typedef {{ filter: string, part: string, info: boolean, playing: boolean, opened: boolean, zoom: 'auto' | 'fit' | 'one' }} MediaSession
+ * @typedef {{ filter: string, part: string, info: boolean, playing: boolean, opened: boolean, lock: number | null }} MediaSession
+ * `lock`: the zoom kept for the next images (% of the original's pixels), locked with the padlock; null: each image
+ * starts filling the stage's width.
  */
 
 export const sheetSession = {
@@ -16,7 +18,7 @@ export const sheetSession = {
   /** In the Wikipédia block: the theme read (its anchor). @type {string | null} */
   anchorWiki: null,
   /** @type {MediaSession} */
-  media: { filter: 'all', part: 'all', info: false, playing: false, opened: false, zoom: 'auto' },
+  media: { filter: 'all', part: 'all', info: false, playing: false, opened: false, lock: null },
   /** Blocks whose sub-blocks list is open. @type {Set<string>} */
   subsOpen: new Set(),
   /** Map blocks whose settings are open. @type {Set<string>} */
