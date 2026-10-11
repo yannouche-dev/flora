@@ -85,6 +85,11 @@ export function setStep(step) {
   save({ step });
   if (step >= LAST_STEP) finishDiscover();
 }
+/** Back to an earlier step (« Précédent »): before the fork, the way chosen is forgotten. @param {number} step */
+export function stepBack(step) {
+  if (step >= state.step || step < 0) return;
+  save(step < 3 ? { step, branch: null } : { step });
+}
 /** The step that ends the discovery (the whole app). */
 export const LAST_STEP = 5;
 

@@ -23,7 +23,7 @@ import { watchLocation } from '../core/geo.js';
 import { alertsOf } from '../core/alerts.js';
 import { plantViewOf, setHarvestMode, setMode, StoreController, whenReady } from '../core/store.js';
 import { dockBlock, paneOf, setStackState } from '../core/sheet-blocks.js';
-import { chooseBranch, discoverEvents, discoverState, discovering, finishDiscover, firstMatchShown, plantSeen, resetPassed, setDiscoverPoint, setDiscoverRadius, setStep, swiped, unswipe, LAST_STEP, PLANTS_BEFORE_FLORE } from '../core/discover.js';
+import { stepBack, chooseBranch, discoverEvents, discoverState, discovering, finishDiscover, firstMatchShown, plantSeen, resetPassed, setDiscoverPoint, setDiscoverRadius, setStep, swiped, unswipe, LAST_STEP, PLANTS_BEFORE_FLORE } from '../core/discover.js';
 import { lookalikesOf } from '../core/lookalikes.js';
 import { scenarioOf } from '../core/scenarios.js';
 import { sheetSession } from '../core/sheet-session.js';
@@ -49,6 +49,8 @@ const PAGE = 12;
 /** Past this many points, a map groups them. */
 const MANY = 250;
 /** The scopes offered after a match: where else the plant grows. */
+/** The steps of the discovery, as the bar shows them. */
+const STAGES = ['Carte', 'Rencontres', 'Photos', 'Encyclopédie', 'Cueillette ou science', 'Voisines'];
 const SCOPES = /** @type {const} */ (['around', 'department', 'region', 'country', 'world']);
 /** The deck has shown it can be swiped (once while the app is open). */
 let hinted = false;
@@ -260,8 +262,37 @@ export class GfDiscover extends LitElement {
     @keyframes burst { from { transform: translate(-50%, -50%) scale(0.4); opacity: 0; } 30% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); } to { transform: translate(-50%, -120%) scale(1); opacity: 0; } }
 
     /* Discovering: blocks side by side — the map, the cards, then the panes the steps add. */
-    .guided { position: absolute; inset: 0; background: var(--gf-bg, var(--gf-surface-2)); }
-    .g-scroll { position: absolute; inset: 0; display: flex; }
+    .guided { position: absolute; inset: 0; display: flex; flex-direction: column; background: var(--gf-bg, var(--gf-surface-2)); }
+    .g-scroll { position: relative; flex: 1; min-height: 0; display: flex; }
+    /* The steps: a bar above the blocks, always in sight — done, the one shown, to come; back and next. */
+    .g-steps { flex: none; display: flex; align-items: center; gap: 10px; padding: 6px 10px; background: var(--gf-surface); border-bottom: 1px solid var(--gf-border); z-index: 2; }
+    .g-steps .mid { flex: 1; min-width: 0; display: grid; gap: 2px; }
+    .g-steps ol { list-style: none; margin: 0; padding: 0; display: flex; align-items: center; gap: 4px; overflow-x: auto; scrollbar-width: none; }
+    .g-steps ol::-webkit-scrollbar { display: none; }
+    .g-steps li { flex: none; display: inline-flex; align-items: center; gap: 5px; font-size: 0.8rem; color: var(--gf-text-muted); white-space: nowrap; }
+    .g-steps li + li::before { content: ''; width: 14px; height: 1px; background: var(--gf-border); margin-right: 2px; }
+    .g-steps .n { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 0.7rem; font-weight: 700; border: 1px solid var(--gf-border); background: var(--gf-surface); }
+    .g-steps li.done .n { background: var(--gf-accent-soft); border-color: var(--gf-accent); color: var(--gf-accent); }
+    .g-steps li.on { color: var(--gf-text); font-weight: 700; }
+    .g-steps li.on .n { background: var(--gf-accent); border-color: var(--gf-accent); color: var(--gf-accent-contrast, #fff); }
+    .g-steps .hint { margin: 0; font-size: 0.78rem; color: var(--gf-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .g-steps .prev { flex: none; display: inline-flex; align-items: center; gap: 2px; min-height: 34px; padding: 0 10px 0 6px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill);
+      background: var(--gf-surface); color: var(--gf-text); font: inherit; font-size: 0.85rem; cursor: pointer; }
+    .g-steps .prev:disabled { opacity: 0.35; cursor: default; }
+    .g-steps .next { flex: none; display: flex; gap: 6px; }
+    .g-steps .next button { min-height: 34px; padding: 0 14px; display: inline-flex; align-items: center; gap: 4px; font-size: 0.88rem; white-space: nowrap; }
+    @media (max-width: 899px) {
+      .g-steps { flex-wrap: wrap; gap: 6px 8px; padding: 6px 8px; }
+      .g-steps .mid { order: -1; flex-basis: 100%; }
+      .g-steps li:not(.on) .l { display: none; }
+      .g-steps .prev span { display: none; }
+      .g-steps .prev { padding: 0 8px; }
+      .g-steps .next { flex: 1; justify-content: flex-end; }
+    }
+    /* The map alone first (its distance): the cards' column slides in next. */
+    .g-deck, .g-map { transition: flex-basis 0.4s ease, padding 0.4s ease; }
+    .guided.asking .g-deck { flex: 0 0 0 !important; padding: 0 !important; overflow: hidden; border: 0 !important; }
+    .guided.asking .g-map { flex: 1 1 auto; border-right: 0; }
     .g-map { flex: 1 1 0; min-width: 260px; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--gf-border); background: var(--gf-surface); }
     .guided.with-panes .g-map { flex: 0 0 min(30%, 380px); }
     .g-mapbox { position: relative; flex: 1; min-height: 0; isolation: isolate; }
@@ -308,7 +339,8 @@ export class GfDiscover extends LitElement {
       .g-deck .actions { gap: 14px; }
       .g-deck .round { width: 50px; height: 50px; font-size: 1.3rem; }
       .g-plant { flex: none; height: 85dvh; }
-      .guided .step-banner { top: 8px; bottom: auto; }
+      .guided.asking .g-mapbox { flex: 1; height: auto; }
+      .guided.asking .g-scroll { overflow: hidden; }
     }
     /* The plants around (step 4): their thumbnails, a touch shows one in the panes. */
     .around { flex: none; width: 270px; border-right: 1px solid var(--gf-border); display: flex; flex-direction: column; min-height: 0; background: var(--gf-surface); }
@@ -323,17 +355,7 @@ export class GfDiscover extends LitElement {
     .around .t b { font-size: 0.86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .around .t small { font-size: 0.74rem; color: var(--gf-text-muted); }
 
-    /* The step offered: a banner with its question, Oui / Plus tard. */
-    .step-banner { position: absolute; z-index: 20; left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); transform: translateX(-50%); width: min(520px, calc(100% - 24px));
-      display: grid; gap: 10px; padding: 14px 16px; border-radius: 16px; background: #1f2a1f; color: #fff; box-shadow: 0 12px 34px rgb(0 0 0 / 35%); animation: rise 0.3s ease-out; }
-    .step-banner p { margin: 0; font-size: 0.98rem; line-height: 1.4; }
-    .step-banner .q { font-weight: 700; }
-    .step-banner .row { justify-content: flex-end; margin: 0; }
-    .step-banner button { min-height: 38px; padding: 6px 16px; border-radius: var(--gf-radius-pill); border: 0; font: inherit; font-weight: 600; cursor: pointer; }
-    .step-banner .yes { background: #9be15d; color: #142014; }
-    .step-banner .later { background: transparent; color: #cfd8cf; }
-    @keyframes rise { from { opacity: 0; transform: translate(-50%, 12px); } }
-    @media (prefers-reduced-motion: reduce) { .card, .burst, .step-banner, .around { transition: none; animation: none; } }  `];
+    @media (prefers-reduced-motion: reduce) { .card, .burst, .around, .g-deck, .g-map { transition: none; animation: none; } }  `];
 
   #store = new StoreController(this);
 
@@ -567,6 +589,7 @@ export class GfDiscover extends LitElement {
     this.#abort?.abort();
     const abort = this.#abort = new AbortController();
     this._loading = true; this._error = null; this._cards = null; this._shown = PAGE;
+    this.#loadedFor = this._radius + ':' + point;
     try {
       await whenReady();
       const radius = this._radius;
@@ -656,7 +679,7 @@ export class GfDiscover extends LitElement {
 
   render() {
     const guided = this.#guided;
-    return html`${!this._point ? this.#welcome() : this._asking || (!this._cards && !this._loading && !this._error) ? this.#distance() : guided ? this.#guidedView() : this.#list()}
+    return html`${!this._point ? this.#welcome() : guided ? this.#guidedView() : this._asking || (!this._cards && !this._loading && !this._error) ? this.#distance() : this.#list()}
       ${this._match ? this.#matchView(this._match) : nothing}
       ${this.open != null && !guided ? this.#plantSheet() : nothing}`;
   }
@@ -939,7 +962,9 @@ export class GfDiscover extends LitElement {
         // The first match (while discovering): its screen, once — Rencontres: a heart, and its photos offered (the
         // panes show it until the next card). The next ones: a heart.
         const first = discovering() && !discoverState().firstMatch;
-        if (first && this.#guided) { firstMatchShown(); this._focus = card.plant.id; this.#restartDwell(); }
+        // Rencontres: the first match brings its photos at once (the third block, zoomed).
+        // The panes follow the deck like a list: the card on top (the matched one has gone; its heart flies off).
+        if (first && this.#guided) { firstMatchShown(); this.#restartDwell(); if (discoverState().step === 0) this.#accept(1); }
         if (first && !this.#guided) this._match = card;
         else { this._burst++; const n = this._burst; setTimeout(() => { if (this._burst === n) this._burst = 0; }, 900); }
       }
@@ -986,7 +1011,7 @@ export class GfDiscover extends LitElement {
   // ── Discovering: the cards, and beside them the panes the steps add to the layout ──
 
   /** Discovering (Rencontres, after the first match): the guided view — the cards stay, panes come beside them. */
-  get #guided() { return discovering() && scenarioOf(this.scenario).key === 'meet' && Boolean(this._point) && !this._asking && Boolean(this._cards || this._loading); }
+  get #guided() { return discovering() && scenarioOf(this.scenario).key === 'meet' && Boolean(this._point) && (this._asking || Boolean(this._cards || this._loading)); }
 
   /** The mode whose layout the steps build (the one the plant sheet shows in Flore). */
   get #view() { return plantViewOf(this.#store.state); }
@@ -1022,43 +1047,6 @@ export class GfDiscover extends LitElement {
     for (const k of keys.slice(1)) if (!paneOf(v, k)) dockBlock(v, k, pane.id, 'center');
     const after = paneOf(v, keys[0]);
     if (after) setStackState(v, after.id, { active: keys[0] });
-  }
-
-  /**
-   * The step to offer now, if any: its photos at once; its encyclopedia after a moment on it (or the next plant);
-   * the plants around, then everything, each after two more plants.
-   * @returns {{ step: number, text: string, question: string, fork?: boolean } | null}
-   */
-  #offer() {
-    const step = discoverState().step, navs = this.#navs - this.#navsAtStep;
-    if (this._later === step) return null;
-    if (step === 0) {
-      // After the first match: its photos.
-      if (!discoverState().firstMatch) return null;
-      const c = (this._cards || []).find(x => x.plant.id === this.#focusId);
-      const name = c ? c.plant.vernacularNames?.[0] || c.plant.scientificName : 'cette plante';
-      return { step: 1, text: `C’est un match ! ${name} a bien d’autres photos, prises près d’ici et ailleurs : fleurs, feuilles, fruits… et un zoom pour les détails.`, question: 'On les regarde ?' };
-    }
-    if (step === 1 && (this._dwell || navs >= 1)) return { step: 2, text: 'Belle, mais qui est-elle vraiment ? Son nom, son histoire, ses usages, ce qu’en dit l’encyclopédie.', question: 'On en apprend plus ?' };
-    if (step === 2 && (this._dwell || navs >= 1)) return { step: 3, fork: true, text: 'Et vous, qu’aimeriez-vous savoir des plantes ?', question: 'Ce qui se cueille, ou ce qu’en dit la science ?' };
-    if (step === 3 && navs >= 2) return { step: 4, text: 'D’autres plantes poussent autour de vous, tout près de celle-ci.', question: 'On les voit toutes ?' };
-    if (step === 4 && navs >= 2) return { step: LAST_STEP, text: discoverState().branch === 'science'
-      ? 'Vous connaissez le coin ! La flore complète vous attend en mode Scientifique : toutes les données, toutes les cartes.'
-      : 'Vous connaissez le coin ! La flore complète vous attend, en mode cueillette : la saison, les sosies, vos lieux de récolte.', question: 'Prêt·e pour la flore complète ?' };
-    return null;
-  }
-
-  /** The step offered; at the fork, the two ways. @param {{ step: number, text: string, question: string, fork?: boolean }} o */
-  #banner(o) {
-    return html`<div class="step-banner" role="dialog" aria-label=${'Étape suivante : ' + o.question}>
-      <p>${o.text} <span class="q">${o.question}</span></p>
-      <div class="row">
-        <button class="later" type="button" @click=${() => { this._later = discoverState().step; }}>Plus tard</button>
-        ${o.fork ? html`<button class="yes fork" type="button" data-branch="harvest" @click=${() => this.#fork('harvest')}>${icon('basket')} La cueillette</button>
-          <button class="yes fork" type="button" data-branch="science" @click=${() => this.#fork('science')}>${icon('diagram-3')} La science</button>`
-        : html`<button class="yes" type="button" @click=${() => this.#accept(o.step)}>Oui</button>`}
-      </div>
-    </div>`;
   }
 
   /** The fork: picking or science; its dashboard joins the plant. @param {'harvest' | 'science'} branch */
@@ -1110,7 +1098,8 @@ export class GfDiscover extends LitElement {
   /** The scope shown for the plant in view: chosen after a match (its scope bar), else the circle. */
   get #scopeNow() {
     const id = this.#focusId;
-    return id != null && discoverState().matches.includes(id) ? this._scope : 'around';
+    // From the first match on: the scope chosen, for the card in view.
+    return id != null && discoverState().firstMatch ? this._scope : 'around';
   }
 
   /** The département and région of the place chosen (from its IGN address), once. */
@@ -1215,7 +1204,7 @@ export class GfDiscover extends LitElement {
    * @param {Card | undefined} card
    */
   #scopeBar(card) {
-    if (!card || !discoverState().matches.includes(card.plant.id)) return nothing;
+    if (!card || !discoverState().firstMatch) return nothing;
     const scope = this._scope;
     const a = this._admin;
     /** @type {[string, unknown][]} */
@@ -1263,36 +1252,89 @@ export class GfDiscover extends LitElement {
     </div>`;
   }
 
+  /** The blocks the steps reached have added to the panes (only those are shown while discovering). */
+  get #paneKeys() {
+    const { step, branch } = discoverState();
+    return [...(step >= 1 ? ['media'] : []), ...(step >= 2 ? ['wikipedia'] : []), ...(step >= 3 && branch ? FORK_BLOCKS[branch] : [])];
+  }
+
+  /** Where the discovery is: 0 the map, 1 the cards, 2 the photos, 3 the encyclopedia, 4 the fork, 5 the plants around. */
+  get #stage() { return this._asking ? 0 : Math.min(discoverState().step + 1, STAGES.length - 1); }
+
+  /** « Précédent »: one step back (the cards: back to the map and its distance). */
+  #prev() {
+    const stage = this.#stage;
+    if (stage === 0) return;
+    if (stage === 1) { this._asking = true; return; }
+    stepBack(stage - 2);
+    this.requestUpdate();
+  }
+
+  /** « Qui pousse par ici ? »: from the map to the map and the cards. */
+  #toCards() { setDiscoverRadius(this._radius); this._asking = false; this._view = 'swipe'; if (!this._cards || this.#loadedFor !== this._radius + ':' + this._point) this.#load(); }
+
   /**
-   * Discovering (Rencontres): from simple to complex. Two blocks — the map of the circle (the distance at hand, the
-   * plant on top lit) and the cards —; then each step accepted adds a block: its photos (the panes of the mode's
-   * layout for the plant in view: the photos, its encyclopedia, the fork's pane); at step 4 the plants around,
-   * under the map. The step offered: a banner with its question.
+   * The steps, always in sight above the blocks (never over them): each one done, the one shown, those to come;
+   * « Précédent » and the next one — what it adds said on its button (at the fork, the two ways).
+   */
+  #steps() {
+    const stage = this.#stage;
+    const { branch } = discoverState();
+    const focus = this.#focusId != null;
+    /** @type {[string, unknown, () => void, boolean?][]} */
+    const next = stage === 0 ? [['go', html`${icon('binoculars')} Qui pousse par ici ?`, () => this.#toCards()]]
+      : stage === 1 ? [['photos', html`Ses photos ${icon('chevron-right')}`, () => this.#accept(1), !focus]]
+      : stage === 2 ? [['wiki', html`L’encyclopédie ${icon('chevron-right')}`, () => this.#accept(2)]]
+      : stage === 3 ? [['harvest', html`${icon('basket')} La cueillette`, () => this.#fork('harvest')], ['science', html`${icon('diagram-3')} La science`, () => this.#fork('science')]]
+      : stage === 4 ? [['around', html`Les voisines ${icon('chevron-right')}`, () => this.#accept(4)]]
+      : [['flore', html`La flore complète ${icon('chevron-right')}`, () => this.#accept(LAST_STEP)]];
+    const hint = ['Choisissez jusqu’où chercher, sur la carte.', 'Glissez les cartes : à droite un coup de cœur — ses photos arrivent.',
+      'Ses photos, zoomables. Ensuite : ce qu’en dit l’encyclopédie.', 'Et vous, qu’aimeriez-vous savoir des plantes ?',
+      branch === 'science' ? 'Cartes et données de la science. Ensuite : les plantes autour.' : 'Ce qui se cueille, et ce qu’il ne faut pas confondre. Ensuite : les plantes autour.',
+      'Les voisines, sous la carte. Ensuite : toute la flore.'][stage];
+    return html`<nav class="g-steps" aria-label="Étapes de la découverte">
+      <button type="button" class="prev" data-step="prev" ?disabled=${stage === 0} @click=${() => this.#prev()} aria-label="Étape précédente">${icon('chevron-left')}<span>Précédent</span></button>
+      <div class="mid">
+        <ol>${STAGES.map((label, i) => html`<li class=${i < stage ? 'done' : i === stage ? 'on' : ''} aria-current=${i === stage ? 'step' : 'false'}>
+          <span class="n">${i < stage ? icon('check-lg') : i + 1}</span><span class="l">${i === 4 && branch ? (branch === 'science' ? 'Science' : 'Cueillette') : label}</span></li>`)}</ol>
+        <p class="hint">${hint}</p>
+      </div>
+      <div class="next">${next.map(([k, label, act, off]) => html`<button type="button" class="primary" data-step=${k} ?disabled=${Boolean(off)} @click=${act}>${label}</button>`)}</div>
+    </nav>`;
+  }
+  #loadedFor = '';
+
+  /**
+   * Discovering (Rencontres): from simple to complex, one layout transformed at each step. The map alone (its
+   * distance); the map and the cards (the plant on top lit on it); on a match, its photos beside them (zoomed);
+   * then each step adds its pane — only those reached are shown —; at step 4 the plants around, under the map.
+   * The steps: a bar above, always in sight.
    */
   #guidedView() {
     const step = discoverState().step;
+    const asking = this._asking;
     const cards = this._cards || [];
     const id = this.#focusId;
-    const offer = this.#offer();
-    const card = cards.find(c => c.plant.id === id);
-    const panes = step >= 1;
-    return html`<section class="guided ${panes ? 'with-panes' : ''} ${step >= 4 ? 'listed' : ''}" aria-label="Découverte">
+    const card = asking ? undefined : cards.find(c => c.plant.id === id);
+    const panes = !asking && step >= 1;
+    return html`<section class="guided ${asking ? 'asking' : ''} ${panes ? 'with-panes' : ''} ${step >= 4 && !asking ? 'listed' : ''}" aria-label="Découverte">
+      ${this.#steps()}
       <div class="g-scroll">
         <div class="g-map">
-          <div class="g-mapbox"><gf-map no-search no-create no-locate .area=${this.#area} .highlight=${this._hl && this._hl.points.length <= MANY ? this._hl : null}
-              .cluster=${this.#guidedCluster} .frame=${this.#scopeFrame} .zone=${this.#scopeZone}></gf-map>${this.#radiusBar()}
-            ${card ? html`<p class="g-legend" aria-live="polite"><span class="dot"></span>${card.plant.vernacularNames?.[0] || card.plant.scientificName} · ${this.#hlLine()}</p>` : nothing}
-            ${this.#scopeBar(card)}</div>
-          ${step >= 4 ? this.#aroundList(cards) : nothing}
+          <div class="g-mapbox"><gf-map no-search no-create no-locate .area=${this.#area} .highlight=${!asking && this._hl && this._hl.points.length <= MANY ? this._hl : null}
+              .cluster=${asking ? null : this.#guidedCluster} .frame=${asking ? null : this.#scopeFrame} .zone=${asking ? null : this.#scopeZone}></gf-map>${this.#radiusBar()}
+            ${asking ? html`<p class="g-legend g-obs" aria-live="polite">${this.#obsLine() || 'Les observations arrivent…'}</p>`
+              : card ? html`<p class="g-legend" aria-live="polite"><span class="dot"></span>${card.plant.vernacularNames?.[0] || card.plant.scientificName} · ${this.#hlLine()}</p>` : nothing}
+            ${asking ? nothing : this.#scopeBar(card)}</div>
+          ${step >= 4 && !asking ? this.#aroundList(cards) : nothing}
         </div>
-        <div class="g-deck">${this._cards ? this.#deckView() : html`<p class="muted g-wait">Recherche des plantes observées autour…</p>`}</div>
+        <div class="g-deck">${asking ? nothing : this._cards ? this.#deckView() : html`<p class="muted g-wait">Recherche des plantes observées autour…</p>`}</div>
         ${panes ? html`<div class="g-plant" aria-label=${card ? 'Volets : ' + (card.plant.vernacularNames?.[0] || card.plant.scientificName) : 'Volets'}>
-          ${id != null ? html`<gf-plant-detail embedded panes-only plant-id=${id} view=${this.#view}>
+          ${id != null ? html`<gf-plant-detail embedded panes-only plant-id=${id} view=${this.#view} .paneKeys=${this.#paneKeys}>
             <div class="g-empty">${icon('binoculars')}<p>Ses photos, son histoire, ses secrets viendront s’installer ici.</p></div>
           </gf-plant-detail>` : nothing}
         </div>` : nothing}
       </div>
-      ${offer ? this.#banner(offer) : nothing}
     </section>`;
   }
 

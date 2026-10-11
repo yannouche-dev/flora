@@ -101,6 +101,9 @@ function obsCard(p) {
 /** A plant without a photo: a flower (Bootstrap Icons) in its circle. */
 const FLOWER = `<svg x="5" y="5" width="12" height="12" viewBox="0 0 16 16" fill="#fff"><use href="${iconHref('flower1')}"></use></svg>`;
 
+/** Past this many points, a group touched is zoomed in on before its points are spread. */
+const SPREAD_MAX = 24;
+
 const escapeAttr = (/** @type {string} */ s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
 
 /**
@@ -659,7 +662,10 @@ export class GfMap extends LitElement {
     new ResizeObserver(() => {
       map.invalidateSize();
       this.#applyFrame();
-      this.#fitArea();
+      // Resized (a column coming beside it): framed again on what it was last framed on — the area's circle, or
+      // the frame given.
+      if (this.#lastFit === 'frame' && this.#framedBounds) map.fitBounds(this.#framedBounds, { paddingTopLeft: [40, 56], paddingBottomRight: [40, 40], animate: false });
+      else this.#fitArea();
       if (this.fit && !this.#fitted) this.#fitToContent();
     }).observe(this.#root);
     this.#syncAll();
@@ -967,9 +973,13 @@ export class GfMap extends LitElement {
         ? L.marker([y, x], { icon: p.photo ? photoIcon(p.photo, Math.min(i, 40) * 25) : leafIcon(Math.min(i, 40) * 25), keyboard: false, bubblingMouseEvents: false }).addTo(layer)
         : L.circleMarker([y, x], { radius: 6, className: 'gf-obs', bubblingMouseEvents: false }).addTo(layer);
       // With a photo: a small card of the plant on hover; else its name.
-      if (fancy && (p.photo || p.sci)) dot.bindTooltip(obsCard(p), { direction: 'top', offset: [0, -14], className: 'gf-obs-tip', opacity: 1 });
+      // A touch screen has no hover: a touch opens the plant's card (a popup, until the next touch on the map);
+      // with a mouse, it shows on hover and a click opens the record.
+      const touch = fancy && (p.photo || p.sci) && matchMedia('(hover: none)').matches;
+      if (touch) dot.bindPopup(obsCard(p), { className: 'gf-obs-tip', closeButton: false, offset: [0, -10], autoPanPadding: [12, 12] });
+      else if (fancy && (p.photo || p.sci)) dot.bindTooltip(obsCard(p), { direction: 'top', offset: [0, -14], className: 'gf-obs-tip', opacity: 1 });
       else dot.bindTooltip(point.title, { direction: 'top', offset: fancy ? [0, -8] : [0, 0] });
-      if (point.url) dot.on('click', () => open(point.url, '_blank', 'noopener'));
+      if (point.url && !touch) dot.on('click', () => open(point.url, '_blank', 'noopener'));
     }
   }
 
@@ -979,6 +989,41 @@ export class GfMap extends LitElement {
   /** @type {L.LayerGroup | null} */ #clusterLayer = null;
   #zoneKey = '';
   #clusterKey = '';
+
+  /** @type {L.LayerGroup | null} */ #spreadLayer = null;
+
+  /**
+   * A group's points spread around it, each on a thread to its place: a dot of its source's colour, its card on
+   * hover, its record on a touch. A touch on the map, or a zoom, gathers them back.
+   * @param {L.LatLng} at @param {{ coordinates: [number, number], title: string, url?: string }[]} pts @param {string} kind
+   */
+  #spread(at, pts, kind) {
+    const map = /** @type {L.Map} */ (this.#map);
+    this.#gather();
+    const layer = this.#spreadLayer = L.layerGroup().addTo(map);
+    const c = map.latLngToLayerPoint(at);
+    const list = pts.slice(0, 60);
+    // A circle for a few, a spiral for more.
+    list.forEach((p, i) => {
+      const n = list.length;
+      const angle = n <= 10 ? (i / n) * Math.PI * 2 - Math.PI / 2 : i * 0.75;
+      const r = n <= 10 ? 34 + n * 3 : 26 + i * 4.2;
+      const spot = map.layerPointToLatLng(L.point(c.x + r * Math.cos(angle), c.y + r * Math.sin(angle)));
+      L.polyline([at, spot], { className: 'gf-spread-thread', interactive: false }).addTo(layer);
+      const dot = L.circleMarker(spot, { radius: 7, className: 'gf-occ gf-occ-' + (/** @type {any} */ (p).kind || kind), bubblingMouseEvents: false }).addTo(layer);
+      const q = /** @type {any} */ (p);
+      dot.bindTooltip(q.photo || q.sci ? obsCard(q) : p.title, q.photo || q.sci ? { direction: 'top', className: 'gf-obs-tip', opacity: 1 } : { direction: 'top' });
+      if (p.url) dot.on('click', () => open(/** @type {string} */ (p.url), '_blank', 'noopener'));
+    });
+    L.circleMarker(at, { radius: 5, className: 'gf-spread-center', interactive: false }).addTo(layer);
+    map.once('click zoomstart', () => this.#gather());
+  }
+
+  /** The points spread gathered back into their group. */
+  #gather() {
+    this.#spreadLayer?.remove();
+    this.#spreadLayer = null;
+  }
 
   /** The outline of the area touched: dashed, lightly filled, under the points. */
   #syncZone() {
@@ -1004,6 +1049,7 @@ export class GfMap extends LitElement {
     if (key === this.#clusterKey && !rezoom) return;
     this.#clusterKey = key;
     layer.clearLayers();
+    this.#gather();
     if (!c?.points.length || !map.getSize().x) { map.getContainer().classList.remove('gf-hl-cluster'); return; }
     // Cells of ~70 px: a few clear groups rather than many small ones.
     const CELL = 72, zoom = map.getZoom();
@@ -1035,10 +1081,11 @@ export class GfMap extends LitElement {
         icon: L.divIcon({ className: 'gf-occ-group gf-occ-group-' + kind, iconSize: [size, size], iconAnchor: [size / 2, size / 2], html: `<span>${n > 999 ? Math.round(n / 1000) + 'k' : n}</span>` }),
         keyboard: true, bubblingMouseEvents: false, title: `${n} points — toucher pour zoomer`
       }).addTo(layer);
+      // A touch: its points, spread around it (a large group: zoomed in on first).
       m.on('click', () => {
         const b = L.latLngBounds(cell.pts.map(p => [p.coordinates[1], p.coordinates[0]]));
-        if (b.getNorthEast().equals(b.getSouthWest())) map.flyTo(b.getCenter(), Math.min(map.getZoom() + 3, 18), { duration: 0.5 });
-        else map.flyToBounds(b, { padding: [40, 40], duration: 0.5, maxZoom: 16 });
+        if (n > SPREAD_MAX && !b.getNorthEast().equals(b.getSouthWest()) && map.getZoom() < 17) { map.flyToBounds(b, { padding: [40, 40], duration: 0.5, maxZoom: 17 }); return; }
+        this.#spread(at, cell.pts, kind);
       });
     }
   }
@@ -1060,10 +1107,15 @@ export class GfMap extends LitElement {
     }
   }
 
+  /** What the map was framed on last: the area's circle, or the frame given (framed again on a resize). */
+  /** @type {'area' | 'frame' | null} */ #lastFit = null;
+  /** @type {L.LatLngBounds | null} */ #framedBounds = null;
+
   /** The circle framed (area.fit), with a margin; `ease`: a short zoom animation. @param {boolean} [ease] */
   #fitArea(ease = false) {
     const map = this.#map, b = this.#areaBounds;
     if (!map || !b || !map.getSize().x) return;
+    this.#lastFit = 'area';
     map.fitBounds(b, { padding: [16, 16], animate: ease });
   }
 
@@ -1088,6 +1140,8 @@ export class GfMap extends LitElement {
     const bounds = L.latLngBounds(frame.points.map(([lon, lat]) => [lat, lon]));
     // A single point (or plants all on it) has no extent: fitBounds then uses maxZoom.
     const single = bounds.getNorthEast().equals(bounds.getSouthWest());
+    this.#lastFit = 'frame';
+    this.#framedBounds = bounds;
     const opts = { paddingTopLeft: /** @type {[number, number]} */ ([40, 56]), paddingBottomRight: /** @type {[number, number]} */ ([40, 40 + bottom]), maxZoom: single ? 18 : 19 };
     // Eased: from the view shown to the next one, smoothly (an area touched in the sheet, and back).
     if (/** @type {any} */ (frame).ease && !matchMedia('(prefers-reduced-motion: reduce)').matches) { map.flyToBounds(bounds, { ...opts, duration: 0.8 }); return true; }
