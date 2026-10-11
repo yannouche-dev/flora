@@ -1148,7 +1148,7 @@ export class GfDiscover extends LitElement {
     return html`<section class="sheet" aria-label="Plante" @touchstart=${this.#touchStart} @touchend=${this.#touchEnd}>
       <div class="sheet-head">
         <button class="icon-btn" type="button" aria-label="Retour aux plantes autour" title="Retour (Échap)" @click=${() => this.#close()}>${icon('arrow-left')}</button>
-        ${this._rail && this._rail.plantId === this.open && this._rail.items.length ? html`<span class="visually-hidden">${name}</span><gf-sheet-rail .items=${this._rail.items} .active=${this._rail.active} .at=${this._rail.at} orientation="row"
+        ${this._rail && this._rail.plantId === this.open && this._rail.items.length ? html`<span class="visually-hidden">${name}</span><gf-sheet-rail .items=${this._rail.items} .active=${this._rail.active} .at=${this._rail.at} .entity=${this._rail.entity} orientation="row"
           @rail-go=${(/** @type {CustomEvent} */ e) => this.#sheet?.goTo(e.detail.key)}></gf-sheet-rail>` : html`<strong>${name}</strong>`}
       </div>
       <gf-plant-detail embedded outer-rail plant-id=${this.open} view="epure" @sheet-rail=${(/** @type {CustomEvent} */ e) => { this._rail = e.detail; }}></gf-plant-detail>

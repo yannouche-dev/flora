@@ -323,6 +323,9 @@ function trefleFacts(details) {
   return facts.slice(0, 60);
 }
 
+/** The reading line, this far under the top of what can be read: the block (or theme) past it is the one read. */
+const READ_LINE = 24;
+
 export class GfPlantDetail extends LitElement {
   static properties = {
     plantId: { type: Number, attribute: 'plant-id' },
@@ -983,6 +986,14 @@ export class GfPlantDetail extends LitElement {
 
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
+    if (changed.has('preview') && changed.get('preview') === true && !this.preview) this.#promoted = true;
+    // Another plant, opening at the rubric read: unseen from this very frame until it is there (#restoreAnchor).
+    // The card underneath (a preview) too: it comes on top already there.
+    if (changed.has('plantId') && this.plantId != null && sheetSession.anchor && !this.only) {
+      this.setAttribute('holding', '');
+      clearTimeout(this.#holdCap);
+      this.#holdCap = setTimeout(() => { if (!this.#restoring) this.removeAttribute('holding'); }, 2500);
+    }
     // The panels opened follow to the next plant (not from a preview card, which is not read).
     if (!this.preview && !this.only) {
       if (changed.has('_subsOpen')) sheetSession.subsOpen = this._subsOpen;
@@ -1042,7 +1053,7 @@ export class GfPlantDetail extends LitElement {
     this.scrollTop = 0;
     this.#restored = false;
     // Opening at the rubric read on the previous plant: unseen until it is there (#restoreAnchor), never stuck.
-    if (sheetSession.anchor && !this.preview && !this.only) {
+    if (sheetSession.anchor && !this.only) {
       this.setAttribute('holding', '');
       clearTimeout(this.#holdCap);
       this.#holdCap = setTimeout(() => { if (!this.#restoring) this.removeAttribute('holding'); }, 2500);
@@ -1529,7 +1540,8 @@ export class GfPlantDetail extends LitElement {
   #wikiSpy(scroller) {
     const themes = /** @type {NodeListOf<HTMLElement>} */ (this.renderRoot.querySelectorAll('.wiki-theme'));
     if (!themes.length) return;
-    const top = scroller.getBoundingClientRect().top + 110;
+    // The same reading line, under the article's menu.
+    const top = this.#readingTop(scroller) + this.#wikiMenuH + READ_LINE;
     let current = null;
     for (const el of themes) if (el.getBoundingClientRect().top <= top) current = el.dataset.theme || null;
     if (current !== this._wikiActive) this._wikiActive = current;
@@ -1760,7 +1772,7 @@ export class GfPlantDetail extends LitElement {
     const items = this.#railItems(ctx);
     if (this.outerRail) { this.#railOut = items; return nothing; }
     if (!items.length) return nothing;
-    return html`<div class="rail"><gf-sheet-rail .items=${items} .active=${this._activeCat} .at=${this.#railAt} orientation="row"
+    return html`<div class="rail"><gf-sheet-rail .items=${items} .active=${this._activeCat} .at=${this.#railAt} .entity=${this.#entity} orientation="row"
       @rail-go=${(/** @type {CustomEvent} */ e) => this.goTo(e.detail.key)}></gf-sheet-rail></div>`;
   }
   /** @type {any[] | null} */ #railOut = null;
@@ -1769,11 +1781,22 @@ export class GfPlantDetail extends LitElement {
   /** Tells the host the rubrics (and the one read), when they change. */
   #sendRail() {
     if (!this.outerRail || this.preview || this.only || !this.#railOut) return;
-    const items = this.#railOut, active = this._activeCat, at = this.#railAt;
-    const sig = JSON.stringify([items, active, at]);
+    const items = this.#railOut, active = this._activeCat, at = this.#railAt, entity = this.#entity;
+    const sig = JSON.stringify([items, active, at, entity]);
     if (sig === this.#railSent) return;
     this.#railSent = sig;
-    this.dispatchEvent(new CustomEvent('sheet-rail', { detail: { items, active, at, plantId: this.plantId }, bubbles: true, composed: true }));
+    this.dispatchEvent(new CustomEvent('sheet-rail', { detail: { items, active, at, entity, plantId: this.plantId }, bubbles: true, composed: true }));
+  }
+
+  /** What the sheet is, from its name: a genus, a species, a subspecies, a variety, a form, a hybrid. */
+  get #entity() {
+    const name = String(this._plant?.scientificName || '');
+    if (!name) return null;
+    if (/\ssubsp\.\s/.test(name)) return 'Sous-espèce';
+    if (/\svar\.\s/.test(name)) return 'Variété';
+    if (/\sf\.\s/.test(name)) return 'Forme';
+    if (/(^|\s)[×x]\s/.test(name)) return 'Hybride';
+    return /^\S+\s+[a-zà-ÿ-]+/.test(name) ? 'Espèce' : 'Genre';
   }
 
   /** Where the reading is, for the rubrics' list: the block, or the article's theme (« wiki:<theme> »). */
@@ -1839,40 +1862,44 @@ export class GfPlantDetail extends LitElement {
     this._activeCat = blockCategory(key);
   }
 
-  /** The block at the top of the sheet: its category lights up in the rail (and is kept for the next plant). */
+  /**
+   * The reading, like a breadcrumb: the block whose top has passed the reading line (just under what stays on top
+   * of the sheet) — and in the article, the theme under its menu. Its rubric lights up; the next plant opens
+   * there, at its top, exactly as a touch on it would (not somewhere inside it).
+   */
   #onScroll = () => {
     if (this.#scrollFrame) return;
     this.#scrollFrame = requestAnimationFrame(() => {
       this.#scrollFrame = 0;
-      let current = null;
-      /** @type {HTMLElement | null} */ let currentEl = null;
       const scroller = this.#sheetScroller;
       if (this.#restoring) return;
-      const scTop = scroller.getBoundingClientRect().top, top = scTop + 72;
-      /** The block under the top edge of the sheet (the anchor), not the one lit a little lower. @type {HTMLElement | null} */
-      let atEdge = null;
+      const line = this.#readingTop(scroller) + READ_LINE;
+      let current = null;
       for (const el of /** @type {NodeListOf<HTMLElement>} */ (this.renderRoot.querySelectorAll('.blocks > .block'))) {
-        const t = el.getBoundingClientRect().top;
-        if (t <= scTop + 4) atEdge = el;
-        if (t <= top) { current = el.dataset.key; currentEl = el; } else break;
+        if (el.getBoundingClientRect().top <= line) current = el.dataset.key || null; else break;
       }
+      const atTop = scroller.scrollTop < 40;
+      if (atTop) current = null;
       const cat = current ? blockCategory(current) : null;
       if (cat !== this._activeCat) this._activeCat = cat;
       if (current !== this._activeBlock) this._activeBlock = current;
       this.#wikiSpy(scroller);
-      // Read by the user: the next plant opens at the same rubric (the top: from the top) — unless the anchor is
-      // locked (the padlock of the rubrics): then it stays where it was locked.
+      // Read by the user: the next plant opens there (the top: from the top) — unless the anchor is locked (the
+      // padlock of the rubrics): then it stays where it was locked.
       if (!this.preview && !this.only && this._plant && !sheetSession.anchorLock) {
-        const atTop = scroller.scrollTop < 40;
-        sheetSession.anchor = atTop ? null : cat;
-        // The block itself, and how far into it (the next plant opens there, not at the rubric's first block).
-        const anchorEl = atEdge || currentEl;
-        sheetSession.anchorBlock = atTop || !anchorEl ? null : anchorEl.dataset.key || null;
-        sheetSession.anchorOffset = atTop || !anchorEl ? 0 : Math.round(scTop - anchorEl.getBoundingClientRect().top);
-        sheetSession.anchorWiki = !atTop && sheetSession.anchorBlock === 'wikipedia' ? this._wikiActive : null;
+        sheetSession.anchor = cat;
+        sheetSession.anchorBlock = current;
+        sheetSession.anchorOffset = 0;
+        sheetSession.anchorWiki = current === 'wikipedia' ? this._wikiActive : null;
       }
     });
   };
+
+  /** The top of what can be read: the sheet's top, under the rubrics stuck over a sheet that scrolls itself. @param {HTMLElement} scroller */
+  #readingTop(scroller) {
+    const rail = scroller === this ? /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.rail'))?.offsetHeight || 0 : 0;
+    return scroller.getBoundingClientRect().top + rail;
+  }
   #scrollFrame = 0;
 
   /** The sheet's scrolling part: its middle when it has edges, else itself. */
@@ -1886,10 +1913,9 @@ export class GfPlantDetail extends LitElement {
    */
   async #restoreAnchor() {
     const cat = sheetSession.anchor;
-    if (this.preview || this.only) return;
+    if (this.only) return;
     // Locked at the top: from the top.
     if (!cat) { if (sheetSession.anchorLock) { await this.updateComplete; this.#sheetScroller.scrollTop = 0; } return; }
-    this.setAttribute('holding', '');
     await this.updateComplete;
     const blocks = () => /** @type {HTMLElement[]} */ ([...this.renderRoot.querySelectorAll('.blocks > .block')]);
     const same = () => sheetSession.anchorBlock ? blocks().find(el => el.dataset.key === sheetSession.anchorBlock) : undefined;
@@ -1898,6 +1924,9 @@ export class GfPlantDetail extends LitElement {
     const wikiEl = () => theme && sheetSession.anchorBlock === 'wikipedia' ? /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('#wiki-' + theme)) : null;
     /** The place read is there (the block, or the article's theme). */
     const there = () => Boolean(theme && sheetSession.anchorBlock === 'wikipedia' ? wikiEl() : same());
+    // Already there (a card coming on top): put in place at once, nothing hidden.
+    const ready = there();
+    if (!ready) this.setAttribute('holding', '');
     this.#restoring = true;
     const scroller = this.#sheetScroller;
     const pin = () => {
@@ -1921,7 +1950,7 @@ export class GfPlantDetail extends LitElement {
     const settle = () => { clearTimeout(quiet); quiet = setTimeout(() => { if (there()) show(); }, 220); };
     const cap = setTimeout(show, 1500);
     pin();
-    settle();
+    if (ready) show(); else settle();
     this._activeCat = cat;
     const body = this.renderRoot.querySelector('article') || scroller;
     const appear = new MutationObserver(() => { pin(); settle(); });
@@ -1940,6 +1969,8 @@ export class GfPlantDetail extends LitElement {
     for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) scroller.addEventListener(ev, stop, { passive: true, once: true });
   }
   #restoring = false;
+  /** The card underneath just came on top. */
+  #promoted = false;
   /** @type {any} */ #holdCap = 0;
   #restored = false;
 
@@ -1975,7 +2006,11 @@ export class GfPlantDetail extends LitElement {
       menu.scrollTo({ left: on.offsetLeft - menu.clientWidth / 2 + on.offsetWidth / 2, behavior: 'smooth' });
     }
     // The plant is drawn (and read, not a card waiting underneath): at the rubric read on the previous one.
-    if (!this.#restored && this._plant && !this._plant.failed && !this.preview && !this.only) { this.#restored = true; this.#restoreAnchor(); }
+    // The card underneath (a preview) is put there too, ready to come on top; on top, it is put there again (its
+    // blocks may have changed meanwhile) — already there, nothing is seen.
+    if (!this.#restored && this._plant && !this._plant.failed && !this.only) { this.#restored = true; this.#restoreAnchor(); }
+    else if (this.#promoted && this._plant && !this._plant.failed) this.#restoreAnchor();
+    this.#promoted = false;
   }
 
   /** A block read without its title (Mode King › title on/off, per view). @param {string} key */

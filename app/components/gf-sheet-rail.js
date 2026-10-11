@@ -23,6 +23,8 @@ export class GfSheetRail extends LitElement {
     items: { attribute: false },
     /** The rubric lit (the one read). */
     active: {},
+    /** What the sheet is (« Espèce », « Sous-espèce »…): the first word of the header, before the rubrics. */
+    entity: {},
     /** Where the reading is in it: the block, or the article's theme (« wiki:<theme> »), lit in its list. */
     at: {},
     /** 'row' or 'column'. */
@@ -39,6 +41,8 @@ export class GfSheetRail extends LitElement {
     :host([orientation='row']) nav::-webkit-scrollbar { display: none; }
     :host([orientation='column']) nav { flex-direction: column; }
     .item { position: relative; flex: none; }
+    .entity { flex: none; padding: 0 10px 0 2px; margin-right: 4px; border-right: 1px solid var(--gf-border); font-size: 0.78rem; font-weight: 700; letter-spacing: 0.05em;
+      text-transform: uppercase; color: var(--gf-text-muted); white-space: nowrap; }
     .item > button { position: relative; width: 36px; height: 36px; min-height: 0; padding: 0; display: grid; place-items: center; border: 0; border-radius: var(--gf-radius-sm);
       background: none; color: var(--gf-text-muted); font-size: 1.05rem; cursor: pointer; }
     .item > button:hover { background: var(--gf-surface-2); color: var(--gf-text); }
@@ -81,6 +85,8 @@ export class GfSheetRail extends LitElement {
     this.active = null;
     /** @type {string | null} */
     this.at = null;
+    /** @type {string | null} */
+    this.entity = null;
     this.orientation = 'row';
     /** @type {{ key: string, x: number, y: number } | null} */
     this._pop = null;
@@ -142,7 +148,7 @@ export class GfSheetRail extends LitElement {
   render() {
     if (!this.items.length) return nothing;
     const pop = this._pop && this.items.find(i => i.key === this._pop?.key);
-    return html`<nav aria-label="Aller à une rubrique de la fiche">${this.items.map(c => {
+    return html`<nav aria-label="Aller à une rubrique de la fiche">${this.entity ? html`<span class="entity">${this.entity}</span>` : nothing}${this.items.map(c => {
       const b = c.badge;
       const label = c.label + (b ? ` — ${b.count} alerte${b.count > 1 ? 's' : ''}` : '');
       return html`<div class="item" @mouseenter=${(/** @type {Event} */ e) => this.#open(c.key, e)} @mouseleave=${() => this.#close()}
