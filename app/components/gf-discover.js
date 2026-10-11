@@ -97,7 +97,6 @@ export class GfDiscover extends LitElement {
     _query: { state: true },
     _places: { state: true },
     /** The rubrics of the plant open, in the sheet's header (as in Flore). */
-    _rail: { state: true },
     /** The observations in the circle, on the map behind the distance. */
     _obs: { state: true },
     /** How many observations there are in the circle in all (the map shows up to 1000). */
@@ -241,7 +240,6 @@ export class GfDiscover extends LitElement {
       :host([opened]) .list { margin-right: min(560px, 48vw); }
     }
     .sheet-head { flex: none; display: flex; align-items: center; gap: 6px; padding: 6px 8px; border-bottom: 1px solid var(--gf-border); }
-    .sheet-head gf-sheet-rail { flex: 1; min-width: 0; }
     .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     .sheet-head strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .sheet gf-plant-detail { flex: 1; min-height: 0; }
@@ -1491,10 +1489,9 @@ export class GfDiscover extends LitElement {
     return html`<section class="sheet" aria-label="Plante" @touchstart=${this.#touchStart} @touchend=${this.#touchEnd}>
       <div class="sheet-head">
         <button class="icon-btn" type="button" aria-label=${scenarioOf(this.scenario).key === 'trail' ? 'Retour au parcours' : 'Retour aux plantes autour'} title="Retour (Échap)" @click=${() => this.#close()}>${icon('arrow-left')}</button>
-        ${this._rail && this._rail.plantId === this.open && this._rail.items.length ? html`<span class="visually-hidden">${name}</span><gf-sheet-rail .items=${this._rail.items} .active=${this._rail.active} .at=${this._rail.at} .entity=${this._rail.entity} orientation="row"
-          @rail-go=${(/** @type {CustomEvent} */ e) => this.#sheet?.goTo(e.detail.key)}></gf-sheet-rail>` : html`<strong>${name}</strong>`}
+        <strong>${name || 'Plante'}</strong>
       </div>
-      <gf-plant-detail embedded outer-rail plant-id=${this.open} view="epure" ?scoped=${scenarioOf(this.scenario).key === 'trail'} @sheet-rail=${(/** @type {CustomEvent} */ e) => { this._rail = e.detail; }}></gf-plant-detail>
+      <gf-plant-detail embedded plant-id=${this.open} view="epure" ?scoped=${scenarioOf(this.scenario).key === 'trail'}></gf-plant-detail>
       ${at >= 0 ? html`<nav class="pager" aria-label="Plantes autour">
         <button class="secondary prev" type="button" ?disabled=${at <= 0} @click=${() => this.#step(-1)}>${icon('chevron-left')} Préc.</button>
         <span>${at + 1} / ${list.length}</span>

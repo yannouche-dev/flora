@@ -12,7 +12,6 @@ import { MediaController, PHONE_QUERY } from '../core/media.js';
 import { back } from '../core/history.js';
 import './gf-map.js';
 import './gf-plant-detail.js';
-import './gf-sheet-rail.js';
 import './gf-pager.js';
 import { ui } from '../styles/ui.js';
 import { icon, kindIcon } from '../core/icons.js';
@@ -44,8 +43,6 @@ function readOpen() {
  */
 export class GfCollections extends LitElement {
   static properties = {
-    /** The rubrics of the plant shown, for the header of its pane (told by the sheet: `sheet-rail`). */
-    _rail: { state: true },
     route: { attribute: false },
     _collections: { state: true },
     _thumbs: { state: true },
@@ -568,17 +565,6 @@ export class GfCollections extends LitElement {
   }
 
 
-  /** The plant's rubrics, in its pane's header (as in Flore): a touch goes there in the sheet. @param {number} plantId */
-  #plantRail(plantId) {
-    const rail = this._rail;
-    // The previous plant's rubrics stay until the new sheet tells its own: the header does not blink.
-    if (!rail || !rail.items.length) return 'Plante';
-    return html`<span class="visually-hidden">Plante</span><gf-sheet-rail .items=${rail.items} .active=${rail.active} .at=${rail.at} .entity=${rail.entity} orientation="row"
-      @rail-go=${(/** @type {CustomEvent} */ e) => /** @type {any} */ (this.renderRoot.querySelector('gf-plant-detail'))?.goTo(e.detail.key)}></gf-sheet-rail>`;
-  }
-
-  /** @param {CustomEvent} e */
-  #onSheetRail = e => { this._rail = e.detail; };
   render() {
     const phone = this.#phone.matches;
     const plantId = this.route.plant;
@@ -588,10 +574,10 @@ export class GfCollections extends LitElement {
         ${plantId ? html`<section class="sheet-plant" aria-label="Plante">
           <div class="pane-head">
             <button class="link back" type="button" @click=${() => back(href.collections({ open: this.route.open }))}>${icon('arrow-left')} Mes plantes</button>
-            <h2>${this.#plantRail(plantId)}</h2>
+            <h2>Plante</h2>
             <a class="icon-btn" href=${href.plant(plantId)} title="Ouvrir la fiche dans Flore" aria-label="Ouvrir la fiche dans Flore">${icon('arrows-angle-expand')}</a>
           </div>
-          <div class="pane-body" @sheet-rail=${this.#onSheetRail}><gf-plant-detail embedded outer-rail plant-id=${plantId} view=${plantViewOf(this.#store.state)}></gf-plant-detail>${this.#pager(plantId, true)}</div>
+          <div class="pane-body"><gf-plant-detail embedded plant-id=${plantId} view=${plantViewOf(this.#store.state)}></gf-plant-detail>${this.#pager(plantId, true)}</div>
         </section>` : nothing}`;
     }
     // List | place map | plant, as in Flore: each pane resizable and foldable. The list keeps its width
@@ -628,11 +614,11 @@ export class GfCollections extends LitElement {
             ${mapOpen && !this.#tablet.matches ? p.split(this.#plantKey, 'right', () => this.#max('plant')) : nothing}
             <section class="pane plant-pane ${plantFills ? 'fill' : ''}" aria-label="Plante"
               style=${plantFills || this.#tablet.matches ? '' : `width:${Math.min(p.width(this.#plantKey), Math.max(360, this.#max('plant')))}px`}>
-              ${p.head('plant', this.#plantRail(plantId), html`
+              ${p.head('plant', 'Plante', html`
                 <a class="icon-btn" href=${href.plant(plantId)} title="Ouvrir la fiche dans Flore" aria-label="Ouvrir la fiche dans Flore">${icon('arrows-angle-expand')}</a>
                 <button class="icon-btn" type="button" title="Fermer la fiche" aria-label="Fermer la fiche"
                   @click=${() => location.replace(href.collections({ open: this.route.open }))}>${icon('x-lg')}</button>`, true)}
-              <div class="pane-body" @sheet-rail=${this.#onSheetRail}><gf-plant-detail embedded outer-rail plant-id=${plantId} view=${plantViewOf(this.#store.state)}></gf-plant-detail>${this.#pager(plantId, false)}</div>
+              <div class="pane-body"><gf-plant-detail embedded plant-id=${plantId} view=${plantViewOf(this.#store.state)}></gf-plant-detail>${this.#pager(plantId, false)}</div>
             </section>`) : nothing}
         </div>
       </div>
