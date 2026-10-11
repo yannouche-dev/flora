@@ -337,11 +337,11 @@ export class GfSheetMap extends LitElement {
 
   /** ✎ on the map: this plant's new position in each place it was moved in. @param {{ placeId: string, plantId: number | null, coordinates: [number, number] }[]} moves */
   async #savePositions(moves) {
-    for (const { placeId, plantId, coordinates } of moves) {
+    for (const { placeId, entryId, plantId, coordinates } of moves) {
       const place = this._spots.find(p => p.id === placeId);
       if (!place) continue;
       const rounded = /** @type {[number, number]} */ (coordinates.map(v => Math.round(v * 1e7) / 1e7));
-      await savePlace(withEntry(place, plantId, { coordinates: rounded, accuracy: null })).catch(() => {});
+      await savePlace(withEntry(place, entryId ?? plantId, { coordinates: rounded, accuracy: null })).catch(() => {});
     }
   }
 
@@ -437,7 +437,7 @@ export class GfSheetMap extends LitElement {
           .createPlant=${plant.id}
           ?no-locate=${!c.actions.locate}
           @spot-select=${e => { location.hash = href.map({ spot: e.detail.id }); }}
-          @plant-select=${e => { location.hash = href.map({ spot: e.detail.placeId, focus: e.detail.plantId }); }}
+          @plant-select=${e => { location.hash = href.map({ spot: e.detail.placeId, focus: e.detail.entryId ?? e.detail.plantId }); }}
           @positions-save=${e => this.#savePositions(e.detail.plants)}
           @layers-change=${e => this.dispatchEvent(new CustomEvent('map-layers', { detail: e.detail }))}
         ></gf-map>

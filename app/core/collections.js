@@ -7,7 +7,7 @@
 
 import { config } from '../config.js';
 import * as db from './db.js';
-import { FAVORITES_ID, normalizeEntry, normalizeCollection, plantIdsOf } from './place-model.js';
+import { FAVORITES_ID, newEntryId, normalizeEntry, normalizeCollection, plantIdsOf } from './place-model.js';
 import { store } from './store.js';
 import { toPortable } from './portable.js';
 import { encodePortable } from './share.js';
@@ -144,8 +144,9 @@ export function plantMarkers(places, keep = () => true, harvestMode = false) {
     for (const entry of place.properties.plants) {
       if (!keep(entry)) continue;
       out.push({
-        key: place.id + ':' + entry.plantId,
+        key: place.id + ':' + entry.id,
         placeId: place.id,
+        entryId: entry.id,
         plantId: entry.plantId,
         coordinates: entryPosition(place, entry),
         own: Boolean(entry.coordinates),
@@ -163,23 +164,47 @@ export const entryPosition = (place, entry) => entry.coordinates || place.geomet
 
 /** A new plant entry from a TAXREF plant record (or search summary). @param {any} plant @returns {PlantEntry} */
 export const newEntry = plant => normalizeEntry({
+  id: newEntryId(),
   plantId: plant.id,
   scientificName: plant.scientificName,
   vernacularName: plant.vernacularNames?.[0] ?? plant.vernacularName ?? null,
   addedAt: new Date().toISOString()
 }, new Date().toISOString());
 
-/** @param {Place} place @param {number | null} plantId */
-export const findEntry = (place, plantId) => place.properties.plants.find(e => e.plantId === plantId) || null;
+/**
+ * An entry of a collection: `ref` an entry id (one occurrence), or a plant id (its first occurrence; a
+ * number given as text too, as in an address).
+ * @param {Place} place @param {string | number | null} ref
+ */
+export function findEntry(place, ref) {
+  const plants = place.properties.plants;
+  if (typeof ref === 'string') {
+    const byId = plants.find(e => e.id === ref);
+    if (byId || !/^\d+$/.test(ref)) return byId || null;
+    ref = Number(ref);
+  }
+  return plants.find(e => e.plantId === ref) || null;
+}
+
+/** All the occurrences of a plant in a collection (a place may hold several, along a walk). @param {Place} place @param {number | null} plantId */
+export const entriesOf = (place, plantId) => place.properties.plants.filter(e => e.plantId === plantId);
+
+/** The entry a collection got last (the one `withPlant` just added). @param {Place} place */
+export const lastEntry = place => place.properties.plants[place.properties.plants.length - 1] || null;
+
+/** Whether `ref` names this entry: its id, or (a number) its plant — every occurrence of it. @param {PlantEntry} e @param {string | number | null} ref */
+const matches = (e, ref) => typeof ref === 'string' ? e.id === ref : e.plantId === ref;
 
 /**
- * Returns a copy of the collection with the plant added (no-op if already there). In a place, the plant
- * gets `position` (default: the place's point); in a list, no position.
+ * Returns a copy of the collection with the plant added. In a list it is there once (no-op if already
+ * there); in a place, `again` adds another occurrence of it (somewhere else along a walk), else no-op too.
+ * In a place, the plant gets `position` (default: the place's point); in a list, no position.
  * @param {Collection} place @param {any} plant
  * @param {{ coordinates: [number, number] | null, accuracy: number | null }} [position]
+ * @param {{ again?: boolean }} [options]
  */
-export function withPlant(place, plant, position) {
-  if (findEntry(place, plant.id)) return place;
+export function withPlant(place, plant, position, { again = false } = {}) {
+  if (!(again && place.geometry) && findEntry(place, plant.id)) return place;
   const entry = newEntry(plant);
   if (place.geometry) {
     entry.coordinates = position?.coordinates ? roundCoordinates(position.coordinates) : place.geometry.coordinates;
@@ -188,12 +213,12 @@ export function withPlant(place, plant, position) {
   return withPlants(place, [...place.properties.plants, entry]);
 }
 
-/** @param {Place} place @param {number | null} plantId */
-export const withoutPlant = (place, plantId) => withPlants(place, place.properties.plants.filter(e => e.plantId !== plantId));
+/** Without one occurrence (`ref` an entry id) or a plant altogether (`ref` its plant id). @param {Place} place @param {string | number | null} ref */
+export const withoutPlant = (place, ref) => withPlants(place, place.properties.plants.filter(e => !matches(e, ref)));
 
-/** @param {Place} place @param {number | null} plantId @param {Partial<PlantEntry>} patch */
-export const withEntry = (place, plantId, patch) =>
-  withPlants(place, place.properties.plants.map(e => e.plantId === plantId ? { ...e, ...patch } : e));
+/** One occurrence changed (`ref` an entry id), or every occurrence of a plant (`ref` its plant id). @param {Place} place @param {string | number | null} ref @param {Partial<PlantEntry>} patch */
+export const withEntry = (place, ref, patch) =>
+  withPlants(place, place.properties.plants.map(e => matches(e, ref) ? { ...e, ...patch, id: e.id } : e));
 
 /** @param {Place} place @param {PlantEntry[]} plants @returns {Place} */
 const withPlants = (place, plants) => ({ ...place, properties: { ...place.properties, plants, plantIds: plantIdsOf(plants) } });
@@ -295,12 +320,12 @@ export async function setInCollection(collectionId, plant, on) {
   return savePlace(on ? withPlant(current, plant) : withoutPlant(current, plant.id));
 }
 
-/** Adds a harvest to one plant of a place and saves. @param {Place} place @param {number | null} plantId @param {Harvest} harvest */
-export function addHarvest(place, plantId, harvest) {
-  const entry = findEntry(place, plantId);
+/** Adds a harvest to one plant of a place and saves. @param {Place} place @param {string | number | null} ref @param {Harvest} harvest */
+export function addHarvest(place, ref, harvest) {
+  const entry = findEntry(place, ref);
   if (!entry) throw new Error('Plante absente de ce lieu.');
   const harvests = [...entry.harvests, harvest].sort((a, b) => b.date.localeCompare(a.date));
-  return savePlace(withEntry(place, plantId, { harvests }));
+  return savePlace(withEntry(place, entry.id, { harvests }));
 }
 
 /**
@@ -627,7 +652,9 @@ export async function transferLink({ personal }) {
  */
 function keepPersonal(incoming, current) {
   const plants = incoming.properties.plants.map(entry => {
-    const mine = findEntry(current, entry.plantId);
+    // The same occurrence (its id), else the plant if this device has it once.
+    const mine = current.properties.plants.find(e => e.id === entry.id)
+      || (entriesOf(current, entry.plantId).length === 1 ? findEntry(current, entry.plantId) : null);
     if (!mine) return entry;
     return {
       ...entry,

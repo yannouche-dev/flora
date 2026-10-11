@@ -14,11 +14,13 @@ export const voiceAvailable = () => voiceSupported() && moduleOn('voice');
 
 /**
  * Listens once (until a pause). `onText(text, final)` gets the interim then the final transcript;
- * `onEnd(error?)` is called once, whatever happens. Returns a function that stops listening.
+ * `onEnd(error?)` is called once, whatever happens; `onStart()` when the microphone is really open (the
+ * system's speech input: Android's or iOS's, through the browser). Returns a function that stops listening.
  * @param {(text: string, final: boolean) => void} onText
  * @param {(error?: string) => void} [onEnd]
+ * @param {() => void} [onStart]
  */
-export function listen(onText, onEnd = () => {}) {
+export function listen(onText, onEnd = () => {}, onStart = () => {}) {
   if (!Recognition) { onEnd('unsupported'); return () => {}; }
   const recognition = new Recognition();
   recognition.lang = 'fr-FR';
@@ -39,6 +41,7 @@ export function listen(onText, onEnd = () => {}) {
     onText(text.trim().replace(/[.!?]$/, ''), final);
   };
   recognition.onerror = (/** @type {any} */ event) => { failure = event.error || 'error'; };
+  recognition.onaudiostart = () => onStart();
   recognition.onend = () => {
     if (ended) return;
     ended = true;

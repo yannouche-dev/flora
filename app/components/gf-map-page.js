@@ -3,7 +3,7 @@ import { LitElement, html, css, nothing, repeat } from 'lit';
 import { GeoController } from '../core/geo.js';
 import { href, parse } from '../core/router.js';
 import { backTo, depth, entryValue, markEntry, pushHash, replaceHash } from '../core/history.js';
-import {
+import { findEntry,
   directionsUrl, entryPosition, plantMarkers, distance, entryName, formatDistance, inSeason, listPlaces,
   placeAbundance, placeLastHarvest, placeTitle, plantCount, savePlace, spotEvents, withEntry
 } from '../core/collections.js';
@@ -263,7 +263,7 @@ export class GfMapPage extends LitElement {
 
   /**
    * ✓ Valider on the map: moved places and plants, saved place by place.
-   * @param {{ places: { id: string, coordinates: [number, number] }[], plants: { placeId: string, plantId: number | null, coordinates: [number, number] }[] }} moves
+   * @param {{ places: { id: string, coordinates: [number, number] }[], plants: { placeId: string, entryId?: string, plantId: number | null, coordinates: [number, number] }[] }} moves
    */
   async #savePositions({ places, plants }) {
     // Only the selected place moved: its panel's editor holds it, it saves the moves with its other edits.
@@ -280,9 +280,9 @@ export class GfMapPage extends LitElement {
       const place = get(id);
       if (place) changed.set(id, { ...place, geometry: { type: 'Point', coordinates: round(coordinates) }, properties: { ...place.properties, accuracy: null } });
     }
-    for (const { placeId, plantId, coordinates } of plants) {
+    for (const { placeId, entryId, plantId, coordinates } of plants) {
       const place = get(placeId);
-      if (place) changed.set(placeId, withEntry(place, plantId, { coordinates: round(coordinates), accuracy: null }));
+      if (place) changed.set(placeId, withEntry(place, entryId ?? plantId, { coordinates: round(coordinates), accuracy: null }));
     }
     try {
       for (const place of changed.values()) await savePlace(place);
@@ -611,7 +611,16 @@ export class GfMapPage extends LitElement {
    * Keeps the URL in sync with selection and filters. Opening a place is a view (Back closes it, closing it
    * goes back); the focused plant, the season and the plant filter update the view in place.
    */
-  /** @param {{ spot?: string | null, focus?: number | null, season?: boolean }} patch */
+  /** The marker of the focused plant of the selected place (an occurrence, or a plant's first). @param {any[]} spots */
+  #focusKey(spots) {
+    const { spot, focus } = this.route;
+    if (!spot || !focus) return null;
+    const place = spots.find(s => s.id === spot);
+    const entry = place && findEntry(place, focus);
+    return entry ? spot + ':' + entry.id : null;
+  }
+
+  /** @param {{ spot?: string | null, focus?: string | number | null, season?: boolean }} patch */
   #navigate(patch) {
     const next = { ...this.route, ...(patch.spot !== undefined && !('focus' in patch) ? { focus: null } : {}), ...patch };
     const hash = href.map({
@@ -709,7 +718,7 @@ export class GfMapPage extends LitElement {
               if (this._editing) { this.#aroundAbort?.abort(); this._around = null; }
             }}
             @positions-save=${e => this.#savePositions(e.detail)}
-            .selectedPlant=${this.route.spot && this.route.focus ? this.route.spot + ':' + this.route.focus : null}
+            .selectedPlant=${this.#focusKey(spots)}
             remember
             @point-info=${() => this.#onPointInfo()}
             @point-close=${() => { this._point = false; }}
@@ -717,7 +726,7 @@ export class GfMapPage extends LitElement {
             .area=${this.#area}
             ?fit=${Boolean(this._plants.length && !this.#frameKey)}
             @spot-select=${e => { this.#hidePoint(); this.#navigate({ spot: e.detail.id }); }}
-            @plant-select=${e => this.#navigate({ spot: e.detail.placeId, focus: e.detail.plantId })}
+            @plant-select=${e => this.#navigate({ spot: e.detail.placeId, focus: e.detail.entryId ?? e.detail.plantId })}
           ></gf-map>
           ${this._editing || !this._around ? nothing : this.#aroundPanel()}
           ${selected && !this._around ? this.#panel(selected) : nothing}
@@ -777,7 +786,7 @@ export class GfMapPage extends LitElement {
           .focus=${this.route.focus} .mapEditing=${this._editing}
           @map-fly=${e => /** @type {any} */ (this.renderRoot.querySelector('gf-map'))?.flyTo(e.detail.coordinates, e.detail.zoom)}
           @map-edit=${() => { this._editing = true; }}
-          @plant-focus=${e => this.#navigate({ spot: place.id, focus: e.detail.plantId })}
+          @plant-focus=${e => this.#navigate({ spot: place.id, focus: e.detail.entryId ?? e.detail.plantId })}
           @panel-close=${() => this.#navigate({ spot: null })}></gf-spot-editor>`)}
 
       </section>`;

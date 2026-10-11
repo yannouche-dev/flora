@@ -111,16 +111,17 @@ export async function decodeCollection(data) {
 
   const c = Array.isArray(json.c) && isNumber(json.c[0]) && isNumber(json.c[1]) &&
     Math.abs(json.c[0]) <= 180 && Math.abs(json.c[1]) <= 90 ? /** @type {[number, number]} */ ([json.c[0], json.c[1]]) : null;
+  // A place may hold the same plant several times (along a walk, each at its spot): only exact repeats go.
   const seen = new Set();
   const plants = json.p
-    .filter(row => Array.isArray(row) && Number.isInteger(row[0]) && !seen.has(row[0]) && seen.add(row[0]))
+    .filter(row => Array.isArray(row) && Number.isInteger(row[0]) && !seen.has(JSON.stringify(row)) && seen.add(JSON.stringify(row)))
     .slice(0, 2000)
     .map(row => {
       /** @type {{ plantId: number, abundance?: string, coordinates?: [number, number] }} */
       const plant = { plantId: row[0] };
       if (ABUNDANCE_CODES[row[1]]) plant.abundance = ABUNDANCE_CODES[row[1]];
-      // Offsets from the place (1e-6°), bounded to ~10 km; older links have none.
-      if (c && Number.isInteger(row[2]) && Number.isInteger(row[3]) && Math.abs(row[2]) <= 1e5 && Math.abs(row[3]) <= 1e5) {
+      // Offsets from the place (1e-6°), bounded to ~100 km (a long walk); older links have none.
+      if (c && Number.isInteger(row[2]) && Number.isInteger(row[3]) && Math.abs(row[2]) <= 1e6 && Math.abs(row[3]) <= 1e6) {
         plant.coordinates = [Math.round((c[0] + row[2] / 1e6) * 1e7) / 1e7, Math.round((c[1] + row[3] / 1e6) * 1e7) / 1e7];
       }
       return plant;

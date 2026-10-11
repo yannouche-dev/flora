@@ -2,7 +2,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import * as db from '../core/db.js';
 import { href } from '../core/router.js';
-import { importPortable, newCollection, newPlace, plantCount, saveCollection, withEntry, withPlant } from '../core/collections.js';
+import { importPortable, lastEntry, newCollection, newPlace, plantCount, saveCollection, withEntry, withPlant } from '../core/collections.js';
 import { FAVORITES_ID } from '../core/place-model.js';
 import { hasPersonal } from '../core/portable.js';
 import { decodeCollection, decodePortable, isPortableLink } from '../core/share.js';
@@ -28,7 +28,7 @@ export class GfShared extends LitElement {
     :host { display: block; overflow-y: auto; }
     .wrap { max-width: 720px; margin: 0 auto; padding: 14px 16px 40px; display: grid; gap: 12px; }
     h1 { margin: 0; font-size: 1.4rem; }
-    gf-map { height: 220px; border-radius: var(--gf-radius); overflow: hidden; }
+    gf-map { height: clamp(240px, 42vh, 420px); border-radius: var(--gf-radius); overflow: hidden; }
     ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
     li a {
       display: grid;
@@ -46,6 +46,7 @@ export class GfShared extends LitElement {
     li gf-thumb { grid-row: span 2; }
     .nm { font-weight: 600; }
     .sci { font-family: var(--gf-font-serif); font-style: italic; color: var(--gf-text-muted); font-size: 0.85rem; }
+    .times { font-weight: 600; color: var(--gf-accent); }
     .actions { gap: 14px; position: sticky; bottom: 0; padding: 10px 0; background: var(--gf-bg); }
     p.muted { font-size: 0.9rem; margin: 0; }
     .error { color: var(--gf-danger); }
@@ -91,8 +92,10 @@ export class GfShared extends LitElement {
     try {
       const shared = await decodeCollection(this.data);
       await whenReady();
-      const plants = (await Promise.all(shared.plants.map(p => db.get('plants', p.plantId)))).filter(Boolean);
-      this._plants = plants;
+      // One record per plant; the shared rows (occurrences) refer to them.
+      const ids = [...new Set(shared.plants.map(p => p.plantId))];
+      const records = (await Promise.all(ids.map(id => db.get('plants', id)))).filter(Boolean);
+      this._plants = records;
       this._shared = shared;
       document.title = (shared.name || 'Collection partagée') + ' — GeoFlora';
     } catch (error) {
@@ -108,11 +111,14 @@ export class GfShared extends LitElement {
       let collection = shared.kind === 'place' && shared.coordinates
         ? newPlace(shared.coordinates, { name: shared.name })
         : newCollection('list', { name: shared.name });
-      for (const plant of this._plants) {
-        const coordinates = shared.plants.find(p => p.plantId === plant.id)?.coordinates;
-        collection = withPlant(collection, plant, coordinates ? { coordinates, accuracy: null } : undefined);
-        const abundance = shared.plants.find(p => p.plantId === plant.id)?.abundance;
-        if (abundance) collection = withEntry(collection, plant.id, { abundance: /** @type {any} */ (abundance) });
+      // Every shared occurrence (a walk may note the same plant several times, each at its spot).
+      const byId = new Map(this._plants.map(p => [p.id, p]));
+      for (const row of shared.plants) {
+        const plant = byId.get(row.plantId);
+        if (!plant) continue;
+        const before = collection;
+        collection = withPlant(collection, plant, row.coordinates ? { coordinates: row.coordinates, accuracy: null } : undefined, { again: true });
+        if (collection !== before && row.abundance) collection = withEntry(collection, /** @type {any} */ (lastEntry(collection)).id, { abundance: /** @type {any} */ (row.abundance) });
       }
       const saved = await saveCollection(collection);
       location.hash = href.spot(saved.id);
@@ -161,6 +167,28 @@ export class GfShared extends LitElement {
       </div>`;
   }
 
+  /**
+   * The shared place on its map: its point and every plant where it was noted — framed on all of them (a walk
+   * shared shows the whole walk).
+   * @param {import('../core/share.js').SharedCollection} shared @param {any[]} rows @param {Map<number, any>} byId
+   */
+  #map(shared, rows, byId) {
+    const origin = /** @type {[number, number]} */ (shared.coordinates);
+    const plants = rows.map((r, i) => {
+      const plant = byId.get(r.plantId);
+      return {
+        key: 'shared:s' + i, placeId: 'shared', entryId: 's' + i, plantId: r.plantId,
+        coordinates: r.coordinates || origin, own: Boolean(r.coordinates), abundance: r.abundance || 'moyen',
+        label: plant?.vernacularNames?.[0] || plant?.scientificName || 'Plante', season: false
+      };
+    });
+    const points = [origin, ...plants.map(m => m.coordinates)];
+    const frame = { key: 'shared:' + points.map(c => c.join(',')).join(';'), points, maxZoom: 18 };
+    const spot = { type: 'Feature', id: 'shared', geometry: { type: 'Point', coordinates: origin },
+      properties: { kind: 'place', name: shared.name, plants: rows.map(() => ({ abundance: 'moyen', harvests: [] })), plantIds: [] } };
+    return html`<gf-map no-search no-create .spots=${[spot]} .plants=${plants} plant-zoom="0" .frame=${frame}></gf-map>`;
+  }
+
   render() {
     if (this._portable && !this._error) return this.#portableView();
     if (this._error) {
@@ -169,21 +197,27 @@ export class GfShared extends LitElement {
     }
     const shared = this._shared;
     if (!shared) return html`<div class="wrap"><p class="muted">Ouverture du partage…</p></div>`;
-    const missing = shared.plants.length - this._plants.length;
+    const byId = new Map(this._plants.map(p => [p.id, p]));
+    const rows = shared.plants.filter(r => byId.has(r.plantId));
+    const missing = shared.plants.length - rows.length;
+    // How many times each plant was noted (a walk may meet it again further on).
+    const times = new Map();
+    for (const r of rows) times.set(r.plantId, (times.get(r.plantId) || 0) + 1);
+    const count = rows.length > this._plants.length
+      ? `${rows.length} observations · ${plantCount(this._plants.length)}`
+      : plantCount(this._plants.length);
 
     return html`
       <div class="wrap">
         <span class="kicker">${shared.kind === 'place' ? 'Lieu partagé' : 'Liste partagée'}</span>
         <h1>${shared.name || 'Sans nom'}</h1>
-        <p class="muted">${plantCount(this._plants.length)}${missing > 0 ? ` (${missing} inconnue${missing > 1 ? 's' : ''} de cette version de la flore)` : ''}</p>
-        ${shared.coordinates ? html`
-          <gf-map .spots=${[{ type: 'Feature', id: 'shared', geometry: { type: 'Point', coordinates: shared.coordinates },
-            properties: { kind: 'place', name: shared.name, plants: this._plants.map(() => ({ abundance: 'moyen', harvests: [] })), plantIds: [] } }]} fit></gf-map>` : nothing}
+        <p class="muted">${count}${missing > 0 ? ` (${missing} inconnue${missing > 1 ? 's' : ''} de cette version de la flore)` : ''}</p>
+        ${shared.coordinates ? this.#map(shared, rows, byId) : nothing}
         <ul>
           ${this._plants.map(plant => html`
             <li><a href=${href.plant(plant.id)}>
               <gf-thumb .plant=${plant} size="44"></gf-thumb>
-              <span class="nm">${plant.vernacularNames?.[0] || plant.scientificName}</span>
+              <span class="nm">${plant.vernacularNames?.[0] || plant.scientificName}${(times.get(plant.id) || 0) > 1 ? html` <small class="times">× ${times.get(plant.id)}</small>` : nothing}</span>
               <span class="sci">${plant.scientificName}</span>
             </a></li>`)}
         </ul>

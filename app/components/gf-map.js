@@ -139,8 +139,9 @@ function plantIcon(plant, selected, draggable) {
 
 /**
  * @typedef {object} PlantMarker
- * @property {string} key          unique: placeId + ':' + plantId
+ * @property {string} key          unique: placeId + ':' + entryId
  * @property {string} placeId
+ * @property {string} [entryId]    the occurrence (a place may hold the same plant several times)
  * @property {number | null} plantId
  * @property {[number, number]} coordinates
  * @property {string} abundance
@@ -211,10 +212,10 @@ const store = (/** @type {string} */ key, value) => {
  *  - editable: the ✎ control (always shown) switches position editing on. While `editing`, every marker
  *    (places, plants, the pin) is dragged freely; each drop (or long press: place the pin / selected place)
  *    emits positions-save with that one move, for the caller to store at once. « Terminé » or ✎ ends it.
- * Events: spot-select {id}, plant-select {placeId, plantId}, pin-move {coordinates},
- *         plant-move {placeId, plantId, coordinates}, map-longpress {coordinates} (while the pin can be placed),
+ * Events: spot-select {id}, plant-select {placeId, entryId, plantId}, pin-move {coordinates},
+ *         plant-move {placeId, entryId, plantId, coordinates}, map-longpress {coordinates} (while the pin can be placed),
  *         point-info {coordinates} (long press elsewhere: the point card opens), point-close,
- *         edit-change {editing}, positions-save {pin, places: [{id, coordinates}], plants: [{placeId, plantId, coordinates}]}
+ *         edit-change {editing}, positions-save {pin, places: [{id, coordinates}], plants: [{placeId, entryId, plantId, coordinates}]}
  */
 export class GfMap extends LitElement {
   static properties = {
@@ -466,7 +467,7 @@ export class GfMap extends LitElement {
     this.#emit('positions-save', {
       pin: what.pin || null,
       places: what.place ? [what.place] : [],
-      plants: what.plant ? [{ placeId: plant?.placeId, plantId: plant?.plantId ?? null, coordinates: what.plant.coordinates }] : []
+      plants: what.plant ? [{ placeId: plant?.placeId, entryId: plant?.entryId, plantId: plant?.plantId ?? null, coordinates: what.plant.coordinates }] : []
     });
     // A save that never comes back (error) must not pin the marker forever.
     const snapshot = this._moves;
@@ -674,7 +675,7 @@ export class GfMap extends LitElement {
       this.#applyFrame();
       // Resized (a column coming beside it): framed again on what it was last framed on — the area's circle, or
       // the frame given.
-      if (this.#lastFit === 'frame' && this.#framedBounds) map.fitBounds(this.#framedBounds, { paddingTopLeft: [40, 56], paddingBottomRight: [40, 40], animate: false });
+      if (this.#lastFit === 'frame' && this.#framedBounds) map.fitBounds(this.#framedBounds, { paddingTopLeft: [40, 56], paddingBottomRight: [40, 40], maxZoom: this.#framedMax, animate: false });
       else this.#fitArea();
       if (this.fit && !this.#fitted) this.#fitToContent();
     }).observe(this.#root);
@@ -848,11 +849,11 @@ export class GfMap extends LitElement {
           autoPan: movable
         });
         const current = plant;
-        marker.on('click', () => { if (!this.editing) this.#emit('plant-select', { placeId: current.placeId, plantId: current.plantId }); });
+        marker.on('click', () => { if (!this.editing) this.#emit('plant-select', { placeId: current.placeId, entryId: current.entryId, plantId: current.plantId }); });
         marker.on('dragend', () => {
           const { lat: y, lng: x } = /** @type {L.Marker} */ (this.#plantMarkers.get(current.key)).getLatLng();
           if (this.editable) this.#drop(m => m.plants.set(current.key, [x, y]), { plant: { key: current.key, coordinates: [x, y] } });
-          else this.#emit('plant-move', { placeId: current.placeId, plantId: current.plantId, coordinates: [x, y] });
+          else this.#emit('plant-move', { placeId: current.placeId, entryId: current.entryId, plantId: current.plantId, coordinates: [x, y] });
         });
         this.#trackDrag(marker).addTo(layer);
         this.#plantMarkers.set(plant.key, marker);
@@ -1190,6 +1191,8 @@ export class GfMap extends LitElement {
   /** What the map was framed on last: the area's circle, or the frame given (framed again on a resize). */
   /** @type {'area' | 'frame' | null} */ #lastFit = null;
   /** @type {L.LatLngBounds | null} */ #framedBounds = null;
+  /** The zoom the last frame may not exceed (kept for refits on resize: a single point never zooms to the max). */
+  #framedMax = 18;
 
   /** The circle framed (area.fit), with a margin; `ease`: a short zoom animation. @param {boolean} [ease] */
   #fitArea(ease = false) {
@@ -1225,6 +1228,7 @@ export class GfMap extends LitElement {
     this.#lastFit = 'frame';
     this.#framedBounds = bounds;
     const opts = { paddingTopLeft: /** @type {[number, number]} */ ([40, 56]), paddingBottomRight: /** @type {[number, number]} */ ([40, 40 + bottom]), maxZoom: /** @type {any} */ (frame).maxZoom || (single ? 18 : 19) };
+    this.#framedMax = opts.maxZoom;
     // Eased: from the view shown to the next one, smoothly (an area touched in the sheet, and back).
     if (/** @type {any} */ (frame).ease && !matchMedia('(prefers-reduced-motion: reduce)').matches) { map.flyToBounds(bounds, { ...opts, duration: 0.8 }); return true; }
     map.fitBounds(bounds, { ...opts, animate: false });

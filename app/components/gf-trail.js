@@ -9,7 +9,7 @@ import { icon } from '../core/icons.js';
 import { watchLocation } from '../core/geo.js';
 import { searchPlaces } from '../core/geoservices.js';
 import { findPlants } from '../core/search.js';
-import { getPlace, newPlace, plantMarkers, savePlace, spotEvents, withPlant, withoutPlant, findEntry, refreshMembership } from '../core/collections.js';
+import { entriesOf, getPlace, lastEntry, newPlace, plantMarkers, savePlace, spotEvents, withPlant, withoutPlant, refreshMembership } from '../core/collections.js';
 import * as db from '../core/db.js';
 import { href } from '../core/router.js';
 import { ui } from '../styles/ui.js';
@@ -35,7 +35,9 @@ export class GfTrail extends LitElement {
     _q: { state: true },
     _hits: { state: true },
     _searching: { state: true },
-    _view: { state: true },
+    _fresh: { state: true },
+    _listening: { state: true },
+    _focusAt: { state: true },
     _toast: { state: true },
     _past: { state: true },
     _places: { state: true },
@@ -46,16 +48,26 @@ export class GfTrail extends LitElement {
   static styles = [ui, css`
     :host { display: block; position: relative; height: 100%; background: var(--gf-bg, var(--gf-surface-2)); container-type: inline-size; }
     .wrap { display: grid; grid-template-columns: minmax(0, 1fr); min-height: 100%; }
-    /* Walking: the parcours' card on top (in both views), then the list or the map. */
-    .wrap.on { grid-template-areas: "head" "tabs" "main"; grid-template-rows: auto auto minmax(0, 1fr); }
-    .wrap.on .head { grid-area: head; padding: 14px 14px 0; max-width: 640px; width: 100%; margin: 0 auto; box-sizing: border-box; }
-    .wrap.on .tabs { grid-area: tabs; }
-    .wrap.on .col { grid-area: main; padding-top: 12px; }
-    .wrap.on .mapcol { grid-area: main; }
+    /*
+     * Walking. A phone: the parcours' card, the map (always in sight), the plants noted, and the search at the
+     * bottom, under the thumb — its suggestions open above it. Wider: the same column on the left, the map
+     * on the right.
+     */
+    .wrap.on { position: relative; height: 100%; min-height: 0; grid-template-areas: "head" "map" "list" "dock"; grid-template-rows: auto minmax(180px, 1fr) auto auto; }
+    .side { display: contents; }
+    .head { grid-area: head; padding: 10px 12px 8px; }
+    .mapcol { grid-area: map; position: relative; min-height: 0; }
+    .mapcol gf-map { position: absolute; inset: 0; display: block; }
+    .list { grid-area: list; min-height: 0; max-height: 30dvh; overflow-y: auto; padding: 8px 12px 4px; box-sizing: border-box; border-top: 1px solid var(--gf-border); background: var(--gf-bg, var(--gf-surface-2)); }
+    .dock { grid-area: dock; position: relative; z-index: 5; padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px)); background: var(--gf-surface); border-top: 1px solid var(--gf-border); box-shadow: 0 -6px 18px rgb(0 0 0 / 8%); }
+    .sheet { position: absolute; left: 0; right: 0; bottom: 100%; max-height: min(62dvh, 560px); overflow-y: auto; display: grid; gap: 6px; align-content: start;
+      padding: 10px 12px 12px; background: var(--gf-bg, var(--gf-surface-2)); border-top: 1px solid var(--gf-border); border-radius: 16px 16px 0 0; box-shadow: 0 -10px 28px rgb(0 0 0 / 16%); }
     @container (min-width: 900px) {
-      .wrap.on { height: 100%; grid-template-columns: minmax(360px, 520px) minmax(0, 1fr); grid-template-areas: "head map" "main map"; grid-template-rows: auto minmax(0, 1fr); }
-      .wrap.on .mapcol { grid-area: map; }
-      .wrap.on .col { overflow-y: auto; height: 100%; }
+      .wrap.on { grid-template-columns: minmax(360px, 480px) minmax(0, 1fr); grid-template-areas: "side map"; grid-template-rows: minmax(0, 1fr); }
+      .side { grid-area: side; display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--gf-border); }
+      .head { padding: 14px 14px 10px; }
+      .list { flex: 1; max-height: none; border-top: 0; padding: 4px 14px; }
+      .dock { padding: 10px 14px 14px; }
     }
     .col { padding: 14px 14px 90px; display: grid; align-content: start; gap: 12px; max-width: 640px; width: 100%; margin: 0 auto; box-sizing: border-box; }
     /* Starting: one action. */
@@ -87,42 +99,46 @@ export class GfTrail extends LitElement {
     .card .meta .gps.off { color: var(--gf-warn); }
     .card .end { grid-row: span 2; }
     .search { position: relative; }
-    .search input { padding: 14px 92px 14px 46px; font-size: 1.1rem; box-shadow: var(--gf-shadow); }
+    .search input { padding: 13px 48px 13px 46px; font-size: 1.08rem; }
+    .bar { display: flex; align-items: center; gap: 10px; }
+    .bar .search { flex: 1; min-width: 0; }
+    .search.listening input { border-color: var(--gf-danger, #dc2626); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gf-danger, #dc2626) 22%, transparent); }
+    .search.listening input::placeholder { color: var(--gf-danger, #dc2626); }
     .search input:focus { border-color: var(--gf-accent); outline: none; box-shadow: var(--gf-focus); }
+    .search input::-webkit-search-cancel-button { display: none; }
     .search .lens { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--gf-text-muted); font-size: 1.1rem; pointer-events: none; }
     .search .tools { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); display: flex; gap: 2px; align-items: center; }
     .hits { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-    .hit { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px 6px 6px 6px; border-radius: 14px; background: var(--gf-surface); box-shadow: var(--gf-shadow); }
+    .hit { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px; border-radius: 14px; background: var(--gf-surface); box-shadow: var(--gf-shadow); }
     .th { width: 52px; height: 52px; border-radius: 10px; overflow: hidden; background: var(--gf-surface-2); display: grid; place-items: center; color: var(--gf-text-muted); }
     .th img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .hit .t { display: grid; min-width: 0; line-height: 1.25; }
     .hit .t b { font-size: 1rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .hit .t i { font-size: 0.82rem; color: var(--gf-text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .add { min-height: 44px; padding: 0 16px; border-radius: var(--gf-radius-pill); font-weight: 700; display: inline-flex; gap: 6px; align-items: center; font-size: 0.95rem; }
-    .added { min-height: 44px; padding: 0 14px; display: inline-flex; gap: 6px; align-items: center; color: var(--gf-accent); font-weight: 600; font-size: 0.9rem; }
     .muted { color: var(--gf-text-muted); margin: 0; }
     .more { justify-self: center; }
-    .tabs { display: none; }
-    .list h2 { margin: 6px 2px 0; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gf-text-muted); display: flex; justify-content: space-between; }
+    .list h2 { margin: 2px 2px 6px; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gf-text-muted); display: flex; justify-content: space-between; }
     .mine { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
     .mine li { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 6px 8px; border-radius: 12px; background: var(--gf-surface); }
+    .mine li.fresh { box-shadow: inset 0 0 0 2px var(--gf-accent); }
+    .mine .th { cursor: pointer; border: 0; padding: 0; color: var(--gf-accent); font-size: 1.05rem; }
+    .nth, .times { font-size: 0.75rem; font-weight: 600; color: var(--gf-accent); white-space: nowrap; }
+    .hint { margin: 0; padding: 6px 2px; color: var(--gf-text-muted); font-size: 0.92rem; }
     .mine .th { width: 40px; height: 40px; }
     .mine a { color: inherit; text-decoration: none; min-width: 0; display: grid; }
     .mine a b { font-size: 0.95rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .mine a i { font-size: 0.78rem; color: var(--gf-text-muted); }
     .mine small { color: var(--gf-text-muted); font-size: 0.78rem; font-variant-numeric: tabular-nums; }
-    .mapcol { position: relative; min-height: 320px; border-left: 1px solid var(--gf-border); }
-    .mapcol gf-map { position: absolute; inset: 0; display: block; }
-    .toast { position: fixed; z-index: 1000; left: 12px; right: 12px; margin: 0 auto; width: fit-content; bottom: calc(80px + env(safe-area-inset-bottom)); display: flex; gap: 12px; align-items: center; padding: 10px 14px 10px 16px;
+    .toast { position: absolute; z-index: 20; left: 12px; right: 12px; margin: 0 auto; width: fit-content; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); display: flex; gap: 12px; align-items: center; padding: 10px 14px 10px 16px;
       border-radius: var(--gf-radius-pill); background: #1f2a1f; color: #fff; box-shadow: 0 10px 30px rgb(0 0 0 / 35%); font-size: 0.92rem; animation: up 0.25s ease-out; }
     .toast button { border: 0; background: none; color: #9be15d; font: inherit; font-weight: 700; cursor: pointer; padding: 4px; }
     @keyframes up { from { opacity: 0; transform: translateY(10px); } }
-    /* A phone (or narrow): Liste | Carte. */
     @container (max-width: 899px) {
-      .wrap.on .tabs { display: flex; position: sticky; top: 0; z-index: 3; justify-content: center; padding: 8px 14px; background: var(--gf-bg, var(--gf-surface-2)); }
-      .wrap.on.v-map .col { display: none; }
-      .wrap.on.v-list .mapcol { display: none; }
-      .wrap.on.v-map .mapcol { height: max(320px, calc(100dvh - 300px)); border-left: 0; }
+      .card { padding: 8px 10px; gap: 2px 10px; border-radius: 14px; }
+      .card .pin { width: 32px; height: 32px; font-size: 0.95rem; }
+      .card .name { font-size: 1rem; }
+      .card .end { min-height: 36px; padding: 0 12px; }
     }
     @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
   `];
@@ -139,7 +155,12 @@ export class GfTrail extends LitElement {
     /** @type {any[]} */
     this._hits = [];
     this._searching = false;
-    this._view = 'list';
+    /** The occurrence just added (lit in the list). @type {string | null} */
+    this._fresh = null;
+    /** The microphone is open (the field says « Parlez… »). */
+    this._listening = false;
+    /** A plant of the list touched: the map shows it. @type {[number, number] | null} */
+    this._focusAt = null;
     /** @type {{ text: string, undo?: () => void } | null} */
     this._toast = null;
     /** @type {any[]} */
@@ -235,6 +256,16 @@ export class GfTrail extends LitElement {
     return null;
   }
 
+  /** @returns {HTMLInputElement | null} */
+  get #input() { return this.renderRoot.querySelector('.dock .search input'); }
+
+  /** Text put in the field by the app (dictation, clearing, after an add) — then searched. @param {string} text @param {boolean} [now] */
+  #type(text, now = true) {
+    const input = this.#input;
+    if (input && input.value !== text) input.value = text;
+    return this.#find(text, now);
+  }
+
   /** The words the hits shown answer (Entrée never adds a plant found for fewer letters). */
   #hitsFor = '';
 
@@ -244,25 +275,33 @@ export class GfTrail extends LitElement {
     if (hits?.[0] && this._q === text) this.#add(hits[0]);
   }
 
-  /** A plant added to the parcours, where I stand (else at the parcours' point). @param {any} hit */
+  /**
+   * A plant added to the parcours, where I stand (else at the parcours' point) — again if it is already there:
+   * the same species met further on is another occurrence, at its own spot.
+   * @param {any} hit
+   */
   async #add(hit) {
     const trail = this._trail;
     if (!trail) return;
     const plant = await db.get('plants', hit.id).catch(() => null) || { id: hit.id, scientificName: hit.scientificName, vernacularName: hit.vernacularName };
     const position = this._fix ? { coordinates: this._fix.coordinates, accuracy: Math.round(this._fix.accuracy) } : undefined;
-    const next = withPlant(trail, plant, position);
+    const next = withPlant(trail, plant, position, { again: true });
+    const added = /** @type {any} */ (lastEntry(next)).id;
     await savePlace(next);
     this._trail = next;
+    this._fresh = added;
+    this._focusAt = null;
     const name = hit.vernacularName || hit.scientificName;
-    this.#say(`${name} ajoutée au parcours${position ? ', ici' : ''}`, async () => { const back = withoutPlant(/** @type {any} */ (this._trail), hit.id); await savePlace(back); this._trail = back; });
+    const n = entriesOf(next, plant.id).length;
+    this.#say(`${name} ajoutée au parcours${n > 1 ? ` (${n}e fois)` : ''}${position ? ', ici' : ''}`, async () => { const back = withoutPlant(/** @type {any} */ (this._trail), added); await savePlace(back); this._trail = back; });
     // Ready for the next one.
-    this._q = ''; this._hits = [];
-    /** @type {HTMLInputElement | null} */ (this.renderRoot.querySelector('.search input'))?.focus();
+    this.#type('');
+    this.#input?.focus();
   }
 
-  /** @param {number} plantId */
-  async #remove(plantId) {
-    const next = withoutPlant(this._trail, plantId);
+  /** One occurrence out of the parcours (the plant's others stay). @param {string} entryId */
+  async #remove(entryId) {
+    const next = withoutPlant(this._trail, entryId);
     await savePlace(next);
     this._trail = next;
   }
@@ -304,30 +343,35 @@ export class GfTrail extends LitElement {
     const t = this._trail;
     if (!t) return this.#starting();
     const plants = [...t.properties.plants].sort((a, b) => String(b.addedAt).localeCompare(String(a.addedAt)));
-    return html`<div class="wrap on v-${this._view}">
-      <div class="head">${this.#card(t)}</div>
-      <div class="tabs"><div class="segmented" role="group" aria-label="Affichage">
-        ${[['list', 'Liste'], ['map', `Carte · ${plants.length}`]].map(([k, l]) => html`<button type="button" aria-pressed=${String(this._view === k)} @click=${() => { this._view = k; }}>${l}</button>`)}
-      </div></div>
-      <div class="col">
-        <div class="search" role="search">
-          <span class="lens" aria-hidden="true">${icon('search')}</span>
-          <input type="search" enterkeyhint="search" autocomplete="off" placeholder="Quelle plante voyez-vous ?" aria-label="Nommer une plante (la flore propose)"
-            .value=${this._q} @input=${(/** @type {any} */ e) => this.#find(e.target.value)}
-            @keydown=${(/** @type {KeyboardEvent} */ e) => { if (e.key === 'Enter') { e.preventDefault(); this.#addFirst(/** @type {any} */ (e.target).value); } }} />
-          <span class="tools">${this._q ? html`<button class="icon-btn" type="button" aria-label="Effacer" @click=${() => this.#find('', true)}>${icon('x-lg')}</button>` : nothing}
-            <gf-voice-button @voice-text=${(/** @type {CustomEvent} */ e) => this.#find(e.detail.text, e.detail.final)}></gf-voice-button></span>
+    return html`<div class="wrap on">
+      <div class="side">
+        <div class="head">${this.#card(t)}</div>
+        <section class="list" aria-label="Les plantes du parcours">
+          ${plants.length ? html`<h2><span>Le parcours</span><span>${this.#count(t)}</span></h2>
+          <ul class="mine">${repeat(plants, e => e.id, e => this.#row(t, e))}</ul>`
+          : html`<p class="hint">Tapez ou dites le nom d’une plante (« ortie », « pissenlit »…) : la flore la propose, un « Ajouter » la pose sur la carte, là où vous êtes.</p>`}
+        </section>
+        <div class="dock">
+          ${this._q ? html`<div class="sheet" aria-label="Plantes proposées">${this.#hitsView(t)}</div>` : nothing}
+          <div class="bar">
+            <div class="search ${this._listening ? 'listening' : ''}" role="search">
+              <span class="lens" aria-hidden="true">${icon('search')}</span>
+              <!-- No value binding: the keyboard's own dictation (and its composition) is never disturbed. -->
+              <input type="search" enterkeyhint="search" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"
+                placeholder=${this._listening ? 'Parlez : « ortie », « pissenlit »…' : 'Quelle plante voyez-vous ?'} aria-label="Nommer une plante (la flore propose)"
+                @input=${(/** @type {any} */ e) => this.#find(e.target.value)}
+                @keydown=${(/** @type {KeyboardEvent} */ e) => {
+                  if (e.isComposing) return;
+                  if (e.key === 'Enter') { e.preventDefault(); this.#addFirst(/** @type {any} */ (e.target).value); }
+                  if (e.key === 'Escape') this.#type(''); }} />
+              ${this._q ? html`<span class="tools"><button class="icon-btn" type="button" aria-label="Effacer" @click=${() => this.#type('')}>${icon('x-lg')}</button></span>` : nothing}
+            </div>
+            <gf-voice-button size="large" fallback
+              @voice-state=${(/** @type {CustomEvent} */ e) => { this._listening = e.detail.state !== 'idle'; }}
+              @voice-text=${(/** @type {CustomEvent} */ e) => this.#type(e.detail.text, e.detail.final)}
+              @voice-fallback=${() => this.#input?.focus()}></gf-voice-button>
+          </div>
         </div>
-        ${this._q ? this.#hitsView(t) : plants.length ? nothing : html`<p class="muted">Tapez ou dites le nom d’une plante (« ortie », « pissenlit »…) : la flore la propose, un « Ajouter » la pose sur la carte, là où vous êtes.</p>`}
-        ${plants.length ? html`<section class="list" aria-label="Les plantes du parcours">
-          <h2><span>Le parcours</span><span>${plants.length} plante${plants.length > 1 ? 's' : ''}</span></h2>
-          <ul class="mine">${repeat(plants, e => e.plantId, e => html`<li>
-            <span class="th">${icon('flower1')}</span>
-            <a href=${href.plant(e.plantId)}><b>${e.vernacularName || e.scientificName}</b>${e.vernacularName ? html`<i>${e.scientificName}</i>` : nothing}</a>
-            <small>${timeOf(e.addedAt)}</small>
-            <button class="icon-btn" type="button" aria-label=${'Retirer ' + (e.vernacularName || e.scientificName) + ' du parcours'} title="Retirer du parcours" @click=${() => this.#remove(e.plantId)}>${icon('x-lg')}</button>
-          </li>`)}</ul>
-        </section>` : nothing}
       </div>
       <div class="mapcol">${this.#map(t)}</div>
       ${this._toast ? html`<div class="toast" role="status">${icon('check-lg')} <span>${this._toast.text}</span>
@@ -335,9 +379,28 @@ export class GfTrail extends LitElement {
     </div>`;
   }
 
+  /** « 12 observations · 9 plantes » (a plant met several times counts once among the plants). @param {any} t */
+  #count(t) {
+    const n = t.properties.plants.length, species = new Set(t.properties.plants.map((/** @type {any} */ e) => e.plantId)).size;
+    if (!n) return 'Aucune plante encore';
+    return n > species ? `${n} observations · ${species} plante${species > 1 ? 's' : ''}` : `${n} plante${n > 1 ? 's' : ''}`;
+  }
+
+  /** A plant noted on the way: touched, the map shows it; its name opens its sheet; ✕ takes this occurrence out. @param {any} t @param {any} e */
+  #row(t, e) {
+    const same = entriesOf(t, e.plantId);
+    const nth = same.length > 1 ? same.indexOf(e) + 1 : 0;
+    const name = e.vernacularName || e.scientificName;
+    return html`<li class=${e.id === this._fresh ? 'fresh' : ''}>
+      <button class="th" type="button" title="Voir sur la carte" aria-label=${'Voir ' + name + ' sur la carte'} @click=${() => { this._focusAt = e.coordinates; }}>${icon('geo-alt-fill')}</button>
+      <a href=${href.plant(e.plantId)}><b>${name}${nth ? html` <span class="nth">n° ${nth}</span>` : nothing}</b>${e.vernacularName ? html`<i>${e.scientificName}</i>` : nothing}</a>
+      <small>${timeOf(e.addedAt)}</small>
+      <button class="icon-btn" type="button" aria-label=${'Retirer ' + name + (nth ? ' n° ' + nth : '') + ' du parcours'} title="Retirer du parcours" @click=${() => this.#remove(e.id)}>${icon('x-lg')}</button>
+    </li>`;
+  }
+
   /** The parcours, small: its name (always editable), its plants, my position; « Terminer ». @param {any} t */
   #card(t) {
-    const n = t.properties.plants.length;
     const gps = this._fix ? `Position ±${Math.round(this._fix.accuracy)} m` : this._geoError ? 'Position introuvable : les plantes vont au point du parcours' : 'Recherche de votre position…';
     return html`<div class="card" aria-label="Le parcours">
       <span class="pin" aria-hidden="true">${icon('geo-alt-fill')}</span>
@@ -351,7 +414,7 @@ export class GfTrail extends LitElement {
         ${icon('pencil')}
       </label>
       <button class="end secondary" type="button" @click=${() => this.#end()}>Terminer</button>
-      <span class="meta"><span>${n} plante${n > 1 ? 's' : ''}</span><span class="gps ${this._fix ? '' : 'off'}">${gps}</span></span>
+      <span class="meta"><span>${this.#count(t)}</span><span class="gps ${this._fix ? '' : 'off'}">${gps}</span></span>
     </div>`;
   }
 
@@ -361,12 +424,14 @@ export class GfTrail extends LitElement {
     const shown = this._hits.slice(0, this._shown);
     const more = this._hits.length - shown.length;
     return html`<ul class="hits" aria-label="Plantes proposées">${repeat(shown, h => h.id, h => {
-      const there = Boolean(findEntry(t, h.id));
+      // Already met: it can be added again (another occurrence, here).
+      const times = entriesOf(t, h.id).length;
       return html`<li class="hit">
         <span class="th">${h.thumbnail?.url ? html`<img src=${h.thumbnail.url} alt="" loading="lazy" referrerpolicy="no-referrer" @error=${(/** @type {any} */ e) => e.target.remove()} />` : icon('flower1')}</span>
-        <span class="t"><b>${h.vernacularName || h.scientificName}</b><i>${h.vernacularName ? h.scientificName + ' · ' : ''}${h.family || ''}</i></span>
-        ${there ? html`<span class="added">${icon('check-lg')} Dans le parcours</span>`
-          : html`<button class="primary add" type="button" @click=${() => this.#add(h)} aria-label=${'Ajouter ' + (h.vernacularName || h.scientificName) + ' au parcours'}>${icon('plus-lg')} Ajouter</button>`}
+        <span class="t"><b>${h.vernacularName || h.scientificName}</b><i>${h.vernacularName ? h.scientificName + ' · ' : ''}${h.family || ''}</i>
+          ${times ? html`<span class="times">${icon('check-lg')} Déjà ${times === 1 ? 'une fois' : times + ' fois'} dans le parcours</span>` : nothing}</span>
+        <button class="primary add" type="button" @click=${() => this.#add(h)}
+          aria-label=${(times ? 'Ajouter encore ' : 'Ajouter ') + (h.vernacularName || h.scientificName) + ' au parcours'}>${icon('plus-lg')} ${times ? 'Encore' : 'Ajouter'}</button>
       </li>`;
     })}</ul>
     ${more > 0 ? html`<button class="more secondary" type="button" @click=${() => { this._shown += STEP; }}>Voir ${Math.min(more, STEP)} plante${Math.min(more, STEP) > 1 ? 's' : ''} de plus (${this._hits.length} en tout)</button>` : nothing}`;
@@ -375,7 +440,9 @@ export class GfTrail extends LitElement {
   /** The map of the parcours: its point, each plant where it was added; me, followed. @param {any} t */
   #map(t) {
     const markers = plantMarkers([t]);
-    const frame = { key: 'trail:' + t.id + ':' + markers.length, maxZoom: 17, points: [t.geometry.coordinates, ...markers.map(m => m.coordinates)].filter(Boolean) };
+    // Framed on the whole parcours (its start and every plant), again as it grows; a plant of the list touched: on it.
+    const points = this._focusAt ? [this._focusAt] : [t.geometry.coordinates, ...markers.map(m => m.coordinates)].filter(Boolean);
+    const frame = { key: 'trail:' + t.id + ':' + points.map(c => c.join(',')).join(';'), maxZoom: this._focusAt ? 19 : 17, points, ease: true };
     return html`<gf-map no-search no-create .spots=${[t]} .plants=${markers} plant-zoom="0" .frame=${frame} track></gf-map>`;
   }
 
