@@ -232,8 +232,8 @@ L'icône film de l'en-tête (ordinateur et téléphone) propose des façons d'en
 
 Le plus simple des modes : un parcours, c'est un lieu de « Mes plantes » où chaque plante notée garde l'endroit où vous l'avez vue.
 - **Démarrer** : « Commencer ici » (votre position) ou une commune ; les parcours déjà commencés se reprennent d'un toucher.
-- **La carte du parcours** (petite, sobre) : son nom (touché, il se renomme), le nombre de plantes, la précision du GPS, « Terminer ».
-- **Nommer une plante** : un grand champ, au clavier ou à la voix (micro) ; la flore propose les plantes qui correspondent, avec photo, famille et un gros bouton « ＋ Ajouter » (Entrée ajoute la première). La plante est posée là où vous êtes ; « Annuler » la retire aussitôt.
+- **La carte du parcours** (petite, sobre, en haut de la liste comme de la carte) : son nom, toujours modifiable (✎), le nombre de plantes, la précision du GPS, « Terminer ».
+- **Nommer une plante** : un grand champ, au clavier ou à la voix (micro) ; la flore propose les plantes qui correspondent, avec photo, famille et un gros bouton « ＋ Ajouter » — toutes celles que trouve la recherche principale, 12 d'abord puis « Voir plus » ; Entrée ajoute la première, toujours pour le nom complet tapé. La plante est posée là où vous êtes ; « Annuler » la retire aussitôt.
 - **La liste** des plantes du parcours (la dernière en haut, avec l'heure), chacune vers sa fiche, ✕ pour la retirer.
 - **La carte** : le parcours et un marqueur par plante ajoutée, avec votre position qui suit ; à côté de la liste sur grand écran, onglets « Liste | Carte » sur téléphone.
 

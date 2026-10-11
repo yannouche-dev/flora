@@ -24,6 +24,9 @@ const write = (/** @type {string} */ k, /** @type {any} */ v) => { try { localSt
 const dayName = () => new Date().toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
 const timeOf = (/** @type {string} */ iso) => { try { return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }); } catch { return ''; } };
 
+/** Plants proposed at first, and added by each « Voir plus ». */
+const STEP = 12;
+
 export class GfTrail extends LitElement {
   static properties = {
     _trail: { state: true },
@@ -37,14 +40,23 @@ export class GfTrail extends LitElement {
     _past: { state: true },
     _places: { state: true },
     _locating: { state: true },
-    _naming: { state: true }
+    _shown: { state: true }
   };
 
   static styles = [ui, css`
     :host { display: block; position: relative; height: 100%; background: var(--gf-bg, var(--gf-surface-2)); container-type: inline-size; }
     .wrap { display: grid; grid-template-columns: minmax(0, 1fr); min-height: 100%; }
-    .wrap.on { height: 100%; grid-template-rows: auto minmax(0, 1fr); }
-    @container (min-width: 900px) { .wrap.on { grid-template-columns: minmax(360px, 520px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); } .wrap.on .col { overflow-y: auto; height: 100%; } }
+    /* Walking: the parcours' card on top (in both views), then the list or the map. */
+    .wrap.on { grid-template-areas: "head" "tabs" "main"; grid-template-rows: auto auto minmax(0, 1fr); }
+    .wrap.on .head { grid-area: head; padding: 14px 14px 0; max-width: 640px; width: 100%; margin: 0 auto; box-sizing: border-box; }
+    .wrap.on .tabs { grid-area: tabs; }
+    .wrap.on .col { grid-area: main; padding-top: 12px; }
+    .wrap.on .mapcol { grid-area: main; }
+    @container (min-width: 900px) {
+      .wrap.on { height: 100%; grid-template-columns: minmax(360px, 520px) minmax(0, 1fr); grid-template-areas: "head map" "main map"; grid-template-rows: auto minmax(0, 1fr); }
+      .wrap.on .mapcol { grid-area: map; }
+      .wrap.on .col { overflow-y: auto; height: 100%; }
+    }
     .col { padding: 14px 14px 90px; display: grid; align-content: start; gap: 12px; max-width: 640px; width: 100%; margin: 0 auto; box-sizing: border-box; }
     /* Starting: one action. */
     .start { text-align: center; gap: 14px; padding-top: 40px; }
@@ -66,8 +78,11 @@ export class GfTrail extends LitElement {
     /* Walking: the parcours' card, the search, the plants. */
     .card { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 12px 14px; border-radius: 16px; background: var(--gf-surface); box-shadow: var(--gf-shadow); }
     .card .pin { grid-row: span 2; width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--gf-accent); color: #fff; font-size: 1.1rem; }
-    .card .name { font-weight: 700; font-size: 1.05rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; border: 0; background: none; padding: 0; text-align: left; font-family: inherit; color: var(--gf-text); cursor: text; }
-    .card input.name { border-bottom: 1px solid var(--gf-accent); cursor: auto; outline: none; }
+    .card .title { display: flex; align-items: center; gap: 6px; min-width: 0; border-radius: 8px; padding: 2px 6px; margin-left: -6px; cursor: text; }
+    .card .title:hover, .card .title:focus-within { background: var(--gf-surface-2); }
+    .card .title:focus-within { box-shadow: inset 0 -2px 0 var(--gf-accent); }
+    .card .name { flex: 1; min-width: 0; font: inherit; font-weight: 700; font-size: 1.05rem; border: 0; background: none; padding: 2px 0; color: var(--gf-text); outline: none; text-overflow: ellipsis; }
+    .card .title .bi { color: var(--gf-text-muted); font-size: 0.85rem; flex: none; }
     .card .meta { grid-column: 2; font-size: 0.8rem; color: var(--gf-text-muted); display: flex; gap: 8px; flex-wrap: wrap; }
     .card .meta .gps.off { color: var(--gf-warn); }
     .card .end { grid-row: span 2; }
@@ -86,6 +101,7 @@ export class GfTrail extends LitElement {
     .add { min-height: 44px; padding: 0 16px; border-radius: var(--gf-radius-pill); font-weight: 700; display: inline-flex; gap: 6px; align-items: center; font-size: 0.95rem; }
     .added { min-height: 44px; padding: 0 14px; display: inline-flex; gap: 6px; align-items: center; color: var(--gf-accent); font-weight: 600; font-size: 0.9rem; }
     .muted { color: var(--gf-text-muted); margin: 0; }
+    .more { justify-self: center; }
     .tabs { display: none; }
     .list h2 { margin: 6px 2px 0; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gf-text-muted); display: flex; justify-content: space-between; }
     .mine { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
@@ -106,8 +122,7 @@ export class GfTrail extends LitElement {
       .wrap.on .tabs { display: flex; position: sticky; top: 0; z-index: 3; justify-content: center; padding: 8px 14px; background: var(--gf-bg, var(--gf-surface-2)); }
       .wrap.on.v-map .col { display: none; }
       .wrap.on.v-list .mapcol { display: none; }
-      .wrap.on { height: auto; min-height: 100%; grid-template-rows: auto auto; }
-      .wrap.on.v-map .mapcol { height: calc(100dvh - 190px); border-left: 0; }
+      .wrap.on.v-map .mapcol { height: max(320px, calc(100dvh - 300px)); border-left: 0; }
     }
     @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
   `];
@@ -132,7 +147,8 @@ export class GfTrail extends LitElement {
     /** @type {any[]} */
     this._places = [];
     this._locating = false;
-    this._naming = false;
+    /** How many of the hits are shown (« Voir plus » adds STEP). */
+    this._shown = STEP;
   }
 
   /** @type {(() => void) | null} */ #stopGeo = null;
@@ -210,10 +226,22 @@ export class GfTrail extends LitElement {
       const q = text.trim();
       if (!q) { this._hits = []; return; }
       this._searching = true;
-      const hits = await findPlants(q, 6).catch(() => []);
-      if (this._q === text) { this._hits = hits; this._searching = false; }
+      const hits = await findPlants(q).catch(() => []);
+      if (this._q === text) { this._hits = hits; this.#hitsFor = text; this._shown = STEP; this._searching = false; }
+      return hits;
     };
-    if (now) run(); else this.#findTimer = setTimeout(run, 160);
+    if (now) return run();
+    this.#findTimer = setTimeout(run, 160);
+    return null;
+  }
+
+  /** The words the hits shown answer (Entrée never adds a plant found for fewer letters). */
+  #hitsFor = '';
+
+  /** Entrée: the first plant for what is typed now — searched at once when the hits are not yet for it. @param {string} text */
+  async #addFirst(text) {
+    const hits = this.#hitsFor === text ? this._hits : await this.#find(text, true);
+    if (hits?.[0] && this._q === text) this.#add(hits[0]);
   }
 
   /** A plant added to the parcours, where I stand (else at the parcours' point). @param {any} hit */
@@ -265,7 +293,6 @@ export class GfTrail extends LitElement {
 
   /** @param {string} name */
   async #rename(name) {
-    this._naming = false;
     const n = name.trim();
     if (!n || !this._trail || n === this._trail.properties.name) return;
     const next = { ...this._trail, properties: { ...this._trail.properties, name: n.slice(0, 80) } };
@@ -278,16 +305,16 @@ export class GfTrail extends LitElement {
     if (!t) return this.#starting();
     const plants = [...t.properties.plants].sort((a, b) => String(b.addedAt).localeCompare(String(a.addedAt)));
     return html`<div class="wrap on v-${this._view}">
+      <div class="head">${this.#card(t)}</div>
       <div class="tabs"><div class="segmented" role="group" aria-label="Affichage">
         ${[['list', 'Liste'], ['map', `Carte · ${plants.length}`]].map(([k, l]) => html`<button type="button" aria-pressed=${String(this._view === k)} @click=${() => { this._view = k; }}>${l}</button>`)}
       </div></div>
       <div class="col">
-        ${this.#card(t)}
         <div class="search" role="search">
           <span class="lens" aria-hidden="true">${icon('search')}</span>
           <input type="search" enterkeyhint="search" autocomplete="off" placeholder="Quelle plante voyez-vous ?" aria-label="Nommer une plante (la flore propose)"
             .value=${this._q} @input=${(/** @type {any} */ e) => this.#find(e.target.value)}
-            @keydown=${(/** @type {KeyboardEvent} */ e) => { if (e.key === 'Enter' && this._hits[0]) { e.preventDefault(); this.#add(this._hits[0]); } }} />
+            @keydown=${(/** @type {KeyboardEvent} */ e) => { if (e.key === 'Enter') { e.preventDefault(); this.#addFirst(/** @type {any} */ (e.target).value); } }} />
           <span class="tools">${this._q ? html`<button class="icon-btn" type="button" aria-label="Effacer" @click=${() => this.#find('', true)}>${icon('x-lg')}</button>` : nothing}
             <gf-voice-button @voice-text=${(/** @type {CustomEvent} */ e) => this.#find(e.detail.text, e.detail.final)}></gf-voice-button></span>
         </div>
@@ -308,16 +335,21 @@ export class GfTrail extends LitElement {
     </div>`;
   }
 
-  /** The parcours, small: its name (a touch to rename), its plants, my position; « Terminer ». @param {any} t */
+  /** The parcours, small: its name (always editable), its plants, my position; « Terminer ». @param {any} t */
   #card(t) {
     const n = t.properties.plants.length;
     const gps = this._fix ? `Position ±${Math.round(this._fix.accuracy)} m` : this._geoError ? 'Position introuvable : les plantes vont au point du parcours' : 'Recherche de votre position…';
     return html`<div class="card" aria-label="Le parcours">
       <span class="pin" aria-hidden="true">${icon('geo-alt-fill')}</span>
-      ${this._naming ? html`<input class="name" .value=${t.properties.name} aria-label="Nom du parcours" autofocus
-          @keydown=${(/** @type {KeyboardEvent} */ e) => { if (e.key === 'Enter') this.#rename(/** @type {any} */ (e.target).value); if (e.key === 'Escape') this._naming = false; }}
-          @blur=${(/** @type {any} */ e) => this.#rename(e.target.value)} />`
-        : html`<button class="name" type="button" title="Renommer" @click=${() => { this._naming = true; }}>${t.properties.name}</button>`}
+      <label class="title" title="Renommer le parcours">
+        <input class="name" .value=${t.properties.name} aria-label="Nom du parcours" maxlength="80" enterkeyhint="done" autocomplete="off"
+          @keydown=${(/** @type {KeyboardEvent} */ e) => { const i = /** @type {HTMLInputElement} */ (e.target);
+            if (e.key === 'Enter') i.blur();
+            if (e.key === 'Escape') { i.value = t.properties.name; i.blur(); } }}
+          @change=${(/** @type {any} */ e) => this.#rename(e.target.value)}
+          @blur=${(/** @type {any} */ e) => { if (!e.target.value.trim()) e.target.value = t.properties.name; }} />
+        ${icon('pencil')}
+      </label>
       <button class="end secondary" type="button" @click=${() => this.#end()}>Terminer</button>
       <span class="meta"><span>${n} plante${n > 1 ? 's' : ''}</span><span class="gps ${this._fix ? '' : 'off'}">${gps}</span></span>
     </div>`;
@@ -326,7 +358,9 @@ export class GfTrail extends LitElement {
   /** The flora's suggestions: each with its photo, its names and a large « Ajouter ». @param {any} t */
   #hitsView(t) {
     if (!this._hits.length) return html`<p class="muted">${this._searching ? 'Recherche dans la flore…' : `Aucune plante de la flore pour « ${this._q} ».`}</p>`;
-    return html`<ul class="hits" aria-label="Plantes proposées">${repeat(this._hits, h => h.id, h => {
+    const shown = this._hits.slice(0, this._shown);
+    const more = this._hits.length - shown.length;
+    return html`<ul class="hits" aria-label="Plantes proposées">${repeat(shown, h => h.id, h => {
       const there = Boolean(findEntry(t, h.id));
       return html`<li class="hit">
         <span class="th">${h.thumbnail?.url ? html`<img src=${h.thumbnail.url} alt="" loading="lazy" referrerpolicy="no-referrer" @error=${(/** @type {any} */ e) => e.target.remove()} />` : icon('flower1')}</span>
@@ -334,7 +368,8 @@ export class GfTrail extends LitElement {
         ${there ? html`<span class="added">${icon('check-lg')} Dans le parcours</span>`
           : html`<button class="primary add" type="button" @click=${() => this.#add(h)} aria-label=${'Ajouter ' + (h.vernacularName || h.scientificName) + ' au parcours'}>${icon('plus-lg')} Ajouter</button>`}
       </li>`;
-    })}</ul>`;
+    })}</ul>
+    ${more > 0 ? html`<button class="more secondary" type="button" @click=${() => { this._shown += STEP; }}>Voir ${Math.min(more, STEP)} plante${Math.min(more, STEP) > 1 ? 's' : ''} de plus (${this._hits.length} en tout)</button>` : nothing}`;
   }
 
   /** The map of the parcours: its point, each plant where it was added; me, followed. @param {any} t */
