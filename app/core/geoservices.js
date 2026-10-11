@@ -99,8 +99,8 @@ const WFS = 'https://data.geopf.fr/wfs/ows';
 
 /**
  * The outline of a French administrative area of GBIF's GADM (a région: « FRA.10_1 », a département:
- * « FRA.10.3_1 »), from IGN's ADMIN EXPRESS (generalised for maps), by its name; null elsewhere or when unknown.
- * Coordinates rounded to ~100 m. Cached a year.
+ * « FRA.10.3_1 »), from IGN's ADMIN EXPRESS (generalised for maps), by its official name; null elsewhere or
+ * when unknown. Lightened to a vertex every ~400 m, coordinates rounded to ~100 m. Cached a year.
  * @param {string} gid @param {string} name
  * @returns {Promise<{ type: 'Feature', geometry: any, properties: { name: string } } | null>}
  */
@@ -111,7 +111,7 @@ export function zoneShape(gid, name) {
   return cached('geo:zone:' + gid, async () => {
     const q = new URLSearchParams({
       SERVICE: 'WFS', VERSION: '2.0.0', REQUEST: 'GetFeature', TYPENAMES: `ADMINEXPRESS-COG-CARTO.LATEST:${type}`,
-      outputFormat: 'application/json', count: '1', CQL_FILTER: `nom='${name.replace(/'/g, "''")}'`
+      outputFormat: 'application/json', count: '1', CQL_FILTER: `nom_officiel='${name.replace(/'/g, "''")}'`
     });
     const data = await json(`${WFS}?${q}`);
     const geometry = data.features?.[0]?.geometry;
@@ -120,14 +120,15 @@ export function zoneShape(gid, name) {
     const flip = (/** @type {number[]} */ p) => Math.abs(p[0]) > 40 && Math.abs(p[1]) < 15;
     const first = /** @type {number[]} */ (geometry.type === 'MultiPolygon' ? geometry.coordinates[0][0][0] : geometry.coordinates[0][0]);
     const swap = flip(first);
+    // Lighter for a map's outline: a vertex every ~400 m at most (a région weighs over 1 MB in full).
     const ring = (/** @type {number[][]} */ r) => {
       /** @type {number[][]} */ const out = [];
-      for (const p of r) {
+      for (const [i, p] of r.entries()) {
         const q = (swap ? [p[1], p[0]] : [p[0], p[1]]).map(v => Math.round(v * 1000) / 1000);
         const last = out[out.length - 1];
-        if (!last || last[0] !== q[0] || last[1] !== q[1]) out.push(q);
+        if (!last || i === r.length - 1 || Math.abs(last[0] - q[0]) + Math.abs(last[1] - q[1]) > 0.004) out.push(q);
       }
-      return out;
+      return out.length >= 4 ? out : r.map(p => (swap ? [p[1], p[0]] : [p[0], p[1]]));
     };
     const coordinates = geometry.type === 'MultiPolygon'
       ? geometry.coordinates.map((/** @type {number[][][]} */ poly) => poly.map(ring))

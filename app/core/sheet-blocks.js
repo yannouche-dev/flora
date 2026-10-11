@@ -549,16 +549,19 @@ export function deleteNote(key) {
  * What a map block shows and lets do (the same in every mode).
  * @typedef {{ gbif: 'fr' | 'world' | 'off', places: boolean, near: 'off' | 'gbif' | 'inat' | 'both', base: 'plan' | 'photo',
  *   overlays: string[], frame: 'auto' | 'france' | 'world' | 'content' | 'me' | 'region', height: 's' | 'm' | 'l',
- *   actions: { open: boolean, create: boolean, edit: boolean, spot: boolean, locate: boolean } }} MapConfig
+ *   actions: { open: boolean, create: boolean, edit: boolean, spot: boolean, locate: boolean },
+ *   subject: 'plant' | 'results' | 'collection', collection: string | null }} MapConfig
+ * `subject`: what the map is about — the plant of the sheet, the plants of the results (the search and its
+ * filters), or a collection (`collection`: its id) — its places shown.
  */
 
 /** @type {MapConfig} */
 export const MAP_DEFAULTS = {
   gbif: 'fr', places: true, near: 'off', base: 'plan', overlays: [], frame: 'auto', height: 'm',
-  actions: { open: true, create: true, edit: true, spot: true, locate: true }
+  actions: { open: true, create: true, edit: true, spot: true, locate: true }, subject: 'plant', collection: null
 };
 
-const MAP_CHOICES = { gbif: ['fr', 'world', 'off'], near: ['off', 'gbif', 'inat', 'both'], base: ['plan', 'photo'], frame: ['auto', 'france', 'world', 'content', 'me', 'region'], height: ['s', 'm', 'l'] };
+const MAP_CHOICES = { gbif: ['fr', 'world', 'off'], near: ['off', 'gbif', 'inat', 'both'], base: ['plan', 'photo'], frame: ['auto', 'france', 'world', 'content', 'me', 'region'], height: ['s', 'm', 'l'], subject: ['plant', 'results', 'collection'] };
 
 /** A map's configuration, cleaned (unknown values give the default). @param {any} saved @returns {MapConfig} */
 function cleanMap(saved) {
@@ -566,6 +569,8 @@ function cleanMap(saved) {
   /** @type {any} */ const out = { ...MAP_DEFAULTS, actions: { ...MAP_DEFAULTS.actions } };
   for (const [k, values] of Object.entries(MAP_CHOICES)) if (values.includes(c[k])) out[k] = c[k];
   if (typeof c.places === 'boolean') out.places = c.places;
+  if (typeof c.collection === 'string' && c.collection.length < 80) out.collection = c.collection;
+  if (out.subject === 'collection' && !out.collection) out.subject = 'plant';
   if (Array.isArray(c.overlays)) out.overlays = c.overlays.filter((/** @type {any} */ o) => typeof o === 'string' && o in OVERLAYS);
   for (const a of Object.keys(MAP_DEFAULTS.actions)) if (typeof c.actions?.[a] === 'boolean') out.actions[a] = c.actions[a];
   return out;

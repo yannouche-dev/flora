@@ -2191,6 +2191,9 @@ export class GfPlantDetail extends LitElement {
       html`<label class="check"><input type="checkbox" .checked=${on} @change=${(/** @type {any} */ e) => change(e.target.checked)} /> ${label}</label>`;
     const action = (/** @type {keyof typeof c.actions} */ a, /** @type {string} */ label) => check(label, c.actions[a], on => set({ actions: { [a]: on } }));
     return html`<div class="map-form" role="group" aria-label="Réglages de la carte">
+      <fieldset><legend>Sujet</legend>
+        ${select('La carte montre', 'subject', [['plant', 'Cette plante'], ['results', 'Les résultats (recherche et filtres)'], ...(c.subject === 'collection' ? [['collection', 'Une collection (choisie sous la carte)']] : [])])}
+      </fieldset>
       <fieldset><legend>Couches</legend>
         ${select('Répartition GBIF', 'gbif', [['fr', 'France'], ['world', 'Monde'], ['off', 'Non']])}
         ${check('Mes lieux de cette plante (et chaque plant)', c.places, on => set({ places: on }))}
