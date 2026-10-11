@@ -135,6 +135,22 @@ export function observationsAround(taxonId, point, radius, signal) {
   });
 }
 
+/**
+ * Where plants were observed in the circle (the 200 most recent research-grade observations, every species),
+ * for a map behind the distance chosen. Cached for a day like the rest.
+ * @param {[number, number]} point @param {number} radius @param {AbortSignal} [signal]
+ * @returns {Promise<{ coordinates: [number, number], title: string }[]>}
+ */
+export function observationPointsAround(point, radius, signal) {
+  if (!moduleOn('inaturalist')) return Promise.reject(new ModuleOffError('inaturalist'));
+  return cached(`around-points:${area(point, radius)}`, async () => {
+    const data = await json(`${API}/observations?${area(point, radius)}&iconic_taxa=Plantae&quality_grade=research&locale=fr&per_page=200&order_by=observed_on`, signal);
+    return (data.results || [])
+      .filter(o => Array.isArray(o.geojson?.coordinates))
+      .map(o => ({ coordinates: /** @type {[number, number]} */ (o.geojson.coordinates), title: o.taxon?.preferred_common_name || o.taxon?.name || 'Plante' }));
+  });
+}
+
 /** The radius chosen last (Carte → Autour). */
 export function savedRadius() {
   try {

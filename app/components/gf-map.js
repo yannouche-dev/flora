@@ -155,7 +155,8 @@ const store = (/** @type {string} */ key, value) => {
  *  - pinDraggable: the place pin can be dragged and long-press emits map-longpress (default true)
  *  - track: show the live GPS position
  *  - fit: zoom to the content on first data
- *  - area: {center, radius, points?} — a circle (metres) and observation dots inside it ("Autour")
+ *  - area: {center, radius, points?, fit?} — a circle (metres) and observation dots inside it ("Autour"); `fit`: the
+ *    view frames the circle, whatever the map's size (again when it is resized)
  *  - frame: {key, points, bottom?} — zoom once on these [lon, lat] points (again when the key changes);
  *    `bottom` is the share of the height kept free below them (e.g. for a sheet)
  *  - search (default on; `no-search` removes it): address search pill on top, with the ▦ "Carte" panel button;
@@ -590,6 +591,7 @@ export class GfMap extends LitElement {
     new ResizeObserver(() => {
       map.invalidateSize();
       this.#applyFrame();
+      this.#fitArea();
       if (this.fit && !this.#fitted) this.#fitToContent();
     }).observe(this.#root);
     this.#syncAll();
@@ -874,13 +876,24 @@ export class GfMap extends LitElement {
     const area = this.area;
     if (!area) return;
     const [lon, lat] = area.center;
-    L.circle([lat, lon], { radius: area.radius, className: 'gf-area', interactive: false }).addTo(layer);
+    const circle = L.circle([lat, lon], { radius: area.radius, className: 'gf-area', interactive: false }).addTo(layer);
+    this.#areaBounds = area.fit ? circle.getBounds() : null;
+    this.#fitArea();
     for (const point of area.points || []) {
       const [x, y] = point.coordinates;
       const dot = L.circleMarker([y, x], { radius: 6, className: 'gf-obs', bubblingMouseEvents: false }).addTo(layer);
       dot.bindTooltip(point.title, { direction: 'top' });
       if (point.url) dot.on('click', () => open(point.url, '_blank', 'noopener'));
     }
+  }
+
+  /** @type {L.LatLngBounds | null} */ #areaBounds = null;
+
+  /** The circle framed (area.fit), with a margin. */
+  #fitArea() {
+    const map = this.#map, b = this.#areaBounds;
+    if (!map || !b || !map.getSize().x) return;
+    map.fitBounds(b, { padding: [16, 16], animate: false });
   }
 
   /** Current zoom level (null before the map exists). */
