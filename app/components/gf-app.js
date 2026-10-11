@@ -16,6 +16,7 @@ import './gf-mode-switch.js';
 import './gf-discover.js';
 import './gf-scenarios.js';
 import { discoverEvents, tabShown, UNLOCKS } from '../core/discover.js';
+import { scenarioOf } from '../core/scenarios.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 
@@ -32,24 +33,37 @@ export class GfApp extends LitElement {
       grid-template-rows: auto 1fr auto;
       height: 100%;
     }
+    /* Three parts: the sections (left), the logo (centred), the tools (right). */
     header {
-      display: flex;
+      display: grid;
+      grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
       align-items: center;
       gap: var(--gf-gap);
-      padding: 8px 16px;
+      padding: 6px 16px;
       background: var(--gf-surface);
       border-bottom: 1px solid var(--gf-border);
     }
+    header .side { display: flex; align-items: center; gap: var(--gf-gap); min-width: 0; }
+    header .side.end { justify-content: flex-end; }
+    /* The logo: bigger, centred, in sight — and quiet (the accent, a light wordmark). */
     .brand {
       display: flex;
       align-items: center;
-      gap: 8px;
-      font-weight: 700;
+      gap: 9px;
       color: var(--gf-accent);
       text-decoration: none;
       white-space: nowrap;
+      padding: 2px 10px 2px 4px;
+      border-radius: var(--gf-radius-pill);
+      transition: background 0.15s;
     }
-    .brand img { width: 28px; height: 28px; }
+    .brand:hover { background: var(--gf-accent-soft); }
+    span.brand:hover { background: none; }
+    /* A scenario played as an app of its own (the Parcours): the rest of GeoFlora dimmed, out of reach. */
+    header.locked .off { opacity: 0.38; filter: grayscale(1); pointer-events: none; }
+    .brand:focus-visible { outline: none; box-shadow: var(--gf-focus); }
+    .brand img { width: 38px; height: 38px; filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.12)); }
+    .brand span { font-size: 1.12rem; font-weight: 600; letter-spacing: 0.01em; }
     nav.tabs { flex: none; }
     nav.tabs a { color: var(--gf-text); text-decoration: none; white-space: nowrap; display: inline-flex; align-items: center; }
     .note, .mode { flex: none; }
@@ -64,8 +78,6 @@ export class GfApp extends LitElement {
     .unlocked button { background: none; border: 0; color: #cfd8cf; font: inherit; cursor: pointer; min-height: 32px; }
     @keyframes up { from { transform: translate(-50%, 20px); opacity: 0; } }
     @media (prefers-reduced-motion: reduce) { .unlocked { animation: none; } }
-    nav.tabs { margin-left: auto; }
-    .phone-scenarios { margin-left: auto; }
     .settings {
       flex: none;
       color: var(--gf-text-muted);
@@ -117,9 +129,13 @@ export class GfApp extends LitElement {
     @keyframes king { 50% { box-shadow: 0 6px 20px rgb(0 0 0 / 0.35), 0 0 0 8px rgb(212 160 23 / 0); } }
     @media (prefers-reduced-motion: reduce) { .king { animation: none; } }
 
+    /* Not much room: the logo alone, « Noter ici » as an icon. */
+    @media (min-width: 700px) and (max-width: 1099px) { .brand span { display: none; } }
+    @media (min-width: 700px) and (max-width: 899px) { .note .lbl { display: none; } .note { padding-inline: 10px; } }
     @media (max-width: 560px) {
-      .brand span { display: none; }
-      header { gap: 8px; padding: 8px 10px; }
+      header { gap: 8px; padding: 6px 10px; }
+      .brand img { width: 34px; height: 34px; }
+      .brand span { font-size: 1.02rem; }
       nav.tabs a { padding: 4px 10px; }
     }
   `];
@@ -156,6 +172,7 @@ export class GfApp extends LitElement {
   constructor() {
     super();
     this.addEventListener('open-capture', () => /** @type {any} */ (this.renderRoot.querySelector('gf-capture'))?.open());
+    this.addEventListener('open-scenarios', () => /** @type {any} */ ([...this.renderRoot.querySelectorAll('gf-scenarios')].find(s => s.getClientRects().length))?.open());
   }
 
   render() {
@@ -163,25 +180,25 @@ export class GfApp extends LitElement {
     const tab = this.#tab(route);
     const { status, statusText, offline, updateReady } = this.#store.state;
     const phone = this.#phone.matches;
+    // The Parcours botanique, an app of its own: the rest of GeoFlora out of reach (dimmed) until another scenario is chosen.
+    const locked = route.name === 'discover' && scenarioOf(route.scenario).key === 'trail';
+    const brand = html`<img src="assets/icons/icon.svg" alt="" /><span>GeoFlora</span>`;
 
     return html`
-      <header>
-        <a class="brand" href=${href.search()}>
-          <img src="assets/icons/icon.svg" alt="" />
-          <span>GeoFlora</span>
-        </a>
-        ${phone ? nothing : html`<nav class="tabs segmented" aria-label="Sections">
+      <header class=${locked ? 'locked' : ''}>
+        <div class="side">${phone ? nothing : html`<nav class="tabs segmented off" aria-label="Sections" ?inert=${locked} aria-disabled=${locked ? 'true' : 'false'}>
           <a href=${href.discover()} aria-current=${tab === 'discover' ? 'page' : 'false'}>Découvrir</a>
           ${tabShown('flore') ? html`<a href=${tabHref('flore', tab === 'flore')} aria-current=${route.name === 'search' || route.name === 'plant' ? 'page' : 'false'}>Flore</a>` : nothing}
           ${tabShown('mine') ? html`<a href=${tabHref('mine', tab === 'mine')} aria-current=${['collections', 'spot', 'spot-new', 'shared'].includes(route.name) ? 'page' : 'false'}>Mes plantes</a>` : nothing}
           ${tabShown('map') ? html`<a href=${tabHref('map', tab === 'map')} aria-current=${route.name === 'map' ? 'page' : 'false'}>Carte</a>` : nothing}
-        </nav>
-        ${tabShown('flore') ? html`<gf-mode-switch class="mode" scope="toute l’application" value=${this.#store.state.mode}
+        </nav>`}</div>
+        ${locked ? html`<span class="brand" aria-label="GeoFlora">${brand}</span>` : html`<a class="brand" href=${href.search()} aria-label="GeoFlora — accueil">${brand}</a>`}
+        <div class="side end">${phone ? html`<gf-scenarios class="phone-scenarios"></gf-scenarios>` : html`
+        ${tabShown('flore') ? html`<gf-mode-switch class="mode off" ?inert=${locked} scope="toute l’application" value=${this.#store.state.mode}
           @mode-change=${e => setMode(e.detail.mode || 'standard')}></gf-mode-switch>` : nothing}
-        ${tabShown('map') ? html`<button class="note primary" type="button" @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-capture'))?.open()}>${icon('plus-lg')} Noter ici</button>` : nothing}
+        ${tabShown('map') ? html`<button class="note primary off" type="button" aria-label="Noter ici" ?disabled=${locked} @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-capture'))?.open()}>${icon('plus-lg')}<span class="lbl"> Noter ici</span></button>` : nothing}
         <gf-scenarios></gf-scenarios>
-        <a class="settings" href=${href.settings()} title="À propos et réglages" aria-label="À propos et réglages">${icon('gear')}</a>`}
-        ${phone ? html`<gf-scenarios class="phone-scenarios"></gf-scenarios>` : nothing}
+        <a class="settings off" href=${href.settings()} title="À propos et réglages" aria-label="À propos et réglages" ?inert=${locked}>${icon('gear')}</a>`}</div>
       </header>
       <main>
         ${updateReady ? html`<div class="banner" role="status">Nouvelle version de GeoFlora disponible.
@@ -192,7 +209,7 @@ export class GfApp extends LitElement {
         ${offline && status === 'ready' && route.name === 'search' ? html`<div class="banner">Hors ligne — recherche sur la copie locale.</div>` : nothing}
         ${this.#outlet(route)}
       </main>
-      ${phone ? html`<gf-tabbar current=${tab}></gf-tabbar>` : html`<span></span>`}
+      ${phone ? html`<gf-tabbar current=${tab} ?locked=${locked}></gf-tabbar>` : html`<span></span>`}
       ${this._unlocked ? this.#unlockedView(/** @type {keyof typeof UNLOCKS} */ (this._unlocked)) : nothing}
       <gf-capture></gf-capture>
       ${this.#store.state.kingMode ? html`<button class="king" type="button" aria-pressed="true" aria-label="Quitter le mode King"

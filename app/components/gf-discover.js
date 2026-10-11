@@ -26,6 +26,7 @@ import { dockBlock, paneOf, setStackState } from '../core/sheet-blocks.js';
 import { stepBack, chooseBranch, discoverEvents, discoverState, discovering, finishDiscover, firstMatchShown, plantSeen, resetPassed, setDiscoverPoint, setDiscoverRadius, setStep, swiped, unswipe, LAST_STEP, PLANTS_BEFORE_FLORE } from '../core/discover.js';
 import { lookalikesOf } from '../core/lookalikes.js';
 import { scenarioOf } from '../core/scenarios.js';
+import { scene, sceneStyles } from '../core/scenes.js';
 import { sheetSession } from '../core/sheet-session.js';
 import { isFavorite, toggleFavorite } from '../core/collections.js';
 import { href, parse } from '../core/router.js';
@@ -120,9 +121,9 @@ export class GfDiscover extends LitElement {
     _hl: { state: true }
   };
 
-  static styles = [ui, css`
+  static styles = [ui, sceneStyles, css`
     :host { display: block; position: relative; min-height: 0; overflow-y: auto; background: var(--gf-bg, var(--gf-surface-2)); container-type: inline-size; }
-    .welcome { max-width: 560px; margin: 0 auto; padding: 48px 20px 32px; display: grid; gap: 18px; text-align: center; }
+    .welcome { max-width: 560px; margin: 0 auto; padding: 28px 20px 32px; display: grid; gap: 18px; text-align: center; }
     .welcome .leaf { font-size: 3rem; color: var(--gf-accent); }
     .welcome h1 { margin: 0; font-size: 1.7rem; line-height: 1.2; }
     .welcome p { margin: 0; color: var(--gf-text-muted); }
@@ -677,7 +678,8 @@ export class GfDiscover extends LitElement {
   #openedHere = false;
 
   #close() {
-    if (depth() > 0 && this.#openedHere) history.back();
+    // The Parcours: its plants open by a link of its list — Back returns to it.
+    if (depth() > 0 && (this.#openedHere || scenarioOf(this.scenario).key === 'trail')) history.back();
     else location.hash = href.discover(null, this.scenario);
   }
 
@@ -710,8 +712,9 @@ export class GfDiscover extends LitElement {
   // ── Render ────────────────────────────────────────────────────────────
 
   render() {
-    // Parcours botanique: its own little app (the place, the search, the plants added, their map).
-    if (scenarioOf(this.scenario).key === 'trail') return html`<gf-trail></gf-trail>`;
+    // Parcours botanique: its own little app (the place, the search, the plants added, their map); a plant of it
+    // opens here, over it — never in Flore.
+    if (scenarioOf(this.scenario).key === 'trail') return html`<gf-trail></gf-trail>${this.open != null ? this.#plantSheet() : nothing}`;
     const guided = this.#guided;
     return html`${!this._point ? this.#welcome() : guided ? this.#guidedView() : this._asking || (!this._cards && !this._loading && !this._error) ? this.#distance() : this.#list()}
       ${this._match ? this.#matchView(this._match) : nothing}
@@ -719,11 +722,17 @@ export class GfDiscover extends LitElement {
   }
 
   #welcome() {
+    const sc = scenarioOf(this.scenario).key;
+    // Each scenario its picture and its words (Rencontres: the cards; Cueillette: the basket; Mosaïque: the photos).
+    const [title, words] = sc === 'harvest'
+      ? ['Cueillette prudente', 'Ce qui se cueille autour de vous… et ses sosies dangereux, les mortels d’abord. Ne cueillez jamais sans être sûr de vous.']
+      : sc === 'mosaic'
+        ? ['La mosaïque du coin', 'Toutes les photos des plantes observées près d’ici, en grand. Une image touchée : toutes celles de la plante.']
+        : ['Découvrez les plantes autour de vous !', 'Orties farceuses, pissenlits voyageurs, chênes centenaires : tout un petit monde vert pousse près d’ici. Un coup de cœur à droite, au suivant à gauche.'];
     return html`<section class="welcome">
-      <div class="leaf" aria-hidden="true">${icon('binoculars')}</div>
-      <h1>Découvrez les plantes autour de vous !</h1>
-      <p>Orties farceuses, pissenlits voyageurs, chênes centenaires : tout un petit monde vert pousse près d’ici. Un coup de cœur à droite, au suivant à gauche.
-        Votre position ne sert qu’à cette recherche.</p>
+      ${scene(sc)}
+      <h1>${title}</h1>
+      <p>${words} Votre position ne sert qu’à cette recherche.</p>
       <button class="primary go" type="button" ?disabled=${this._locating} @click=${() => this.#locate()}>${icon('geo-alt-fill')} ${this._locating ? 'Localisation…' : 'Autour de moi'}</button>
       ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : nothing}
       <span class="or">ou</span>
@@ -1464,11 +1473,11 @@ export class GfDiscover extends LitElement {
     const name = at >= 0 ? list[at].plant.vernacularNames?.[0] || list[at].plant.scientificName : '';
     return html`<section class="sheet" aria-label="Plante" @touchstart=${this.#touchStart} @touchend=${this.#touchEnd}>
       <div class="sheet-head">
-        <button class="icon-btn" type="button" aria-label="Retour aux plantes autour" title="Retour (Échap)" @click=${() => this.#close()}>${icon('arrow-left')}</button>
+        <button class="icon-btn" type="button" aria-label=${scenarioOf(this.scenario).key === 'trail' ? 'Retour au parcours' : 'Retour aux plantes autour'} title="Retour (Échap)" @click=${() => this.#close()}>${icon('arrow-left')}</button>
         ${this._rail && this._rail.plantId === this.open && this._rail.items.length ? html`<span class="visually-hidden">${name}</span><gf-sheet-rail .items=${this._rail.items} .active=${this._rail.active} .at=${this._rail.at} .entity=${this._rail.entity} orientation="row"
           @rail-go=${(/** @type {CustomEvent} */ e) => this.#sheet?.goTo(e.detail.key)}></gf-sheet-rail>` : html`<strong>${name}</strong>`}
       </div>
-      <gf-plant-detail embedded outer-rail plant-id=${this.open} view="epure" @sheet-rail=${(/** @type {CustomEvent} */ e) => { this._rail = e.detail; }}></gf-plant-detail>
+      <gf-plant-detail embedded outer-rail plant-id=${this.open} view="epure" ?scoped=${scenarioOf(this.scenario).key === 'trail'} @sheet-rail=${(/** @type {CustomEvent} */ e) => { this._rail = e.detail; }}></gf-plant-detail>
       ${at >= 0 ? html`<nav class="pager" aria-label="Plantes autour">
         <button class="secondary prev" type="button" ?disabled=${at <= 0} @click=${() => this.#step(-1)}>${icon('chevron-left')} Préc.</button>
         <span>${at + 1} / ${list.length}</span>
