@@ -30,7 +30,7 @@ const ground = svg`<path d="M0 156 Q 70 128 150 142 T 320 132 L 320 190 L 0 190 
 
 const TRAIL = 'M30 150 C 86 152 64 100 124 100 S 188 146 228 112 S 266 56 290 44';
 
-/** The Parcours botanique: a dotted walk from a pin to a flag, flowers and leaves along it. */
+/** The Parcours botanique: a dotted walk from a pin to a flag, flowers and leaves along it — plants only (a leaf in the wind, no animal). */
 const trail = () => svg`
   <defs><mask id="scene-walk" maskUnits="userSpaceOnUse" x="0" y="-10" width="320" height="200">
     <path class="walk" pathLength="1" d=${TRAIL} fill="none" stroke="#fff" stroke-width="16" stroke-linecap="round"/></mask></defs>
@@ -47,7 +47,7 @@ const trail = () => svg`
   ${sticker(290, 34, 'flag-fill', 'var(--sun)', 16, 1.35, 'var(--ink-dark)', -4)}
   ${loose(100, 164, 'leaf', 'var(--leaf)', 16, 0.4, -20)}
   ${loose(196, 170, 'leaf-fill', 'var(--leaf2)', 14, 0.8, 30)}
-  ${loose(150, 40, 'bug-fill', 'var(--red)', 16, 1.2, 25, 'fly')}`;
+  ${loose(150, 40, 'leaf-fill', 'var(--leaf2)', 17, 1.2, 25, 'fly')}`;
 
 /** Rencontres: a fan of plant cards, a heart for a match, binoculars to look around. */
 const meet = () => svg`

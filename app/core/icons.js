@@ -15,7 +15,7 @@ const SPRITE = new URL('../../assets/icons/bi.svg', import.meta.url).href;
  *   | 'leaf' | 'leaf-fill' | 'list-nested' | 'list-ul' | 'map' | 'map-fill' | 'mic' | 'mic-fill' | 'pencil' | 'pin-angle' | 'pin-angle-fill' | 'plus-lg' | 'search' | 'share' | 'shield-check' | 'star' | 'star-fill' | 'table'
  *   | 'three-dots' | 'trash3' | 'triangle' | 'type-h2' | 'upload' | 'x' | 'x-lg'
  *   | 'arrows-fullscreen' | 'box-arrow-up-right' | 'fullscreen-exit' | 'images' | 'zoom-in' | 'tree' | 'flower3' | 'fruit' | 'bark' | 'binoculars' | 'binoculars-fill' | 'geo-alt' | 'lightbulb' | 'camera-reels' | 'card-text' | 'wikipedia' | 'basket' | 'lock-fill' | 'unlock'
- *   | 'flower2' | 'flag-fill' | 'sun-fill' | 'bug-fill' | 'tree-fill' | 'basket2-fill' | 'cloud-fill' | 'stars' | 'signpost-split-fill'} IconName
+ *   | 'flower2' | 'flag-fill' | 'sun-fill' | 'tree-fill' | 'basket2-fill' | 'cloud-fill' | 'stars' | 'signpost-split-fill'} IconName
  */
 
 /** An icon in a Lit template. @param {IconName} name */

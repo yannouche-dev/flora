@@ -14,7 +14,7 @@ const NAMES = [
   'three-dots', 'trash3', 'triangle', 'type-h2', 'upload', 'x', 'x-lg',
   'arrows-fullscreen', 'box-arrow-up-right', 'fullscreen-exit', 'images', 'zoom-in', 'tree', 'flower3', 'card-text', 'wikipedia', 'basket', 'lock-fill', 'unlock',
   // The scenarios' pictures (Parcours, Rencontres, Cueillette, Mosaïque).
-  'flower2', 'flag-fill', 'sun-fill', 'bug-fill', 'tree-fill', 'basket2-fill', 'cloud-fill', 'stars', 'signpost-split-fill'
+  'flower2', 'flag-fill', 'sun-fill', 'tree-fill', 'basket2-fill', 'cloud-fill', 'stars', 'signpost-split-fill'
 ];
 
 // Drawn for the app, in the same 16 × 16 grid, where Bootstrap Icons has none.
