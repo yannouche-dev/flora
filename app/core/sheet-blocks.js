@@ -42,7 +42,9 @@ export const BLOCKS = [
   { key: 'literature', title: 'Publications (GBIF)', module: 'gbif' },
   { key: 'trefle', title: 'Trefle', module: 'trefle' },
   { key: 'ids', title: 'Identifiants' },
-  { key: 'resources', title: 'Ressources' }
+  { key: 'resources', title: 'Ressources' },
+  // Another site, in a frame: in a pane, the app's links to other sites open there.
+  { key: 'web', title: 'Page web' }
 ];
 
 /** The parts of a block that can be moved and hidden inside it, in their default order. @type {Record<string, SubBlock[]>} */
@@ -110,9 +112,9 @@ export const ACTIONS = SUBS.actions;
 
 /** Default order of each mode: what the mode is about first. Note blocks follow, in their creation order. @type {Record<Mode, string[]>} */
 const DEFAULTS = {
-  epure: ['name', 'photos', 'media', 'status', 'lookalikes', 'uses', 'calendar', 'interactions', 'wikipedia', 'names', 'taxonomy', 'mine', 'descriptions', 'occurrences', 'map', 'climate', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids', 'resources'],
-  standard: ['name', 'status', 'lookalikes', 'uses', 'taxonomy', 'mine', 'calendar', 'interactions', 'media', 'photos', 'wikipedia', 'descriptions', 'names', 'resources', 'occurrences', 'map', 'climate', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids'],
-  scientific: ['name', 'lookalikes', 'taxonomy', 'status', 'calendar', 'occurrences', 'map', 'climate', 'interactions', 'wikipedia', 'descriptions', 'gbifProfile', 'media', 'photos', 'gbifMedia', 'trefle', 'literature', 'ids', 'mine', 'resources', 'uses', 'names']
+  epure: ['name', 'photos', 'media', 'status', 'lookalikes', 'uses', 'calendar', 'interactions', 'wikipedia', 'names', 'taxonomy', 'mine', 'descriptions', 'occurrences', 'map', 'climate', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids', 'resources', 'web'],
+  standard: ['name', 'status', 'lookalikes', 'uses', 'taxonomy', 'mine', 'calendar', 'interactions', 'media', 'photos', 'wikipedia', 'descriptions', 'names', 'resources', 'occurrences', 'map', 'climate', 'gbifMedia', 'gbifProfile', 'trefle', 'literature', 'ids', 'web'],
+  scientific: ['name', 'lookalikes', 'taxonomy', 'status', 'calendar', 'occurrences', 'map', 'climate', 'interactions', 'wikipedia', 'descriptions', 'gbifProfile', 'media', 'photos', 'gbifMedia', 'trefle', 'literature', 'ids', 'mine', 'resources', 'uses', 'names', 'web']
 };
 
 /**
@@ -121,7 +123,7 @@ const DEFAULTS = {
  * Épuré keeps its large photo (touching it opens the viewer).
  * @type {Record<Mode, string[]>}
  */
-const DEFAULT_HIDDEN = { epure: ['media'], standard: ['photos', 'gbifMedia'], scientific: ['photos', 'gbifMedia'] };
+const DEFAULT_HIDDEN = { epure: ['media', 'web'], standard: ['photos', 'gbifMedia', 'web'], scientific: ['photos', 'gbifMedia', 'web'] };
 
 /** The blocks folded by hand (or by default) in a view. @param {Mode} view @returns {string[]} */
 const hiddenList = view => layout().hidden[view] ?? DEFAULT_HIDDEN[baseOf(view)] ?? [];
@@ -546,17 +548,20 @@ export function deleteNote(key) {
 /**
  * What a map block shows and lets do (the same in every mode).
  * @typedef {{ gbif: 'fr' | 'world' | 'off', places: boolean, near: 'off' | 'gbif' | 'inat' | 'both', base: 'plan' | 'photo',
- *   overlays: string[], frame: 'auto' | 'france' | 'world' | 'content' | 'me', height: 's' | 'm' | 'l',
- *   actions: { open: boolean, create: boolean, edit: boolean, spot: boolean, locate: boolean } }} MapConfig
+ *   overlays: string[], frame: 'auto' | 'france' | 'world' | 'content' | 'me' | 'region', height: 's' | 'm' | 'l',
+ *   actions: { open: boolean, create: boolean, edit: boolean, spot: boolean, locate: boolean },
+ *   subject: 'plant' | 'results' | 'collection', collection: string | null }} MapConfig
+ * `subject`: what the map is about — the plant of the sheet, the plants of the results (the search and its
+ * filters), or a collection (`collection`: its id) — its places shown.
  */
 
 /** @type {MapConfig} */
 export const MAP_DEFAULTS = {
   gbif: 'fr', places: true, near: 'off', base: 'plan', overlays: [], frame: 'auto', height: 'm',
-  actions: { open: true, create: true, edit: true, spot: true, locate: true }
+  actions: { open: true, create: true, edit: true, spot: true, locate: true }, subject: 'plant', collection: null
 };
 
-const MAP_CHOICES = { gbif: ['fr', 'world', 'off'], near: ['off', 'gbif', 'inat', 'both'], base: ['plan', 'photo'], frame: ['auto', 'france', 'world', 'content', 'me'], height: ['s', 'm', 'l'] };
+const MAP_CHOICES = { gbif: ['fr', 'world', 'off'], near: ['off', 'gbif', 'inat', 'both'], base: ['plan', 'photo'], frame: ['auto', 'france', 'world', 'content', 'me', 'region'], height: ['s', 'm', 'l'], subject: ['plant', 'results', 'collection'] };
 
 /** A map's configuration, cleaned (unknown values give the default). @param {any} saved @returns {MapConfig} */
 function cleanMap(saved) {
@@ -564,6 +569,8 @@ function cleanMap(saved) {
   /** @type {any} */ const out = { ...MAP_DEFAULTS, actions: { ...MAP_DEFAULTS.actions } };
   for (const [k, values] of Object.entries(MAP_CHOICES)) if (values.includes(c[k])) out[k] = c[k];
   if (typeof c.places === 'boolean') out.places = c.places;
+  if (typeof c.collection === 'string' && c.collection.length < 80) out.collection = c.collection;
+  if (out.subject === 'collection' && !out.collection) out.subject = 'plant';
   if (Array.isArray(c.overlays)) out.overlays = c.overlays.filter((/** @type {any} */ o) => typeof o === 'string' && o in OVERLAYS);
   for (const a of Object.keys(MAP_DEFAULTS.actions)) if (typeof c.actions?.[a] === 'boolean') out.actions[a] = c.actions[a];
   return out;

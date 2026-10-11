@@ -39,6 +39,8 @@ import { chartStyles, climateChart, groupColor, groupLegend, networkChart, niche
 import { unsafeCSS } from 'lit';
 import './gf-sortable-list.js';
 import './gf-media-viewer.js';
+import './gf-web-pane.js';
+import { registerWebPane, unregisterWebPane } from '../core/web-pane.js';
 import './gf-sheet-rail.js';
 import { alertsOf } from '../core/alerts.js';
 import { sheetSession } from '../core/sheet-session.js';
@@ -323,6 +325,11 @@ function trefleFacts(details) {
   return facts.slice(0, 60);
 }
 
+/** The reading line, this far under the top of what can be read: the block (or theme) past it is the one read. */
+const READ_LINE = 24;
+/** Stopped this near the start of the block read: settled on it. */
+const SETTLE = 28;
+
 export class GfPlantDetail extends LitElement {
   static properties = {
     plantId: { type: Number, attribute: 'plant-id' },
@@ -361,6 +368,8 @@ export class GfPlantDetail extends LitElement {
     _paneDialog: { state: true },
     /** The category of the block at the top of the sheet (lit in the side rail). */
     _activeCat: { state: true },
+    /** The block read (under the top of the sheet), lit in the rubrics' list with the article's theme read. */
+    _activeBlock: { state: true },
     /** The plant's alerts, as counts on the rubric icons (alerts.js). */
     _alerts: { state: true },
     /** The sheet is wide enough for the rubrics in a column on its left. */
@@ -668,7 +677,7 @@ export class GfPlantDetail extends LitElement {
     .wiki-menu a:hover { color: var(--gf-text); background: var(--gf-surface-2); }
     .wiki-menu a.on { background: var(--gf-accent-soft); color: var(--gf-accent); font-weight: 600; }
     .wiki-menu a:focus-visible { outline: none; box-shadow: var(--gf-focus); }
-    .wiki-theme { border-top: 1px solid var(--gf-border); scroll-margin-top: 52px; }
+    .wiki-theme { border-top: 1px solid var(--gf-border); scroll-margin-top: var(--wiki-menu-h, 40px); }
     .wiki-theme > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; padding: 10px 0; cursor: pointer; font-weight: 600; list-style: none; }
     .wiki-theme > summary::-webkit-details-marker { display: none; }
     .wiki-theme > summary::before { content: '›'; display: inline-block; transition: transform 0.15s; color: var(--gf-text-muted); }
@@ -751,6 +760,9 @@ export class GfPlantDetail extends LitElement {
     .split { flex: 1; min-width: 0; min-height: 0; display: flex; }
     .split.row { flex-direction: row; } .split.col { flex-direction: column; }
     .cell { display: flex; min-width: 0; min-height: 0; }
+    /* The media's pane keeps the room its viewer needs (its image, zoom bar and thumbnails never overlap). */
+    .split.col > .cell:not(.folded):has(gf-media-viewer:not([compact])) { min-height: 400px; }
+    .split.row > .cell:not(.folded):has(gf-media-viewer:not([compact])) { min-width: 280px; }
     .cell > * { flex: 1; min-width: 0; min-height: 0; }
     .cell.folded { flex: 0 0 auto !important; }
     .split-grip { flex: none; position: relative; z-index: 8; background: var(--gf-border); touch-action: none; }
@@ -763,17 +775,37 @@ export class GfPlantDetail extends LitElement {
     .split-grip:hover::after, .split-grip:focus-visible::after { background: var(--gf-accent); }
     .split-grip:focus-visible { outline: none; }
     .frame.edged .main { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; padding: 16px 16px 0; }
+    /* A new plant, while its place (the rubric read) comes: the sheet waits, unseen, then shows there at once. */
+    :host([holding]) article { opacity: 0; transition: none; }
+    article { transition: opacity 0.12s ease-out; }
+    /* Room after the last block: any block (a rubric's, the last ones too) can come right under the top. */
+    .frame.edged .main[data-drop-node='sheet']::after { content: ''; display: block; height: max(0px, calc(100% - 160px)); }
     :host([embedded]) .frame.edged .main { padding: 4px 14px 0; }
     /* Narrow: the panes as bands above and under the sheet, sharing the height left to it. */
     .frame.edged.narrow { flex-direction: column; }
     .band-cell { flex: none; height: min(calc(var(--host-h, 80vh) * 0.45), calc((var(--host-h, 80vh) - 220px) / var(--bands, 1))); border-bottom: 1px solid var(--gf-border); }
     .band-cell.folded { height: auto; }
+    /* A narrow sheet: the media's band too keeps the room its viewer needs. */
+    .band-cell:not(.folded):has(gf-media-viewer:not([compact])) { min-height: 400px; }
     .panes-only .band-cell.grow { flex: 1 0 300px; height: auto; }
     .frame.edged.narrow.panes-only { overflow-y: auto; }
     .edge { position: relative; z-index: 7; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--gf-bg, var(--gf-surface-2)); }
     /* Over the whole plant pane for a while (the frame holds it: the cells are not positioned). */
     .edge.max { position: absolute; inset: 0; z-index: 30; box-shadow: var(--gf-shadow-float); }
     .edge-bar { flex: none; display: flex; align-items: center; gap: 4px; min-height: 36px; padding: 2px 6px 2px 8px; color: var(--gf-text-muted); font-size: 0.75rem; }
+    /* The media's controls in its header (type, part, count): what the viewer's own line held. */
+    .media-ctl { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: flex-end; gap: 6px; overflow-x: auto; scrollbar-width: none; color: var(--gf-text); }
+    .media-ctl:empty { display: none; }
+    .media-ctl::-webkit-scrollbar { display: none; }
+    .media-ctl select { font: inherit; font-size: 0.78rem; padding: 2px 4px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-sm); background: var(--gf-surface); color: var(--gf-text); max-width: 150px; min-height: 0; height: 28px; }
+    .media-ctl .count { color: var(--gf-text-muted); font-variant-numeric: tabular-nums; font-size: 0.78rem; white-space: nowrap; }
+    .media-ctl .parts { flex: none; display: flex; gap: 1px; padding: 2px; border-radius: var(--gf-radius-pill); background: var(--gf-surface-2); }
+    .media-ctl .parts button { width: 26px; height: 24px; min-height: 0; padding: 0; border: 0; border-radius: var(--gf-radius-pill); background: none; color: var(--gf-text-muted); display: grid; place-items: center; cursor: pointer; font-size: 0.8rem; }
+    .media-ctl .parts button[aria-checked='true'] { background: var(--gf-surface); color: var(--gf-accent); box-shadow: 0 1px 3px rgb(0 0 0 / 15%); }
+    .media-ctl .parts button:disabled { opacity: 0.3; cursor: default; }
+    .media-ctl .icon-btn { width: 28px; height: 28px; min-height: 0; }
+    .media-ctl .back-mosaic { white-space: nowrap; font-size: 0.78rem; }
+    .edge-bar:has(.media-ctl:not(:empty)) .edge-tabs .tab-name { display: none; }
     .edge-tabs { flex: 1; min-width: 0; display: flex; gap: 2px; overflow-x: auto; scrollbar-width: none; }
     .edge-tabs::-webkit-scrollbar { display: none; }
     .edge-tabs button { display: inline-flex; align-items: center; gap: 5px; min-height: 28px; padding: 2px 8px; border: 0; border-radius: var(--gf-radius-sm); background: none;
@@ -802,6 +834,9 @@ export class GfPlantDetail extends LitElement {
     .edge-body > .block.map-block > .content, .edge-body > .block[data-key='media'] > .content { flex: 1; display: flex; flex-direction: column; min-height: 0; }
     .edge-body .map-placeholder.fill { flex: 1; height: auto !important; }
     .edge-body gf-media-viewer { flex: 1; min-height: 0; }
+    .edge-body > .block[data-key='web'] { flex: 1 0 260px; display: flex; flex-direction: column; min-height: 0; }
+    .edge-body > .block[data-key='web'] > .content { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+    .edge-body:has(> .block[data-key='web']) { padding: 0; }
     gf-sheet-map[fill] { flex: 1; min-height: 0; }
     /* Folded: its bar only (a column: a strip of its blocks' icons). */
     .edge.col.folded { width: 44px; }
@@ -838,7 +873,7 @@ export class GfPlantDetail extends LitElement {
     .railed { --rail-h: 44px; }
     .rail { position: sticky; top: -16px; z-index: 9; margin: -16px -16px 6px; padding: 4px 10px; background: var(--gf-surface); border-bottom: 1px solid var(--gf-border); }
     :host([embedded]) .rail { top: -4px; margin: -4px -14px 6px; }
-    .block { scroll-margin-top: calc(var(--rail-h, 0px) + 8px); }
+    .block { scroll-margin-top: var(--rail-h, 0px); }
     .block[data-flash] { animation: flash 1.2s ease-out; }
     @keyframes flash { from { box-shadow: 0 0 0 3px var(--gf-accent); } to { box-shadow: 0 0 0 3px transparent; } }
     @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } .block[data-flash] { animation: none; } }
@@ -923,6 +958,10 @@ export class GfPlantDetail extends LitElement {
     this.#resize.observe(this);
     // The sheet scrolls itself, or its middle when edges are used (scroll does not bubble: caught on the way down).
     this.renderRoot.addEventListener('scroll', this.#onScroll, { passive: true, capture: true });
+    // The hand scrolling (not a touch on a rubric): the sheet may settle where it stops.
+    for (const ev of ['wheel', 'touchmove', 'keydown']) this.addEventListener(ev, () => { this.#handAt = Date.now(); }, { passive: true, capture: true });
+    // The media's controls drawn in its pane's header follow the viewer.
+    this.renderRoot.addEventListener('media-bar', () => this.requestUpdate());
     this.addEventListener('scroll', this.#onScroll, { passive: true });
     this.addEventListener('keydown', this.#onEdgeKey);
     // A menu (position, edge options) closes when touching elsewhere.
@@ -956,6 +995,14 @@ export class GfPlantDetail extends LitElement {
 
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
+    if (changed.has('preview') && changed.get('preview') === true && !this.preview) this.#promoted = true;
+    // Another plant, opening at the rubric read: unseen from this very frame until it is there (#restoreAnchor).
+    // The card underneath (a preview) too: it comes on top already there.
+    if (changed.has('plantId') && this.plantId != null && sheetSession.anchor && !this.only) {
+      this.setAttribute('holding', '');
+      clearTimeout(this.#holdCap);
+      this.#holdCap = setTimeout(() => { if (!this.#restoring) this.removeAttribute('holding'); }, 2500);
+    }
     // The panels opened follow to the next plant (not from a preview card, which is not read).
     if (!this.preview && !this.only) {
       if (changed.has('_subsOpen')) sheetSession.subsOpen = this._subsOpen;
@@ -984,6 +1031,7 @@ export class GfPlantDetail extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    unregisterWebPane(this);
     this.#resize.disconnect();
     this.#abort?.abort();
   }
@@ -1014,6 +1062,12 @@ export class GfPlantDetail extends LitElement {
     this.#requested.clear();
     this.scrollTop = 0;
     this.#restored = false;
+    // Opening at the rubric read on the previous plant: unseen until it is there (#restoreAnchor), never stuck.
+    if (sheetSession.anchor && !this.only) {
+      this.setAttribute('holding', '');
+      clearTimeout(this.#holdCap);
+      this.#holdCap = setTimeout(() => { if (!this.#restoring) this.removeAttribute('holding'); }, 2500);
+    }
 
     let plant;
     try {
@@ -1443,7 +1497,9 @@ export class GfPlantDetail extends LitElement {
     const el = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('#wiki-' + t));
     // The article elsewhere (an edge, a pane) or not drawn yet: to the block itself.
     if (!el) { this.#goTo('wikipedia'); return; }
-    el.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+    this.#scrollTo(el, { smooth: true, under: this.#wikiMenuH });
+    this._activeBlock = 'wikipedia';
+    this._activeCat = blockCategory('wikipedia');
     el.removeAttribute('data-flash'); void el.offsetWidth; el.setAttribute('data-flash', '');
     setTimeout(() => el.removeAttribute('data-flash'), 1300);
     this._wikiActive = t;
@@ -1494,9 +1550,8 @@ export class GfPlantDetail extends LitElement {
   #wikiSpy(scroller) {
     const themes = /** @type {NodeListOf<HTMLElement>} */ (this.renderRoot.querySelectorAll('.wiki-theme'));
     if (!themes.length) return;
-    const top = scroller.getBoundingClientRect().top + 110;
-    let current = null;
-    for (const el of themes) if (el.getBoundingClientRect().top <= top) current = el.dataset.theme || null;
+    // The same rule, under the article's menu.
+    const current = this.#readAt([...themes], this.#readingTop(scroller) + this.#wikiMenuH, scroller)?.dataset.theme || null;
     if (current !== this._wikiActive) this._wikiActive = current;
   }
 
@@ -1533,6 +1588,8 @@ export class GfPlantDetail extends LitElement {
 
   /** Shown here: everything in Mode King; outside it, not folded, not left out for being empty. @param {string} k @param {any} ctx */
   #visible(k, ctx) {
+    // « Page web » works in a pane only: elsewhere, Mode King alone shows it (to be placed).
+    if (k === 'web') return this.#store.state.kingMode || Boolean(paneOf(this.view, 'web'));
     return this.#store.state.kingMode || (!isHidden(this.view, k) && !(hidesEmpty(this.view, k) && this.#emptyHere(k, ctx)));
   }
 
@@ -1583,13 +1640,14 @@ export class GfPlantDetail extends LitElement {
     const tabs = html`<span class="edge-tabs" role="tablist" aria-label=${'Blocs du volet ' + where}>${keys.map(k => html`<button type="button" role="tab" data-drag-key=${k}
       aria-selected=${k === tab ? 'true' : 'false'} title=${blockTitle(k)} @click=${() => setStackState(this.view, node.id, { active: k, folded: false })}
       @pointerdown=${king ? (/** @type {PointerEvent} */ e) => this.#press(e, k) : null}>
-      ${icon(categoryOf(blockCategory(k)).icon)}<span class="tab-name">${blockTitle(k)}</span></button>`)}</span>`;
+      ${icon(k === 'web' ? 'globe-europe-africa' : categoryOf(blockCategory(k)).icon)}<span class="tab-name">${blockTitle(k)}</span></button>`)}</span>`;
     return html`<aside class="edge ${column ? 'col' : 'band'} ${folded ? 'folded' : ''} ${bare ? 'bare' : ''} ${max ? 'max' : ''} ${king ? 'king' : ''}"
         data-pane=${node.id} data-drop-node=${node.id} aria-label=${'Volet ' + where}>
-      ${bare ? html`<div class="edge-float">${keys.length > 1 ? tabs : nothing}
+      ${bare ? html`<div class="edge-float">${keys.length > 1 ? tabs : nothing}${tab === 'media' ? this.#mediaControls() : nothing}
           <button class="edge-btn" type="button" title="Agrandir à tout le panneau" aria-label=${'Agrandir le volet ' + where} @click=${() => { this._maxEdge = node.id; }}>${icon('arrows-fullscreen')}</button></div>`
         : html`<div class="edge-bar">
         ${tabs}
+        ${tab === 'media' && !folded ? this.#mediaControls() : nothing}
         ${king ? this.#placePicker(tab) : nothing}
         ${folded ? nothing : html`<details class="edge-opts">
           <summary class="edge-btn" title="Options d’affichage" aria-label=${'Options d’affichage du volet ' + where}>${icon('gear')}</summary>
@@ -1605,6 +1663,12 @@ export class GfPlantDetail extends LitElement {
       </div>`}
       ${folded ? nothing : html`<div class="edge-body">${repeat([tab], k => k, k => king ? this.#block(k, ctx, null) : this.#plainBlock(k, ctx))}</div>`}
     </aside>`;
+  }
+
+  /** The media's controls (type, part of the plant, count) in its pane's header: one line less. */
+  #mediaControls() {
+    const viewer = /** @type {any} */ (this.renderRoot.querySelector('.edge gf-media-viewer[bar-out]'));
+    return html`<span class="media-ctl">${viewer ? viewer.controls() : nothing}</span>`;
   }
 
   /**
@@ -1652,10 +1716,13 @@ export class GfPlantDetail extends LitElement {
     const start = row ? e.clientX : e.clientY;
     const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
     const pa = row ? ra.width : ra.height, pb = row ? rb.width : rb.height;
+    // Each side keeps its own minimum (the media's pane: room for its viewer), else 60 px.
+    const least = (/** @type {HTMLElement} */ c) => Math.max(60, parseFloat(getComputedStyle(c)[row ? 'minWidth' : 'minHeight']) || 0);
+    const ma = least(a), mb = least(b);
     const total = node.sizes.reduce((x, y) => x + y, 0), wa = node.sizes[i - 1] / total, wb = node.sizes[i] / total;
     let na = wa, nb = wb;
     const move = (/** @type {PointerEvent} */ ev) => {
-      const d = Math.max(-pa + 60, Math.min(pb - 60, (row ? ev.clientX : ev.clientY) - start));
+      const d = Math.max(-pa + ma, Math.min(pb - mb, (row ? ev.clientX : ev.clientY) - start));
       na = wa * (pa + d) / pa; nb = wb * (pb - d) / pb;
       a.style.flexGrow = String(na); b.style.flexGrow = String(nb);
     };
@@ -1715,7 +1782,7 @@ export class GfPlantDetail extends LitElement {
     const items = this.#railItems(ctx);
     if (this.outerRail) { this.#railOut = items; return nothing; }
     if (!items.length) return nothing;
-    return html`<div class="rail"><gf-sheet-rail .items=${items} .active=${this._activeCat} orientation="row"
+    return html`<div class="rail"><gf-sheet-rail .items=${items} .active=${this._activeCat} .at=${this.#railAt} .entity=${this.#entity} orientation="row"
       @rail-go=${(/** @type {CustomEvent} */ e) => this.goTo(e.detail.key)}></gf-sheet-rail></div>`;
   }
   /** @type {any[] | null} */ #railOut = null;
@@ -1724,12 +1791,44 @@ export class GfPlantDetail extends LitElement {
   /** Tells the host the rubrics (and the one read), when they change. */
   #sendRail() {
     if (!this.outerRail || this.preview || this.only || !this.#railOut) return;
-    const items = this.#railOut, active = this._activeCat;
-    const sig = JSON.stringify([items, active]);
+    const items = this.#railOut, active = this._activeCat, at = this.#railAt, entity = this.#entity;
+    const sig = JSON.stringify([items, active, at, entity]);
     if (sig === this.#railSent) return;
     this.#railSent = sig;
-    this.dispatchEvent(new CustomEvent('sheet-rail', { detail: { items, active, plantId: this.plantId }, bubbles: true, composed: true }));
+    this.dispatchEvent(new CustomEvent('sheet-rail', { detail: { items, active, at, entity, plantId: this.plantId }, bubbles: true, composed: true }));
   }
+
+  /** What the sheet is, from its name: a genus, a species, a subspecies, a variety, a form, a hybrid. */
+  get #entity() {
+    const name = String(this._plant?.scientificName || '');
+    if (!name) return null;
+    if (/\ssubsp\.\s/.test(name)) return 'Sous-espèce';
+    if (/\svar\.\s/.test(name)) return 'Variété';
+    if (/\sf\.\s/.test(name)) return 'Forme';
+    if (/(^|\s)[×x]\s/.test(name)) return 'Hybride';
+    return /^\S+\s+[a-zà-ÿ-]+/.test(name) ? 'Espèce' : 'Genre';
+  }
+
+  /** Where the reading is, for the rubrics' list: the block, or the article's theme (« wiki:<theme> »). */
+  get #railAt() {
+    const b = this._activeBlock;
+    return b === 'wikipedia' && this._wikiActive ? 'wiki:' + this._wikiActive : b || null;
+  }
+
+  /**
+   * Scrolls the sheet (only the sheet: not the page or a pane around it) to put `el` at its top — right under
+   * what stays on top: the rubrics stuck over a sheet that scrolls itself, the article's menu over its themes.
+   * @param {HTMLElement} el @param {{ smooth?: boolean, under?: number, into?: number }} [opts]
+   */
+  #scrollTo(el, { smooth = false, under = 0, into = 0 } = {}) {
+    const scroller = this.#sheetScroller;
+    const rail = scroller === this ? /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.rail'))?.offsetHeight || 0 : 0;
+    const top = scroller.scrollTop + el.getBoundingClientRect().top - scroller.getBoundingClientRect().top - rail - under + into;
+    scroller.scrollTo({ top, behavior: smooth && !matchMedia('(prefers-reduced-motion: reduce)').matches ? 'smooth' : 'auto' });
+  }
+
+  /** The article's menu stuck over its themes (its height). */
+  get #wikiMenuH() { return /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.wiki-menu'))?.offsetHeight || 0; }
 
   /** To a rubric's block (or a theme of the article, « wiki:<theme> »), asked by the host's rail. @param {string} key */
   goTo(key) {
@@ -1758,12 +1857,13 @@ export class GfPlantDetail extends LitElement {
     await this.updateComplete;
     const section = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(`.block[data-key="${CSS.escape(key)}"]`));
     if (!section) return;
+    this._activeBlock = key;
     if (instant) {
-      section.scrollIntoView({ behavior: 'auto', block: 'start' });
+      this.#scrollTo(section);
       this._activeCat = blockCategory(key);
       return;
     }
-    section.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+    this.#scrollTo(section, { smooth: true });
     // An attribute, not a class: the block's class is the template's, rewritten on the next render.
     section.removeAttribute('data-flash');
     void section.offsetWidth;
@@ -1772,83 +1872,142 @@ export class GfPlantDetail extends LitElement {
     this._activeCat = blockCategory(key);
   }
 
-  /** The block at the top of the sheet: its category lights up in the rail (and is kept for the next plant). */
+  /**
+   * The reading, like a breadcrumb: the block whose top has passed the reading line (just under what stays on top
+   * of the sheet) — and in the article, the theme under its menu. Its rubric lights up; the next plant opens
+   * there, at its top, exactly as a touch on it would (not somewhere inside it).
+   */
   #onScroll = () => {
     if (this.#scrollFrame) return;
     this.#scrollFrame = requestAnimationFrame(() => {
       this.#scrollFrame = 0;
-      let current = null;
-      /** @type {HTMLElement | null} */ let currentEl = null;
       const scroller = this.#sheetScroller;
       if (this.#restoring) return;
-      const scTop = scroller.getBoundingClientRect().top, top = scTop + 72;
-      /** The block under the top edge of the sheet (the anchor), not the one lit a little lower. @type {HTMLElement | null} */
-      let atEdge = null;
-      for (const el of /** @type {NodeListOf<HTMLElement>} */ (this.renderRoot.querySelectorAll('.blocks > .block'))) {
-        const t = el.getBoundingClientRect().top;
-        if (t <= scTop + 4) atEdge = el;
-        if (t <= top) { current = el.dataset.key; currentEl = el; } else break;
-      }
+      let current = this.#readAt(/** @type {HTMLElement[]} */ ([...this.renderRoot.querySelectorAll('.blocks > .block')]), this.#readingTop(scroller), scroller)?.dataset.key || null;
+      const atTop = scroller.scrollTop < 40;
+      if (atTop) current = null;
       const cat = current ? blockCategory(current) : null;
       if (cat !== this._activeCat) this._activeCat = cat;
+      if (current !== this._activeBlock) this._activeBlock = current;
       this.#wikiSpy(scroller);
-      // Read by the user: the next plant opens at the same rubric (the top: from the top).
-      if (!this.preview && !this.only && this._plant) {
-        const atTop = scroller.scrollTop < 40;
-        sheetSession.anchor = atTop ? null : cat;
-        // The block itself, and how far into it (the next plant opens there, not at the rubric's first block).
-        const anchorEl = atEdge || currentEl;
-        sheetSession.anchorBlock = atTop || !anchorEl ? null : anchorEl.dataset.key || null;
-        sheetSession.anchorOffset = atTop || !anchorEl ? 0 : Math.round(scTop - anchorEl.getBoundingClientRect().top);
-        sheetSession.anchorWiki = !atTop && sheetSession.anchorBlock === 'wikipedia' ? this._wikiActive : null;
+      clearTimeout(this.#settleTimer);
+      this.#settleTimer = setTimeout(() => this.#settle(), 180);
+      // Read by the user: the next plant opens there (the top: from the top) — unless the anchor is locked (the
+      // padlock of the rubrics): then it stays where it was locked.
+      if (!this.preview && !this.only && this._plant && !sheetSession.anchorLock) {
+        sheetSession.anchor = cat;
+        sheetSession.anchorBlock = current;
+        sheetSession.anchorOffset = 0;
+        sheetSession.anchorWiki = current === 'wikipedia' ? this._wikiActive : null;
       }
     });
   };
+
+  /**
+   * The one read among `els` (in order), `top` being the top of what can be read: the one at the top — when it
+   * starts there (put there by a touch, or settled), it is the one; when it was scrolled into, the next one
+   * once its title has come into the top third.
+   * @param {HTMLElement[]} els @param {number} top @param {HTMLElement} scroller
+   */
+  #readAt(els, top, scroller) {
+    let at = null, next = null;
+    for (const el of els) {
+      const t = el.getBoundingClientRect().top;
+      if (t <= top + READ_LINE) at = { el, t }; else { next = { el, t }; break; }
+    }
+    if (at && at.t >= top - 2) return at.el;
+    if (next && next.t <= top + Math.max(READ_LINE, scroller.clientHeight / 3)) return next.el;
+    return at?.el || null;
+  }
+
+  /**
+   * Scrolled by hand and stopped near the start of the block (or theme) read — within SETTLE px —: settled
+   * exactly there, as a touch on its rubric puts it. Farther, the sheet stays where it was left.
+   */
+  #settle() {
+    if (this.#restoring || this.preview || this.only || Date.now() - this.#handAt > 600) return;
+    const scroller = this.#sheetScroller;
+    const wiki = this._activeBlock === 'wikipedia' && this._wikiActive ? /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('#wiki-' + this._wikiActive)) : null;
+    const block = this._activeBlock ? /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(`.blocks > .block[data-key="${CSS.escape(this._activeBlock)}"]`)) : null;
+    const top = this.#readingTop(scroller);
+    for (const [el, under] of /** @type {[HTMLElement | null, number][]} */ ([[wiki, this.#wikiMenuH], [block, 0]])) {
+      if (!el) continue;
+      const d = el.getBoundingClientRect().top - (top + under);
+      if (Math.abs(d) >= 1 && Math.abs(d) <= SETTLE) { this.#scrollTo(el, { smooth: true, under }); return; }
+      if (Math.abs(d) < 1) return;
+    }
+  }
+  /** When the hand last scrolled the sheet (wheel, touch, keys). */
+  #handAt = 0;
+  /** @type {any} */ #settleTimer = 0;
+
+  /** The top of what can be read: the sheet's top, under the rubrics stuck over a sheet that scrolls itself. @param {HTMLElement} scroller */
+  #readingTop(scroller) {
+    const rail = scroller === this ? /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.rail'))?.offsetHeight || 0 : 0;
+    return scroller.getBoundingClientRect().top + rail;
+  }
   #scrollFrame = 0;
 
   /** The sheet's scrolling part: its middle when it has edges, else itself. */
   get #sheetScroller() { return /** @type {HTMLElement} */ (this.renderRoot.querySelector('.frame.edged .main[data-drop-node="sheet"]') || this); }
 
   /**
-   * A new plant opens at the rubric read on the previous one; while its blocks come in (and grow), it stays
-   * there — until the user scrolls, or after 2.5 s.
+   * A new plant opens at the rubric read on the previous one, exactly where it was read: the sheet stays hidden
+   * (its panes do not) until that place is there — the block read, or the article's theme — and has stopped
+   * growing; then it shows at once, no scrolling seen. Later growth above it keeps it in place, until the user
+   * scrolls (or after 6 s). Never hidden more than 1.5 s: past that, at the rubric's first block.
    */
   async #restoreAnchor() {
     const cat = sheetSession.anchor;
-    if (!cat || this.preview || this.only) return;
+    if (this.only) return;
+    // Locked at the top: from the top.
+    if (!cat) { if (sheetSession.anchorLock) { await this.updateComplete; this.#sheetScroller.scrollTop = 0; } return; }
     await this.updateComplete;
-    // The block read on the previous plant when this one has it, else the rubric's first block in the sheet's
-    // flow (on an edge or in the pane, it is already in view).
     const blocks = () => /** @type {HTMLElement[]} */ ([...this.renderRoot.querySelectorAll('.blocks > .block')]);
     const same = () => sheetSession.anchorBlock ? blocks().find(el => el.dataset.key === sheetSession.anchorBlock) : undefined;
     const first = () => same() || blocks().find(el => blockCategory(el.dataset.key || '') === cat);
-    // The blocks of the rubric may come later (their data loading): no return — they are waited for below.
     const offset = sheetSession.anchorOffset, theme = sheetSession.anchorWiki;
+    const wikiEl = () => theme && sheetSession.anchorBlock === 'wikipedia' ? /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('#wiki-' + theme)) : null;
+    /** The place read is there (the block, or the article's theme). */
+    const there = () => Boolean(theme && sheetSession.anchorBlock === 'wikipedia' ? wikiEl() : same());
+    // Already there (a card coming on top): put in place at once, nothing hidden.
+    const ready = there();
+    if (!ready) this.setAttribute('holding', '');
     this.#restoring = true;
     const scroller = this.#sheetScroller;
     const pin = () => {
-      // In the article: at the theme read (its anchor), once the article is there.
-      const wiki = theme && sheetSession.anchorBlock === 'wikipedia' ? /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('#wiki-' + theme)) : null;
-      if (wiki) { scroller.scrollTop += wiki.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 52; this._wikiActive = theme; return; }
+      const wiki = wikiEl();
+      if (wiki) { this.#scrollTo(wiki, { under: this.#wikiMenuH }); this._wikiActive = theme; this._activeBlock = 'wikipedia'; return; }
       const el = first();
       if (!el) return;
+      this._activeBlock = el.dataset.key || null;
       // As far into the block as before (within it), else at its top.
-      const into = same() === el ? Math.max(-80, Math.min(offset, el.offsetHeight - 60)) : null;
-      if (into === null) { el.scrollIntoView({ behavior: 'auto', block: 'start' }); return; }
-      scroller.scrollTop += el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + into;
+      const into = same() === el ? Math.max(-80, Math.min(offset, el.offsetHeight - 60)) : 0;
+      this.#scrollTo(el, { into });
     };
+    /** @type {any} */ let quiet = 0;
+    const show = () => {
+      clearTimeout(quiet); clearTimeout(cap);
+      if (!this.hasAttribute('holding')) return;
+      pin();
+      this.removeAttribute('holding');
+    };
+    // Shown once the place is there and nothing has moved for a moment.
+    const settle = () => { clearTimeout(quiet); quiet = setTimeout(() => { if (there()) show(); }, 220); };
+    const cap = setTimeout(show, 1500);
     pin();
+    if (ready) show(); else settle();
     this._activeCat = cat;
     const body = this.renderRoot.querySelector('article') || scroller;
-    // Blocks appearing (a block's data arriving) are watched too, not only growing ones.
-    const appear = new MutationObserver(() => pin());
+    const appear = new MutationObserver(() => { pin(); settle(); });
     appear.observe(body, { childList: true, subtree: true });
-    const grow = new ResizeObserver(() => pin());
+    const grow = new ResizeObserver(() => { pin(); settle(); });
     grow.observe(body);
     const stop = () => {
       grow.disconnect();
       appear.disconnect();
       clearTimeout(timer);
+      show();
       for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) scroller.removeEventListener(ev, stop);
       requestAnimationFrame(() => { this.#restoring = false; });
     };
@@ -1856,6 +2015,9 @@ export class GfPlantDetail extends LitElement {
     for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) scroller.addEventListener(ev, stop, { passive: true, once: true });
   }
   #restoring = false;
+  /** The card underneath just came on top. */
+  #promoted = false;
+  /** @type {any} */ #holdCap = 0;
   #restored = false;
 
   /**
@@ -1879,18 +2041,32 @@ export class GfPlantDetail extends LitElement {
     return html`<div class="frame edged ${this._maxEdge ? 'maxed' : ''}" data-drop-node="root">${this.#node(ctx, tree, sheet)}</div>`;
   }
 
+  /** A page arrived for the « Page web » pane: its tab shown, unfolded. */
+  revealWeb() {
+    const pane = paneOf(this.view, 'web');
+    if (pane && (pane.active !== 'web' || pane.folded)) setStackState(this.view, pane.id, { active: 'web', folded: false });
+  }
+
   updated() {
+    // A « Page web » pane in this layout: the app's links to other sites come to it.
+    if (paneOf(this.view, 'web') && !this.only) registerWebPane(this); else unregisterWebPane(this);
     // The sheet scrolls in its middle when it has edges: the host itself does not.
     this.toggleAttribute('edged', Boolean(this.renderRoot.querySelector('.frame.edged')));
     this.#sendRail();
     // The theme read stays in sight in the article's menu.
     const menu = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.wiki-menu'));
+    // Its height: a theme settles right under it (as a touch on it puts it).
+    if (menu?.offsetHeight && this.style.getPropertyValue('--wiki-menu-h') !== menu.offsetHeight + 'px') this.style.setProperty('--wiki-menu-h', menu.offsetHeight + 'px');
     const on = /** @type {HTMLElement | null} */ (menu?.querySelector('a.on'));
     if (menu && on && (on.offsetLeft < menu.scrollLeft || on.offsetLeft + on.offsetWidth > menu.scrollLeft + menu.clientWidth - 16)) {
       menu.scrollTo({ left: on.offsetLeft - menu.clientWidth / 2 + on.offsetWidth / 2, behavior: 'smooth' });
     }
     // The plant is drawn (and read, not a card waiting underneath): at the rubric read on the previous one.
-    if (!this.#restored && this._plant && !this._plant.failed && !this.preview && !this.only) { this.#restored = true; this.#restoreAnchor(); }
+    // The card underneath (a preview) is put there too, ready to come on top; on top, it is put there again (its
+    // blocks may have changed meanwhile) — already there, nothing is seen.
+    if (!this.#restored && this._plant && !this._plant.failed && !this.only) { this.#restored = true; this.#restoreAnchor(); }
+    else if (this.#promoted && this._plant && !this._plant.failed) this.#restoreAnchor();
+    this.#promoted = false;
   }
 
   /** A block read without its title (Mode King › title on/off, per view). @param {string} key */
@@ -1912,7 +2088,7 @@ export class GfPlantDetail extends LitElement {
   }
 
   /** Blocks that make no sense alone in a pane. */
-  static NO_PANE = ['name', 'actions', 'media'];
+  static NO_PANE = ['name', 'actions', 'media', 'web'];
 
   /** ⤢ on a block: open it in the pane beside the sheet. @param {string} key */
   #paneButton(key) {
@@ -2034,6 +2210,7 @@ export class GfPlantDetail extends LitElement {
     if (this.preview) return html`<div class="map-placeholder ${fill ? 'fill' : ''}" style=${`height:${{ s: 180, m: 260, l: 380 }[config.height]}px`}></div>`;
     return html`<gf-sheet-map .plant=${plant} .gbifKey=${details?.identifiers?.gbif?.id ?? null} .inatId=${inat?.id ?? null}
       .config=${config} mode=${this.view} ?fill=${fill} .focus=${this._focus}
+      @map-config=${(/** @type {CustomEvent} */ e) => setMapConfig(key, e.detail)}
       @focus-clear=${(/** @type {CustomEvent} */ e) => { this._focus = { ...this._focus, [e.detail.kind]: null }; }}
       @map-layers=${(/** @type {CustomEvent} */ e) => {
         const { base, overlays } = e.detail;
@@ -2054,6 +2231,9 @@ export class GfPlantDetail extends LitElement {
       html`<label class="check"><input type="checkbox" .checked=${on} @change=${(/** @type {any} */ e) => change(e.target.checked)} /> ${label}</label>`;
     const action = (/** @type {keyof typeof c.actions} */ a, /** @type {string} */ label) => check(label, c.actions[a], on => set({ actions: { [a]: on } }));
     return html`<div class="map-form" role="group" aria-label="Réglages de la carte">
+      <fieldset><legend>Sujet</legend>
+        ${select('La carte montre', 'subject', [['plant', 'Cette plante'], ['results', 'Les résultats (recherche et filtres)'], ...(c.subject === 'collection' ? [['collection', 'Une collection (choisie sous la carte)']] : [])])}
+      </fieldset>
       <fieldset><legend>Couches</legend>
         ${select('Répartition GBIF', 'gbif', [['fr', 'France'], ['world', 'Monde'], ['off', 'Non']])}
         ${check('Mes lieux de cette plante (et chaque plant)', c.places, on => set({ places: on }))}
@@ -2065,7 +2245,7 @@ export class GfPlantDetail extends LitElement {
           on => set({ overlays: on ? [...c.overlays, k] : c.overlays.filter(o => o !== k) })))}
       </fieldset>
       <fieldset><legend>Affichage</legend>
-        ${select('Cadrage', 'frame', [['auto', 'Automatique (selon les couches)'], ['france', 'France entière'], ['world', 'Monde entier'], ['content', 'Ajusté à ce qui est affiché'], ['me', 'Autour de moi']])}
+        ${select('Cadrage', 'frame', [['auto', 'Automatique (selon les couches)'], ['france', 'France entière'], ['world', 'Monde entier'], ['content', 'Ajusté à ce qui est affiché'], ['me', 'Autour de moi'], ['region', 'Ma région']])}
         ${select('Hauteur', 'height', [['s', 'Petite'], ['m', 'Moyenne'], ['l', 'Grande']])}
       </fieldset>
       <fieldset><legend>Actions</legend>
@@ -2158,10 +2338,11 @@ export class GfPlantDetail extends LitElement {
     if (isMap(key)) return this.#map(key, ctx);
     switch (key) {
       case 'name': return this.#name(ctx);
+      case 'web': return html`<gf-web-pane ?inactive=${!paneOf(v, 'web')}></gf-web-pane>`;
       case 'media':
         return ctx.photosOff ? html`<p class="muted">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`
           // In the sheet: compact; stuck to an edge: the full viewer, filling it (its keys only when it has the focus).
-          : html`<gf-media-viewer ?prefer-photos=${this.panesOnly} ?compact=${!isOnEdge(this.view, 'media')} ?local=${isOnEdge(this.view, 'media')} plant-id=${plant.id} .view=${this.view}
+          : html`<gf-media-viewer ?prefer-photos=${this.panesOnly} ?showcase=${this.panesOnly} ?bar-out=${isOnEdge(this.view, 'media')} ?compact=${!isOnEdge(this.view, 'media')} ?local=${isOnEdge(this.view, 'media')} plant-id=${plant.id} .view=${this.view}
             presentation=${blockStyle(this.view, 'media')} .label=${isTitleShown(this.view, 'media') ? null : blockTitle('media')}
             @open-pane=${(/** @type {CustomEvent} */ e) => { e.stopPropagation(); this.#openPane('media', e.detail.url); }}></gf-media-viewer>`;
       case 'photos': {

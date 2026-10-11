@@ -5,14 +5,13 @@ import { MediaController, PHONE_QUERY } from '../core/media.js';
 import { activeFilterCount, clearFilters, lastSearchHash } from '../core/query.js';
 import { href } from '../core/router.js';
 import { backTo, depth, openModal } from '../core/history.js';
-import { plantViewOf, setPlantView, StoreController } from '../core/store.js';
+import { plantViewOf, StoreController } from '../core/store.js';
 import { ui } from '../styles/ui.js';
 import './gf-results-bar.js';
 import './gf-filter-panel.js';
 import './gf-plant-list.js';
 import './gf-plant-detail.js';
 import './gf-sheet-rail.js';
-import './gf-mode-switch.js';
 import './gf-pager.js';
 import './gf-media-viewer.js';
 import { icon } from '../core/icons.js';
@@ -711,7 +710,7 @@ export class GfFlora extends LitElement {
     const rail = this._rail;
     // The previous plant's rubrics stay until the new sheet tells its own: the header does not blink.
     if (!rail || !rail.items.length) return 'Plante';
-    return html`<span class="visually-hidden">Plante</span><gf-sheet-rail .items=${rail.items} .active=${rail.active} orientation="row"
+    return html`<span class="visually-hidden">Plante</span><gf-sheet-rail .items=${rail.items} .active=${rail.active} .at=${rail.at} .entity=${rail.entity} orientation="row"
       @rail-go=${(/** @type {CustomEvent} */ e) => {
         const sheet = /** @type {any} */ (this.renderRoot.querySelector('.swipe:not(.under) gf-plant-detail'));
         sheet?.goTo(e.detail.key);
@@ -750,8 +749,6 @@ export class GfFlora extends LitElement {
     const plantFolded = showPlant && folded.plant;
 
     const plantView = plantViewOf(this.#store.state);
-    const plantSwitch = html`<gf-mode-switch scope="la fiche" value=${plantView} ?overridden=${this.#store.state.plantView !== null}
-      @mode-change=${e => setPlantView(e.detail.mode)}></gf-mode-switch>`;
 
     return html`
       <div class="panes">
@@ -777,7 +774,6 @@ export class GfFlora extends LitElement {
           <section class="pane plant ${resultsFolded && !media ? 'fill' : ''}" aria-label="Plante" @open-pane=${this.#openPane} @sheet-rail=${this.#onSheetRail}
             style=${resultsFolded && !media ? '' : `width:${Math.min(this.#width('plant'), this.#max('plant'))}px`}>
             ${this.#head('plant', this.#plantRail(), html`
-              ${plantSwitch}
               <a class="icon-btn" href=${'#/plant/' + plantId} title="Ouvrir la fiche seule" aria-label="Ouvrir la fiche seule"
                 @click=${e => { e.preventDefault(); this.#fold('results', true); }}>${icon('arrows-angle-expand')}</a>
               <button class="icon-btn" type="button" title="Fermer la fiche" aria-label="Fermer la fiche" @click=${() => this.#closePlant()}>${icon('x-lg')}</button>`)}
@@ -790,7 +786,6 @@ export class GfFlora extends LitElement {
           <div class="pane-head">
             <button class="link back" type="button" aria-label="Résultats" @click=${() => this.#closePlant()}>${icon('arrow-left')}</button>
             <h2>${this.#plantRail()}</h2>
-            ${plantSwitch}
           </div>
           <div class="pane-body" style="display:flex;flex-direction:column;overflow:hidden;background:var(--gf-surface-2)">${this.#swipe(plantId, plantView, true)}${this.#pager(true)}</div>
         </section>` : nothing}

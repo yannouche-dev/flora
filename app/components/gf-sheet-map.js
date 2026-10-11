@@ -1,17 +1,33 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { href } from '../core/router.js';
-import { collectionsForPlant, formatDistance, plantMarkers, savePlace, spotEvents, withEntry } from '../core/collections.js';
+import { collectionsForPlant, formatDistance, listCollections, plantMarkers, savePlace, spotEvents, withEntry } from '../core/collections.js';
+import { store } from '../core/store.js';
 import { lastFix, watchLocation } from '../core/geo.js';
 import { FRANCE_BOUNDS, WORLD_BOUNDS } from '../core/ign.js';
 import { moduleOn } from '../core/modules.js';
-import { observationsAround, savedRadius } from '../core/nearby.js';
+import { observationsAround, RADII, savedRadius, saveRadius } from '../core/nearby.js';
+import { addressAt, zoneShape } from '../core/geoservices.js';
+import { discoverState } from '../core/discover.js';
+import { regionOf } from '../core/regions.js';
 import * as sources from '../core/sources.js';
 import { MAP_DEFAULTS } from '../core/sheet-blocks.js';
-import { focusId, isPlaceFilter, noFocus } from '../core/map-focus.js';
+import { FOCUS_EVENT, focusId, isPlaceFilter, noFocus } from '../core/map-focus.js';
+import { lookalikesOf } from '../core/lookalikes.js';
+import { OVERLAYS } from '../core/ign.js';
 import { icon } from '../core/icons.js';
 import { ui } from '../styles/ui.js';
 import './gf-map.js';
+
+/** The box of an outline, as two corners [lon, lat]. @param {any} feature @returns {[number, number][] | null} */
+function zoneBounds(feature) {
+  const g = feature?.geometry;
+  if (!g) return null;
+  const pts = /** @type {number[][]} */ (g.type === 'MultiPolygon' ? g.coordinates.flat(2) : g.coordinates.flat(1));
+  if (!pts.length) return null;
+  const lons = pts.map(p => p[0]), lats = pts.map(p => p[1]);
+  return [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]];
+}
 
 /** Heights of a map block. */
 const HEIGHTS = { s: 180, m: 260, l: 380 };
@@ -67,7 +83,13 @@ export class GfSheetMap extends LitElement {
     _spots: { state: true },
     _near: { state: true },
     _compare: { state: true },
-    _bounds: { state: true }
+    _bounds: { state: true },
+    /** The region where I am (from my position, or the place chosen in Découvrir), for « Ma région ». */
+    _region: { state: true },
+    /** The plants it is mistaken for (to show beside it, from « Plantes à confondre »). */
+    _lookalikes: { state: true },
+    /** My collections (to choose one as what the map is about). */
+    _collections: { state: true }
   };
 
   static styles = [ui, css`
@@ -89,9 +111,30 @@ export class GfSheetMap extends LitElement {
     .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; font-size: 0.78rem; color: var(--gf-text-muted); }
     .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; border: 1px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 20%); }
     .hint { font-size: 0.78rem; color: var(--gf-text-muted); margin: 6px 0 0; }
+    /* What the map can show: how to frame it, how far around me, which data. */
+    .scope { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 8px; align-items: center; margin-top: 8px; font-size: 0.78rem; }
+    .scope > b { color: var(--gf-text-muted); font-weight: 600; white-space: nowrap; }
+    .scope .row { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+    .scope button { min-height: 0; height: 26px; padding: 0 10px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill); background: var(--gf-surface);
+      color: var(--gf-text); font: inherit; font-size: 0.78rem; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap; }
+    .scope button:hover { background: var(--gf-surface-2); }
+    .scope button[aria-pressed='true'] { background: var(--gf-accent-soft); border-color: var(--gf-accent); color: var(--gf-accent); font-weight: 600; }
+    .scope button:focus-visible { outline: none; box-shadow: var(--gf-focus); }
+    .scope button i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+    .scope small { color: var(--gf-text-muted); font-weight: 400; }
+    .scope select { height: 26px; min-height: 0; padding: 0 8px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill); background: var(--gf-surface); color: var(--gf-text); font: inherit; font-size: 0.78rem; max-width: 220px; }
+    .scope select.on { background: var(--gf-accent-soft); border-color: var(--gf-accent); color: var(--gf-accent); font-weight: 600; }
   `];
 
-  #onChange = () => this.#loadSpots();
+  #onChange = () => { this.#loadSpots(); this.#loadCollections(); };
+  /** The results changed (the search, its filters): a map about them follows. */
+  #onStore = () => {
+    const items = store.state.results.items;
+    if (items !== this.#items) { this.#items = items; if (this.config.subject === 'results') this.#loadSpots(); }
+  };
+  /** @type {any} */ #items = null;
+  /** Which plants of a place are shown (the plant, the results', the collection's). @type {(e: any) => boolean} */
+  #keep = () => true;
 
   constructor() {
     super();
@@ -115,21 +158,68 @@ export class GfSheetMap extends LitElement {
     this._spots = [];
     /** Observations around: not asked, looking, the result, or what went wrong. @type {any} */
     this._near = undefined;
+    /** @type {{ name: string, bounds: [number, number, number, number] } | null} */
+    this._region = null;
   }
 
   connectedCallback() {
     super.connectedCallback();
     spotEvents.addEventListener('change', this.#onChange);
+    store.addEventListener('change', this.#onStore);
+    this.#items = store.state.results.items;
+    this.#findRegion();
+    this.#loadCollections();
+  }
+
+  async #loadCollections() {
+    const all = await listCollections().catch(() => []);
+    this._collections = all.map(c => ({ id: c.id, name: c.properties.name || (c.properties.kind === 'favorites' ? 'Favoris' : 'Sans nom'), kind: c.properties.kind, count: c.properties.plants.length }));
+  }
+
+  /** Where I am, as far as the app knows without asking: my last position, else the place chosen in Découvrir. */
+  get #whereIAm() {
+    return /** @type {[number, number] | null} */ (this._near?.point || lastFix()?.coordinates || discoverState().point || null);
+  }
+
+  /** My region (IGN address of where I am), once. */
+  async #findRegion() {
+    const point = this.#whereIAm;
+    if (!point || this.#regionFor === point.join()) return;
+    this.#regionFor = point.join();
+    const a = await addressAt(point).catch(() => null);
+    this._region = a ? regionOf(a.context) : null;
+  }
+  #regionFor = '';
+
+  /** A setting of this map changed here (the scope bar): the sheet keeps it, per map. @param {any} patch */
+  #set(patch) {
+    if ('near' in patch && patch.near !== 'off') nearAllowed = true;
+    this.dispatchEvent(new CustomEvent('map-config', { detail: patch }));
+  }
+
+  /** « Autour de moi »: framed on the circle around me (located first if needed). */
+  async #aroundMe() {
+    this.#set({ frame: 'me' });
+    if (!lastFix() && !this._near?.point) { const fix = await locate(); if (fix && !('error' in fix)) { this.#findRegion(); this.requestUpdate(); } }
+  }
+
+  /** Another radius: kept (as in the Carte), the observations around looked for again. @param {number} r */
+  #setRadius(r) {
+    saveRadius(r);
+    if (this.config.near !== 'off' && this._near?.state === 'done') this.#findNear(); else this.requestUpdate();
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     spotEvents.removeEventListener('change', this.#onChange);
+    store.removeEventListener('change', this.#onStore);
   }
 
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
-    if (changed.has('plant')) { this._near = undefined; this.#loadSpots(); }
+    if (changed.has('_near')) this.#findRegion();
+    if (changed.has('plant')) { this._near = undefined; this.#loadSpots(); this.#loadLookalikes(); }
+    else if (changed.has('config') && (changed.get('config')?.subject !== this.config.subject || changed.get('config')?.collection !== this.config.collection)) this.#loadSpots();
     if (changed.has('focus') || changed.has('gbifKey')) this.#loadFocus();
     const near = this.config.near;
     if ((changed.has('config') || changed.has('plant') || changed.has('gbifKey') || changed.has('inatId')) && near !== 'off') {
@@ -156,20 +246,60 @@ export class GfSheetMap extends LitElement {
     if (!filter || !isPlaceFilter(filter.params) || !this.gbifKey) this._bounds = null;
     else if (this._bounds?.id !== id + ':' + this.gbifKey) {
       const wanted = id + ':' + this.gbifKey;
-      this._bounds = { id: wanted, points: null };
-      const found = await sources.gbifBounds(this.gbifKey, filter.params, undefined, mode).catch(() => null);
-      if (this._bounds?.id === wanted) this._bounds = { id: wanted, points: found?.bounds || [] };
+      // Both asked at once: the occurrences in the area, and its outline (French régions and départements).
+      // Until both are in, the map stays where it is (no default view in between).
+      this._bounds = { id: wanted, points: null, occ: [], zone: undefined };
+      const [found, zone] = await Promise.all([
+        sources.gbifBounds(this.gbifKey, filter.params, undefined, mode).catch(() => null),
+        zoneShape(filter.params.gadmGid || '', filter.label).catch(() => null)
+      ]);
+      if (this._bounds?.id === wanted) this._bounds = { id: wanted, points: found?.bounds || [], occ: found?.points || [], zone, count: found?.count ?? 0 };
     }
   }
 
+  async #loadLookalikes() {
+    const plant = this.plant;
+    this._lookalikes = [];
+    if (!plant) return;
+    const list = await lookalikesOf(plant).catch(() => []);
+    if (this.plant !== plant) return;
+    /** @type {Map<string, { taxon: string, label: string }>} */
+    const others = new Map();
+    for (const l of list) for (const o of l.others) if (o.taxon && !others.has(o.taxon)) others.set(o.taxon, { taxon: o.taxon, label: o.label || o.taxon });
+    this._lookalikes = [...others.values()].slice(0, 4);
+  }
+
+  /**
+   * The places shown, from what the map is about: those with this plant; those with a plant of the results; a
+   * collection's — the place itself, or (a list) the places where its plants are. And which of their plants show.
+   */
   async #loadSpots() {
-    const id = this.plant?.id;
+    const id = this.plant?.id, c = this.config;
     if (!id) return;
+    const want = c.subject + ':' + c.collection + ':' + id;
+    this.#spotsFor = want;
     try {
-      const all = await collectionsForPlant(id);
-      if (this.plant?.id === id) this._spots = all.filter(c => c.properties.kind === 'place' && c.geometry);
+      /** @type {any[]} */ let places;
+      if (c.subject === 'results' || c.subject === 'collection') {
+        const all = await listCollections();
+        const isPlace = (/** @type {any} */ x) => x.properties.kind === 'place' && x.geometry;
+        /** @type {Set<number>} */ let ids;
+        const chosen = c.subject === 'collection' ? all.find(x => x.id === c.collection) : null;
+        if (c.subject === 'results') ids = new Set(store.state.results.items.map((/** @type {any} */ i) => i.id));
+        else ids = new Set((chosen?.properties.plants || []).map((/** @type {any} */ e) => e.plantId));
+        if (chosen && isPlace(chosen)) { places = [chosen]; this.#keep = () => true; }
+        else { places = all.filter(x => isPlace(x) && x.properties.plants.some((/** @type {any} */ e) => ids.has(e.plantId))); this.#keep = e => ids.has(e.plantId); }
+      } else {
+        places = (await collectionsForPlant(id)).filter(x => x.properties.kind === 'place' && x.geometry);
+        this.#keep = e => e.plantId === id;
+      }
+      if (this.#spotsFor === want) this._spots = places;
     } catch { this._spots = []; }
   }
+  #spotsFor = '';
+
+  /** The map is about this plant (its distribution, around me, its look-alikes, an area touched in the sheet). */
+  get #aboutPlant() { return this.config.subject === 'plant'; }
 
   /** Observations around me, from the sources chosen. */
   async #findNear() {
@@ -228,10 +358,9 @@ export class GfSheetMap extends LitElement {
    */
   #framing() {
     const c = this.config;
-    const near = this._near?.state === 'done' && c.near !== 'off' ? this._near : null;
-    const plantId = this.plant?.id;
+    const near = this.#aboutPlant && this._near?.state === 'done' && c.near !== 'off' ? this._near : null;
     const content = /** @type {[number, number][]} */ ([
-      ...(c.places ? this._spots.flatMap(s => [s.geometry.coordinates, ...s.properties.plants.filter((/** @type {any} */ e) => e.plantId === plantId && e.coordinates).map((/** @type {any} */ e) => e.coordinates)]) : []),
+      ...(c.places ? this._spots.flatMap(s => [s.geometry.coordinates, ...s.properties.plants.filter((/** @type {any} */ e) => this.#keep(e) && e.coordinates).map((/** @type {any} */ e) => e.coordinates)]) : []),
       ...(near ? near.points.map((/** @type {any} */ p) => p.coordinates) : [])
     ]);
     const center = near?.point || (c.frame === 'me' ? lastFix()?.coordinates : null);
@@ -241,22 +370,33 @@ export class GfSheetMap extends LitElement {
       const dLon = r / Math.cos(lat * Math.PI / 180);
       return /** @type {[number, number][]} */ ([[lon - dLon, lat - r], [lon + dLon, lat + r]]);
     };
-    // A place touched in the sheet (a région, a country): its occurrences.
-    const filtered = this._bounds?.points?.length ? this._bounds : null;
-    if (filtered) {
+    // A place touched in the sheet (a région, a country): its outline, else its occurrences — once both are in;
+    // until then, the view shown stays (no France or world in between).
+    const b = this.#aboutPlant ? this._bounds : null;
+    if (b && b.points === null && this.#lastFraming) return this.#lastFraming;
+    const zoneBox = b?.zone ? zoneBounds(b.zone) : null;
+    if (b && (zoneBox || b.points?.length)) {
       const world = !/^FRA\./.test(this.focus?.filter?.params.gadmGid || '') && this.focus?.filter?.params.country !== 'FR';
-      return { frame: { key: 'filter|' + filtered.id + '|' + c.height, points: filtered.points }, world };
+      return (this.#lastFraming = { frame: { key: 'filter|' + b.id + '|' + c.height, points: zoneBox || b.points, ease: true }, world });
     }
     const box = (/** @type {any} */ bounds) => /** @type {[number, number][]} */ ([[bounds.getWest(), bounds.getSouth()], [bounds.getEast(), bounds.getNorth()]]);
     /** @type {string} */ let kind = c.frame;
     if (kind === 'auto') kind = near ? 'me' : content.length ? 'content' : c.gbif === 'world' ? 'world' : 'france';
+    if (kind === 'region' && !this._region) kind = 'france';
     if (kind === 'me' && !center) kind = content.length ? 'content' : 'france';
     if (kind === 'content' && !content.length) kind = c.gbif === 'world' ? 'world' : 'france';
-    const points = kind === 'me' ? circle() : kind === 'content' ? content : kind === 'world' ? box(WORLD_BOUNDS) : box(FRANCE_BOUNDS);
+    const region = this._region?.bounds;
+    const points = kind === 'me' ? circle() : kind === 'content' ? content : kind === 'world' ? box(WORLD_BOUNDS)
+      : kind === 'region' && region ? /** @type {[number, number][]} */ ([[region[0], region[1]], [region[2], region[3]]]) : box(FRANCE_BOUNDS);
     // Framed again whenever what it shows changes (settings, data, size), not when the user moves it.
-    const key = [kind, c.gbif, c.places, c.near, c.height, points.length, center?.join() || ''].join('|');
-    return { frame: { key, points }, world: kind === 'world' || c.gbif === 'world' };
+    // Where the points are (not only how many): another place with as many points is framed again.
+    const where = points.length ? points.reduce((m, p) => [m[0] + p[0], m[1] + p[1]], [0, 0]).map(v => v.toFixed(3)).join(',') : '';
+    const key = [kind, c.subject, c.collection, this._spots.length, c.gbif, c.places, c.near, c.height, points.length, where, center?.join() || '', kind === 'me' ? near?.radius || savedRadius() : '', kind === 'region' ? this._region?.name : ''].join('|');
+    // Back from a place touched (its ✕): eased too.
+    return (this.#lastFraming = { frame: { key, points, ease: Boolean(this.#lastFraming) }, world: kind === 'world' || c.gbif === 'world' });
   }
+  /** @type {{ frame: { key: string, points: [number, number][], ease?: boolean }, world: boolean } | null} */
+  #lastFraming = null;
 
 
   render() {
@@ -266,7 +406,7 @@ export class GfSheetMap extends LitElement {
     const near = this._near;
     const spots = c.places ? this._spots : [];
     const f = this.focus || noFocus();
-    const gbifReady = Boolean(this.gbifKey) && moduleOn('gbif', /** @type {any} */ (this.mode));
+    const gbifReady = this.#aboutPlant && Boolean(this.gbifKey) && moduleOn('gbif', /** @type {any} */ (this.mode));
     // A filter shows the plant's occurrences even on a map set without them.
     const gbifOn = gbifReady && (c.gbif !== 'off' || Boolean(f.filter));
     const country = f.filter && isPlaceFilter(f.filter.params) ? '' : c.gbif === 'world' ? '' : 'FR';
@@ -277,16 +417,18 @@ export class GfSheetMap extends LitElement {
       <div class="frame" style=${this.fill ? '' : `height:${HEIGHTS[c.height] || HEIGHTS.m}px`}>
         <gf-map
           .spots=${spots}
-          .plants=${c.places ? plantMarkers(this._spots, e => e.plantId === plant.id) : []}
+          .plants=${c.places ? plantMarkers(this._spots, this.#keep) : []}
           plant-zoom="0"
           ?editable=${c.actions.edit && c.places && this._spots.length > 0}
           .frame=${frame}
           min-zoom=${framing.world || compare ? 1 : 5}
-          .area=${near?.state === 'done' && c.near !== 'off' ? { center: near.point, radius: near.radius } : null}
-          .points=${c.near !== 'off' && near?.state === 'done' ? near.points : []}
+          .area=${this.#aboutPlant && near?.state === 'done' && c.near !== 'off' ? { center: near.point, radius: near.radius } : null}
+          .points=${[]}
           .distribution=${gbifOn ? { key: this.gbifKey, label: plant.vernacularNames?.[0] || plant.scientificName, country, filter: f.filter?.params || null } : null}
           .compare=${compare}
           .focusPoint=${f.point ? { coordinates: f.point.coordinates, title: f.point.label, url: f.point.url } : null}
+          .zone=${this.#aboutPlant && this._bounds?.zone ? { key: this._bounds.id, feature: this._bounds.zone } : null}
+          .cluster=${this.#occurrences()}
           ?distribution-on=${Boolean(gbifOn)}
           .base=${c.base}
           .overlays=${c.overlays}
@@ -301,6 +443,7 @@ export class GfSheetMap extends LitElement {
         ></gf-map>
         ${this.#chips(f)}
       </div>
+      ${this.#scope(gbifReady)}
       ${this.#legend(gbifOn)}
       <div class="actions">
         ${c.near !== 'off' && (!near || near.state === 'error') ? html`<button type="button" class="near-ask" @click=${() => this.#findNear()}>${icon('crosshair')} Observations autour de moi (${formatDistance(savedRadius())})</button>` : nothing}
@@ -314,6 +457,26 @@ export class GfSheetMap extends LitElement {
         c.actions.edit && c.places && this._spots.length ? '✎ : déplacer mes plants' : '',
         'les couches : fond et couches IGN de cette carte'].filter(Boolean).join(' · ')}.</p>` : nothing}`;
   }
+
+  /**
+   * The points shown, grouped by the map when they are many: the occurrences of the place touched (amber), the
+   * observations around me (iNaturalist green, GBIF blue).
+   */
+  #occurrences() {
+    if (!this.#aboutPlant) return null;
+    const b = this._bounds, near = this.config.near !== 'off' && this._near?.state === 'done' ? this._near : null;
+    const id = (b?.occ?.length ? b.id : '') + '|' + (near ? near.wanted + ':' + near.radius + ':' + near.points.length : '');
+    if (id === '|') return null;
+    if (this.#occMemo?.id === id) return this.#occMemo.value;
+    const value = { key: id, points: [
+      ...(b?.occ || []).map((/** @type {any} */ o) => ({ kind: 'occ', coordinates: o.coordinates, url: 'https://www.gbif.org/occurrence/' + o.key,
+        title: 'GBIF' + (o.date ? ' · ' + new Date(o.date).toLocaleDateString('fr-FR') : '') })),
+      ...(near?.points || []).map((/** @type {any} */ p) => ({ ...p }))
+    ] };
+    this.#occMemo = { id, value };
+    return value;
+  }
+  /** @type {{ id: string, value: any } | null} */ #occMemo = null;
 
   /** What the sheet's data shows on the map, each with its ✕. @param {import('../core/map-focus.js').SheetFocus} f */
   #chips(f) {
@@ -336,6 +499,66 @@ export class GfSheetMap extends LitElement {
     return chips.length ? html`<div class="chips">${chips}</div>` : nothing;
   }
 
+  /**
+   * What this map can show, suggested from what is known: how to frame it (my region when it is known, around me,
+   * the points shown, France, the world), how far around me once located, and the data it can show — the GBIF
+   * distribution, my places with this plant, the observations around me (iNaturalist, GBIF) — each with a touch.
+   * @param {boolean} gbifReady
+   */
+  #scope(gbifReady) {
+    const c = this.config, near = this._near;
+    const located = Boolean(this.#whereIAm);
+    const hasContent = (c.places && this._spots.length > 0) || (near?.state === 'done' && near.points.length > 0);
+    /** @param {string} value @param {unknown} label @param {string} [title] @param {() => void} [act] */
+    const frameBtn = (value, label, title, act) => html`<button type="button" aria-pressed=${String(c.frame === value)}
+      title=${title || ''} data-frame=${value} @click=${act || (() => this.#set({ frame: value }))}>${label}</button>`;
+    const inatReady = Boolean(this.inatId) && moduleOn('inaturalist', /** @type {any} */ (this.mode));
+    const gbifNear = c.near === 'gbif' || c.near === 'both', inatNear = c.near === 'inat' || c.near === 'both';
+    const nearOf = (/** @type {boolean} */ g, /** @type {boolean} */ i) => g && i ? 'both' : g ? 'gbif' : i ? 'inat' : 'off';
+    const r = near?.radius || savedRadius();
+    const showRadius = c.frame === 'me' || c.near !== 'off';
+    const about = this.#aboutPlant;
+    const count = store.state.results.total ?? store.state.results.items.length;
+    const places = this._collections?.filter((/** @type {any} */ x) => x.count) || [];
+    return html`<div class="scope" role="group" aria-label="Ce que la carte montre">
+      <b>Sujet</b><div class="row">
+        <button type="button" data-subject="plant" aria-pressed=${String(c.subject === 'plant')} title="Cette plante : sa répartition, mes lieux où elle est, ce qui est autour"
+          @click=${() => this.#set({ subject: 'plant' })}>${icon('flower1')} Cette plante</button>
+        <button type="button" data-subject="results" aria-pressed=${String(c.subject === 'results')} title="Les plantes des résultats (la recherche et ses filtres) : mes lieux où elles sont"
+          @click=${() => this.#set({ subject: 'results' })}>${icon('funnel')} Les résultats <small>${count}</small></button>
+        ${places.length ? html`<select aria-label="Une collection" data-subject="collection" class=${c.subject === 'collection' ? 'on' : ''}
+          @change=${(/** @type {any} */ e) => e.target.value && this.#set({ subject: 'collection', collection: e.target.value })}>
+          <option value="" ?selected=${c.subject !== 'collection'}>Une collection…</option>
+          ${places.map((/** @type {any} */ x) => html`<option value=${x.id} ?selected=${c.subject === 'collection' && c.collection === x.id}>${x.kind === 'place' ? '📍 ' : ''}${x.name} (${x.count})</option>`)}
+        </select>` : nothing}
+      </div>
+      <b>Cadrer</b><div class="row">
+        ${frameBtn('auto', 'Auto', 'Selon ce qui est affiché')}
+        ${this._region ? frameBtn('region', html`Ma région <small>${this._region.name}</small>`, 'La région où vous êtes') : nothing}
+        ${about || located ? frameBtn('me', html`${icon('crosshair')} Autour de moi`, located ? 'Le cercle autour de vous' : 'Vous localiser, puis le cercle autour de vous', () => this.#aroundMe()) : nothing}
+        ${hasContent ? frameBtn('content', 'Les points', 'Ajusté aux points affichés') : nothing}
+        ${frameBtn('france', 'France')}
+        ${frameBtn('world', 'Monde')}
+      </div>
+      ${about && showRadius ? html`<b>Rayon</b><div class="row">${RADII.map(d => html`<button type="button" data-radius=${d} aria-pressed=${String(r === d)}
+        @click=${() => this.#setRadius(d)}>${formatDistance(d)}</button>`)}</div>` : nothing}
+      <b>Données</b><div class="row">
+        ${gbifReady ? html`<button type="button" data-layer="gbif-fr" aria-pressed=${String(c.gbif === 'fr')} title="Répartition GBIF en France" @click=${() => this.#set({ gbif: c.gbif === 'fr' ? 'off' : 'fr' })}><i style="background:#f97316"></i>Répartition France</button>
+          <button type="button" data-layer="gbif-world" aria-pressed=${String(c.gbif === 'world')} title="Répartition GBIF dans le monde" @click=${() => this.#set({ gbif: c.gbif === 'world' ? 'off' : 'world' })}><i style="background:#f97316"></i>Monde</button>` : nothing}
+        ${this._spots.length || !about ? html`<button type="button" data-layer="places" aria-pressed=${String(c.places)} @click=${() => this.#set({ places: !c.places })}>${icon('geo-alt-fill')} Mes lieux <small>${this._spots.length}</small></button>` : nothing}
+        ${about && inatReady ? html`<button type="button" data-layer="inat" aria-pressed=${String(inatNear)} title="Observations iNaturalist autour de moi" @click=${() => this.#set({ near: nearOf(gbifNear, !inatNear) })}><i style="background:#74ac00"></i>iNaturalist autour${near?.state === 'done' && near.inatOn ? html` <small>${near.inatCount ?? 0}</small>` : nothing}</button>` : nothing}
+        ${gbifReady ? this._lookalikes.map(o => html`<button type="button" data-layer="compare" data-taxon=${o.taxon} aria-pressed=${String(this.focus?.compare?.taxon === o.taxon)}
+          title=${'Sa répartition (GBIF) à côté : ' + o.label + ' — une plante avec laquelle elle se confond'}
+          @click=${() => this.dispatchEvent(new CustomEvent(FOCUS_EVENT, { detail: { kind: 'compare', label: o.label, taxon: o.taxon }, bubbles: true, composed: true }))}><i style="background:#7b3294"></i>Sosie : ${o.label}</button>`) : nothing}
+        ${gbifReady ? html`<button type="button" data-layer="gbif-near" aria-pressed=${String(gbifNear)} title="Occurrences GBIF autour de moi" @click=${() => this.#set({ near: nearOf(!gbifNear, inatNear) })}><i style="background:#4e7b9f"></i>GBIF autour${near?.state === 'done' && near.gbifOn ? html` <small>${(near.gbifTotal ?? 0).toLocaleString('fr-FR')}</small>` : nothing}</button>` : nothing}
+      </div>
+      <b>Couches IGN</b><div class="row">
+        ${Object.entries(OVERLAYS).map(([k, def]) => html`<button type="button" data-layer=${'ign-' + k} aria-pressed=${String(c.overlays.includes(k))} title=${def.hint || def.label}
+          @click=${() => this.#set({ overlays: c.overlays.includes(k) ? c.overlays.filter(o => o !== k) : [...c.overlays, k] })}>${def.label}</button>`)}
+      </div>
+    </div>`;
+  }
+
   /** What the colours mean, and where the data comes from. @param {any} gbifOn */
   #legend(gbifOn) {
     const c = this.config;
@@ -343,10 +566,16 @@ export class GfSheetMap extends LitElement {
     const parts = [];
     const f = this.focus || noFocus();
     if (gbifOn) parts.push(f.filter
-      ? html`<span><i style="background:#f59e0b"></i>Occurrences GBIF filtrées : ${f.filter.label}</span>`
+      ? html`<span><i style="background:#f59e0b"></i>Occurrences GBIF : ${f.filter.label}${this._bounds?.points === null ? ' …' : this._bounds?.count ? ` (${this._bounds.count.toLocaleString('fr-FR')}${this._bounds.count > (this._bounds.occ?.length || 0) ? `, ${this._bounds.occ.length} placées en points` : ''})` : ''}</span>
+        ${this._bounds?.zone ? html`<span><i style="background:transparent;border:2px dashed #b45309"></i>Limites : ${f.filter.label} (IGN)</span>` : nothing}`
       : html`<span>Densité GBIF${c.gbif === 'fr' ? ' (France)' : ''}</span>`);
     if (f.compare && this._compare?.key) parts.push(html`<span><i style="background:#7b3294"></i>${f.compare.label} (GBIF, comparaison)</span>`);
-    if (c.places && this._spots.length) parts.push(html`<span>Mes lieux (${this._spots.length})</span>`);
+    if (c.places && (this._spots.length || !this.#aboutPlant)) {
+      const chosen = this._collections?.find((/** @type {any} */ x) => x.id === c.collection);
+      parts.push(html`<span>${c.subject === 'results' ? `Mes lieux avec des plantes des résultats (${this._spots.length})`
+        : c.subject === 'collection' ? `${chosen?.kind === 'place' ? 'Le lieu' : 'Mes lieux de la collection'} « ${chosen?.name || '…'} » (${this._spots.length})`
+        : `Mes lieux (${this._spots.length})`}</span>`);
+    }
     if (near?.state === 'done') {
       if (near.inatOn) parts.push(html`<span><i style="background:#74ac00"></i>iNaturalist (${near.inatCount ?? 0})</span>`);
       if (near.gbifOn) parts.push(html`<span><i style="background:#4e7b9f"></i>GBIF (${(near.gbifTotal ?? 0).toLocaleString('fr-FR')} à moins de ${formatDistance(near.radius)})</span>`);

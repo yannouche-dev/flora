@@ -71,6 +71,11 @@ export class GfMediaViewer extends LitElement {
     preferPhotos: { type: Boolean, attribute: 'prefer-photos' },
     /** 'scene' (stage and filmstrip), 'mosaic' (every image in a grid) or 'slideshow' (one image, full frame). */
     presentation: { reflect: true },
+    /** In a pane: its controls (type, part, count) go in the pane's header (controls()); no bar of its own. */
+    barOut: { type: Boolean, attribute: 'bar-out', reflect: true },
+    /** Showing what it can do (Découvrir): the first image zooms in by itself, a tip says how; the zoom bar stays. */
+    showcase: { type: Boolean, reflect: true },
+    _tip: { state: true },
     _opened: { state: true },
     _playing: { state: true },
     _plant: { state: true },
@@ -104,6 +109,9 @@ export class GfMediaViewer extends LitElement {
     .icon-btn[aria-pressed="true"] { background: var(--gf-accent-soft); color: var(--gf-accent); }
 
     .main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); position: relative; }
+    /* Short of room, the stage gives way (clipped), never sliding under the thumbnails. */
+    :host(:not([compact])) .main { overflow: hidden; }
+    :host(:not([compact])) .stage { min-height: 140px; }
     @container (min-width: 760px) { .main.with-info { grid-template-columns: minmax(0, 1fr) clamp(240px, 30%, 380px); } }
 
     /* The stage: the image fitted, zoomed and moved by one transform. */
@@ -151,6 +159,12 @@ export class GfMediaViewer extends LitElement {
     @keyframes map-in { from { opacity: 0; transform: translateX(8px); } }
     /* The controls fade while the pointer rests (wide, mouse). */
     .stage.idle .nav, .stage.idle .zoombar { opacity: 0; }
+    /* Showcase: the zoom bar stays, a slow first zoom, a tip above the bar. */
+    :host([showcase]) .stage.idle .zoombar { opacity: 1; }
+    .stage.showing .frame { transition: transform 1.2s cubic-bezier(0.22, 0.8, 0.3, 1); }
+    .zoom-tip { position: absolute; z-index: 5; left: 50%; bottom: 48px; transform: translateX(-50%); width: max-content; max-width: calc(100% - 24px); margin: 0; padding: 6px 12px;
+      border-radius: var(--gf-radius-pill); background: rgb(0 0 0 / 72%); color: #fff; font-size: 0.8rem; line-height: 1.3; text-align: center; pointer-events: none; animation: tip-in 0.4s ease-out; }
+    @keyframes tip-in { from { opacity: 0; transform: translate(-50%, 6px); } }
     .stage:focus-visible { box-shadow: inset var(--gf-focus); }
     /* The image past the stage: the whole of it laid over the right edge, at the stage's height, and the part seen. */
     .minimap { position: absolute; right: 8px; top: 8px; z-index: 3; border: 1px solid rgb(255 255 255 / 45%); border-radius: 4px; overflow: hidden;
@@ -239,7 +253,7 @@ export class GfMediaViewer extends LitElement {
     :host([compact]) .skel .thumbs i { width: 52px; height: 52px; }
     @keyframes shimmer { to { background-position: -300% 0; } }
     @media (prefers-reduced-motion: reduce) {
-      .thumbs { scroll-behavior: auto; } .mosaic img, .frame .disp, .frame .hd, .stage.animate .frame { transition: none; } .caption .hd-dot { animation: none; }
+      .thumbs { scroll-behavior: auto; } .mosaic img, .frame .disp, .frame .hd, .stage.animate .frame, .stage.showing .frame { transition: none; } .zoom-tip { animation: none; } .caption .hd-dot { animation: none; }
       .skel .stage { animation: none; }
     }
   `];
@@ -848,6 +862,7 @@ export class GfMediaViewer extends LitElement {
   // ── Render ─────────────────────────────────────────────────────────────
 
   updated() {
+    this.#tellBar();
     // The same image kept (its address did not change): already loaded, no new « load » to wait for.
     const disp = /** @type {HTMLImageElement | null} */ (this.renderRoot.querySelector('.frame .disp'));
     const item = this.#current;
@@ -872,24 +887,50 @@ export class GfMediaViewer extends LitElement {
   /** @type {HTMLElement | null} */ #scrolledTo = null;
   #preloaded = new Set();
 
-  render() {
-    const plant = this._plant, item = this.#current, shown = this.#shown;
-    const at = item ? shown.indexOf(item) : -1;
-    const kinds = KINDS.filter(([k]) => k === 'all' || this.#alive.some(i => i.kind === k));
-    return html`
-      <div class="bar">
-        ${this.compact ? html`${icon('images')}<h2>${this.label || 'Médias'}</h2>` : html`<h2></h2>`}
-        ${this.presentation === 'mosaic' && this._opened ? html`<button class="link back-mosaic" type="button" @click=${() => { this._opened = false; }}>${icon('chevron-left')} Mosaïque</button>` : nothing}
+  /**
+   * The bar's controls: back to the mosaic, the type of media, the part of the plant, the count, the slideshow.
+   * @param {any[]} kinds @param {MediaItem | undefined} item @param {MediaItem[]} shown @param {number} at
+   */
+  #controls(kinds, item, shown, at) {
+    return html`${this.presentation === 'mosaic' && this._opened ? html`<button class="link back-mosaic" type="button" @click=${() => { this._opened = false; }}>${icon('chevron-left')} Mosaïque</button>` : nothing}
         ${kinds.length > 2 ? html`<select aria-label="Type de média" @change=${(/** @type {any} */ e) => this.#setFilter(e.target.value)}>
           ${kinds.map(([k, label]) => html`<option value=${k} ?selected=${this._filter === k}>${label} (${k === 'all' ? this.#alive.length : this.#alive.filter(i => i.kind === k).length})</option>`)}</select>` : nothing}
         ${this.#partMenu()}
         ${item ? html`<span class="count" aria-live="polite">${at + 1} / ${shown.length}</span>` : this._done ? nothing : html`<span class="count">chargement…</span>`}
         ${this.#view === 'slideshow' && shown.length > 1 ? html`<button class="icon-btn" type="button" aria-pressed=${String(this._playing)}
           title=${this._playing ? 'Arrêter le diaporama' : 'Lancer le diaporama (une image toutes les 5 s)'} aria-label=${this._playing ? 'Arrêter le diaporama' : 'Lancer le diaporama'}
-          @click=${() => this.#play()}>${this._playing ? html`<b class="pause">❚❚</b>` : html`<b class="play">▶</b>`}</button>` : nothing}
+          @click=${() => this.#play()}>${this._playing ? html`<b class="pause">❚❚</b>` : html`<b class="play">▶</b>`}</button>` : nothing}`;
+  }
+
+  /** The controls for the pane's header (bar-out): drawn there, acting here. */
+  controls() {
+    const item = this.#current, shown = this.#shown;
+    const kinds = KINDS.filter(([k]) => k === 'all' || this.#alive.some(i => i.kind === k));
+    return this.#controls(kinds, item, shown, item ? shown.indexOf(item) : -1);
+  }
+
+  /** Bar out: the pane's header is told when its controls change (another type, part, image, count). */
+  #barSig = '';
+  #tellBar() {
+    if (!this.barOut) return;
+    const item = this.#current, shown = this.#shown;
+    const sig = [this._filter, this._part, this._playing, this._opened, this._done, this.#alive.length, shown.length, item ? shown.indexOf(item) : -1, this.presentation, this.#view].join('|');
+    if (sig === this.#barSig) return;
+    this.#barSig = sig;
+    this.dispatchEvent(new CustomEvent('media-bar', { bubbles: true, composed: true }));
+  }
+
+  render() {
+    const plant = this._plant, item = this.#current, shown = this.#shown;
+    const at = item ? shown.indexOf(item) : -1;
+    const kinds = KINDS.filter(([k]) => k === 'all' || this.#alive.some(i => i.kind === k));
+    return html`
+      ${this.barOut ? nothing : html`<div class="bar">
+        ${this.compact ? html`${icon('images')}<h2>${this.label || 'Médias'}</h2>` : html`<h2></h2>`}
+        ${this.#controls(kinds, item, shown, at)}
         ${this.compact ? html`<button class="icon-btn" type="button" title="Ouvrir en grand, à côté de la fiche" aria-label="Ouvrir les médias en volet"
           @click=${() => this.#toPane()}>${icon('arrows-angle-expand')}</button>` : nothing}
-      </div>
+      </div>`}
       ${!item ? (this._done ? this.#empty(plant) : this.#skeleton()) : this.#view === 'mosaic' ? this.#mosaic(shown) : html`
         <div class="main ${this._info ? 'with-info' : ''} ${this.#view === 'slideshow' ? 'slideshow' : ''}">${this.#stage(item, at, shown.length)}${this._info ? this.#details(item) : nothing}</div>
         ${this.compact ? this.#grip() : nothing}
@@ -1009,6 +1050,7 @@ export class GfMediaViewer extends LitElement {
       <button class="nav prev" type="button" aria-label="Média précédent" ?disabled=${at <= 0} @click=${() => this.#go(-1)}>${icon('chevron-left')}</button>
       <button class="nav next" type="button" aria-label="Média suivant" ?disabled=${at >= n - 1} @click=${() => this.#go(1)}>${icon('chevron-right')}</button>
       ${map && fit ? this.#minimap(item, fit, map) : nothing}
+      ${this._tip ? html`<p class="zoom-tip" role="status">${icon('zoom-in')} Molette, pincer ou double-clic pour zoomer ; ${icon('unlock')} garde le zoom pour les photos suivantes.</p>` : nothing}
       <div class="zoombar" role="group" aria-label="Zoom">
         <button type="button" aria-label="Dézoomer" title="Dézoomer (−)" ?disabled=${!over} @click=${() => this.#zoomAt(z / 1.5, 0, 0, true)}>−</button>
         ${this.#viewButton(z, pct, one)}
@@ -1069,7 +1111,21 @@ export class GfMediaViewer extends LitElement {
     if ((!this._natural || this.#guessed) && img.naturalWidth) { this._natural = { w: img.naturalWidth, h: img.naturalHeight }; this.#guessed = false; }
     this._loaded = true;
     this.#maybeHd();
+    if (this.showcase && !this.#showcased && !this.#touched) {
+      this.#showcased = true;
+      // A moment on the whole image, then a slow zoom into its middle (the map of the image appears); the tip says how.
+      setTimeout(() => {
+        if (this.#touched || item.key !== this.#current?.key) return;
+        this._tip = true;
+        this.#zoomAt(this.#home * 2.2, 0, 0, true);
+        this.renderRoot.querySelector('.stage')?.classList.add('showing');
+        setTimeout(() => this.renderRoot.querySelector('.stage')?.classList.remove('showing'), 1300);
+        setTimeout(() => { this._tip = false; }, 7000);
+      }, 900);
+    }
   }
+  /** The zoom shown once (showcase). */
+  #showcased = false;
 
   /** The thumbnail gives the shape before the display size arrives. @param {HTMLImageElement} img */
   #guessShape(img) {

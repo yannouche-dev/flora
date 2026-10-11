@@ -62,18 +62,18 @@ export async function searchPlaces(text, signal) {
 }
 
 /**
- * Nearest address (within ~500 m) and commune of a point.
+ * Nearest address (within ~500 m) and commune of a point, and its context (« 34, Hérault, Occitanie »).
  * @param {[number, number]} point [lon, lat]
- * @returns {Promise<{ label: string, city: string, distance: number } | null>}
+ * @returns {Promise<{ label: string, city: string, distance: number, context: string } | null>}
  */
 export function addressAt(point) {
   if (!moduleOn('ignGeo')) return Promise.resolve(null);
-  return cached('geo:rev:' + key5(point), async () => {
+  return cached('geo:rev2:' + key5(point), async () => {
     const data = await json(`${GEOCODING}/reverse?lon=${point[0]}&lat=${point[1]}&limit=1`);
     const p = data.features?.[0]?.properties;
     if (!p) return null;
     const far = Number(p.distance) > 500;
-    return { label: far ? p.city : p.label, city: p.city || '', distance: Number(p.distance) || 0 };
+    return { label: far ? p.city : p.label, city: p.city || '', distance: Number(p.distance) || 0, context: p.context || '' };
   });
 }
 
@@ -94,3 +94,54 @@ export function altitudeAt(point) {
 
 /** "45.76410, 4.83570" (lat, lon: the order GPS apps and search engines accept). @param {[number, number]} point */
 export const formatCoordinates = ([lon, lat]) => `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+
+const WFS = 'https://data.geopf.fr/wfs/ows';
+
+/**
+ * The outline of a French administrative area of GBIF's GADM (a région: « FRA.10_1 », a département:
+ * « FRA.10.3_1 »), from IGN's ADMIN EXPRESS (generalised for maps), by its official name; null elsewhere or
+ * when unknown. Lightened to a vertex every ~400 m, coordinates rounded to ~100 m. Cached a year.
+ * @param {string} gid @param {string} name
+ * @returns {Promise<{ type: 'Feature', geometry: any, properties: { name: string } } | null>}
+ */
+export function zoneShape(gid, name) {
+  const level = /^FRA\./.test(gid || '') ? gid.split('.').length - 1 : 0;
+  const type = level === 1 ? 'region' : level === 2 ? 'departement' : null;
+  return type ? adminShape(type, name) : Promise.resolve(null);
+}
+
+/**
+ * The outline of a French région or département by its official name (IGN ADMIN EXPRESS), lightened.
+ * @param {'region' | 'departement'} type @param {string} name
+ * @returns {Promise<{ type: 'Feature', geometry: any, properties: { name: string } } | null>}
+ */
+export function adminShape(type, name) {
+  if (!name || !moduleOn('ignGeo')) return Promise.resolve(null);
+  return cached(`geo:admin:${type}:${name}`, async () => {
+    const q = new URLSearchParams({
+      SERVICE: 'WFS', VERSION: '2.0.0', REQUEST: 'GetFeature', TYPENAMES: `ADMINEXPRESS-COG-CARTO.LATEST:${type}`,
+      outputFormat: 'application/json', count: '1', CQL_FILTER: `nom_officiel='${name.replace(/'/g, "''")}'`
+    });
+    const data = await json(`${WFS}?${q}`);
+    const geometry = data.features?.[0]?.geometry;
+    if (!geometry?.coordinates) return null;
+    // [lon, lat] whatever the server's axis order (France: longitudes under 10°, latitudes over 41°).
+    const flip = (/** @type {number[]} */ p) => Math.abs(p[0]) > 40 && Math.abs(p[1]) < 15;
+    const first = /** @type {number[]} */ (geometry.type === 'MultiPolygon' ? geometry.coordinates[0][0][0] : geometry.coordinates[0][0]);
+    const swap = flip(first);
+    // Lighter for a map's outline: a vertex every ~400 m at most (a région weighs over 1 MB in full).
+    const ring = (/** @type {number[][]} */ r) => {
+      /** @type {number[][]} */ const out = [];
+      for (const [i, p] of r.entries()) {
+        const q = (swap ? [p[1], p[0]] : [p[0], p[1]]).map(v => Math.round(v * 1000) / 1000);
+        const last = out[out.length - 1];
+        if (!last || i === r.length - 1 || Math.abs(last[0] - q[0]) + Math.abs(last[1] - q[1]) > 0.004) out.push(q);
+      }
+      return out.length >= 4 ? out : r.map(p => (swap ? [p[1], p[0]] : [p[0], p[1]]));
+    };
+    const coordinates = geometry.type === 'MultiPolygon'
+      ? geometry.coordinates.map((/** @type {number[][][]} */ poly) => poly.map(ring))
+      : geometry.coordinates.map(ring);
+    return { type: 'Feature', geometry: { type: geometry.type, coordinates }, properties: { name } };
+  });
+}

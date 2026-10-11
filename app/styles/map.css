@@ -319,6 +319,16 @@ gf-map .gf-layer-menu input {
   animation: gf-leaf-pop 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 .gf-obs-leaf .pop:hover { color: #fff; background: #2e7d32; }
+/* The plant in view (Découvrir): its observations larger, in pink and gold; the others step back. */
+.gf-obs-leaf.hl .pop {
+  width: 34px;
+  height: 34px;
+  font-size: 18px;
+  color: #fff;
+  background: radial-gradient(circle at 35% 30%, #ff6f9c, #e0245e 70%);
+  box-shadow: 0 2px 8px rgb(0 0 0 / 40%), 0 0 0 3px #ffd166;
+}
+.gf-hl-on .gf-obs-leaf:not(.hl) { opacity: 0.45; transition: opacity 0.3s; }
 @keyframes gf-leaf-pop {
   from { transform: scale(0) rotate(-40deg); opacity: 0; }
   to { transform: none; opacity: 1; }
@@ -417,3 +427,35 @@ gf-map:has(.gf-point-card) .leaflet-bottom {
   filter: drop-shadow(0 0 4px rgb(225 29 72 / 0.8));
 }
 .gf-focus-tip { font-weight: 600; }
+
+/* An area touched in the sheet (a région, a département): its outline, its occurrences grouped. */
+.gf-zone { stroke: #b45309; stroke-width: 2.5; stroke-dasharray: 7 5; fill: #f59e0b; fill-opacity: 0.08; }
+.gf-occ { stroke: #fff; stroke-width: 2; fill: #f59e0b; fill-opacity: 0.95; filter: drop-shadow(0 1px 2px rgb(0 0 0 / 35%)); cursor: pointer; }
+.gf-occ:hover { fill: #b45309; }
+.gf-occ-group { background: none; border: 0; }
+.gf-occ-group span {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fbbf24, #d97706 75%);
+  color: #fff;
+  font: 700 12px/1 system-ui, sans-serif;
+  text-shadow: 0 1px 1px rgb(0 0 0 / 35%);
+  box-shadow: 0 0 0 4px rgb(245 158 11 / 30%), 0 2px 8px rgb(0 0 0 / 35%);
+  cursor: pointer;
+  animation: gf-leaf-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.gf-occ-group:hover span { background: radial-gradient(circle at 35% 30%, #f59e0b, #b45309 75%); }
+@media (prefers-reduced-motion: reduce) { .gf-occ-group span { animation: none; } }
+/* Observations around me, by source: iNaturalist green, GBIF blue (dots and groups). */
+.gf-occ.gf-occ-inat { fill: #74ac00; }
+.gf-occ.gf-occ-gbif { fill: #4e7b9f; }
+.gf-occ-group-inat span { background: radial-gradient(circle at 35% 30%, #a3d23a, #5c8a00 75%); box-shadow: 0 0 0 4px rgb(116 172 0 / 30%), 0 2px 8px rgb(0 0 0 / 35%); }
+.gf-occ-group-gbif span { background: radial-gradient(circle at 35% 30%, #7aa6c8, #3a6283 75%); box-shadow: 0 0 0 4px rgb(78 123 159 / 30%), 0 2px 8px rgb(0 0 0 / 35%); }
+/* Découvrir: the plant in view, in a wider scope (a région, France…), grouped in pink and gold. */
+.gf-occ.gf-occ-hl { fill: #e0245e; stroke: #ffd166; }
+.gf-occ-group-hl span { background: radial-gradient(circle at 35% 30%, #ff6f9c, #e0245e 75%); box-shadow: 0 0 0 3px #ffd166, 0 2px 8px rgb(0 0 0 / 35%); }
+/* The plant in view lit (its leaves, or its groups in a wider scope): the observations of every plant step back. */
+.gf-hl-on .gf-occ-group-inat, .gf-hl-on .gf-occ-inat, .gf-hl-cluster .gf-occ-group-inat, .gf-hl-cluster .gf-occ-inat { opacity: 0.35; transition: opacity 0.3s; }
