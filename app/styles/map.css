@@ -427,3 +427,30 @@ gf-map:has(.gf-point-card) .leaflet-bottom {
   filter: drop-shadow(0 0 4px rgb(225 29 72 / 0.8));
 }
 .gf-focus-tip { font-weight: 600; }
+
+/* An area touched in the sheet (a région, a département): its outline, its occurrences grouped. */
+.gf-zone { stroke: #b45309; stroke-width: 2.5; stroke-dasharray: 7 5; fill: #f59e0b; fill-opacity: 0.08; }
+.gf-occ { stroke: #fff; stroke-width: 2; fill: #f59e0b; fill-opacity: 0.95; filter: drop-shadow(0 1px 2px rgb(0 0 0 / 35%)); cursor: pointer; }
+.gf-occ:hover { fill: #b45309; }
+.gf-occ-group { background: none; border: 0; }
+.gf-occ-group span {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 35% 30%, #fbbf24, #d97706 75%);
+  color: #fff;
+  font: 700 12px/1 system-ui, sans-serif;
+  text-shadow: 0 1px 1px rgb(0 0 0 / 35%);
+  box-shadow: 0 0 0 4px rgb(245 158 11 / 30%), 0 2px 8px rgb(0 0 0 / 35%);
+  cursor: pointer;
+  animation: gf-leaf-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+.gf-occ-group:hover span { background: radial-gradient(circle at 35% 30%, #f59e0b, #b45309 75%); }
+@media (prefers-reduced-motion: reduce) { .gf-occ-group span { animation: none; } }
+/* Observations around me, by source: iNaturalist green, GBIF blue (dots and groups). */
+.gf-occ.gf-occ-inat { fill: #74ac00; }
+.gf-occ.gf-occ-gbif { fill: #4e7b9f; }
+.gf-occ-group-inat span { background: radial-gradient(circle at 35% 30%, #a3d23a, #5c8a00 75%); box-shadow: 0 0 0 4px rgb(116 172 0 / 30%), 0 2px 8px rgb(0 0 0 / 35%); }
+.gf-occ-group-gbif span { background: radial-gradient(circle at 35% 30%, #7aa6c8, #3a6283 75%); box-shadow: 0 0 0 4px rgb(78 123 159 / 30%), 0 2px 8px rgb(0 0 0 / 35%); }

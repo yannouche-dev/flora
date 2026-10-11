@@ -234,7 +234,7 @@ export function gbifNear(gbifKey, point, radius, signal, mode, limit = 5) {
 export function gbifBounds(gbifKey, filter, signal, mode) {
   if (!gbifKey) return Promise.resolve(null);
   const id = Object.entries(filter).sort().map(([k, v]) => k + '=' + v).join('&');
-  return cached('gbif-bounds:' + gbifKey + ':' + id, () => sourcesFor(mode).gbifOccurrenceBounds(gbifKey, filter, { signal }));
+  return cached('gbif-bounds2:' + gbifKey + ':' + id, () => sourcesFor(mode).gbifOccurrenceBounds(gbifKey, filter, { signal }));
 }
 
 /**

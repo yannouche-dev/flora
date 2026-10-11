@@ -198,6 +198,10 @@ export class GfMap extends LitElement {
     fit: { type: Boolean },
     frame: { attribute: false },
     area: { attribute: false },
+    /** An area's outline to draw ({ key, feature }: a GeoJSON Feature), dashed, lightly filled. */
+    zone: { attribute: false },
+    /** Points grouped when they are close at the zoom shown ({ key, points: { coordinates, title, url? }[] }). */
+    cluster: { attribute: false },
     /** Over the area: where one plant was observed ({key, points}), larger leaves of another colour (Découvrir). */
     highlight: { attribute: false },
     remember: { type: Boolean },
@@ -257,6 +261,10 @@ export class GfMap extends LitElement {
     this.area = null;
     /** @type {{ key: string, points: { coordinates: [number, number], title: string }[] } | null} */
     this.highlight = null;
+    /** @type {{ key: string, feature: any } | null} */
+    this.zone = null;
+    /** @type {{ key: string, points: { coordinates: [number, number], title: string, url?: string }[] } | null} */
+    this.cluster = null;
     /** Persist the last viewed area (main map only). */
     this.remember = false;
     // The same controls on every map: address search, layers and legend.
@@ -586,9 +594,11 @@ export class GfMap extends LitElement {
     this.#pointsLayer = L.layerGroup().addTo(map);
     this.#focusLayer = L.layerGroup().addTo(map);
     this.#hlLayer = L.layerGroup().addTo(map);
+    this.#zoneLayer = L.layerGroup().addTo(map);
+    this.#clusterLayer = L.layerGroup().addTo(map);
     this.#spotLayer = L.layerGroup().addTo(map);
     this.#plantLayer = L.layerGroup();
-    map.on('zoomend', () => this.#syncPlantVisibility());
+    map.on('zoomend', () => { this.#syncPlantVisibility(); this.#syncCluster(true); });
 
     const view = this.remember ? readStored(config.storageKeys.mapView, null) : null;
     if (view) map.setView([view.lat, view.lng], view.zoom);
@@ -678,6 +688,8 @@ export class GfMap extends LitElement {
     if (changed.has('track')) this.#syncTracking();
     if (changed.has('area')) this.#syncArea();
     if (changed.has('highlight')) this.#syncHighlight();
+    if (changed.has('zone')) this.#syncZone();
+    if (changed.has('cluster')) this.#syncCluster();
     const framed = changed.has('frame') && this.#applyFrame();
     if (this.fit && !this.#fitted) this.#fitToContent();
     if (changed.has('selectedId') && this.selectedId && !framed) this.#reveal(this.selectedId);
@@ -714,6 +726,8 @@ export class GfMap extends LitElement {
     this.#syncTracking();
     this.#syncArea();
     this.#syncHighlight();
+    this.#syncZone();
+    this.#syncCluster();
     this.#syncPoints();
     if (!this.#applyFrame() && this.fit) this.#fitToContent();
     if (this.focusPoint && !this.#focusLayer?.getLayers().length) this.#syncFocusPoint();
@@ -932,6 +946,70 @@ export class GfMap extends LitElement {
 
   /** @type {L.LatLngBounds | null} */ #areaBounds = null;
   /** @type {L.LayerGroup | null} */ #hlLayer = null;
+  /** @type {L.LayerGroup | null} */ #zoneLayer = null;
+  /** @type {L.LayerGroup | null} */ #clusterLayer = null;
+  #zoneKey = '';
+  #clusterKey = '';
+
+  /** The outline of the area touched: dashed, lightly filled, under the points. */
+  #syncZone() {
+    const layer = this.#zoneLayer, z = this.zone;
+    if (!layer) return;
+    const key = z?.key || '';
+    if (key === this.#zoneKey) return;
+    this.#zoneKey = key;
+    layer.clearLayers();
+    if (!z?.feature) return;
+    L.geoJSON(z.feature, { interactive: false, style: { className: 'gf-zone' } }).addTo(layer);
+  }
+
+  /**
+   * The points given, grouped by the screen cell they fall in at this zoom: alone, a dot (its record on a touch);
+   * together, a disc with their number, larger for more (a touch zooms in on them). Grouped again at each zoom.
+   * @param {boolean} [rezoom]
+   */
+  #syncCluster(rezoom = false) {
+    const map = this.#map, layer = this.#clusterLayer, c = this.cluster;
+    if (!map || !layer) return;
+    const key = (c?.key || '') + ':' + map.getZoom();
+    if (key === this.#clusterKey && !rezoom) return;
+    this.#clusterKey = key;
+    layer.clearLayers();
+    if (!c?.points.length || !map.getSize().x) return;
+    const CELL = 46, zoom = map.getZoom();
+    /** @type {Map<string, { pts: typeof c.points, x: number, y: number }>} */
+    const cells = new Map();
+    for (const p of c.points) {
+      const px = map.project([p.coordinates[1], p.coordinates[0]], zoom);
+      // Each source grouped apart: its colour stays seen beside the others.
+      const id = (/** @type {any} */ (p).kind || 'occ') + ':' + Math.floor(px.x / CELL) + ':' + Math.floor(px.y / CELL);
+      const cell = cells.get(id) || { pts: [], x: 0, y: 0 };
+      cell.pts.push(p); cell.x += px.x; cell.y += px.y;
+      cells.set(id, cell);
+    }
+    for (const cell of cells.values()) {
+      const n = cell.pts.length;
+      const at = map.unproject([cell.x / n, cell.y / n], zoom);
+      if (n === 1) {
+        const p = cell.pts[0];
+        const dot = L.circleMarker([p.coordinates[1], p.coordinates[0]], { radius: 6, className: 'gf-occ gf-occ-' + (/** @type {any} */ (p).kind || 'occ'), bubblingMouseEvents: false }).addTo(layer);
+        dot.bindTooltip(p.title, { direction: 'top' });
+        if (p.url) dot.on('click', () => open(/** @type {string} */ (p.url), '_blank', 'noopener'));
+        continue;
+      }
+      const size = Math.round(Math.min(54, 26 + Math.log2(n) * 6));
+      const kind = /** @type {any} */ (cell.pts[0]).kind || 'occ';
+      const m = L.marker(at, {
+        icon: L.divIcon({ className: 'gf-occ-group gf-occ-group-' + kind, iconSize: [size, size], iconAnchor: [size / 2, size / 2], html: `<span>${n > 999 ? Math.round(n / 1000) + 'k' : n}</span>` }),
+        keyboard: true, bubblingMouseEvents: false, title: `${n} points — toucher pour zoomer`
+      }).addTo(layer);
+      m.on('click', () => {
+        const b = L.latLngBounds(cell.pts.map(p => [p.coordinates[1], p.coordinates[0]]));
+        if (b.getNorthEast().equals(b.getSouthWest())) map.flyTo(b.getCenter(), Math.min(map.getZoom() + 3, 18), { duration: 0.5 });
+        else map.flyToBounds(b, { padding: [40, 40], duration: 0.5, maxZoom: 16 });
+      });
+    }
+  }
   #hlKey = '';
 
   /** One plant's observations over the area: larger leaves, in their own colour; the others fade. */
@@ -978,7 +1056,10 @@ export class GfMap extends LitElement {
     const bounds = L.latLngBounds(frame.points.map(([lon, lat]) => [lat, lon]));
     // A single point (or plants all on it) has no extent: fitBounds then uses maxZoom.
     const single = bounds.getNorthEast().equals(bounds.getSouthWest());
-    map.fitBounds(bounds, { paddingTopLeft: [40, 56], paddingBottomRight: [40, 40 + bottom], maxZoom: single ? 18 : 19, animate: false });
+    const opts = { paddingTopLeft: /** @type {[number, number]} */ ([40, 56]), paddingBottomRight: /** @type {[number, number]} */ ([40, 40 + bottom]), maxZoom: single ? 18 : 19 };
+    // Eased: from the view shown to the next one, smoothly (an area touched in the sheet, and back).
+    if (/** @type {any} */ (frame).ease && !matchMedia('(prefers-reduced-motion: reduce)').matches) { map.flyToBounds(bounds, { ...opts, duration: 0.8 }); return true; }
+    map.fitBounds(bounds, { ...opts, animate: false });
     if (map.getZoom() < PLANT_ZOOM && bounds.getNorthEast().distanceTo(bounds.getSouthWest()) < 300) {
       map.setZoom(PLANT_ZOOM, { animate: false });
     }

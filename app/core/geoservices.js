@@ -94,3 +94,44 @@ export function altitudeAt(point) {
 
 /** "45.76410, 4.83570" (lat, lon: the order GPS apps and search engines accept). @param {[number, number]} point */
 export const formatCoordinates = ([lon, lat]) => `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+
+const WFS = 'https://data.geopf.fr/wfs/ows';
+
+/**
+ * The outline of a French administrative area of GBIF's GADM (a région: « FRA.10_1 », a département:
+ * « FRA.10.3_1 »), from IGN's ADMIN EXPRESS (generalised for maps), by its name; null elsewhere or when unknown.
+ * Coordinates rounded to ~100 m. Cached a year.
+ * @param {string} gid @param {string} name
+ * @returns {Promise<{ type: 'Feature', geometry: any, properties: { name: string } } | null>}
+ */
+export function zoneShape(gid, name) {
+  const level = /^FRA\./.test(gid || '') ? gid.split('.').length - 1 : 0;
+  const type = level === 1 ? 'region' : level === 2 ? 'departement' : null;
+  if (!type || !name || !moduleOn('ignGeo')) return Promise.resolve(null);
+  return cached('geo:zone:' + gid, async () => {
+    const q = new URLSearchParams({
+      SERVICE: 'WFS', VERSION: '2.0.0', REQUEST: 'GetFeature', TYPENAMES: `ADMINEXPRESS-COG-CARTO.LATEST:${type}`,
+      outputFormat: 'application/json', count: '1', CQL_FILTER: `nom='${name.replace(/'/g, "''")}'`
+    });
+    const data = await json(`${WFS}?${q}`);
+    const geometry = data.features?.[0]?.geometry;
+    if (!geometry?.coordinates) return null;
+    // [lon, lat] whatever the server's axis order (France: longitudes under 10°, latitudes over 41°).
+    const flip = (/** @type {number[]} */ p) => Math.abs(p[0]) > 40 && Math.abs(p[1]) < 15;
+    const first = /** @type {number[]} */ (geometry.type === 'MultiPolygon' ? geometry.coordinates[0][0][0] : geometry.coordinates[0][0]);
+    const swap = flip(first);
+    const ring = (/** @type {number[][]} */ r) => {
+      /** @type {number[][]} */ const out = [];
+      for (const p of r) {
+        const q = (swap ? [p[1], p[0]] : [p[0], p[1]]).map(v => Math.round(v * 1000) / 1000);
+        const last = out[out.length - 1];
+        if (!last || last[0] !== q[0] || last[1] !== q[1]) out.push(q);
+      }
+      return out;
+    };
+    const coordinates = geometry.type === 'MultiPolygon'
+      ? geometry.coordinates.map((/** @type {number[][][]} */ poly) => poly.map(ring))
+      : geometry.coordinates.map(ring);
+    return { type: 'Feature', geometry: { type: geometry.type, coordinates }, properties: { name } };
+  });
+}
