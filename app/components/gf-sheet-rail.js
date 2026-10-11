@@ -3,10 +3,12 @@
 // the rubric, hovering one lists its blocks. An icon can carry a count, like messages waiting: the alerts of
 // the plant (protection, toxicity; for an edible plant, what it is mistaken for), red when it is a danger.
 // A row (the header of the plant pane, the top of a narrow sheet) or a column (the left of a wide sheet);
-// too many icons for the row: it scrolls, without a scrollbar.
+// too many icons for the row: it scrolls, without a scrollbar. The rubric read is lit (and, in its list, the block
+// and the article's theme read); a padlock at the end keeps that place for every plant opened next.
 
 import { LitElement, html, css, nothing } from 'lit';
 import { icon } from '../core/icons.js';
+import { sheetEvents, sheetSession, setAnchorLock } from '../core/sheet-session.js';
 import { ui } from '../styles/ui.js';
 
 /**
@@ -21,6 +23,8 @@ export class GfSheetRail extends LitElement {
     items: { attribute: false },
     /** The rubric lit (the one read). */
     active: {},
+    /** Where the reading is in it: the block, or the article's theme (« wiki:<theme> »), lit in its list. */
+    at: {},
     /** 'row' or 'column'. */
     orientation: { reflect: true },
     /** The rubric whose blocks are listed (hover, focus). */
@@ -39,6 +43,11 @@ export class GfSheetRail extends LitElement {
       background: none; color: var(--gf-text-muted); font-size: 1.05rem; cursor: pointer; }
     .item > button:hover { background: var(--gf-surface-2); color: var(--gf-text); }
     .item > button.on { background: var(--gf-accent-soft); color: var(--gf-accent); }
+    .lock { flex: none; width: 30px; height: 30px; min-height: 0; padding: 0; margin-left: 4px; display: grid; place-items: center; border: 0; border-radius: var(--gf-radius-sm);
+      background: none; color: var(--gf-text-muted); font-size: 0.85rem; cursor: pointer; opacity: 0.7; }
+    .lock:hover { opacity: 1; background: var(--gf-surface-2); }
+    .lock[aria-pressed='true'] { opacity: 1; color: var(--gf-accent); background: var(--gf-accent-soft); }
+    .lock:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     .item > button:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     /* Alerts: the icon takes the colour, a count in its corner. */
     .item > button.warn { color: var(--gf-warn); }
@@ -55,6 +64,9 @@ export class GfSheetRail extends LitElement {
     .pop button:hover, .pop button:focus-visible { background: var(--gf-accent-soft); outline: none; }
     /* Sub-anchors (the article's themes): under their block, indented, smaller. */
     .pop button.sub { padding: 4px 8px 4px 22px; font-size: 0.82rem; color: var(--gf-text-muted); }
+    /* Where the reading is: its block (and the article's theme) marked in the list. */
+    .pop button.on { color: var(--gf-accent); font-weight: 600; box-shadow: inset 3px 0 0 var(--gf-accent); }
+    .pop button.sub.on { color: var(--gf-accent); }
     .pop { max-height: min(70vh, 520px); overflow-y: auto; }
     .pop ul { margin: 2px 0 6px; padding: 0 8px 0 24px; font-size: 0.8rem; }
     .pop li { margin: 2px 0; }
@@ -67,9 +79,26 @@ export class GfSheetRail extends LitElement {
     this.items = [];
     /** @type {string | null} */
     this.active = null;
+    /** @type {string | null} */
+    this.at = null;
     this.orientation = 'row';
     /** @type {{ key: string, x: number, y: number } | null} */
     this._pop = null;
+  }
+
+  #onLock = () => this.requestUpdate();
+  connectedCallback() { super.connectedCallback(); sheetEvents.addEventListener('anchor-lock', this.#onLock); }
+  disconnectedCallback() { super.disconnectedCallback(); sheetEvents.removeEventListener('anchor-lock', this.#onLock); }
+
+  /** The padlock: the place read now kept for the next plants (or let each plant open where the reading left it). */
+  #lockButton() {
+    const on = sheetSession.anchorLock;
+    const item = this.items.find(i => i.key === sheetSession.anchor);
+    const block = item?.blocks.find(b => b.key === sheetSession.anchorBlock);
+    const where = item ? `« ${item.label}${block && block.title !== item.label ? ' › ' + block.title : ''} »` : 'le haut de la fiche';
+    return html`<button type="button" class="lock" aria-pressed=${String(on)} data-lock
+      title=${on ? `Ancre verrouillée sur ${where} : chaque plante s’ouvre là, au même endroit — toucher pour déverrouiller` : 'Verrouiller l’ancre : chaque plante s’ouvrira à l’endroit lu maintenant, même après avoir défilé'}
+      aria-label=${on ? 'Déverrouiller l’ancre' : 'Verrouiller l’ancre'} @click=${() => setAnchorLock(!on)}>${icon(on ? 'lock-fill' : 'unlock')}</button>`;
   }
 
   /** @param {string} key */
@@ -92,7 +121,16 @@ export class GfSheetRail extends LitElement {
   /** @type {any} */ #closing = 0;
 
   /** « fixed » is relative to the nearest contained ancestor (a pane, a container): the pop goes where asked. */
-  updated() {
+  updated(/** @type {Map<string, any>} */ changed) {
+    // The rubric read stays in sight in a row that scrolls.
+    if (changed.has('active') && this.active && this.orientation === 'row') {
+      const nav = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('nav'));
+      const on = /** @type {HTMLElement | null} */ (nav?.querySelector('.item > button.on'));
+      const item = on?.parentElement;
+      if (nav && item && (item.offsetLeft < nav.scrollLeft || item.offsetLeft + item.offsetWidth > nav.scrollLeft + nav.clientWidth - 14)) {
+        nav.scrollTo({ left: item.offsetLeft - nav.clientWidth / 2 + item.offsetWidth / 2, behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+      }
+    }
     const pop = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.pop'));
     if (!pop || !this._pop || pop.dataset.at === `${this._pop.x},${this._pop.y}`) return;
     const r = pop.getBoundingClientRect();
@@ -113,13 +151,16 @@ export class GfSheetRail extends LitElement {
           aria-label=${label} aria-current=${this.active === c.key ? 'true' : 'false'} data-key=${c.key}
           @click=${() => c.blocks[0] && this.#go(c.blocks[0].key)}>${icon(/** @type {any} */ (c.icon))}${b ? html`<span class="badge" aria-hidden="true">${b.count}</span>` : nothing}</button>
       </div>`;
-    })}</nav>
+    })}${this.#lockButton()}</nav>
     ${pop && this._pop ? html`<div class="pop" role="menu" aria-label=${pop.label} style=${`left:${this._pop.x}px;top:${this._pop.y}px`}
         @mouseenter=${() => clearTimeout(this.#closing)} @mouseleave=${() => this.#close()} @focusin=${() => clearTimeout(this.#closing)} @focusout=${() => this.#close()}>
       <strong>${pop.label}</strong>
       ${pop.badge ? html`<ul class="alerts ${pop.badge.tone}">${pop.badge.text.map(t => html`<li>${t}</li>`)}</ul>` : nothing}
-      ${pop.blocks.map(k => html`<button type="button" role="menuitem" @click=${() => this.#go(k.key)}>${k.title}${k.note ? html` <small>(${k.note})</small>` : nothing}</button>
-        ${k.subs?.map(x => html`<button type="button" role="menuitem" class="sub" @click=${() => this.#go(x.key)}>${x.title}</button>`)}`)}
+      ${pop.blocks.map(k => {
+        const here = this.at === k.key || Boolean(this.at?.startsWith('wiki:') && k.key === 'wikipedia');
+        return html`<button type="button" role="menuitem" class=${here ? 'on' : ''} aria-current=${here ? 'location' : 'false'} @click=${() => this.#go(k.key)}>${k.title}${k.note ? html` <small>(${k.note})</small>` : nothing}</button>
+        ${k.subs?.map(x => html`<button type="button" role="menuitem" class="sub ${this.at === x.key ? 'on' : ''}" aria-current=${this.at === x.key ? 'location' : 'false'} @click=${() => this.#go(x.key)}>${x.title}</button>`)}`;
+      })}
     </div>` : nothing}`;
   }
 }

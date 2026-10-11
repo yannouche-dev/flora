@@ -107,6 +107,9 @@ export class GfMediaViewer extends LitElement {
     .icon-btn[aria-pressed="true"] { background: var(--gf-accent-soft); color: var(--gf-accent); }
 
     .main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); position: relative; }
+    /* Short of room, the stage gives way (clipped), never sliding under the thumbnails. */
+    :host(:not([compact])) .main { overflow: hidden; }
+    :host(:not([compact])) .stage { min-height: 140px; }
     @container (min-width: 760px) { .main.with-info { grid-template-columns: minmax(0, 1fr) clamp(240px, 30%, 380px); } }
 
     /* The stage: the image fitted, zoomed and moved by one transform. */

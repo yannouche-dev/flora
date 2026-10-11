@@ -574,7 +574,7 @@ export class GfCollections extends LitElement {
     const rail = this._rail;
     // The previous plant's rubrics stay until the new sheet tells its own: the header does not blink.
     if (!rail || !rail.items.length) return 'Plante';
-    return html`<span class="visually-hidden">Plante</span><gf-sheet-rail .items=${rail.items} .active=${rail.active} orientation="row"
+    return html`<span class="visually-hidden">Plante</span><gf-sheet-rail .items=${rail.items} .active=${rail.active} .at=${rail.at} orientation="row"
       @rail-go=${(/** @type {CustomEvent} */ e) => /** @type {any} */ (this.renderRoot.querySelector('gf-plant-detail'))?.goTo(e.detail.key)}></gf-sheet-rail>`;
   }
 

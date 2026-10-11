@@ -361,6 +361,8 @@ export class GfPlantDetail extends LitElement {
     _paneDialog: { state: true },
     /** The category of the block at the top of the sheet (lit in the side rail). */
     _activeCat: { state: true },
+    /** The block read (under the top of the sheet), lit in the rubrics' list with the article's theme read. */
+    _activeBlock: { state: true },
     /** The plant's alerts, as counts on the rubric icons (alerts.js). */
     _alerts: { state: true },
     /** The sheet is wide enough for the rubrics in a column on its left. */
@@ -751,6 +753,9 @@ export class GfPlantDetail extends LitElement {
     .split { flex: 1; min-width: 0; min-height: 0; display: flex; }
     .split.row { flex-direction: row; } .split.col { flex-direction: column; }
     .cell { display: flex; min-width: 0; min-height: 0; }
+    /* The media's pane keeps the room its viewer needs (its image, zoom bar and thumbnails never overlap). */
+    .split.col > .cell:not(.folded):has(gf-media-viewer:not([compact])) { min-height: 400px; }
+    .split.row > .cell:not(.folded):has(gf-media-viewer:not([compact])) { min-width: 280px; }
     .cell > * { flex: 1; min-width: 0; min-height: 0; }
     .cell.folded { flex: 0 0 auto !important; }
     .split-grip { flex: none; position: relative; z-index: 8; background: var(--gf-border); touch-action: none; }
@@ -763,11 +768,18 @@ export class GfPlantDetail extends LitElement {
     .split-grip:hover::after, .split-grip:focus-visible::after { background: var(--gf-accent); }
     .split-grip:focus-visible { outline: none; }
     .frame.edged .main { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; padding: 16px 16px 0; }
+    /* A new plant, while its place (the rubric read) comes: the sheet waits, unseen, then shows there at once. */
+    :host([holding]) article { opacity: 0; transition: none; }
+    article { transition: opacity 0.12s ease-out; }
+    /* Room after the last block: any block (a rubric's, the last ones too) can come right under the top. */
+    .frame.edged .main[data-drop-node='sheet']::after { content: ''; display: block; height: max(0px, calc(100% - 160px)); }
     :host([embedded]) .frame.edged .main { padding: 4px 14px 0; }
     /* Narrow: the panes as bands above and under the sheet, sharing the height left to it. */
     .frame.edged.narrow { flex-direction: column; }
     .band-cell { flex: none; height: min(calc(var(--host-h, 80vh) * 0.45), calc((var(--host-h, 80vh) - 220px) / var(--bands, 1))); border-bottom: 1px solid var(--gf-border); }
     .band-cell.folded { height: auto; }
+    /* A narrow sheet: the media's band too keeps the room its viewer needs. */
+    .band-cell:not(.folded):has(gf-media-viewer:not([compact])) { min-height: 400px; }
     .panes-only .band-cell.grow { flex: 1 0 300px; height: auto; }
     .frame.edged.narrow.panes-only { overflow-y: auto; }
     .edge { position: relative; z-index: 7; display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--gf-bg, var(--gf-surface-2)); }
@@ -1014,6 +1026,12 @@ export class GfPlantDetail extends LitElement {
     this.#requested.clear();
     this.scrollTop = 0;
     this.#restored = false;
+    // Opening at the rubric read on the previous plant: unseen until it is there (#restoreAnchor), never stuck.
+    if (sheetSession.anchor && !this.preview && !this.only) {
+      this.setAttribute('holding', '');
+      clearTimeout(this.#holdCap);
+      this.#holdCap = setTimeout(() => { if (!this.#restoring) this.removeAttribute('holding'); }, 2500);
+    }
 
     let plant;
     try {
@@ -1443,7 +1461,9 @@ export class GfPlantDetail extends LitElement {
     const el = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('#wiki-' + t));
     // The article elsewhere (an edge, a pane) or not drawn yet: to the block itself.
     if (!el) { this.#goTo('wikipedia'); return; }
-    el.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+    this.#scrollTo(el, { smooth: true, under: this.#wikiMenuH });
+    this._activeBlock = 'wikipedia';
+    this._activeCat = blockCategory('wikipedia');
     el.removeAttribute('data-flash'); void el.offsetWidth; el.setAttribute('data-flash', '');
     setTimeout(() => el.removeAttribute('data-flash'), 1300);
     this._wikiActive = t;
@@ -1652,10 +1672,13 @@ export class GfPlantDetail extends LitElement {
     const start = row ? e.clientX : e.clientY;
     const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
     const pa = row ? ra.width : ra.height, pb = row ? rb.width : rb.height;
+    // Each side keeps its own minimum (the media's pane: room for its viewer), else 60 px.
+    const least = (/** @type {HTMLElement} */ c) => Math.max(60, parseFloat(getComputedStyle(c)[row ? 'minWidth' : 'minHeight']) || 0);
+    const ma = least(a), mb = least(b);
     const total = node.sizes.reduce((x, y) => x + y, 0), wa = node.sizes[i - 1] / total, wb = node.sizes[i] / total;
     let na = wa, nb = wb;
     const move = (/** @type {PointerEvent} */ ev) => {
-      const d = Math.max(-pa + 60, Math.min(pb - 60, (row ? ev.clientX : ev.clientY) - start));
+      const d = Math.max(-pa + ma, Math.min(pb - mb, (row ? ev.clientX : ev.clientY) - start));
       na = wa * (pa + d) / pa; nb = wb * (pb - d) / pb;
       a.style.flexGrow = String(na); b.style.flexGrow = String(nb);
     };
@@ -1715,7 +1738,7 @@ export class GfPlantDetail extends LitElement {
     const items = this.#railItems(ctx);
     if (this.outerRail) { this.#railOut = items; return nothing; }
     if (!items.length) return nothing;
-    return html`<div class="rail"><gf-sheet-rail .items=${items} .active=${this._activeCat} orientation="row"
+    return html`<div class="rail"><gf-sheet-rail .items=${items} .active=${this._activeCat} .at=${this.#railAt} orientation="row"
       @rail-go=${(/** @type {CustomEvent} */ e) => this.goTo(e.detail.key)}></gf-sheet-rail></div>`;
   }
   /** @type {any[] | null} */ #railOut = null;
@@ -1724,12 +1747,33 @@ export class GfPlantDetail extends LitElement {
   /** Tells the host the rubrics (and the one read), when they change. */
   #sendRail() {
     if (!this.outerRail || this.preview || this.only || !this.#railOut) return;
-    const items = this.#railOut, active = this._activeCat;
-    const sig = JSON.stringify([items, active]);
+    const items = this.#railOut, active = this._activeCat, at = this.#railAt;
+    const sig = JSON.stringify([items, active, at]);
     if (sig === this.#railSent) return;
     this.#railSent = sig;
-    this.dispatchEvent(new CustomEvent('sheet-rail', { detail: { items, active, plantId: this.plantId }, bubbles: true, composed: true }));
+    this.dispatchEvent(new CustomEvent('sheet-rail', { detail: { items, active, at, plantId: this.plantId }, bubbles: true, composed: true }));
   }
+
+  /** Where the reading is, for the rubrics' list: the block, or the article's theme (« wiki:<theme> »). */
+  get #railAt() {
+    const b = this._activeBlock;
+    return b === 'wikipedia' && this._wikiActive ? 'wiki:' + this._wikiActive : b || null;
+  }
+
+  /**
+   * Scrolls the sheet (only the sheet: not the page or a pane around it) to put `el` at its top — right under
+   * what stays on top: the rubrics stuck over a sheet that scrolls itself, the article's menu over its themes.
+   * @param {HTMLElement} el @param {{ smooth?: boolean, under?: number, into?: number }} [opts]
+   */
+  #scrollTo(el, { smooth = false, under = 0, into = 0 } = {}) {
+    const scroller = this.#sheetScroller;
+    const rail = scroller === this ? /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.rail'))?.offsetHeight || 0 : 0;
+    const top = scroller.scrollTop + el.getBoundingClientRect().top - scroller.getBoundingClientRect().top - rail - under + into;
+    scroller.scrollTo({ top, behavior: smooth && !matchMedia('(prefers-reduced-motion: reduce)').matches ? 'smooth' : 'auto' });
+  }
+
+  /** The article's menu stuck over its themes (its height). */
+  get #wikiMenuH() { return /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.wiki-menu'))?.offsetHeight || 0; }
 
   /** To a rubric's block (or a theme of the article, « wiki:<theme> »), asked by the host's rail. @param {string} key */
   goTo(key) {
@@ -1758,12 +1802,13 @@ export class GfPlantDetail extends LitElement {
     await this.updateComplete;
     const section = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(`.block[data-key="${CSS.escape(key)}"]`));
     if (!section) return;
+    this._activeBlock = key;
     if (instant) {
-      section.scrollIntoView({ behavior: 'auto', block: 'start' });
+      this.#scrollTo(section);
       this._activeCat = blockCategory(key);
       return;
     }
-    section.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' });
+    this.#scrollTo(section, { smooth: true });
     // An attribute, not a class: the block's class is the template's, rewritten on the next render.
     section.removeAttribute('data-flash');
     void section.offsetWidth;
@@ -1791,9 +1836,11 @@ export class GfPlantDetail extends LitElement {
       }
       const cat = current ? blockCategory(current) : null;
       if (cat !== this._activeCat) this._activeCat = cat;
+      if (current !== this._activeBlock) this._activeBlock = current;
       this.#wikiSpy(scroller);
-      // Read by the user: the next plant opens at the same rubric (the top: from the top).
-      if (!this.preview && !this.only && this._plant) {
+      // Read by the user: the next plant opens at the same rubric (the top: from the top) — unless the anchor is
+      // locked (the padlock of the rubrics): then it stays where it was locked.
+      if (!this.preview && !this.only && this._plant && !sheetSession.anchorLock) {
         const atTop = scroller.scrollTop < 40;
         sheetSession.anchor = atTop ? null : cat;
         // The block itself, and how far into it (the next plant opens there, not at the rubric's first block).
@@ -1810,45 +1857,60 @@ export class GfPlantDetail extends LitElement {
   get #sheetScroller() { return /** @type {HTMLElement} */ (this.renderRoot.querySelector('.frame.edged .main[data-drop-node="sheet"]') || this); }
 
   /**
-   * A new plant opens at the rubric read on the previous one; while its blocks come in (and grow), it stays
-   * there — until the user scrolls, or after 2.5 s.
+   * A new plant opens at the rubric read on the previous one, exactly where it was read: the sheet stays hidden
+   * (its panes do not) until that place is there — the block read, or the article's theme — and has stopped
+   * growing; then it shows at once, no scrolling seen. Later growth above it keeps it in place, until the user
+   * scrolls (or after 6 s). Never hidden more than 1.5 s: past that, at the rubric's first block.
    */
   async #restoreAnchor() {
     const cat = sheetSession.anchor;
-    if (!cat || this.preview || this.only) return;
+    if (this.preview || this.only) return;
+    // Locked at the top: from the top.
+    if (!cat) { if (sheetSession.anchorLock) { await this.updateComplete; this.#sheetScroller.scrollTop = 0; } return; }
+    this.setAttribute('holding', '');
     await this.updateComplete;
-    // The block read on the previous plant when this one has it, else the rubric's first block in the sheet's
-    // flow (on an edge or in the pane, it is already in view).
     const blocks = () => /** @type {HTMLElement[]} */ ([...this.renderRoot.querySelectorAll('.blocks > .block')]);
     const same = () => sheetSession.anchorBlock ? blocks().find(el => el.dataset.key === sheetSession.anchorBlock) : undefined;
     const first = () => same() || blocks().find(el => blockCategory(el.dataset.key || '') === cat);
-    // The blocks of the rubric may come later (their data loading): no return — they are waited for below.
     const offset = sheetSession.anchorOffset, theme = sheetSession.anchorWiki;
+    const wikiEl = () => theme && sheetSession.anchorBlock === 'wikipedia' ? /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('#wiki-' + theme)) : null;
+    /** The place read is there (the block, or the article's theme). */
+    const there = () => Boolean(theme && sheetSession.anchorBlock === 'wikipedia' ? wikiEl() : same());
     this.#restoring = true;
     const scroller = this.#sheetScroller;
     const pin = () => {
-      // In the article: at the theme read (its anchor), once the article is there.
-      const wiki = theme && sheetSession.anchorBlock === 'wikipedia' ? /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('#wiki-' + theme)) : null;
-      if (wiki) { scroller.scrollTop += wiki.getBoundingClientRect().top - scroller.getBoundingClientRect().top - 52; this._wikiActive = theme; return; }
+      const wiki = wikiEl();
+      if (wiki) { this.#scrollTo(wiki, { under: this.#wikiMenuH }); this._wikiActive = theme; this._activeBlock = 'wikipedia'; return; }
       const el = first();
       if (!el) return;
+      this._activeBlock = el.dataset.key || null;
       // As far into the block as before (within it), else at its top.
-      const into = same() === el ? Math.max(-80, Math.min(offset, el.offsetHeight - 60)) : null;
-      if (into === null) { el.scrollIntoView({ behavior: 'auto', block: 'start' }); return; }
-      scroller.scrollTop += el.getBoundingClientRect().top - scroller.getBoundingClientRect().top + into;
+      const into = same() === el ? Math.max(-80, Math.min(offset, el.offsetHeight - 60)) : 0;
+      this.#scrollTo(el, { into });
     };
+    /** @type {any} */ let quiet = 0;
+    const show = () => {
+      clearTimeout(quiet); clearTimeout(cap);
+      if (!this.hasAttribute('holding')) return;
+      pin();
+      this.removeAttribute('holding');
+    };
+    // Shown once the place is there and nothing has moved for a moment.
+    const settle = () => { clearTimeout(quiet); quiet = setTimeout(() => { if (there()) show(); }, 220); };
+    const cap = setTimeout(show, 1500);
     pin();
+    settle();
     this._activeCat = cat;
     const body = this.renderRoot.querySelector('article') || scroller;
-    // Blocks appearing (a block's data arriving) are watched too, not only growing ones.
-    const appear = new MutationObserver(() => pin());
+    const appear = new MutationObserver(() => { pin(); settle(); });
     appear.observe(body, { childList: true, subtree: true });
-    const grow = new ResizeObserver(() => pin());
+    const grow = new ResizeObserver(() => { pin(); settle(); });
     grow.observe(body);
     const stop = () => {
       grow.disconnect();
       appear.disconnect();
       clearTimeout(timer);
+      show();
       for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) scroller.removeEventListener(ev, stop);
       requestAnimationFrame(() => { this.#restoring = false; });
     };
@@ -1856,6 +1918,7 @@ export class GfPlantDetail extends LitElement {
     for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) scroller.addEventListener(ev, stop, { passive: true, once: true });
   }
   #restoring = false;
+  /** @type {any} */ #holdCap = 0;
   #restored = false;
 
   /**
