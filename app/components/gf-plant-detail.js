@@ -328,12 +328,12 @@ function trefleFacts(details) {
  * A place reached (a rubric, a block, a theme of the article) is kept in place while the plant's data still arrives
  * above it — until the hand moves the sheet, another place is reached, or at the latest after this long (ms).
  */
-const KEEP_MAX_MS = 20000;
+const KEEP_MAX_MS = 15000;
 /** Everything arrived: the place is kept until the sheet has not grown for this long (ms). */
 const KEEP_QUIET_MS = 700;
 /** All the rubrics stacked above and below (« full ») when that leaves this share of the sheet to read; back to one at the top under the lower share (no flip for a few pixels: a phone's address bar). */
 const STACK_ENTER = 0.62;
-const STACK_LEAVE = 0.52;
+const STACK_LEAVE = 0.57;
 
 export class GfPlantDetail extends LitElement {
   static properties = {
@@ -916,7 +916,10 @@ export class GfPlantDetail extends LitElement {
     .toc[data-open] { display: block; }
     .toc:popover-open { display: block; }
     .toc:focus { outline: none; }
-    .toc-head { display: flex; align-items: center; gap: 8px; padding: 2px 4px 6px; border-bottom: 1px solid var(--gf-border); margin-bottom: 4px; }
+    .toc-head { display: flex; align-items: center; gap: 8px; padding: 2px 4px 6px; border-bottom: 1px solid var(--gf-border); margin-bottom: 4px;
+      position: sticky; top: -8px; z-index: 1; background: var(--gf-surface); }
+    .toc { overscroll-behavior: contain; }
+    .blocks .block[tabindex='-1']:focus { outline: none; }
     .toc-head b { flex: 1; }
     .toc-head .entity { font-size: 0.7rem; font-weight: 600; padding: 1px 8px; border-radius: var(--gf-radius-pill); background: var(--gf-surface-2); color: var(--gf-text-muted); }
     .toc-lock[aria-pressed='true'] { color: var(--gf-accent); }
@@ -1016,6 +1019,9 @@ export class GfPlantDetail extends LitElement {
     // The hand (wheel, touch, keys, pointer): a place kept for a moment lets go at once; where the sheet stops,
     // once the hand has moved it, is noted for the next plant (#noteRead) — nothing is computed while it scrolls.
     for (const ev of ['wheel', 'touchstart', 'keydown', 'pointerdown']) this.addEventListener(ev, this.#onHand, { passive: true, capture: true });
+    for (const ev of ['touchend', 'touchcancel', 'pointerup', 'pointercancel']) window.addEventListener(ev, this.#onLift, { passive: true, capture: true });
+    // A control stuck in place (a header of the stacks, a block's title, the action bar) focused: already in view.
+    this.renderRoot.addEventListener('focusin', this.#onFocusIn, true);
     // The sheet scrolls itself, or its middle when edges are used (scroll does not bubble: caught on the way down).
     this.renderRoot.addEventListener('scroll', this.#onScroll, { passive: true, capture: true });
     this.addEventListener('scroll', this.#onScroll, { passive: true });
@@ -1025,6 +1031,36 @@ export class GfPlantDetail extends LitElement {
     // A menu (position, edge options) closes when touching elsewhere.
     this.renderRoot.addEventListener('pointerdown', this.#closeMenus, { capture: true });
   }
+
+  /**
+   * A control stuck in place focused (a header of the stacks, a block's title and its tools, the theme's title, the
+   * action bar): it is in view already, but the browser counts the stuck margins and scrolls the sheet to « show »
+   * it — again at each Tab. That scroll is undone. @param {Event} e
+   */
+  #onFocusIn = e => {
+    const el = /** @type {Element} */ (e.composedPath()[0]);
+    const pre = this.#preFocus;
+    this.#preFocus = null;
+    if (!(el instanceof Element) || this.#appFocus) return;
+    const stuck = el.closest('.rub-head, .block-title, .wiki-theme > summary, .action-bar');
+    const scroller = this.#sheetScroller, now = scroller.scrollTop;
+    // Where it was: noted at the key or pointer down; else where its last scroll left it (the browser's own scroll
+    // to the focus has not been told yet).
+    const was = pre && performance.now() - pre.at < 300 ? pre.st : this.#lastTop;
+    if (!stuck || was === null || Math.abs(now - was) <= 1) return;
+    // The browser has already scrolled (before this event): back where the sheet was, if the control was seen
+    // there — in the sheet, not under something else stuck. Else (out of view) the browser's scroll stays.
+    scroller.scrollTop = was;
+    const r = el.getBoundingClientRect(), s = scroller.getBoundingClientRect();
+    const hit = r.height && r.top >= s.top && r.bottom <= s.bottom ? /** @type {any} */ (this.renderRoot).elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
+    if (!hit || !stuck.contains(hit)) scroller.scrollTop = now;
+  };
+  /** Where the sheet was when a key or a pointer went down (before the browser scrolls to what gets the focus). @type {{ st: number, at: number } | null} */
+  #preFocus = null;
+  /** Where the sheet's last scroll left it (or the app, at once). @type {number | null} */
+  #lastTop = null;
+  /** The app gives the focus itself (without scrolling): nothing to undo. */
+  #appFocus = false;
 
   /** @param {Event} e */
   #closeMenus = e => {
@@ -1089,6 +1125,8 @@ export class GfPlantDetail extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    for (const ev of ['touchend', 'touchcancel', 'pointerup', 'pointercancel']) window.removeEventListener(ev, this.#onLift, { capture: true });
+    this.#touching = this.#buttonDown = false;
     unregisterWebPane(this);
     this.#resize.disconnect();
     this.#abort?.abort();
@@ -1109,6 +1147,7 @@ export class GfPlantDetail extends LitElement {
     this.#handAt = 0;
     this.#lastPlace = null;
     this.#pending = new Set();
+    this.#loadStart = performance.now();
     this.#abort?.abort();
     const abort = this.#abort = new AbortController();
     this._plant = undefined;
@@ -1166,6 +1205,7 @@ export class GfPlantDetail extends LitElement {
     this.#abort?.abort();
     const abort = this.#abort = new AbortController();
     this.#requested.clear();
+    this.#loadStart = performance.now();
     this._wiki = undefined;
     this._science = undefined;
     this._gbif = {};
@@ -1745,7 +1785,11 @@ export class GfPlantDetail extends LitElement {
     if (pop.showPopover) pop.showPopover(); else { pop.setAttribute('data-open', ''); this.#onTocToggle(/** @type {any} */ ({ newState: 'open' })); }
     this.#tocPlace(pop, button.getBoundingClientRect());
     const at = /** @type {HTMLElement | null} */ (pop.querySelector('button[aria-current="location"]') || pop.querySelector('button[aria-current]') || pop.querySelector('ul button'));
-    if (at) { at.focus({ preventScroll: true }); pop.scrollTop = Math.max(0, at.offsetTop - pop.clientHeight / 3); }
+    if (at) {
+      at.focus({ preventScroll: true });
+      const head = /** @type {HTMLElement | null} */ (pop.querySelector('.toc-head'))?.offsetHeight || 0;
+      pop.scrollTop = Math.max(0, at.offsetTop - head - (pop.clientHeight - head) / 3);
+    }
   }
 
   /** Where the table of contents goes: 8 px from every edge of the screen. @param {HTMLElement} pop @param {DOMRect} r */
@@ -1779,7 +1823,9 @@ export class GfPlantDetail extends LitElement {
   #closeToc(back = false) {
     const pop = this.#tocEl;
     if (!pop || !this.#tocOpen()) return;
+    this.#tocClosing = true;
     if (pop.hidePopover) pop.hidePopover(); else { pop.removeAttribute('data-open'); this.#onTocToggle(/** @type {any} */ ({ newState: 'closed' })); }
+    this.#tocClosing = false;
     if (back) this.#tocFrom?.focus({ preventScroll: true });
   }
 
@@ -1791,10 +1837,12 @@ export class GfPlantDetail extends LitElement {
   #onTocToggle = e => {
     const open = /** @type {any} */ (e).newState === 'open';
     this.#tocFrom?.setAttribute('aria-expanded', String(open));
-    if (open) return;
+    // Closed by a touch outside it (the pointer going down on its ☰ too): its ☰'s click must not open it again.
+    if (open || this.#tocClosing) return;
     this.#tocClosedAt = performance.now();
     this.#tocClosedFrom = this.#tocFrom;
   };
+  #tocClosing = false;
 
   /**
    * Keys in the table of contents: ↑ ↓ (Début, Fin) from entry to entry; Échap closes it, back to its ☰ — and
@@ -1817,10 +1865,19 @@ export class GfPlantDetail extends LitElement {
   /** @type {HTMLElement | null} */ #tocClosedFrom = null;
   #tocClosedAt = 0;
 
-  /** @param {string} key */
-  #tocGo(key) {
+  /** An entry chosen: there, and the focus with it (Tab goes on from the place reached). @param {string} key */
+  async #tocGo(key) {
+    const from = this.#tocFrom;
     this.#closeToc();
-    this.goTo(key);
+    await this.goTo(key);
+    const q = (/** @type {string} */ sel) => /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(sel));
+    const at = key.startsWith('rub:') ? q(`.rubric[data-cat="${CSS.escape(key.slice(4))}"] .rub-go`)
+      : key.startsWith('wiki:') ? q(`.blocks #wiki-${CSS.escape(key.slice(5))} > summary`)
+      : q(`.blocks .block[data-key="${CSS.escape(key)}"]`);
+    if (at && !at.matches('button, summary')) at.tabIndex = -1;
+    this.#appFocus = true;
+    (at || from)?.focus({ preventScroll: true });
+    this.#appFocus = false;
   }
 
   /** Shown here: everything in Mode King; outside it, not folded, not left out for being empty. @param {string} k @param {any} ctx */
@@ -2097,9 +2154,11 @@ export class GfPlantDetail extends LitElement {
     if (!this.#inSheet(el)) return;
     this.#handAt = 0;
     this.#lastPlace = { el, prefer };
+    this.#preFocus = null;
     const d = this.#offset(el, scroller);
     const glide = !quiet && Math.abs(d) > 1 && Math.abs(d) < scroller.clientHeight && 'onscrollend' in window && !matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (Math.abs(d) > 1) scroller.scrollTo({ top: scroller.scrollTop + d, behavior: glide ? 'smooth' : 'auto' });
+    this.#lastTop = glide ? null : scroller.scrollTop;
     this.#padTo(el);
     // One place lit at a time: the one before goes out.
     this.#lit?.removeAttribute('data-flash');
@@ -2127,7 +2186,9 @@ export class GfPlantDetail extends LitElement {
   }
 
   /** Data of the plant still on its way (the details, the article, GBIF, the open data): what is there may still grow. */
-  get #loading() { return this._details === undefined || this.#pending.size > 0; }
+  get #loading() { return (this._details === undefined || this.#pending.size > 0) && performance.now() - this.#loadStart < KEEP_MAX_MS; }
+  /** When the plant's data were asked (a source that never answers stops counting after KEEP_MAX_MS). */
+  #loadStart = 0;
   /** The plant's loads in flight (#loadExtras). @type {Set<Promise<any>>} */
   #pending = new Set();
 
@@ -2154,7 +2215,10 @@ export class GfPlantDetail extends LitElement {
       if (gliding || !target.isConnected) return;
       const d = want === null ? this.#offset(target, scroller) : top(target) - want;
       if (Math.abs(d) > 1) scroller.scrollTop += d;
+      kept.wrote = this.#lastTop = scroller.scrollTop;
     };
+    /** Where the sheet was put by the app (a scroll elsewhere is the hand's: #onScroll lets go). */
+    const kept = this.#kept = { wrote: scroller.scrollTop, gliding: () => gliding };
     const grow = new ResizeObserver(() => { grewAt = performance.now(); fix(); });
     let body = this.renderRoot.querySelector('article');
     if (body) grow.observe(body);
@@ -2165,7 +2229,7 @@ export class GfPlantDetail extends LitElement {
       grewAt = performance.now();
       fix();
     };
-    const end = () => { gliding = false; fix(); };
+    const end = () => { gliding = false; kept.wrote = scroller.scrollTop; fix(); };
     scroller.addEventListener('scrollend', end);
     // One hand on the place while it is kept: the browser's own anchoring (which would hold another line) waits.
     scroller.style.overflowAnchor = 'none';
@@ -2176,10 +2240,12 @@ export class GfPlantDetail extends LitElement {
       timer = setTimeout(check, 200);
     };
     timer = setTimeout(check, 200);
-    this.#keeper = () => { grow.disconnect(); scroller.removeEventListener('scrollend', end); clearTimeout(timer); scroller.style.overflowAnchor = ''; this.#keepFix = null; };
+    this.#keeper = () => { grow.disconnect(); scroller.removeEventListener('scrollend', end); clearTimeout(timer); scroller.style.overflowAnchor = ''; this.#keepFix = null; this.#kept = null; };
   }
   /** The place kept, put back after a render (#keep). @type {(() => void) | null} */
   #keepFix = null;
+  /** What the place kept wrote last, and whether it is still gliding there. @type {{ wrote: number, gliding: () => boolean } | null} */
+  #kept = null;
   /** @type {(() => void) | null} */ #keeper = null;
 
   /** The place kept lets go. */
@@ -2240,8 +2306,33 @@ export class GfPlantDetail extends LitElement {
   #titleH() { return parseFloat(this.style.getPropertyValue('--title-h')) || 38; }
   #rubCount() { return this.renderRoot.querySelectorAll('.blocks > .rubric').length; }
 
-  /** The hand on the sheet: what is kept lets go; its scrolling will be a reading (#onScroll). */
-  #onHand = () => { this.#handAt = Date.now(); this.#letGo(); };
+  /**
+   * The hand on the sheet: what is kept lets go, the table of contents closes; its scrolling will be a reading
+   * (#onScroll). Opening or going through the table of contents is not reading: it changes nothing here. A finger
+   * on the screen or a button held (the scrollbar's thumb) is noted until it lifts: nothing is held under it.
+   * @param {Event} e
+   */
+  #onHand = e => {
+    if (e.type === 'keydown' || e.type === 'pointerdown') this.#preFocus = { st: this.#sheetScroller.scrollTop, at: performance.now() };
+    const path = e.composedPath();
+    if (path.some(x => x instanceof Element && (x.classList.contains('toc') || x.classList.contains('rub-toc')))) return;
+    if (e.type === 'touchstart') this.#touching = true;
+    else if (e.type === 'pointerdown' && /** @type {PointerEvent} */ (e).pointerType !== 'touch') this.#buttonDown = true;
+    this.#handAt = Date.now();
+    this.#letGo();
+    this.#closeToc();
+  };
+  /** The finger or the button lifted (anywhere): the line read may be held now, if the hand stopped meanwhile. @param {Event} e */
+  #onLift = e => {
+    if (e.type === 'touchend' || e.type === 'touchcancel') { if (/** @type {TouchEvent} */ (e).touches.length) return; this.#touching = false; }
+    else if (/** @type {PointerEvent} */ (e).pointerType !== 'touch') this.#buttonDown = false;
+    else return;
+    if (this.#holdLater && !this.#readTimer) this.#readTimer = setTimeout(() => { this.#readTimer = 0; this.#handStopped(); }, 180);
+  };
+  #touching = false;
+  #buttonDown = false;
+  /** The hand stopped while still down: the line is held once it lifts. */
+  #holdLater = false;
   /** When the hand last touched the sheet; 0: the app moved it since (a place reached, a new plant). */
   #handAt = 0;
 
@@ -2250,8 +2341,14 @@ export class GfPlantDetail extends LitElement {
    * it scrolls — the stuck headers say where the reading is. @param {Event} e
    */
   #onScroll = e => {
-    if (!this.#handAt || e.composedPath()[0] !== this.#sheetScroller) return;
-    this.#closeToc();
+    const scroller = this.#sheetScroller;
+    if (e.composedPath()[0] !== scroller) return;
+    this.#lastTop = scroller.scrollTop;
+    // A scroll the place kept did not write (the scrollbar's thumb, the page's search, a finger whose events went
+    // elsewhere): the hand has the sheet.
+    const kept = this.#kept;
+    if (kept && !kept.gliding() && Math.abs(scroller.scrollTop - kept.wrote) > 1) { this.#handAt = Date.now(); this.#letGo(); }
+    if (!this.#handAt) return;
     clearTimeout(this.#readTimer);
     this.#readTimer = setTimeout(() => { this.#readTimer = 0; this.#handStopped(); }, 180);
   };
@@ -2269,10 +2366,11 @@ export class GfPlantDetail extends LitElement {
     if (el) this.#padTo(el); else this.#padBase();
   }
 
-  /** The hand stopped: the place read noted, and — data still arriving — the line read held (#holdEye). */
+  /** The hand stopped: the place read noted, and — data still arriving — the line read held (#holdEye), once the hand has lifted. */
   #handStopped() {
     this.#noteRead();
-    if (this.#loading && !this.#keeper) this.#holdEye();
+    this.#holdLater = this.#touching || this.#buttonDown;
+    if (!this.#holdLater && this.#loading && !this.#keeper) this.#holdEye();
   }
 
   /** Where the reading is: the rubric, block and theme whose starts have passed under what is stuck above them. */
@@ -2402,6 +2500,8 @@ export class GfPlantDetail extends LitElement {
     }
     if (was === mode) return;
     this.setAttribute('stack', mode);
+    const read = this.#readPlace().el;
+    if (read) this.#padTo(read); else this.#padBase();
     const place = this.#lastPlace;
     if (was && !this.#handAt && place?.el.isConnected && !this.#keeper) requestAnimationFrame(() => { if (place.el.isConnected && !this.#handAt) this.#arrive(place.el, { quiet: true, prefer: place.prefer }); });
   }
