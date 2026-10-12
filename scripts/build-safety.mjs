@@ -1,7 +1,11 @@
 // Builds data/safety.json: what official and scientific sources say about the risks and the traditional
 // medicinal use of the flora's plants, keyed by TAXREF id like data/plants.json.
 //
-// Sources (any failure only warns; the previous file is kept):
+// Sources, merged one by one with the previous file: a source that cannot be read (or reads as nothing) keeps its
+// entries and its record from the previous data/safety.json, with a ::warning:: in the Actions log, so a passing
+// outage never ships a file without its warnings; when no source is read, the file is left as is. The dataset build
+// then checks the result (scripts/check-data.mjs: every source there, counts above floors) before committing it.
+// Each source record carries `read`, the day it was last read:
 //  - ANSM, Pharmacopée française — liste A des plantes médicinales utilisées traditionnellement (parts used,
 //    toxic parts) and liste B (plants whose potential adverse effects exceed the expected benefit). PDFs read
 //    with `pdftotext -layout` (poppler-utils, installed by the workflow).
@@ -224,42 +228,92 @@ async function tpptUrl() {
   } catch { return TPPT_FALLBACK; }
 }
 
+/**
+ * What a source gave each plant in a safety file: the ANSM entries of one list, or the TPPT entry.
+ * @type {Record<string, (entry: any) => any>}
+ */
+const SLICE = {
+  ansmA: entry => entry.ansm?.filter(e => e.list === 'A'),
+  ansmB: entry => entry.ansm?.filter(e => e.list === 'B'),
+  tppt: entry => entry.tppt
+};
+
+/** The previous safety file, or null when there is none or it cannot be read. */
+async function previousFile() {
+  try {
+    const data = JSON.parse(await readFile(OUT_FILE, 'utf8'));
+    return data?.plants && data.sources ? data : null;
+  } catch { return null; }
+}
+
 async function main() {
   const plants = JSON.parse(await readFile(PLANTS_FILE, 'utf8'));
   const index = indexPlants(plants);
+  const flora = new Set(plants.map(p => p.id));
   const dir = await mkdtemp(join(tmpdir(), 'safety-'));
-  /** @type {Record<number, any>} */
-  const out = {};
-  const put = (id, k, v) => { (out[id] ||= {})[k] = v; };
+  const today = new Date().toISOString().slice(0, 10);
+  /** Per source, what it gives each plant (an array of ANSM entries, or the TPPT entry). @type {Record<string, Map<number, any>>} */
+  const got = {};
+  /** @type {Record<string, any>} */
   const sources = {};
+  const failed = [];
 
-  try {
-    const urls = await ansmUrls();
-    for (const list of /** @type {const} */ (['A', 'B'])) {
+  /** Reads one source; on failure, or when it matches no plant, keeps its part of the previous file. @param {string} key @param {() => Promise<{ matched: Map<number, any>, file: string }>} read */
+  const source = async (key, read) => {
+    try {
+      const { matched, file } = await read();
+      if (!matched.size) throw new Error('no plant of the flora matched');
+      got[key] = matched;
+      sources[key] = { ...SOURCES[key], file, read: today };
+    } catch (error) {
+      failed.push(key);
+      // On one line: an annotation ends at the first line break, and execFileSync's message carries the stderr.
+      const why = String(error?.message ?? error).replace(/\s*\n\s*/g, ' ').trim();
+      const previous = await previousFile();
+      if (previous?.sources?.[key]) {
+        got[key] = new Map();
+        for (const [id, entry] of Object.entries(previous.plants)) {
+          const part = SLICE[key](entry);
+          if (flora.has(Number(id)) && part && (!Array.isArray(part) || part.length)) got[key].set(Number(id), part);
+        }
+        sources[key] = { read: previous.built, ...previous.sources[key] };
+        console.warn(`::warning::${key} not read (${why}): its ${got[key].size} plants kept from the previous ${OUT_FILE} (read ${sources[key].read || 'on an unknown day'})`);
+      } else console.warn(`::warning::${key} not read (${why}), and no previous ${OUT_FILE} has it: its warnings are missing`);
+    }
+  };
+
+  const urls = await ansmUrls();
+  for (const list of /** @type {const} */ (['A', 'B'])) {
+    await source('ansm' + list, async () => {
       const pdf = join(dir, `ansm-${list}.pdf`), txt = join(dir, `ansm-${list}.txt`);
       await writeFile(pdf, await download(urls[list]));
       execFileSync('pdftotext', ['-layout', pdf, txt]);
       const rows = parseAnsm(await readFile(txt, 'utf8'), list);
       const matched = matchAnsm(rows, index);
-      for (const [id, entries] of matched) put(id, 'ansm', [...(out[id]?.ansm || []), ...entries]);
-      sources['ansm' + list] = { ...SOURCES['ansm' + list], file: urls[list] };
       console.log(`ANSM liste ${list}: ${rows.length} rows, ${matched.size} plants of the flora`);
-    }
-  } catch (error) { console.warn('ANSM lists skipped:', error.message); }
+      return { matched, file: urls[list] };
+    });
+  }
 
-  try {
+  await source('tppt', async () => {
     const { default: XLSX } = await import('xlsx');
     const url = await tpptUrl();
     const matched = matchTppt(XLSX, await download(url), index);
-    for (const [id, entry] of matched) put(id, 'tppt', entry);
-    sources.tppt = { ...SOURCES.tppt, file: url };
     console.log(`TPPT: ${matched.size} plants of the flora`);
-  } catch (error) { console.warn('TPPT skipped:', error.message); }
+    return { matched, file: url };
+  });
 
-  if (!Object.keys(sources).length) { console.warn('No safety source read: data/safety.json left as is.'); return; }
+  if (failed.length === Object.keys(SOURCES).length) { console.warn(`::warning::No safety source read: ${OUT_FILE} left as is.`); return; }
+  /** @type {Record<number, any>} */
+  const out = {};
+  for (const id of [...new Set(Object.values(got).flatMap(m => [...m.keys()]))].sort((a, b) => a - b)) {
+    const ansm = [...(got.ansmA?.get(id) || []), ...(got.ansmB?.get(id) || [])];
+    const tppt = got.tppt?.get(id);
+    out[id] = { ...(ansm.length ? { ansm } : {}), ...(tppt ? { tppt } : {}) };
+  }
   const about = 'Risques et usages médicinaux traditionnels des plantes de la flore, d’après des sources officielles et scientifiques citées : ANSM (Pharmacopée française, listes A et B) et Agroscope (base TPPT des plantes toxiques). Ne dit jamais qu’une plante est comestible.';
-  await writeFile(OUT_FILE, JSON.stringify({ about, built: new Date().toISOString().slice(0, 10), sources, plants: out }));
-  console.log(`${OUT_FILE}: ${Object.keys(out).length} plants`);
+  await writeFile(OUT_FILE, JSON.stringify({ about, built: today, sources, plants: out }));
+  console.log(`${OUT_FILE}: ${Object.keys(out).length} plants${failed.length ? ` (not read: ${failed.join(', ')}; see the warnings above)` : ''}`);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) await main();

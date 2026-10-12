@@ -18,6 +18,7 @@ import * as db from '../core/db.js';
 import { icon } from '../core/icons.js';
 import { imageKey, loadMedia, PARTS } from '../core/media-items.js';
 import { sheetSession, setMediaSession } from '../core/sheet-session.js';
+import { safeUrl } from '../core/safe-url.js';
 import { ui } from '../styles/ui.js';
 import './gf-attribution.js';
 
@@ -1155,8 +1156,8 @@ export class GfMediaViewer extends LitElement {
         ${where ? html`<dt>Lieu</dt><dd>${where}</dd>` : nothing}
       </dl>
       <div class="links">
-        ${page ? html`<a href=${page} target="_blank" rel="noopener">${icon('box-arrow-up-right')} Voir à la source</a>` : nothing}
-        <a href=${item.original} target="_blank" rel="noopener">${icon('image')} Ouvrir l’original</a>
+        ${safeUrl(page) ? html`<a href=${safeUrl(page)} target="_blank" rel="noopener">${icon('box-arrow-up-right')} Voir à la source</a>` : nothing}
+        ${safeUrl(item.original) ? html`<a href=${safeUrl(item.original)} target="_blank" rel="noopener">${icon('image')} Ouvrir l’original</a>` : nothing}
       </div>
       <p class="tip">Double-clic ou double-tap : zoomer là ; molette (Ctrl + molette dans la fiche) ou pincer : zoom progressif ; glisser : se déplacer. Au-delà de l’image d’affichage, l’original se charge tout seul.</p>
     </aside>`;

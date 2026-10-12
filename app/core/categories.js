@@ -16,7 +16,8 @@
 export const CATEGORIES = [
   { key: 'names', label: 'L’essentiel', question: 'Qui est-elle, en quelques mots ?', icon: 'card-text' },
   { key: 'images', label: 'Images', question: 'À quoi ressemble-t-elle ?', icon: 'images' },
-  { key: 'safety', label: 'Alertes', question: 'Puis-je la cueillir sans danger ?', icon: 'shield-check' },
+  // A neutral question and no check mark: most plants have no data, which does not make them safe.
+  { key: 'safety', label: 'Alertes', question: 'Quels risques lui connaît-on ?', icon: 'exclamation-triangle-fill' },
   { key: 'uses', label: 'Usages', question: 'À quoi sert-elle, se mange-t-elle ?', icon: 'basket' },
   { key: 'seasons', label: 'Saisons', question: 'Quand la voir ?', icon: 'flower1' },
   { key: 'knowledge', label: 'Encyclopédie', question: 'Que sait-on d’elle ?', icon: 'wikipedia' },

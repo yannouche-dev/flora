@@ -187,7 +187,8 @@ export function gbifStats(plant, gbifKey, signal, mode) {
  */
 export function gbifMedia(plant, gbifKey, kind, signal, mode) {
   if (!gbifKey) return Promise.resolve([]);
-  return cached(key('gbif-media2-' + kind, plant.id, mode), () => sourcesFor(mode).gbifOccurrenceMedia(gbifKey, kind, { signal }));
+  // media3: records read again since their free-text fields are plain text (lib/plant-sources.mjs, audit SEC-2).
+  return cached(key('gbif-media3-' + kind, plant.id, mode), () => sourcesFor(mode).gbifOccurrenceMedia(gbifKey, kind, { signal }));
 }
 
 /**

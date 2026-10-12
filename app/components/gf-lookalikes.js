@@ -1,17 +1,29 @@
 // @ts-check
 import { LitElement, html, css, nothing, repeat } from 'lit';
-import { lookalikesOf } from '../core/lookalikes.js';
+import { UNREAD_LOOKALIKES, genusOf, lookalikesOf } from '../core/lookalikes.js';
 import { href } from '../core/router.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 import { isFocused, sendFocus } from '../core/map-focus.js';
+import { safeUrl } from '../core/safe-url.js';
 
 /** @typedef {import('../core/lookalikes.js').Lookalike} Lookalike */
+
+/** The official list of the Centres antipoison (each with its phone number). */
+const POISON_CENTRES = 'https://centres-antipoison.net/';
+
+/**
+ * What to do after eating a plant, wherever a confusion or a toxicity is shown (no full stop: a sentence ends it).
+ * The numbers work offline.
+ */
+export const emergency = () => html`<span class="sos">Centre antipoison : <a href=${POISON_CENTRES} target="_blank" rel="noopener">centres-antipoison.net</a> (liste officielle) · <a href="tel:15">15</a> ou <a href="tel:112">112</a> en cas de détresse vitale</span>`;
 
 /**
  * « Peut être confondue avec… »: the confusions the Anses and the Centres antipoison report for this plant,
  * with how to tell them apart and the source. Each confusion folds on its own: closed at first when `compact`
- * (Épuré: one line each), open otherwise. `detailed`: also the symptoms (Scientifique). Nothing for other plants.
+ * (Épuré: one line each), open otherwise. The symptoms of a deadly confusion in every mode (Épuré: one line outside
+ * the fold, in full once open), the others' when `detailed` (Scientifique). Nothing for other plants; when the list
+ * cannot be read, says so (never « nothing »), with « Réessayer » (it also tells the sheet: `safety-retry`).
  */
 export class GfLookalikes extends LitElement {
   static properties = {
@@ -23,13 +35,14 @@ export class GfLookalikes extends LitElement {
     /** The sheet's map focus (which look-alike is compared). */
     focus: { attribute: false },
     _list: { state: true },
-    _loading: { state: true }
+    _loading: { state: true },
+    _error: { state: true }
   };
 
   static styles = [ui, css`
     :host { display: block; }
     :host([hidden]) { display: none; }
-    .box { display: grid; gap: 6px; }
+    .box { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
     .alert {
       border-radius: var(--gf-radius);
       padding: 8px 12px;
@@ -47,6 +60,8 @@ export class GfLookalikes extends LitElement {
     details[open] .chev { rotate: 180deg; }
     @media (prefers-reduced-motion: reduce) { .chev { transition: none; } }
     .alert strong { display: inline; }
+    .sym { display: block; margin-top: 2px; font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    details[open] .sym { display: none; }
     .alert strong a { color: inherit; }
     .sev { font-weight: 700; text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.03em; margin-left: 4px; }
     .mortel .sev { color: #b91c1c; }
@@ -58,6 +73,9 @@ export class GfLookalikes extends LitElement {
     .compare { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 0; }
     .compare button { min-height: 0; padding: 3px 10px; font-size: 0.8rem; border-radius: var(--gf-radius-pill); }
     .compare button[aria-pressed='true'] { border-color: #7b3294; color: #7b3294; background: color-mix(in srgb, #7b3294 10%, var(--gf-surface)); }
+    .sos a { color: inherit; }
+    .unread { margin: 0; }
+    .unread button { min-height: 0; padding: 0 4px; }
   `];
 
   constructor() {
@@ -68,28 +86,44 @@ export class GfLookalikes extends LitElement {
     /** @type {Lookalike[]} */
     this._list = [];
     this._loading = false;
+    this._error = false;
   }
 
   /** @param {Map<string, unknown>} changed */
   willUpdate(changed) {
-    if (changed.has('plant') && this.plant?.id !== /** @type {any} */ (changed.get('plant'))?.id) {
-      this._list = [];
-      this._loading = true;
-      const plant = this.plant;
-      lookalikesOf(plant).then(list => { if (this.plant === plant) this._list = list; }).catch(console.error)
-        .finally(() => { if (this.plant === plant) this._loading = false; });
-    }
+    if (changed.has('plant') && this.plant?.id !== /** @type {any} */ (changed.get('plant'))?.id) this.reload();
   }
+
+  /**
+   * Reads the plant's confusions (again: « Réessayer », here or in the sheet; a file that failed is asked again).
+   * Kept while the plant has the same id: the collection editor passes a new object at each render.
+   */
+  reload() {
+    this._list = [];
+    this._error = false;
+    this._loading = true;
+    const plant = this.plant, id = plant?.id;
+    const same = () => this.plant?.id === id;
+    lookalikesOf(plant).then(list => { if (same()) this._list = list; },
+      error => { console.error(error); if (same()) this._error = true; })
+      .finally(() => { if (same()) this._loading = false; });
+  }
+
+  #retry = () => {
+    this.reload();
+    this.dispatchEvent(new CustomEvent('safety-retry', { bubbles: true, composed: true }));
+  };
 
   /** @param {Lookalike['others'][number]} other */
   #other(other) {
-    const link = other.id ? href.plant(other.id) : other.taxon.includes(' ') ? null : '#/?genus=' + encodeURIComponent(other.taxon);
+    const genus = genusOf(other.taxon);
+    const link = other.id ? href.plant(other.id) : genus ? '#/?genus=' + encodeURIComponent(genus) : null;
     return link ? html`<a href=${link}>${other.label}</a>` : html`<span>${other.label}</span>`;
   }
 
   /** « Comparer sur la carte »: the look-alike's GBIF occurrences beside this plant's, in another colour. @param {Lookalike['others']} others */
   #compare(others) {
-    const species = others.filter(o => o.taxon.includes(' '));
+    const species = others.filter(o => !genusOf(o.taxon));
     if (!species.length) return nothing;
     return html`<p class="compare">${species.map(o => {
       /** @type {import('../core/map-focus.js').CompareFocus} */ const f = { kind: 'compare', label: o.label, taxon: o.taxon };
@@ -101,32 +135,40 @@ export class GfLookalikes extends LitElement {
   /** @param {Lookalike} l */
   #item(l) {
     const { pair, side, others } = l;
+    // Épuré (folded): the symptoms one line under the head; in full once open.
+    const symptoms = (this.detailed || pair.severity === 'mortel') && pair.symptoms;
     const names = others.map((o, i) => html`${i ? ', ' : ''}${this.#other(o)}`);
     const head = side === 'edible'
       ? html`<strong>${icon('exclamation-triangle-fill')} Peut être confondue avec ${names}</strong>`
-      : html`<strong>${icon('exclamation-octagon-fill')} Plante toxique, confondue avec ${names}</strong>`;
+      : html`<strong>${icon('exclamation-octagon-fill')} Plante ${pair.severity === 'mortel' ? 'mortelle' : 'toxique'}, confondue avec ${names}</strong>`;
     return html`<details class="alert ${pair.severity}" ?open=${!this.compact}>
-      <summary><span class="what">${head}<span class="sev">${pair.severity}</span> <span class="muted">· ${pair.part}</span></span>
+      <summary><span class="what">${head}<span class="sev">${pair.severity}</span> <span class="muted">· ${pair.part}</span>
+        ${symptoms && this.compact ? html`<span class="sym"><b>Symptômes :</b> ${pair.symptoms}</span>` : nothing}</span>
         <span class="chev" aria-hidden="true">${icon('chevron-down')}</span></summary>
       ${pair.tell.length ? html`<ul>${pair.tell.map(t => html`<li>${t}</li>`)}</ul>` : nothing}
       ${this.mapLinked ? this.#compare(others) : nothing}
-      ${this.detailed && pair.symptoms ? html`<p class="src"><b>Symptômes :</b> ${pair.symptoms}</p>` : nothing}
-      <p class="src muted">Source${l.sources.length > 1 ? 's' : ''} : ${l.sources.map((s, i) => html`${i ? ' · ' : ''}<a href=${s.url} target="_blank" rel="noopener" title=${s.title}>${s.publisher} (${s.date.slice(0, 4)})</a>`)}</p>
+      ${symptoms ? html`<p class="src"><b>Symptômes :</b> ${pair.symptoms}</p>` : nothing}
+      <p class="src muted">Source${l.sources.length > 1 ? 's' : ''} : ${l.sources.map((s, i) => {
+        const name = `${s.publisher} (${String(s.date).slice(0, 4)})`, url = safeUrl(s.url);
+        return html`${i ? ' · ' : ''}${url ? html`<a href=${url} target="_blank" rel="noopener" title=${s.title}>${name}</a>` : html`<span title=${s.title}>${name}</span>`}`;
+      })}</p>
     </details>`;
   }
 
   updated() {
-    this.hidden = !this._list.length;
+    this.hidden = !this._list.length && !this._error;
     // Still reading the list: the sheet waits before saying there is nothing.
     this.toggleAttribute('loading', this._loading);
   }
 
   render() {
     const list = this._list;
+    if (this._error) return html`<div class="box" aria-label="Plantes à confondre"><p class="alert mortel unread" role="alert">${icon('exclamation-octagon-fill')}
+      <b>${UNREAD_LOOKALIKES}</b> <button type="button" class="link" @click=${this.#retry}>Réessayer</button></p></div>`;
     if (!list.length) return nothing;
     return html`<div class="box" aria-label="Plantes à confondre">
       ${repeat(list, (_, i) => this.plant?.id + ':' + i, l => this.#item(l))}
-      <p class="muted">En cas de doute, ne pas consommer. Centre antipoison 24 h/24 ; le 15 en cas de détresse vitale.</p>
+      <p class="muted">En cas de doute, ne la consommez pas. ${emergency()}.</p>
     </div>`;
   }
 }

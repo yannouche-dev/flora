@@ -48,9 +48,15 @@ async function cached(key, load) {
   }
 }
 
-/** Lower-case "Genus species" (hybrids and infraspecific ranks reduced to the binomial). */
+/** Lower-case "Genus species" (infraspecific ranks reduced to the binomial; a hybrid's is never looked up, see nameIndex). */
 export const binomial = (/** @type {string} */ name) =>
   String(name || '').toLowerCase().replace(/\s+[×x]\s+/, ' x ').split(/\s+/).slice(0, 2).join(' ');
+
+/** Lower-case scientific name, single-spaced, the hybrid sign as « x » (iNaturalist writes « × », TAXREF « x »). */
+const fullName = (/** @type {string} */ name) => String(name || '').toLowerCase().replace(/×/g, ' x ').trim().split(/\s+/).join(' ');
+
+/** A hybrid: a formula (« A b x C d ») or a nothotaxon (« A x b », « x Genus b »). */
+const isHybrid = (/** @type {string} */ name) => /(^| )x( |$)/.test(fullName(name));
 
 /** First word of a scientific name; an intergeneric hybrid keeps its sign ("× Anacamptorchis"). */
 const genusOf = (/** @type {string} */ name) => {
@@ -60,23 +66,41 @@ const genusOf = (/** @type {string} */ name) => {
 
 /** @typedef {{ id: number, family: string, genus: string }} FloraMatch */
 
-/** @type {Promise<Map<string, FloraMatch>> | null} */
+/** @type {Promise<{ exact: Map<string, FloraMatch>, loose: Map<string, FloraMatch> }> | null} */
 let index = null;
-/** Scientific names and synonyms of the local flora → TAXREF id, family, genus. */
+/**
+ * Scientific names and synonyms of the local flora → TAXREF id, family, genus. `exact`: whole names, accepted names
+ * winning over synonyms. `loose`: their binomials, for an infraspecific name (iNaturalist's « Daucus carota sativus »),
+ * never from a hybrid: « Heracleum mantegazzianum x Heracleum sphondylium » would take the place of the species,
+ * and lose its alerts; a species' own name wins over its subspecies', an accepted name over a synonym.
+ */
 function nameIndex() {
   index ??= db.getAll('plants').then(plants => {
-    const map = new Map();
     const match = (/** @type {any} */ p) => ({ id: p.id, family: p.family, genus: p.genus });
+    /** @type {Map<string, FloraMatch>} */ const exact = new Map();
+    /** @type {Map<string, FloraMatch>} */ const loose = new Map();
+    /** @type {Map<string, number>} */ const rank = new Map();
+    const put = (/** @type {string} */ name, /** @type {any} */ p, /** @type {number} */ r) => {
+      if (isHybrid(name)) return;
+      const key = binomial(name);
+      if ((rank.get(key) ?? -1) < r) { rank.set(key, r); loose.set(key, match(p)); }
+    };
     for (const p of plants) {
-      for (const name of p.synonyms || []) if (!map.has(binomial(name))) map.set(binomial(name), match(p));
+      for (const name of p.synonyms || []) { if (!exact.has(fullName(name))) exact.set(fullName(name), match(p)); put(name, p, 0); }
     }
-    // Accepted names win over synonyms.
-    for (const p of plants) map.set(binomial(p.scientificName), match(p));
-    return map;
+    for (const p of plants) {
+      exact.set(fullName(p.scientificName), match(p));
+      put(p.scientificName, p, fullName(p.scientificName) === binomial(p.scientificName) ? 2 : 1);
+    }
+    return { exact, loose };
   });
   index.catch(() => { index = null; });
   return index;
 }
+
+/** The plant of the flora an iNaturalist name is: the whole name first, the binomial only for a non-hybrid. */
+const lookup = (/** @type {{ exact: Map<string, FloraMatch>, loose: Map<string, FloraMatch> }} */ names, /** @type {string} */ name) =>
+  names.exact.get(fullName(name)) ?? (isHybrid(name) ? undefined : names.loose.get(binomial(name)));
 
 /**
  * Plant species observed in the circle, most observed first.
@@ -98,9 +122,9 @@ export async function speciesAround(point, radius, signal) {
       photo: r.taxon.default_photo?.square_url || null
     }));
   });
-  const names = await nameIndex().catch(() => new Map());
+  const names = await nameIndex().catch(() => ({ exact: new Map(), loose: new Map() }));
   const species = raw.map(s => {
-    const local = names.get(binomial(s.name));
+    const local = lookup(names, s.name);
     return {
       ...s,
       plantId: local?.id ?? null,

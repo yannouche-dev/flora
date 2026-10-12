@@ -18,15 +18,23 @@ const DAY = 24 * 3600 * 1000;
 /** @type {Promise<any> | null} */
 let safetyLoading = null;
 
-/** The safety file (sources and per-plant entries); empty when it is not there yet. */
+/**
+ * The safety file (sources and per-plant entries). Rejects when it cannot be read (an HTTP error, a broken or empty
+ * file), and is asked again next time: an error is not « no data » — the sheet says the data is unavailable.
+ */
 export function safetyData() {
-  safetyLoading ??= fetch(new URL('../../data/safety.json', import.meta.url)).then(r => r.ok ? r.json() : { sources: {}, plants: {} })
-    .catch(() => { safetyLoading = null; return { sources: {}, plants: {} }; });
+  safetyLoading ??= fetch(new URL('../../data/safety.json', import.meta.url)).then(async r => {
+    if (!r.ok) throw new Error('safety ' + r.status);
+    const data = await r.json();
+    if (!data?.plants || typeof data.plants !== 'object' || !Object.keys(data.plants).length) throw new Error('safety: no plants');
+    return data;
+  }).catch(error => { safetyLoading = null; throw error; });
   return safetyLoading;
 }
 
 /**
- * What the safety file says about a plant: ANSM list (A or B, part, French name) and TPPT toxicity.
+ * What the safety file says about a plant: ANSM list (A or B, part, French name) and TPPT toxicity; null when the
+ * file has nothing on it, a rejection when the file cannot be read.
  * @param {any} plant @returns {Promise<{ ansm?: any, tppt?: any, sources: Record<string, any> } | null>}
  */
 export async function safetyOf(plant) {

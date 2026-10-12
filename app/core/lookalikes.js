@@ -2,6 +2,7 @@
 // Plantes à confondre: edible plants and the toxic plants they are mistaken for, as listed by the Anses and
 // the Centres antipoison (data/lookalikes.json — sources, distinguishing criteria and symptoms quoted from them).
 // Bundled with the app (precached): the warning must work offline, where the picking happens.
+// A file that cannot be read is an error, never « no confusion »: callers say the list is unavailable.
 
 import * as db from './db.js';
 
@@ -16,23 +17,103 @@ import * as db from './db.js';
 /** @type {Promise<{ sources: Record<string, Source>, pairs: Pair[] }> | null} */
 let loading = null;
 
+/** The look-alikes file; rejects (and is asked again next time) when it cannot be read or has no pairs. */
 export function lookalikeData() {
-  loading ??= fetch(new URL('../../data/lookalikes.json', import.meta.url)).then(r => {
+  loading ??= fetch(new URL('../../data/lookalikes.json', import.meta.url)).then(async r => {
     if (!r.ok) throw new Error('lookalikes ' + r.status);
-    return r.json();
+    const data = await r.json();
+    if (!Array.isArray(data?.pairs) || !data.pairs.length) throw new Error('lookalikes: no pairs');
+    return data;
   }).catch(error => { loading = null; throw error; });
   return loading;
 }
 
-/** @param {Taxon} taxon @param {any} plant */
-const matches = (taxon, plant) => taxon.taxon.includes(' ') ? plant.scientificName === taxon.taxon : plant.genus === taxon.taxon;
+/**
+ * A scientific name as a key: lower case, single spaces, « × » as « x », without its author. The word after the genus
+ * (and a hybrid sign) is the epithet when it is a word, whatever its case (« molopospermum Peloponnesiacum »), else
+ * the author of a genus (« Colchicum L. »); after the epithet, the author starts at the first capitalised word or
+ * parenthesis, unless a hybrid sign comes just before it (« A b x C d »).
+ * @param {string} name
+ */
+export const nameKey = name => {
+  const words = String(name || '').replace(/×/g, ' x ').trim().split(/\s+/).filter(Boolean);
+  const x = (/** @type {string | undefined} */ w) => w?.toLowerCase() === 'x';
+  // The genus (after a hybrid sign: « × Anacamptorchis »), then the epithet (after one: « Mentha × piperita »).
+  const genus = x(words[0]) ? 2 : 1, epithet = genus + Number(x(words[genus]));
+  if (!/^\p{L}[\p{L}-]*$/u.test(words[epithet] || '')) return words.slice(0, genus).join(' ').toLowerCase();
+  const end = words.findIndex((w, i) => i > epithet && /^[(\p{Lu}]/u.test(w) && !x(words[i - 1]));
+  return (end < 0 ? words : words.slice(0, end)).join(' ').toLowerCase();
+};
 
-/** A species of the flora by its name, for a link to its sheet (null for a genus or a plant not in the flora). @param {string} name */
+/** A key that names a genus (one word, after a hybrid sign): « colchicum », « x anacamptorchis ». @param {string} key */
+const genusKey = key => !key.replace(/^x /, '').includes(' ');
+
+/** The genus a taxon names, without its author (« Colchicum L. » → « Colchicum »); null for a species. @param {string} name */
+export function genusOf(name) {
+  const key = nameKey(name);
+  return genusKey(key) ? String(name).replace(/×/g, ' x ').trim().split(/\s+/).slice(0, key.split(' ').length).join(' ') : null;
+}
+
+/** Names resolved this session (only those found: the flora may still be loading). @type {Map<string, Promise<number>>} */
+const ids = new Map();
+/** @type {Promise<Map<string, number[]>> | null} */
+let synonyms = null;
+
+/** The plants of the flora by their synonyms (as keys), read once, when a name of the file is no accepted name. */
+function synonymIndex() {
+  synonyms ??= db.getAll('plants').then(plants => {
+    /** @type {Map<string, number[]>} */
+    const map = new Map();
+    for (const p of plants) for (const s of p.synonyms || []) {
+      const list = map.get(nameKey(s)) || [];
+      if (!list.includes(p.id)) map.set(nameKey(s), [...list, p.id]);
+    }
+    // An empty flora (still loading) is not kept.
+    if (!plants.length) synonyms = null;
+    return map;
+  });
+  synonyms.catch(() => { synonyms = null; });
+  return synonyms;
+}
+
+/**
+ * A species of the flora by its name, for a link to its sheet and to know a sheet's plant (null for a genus or a
+ * plant not in the flora): the plant whose accepted name it is, else the only plant that has it as a synonym
+ * (another spelling, an older name: « Molopospermum peloponnesiacum »). Author and case left aside.
+ * @param {string} name @returns {Promise<number | null>}
+ */
 async function plantId(name) {
-  const [genus, ...rest] = name.split(' ');
-  if (!rest.length) return null;
-  const rows = await db.getAllByIndex('plants', 'by_taxon', [genus, rest.join(' ')]).catch(() => []);
-  return rows.find(row => row.scientificName === name)?.id ?? null;
+  const key = nameKey(name);
+  if (genusKey(key)) return null;
+  const [genus, species] = key.split(' ');
+  let found = ids.get(key);
+  if (!found) {
+    found = (async () => {
+      const rows = await db.getAllByIndex('plants', 'by_taxon', [genus[0].toUpperCase() + genus.slice(1), species]);
+      const accepted = rows.find(row => nameKey(row.scientificName) === key);
+      if (accepted) return accepted.id;
+      const owners = (await synonymIndex()).get(key) || [];
+      if (owners.length !== 1) throw new Error('no plant');
+      return owners[0];
+    })();
+    ids.set(key, found);
+    found.catch(() => ids.delete(key));
+  }
+  return found.catch(() => null);
+}
+
+/**
+ * Does this taxon of a pair name this plant? Its genus (one word without its author, nameKey), its accepted name, or
+ * one of its synonyms that is no other plant's accepted name (plantId). A record without synonyms (a collection
+ * entry) is checked through the flora.
+ * @param {Taxon} taxon @param {any} plant @param {string} name the plant's name, as a key @param {Set<string> | null} own its synonyms, as keys
+ */
+async function matches(taxon, plant, name, own) {
+  const key = nameKey(taxon.taxon);
+  if (genusKey(key)) return nameKey(plant.genus) === key;
+  if (key === name) return true;
+  if (own && !own.has(key)) return false;
+  return plant.id != null && await plantId(taxon.taxon) === plant.id;
 }
 
 /**
@@ -42,10 +123,13 @@ async function plantId(name) {
 export async function lookalikesOf(plant) {
   if (!plant?.genus) return [];
   const { sources, pairs } = await lookalikeData();
+  const name = nameKey(plant.scientificName);
+  const own = Array.isArray(plant.synonyms) ? new Set(plant.synonyms.map(nameKey)) : null;
+  const any = async (/** @type {Taxon[]} */ taxa) => { for (const t of taxa) if (await matches(t, plant, name, own)) return true; return false; };
   /** @type {Lookalike[]} */
   const found = [];
   for (const pair of pairs) {
-    const side = pair.edible.some(t => matches(t, plant)) ? 'edible' : pair.toxic.some(t => matches(t, plant)) ? 'toxic' : null;
+    const side = await any(pair.edible) ? 'edible' : await any(pair.toxic) ? 'toxic' : null;
     if (!side) continue;
     const others = await Promise.all((side === 'edible' ? pair.toxic : pair.edible).map(async t => ({ ...t, id: await plantId(t.taxon) })));
     found.push({ side, pair, others, sources: pair.sources.map(id => sources[id]).filter(Boolean) });
@@ -53,12 +137,17 @@ export async function lookalikesOf(plant) {
   return found.sort((a, b) => Number(b.pair.severity === 'mortel') - Number(a.pair.severity === 'mortel'));
 }
 
+/** When the list cannot be read: said, never left out. */
+export const UNREAD_LOOKALIKES = 'Liste des confusions indisponible pour le moment : ne consommez aucune plante sans vérification.';
+
 /**
- * One line for the harvest toasts: what this plant can be mistaken for (or that it is the toxic one).
- * @param {any} plant @returns {Promise<{ toxic: boolean, text: string } | null>}
+ * One line for the harvest toasts: what this plant can be mistaken for (or that it is the toxic one), or that the
+ * list could not be read (`unread`).
+ * @param {any} plant @returns {Promise<{ toxic: boolean, text: string, unread?: boolean } | null>}
  */
 export async function lookalikeWarning(plant) {
-  const list = await lookalikesOf(plant).catch(() => []);
+  let list;
+  try { list = await lookalikesOf(plant); } catch { return { toxic: true, unread: true, text: UNREAD_LOOKALIKES }; }
   const edible = list.filter(l => l.side === 'edible');
   if (edible.length) {
     const names = edible.flatMap(l => l.others.map(o => o.label + (l.pair.severity === 'mortel' ? ' (mortel)' : '')));

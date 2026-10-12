@@ -12,6 +12,7 @@ import { cachedThumb, thumbUrl } from '../core/thumb.js';
 import { moduleEvents, moduleOn } from '../core/modules.js';
 import { protectedAreasIn } from '../core/protected.js';
 import { href } from '../core/router.js';
+import { safeUrl } from '../core/safe-url.js';
 import { gbifTileUrl } from '../core/sources.js';
 import './gf-map-panel.js';
 import './gf-map-search.js';
@@ -76,25 +77,47 @@ function leafIcon(delay, hl = false) {
  * @param {string} photo @param {number} delay
  */
 function photoIcon(photo, delay) {
-  return L.divIcon({
-    className: 'gf-obs-leaf gf-obs-photo',
-    iconSize: [30, 30],
-    iconAnchor: [15, 15],
-    html: `<span class="pop" style="animation-delay:${delay}ms"><img src="${escapeAttr(photo)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></span>`
-  });
+  const pop = elem('span', 'pop');
+  pop.style.animationDelay = delay + 'ms';
+  pop.append(dropImg(photo, { loading: 'lazy' }));
+  return L.divIcon({ className: 'gf-obs-leaf gf-obs-photo', iconSize: [30, 30], iconAnchor: [15, 15], html: pop });
 }
 
 /**
- * The small plant card shown over an observation: its photo, its names, when and where.
+ * The small plant card shown over an observation: its photo, its names, when and where. Built as nodes, the
+ * texts as text: names and places come from iNaturalist / GBIF, never parsed as HTML.
  * @param {{ title: string, common?: string | null, sci?: string, photo?: string | null, date?: string | null, place?: string | null }} p
  */
 function obsCard(p) {
-  const esc = (/** @type {string} */ t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const big = p.photo ? p.photo.replace('/square.', '/small.') : null;
   const when = p.date ? new Date(p.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
-  return `<div class="gf-obs-card">${big ? `<img src="${escapeAttr(big)}" alt="" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
-    <div class="t"><b>${esc(p.common || p.sci || p.title)}</b>${p.common && p.sci ? `<i>${esc(p.sci)}</i>` : ''}
-    ${when || p.place ? `<small>${esc([when, p.place].filter(Boolean).join(' · '))}</small>` : ''}</div></div>`;
+  const card = elem('div', 'gf-obs-card'), t = elem('div', 't');
+  if (big) card.append(dropImg(big));
+  t.append(elem('b', '', p.common || p.sci || p.title));
+  if (p.common && p.sci) t.append(elem('i', '', p.sci));
+  if (when || p.place) t.append(elem('small', '', [when, p.place].filter(Boolean).join(' · ')));
+  card.append(t);
+  return card;
+}
+
+/** An element, its text set as text (never HTML). @param {string} tag @param {string} [className] @param {string} [text] */
+function elem(tag, className = '', text = '') {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text) node.textContent = text;
+  return node;
+}
+
+/**
+ * An image that leaves when it fails (offline, gone): a listener, not an inline `onerror`, which the CSP of
+ * index.html forbids. `loading` is set before `src`, so a lazy image waits until it is near the view.
+ * @param {string} src @param {{ loading?: 'lazy' | 'eager', decoding?: 'async' | 'sync' | 'auto' }} [props]
+ */
+function dropImg(src, props = {}) {
+  const img = Object.assign(document.createElement('img'), { alt: '', referrerPolicy: 'no-referrer', ...props });
+  img.addEventListener('error', () => img.remove(), { once: true });
+  img.src = src;
+  return img;
 }
 
 /** Leaf glyph for plant markers. */
@@ -107,8 +130,6 @@ const SPREAD_MAX = 24;
 /** Room between a point and its card. @param {{ gap?: number }} o */
 const gap = o => o.gap ?? 8;
 
-const escapeAttr = (/** @type {string} */ s) => s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
-
 /**
  * Plant: its photo in a circle ringed with its abundance colour (a leaf until / unless a photo is known).
  * @param {PlantMarker} plant @param {boolean} selected @param {boolean} draggable
@@ -118,13 +139,10 @@ function plantIcon(plant, selected, draggable) {
   const url = plant.plantId ? cachedThumb(plant.plantId) : null;
   const classes = ['gf-plant', url ? 'photo' : '', selected ? 'selected' : '', plant.season ? 'season' : '', draggable ? 'draggable' : ''].join(' ');
   if (url) {
-    return L.divIcon({
-      className: classes,
-      iconSize: [34, 34],
-      iconAnchor: [17, 17],
-      html: `<span class="ring" style="--c:${color}"><img src="${escapeAttr(url)}" alt="" referrerpolicy="no-referrer" decoding="async"
-        onerror="this.remove()" /></span>`
-    });
+    const ring = elem('span', 'ring');
+    ring.style.setProperty('--c', color);
+    ring.append(dropImg(url, { decoding: 'async' }));
+    return L.divIcon({ className: classes, iconSize: [34, 34], iconAnchor: [17, 17], html: ring });
   }
   return L.divIcon({
     className: classes,
@@ -369,8 +387,8 @@ export class GfMap extends LitElement {
     const shown = this._areasOpen ? areas : areas.slice(0, 2);
     const more = areas.length - shown.length;
     return html`<div class="gf-map-protected" role="status">
-      <span class="what">${icon('shield-check')} ${shown.map((a, i) => html`${i ? ' · ' : ''}${a.url
-        ? html`<a href=${a.url} target="_blank" rel="noopener" title=${a.kind}>${a.name}</a>` : html`<b title=${a.kind}>${a.name}</b>`}
+      <span class="what">${icon('shield-check')} ${shown.map((a, i) => html`${i ? ' · ' : ''}${safeUrl(a.url)
+        ? html`<a href=${safeUrl(a.url)} target="_blank" rel="noopener" title=${a.kind}>${a.name}</a>` : html`<b title=${a.kind}>${a.name}</b>`}
         <span class="kind">(${a.kind})</span>`)}${more > 0
         ? html` · <button type="button" class="more" @click=${() => { this._areasOpen = true; }}>${icon('plus-lg')} ${more} autre${more > 1 ? 's' : ''}</button>` : nothing}
         — la cueillette y est souvent interdite ou réglementée : vérifiez les règles du site.</span>
@@ -564,7 +582,9 @@ export class GfMap extends LitElement {
     if (!p) return;
     const [x, y] = p.coordinates;
     const dot = L.circleMarker([y, x], { radius: 9, className: 'gf-focus-point', bubblingMouseEvents: false }).addTo(layer);
-    dot.bindTooltip(p.title, { direction: 'top', permanent: true, className: 'gf-focus-tip' });
+    // A node, not a string: Leaflet sets a string as innerHTML, and the title comes from the user's places (a
+    // shared link's names) or from GBIF records.
+    dot.bindTooltip(elem('span', '', p.title), { direction: 'top', permanent: true, className: 'gf-focus-tip' });
     this.#onPoint(dot, p);
     if (this.#map.getSize().x) this.#map.flyTo([y, x], Math.max(this.#map.getZoom(), 11), { duration: 0.6 });
   }
@@ -999,7 +1019,7 @@ export class GfMap extends LitElement {
       // A touch screen has no hover: a touch opens the plant's card (a popup, until the next touch on the map);
       // with a mouse, it shows on hover and a click opens the record.
       const touch = fancy && (p.photo || p.sci) && matchMedia('(hover: none)').matches;
-      if (fancy && (p.photo || p.sci)) this.#tip(dot, obsCard(p), { card: true, gap: 6 });
+      if (fancy && (p.photo || p.sci)) this.#tip(dot, () => obsCard(p), { card: true, gap: 6 });
       else this.#tip(dot, point.title);
       if (!touch || this.pointClick === 'pick') this.#onPoint(dot, point);
     }
@@ -1012,7 +1032,8 @@ export class GfMap extends LitElement {
    * A point's little card (or its name), floating above all the rest — the top layer where the browser has it, so no
    * button, panel or bar of the map (or of the page) covers it. Hover shows it; on a touch screen, a touch (another
    * touch on the map hides it).
-   * @param {L.Layer} dot @param {string} content HTML for a card, else plain text @param {{ card?: boolean, gap?: number }} [o]
+   * @param {L.Layer} dot @param {string | (() => Node)} content plain text, or the card's builder (called at each show: its
+   *   photo is fetched when the card shows) @param {{ card?: boolean, gap?: number }} [o]
    */
   #tip(dot, content, o = {}) {
     const show = () => this.#showTip(dot, content, o);
@@ -1021,14 +1042,14 @@ export class GfMap extends LitElement {
     dot.on('remove', () => this.#hideTip(dot));
   }
 
-  /** @param {L.Layer} dot @param {string} content @param {{ card?: boolean, gap?: number }} o */
+  /** @param {L.Layer} dot @param {string | (() => Node)} content @param {{ card?: boolean, gap?: number }} o */
   #showTip(dot, content, o) {
     const tip = this.#floatTip;
     const el = /** @type {any} */ (dot).getElement?.();
     if (!tip || !el) return;
     this.#tipOwner = dot;
     tip.className = 'gf-float-tip' + (o.card ? ' card' : '');
-    if (o.card) tip.innerHTML = content; else tip.textContent = content;
+    if (typeof content === 'function') tip.replaceChildren(content()); else tip.textContent = content;
     // Its photo arriving changes nothing (fixed size), but placed again once there, to be sure.
     tip.querySelector('img')?.addEventListener('load', () => { if (this.#tipOwner === dot) this.#placeTip(el, gap(o)); }, { once: true });
     try { if (tip.popover && !tip.matches(':popover-open')) tip.showPopover(); } catch { /* not connected */ }
@@ -1097,7 +1118,7 @@ export class GfMap extends LitElement {
       L.polyline([at, spot], { className: 'gf-spread-thread', interactive: false }).addTo(layer);
       const dot = L.circleMarker(spot, { radius: 7, className: 'gf-occ gf-occ-' + (/** @type {any} */ (p).kind || kind), bubblingMouseEvents: false }).addTo(layer);
       const q = /** @type {any} */ (p);
-      if (q.photo || q.sci) this.#tip(dot, obsCard(q), { card: true }); else this.#tip(dot, p.title);
+      if (q.photo || q.sci) this.#tip(dot, () => obsCard(q), { card: true }); else this.#tip(dot, p.title);
       this.#onPoint(dot, p);
     });
     L.circleMarker(at, { radius: 5, className: 'gf-spread-center', interactive: false }).addTo(layer);

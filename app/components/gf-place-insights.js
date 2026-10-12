@@ -8,6 +8,7 @@ import { chartStyles, climateChart } from '../core/charts.js';
 import { icon } from '../core/icons.js';
 import { ui } from '../styles/ui.js';
 import { hideImg, showImg } from '../core/img.js';
+import { safeUrl } from '../core/safe-url.js';
 
 /** Radius of « Plantes vues ici » (metres). */
 const SEEN_RADIUS = 500;
@@ -103,7 +104,7 @@ export class GfPlaceInsights extends LitElement {
         : z === null ? html`<p class="muted">API Carto (IGN) ne répond pas pour le moment.</p>`
         : !z.length ? html`<p class="muted">Ni ZNIEFF, ni site Natura 2000, ni parc ou réserve ici.</p>`
         : html`<ul class="zones">${z.map((/** @type {any} */ x) => html`<li><span class="kind">${x.label}</span>
-            ${x.url ? html`<a href=${x.url} target="_blank" rel="noopener">${x.name}</a>` : html`<span>${x.name}</span>`}</li>`)}</ul>`}
+            ${safeUrl(x.url) ? html`<a href=${safeUrl(x.url)} target="_blank" rel="noopener">${x.name}</a>` : html`<span>${x.name}</span>`}</li>`)}</ul>`}
       ${Array.isArray(z) ? html`<p class="credit">Source : INPN / PatriNat via <a href="https://apicarto.ign.fr/api/doc/nature" target="_blank" rel="noopener">API Carto (IGN)</a>. Une ZNIEFF signale un milieu riche ; Natura 2000, un site européen ; un parc ou une réserve a ses propres règles de cueillette.</p>` : nothing}
     </section>`;
   }

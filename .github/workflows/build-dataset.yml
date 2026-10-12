@@ -22,13 +22,14 @@ jobs:
     timeout-minutes: 90
 
     steps:
+      # Actions pinned by commit (a moved tag cannot change what pushes to main); the comment names the release.
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Download official TAXREF v18 archive
         run: |
@@ -86,6 +87,13 @@ jobs:
         run: |
           node -e "const p=require('./data/plants.json'); const m=require('./data/meta.json'); const n=p.filter(x=>x.thumbnail?.url).length; if(!Array.isArray(p)||p.length<4500||p.length>8000) process.exit(1); if(p.length!==m.plants) process.exit(1); if(n<3000) throw new Error('Thumbnail coverage unexpectedly low: '+n); console.log(p.length+' plants; '+m.vernacularNames+' French vernacular names; '+n+' thumbnails; '+p.filter(x=>x.flowering).length+' with Baseflor flowering; '+p.filter(x=>x.statuses?.some(s=>/^P[NRD]$/.test(s.type))).length+' protected; '+p.filter(x=>x.statuses?.some(s=>s.type==='REGL')).length+' regulated')"
           cat data/meta.json
+
+      # The steps that read outside sources go on when one fails (continue-on-error): build-safety.mjs then keeps
+      # the failed source's part of the previous safety.json, but statuses are not kept. Look-alike taxa that no
+      # longer name the flora, a missing safety source or counts under their floors fail the job here, so a
+      # degraded dataset is never committed, nor deployed (deploy-pages only follows a successful build).
+      - name: Check safety data and protection statuses
+        run: node scripts/check-data.mjs
 
       - name: Commit generated dataset
         if: github.ref == 'refs/heads/main'
