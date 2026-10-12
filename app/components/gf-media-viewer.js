@@ -2,8 +2,12 @@
 // « Médias »: every image of a plant in one viewer, with one zoom that works the way photo apps do.
 //  - The image shows at once from its thumbnail (blurred), then its display size fades in; zooming past what
 //    the display size holds loads the original, on its own — there is nothing to choose.
-//  - « Plein cadre »: the image fills the stage's width whenever its definition allows it; the map of the
-//    whole image lies over the right edge (at the stage's height when it is narrow enough), showing the part seen.
+//  - Zoomed by default (« Plein cadre »), as its shape allows: an image of about the stage's shape fills it (a third
+//    of it cropped at most), another one is enlarged that far only (two thirds of it seen across, its blurred
+//    backdrop at the sides); the map of the whole image lies over the right edge (at the stage's height when it is
+//    narrow enough), showing the part seen.
+//  - Never past 100 %: one pixel of the original per screen pixel at most — a small image is not enlarged, even
+//    whole (it shows at its size over its blurred backdrop).
 //  - Zoom in place: double-click / double-tap (at that point), pinch, Ctrl + wheel (and the wheel alone when
 //    the viewer is alone in a pane), + / − / 0 keys, the − % + buttons; drag to move around, or on the map.
 //  - Browse: ‹ ›, the filmstrip, ← → (when the viewer has the focus), a swipe when not zoomed.
@@ -35,6 +39,8 @@ const PART_INFO = { all: ['Toutes les parties', 'images'], flower: ['Fleur', 'fl
 const MAP_SHARE = 0.45, MAP_SHARE_NARROW = 0.35;
 /** Zoomed, the image may be moved this far clear of the map (px), so nothing of it stays hidden under the map. */
 const MAP_GAP = 12;
+/** Plein cadre enlarges the whole image this much at most: two thirds of it stay in view across. */
+const FRAME = 1.5;
 const nf = new Intl.NumberFormat('fr-FR');
 
 /** The image's height in the sheet, as a proportion of its width (the grip); null: the default shape. */
@@ -460,6 +466,7 @@ export class GfMediaViewer extends LitElement {
     this._natural = item?.width && item?.height ? { w: item.width, h: item.height } : null;
     this.#guessed = false;
     this.#touched = false;
+    this.#preview = this.showcase && !this.#showcased;
   }
   /** The user zoomed or moved this image: its view is theirs. */
   #touched = false;
@@ -545,30 +552,39 @@ export class GfMediaViewer extends LitElement {
     return fit && n ? n.w / fit.w : 4;
   }
 
-  /** Up to twice the original's pixels (at least ×4). */
-  get #maxZoom() { return Math.max(4, this.#oneToOne * 2); }
+  /** Its true size is known (not only its thumbnail's shape). */
+  get #sized() { return Boolean(this._natural && this.#fit) && !this.#guessed; }
+
+  /** The whole image: fitted in the stage — never past 100 % (a small image keeps its size). */
+  get #base() { return this.#sized ? Math.min(1, this.#oneToOne) : 1; }
+
+  /** Up to 100 %: one pixel of the original per screen pixel at most (×4 while its size is not known yet). */
+  get #maxZoom() { return this.#sized ? Math.max(this.#base, this.#oneToOne) : 4; }
 
   /**
-   * Plein cadre: the zoom at which the image fills the stage's width — the first view of every image, unless its
-   * definition is far too low for it (enlarged more than twice), then the whole image.
+   * Plein cadre, the first view of every image: zoomed as its shape allows — filling the stage when that crops a
+   * third of it at most (an image of about the stage's shape, portrait in portrait, landscape in landscape); else
+   * enlarged that far only (a portrait image in a wide stage, or the reverse: two thirds of it seen, its blurred
+   * backdrop at the sides). Never past 100 %.
    */
   get #fill() {
-    const n = this._natural, { w } = this._stage, fit = this.#fit;
-    if (!n || !fit || !w || this.#guessed) return 1;
-    const z = w / fit.w;
-    if (z <= 1.01) return 1;
-    if (w > n.w * 2) return 1;
-    return Math.min(z, this.#maxZoom);
+    const fit = this.#fit, { w, h } = this._stage;
+    if (!this.#sized || !fit || !w || !h) return this.#base;
+    const cover = Math.max(w / fit.w, h / fit.h);
+    return clamp(Math.min(cover, FRAME), this.#base, this.#maxZoom);
   }
 
   /** The zoom kept with the padlock (its % of the original's pixels), on this image. */
   get #locked() {
     const pct = sheetSession.media.lock;
-    return pct ? clamp(pct / 100 * this.#oneToOne, 1, this.#maxZoom) : null;
+    return pct ? clamp(pct / 100 * this.#oneToOne, this.#base, this.#maxZoom) : null;
   }
 
-  /** The first view of an image: filling the stage's width — or the zoom locked with the padlock. */
-  get #home() { return this.#locked ?? this.#fill; }
+  /** The first view of an image: plein cadre — or the zoom locked with the padlock (the showcase: whole first). */
+  get #home() { return this.#preview ? this.#base : this.#locked ?? this.#fill; }
+
+  /** Showcase, the first image: whole a moment, then it zooms in to its first view by itself. */
+  #preview = false;
 
   /** The image wider than the stage (it moves sideways). */
   get #overflowX() { const fit = this.#fit; return !!fit && fit.w * this._z > this._stage.w + 1; }
@@ -583,9 +599,9 @@ export class GfMediaViewer extends LitElement {
 
   /** « Ajusté » → « Plein cadre » (when there is one) → « 100 % » → « Ajusté »…, on this image (the padlock keeps it). */
   #cycleView() {
-    const z = this._z, fill = this.#fill, one = clamp(this.#oneToOne, 1, this.#maxZoom);
+    const z = this._z, base = this.#base, fill = this.#fill, one = this.#maxZoom;
     const near = (/** @type {number} */ a) => Math.abs(z - a) < 0.02;
-    const next = near(1) ? (fill > 1 ? fill : one) : near(fill) && fill > 1 ? (one > fill + 0.02 ? one : 1) : 1;
+    const next = near(base) ? (fill > base + 0.02 ? fill : one) : near(fill) && fill > base + 0.02 ? (one > fill + 0.02 ? one : base) : base;
     this._z = next; this._tx = 0; this._ty = 0;
     this.#touched = true;
     this.#clampPan();
@@ -636,11 +652,11 @@ export class GfMediaViewer extends LitElement {
   #zoomAt(z, px, py, animate = false) {
     this.#touched = true;
     queueMicrotask(() => this.#keepLock());
-    const z2 = clamp(z, 1, this.#maxZoom), k = z2 / this._z;
+    const base = this.#base, z2 = clamp(z, base, this.#maxZoom), k = z2 / this._z;
     this._tx = px - (px - this._tx) * k;
     this._ty = py - (py - this._ty) * k;
     this._z = z2;
-    if (z2 <= 1.001) { this._tx = 0; this._ty = 0; }
+    if (z2 <= Math.max(1, base) + 0.001) { this._tx = 0; this._ty = 0; }
     this.#clampPan();
     this.#animate(animate);
     this.#maybeHd();
@@ -714,7 +730,7 @@ export class GfMediaViewer extends LitElement {
     if (this.#pinch && this.#pointers.size >= 2) {
       const [a, b] = [...this.#pointers.values()], p = this.#pinch;
       this.#touched = true;
-      const z = clamp(p.z * Math.hypot(a.x - b.x, a.y - b.y) / p.d, 1, this.#maxZoom), k = z / p.z;
+      const z = clamp(p.z * Math.hypot(a.x - b.x, a.y - b.y) / p.d, this.#base, this.#maxZoom), k = z / p.z;
       const [cx, cy] = this.#local(/** @type {any} */ ({ clientX: (a.x + b.x) / 2, clientY: (a.y + b.y) / 2 }));
       // The point under the fingers stays under them, and follows them.
       this._tx = cx - (p.cx - p.tx) * k; this._ty = cy - (p.cy - p.ty) * k; this._z = z;
@@ -738,7 +754,7 @@ export class GfMediaViewer extends LitElement {
     /** @type {HTMLElement} */ (e.currentTarget).classList.remove('dragging');
     this.#pointers.delete(e.pointerId);
     if (this.#pinch) {
-      if (this.#pointers.size < 2) { this.#pinch = null; if (this._z <= 1.02) { this._z = 1; this._tx = 0; this._ty = 0; } this.#maybeHd(); }
+      if (this.#pointers.size < 2) { this.#pinch = null; if (this._z <= Math.max(1, this.#base) + 0.02) { this._z = Math.min(1, Math.max(this._z, this.#base)); this._tx = 0; this._ty = 0; } this.#maybeHd(); }
       return;
     }
     const d = this.#drag;
@@ -1028,7 +1044,7 @@ export class GfMediaViewer extends LitElement {
 
   /** @param {MediaItem} item @param {number} at @param {number} n */
   #stage(item, at, n) {
-    const fit = this.#fit, z = this._z, home = this.#home, zoomed = z > home + 0.01, over = z > 1.01;
+    const fit = this.#fit, z = this._z, home = this.#home, zoomed = z > home + 0.01, over = z > 1.01, shrink = z > this.#base + 0.01;
     const src = this._failed.get(item.key) || item.display;
     const frame = fit ? `width:${fit.w}px;height:${fit.h}px;transform:translate(calc(-50% + ${this._tx}px), calc(-50% + ${this._ty}px)) scale(${z})` : 'display:none';
     const pct = Math.round(z / this.#oneToOne * 100);
@@ -1053,7 +1069,7 @@ export class GfMediaViewer extends LitElement {
       ${map && fit ? this.#minimap(item, fit, map) : nothing}
       ${this._tip ? html`<p class="zoom-tip" role="status">${icon('zoom-in')} Molette, pincer ou double-clic pour zoomer ; ${icon('unlock')} garde le zoom pour les photos suivantes.</p>` : nothing}
       <div class="zoombar" role="group" aria-label="Zoom">
-        <button type="button" aria-label="Dézoomer" title="Dézoomer (−)" ?disabled=${!over} @click=${() => this.#zoomAt(z / 1.5, 0, 0, true)}>−</button>
+        <button type="button" aria-label="Dézoomer" title="Dézoomer (−)" ?disabled=${!shrink} @click=${() => this.#zoomAt(z / 1.5, 0, 0, true)}>−</button>
         ${this.#viewButton(z, pct, one)}
         <button type="button" aria-label="Zoomer" title="Zoomer (+)" ?disabled=${z >= this.#maxZoom - 0.01} @click=${() => this.#zoomAt(z * 1.5, 0, 0, true)}>+</button>
         ${this.#lockButton()}
@@ -1074,9 +1090,9 @@ export class GfMediaViewer extends LitElement {
   }
 
   #viewButton(z, pct, one) {
-    const near = (/** @type {number} */ a) => Math.abs(z - a) < 0.02, fill = this.#fill;
-    const label = near(1) ? 'Ajusté' : fill > 1 && near(fill) ? 'Plein cadre' : nf.format(pct) + ' %';
-    const next = near(1) ? (fill > 1 ? 'Plein cadre' : '100 %') : fill > 1 && near(fill) && clamp(one, 1, this.#maxZoom) > fill + 0.02 ? '100 %' : 'l’image entière';
+    const near = (/** @type {number} */ a) => Math.abs(z - a) < 0.02, base = this.#base, fill = this.#fill, framed = fill > base + 0.02;
+    const label = near(base) ? 'Ajusté' : framed && near(fill) ? 'Plein cadre' : nf.format(pct) + ' %';
+    const next = near(base) ? (framed ? 'Plein cadre' : '100 %') : framed && near(fill) && this.#maxZoom > fill + 0.02 ? '100 %' : 'l’image entière';
     return html`<button type="button" class="pct" title=${'Passer à : ' + next} aria-label=${label + ' — passer à ' + next}
       @click=${() => this.#cycleView()}>${label}</button>`;
   }
@@ -1114,12 +1130,16 @@ export class GfMediaViewer extends LitElement {
     this.#maybeHd();
     if (this.showcase && !this.#showcased && !this.#touched) {
       this.#showcased = true;
-      // A moment on the whole image, then a slow zoom into its middle (the map of the image appears); the tip says how.
+      // A moment on the whole image, then a slow zoom to its first view (plein cadre: as its shape allows, never past
+      // 100 %), which it keeps; the tip says how to zoom.
       setTimeout(() => {
+        this.#preview = false;
         if (this.#touched || item.key !== this.#current?.key) return;
-        this._tip = true;
-        this.#zoomAt(this.#home * 2.2, 0, 0, true);
+        // The tip only when the image can be zoomed (a small one already shows at 100 %).
+        this._tip = this.#maxZoom > this.#base + 0.01;
         this.renderRoot.querySelector('.stage')?.classList.add('showing');
+        this.#toHome(false);
+        this.requestUpdate();
         setTimeout(() => this.renderRoot.querySelector('.stage')?.classList.remove('showing'), 1300);
         setTimeout(() => { this._tip = false; }, 7000);
       }, 900);

@@ -77,7 +77,7 @@ const MANY = 250;
 /** The steps of the discovery, as the bar shows them. */
 const STAGES = ['Carte', 'Rencontres', 'Photos', 'Encyclopédie', 'Cueillette ou science', 'Voisines'];
 /** What each step brings, said on its button in the bar. */
-const STAGE_ABOUT = ['La carte : jusqu’où chercher', 'Les cartes des plantes d’ici, à côté de la carte', 'Les photos de la plante aimée',
+const STAGE_ABOUT = ['La carte : jusqu’où chercher', 'Les cartes des plantes d’ici, à côté de la carte', 'Les photos de la plante en vue',
   'Ce qu’en dit l’encyclopédie', 'La cueillette ou la science : à vous de choisir', 'Les plantes voisines, sous la carte'];
 const SCOPES = /** @type {const} */ (['around', 'department', 'region', 'country', 'world']);
 /** The deck has shown it can be swiped (once while the app is open). */
@@ -137,7 +137,10 @@ export class GfDiscover extends LitElement {
     _later: { state: true },
     /** On the plant for a while: the next step can be offered. */
     _dwell: { state: true },
-    /** The plant the panes show while discovering (the one matched, or chosen among the plants around); else the top card. */
+    /**
+     * Discovering: a plant already loved, brought back on top of the deck (touched on the map or in the list around)
+     * — else none: the card on top is the plant the map and the panes show.
+     */
     _focus: { state: true },
     _note: { state: true },
     /** The name of the plant open when it is not among the cards (a link). */
@@ -235,6 +238,9 @@ export class GfDiscover extends LitElement {
     .stamp { position: absolute; top: 26px; padding: 4px 12px; border: 4px solid; border-radius: 10px; font-size: 1.8rem; font-weight: 900; letter-spacing: 0.08em; opacity: 0; pointer-events: none; }
     .stamp.like { left: 18px; color: #4ade80; transform: rotate(-14deg); opacity: var(--like, 0); }
     .stamp.nope { right: 18px; color: #f87171; transform: rotate(14deg); opacity: var(--nope, 0); }
+    /* A plant already loved, brought back on top (touched on the map or in the list around). */
+    .loved-badge { position: absolute; top: 12px; left: 12px; z-index: 1; display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: var(--gf-radius-pill);
+      background: #e0245e; color: #fff; font-size: 0.8rem; font-weight: 700; box-shadow: 0 0 0 2px #ffd166, 0 2px 8px rgb(0 0 0 / 35%); pointer-events: none; }
     .actions { display: flex; gap: 22px; align-items: center; }
     .round { width: 62px; height: 62px; border-radius: 50%; border: 0; display: grid; place-items: center; font-size: 1.6rem; cursor: pointer; background: var(--gf-surface);
       box-shadow: 0 6px 16px rgb(0 0 0 / 18%); transition: transform 0.12s; }
@@ -492,7 +498,7 @@ export class GfDiscover extends LitElement {
       // The deck: ← passes, → matches, ↑ its sheet.
       const t0 = /** @type {HTMLElement} */ (e.composedPath()[0]);
       if (this._view !== 'swipe' || this._match || t0?.closest?.('input, textarea, select')) return;
-      const top = this.#deck[0];
+      const top = this.#shown[0];
       if (!top) return;
       if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); this.#decide(top, e.key === 'ArrowRight'); }
       else if (e.key === 'ArrowUp' && !this.#guided) { e.preventDefault(); this.#openPlant(top.plant.id, this.#deck.map(c => c.plant.id)); }
@@ -819,6 +825,22 @@ export class GfDiscover extends LitElement {
     return (this._cards || []).filter(c => !s.passed.includes(c.plant.id) && !s.matches.includes(c.plant.id));
   }
 
+  /** Discovering: a plant already loved, brought back on top (touched on the map or in the list around). */
+  get #revisit() {
+    const id = this._focus;
+    if (id == null || !this.#guided || !discoverState().matches.includes(id)) return undefined;
+    return (this._cards || []).find(c => c.plant.id === id);
+  }
+
+  /**
+   * The deck as shown: the cards to meet — a plant loved brought back on top of them. The card on top is the
+   * plant of the moment: the map lights it, the panes show it; a swipe, and the next one is.
+   */
+  get #shown() {
+    const back = this.#revisit;
+    return back ? [back, ...this.#deck] : this.#deck;
+  }
+
   get #matchCards() {
     const ids = discoverState().matches;
     return (this._cards || []).filter(c => ids.includes(c.plant.id));
@@ -897,11 +919,13 @@ export class GfDiscover extends LitElement {
     const card = (this._cards || []).find(c => c.plant.id === last.id);
     if (last.fav && card && isFavorite(last.id)) toggleFavorite(card.plant).catch(() => {});
     this._match = null;
+    // The card taken back is the one of the moment (on top): the map and the panes go back to it.
+    this._focus = null;
   }
 
   /** The deck: the card on top (dragged), the next one under it, and the three buttons. */
   #deckView() {
-    const deck = this.#deck;
+    const deck = this.#shown;
     if (!deck.length) {
       const next = DISTANCES.find(d => d > this._radius);
       return html`<div class="deck-end">
@@ -924,18 +948,21 @@ export class GfDiscover extends LitElement {
         ${this.#guided ? nothing : html`<button class="round info" type="button" aria-label="Voir sa fiche" title="Sa fiche (↑)" @click=${() => this.#openPlant(top.plant.id, this.#deck.map(c => c.plant.id))}>${icon('three-dots')}</button>`}
         <button class="round like" type="button" aria-label="J’aime : c’est un match" title="Match (→)" @click=${() => this.#decide(top, true)}>${icon('heart-fill')}</button>
       </div>
-      <p class="left">${deck.length} plante${deck.length > 1 ? 's' : ''} à rencontrer</p>
+      <p class="left">${this.#deck.length} plante${this.#deck.length > 1 ? 's' : ''} à rencontrer</p>
     </div>`;
   }
 
   /** @param {Card} c @param {boolean} top */
   #swipeCard(c, top) {
     const p = c.plant, name = p.vernacularNames?.[0] || p.scientificName;
-    return html`<article class="swipe-card ${top ? 'top' : 'under'}" aria-label=${name} data-id=${p.id}
+    // A plant already loved, brought back on top: its heart says so; a swipe either way only puts it back.
+    const loved = discoverState().matches.includes(p.id);
+    return html`<article class="swipe-card ${top ? 'top' : 'under'} ${loved ? 'loved' : ''}" aria-label=${loved ? name + ' — déjà aimée' : name} data-id=${p.id}
         @pointerdown=${top ? this.#dragStart : null} @pointermove=${top ? this.#dragMove : null} @pointerup=${top ? this.#dragEnd : null} @pointercancel=${top ? this.#dragEnd : null}>
       <div class="nophoto">${icon('leaf')}</div>
       ${c.photo ? html`<img src=${c.photo} alt="" loading=${top ? 'eager' : 'lazy'} decoding="async" referrerpolicy="no-referrer" draggable="false" @error=${hideImg} @load=${showImg} />` : nothing}
       <span class="stamp like">MATCH</span><span class="stamp nope">BOF</span>
+      ${loved ? html`<span class="loved-badge">${icon('heart-fill')} Déjà aimée</span>` : nothing}
       <div class="about">
         <h2>${name}<small>${p.scientificName}</small></h2>
         ${this.#ethnoLine(c)}
@@ -1054,19 +1081,23 @@ export class GfDiscover extends LitElement {
     const node = el || /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.swipe-card.top'));
     const done = () => {
       if (node) { node.style.transition = 'none'; this.#reset(node); node.classList.remove('fly'); requestAnimationFrame(() => { node.style.transition = ''; }); }
+      // Discovering: whatever the swipe, the card now on top is the plant of the moment — the map lights it, the
+      // panes show it. A plant already loved, brought back on top, is only put back (still loved).
+      if (this.#guided) {
+        const back = this._focus === card.plant.id && discoverState().matches.includes(card.plant.id);
+        this._focus = null; this.#navs++; this.#restartDwell();
+        if (back) return;
+      }
       const fav = liked && !isFavorite(card.plant.id);
       this._history = [...this._history, { id: card.plant.id, liked, fav }].slice(-30);
       swiped(card.plant.id, liked);
-      // Discovering: a match is shown in the panes (its photos — the plant just loved, not the next card); a card
-      // passed: the panes go on with the one now on top.
-      if (this.#guided) { this._focus = liked ? card.plant.id : null; this.#navs++; this.#restartDwell(); }
       if (liked) {
         if (fav) toggleFavorite(card.plant).catch(() => {});
         if (matchMedia('(pointer: coarse)').matches) navigator.vibrate?.(30);
         // The first match (while discovering): its screen, once — Rencontres: a heart, and its photos offered (the
         // panes show it until the next card). The next ones: a heart.
         const first = discovering() && !discoverState().firstMatch;
-        // Rencontres: the first match brings its photos at once (the third block, zoomed), of the plant matched.
+        // Rencontres: the first match brings the photos at once (the third block, zoomed) — of the card now on top.
         if (first && this.#guided) { firstMatchShown(); this.#restartDwell(); if (discoverState().step === 0) this.#accept(1); }
         if (first && !this.#guided) this._match = card;
         else { this._burst++; const n = this._burst; setTimeout(() => { if (this._burst === n) this._burst = 0; }, 900); }
@@ -1119,14 +1150,27 @@ export class GfDiscover extends LitElement {
   /** The mode whose layout the steps build (the one the plant sheet shows in Flore). */
   get #view() { return plantViewOf(this.#store.state); }
 
-  /** The plant shown in the panes. */
-  get #focusId() { return this._focus ?? this.#deck[0]?.plant.id ?? null; }
+  /** The plant of the moment: the card on top (the map lights it, the panes show it). */
+  get #focusId() { return this.#shown[0]?.plant.id ?? null; }
 
-  /** A plant of the list around, shown in the panes. @param {number} id */
+  /**
+   * A plant touched (on the map, or in the list around): its card on top of the deck — the map and the panes follow
+   * it. One passed: back in the deck, on top; one already loved: brought back on top, still loved.
+   * @param {number} id
+   */
   #aroundGo(id) {
     if (id === this.#focusId) return;
-    this._focus = id;
+    const cards = this._cards || [];
+    const card = cards.find(c => c.plant.id === id);
+    if (!card) return;
+    if (discoverState().matches.includes(id)) this._focus = id;
+    else {
+      if (discoverState().passed.includes(id)) unswipe(id);
+      this._cards = [card, ...cards.filter(c => c !== card)];
+      this._focus = null;
+    }
     this.#navs++;
+    this.#restartDwell();
   }
 
   /**
@@ -1518,7 +1562,7 @@ export class GfDiscover extends LitElement {
 
   /**
    * A point of the map touched (the cards shown): its plant comes on top of the deck — the cards, the media and the
-   * map follow it. One already loved: shown in the panes; one passed: back in the deck, on top.
+   * map follow it. One already loved: brought back on top, still loved; one passed: back in the deck, on top.
    * @param {CustomEvent} e
    */
   #pick(e) {
@@ -1526,13 +1570,7 @@ export class GfDiscover extends LitElement {
     const cards = this._cards || [];
     const card = cards.find(c => (p.taxonId != null && c.taxonId === p.taxonId) || c.plant.scientificName === p.sci);
     if (!card) { this.#note(`${p.common || p.sci || 'Cette plante'} n’est pas parmi les rencontres d’ici.`); return; }
-    const id = card.plant.id;
-    if (discoverState().matches.includes(id)) { this.#aroundGo(id); return; }
-    if (discoverState().passed.includes(id)) unswipe(id);
-    this._cards = [card, ...cards.filter(c => c !== card)];
-    this._focus = null;
-    this.#navs++;
-    this.#restartDwell();
+    this.#aroundGo(card.plant.id);
   }
 
   /** A word on the map for a moment. @param {string} text */

@@ -1278,9 +1278,9 @@ export class GfMap extends LitElement {
   }
 
   /**
-   * The outline of the area touched (a département, a région, France): a perimeter, like the circle — light green,
-   * lightly filled, under the points. A FeatureCollection may give its fill and its border apart (`properties.part`:
-   * 'fill', 'line'): several shapes filled as one, their shared borders not drawn.
+   * The outline of the area touched (a département, a région, France): a perimeter, like the circle — its border
+   * only, light green, under the points. A FeatureCollection may give its border as lines (`properties.part: 'line'`:
+   * several shapes as one, their shared borders not drawn; a 'fill' part is not shown).
    */
   #syncZone() {
     const layer = this.#zoneLayer, z = this.zone;

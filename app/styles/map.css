@@ -351,17 +351,16 @@ gf-map .gf-layer-menu input {
   }
 }
 
-/* Perimeters — the circle searched (« Autour »), a département, a région, France —: light green, lightly
-   filled, lifted by a soft shadow: the same line under it, darker and a little lower (no filter: nothing to redraw as
-   the map moves). A zone given as fill and border apart: the fill has no stroke, the border no fill. */
+/* Perimeters — the circle searched (« Autour »), a département, a région, France —: their border only, light
+   green, lifted by a soft shadow: the same line under it, darker and a little lower (no filter: nothing to redraw as
+   the map moves). No fill: the map shows through. */
 .gf-area,
 .gf-zone {
   stroke: #a3e68a;
   stroke-width: 3;
   stroke-linejoin: round;
   stroke-dasharray: none;
-  fill: #c3f2ad;
-  fill-opacity: 0.1;
+  fill: none;
 }
 .gf-perim-shadow {
   stroke: #000;
@@ -374,13 +373,9 @@ gf-map .gf-layer-menu input {
 }
 .gf-zone {
   stroke-width: 2.5;
-  fill-opacity: 0.08;
 }
 .gf-zone.gf-zone-fill {
-  stroke: none;
-}
-.gf-zone.gf-zone-line {
-  fill: none;
+  display: none;
 }
 /* The observations of one plant chosen, as dots (no photo): its pink and gold. */
 .gf-obs {
@@ -404,7 +399,6 @@ path.gf-occ:hover {
 /* Découvrir: the circle well seen (a little wider); the observations as leaves popping in one after the other. */
 .gf-area.gf-area-glow {
   stroke-width: 3.5;
-  fill-opacity: 0.12;
 }
 .gf-obs-leaf { background: none; border: 0; }
 .gf-obs-leaf .pop {

@@ -85,8 +85,8 @@ export async function territoryOfRegion(iso) {
 
 /**
  * The outline of departments taken together, from the bundled simplified outlines (offline): a GeoJSON
- * FeatureCollection — their fill (`properties.part: 'fill'`), and their border (`'line'`) without the borders they
- * share (the outlines share their vertices: an edge drawn twice is inside) —, and its box [west, south, east, north].
+ * FeatureCollection of their border (`properties.part: 'line'`) without the borders they share (the outlines share
+ * their vertices: an edge drawn twice is inside), and its box [west, south, east, north].
  * @param {Department[]} departments
  * @returns {{ feature: any, box: [number, number, number, number] } | null}
  */
@@ -119,7 +119,6 @@ function outlineOf(departments) {
   }
   return {
     feature: { type: 'FeatureCollection', features: [
-      { type: 'Feature', properties: { part: 'fill' }, geometry: { type: 'MultiPolygon', coordinates: polygons } },
       { type: 'Feature', properties: { part: 'line' }, geometry: { type: 'MultiLineString', coordinates: lines } }
     ] },
     box: [w, s, e, n]
