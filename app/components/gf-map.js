@@ -282,7 +282,7 @@ const store = (/** @type {string} */ key, value) => {
  *  - pin: [lon, lat] of an editable, draggable place pin (place editor), or null
  *  - plants: plant markers (each plant of a place has its own position)
  *  - plantZoom: minimum zoom to show plant markers (0 = always)
- *  - selectedPlant: highlighted plant marker key — or keys (an array: a plant's occurrences, the others dimmed)
+ *  - selectedPlant: highlighted plant marker key — or keys (an array: a plant's occurrences; the other plants unchanged)
  *  - draggablePlants: plant markers can be dragged (place editor)
  *  - pinDraggable: the place pin can be dragged and long-press emits map-longpress (default true)
  *  - track: show the live GPS position
@@ -291,7 +291,8 @@ const store = (/** @type {string} */ key, value) => {
  *    view frames the circle, whatever the map's size (again when it is resized); `photo`: the points are one plant's,
  *    each shows its photo
  *  Plants' points (observations, the plant chosen's, the plants of places), hovered or touched, light their kin: the
- *  other points of the same plant. A plant selected lights its other markers (in other places) too.
+ *  other points of the same plant. A plant selected lights its other markers (in other places) too. The other points
+ *  never change: only the plant aimed at and its occurrences are set off.
  *  - frame: {key, points, bottom?} — zoom once on these [lon, lat] points (again when the key changes);
  *    `bottom` is the share of the height kept free below them (e.g. for a sheet)
  *  - search (default on; `no-search` removes it): address search pill on top, with the ▦ "Carte" panel button;
@@ -952,7 +953,6 @@ export class GfMap extends LitElement {
 
   #syncPlants() {
     const layer = /** @type {L.LayerGroup} */ (this.#plantLayer);
-    this.#map?.getContainer().classList.toggle('gf-sel-many', Array.isArray(this.selectedPlant) && this.selectedPlant.length > 0);
     // The plants selected: the other markers of the same plants (elsewhere, in other places) are lit too.
     const chosen = new Set(this.plants.filter(p => p.plantId != null && this.#isSelected(p.key)).map(p => p.plantId));
     const seen = new Set();
@@ -1200,8 +1200,8 @@ export class GfMap extends LitElement {
 
   /**
    * A plant's point: hovered (touched, on a touch screen), it is lit and so are the other points of the same plant
-   * — its kin, wherever they are on the map: observations, the plant chosen's, the plants of places —; the rest
-   * step back. A touch elsewhere on the map, or leaving it, lets go.
+   * — its kin, wherever they are on the map: observations, the plant chosen's, the plants of places —; the other
+   * points stay as they are. A touch elsewhere on the map, or leaving it, lets go.
    * @param {L.Layer} layer @param {string | null} key the plant (speciesKey, 'p:' + plant id, 'hl', 'area')
    */
   #kin(layer, key) {
@@ -1239,8 +1239,6 @@ export class GfMap extends LitElement {
       const self = /** @type {any} */ (origin)?.getElement?.();
       if (self) { self.classList.add('gf-kin-self'); if (!this.#lit.includes(self)) this.#lit.push(self); }
     }
-    // Kin to show: the other points step back (one alone is only lit itself).
-    map.getContainer().classList.toggle('gf-kin-on', this.#lit.length > 1);
   }
 
   /** Points drawn again (a new icon has its own classes): the plant lit stays lit, its new points with it. */
@@ -1353,11 +1351,9 @@ export class GfMap extends LitElement {
     this.#clusterKey = key;
     layer.clearLayers();
     this.#gather();
-    if (!c?.points.length || !map.getSize().x) { map.getContainer().classList.remove('gf-hl-cluster'); return; }
+    if (!c?.points.length || !map.getSize().x) return;
     // Cells of ~70 px: a few clear groups rather than many small ones.
     const CELL = 72, zoom = map.getZoom();
-    // The plant in view among them (Découvrir): the others step back.
-    map.getContainer().classList.toggle('gf-hl-cluster', c.points.some(p => /** @type {any} */ (p).kind === 'hl'));
     /** @type {Map<string, { pts: typeof c.points, x: number, y: number }>} */
     const cells = new Map();
     for (const p of c.points) {
@@ -1420,13 +1416,12 @@ export class GfMap extends LitElement {
 
   /**
    * One plant's observations over the area: its photo in each, large, bouncing in one after the other (its leaf
-   * without a photo); the other points step back. Hovered, a small card of it (its date); its kin lit with it.
+   * without a photo); the other points stay as they are. Hovered, a small card of it (its date); its kin lit with it.
    */
   #syncHighlight() {
     const layer = this.#hlLayer, hl = /** @type {any} */ (this.highlight);
     if (!layer) return;
     const key = hl ? hl.key + ':' + hl.points.length + ':' + (hl.photo || '') : '';
-    this.#map?.getContainer().classList.toggle('gf-hl-on', Boolean(hl?.points.length));
     if (key === this.#hlKey) return;
     this.#hlKey = key;
     layer.clearLayers();
