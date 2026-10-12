@@ -377,7 +377,7 @@ export class GfDiscover extends LitElement {
     @media (max-width: 899px) { .g-launch { left: 10px; right: 10px; bottom: 12px; bottom: 12px; width: auto; padding: 12px 14px; gap: 8px; } .g-launch h2 { font-size: 1.02rem; } }
     /* After a match: where else it grows — the zones, the one shown in green (the colour of its outline on the map). */
     .g-scope { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
-      mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent); padding-right: 14px; }
+      mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent); padding-right: 14px; scroll-padding-inline: 8px 22px; }
     .g-scope::-webkit-scrollbar { display: none; }
     /* With a mouse (no swipe), every zone in sight: the row wraps. */
     @media (hover: hover) and (pointer: fine) { .g-scope { flex-wrap: wrap; overflow: visible; mask-image: none; padding-right: 0; } .g-where .top:has(.g-scope) { align-items: flex-start; } }
@@ -1466,8 +1466,10 @@ export class GfDiscover extends LitElement {
           src => html`<img src=${src} alt="" decoding="async" referrerpolicy="no-referrer" @load=${(/** @type {any} */ e) => e.target.classList.add('in')} @error=${hideImg} />`)}</span><b>${name}</b><span>${this.#hlLine()}</span></p>` : nothing;
     return html`<div class="g-where" role="group" aria-label="Périmètre de la recherche">
       <div class="top">
-        ${scopes ? html`<div class="g-scope" role="group" aria-label="Où pousse-t-elle encore ?">
-            ${chips.map(([k, label]) => html`<button type="button" data-scope=${k} aria-pressed=${String(scope === k)} @click=${() => { this._scope = k; }}>${label}</button>`)}
+        ${scopes ? html`<div class="g-scope" role="group" aria-label="Où pousse-t-elle encore ?"
+            @focusin=${(/** @type {any} */ e) => e.target.scrollIntoView?.({ inline: 'nearest', block: 'nearest' })}>
+            ${chips.map(([k, label]) => html`<button type="button" data-scope=${k} aria-pressed=${String(scope === k)} aria-label=${k === 'around' ? 'Autour, ' + km : nothing}
+              @click=${() => { this._scope = k; }}>${label}</button>`)}
           </div>`
           : html`<span class="d">${km}</span><span class="mood">${mood}</span>`}
         <button class="icon-btn place" type="button" title="Changer de lieu" aria-label="Changer de lieu" @click=${() => { this._point = null; this._cards = null; }}>${icon('geo-alt')}</button>
