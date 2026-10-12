@@ -1,32 +1,48 @@
 name: Enrich search media
 
-on:
+# workflow_run runs with the rights of main: only on a build of main here (branches, and head_branch below), and the
+# code checked out is that of main, never a pull request's.
+on: # zizmor: ignore[dangerous-triggers]
+  # After each dataset build of main only: a manual build on another branch never leads to a push to main.
   workflow_run:
     workflows: ["Build flora dataset"]
     types: [completed]
+    branches: [main]
   workflow_dispatch:
   schedule:
     - cron: "17 3 * * 0"
 
-permissions:
-  contents: write
+# Two jobs, as in build-dataset: « enrich » queries GBIF and iNaturalist with a read-only token and no credential
+# left in the checkout; only « commit » may push to main, and only on main, the three files « enrich » handed over.
+permissions: {}
 
 concurrency:
-  group: flora-media-enrichment
+  group: flora-media-enrichment-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   enrich:
-    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    permissions:
+      contents: read
+    outputs:
+      base: ${{ steps.base.outputs.sha }}
 
     steps:
-      # Actions pinned by commit (a moved tag cannot change what pushes to main); the comment names the release.
-      - name: Checkout latest main
+      # Actions pinned by commit (a moved tag cannot change what runs); the comment names the release.
+      # The latest commit of the branch (main, except for a manual run on another branch): after a dataset build, the
+      # one that build just pushed.
+      - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: main
+          ref: ${{ github.ref }}
+          persist-credentials: false
+
+      - name: Note the commit enriched
+        id: base
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -49,6 +65,54 @@ jobs:
           node -e "const p=require('./data/plants.json'); const n=p.filter(x=>x.thumbnail?.url).length; console.log(n+'/'+p.length+' plants with thumbnails'); if(n<3000) process.exit(1)"
           cat data/meta.json
 
+      - name: Hand over the enriched files
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: media
+          path: |
+            data/plants.json
+            data/meta.json
+            data/thumbnails.json
+          if-no-files-found: error
+          retention-days: 7
+
+  commit:
+    needs: enrich
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # push the media commit to main
+
+    steps:
+      # The commit that was enriched: a dataset commit pushed meanwhile makes the rebase below fail rather than be
+      # overwritten by these files. The checkout keeps its credential for the push below: this job runs no outside
+      # code and uploads no artifact.
+      - name: Checkout # zizmor: ignore[artipacked]
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ needs.enrich.outputs.base }}
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Take the enriched files
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: media
+          path: ${{ runner.temp }}/media
+
+      - name: Put them in place
+        run: cp "$RUNNER_TEMP"/media/plants.json "$RUNNER_TEMP"/media/meta.json "$RUNNER_TEMP"/media/thumbnails.json data/
+
+      # The files as received, checked before they are versioned: thumbnails, and the safety data plants.json carries.
+      - name: Check media coverage and safety data
+        run: |
+          node -e "const p=require('./data/plants.json'); const n=p.filter(x=>x.thumbnail?.url).length; if(n<3000) process.exit(1)"
+          node scripts/check-data.mjs
+
       - name: Commit media enrichment
         run: |
           git config user.name "github-actions[bot]"
@@ -59,5 +123,5 @@ jobs:
           else
             git commit -m "Enrich search thumbnails [skip ci]"
             git pull --rebase origin main
-            git push
+            git push origin HEAD:main
           fi

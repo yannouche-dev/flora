@@ -18,7 +18,7 @@ SITE=''
 if [ $# -gt 0 ]; then SITE="$(cd "$1" && pwd)" || { echo "::error::no site folder $1"; exit 1; }; fi
 cd "$(dirname "$0")/.." || exit 1
 
-# What deploy-pages copies into the site: keep in step with its « Assemble site » step.
+# What deploy-pages copies into the site: keep in step with tools/assemble-site.sh.
 DEPLOYED='index.html manifest.webmanifest sw.js .nojekyll app assets vendor lib
   data/plants.json data/meta.json data/territories.json data/lookalikes.json data/safety.json'
 
@@ -27,10 +27,12 @@ fail() { echo "$1"; failed=1; }
 step() { echo; echo "── $1"; }
 
 step 'Modules parse (ES modules)'
+# Each file parsed as a module, whatever its extension and the Node release: a script parse misses what only a module
+# rejects (an import clashing with a declaration), and Node's guess from the syntax lets such a file through.
 count=0
-for file in sw.js vendor/*.js lib/*.mjs scripts/*.mjs tools/*.mjs $(find app -name '*.js' | sort); do
+for file in sw.js vendor/*.js lib/*.mjs scripts/*.mjs tools/*.mjs tests/*.mjs $(find app -name '*.js' | sort); do
   count=$((count + 1))
-  node --experimental-default-type=module --check "$file" || fail "::error file=$file::$file does not parse"
+  node --input-type=module --check < "$file" || fail "::error file=$file::$file does not parse"
 done
 node -e "JSON.parse(require('fs').readFileSync('manifest.webmanifest', 'utf8'))" \
   || fail '::error file=manifest.webmanifest::manifest.webmanifest is not valid JSON'

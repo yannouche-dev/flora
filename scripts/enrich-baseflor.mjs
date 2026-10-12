@@ -5,7 +5,7 @@
 // Each matched plant gets `flowering: [firstMonth, lastMonth]` (1–12; last < first wraps over the year end).
 //
 // The file is found on the Tela Botanica downloads page (or BASEFLOR_URL), as CSV/TSV, .xlsx/.xls (read with
-// the `xlsx` package, installed by the workflow) or a .zip holding one of those. Any failure only logs a
+// the `xlsx` package of package.json: npm ci --ignore-scripts) or a .zip holding one of those. Any failure only logs a
 // warning: the dataset then ships without flowering months.
 
 import { execFileSync } from 'node:child_process';

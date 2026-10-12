@@ -422,11 +422,23 @@ python3 -m http.server 8000
 
 L'app démarre aussi en http depuis un autre appareil (un téléphone sur le réseau local : `http://<adresse de l'ordinateur>:8000`) : sa CSP n'exige pas https (ci-dessous). Hors https et localhost, le navigateur refuse toutefois le service worker (pas de hors-ligne), la position et le presse-papiers (copier un lien, des coordonnées) ; les lieux et les listes se créent quand même. Pour tout essayer depuis un téléphone, passer par un tunnel https.
 
-Le workflow `Deploy web app` publie l'application sur GitHub Pages à chaque modification de l'app sur `main` et après chaque build du dataset. Il faut l'activer une fois : **Settings → Pages → Source : GitHub Actions**.
+Le workflow `Deploy web app` publie l'application sur GitHub Pages à chaque modification de l'app sur `main`, après chaque build du dataset et après chaque enrichissement des médias. Il faut l'activer une fois : **Settings → Pages → Source : GitHub Actions**.
 
 Ajouter un fichier JS ou CSS dans `app/` impose de l'ajouter aussi à la liste `SHELL` de `sw.js` ; `tools/check.sh` le vérifie. Pour mettre Lit ou Leaflet à jour : `LIT_VERSION=3.x.y LEAFLET_VERSION=1.x.y scripts/vendor.sh`.
 
-**Contrôles avant fusion.** `bash tools/check.sh` réunit ce qu'une modification doit passer, et liste tous les problèmes d'un coup : chaque module se lit comme module ES ; chaque import trouve son fichier et les noms qu'il demande, parmi les fichiers que publie le déploiement, carte d'imports d'`index.html` comprise (`tools/check-imports.mjs` : sans build, un import cassé ne se voit qu'au navigateur, en écran blanc) ; le service worker précache tous les scripts et feuilles de style de `app/` et `vendor/`, et rien qui ne soit déployé ; les données de sécurité tiennent (`scripts/check-data.mjs` : chaque taxon des confusions est un nom accepté de la flore, `safety.json` a ses trois sources et ses effectifs au-dessus de seuils) ; la CSP d'`index.html` autorise son import map par empreinte (`tools/csp-hash.mjs`). Le workflow `CI` (`.github/workflows/ci.yml`) le lance sur chaque pull request et chaque push sur `main`, `Deploy web app` le relance sur le site assemblé avant de publier, et `Build flora dataset` vérifie les données avant de les versionner. Faire du job « check » un contrôle requis de `main` (*Settings → Rules*) empêche de fusionner une PR en rouge.
+**Contrôles avant fusion.** `bash tools/check.sh` réunit ce qu'une modification doit passer, et liste tous les problèmes d'un coup : chaque module se lit comme module ES ; chaque import trouve son fichier et les noms qu'il demande, parmi les fichiers que publie le déploiement, carte d'imports d'`index.html` comprise (`tools/check-imports.mjs` : sans build, un import cassé ne se voit qu'au navigateur, en écran blanc) ; le service worker précache tous les scripts et feuilles de style de `app/` et `vendor/`, et rien qui ne soit déployé ; les données de sécurité tiennent (`scripts/check-data.mjs` : chaque taxon des confusions est un nom accepté de la flore, `safety.json` a ses trois sources et ses effectifs au-dessus de seuils) ; la CSP d'`index.html` autorise son import map par empreinte (`tools/csp-hash.mjs`). Le workflow `CI` (`.github/workflows/ci.yml`) le lance (job « check ») sur chaque pull request, chaque push sur `main` et dans une file de fusion ; `Deploy web app` le relance sur le site assemblé avant de publier, et `Build flora dataset` vérifie les données avant de les versionner.
+
+**Test de fumée.** Le job « smoke » du même workflow ouvre dans Chromium, **sur le site tel que publié** (`tools/assemble-site.sh`, que `Deploy web app` utilise aussi), les écrans principaux (accueil, recherche, fiche, Découvrir et deux de ses scénarios, carte, collections, réglages), au format téléphone (390 px, tactile, première visite : Découvrir) puis bureau (1280 px, visiteur habitué : la recherche et la fiche s'ouvrent dans Flore). Il échoue sur une erreur de page, une violation de CSP, une erreur en console, **un fichier du site qui ne se charge pas** (404), une flore qui ne se charge pas (en le disant, sans attendre la fin du job) ou **un écran resté vide** (la vue de la route doit être un composant défini qui affiche quelque chose — pas « Page introuvable ») : ce que ni l'analyse des modules ni le contrôle des imports ne voient (un composant qui plante au rendu, un fichier oublié au déploiement). Les appels aux services tiers reçoivent une réponse locale (image vide, sinon 503) : le test ne dépend d'aucun service extérieur et parcourt les chemins dégradés de l'app. En local :
+
+```bash
+npm ci --ignore-scripts && npx playwright install chromium
+bash tools/assemble-site.sh _site && python3 -m http.server 8000 --directory _site &
+node tests/smoke.mjs http://localhost:8000/
+```
+
+**Dépendances de développement.** L'app n'a ni dépendance ni build : `package.json` ne liste qu'un outil, Playwright (test de fumée) ; SheetJS (`xlsx`, lecture des tableurs Baseflor et TPPT) est à part, dans `scripts/package.json`, pour les seuls scripts du jeu de données (le test de fumée n'en dépend pas). Chaque `package-lock.json` fixe les versions et les empreintes ; la CI installe par `npm ci --ignore-scripts` (aucun script d'installation ne s'exécute ; `--prefix scripts` pour SheetJS), puis `npm audit --audit-level=high`, lancé après le test de fumée, bloque une PR sur une vulnérabilité haute. SheetJS vient de son propre dépôt (`cdn.sheetjs.com`, version 0.20.3) : npm ne propose que la 0.18.5, vulnérable (pollution de prototype, ReDoS). Le changement de version ne modifie pas les données : mêmes mois de floraison (3 879 plantes), mêmes 635 correspondances TPPT. Dependabot (`.github/dependabot.yml`) propose chaque semaine la mise à jour des actions GitHub (épinglées par commit) et de Playwright, une fois la version publiée depuis sept jours ; il ne suit pas SheetJS, à mettre à jour à la main (`scripts/package.json`, puis `npm install --package-lock-only --ignore-scripts --prefix scripts`).
+
+**Protéger `main`** (*Settings → Rules → Rulesets → New branch ruleset*, cible : la branche par défaut). Interdire la suppression et le force-push (*Restrict deletions*, *Block force pushes*) ne gêne rien. Exiger une pull request et les contrôles « check » et « smoke » (*Require a pull request before merging*, *Require status checks to pass*) bloquerait en revanche les commits des workflows de données, poussés directement sur `main` avec le jeton du workflow (`GITHUB_TOKEN`), qu'aucune liste d'exceptions d'un ruleset n'accepte. Il faut d'abord les faire pousser avec le jeton d'une GitHub App placée dans cette liste. D'ici là, une pull request affiche « check » et « smoke » : ne la fusionner qu'au vert.
 
 **Sécurité dans le navigateur.**
 - *Content-Security-Policy* (balise `<meta>` en tête d'`index.html`) : scripts du site seulement, plus l'import map par son empreinte sha256 — après l'avoir modifiée, `node tools/csp-hash.mjs --fix` (sans `--fix`, il vérifie) ; aucun gestionnaire inline (`onerror="…"`) ni `<script>` injecté ne s'exécute ; connexions limitées aux API des modules ; images de tout hôte web, http compris (une photo GBIF peut l'être) ; cadres en https (volet « Page web »). Pas de `upgrade-insecure-requests` : il ferait demander en https les fichiers de l'app elle-même, servie en http lors d'un test sur le réseau local.
@@ -579,20 +591,24 @@ Une collection sans `geometry` est une liste ; l'identifiant `favorites` désign
 
 ## Génération locale
 
-Node.js 20+ :
+Node.js 22+ :
 
 ```bash
 mkdir -p .cache/taxref
 curl -L "https://assets.patrinat.fr/files/referentiel/TAXREF_v18_2025.zip" -o .cache/taxref.zip
 unzip .cache/taxref.zip -d .cache/taxref
 node scripts/build-plants.mjs
+npm ci --ignore-scripts --prefix scripts   # SheetJS, pour enrich-baseflor.mjs et build-safety.mjs
 ```
 
-La GitHub Action `Build flora dataset` télécharge la source officielle, valide le module d'enrichissement, génère puis versionne :
+La GitHub Action `Build flora dataset` télécharge les sources, valide les modules d'enrichissement, génère puis versionne :
 
 - `data/plants.json`
 - `data/meta.json`
 - `data/thumbnails.json` (cache d'enrichissement Wikimedia)
+- `data/safety.json`
+
+Elle tient en deux jobs. « build » télécharge et analyse les fichiers extérieurs (archive TAXREF, tableurs Baseflor et TPPT, PDF de l'ANSM, Wikimedia) avec un jeton en lecture seule, sans identifiant laissé dans la copie du dépôt ; il vérifie les données, puis les remet dans un artefact gardé sept jours. « commit », sur `main` seulement, reprend ces quatre fichiers, les revérifie et les pousse ; il n'exécute rien de ce qui lit l'extérieur. Un fichier source piégé ne peut donc pousser ni code ni workflow : seulement le contenu de ces quatre fichiers de données, dans les limites que vérifie `scripts/check-data.mjs`. Lancée à la main sur une autre branche, l'action construit sans rien versionner : le résultat est dans l'artefact du run. `Enrich search media` (vignettes de repli GBIF et iNaturalist) suit chaque build de `main` et tourne chaque dimanche, avec le même découpage ; `Deploy web app` republie ensuite.
 
 ## IndexedDB recommandée
 
