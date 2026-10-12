@@ -3,17 +3,21 @@
 
 /**
  * @typedef {{ coordinates: [number, number], accuracy: number, timestamp: number }} Fix
- * @typedef {{ fix: Fix | null, error: string | null, watching: boolean }} GeoState
+ * @typedef {'denied' | 'timeout' | 'unavailable' | 'unsupported'} GeoCode  why there is no position (each screen says it its own way)
+ * @typedef {{ fix: Fix | null, error: string | null, code?: GeoCode | null, watching: boolean }} GeoState
  */
 
 /** @type {GeoState} */
-let state = { fix: null, error: null, watching: false };
+let state = { fix: null, error: null, code: null, watching: false };
 /** @type {Set<(state: GeoState) => void>} */
 const listeners = new Set();
 /** @type {number | null} */
 let watchId = null;
 
 const emit = () => { for (const listener of listeners) listener(state); };
+
+/** @param {GeolocationPositionError} error @returns {GeoCode} */
+const codeOf = error => error.code === error.PERMISSION_DENIED ? 'denied' : error.code === error.TIMEOUT ? 'timeout' : 'unavailable';
 
 /** @param {GeolocationPositionError} error */
 function explain(error) {
@@ -27,11 +31,11 @@ function explain(error) {
 function start() {
   if (watchId !== null) return;
   if (!('geolocation' in navigator)) {
-    state = { ...state, error: 'Ce navigateur ne permet pas la géolocalisation.' };
+    state = { ...state, error: 'Ce navigateur ne permet pas la géolocalisation.', code: 'unsupported' };
     emit();
     return;
   }
-  state = { ...state, watching: true, error: null };
+  state = { ...state, watching: true, error: null, code: null };
   emit();
   watchId = navigator.geolocation.watchPosition(
     position => {
@@ -42,12 +46,13 @@ function start() {
           timestamp: position.timestamp
         },
         error: null,
+        code: null,
         watching: true
       };
       emit();
     },
     error => {
-      state = { ...state, error: explain(error) };
+      state = { ...state, error: explain(error), code: codeOf(error) };
       emit();
     },
     { enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 }
@@ -67,8 +72,12 @@ function stop() {
  * @returns {() => void} unsubscribe
  */
 export function watchLocation(listener) {
-  listeners.add(listener);
+  // A newcomer after a failure (« Réessayer », another screen) asks again: the watch is started anew, not left on
+  // the old error.
+  if (state.error && watchId !== null) stop();
+  // Started before the listener joins: start() tells those already there, the new one hears the state once.
   start();
+  listeners.add(listener);
   listener(state);
   return () => {
     listeners.delete(listener);
