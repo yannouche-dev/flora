@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-12T20:39:08.703Z",
+  "generatedAt": "2026-10-12T21:09:04.122Z",
   "source": "TAXREF v18 official PatriNat archive",
   "sourceUrl": "https://assets.patrinat.fr/files/referentiel/TAXREF_v18_2025.zip",
   "taxrefVersion": "18.0",
@@ -36,7 +36,7 @@
       "license": "CC BY-SA 2.0 (données), ODbL 1.0 (base) — Ph. Julve, Tela Botanica",
       "rows": 8292,
       "matched": 3879,
-      "fetchedAt": "2026-10-12T20:39:18.272Z"
+      "fetchedAt": "2026-10-12T21:09:20.119Z"
     },
     "bdcStatuts": {
       "url": "https://assets.patrinat.fr/files/referentiel/BDC.zip",
@@ -51,7 +51,7 @@
         "LRN": 719,
         "LRR": 2623
       },
-      "fetchedAt": "2026-10-12T20:39:28.747Z"
+      "fetchedAt": "2026-10-12T21:09:30.681Z"
     }
   },
   "thumbnails": {
@@ -66,18 +66,9 @@
       "GBIF": 751
     },
     "wikidataBulk": {
-      "checked": 1945,
-      "matched": 586,
+      "checked": 2065,
+      "matched": 641,
       "freeP18ImagesAdded": 0
-    },
-    "fallbacks": {
-      "gbif": true,
-      "inaturalist": true,
-      "acceptedLicenses": [
-        "CC0",
-        "CC BY",
-        "CC BY-SA"
-      ]
     }
   }
 }
