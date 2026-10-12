@@ -336,7 +336,7 @@ export class GfFlora extends LitElement {
   #onTouchStart(e) {
     if (e.touches.length !== 1) { this.#touch = null; return; }
     const path = /** @type {HTMLElement[]} */ (e.composedPath());
-    const blocked = path.some(el => el instanceof HTMLElement && (el.matches('input, textarea, select, gf-map, .gallery, .leaflet-container')
+    const blocked = path.some(el => el instanceof HTMLElement && (el.matches('input, textarea, select, gf-map, gf-media-viewer, .gallery, .leaflet-container')
       || (el.scrollWidth > el.clientWidth + 2 && /auto|scroll/.test(getComputedStyle(el).overflowX))));
     const t = e.touches[0];
     this.#touch = blocked ? null : { x: t.clientX, y: t.clientY, t: Date.now(), el: /** @type {HTMLElement} */ (e.currentTarget) };
