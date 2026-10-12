@@ -11,7 +11,6 @@ import './gf-results-bar.js';
 import './gf-filter-panel.js';
 import './gf-plant-list.js';
 import './gf-plant-detail.js';
-import './gf-sheet-rail.js';
 import './gf-pager.js';
 import './gf-media-viewer.js';
 import { icon } from '../core/icons.js';
@@ -45,9 +44,7 @@ export class GfFlora extends LitElement {
     _layout: { state: true },
     _grid: { state: true },
     _under: { state: true },
-    _paneFull: { state: true },
-    /** The rubrics of the plant shown, for the header of its pane (told by the sheet: `sheet-rail`). */
-    _rail: { state: true }
+    _paneFull: { state: true }
   };
 
   static styles = [ui, css`
@@ -100,8 +97,6 @@ export class GfFlora extends LitElement {
       background: var(--gf-surface);
     }
     .pane-head h2 { margin: 0; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gf-text-muted); flex: 1; display: flex; gap: 8px; align-items: center; min-width: 0; }
-    .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-    .pane-head h2 gf-sheet-rail { flex: 1; min-width: 0; text-transform: none; letter-spacing: 0; }
     .pane-head .icon-btn { width: 32px; height: 32px; font-size: 1rem; }
     /* Each pane lays out on its own: resizing one does not re-lay out the content of the others. */
     .pane-body { flex: 1; min-height: 0; overflow-y: auto; contain: strict; }
@@ -423,7 +418,7 @@ export class GfFlora extends LitElement {
       ?inert=${id === under} aria-hidden=${id === under ? 'true' : 'false'}
       @touchstart=${touch ? this.#onTouchStart : null} @touchmove=${touch ? this.#onTouchMove : null} @touchend=${touch ? this.#onTouchEnd : null}
       @touchcancel=${touch ? () => { const s = this.#touch; this.#touch = null; if (s?.el.classList.contains('dragging')) this.#settle(s.el); } : null}
-      ><gf-plant-detail embedded outer-rail ?preview=${id === under} plant-id=${id} view=${view} .inPane=${id === this.#plantId ? this.#pane : null}></gf-plant-detail></div>`)}</div>`;
+      ><gf-plant-detail embedded ?preview=${id === under} plant-id=${id} view=${view} .inPane=${id === this.#plantId ? this.#pane : null}></gf-plant-detail></div>`)}</div>`;
   }
 
 
@@ -705,23 +700,6 @@ export class GfFlora extends LitElement {
       ${right ? '‹' : '›'} ${TITLES[pane]} ${active ? html`<span class="badge">${active}</span>` : nothing}</button>`;
   }
 
-  /** The plant's rubrics, in its pane's header: a touch goes there in the sheet shown. */
-  #plantRail() {
-    const rail = this._rail;
-    // The previous plant's rubrics stay until the new sheet tells its own: the header does not blink.
-    if (!rail || !rail.items.length) return 'Plante';
-    return html`<span class="visually-hidden">Plante</span><gf-sheet-rail .items=${rail.items} .active=${rail.active} .at=${rail.at} .entity=${rail.entity} orientation="row"
-      @rail-go=${(/** @type {CustomEvent} */ e) => {
-        const sheet = /** @type {any} */ (this.renderRoot.querySelector('.swipe:not(.under) gf-plant-detail'));
-        sheet?.goTo(e.detail.key);
-      }}></gf-sheet-rail>`;
-  }
-
-  /** @param {CustomEvent} e */
-  #onSheetRail = e => {
-    if (e.detail.plantId === this.#plantId) this._rail = e.detail;
-  };
-
   /**
    * The head stays when there is nothing to fold (the list alone): the list does not move down when a plant opens.
    * @param {Pane} pane @param {any} title @param {any} [extra] @param {boolean} [fixed]
@@ -771,9 +749,9 @@ export class GfFlora extends LitElement {
 
         ${showPlant ? (plantFolded ? this.#rail('plant', true) : html`
           ${resultsFolded && !media ? nothing : this.#split('plant')}
-          <section class="pane plant ${resultsFolded && !media ? 'fill' : ''}" aria-label="Plante" @open-pane=${this.#openPane} @sheet-rail=${this.#onSheetRail}
+          <section class="pane plant ${resultsFolded && !media ? 'fill' : ''}" aria-label="Plante" @open-pane=${this.#openPane}
             style=${resultsFolded && !media ? '' : `width:${Math.min(this.#width('plant'), this.#max('plant'))}px`}>
-            ${this.#head('plant', this.#plantRail(), html`
+            ${this.#head('plant', 'Plante', html`
               <a class="icon-btn" href=${'#/plant/' + plantId} title="Ouvrir la fiche seule" aria-label="Ouvrir la fiche seule"
                 @click=${e => { e.preventDefault(); this.#fold('results', true); }}>${icon('arrows-angle-expand')}</a>
               <button class="icon-btn" type="button" title="Fermer la fiche" aria-label="Fermer la fiche" @click=${() => this.#closePlant()}>${icon('x-lg')}</button>`)}
@@ -782,10 +760,10 @@ export class GfFlora extends LitElement {
       </div>
 
       ${phone && plantId !== null ? html`
-        <section class="sheet-plant" aria-label="Plante" @open-pane=${this.#openPane} @sheet-rail=${this.#onSheetRail}>
+        <section class="sheet-plant" aria-label="Plante" @open-pane=${this.#openPane}>
           <div class="pane-head">
             <button class="link back" type="button" aria-label="Résultats" @click=${() => this.#closePlant()}>${icon('arrow-left')}</button>
-            <h2>${this.#plantRail()}</h2>
+            <h2>Plante</h2>
           </div>
           <div class="pane-body" style="display:flex;flex-direction:column;overflow:hidden;background:var(--gf-surface-2)">${this.#swipe(plantId, plantView, true)}${this.#pager(true)}</div>
         </section>` : nothing}
