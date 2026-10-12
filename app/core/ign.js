@@ -4,6 +4,8 @@
 
 import * as L from 'leaflet';
 import { moduleOn } from './modules.js';
+import { config } from '../config.js';
+import * as db from './db.js';
 
 const WMTS = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&TILEMATRIXSET=PM'
   + '&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}';
@@ -85,9 +87,92 @@ function wmts(def, base, key, minZoom = 5) {
  */
 export function tileLayer(key, minZoom) {
   const base = key in BASES;
-  const def = base ? BASES[/** @type {'photo' | 'plan'} */ (key)] : OVERLAYS[key];
+  const def = base ? BASES[/** @type {'photo' | 'plan'} */ (key)] : /** @type {LayerDef} */ (overlayDef(key));
   const layers = def.layers.map(l => wmts(l, base, key, minZoom));
   return layers.length === 1 ? layers[0] : L.layerGroup(layers);
+}
+
+// ── Every IGN layer ──────────────────────────────────────────────────────────
+
+/**
+ * A layer of IGN's whole WMTS catalogue (GetCapabilities), compact.
+ * @typedef {{ id: string, title: string, about: string, format: string, style: string, minNative: number, maxNative: number }} CatalogLayer
+ */
+
+/** A layer of the catalogue, as an overlay key. */
+export const IGN_PREFIX = 'ign:';
+const SAFE_ID = /^[A-Za-z0-9._:-]{1,160}$/;
+
+/** The catalogue's layers added to the maps (key → definition), kept so they show at once and offline. @type {Map<string, LayerDef>} */
+const added = new Map();
+try {
+  const saved = JSON.parse(localStorage.getItem(config.storageKeys.ignLayers) || '{}');
+  for (const [key, def] of Object.entries(saved)) if (key.startsWith(IGN_PREFIX) && SAFE_ID.test(def?.layers?.[0]?.id || '')) added.set(key, def);
+} catch { /* none */ }
+
+/** An overlay the maps know: one of the app's, or a layer of the catalogue added. @param {string} key */
+export const isOverlay = key => key in OVERLAYS || added.has(key);
+
+/** Its definition (null: unknown). @param {string} key @returns {LayerDef | null} */
+export const overlayDef = key => OVERLAYS[key] || added.get(key) || null;
+
+/** The catalogue's layers added, in the order they were. */
+export const addedLayers = () => [...added.keys()];
+
+/** A layer of the catalogue made an overlay (kept for next time). @param {CatalogLayer} l @returns {string} its key */
+export function addCatalogLayer(l) {
+  const key = IGN_PREFIX + l.id;
+  if (!SAFE_ID.test(l.id) || !/^image\/(png|jpeg)$/.test(l.format)) return key;
+  added.set(key, { label: l.title || l.id, hint: l.id, group: 'ign', layers: [{ id: l.id, format: l.format, style: l.style || 'normal', minNative: l.minNative, maxNative: l.maxNative }] });
+  try { localStorage.setItem(config.storageKeys.ignLayers, JSON.stringify(Object.fromEntries(added))); } catch { /* not kept */ }
+  return key;
+}
+
+const CAPABILITIES = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetCapabilities';
+/** The catalogue changes seldom: asked again after a month. */
+const CATALOG_TTL = 30 * 24 * 3600 * 1000;
+
+/**
+ * IGN's whole catalogue of map layers (WMTS, the Web Mercator grid the maps use, PNG or JPEG tiles): read from the
+ * service's own description, kept a month on the device.
+ * @returns {Promise<CatalogLayer[]>}
+ */
+export async function ignCatalog() {
+  const hit = await db.get('plantDetails', 'ign:catalog').catch(() => null);
+  if (hit && Date.now() - hit.fetchedAt < CATALOG_TTL) return hit.value;
+  if (!moduleOn('ignMaps')) { if (hit) return hit.value; throw new Error('IGN – fonds de carte désactivé'); }
+  try {
+    const response = await fetch(CAPABILITIES);
+    if (!response.ok) throw new Error('IGN ' + response.status);
+    const value = parseCapabilities(await response.text());
+    await db.put('plantDetails', { key: 'ign:catalog', fetchedAt: Date.now(), value }).catch(() => {});
+    return value;
+  } catch (error) {
+    if (hit) return hit.value;
+    throw error;
+  }
+}
+
+/** @param {string} xml @returns {CatalogLayer[]} */
+export function parseCapabilities(xml) {
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+  const kids = (/** @type {Element} */ el, /** @type {string} */ name) => [...el.children].filter(c => c.localName === name);
+  const text = (/** @type {Element} */ el, /** @type {string} */ name) => kids(el, name)[0]?.textContent?.trim() || '';
+  /** @type {CatalogLayer[]} */
+  const out = [];
+  for (const layer of doc.getElementsByTagNameNS('*', 'Layer')) {
+    const id = text(layer, 'Identifier');
+    const formats = kids(layer, 'Format').map(f => f.textContent?.trim() || '');
+    const format = formats.find(f => f === 'image/png') || formats.find(f => f === 'image/jpeg');
+    const link = kids(layer, 'TileMatrixSetLink').find(l => text(l, 'TileMatrixSet') === 'PM');
+    if (!id || !SAFE_ID.test(id) || !format || !link) continue;
+    const styles = kids(layer, 'Style');
+    const style = text(styles.find(s => s.getAttribute('isDefault') === 'true') || styles[0] || layer, 'Identifier') || 'normal';
+    const zooms = [...link.getElementsByTagNameNS('*', 'TileMatrix')].map(m => Number(m.textContent)).filter(Number.isFinite);
+    out.push({ id, title: text(layer, 'Title') || id, about: text(layer, 'Abstract').slice(0, 240), format, style,
+      minNative: zooms.length ? Math.min(...zooms) : 0, maxNative: zooms.length ? Math.max(...zooms) : 19 });
+  }
+  return out.sort((a, b) => a.title.localeCompare(b.title, 'fr'));
 }
 
 /** The whole world (inhabited latitudes), for a map showing a worldwide distribution. */

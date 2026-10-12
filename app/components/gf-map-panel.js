@@ -1,6 +1,6 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
-import { BASES, OVERLAYS } from '../core/ign.js';
+import { BASES, OVERLAYS, IGN_PREFIX, addedLayers, ignCatalog, overlayDef } from '../core/ign.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 import { openModal } from '../core/history.js';
@@ -9,7 +9,8 @@ const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
 
 /**
  * "Carte" panel: everything about how the map looks, in one bottom sheet — background, overlays
- * (terrain, protected areas), legend, sources. Events: base-change {key}, overlay-toggle {key, on}.
+ * (terrain, protected areas, and any layer of IGN's whole catalogue), legend, sources. Events: base-change {key},
+ * overlay-toggle {key, on, layer?} (`layer`: a catalogue layer to add).
  */
 export class GfMapPanel extends LitElement {
   static properties = {
@@ -18,7 +19,9 @@ export class GfMapPanel extends LitElement {
     /** Name of the plant whose GBIF distribution can be shown (null: none offered). */
     distribution: { attribute: false },
     distributionOn: { attribute: false },
-    legend: { type: Boolean }
+    legend: { type: Boolean },
+    _catalog: { state: true },
+    _q: { state: true }
   };
 
   static styles = [ui, css`
@@ -65,6 +68,14 @@ export class GfMapPanel extends LitElement {
     .legend i.square { border-radius: 3px; }
     .sources { font-size: 0.8rem; color: var(--gf-text-muted); margin: 0 4px; }
     .sources a { color: inherit; }
+    .catalog { display: grid; gap: 6px; }
+    .catalog input[type=search] { width: 100%; box-sizing: border-box; }
+    .catalog ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 40dvh; overflow-y: auto; }
+    .catalog li { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-radius: var(--gf-radius-sm); }
+    .catalog li:hover { background: var(--gf-surface-2); }
+    .catalog li span { display: grid; flex: 1; min-width: 0; }
+    .catalog li small { color: var(--gf-text-muted); font-size: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .catalog li button { flex: none; }
   `];
 
   constructor() {
@@ -76,6 +87,36 @@ export class GfMapPanel extends LitElement {
     /** @type {string | null} */
     this.distribution = null;
     this.distributionOn = false;
+    /** IGN's whole catalogue: null (not asked), 'loading', an error message, or its layers. @type {null | 'loading' | string | import('../core/ign.js').CatalogLayer[]} */
+    this._catalog = null;
+    this._q = '';
+  }
+
+  async #loadCatalog() {
+    this._catalog = 'loading';
+    try { this._catalog = await ignCatalog(); } catch { this._catalog = 'Catalogue de l’IGN indisponible (hors ligne ?) — réessayez plus tard.'; }
+  }
+
+  /** IGN's whole catalogue: the layers added, and a search among all the others. */
+  #catalog() {
+    const c = this._catalog;
+    const fold = (/** @type {string} */ t) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    const words = fold(this._q).split(/\s+/).filter(Boolean);
+    const shown = Array.isArray(c) ? c.filter(l => !addedLayers().includes(IGN_PREFIX + l.id))
+      .filter(l => words.every(w => fold(l.title + ' ' + l.id + ' ' + l.about).includes(w))) : [];
+    return html`<div class="catalog">
+      ${addedLayers().map(k => this.#layer(k))}
+      ${c === null ? html`<button type="button" @click=${() => this.#loadCatalog()}>${icon('layers')} Ajouter une couche de l’IGN…</button>`
+        : c === 'loading' ? html`<p class="note" role="status">Chargement du catalogue de l’IGN…</p>`
+        : typeof c === 'string' ? html`<p class="note" role="status">${c}</p>`
+        : html`<input type="search" placeholder=${'Chercher parmi ' + c.length + ' couches (relief, forêts, géologie…)'} aria-label="Chercher une couche de l’IGN"
+            .value=${this._q} @input=${(/** @type {any} */ e) => { this._q = e.target.value; }} />
+          <ul aria-label="Couches de l’IGN">${shown.slice(0, 60).map(l => html`<li>
+            <span>${l.title}<small title=${l.about || l.id}>${l.about || l.id}</small></span>
+            <button type="button" @click=${() => this.#emit('overlay-toggle', { key: IGN_PREFIX + l.id, on: true, layer: l })}>${icon('plus-lg')} Ajouter</button>
+          </li>`)}</ul>
+          ${shown.length > 60 ? html`<p class="note">${shown.length - 60} autres : précisez la recherche.</p>` : !shown.length ? html`<p class="note">Aucune couche ne correspond.</p>` : nothing}`}
+    </div>`;
   }
 
   open() { openModal(/** @type {HTMLDialogElement} */ (this.renderRoot.querySelector('dialog'))); }
@@ -86,7 +127,8 @@ export class GfMapPanel extends LitElement {
 
   /** @param {string} key */
   #layer(key) {
-    const def = OVERLAYS[key];
+    const def = overlayDef(key);
+    if (!def) return nothing;
     return html`<label class="layer">
       <input type="checkbox" .checked=${this.overlays.includes(key)}
         @change=${e => this.#emit('overlay-toggle', { key, on: e.target.checked })} />
@@ -121,6 +163,10 @@ export class GfMapPanel extends LitElement {
 
           <h3 class="kicker">Terrain</h3>
           ${group('terrain').map(k => this.#layer(k))}
+
+          <h3 class="kicker">Toutes les couches de l’IGN</h3>
+          <p class="note">Tout le catalogue de la Géoplateforme : relief, géologie, forêts, hydrographie, cartes anciennes…</p>
+          ${this.#catalog()}
 
           <h3 class="kicker">Règles de cueillette</h3>
           <p class="note">Dans ces zones, la cueillette a souvent des règles propres : vérifiez-les avant de cueillir.</p>

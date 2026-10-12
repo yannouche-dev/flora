@@ -35,6 +35,8 @@ export const config = {
     kingMode: 'geoflora.kingMode',
     target: 'geoflora.target',
     mapLayer: 'geoflora.mapLayer',
+    /** The layers of IGN's whole catalogue added to the maps (their definitions, so they show at once, offline too). */
+    ignLayers: 'geoflora.ignLayers',
     mapView: 'geoflora.mapView',
     lastExport: 'geoflora.lastExport',
     hasSpots: 'geoflora.hasSpots',

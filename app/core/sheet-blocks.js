@@ -9,7 +9,7 @@
 import { config } from '../config.js';
 import { MODULES, moduleOn, setModule } from './modules.js';
 import { baseOf, importModes, modeKeys, ownModes } from './modes.js';
-import { OVERLAYS } from './ign.js';
+import { isOverlay } from './ign.js';
 import { emptyLayout, migratePlaces, migrateTree, store } from './store.js';
 import { SHEET, dock, normalize, patchStack, setSizes, sheetInRow, stackOf, undock, validTree } from './pane-tree.js';
 
@@ -571,7 +571,7 @@ function cleanMap(saved) {
   if (typeof c.places === 'boolean') out.places = c.places;
   if (typeof c.collection === 'string' && c.collection.length < 80) out.collection = c.collection;
   if (out.subject === 'collection' && !out.collection) out.subject = 'plant';
-  if (Array.isArray(c.overlays)) out.overlays = c.overlays.filter((/** @type {any} */ o) => typeof o === 'string' && o in OVERLAYS);
+  if (Array.isArray(c.overlays)) out.overlays = c.overlays.filter((/** @type {any} */ o) => typeof o === 'string' && isOverlay(o));
   for (const a of Object.keys(MAP_DEFAULTS.actions)) if (typeof c.actions?.[a] === 'boolean') out.actions[a] = c.actions[a];
   return out;
 }
