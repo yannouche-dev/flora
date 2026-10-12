@@ -8,6 +8,7 @@ import { FRANCE_BOUNDS, WORLD_BOUNDS } from '../core/ign.js';
 import { moduleOn } from '../core/modules.js';
 import { observationsAround, RADII, savedRadius, saveRadius } from '../core/nearby.js';
 import { addressAt, zoneShape } from '../core/geoservices.js';
+import { bundledOutline } from '../core/territory.js';
 import { discoverState } from '../core/discover.js';
 import { regionOf } from '../core/regions.js';
 import * as sources from '../core/sources.js';
@@ -28,6 +29,22 @@ function zoneBounds(feature) {
   if (!pts.length) return null;
   const lons = pts.map(p => p[0]), lats = pts.map(p => p[1]);
   return [[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]];
+}
+
+/**
+ * The outline of the place touched in the sheet: IGN's (a région, a département), else the one the app carries
+ * (offline, the IGN module off) — and France's, which only the app has.
+ * @param {Record<string, string>} params @param {string} label
+ */
+async function placeOutline(params, label) {
+  const gid = params.gadmGid || '';
+  const ign = await zoneShape(gid, label).catch(() => null);
+  if (ign) return ign;
+  const level = /^FRA\./.test(gid) ? gid.split('.').length - 1 : 0;
+  const kind = level === 1 ? 'region' : level === 2 ? 'department' : !gid && params.country === 'FR' ? 'country' : null;
+  const outline = kind ? await bundledOutline(kind, label).catch(() => null) : null;
+  // Its border as one Feature (lines): drawn as a perimeter, framed like IGN's.
+  return outline?.feature.features[0] ?? null;
 }
 
 /** Heights of a map block. */
@@ -252,7 +269,7 @@ export class GfSheetMap extends LitElement {
       this._bounds = { id: wanted, points: null, occ: [], zone: undefined };
       const [found, zone] = await Promise.all([
         sources.gbifBounds(this.gbifKey, filter.params, undefined, mode).catch(() => null),
-        zoneShape(filter.params.gadmGid || '', filter.label).catch(() => null)
+        placeOutline(filter.params, filter.label).catch(() => null)
       ]);
       if (this._bounds?.id === wanted) this._bounds = { id: wanted, points: found?.bounds || [], occ: found?.points || [], zone, count: found?.count ?? 0 };
     }
@@ -568,7 +585,7 @@ export class GfSheetMap extends LitElement {
     const f = this.focus || noFocus();
     if (gbifOn) parts.push(f.filter
       ? html`<span><i style="background:#f59e0b"></i>Occurrences GBIF : ${f.filter.label}${this._bounds?.points === null ? ' …' : this._bounds?.count ? ` (${this._bounds.count.toLocaleString('fr-FR')}${this._bounds.count > (this._bounds.occ?.length || 0) ? `, ${this._bounds.occ.length} placées en points` : ''})` : ''}</span>
-        ${this._bounds?.zone ? html`<span><i style="background:transparent;border:2px dashed #b45309"></i>Limites : ${f.filter.label} (IGN)</span>` : nothing}`
+        ${this._bounds?.zone ? html`<span><i style="background:transparent;border:2px solid #a3e68a;box-shadow:0 1px 0 rgb(0 0 0 / 30%)"></i>Limites : ${f.filter.label} (IGN)</span>` : nothing}`
       : html`<span>Densité GBIF${c.gbif === 'fr' ? ' (France)' : ''}</span>`);
     if (f.compare && this._compare?.key) parts.push(html`<span><i style="background:#7b3294"></i>${f.compare.label} (GBIF, comparaison)</span>`);
     if (c.places && (this._spots.length || !this.#aboutPlant)) {
