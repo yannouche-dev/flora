@@ -20,11 +20,11 @@ import * as sources from '../core/sources.js';
 import { searchPlaces, addressAt } from '../core/geoservices.js';
 import { REGION_BOUNDS, regionOf } from '../core/regions.js';
 import { watchLocation } from '../core/geo.js';
-import { alertsOf } from '../core/alerts.js';
+import { UNREAD, alertsOf } from '../core/alerts.js';
 import { plantViewOf, setHarvestMode, setMode, StoreController, whenReady } from '../core/store.js';
 import { dockBlock, paneOf, setStackState } from '../core/sheet-blocks.js';
 import { stepBack, chooseBranch, discoverEvents, discoverState, discovering, finishDiscover, firstMatchShown, plantSeen, resetPassed, setDiscoverPoint, setDiscoverRadius, setStep, swiped, unswipe, LAST_STEP, PLANTS_BEFORE_FLORE } from '../core/discover.js';
-import { lookalikesOf } from '../core/lookalikes.js';
+import { UNREAD_LOOKALIKES, lookalikesOf } from '../core/lookalikes.js';
 import { scenarioOf } from '../core/scenarios.js';
 import { scene, sceneStyles } from '../core/scenes.js';
 import { sheetSession } from '../core/sheet-session.js';
@@ -35,6 +35,7 @@ import { floweringMonths } from './gf-calendar.js';
 import { hideImg, showImg } from '../core/img.js';
 import { ui } from '../styles/ui.js';
 import './gf-plant-detail.js';
+import { emergency } from './gf-lookalikes.js';
 import './gf-media-viewer.js';
 import './gf-map.js';
 import './gf-trail.js';
@@ -93,6 +94,8 @@ export class GfDiscover extends LitElement {
     _shown: { state: true },
     _loading: { state: true },
     _error: { state: true },
+    /** Cueillette prudente: the look-alikes list could not be read (every plant kept, never « none to pick »). */
+    _unread: { state: true },
     _locating: { state: true },
     _query: { state: true },
     _places: { state: true },
@@ -166,6 +169,9 @@ export class GfDiscover extends LitElement {
 
     /* Scenarios. */
     .banner-warn { margin: 0 0 12px; padding: 10px 12px; border-radius: var(--gf-radius); background: #fde2df; color: #7a1d16; font-size: 0.88rem; display: flex; gap: 8px; align-items: flex-start; }
+    .banner-warn .sos-line { display: block; margin-top: 2px; }
+    .banner-warn .sos a, .banner-warn .link { color: inherit; }
+    .banner-warn .link { font-size: inherit; font-weight: 600; margin-left: 4px; }
     .bloom-only { display: flex; gap: 6px; align-items: center; justify-content: center; margin: 0 0 10px; font-size: 0.9rem; }
     .grid.mosaic { grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); grid-auto-flow: dense; gap: 6px; }
     .grid.mosaic .card { border-radius: 10px; }
@@ -415,6 +421,7 @@ export class GfDiscover extends LitElement {
     this._loading = false;
     /** @type {string | null} */
     this._error = null;
+    this._unread = false;
     this._locating = false;
     this._query = '';
     /** @type {any[]} */
@@ -445,7 +452,7 @@ export class GfDiscover extends LitElement {
     this.#abort?.abort();
     this._point = null; this._place = null; this._cards = null; this._radius = 1000; this._asking = false;
     this._history = []; this._match = null; this._ethno = new Map(); this._obs = []; this._later = null; this._error = null;
-    this._view = 'swipe'; this._loading = false;
+    this._unread = false; this._view = 'swipe'; this._loading = false;
     this.#navs = 0; this.#navsAtStep = 0;
   };
   #onKey = (/** @type {KeyboardEvent} */ e) => {
@@ -625,7 +632,7 @@ export class GfDiscover extends LitElement {
     if (!point) return;
     this.#abort?.abort();
     const abort = this.#abort = new AbortController();
-    this._loading = true; this._error = null; this._cards = null; this._shown = PAGE;
+    this._loading = true; this._error = null; this._unread = false; this._cards = null; this._shown = PAGE;
     this.#loadedFor = this._radius + ':' + point;
     try {
       await whenReady();
@@ -646,11 +653,17 @@ export class GfDiscover extends LitElement {
       /** @type {Card[]} */
       let list = /** @type {Card[]} */ (cards);
       if (scenarioOf(this.scenario).key === 'harvest') {
-        // Cueillette prudente: only the plants of the Anses / Centres antipoison confusions, the deadly first.
-        for (const c of list) c.confusions = await lookalikesOf(c.plant).catch(() => []);
+        // Cueillette prudente: only the plants of the Anses / Centres antipoison confusions, the deadly first. The list
+        // unreadable: said, with every plant (each card says it too), never « none to pick ».
+        let unread = false;
+        for (const c of list) {
+          c.confusions = await lookalikesOf(c.plant).catch(error => { console.error(error); unread = true; return []; });
+          if (unread) break;
+        }
         if (abort.signal.aborted) return;
+        this._unread = unread;
         const deadly = (/** @type {Card} */ c) => Number((c.confusions || []).some(l => l.pair.severity === 'mortel'));
-        list = list.filter(c => c.confusions?.length)
+        list = list.filter(c => unread || c.confusions?.length)
           .sort((a, b) => deadly(b) - deadly(a) || Number(b.confusions?.some(l => l.side === 'edible')) - Number(a.confusions?.some(l => l.side === 'edible')) || b.count - a.count);
       } else {
         // The most observed here first (the most photos: every observation has one), then those in flower.
@@ -805,9 +818,12 @@ export class GfDiscover extends LitElement {
         <button class="link" type="button" @click=${() => { this._asking = true; }}>Distance : ${km}</button>
         <button class="link" type="button" @click=${() => { this._point = null; this._cards = null; }}>Changer de lieu</button>
       </div>
-      ${sc.key === 'harvest' ? html`<p class="banner-warn" role="note">${icon('exclamation-triangle-fill')} Ne cueillez jamais une plante sans identification certaine :
-        chacune de ces plantes a un sosie dangereux (liste de l’Anses et des Centres antipoison).</p>` : nothing}
-      ${sc.key === 'harvest' && cards && !cards.length && !this._loading ? html`<div class="deck-end"><p><b>Aucune plante de cueillette observée à moins de ${km}.</b></p>
+      ${sc.key === 'harvest' ? html`<p class="banner-warn" role="note">${icon('exclamation-triangle-fill')}<span>Ne cueillez jamais une plante sans identification certaine${this._unread ? ''
+        : ' : chacune de ces plantes a un sosie dangereux (liste de l’Anses et des Centres antipoison)'}.
+        <span class="sos-line">${emergency()}.</span></span></p>` : nothing}
+      ${sc.key === 'harvest' && this._unread && !this._loading ? html`<p class="banner-warn" role="alert">${icon('exclamation-octagon-fill')}<span><b>${UNREAD_LOOKALIKES}</b>
+        <button class="link" type="button" @click=${() => this.#load()}>Réessayer</button></span></p>` : nothing}
+      ${sc.key === 'harvest' && cards && !cards.length && !this._loading && !this._unread ? html`<div class="deck-end"><p><b>Aucune plante de cueillette observée à moins de ${km}.</b></p>
         ${DISTANCES.find(d => d > this._radius) ? html`<button class="primary" type="button" @click=${() => { const n = /** @type {number} */ (DISTANCES.find(d => d > this._radius)); this._radius = n; setDiscoverRadius(n); this.#load(); }}>Chercher jusqu’à ${distLabel(/** @type {number} */ (DISTANCES.find(d => d > this._radius)))}</button>` : nothing}</div>` : nothing}
       ${sc.key === 'mosaic' && cards?.length ? html`<label class="bloom-only"><input type="checkbox" .checked=${this._bloomOnly} @change=${(/** @type {any} */ e) => { this._bloomOnly = e.target.checked; }} /> En fleur maintenant (${cards.filter(c => c.blooming).length})</label>` : nothing}
       ${cards && cards.length ? html`<div class="views segmented" role="tablist" aria-label="Affichage">
@@ -930,19 +946,31 @@ export class GfDiscover extends LitElement {
 
   /** A short bio, from the plant's real data — with a wink. @param {Card} c @returns {string[]} */
   #bio(c) {
-    const p = c.plant, a = c.alerts, out = [];
+    const p = c.plant, a = /** @type {any} */ (c.alerts), out = [];
     // Cueillette prudente: the confusion first.
     for (const l of (c.confusions || []).slice(0, 2)) {
       const others = l.others.map(o => o.label).join(', ');
       out.push(l.side === 'edible' ? `⚠️ Ne me confondez pas avec ${others}${l.pair.severity === 'mortel' ? ' (mortel)' : ' (toxique)'}. Partie : ${l.pair.part}.`
         : `☠️ Je suis le sosie ${l.pair.severity === 'mortel' ? 'mortel' : 'toxique'} de ${others}.`);
     }
+    // Safety before the rest (only 4 lines are kept). Data unreadable: said, never left out (alerts.js).
+    if (a?.unread) out.push('⚠️ ' + UNREAD + '.');
+    const facts = /** @type {string[]} */ (a?.safety?.text || []).filter(t => t !== UNREAD);
+    const toxicLine = a?.safety?.tone === 'danger' && facts.find(t => /toxi|mortel|ANSM/i.test(t));
+    if (toxicLine) out.push('☠️ ' + toxicLine + '. On regarde, on ne goûte pas.');
+    else if (facts.some(t => /Protégée/.test(t))) out.push('🛡️ Espèce protégée : on m’admire, on ne me cueille pas.');
+    if (a?.edible) {
+      // Never « comestible »: the part the Anses says is eaten, and no « à table » for a plant toxic (TPPT 2 or more,
+      // ANSM), protected or regulated, or whose toxicity could not be read.
+      const n = a.edible.text.length;
+      const kept = (p.statuses || []).some((/** @type {any} */ s) => /^(PN|PR|PD|REGL)$/.test(s.type));
+      out.push(a.toxic || kept || a.unread ? `⚠️ J’ai des sosies dangereux (${n}). Lisez ma fiche avant toute cueillette.`
+        : a.edible.parts?.length ? `🍽️ Partie consommée selon l’Anses : ${a.edible.parts.join(', ')}. J’ai des sosies dangereux (${n}) : lisez ma fiche avant de passer à table.`
+        : `⚠️ J’ai des sosies dangereux (${n}) : lisez ma fiche avant de passer à table.`);
+    }
     const months = floweringMonths(p.flowering);
     if (c.blooming) out.push('🌼 En fleur en ce moment : c’est le jour de la photo.');
     else if (months.size) out.push(`🗓️ Je fleuris de ${MONTH[[...months][0]]} à ${MONTH[[...months][months.size - 1]]}. Repassez me voir.`);
-    if (a?.safety?.tone === 'danger') out.push('☠️ ' + (a.safety.text.find(t => /toxi|mortel|ANSM/i.test(t)) || a.safety.text[0]) + '. On regarde, on ne goûte pas.');
-    else if (a?.safety?.text.some(t => /Protégée/.test(t))) out.push('🛡️ Espèce protégée : on m’admire, on ne me cueille pas.');
-    if (a?.edible) out.push(`🍽️ Comestible, mais j’ai des sosies dangereux (${a.edible.text.length}). Lisez ma fiche avant de passer à table.`);
     // How often it is seen here, in words (no count on the card).
     out.push(c.count >= 50 ? '📸 Très populaire par ici.' : c.count <= 3 ? '🤫 Rare par ici : une belle rencontre.' : '👀 Assez présente dans le coin.');
     if (p.family) out.push(`👪 De la famille des ${p.family}.`);

@@ -83,7 +83,7 @@
     },
     {
       "toxic": [{ "taxon": "Aconitum napellus", "label": "Aconit napel" }],
-      "edible": [{ "taxon": "Molopospermum peloponnesiacum", "label": "Couscouil" }],
+      "edible": [{ "taxon": "Molopospermum peleponnesiacum", "label": "Couscouil" }],
       "part": "feuilles",
       "severity": "mortel",
       "tell": ["Confusion d’une plante non fleurie : les fleurs bleu-violacé en forme de casque de l’aconit n’étaient pas encore visibles."],

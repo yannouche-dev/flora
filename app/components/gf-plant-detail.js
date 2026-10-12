@@ -17,7 +17,7 @@ import './gf-attribution.js';
 import './gf-plant-spots.js';
 import './gf-calendar.js';
 import './gf-status.js';
-import './gf-lookalikes.js';
+import { emergency } from './gf-lookalikes.js';
 import './gf-add-to.js';
 import './gf-sheet-map.js';
 import { OVERLAYS } from '../core/ign.js';
@@ -45,6 +45,7 @@ import { alertsOf } from '../core/alerts.js';
 import { sheetSession, setAnchorLock } from '../core/sheet-session.js';
 import { openModal } from '../core/history.js';
 import { hideImg, dropFigure, showImg } from '../core/img.js';
+import { safeUrl } from '../core/safe-url.js';
 
 /** Remote text is untrusted HTML: keep only its text content (DOMParser never runs scripts). */
 function toText(/** @type {string} */ value) {
@@ -52,6 +53,9 @@ function toText(/** @type {string} */ value) {
   body.querySelectorAll('script, style, noscript').forEach(node => node.remove());
   return body.textContent?.replace(/\s+/g, ' ').trim() || '';
 }
+
+/** The safety file or the look-alikes file could not be read (_open.safety, _open.confusions): never « nothing known ». */
+const UNREAD = Object.freeze({ unread: true });
 
 const truncate = (/** @type {string} */ text, max = 900) =>
   text.length > max ? text.slice(0, max).replace(/\s+\S*$/, '') + '…' : text;
@@ -703,6 +707,9 @@ export class GfPlantDetail extends LitElement {
     .prudence li svg { flex: none; color: #d97706; }
     .prudence li.stop svg { color: #b91c1c; }
     .prudence p { margin: 8px 0 0; }
+    .prudence .sos a { color: inherit; }
+    .prudence li button.link { min-height: 0; padding: 0 4px; font-size: inherit; }
+    .no-tox { margin: 0 0 10px; padding: 6px 10px; border-left: 3px solid var(--gf-text-muted); color: var(--gf-text-muted); }
     .src { font-size: 0.72rem; color: var(--gf-text-muted); white-space: nowrap; }
     .src::before { content: '— '; }
     ul.recipes { margin: 4px 0 0; padding-left: 18px; font-size: 0.9rem; display: grid; gap: 3px; }
@@ -1250,8 +1257,9 @@ export class GfPlantDetail extends LitElement {
     // « Usages et cuisine sauvage »: the local safety file first, then Wikidata and Wikibooks.
     if (shown('uses')) {
       if (once('uses:safety')) {
-        settle(usesData.safetyOf(plant), x => putOpen('safety', x));
-        settle(lookalikesOf(plant).then(list => list.length), x => putOpen('confusions', x || 0));
+        const [safety, confusions] = this.#safetyTasks(plant);
+        settle(safety, x => putOpen('safety', x));
+        settle(confusions, x => putOpen('confusions', x));
       }
       const usesQid = plant.identifiers?.wikidata || details?.identifiers?.wikidata?.id;
       if (details !== undefined && once('uses:wikidata')) {
@@ -1264,6 +1272,29 @@ export class GfPlantDetail extends LitElement {
     }
     // My position already known in this visit: its pollen and climate come with the sheet.
     if (shown('climate') && hereAllowed && once('here')) queueMicrotask(() => this.#findHere());
+  }
+
+  /**
+   * The local safety data of « Usages » (Prudence): the safety file's entry (null: none) and the plant's confusions,
+   * UNREAD when a file could not be read. @param {any} plant
+   */
+  #safetyTasks(plant) {
+    return [usesData.safetyOf(plant).catch(() => UNREAD), lookalikesOf(plant).catch(() => UNREAD)];
+  }
+
+  /**
+   * « Réessayer »: the safety and look-alikes files read again (a file that failed is asked again), with the
+   * alerts. `lookalikes`: also the « Plantes à confondre » blocks (the retry did not come from one of them).
+   */
+  #retrySafety(lookalikes = true) {
+    const plant = this._plant;
+    if (!plant?.id) return;
+    if (lookalikes) for (const el of this.renderRoot.querySelectorAll('gf-lookalikes')) /** @type {any} */ (el).reload();
+    const put = (/** @type {string} */ k, /** @type {any} */ x) => { if (this._plant === plant) this._open = { ...this._open, [k]: x ?? null }; };
+    const [safety, confusions] = this.#safetyTasks(plant);
+    safety.then(x => put('safety', x));
+    confusions.then(x => put('confusions', x));
+    alertsOf(plant).then(a => { if (this._plant === plant) this._alerts = a; }, () => {});
   }
 
   /** Pollen and climate at my position (asked once; later sheets of the visit reuse it). */
@@ -1559,7 +1590,7 @@ export class GfPlantDetail extends LitElement {
       <div class="gallery">
         ${shown.map(image => html`
           <figure>
-            <a href=${image.sourceUrl || image.pageUrl || image.url} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, image.url)}>
+            <a href=${safeUrl(image.sourceUrl || image.pageUrl || image.url) || '#'} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, image.url)}>
               <img src=${image.url} alt=${plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${dropFigure} @load=${showImg} />
             </a>
             <figcaption><gf-attribution .media=${image}></gf-attribution></figcaption>
@@ -2749,7 +2780,8 @@ export class GfPlantDetail extends LitElement {
       case 'gbifProfile': { const p = profile(g); return !this.#wikiSections(['ecology']).length && !p.habitats.length && !p.forms.length && !p.invasive.length; }
       case 'literature': return !g.literature?.items?.length;
       case 'interactions': return loaded(this._open.interactions) && !this._open.interactions?.roles?.length;
-      case 'uses': { const o = this._open; return !this.#wikiSections(['toxicity', 'food', 'uses']).length && loaded(o.safety) && !o.safety && !o.confusions && loaded(o.wdUses) && !o.wdUses?.uses?.length && !o.wdUses?.products?.length && !o.wdUses?.dishes?.length && !o.recipes?.length && !this.#danger(ctx.plant).length; }
+      // Prudence always says something once read (a warning, the data unavailable, or that none is known).
+      case 'uses': { const o = this._open; return isSubHidden(v, 'uses', 'safety') && !this.#wikiSections(['toxicity', 'food', 'uses']).length && loaded(o.safety) && !o.safety && !o.confusions?.length && loaded(o.wdUses) && !o.wdUses?.uses?.length && !o.wdUses?.products?.length && !o.wdUses?.dishes?.length && !o.recipes?.length && !this.#danger(ctx.plant).length; }
       case 'climate': return !openData.pollenOf(ctx.plant) && loaded(this._open.niche) && !this._open.niche?.points?.length;
       case 'trefle': return !ctx.loading && !trefleFacts(ctx.details).length;
       default: return false;
@@ -2786,7 +2818,7 @@ export class GfPlantDetail extends LitElement {
         if (baseOf(v) !== 'epure') return this.#gallery(ctx, baseOf(v) === 'standard' ? 6 : Infinity);
         const hero = ctx.images[0];
         return html`<figure class="hero">
-          ${hero ? html`<a href=${hero.sourceUrl || hero.url} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, hero.url)}><img src=${hero.url} alt=${plant.scientificName} decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} /></a>
+          ${hero ? html`<a href=${safeUrl(hero.sourceUrl || hero.url) || '#'} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, hero.url)}><img src=${hero.url} alt=${plant.scientificName} decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} /></a>
             <figcaption><gf-attribution .media=${hero}></gf-attribution></figcaption>`
             : html`<div class=${loading ? 'skeleton' : 'no-photo'} aria-hidden="true">${loading ? '' : icon('flower1')}</div>`}
         </figure>`;
@@ -2795,8 +2827,9 @@ export class GfPlantDetail extends LitElement {
         return baseOf(v) === 'scientific' ? this.#statuses(ctx)
           : html`<gf-status .plant=${plant}></gf-status>${ifEmpty('Aucune protection, réglementation ni liste rouge connue (INPN).')}`;
       case 'lookalikes':
-        return html`<gf-lookalikes .plant=${plant} ?compact=${baseOf(v) === 'epure'} ?detailed=${baseOf(v) === 'scientific'} ?map-linked=${this.#hasMap} .focus=${this._focus}></gf-lookalikes>
-          ${ifEmpty('Aucune confusion signalée par l’Anses et les Centres antipoison.')}`;
+        return html`<gf-lookalikes .plant=${plant} ?compact=${baseOf(v) === 'epure'} ?detailed=${baseOf(v) === 'scientific'} ?map-linked=${this.#hasMap} .focus=${this._focus}
+            @safety-retry=${() => this.#retrySafety(false)}></gf-lookalikes>
+          ${ifEmpty('Aucune confusion de notre liste (Anses, Centres antipoison) ne concerne cette plante : cela ne garantit pas l’absence de risque.')}`;
       case 'taxonomy': return baseOf(v) === 'scientific' ? this.#taxonomy(ctx) : this.#tags(ctx);
       case 'mine': {
         if (baseOf(v) === 'scientific') return html`<gf-plant-spots plant-id=${plant.id} notitle ?map-linked=${this.#hasMap} .focus=${this._focus}></gf-plant-spots>`;
@@ -3107,7 +3140,7 @@ export class GfPlantDetail extends LitElement {
     if (list === undefined) return html`${head}<p class="muted">chargement…</p>`;
     if (!list?.length) return html`${head}<p class="muted">${none}</p>`;
     return html`${head}<div class="gallery ${herbarium ? 'herbarium' : ''}">${list.map(image => html`<figure>
-      <a href=${image.sourceUrl || image.url} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, image.url)}><img src=${image.url} alt=${(herbarium ? 'Planche d’herbier de ' : '') + plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${dropFigure} @load=${showImg} /></a>
+      <a href=${safeUrl(image.sourceUrl || image.url) || '#'} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, image.url)}><img src=${image.url} alt=${(herbarium ? 'Planche d’herbier de ' : '') + plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${dropFigure} @load=${showImg} /></a>
       <figcaption>
         ${herbarium ? html`<span class="specimen">${[image.institution, image.catalogNumber && 'n° ' + image.catalogNumber, image.year, image.country].filter(Boolean).join(' · ')}</span>` : nothing}
         ${image.coordinates && this.#hasMap ? this.#focusable({ kind: 'point', label: (herbarium ? 'Planche ' : 'Photo ') + ([image.institution, image.year].filter(Boolean).join(' ') || 'GBIF'), coordinates: image.coordinates, url: image.sourceUrl },
@@ -3146,13 +3179,13 @@ export class GfPlantDetail extends LitElement {
     if (blockStyle(this.view, 'literature') !== 'list') return html`<table class="data papers-table">
         <thead><tr><th scope="col">Titre</th><th scope="col">Auteurs</th><th scope="col">Revue</th><th scope="col" class="num">Année</th></tr></thead>
         <tbody>${l.items.map((/** @type {any} */ r) => html`<tr>
-          <td>${r.url ? html`<a href=${r.url} target="_blank" rel="noopener">${r.title}</a>` : r.title}</td>
+          <td>${safeUrl(r.url) ? html`<a href=${safeUrl(r.url)} target="_blank" rel="noopener">${r.title}</a>` : r.title}</td>
           <td>${authors(r)}</td><td>${r.source}</td><td class="num">${r.year ?? ''}</td></tr>`)}</tbody>
       </table>
       <p class="credit">${l.total.toLocaleString('fr-FR')} publication${l.total > 1 ? 's' : ''} utilisant des données GBIF sur cette espèce —
         <a href=${'https://www.gbif.org/resource/search?contentType=literature&gbifTaxonKey=' + key} target="_blank" rel="noopener">toutes sur GBIF.org</a>.</p>`;
     return html`<ul class="papers">${l.items.map((/** @type {any} */ r) => html`<li>
-        ${r.url ? html`<a href=${r.url} target="_blank" rel="noopener">${r.title}</a>` : r.title}
+        ${safeUrl(r.url) ? html`<a href=${safeUrl(r.url)} target="_blank" rel="noopener">${r.title}</a>` : r.title}
         <small>${[r.authors.slice(0, 3).join(', ') + (r.authors.length > 3 ? ' et al.' : ''), r.source, r.year].filter(Boolean).join(' · ')}</small>
       </li>`)}</ul>
       <p class="credit">${l.total.toLocaleString('fr-FR')} publication${l.total > 1 ? 's' : ''} utilisant des données GBIF sur cette espèce —
@@ -3162,17 +3195,28 @@ export class GfPlantDetail extends LitElement {
 
   /**
    * What says to be careful with this plant, each with its source: ANSM liste B, TPPT toxicity, confusions
-   * with toxic plants (Anses), protection and harvest rules (INPN). @param {any} plant
+   * with toxic plants (Anses), protection and harvest rules (INPN); first, a file that could not be read.
+   * @param {any} plant
    */
   #danger(plant) {
     const o = this._open;
     /** @type {{ level: 'stop' | 'warn', text: unknown }[]} */
     const out = [];
+    if (o.safety === UNREAD || o.confusions === UNREAD) {
+      const what = o.safety !== UNREAD ? 'Liste des confusions indisponible' : o.confusions === UNREAD ? 'Données de toxicité et liste des confusions indisponibles' : 'Données de toxicité indisponibles';
+      out.push({ level: 'stop', text: html`<b>${what} pour le moment</b> : ne consommez aucune plante sans vérification. <button type="button" class="link" @click=${() => this.#retrySafety()}>Réessayer</button>` });
+    }
     const ansm = /** @type {any[]} */ (o.safety?.ansm || []), tppt = o.safety?.tppt;
     for (const b of ansm.filter(a => a.list === 'B')) out.push({ level: 'stop', text: html`<b>Pharmacopée française, liste B</b>${b.genus ? ' (tout le genre)' : ''} : plante médicinale dont les effets indésirables potentiels l’emportent sur le bénéfice attendu${b.parts ? html` — partie concernée : ${b.parts}` : nothing}. <span class="src">ANSM</span>` });
     for (const a of ansm.filter(a => a.list === 'A' && a.toxicParts)) out.push({ level: 'warn', text: html`<b>Parties toxiques</b> : ${a.toxicParts}. <span class="src">ANSM, Pharmacopée liste A</span>` });
     if (tppt) out.push({ level: tppt.level >= 3 ? 'stop' : 'warn', text: html`<b>${tppt.level >= 2 ? 'Plante toxique' : 'Attention'}</b>${tppt.levelLabel ? ` (${tppt.levelLabel})` : ''}${tppt.parts ? html` — ${tppt.level >= 2 ? 'parties toxiques' : 'parties concernées'} : ${tppt.parts}` : nothing}${tppt.toxins?.length ? html` ; substances : ${tppt.toxins.slice(0, 4).join(', ')}` : nothing}. <span class="src">Agroscope, base TPPT</span>` });
-    if (o.confusions) out.push({ level: 'warn', text: html`<b>Risque de confusion</b> avec une plante toxique : voir « ${blockTitle('lookalikes')} ». <span class="src">Anses, Centres antipoison</span>` });
+    // The pair's severity, on both sides: the toxic side is the dangerous plant itself, even without ANSM or TPPT data.
+    const confusions = /** @type {import('../core/lookalikes.js').Lookalike[]} */ (Array.isArray(o.confusions) ? o.confusions : []);
+    const toxicSide = confusions.filter(l => l.side === 'toxic'), edibleSide = confusions.filter(l => l.side === 'edible');
+    const deadly = (/** @type {typeof confusions} */ list) => list.some(l => l.pair.severity === 'mortel');
+    const see = html` Voir « ${blockTitle('lookalikes')} ». <span class="src">Anses, Centres antipoison</span>`;
+    if (toxicSide.length) out.push({ level: 'stop', text: html`<b>Plante ${deadly(toxicSide) ? 'mortelle' : 'toxique'}</b>, confondue avec ${[...new Set(toxicSide.flatMap(l => l.others.map(x => x.label)))].join(', ')}.${see}` });
+    if (edibleSide.length) out.push({ level: deadly(edibleSide) ? 'stop' : 'warn', text: html`<b>Risque de confusion</b> avec une plante ${deadly(edibleSide) ? 'mortelle' : 'toxique'} : ${[...new Set(edibleSide.flatMap(l => l.others.map(x => x.label + (l.pair.severity === 'mortel' ? ' (mortel)' : ''))))].join(', ')}.${see}` });
     const st = plant.statuses || [];
     if (st.some((/** @type {any} */ x) => /^P[NRD]$/.test(x.type))) out.push({ level: 'stop', text: html`<b>Espèce protégée</b> (${[...new Set(st.filter((/** @type {any} */ x) => /^P[NRD]$/.test(x.type)).map((/** @type {any} */ x) => x.area || x.label))].slice(0, 3).join(', ')}) : cueillette interdite là où elle l’est. <span class="src">INPN</span>` });
     else if (st.some((/** @type {any} */ x) => x.type === 'REGL')) out.push({ level: 'warn', text: html`<b>Cueillette réglementée</b> dans certains départements (voir « ${blockTitle('status')} »). <span class="src">INPN</span>` });
@@ -3190,12 +3234,19 @@ export class GfPlantDetail extends LitElement {
     const pending = html`<p class="muted">chargement…</p>`;
     const KIND = { food: 'Alimentation', medicine: 'Médecine traditionnelle', other: 'Autres usages' };
     return html`${this.#subs('uses', {
-      safety: () => danger.length ? html`<div class="prudence ${danger.some(d => d.level === 'stop') ? 'grave' : ''}">
+      safety: () => {
+        // No toxicity in our sources (and not the toxic side of a confusion): said so, without reassuring.
+        const tox = (/** @type {any[]} */ (o.safety?.ansm || [])).some(a => a.list === 'B' || a.toxicParts) || o.safety?.tppt
+          || (Array.isArray(o.confusions) && o.confusions.some(l => l.side === 'toxic'));
+        const none = o.safety !== undefined && o.safety !== UNREAD && Array.isArray(o.confusions) && !tox;
+        if (!danger.length && !none) return nothing;
+        return html`${danger.length ? html`<div class="prudence ${danger.some(d => d.level === 'stop') ? 'grave' : ''}">
           <ul>${danger.map(d => html`<li class=${d.level}>${icon(d.level === 'stop' ? 'exclamation-octagon-fill' : 'exclamation-triangle-fill')}<span>${d.text}</span></li>`)}</ul>
-          <p class="small">En cas de doute, ne pas consommer. Centre antipoison 24 h/24 ; le 15 en cas de détresse vitale. <span class="src">Anses</span></p>
-        </div>` : nothing,
+          <p class="small">En cas de doute, ne la consommez pas. ${emergency()}. <span class="src">Anses</span></p>
+        </div>` : nothing}${none ? html`<p class="small no-tox">Aucune donnée de toxicité dans nos sources (ANSM, TPPT) : cela ne veut pas dire qu’elle est comestible ni sans danger. En cas de doute, ne la consommez pas.</p>` : nothing}`;
+      },
       uses: () => {
-        const head = html`<h3>${danger.length ? 'Usages rapportés (non vérifiés, voir Prudence)' : 'Usages rapportés'}</h3>`;
+        const head = html`<h3>${danger.length ? 'Usages rapportés (non vérifiés, voir Prudence)' : 'Usages rapportés (non vérifiés)'}</h3>`;
         const groups = /** @type {Record<string, any[]>} */ ({});
         for (const u of wd?.uses || []) (groups[u.kind] ||= []).push(u);
         if (wd === undefined && !ansmA.length) return html`${head}${pending}`;
@@ -3220,8 +3271,8 @@ export class GfPlantDetail extends LitElement {
         const books = o.recipes || [];
         if (!dishes.length && !books.length) return o.recipes === undefined && wd === undefined ? html`<h3>En cuisine</h3>${pending}` : nothing;
         return html`<h3>En cuisine</h3>
-          ${dishes.length ? html`<p class="small"><b>Plats</b> : ${dishes.map((d, i) => html`${i ? ' · ' : ''}<a href=${d.url || 'https://www.wikidata.org/wiki/' + d.id} target="_blank" rel="noopener">${d.label}</a>`)}</p>` : nothing}
-          ${books.length ? html`<ul class="recipes">${books.map((/** @type {any} */ r) => html`<li><a href=${r.url} target="_blank" rel="noopener">${r.title.replace(/^Cookbook:/, '')}</a> <span class="muted">(${r.lang === 'fr' ? 'Wikibooks' : 'Wikibooks, en anglais'})</span></li>`)}</ul>` : nothing}
+          ${dishes.length ? html`<p class="small"><b>Plats</b> : ${dishes.map((d, i) => html`${i ? ' · ' : ''}<a href=${safeUrl(d.url) || 'https://www.wikidata.org/wiki/' + d.id} target="_blank" rel="noopener">${d.label}</a>`)}</p>` : nothing}
+          ${books.length ? html`<ul class="recipes">${books.map((/** @type {any} */ r) => html`<li>${safeUrl(r.url) ? html`<a href=${safeUrl(r.url)} target="_blank" rel="noopener">${r.title.replace(/^Cookbook:/, '')}</a>` : r.title.replace(/^Cookbook:/, '')} <span class="muted">(${r.lang === 'fr' ? 'Wikibooks' : 'Wikibooks, en anglais'})</span></li>`)}</ul>` : nothing}
           <p class="credit">Plats : Wikidata (CC0) ; recettes : Wikibooks (CC BY-SA), non vérifiées.</p>`;
       },
       links: () => {
@@ -3242,7 +3293,8 @@ export class GfPlantDetail extends LitElement {
     const keys = shownSubs(this.view, 'interactions');
     const roles = data.roles.filter((/** @type {any} */ r) => keys.includes(r.key));
     const style = blockStyle(this.view, 'interactions');
-    const credit = html`<p class="credit">Source : <a href=${data.url} target="_blank" rel="noopener">GloBI — Global Biotic Interactions</a> :
+    const globi = safeUrl(data.url) || 'https://www.globalbioticinteractions.org/';
+    const credit = html`<p class="credit">Source : <a href=${globi} target="_blank" rel="noopener">GloBI — Global Biotic Interactions</a> :
       ${data.total.toLocaleString('fr-FR')} mention${data.total > 1 ? 's' : ''} tirées de ${data.studies.toLocaleString('fr-FR')} étude${data.studies > 1 ? 's' : ''} ou jeu${data.studies > 1 ? 'x' : ''} de données (CC BY selon les sources).</p>`;
     if (!roles.length) return html`<p class="muted">Aucune interaction de ce type connue de GloBI.</p>${credit}`;
     const partner = (/** @type {any} */ p) => html`<span class="partner"><i class="dot" style=${`background:${groupColor(p.group)}`}></i><em>${p.name}</em></span>`;
@@ -3257,7 +3309,7 @@ export class GfPlantDetail extends LitElement {
     return html`${roles.map((/** @type {any} */ r) => html`<h3>${r.label} <small class="muted">(${r.count} espèce${r.count > 1 ? 's' : ''} ou groupe${r.count > 1 ? 's' : ''})</small></h3>
       <table class="data counts-table"><thead><tr><th scope="col">Espèce ou groupe</th><th scope="col">Groupe</th><th scope="col" class="num">Mentions</th></tr></thead>
         <tbody>${r.partners.slice(0, 12).map((/** @type {any} */ p) => html`<tr><td>${partner(p)}</td><td>${p.group}</td><td class="num">${p.count}</td></tr>`)}</tbody></table>
-      ${r.count > 12 ? html`<p class="muted small">Et ${r.count - 12} autres sur <a href=${data.url} target="_blank" rel="noopener">GloBI</a>.</p>` : nothing}`)}${credit}`;
+      ${r.count > 12 ? html`<p class="muted small">Et ${r.count - 12} autres sur <a href=${globi} target="_blank" rel="noopener">GloBI</a>.</p>` : nothing}`)}${credit}`;
   }
 
   /** « Climat et pollen » (Open-Meteo × GBIF): today's pollen of the plant, its climate niche, my position on it. @param {any} ctx */

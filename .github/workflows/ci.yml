@@ -1,0 +1,40 @@
+name: CI
+
+# The checks of tools/check.sh on every pull request, before it is merged (deploy-pages runs them again before each
+# deploy): modules parse, imports resolve, the service worker precaches what is deployed, the safety data holds, the
+# CSP matches index.html. Make the « check » job a required status check of main (Settings → Rules) so a pull request
+# cannot be merged red.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A new push to a pull request cancels its running check. Any other run is a group of its own (its run id): no commit
+# of main has its check cancelled, nor dropped while it waits behind another (one group keeps one pending run).
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      # Actions pinned by commit (a moved tag cannot change what runs); the comment names the release.
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Check modules, imports, precache, safety data, CSP
+        run: bash tools/check.sh

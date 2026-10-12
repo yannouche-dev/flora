@@ -89,7 +89,8 @@ export function newCollection(kind, properties = {}) {
   const now = new Date().toISOString();
   return {
     type: 'Feature',
-    id: kind === 'favorites' ? FAVORITES_ID : crypto.randomUUID(),
+    // randomUUID only exists in a secure context (https, localhost): served over http on the LAN, another id.
+    id: kind === 'favorites' ? FAVORITES_ID : (globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`),
     geometry: null,
     properties: {
       kind, name: kind === 'favorites' ? 'Favoris' : '', notes: '', accuracy: null,
