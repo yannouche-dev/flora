@@ -7,24 +7,32 @@ on:
     paths:
       - scripts/**/*.mjs
       - lib/**/*.mjs
+      - package-lock.json
       - .github/workflows/build-dataset.yml
 
-permissions:
-  contents: write
+# Two jobs: « build » downloads and parses outside files (TAXREF, Baseflor and TPPT spreadsheets, ANSM PDFs, Wikimedia)
+# with a read-only token and no credential left in the checkout; only « commit », which runs none of that, may push to
+# main, and only the four data files « build » handed over.
+permissions: {}
 
+# One build per branch at a time: a manual run on a branch does not cancel the build of main.
 concurrency:
-  group: flora-dataset-main
+  group: flora-dataset-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    permissions:
+      contents: read
 
     steps:
-      # Actions pinned by commit (a moved tag cannot change what pushes to main); the comment names the release.
+      # Actions pinned by commit (a moved tag cannot change what runs); the comment names the release.
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -49,13 +57,18 @@ jobs:
       - name: Build dataset
         run: node scripts/build-plants.mjs
 
+      # SheetJS (xlsx) reads the Baseflor and TPPT spreadsheets: the version and checksum of package-lock.json
+      # (0.20.3, from the SheetJS CDN: npm only has the vulnerable 0.18.5), without install scripts. The two steps
+      # that need it go on without it, like on any failure of their source.
+      - name: Install dev dependencies (SheetJS)
+        continue-on-error: true
+        run: npm ci --ignore-scripts
+
       - name: Add Baseflor flowering months (Ph. Julve, Tela Botanica — CC BY-SA)
         continue-on-error: true
         env:
           BASEFLOR_URL: ${{ vars.BASEFLOR_URL }}
-        run: |
-          npm install --no-save --no-package-lock xlsx@0.18.5
-          node scripts/enrich-baseflor.mjs
+        run: node scripts/enrich-baseflor.mjs
 
       - name: Add INPN statuses (protection, harvest regulation, Red Lists)
         continue-on-error: true
@@ -67,7 +80,6 @@ jobs:
         continue-on-error: true
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
-          npm install --no-save --no-package-lock xlsx@0.18.5
           node scripts/build-safety.mjs
 
       - name: Enrich search thumbnails
@@ -95,8 +107,52 @@ jobs:
       - name: Check safety data and protection statuses
         run: node scripts/check-data.mjs
 
+      # Kept a week on every run: a manual run on a branch can be looked at without committing anything.
+      - name: Hand over the generated dataset
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: dataset
+          path: |
+            data/plants.json
+            data/meta.json
+            data/thumbnails.json
+            data/safety.json
+          if-no-files-found: error
+          retention-days: 7
+
+  commit:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # push the data commit to main
+
+    steps:
+      # The commit the build started from: the data lands on the code that produced it. The checkout keeps its
+      # credential for the push below: this job runs no outside code and uploads no artifact.
+      - name: Checkout # zizmor: ignore[artipacked]
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Take the generated dataset
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: dataset
+          path: ${{ runner.temp }}/dataset
+
+      - name: Put it in place
+        run: cp "$RUNNER_TEMP"/dataset/plants.json "$RUNNER_TEMP"/dataset/meta.json "$RUNNER_TEMP"/dataset/thumbnails.json "$RUNNER_TEMP"/dataset/safety.json data/
+
+      # The files as received, checked again before they are versioned.
+      - name: Check safety data and protection statuses
+        run: node scripts/check-data.mjs
+
       - name: Commit generated dataset
-        if: github.ref == 'refs/heads/main'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -106,5 +162,5 @@ jobs:
           else
             git commit -m "Build TAXREF v18 flora dataset [skip ci]"
             git pull --rebase origin main
-            git push
+            git push origin HEAD:main
           fi

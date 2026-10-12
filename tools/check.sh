@@ -27,10 +27,14 @@ fail() { echo "$1"; failed=1; }
 step() { echo; echo "── $1"; }
 
 step 'Modules parse (ES modules)'
+# Node 22 reads a .js file as a script unless told otherwise, and a script parse misses what only a module rejects;
+# later releases dropped the option and tell a module from its syntax.
+esm=(--experimental-default-type=module)
+node "${esm[@]}" -e '' 2>/dev/null || esm=()
 count=0
-for file in sw.js vendor/*.js lib/*.mjs scripts/*.mjs tools/*.mjs $(find app -name '*.js' | sort); do
+for file in sw.js vendor/*.js lib/*.mjs scripts/*.mjs tools/*.mjs tests/*.mjs $(find app -name '*.js' | sort); do
   count=$((count + 1))
-  node --experimental-default-type=module --check "$file" || fail "::error file=$file::$file does not parse"
+  node "${esm[@]}" --check "$file" || fail "::error file=$file::$file does not parse"
 done
 node -e "JSON.parse(require('fs').readFileSync('manifest.webmanifest', 'utf8'))" \
   || fail '::error file=manifest.webmanifest::manifest.webmanifest is not valid JSON'

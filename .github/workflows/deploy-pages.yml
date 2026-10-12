@@ -1,6 +1,8 @@
 name: Deploy web app
 
-on:
+# workflow_run runs with the rights of main: only after a run on main here (branches), and the code deployed is
+# always that of main (checkout ref: main), never a pull request's.
+on: # zizmor: ignore[dangerous-triggers]
   workflow_dispatch:
   push:
     branches: [main]
@@ -16,16 +18,15 @@ on:
       - data/lookalikes.json
       - data/safety.json
       - .github/workflows/deploy-pages.yml
-  # Dataset commits are pushed with [skip ci]; redeploy once the dataset build finishes.
+  # Data commits are pushed with [skip ci]; redeploy once the dataset build, or the media enrichment that follows it
+  # (and runs weekly), finishes on main.
   workflow_run:
-    workflows: [Build flora dataset]
+    workflows: [Build flora dataset, Enrich search media]
     types: [completed]
     branches: [main]
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+# Only the deploy job holds the Pages and OIDC (id-token) permissions.
+permissions: {}
 
 concurrency:
   group: pages
@@ -35,6 +36,10 @@ jobs:
   deploy:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write # publish the site
+      id-token: write # deploy-pages proves the run's identity to GitHub Pages (OIDC)
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

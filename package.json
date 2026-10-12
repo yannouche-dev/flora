@@ -1,0 +1,14 @@
+{
+  "name": "geoflora-dev",
+  "private": true,
+  "description": "Outils de développement de GeoFlora (l'app elle-même n'a ni dépendance ni build) : Playwright pour le test de fumée, SheetJS pour lire les tableurs des sources du jeu de données.",
+  "scripts": {
+    "check": "bash tools/check.sh",
+    "check:data": "node scripts/check-data.mjs",
+    "smoke": "node tests/smoke.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.56.1",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  }
+}

@@ -1,11 +1,15 @@
 name: CI
 
-# The checks of tools/check.sh on every pull request, before it is merged (deploy-pages runs them again before each
-# deploy): modules parse, imports resolve, the service worker precaches what is deployed, the safety data holds, the
-# CSP matches index.html. Make the « check » job a required status check of main (Settings → Rules) so a pull request
-# cannot be merged red.
+# On every pull request, before it is merged (and on main, and in a merge queue):
+#  - « check »: tools/check.sh (deploy-pages runs it again before each deploy): modules parse, imports resolve, the
+#    service worker precaches what is deployed, the safety data holds, the CSP matches index.html;
+#  - « smoke »: tests/smoke.mjs opens every main screen in Chromium, phone and desktop, and fails on a page error, a
+#    CSP violation or a console error: what no build step and no parse check can see (a module that fails to link,
+#    a component that throws when it renders) shows here, not as a blank screen in production.
+# Make both jobs required status checks of main (Settings → Rules) so a pull request cannot be merged red.
 on:
   pull_request:
+  merge_group:
   push:
     branches: [main]
   workflow_dispatch:
@@ -38,3 +42,36 @@ jobs:
 
       - name: Check modules, imports, precache, safety data, CSP
         run: bash tools/check.sh
+
+  smoke:
+    # Pinned: Playwright installs the browser's system libraries for a known Ubuntu release.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      # The versions and checksums of package-lock.json, without install scripts.
+      - name: Install dev dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Audit dev dependencies
+        run: npm audit --audit-level=high
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps --only-shell chromium
+
+      # The app as deployed is static files: any static server serves it.
+      - name: Open every screen (phone and desktop)
+        run: |
+          python3 -m http.server 8000 --bind 127.0.0.1 >/dev/null 2>&1 &
+          for _ in $(seq 30); do curl -fsS -o /dev/null http://127.0.0.1:8000/ && break; sleep 1; done
+          node tests/smoke.mjs http://127.0.0.1:8000/
