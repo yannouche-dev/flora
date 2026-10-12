@@ -7,7 +7,7 @@ on:
     paths:
       - scripts/**/*.mjs
       - lib/**/*.mjs
-      - package-lock.json
+      - scripts/package-lock.json
       - .github/workflows/build-dataset.yml
 
 # Two jobs: « build » downloads and parses outside files (TAXREF, Baseflor and TPPT spreadsheets, ANSM PDFs, Wikimedia)
@@ -57,12 +57,13 @@ jobs:
       - name: Build dataset
         run: node scripts/build-plants.mjs
 
-      # SheetJS (xlsx) reads the Baseflor and TPPT spreadsheets: the version and checksum of package-lock.json
-      # (0.20.3, from the SheetJS CDN: npm only has the vulnerable 0.18.5), without install scripts. The two steps
-      # that need it go on without it, like on any failure of their source.
-      - name: Install dev dependencies (SheetJS)
+      # SheetJS (xlsx) reads the Baseflor and TPPT spreadsheets: the version and checksum of scripts/package-lock.json
+      # (0.20.3, from the SheetJS CDN: npm only has the vulnerable 0.18.5), without install scripts, in
+      # scripts/node_modules (where the scripts' `import('xlsx')` finds it). The two steps that need it go on without
+      # it, like on any failure of their source.
+      - name: Install SheetJS
         continue-on-error: true
-        run: npm ci --ignore-scripts
+        run: npm ci --ignore-scripts --prefix scripts
 
       - name: Add Baseflor flowering months (Ph. Julve, Tela Botanica — CC BY-SA)
         continue-on-error: true

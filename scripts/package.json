@@ -1,0 +1,8 @@
+{
+  "name": "geoflora-scripts",
+  "private": true,
+  "description": "Ce que lisent les scripts du jeu de données (build-dataset) : SheetJS, pour les tableurs Baseflor et TPPT. À part du package.json racine : le test de fumée n'en dépend pas.",
+  "dependencies": {
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz"
+  }
+}

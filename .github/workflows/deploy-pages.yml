@@ -17,6 +17,7 @@ on: # zizmor: ignore[dangerous-triggers]
       - data/territories.json
       - data/lookalikes.json
       - data/safety.json
+      - tools/assemble-site.sh
       - .github/workflows/deploy-pages.yml
   # Data commits are pushed with [skip ci]; redeploy once the dataset build, or the media enrichment that follows it
   # (and runs weekly), finishes on main.
@@ -28,14 +29,15 @@ on: # zizmor: ignore[dangerous-triggers]
 # Only the deploy job holds the Pages and OIDC (id-token) permissions.
 permissions: {}
 
-concurrency:
-  group: pages
-  cancel-in-progress: true
-
 jobs:
   deploy:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    # One deploy at a time, set on the job: a run whose job is skipped (a failed build, a media run with nothing to
+    # follow) never enters the group, so it cancels nothing. A deploy under way finishes; the next waits (the latest).
+    concurrency:
+      group: pages
+      cancel-in-progress: false
     permissions:
       contents: read
       pages: write # publish the site
@@ -57,12 +59,9 @@ jobs:
         with:
           node-version: 22
 
-      # Keep tools/check.sh's DEPLOYED list in step with what is copied here.
+      # What is published (the smoke test of ci.yml opens the same); tools/check.sh's DEPLOYED list follows it.
       - name: Assemble site
-        run: |
-          mkdir -p _site/data
-          cp -r index.html manifest.webmanifest sw.js .nojekyll app assets vendor lib _site/
-          cp data/plants.json data/meta.json data/territories.json data/lookalikes.json data/safety.json _site/data/
+        run: bash tools/assemble-site.sh _site
 
       # The same checks as on pull requests (ci.yml), the precache against the assembled site: nothing is deployed
       # with a module that does not parse or link, a file the service worker misses, or broken safety data.

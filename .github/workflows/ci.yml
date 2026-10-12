@@ -3,10 +3,13 @@ name: CI
 # On every pull request, before it is merged (and on main, and in a merge queue):
 #  - « check »: tools/check.sh (deploy-pages runs it again before each deploy): modules parse, imports resolve, the
 #    service worker precaches what is deployed, the safety data holds, the CSP matches index.html;
-#  - « smoke »: tests/smoke.mjs opens every main screen in Chromium, phone and desktop, and fails on a page error, a
-#    CSP violation or a console error: what no build step and no parse check can see (a module that fails to link,
-#    a component that throws when it renders) shows here, not as a blank screen in production.
-# Make both jobs required status checks of main (Settings → Rules) so a pull request cannot be merged red.
+#  - « smoke »: tests/smoke.mjs opens every main screen of the site as deployed (tools/assemble-site.sh) in Chromium,
+#    phone and desktop, and fails on a page error, a CSP violation, a console error, a file of the site that does not
+#    load, or a screen left empty: what no build step and no parse check can see (a module that fails to link, a
+#    component that throws when it renders) shows here, not as a blank screen in production.
+# Not required checks of main yet: the data workflows push to main with GITHUB_TOKEN, which no ruleset bypass list
+# accepts (README, « Protéger main »); until they push as a GitHub App, merge a pull request (or a merge queue entry)
+# only when both are green.
 on:
   pull_request:
   merge_group:
@@ -59,19 +62,23 @@ jobs:
         with:
           node-version: 22
 
-      # The versions and checksums of package-lock.json, without install scripts.
+      # The versions and checksums of package-lock.json (Playwright, from npm), without install scripts.
       - name: Install dev dependencies
         run: npm ci --ignore-scripts
-
-      - name: Audit dev dependencies
-        run: npm audit --audit-level=high
 
       - name: Install Chromium
         run: npx playwright install --with-deps --only-shell chromium
 
-      # The app as deployed is static files: any static server serves it.
+      # The site as deploy-pages publishes it: static files, any static server serves them.
       - name: Open every screen (phone and desktop)
+        timeout-minutes: 6
         run: |
-          python3 -m http.server 8000 --bind 127.0.0.1 >/dev/null 2>&1 &
+          bash tools/assemble-site.sh _site
+          python3 -m http.server 8000 --bind 127.0.0.1 --directory _site >/dev/null 2>&1 &
           for _ in $(seq 30); do curl -fsS -o /dev/null http://127.0.0.1:8000/ && break; sleep 1; done
           node tests/smoke.mjs http://127.0.0.1:8000/
+
+      # After the test, so a new advisory never hides its result.
+      - name: Audit dev dependencies
+        if: ${{ !cancelled() }}
+        run: npm audit --audit-level=high
