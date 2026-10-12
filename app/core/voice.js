@@ -13,6 +13,36 @@ export const voiceSupported = () => Boolean(Recognition);
 export const voiceAvailable = () => voiceSupported() && moduleOn('voice');
 
 /**
+ * The microphone, asked of the browser (its own prompt) unless already granted: a stream opened only for that, closed
+ * at once — the recognition opens its own. 'granted'; 'denied' (refused now or before: the browser no longer asks);
+ * 'none' (no microphone); 'unknown' (no way to ask here: the recognition will, if anything).
+ * @returns {Promise<'granted' | 'denied' | 'none' | 'unknown'>}
+ */
+export async function askMicrophone() {
+  try {
+    const status = await navigator.permissions?.query({ name: /** @type {PermissionName} */ ('microphone') });
+    if (status?.state === 'granted') return 'granted';
+    if (status?.state === 'denied') return 'denied';
+  } catch { /* 'microphone' unknown to this browser's permissions: asked below */ }
+  if (!navigator.mediaDevices?.getUserMedia) return 'unknown';
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    for (const track of stream.getTracks()) track.stop();
+    // The microphone let go before the recognition takes it (Android would otherwise find it busy).
+    await new Promise(resolve => setTimeout(resolve, 150));
+    return 'granted';
+  } catch (error) {
+    const name = /** @type {any} */ (error)?.name;
+    if (name === 'NotAllowedError' || name === 'SecurityError') return 'denied';
+    if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'none';
+    return 'unknown';
+  }
+}
+
+/** What to say when the browser refuses the microphone: where to allow it again. */
+export const MIC_BLOCKED = 'Micro bloqué pour ce site : autorisez-le dans les réglages du navigateur (le cadenas ou ⓘ à gauche de l’adresse), puis touchez à nouveau.';
+
+/**
  * Listens once (until a pause). `onText(text, final)` gets the interim then the final transcript;
  * `onEnd(error?)` is called once, whatever happens; `onStart()` when the microphone is really open (the
  * system's speech input: Android's or iOS's, through the browser). Returns a function that stops listening.
@@ -59,7 +89,9 @@ export function listen(onText, onEnd = () => {}, onStart = () => {}) {
 /** What to tell the user when listening failed. @param {string | undefined} error */
 export function voiceError(error) {
   if (!error || error === 'aborted' || error === 'no-speech') return error === 'no-speech' ? 'Rien entendu.' : null;
-  if (error === 'not-allowed' || error === 'service-not-allowed') return 'Micro refusé (autorisez-le dans le navigateur).';
+  if (error === 'not-allowed') return MIC_BLOCKED;
+  if (error === 'service-not-allowed') return 'Dictée refusée par le navigateur (autorisez la reconnaissance vocale dans ses réglages).';
+  if (error === 'audio-capture') return 'Micro indisponible (déjà utilisé, ou absent).';
   if (error === 'network') return 'Dictée indisponible hors ligne.';
   return 'Dictée impossible.';
 }

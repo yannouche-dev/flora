@@ -1,7 +1,7 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { StoreController } from '../core/store.js';
-import { listen, voiceAvailable, voiceError, voiceSupported } from '../core/voice.js';
+import { MIC_BLOCKED, askMicrophone, listen, voiceAvailable, voiceError, voiceSupported } from '../core/voice.js';
 import { moduleOn } from '../core/modules.js';
 import { icon } from '../core/icons.js';
 
@@ -11,6 +11,7 @@ import { icon } from '../core/icons.js';
  * `fallback`: shown even so — a touch says how to dictate with the keyboard's own microphone (the keyboard is
  * not opened by the button).
  * `size="large"`: a big round button, made for a thumb (the Parcours botanique).
+ * The first touch asks the browser for the microphone (its own prompt); refused, the button says where to allow it.
  * Events: voice-text {text, final} (interim results, then the final one), voice-state {state: 'idle' |
  * 'starting' | 'listening'}. A second tap stops.
  */
@@ -78,6 +79,7 @@ export class GfVoiceButton extends LitElement {
 
   #store = new StoreController(this);
   /** @type {(() => void) | null} */ #stop = null;
+  #asking = false;
 
   constructor() {
     super();
@@ -104,8 +106,10 @@ export class GfVoiceButton extends LitElement {
     if (text) this.#noteTimer = setTimeout(() => { this._note = null; }, ms);
   }
 
-  #toggle() {
+  async #toggle() {
     if (this.#stop) { this.#stop(); return; }
+    // The browser is asking for the microphone: its answer comes first.
+    if (this.#asking) return;
     // No speech recognition in this browser: the keyboard's own microphone does it.
     if (!voiceSupported()) {
       this.#say('Pas de dictée dans ce navigateur : touchez le champ, puis le micro du clavier', 4500);
@@ -115,6 +119,15 @@ export class GfVoiceButton extends LitElement {
     // At once: the button says it heard the touch, before the microphone opens.
     this.#set('starting');
     if (matchMedia('(pointer: coarse)').matches) navigator.vibrate?.(12);
+    // The browser asked for the microphone (its prompt), unless already allowed.
+    this.#asking = true;
+    const mic = await askMicrophone().finally(() => { this.#asking = false; });
+    if (!this.isConnected) { this.#set('idle'); return; }
+    if (mic === 'denied' || mic === 'none') {
+      this.#set('idle');
+      this.#say(mic === 'none' ? 'Aucun micro trouvé sur cet appareil.' : MIC_BLOCKED, 7000);
+      return;
+    }
     this.#stop = listen(
       (text, final) => this.dispatchEvent(new CustomEvent('voice-text', { detail: { text, final }, bubbles: true, composed: true })),
       error => {
