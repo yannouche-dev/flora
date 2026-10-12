@@ -1,8 +1,8 @@
 // @ts-check
 // The film icon of the header: the scenarios of the app (core/scenarios.js), in cards — what each one does,
-// « Jouer »; those to come, « Bientôt ».
+// « Jouer » (« Rejouer » once played).
 
-import { LitElement, html, css, nothing } from 'lit';
+import { LitElement, html, css } from 'lit';
 import { icon } from '../core/icons.js';
 import { openModal } from '../core/history.js';
 import { SCENARIOS } from '../core/scenarios.js';
@@ -28,9 +28,6 @@ export class GfScenarios extends LitElement {
     li b { font-size: 1rem; }
     li p { margin: 0; font-size: 0.86rem; color: var(--gf-text-muted); }
     li button { justify-self: start; margin-top: 6px; }
-    li.soon { opacity: 0.55; }
-    li.soon .ic { background: var(--gf-surface-2); color: var(--gf-text-muted); }
-    .tag { justify-self: start; margin-top: 6px; padding: 2px 10px; border-radius: var(--gf-radius-pill); background: var(--gf-surface-2); font-size: 0.75rem; font-weight: 600; }
   `];
 
   get #dialog() { return /** @type {HTMLDialogElement | null} */ (this.renderRoot.querySelector('dialog')); }
@@ -45,12 +42,12 @@ export class GfScenarios extends LitElement {
         <div class="head">${icon('camera-reels')}<h2>Scénarios</h2>
           <button class="icon-btn" type="button" aria-label="Fermer" @click=${() => this.#dialog?.close()}>${icon('x-lg')}</button></div>
         <p class="intro">Des façons de découvrir la flore, chacune avec les outils qu’il lui faut. On peut en changer quand on veut.</p>
-        <ul>${SCENARIOS.map(s => html`<li class=${s.soon ? 'soon' : ''}>
+        <ul>${SCENARIOS.map(s => html`<li>
           <span class="ic" aria-hidden="true">${icon(s.icon)}</span>
           <b>${s.title}</b>
           <p>${s.pitch}</p>
-          ${s.soon ? html`<span class="tag">Bientôt</span>` : html`<button class="primary" type="button" title=${s.played?.() ? 'Tout reprendre du début : lieu, distance, cartes, étapes' : ''}
-            @click=${() => { s.play?.(); this.#dialog?.close(); this.requestUpdate(); }}>${s.played?.() ? 'Rejouer' : 'Jouer'}</button>`}
+          <button class="primary" type="button" title=${s.played?.() ? 'Tout reprendre du début : lieu, distance, cartes, étapes' : ''}
+            @click=${() => { s.play(); this.#dialog?.close(); this.requestUpdate(); }}>${s.played?.() ? 'Rejouer' : 'Jouer'}</button>
         </li>`)}</ul>
       </dialog>`;
   }

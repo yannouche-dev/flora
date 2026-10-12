@@ -617,6 +617,7 @@ export class GfMap extends LitElement {
   #fitted = false;
   /** @type {string | null} */ #framedKey = null;
   /** @type {HTMLElement | null} */ #buttons = null;
+  /** @type {ResizeObserver | null} */ #resized = null;
 
   firstUpdated() {
     // Light DOM, but possibly inside another component's shadow root: bring the map CSS along.
@@ -631,6 +632,8 @@ export class GfMap extends LitElement {
 
     const map = this.#map = L.map(canvas, {
       zoomControl: false,
+      // Its size is followed by the ResizeObserver below (a window listener per map would outlive the element).
+      trackResize: false,
       attributionControl: true,
       tapHold: true,
       maxZoom: 21,
@@ -689,8 +692,8 @@ export class GfMap extends LitElement {
     this.#buildButtons();
     this.toggleAttribute('search', this.#hasSearch);
     if (this.#hasSearch) this.#buildSearch();
-    // The element may have been laid out after Leaflet measured it.
-    new ResizeObserver(() => {
+    // The element may have been laid out after Leaflet measured it. Let go while the element is out of the page.
+    this.#resized = new ResizeObserver(() => {
       map.invalidateSize();
       this.#applyFrame();
       // Resized (a column coming beside it): framed again on what it was last framed on — the area's circle, or
@@ -698,7 +701,8 @@ export class GfMap extends LitElement {
       if (this.#lastFit === 'frame' && this.#framedBounds) map.fitBounds(this.#framedBounds, { paddingTopLeft: [40, 56], paddingBottomRight: [40, 40], maxZoom: this.#framedMax, animate: false });
       else this.#fitArea();
       if (this.fit && !this.#fitted) this.#fitToContent();
-    }).observe(this.#root);
+    });
+    this.#resized.observe(this.#root);
     this.#syncAll();
   }
 
@@ -773,12 +777,13 @@ export class GfMap extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     moduleEvents.addEventListener('change', this.#onModules);
-    if (this.#map) this.#syncTracking();
+    if (this.#map) { this.#resized?.observe(this.#root); this.#syncTracking(); }
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     moduleEvents.removeEventListener('change', this.#onModules);
+    this.#resized?.disconnect();
     clearTimeout(this.#areasTimer);
     this.#areasAbort?.abort();
     this.#unwatch?.();

@@ -17,7 +17,7 @@ import { speciesAround, observationPointsAround, observationsAround, observation
 import { adminShape } from '../core/geoservices.js';
 import { FRANCE_BOUNDS, WORLD_BOUNDS } from '../core/ign.js';
 import * as sources from '../core/sources.js';
-import { searchPlaces, addressAt } from '../core/geoservices.js';
+import { addressAt } from '../core/geoservices.js';
 import { REGION_BOUNDS, regionOf } from '../core/regions.js';
 import { watchLocation } from '../core/geo.js';
 import { UNREAD, alertsOf } from '../core/alerts.js';
@@ -26,7 +26,7 @@ import { dockBlock, paneOf, setStackState } from '../core/sheet-blocks.js';
 import { stepBack, chooseBranch, discoverEvents, discoverState, discovering, finishDiscover, firstMatchShown, plantSeen, resetPassed, setDiscoverPoint, setDiscoverRadius, setStep, swiped, unswipe, LAST_STEP, PLANTS_BEFORE_FLORE } from '../core/discover.js';
 import { UNREAD_LOOKALIKES, lookalikesOf } from '../core/lookalikes.js';
 import { scenarioOf } from '../core/scenarios.js';
-import { scene, sceneStyles } from '../core/scenes.js';
+import { geoProblem, startScreen, startStyles } from './start-screen.js';
 import { sheetSession } from '../core/sheet-session.js';
 import { isFavorite, toggleFavorite } from '../core/collections.js';
 import { href, parse } from '../core/router.js';
@@ -42,6 +42,16 @@ import './gf-trail.js';
 
 /** How far to look, in metres (iNaturalist searches a circle; beyond 50 km the list is a region's, not « around »). */
 const DISTANCES = [200, 500, 1000, 2000, 5000, 10000, 20000, 50000];
+/** The words of each scenario's first screen (`name`: in « Quitter … : autres scénarios »). */
+const WELCOME = {
+  meet: { name: 'les rencontres', title: 'Rencontrez les plantes d’ici',
+    lead: 'Une carte par plante observée autour de vous. Un coup de cœur à droite, au suivant à gauche. Vos coups de cœur rejoignent vos favoris.' },
+  harvest: { name: 'la cueillette', title: 'Cueillette prudente', lead: 'Ce qui se cueille autour de vous, et ses sosies dangereux. Les plus toxiques passent en premier.',
+    caution: { text: 'Ne cueillez jamais une plante sans être sûr de vous.' } },
+  mosaic: { name: 'la mosaïque', title: 'La mosaïque du coin', lead: 'Les photos des plantes observées près d’ici, en grand. Touchez une image pour voir toutes celles de la plante.' }
+};
+/** « Autour de moi » takes a position at most this old (ms). */
+const FIX_MAX_AGE = 60_000;
 /** @param {number} m */
 const distLabel = m => m >= 1000 ? (m / 1000).toLocaleString('fr-FR') + ' km' : m + ' m';
 /** The view chosen (Rencontres, Matchs, Toutes) in each scenario, kept while the app is open. @type {Record<string, string>} */
@@ -96,9 +106,9 @@ export class GfDiscover extends LitElement {
     _error: { state: true },
     /** Cueillette prudente: the look-alikes list could not be read (every plant kept, never « none to pick »). */
     _unread: { state: true },
+    /** Why « Autour de moi » failed (the start screen's words, from geo.js's code). */
+    _startError: { state: true },
     _locating: { state: true },
-    _query: { state: true },
-    _places: { state: true },
     /** The observations in the circle, on the map behind the distance. */
     _obs: { state: true },
     /** How many observations there are in the circle in all (the map shows up to 1000). */
@@ -124,19 +134,13 @@ export class GfDiscover extends LitElement {
     _hl: { state: true }
   };
 
-  static styles = [ui, sceneStyles, css`
+  static styles = [ui, startStyles, css`
     :host { display: block; position: relative; min-height: 0; overflow-y: auto; background: var(--gf-bg, var(--gf-surface-2)); container-type: inline-size; }
     .welcome { max-width: 560px; margin: 0 auto; padding: 28px 20px 32px; display: grid; gap: 18px; text-align: center; }
     .welcome .leaf { font-size: 3rem; color: var(--gf-accent); }
     .welcome h1 { margin: 0; font-size: 1.7rem; line-height: 1.2; }
     .welcome p { margin: 0; color: var(--gf-text-muted); }
     .welcome .go { justify-self: center; font-size: 1.05rem; padding: 12px 26px; min-height: 48px; display: inline-flex; gap: 8px; align-items: center; }
-    .or { color: var(--gf-text-muted); font-size: 0.85rem; }
-    .commune { position: relative; text-align: left; }
-    .commune ul { list-style: none; margin: 4px 0 0; padding: 4px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface); box-shadow: var(--gf-shadow); }
-    .commune li button { width: 100%; text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: var(--gf-radius-sm); font: inherit; cursor: pointer; }
-    .commune li button:hover, .commune li button:focus-visible { background: var(--gf-accent-soft); outline: none; }
-    .commune small { color: var(--gf-text-muted); }
     .skip { font-size: 0.85rem; }
     .error { color: var(--gf-danger); font-size: 0.9rem; }
 
@@ -422,10 +426,9 @@ export class GfDiscover extends LitElement {
     /** @type {string | null} */
     this._error = null;
     this._unread = false;
+    /** @type {import('./start-screen.js').StartError | null} */
+    this._startError = null;
     this._locating = false;
-    this._query = '';
-    /** @type {any[]} */
-    this._places = [];
     /** @type {{ coordinates: [number, number], title: string }[]} */
     this._obs = [];
     this._obsTotal = 0;
@@ -504,6 +507,8 @@ export class GfDiscover extends LitElement {
     const sc = scenarioOf(this.scenario).key;
     // Another scenario: its own view (Mosaïque: the grid), the cards filtered for it.
     if (changed.has('scenario')) {
+      // Another scenario chosen while « Autour de moi » looks: it stops (a late answer must not set its place).
+      if (changed.get('scenario') !== undefined) this.#cancelLocate();
       this._view = lastView[sc] || (sc === 'mosaic' ? 'all' : 'swipe');
       if (changed.get('scenario') !== undefined && sc !== 'trail' && this._point && !this._asking) this.#load();
     } else if (changed.has('_view')) lastView[sc] = this._view;
@@ -581,26 +586,29 @@ export class GfDiscover extends LitElement {
 
   /** @type {(() => void) | null} */ #stopGeo = null;
 
+  /** « Autour de moi »: once; a commune chosen meanwhile, « Annuler », the screen left drop its answer; an old fix is not taken. */
   #locate() {
-    this._error = null;
+    if (this.#stopGeo) return;
+    this._startError = null;
     this._locating = true;
-    this.#stopGeo?.();
-    this.#stopGeo = watchLocation(s => {
-      if (s.fix) {
-        this.#stopGeo?.(); this.#stopGeo = null;
-        this._locating = false;
-        this.#setPoint(s.fix.coordinates, null);
-      } else if (s.error) {
-        this.#stopGeo?.(); this.#stopGeo = null;
-        this._locating = false;
-        this._error = s.error + ' Choisissez plutôt une commune.';
-      }
+    const since = Date.now() - FIX_MAX_AGE;
+    let live = true;
+    const end = () => { live = false; this._locating = false; const s = this.#stopGeo; this.#stopGeo = null; if (s) queueMicrotask(s); };
+    const unsubscribe = watchLocation(s => {
+      if (!live) return;
+      if (s.fix && s.fix.timestamp >= since) { end(); this.#setPoint(s.fix.coordinates, null); }
+      else if (s.error) { end(); this._startError = geoProblem(s.code, { place: true, retry: () => this.#locate() }); }
     });
+    if (live) this.#stopGeo = () => { live = false; this._locating = false; unsubscribe(); };
+    else queueMicrotask(unsubscribe);
   }
+
+  /** « Annuler », a commune chosen, « Reprendre », another scenario: the locating stops, its error goes. */
+  #cancelLocate() { this.#stopGeo?.(); this.#stopGeo = null; this._locating = false; this._startError = null; }
 
   /** @param {[number, number]} point @param {string | null} place */
   async #setPoint(point, place) {
-    this._point = point; this._place = place; this._query = ''; this._places = [];
+    this._point = point; this._place = place;
     // The start page (#/) shows Découvrir only until Flore comes: the discovery gets its own address, so a tab
     // arriving midway does not take the screen away.
     if (parse(location.hash).name !== 'discover') { replaceHash(href.discover(null, this.scenario)); dispatchEvent(new HashChangeEvent('hashchange')); }
@@ -611,16 +619,6 @@ export class GfDiscover extends LitElement {
       const a = await addressAt(point).catch(() => null);
       if (a?.city && this._point === point) { this._place = a.city; setDiscoverPoint(point, a.city); }
     }
-  }
-
-  /** @type {any} */ #searchTimer = 0;
-  /** @param {string} text */
-  #search(text) {
-    this._query = text;
-    clearTimeout(this.#searchTimer);
-    this.#searchTimer = setTimeout(async () => {
-      try { this._places = await searchPlaces(text); } catch { this._places = []; }
-    }, 250);
   }
 
   // ── What grows around ────────────────────────────────────────────────
@@ -738,29 +736,32 @@ export class GfDiscover extends LitElement {
       ${this.open != null && !guided ? this.#plantSheet() : nothing}`;
   }
 
+  /**
+   * Each scenario's first screen, the shared template (start-screen.js): its picture and its words, « Autour de
+   * moi »; smaller, a commune, the place left by « Changer de lieu »; the way out (« Passer » during the first steps).
+   */
   #welcome() {
-    const sc = scenarioOf(this.scenario).key;
-    // Each scenario its picture and its words (Rencontres: the cards; Cueillette: the basket; Mosaïque: the photos).
-    const [title, words] = sc === 'harvest'
-      ? ['Cueillette prudente', 'Ce qui se cueille autour de vous… et ses sosies dangereux, les mortels d’abord. Ne cueillez jamais sans être sûr de vous.']
-      : sc === 'mosaic'
-        ? ['La mosaïque du coin', 'Toutes les photos des plantes observées près d’ici, en grand. Une image touchée : toutes celles de la plante.']
-        : ['Découvrez les plantes autour de vous !', 'Orties farceuses, pissenlits voyageurs, chênes centenaires : tout un petit monde vert pousse près d’ici. Un coup de cœur à droite, au suivant à gauche.'];
-    return html`<section class="welcome">
-      ${scene(sc)}
-      <h1>${title}</h1>
-      <p>${words} Votre position ne sert qu’à cette recherche.</p>
-      <button class="primary go" type="button" ?disabled=${this._locating} @click=${() => this.#locate()}>${icon('geo-alt-fill')} ${this._locating ? 'Localisation…' : 'Autour de moi'}</button>
-      ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : nothing}
-      <span class="or">ou</span>
-      <div class="commune">
-        <input type="search" placeholder="Une commune, un lieu-dit…" aria-label="Choisir une commune" autocomplete="off" .value=${this._query}
-          @input=${(/** @type {any} */ e) => this.#search(e.target.value)} />
-        ${this._places.length ? html`<ul role="listbox" aria-label="Lieux">${this._places.map(p => html`<li><button type="button" role="option"
-          @click=${() => this.#setPoint(p.coordinates, p.label)}>${p.label} <small>${p.detail}</small></button></li>`)}</ul>` : nothing}
-      </div>
-      <a class="link skip" href=${href.search()} @click=${() => finishDiscover()}>Passer : montrer toute l’application</a>
-    </section>`;
+    // A scenario with no start screen of its own (?s=science): Rencontres', named so.
+    const key = scenarioOf(this.scenario).key, sc = key in WELCOME ? key : 'meet';
+    const w = WELCOME[/** @type {keyof typeof WELCOME} */ (sc)];
+    const kept = discoverState();
+    const leave = discovering() && sc === 'meet'
+      ? { label: 'Passer : montrer toute l’application', href: href.search(), run: () => finishDiscover() }
+      : { icon: /** @type {const} */ ('camera-reels'), label: `Quitter ${w.name} : autres scénarios`,
+        run: () => { this.#cancelLocate(); this.dispatchEvent(new CustomEvent('open-scenarios', { bubbles: true, composed: true })); } };
+    return startScreen({
+      id: sc, art: sc, title: w.title, lead: w.lead, caution: w.caution,
+      primary: { icon: 'geo-alt-fill', label: 'Autour de moi', busyLabel: 'Localisation…', busy: this._locating, cancel: () => this.#cancelLocate(), run: () => this.#locate() },
+      error: this._startError,
+      note: 'Votre position est envoyée à iNaturalist et à l’IGN pour chercher autour de vous ; elle n’est gardée que sur cet appareil.',
+      alternatives: [
+        { kind: 'place', label: 'ou choisir une commune', field: 'Choisir une commune', pick: p => { this.#cancelLocate(); this._startError = null; this.#setPoint(p.coordinates, p.label); } },
+        kept.point && { kind: 'choices', label: 'Reprendre', items: [{ key: 'kept', icon: /** @type {const} */ ('geo-alt'), label: kept.place ? `Autour de ${kept.place}` : 'Au dernier lieu choisi',
+          meta: distLabel(kept.radius || 1000),
+          run: () => { this.#cancelLocate(); this._point = kept.point; this._place = kept.place; this._radius = kept.radius || 1000; this._asking = true; } }] }
+      ],
+      exit: leave
+    });
   }
 
   /** How far to look: a slider of distances, then the search. */

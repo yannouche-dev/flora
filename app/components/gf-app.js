@@ -86,7 +86,7 @@ export class GfApp extends LitElement {
       line-height: 1;
       padding: 4px;
     }
-    main { min-height: 0; display: flex; flex-direction: column; }
+    main { position: relative; min-height: 0; display: flex; flex-direction: column; }
     gf-settings { flex: 1; min-height: 0; }
     .banner {
       padding: 8px 16px;
@@ -94,6 +94,9 @@ export class GfApp extends LitElement {
       background: var(--gf-accent-soft);
     }
     .banner.error { color: var(--gf-danger); }
+    /* Over Découvrir's start screens, the loading line lies over the top (the picture): their action does not move
+       under the thumb as it comes and goes. Not on a phone on its side, where the title is at the top. */
+    @media (min-height: 501px) { .banner.over { position: absolute; z-index: 6; top: 0; left: 0; right: 0; box-shadow: var(--gf-shadow); } }
 
     /* « Mode King »: the crown, bottom centre, above the tab bar on a phone; touching it leaves the mode. */
     .king {
@@ -161,13 +164,34 @@ export class GfApp extends LitElement {
     super.connectedCallback();
     discoverEvents.addEventListener('change', this.#onDiscover);
     discoverEvents.addEventListener('unlock', this.#onUnlock);
+    window.visualViewport?.addEventListener('resize', this.#onKeyboard);
+    window.visualViewport?.addEventListener('scroll', this.#onKeyboard);
+    window.addEventListener('fit-keyboard', this.#onKeyboard);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     discoverEvents.removeEventListener('change', this.#onDiscover);
     discoverEvents.removeEventListener('unlock', this.#onUnlock);
+    window.visualViewport?.removeEventListener('resize', this.#onKeyboard);
+    window.visualViewport?.removeEventListener('scroll', this.#onKeyboard);
+    window.removeEventListener('fit-keyboard', this.#onKeyboard);
   }
+
+  /**
+   * The keyboard up while a parcours is walked (`data-fit-keyboard`, set by gf-trail): the app over it, its bottom
+   * (the search, the tab bar) right above the keys. Most browsers resize the page themselves (gf-trail asks for
+   * interactive-widget=resizes-content); the others (Safari) leave the page under the keyboard: there, the app
+   * takes the height that is left, and the page is not scrolled away. Elsewhere, the browser's own way.
+   */
+  #onKeyboard = () => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const typing = document.documentElement.hasAttribute('data-fit-keyboard') && Math.abs(vv.scale - 1) < 0.01 && innerHeight - vv.height > 80;
+    const h = typing ? Math.round(vv.height) + 'px' : '';
+    if (this.style.height !== h) this.style.height = h;
+    if (typing && (scrollY || vv.offsetTop)) scrollTo(0, 0);
+  };
 
   constructor() {
     super();
@@ -203,7 +227,7 @@ export class GfApp extends LitElement {
       <main>
         ${updateReady ? html`<div class="banner" role="status">Nouvelle version de GeoFlora disponible.
           <button class="link" type="button" @click=${() => location.reload()}>Recharger</button></div>` : nothing}
-        ${status === 'loading' ? html`<div class="banner" role="status">${statusText || 'Chargement…'}</div>` : nothing}
+        ${status === 'loading' ? html`<div class="banner ${route.name === 'discover' ? 'over' : ''}" role="status">${statusText || 'Chargement…'}</div>` : nothing}
         ${status === 'error' ? html`<div class="banner error" role="alert">${statusText}
           <button class="link" type="button" @click=${() => location.reload()}>Recharger</button></div>` : nothing}
         ${offline && status === 'ready' && route.name === 'search' ? html`<div class="banner">Hors ligne — recherche sur la copie locale.</div>` : nothing}

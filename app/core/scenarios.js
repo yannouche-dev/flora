@@ -5,15 +5,15 @@
 //  - Cueillette prudente: around, only the plants that matter for picking — the edible ones of the Anses and
 //    Centres antipoison list and their toxic look-alikes, the deadly first; the harvest mode on.
 //  - Mosaïque: the photos of the plants around, a large mosaic; a touch, the plant's images.
+//  - Parcours botanique: a walk, the plants met named, each where it was met (gf-trail).
 //  - Scientifique: the scientific mode, every tool.
-// Others are announced (« bientôt »).
 
 import { href, parse } from './router.js';
 import { setHarvestMode, setMode } from './store.js';
 import { discoverState, finishDiscover, resetChoices, restartDiscover } from './discover.js';
 
 /**
- * @typedef {{ key: string, title: string, pitch: string, icon: import('./icons.js').IconName, play?: () => void, played?: () => boolean, soon?: boolean }} Scenario
+ * @typedef {{ key: string, title: string, pitch: string, icon: import('./icons.js').IconName, play: () => void, played?: () => boolean }} Scenario
  */
 
 /** The scenario on screen (Découvrir with it): played again, it starts over; another one keeps the place chosen. @param {string} key */
@@ -31,10 +31,8 @@ export const SCENARIOS = [
   { key: 'trail', title: 'Parcours botanique', icon: 'geo-alt-fill', pitch: 'Marchez, nommez les plantes que vous croisez : chacune prend sa place sur la carte de votre parcours.',
     play: () => { location.hash = href.discover(null, 'trail'); }, played: () => current('trail') },
   { key: 'science', title: 'Scientifique', icon: 'table', pitch: 'Toutes les données et tous les outils : la flore complète, les fiches en mode Scientifique.',
-    play: () => { setMode('scientific'); finishDiscover(); location.hash = href.search(); } },
-  { key: 'map', title: 'La carte d’abord', icon: 'map', pitch: 'La carte au centre, la flore et la fiche en panneaux autour.', soon: true },
-  { key: 'dashboard', title: 'Tableau de bord scientifique', icon: 'diagram-3', pitch: 'Répartition, phénologie, statuts et niche climatique d’un coup d’œil.', soon: true }
+    play: () => { setMode('scientific'); finishDiscover(); location.hash = href.search(); } }
 ];
 
-/** @param {string | null | undefined} key */
-export const scenarioOf = key => SCENARIOS.find(s => s.key === key && !s.soon) || SCENARIOS[0];
+/** The scenario of a key (Rencontres for none, or one unknown). @param {string | null | undefined} key */
+export const scenarioOf = key => SCENARIOS.find(s => s.key === key) || SCENARIOS[0];

@@ -8,10 +8,11 @@ import { icon } from '../core/icons.js';
 /**
  * 🎙 Dictate a search, with the system's speech input (Android's, iOS's — through the browser's speech
  * recognition). Hidden when « Dictée vocale » is off (Réglages › Modules), or when the browser can't — except
- * `fallback`: then a touch puts the cursor in the field and points to the keyboard's own microphone.
+ * `fallback`: shown even so — a touch says how to dictate with the keyboard's own microphone (the keyboard is
+ * not opened by the button).
  * `size="large"`: a big round button, made for a thumb (the Parcours botanique).
  * Events: voice-text {text, final} (interim results, then the final one), voice-state {state: 'idle' |
- * 'starting' | 'listening'}, voice-fallback (no speech recognition here: use the keyboard's mic). A second tap stops.
+ * 'starting' | 'listening'}. A second tap stops.
  */
 export class GfVoiceButton extends LitElement {
   static properties = {
@@ -107,8 +108,7 @@ export class GfVoiceButton extends LitElement {
     if (this.#stop) { this.#stop(); return; }
     // No speech recognition in this browser: the keyboard's own microphone does it.
     if (!voiceSupported()) {
-      this.dispatchEvent(new CustomEvent('voice-fallback', { bubbles: true, composed: true }));
-      this.#say('Dictez avec le micro du clavier 🎙', 3500);
+      this.#say('Pas de dictée dans ce navigateur : touchez le champ, puis le micro du clavier', 4500);
       return;
     }
     this.#say(null);
