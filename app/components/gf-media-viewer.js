@@ -12,12 +12,15 @@
 //    the viewer is alone in a pane), + / − / 0 keys, the − % + buttons; drag to move around, or on the map.
 //  - Browse: ‹ ›, the filmstrip, ← → (when the viewer has the focus), a swipe when not zoomed.
 //  - Calm: the credit in one line under the image, « ⓘ » for the details; the controls fade when the pointer rests.
+//  - One fade everywhere: an image changing — ‹ ›, keys, a swipe, the filmstrip, the mosaic, the slideshow, a part,
+//    another plant, zoomed or not — fades out over the one coming, which fades in (even from the cache); thumbnails
+//    fade in as they load. Opacity only (the compositor's work); none when motion is reduced.
 //  - Parts (Trefle): flower, leaf, fruit, bark, habit — an icon menu filtering every presentation.
 //  - The same display from one plant to the next (filters, zoom choice, details, slideshow): sheet-session.js.
 // Two sizes: in a pane (beside the sheet, full screen…) and `compact`, the « Médias » block of the sheet, whose
 // frame keeps one shape (nothing jumps from one plant to the next) and where the wheel scrolls the sheet.
 
-import { LitElement, html, css, nothing } from 'lit';
+import { LitElement, html, css, nothing, repeat } from 'lit';
 import * as db from '../core/db.js';
 import { icon } from '../core/icons.js';
 import { imageKey, loadMedia, PARTS } from '../core/media-items.js';
@@ -42,6 +45,9 @@ const MAP_GAP = 12;
 /** The first view of every image: this share of the original's pixels (0.5: 50 %). */
 const START = 0.5;
 const nf = new Intl.NumberFormat('fr-FR');
+/** The cross-fade of an image changing (ms). */
+const FADE = 350;
+const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** The image's height in the sheet, as a proportion of its width (the grip); null: the default shape. */
 const RATIO_KEY = 'geoflora.mediaRatio';
@@ -59,6 +65,35 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 const hide = e => { /** @type {HTMLElement} */ (e.target).style.visibility = 'hidden'; };
 /** @param {Event} e */
 const unhide = e => { /** @type {HTMLElement} */ (e.target).style.removeProperty('visibility'); };
+/** A thumbnail in, once loaded (a fade). @param {Event} e */
+/**
+ * A still of a shown picture: a canvas painted from it (at most 2048 px wide or high), with its classes and style —
+ * or null when it shows nothing yet. A cross-origin picture taints the canvas: shown, never read.
+ * @param {HTMLImageElement} img @returns {HTMLCanvasElement | null}
+ */
+function paint(img) {
+  if (!img.complete || !img.naturalWidth) return null;
+  const canvas = document.createElement('canvas');
+  const k = Math.min(1, 2048 / Math.max(img.naturalWidth, img.naturalHeight));
+  const r = img.getBoundingClientRect();
+  if (img.classList.contains('backdrop') && r.width && r.height) {
+    // Its « cover »: the middle of the picture, in the box's shape (small: it is blurred).
+    canvas.width = 96; canvas.height = Math.max(1, Math.round(96 * r.height / r.width));
+    const s = Math.max(canvas.width / img.naturalWidth, canvas.height / img.naturalHeight);
+    const w = canvas.width / s, h = canvas.height / s;
+    canvas.getContext('2d')?.drawImage(img, (img.naturalWidth - w) / 2, (img.naturalHeight - h) / 2, w, h, 0, 0, canvas.width, canvas.height);
+  } else {
+    canvas.width = Math.round(img.naturalWidth * k); canvas.height = Math.round(img.naturalHeight * k);
+    canvas.getContext('2d')?.drawImage(img, 0, 0, canvas.width, canvas.height);
+  }
+  canvas.className = img.className;
+  const style = img.getAttribute('style');
+  if (style) canvas.setAttribute('style', style);
+  canvas.setAttribute('aria-hidden', 'true');
+  return canvas;
+}
+
+const fadeIn = e => { /** @type {HTMLElement} */ (e.target).classList.add('in'); };
 
 export class GfMediaViewer extends LitElement {
   static properties = {
@@ -142,11 +177,17 @@ export class GfMediaViewer extends LitElement {
       pointer-events: none; -webkit-user-drag: none; }
     .frame { position: absolute; left: 50%; top: 50%; transform-origin: center; will-change: transform; overflow: hidden; }
     .frame.ready .ph { visibility: hidden; }
-    .frame img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; -webkit-user-drag: none; }
+    .frame img, .frame canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; -webkit-user-drag: none; }
     .frame .ph { filter: blur(10px); transform: scale(1.04); }
-    .frame .disp, .frame .hd { opacity: 0; transition: opacity 0.25s; }
+    .frame .disp, .frame .hd { opacity: 0; transition: opacity 0.35s ease-out; }
     .frame .disp.on, .frame .hd.on { opacity: 1; }
     .stage.animate .frame { transition: transform 0.22s ease-out; }
+    /* The image leaving (a still of it, as it was shown): its backdrop under the new one, the image over it — the one
+       coming fades in above both. */
+    .leaving { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+    /* Thumbnails (filmstrip, mosaic): in once loaded. */
+    img.fade { opacity: 0; transition: opacity 0.35s ease-out; }
+    img.fade.in { opacity: 1; }
     /* ‹ ›: at the bottom of the stage, one in each corner — always there, zoomed or not, over the map when it reaches down. */
     .nav { position: absolute; bottom: 8px; z-index: 4; width: 44px; height: 34px; border: 0; border-radius: var(--gf-radius-pill);
       background: rgb(0 0 0 / 38%); color: #fff; font-size: 1.2rem; display: grid; place-items: center; cursor: pointer; transition: opacity 0.2s; }
@@ -177,9 +218,11 @@ export class GfMediaViewer extends LitElement {
     .minimap { position: absolute; right: 8px; top: 8px; z-index: 3; border: 1px solid rgb(255 255 255 / 45%); border-radius: 4px; overflow: hidden;
       background: rgb(0 0 0 / 70%); box-shadow: 0 2px 12px rgb(0 0 0 / 45%); cursor: crosshair; touch-action: none; transition: opacity 0.3s; }
     .minimap img { display: block; width: 100%; height: 100%; object-fit: fill; pointer-events: none; }
-    .minimap .view { transition: left 0.22s ease-out, top 0.22s ease-out; }
-    .stage.dragging .minimap .view, .minimap.dragging .view { transition: none; }
-    .minimap .view { position: absolute; border: 1px solid rgb(255 255 255 / 85%); border-radius: 2px; box-shadow: 0 0 0 9999px rgb(0 0 0 / 18%); pointer-events: none; }
+    /* The part seen: discreet at rest; lit while the map is used (pointed, dragged), then back to discreet, slowly. */
+    .minimap .view { position: absolute; border: 1px solid rgb(255 255 255 / 38%); border-radius: 2px; box-shadow: 0 0 0 9999px rgb(0 0 0 / 6%); pointer-events: none;
+      transition: left 0.22s ease-out, top 0.22s ease-out, border-color 0.8s ease, box-shadow 0.8s ease; }
+    .minimap:hover .view, .minimap.dragging .view { border-color: rgb(255 255 255 / 90%); box-shadow: 0 0 0 9999px rgb(0 0 0 / 22%), 0 0 0 1px rgb(0 0 0 / 35%); transition-duration: 0.22s, 0.22s, 0.15s, 0.15s; }
+    .stage.dragging .minimap .view, .minimap.dragging .view { transition-property: border-color, box-shadow; }
     .stage.idle .minimap { opacity: 0.9; }
     /* The zoom bar beside the next arrow; left of the map when there is one. */
     .zoombar { right: max(60px, calc(var(--map-w, 0px) + 16px)); }
@@ -260,7 +303,7 @@ export class GfMediaViewer extends LitElement {
     :host([compact]) .skel .thumbs i { width: 52px; height: 52px; }
     @keyframes shimmer { to { background-position: -300% 0; } }
     @media (prefers-reduced-motion: reduce) {
-      .thumbs { scroll-behavior: auto; } .mosaic img, .frame .disp, .frame .hd, .stage.animate .frame, .stage.showing .frame { transition: none; } .zoom-tip { animation: none; } .caption .hd-dot { animation: none; }
+      .thumbs { scroll-behavior: auto; } .mosaic img, .frame .disp, .frame .hd, .stage.animate .frame, .stage.showing .frame, img.fade { transition: none; } .zoom-tip { animation: none; } .caption .hd-dot { animation: none; }
       .skel .stage { animation: none; }
     }
   `];
@@ -355,6 +398,9 @@ export class GfMediaViewer extends LitElement {
       const found = this._items.find(i => i.key === want);
       if (found) { this._filter = 'all'; this.#select(found); }
     }
+    // Another image (whatever the way: ‹ ›, the address, a photo touched on the sheet): the one shown, copied before
+    // it goes, stays under the next one while it fades in.
+    if (changed.has('_key') && changed.get('_key') != null) this.#leave();
     if (changed.has('_key')) this.#resetImage();
     // Until the user zooms or moves, the image keeps the chosen view (its shape and the stage's can still change).
     // Put there at once, never animated: no « speed zoom » when the true shape arrives — the image only fades in.
@@ -437,6 +483,55 @@ export class GfMediaViewer extends LitElement {
   }
 
   /** The place of the item shown among all media, for the host to keep in the address. */
+  /**
+   * The image leaving: a copy of it and of its blurred backdrop, as shown (zoomed or not, half faded in if it was
+   * still arriving), under the image coming — which fades in over it; the copy goes once that one is nearly there.
+   * Its pictures are painted, not reloaded (a canvas from the decoded image: nothing to wait for, no flash).
+   */
+  #leave() {
+    const stage = this.renderRoot.querySelector('.stage');
+    const back = stage?.querySelector(':scope > .leaving.back'), front = stage?.querySelector(':scope > .leaving.front');
+    const frame = stage?.querySelector(':scope > .frame');
+    if (!back || !front || !frame || getComputedStyle(frame).display === 'none' || still()) return;
+    // Quick changes: the copies before keep fading; only the last few are kept.
+    for (const h of [back, front]) while (h.childElementCount > 2) h.firstElementChild?.remove();
+    // The backdrop's copy under the new backdrop, the image's over it (the new blur never dims the image leaving).
+    for (const [el, holder] of /** @type {[Element | null | undefined, Element][]} */ ([[stage?.querySelector(':scope > .backdrop'), back], [frame, front]])) {
+      if (!el) continue;
+      const from = Number(getComputedStyle(el).opacity);
+      // Not a deep clone: a cloned <img> would download its picture again.
+      let root = /** @type {HTMLElement | null} */ (null);
+      if (el.localName === 'img') root = paint(/** @type {HTMLImageElement} */ (el));
+      else {
+        root = /** @type {HTMLElement} */ (el.cloneNode(false));
+        for (const img of el.querySelectorAll(':scope > img')) { const c = paint(/** @type {HTMLImageElement} */ (img)); if (c) root.append(c); }
+      }
+      if (!root) continue;
+      root.style.opacity = '0';
+      holder.append(root);
+      const fade = root.animate([{ opacity: from }, { opacity: from, offset: 0.6 }, { opacity: 0 }], { duration: FADE + 120, easing: 'ease-in', fill: 'forwards' });
+      fade.finished.then(() => root.remove(), () => root.remove());
+    }
+  }
+
+  /** The image coming, once its frame shows: it fades in (from the cache too, where its « load » is at once). */
+  #arrive() {
+    const key = this.#current?.key;
+    const frame = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.stage > .frame'));
+    if (!key || (key === this.#arrived && frame === this.#arrivedFrame) || !frame || !this.#fit) return;
+    this.#arrived = key;
+    this.#arrivedFrame = frame;
+    if (still()) return;
+    for (const el of [this.renderRoot.querySelector('.stage > .backdrop'), frame]) {
+      // A quicker change: the fade before gives way (one at a time).
+      for (const a of el?.getAnimations() || []) if (a.id === 'arrive') a.cancel();
+      el?.animate([{ opacity: 0 }, { opacity: 1 }], { id: 'arrive', duration: FADE, easing: 'ease-out' });
+    }
+  }
+  /** The image whose arrival faded in, and its frame (the same image shown again after the mosaic fades in too). */
+  #arrived = '';
+  /** @type {HTMLElement | null} */ #arrivedFrame = null;
+
   #announce() {
     const at = this._items.findIndex(i => i.key === this.#current?.key);
     if (at >= 0) this.dispatchEvent(new CustomEvent('media-index', { detail: { index: at }, bubbles: true, composed: true }));
@@ -555,8 +650,14 @@ export class GfMediaViewer extends LitElement {
   /** Its true size is known (not only its thumbnail's shape). */
   get #sized() { return Boolean(this._natural && this.#fit) && !this.#guessed; }
 
-  /** The whole image: fitted in the stage — never past 100 % (a small image keeps its size). */
-  get #base() { return this.#sized ? Math.min(1, this.#oneToOne) : 1; }
+  /**
+   * The least zoom: the image fills the stage's width (a tall one is then moved up and down) — never past 100 %: an
+   * original narrower than the stage keeps its size, over the blurred backdrop.
+   */
+  get #base() {
+    const fit = this.#fit;
+    return this.#sized && fit ? Math.min(this._stage.w / fit.w, this.#oneToOne) : 1;
+  }
 
   /** Up to 100 %: one pixel of the original per screen pixel at most (×4 while its size is not known yet). */
   get #maxZoom() { return this.#sized ? Math.max(this.#base, this.#oneToOne) : 4; }
@@ -601,7 +702,7 @@ export class GfMediaViewer extends LitElement {
     this.#maybeHd();
   }
 
-  /** « Ajusté » → « 50 % » (when it is more than the whole image) → « 100 % » → « Ajusté »…, on this image (the padlock keeps it). */
+  /** « Largeur » → « 50 % » (when it is more than the width filled) → « 100 % » → « Largeur »…, on this image (the padlock keeps it). */
   #cycleView() {
     const z = this._z, base = this.#base, start = this.#start, one = this.#maxZoom;
     const near = (/** @type {number} */ a) => Math.abs(z - a) < 0.02;
@@ -758,15 +859,17 @@ export class GfMediaViewer extends LitElement {
     /** @type {HTMLElement} */ (e.currentTarget).classList.remove('dragging');
     this.#pointers.delete(e.pointerId);
     if (this.#pinch) {
-      if (this.#pointers.size < 2) { this.#pinch = null; if (this._z <= Math.max(1, this.#base) + 0.02) { this._z = Math.min(1, Math.max(this._z, this.#base)); this._tx = 0; this._ty = 0; } this.#maybeHd(); }
+      if (this.#pointers.size < 2) { this.#pinch = null; if (this._z <= Math.max(1, this.#base) + 0.02) { this._z = Math.max(this.#base, Math.min(1, this._z)); this._tx = 0; this._ty = 0; } this.#maybeHd(); }
       return;
     }
     const d = this.#drag;
     this.#drag = null;
     if (!d || e.type === 'pointercancel') return;
     const dx = e.clientX - d.x, dy = e.clientY - d.y;
-    // Nothing to move sideways: a quick sideways swipe browses.
-    if (!this.#overflowX && Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && Date.now() - d.t < 700) { this.#go(dx < 0 ? 1 : -1); return; }
+    // Nothing to move sideways — or the image already at its edge that way (the finger went on where it could not):
+    // a quick sideways swipe browses.
+    const blocked = !this.#overflowX || Math.abs(dx) - Math.abs(this._tx - d.tx) > 60;
+    if (blocked && Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5 && Date.now() - d.t < 700) { this.#go(dx < 0 ? 1 : -1); return; }
     if (d.moved) { this.#maybeHd(); return; }
     // A tap: the second one, close in time and place, zooms (a mouse uses dblclick).
     if (e.pointerType === 'mouse') return;
@@ -884,6 +987,7 @@ export class GfMediaViewer extends LitElement {
 
   updated() {
     this.#tellBar();
+    this.#arrive();
     // The same image kept (its address did not change): already loaded, no new « load » to wait for.
     const disp = /** @type {HTMLImageElement | null} */ (this.renderRoot.querySelector('.frame .disp'));
     const item = this.#current;
@@ -1017,9 +1121,9 @@ export class GfMediaViewer extends LitElement {
   /** @param {MediaItem[]} shown @param {MediaItem} item */
   #thumbs(shown, item) {
     return html`<div class="thumbs" role="listbox" aria-label="Médias">
-      ${shown.map(i => html`<button type="button" role="option" class=${i.kind} aria-current=${String(i.key === item.key)} aria-selected=${String(i.key === item.key)}
+      ${repeat(shown, i => i.key, i => html`<button type="button" role="option" class=${i.kind} aria-current=${String(i.key === item.key)} aria-selected=${String(i.key === item.key)}
         title=${[KIND_LABEL[i.kind], i.source].join(' · ')} @click=${() => this.#select(i)}>
-        <img src=${i.thumb} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer"
+        <img class="fade" src=${i.thumb} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @load=${fadeIn}
           @error=${(/** @type {Event} */ e) => this.#thumbError(e, i)} />
       </button>`)}
     </div>`;
@@ -1027,9 +1131,9 @@ export class GfMediaViewer extends LitElement {
 
   /** Mosaic: every image of the filter, in a grid; one touched opens in the scene. @param {MediaItem[]} shown */
   #mosaic(shown) {
-    return html`<div class="mosaic-wrap"><div class="mosaic" role="list" aria-label="Médias">${shown.map(i => html`<button type="button" role="listitem" class=${i.kind}
+    return html`<div class="mosaic-wrap"><div class="mosaic" role="list" aria-label="Médias">${repeat(shown, i => i.key, i => html`<button type="button" role="listitem" class=${i.kind}
       title=${[KIND_LABEL[i.kind], i.source, i.author].filter(Boolean).join(' · ')} @click=${() => { this.#select(i); this._key = i.key; this._opened = true; }}>
-      <img src=${i.thumb} alt=${KIND_LABEL[i.kind]} loading="lazy" decoding="async" referrerpolicy="no-referrer"
+      <img class="fade" src=${i.thumb} alt=${KIND_LABEL[i.kind]} loading="lazy" decoding="async" referrerpolicy="no-referrer" @load=${fadeIn}
         @error=${(/** @type {Event} */ e) => this.#thumbError(e, i)} />
     </button>`)}</div></div>`;
   }
@@ -1058,7 +1162,9 @@ export class GfMediaViewer extends LitElement {
         aria-label=${(KIND_LABEL[item.kind] || 'Image') + (this._plant ? ' de ' + this._plant.scientificName : '') + ' — double-clic pour zoomer'}
         @pointerdown=${this.#down} @pointermove=${this.#move} @pointerup=${this.#up} @pointercancel=${this.#up}
         @dblclick=${this.#dblclick} @wheel=${this.#wheel} @pointerleave=${() => { if (!this.#drag) this._idle = matchMedia('(hover: hover)').matches; }}>
+      <div class="leaving back" aria-hidden="true"></div>
       ${fit ? html`<img class="backdrop" src=${item.thumb} alt="" aria-hidden="true" decoding="async" referrerpolicy="no-referrer" draggable="false" @error=${hide} @load=${unhide} />` : nothing}
+      <div class="leaving front" aria-hidden="true"></div>
       <div class="frame ${this._loaded ? 'ready' : ''}" style=${frame}>
         <img class="ph" src=${item.thumb} alt="" decoding="async" referrerpolicy="no-referrer" draggable="false" @error=${hide} @load=${unhide} />
         <img class="disp ${this._loaded ? 'on' : ''}" src=${src} alt=${(KIND_LABEL[item.kind] || 'Image') + (this._plant ? ' de ' + this._plant.scientificName : '')}
@@ -1082,7 +1188,7 @@ export class GfMediaViewer extends LitElement {
   }
 
   /**
-   * The view button: the view shown (« Ajusté », or its zoom: « 50 % », « 100 % »…), a touch for the next
+   * The view button: the view shown (« Largeur », or its zoom: « 50 % », « 100 % »…), a touch for the next
    * one — the choice is kept for the next images and plants.
    * @param {number} z @param {number} pct @param {number} one
    */
@@ -1095,8 +1201,9 @@ export class GfMediaViewer extends LitElement {
 
   #viewButton(z, pct, one) {
     const near = (/** @type {number} */ a) => Math.abs(z - a) < 0.02, base = this.#base, start = this.#start, zoomed = start > base + 0.02;
-    const label = near(base) ? 'Ajusté' : nf.format(pct) + ' %';
-    const next = near(base) ? (zoomed ? nf.format(Math.round(start / one * 100)) + ' %' : '100 %') : zoomed && near(start) && this.#maxZoom > start + 0.02 ? '100 %' : 'l’image entière';
+    // The least zoom: the width filled (« Largeur »), or an original narrower than the stage at its size (100 %).
+    const label = near(base) && base < this.#maxZoom - 0.02 ? 'Largeur' : nf.format(pct) + ' %';
+    const next = near(base) ? (zoomed ? nf.format(Math.round(start / one * 100)) + ' %' : '100 %') : zoomed && near(start) && this.#maxZoom > start + 0.02 ? '100 %' : 'toute la largeur';
     return html`<button type="button" class="pct" title=${'Passer à : ' + next} aria-label=${label + ' — passer à ' + next}
       @click=${() => this.#cycleView()}>${label}</button>`;
   }
@@ -1121,7 +1228,7 @@ export class GfMediaViewer extends LitElement {
     return html`<div class="minimap" role="img" aria-label="Où se trouve la vue sur l’image entière" style=${`width:${size.w}px;height:${size.h}px`}
         @pointerdown=${(/** @type {PointerEvent} */ e) => this.#mapDown(e)} @pointermove=${(/** @type {PointerEvent} */ e) => this.#mapMove(e)}
         @pointerup=${() => this.#mapUp()} @pointercancel=${() => this.#mapUp()}>
-      <img src=${item.thumb} alt="" referrerpolicy="no-referrer" draggable="false" />
+      ${repeat([item], i => i.key, i => html`<img class="fade" src=${i.thumb} alt="" referrerpolicy="no-referrer" draggable="false" @load=${fadeIn} />`)}
       <div class="view" style=${`left:${left * 100}%;top:${top * 100}%;width:${vw * 100}%;height:${vh * 100}%`}></div>
     </div>`;
   }
