@@ -324,10 +324,16 @@ function trefleFacts(details) {
   return facts.slice(0, 60);
 }
 
-/** A place reached (a rubric, a block, a theme of the article) is kept in place this long while the content above it still arrives — unless the hand moves the sheet first. */
-const KEEP_MS = 2500;
-/** A rubric's place kept longer when the place read on the previous plant (a theme of the article) is still to come. */
-const KEEP_WAIT_MS = 4500;
+/**
+ * A place reached (a rubric, a block, a theme of the article) is kept in place while the plant's data still arrives
+ * above it — until the hand moves the sheet, another place is reached, or at the latest after this long (ms).
+ */
+const KEEP_MAX_MS = 20000;
+/** Everything arrived: the place is kept until the sheet has not grown for this long (ms). */
+const KEEP_QUIET_MS = 700;
+/** All the rubrics stacked above and below (« full ») when that leaves this share of the sheet to read; back to one at the top under the lower share (no flip for a few pixels: a phone's address bar). */
+const STACK_ENTER = 0.62;
+const STACK_LEAVE = 0.52;
 
 export class GfPlantDetail extends LitElement {
   static properties = {
@@ -367,7 +373,7 @@ export class GfPlantDetail extends LitElement {
     _paneDialog: { state: true },
     /** The plant's alerts, as counts on the rubric icons (alerts.js). */
     _alerts: { state: true },
-    /** The sheet is wide enough for the rubrics in a column on its left. */
+    /** The sheet is wide enough for its panes beside it (else bands above and under it). */
     /** The edge shown over the whole plant pane for now (Échap or its button puts it back). */
     _maxEdge: { state: true },
     /** Said to screen readers: the last move of a block (Mode King). */
@@ -875,7 +881,7 @@ export class GfPlantDetail extends LitElement {
       font-size: 0.82rem; font-weight: 600; letter-spacing: 0; text-transform: none; }
     :host([stack='full']) .rub-head { top: calc(var(--stack, 0) * var(--rub-h)); bottom: calc((var(--count, 1) - var(--stack, 0) - 1) * var(--rub-h) + var(--bar-h, 0px));
       box-shadow: 0 -1px 0 var(--gf-border); }
-    .rubric:first-of-type > .rub-head, .blocks > .rub-head:first-of-type { margin-top: 14px; }
+    .rubric:first-of-type > .rub-mark { margin-top: 14px; }
     .rub-go { flex: 1; min-width: 0; height: 100%; min-height: 0; display: flex; align-items: center; justify-content: flex-start; gap: 8px; padding: 0; border: 0; border-radius: 0; background: none; color: var(--gf-text);
       font: inherit; text-align: left; cursor: pointer; }
     .rub-go:focus-visible, .rub-toc:focus-visible { outline: none; box-shadow: var(--gf-focus); border-radius: var(--gf-radius-sm); }
@@ -884,28 +890,32 @@ export class GfPlantDetail extends LitElement {
     .rub-badge { flex: none; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: var(--gf-radius-pill); display: inline-grid; place-items: center;
       font-size: 0.7rem; font-weight: 700; color: #fff; background: var(--gf-warn, #b45309); }
     .rub-badge.danger { background: var(--gf-danger, #dc2626); }
+    @media (prefers-color-scheme: dark) { .rub-badge { color: #1d1405; } }
     .rub-toc { flex: none; width: 28px; height: 28px; min-height: 0; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--gf-text-muted); cursor: pointer; }
     .rub-toc:hover, .rub-go:hover .rub-label { color: var(--gf-text); }
     .rub-head[data-flash] { animation: rub-flash 1.2s ease-out; }
     @keyframes rub-flash { from { background: var(--gf-accent-soft); } }
     .rub-note { margin: 8px 0 4px; font-size: 0.82rem; color: var(--gf-text-muted); }
     .rubric > .block { scroll-margin-top: var(--lvl1); }
-    .rubric > .block:first-of-type { margin-top: 12px; }
-    .rubric > .block > .block-title { position: sticky; top: var(--lvl1); z-index: 4; background: var(--gf-surface); margin: 0 -6px 8px; padding: 4px 6px; }
+    .rubric > .block > .block-title { position: sticky; top: var(--lvl1); z-index: 4; background: var(--gf-surface); margin: 0 -6px 8px; padding: 4px 6px; box-shadow: 0 1px 0 var(--gf-border); }
     .rubric > .block > .wiki-theme, .rubric .wiki-theme { scroll-margin-top: var(--lvl1); }
-    .rubric .wiki-theme[open] > summary { position: sticky; top: var(--lvl1); z-index: 3; background: var(--gf-surface); }
-    .rubric > .block:not(.headless) .wiki-theme { scroll-margin-top: calc(var(--lvl1) + 32px); }
-    .rubric > .block:not(.headless) .wiki-theme[open] > summary { top: calc(var(--lvl1) + 32px); }
+    .rubric .wiki-theme[open] > summary { position: sticky; top: var(--lvl1); z-index: 3; background: var(--gf-surface); box-shadow: 0 1px 0 var(--gf-border); }
+    .rubric > .block:not(.headless) .wiki-theme { scroll-margin-top: calc(var(--lvl1) + var(--title-h, 38px)); }
+    .rubric > .block:not(.headless) .wiki-theme[open] > summary { top: calc(var(--lvl1) + var(--title-h, 38px)); }
     /* Room after the last rubric: it too comes right under the rubrics stuck above it. */
+    .blocks.rubrics { --room-stack: var(--rub-h); --room-gap: 160px; }
+    :host([stack='full']) .blocks.rubrics { --room-stack: calc(var(--count, 1) * var(--rub-h)); --room-gap: 120px; }
     :host(:not([edged])) .blocks.rubrics::after, .frame.edged .main[data-drop-node='sheet'] .blocks.rubrics::after { content: ''; display: block; flex: none;
-      height: max(0px, calc(var(--host-h, 100vh) - var(--count, 1) * var(--rub-h) - var(--bar-h, 0px) - 120px)); }
-    :host(:not([stack='full'])) .blocks.rubrics::after { height: max(0px, calc(var(--host-h, 100vh) - var(--rub-h) - var(--bar-h, 0px) - 160px)); }
+      height: max(0px, calc(var(--sheet-h, 100vh) - var(--room-stack) - var(--bar-h, 0px) - var(--room-gap))); }
     /* Mode King: the plain list — any block can come under the top (room after the last one). */
     .frame.edged .main[data-drop-node='sheet']:has(.blocks.king)::after { content: ''; display: block; height: max(0px, calc(100% - 160px)); }
     /* The table of contents: over everything (the top layer), under the header touched. */
     .toc { position: fixed; inset: auto; margin: 0; width: min(300px, calc(100vw - 16px)); max-height: min(70vh, 560px); overflow-y: auto; padding: 8px; box-sizing: border-box;
       border: 1px solid var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface); color: var(--gf-text); box-shadow: var(--gf-shadow-float); }
-    .toc:not([popover]), .toc:not(:popover-open):not([data-open]) { display: none; }
+    .toc { display: none; }
+    .toc[data-open] { display: block; }
+    .toc:popover-open { display: block; }
+    .toc:focus { outline: none; }
     .toc-head { display: flex; align-items: center; gap: 8px; padding: 2px 4px 6px; border-bottom: 1px solid var(--gf-border); margin-bottom: 4px; }
     .toc-head b { flex: 1; }
     .toc-head .entity { font-size: 0.7rem; font-weight: 600; padding: 1px 8px; border-radius: var(--gf-radius-pill); background: var(--gf-surface-2); color: var(--gf-text-muted); }
@@ -920,6 +930,7 @@ export class GfPlantDetail extends LitElement {
     .toc .toc-rub .bi { color: var(--gf-accent); }
     .toc .toc-rub span:not(.rub-badge) { flex: 1; }
     .toc ul ul button { color: var(--gf-text-muted); font-size: 0.82rem; min-height: 28px; }
+    .toc button[aria-current] { background: var(--gf-accent-soft); color: var(--gf-text); }
     .block[data-flash] { animation: flash 1.2s ease-out; }
     @keyframes flash { from { box-shadow: 0 0 0 3px var(--gf-accent); } to { box-shadow: 0 0 0 3px transparent; } }
     @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } .block[data-flash], .rub-head[data-flash] { animation: none; } }
@@ -1043,6 +1054,13 @@ export class GfPlantDetail extends LitElement {
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
     if (changed.has('preview') && changed.get('preview') === true && !this.preview) this.#promoted = true;
+    // Another view or Mode King reorders the sheet: the place read now is reached again once drawn (#placeAgain).
+    const king = Boolean(this.#store.state.kingMode);
+    if (this.#placed && this._plant && !this.preview && !this.only && !this.panesOnly && ((changed.has('view') && changed.get('view') !== undefined) || king !== this.#king)) {
+      const { cat, block, wiki } = this.#readPlace();
+      if (cat || block) this.#rePlace = { cat, block, wiki };
+    }
+    this.#king = king;
     // The panels opened follow to the next plant (not from a preview card, which is not read).
     if (!this.preview && !this.only) {
       if (changed.has('_subsOpen')) sheetSession.subsOpen = this._subsOpen;
@@ -1086,6 +1104,11 @@ export class GfPlantDetail extends LitElement {
 
   /** @param {number} id */
   async #load(id) {
+    // The hand had just stopped on the previous plant: its place is noted now, before it goes.
+    if (this.#readTimer) { clearTimeout(this.#readTimer); this.#readTimer = 0; if (this.#handAt && this._plant) this.#noteRead(); }
+    this.#handAt = 0;
+    this.#lastPlace = null;
+    this.#pending = new Set();
     this.#abort?.abort();
     const abort = this.#abort = new AbortController();
     this._plant = undefined;
@@ -1164,9 +1187,14 @@ export class GfPlantDetail extends LitElement {
     // In a pane: that block's data only.
     const shown = (/** @type {string} */ key) => this.only ? key === this.only : !isHidden(v, key);
     const qid = plant.identifiers?.wikidata || details?.identifiers?.wikidata?.id;
-    const settle = (/** @type {Promise<any>} */ task, /** @type {(v: any) => void} */ set) =>
-      task.then(v => { if (!signal?.aborted && this._plant === plant) set(v ?? null); })
+    // Each load in flight is counted: a place reached is kept while the data still arrives (#keep).
+    const pending = this.#pending;
+    const settle = (/** @type {Promise<any>} */ task, /** @type {(v: any) => void} */ set) => {
+      const done = task.then(v => { if (!signal?.aborted && this._plant === plant) set(v ?? null); })
         .catch(() => { if (!signal?.aborted && this._plant === plant) set(null); });
+      pending.add(done);
+      done.finally(() => { pending.delete(done); if (!pending.size && pending === this.#pending) this.requestUpdate(); });
+    };
     const once = (/** @type {string} */ key) => !this.#requested.has(key) && Boolean(this.#requested.add(key));
     // Wikipédia feeds its block and, by theme, Descriptions, Calendrier, Habitat, Occurrences, Usages and Noms.
     if (['wikipedia', 'descriptions', 'calendar', 'gbifProfile', 'occurrences', 'uses', 'names'].some(shown) && once('wiki')) settle(sources.wikipedia(plant, qid, signal, v), x => { this._wiki = x; });
@@ -1523,7 +1551,7 @@ export class GfPlantDetail extends LitElement {
       return html`<section class="wiki-x"><h3>${x.title.split(' › ').pop()}</h3>${text.split('\n').map(p => html`<p>${p}</p>`)}
         ${whole ? nothing : html`<button class="link" type="button" @click=${() => { this._wikiOpen = new Set([...this._wikiOpen, id]); }}>Lire la suite</button>`}</section>`;
     })}${under ? html`<p class="credit">D’après <a href=${this._wiki.url} target="_blank" rel="noopener">Wikipédia</a> · CC BY-SA 4.0
-      ${reader ? html` · <button class="link" type="button" @click=${() => this.#wikiGo(themes[0])}>Lire dans l’article</button>` : nothing}</p>` : nothing}</div>`;
+      ${reader ? html` · <button class="link" type="button" @click=${() => this.goTo('wiki:' + themes[0])}>Lire dans l’article</button>` : nothing}</p>` : nothing}</div>`;
   }
 
   /** The themes of the article, in the menu's order. */
@@ -1536,10 +1564,14 @@ export class GfPlantDetail extends LitElement {
   async #wikiGo(t) {
     if (!this.#wikiThemeOpen(t)) this._wikiOpen = new Set([...this._wikiOpen, 'theme:' + t]);
     await this.updateComplete;
-    const el = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('#wiki-' + t));
-    // The article elsewhere (an edge, a pane) or not drawn yet: to the block itself.
-    if (!el) { this.#goTo('wikipedia'); return; }
-    this.#arrive(el);
+    const el = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.blocks #wiki-' + t));
+    if (el) { this.#arrive(el); return; }
+    // The article in a pane: the theme brought to the top of its pane; the sheet does not move.
+    const there = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.edge-body #wiki-' + t));
+    const body = there?.closest('.edge-body');
+    if (there && body) { body.scrollTop += there.getBoundingClientRect().top - body.getBoundingClientRect().top - 4; return; }
+    // Not drawn yet: to the block itself.
+    this.#goTo('wikipedia');
   }
 
   /**
@@ -1558,7 +1590,7 @@ export class GfPlantDetail extends LitElement {
     return html`<div class="description wiki">
       ${themes.length ? html`<nav class="wiki-menu" aria-label="Sommaire de l’article Wikipédia">
         <span class="wiki-logo" aria-hidden="true">${icon('wikipedia')}</span>
-        ${themes.map(t => html`<a href=${'#wiki-' + t} @click=${(/** @type {Event} */ e) => { e.preventDefault(); this.#wikiGo(t); }}>${WIKI_THEMES[t][0]}</a>`)}
+        ${themes.map(t => html`<a href=${'#wiki-' + t} @click=${(/** @type {Event} */ e) => { e.preventDefault(); this.goTo('wiki:' + t); }}>${WIKI_THEMES[t][0]}</a>`)}
       </nav>` : nothing}
       ${wiki.description ? html`<p class="wiki-desc">${wiki.description}</p>` : nothing}
       ${wiki.extract.split('\n').map((/** @type {string} */ p) => html`<p>${p}</p>`)}
@@ -1653,29 +1685,23 @@ export class GfPlantDetail extends LitElement {
     const badge = this.#badge(g.cat);
     return html`<div class="rubric" data-cat=${g.cat} style=${`--stack:${i}`}>
       <i class="rub-mark" data-cat=${g.cat} aria-hidden="true"></i>
-      <h2 class="rub-head">
+      <div class="rub-head">
         <button type="button" class="rub-go" title=${c.question + (badge ? '\n' + badge.text.join('\n') : '')}
           aria-label=${c.label + (badge ? ` — ${badge.count} alerte${badge.count > 1 ? 's' : ''}` : '')}
-          @click=${(/** @type {Event} */ e) => this.#onRubric(g.cat, e)}><span class="rub-ic" aria-hidden="true">${icon(/** @type {any} */ (c.icon))}</span><span class="rub-label">${c.label}</span>${badge
+          @click=${() => this.#onRubric(g.cat)}><span class="rub-ic" aria-hidden="true">${icon(/** @type {any} */ (c.icon))}</span><span class="rub-label">${c.label}</span>${badge
             ? html`<span class="rub-badge ${badge.tone}" aria-hidden="true">${badge.count}</span>` : nothing}</button>
         ${this.preview ? nothing : html`<button type="button" class="rub-toc" aria-label="Sommaire de la fiche" title="Sommaire : les rubriques, leurs blocs, les thèmes de l’article"
-          @click=${(/** @type {Event} */ e) => this.#openToc(e)}>${icon('list-ul')}</button>`}
-      </h2>
+          aria-haspopup="dialog" aria-controls="toc" aria-expanded="false" @click=${(/** @type {Event} */ e) => this.#openToc(e)}>${icon('list-ul')}</button>`}
+      </div>
       ${repeat(g.keys, k => k, k => this.#plainBlock(k, ctx))}
       ${g.pane.length ? html`<p class="rub-note">${g.pane.map(k => blockTitle(k)).join(' · ')} : dans un volet.
         <button type="button" class="link" @click=${() => this.#goTo(g.pane[0])}>Afficher</button></p>` : nothing}
-      ${g.keys.length || g.pane.length ? nothing : html`<p class="rub-note">${this._details === undefined ? 'Chargement…' : 'Rien dans les sources consultées.'}</p>`}
+      ${g.keys.length || g.pane.length ? nothing : html`<p class="rub-note">${this.#loading ? 'Chargement…' : 'Rien dans les sources consultées.'}</p>`}
     </div>`;
   }
 
-  /**
-   * A touch on a rubric's header: to the rubric's start — or, the rubric being read with its header alone at the
-   * top (pushed stack), the table of contents (to go elsewhere). @param {string} cat @param {Event} e
-   */
-  #onRubric(cat, e) {
-    if (this.getAttribute('stack') !== 'full' && this.#readCat() === cat) { this.#openToc(e); return; }
-    this.goTo('rub:' + cat);
-  }
+  /** A touch on a rubric's header: to the rubric's start, in every stack (the ☰ beside it: the table of contents). @param {string} cat */
+  #onRubric(cat) { this.goTo('rub:' + cat); }
 
   /**
    * The table of contents (a popover, over everything): every rubric, its blocks, the article's themes — a touch
@@ -1684,37 +1710,116 @@ export class GfPlantDetail extends LitElement {
   #toc(ctx) {
     const items = this.#tocItems(ctx);
     const lock = sheetSession.anchorLock;
-    return html`<div class="toc" popover role="dialog" aria-label="Sommaire de la fiche">
+    return html`<div class="toc" id="toc" popover tabindex="-1" role="dialog" aria-label="Sommaire de la fiche" @beforetoggle=${this.#onTocToggle} @keydown=${this.#onTocKey}>
       <div class="toc-head">${this.#entity ? html`<span class="entity">${this.#entity}</span>` : nothing}<b>Sommaire</b>
         <button type="button" class="icon-btn toc-lock" aria-pressed=${String(lock)}
           title=${lock ? 'Ancre verrouillée : chaque plante s’ouvre à l’endroit lu — toucher pour déverrouiller' : 'Verrouiller l’ancre : chaque plante s’ouvrira à l’endroit lu maintenant'}
           aria-label=${lock ? 'Déverrouiller l’ancre' : 'Verrouiller l’ancre'} @click=${() => { setAnchorLock(!lock); if (!lock) this.#noteRead(true); this.requestUpdate(); }}>${icon(lock ? 'lock-fill' : 'unlock')}</button></div>
       <ul>${items.map(c => html`<li>
-        <button type="button" class="toc-rub" @click=${() => this.#tocGo('rub:' + c.key)}>${icon(/** @type {any} */ (c.icon))}<span>${c.label}</span>${c.badge
+        <button type="button" class="toc-rub" data-key=${'rub:' + c.key} @click=${() => this.#tocGo('rub:' + c.key)}>${icon(/** @type {any} */ (c.icon))}<span>${c.label}</span>${c.badge
           ? html`<span class="rub-badge ${c.badge.tone}">${c.badge.count}</span>` : nothing}</button>
         ${c.blocks.length > 1 || c.blocks.some(b => b.subs?.length || b.note) ? html`<ul>${c.blocks.map(b => html`<li>
-          <button type="button" @click=${() => this.#tocGo(b.key)}>${b.title}${b.note ? html` <small>(${b.note})</small>` : nothing}</button>
-          ${b.subs?.length ? html`<ul class="subs">${b.subs.map(x => html`<li><button type="button" @click=${() => this.#tocGo(x.key)}>${x.title}</button></li>`)}</ul>` : nothing}
+          <button type="button" data-key=${b.key} @click=${() => this.#tocGo(b.key)}>${b.title}${b.note ? html` <small>(${b.note})</small>` : nothing}</button>
+          ${b.subs?.length ? html`<ul class="subs">${b.subs.map(x => html`<li><button type="button" data-key=${x.key} @click=${() => this.#tocGo(x.key)}>${x.title}</button></li>`)}</ul>` : nothing}
         </li>`)}</ul>` : nothing}
       </li>`)}</ul>
     </div>`;
   }
 
-  /** The table of contents opened under the header touched. @param {Event} e */
+  get #tocEl() { return /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.toc')); }
+  #tocOpen() { const pop = this.#tocEl; return Boolean(pop && (pop.showPopover ? pop.matches(':popover-open') : pop.hasAttribute('data-open'))); }
+
+  /**
+   * The table of contents, from a header's ☰: under it, or over it when there is no room under (the stack at the
+   * bottom), always whole on the screen; the place read marked, the focus in it. The ☰ touched again closes it.
+   * @param {Event} e
+   */
   #openToc(e) {
-    const pop = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.toc'));
+    const pop = this.#tocEl;
     if (!pop) return;
-    const r = /** @type {HTMLElement} */ (e.currentTarget).getBoundingClientRect();
-    pop.style.top = Math.round(Math.min(r.bottom + 4, innerHeight - 160)) + 'px';
-    pop.style.left = Math.round(Math.max(8, Math.min(r.left, innerWidth - 300))) + 'px';
-    if (pop.showPopover) { if (pop.matches(':popover-open')) pop.hidePopover(); else pop.showPopover(); }
-    else pop.toggleAttribute('data-open');
+    const button = /** @type {HTMLElement} */ (e.currentTarget);
+    // Open, or closed by this very touch (a popover closes as soon as the pointer goes down outside it): closed.
+    if (this.#tocOpen() || (this.#tocClosedFrom === button && performance.now() - this.#tocClosedAt < 400)) { this.#closeToc(true); return; }
+    this.#tocFrom = button;
+    this.#tocMark(pop);
+    if (pop.showPopover) pop.showPopover(); else { pop.setAttribute('data-open', ''); this.#onTocToggle(/** @type {any} */ ({ newState: 'open' })); }
+    this.#tocPlace(pop, button.getBoundingClientRect());
+    const at = /** @type {HTMLElement | null} */ (pop.querySelector('button[aria-current="location"]') || pop.querySelector('button[aria-current]') || pop.querySelector('ul button'));
+    if (at) { at.focus({ preventScroll: true }); pop.scrollTop = Math.max(0, at.offsetTop - pop.clientHeight / 3); }
   }
+
+  /** Where the table of contents goes: 8 px from every edge of the screen. @param {HTMLElement} pop @param {DOMRect} r */
+  #tocPlace(pop, r) {
+    const m = 8;
+    pop.style.maxHeight = '';
+    const h = pop.offsetHeight, w = pop.offsetWidth || 300;
+    const below = innerHeight - r.bottom - 4 - m, above = r.top - 4 - m;
+    let top;
+    if (h <= below) top = r.bottom + 4;
+    else if (h <= above) top = r.top - 4 - h;
+    else if (below >= above) { top = r.bottom + 4; pop.style.maxHeight = Math.max(120, below) + 'px'; }
+    else { top = m; pop.style.maxHeight = above + 'px'; }
+    pop.style.top = Math.round(top) + 'px';
+    pop.style.left = Math.round(Math.max(m, Math.min(r.left, innerWidth - w - m))) + 'px';
+  }
+
+  /** The place read, marked in the table of contents: its rubric, and its block or theme. @param {HTMLElement} pop */
+  #tocMark(pop) {
+    const { cat, block, wiki } = this.#readPlace();
+    const here = wiki ? 'wiki:' + wiki : block;
+    for (const b of /** @type {NodeListOf<HTMLElement>} */ (pop.querySelectorAll('button[data-key]'))) {
+      const k = b.dataset.key;
+      if (here && k === here) b.setAttribute('aria-current', 'location');
+      else if (cat && k === 'rub:' + cat) b.setAttribute('aria-current', 'true');
+      else b.removeAttribute('aria-current');
+    }
+  }
+
+  /** @param {boolean} [back] the focus back on the ☰ it was opened from */
+  #closeToc(back = false) {
+    const pop = this.#tocEl;
+    if (!pop || !this.#tocOpen()) return;
+    if (pop.hidePopover) pop.hidePopover(); else { pop.removeAttribute('data-open'); this.#onTocToggle(/** @type {any} */ ({ newState: 'closed' })); }
+    if (back) this.#tocFrom?.focus({ preventScroll: true });
+  }
+
+  /**
+   * Opening or closing (a touch elsewhere, Échap, a place chosen): the ☰ says so. Before the change, at once — a
+   * touch on the ☰ closes it on pointer down, then its click must know (the toggle event comes after the click).
+   * @param {Event} e
+   */
+  #onTocToggle = e => {
+    const open = /** @type {any} */ (e).newState === 'open';
+    this.#tocFrom?.setAttribute('aria-expanded', String(open));
+    if (open) return;
+    this.#tocClosedAt = performance.now();
+    this.#tocClosedFrom = this.#tocFrom;
+  };
+
+  /**
+   * Keys in the table of contents: ↑ ↓ (Début, Fin) from entry to entry; Échap closes it, back to its ☰ — and
+   * neither Échap nor ← → reach the page (Découvrir would close the plant, the lists would change it).
+   * @param {KeyboardEvent} e
+   */
+  #onTocKey = e => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.#closeToc(true); return; }
+    if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) {
+      const list = [...(/** @type {HTMLElement} */ (e.currentTarget)).querySelectorAll('button')];
+      const i = list.indexOf(/** @type {any} */ (this.renderRoot).activeElement);
+      const next = e.key === 'Home' ? 0 : e.key === 'End' ? list.length - 1 : (i + (e.key === 'ArrowDown' ? 1 : -1) + list.length) % list.length;
+      /** @type {HTMLElement} */ (list[next])?.focus();
+      e.preventDefault(); e.stopPropagation();
+      return;
+    }
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') e.stopPropagation();
+  };
+  /** @type {HTMLElement | null} */ #tocFrom = null;
+  /** @type {HTMLElement | null} */ #tocClosedFrom = null;
+  #tocClosedAt = 0;
 
   /** @param {string} key */
   #tocGo(key) {
-    const pop = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.toc'));
-    if (pop?.hidePopover && pop.matches(':popover-open')) pop.hidePopover(); else pop?.removeAttribute('data-open');
+    this.#closeToc();
     this.goTo(key);
   }
 
@@ -1878,7 +1983,7 @@ export class GfPlantDetail extends LitElement {
     setPaneSizes(this.view, node.id, sizes);
   }
 
-  /** The sheet, with the side rail of categories and the dock of pinned blocks when there are some. @param {any} ctx @param {unknown} article */
+  /** The sheet, with its panes when it has some. @param {any} ctx @param {unknown} article */
   #layout(ctx, article) { return this.#docked(ctx, article); }
 
   // ── The table of contents, places reached and kept, the place read ─────────────────────────────────────
@@ -1983,68 +2088,157 @@ export class GfPlantDetail extends LitElement {
    * Arrives at `el`, right under the rubrics stuck above it (its scroll-margin): at once — gliding only when it is
    * near (within a screen, motion allowed) — lit, then kept there while the content above it still arrives (#keep).
    * `quiet`: no glide, no light (a new plant opening there). `prefer`: a finer place still to come, reached when it
-   * comes (the article's theme read on the previous plant).
-   * @param {Element} el @param {{ flash?: Element | null, prefer?: (() => Element | null) | null, wait?: boolean, quiet?: boolean }} [opts]
+   * comes (the article's theme read on the previous plant). Only a place of the sheet itself: a pane has its own.
+   * @param {Element} el @param {{ flash?: Element | null, prefer?: (() => Element | null) | null, quiet?: boolean }} [opts]
    */
-  #arrive(el, { flash = el, prefer = null, wait = false, quiet = false } = {}) {
+  #arrive(el, { flash = el, prefer = null, quiet = false } = {}) {
     const scroller = this.#sheetScroller;
     this.#letGo();
+    if (!this.#inSheet(el)) return;
     this.#handAt = 0;
+    this.#lastPlace = { el, prefer };
     const d = this.#offset(el, scroller);
     const glide = !quiet && Math.abs(d) > 1 && Math.abs(d) < scroller.clientHeight && 'onscrollend' in window && !matchMedia('(prefers-reduced-motion: reduce)').matches;
     if (Math.abs(d) > 1) scroller.scrollTo({ top: scroller.scrollTop + d, behavior: glide ? 'smooth' : 'auto' });
     this.#padTo(el);
+    // One place lit at a time: the one before goes out.
+    this.#lit?.removeAttribute('data-flash');
     const lit = () => {
+      this.#litOff = null;
       if (!flash || quiet) return;
+      this.#lit = /** @type {HTMLElement} */ (flash);
       flash.removeAttribute('data-flash');
       void (/** @type {HTMLElement} */ (flash)).offsetWidth;
       flash.setAttribute('data-flash', '');
       setTimeout(() => flash.removeAttribute('data-flash'), 1300);
     };
-    if (glide) scroller.addEventListener('scrollend', lit, { once: true }); else lit();
-    this.#keep(el, { prefer, ms: wait ? KEEP_WAIT_MS : KEEP_MS, glide });
+    if (glide) { scroller.addEventListener('scrollend', lit, { once: true }); this.#litOff = () => scroller.removeEventListener('scrollend', lit); } else lit();
+    this.#keep(el, { prefer, glide });
   }
+  /** The place reached last (with its finer place to come), to reach again when the stack changes. @type {{ el: Element, prefer: (() => Element | null) | null } | null} */
+  #lastPlace = null;
+  /** @type {HTMLElement | null} */ #lit = null;
+  /** @type {(() => void) | null} */ #litOff = null;
+
+  /** In the sheet itself (not in one of its panes). @param {Element} el */
+  #inSheet(el) {
+    const scroller = this.#sheetScroller;
+    return el.isConnected && !el.closest('.edge-body') && (scroller === this || scroller.contains(el));
+  }
+
+  /** Data of the plant still on its way (the details, the article, GBIF, the open data): what is there may still grow. */
+  get #loading() { return this._details === undefined || this.#pending.size > 0; }
+  /** The plant's loads in flight (#loadExtras). @type {Set<Promise<any>>} */
+  #pending = new Set();
 
   /**
    * Keeps `el` at its place while the content above it still arrives (photos, the article, other blocks' data): at
-   * once, each time the sheet grows — for a moment only, never against the hand (wheel, touch, keys, pointer let
-   * go at once: #onHand), never past another place reached or another plant.
-   * @param {Element} el @param {{ prefer: (() => Element | null) | null, ms: number, glide: boolean }} opts
+   * once, each time the sheet grows — until the plant's data has all arrived and the sheet has stopped growing
+   * (KEEP_QUIET_MS; KEEP_MAX_MS at most), never against the hand (wheel, touch, keys, pointer let go at once:
+   * #onHand), never past another place reached or another plant. A finer place to come (`prefer`) is reached when
+   * it comes, as long as it is kept. `at`: kept where it is now (px from the sheet's top) instead of at its place —
+   * what the eye reads when the hand stopped (#holdEye); `outer` (its block) kept instead if it goes.
+   * @param {Element} el @param {{ prefer?: (() => Element | null) | null, glide?: boolean, at?: number | null, outer?: Element | null }} opts
    */
-  #keep(el, { prefer, ms, glide }) {
+  #keep(el, { prefer = null, glide = false, at = null, outer = null }) {
     const scroller = this.#sheetScroller;
-    let target = el, gliding = glide;
+    const start = performance.now();
+    const top = (/** @type {Element} */ x) => x.getBoundingClientRect().top - scroller.getBoundingClientRect().top;
+    const outerAt = outer && at !== null ? top(outer) : 0;
+    let target = el, gliding = glide, grewAt = start, timer = 0, want = at;
     const fix = () => {
       if (!this.isConnected) { this.#letGo(); return; }
       const better = prefer?.();
-      if (better && better !== target) { target = better; this.#padTo(target); }
+      if (better && better !== target && this.#inSheet(better)) { target = better; this.#lastPlace = { el: better, prefer }; this.#padTo(target); }
+      if (!target.isConnected && outer?.isConnected) { target = outer; want = outerAt; }
       if (gliding || !target.isConnected) return;
-      const d = this.#offset(target, scroller);
+      const d = want === null ? this.#offset(target, scroller) : top(target) - want;
       if (Math.abs(d) > 1) scroller.scrollTop += d;
     };
-    const grow = new ResizeObserver(fix);
-    const body = this.renderRoot.querySelector('article');
+    const grow = new ResizeObserver(() => { grewAt = performance.now(); fix(); });
+    let body = this.renderRoot.querySelector('article');
     if (body) grow.observe(body);
+    // Each render too (before it is painted): the article itself may be drawn anew (the details arrived).
+    this.#keepFix = () => {
+      const now = this.renderRoot.querySelector('article');
+      if (now !== body) { if (body) grow.unobserve(body); body = now; if (body) grow.observe(body); }
+      grewAt = performance.now();
+      fix();
+    };
     const end = () => { gliding = false; fix(); };
     scroller.addEventListener('scrollend', end);
-    const timer = setTimeout(() => this.#letGo(), ms);
-    this.#keeper = () => { grow.disconnect(); scroller.removeEventListener('scrollend', end); clearTimeout(timer); };
+    // One hand on the place while it is kept: the browser's own anchoring (which would hold another line) waits.
+    scroller.style.overflowAnchor = 'none';
+    const check = () => {
+      const now = performance.now();
+      if (gliding && now - start > 1500) end();
+      if (now - start > KEEP_MAX_MS || (!this.#loading && !gliding && now - grewAt > KEEP_QUIET_MS)) { this.#letGo(); return; }
+      timer = setTimeout(check, 200);
+    };
+    timer = setTimeout(check, 200);
+    this.#keeper = () => { grow.disconnect(); scroller.removeEventListener('scrollend', end); clearTimeout(timer); scroller.style.overflowAnchor = ''; this.#keepFix = null; };
   }
+  /** The place kept, put back after a render (#keep). @type {(() => void) | null} */
+  #keepFix = null;
   /** @type {(() => void) | null} */ #keeper = null;
 
   /** The place kept lets go. */
-  #letGo() { this.#keeper?.(); this.#keeper = null; }
+  #letGo() { this.#keeper?.(); this.#keeper = null; this.#litOff?.(); this.#litOff = null; }
 
   /**
-   * What stays stuck above the place read, as the sheet's scroll padding: the browser then keeps that place when
-   * content grows above it (scroll anchoring), and what the keyboard focuses never lands under the stacks.
+   * What stays stuck above and below the place read, as the sheet's scroll padding: the browser then keeps that
+   * place when content grows above it (scroll anchoring), a page down (Page suivante, Espace) shows the next lines
+   * and no more, and what the keyboard focuses never lands under the stacks. Above: the rubrics, then the rubric's
+   * own header, the block's title or the theme's title; below: the rubrics to come (« full ») and the action bar.
    * @param {Element} el
    */
   #padTo(el) {
-    const scroller = this.#sheetScroller;
-    const top = Math.max(0, Math.round(parseFloat(getComputedStyle(el).scrollMarginTop) || 0));
-    if (scroller.style.scrollPaddingTop !== top + 'px') scroller.style.scrollPaddingTop = top + 'px';
+    let top = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
+    if (el.classList.contains('rub-mark')) top += this.#rubH();
+    else if (el.classList.contains('block') && !el.classList.contains('headless')) top += this.#titleH();
+    else if (el.matches('.wiki-theme[open]')) top += el.querySelector(':scope > summary')?.getBoundingClientRect().height || 0;
+    const full = this.getAttribute('stack') === 'full';
+    const stack = parseFloat(getComputedStyle(el).getPropertyValue('--stack')) || 0;
+    this.#pad(top, full ? (this.#rubCount() - stack - 1) * this.#rubH() + this.#barH() : this.#barH());
   }
+
+  /**
+   * The hand stopped while the plant's data still arrives: what the eye reads (the first line under what is stuck
+   * above) stays where it is until everything has arrived and the sheet is still — or the hand moves again. The
+   * browser's own anchoring cannot do it: what is stuck hides the lines it would hold.
+   */
+  #holdEye() {
+    const scroller = this.#sheetScroller, r = scroller.getBoundingClientRect();
+    const y = r.top + (parseFloat(scroller.style.scrollPaddingTop) || 0) + 24, x = r.left + Math.min(r.width / 2, 200);
+    /** @type {Element | undefined} */
+    const el = /** @type {any} */ (this.renderRoot).elementsFromPoint(x, y).find((/** @type {Element} */ e) => e.closest('.blocks') && !e.closest('.rub-head, .block-title, .wiki-theme > summary')
+      && getComputedStyle(e).position !== 'sticky' && e.getBoundingClientRect().height < r.height);
+    // The line read belongs to the place read (its block, its theme): that line is held. Else the place read itself
+    // (a block still empty, its start under the stack): its start is held, what comes fills it downwards.
+    const place = this.#readPlace().el;
+    const held = el && this.#inSheet(el) && (!place || place.contains(el)) ? el : place;
+    if (!held) return;
+    this.#keep(held, { at: held.getBoundingClientRect().top - r.top, outer: held === el ? el.closest('.block') : null });
+  }
+
+  /** The sheet's padding with no place read (its top): nothing stuck above, every rubric below (« full »). */
+  #padBase() {
+    const full = this.getAttribute('stack') === 'full';
+    this.#pad(0, (full ? this.#rubCount() * this.#rubH() : 0) + this.#barH());
+  }
+
+  /** @param {number} top @param {number} bottom */
+  #pad(top, bottom) {
+    const s = this.#sheetScroller.style;
+    const t = Math.max(0, Math.round(top)) + 'px', b = Math.max(0, Math.round(bottom)) + 'px';
+    if (s.scrollPaddingTop !== t) s.scrollPaddingTop = t;
+    if (s.scrollPaddingBottom !== b) s.scrollPaddingBottom = b;
+  }
+
+  #rubH() { return parseFloat(getComputedStyle(this).getPropertyValue('--rub-h')) || 30; }
+  #barH() { return parseFloat(this.style.getPropertyValue('--bar-h')) || 0; }
+  #titleH() { return parseFloat(this.style.getPropertyValue('--title-h')) || 38; }
+  #rubCount() { return this.renderRoot.querySelectorAll('.blocks > .rubric').length; }
 
   /** The hand on the sheet: what is kept lets go; its scrolling will be a reading (#onScroll). */
   #onHand = () => { this.#handAt = Date.now(); this.#letGo(); };
@@ -2057,8 +2251,9 @@ export class GfPlantDetail extends LitElement {
    */
   #onScroll = e => {
     if (!this.#handAt || e.composedPath()[0] !== this.#sheetScroller) return;
+    this.#closeToc();
     clearTimeout(this.#readTimer);
-    this.#readTimer = setTimeout(() => this.#noteRead(), 180);
+    this.#readTimer = setTimeout(() => { this.#readTimer = 0; this.#handStopped(); }, 180);
   };
   /** @type {any} */ #readTimer = 0;
 
@@ -2071,7 +2266,13 @@ export class GfPlantDetail extends LitElement {
     if (this.preview || this.only || (sheetSession.anchorLock && !force)) return;
     const { cat, block, wiki, el } = this.#readPlace();
     this.#noteAnchor(cat, block, wiki);
-    if (el) this.#padTo(el);
+    if (el) this.#padTo(el); else this.#padBase();
+  }
+
+  /** The hand stopped: the place read noted, and — data still arriving — the line read held (#holdEye). */
+  #handStopped() {
+    this.#noteRead();
+    if (this.#loading && !this.#keeper) this.#holdEye();
   }
 
   /** Where the reading is: the rubric, block and theme whose starts have passed under what is stuck above them. */
@@ -2091,9 +2292,6 @@ export class GfPlantDetail extends LitElement {
     return { cat, block: block?.dataset.key || null, wiki: wiki?.dataset.theme || null, el: wiki || block || mark };
   }
 
-  /** The rubric read. */
-  #readCat() { return this.#readPlace().cat; }
-
   /**
    * A plant drawn: at the place read on the previous one, at once — nothing hidden, nothing seen moving. Its
    * rubric is always there (a header does not wait for the data); its block, or the article's theme, is reached
@@ -2105,14 +2303,30 @@ export class GfPlantDetail extends LitElement {
     const scroller = this.#sheetScroller;
     const cat = sheetSession.anchor;
     this.#handAt = 0;
-    if (!cat) { if (scroller.scrollTop) scroller.scrollTop = 0; scroller.style.scrollPaddingTop = ''; return; }
+    if (!cat) { if (scroller.scrollTop) scroller.scrollTop = 0; this.#padBase(); return; }
     const q = (/** @type {string} */ sel) => /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(sel));
     const finer = () => (sheetSession.anchorWiki && q('.blocks #wiki-' + CSS.escape(sheetSession.anchorWiki)))
       || (sheetSession.anchorBlock && q(`.blocks .block[data-key="${CSS.escape(sheetSession.anchorBlock)}"]`)) || null;
     const el = finer() || q(`.rub-mark[data-cat="${CSS.escape(cat)}"]`)
       || [...this.renderRoot.querySelectorAll('.blocks > .block')].find(b => blockCategory(/** @type {HTMLElement} */ (b).dataset.key || '') === cat) || null;
-    if (el) this.#arrive(el, { quiet: true, prefer: finer, wait: true });
+    if (el) this.#arrive(el, { quiet: true, prefer: finer });
   }
+
+  /**
+   * The view or Mode King changed the sheet's order: the place read before is reached again, quietly (its block,
+   * its theme, else its rubric). @param {{ cat: string | null, block: string | null, wiki: string | null }} p
+   */
+  #placeAgain(p) {
+    const q = (/** @type {string} */ sel) => /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(sel));
+    const el = (p.wiki && q('.blocks #wiki-' + CSS.escape(p.wiki))) || (p.block && q(`.blocks .block[data-key="${CSS.escape(p.block)}"]`))
+      || (p.cat && (q(`.rub-mark[data-cat="${CSS.escape(p.cat)}"]`)
+        || /** @type {HTMLElement | undefined} */ ([...this.renderRoot.querySelectorAll('.blocks > .block')].find(b => blockCategory(/** @type {HTMLElement} */ (b).dataset.key || '') === p.cat)))) || null;
+    if (el) this.#arrive(el, { quiet: true });
+  }
+  /** The place read when the view or Mode King changes, to reach again once drawn. @type {{ cat: string | null, block: string | null, wiki: string | null } | null} */
+  #rePlace = null;
+  /** Mode King at the last update. */
+  #king = false;
   /** The plant was placed (#place). */
   #placed = false;
   /** The card underneath just came on top. */
@@ -2153,30 +2367,43 @@ export class GfPlantDetail extends LitElement {
     // The action bar's height: the rubrics stacked at the bottom wait above it.
     const bar = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.action-bar'))?.offsetHeight || 0;
     if (this.style.getPropertyValue('--bar-h') !== bar + 'px') this.style.setProperty('--bar-h', bar + 'px');
+    // A block's title, stuck under the rubrics: the article's theme read sticks under it.
+    const title = this.renderRoot.querySelector('.rubric > .block:not(.headless) > .block-title');
+    const th = title ? Math.round(title.getBoundingClientRect().height) : 0;
+    if (th && this.style.getPropertyValue('--title-h') !== th + 'px') this.style.setProperty('--title-h', th + 'px');
     this.#stackMode();
     // The plant is drawn: at the place read on the previous one. The card underneath (a preview) is put there too,
     // ready to come on top; on top, it is put there again (the place read may have changed meanwhile) — already
     // there, nothing moves.
     if (!this.#placed && this._plant && !this._plant.failed && !this.only) { this.#placed = true; this.#place(); }
     else if (this.#promoted && this._plant && !this._plant.failed) this.#place();
+    else if (this.#rePlace) this.#placeAgain(this.#rePlace);
+    this.#rePlace = null;
     this.#promoted = false;
+    this.#keepFix?.();
   }
 
   /**
    * How the rubrics stack: all of them, stuck above and below like the filters' (« full »), when that leaves most
-   * of the sheet to read (60 %); else the rubric read alone at the top, pushed by the next (« push »: phones, low
-   * panes). Mode King and a sheet without rubrics: none.
+   * of the sheet to read once the block's title is stuck too (STACK_ENTER; it stays so down to STACK_LEAVE: no flip
+   * for a few pixels); else the rubric read alone at the top, pushed by the next (« push »: phones, low panes). Mode
+   * King and a sheet without rubrics: none. A place reached, untouched since, is reached again under the new stack.
    */
   #stackMode() {
-    const count = this.renderRoot.querySelectorAll('.blocks > .rubric').length;
+    const h = this.#sheetScroller.clientHeight;
+    if (!h) return;
+    if (this.style.getPropertyValue('--sheet-h') !== h + 'px') this.style.setProperty('--sheet-h', h + 'px');
+    const count = this.#rubCount();
+    const was = this.getAttribute('stack');
     let mode = 'none';
     if (count) {
-      const h = this.#sheetScroller.clientHeight;
-      const rub = parseFloat(getComputedStyle(this).getPropertyValue('--rub-h')) || 30;
-      const bar = parseFloat(this.style.getPropertyValue('--bar-h')) || 0;
-      mode = h - count * rub - bar >= h * 0.6 ? 'full' : 'push';
+      const room = (h - count * this.#rubH() - this.#barH() - this.#titleH()) / h;
+      mode = room >= (was === 'full' ? STACK_LEAVE : STACK_ENTER) ? 'full' : 'push';
     }
-    if (this.getAttribute('stack') !== mode) this.setAttribute('stack', mode);
+    if (was === mode) return;
+    this.setAttribute('stack', mode);
+    const place = this.#lastPlace;
+    if (was && !this.#handAt && place?.el.isConnected && !this.#keeper) requestAnimationFrame(() => { if (place.el.isConnected && !this.#handAt) this.#arrive(place.el, { quiet: true, prefer: place.prefer }); });
   }
 
   /** A block read without its title (Mode King › title on/off, per view). @param {string} key */
@@ -2595,7 +2822,8 @@ export class GfPlantDetail extends LitElement {
     if (seen || !maps[0]) return;
     // A map of the sheet: its block reached (only the sheet scrolls); a map in a pane: brought into its pane's view.
     const block = maps[0].closest('.blocks .block');
-    if (block) this.#arrive(block); else maps[0].scrollIntoView({ block: 'nearest' });
+    const key = /** @type {HTMLElement | null} */ (block)?.dataset.key;
+    if (block && key) { this.#noteAnchor(blockCategory(key), key, null); this.#arrive(block); } else maps[0].scrollIntoView({ block: 'nearest' });
   }
 
   /**

@@ -38,11 +38,7 @@ export function setMediaSession(patch) {
   sheetSession.media = { ...sheetSession.media, ...patch };
 }
 
-/** Told when the anchor is locked or unlocked. */
-export const sheetEvents = new EventTarget();
-
 /** The padlock of the rubrics: keep the place read now (rubric, block, theme, how far into it) for every plant. @param {boolean} on */
 export function setAnchorLock(on) {
   sheetSession.anchorLock = on;
-  sheetEvents.dispatchEvent(new Event('anchor-lock'));
 }
