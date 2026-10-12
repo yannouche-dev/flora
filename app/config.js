@@ -38,6 +38,8 @@ export const config = {
     /** The layers of IGN's whole catalogue added to the maps (their definitions, so they show at once, offline too). */
     ignLayers: 'geoflora.ignLayers',
     mapView: 'geoflora.mapView',
+    discoverLayout: 'geoflora.discoverLayout',
+    trailLayout: 'geoflora.trailLayout',
     lastExport: 'geoflora.lastExport',
     hasSpots: 'geoflora.hasSpots',
     harvestMode: 'geoflora.harvestMode',

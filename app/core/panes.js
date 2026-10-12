@@ -29,6 +29,13 @@ export const paneStyles = css`
   .split::after { content: ''; position: absolute; inset: 0 3px; background: var(--gf-border); transition: background 0.12s; }
   .split:hover::after, .split:focus-visible::after, .split.dragging::after { background: var(--gf-accent); inset: 0 2px; }
   .split:focus-visible { outline: none; }
+  /* A finger: a wider grip, and a tab to hold in the middle. */
+  @media (pointer: coarse) {
+    .split { width: 24px; margin: 0 -12px; }
+    .split::after { inset: 0 11.5px; }
+    .split::before { content: ''; position: absolute; top: 50%; left: 50%; width: 10px; height: 44px; translate: -50% -50%; border-radius: 5px;
+      background: var(--gf-surface); border: 1px solid var(--gf-border); box-shadow: 0 1px 4px rgb(0 0 0 / 18%); z-index: 1; }
+  }
   :host(.resizing) { cursor: col-resize; user-select: none; }
   .rail {
     flex: none; width: 40px; min-height: 0; border: 0; border-radius: 0; border-right: 1px solid var(--gf-border);
@@ -48,9 +55,11 @@ export class PaneSizer {
    * @param {import('lit').ReactiveControllerHost & HTMLElement & { renderRoot: ParentNode }} host
    * @param {string} storageKey
    * @param {Record<string, { width: number, min: number, title: string }>} panes
+   * @param {{ onChange?: (pane: string) => void }} [opts] `onChange`: a width about to change (a map beside it: hold its view)
    */
-  constructor(host, storageKey, panes) {
+  constructor(host, storageKey, panes, opts = {}) {
     this.host = host;
+    this.onChange = opts.onChange;
     this.key = storageKey;
     this.panes = panes;
     /** @type {PaneState} */
@@ -83,6 +92,7 @@ export class PaneSizer {
 
   /** @param {string} pane @param {number} w */
   setWidth(pane, w) {
+    this.onChange?.(pane);
     this.state = { ...this.state, widths: { ...this.state.widths, [pane]: Math.round(w) } };
     this.#save();
   }
@@ -115,15 +125,29 @@ export class PaneSizer {
     const clamp = (/** @type {number} */ w) => Math.round(Math.min(Math.max(this.panes[pane].min, max()), Math.max(this.panes[pane].min, w)));
     return html`<div class="split" role="separator" aria-orientation="vertical" tabindex="0" data-pane=${pane}
       aria-label=${'Largeur du panneau ' + t.toLowerCase()} aria-valuenow=${this.width(pane)} aria-valuemin=${this.panes[pane].min}
-      title="Glisser pour redimensionner · double-clic : largeur par défaut"
+      aria-valuemax=${Math.max(this.panes[pane].min, Math.round(max()))}
+      title="Glisser pour redimensionner · ← → au clavier · double-clic : largeur par défaut"
       @pointerdown=${(/** @type {PointerEvent} */ e) => this.#drag(e, pane, side, clamp)}
       @keydown=${(/** @type {KeyboardEvent} */ e) => {
         const dir = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
-        if (!dir) return;
+        if (!dir && !['Home', 'End', 'Enter'].includes(e.key)) return;
+        // Handled here: not also by the page (Découvrir's ← → pass and keep the card on top).
         e.preventDefault();
-        this.setWidth(pane, clamp(this.width(pane) + (side === 'left' ? dir : -dir) * (e.shiftKey ? 64 : 16)));
+        e.stopPropagation();
+        if (e.key === 'Enter') { this.reset(pane); return; }
+        if (!dir) { this.setWidth(pane, clamp((e.key === 'End') === (side === 'left') ? Infinity : 0)); return; }
+        // From the width it has on screen (a default in % may differ from the one remembered).
+        const el = /** @type {HTMLElement} */ (e.currentTarget)[side === 'left' ? 'previousElementSibling' : 'nextElementSibling'];
+        const now = el ? Math.round(el.getBoundingClientRect().width) : this.width(pane);
+        this.setWidth(pane, clamp(now + (side === 'left' ? dir : -dir) * (e.shiftKey ? 64 : 16)));
       }}
-      @dblclick=${() => { const widths = { ...this.state.widths }; delete widths[pane]; this.state = { ...this.state, widths }; this.#save(); }}></div>`;
+      @dblclick=${() => this.reset(pane)}></div>`;
+  }
+
+  /** Back to its default width. @param {string} pane */
+  reset(pane) {
+    this.onChange?.(pane);
+    const widths = { ...this.state.widths }; delete widths[pane]; this.state = { ...this.state, widths }; this.#save();
   }
 
   /**

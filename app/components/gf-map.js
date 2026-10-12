@@ -783,6 +783,8 @@ export class GfMap extends LitElement {
     // The element may have been laid out after Leaflet measured it. Let go while the element is out of the page.
     this.#resized = new ResizeObserver(() => {
       map.invalidateSize();
+      // Resized by hand (a pane's separator dragged): the view stays as the user left it.
+      if (performance.now() < this.#holdUntil) return;
       this.#applyFrame();
       // Resized (a column coming beside it): framed again on what it was last framed on — the area's circle, or
       // the frame given.
@@ -1453,6 +1455,10 @@ export class GfMap extends LitElement {
     const inset = /** @type {any} */ (this.area)?.inset || {};
     map.fitBounds(b, { paddingTopLeft: [16, 16], paddingBottomRight: [16 + (inset.right || 0), 16 + (inset.bottom || 0)], animate: ease });
   }
+
+  /** For a moment, a change of size keeps the view as it is (no framing again): a pane beside it resized by hand. */
+  holdFrame() { this.#holdUntil = performance.now() + 1500; }
+  #holdUntil = 0;
 
   /** Current zoom level (null before the map exists). */
   zoom() { return this.#map ? this.#map.getZoom() : null; }
