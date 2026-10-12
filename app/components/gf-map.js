@@ -5,7 +5,7 @@ import { LitElement, html, nothing } from 'lit';
 import * as L from 'leaflet';
 import { config } from '../config.js';
 import { watchLocation } from '../core/geo.js';
-import { BASES, FRANCE_BOUNDS, OVERLAYS, tileLayer } from '../core/ign.js';
+import { BASES, FRANCE_BOUNDS, OVERLAYS, addCatalogLayer, addedLayers, isOverlay, tileLayer } from '../core/ign.js';
 import { inSeason, placeAbundance, placeTitle } from '../core/collections.js';
 import { store as appStore } from '../core/store.js';
 import { cachedThumb, thumbUrl } from '../core/thumb.js';
@@ -251,7 +251,7 @@ function readLayers() {
   const overlays = Array.isArray(saved.overlays) ? saved.overlays : saved.cadastre ? ['cadastre'] : [];
   return {
     base: saved.base in BASES ? saved.base : 'photo',
-    overlays: overlays.filter(k => k in OVERLAYS),
+    overlays: overlays.filter(isOverlay),
     distribution: saved.distribution === true
   };
 }
@@ -725,7 +725,7 @@ export class GfMap extends LitElement {
     L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(map);
 
     if (this.base && this.base in BASES) this.#base = /** @type {'photo' | 'plan'} */ (this.base);
-    if (this.overlays) this.#overlays = this.overlays.filter(k => k in OVERLAYS);
+    if (this.overlays) this.#overlays = this.overlays.filter(isOverlay);
     this.#layer(this.#base).addTo(map);
     for (const key of this.#overlays) this.#layer(key).addTo(map);
 
@@ -799,7 +799,7 @@ export class GfMap extends LitElement {
     if (!this.#map) return;
     if (changed.has('base') && this.base && this.base !== this.#base) this.#setBase(/** @type {any} */ (this.base));
     if (changed.has('overlays') && this.overlays) {
-      for (const key of Object.keys(OVERLAYS)) {
+      for (const key of new Set([...Object.keys(OVERLAYS), ...addedLayers(), ...this.#overlays])) {
         const on = this.overlays.includes(key);
         if (on !== this.#overlays.includes(key)) this.#setOverlay(key, on);
       }
@@ -1579,7 +1579,11 @@ export class GfMap extends LitElement {
     if (!this.#panel) {
       const panel = this.#panel = document.createElement('gf-map-panel');
       panel.addEventListener('base-change', (/** @type {any} */ e) => this.#setBase(e.detail.key));
-      panel.addEventListener('overlay-toggle', (/** @type {any} */ e) => this.#setOverlay(e.detail.key, e.detail.on));
+      panel.addEventListener('overlay-toggle', (/** @type {any} */ e) => {
+        // A layer of IGN's whole catalogue: known from now on (kept, for this map and the next ones).
+        const key = e.detail.layer ? addCatalogLayer(e.detail.layer) : e.detail.key;
+        this.#setOverlay(key, e.detail.on);
+      });
       panel.addEventListener('distribution-toggle', (/** @type {any} */ e) => {
         this.#distributionOn = e.detail.on;
         this.#saveLayers();
@@ -1638,7 +1642,7 @@ export class GfMap extends LitElement {
   /** @param {string} key @param {boolean} on */
   #setOverlay(key, on) {
     const map = /** @type {L.Map} */ (this.#map);
-    if (!(key in OVERLAYS)) return;
+    if (!isOverlay(key)) return;
     this.#overlays = this.#overlays.filter(k => k !== key);
     if (on) {
       this.#overlays.push(key);
