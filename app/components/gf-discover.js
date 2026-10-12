@@ -19,6 +19,7 @@ import { FRANCE_BOUNDS, WORLD_BOUNDS } from '../core/ign.js';
 import * as sources from '../core/sources.js';
 import { addressAt } from '../core/geoservices.js';
 import { REGION_BOUNDS, regionOf } from '../core/regions.js';
+import { bundledOutline, territoryAt } from '../core/territory.js';
 import { watchLocation } from '../core/geo.js';
 import { UNREAD, alertsOf } from '../core/alerts.js';
 import { plantViewOf, setHarvestMode, setMode, StoreController, whenReady } from '../core/store.js';
@@ -54,6 +55,17 @@ const WELCOME = {
 const FIX_MAX_AGE = 60_000;
 /** @param {number} m */
 const distLabel = m => m >= 1000 ? (m / 1000).toLocaleString('fr-FR') + ' km' : m + ' m';
+/** The box [west, south, east, north] of a GeoJSON polygon or multipolygon. @param {any} geometry @returns {[number, number, number, number]} */
+function boxOf(geometry) {
+  let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+  for (const [x, y] of geometry.coordinates.flat(geometry.type === 'MultiPolygon' ? 2 : 1)) {
+    if (x < w) w = x;
+    if (x > e) e = x;
+    if (y < s) s = y;
+    if (y > n) n = y;
+  }
+  return [w, s, e, n];
+}
 /** The view chosen (Rencontres, Matchs, Toutes) in each scenario, kept while the app is open. @type {Record<string, string>} */
 const lastView = {};
 /** A word for the distance, for fun. @param {number} m */
@@ -65,7 +77,7 @@ const MANY = 250;
 /** The steps of the discovery, as the bar shows them. */
 const STAGES = ['Carte', 'Rencontres', 'Photos', 'Encyclopédie', 'Cueillette ou science', 'Voisines'];
 /** What each step brings, said on its button in the bar. */
-const STAGE_ABOUT = ['La carte : jusqu’où chercher', 'Les cartes des plantes d’ici, à côté de la carte', 'Les photos de la plante aimée',
+const STAGE_ABOUT = ['La carte : jusqu’où chercher', 'Les cartes des plantes d’ici, à côté de la carte', 'Les photos de la plante en vue',
   'Ce qu’en dit l’encyclopédie', 'La cueillette ou la science : à vous de choisir', 'Les plantes voisines, sous la carte'];
 const SCOPES = /** @type {const} */ (['around', 'department', 'region', 'country', 'world']);
 /** The deck has shown it can be swiped (once while the app is open). */
@@ -125,7 +137,10 @@ export class GfDiscover extends LitElement {
     _later: { state: true },
     /** On the plant for a while: the next step can be offered. */
     _dwell: { state: true },
-    /** The plant the panes show while discovering (the one matched, or chosen among the plants around); else the top card. */
+    /**
+     * Discovering: a plant already loved, brought back on top of the deck (touched on the map or in the list around)
+     * — else none: the card on top is the plant the map and the panes show.
+     */
     _focus: { state: true },
     _note: { state: true },
     /** The name of the plant open when it is not among the cards (a link). */
@@ -223,6 +238,9 @@ export class GfDiscover extends LitElement {
     .stamp { position: absolute; top: 26px; padding: 4px 12px; border: 4px solid; border-radius: 10px; font-size: 1.8rem; font-weight: 900; letter-spacing: 0.08em; opacity: 0; pointer-events: none; }
     .stamp.like { left: 18px; color: #4ade80; transform: rotate(-14deg); opacity: var(--like, 0); }
     .stamp.nope { right: 18px; color: #f87171; transform: rotate(14deg); opacity: var(--nope, 0); }
+    /* A plant already loved, brought back on top (touched on the map or in the list around). */
+    .loved-badge { position: absolute; top: 12px; left: 12px; z-index: 1; display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: var(--gf-radius-pill);
+      background: #e0245e; color: #fff; font-size: 0.8rem; font-weight: 700; box-shadow: 0 0 0 2px #ffd166, 0 2px 8px rgb(0 0 0 / 35%); pointer-events: none; }
     .actions { display: flex; gap: 22px; align-items: center; }
     .round { width: 62px; height: 62px; border-radius: 50%; border: 0; display: grid; place-items: center; font-size: 1.6rem; cursor: pointer; background: var(--gf-surface);
       box-shadow: 0 6px 16px rgb(0 0 0 / 18%); transition: transform 0.12s; }
@@ -317,14 +335,26 @@ export class GfDiscover extends LitElement {
     .g-mapbox { position: relative; flex: 1; min-height: 0; isolation: isolate; }
     .g-mapbox gf-map { position: absolute; inset: 0; display: block; }
     .g-mapbox gf-map .leaflet-container { background: #2f4a2c; }
-    .g-radius { position: absolute; z-index: 500; left: 10px; right: 50px; top: 10px; display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 12px; border-radius: 14px;
-      background: color-mix(in srgb, var(--gf-surface) 92%, transparent); box-shadow: var(--gf-shadow); backdrop-filter: blur(6px); }
-    .g-radius label { flex: 1; min-width: 0; display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 0 8px; }
-    .g-radius .d { font-weight: 800; color: var(--gf-accent); font-variant-numeric: tabular-nums; }
-    .g-radius .mood { font-size: 0.78rem; color: var(--gf-text-muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .g-radius input { grid-column: 1 / -1; width: 100%; margin: 2px 0 0; accent-color: var(--gf-accent); }
-    .g-legend { position: absolute; z-index: 500; left: 10px; top: 76px; max-width: calc(100% - 20px); margin: 0; padding: 4px 10px; border-radius: var(--gf-radius-pill);
-      background: rgb(0 0 0 / 62%); color: #fff; font-size: 0.78rem; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* The perimeter: one panel over the map (under it on a phone) — the zones, the circle's slider, the place, the
+       plant in view and its count. No backdrop blur: the map moves under it. */
+    .g-map { position: relative; }
+    .g-where { position: absolute; z-index: 500; left: 10px; right: 50px; top: 10px; display: grid; gap: 6px; padding: 7px 7px 8px 10px; border-radius: 14px;
+      background: color-mix(in srgb, var(--gf-surface) 95%, transparent); box-shadow: var(--gf-shadow); font-size: 0.8rem; animation: g-drop 0.3s ease-out; }
+    @keyframes g-drop { from { opacity: 0; transform: translateY(-8px); } }
+    .g-where .top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .g-where .top > .d { font-size: 1rem; font-weight: 800; color: var(--gf-accent); font-variant-numeric: tabular-nums; }
+    .g-where .mood { min-width: 0; font-size: 0.78rem; color: var(--gf-text-muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .g-where .top > .mood { flex: 1; }
+    .g-where .place { flex: none; margin-left: auto; width: 32px; height: 32px; min-height: 0; }
+    .g-radius { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .g-radius .mood { flex: none; max-width: 45%; }
+    .g-radius input { flex: 1; min-width: 0; margin: 0; accent-color: var(--gf-accent); }
+    .g-legend { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; color: var(--gf-text); font-size: 0.78rem; }
+    .g-legend b { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .g-legend > span:last-child { color: var(--gf-text-muted); white-space: nowrap; }
+    @media (max-width: 899px) {
+      .g-where { position: static; animation: none; border-radius: 0; box-shadow: none; border-bottom: 1px solid var(--gf-border); background: var(--gf-surface); padding: 6px 10px; }
+    }
     /* The first map: its panel, the way to the cards. */
     .g-launch { position: absolute; z-index: 500; right: 16px; bottom: 28px; width: min(400px, calc(100% - 32px)); box-sizing: border-box; display: grid; gap: 10px; padding: 16px 18px;
       border-radius: 18px; background: color-mix(in srgb, var(--gf-surface) 95%, transparent); box-shadow: 0 12px 36px rgb(0 0 0 / 28%); backdrop-filter: blur(8px); animation: g-up 0.35s ease-out; }
@@ -345,14 +375,23 @@ export class GfDiscover extends LitElement {
     .g-launch .go .bi { display: none; }
     .g-launch .go small { font-size: 0.75rem; font-weight: 400; opacity: 0.85; }
     @media (max-width: 899px) { .g-launch { left: 10px; right: 10px; bottom: 12px; bottom: 12px; width: auto; padding: 12px 14px; gap: 8px; } .g-launch h2 { font-size: 1.02rem; } }
-    /* After a match: where else it grows. */
-    .g-scope { position: absolute; z-index: 500; left: 10px; right: 10px; top: 112px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 8px; border-radius: 14px;
-      background: color-mix(in srgb, var(--gf-surface) 94%, transparent); box-shadow: var(--gf-shadow); backdrop-filter: blur(6px); font-size: 0.78rem; animation: g-in 0.35s ease-out; }
-    .g-scope > span { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; margin-right: 4px; color: var(--gf-text); }
-    .g-scope button { min-height: 0; height: 26px; padding: 0 10px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill); background: var(--gf-surface); color: var(--gf-text);
-      font: inherit; font-size: 0.78rem; cursor: pointer; white-space: nowrap; }
-    .g-scope button[aria-pressed='true'] { background: #e0245e; border-color: #e0245e; color: #fff; font-weight: 600; }
-    .g-legend .dot { flex: none; width: 12px; height: 12px; border-radius: 50%; background: #e0245e; box-shadow: 0 0 0 2px #ffd166; }
+    /* After a match: where else it grows — the zones, the one shown in green (the colour of its outline on the map). */
+    .g-scope { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
+      mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent); padding-right: 14px; }
+    .g-scope::-webkit-scrollbar { display: none; }
+    /* With a mouse (no swipe), every zone in sight: the row wraps. */
+    @media (hover: hover) and (pointer: fine) { .g-scope { flex-wrap: wrap; overflow: visible; mask-image: none; padding-right: 0; } .g-where .top:has(.g-scope) { align-items: flex-start; } }
+    .g-scope button { flex: none; }
+    .g-scope button { min-height: 0; height: 26px; padding: 0 10px; display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill);
+      background: var(--gf-surface); color: var(--gf-text); font: inherit; font-size: 0.78rem; cursor: pointer; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .g-scope button[aria-pressed='true'] { background: var(--gf-accent); border-color: var(--gf-accent); color: var(--gf-accent-contrast, #fff); font-weight: 700; }
+    /* The plant in view: its leaf, then its photo once loaded, in its pink and gold (as on the map). */
+    .g-legend .dot { flex: none; position: relative; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; overflow: hidden;
+      background: #e0245e; color: #fff; font-size: 10px; box-shadow: 0 0 0 2px #ffd166; }
+    .g-legend .dot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.3s ease-out; }
+    .g-legend .dot img.in { opacity: 1; }
+    /* The panel says the distance: the map's scale would say it again. */
+    .g-mapbox gf-map .leaflet-control-scale { display: none; }
     .g-deck { flex: 0 0 min(400px, 42%); min-width: 0; overflow-y: auto; padding: 14px 12px 90px; }
     .guided:not(.with-panes) .g-deck { flex: 1 1 0; }
     .guided.with-panes .g-deck { flex-basis: min(360px, 32%); border-right: 1px solid var(--gf-border); }
@@ -394,7 +433,7 @@ export class GfDiscover extends LitElement {
     .around .t b { font-size: 0.86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .around .t small { font-size: 0.74rem; color: var(--gf-text-muted); }
 
-    @media (prefers-reduced-motion: reduce) { .card, .burst, .around, .g-deck, .g-map { transition: none; animation: none; } }  `];
+    @media (prefers-reduced-motion: reduce) { .card, .burst, .around, .g-deck, .g-map, .g-where { transition: none; animation: none; } }  `];
 
   #store = new StoreController(this);
 
@@ -466,7 +505,7 @@ export class GfDiscover extends LitElement {
       // The deck: ← passes, → matches, ↑ its sheet.
       const t0 = /** @type {HTMLElement} */ (e.composedPath()[0]);
       if (this._view !== 'swipe' || this._match || t0?.closest?.('input, textarea, select')) return;
-      const top = this.#deck[0];
+      const top = this.#shown[0];
       if (!top) return;
       if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); this.#decide(top, e.key === 'ArrowRight'); }
       else if (e.key === 'ArrowUp' && !this.#guided) { e.preventDefault(); this.#openPlant(top.plant.id, this.#deck.map(c => c.plant.id)); }
@@ -530,11 +569,14 @@ export class GfDiscover extends LitElement {
   }
   updated() {
     this.#hintSwipe();
+    this.#showScope();
     // Discovering: the plant in view lit on the map (where it was seen in the circle).
     const id = this.#guided ? this.#focusId : null;
     if (id != null) this.#findAdmin();
     const scope = this.#scopeNow;
-    const key = id == null || !this._point ? '' : `${id}:${this._radius}:${this._point}:${scope}`;
+    // Its département or région by name: another place (its own, once known) loads again.
+    const where = scope === 'department' || scope === 'region' ? this._admin?.[scope] ?? '?' : '';
+    const key = id == null || !this._point ? '' : `${id}:${this._radius}:${this._point}:${scope}:${where}`;
     if (key === this.#hlFor) return;
     this.#hlFor = key;
     // Another plant: its leaves come (the old ones go); another scope of the same plant: the map stays until its
@@ -546,6 +588,21 @@ export class GfDiscover extends LitElement {
     this.#loadHighlight(key, card, scope);
   }
   #hlFor = '';
+
+  /** The zone chosen, in sight in its row (scrolled sideways on a touch screen): a row drawn again starts at its left. */
+  #showScope() {
+    const row = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.g-scope'));
+    if (!row || (row === this.#scopeRow && this._scope === this.#scopeRowFor)) return;
+    this.#scopeRow = row;
+    this.#scopeRowFor = this._scope;
+    const chip = row.querySelector('[aria-pressed="true"]');
+    if (!chip || row.scrollWidth <= row.clientWidth) return;
+    const r = row.getBoundingClientRect(), c = chip.getBoundingClientRect();
+    // Its right end clear of the row's fading edge.
+    if (c.left < r.left || c.right > r.right - 18) row.scrollLeft += c.left - r.left - 8;
+  }
+  /** @type {HTMLElement | null} */ #scopeRow = null;
+  #scopeRowFor = '';
 
   /** The cards just there: the one on top leans a little right, then left — they can be swiped (once). */
   #hintSwipe() {
@@ -609,6 +666,9 @@ export class GfDiscover extends LitElement {
   /** @param {[number, number]} point @param {string | null} place */
   async #setPoint(point, place) {
     this._point = point; this._place = place;
+    // Its own département and région (found again for this point): never the last place's meanwhile.
+    this._admin = null;
+    this.#adminFor = '';
     // The start page (#/) shows Découvrir only until Flore comes: the discovery gets its own address, so a tab
     // arriving midway does not take the screen away.
     if (parse(location.hash).name !== 'discover') { replaceHash(href.discover(null, this.scenario)); dispatchEvent(new HashChangeEvent('hashchange')); }
@@ -793,6 +853,22 @@ export class GfDiscover extends LitElement {
     return (this._cards || []).filter(c => !s.passed.includes(c.plant.id) && !s.matches.includes(c.plant.id));
   }
 
+  /** Discovering: a plant already loved, brought back on top (touched on the map or in the list around). */
+  get #revisit() {
+    const id = this._focus;
+    if (id == null || !this.#guided || !discoverState().matches.includes(id)) return undefined;
+    return (this._cards || []).find(c => c.plant.id === id);
+  }
+
+  /**
+   * The deck as shown: the cards to meet — a plant loved brought back on top of them. The card on top is the
+   * plant of the moment: the map lights it, the panes show it; a swipe, and the next one is.
+   */
+  get #shown() {
+    const back = this.#revisit;
+    return back ? [back, ...this.#deck] : this.#deck;
+  }
+
   get #matchCards() {
     const ids = discoverState().matches;
     return (this._cards || []).filter(c => ids.includes(c.plant.id));
@@ -871,11 +947,13 @@ export class GfDiscover extends LitElement {
     const card = (this._cards || []).find(c => c.plant.id === last.id);
     if (last.fav && card && isFavorite(last.id)) toggleFavorite(card.plant).catch(() => {});
     this._match = null;
+    // The card taken back is the one of the moment (on top): the map and the panes go back to it.
+    this._focus = null;
   }
 
   /** The deck: the card on top (dragged), the next one under it, and the three buttons. */
   #deckView() {
-    const deck = this.#deck;
+    const deck = this.#shown;
     if (!deck.length) {
       const next = DISTANCES.find(d => d > this._radius);
       return html`<div class="deck-end">
@@ -898,18 +976,21 @@ export class GfDiscover extends LitElement {
         ${this.#guided ? nothing : html`<button class="round info" type="button" aria-label="Voir sa fiche" title="Sa fiche (↑)" @click=${() => this.#openPlant(top.plant.id, this.#deck.map(c => c.plant.id))}>${icon('three-dots')}</button>`}
         <button class="round like" type="button" aria-label="J’aime : c’est un match" title="Match (→)" @click=${() => this.#decide(top, true)}>${icon('heart-fill')}</button>
       </div>
-      <p class="left">${deck.length} plante${deck.length > 1 ? 's' : ''} à rencontrer</p>
+      <p class="left">${this.#deck.length} plante${this.#deck.length > 1 ? 's' : ''} à rencontrer</p>
     </div>`;
   }
 
   /** @param {Card} c @param {boolean} top */
   #swipeCard(c, top) {
     const p = c.plant, name = p.vernacularNames?.[0] || p.scientificName;
-    return html`<article class="swipe-card ${top ? 'top' : 'under'}" aria-label=${name} data-id=${p.id}
+    // A plant already loved, brought back on top: its heart says so; a swipe either way only puts it back.
+    const loved = discoverState().matches.includes(p.id);
+    return html`<article class="swipe-card ${top ? 'top' : 'under'} ${loved ? 'loved' : ''}" aria-label=${loved ? name + ' — déjà aimée' : name} data-id=${p.id}
         @pointerdown=${top ? this.#dragStart : null} @pointermove=${top ? this.#dragMove : null} @pointerup=${top ? this.#dragEnd : null} @pointercancel=${top ? this.#dragEnd : null}>
       <div class="nophoto">${icon('leaf')}</div>
       ${c.photo ? html`<img src=${c.photo} alt="" loading=${top ? 'eager' : 'lazy'} decoding="async" referrerpolicy="no-referrer" draggable="false" @error=${hideImg} @load=${showImg} />` : nothing}
       <span class="stamp like">MATCH</span><span class="stamp nope">BOF</span>
+      ${loved ? html`<span class="loved-badge">${icon('heart-fill')} Déjà aimée</span>` : nothing}
       <div class="about">
         <h2>${name}<small>${p.scientificName}</small></h2>
         ${this.#ethnoLine(c)}
@@ -1028,19 +1109,23 @@ export class GfDiscover extends LitElement {
     const node = el || /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.swipe-card.top'));
     const done = () => {
       if (node) { node.style.transition = 'none'; this.#reset(node); node.classList.remove('fly'); requestAnimationFrame(() => { node.style.transition = ''; }); }
+      // Discovering: whatever the swipe, the card now on top is the plant of the moment — the map lights it, the
+      // panes show it. A plant already loved, brought back on top, is only put back (still loved).
+      if (this.#guided) {
+        const back = this._focus === card.plant.id && discoverState().matches.includes(card.plant.id);
+        this._focus = null; this.#navs++; this.#restartDwell();
+        if (back) return;
+      }
       const fav = liked && !isFavorite(card.plant.id);
       this._history = [...this._history, { id: card.plant.id, liked, fav }].slice(-30);
       swiped(card.plant.id, liked);
-      // Discovering: a match is shown in the panes (its photos — the plant just loved, not the next card); a card
-      // passed: the panes go on with the one now on top.
-      if (this.#guided) { this._focus = liked ? card.plant.id : null; this.#navs++; this.#restartDwell(); }
       if (liked) {
         if (fav) toggleFavorite(card.plant).catch(() => {});
         if (matchMedia('(pointer: coarse)').matches) navigator.vibrate?.(30);
         // The first match (while discovering): its screen, once — Rencontres: a heart, and its photos offered (the
         // panes show it until the next card). The next ones: a heart.
         const first = discovering() && !discoverState().firstMatch;
-        // Rencontres: the first match brings its photos at once (the third block, zoomed), of the plant matched.
+        // Rencontres: the first match brings the photos at once (the third block, zoomed) — of the card now on top.
         if (first && this.#guided) { firstMatchShown(); this.#restartDwell(); if (discoverState().step === 0) this.#accept(1); }
         if (first && !this.#guided) this._match = card;
         else { this._burst++; const n = this._burst; setTimeout(() => { if (this._burst === n) this._burst = 0; }, 900); }
@@ -1093,14 +1178,27 @@ export class GfDiscover extends LitElement {
   /** The mode whose layout the steps build (the one the plant sheet shows in Flore). */
   get #view() { return plantViewOf(this.#store.state); }
 
-  /** The plant shown in the panes. */
-  get #focusId() { return this._focus ?? this.#deck[0]?.plant.id ?? null; }
+  /** The plant of the moment: the card on top (the map lights it, the panes show it). */
+  get #focusId() { return this.#shown[0]?.plant.id ?? null; }
 
-  /** A plant of the list around, shown in the panes. @param {number} id */
+  /**
+   * A plant touched (on the map, or in the list around): its card on top of the deck — the map and the panes follow
+   * it. One passed: back in the deck, on top; one already loved: brought back on top, still loved.
+   * @param {number} id
+   */
   #aroundGo(id) {
     if (id === this.#focusId) return;
-    this._focus = id;
+    const cards = this._cards || [];
+    const card = cards.find(c => c.plant.id === id);
+    if (!card) return;
+    if (discoverState().matches.includes(id)) this._focus = id;
+    else {
+      if (discoverState().passed.includes(id)) unswipe(id);
+      this._cards = [card, ...cards.filter(c => c !== card)];
+      this._focus = null;
+    }
     this.#navs++;
+    this.#restartDwell();
   }
 
   /**
@@ -1180,25 +1278,50 @@ export class GfDiscover extends LitElement {
     return id != null && discoverState().firstMatch && this.#stage >= 2 ? this._scope : 'around';
   }
 
-  /** The département and région of the place chosen (from its IGN address), once. */
+  /**
+   * The département and région of the place chosen (from its IGN address), once; offline (IGN unreachable or its
+   * module off), from the outlines the app carries.
+   */
   async #findAdmin() {
     const point = this._point;
     if (!point || this.#adminFor === point.join()) return;
     this.#adminFor = point.join();
     const a = await addressAt(point).catch(() => null);
     const parts = String(a?.context || '').split(',').map(x => x.trim()).filter(Boolean);
+    let department = parts.length >= 3 ? parts[1] : null, region = regionOf(a?.context || '')?.name || null;
+    if (!department || !region) {
+      const t = await territoryAt(point).catch(() => null);
+      department ||= t?.deptName || null;
+      region ||= t?.regionName || null;
+    }
     if (this._point !== point) return;
-    this._admin = { department: parts.length >= 3 ? parts[1] : null, region: regionOf(a?.context || '')?.name || null, shapes: {} };
+    this._admin = { department, region, shapes: {} };
   }
   #adminFor = '';
 
-  /** The outline of the département or région (IGN), kept once asked. @param {'department' | 'region'} scope */
+  /**
+   * The outline of the département or région — IGN's, else the one the app carries (simplified) —, and its box;
+   * kept once asked. @param {'department' | 'region'} scope
+   * @returns {Promise<{ feature: any, box: [number, number, number, number] } | null>}
+   */
   async #adminOutline(scope) {
     const admin = this._admin;
     const name = admin?.[scope];
     if (!admin || !name) return null;
-    if (!(scope in admin.shapes)) admin.shapes[scope] = await adminShape(scope === 'department' ? 'departement' : 'region', name).catch(() => null);
+    if (!(scope in admin.shapes)) {
+      const shape = await adminShape(scope === 'department' ? 'departement' : 'region', name).catch(() => null);
+      admin.shapes[scope] = shape ? { feature: shape, box: boxOf(shape.geometry) } : await bundledOutline(scope, name).catch(() => null);
+    }
     return admin.shapes[scope];
+  }
+
+  /** France's outline (the app carries it), drawn when its scope is chosen. @type {{ feature: any, box: [number, number, number, number] } | null} */
+  #france = null;
+  #franceAsked = false;
+  #loadFrance() {
+    if (this.#franceAsked) return;
+    this.#franceAsked = true;
+    bundledOutline('country').then(o => { this.#france = o; this.requestUpdate(); }, () => { this.#franceAsked = false; });
   }
 
   /** The box of a scope [west, south, east, north]. @param {string} scope */
@@ -1206,23 +1329,28 @@ export class GfDiscover extends LitElement {
     if (scope === 'country') return /** @type {[number, number, number, number]} */ ([FRANCE_BOUNDS.getWest(), FRANCE_BOUNDS.getSouth(), FRANCE_BOUNDS.getEast(), FRANCE_BOUNDS.getNorth()]);
     if (scope === 'world') return /** @type {[number, number, number, number]} */ ([WORLD_BOUNDS.getWest(), WORLD_BOUNDS.getSouth(), WORLD_BOUNDS.getEast(), WORLD_BOUNDS.getNorth()]);
     const shape = await this.#adminOutline(/** @type {any} */ (scope));
-    if (shape) { const pts = shape.geometry.coordinates.flat(shape.geometry.type === 'MultiPolygon' ? 2 : 1); const lons = pts.map((/** @type {number[]} */ p) => p[0]), lats = pts.map((/** @type {number[]} */ p) => p[1]); return /** @type {[number, number, number, number]} */ ([Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)]); }
-    // No outline (IGN unreachable): the région's box, if known.
+    if (shape) return shape.box;
+    // No outline at all: the région's box, if known.
     return scope === 'region' && this._admin?.region ? REGION_BOUNDS[this._admin.region] || null : null;
   }
 
-  /** Where the plant in view was seen, in its scope: the circle (leaves), or a département, a région, France, the world. */
+  /**
+   * Where the plant in view was seen, in its scope: the circle, or a département, a région, France, the world — each
+   * point with its date, the plant's photo and names for the map to show on them.
+   */
   async #loadHighlight(key, card, scope) {
     const title = card.plant.vernacularNames?.[0] || card.plant.scientificName;
+    const who = { photo: card.photo ? card.photo.replace('/medium.', '/small.') : null, common: card.plant.vernacularNames?.[0] || null, sci: card.plant.scientificName, taxonId: card.taxonId ?? null };
+    const pointsOf = (/** @type {{ coordinates: [number, number], date: string | null, url: string }[]} */ pts) => pts.map(p => ({ coordinates: p.coordinates, title, url: p.url, date: p.date }));
     if (scope === 'around') {
       const pts = await observationsAround(card.taxonId, /** @type {[number, number]} */ (this._point), this._radius).catch(() => null);
-      if (pts && this.#hlFor === key) this._hl = { key, scope, points: pts.map(p => ({ coordinates: p.coordinates, title, url: p.url })), total: pts.length };
+      if (pts && this.#hlFor === key) this._hl = { key, scope, ...who, points: pointsOf(pts), total: pts.length };
       return;
     }
     const box = await this.#scopeBox(scope);
-    if (!box || this.#hlFor !== key) { if (this.#hlFor === key) this._hl = { key, scope, points: [], total: 0 }; return; }
+    if (!box || this.#hlFor !== key) { if (this.#hlFor === key) this._hl = { key, scope, ...who, points: [], total: 0 }; return; }
     const found = await observationsInBox(card.taxonId, box).catch(() => null);
-    if (found && this.#hlFor === key) this._hl = { key, scope, box, points: found.points.map(p => ({ coordinates: p.coordinates, title, url: p.url })), total: found.total };
+    if (found && this.#hlFor === key) this._hl = { key, scope, box, ...who, points: pointsOf(found.points), total: found.total };
   }
 
   /**
@@ -1243,7 +1371,7 @@ export class GfDiscover extends LitElement {
     if (!many) return null;
     const key = many.key;
     if (this.#gcMemo?.key === key) return this.#gcMemo.value;
-    const value = { key, points: many.points.map((/** @type {any} */ p) => ({ ...p, kind: 'hl' })) };
+    const value = { key, photo: many.photo, common: many.common, sci: many.sci, taxonId: many.taxonId, points: many.points.map((/** @type {any} */ p) => ({ ...p, kind: 'hl' })) };
     this.#gcMemo = { key, value };
     return value;
   }
@@ -1270,38 +1398,23 @@ export class GfDiscover extends LitElement {
     return this.#lastFrame;
   }
 
-  /** The outline of the département or région shown. */
+  /** The outline of the scope shown — the département, the région, France —: a perimeter, like the circle. */
   get #scopeZone() {
     const scope = this.#scopeNow;
-    const shape = (scope === 'department' || scope === 'region') ? this._admin?.shapes?.[scope] : null;
-    return shape ? (this.#zoneMemo?.feature === shape ? this.#zoneMemo : (this.#zoneMemo = { key: scope + ':' + this._admin?.[scope], feature: shape })) : null;
+    if (scope === 'country') this.#loadFrance();
+    const shape = scope === 'country' ? this.#france
+      : (scope === 'department' || scope === 'region') ? this._admin?.shapes?.[scope] : null;
+    const feature = shape?.feature;
+    return feature ? (this.#zoneMemo?.feature === feature ? this.#zoneMemo : (this.#zoneMemo = { key: scope + ':' + (this._admin?.[scope] || ''), feature })) : null;
   }
   /** @type {any} */ #zoneMemo = null;
 
-  /** « 23 observations ici », « 1 204 en Nouvelle-Aquitaine »… */
+  /** « 23 observations », « 1 204 observations (1 000 sur la carte) »: where, the perimeter chosen says it. */
   #hlLine() {
     const hl = this._hl;
     if (!hl) return '…';
-    const where = { around: 'ici', department: 'en ' + (this._admin?.department || 'ce département'), region: 'en ' + (this._admin?.region || 'cette région'), country: 'en France', world: 'dans le monde' }[/** @type {string} */ (hl.scope)] || 'ici';
     const n = hl.total ?? hl.points.length;
-    return `${n.toLocaleString('fr-FR')} observation${n > 1 ? 's' : ''} ${where}${n > hl.points.length ? ` (${hl.points.length.toLocaleString('fr-FR')} sur la carte)` : ''}`;
-  }
-
-  /**
-   * After a match: where else it grows — its département, its région, France, the world — each a touch away; the
-   * map eases there, its observations grouped, the outline drawn.
-   * @param {Card | undefined} card
-   */
-  #scopeBar(card) {
-    if (!card || !discoverState().firstMatch) return nothing;
-    const scope = this._scope;
-    const a = this._admin;
-    /** @type {[string, unknown][]} */
-    const chips = [['around', `Autour · ${distLabel(this._radius)}`], ...(a?.department ? [['department', a.department]] : []), ...(a?.region ? [['region', a.region]] : []), ['country', 'France'], ['world', 'Monde']];
-    return html`<div class="g-scope" role="group" aria-label="Où pousse-t-elle encore ?">
-      <span>${icon('globe-europe-africa')} Où pousse-t-elle encore ?</span>
-      ${chips.map(([k, label]) => html`<button type="button" data-scope=${k} aria-pressed=${String(scope === k)} @click=${() => { this._scope = k; }}>${label}</button>`)}
-    </div>`;
+    return `${n.toLocaleString('fr-FR')} observation${n > 1 ? 's' : ''}${n > hl.points.length ? ` (${hl.points.length.toLocaleString('fr-FR')} sur la carte)` : ''}`;
   }
 
   /** The circle and its observations, the same object while they do not change (the map does not redraw them). */
@@ -1332,14 +1445,37 @@ export class GfDiscover extends LitElement {
     this.#radiusTimer = setTimeout(() => { setDiscoverRadius(m); this.#load(); }, 700);
   }
 
-  /** Over the map: how far (the slider), and where. */
-  #radiusBar() {
+  /**
+   * The perimeter, in one panel over the map (under it on a phone) — the distance said once: after a match, the zones
+   * to choose (the circle with its radius, the département, the région, France, the world) — the map eases there, the
+   * outline drawn —; under the circle's, its slider; the place to change; and the plant in view, its observations in
+   * the perimeter counted. Rencontres (quiet): the circle and its distance only.
+   * @param {Card | undefined} card @param {boolean} quiet
+   */
+  #wherePanel(card, quiet) {
+    const scopes = !quiet && Boolean(card) && discoverState().firstMatch;
+    const scope = scopes ? this._scope : 'around';
+    const a = this._admin;
+    const km = distLabel(this._radius), mood = distMood(this._radius);
     const at = Math.max(0, DISTANCES.indexOf(this._radius));
-    return html`<div class="g-radius">
-      <label><span class="d">${distLabel(this._radius)}</span><span class="mood">${distMood(this._radius)}</span>
+    /** @type {[string, unknown][]} */
+    const chips = [['around', html`${icon('crosshair')} ${km}`], ...(a?.department ? [['department', a.department]] : []), ...(a?.region ? [['region', a.region]] : []), ['country', 'France'], ['world', 'Monde']];
+    const name = card ? card.plant.vernacularNames?.[0] || card.plant.scientificName : '';
+    const legend = this._note ? html`<p class="g-legend" role="status">${this._note}</p>`
+      : card && !quiet ? html`<p class="g-legend" aria-live="polite"><span class="dot">${icon('leaf-fill')}${repeat(card.photo ? [card.photo.replace('/medium.', '/square.')] : [], src => src,
+          src => html`<img src=${src} alt="" decoding="async" referrerpolicy="no-referrer" @load=${(/** @type {any} */ e) => e.target.classList.add('in')} @error=${hideImg} />`)}</span><b>${name}</b><span>${this.#hlLine()}</span></p>` : nothing;
+    return html`<div class="g-where" role="group" aria-label="Périmètre de la recherche">
+      <div class="top">
+        ${scopes ? html`<div class="g-scope" role="group" aria-label="Où pousse-t-elle encore ?">
+            ${chips.map(([k, label]) => html`<button type="button" data-scope=${k} aria-pressed=${String(scope === k)} @click=${() => { this._scope = k; }}>${label}</button>`)}
+          </div>`
+          : html`<span class="d">${km}</span><span class="mood">${mood}</span>`}
+        <button class="icon-btn place" type="button" title="Changer de lieu" aria-label="Changer de lieu" @click=${() => { this._point = null; this._cards = null; }}>${icon('geo-alt')}</button>
+      </div>
+      ${scope === 'around' ? html`<label class="g-radius">${scopes ? html`<span class="mood">${mood}</span>` : nothing}
         <input type="range" min="0" max=${DISTANCES.length - 1} step="1" .value=${String(at)} aria-label="Distance de la recherche"
-          aria-valuetext=${distLabel(this._radius)} @input=${(/** @type {any} */ e) => this.#setRadius(DISTANCES[Number(e.target.value)])} /></label>
-      <button class="icon-btn" type="button" title="Changer de lieu" aria-label="Changer de lieu" @click=${() => { this._point = null; this._cards = null; }}>${icon('geo-alt')}</button>
+          aria-valuetext=${km} @input=${(/** @type {any} */ e) => this.#setRadius(DISTANCES[Number(e.target.value)])} /></label>` : nothing}
+      ${legend}
     </div>`;
   }
 
@@ -1453,7 +1589,7 @@ export class GfDiscover extends LitElement {
 
   /**
    * A point of the map touched (the cards shown): its plant comes on top of the deck — the cards, the media and the
-   * map follow it. One already loved: shown in the panes; one passed: back in the deck, on top.
+   * map follow it. One already loved: brought back on top, still loved; one passed: back in the deck, on top.
    * @param {CustomEvent} e
    */
   #pick(e) {
@@ -1461,14 +1597,10 @@ export class GfDiscover extends LitElement {
     const cards = this._cards || [];
     const card = cards.find(c => (p.taxonId != null && c.taxonId === p.taxonId) || c.plant.scientificName === p.sci);
     if (!card) { this.#note(`${p.common || p.sci || 'Cette plante'} n’est pas parmi les rencontres d’ici.`); return; }
-    const id = card.plant.id;
-    if (discoverState().matches.includes(id)) { this.#aroundGo(id); return; }
-    if (discoverState().passed.includes(id)) unswipe(id);
-    this._cards = [card, ...cards.filter(c => c !== card)];
-    this._focus = null;
-    this.#navs++;
-    this.#restartDwell();
+    this.#aroundGo(card.plant.id);
   }
+
+  /** @type {Card | undefined} */ #panelCard;
 
   /** A word on the map for a moment. @param {string} text */
   #note(text) {
@@ -1490,6 +1622,9 @@ export class GfDiscover extends LitElement {
     const cards = this._cards || [];
     const id = this.#focusId;
     const card = asking ? undefined : cards.find(c => c.plant.id === id);
+    // While the cards reload (the distance changed), the panel keeps the plant it showed: nothing jumps.
+    if (card) this.#panelCard = card;
+    const panelCard = card ?? (this._loading && !asking ? this.#panelCard : undefined);
     const panes = !asking && step >= 1;
     // Rencontres: the map, the place (distance) and the cards — no legend, no « Où pousse-t-elle encore ? ».
     const quiet = this.#stage === 1;
@@ -1499,11 +1634,8 @@ export class GfDiscover extends LitElement {
         <div class="g-map">
           <div class="g-mapbox"><gf-map no-search no-create no-locate point-click=${asking ? 'none' : 'pick'} @point-pick=${(/** @type {CustomEvent} */ e) => this.#pick(e)}
               .area=${this.#area} .highlight=${asking ? null : quiet ? this.#quietHighlight : this._hl && this._hl.points.length <= MANY ? this._hl : null}
-              .cluster=${asking || quiet ? null : this.#guidedCluster} .frame=${asking ? null : this.#scopeFrame} .zone=${asking ? null : this.#scopeZone}></gf-map>${asking ? this.#launch() : this.#radiusBar()}
-            ${asking ? nothing
-              : this._note ? html`<p class="g-legend" role="status">${this._note}</p>`
-              : card && !quiet ? html`<p class="g-legend" aria-live="polite"><span class="dot"></span>${card.plant.vernacularNames?.[0] || card.plant.scientificName} · ${this.#hlLine()}</p>` : nothing}
-            ${asking || quiet ? nothing : this.#scopeBar(card)}</div>
+              .cluster=${asking || quiet ? null : this.#guidedCluster} .frame=${asking ? null : this.#scopeFrame} .zone=${asking ? null : this.#scopeZone}></gf-map>${asking ? this.#launch() : nothing}</div>
+          ${asking ? nothing : this.#wherePanel(panelCard, quiet)}
           ${step >= 4 && !asking ? this.#aroundList(cards) : nothing}
         </div>
         <div class="g-deck">${asking ? nothing : this._cards ? this.#deckView() : html`<p class="muted g-wait">Recherche des plantes observées autour…</p>`}</div>

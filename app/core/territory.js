@@ -1,18 +1,19 @@
 // @ts-check
 // Where am I, administratively? Departments (bundled simplified outlines, data/territories.json) give the
-// department, its current region and its former (pre-2016) region; protection orders name any of these.
+// department, its current region and its former (pre-2016) region; protection orders name any of these. The
+// outlines (departments, regions, France) are also a map's perimeter when IGN's are not there.
 // Also sorts a plant's INPN statuses into national / here / elsewhere.
 
 import { config } from '../config.js';
 
 /**
  * @typedef {{ code: string, name: string, region: string, former: string, polygons: number[][][][] }} Department
- * @typedef {{ iso: string, name: string, formers: string[] }} Region
+ * @typedef {{ iso: string, name: string, formers: string[], polygons?: number[][][][] }} Region
  * @typedef {{ dept: string | null, deptName: string | null, region: string, regionName: string, formers: string[] }} Territory
  * @typedef {{ type: string, code: string, label: string, area: string, level: string, iso: string }} Status
  */
 
-/** @type {Promise<{ regions: Region[], departments: Department[] }> | null} */
+/** @type {Promise<{ regions: Region[], departments: Department[], country?: { name: string, polygons: number[][][][] } }> | null} */
 let loading = null;
 
 /** The outlines and region table (bundled with the app, cached by the service worker). */
@@ -79,6 +80,54 @@ export async function territoryOfRegion(iso) {
   const { regions } = await territories();
   const region = regions.find(r => r.iso === iso);
   return region ? { dept: null, deptName: null, region: region.iso, regionName: region.name, formers: region.formers } : null;
+}
+
+// ── Outlines (a map's perimeter) ─────────────────────────────────────────────
+
+/**
+ * An outline to draw: a GeoJSON FeatureCollection of its rings as lines (`properties.part: 'line'`: a border, no
+ * fill), and its box [west, south, east, north].
+ * @param {number[][][][]} polygons
+ * @returns {{ feature: any, box: [number, number, number, number] } | null}
+ */
+function outlineOf(polygons) {
+  if (!polygons.length) return null;
+  const lines = polygons.flat();
+  let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+  for (const ring of lines) for (const [x, y] of ring) {
+    if (x < w) w = x;
+    if (x > e) e = x;
+    if (y < s) s = y;
+    if (y > n) n = y;
+  }
+  return {
+    feature: { type: 'FeatureCollection', features: [
+      { type: 'Feature', properties: { part: 'line' }, geometry: { type: 'MultiLineString', coordinates: lines } }
+    ] },
+    box: [w, s, e, n]
+  };
+}
+
+/** @type {Map<string, ReturnType<typeof outlineOf>>} */
+const outlines = new Map();
+
+/**
+ * The bundled outline of a département or a région (by name, compared without accents or punctuation), or of
+ * metropolitan France: for a map, when IGN's is not there (offline, its module off) — and France's always. Regions
+ * and France have their own outlines (departments simplified one by one do not share their borders exactly).
+ * @param {'department' | 'region' | 'country'} kind @param {string} [name]
+ * @returns {Promise<{ feature: any, box: [number, number, number, number] } | null>}
+ */
+export async function bundledOutline(kind, name = '') {
+  const key = kind + ':' + fold(name);
+  if (outlines.has(key)) return outlines.get(key) ?? null;
+  const { regions, departments, country } = await territories();
+  const polygons = kind === 'country' ? country?.polygons
+    : kind === 'region' ? regions.find(r => fold(r.name) === fold(name))?.polygons
+    : departments.find(d => fold(d.name) === fold(name))?.polygons;
+  const outline = outlineOf(polygons || []);
+  outlines.set(key, outline);
+  return outline;
 }
 
 // ── "Ma région" (Réglages) ───────────────────────────────────────────────────

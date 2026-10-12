@@ -177,7 +177,7 @@ export class GfShared extends LitElement {
     const plants = rows.map((r, i) => {
       const plant = byId.get(r.plantId);
       return {
-        key: 'shared:s' + i, placeId: 'shared', entryId: 's' + i, plantId: r.plantId,
+        key: 'shared:s' + i, placeId: 'shared', entryId: 's' + i, plantId: r.plantId, sci: plant?.scientificName,
         coordinates: r.coordinates || origin, own: Boolean(r.coordinates), abundance: r.abundance || 'moyen',
         label: plant?.vernacularNames?.[0] || plant?.scientificName || 'Plante', season: false
       };

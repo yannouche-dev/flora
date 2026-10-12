@@ -149,6 +149,7 @@ export function plantMarkers(places, keep = () => true, harvestMode = false) {
         placeId: place.id,
         entryId: entry.id,
         plantId: entry.plantId,
+        sci: entry.scientificName || undefined,
         coordinates: entryPosition(place, entry),
         own: Boolean(entry.coordinates),
         abundance: entry.abundance,

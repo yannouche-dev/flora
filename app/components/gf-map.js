@@ -59,29 +59,86 @@ function pinIcon(spot, selected, movable = false) {
 }
 
 /**
- * An observation around (Découvrir): a small leaf in a disc, popping in after `delay` ms; `hl`: the plant in view,
- * larger and in its own colour.
- * @param {number} delay @param {boolean} [hl]
+ * An observation around (Découvrir) without a photo: a small leaf in a disc, popping in after `delay` ms.
+ * @param {number} delay
  */
-function leafIcon(delay, hl = false) {
+function leafIcon(delay) {
   return L.divIcon({
-    className: hl ? 'gf-obs-leaf hl' : 'gf-obs-leaf',
-    iconSize: hl ? [34, 34] : [22, 22],
-    iconAnchor: hl ? [17, 17] : [11, 11],
+    className: 'gf-obs-leaf',
+    iconSize: [22, 22],
+    iconAnchor: [11, 11],
     html: `<span class="pop" style="animation-delay:${delay}ms">${iconMarkup('leaf-fill')}</span>`
   });
 }
 
 /**
- * An observation around with its photo (Découvrir): the plant's thumbnail in a ring, popping in after `delay` ms.
+ * An observation around with its photo (Découvrir): popping in after `delay` ms, its leaf first, then the plant's
+ * thumbnail in a ring once it has loaded.
  * @param {string} photo @param {number} delay
  */
 function photoIcon(photo, delay) {
   const pop = elem('span', 'pop');
   pop.style.animationDelay = delay + 'ms';
-  pop.append(dropImg(photo, { loading: 'lazy' }));
+  pop.append(leafGlyph(), fadeImg(photo, { loading: 'lazy' }));
   return L.divIcon({ className: 'gf-obs-leaf gf-obs-photo', iconSize: [30, 30], iconAnchor: [15, 15], html: pop });
 }
+
+/** The leaf a plant's badge shows until its photo has loaded (and for good without one). */
+function leafGlyph() {
+  const glyph = elem('span', 'glyph');
+  glyph.innerHTML = iconMarkup('leaf-fill');
+  return glyph;
+}
+
+/**
+ * A badge's photo: shown once it has loaded (a fade), over the leaf; gone if it fails (the leaf stays).
+ * @param {string} src @param {{ loading?: 'lazy' | 'eager', decoding?: 'async' | 'sync' | 'auto' }} [props]
+ */
+function fadeImg(src, props = {}) {
+  const img = dropImg(src, props);
+  img.classList.add('gf-fade');
+  // Already there (cached): no fade, at once.
+  if (img.complete && img.naturalWidth) img.classList.add('in');
+  else img.addEventListener('load', () => img.classList.add('in'), { once: true });
+  return img;
+}
+
+/**
+ * The plant chosen (Découvrir's plant in view, the species picked « Autour », a value touched in a plant's sheet):
+ * its photo, large, in a pink and gold ring, bouncing in after `delay` ms with a ripple as it lands. Its leaf
+ * shows under the photo until it comes, and stays when there is none (or it fails).
+ * @param {string | null | undefined} photo @param {number} delay @param {number} [size] @param {string} [extra] more classes
+ */
+function chosenIcon(photo, delay, size = 44, extra = '') {
+  const pop = elem('span', 'pop');
+  pop.style.setProperty('--d', delay + 'ms');
+  pop.append(leafGlyph());
+  if (photo) pop.append(fadeImg(photo, { decoding: 'async' }));
+  return L.divIcon({ className: `gf-obs-leaf hl chosen ${extra}`.trim(), iconSize: [size, size], iconAnchor: [size / 2, size / 2], html: pop });
+}
+
+/**
+ * Many observations of the plant chosen, together (a wider scope): its photo in a disc sized by their number, the
+ * count on a badge. `still`: drawn again at another zoom, no entrance.
+ * @param {string} photo @param {number} n @param {number} size @param {boolean} [still]
+ */
+function chosenGroupIcon(photo, n, size, still = false) {
+  const g = elem('span', 'g');
+  const ph = elem('span', 'ph');
+  ph.append(leafGlyph(), fadeImg(photo, { decoding: 'async' }));
+  g.append(ph, elem('b', 'n', n > 999 ? Math.round(n / 1000) + 'k' : String(n)));
+  return L.divIcon({ className: 'gf-occ-group gf-occ-group-hl photo' + (still ? ' still' : ''), iconSize: [size, size], iconAnchor: [size / 2, size / 2], html: g });
+}
+
+/**
+ * Which plant a point is, to light its kin (the other points of the same species): its binomial first — the same
+ * key whatever the source (iNaturalist, GBIF, the plants of places) —, else its taxon.
+ * @param {any} p @returns {string | null}
+ */
+const speciesKey = p => {
+  const binomial = String(p?.sci || '').trim().split(/\s+/).slice(0, 2).join(' ').toLowerCase();
+  return binomial ? 's:' + binomial : p?.taxonId != null ? 't:' + p.taxonId : null;
+};
 
 /**
  * The small plant card shown over an observation: its photo, its names, when and where. Built as nodes, the
@@ -92,7 +149,7 @@ function obsCard(p) {
   const big = p.photo ? p.photo.replace('/square.', '/small.') : null;
   const when = p.date ? new Date(p.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
   const card = elem('div', 'gf-obs-card'), t = elem('div', 't');
-  if (big) card.append(dropImg(big));
+  if (big) card.append(fadeImg(big));
   t.append(elem('b', '', p.common || p.sci || p.title));
   if (p.common && p.sci) t.append(elem('i', '', p.sci));
   if (when || p.place) t.append(elem('small', '', [when, p.place].filter(Boolean).join(' · ')));
@@ -126,23 +183,28 @@ const FLOWER = `<svg x="5" y="5" width="12" height="12" viewBox="0 0 16 16" fill
 
 /** Past this many points, a group touched is zoomed in on before its points are spread. */
 const SPREAD_MAX = 24;
+/** Up to this many points of the plant chosen alone (a wider scope), each shows its photo; past it, dots. */
+const PHOTO_SINGLES = 40;
 
 /** Room between a point and its card. @param {{ gap?: number }} o */
 const gap = o => o.gap ?? 8;
 
 /**
- * Plant: its photo in a circle ringed with its abundance colour (a leaf until / unless a photo is known).
- * @param {PlantMarker} plant @param {boolean} selected @param {boolean} draggable
+ * Plant: its photo in a circle ringed with its abundance colour (a leaf until / unless a photo is known). Selected,
+ * larger (it bounces in); `kin`: the same plant as the one selected, elsewhere — lit too.
+ * @param {PlantMarker} plant @param {boolean} selected @param {boolean} draggable @param {boolean} [kin]
  */
-function plantIcon(plant, selected, draggable) {
+function plantIcon(plant, selected, draggable, kin = false) {
   const color = PIN_COLORS[plant.abundance] || PIN_COLORS.moyen;
   const url = plant.plantId ? cachedThumb(plant.plantId) : null;
-  const classes = ['gf-plant', url ? 'photo' : '', selected ? 'selected' : '', plant.season ? 'season' : '', draggable ? 'draggable' : ''].join(' ');
+  const classes = ['gf-plant', url ? 'photo' : '', selected ? 'selected' : '', kin && !selected ? 'kin' : '', plant.season ? 'season' : '', draggable ? 'draggable' : ''].join(' ');
   if (url) {
     const ring = elem('span', 'ring');
     ring.style.setProperty('--c', color);
-    ring.append(dropImg(url, { decoding: 'async' }));
-    return L.divIcon({ className: classes, iconSize: [34, 34], iconAnchor: [17, 17], html: ring });
+    // Its leaf first, the photo once it has loaded.
+    ring.append(leafGlyph(), fadeImg(url, { decoding: 'async' }));
+    const size = selected ? 50 : 34;
+    return L.divIcon({ className: classes, iconSize: [size, size], iconAnchor: [size / 2, size / 2], html: ring });
   }
   return L.divIcon({
     className: classes,
@@ -155,12 +217,17 @@ function plantIcon(plant, selected, draggable) {
   });
 }
 
+/** What a plant marker looks like: drawn again only when this changes (a selection then bounces once, not at every render). @param {PlantMarker} plant @param {boolean} selected @param {boolean} draggable @param {boolean} kin */
+const plantLook = (plant, selected, draggable, kin) =>
+  [plant.plantId ? cachedThumb(plant.plantId) || '' : '', selected, draggable, kin && !selected, plant.season, plant.abundance].join('|');
+
 /**
  * @typedef {object} PlantMarker
  * @property {string} key          unique: placeId + ':' + entryId
  * @property {string} placeId
  * @property {string} [entryId]    the occurrence (a place may hold the same plant several times)
  * @property {number | null} plantId
+ * @property {string} [sci]        its scientific name: lit with the observations of the same species
  * @property {[number, number]} coordinates
  * @property {string} abundance
  * @property {string} label
@@ -220,8 +287,11 @@ const store = (/** @type {string} */ key, value) => {
  *  - pinDraggable: the place pin can be dragged and long-press emits map-longpress (default true)
  *  - track: show the live GPS position
  *  - fit: zoom to the content on first data
- *  - area: {center, radius, points?, fit?} — a circle (metres) and observation dots inside it ("Autour"); `fit`: the
- *    view frames the circle, whatever the map's size (again when it is resized)
+ *  - area: {center, radius, points?, fit?, photo?} — a circle (metres) and observation dots inside it ("Autour"); `fit`: the
+ *    view frames the circle, whatever the map's size (again when it is resized); `photo`: the points are one plant's,
+ *    each shows its photo
+ *  Plants' points (observations, the plant chosen's, the plants of places), hovered or touched, light their kin: the
+ *  other points of the same plant. A plant selected lights its other markers (in other places) too.
  *  - frame: {key, points, bottom?} — zoom once on these [lon, lat] points (again when the key changes);
  *    `bottom` is the share of the height kept free below them (e.g. for a sheet)
  *  - search (default on; `no-search` removes it): address search pill on top, with the ▦ "Carte" panel button;
@@ -253,9 +323,9 @@ export class GfMap extends LitElement {
     area: { attribute: false },
     /** An area's outline to draw ({ key, feature }: a GeoJSON Feature), dashed, lightly filled. */
     zone: { attribute: false },
-    /** Points grouped when they are close at the zoom shown ({ key, points: { coordinates, title, url? }[] }). */
+    /** Points grouped when they are close at the zoom shown ({ key, points: { coordinates, title, url? }[], photo? }): `photo` shows on the plant chosen's (kind 'hl'). */
     cluster: { attribute: false },
-    /** Over the area: where one plant was observed ({key, points}), larger leaves of another colour (Découvrir). */
+    /** Over the area: where one plant was observed ({ key, points: { coordinates, title, date? }[], photo?, common?, sci?, taxonId? }), its photo in each, large (Découvrir). */
     highlight: { attribute: false },
     remember: { type: Boolean },
     search: { type: Boolean },
@@ -270,7 +340,7 @@ export class GfMap extends LitElement {
     distributionOn: { type: Boolean, attribute: 'distribution-on' },
     /** A second plant's GBIF occurrences, in another colour: { key, label, country? }. */
     compare: { attribute: false },
-    /** A point to show and fly to (a value touched in the plant sheet): { coordinates, title, url? }. */
+    /** A point to show and fly to (a value touched in the plant sheet): { coordinates, title, url?, photo? } (the plant's photo on it). */
     focusPoint: { attribute: false },
     /** This map's own background and overlays (not the shared choice of the Carte); changes emit `layers-change`. */
     base: { attribute: false },
@@ -573,21 +643,31 @@ export class GfMap extends LitElement {
     return layer.addTo(map);
   }
 
-  /** The point touched in the sheet: a ringed marker, the map flies to it. */
+  /** The point touched in the sheet: the plant's photo, large (a ringed dot without one), named; the map flies to it. */
   #syncFocusPoint() {
     const layer = this.#focusLayer;
     if (!layer || !this.#map) return;
+    const p = /** @type {any} */ (this.focusPoint);
+    // The same point again (a caller's new object, at each render): left as it is — no bounce, no flight back to it.
+    const key = p ? [p.coordinates.join(), p.title, p.photo || ''].join('|') : '';
+    if (key === this.#focusKey && layer.getLayers().length) return;
+    this.#focusKey = key;
     layer.clearLayers();
-    const p = this.focusPoint;
     if (!p) return;
     const [x, y] = p.coordinates;
-    const dot = L.circleMarker([y, x], { radius: 9, className: 'gf-focus-point', bubblingMouseEvents: false }).addTo(layer);
+    const dot = p.photo
+      ? L.marker([y, x], { icon: chosenIcon(p.photo, 0, 46, 'focus'), keyboard: false, bubblingMouseEvents: false, zIndexOffset: 2000 }).addTo(layer)
+      : L.circleMarker([y, x], { radius: 9, className: 'gf-focus-point', bubblingMouseEvents: false }).addTo(layer);
     // A node, not a string: Leaflet sets a string as innerHTML, and the title comes from the user's places (a
     // shared link's names) or from GBIF records.
-    dot.bindTooltip(elem('span', '', p.title), { direction: 'top', permanent: true, className: 'gf-focus-tip' });
+    // Above the point; on a low map (a pinned block), below it — the filter's chip is over the map's top.
+    const low = this.#map.getSize().y < 260;
+    dot.bindTooltip(elem('span', '', p.title), { direction: low ? 'bottom' : 'top', permanent: true, className: 'gf-focus-tip', offset: p.photo ? [0, low ? 22 : -22] : [0, 0] });
     this.#onPoint(dot, p);
     if (this.#map.getSize().x) this.#map.flyTo([y, x], Math.max(this.#map.getZoom(), 11), { duration: 0.6 });
   }
+
+  #focusKey = '';
 
   get #root() { return /** @type {HTMLElement} */ (this.querySelector('.gf-map-root')); }
 
@@ -656,12 +736,19 @@ export class GfMap extends LitElement {
     this.#clusterLayer = L.layerGroup().addTo(map);
     this.#spotLayer = L.layerGroup().addTo(map);
     this.#plantLayer = L.layerGroup();
-    map.on('zoomend', () => { this.#syncPlantVisibility(); this.#syncCluster(true); });
+    // A zoom under way (a flight to a zone): the groups wait for its end, made once at the zoom reached.
+    map.on('zoomstart', () => { this.#zooming = true; });
+    map.on('zoomend', () => { this.#zooming = false; this.#syncPlantVisibility(); this.#syncCluster(true); });
+    // A flight stopped short (a drag) ends without a zoomend.
+    map.on('moveend', () => { if (this.#zooming) { this.#zooming = false; this.#syncCluster(true); } });
     // The plants' little cards float above everything (the map's buttons and panels, the page's around it).
     const tip = this.#floatTip = Object.assign(document.createElement('div'), { className: 'gf-float-tip', role: 'tooltip' });
     if ('popover' in tip) tip.popover = 'manual';
     root.append(tip);
     map.on('movestart zoomstart click', () => this.#hideTip());
+    // A touch on the map lets go of the plant lit (a touch screen has no « mouse out »); with a mouse, leaving the map.
+    map.on('click zoomstart', () => this.#light(null));
+    map.getContainer().addEventListener('mouseleave', () => { if (!matchMedia('(hover: none)').matches) this.#light(null); });
 
     const view = this.remember ? readStored(config.storageKeys.mapView, null) : null;
     if (view) map.setView([view.lat, view.lng], view.zoom);
@@ -759,8 +846,9 @@ export class GfMap extends LitElement {
     if (changed.has('pointClick') && changed.get('pointClick') !== undefined && !changed.has('cluster')) { this.#clusterKey = ''; this.#syncCluster(); }
     if (changed.has('highlight')) this.#syncHighlight();
     if (changed.has('zone')) this.#syncZone();
-    if (changed.has('cluster')) this.#syncCluster();
+    // Framed first: a flight starting, the groups are made at its end (at the zoom reached), not here.
     const framed = changed.has('frame') && this.#applyFrame();
+    if (changed.has('cluster')) this.#syncCluster();
     if (this.fit && !this.#fitted) this.#fitToContent();
     if (changed.has('selectedId') && this.selectedId && !framed) this.#reveal(this.selectedId);
   }
@@ -830,10 +918,13 @@ export class GfMap extends LitElement {
       const [lon, lat] = this.#spotAt(spot);
       const selected = spot.id === this.selectedId;
       const movable = this.#placeMovable(spot.id);
+      // Drawn again only when its look changes: a place selected bounces once, not at every render.
+      const look = [selected, movable, spot.properties.plants.length, placeAbundance(spot), appStore.state.harvestMode && inSeason(spot)].join('|');
       let marker = this.#markers.get(spot.id);
       if (!marker) {
         marker = L.marker([lat, lon], { icon: pinIcon(spot, selected, movable), title: placeTitle(spot), keyboard: true, riseOnHover: true, draggable: movable, autoPan: movable })
           .on('click', () => { if (!this.editing) this.#emit('spot-select', { id: spot.id }); });
+        /** @type {any} */ (marker).gfLook = look;
         const id = spot.id;
         marker.on('dragend', () => {
           const { lat: y, lng: x } = /** @type {L.Marker} */ (this.#markers.get(id)).getLatLng();
@@ -843,7 +934,8 @@ export class GfMap extends LitElement {
         this.#markers.set(spot.id, marker);
       } else if (!this.#dragging.has(marker)) {
         marker.setLatLng([lat, lon]);
-        marker.setIcon(pinIcon(spot, selected, movable));
+        if (/** @type {any} */ (marker).gfLook !== look) marker.setIcon(pinIcon(spot, selected, movable));
+        /** @type {any} */ (marker).gfLook = look;
       }
       // While editing, places stay below plants (z 500+): a plant on its place point remains grabbable.
       marker.setZIndexOffset(selected && !this.editing ? 1000 : 0);
@@ -861,16 +953,20 @@ export class GfMap extends LitElement {
   #syncPlants() {
     const layer = /** @type {L.LayerGroup} */ (this.#plantLayer);
     this.#map?.getContainer().classList.toggle('gf-sel-many', Array.isArray(this.selectedPlant) && this.selectedPlant.length > 0);
+    // The plants selected: the other markers of the same plants (elsewhere, in other places) are lit too.
+    const chosen = new Set(this.plants.filter(p => p.plantId != null && this.#isSelected(p.key)).map(p => p.plantId));
     const seen = new Set();
     for (const plant of this.plants) {
       seen.add(plant.key);
       const [lon, lat] = this.#plantAt(plant);
       const selected = this.#isSelected(plant.key);
       const movable = this.#plantMovable(plant);
+      const kin = plant.plantId != null && chosen.has(plant.plantId);
+      const look = plantLook(plant, selected, movable, kin);
       let marker = this.#plantMarkers.get(plant.key);
       if (!marker) {
         marker = L.marker([lat, lon], {
-          icon: plantIcon(plant, selected, movable),
+          icon: plantIcon(plant, selected, movable, kin),
           title: plant.label,
           keyboard: true,
           riseOnHover: true,
@@ -884,13 +980,17 @@ export class GfMap extends LitElement {
           if (this.editable) this.#drop(m => m.plants.set(current.key, [x, y]), { plant: { key: current.key, coordinates: [x, y] } });
           else this.#emit('plant-move', { placeId: current.placeId, entryId: current.entryId, plantId: current.plantId, coordinates: [x, y] });
         });
+        // Hovered (touched): the other markers of the same plant are lit with it (and its observations around).
+        this.#kin(marker, speciesKey(plant) || (plant.plantId != null ? 'p:' + plant.plantId : null));
         this.#trackDrag(marker).addTo(layer);
         this.#plantMarkers.set(plant.key, marker);
+        /** @type {any} */ (marker).gfLook = look;
       } else if (!this.#dragging.has(marker)) {
         marker.setLatLng([lat, lon]);
-        marker.setIcon(plantIcon(plant, selected, movable));
+        if (/** @type {any} */ (marker).gfLook !== look) marker.setIcon(plantIcon(plant, selected, movable, kin));
+        /** @type {any} */ (marker).gfLook = look;
       }
-      marker.setZIndexOffset(selected ? 1200 : 500);
+      marker.setZIndexOffset(selected ? 1200 : kin ? 900 : 500);
     }
     for (const [key, marker] of this.#plantMarkers) {
       if (seen.has(key)) continue;
@@ -899,16 +999,23 @@ export class GfMap extends LitElement {
       this.#plantMarkers.delete(key);
     }
     this.#syncPlantVisibility();
+    this.#relight();
   }
 
   /** Once a plant's photo URL is known, its markers are redrawn with it. @param {number} plantId */
   async #loadThumb(plantId) {
     const url = await thumbUrl(plantId);
     if (!url || !this.isConnected) return;
+    const chosen = new Set(this.plants.filter(p => p.plantId != null && this.#isSelected(p.key)).map(p => p.plantId));
     for (const plant of this.plants) {
       if (plant.plantId !== plantId) continue;
-      this.#plantMarkers.get(plant.key)?.setIcon(plantIcon(plant, this.#isSelected(plant.key), this.#plantMovable(plant)));
+      const marker = this.#plantMarkers.get(plant.key);
+      if (!marker || this.#dragging.has(marker)) continue;
+      const selected = this.#isSelected(plant.key), movable = this.#plantMovable(plant), kin = chosen.has(plantId);
+      marker.setIcon(plantIcon(plant, selected, movable, kin));
+      /** @type {any} */ (marker).gfLook = plantLook(plant, selected, movable, kin);
     }
+    this.#relight();
   }
 
   /** Plants only from `plantZoom` on: from afar the map shows places. */
@@ -1004,6 +1111,8 @@ export class GfMap extends LitElement {
     const [lon, lat] = area.center;
     // `leaves`: the observations as small leaves popping in one after the other, the circle glowing (Découvrir).
     const fancy = Boolean(area.leaves);
+    // Its shadow: the same circle, darker, a little lower (a still line — no filter to redraw at each move).
+    L.circle([lat, lon], { radius: area.radius, className: 'gf-perim-shadow', interactive: false }).addTo(layer);
     const circle = L.circle([lat, lon], { radius: area.radius, className: fancy ? 'gf-area gf-area-glow' : 'gf-area', interactive: false }).addTo(layer);
     const bounds = area.fit ? circle.getBounds() : null;
     // The same circle again (the points arrived): no move; another one: the view eases to it (the old tiles
@@ -1014,20 +1123,24 @@ export class GfMap extends LitElement {
     this.#areaBounds = bounds;
     this.#areaInset = inset;
     if (moved) this.#fitArea(!first);
+    // `photo`: the observations are of one plant chosen (the species picked « Autour »): each shows its photo, large.
+    const chosen = /** @type {any} */ (area).photo;
     for (const [i, point] of (area.points || []).entries()) {
       const [x, y] = point.coordinates;
       const p = /** @type {any} */ (point);
       const dot = fancy
         ? L.marker([y, x], { icon: p.photo ? photoIcon(p.photo, Math.min(i, 40) * 25) : leafIcon(Math.min(i, 40) * 25), keyboard: false, bubblingMouseEvents: false }).addTo(layer)
+        : chosen ? L.marker([y, x], { icon: chosenIcon(chosen, Math.min(i, 30) * 25, this.#chosenSize(40)), keyboard: false, bubblingMouseEvents: false, riseOnHover: true }).addTo(layer)
         : L.circleMarker([y, x], { radius: 6, className: 'gf-obs', bubblingMouseEvents: false }).addTo(layer);
-      // With a photo: a small card of the plant on hover; else its name.
-      // A touch screen has no hover: a touch opens the plant's card (a popup, until the next touch on the map);
-      // with a mouse, it shows on hover and a click opens the record.
-      const touch = fancy && (p.photo || p.sci) && matchMedia('(hover: none)').matches;
+      // With a photo: a small card of the plant on hover (a first touch, on a touch screen); else its name.
       if (fancy && (p.photo || p.sci)) this.#tip(dot, () => obsCard(p), { card: true, gap: 6 });
+      else if (chosen) this.#tip(dot, () => obsCard({ ...p, photo: chosen }), { card: true, gap: 6 });
       else this.#tip(dot, point.title);
-      if (!touch || this.pointClick === 'pick') this.#onPoint(dot, point);
+      this.#onPoint(dot, point);
+      // Hovered (touched): the other points of the same plant are lit with it.
+      this.#kin(dot, speciesKey(p) || (fancy ? null : 'area'));
     }
+    this.#relight();
   }
 
   /** @type {HTMLElement | null} */ #floatTip = null;
@@ -1042,7 +1155,9 @@ export class GfMap extends LitElement {
    */
   #tip(dot, content, o = {}) {
     const show = () => this.#showTip(dot, content, o);
-    if (matchMedia('(hover: none)').matches) dot.on('click', show);
+    /** @type {any} */ (dot).gfTip = true;
+    // A touch shows the card; a second one, while it shows, does what a click does (#onPoint: 'gf-again').
+    if (matchMedia('(hover: none)').matches) dot.on('click', () => { const again = this.#tipOwner === dot; show(); if (again) dot.fire('gf-again'); });
     else { dot.on('mouseover', show); dot.on('mouseout', () => this.#hideTip(dot)); }
     dot.on('remove', () => this.#hideTip(dot));
   }
@@ -1055,6 +1170,7 @@ export class GfMap extends LitElement {
     this.#tipOwner = dot;
     tip.className = 'gf-float-tip' + (o.card ? ' card' : '');
     if (typeof content === 'function') tip.replaceChildren(content()); else tip.textContent = content;
+    if (/** @type {any} */ (dot).gfAgain) (tip.querySelector('.gf-obs-card .t') || tip).append(elem('small', 'again', 'Touchez encore pour ouvrir l’observation'));
     // Its photo arriving changes nothing (fixed size), but placed again once there, to be sure.
     tip.querySelector('img')?.addEventListener('load', () => { if (this.#tipOwner === dot) this.#placeTip(el, gap(o)); }, { once: true });
     try { if (tip.popover && !tip.matches(':popover-open')) tip.showPopover(); } catch { /* not connected */ }
@@ -1083,15 +1199,69 @@ export class GfMap extends LitElement {
   }
 
   /**
-   * A point clicked, as `point-click` says: its record opened in a new tab, a `point-pick` event (the page shows
-   * that plant: Découvrir), or nothing (its tooltip only).
+   * A plant's point: hovered (touched, on a touch screen), it is lit and so are the other points of the same plant
+   * — its kin, wherever they are on the map: observations, the plant chosen's, the plants of places —; the rest
+   * step back. A touch elsewhere on the map, or leaving it, lets go.
+   * @param {L.Layer} layer @param {string | null} key the plant (speciesKey, 'p:' + plant id, 'hl', 'area')
+   */
+  #kin(layer, key) {
+    if (!key) return;
+    /** @type {any} */ (layer).gfKin = key;
+    if (matchMedia('(hover: none)').matches) layer.on('click', () => this.#light(key, layer));
+    else { layer.on('mouseover', () => this.#light(key, layer)); layer.on('mouseout', () => this.#light(null)); }
+    layer.on('remove', () => { if (this.#litBy === layer) this.#light(null); });
+  }
+
+  /** The elements lit now. @type {Element[]} */ #lit = [];
+  /** @type {L.Layer | null} */ #litBy = null;
+  /** The plant lit now (its kin key). @type {string | null} */ #litKey = null;
+
+  /** Lights one plant's points (null: none), `origin` the most. @param {string | null} key @param {L.Layer} [origin] */
+  #light(key, origin) {
+    for (const el of this.#lit) el.classList.remove('gf-kin', 'gf-kin-self');
+    this.#lit = [];
+    this.#litKey = key;
+    this.#litBy = key && origin ? origin : null;
+    const map = this.#map;
+    if (!map) return;
+    if (key) {
+      const groups = [this.#areaLayer, this.#hlLayer, this.#clusterLayer, this.#spreadLayer];
+      /** @type {any[]} */
+      const layers = groups.flatMap(g => g ? g.getLayers() : []);
+      if (this.#plantLayer && map.hasLayer(this.#plantLayer)) layers.push(...this.#plantMarkers.values());
+      // Only those in sight (a wide scope has hundreds out of it): fewer elements restyled.
+      const view = map.getBounds().pad(0.2);
+      for (const l of layers) {
+        if (l.gfKin !== key || (l.getLatLng && !view.contains(l.getLatLng()))) continue;
+        const el = l.getElement?.();
+        if (el) { el.classList.add('gf-kin'); this.#lit.push(el); }
+      }
+      const self = /** @type {any} */ (origin)?.getElement?.();
+      if (self) { self.classList.add('gf-kin-self'); if (!this.#lit.includes(self)) this.#lit.push(self); }
+    }
+    // Kin to show: the other points step back (one alone is only lit itself).
+    map.getContainer().classList.toggle('gf-kin-on', this.#lit.length > 1);
+  }
+
+  /** Points drawn again (a new icon has its own classes): the plant lit stays lit, its new points with it. */
+  #relight() { if (this.#litKey) this.#light(this.#litKey, this.#litBy ?? undefined); }
+
+  /**
+   * A point clicked, as `point-click` says: its record opened in a new tab (on a touch screen, at a second touch
+   * when the point has a card), a `point-pick` event (the page shows that plant: Découvrir), or nothing (its tooltip
+   * only).
    * @param {L.Layer} dot @param {any} p
    */
   #onPoint(dot, p) {
     const how = this.pointClick || 'open';
     if (how === 'none') return;
     if (how === 'pick') { dot.on('click', () => this.dispatchEvent(new CustomEvent('point-pick', { detail: { point: p }, bubbles: true, composed: true }))); return; }
-    if (p.url) dot.on('click', () => open(p.url, '_blank', 'noopener'));
+    if (!p.url) return;
+    // On a touch screen, a point with a card: the first touch shows it (and lights its kin), the second opens the
+    // record — not the app left at once.
+    const again = /** @type {any} */ (dot).gfTip && matchMedia('(hover: none)').matches;
+    /** @type {any} */ (dot).gfAgain = again;
+    dot.on(again ? 'gf-again' : 'click', () => open(p.url, '_blank', 'noopener'));
   }
 
   /** @type {L.LatLngBounds | null} */ #areaBounds = null;
@@ -1102,13 +1272,17 @@ export class GfMap extends LitElement {
   #clusterKey = '';
 
   /** @type {L.LayerGroup | null} */ #spreadLayer = null;
+  /** A zoom under way (zoomstart → zoomend): groups wait for its end. */
+  #zooming = false;
 
   /**
    * A group's points spread around it, each on a thread to its place: a dot of its source's colour, its card on
    * hover, its record on a touch. A touch on the map, or a zoom, gathers them back.
    * @param {L.LatLng} at @param {{ coordinates: [number, number], title: string, url?: string }[]} pts @param {string} kind
+   * @param {string | null} [photo] the plant chosen's: each of its points shows it
+   * @param {{ common?: string, sci?: string, taxonId?: number } | null} [who] the plant chosen (its card's names, its kin)
    */
-  #spread(at, pts, kind) {
+  #spread(at, pts, kind, photo = null, who = null) {
     const map = /** @type {L.Map} */ (this.#map);
     this.#gather();
     const layer = this.#spreadLayer = L.layerGroup().addTo(map);
@@ -1121,13 +1295,19 @@ export class GfMap extends LitElement {
       const r = n <= 10 ? 34 + n * 3 : 26 + i * 4.2;
       const spot = map.layerPointToLatLng(L.point(c.x + r * Math.cos(angle), c.y + r * Math.sin(angle)));
       L.polyline([at, spot], { className: 'gf-spread-thread', interactive: false }).addTo(layer);
-      const dot = L.circleMarker(spot, { radius: 7, className: 'gf-occ gf-occ-' + (/** @type {any} */ (p).kind || kind), bubblingMouseEvents: false }).addTo(layer);
+      const dot = photo
+        ? L.marker(spot, { icon: chosenIcon(photo, Math.min(i, 30) * 15, 30), keyboard: false, bubblingMouseEvents: false, riseOnHover: true, zIndexOffset: 1000 }).addTo(layer)
+        : L.circleMarker(spot, { radius: 7, className: 'gf-occ gf-occ-' + (/** @type {any} */ (p).kind || kind), bubblingMouseEvents: false }).addTo(layer);
       const q = /** @type {any} */ (p);
-      if (q.photo || q.sci) this.#tip(dot, () => obsCard(q), { card: true }); else this.#tip(dot, p.title);
+      if (photo) this.#tip(dot, () => obsCard({ ...q, photo, common: who?.common, sci: who?.sci }), { card: true, gap: 6 });
+      else if (q.photo || q.sci) this.#tip(dot, () => obsCard(q), { card: true });
+      else this.#tip(dot, p.title);
       this.#onPoint(dot, p);
+      this.#kin(dot, photo ? speciesKey(who) || 'hl' : null);
     });
     L.circleMarker(at, { radius: 5, className: 'gf-spread-center', interactive: false }).addTo(layer);
     map.once('click zoomstart', () => this.#gather());
+    this.#relight();
   }
 
   /** The points spread gathered back into their group. */
@@ -1136,7 +1316,11 @@ export class GfMap extends LitElement {
     this.#spreadLayer = null;
   }
 
-  /** The outline of the area touched: dashed, lightly filled, under the points. */
+  /**
+   * The outline of the area touched (a département, a région, France): a perimeter, like the circle — its border
+   * only, light green, under the points. A FeatureCollection may give its border as lines (`properties.part: 'line'`:
+   * several shapes as one, their shared borders not drawn; a 'fill' part is not shown).
+   */
   #syncZone() {
     const layer = this.#zoneLayer, z = this.zone;
     if (!layer) return;
@@ -1145,7 +1329,10 @@ export class GfMap extends LitElement {
     this.#zoneKey = key;
     layer.clearLayers();
     if (!z?.feature) return;
-    L.geoJSON(z.feature, { interactive: false, style: { className: 'gf-zone' } }).addTo(layer);
+    const part = (/** @type {any} */ f) => f?.properties?.part;
+    // Its shadow first (the border only, darker, a little lower), then the zone.
+    L.geoJSON(z.feature, { interactive: false, filter: f => part(f) !== 'fill', style: { className: 'gf-perim-shadow' } }).addTo(layer);
+    L.geoJSON(z.feature, { interactive: false, style: f => ({ className: 'gf-zone' + (part(f) === 'fill' ? ' gf-zone-fill' : part(f) === 'line' ? ' gf-zone-line' : '') }) }).addTo(layer);
   }
 
   /**
@@ -1156,8 +1343,13 @@ export class GfMap extends LitElement {
   #syncCluster(rezoom = false) {
     const map = this.#map, layer = this.#clusterLayer, c = this.cluster;
     if (!map || !layer) return;
+    // A zoom under way (a flight to the zone chosen): grouped once, at its end (zoomend), at the zoom reached — not
+    // here, at the zoom it leaves (hundreds of points alone there, each drawn and bouncing for nothing).
+    if (this.#zooming && !rezoom) { layer.clearLayers(); this.#gather(); this.#clusterKey = ''; return; }
     const key = (c?.key || '') + ':' + map.getZoom();
     if (key === this.#clusterKey && !rezoom) return;
+    // The same points again at another zoom: drawn at once, without their entrance (it played when they came).
+    const still = c?.key && this.#clusterKey.startsWith(c.key + ':') ? ' still' : '';
     this.#clusterKey = key;
     layer.clearLayers();
     this.#gather();
@@ -1176,46 +1368,79 @@ export class GfMap extends LitElement {
       cell.pts.push(p); cell.x += px.x; cell.y += px.y;
       cells.set(id, cell);
     }
+    // The plant chosen (Découvrir, a wider scope): its names on its points' cards; its kin key, the same as its
+    // points in the circle (they light together).
+    const who = /** @type {any} */ (c);
+    const hlKin = speciesKey(who) || 'hl';
+    // Its points alone get its photo while they are few; past that, dots (hundreds of images and bounces weigh).
+    const singles = [...cells.values()].filter(cell => cell.pts.length === 1 && /** @type {any} */ (cell.pts[0]).kind === 'hl').length;
     for (const cell of cells.values()) {
       const n = cell.pts.length;
       const at = map.unproject([cell.x / n, cell.y / n], zoom);
+      // The plant chosen's points: its photo, alone or on the group with their number.
+      const photo = /** @type {any} */ (cell.pts[0]).kind === 'hl' ? who.photo || null : null;
       if (n === 1) {
         const p = cell.pts[0];
-        const dot = L.circleMarker([p.coordinates[1], p.coordinates[0]], { radius: 6, className: 'gf-occ gf-occ-' + (/** @type {any} */ (p).kind || 'occ'), bubblingMouseEvents: false }).addTo(layer);
-        this.#tip(dot, p.title);
+        const kind = /** @type {any} */ (p).kind || 'occ';
+        const dot = photo && singles <= PHOTO_SINGLES
+          ? L.marker([p.coordinates[1], p.coordinates[0]], { icon: chosenIcon(photo, 0, 34, still), keyboard: false, bubblingMouseEvents: false, riseOnHover: true, zIndexOffset: 1000 }).addTo(layer)
+          : L.circleMarker([p.coordinates[1], p.coordinates[0]], { radius: 6, className: 'gf-occ gf-occ-' + kind, bubblingMouseEvents: false }).addTo(layer);
+        if (photo) this.#tip(dot, () => obsCard({ .../** @type {any} */ (p), photo, common: who.common, sci: who.sci }), { card: true, gap: 6 });
+        else this.#tip(dot, p.title);
         this.#onPoint(dot, p);
+        this.#kin(dot, kind === 'hl' ? hlKin : null);
         continue;
       }
       const size = Math.round(Math.min(54, 26 + Math.log2(n) * 6));
       const kind = /** @type {any} */ (cell.pts[0]).kind || 'occ';
       const m = L.marker(at, {
-        icon: L.divIcon({ className: 'gf-occ-group gf-occ-group-' + kind, iconSize: [size, size], iconAnchor: [size / 2, size / 2], html: `<span>${n > 999 ? Math.round(n / 1000) + 'k' : n}</span>` }),
-        keyboard: true, bubblingMouseEvents: false, title: `${n} points — toucher pour zoomer`
+        icon: photo ? chosenGroupIcon(photo, n, size, Boolean(still))
+          : L.divIcon({ className: 'gf-occ-group gf-occ-group-' + kind + still, iconSize: [size, size], iconAnchor: [size / 2, size / 2], html: `<span>${n > 999 ? Math.round(n / 1000) + 'k' : n}</span>` }),
+        keyboard: true, bubblingMouseEvents: false, title: `${n} points — toucher pour zoomer`, riseOnHover: true,
+        // The plant chosen's groups above the others' (and the larger above the smaller: their number stays seen).
+        zIndexOffset: photo ? 1000 + Math.min(n, 999) : 0
       }).addTo(layer);
+      this.#kin(m, kind === 'hl' ? hlKin : null);
       // A touch: its points, spread around it (a large group: zoomed in on first).
       m.on('click', () => {
         const b = L.latLngBounds(cell.pts.map(p => [p.coordinates[1], p.coordinates[0]]));
         if (n > SPREAD_MAX && !b.getNorthEast().equals(b.getSouthWest()) && map.getZoom() < 17) { map.flyToBounds(b, { padding: [40, 40], duration: 0.5, maxZoom: 17 }); return; }
-        this.#spread(at, cell.pts, kind);
+        this.#spread(at, cell.pts, kind, photo, photo ? who : null);
       });
     }
+    this.#relight();
   }
   #hlKey = '';
 
-  /** One plant's observations over the area: larger leaves, in their own colour; the others fade. */
+  /**
+   * The size of the plant chosen's photos: a little smaller on a small map (a phone's band), large elsewhere — still
+   * well above the other points (30 px). @param {number} large
+   */
+  #chosenSize(large) { const w = this.#map?.getSize().x || 0; return w && w < 520 ? Math.max(40, Math.round(large * 0.9)) : large; }
+
+  /**
+   * One plant's observations over the area: its photo in each, large, bouncing in one after the other (its leaf
+   * without a photo); the other points step back. Hovered, a small card of it (its date); its kin lit with it.
+   */
   #syncHighlight() {
-    const layer = this.#hlLayer, hl = this.highlight;
+    const layer = this.#hlLayer, hl = /** @type {any} */ (this.highlight);
     if (!layer) return;
-    const key = hl ? hl.key + ':' + hl.points.length : '';
+    const key = hl ? hl.key + ':' + hl.points.length + ':' + (hl.photo || '') : '';
     this.#map?.getContainer().classList.toggle('gf-hl-on', Boolean(hl?.points.length));
     if (key === this.#hlKey) return;
     this.#hlKey = key;
     layer.clearLayers();
+    const kin = speciesKey(hl) || 'hl';
     for (const [i, point] of (hl?.points || []).entries()) {
       const [x, y] = point.coordinates;
-      const dot = L.marker([y, x], { icon: leafIcon(Math.min(i, 30) * 30, true), keyboard: false, bubblingMouseEvents: false, zIndexOffset: 1000 }).addTo(layer);
-      this.#tip(dot, point.title, { gap: 4 });
+      const p = /** @type {any} */ (point);
+      const photo = p.photo || hl.photo || null;
+      const dot = L.marker([y, x], { icon: chosenIcon(photo, Math.min(i, 30) * 30, this.#chosenSize(44)), keyboard: false, bubblingMouseEvents: false, zIndexOffset: 1000, riseOnHover: true }).addTo(layer);
+      if (photo || hl.sci) this.#tip(dot, () => obsCard({ title: point.title, common: hl.common, sci: hl.sci, photo, date: p.date }), { card: true, gap: 6 });
+      else this.#tip(dot, point.title, { gap: 4 });
+      this.#kin(dot, kin);
     }
+    this.#relight();
   }
 
   /** What the map was framed on last: the area's circle, or the frame given (framed again on a resize). */

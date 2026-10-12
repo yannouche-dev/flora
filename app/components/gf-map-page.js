@@ -359,17 +359,29 @@ export class GfMapPage extends LitElement {
     if (a) this._around = { ...a, filter: { ...a.filter, ...patch } };
   }
 
-  /** The circle for gf-map, with the chosen species' observations. */
+  /**
+   * The circle for gf-map, with the chosen species' observations — the same object while they do not change: the
+   * map redraws them only then (its markers bounce in once, not at each render, a GPS fix…).
+   */
   get #area() {
     const a = this._around;
     if (!a) return null;
+    // The species picked: its photo on each of its observations (when photos are on).
+    const photo = a.species?.photo && this.#store.state.modules.photos[this.#store.state.mode] ? a.species.photo : null;
+    const m = this.#areaMemo;
+    if (m && m.center === a.center && m.radius === a.radius && m.obs === a.obs && m.species === a.species && m.photo === photo) return m.value;
     const name = a.species ? a.species.common || a.species.name : '';
-    return {
+    const value = {
       center: a.center,
       radius: a.radius,
-      points: (a.obs || []).map(o => ({ coordinates: o.coordinates, title: name + (o.date ? ' · ' + shortDate(o.date) : ''), url: o.url }))
+      photo,
+      points: (a.obs || []).map(o => ({ coordinates: o.coordinates, title: name + (o.date ? ' · ' + shortDate(o.date) : ''), url: o.url,
+        common: a.species?.common || null, sci: a.species?.name || '', date: o.date || null }))
     };
+    this.#areaMemo = { center: a.center, radius: a.radius, obs: a.obs, species: a.species, photo, value };
+    return value;
   }
+  /** @type {any} */ #areaMemo = null;
 
   /** Frames the whole circle above the panel. */
   get #aroundFrame() {
