@@ -115,19 +115,33 @@ gf-map .leaflet-control-attribution {
   border: 0;
 }
 
+/* Effects stay light: only `transform`, `scale`, `rotate` and `opacity` move (the compositor's work, no repaint),
+   shadows are still, and nothing loops on many points. Hover, selection and kin use the `scale` property: it composes
+   with the `transform` of the entrance animations (a bounce). */
 .gf-place svg,
 .gf-plant svg {
   display: block;
   filter: drop-shadow(0 1px 2px rgb(0 0 0 / 50%));
-  transition: transform 0.12s ease-out;
+  transition: scale 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .gf-place svg {
   transform-origin: 50% 100%;
 }
 
+.gf-place:not(.selected):hover svg {
+  scale: 1.12;
+}
+
+/* A place selected: it drops in and bounces, larger. */
 .gf-place.selected svg {
-  transform: scale(1.25);
+  scale: 1.25;
+  animation: gf-place-drop 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+@keyframes gf-place-drop {
+  0% { transform: translateY(-16px) scale(0.6); opacity: 0; }
+  60% { transform: translateY(2px) scale(1.08); opacity: 1; }
+  100% { transform: none; }
 }
 
 .gf-place.season .ring,
@@ -141,8 +155,13 @@ gf-map .leaflet-control-attribution {
   transform-origin: 50% 50%;
 }
 
+.gf-plant:hover svg {
+  scale: 1.25;
+}
+
 .gf-plant.selected svg {
-  transform: scale(1.4);
+  scale: 1.5;
+  animation: gf-chosen-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
 }
 
 .gf-plant.draggable {
@@ -151,31 +170,70 @@ gf-map .leaflet-control-attribution {
 
 /* Plants with a photo: the photo in a circle ringed with the abundance colour. */
 .gf-plant .ring:is(span) {
-  display: block;
+  position: relative;
+  display: grid;
+  place-items: center;
   box-sizing: border-box;
-  width: 34px;
-  height: 34px;
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
   overflow: hidden;
   border: 3px solid var(--c);
   background: var(--c);
-  box-shadow: 0 0 0 1.5px #fff, 0 1px 4px rgb(0 0 0 / 55%);
-  transition: transform 0.12s ease-out;
+  color: #fff;
+  font-size: 14px;
+  box-shadow: 0 0 0 1.5px #fff, 0 2px 5px rgb(0 0 0 / 50%);
+  transition: scale 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.gf-plant .ring:is(span):hover {
+  scale: 1.2;
 }
 .gf-plant .ring img {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
+/* A badge's photo: shown once loaded, over its leaf (fadeImg). */
+.gf-fade { opacity: 0; transition: opacity 0.3s ease-out; }
+.gf-fade.in { opacity: 1; }
+/* The leaf under it: a layer of its own (Leaflet gives icons a z-index, which a grid item honours), under the photo. */
+.gf-obs-leaf .glyph, .gf-plant .glyph, .gf-occ-group .glyph { position: absolute; inset: 0; z-index: 0; display: grid; place-items: center; line-height: 0; }
 /* A plant's occurrences lit together (Parcours): the other plants step back. */
 .gf-sel-many .gf-plant:not(.selected) {
   opacity: 0.45;
   transition: opacity 0.2s;
 }
+/* A plant selected: larger (its marker is), bouncing in, ringed in green, a halo breathing around it. */
 .gf-plant.photo.selected .ring {
-  transform: scale(1.35);
-  box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--gf-accent, #16a34a), 0 1px 4px rgb(0 0 0 / 55%);
+  border-width: 3.5px;
+  box-shadow: 0 0 0 2.5px #fff, 0 0 0 5px var(--gf-accent, #16a34a), 0 6px 16px rgb(0 0 0 / 50%);
+  animation: gf-chosen-in 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+/* Its halo: three ripples, then still (a halo never loops on many markers: a plant's occurrences lit together). */
+.gf-plant.selected::after {
+  content: '';
+  position: absolute;
+  inset: -6px;
+  border-radius: 50%;
+  border: 3px solid var(--gf-accent, #16a34a);
+  pointer-events: none;
+  opacity: 0;
+  animation: gf-halo 1.6s ease-out 0.5s 3;
+}
+/* The same plant as the one selected, in its other places: ringed in gold, a little larger. */
+.gf-plant.kin .ring:is(span) {
+  scale: 1.15;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4.5px #ffd166, 0 4px 10px rgb(0 0 0 / 45%);
+}
+.gf-plant.kin svg {
+  scale: 1.25;
+}
+.gf-plant.kin svg .ring {
+  stroke: #ffd166;
+  stroke-width: 2.5;
 }
 .gf-plant.photo.season .ring {
   border-color: #fde047;
@@ -293,33 +351,60 @@ gf-map .gf-layer-menu input {
   }
 }
 
-/* "Autour": the searched circle and iNaturalist observations of one species. */
-.gf-area {
-  stroke: #7c3aed;
-  stroke-width: 2;
-  stroke-dasharray: 6 6;
-  fill: #7c3aed;
-  fill-opacity: 0.06;
+/* Perimeters — the circle searched (« Autour »), a département, a région, France —: light green, lightly
+   filled, lifted by a soft shadow: the same line under it, darker and a little lower (no filter: nothing to redraw as
+   the map moves). A zone given as fill and border apart: the fill has no stroke, the border no fill. */
+.gf-area,
+.gf-zone {
+  stroke: #a3e68a;
+  stroke-width: 3;
+  stroke-linejoin: round;
+  stroke-dasharray: none;
+  fill: #c3f2ad;
+  fill-opacity: 0.1;
 }
+.gf-perim-shadow {
+  stroke: #000;
+  stroke-opacity: 0.3;
+  stroke-width: 5;
+  stroke-linejoin: round;
+  fill: none;
+  transform: translate(0, 1.5px);
+  pointer-events: none;
+}
+.gf-zone {
+  stroke-width: 2.5;
+  fill-opacity: 0.08;
+}
+.gf-zone.gf-zone-fill {
+  stroke: none;
+}
+.gf-zone.gf-zone-line {
+  fill: none;
+}
+/* The observations of one plant chosen, as dots (no photo): its pink and gold. */
 .gf-obs {
-  stroke: #fff;
+  stroke: #ffd166;
   stroke-width: 2;
-  fill: #7c3aed;
-  fill-opacity: 0.9;
+  fill: #e0245e;
+  fill-opacity: 0.95;
   cursor: pointer;
 }
-/* Découvrir: the circle well seen, breathing softly; the observations as leaves popping in one after the other. */
-.gf-area.gf-area-glow {
-  stroke: #2e7d32;
-  stroke-width: 3;
-  stroke-dasharray: none;
-  fill: #66bb6a;
-  fill-opacity: 0.1;
-  filter: drop-shadow(0 0 6px rgb(46 125 50 / 55%));
-  animation: gf-area-breathe 3.2s ease-in-out infinite;
+/* Points on hover: they swell with a spring. */
+path.gf-obs,
+path.gf-occ {
+  transform-box: fill-box;
+  transform-origin: center;
+  transition: scale 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s;
 }
-@keyframes gf-area-breathe {
-  50% { fill-opacity: 0.18; stroke-opacity: 0.75; }
+path.gf-obs:hover,
+path.gf-occ:hover {
+  scale: 1.45;
+}
+/* Découvrir: the circle well seen (a little wider); the observations as leaves popping in one after the other. */
+.gf-area.gf-area-glow {
+  stroke-width: 3.5;
+  fill-opacity: 0.12;
 }
 .gf-obs-leaf { background: none; border: 0; }
 .gf-obs-leaf .pop {
@@ -333,30 +418,94 @@ gf-map .gf-layer-menu input {
   font-size: 12px;
   box-shadow: 0 1px 4px rgb(0 0 0 / 35%), 0 0 0 2px rgb(46 125 50 / 35%);
   cursor: pointer;
-  animation: gf-leaf-pop 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  /* `backwards`: once in, the transform is free again — hover and kin swell it with `scale`. */
+  animation: gf-leaf-pop 0.42s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+  transition: scale 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), rotate 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s;
 }
-.gf-obs-leaf .pop:hover { color: #fff; background: #2e7d32; }
-/* The plant in view (Découvrir): its observations larger, in pink and gold; the others step back. */
-.gf-obs-leaf.hl .pop {
-  width: 34px;
-  height: 34px;
-  font-size: 18px;
-  color: #fff;
-  background: radial-gradient(circle at 35% 30%, #ff6f9c, #e0245e 70%);
-  box-shadow: 0 2px 8px rgb(0 0 0 / 40%), 0 0 0 3px #ffd166;
-}
+.gf-obs-leaf .pop:hover { color: #fff; background: #2e7d32; scale: 1.3; rotate: -8deg; }
 .gf-hl-on .gf-obs-leaf:not(.hl) { opacity: 0.45; transition: opacity 0.3s; }
 @keyframes gf-leaf-pop {
   from { transform: scale(0) rotate(-40deg); opacity: 0; }
   to { transform: none; opacity: 1; }
 }
+
+/* The plant chosen (Découvrir's plant in view, the species picked « Autour », a value touched in a sheet): its photo,
+   large, in a pink and gold ring; it bounces in, a ripple as it lands. Its leaf until the photo comes (or for good). */
+.gf-obs-leaf.chosen .pop {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  color: #fff;
+  font-size: 18px;
+  background: radial-gradient(circle at 35% 30%, #ff6f9c, #e0245e 70%);
+  box-shadow: 0 0 0 3px #ffd166, 0 0 0 4.5px rgb(255 255 255 / 85%), 0 5px 14px rgb(0 0 0 / 45%);
+  animation: gf-chosen-in 0.62s cubic-bezier(0.34, 1.56, 0.64, 1) var(--d, 0ms) backwards;
+}
+.gf-obs-leaf.chosen .pop img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+.gf-obs-leaf.chosen .pop::after {
+  content: '';
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 3px solid #ffd166;
+  pointer-events: none;
+  opacity: 0;
+  animation: gf-halo 0.9s ease-out calc(var(--d, 0ms) + 0.35s) 1;
+}
+.gf-obs-leaf.chosen .pop:hover { color: #fff; background: radial-gradient(circle at 35% 30%, #ff6f9c, #e0245e 70%); scale: 1.25; rotate: -6deg; }
+/* The value touched in a sheet: its halo three times. */
+.gf-obs-leaf.chosen.focus .pop::after { animation: gf-halo 1.6s ease-out 0.4s 3; }
+@keyframes gf-chosen-in {
+  0% { transform: scale(0) rotate(-30deg); opacity: 0; }
+  55% { transform: scale(1.25) rotate(8deg); opacity: 1; }
+  78% { transform: scale(0.92) rotate(-3deg); }
+  100% { transform: none; opacity: 1; }
+}
+@keyframes gf-halo {
+  from { transform: scale(0.9); opacity: 0.9; }
+  to { transform: scale(1.8); opacity: 0; }
+}
+
+/* A plant's point hovered (touched): it and its kin — the other points of the same plant — are lit, the hovered one
+   most; the other points step back. */
+.leaflet-marker-icon.gf-kin { z-index: 5000 !important; }
+.leaflet-marker-icon.gf-kin-self { z-index: 6000 !important; }
+.gf-kin .pop,
+.gf-kin .ring:is(span) { scale: 1.25; }
+.gf-kin svg { scale: 1.3; }
+.gf-kin .pop { box-shadow: 0 0 0 3px #9be15d, 0 0 14px 3px rgb(155 225 93 / 75%), 0 4px 10px rgb(0 0 0 / 40%); }
+.gf-kin.chosen .pop,
+.gf-kin .ring:is(span) { box-shadow: 0 0 0 3px #ffd166, 0 0 16px 4px rgb(255 209 102 / 80%), 0 5px 14px rgb(0 0 0 / 45%); }
+.gf-kin-self .pop,
+.gf-kin-self .ring:is(span) { scale: 1.5; rotate: -6deg; }
+.gf-kin-self svg { scale: 1.6; }
+path.gf-kin { scale: 1.5; stroke: #ffd166; stroke-width: 3; }
+.gf-kin-on .gf-obs-leaf:not(.gf-kin),
+.gf-kin-on .gf-plant:not(.gf-kin),
+.gf-kin-on .gf-occ-group:not(.gf-kin),
+.gf-kin-on path.gf-occ:not(.gf-kin),
+.gf-kin-on path.gf-obs:not(.gf-kin) { opacity: 0.28; transition: opacity 0.25s; }
+.gf-kin-on .gf-obs-leaf.gf-kin,
+.gf-kin-on .gf-plant.gf-kin { opacity: 1; }
+
 @media (prefers-reduced-motion: reduce) {
-  .gf-area.gf-area-glow, .gf-obs-leaf .pop { animation: none; }
+  .gf-obs-leaf .pop, .gf-obs-leaf.chosen .pop::after, .gf-plant.selected::after,
+  .gf-plant.selected svg, .gf-plant.photo.selected .ring, .gf-place.selected svg { animation: none; }
+  .gf-obs-leaf .pop, .gf-plant svg, .gf-plant .ring:is(span), .gf-place svg, path.gf-obs, path.gf-occ, .gf-fade { transition: none; }
 }
 
 /* Observations around, by source (map blocks of the plant sheet). */
-.gf-obs-inat { fill: #74ac00; }
-.gf-obs-gbif { fill: #4e7b9f; }
+.gf-obs-inat { fill: #74ac00; stroke: #fff; }
+.gf-obs-gbif { fill: #4e7b9f; stroke: #fff; }
 
 /* Search pill on top of the map (Carte tab). */
 gf-map .gf-map-search {
@@ -445,8 +594,7 @@ gf-map:has(.gf-point-card) .leaflet-bottom {
 }
 .gf-focus-tip { font-weight: 600; }
 
-/* An area touched in the sheet (a région, a département): its outline, its occurrences grouped. */
-.gf-zone { stroke: #b45309; stroke-width: 2.5; stroke-dasharray: 7 5; fill: #f59e0b; fill-opacity: 0.08; }
+/* An area touched in the sheet (a région, a département): its outline (a perimeter, above), its occurrences grouped. */
 .gf-occ { stroke: #fff; stroke-width: 2; fill: #f59e0b; fill-opacity: 0.95; filter: drop-shadow(0 1px 2px rgb(0 0 0 / 35%)); cursor: pointer; }
 .gf-occ:hover { fill: #b45309; }
 .gf-occ-group { background: none; border: 0; }
@@ -464,22 +612,35 @@ gf-map:has(.gf-point-card) .leaflet-bottom {
   cursor: pointer;
   animation: gf-leaf-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
-.gf-occ-group:hover span { background: radial-gradient(circle at 35% 30%, #f59e0b, #b45309 75%); }
+.gf-occ-group span { transition: scale 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.gf-occ-group:hover span { background: radial-gradient(circle at 35% 30%, #f59e0b, #b45309 75%); scale: 1.08; }
 @media (prefers-reduced-motion: reduce) { .gf-occ-group span { animation: none; } }
 /* Observations around me, by source: iNaturalist green, GBIF blue (dots and groups). */
 .gf-occ.gf-occ-inat { fill: #74ac00; }
 .gf-occ.gf-occ-gbif { fill: #4e7b9f; }
 .gf-occ-group-inat span { background: radial-gradient(circle at 35% 30%, #a3d23a, #5c8a00 75%); box-shadow: 0 0 0 4px rgb(116 172 0 / 30%), 0 2px 8px rgb(0 0 0 / 35%); }
 .gf-occ-group-gbif span { background: radial-gradient(circle at 35% 30%, #7aa6c8, #3a6283 75%); box-shadow: 0 0 0 4px rgb(78 123 159 / 30%), 0 2px 8px rgb(0 0 0 / 35%); }
-/* Découvrir: the plant in view, in a wider scope (a région, France…), grouped in pink and gold. */
+/* Découvrir: the plant in view, in a wider scope (a région, France…), grouped in pink and gold — its photo in the
+   group when known, their number on a badge. */
 .gf-occ.gf-occ-hl { fill: #e0245e; stroke: #ffd166; }
 .gf-occ-group-hl span { background: radial-gradient(circle at 35% 30%, #ff6f9c, #e0245e 75%); box-shadow: 0 0 0 3px #ffd166, 0 2px 8px rgb(0 0 0 / 35%); }
+.gf-occ-group-hl.photo .g { position: relative; display: block; width: 100%; height: 100%; cursor: pointer;
+  animation: gf-chosen-in 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) backwards; transition: scale 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.gf-occ-group-hl.photo .ph { position: relative; display: grid; place-items: center; color: #fff; font-size: 18px; width: 100%; height: 100%; border-radius: 50%; overflow: hidden;
+  background: radial-gradient(circle at 35% 30%, #ff6f9c, #e0245e 75%); box-shadow: 0 0 0 3px #ffd166, 0 0 0 4.5px rgb(255 255 255 / 85%), 0 4px 12px rgb(0 0 0 / 45%); }
+.gf-occ-group-hl.photo .ph img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+.gf-occ-group-hl.photo .n { position: absolute; right: -6px; bottom: -4px; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 10px;
+  display: grid; place-items: center; background: #e0245e; color: #fff; font: 800 11px/1 system-ui, sans-serif; box-shadow: 0 0 0 2px #ffd166, 0 2px 5px rgb(0 0 0 / 40%); }
+.gf-occ-group-hl.photo:hover .g { scale: 1.1; }
+.gf-occ-group-hl.photo.gf-kin .g { scale: 1.12; }
+.gf-occ-group-hl.photo.gf-kin .ph { box-shadow: 0 0 0 3px #ffd166, 0 0 16px 4px rgb(255 209 102 / 80%), 0 5px 14px rgb(0 0 0 / 45%); }
+@media (prefers-reduced-motion: reduce) { .gf-occ-group-hl.photo .g { animation: none; transition: none; } }
 /* The plant in view lit (its leaves, or its groups in a wider scope): the observations of every plant step back. */
 .gf-hl-on .gf-occ-group-inat, .gf-hl-on .gf-occ-inat, .gf-hl-cluster .gf-occ-group-inat, .gf-hl-cluster .gf-occ-inat { opacity: 0.35; transition: opacity 0.3s; }
 /* Découvrir: the observations around, each its plant's photo; on hover, a small card of the plant. */
-.gf-obs-photo .pop { width: 30px; height: 30px; padding: 0; overflow: hidden; background: #2e7d32; box-shadow: 0 1px 5px rgb(0 0 0 / 45%), 0 0 0 2px #fff; }
-.gf-obs-photo .pop img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 50%; }
-.gf-obs-photo .pop:hover { transform: scale(1.25); box-shadow: 0 2px 8px rgb(0 0 0 / 50%), 0 0 0 3px #9be15d; }
+.gf-obs-photo .pop { position: relative; width: 30px; height: 30px; padding: 0; overflow: hidden; color: #fff; font-size: 14px; background: #2e7d32; box-shadow: 0 1px 5px rgb(0 0 0 / 45%), 0 0 0 2px #fff; }
+.gf-obs-photo .pop img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 50%; }
+.gf-obs-photo .pop:hover { scale: 1.3; rotate: -6deg; box-shadow: 0 4px 12px rgb(0 0 0 / 50%), 0 0 0 3px #9be15d; }
 .gf-hl-on .gf-obs-photo:not(.hl) { opacity: 0.55; }
 .leaflet-tooltip.gf-obs-tip { padding: 0; border: 0; border-radius: 12px; overflow: hidden; background: var(--gf-surface, #fff); box-shadow: 0 8px 24px rgb(0 0 0 / 30%); white-space: normal; }
 .leaflet-tooltip.gf-obs-tip::before { display: none; }
@@ -492,11 +653,16 @@ gf-map:has(.gf-point-card) .leaflet-bottom {
 .leaflet-popup.gf-obs-tip .leaflet-popup-content-wrapper { padding: 0; border-radius: 12px; overflow: hidden; }
 .leaflet-popup.gf-obs-tip .leaflet-popup-content { margin: 0; width: auto !important; }
 /* The points' little cards: floating above everything (the top layer), never under a button or a panel. */
-gf-map .gf-float-tip { position: fixed; inset: auto; left: 0; top: 0; z-index: 6000; margin: 0; padding: 4px 9px; border: 0; border-radius: 8px; overflow: hidden;
+gf-map .gf-float-tip { position: fixed; inset: auto; left: 0; top: 0; z-index: 6000; margin: 0; padding: 4px 9px; border-radius: 8px; overflow: hidden;
+  /* A light, thin, see-through border: the map shows through its edge. */
+  border: 1px solid rgb(255 255 255 / 55%); background-clip: padding-box;
   background: var(--gf-surface, #fff); color: var(--gf-text, #1f2a1f); box-shadow: 0 6px 20px rgb(0 0 0 / 28%); font: 12.5px/1.3 system-ui, sans-serif;
   white-space: nowrap; pointer-events: none; display: none; }
 gf-map .gf-float-tip.on { display: block; }
-gf-map .gf-float-tip.card { padding: 0; border-radius: 12px; white-space: normal; box-shadow: 0 8px 24px rgb(0 0 0 / 30%); }
+gf-map .gf-float-tip.card { padding: 0; border-radius: 12px; white-space: normal; box-shadow: 0 8px 24px rgb(0 0 0 / 30%); animation: gf-tip-in 0.18s ease-out; }
+@keyframes gf-tip-in { from { opacity: 0; transform: translateY(4px) scale(0.97); } }
+@media (prefers-color-scheme: dark) { gf-map .gf-float-tip { border-color: rgb(255 255 255 / 16%); } }
+@media (prefers-reduced-motion: reduce) { gf-map .gf-float-tip.card { animation: none; } }
 gf-map .gf-float-tip::backdrop { display: none; }
 gf-map .gf-float-tip .gf-obs-card img { width: 180px; height: 120px; }
 /* A group touched: its points spread around it, each on a thread. */

@@ -81,6 +81,73 @@ export async function territoryOfRegion(iso) {
   return region ? { dept: null, deptName: null, region: region.iso, regionName: region.name, formers: region.formers } : null;
 }
 
+// ── Outlines (a map's perimeter) ─────────────────────────────────────────────
+
+/**
+ * The outline of departments taken together, from the bundled simplified outlines (offline): a GeoJSON
+ * FeatureCollection — their fill (`properties.part: 'fill'`), and their border (`'line'`) without the borders they
+ * share (the outlines share their vertices: an edge drawn twice is inside) —, and its box [west, south, east, north].
+ * @param {Department[]} departments
+ * @returns {{ feature: any, box: [number, number, number, number] } | null}
+ */
+function outlineOf(departments) {
+  const polygons = departments.flatMap(d => d.polygons);
+  if (!polygons.length) return null;
+  const edge = (/** @type {number[]} */ a, /** @type {number[]} */ b) => { const s = a.join(), e = b.join(); return s < e ? s + '|' + e : e + '|' + s; };
+  /** @type {Map<string, number>} */
+  const count = new Map();
+  for (const polygon of polygons) for (const ring of polygon) for (let i = 1; i < ring.length; i++) {
+    const k = edge(ring[i - 1], ring[i]);
+    count.set(k, (count.get(k) || 0) + 1);
+  }
+  // Each ring walked, its runs of unshared edges kept as lines.
+  /** @type {number[][][]} */
+  const lines = [];
+  let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+  for (const polygon of polygons) for (const ring of polygon) {
+    /** @type {number[][] | null} */ let run = null;
+    for (let i = 1; i < ring.length; i++) {
+      const [x, y] = ring[i];
+      if (x < w) w = x;
+      if (x > e) e = x;
+      if (y < s) s = y;
+      if (y > n) n = y;
+      if (count.get(edge(ring[i - 1], ring[i])) !== 1) { run = null; continue; }
+      if (!run) lines.push(run = [ring[i - 1]]);
+      run.push(ring[i]);
+    }
+  }
+  return {
+    feature: { type: 'FeatureCollection', features: [
+      { type: 'Feature', properties: { part: 'fill' }, geometry: { type: 'MultiPolygon', coordinates: polygons } },
+      { type: 'Feature', properties: { part: 'line' }, geometry: { type: 'MultiLineString', coordinates: lines } }
+    ] },
+    box: [w, s, e, n]
+  };
+}
+
+/** @type {Map<string, ReturnType<typeof outlineOf>>} */
+const outlines = new Map();
+
+/**
+ * The bundled outline of a département or a région (by name, compared without accents or punctuation), or of
+ * metropolitan France: for a map, when IGN's is not there (offline, its module off) — and France's always.
+ * @param {'department' | 'region' | 'country'} kind @param {string} [name]
+ * @returns {Promise<{ feature: any, box: [number, number, number, number] } | null>}
+ */
+export async function bundledOutline(kind, name = '') {
+  const key = kind + ':' + fold(name);
+  if (outlines.has(key)) return outlines.get(key) ?? null;
+  const { regions, departments } = await territories();
+  const region = kind === 'region' ? regions.find(r => fold(r.name) === fold(name)) : null;
+  const keep = kind === 'country' ? departments
+    : kind === 'region' ? (region ? departments.filter(d => d.region === region.iso) : [])
+    : departments.filter(d => fold(d.name) === fold(name));
+  const outline = outlineOf(keep);
+  outlines.set(key, outline);
+  return outline;
+}
+
 // ── "Ma région" (Réglages) ───────────────────────────────────────────────────
 
 /** @returns {string | null} ISO code of the chosen region */

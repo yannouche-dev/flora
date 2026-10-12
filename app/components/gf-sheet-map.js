@@ -16,6 +16,7 @@ import { FOCUS_EVENT, focusId, isPlaceFilter, noFocus } from '../core/map-focus.
 import { lookalikesOf } from '../core/lookalikes.js';
 import { OVERLAYS } from '../core/ign.js';
 import { icon } from '../core/icons.js';
+import { knownThumb } from '../core/thumb.js';
 import { ui } from '../styles/ui.js';
 import './gf-map.js';
 
@@ -426,7 +427,7 @@ export class GfSheetMap extends LitElement {
           .points=${[]}
           .distribution=${gbifOn ? { key: this.gbifKey, label: plant.vernacularNames?.[0] || plant.scientificName, country, filter: f.filter?.params || null } : null}
           .compare=${compare}
-          .focusPoint=${f.point ? { coordinates: f.point.coordinates, title: f.point.label, url: f.point.url } : null}
+          .focusPoint=${f.point ? { coordinates: f.point.coordinates, title: f.point.label, url: f.point.url, photo: knownThumb(plant) || null } : null}
           .zone=${this.#aboutPlant && this._bounds?.zone ? { key: this._bounds.id, feature: this._bounds.zone } : null}
           .cluster=${this.#occurrences()}
           ?distribution-on=${Boolean(gbifOn)}

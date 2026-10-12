@@ -19,6 +19,7 @@ import { FRANCE_BOUNDS, WORLD_BOUNDS } from '../core/ign.js';
 import * as sources from '../core/sources.js';
 import { addressAt } from '../core/geoservices.js';
 import { REGION_BOUNDS, regionOf } from '../core/regions.js';
+import { bundledOutline, territoryAt } from '../core/territory.js';
 import { watchLocation } from '../core/geo.js';
 import { UNREAD, alertsOf } from '../core/alerts.js';
 import { plantViewOf, setHarvestMode, setMode, StoreController, whenReady } from '../core/store.js';
@@ -54,6 +55,17 @@ const WELCOME = {
 const FIX_MAX_AGE = 60_000;
 /** @param {number} m */
 const distLabel = m => m >= 1000 ? (m / 1000).toLocaleString('fr-FR') + ' km' : m + ' m';
+/** The box [west, south, east, north] of a GeoJSON polygon or multipolygon. @param {any} geometry @returns {[number, number, number, number]} */
+function boxOf(geometry) {
+  let w = Infinity, s = Infinity, e = -Infinity, n = -Infinity;
+  for (const [x, y] of geometry.coordinates.flat(geometry.type === 'MultiPolygon' ? 2 : 1)) {
+    if (x < w) w = x;
+    if (x > e) e = x;
+    if (y < s) s = y;
+    if (y > n) n = y;
+  }
+  return [w, s, e, n];
+}
 /** The view chosen (Rencontres, Matchs, Toutes) in each scenario, kept while the app is open. @type {Record<string, string>} */
 const lastView = {};
 /** A word for the distance, for fun. @param {number} m */
@@ -317,14 +329,26 @@ export class GfDiscover extends LitElement {
     .g-mapbox { position: relative; flex: 1; min-height: 0; isolation: isolate; }
     .g-mapbox gf-map { position: absolute; inset: 0; display: block; }
     .g-mapbox gf-map .leaflet-container { background: #2f4a2c; }
-    .g-radius { position: absolute; z-index: 500; left: 10px; right: 50px; top: 10px; display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 12px; border-radius: 14px;
-      background: color-mix(in srgb, var(--gf-surface) 92%, transparent); box-shadow: var(--gf-shadow); backdrop-filter: blur(6px); }
-    .g-radius label { flex: 1; min-width: 0; display: grid; grid-template-columns: auto 1fr; align-items: baseline; gap: 0 8px; }
-    .g-radius .d { font-weight: 800; color: var(--gf-accent); font-variant-numeric: tabular-nums; }
-    .g-radius .mood { font-size: 0.78rem; color: var(--gf-text-muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .g-radius input { grid-column: 1 / -1; width: 100%; margin: 2px 0 0; accent-color: var(--gf-accent); }
-    .g-legend { position: absolute; z-index: 500; left: 10px; top: 76px; max-width: calc(100% - 20px); margin: 0; padding: 4px 10px; border-radius: var(--gf-radius-pill);
-      background: rgb(0 0 0 / 62%); color: #fff; font-size: 0.78rem; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* The perimeter: one panel over the map (under it on a phone) — the zones, the circle's slider, the place, the
+       plant in view and its count. No backdrop blur: the map moves under it. */
+    .g-map { position: relative; }
+    .g-where { position: absolute; z-index: 500; left: 10px; right: 50px; top: 10px; display: grid; gap: 6px; padding: 7px 7px 8px 10px; border-radius: 14px;
+      background: color-mix(in srgb, var(--gf-surface) 95%, transparent); box-shadow: var(--gf-shadow); font-size: 0.8rem; animation: g-drop 0.3s ease-out; }
+    @keyframes g-drop { from { opacity: 0; transform: translateY(-8px); } }
+    .g-where .top { display: flex; align-items: center; gap: 8px; min-width: 0; }
+    .g-where .top > .d { font-size: 1rem; font-weight: 800; color: var(--gf-accent); font-variant-numeric: tabular-nums; }
+    .g-where .mood { min-width: 0; font-size: 0.78rem; color: var(--gf-text-muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .g-where .top > .mood { flex: 1; }
+    .g-where .place { flex: none; margin-left: auto; width: 32px; height: 32px; min-height: 0; }
+    .g-radius { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .g-radius .mood { flex: none; max-width: 45%; }
+    .g-radius input { flex: 1; min-width: 0; margin: 0; accent-color: var(--gf-accent); }
+    .g-legend { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; color: var(--gf-text); font-size: 0.78rem; }
+    .g-legend b { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .g-legend > span:last-child { color: var(--gf-text-muted); white-space: nowrap; }
+    @media (max-width: 899px) {
+      .g-where { position: static; animation: none; border-radius: 0; box-shadow: none; border-bottom: 1px solid var(--gf-border); background: var(--gf-surface); padding: 6px 10px; }
+    }
     /* The first map: its panel, the way to the cards. */
     .g-launch { position: absolute; z-index: 500; right: 16px; bottom: 28px; width: min(400px, calc(100% - 32px)); box-sizing: border-box; display: grid; gap: 10px; padding: 16px 18px;
       border-radius: 18px; background: color-mix(in srgb, var(--gf-surface) 95%, transparent); box-shadow: 0 12px 36px rgb(0 0 0 / 28%); backdrop-filter: blur(8px); animation: g-up 0.35s ease-out; }
@@ -345,14 +369,16 @@ export class GfDiscover extends LitElement {
     .g-launch .go .bi { display: none; }
     .g-launch .go small { font-size: 0.75rem; font-weight: 400; opacity: 0.85; }
     @media (max-width: 899px) { .g-launch { left: 10px; right: 10px; bottom: 12px; bottom: 12px; width: auto; padding: 12px 14px; gap: 8px; } .g-launch h2 { font-size: 1.02rem; } }
-    /* After a match: where else it grows. */
-    .g-scope { position: absolute; z-index: 500; left: 10px; right: 10px; top: 112px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 6px 8px; border-radius: 14px;
-      background: color-mix(in srgb, var(--gf-surface) 94%, transparent); box-shadow: var(--gf-shadow); backdrop-filter: blur(6px); font-size: 0.78rem; animation: g-in 0.35s ease-out; }
-    .g-scope > span { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; margin-right: 4px; color: var(--gf-text); }
-    .g-scope button { min-height: 0; height: 26px; padding: 0 10px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill); background: var(--gf-surface); color: var(--gf-text);
-      font: inherit; font-size: 0.78rem; cursor: pointer; white-space: nowrap; }
-    .g-scope button[aria-pressed='true'] { background: #e0245e; border-color: #e0245e; color: #fff; font-weight: 600; }
-    .g-legend .dot { flex: none; width: 12px; height: 12px; border-radius: 50%; background: #e0245e; box-shadow: 0 0 0 2px #ffd166; }
+    /* After a match: where else it grows — the zones, the one shown in green (the colour of its outline on the map). */
+    .g-scope { flex: 1; min-width: 0; display: flex; align-items: center; gap: 4px; overflow-x: auto; scrollbar-width: none; overscroll-behavior-x: contain;
+      mask-image: linear-gradient(to right, #000 calc(100% - 18px), transparent); padding-right: 14px; }
+    .g-scope::-webkit-scrollbar { display: none; }
+    .g-scope button { flex: none; }
+    .g-scope button { min-height: 0; height: 26px; padding: 0 10px; display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill);
+      background: var(--gf-surface); color: var(--gf-text); font: inherit; font-size: 0.78rem; cursor: pointer; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .g-scope button[aria-pressed='true'] { background: var(--gf-accent); border-color: var(--gf-accent); color: var(--gf-accent-contrast, #fff); font-weight: 700; }
+    /* The plant in view: its photo, in its pink and gold (as on the map). */
+    .g-legend .dot { flex: none; width: 18px; height: 18px; border-radius: 50%; object-fit: cover; background: #e0245e; box-shadow: 0 0 0 2px #ffd166; }
     .g-deck { flex: 0 0 min(400px, 42%); min-width: 0; overflow-y: auto; padding: 14px 12px 90px; }
     .guided:not(.with-panes) .g-deck { flex: 1 1 0; }
     .guided.with-panes .g-deck { flex-basis: min(360px, 32%); border-right: 1px solid var(--gf-border); }
@@ -394,7 +420,7 @@ export class GfDiscover extends LitElement {
     .around .t b { font-size: 0.86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .around .t small { font-size: 0.74rem; color: var(--gf-text-muted); }
 
-    @media (prefers-reduced-motion: reduce) { .card, .burst, .around, .g-deck, .g-map { transition: none; animation: none; } }  `];
+    @media (prefers-reduced-motion: reduce) { .card, .burst, .around, .g-deck, .g-map, .g-where { transition: none; animation: none; } }  `];
 
   #store = new StoreController(this);
 
@@ -1180,25 +1206,50 @@ export class GfDiscover extends LitElement {
     return id != null && discoverState().firstMatch && this.#stage >= 2 ? this._scope : 'around';
   }
 
-  /** The département and région of the place chosen (from its IGN address), once. */
+  /**
+   * The département and région of the place chosen (from its IGN address), once; offline (IGN unreachable or its
+   * module off), from the outlines the app carries.
+   */
   async #findAdmin() {
     const point = this._point;
     if (!point || this.#adminFor === point.join()) return;
     this.#adminFor = point.join();
     const a = await addressAt(point).catch(() => null);
     const parts = String(a?.context || '').split(',').map(x => x.trim()).filter(Boolean);
+    let department = parts.length >= 3 ? parts[1] : null, region = regionOf(a?.context || '')?.name || null;
+    if (!department || !region) {
+      const t = await territoryAt(point).catch(() => null);
+      department ||= t?.deptName || null;
+      region ||= t?.regionName || null;
+    }
     if (this._point !== point) return;
-    this._admin = { department: parts.length >= 3 ? parts[1] : null, region: regionOf(a?.context || '')?.name || null, shapes: {} };
+    this._admin = { department, region, shapes: {} };
   }
   #adminFor = '';
 
-  /** The outline of the département or région (IGN), kept once asked. @param {'department' | 'region'} scope */
+  /**
+   * The outline of the département or région — IGN's, else the one the app carries (simplified) —, and its box;
+   * kept once asked. @param {'department' | 'region'} scope
+   * @returns {Promise<{ feature: any, box: [number, number, number, number] } | null>}
+   */
   async #adminOutline(scope) {
     const admin = this._admin;
     const name = admin?.[scope];
     if (!admin || !name) return null;
-    if (!(scope in admin.shapes)) admin.shapes[scope] = await adminShape(scope === 'department' ? 'departement' : 'region', name).catch(() => null);
+    if (!(scope in admin.shapes)) {
+      const shape = await adminShape(scope === 'department' ? 'departement' : 'region', name).catch(() => null);
+      admin.shapes[scope] = shape ? { feature: shape, box: boxOf(shape.geometry) } : await bundledOutline(scope, name).catch(() => null);
+    }
     return admin.shapes[scope];
+  }
+
+  /** France's outline (the app carries it), drawn when its scope is chosen. @type {{ feature: any, box: [number, number, number, number] } | null} */
+  #france = null;
+  #franceAsked = false;
+  #loadFrance() {
+    if (this.#franceAsked) return;
+    this.#franceAsked = true;
+    bundledOutline('country').then(o => { this.#france = o; this.requestUpdate(); }, () => { this.#franceAsked = false; });
   }
 
   /** The box of a scope [west, south, east, north]. @param {string} scope */
@@ -1206,23 +1257,28 @@ export class GfDiscover extends LitElement {
     if (scope === 'country') return /** @type {[number, number, number, number]} */ ([FRANCE_BOUNDS.getWest(), FRANCE_BOUNDS.getSouth(), FRANCE_BOUNDS.getEast(), FRANCE_BOUNDS.getNorth()]);
     if (scope === 'world') return /** @type {[number, number, number, number]} */ ([WORLD_BOUNDS.getWest(), WORLD_BOUNDS.getSouth(), WORLD_BOUNDS.getEast(), WORLD_BOUNDS.getNorth()]);
     const shape = await this.#adminOutline(/** @type {any} */ (scope));
-    if (shape) { const pts = shape.geometry.coordinates.flat(shape.geometry.type === 'MultiPolygon' ? 2 : 1); const lons = pts.map((/** @type {number[]} */ p) => p[0]), lats = pts.map((/** @type {number[]} */ p) => p[1]); return /** @type {[number, number, number, number]} */ ([Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)]); }
-    // No outline (IGN unreachable): the région's box, if known.
+    if (shape) return shape.box;
+    // No outline at all: the région's box, if known.
     return scope === 'region' && this._admin?.region ? REGION_BOUNDS[this._admin.region] || null : null;
   }
 
-  /** Where the plant in view was seen, in its scope: the circle (leaves), or a département, a région, France, the world. */
+  /**
+   * Where the plant in view was seen, in its scope: the circle, or a département, a région, France, the world — each
+   * point with its date, the plant's photo and names for the map to show on them.
+   */
   async #loadHighlight(key, card, scope) {
     const title = card.plant.vernacularNames?.[0] || card.plant.scientificName;
+    const who = { photo: card.photo ? card.photo.replace('/medium.', '/small.') : null, common: card.plant.vernacularNames?.[0] || null, sci: card.plant.scientificName, taxonId: card.taxonId ?? null };
+    const pointsOf = (/** @type {{ coordinates: [number, number], date: string | null, url: string }[]} */ pts) => pts.map(p => ({ coordinates: p.coordinates, title, url: p.url, date: p.date }));
     if (scope === 'around') {
       const pts = await observationsAround(card.taxonId, /** @type {[number, number]} */ (this._point), this._radius).catch(() => null);
-      if (pts && this.#hlFor === key) this._hl = { key, scope, points: pts.map(p => ({ coordinates: p.coordinates, title, url: p.url })), total: pts.length };
+      if (pts && this.#hlFor === key) this._hl = { key, scope, ...who, points: pointsOf(pts), total: pts.length };
       return;
     }
     const box = await this.#scopeBox(scope);
-    if (!box || this.#hlFor !== key) { if (this.#hlFor === key) this._hl = { key, scope, points: [], total: 0 }; return; }
+    if (!box || this.#hlFor !== key) { if (this.#hlFor === key) this._hl = { key, scope, ...who, points: [], total: 0 }; return; }
     const found = await observationsInBox(card.taxonId, box).catch(() => null);
-    if (found && this.#hlFor === key) this._hl = { key, scope, box, points: found.points.map(p => ({ coordinates: p.coordinates, title, url: p.url })), total: found.total };
+    if (found && this.#hlFor === key) this._hl = { key, scope, box, ...who, points: pointsOf(found.points), total: found.total };
   }
 
   /**
@@ -1243,7 +1299,7 @@ export class GfDiscover extends LitElement {
     if (!many) return null;
     const key = many.key;
     if (this.#gcMemo?.key === key) return this.#gcMemo.value;
-    const value = { key, points: many.points.map((/** @type {any} */ p) => ({ ...p, kind: 'hl' })) };
+    const value = { key, photo: many.photo, points: many.points.map((/** @type {any} */ p) => ({ ...p, kind: 'hl' })) };
     this.#gcMemo = { key, value };
     return value;
   }
@@ -1270,38 +1326,23 @@ export class GfDiscover extends LitElement {
     return this.#lastFrame;
   }
 
-  /** The outline of the département or région shown. */
+  /** The outline of the scope shown — the département, the région, France —: a perimeter, like the circle. */
   get #scopeZone() {
     const scope = this.#scopeNow;
-    const shape = (scope === 'department' || scope === 'region') ? this._admin?.shapes?.[scope] : null;
-    return shape ? (this.#zoneMemo?.feature === shape ? this.#zoneMemo : (this.#zoneMemo = { key: scope + ':' + this._admin?.[scope], feature: shape })) : null;
+    if (scope === 'country') this.#loadFrance();
+    const shape = scope === 'country' ? this.#france
+      : (scope === 'department' || scope === 'region') ? this._admin?.shapes?.[scope] : null;
+    const feature = shape?.feature;
+    return feature ? (this.#zoneMemo?.feature === feature ? this.#zoneMemo : (this.#zoneMemo = { key: scope + ':' + (this._admin?.[scope] || ''), feature })) : null;
   }
   /** @type {any} */ #zoneMemo = null;
 
-  /** « 23 observations ici », « 1 204 en Nouvelle-Aquitaine »… */
+  /** « 23 observations », « 1 204 observations (1 000 sur la carte) »: where, the perimeter chosen says it. */
   #hlLine() {
     const hl = this._hl;
     if (!hl) return '…';
-    const where = { around: 'ici', department: 'en ' + (this._admin?.department || 'ce département'), region: 'en ' + (this._admin?.region || 'cette région'), country: 'en France', world: 'dans le monde' }[/** @type {string} */ (hl.scope)] || 'ici';
     const n = hl.total ?? hl.points.length;
-    return `${n.toLocaleString('fr-FR')} observation${n > 1 ? 's' : ''} ${where}${n > hl.points.length ? ` (${hl.points.length.toLocaleString('fr-FR')} sur la carte)` : ''}`;
-  }
-
-  /**
-   * After a match: where else it grows — its département, its région, France, the world — each a touch away; the
-   * map eases there, its observations grouped, the outline drawn.
-   * @param {Card | undefined} card
-   */
-  #scopeBar(card) {
-    if (!card || !discoverState().firstMatch) return nothing;
-    const scope = this._scope;
-    const a = this._admin;
-    /** @type {[string, unknown][]} */
-    const chips = [['around', `Autour · ${distLabel(this._radius)}`], ...(a?.department ? [['department', a.department]] : []), ...(a?.region ? [['region', a.region]] : []), ['country', 'France'], ['world', 'Monde']];
-    return html`<div class="g-scope" role="group" aria-label="Où pousse-t-elle encore ?">
-      <span>${icon('globe-europe-africa')} Où pousse-t-elle encore ?</span>
-      ${chips.map(([k, label]) => html`<button type="button" data-scope=${k} aria-pressed=${String(scope === k)} @click=${() => { this._scope = k; }}>${label}</button>`)}
-    </div>`;
+    return `${n.toLocaleString('fr-FR')} observation${n > 1 ? 's' : ''}${n > hl.points.length ? ` (${hl.points.length.toLocaleString('fr-FR')} sur la carte)` : ''}`;
   }
 
   /** The circle and its observations, the same object while they do not change (the map does not redraw them). */
@@ -1332,14 +1373,38 @@ export class GfDiscover extends LitElement {
     this.#radiusTimer = setTimeout(() => { setDiscoverRadius(m); this.#load(); }, 700);
   }
 
-  /** Over the map: how far (the slider), and where. */
-  #radiusBar() {
+  /**
+   * The perimeter, in one panel over the map (under it on a phone) — the distance said once: after a match, the zones
+   * to choose (the circle with its radius, the département, the région, France, the world) — the map eases there, the
+   * outline drawn —; under the circle's, its slider; the place to change; and the plant in view, its observations in
+   * the perimeter counted. Rencontres (quiet): the circle and its distance only.
+   * @param {Card | undefined} card @param {boolean} quiet
+   */
+  #wherePanel(card, quiet) {
+    const scopes = !quiet && Boolean(card) && discoverState().firstMatch;
+    const scope = scopes ? this._scope : 'around';
+    const a = this._admin;
+    const km = distLabel(this._radius), mood = distMood(this._radius);
     const at = Math.max(0, DISTANCES.indexOf(this._radius));
-    return html`<div class="g-radius">
-      <label><span class="d">${distLabel(this._radius)}</span><span class="mood">${distMood(this._radius)}</span>
+    /** @type {[string, unknown][]} */
+    const chips = [['around', html`${icon('crosshair')} ${km}`], ...(a?.department ? [['department', a.department]] : []), ...(a?.region ? [['region', a.region]] : []), ['country', 'France'], ['world', 'Monde']];
+    const name = card ? card.plant.vernacularNames?.[0] || card.plant.scientificName : '';
+    const legend = this._note ? html`<p class="g-legend" role="status">${this._note}</p>`
+      : card && !quiet ? html`<p class="g-legend" aria-live="polite">${card.photo
+        ? html`<img class="dot" src=${card.photo.replace('/medium.', '/square.')} alt="" decoding="async" referrerpolicy="no-referrer" @error=${(/** @type {any} */ e) => { e.target.replaceWith(Object.assign(document.createElement('span'), { className: 'dot' })); }} />`
+        : html`<span class="dot"></span>`}<b>${name}</b><span>· ${this.#hlLine()}</span></p>` : nothing;
+    return html`<div class="g-where" role="group" aria-label="Périmètre de la recherche">
+      <div class="top">
+        ${scopes ? html`<div class="g-scope" role="group" aria-label="Où pousse-t-elle encore ?">
+            ${chips.map(([k, label]) => html`<button type="button" data-scope=${k} aria-pressed=${String(scope === k)} @click=${() => { this._scope = k; }}>${label}</button>`)}
+          </div>`
+          : html`<span class="d">${km}</span><span class="mood">${mood}</span>`}
+        <button class="icon-btn place" type="button" title="Changer de lieu" aria-label="Changer de lieu" @click=${() => { this._point = null; this._cards = null; }}>${icon('geo-alt')}</button>
+      </div>
+      ${scope === 'around' ? html`<label class="g-radius">${scopes ? html`<span class="mood">${mood}</span>` : nothing}
         <input type="range" min="0" max=${DISTANCES.length - 1} step="1" .value=${String(at)} aria-label="Distance de la recherche"
-          aria-valuetext=${distLabel(this._radius)} @input=${(/** @type {any} */ e) => this.#setRadius(DISTANCES[Number(e.target.value)])} /></label>
-      <button class="icon-btn" type="button" title="Changer de lieu" aria-label="Changer de lieu" @click=${() => { this._point = null; this._cards = null; }}>${icon('geo-alt')}</button>
+          aria-valuetext=${km} @input=${(/** @type {any} */ e) => this.#setRadius(DISTANCES[Number(e.target.value)])} /></label>` : nothing}
+      ${legend}
     </div>`;
   }
 
@@ -1499,11 +1564,8 @@ export class GfDiscover extends LitElement {
         <div class="g-map">
           <div class="g-mapbox"><gf-map no-search no-create no-locate point-click=${asking ? 'none' : 'pick'} @point-pick=${(/** @type {CustomEvent} */ e) => this.#pick(e)}
               .area=${this.#area} .highlight=${asking ? null : quiet ? this.#quietHighlight : this._hl && this._hl.points.length <= MANY ? this._hl : null}
-              .cluster=${asking || quiet ? null : this.#guidedCluster} .frame=${asking ? null : this.#scopeFrame} .zone=${asking ? null : this.#scopeZone}></gf-map>${asking ? this.#launch() : this.#radiusBar()}
-            ${asking ? nothing
-              : this._note ? html`<p class="g-legend" role="status">${this._note}</p>`
-              : card && !quiet ? html`<p class="g-legend" aria-live="polite"><span class="dot"></span>${card.plant.vernacularNames?.[0] || card.plant.scientificName} · ${this.#hlLine()}</p>` : nothing}
-            ${asking || quiet ? nothing : this.#scopeBar(card)}</div>
+              .cluster=${asking || quiet ? null : this.#guidedCluster} .frame=${asking ? null : this.#scopeFrame} .zone=${asking ? null : this.#scopeZone}></gf-map>${asking ? this.#launch() : nothing}</div>
+          ${asking ? nothing : this.#wherePanel(card, quiet)}
           ${step >= 4 && !asking ? this.#aroundList(cards) : nothing}
         </div>
         <div class="g-deck">${asking ? nothing : this._cards ? this.#deckView() : html`<p class="muted g-wait">Recherche des plantes observées autour…</p>`}</div>
