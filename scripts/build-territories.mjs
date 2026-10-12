@@ -1,12 +1,19 @@
 // Builds data/territories.json: simplified outlines of metropolitan departments, each with its current
-// region and its former (pre-2016) region — regional protection orders often still name former regions.
+// region and its former (pre-2016) region — regional protection orders often still name former regions —, and the
+// outlines of the regions and of metropolitan France as such (a map's perimeter: departments simplified one by one
+// no longer share their borders exactly, so their union would keep bits of inner borders).
 // Outlines: france-geojson (Grégoire David), derived from IGN ADMIN EXPRESS, Licence Ouverte (Etalab).
-// Run once (or when outlines change): node scripts/build-territories.mjs
+// Run once (or when outlines change): node scripts/build-territories.mjs (Node 22.21+ behind a proxy: NODE_USE_ENV_PROXY=1)
 
 import { writeFile } from 'node:fs/promises';
 
-const SOURCE = 'https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/departements-version-simplifiee.geojson';
+const BASE = 'https://raw.githubusercontent.com/gregoiredavid/france-geojson/master/';
+const SOURCE = BASE + 'departements-version-simplifiee.geojson';
+const REGION_SOURCE = BASE + 'regions-version-simplifiee.geojson';
+const COUNTRY_SOURCE = BASE + 'metropole-version-simplifiee.geojson';
 const TOLERANCE = 0.006; // degrees (~500 m): plenty to tell which department a harvest place is in
+/** Coarser for the outlines only drawn (a region, the country: seen from afar, a pixel is 0.5–3 km). */
+const REGION_TOLERANCE = 0.012, COUNTRY_TOLERANCE = 0.02;
 
 /** Former regions (INSEE, before 1 January 2016) and their departments. */
 const FORMER = {
@@ -51,7 +58,7 @@ const REGIONS = [
   ['FR-PAC', "Provence-Alpes-Côte d'Azur", ["Provence-Alpes-Côte d'Azur"]]
 ];
 
-/** Douglas–Peucker on one ring. @param {number[][]} points */
+/** Douglas–Peucker on one ring. @param {number[][]} points @param {number} tolerance */
 function simplify(points, tolerance) {
   if (points.length < 4) return points;
   const keep = new Uint8Array(points.length);
@@ -72,38 +79,57 @@ function simplify(points, tolerance) {
 }
 
 const r4 = n => Math.round(n * 1e3) / 1e3; // ~100 m
-/** A closed ring (first point = last) is split at its farthest point, each half simplified. */
-function simplifyRing(r) {
+/** A closed ring (first point = last) is split at its farthest point, each half simplified. @param {number[][]} r @param {number} tolerance */
+function simplifyRing(r, tolerance) {
   const [x0, y0] = r[0];
   let k = 1, max = 0;
   r.forEach(([x, y], i) => { const d = Math.hypot(x - x0, y - y0); if (d > max) { max = d; k = i; } });
-  return [...simplify(r.slice(0, k + 1), TOLERANCE).slice(0, -1), ...simplify(r.slice(k), TOLERANCE)];
+  return [...simplify(r.slice(0, k + 1), tolerance).slice(0, -1), ...simplify(r.slice(k), tolerance)];
 }
-const ring = (/** @type {number[][]} */ r) => simplifyRing(r).map(([x, y]) => [r4(x), r4(y)]);
+
+/**
+ * A (Multi)Polygon geometry as [[outer, hole…], …], simplified, small islets (< 4 points after simplification) dropped.
+ * @param {any} geometry @param {number} [tolerance]
+ */
+const polygonsOf = (geometry, tolerance = TOLERANCE) =>
+  (geometry.type === 'Polygon' ? [geometry.coordinates] : geometry.coordinates)
+    .map((/** @type {number[][][]} */ p) => p.map(r => simplifyRing(r, tolerance).map(([x, y]) => [r4(x), r4(y)])).filter(r => r.length >= 4))
+    .filter((/** @type {any[]} */ p) => p.length);
+
+/** @param {string} url */
+async function load(url) {
+  const response = await fetch(url);
+  if (!response.ok) throw new Error(url + ' : ' + response.status);
+  return response.json();
+}
 
 async function main() {
-  const source = await (await fetch(SOURCE)).json();
+  const [source, regionSource, countrySource] = await Promise.all([load(SOURCE), load(REGION_SOURCE), load(COUNTRY_SOURCE)]);
   const formerOf = new Map(Object.entries(FORMER).flatMap(([name, codes]) => codes.map(c => [c, name])));
   const regionOf = new Map(REGIONS.flatMap(([iso, name, formers]) => formers.map(f => [f, { iso, name }])));
   const departments = source.features.map(f => {
     const code = String(f.properties.code);
     const former = formerOf.get(code);
     if (!former) throw new Error('département sans ancienne région : ' + code);
-    const polygons = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;
     return {
       code,
       name: f.properties.nom,
       region: regionOf.get(former).iso,
       former,
-      // [[outer, hole…], …], small islets (< 4 points after simplification) dropped
-      polygons: polygons.map(p => p.map(ring).filter(r => r.length >= 4)).filter(p => p.length)
+      polygons: polygonsOf(f.geometry)
     };
   }).sort((a, b) => a.code.localeCompare(b.code));
+  const regions = REGIONS.map(([iso, name, formers]) => {
+    const f = regionSource.features.find((/** @type {any} */ g) => g.properties.nom === name);
+    if (!f) throw new Error('région absente de la source : ' + name);
+    return { iso, name, formers, polygons: polygonsOf(f.geometry, REGION_TOLERANCE) };
+  });
   const out = {
     source: 'france-geojson (G. David), d’après IGN ADMIN EXPRESS — Licence Ouverte (Etalab)',
     sourceUrl: SOURCE,
-    regions: REGIONS.map(([iso, name, formers]) => ({ iso, name, formers })),
-    departments
+    regions,
+    departments,
+    country: { name: 'France métropolitaine', polygons: polygonsOf((countrySource.features?.[0] ?? countrySource).geometry, COUNTRY_TOLERANCE) }
   };
   const json = JSON.stringify(out);
   await writeFile('data/territories.json', json + '\n', 'utf8');
