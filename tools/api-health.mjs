@@ -12,6 +12,7 @@
 import { appendFileSync, readFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { WIKIMEDIA_AGENT } from '../lib/plant-sources.mjs';
+import { parseCapabilities } from '../lib/ign-catalog.mjs';
 
 const ORIGIN = 'https://yannouche-dev.github.io';
 const AGENT = 'GeoFlora api-health (https://github.com/yannouche-dev/flora; daily check, one request per service)';
@@ -74,7 +75,20 @@ const PROBES = [
     check: xml => {
       if (!/<Capabilities\b/.test(xml)) return 'not a WMTS Capabilities document';
       const gone = IGN_LAYERS.filter(id => !xml.includes(`<ows:Identifier>${id}</ows:Identifier>`));
-      return gone.length ? `layers of the app missing: ${gone.join(', ')}` : true;
+      if (gone.length) return `layers of the app missing: ${gone.join(', ')}`;
+      // Read as the app reads it (lib/ign-catalog.mjs): a document it can no longer read shows here, not on a phone.
+      const read = parseCapabilities(xml).length;
+      return read >= 50 || `only ${read} layers read by lib/ign-catalog.mjs`;
+    } },
+  // Not a service: the copy of that catalogue the site publishes, written at each deploy (deploy-pages.yml, monthly at
+  // least). Older than 45 days, or the starting copy: the deploys could not read the service for weeks.
+  { name: 'ign-catalog', service: 'Catalogue IGN publié (data/ign-catalog.json)',
+    url: ORIGIN + '/flora/data/ign-catalog.json', cors: false,
+    check: d => {
+      if (!Array.isArray(d.layers) || d.layers.length < 50) return `${d.layers?.length ?? 0} layers`;
+      if (d.seed) return 'the starting copy (seed): no deploy has read the service yet';
+      const days = (Date.now() - Date.parse(d.fetchedAt)) / 86400e3;
+      return days <= 45 || `read ${Number.isFinite(days) ? Math.round(days) + ' days ago' : 'at an unknown date'} (more than 45)`;
     } },
   { name: 'ign-alti', service: 'IGN Géoplateforme (altimétrie)',
     url: 'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?' + qs({ lon: LON, lat: LAT, resource: 'ign_rge_alti_wld', zonly: 'true' }),

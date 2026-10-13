@@ -5,7 +5,8 @@
 //    Pages takes a moment to publish and its CDN keeps files up to 10 minutes: both are asked again, with a query
 //    string the CDN has not seen, every 15 s until they match or the wait is over;
 //  - then every file the service worker precaches, and the data files, answer 200 (one missing file and the new
-//    version never installs: the app stays on the previous one, silently).
+//    version never installs: the app stays on the previous one, silently);
+//  - the IGN catalogue (data/ign-catalog.json) is a fresh one: a seed or a copy over 45 days old is a warning.
 //   bash tools/assemble-site.sh _site && node tools/check-live.mjs _site https://yannouche-dev.github.io/flora/ [--wait 600]
 // Exits 0 when the live site is this one, 3 when it still serves another version at the end of the wait (a deploy
 // that did not land, or a newer one already there: post-deploy.yml tells them apart), 1 on a missing file or an
@@ -16,7 +17,7 @@ import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { onDemandPaths, shellPaths, VERSION_LINE } from './stamp-sw.mjs';
 
-const DATA = ['data/plants.json', 'data/meta.json', 'data/territories.json', 'data/lookalikes.json', 'data/safety.json'];
+const DATA = ['data/plants.json', 'data/meta.json', 'data/territories.json', 'data/lookalikes.json', 'data/safety.json', 'data/ign-catalog.json'];
 const AGENT = 'GeoFlora post-deploy check (https://github.com/yannouche-dev/flora)';
 
 const args = process.argv.slice(2);
@@ -77,6 +78,13 @@ try {
   for (const m of missing) console.log(`::error::${new URL(m.split(':')[0], BASE).href} does not load (${m})`);
   if (missing.length) process.exit(1);
   console.log(`${paths.length} files of the site load (every precached file, those kept on demand, and the data)`);
+
+  // IGN's catalogue of map layers, written at each deploy (scripts/build-ign-catalog.mjs): the committed copy stands in
+  // when the service could not be read, which is said, not failed (api-health.yml fails when it lasts).
+  const catalog = await (await get('data/ign-catalog.json?deploy-check=' + Date.now())).json();
+  const age = (Date.now() - Date.parse(catalog.fetchedAt)) / 86400e3;
+  if (catalog.seed || !(age <= 45)) console.log(`::warning::data/ign-catalog.json is ${catalog.seed ? 'the starting copy (seed)' : `${Math.round(age)} days old`}: the IGN service could not be read at this deploy (see its « Fresh IGN catalogue » job)`);
+  else console.log(`data/ign-catalog.json: ${catalog.layers?.length} layers, read ${catalog.fetchedAt}`);
 } catch (error) {
   console.log(`::error::the live check failed: ${/** @type {Error} */ (error).message}`);
   process.exit(1);

@@ -56,6 +56,23 @@ jobs:
         with:
           node-version: 22
 
+      # The IGN catalogue deploy-pages published (written at each deploy, not committed: scripts/build-ign-catalog.mjs).
+      # Run by hand, outside a deploy, the live one is taken: the rest of the site is still compared.
+      - name: Take the IGN catalogue published
+        if: inputs.sha != ''
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ign-catalog-published
+          path: ${{ runner.temp }}/catalog
+
+      - name: Put it in place
+        run: |
+          if [ -f "$RUNNER_TEMP/catalog/ign-catalog.json" ]; then
+            cp "$RUNNER_TEMP/catalog/ign-catalog.json" data/ign-catalog.json
+          else
+            curl -fsSL --retry 3 "${SITE_URL%/}/data/ign-catalog.json?deploy-check=$(date +%s)" -o data/ign-catalog.json
+          fi
+
       # The site as deploy-pages assembled it from this commit: its sw.js VERSION and flora fingerprint are expected.
       - name: Assemble site
         run: bash tools/assemble-site.sh _site

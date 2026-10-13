@@ -17,6 +17,8 @@ on: # zizmor: ignore[dangerous-triggers]
       - data/territories.json
       - data/lookalikes.json
       - data/safety.json
+      - data/ign-catalog.json
+      - scripts/build-ign-catalog.mjs
       - tools/assemble-site.sh
       - tools/stamp-sw.mjs
       - tools/check-live.mjs
@@ -28,13 +30,57 @@ on: # zizmor: ignore[dangerous-triggers]
     workflows: [Build flora dataset, Enrich search media]
     types: [completed]
     branches: [main]
+  # Monthly, even without a push: the site gets a fresh copy of IGN's catalogue of map layers (job « catalog »). An
+  # unchanged catalogue gives the same sw.js VERSION: the apps download nothing again.
+  schedule:
+    - cron: "37 4 2 * *"
 
 # Only the deploy job holds the Pages and OIDC (id-token) permissions.
 permissions: {}
 
 jobs:
-  deploy:
+  # IGN's whole WMTS catalogue (GetCapabilities, several MB of XML), read here rather than on the phones: compact, it is
+  # published as data/ign-catalog.json (scripts/build-ign-catalog.mjs, with the app's own parser). A job of its own,
+  # with a read-only token and no credential left in the checkout: it reads an outside service, the deploy job does
+  # not. Never fails the deploy: the service down, or an answer refused (too few layers, the app's layers missing, a
+  # large drop), and the committed copy is handed over instead, with a warning.
+  catalog:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Fresh IGN catalogue
+        env:
+          TRIES: '3'
+          RETRY_WAIT_MS: '30000'
+        run: node scripts/build-ign-catalog.mjs --fallback --out "$RUNNER_TEMP/ign-catalog.json"
+
+      - name: Hand it over
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ign-catalog
+          path: ${{ runner.temp }}/ign-catalog.json
+          if-no-files-found: error
+          retention-days: 7
+
+  deploy:
+    needs: catalog
+    # After the catalogue job, whatever became of it (the committed copy then stands in); not after a failed build.
+    if: ${{ !cancelled() && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') }}
     runs-on: ubuntu-latest
     # One deploy at a time, set on the job: a run whose job is skipped (a failed build, a media run with nothing to
     # follow) never enters the group, so it cancels nothing. A deploy under way finishes; the next waits (the latest).
@@ -69,6 +115,35 @@ jobs:
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
+
+      # Before the site is assembled: the service worker's VERSION (tools/stamp-sw.mjs) follows the catalogue too.
+      - name: Take the fresh IGN catalogue
+        id: catalog
+        continue-on-error: true
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ign-catalog
+          path: ${{ runner.temp }}/catalog
+
+      # Checked again here (enough layers, each with a safe id, a PNG/JPEG format, a title and zooms), or not used.
+      - name: Put it in place
+        run: |
+          fresh="$RUNNER_TEMP/catalog/ign-catalog.json"
+          if [ -f "$fresh" ] && node scripts/build-ign-catalog.mjs --check "$fresh"; then
+            cp "$fresh" data/ign-catalog.json
+          else
+            echo "::warning::no usable fresh IGN catalogue: the committed data/ign-catalog.json is published"
+          fi
+          node scripts/build-ign-catalog.mjs --check data/ign-catalog.json
+
+      # The catalogue published, for post-deploy.yml: it assembles the site again and compares its VERSION.
+      - name: Hand over the catalogue published
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ign-catalog-published
+          path: data/ign-catalog.json
+          if-no-files-found: error
+          retention-days: 7
 
       # What is published (the smoke test of ci.yml opens the same); tools/check.sh's DEPLOYED list follows it.
       - name: Assemble site

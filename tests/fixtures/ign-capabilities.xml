@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A WMTS GetCapabilities of the IGN Géoplateforme (data.geopf.fr/wmts), reduced to a few layers of each kind the
+     parser meets (lib/ign-catalog.mjs; tests/unit/ign-catalog.test.mjs, tests/e2e/ign-catalog.spec.mjs). As in the
+     service's own document, layers link the bounded Web Mercator sets « PM_<min>_<max> », not « PM ». -->
+<Capabilities xmlns="http://www.opengis.net/wmts/1.0" xmlns:ows="http://www.opengis.net/ows/1.1" xmlns:xlink="http://www.w3.org/1999/xlink" xmlns:gml="http://www.opengis.net/gml" version="1.0.0">
+  <ows:ServiceIdentification>
+    <ows:Title>Service WMTS de la Géoplateforme</ows:Title>
+    <ows:ServiceType>OGC WMTS</ows:ServiceType>
+    <ows:ServiceTypeVersion>1.0.0</ows:ServiceTypeVersion>
+  </ows:ServiceIdentification>
+  <Contents>
+    <Layer>
+      <ows:Title>Plan IGN</ows:Title>
+      <ows:Abstract>Cartographie multi-échelles sur le territoire national, issue des bases de données vecteur de l’IGN.</ows:Abstract>
+      <ows:WGS84BoundingBox><ows:LowerCorner>-179.9 -85</ows:LowerCorner><ows:UpperCorner>179.9 85</ows:UpperCorner></ows:WGS84BoundingBox>
+      <ows:Identifier>GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2</ows:Identifier>
+      <Style isDefault="true"><ows:Title>Légende générique</ows:Title><ows:Identifier>normal</ows:Identifier></Style>
+      <Format>image/png</Format>
+      <TileMatrixSetLink>
+        <TileMatrixSet>PM_0_19</TileMatrixSet>
+        <TileMatrixSetLimits>
+          <TileMatrixLimits><TileMatrix>0</TileMatrix><MinTileRow>0</MinTileRow><MaxTileRow>0</MaxTileRow><MinTileCol>0</MinTileCol><MaxTileCol>0</MaxTileCol></TileMatrixLimits>
+          <TileMatrixLimits><TileMatrix>1</TileMatrix><MinTileRow>0</MinTileRow><MaxTileRow>1</MaxTileRow><MinTileCol>0</MinTileCol><MaxTileCol>1</MaxTileCol></TileMatrixLimits>
+          <TileMatrixLimits><TileMatrix>18</TileMatrix><MinTileRow>107</MinTileRow><MaxTileRow>261996</MaxTileRow><MinTileCol>18</MinTileCol><MaxTileCol>262126</MaxTileCol></TileMatrixLimits>
+          <TileMatrixLimits><TileMatrix>19</TileMatrix><MinTileRow>215</MinTileRow><MaxTileRow>523992</MaxTileRow><MinTileCol>37</MinTileCol><MaxTileCol>524251</MaxTileCol></TileMatrixLimits>
+        </TileMatrixSetLimits>
+      </TileMatrixSetLink>
+    </Layer>
+    <Layer>
+      <ows:Title>Forêts publiques</ows:Title>
+      <ows:Abstract>Localisation des forêts publiques domaniales et non domaniales gérées par l'Office national des forêts (ONF).</ows:Abstract>
+      <ows:Identifier>FORETS.PUBLIQUES</ows:Identifier>
+      <Style><ows:Title>Données brutes</ows:Title><ows:Identifier>normal</ows:Identifier></Style>
+      <Style isDefault="true"><ows:Title>FORETS PUBLIQUES ONF</ows:Title><ows:Identifier>FORETS PUBLIQUES ONF</ows:Identifier>
+        <LegendURL format="image/jpeg" xlink:href="https://data.geopf.fr/annexes/ressources/legendes/FORETS.PUBLIQUES-legend.png"/></Style>
+      <Format>image/png</Format>
+      <TileMatrixSetLink>
+        <TileMatrixSet>PM_3_16</TileMatrixSet>
+        <TileMatrixSetLimits>
+          <TileMatrixLimits><TileMatrix>3</TileMatrix><MinTileRow>0</MinTileRow><MaxTileRow>7</MaxTileRow><MinTileCol>0</MinTileCol><MaxTileCol>7</MaxTileCol></TileMatrixLimits>
+          <TileMatrixLimits><TileMatrix>10</TileMatrix><MinTileRow>1</MinTileRow><MaxTileRow>1022</MaxTileRow><MinTileCol>0</MinTileCol><MaxTileCol>1023</MaxTileCol></TileMatrixLimits>
+          <TileMatrixLimits><TileMatrix>16</TileMatrix><MinTileRow>26</MinTileRow><MaxTileRow>65498</MaxTileRow><MinTileCol>4</MinTileCol><MaxTileCol>65531</MaxTileCol></TileMatrixLimits>
+        </TileMatrixSetLimits>
+      </TileMatrixSetLink>
+    </Layer>
+    <Layer>
+      <ows:Title>Relief ombré (estompage)</ows:Title>
+      <ows:Abstract><![CDATA[Estompage <b>multidirectionnel</b> du relief, calculé à partir du RGE ALTI® au pas de 1 m sur la France métropolitaine et les départements d'outre-mer, puis généralisé aux petites échelles afin de garder une lecture claire des grandes formes du relief : vallées, crêtes, plateaux, cirques glaciaires et massifs montagneux de la France entière.]]></ows:Abstract>
+      <ows:Identifier>ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW</ows:Identifier>
+      <Style isDefault="true"><ows:Title>Estompage grisé</ows:Title><ows:Identifier>estompage_grayscale</ows:Identifier></Style>
+      <Format>image/jpeg</Format>
+      <Format>image/png</Format>
+      <TileMatrixSetLink>
+        <TileMatrixSet>PM_0_18</TileMatrixSet>
+        <TileMatrixSetLimits>
+          <TileMatrixLimits><TileMatrix>0</TileMatrix><MinTileRow>0</MinTileRow><MaxTileRow>0</MaxTileRow><MinTileCol>0</MinTileCol><MaxTileCol>0</MaxTileCol></TileMatrixLimits>
+          <TileMatrixLimits><TileMatrix>18</TileMatrix><MinTileRow>0</MinTileRow><MaxTileRow>262143</MaxTileRow><MinTileCol>0</MinTileCol><MaxTileCol>262143</MaxTileCol></TileMatrixLimits>
+        </TileMatrixSetLimits>
+      </TileMatrixSetLink>
+    </Layer>
+    <Layer>
+      <ows:Title>Cours d&apos;eau &amp; plans d&#39;eau (BCAE)</ows:Title>
+      <ows:Abstract>Cours d’eau au titre des bonnes conditions agricoles et environnementales.</ows:Abstract>
+      <ows:Identifier>HYDROGRAPHY.BCAE.LATEST</ows:Identifier>
+      <Style isDefault="true"><ows:Title>Légende générique</ows:Title><ows:Identifier>normal</ows:Identifier></Style>
+      <Format>image/png</Format>
+      <TileMatrixSetLink><TileMatrixSet>2154_5cm_6_22</TileMatrixSet></TileMatrixSetLink>
+      <TileMatrixSetLink>
+        <TileMatrixSet>PM_10_18</TileMatrixSet>
+        <TileMatrixSetLimits>
+          <TileMatrixLimits><TileMatrix>10</TileMatrix><MinTileRow>350</MinTileRow><MaxTileRow>380</MaxTileRow><MinTileCol>500</MinTileCol><MaxTileCol>540</MaxTileCol></TileMatrixLimits>
+          <TileMatrixLimits><TileMatrix>18</TileMatrix><MinTileRow>89600</MinTileRow><MaxTileRow>97280</MaxTileRow><MinTileCol>128000</MinTileCol><MaxTileCol>138240</MaxTileCol></TileMatrixLimits>
+        </TileMatrixSetLimits>
+      </TileMatrixSetLink>
+    </Layer>
+    <Layer>
+      <ows:Title>Cartes de l'état-major (1820-1866)</ows:Title>
+      <ows:Abstract>Carte de France dite d'état-major, levée entre 1820 et 1866.</ows:Abstract>
+      <ows:Identifier>GEOGRAPHICALGRIDSYSTEMS.ETATMAJOR40</ows:Identifier>
+      <Style isDefault="true"><ows:Title>Légende générique</ows:Title><ows:Identifier>normal</ows:Identifier></Style>
+      <Format>image/jpeg</Format>
+      <TileMatrixSetLink><TileMatrixSet>PM_6_15</TileMatrixSet></TileMatrixSetLink>
+    </Layer>
+    <Layer>
+      <ows:Title>Carte géologique</ows:Title>
+      <ows:Abstract>Carte géologique de la France au 1/50 000 (BRGM).</ows:Abstract>
+      <ows:Identifier>GEOLOGIE.CARTE</ows:Identifier>
+      <Format>image/png</Format>
+      <TileMatrixSetLink><TileMatrixSet>PM</TileMatrixSet></TileMatrixSetLink>
+    </Layer>
+    <Layer>
+      <ows:Title>MNT haute résolution (BIL)</ows:Title>
+      <ows:Abstract>Altitudes, en float 32 bits.</ows:Abstract>
+      <ows:Identifier>ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES</ows:Identifier>
+      <Style isDefault="true"><ows:Title>Données brutes</ows:Title><ows:Identifier>normal</ows:Identifier></Style>
+      <Format>image/x-bil;bits=32</Format>
+      <TileMatrixSetLink><TileMatrixSet>WGS84G_6_14</TileMatrixSet></TileMatrixSetLink>
+    </Layer>
+    <Layer>
+      <ows:Title>Orthophotos 5 cm (Lambert-93 seulement)</ows:Title>
+      <ows:Identifier>ORTHOIMAGERY.ORTHOPHOTOS.5CM.L93</ows:Identifier>
+      <Format>image/jpeg</Format>
+      <TileMatrixSetLink><TileMatrixSet>2154_5cm_14_22</TileMatrixSet></TileMatrixSetLink>
+    </Layer>
+    <Layer>
+      <ows:Title>Ciel en Web Mercator inconnu</ows:Title>
+      <ows:Identifier>BAD ID &lt;script&gt;</ows:Identifier>
+      <Format>image/png</Format>
+      <TileMatrixSetLink><TileMatrixSet>PM_0_19</TileMatrixSet></TileMatrixSetLink>
+    </Layer>
+    <Layer>
+      <ows:Title>Plan IGN (doublon)</ows:Title>
+      <ows:Identifier>GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2</ows:Identifier>
+      <Format>image/png</Format>
+      <TileMatrixSetLink><TileMatrixSet>PM_0_19</TileMatrixSet></TileMatrixSetLink>
+    </Layer>
+    <TileMatrixSet>
+      <ows:Identifier>PM_0_19</ows:Identifier>
+      <ows:SupportedCRS>EPSG:3857</ows:SupportedCRS>
+      <TileMatrix><ows:Identifier>0</ows:Identifier><ScaleDenominator>559082264.0287178958533332</ScaleDenominator><TopLeftCorner>-20037508.3427892476320267 20037508.3427892476320267</TopLeftCorner><TileWidth>256</TileWidth><TileHeight>256</TileHeight><MatrixWidth>1</MatrixWidth><MatrixHeight>1</MatrixHeight></TileMatrix>
+    </TileMatrixSet>
+  </Contents>
+  <Themes>
+    <Theme><ows:Title>Cartes</ows:Title><ows:Identifier>cartes</ows:Identifier><LayerRef>GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2</LayerRef></Theme>
+  </Themes>
+</Capabilities>
