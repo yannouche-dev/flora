@@ -210,9 +210,11 @@ export class GfApp extends LitElement {
     // The Parcours botanique, an app of its own: the rest of GeoFlora out of reach (dimmed) until another scenario is chosen.
     const locked = route.name === 'discover' && scenarioOf(route.scenario).key === 'trail';
     const brand = html`<img src="assets/icons/icon.svg" alt="" /><span>GeoFlora</span>`;
+    // Phone: a plant's sheet covers the header (gf-flora): out of reach until it closes; the tab bar stays.
+    const covered = phone && route.name === 'plant';
 
     return html`
-      <header class=${locked ? 'locked' : ''}>
+      <header class=${locked ? 'locked' : ''} ?inert=${covered}>
         <div class="side">${phone ? nothing : html`<nav class="tabs segmented off" aria-label="Sections" ?inert=${locked} aria-disabled=${locked ? 'true' : 'false'}>
           <a href=${href.discover()} aria-current=${tab === 'discover' ? 'page' : 'false'}>Découvrir</a>
           ${tabShown('flore') ? html`<a href=${tabHref('flore', tab === 'flore')} aria-current=${route.name === 'search' || route.name === 'plant' ? 'page' : 'false'}>Flore</a>` : nothing}

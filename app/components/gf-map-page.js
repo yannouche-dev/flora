@@ -23,6 +23,7 @@ import { MediaController } from '../core/media.js';
 import { PaneSizer, paneStyles } from '../core/panes.js';
 import { config } from '../config.js';
 import { hideImg, showImg } from '../core/img.js';
+import { creditText } from '../core/credit.js';
 
 const shortDate = (/** @type {string} */ iso) =>
   new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -194,6 +195,7 @@ export class GfMapPage extends LitElement {
     .species-head { display: flex; gap: 12px; align-items: center; }
     .species-head .ph { width: 56px; height: 56px; }
     .source { font-size: 0.75rem; color: var(--gf-text-muted); margin: 0; }
+    .species-head .credit { display: block; font-size: 0.72rem; color: var(--gf-text-muted); }
     .source a { color: inherit; }
     .list { flex: 1; overflow-y: auto; margin: 0; padding: 0 0 96px; list-style: none; background: var(--gf-surface); }
     .list a {
@@ -373,6 +375,8 @@ export class GfMapPage extends LitElement {
       center: a.center,
       radius: a.radius,
       photo,
+      // Its credit (author, licence: a free one, nearby.js), on each point's card.
+      credit: photo ? a.species?.credit || null : null,
       points: (a.obs || []).map(o => ({ coordinates: o.coordinates, title: name + (o.date ? ' · ' + shortDate(o.date) : ''), url: o.url,
         common: a.species?.common || null, sci: a.species?.name || '', date: o.date || null }))
     };
@@ -407,7 +411,7 @@ export class GfMapPage extends LitElement {
           @click=${() => { saveRadius(r); this.#searchAround(a.center, a.where, r); }}>${km(r)}</button>`)}
       </div>`;
     const source = html`<p class="source">Source : <a href=${a.species ? exploreUrl(a.center, a.radius, a.species.taxonId) : exploreUrl(a.center, a.radius)}
-      target="_blank" rel="noopener">iNaturalist</a>, observations validées (niveau recherche), toutes dates.</p>`;
+      target="_blank" rel="noopener">iNaturalist</a>, observations validées (niveau recherche), toutes dates. Photos d’iNaturalist sous licence libre seulement (CC0, CC BY, CC BY-SA) ; auteur et licence en ouvrant l’espèce.</p>`;
 
     if (a.status === 'loading') return html`<section class="sheet around" aria-label="Autour">${head}<p class="notes">Chargement des observations…</p></section>`;
     if (a.status === 'error') return html`<section class="sheet around" aria-label="Autour">${head}<p class="notes">${a.error}</p>
@@ -423,7 +427,8 @@ export class GfMapPage extends LitElement {
         <button type="button" class="link back" @click=${() => this.#pickSpecies(null)}>${icon('arrow-left')} Toutes les espèces</button>
         <div class="species-head">
           ${s.plantId ? html`<gf-thumb plant-id=${s.plantId} size="56"></gf-thumb>` : s.photo && this.#store.state.modules.photos[this.#store.state.mode] ? html`<img class="ph" src=${s.photo} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />` : nothing}
-          <div><h2>${s.common || s.name}</h2>${s.common ? html`<span class="sci">${s.name}</span>` : nothing}</div>
+          <div><h2>${s.common || s.name}</h2>${s.common ? html`<span class="sci">${s.name}</span>` : nothing}
+            ${!s.plantId && s.photo && s.credit && this.#store.state.modules.photos[this.#store.state.mode] ? html`<small class="credit">Photo : ${creditText(s.credit)}</small>` : nothing}</div>
         </div>
         <div class="meta"><span>${s.count} observation${s.count > 1 ? 's' : ''} dans le cercle</span>
           <span>${a.obs === null ? 'Chargement des points…' : a.obs?.length ? `${a.obs.length} point${a.obs.length > 1 ? 's' : ''} sur la carte${a.obs.length < s.count ? ' (les plus récents)' : ''}` : 'Aucun point localisé'}</span></div>
@@ -490,7 +495,7 @@ export class GfMapPage extends LitElement {
         ${shown.length ? html`<ul class="plants species">
           ${shown.map(sp => html`<li><button type="button" class="pick" @click=${() => this.#pickSpecies(sp)}>
             ${sp.plantId ? html`<gf-thumb plant-id=${sp.plantId} size="38"></gf-thumb>`
-              : sp.photo && this.#store.state.modules.photos[this.#store.state.mode] ? html`<img class="ph" src=${sp.photo} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />` : html`<gf-thumb size="38"></gf-thumb>`}
+              : sp.photo && this.#store.state.modules.photos[this.#store.state.mode] ? html`<img class="ph" src=${sp.photo} alt="" title=${creditText(sp.credit)} loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />` : html`<gf-thumb size="38"></gf-thumb>`}
             <span class="who"><span class="nm">${sp.common || sp.name}</span>
               <span class="sub">${sp.common ? html`<i>${sp.name}</i>` : nothing}${sp.common && sp.family ? ' · ' : ''}${sp.family || ''}</span></span>
             <span class="n">${sp.count}</span>
@@ -692,6 +697,7 @@ export class GfMapPage extends LitElement {
     const seasonCount = this._spots.filter(s => inSeason(s)).length;
 
     return html`
+      <h1 class="visually-hidden">Carte des lieux</h1>
       <div class="bar">
         <span class="count">${spots.length} lieu${spots.length > 1 ? 'x' : ''}</span>
         ${this._flore ? html`<button type="button" class="flore-chip" aria-pressed="true" title="Seulement les lieux qui ont une plante de la recherche Flore"

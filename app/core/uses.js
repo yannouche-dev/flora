@@ -10,6 +10,7 @@
 
 import * as db from './db.js';
 import { ModuleOffError, moduleOn } from './modules.js';
+import { wikimediaHeaders } from '../../lib/plant-sources.mjs';
 
 /** @typedef {import('./modules.js').Mode} Mode */
 
@@ -43,9 +44,12 @@ export async function safetyOf(plant) {
   return entry ? { ...entry, sources: data.sources || {} } : null;
 }
 
-/** @param {string} url @param {AbortSignal} [signal] @param {Record<string, string>} [headers] */
+/**
+ * Wikibooks' API is told who asks (Api-User-Agent, lib/plant-sources.mjs); the query service is not.
+ * @param {string} url @param {AbortSignal} [signal] @param {Record<string, string>} [headers]
+ */
 async function json(url, signal, headers = {}) {
-  const response = await fetch(url, { signal, headers: { accept: 'application/json', ...headers } });
+  const response = await fetch(url, { signal, headers: { accept: 'application/json', ...wikimediaHeaders(url), ...headers } });
   if (!response.ok) throw new Error(`${new URL(url).host} ${response.status}`);
   return response.json();
 }

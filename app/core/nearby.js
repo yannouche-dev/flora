@@ -5,6 +5,7 @@
 
 import * as db from './db.js';
 import { ModuleOffError, moduleOn } from './modules.js';
+import { inatCredit } from './credit.js';
 
 const API = 'https://api.inaturalist.org/v1';
 /** Results kept a day (offline: an older copy is better than nothing). */
@@ -15,7 +16,8 @@ export const RADII = [500, 1000, 2000, 5000, 10000];
 export const DEFAULT_RADIUS = 5000;
 
 /**
- * @typedef {{ taxonId: number, name: string, common: string | null, count: number, photo: string | null, plantId: number | null, family: string | null, genus: string | null }} NearbySpecies
+ * @typedef {import('./credit.js').Credit} Credit
+ * @typedef {{ taxonId: number, name: string, common: string | null, count: number, photo: string | null, credit: Credit | null, plantId: number | null, family: string | null, genus: string | null }} NearbySpecies
  * @typedef {{ species: NearbySpecies[], observations: number, sourceUrl: string, fetchedAt: number }} NearbyResult
  * @typedef {{ coordinates: [number, number], date: string | null, url: string }} NearbyObservation
  */
@@ -111,16 +113,23 @@ const lookup = (/** @type {{ exact: Map<string, FloraMatch>, loose: Map<string, 
  */
 export async function speciesAround(point, radius, signal) {
   if (!moduleOn('inaturalist')) throw new ModuleOffError('inaturalist');
-  const key = `around:${area(point, radius)}`;
+  // « around2 »: the results cached before the licences were read (every photo kept) are not used again.
+  const key = `around2:${area(point, radius)}`;
   const raw = await cached(key, async () => {
     const data = await json(`${API}/observations/species_counts?${area(point, radius)}&iconic_taxa=Plantae&quality_grade=research&locale=fr&per_page=500`, signal);
-    return (data.results || []).map(r => ({
-      taxonId: r.taxon.id,
-      name: r.taxon.name,
-      common: r.taxon.preferred_common_name || null,
-      count: r.count,
-      photo: r.taxon.default_photo?.square_url || null
-    }));
+    return (data.results || []).map(r => {
+      // The taxon's photo only under a free licence, with its credit; else none (the flora's thumbnail, if any).
+      const photo = r.taxon.default_photo?.square_url || null;
+      const credit = photo ? inatCredit(r.taxon.default_photo) : null;
+      return {
+        taxonId: r.taxon.id,
+        name: r.taxon.name,
+        common: r.taxon.preferred_common_name || null,
+        count: r.count,
+        photo: credit ? photo : null,
+        credit
+      };
+    });
   });
   const names = await nameIndex().catch(() => ({ exact: new Map(), loose: new Map() }));
   const species = raw.map(s => {
@@ -202,17 +211,23 @@ export function observationsInBox(taxonId, [w, s, e, n], signal) {
  */
 export function observationPointsAround(point, radius, signal) {
   if (!moduleOn('inaturalist')) return Promise.reject(new ModuleOffError('inaturalist'));
-  return cached(`around-points4:${area(point, radius)}`, async () => {
+  // « around-points5 »: the points cached before the licences were read are not used again.
+  return cached(`around-points5:${area(point, radius)}`, async () => {
     const data = await json(`${API}/observations?${area(point, radius)}&iconic_taxa=Plantae&quality_grade=research&locale=fr&per_page=100&order_by=observed_on`, signal);
     const points = (data.results || []).filter(o => Array.isArray(o.geojson?.coordinates)).map(o => {
-      const photo = o.photos?.[0]?.url || o.taxon?.default_photo?.square_url || null;
+      const url = o.uri || `https://www.inaturalist.org/observations/${o.id}`;
+      // The observation's first photo under a free licence, else the taxon's (free too), else none: a leaf.
+      const own = (o.photos || []).find((/** @type {any} */ p) => p?.url && inatCredit(p));
+      const taxon = !own && o.taxon?.default_photo?.square_url && inatCredit(o.taxon.default_photo) ? o.taxon.default_photo : null;
+      const photo = own?.url || taxon?.square_url || null;
       const common = o.taxon?.preferred_common_name || null, sci = o.taxon?.name || '';
       return {
         coordinates: /** @type {[number, number]} */ (o.geojson.coordinates),
         title: common || sci || 'Plante', common, sci, taxonId: o.taxon?.id ?? null,
         photo: photo ? photo.replace(/\/(square|thumb|small|medium)\./, '/square.') : null,
+        credit: own ? inatCredit(own, url) : taxon ? inatCredit(taxon) : null,
         date: o.observed_on || null, place: o.place_guess || null,
-        url: o.uri || `https://www.inaturalist.org/observations/${o.id}`
+        url
       };
     });
     return { points, total: Number(data.total_results) || points.length };
@@ -221,7 +236,7 @@ export function observationPointsAround(point, radius, signal) {
 
 /**
  * @typedef {{ coordinates: [number, number], title: string, common: string | null, sci: string, taxonId: number | null, photo: string | null,
- *   date: string | null, place: string | null, url: string }} AroundPoint
+ *   credit: Credit | null, date: string | null, place: string | null, url: string }} AroundPoint
  */
 
 /** The radius chosen last (Carte → Autour). */

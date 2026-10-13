@@ -592,7 +592,9 @@ export class GfCollections extends LitElement {
     const plantOpen = plantId && !plantFolded;
     // The plant fills the room left when the map is not beside it.
     const plantFills = plantOpen && !mapOpen;
+    // The view's h1 (a phone shows it): « Mes plantes », unless a plant is open (its name is the h1).
     return html`
+      ${plantId ? nothing : html`<h1 class="visually-hidden">Mes plantes</h1>`}
       <div class="layout">
         ${listFolded ? p.rail('list') : html`<section class="pane list-pane" aria-label="Mes plantes" style=${`width:${Math.min(p.width('list'), Math.max(280, this.#max('list')))}px`}>
           ${p.head('list', 'Mes plantes')}

@@ -16,6 +16,9 @@ export const ui = css`
   :host { -webkit-tap-highlight-color: transparent; }
   *, *::before, *::after { box-sizing: border-box; }
 
+  /* Read by a screen reader, not shown: a view's h1, a status said aloud. */
+  .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+
   /* Bootstrap Icons (app/core/icons.js): sit on the text baseline, never squeezed. */
   .bi { flex: none; vertical-align: -0.125em; }
 

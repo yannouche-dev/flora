@@ -4,15 +4,14 @@ const CONCURRENCY = Number(process.env.THUMBNAIL_CONCURRENCY || 10);
 const CHECKPOINT_EVERY = Number(process.env.CHECKPOINT_EVERY || 100);
 const REQUEST_DELAY_MS = Number(process.env.REQUEST_DELAY_MS || 40);
 
+// CC0, public domain, CC BY, CC BY-SA; never NC nor ND (« CC BY-NC 4.0 », « cc-by-nd »): as lib/plant-sources.mjs.
 const FREE_LICENSES = [
   /^cc0\b/i,
   /^public domain\b/i,
   /^pd\b/i,
-  /^cc by\b/i,
-  /^cc-by\b/i,
-  /^cc by-sa\b/i,
-  /^cc-by-sa\b/i
+  /^cc[- ]by\b/i
 ];
+const NOT_FREE = /\bn[cd]\b|non[- ]?commercial|no[- ]?deriv/i;
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -25,7 +24,7 @@ const stripHtml = value => String(value ?? '')
   .replace(/\s+/g, ' ')
   .trim();
 
-const freeLicense = value => FREE_LICENSES.some(pattern => pattern.test(stripHtml(value)));
+const freeLicense = value => FREE_LICENSES.some(pattern => pattern.test(stripHtml(value))) && !NOT_FREE.test(stripHtml(value));
 
 function params(values) {
   const query = new URLSearchParams();
@@ -66,7 +65,8 @@ function commonsMedia(page) {
     url: info.thumburl || info.url,
     source: 'Wikimedia Commons',
     sourceUrl: 'https://commons.wikimedia.org/wiki/' + encodeURIComponent(page.title),
-    author: stripHtml(meta.Artist?.value) || null,
+    // The author a CC BY licence asks to name: Artist, else the attribution or credit line the file gives.
+    author: stripHtml(meta.Artist?.value) || stripHtml(meta.Attribution?.value) || stripHtml(meta.Credit?.value) || null,
     license: license || null,
     licenseUrl: stripHtml(meta.LicenseUrl?.value) || null
   };
