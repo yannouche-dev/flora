@@ -89,6 +89,43 @@ export function why2d(host) {
 export function attachGl(host, leaflet) { return new GlView(host, leaflet); }
 
 /**
+ * The wheel pressed and dragged orbits, as in every 3D tool (Google Earth, Blender, Cesium…): sideways turns around the
+ * middle of the map, up and down tilts — MapLibre only does it with the right button (or Ctrl), the wheel's press
+ * would else start the browser's auto-scroll. Same speeds as MapLibre's right-drag; the tilt within the map's limits.
+ * @param {any} map a MapLibre map
+ */
+export function orbitWithMiddleButton(map) {
+  const box = map.getCanvasContainer();
+  /** @type {{ x: number, y: number } | null} */
+  let last = null;
+  const move = (/** @type {MouseEvent} */ e) => {
+    if (!last) return;
+    const dx = e.clientX - last.x, dy = e.clientY - last.y;
+    last = { x: e.clientX, y: e.clientY };
+    map.jumpTo({ bearing: map.getBearing() - dx * 0.8, pitch: Math.min(map.getMaxPitch(), Math.max(map.getMinPitch(), map.getPitch() + dy * 0.5)) });
+  };
+  const up = (/** @type {MouseEvent} */ e) => {
+    if (e.button !== 1 || !last) return;
+    last = null;
+    box.style.cursor = '';
+    removeEventListener('mousemove', move);
+    removeEventListener('mouseup', up);
+  };
+  // Caught on its way down: a marker under the pointer (which keeps its presses from the map) orbits too.
+  box.addEventListener('mousedown', (/** @type {MouseEvent} */ e) => {
+    if (e.button !== 1) return;
+    e.preventDefault();
+    last = { x: e.clientX, y: e.clientY };
+    box.style.cursor = 'move';
+    map.stop();
+    addEventListener('mousemove', move);
+    addEventListener('mouseup', up);
+  }, true);
+  // No auto-scroll, no link opened in a new tab by the wheel's click over the map.
+  box.addEventListener('auxclick', (/** @type {MouseEvent} */ e) => { if (e.button === 1) e.preventDefault(); });
+}
+
+/**
  * @typedef {{ kind: 'marker', layer: any, wrap: HTMLElement, gl: any, label?: HTMLElement | null }} MarkerMirror
  * @typedef {{ kind: 'dot', layer: any, el: HTMLElement, gl: any }} DotMirror
  * @typedef {{ kind: 'path', layer: any }} PathMirror
@@ -337,9 +374,11 @@ export class GlView {
       fadeDuration: reduceMotion() ? 0 : 300,
       cancelPendingTileRequestsWhileZooming: true
     });
-    // The usual 3D navigation, MapLibre's defaults on every device: drag to pan, right-drag (Ctrl-drag) or two
-    // fingers to rotate and tilt, wheel or pinch to zoom, arrow keys; + −, and the compass (north again, the tilt shown).
+    // The usual 3D navigation, MapLibre's defaults on every device: drag to pan, the wheel pressed (as in any 3D
+    // tool), right-drag (Ctrl-drag) or two fingers to rotate and tilt, wheel or pinch to zoom, arrow keys; + −, and
+    // the compass (north again, the tilt shown).
     map.addControl(new ml.NavigationControl({ visualizePitch: true }), 'bottom-left');
+    orbitWithMiddleButton(map);
     map.addControl(new ml.ScaleControl({ unit: 'metric', maxWidth: 90 }), 'bottom-left');
     const frame = this.host.querySelector('.gf-map-frame');
     map.addControl(new ml.FullscreenControl(frame ? { container: frame } : {}), 'bottom-left');
