@@ -15,6 +15,8 @@
 //  - remote images (Wikimedia, iNaturalist…): stale-while-revalidate, in a cache kept across versions and capped
 //    (not the originals of the media viewer). Fetched with CORS, so what is stored is a readable response of its
 //    real size: an opaque one (a host without CORS) is shown but never stored, as each counts ~7 MB of quota.
+//    One request per photo whoever asks, six at a time per host, the latest asked first (the map's points shown now
+//    before those gone), a CORS error answered by asking as the page did.
 //  - IGN map tiles: cache-first, capped — areas already viewed stay available offline (the 3D maps' vector tiles,
 //    their style, fonts and symbols too)
 //  - remote API JSON: not cached here (app/core/sources.js caches it in IndexedDB)
@@ -332,44 +334,169 @@ async function fromShell(event, key, storable = () => true) {
 }
 
 /**
- * A photo: the copy kept, refreshed in the background (or the network's answer, kept for next time). Only readable
- * answers are kept; a failure to store one never fails the photo.
+ * A photo: the copy kept, refreshed in the background once while this worker runs (or the network's answer, kept for
+ * next time). Only readable answers are kept; a failure to store one never fails the photo.
  * @param {FetchEvent} event
  */
 async function cachedImage(event) {
   const { request } = event;
   const cache = await caches.open(IMAGE_CACHE);
   const cached = await cache.match(request.url);
-  const network = fetchImage(request).then(response => {
+  if (cached) {
+    // The refresh in the background: once, never ahead of the photos not kept yet (a host's few connections).
+    if (!refreshed.has(request.url)) {
+      refreshed.add(request.url);
+      event.waitUntil(networkImage(event, cache, true).catch(() => {}));
+    }
+    return cached;
+  }
+  return networkImage(event, cache, false).catch(() => Response.error());
+}
+
+/** The photos refreshed while this worker runs. */
+const refreshed = new Set();
+
+/** Photos asked of one host at once, at most (HTTP/1.1: a browser opens 6 connections to a host). */
+const PER_HOST = 6;
+/** A photo's request given up after this (ms): a stalled connection never holds a place for good. */
+const IMAGE_TIMEOUT = 20_000;
+
+/**
+ * A photo asked of the network: one request whoever asks for it at once (the page again, another page, a refresh),
+ * waiting its turn among its host's (`start`), given up (`cancel`) when every page that asked has given up.
+ * @typedef {{ url: string, host: string, low: boolean, started: boolean, waiting: number, controller: AbortController,
+ *   start: () => void, cancel: (reason: any) => void, promise: Promise<Response>, stored: Promise<void> }} ImageJob
+ */
+/** @type {Map<string, ImageJob>} */
+const inflight = new Map();
+/**
+ * Per host, the photos being fetched and those waiting. The worker's requests are never stopped by the page (a marker
+ * taken away, cancelImages): with the browser's queue alone, the photos of the points shown would wait behind every
+ * one asked before. So the latest asked go first (the points shown now), and those the page dropped (a message,
+ * below) and the refreshes after every other. @type {Map<string, { active: number, queue: ImageJob[] }>}
+ */
+const hostQueues = new Map();
+
+/**
+ * The network's answer for the photo asked by `event`, stored when readable; each one asking gets its own copy.
+ * `background`: a refresh (low, never given up by the page).
+ * @param {FetchEvent} event @param {Cache} cache @param {boolean} background @returns {Promise<Response>}
+ */
+function networkImage(event, cache, background) {
+  const { request } = event;
+  let job = inflight.get(request.url);
+  if (!job) {
+    job = imageJob(request, cache, background);
+    const made = job;
+    // The worker kept alive until the photo has come and been stored.
+    event.waitUntil(made.promise.then(() => made.stored, () => {}));
+  } else if (!background && job.low) {
+    // Asked again by a page: in its turn again.
+    job.low = false;
+  }
+  const shared = job;
+  shared.waiting++;
+  if (!background) request.signal?.addEventListener('abort', () => { if (--shared.waiting <= 0) giveUp(shared); }, { once: true });
+  return shared.promise.then(response => response.clone());
+}
+
+/** @param {Request} request @param {Cache} cache @param {boolean} low @returns {ImageJob} */
+function imageJob(request, cache, low) {
+  const url = request.url, host = new URL(url).host, controller = new AbortController();
+  /** @type {ImageJob} */
+  const job = { url, host, low, started: false, waiting: 0, controller, start: () => {}, cancel: () => {}, promise: /** @type {any} */ (null), stored: Promise.resolve() };
+  const turn = new Promise((resolve, reject) => { job.start = () => resolve(undefined); job.cancel = reject; });
+  job.promise = turn.then(() => {
+    const timer = setTimeout(() => controller.abort(), IMAGE_TIMEOUT);
+    return fetchImage(request, controller.signal, low).finally(() => { clearTimeout(timer); release(host); });
+  }).then(response => {
     if (response.ok && (response.type === 'cors' || response.type === 'basic')) {
-      event.waitUntil(cache.put(request.url, response.clone()).then(() => trimSometimes(IMAGE_CACHE, cache, IMAGE_LIMIT)).catch(() => {}));
+      job.stored = cache.put(url, response.clone()).then(() => trimSometimes(IMAGE_CACHE, cache, IMAGE_LIMIT)).catch(() => {});
     }
     return response;
   });
-  // Keep the worker alive until the background refresh has been stored.
-  event.waitUntil(network.catch(() => {}));
-  return cached || network.catch(() => Response.error());
+  const done = () => { if (inflight.get(url) === job) inflight.delete(url); };
+  job.promise.then(done, done);
+  inflight.set(url, job);
+  const q = hostQueues.get(host) || { active: 0, queue: [] };
+  hostQueues.set(host, q);
+  q.queue.push(job);
+  pump(host);
+  return job;
 }
 
-/** Hosts that answered without CORS while this worker runs: asked for the photo as the page did, once. */
+/** The next photos of a host started, while it has room: the latest asked first, the low ones last. @param {string} host */
+function pump(host) {
+  const q = /** @type {{ active: number, queue: ImageJob[] }} */ (hostQueues.get(host));
+  while (q.active < PER_HOST && q.queue.length) {
+    let i = q.queue.length - 1;
+    while (i >= 0 && q.queue[i].low) i--;
+    if (i < 0) i = q.queue.length - 1;
+    const [job] = q.queue.splice(i, 1);
+    q.active++;
+    job.started = true;
+    job.start();
+  }
+}
+
+/** A photo of `host` done: the next one's turn. @param {string} host */
+function release(host) {
+  const q = hostQueues.get(host);
+  if (!q) return;
+  q.active--;
+  pump(host);
+}
+
+/** No page waits for this photo any more: not asked (still waiting), or stopped. @param {ImageJob} job */
+function giveUp(job) {
+  if (inflight.get(job.url) === job) inflight.delete(job.url);
+  const q = hostQueues.get(job.host);
+  const i = q ? q.queue.indexOf(job) : -1;
+  if (q && i >= 0) q.queue.splice(i, 1);
+  job.controller.abort();
+  if (!job.started) job.cancel(new DOMException('Photo no longer asked', 'AbortError'));
+}
+
+// The page's markers taken away (map-style.js#cancelImages): the photos they asked for, still waiting, go last (not
+// given up: another image of the page may show the same photo, one request for both).
+self.addEventListener('message', event => {
+  const { type, urls } = event.data || {};
+  if (type !== 'photos-dropped' || !Array.isArray(urls)) return;
+  for (const url of urls) {
+    const job = inflight.get(url);
+    if (job && !job.started) job.low = true;
+  }
+});
+
+/** Hosts that refused a CORS request while this worker runs: asked for their photos as the page did, at once. */
 const noCorsHosts = new Set();
 
 /**
  * The photo as a CORS response when its host allows it (Wikimedia, iNaturalist…: readable, stored at its real size),
- * so the app's plain <img> need no crossorigin attribute. A host without CORS (a refused CORS request, then an opaque
- * answer) still gets its photos shown: asked as the page did, not stored.
- * @param {Request} request
+ * so the app's plain <img> need no crossorigin attribute. A host without CORS (a refused CORS request), or one that
+ * answers the CORS request with an error (403…), still gets its photos shown: asked as the page did (opaque), not
+ * stored. @param {Request} request @param {AbortSignal} signal @param {boolean} background
  */
-async function fetchImage(request) {
+async function fetchImage(request, signal, background) {
   if (request.mode !== 'no-cors') return fetch(request);
   const { host } = new URL(request.url);
+  /** @type {RequestInit} */
+  const options = { credentials: 'omit', referrerPolicy: request.referrerPolicy || 'no-referrer', signal, ...(background ? { priority: 'low' } : {}) };
+  let refused = false;
   if (!noCorsHosts.has(host)) {
     try {
-      return await fetch(request.url, { mode: 'cors', credentials: 'omit', referrerPolicy: request.referrerPolicy || 'no-referrer' });
-    } catch { /* no CORS on that host, or no network: asked below as the page did */ }
+      const response = await fetch(request.url, { ...options, mode: 'cors' });
+      if (response.ok) return response;
+      // An error in CORS (a host refusing it, a moment's failure): asked once more, as the page did.
+    } catch (error) {
+      if (signal.aborted) throw error;
+      // No CORS on that host (or no network): asked as the page did.
+      refused = true;
+    }
   }
-  const response = await fetch(request);
-  if (response.type === 'opaque') noCorsHosts.add(host);
+  const response = await fetch(request.url, { ...options, mode: 'no-cors', credentials: request.credentials });
+  // It answers, without CORS: its next photos asked that way at once.
+  if (refused && response.type === 'opaque') noCorsHosts.add(host);
   return response;
 }
 
