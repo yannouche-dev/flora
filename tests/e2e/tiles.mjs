@@ -26,12 +26,57 @@ export function png(rgb) {
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
 
-/** Aerial photo: green fields, a darker grid. */
+/** Aerial photo: green fields, a darker grid (the same everywhere: a test's picture, not a place). */
 export const PHOTO = png((x, y) => (x % 64 < 3 || y % 64 < 3 ? [70, 110, 60] : [120 + (x >> 3), 160, 100 + (y >> 3)]));
 /** Plan: pale, with blue-grey roads. */
 export const PLAN = png((x, y) => (x % 85 < 4 || y % 85 < 4 ? [200, 205, 215] : [246, 243, 236]));
 /** Terrarium: height = R × 256 + G + B / 256 − 32768; a slope from 1 500 m to some 2 300 m across each tile. */
 export const TERRARIUM = png((x, y) => { const h = 1500 + x * 2 + y + 32768; return [h >> 8, h & 255, 0]; });
+
+/** @type {Map<string, Buffer>} */
+const photos = new Map();
+/**
+ * Fields, woods and roads as seen from above, at their place (seamless from one tile to the next): a test's picture.
+ * @param {number} z @param {number} x @param {number} y
+ */
+export function photoTile(z, x, y) {
+  const key = `${z}/${x}/${y}`;
+  let tile = photos.get(key);
+  if (!tile) {
+    const n = 2 ** z, k = 2 ** Math.max(0, 17 - z);
+    tile = png((px, py) => {
+      // In metres or so at zoom 17: fields of ~100 m, a road every ~400 m.
+      const gx = ((x + px / 256) / n) * 2 ** 17 * 256 / 64, gy = ((y + py / 256) / n) * 2 ** 17 * 256 / 64;
+      if (k <= 8 && (Math.abs((gx % 16) - 8) < 0.12 * k || Math.abs((gy % 16) - 8) < 0.12 * k)) return [196, 190, 176];
+      const f = Math.floor(gx / 2) * 7349 + Math.floor(gy / 2) * 3571;
+      const kind = ((f % 5) + 5) % 5, shade = ((Math.floor(gx * 3) ^ Math.floor(gy * 3)) & 3) * 6;
+      return kind === 0 ? [52 + shade, 92 + shade, 48] : kind === 1 ? [168 + shade, 160, 96] : kind === 2 ? [110 + shade, 150, 80] : kind === 3 ? [90, 128 + shade, 62] : [140, 170 + shade, 98];
+    });
+    photos.set(key, tile);
+  }
+  return tile;
+}
+
+/** Hills (metres) at a point: smooth, the same from one tile to the next. @param {number} lon @param {number} lat */
+const hills = (lon, lat) => Math.max(0, 900 + 520 * Math.sin(lon * 38) * Math.cos(lat * 52) + 260 * Math.sin(lon * 140 + lat * 95) + 120 * Math.cos(lat * 300));
+/** @type {Map<string, Buffer>} */
+const reliefs = new Map();
+/** A Terrarium tile of `hills`, at its place. @param {number} z @param {number} x @param {number} y */
+export function reliefTile(z, x, y) {
+  const key = `${z}/${x}/${y}`;
+  let tile = reliefs.get(key);
+  if (!tile) {
+    const n = 2 ** z;
+    tile = png((px, py) => {
+      const lon = ((x + px / 256) / n) * 360 - 180;
+      const lat = Math.atan(Math.sinh(Math.PI * (1 - (2 * (y + py / 256)) / n))) * 180 / Math.PI;
+      const v = Math.round((hills(lon, lat) + 32768) * 256);
+      return [(v >> 16) & 255, (v >> 8) & 255, v & 255];
+    });
+    reliefs.set(key, tile);
+  }
+  return tile;
+}
 
 // ---------- Mapbox Vector Tile (protobuf), enough for polygons with one number each ----------
 
@@ -103,12 +148,17 @@ export async function answerTiles(page, { dem = 'ok', seen } = {}) {
   const cors = { 'access-control-allow-origin': '*' };
   await page.route(/^https:\/\/data\.geopf\.fr\/wmts\?.*REQUEST=GetTile/i, route => {
     seen?.push(route.request().url());
-    const plan = /PLANIGNV2/.test(route.request().url());
-    return route.fulfill({ contentType: plan ? 'image/png' : 'image/jpeg', body: plan ? PLAN : PHOTO, headers: cors });
+    const url = route.request().url();
+    const plan = /PLANIGNV2/.test(url);
+    const [z, row, col] = ['TILEMATRIX', 'TILEROW', 'TILECOL'].map(k => Number(new URL(url).searchParams.get(k)));
+    const photo = /ORTHOPHOTOS/.test(url) && Number.isFinite(z) ? photoTile(z, col, row) : PHOTO;
+    return route.fulfill({ contentType: 'image/png', body: plan ? PLAN : photo, headers: cors });
   });
   await page.route(/^https:\/\/s3\.amazonaws\.com\/elevation-tiles-prod\/terrarium\//, route => {
     seen?.push(route.request().url());
-    return dem === 'ok' ? route.fulfill({ contentType: 'image/png', body: TERRARIUM, headers: cors }) : route.abort('internetdisconnected');
+    if (dem !== 'ok') return route.abort('internetdisconnected');
+    const [z, x, y] = (/\/(\d+)\/(\d+)\/(\d+)\.png/.exec(route.request().url()) || []).slice(1).map(Number);
+    return route.fulfill({ contentType: 'image/png', body: Number.isFinite(z) ? reliefTile(z, x, y) : TERRARIUM, headers: cors });
   });
   await page.route(/^https:\/\/data\.geopf\.fr\/tms\/1\.0\.0\/PLAN\.IGN\/\d+\/\d+\/\d+\.pbf/, route => {
     seen?.push(route.request().url());

@@ -105,12 +105,16 @@ test('Réglages › Cartes « 3D » : la Carte en MapLibre — relief, bâtiment
   await expect.poll(() => seen.tiles.some(u => u.includes('elevation-tiles-prod'))).toBe(true);
   await expect.poll(() => seen.tiles.some(u => /tms\/1\.0\.0\/PLAN\.IGN\/\d+/.test(u))).toBe(true);
   await expect.poll(() => seen.tiles.some(u => u.includes('ORTHOIMAGERY.ORTHOPHOTOS'))).toBe(true);
-  // Software WebGL draws buildings on the relief slowly (a second or two a frame): off for the rest of the test.
-  await page.evaluate(async () => { (await import('/app/core/map-settings.js')).setMapSettings({ buildings: false, hillshade: false }); });
-  await expect.poll(async () => (await glState(map)).layers.includes('gf-buildings'), SLOW).toBe(false);
-  // Credits (the 2D map's, the relief's), MapLibre's buttons in French, the canvas reachable by keyboard.
+  // Credits (the 2D map's, the relief's).
   await expect(map.locator('.leaflet-control-attribution')).toContainText('IGN');
   await expect(map.locator('.leaflet-control-attribution')).toContainText('Terrain Tiles');
+  // Software WebGL draws buildings on the relief slowly (a second or two a frame, here): flat and without them for
+  // the rest of the test (the relief's credit goes with it).
+  await page.evaluate(async () => { (await import('/app/core/map-settings.js')).setMapSettings({ buildings: false, hillshade: false, relief: false }); });
+  await expect.poll(async () => (await glState(map)).terrain, SLOW).toBe(false);
+  expect((await glState(map)).layers).not.toContain('gf-buildings');
+  await expect(map.locator('.leaflet-control-attribution')).not.toContainText('Terrain Tiles');
+  // MapLibre's buttons in French, the canvas reachable by keyboard.
   await expect(map.locator('.maplibregl-ctrl-compass')).toHaveAttribute('aria-label', /Revenir au nord/);
   await expect(map.locator('canvas.maplibregl-canvas')).toHaveAttribute('aria-label', /Carte en 3D/);
   // Shift + arrows: rotate and tilt (MapLibre's keyboard).
