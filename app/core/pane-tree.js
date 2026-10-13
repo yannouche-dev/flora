@@ -114,11 +114,19 @@ export function undock(tree, key) {
 /**
  * A block docked: on a side of a pane (a new pane there, taking part of its room), in its centre (a tab of
  * that stack), or at a place among its tabs. `root:` before the side: across the whole frame.
+ * A layout the import would refuse (validTree: too deep, too many panes) is never built: the tree is then
+ * returned as it was, the block where it was, so a saved layout can always be read back (audit TEST-6).
  * @param {PaneNode} tree @param {string} key @param {string} targetId a node's id, or 'root'
  * @param {Zone} zone
  * @returns {PaneNode}
  */
 export function dock(tree, key, targetId, zone) {
+  const out = dockAnyhow(tree, key, targetId, zone);
+  return validTree(out) || !validTree(tree) ? out : tree;
+}
+
+/** dock(), without the bound. @param {PaneNode} tree @param {string} key @param {string} targetId @param {Zone} zone @returns {PaneNode} */
+function dockAnyhow(tree, key, targetId, zone) {
   const out = undock(tree, key);
   const target = targetId === 'root' ? out : find(out, targetId);
   if (!target) return out;

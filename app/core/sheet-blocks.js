@@ -421,14 +421,17 @@ export function modulesOffFor(view, key) {
  * A block docked: on a side of a pane (or of the sheet, or of the whole frame: target 'root'), in a pane's
  * centre (a tab), or among its tabs. A hidden block comes back, its module switched on with it, when the user
  * moves it; `auto` (a layout the app makes itself, like Découvrir's steps) never switches a module on: a block whose
- * module is off is left where it is, and false returned.
+ * module is off is left where it is, and false returned. False too when the layout would be too deep (too many
+ * panes nested: pane-tree.js dock refuses what an export could not be imported back from): nothing moves.
  * @param {Mode} view @param {string} key @param {string} target a node's id ('sheet', a pane's id, 'root') @param {Zone} zone
  * @param {{ auto?: boolean }} [options]
  */
 export function dockBlock(view, key, target, zone, { auto = false } = {}) {
   if (auto && modulesOffFor(view, key).length) return false;
+  const before = treeOf(view), after = dock(before, key, target, zone);
+  if (after === before) return false;
   if (isHidden(view, key)) setHidden(view, key, false);
-  setTree(view, dock(treeOf(view), key, target, zone));
+  setTree(view, after);
   return true;
 }
 

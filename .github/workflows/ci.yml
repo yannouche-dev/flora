@@ -6,10 +6,11 @@ name: CI
 #  - « smoke »: tests/smoke.mjs opens every main screen of the site as deployed (tools/assemble-site.sh) in Chromium,
 #    phone and desktop, and fails on a page error, a CSP violation, a console error, a file of the site that does not
 #    load, or a screen left empty: what no build step and no parse check can see (a module that fails to link, a
-#    component that throws when it renders) shows here, not as a blank screen in production.
+#    component that throws when it renders) shows here, not as a blank screen in production;
+#  - « tests »: the unit tests (node --test, tests/unit) and the end-to-end specs (@playwright/test, tests/e2e).
 # Not required checks of main yet: the data workflows push to main with GITHUB_TOKEN, which no ruleset bypass list
 # accepts (README, « Protéger main »); until they push as a GitHub App, merge a pull request (or a merge queue entry)
-# only when both are green.
+# only when all three are green.
 on:
   pull_request:
   merge_group:
@@ -82,3 +83,44 @@ jobs:
       - name: Audit dev dependencies
         if: ${{ !cancelled() }}
         run: npm audit --audit-level=high
+
+  tests:
+    # The versioned tests (README, « Tests ») : unit tests (node:test, tests/unit) on the pure modules, then the
+    # end-to-end specs (@playwright/test, tests/e2e) on a phone (390 px) and a desktop (1280 px), on the reduced flora
+    # of tests/fixtures, every outside service answered by the tests.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Unit tests (node --test)
+        run: npm run test:unit
+
+      - name: Install dev dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps --only-shell chromium
+
+      # The specs start their own static server (python3 -m http.server, tests/e2e/playwright.config.mjs).
+      - name: End-to-end tests (phone and desktop)
+        timeout-minutes: 12
+        run: npm run test:e2e
+
+      # The traces of the tests that failed (a timeline, the DOM and the network at each step).
+      - name: Keep the traces of failed tests
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: e2e-traces
+          path: test-results/
+          retention-days: 7

@@ -58,6 +58,9 @@ function toText(/** @type {string} */ value) {
 /** The safety file or the look-alikes file could not be read (_open.safety, _open.confusions): never « nothing known ». */
 const UNREAD = Object.freeze({ unread: true });
 
+/** A block not moved: the layout would have too many panes nested to be exported and read back (pane-tree.js dock). */
+const TOO_DEEP = 'pas déplacé, trop de volets imbriqués';
+
 const truncate = (/** @type {string} */ text, max = 900) =>
   text.length > max ? text.slice(0, max).replace(/\s+\S*$/, '') + '…' : text;
 
@@ -1932,10 +1935,9 @@ export class GfPlantDetail extends LitElement {
   #placePicker(key) {
     const title = blockTitle(key);
     const tree = treeOf(this.view), here = paneOf(this.view, key);
-    const move = (/** @type {Event} */ e, /** @type {() => void} */ fn, /** @type {string} */ said) => {
+    const move = (/** @type {Event} */ e, /** @type {() => unknown} */ fn, /** @type {string} */ said) => {
       /** @type {HTMLDetailsElement | null} */ ((/** @type {HTMLElement} */ (e.currentTarget)).closest('details'))?.removeAttribute('open');
-      fn();
-      this._said = `« ${title} » : ${said}`;
+      this._said = `« ${title} » : ${fn() === false ? TOO_DEEP : said}`;
     };
     const panes = /** @type {import('../core/pane-tree.js').StackNode[]} */ (paneLeaves(tree).filter(n => n.t === 'stack' && n !== here));
     const sides = /** @type {const} */ ([['right', 'à droite', 'chevron-bar-right'], ['left', 'à gauche', 'chevron-bar-left'], ['top', 'en haut', 'chevron-up'], ['bottom', 'en bas', 'chevron-down']]);
@@ -3438,9 +3440,8 @@ export class GfPlantDetail extends LitElement {
       onEnd: () => this.toggleAttribute('docking', false),
       onDrop: ({ target, zone, beforeKey }) => {
         const k = make ? make() : key;
-        if (zone === 'sheet') toSheet(view, k, beforeKey);
-        else dockBlock(view, k, target, zone);
-        this._said = `« ${blockTitle(k)} » : ${zone === 'sheet' ? 'dans la fiche' : typeof zone === 'object' || zone === 'center' ? 'onglet d’un volet' : 'nouveau volet'}`;
+        const moved = zone === 'sheet' ? (toSheet(view, k, beforeKey), true) : dockBlock(view, k, target, zone);
+        this._said = `« ${blockTitle(k)} » : ${!moved ? TOO_DEEP : zone === 'sheet' ? 'dans la fiche' : typeof zone === 'object' || zone === 'center' ? 'onglet d’un volet' : 'nouveau volet'}`;
       }
     });
   }

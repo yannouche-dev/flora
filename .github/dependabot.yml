@@ -1,6 +1,7 @@
 # Weekly update pull requests, each checked by CI like any other:
 #  - GitHub Actions: they are pinned by commit, with the release in a comment; Dependabot moves both;
-#  - the dev dependencies of package.json (Playwright). SheetJS comes from its own CDN, which Dependabot does not
+#  - the dev dependencies of package.json (Playwright, and @playwright/test at the same version: one pull request for
+#    both, the browser they drive is the same). SheetJS comes from its own CDN, which Dependabot does not
 #    follow: check https://cdn.sheetjs.com for a new release and update package.json and package-lock.json by hand.
 # A release is only proposed once it is a week old: a compromised one is usually found and pulled by then.
 version: 2
@@ -23,5 +24,8 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    groups:
+      playwright:
+        patterns: ["playwright", "@playwright/*"]
     commit-message:
       prefix: deps
