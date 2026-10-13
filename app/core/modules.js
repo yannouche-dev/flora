@@ -9,7 +9,7 @@ import { writeLocal } from './quota.js';
 import { onStorage } from './sync.js';
 
 /**
- * @typedef {'ignMaps' | 'ignGeo' | 'ignProtected' | 'ignNature' | 'voice' | 'globi' | 'openmeteo' | 'wikibooks' | 'inaturalist' | 'gbif' | 'wikidata' | 'wikipedia' | 'commons' | 'trefle' | 'photos'} ModuleKey
+ * @typedef {'ignMaps' | 'ignGeo' | 'ignProtected' | 'ignNature' | 'relief3d' | 'voice' | 'globi' | 'openmeteo' | 'wikibooks' | 'inaturalist' | 'gbif' | 'wikidata' | 'wikipedia' | 'commons' | 'trefle' | 'photos'} ModuleKey
  * @typedef {{ key: ModuleKey, category: import('./categories.js').CategoryKey, also: import('./categories.js').CategoryKey[], name: string, provides: string, hosts: string, needsToken?: boolean }} ModuleInfo
  */
 
@@ -23,6 +23,8 @@ export const MODULES = [
     provides: 'Bandeau sur les cartes quand la vue touche un parc national, une réserve naturelle ou un arrêté de biotope (dès le zoom 11).' },
   { key: 'ignNature', category: 'territory', also: ['ecology'], name: 'IGN – zones naturelles au point', hosts: 'apicarto.ign.fr (API Carto, module nature)',
     provides: 'Pour un lieu ou un point de la carte : les ZNIEFF, sites Natura 2000, parcs et réserves qui le contiennent, avec leur fiche INPN. Envoie les coordonnées du point.' },
+  { key: 'relief3d', category: 'territory', also: [], name: 'Vue 3D (relief)', hosts: 's3.amazonaws.com (tuiles de relief AWS Terrain Tiles)',
+    provides: 'Bouton « 3D » du récapitulatif d’un parcours et des lieux de Mes plantes : leurs plantes sur le relief (Terrain Tiles d’AWS : Mapzen, EU-DEM © Copernicus, environ 25 à 30 m de résolution). Envoie la zone de carte affichée. Désactivé : pas de vue 3D.' },
   { key: 'inaturalist', category: 'distribution', also: ['seasons', 'images'], name: 'iNaturalist', hosts: 'api.inaturalist.org',
     provides: 'Autour (plantes observées dans un cercle), Découvrir, courbes de floraison et fructification, nombre d’observations, photos de repli. Autour et Découvrir envoient le centre du cercle : votre position précise quand vous touchez « Autour de moi », sinon le lieu ou la commune choisis.' },
   { key: 'gbif', category: 'distribution', also: ['names', 'images', 'knowledge', 'ecology', 'safety'], name: 'GBIF', hosts: 'api.gbif.org',

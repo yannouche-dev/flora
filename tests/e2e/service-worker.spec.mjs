@@ -1,6 +1,7 @@
 // The service worker of the site as deployed (tools/assemble-site.sh: VERSION written from the files it precaches):
 // a launch offline, an update to a new build (installed whole, the app offering to reload), a broken build that never
-// installs, and the photos: stored in CORS across versions, an answer without CORS shown but never stored.
+// installs, the photos: stored in CORS across versions, an answer without CORS shown but never stored, and MapLibre
+// (sw.js ON_DEMAND): not precached, kept once asked.
 // The other specs block the service worker (playwright.config.mjs): these allow it, and serve the sites themselves —
 // two builds of the app on one origin (switched by the test), the photos from a second origin, with or without CORS.
 import { test, expect } from '@playwright/test';
@@ -194,6 +195,25 @@ test('photos : gardées en CORS ; sans CORS, affichées mais jamais gardées (un
   await new App(page).ready();
   expect(await shown(page, withCors), 'stored photo, offline').toBe(1);
   expect(await shown(page, without), 'photo without CORS, offline').toBe(0);
+  expect(errors).toEqual([]);
+  await context.close();
+});
+
+test('MapLibre (ON_DEMAND) : pas précaché, gardé dans le cache de la version à sa première demande, servi hors ligne', async ({ browser }) => {
+  const { context, page, errors } = await open(browser);
+  const shell = `geoflora-shell-${versionOf(builds.A)}`;
+  const kept = () => page.evaluate(async name => (await (await caches.open(name)).keys()).map(k => new URL(k.url).pathname).filter(p => p.includes('/vendor/maplibre/')), shell);
+  // Installed without it: the app's 1.6 MB lighter.
+  expect(await kept()).toEqual([]);
+  // Asked as MapLibre asks for its worker (with ?v=…): kept under its address without the query.
+  const worker = await fetched(page, 'vendor/maplibre/maplibre-gl-worker.mjs?v=6.13.0');
+  expect(worker).toContain('MapLibre GL JS');
+  await expect.poll(kept).toEqual(['/vendor/maplibre/maplibre-gl-worker.mjs']);
+  // The site out of reach: served from that cache, whatever the query.
+  siteDown = true;
+  await context.setOffline(true);
+  expect(await fetched(page, 'vendor/maplibre/maplibre-gl-worker.mjs?v=6.13.0')).toBe(worker);
+  expect(await fetched(page, 'vendor/maplibre/maplibre-gl-worker.mjs')).toBe(worker);
   expect(errors).toEqual([]);
   await context.close();
 });

@@ -14,7 +14,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { shellPaths, VERSION_LINE } from './stamp-sw.mjs';
+import { onDemandPaths, shellPaths, VERSION_LINE } from './stamp-sw.mjs';
 
 const DATA = ['data/plants.json', 'data/meta.json', 'data/territories.json', 'data/lookalikes.json', 'data/safety.json'];
 const AGENT = 'GeoFlora post-deploy check (https://github.com/yannouche-dev/flora)';
@@ -67,8 +67,8 @@ try {
   }
   console.log(`live:     the same, at ${BASE.href}`);
 
-  // Every precached file and the data files, a few at a time (HEAD: the bytes are not needed).
-  const paths = [...new Set([...shellPaths(source), ...DATA])];
+  // Every precached file, those kept on demand (MapLibre) and the data files, a few at a time (HEAD: the bytes are not needed).
+  const paths = [...new Set([...shellPaths(source), ...onDemandPaths(source), ...DATA])];
   const missing = [];
   for (let i = 0; i < paths.length; i += 8) {
     const answers = await Promise.all(paths.slice(i, i + 8).map(p => get(p, { method: 'HEAD' }).then(r => [p, r.status], e => [p, String(e)])));
@@ -76,7 +76,7 @@ try {
   }
   for (const m of missing) console.log(`::error::${new URL(m.split(':')[0], BASE).href} does not load (${m})`);
   if (missing.length) process.exit(1);
-  console.log(`${paths.length} files of the site load (every precached file, and the data)`);
+  console.log(`${paths.length} files of the site load (every precached file, those kept on demand, and the data)`);
 } catch (error) {
   console.log(`::error::the live check failed: ${/** @type {Error} */ (error).message}`);
   process.exit(1);

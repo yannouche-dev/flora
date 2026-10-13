@@ -5,6 +5,9 @@
 //    foreground: app/main.js), installs in the background, whole or not at all, and the app offers to reload. Until
 //    then, the version running stays the one cached, never a mix of two deploys. In the repository VERSION is 'dev':
 //    the shell is then served from the network first (an edit shows on a reload), the cache only offline.
+//  - on demand (ON_DEMAND): files deployed but not precached — MapLibre (~1.6 MB, the « Vue 3D » only, which needs
+//    the network for its relief anyway). Fetched the first time the 3D view opens, then kept in this version's cache:
+//    served like the shell from then on (offline too), gone with the version.
 //  - data/*.json: network only — the dataset lives in IndexedDB, so it is not duplicated here
 //    (except data/territories.json, data/lookalikes.json and data/safety.json: small and static, precached —
 //    the look-alike and toxicity warnings must work offline, where the picking happens)
@@ -106,6 +109,8 @@ const SHELL = [
   'app/components/gf-media-viewer.js',
   'app/components/gf-discover.js',
   'app/components/gf-trail.js',
+  'app/components/gf-map3d.js',
+  'app/core/walk.js',
   'app/components/start-screen.js',
   'app/components/gf-place-search.js',
   'app/components/gf-scenarios.js',
@@ -153,8 +158,19 @@ const SHELL = [
   'app/components/gf-tabbar.js'
 ];
 
+// Deployed, not precached: kept once asked (see above). tools/check.sh allows a file of vendor/ here instead of in
+// SHELL; tools/stamp-sw.mjs counts them in the version all the same.
+const ON_DEMAND = [
+  'vendor/maplibre/maplibre-gl.mjs',
+  'vendor/maplibre/maplibre-gl-worker.mjs',
+  'vendor/maplibre/maplibre-gl.css',
+  'vendor/maplibre/LICENSE.txt'
+];
+
 /** The address of each precached file, to tell them from the other files of the site. */
 const PRECACHED = new Set(SHELL.map(path => new URL(path, self.location.href).href));
+/** The address of each file kept on demand (its query left out: MapLibre asks for its worker with ?v=…). */
+const KEPT = new Set(ON_DEMAND.map(path => new URL(path, self.location.href).href));
 
 self.addEventListener('install', event => {
   // All or nothing: one file missing and this version never installs (its partial cache goes; not in the repository,
@@ -196,7 +212,9 @@ self.addEventListener('fetch', event => {
       event.respondWith(fromShell(event, 'index.html', isHtml));
       return;
     }
-    event.respondWith(fromShell(event, request));
+    // A file kept on demand: under its address without the query (one copy, whatever the version asked).
+    const bare = url.origin + url.pathname;
+    event.respondWith(fromShell(event, KEPT.has(bare) ? bare : request));
     return;
   }
 
@@ -239,7 +257,8 @@ async function fromShell(event, key, storable = () => true) {
   const cache = await caches.open(SHELL_CACHE);
   const options = { ignoreSearch: request.mode === 'navigate' };
   const store = (/** @type {Response} */ response) => {
-    const precached = PRECACHED.has(new URL(typeof key === 'string' ? key : key.url, self.location.href).href);
+    const address = new URL(typeof key === 'string' ? key : key.url, self.location.href).href;
+    const precached = PRECACHED.has(address) || KEPT.has(address);
     if (precached && response.ok && response.type === 'basic' && storable(response)) {
       event.waitUntil(cache.put(key, response.clone()).catch(() => {}));
     }

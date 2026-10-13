@@ -22,6 +22,7 @@ import { icon, kindIcon } from '../core/icons.js';
 import { harvestRisk } from '../core/alerts.js';
 import './gf-plant-pick-list.js';
 import './gf-place-insights.js';
+import { openMap3d } from './gf-map3d.js';
 
 /** Existing places closer than this are offered instead of creating a duplicate. */
 const NEARBY_RADIUS = 100;
@@ -73,7 +74,9 @@ export class GfSpotEditor extends LitElement {
     _error: { state: true },
     _note: { state: true },
     _where: { state: true },
-    _editPos: { state: true }
+    _editPos: { state: true },
+    /** Why its « Vue 3D » did not open (no WebGL2, the module off). */
+    _note3d: { state: true }
   };
 
   static styles = [ui, css`
@@ -97,6 +100,8 @@ export class GfSpotEditor extends LitElement {
     .save-state { font-size: 0.8rem; color: var(--gf-text-muted); margin-right: auto; }
     .save-state.error { color: var(--gf-danger); }
     .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
+    .note3d { margin: 6px 0 0; font-size: 0.85rem; color: var(--gf-text-muted); }
+    .note3d:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
     /* Dashed "add" buttons: something new goes here. */
     .add { border-style: dashed; border-color: var(--gf-accent); color: var(--gf-accent); font-weight: 600; justify-self: start; }
     .map-area { position: relative; min-height: 0; }
@@ -1014,6 +1019,13 @@ export class GfSpotEditor extends LitElement {
       </div>`;
   }
 
+  /** « Vue 3D » of the place (a parcours: its walk too); when it cannot open here, why. @param {Event} e */
+  #open3d = async (/** @type {Event} */ e) => {
+    const opener = /** @type {HTMLElement} */ (e.currentTarget);
+    this._note3d = '';
+    if (this._place) this._note3d = await openMap3d(this._place, opener) || '';
+  };
+
   render() {
     const place = this._place;
     if (place === undefined) return html`<form><p>Chargement…</p></form>`;
@@ -1087,8 +1099,10 @@ export class GfSpotEditor extends LitElement {
             ${p.plants.length ? html`<button type="button" @click=${this.#share}>Partager</button>` : nothing}
             <button type="button" @click=${this.#export}>Exporter (GeoJSON)</button>
             ${isPlace && !this.embedded ? html`<a class="button" href=${href.map({ spot: place.id })}>Voir sur la carte</a>` : nothing}
+            ${isPlace && p.plants.length ? html`<button type="button" class="map3d" aria-describedby="note3d" @click=${this.#open3d}>${icon('map')} Vue 3D</button>` : nothing}
             ${isPlace ? html`<button type="button" @click=${this.#removeLocation}>Retirer la position</button>` : nothing}
-          </div>`}
+          </div>
+          <p class="note3d" id="note3d" role="status">${this._note3d || ''}</p>`}
 
         ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : nothing}
 

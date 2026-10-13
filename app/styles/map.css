@@ -653,3 +653,130 @@ gf-map .gf-float-tip .again { display: block; color: var(--gf-accent, #16a34a); 
 .gf-plant.gf-kin-self .ring:is(span) { scale: 1.5; rotate: -6deg; }
 .gf-plant.gf-kin-self svg { scale: 1.6; }
 path.gf-kin { scale: 1.5; stroke: #ffd166; stroke-width: 3; }
+
+/* « Vue 3D » (gf-map3d.js): a dialog over the whole screen, MapLibre inside. */
+dialog.gf-map3d {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: var(--gf-surface);
+  color: var(--gf-text);
+  flex-direction: column;
+  overflow: hidden;
+}
+dialog.gf-map3d[open] { display: flex; }
+dialog.gf-map3d::backdrop { background: rgb(0 0 0 / 50%); }
+.gf3d-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: calc(6px + env(safe-area-inset-top, 0px)) 8px 6px 12px;
+  border-bottom: 1px solid var(--gf-border);
+  background: var(--gf-surface);
+}
+.gf3d-head h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 1rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gf3d-kicker { color: var(--gf-accent); }
+.gf3d-seg { display: inline-flex; border: 1px solid var(--gf-border); border-radius: 999px; overflow: hidden; flex: none; }
+.gf3d-seg button {
+  min-width: 48px;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--gf-text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.gf3d-seg button[aria-pressed='true'] { background: var(--gf-accent); color: #fff; }
+.gf3d-seg button:disabled { cursor: default; opacity: 0.6; }
+.gf3d-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--gf-text);
+  font-size: 1.2rem;
+  cursor: pointer;
+}
+.gf3d-close:hover { background: var(--gf-surface-2); }
+.gf3d-canvas { position: relative; flex: 1; min-height: 0; background: #dfe6d8; }
+.gf3d-loading, .gf3d-note:not(:empty) {
+  position: absolute;
+  left: 50%;
+  translate: -50% 0;
+  max-width: calc(100% - 32px);
+  margin: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgb(20 30 22 / 82%);
+  color: #fff;
+  font-size: 0.85rem;
+  text-align: center;
+  pointer-events: none;
+}
+.gf3d-loading { top: 50%; }
+/* Under the header (the controls and the credits keep the bottom corners). */
+.gf3d-note:not(:empty) { top: calc(68px + env(safe-area-inset-top, 0px)); }
+.gf3d-note:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+
+/* A plant standing on the ground: its photo in a ring of its abundance colour (as on gf-map), its altitude, a stem. */
+.gf3d-pin { display: flex; flex-direction: column; align-items: center; cursor: pointer; }
+.gf3d-pin .ring {
+  position: relative;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 3px solid var(--c);
+  background: var(--c);
+  color: #fff;
+  font-size: 16px;
+  box-shadow: 0 0 0 1.5px #fff, 0 2px 5px rgb(0 0 0 / 50%);
+  transition: scale 0.2s ease-out;
+}
+.gf3d-pin:hover .ring, .gf3d-pin:focus-visible .ring { scale: 1.15; }
+.gf3d-pin:focus-visible { outline: none; }
+.gf3d-pin:focus-visible .ring { box-shadow: 0 0 0 3px #fff, 0 0 0 5px var(--gf-accent); }
+.gf3d-pin .ring img { position: absolute; inset: 0; z-index: 1; width: 100%; height: 100%; object-fit: cover; }
+.gf3d-pin .glyph { position: absolute; inset: 0; display: grid; place-items: center; line-height: 0; }
+.gf3d-pin .alt, .gf3d-start {
+  margin-top: 2px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 92%);
+  color: #1d2b20;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 35%);
+}
+.gf3d-pin .stem { width: 2px; height: 14px; background: #fff; box-shadow: 0 0 2px rgb(0 0 0 / 60%); }
+.gf3d-start { background: #1d2b20; color: #fff; }
+.gf3d-card { display: grid; gap: 2px; color: #1d2b20; font-size: 0.85rem; }
+.gf3d-card i, .gf3d-card small { color: #4a5a4e; }
+@media (prefers-reduced-motion: reduce) { .gf3d-pin .ring { transition: none; } }
