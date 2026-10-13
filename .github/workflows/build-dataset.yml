@@ -2,6 +2,10 @@ name: Build flora dataset
 
 on:
   workflow_dispatch:
+    inputs:
+      max_drop:
+        description: Largest drop allowed for a count of the safety data against the dataset as last committed (0.05 = 5 %); raise it only for a drop you checked
+        default: '0.05'
   push:
     branches: [main]
     paths:
@@ -53,32 +57,33 @@ jobs:
           node --check scripts/enrich-baseflor.mjs
           node --check scripts/enrich-statuses.mjs
           node --check scripts/build-safety.mjs
+          node --check scripts/previous-data.mjs
+          node --check scripts/check-data.mjs
 
       - name: Build dataset
         run: node scripts/build-plants.mjs
 
       # SheetJS (xlsx) reads the Baseflor and TPPT spreadsheets: the version and checksum of scripts/package-lock.json
       # (0.20.3, from the SheetJS CDN: npm only has the vulnerable 0.18.5), without install scripts, in
-      # scripts/node_modules (where the scripts' `import('xlsx')` finds it). The two steps that need it go on without
-      # it, like on any failure of their source.
+      # scripts/node_modules (where the scripts' `import('xlsx')` finds it). A failed install fails the build: the
+      # steps below would otherwise keep their previous data on every run, unnoticed.
       - name: Install SheetJS
-        continue-on-error: true
         run: npm ci --ignore-scripts --prefix scripts
 
+      # The three steps below read outside sources. A source that cannot be read keeps its part of the dataset as last
+      # committed (git HEAD, scripts/previous-data.mjs) with a ::warning::, so they carry no continue-on-error: an
+      # error left in them is a broken script, and fails the build before anything is committed.
       - name: Add Baseflor flowering months (Ph. Julve, Tela Botanica — CC BY-SA)
-        continue-on-error: true
         env:
           BASEFLOR_URL: ${{ vars.BASEFLOR_URL }}
         run: node scripts/enrich-baseflor.mjs
 
       - name: Add INPN statuses (protection, harvest regulation, Red Lists)
-        continue-on-error: true
         env:
           BDC_URL: ${{ vars.BDC_URL }}
         run: node scripts/enrich-statuses.mjs
 
       - name: Add ANSM lists A/B and TPPT toxicity (data/safety.json)
-        continue-on-error: true
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq poppler-utils
           node scripts/build-safety.mjs
@@ -101,11 +106,12 @@ jobs:
           node -e "const p=require('./data/plants.json'); const m=require('./data/meta.json'); const n=p.filter(x=>x.thumbnail?.url).length; if(!Array.isArray(p)||p.length<4500||p.length>8000) process.exit(1); if(p.length!==m.plants) process.exit(1); if(n<3000) throw new Error('Thumbnail coverage unexpectedly low: '+n); console.log(p.length+' plants; '+m.vernacularNames+' French vernacular names; '+n+' thumbnails; '+p.filter(x=>x.flowering).length+' with Baseflor flowering; '+p.filter(x=>x.statuses?.some(s=>/^P[NRD]$/.test(s.type))).length+' protected; '+p.filter(x=>x.statuses?.some(s=>s.type==='REGL')).length+' regulated')"
           cat data/meta.json
 
-      # The steps that read outside sources go on when one fails (continue-on-error): build-safety.mjs then keeps
-      # the failed source's part of the previous safety.json, but statuses are not kept. Look-alike taxa that no
-      # longer name the flora, a missing safety source or counts under their floors fail the job here, so a
-      # degraded dataset is never committed, nor deployed (deploy-pages only follows a successful build).
+      # Look-alike taxa that no longer name the flora, a missing safety source, counts under their floors or down by
+      # more than max_drop from the dataset as last committed (HEAD) fail the job here, so a degraded dataset is
+      # never committed, nor deployed (deploy-pages only follows a successful build).
       - name: Check safety data and protection statuses
+        env:
+          MAX_DROP: ${{ inputs.max_drop || '0.05' }}
         run: node scripts/check-data.mjs
 
       # Kept a week on every run: a manual run on a branch can be looked at without committing anything.
@@ -149,8 +155,10 @@ jobs:
       - name: Put it in place
         run: cp "$RUNNER_TEMP"/dataset/plants.json "$RUNNER_TEMP"/dataset/meta.json "$RUNNER_TEMP"/dataset/thumbnails.json "$RUNNER_TEMP"/dataset/safety.json data/
 
-      # The files as received, checked again before they are versioned.
+      # The files as received, checked again before they are versioned, against the data of the commit they land on.
       - name: Check safety data and protection statuses
+        env:
+          MAX_DROP: ${{ inputs.max_drop || '0.05' }}
         run: node scripts/check-data.mjs
 
       - name: Commit generated dataset

@@ -407,13 +407,29 @@ function setTree(view, tree) {
 }
 
 /**
- * A block docked: on a side of a pane (or of the sheet, or of the whole frame: target 'root'), in a pane's
- * centre (a tab), or among its tabs. A hidden block comes back.
- * @param {Mode} view @param {string} key @param {string} target a node's id ('sheet', a pane's id, 'root') @param {Zone} zone
+ * The modules a block needs that are off in this view (Wikipédia needs Wikidata too), empty when none: only the
+ * user switches them on again (Réglages › Modules, or by bringing the block back by hand).
+ * @param {Mode} view @param {string} key @returns {import('./modules.js').ModuleKey[]}
  */
-export function dockBlock(view, key, target, zone) {
+export function modulesOffFor(view, key) {
+  const module = blockOf(key)?.module;
+  if (!module) return [];
+  return /** @type {import('./modules.js').ModuleKey[]} */ ([module, ...(module === 'wikipedia' ? ['wikidata'] : [])]).filter(m => !moduleOn(m, view));
+}
+
+/**
+ * A block docked: on a side of a pane (or of the sheet, or of the whole frame: target 'root'), in a pane's
+ * centre (a tab), or among its tabs. A hidden block comes back, its module switched on with it, when the user
+ * moves it; `auto` (a layout the app makes itself, like Découvrir's steps) never switches a module on: a block whose
+ * module is off is left where it is, and false returned.
+ * @param {Mode} view @param {string} key @param {string} target a node's id ('sheet', a pane's id, 'root') @param {Zone} zone
+ * @param {{ auto?: boolean }} [options]
+ */
+export function dockBlock(view, key, target, zone, { auto = false } = {}) {
+  if (auto && modulesOffFor(view, key).length) return false;
   if (isHidden(view, key)) setHidden(view, key, false);
   setTree(view, dock(treeOf(view), key, target, zone));
+  return true;
 }
 
 /** A block back in the sheet, before another one (or where it was in the order). @param {Mode} view @param {string} key @param {string | null} [beforeKey] */

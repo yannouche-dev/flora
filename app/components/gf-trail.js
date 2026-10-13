@@ -7,7 +7,8 @@
 import { LitElement, html, css, nothing, repeat, svg } from 'lit';
 import { icon } from '../core/icons.js';
 import { geoProblem, startScreen, startStyles } from './start-screen.js';
-import { watchLocation } from '../core/geo.js';
+import { watchLocation, whenGranted } from '../core/geo.js';
+import { photoOf } from '../core/thumb.js';
 import { atPlace, placeNameAt } from '../core/geoservices.js';
 import { findPlants } from '../core/search.js';
 import { distance, entriesOf, getPlace, lastEntry, newPlace, plantMarkers, savePlace, spotEvents, withPlant, withoutPlant, refreshMembership } from '../core/collections.js';
@@ -291,6 +292,7 @@ export class GfTrail extends LitElement {
   }
 
   /** @type {(() => void) | null} */ #stopGeo = null;
+  /** Waiting for the geolocation permission before following (a parcours found again on opening). @type {(() => void) | null} */ #waitGeo = null;
   #onSpots = () => this.#reload();
 
   connectedCallback() {
@@ -312,6 +314,8 @@ export class GfTrail extends LitElement {
     fitKeyboard(false);
     this.#stopGeo?.();
     this.#stopGeo = null;
+    this.#waitGeo?.();
+    this.#waitGeo = null;
     this.#cancelStart();
     // The recap left for another scenario (not for « Le voir dans Mes plantes », whose Back comes to it again).
     if (this._done && parse(location.hash).name !== 'collections') write(DONE, null);
@@ -417,7 +421,13 @@ export class GfTrail extends LitElement {
     }
     const ids = /** @type {string[]} */ (read(LIST, []));
     this._past = (await Promise.all(ids.filter(x => x !== id).map(x => getPlace(x).catch(() => undefined)))).filter(Boolean);
-    if (this._trail && this.isConnected) this.#follow();
+    // A parcours under way, found again on opening: followed once the permission is granted (no gesture here);
+    // « Commencer ici » and « Reprendre » ask for the position themselves.
+    if (this._trail && this.isConnected && !this.#stopGeo) {
+      this.#waitGeo?.();
+      const cancel = whenGranted(() => { this.#waitGeo = null; if (this._trail && this.isConnected) this.#follow(); });
+      this.#waitGeo = this.#stopGeo ? null : cancel;
+    }
   }
 
   /** Where I am, followed while walking. */
@@ -615,7 +625,7 @@ export class GfTrail extends LitElement {
     await this.#flushName();
     write(KEY, null);
     write(DONE, this._trail?.id ?? null);
-    this.#stopGeo?.(); this.#stopGeo = null;
+    this.#stopGeo?.(); this.#stopGeo = null; this.#waitGeo?.(); this.#waitGeo = null;
     this._done = this._trail;
     this._trail = null; this._q = ''; this._hits = []; this._sel = null; this._selEntry = null; this._peek = false; this._toast = null;
     this.#reload();
@@ -857,7 +867,7 @@ export class GfTrail extends LitElement {
       // Already met: it can be added again (another occurrence, here).
       const times = entriesOf(t, h.id).length;
       return html`<li class="hit">
-        <span class="th">${h.thumbnail?.url ? html`<img src=${h.thumbnail.url} alt="" loading="lazy" referrerpolicy="no-referrer" @error=${(/** @type {any} */ e) => e.target.remove()} />` : icon('flower1')}</span>
+        <span class="th">${photoOf(h.thumbnail?.url) ? html`<img src=${h.thumbnail.url} alt="" loading="lazy" referrerpolicy="no-referrer" @error=${(/** @type {any} */ e) => e.target.remove()} />` : icon('flower1')}</span>
         <span class="t"><b>${h.vernacularName || h.scientificName}</b><i>${h.vernacularName ? h.scientificName + ' · ' : ''}${h.family || ''}</i>
           ${times ? html`<span class="times">${icon('check-lg')} Déjà ${times === 1 ? 'une fois' : times + ' fois'} dans le parcours</span>` : nothing}</span>
         <button class="primary add" type="button" @click=${() => this.#add(h)} title=${times ? 'L’ajouter encore, ici' : 'L’ajouter au parcours, ici'}

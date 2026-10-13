@@ -4,7 +4,7 @@
 import './history.js';
 
 /**
- * @typedef {{ name: 'search' } | { name: 'plant', id: number, pane: string | null, at: number | null } | { name: 'settings' } | { name: 'collections', open: string | null, plant: number | null }
+ * @typedef {{ name: 'search' } | { name: 'plant', id: number, pane: string | null, at: number | null } | { name: 'settings' } | { name: 'legal' } | { name: 'collections', open: string | null, plant: number | null }
  *   | { name: 'map', spot: string | null, plant: number | null, focus: string | null, season: boolean, add: number | null, pick: boolean, flore: boolean }
  *   | { name: 'spot-new', plant: number | null, kind: 'list' | 'place', at: [number, number] | null }
  *   | { name: 'spot', id: string, add: number | null, pick: boolean }
@@ -50,6 +50,7 @@ export function parse(hash) {
   if (path === 'shared') return { name: 'shared', data: params.get('d') || '' };
 
   if (path === 'settings') return { name: 'settings' };
+  if (path === 'legal') return { name: 'legal' };
   // « Découvrir »: the flora around; ?p=<id> the plant open.
   if (path === 'discover') return { name: 'discover', plant: number('p'), scenario: /^[a-z]{2,12}$/.test(params.get('s') || '') ? params.get('s') : null };
   return { name: 'not-found' };
@@ -64,6 +65,8 @@ export const href = {
   plantPane: (/** @type {number} */ id, /** @type {string} */ pane, /** @type {number | null} */ at = null) =>
     '#/plant/' + id + '?pane=' + encodeURIComponent(pane) + (at != null ? '&i=' + at : ''),
   settings: () => '#/settings',
+  /** Mentions légales et confidentialité (from Réglages). */
+  legal: () => '#/legal',
   /** « Découvrir » (the flora around), with a plant open. */
   discover: (/** @type {number | null | undefined} */ plantId = null, /** @type {string | null | undefined} */ scenario = null) => {
     const params = new URLSearchParams();

@@ -23,10 +23,11 @@ import { bundledOutline, territoryAt } from '../core/territory.js';
 import { watchLocation } from '../core/geo.js';
 import { UNREAD, alertsOf } from '../core/alerts.js';
 import { plantViewOf, setHarvestMode, setMode, StoreController, whenReady } from '../core/store.js';
-import { dockBlock, paneOf, setStackState } from '../core/sheet-blocks.js';
+import { dockBlock, modulesOffFor, paneOf, setStackState } from '../core/sheet-blocks.js';
 import { stepBack, chooseBranch, discoverEvents, discoverState, discovering, finishDiscover, firstMatchShown, plantSeen, resetPassed, setDiscoverPoint, setDiscoverRadius, setStep, swiped, unswipe, LAST_STEP, PLANTS_BEFORE_FLORE } from '../core/discover.js';
 import { UNREAD_LOOKALIKES, lookalikesOf } from '../core/lookalikes.js';
 import { scenarioOf } from '../core/scenarios.js';
+import { MODULES, moduleEvents, moduleOn } from '../core/modules.js';
 import { geoProblem, startScreen, startStyles } from './start-screen.js';
 import { sheetSession } from '../core/sheet-session.js';
 import { isFavorite, toggleFavorite } from '../core/collections.js';
@@ -400,6 +401,8 @@ export class GfDiscover extends LitElement {
     .guided:not(.with-panes) .g-deck { flex: 0 1 var(--w-cards, 50%); }
     .guided.with-panes .g-deck { flex: 0 1 var(--w-deck, min(360px, 32%)); border-right: 1px solid var(--gf-border); }
     /* The separators (wide screens): the map's and the cards' widths, remembered (PaneSizer). */
+    .g-off { margin: 8px; padding: 8px 10px; border-radius: var(--gf-radius); background: var(--gf-surface); border: 1px solid var(--gf-border); font-size: 0.8125rem; color: var(--gf-text-muted); }
+    .g-off a { color: var(--gf-accent); }
     .g-scroll > .split { flex: none; width: 9px; margin: 0 -4px; z-index: 3; cursor: col-resize; position: relative; touch-action: none; }
     .g-scroll > .split::after { content: ''; position: absolute; inset: 0 4px; background: transparent; transition: background 0.12s; }
     .g-scroll > .split:hover::after, .g-scroll > .split:focus-visible::after, .g-scroll > .split.dragging::after { background: var(--gf-accent); inset: 0 3px; }
@@ -562,10 +565,14 @@ export class GfDiscover extends LitElement {
     else if (e.key === 'Escape') { e.preventDefault(); this.#close(); }
   };
 
+  #onModules = () => this.requestUpdate();
+
   connectedCallback() {
     super.connectedCallback();
     discoverEvents.addEventListener('change', this.#onChange);
     discoverEvents.addEventListener('reset', this.#onReset);
+    // A module switched on or off (Réglages, another tab): photos and panes follow it.
+    moduleEvents.addEventListener('change', this.#onModules);
     // The discovery screens: no zone alerts on their maps (gf-map).
     this.setAttribute('no-areas', '');
     addEventListener('keydown', this.#onKey);
@@ -577,6 +584,7 @@ export class GfDiscover extends LitElement {
     super.disconnectedCallback();
     discoverEvents.removeEventListener('change', this.#onChange);
     discoverEvents.removeEventListener('reset', this.#onReset);
+    moduleEvents.removeEventListener('change', this.#onModules);
     removeEventListener('keydown', this.#onKey);
     clearTimeout(this.#dwellTimer);
     clearTimeout(this.#obsTimer);
@@ -1032,7 +1040,7 @@ export class GfDiscover extends LitElement {
     return html`<article class="swipe-card ${top ? 'top' : 'under'} ${loved ? 'loved' : ''}" aria-label=${loved ? name + ' — déjà aimée' : name} data-id=${p.id}
         @pointerdown=${top ? this.#dragStart : null} @pointermove=${top ? this.#dragMove : null} @pointerup=${top ? this.#dragEnd : null} @pointercancel=${top ? this.#dragEnd : null}>
       <div class="nophoto">${icon('leaf')}</div>
-      ${c.photo ? html`<img src=${c.photo} alt="" loading=${top ? 'eager' : 'lazy'} decoding="async" referrerpolicy="no-referrer" draggable="false" @error=${hideImg} @load=${showImg} />` : nothing}
+      ${this.#photo(c.photo) ? html`<img src=${c.photo} alt="" loading=${top ? 'eager' : 'lazy'} decoding="async" referrerpolicy="no-referrer" draggable="false" @error=${hideImg} @load=${showImg} />` : nothing}
       <span class="stamp like">MATCH</span><span class="stamp nope">BOF</span>
       ${loved ? html`<span class="loved-badge">${icon('heart-fill')} Déjà aimée</span>` : nothing}
       <div class="about">
@@ -1191,7 +1199,7 @@ export class GfDiscover extends LitElement {
     const name = c.plant.vernacularNames?.[0] || c.plant.scientificName;
     return html`<div class="match" role="alertdialog" aria-modal="true" aria-label="C’est un match" aria-describedby="match-text">
       <p class="title">C’est un match !</p>
-      ${c.photo ? html`<img src=${c.photo} alt="" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} />` : nothing}
+      ${this.#photo(c.photo) ? html`<img src=${c.photo} alt="" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} />` : nothing}
       <p id="match-text">Coup de cœur pour <b>${name}</b> ! Direction votre herbier (♥ favoris) — et ce n’est que le début de l’exploration.</p>
       <div class="row">
         <button class="primary" type="button" autofocus @click=${() => { firstMatchShown(); this._match = null; this._focus = c.plant.id; this.#restartDwell(); }}>Découvrir cette plante</button>
@@ -1206,7 +1214,7 @@ export class GfDiscover extends LitElement {
     const n = (a?.safety?.count || 0) + (a?.edible?.count || 0);
     return html`<button class="card" type="button" aria-current=${String(this.open === p.id)} @click=${() => { if (mosaic) { sheetSession.anchor = 'images'; sheetSession.anchorBlock = 'media'; sheetSession.anchorOffset = 0; } this.#openPlant(p.id, ids); }}>
       ${discoverState().matches.includes(p.id) ? html`<span class="heart" aria-label="Match">${icon('heart-fill')}</span>` : nothing}
-      <div class="ph">${c.photo ? html`<img src=${c.photo} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />` : nothing}</div>
+      <div class="ph">${this.#photo(c.photo) ? html`<img src=${c.photo} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />` : nothing}</div>
       <div class="chips">${c.blooming ? html`<span class="chip bloom">En fleur</span>` : nothing}
         ${n ? html`<span class="chip ${danger ? 'danger' : 'warn'}">${danger ? 'Attention' : 'À savoir'} · ${n}</span>` : nothing}</div>
       ${discoverState().seen.includes(p.id) ? html`<span class="seen" title="Déjà découverte" aria-label="Déjà découverte">${icon('check-lg')}</span>` : nothing}
@@ -1221,6 +1229,9 @@ export class GfDiscover extends LitElement {
 
   /** The mode whose layout the steps build (the one the plant sheet shows in Flore). */
   get #view() { return plantViewOf(this.#store.state); }
+
+  /** A plant's photo, unless the « Photos en ligne » module is off in this view (a leaf shows instead). @param {string | null | undefined} url */
+  #photo(url) { return url && moduleOn('photos', this.#view) ? url : null; }
 
   /** The plant of the moment: the card on top (the map lights it, the panes show it). */
   get #focusId() { return this.#shown[0]?.plant.id ?? null; }
@@ -1254,18 +1265,22 @@ export class GfDiscover extends LitElement {
     const v = this.#view;
     if (paneOf(v, key)) return;
     const p = near ? paneOf(v, near) : null;
-    dockBlock(v, key, root ? 'root' : p ? p.id : 'sheet', root || p ? side : 'right');
+    // A module switched off stays off: its block is not added (the panes say why, #offNote).
+    dockBlock(v, key, root ? 'root' : p ? p.id : 'sheet', root || p ? side : 'right', { auto: true });
   }
 
   /** Several blocks as the tabs of one new pane (the first one shown). @param {string[]} keys @param {'left' | 'right' | 'top' | 'bottom'} side */
   #dockTabs(keys, side) {
     const v = this.#view;
-    this.#dockAt(keys[0], null, side, true);
-    const pane = paneOf(v, keys[0]);
+    // The first block whose module is on opens the pane; the others join it as tabs.
+    const shown = keys.filter(k => !modulesOffFor(v, k).length);
+    if (!shown.length) return;
+    this.#dockAt(shown[0], null, side, true);
+    const pane = paneOf(v, shown[0]);
     if (!pane) return;
-    for (const k of keys.slice(1)) if (!paneOf(v, k)) dockBlock(v, k, pane.id, 'center');
-    const after = paneOf(v, keys[0]);
-    if (after) setStackState(v, after.id, { active: keys[0] });
+    for (const k of shown.slice(1)) if (!paneOf(v, k)) dockBlock(v, k, pane.id, 'center', { auto: true });
+    const after = paneOf(v, shown[0]);
+    if (after) setStackState(v, after.id, { active: shown[0] });
   }
 
   /** The fork: picking or science; its dashboard joins the plant. @param {'harvest' | 'science'} branch */
@@ -1308,7 +1323,7 @@ export class GfDiscover extends LitElement {
     return html`<aside class="around" aria-label="Les plantes autour">
       <h2>Les voisines <small class="muted">${cards.length}</small></h2>
       <ul>${repeat(cards, c => c.plant.id, c => html`<li><button type="button" aria-current=${String(c.plant.id === this.#focusId)} @click=${() => this.#aroundGo(c.plant.id)}>
-        <span class="th">${c.photo ? html`<img src=${c.photo.replace('/medium.', '/square.')} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />` : nothing}</span>
+        <span class="th">${this.#photo(c.photo) ? html`<img src=${c.photo.replace('/medium.', '/square.')} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />` : nothing}</span>
         <span class="t"><b>${c.plant.vernacularNames?.[0] || c.plant.scientificName}</b><small>${c.blooming ? 'En fleur · ' : ''}${c.count} obs.${discoverState().matches.includes(c.plant.id) ? ' · ♥' : ''}</small></span>
       </button></li>`)}</ul>
     </aside>`;
@@ -1384,7 +1399,7 @@ export class GfDiscover extends LitElement {
    */
   async #loadHighlight(key, card, scope) {
     const title = card.plant.vernacularNames?.[0] || card.plant.scientificName;
-    const who = { photo: card.photo ? card.photo.replace('/medium.', '/small.') : null, common: card.plant.vernacularNames?.[0] || null, sci: card.plant.scientificName, taxonId: card.taxonId ?? null };
+    const who = { photo: this.#photo(card.photo) ? card.photo.replace('/medium.', '/small.') : null, common: card.plant.vernacularNames?.[0] || null, sci: card.plant.scientificName, taxonId: card.taxonId ?? null };
     const pointsOf = (/** @type {{ coordinates: [number, number], date: string | null, url: string }[]} */ pts) => pts.map(p => ({ coordinates: p.coordinates, title, url: p.url, date: p.date }));
     if (scope === 'around') {
       const pts = await observationsAround(card.taxonId, /** @type {[number, number]} */ (this._point), this._radius).catch(() => null);
@@ -1506,7 +1521,7 @@ export class GfDiscover extends LitElement {
     const chips = [['around', html`${icon('crosshair')} ${km}`], ...(a?.department ? [['department', a.department]] : []), ...(a?.region ? [['region', a.region]] : []), ['country', 'France'], ['world', 'Monde']];
     const name = card ? card.plant.vernacularNames?.[0] || card.plant.scientificName : '';
     const legend = this._note ? html`<p class="g-legend" role="status">${this._note}</p>`
-      : card && !quiet ? html`<p class="g-legend" aria-live="polite"><span class="dot">${icon('leaf-fill')}${repeat(card.photo ? [card.photo.replace('/medium.', '/square.')] : [], src => src,
+      : card && !quiet ? html`<p class="g-legend" aria-live="polite"><span class="dot">${icon('leaf-fill')}${repeat(this.#photo(card.photo) ? [card.photo.replace('/medium.', '/square.')] : [], src => src,
           src => html`<img src=${src} alt="" decoding="async" referrerpolicy="no-referrer" @load=${(/** @type {any} */ e) => e.target.classList.add('in')} @error=${hideImg} />`)}</span><b>${name}</b><span>${this.#hlLine()}</span></p>` : nothing;
     return html`<div class="g-where" role="group" aria-label="Périmètre de la recherche">
       <div class="top">
@@ -1533,7 +1548,7 @@ export class GfDiscover extends LitElement {
     const at = Math.max(0, DISTANCES.indexOf(this._radius));
     const species = new Map();
     for (const o of this._obs) if (o.sci && !species.has(o.sci)) species.set(o.sci, o);
-    const faces = [...species.values()].filter(o => o.photo).slice(0, 6);
+    const faces = [...species.values()].filter(o => this.#photo(o.photo)).slice(0, 6);
     const fr = (/** @type {number} */ x) => x.toLocaleString('fr-FR');
     const total = Math.max(this._obsTotal || 0, this._obs.length);
     return html`<section class="g-launch" aria-label="Lancer la découverte">
@@ -1552,8 +1567,21 @@ export class GfDiscover extends LitElement {
 
   /** The blocks the steps reached have added to the panes (only those are shown while discovering). */
   get #paneKeys() {
+    return this.#stepKeys.filter(k => !modulesOffFor(this.#view, k).length);
+  }
+
+  /** The blocks the steps reached would add, modules off or not. */
+  get #stepKeys() {
     const { step, branch } = discoverState();
     return [...(step >= 1 ? ['media'] : []), ...(step >= 2 ? ['wikipedia'] : []), ...(step >= 3 && branch ? FORK_BLOCKS[branch] : [])];
+  }
+
+  /** Why some steps added nothing: their modules are off (Réglages › Modules), and Découvrir leaves them so. */
+  #offNote() {
+    const off = [...new Set(this.#stepKeys.flatMap(k => modulesOffFor(this.#view, k)))];
+    if (!off.length) return nothing;
+    const names = off.map(m => `« ${MODULES.find(x => x.key === m)?.name || m} »`);
+    return html`<p class="g-off" role="note">${icon('eye-slash')} ${names.length > 1 ? `Modules ${names.slice(0, -1).join(', ')} et ${names.at(-1)} désactivés` : `Module ${names[0]} désactivé`} : ${names.length > 1 ? 'leurs volets ne sont pas ajoutés' : 'son volet n’est pas ajouté'}. Vous pouvez ${names.length > 1 ? 'les' : 'le'} réactiver dans <a href=${href.settings()}>Réglages › Modules</a>.</p>`;
   }
 
   /** Where the discovery is: 0 the map, 1 the cards, 2 the photos, 3 the encyclopedia, 4 the fork, 5 the plants around. */
@@ -1689,6 +1717,7 @@ export class GfDiscover extends LitElement {
         <div class="g-deck">${asking ? nothing : this._cards ? this.#deckView() : html`<p class="muted g-wait">Recherche des plantes observées autour…</p>`}</div>
         ${panes ? this.#sizer.split('deck', 'left', () => this.#paneMax('deck')) : nothing}
         ${panes ? html`<div class="g-plant" aria-label=${card ? 'Volets : ' + (card.plant.vernacularNames?.[0] || card.plant.scientificName) : 'Volets'}>
+          ${this.#offNote()}
           ${id != null ? html`<gf-plant-detail embedded panes-only plant-id=${id} view=${this.#view} .paneKeys=${this.#paneKeys}>
             <div class="g-empty">${icon('binoculars')}<p>Ses photos, son histoire, ses secrets viendront s’installer ici.</p></div>
           </gf-plant-detail>` : nothing}

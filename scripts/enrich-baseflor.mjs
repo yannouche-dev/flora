@@ -5,14 +5,16 @@
 // Each matched plant gets `flowering: [firstMonth, lastMonth]` (1–12; last < first wraps over the year end).
 //
 // The file is found on the Tela Botanica downloads page (or BASEFLOR_URL), as CSV/TSV, .xlsx/.xls (read with
-// the `xlsx` package of package.json: npm ci --ignore-scripts) or a .zip holding one of those. Any failure only logs a
-// warning: the dataset then ships without flowering months.
+// the `xlsx` package of scripts/package.json: npm ci --ignore-scripts) or a .zip holding one of those. When no file can
+// be read, the flowering months of the dataset as last committed are kept (scripts/previous-data.mjs), with a
+// ::warning::, and meta.json says since when; with no previous dataset either, the script fails.
 
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, readFile, readdir, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { baselineName, keepPrevious, previousJson } from './previous-data.mjs';
 
 const PLANTS_FILE = process.env.PLANTS_FILE || 'data/plants.json';
 const META_FILE = process.env.META_FILE || 'data/meta.json';
@@ -288,8 +290,11 @@ async function main() {
     meta.sources = { ...(meta.sources || {}), baseflor: { url, license: LICENSE, rows: count, matched, fetchedAt: new Date().toISOString() } };
     console.log(`Baseflor: flowering months for ${matched} / ${plants.length} plants`);
   } catch (error) {
-    console.warn('::warning::Baseflor skipped:', error.message);
-    return;
+    const kept = keepPrevious(plants, 'flowering', 'data/plants.json');
+    if (kept < 1) throw new Error(`Baseflor not read (${error.message}), and no previous flowering months to keep (${baselineName()})`);
+    const before = previousJson('data/meta.json')?.sources?.baseflor;
+    meta.sources = { ...(meta.sources || {}), baseflor: { ...before, kept: true, keptAt: new Date().toISOString() } };
+    console.warn(`::warning::Baseflor not read (${error.message}): the flowering months of ${kept} plants are kept from the previous dataset (${baselineName()}, read ${before?.fetchedAt?.slice(0, 10) || 'on an unknown day'})`);
   }
   await writeFile(PLANTS_FILE, JSON.stringify(plants, null, 2) + '\n', 'utf8');
   await writeFile(META_FILE, JSON.stringify(meta, null, 2) + '\n', 'utf8');

@@ -1,6 +1,7 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { lastSearchHash } from '../core/query.js';
+import { href } from '../core/router.js';
 import { setHarvestMode, setKingMode, setMode, StoreController } from '../core/store.js';
 import { MODE_ICON_CHOICES, modeLabel } from '../core/modes.js';
 import { createMode, deleteMode, editMode } from '../core/mode-admin.js';
@@ -256,7 +257,8 @@ export class GfSettings extends LitElement {
       <h2 id="modules">Modules : services en ligne</h2>
       <p class="muted">Tout fonctionne hors ligne avec la flore locale ; chaque module ajoute des données d’un service en ligne.
         Cochez les modes où il sert : la fiche plante suit son affichage, la grille des résultats le sien, la carte et le reste le mode
-        de l’application. Décoché, le service n’est pas appelé dans ce mode et ses données ne s’y affichent pas.</p>
+        de l’application. Décoché, le service n’est pas appelé dans ce mode et ses données ne s’y affichent pas.
+        Ce que chacun reçoit, votre position surtout : <a href=${href.legal()}>Mentions légales et confidentialité</a>.</p>
       ${CATEGORIES.filter(c => MODULES.some(m => m.category === c.key)).map(c => html`
       <h3 class="category">${icon(c.icon)} ${c.label} <small>${c.question}</small></h3>
       <ul class="modules">
@@ -496,6 +498,7 @@ export class GfSettings extends LitElement {
       <article>
         <a class="back link" href=${lastSearchHash()}>${icon('arrow-left')} Recherche</a>
         <h1>À propos et réglages</h1>
+        <p class="muted"><a href=${href.legal()}>${icon('shield-check')} Mentions légales et confidentialité</a> : qui publie GeoFlora, ce qui reste sur cet appareil, ce que reçoit chaque service en ligne (votre position surtout).</p>
         ${this.#firstSteps()}
         ${this.#king()}
 

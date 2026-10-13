@@ -12,17 +12,27 @@
 //    are cited ones;
 //  - every id of safety.json is a plant of the flora, and its three sources (ANSM lists A and B, TPPT) are there;
 //  - counts stay above floors (about 90 % of what the sources gave on 2026-10-12): a source that failed upstream,
-//    or a format change read as nothing, shows as a drop under them.
-// Paths: PLANTS_FILE, LOOKALIKES_FILE, SAFETY_FILE (defaults: data/…), like the build scripts.
+//    or a format change read as nothing, shows as a drop under them;
+//  - counts drop by no more than MAX_DROP (default 5 %) from the dataset as last committed (git HEAD, or
+//    DATA_BASELINE / PREVIOUS_DATA_DIR: scripts/previous-data.mjs): a source that lost part of its content passes
+//    the floors but not this. A deliberate drop is let through by a manual run with a larger MAX_DROP;
+//  - a source kept from a previous build (its download failed) is a ::warning::, more than STALE_DAYS (30) days
+//    after it was last read.
+// Paths: PLANTS_FILE, LOOKALIKES_FILE, SAFETY_FILE, META_FILE (defaults: data/…), like the build scripts.
 
 import { readFileSync } from 'node:fs';
+import { baselineName, previousJson } from './previous-data.mjs';
 
 const PLANTS_FILE = process.env.PLANTS_FILE || 'data/plants.json';
 const LOOKALIKES_FILE = process.env.LOOKALIKES_FILE || 'data/lookalikes.json';
 const SAFETY_FILE = process.env.SAFETY_FILE || 'data/safety.json';
+const META_FILE = process.env.META_FILE || 'data/meta.json';
+/** A share (0.05 = 5 %); anything else read as the default, never as « no limit ». */
+const MAX_DROP = /^(0?\.\d+|1(\.0*)?)$/.test(process.env.MAX_DROP || '') ? Number(process.env.MAX_DROP) : 0.05;
+const STALE_DAYS = 30;
 
-/** Floors, measured 2026-10-12: 977 plants in safety.json, 184 on ANSM list A, 400 on list B, 635 in TPPT; 2117 protected (PN, PR, PD) and 1125 regulated (REGL) plants. */
-const FLOORS = { safety: 880, ansmA: 165, ansmB: 360, tppt: 570, protected: 1900, regulated: 1010 };
+/** Floors, measured 2026-10-12: 977 plants in safety.json, 184 on ANSM list A, 400 on list B, 635 in TPPT; 2117 protected (PN, PR, PD) and 1125 regulated (REGL) plants; 3879 with Baseflor flowering months. */
+const FLOORS = { safety: 880, ansmA: 165, ansmB: 360, tppt: 570, protected: 1900, regulated: 1010, flowering: 3500 };
 const SAFETY_SOURCES = ['ansmA', 'ansmB', 'tppt'];
 const SEVERITIES = ['mortel', 'toxique'];
 
@@ -49,6 +59,36 @@ const lineOf = (text, value) => {
   const at = text.indexOf(JSON.stringify(value));
   return at < 0 ? undefined : text.slice(0, at).split('\n').length;
 };
+
+/**
+ * What the checks count, for this build and for the previous one.
+ * @param {any[]} plants @param {any} safety @param {any} lookalikes
+ * @returns {Record<string, number>}
+ */
+function measure(plants, safety, lookalikes) {
+  const entries = Object.values(safety?.plants && typeof safety.plants === 'object' ? safety.plants : {});
+  return {
+    plants: plants.length,
+    protected: plants.filter(p => p.statuses?.some(s => /^P[NRD]$/.test(s.type))).length,
+    regulated: plants.filter(p => p.statuses?.some(s => s.type === 'REGL')).length,
+    flowering: plants.filter(p => p.flowering).length,
+    thumbnails: plants.filter(p => p.thumbnail?.url).length,
+    safety: entries.length,
+    ansmA: entries.filter(v => v?.ansm?.some(e => e.list === 'A')).length,
+    ansmB: entries.filter(v => v?.ansm?.some(e => e.list === 'B')).length,
+    tppt: entries.filter(v => v?.tppt).length,
+    pairs: Array.isArray(lookalikes?.pairs) ? lookalikes.pairs.length : 0
+  };
+}
+
+/**
+ * A ::warning:: for a source last read more than STALE_DAYS ago (kept from a previous build since its download failed).
+ * @param {string} file @param {string} key @param {string} [read] ISO date or timestamp
+ */
+function stale(file, key, read) {
+  const days = read ? (Date.now() - Date.parse(read)) / 864e5 : NaN;
+  if (days > STALE_DAYS) console.log(`::warning file=${file}::${file}: ${key} last read ${String(read).slice(0, 10)}, ${Math.floor(days)} days ago: its download keeps failing`);
+}
 
 const plantsFile = load(PLANTS_FILE), lookFile = load(LOOKALIKES_FILE), safetyFile = load(SAFETY_FILE);
 /** @type {any[]} */
@@ -110,23 +150,39 @@ if (plants.length) {
     for (const key of SAFETY_SOURCES) if (!data?.sources?.[key]) error(SAFETY_FILE, `source « ${key} » is missing: its warnings would be gone from the app`);
     const unknown = Object.keys(entries).filter(id => !ids.has(id));
     if (unknown.length) error(SAFETY_FILE, `${unknown.length} ids are no plant of ${PLANTS_FILE}: ${unknown.slice(0, 10).join(', ')}${unknown.length > 10 ? '…' : ''}`);
-    const values = Object.values(entries);
-    const count = {
-      safety: values.length,
-      ansmA: values.filter(v => v?.ansm?.some(e => e.list === 'A')).length,
-      ansmB: values.filter(v => v?.ansm?.some(e => e.list === 'B')).length,
-      tppt: values.filter(v => v?.tppt).length
-    };
-    for (const [key, n] of Object.entries(count)) if (n < FLOORS[key]) error(SAFETY_FILE, `${key === 'safety' ? 'plants with an entry' : key + ' entries'}: ${n}, under the floor of ${FLOORS[key]}`);
+    const count = measure([], data, null);
+    for (const key of ['safety', ...SAFETY_SOURCES]) if (count[key] < FLOORS[key]) error(SAFETY_FILE, `${key === 'safety' ? 'plants with an entry' : key + ' entries'}: ${count[key]}, under the floor of ${FLOORS[key]}`);
+    for (const key of SAFETY_SOURCES) stale(SAFETY_FILE, key, data?.sources?.[key]?.read);
     summary.push(`${SAFETY_FILE}: ${count.safety} plants (ANSM A ${count.ansmA}, ANSM B ${count.ansmB}, TPPT ${count.tppt})`);
   }
 
   // ── Protection and harvest regulation ──
-  const protectedN = plants.filter(p => p.statuses?.some(s => /^P[NRD]$/.test(s.type))).length;
-  const regulatedN = plants.filter(p => p.statuses?.some(s => s.type === 'REGL')).length;
-  if (protectedN < FLOORS.protected) error(PLANTS_FILE, `protected plants (PN, PR, PD): ${protectedN}, under the floor of ${FLOORS.protected}`);
-  if (regulatedN < FLOORS.regulated) error(PLANTS_FILE, `regulated plants (REGL): ${regulatedN}, under the floor of ${FLOORS.regulated}`);
-  summary.push(`${PLANTS_FILE}: ${plants.length} plants, ${protectedN} protected, ${regulatedN} regulated`);
+  const now = measure(plants, safetyFile?.data, lookFile?.data);
+  if (now.protected < FLOORS.protected) error(PLANTS_FILE, `protected plants (PN, PR, PD): ${now.protected}, under the floor of ${FLOORS.protected}`);
+  if (now.regulated < FLOORS.regulated) error(PLANTS_FILE, `regulated plants (REGL): ${now.regulated}, under the floor of ${FLOORS.regulated}`);
+  if (now.flowering < FLOORS.flowering) error(PLANTS_FILE, `plants with flowering months (Baseflor): ${now.flowering}, under the floor of ${FLOORS.flowering}`);
+  summary.push(`${PLANTS_FILE}: ${now.plants} plants, ${now.protected} protected, ${now.regulated} regulated, ${now.flowering} with flowering months, ${now.thumbnails} thumbnails`);
+
+  // ── Sources kept from a previous build ──
+  const meta = load(META_FILE)?.data;
+  stale(META_FILE, 'bdcStatuts', meta?.sources?.bdcStatuts?.fetchedAt);
+  stale(META_FILE, 'baseflor', meta?.sources?.baseflor?.fetchedAt);
+
+  // ── Against the dataset as last committed ──
+  const before = previousJson('data/plants.json');
+  if (Array.isArray(before) && before.length) {
+    const then = measure(before, previousJson('data/safety.json'), previousJson('data/lookalikes.json'));
+    /** Where each count is read, for the annotation. @type {Record<string, string>} */
+    const fileOf = { safety: SAFETY_FILE, ansmA: SAFETY_FILE, ansmB: SAFETY_FILE, tppt: SAFETY_FILE, pairs: LOOKALIKES_FILE };
+    const drops = [];
+    for (const [key, was] of Object.entries(then)) {
+      if (!was) continue;
+      const lost = (was - now[key]) / was;
+      if (lost > MAX_DROP) error(fileOf[key] || PLANTS_FILE, `${key}: ${now[key]}, down ${Math.round(lost * 100)} % from ${was} in ${baselineName()} (at most ${Math.round(MAX_DROP * 100)} %: a source lost part of its content; a deliberate drop needs a manual run with a larger MAX_DROP)`);
+      if (now[key] !== was) drops.push(`${key} ${was} → ${now[key]}`);
+    }
+    summary.push(`against ${baselineName()}: ${drops.join(', ') || 'same counts'}`);
+  } else summary.push(`no previous dataset to compare with (${baselineName()})`);
 }
 
 console.log(`check-data: ${summary.join('; ') || 'nothing checked'}.`);
