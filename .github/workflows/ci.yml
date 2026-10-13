@@ -139,11 +139,12 @@ jobs:
         with:
           node-version: 22
 
-      - name: Unit tests (node --test)
-        run: npm run test:unit
-
+      # Before the unit tests: some use dev dependencies (fake-indexeddb for the storage tests).
       - name: Install dev dependencies
         run: npm ci --ignore-scripts
+
+      - name: Unit tests (node --test)
+        run: npm run test:unit
 
       - name: Install Chromium
         run: npx playwright install --with-deps --only-shell chromium
