@@ -1,6 +1,8 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
-import { BASES, OVERLAYS, IGN_PREFIX, addedLayers, ignCatalog, overlayDef } from '../core/ign.js';
+import { BASES, OVERLAYS, IGN_PREFIX, addedLayers, overlayDef } from '../core/ign.js';
+import { loadCatalog, onCatalog } from '../core/ign-catalog.js';
+import { href } from '../core/router.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 import { openModal } from '../core/history.js';
@@ -20,6 +22,7 @@ export class GfMapPanel extends LitElement {
     distribution: { attribute: false },
     distributionOn: { attribute: false },
     legend: { type: Boolean },
+    _open: { state: true },
     _catalog: { state: true },
     _q: { state: true }
   };
@@ -76,6 +79,9 @@ export class GfMapPanel extends LitElement {
     .catalog li span { display: grid; flex: 1; min-width: 0; }
     .catalog li small { color: var(--gf-text-muted); font-size: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .catalog li button { flex: none; }
+    .catalog .state { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 2px 4px 4px; }
+    .catalog .state .note { margin: 0; }
+    .catalog .state button { min-height: 32px; padding: 2px 12px; font-size: 0.85rem; }
   `];
 
   constructor() {
@@ -87,39 +93,83 @@ export class GfMapPanel extends LitElement {
     /** @type {string | null} */
     this.distribution = null;
     this.distributionOn = false;
-    /** IGN's whole catalogue: null (not asked), 'loading', an error message, or its layers. @type {null | 'loading' | string | import('../core/ign.js').CatalogLayer[]} */
+    /** « Ajouter une couche de l'IGN… » touched: the catalogue is shown. */
+    this._open = false;
+    /** IGN's whole catalogue, as core/ign-catalog.js has it. @type {import('../core/ign-catalog.js').CatalogState | null} */
     this._catalog = null;
     this._q = '';
+    /** @type {(() => void) | null} */
+    this._unsubscribe = null;
   }
 
-  async #loadCatalog() {
-    this._catalog = 'loading';
-    try { this._catalog = await ignCatalog(); } catch { this._catalog = 'Catalogue de l’IGN indisponible (hors ligne ?) — réessayez plus tard.'; }
+  connectedCallback() {
+    super.connectedCallback();
+    this._unsubscribe = onCatalog(state => { this._catalog = state; });
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this._unsubscribe?.();
+  }
+
+  /** Shows the catalogue; `retry` (« Réessayer »): the service asked now. @param {boolean} [retry] */
+  #loadCatalog(retry = false) {
+    this._open = true;
+    loadCatalog({ retry }).catch(error => console.warn('Catalogue IGN :', error));
+  }
+
+  /** The searchable text of each layer, folded once per list (hundreds of layers, searched at each key). */
+  #folded = new WeakMap();
+
+  /** @param {import('../core/ign-catalog.js').CatalogState} c */
+  #catalogState(c) {
+    const day = c.date ? new Date(c.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+    const kept = !c.layers ? '' : c.origin === 'bundled' ? (day ? `catalogue livré avec l’app (${day})` : 'catalogue livré avec l’app') : `catalogue gardé du ${day}`;
+    const retry = html`<button type="button" @click=${() => this.#loadCatalog(true)}>${icon('arrow-counterclockwise')} Réessayer</button>`;
+    if (c.problem === 'module-off') {
+      return html`<div class="state"><p class="note" role="status">Module « IGN – fonds de carte » désactivé : ${c.layers ? 'une couche ajoutée n’affichera que les zones déjà vues' : 'le catalogue n’est pas demandé'}.
+        <a href=${href.settings()}>Réglages › Modules</a></p></div>`;
+    }
+    if (c.problem === 'offline') {
+      return html`<div class="state"><p class="note" role="status">${c.layers ? `Hors ligne : ${kept}.` : 'Hors ligne : le catalogue de l’IGN n’est pas encore sur l’appareil.'}</p>${c.layers ? nothing : retry}</div>`;
+    }
+    if (c.problem === 'down') {
+      return html`<div class="state"><p class="note" role="status">Le catalogue de l’IGN ne répond pas${c.reason ? ` (${c.reason})` : ''}${c.layers ? ` — ${kept}` : ''}.</p>${retry}</div>`;
+    }
+    if (c.refreshing || !c.layers) return html`<div class="state"><p class="note" role="status">${c.layers ? 'Mise à jour du catalogue de l’IGN…' : 'Chargement du catalogue de l’IGN…'}</p></div>`;
+    return nothing;
   }
 
   /** IGN's whole catalogue: the layers added, and a search among all the others. */
   #catalog() {
     const c = this._catalog;
+    const layers = c?.layers;
     const fold = (/** @type {string} */ t) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
     const words = fold(this._q).split(/\s+/).filter(Boolean);
-    const shown = Array.isArray(c) ? c.filter(l => !addedLayers().includes(IGN_PREFIX + l.id))
-      .filter(l => words.every(w => fold(l.title + ' ' + l.id + ' ' + l.about).includes(w))) : [];
+    const added = new Set(addedLayers());
+    let folded = layers ? this.#folded.get(layers) : null;
+    if (layers && !folded) this.#folded.set(layers, folded = layers.map(l => fold(l.title + ' ' + l.id + ' ' + l.about)));
+    const shown = layers ? layers.filter((l, i) => !added.has(IGN_PREFIX + l.id) && words.every(w => folded[i].includes(w))) : [];
     return html`<div class="catalog">
       ${addedLayers().map(k => this.#layer(k))}
-      ${c === null ? html`<button type="button" @click=${() => this.#loadCatalog()}>${icon('layers')} Ajouter une couche de l’IGN…</button>`
-        : c === 'loading' ? html`<p class="note" role="status">Chargement du catalogue de l’IGN…</p>`
-        : typeof c === 'string' ? html`<p class="note" role="status">${c}</p>`
-        : html`<input type="search" placeholder=${'Chercher parmi ' + c.length + ' couches (relief, forêts, géologie…)'} aria-label="Chercher une couche de l’IGN"
+      ${!this._open || !c ? html`<button type="button" @click=${() => this.#loadCatalog()}>${icon('layers')} Ajouter une couche de l’IGN…</button>`
+        : html`${this.#catalogState(c)}
+          ${!layers ? nothing : html`<input type="search" placeholder=${'Chercher parmi ' + layers.length + ' couches (relief, forêts, géologie…)'} aria-label="Chercher une couche de l’IGN"
             .value=${this._q} @input=${(/** @type {any} */ e) => { this._q = e.target.value; }} />
           <ul aria-label="Couches de l’IGN">${shown.slice(0, 60).map(l => html`<li>
             <span>${l.title}<small title=${l.about || l.id}>${l.about || l.id}</small></span>
             <button type="button" @click=${() => this.#emit('overlay-toggle', { key: IGN_PREFIX + l.id, on: true, layer: l })}>${icon('plus-lg')} Ajouter</button>
           </li>`)}</ul>
-          ${shown.length > 60 ? html`<p class="note">${shown.length - 60} autres : précisez la recherche.</p>` : !shown.length ? html`<p class="note">Aucune couche ne correspond.</p>` : nothing}`}
+          ${shown.length > 60 ? html`<p class="note">${shown.length - 60} autres : précisez la recherche.</p>` : !shown.length ? html`<p class="note">Aucune couche ne correspond.</p>` : nothing}`}`}
     </div>`;
   }
 
-  open() { openModal(/** @type {HTMLDialogElement} */ (this.renderRoot.querySelector('dialog'))); }
+  open() {
+    // The catalogue shown before: asked again (online again, a month gone, the module switched…).
+    if (this._open) this.#loadCatalog();
+    openModal(/** @type {HTMLDialogElement} */ (this.renderRoot.querySelector('dialog')));
+  }
+
   close() { /** @type {HTMLDialogElement} */ (this.renderRoot.querySelector('dialog'))?.close(); }
 
   /** @param {string} name @param {any} detail */

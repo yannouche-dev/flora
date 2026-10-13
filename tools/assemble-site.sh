@@ -3,7 +3,8 @@
 # for the smoke test (ci.yml), which opens the app as deployed, not the repository (a file left out shows there).
 #   tools/assemble-site.sh _site
 # The service worker gets its VERSION here (tools/stamp-sw.mjs): a fingerprint of the files it precaches, never
-# bumped by hand.
+# bumped by hand. data/ign-catalog.json is copied as it is in the checkout: deploy-pages.yml writes a fresh one there
+# first (scripts/build-ign-catalog.mjs), so the version follows it too.
 # Keep tools/check.sh's DEPLOYED list in step with it.
 set -euo pipefail
 [ $# -eq 1 ] || { echo 'usage: tools/assemble-site.sh <folder>' >&2; exit 2; }
@@ -11,5 +12,5 @@ out="$1"
 cd "$(dirname "$0")/.."
 mkdir -p "$out/data"
 cp -r index.html manifest.webmanifest sw.js .nojekyll app assets vendor lib "$out/"
-cp data/plants.json data/meta.json data/territories.json data/lookalikes.json data/safety.json "$out/data/"
+cp data/plants.json data/meta.json data/territories.json data/lookalikes.json data/safety.json data/ign-catalog.json "$out/data/"
 node tools/stamp-sw.mjs "$out"

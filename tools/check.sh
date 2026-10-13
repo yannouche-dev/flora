@@ -25,7 +25,7 @@ cd "$(dirname "$0")/.." || exit 1
 
 # What deploy-pages copies into the site: keep in step with tools/assemble-site.sh.
 DEPLOYED='index.html manifest.webmanifest sw.js .nojekyll app assets vendor lib
-  data/plants.json data/meta.json data/territories.json data/lookalikes.json data/safety.json'
+  data/plants.json data/meta.json data/territories.json data/lookalikes.json data/safety.json data/ign-catalog.json'
 
 failed=0
 fail() { echo "$1"; failed=1; }

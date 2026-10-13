@@ -10,7 +10,8 @@
 //    served like the shell from then on (offline too), gone with the version.
 //  - data/*.json: network only — the dataset lives in IndexedDB, so it is not duplicated here
 //    (except data/territories.json, data/lookalikes.json and data/safety.json: small and static, precached —
-//    the look-alike and toxicity warnings must work offline, where the picking happens)
+//    the look-alike and toxicity warnings must work offline, where the picking happens — and data/ign-catalog.json,
+//    IGN's catalogue of map layers, written at each deploy: listed offline too, and part of the version)
 //  - remote images (Wikimedia, iNaturalist…): stale-while-revalidate, in a cache kept across versions and capped
 //    (not the originals of the media viewer). Fetched with CORS, so what is stored is a readable response of its
 //    real size: an opaque one (a host without CORS) is shown but never stored, as each counts ~7 MB of quota.
@@ -39,9 +40,11 @@ const SHELL = [
   'vendor/leaflet.js',
   'vendor/leaflet.css',
   'lib/plant-sources.mjs',
+  'lib/ign-catalog.mjs',
   'data/territories.json',
   'data/lookalikes.json',
   'data/safety.json',
+  'data/ign-catalog.json',
   'assets/icons/icon.svg',
   'assets/icons/bi.svg',
   'assets/icons/geoflora-192.png',
@@ -80,6 +83,7 @@ const SHELL = [
   'app/core/highlight.js',
   'app/core/fold.js',
   'app/core/ign.js',
+  'app/core/ign-catalog.js',
   'app/core/place-model.js',
   'app/core/portable.js',
   'app/core/territory.js',
@@ -107,6 +111,7 @@ const SHELL = [
   'app/core/quota.js',
   'app/workers/search-core.js',
   'app/workers/search.worker.js',
+  'app/workers/ign-catalog.worker.js',
   'app/components/gf-app.js',
   'app/components/gf-lookalikes.js',
   'app/components/gf-media-viewer.js',
@@ -238,7 +243,7 @@ self.addEventListener('fetch', event => {
 
   if (url.origin === self.location.origin) {
     // The flora lives in IndexedDB; only the small, static department outlines are part of the shell.
-    if (url.pathname.includes('/data/') && !/\/(territories|lookalikes|safety)\.json$/.test(url.pathname)) return;
+    if (url.pathname.includes('/data/') && !/\/(territories|lookalikes|safety|ign-catalog)\.json$/.test(url.pathname)) return;
     // The app's navigations (any hash route, to the root or to index.html) are served by the cached index.html.
     // A file of the site opened in a tab (an icon, the manifest) is no launch of the app: straight from the network,
     // and never stored as the app's page.
@@ -254,7 +259,7 @@ self.addEventListener('fetch', event => {
   }
 
   // IGN map tiles, and GBIF distribution tiles (plant sheet, Carte).
-  // (Not the catalogue of layers, GetCapabilities: the app keeps it a month itself.)
+  // (Not the catalogue of layers, GetCapabilities: app/core/ign-catalog.js reads it as it streams, and keeps it.)
   if ((url.hostname === TILE_HOST && url.pathname.startsWith('/wmts') && !/getcapabilities/i.test(url.search)) || (url.hostname === 'api.gbif.org' && url.pathname.startsWith('/v2/map/'))) {
     event.respondWith(cacheFirstTile(event));
     return;

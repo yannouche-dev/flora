@@ -3,11 +3,8 @@
 // Layer identifiers and styles checked against the service's GetCapabilities.
 
 import * as L from 'leaflet';
-import { ModuleOffError, moduleOn } from './modules.js';
+import { moduleOn } from './modules.js';
 import { config } from '../config.js';
-import * as cache from './cache.js';
-import * as db from './db.js';
-import { fetchOk, SchemaError } from './net.js';
 
 const WMTS = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&TILEMATRIXSET=PM'
   + '&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}';
@@ -130,51 +127,7 @@ export function addCatalogLayer(l) {
   return key;
 }
 
-const CAPABILITIES = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetCapabilities';
-/** The catalogue changes seldom: asked again after a month. */
-const CATALOG_TTL = 30 * 24 * 3600 * 1000;
-
-/**
- * IGN's whole catalogue of map layers (WMTS, the Web Mercator grid the maps use, PNG or JPEG tiles): read from the
- * service's own description, kept a month on the device.
- * @returns {Promise<CatalogLayer[]>}
- */
-export async function ignCatalog() {
-  if (!moduleOn('ignMaps')) {
-    // Switched off: the copy already kept is shown, nothing is asked.
-    const hit = await db.get('plantDetails', 'ign:catalog').catch(() => null);
-    if (hit) return hit.value;
-    throw new ModuleOffError('ignMaps');
-  }
-  // A large XML document: more time than a JSON answer. Not a single layer read: an answer of another shape.
-  return cache.cached('ign:catalog', async () => {
-    const value = parseCapabilities(await (await fetchOk(CAPABILITIES, { timeout: 30000 })).text());
-    if (!value.length) throw new SchemaError('data.geopf.fr', 'Catalogue IGN : aucune couche lue');
-    return value;
-  }, { ttl: CATALOG_TTL });
-}
-
-/** @param {string} xml @returns {CatalogLayer[]} */
-export function parseCapabilities(xml) {
-  const doc = new DOMParser().parseFromString(xml, 'application/xml');
-  const kids = (/** @type {Element} */ el, /** @type {string} */ name) => [...el.children].filter(c => c.localName === name);
-  const text = (/** @type {Element} */ el, /** @type {string} */ name) => kids(el, name)[0]?.textContent?.trim() || '';
-  /** @type {CatalogLayer[]} */
-  const out = [];
-  for (const layer of doc.getElementsByTagNameNS('*', 'Layer')) {
-    const id = text(layer, 'Identifier');
-    const formats = kids(layer, 'Format').map(f => f.textContent?.trim() || '');
-    const format = formats.find(f => f === 'image/png') || formats.find(f => f === 'image/jpeg');
-    const link = kids(layer, 'TileMatrixSetLink').find(l => text(l, 'TileMatrixSet') === 'PM');
-    if (!id || !SAFE_ID.test(id) || !format || !link) continue;
-    const styles = kids(layer, 'Style');
-    const style = text(styles.find(s => s.getAttribute('isDefault') === 'true') || styles[0] || layer, 'Identifier') || 'normal';
-    const zooms = [...link.getElementsByTagNameNS('*', 'TileMatrix')].map(m => Number(m.textContent)).filter(Number.isFinite);
-    out.push({ id, title: text(layer, 'Title') || id, about: text(layer, 'Abstract').slice(0, 240), format, style,
-      minNative: zooms.length ? Math.min(...zooms) : 0, maxNative: zooms.length ? Math.max(...zooms) : 19 });
-  }
-  return out.sort((a, b) => a.title.localeCompare(b.title, 'fr'));
-}
+// The catalogue itself (the copy shipped with the app, refreshed from GetCapabilities): app/core/ign-catalog.js.
 
 /** The whole world (inhabited latitudes), for a map showing a worldwide distribution. */
 export const WORLD_BOUNDS = L.latLngBounds([-56, -170], [75, 180]);

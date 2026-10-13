@@ -3,6 +3,7 @@
   "entry": [
     "app/main.js",
     "app/workers/search.worker.js",
+    "app/workers/ign-catalog.worker.js",
     "sw.js",
     "scripts/*.mjs",
     "tools/*.mjs",
