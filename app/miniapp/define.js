@@ -56,6 +56,7 @@ import { MODULES } from '../core/modules.js';
  * @property {number} version
  * @property {boolean} [driven]                                   its component leads its steps (see above)
  * @property {(c: any, app: any) => boolean} [ownBar]             its component shows a steps bar of its own now: the box's is left out
+ * @property {(c: any) => string | null} [resumeAt]              the step its address opens when it names none (a game under way), else the start
  * @property {{ keys?: string[], reset?: () => unknown, made?: { label: string, kept: [string, string] } }} owns     the session data it owns,
  *   emptied by « Rejouer »; `made`: what it calls a collection it makes in Mes plantes, still its own (« le parcours en
  *   cours »), and those the user made their own, kept (one, many — {n} the count)
@@ -235,6 +236,7 @@ export function defineMiniApp(spec) {
   if (m.full !== undefined && !steps.has(m.full)) fail(`full: no step « ${m.full} »`);
   if (m.fork !== undefined && !isFn(m.fork?.default)) fail('fork.default must be a function');
   if (m.ownBar !== undefined && !isFn(m.ownBar)) fail('ownBar must be a function');
+  if (m.resumeAt !== undefined && !isFn(m.resumeAt)) fail('resumeAt must be a function');
 
   // Along every path: a component, or a block of it, added once; a drop only of one there.
   for (const path of paths(m)) {

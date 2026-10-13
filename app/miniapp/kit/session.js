@@ -79,6 +79,7 @@ export class AroundSession extends EventTarget {
     /** @type {any} */
     this.timers = { points: 0, radius: 0, burst: 0 };
     this.pointsFor = '';
+    app.addEventListener('dispose', () => this.dispose(), { once: true });
   }
 
   /** The app's context: the place, the distance, the swipes. @returns {any} */

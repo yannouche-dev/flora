@@ -187,8 +187,8 @@ export class GfApp extends LitElement {
   }
 
   /**
-   * The keyboard up while a parcours is walked (`data-fit-keyboard`, set by gf-trail): the app over it, its bottom
-   * (the search, the tab bar) right above the keys. Most browsers resize the page themselves (gf-trail asks for
+   * The keyboard up while a parcours is walked (`data-fit-keyboard`, set by the Parcours' walk: app/miniapp/kit/ma-walk.js): the app over it, its bottom
+   * (the search, the tab bar) right above the keys. Most browsers resize the page themselves (the walk asks for
    * interactive-widget=resizes-content); the others (Safari) leave the page under the keyboard: there, the app
    * takes the height that is left, and the page is not scrolled away. Elsewhere, the browser's own way.
    */

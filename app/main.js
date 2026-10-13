@@ -9,7 +9,7 @@ import { context } from './core/context.js';
 import { parse } from './core/router.js';
 import { loadIndex, runSearch } from './core/search.js';
 import { anyHarvest, hasSpots, refreshMembership, requestPersistence, spotEvents, tagLegacyOrigins, writeBackup } from './core/collections.js';
-import { keptWalks, walkOn } from './components/gf-trail.js';
+import { keptWalks, walkOn } from './miniapp/kit/trail-store.js';
 import { initHarvestMode, store } from './core/store.js';
 import { loadNotes } from './core/sheet-notes.js';
 

@@ -224,8 +224,10 @@ export class GfMiniapp extends LitElement {
     // An app ported whole leads its own steps: the address only says them.
     // (The step of the address meanwhile, until it says its own: the bar does not jump back to the start.)
     if (app.m.driven) { if (!route.step || !app.reached(route.step)) this.#syncUrl(); return; }
-    // A step that may not be entered now (a link, a reload): the start, with no error.
-    if (!app.follow(route.step)) { app.follow(null); this.#syncUrl(); }
+    // No step named: the game under way, if the manifest says where (resumeAt), else the start. A step that may not be
+    // entered now (a link, a reload): the start, with no error.
+    const step = route.step ?? app.m.resumeAt?.(app.c) ?? null;
+    if (!app.follow(step)) { app.follow(null); this.#syncUrl(); }
     else if (!route.step) this.#syncUrl();
   }
 

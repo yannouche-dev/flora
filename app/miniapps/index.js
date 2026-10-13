@@ -7,7 +7,7 @@
 
 import { aroundUnderWay } from '../core/around-sessions.js';
 import { setHarvestMode } from '../core/store.js';
-import { walkUnderWay } from '../components/gf-trail.js';
+import { walkUnderWay } from '../miniapp/kit/trail-store.js';
 
 /**
  * @typedef {{ id: string, title: string, icon: import('../core/icons.js').IconName, pitch: string, scene: string, underWay: () => boolean,

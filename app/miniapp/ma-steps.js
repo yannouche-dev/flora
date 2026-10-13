@@ -5,6 +5,7 @@
 
 import { LitElement, html, css, nothing } from 'lit';
 import { followers } from './define.js';
+import { pathTo } from './runtime.js';
 import { fr } from '../components/start-screen.js';
 import { icon } from '../core/icons.js';
 import { ui } from '../styles/ui.js';
@@ -65,7 +66,7 @@ export class MaSteps extends LitElement {
     </ol></nav>
     ${driven ? nothing : html`<span class="acts">
       ${step.choose ? step.choose.map(ch => html`<button type="button" class="primary" @click=${() => app.go(ch.to)}>${ch.icon ? icon(/** @type {any} */ (ch.icon)) : nothing}${fr(ch.label)}</button>`) : nothing}
-      ${step.kind !== 'start' && !step.done && next.length === 1 ? html`<button type="button" class="secondary" @click=${() => app.go(next[0])}>Suite ${icon('chevron-right')}</button>` : nothing}
+      ${step.kind !== 'start' && !step.done && next.length === 1 && pathTo(app.m, app.path, next[0], app.c) ? html`<button type="button" class="secondary" @click=${() => app.go(next[0])}>Suite ${icon('chevron-right')}</button>` : nothing}
       ${step.action ? html`<button type="button" class="secondary" @click=${() => step.action?.run(app)}>${fr(step.action.label)}</button>` : nothing}
     </span>`}`;
   }

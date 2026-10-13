@@ -1,6 +1,6 @@
 // @ts-check
 // A parcours (or a place) as a walk: its plants in the order they were added, the line from one to the next, and
-// the box a map frames it in. Shared by the parcours' recap (gf-trail.js: distance, profile) and the « Vue 3D »
+// the box a map frames it in. Shared by the parcours' recap (app/miniapp/kit/trail-store.js: distance, profile) and the « Vue 3D »
 // (gf-map3d.js), so both draw the same walk. Pure: no DOM, no storage.
 
 /** @typedef {[number, number]} LngLat */

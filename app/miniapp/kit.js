@@ -10,15 +10,17 @@
 // The mini-apps around a place (Rencontres, Cueillette prudente, Mosaïque) compose the kit of app/miniapp/kit/: the
 // distance over the map (ma-distance), the list of the plants around (ma-around-list: the deck ma-deck, the matches,
 // the grid or mosaic, the plant's sheet ma-plant-sheet, the first match), and Rencontres' guided way during the
-// first steps (ma-guided: the map ma-around-map, the deck, the plant's panes, its own steps bar). The Parcours, ported
-// whole, is one component: its element draws every screen and says which step it is on (the event ma-step).
+// first steps (ma-guided: the map ma-around-map, the deck, the plant's panes, its own steps bar). The Parcours
+// composes its own (app/miniapp/kit/: its game trail-session.js, its start screen trail-start.js): the walk (ma-walk:
+// its card, its plants, its search, its map) and the recap (ma-trail-recap).
 
 import { html } from 'lit';
 import { discovering } from '../core/discover.js';
 import './kit/ma-distance.js';
 import './kit/ma-around-list.js';
 import './kit/ma-guided.js';
-import '../components/gf-trail.js';
+import './kit/ma-walk.js';
+import './kit/ma-trail-recap.js';
 
 /**
  * @typedef {import('./define.js').Place} Place
@@ -60,12 +62,19 @@ const meet = {
     : app.step.id === 'map' ? distance.render(c, app, p) : aroundList.render(c, app, p)
 };
 
-/** Parcours botanique: the walk, its plants and their map, its recap (gf-trail), in the box. @type {Component} */
-const trail = {
+/** The Parcours, walking: its card, its plants, its search under the thumb, its map (step « walk »). @type {Component} */
+const walk = {
   reads: [],
   heavy: true,
-  render: () => html`<gf-trail></gf-trail>`
+  render: (c, app) => html`<ma-walk .app=${app}></ma-walk>`
+};
+
+/** The Parcours' recap: its map (« Vue 3D »), its plants, its profile, « Partager » (step « done »). @type {Component} */
+const recap = {
+  reads: [],
+  heavy: true,
+  render: (c, app) => html`<ma-trail-recap .app=${app}></ma-trail-recap>`
 };
 
 /** The components, by their `use` name. @type {Record<string, Component>} */
-export const kit = { distance, aroundList, meet, trail };
+export const kit = { distance, aroundList, meet, walk, recap };
