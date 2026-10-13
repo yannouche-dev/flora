@@ -11,10 +11,10 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const VERSION_LINE = /^const VERSION = '([^']*)';$/m;
+export const VERSION_LINE = /^const VERSION = '([^']*)';$/m;
 
 /** The paths of `const SHELL = [ … ];` in sw.js. @param {string} source */
-function shellPaths(source) {
+export function shellPaths(source) {
   const list = /^const SHELL = \[\n([\s\S]*?)\n\];$/m.exec(source);
   if (!list) throw new Error('sw.js: no « const SHELL = [ … ]; » list');
   return [...list[1].matchAll(/'([^']*)'/g)].map(m => m[1]);

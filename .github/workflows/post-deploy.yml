@@ -1,0 +1,92 @@
+name: Check live site
+
+# After each deploy (audit TEST-14): is the live site the one just deployed, and does it open?
+#  - « The live site is this commit's » (tools/check-live.mjs): the site is assembled again from the commit deployed,
+#    and the live sw.js must carry the same VERSION (tools/stamp-sw.mjs) and data/meta.json the same flora fingerprint,
+#    asked again every 15 s for up to 10 minutes (Pages publishing, its CDN's copies); then every precached file and
+#    every data file must load. A newer commit of main already live (a deploy right after this one) is a warning,
+#    not a failure;
+#  - « Open every screen on the live site »: the smoke test of ci.yml (tests/smoke.mjs), on the production URL. As in
+#    CI, its outside requests are answered by the test itself (a blank image, otherwise 503): it checks the site, its
+#    files, CSP and modules as served by Pages, not the third-party services — api-health.yml watches those, every day.
+# Called by deploy-pages.yml as its last job (workflow_call): a workflow_run on « Deploy web app » would not start
+# after a deploy that itself followed « Enrich search media » after « Build flora dataset » (GitHub does not chain
+# workflow_run more than three deep), and the job gets the commit deployed from the deploy job. Also by hand
+# (workflow_dispatch: the commit of the branch it runs on, main by default, against the live URL).
+on:
+  workflow_call:
+    inputs:
+      sha:
+        description: The commit deployed
+        type: string
+        required: true
+      url:
+        description: The live URL of the site
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      url:
+        description: The live URL of the site
+        default: https://yannouche-dev.github.io/flora/
+
+permissions: {}
+
+jobs:
+  live:
+    # Pinned: Playwright installs the browser's system libraries for a known Ubuntu release.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read # check out the commit deployed; ask which commit main is at
+    env:
+      SITE_URL: ${{ inputs.url || 'https://yannouche-dev.github.io/flora/' }}
+      DEPLOYED: ${{ inputs.sha || github.sha }}
+
+    steps:
+      # Actions pinned by commit (a moved tag cannot change what runs); the comment names the release.
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ inputs.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      # The site as deploy-pages assembled it from this commit: its sw.js VERSION and flora fingerprint are expected.
+      - name: Assemble site
+        run: bash tools/assemble-site.sh _site
+
+      - name: The live site is this commit's
+        id: live
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          code=0
+          node tools/check-live.mjs _site "$SITE_URL" || code=$?
+          if [ "$code" -eq 3 ]; then
+            latest="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)"
+            if [ "$latest" != "$DEPLOYED" ]; then
+              echo "::warning::main has moved on to $latest since $DEPLOYED was deployed: the next deploy is checked by its own run"
+              echo "superseded=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          exit "$code"
+
+      # The versions and checksums of package-lock.json (Playwright, from npm), without install scripts.
+      - name: Install dev dependencies
+        if: steps.live.outputs.superseded != 'true'
+        run: npm ci --ignore-scripts
+
+      - name: Install Chromium
+        if: steps.live.outputs.superseded != 'true'
+        run: npx playwright install --with-deps --only-shell chromium
+
+      - name: Open every screen on the live site (phone and desktop)
+        if: steps.live.outputs.superseded != 'true'
+        timeout-minutes: 8
+        run: node tests/smoke.mjs "$SITE_URL"
