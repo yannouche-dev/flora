@@ -18,9 +18,12 @@ on: # zizmor: ignore[dangerous-triggers]
       - data/lookalikes.json
       - data/safety.json
       - tools/assemble-site.sh
+      - tools/stamp-sw.mjs
+      - tools/check-live.mjs
       - .github/workflows/deploy-pages.yml
-  # Data commits are pushed with [skip ci]; redeploy once the dataset build, or the media enrichment that follows it
-  # (and runs weekly), finishes on main.
+      - .github/workflows/post-deploy.yml
+  # Data commits are pushed with GITHUB_TOKEN (and [skip ci]), which starts no push workflow: redeploy once the dataset
+  # build, or the media enrichment that follows it (and runs weekly), finishes on main, successfully (the job's « if »).
   workflow_run:
     workflows: [Build flora dataset, Enrich search media]
     types: [completed]
@@ -45,6 +48,9 @@ jobs:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       # Actions pinned by commit (a moved tag cannot change what is deployed); the comment names the release.
@@ -53,6 +59,11 @@ jobs:
         with:
           ref: main
           persist-credentials: false
+
+      # main as checked out (after a data workflow, its latest commit): post-deploy.yml checks that it is what is live.
+      - name: Note the commit deployed
+        id: commit
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
@@ -76,3 +87,15 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4.0.5
+
+  # The live site is the one just deployed, and every screen opens there (post-deploy.yml). A job of this workflow,
+  # not a workflow_run of its own: GitHub chains workflow_run three deep at most, and a deploy after « Enrich search
+  # media » after « Build flora dataset » is already the third.
+  verify:
+    needs: deploy
+    permissions:
+      contents: read
+    uses: ./.github/workflows/post-deploy.yml
+    with:
+      sha: ${{ needs.deploy.outputs.sha }}
+      url: ${{ needs.deploy.outputs.url }}

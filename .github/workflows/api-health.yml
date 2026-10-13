@@ -1,0 +1,38 @@
+name: Outside services health
+
+# Every day (audit OPS-5): tools/api-health.mjs asks each outside service of the app (app/core/modules.js: GBIF,
+# iNaturalist, Wikidata and its query service, Wikipédia, Commons, Wikibooks, GloBI, Open-Meteo, IGN Géoplateforme
+# WMTS, altimétrie, géocodage and WFS, API Carto) and the TAXREF archive of the dataset build one small question, and
+# checks the answer's status, its CORS header for the site's origin and the shape the app reads (and, for the WMTS
+# catalogue, that every map layer of app/core/ign.js is still there). The table is in the run's summary; the run
+# fails when a service is broken, and GitHub notifies as for any failed scheduled run. It opens no issue and holds no
+# secret: no key or token (Trefle, which needs a personal token, is not probed).
+on:
+  schedule:
+    - cron: "41 5 * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+
+    steps:
+      # Actions pinned by commit (a moved tag cannot change what runs); the comment names the release.
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      # Node only, no dependency: one request per service, one after the other.
+      - name: Ask each service
+        run: node tools/api-health.mjs
