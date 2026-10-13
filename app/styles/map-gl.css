@@ -45,6 +45,7 @@ gf-map .gf-map-gl .maplibregl-canvas:focus-visible { outline: 3px solid var(--gf
 .gf-gl-dot.inert { pointer-events: none; cursor: default; }
 .gf-gl-dot.gf-obs-inat { background: #74ac00; border-color: #fff; }
 .gf-gl-dot.gf-obs-gbif { background: #4e7b9f; border-color: #fff; }
+.gf-gl-dot.gf-obs-start { background: #1d2b20; border-color: #fff; }
 .gf-gl-dot.gf-occ { background: #f59e0b; border-color: #fff; }
 .gf-gl-dot.gf-occ-inat { background: #74ac00; }
 .gf-gl-dot.gf-occ-gbif { background: #4e7b9f; }

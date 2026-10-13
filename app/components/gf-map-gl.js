@@ -164,8 +164,8 @@ export class GlView {
     if (text && !stay) this.#noteTimer = setTimeout(() => { note.hidden = true; }, 7000);
   }
 
-  /** 3D wanted for this map: Réglages › Cartes say so (and the map may be in 3D). */
-  get wanted() { return this.allowed && mapSettings().renderer === '3d'; }
+  /** 3D wanted for this map: Réglages › Cartes say so (or the map is a 3D view: map-3d="on"; and it may be in 3D). */
+  get wanted() { return this.allowed && (this.host.getAttribute('map-3d') === 'on' || mapSettings().renderer === '3d'); }
   /** Drawn in 3D now (or loading). */
   get on() { return this.#state !== 'off'; }
 

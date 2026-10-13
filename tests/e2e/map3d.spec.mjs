@@ -1,45 +1,20 @@
-// « Vue 3D » (gf-map3d.js): the recap of a parcours opens its walk on the relief, MapLibre loaded on demand only.
+// « Vue 3D » (gf-map3d.js): the recap of a parcours (and a place of Mes plantes) opens its walk on the relief — the app's
+// one map, gf-map, set to 3D (map-3d="on": its MapLibre renderer, gf-map-gl.js), MapLibre loaded on demand only.
 // Headless Chromium has WebGL2 here (SwiftShader, software); --enable-unsafe-swiftshader keeps it so where newer
-// releases would stop falling back to it. The real path is tested: MapLibre loaded, the map drawn, its markers, the
-// tilt, 2D ⇄ 3D, Échap, the focus given back; the tiles come from here (a green picture for the IGN's photos, a
-// Terrarium tile of a slope for the relief), never from the network. Then the ways it does not open, or opens flat:
-// no WebGL2 (the button says so, MapLibre never asked), the relief out of reach (flat, said), the module off.
+// releases would stop falling back to it. The real path is tested: MapLibre loaded, the map drawn, its plants (the
+// same markers as every map), the walk, its start, a plant's altitude, Échap, the focus given back; the tiles come
+// from here (tiles.mjs), never from the network. Then the ways it does not open, or opens flat: no WebGL2 (the button
+// says so, MapLibre never asked), the relief out of reach (flat, said), offline, the module off.
 import { test, expect, plantId } from './fixtures.mjs';
-import { deflateSync } from 'node:zlib';
+import { answerTiles } from './tiles.mjs';
 import { writeFileSync, mkdirSync } from 'node:fs';
 
 test.use({ launchOptions: { args: ['--enable-unsafe-swiftshader'] } });
 
 /** Where the screenshots of the view go, when asked (MAP3D_SHOTS=dir). */
 const SHOTS = process.env.MAP3D_SHOTS || '';
-
-// ---------- Tiles made here: a PNG encoder, enough for 256 × 256 RGB ----------
-
-const CRC = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
-/** @param {Buffer} buf */
-const crc32 = buf => { let c = 0xffffffff; for (const b of buf) c = CRC[(c ^ b) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
-/** @param {string} type @param {Buffer} data */
-function chunk(type, data) {
-  const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
-  const body = Buffer.concat([Buffer.from(type, 'ascii'), data]);
-  const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(body));
-  return Buffer.concat([len, body, crc]);
-}
-/** A 256 × 256 RGB PNG, each pixel from `rgb(x, y)`. @param {(x: number, y: number) => [number, number, number]} rgb */
-function png(rgb) {
-  const raw = Buffer.alloc(256 * (1 + 256 * 3));
-  for (let y = 0; y < 256; y++) {
-    const row = y * (1 + 256 * 3);
-    for (let x = 0; x < 256; x++) raw.set(rgb(x, y), row + 1 + x * 3);
-  }
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(256, 0); ihdr.writeUInt32BE(256, 4); ihdr[8] = 8; ihdr[9] = 2;
-  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
-}
-/** Aerial photo: green fields, a darker grid. */
-const PHOTO = png((x, y) => (x % 64 < 3 || y % 64 < 3 ? [70, 110, 60] : [120 + (x >> 3), 160, 100 + (y >> 3)]));
-/** Terrarium: height = R × 256 + G + B / 256 − 32768; a slope from 1 500 m to some 2 300 m across each tile. */
-const TERRARIUM = png((x, y) => { const h = 1500 + x * 2 + y + 32768; return [h >> 8, h & 255, 0]; });
+/** Software WebGL is slow: a change may take its time. */
+const SLOW = { timeout: 30_000 };
 
 // ---------- A parcours ended, seeded in the page ----------
 
@@ -92,13 +67,6 @@ async function watch(page) {
   return { problems, maplibre };
 }
 
-/** IGN photos and the relief answered from here. @param {import('@playwright/test').Page} page @param {{ dem?: 'ok' | 'fail' }} [o] */
-async function tiles(page, { dem = 'ok' } = {}) {
-  await page.route(/^https:\/\/data\.geopf\.fr\/wmts\?.*REQUEST=GetTile/i, route => route.fulfill({ contentType: 'image/png', body: PHOTO }));
-  await page.route(/^https:\/\/s3\.amazonaws\.com\/elevation-tiles-prod\/terrarium\//, route =>
-    dem === 'ok' ? route.fulfill({ contentType: 'image/png', body: TERRARIUM, headers: { 'access-control-allow-origin': '*' } }) : route.abort('internetdisconnected'));
-}
-
 /** The recap of the seeded parcours. @param {import('./app.mjs').App} app @param {import('@playwright/test').Page} page */
 async function openRecap(app, page) {
   await app.open('#/collections');
@@ -110,60 +78,60 @@ async function openRecap(app, page) {
   return button;
 }
 
-test('la Vue 3D du parcours : MapLibre à la demande, les plantes sur le relief, 2D ⇄ 3D, Échap', async ({ app, page }, info) => {
-  // WebGL in software (SwiftShader): every frame of the relief is drawn by the CPU.
+/** The map of the view. @param {import('@playwright/test').Page} page */
+const viewMap = page => page.locator('dialog.gf-map3d gf-map');
+/** What its 3D renderer says. @param {import('@playwright/test').Locator} map */
+const glState = map => map.evaluate(m => /** @type {any} */ (m).gl.state());
+
+/** Buildings drawn on the relief are slow in software WebGL, and there are none on a mountain path. @param {import('@playwright/test').Page} page */
+const noBuildings = page => page.addInitScript(() => { if (!localStorage.getItem('geoflora.maps3d')) localStorage.setItem('geoflora.maps3d', JSON.stringify({ buildings: false })); });
+
+test('la Vue 3D du parcours : la carte de l’app en 3D, MapLibre à la demande, les plantes et la marche sur le relief, Échap', async ({ app, page }, info) => {
   test.slow();
   const seen = await watch(page);
-  await tiles(page);
+  await answerTiles(page);
+  await noBuildings(page);
   const button = await openRecap(app, page);
-  // Never at startup: MapLibre is asked only when the view opens.
+  // Never at startup, nor for the recap's map (2D, Réglages' default): MapLibre is asked only when the view opens.
   expect(seen.maplibre).toEqual([]);
 
   await button.click();
   const dialog = page.locator('dialog.gf-map3d');
   await expect(dialog).toHaveAttribute('open', '');
-  await expect(dialog).toHaveAttribute('data-state', 'ready', { timeout: 30_000 });
+  const map = viewMap(page);
+  await expect(map).toHaveAttribute('data-renderer', '3d', { timeout: 30_000 });
   expect(seen.maplibre).toEqual(expect.arrayContaining(['/vendor/maplibre/maplibre-gl.mjs', '/vendor/maplibre/maplibre-gl-worker.mjs', '/vendor/maplibre/maplibre-gl.css']));
   await expect(dialog.locator('canvas.maplibregl-canvas')).toHaveCount(1);
-  await expect(dialog).toHaveAttribute('data-terrain', 'on');
   await expect(dialog.locator('#gf3d-title')).toContainText('Vers le lac Blanc');
+  // No 2D ⇄ 3D switch: a view in 3D (Réglages › Cartes set the rest).
+  await expect(dialog.getByRole('button', { name: /^(2D|3D)$/ })).toHaveCount(0);
 
-  // Each plant on the ground, its altitude (the IGN's, kept with it); the start of the walk.
-  const pins = dialog.locator('.gf3d-pin');
-  await expect(pins).toHaveCount(3);
-  await expect(pins.locator('.alt')).toHaveText([/^1\s?964 m$/, /^2\s?051 m$/, /^2\s?143 m$/]);
-  await expect(dialog.locator('.gf3d-start')).toHaveText(/^Départ · 1\s?877 m$/);
+  // Its plants: the app's markers (their ring of abundance), on the relief; the walk; its start.
+  await expect(map.locator('.gf-gl-mk .gf-plant')).toHaveCount(3);
+  await expect(map.locator('.gf-gl-dot.gf-obs-start')).toHaveCount(1);
+  let st = await glState(map);
+  expect(st.terrain).toBe(true);
+  expect(st.pitch).toBe(55);
+  expect(st.paths).toBe(2);
   // The attribution: IGN and the relief's sources.
-  await expect(dialog.locator('.maplibregl-ctrl-attrib-inner')).toContainText('IGN');
-  await expect(dialog.locator('.maplibregl-ctrl-attrib-inner')).toContainText('Terrain Tiles (Mapzen · EU-DEM © Copernicus)');
-  // French controls.
-  await expect(dialog.locator('.maplibregl-ctrl-zoom-in')).toHaveAttribute('aria-label', 'Zoomer');
+  await expect(map.locator('.leaflet-control-attribution')).toContainText('IGN');
+  await expect(map.locator('.leaflet-control-attribution')).toContainText('Terrain Tiles (Mapzen · EU-DEM © Copernicus)');
+  await expect(map.locator('.maplibregl-ctrl-compass')).toBeVisible();
 
-  // Tilted, the relief under it.
-  await expect(dialog).toHaveAttribute('data-pitch', '60', { timeout: 10_000 });
-  await expect(dialog).toHaveAttribute('data-view', '3d');
-  // A plant's card.
-  await pins.first().click();
-  await expect(dialog.locator('.maplibregl-popup .gf3d-card')).toContainText('Altitude');
+  // A plant touched: its name and its altitude (the IGN's, kept with it).
+  await map.locator('.gf-gl-mk .gf-plant').first().dispatchEvent('click');
+  await expect(dialog.locator('.gf3d-card')).toContainText(/Altitude : (1|2)\s?\d{3} m \(IGN\)/);
   if (SHOTS) {
     mkdirSync(SHOTS, { recursive: true });
     await page.waitForTimeout(1500);
     writeFileSync(`${SHOTS}/map3d-${info.project.name}.png`, await page.screenshot());
   }
-  await dialog.locator('.maplibregl-popup-close-button').click();
 
-  // 2D: from above, flat; and back.
-  await dialog.getByRole('button', { name: '2D', exact: true }).click();
-  await expect(dialog).toHaveAttribute('data-pitch', '0', { timeout: 10_000 });
-  await expect(dialog.getByRole('button', { name: '2D', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  if (SHOTS) writeFileSync(`${SHOTS}/map3d-2d-${info.project.name}.png`, await page.screenshot());
-  await dialog.getByRole('button', { name: '3D', exact: true }).click();
-  await expect(dialog).toHaveAttribute('data-pitch', '60', { timeout: 10_000 });
-
-  // Échap closes it: the map removed, the focus back on the button.
+  // Échap closes it: the map removed (its WebGL context given back), the focus back on the button.
   await page.keyboard.press('Escape');
   await expect(dialog).not.toHaveAttribute('open', '');
-  await expect(dialog.locator('.gf3d-canvas > *')).toHaveCount(0);
+  await expect(dialog.locator('gf-map')).toHaveCount(0);
+  await expect(page.locator('canvas.maplibregl-canvas')).toHaveCount(0);
   await expect.poll(() => page.evaluate(() => {
     let el = document.activeElement;
     while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
@@ -172,12 +140,13 @@ test('la Vue 3D du parcours : MapLibre à la demande, les plantes sur le relief,
 
   // Opened again: one map, one view.
   await button.click();
-  await expect(dialog).toHaveAttribute('data-state', 'ready', { timeout: 30_000 });
+  await expect(map).toHaveAttribute('data-renderer', '3d', { timeout: 30_000 });
   await expect(page.locator('gf-map3d')).toHaveCount(1);
   await expect(page.locator('canvas.maplibregl-canvas')).toHaveCount(1);
+  st = await glState(map);
+  expect(st.terrain).toBe(true);
   await dialog.getByRole('button', { name: 'Fermer la vue 3D' }).click();
   await expect(dialog).not.toHaveAttribute('open', '');
-
   expect(seen.problems).toEqual([]);
 });
 
@@ -199,38 +168,43 @@ test('sans WebGL2 : le bouton le dit, MapLibre n’est jamais demandé', async (
 });
 
 test('relief injoignable : la vue s’ouvre à plat et le dit', async ({ app, page }) => {
+  test.slow();
   const seen = await watch(page);
-  await tiles(page, { dem: 'fail' });
+  await answerTiles(page, { dem: 'fail' });
+  await noBuildings(page);
   const button = await openRecap(app, page);
   await button.click();
-  const dialog = page.locator('dialog.gf-map3d');
-  await expect(dialog).toHaveAttribute('data-state', 'ready', { timeout: 30_000 });
-  await expect(dialog).toHaveAttribute('data-terrain', 'off');
-  await expect(dialog.locator('.gf3d-note')).toHaveText('Relief injoignable : vue à plat.');
-  await expect(dialog.locator('.gf3d-pin')).toHaveCount(3);
+  const map = viewMap(page);
+  await expect(map).toHaveAttribute('data-renderer', '3d', { timeout: 30_000 });
+  await expect.poll(async () => (await glState(map)).terrain, SLOW).toBe(false);
+  await expect(map.locator('.gf-gl-note')).toContainText('Relief injoignable : vue à plat.');
+  await expect(map.locator('.gf-gl-mk .gf-plant')).toHaveCount(3);
   await page.keyboard.press('Escape');
-  await expect(dialog).not.toHaveAttribute('open', '');
+  await expect(page.locator('dialog.gf-map3d')).not.toHaveAttribute('open', '');
   expect(seen.problems).toEqual([]);
 });
 
 test('hors ligne : pas de relief demandé, la vue à plat', async ({ app, page, context }) => {
+  test.slow();
   const seen = await watch(page);
-  await tiles(page);
+  await answerTiles(page);
+  await noBuildings(page);
   /** @type {string[]} */
   const dem = [];
   page.on('request', r => { if (r.url().includes('elevation-tiles-prod')) dem.push(r.url()); });
   const button = await openRecap(app, page);
   // MapLibre already fetched once (as after a first opening online: kept by the service worker).
   await button.click();
-  const dialog = page.locator('dialog.gf-map3d');
-  await expect(dialog).toHaveAttribute('data-state', 'ready', { timeout: 30_000 });
+  const map = viewMap(page);
+  await expect(map).toHaveAttribute('data-renderer', '3d', { timeout: 30_000 });
   await page.keyboard.press('Escape');
+  await expect(page.locator('canvas.maplibregl-canvas')).toHaveCount(0);
   dem.length = 0;
   await context.setOffline(true);
   await button.click();
-  await expect(dialog).toHaveAttribute('data-state', 'ready', { timeout: 30_000 });
-  await expect(dialog).toHaveAttribute('data-terrain', 'off');
-  await expect(dialog.locator('.gf3d-note')).toHaveText('Hors ligne : pas de relief, vue à plat.');
+  await expect(map).toHaveAttribute('data-renderer', '3d', { timeout: 30_000 });
+  expect((await glState(map)).terrain).toBe(false);
+  await expect(map.locator('.gf-gl-note')).toContainText('Hors ligne : relief, bâtiments et plan vectoriel indisponibles, vue à plat.');
   expect(dem).toEqual([]);
   await page.keyboard.press('Escape');
   await context.setOffline(false);
@@ -238,8 +212,10 @@ test('hors ligne : pas de relief demandé, la vue à plat', async ({ app, page, 
 });
 
 test('module « Vue 3D (relief) » désactivé, photos coupées : le bouton l’explique ; Mes plantes ouvre la vue sans photo', async ({ app, page }) => {
+  test.slow();
   const seen = await watch(page);
-  await tiles(page);
+  await answerTiles(page);
+  await noBuildings(page);
   await page.addInitScript(() => localStorage.setItem('geoflora.modules', JSON.stringify({ relief3d: false, photos: false })));
   const button = await openRecap(app, page);
   await button.click();
@@ -257,12 +233,11 @@ test('module « Vue 3D (relief) » désactivé, photos coupées : le bouton l’
   const open3d = page.locator('gf-spot-editor button.map3d');
   await expect(open3d).toBeVisible();
   await open3d.click();
-  const dialog = page.locator('dialog.gf-map3d');
-  await expect(dialog).toHaveAttribute('data-state', 'ready', { timeout: 30_000 });
-  await expect(dialog.locator('.gf3d-pin')).toHaveCount(3);
-  await expect(dialog.locator('.gf3d-pin .glyph')).toHaveCount(3);
-  await expect(dialog.locator('.gf3d-pin img')).toHaveCount(0);
+  const map = viewMap(page);
+  await expect(map).toHaveAttribute('data-renderer', '3d', { timeout: 30_000 });
+  await expect(map.locator('.gf-gl-mk .gf-plant')).toHaveCount(3);
+  await expect(map.locator('.gf-gl-mk .gf-plant img')).toHaveCount(0);
   await page.keyboard.press('Escape');
-  await expect(dialog).not.toHaveAttribute('open', '');
+  await expect(page.locator('dialog.gf-map3d')).not.toHaveAttribute('open', '');
   expect(seen.problems).toEqual([]);
 });
