@@ -15,6 +15,7 @@ import './gf-map.js';
 import './gf-spot-editor.js';
 import './gf-thumb.js';
 import { icon } from '../core/icons.js';
+import { foldLetters as fold } from '../core/fold.js';
 import * as db from '../core/db.js';
 import { gbifTaxon } from '../core/sources.js';
 import { context, setContext } from '../core/context.js';
@@ -29,9 +30,6 @@ const shortDate = (/** @type {string} */ iso) =>
 const round = (/** @type {[number, number]} */ [x, y]) => /** @type {[number, number]} */ ([Math.round(x * 1e7) / 1e7, Math.round(y * 1e7) / 1e7]);
 
 const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
-
-/** Lower case without accents, for the "Autour" list filter. */
-const fold = (/** @type {string} */ s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 /**
  * Harvest places: IGN map or list sorted by distance, filters. A selected place opens in full beside the map

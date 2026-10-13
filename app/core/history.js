@@ -22,6 +22,9 @@ addEventListener('hashchange', () => {
 /** Updates the URL of the current view (no new entry), keeping its place in history. @param {string} hash */
 export function replaceHash(hash) {
   history.replaceState({ ...state(), gfDepth: depth() }, '', hash);
+  // On a dialog's step (filters ticked in the « Filtres » sheet): the view behind it gets this URL when it closes.
+  const modal = state().gfModal;
+  if (modal && stepUrls.has(modal)) stepUrls.set(modal, { ...stepUrls.get(modal), href: location.href });
   moved();
 }
 
@@ -65,6 +68,12 @@ export function back(fallback) {
 let modals = 0;
 /** Dialogs open through openModal, by id. @type {Map<number, HTMLDialogElement>} */
 const open = new Map();
+/**
+ * The URL a dialog's step was given while it was open (replaceHash), by dialog id, with the depth of the view it
+ * covers: leaving the step takes it back to that view, whose URL would otherwise undo what was chosen in the dialog.
+ * @type {Map<number, { depth: number, href: string }>}
+ */
+const stepUrls = new Map();
 
 /**
  * Shows a modal dialog as a step in history: Back closes it; closing it otherwise (✕, Esc, a choice) takes the
@@ -77,17 +86,32 @@ export function openModal(dialog) {
   const id = ++modals;
   open.set(id, dialog);
   history.pushState({ ...state(), gfModal: id }, '');
+  stepUrls.set(id, { depth: depth(), href: location.href });
   dialog.addEventListener('close', () => {
     open.delete(id);
     // Closed by the app or the user, not by Back: remove the step it added — after the click that closed it,
     // so a link in the dialog navigates first (its view then stays, and the step behind is skipped on Back).
-    setTimeout(() => { if (state().gfModal === id) history.back(); });
+    setTimeout(() => {
+      if (state().gfModal === id) history.back();
+      else stepUrls.delete(id);
+    });
   }, { once: true });
 }
 
 addEventListener('popstate', () => {
   // A link fires popstate too, on its new entry not stamped yet (hashchange stamps it from `last`).
   if (typeof state().gfDepth === 'number') last = depth();
+  // Back from a dialog's step to the view it covered (same depth): that view takes the URL the step was given,
+  // before the hashchange of this move reads it (the store follows the URL: the filters would be undone).
+  for (const [id, step] of stepUrls) {
+    if (state().gfModal === id) continue;
+    stepUrls.delete(id);
+    if (typeof state().gfDepth !== 'number' || depth() !== step.depth || step.href === location.href) continue;
+    history.replaceState(state(), '', step.href);
+    // Back onto another dialog's step (one dialog over another): it carries the URL on in turn.
+    const under = state().gfModal;
+    if (under && stepUrls.has(under)) stepUrls.set(under, { ...stepUrls.get(under), href: step.href });
+  }
   // A dialog whose page went away without closing it.
   for (const [id, dialog] of open) if (!dialog.isConnected) open.delete(id);
   // Back from a dialog's step: close it.

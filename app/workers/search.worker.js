@@ -3,20 +3,14 @@
 // ~7.7k species: a ranked linear scan answers in a few milliseconds, no library needed.
 
 import { getAll } from '../core/db.js';
+import { fold } from '../core/fold.js';
 
 /** Facets, in the order the filter panel shows them. Values within a facet are OR'ed, facets are AND'ed. */
 const FACETS = /** @type {const} */ (['mine', 'status', 'legal', 'family', 'genus', 'photo', 'french']);
 const NONE = /** @type {string[]} */ ([]);
 
-/** @param {string} value */
-const normalize = value => String(value ?? '')
-  .normalize('NFD')
-  .replace(/[̀-ͯ]/g, '')
-  .replace(/[œ]/g, 'oe')
-  .replace(/[æ]/g, 'ae')
-  .toLowerCase()
-  .replace(/[^a-z0-9]+/g, ' ')
-  .trim();
+/** Folded words (« Œillet » and « oeillet » alike): the one folding of the app (core/fold.js). */
+const normalize = fold;
 
 const words = (/** @type {string} */ text) => text.split(' ').filter(Boolean);
 

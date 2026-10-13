@@ -213,7 +213,7 @@ export class GfMediaViewer extends LitElement {
     .zoom-tip { position: absolute; z-index: 5; left: 50%; bottom: 48px; transform: translateX(-50%); width: max-content; max-width: calc(100% - 24px); margin: 0; padding: 6px 12px;
       border-radius: var(--gf-radius-pill); background: rgb(0 0 0 / 72%); color: #fff; font-size: 0.8rem; line-height: 1.3; text-align: center; pointer-events: none; animation: tip-in 0.4s ease-out; }
     @keyframes tip-in { from { opacity: 0; transform: translate(-50%, 6px); } }
-    .stage:focus-visible { box-shadow: inset var(--gf-focus); }
+    .stage:focus-visible { box-shadow: inset 0 0 0 3px var(--gf-accent); }
     /* The image past the stage: the whole of it laid over the right edge, at the stage's height, and the part seen. */
     .minimap { position: absolute; right: 8px; top: 8px; z-index: 3; border: 1px solid rgb(255 255 255 / 45%); border-radius: 4px; overflow: hidden;
       background: rgb(0 0 0 / 70%); box-shadow: 0 2px 12px rgb(0 0 0 / 45%); cursor: crosshair; touch-action: none; transition: opacity 0.3s; }

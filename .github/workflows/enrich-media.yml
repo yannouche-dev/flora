@@ -60,6 +60,10 @@ jobs:
           GBIF_MEDIA_LIMIT: '30'
         run: node scripts/enrich-thumbnail-fallbacks.mjs
 
+      # The photos changed plants.json: its new fingerprint, so that installed apps take it.
+      - name: Fingerprint the dataset
+        run: node scripts/fingerprint-dataset.mjs
+
       - name: Validate media coverage
         run: |
           node -e "const p=require('./data/plants.json'); const n=p.filter(x=>x.thumbnail?.url).length; console.log(n+'/'+p.length+' plants with thumbnails'); if(n<3000) process.exit(1)"

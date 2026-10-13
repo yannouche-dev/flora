@@ -57,7 +57,9 @@ export class GfPlantCard extends LitElement {
       text-decoration: none;
       border-bottom: 1px solid var(--gf-border);
     }
-    a.row:hover, a.row:focus-visible { background: var(--gf-surface-2); outline: none; }
+    a.row:hover, a.row:focus-visible { background: var(--gf-surface-2); }
+    /* Drawn inside the row: the rows touch, and the list clips what goes past its edges. */
+    a.row:focus-visible { outline: 2px solid var(--gf-accent); outline-offset: -2px; }
     .thumb {
       width: 60px;
       height: 60px;
@@ -98,7 +100,18 @@ export class GfPlantCard extends LitElement {
       padding: 0 8px 0 12px;
       border-bottom: 1px solid var(--gf-border);
     }
-    :host([grid]) a.row { display: contents; }
+    /* The link spans the cells it holds (a subgrid of the row's columns), not display: contents, which would take it
+       out of the keyboard's reach: Tab would skip it, from the ♥ of a row to the 📍 of the next. */
+    :host([grid]) a.row {
+      grid-column: 1 / span var(--gf-link-cols, 1);
+      display: grid;
+      grid-template-columns: subgrid;
+      align-items: center;
+      align-self: stretch;
+      padding: 0 !important;
+      border-bottom: 0;
+    }
+    :host([grid]) a.row:hover, :host([grid]) a.row:focus-visible { background: none; }
     :host([grid]:hover), :host([grid]:focus-within) { background: var(--gf-surface-2); }
     :host([grid]) .fav { position: static; transform: none; justify-self: center; }
     :host([grid]) .thumb { width: 40px; height: 40px; font-size: 1.1rem; }
@@ -131,6 +144,7 @@ export class GfPlantCard extends LitElement {
     .tag.pn, .tag.pr { background: color-mix(in srgb, #dc2626 16%, var(--gf-surface)); color: color-mix(in srgb, #dc2626 70%, var(--gf-text)); }
     .tag.re { background: color-mix(in srgb, #f59e0b 22%, var(--gf-surface)); }
     :host([current]) a.row, :host([current][grid]) { background: var(--gf-accent-soft); box-shadow: inset 3px 0 0 var(--gf-accent); }
+    :host([current][grid]) a.row { background: none; box-shadow: none; }
   `;
 
   #store = new StoreController(this);
@@ -230,7 +244,7 @@ export class GfPlantCard extends LitElement {
     };
     const keys = this.columns.filter(k => k in cells);
     return html`
-      <a class="row" href=${href.plant(p.id)} @click=${() => rememberSearch(q)}>${keys.map(k => cells[k]())}</a>
+      <a class="row" href=${href.plant(p.id)} style=${'--gf-link-cols: ' + keys.length} @click=${() => rememberSearch(q)}>${keys.map(k => cells[k]())}</a>
       ${this.columns.includes('fav') ? html`<button class="fav" type="button" aria-pressed=${fav ? 'true' : 'false'}
         aria-label=${(fav ? 'Retirer des favoris : ' : 'Ajouter aux favoris : ') + title}
         title=${fav ? 'Retirer des favoris' : 'Ajouter aux favoris'}
