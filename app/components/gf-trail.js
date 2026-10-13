@@ -18,10 +18,12 @@ import { encodeCollection, share } from '../core/share.js';
 import { ui } from '../styles/ui.js';
 import { PaneSizer } from '../core/panes.js';
 import { altitudeOf, fillAltitudes, formatAltitude, profileOf } from '../core/altitude.js';
+import { walkOf } from '../core/walk.js';
 import { config } from '../config.js';
 import './gf-map.js';
 import './gf-voice-button.js';
 import './gf-thumb.js';
+import { openMap3d } from './gf-map3d.js';
 
 /** The parcours being walked (its place id), those walked before, and the one just ended (its recap, until left). */
 const KEY = 'geoflora.trail', LIST = 'geoflora.trails', DONE = 'geoflora.trailDone';
@@ -88,7 +90,9 @@ export class GfTrail extends LitElement {
     /** The search field touched by the hand (the keyboard up): the suggestions come over the parcours, even before a letter. */
     _peek: { state: true },
     /** The parcours just ended: its recap (« Terminer »). */
-    _done: { state: true }
+    _done: { state: true },
+    /** Why its « Vue 3D » did not open (no WebGL2, the module off), said under its map. */
+    _note3d: { state: true }
   };
 
   static styles = [ui, startStyles, css`
@@ -162,6 +166,11 @@ export class GfTrail extends LitElement {
     @media (max-height: 500px) and (min-aspect-ratio: 3/2) { .start .art > .recap .recap-map { height: 160px; } }
     .recap-map { position: relative; height: clamp(140px, 26dvh, 240px); border-radius: 16px; overflow: hidden; box-shadow: var(--gf-shadow); }
     .recap-map gf-map { position: absolute; inset: 0; display: block; }
+    /* « Vue 3D », over the recap's map (above Leaflet's panes and controls). */
+    .recap-map .map3d { position: absolute; top: 8px; left: 8px; z-index: 1000; min-height: 44px; padding: 0 14px; gap: 6px; border-radius: 999px;
+      background: var(--gf-surface); color: var(--gf-text); border: 1px solid var(--gf-border); box-shadow: var(--gf-shadow); font-weight: 600; }
+    .note3d { margin: 0; font-size: 0.8rem; color: var(--gf-text-muted); text-align: center; }
+    .note3d:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
     .met { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
     .met .more-n { align-self: center; font-size: 0.8rem; font-weight: 700; color: var(--gf-text-muted); padding: 0 4px; }
     /* The walk's altitude profile, under the plants met. */
@@ -924,15 +933,11 @@ export class GfTrail extends LitElement {
     // The walk, in the order the plants were added, from one to the next (as the crow flies), from the start when
     // it was started here — only the plants with a place of their own (located, or moved by hand), not those put on
     // the parcours' point for want of a position, nor the commune it started from.
-    const steps = [...plants].sort((a, b) => String(a.addedAt).localeCompare(String(b.addedAt)));
-    const at = t.geometry?.coordinates;
-    const onPoint = (/** @type {any} */ e) => e.accuracy == null && at && e.coordinates?.[0] === at[0] && e.coordinates?.[1] === at[1];
-    const own = steps.filter(e => e.coordinates && !onPoint(e));
-    const placed = own.map(e => e.coordinates);
-    if (t.properties.startedHere && at) placed.unshift(at);
+    // (core/walk.js: the « Vue 3D » draws the same walk.)
+    const { steps, own, start, line: placed } = walkOf(t);
     // Its altitudes (the IGN's, kept with each plant): the profile of the walk, from plant to plant.
     const profile = profileOf([
-      ...(t.properties.startedHere && at ? [{ at, m: altitudeOf(t.properties, at), label: 'Départ' }] : []),
+      ...(start ? [{ at: start, m: altitudeOf(t.properties, start), label: 'Départ' }] : []),
       ...own.map(e => ({ at: e.coordinates, m: altitudeOf(e, e.coordinates), label: e.vernacularName || e.scientificName }))
     ], distance);
     let km = 0;
@@ -947,7 +952,9 @@ export class GfTrail extends LitElement {
     const dist = m >= 1000 ? `${(m / 1000).toFixed(1).replace('.', ',')} km` : m >= 50 ? `${m} m` : '';
     const walk = [time && 'en ' + time, dist && 'sur ' + dist, profile && profile.climb >= 10 && `${formatAltitude(profile.climb)} de montée`].filter(Boolean).join(', ');
     const art = html`<div class="recap">
-      <div class="recap-map"><gf-map no-search no-create .spots=${NO_SPOTS} .plants=${markers} plant-zoom="0" .frame=${frame}></gf-map></div>
+      <div class="recap-map"><gf-map no-search no-create .spots=${NO_SPOTS} .plants=${markers} plant-zoom="0" .frame=${frame}></gf-map>
+        ${markers.length ? html`<button type="button" class="map3d" aria-describedby="note3d" @click=${(/** @type {Event} */ e) => this.#open3d(t, e)}>${icon('map')} Vue 3D</button>` : nothing}</div>
+      <p class="note3d" id="note3d" role="status">${this._note3d || ''}</p>
       ${groups.length ? html`<ul class="met" aria-label="Les plantes du parcours">${groups.slice(0, 8).map(g => html`<li title=${g.last.vernacularName || g.last.scientificName}><gf-thumb plant-id=${g.plantId} size="44" round></gf-thumb></li>`)}
         ${groups.length > 8 ? html`<li class="more-n">+${groups.length - 8}</li>` : nothing}</ul>` : nothing}
       ${profile ? this.#profile(profile) : nothing}
@@ -971,6 +978,12 @@ export class GfTrail extends LitElement {
       exit: { icon: 'camera-reels', label: 'Quitter le parcours : autres scénarios', run: () => this.dispatchEvent(new CustomEvent('open-scenarios', { bubbles: true, composed: true })) }
     })}
     <div class="toast-dock">${this._toast ? html`<div class="toast" role="status">${icon('check-lg')} <span>${this._toast.text}</span></div>` : nothing}</div></div>`;
+  }
+
+  /** « Vue 3D » of the parcours; when it cannot open here, why (under the map). @param {any} t @param {Event} e */
+  async #open3d(t, e) {
+    this._note3d = '';
+    this._note3d = await openMap3d(t, /** @type {HTMLElement} */ (e.currentTarget)) || '';
   }
 
   /**

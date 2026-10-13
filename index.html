@@ -4,11 +4,13 @@
   <meta charset="utf-8" />
   <!-- Content-Security-Policy, first so it covers everything after it. Scripts: the site's own, plus the import map
        below by its sha256: edit the import map, then run `node tools/csp-hash.mjs --fix` (without --fix, it checks).
-       No inline handler or injected <script> runs. Styles inline (Lit, Leaflet). Images from any web host (photo
-       sources; a GBIF record may give an http: one). connect-src: the APIs of the modules (app/core/modules.js).
+       No inline handler or injected <script> runs. Styles inline (Lit, Leaflet, MapLibre). Images from any web host
+       (photo sources; a GBIF record may give an http: one). connect-src: the APIs of the modules (app/core/modules.js),
+       s3.amazonaws.com among them: the relief tiles of the « Vue 3D », which MapLibre fetches. worker-src 'self': the
+       search worker, and MapLibre's (a module worker next to vendor/maplibre/maplibre-gl.mjs, loaded on demand).
        Frames: the « Page web » pane. No upgrade-insecure-requests: it would ask the app's own files over https, and
        the app served over http from another machine (a phone on the local network, for a test) would not start. -->
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-BS2VV/YLG1Y5w1dI1UcCQFr+wmtLplZ8R7/J3tVELAo='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http:; connect-src 'self' https://api.gbif.org https://api.inaturalist.org https://fr.wikipedia.org https://www.wikidata.org https://query.wikidata.org https://commons.wikimedia.org https://fr.wikibooks.org https://en.wikibooks.org https://data.geopf.fr https://apicarto.ign.fr https://api.globalbioticinteractions.org https://archive-api.open-meteo.com https://air-quality-api.open-meteo.com https://trefle.io; frame-src https:; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-BS2VV/YLG1Y5w1dI1UcCQFr+wmtLplZ8R7/J3tVELAo='; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http:; connect-src 'self' https://api.gbif.org https://api.inaturalist.org https://fr.wikipedia.org https://www.wikidata.org https://query.wikidata.org https://commons.wikimedia.org https://fr.wikibooks.org https://en.wikibooks.org https://data.geopf.fr https://apicarto.ign.fr https://api.globalbioticinteractions.org https://archive-api.open-meteo.com https://air-quality-api.open-meteo.com https://trefle.io https://s3.amazonaws.com; frame-src https:; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'" />
   <meta name="referrer" content="strict-origin-when-cross-origin" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>GeoFlora — flore de France</title>

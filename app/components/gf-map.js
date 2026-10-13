@@ -25,7 +25,8 @@ const STYLESHEETS = [
   new URL('../styles/map.css', import.meta.url).href
 ];
 
-const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
+/** A plant's ring, by its abundance (gf-map3d.js too). */
+export const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
 
 /** Plants are drawn from this zoom level on (places are always drawn). */
 export const PLANT_ZOOM = 16;
