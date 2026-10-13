@@ -12,6 +12,9 @@ const round6 = (/** @type {number} */ n) => Math.round(n * 1e6) / 1e6;
 const point = c => [round6(c[0]), round6(c[1])];
 const same = (/** @type {[number, number]} */ a, /** @type {[number, number]} */ b) => a[0] === b[0] && a[1] === b[1];
 
+/** The altitude (m) kept for exactly this position, else null. @param {any} a @param {[number, number]} c */
+const altitudeAt = (a, c) => a && typeof a.m === 'number' && Array.isArray(a.at) && a.at[0] === c[0] && a.at[1] === c[1] ? a.m : null;
+
 /**
  * @param {any} h harvest
  */
@@ -41,6 +44,9 @@ function slimEntry(e, at, personal) {
     const own = point(e.coordinates);
     if (!same(own, at)) out.coordinates = own;
     if (e.accuracy !== null && e.accuracy !== undefined && !same(own, at)) out.accuracy = e.accuracy;
+    // Its ground altitude (metres), that of its position: not asked again where the file is opened.
+    const m = altitudeAt(e.altitude, e.coordinates);
+    if (m !== null) out.altitude = m;
   }
   if (personal) {
     if (e.notes) out.notes = e.notes;
@@ -69,6 +75,8 @@ export function toPortable(collections, { personal = true, name = 'GeoFlora — 
       if (p.name) props.name = p.name;
       if (personal && p.notes) props.notes = p.notes;
       if (at && p.accuracy !== null && p.accuracy !== undefined) props.accuracy = p.accuracy;
+      const m = c.geometry ? altitudeAt(p.altitude, c.geometry.coordinates) : null;
+      if (m !== null) props.altitude = m;
       props.createdAt = p.createdAt;
       props.updatedAt = p.updatedAt;
       props.plants = p.plants.map(e => slimEntry(e, at, personal));

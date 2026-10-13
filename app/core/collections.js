@@ -11,6 +11,7 @@ import { FAVORITES_ID, newEntryId, normalizeEntry, normalizeCollection, plantIds
 import { store } from './store.js';
 import { toPortable } from './portable.js';
 import { encodePortable } from './share.js';
+import { fillAltitudes } from './altitude.js';
 
 export { FAVORITES_ID };
 
@@ -235,6 +236,8 @@ export async function savePlace(place) {
   await db.put('spots', saved);
   markHasSpots();
   await changed();
+  // The altitudes of its new or moved positions, in the background (saved again once found).
+  if (saved.geometry) fillAltitudes(saved.id, getPlace, savePlace);
   return /** @type {Collection} */ (saved);
 }
 export const saveCollection = savePlace;

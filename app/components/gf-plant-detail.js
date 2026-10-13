@@ -35,6 +35,7 @@ import { FOCUS_EVENT, isFocused, noFocus, toggleFocus } from '../core/map-focus.
 import * as openData from '../core/open-data.js';
 import * as usesData from '../core/uses.js';
 import { lookalikesOf } from '../core/lookalikes.js';
+import { formatAltitude } from '../core/altitude.js';
 import { chartStyles, climateChart, groupColor, groupLegend, networkChart, nicheChart } from '../core/charts.js';
 import { unsafeCSS } from 'lit';
 import './gf-sortable-list.js';
@@ -3347,11 +3348,25 @@ export class GfPlantDetail extends LitElement {
           <p class="small">Là où elle a été observée : <strong>${temps[0]} à ${temps[temps.length - 1]} °C</strong> de moyenne annuelle,
             <strong>${rains[0].toLocaleString('fr-FR')} à ${rains[rains.length - 1].toLocaleString('fr-FR')} mm</strong> de pluie par an (${niche.points.length} lieux, cadre : 80 % d’entre eux).
             ${mine ? html`Chez vous : ${mine.temp} °C, ${mine.precip.toLocaleString('fr-FR')} mm — ${inside ? 'dans sa niche' : 'en dehors du cœur de sa niche'}.` : nothing}</p>
+          ${this.#altitudes(niche.altitudes, here?.state === 'done' ? here.climate?.elevation : null)}
           ${!mine && !here ? ask('Me situer sur ce graphique') : hereState || nothing}
           ${mine && baseOf(v) !== 'epure' ? html`<details class="here-climate"><summary>Climat chez vous (${here.climate.years})</summary>${climateChart(here.climate.temp, here.climate.precip)}</details>` : nothing}
           <p class="credit">Climat : ERA5 via <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a> (moyennes ${niche.years}, CC BY 4.0) aux occurrences de <a href=${'https://www.gbif.org/species/' + (this._details?.identifiers?.gbif?.id ?? '')} target="_blank" rel="noopener">GBIF.org</a>.</p>`;
       }
     })}`;
+  }
+
+  /**
+   * The altitudes where it was observed in France (GBIF), and mine (Open-Meteo's, for my position) beside them.
+   * @param {import('../core/open-data.js').Altitudes | null | undefined} a @param {number | null | undefined} mine
+   */
+  #altitudes(a, mine) {
+    if (!a) return nothing;
+    const m = (/** @type {number} */ v) => formatAltitude(v);
+    const where = typeof mine === 'number' ? (mine >= a.low && mine <= a.high ? 'dans cette tranche' : mine < a.low ? 'plus bas que la plupart' : 'plus haut que la plupart') : '';
+    return html`<p class="small">${icon('triangle')} Altitude : le plus souvent <strong>entre ${m(a.low)} et ${m(a.high)}</strong>
+      (de ${m(a.min)} à ${m(a.max)} ; ${a.n} des ${a.of} occurrences GBIF la donnent).
+      ${where ? html`Chez vous : ${m(/** @type {number} */ (mine))}, ${where}.` : nothing}</p>`;
   }
 
   /** @param {any} ctx */

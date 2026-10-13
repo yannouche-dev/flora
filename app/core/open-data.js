@@ -193,15 +193,16 @@ function monthly(daily, years) {
 
 /**
  * Climate niche of a species: the climate (annual mean temperature, annual precipitation, from ERA5 over two
- * years) of up to 24 of its GBIF occurrences in France, spread over the country.
+ * years) of up to 24 of its GBIF occurrences in France, spread over the country; and the altitudes at which they
+ * were observed (those of the 300 occurrences that give one: most of them, 10th–90th percentile, and the extremes).
  * @param {number} gbifKey @param {AbortSignal} [signal] @param {Mode} [mode]
- * @returns {Promise<{ points: { coordinates: [number, number], temp: number, precip: number }[], years: string } | null>}
+ * @returns {Promise<{ points: { coordinates: [number, number], temp: number, precip: number }[], years: string, altitudes: Altitudes | null } | null>}
  */
 export async function climateNiche(gbifKey, signal, mode) {
   need('openmeteo', mode);
   need('gbif', mode);
   const end = new Date().getFullYear() - 1;
-  return cached(`niche:${end}:${gbifKey}`, 90 * DAY, async () => {
+  return cached(`niche2:${end}:${gbifKey}`, 90 * DAY, async () => {
     const occ = await json(`https://api.gbif.org/v1/occurrence/search?taxonKey=${gbifKey}&country=FR&occurrenceStatus=PRESENT&hasGeospatialIssue=false&hasCoordinate=true&limit=300`, signal);
     /** @type {[number, number][]} */
     const all = (occ.results || []).filter((/** @type {any} */ o) => typeof o.decimalLatitude === 'number' && typeof o.decimalLongitude === 'number')
@@ -211,14 +212,28 @@ export async function climateNiche(gbifKey, signal, mode) {
     for (const p of all) { const k = Math.round(p[0] * 2) + ':' + Math.round(p[1] * 2); if (!cells.has(k)) cells.set(k, p); }
     const picked = [...cells.values()].slice(0, 24);
     if (!picked.length) return null;
+    const altitudes = altitudesOf(occ.results || []);
     const data = await json(`https://archive-api.open-meteo.com/v1/archive?latitude=${picked.map(p => p[1]).join(',')}&longitude=${picked.map(p => p[0]).join(',')}&start_date=${end - 1}-01-01&end_date=${end}-12-31&daily=temperature_2m_mean,precipitation_sum`, signal);
     const list = Array.isArray(data) ? data : [data];
     const points = list.map((d, i) => {
       const m = monthly(d.daily, 2);
       return { coordinates: picked[i], temp: m.annualTemp, precip: m.annualPrecip };
     }).filter(p => Number.isFinite(p.temp));
-    return { points, years: `${end - 1}–${end}` };
+    return { points, years: `${end - 1}–${end}`, altitudes };
   });
+}
+
+/** @typedef {{ low: number, high: number, min: number, max: number, n: number, of: number }} Altitudes */
+
+/**
+ * The altitudes of occurrences (GBIF's `elevation`, metres): most of them (10th–90th percentile) and the extremes,
+ * when at least 5 give one. @param {any[]} results @returns {Altitudes | null}
+ */
+export function altitudesOf(results) {
+  const z = results.map(o => o?.elevation).filter(v => typeof v === 'number' && Number.isFinite(v) && v > -500 && v < 9000).sort((a, b) => a - b);
+  if (z.length < 5) return null;
+  const at = (/** @type {number} */ q) => Math.round(z[Math.min(z.length - 1, Math.max(0, Math.round(q * (z.length - 1))))]);
+  return { low: at(0.1), high: at(0.9), min: Math.round(z[0]), max: Math.round(z[z.length - 1]), n: z.length, of: results.length };
 }
 
 // ── IGN API Carto: natural zones at a point ──────────────────────────────────────────────────────────────

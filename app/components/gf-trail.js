@@ -4,7 +4,7 @@
 // suggests them, one touch adds each where you stand; the map of the parcours shows them as you go. A small card
 // tells the parcours (its name, its plants, your position); « Terminer » closes it (it stays in Mes plantes).
 
-import { LitElement, html, css, nothing, repeat } from 'lit';
+import { LitElement, html, css, nothing, repeat, svg } from 'lit';
 import { icon } from '../core/icons.js';
 import { geoProblem, startScreen, startStyles } from './start-screen.js';
 import { watchLocation } from '../core/geo.js';
@@ -16,6 +16,7 @@ import { href, parse } from '../core/router.js';
 import { encodeCollection, share } from '../core/share.js';
 import { ui } from '../styles/ui.js';
 import { PaneSizer } from '../core/panes.js';
+import { altitudeOf, fillAltitudes, formatAltitude, profileOf } from '../core/altitude.js';
 import { config } from '../config.js';
 import './gf-map.js';
 import './gf-voice-button.js';
@@ -160,6 +161,13 @@ export class GfTrail extends LitElement {
     .recap-map gf-map { position: absolute; inset: 0; display: block; }
     .met { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
     .met .more-n { align-self: center; font-size: 0.8rem; font-weight: 700; color: var(--gf-text-muted); padding: 0 4px; }
+    /* The walk's altitude profile, under the plants met. */
+    .profile { margin: 0; }
+    .profile svg { display: block; width: 100%; height: auto; }
+    .profile .area { fill: color-mix(in srgb, var(--gf-accent) 18%, transparent); }
+    .profile .line { fill: none; stroke: var(--gf-accent); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+    .profile circle { fill: var(--gf-surface); stroke: var(--gf-accent); stroke-width: 1.5; }
+    .profile figcaption { text-align: center; font-size: 0.75rem; color: var(--gf-text-muted); font-variant-numeric: tabular-nums; }
     .recap-of { display: block; color: var(--gf-text); font-weight: 600; }
     .search input { width: 100%; box-sizing: border-box; font: inherit; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill); background: var(--gf-surface); color: var(--gf-text); }
     /* Walking: the parcours' card, the search, the plants. */
@@ -404,6 +412,8 @@ export class GfTrail extends LitElement {
     if (done) {
       this._done = await getPlace(done).catch(() => undefined) || null;
       if (!this._done) write(DONE, null);
+      // Its altitudes, for its profile (a parcours noted offline, or before they were kept): saved again once found.
+      else fillAltitudes(this._done.id, getPlace, savePlace);
     }
     const ids = /** @type {string[]} */ (read(LIST, []));
     this._past = (await Promise.all(ids.filter(x => x !== id).map(x => getPlace(x).catch(() => undefined)))).filter(Boolean);
@@ -889,8 +899,14 @@ export class GfTrail extends LitElement {
     const steps = [...plants].sort((a, b) => String(a.addedAt).localeCompare(String(b.addedAt)));
     const at = t.geometry?.coordinates;
     const onPoint = (/** @type {any} */ e) => e.accuracy == null && at && e.coordinates?.[0] === at[0] && e.coordinates?.[1] === at[1];
-    const placed = steps.filter(e => e.coordinates && !onPoint(e)).map(e => e.coordinates);
+    const own = steps.filter(e => e.coordinates && !onPoint(e));
+    const placed = own.map(e => e.coordinates);
     if (t.properties.startedHere && at) placed.unshift(at);
+    // Its altitudes (the IGN's, kept with each plant): the profile of the walk, from plant to plant.
+    const profile = profileOf([
+      ...(t.properties.startedHere && at ? [{ at, m: altitudeOf(t.properties, at), label: 'Départ' }] : []),
+      ...own.map(e => ({ at: e.coordinates, m: altitudeOf(e, e.coordinates), label: e.vernacularName || e.scientificName }))
+    ], distance);
     let km = 0;
     for (let i = 1; i < placed.length; i++) km += distance(placed[i - 1], placed[i]) / 1000;
     // Its time: from the start to the last plant, without the pauses (taken up again another day).
@@ -901,11 +917,12 @@ export class GfTrail extends LitElement {
     const time = min >= 60 ? `${Math.floor(min / 60)} h ${String(min % 60).padStart(2, '0')}` : min >= 1 ? `${min} min` : '';
     const m = Math.round(km * 100) * 10;
     const dist = m >= 1000 ? `${(m / 1000).toFixed(1).replace('.', ',')} km` : m >= 50 ? `${m} m` : '';
-    const walk = [time && 'en ' + time, dist && 'sur ' + dist].filter(Boolean).join(', ');
+    const walk = [time && 'en ' + time, dist && 'sur ' + dist, profile && profile.climb >= 10 && `${formatAltitude(profile.climb)} de montée`].filter(Boolean).join(', ');
     const art = html`<div class="recap">
       <div class="recap-map"><gf-map no-search no-create .spots=${NO_SPOTS} .plants=${markers} plant-zoom="0" .frame=${frame}></gf-map></div>
       ${groups.length ? html`<ul class="met" aria-label="Les plantes du parcours">${groups.slice(0, 8).map(g => html`<li title=${g.last.vernacularName || g.last.scientificName}><gf-thumb plant-id=${g.plantId} size="44" round></gf-thumb></li>`)}
         ${groups.length > 8 ? html`<li class="more-n">+${groups.length - 8}</li>` : nothing}</ul>` : nothing}
+      ${profile ? this.#profile(profile) : nothing}
     </div>`;
     const another = () => this.#leaveRecap();
     return html`<div class="wrap done">${startScreen({
@@ -926,6 +943,26 @@ export class GfTrail extends LitElement {
       exit: { icon: 'camera-reels', label: 'Quitter le parcours : autres scénarios', run: () => this.dispatchEvent(new CustomEvent('open-scenarios', { bubbles: true, composed: true })) }
     })}
     <div class="toast-dock">${this._toast ? html`<div class="toast" role="status">${icon('check-lg')} <span>${this._toast.text}</span></div>` : nothing}</div></div>`;
+  }
+
+  /**
+   * The walk's altitude profile: the ground's altitude at each plant, by distance from the start; its lowest and
+   * highest. @param {NonNullable<ReturnType<typeof profileOf>>} p
+   */
+  #profile(p) {
+    const W = 320, H = 84, pad = 6;
+    const span = Math.max(20, p.high - p.low), len = Math.max(1, p.length);
+    const x = (/** @type {number} */ d) => pad + d / len * (W - 2 * pad);
+    const y = (/** @type {number} */ m) => H - pad - (m - p.low) / span * (H - 2 * pad);
+    const line = p.points.map((q, i) => `${i ? 'L' : 'M'}${x(q.d).toFixed(1)} ${y(q.m).toFixed(1)}`).join(' ');
+    const area = `${line} L${x(p.points[p.points.length - 1].d).toFixed(1)} ${H} L${x(p.points[0].d).toFixed(1)} ${H} Z`;
+    return html`<figure class="profile">
+      <svg viewBox="0 0 ${W} ${H}" role="img" aria-label=${`Profil d’altitude du parcours : de ${formatAltitude(p.low)} à ${formatAltitude(p.high)}, ${formatAltitude(p.climb)} de montée`}>
+        ${svg`<path class="area" d=${area}></path><path class="line" d=${line}></path>
+        ${p.points.map(q => svg`<circle cx=${x(q.d)} cy=${y(q.m)} r="3"><title>${q.label ? q.label + ' — ' : ''}${formatAltitude(q.m)}</title></circle>`)}`}
+      </svg>
+      <figcaption>Altitude au fil des plantes : de ${formatAltitude(p.low)} à ${formatAltitude(p.high)} (IGN)</figcaption>
+    </figure>`;
   }
 
   /** No parcours yet: the shared start screen. One action, start here; smaller, a commune, a parcours to take up again; the way out. */
