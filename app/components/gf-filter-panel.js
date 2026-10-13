@@ -56,7 +56,7 @@ export class GfFilterPanel extends LitElement {
         .options=${[
           { value: 'nationale', label: 'Protégée en France', title: 'Protection nationale (INPN)', count: count('legal', 'nationale') },
           { value: 'protegee', label: 'Protégée (France, région ou département)', title: 'Protection nationale, régionale ou départementale (INPN)', count: count('legal', 'protegee') },
-          { value: 'reglementee', label: 'Cueillette réglementée', title: 'Réglementation de la cueillette dans au moins un département (INPN)', count: count('legal', 'reglementee') },
+          { value: 'reglementee', label: 'Cueillette réglementée', title: 'Cueillette réglementée en France métropolitaine : arrêté d’un département, ou espèce qu’un préfet peut réglementer (INPN) ; ni commerce (CITES) ni outre-mer', count: count('legal', 'reglementee') },
           { value: 'menacee', label: 'Menacée en France', title: 'Liste rouge nationale : quasi menacée à en danger critique (INPN)', count: count('legal', 'menacee') }
         ]}
       ></gf-facet>

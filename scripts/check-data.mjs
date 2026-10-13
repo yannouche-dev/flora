@@ -25,6 +25,8 @@
 import { readFileSync } from 'node:fs';
 import { baselineName, previousJson } from './previous-data.mjs';
 import { fingerprint } from './fingerprint-dataset.mjs';
+import { checkConfusions } from './check-confusions.mjs';
+import { PARTS_WORDS, TOXICITY_LABELS } from './build-safety.mjs';
 
 const PLANTS_FILE = process.env.PLANTS_FILE || 'data/plants.json';
 const LOOKALIKES_FILE = process.env.LOOKALIKES_FILE || 'data/lookalikes.json';
@@ -37,7 +39,8 @@ const STALE_DAYS = 30;
 /** Floors, measured 2026-10-12: 977 plants in safety.json, 184 on ANSM list A, 400 on list B, 635 in TPPT; 2117 protected (PN, PR, PD) and 1125 regulated (REGL) plants; 3879 with Baseflor flowering months. */
 const FLOORS = { safety: 880, ansmA: 165, ansmB: 360, tppt: 570, protected: 1900, regulated: 1010, flowering: 3500 };
 const SAFETY_SOURCES = ['ansmA', 'ansmB', 'tppt'];
-const SEVERITIES = ['mortel', 'toxique'];
+const SEVERITIES = ['mortel', 'grave', 'toxique'];
+const REFERENCE_FILE = process.env.REFERENCE_FILE || 'data/confusions-reference.json';
 
 let errors = 0;
 /** @param {string} file @param {string} message @param {number} [line] */
@@ -156,6 +159,15 @@ if (plants.length) {
     summary.push(`${LOOKALIKES_FILE}: ${pairs.length} pairs, ${taxa} taxa`);
   }
 
+  // ── Reference list of confusions, severity and TPPT (scripts/check-confusions.mjs) ──
+  const referenceFile = load(REFERENCE_FILE);
+  if (referenceFile && lookFile) {
+    const { errors: wrong, pending } = checkConfusions({ reference: referenceFile.data, lookalikes: lookFile.data, plants, safety: safetyFile?.data });
+    for (const e of wrong) error(/^lookalikes\.json/.test(e) ? LOOKALIKES_FILE : REFERENCE_FILE, e);
+    if (pending.length) console.log(`::notice file=${REFERENCE_FILE}::${pending.length} confusions à vérifier against a source (not shown in the app): ${pending.join(' ; ')}`);
+    summary.push(`${REFERENCE_FILE}: ${referenceFile.data?.confusions?.length ?? 0} confusions, ${pending.length} à vérifier`);
+  }
+
   // ── Toxicity and medicinal use ──
   if (safetyFile) {
     const { data } = safetyFile;
@@ -167,6 +179,16 @@ if (plants.length) {
     const count = measure([], data, null);
     for (const key of ['safety', ...SAFETY_SOURCES]) if (count[key] < FLOORS[key]) error(SAFETY_FILE, `${key === 'safety' ? 'plants with an entry' : key + ' entries'}: ${count[key]}, under the floor of ${FLOORS[key]}`);
     for (const key of SAFETY_SOURCES) stale(SAFETY_FILE, key, data?.sources?.[key]?.read);
+    // TPPT in French: every label one build-safety.mjs writes, every word of the parts one of its translations.
+    const english = new Map();
+    for (const [id, entry] of Object.entries(entries)) {
+      const t = /** @type {any} */ (entry)?.tppt;
+      if (!t) continue;
+      for (const label of [t.levelLabel, t.animal]) if (label && !label.split(', ').every((/** @type {string} */ l) => TOXICITY_LABELS.includes(l))) english.set(`level « ${label} »`, id);
+      const odd = String(t.parts || '').toLowerCase().split(/[^\p{L}]+/u).filter(w => w && !PARTS_WORDS.has(w));
+      if (odd.length) english.set(`parts « ${t.parts} » (${odd.join(', ')})`, id);
+    }
+    for (const [what, id] of english) error(SAFETY_FILE, `TPPT ${what} of plant ${id} is not translated (scripts/build-safety.mjs: toxicity, PARTS)`);
     summary.push(`${SAFETY_FILE}: ${count.safety} plants (ANSM A ${count.ansmA}, ANSM B ${count.ansmB}, TPPT ${count.tppt})`);
   }
 

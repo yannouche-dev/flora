@@ -1,0 +1,409 @@
+{
+  "about": "Liste de référence des confusions entre plantes comestibles et plantes toxiques que GeoFlora doit signaler. « publiée » : la confusion figure dans les sources citées (data/lookalikes.json, sources), elle doit être dans data/lookalikes.json, à la gravité minSeverity au moins ; scripts/check-confusions.mjs le vérifie en CI (tools/check.sh, via scripts/check-data.mjs). « à vérifier » : une piste à relire dans une publication de l’Anses ou d’un Centre antipoison ; elle n’est montrée à personne tant qu’une source lue ne l’a pas confirmée (la passer alors en « publiée », avec sa source dans lookalikes.json). gaps : les champs (tell : critères de distinction, symptoms : symptômes) que les sources citées ne donnent pas pour une confusion mortelle ou grave, à compléter depuis une source lue.",
+  "review": {
+    "date": "2026-10-13",
+    "read": [],
+    "unreachable": [
+      "https://www.anses.fr/fr/system/files/2020-02_aide_memoire-plantes_toxiques.pdf",
+      "https://vigilanses.anses.fr/sites/default/files/VigilAnsesN8_Juin2019_1.pdf",
+      "https://www.anses.fr/fr/content/actu-confusion-colchique-ail-des-ours",
+      "https://www.anses.fr/fr/content/plante-comestible-et-plante-toxique-gare-aux-confusions",
+      "https://www.anses.fr/fr/content/cet-ete-quelles-plantes-faire-attention-pour-eviter-les-intoxications"
+    ],
+    "toRead": [
+      {
+        "title": "Vigil’Anses n°8, juin 2019 — Toxicovigilance : confusion de plantes",
+        "url": "https://vigilanses.anses.fr/sites/default/files/VigilAnsesN8_Juin2019_Toxicovigilance_Confusionplantes.pdf"
+      },
+      {
+        "title": "Vigil’Anses n°26, juillet 2025 — Les plantes à l’origine d’intoxications fréquentes ou graves",
+        "url": "https://vigilanses.anses.fr/sites/default/files/VigilAnsesN26_Plantes_Juillet2025.pdf"
+      },
+      {
+        "title": "Anses, fiches d’information, juin 2021 — Plantes toxiques",
+        "url": "https://www.anses.fr/fr/system/files/ANSES-Ft-Plantes-toxiques-ingestion-2021.pdf"
+      },
+      {
+        "title": "Association des centres antipoison et de toxicovigilance — Plantes toxiques et plantes comestibles",
+        "url": "https://centres-antipoison.net/plantes-toxiques-et-plantes-comestibles"
+      },
+      {
+        "title": "Anses — Plantes toxiques",
+        "url": "https://enquetes.anses.fr/fr/content/plantes-toxiques"
+      }
+    ],
+    "note": "Relecture du 2026-10-13 : aucune de ces pages n’a pu être lue depuis l’environnement de travail (hôtes anses.fr, vigilanses.anses.fr et centres-antipoison.net injoignables). Les confusions « publiées » sont celles que data/lookalikes.json citait déjà ; les pistes « à vérifier » attendent une lecture de ces sources, puis l’avis d’un Centre antipoison."
+  },
+  "confusions": [
+    {
+      "id": "colchicum-allium-ursinum",
+      "toxic": [
+        "Colchicum"
+      ],
+      "edible": [
+        "Allium ursinum",
+        "Allium polyanthum"
+      ],
+      "status": "publiée",
+      "minSeverity": "mortel",
+      "sources": [
+        "colchique",
+        "aide-memoire",
+        "vigilanses-8"
+      ]
+    },
+    {
+      "id": "convallaria-majalis-allium-ursinum",
+      "toxic": [
+        "Convallaria majalis"
+      ],
+      "edible": [
+        "Allium ursinum"
+      ],
+      "status": "publiée",
+      "minSeverity": "grave",
+      "sources": [
+        "vigilanses-8"
+      ],
+      "gaps": [
+        "tell",
+        "symptoms"
+      ]
+    },
+    {
+      "id": "digitalis-symphytum",
+      "toxic": [
+        "Digitalis"
+      ],
+      "edible": [
+        "Symphytum"
+      ],
+      "status": "publiée",
+      "minSeverity": "mortel",
+      "sources": [
+        "aide-memoire",
+        "vigilanses-8",
+        "ete"
+      ]
+    },
+    {
+      "id": "veratrum-gentiana-lutea",
+      "toxic": [
+        "Veratrum"
+      ],
+      "edible": [
+        "Gentiana lutea"
+      ],
+      "status": "publiée",
+      "minSeverity": "mortel",
+      "sources": [
+        "aide-memoire",
+        "vigilanses-8",
+        "ete"
+      ]
+    },
+    {
+      "id": "oenanthe-crocata-daucus-carota",
+      "toxic": [
+        "Oenanthe crocata"
+      ],
+      "edible": [
+        "Daucus carota"
+      ],
+      "status": "publiée",
+      "minSeverity": "mortel",
+      "sources": [
+        "aide-memoire",
+        "vigilanses-8",
+        "gare-aux-confusions"
+      ]
+    },
+    {
+      "id": "aconitum-napellus-molopospermum-peleponnesiacum",
+      "toxic": [
+        "Aconitum napellus"
+      ],
+      "edible": [
+        "Molopospermum peleponnesiacum"
+      ],
+      "status": "publiée",
+      "minSeverity": "mortel",
+      "sources": [
+        "vigilanses-8"
+      ],
+      "gaps": [
+        "symptoms"
+      ]
+    },
+    {
+      "id": "atropa-bella-donna-vitis-vinifera",
+      "toxic": [
+        "Atropa bella-donna"
+      ],
+      "edible": [
+        "Vitis vinifera",
+        "Vaccinium",
+        "Ribes nigrum"
+      ],
+      "status": "publiée",
+      "minSeverity": "mortel",
+      "sources": [
+        "aide-memoire",
+        "vigilanses-8",
+        "ete"
+      ]
+    },
+    {
+      "id": "conium-maculatum-petroselinum-crispum",
+      "toxic": [
+        "Conium maculatum",
+        "Aethusa cynapium"
+      ],
+      "edible": [
+        "Petroselinum crispum"
+      ],
+      "status": "publiée",
+      "minSeverity": "grave",
+      "sources": [
+        "vigilanses-8"
+      ],
+      "gaps": [
+        "tell",
+        "symptoms"
+      ]
+    },
+    {
+      "id": "arum-rumex",
+      "toxic": [
+        "Arum"
+      ],
+      "edible": [
+        "Rumex"
+      ],
+      "status": "publiée",
+      "minSeverity": "grave",
+      "sources": [
+        "aide-memoire",
+        "vigilanses-8"
+      ],
+      "gaps": [
+        "tell"
+      ]
+    },
+    {
+      "id": "laburnum-anagyroides-robinia-pseudoacacia",
+      "toxic": [
+        "Laburnum anagyroides"
+      ],
+      "edible": [
+        "Robinia pseudoacacia"
+      ],
+      "status": "publiée",
+      "minSeverity": "grave",
+      "sources": [
+        "aide-memoire",
+        "vigilanses-8"
+      ]
+    },
+    {
+      "id": "aesculus-hippocastanum-castanea-sativa",
+      "toxic": [
+        "Aesculus hippocastanum"
+      ],
+      "edible": [
+        "Castanea sativa"
+      ],
+      "status": "publiée",
+      "minSeverity": "toxique",
+      "sources": [
+        "aide-memoire",
+        "vigilanses-8"
+      ]
+    },
+    {
+      "id": "sambucus-ebulus-sambucus-nigra",
+      "toxic": [
+        "Sambucus ebulus"
+      ],
+      "edible": [
+        "Sambucus nigra"
+      ],
+      "status": "publiée",
+      "minSeverity": "toxique",
+      "sources": [
+        "ete"
+      ]
+    },
+    {
+      "id": "lonicera-nigra-vaccinium-myrtillus",
+      "toxic": [
+        "Lonicera nigra"
+      ],
+      "edible": [
+        "Vaccinium myrtillus"
+      ],
+      "status": "publiée",
+      "minSeverity": "toxique",
+      "sources": [
+        "ete"
+      ]
+    },
+    {
+      "id": "nerium-oleander-laurus-nobilis",
+      "toxic": [
+        "Nerium oleander"
+      ],
+      "edible": [
+        "Laurus nobilis"
+      ],
+      "status": "publiée",
+      "minSeverity": "grave",
+      "sources": [
+        "ete",
+        "vigilanses-8"
+      ],
+      "gaps": [
+        "symptoms"
+      ]
+    },
+    {
+      "id": "prunus-laurocerasus-laurus-nobilis",
+      "toxic": [
+        "Prunus laurocerasus"
+      ],
+      "edible": [
+        "Laurus nobilis"
+      ],
+      "status": "publiée",
+      "minSeverity": "toxique",
+      "sources": [
+        "ete",
+        "vigilanses-8"
+      ]
+    },
+    {
+      "id": "datura-stramonium-tetragonia-tetragonoides",
+      "toxic": [
+        "Datura stramonium"
+      ],
+      "edible": [
+        "Tetragonia tetragonoides"
+      ],
+      "status": "publiée",
+      "minSeverity": "grave",
+      "sources": [
+        "gare-aux-confusions"
+      ],
+      "gaps": [
+        "tell",
+        "symptoms"
+      ]
+    },
+    {
+      "id": "cicuta-virosa-daucus-carota",
+      "toxic": [
+        "Cicuta virosa"
+      ],
+      "edible": [
+        "Daucus carota",
+        "Pastinaca sativa",
+        "Apium graveolens"
+      ],
+      "status": "à vérifier",
+      "lead": "Audit GeoFlora 2026-10 (SAFE-2) : confusion classique en toxicologie, absente de lookalikes.json ; sa présence dans une publication de l’Anses ou d’un Centre antipoison n’a pas pu être vérifiée."
+    },
+    {
+      "id": "conium-maculatum-daucus-carota",
+      "toxic": [
+        "Conium maculatum"
+      ],
+      "edible": [
+        "Daucus carota",
+        "Anthriscus sylvestris",
+        "Chaerophyllum"
+      ],
+      "status": "à vérifier",
+      "lead": "Audit GeoFlora 2026-10 (SAFE-2) : confusion classique en toxicologie, absente de lookalikes.json ; sa présence dans une publication de l’Anses ou d’un Centre antipoison n’a pas pu être vérifiée."
+    },
+    {
+      "id": "aethusa-cynapium-anthriscus-cerefolium",
+      "toxic": [
+        "Aethusa cynapium"
+      ],
+      "edible": [
+        "Anthriscus cerefolium"
+      ],
+      "status": "à vérifier",
+      "lead": "Audit GeoFlora 2026-10 (SAFE-2) : confusion classique en toxicologie, absente de lookalikes.json ; sa présence dans une publication de l’Anses ou d’un Centre antipoison n’a pas pu être vérifiée."
+    },
+    {
+      "id": "oenanthe-crocata-apium-graveolens",
+      "toxic": [
+        "Oenanthe crocata"
+      ],
+      "edible": [
+        "Apium graveolens",
+        "Pastinaca sativa",
+        "Petroselinum crispum"
+      ],
+      "status": "à vérifier",
+      "lead": "Audit GeoFlora 2026-10 (SAFE-2) : confusion classique en toxicologie, absente de lookalikes.json ; sa présence dans une publication de l’Anses ou d’un Centre antipoison n’a pas pu être vérifiée. Recherche web du 2026-10-13 : un décès en 2019 après confusion avec du persil tubéreux serait rapporté par l’Anses (Vigil’Anses n°8) ; document non lu."
+    },
+    {
+      "id": "arum-allium-ursinum",
+      "toxic": [
+        "Arum"
+      ],
+      "edible": [
+        "Allium ursinum"
+      ],
+      "status": "à vérifier",
+      "lead": "Audit GeoFlora 2026-10 (SAFE-2) : confusion classique en toxicologie, absente de lookalikes.json ; sa présence dans une publication de l’Anses ou d’un Centre antipoison n’a pas pu être vérifiée."
+    },
+    {
+      "id": "digitalis-borago-officinalis",
+      "toxic": [
+        "Digitalis"
+      ],
+      "edible": [
+        "Borago officinalis"
+      ],
+      "status": "à vérifier",
+      "lead": "Audit GeoFlora 2026-10 (SAFE-2) : confusion classique en toxicologie, absente de lookalikes.json ; sa présence dans une publication de l’Anses ou d’un Centre antipoison n’a pas pu être vérifiée."
+    },
+    {
+      "id": "bryonia-dioica-dioscorea-communis",
+      "toxic": [
+        "Bryonia dioica"
+      ],
+      "edible": [
+        "Dioscorea communis",
+        "Asparagus acutifolius"
+      ],
+      "status": "à vérifier",
+      "lead": "Audit GeoFlora 2026-10 (SAFE-2) : confusion classique en toxicologie, absente de lookalikes.json ; sa présence dans une publication de l’Anses ou d’un Centre antipoison n’a pas pu être vérifiée."
+    },
+    {
+      "id": "veratrum-album-allium-victorialis",
+      "toxic": [
+        "Veratrum album"
+      ],
+      "edible": [
+        "Allium victorialis"
+      ],
+      "status": "à vérifier",
+      "lead": "Audit GeoFlora 2026-10 (SAFE-2) : confusion classique en toxicologie, absente de lookalikes.json ; sa présence dans une publication de l’Anses ou d’un Centre antipoison n’a pas pu être vérifiée."
+    },
+    {
+      "id": "heracleum-mantegazzianum-heracleum-sphondylium",
+      "toxic": [
+        "Heracleum mantegazzianum"
+      ],
+      "edible": [
+        "Heracleum sphondylium"
+      ],
+      "status": "à vérifier",
+      "lead": "Audit GeoFlora 2026-10 (SAFE-2) : confusion classique en toxicologie, absente de lookalikes.json ; sa présence dans une publication de l’Anses ou d’un Centre antipoison n’a pas pu être vérifiée."
+    }
+  ]
+}
