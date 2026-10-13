@@ -43,7 +43,8 @@ export class MaDeck extends LitElement {
     .deck-wrap { display: grid; justify-items: center; gap: 14px; }
     .deck { position: relative; width: min(100%, 380px); aspect-ratio: 3 / 4.3; max-height: calc(100dvh - 300px); min-height: 360px; }
     .swipe-card { position: absolute; inset: 0; border-radius: 18px; overflow: hidden; background: #2a3a2a; color: #fff; box-shadow: 0 12px 30px rgb(0 0 0 / 25%);
-      touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; transition: transform 0.25s ease-out; }
+      touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; z-index: 2;
+      transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.32s ease-out; }
     .swipe-card.dragging { transition: none; cursor: grabbing; }
     .swipe-card.fly { transition: transform 0.26s ease-in; }
     /* The first time: a little swipe right, then left (its stamps showing a moment), and back. */
@@ -53,7 +54,16 @@ export class MaDeck extends LitElement {
     @keyframes swipe-hint { 25% { transform: translateX(46px) rotate(5deg); } 40% { transform: none; } 65% { transform: translateX(-46px) rotate(-5deg); } 80%, to { transform: none; } }
     @keyframes hint-like { 25% { opacity: 0.7; } 40%, to { opacity: 0; } }
     @keyframes hint-nope { 0%, 40% { opacity: 0; } 65% { opacity: 0.7; } 80%, to { opacity: 0; } }
-    .swipe-card.under { transform: scale(0.94) translateY(10px); filter: brightness(0.9); pointer-events: none; }
+    /* The card underneath: smaller, a little lower and darker; it rises as the one on top is dragged away (--rise, 0 → 1),
+       and is full size when the top one has flown — the swap then shows nothing. A new one fades in under it. */
+    .swipe-card.under { z-index: 1; pointer-events: none; animation: under-in 0.32s ease-out;
+      transform: scale(calc(0.94 + 0.06 * var(--rise, 0))) translateY(calc(10px * (1 - var(--rise, 0)))); filter: brightness(calc(0.9 + 0.1 * var(--rise, 0))); }
+    .swipe-card.under.following { transition: none; }
+    /* Risen while the top card flies (0.26 s): full size before the swap. */
+    .swipe-card.under.rising { transition: transform 0.24s ease-out, filter 0.24s ease-out; }
+    /* Risen while the top card flies (0.26 s): full size before the swap. */
+    .swipe-card.under.rising { transition: transform 0.24s ease-out, filter 0.24s ease-out; }
+    @keyframes under-in { from { opacity: 0; transform: scale(0.9) translateY(18px); } }
     .swipe-card img, .swipe-card .nophoto { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
     .swipe-card .nophoto { display: grid; place-items: center; font-size: 4rem; opacity: 0.4; }
     .swipe-card .about { position: absolute; left: 0; right: 0; bottom: 0; padding: 60px 16px 14px; background: linear-gradient(transparent, rgb(0 0 0 / 82%) 45%); }
@@ -98,7 +108,7 @@ export class MaDeck extends LitElement {
       :host([guided]) .actions { gap: 14px; }
       :host([guided]) .round { width: 50px; height: 50px; font-size: 1.3rem; }
     }
-    @media (prefers-reduced-motion: reduce) { .swipe-card, .swipe-card.fly { transition: none; animation: none; } .burst { transition: none; animation: none; } }
+    @media (prefers-reduced-motion: reduce) { .swipe-card, .swipe-card.fly, .swipe-card.under { transition: none; animation: none; } .burst { transition: none; animation: none; } }
   `];
 
   #store = new StoreController(this);
@@ -194,9 +204,12 @@ export class MaDeck extends LitElement {
     const done = () => {
       if (node) { node.style.transition = 'none'; this.#reset(node); node.classList.remove('fly'); requestAnimationFrame(() => { node.style.transition = ''; }); }
       this.dispatchEvent(new CustomEvent('deck-decide', { detail: { card, liked }, bubbles: true, composed: true }));
+      // Now on top, the card that rose needs its rise no more (it would show if it came back under, by ↺).
+      this.updateComplete.then(() => this.renderRoot.querySelectorAll('.swipe-card').forEach(n => /** @type {HTMLElement} */ (n).style.removeProperty('--rise')));
     };
     node?.classList.remove('hint');
     if (!node || matchMedia('(prefers-reduced-motion: reduce)').matches) { done(); return; }
+    this.#rise(1);
     node.classList.add('fly');
     node.style.transform = `translate(${liked ? 140 : -140}vw, -40px) rotate(${liked ? 30 : -30}deg)`;
     setTimeout(done, 260);
@@ -223,6 +236,8 @@ export class MaDeck extends LitElement {
     const reach = (d.el.offsetWidth || 300) * 0.3;
     d.el.style.setProperty('--like', String(Math.max(0, Math.min(1, d.dx / reach))));
     d.el.style.setProperty('--nope', String(Math.max(0, Math.min(1, -d.dx / reach))));
+    // The card underneath rises with the drag, full size at the distance that decides.
+    this.#rise(Math.min(1, Math.abs(d.dx) / reach), true);
   };
 
   #dragEnd = () => {
@@ -230,6 +245,7 @@ export class MaDeck extends LitElement {
     this.#drag = null;
     if (!d) return;
     d.el.classList.remove('dragging');
+    this.#under()?.classList.remove('following');
     const card = this.cards.find(c => c.plant.id === d.id);
     // Far enough (30 % of the card's width), or thrown (fast enough, the same way).
     const w = d.el.offsetWidth || 300, h = d.el.offsetHeight || 400;
@@ -241,8 +257,21 @@ export class MaDeck extends LitElement {
     this.#reset(d.el);
   };
 
-  /** @param {HTMLElement} el */
-  #reset(el) { el.style.transform = ''; el.style.removeProperty('--like'); el.style.removeProperty('--nope'); }
+  /** @param {HTMLElement} el The card on top back in place — and the one underneath back down. */
+  #reset(el) { el.style.transform = ''; el.style.removeProperty('--like'); el.style.removeProperty('--nope'); this.#rise(0); }
+
+  /** @returns {HTMLElement | null} the card underneath */
+  #under() { return /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.swipe-card.under')); }
+
+  /** The card underneath risen by `p` (0: under, 1: full size); `follow`: at once, under the finger. @param {number} p @param {boolean} [follow] */
+  #rise(p, follow = false) {
+    const u = this.#under();
+    if (!u) return;
+    u.classList.toggle('following', follow);
+    u.classList.toggle('rising', !follow && p === 1);
+    u.classList.toggle('rising', !follow && p === 1);
+    if (p) u.style.setProperty('--rise', String(p)); else u.style.removeProperty('--rise');
+  }
 
   render() {
     const s = this.session, c = this.c;
@@ -295,7 +324,7 @@ export class MaDeck extends LitElement {
         ?inert=${!top} aria-hidden=${top ? 'false' : 'true'}
         @pointerdown=${top ? this.#dragStart : null} @pointermove=${top ? this.#dragMove : null} @pointerup=${top ? this.#dragEnd : null} @pointercancel=${top ? this.#dragEnd : null}>
       <div class="nophoto">${icon('leaf')}</div>
-      ${photo ? html`<img src=${photo} alt="" loading=${top ? 'eager' : 'lazy'} decoding="async" referrerpolicy="no-referrer" draggable="false" @error=${hideImg} @load=${showImg} />` : nothing}
+      ${photo ? html`<img src=${photo} alt="" loading="eager" decoding="async" referrerpolicy="no-referrer" draggable="false" @error=${hideImg} @load=${showImg} />` : nothing}
       <span class="stamp like" aria-hidden="true">MATCH</span><span class="stamp nope" aria-hidden="true">BOF</span>
       ${loved ? html`<span class="loved-badge">${icon('heart-fill')} Déjà aimée</span>` : nothing}
       ${photo && c.credit ? html`<p class="credit">Photo : ${creditText(c.credit)}</p>` : nothing}
