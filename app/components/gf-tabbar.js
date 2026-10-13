@@ -9,13 +9,12 @@ import { discoverEvents, tabShown } from '../core/discover.js';
 /**
  * Mobile bottom navigation: Découvrir · Flore · Carte · Mes collections · Réglages — during the first steps,
  * only the tabs already met (discover.js). Noting a plant here lives in Mes
- * collections, on the map (+) and in a plant's Actions. `locked`: a scenario played as an app of its own (the
- * Parcours botanique) — the tabs shown, dimmed, out of reach.
+ * collections, on the map (+) and in a plant's Actions. (A mini-app — #/app/… — has none: it is alone on the
+ * screen.)
  */
 export class GfTabbar extends LitElement {
   static properties = {
-    current: {},
-    locked: { type: Boolean, reflect: true }
+    current: {}
   };
 
   static styles = css`
@@ -45,7 +44,6 @@ export class GfTabbar extends LitElement {
     a[aria-current='page'] .icon { background: var(--gf-accent-soft); }
     @media (prefers-reduced-motion: reduce) { .icon { transition: none; } a.new .icon { animation: none; } }
     a:focus-visible { outline: none; box-shadow: var(--gf-focus); border-radius: var(--gf-radius-sm); }
-    :host([locked]) nav { opacity: 0.38; filter: grayscale(1); }
   `;
 
   // Tabs lead back to where each part was left (context.js), which changes as the user moves: the controller
@@ -57,7 +55,6 @@ export class GfTabbar extends LitElement {
     super();
     /** 'discover' | 'flore' | 'map' | 'mine' | 'more' */
     this.current = 'flore';
-    this.locked = false;
   }
 
   /** The tab that just came, for a moment. @type {string | null} */
@@ -85,7 +82,7 @@ export class GfTabbar extends LitElement {
       return html`<a class=${this.#fresh === id ? 'new' : ''} href=${link} aria-current=${current ? 'page' : 'false'}><span class="icon" aria-hidden="true">${icon(current ? active : name)}</span><span>${label}</span></a>`;
     };
     return html`
-      <nav aria-label="Navigation principale" ?inert=${this.locked} aria-disabled=${this.locked ? 'true' : 'false'}>
+      <nav aria-label="Navigation principale">
         ${tab('discover', href.discover(), 'binoculars', 'binoculars-fill', 'Découvrir')}
         ${tab('flore', tabHref('flore', this.current === 'flore'), 'leaf', 'leaf-fill', 'Flore')}
         ${tab('map', tabHref('map', this.current === 'map'), 'map', 'map-fill', 'Carte')}

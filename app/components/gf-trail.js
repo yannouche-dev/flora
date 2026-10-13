@@ -334,6 +334,12 @@ export class GfTrail extends LitElement {
 
   /** @param {Map<string, any>} changed */
   updated(changed) {
+    // The mini-app's box (app/miniapps/parcours.js) follows its steps: the start, the walk, the recap — once known.
+    const step = !this.#known ? '' : this._trail ? 'walk' : this._done ? 'done' : 'start';
+    if (step && step !== this.#stepSaid) {
+      this.#stepSaid = step;
+      this.dispatchEvent(new CustomEvent('ma-step', { detail: { step }, bubbles: true, composed: true }));
+    }
     // Only while on screen: a late update (a toast's end, a GPS fix, the IGN's name) never sets it elsewhere.
     fitKeyboard(this.isConnected && Boolean(this._trail));
     const sheet = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.sheet'));
@@ -416,6 +422,10 @@ export class GfTrail extends LitElement {
   /** How the ✕ was touched (a finger, the keyboard away: the search is left). */
   #clearBy = '';
 
+  /** The walk under way and the recap read once (the step said from then on), and the step last said. */
+  #known = false;
+  #stepSaid = '';
+
   /** The parcours walked (and those before), from Mes plantes. */
   async #reload() {
     const id = read(KEY, null);
@@ -432,6 +442,7 @@ export class GfTrail extends LitElement {
     }
     const ids = /** @type {string[]} */ (read(LIST, []));
     this._past = (await Promise.all(ids.filter(x => x !== id).map(x => getPlace(x).catch(() => undefined)))).filter(Boolean);
+    this.#known = true;
     // A parcours under way, found again on opening: followed once the permission is granted (no gesture here);
     // « Commencer ici » and « Reprendre » ask for the position themselves.
     if (this._trail && this.isConnected && !this.#stopGeo) {

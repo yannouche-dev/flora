@@ -9,6 +9,7 @@ import './history.js';
  *   | { name: 'spot-new', plant: number | null, kind: 'list' | 'place', at: [number, number] | null }
  *   | { name: 'spot', id: string, add: number | null, pick: boolean }
  *   | { name: 'shared', data: string } | { name: 'discover', plant: number | null, scenario: string | null }
+ *   | { name: 'app', id: string, step: string | null, plant: number | null }
  *   | { name: 'not-found' }} Route
  */
 
@@ -52,6 +53,12 @@ export function parse(hash) {
   if (path === 'settings') return { name: 'settings' };
   if (path === 'legal') return { name: 'legal' };
   // « Découvrir »: the flora around; ?p=<id> the plant open.
+  // A mini-app (app/miniapps), alone on the screen: #/app/<id>[/<step>][?p=<plant>].
+  const app = /^app\/([a-z][a-z0-9-]{1,23})(?:\/([a-z][a-z0-9-]{1,23}))?$/.exec(path);
+  if (app) return { name: 'app', id: app[1], step: app[2] ?? null, plant: number('p') };
+  // Rencontres and the Parcours, scenarios of Découvrir before they were mini-apps: their old addresses open them.
+  const was = path === 'discover' ? { meet: 'rencontres', trail: 'parcours' }[params.get('s') || ''] : undefined;
+  if (was) return { name: 'app', id: was, step: null, plant: number('p') };
   if (path === 'discover') return { name: 'discover', plant: number('p'), scenario: /^[a-z]{2,12}$/.test(params.get('s') || '') ? params.get('s') : null };
   return { name: 'not-found' };
 }
@@ -111,7 +118,9 @@ export const href = {
   /** A collection; `add` pre-adds a plant to it, `pick` opens the plant picker. @param {string} id @param {number | null} [add] @param {boolean} [pick] */
   spot: (id, add, pick = false) =>
     '#/collection/' + id + (add ? '?add=' + add : pick ? '?pick=1' : ''),
-  shared: (/** @type {string} */ data) => '#/shared?d=' + data
+  shared: (/** @type {string} */ data) => '#/shared?d=' + data,
+  /** A mini-app, at a step (none: its start), a plant open in it. @param {string} id @param {string | null} [step] @param {number | null} [plant] */
+  app: (id, step = null, plant = null) => '#/app/' + id + (step ? '/' + step : '') + (plant ? '?p=' + plant : '')
 };
 
 /** Lit ReactiveController exposing the current route and re-rendering on navigation. */

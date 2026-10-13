@@ -9,6 +9,7 @@
 
 import { config } from '../config.js';
 import { listCollections, spotEvents, FAVORITES_ID } from './collections.js';
+import { onStorage } from './sync.js';
 
 const KEY = 'geoflora.discover';
 /** Plants discovered before Flore (the whole flora, search and filters) comes. */
@@ -33,8 +34,11 @@ function usedBefore() {
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const k = localStorage.key(i) || '';
-      // Not the keys every visit writes by itself (where the user is, the modules' defaults).
-      if (k.startsWith('geoflora.') && ![KEY, config.storageKeys.modules, config.storageKeys.context].includes(k)) return true;
+      // Not the keys every visit writes by itself (where the user is, the modules' defaults), nor those of a layout
+      // or a mini-app: a new visitor who drags a separator or opens a mini-app keeps the first steps.
+      if (k.startsWith(config.storageKeys.appPrefix)) continue;
+      if (k.startsWith('geoflora.') && ![KEY, config.storageKeys.modules, config.storageKeys.context, config.storageKeys.showSteps,
+        config.storageKeys.discoverLayout, config.storageKeys.trailLayout].includes(k)) return true;
     }
   } catch { /* no storage: first steps every time, harmless */ }
   return false;
@@ -136,6 +140,16 @@ export function resetChoices() {
   discoverEvents.dispatchEvent(new CustomEvent('reset'));
 }
 
+/**
+ * Rencontres played again (« Rejouer » of the mini-app): its session forgotten — the place, the distance, the cards
+ * swiped, the matches of this game, the steps of its guided way and the fork. Not the first steps of the app (the
+ * tabs that came, the tips, the plants seen), nor the favourites: they are the user's. Fires `reset`.
+ */
+export function replayMeet() {
+  save({ passed: [], matches: [], point: null, place: null, radius: 1000, step: 0, firstMatch: false, branch: null });
+  discoverEvents.dispatchEvent(new CustomEvent('reset'));
+}
+
 /** The cards passed, to see them again. */
 export const resetPassed = () => save({ passed: [] });
 
@@ -151,6 +165,12 @@ export function restartDiscover() {
   save({ done: false, unlocked: [], tips: [], seen: [], passed: [], matches: [], step: 0, firstMatch: false, branch: null, point: null, place: null, radius: 1000 });
   discoverEvents.dispatchEvent(new CustomEvent('reset'));
 }
+
+// Changed in another tab (a game played again there): read again, never overwritten with this tab's older copy.
+onStorage(KEY, () => {
+  state = read();
+  discoverEvents.dispatchEvent(new CustomEvent('change', { detail: state }));
+});
 
 // A favourite brings Mes plantes; a place noted, the Carte.
 spotEvents.addEventListener('change', async () => {
