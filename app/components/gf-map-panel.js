@@ -6,13 +6,19 @@ import { href } from '../core/router.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 import { openModal } from '../core/history.js';
+import { mapSettings, mapSettingsEvents, setMapSettings } from '../core/map-settings.js';
+import { moduleEvents, moduleOn } from '../core/modules.js';
+import { hasWebGL2 } from '../core/maplibre.js';
+import { map3dOptions, map3dOptionsCss, mapRendererChoice } from './map3d-options.js';
 
 const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
 
 /**
- * "Carte" panel: everything about how the map looks, in one bottom sheet — background, overlays
- * (terrain, protected areas, and any layer of IGN's whole catalogue), legend, sources. Events: base-change {key},
- * overlay-toggle {key, on, layer?} (`layer`: a catalogue layer to add).
+ * "Carte" panel: everything about how the map looks, in one bottom sheet — its display (2D or 3D, and the 3D
+ * options: the maps' one choice, core/map-settings.js, the same as Réglages › Cartes — every map follows), background,
+ * overlays (terrain, protected areas, and any layer of IGN's whole catalogue), legend, sources. Every map has it
+ * (gf-map: its round button, or the end of its search pill). Events: base-change {key}, overlay-toggle {key, on,
+ * layer?} (`layer`: a catalogue layer to add); the display is stored here (setMapSettings).
  */
 export class GfMapPanel extends LitElement {
   static properties = {
@@ -23,14 +29,17 @@ export class GfMapPanel extends LitElement {
     distributionOn: { attribute: false },
     legend: { type: Boolean },
     _open: { state: true },
-    /** The map in 3D (gf-map-gl.js): { on, note }, else null. */
+    /**
+     * How the map is drawn (gf-map-gl.js): { on: in 3D (or loading), fixed: { renderer, why } when this map is always
+     * drawn one way, note: why it is in 2D though 3D is chosen, or flat }; null: not known yet.
+     */
     gl: { attribute: false },
     _catalog: { state: true },
     _q: { state: true }
   };
 
-  static styles = [ui, css`
-    .gl-note { margin-top: 10px; }
+  static styles = [ui, map3dOptionsCss, css`
+    .display { display: grid; gap: 6px; }
 
     dialog {
       position: fixed;
@@ -111,12 +120,19 @@ export class GfMapPanel extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this._unsubscribe = onCatalog(state => { this._catalog = state; });
+    // The display's choice, changed here, in Réglages or another tab; a module that the 3D options depend on.
+    mapSettingsEvents.addEventListener('change', this.#redraw);
+    moduleEvents.addEventListener('change', this.#redraw);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this._unsubscribe?.();
+    mapSettingsEvents.removeEventListener('change', this.#redraw);
+    moduleEvents.removeEventListener('change', this.#redraw);
   }
+
+  #redraw = () => this.requestUpdate();
 
   /** Shows the catalogue; `retry` (« Réessayer »): the service asked now. @param {boolean} [retry] */
   #loadCatalog(retry = false) {
@@ -192,12 +208,25 @@ export class GfMapPanel extends LitElement {
     </label>`;
   }
 
-  /** In 3D: said, with where its options are (Réglages › Cartes, the same for every map). */
-  #gl() {
+  /**
+   * « Affichage »: 2D or 3D — the maps' one choice (Réglages › Cartes are the same settings), so every map follows —
+   * and, in 3D, its options (folded: the layers come next). A map always drawn one way says so, the choice disabled.
+   */
+  #display() {
+    const s = mapSettings();
     const g = this.gl;
-    if (!g?.on) return nothing;
-    return html`<p class="note gl-note">Carte en 3D : relief, inclinaison, bâtiments, ciel et le retour à la 2D se règlent dans
-      <a href=${href.settings()}>Réglages › Cartes</a>.${g.note ? html` ${g.note}` : nothing}</p>`;
+    const fixed = g?.fixed || null;
+    const change = (/** @type {Partial<import('../core/map-settings.js').MapSettings>} */ patch) => setMapSettings(patch);
+    return html`<h3 class="kicker">Affichage</h3>
+      <div class="display">
+        ${mapRendererChoice(s, change, { id: 'panel', legend: 'Carte en 2D ou en 3D', webgl: hasWebGL2(), fixed })}
+        ${!fixed && g?.note ? html`<p class="note3d" role="status">${g.note}</p>` : nothing}
+        ${fixed || s.renderer !== '3d' ? nothing : html`<details class="more3d">
+          <summary>Options de la 3D</summary>
+          ${map3dOptions(s, change, { relief: moduleOn('relief3d'), ign: moduleOn('ignMaps'), id: 'panel3d' })}
+        </details>`}
+        <p class="note">Le même choix pour toutes les cartes ; par défaut dans <a href=${href.settings()}>Réglages › Cartes</a>.</p>
+      </div>`;
   }
 
   render() {
@@ -209,7 +238,7 @@ export class GfMapPanel extends LitElement {
           <button class="icon-btn" type="button" aria-label="Fermer" @click=${() => this.close()}>${icon('x-lg')}</button>
         </header>
         <div class="body">
-          ${this.#gl()}
+          ${this.#display()}
           <h3 class="kicker">Fond</h3>
           <div class="bases" role="group" aria-label="Fond de carte">
             ${Object.entries(BASES).map(([key, def]) => html`

@@ -8,6 +8,7 @@ import { ui } from '../styles/ui.js';
 import { icon, kindIcon } from '../core/icons.js';
 import { isFocused, sendFocus } from '../core/map-focus.js';
 import { openView } from '../core/history.js';
+import { ONE_GL_PER_SHEET } from './map3d-options.js';
 
 const shortDate = (/** @type {string} */ iso) =>
   new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -124,6 +125,7 @@ export class GfPlantSpots extends LitElement {
       ${spots.length ? html`
         <gf-map
           map-3d="off"
+          map-3d-why=${ONE_GL_PER_SHEET}
           .plants=${plantMarkers(spots, e => e.plantId === this.plantId)}
           plant-zoom="0"
           fit

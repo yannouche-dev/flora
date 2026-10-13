@@ -1776,7 +1776,11 @@ export class GfMap extends LitElement {
     this.#root.append(search);
   }
 
-  /** The "Carte" panel: background, overlays, legend, sources. */
+  /**
+   * The "Carte" panel: display (2D / 3D and the 3D options, the maps' one choice: gf-map-gl.js tells the panel how
+   * this map is drawn), background, overlays, legend, sources. Every map has its button: round among the map's
+   * buttons, or at the end of the search pill.
+   */
   openPanel() {
     if (!this.#panel) {
       const panel = this.#panel = document.createElement('gf-map-panel');

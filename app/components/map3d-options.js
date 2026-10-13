@@ -1,9 +1,40 @@
 // @ts-check
-// The 3D maps' options as a form (core/map-settings.js): Réglages › Cartes and the « Carte » panel of each map show the
-// same one. `change` gets the settings changed ({ relief: false }…); the caller stores them (setMapSettings).
+// The maps' 2D / 3D choice and the 3D options, as forms (core/map-settings.js): Réglages › Cartes, the « Carte »
+// panel of every map (gf-map-panel.js) and the map blocks' form of the plant sheet show the same ones, on the same
+// settings — one choice for every map, Réglages' being the same as each map's. `change` gets the settings changed
+// ({ renderer: '3d' }, { relief: false }…); the caller stores them (setMapSettings).
+//   mapRendererChoice(s, change, o) → the 2D / 3D radios (and why a map cannot change: WebGL2 missing, a map that
+//   always stays in 2D or in 3D); map3dOptions(s, change, o) → the 3D options.
 
 import { css, html, nothing } from 'lit';
 import { LIMITS, formatHour } from '../core/map-settings.js';
+
+/** Why a map stays in 2D whatever the choice: one WebGL map per plant sheet (gf-map-gl.js, the attribute map-3d-why). */
+export const ONE_GL_PER_SHEET = 'Une seule carte en 3D par fiche plante : la carte principale suit le choix, les autres cartes de la fiche restent en 2D.';
+
+/**
+ * « 2D » or « 3D », for every map. `fixed`: this map is always drawn one way ({ renderer, why }: the « Jusqu’où part
+ * l’expédition ? » step from above, a second map of a plant sheet, a « Vue 3D »): the choice is shown, disabled, with
+ * why. Without WebGL2, 3D cannot be chosen (unless it already is: back to 2D stays possible).
+ * @param {import('../core/map-settings.js').MapSettings} s
+ * @param {(patch: Partial<import('../core/map-settings.js').MapSettings>) => void} change
+ * @param {{ id: string, legend: string, webgl: boolean, fixed?: { renderer: '2d' | '3d', why: string } | null }} o
+ */
+export function mapRendererChoice(s, change, o) {
+  const fixed = o.fixed || null;
+  const shown = fixed ? fixed.renderer : s.renderer;
+  const radio = (/** @type {'2d' | '3d'} */ value, /** @type {string} */ label, /** @type {string} */ hint) => html`
+    <label><input type="radio" name=${o.id + '-renderer'} value=${value} .checked=${shown === value}
+      ?disabled=${Boolean(fixed) || (value === '3d' && !o.webgl && s.renderer !== '3d')}
+      @change=${() => change({ renderer: value })} /> ${label} <small class="muted">(${hint})</small></label>`;
+  return html`<fieldset class="renderer-choice">
+      <legend>${o.legend}</legend>
+      ${radio('2d', '2D', 'vue de dessus, la plus légère')}
+      ${radio('3d', '3D', 'relief, inclinaison, rotation, bâtiments, ciel')}
+    </fieldset>
+    ${fixed ? html`<p class="note3d" role="status">${fixed.why}</p>`
+      : o.webgl ? nothing : html`<p class="note3d" role="status">Cet appareil n’affiche pas la 3D (WebGL2 requis) : les cartes restent en 2D.</p>`}`;
+}
 
 /**
  * @param {import('../core/map-settings.js').MapSettings} s
@@ -42,6 +73,16 @@ export function map3dOptions(s, change, o) {
 
 /** Their styles (in a shadow root with the app's `ui`). */
 export const map3dOptionsCss = css`
+  .renderer-choice { display: grid; gap: 6px; margin: 4px 0; padding: 10px 14px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius); }
+  .renderer-choice legend { padding: 0 4px; font-weight: 600; }
+  .renderer-choice label { display: flex; align-items: center; gap: 8px; min-height: 32px; cursor: pointer; }
+  .renderer-choice input { accent-color: var(--gf-accent); }
+  .renderer-choice :disabled, .renderer-choice label:has(:disabled) { cursor: default; }
+  .renderer-choice label:has(:disabled) { opacity: 0.6; }
+  .note3d { margin: 2px 4px 4px; font-size: 0.85rem; color: var(--gf-text-muted); }
+  details.more3d { border: 1px solid var(--gf-border); border-radius: var(--gf-radius-sm); padding: 4px 10px; }
+  details.more3d summary { cursor: pointer; min-height: 32px; display: flex; align-items: center; font-weight: 600; }
+  details.more3d[open] summary { margin-bottom: 4px; }
   .opts3d { display: grid; gap: 6px; }
   .opts3d input { accent-color: var(--gf-accent); }
   .opt3d.switch { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; padding: 4px 0; }

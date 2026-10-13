@@ -1,8 +1,8 @@
-// Every map in 3D (gf-map-gl.js): Réglages › Cartes « 3D », or a map's own 2D ⇄ 3D button. Real WebGL (SwiftShader,
+// Every map in 3D (gf-map-gl.js): the maps' one choice « 3D », in Réglages › Cartes or a map's panel « Carte ». Real WebGL (SwiftShader,
 // as in map3d.spec.mjs), every tile made here (tiles.mjs: the IGN's photos and plan, the relief, a block of buildings),
 // never the network. The Carte in MapLibre with its relief, the same layers as in 2D, the options (buildings, sky,
-// globe) switched from its panel, its markers clickable; 2D by default, MapLibre never asked then; each map's own
-// button; back in 2D while positions are edited; the ways it stays in 2D or flat (no WebGL2, modules off, offline);
+// globe) switched from its panel, its markers clickable; 2D by default, MapLibre never asked then; no 2D ⇄ 3D
+// button on the maps (the choice is in their panel: maps-panel3d.spec.mjs); back in 2D while positions are edited; the ways it stays in 2D or flat (no WebGL2, modules off, offline);
 // the « Jusqu’où part l’expédition ? » step always from above; one WebGL map per plant sheet.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
@@ -166,8 +166,11 @@ test('en 3D, le panneau « Carte » : les mêmes couches qu’en 2D ; les option
   for (const name of ['Parcelles cadastrales', 'Courbes de niveau', 'Forêts publiques', 'Parcs nationaux', 'Réserves naturelles', 'Protection de biotope']) {
     await expect(panel.getByRole('checkbox', { name: new RegExp(name) })).toBeVisible();
   }
-  // No 2D ⇄ 3D switch here: the panel says where the 3D is set.
-  await expect(panel).toContainText('Carte en 3D');
+  // « Affichage »: the maps' one choice (3D, as Réglages say), its options folded; a link to Réglages › Cartes.
+  await expect(panel.getByRole('group', { name: 'Carte en 2D ou en 3D' }).getByRole('radio', { name: /^3D/ })).toBeChecked();
+  await expect(panel.getByRole('checkbox', { name: /Bâtiments en 3D/ })).toBeHidden();
+  await panel.getByText('Options de la 3D').click();
+  await expect(panel.getByRole('checkbox', { name: /Bâtiments en 3D/ })).toBeChecked();
   await expect(panel.getByRole('link', { name: 'Réglages › Cartes' })).toHaveAttribute('href', '#/settings');
   await expect(panel.getByRole('button', { name: /^(2D|3D)$/ })).toHaveCount(0);
   await panel.getByRole('checkbox', { name: /Courbes de niveau/ }).check();
