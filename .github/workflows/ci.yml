@@ -8,9 +8,11 @@ name: CI
 #    load, or a screen left empty: what no build step and no parse check can see (a module that fails to link, a
 #    component that throws when it renders) shows here, not as a blank screen in production;
 #  - « tests »: the unit tests (node --test, tests/unit) and the end-to-end specs (@playwright/test, tests/e2e).
+#  - « a11y »: tools/axe.mjs runs axe-core (WCAG A/AA and best practices) on the main screens, phone and desktop, and
+#    fails on more violations than tools/axe-baseline.json allows, rule by rule: a ratchet, the baseline only goes down.
 # Not required checks of main yet: the data workflows push to main with GITHUB_TOKEN, which no ruleset bypass list
 # accepts (README, « Protéger main »); until they push as a GitHub App, merge a pull request (or a merge queue entry)
-# only when all three are green.
+# only when all four are green.
 on:
   pull_request:
   merge_group:
@@ -124,3 +126,35 @@ jobs:
           name: e2e-traces
           path: test-results/
           retention-days: 7
+
+  a11y:
+    # Pinned: Playwright installs the browser's system libraries for a known Ubuntu release.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      # Playwright and axe-core at the versions and checksums of package-lock.json, without install scripts.
+      - name: Install dev dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps --only-shell chromium
+
+      # The site as deploy-pages publishes it; outside requests are answered by the script, as in the smoke test.
+      - name: Accessibility against the baseline (axe-core)
+        timeout-minutes: 8
+        run: |
+          bash tools/assemble-site.sh _site
+          python3 -m http.server 8000 --bind 127.0.0.1 --directory _site >/dev/null 2>&1 &
+          for _ in $(seq 30); do curl -fsS -o /dev/null http://127.0.0.1:8000/ && break; sleep 1; done
+          node tools/axe.mjs http://127.0.0.1:8000/

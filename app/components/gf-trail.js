@@ -701,6 +701,7 @@ export class GfTrail extends LitElement {
     // Under the suggestions, the parcours is out of reach (the keyboard's Tab, the screen readers): only what is seen.
     const sized = 'side' in this.#sizer.state.widths;
     return html`<div class="wrap on ${open ? 'seeking' : ''} ${sized ? 'sized' : ''}" style=${sized ? `--w-side: ${this.#sizer.width('side')}px` : ''}>
+      <h1 class="visually-hidden">Parcours botanique : ${t.properties.name}</h1>
       <div class="side">
         <div class="head" ?inert=${open}>${this.#card(t)}</div>
         <section class="list" aria-label="Les plantes du parcours" ?inert=${open}>

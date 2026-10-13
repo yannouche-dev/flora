@@ -1,0 +1,12 @@
+{
+  "axe": "4.13.0",
+  "rules": {
+    "aria-prohibited-attr": 2,
+    "aria-required-attr": 2,
+    "aria-required-parent": 1,
+    "color-contrast": 4,
+    "empty-table-header": 2,
+    "listitem": 40,
+    "target-size": 2
+  }
+}

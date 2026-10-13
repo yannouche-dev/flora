@@ -9,6 +9,7 @@ import { icon } from '../core/icons.js';
 import { ui } from '../styles/ui.js';
 import { hideImg, showImg } from '../core/img.js';
 import { photoOf } from '../core/thumb.js';
+import { creditsText } from '../core/credit.js';
 import { safeUrl } from '../core/safe-url.js';
 
 /** Radius of « Plantes vues ici » (metres). */
@@ -114,6 +115,8 @@ export class GfPlaceInsights extends LitElement {
     const s = this._seen;
     if (s === 'off') return nothing;
     const max = this.compact ? 6 : 12;
+    // The photos' authors and licences (free ones only, nearby.js), together under the row.
+    const credits = s && s !== 'off' ? creditsText(s.species.slice(0, max).filter((/** @type {any} */ x) => photoOf(x.photo)).map((/** @type {any} */ x) => x.credit)) : '';
     return html`<section class="seen-part">
       <h3>${icon('flower1')} Plantes vues ici <small>(${SEEN_RADIUS} m)</small></h3>
       ${s === undefined ? html`<p class="muted">chargement…</p>`
@@ -125,7 +128,7 @@ export class GfPlaceInsights extends LitElement {
               <span class="txt"><b>${x.common || x.name}</b><small>${this.plantIds.includes(x.plantId) ? html`<span class="here">dans ce lieu · </span>` : nothing}${x.count} obs.</small></span>`;
             return html`<li>${x.plantId ? html`<a href=${href.plant(x.plantId)} title=${x.name}>${inner}</a>` : html`<span class="plain" title=${x.name}>${inner}</span>`}</li>`;
           })}</ul>
-          <p class="credit">Source : <a href=${s.sourceUrl} target="_blank" rel="noopener">iNaturalist</a>, observations de qualité recherche ; une plante de la flore ouvre sa fiche.</p>`}
+          <p class="credit">Source : <a href=${s.sourceUrl} target="_blank" rel="noopener">iNaturalist</a>, observations de qualité recherche ; une plante de la flore ouvre sa fiche.${credits ? html`<br />Photos : ${credits}.` : nothing}</p>`}
     </section>`;
   }
 

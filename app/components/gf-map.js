@@ -14,6 +14,7 @@ import { protectedAreasIn } from '../core/protected.js';
 import { href } from '../core/router.js';
 import { safeUrl } from '../core/safe-url.js';
 import { gbifTileUrl } from '../core/sources.js';
+import { creditText } from '../core/credit.js';
 import './gf-map-panel.js';
 import './gf-map-search.js';
 import './gf-point-card.js';
@@ -144,9 +145,11 @@ const speciesKey = p => {
 };
 
 /**
- * The small plant card shown over an observation: its photo, its names, when and where. Built as nodes, the
- * texts as text: names and places come from iNaturalist / GBIF, never parsed as HTML.
- * @param {{ title: string, common?: string | null, sci?: string, photo?: string | null, date?: string | null, place?: string | null }} p
+ * The small plant card shown over an observation: its photo and its credit (author, licence, source), its names,
+ * when and where. Built as nodes, the texts as text: names and places come from iNaturalist / GBIF, never parsed
+ * as HTML.
+ * @param {{ title: string, common?: string | null, sci?: string, photo?: string | null, credit?: import('../core/credit.js').Credit | null,
+ *   date?: string | null, place?: string | null }} p
  */
 function obsCard(p) {
   const big = p.photo ? p.photo.replace('/square.', '/small.') : null;
@@ -156,6 +159,7 @@ function obsCard(p) {
   t.append(elem('b', '', p.common || p.sci || p.title));
   if (p.common && p.sci) t.append(elem('i', '', p.sci));
   if (when || p.place) t.append(elem('small', '', [when, p.place].filter(Boolean).join(' · ')));
+  if (big && p.credit && moduleOn('photos')) t.append(elem('small', 'credit', 'Photo : ' + creditText(p.credit)));
   card.append(t);
   return card;
 }
@@ -188,6 +192,8 @@ const FLOWER = `<svg x="5" y="5" width="12" height="12" viewBox="0 0 16 16" fill
 const SPREAD_MAX = 24;
 /** Up to this many points of the plant chosen alone (a wider scope), each shows its photo; past it, dots. */
 const PHOTO_SINGLES = 40;
+/** The map's attribution while plant photos are on its points (#photoCredit). */
+const PHOTO_CREDIT = 'Photos : <a href="https://www.inaturalist.org/" target="_blank" rel="noopener">iNaturalist</a> (CC0, CC BY, CC BY-SA), Wikimedia Commons — auteur et licence sur chaque point';
 
 /** Room between a point and its card. @param {{ gap?: number }} o */
 const gap = o => o.gap ?? 8;
@@ -855,6 +861,7 @@ export class GfMap extends LitElement {
     // Framed first: a flight starting, the groups are made at its end (at the zoom reached), not here.
     const framed = changed.has('frame') && this.#applyFrame();
     if (changed.has('cluster')) this.#syncCluster();
+    if (changed.has('area') || changed.has('highlight') || changed.has('cluster')) this.#photoCredit();
     if (this.fit && !this.#fitted) this.#fitToContent();
     if (changed.has('selectedId') && this.selectedId && !framed) this.#reveal(this.selectedId);
   }
@@ -896,6 +903,7 @@ export class GfMap extends LitElement {
     this.#syncZone();
     this.#syncCluster();
     this.#syncPoints();
+    this.#photoCredit();
     if (!this.#applyFrame() && this.fit) this.#fitToContent();
     if (this.focusPoint && !this.#focusLayer?.getLayers().length) this.#syncFocusPoint();
   }
@@ -1149,7 +1157,7 @@ export class GfMap extends LitElement {
         : L.circleMarker([y, x], { radius: 6, className: 'gf-obs', bubblingMouseEvents: false }).addTo(layer);
       // With a photo: a small card of the plant on hover (a first touch, on a touch screen); else its name.
       if (fancy && (p.photo || p.sci)) this.#tip(dot, () => obsCard(p), { card: true, gap: 6 });
-      else if (chosen) this.#tip(dot, () => obsCard({ ...p, photo: chosen }), { card: true, gap: 6 });
+      else if (chosen) this.#tip(dot, () => obsCard({ ...p, photo: chosen, credit: /** @type {any} */ (area).credit }), { card: true, gap: 6 });
       else this.#tip(dot, point.title);
       this.#onPoint(dot, point);
       // Hovered (touched): the other points of the same plant are lit with it.
@@ -1260,6 +1268,23 @@ export class GfMap extends LitElement {
   #relight() { if (this.#litKey) this.#light(this.#litKey, this.#litBy ?? undefined); }
 
   /**
+   * Plant photos on the points (iNaturalist's under a free licence, the flora's thumbnails): their sources named in
+   * the map's attribution while they are shown; each point's card gives its author and licence.
+   */
+  #photoCredit() {
+    const map = this.#map;
+    if (!map) return;
+    const a = /** @type {any} */ (this.area), h = /** @type {any} */ (this.highlight), c = /** @type {any} */ (this.cluster);
+    const shown = moduleOn('photos') && Boolean(a?.photo || h?.photo || c?.photo
+      || a?.points?.some((/** @type {any} */ p) => p.photo) || h?.points?.some((/** @type {any} */ p) => p.photo));
+    if (shown === this.#photoCredited) return;
+    this.#photoCredited = shown;
+    if (shown) map.attributionControl.addAttribution(PHOTO_CREDIT);
+    else map.attributionControl.removeAttribution(PHOTO_CREDIT);
+  }
+  #photoCredited = false;
+
+  /**
    * A point clicked, as `point-click` says: its record opened in a new tab (on a touch screen, at a second touch
    * when the point has a card), a `point-pick` event (the page shows that plant: Découvrir), or nothing (its tooltip
    * only).
@@ -1312,7 +1337,7 @@ export class GfMap extends LitElement {
         ? L.marker(spot, { icon: chosenIcon(photo, Math.min(i, 30) * 15, 30), keyboard: false, bubblingMouseEvents: false, riseOnHover: true, zIndexOffset: 1000 }).addTo(layer)
         : L.circleMarker(spot, { radius: 7, className: 'gf-occ gf-occ-' + (/** @type {any} */ (p).kind || kind), bubblingMouseEvents: false }).addTo(layer);
       const q = /** @type {any} */ (p);
-      if (photo) this.#tip(dot, () => obsCard({ ...q, photo, common: who?.common, sci: who?.sci }), { card: true, gap: 6 });
+      if (photo) this.#tip(dot, () => obsCard({ ...q, photo, common: who?.common, sci: who?.sci, credit: /** @type {any} */ (who)?.credit }), { card: true, gap: 6 });
       else if (q.photo || q.sci) this.#tip(dot, () => obsCard(q), { card: true });
       else this.#tip(dot, p.title);
       this.#onPoint(dot, p);
@@ -1396,7 +1421,7 @@ export class GfMap extends LitElement {
         const dot = photo && singles <= PHOTO_SINGLES
           ? L.marker([p.coordinates[1], p.coordinates[0]], { icon: chosenIcon(photo, 0, 34, still), keyboard: false, bubblingMouseEvents: false, riseOnHover: true, zIndexOffset: 1000 }).addTo(layer)
           : L.circleMarker([p.coordinates[1], p.coordinates[0]], { radius: 6, className: 'gf-occ gf-occ-' + kind, bubblingMouseEvents: false }).addTo(layer);
-        if (photo) this.#tip(dot, () => obsCard({ .../** @type {any} */ (p), photo, common: who.common, sci: who.sci }), { card: true, gap: 6 });
+        if (photo) this.#tip(dot, () => obsCard({ .../** @type {any} */ (p), photo, common: who.common, sci: who.sci, credit: who.credit }), { card: true, gap: 6 });
         else this.#tip(dot, p.title);
         this.#onPoint(dot, p);
         this.#kin(dot, kind === 'hl' ? hlKin : null);
@@ -1446,7 +1471,7 @@ export class GfMap extends LitElement {
       const p = /** @type {any} */ (point);
       const photo = p.photo || hl.photo || null;
       const dot = L.marker([y, x], { icon: chosenIcon(photo, Math.min(i, 30) * 30, this.#chosenSize(44)), keyboard: false, bubblingMouseEvents: false, zIndexOffset: 1000, riseOnHover: true }).addTo(layer);
-      if (photo || hl.sci) this.#tip(dot, () => obsCard({ title: point.title, common: hl.common, sci: hl.sci, photo, date: p.date }), { card: true, gap: 6 });
+      if (photo || hl.sci) this.#tip(dot, () => obsCard({ title: point.title, common: hl.common, sci: hl.sci, photo, credit: p.photo ? p.credit : hl.credit, date: p.date }), { card: true, gap: 6 });
       else this.#tip(dot, point.title, { gap: 4 });
       this.#kin(dot, kin);
     }

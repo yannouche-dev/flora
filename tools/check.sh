@@ -10,6 +10,7 @@
 #  - the service worker precaches every app and vendor script and stylesheet (or offline mode breaks), and every
 #    path it precaches is deployed (a single missing file and it never installs);
 #  - the safety data: look-alike pairs, toxicity sources, protection statuses (scripts/check-data.mjs);
+#  - the licence rules of the images and their credits, as a table (tests/licenses.mjs);
 #  - the CSP of index.html allows its inline scripts by hash (tools/csp-hash.mjs, when present).
 # Every check runs, so one run lists every problem; the script exits 1 when any failed.
 set -uo pipefail
@@ -84,6 +85,10 @@ fi
 
 step 'Safety data (scripts/check-data.mjs)'
 node scripts/check-data.mjs || failed=1
+
+step 'Image licences and credits (tests/licenses.mjs)'
+# app/core/credit.js is a plain .js module: Node reads it as one, and says so (the warning only).
+node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tests/licenses.mjs || failed=1
 
 step 'Content-Security-Policy hashes (tools/csp-hash.mjs)'
 if [ -f tools/csp-hash.mjs ]; then

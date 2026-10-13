@@ -159,7 +159,7 @@ async function commonsInfo(files) {
         source: 'Wikimedia Commons',
         sourceUrl: commonsPageUrl(page.title),
         commonsFile: page.title.replace(/^File:/, ''),
-        author: stripHtml(meta.Artist?.value) || null,
+        author: stripHtml(meta.Artist?.value) || stripHtml(meta.Credit?.value) || null,
         credit: stripHtml(meta.Credit?.value) || null,
         license: license || null,
         licenseUrl: stripHtml(meta.LicenseUrl?.value) || null

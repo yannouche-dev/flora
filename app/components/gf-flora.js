@@ -96,7 +96,8 @@ export class GfFlora extends LitElement {
       border-bottom: 1px solid var(--gf-border);
       background: var(--gf-surface);
     }
-    .pane-head h2 { margin: 0; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gf-text-muted); flex: 1; display: flex; gap: 8px; align-items: center; min-width: 0; }
+    /* A pane's name: a heading under the view's h1 (Flore); a plant open, a label only (its name is the h1). */
+    .pane-head :is(h2, .title) { margin: 0; font-weight: 700; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gf-text-muted); flex: 1; display: flex; gap: 8px; align-items: center; min-width: 0; }
     .pane-head .icon-btn { width: 32px; height: 32px; font-size: 1rem; }
     /* Each pane lays out on its own: resizing one does not re-lay out the content of the others. */
     .pane-body { flex: 1; min-height: 0; overflow-y: auto; contain: strict; }
@@ -162,6 +163,7 @@ export class GfFlora extends LitElement {
     }
     .sheet-plant .pane-head { padding-left: 4px; }
     .sheet-plant .back { font-weight: 600; }
+    .sheet-plant:focus { outline: none; }
     @keyframes slide-in { from { transform: translateX(30%); opacity: 0; } }
     @media (prefers-reduced-motion: reduce) { .sheet-plant { animation: none; } }
 
@@ -448,6 +450,11 @@ export class GfFlora extends LitElement {
       // Pane closed (Back): not full screen any more; a pane opened by a link is not ours to go back from.
       if (!this.#paneInUrl) { this.#panePushed = false; this.#paneStart = null; }
       if (this.#pane === null) this._paneFull = false;
+      // Phone: the sheet that opens over the list takes the focus; closed, the focus goes back to the plant's row.
+      if (this.#phone.matches) {
+        if (this.route.name === 'plant' && before?.name !== 'plant') this.#focusSheet = true;
+        if (before?.name === 'plant' && this.route.name !== 'plant') this.#focusRow = before.id;
+      }
     }
   }
 
@@ -458,6 +465,43 @@ export class GfFlora extends LitElement {
       this.#resultsObserver.observe(results);
       this.#observed = results;
     }
+    if (this.#focusSheet) { this.#focusSheet = false; this.#enterSheet(); }
+    if (this.#focusRow !== null) { const id = this.#focusRow; this.#focusRow = null; this.#backToRow(id); }
+  }
+
+  /** Phone: a plant just opened (its sheet takes the focus). */
+  #focusSheet = false;
+  /** Phone: the plant whose sheet just closed (its row takes the focus back). @type {number | null} */
+  #focusRow = null;
+
+  /**
+   * Phone: the focus into the sheet over the list (the list under it is inert): the sheet at once, then the
+   * plant's name (its h1) once drawn — unless the focus went elsewhere meanwhile.
+   */
+  async #enterSheet() {
+    const sheet = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.sheet-plant'));
+    if (!sheet) return;
+    sheet.focus({ preventScroll: true });
+    for (let i = 0; i < 30 && sheet.isConnected; i++) {
+      const detail = sheet.querySelector('.swipe:not(.under) gf-plant-detail');
+      const h1 = /** @type {HTMLElement | null | undefined} */ (detail?.shadowRoot?.querySelector('h1'));
+      if (h1) {
+        if (/** @type {ShadowRoot} */ (this.renderRoot).activeElement !== sheet) return;
+        h1.tabIndex = -1;
+        h1.focus({ preventScroll: true });
+        return;
+      }
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+
+  /** Phone: the sheet closed, the focus back on the plant's row in the list (when it is drawn). @param {number} id */
+  async #backToRow(id) {
+    const list = /** @type {any} */ (this.renderRoot.querySelector('gf-plant-list'));
+    await list?.updateComplete;
+    const card = /** @type {any} */ ([...(list?.renderRoot?.querySelectorAll('gf-plant-card') || [])].find(c => /** @type {any} */ (c).plant?.id === id));
+    await card?.updateComplete;
+    /** @type {HTMLElement | null | undefined} */ (card?.renderRoot?.querySelector('a.row'))?.focus({ preventScroll: true });
   }
 
   /** @type {Element | null} */ #observed = null;
@@ -526,7 +570,7 @@ export class GfFlora extends LitElement {
         @media-index=${this.#mediaIndex} @media-close=${this.#closePane}>
       <div class="pane-head">
         ${phone ? html`<button class="link back" type="button" @click=${this.#closePane}>${icon('arrow-left')} Fiche</button>` : nothing}
-        <h2>${blockTitle(key)} <span class="pane-plant">${this.#paneName}</span></h2>
+        <div class="title">${blockTitle(key)} <span class="pane-plant">${this.#paneName}</span></div>
         ${phone ? nothing : html`<button class="icon-btn" type="button" aria-pressed=${String(this._paneFull)} title=${this._paneFull ? 'Quitter le plein écran' : 'Plein écran'}
           aria-label="Plein écran" @click=${() => { this._paneFull = !this._paneFull; }}>${icon(this._paneFull ? 'fullscreen-exit' : 'arrows-fullscreen')}</button>`}
         <button class="icon-btn" type="button" title="Fermer le volet" aria-label="Fermer le volet" @click=${this.#closePane}>${icon('x-lg')}</button>
@@ -706,8 +750,9 @@ export class GfFlora extends LitElement {
    */
   #head(pane, title, extra = nothing, fixed = false) {
     const right = pane === 'plant';
+    // A plant open: its name is the view's h1, so the panes' names come before it as labels, not headings.
     return html`<div class="pane-head">
-      <h2>${title}</h2>
+      ${this.#plantId === null ? html`<h2>${title}</h2>` : html`<div class="title">${title}</div>`}
       ${extra}
       <button class="icon-btn" type="button" aria-expanded="true" ?hidden=${fixed} title=${'Replier : ' + TITLES[pane]}
         aria-label=${'Replier le panneau ' + TITLES[pane].toLowerCase()} @click=${() => this.#fold(pane, true)}>${right ? '»' : '«'}</button>
@@ -728,7 +773,12 @@ export class GfFlora extends LitElement {
 
     const plantView = plantViewOf(this.#store.state);
 
+    // Phone, a plant open: its sheet covers the results (and the app's header, gf-app): out of reach (inert) until
+    // it closes; above it, a block's pane covers the sheet in turn.
+    const covered = phone && plantId !== null;
+
     return html`
+      ${plantId === null ? html`<h1 class="visually-hidden">Flore : recherche</h1>` : nothing}
       <div class="panes">
         ${wide ? (folded.filters || media ? this.#rail('filters') : html`
           <section class="pane filters" aria-label="Filtres" style="width:${this._layout.filters}px">
@@ -739,7 +789,7 @@ export class GfFlora extends LitElement {
 
         ${media ? this.#paneSection(false) : nothing}
         ${resultsFolded ? (media ? nothing : this.#rail('results')) : html`
-          <section class="pane results" aria-label="Résultats" ?hidden=${media} @focus-facet=${this.#focusFacet}>
+          <section class="pane results" aria-label="Résultats" ?hidden=${media} ?inert=${covered} @focus-facet=${this.#focusFacet}>
             ${phone ? nothing : this.#head('results', 'Résultats', nothing, !showPlant)}
             <div class="pane-body">
               <gf-results-bar .wide=${wide} ?grid=${this._grid} @open-filters=${() => openModal(this.#dialog)}></gf-results-bar>
@@ -760,10 +810,10 @@ export class GfFlora extends LitElement {
       </div>
 
       ${phone && plantId !== null ? html`
-        <section class="sheet-plant" aria-label="Plante" @open-pane=${this.#openPane}>
+        <section class="sheet-plant" aria-label="Plante" tabindex="-1" ?inert=${this.#pane !== null} @open-pane=${this.#openPane}>
           <div class="pane-head">
-            <button class="link back" type="button" aria-label="Résultats" @click=${() => this.#closePlant()}>${icon('arrow-left')}</button>
-            <h2>Plante</h2>
+            <button class="link back" type="button" aria-label="Retour aux résultats" @click=${() => this.#closePlant()}>${icon('arrow-left')}</button>
+            <div class="title">Plante</div>
           </div>
           <div class="pane-body" style="display:flex;flex-direction:column;overflow:hidden;background:var(--gf-surface-2)">${this.#swipe(plantId, plantView, true)}${this.#pager(true)}</div>
         </section>` : nothing}

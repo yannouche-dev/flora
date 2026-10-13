@@ -32,9 +32,10 @@ import { geoProblem, startScreen, startStyles } from './start-screen.js';
 import { sheetSession } from '../core/sheet-session.js';
 import { isFavorite, toggleFavorite } from '../core/collections.js';
 import { href, parse } from '../core/router.js';
-import { depth, replaceHash } from '../core/history.js';
+import { depth, openModal, replaceHash } from '../core/history.js';
 import { floweringMonths } from './gf-calendar.js';
 import { hideImg, showImg } from '../core/img.js';
+import { creditText, thumbCredit } from '../core/credit.js';
 import { PaneSizer } from '../core/panes.js';
 import { config } from '../config.js';
 import { ui } from '../styles/ui.js';
@@ -90,8 +91,8 @@ const FORK_BLOCKS = { harvest: ['uses', 'lookalikes', 'calendar'], science: ['ma
 const MONTH = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 
 /**
- * @typedef {{ plant: any, taxonId?: number, count: number, photo: string | null, blooming: boolean, alerts: { safety: any, edible: any } | null,
- *   confusions?: import('../core/lookalikes.js').Lookalike[] }} Card
+ * @typedef {{ plant: any, taxonId?: number, count: number, photo: string | null, credit: import('../core/credit.js').Credit | null, blooming: boolean,
+ *   alerts: { safety: any, edible: any } | null, confusions?: import('../core/lookalikes.js').Lookalike[] }} Card
  */
 
 export class GfDiscover extends LitElement {
@@ -114,6 +115,8 @@ export class GfDiscover extends LitElement {
     _view: { state: true },
     /** The match just made (its card), celebrated. */
     _match: { state: true },
+    /** What a swipe did, said to a screen reader (a match, a plant passed, the next card). */
+    _said: { state: true },
     /** The cards the sheet steps through. */
     _sheetIds: { state: true },
     _shown: { state: true },
@@ -256,8 +259,10 @@ export class GfDiscover extends LitElement {
     .deck-end p { margin: 0; }
     .row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
     /* The match. */
-    .match { position: fixed; inset: 0; z-index: 1004; display: grid; place-content: center; justify-items: center; gap: 12px; padding: 24px; text-align: center;
+    .match { position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; border: 0; place-content: center; justify-items: center; gap: 12px; padding: 24px; text-align: center;
       background: linear-gradient(160deg, rgb(224 36 94 / 92%), rgb(46 125 50 / 92%)); color: #fff; animation: pop 0.3s ease-out; }
+    .match[open] { display: grid; }
+    .match::backdrop { background: transparent; }
     .match .title { margin: 0; font-size: 2.4rem; font-weight: 900; font-style: italic; transform: rotate(-4deg); text-shadow: 0 3px 0 rgb(0 0 0 / 20%); }
     .match img { width: 180px; height: 180px; border-radius: 50%; object-fit: cover; border: 5px solid #fff; box-shadow: 0 10px 30px rgb(0 0 0 / 30%); }
     .match p { margin: 0; max-width: 340px; }
@@ -292,6 +297,16 @@ export class GfDiscover extends LitElement {
     /* What is said of it (Wikipédia), on the card. */
     .ethno { margin: 0 0 6px; font-size: 0.86rem; line-height: 1.35; font-style: italic; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
     .ethno b { font-style: normal; }
+    .ethno .wsrc { font-style: normal; font-size: 0.72rem; opacity: 0.8; }
+    /* The photo's credit (its author, licence and source): small, over the photo's top corner. */
+    .swipe-card .credit { position: absolute; z-index: 1; top: 8px; right: 8px; max-width: calc(100% - 16px); margin: 0; padding: 2px 8px; border-radius: var(--gf-radius-pill);
+      background: rgb(0 0 0 / 55%); color: #fff; font-size: 0.68rem; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
+    .card .ph { position: relative; }
+    .card .credit { position: absolute; z-index: 1; left: 0; right: 0; bottom: 0; padding: 1px 6px; background: rgb(0 0 0 / 50%); color: #fff;
+      font-size: 0.62rem; line-height: 1.4; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .grid.mosaic .card .credit { position: static; padding: 0; background: none; opacity: 0.85; }
+    .match .credit { font-size: 0.75rem; opacity: 0.9; }
+    .deck:focus-visible { outline: none; border-radius: 20px; box-shadow: var(--gf-focus); }
     /* A match after the first: a heart flies off the deck. */
     .burst { position: absolute; z-index: 5; left: 50%; top: 45%; font-size: 4rem; color: #e0245e; pointer-events: none; animation: burst 0.9s ease-out forwards; }
     @keyframes burst { from { transform: translate(-50%, -50%) scale(0.4); opacity: 0; } 30% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); } to { transform: translate(-50%, -120%) scale(1); opacity: 0; } }
@@ -549,9 +564,11 @@ export class GfDiscover extends LitElement {
     // The first match waits for its one button: no key closes it.
     if (this._match) { if (e.key === 'Escape') e.preventDefault(); return; }
     if (this.open == null) {
-      // The deck: ← passes, → matches, ↑ its sheet.
+      // The deck: ← passes, → matches, ↑ its sheet — when it has the focus, or nothing has (the page itself). Elsewhere
+      // (a tab, a button, a field, the map, a slider) the arrows keep their own meaning: never a match by mistake.
       const t0 = /** @type {HTMLElement} */ (e.composedPath()[0]);
-      if (this._view !== 'swipe' || this._match || t0?.closest?.('input, textarea, select')) return;
+      const free = t0 === document.body || t0 === document.documentElement || Boolean(t0?.closest?.('.deck'));
+      if (this._view !== 'swipe' || this._match || !free) return;
       const top = this.#shown[0];
       if (!top) return;
       if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); this.#decide(top, e.key === 'ArrowRight'); }
@@ -563,6 +580,22 @@ export class GfDiscover extends LitElement {
     // Bare: → keeps the plant and goes on, ← passes it — as with the cards.
     if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') { e.preventDefault(); this.#step(e.key === 'ArrowRight' ? 1 : -1); }
     else if (e.key === 'Escape') { e.preventDefault(); this.#close(); }
+  };
+
+  /**
+   * The views' tabs, as tabs go (ARIA's pattern): one stop in the Tab order, ← → (Début, Fin) to the next one,
+   * shown at once. @param {KeyboardEvent} e
+   */
+  #tabKey = (/** @type {KeyboardEvent} */ e) => {
+    const tabs = /** @type {HTMLElement[]} */ ([...(/** @type {HTMLElement} */ (e.currentTarget)).querySelectorAll('[role="tab"]')]);
+    const at = tabs.indexOf(/** @type {HTMLElement} */ (e.target));
+    const to = e.key === 'ArrowRight' ? (at + 1) % tabs.length : e.key === 'ArrowLeft' ? (at - 1 + tabs.length) % tabs.length
+      : e.key === 'Home' ? 0 : e.key === 'End' ? tabs.length - 1 : -1;
+    if (at < 0 || to < 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    this._view = /** @type {string} */ (tabs[to].dataset.view);
+    tabs[to].focus();
   };
 
   #onModules = () => this.requestUpdate();
@@ -620,6 +653,8 @@ export class GfDiscover extends LitElement {
     this.toggleAttribute('opened', this.open != null);
   }
   updated() {
+    // The first match's window: modal, a step in history (Back closes it, as the button does).
+    if (this._match) openModal(/** @type {HTMLDialogElement | null} */ (this.renderRoot.querySelector('dialog.match')));
     this.#hintSwipe();
     this.#showScope();
     // Discovering: the plant in view lit on the map (where it was seen in the circle).
@@ -754,9 +789,10 @@ export class GfDiscover extends LitElement {
       const cards = (await Promise.all(species.map(async s => {
         const plant = await db.get('plants', /** @type {number} */ (s.plantId)).catch(() => null);
         if (!plant) return null;
+        // iNaturalist's photo (a free licence only, nearby.js), else the flora's thumbnail: each with its credit.
         /** @type {Card} */
         const card = { plant, taxonId: s.taxonId, count: s.count, photo: s.photo ? s.photo.replace(/\/square\./, '/medium.') : plant.thumbnail?.url || null,
-          blooming: floweringMonths(plant.flowering).has(month), alerts: null };
+          credit: s.photo ? s.credit : thumbCredit(plant.thumbnail), blooming: floweringMonths(plant.flowering).has(month), alerts: null };
         return card;
       }))).filter(Boolean);
       if (abort.signal.aborted) return;
@@ -844,6 +880,7 @@ export class GfDiscover extends LitElement {
     if (scenarioOf(this.scenario).key === 'trail') return html`<gf-trail></gf-trail>${this.open != null ? this.#plantSheet() : nothing}`;
     const guided = this.#guided;
     return html`${!this._point ? this.#welcome() : guided ? this.#guidedView() : this._asking || (!this._cards && !this._loading && !this._error) ? this.#distance() : this.#list()}
+      <p class="visually-hidden" role="status">${this._said || ''}</p>
       ${this._match ? this.#matchView(this._match) : nothing}
       ${this.open != null && !guided ? this.#plantSheet() : nothing}`;
   }
@@ -955,9 +992,9 @@ export class GfDiscover extends LitElement {
       ${sc.key === 'harvest' && cards && !cards.length && !this._loading && !this._unread ? html`<div class="deck-end"><p><b>Aucune plante de cueillette observée à moins de ${km}.</b></p>
         ${DISTANCES.find(d => d > this._radius) ? html`<button class="primary" type="button" @click=${() => { const n = /** @type {number} */ (DISTANCES.find(d => d > this._radius)); this._radius = n; setDiscoverRadius(n); this.#load(); }}>Chercher jusqu’à ${distLabel(/** @type {number} */ (DISTANCES.find(d => d > this._radius)))}</button>` : nothing}</div>` : nothing}
       ${sc.key === 'mosaic' && cards?.length ? html`<label class="bloom-only"><input type="checkbox" .checked=${this._bloomOnly} @change=${(/** @type {any} */ e) => { this._bloomOnly = e.target.checked; }} /> En fleur maintenant (${cards.filter(c => c.blooming).length})</label>` : nothing}
-      ${cards && cards.length ? html`<div class="views segmented" role="tablist" aria-label="Affichage">
+      ${cards && cards.length ? html`<div class="views segmented" role="tablist" aria-label="Affichage" @keydown=${this.#tabKey}>
         ${[['swipe', 'Rencontres'], ['matches', `Matchs${matches ? ' · ' + matches : ''}`], ['all', 'Toutes']].map(([k, l]) => html`<button type="button" role="tab"
-          aria-selected=${String(this._view === k)} @click=${() => { this._view = k; }}>${l}</button>`)}
+          data-view=${k} aria-selected=${String(this._view === k)} tabindex=${this._view === k ? '0' : '-1'} @click=${() => { this._view = k; }}>${l}</button>`)}
       </div>` : nothing}
       ${this._loading ? html`<p class="muted">Recherche des plantes observées autour…</p>` : nothing}
       ${this._error ? html`<p class="error" role="alert">${this._error} <button class="link" type="button" @click=${() => this.#load()}>Réessayer</button></p>` : nothing}
@@ -1017,16 +1054,19 @@ export class GfDiscover extends LitElement {
       </div>`;
     }
     const [top, under] = deck;
+    const name = top.plant.vernacularNames?.[0] || top.plant.scientificName;
+    // The deck takes the focus (a Tab), and ← → ↑ then act on its top card — only there (#onKey): on a tab, a
+    // button or the map, the arrows keep their own meaning.
     return html`<div class="deck-wrap">
-      <div class="deck">
+      <div class="deck" tabindex="0" role="group" aria-label=${`Carte : ${name}. Flèche droite : match, flèche gauche : passer${this.#guided ? '' : ', flèche haut : sa fiche'}`}>
         ${repeat(under ? [under, top] : [top], c => c.plant.id, c => this.#swipeCard(c, c === top))}
         ${this._burst ? html`<span class="burst" aria-hidden="true">${icon('heart-fill')}</span>` : nothing}
       </div>
       <div class="actions" role="group" aria-label="Votre réponse">
         <button class="round undo" type="button" aria-label="Revenir à la carte précédente" title="Revenir à la carte précédente" ?disabled=${!this._history.length} @click=${() => this.#rewind()}>${icon('arrow-counterclockwise')}</button>
-        <button class="round pass" type="button" aria-label="Passer" title="Passer (←)" @click=${() => this.#decide(top, false)}>${icon('x-lg')}</button>
-        ${this.#guided ? nothing : html`<button class="round info" type="button" aria-label="Voir sa fiche" title="Sa fiche (↑)" @click=${() => this.#openPlant(top.plant.id, this.#deck.map(c => c.plant.id))}>${icon('three-dots')}</button>`}
-        <button class="round like" type="button" aria-label="J’aime : c’est un match" title="Match (→)" @click=${() => this.#decide(top, true)}>${icon('heart-fill')}</button>
+        <button class="round pass" type="button" aria-label=${'Passer : ' + name} title="Passer (←)" @click=${() => this.#decide(top, false)}>${icon('x-lg')}</button>
+        ${this.#guided ? nothing : html`<button class="round info" type="button" aria-label=${'Voir sa fiche : ' + name} title="Sa fiche (↑)" @click=${() => this.#openPlant(top.plant.id, this.#deck.map(c => c.plant.id))}>${icon('three-dots')}</button>`}
+        <button class="round like" type="button" aria-label=${`J’aime ${name} : c’est un match`} title="Match (→)" @click=${() => this.#decide(top, true)}>${icon('heart-fill')}</button>
       </div>
       <p class="left">${this.#deck.length} plante${this.#deck.length > 1 ? 's' : ''} à rencontrer</p>
     </div>`;
@@ -1037,12 +1077,16 @@ export class GfDiscover extends LitElement {
     const p = c.plant, name = p.vernacularNames?.[0] || p.scientificName;
     // A plant already loved, brought back on top: its heart says so; a swipe either way only puts it back.
     const loved = discoverState().matches.includes(p.id);
+    const photo = this.#photo(c.photo);
+    // The card underneath is out of reach (inert) and unread: a screen reader meets the card on top only.
     return html`<article class="swipe-card ${top ? 'top' : 'under'} ${loved ? 'loved' : ''}" aria-label=${loved ? name + ' — déjà aimée' : name} data-id=${p.id}
+        ?inert=${!top} aria-hidden=${top ? 'false' : 'true'}
         @pointerdown=${top ? this.#dragStart : null} @pointermove=${top ? this.#dragMove : null} @pointerup=${top ? this.#dragEnd : null} @pointercancel=${top ? this.#dragEnd : null}>
       <div class="nophoto">${icon('leaf')}</div>
-      ${this.#photo(c.photo) ? html`<img src=${c.photo} alt="" loading=${top ? 'eager' : 'lazy'} decoding="async" referrerpolicy="no-referrer" draggable="false" @error=${hideImg} @load=${showImg} />` : nothing}
-      <span class="stamp like">MATCH</span><span class="stamp nope">BOF</span>
+      ${photo ? html`<img src=${photo} alt="" loading=${top ? 'eager' : 'lazy'} decoding="async" referrerpolicy="no-referrer" draggable="false" @error=${hideImg} @load=${showImg} />` : nothing}
+      <span class="stamp like" aria-hidden="true">MATCH</span><span class="stamp nope" aria-hidden="true">BOF</span>
       ${loved ? html`<span class="loved-badge">${icon('heart-fill')} Déjà aimée</span>` : nothing}
+      ${photo && c.credit ? html`<p class="credit">Photo : ${creditText(c.credit)}</p>` : nothing}
       <div class="about">
         <h2>${name}<small>${p.scientificName}</small></h2>
         ${this.#ethnoLine(c)}
@@ -1060,7 +1104,7 @@ export class GfDiscover extends LitElement {
     const id = c.plant.id;
     if (!this._ethno.has(id)) this.#loadEthno(c);
     const text = this._ethno.get(id);
-    return text ? html`<p class="ethno"><b>On dit de moi :</b> ${text}</p>` : nothing;
+    return text ? html`<p class="ethno"><b>On dit de moi</b> <small class="wsrc">(Wikipédia, CC BY-SA)</small> : ${text}</p>` : nothing;
   }
 
   /** @param {Card} c */
@@ -1171,6 +1215,10 @@ export class GfDiscover extends LitElement {
       const fav = liked && !isFavorite(card.plant.id);
       this._history = [...this._history, { id: card.plant.id, liked, fav }].slice(-30);
       swiped(card.plant.id, liked);
+      // Said aloud (the status under the view): what the swipe did, then the card now on top.
+      const nameOf = (/** @type {Card} */ c) => c.plant.vernacularNames?.[0] || c.plant.scientificName;
+      const next = this.#shown[0];
+      this._said = `${liked ? `Match : ${nameOf(card)}${fav ? ', ajoutée aux favoris' : ''}` : `Passée : ${nameOf(card)}`}. ${next ? `Carte suivante : ${nameOf(next)}.` : 'Plus aucune carte.'}`;
       if (liked) {
         if (fav) toggleFavorite(card.plant).catch(() => {});
         if (matchMedia('(pointer: coarse)').matches) navigator.vibrate?.(30);
@@ -1192,19 +1240,32 @@ export class GfDiscover extends LitElement {
 
   /**
    * The first match: a screen of its own, with one way out — to the plant. Nothing else closes it (no click
-   * outside, no key, no timer).
+   * outside, no key, no timer) but Back, which does what the button does.
    * @param {Card} c
    */
   #matchView(c) {
     const name = c.plant.vernacularNames?.[0] || c.plant.scientificName;
-    return html`<div class="match" role="alertdialog" aria-modal="true" aria-label="C’est un match" aria-describedby="match-text">
-      <p class="title">C’est un match !</p>
-      ${this.#photo(c.photo) ? html`<img src=${c.photo} alt="" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} />` : nothing}
+    const photo = this.#photo(c.photo);
+    // A modal <dialog> (opened in updated(), by openModal): the focus goes to its button and stays in it, the rest of
+    // the page is out of reach. Échap is held back (cancel); should the browser close it anyway, it is as the button.
+    return html`<dialog class="match" aria-labelledby="match-title" aria-describedby="match-text"
+        @cancel=${(/** @type {Event} */ e) => e.preventDefault()} @close=${() => this.#matchClosed(c)}>
+      <p class="title" id="match-title">C’est un match !</p>
+      ${photo ? html`<img src=${photo} alt="" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} />` : nothing}
+      ${photo && c.credit ? html`<p class="credit">Photo : ${creditText(c.credit)}</p>` : nothing}
       <p id="match-text">Coup de cœur pour <b>${name}</b> ! Direction votre herbier (♥ favoris) — et ce n’est que le début de l’exploration.</p>
       <div class="row">
-        <button class="primary" type="button" autofocus @click=${() => { firstMatchShown(); this._match = null; this._focus = c.plant.id; this.#restartDwell(); }}>Découvrir cette plante</button>
+        <button class="primary" type="button" autofocus @click=${(/** @type {any} */ e) => e.currentTarget.closest('dialog')?.close()}>Découvrir cette plante</button>
       </div>
-    </div>`;
+    </dialog>`;
+  }
+
+  /** The match's window closed: the deck goes on, the focus back on it (its new top card). @param {Card} c */
+  async #matchClosed(c) {
+    if (this._match !== c) return;
+    firstMatchShown(); this._match = null; this._focus = c.plant.id; this.#restartDwell();
+    await this.updateComplete;
+    /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.deck, .deck-end button, .views [aria-selected="true"]'))?.focus();
   }
 
   /** @param {Card} c @param {number[]} [ids] @param {boolean} [mosaic] Mosaïque: a touch opens the plant at its images */
@@ -1212,13 +1273,16 @@ export class GfDiscover extends LitElement {
     const p = c.plant, name = p.vernacularNames?.[0] || p.scientificName;
     const a = c.alerts, danger = a?.safety?.tone === 'danger' || a?.edible?.tone === 'danger';
     const n = (a?.safety?.count || 0) + (a?.edible?.count || 0);
+    const photo = this.#photo(c.photo);
+    // The photo's credit, shown on it; not in the button's name (the plant's), which a screen reader says at each tile.
+    const credit = photo && c.credit ? html`<small class="credit" aria-hidden="true">${creditText(c.credit)}</small>` : nothing;
     return html`<button class="card" type="button" aria-current=${String(this.open === p.id)} @click=${() => { if (mosaic) { sheetSession.anchor = 'images'; sheetSession.anchorBlock = 'media'; sheetSession.anchorOffset = 0; } this.#openPlant(p.id, ids); }}>
       ${discoverState().matches.includes(p.id) ? html`<span class="heart" aria-label="Match">${icon('heart-fill')}</span>` : nothing}
-      <div class="ph">${this.#photo(c.photo) ? html`<img src=${c.photo} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />` : nothing}</div>
+      <div class="ph">${photo ? html`<img src=${photo} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />` : nothing}${mosaic ? nothing : credit}</div>
       <div class="chips">${c.blooming ? html`<span class="chip bloom">En fleur</span>` : nothing}
         ${n ? html`<span class="chip ${danger ? 'danger' : 'warn'}">${danger ? 'Attention' : 'À savoir'} · ${n}</span>` : nothing}</div>
       ${discoverState().seen.includes(p.id) ? html`<span class="seen" title="Déjà découverte" aria-label="Déjà découverte">${icon('check-lg')}</span>` : nothing}
-      <div class="txt"><b>${name}</b><i>${p.scientificName}</i></div>
+      <div class="txt"><b>${name}</b><i>${p.scientificName}</i>${mosaic ? credit : nothing}</div>
     </button>`;
   }
 
@@ -1399,7 +1463,8 @@ export class GfDiscover extends LitElement {
    */
   async #loadHighlight(key, card, scope) {
     const title = card.plant.vernacularNames?.[0] || card.plant.scientificName;
-    const who = { photo: this.#photo(card.photo) ? card.photo.replace('/medium.', '/small.') : null, common: card.plant.vernacularNames?.[0] || null, sci: card.plant.scientificName, taxonId: card.taxonId ?? null };
+    const photo = this.#photo(card.photo) ? card.photo.replace('/medium.', '/small.') : null;
+    const who = { photo, credit: photo ? card.credit : null, common: card.plant.vernacularNames?.[0] || null, sci: card.plant.scientificName, taxonId: card.taxonId ?? null };
     const pointsOf = (/** @type {{ coordinates: [number, number], date: string | null, url: string }[]} */ pts) => pts.map(p => ({ coordinates: p.coordinates, title, url: p.url, date: p.date }));
     if (scope === 'around') {
       const pts = await observationsAround(card.taxonId, /** @type {[number, number]} */ (this._point), this._radius).catch(() => null);
@@ -1430,7 +1495,7 @@ export class GfDiscover extends LitElement {
     if (!many) return null;
     const key = many.key;
     if (this.#gcMemo?.key === key) return this.#gcMemo.value;
-    const value = { key, photo: many.photo, common: many.common, sci: many.sci, taxonId: many.taxonId, points: many.points.map((/** @type {any} */ p) => ({ ...p, kind: 'hl' })) };
+    const value = { key, photo: many.photo, credit: many.credit, common: many.common, sci: many.sci, taxonId: many.taxonId, points: many.points.map((/** @type {any} */ p) => ({ ...p, kind: 'hl' })) };
     this.#gcMemo = { key, value };
     return value;
   }
@@ -1558,7 +1623,7 @@ export class GfDiscover extends LitElement {
         <input type="range" min="0" max=${DISTANCES.length - 1} step="1" .value=${String(at)} aria-label="Distance de la recherche"
           aria-valuetext=${distLabel(this._radius)} @input=${(/** @type {any} */ e) => { this._radius = DISTANCES[Number(e.target.value)]; }} /></label>
       <div class="g-seen" aria-live="polite">
-        ${faces.length ? html`<span class="faces" aria-hidden="true">${faces.map(o => html`<img src=${o.photo} alt="" loading="lazy" referrerpolicy="no-referrer" @error=${(/** @type {any} */ e) => e.target.remove()} />`)}</span>` : nothing}
+        ${faces.length ? html`<span class="faces" aria-hidden="true">${faces.map(o => html`<img src=${o.photo} alt="" title=${creditText(o.credit)} loading="lazy" referrerpolicy="no-referrer" @error=${(/** @type {any} */ e) => e.target.remove()} />`)}</span>` : nothing}
         <span>${this._obs.length ? html`<b>${fr(total)}</b> observation${total > 1 ? 's' : ''} de plantes, <b>${fr(species.size)}</b> espèce${species.size > 1 ? 's' : ''} différente${species.size > 1 ? 's' : ''}${total > this._obs.length ? ` — les ${fr(this._obs.length)} plus récentes sur la carte` : ' sur la carte'}` : 'Les observations arrivent…'}</span>
       </div>
       <button class="primary go" type="button" @click=${() => this.#toCards()}>${icon('heart-fill')} Qui pousse par ici ? <small>Les rencontres arrivent à côté de la carte</small></button>
@@ -1704,6 +1769,7 @@ export class GfDiscover extends LitElement {
     const quiet = this.#stage === 1;
     return html`<section class="guided ${asking ? 'asking' : ''} ${panes ? 'with-panes' : ''} ${step >= 4 && !asking ? 'listed' : ''}" aria-label="Découverte"
       style=${this.#widths(asking, panes)}>
+      <h1 class="visually-hidden">Découvrir : étape ${this.#stage + 1} sur ${STAGES.length}, ${STAGES[this.#stage]}</h1>
       ${this.#steps()}
       <div class="g-scroll">
         <div class="g-map">

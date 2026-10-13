@@ -3,7 +3,7 @@
   "private": true,
   "license": "MIT",
   "type": "module",
-  "description": "Outils de développement de GeoFlora (l'app elle-même n'a ni dépendance ni build, et ce fichier n'est pas déployé) : Playwright, pour le test de fumée et les tests de bout en bout (tests/e2e) ; les tests unitaires (tests/unit) n'utilisent que node:test. SheetJS, que lisent les scripts du jeu de données, est dans scripts/package.json.",
+  "description": "Outils de développement de GeoFlora (l'app elle-même n'a ni dépendance ni build, et ce fichier n'est pas déployé) : Playwright, pour le test de fumée et les tests de bout en bout (tests/e2e) ; axe-core, pour le contrôle d'accessibilité (tools/axe.mjs) ; les tests unitaires (tests/unit) n'utilisent que node:test. SheetJS, que lisent les scripts du jeu de données, est dans scripts/package.json.",
   "scripts": {
     "check": "bash tools/check.sh",
     "check:data": "node scripts/check-data.mjs",
@@ -11,10 +11,12 @@
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "node --import ./tests/unit/support/setup.mjs --test \"tests/unit/*.test.mjs\"",
     "test:e2e": "playwright test --config tests/e2e/playwright.config.mjs",
-    "test:fixture": "node tests/fixtures/build-fixture.mjs"
+    "test:fixture": "node tests/fixtures/build-fixture.mjs",
+    "axe": "node tools/axe.mjs"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",
+    "axe-core": "4.13.0",
     "playwright": "1.56.1"
   }
 }

@@ -66,8 +66,21 @@ function commonsPageUrl(title) {
   return 'https://commons.wikimedia.org/wiki/' + encodeURIComponent(title.replace(/ /g, '_'));
 }
 
+/**
+ * A licence a search thumbnail may have: CC0, public domain, CC BY, CC BY-SA — never NC or ND, nor GFDL, GPL, FAL or a
+ * « No restrictions » that names no licence (the media policy the app states; audit LEG-10).
+ */
+function freeLicense(value) {
+  const text = stripHtml(value);
+  return /^(cc0|public domain|pd)\b|^cc[- ]by\b/i.test(text) && !/\bn[cd]\b|non[- ]?commercial|no[- ]?deriv/i.test(text);
+}
+
+/** A CC BY or CC BY-SA thumbnail without its author's name: looked up again at the next build. */
+const missingAuthor = image => Boolean(image?.url) && /\bby\b/i.test(image.license || '') && !image.author;
+
 function fresh(entry) {
   if (!entry?.checkedAt) return false;
+  if (missingAuthor(entry.thumbnail)) return false;
   const age = Date.now() - Date.parse(entry.checkedAt);
   return Number.isFinite(age) && age < RETRY_AFTER_DAYS * 86400000;
 }
@@ -155,7 +168,7 @@ async function commonsInfo(titlesInput) {
     prop: 'imageinfo',
     iiprop: 'url|extmetadata',
     iiurlwidth: 480,
-    iiextmetadatafilter: 'LicenseShortName|LicenseUrl|Artist|Credit|ImageDescription',
+    iiextmetadatafilter: 'LicenseShortName|LicenseUrl|Artist|Attribution|Credit|ImageDescription',
     origin: '*'
   });
 
@@ -165,13 +178,16 @@ async function commonsInfo(titlesInput) {
     if (page.missing || !page.imageinfo?.[0]) continue;
     const info = page.imageinfo[0];
     const meta = info.extmetadata || {};
+    // Not under a free licence: no thumbnail from this file.
+    if (!freeLicense(meta.LicenseShortName?.value)) continue;
     result.set(key(page.title), {
       url: info.thumburl || info.url || null,
       originalUrl: info.url || null,
       source: 'Wikimedia Commons',
       sourceUrl: commonsPageUrl(page.title),
       commonsFile: page.title.replace(/^File:/, ''),
-      author: stripHtml(meta.Artist?.value),
+      // The author a CC BY licence asks to name: Artist, else the attribution line the file gives, else its credit.
+      author: stripHtml(meta.Artist?.value) || stripHtml(meta.Attribution?.value) || stripHtml(meta.Credit?.value),
       credit: stripHtml(meta.Credit?.value),
       license: stripHtml(meta.LicenseShortName?.value),
       licenseUrl: stripHtml(meta.LicenseUrl?.value)
@@ -245,7 +261,7 @@ async function main() {
       url: image.url,
       source: image.source,
       sourceUrl: image.sourceUrl,
-      author: image.author || null,
+      author: image.author || image.credit || null,
       license: image.license || null
     } : null;
 
