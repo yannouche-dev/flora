@@ -60,6 +60,12 @@ async function play(page, id) {
   await expect(page.locator('ma-deck .swipe-card.top')).toHaveAttribute('data-id', String(plantId('Allium ursinum')));
   await page.locator('ma-deck .round.like').click();
   await expect.poll(async () => (await favourites(page))[plantId('Allium ursinum')]).toBe(id);
+  // Rencontres' first match brings its photos: on a phone full screen over the deck (Échap closes it; meet-media.spec).
+  if (id === 'rencontres' && await page.evaluate(() => innerWidth < 900)) {
+    await expect(page.locator('ma-meet-media[mode="dialog"]')).toHaveCount(1);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('ma-meet-media')).toHaveCount(0);
+  }
   return 'cards';
 }
 

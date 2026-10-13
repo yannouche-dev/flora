@@ -130,6 +130,7 @@ const SHELL = [
   'app/miniapp/kit/ma-around-list.js',
   'app/miniapp/kit/ma-around-map.js',
   'app/miniapp/kit/ma-guided.js',
+  'app/miniapp/kit/ma-meet-media.js',
   'app/miniapp/kit/ma-plant-sheet.js',
   'app/miniapp/kit/watch.js',
   'app/miniapp/kit/trail-store.js',

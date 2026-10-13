@@ -61,6 +61,12 @@ test('Rencontres : départ, carte, cartes ; « Rejouer » vide la partie et ses 
   await expect.poll(() => page.evaluate(async id => (await import('/app/core/collections.js')).isFavorite(id), ail)).toBe(true);
   const session = () => page.evaluate(() => { const s = JSON.parse(localStorage.getItem('geoflora.app.rencontres.state') || 'null')?.ctx; return s ? { point: s.point, matches: s.matches, passed: s.passed } : null; });
   await expect.poll(async () => (await session())?.matches).toEqual([ail]);
+  // Its first match brought its photos: on a phone full screen over the deck, closed (Échap) before the box's ⋯.
+  if (await page.evaluate(() => innerWidth < 900)) {
+    await expect(page.locator('ma-meet-media[mode="dialog"]')).toHaveCount(1);
+    await page.keyboard.press('Escape');
+    await expect(page.locator('ma-meet-media')).toHaveCount(0);
+  }
   // A favourite from elsewhere (Flore), kept.
   const ortie = plantId('Urtica dioica');
   await page.evaluate(async id => { const db = await import('/app/core/db.js'); await (await import('/app/core/collections.js')).toggleFavorite(await db.get('plants', id)); }, ortie);

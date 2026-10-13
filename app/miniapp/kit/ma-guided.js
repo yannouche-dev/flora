@@ -243,7 +243,13 @@ export class MaGuided extends LitElement {
     const next = this.#shown[0];
     this._said = `${liked ? `Match : ${nameOf(card.plant)}${fav ? ', ajoutée aux favoris' : ''}` : `Passée : ${nameOf(card.plant)}`}. ${next ? `Carte suivante : ${nameOf(next.plant)}.` : 'Plus aucune carte.'}`;
     if (!liked) return;
-    if (!discoverState().firstMatch) { firstMatchShown(); if (discoverState().step === 0) this.#accept(1); }
+    if (!discoverState().firstMatch) {
+      firstMatchShown();
+      // Its photos are the game's now: once the first steps are over, the list keeps them beside the deck
+      // (kit/ma-around-list.js, the context's `media`) — not brought a second time.
+      this.app?.set({ media: { id: card.plant.id, closed: false } });
+      if (discoverState().step === 0) this.#accept(1);
+    }
     else s.heart();
   };
 
