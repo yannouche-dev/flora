@@ -7,6 +7,7 @@ import './gf-map.js';
 import { ui } from '../styles/ui.js';
 import { icon, kindIcon } from '../core/icons.js';
 import { isFocused, sendFocus } from '../core/map-focus.js';
+import { openView } from '../core/history.js';
 
 const shortDate = (/** @type {string} */ iso) =>
   new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -20,7 +21,7 @@ export class GfPlantSpots extends LitElement {
     /** The sheet has a map: each place gets a « show on the map » button (map-focus.js). */
     mapLinked: { type: Boolean, attribute: 'map-linked' },
     /** The sheet's map focus, to show which place is on the map. */
-    focus: { attribute: false },
+    mapFocus: { attribute: false },
     _spots: { state: true },
     _lists: { state: true },
     _error: { state: true }
@@ -61,7 +62,7 @@ export class GfPlantSpots extends LitElement {
   constructor() {
     super();
     this.plantId = 0;
-    /** @type {import('../core/collections.js').Spot[]} */
+    /** @type {import('../core/collections.js').Place[]} */
     this._spots = [];
     /** @type {import('../core/collections.js').Collection[]} */
     this._lists = [];
@@ -125,7 +126,7 @@ export class GfPlantSpots extends LitElement {
           fit
           editable
           @positions-save=${e => this.#savePositions(e.detail.plants)}
-          @plant-select=${e => { location.hash = href.map({ spot: e.detail.placeId, focus: e.detail.entryId ?? e.detail.plantId }); }}
+          @plant-select=${e => { openView(href.map({ spot: e.detail.placeId, focus: e.detail.entryId ?? e.detail.plantId })); }}
         ></gf-map>
         <ul>
           ${spots.map((place, i) => {
@@ -137,7 +138,7 @@ export class GfPlantSpots extends LitElement {
             const at = /** @type {[number, number]} */ (entry?.coordinates || place.geometry.coordinates);
             /** @type {import('../core/map-focus.js').PointFocus} */
             const point = { kind: 'point', label: name, coordinates: at };
-            const on = isFocused(this.focus, point);
+            const on = isFocused(this.mapFocus, point);
             return html`<li class=${this.mapLinked ? 'linked' : ''}><a href=${href.map({ spot: place.id, focus: this.plantId })}>
               <span>${place.properties.name || 'Lieu ' + (i + 1)}${others > 0 ? html` <small>· ${plantCount(others + 1)}</small>` : nothing}</span>
               ${this.#store.state.harvestMode ? html`

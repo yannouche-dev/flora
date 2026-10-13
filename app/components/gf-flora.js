@@ -4,7 +4,7 @@ import { config } from '../config.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
 import { activeFilterCount, clearFilters, lastSearchHash } from '../core/query.js';
 import { href } from '../core/router.js';
-import { backTo, depth, openModal } from '../core/history.js';
+import { backTo, depth, openModal, openView, replaceView } from '../core/history.js';
 import { plantViewOf, StoreController } from '../core/store.js';
 import { ui } from '../styles/ui.js';
 import './gf-results-bar.js';
@@ -27,6 +27,7 @@ const TITLES = { filters: 'Filtres', results: 'Résultats', plant: 'Plante' };
 
 function readLayout() {
   try {
+    // eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
     const saved = JSON.parse(localStorage.getItem(config.storageKeys.floraLayout) || 'null') || {};
     return { ...DEFAULTS, ...saved, folded: { ...DEFAULTS.folded, ...saved.folded } };
   } catch { return structuredClone(DEFAULTS); }
@@ -295,7 +296,7 @@ export class GfFlora extends LitElement {
     const card = this.#card;
     // Each plant is a view: Back returns to the one before (« Résultats » goes straight to the list).
     // The pane stays open (the next plant's map, media…).
-    const go = () => { location.hash = this.#paneInUrl ? href.plantPane(id, /** @type {string} */ (/** @type {any} */ (this.route).pane)) : href.plant(id); };
+    const go = () => { openView(this.#paneInUrl ? href.plantPane(id, /** @type {string} */ (/** @type {any} */ (this.route).pane)) : href.plant(id)); };
     if (!card || this.#reducedMotion.matches) { this._under = null; go(); return; }
     if (this.#moving) return;
     this.#moving = true;
@@ -540,9 +541,9 @@ export class GfFlora extends LitElement {
     const key = e.detail.key;
     this.#paneStart = e.detail.url || null;
     if (this.#pane === key && this.#paneInUrl) { this.requestUpdate(); return; }
-    if (this.#paneInUrl) { location.replace(href.plantPane(id, key)); return; }
+    if (this.#paneInUrl) { replaceView(href.plantPane(id, key)); return; }
     this.#panePushed = true;
-    location.hash = href.plantPane(id, key);
+    openView(href.plantPane(id, key));
   };
 
   /** The media viewer moved to another image: the address follows (no new step in history). @param {CustomEvent} e */
@@ -558,7 +559,7 @@ export class GfFlora extends LitElement {
     this._paneFull = false;
     this.#paneStart = null;
     if (this.#panePushed) { this.#panePushed = false; history.back(); }
-    else if (id !== null) location.replace(href.plant(id));
+    else if (id !== null) replaceView(href.plant(id));
   };
 
   /** The pane: its bar (block, plant, full screen, close) and the block alone. @param {boolean} phone */
@@ -586,6 +587,7 @@ export class GfFlora extends LitElement {
   }
 
   #save() {
+    // eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
     try { localStorage.setItem(config.storageKeys.floraLayout, JSON.stringify(this._layout)); } catch { /* not persisted */ }
   }
 

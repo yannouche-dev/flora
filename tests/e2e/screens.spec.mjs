@@ -1,5 +1,6 @@
 // Every main screen opens on the reduced flora, the first launch shows Découvrir alone, and the real flora still
 // loads (the one spec on data/plants.json as published). Migrated from smoke.cjs, startup.cjs, tabbar.cjs.
+import { readdirSync } from 'node:fs';
 import { test, expect, plantId } from './fixtures.mjs';
 
 const ROUTES = ['#/', '#/?q=ortie', `#/plant/${plantId('Urtica dioica')}`, '#/discover', '#/discover?s=harvest', '#/discover?s=trail',
@@ -17,6 +18,26 @@ test('chaque écran s’ouvre et montre quelque chose (visiteur habitué)', asyn
       return view.localName.includes('-') && customElements.get(view.localName) && view.shadowRoot?.childElementCount ? 'shown' : 'nothing';
     }), { message: route }).toBe('shown');
   }
+});
+
+// A reactive property named after an HTMLElement member hides it: `focus` on four components made el.focus() throw
+// (audit QUA-4 / ARC-10; eslint.config.js now refuses such a name). Every component keeps the native methods.
+test('aucun composant ne masque focus(), blur() ni click()', async ({ app, page }) => {
+  const files = readdirSync(new URL('../../app/components/', import.meta.url)).filter(f => f.endsWith('.js'));
+  await app.open('#/');
+  const broken = await page.evaluate(async files => {
+    // eslint-disable-next-line no-unsanitized/method -- the file names of app/components, read by the test
+    for (const f of files) await import('/app/components/' + f);
+    const out = [];
+    for (const f of files) {
+      const name = f.replace(/\.js$/, '');
+      if (!customElements.get(name)) continue;
+      const el = document.createElement(name);
+      for (const m of ['focus', 'blur', 'click']) if (typeof el[m] !== 'function') out.push(`${name}.${m}`);
+    }
+    return out;
+  }, files);
+  expect(broken).toEqual([]);
 });
 
 test.describe('premier lancement', () => {

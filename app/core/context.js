@@ -71,7 +71,9 @@ function follow() {
     case 'plant': setContext({ flore: hash, plant: route.id }); break;
     case 'collections': setContext({ mine: hash, ...(route.open ? { collection: route.open } : {}), ...(route.plant ? { plant: route.plant } : {}) }); break;
     case 'map': {
-      const plant = route.focus || route.plant;
+      // The focus is a plant id or an occurrence id (an entry of the place): only a plant id is a plant.
+      const focus = Number(route.focus);
+      const plant = Number.isInteger(focus) && focus > 0 ? focus : route.plant;
       setContext({ map: hash, ...(route.spot ? { collection: route.spot } : {}), ...(plant ? { plant } : {}) });
       break;
     }

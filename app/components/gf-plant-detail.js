@@ -151,9 +151,6 @@ const WIKI_THEMES = /** @type {Record<string, [string, string | null]>} */ ({
 /** A section's text: at first, its beginning only. */
 const WIKI_SHORT = 600;
 
-/** Same name, case and accents aside. @param {string | undefined} a @param {string | undefined} b */
-const sameName = (a, b) => Boolean(a && b) && nameKey(String(a)) === nameKey(String(b));
-
 /**
  * A name's key, for the duplicates written differently: case, accents, hyphens and apostrophes, an article in
  * front (« la », « l’ »), plurals (« Orties »), spaces. @param {string} name
@@ -179,7 +176,7 @@ export function dedupNames(names, except = []) {
   /** @type {Map<string, string>} */
   const kept = new Map();
   for (const raw of names) {
-    for (const part of String(raw || '').split(/\s*[,;\/]\s*|\s+ou\s+/)) {
+    for (const part of String(raw || '').split(/\s*[,;/]\s*|\s+ou\s+/)) {
       const name = part.replace(/\s+/g, ' ').trim();
       if (name.length < 2) continue;
       const key = nameKey(name);
@@ -1002,7 +999,7 @@ export class GfPlantDetail extends LitElement {
     this._spotsOpen = false;
     /** @type {import('../core/map-focus.js').SheetFocus} */
     this._focus = noFocus();
-    /** @type {{ interactions?: any, niche?: any, here?: any }} */
+    /** What the opened blocks loaded (undefined: not yet; null: nothing). @type {{ interactions?: any, niche?: any, here?: any, safety?: any, confusions?: any, recipes?: any, wdUses?: any, herbarium?: any, photos?: any }} */
     this._open = {};
     // A value touched in a block: the maps show it (touched again, it goes).
     this.addEventListener(FOCUS_EVENT, e => {
@@ -2680,7 +2677,7 @@ export class GfPlantDetail extends LitElement {
     const fill = isOnEdge(this.view, key) || this.only === key;
     if (this.preview) return html`<div class="map-placeholder ${fill ? 'fill' : ''}" style=${`height:${{ s: 180, m: 260, l: 380 }[config.height]}px`}></div>`;
     return html`<gf-sheet-map .plant=${plant} .gbifKey=${details?.identifiers?.gbif?.id ?? null} .inatId=${inat?.id ?? null}
-      .config=${config} mode=${this.view} ?fill=${fill} .focus=${this._focus}
+      .config=${config} mode=${this.view} ?fill=${fill} .mapFocus=${this._focus}
       @map-config=${(/** @type {CustomEvent} */ e) => setMapConfig(key, e.detail)}
       @focus-clear=${(/** @type {CustomEvent} */ e) => { this._focus = { ...this._focus, [e.detail.kind]: null }; }}
       @map-layers=${(/** @type {CustomEvent} */ e) => {
@@ -2830,12 +2827,12 @@ export class GfPlantDetail extends LitElement {
         return baseOf(v) === 'scientific' ? this.#statuses(ctx)
           : html`<gf-status .plant=${plant}></gf-status>${ifEmpty('Aucune protection, réglementation ni liste rouge connue (INPN).')}`;
       case 'lookalikes':
-        return html`<gf-lookalikes .plant=${plant} ?compact=${baseOf(v) === 'epure'} ?detailed=${baseOf(v) === 'scientific'} ?map-linked=${this.#hasMap} .focus=${this._focus}
+        return html`<gf-lookalikes .plant=${plant} ?compact=${baseOf(v) === 'epure'} ?detailed=${baseOf(v) === 'scientific'} ?map-linked=${this.#hasMap} .mapFocus=${this._focus}
             @safety-retry=${() => this.#retrySafety(false)}></gf-lookalikes>
           ${ifEmpty('Aucune confusion de notre liste (Anses, Centres antipoison) ne concerne cette plante : cela ne garantit pas l’absence de risque.')}`;
       case 'taxonomy': return baseOf(v) === 'scientific' ? this.#taxonomy(ctx) : this.#tags(ctx);
       case 'mine': {
-        if (baseOf(v) === 'scientific') return html`<gf-plant-spots plant-id=${plant.id} notitle ?map-linked=${this.#hasMap} .focus=${this._focus}></gf-plant-spots>`;
+        if (baseOf(v) === 'scientific') return html`<gf-plant-spots plant-id=${plant.id} notitle ?map-linked=${this.#hasMap} .mapFocus=${this._focus}></gf-plant-spots>`;
         const count = (getMembership().byPlant.get(plant.id) || []).length;
         return html`
           <div class="mine">
@@ -2843,7 +2840,7 @@ export class GfPlantDetail extends LitElement {
             <button class="link" type="button" aria-expanded=${this._spotsOpen ? 'true' : 'false'}
               @click=${() => { this._spotsOpen = !this._spotsOpen; }}>${this._spotsOpen ? 'Masquer' : count ? 'Voir' : 'Lieux'}</button>
           </div>
-          ${this._spotsOpen ? html`<gf-plant-spots plant-id=${plant.id} notitle ?map-linked=${this.#hasMap} .focus=${this._focus}></gf-plant-spots>` : nothing}`;
+          ${this._spotsOpen ? html`<gf-plant-spots plant-id=${plant.id} notitle ?map-linked=${this.#hasMap} .mapFocus=${this._focus}></gf-plant-spots>` : nothing}`;
       }
       case 'calendar':
         return html`<gf-calendar .plant=${plant} mode=${v} notitle></gf-calendar>${this.#wikiSections(['biology']).length ? this.#wikiBits(['biology']) : ifEmpty('Aucune période de floraison ni d’observation connue.')}`;

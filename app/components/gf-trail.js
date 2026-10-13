@@ -25,7 +25,9 @@ import './gf-thumb.js';
 
 /** The parcours being walked (its place id), those walked before, and the one just ended (its recap, until left). */
 const KEY = 'geoflora.trail', LIST = 'geoflora.trails', DONE = 'geoflora.trailDone';
+// eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
 const read = (/** @type {string} */ k, /** @type {any} */ d) => { try { return JSON.parse(localStorage.getItem(k) || 'null') ?? d; } catch { return d; } };
+// eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
 const write = (/** @type {string} */ k, /** @type {any} */ v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* not kept */ } };
 
 /** A new parcours' name, until the place where it starts is known (« Mon parcours botanique en forêt de … »). */

@@ -51,16 +51,30 @@ export function markEntry(values) {
 /** A value this app kept in the current entry's state (pushHash `extra`). @param {string} key */
 export const entryValue = key => state()[key];
 
+/**
+ * A new view, as a link to `hash` would open it: a new entry, which the router follows (hashchange). The one place
+ * the app sets location.hash (eslint.config.js): a navigation service has one place to start from.
+ * @param {string} hash
+ */
+export function openView(hash) {
+  location.hash = hash;
+}
+
+/** The current view replaced by the one at `hash` (no new entry: Back skips it); the router follows it. @param {string} hash */
+export function replaceView(hash) {
+  location.replace(hash);
+}
+
 /** Back to the entry at `target` depth when it is behind this one, else a new view at `fallback`. @param {number | null} target @param {string} fallback */
 export function backTo(target, fallback) {
   if (target !== null && target >= 0 && target < depth()) history.go(target - depth());
-  else location.hash = fallback;
+  else openView(fallback);
 }
 
 /** Back one view when there is one in this visit, else to `fallback` (in place). @param {string} fallback */
 export function back(fallback) {
   if (depth() > 0) history.back();
-  else location.replace(fallback);
+  else replaceView(fallback);
 }
 
 // ── Dialogs: open one = a history entry (same URL); Back closes it ─────────────────────────────────────────

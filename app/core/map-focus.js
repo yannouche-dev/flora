@@ -37,8 +37,5 @@ export function sendFocus(from, f) {
   from.dispatchEvent(new CustomEvent(FOCUS_EVENT, { detail: f, bubbles: true, composed: true }));
 }
 
-/** Labels of GBIF filters, for the chip and the credit. */
-export const FILTER_NAMES = { gadmGid: 'zone', month: 'mois', year: 'année', basisOfRecord: 'type de relevé', datasetKey: 'source', country: 'pays' };
-
 /** Filters that are places: the map frames their occurrences (the others keep France). @param {Record<string, string>} params */
 export const isPlaceFilter = params => 'gadmGid' in params || 'country' in params;

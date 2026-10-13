@@ -36,7 +36,7 @@ function attr(text, name) {
 }
 
 function localTerm(term) {
-  return String(term || '').split(/[\/#]/).pop();
+  return String(term || '').split(/[/#]/).pop();
 }
 
 function parseTableBlock(xml, kind) {

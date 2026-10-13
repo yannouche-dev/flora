@@ -2,7 +2,10 @@
 #  - GitHub Actions: they are pinned by commit, with the release in a comment; Dependabot moves both;
 #  - the dev dependencies of package.json (Playwright, and @playwright/test at the same version: one pull request for
 #    both, the browser they drive is the same; axe-core: a new axe-core may count violations differently, and the
-#    a11y job then says so — see tools/axe.mjs). SheetJS comes from its own CDN, which Dependabot does not
+#    a11y job then says so — see tools/axe.mjs; ESLint and its plugins in one pull request; TypeScript: a new
+#    release may count errors differently, and the lint job then says so — see tools/tsc-ratchet.mjs). lit and
+#    @types/leaflet are only the types of vendor/lit.js and vendor/leaflet.js: they move with them (scripts/vendor.sh),
+#    not on their own. SheetJS comes from its own CDN, which Dependabot does not
 #    follow: check https://cdn.sheetjs.com for a new release and update package.json and package-lock.json by hand.
 # A release is only proposed once it is a week old: a compromised one is usually found and pulled by then.
 version: 2
@@ -28,5 +31,10 @@ updates:
     groups:
       playwright:
         patterns: ["playwright", "@playwright/*"]
+      eslint:
+        patterns: ["eslint", "@eslint/*", "eslint-plugin-*", "globals"]
+    ignore:
+      - dependency-name: lit
+      - dependency-name: "@types/leaflet"
     commit-message:
       prefix: deps

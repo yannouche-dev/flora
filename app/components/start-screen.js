@@ -52,9 +52,6 @@ import './gf-place-search.js';
  * @property {StartExit} exit                the one way out
  */
 
-/** The class names the template uses (a host must not style them). */
-export const START_CLASSES = ['start', 'art', 'kicker', 'lead', 'caution', 'act', 'go', 'alert', 'cancel', 'note', 'alts', 'or', 'query', 'choices', 'alt', 'leave'];
-
 /**
  * French spacing: a narrow no-break space before : ; ! ? » and after «, so a line never starts with « : ».
  * Strings only. @template T @param {T} t @returns {T}

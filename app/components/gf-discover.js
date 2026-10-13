@@ -32,7 +32,7 @@ import { geoProblem, startScreen, startStyles } from './start-screen.js';
 import { sheetSession } from '../core/sheet-session.js';
 import { isFavorite, toggleFavorite } from '../core/collections.js';
 import { href, parse } from '../core/router.js';
-import { depth, openModal, replaceHash } from '../core/history.js';
+import { depth, openModal, openView, replaceHash } from '../core/history.js';
 import { floweringMonths } from './gf-calendar.js';
 import { hideImg, showImg } from '../core/img.js';
 import { creditText, thumbCredit } from '../core/credit.js';
@@ -83,7 +83,6 @@ const STAGES = ['Carte', 'Rencontres', 'Photos', 'Encyclopédie', 'Cueillette ou
 /** What each step brings, said on its button in the bar. */
 const STAGE_ABOUT = ['La carte : jusqu’où chercher', 'Les cartes des plantes d’ici, à côté de la carte', 'Les photos de la plante en vue',
   'Ce qu’en dit l’encyclopédie', 'La cueillette ou la science : à vous de choisir', 'Les plantes voisines, sous la carte'];
-const SCOPES = /** @type {const} */ (['around', 'department', 'region', 'country', 'world']);
 /** The deck has shown it can be swiped (once while the app is open). */
 let hinted = false;
 /** The fork's pane: the blocks of the sheet that join the layout, picking or science (the first one shown). */
@@ -531,7 +530,6 @@ export class GfDiscover extends LitElement {
     this._point = null; this._place = null; this._cards = null; this._radius = 1000; this._asking = false;
     this._history = []; this._match = null; this._ethno = new Map(); this._obs = []; this._later = null; this._error = null;
     this._unread = false; this._view = 'swipe'; this._loading = false;
-    this.#navs = 0; this.#navsAtStep = 0;
   };
   /** The guided view's widths (wide screens): the map, the cards; the plant's panes take the rest. */
   #sizer = new PaneSizer(this, config.storageKeys.discoverLayout, {
@@ -713,10 +711,6 @@ export class GfDiscover extends LitElement {
     clearTimeout(this.#dwellTimer);
     this.#dwellTimer = setTimeout(() => { this._dwell = true; }, 6000);
   }
-  /** Plants stepped through while discovering (each step after the second waits for two of them). */
-  #navs = 0;
-  /** The number of plants stepped through when the current step began. */
-  #navsAtStep = 0;
 
   /** The observations in the circle, for the map behind the distance. */
   async #loadPoints() {
@@ -835,7 +829,7 @@ export class GfDiscover extends LitElement {
   #openPlant(id, ids) {
     this._sheetIds = ids || (this._cards || []).map(c => c.plant.id);
     this.#openedHere = true;
-    location.hash = href.discover(id, this.scenario);
+    openView(href.discover(id, this.scenario));
   }
   /** The plant was opened from the list (Back returns to it), not by a link. */
   #openedHere = false;
@@ -843,7 +837,7 @@ export class GfDiscover extends LitElement {
   #close() {
     // The Parcours: its plants open by a link of its list — Back returns to it.
     if (depth() > 0 && (this.#openedHere || scenarioOf(this.scenario).key === 'trail')) history.back();
-    else location.hash = href.discover(null, this.scenario);
+    else openView(href.discover(null, this.scenario));
   }
 
   /** @param {number} dir */
@@ -869,8 +863,6 @@ export class GfDiscover extends LitElement {
     const dx = e.changedTouches[0].clientX - s.x, dy = e.changedTouches[0].clientY - s.y;
     if (Math.abs(dx) > 70 && Math.abs(dx) > Math.abs(dy) * 1.6 && Date.now() - s.t < 600) this.#step(dx < 0 ? 1 : -1);
   };
-
-  get #sheet() { return /** @type {any} */ (this.renderRoot.querySelector('.sheet gf-plant-detail')); }
 
   // ── Render ────────────────────────────────────────────────────────────
 
@@ -916,7 +908,6 @@ export class GfDiscover extends LitElement {
   /** How far to look: a slider of distances, then the search. */
   #distance() {
     const at = Math.max(0, DISTANCES.indexOf(this._radius));
-    const point = /** @type {[number, number]} */ (this._point);
     return html`<div class="distance-wrap">
       <gf-map no-search no-create no-locate .area=${this.#area}></gf-map>
       <section class="welcome distance">
@@ -1209,7 +1200,7 @@ export class GfDiscover extends LitElement {
       // panes show it. A plant already loved, brought back on top, is only put back (still loved).
       if (this.#guided) {
         const back = this._focus === card.plant.id && discoverState().matches.includes(card.plant.id);
-        this._focus = null; this.#navs++; this.#restartDwell();
+        this._focus = null; this.#restartDwell();
         if (back) return;
       }
       const fav = liked && !isFavorite(card.plant.id);
@@ -1316,7 +1307,6 @@ export class GfDiscover extends LitElement {
       this._cards = [card, ...cards.filter(c => c !== card)];
       this._focus = null;
     }
-    this.#navs++;
     this.#restartDwell();
   }
 
@@ -1349,7 +1339,6 @@ export class GfDiscover extends LitElement {
 
   /** The fork: picking or science; its dashboard joins the plant. @param {'harvest' | 'science'} branch */
   #fork(branch) {
-    this.#navsAtStep = this.#navs;
     this.#dockTabs(FORK_BLOCKS[branch], 'right');
     chooseBranch(branch);
     this.requestUpdate();
@@ -1358,7 +1347,6 @@ export class GfDiscover extends LitElement {
 
   /** A step accepted: its pane joins the layout; the last one leaves for the whole app, on this plant. @param {number} step */
   #accept(step) {
-    this.#navsAtStep = this.#navs;
     this._dwell = false;
     clearTimeout(this.#dwellTimer);
     this.#dwellTimer = setTimeout(() => { this._dwell = true; }, 6000);
@@ -1370,7 +1358,7 @@ export class GfDiscover extends LitElement {
     // The whole app, the way chosen at the fork.
     if (step >= LAST_STEP) { if (discoverState().branch === 'science') setMode('scientific'); else if (discoverState().branch === 'harvest') setHarvestMode(true); }
     setStep(step);
-    if (step >= LAST_STEP && id != null) location.hash = href.plant(id);
+    if (step >= LAST_STEP && id != null) openView(href.plant(id));
     this.requestUpdate();
     this.#showNewBlock();
   }

@@ -179,6 +179,3 @@ export function normalizeCollection(feature) {
     }
   };
 }
-
-/** Former name, kept for the version-3 upgrade path. */
-export const normalizePlace = normalizeCollection;

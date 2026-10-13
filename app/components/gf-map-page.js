@@ -232,7 +232,7 @@ export class GfMapPage extends LitElement {
     super();
     /** @type {any} */
     this.route = { name: 'map', spot: null, plant: null, season: false };
-    /** @type {import('../core/collections.js').Spot[]} */
+    /** @type {import('../core/collections.js').Place[]} */
     this._spots = [];
     /** @type {string | null} */
     this._error = null;
@@ -799,7 +799,7 @@ export class GfMapPage extends LitElement {
         </div>
         ${repeat([place], p => p.id, () => html`<gf-spot-editor embedded spot-id=${place.id}
           add-plant=${arrival?.add ?? ''} ?pick=${Boolean(arrival?.pick)}
-          .focus=${this.route.focus} .mapEditing=${this._editing}
+          .focusEntry=${this.route.focus} .mapEditing=${this._editing}
           @map-fly=${e => /** @type {any} */ (this.renderRoot.querySelector('gf-map'))?.flyTo(e.detail.coordinates, e.detail.zoom)}
           @map-edit=${() => { this._editing = true; }}
           @plant-focus=${e => this.#navigate({ spot: place.id, focus: e.detail.entryId ?? e.detail.plantId })}
