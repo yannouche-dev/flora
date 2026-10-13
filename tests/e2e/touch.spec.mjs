@@ -26,8 +26,8 @@ test.describe('Rencontres', () => {
     await cardsAround(context);
     await app.open('#/app/rencontres');
     await page.getByRole('button', { name: 'Autour de moi' }).click();
-    await page.locator('gf-discover .g-steps [data-step="go"]').click();
-    const top = page.locator('gf-discover .swipe-card.top');
+    await page.locator('ma-guided .g-steps [data-step="go"]').click();
+    const top = page.locator('ma-guided .swipe-card.top');
     await expect(top).toHaveAttribute('data-id', String(plantId('Allium ursinum')));
     let at = await centre(top);
     await swipe(page, at, { x: at.x - 260, y: at.y + 10 });
@@ -42,8 +42,8 @@ test.describe('Rencontres', () => {
     await cardsAround(context);
     await app.open('#/app/rencontres');
     await page.getByRole('button', { name: 'Autour de moi' }).click();
-    await page.locator('gf-discover .g-steps [data-step="go"]').click();
-    const top = page.locator('gf-discover .swipe-card.top');
+    await page.locator('ma-guided .g-steps [data-step="go"]').click();
+    const top = page.locator('ma-guided .swipe-card.top');
     await expect(top).toHaveAttribute('data-id', String(plantId('Allium ursinum')));
     // The pointer events a finger gives when the browser takes the gesture over (a scroll, a pinch): pointercancel.
     const at = await centre(top);

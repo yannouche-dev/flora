@@ -1,14 +1,9 @@
 {
   "typescript": "7.0.2",
-  "total": 105,
+  "total": 87,
   "errors": {
     "app/components/gf-calendar.js": {
       "TS2339": 1
-    },
-    "app/components/gf-discover.js": {
-      "TS2322": 1,
-      "TS2339": 14,
-      "TS2353": 3
     },
     "app/components/gf-lookalikes.js": {
       "TS2339": 2

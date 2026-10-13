@@ -7,11 +7,17 @@
 //  - `reads`: the context keys it reads, declared (checked against the manifest as it loads: define.js#unread);
 //  - `heavy`: a map in it (a separator beside it moves a guide line, not the map, until released);
 //  - `empty(c)`: nothing to show yet (a phone keeps such a sheet closed); `clear`: the patch that empties it.
-// The apps ported whole (Rencontres, Parcours) are one component each: their element draws every screen and says
-// which step it is on (the event ma-step, which the box follows).
+// The mini-apps around a place (Rencontres, Cueillette prudente, Mosaïque) compose the kit of app/miniapp/kit/: the
+// distance over the map (ma-distance), the list of the plants around (ma-around-list: the deck ma-deck, the matches,
+// the grid or mosaic, the plant's sheet ma-plant-sheet, the first match), and Rencontres' guided way during the
+// first steps (ma-guided: the map ma-around-map, the deck, the plant's panes, its own steps bar). The Parcours, ported
+// whole, is one component: its element draws every screen and says which step it is on (the event ma-step).
 
 import { html } from 'lit';
-import '../components/gf-discover.js';
+import { discovering } from '../core/discover.js';
+import './kit/ma-distance.js';
+import './kit/ma-around-list.js';
+import './kit/ma-guided.js';
 import '../components/gf-trail.js';
 
 /**
@@ -20,14 +26,38 @@ import '../components/gf-trail.js';
  *   render: (c: any, app: import('./runtime.js').MiniApp, place: Place) => unknown }} Component
  */
 
+/** What the plants-around components read of the context. */
+const AROUND = ['point', 'place', 'radius', 'matches', 'passed', 'focus'];
+
 /**
- * Rencontres: the plants observed around, one card at a time (gf-discover, as Découvrir shows it), in the box. The
- * plant open over it is c.focus (the address's ?p=). @type {Component}
+ * How far to look, over the map of the observations in the circle (step « map »). props.view: the list's own view,
+ * back to it as the cards come. @type {Component}
+ */
+const distance = {
+  reads: AROUND,
+  heavy: true,
+  render: (c, app, p) => html`<ma-distance .app=${app} .c=${c} .view=${p.props?.view ?? 'swipe'}></ma-distance>`
+};
+
+/**
+ * The plants around, a page of cards (step « cards »). props: harvest (Cueillette prudente's cards and warnings),
+ * mosaic (« Toutes » as a mosaic), heading (its name before « Autour de … »), view (the one it opens on). @type {Component}
+ */
+const aroundList = {
+  reads: AROUND,
+  render: (c, app, p) => html`<ma-around-list .app=${app} .c=${c} ?harvest=${Boolean(p.props?.harvest)} ?mosaic=${Boolean(p.props?.mosaic)}
+    .heading=${p.props?.heading ?? null} .view=${p.props?.view ?? 'swipe'}></ma-around-list>`
+};
+
+/**
+ * Rencontres: during the first steps, its guided way (map, cards and the plant's panes, one layout across the steps
+ * « map » and « cards »); after them, the distance then the list, as the others. @type {Component}
  */
 const meet = {
-  reads: ['focus'],
+  reads: AROUND,
   heavy: true,
-  render: (c, app) => html`<gf-discover scenario="meet" boxed=${app.m.id} .open=${c.focus ?? null}></gf-discover>`
+  render: (c, app, p) => discovering() ? html`<ma-guided .app=${app} .c=${c}></ma-guided>`
+    : app.step.id === 'map' ? distance.render(c, app, p) : aroundList.render(c, app, p)
 };
 
 /** Parcours botanique: the walk, its plants and their map, its recap (gf-trail), in the box. @type {Component} */
@@ -38,4 +68,4 @@ const trail = {
 };
 
 /** The components, by their `use` name. @type {Record<string, Component>} */
-export const kit = { meet, trail };
+export const kit = { distance, aroundList, meet, trail };

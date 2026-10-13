@@ -20,6 +20,9 @@
  * @property {[number, number] | null} coordinates   where this plant grows [lon, lat]; null outside places
  * @property {number | null} accuracy    GPS accuracy (m) when recorded
  * @property {Altitude | null} altitude  the ground's altitude where it grows (none yet: asked of the IGN when online)
+ * @property {Origin} [origin]           made by a mini-app (a favourite of a match): « Recommencer » it, and it goes
+ * @property {Origin} [from]             made by a mini-app, then made the user's own (promoted): « Recommencer » keeps it
+ * @typedef {{ app: string }} Origin     the mini-app that made an entry or a collection (app/miniapps/<app>.js)
  * @typedef {{ m: number | null, at: [number, number] }} Altitude   metres (RGE ALTI®; null: no data there) at the
  *                                       point `at` — the altitude of that point only: moved, it is asked again
  * @typedef {'favorites' | 'list' | 'place'} CollectionKind
@@ -30,6 +33,8 @@
  * @property {number | null} accuracy    GPS accuracy (m) when recorded
  * @property {Altitude | null} altitude  the place's point's
  * @property {boolean} [startedHere]     a parcours started where the walker stood: its point is the walk's first step
+ * @property {Origin} [origin]           made by a mini-app (a parcours): « Recommencer » it, and it goes
+ * @property {Origin} [from]             made by a mini-app, then made the user's own (a parcours finished, renamed…): kept
  * @property {string} createdAt
  * @property {string} updatedAt
  * @property {PlantEntry[]} plants
@@ -45,6 +50,9 @@ const KINDS = ['favorites', 'list', 'place'];
 const ABUNDANCES = ['rare', 'moyen', 'abondant'];
 
 const isNumber = (/** @type {unknown} */ n) => typeof n === 'number' && Number.isFinite(n);
+
+/** The origin of an entry or a collection, as stored or read from a file: { app } with a mini-app's id, else none. @param {any} o @returns {Origin | null} */
+export const validOrigin = o => o && typeof o === 'object' && typeof o.app === 'string' && /^[a-z][a-z0-9-]{1,23}$/.test(o.app) ? { app: o.app } : null;
 const text = (/** @type {unknown} */ v, max = 5000) => typeof v === 'string' ? v.slice(0, max) : '';
 
 /** @param {any[]} list @returns {Harvest[]} */
@@ -94,7 +102,9 @@ export function normalizeEntry(e, fallbackDate, placeCoordinates = null) {
     harvests: normalizeHarvests(e?.harvests),
     coordinates,
     accuracy: own && isNumber(e?.accuracy) ? e.accuracy : null,
-    altitude: validAltitude(e?.altitude, coordinates)
+    altitude: validAltitude(e?.altitude, coordinates),
+    ...(validOrigin(e?.origin) ? { origin: /** @type {Origin} */ (validOrigin(e.origin)) } : {}),
+    ...(validOrigin(e?.from) ? { from: /** @type {Origin} */ (validOrigin(e.from)) } : {})
   };
 }
 
@@ -172,6 +182,8 @@ export function normalizeCollection(feature) {
       accuracy: geometry && isNumber(p.accuracy) ? p.accuracy : null,
       altitude: validAltitude(p.altitude, placePoint),
       ...(geometry && p.startedHere === true ? { startedHere: true } : {}),
+      ...(kind !== 'favorites' && validOrigin(p.origin) ? { origin: /** @type {Origin} */ (validOrigin(p.origin)) } : {}),
+      ...(kind !== 'favorites' && validOrigin(p.from) ? { from: /** @type {Origin} */ (validOrigin(p.from)) } : {}),
       createdAt,
       updatedAt: typeof p.updatedAt === 'string' ? p.updatedAt : now,
       plants,
@@ -302,3 +314,102 @@ export function mergeCollections(local, incoming) {
 /** The same content, the dates of change aside. @param {Collection} a @param {Collection} b */
 export const sameContent = (a, b) =>
   same({ ...a, properties: { ...a.properties, updatedAt: '' } }, { ...b, properties: { ...b.properties, updatedAt: '' } });
+
+// ── What a mini-app made ────────────────────────────────────────────────────
+// A mini-app marks what it makes in Mes plantes (`origin`): a favourite of a match, a parcours and its plants.
+// « Recommencer » it, and that goes — unless the user made it their own meanwhile (« promoted »: its origin dropped,
+// `from` kept to say where it came from): a parcours finished with plants, or renamed, edited or added to from Mes
+// plantes, shared or exported; a favourite then put in a collection or given a note.
+
+/**
+ * @typedef {{ favorites: PlantEntry[], collections: { id: string, name: string, plants: number }[], kept: { favorites: number, collections: number } }} Made
+ */
+
+/** Its own, the user's: the origin dropped (`from` says where it came from), for the collection and its entries. Pure. @param {Collection} c @returns {Collection} */
+export function promoted(c) {
+  const app = c.properties.origin?.app;
+  const plants = c.properties.plants.map(e => e.origin ? promotedEntry(e) : e);
+  const { origin, ...rest } = c.properties;
+  void origin;
+  return { ...c, properties: { ...rest, ...(app ? { from: { app } } : {}), plants } };
+}
+
+/** An entry made the user's own (origin dropped, `from` kept). Pure. @param {PlantEntry} e @returns {PlantEntry} */
+export function promotedEntry(e) {
+  const { origin, ...rest } = e;
+  return origin ? { ...rest, from: { app: origin.app } } : e;
+}
+
+/**
+ * A change to a collection by the user (not by the mini-app that made it): anything but the altitudes the app asks for
+ * in the background — its name, its notes, its plants and what is said of them. Pure.
+ * @param {Collection} before @param {Collection} after
+ */
+export function userChange(before, after) {
+  const plain = (/** @type {Collection} */ c) => JSON.stringify({ geometry: c.geometry, name: c.properties.name, notes: c.properties.notes,
+    plants: c.properties.plants.map(({ altitude, ...e }) => { void altitude; return e; }) });
+  return plain(before) !== plain(after);
+}
+
+/**
+ * What a mini-app made in Mes plantes, still its own (« Recommencer » takes it away, the confirmation says it): the
+ * favourites its matches added (entries of the favourites with its origin — not a favourite set elsewhere, nor one
+ * already there before the match), and the collections it made (a parcours under way); and what came from it but the
+ * user made their own (kept: counted for the confirmation). Pure.
+ * @param {Collection[]} collections @param {string} app @returns {Made}
+ */
+export function madeBy(collections, app) {
+  const mine = (/** @type {{ origin?: Origin }} */ x) => x.origin?.app === app;
+  const was = (/** @type {{ from?: Origin }} */ x) => x.from?.app === app;
+  const favs = collections.filter(c => c.id === FAVORITES_ID).flatMap(c => c.properties.plants);
+  const others = collections.filter(c => c.id !== FAVORITES_ID);
+  return {
+    favorites: favs.filter(mine),
+    collections: others.filter(c => mine(c.properties)).map(c => ({ id: c.id, name: c.properties.name, plants: c.properties.plants.length })),
+    kept: { favorites: favs.filter(was).length, collections: others.filter(c => was(c.properties)).length }
+  };
+}
+
+/**
+ * A collection without what a mini-app made: null when it made the collection itself (to delete), else the
+ * collection without the entries it added (the same object when there is none). Pure.
+ * @param {Collection} c @param {string} app @returns {Collection | null}
+ */
+export function withoutMadeBy(c, app) {
+  if (c.id !== FAVORITES_ID && c.properties.origin?.app === app) return null;
+  const plants = c.properties.plants.filter(e => e.origin?.app !== app);
+  return plants.length === c.properties.plants.length ? c : { ...c, properties: { ...c.properties, plants, plantIds: plantIdsOf(plants) } };
+}
+
+/**
+ * The origins of what the mini-apps made before they were recorded (best effort, once): a favourite whose plant is
+ * among a game's matches (`matches`, by mini-app, the first one listed wins) is that game's; the parcours under way
+ * (`walk`), and a parcours kept (`walks`) or started where the walker stood (a parcours' mark) with no plant, are the
+ * Parcours'; one with plants was finished, its own already: promoted (kept). Returns the collections changed. Pure.
+ * @param {Collection[]} collections @param {{ matches: [string, number[]][], walks: string[], walk?: string | null }} known @returns {Collection[]}
+ */
+export function tagLegacy(collections, { matches, walks, walk = null }) {
+  /** @type {Collection[]} */
+  const out = [];
+  for (const c of collections) {
+    if (c.id === FAVORITES_ID) {
+      let changed = false;
+      const plants = c.properties.plants.map(e => {
+        if (e.origin || e.from || e.plantId === null) return e;
+        const app = matches.find(([, ids]) => ids.includes(/** @type {number} */ (e.plantId)))?.[0];
+        if (!app) return e;
+        changed = true;
+        return { ...e, origin: { app } };
+      });
+      if (changed) out.push({ ...c, properties: { ...c.properties, plants } });
+      continue;
+    }
+    const p = c.properties;
+    if (p.origin || p.from) continue;
+    const parcours = c.id === walk || walks.includes(c.id) || (p.kind === 'place' && p.startedHere === true);
+    if (!parcours) continue;
+    const draft = c.id === walk || !p.plants.length;
+    out.push({ ...c, properties: { ...p, ...(draft ? { origin: { app: 'parcours' } } : { from: { app: 'parcours' } }) } });
+  }
+  return out;
+}

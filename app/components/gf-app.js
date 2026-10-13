@@ -15,12 +15,10 @@ import './gf-shared.js';
 import './gf-capture.js';
 import './gf-tabbar.js';
 import './gf-mode-switch.js';
-import './gf-discover.js';
 import './gf-scenarios.js';
 import './gf-launcher.js';
 import '../miniapp/gf-miniapp.js';
 import { discoverEvents, tabShown, UNLOCKS } from '../core/discover.js';
-import { playedInDiscover } from '../core/scenarios.js';
 import { replaceView } from '../core/history.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
@@ -74,7 +72,7 @@ export class GfApp extends LitElement {
     /* The page's tab, on the accent: its contrasting text (the rule above outweighs the .segmented one of ui.js). */
     nav.tabs a[aria-current='page'] { color: var(--gf-accent-contrast); }
     .note, .mode { flex: none; }
-    gf-map-page, gf-spot-editor, gf-collections, gf-shared, gf-flora, gf-discover, gf-miniapp, gf-launcher { flex: 1; min-height: 0; }
+    gf-map-page, gf-spot-editor, gf-collections, gf-shared, gf-flora, gf-miniapp, gf-launcher { flex: 1; min-height: 0; }
     /* A tool that just came (first steps): announced once. */
     .unlocked { position: fixed; z-index: 1003; left: 50%; transform: translateX(-50%); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); width: min(440px, calc(100vw - 24px));
       display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; background: #1f2a1f; color: #fff; box-shadow: 0 10px 30px rgb(0 0 0 / 35%); animation: up 0.3s ease-out; }
@@ -107,9 +105,6 @@ export class GfApp extends LitElement {
       background: var(--gf-accent-soft);
     }
     .banner.error { color: var(--gf-danger); }
-    /* Over Découvrir's start screens, the loading line lies over the top (the picture): their action does not move
-       under the thumb as it comes and goes. Not on a phone on its side, where the title is at the top. */
-    @media (min-height: 501px) { .banner.over { position: absolute; z-index: 6; top: 0; left: 0; right: 0; box-shadow: var(--gf-shadow); } }
 
     /* « Mode King »: the crown, bottom centre, above the tab bar on a phone; touching it leaves the mode. */
     .king {
@@ -255,7 +250,7 @@ export class GfApp extends LitElement {
       <main>
         ${updateReady ? html`<div class="banner" role="status">Nouvelle version de GeoFlora disponible.
           <button class="link" type="button" @click=${() => location.reload()}>Recharger</button></div>` : nothing}
-        ${status === 'loading' ? html`<div class="banner ${route.name === 'discover' && playedInDiscover(route.scenario) ? 'over' : ''}" role="status">${statusText || 'Chargement…'}</div>` : nothing}
+        ${status === 'loading' ? html`<div class="banner" role="status">${statusText || 'Chargement…'}</div>` : nothing}
         ${status === 'error' ? html`<div class="banner error" role="alert">${statusText}
           <button class="link" type="button" @click=${() => location.reload()}>Recharger</button></div>` : nothing}
         ${offline && status === 'ready' && route.name === 'search' ? html`<div class="banner">Hors ligne — recherche sur la copie locale.</div>`
@@ -301,14 +296,8 @@ export class GfApp extends LitElement {
       <button type="button" aria-label="Fermer" @click=${() => { this._unlocked = null; this.requestUpdate(); }}>${icon('x-lg')}</button></div>`;
   }
 
-  /**
-   * Découvrir: a scenario played on its screen (Cueillette prudente, Mosaïque), else the list of the ways to play —
-   * the mini-apps, then the scenarios (gf-launcher, as in the launcher's dialog).
-   * @param {number | null} plant @param {string | null} scenario
-   */
-  #discover(plant, scenario) {
-    return playedInDiscover(scenario) ? html`<gf-discover .open=${plant} .scenario=${scenario}></gf-discover>` : html`<gf-launcher page></gf-launcher>`;
-  }
+  /** Découvrir: the list of the ways to play — the mini-apps, then the scenarios (gf-launcher, as in the launcher's dialog). */
+  #discover() { return html`<gf-launcher page></gf-launcher>`; }
 
   /** @param {import('../core/router.js').Route} route */
   #flora(route) { return html`<gf-flora .route=${route}></gf-flora>`; }
@@ -318,10 +307,10 @@ export class GfApp extends LitElement {
     switch (route.name) {
       case 'discover':
         document.title = 'Découvrir — GeoFlora';
-        return this.#discover(route.plant, route.scenario);
+        return this.#discover();
       case 'search':
       case 'plant':
-        if (route.name === 'search' && !tabShown('flore')) return this.#discover(null, null);
+        if (route.name === 'search' && !tabShown('flore')) return this.#discover();
         // One template for the list and a plant: Lit keeps the same gf-flora (its list, filters, scroll), only the route changes.
         return this.#flora(route);
       case 'map':

@@ -7,7 +7,7 @@
 
 import { config } from '../config.js';
 import * as db from './db.js';
-import { FAVORITES_ID, mergeCollections, newEntryId, normalizeEntry, normalizeCollection, plantIdsOf, rebase, sameContent } from './place-model.js';
+import { FAVORITES_ID, madeBy, mergeCollections, newEntryId, normalizeEntry, normalizeCollection, plantIdsOf, promoted, promotedEntry, rebase, sameContent, tagLegacy, userChange, withoutMadeBy } from './place-model.js';
 import { store } from './store.js';
 import { toPortable } from './portable.js';
 import { encodePortable } from './share.js';
@@ -229,11 +229,12 @@ const matches = (e, ref) => typeof ref === 'string' ? e.id === ref : e.plantId =
  * In a place, the plant gets `position` (default: the place's point); in a list, no position.
  * @param {Collection} place @param {any} plant
  * @param {{ coordinates: [number, number] | null, accuracy: number | null }} [position]
- * @param {{ again?: boolean }} [options]
+ * @param {{ again?: boolean, origin?: import('./place-model.js').Origin }} [options] `origin`: the mini-app adding it (a match's favourite)
  */
-export function withPlant(place, plant, position, { again = false } = {}) {
+export function withPlant(place, plant, position, { again = false, origin } = {}) {
   if (!(again && place.geometry) && findEntry(place, plant.id)) return place;
   const entry = newEntry(plant);
+  if (origin) entry.origin = { app: origin.app };
   if (place.geometry) {
     entry.coordinates = position?.coordinates ? roundCoordinates(position.coordinates) : place.geometry.coordinates;
     entry.accuracy = position?.coordinates ? position.accuracy ?? null : null;
@@ -284,18 +285,22 @@ export const saveCollection = savePlace;
  * so nothing written meanwhile — by another tab, the altitudes, « Noter ici » — is lost) and returns it changed, or
  * the same object to leave it as it is. A collection deleted meanwhile is not made again: GoneError (except the
  * favorites, created on first use).
- * @param {string} id @param {(current: Collection) => Collection} change
+ * A collection a mini-app made (its origin), changed by the user — anyone but that mini-app (`by`), anything but the
+ * altitudes —, becomes the user's own (place-model.js#promoted): « Recommencer » the mini-app keeps it.
+ * @param {string} id @param {(current: Collection) => Collection} change @param {{ by?: string }} [opts] `by`: the mini-app writing
  * @returns {Promise<Collection>} as stored
  */
-export async function updatePlace(id, change) {
+export async function updatePlace(id, change, { by } = {}) {
   /** @type {Collection | null} */
   let saved = null;
   let wrote = false;
   await db.update('spots', id, record => {
     const current = read(record) || (id === FAVORITES_ID ? newCollection('favorites') : undefined);
     if (!current) return undefined;
-    const next = change(current);
+    let next = change(current);
     if (next === current && record) { saved = current; return undefined; }
+    const app = current.properties.origin?.app;
+    if (app && app !== by && userChange(current, next)) next = promoted(next);
     wrote = true;
     return saved = stamped(next);
   });
@@ -372,17 +377,86 @@ export function matchCollections(collections, text, limit = 6) {
 export const isFavorite = plantId => membership.favorites.has(plantId);
 
 /**
- * Adds or removes a plant from the favorites (created on first use).
- * @param {any} plant TAXREF record or search summary
+ * Adds or removes a plant from the favorites (created on first use). `origin`: the mini-app adding it (a match),
+ * whose « Recommencer » takes it away again.
+ * @param {any} plant TAXREF record or search summary @param {import('./place-model.js').Origin} [origin]
  * @returns {Promise<boolean>} new state
  */
-export async function toggleFavorite(plant) {
+export async function toggleFavorite(plant, origin) {
   let on = false;
   await updatePlace(FAVORITES_ID, current => {
     on = !findEntry(current, plant.id);
-    return on ? withPlant(current, plant) : withoutPlant(current, plant.id);
+    return on ? withPlant(current, plant, undefined, { origin }) : withoutPlant(current, plant.id);
   });
   return on;
+}
+
+// ── What a mini-app made ──────────────────────────────────────────────────
+
+/**
+ * A collection made the user's own (a parcours finished with plants, shared, exported alone): its mini-app's
+ * « Recommencer » keeps it. Nothing made by a mini-app (or gone): nothing done. @param {string} id
+ */
+export async function promotePlace(id) {
+  await updatePlace(id, c => c.properties.origin ? promoted(c) : c).catch(() => {});
+}
+
+/**
+ * A favourite made the user's own (put in a collection, given a note): its mini-app's « Recommencer » keeps it.
+ * @param {number} plantId
+ */
+export async function promoteFavorite(plantId) {
+  if (!isFavorite(plantId)) return;
+  await updatePlace(FAVORITES_ID, c => c.properties.plants.some(e => e.plantId === plantId && e.origin)
+    ? withPlants(c, c.properties.plants.map(e => e.plantId === plantId ? promotedEntry(e) : e)) : c).catch(() => {});
+}
+
+/** What a mini-app made in Mes plantes (place-model.js#madeBy): its favourites, its collections. @param {string} app */
+export const madeByApp = async app => madeBy(await listCollections(), app);
+
+/**
+ * « Recommencer » a mini-app: what it made in Mes plantes deleted, in one transaction — its favourites (the
+ * entries with its origin), the collections it made (a parcours, with every plant in it) —; nothing else. The other
+ * tabs and the backup follow. @param {string} app @returns {Promise<number>} the collections and entries removed
+ */
+export async function forgetMadeBy(app) {
+  const keys = (await listCollections()).map(c => c.id);
+  let removed = 0;
+  await db.updateMany('spots', keys, record => {
+    const c = read(record);
+    if (!c) return undefined;
+    const next = withoutMadeBy(c, app);
+    if (next === c) return undefined;
+    removed += next ? c.properties.plants.length - next.properties.plants.length : 1;
+    return next ? stamped(next) : db.DELETE;
+  });
+  if (removed) {
+    // A deliberate deletion may leave nothing: the backup must follow, not keep what was deleted.
+    allowEmptyBackup = true;
+    await changed();
+  }
+  return removed;
+}
+
+/**
+ * The origins of what the mini-apps made before they were recorded, given once (best effort, place-model.js#tagLegacy):
+ * the favourites among a game's matches, the parcours under way or empty (the finished ones are the user's). Marked
+ * done in the database (meta « origins »).
+ * @param {{ matches: [string, number[]][], walks: string[], walk?: string | null }} known
+ */
+export async function tagLegacyOrigins(known) {
+  if (await db.get('meta', 'origins').catch(() => null)) return;
+  const changes = tagLegacy(await listCollections(), known);
+  if (changes.length) {
+    const byId = new Map(changes.map(c => [c.id, c]));
+    await db.updateMany('spots', [...byId.keys()], record => {
+      const c = read(record);
+      // Changed meanwhile: tagged again from what is stored now.
+      return c ? tagLegacy([c], known).map(stamped)[0] : undefined;
+    });
+    await changed();
+  }
+  await db.put('meta', { at: new Date().toISOString() }, 'origins');
 }
 
 /**
@@ -390,6 +464,8 @@ export async function toggleFavorite(plant) {
  * @param {string} collectionId @param {any} plant @param {boolean} on
  */
 export async function setInCollection(collectionId, plant, on) {
+  // A favourite of a game put in a collection: the user's own now.
+  if (on && collectionId !== FAVORITES_ID) await promoteFavorite(plant.id);
   try {
     return await updatePlace(collectionId, current =>
       Boolean(findEntry(current, plant.id)) === on ? current : on ? withPlant(current, plant) : withoutPlant(current, plant.id));
@@ -670,6 +746,8 @@ export async function protectStorage() {
  * @param {Collection[]} [only]
  */
 export async function exportGeoJSON(only) {
+  // One collection exported (its own file): the user's own now, whatever made it.
+  if (only) for (const c of only) if (c.properties.origin) await promotePlace(c.id);
   const features = (only || await listCollections()).sort((a, b) => a.properties.createdAt.localeCompare(b.properties.createdAt));
   // Everything (not one collection): the plant sheet's notes with it, so the file restores them too.
   const collection = toPortable(features, { name: only?.length === 1 ? 'GeoFlora — ' + collectionTitle(only[0]) : 'GeoFlora — mes plantes', sheetNotes: only ? undefined : exportNotes() });

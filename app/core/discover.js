@@ -6,8 +6,11 @@
 // plants around, 5 the whole sheet and every tool (in the harvest or scientific way, as chosen).
 // The tabs come when they become useful — and stay: Mes plantes with the first favourite, the Carte with the
 // first place noted, Flore after a few plants discovered. Someone who already used the app starts with everything.
+// The games around a place (Rencontres, Cueillette prudente, Mosaïque) keep their own place, distance and cards, each
+// with its mini-app (core/around-sessions.js); the session they shared here before is handed over to them once.
 
 import { config } from '../config.js';
+import { clearAroundGames, migrateDiscover } from './around-sessions.js';
 import { listCollections, spotEvents, FAVORITES_ID } from './collections.js';
 import { onStorage } from './sync.js';
 
@@ -25,9 +28,10 @@ export const UNLOCKS = {
 
 /**
  * @typedef {{ done: boolean, unlocked: Unlockable[], tips: string[], seen: number[],
- *   point: [number, number] | null, place: string | null, radius: number, matches: number[], passed: number[],
  *   step: number, firstMatch: boolean, branch: 'harvest' | 'science' | null }} DiscoverState
  */
+/** What the games around a place kept here before (handed over to them: around-sessions.js#migrateDiscover). */
+const HANDED = ['point', 'place', 'radius', 'matches', 'passed'];
 
 /** Someone who already used the app (any setting of it): no first steps. */
 function usedBefore() {
@@ -46,10 +50,19 @@ function usedBefore() {
 
 /** @returns {DiscoverState} */
 function read() {
-  const fresh = { done: false, unlocked: [], tips: [], seen: [], point: null, place: null, radius: 1000, matches: [], passed: [], step: 0, firstMatch: false, branch: null };
+  /** @type {DiscoverState} */
+  const fresh = { done: false, unlocked: [], tips: [], seen: [], step: 0, firstMatch: false, branch: null };
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) || 'null');
-    if (saved && typeof saved === 'object') return { ...fresh, ...saved };
+    if (saved && typeof saved === 'object') {
+      // The session of the games around a place, kept here before: theirs now (once; written back without it).
+      if (HANDED.some(k => k in saved)) {
+        migrateDiscover(saved);
+        for (const k of HANDED) delete saved[k];
+        localStorage.setItem(KEY, JSON.stringify(saved));
+      }
+      return { ...fresh, ...saved };
+    }
   } catch { /* fresh */ }
   return usedBefore() ? { ...fresh, done: true } : fresh;
 }
@@ -113,57 +126,24 @@ export function plantSeen(id) {
   if (state.seen.length >= PLANTS_BEFORE_FLORE) unlock('flore');
 }
 
-/** Where the user discovers (their position or a commune), kept for the next visit. @param {[number, number]} point @param {string | null} place */
-export const setDiscoverPoint = (point, place) => save({ point, place });
-
-/** The place kept for the next visit forgotten (Mentions légales et confidentialité › « Oublier »). */
-export const forgetDiscoverPoint = () => save({ point: null, place: null });
-
-/** The distance of the search, in metres. @param {number} radius */
-export const setDiscoverRadius = radius => save({ radius });
-
 /**
- * A card swiped: right, a match (kept); left, passed (not shown again here). @param {number} id @param {boolean} liked
+ * Rencontres played again (« Rejouer » of the mini-app, which empties its own place, distance and cards): the steps
+ * of its guided way and the fork forgotten. Not the first steps of the app (the tabs that came, the tips, the plants
+ * seen), nor the favourites: they are the user's.
  */
-export function swiped(id, liked) {
-  save(liked ? { matches: [...state.matches.filter(x => x !== id), id], passed: state.passed.filter(x => x !== id) }
-    : { passed: [...state.passed.filter(x => x !== id), id].slice(-500), matches: state.matches.filter(x => x !== id) });
-  plantSeen(id);
-}
-
-/** A card back in the deck (« ↺ »: the last swipe undone, or a match taken back). @param {number} id */
-export const unswipe = id => save({ matches: state.matches.filter(x => x !== id), passed: state.passed.filter(x => x !== id) });
-
-/** A scenario played again (Cueillette, Mosaïque): its choices and cards forgotten — the place, the distance, the cards swiped. Fires `reset`. */
-export function resetChoices() {
-  save({ passed: [], matches: [], point: null, place: null, radius: 1000 });
-  discoverEvents.dispatchEvent(new CustomEvent('reset'));
-}
-
-/**
- * Rencontres played again (« Rejouer » of the mini-app): its session forgotten — the place, the distance, the cards
- * swiped, the matches of this game, the steps of its guided way and the fork. Not the first steps of the app (the
- * tabs that came, the tips, the plants seen), nor the favourites: they are the user's. Fires `reset`.
- */
-export function replayMeet() {
-  save({ passed: [], matches: [], point: null, place: null, radius: 1000, step: 0, firstMatch: false, branch: null });
-  discoverEvents.dispatchEvent(new CustomEvent('reset'));
-}
-
-/** The cards passed, to see them again. */
-export const resetPassed = () => save({ passed: [] });
+export const replayMeet = () => save({ step: 0, firstMatch: false, branch: null });
 
 /** Everything at once (« Tout montrer »). */
 export function finishDiscover() { save({ done: true, step: LAST_STEP }); }
 
 /**
- * The first steps again (Réglages, « Rejouer » in Scénarios): every choice and all progress forgotten — the
- * place, the distance, the cards swiped, the matches, the steps and the fork, the tabs that had come. (The
- * favourites stay: they are the user's.) Fires `reset`.
+ * The first steps again (Réglages › « Recommencer la découverte »): every choice and all progress forgotten — the
+ * steps and the fork, the tabs that had come, and the games around a place (Rencontres, Cueillette prudente,
+ * Mosaïque: their place, distance, cards and matches). (The favourites stay: they are the user's.)
  */
 export function restartDiscover() {
-  save({ done: false, unlocked: [], tips: [], seen: [], passed: [], matches: [], step: 0, firstMatch: false, branch: null, point: null, place: null, radius: 1000 });
-  discoverEvents.dispatchEvent(new CustomEvent('reset'));
+  clearAroundGames();
+  save({ done: false, unlocked: [], tips: [], seen: [], step: 0, firstMatch: false, branch: null });
 }
 
 // Changed in another tab (a game played again there): read again, never overwritten with this tab's older copy.

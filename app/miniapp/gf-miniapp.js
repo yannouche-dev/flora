@@ -4,13 +4,15 @@
 // « Afficher les étapes » says so), and ⋯: show or hide the steps, the layout back to its own, « Rejouer ».
 //  - Its manifest is loaded when it opens (app/miniapps/index.js), checked against the kit, and run (runtime.js).
 //  - The address follows it: a step reached is a new entry (Back returns to the one before), a step an app ported
-//    whole says it is on replaces the address (Back leaves it, as before); ?p= is the context's `focus`.
+//    whole says it is on replaces the address (Back leaves it, as before); ?p= is the context's `focus`: a plant
+//    opened by a component (the event ma-plant) is a new entry too (Back closes it), the next one in its sheet
+//    replaces it. Over a start screen, the plant of a link (?p=) shows in a sheet of its own (ma-plant-sheet).
 //  - The way out: exit.confirm(c) asks first if it says something; then exit.handoff, within the grants; then back
 //    to where it was opened from (else the start page).
 //  - « Rejouer » asks first, in a dialog; then what the app owns is emptied (runtime.js#replay), here and in the
 //    other tabs (core/sync.js), and it starts again at its first step.
 
-import { LitElement, html, css, repeat } from 'lit';
+import { LitElement, html, css, nothing, repeat } from 'lit';
 import { backTo, depth, entryValue, markEntry, openModal, pushHash, replaceHash } from '../core/history.js';
 import { href } from '../core/router.js';
 import { plantViewOf, setHarvestMode, setMode, setShowSteps, StoreController } from '../core/store.js';
@@ -20,11 +22,13 @@ import { ui } from '../styles/ui.js';
 import { startScreen, startStyles, fr } from '../components/start-screen.js';
 import '../components/gf-scenarios.js';
 import { miniApp } from '../miniapps/index.js';
+import { madeByApp } from '../core/collections.js';
 import { kitProblems } from './define.js';
 import { kit } from './kit.js';
-import { MiniApp } from './runtime.js';
+import { MiniApp, replayItems } from './runtime.js';
 import './ma-grid.js';
 import './ma-steps.js';
+import './kit/ma-plant-sheet.js';
 
 export class GfMiniapp extends LitElement {
   static properties = {
@@ -98,8 +102,46 @@ export class GfMiniapp extends LitElement {
     // « Autres scénarios » of a component: the launcher, over the box.
     this.addEventListener('open-scenarios', e => {
       e.stopPropagation();
-      /** @type {any} */ (this.renderRoot.querySelector('gf-scenarios'))?.open();
+      this.#scenarios();
     });
+    // « Recommencer » this app, from the launcher over it (confirmed there): played again, at its first step.
+    this.addEventListener('ma-replay', e => {
+      e.stopPropagation();
+      if (/** @type {CustomEvent} */ (e).detail?.id !== this._app?.m.id) return;
+      /** @type {any} */ (this.renderRoot.querySelector('ma-grid'))?.resetLayout?.();
+      this._app?.replay();
+    });
+    // A plant opened by a component (detail.id), or closed (null).
+    this.addEventListener('ma-plant', e => {
+      e.stopPropagation();
+      this.#plant(/** @type {CustomEvent} */ (e).detail?.id ?? null);
+    });
+  }
+
+  #scenarios = () => { /** @type {any} */ (this.renderRoot.querySelector('gf-scenarios'))?.open(); };
+
+  /** The next change of the plant (?p=) is a new entry: opened by a component. */
+  #pushPlant = false;
+  /** The plant on screen was opened here (Back closes it), not by a link. */
+  #openedHere = false;
+
+  /**
+   * A plant opened (a new entry: Back closes it), or closed — Back when it was opened here, else the address without
+   * it. @param {number | null} id
+   */
+  #plant(id) {
+    const app = this._app;
+    if (!app || !('focus' in app.m.context)) return;
+    if (id == null) {
+      if (this.#openedHere && depth() > 0) history.back();
+      else app.set({ focus: null });
+      this.#openedHere = false;
+      return;
+    }
+    this.#pushPlant = app.c.focus == null;
+    this.#openedHere ||= this.#pushPlant;
+    app.set({ focus: id });
+    this.#pushPlant = false;
   }
 
   /** The depth of the entry it was opened from (Quitter goes back to it). @type {number | null} */ #from = null;
@@ -146,6 +188,7 @@ export class GfMiniapp extends LitElement {
       app.addEventListener('change', this.#onChange);
       app.addEventListener('navigate', this.#onNavigate);
       app.addEventListener('exit', this.#onExit);
+      app.addEventListener('scenarios', this.#scenarios);
       // Where it was opened from: kept in the entry (a reload, Back and Forward find it again).
       const kept = entryValue('gfAppFrom');
       this.#from = typeof kept === 'number' ? kept : depth() > 0 ? depth() - 1 : null;
@@ -167,6 +210,7 @@ export class GfMiniapp extends LitElement {
     app.removeEventListener('change', this.#onChange);
     app.removeEventListener('navigate', this.#onNavigate);
     app.removeEventListener('exit', this.#onExit);
+    app.removeEventListener('scenarios', this.#scenarios);
     app.dispose();
     this._app = null;
   }
@@ -176,6 +220,7 @@ export class GfMiniapp extends LitElement {
     const app = this._app, route = this.route;
     if (!app || !route) return;
     if ('focus' in app.m.context) app.set({ focus: route.plant });
+    if (route.plant == null) this.#openedHere = false;
     // An app ported whole leads its own steps: the address only says them.
     // (The step of the address meanwhile, until it says its own: the bar does not jump back to the start.)
     if (app.m.driven) { if (!route.step || !app.reached(route.step)) this.#syncUrl(); return; }
@@ -199,9 +244,14 @@ export class GfMiniapp extends LitElement {
   }
 
   #onChange = () => {
-    // The plant (?p=) changed in place: the address follows; a step changed: #onNavigate does.
+    // The plant (?p=) changed in place: the address follows (a plant opened: a new entry); a step changed:
+    // #onNavigate does.
     const app = this._app;
-    if (app && /^#\/app\/[^/?]+\/([^?]+)/.exec(location.hash)?.[1] === app.step.id) this.#syncUrl();
+    if (app && /^#\/app\/[^/?]+\/([^?]+)/.exec(location.hash)?.[1] === app.step.id) {
+      const want = this.#href();
+      if (this.#pushPlant && location.hash !== want) pushHash(want, { gfAppFrom: this.#from });
+      else this.#syncUrl();
+    }
     this.requestUpdate();
   };
 
@@ -229,17 +279,21 @@ export class GfMiniapp extends LitElement {
 
   /** « Rejouer », once confirmed. */
   async #replay() {
-    if (!this._app || !(await this.#ask('replay'))) return;
+    const app = this._app;
+    if (!app) return;
+    // What will be deleted, said: what it made in Mes plantes (its favourites, its parcours), the game.
+    const items = replayItems(app.m, await madeByApp(app.m.id).catch(() => ({ favorites: [], collections: [], kept: { favorites: 0, collections: 0 } })));
+    if (!(await this.#ask('replay', '', items))) return;
     /** @type {any} */ (this.renderRoot.querySelector('ma-grid'))?.resetLayout?.();
     await this._app.replay();
   }
 
   /** The answer of a confirmation dialog. @type {((yes: boolean) => void) | null} */ #answer = null;
-  /** @type {{ kind: 'replay' | 'leave', text: string } | null} */ _asking = null;
+  /** @type {{ kind: 'replay' | 'leave', text: string, items?: { gone: string[], kept: string[] } } | null} */ _asking = null;
 
-  /** Asks in a modal dialog (a step in history: Back says no). @param {'replay' | 'leave'} kind @param {string} [text] @returns {Promise<boolean>} */
-  async #ask(kind, text = '') {
-    this._asking = { kind, text };
+  /** Asks in a modal dialog (a step in history: Back says no). @param {'replay' | 'leave'} kind @param {string} [text] @param {{ gone: string[], kept: string[] }} [items] what « Rejouer » deletes, and keeps @returns {Promise<boolean>} */
+  async #ask(kind, text = '', items = { gone: [], kept: [] }) {
+    this._asking = { kind, text, items };
     this.requestUpdate();
     await this.updateComplete;
     const dialog = /** @type {HTMLDialogElement | null} */ (this.renderRoot.querySelector('dialog.ask'));
@@ -264,7 +318,8 @@ export class GfMiniapp extends LitElement {
     const c = app.c;
     const kind = step.kind ?? 'grid';
     const drawn = kind !== 'grid' && !(m.driven && kind === 'start');
-    const bar = app.guided && !this._ownBar;
+    const bar = app.guided && !this._ownBar && !m.ownBar?.(c, app);
+    const focus = drawn && 'focus' in m.context && typeof c.focus === 'number' ? c.focus : null;
     const asking = this._asking;
     return html`<div class="bar">
         <button class="quit" type="button" title=${fr(m.exit.label)} aria-label=${fr(m.exit.label)} @click=${() => app.exit()}>${icon('x-lg')}<span class="lbl">${fr(m.exit.label)}</span></button>
@@ -283,14 +338,16 @@ export class GfMiniapp extends LitElement {
       <p class="visually-hidden" role="status">${this._said}</p>
       <div class="body">${repeat([app.generation], g => g, () => drawn
         ? html`<div class="start-host">${startScreen(app.startSpec(step))}</div>`
-        : html`<ma-grid .app=${app} .c=${c} .path=${app.path}></ma-grid>`)}</div>
+        : html`<ma-grid .app=${app} .c=${c} .path=${app.path}></ma-grid>`)}
+        ${focus != null ? html`<ma-plant-sheet .open=${focus} scoped></ma-plant-sheet>` : nothing}</div>
       <dialog class="ask" aria-labelledby="ask-title" aria-describedby="ask-text">
         <form method="dialog">
           ${asking?.kind === 'leave'
             ? html`<h2 id="ask-title">${fr(m.exit.label)} ?</h2><p id="ask-text">${fr(asking.text)}</p>
               <div class="row"><button value="no" type="submit" autofocus>Rester</button><button class="primary" value="yes" type="submit">Quitter</button></div>`
-            : html`<h2 id="ask-title">${fr('Rejouer : tout recommencer depuis le début ?')}</h2>
-              <p id="ask-text">Les données de cette partie seront effacées. Vos plantes, vos favoris et vos lieux restent.</p>
+            : html`<h2 id="ask-title">${fr('Recommencer : tout effacer ?')}</h2>
+              <p id="ask-text">${fr(`Seront supprimés : ${(asking?.items?.gone ?? []).join(', ')}. Cette action est définitive.`)}${(asking?.items?.kept ?? []).map(k => ' ' + fr(k))}</p>
+              <p class="kept">${fr(`Ce qui ne vient pas de ${m.title} reste : vos autres plantes et favoris, vos lieux, vos réglages.`)}</p>
               <div class="row"><button value="no" type="submit" autofocus>Annuler</button><button class="danger" value="yes" type="submit">${icon('arrow-counterclockwise')} Rejouer</button></div>`}
         </form>
       </dialog>`;

@@ -8,7 +8,7 @@ import './history.js';
  *   | { name: 'map', spot: string | null, plant: number | null, focus: string | null, season: boolean, add: number | null, pick: boolean, flore: boolean }
  *   | { name: 'spot-new', plant: number | null, kind: 'list' | 'place', at: [number, number] | null }
  *   | { name: 'spot', id: string, add: number | null, pick: boolean }
- *   | { name: 'shared', data: string } | { name: 'discover', plant: number | null, scenario: string | null }
+ *   | { name: 'shared', data: string } | { name: 'discover' }
  *   | { name: 'app', id: string, step: string | null, plant: number | null }
  *   | { name: 'not-found' }} Route
  */
@@ -55,12 +55,13 @@ export function parse(hash) {
   // A mini-app (app/miniapps), alone on the screen: #/app/<id>[/<step>][?p=<plant>].
   const app = /^app\/([a-z][a-z0-9-]{1,23})(?:\/([a-z][a-z0-9-]{1,23}))?$/.exec(path);
   if (app) return { name: 'app', id: app[1], step: app[2] ?? null, plant: number('p') };
-  // Rencontres and the Parcours, scenarios of Découvrir before they were mini-apps: their old addresses open them
-  // (a plant open over Découvrir with no scenario, #/discover?p=<id>, was over Rencontres' cards).
-  const was = path === 'discover' ? { meet: 'rencontres', trail: 'parcours' }[params.get('s') || (params.has('p') ? 'meet' : '')] : undefined;
-  if (was) return { name: 'app', id: was, step: null, plant: number('p') };
-  // « Découvrir »: the list of the ways to play; ?s=<scenario> one played on its screen (harvest, mosaic), ?p=<id> a plant open.
-  if (path === 'discover') return { name: 'discover', plant: number('p'), scenario: /^[a-z]{2,12}$/.test(params.get('s') || '') ? params.get('s') : null };
+  // Rencontres, the Parcours, Cueillette prudente and Mosaïque, scenarios of Découvrir before they were mini-apps: their
+  // old addresses open them (a plant open over Découvrir with no scenario, #/discover?p=<id>, was over Rencontres'
+  // cards); a plant open there, over its cards.
+  const was = path === 'discover' ? { meet: 'rencontres', trail: 'parcours', harvest: 'cueillette', mosaic: 'mosaique' }[params.get('s') || (params.has('p') ? 'meet' : '')] : undefined;
+  if (was) return { name: 'app', id: was, step: was !== 'parcours' && params.has('p') ? 'cards' : null, plant: number('p') };
+  // « Découvrir »: the list of the ways to play (any other scenario: the list too).
+  if (path === 'discover') return { name: 'discover' };
   return { name: 'not-found' };
 }
 
@@ -75,14 +76,8 @@ export const href = {
   settings: () => '#/settings',
   /** Mentions légales et confidentialité (from Réglages). */
   legal: () => '#/legal',
-  /** « Découvrir »: the list of the ways to play; with a scenario (Cueillette, Mosaïque), its screen, a plant open. */
-  discover: (/** @type {number | null | undefined} */ plantId = null, /** @type {string | null | undefined} */ scenario = null) => {
-    const params = new URLSearchParams();
-    if (scenario) params.set('s', scenario);
-    if (plantId) params.set('p', String(plantId));
-    const q = params.toString();
-    return '#/discover' + (q ? '?' + q : '');
-  },
+  /** « Découvrir »: the list of the ways to play. */
+  discover: () => '#/discover',
   /** Mes plantes; `open`: the collection shown (a place: its map too), `plant`: the plant sheet beside. */
   collections: (/** @type {{ open?: string | null, plant?: number | null }} */ options = {}) => {
     const params = new URLSearchParams();

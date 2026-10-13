@@ -1,0 +1,111 @@
+// @ts-check
+// What the three mini-apps around a place share in their manifests (Rencontres, Cueillette prudente, Mosaïque): the
+// context their components read (the place, the distance, the swipes, kept; the plant open, the start's error), the
+// first screen (« Autour de moi », a commune, « Reprendre » the place kept), the action that finds where you are, and
+// the steps start › map › cards (a place chosen: the map, its distance; then the cards).
+
+import { watchLocation } from '../../core/geo.js';
+import { discovering, finishDiscover } from '../../core/discover.js';
+import { href } from '../../core/router.js';
+import { geoProblem } from '../../components/start-screen.js';
+import { distLabel } from './cards.js';
+import { sessionOf } from './session.js';
+
+/** @typedef {'meet' | 'harvest' | 'mosaic'} AroundKind */
+
+/** The words of each one's first screen (`name`: in « Quitter … : autres scénarios »). */
+export const WORDS = {
+  meet: { name: 'les rencontres', title: 'Rencontrez les plantes d’ici',
+    lead: 'Une carte par plante observée autour de vous. Un coup de cœur à droite, au suivant à gauche. Vos coups de cœur rejoignent vos favoris.' },
+  harvest: { name: 'la cueillette', title: 'Cueillette prudente', lead: 'Ce qui se cueille autour de vous, et ses sosies dangereux. Les plus toxiques passent en premier.',
+    caution: { text: 'Ne cueillez jamais une plante sans être sûr de vous.' } },
+  mosaic: { name: 'la mosaïque', title: 'La mosaïque du coin', lead: 'Les photos des plantes observées près d’ici, en grand. Touchez une image pour voir toutes celles de la plante.' }
+};
+
+/** « Autour de moi » takes a position at most this old (ms). */
+const FIX_MAX_AGE = 60_000;
+
+/**
+ * The context of a mini-app around a place: kept (persist) — the place chosen and its name, the distance, the cards
+ * swiped right (matches) and left (passed); for the visit — the plant open (the address's ?p=), why « Autour de moi »
+ * failed. @returns {Record<string, import('../define.js').ContextKey>}
+ */
+export const aroundContext = () => ({
+  point: { init: null, persist: true },
+  place: { init: null, persist: true },
+  radius: { init: 1000, persist: true, min: 200, max: 50000 },
+  matches: { init: [], persist: true },
+  passed: { init: [], persist: true },
+  focus: { init: null },
+  startError: { init: null }
+});
+
+/** A place chosen: the map and its distance, then the cards. @param {any} c */
+const placed = c => Array.isArray(c.point);
+
+/**
+ * « Autour de moi »: once; a commune chosen meanwhile, « Annuler », the app left drop its answer; an old fix is not
+ * taken. Found: the place, and on to the map. @type {import('../define.js').ActionSpec}
+ */
+export const locate = {
+  mode: 'exclusive',
+  run: (/** @type {import('../runtime.js').MiniApp} */ app) => new Promise(resolve => {
+    app.set({ startError: null });
+    const since = Date.now() - FIX_MAX_AGE;
+    const signal = app.signal('locate');
+    let live = true;
+    /** @type {() => void} */
+    let unsubscribe = () => {};
+    const end = () => { if (!live) return; live = false; queueMicrotask(() => unsubscribe()); resolve(undefined); };
+    signal.addEventListener('abort', end, { once: true });
+    unsubscribe = watchLocation(s => {
+      if (!live) return;
+      if (s.fix && s.fix.timestamp >= since) { end(); sessionOf(app).setPoint(s.fix.coordinates, null); app.go('map'); }
+      else if (s.error) { end(); app.set({ startError: geoProblem(s.code, { place: true, retry: () => app.do('locate') }) }); }
+    });
+  })
+};
+
+/**
+ * The first screen (start-screen.js's template): its picture and words, « Autour de moi »; smaller, a commune, the
+ * place kept (« Reprendre »); the way out — « Passer » during the first steps (Rencontres), else the launcher.
+ * @param {any} c @param {import('../runtime.js').MiniApp} app @param {AroundKind} kind
+ * @returns {import('../../components/start-screen.js').StartSpec}
+ */
+export function aroundStart(c, app, kind) {
+  const w = /** @type {{ name: string, title: string, lead: string, caution?: { text: string } }} */ (WORDS[kind]);
+  const stop = () => { app.cancel('locate'); app.set({ startError: null }); };
+  return {
+    id: kind, art: kind, title: w.title, lead: w.lead, caution: w.caution,
+    primary: { icon: 'geo-alt-fill', label: 'Autour de moi', busyLabel: 'Localisation…', busy: app.busy('locate'), cancel: stop, run: () => { app.do('locate'); } },
+    error: c.startError,
+    note: 'Votre position est envoyée à iNaturalist et à l’IGN pour chercher autour de vous ; elle n’est gardée que sur cet appareil.',
+    alternatives: [
+      { kind: 'place', label: 'ou choisir une commune', field: 'Choisir une commune', pick: p => { stop(); sessionOf(app).setPoint(p.coordinates, p.label); app.go('map'); } },
+      placed(c) && { kind: 'choices', label: 'Reprendre', items: [{ key: 'kept', icon: 'geo-alt', label: c.place ? `Autour de ${c.place}` : 'Au dernier lieu choisi',
+        meta: distLabel(c.radius || 1000), run: () => { stop(); app.go('map'); } }] }
+    ],
+    exit: kind === 'meet' && discovering()
+      ? { label: 'Passer : montrer toute l’application', href: href.search(), run: () => finishDiscover() }
+      : { icon: 'camera-reels', label: `Quitter ${w.name} : autres scénarios`, run: () => { stop(); app.scenarios(); } }
+  };
+}
+
+/** The last step's name in the steps bar, and what it shows. */
+const CARDS = {
+  meet: { label: 'Rencontres', about: 'Une carte à la fois' },
+  harvest: { label: 'Cueillette', about: 'Ce qui se cueille, et ses sosies dangereux' },
+  mosaic: { label: 'Mosaïque', about: 'Les photos des plantes d’ici' }
+};
+
+/**
+ * The steps: the start, the map (how far), the cards. `map` and `cards` add the components of each app.
+ * @param {AroundKind} kind @param {{ map?: import('../define.js').Place[], cards?: import('../define.js').Place[], drop?: string[] }} put
+ * @returns {import('../define.js').Step[]}
+ */
+export const aroundSteps = (kind, put) => [
+  { id: 'start', kind: 'start', label: 'Départ', about: 'Autour de vous, ou d’une commune', next: 'map', start: (c, app) => aroundStart(c, app, kind) },
+  { id: 'map', label: 'Carte', about: 'Jusqu’où chercher', can: placed, next: 'cards', add: put.map ?? [] },
+  { id: 'cards', label: CARDS[kind].label, about: CARDS[kind].about, can: placed,
+    add: put.cards ?? [], drop: put.drop ?? [] }
+];

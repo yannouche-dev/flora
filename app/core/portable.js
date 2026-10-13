@@ -50,6 +50,9 @@ function slimEntry(e, at, personal) {
     const m = altitudeAt(e.altitude, e.coordinates);
     if (m !== null) out.altitude = m;
   }
+  // Made by a mini-app (a match's favourite): « Recommencer » it on the device that reads the file, and it goes too.
+  if (e.origin) out.origin = e.origin;
+  if (e.from) out.from = e.from;
   if (personal) {
     if (e.notes) out.notes = e.notes;
     if (e.harvests?.length) out.harvests = e.harvests.map(slimHarvest);
@@ -80,6 +83,8 @@ export function toPortable(collections, { personal = true, name = 'GeoFlora — 
       if (at && p.accuracy !== null && p.accuracy !== undefined) props.accuracy = p.accuracy;
       const m = c.geometry ? altitudeAt(p.altitude, c.geometry.coordinates) : null;
       if (m !== null) props.altitude = m;
+      if (p.origin) props.origin = p.origin;
+      if (p.from) props.from = p.from;
       props.createdAt = p.createdAt;
       props.updatedAt = p.updatedAt;
       props.plants = p.plants.map(e => slimEntry(e, at, personal));

@@ -7,7 +7,7 @@ import { href } from '../core/router.js';
 import { icon } from '../core/icons.js';
 import * as db from '../core/db.js';
 import { forgetFailures } from '../core/cache.js';
-import { discoverState, forgetDiscoverPoint } from '../core/discover.js';
+import { forgetPlaces, keptPlace } from '../core/around-sessions.js';
 import { ui } from '../styles/ui.js';
 
 /** The publisher's name or pseudonym, as the law asks it shown (LCEN, art. 6). To be filled in by the owner. */
@@ -76,8 +76,8 @@ export class GfLegal extends LitElement {
   }
 
   #forgetPosition() {
-    forgetDiscoverPoint();
-    this._done = 'Dernière position de Découvrir oubliée.';
+    forgetPlaces();
+    this._done = 'Dernière position de Découvrir oubliée (Rencontres, Cueillette prudente, Mosaïque).';
   }
 
   /** The answers of the online services kept on the device (some hold the coordinates searched), and their images and map tiles. */
@@ -93,7 +93,7 @@ export class GfLegal extends LitElement {
 
   render() {
     document.title = 'Mentions légales et confidentialité — GeoFlora';
-    const kept = discoverState().point;
+    const kept = keptPlace();
     return html`<article>
       <a class="back link" href=${href.settings()}>${icon('arrow-left')} Réglages</a>
       <h1>Mentions légales et confidentialité</h1>
@@ -116,7 +116,7 @@ export class GfLegal extends LitElement {
         <li>La flore (espèces, noms, statuts, données de toxicité), pour fonctionner hors ligne.</li>
         <li>Vos lieux, collections, favoris, parcours, récoltes et notes, avec leur position GPS, et leur copie de secours. Ils ne quittent l’appareil que si vous les exportez ou les partagez (un lien de partage porte les données dans l’adresse après « # », que le serveur ne reçoit pas).</li>
         <li>Vos réglages : modes d’affichage, modules, mise en page des fiches, région, recherches récentes, jeton Trefle si vous en avez saisi un.</li>
-        <li>Le dernier lieu de Découvrir (votre position, ou la commune choisie), pour reprendre là à la prochaine visite${kept ? '' : ' (aucun pour le moment)'}.</li>
+        <li>Le dernier lieu de Découvrir (votre position, ou la commune choisie, dans Rencontres, la Cueillette prudente et la Mosaïque), pour reprendre là à la prochaine visite${kept ? '' : ' (aucun pour le moment)'}.</li>
         <li>Les réponses des services en ligne, de 7 jours à un an pour les altitudes (certaines portent les coordonnées cherchées), et les images et cartes déjà vues, pour les revoir hors ligne.</li>
       </ul>
       <div class="row">

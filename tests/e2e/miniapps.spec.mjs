@@ -15,8 +15,9 @@ async function replay(page) {
   await box.locator('.more summary').click();
   await box.locator('.menu').getByRole('button', { name: 'Rejouer' }).click();
   const dialog = box.getByRole('dialog');
-  await expect(dialog).toContainText('Rejouer : tout recommencer depuis le début ?');
-  await expect(dialog).toContainText('Les données de cette partie seront effacées.');
+  await expect(dialog).toContainText('Recommencer : tout effacer ?');
+  await expect(dialog).toContainText('la partie en cours. Cette action est définitive.');
+  await expect(dialog.getByRole('button', { name: 'Annuler' })).toBeFocused();
   await dialog.getByRole('button', { name: 'Rejouer' }).click();
   await expect(dialog).toBeHidden();
 }
@@ -42,36 +43,43 @@ test('les anciennes adresses de Découvrir ouvrent les mini-applications', async
   await expect(page.getByRole('heading', { name: 'Rencontrez les plantes d’ici' })).toBeVisible();
 });
 
-test('Rencontres : départ, carte, cartes ; « Rejouer » vide la partie, pas les favoris', async ({ app, page }) => {
+test('Rencontres : départ, carte, cartes ; « Rejouer » vide la partie et ses favoris, pas ceux d’ailleurs', async ({ app, page }) => {
   await app.open('#/app/rencontres');
-  const discover = page.locator('gf-discover');
   await page.getByRole('button', { name: 'Autour de moi' }).click();
   await expect.poll(() => step(page)).toBe('map');
-  await discover.getByRole('button', { name: 'Qui pousse par ici ?' }).click();
+  await page.locator('ma-distance').getByRole('button', { name: 'Qui pousse par ici ?' }).click();
   await expect.poll(() => step(page)).toBe('cards');
-  const top = discover.locator('.swipe-card.top');
+  // Back: the step before (the map), Forward: the cards again.
+  await page.goBack();
+  await expect.poll(() => step(page)).toBe('map');
+  await page.goForward();
+  await expect.poll(() => step(page)).toBe('cards');
+  const top = page.locator('ma-deck .swipe-card.top');
   await expect(top).toHaveAttribute('data-id', String(plantId('Allium ursinum')));
   await page.keyboard.press('ArrowRight');
   const ail = plantId('Allium ursinum');
   await expect.poll(() => page.evaluate(async id => (await import('/app/core/collections.js')).isFavorite(id), ail)).toBe(true);
-  expect((await page.evaluate(async () => (await import('/app/core/discover.js')).discoverState())).matches).toEqual([ail]);
+  const session = () => page.evaluate(() => { const s = JSON.parse(localStorage.getItem('geoflora.app.rencontres.state') || 'null')?.ctx; return s ? { point: s.point, matches: s.matches, passed: s.passed } : null; });
+  await expect.poll(async () => (await session())?.matches).toEqual([ail]);
+  // A favourite from elsewhere (Flore), kept.
+  const ortie = plantId('Urtica dioica');
+  await page.evaluate(async id => { const db = await import('/app/core/db.js'); await (await import('/app/core/collections.js')).toggleFavorite(await db.get('plants', id)); }, ortie);
 
   await replay(page);
   await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/app/rencontres/start');
   await expect(page.getByRole('heading', { name: 'Rencontrez les plantes d’ici' })).toBeVisible();
-  const empty = { point: null, matches: [], passed: [] };
-  const session = () => page.evaluate(async () => { const s = (await import('/app/core/discover.js')).discoverState(); return { point: s.point, matches: s.matches, passed: s.passed }; });
-  expect(await session()).toEqual(empty);
-  // The favourite is the user's: it stays.
-  expect(await page.evaluate(async id => (await import('/app/core/collections.js')).isFavorite(id), ail)).toBe(true);
+  // Nothing kept: the game, and the favourite its match added, gone; the one from Flore stays.
+  expect(await session()).toBe(null);
+  await expect.poll(() => page.evaluate(async id => (await import('/app/core/collections.js')).isFavorite(id), ail)).toBe(false);
+  expect(await page.evaluate(async id => (await import('/app/core/collections.js')).isFavorite(id), ortie)).toBe(true);
   await page.reload();
   await app.ready();
   await expect(page.getByRole('heading', { name: 'Rencontrez les plantes d’ici' })).toBeVisible();
-  expect(await session()).toEqual(empty);
+  expect(await session()).toBe(null);
   expect(await step(page)).toBe('start');
 });
 
-test('Parcours : en marche puis « Rejouer » ; le parcours reste dans Mes plantes', async ({ app, page }) => {
+test('Parcours : en marche puis « Rejouer » ; le parcours enregistré quitte Mes plantes', async ({ app, page }) => {
   await app.open('#/app/parcours');
   const trail = page.locator('gf-trail');
   await trail.locator('.go').click();
@@ -90,8 +98,8 @@ test('Parcours : en marche puis « Rejouer » ; le parcours reste dans Mes plant
   await expect(page.locator('gf-trail .go')).toBeVisible();
   const owned = () => page.evaluate(() => ['geoflora.trail', 'geoflora.trails', 'geoflora.trailDone'].map(k => localStorage.getItem(k)));
   expect(await owned()).toEqual([null, null, null]);
-  // The walk itself is a place of Mes plantes: the user's, it stays.
-  expect(await kept()).toBe(1);
+  // The walk it saved in Mes plantes is its own: gone too.
+  await expect.poll(kept).toBe(null);
   await page.reload();
   await app.ready();
   await expect(page.locator('gf-trail .go')).toBeVisible();

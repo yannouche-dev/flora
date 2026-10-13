@@ -13,7 +13,7 @@ test('autour de moi : la carte des observations, puis les cartes, la plus observ
   await app.open('#/');
   await page.locator('gf-launcher li[data-app="rencontres"]').getByRole('button', { name: 'Jouer' }).click();
   await page.getByRole('button', { name: 'Autour de moi' }).click();
-  const discover = page.locator('gf-discover');
+  const discover = page.locator('ma-guided');
   await expect(discover.locator('.g-steps li.on .l')).toHaveText('Carte');
   const map = discover.locator('.g-mapbox gf-map');
   await expect(map.locator('path.gf-area')).toHaveCount(1);
@@ -30,7 +30,7 @@ test('autour de moi : la carte des observations, puis les cartes, la plus observ
 test('un cœur (→) garde la plante dans les favoris, un passage (←) montre la suivante', async ({ app, page }) => {
   await app.open('#/app/rencontres');
   await page.getByRole('button', { name: 'Autour de moi' }).click();
-  const discover = page.locator('gf-discover');
+  const discover = page.locator('ma-guided');
   await discover.locator('.g-steps [data-step="go"]').click();
   const top = discover.locator('.swipe-card.top');
   await expect(top).toHaveAttribute('data-id', String(plantId('Allium ursinum')));
@@ -56,6 +56,8 @@ test('« Passer » montre toute l’application ; « Recommencer la découverte 
   await expect(page.getByRole('heading', { level: 1, name: 'Découvrir' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Rencontrez les plantes d’ici' })).toHaveCount(0);
   const state = await page.evaluate(async () => (await import('/app/core/discover.js')).discoverState());
-  expect({ done: state.done, step: state.step, matches: state.matches.length }).toEqual({ done: false, step: 0, matches: 0 });
+  expect({ done: state.done, step: state.step }).toEqual({ done: false, step: 0 });
+  // Rencontres' game (its place, its matches) forgotten too.
+  expect(await page.evaluate(() => localStorage.getItem('geoflora.app.rencontres.state'))).toBe(null);
   await expect.poll(() => app.tabs()).not.toContain('Flore');
 });
