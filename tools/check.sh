@@ -7,8 +7,10 @@
 #  - every import finds its file and the names it asks for, and the import map of index.html its files
 #    (tools/check-imports.mjs): no build step links the modules, so a broken one only shows in the browser, as a
 #    blank screen the service worker then caches;
-#  - the service worker precaches every app and vendor script and stylesheet (or offline mode breaks), and every
-#    path it precaches is deployed (a single missing file and it never installs);
+#  - the service worker precaches every file of app/, vendor/, lib/ and assets/, index.html and the manifest (or
+#    offline mode breaks), and every path it precaches is deployed (a single missing file and it never installs);
+#  - its VERSION is written at deploy, from the files it precaches (tools/stamp-sw.mjs): 'dev' in the repository
+#    (never bumped by hand), the fingerprint of the site's files in an assembled site;
 #  - the safety data: look-alike pairs, toxicity sources, protection statuses (scripts/check-data.mjs);
 #  - the licence rules of the images and their credits, as a table (tests/licenses.mjs);
 #  - the CSP of index.html allows its inline scripts by hash (tools/csp-hash.mjs, when present).
@@ -60,9 +62,9 @@ shell="$(sed -n "/^const SHELL = \[/,/^\];/p" sw.js | grep -o "'[^']*'" | tr -d 
 if [ -z "$shell" ]; then
   fail '::error file=sw.js::no « const SHELL = [ … ]; » list found in sw.js'
 else
-  # Every app file must be precached by the service worker, or offline mode breaks.
+  # Every file of the app must be precached by the service worker, or offline mode breaks.
   files=0
-  for file in $(find app vendor \( -name '*.js' -o -name '*.css' \) | sort); do
+  for file in index.html manifest.webmanifest $(find app vendor lib assets -type f | sort); do
     files=$((files + 1))
     grep -qxF "$file" <<<"$shell" || fail "::error file=sw.js::$file missing from SHELL"
   done
@@ -80,7 +82,29 @@ else
     paths=$((paths + 1))
     [ "$path" = ./ ] || deployed "$path" || fail "::error file=sw.js::$path is precached but not deployed"
   done
-  echo "$paths precached paths; $files app and vendor scripts and stylesheets"
+  echo "$paths precached paths; $files files of the app"
+fi
+
+step "Service worker version (tools/stamp-sw.mjs${SITE:+, against $SITE})"
+if [ -n "$SITE" ]; then
+  node tools/stamp-sw.mjs "$SITE" --check || failed=1
+elif ! grep -qxF "const VERSION = 'dev';" sw.js; then
+  fail "::error file=sw.js::sw.js must keep « const VERSION = 'dev'; »: the version is written at deploy (tools/assemble-site.sh), never by hand"
+else
+  # The copy of the deployed files above: stamped, its version is the fingerprint of its files, and changes with them.
+  if node tools/stamp-sw.mjs "$tmp" >/dev/null && node tools/stamp-sw.mjs "$tmp" --check; then
+    before="$(sed -n "s/^const VERSION = '\([0-9a-f]\{12\}\)';$/\1/p" "$tmp/sw.js")"
+    echo '// changed' >> "$tmp/app/config.js"
+    node tools/stamp-sw.mjs "$tmp" >/dev/null
+    after="$(sed -n "s/^const VERSION = '\([0-9a-f]\{12\}\)';$/\1/p" "$tmp/sw.js")"
+    if [ -z "$before" ] || [ "$before" = "$after" ]; then
+      fail '::error file=tools/stamp-sw.mjs::the version written into sw.js does not follow the files it precaches'
+    else
+      echo "a changed file gives a new version ($before → $after)"
+    fi
+  else
+    failed=1
+  fi
 fi
 
 step 'Safety data (scripts/check-data.mjs)'

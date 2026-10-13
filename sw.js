@@ -1,17 +1,27 @@
 // GeoFlora service worker — hand-written, no tooling.
-//  - app shell: precached, then stale-while-revalidate (a deploy is picked up on the next launch)
+//  - app shell: precached as one versioned whole, then served from the cache first. VERSION is written at deploy
+//    (tools/assemble-site.sh, tools/stamp-sw.mjs): a fingerprint of the SHELL files and of this file, so any change
+//    gives a new sw.js, which the browser notices on its own (at each launch, and when the app comes back to the
+//    foreground: app/main.js), installs in the background, whole or not at all, and the app offers to reload. Until
+//    then, the version running stays the one cached, never a mix of two deploys. In the repository VERSION is 'dev':
+//    the shell is then served from the network first (an edit shows on a reload), the cache only offline.
 //  - data/*.json: network only — the dataset lives in IndexedDB, so it is not duplicated here
 //    (except data/territories.json, data/lookalikes.json and data/safety.json: small and static, precached —
 //    the look-alike and toxicity warnings must work offline, where the picking happens)
-//  - remote images (Wikimedia, iNaturalist): stale-while-revalidate, capped (not the originals of the media viewer)
+//  - remote images (Wikimedia, iNaturalist…): stale-while-revalidate, in a cache kept across versions and capped
+//    (not the originals of the media viewer). Fetched with CORS, so what is stored is a readable response of its
+//    real size: an opaque one (a host without CORS) is shown but never stored, as each counts ~7 MB of quota.
 //  - IGN map tiles: cache-first, capped — areas already viewed stay available offline
 //  - remote API JSON: not cached here (app/core/sources.js caches it in IndexedDB)
 
-const VERSION = 'v106';
+// Written at deploy by tools/stamp-sw.mjs: never edited by hand.
+const VERSION = 'dev';
+const DEV = VERSION === 'dev';
 const SHELL_CACHE = 'geoflora-shell-' + VERSION;
-const IMAGE_CACHE = 'geoflora-images-' + VERSION;
+// Photos and tiles are kept across app versions (not tied to VERSION): they don't change when the app does.
+// (app/components/gf-legal.js empties both.)
+const IMAGE_CACHE = 'geoflora-images';
 const IMAGE_LIMIT = 400;
-// Tiles are kept across app versions (not tied to VERSION): they don't change when the app does.
 const TILE_CACHE = 'geoflora-tiles';
 const TILE_LIMIT = 3000;
 const TILE_HOST = 'data.geopf.fr';
@@ -142,16 +152,22 @@ const SHELL = [
   'app/components/gf-tabbar.js'
 ];
 
+/** The address of each precached file, to tell them from the other files of the site. */
+const PRECACHED = new Set(SHELL.map(path => new URL(path, self.location.href).href));
 
 self.addEventListener('install', event => {
+  // All or nothing: one file missing and this version never installs (its partial cache goes; not in the repository,
+  // where every worker shares the 'dev' cache), the one running keeps its own cache.
   event.waitUntil(
     caches.open(SHELL_CACHE)
       .then(cache => cache.addAll(SHELL.map(path => new Request(path, { cache: 'reload' }))))
+      .catch(error => (DEV ? Promise.resolve() : caches.delete(SHELL_CACHE)).then(() => { throw error; }))
       .then(() => self.skipWaiting())
   );
 });
 
 self.addEventListener('activate', event => {
+  // The previous versions' shells go, and the photo caches named after a version (before the cache kept across them).
   event.waitUntil(
     caches.keys()
       .then(keys => Promise.all(
@@ -176,10 +192,10 @@ self.addEventListener('fetch', event => {
     // and never stored as the app's page.
     if (request.mode === 'navigate') {
       if (!isAppPage(url)) return;
-      event.respondWith(staleWhileRevalidate(event, SHELL_CACHE, 'index.html', 0, isHtml));
+      event.respondWith(fromShell(event, 'index.html', isHtml));
       return;
     }
-    event.respondWith(staleWhileRevalidate(event, SHELL_CACHE, request));
+    event.respondWith(fromShell(event, request));
     return;
   }
 
@@ -193,7 +209,7 @@ self.addEventListener('fetch', event => {
   // Plant photos (Wikimedia, iNaturalist, herbaria…): whatever host the dataset points to.
   // Not the originals the media viewer zooms on (megabytes each): straight from the network.
   if (request.destination === 'image' && !isOriginal(url)) {
-    event.respondWith(staleWhileRevalidate(event, IMAGE_CACHE, request, IMAGE_LIMIT));
+    event.respondWith(cachedImage(event));
   }
 });
 
@@ -211,26 +227,75 @@ function isOriginal(url) {
   return /\/photos\/\d+\/original\./.test(url.pathname) || (url.hostname === 'upload.wikimedia.org' && !url.pathname.includes('/thumb/'));
 }
 
-/** @param {(response: Response) => boolean} [storable] what may be stored under `key`, besides being a success */
-async function staleWhileRevalidate(event, cacheName, key, limit, storable = () => true) {
+/**
+ * A file of the site. Deployed: from the cache of this version first (installed whole), the network only for a file
+ * that is not there (outside SHELL, or the cache evicted), a file of the shell then stored again. In the repository
+ * (VERSION 'dev'): from the network first, the cache offline.
+ * @param {FetchEvent} event @param {Request | string} key @param {(response: Response) => boolean} [storable]
+ */
+async function fromShell(event, key, storable = () => true) {
   const { request } = event;
-  const cache = await caches.open(cacheName);
-  const cached = await cache.match(key, { ignoreSearch: request.mode === 'navigate' });
+  const cache = await caches.open(SHELL_CACHE);
+  const options = { ignoreSearch: request.mode === 'navigate' };
+  const store = (/** @type {Response} */ response) => {
+    const precached = PRECACHED.has(new URL(typeof key === 'string' ? key : key.url, self.location.href).href);
+    if (precached && response.ok && response.type === 'basic' && storable(response)) {
+      event.waitUntil(cache.put(key, response.clone()).catch(() => {}));
+    }
+    return response;
+  };
+  if (DEV) {
+    try {
+      return store(await fetch(request));
+    } catch {
+      return (await cache.match(key, options)) || Response.error();
+    }
+  }
+  const cached = await cache.match(key, options);
+  if (cached) return cached;
+  return store(await fetch(request));
+}
 
-  const network = fetch(request)
-    .then(async response => {
-      // Opaque (no-cors) image responses have status 0 but are still worth caching.
-      if ((response.ok || response.type === 'opaque') && storable(response)) {
-        await cache.put(key, response.clone());
-        if (limit) await trim(cache, limit);
-      }
-      return response;
-    })
-    .catch(() => cached || Response.error());
-
+/**
+ * A photo: the copy kept, refreshed in the background (or the network's answer, kept for next time). Only readable
+ * answers are kept; a failure to store one never fails the photo.
+ * @param {FetchEvent} event
+ */
+async function cachedImage(event) {
+  const { request } = event;
+  const cache = await caches.open(IMAGE_CACHE);
+  const cached = await cache.match(request.url);
+  const network = fetchImage(request).then(response => {
+    if (response.ok && (response.type === 'cors' || response.type === 'basic')) {
+      event.waitUntil(cache.put(request.url, response.clone()).then(() => trimSometimes(IMAGE_CACHE, cache, IMAGE_LIMIT)).catch(() => {}));
+    }
+    return response;
+  });
   // Keep the worker alive until the background refresh has been stored.
   event.waitUntil(network.catch(() => {}));
-  return cached || network;
+  return cached || network.catch(() => Response.error());
+}
+
+/** Hosts that answered without CORS while this worker runs: asked for the photo as the page did, once. */
+const noCorsHosts = new Set();
+
+/**
+ * The photo as a CORS response when its host allows it (Wikimedia, iNaturalist…: readable, stored at its real size),
+ * so the app's plain <img> need no crossorigin attribute. A host without CORS (a refused CORS request, then an opaque
+ * answer) still gets its photos shown: asked as the page did, not stored.
+ * @param {Request} request
+ */
+async function fetchImage(request) {
+  if (request.mode !== 'no-cors') return fetch(request);
+  const { host } = new URL(request.url);
+  if (!noCorsHosts.has(host)) {
+    try {
+      return await fetch(request.url, { mode: 'cors', credentials: 'omit', referrerPolicy: request.referrerPolicy || 'no-referrer' });
+    } catch { /* no CORS on that host, or no network: asked below as the page did */ }
+  }
+  const response = await fetch(request);
+  if (response.type === 'opaque') noCorsHosts.add(host);
+  return response;
 }
 
 async function cacheFirstTile(event) {
@@ -240,8 +305,9 @@ async function cacheFirstTile(event) {
   if (cached) return cached;
   try {
     const response = await fetch(request);
+    // Readable answers only (the layers ask in CORS): an opaque one has no status, and weighs ~7 MB of quota.
     if (response.ok) {
-      event.waitUntil(cache.put(request, response.clone()).then(() => trimSometimes(cache)));
+      event.waitUntil(cache.put(request, response.clone()).then(() => trimSometimes(TILE_CACHE, cache, TILE_LIMIT)).catch(() => {}));
     }
     return response;
   } catch {
@@ -249,15 +315,15 @@ async function cacheFirstTile(event) {
   }
 }
 
-// Counting thousands of keys on every tile is wasteful: trim roughly every 50 stored tiles.
-let tilesSinceTrim = 0;
-async function trimSometimes(cache) {
-  if (++tilesSinceTrim < 50) return;
-  tilesSinceTrim = 0;
-  await trim(cache, TILE_LIMIT);
-}
-
-async function trim(cache, limit) {
+// Counting thousands of keys on every stored response is wasteful: trim roughly every 50 (per cache).
+/** @type {Map<string, number>} */
+const storedSinceTrim = new Map();
+/** @param {string} name @param {Cache} cache @param {number} limit */
+async function trimSometimes(name, cache, limit) {
+  const count = (storedSinceTrim.get(name) || 0) + 1;
+  storedSinceTrim.set(name, count < 50 ? count : 0);
+  if (count < 50) return;
+  // Oldest first: an entry refreshed (a photo seen again) moves to the end.
   const keys = await cache.keys();
   for (const key of keys.slice(0, Math.max(0, keys.length - limit))) await cache.delete(key);
 }
