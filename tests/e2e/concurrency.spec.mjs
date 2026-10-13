@@ -50,7 +50,7 @@ test('deux onglets : chacun garde ses lieux, aucun n’efface l’autre', async 
 
 test('GAP1-4 : deux « Ajouter » rapprochés dans le parcours gardent les deux plantes', async ({ app, page }) => {
   await app.open('#/app/parcours');
-  const trail = page.locator('gf-trail');
+  const trail = page.locator('gf-miniapp');
   await trail.locator('.go').click();
   await trail.locator('.search input').fill('ortie');
   const adds = trail.locator('.hit .add');

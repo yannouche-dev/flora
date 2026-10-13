@@ -105,7 +105,7 @@ async function openRecap(app, page) {
   await seedWalk(page);
   // The Parcours mini-app: its recap (« Vue 3D » over its map), in its box.
   await app.open('#/app/parcours');
-  const button = page.locator('gf-trail .recap-map .map3d');
+  const button = page.locator('gf-miniapp .recap-map .map3d');
   await expect(button).toBeVisible();
   return button;
 }
@@ -190,11 +190,11 @@ test('sans WebGL2 : le bouton le dit, MapLibre n’est jamais demandé', async (
   });
   const button = await openRecap(app, page);
   await button.click();
-  await expect(page.locator('gf-trail .note3d')).toHaveText('3D indisponible sur cet appareil (WebGL2 requis).');
+  await expect(page.locator('gf-miniapp .note3d')).toHaveText('3D indisponible sur cet appareil (WebGL2 requis).');
   await expect(page.locator('dialog.gf-map3d[open]')).toHaveCount(0);
   expect(seen.maplibre).toEqual([]);
   // The recap is still there, working.
-  await expect(page.locator('gf-trail .recap-map gf-map')).toBeVisible();
+  await expect(page.locator('gf-miniapp .recap-map gf-map')).toBeVisible();
   expect(seen.problems).toEqual([]);
 });
 
@@ -243,7 +243,7 @@ test('module « Vue 3D (relief) » désactivé, photos coupées : le bouton l’
   await page.addInitScript(() => localStorage.setItem('geoflora.modules', JSON.stringify({ relief3d: false, photos: false })));
   const button = await openRecap(app, page);
   await button.click();
-  await expect(page.locator('gf-trail .note3d')).toContainText('Vue 3D désactivée');
+  await expect(page.locator('gf-miniapp .note3d')).toContainText('Vue 3D désactivée');
   await expect(page.locator('dialog.gf-map3d[open]')).toHaveCount(0);
   expect(seen.maplibre).toEqual([]);
 

@@ -43,7 +43,7 @@ const favourites = page => page.evaluate(async () => {
 /** A game played in a mini-app, from its start: to its cards (a heart on the first), or a walk with a plant. @param {import('@playwright/test').Page} page @param {string} id */
 async function play(page, id) {
   if (id === 'parcours') {
-    const trail = page.locator('gf-trail');
+    const trail = page.locator('gf-miniapp');
     await trail.locator('.go').click();
     await trail.locator('.card input.name').fill('Chemin du lavoir');
     await trail.locator('.card input.name').press('Enter');
@@ -67,7 +67,7 @@ async function play(page, id) {
 async function atStart(page, id) {
   await expect.poll(() => hash(page)).toBe(`#/app/${id}/start`);
   if (START[id]) await expect(page.getByRole('heading', { level: 1, name: START[id] })).toBeVisible();
-  else await expect(page.locator('gf-trail .go')).toBeVisible();
+  else await expect(page.locator('gf-miniapp .go')).toBeVisible();
 }
 
 for (const id of /** @type {(keyof typeof TITLES)[]} */ (Object.keys(TITLES))) {
@@ -85,7 +85,7 @@ for (const id of /** @type {(keyof typeof TITLES)[]} */ (Object.keys(TITLES))) {
     // « Continuer »: back at the step it was left at.
     await list(page).getByRole('button', { name: `Continuer : ${TITLES[id]}` }).click();
     await expect.poll(() => hash(page)).toBe(`#/app/${id}/${step}`);
-    if (id === 'parcours') await expect(page.locator('gf-trail .mine > li')).toHaveCount(1);
+    if (id === 'parcours') await expect(page.locator('gf-miniapp .mine > li')).toHaveCount(1);
     else await expect(page.locator('ma-around-list .head')).toBeVisible();
     await page.locator('gf-miniapp .quit').click();
     await expect.poll(() => hash(page)).toBe('#/discover');
@@ -183,8 +183,8 @@ test('Parcours : un parcours terminé avec ses plantes reste dans Mes plantes, l
   await play(page, 'parcours');
   expect(await walksNamed(page, 'Chemin du lavoir')).toEqual([{ origin: { app: 'parcours' }, from: null }]);
   // A plant touched first (its occurrences lit), then « Terminer »: the recap, and it stays.
-  await page.locator('gf-trail .mine .pick').first().click();
-  await page.locator('gf-trail .end').click();
+  await page.locator('gf-miniapp .mine .pick').first().click();
+  await page.locator('gf-miniapp .end').click();
   await expect(page.getByRole('heading', { level: 1, name: 'Parcours terminé' })).toBeVisible();
   await expect.poll(() => walksNamed(page, 'Chemin du lavoir')).toEqual([{ origin: null, from: { app: 'parcours' } }]);
   // Still the recap once its promotion is written (no stale reload brings the walk back).

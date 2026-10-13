@@ -11,7 +11,8 @@
 //  - Kept under geoflora.app.<id>.state: { v, path, ctx (the persist keys), finished }, written 300 ms after a change.
 //    The start is always shown first; the path kept is offered as « Reprendre ».
 //  - Events: 'change' (anything to render again), 'navigate' (detail { step, replace? }: a step reached, for the
-//    address), 'exit' (the way out asked), 'scenarios' (the launcher asked for, over the app).
+//    address), 'exit' (the way out asked), 'scenarios' (the launcher asked for, over the app), 'dispose' (the box
+//    gone: a component's game stops its requests and timers).
 
 import { config } from '../config.js';
 import { MODULES, moduleOn } from '../core/modules.js';
@@ -77,7 +78,7 @@ export const guided = (showSteps, finished) => showSteps === 'on' || (showSteps 
 
 /**
  * The path that reaches `target` from `path`: back to it, one step on, or the shortest way from the start; null
- * when there is none, or a step on it may not be entered now (can).
+ * when there is none, or `target` may not be entered now (its can).
  * @param {Manifest} m @param {string[]} path @param {string} target @param {Record<string, any>} c @returns {string[] | null}
  */
 export function pathTo(m, path, target, c) {
@@ -98,7 +99,10 @@ export function pathTo(m, path, target, c) {
     }
   }
   if (!next) return null;
-  return next.every(id => { const s = steps.get(id); return !s?.can || s.can(c); }) ? next : null;
+  // The step reached may be entered now (the ones passed through on the way are not on screen: a recap after a walk
+  // ended is reached through the walk, which can no longer be entered itself).
+  const s = steps.get(target);
+  return !s?.can || s.can(c) ? next : null;
 }
 
 export class MiniApp extends EventTarget {
@@ -266,6 +270,9 @@ export class MiniApp extends EventTarget {
   /** The way out asked (the box asks for confirmation if the manifest wants it). */
   exit() { this.#emit('exit'); }
 
+  /** Something it shows changed outside its context (a component's game): drawn again (the box, its start screen). */
+  refresh() { this.#emit('change'); }
+
   /** The launcher asked for (« Quitter … : autres scénarios »): the box opens it over the app. */
   scenarios() { this.#emit('scenarios'); }
 
@@ -321,11 +328,12 @@ export class MiniApp extends EventTarget {
     } catch { /* not kept */ }
   }
 
-  /** Stops its loads and timers (the box gone). */
+  /** Stops its loads and timers (the box gone); `dispose` told (a component's game stops its own). */
   dispose() {
     for (const l of this.loads.values()) { clearTimeout(l.timer); l.abort?.abort(); }
     for (const a of this.running.values()) a.abort();
     this.flush();
+    this.#emit('dispose');
   }
 
   /** @param {string[]} path */

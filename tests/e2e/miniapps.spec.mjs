@@ -27,7 +27,7 @@ test('le lanceur ouvre une mini-application seule à l’écran ; « Quitter » 
   await page.getByRole('button', { name: 'Scénarios' }).locator('visible=true').first().click();
   await page.getByRole('dialog').locator('li[data-app="parcours"]').getByRole('button', { name: 'Jouer' }).click();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/app/parcours/start');
-  await expect(page.locator('gf-trail .go')).toBeVisible();
+  await expect(page.locator('gf-miniapp .go')).toBeVisible();
   // Alone: no header, no tab bar.
   await expect(page.locator('gf-app header')).toHaveCount(0);
   await expect(page.locator('gf-tabbar')).toHaveCount(0);
@@ -81,7 +81,7 @@ test('Rencontres : départ, carte, cartes ; « Rejouer » vide la partie et ses 
 
 test('Parcours : en marche puis « Rejouer » ; le parcours enregistré quitte Mes plantes', async ({ app, page }) => {
   await app.open('#/app/parcours');
-  const trail = page.locator('gf-trail');
+  const trail = page.locator('gf-miniapp');
   await trail.locator('.go').click();
   await expect.poll(() => step(page)).toBe('walk');
   await trail.locator('.card input.name').fill('Chemin du lavoir');
@@ -95,16 +95,48 @@ test('Parcours : en marche puis « Rejouer » ; le parcours enregistré quitte M
 
   await replay(page);
   await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/app/parcours/start');
-  await expect(page.locator('gf-trail .go')).toBeVisible();
+  await expect(page.locator('gf-miniapp .go')).toBeVisible();
   const owned = () => page.evaluate(() => ['geoflora.trail', 'geoflora.trails', 'geoflora.trailDone'].map(k => localStorage.getItem(k)));
   expect(await owned()).toEqual([null, null, null]);
   // The walk it saved in Mes plantes is its own: gone too.
   await expect.poll(kept).toBe(null);
   await page.reload();
   await app.ready();
-  await expect(page.locator('gf-trail .go')).toBeVisible();
+  await expect(page.locator('gf-miniapp .go')).toBeVisible();
   await expect.poll(() => step(page)).toBe('start');
   expect(await owned()).toEqual([null, null, null]);
+});
+
+test('Parcours : ses étapes (Départ › En marche › Bilan), Retour étape par étape ; l’adresse sans étape retrouve la marche', async ({ app, page }) => {
+  await app.open('#/discover');
+  await app.go('#/app/parcours');
+  await expect.poll(() => step(page)).toBe('start');
+  const box = page.locator('gf-miniapp');
+  await box.locator('.go').click();
+  await expect.poll(() => step(page)).toBe('walk');
+  await box.locator('.search input').fill('ortie dioique');
+  await box.locator('.hit').filter({ hasText: 'Urtica dioica' }).locator('.add').click();
+  await expect(box.locator('.mine > li')).toHaveCount(1);
+  // Back: the start, the walk under way offered first to take up; Forward: the walk again.
+  await page.goBack();
+  await expect.poll(() => step(page)).toBe('start');
+  await expect(page.getByRole('group', { name: 'Reprendre un parcours' })).toContainText('1 plante');
+  await page.goForward();
+  await expect.poll(() => step(page)).toBe('walk');
+  // The address with no step: the walk under way, at once.
+  await app.go('#/app/parcours');
+  await expect.poll(() => step(page)).toBe('walk');
+  await expect(box.locator('.mine > li')).toHaveCount(1);
+  await box.locator('.end').click();
+  await expect.poll(() => step(page)).toBe('done');
+  await expect(page.getByRole('heading', { level: 1, name: 'Parcours terminé' })).toBeVisible();
+  await page.reload();
+  await app.ready();
+  await expect(page.getByRole('heading', { level: 1, name: 'Parcours terminé' })).toBeVisible();
+  // « Un nouveau parcours »: the start.
+  await page.getByRole('button', { name: 'Un nouveau parcours' }).click();
+  await expect.poll(() => step(page)).toBe('start');
+  await expect(box.locator('.go')).toBeVisible();
 });
 
 test('Réglages : « Afficher les étapes » toujours, puis jamais', async ({ app, page }) => {
@@ -116,6 +148,6 @@ test('Réglages : « Afficher les étapes » toujours, puis jamais', async ({ ap
   await app.go('#/settings');
   await page.getByRole('radio', { name: 'Jamais' }).check();
   await app.go('#/app/parcours');
-  await expect(page.locator('gf-trail .go')).toBeVisible();
+  await expect(page.locator('gf-miniapp .go')).toBeVisible();
   await expect(page.locator('gf-miniapp ma-steps')).toHaveCount(0);
 });

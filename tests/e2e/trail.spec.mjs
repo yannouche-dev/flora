@@ -11,7 +11,7 @@ const saved = (page, name) => page.evaluate(async n => {
 
 test('un parcours : nommé, des plantes ajoutées par la recherche, enregistré et sur la carte', async ({ app, page }) => {
   await app.open('#/app/parcours');
-  const trail = page.locator('gf-trail');
+  const trail = page.locator('gf-miniapp');
   await trail.locator('.go').click();
   const name = trail.locator('.card input.name');
   await expect(name).toBeVisible();
@@ -44,12 +44,12 @@ test('un parcours : nommé, des plantes ajoutées par la recherche, enregistré 
 
 test('le nom du parcours se garde au rechargement', async ({ app, page }) => {
   await app.open('#/app/parcours');
-  const trail = page.locator('gf-trail');
+  const trail = page.locator('gf-miniapp');
   await trail.locator('.go').click();
   await trail.locator('.card input.name').fill('Sentier des crêtes');
   await trail.locator('.card input.name').press('Enter');
   await expect.poll(() => saved(page, 'Sentier des crêtes')).not.toBeNull();
   await page.reload();
   await app.ready();
-  await expect(page.locator('gf-trail .card input.name')).toHaveValue('Sentier des crêtes');
+  await expect(page.locator('gf-miniapp .card input.name')).toHaveValue('Sentier des crêtes');
 });
