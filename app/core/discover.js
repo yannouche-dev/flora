@@ -7,7 +7,8 @@
 // The tabs come when they become useful — and stay: Mes plantes with the first favourite, the Carte with the
 // first place noted, Flore after a few plants discovered. Someone who already used the app starts with everything.
 // The games around a place (Rencontres, Cueillette prudente, Mosaïque) keep their own place, distance and cards, each
-// with its mini-app (core/around-sessions.js); the session they shared here before is handed over to them once.
+// with its mini-app (core/around-sessions.js); the session they shared here before is handed over once, to the one
+// played last.
 
 import { config } from '../config.js';
 import { clearAroundGames, migrateDiscover } from './around-sessions.js';
@@ -57,7 +58,7 @@ function read() {
     if (saved && typeof saved === 'object') {
       // The session of the games around a place, kept here before: theirs now (once; written back without it).
       if (HANDED.some(k => k in saved)) {
-        migrateDiscover(saved);
+        migrateDiscover(saved, typeof location === 'object' ? location.hash : '');
         for (const k of HANDED) delete saved[k];
         localStorage.setItem(KEY, JSON.stringify(saved));
       }

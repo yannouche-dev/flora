@@ -67,19 +67,28 @@ test('cartes : balayées à droite (match) ou à gauche, reprises ; le paquet sa
   assert.equal(ethnoSentence(null), '');
 });
 
-test('sessions : la partie partagée d’avant donnée à chacune, une fois ; « Oublier ma position » ; chacune la sienne', () => {
+test('sessions : la partie partagée d’avant donnée à la dernière jouée (sinon Rencontres), une fois ; « Oublier ma position »', () => {
   localStorage.clear();
+  const old = { point: [2.35, 48.85], place: 'Paris', radius: 2000, matches: [7], passed: [8] };
   localStorage.setItem('geoflora.app.rencontres.state', JSON.stringify({ v: 1, path: ['start', 'map', 'cards'], ctx: {}, finished: false }));
-  migrateDiscover({ point: [2.35, 48.85], place: 'Paris', radius: 2000, matches: [7], passed: [8] });
-  for (const id of ['rencontres', 'cueillette', 'mosaique']) {
-    assert.deepEqual(aroundKept(id), { point: [2.35, 48.85], place: 'Paris', radius: 2000, matches: [7], passed: [8] }, id);
-  }
+  migrateDiscover(old, '#/collections');
+  assert.deepEqual(aroundKept('rencontres'), old, 'rien ne dit laquelle : Rencontres');
+  assert.deepEqual([aroundKept('cueillette'), aroundKept('mosaique')], [{}, {}], 'les autres : rien, pas de « Continuer »');
   assert.equal(leftAt('rencontres'), 'cards', 'l’étape où on l’a laissée, gardée');
+  assert.equal(leftAt('cueillette'), null);
+  clearAroundGames();
+  // Opened at the old address of a scenario: that one was played last.
+  migrateDiscover(old, '#/discover?s=mosaic&p=3');
+  assert.deepEqual(aroundKept('mosaique'), old);
+  assert.deepEqual([aroundKept('rencontres'), aroundKept('cueillette')], [{}, {}]);
+  clearAroundGames();
+  migrateDiscover(old, '#/discover?s=harvest');
+  assert.deepEqual(aroundKept('cueillette'), old);
   assert.equal(leftAt('cueillette'), 'start');
   assert.deepEqual(keptPlace(), { point: [2.35, 48.85], place: 'Paris' });
   forgetPlaces();
   assert.equal(keptPlace(), null);
-  assert.deepEqual(aroundKept('mosaique').matches, [7], 'le reste de la partie gardé');
+  assert.deepEqual(aroundKept('cueillette').matches, [7], 'le reste de la partie gardé');
   // Nothing to hand over: nothing written.
   clearAroundGames();
   migrateDiscover({ point: null, matches: [], passed: [] });
@@ -149,15 +158,15 @@ test('Recommencer : ce que la mini-application a fait et qui est encore le sien,
     { gone: ['2 favoris ajoutés par Rencontres', 'la partie en cours'], kept: [] });
 });
 
-test('avant les origines : les matchs des parties, le parcours en cours et les vides tagués ; les parcours terminés, déjà à soi', () => {
+test('avant les origines : le parcours en cours et les vides tagués ; les parcours terminés et tous les favoris, déjà à soi', () => {
   const mine = col({ type: 'Feature', id: 'm', geometry: { type: 'Point', coordinates: [2, 48] }, properties: { name: 'Jardin', plants: [{ plantId: 6, scientificName: 'F' }] } });
   const old = col({ type: 'Feature', id: 'favorites', geometry: null, properties: { plants: [{ plantId: 1, scientificName: 'A' }, { plantId: 2, scientificName: 'B' }, { plantId: 9, scientificName: 'Z' }] } });
   const empty = col({ type: 'Feature', id: 'e', geometry: { type: 'Point', coordinates: [2, 48] }, properties: { name: 'Vide', startedHere: true, plants: [] } });
   const finished = col({ type: 'Feature', id: 'f', geometry: { type: 'Point', coordinates: [2, 48] }, properties: { name: 'Fini', plants: [{ plantId: 4, scientificName: 'D' }] } });
   const current = col({ type: 'Feature', id: 'c', geometry: { type: 'Point', coordinates: [2, 48] }, properties: { name: 'En cours', plants: [{ plantId: 5, scientificName: 'E' }] } });
-  const tagged = M.tagLegacy([old, empty, finished, current, mine], { matches: [['rencontres', [1]], ['cueillette', [1, 2]]], walks: ['f'], walk: 'c' });
+  const tagged = M.tagLegacy([old, empty, finished, current, mine], { walks: ['f'], walk: 'c' });
   const by = Object.fromEntries(tagged.map(c => [c.id, c]));
-  assert.deepEqual(by.favorites.properties.plants.map(e => e.origin?.app ?? null), ['rencontres', 'cueillette', null]);
+  assert.equal(by.favorites, undefined, 'les favoris d’avant sont à soi : jamais tagués');
   assert.deepEqual(by.e.properties.origin, { app: 'parcours' });
   assert.deepEqual(by.c.properties.origin, { app: 'parcours' });
   assert.deepEqual([by.f.properties.origin, by.f.properties.from], [undefined, { app: 'parcours' }], 'terminé avec ses plantes : gardé');

@@ -440,9 +440,9 @@ export async function forgetMadeBy(app) {
 
 /**
  * The origins of what the mini-apps made before they were recorded, given once (best effort, place-model.js#tagLegacy):
- * the favourites among a game's matches, the parcours under way or empty (the finished ones are the user's). Marked
- * done in the database (meta « origins »).
- * @param {{ matches: [string, number[]][], walks: string[], walk?: string | null }} known
+ * the parcours under way or empty (the finished ones, and every favourite of before, are the user's). Marked done in
+ * the database (meta « origins »).
+ * @param {{ walks: string[], walk?: string | null }} known
  */
 export async function tagLegacyOrigins(known) {
   if (await db.get('meta', 'origins').catch(() => null)) return;

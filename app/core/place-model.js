@@ -382,28 +382,17 @@ export function withoutMadeBy(c, app) {
 }
 
 /**
- * The origins of what the mini-apps made before they were recorded (best effort, once): a favourite whose plant is
- * among a game's matches (`matches`, by mini-app, the first one listed wins) is that game's; the parcours under way
+ * The origins of what the mini-apps made before they were recorded (best effort, once): the parcours under way
  * (`walk`), and a parcours kept (`walks`) or started where the walker stood (a parcours' mark) with no plant, are the
- * Parcours'; one with plants was finished, its own already: promoted (kept). Returns the collections changed. Pure.
- * @param {Collection[]} collections @param {{ matches: [string, number[]][], walks: string[], walk?: string | null }} known @returns {Collection[]}
+ * Parcours'; one with plants was finished, its own already: promoted (kept). The favourites of before are the user's:
+ * never tagged. Returns the collections changed. Pure.
+ * @param {Collection[]} collections @param {{ walks: string[], walk?: string | null }} known @returns {Collection[]}
  */
-export function tagLegacy(collections, { matches, walks, walk = null }) {
+export function tagLegacy(collections, { walks, walk = null }) {
   /** @type {Collection[]} */
   const out = [];
   for (const c of collections) {
-    if (c.id === FAVORITES_ID) {
-      let changed = false;
-      const plants = c.properties.plants.map(e => {
-        if (e.origin || e.from || e.plantId === null) return e;
-        const app = matches.find(([, ids]) => ids.includes(/** @type {number} */ (e.plantId)))?.[0];
-        if (!app) return e;
-        changed = true;
-        return { ...e, origin: { app } };
-      });
-      if (changed) out.push({ ...c, properties: { ...c.properties, plants } });
-      continue;
-    }
+    if (c.id === FAVORITES_ID) continue;
     const p = c.properties;
     if (p.origin || p.from) continue;
     const parcours = c.id === walk || walks.includes(c.id) || (p.kind === 'place' && p.startedHere === true);

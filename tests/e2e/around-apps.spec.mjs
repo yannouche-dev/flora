@@ -126,7 +126,7 @@ test('les anciennes adresses : Cueillette prudente et Mosaïque ouvrent leur min
 });
 
 test.describe('la partie partagée d’avant', () => {
-  test('donnée à chacune des trois, une fois : rien n’est perdu', async ({ app, page, context }) => {
+  test('donnée à Rencontres (rien ne dit laquelle a été jouée), une fois ; ses favoris restent à soi', async ({ app, page, context }) => {
     const ail = plantId('Allium ursinum');
     await context.addInitScript(id => {
       if (sessionStorage.getItem('seeded')) return;
@@ -134,15 +134,47 @@ test.describe('la partie partagée d’avant', () => {
       localStorage.setItem('geoflora.discover', JSON.stringify({ done: true, point: [2.35, 48.85], place: 'Paris', radius: 2000, matches: [id], passed: [] }));
     }, ail);
     await app.open('#/discover');
-    for (const id of ['rencontres', 'cueillette', 'mosaique']) {
-      expect(await kept(page, id), id).toEqual({ point: [2.35, 48.85], place: 'Paris', radius: 2000, matches: [ail], passed: [] });
-    }
+    expect(await kept(page, 'rencontres')).toEqual({ point: [2.35, 48.85], place: 'Paris', radius: 2000, matches: [ail], passed: [] });
+    expect(await kept(page, 'cueillette')).toBe(null);
+    expect(await kept(page, 'mosaique')).toBe(null);
     const discover = await page.evaluate(() => JSON.parse(localStorage.getItem('geoflora.discover') || 'null'));
     expect(discover.point).toBeUndefined();
     expect(discover.done).toBe(true);
-    await expect(page.locator('gf-launcher[page]').getByRole('button', { name: 'Continuer : Mosaïque' })).toBeVisible();
-    await page.locator('gf-launcher[page]').getByRole('button', { name: 'Continuer : Rencontres' }).click();
+    const launcher = page.locator('gf-launcher[page]');
+    await expect(launcher.getByRole('button', { name: 'Jouer : Mosaïque' })).toBeVisible();
+    await expect(launcher.getByRole('button', { name: 'Continuer : Cueillette prudente' })).toHaveCount(0);
+    // A favourite of before (its match then): the user's, never tagged — Recommencer Rencontres keeps it.
+    await page.evaluate(async id => {
+      const db = await import('/app/core/db.js');
+      await (await import('/app/core/collections.js')).toggleFavorite(await db.get('plants', id));
+      await db.remove('meta', 'origins');
+    }, ail);
+    await page.reload();
+    await app.ready();
+    const origin = () => page.evaluate(async id => {
+      const fav = (await (await import('/app/core/collections.js')).listCollections()).find((/** @type {any} */ c) => c.id === 'favorites');
+      const e = fav?.properties.plants.find((/** @type {any} */ x) => x.plantId === id);
+      return e ? e.origin ?? 'none' : 'gone';
+    }, ail);
+    await expect.poll(() => page.evaluate(async () => Boolean(await (await import('/app/core/db.js')).get('meta', 'origins')))).toBe(true);
+    expect(await origin()).toBe('none');
+    await launcher.getByRole('button', { name: 'Recommencer : Rencontres' }).click();
+    await expect(launcher.locator('dialog.ask')).toContainText('Seront supprimés : la partie en cours.');
+    await launcher.locator('dialog.ask').getByRole('button', { name: 'Recommencer' }).click();
     await expect.poll(() => hash(page)).toBe('#/app/rencontres/start');
+    expect(await origin()).toBe('none');
+  });
+
+  test('donnée à la dernière jouée quand l’adresse le dit (Cueillette prudente)', async ({ app, page, context }) => {
+    await context.addInitScript(() => {
+      if (sessionStorage.getItem('seeded')) return;
+      sessionStorage.setItem('seeded', '1');
+      localStorage.setItem('geoflora.discover', JSON.stringify({ done: true, point: [2.35, 48.85], place: 'Paris', radius: 2000, matches: [], passed: [3] }));
+    });
+    await app.open('#/discover?s=harvest');
+    await expect.poll(() => hash(page)).toBe('#/app/cueillette/start');
+    expect((await kept(page, 'cueillette'))?.passed).toEqual([3]);
+    expect(await kept(page, 'rencontres')).toBe(null);
     await expect(page.getByRole('group', { name: 'Reprendre' })).toContainText('Autour de Paris');
   });
 });
