@@ -132,7 +132,7 @@ export class MaAroundList extends LitElement {
     .match .credit { font-size: 0.75rem; opacity: 0.9; }
     @keyframes pop { from { opacity: 0; transform: scale(1.06); } }
     /* A plant open beside the list (wide screens). */
-    @media (min-width: 900px) { :host([opened]) .list { margin-right: min(560px, 48vw); } }
+    @media (min-width: 900px) { :host([opened]) .list { margin-right: var(--ma-sheet-w, min(560px, 48vw)); } }
     @media (prefers-reduced-motion: reduce) { .match, .card { transition: none; animation: none; } }
     /* Rencontres: the photos beside the deck (wide screens); the list then scrolls on its own. */
     .duo { display: contents; }
@@ -470,7 +470,7 @@ export class MaAroundList extends LitElement {
     <p class="visually-hidden" role="status">${this._said || ''}</p>
     ${this._match ? this.#matchView(this._match) : nothing}
     ${this.#fullView()}
-    ${c.focus != null ? html`<ma-plant-sheet .open=${c.focus} .cards=${s.sheetCards} scoped @ma-plant=${this.#onSheet}></ma-plant-sheet>` : nothing}`;
+    ${c.focus != null ? html`<ma-plant-sheet .open=${c.focus} .cards=${s.sheetCards} scoped layout-key=${config.storageKeys.appPrefix + this.app.m.id + '.sheet'} @ma-plant=${this.#onSheet}></ma-plant-sheet>` : nothing}`;
   }
 
   /** « Toutes »: the grid (Mosaïque: large photos, the names over them; « En fleur » filters). @param {Card[]} all */
