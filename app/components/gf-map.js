@@ -20,7 +20,7 @@ import './gf-point-card.js';
 import { attachGl } from './gf-map-gl.js';
 import { icon, iconHref, iconMarkup } from '../core/icons.js';
 import { inMiniApp } from '../miniapp/quiet-links.js';
-import { cancelImages, chosenGroupMarker, chosenMarker, elem, fadeImg, leafGlyph, leafMarker, markClasses, obsCard, photoMarker, ringElement, speciesKey } from './map-style.js';
+import { cancelImages, chosenGroupMarker, chosenMarker, elem, fadeImg, leafGlyph, leafMarker, markClasses, obsCard, photoMarker, resumeImages, ringElement, speciesKey } from './map-style.js';
 
 /** @typedef {import('./map-style.js').MarkerSpec} MarkerSpec */
 
@@ -1074,12 +1074,34 @@ export class GfMap extends LitElement {
       map.options.zoomSnap = 1;
       for (const h of ['dragging', 'touchZoom', 'doubleClickZoom', 'scrollWheelZoom', 'boxZoom', 'keyboard']) /** @type {any} */ (map)[h]?.enable();
     }
-    cancelLayerImages(layer);
-    layer.clearLayers();
+    // The points drawn the same way as before are kept (by what they show): a new `area` object (another render, the
+    // same points; a few points more or less) never draws them again, nor stops or asks again for their photos.
+    const fancy = Boolean(area?.leaves);
+    const sig = area ? JSON.stringify([fancy, area.photo || null, area.credit || null, /** @type {any} */ (this).pointClick || null, moduleOn('photos')]) : '';
+    const was = this.#areaDots?.sig === sig ? this.#areaDots.dots : new Map();
+    /** @type {Map<string, L.Layer>} */
+    const dots = new Map();
+    /** @type {{ point: any, key: string }[]} */
+    const fresh = [];
+    for (const point of area?.points || []) {
+      const p = point, key = JSON.stringify([p.url, p.coordinates, p.title, p.photo, p.common, p.sci, p.date]);
+      if (dots.has(key)) continue;
+      const dot = was.get(key);
+      if (dot) { was.delete(key); dots.set(key, dot); } else { fresh.push({ point, key }); dots.set(key, /** @type {any} */ (null)); }
+    }
+    const kept = new Set(dots.values());
+    kept.delete(/** @type {any} */ (null));
+    for (const l of layer.getLayers()) {
+      if (kept.has(l)) continue;
+      const el = /** @type {any} */ (l).getElement?.();
+      if (el) cancelImages(el);
+      layer.removeLayer(l);
+    }
+    for (const dot of kept) { const el = /** @type {any} */ (dot).getElement?.(); if (el) resumeImages(el); }
+    this.#areaDots = area ? { sig, dots } : null;
     if (!area) return;
     const [lon, lat] = area.center;
     // `leaves`: the observations as small leaves popping in one after the other, the circle glowing (Découvrir).
-    const fancy = Boolean(area.leaves);
     // Its shadow: the same circle, darker, a little lower (a still line — no filter to redraw at each move).
     L.circle([lat, lon], { radius: area.radius, className: 'gf-perim-shadow', interactive: false }).addTo(layer);
     const circle = L.circle([lat, lon], { radius: area.radius, className: fancy ? 'gf-area gf-area-glow' : 'gf-area', interactive: false }).addTo(layer);
@@ -1092,9 +1114,13 @@ export class GfMap extends LitElement {
     this.#areaBounds = bounds;
     this.#areaInset = inset;
     if (moved) this.#fitArea(!first);
-    for (const [i, point] of (area.points || []).entries()) this.#areaDot(area, point, Math.min(i, 40) * 25).addTo(layer);
+    // All new: one after the other as before; a few more among those kept: quicker.
+    const all = fresh.length === dots.size;
+    for (const [i, { point, key }] of fresh.entries()) dots.set(key, this.#areaDot(area, point, all ? Math.min(i, 40) * 25 : Math.min(i, 30) * 14).addTo(layer));
     this.#relight();
   }
+  /** The points of a (not smooth) area drawn, by what they show, and how they were drawn. @type {{ sig: string, dots: Map<string, L.Layer> } | null} */
+  #areaDots = null;
 
   /**
    * One observation of the area: a leaf, or its plant's photo (`leaves`), the photo of the plant chosen (`photo`), else
@@ -1142,6 +1168,7 @@ export class GfMap extends LitElement {
     if (!s || first) {
       cancelLayerImages(layer);
       layer.clearLayers();
+      this.#areaDots = null;
       s = this.#smooth = { center: lon + ',' + lat, latlng: L.latLng(lat, lon), target: area.radius, ring: area.ring, points: null, dots: new Map() };
       // Any zoom (the distance fills the ring exactly); the view is the ring's.
       map.options.zoomSnap = 0;
@@ -1172,7 +1199,7 @@ export class GfMap extends LitElement {
         const key = p.url || p.coordinates.join(',') + ':' + p.title;
         if (keep.has(key)) continue;
         let dot = s.dots.get(key);
-        if (dot) s.dots.delete(key);
+        if (dot) { s.dots.delete(key); const el = /** @type {any} */ (dot).getElement?.(); if (el) resumeImages(el); }
         else dot = this.#areaDot(area, p, fresh ? Math.min(i, 40) * 25 : Math.min(n++, 30) * 14).addTo(layer);
         keep.set(key, dot);
       }

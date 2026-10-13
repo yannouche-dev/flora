@@ -7,8 +7,8 @@
 // and size, its SVG). Data in, descriptors and DOM out: a renderer wraps a MarkerSpec in its own marker (Leaflet's
 // divIcon) and places the ring's SVG over its map; the CSS is styles/map.css. No renderer imported here.
 // Photos: each one through fadeImg (shown once loaded, over the leaf; gone if it fails, the leaf stays; none with the
-// « Photos en ligne » module off), and a marker taken away calls cancelImages (its photo stops loading: the next
-// ones are not queued behind it on the few connections a host gets).
+// « Photos en ligne » module off; asked once more before that), and a marker taken away calls cancelImages (its photo
+// stops loading: the next ones are not queued behind it on the few connections a host gets) — never a marker kept.
 
 import { iconMarkup } from '../core/icons.js';
 import { moduleOn } from '../core/modules.js';
@@ -29,14 +29,26 @@ export function elem(tag, className = '', text = '') {
   return node;
 }
 
+/** The wait before a photo that failed is asked once more (ms). */
+const RETRY_MS = 1500;
+
 /**
- * An image that leaves when it fails (offline, gone): a listener, not an inline `onerror`, which the CSP of
- * index.html forbids. `loading` is set before `src`, so a lazy image waits until it is near the view.
+ * An image that leaves when it fails (offline, gone) — after one more try a moment later (a busy host, an answer
+ * cut short): a listener, not an inline `onerror`, which the CSP of index.html forbids. Its address is kept
+ * (data-src): a photo stopped by cancelImages can be asked again (resumeImages). `loading` is set before `src`.
  * @param {string} src @param {{ loading?: 'lazy' | 'eager', decoding?: 'async' | 'sync' | 'auto' }} [props]
  */
 export function dropImg(src, props = {}) {
   const img = Object.assign(document.createElement('img'), { alt: '', referrerPolicy: 'no-referrer', ...props });
-  img.addEventListener('error', () => img.remove(), { once: true });
+  img.dataset.src = src;
+  let tried = false;
+  img.addEventListener('error', () => {
+    // No address: stopped on purpose (cancelImages), not a failure.
+    if (!img.getAttribute('src')) return;
+    if (tried) { img.remove(); return; }
+    tried = true;
+    setTimeout(() => { if (img.getAttribute('src')) { img.removeAttribute('src'); img.src = src; } }, RETRY_MS);
+  });
   img.src = src;
   return img;
 }
@@ -44,6 +56,7 @@ export function dropImg(src, props = {}) {
 /**
  * A badge's photo: shown once it has loaded (a fade), over the leaf; gone if it fails (the leaf stays). Every plant
  * photo of the map comes through here: with the « Photos en ligne » module off, none is loaded (the leaf stays).
+ * Shown whichever way it comes: its load event, already there (cached), or once decoded (an image attached again).
  * @param {string} src @param {{ loading?: 'lazy' | 'eager', decoding?: 'async' | 'sync' | 'auto' }} [props]
  * @returns {Node}
  */
@@ -51,19 +64,43 @@ export function fadeImg(src, props = {}) {
   if (!moduleOn('photos')) return document.createTextNode('');
   const img = dropImg(src, props);
   img.classList.add('gf-fade');
+  const show = () => { if (img.complete && img.naturalWidth) img.classList.add('in'); };
   // Already there (cached): no fade, at once.
-  if (img.complete && img.naturalWidth) img.classList.add('in');
-  else img.addEventListener('load', () => img.classList.add('in'), { once: true });
+  show();
+  img.addEventListener('load', () => img.classList.add('in'));
+  img.decode?.().then(show, () => {});
   return img;
 }
 
 /**
  * The photos still loading under `el` stop: a marker taken away keeps its request in the browser's queue otherwise
  * (a few at a time per host), and the photos of the points shown next wait behind those of points no longer there.
+ * Only for a marker really taken away: one kept never stays without its photo (resumeImages). The service worker's own
+ * request is not stopped with the image's: it is told (sw.js), and puts these photos after the others — unless
+ * another image of the map still shows the same one.
  * @param {Element} el
  */
 export function cancelImages(el) {
-  for (const img of el.querySelectorAll('img')) if (!img.complete) img.removeAttribute('src');
+  /** @type {string[]} */
+  const dropped = [];
+  for (const img of el.querySelectorAll('img')) {
+    if (img.complete) continue;
+    const src = img.getAttribute('src');
+    img.removeAttribute('src');
+    if (src) dropped.push(src);
+  }
+  if (!dropped.length) return;
+  const root = el.getRootNode();
+  const used = new Set([.../** @type {Document | ShadowRoot} */ (root).querySelectorAll?.('img[src]') || []].map(i => i.getAttribute('src')));
+  const urls = dropped.filter(u => !used.has(u));
+  if (urls.length) globalThis.navigator?.serviceWorker?.controller?.postMessage({ type: 'photos-dropped', urls: urls.map(u => new URL(u, location.href).href) });
+}
+
+/** The photos under `el` that were stopped (cancelImages) asked again. @param {Element} el */
+export function resumeImages(el) {
+  for (const img of el.querySelectorAll('img')) {
+    if (img instanceof HTMLImageElement && !img.getAttribute('src') && img.dataset.src) img.src = img.dataset.src;
+  }
 }
 
 /** The leaf a plant's badge shows until its photo has loaded (and for good without one). */
@@ -90,7 +127,8 @@ export function leafMarker(delay) {
 export function photoMarker(photo, delay) {
   const pop = elem('span', 'pop');
   pop.style.animationDelay = delay + 'ms';
-  pop.append(leafGlyph(), fadeImg(photo, { loading: 'lazy' }));
+  // Not lazy: a small square; a lazy image in a marker pane (moved, scaled from 0, a map shown later) may wait for good.
+  pop.append(leafGlyph(), fadeImg(photo, { decoding: 'async' }));
   return { className: 'gf-obs-leaf gf-obs-photo', size: [30, 30], html: pop };
 }
 
