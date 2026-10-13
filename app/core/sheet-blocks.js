@@ -11,6 +11,8 @@ import { MODULES, moduleOn, setModule } from './modules.js';
 import { baseOf, importModes, modeKeys, ownModes } from './modes.js';
 import { isOverlay } from './ign.js';
 import { emptyLayout, migratePlaces, migrateTree, store } from './store.js';
+import { allNoteTexts, deleteNoteTexts, fromPortable, mergeNoteTexts, noteText as storedText, notesWithText, portableNotes, setNoteText as storeText } from './sheet-notes.js';
+import { writeLocal } from './quota.js';
 import { SHEET, dock, normalize, patchStack, setSizes, sheetInRow, stackOf, undock, validTree } from './pane-tree.js';
 
 /** @typedef {import('./modules.js').Mode} Mode */
@@ -206,13 +208,12 @@ function save(patch) {
   }
   const isEmpty = !next.notes.length && !Object.keys(next.titles).length && !next.mapBlocks?.length && !Object.keys(next.maps || {}).length
     && ['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown', 'hideEmpty', 'tree'].every(p => !Object.keys(/** @type {any} */ (next)[p] || {}).length);
-  try {
-    if (isEmpty) localStorage.removeItem(config.storageKeys.sheetLayout);
-    else localStorage.setItem(config.storageKeys.sheetLayout, JSON.stringify(next));
+  // A refusal for lack of room is said on screen (quota.js); the layout still applies to this session.
+  if (writeLocal(config.storageKeys.sheetLayout, isEmpty ? null : JSON.stringify(next))) {
     // Earlier versions' keys: carried over once, then gone.
-    localStorage.removeItem(config.storageKeys.sheetBlocks);
-    localStorage.removeItem(config.storageKeys.sheetHidden);
-  } catch { /* not persisted */ }
+    writeLocal(config.storageKeys.sheetBlocks, null);
+    writeLocal(config.storageKeys.sheetHidden, null);
+  }
   store.set({ sheetLayout: next });
 }
 
@@ -529,17 +530,6 @@ export function createNote(title) {
   return 'note:' + id;
 }
 
-/** @returns {Record<string, Record<string, string>>} note id → plant id → text */
-const readNotes = () => {
-  try { return JSON.parse(localStorage.getItem(config.storageKeys.plantNotes) || '{}') || {}; } catch { return {}; }
-};
-/** @param {Record<string, Record<string, string>>} notes */
-const writeNotes = notes => {
-  try {
-    if (Object.keys(notes).length) localStorage.setItem(config.storageKeys.plantNotes, JSON.stringify(notes));
-    else localStorage.removeItem(config.storageKeys.plantNotes);
-  } catch { /* not persisted */ }
-};
 
 /** A deleted block leaves every mode's places. @param {string} key */
 const unplace = key => Object.fromEntries(Object.entries(layout().place || {}).map(([v, per]) => {
@@ -553,9 +543,7 @@ export function deleteNote(key) {
   const id = key.slice('note:'.length);
   const strip = (/** @type {Partial<Record<Mode, string[]>>} */ per) =>
     Object.fromEntries(Object.entries(per).map(([v, keys]) => [v, (keys || []).filter(k => k !== key)]));
-  const notes = readNotes();
-  delete notes[id];
-  writeNotes(notes);
+  deleteNoteTexts(id).catch(error => console.error(error));
   save({ notes: layout().notes.filter(n => n.id !== id), order: strip(layout().order), hidden: strip(layout().hidden), place: unplace(key) });
 }
 
@@ -622,17 +610,30 @@ export function deleteMap(key) {
   save({ mapBlocks: (layout().mapBlocks || []).filter(m => m.id !== id), maps, order: strip(layout().order), hidden: strip(layout().hidden), place: unplace(key) });
 }
 
-/** @param {string} key @param {number} plantId */
-export const noteText = (key, plantId) => readNotes()[key.slice('note:'.length)]?.[plantId] || '';
+/** The text of a note block for a plant (sheet-notes.js). @param {string} key @param {number} plantId */
+export const noteText = (key, plantId) => storedText(key.slice('note:'.length), plantId);
 
-/** @param {string} key @param {number} plantId @param {string} text */
-export function setNoteText(key, plantId, text) {
-  const id = key.slice('note:'.length);
-  const notes = readNotes();
-  const mine = { ...notes[id] };
-  if (text.trim()) mine[plantId] = text; else delete mine[plantId];
-  if (Object.keys(mine).length) notes[id] = mine; else delete notes[id];
-  writeNotes(notes);
+/**
+ * Writes a note block's text for a plant; resolves with whether it is stored (false: not saved, storage full).
+ * @param {string} key @param {number} plantId @param {string} text @returns {Promise<boolean>}
+ */
+export const setNoteText = (key, plantId, text) => storeText(key.slice('note:'.length), plantId, text);
+
+/** The note blocks' texts in their portable form (export, backup copy, transfer link). */
+export const exportNotes = () => portableNotes(layout().notes);
+
+/**
+ * Note texts from an export, a backup copy or a link: their blocks made where missing (same id, same title), the
+ * texts merged (a newer one replaces this device's; nothing is deleted). @param {any} list @returns {Promise<number>}
+ */
+export async function importNotes(list) {
+  const texts = fromPortable(list);
+  if (!texts.length) return 0;
+  const have = new Set(layout().notes.map(n => n.id));
+  const blocks = /** @type {any[]} */ (list).filter(b => texts.some(t => t.note === b.id) && !have.has(b.id))
+    .map(b => ({ id: b.id, title: String(b.title || 'Note').trim().slice(0, 60) || 'Note' }));
+  if (blocks.length) save({ notes: [...layout().notes, ...blocks] });
+  return mergeNoteTexts(texts);
 }
 
 // ── Reset, export, import ──────────────────────────────────────────────────
@@ -663,7 +664,7 @@ export function exportLayout() {
   return JSON.stringify({
     app: 'geoflora', kind: 'sheet-layout', version: 2,
     layout: layout(),
-    notes: readNotes(),
+    notes: allNoteTexts(),
     modes: ownModes(),
     modulesOff: Object.fromEntries(modeKeys().map(v => [v, foldedModules(v)]))
   }, null, 2);
@@ -677,8 +678,10 @@ const perView = (v, ok) => v && typeof v === 'object' && !Array.isArray(v) && Ob
 const perBlock = v => v && typeof v === 'object' && !Array.isArray(v) && Object.entries(v).every(([block, keys]) => block in SUBS && isKeyList(keys));
 
 /**
- * Applies a layout file. Throws (and changes nothing) when it is not one.
- * @param {string} text
+ * Applies a layout file. Throws (and changes nothing) when it is not one. Its note texts are added to this device's,
+ * never over them (a layout shared by someone else does not erase what was written here), and the note blocks that
+ * hold a text here stay. The layout is applied at once; the promise resolves once the texts are stored.
+ * @param {string} text @returns {Promise<number>} how many texts were added
  */
 export function importLayout(text) {
   let data;
@@ -705,14 +708,19 @@ export function importLayout(text) {
     && (!data.modulesOff || perView(data.modulesOff, x => Array.isArray(x) && x.every(m => MODULES.some(mm => mm.key === m))));
   if (!valid) throw new Error('Mise en page illisible ou incomplète.');
   importModes(data.modes || []);
-  writeNotes(data.notes || {});
-  save({ ...emptyLayout(), order: l.order || {}, hidden: l.hidden || {}, subOrder: l.subOrder || {}, subHidden: l.subHidden || {}, styles: l.styles || {}, titleShown: l.titleShown || {}, hideEmpty: l.hideEmpty || {}, tree: l.tree || {}, titles: l.titles, notes: l.notes,
+  // Note blocks holding a text on this device are kept, after the file's.
+  const written = new Set(notesWithText());
+  const kept = layout().notes.filter(n => written.has(n.id) && !l.notes.some((/** @type {any} */ m) => m.id === n.id));
+  const texts = Object.entries(data.notes || {}).flatMap(([note, byPlant]) => Object.entries(/** @type {Record<string, string>} */ (byPlant))
+    .map(([plantId, t]) => ({ key: '', note, plantId: Number(plantId), text: t, updatedAt: '' })));
+  save({ ...emptyLayout(), order: l.order || {}, hidden: l.hidden || {}, subOrder: l.subOrder || {}, subHidden: l.subHidden || {}, styles: l.styles || {}, titleShown: l.titleShown || {}, hideEmpty: l.hideEmpty || {}, tree: l.tree || {}, titles: l.titles, notes: [...l.notes, ...kept],
     mapBlocks: l.mapBlocks || [], maps: Object.fromEntries(Object.entries(l.maps || {}).map(([k, c]) => [k, cleanMap(c)])) });
   for (const view of modeKeys()) {
     const off = data.modulesOff?.[view] || [];
     for (const m of blockModules()) setModule(m, view, !off.includes(m));
     if (!off.includes('wikipedia') && !moduleOn('wikidata', view)) setModule('wikidata', view, true);
   }
+  return mergeNoteTexts(texts, { keepMine: true });
 }
 
 // ── Modes made here ────────────────────────────────────────────────────────

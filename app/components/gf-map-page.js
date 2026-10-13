@@ -5,7 +5,7 @@ import { href, parse } from '../core/router.js';
 import { backTo, depth, entryValue, markEntry, pushHash, replaceHash } from '../core/history.js';
 import { findEntry,
   directionsUrl, entryPosition, plantMarkers, distance, entryName, formatDistance, inSeason, listPlaces,
-  placeAbundance, placeLastHarvest, placeTitle, plantCount, savePlace, spotEvents, withEntry
+  placeAbundance, placeLastHarvest, placeTitle, plantCount, spotEvents, updatePlace, withEntry
 } from '../core/collections.js';
 import { RADII, exploreUrl, observationsAround, saveRadius, savedRadius, speciesAround } from '../core/nearby.js';
 import { StoreController, whenReady } from '../core/store.js';
@@ -274,18 +274,20 @@ export class GfMapPage extends LitElement {
       this.#showToast('Position enregistrée');
       return;
     }
-    const changed = new Map();
-    const get = (/** @type {string} */ id) => changed.get(id) || this._spots.find(s => s.id === id);
+    // The moves of each place, applied to it as stored now (in one transaction: nothing changed meanwhile is lost).
+    /** @type {Map<string, ((place: any) => any)[]>} */
+    const changes = new Map();
+    const add = (/** @type {string} */ id, /** @type {(place: any) => any} */ change) => {
+      if (this._spots.some(s => s.id === id)) changes.set(id, [...changes.get(id) || [], change]);
+    };
     for (const { id, coordinates } of places) {
-      const place = get(id);
-      if (place) changed.set(id, { ...place, geometry: { type: 'Point', coordinates: round(coordinates) }, properties: { ...place.properties, accuracy: null } });
+      add(id, place => ({ ...place, geometry: { type: 'Point', coordinates: round(coordinates) }, properties: { ...place.properties, accuracy: null } }));
     }
     for (const { placeId, entryId, plantId, coordinates } of plants) {
-      const place = get(placeId);
-      if (place) changed.set(placeId, withEntry(place, entryId ?? plantId, { coordinates: round(coordinates), accuracy: null }));
+      add(placeId, place => withEntry(place, entryId ?? plantId, { coordinates: round(coordinates), accuracy: null }));
     }
     try {
-      for (const place of changed.values()) await savePlace(place);
+      for (const [id, list] of changes) await updatePlace(id, place => list.reduce((p, change) => change(p), place));
       this.#showToast('Position enregistrée');
     } catch (error) {
       this.#showToast('Enregistrement impossible : ' + /** @type {Error} */ (error).message);

@@ -97,11 +97,14 @@ const asking = new Set();
 
 /**
  * Fills a saved place's missing altitudes (in the background): asked of the IGN, then written into the place as it
- * is now — read again, so nothing changed meanwhile is lost; a plant moved meanwhile waits for the next time.
- * `read` and `write` are the collections' own (no import cycle). Quiet when offline or the module is off.
- * @param {string} id @param {(id: string) => Promise<Place | undefined>} read @param {(place: Place) => Promise<unknown>} write
+ * is stored at that moment — `update` (collections.js updatePlace) reads and writes it in one transaction, so nothing
+ * changed meanwhile, here or in another tab, is lost; a plant moved meanwhile waits for the next time; a place
+ * deleted meanwhile stays deleted. `read` and `update` are the collections' own (no import cycle). Quiet when
+ * offline or the module is off.
+ * @param {string} id @param {(id: string) => Promise<Place | undefined>} read
+ * @param {(id: string, change: (current: Place) => Place) => Promise<unknown>} update
  */
-export async function fillAltitudes(id, read, write) {
+export async function fillAltitudes(id, read, update) {
   if (asking.has(id) || !moduleOn('ignGeo') || !navigator.onLine || Date.now() - (failedAt.get(id) ?? 0) < RETRY) return;
   asking.add(id);
   try {
@@ -109,10 +112,10 @@ export async function fillAltitudes(id, read, write) {
     const points = before ? missingAltitudes(before) : [];
     if (!points.length) return;
     const found = await altitudesAt(points);
-    const now = await read(id);
-    if (!now) return;
-    const next = withAltitudes(now, found);
-    if (missingAltitudes(next).length < missingAltitudes(now).length) await write(next);
+    await update(id, now => {
+      const next = withAltitudes(now, found);
+      return missingAltitudes(next).length < missingAltitudes(now).length ? next : now;
+    });
   } catch {
     failedAt.set(id, Date.now());
   } finally {

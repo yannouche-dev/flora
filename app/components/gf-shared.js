@@ -136,7 +136,8 @@ export class GfShared extends LitElement {
       await whenReady();
       const r = await importPortable(this._portable);
       this._done = `${r.added} ajoutée${r.added > 1 ? 's' : ''}, ${r.updated} mise${r.updated > 1 ? 's' : ''} à jour, ${r.unchanged} déjà à jour`
-        + (r.skipped ? `, ${r.skipped} ignorée${r.skipped > 1 ? 's' : ''}` : '') + '.';
+        + (r.skipped ? `, ${r.skipped} ignorée${r.skipped > 1 ? 's' : ''}` : '')
+        + (r.notes ? `, ${r.notes} note${r.notes > 1 ? 's' : ''} de fiche` : '') + '.';
     } catch (error) {
       this._error = 'Import impossible : ' + /** @type {Error} */ (error).message;
     } finally {

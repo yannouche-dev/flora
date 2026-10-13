@@ -11,7 +11,7 @@ import { watchLocation, whenGranted } from '../core/geo.js';
 import { photoOf } from '../core/thumb.js';
 import { atPlace, placeNameAt } from '../core/geoservices.js';
 import { findPlants } from '../core/search.js';
-import { distance, entriesOf, getPlace, lastEntry, newPlace, plantMarkers, savePlace, spotEvents, withPlant, withoutPlant, refreshMembership } from '../core/collections.js';
+import { distance, entriesOf, getPlace, lastEntry, newPlace, plantMarkers, savePlace, spotEvents, updatePlace, withPlant, withoutPlant, refreshMembership } from '../core/collections.js';
 import * as db from '../core/db.js';
 import { href, parse } from '../core/router.js';
 import { encodeCollection, share } from '../core/share.js';
@@ -419,7 +419,7 @@ export class GfTrail extends LitElement {
       this._done = await getPlace(done).catch(() => undefined) || null;
       if (!this._done) write(DONE, null);
       // Its altitudes, for its profile (a parcours noted offline, or before they were kept): saved again once found.
-      else fillAltitudes(this._done.id, getPlace, savePlace);
+      else fillAltitudes(this._done.id, getPlace, updatePlace);
     }
     const ids = /** @type {string[]} */ (read(LIST, []));
     this._past = (await Promise.all(ids.filter(x => x !== id).map(x => getPlace(x).catch(() => undefined)))).filter(Boolean);
@@ -552,14 +552,14 @@ export class GfTrail extends LitElement {
     if (!trail) return;
     const plant = await db.get('plants', hit.id).catch(() => null) || { id: hit.id, scientificName: hit.scientificName, vernacularName: hit.vernacularName };
     const position = this._fix ? { coordinates: this._fix.coordinates, accuracy: Math.round(this._fix.accuracy) } : undefined;
-    const next = withPlant(trail, plant, position, { again: true });
+    // Added to the parcours as stored now (another add, another tab, the altitudes may have written meanwhile).
+    const next = await this.#update(trail.id, current => withPlant(current, plant, position, { again: true }));
+    if (!next) return;
     const added = /** @type {any} */ (lastEntry(next)).id;
-    await savePlace(next);
-    this._trail = next;
     this._fresh = added;
     const name = hit.vernacularName || hit.scientificName;
     const n = entriesOf(next, plant.id).length;
-    this.#say(`${name} ajoutée au parcours${n > 1 ? ` (${n}e fois)` : ''}${position ? ', ici' : ''}`, async () => { const back = withoutPlant(/** @type {any} */ (this._trail), added); await savePlace(back); this._trail = back; });
+    this.#say(`${name} ajoutée au parcours${n > 1 ? ` (${n}e fois)` : ''}${position ? ', ici' : ''}`, () => { this.#update(trail.id, current => withoutPlant(current, added)); });
     if (here) return;
     // Added: the search goes down — on a phone the keyboard too — and the card and the map are back, the plant on
     // it. Wide (no keyboard): the field stays ready for the next one.
@@ -599,17 +599,13 @@ export class GfTrail extends LitElement {
     const t = this._trail;
     const entry = t?.properties.plants.find((/** @type {any} */ e) => e.id === entryId);
     if (!t || !entry) return;
-    const next = withoutPlant(t, entryId);
-    await savePlace(next);
-    this._trail = next;
+    const next = await this.#update(t.id, current => withoutPlant(current, entryId));
+    if (!next) return;
     this._selEntry = null;
     if (this._sel != null && !entriesOf(next, this._sel).length) this._sel = null;
-    this.#say(`${entry.vernacularName || entry.scientificName} retirée du parcours`, async () => {
-      const cur = /** @type {any} */ (this._trail);
-      if (!cur || cur.id !== t.id || cur.properties.plants.some((/** @type {any} */ e) => e.id === entryId)) return;
-      const back = { ...cur, properties: { ...cur.properties, plants: [...cur.properties.plants, entry] } };
-      await savePlace(back);
-      this._trail = back;
+    this.#say(`${entry.vernacularName || entry.scientificName} retirée du parcours`, () => {
+      this.#update(t.id, current => current.properties.plants.some(e => e.id === entryId) ? current
+        : { ...current, properties: { ...current.properties, plants: [...current.properties.plants, entry] } });
     });
   }
 
@@ -677,9 +673,28 @@ export class GfTrail extends LitElement {
     clearTimeout(this.#nameTimer);
     const n = name.trim();
     if (!n || !this._trail || n === this._trail.properties.name) return;
-    const next = { ...this._trail, properties: { ...this._trail.properties, name: n.slice(0, 80) } };
-    this._trail = next;
-    await savePlace(next);
+    const kept = n.slice(0, 80);
+    this._trail = { ...this._trail, properties: { ...this._trail.properties, name: kept } };
+    await this.#update(this._trail.id, current => ({ ...current, properties: { ...current.properties, name: kept } }));
+  }
+
+  /**
+   * A change to the parcours, applied to it as stored now, in one transaction (collections.js updatePlace): two
+   * quick adds, or the same parcours open in two tabs, never lose one another's plants. Deleted meanwhile (in another
+   * tab): said, and the parcours left. Resolves with the parcours as stored, or null.
+   * @param {string} id @param {(current: import('../core/collections.js').Place) => import('../core/collections.js').Place} change
+   */
+  async #update(id, change) {
+    try {
+      const saved = await updatePlace(id, change);
+      if (this._trail?.id === id) this._trail = saved;
+      return saved;
+    } catch (error) {
+      this.#say(/** @type {Error} */ (error).name === 'GoneError' ? 'Ce parcours a été supprimé (dans un autre onglet ?) : rien n’a été enregistré.'
+        : 'Enregistrement impossible : ' + /** @type {Error} */ (error).message);
+      this.#reload();
+      return null;
+    }
   }
 
   /** @type {any} */ #nameTimer = 0;

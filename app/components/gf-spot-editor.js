@@ -9,7 +9,7 @@ import { back, replaceHash, replaceView } from '../core/history.js';
 import {
   ABUNDANCE, defaultPlantPosition, deletePlace, distance, entryInSeason, entryName, entryPosition, exportGeoJSON, findEntry,
   formatDistance, getPlace, lastHarvest, matchCollections, plantMarkers,
-  nearbyPlaces, newCollection, newPlace, placeTitle, plantCount, savePlace, spotEvents, withEntry, withLocation, withoutPlant, withPlant, entriesOf, lastEntry } from '../core/collections.js';
+  nearbyPlaces, newCollection, newPlace, placeTitle, plantCount, savePatch, savePlace, spotEvents, updatePlace, withEntry, withLocation, withoutPlant, withPlant, entriesOf, lastEntry } from '../core/collections.js';
 import { encodeCollection, share } from '../core/share.js';
 import { StoreController, whenReady } from '../core/store.js';
 import { addressAt, altitudeAt, formatCoordinates } from '../core/geoservices.js';
@@ -286,8 +286,13 @@ export class GfSpotEditor extends LitElement {
     if (this.#saving) { await this.#saving; return this.#flush(); }
     this.#dirty = false;
     const wasNew = this.#isNew;
-    this.#saving = savePlace(this.#payload())
+    const mine = this.#payload();
+    // A new collection is created; an existing one gets only what was edited here since it was read (#base → mine),
+    // applied to it as stored now — a plant, a harvest, a name changed meanwhile elsewhere (another tab, « Noter
+    // ici », the altitudes) are kept; deleted meanwhile, it is not made again.
+    this.#saving = (wasNew ? savePlace(mine) : savePatch(this.#base || mine, mine))
       .then(saved => {
+        this.#base = mine;
         this.#savedAt = saved.properties.updatedAt;
         if (wasNew) {
           this.#persisted = true;
@@ -297,8 +302,12 @@ export class GfSpotEditor extends LitElement {
       })
       .catch(error => {
         console.error(error);
-        this.#dirty = true;
         this._saveState = 'error';
+        if (/** @type {Error} */ (error).name === 'GoneError') {
+          this._error = this.#goneText();
+          return;
+        }
+        this.#dirty = true;
         this._error = 'Enregistrement impossible : ' + /** @type {Error} */ (error).message;
       })
       .finally(() => { this.#saving = null; });
@@ -321,13 +330,34 @@ export class GfSpotEditor extends LitElement {
 
   /** updatedAt of the version this editor last read or wrote: anything newer was changed elsewhere. */
   #savedAt = '';
+  /**
+   * The collection as this editor last read or wrote it (with today's harvests): what is saved is the difference
+   * between it and the edited one, applied to the stored record (collections.js savePatch).
+   * @type {import('../core/collections.js').Collection | null}
+   */
+  #base = null;
 
-  /** Embedded on the Carte: « Noter ici » or the map may change this place meanwhile; reload it then. */
+  #goneText() {
+    return `${this.#isPlace ? 'Cet endroit a été supprimé' : 'Cette collection a été supprimée'} entre-temps (dans un autre onglet ?) : vos dernières modifications n’ont pas été enregistrées.`;
+  }
+
+  /**
+   * « Noter ici », the map, another tab or window may change this collection meanwhile: read it again then (not while
+   * an edit waits to be saved — that one is applied to the stored record, keeping those changes). Deleted elsewhere:
+   * said, never made again.
+   */
   #onSpotsChange = async () => {
-    if (!this.embedded || !this.spotId || this.#dirty || this.#saving) return;
-    const place = await getPlace(this.spotId).catch(() => null);
-    if (!place || this.#dirty || this.#saving || place.properties.updatedAt === this.#savedAt) return;
+    const id = this.spotId;
+    if (!id || this.#dirty || this.#saving) return;
+    const place = await getPlace(id).catch(() => null);
+    if (this.#dirty || this.#saving || id !== this.spotId) return;
+    if (!place) {
+      if (this._place && this.#savedAt) { this._error = this.#goneText(); this._saveState = ''; }
+      return;
+    }
+    if (place.properties.updatedAt === this.#savedAt) return;
     this.#savedAt = place.properties.updatedAt;
+    this.#base = place;
     // Today's harvests of the added plants are saved in it already.
     this._todayFor = new Map();
     this._place = place;
@@ -424,6 +454,7 @@ export class GfSpotEditor extends LitElement {
         return;
       }
       this.#savedAt = place?.properties.updatedAt || '';
+      this.#base = place || null;
       if (this.embedded && this.focusEntry != null && place) this._open = findEntry(place, this.focusEntry)?.id ?? null;
       if (place && this.addPlant && place.properties.kind === 'place') {
         if (!findEntry(place, this.addPlant)) {
@@ -637,21 +668,23 @@ export class GfSpotEditor extends LitElement {
     await this.#saving;
     const draft = this.#payload();
     try {
-      let target = await getPlace(targetId);
-      if (!target) throw new Error('Collection introuvable.');
-      for (const e of draft.properties.plants) {
-        if (e.plantId === null) continue;
-        const own = draft.geometry && e.coordinates ? { coordinates: e.coordinates, accuracy: e.accuracy } : null;
-        // Already there: in a list, the plant; in a place, this plant at this very spot (else another occurrence).
-        const there = target.geometry && own
-          ? entriesOf(target, e.plantId).some(t => t.coordinates && distance(t.coordinates, own.coordinates) < 1)
-          : Boolean(findEntry(target, e.plantId));
-        if (there) continue;
-        const position = target.geometry ? own || defaultPlantPosition(target, this.#geo.state.fix) : undefined;
-        target = withPlant(target, { id: e.plantId, scientificName: e.scientificName, vernacularName: e.vernacularName }, position, { again: true });
-        target = withEntry(target, /** @type {any} */ (lastEntry(target)).id, { abundance: e.abundance, rating: e.rating, notes: e.notes, harvests: e.harvests });
-      }
-      await savePlace(target);
+      // Into the target as stored now, in one transaction.
+      await updatePlace(targetId, stored => {
+        let target = stored;
+        for (const e of draft.properties.plants) {
+          if (e.plantId === null) continue;
+          const own = draft.geometry && e.coordinates ? { coordinates: e.coordinates, accuracy: e.accuracy } : null;
+          // Already there: in a list, the plant; in a place, this plant at this very spot (else another occurrence).
+          const there = target.geometry && own
+            ? entriesOf(target, e.plantId).some(t => t.coordinates && distance(t.coordinates, own.coordinates) < 1)
+            : Boolean(findEntry(target, e.plantId));
+          if (there) continue;
+          const position = target.geometry ? own || defaultPlantPosition(target, this.#geo.state.fix) : undefined;
+          target = withPlant(target, { id: e.plantId, scientificName: e.scientificName, vernacularName: e.vernacularName }, position, { again: true });
+          target = withEntry(target, /** @type {any} */ (lastEntry(target)).id, { abundance: e.abundance, rating: e.rating, notes: e.notes, harvests: e.harvests });
+        }
+        return target;
+      }).catch(error => { throw error.name === 'GoneError' ? new Error('Collection introuvable.', { cause: error }) : error; });
       if (this.#persisted && this.#createdHere) await deletePlace(draft.id);
       this.#persisted = false;
       // In place of this draft: Back does not return to it.
@@ -693,6 +726,7 @@ export class GfSpotEditor extends LitElement {
     }
     try {
       const saved = await savePlace(this.#payload());
+      this.#base = saved;
       this.#persisted = true;
       // The new place replaces its form in history.
       replaceView(href.map({ spot: saved.id }));

@@ -448,7 +448,7 @@ export class GfCollections extends LitElement {
 
   async #export() {
     const { cancelled } = await exportGeoJSON();
-    if (!cancelled) this._note = 'Sauvegarde exportée. Gardez le fichier (Drive, e-mail…) : il permet de tout restaurer.';
+    if (!cancelled) this._note = 'Sauvegarde exportée. Gardez le fichier (Drive, e-mail…) : il permet de restaurer vos collections et les notes de vos fiches.';
     this.requestUpdate();
   }
 

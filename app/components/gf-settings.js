@@ -180,7 +180,8 @@ export class GfSettings extends LitElement {
     try {
       const r = await importGeoJSON(file);
       this._spotMessage = `Import : ${r.added} ajouté(s), ${r.updated} mis à jour, ${r.unchanged} inchangé(s)`
-        + (r.skipped ? `, ${r.skipped} ignoré(s) (non valides)` : '') + '.';
+        + (r.skipped ? `, ${r.skipped} ignoré(s) (non valides)` : '')
+        + (r.notes ? `, ${r.notes} note${r.notes > 1 ? 's' : ''} de fiche` : '') + '.';
     } catch (error) {
       this._spotMessage = /** @type {Error} */ (error).message;
     }
@@ -446,8 +447,9 @@ export class GfSettings extends LitElement {
     input.value = '';
     if (!file) return;
     try {
-      importLayout(await file.text());
-      this._layoutNote = 'Mise en page importée.';
+      const added = await importLayout(await file.text());
+      // Its notes are added to this device's, never written over them.
+      this._layoutNote = 'Mise en page importée' + (added ? ` (${added} note${added > 1 ? 's' : ''} ajoutée${added > 1 ? 's' : ''}).` : '.');
     } catch (error) {
       this._layoutNote = 'Import impossible : ' + /** @type {Error} */ (error).message;
     }

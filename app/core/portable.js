@@ -3,6 +3,8 @@
 // The flora itself (names, families…) is already in every copy of the app, so it is never written:
 // plants are referenced by TAXREF id and their names are re-filled on import. Defaults, derived
 // fields and app timestamps are left out. Used by the file export, the local backup and transfer links.
+// With personal data, the texts of the plant sheet's « Note » blocks go along (`sheetNotes`, a foreign member of the
+// FeatureCollection, ignored by other GeoJSON readers): see sheet-notes.js portableNotes.
 // No imports: usable anywhere (page, tests).
 
 export const FORMAT_VERSION = 5;
@@ -57,9 +59,10 @@ function slimEntry(e, at, personal) {
 
 /**
  * @param {import('./place-model.js').Collection[]} collections
- * @param {{ personal?: boolean, name?: string }} [options] personal: include notes and harvest logs
+ * @param {{ personal?: boolean, name?: string, sheetNotes?: any[] }} [options] personal: include notes and harvest logs
+ *   (and `sheetNotes`, the plant sheet's notes, when given)
  */
-export function toPortable(collections, { personal = true, name = 'GeoFlora — mes plantes' } = {}) {
+export function toPortable(collections, { personal = true, name = 'GeoFlora — mes plantes', sheetNotes } = {}) {
   return {
     type: 'FeatureCollection',
     name,
@@ -81,12 +84,13 @@ export function toPortable(collections, { personal = true, name = 'GeoFlora — 
       props.updatedAt = p.updatedAt;
       props.plants = p.plants.map(e => slimEntry(e, at, personal));
       return { type: 'Feature', id: c.id, geometry: at ? { type: 'Point', coordinates: at } : null, properties: props };
-    })
+    }),
+    ...(personal && sheetNotes?.length ? { sheetNotes } : {})
   };
 }
 
 /** Whether a portable/GeoJSON payload carries personal notes or harvests. @param {any} fc */
 export function hasPersonal(fc) {
-  return (fc?.features || []).some((/** @type {any} */ f) =>
+  return Boolean(fc?.sheetNotes?.length) || (fc?.features || []).some((/** @type {any} */ f) =>
     f?.properties?.notes || (f?.properties?.plants || []).some((/** @type {any} */ e) => e?.notes || e?.harvests?.length));
 }

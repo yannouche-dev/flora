@@ -1,6 +1,7 @@
 // Things happening at once: answers of the search worker arriving out of order, two tabs on the same IndexedDB, two
-// quick adds. The known losses of the audit (GAP1-1, GAP1-4) are written as test.fixme: they document the bug and
-// pass the day it is fixed (remove .fixme then). Migrated from samesearch.cjs, dbgkey.cjs, review-fixes/keep-hold.
+// quick adds. The losses of the audit (GAP1-1, GAP1-2, GAP1-4, GAP1-7) are fixed by db.update (read and write in one
+// transaction), the editor saving its edits as a patch, and core/sync.js (BroadcastChannel, the storage event): each
+// has its test here. Migrated from samesearch.cjs, dbgkey.cjs, review-fixes/keep-hold.
 import { test, expect, plantId } from './fixtures.mjs';
 
 test('frappe rapide : seule la dernière recherche s’affiche', async ({ app, page }) => {
@@ -47,18 +48,19 @@ test('deux onglets : chacun garde ses lieux, aucun n’efface l’autre', async 
   await other.close();
 });
 
-test.fixme('GAP1-4 : deux « Ajouter » rapprochés dans le parcours gardent les deux plantes', async ({ app, page }) => {
+test('GAP1-4 : deux « Ajouter » rapprochés dans le parcours gardent les deux plantes', async ({ app, page }) => {
   await app.open('#/discover?s=trail');
   const trail = page.locator('gf-trail');
   await trail.locator('.go').click();
   await trail.locator('.search input').fill('ortie');
   const adds = trail.locator('.hit .add');
   await expect(adds.nth(1)).toBeVisible();
-  await Promise.all([adds.nth(0).click(), adds.nth(1).click()]);
+  // Both in the same moment (two mouse clicks from Playwright would interleave: one press would be lost before the app).
+  await adds.evaluateAll(buttons => { /** @type {HTMLElement} */ (buttons[0]).click(); /** @type {HTMLElement} */ (buttons[1]).click(); });
   await expect(trail.locator('.mine > li')).toHaveCount(2);
 });
 
-test.fixme('GAP1-1 : l’éditeur de lieu ouvert n’efface pas une plante ajoutée ailleurs entre-temps', async ({ app, page, context }) => {
+test('GAP1-1 : l’éditeur de lieu ouvert n’efface pas une plante ajoutée ailleurs entre-temps', async ({ app, page, context }) => {
   await app.open('#/');
   const id = await page.evaluate(async () => {
     const c = await import('/app/core/collections.js');

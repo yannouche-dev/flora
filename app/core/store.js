@@ -5,6 +5,8 @@ import { config } from '../config.js';
 import { moduleEvents, modulesState, useModeSource } from './modules.js';
 import { baseOf, isMode, modeEvents, modeList } from './modes.js';
 import { treeFromPlaces } from './pane-tree.js';
+import { quotaEvents } from './quota.js';
+import { onStorage } from './sync.js';
 
 /**
  * @typedef {Record<'status' | 'legal' | 'family' | 'genus' | 'photo' | 'french' | 'mine', string[]>} Filters
@@ -25,6 +27,7 @@ import { treeFromPlaces } from './pane-tree.js';
  * @property {boolean} offline
  * @property {boolean} [datasetDeferred]  a new flora was announced but could not be downloaded: the local copy stays, until the next launch
  * @property {boolean} [updateReady]  a new version of the app is installed: reloading shows it
+ * @property {boolean} [storageFull]  a write was refused for lack of room (QuotaExceededError): a banner says what to do
  * @property {Query} query
  * @property {Results} results
  * @property {boolean} compact
@@ -182,6 +185,11 @@ modeEvents.addEventListener('change', () => {
   if (plantView && !isMode(plantView)) setPlantView(null);
   store.set({ modes: modeList(), modules: modulesState() });
 });
+// Storage full: said once, in a banner (gf-app), until closed.
+quotaEvents.addEventListener('full', () => store.set({ storageFull: true }));
+// The layout arranged in another tab: this one shows it too (and its next change starts from it).
+onStorage(config.storageKeys.sheetLayout, () => store.set({ sheetLayout: readLayout() }));
+
 // Modules asked without a mode follow the app mode (maps, Autour, lists).
 useModeSource(() => store.state.mode);
 

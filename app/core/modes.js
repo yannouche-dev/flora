@@ -5,6 +5,8 @@
 // Scientifique); then it is arranged on its own, in Mode King and Réglages. No dependency on the store.
 
 import { config } from '../config.js';
+import { writeLocal } from './quota.js';
+import { onStorage } from './sync.js';
 
 /** The modes every installation has, which the others are made from. */
 export const BASE_MODES = /** @type {const} */ (['epure', 'standard', 'scientific']);
@@ -42,12 +44,15 @@ let own = read();
 export const modeEvents = new EventTarget();
 
 function save() {
-  try {
-    if (own.length) localStorage.setItem(config.storageKeys.modes, JSON.stringify(own.map(({ builtIn, ...m }) => m)));
-    else localStorage.removeItem(config.storageKeys.modes);
-  } catch { /* not persisted */ }
+  writeLocal(config.storageKeys.modes, own.length ? JSON.stringify(own.map(({ builtIn, ...m }) => m)) : null);
   modeEvents.dispatchEvent(new Event('change'));
 }
+
+// Modes made, renamed or deleted in another tab: this one lists them too.
+onStorage(config.storageKeys.modes, () => {
+  own = read();
+  modeEvents.dispatchEvent(new Event('change'));
+});
 
 /** Every mode, the app's first. */
 export const modeList = () => [...BUILT_IN, ...own];

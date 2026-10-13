@@ -5,6 +5,8 @@
 
 import { config } from '../config.js';
 import { modeKeys } from './modes.js';
+import { writeLocal } from './quota.js';
+import { onStorage } from './sync.js';
 
 /**
  * @typedef {'ignMaps' | 'ignGeo' | 'ignProtected' | 'ignNature' | 'voice' | 'globi' | 'openmeteo' | 'wikibooks' | 'inaturalist' | 'gbif' | 'wikidata' | 'wikipedia' | 'commons' | 'trefle' | 'photos'} ModuleKey
@@ -97,32 +99,39 @@ export const modulesSignature = (mode = currentMode()) => MODULES.filter(m => !m
 export const modulesState = () => /** @type {any} */ (Object.fromEntries(MODULES.map(m =>
   [m.key, Object.fromEntries(modeKeys().map(mode => [mode, moduleOn(m.key, mode)]))])));
 
+// Switched on or off in another tab: this one follows (a refusal made there is never undone from here).
+onStorage(config.storageKeys.modules, () => {
+  state = read();
+  moduleEvents.dispatchEvent(new CustomEvent('change', { detail: {} }));
+});
+
+/** @param {typeof state} next */
+const persist = next => writeLocal(config.storageKeys.modules, Object.keys(next).length ? JSON.stringify(next) : null);
+
 /** @param {ModuleKey} key @param {Mode} mode @param {boolean} on */
 export function setModule(key, mode, on) {
-  const modes = { ...state[key] };
+  // From what is stored now, not this tab's copy: another tab's choices since are kept (read, changed, written
+  // at once — localStorage is synchronous: nothing comes in between).
+  const fresh = read();
+  const modes = { ...fresh[key] };
   if (on) delete modes[mode]; else modes[mode] = false;
-  const next = { ...state };
+  const next = { ...fresh };
   if (Object.keys(modes).length) next[key] = modes; else delete next[key];
   state = next;
-  try {
-    if (Object.keys(next).length) localStorage.setItem(config.storageKeys.modules, JSON.stringify(next));
-    else localStorage.removeItem(config.storageKeys.modules);
-  } catch { /* not persisted */ }
+  persist(next);
   moduleEvents.dispatchEvent(new CustomEvent('change', { detail: { key, mode, on } }));
 }
 
 /** Store the exceptions of every module at once. @param {typeof state} next */
 function writeAll(next) {
   state = next;
-  try {
-    if (Object.keys(next).length) localStorage.setItem(config.storageKeys.modules, JSON.stringify(next));
-    else localStorage.removeItem(config.storageKeys.modules);
-  } catch { /* not persisted */ }
+  persist(next);
   moduleEvents.dispatchEvent(new CustomEvent('change', { detail: {} }));
 }
 
 /** A new mode uses the services of its model. @param {Mode} from @param {Mode} to */
 export function copyModules(from, to) {
+  state = read();
   const next = { ...state };
   for (const m of MODULES) {
     const modes = { ...next[m.key] };
@@ -134,6 +143,7 @@ export function copyModules(from, to) {
 
 /** A mode deleted: its choices go. @param {Mode} mode */
 export function dropModules(mode) {
+  state = read();
   const next = { ...state };
   for (const [k, modes] of Object.entries(next)) {
     if (!modes || !(mode in modes)) continue;

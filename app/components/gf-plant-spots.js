@@ -1,7 +1,7 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { href } from '../core/router.js';
-import { collectionsForPlant, collectionTitle, plantMarkers, entryInSeason, findEntry, lastHarvest, plantCount, savePlace, spotEvents, withEntry } from '../core/collections.js';
+import { collectionsForPlant, collectionTitle, plantMarkers, entryInSeason, findEntry, lastHarvest, plantCount, spotEvents, updatePlace, withEntry } from '../core/collections.js';
 import { StoreController } from '../core/store.js';
 import './gf-map.js';
 import { ui } from '../styles/ui.js';
@@ -104,7 +104,9 @@ export class GfPlantSpots extends LitElement {
       const place = this._spots.find(p => p.id === placeId);
       if (!place) continue;
       const rounded = /** @type {[number, number]} */ (coordinates.map(v => Math.round(v * 1e7) / 1e7));
-      await savePlace(withEntry(place, entryId ?? plantId, { coordinates: rounded, accuracy: null })).catch(error => { this._error = 'Enregistrement impossible : ' + error.message; });
+      // On the place as stored now (its other plants may have changed meanwhile, in another tab).
+      await updatePlace(place.id, current => withEntry(current, entryId ?? plantId, { coordinates: rounded, accuracy: null }))
+        .catch(error => { this._error = 'Enregistrement impossible : ' + error.message; });
     }
   }
 

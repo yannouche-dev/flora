@@ -179,3 +179,126 @@ export function normalizeCollection(feature) {
     }
   };
 }
+
+// ── Two copies of a collection ──────────────────────────────────────────────
+
+const same = (/** @type {unknown} */ a, /** @type {unknown} */ b) => JSON.stringify(a) === JSON.stringify(b);
+const harvestKey = (/** @type {Harvest} */ h) => JSON.stringify([h.date, h.quantity || '', h.note || '']);
+const newestFirst = (/** @type {Harvest[]} */ list) => list.sort((a, b) => b.date.localeCompare(a.date));
+
+/** The fields of a collection that are not edited (kept by the store, or derived). */
+const DERIVED = new Set(['plants', 'plantIds', 'createdAt', 'updatedAt']);
+
+/**
+ * Kind and geometry agree (one side may have moved the point while the other made the place a list).
+ * @param {Collection} c @returns {Collection}
+ */
+function consistent(c) {
+  if (c.properties.kind === 'place' && !c.geometry) return { ...c, properties: { ...c.properties, kind: 'list' } };
+  if (c.properties.kind !== 'place' && c.geometry) return { ...c, geometry: null };
+  return c;
+}
+
+/**
+ * Harvest logs edited on two sides: those `mine` removed from `base` go, those it added come, the rest is `theirs`.
+ * @param {Harvest[]} base @param {Harvest[]} mine @param {Harvest[]} theirs
+ */
+function rebaseHarvests(base, mine, theirs) {
+  const mineKeys = new Set(mine.map(harvestKey));
+  const baseKeys = new Set(base.map(harvestKey));
+  const out = theirs.filter(h => mineKeys.has(harvestKey(h)) || !baseKeys.has(harvestKey(h)));
+  const have = new Set(out.map(harvestKey));
+  for (const h of mine) if (!baseKeys.has(harvestKey(h)) && !have.has(harvestKey(h))) { out.push(h); have.add(harvestKey(h)); }
+  return newestFirst(out);
+}
+
+/** @param {PlantEntry} base @param {PlantEntry} mine @param {PlantEntry} theirs @returns {PlantEntry} */
+function rebaseEntry(base, mine, theirs) {
+  if (same(base, mine)) return theirs;
+  /** @type {any} */
+  const out = { ...theirs };
+  for (const key of /** @type {(keyof PlantEntry)[]} */ (Object.keys(mine))) {
+    if (key === 'id' || key === 'harvests') continue;
+    if (!same(base[key], mine[key])) out[key] = mine[key];
+  }
+  out.harvests = rebaseHarvests(base.harvests, mine.harvests, theirs.harvests);
+  return out;
+}
+
+/**
+ * The edits made on a copy, applied to the stored record as it is now (a three-way merge, field by field):
+ * `base` the record as the editor read it, `mine` as edited, `theirs` as stored now (changed meanwhile by another
+ * tab, « Noter ici », the altitudes…). What `mine` changed wins; everything else stays as `theirs` has it — a plant
+ * added elsewhere, a harvest noted elsewhere, a name changed elsewhere are all kept. Plants are matched by entry id.
+ * @param {Collection} base @param {Collection} mine @param {Collection} theirs @returns {Collection}
+ */
+export function rebase(base, mine, theirs) {
+  if (same(base, mine)) return theirs;
+  const geometry = same(base.geometry, mine.geometry) ? theirs.geometry : mine.geometry;
+  /** @type {any} */
+  const properties = { ...theirs.properties };
+  const b = /** @type {any} */ (base.properties), m = /** @type {any} */ (mine.properties);
+  for (const key of new Set([...Object.keys(b), ...Object.keys(m)])) {
+    if (DERIVED.has(key) || same(b[key], m[key])) continue;
+    if (key in m) properties[key] = m[key]; else delete properties[key];
+  }
+  const baseById = new Map(base.properties.plants.map(e => [e.id, e]));
+  const mineById = new Map(mine.properties.plants.map(e => [e.id, e]));
+  const plants = theirs.properties.plants
+    // Removed here: gone (removed there too, or never there: nothing to do).
+    .filter(e => !(baseById.has(e.id) && !mineById.has(e.id)))
+    .map(e => {
+      const was = baseById.get(e.id), now = mineById.get(e.id);
+      return was && now ? rebaseEntry(was, now, e) : e;
+    });
+  const there = new Set(plants.map(e => e.id));
+  for (const e of mine.properties.plants) if (!baseById.has(e.id) && !there.has(e.id)) plants.push(e);
+  return consistent({ ...theirs, geometry, properties: { ...properties, plants, plantIds: plantIdsOf(plants) } });
+}
+
+/**
+ * Two copies of the same collection from two devices (an import, a transfer link, the backup copy): the newer
+ * one's fields, and the plants of both — none is dropped for being missing from the other copy. A plant both have
+ * (the same occurrence; in a list, the same plant) takes the newer copy's details, its harvest logs joined and its
+ * notes kept where the newer copy has none (a link shared without them).
+ * @param {Collection} local @param {Collection} incoming @returns {Collection}
+ */
+export function mergeCollections(local, incoming) {
+  const newer = incoming.properties.updatedAt > local.properties.updatedAt;
+  const win = newer ? incoming : local, lose = newer ? local : incoming;
+  const list = !win.geometry;
+  /** @type {Set<PlantEntry>} */
+  const used = new Set();
+  /** @param {PlantEntry} e */
+  const partner = e => {
+    let other = lose.properties.plants.find(o => o.id === e.id && !used.has(o));
+    if (!other && e.plantId !== null) {
+      const theirs = lose.properties.plants.filter(o => o.plantId === e.plantId && !used.has(o));
+      const ours = win.properties.plants.filter(o => o.plantId === e.plantId);
+      // In a list a plant is there once; in a place, only an unambiguous pair (one occurrence each side).
+      if (theirs.length && (list || (theirs.length === 1 && ours.length === 1))) other = theirs[0];
+    }
+    if (other) used.add(other);
+    return other;
+  };
+  const plants = win.properties.plants.map(e => {
+    const other = partner(e);
+    if (!other) return e;
+    const harvests = [...e.harvests];
+    const have = new Set(harvests.map(harvestKey));
+    for (const h of other.harvests) if (!have.has(harvestKey(h))) { harvests.push(h); have.add(harvestKey(h)); }
+    return { ...e, notes: e.notes || other.notes, harvests: newestFirst(harvests) };
+  });
+  for (const e of lose.properties.plants) {
+    if (used.has(e)) continue;
+    // A list holds a plant once.
+    if (list && plants.some(p => p.plantId !== null && p.plantId === e.plantId)) continue;
+    const point = win.geometry?.coordinates;
+    plants.push(!point ? { ...e, coordinates: null, accuracy: null, altitude: null } : e.coordinates ? e : { ...e, coordinates: point });
+  }
+  return consistent({ ...win, properties: { ...win.properties, notes: win.properties.notes || lose.properties.notes, plants, plantIds: plantIdsOf(plants) } });
+}
+
+/** The same content, the dates of change aside. @param {Collection} a @param {Collection} b */
+export const sameContent = (a, b) =>
+  same({ ...a, properties: { ...a.properties, updatedAt: '' } }, { ...b, properties: { ...b.properties, updatedAt: '' } });

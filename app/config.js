@@ -9,7 +9,7 @@ export const config = {
 
   db: {
     name: 'geoflora',
-    version: 5
+    version: 6
   },
 
   /** How long remote enrichment (GBIF, iNaturalist, Commons…) stays cached in IndexedDB. */
@@ -56,7 +56,9 @@ export const config = {
     context: 'geoflora.context',
     modules: 'geoflora.modules',
     // Display modes made from the app's three (Réglages › Modes d'affichage).
-    modes: 'geoflora.modes'
+    modes: 'geoflora.modes',
+    // Storing the flora failed for lack of room: the free space then (bytes), so it is not downloaded again in vain.
+    datasetQuota: 'geoflora.datasetQuota'
   },
 
   /** GPS fixes at or under this accuracy (metres) are considered good enough to save. */
