@@ -1,6 +1,7 @@
-// Découvrir « Rencontres » on a first launch: around me, a map of the observations, cards of the plants seen around
-// (the most observed first), a heart keeps one (favourites), and the steps lead to the whole app. iNaturalist,
-// Wikidata and Wikipédia answered here. Migrated from discover2.cjs, discoverscope.cjs, meetstart.cjs, meetmatch.cjs.
+// Découvrir on a first launch: the list of the ways to play, then « Rencontres » (the mini-app): around me, a map of
+// the observations, cards of the plants seen around (the most observed first), a heart keeps one (favourites), and the
+// steps lead to the whole app. iNaturalist, Wikidata and Wikipédia answered here. Migrated from discover2.cjs,
+// discoverscope.cjs, meetstart.cjs, meetmatch.cjs.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 
 // No hint animation of the top card: the keys alone move the cards.
@@ -10,6 +11,7 @@ test.beforeEach(({ context }) => answerAround(context));
 
 test('autour de moi : la carte des observations, puis les cartes, la plus observée d’abord', async ({ app, page }) => {
   await app.open('#/');
+  await page.locator('gf-launcher li[data-app="rencontres"]').getByRole('button', { name: 'Jouer' }).click();
   await page.getByRole('button', { name: 'Autour de moi' }).click();
   const discover = page.locator('gf-discover');
   await expect(discover.locator('.g-steps li.on .l')).toHaveText('Carte');
@@ -26,7 +28,7 @@ test('autour de moi : la carte des observations, puis les cartes, la plus observ
 });
 
 test('un cœur (→) garde la plante dans les favoris, un passage (←) montre la suivante', async ({ app, page }) => {
-  await app.open('#/');
+  await app.open('#/app/rencontres');
   await page.getByRole('button', { name: 'Autour de moi' }).click();
   const discover = page.locator('gf-discover');
   await discover.locator('.g-steps [data-step="go"]').click();
@@ -49,7 +51,10 @@ test('« Passer » montre toute l’application ; « Recommencer la découverte 
   expect(await page.evaluate(async () => (await import('/app/core/discover.js')).discoverState().done)).toBe(true);
   await app.go('#/settings');
   await page.getByRole('button', { name: 'Recommencer la découverte' }).click();
-  await expect(page.getByRole('heading', { name: 'Rencontrez les plantes d’ici' })).toBeVisible();
+  // Découvrir again: the list of the ways to play, not Rencontres.
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/discover');
+  await expect(page.getByRole('heading', { level: 1, name: 'Découvrir' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Rencontrez les plantes d’ici' })).toHaveCount(0);
   const state = await page.evaluate(async () => (await import('/app/core/discover.js')).discoverState());
   expect({ done: state.done, step: state.step, matches: state.matches.length }).toEqual({ done: false, step: 0, matches: 0 });
   await expect.poll(() => app.tabs()).not.toContain('Flore');

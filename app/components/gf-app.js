@@ -17,8 +17,11 @@ import './gf-tabbar.js';
 import './gf-mode-switch.js';
 import './gf-discover.js';
 import './gf-scenarios.js';
+import './gf-launcher.js';
 import '../miniapp/gf-miniapp.js';
 import { discoverEvents, tabShown, UNLOCKS } from '../core/discover.js';
+import { playedInDiscover } from '../core/scenarios.js';
+import { replaceView } from '../core/history.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 
@@ -71,7 +74,7 @@ export class GfApp extends LitElement {
     /* The page's tab, on the accent: its contrasting text (the rule above outweighs the .segmented one of ui.js). */
     nav.tabs a[aria-current='page'] { color: var(--gf-accent-contrast); }
     .note, .mode { flex: none; }
-    gf-map-page, gf-spot-editor, gf-collections, gf-shared, gf-flora, gf-discover, gf-miniapp { flex: 1; min-height: 0; }
+    gf-map-page, gf-spot-editor, gf-collections, gf-shared, gf-flora, gf-discover, gf-miniapp, gf-launcher { flex: 1; min-height: 0; }
     /* A tool that just came (first steps): announced once. */
     .unlocked { position: fixed; z-index: 1003; left: 50%; transform: translateX(-50%); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); width: min(440px, calc(100vw - 24px));
       display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; background: #1f2a1f; color: #fff; box-shadow: 0 10px 30px rgb(0 0 0 / 35%); animation: up 0.3s ease-out; }
@@ -252,7 +255,7 @@ export class GfApp extends LitElement {
       <main>
         ${updateReady ? html`<div class="banner" role="status">Nouvelle version de GeoFlora disponible.
           <button class="link" type="button" @click=${() => location.reload()}>Recharger</button></div>` : nothing}
-        ${status === 'loading' ? html`<div class="banner ${route.name === 'discover' ? 'over' : ''}" role="status">${statusText || 'Chargement…'}</div>` : nothing}
+        ${status === 'loading' ? html`<div class="banner ${route.name === 'discover' && playedInDiscover(route.scenario) ? 'over' : ''}" role="status">${statusText || 'Chargement…'}</div>` : nothing}
         ${status === 'error' ? html`<div class="banner error" role="alert">${statusText}
           <button class="link" type="button" @click=${() => location.reload()}>Recharger</button></div>` : nothing}
         ${offline && status === 'ready' && route.name === 'search' ? html`<div class="banner">Hors ligne — recherche sur la copie locale.</div>`
@@ -273,7 +276,11 @@ export class GfApp extends LitElement {
   }
 
   willUpdate() {
-    this.toggleAttribute('boxed', this.#router.route.name === 'app');
+    const route = this.#router.route;
+    this.toggleAttribute('boxed', route.name === 'app');
+    // The start page during the first steps is Découvrir's list: at its own address, so that a mini-app left
+    // (« Quitter », back to here) finds the list again, even once Flore — the start page then — has come.
+    if (route.name === 'search' && !tabShown('flore') && /^#?\/?$/.test(location.hash)) replaceView(href.discover());
   }
 
   updated() {
@@ -295,10 +302,13 @@ export class GfApp extends LitElement {
   }
 
   /**
-   * One template for Découvrir, at its address or as the start page: going from one to the other keeps the same
-   * element (its place, its cards, the step reached). @param {number | null} plant @param {string | null} scenario
+   * Découvrir: a scenario played on its screen (Cueillette prudente, Mosaïque), else the list of the ways to play —
+   * the mini-apps, then the scenarios (gf-launcher, as in the launcher's dialog).
+   * @param {number | null} plant @param {string | null} scenario
    */
-  #discover(plant, scenario) { return html`<gf-discover .open=${plant} .scenario=${scenario}></gf-discover>`; }
+  #discover(plant, scenario) {
+    return playedInDiscover(scenario) ? html`<gf-discover .open=${plant} .scenario=${scenario}></gf-discover>` : html`<gf-launcher page></gf-launcher>`;
+  }
 
   /** @param {import('../core/router.js').Route} route */
   #flora(route) { return html`<gf-flora .route=${route}></gf-flora>`; }

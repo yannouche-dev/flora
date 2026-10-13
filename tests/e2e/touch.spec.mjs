@@ -1,4 +1,4 @@
-// The phone, by the finger (390 px project only): swiping the cards of Découvrir, a tap on a result, swiping from a
+// The phone, by the finger (390 px project only): swiping the cards of Rencontres, a tap on a result, swiping from a
 // plant to the next one of the results. Known touch bugs of the audit (GAP3-5) as test.fixme. Migrated from
 // tinder.cjs, meetpick.cjs, plantnav.cjs, drag.cjs, review-parcours/a11y-touch.
 import { test, expect, plantId } from './fixtures.mjs';
@@ -6,7 +6,7 @@ import { centre, swipe } from './touch.mjs';
 
 test.skip(({ hasTouch }) => !hasTouch, 'gestes au doigt : le projet téléphone');
 
-/** Découvrir on its cards, iNaturalist answering with a few plants around. @param {import('@playwright/test').BrowserContext} context */
+/** Rencontres on its cards, iNaturalist answering with a few plants around. @param {import('@playwright/test').BrowserContext} context */
 async function cardsAround(context) {
   const names = ['Allium ursinum', 'Urtica dioica', 'Geum urbanum', 'Hedera helix', 'Bellis perennis'];
   await context.route(/^https:\/\/api\.inaturalist\.org\//, route => {
@@ -18,13 +18,13 @@ async function cardsAround(context) {
   });
 }
 
-test.describe('Découvrir', () => {
+test.describe('Rencontres', () => {
   // No hint (the top card leaning right then left on its own): the finger alone moves the cards.
   test.use({ firstVisit: true, reducedMotion: 'reduce' });
 
   test('balayer la carte : à droite un cœur (favori), à gauche la suivante', async ({ app, page, context }) => {
     await cardsAround(context);
-    await app.open('#/');
+    await app.open('#/app/rencontres');
     await page.getByRole('button', { name: 'Autour de moi' }).click();
     await page.locator('gf-discover .g-steps [data-step="go"]').click();
     const top = page.locator('gf-discover .swipe-card.top');
@@ -40,7 +40,7 @@ test.describe('Découvrir', () => {
 
   test.fixme('GAP3-5 : un geste repris par le navigateur (pointercancel) ne décide rien', async ({ app, page, context }) => {
     await cardsAround(context);
-    await app.open('#/');
+    await app.open('#/app/rencontres');
     await page.getByRole('button', { name: 'Autour de moi' }).click();
     await page.locator('gf-discover .g-steps [data-step="go"]').click();
     const top = page.locator('gf-discover .swipe-card.top');

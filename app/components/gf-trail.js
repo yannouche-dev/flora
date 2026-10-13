@@ -31,6 +31,8 @@ const KEY = 'geoflora.trail', LIST = 'geoflora.trails', DONE = 'geoflora.trailDo
 const read = (/** @type {string} */ k, /** @type {any} */ d) => { try { return JSON.parse(localStorage.getItem(k) || 'null') ?? d; } catch { return d; } };
 // eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
 const write = (/** @type {string} */ k, /** @type {any} */ v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* not kept */ } };
+/** A parcours under way on this device (the list of the ways to play says « Reprendre »). */
+export const walkUnderWay = () => Boolean(read(KEY, null));
 
 /** A new parcours' name, until the place where it starts is known (« Mon parcours botanique en forêt de … »). */
 const NAMED = 'Mon parcours botanique';
