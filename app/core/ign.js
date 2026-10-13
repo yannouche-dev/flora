@@ -63,10 +63,13 @@ const CachedTileLayer = L.TileLayer.extend({
   }
 });
 
+/** A WMTS layer's tile address ({z}/{x}/{y} to fill): the same for Leaflet and MapLibre (gl-style.js). @param {WmtsLayer} def */
+export const wmtsUrl = def => `${WMTS}&LAYER=${def.id}&STYLE=${encodeURIComponent(def.style || 'normal')}&FORMAT=${encodeURIComponent(def.format)}`;
+
 /** @param {WmtsLayer} def @param {boolean} base @param {string} key @param {number} [minZoom] how far out the map goes */
 function wmts(def, base, key, minZoom = 5) {
   const Layer = moduleOn('ignMaps') ? L.TileLayer : CachedTileLayer;
-  return new Layer(`${WMTS}&LAYER=${def.id}&STYLE=${encodeURIComponent(def.style || 'normal')}&FORMAT=${encodeURIComponent(def.format)}`, {
+  return new Layer(wmtsUrl(def), {
     attribution: ATTRIBUTION,
     minNativeZoom: def.minNative ?? 0,
     maxNativeZoom: def.maxNative ?? 19,

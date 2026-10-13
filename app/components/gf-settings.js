@@ -7,7 +7,7 @@ import { MODE_ICON_CHOICES, modeLabel } from '../core/modes.js';
 import { createMode, deleteMode, editMode } from '../core/mode-admin.js';
 import './gf-mode-switch.js';
 import { getTrefleToken, setTrefleToken } from '../core/sources.js';
-import { MODULES, setModule } from '../core/modules.js';
+import { MODULES, moduleOn, setModule } from '../core/modules.js';
 import { CATEGORIES, blockCategory, categoryOf } from '../core/categories.js';
 import { icon, modeIcon } from '../core/icons.js';
 import { pressDock } from '../core/dock-drag.js';
@@ -22,6 +22,9 @@ import './gf-sortable-list.js';
 import { ui } from '../styles/ui.js';
 import { discoverEvents, discovering, finishDiscover, restartDiscover } from '../core/discover.js';
 import { openView } from '../core/history.js';
+import { mapSettings, mapSettingsEvents, resetMapSettings, setMapSettings } from '../core/map-settings.js';
+import { hasWebGL2 } from '../core/maplibre.js';
+import { map3dOptions, map3dOptionsCss } from './map3d-options.js';
 
 /** French names of the icons a mode can have. */
 const ICON_NAMES = { image: 'Photo', 'list-ul': 'Liste', table: 'Tableau', images: 'Médias', map: 'Carte', leaf: 'Feuille', flower1: 'Fleur', 'diagram-3': 'Réseau', star: 'Étoile', layers: 'Couches', search: 'Loupe', crown: 'Couronne' };
@@ -42,7 +45,9 @@ export class GfSettings extends LitElement {
     _modeNote: { state: true }
   };
 
-  static styles = [ui, css`
+  static styles = [ui, map3dOptionsCss, css`
+    .maps-card { display: grid; gap: 8px; }
+    .maps-card .opts3d { padding: 4px 0 0; }
     .steps-choice { display: grid; gap: 6px; margin: 4px 0 12px; padding: 10px 14px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius); }
     .steps-choice legend { padding: 0 4px; font-weight: 600; }
     .steps-choice label { display: flex; align-items: center; gap: 8px; min-height: 32px; }
@@ -121,9 +126,11 @@ export class GfSettings extends LitElement {
   #store = new StoreController(this);
   #onSpots = () => this.#countSpots();
   #onDiscover = () => this.requestUpdate();
+  #onMaps = () => this.requestUpdate();
 
   connectedCallback() {
     super.connectedCallback();
+    mapSettingsEvents.addEventListener('change', this.#onMaps);
     spotEvents.addEventListener('change', this.#onSpots);
     discoverEvents.addEventListener('change', this.#onDiscover);
     this.#countSpots();
@@ -131,6 +138,7 @@ export class GfSettings extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    mapSettingsEvents.removeEventListener('change', this.#onMaps);
     spotEvents.removeEventListener('change', this.#onSpots);
     discoverEvents.removeEventListener('change', this.#onDiscover);
   }
@@ -310,7 +318,7 @@ export class GfSettings extends LitElement {
         <p class="muted">Personnalisez la fiche plante : glissez les blocs par leur titre (ou ci-dessous, par leur poignée ${icon('grip-vertical')}), masquez-les avec la corbeille ${icon('trash3')},
           réaffichez-les avec ${icon('arrow-counterclockwise')}. Tout est enregistré automatiquement, pour chaque mode d’affichage ;
           masquer un bloc de service (Wikipédia, GBIF, Trefle, photos) coupe ce module dans ce mode. Quittez en touchant la couronne en bas de l’écran.
-          La mise en page s’exporte en fichier JSON (pour la sauvegarder ou la copier sur un autre appareil).</p>
+          La mise en page s’exporte en fichier JSON, avec les réglages des cartes (pour la sauvegarder ou la copier sur un autre appareil).</p>
         <div class="row layout-file">
           <button type="button" @click=${this.#exportLayout}>${icon('download')} Exporter la mise en page</button>
           <label class="button file">${icon('upload')} Importer…
@@ -489,6 +497,31 @@ export class GfSettings extends LitElement {
       ${this._modeNote ? html`<p class="muted" role="status">${this._modeNote}</p>` : nothing}`;
   }
 
+  /**
+   * « Cartes »: every map in 2D (Leaflet) or 3D (MapLibre, loaded only then), and the 3D options. Each map's own
+   * 2D ⇄ 3D button changes that map only, while it is shown.
+   */
+  #maps() {
+    const s = mapSettings();
+    const webgl = hasWebGL2();
+    const options = map3dOptions(s, patch => setMapSettings(patch), { relief: moduleOn('relief3d'), ign: moduleOn('ignMaps'), id: 'settings3d' });
+    return html`<h2 id="cartes">Cartes</h2>
+      <div class="maps-card">
+        <fieldset class="steps-choice">
+          <legend>Affichage des cartes</legend>
+          <label><input type="radio" name="map-renderer" value="2d" .checked=${s.renderer === '2d'} @change=${() => setMapSettings({ renderer: '2d' })} /> 2D <small class="muted">(vue de dessus, la plus légère)</small></label>
+          <label><input type="radio" name="map-renderer" value="3d" .checked=${s.renderer === '3d'} ?disabled=${!webgl && s.renderer !== '3d'} @change=${() => setMapSettings({ renderer: '3d' })} /> 3D <small class="muted">(relief, inclinaison, rotation, bâtiments, ciel)</small></label>
+        </fieldset>
+        ${webgl ? nothing : html`<p class="muted" role="status">Cet appareil n’affiche pas la 3D (WebGL2 requis) : les cartes restent en 2D.</p>`}
+        <p class="muted">Le choix vaut pour toutes les cartes : la Carte, la carte de la fiche plante, Mes plantes, Parcours, Rencontres, le partage.
+          En 3D : glisser du clic droit, ou à deux doigts, pour tourner et incliner ; Maj + flèches au clavier ; la boussole revient au nord. La 3D se télécharge à sa première ouverture (environ 1,6 Mo), en ligne.
+          L’étape « Jusqu’où part l’expédition ? » reste vue de dessus ; sur une fiche plante, les cartes ajoutées en plus de la carte principale restent en 2D ; pendant la modification des positions, la carte repasse en 2D le temps de l’édition.</p>
+        ${s.renderer === '3d' ? options : nothing}
+        <p class="muted">Le relief vient d’AWS Terrain Tiles (s3.amazonaws.com, module « Vue 3D (relief) »), les bâtiments et le plan vectoriel de l’IGN (data.geopf.fr, module « IGN – fonds de carte ») : ces serveurs voient la zone de carte affichée.</p>
+        <p><button type="button" class="small" @click=${() => resetMapSettings()}>${icon('arrow-counterclockwise')} Options des cartes par défaut</button></p>
+      </div>`;
+  }
+
   /** « Premiers pas »: the guided start (Découvrir), on or over. */
   #firstSteps() {
     const on = discovering();
@@ -564,6 +597,7 @@ export class GfSettings extends LitElement {
           Scientifique : toutes les données, locales et distantes. La grille et la fiche plante ont aussi leur propre choix, qui revient au mode de l’application quand celui-ci change.</p>
         ${this.#modes()}
 
+        ${this.#maps()}
 
         ${this.#modules()}
 

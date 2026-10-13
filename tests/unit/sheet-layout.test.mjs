@@ -67,3 +67,24 @@ test('resetAll retire les volets : la fiche seule', () => {
   SB.resetAll();
   assert.equal(SB.treeOf('standard').t, 'sheet');
 });
+
+test('le fichier de mise en page emporte Réglages › Cartes (2D / 3D et options), et les rend à l’import', async () => {
+  const MS = await import('../../app/core/map-settings.js');
+  SB.resetAll();
+  MS.setMapSettings({ renderer: '3d', globe: true, exaggeration: 2 });
+  const text = SB.exportLayout();
+  assert.deepEqual(JSON.parse(text).maps3d, { renderer: '3d', exaggeration: 2, globe: true });
+  MS.resetMapSettings();
+  SB.importLayout(text);
+  assert.equal(MS.mapSettings().renderer, '3d');
+  assert.equal(MS.mapSettings().globe, true);
+  // A file of before (no maps3d): the settings here stay; a broken value is made valid.
+  const old = JSON.parse(text);
+  delete old.maps3d;
+  SB.importLayout(JSON.stringify(old));
+  assert.equal(MS.mapSettings().exaggeration, 2);
+  SB.importLayout(JSON.stringify({ ...old, maps3d: { renderer: 'holo', pitch: 400 } }));
+  assert.equal(MS.mapSettings().renderer, '2d');
+  assert.equal(MS.mapSettings().pitch, 60);
+  MS.resetMapSettings();
+});

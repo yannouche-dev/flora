@@ -1,0 +1,135 @@
+/* Maps in 3D (app/components/gf-map-gl.js): MapLibre draws the map, over the 2D map (Leaflet), which stays under it,
+   hidden, to keep the view and the markers' logic. Its markers are the 2D map's own elements, moved into MapLibre's
+   markers (so every effect of map.css applies). Loaded by the map itself, next to MapLibre's stylesheet. */
+
+gf-map[data-renderer='3d'] .gf-map-canvas { visibility: hidden; }
+/* The credits stay those of the 2D map (its layers, the photos' sources), shown over the 3D one. */
+gf-map[data-renderer='3d'] .gf-map-canvas .leaflet-control-attribution { visibility: visible; }
+
+gf-map .gf-map-gl {
+  position: absolute;
+  inset: 0;
+  /* Over Leaflet's panes (400), under the map's buttons, notes and cards (650 and more). */
+  z-index: 450;
+  background: #dfe6d8;
+  font: inherit;
+  container-type: size;
+}
+/* A small map (a block of the plant sheet): its controls few. */
+@container (max-height: 300px) {
+  gf-map .gf-map-gl .maplibregl-ctrl-group:has(.maplibregl-ctrl-fullscreen), gf-map .gf-map-gl .maplibregl-ctrl-scale { display: none; }
+}
+gf-map .gf-map-gl[hidden] { display: none; }
+gf-map .gf-map-gl .maplibregl-canvas:focus-visible { outline: 3px solid var(--gf-accent, #2f6b3a); outline-offset: -3px; }
+
+/* A marker of the 2D map, in a MapLibre marker: placed by MapLibre (its own transform: none), anchored by Leaflet's
+   margins. */
+.gf-gl-mk { width: 0; height: 0; }
+.gf-gl-mk > .leaflet-marker-icon { position: absolute; left: 0; top: 0; transform: none !important; }
+.gf-gl-mk:hover, .gf-gl-mk:focus-within, .gf-gl-mk:has(> .gf-kin) { z-index: 5000 !important; }
+.gf-gl-mk:has(> .gf-kin-self) { z-index: 6000 !important; }
+.gf-gl-mk > .leaflet-interactive { cursor: pointer; }
+
+/* A point of the 2D map (a circle in SVG there): a disc here, in the same colours. */
+.gf-gl-dot {
+  box-sizing: border-box;
+  width: calc(var(--r, 6) * 2px);
+  height: calc(var(--r, 6) * 2px);
+  border-radius: 50%;
+  background: #e0245e;
+  border: 2px solid #ffd166;
+  box-shadow: 0 1px 2px rgb(0 0 0 / 35%);
+  cursor: pointer;
+  transition: scale 0.15s ease-out;
+}
+.gf-gl-dot.inert { pointer-events: none; cursor: default; }
+.gf-gl-dot.gf-obs-inat { background: #74ac00; border-color: #fff; }
+.gf-gl-dot.gf-obs-gbif { background: #4e7b9f; border-color: #fff; }
+.gf-gl-dot.gf-obs-start { background: #1d2b20; border-color: #fff; }
+.gf-gl-dot.gf-occ { background: #f59e0b; border-color: #fff; }
+.gf-gl-dot.gf-occ-inat { background: #74ac00; }
+.gf-gl-dot.gf-occ-gbif { background: #4e7b9f; }
+.gf-gl-dot.gf-occ-hl { background: #e0245e; border-color: #ffd166; }
+.gf-gl-dot.gf-focus-point { background: #e11d48; border: 3px solid #fff; box-shadow: 0 0 6px rgb(225 29 72 / 80%); }
+.gf-gl-dot.gf-spread-center { background: rgb(61 74 61 / 80%); border-color: #fff; }
+.gf-gl-dot:hover, .gf-gl-dot.gf-kin { scale: 1.45; }
+.gf-gl-dot.gf-kin { border-color: #ffd166; border-width: 3px; z-index: 5000; }
+@media (prefers-reduced-motion: reduce) { .gf-gl-dot { transition: none; } }
+
+/* A point's permanent name (the value touched in the plant sheet). */
+.gf-gl-label {
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 8px);
+  translate: -50% 0;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #fff;
+  color: #1d2419;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 35%);
+  pointer-events: none;
+}
+.gf-gl-label.below { bottom: auto; top: calc(100% + 8px); }
+
+/* What the 3D map says (loading, back in 2D and why, flat for lack of relief): under the search pill, centred. */
+gf-map .gf-gl-note {
+  position: absolute;
+  z-index: 1002;
+  left: 50%;
+  top: 12px;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: calc(100% - 96px);
+  padding: 6px 6px 6px 12px;
+  border-radius: 999px;
+  background: rgb(20 30 22 / 85%);
+  color: #fff;
+  font-size: 0.8rem;
+  line-height: 1.3;
+}
+gf-map[search] .gf-gl-note { top: 66px; }
+gf-map .gf-gl-note[hidden] { display: none; }
+gf-map .gf-gl-note button {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: #fff;
+  cursor: pointer;
+}
+gf-map .gf-gl-note button:focus-visible { outline: 2px solid #fff; }
+
+/* The altitude under the pointer (the relief's), above the scale. */
+gf-map .gf-gl-alt {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  bottom: 8px;
+  translate: -50% 0;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 90%);
+  color: #1d2419;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 30%);
+  pointer-events: none;
+}
+gf-map .gf-gl-alt[hidden] { display: none; }
+
+/* MapLibre's controls: like the 2D map's (bottom left), clear of the point card and of the place sheet. */
+gf-map .gf-map-gl .maplibregl-ctrl-bottom-left { margin-bottom: env(safe-area-inset-bottom, 0px); }
+gf-map:has(.gf-point-card) .gf-map-gl .maplibregl-ctrl-bottom-left,
+gf-map:has(.gf-point-card) .gf-gl-alt { visibility: hidden; }
+gf-map .gf-map-gl .maplibregl-ctrl-group button { width: 32px; height: 32px; }
+@media (pointer: coarse) { gf-map .gf-map-gl .maplibregl-ctrl-group button { width: 38px; height: 38px; } }

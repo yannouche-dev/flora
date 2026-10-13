@@ -15,7 +15,8 @@
 //  - remote images (Wikimedia, iNaturalist…): stale-while-revalidate, in a cache kept across versions and capped
 //    (not the originals of the media viewer). Fetched with CORS, so what is stored is a readable response of its
 //    real size: an opaque one (a host without CORS) is shown but never stored, as each counts ~7 MB of quota.
-//  - IGN map tiles: cache-first, capped — areas already viewed stay available offline
+//  - IGN map tiles: cache-first, capped — areas already viewed stay available offline (the 3D maps' vector tiles,
+//    their style, fonts and symbols too)
 //  - remote API JSON: not cached here (app/core/sources.js caches it in IndexedDB)
 
 // Written at deploy by tools/stamp-sw.mjs: never edited by hand.
@@ -166,6 +167,12 @@ const SHELL = [
   'app/components/gf-filter-panel.js',
   'app/components/gf-map.js',
   'app/components/map-style.js',
+  'app/components/gf-map-gl.js',
+  'app/components/map3d-options.js',
+  'app/core/map-settings.js',
+  'app/core/gl-style.js',
+  'app/core/maplibre.js',
+  'app/styles/map-gl.css',
   'app/components/gf-sheet-map.js',
   'app/components/gf-map-page.js',
   'app/components/gf-plant-card.js',
@@ -266,6 +273,12 @@ self.addEventListener('fetch', event => {
     event.respondWith(cacheFirstTile(event));
     return;
   }
+  // The maps in 3D: the IGN's vector tiles (buildings, the vector plan) and their style, fonts and symbols — kept like
+  // the other tiles (a tile neither cached nor reachable: empty, which MapLibre reads as « nothing here »).
+  if (url.hostname === TILE_HOST && (url.pathname.startsWith('/tms/') || url.pathname.startsWith('/annexes/ressources/vectorTiles/'))) {
+    event.respondWith(cacheFirstTile(event, url.pathname.endsWith('.pbf') ? new Uint8Array(0) : null));
+    return;
+  }
 
   // Plant photos (Wikimedia, iNaturalist, herbaria…): whatever host the dataset points to.
   // Not the originals the media viewer zooms on (megabytes each): straight from the network.
@@ -360,7 +373,8 @@ async function fetchImage(request) {
   return response;
 }
 
-async function cacheFirstTile(event) {
+/** @param {any} event @param {Uint8Array | null} [empty] what a tile out of reach is (a transparent PNG; null: an error) */
+async function cacheFirstTile(event, empty = EMPTY_TILE) {
   const { request } = event;
   const cache = await caches.open(TILE_CACHE);
   const cached = await cache.match(request);
@@ -373,7 +387,8 @@ async function cacheFirstTile(event) {
     }
     return response;
   } catch {
-    return new Response(EMPTY_TILE, { headers: { 'Content-Type': 'image/png' } });
+    if (!empty) return Response.error();
+    return new Response(empty, { headers: { 'Content-Type': empty.length ? 'image/png' : 'application/x-protobuf' } });
   }
 }
 

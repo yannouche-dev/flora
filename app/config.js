@@ -38,6 +38,8 @@ export const config = {
     /** The layers of IGN's whole catalogue added to the maps (their definitions, so they show at once, offline too). */
     ignLayers: 'geoflora.ignLayers',
     mapView: 'geoflora.mapView',
+    /** Réglages › Cartes: 2D or 3D, and the 3D options (core/map-settings.js). */
+    maps3d: 'geoflora.maps3d',
     discoverLayout: 'geoflora.discoverLayout',
     trailLayout: 'geoflora.trailLayout',
     // Mini-apps (app/miniapp): « Afficher les étapes » (auto, on, off); each one's state and layout under the prefix.

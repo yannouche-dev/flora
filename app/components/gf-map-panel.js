@@ -23,11 +23,15 @@ export class GfMapPanel extends LitElement {
     distributionOn: { attribute: false },
     legend: { type: Boolean },
     _open: { state: true },
+    /** The map in 3D (gf-map-gl.js): { on, note }, else null. */
+    gl: { attribute: false },
     _catalog: { state: true },
     _q: { state: true }
   };
 
   static styles = [ui, css`
+    .gl-note { margin-top: 10px; }
+
     dialog {
       position: fixed;
       inset: auto 0 0 0;
@@ -95,6 +99,8 @@ export class GfMapPanel extends LitElement {
     this.distributionOn = false;
     /** « Ajouter une couche de l'IGN… » touched: the catalogue is shown. */
     this._open = false;
+    /** @type {any} */
+    this.gl = null;
     /** IGN's whole catalogue, as core/ign-catalog.js has it. @type {import('../core/ign-catalog.js').CatalogState | null} */
     this._catalog = null;
     this._q = '';
@@ -186,6 +192,14 @@ export class GfMapPanel extends LitElement {
     </label>`;
   }
 
+  /** In 3D: said, with where its options are (Réglages › Cartes, the same for every map). */
+  #gl() {
+    const g = this.gl;
+    if (!g?.on) return nothing;
+    return html`<p class="note gl-note">Carte en 3D : relief, inclinaison, bâtiments, ciel et le retour à la 2D se règlent dans
+      <a href=${href.settings()}>Réglages › Cartes</a>.${g.note ? html` ${g.note}` : nothing}</p>`;
+  }
+
   render() {
     const group = (/** @type {string} */ g) => Object.keys(OVERLAYS).filter(k => OVERLAYS[k].group === g);
     return html`
@@ -195,6 +209,7 @@ export class GfMapPanel extends LitElement {
           <button class="icon-btn" type="button" aria-label="Fermer" @click=${() => this.close()}>${icon('x-lg')}</button>
         </header>
         <div class="body">
+          ${this.#gl()}
           <h3 class="kicker">Fond</h3>
           <div class="bases" role="group" aria-label="Fond de carte">
             ${Object.entries(BASES).map(([key, def]) => html`
@@ -235,6 +250,7 @@ export class GfMapPanel extends LitElement {
           <h3 class="kicker">Sources</h3>
           <p class="sources">
             Fonds, cadastre, courbes de niveau, adresses et altitudes : <a href="https://geoservices.ign.fr/" target="_blank" rel="noopener">IGN – Géoplateforme</a>.
+            ${this.gl?.on ? html`Bâtiments et plan vectoriel : IGN (BD TOPO). Relief 3D : <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">AWS Terrain Tiles</a> (Mapzen, EU-DEM © Copernicus).` : nothing}
             Forêts publiques : ONF. Espaces protégés : <a href="https://inpn.mnhn.fr/" target="_blank" rel="noopener">INPN – PatriNat</a>.
             ${this.distribution ? html`Répartition : <a href="https://www.gbif.org/" target="_blank" rel="noopener">GBIF.org</a>.` : nothing}
           </p>

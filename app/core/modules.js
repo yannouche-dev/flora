@@ -24,7 +24,7 @@ export const MODULES = [
   { key: 'ignNature', category: 'territory', also: ['ecology'], name: 'IGN – zones naturelles au point', hosts: 'apicarto.ign.fr (API Carto, module nature)',
     provides: 'Pour un lieu ou un point de la carte : les ZNIEFF, sites Natura 2000, parcs et réserves qui le contiennent, avec leur fiche INPN. Envoie les coordonnées du point.' },
   { key: 'relief3d', category: 'territory', also: [], name: 'Vue 3D (relief)', hosts: 's3.amazonaws.com (tuiles de relief AWS Terrain Tiles)',
-    provides: 'Bouton « 3D » du récapitulatif d’un parcours et des lieux de Mes plantes : leurs plantes sur le relief (Terrain Tiles d’AWS : Mapzen, EU-DEM © Copernicus, environ 25 à 30 m de résolution). Envoie la zone de carte affichée. Désactivé : pas de vue 3D.' },
+    provides: 'Le relief des cartes en 3D (Réglages › Cartes) et la « Vue 3D » du récapitulatif d’un parcours et des lieux de Mes plantes : leurs plantes sur le relief (Terrain Tiles d’AWS : Mapzen, EU-DEM © Copernicus, environ 25 à 30 m de résolution). Envoie la zone de carte affichée. Désactivé : pas de « Vue 3D », et les cartes en 3D restent à plat (inclinées, sans relief).' },
   { key: 'inaturalist', category: 'distribution', also: ['seasons', 'images'], name: 'iNaturalist', hosts: 'api.inaturalist.org',
     provides: 'Autour (plantes observées dans un cercle), Découvrir, courbes de floraison et fructification, nombre d’observations, photos de repli. Autour et Découvrir envoient le centre du cercle : votre position précise quand vous touchez « Autour de moi », sinon le lieu ou la commune choisis.' },
   { key: 'gbif', category: 'distribution', also: ['names', 'images', 'knowledge', 'ecology', 'safety'], name: 'GBIF', hosts: 'api.gbif.org',

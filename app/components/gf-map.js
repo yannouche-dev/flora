@@ -17,6 +17,7 @@ import { gbifTileUrl } from '../core/sources.js';
 import './gf-map-panel.js';
 import './gf-map-search.js';
 import './gf-point-card.js';
+import { attachGl } from './gf-map-gl.js';
 import { icon, iconHref, iconMarkup } from '../core/icons.js';
 import { inMiniApp } from '../miniapp/quiet-links.js';
 import { cancelImages, chosenGroupMarker, chosenMarker, elem, fadeImg, leafGlyph, leafMarker, markClasses, obsCard, photoMarker, ringElement, speciesKey } from './map-style.js';
@@ -266,6 +267,8 @@ export class GfMap extends LitElement {
     noLocate: { type: Boolean, attribute: 'no-locate' },
     /** No « protected areas in view » notice (also under any element marked `no-areas`: Découvrir). */
     noAreas: { type: Boolean, attribute: 'no-areas' },
+    /** A walk to draw ({ key, coordinates: [lon, lat][] }): a line on a white casing (the « Vue 3D » of a parcours). */
+    line: { attribute: false },
     _moves: { state: true },
     _areas: { state: true },
     _areasClosed: { state: true },
@@ -320,6 +323,8 @@ export class GfMap extends LitElement {
     this.createPlant = null;
     this.noLocate = false;
     this.noAreas = false;
+    /** @type {{ key: string, coordinates: [number, number][] } | null} */
+    this.line = null;
     this.minZoom = 5;
     this.noSearch = false;
     this.editable = false;
@@ -704,11 +709,38 @@ export class GfMap extends LitElement {
     });
     this.#resized.observe(this.#root);
     this.#syncAll();
+    if (this.line) this.#syncLine();
+    // 3D (Réglages › Cartes): MapLibre over this map, which it mirrors (gf-map-gl.js).
+    this.#gl = attachGl(this, map);
   }
+
+  /** @type {L.LayerGroup | null} */ #lineLayer = null;
+  #lineKey = '';
+
+  /** The walk: a pink line on a white casing (by their options: the same in 2D and, mirrored, in 3D). */
+  #syncLine() {
+    const map = this.#map, l = /** @type {any} */ (this.line);
+    if (!map) return;
+    const key = l ? l.key + ':' + l.coordinates.length : '';
+    if (key === this.#lineKey) return;
+    this.#lineKey = key;
+    this.#lineLayer ??= L.layerGroup().addTo(map);
+    this.#lineLayer.clearLayers();
+    if (!l || l.coordinates.length < 2) return;
+    const at = l.coordinates.map((/** @type {[number, number]} */ [x, y]) => [y, x]);
+    L.polyline(at, { color: '#ffffff', weight: 7, opacity: 0.9, interactive: false, className: 'gf-walk-casing' }).addTo(this.#lineLayer);
+    L.polyline(at, { color: '#e0245e', weight: 3.5, opacity: 1, interactive: false, className: 'gf-walk' }).addTo(this.#lineLayer);
+  }
+
+  /** The 3D adapter of this map (gf-map-gl.js): null before the map exists. @type {import('./gf-map-gl.js').GlView | null} */
+  #gl = null;
+  get gl() { return this.#gl; }
 
   /** @param {Map<string, any>} changed */
   updated(changed) {
     if (!this.#map) return;
+    this.#gl?.changed(changed);
+    if (changed.has('line')) this.#syncLine();
     if (changed.has('base') && this.base && this.base !== this.#base) this.#setBase(/** @type {any} */ (this.base));
     if (changed.has('overlays') && this.overlays) {
       for (const key of new Set([...Object.keys(OVERLAYS), ...addedLayers(), ...this.#overlays])) {
@@ -780,6 +812,7 @@ export class GfMap extends LitElement {
     super.connectedCallback();
     moduleEvents.addEventListener('change', this.#onModules);
     if (this.#map) { this.#resized?.observe(this.#root); this.#syncTracking(); }
+    this.#gl?.connect();
   }
 
   disconnectedCallback() {
@@ -792,6 +825,7 @@ export class GfMap extends LitElement {
     this.#unwatch = null;
     this.#unwait?.();
     this.#unwait = null;
+    this.#gl?.disconnect();
   }
 
   #syncAll() {
