@@ -18,11 +18,81 @@
   <meta name="theme-color" content="#2f6b3a" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="assets/icons/icon.svg" type="image/svg+xml" />
-  <link rel="apple-touch-icon" href="assets/icons/icon-192.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/apple-touch-icon-180.png" />
+  <!-- iOS, added to the home screen: its name under the icon, the status bar over the page's light background. -->
+  <meta name="apple-mobile-web-app-title" content="GeoFlora" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <link rel="stylesheet" href="app/styles/tokens.css" />
   <link rel="stylesheet" href="app/styles/app.css" />
   <link rel="stylesheet" href="vendor/leaflet.css" />
   <link rel="stylesheet" href="app/styles/map.css" />
+  <!-- The launch screen (.gf-boot, end of <body>): drawn by the page itself while its modules load, in every browser,
+       after Android's own splash (the manifest's icon on its background_color, the colour of --gf-bg). It fades out
+       as soon as <gf-app> is defined, which renders it in the same task. On a load fast enough that the screen was
+       never styled there is nothing to fade (a transition needs a style before it), so no flash. Hidden, it takes no
+       click and leaves the accessibility tree. Its styles are here, not in app.css: one file holds the whole screen. -->
+  <style>
+    .gf-boot {
+      position: fixed;
+      inset: 0;
+      z-index: 2147483000;
+      background: var(--gf-bg, #f6f7f2);
+      color: var(--gf-text-muted, #5d6857);
+      font-family: var(--gf-font, system-ui, sans-serif);
+      text-align: center;
+    }
+    gf-app:defined + .gf-boot {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+      transition: opacity 0.22s ease-out, visibility 0s linear 0.22s;
+    }
+    /* The logo's centre on the screen's, where Android's splash had its icon; the name and the rest under it. */
+    .gf-boot-mark {
+      position: absolute;
+      inset: 50% 16px auto;
+      translate: 0 -48px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .gf-boot-mark img { width: 96px; height: 96px; display: block; filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.12)); }
+    /* The header's wordmark (gf-app .brand), larger. */
+    .gf-boot-name { margin-top: 14px; color: var(--gf-accent, #2f6b3a); font-size: 2rem; font-weight: 600; letter-spacing: 0.01em; line-height: 1.2; }
+    .gf-boot-tagline { margin-top: 2px; font-size: 0.95rem; }
+    /* A discreet progress bar, only once the wait lasts (a fast load never shows it). */
+    .gf-boot-bar {
+      position: relative;
+      overflow: hidden;
+      width: 112px;
+      height: 3px;
+      margin-top: 22px;
+      border-radius: 999px;
+      background: var(--gf-accent-soft, #dcebd9);
+      opacity: 0;
+      animation: gf-boot-in 0.3s ease-out 0.6s forwards;
+    }
+    .gf-boot-bar::after {
+      content: '';
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 40%;
+      border-radius: inherit;
+      background: var(--gf-accent, #2f6b3a);
+      animation: gf-boot-slide 1.2s ease-in-out infinite;
+    }
+    @keyframes gf-boot-in { to { opacity: 1; } }
+    @keyframes gf-boot-slide { from { translate: -100% 0; } to { translate: 250% 0; } }
+    @media (prefers-reduced-motion: reduce) {
+      gf-app:defined + .gf-boot { transition: none; }
+      .gf-boot-bar { animation: none; opacity: 1; }
+      .gf-boot-bar::after { animation: none; left: 30%; }
+    }
+    .gf-boot-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    .gf-boot-noscript { position: absolute; inset: auto 16px 32px; color: var(--gf-text, #1d2419); }
+  </style>
+  <noscript><style>.gf-boot-bar { display: none; }</style></noscript>
 
   <!-- Bare specifiers → vendored files. No bundler: the browser resolves modules natively. -->
   <script type="importmap">
@@ -39,9 +109,15 @@
 </head>
 <body>
   <gf-app></gf-app>
-  <div class="gf-boot">
-    <noscript>GeoFlora nécessite JavaScript.</noscript>
-    Chargement de GeoFlora…
+  <div class="gf-boot" role="status">
+    <div class="gf-boot-mark" aria-hidden="true">
+      <img src="assets/icons/icon.svg" alt="" width="96" height="96" fetchpriority="high" />
+      <span class="gf-boot-name">GeoFlora</span>
+      <span class="gf-boot-tagline">Flore de France</span>
+      <span class="gf-boot-bar"></span>
+    </div>
+    <span class="gf-boot-sr">Chargement de GeoFlora…</span>
+    <noscript><p class="gf-boot-noscript">GeoFlora nécessite JavaScript.</p></noscript>
   </div>
 </body>
 </html>

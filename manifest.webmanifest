@@ -1,7 +1,8 @@
 {
-  "name": "GeoFlora — flore de France",
+  "id": "/flora/",
+  "name": "GeoFlora",
   "short_name": "GeoFlora",
-  "description": "Recherche hors ligne dans la flore vasculaire de France métropolitaine (TAXREF v18).",
+  "description": "GeoFlora — flore de France : recherche hors ligne dans la flore vasculaire de France métropolitaine (TAXREF v18).",
   "lang": "fr",
   "start_url": "./",
   "scope": "./",
@@ -9,9 +10,10 @@
   "background_color": "#f6f7f2",
   "theme_color": "#2f6b3a",
   "icons": [
-    { "src": "assets/icons/icon.svg", "sizes": "any", "type": "image/svg+xml" },
-    { "src": "assets/icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "assets/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "assets/icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "assets/icons/geoflora-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/geoflora-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "assets/icons/geoflora-maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "assets/icons/geoflora-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }

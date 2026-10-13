@@ -22,19 +22,7 @@ gf-app {
   height: 100%;
 }
 
-/* Shown until the custom elements are defined (and if JavaScript is off). */
-.gf-boot {
-  display: grid;
-  place-items: center;
-  height: 100%;
-  color: var(--gf-text-muted);
-  text-align: center;
-  padding: 16px;
-}
-
-gf-app:defined + .gf-boot {
-  display: none;
-}
+/* The launch screen (.gf-boot): its styles are inline in index.html. */
 
 /* Bootstrap Icons (app/core/icons.js) outside shadow roots. */
 .bi { flex: none; vertical-align: -0.125em; }
