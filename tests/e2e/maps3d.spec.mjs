@@ -8,6 +8,8 @@ import { test, expect, plantId, answerAround } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
 
 test.use({ launchOptions: { args: ['--enable-unsafe-swiftshader'] } });
+// Software WebGL draws every pixel on the CPU: on the desktop, a smaller window keeps each frame (and the run) short.
+test.beforeEach(async ({ page }, info) => { if (info.project.name.startsWith('desktop')) await page.setViewportSize({ width: 1024, height: 680 }); });
 
 /**
  * MapLibre's files asked, the map tiles asked, the console's errors (not the browser's lines for a request refused)
@@ -249,7 +251,7 @@ test('modules coupés et hors ligne : ni relief ni tuile du réseau, la 3D à pl
   test.slow();
   const seen = await watch(page);
   await answerTiles(page, { seen: seen.tiles });
-  await settings(page, { renderer: '3d' });
+  await settings(page, { renderer: '3d', hillshade: false });
   await page.addInitScript(() => { if (!sessionStorage.getItem('gf-mod')) { sessionStorage.setItem('gf-mod', '1'); localStorage.setItem('geoflora.modules', JSON.stringify({ relief3d: false, ignMaps: false })); } });
   await app.open('#/map');
   const map = carte(page);
@@ -285,7 +287,7 @@ test('le relief injoignable : la 3D continue à plat et le dit', async ({ app, p
   test.slow();
   const seen = await watch(page);
   await answerTiles(page, { dem: 'fail' });
-  await settings(page, { renderer: '3d' });
+  await settings(page, { renderer: '3d', buildings: false, hillshade: false });
   await app.open('#/collections');
   const spot = await seedPlaces(page);
   await app.go(`#/map?spot=${spot}`);
@@ -317,7 +319,7 @@ test('fiche plante : sa carte principale en 3D, une carte ajoutée reste en 2D (
   test.slow();
   const seen = await watch(page);
   await answerTiles(page);
-  await settings(page, { renderer: '3d' });
+  await settings(page, { renderer: '3d', buildings: false, hillshade: false, pitch: 30 });
   await app.open('#/collections');
   await seedPlaces(page);
   // A second map block in the sheet (Mode King's « + Carte »).
@@ -336,7 +338,7 @@ test('fiche plante : sa carte principale en 3D, une carte ajoutée reste en 2D (
   const st = await glState(main);
   expect(st.terrain).toBe(true);
   expect(st.sky).toBe(true);
-  expect(st.pitch).toBe(55);
+  expect(st.pitch).toBe(30);
   expect(st.tiles.length).toBeGreaterThan(0);
   // 2D again in Réglages: the sheet's map follows at once.
   await page.evaluate(async () => { (await import('/app/core/map-settings.js')).setMapSettings({ renderer: '2d' }); });

@@ -165,7 +165,11 @@ export class GlView {
   }
 
   /** 3D wanted for this map: Réglages › Cartes say so (or the map is a 3D view: map-3d="on"; and it may be in 3D). */
-  get wanted() { return this.allowed && (this.host.getAttribute('map-3d') === 'on' || mapSettings().renderer === '3d'); }
+  get wanted() {
+    // A ring held on the screen (area.ring: the games' « map » step) is a view from above by design: never in 3D.
+    if (this.host.area?.ring) return false;
+    return this.allowed && (this.host.getAttribute('map-3d') === 'on' || mapSettings().renderer === '3d');
+  }
   /** Drawn in 3D now (or loading). */
   get on() { return this.#state !== 'off'; }
 
@@ -207,7 +211,7 @@ export class GlView {
 
   /** gf-map's properties changed: editing starts or ends, markers become draggable. @param {Map<string, any>} changed */
   changed(changed) {
-    if (['editing', 'editable', 'draggablePlants', 'pin', 'pinDraggable'].some(k => changed.has(k))) queueMicrotask(() => this.sync());
+    if (['editing', 'editable', 'draggablePlants', 'pin', 'pinDraggable', 'area'].some(k => changed.has(k))) queueMicrotask(() => this.sync());
   }
 
   /** In the page (again): it follows Réglages, the modules and the network while it is. */

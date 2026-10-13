@@ -10,6 +10,8 @@ import { answerTiles } from './tiles.mjs';
 import { writeFileSync, mkdirSync } from 'node:fs';
 
 test.use({ launchOptions: { args: ['--enable-unsafe-swiftshader'] } });
+// Software WebGL draws every pixel on the CPU: on the desktop, a smaller window keeps each frame (and the run) short.
+test.beforeEach(async ({ page }, info) => { if (info.project.name.startsWith('desktop')) await page.setViewportSize({ width: 1024, height: 680 }); });
 
 /** Where the screenshots of the view go, when asked (MAP3D_SHOTS=dir). */
 const SHOTS = process.env.MAP3D_SHOTS || '';
@@ -84,7 +86,7 @@ const viewMap = page => page.locator('dialog.gf-map3d gf-map');
 const glState = map => map.evaluate(m => /** @type {any} */ (m).gl.state());
 
 /** Buildings drawn on the relief are slow in software WebGL, and there are none on a mountain path. @param {import('@playwright/test').Page} page */
-const noBuildings = page => page.addInitScript(() => { if (!localStorage.getItem('geoflora.maps3d')) localStorage.setItem('geoflora.maps3d', JSON.stringify({ buildings: false })); });
+const noBuildings = page => page.addInitScript(() => { if (!localStorage.getItem('geoflora.maps3d')) localStorage.setItem('geoflora.maps3d', JSON.stringify({ buildings: false, hillshade: false, pitch: 30 })); });
 
 test('la Vue 3D du parcours : la carte de l’app en 3D, MapLibre à la demande, les plantes et la marche sur le relief, Échap', async ({ app, page }, info) => {
   test.slow();
@@ -111,7 +113,7 @@ test('la Vue 3D du parcours : la carte de l’app en 3D, MapLibre à la demande,
   await expect(map.locator('.gf-gl-dot.gf-obs-start')).toHaveCount(1);
   let st = await glState(map);
   expect(st.terrain).toBe(true);
-  expect(st.pitch).toBe(55);
+  expect(st.pitch).toBe(30);
   expect(st.paths).toBe(2);
   // The attribution: IGN and the relief's sources.
   await expect(map.locator('.leaflet-control-attribution')).toContainText('IGN');
