@@ -7,6 +7,7 @@
 import * as db from './db.js';
 import { moduleOn } from './modules.js';
 import { validAltitude } from './place-model.js';
+import { fetchJson, SchemaError } from './net.js';
 
 const ALTIMETRY = 'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json';
 /** Points per request: the service takes thousands, a URL much fewer. */
@@ -49,17 +50,15 @@ export async function altitudesAt(points) {
     if (i) await new Promise(r => setTimeout(r, GAP));
     const part = ask.slice(i, i + BATCH);
     const url = `${ALTIMETRY}?lon=${part.map(p => p[0]).join('|')}&lat=${part.map(p => p[1]).join('|')}&resource=ign_rge_alti_wld&zonly=true`;
-    const response = await fetch(url, { headers: { accept: 'application/json' } });
-    if (!response.ok) throw new Error('Géoplateforme ' + response.status);
-    const data = await response.json();
-    const list = Array.isArray(data?.elevations) ? data.elevations : [];
-    if (list.length !== part.length) throw new Error('Géoplateforme : réponse incomplète');
+    const data = await fetchJson(url, { expect: d => Array.isArray(d.elevations) });
+    const list = data.elevations;
+    if (list.length !== part.length) throw new SchemaError('data.geopf.fr', 'Géoplateforme : réponse incomplète');
     part.forEach((p, j) => {
       const z = typeof list[j] === 'object' ? list[j]?.z : list[j];
       // -99999: no data at that point.
       const value = Number.isFinite(z) && z > -1000 ? Math.round(z) : null;
       out.set(key5(p), value);
-      db.put('plantDetails', { key: 'geo:alt:' + key5(p), fetchedAt: Date.now(), value }).catch(() => {});
+      db.put('plantDetails', { key: 'geo:alt:' + key5(p), fetchedAt: Date.now(), ttl: TTL, value }).catch(() => {});
     });
   }
   return out;

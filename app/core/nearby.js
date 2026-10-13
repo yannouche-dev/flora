@@ -3,8 +3,10 @@
 // (identification confirmed by the community). All observations ever made in the circle, not per month.
 // Species are matched to the local flora (TAXREF) by scientific name or synonym.
 
+import * as cache from './cache.js';
 import * as db from './db.js';
 import { ModuleOffError, moduleOn } from './modules.js';
+import { fetchJson } from './net.js';
 import { inatCredit } from './credit.js';
 
 const API = 'https://api.inaturalist.org/v1';
@@ -29,26 +31,14 @@ const area = ([lon, lat], radius) =>
 export const exploreUrl = (/** @type {[number, number]} */ point, /** @type {number} */ radius, /** @type {number} */ taxonId = 0) =>
   `https://www.inaturalist.org/observations?${area(point, radius)}&quality_grade=research&${taxonId ? 'taxon_id=' + taxonId : 'iconic_taxa=Plantae'}`;
 
-/** @param {string} url @param {AbortSignal} [signal] */
-async function json(url, signal) {
-  const response = await fetch(url, { signal, headers: { accept: 'application/json' } });
-  if (!response.ok) throw new Error(`iNaturalist ${response.status}`);
-  return response.json();
-}
+/** An iNaturalist list: its `results` an array. @param {string} url @param {AbortSignal} [signal] */
+const json = (url, signal) => fetchJson(url, { signal, expect: d => Array.isArray(d.results) });
 
-/** @template T @param {string} key @param {() => Promise<T>} load @returns {Promise<T>} */
-async function cached(key, load) {
-  const hit = await db.get('plantDetails', key).catch(() => null);
-  if (hit && Date.now() - hit.fetchedAt < TTL) return hit.value;
-  try {
-    const value = await load();
-    await db.put('plantDetails', { key, fetchedAt: Date.now(), value }).catch(() => {});
-    return value;
-  } catch (error) {
-    if (hit && /** @type {Error} */ (error).name !== 'AbortError') return hit.value;
-    throw error;
-  }
-}
+/**
+ * Cached a day (core/cache.js); `partial`: some pages failed (kept a few minutes only).
+ * @template T @param {string} key @param {() => Promise<T>} load @param {() => boolean} [partial] @returns {Promise<T>}
+ */
+const cached = (key, load, partial) => cache.cached(key, load, { ttl: TTL, partial });
 
 /** Lower-case "Genus species" (infraspecific ranks reduced to the binomial; a hybrid's is never looked up, see nameIndex). */
 export const binomial = (/** @type {string} */ name) =>
@@ -160,10 +150,12 @@ export async function speciesAround(point, radius, signal) {
  */
 export function observationsAround(taxonId, point, radius, signal) {
   if (!moduleOn('inaturalist')) return Promise.reject(new ModuleOffError('inaturalist'));
+  let partial = false;
   return cached(`around-obs2:${taxonId}:${area(point, radius)}`, async () => {
-    const { results } = await paged(`taxon_id=${taxonId}&${area(point, radius)}&quality_grade=research&order_by=observed_on`, 600, signal);
-    return results.map(toObservation);
-  });
+    const page = await paged(`taxon_id=${taxonId}&${area(point, radius)}&quality_grade=research&order_by=observed_on`, 600, signal);
+    partial = page.partial;
+    return page.results.map(toObservation);
+  }, () => partial);
 }
 
 /** An iNaturalist observation, for a map. @param {any} o @returns {NearbyObservation} */
@@ -173,17 +165,20 @@ const toObservation = o => ({ coordinates: /** @type {[number, number]} */ (o.ge
  * Up to `max` observations of a query (200 a page, iNaturalist's most: the first page tells how many there are,
  * the next ones are asked together), with their true total.
  * @param {string} query @param {number} max @param {AbortSignal} [signal]
- * @returns {Promise<{ results: any[], total: number }>}
+ * `partial`: a page after the first failed (its observations are missing).
+ * @returns {Promise<{ results: any[], total: number, partial: boolean }>}
  */
 async function paged(query, max, signal) {
   const PER = 200;
   const first = await json(`${API}/observations?${query}&per_page=${PER}&page=1`, signal);
-  const total = Number(first.total_results) || (first.results || []).length;
+  const total = Number(first.total_results) || first.results.length;
   const pages = Math.min(Math.ceil(Math.min(total, max) / PER), Math.ceil(max / PER));
+  let partial = false;
   const rest = await Promise.all(Array.from({ length: Math.max(0, pages - 1) }, (_, i) =>
-    json(`${API}/observations?${query}&per_page=${PER}&page=${i + 2}`, signal).catch(() => ({ results: [] }))));
-  const results = [first, ...rest].flatMap(d => d.results || []).filter(o => Array.isArray(o.geojson?.coordinates));
-  return { results, total };
+    json(`${API}/observations?${query}&per_page=${PER}&page=${i + 2}`, signal)
+      .catch(error => { if (error?.name === 'AbortError') throw error; partial = true; return { results: [] }; })));
+  const results = [first, ...rest].flatMap(d => d.results).filter(o => Array.isArray(o.geojson?.coordinates));
+  return { results, total, partial };
 }
 
 /**
@@ -196,10 +191,12 @@ async function paged(query, max, signal) {
 export function observationsInBox(taxonId, [w, s, e, n], signal) {
   if (!moduleOn('inaturalist')) return Promise.reject(new ModuleOffError('inaturalist'));
   const box = `swlat=${s.toFixed(3)}&swlng=${w.toFixed(3)}&nelat=${n.toFixed(3)}&nelng=${e.toFixed(3)}`;
+  let partial = false;
   return cached(`box-obs:${taxonId}:${box}`, async () => {
-    const { results, total } = await paged(`taxon_id=${taxonId}&${box}&quality_grade=research&order_by=observed_on`, 1000, signal);
-    return { points: results.map(toObservation), total };
-  });
+    const page = await paged(`taxon_id=${taxonId}&${box}&quality_grade=research&order_by=observed_on`, 1000, signal);
+    partial = page.partial;
+    return { points: page.results.map(toObservation), total: page.total };
+  }, () => partial);
 }
 
 /**

@@ -6,6 +6,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { href } from '../core/router.js';
 import { icon } from '../core/icons.js';
 import * as db from '../core/db.js';
+import { forgetFailures } from '../core/cache.js';
 import { discoverState, forgetDiscoverPoint } from '../core/discover.js';
 import { ui } from '../styles/ui.js';
 
@@ -80,6 +81,7 @@ export class GfLegal extends LitElement {
   async #clearCache() {
     if (!confirm('Effacer les réponses des services en ligne gardées sur cet appareil, avec les images et les cartes déjà vues ? Vos lieux, collections et réglages restent.')) return;
     await db.clear('plantDetails').catch(() => {});
+    forgetFailures();
     try {
       for (const key of await caches.keys()) if (key.startsWith('geoflora-images-') || key === 'geoflora-tiles') await caches.delete(key);
     } catch { /* no Cache Storage */ }

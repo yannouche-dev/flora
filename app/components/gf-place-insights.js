@@ -11,6 +11,9 @@ import { hideImg, showImg } from '../core/img.js';
 import { photoOf } from '../core/thumb.js';
 import { creditsText } from '../core/credit.js';
 import { safeUrl } from '../core/safe-url.js';
+import { forgetFailures } from '../core/cache.js';
+import { isUnavailable } from '../core/net.js';
+import { sourceDown, sourceDownStyles } from '../core/source-state.js';
 
 /** Radius of « Plantes vues ici » (metres). */
 const SEEN_RADIUS = 500;
@@ -60,6 +63,7 @@ export class GfPlaceInsights extends LitElement {
     .credit a { color: inherit; }
     .summary { font-size: 0.85rem; margin: 4px 0 0; }
     ${unsafeCSS(chartStyles)}
+    ${sourceDownStyles}
   `];
 
   constructor() {
@@ -80,9 +84,20 @@ export class GfPlaceInsights extends LitElement {
     if (!changed.has('point') || !this.point) return;
     const prev = /** @type {[number, number] | null | undefined} */ (changed.get('point'));
     if (prev && Math.abs(prev[0] - this.point[0]) < 1e-4 && Math.abs(prev[1] - this.point[1]) < 1e-4) return;
+    this.#load();
+  }
+
+  /**
+   * Each part, from its source: its answer; { error } when the source is unavailable (« Réessayer »); null when it
+   * failed otherwise; 'off' when its module is switched off.
+   */
+  #load() {
     const point = this.point;
+    if (!point) return;
     const keep = (/** @type {string} */ k) => (/** @type {any} */ v) => { if (this.point === point) /** @type {any} */ (this)[k] = v; };
-    const fail = (/** @type {string} */ k) => () => { if (this.point === point) /** @type {any} */ (this)[k] = null; };
+    const fail = (/** @type {string} */ k) => (/** @type {unknown} */ error) => {
+      if (this.point === point) /** @type {any} */ (this)[k] = isUnavailable(error) ? { error } : null;
+    };
     this._zones = this._seen = this._pollen = this._climate = undefined;
     if (moduleOn('ignNature')) openData.zonesAt(point).then(keep('_zones'), fail('_zones')); else this._zones = 'off';
     if (moduleOn('inaturalist')) speciesAround(point, SEEN_RADIUS).then(keep('_seen'), fail('_seen')); else this._seen = 'off';
@@ -90,6 +105,17 @@ export class GfPlaceInsights extends LitElement {
       openData.pollensAt(point).then(keep('_pollen'), fail('_pollen'));
       if (!this.compact) openData.climateAt(point).then(keep('_climate'), fail('_climate'));
     } else { this._pollen = 'off'; this._climate = 'off'; }
+  }
+
+  /** « Réessayer »: the failures remembered forgotten (core/cache.js), every part asked again (those kept come from the cache). */
+  #retry() {
+    forgetFailures();
+    this.#load();
+  }
+
+  /** The « Source indisponible — Réessayer » line of a part that failed, or nothing. @param {any} part */
+  #down(part) {
+    return part?.error ? sourceDown(part.error, () => this.#retry()) : nothing;
   }
 
   render() {
@@ -103,6 +129,7 @@ export class GfPlaceInsights extends LitElement {
     return html`<section class="zones-part">
       <h3>${icon('shield-check')} Zones naturelles</h3>
       ${z === undefined ? html`<p class="muted">chargement…</p>`
+        : z?.error ? this.#down(z)
         : z === null ? html`<p class="muted">API Carto (IGN) ne répond pas pour le moment.</p>`
         : !z.length ? html`<p class="muted">Ni ZNIEFF, ni site Natura 2000, ni parc ou réserve ici.</p>`
         : html`<ul class="zones">${z.map((/** @type {any} */ x) => html`<li><span class="kind">${x.label}</span>
@@ -116,10 +143,11 @@ export class GfPlaceInsights extends LitElement {
     if (s === 'off') return nothing;
     const max = this.compact ? 6 : 12;
     // The photos' authors and licences (free ones only, nearby.js), together under the row.
-    const credits = s && s !== 'off' ? creditsText(s.species.slice(0, max).filter((/** @type {any} */ x) => photoOf(x.photo)).map((/** @type {any} */ x) => x.credit)) : '';
+    const credits = s && s !== 'off' && !s.error ? creditsText(s.species.slice(0, max).filter((/** @type {any} */ x) => photoOf(x.photo)).map((/** @type {any} */ x) => x.credit)) : '';
     return html`<section class="seen-part">
       <h3>${icon('flower1')} Plantes vues ici <small>(${SEEN_RADIUS} m)</small></h3>
       ${s === undefined ? html`<p class="muted">chargement…</p>`
+        : s?.error ? this.#down(s)
         : s === null ? html`<p class="muted">iNaturalist ne répond pas pour le moment.</p>`
         : !s.species.length ? html`<p class="muted">Aucune plante observée (et validée) à moins de ${SEEN_RADIUS} m sur iNaturalist.</p>`
         : html`<p class="summary"><strong>${s.species.length}</strong> espèce${s.species.length > 1 ? 's' : ''} observée${s.species.length > 1 ? 's' : ''}, ${s.observations.toLocaleString('fr-FR')} observation${s.observations > 1 ? 's' : ''} ; les plus vues :</p>
@@ -135,6 +163,7 @@ export class GfPlaceInsights extends LitElement {
   #pollens() {
     const p = this._pollen;
     if (p === 'off' || p === null) return nothing;
+    if (p?.error) return html`<section class="pollen-part"><h3>${icon('leaf')} Pollens aujourd’hui</h3>${this.#down(p)}</section>`;
     const list = p ? openData.POLLENS.map(x => ({ ...x, value: p.values[x.key] })).filter(x => x.value != null) : [];
     return html`<section class="pollen-part">
       <h3>${icon('leaf')} Pollens aujourd’hui</h3>
@@ -147,6 +176,7 @@ export class GfPlaceInsights extends LitElement {
   #climate() {
     const c = this._climate;
     if (c === 'off' || c === null) return nothing;
+    if (c?.error) return html`<section class="climate-part"><h3>${icon('triangle')} Climat du lieu</h3>${this.#down(c)}</section>`;
     return html`<section class="climate-part">
       <h3>${icon('triangle')} Climat du lieu</h3>
       ${c === undefined ? html`<p class="muted">chargement…</p>` : html`${climateChart(c.temp, c.precip)}

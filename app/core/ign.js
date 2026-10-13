@@ -3,9 +3,11 @@
 // Layer identifiers and styles checked against the service's GetCapabilities.
 
 import * as L from 'leaflet';
-import { moduleOn } from './modules.js';
+import { ModuleOffError, moduleOn } from './modules.js';
 import { config } from '../config.js';
+import * as cache from './cache.js';
 import * as db from './db.js';
+import { fetchOk, SchemaError } from './net.js';
 
 const WMTS = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&TILEMATRIXSET=PM'
   + '&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}';
@@ -138,19 +140,18 @@ const CATALOG_TTL = 30 * 24 * 3600 * 1000;
  * @returns {Promise<CatalogLayer[]>}
  */
 export async function ignCatalog() {
-  const hit = await db.get('plantDetails', 'ign:catalog').catch(() => null);
-  if (hit && Date.now() - hit.fetchedAt < CATALOG_TTL) return hit.value;
-  if (!moduleOn('ignMaps')) { if (hit) return hit.value; throw new Error('IGN – fonds de carte désactivé'); }
-  try {
-    const response = await fetch(CAPABILITIES);
-    if (!response.ok) throw new Error('IGN ' + response.status);
-    const value = parseCapabilities(await response.text());
-    await db.put('plantDetails', { key: 'ign:catalog', fetchedAt: Date.now(), value }).catch(() => {});
-    return value;
-  } catch (error) {
+  if (!moduleOn('ignMaps')) {
+    // Switched off: the copy already kept is shown, nothing is asked.
+    const hit = await db.get('plantDetails', 'ign:catalog').catch(() => null);
     if (hit) return hit.value;
-    throw error;
+    throw new ModuleOffError('ignMaps');
   }
+  // A large XML document: more time than a JSON answer. Not a single layer read: an answer of another shape.
+  return cache.cached('ign:catalog', async () => {
+    const value = parseCapabilities(await (await fetchOk(CAPABILITIES, { timeout: 30000 })).text());
+    if (!value.length) throw new SchemaError('data.geopf.fr', 'Catalogue IGN : aucune couche lue');
+    return value;
+  }, { ttl: CATALOG_TTL });
 }
 
 /** @param {string} xml @returns {CatalogLayer[]} */

@@ -48,6 +48,9 @@ import { sheetSession, setAnchorLock } from '../core/sheet-session.js';
 import { openModal } from '../core/history.js';
 import { hideImg, dropFigure, showImg } from '../core/img.js';
 import { safeUrl } from '../core/safe-url.js';
+import { forgetFailures } from '../core/cache.js';
+import { isUnavailable } from '../core/net.js';
+import { sourceDown } from '../core/source-state.js';
 
 /** Remote text is untrusted HTML: keep only its text content (DOMParser never runs scripts). */
 function toText(/** @type {string} */ value) {
@@ -58,6 +61,32 @@ function toText(/** @type {string} */ value) {
 
 /** The safety file or the look-alikes file could not be read (_open.safety, _open.confusions): never « nothing known ». */
 const UNREAD = Object.freeze({ unread: true });
+
+/**
+ * The loads each block reads (#loadExtras, #loadGbif; 'details:<service>': a service the details could not reach):
+ * one that failed makes the block say « Source indisponible — Réessayer » (audit STO-8), not « aucune donnée ».
+ * @type {Record<string, string[]>}
+ */
+const BLOCK_LOADS = {
+  wikipedia: ['wiki', 'details:wikidata'],
+  descriptions: ['gbif:descriptions', 'details:gbif'],
+  names: ['gbif:vernacularNames', 'details:gbif'],
+  occurrences: ['gbif:stats', 'gbif:distributions', 'details:gbif'],
+  gbifMedia: ['gbif:photos', 'gbif:herbarium', 'details:gbif'],
+  gbifProfile: ['gbif:speciesProfiles', 'details:gbif'],
+  literature: ['gbif:literature', 'details:gbif'],
+  interactions: ['globi'],
+  climate: ['niche', 'details:gbif'],
+  uses: ['uses:wikidata', 'uses:recipes', 'details:wikidata'],
+  taxonomy: ['science', 'gbif:synonyms', 'details:wikidata', 'details:gbif'],
+  status: ['science', 'gbif:iucn'],
+  ids: ['science', 'details:gbif', 'details:inaturalist', 'details:wikidata'],
+  photos: ['details:commons', 'details:inaturalist'],
+  trefle: ['details:trefle']
+};
+
+/** Loads whose value is in _open, by load key. @type {Record<string, string>} */
+const OPEN_KEYS = { globi: 'interactions', niche: 'niche', 'uses:wikidata': 'wdUses', 'uses:recipes': 'recipes' };
 
 /** A block not moved: the layout would have too many panes nested to be exported and read back (pane-tree.js dock). */
 const TOO_DEEP = 'pas déplacé, trop de volets imbriqués';
@@ -400,7 +429,8 @@ export class GfPlantDetail extends LitElement {
     /** What the sheet's maps show beyond their settings: a filter, a point, a compared plant (map-focus.js). */
     _focus: { state: true },
     /** Open data crossed with the plant: GloBI interactions, climate niche; « here » (pollen and climate of my position). */
-    _open: { state: true }
+    _open: { state: true },
+    _failed: { state: true }
   };
 
   static styles = [ui, css`
@@ -1006,6 +1036,12 @@ export class GfPlantDetail extends LitElement {
     this._focus = noFocus();
     /** What the opened blocks loaded (undefined: not yet; null: nothing). @type {{ interactions?: any, niche?: any, here?: any, safety?: any, confusions?: any, recipes?: any, wdUses?: any, herbarium?: any, photos?: any }} */
     this._open = {};
+    /**
+     * The loads that failed (a source unavailable, not a module switched off), by load key ('wiki', 'gbif:stats',
+     * 'details:gbif'…): the blocks they feed say « Source indisponible — Réessayer », not « aucune donnée ».
+     * @type {Record<string, any>}
+     */
+    this._failed = {};
     // A value touched in a block: the maps show it (touched again, it goes).
     this.addEventListener(FOCUS_EVENT, e => {
       e.stopPropagation();
@@ -1179,6 +1215,7 @@ export class GfPlantDetail extends LitElement {
     this._spotsOpen = sheetSession.spotsOpen;
     this._focus = noFocus();
     this._open = {};
+    this._failed = {};
     this._alerts = null;
     this.#requested.clear();
     this.#letGo();
@@ -1203,10 +1240,11 @@ export class GfPlantDetail extends LitElement {
 
     try {
       const details = await sources.details(plant, abort.signal, this.view);
-      if (!abort.signal.aborted) this._details = details;
+      if (!abort.signal.aborted) { this._details = details; this.#noteDetails(details); }
       if (!abort.signal.aborted) this.#loadExtras(plant, details, abort.signal);
     } catch (error) {
       if (!abort.signal.aborted) {
+        if (isUnavailable(error)) this._failed = { ...this._failed, 'details:all': error };
         this._details = null;
         this.#loadExtras(plant, null, abort.signal);
         this._error = navigator.onLine
@@ -1228,10 +1266,60 @@ export class GfPlantDetail extends LitElement {
     this._science = undefined;
     this._gbif = {};
     this._near = undefined;
-    const details = await sources.details(plant, abort.signal, this.view).catch(() => null);
+    this._failed = {};
+    this._error = null;
+    const details = await sources.details(plant, abort.signal, this.view).catch(error => {
+      if (!abort.signal.aborted && isUnavailable(error)) this._failed = { ...this._failed, 'details:all': error };
+      return null;
+    });
     if (abort.signal.aborted) return;
     this._details = details;
+    this.#noteDetails(details);
     this.#loadExtras(plant, details, abort.signal);
+  }
+
+  /**
+   * The services the details could not reach (lib/plant-sources.mjs `unavailable`): their blocks say so, with « Réessayer ».
+   * @param {any} details
+   */
+  #noteDetails(details) {
+    const down = details?.unavailable || [];
+    if (!down.length) return;
+    this._failed = { ...this._failed, ...Object.fromEntries(down.map((/** @type {string} */ s) => ['details:' + s, { source: s }])) };
+  }
+
+  /**
+   * « Réessayer » on a block: the failures remembered are forgotten (core/cache.js) and what failed is asked again —
+   * the details and everything after them when they were incomplete, else only the loads that failed.
+   */
+  #retry() {
+    const plant = this._plant;
+    if (!plant?.id) return;
+    forgetFailures();
+    const keys = Object.keys(this._failed);
+    this._failed = {};
+    if (keys.some(k => k.startsWith('details:'))) { this.#refresh(); return; }
+    /** @type {Record<string, any>} */
+    const open = { ...this._open };
+    const gbif = { ...this._gbif };
+    for (const k of keys) {
+      this.#requested.delete(k);
+      if (k === 'wiki') this._wiki = undefined;
+      else if (k === 'science') this._science = undefined;
+      else if (k.startsWith('gbif:')) delete gbif[k.slice(5)];
+      else if (OPEN_KEYS[k]) delete open[OPEN_KEYS[k]];
+    }
+    this._open = open;
+    this._gbif = gbif;
+    this.#loadExtras(plant, this._details, this.#abort?.signal);
+  }
+
+  /** The loads of a block that failed (see BLOCK_LOADS). @param {string} key @returns {any[]} */
+  #down(key) {
+    const loads = BLOCK_LOADS[key];
+    if (!loads) return [];
+    const failed = this._failed;
+    return Object.keys(failed).filter(k => k === 'details:all' || loads.includes(k)).map(k => failed[k]);
   }
 
   /**
@@ -1247,23 +1335,29 @@ export class GfPlantDetail extends LitElement {
     const qid = plant.identifiers?.wikidata || details?.identifiers?.wikidata?.id;
     // Each load in flight is counted: a place reached is kept while the data still arrives (#keep).
     const pending = this.#pending;
-    const settle = (/** @type {Promise<any>} */ task, /** @type {(v: any) => void} */ set) => {
+    // A load that fails: null for its value, and, when its source is unavailable (not a module switched off), noted
+    // under its key so its blocks say so (#down).
+    const settle = (/** @type {Promise<any>} */ task, /** @type {(v: any) => void} */ set, /** @type {string} */ key = '') => {
       const done = task.then(v => { if (!signal?.aborted && this._plant === plant) set(v ?? null); })
-        .catch(() => { if (!signal?.aborted && this._plant === plant) set(null); });
+        .catch(error => {
+          if (signal?.aborted || this._plant !== plant) return;
+          if (key && isUnavailable(error)) this._failed = { ...this._failed, [key]: error };
+          set(null);
+        });
       pending.add(done);
       done.finally(() => { pending.delete(done); if (!pending.size && pending === this.#pending) this.requestUpdate(); });
     };
     const once = (/** @type {string} */ key) => !this.#requested.has(key) && Boolean(this.#requested.add(key));
     // Wikipédia feeds its block and, by theme, Descriptions, Calendrier, Habitat, Occurrences, Usages and Noms.
-    if (['wikipedia', 'descriptions', 'calendar', 'gbifProfile', 'occurrences', 'uses', 'names'].some(shown) && once('wiki')) settle(sources.wikipedia(plant, qid, signal, v), x => { this._wiki = x; });
+    if (['wikipedia', 'descriptions', 'calendar', 'gbifProfile', 'occurrences', 'uses', 'names'].some(shown) && once('wiki')) settle(sources.wikipedia(plant, qid, signal, v), x => { this._wiki = x; }, 'wiki');
     const science = shown('ids') || (baseOf(v) === 'scientific' && (shown('taxonomy') || shown('status')));
-    if (science && once('science')) settle(sources.wikidataScience(plant, qid, signal, v), x => { this._science = x; });
+    if (science && once('science')) settle(sources.wikidataScience(plant, qid, signal, v), x => { this._science = x; }, 'science');
     this.#loadGbif(plant, details, signal, settle, once, shown);
     const putOpen = (/** @type {string} */ k, /** @type {any} */ x) => { this._open = { ...this._open, [k]: x }; };
-    if (shown('interactions') && once('globi')) settle(openData.interactions(plant.scientificName, signal, v), x => putOpen('interactions', x));
+    if (shown('interactions') && once('globi')) settle(openData.interactions(plant.scientificName, signal, v), x => putOpen('interactions', x), 'globi');
     const gbifKey = details?.identifiers?.gbif?.id ?? null;
     if (shown('climate') && !isSubHidden(v, 'climate', 'niche') && details !== undefined && once('niche')) {
-      if (gbifKey) settle(openData.climateNiche(gbifKey, signal, v), x => putOpen('niche', x)); else putOpen('niche', null);
+      if (gbifKey) settle(openData.climateNiche(gbifKey, signal, v), x => putOpen('niche', x), 'niche'); else putOpen('niche', null);
     }
     // « Usages et cuisine sauvage »: the local safety file first, then Wikidata and Wikibooks.
     if (shown('uses')) {
@@ -1274,10 +1368,10 @@ export class GfPlantDetail extends LitElement {
       }
       const usesQid = plant.identifiers?.wikidata || details?.identifiers?.wikidata?.id;
       if (details !== undefined && once('uses:wikidata')) {
-        if (usesQid && moduleOn('wikidata', v)) settle(usesData.wikidataUses(usesQid, signal, v), x => putOpen('wdUses', x)); else putOpen('wdUses', null);
+        if (usesQid && moduleOn('wikidata', v)) settle(usesData.wikidataUses(usesQid, signal, v), x => putOpen('wdUses', x), 'uses:wikidata'); else putOpen('wdUses', null);
       }
       if (!isSubHidden(v, 'uses', 'kitchen') && once('uses:recipes')) {
-        if (moduleOn('wikibooks', v)) settle(usesData.recipes({ french: plant.vernacularNames?.[0] || null, latin: plant.scientificName }, signal), x => putOpen('recipes', x));
+        if (moduleOn('wikibooks', v)) settle(usesData.recipes({ french: plant.vernacularNames?.[0] || null, latin: plant.scientificName }, signal), x => putOpen('recipes', x), 'uses:recipes');
         else putOpen('recipes', null);
       }
     }
@@ -1329,7 +1423,7 @@ export class GfPlantDetail extends LitElement {
   /**
    * GBIF, part by part: only what the shown blocks and sub-blocks use (the Backbone key comes with the details).
    * @param {any} plant @param {any} details @param {AbortSignal | undefined} signal
-   * @param {(task: Promise<any>, set: (v: any) => void) => void} settle @param {(key: string) => boolean} once
+   * @param {(task: Promise<any>, set: (v: any) => void, key?: string) => void} settle @param {(key: string) => boolean} once
    * @param {(key: string) => boolean} shown
    */
   #loadGbif(plant, details, signal, settle, once, shown) {
@@ -1341,7 +1435,7 @@ export class GfPlantDetail extends LitElement {
     const part = (/** @type {string} */ name, /** @type {() => Promise<any>} */ load) => {
       if (!once('gbif:' + name)) return;
       if (!key) { put(name, null); return; }
-      settle(load(), x => put(name, x));
+      settle(load(), x => put(name, x), 'gbif:' + name);
     };
     const species = (/** @type {string} */ name, /** @type {string} */ api = name) => part(name, () => sources.gbifSpecies(plant, key, api, signal, v));
     if (shown('names')) species('vernacularNames');
@@ -2780,6 +2874,12 @@ export class GfPlantDetail extends LitElement {
    * @param {string} key @param {any} ctx
    */
   #emptyHere(key, ctx) {
+    // A source unavailable: the block stays, to say so and offer « Réessayer ».
+    return !this.#down(key).length && this.#nothingHere(key, ctx);
+  }
+
+  /** The block has no data for this plant (whatever the reason). @param {string} key @param {any} ctx */
+  #nothingHere(key, ctx) {
     const v = this.view;
     const g = this._gbif;
     const loaded = (/** @type {any} */ x) => x !== undefined;
@@ -2814,14 +2914,26 @@ export class GfPlantDetail extends LitElement {
     return blockStyle(this.view, 'names') === 'list' || baseOf(this.view) !== 'scientific' || !otherNames(this._gbif).length;
   }
 
-  /** A block's content, as this view shows it. @param {string} key @param {any} ctx */
+  /**
+   * A block's content, as this view shows it. A source it reads failed: « Source indisponible — Réessayer », alone
+   * when the block has nothing else to show, else above what it has (its « nothing known » lines left out).
+   * @param {string} key @param {any} ctx
+   */
   #content(key, ctx) {
+    const down = this.#down(key);
+    if (!down.length) return this.#blockContent(key, ctx, false);
+    const notice = sourceDown(down, () => this.#retry());
+    return this.#nothingHere(key, ctx) ? notice : html`${notice}${this.#blockContent(key, ctx, true)}`;
+  }
+
+  /** @param {string} key @param {any} ctx @param {boolean} down a source of the block failed: no « nothing known » line */
+  #blockContent(key, ctx, down) {
     const v = this.view;
     const { plant, details, loading } = ctx;
     const pending = html`<p class="muted">chargement…</p>`;
-    const empty = (/** @type {string} */ text) => html`<p class="muted">${text}</p>`;
+    const empty = (/** @type {string} */ text) => down ? nothing : html`<p class="muted">${text}</p>`;
     // After a part that hides itself when it has nothing for this plant.
-    const ifEmpty = (/** @type {string} */ text) => html`<p class="muted if-empty">${text}</p>`;
+    const ifEmpty = (/** @type {string} */ text) => down ? nothing : html`<p class="muted if-empty">${text}</p>`;
     if (isNote(key)) return this.#note(key, plant);
     if (isMap(key)) return this.#map(key, ctx);
     switch (key) {
@@ -3157,7 +3269,8 @@ export class GfPlantDetail extends LitElement {
   #mediaGallery(plant, title, list, none, herbarium) {
     const head = html`<h3>${title}</h3>`;
     if (list === undefined) return html`${head}<p class="muted">chargement…</p>`;
-    if (!list?.length) return html`${head}<p class="muted">${none}</p>`;
+    // Its source failed: the block says so above (#content), not « none ».
+    if (!list?.length) return this._failed['gbif:' + (herbarium ? 'herbarium' : 'photos')] || this._failed['details:gbif'] ? head : html`${head}<p class="muted">${none}</p>`;
     return html`${head}<div class="gallery ${herbarium ? 'herbarium' : ''}">${list.map(image => html`<figure>
       <a href=${safeUrl(image.sourceUrl || image.url) || '#'} title="Voir en grand (Médias)" @click=${(/** @type {Event} */ e) => this.#openMedia(e, image.url)}><img src=${image.url} alt=${(herbarium ? 'Planche d’herbier de ' : '') + plant.scientificName} loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${dropFigure} @load=${showImg} /></a>
       <figcaption>
@@ -3356,7 +3469,7 @@ export class GfPlantDetail extends LitElement {
         const niche = this._open.niche;
         const head = html`<h3>Niche climatique en France</h3>`;
         if (niche === undefined) return html`${head}<p class="muted">chargement…</p>`;
-        if (!niche?.points?.length) return html`${head}<p class="muted">Pas assez d’occurrences GBIF localisées en France pour situer son climat.</p>`;
+        if (!niche?.points?.length) return this._failed.niche || this._failed['details:gbif'] ? head : html`${head}<p class="muted">Pas assez d’occurrences GBIF localisées en France pour situer son climat.</p>`;
         const temps = niche.points.map((/** @type {any} */ p) => p.temp).sort((/** @type {number} */ a, /** @type {number} */ b) => a - b);
         const rains = niche.points.map((/** @type {any} */ p) => p.precip).sort((/** @type {number} */ a, /** @type {number} */ b) => a - b);
         const mine = here?.state === 'done' && here.climate ? { temp: here.climate.annualTemp, precip: here.climate.annualPrecip, label: 'chez vous' } : null;
