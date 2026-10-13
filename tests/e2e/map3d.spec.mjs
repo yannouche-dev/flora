@@ -103,7 +103,8 @@ async function tiles(page, { dem = 'ok' } = {}) {
 async function openRecap(app, page) {
   await app.open('#/collections');
   await seedWalk(page);
-  await app.open('#/discover?s=trail');
+  // The Parcours mini-app: its recap (« Vue 3D » over its map), in its box.
+  await app.open('#/app/parcours');
   const button = page.locator('gf-trail .recap-map .map3d');
   await expect(button).toBeVisible();
   return button;

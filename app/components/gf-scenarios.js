@@ -1,11 +1,14 @@
 // @ts-check
-// The film icon of the header: the scenarios of the app (core/scenarios.js), in cards — what each one does,
-// « Jouer » (« Rejouer » once played).
+// The film icon of the header (and of a mini-app's bar): the launcher. The mini-apps first (app/miniapps: each one
+// opens alone on the screen, at #/app/<id>), then the scenarios still played in Découvrir (core/scenarios.js), in
+// cards — what each one does, « Jouer » (« Rejouer » once played). A mini-app is played again from its own ⋯.
 
 import { LitElement, html, css } from 'lit';
 import { icon } from '../core/icons.js';
-import { openModal } from '../core/history.js';
+import { openModal, openView } from '../core/history.js';
+import { href, parse } from '../core/router.js';
 import { SCENARIOS } from '../core/scenarios.js';
+import { MINIAPPS } from '../miniapps/index.js';
 import { ui } from '../styles/ui.js';
 
 export class GfScenarios extends LitElement {
@@ -30,6 +33,9 @@ export class GfScenarios extends LitElement {
     li button { justify-self: start; margin-top: 6px; }
   `];
 
+  /** The mini-app on screen. @param {string} id */
+  #here(id) { const r = parse(location.hash); return r.name === 'app' && r.id === id; }
+
   get #dialog() { return /** @type {HTMLDialogElement | null} */ (this.renderRoot.querySelector('dialog')); }
 
   /** The scenarios, shown (from elsewhere: « Autres scénarios » of the Parcours). */
@@ -42,7 +48,13 @@ export class GfScenarios extends LitElement {
         <div class="head">${icon('camera-reels')}<h2>Scénarios</h2>
           <button class="icon-btn" type="button" aria-label="Fermer" @click=${() => this.#dialog?.close()}>${icon('x-lg')}</button></div>
         <p class="intro">Des façons de découvrir la flore, chacune avec les outils qu’il lui faut. On peut en changer quand on veut.</p>
-        <ul>${SCENARIOS.map(s => html`<li>
+        <ul>${MINIAPPS.map(a => { const here = this.#here(a.id); return html`<li data-app=${a.id}>
+          <span class="ic" aria-hidden="true">${icon(a.icon)}</span>
+          <b>${a.title}</b>
+          <p>${a.pitch}</p>
+          <button class="primary" type="button" ?disabled=${here} @click=${() => { this.#dialog?.close(); openView(href.app(a.id)); }}>${here ? 'En cours' : 'Jouer'}</button>
+        </li>`; })}
+        ${SCENARIOS.map(s => html`<li>
           <span class="ic" aria-hidden="true">${icon(s.icon)}</span>
           <b>${s.title}</b>
           <p>${s.pitch}</p>

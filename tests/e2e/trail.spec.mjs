@@ -10,7 +10,7 @@ const saved = (page, name) => page.evaluate(async n => {
 }, name);
 
 test('un parcours : nommé, des plantes ajoutées par la recherche, enregistré et sur la carte', async ({ app, page }) => {
-  await app.open('#/discover?s=trail');
+  await app.open('#/app/parcours');
   const trail = page.locator('gf-trail');
   await trail.locator('.go').click();
   const name = trail.locator('.card input.name');
@@ -43,7 +43,7 @@ test('un parcours : nommé, des plantes ajoutées par la recherche, enregistré 
 });
 
 test('le nom du parcours se garde au rechargement', async ({ app, page }) => {
-  await app.open('#/discover?s=trail');
+  await app.open('#/app/parcours');
   const trail = page.locator('gf-trail');
   await trail.locator('.go').click();
   await trail.locator('.card input.name').fill('Sentier des crêtes');

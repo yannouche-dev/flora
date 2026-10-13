@@ -43,6 +43,7 @@ import { onStorage } from './sync.js';
  * @property {import('./modes.js').ModeInfo[]} modes  the display modes: the app's three and the ones made from them
  * @property {boolean} kingMode         « Mode King »: the plant sheet blocks can be moved, folded and revived (left with the crown)
  * @property {boolean} harvestMode      "Mode cueillette": harvest log, seasons, look-alike warnings
+ * @property {ShowSteps} showSteps       mini-apps: their steps bar shown until one is finished once (auto), always (on), never (off)
  * @property {import('./collections.js').CollectionSummary[]} collections
  */
 
@@ -61,6 +62,7 @@ export class Store extends EventTarget {
 }
 
 /** @typedef {import('./modes.js').Mode} Mode */
+/** @typedef {'auto' | 'on' | 'off'} ShowSteps */
 
 /** @param {any} v @returns {Mode | null} */
 const asMode = v => isMode(v) ? v : v === 'illustrated' ? 'epure' : null;
@@ -172,7 +174,8 @@ export const store = new Store({
   modes: modeList(),
   collections: [],
   kingMode: (() => { try { return localStorage.getItem(config.storageKeys.kingMode) === '1'; } catch { return false; } })(),
-  harvestMode: readHarvestMode() ?? false
+  harvestMode: readHarvestMode() ?? false,
+  showSteps: readShowSteps()
 });
 
 moduleEvents.addEventListener('change', () => store.set({ modules: modulesState() }));
@@ -205,6 +208,20 @@ function readHarvestMode() {
 export function setHarvestMode(on) {
   try { localStorage.setItem(config.storageKeys.harvestMode, on ? '1' : '0'); } catch { /* not persisted */ }
   store.set({ harvestMode: on });
+}
+
+/** « Afficher les étapes » of the mini-apps: 'auto' unless chosen. @returns {ShowSteps} */
+function readShowSteps() {
+  try {
+    const value = localStorage.getItem(config.storageKeys.showSteps);
+    return value === 'on' || value === 'off' ? value : 'auto';
+  } catch { return 'auto'; }
+}
+
+/** @param {ShowSteps} value */
+export function setShowSteps(value) {
+  writeKey(config.storageKeys.showSteps, value === 'auto' ? null : value);
+  store.set({ showSteps: value });
 }
 
 /** Enter or leave « Mode King » (editing the plant sheet blocks); kept until left. @param {boolean} on */

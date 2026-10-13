@@ -46,6 +46,36 @@ export async function prepare(context, { baseURL, realData = false, firstVisit =
   }
 }
 
+const NAMES = ['Urtica dioica', 'Allium ursinum', 'Conium maculatum', 'Geum urbanum', 'Taraxacum officinale', 'Quercus robur',
+  'Hedera helix', 'Galium aparine', 'Plantago lanceolata', 'Bellis perennis', 'Ranunculus acris', 'Trifolium repens'];
+const COUNTS = [12, 80, 5, 40, 66, 3, 25, 9, 51, 30, 18, 7];
+const ARTICLE = 'La plante est une espèce vivace.\n\n== Phytonymie ==\n\n=== Étymologie ===\nSon nom vient du latin ursus, l’ours.\n\n== Description ==\nFeuilles larges.';
+
+/**
+ * Rencontres' services answered (Découvrir, the mini-app): iNaturalist's plants around (12, Allium ursinum the
+ * most observed), 30 observations on the map, Wikidata and Wikipédia's article of each.
+ * @param {import('@playwright/test').BrowserContext} context
+ */
+export async function answerAround(context) {
+  /** @type {(route: import('@playwright/test').Route, body: any) => Promise<void>} */
+  const json = (route, body) => route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
+  await context.route(/^https:\/\/(api\.inaturalist\.org|www\.wikidata\.org|fr\.wikipedia\.org)\//, route => {
+    const url = new URL(route.request().url());
+    if (url.host === 'api.inaturalist.org' && /species_counts/.test(url.pathname)) {
+      return json(route, { results: NAMES.map((name, i) => ({ count: COUNTS[i], taxon: { id: 1000 + i, name, preferred_common_name: null, default_photo: { square_url: `https://inaturalist-open-data.s3.amazonaws.com/photos/${i}/square.jpg` } } })) });
+    }
+    if (url.host === 'api.inaturalist.org' && url.pathname === '/v1/observations') {
+      return json(route, { results: Array.from({ length: 30 }, (_, i) => ({ id: i, geojson: { coordinates: [2.35 + (i % 6 - 3) * 0.001, 48.85 + (Math.floor(i / 6) - 2) * 0.001] }, taxon: { name: 'Urtica dioica', preferred_common_name: 'Ortie' } })) });
+    }
+    if (url.host === 'www.wikidata.org' && url.searchParams.get('action') === 'wbgetentities') {
+      const ids = url.searchParams.get('ids') || '';
+      return json(route, { entities: { [ids]: { claims: {}, sitelinks: { frwiki: { title: 'Plante ' + ids } }, aliases: { fr: [] } } } });
+    }
+    if (url.host === 'fr.wikipedia.org') return json(route, { query: { pages: [{ title: 'Plante', extract: ARTICLE, description: 'espèce de plantes', touched: '2026-09-01T10:00:00Z' }] } });
+    return route.fallback();
+  });
+}
+
 /**
  * @typedef {{ realData: boolean, firstVisit: boolean, offlineData: boolean }} Options
  * @typedef {{ pageErrors: string[], app: import('./app.mjs').App, newDevice: () => Promise<{ page: import('@playwright/test').Page, app: import('./app.mjs').App }> }} Fixtures

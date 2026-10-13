@@ -40,6 +40,9 @@ export const config = {
     mapView: 'geoflora.mapView',
     discoverLayout: 'geoflora.discoverLayout',
     trailLayout: 'geoflora.trailLayout',
+    // Mini-apps (app/miniapp): « Afficher les étapes » (auto, on, off); each one's state and layout under the prefix.
+    showSteps: 'geoflora.showSteps',
+    appPrefix: 'geoflora.app.',
     lastExport: 'geoflora.lastExport',
     hasSpots: 'geoflora.hasSpots',
     harvestMode: 'geoflora.harvestMode',

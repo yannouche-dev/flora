@@ -17,8 +17,8 @@ import './gf-tabbar.js';
 import './gf-mode-switch.js';
 import './gf-discover.js';
 import './gf-scenarios.js';
+import '../miniapp/gf-miniapp.js';
 import { discoverEvents, tabShown, UNLOCKS } from '../core/discover.js';
-import { scenarioOf } from '../core/scenarios.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 
@@ -61,8 +61,8 @@ export class GfApp extends LitElement {
     }
     .brand:hover { background: var(--gf-accent-soft); }
     span.brand:hover { background: none; }
-    /* A scenario played as an app of its own (the Parcours): the rest of GeoFlora dimmed, out of reach. */
-    header.locked .off { opacity: 0.38; filter: grayscale(1); pointer-events: none; }
+    /* A mini-app (#/app/…): alone on the screen, under its own bar — no header, no tab bar. */
+    :host([boxed]) { grid-template-rows: minmax(0, 1fr); }
     .brand:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     .brand img { width: 38px; height: 38px; filter: drop-shadow(0 1px 1px rgb(0 0 0 / 0.12)); }
     .brand span { font-size: 1.12rem; font-weight: 600; letter-spacing: 0.01em; }
@@ -71,7 +71,7 @@ export class GfApp extends LitElement {
     /* The page's tab, on the accent: its contrasting text (the rule above outweighs the .segmented one of ui.js). */
     nav.tabs a[aria-current='page'] { color: var(--gf-accent-contrast); }
     .note, .mode { flex: none; }
-    gf-map-page, gf-spot-editor, gf-collections, gf-shared, gf-flora, gf-discover { flex: 1; min-height: 0; }
+    gf-map-page, gf-spot-editor, gf-collections, gf-shared, gf-flora, gf-discover, gf-miniapp { flex: 1; min-height: 0; }
     /* A tool that just came (first steps): announced once. */
     .unlocked { position: fixed; z-index: 1003; left: 50%; transform: translateX(-50%); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); width: min(440px, calc(100vw - 24px));
       display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; background: #1f2a1f; color: #fff; box-shadow: 0 10px 30px rgb(0 0 0 / 35%); animation: up 0.3s ease-out; }
@@ -214,27 +214,40 @@ export class GfApp extends LitElement {
     const tab = this.#tab(route);
     const { status, statusText, offline, updateReady, datasetDeferred, storageFull } = this.#store.state;
     const phone = this.#phone.matches;
-    // The Parcours botanique, an app of its own: the rest of GeoFlora out of reach (dimmed) until another scenario is chosen.
-    const locked = route.name === 'discover' && scenarioOf(route.scenario).key === 'trail';
+    // A mini-app: alone on the screen (its box has its own bar, its one way out).
+    const boxed = route.name === 'app';
     const brand = html`<img src="assets/icons/icon.svg" alt="" /><span>GeoFlora</span>`;
     // Phone: a plant's sheet covers the header (gf-flora): out of reach until it closes; the tab bar stays.
     const covered = phone && route.name === 'plant';
 
+    if (boxed) {
+      return html`<main>
+        ${updateReady ? html`<div class="banner" role="status">Nouvelle version de GeoFlora disponible.
+          <button class="link" type="button" @click=${() => location.reload()}>Recharger</button></div>` : nothing}
+        ${status === 'loading' ? html`<div class="banner over" role="status">${statusText || 'Chargement…'}</div>` : nothing}
+        ${status === 'error' ? html`<div class="banner error" role="alert">${statusText}
+          <button class="link" type="button" @click=${() => location.reload()}>Recharger</button></div>` : nothing}
+        ${this.#outlet(route)}
+      </main>
+      ${this.#store.state.kingMode ? html`<button class="king" type="button" aria-pressed="true" aria-label="Quitter le mode King"
+        title="Mode King actif : touchez pour quitter" @click=${() => setKingMode(false)}>${icon('crown')} Mode King <small>· quitter</small></button>` : nothing}`;
+    }
+
     return html`
-      <header class=${locked ? 'locked' : ''} ?inert=${covered}>
-        <div class="side">${phone ? nothing : html`<nav class="tabs segmented off" aria-label="Sections" ?inert=${locked} aria-disabled=${locked ? 'true' : 'false'}>
+      <header ?inert=${covered}>
+        <div class="side">${phone ? nothing : html`<nav class="tabs segmented" aria-label="Sections">
           <a href=${href.discover()} aria-current=${tab === 'discover' ? 'page' : 'false'}>Découvrir</a>
           ${tabShown('flore') ? html`<a href=${tabHref('flore', tab === 'flore')} aria-current=${route.name === 'search' || route.name === 'plant' ? 'page' : 'false'}>Flore</a>` : nothing}
           ${tabShown('mine') ? html`<a href=${tabHref('mine', tab === 'mine')} aria-current=${['collections', 'spot', 'spot-new', 'shared'].includes(route.name) ? 'page' : 'false'}>Mes plantes</a>` : nothing}
           ${tabShown('map') ? html`<a href=${tabHref('map', tab === 'map')} aria-current=${route.name === 'map' ? 'page' : 'false'}>Carte</a>` : nothing}
         </nav>`}</div>
-        ${locked ? html`<span class="brand" aria-label="GeoFlora">${brand}</span>` : html`<a class="brand" href=${href.search()} aria-label="GeoFlora — accueil">${brand}</a>`}
+        <a class="brand" href=${href.search()} aria-label="GeoFlora — accueil">${brand}</a>
         <div class="side end">${phone ? html`<gf-scenarios class="phone-scenarios"></gf-scenarios>` : html`
-        ${tabShown('flore') ? html`<gf-mode-switch class="mode off" ?inert=${locked} scope="toute l’application" value=${this.#store.state.mode}
+        ${tabShown('flore') ? html`<gf-mode-switch class="mode" scope="toute l’application" value=${this.#store.state.mode}
           @mode-change=${e => setMode(e.detail.mode || 'standard')}></gf-mode-switch>` : nothing}
-        ${tabShown('map') ? html`<button class="note primary off" type="button" aria-label="Noter ici" ?disabled=${locked} @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-capture'))?.open()}>${icon('plus-lg')}<span class="lbl"> Noter ici</span></button>` : nothing}
+        ${tabShown('map') ? html`<button class="note primary" type="button" aria-label="Noter ici" @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-capture'))?.open()}>${icon('plus-lg')}<span class="lbl"> Noter ici</span></button>` : nothing}
         <gf-scenarios></gf-scenarios>
-        <a class="settings off" href=${href.settings()} title="À propos et réglages" aria-label="À propos et réglages" ?inert=${locked}>${icon('gear')}</a>`}</div>
+        <a class="settings" href=${href.settings()} title="À propos et réglages" aria-label="À propos et réglages">${icon('gear')}</a>`}</div>
       </header>
       <main>
         ${updateReady ? html`<div class="banner" role="status">Nouvelle version de GeoFlora disponible.
@@ -246,7 +259,7 @@ export class GfApp extends LitElement {
           : datasetDeferred && status === 'ready' && route.name === 'search' ? html`<div class="banner" role="status">Mise à jour de la flore reportée — recherche sur la copie locale.</div>` : nothing}
         ${this.#outlet(route)}
       </main>
-      ${phone ? html`<gf-tabbar current=${tab} ?locked=${locked}></gf-tabbar>` : html`<span></span>`}
+      ${phone ? html`<gf-tabbar current=${tab}></gf-tabbar>` : html`<span></span>`}
       ${storageFull && status !== 'error' ? html`<div class="full" role="alert">
         <p><strong>Espace de stockage plein</strong> : GeoFlora n’a pas pu enregistrer une modification sur cet appareil.
           Exportez vos plantes pour ne rien perdre, puis libérez de l’espace (fichiers, applications, données d’autres sites) et rechargez la page.</p>
@@ -257,6 +270,10 @@ export class GfApp extends LitElement {
       ${this.#store.state.kingMode ? html`<button class="king" type="button" aria-pressed="true" aria-label="Quitter le mode King"
         title="Mode King actif : touchez pour quitter" @click=${() => setKingMode(false)}>${icon('crown')} Mode King <small>· quitter</small></button>` : nothing}
     `;
+  }
+
+  willUpdate() {
+    this.toggleAttribute('boxed', this.#router.route.name === 'app');
   }
 
   updated() {
@@ -313,6 +330,8 @@ export class GfApp extends LitElement {
         return html`<gf-settings></gf-settings>`;
       case 'legal':
         return html`<gf-legal></gf-legal>`;
+      case 'app':
+        return html`<gf-miniapp .route=${route}></gf-miniapp>`;
       default:
         return html`<div class="banner">Page introuvable. <a href=${href.search()}>Retour à la recherche</a></div>`;
     }

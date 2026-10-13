@@ -44,7 +44,6 @@ import './gf-plant-detail.js';
 import { emergency } from './gf-lookalikes.js';
 import './gf-media-viewer.js';
 import './gf-map.js';
-import './gf-trail.js';
 
 /** How far to look, in metres (iNaturalist searches a circle; beyond 50 km the list is a region's, not « around »). */
 const DISTANCES = [200, 500, 1000, 2000, 5000, 10000, 20000, 50000];
@@ -101,6 +100,11 @@ export class GfDiscover extends LitElement {
     open: { type: Number },
     /** The scenario (the address's ?s=): 'meet' (Rencontres), 'harvest' (Cueillette prudente), 'mosaic'. */
     scenario: {},
+    /**
+     * In the box of a mini-app (its id: Rencontres): its addresses are the box's (#/app/<id>/<step>?p=), and it says
+     * the step it is on (ma-step: 'start', 'map', 'cards'; ownBar: the guided way's own steps bar is shown).
+     */
+    boxed: {},
     /** Mosaïque: only the plants in flower now. */
     _bloomOnly: { state: true },
     /** ↺: the last swipes, to undo. */
@@ -488,6 +492,8 @@ export class GfDiscover extends LitElement {
     this._asking = false;
     /** @type {string | null} */
     this.scenario = null;
+    /** @type {string | null} */
+    this.boxed = null;
     this._view = 'swipe';
     this._bloomOnly = false;
     /** @type {{ id: number, liked: boolean, fav: boolean }[]} */
@@ -633,7 +639,7 @@ export class GfDiscover extends LitElement {
       // Another scenario chosen while « Autour de moi » looks: it stops (a late answer must not set its place).
       if (changed.get('scenario') !== undefined) this.#cancelLocate();
       this._view = lastView[sc] || (sc === 'mosaic' ? 'all' : 'swipe');
-      if (changed.get('scenario') !== undefined && sc !== 'trail' && this._point && !this._asking) this.#load();
+      if (changed.get('scenario') !== undefined && this._point && !this._asking) this.#load();
     } else if (changed.has('_view')) lastView[sc] = this._view;
     if (changed.has('open') && this.open != null) {
       plantSeen(this.open);
@@ -652,6 +658,7 @@ export class GfDiscover extends LitElement {
     this.toggleAttribute('opened', this.open != null);
   }
   updated() {
+    this.#sayStep();
     // The first match's window: modal, a step in history (Back closes it, as the button does).
     if (this._match) openModal(/** @type {HTMLDialogElement | null} */ (this.renderRoot.querySelector('dialog.match')));
     this.#hintSwipe();
@@ -674,6 +681,21 @@ export class GfDiscover extends LitElement {
     this.#loadHighlight(key, card, scope);
   }
   #hlFor = '';
+
+  /** The step of the mini-app it is on (in a box): the start, how far (the map), the cards. */
+  get #phase() { return !this._point ? 'start' : this._asking || (!this._cards && !this._loading && !this._error) ? 'map' : 'cards'; }
+  /** In a box: the step it is on, said each time it changes. */
+  #sayStep() {
+    if (!this.boxed) return;
+    const said = this.#phase + ':' + this.#guided;
+    if (said === this.#said) return;
+    this.#said = said;
+    this.dispatchEvent(new CustomEvent('ma-step', { detail: { step: this.#phase, ownBar: this.#guided }, bubbles: true, composed: true }));
+  }
+  #said = '';
+
+  /** Its address with the plant `plant` open (none: null): Découvrir's, or the box's. @param {number | null} plant */
+  #url(plant) { return this.boxed ? href.app(this.boxed, this.#phase, plant) : href.discover(plant, this.scenario); }
 
   /** The zone chosen, in sight in its row (scrolled sideways on a touch screen): a row drawn again starts at its left. */
   #showScope() {
@@ -753,7 +775,7 @@ export class GfDiscover extends LitElement {
     this.#adminFor = '';
     // The start page (#/) shows Découvrir only until Flore comes: the discovery gets its own address, so a tab
     // arriving midway does not take the screen away.
-    if (parse(location.hash).name !== 'discover') { replaceHash(href.discover(null, this.scenario)); dispatchEvent(new HashChangeEvent('hashchange')); }
+    if (!this.boxed && parse(location.hash).name !== 'discover') { replaceHash(href.discover(null, this.scenario)); dispatchEvent(new HashChangeEvent('hashchange')); }
     setDiscoverPoint(point, place);
     this._cards = null;
     this._asking = true;
@@ -830,15 +852,14 @@ export class GfDiscover extends LitElement {
   #openPlant(id, ids) {
     this._sheetIds = ids || (this._cards || []).map(c => c.plant.id);
     this.#openedHere = true;
-    openView(href.discover(id, this.scenario));
+    openView(this.#url(id));
   }
   /** The plant was opened from the list (Back returns to it), not by a link. */
   #openedHere = false;
 
   #close() {
-    // The Parcours: its plants open by a link of its list — Back returns to it.
-    if (depth() > 0 && (this.#openedHere || scenarioOf(this.scenario).key === 'trail')) history.back();
-    else openView(href.discover(null, this.scenario));
+    if (depth() > 0 && this.#openedHere) history.back();
+    else openView(this.#url(null));
   }
 
   /** @param {number} dir */
@@ -848,7 +869,7 @@ export class GfDiscover extends LitElement {
     const next = list[at + dir];
     if (!next) return;
     if (this._view === 'all' && at + dir >= this._shown) this._shown = at + dir + 1;
-    replaceHash(href.discover(next.plant.id, this.scenario));
+    replaceHash(this.#url(next.plant.id));
     this.open = next.plant.id;
   }
 
@@ -868,9 +889,6 @@ export class GfDiscover extends LitElement {
   // ── Render ────────────────────────────────────────────────────────────
 
   render() {
-    // Parcours botanique: its own little app (the place, the search, the plants added, their map); a plant of it
-    // opens here, over it — never in Flore.
-    if (scenarioOf(this.scenario).key === 'trail') return html`<gf-trail></gf-trail>${this.open != null ? this.#plantSheet() : nothing}`;
     const guided = this.#guided;
     return html`${!this._point ? this.#welcome() : guided ? this.#guidedView() : this._asking || (!this._cards && !this._loading && !this._error) ? this.#distance() : this.#list()}
       <p class="visually-hidden" role="status">${this._said || ''}</p>
@@ -1795,10 +1813,10 @@ export class GfDiscover extends LitElement {
     const name = at >= 0 ? list[at].plant.vernacularNames?.[0] || list[at].plant.scientificName : this._openName || '';
     return html`<section class="sheet" aria-label="Plante" @touchstart=${this.#touchStart} @touchend=${this.#touchEnd}>
       <div class="sheet-head">
-        <button class="icon-btn" type="button" aria-label=${scenarioOf(this.scenario).key === 'trail' ? 'Retour au parcours' : 'Retour aux plantes autour'} title="Retour (Échap)" @click=${() => this.#close()}>${icon('arrow-left')}</button>
+        <button class="icon-btn" type="button" aria-label="Retour aux plantes autour" title="Retour (Échap)" @click=${() => this.#close()}>${icon('arrow-left')}</button>
         <strong>${name || 'Plante'}</strong>
       </div>
-      <gf-plant-detail embedded plant-id=${this.open} view="epure" ?scoped=${scenarioOf(this.scenario).key === 'trail'}></gf-plant-detail>
+      <gf-plant-detail embedded plant-id=${this.open} view="epure" ?scoped=${Boolean(this.boxed)}></gf-plant-detail>
       ${at >= 0 ? html`<nav class="pager" aria-label="Plantes autour">
         <button class="secondary prev" type="button" ?disabled=${at <= 0} @click=${() => this.#step(-1)}>${icon('chevron-left')} Préc.</button>
         <span>${at + 1} / ${list.length}</span>

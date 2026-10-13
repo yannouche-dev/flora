@@ -38,7 +38,13 @@ test('parse : chaque écran de l’app et ses paramètres', () => {
   assert.deepEqual(parse('#/plant/128268?pane=media&i=2'), { name: 'plant', id: 128268, pane: 'media', at: 2 });
   assert.deepEqual(parse('#/plant/1?media=3'), { name: 'plant', id: 1, pane: 'media', at: 3 }, 'ancien lien ?media=');
   assert.equal(parse('#/plant/1?pane=<script>').pane, null);
-  assert.deepEqual(parse('#/discover?s=trail'), { name: 'discover', plant: null, scenario: 'trail' });
+  assert.deepEqual(parse('#/discover?s=harvest'), { name: 'discover', plant: null, scenario: 'harvest' });
+  // Rencontres and the Parcours are mini-apps: their old addresses open them.
+  assert.deepEqual(parse('#/discover?s=trail'), { name: 'app', id: 'parcours', step: null, plant: null });
+  assert.deepEqual(parse('#/discover?s=meet&p=12'), { name: 'app', id: 'rencontres', step: null, plant: 12 });
+  assert.deepEqual(parse('#/app/parcours/walk?p=3'), { name: 'app', id: 'parcours', step: 'walk', plant: 3 });
+  assert.equal(parse('#/app/Parcours').name, 'not-found');
+  assert.equal(href.app('rencontres', 'cards', 7), '#/app/rencontres/cards?p=7');
   assert.equal(parse('#/discover?s=../x').scenario, null);
   assert.deepEqual(parse('#/collection/new?kind=list'), { name: 'spot-new', plant: null, kind: 'list', at: null });
   assert.deepEqual(parse('#/spot/new?at=48.85,2.35').at, [2.35, 48.85], 'ancien lien spot/');

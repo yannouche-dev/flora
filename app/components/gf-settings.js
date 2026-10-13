@@ -2,7 +2,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { lastSearchHash } from '../core/query.js';
 import { href } from '../core/router.js';
-import { setHarvestMode, setKingMode, setMode, StoreController } from '../core/store.js';
+import { setHarvestMode, setKingMode, setMode, setShowSteps, StoreController } from '../core/store.js';
 import { MODE_ICON_CHOICES, modeLabel } from '../core/modes.js';
 import { createMode, deleteMode, editMode } from '../core/mode-admin.js';
 import './gf-mode-switch.js';
@@ -43,6 +43,9 @@ export class GfSettings extends LitElement {
   };
 
   static styles = [ui, css`
+    .steps-choice { display: grid; gap: 6px; margin: 4px 0 12px; padding: 10px 14px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius); }
+    .steps-choice legend { padding: 0 4px; font-weight: 600; }
+    .steps-choice label { display: flex; align-items: center; gap: 8px; min-height: 32px; }
     .mode-list { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
     .mode-item { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-sm); background: var(--gf-surface); }
     .mode-item .mode-icon { display: inline-grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--gf-accent-soft); color: var(--gf-accent); }
@@ -493,7 +496,19 @@ export class GfSettings extends LitElement {
       <p class="muted">${on ? 'La découverte guidée est en cours : les onglets arrivent à mesure qu’ils servent, avec une astuce à la fois.'
         : 'Tous les outils sont là. La découverte guidée (Découvrir, une astuce à la fois, les onglets qui arrivent un à un) peut être refaite.'}</p>
       <p>${on ? html`<button class="secondary" type="button" @click=${() => finishDiscover()}>Tout montrer maintenant</button>`
-        : html`<button class="secondary" type="button" @click=${() => { restartDiscover(); openView('#/discover'); }}>Recommencer la découverte</button>`}</p>`;
+        : html`<button class="secondary" type="button" @click=${() => { restartDiscover(); openView('#/discover'); }}>Recommencer la découverte</button>`}</p>
+      ${this.#showSteps()}`;
+  }
+
+  /** « Afficher les étapes » of the mini-apps (Rencontres, Parcours…): while discovering one, always, never. */
+  #showSteps() {
+    const value = this.#store.state.showSteps;
+    const choices = /** @type {const} */ ([['auto', 'Pendant la découverte', 'jusqu’à la fin d’une première partie'], ['on', 'Toujours', ''], ['off', 'Jamais', 'chaque mini-application s’ouvre en entier']]);
+    return html`<fieldset class="steps-choice">
+      <legend>Afficher les étapes des mini-applications</legend>
+      ${choices.map(([key, label, note]) => html`<label><input type="radio" name="show-steps" value=${key} .checked=${value === key}
+        @change=${() => setShowSteps(key)} /> ${label}${note ? html` <small class="muted">(${note})</small>` : nothing}</label>`)}
+    </fieldset>`;
   }
   render() {
     const { meta, offline } = this.#store.state;
