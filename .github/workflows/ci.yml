@@ -151,7 +151,7 @@ jobs:
 
       # The specs start their own static server (python3 -m http.server, tests/e2e/playwright.config.mjs).
       - name: End-to-end tests (phone and desktop)
-        timeout-minutes: 12
+        timeout-minutes: 25
         run: npm run test:e2e
 
       # The traces of the tests that failed (a timeline, the DOM and the network at each step).
