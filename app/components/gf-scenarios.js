@@ -1,7 +1,6 @@
 // @ts-check
 // The film icon of the header (and of a mini-app's bar): the launcher. Its dialog holds the list of the ways to play
-// (gf-launcher, the same list as the Découvrir tab's page): the mini-apps first, then the scenarios still played in
-// Découvrir. A mini-app is played again from its own ⋯.
+// (gf-launcher, the same list as the Découvrir tab's page): the mini-apps. A mini-app is played again from its own ⋯.
 
 import { LitElement, html, css } from 'lit';
 import { icon } from '../core/icons.js';

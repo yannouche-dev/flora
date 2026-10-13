@@ -60,7 +60,7 @@ export function parse(hash) {
   // cards); a plant open there, over its cards.
   const was = path === 'discover' ? { meet: 'rencontres', trail: 'parcours', harvest: 'cueillette', mosaic: 'mosaique' }[params.get('s') || (params.has('p') ? 'meet' : '')] : undefined;
   if (was) return { name: 'app', id: was, step: was !== 'parcours' && params.has('p') ? 'cards' : null, plant: number('p') };
-  // « Découvrir »: the list of the ways to play (any other scenario: the list too).
+  // « Découvrir »: the list of the ways to play (any other scenario, Scientifique's old ?s=science among them: the list too).
   if (path === 'discover') return { name: 'discover' };
   return { name: 'not-found' };
 }
