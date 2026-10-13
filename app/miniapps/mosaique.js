@@ -17,7 +17,7 @@
 
 import { forgetMadeBy } from '../core/collections.js';
 import { defineMiniApp } from '../miniapp/define.js';
-import { aroundContext, aroundSteps, locate } from '../miniapp/kit/around.js';
+import { aroundColumns, aroundContext, aroundSteps, locate } from '../miniapp/kit/around.js';
 import { forgetGame } from '../miniapp/kit/session.js';
 
 export default defineMiniApp({
@@ -32,11 +32,9 @@ export default defineMiniApp({
   shared: ['Mes plantes (sauf les favoris ajoutés par ses matchs)', 'lieux', 'réglages'],
   context: aroundContext(),
   actions: { locate },
-  columns: [{ id: 'main', base: 'fill', min: 300, rank: 1, heavy: true, title: 'Mosaïque' }],
-  phone: { rows: [['main', '1fr']] },
+  ...aroundColumns('Mosaïque'),
   steps: aroundSteps('mosaic', {
-    map: [{ id: 'distance', use: 'distance', col: 'main', title: 'Distance', props: { view: 'all' } }],
-    drop: ['distance'],
-    cards: [{ id: 'list', use: 'aroundList', col: 'main', title: 'Mosaïque', props: { mosaic: true, heading: 'Mosaïque', view: 'all' } }]
+    map: [{ id: 'distance', use: 'distance', col: 'map', title: 'Carte', props: { view: 'all' } }],
+    cards: [{ id: 'list', use: 'aroundList', col: 'cards', title: 'Mosaïque', props: { mosaic: true, heading: 'Mosaïque', view: 'all' } }]
   })
 });

@@ -25,7 +25,8 @@ import { MODULES } from '../core/modules.js';
  * @typedef {{ id: string, base: number | 'fill', min: number, max?: number, rank: number, mergeInto?: string, heavy?: boolean, title?: string }} Column
  * @typedef {'top' | 'main' | 'tab' | 'sheet' | 'hide'} PhonePlace
  * @typedef {{ id: string, use?: string, col?: string, below?: string, tabWith?: string, blocks?: string[],
- *   phone?: PhonePlace, title?: string, props?: Record<string, unknown> }} Place
+ *   phone?: PhonePlace, title?: string, props?: Record<string, unknown>, when?: () => boolean }} Place   `when`: on screen only while
+ *   it says so (Rencontres' list, not during its guided first steps)
  * @typedef {{ label: string, icon?: string, to: string }} Choice
  * @typedef {{ id: string, label: string, about?: string, kind?: 'start' | 'grid' | 'screen',
  *   start?: (c: any, app: any) => import('../components/start-screen.js').StartSpec,

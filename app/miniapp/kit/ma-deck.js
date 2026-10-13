@@ -41,7 +41,8 @@ export class MaDeck extends LitElement {
     :host { display: block; }
     /* The deck: one card, the next under it; dragged, it leans and shows its stamp. */
     .deck-wrap { display: grid; justify-items: center; gap: 14px; }
-    .deck { position: relative; width: min(100%, 380px); aspect-ratio: 3 / 4.3; max-height: calc(100dvh - 300px); min-height: 360px; }
+    /* Its height: what its page gives it (--deck-max, --deck-min: the list fits its column), else the window's. */
+    .deck { position: relative; width: min(100%, 380px); aspect-ratio: 3 / 4.3; max-height: var(--deck-max, calc(100dvh - 300px)); min-height: var(--deck-min, 360px); }
     .swipe-card { position: absolute; inset: 0; border-radius: 18px; overflow: hidden; background: #2a3a2a; color: #fff; box-shadow: 0 12px 30px rgb(0 0 0 / 25%);
       touch-action: none; user-select: none; -webkit-user-select: none; cursor: grab; z-index: 2;
       transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1), filter 0.32s ease-out; }
