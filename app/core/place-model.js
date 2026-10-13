@@ -19,12 +19,17 @@
  * @property {Harvest[]} harvests        newest first
  * @property {[number, number] | null} coordinates   where this plant grows [lon, lat]; null outside places
  * @property {number | null} accuracy    GPS accuracy (m) when recorded
+ * @property {Altitude | null} altitude  the ground's altitude where it grows (none yet: asked of the IGN when online)
+ * @typedef {{ m: number | null, at: [number, number] }} Altitude   metres (RGE ALTI®; null: no data there) at the
+ *                                       point `at` — the altitude of that point only: moved, it is asked again
  * @typedef {'favorites' | 'list' | 'place'} CollectionKind
  * @typedef {object} PlaceProperties
  * @property {CollectionKind} kind
  * @property {string} name
  * @property {string} notes
  * @property {number | null} accuracy    GPS accuracy (m) when recorded
+ * @property {Altitude | null} altitude  the place's point's
+ * @property {boolean} [startedHere]     a parcours started where the walker stood: its point is the walk's first step
  * @property {string} createdAt
  * @property {string} updatedAt
  * @property {PlantEntry[]} plants
@@ -48,6 +53,18 @@ export const normalizeHarvests = list => (Array.isArray(list) ? list : [])
   .map(h => ({ date: String(h.date).slice(0, 10), quantity: text(h.quantity, 200), note: text(h.note, 1000) }))
   .sort((a, b) => b.date.localeCompare(a.date));
 
+/**
+ * The altitude kept with a position: only while it is the altitude of that very position (a plant or a place
+ * moved has its altitude asked again). @param {unknown} a @param {[number, number] | null} at @returns {Altitude | null}
+ */
+export function validAltitude(a, at) {
+  // A file or a link: the altitude alone, that of the position it comes with.
+  const v = typeof a === 'number' ? { m: a, at } : /** @type {any} */ (a);
+  if (!at || !v || typeof v !== 'object' || !Array.isArray(v.at) || v.at[0] !== at[0] || v.at[1] !== at[1]) return null;
+  if (v.m !== null && !(isNumber(v.m) && v.m > -500 && v.m < 9000)) return null;
+  return { m: v.m === null ? null : Math.round(v.m), at: [at[0], at[1]] };
+}
+
 /** 7 decimals ≈ 1 cm. @param {unknown} c @returns {[number, number] | null} */
 export function validCoordinates(c) {
   if (!Array.isArray(c) || !isNumber(c[0]) || !isNumber(c[1]) || Math.abs(c[1]) > 90 || Math.abs(c[0]) > 180) return null;
@@ -62,6 +79,7 @@ export function validCoordinates(c) {
  */
 export function normalizeEntry(e, fallbackDate, placeCoordinates = null) {
   const own = placeCoordinates ? validCoordinates(e?.coordinates) : null;
+  const coordinates = own || (placeCoordinates ? /** @type {[number, number]} */ ([placeCoordinates[0], placeCoordinates[1]]) : null);
   const plantId = isNumber(e?.plantId) ? e.plantId : null;
   return {
     // Entries from before occurrences had no id: one derived from the plant, the same at every read.
@@ -74,8 +92,9 @@ export function normalizeEntry(e, fallbackDate, placeCoordinates = null) {
     notes: text(e?.notes),
     addedAt: typeof e?.addedAt === 'string' ? e.addedAt : fallbackDate,
     harvests: normalizeHarvests(e?.harvests),
-    coordinates: own || (placeCoordinates ? [placeCoordinates[0], placeCoordinates[1]] : null),
-    accuracy: own && isNumber(e?.accuracy) ? e.accuracy : null
+    coordinates,
+    accuracy: own && isNumber(e?.accuracy) ? e.accuracy : null,
+    altitude: validAltitude(e?.altitude, coordinates)
   };
 }
 
@@ -151,6 +170,8 @@ export function normalizeCollection(feature) {
       // Format 1 notes belonged to the single plant; they now live on its entry.
       notes: Array.isArray(p.plants) ? text(p.notes) : '',
       accuracy: geometry && isNumber(p.accuracy) ? p.accuracy : null,
+      altitude: validAltitude(p.altitude, placePoint),
+      ...(geometry && p.startedHere === true ? { startedHere: true } : {}),
       createdAt,
       updatedAt: typeof p.updatedAt === 'string' ? p.updatedAt : now,
       plants,
