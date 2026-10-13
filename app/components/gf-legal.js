@@ -83,7 +83,7 @@ export class GfLegal extends LitElement {
     await db.clear('plantDetails').catch(() => {});
     forgetFailures();
     try {
-      for (const key of await caches.keys()) if (key.startsWith('geoflora-images-') || key === 'geoflora-tiles') await caches.delete(key);
+      for (const key of await caches.keys()) if (key.startsWith('geoflora-images') || key === 'geoflora-tiles') await caches.delete(key);
     } catch { /* no Cache Storage */ }
     this._done = 'Réponses, images et cartes gardées en cache effacées.';
   }
