@@ -1,6 +1,7 @@
 {
   "name": "geoflora-dev",
   "private": true,
+  "license": "MIT",
   "description": "Outils de développement de GeoFlora (l'app elle-même n'a ni dépendance ni build) : Playwright, pour le test de fumée. SheetJS, que lisent les scripts du jeu de données, est dans scripts/package.json.",
   "scripts": {
     "check": "bash tools/check.sh",
