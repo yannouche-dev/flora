@@ -182,8 +182,14 @@ test('Parcours : un parcours terminé avec ses plantes reste dans Mes plantes, l
   await list(page).getByRole('button', { name: 'Jouer : Parcours botanique' }).click();
   await play(page, 'parcours');
   expect(await walksNamed(page, 'Chemin du lavoir')).toEqual([{ origin: { app: 'parcours' }, from: null }]);
+  // A plant touched first (its occurrences lit), then « Terminer »: the recap, and it stays.
+  await page.locator('gf-trail .mine .pick').first().click();
   await page.locator('gf-trail .end').click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Parcours terminé' })).toBeVisible();
   await expect.poll(() => walksNamed(page, 'Chemin du lavoir')).toEqual([{ origin: null, from: { app: 'parcours' } }]);
+  // Still the recap once its promotion is written (no stale reload brings the walk back).
+  await page.waitForTimeout(800);
+  await expect(page.getByRole('heading', { level: 1, name: 'Parcours terminé' })).toBeVisible();
   const box = page.locator('gf-miniapp');
   await box.locator('.more summary').click();
   await box.locator('.menu').getByRole('button', { name: 'Rejouer' }).click();

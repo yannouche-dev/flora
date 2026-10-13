@@ -654,9 +654,11 @@ export class GfTrail extends LitElement {
    */
   async #end() {
     await this.#flushName();
-    if (this._trail?.properties.plants.length) await promotePlace(this._trail.id);
+    const ended = this._trail;
     write(KEY, null);
-    write(DONE, this._trail?.id ?? null);
+    write(DONE, ended?.id ?? null);
+    // Promoted once no longer under way: the reload its change brings (spotEvents) finds the recap, not the walk.
+    if (ended?.properties.plants.length) promotePlace(ended.id);
     this.#stopGeo?.(); this.#stopGeo = null; this.#waitGeo?.(); this.#waitGeo = null;
     this._done = this._trail;
     this._trail = null; this._q = ''; this._hits = []; this._sel = null; this._selEntry = null; this._peek = false; this._toast = null;
