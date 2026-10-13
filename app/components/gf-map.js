@@ -14,12 +14,14 @@ import { protectedAreasIn } from '../core/protected.js';
 import { href } from '../core/router.js';
 import { safeUrl } from '../core/safe-url.js';
 import { gbifTileUrl } from '../core/sources.js';
-import { creditText } from '../core/credit.js';
 import './gf-map-panel.js';
 import './gf-map-search.js';
 import './gf-point-card.js';
 import { icon, iconHref, iconMarkup } from '../core/icons.js';
 import { inMiniApp } from '../miniapp/quiet-links.js';
+import { cancelImages, chosenGroupMarker, chosenMarker, elem, fadeImg, leafGlyph, leafMarker, markClasses, obsCard, photoMarker, ringElement, speciesKey } from './map-style.js';
+
+/** @typedef {import('./map-style.js').MarkerSpec} MarkerSpec */
 
 const STYLESHEETS = [
   new URL('../../vendor/leaflet.css', import.meta.url).href,
@@ -61,145 +63,19 @@ function pinIcon(spot, selected, movable = false) {
   return placeIconOf(color, spot.properties.plants.length, classes);
 }
 
-/**
- * An observation around (Découvrir) without a photo: a small leaf in a disc, popping in after `delay` ms.
- * @param {number} delay
- */
-function leafIcon(delay) {
-  return L.divIcon({
-    className: 'gf-obs-leaf',
-    iconSize: [22, 22],
-    iconAnchor: [11, 11],
-    html: `<span class="pop" style="animation-delay:${delay}ms">${iconMarkup('leaf-fill')}</span>`
-  });
-}
+/** A marker of the map style (map-style.js: renderer-agnostic) as a Leaflet icon, anchored at its middle. @param {MarkerSpec} d */
+const divIcon = d => L.divIcon({ className: d.className, iconSize: d.size, iconAnchor: [d.size[0] / 2, d.size[1] / 2], html: d.html });
+/** @param {number} delay */
+const leafIcon = delay => divIcon(leafMarker(delay));
+/** @param {string} photo @param {number} delay */
+const photoIcon = (photo, delay) => divIcon(photoMarker(photo, delay));
+/** @param {string | null | undefined} photo @param {number} delay @param {number} [size] @param {string} [extra] */
+const chosenIcon = (photo, delay, size, extra) => divIcon(chosenMarker(photo, delay, size, extra));
+/** @param {string} photo @param {number} n @param {number} size @param {boolean} [still] */
+const chosenGroupIcon = (photo, n, size, still) => divIcon(chosenGroupMarker(photo, n, size, still));
 
-/**
- * An observation around with its photo (Découvrir): popping in after `delay` ms, its leaf first, then the plant's
- * thumbnail in a ring once it has loaded.
- * @param {string} photo @param {number} delay
- */
-function photoIcon(photo, delay) {
-  const pop = elem('span', 'pop');
-  pop.style.animationDelay = delay + 'ms';
-  pop.append(leafGlyph(), fadeImg(photo, { loading: 'lazy' }));
-  return L.divIcon({ className: 'gf-obs-leaf gf-obs-photo', iconSize: [30, 30], iconAnchor: [15, 15], html: pop });
-}
-
-/** The leaf a plant's badge shows until its photo has loaded (and for good without one). */
-function leafGlyph() {
-  const glyph = elem('span', 'glyph');
-  // eslint-disable-next-line no-unsanitized/property -- the markup of a bundled icon, no data in it
-  glyph.innerHTML = iconMarkup('leaf-fill');
-  return glyph;
-}
-
-/**
- * A badge's photo: shown once it has loaded (a fade), over the leaf; gone if it fails (the leaf stays). Every plant
- * photo of the map comes through here: with the « Photos en ligne » module off, none is loaded (the leaf stays).
- * @param {string} src @param {{ loading?: 'lazy' | 'eager', decoding?: 'async' | 'sync' | 'auto' }} [props]
- * @returns {Node}
- */
-function fadeImg(src, props = {}) {
-  if (!moduleOn('photos')) return document.createTextNode('');
-  const img = dropImg(src, props);
-  img.classList.add('gf-fade');
-  // Already there (cached): no fade, at once.
-  if (img.complete && img.naturalWidth) img.classList.add('in');
-  else img.addEventListener('load', () => img.classList.add('in'), { once: true });
-  return img;
-}
-
-/**
- * The plant chosen (Découvrir's plant in view, the species picked « Autour », a value touched in a plant's sheet):
- * its photo, large, in a pink and gold ring, bouncing in after `delay` ms with a ripple as it lands. Its leaf
- * shows under the photo until it comes, and stays when there is none (or it fails).
- * @param {string | null | undefined} photo @param {number} delay @param {number} [size] @param {string} [extra] more classes
- */
-function chosenIcon(photo, delay, size = 44, extra = '') {
-  const pop = elem('span', 'pop');
-  pop.style.setProperty('--d', delay + 'ms');
-  pop.append(leafGlyph());
-  if (photo) pop.append(fadeImg(photo, { decoding: 'async' }));
-  return L.divIcon({ className: `gf-obs-leaf hl chosen ${extra}`.trim(), iconSize: [size, size], iconAnchor: [size / 2, size / 2], html: pop });
-}
-
-/**
- * Many observations of the plant chosen, together (a wider scope): its photo in a disc sized by their number, the
- * count on a badge. `still`: drawn again at another zoom, no entrance.
- * @param {string} photo @param {number} n @param {number} size @param {boolean} [still]
- */
-function chosenGroupIcon(photo, n, size, still = false) {
-  const g = elem('span', 'g');
-  const ph = elem('span', 'ph');
-  ph.append(leafGlyph(), fadeImg(photo, { decoding: 'async' }));
-  g.append(ph, elem('b', 'n', n > 999 ? Math.round(n / 1000) + 'k' : String(n)));
-  return L.divIcon({ className: 'gf-occ-group gf-occ-group-hl photo' + (still ? ' still' : ''), iconSize: [size, size], iconAnchor: [size / 2, size / 2], html: g });
-}
-
-/**
- * Which plant a point is, to light its kin (the other points of the same species): its binomial first — the same
- * key whatever the source (iNaturalist, GBIF, the plants of places) —, else its taxon.
- * @param {any} p @returns {string | null}
- */
-const speciesKey = p => {
-  const binomial = String(p?.sci || '').trim().split(/\s+/).slice(0, 2).join(' ').toLowerCase();
-  return binomial ? 's:' + binomial : p?.taxonId != null ? 't:' + p.taxonId : null;
-};
-
-/**
- * The small plant card shown over an observation: its photo and its credit (author, licence, source), its names,
- * when and where. Built as nodes, the texts as text: names and places come from iNaturalist / GBIF, never parsed
- * as HTML.
- * @param {{ title: string, common?: string | null, sci?: string, photo?: string | null, credit?: import('../core/credit.js').Credit | null,
- *   date?: string | null, place?: string | null }} p
- */
-function obsCard(p) {
-  const big = p.photo ? p.photo.replace('/square.', '/small.') : null;
-  const when = p.date ? new Date(p.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
-  const card = elem('div', 'gf-obs-card'), t = elem('div', 't');
-  if (big) card.append(fadeImg(big));
-  t.append(elem('b', '', p.common || p.sci || p.title));
-  if (p.common && p.sci) t.append(elem('i', '', p.sci));
-  if (when || p.place) t.append(elem('small', '', [when, p.place].filter(Boolean).join(' · ')));
-  if (big && p.credit && moduleOn('photos')) t.append(elem('small', 'credit', 'Photo : ' + creditText(p.credit)));
-  card.append(t);
-  return card;
-}
-
-/** An element, its text set as text (never HTML). @param {string} tag @param {string} [className] @param {string} [text] */
-function elem(tag, className = '', text = '') {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text) node.textContent = text;
-  return node;
-}
-
-/**
- * An image that leaves when it fails (offline, gone): a listener, not an inline `onerror`, which the CSP of
- * index.html forbids. `loading` is set before `src`, so a lazy image waits until it is near the view.
- * @param {string} src @param {{ loading?: 'lazy' | 'eager', decoding?: 'async' | 'sync' | 'auto' }} [props]
- */
-function dropImg(src, props = {}) {
-  const img = Object.assign(document.createElement('img'), { alt: '', referrerPolicy: 'no-referrer', ...props });
-  img.addEventListener('error', () => img.remove(), { once: true });
-  img.src = src;
-  return img;
-}
-
-/**
- * The photos still loading under `root` (an element, or a layer group's markers) stop: a marker taken away keeps its
- * request in the browser's queue otherwise (a few at a time per host), and the photos of the points shown next wait
- * behind those of points no longer there.
- * @param {Element | L.LayerGroup | null} root
- */
-function cancelImages(root) {
-  if (!root) return;
-  const els = root instanceof Element ? [root] : root.getLayers().map(l => /** @type {any} */ (l).getElement?.()).filter(Boolean);
-  for (const el of els) {
-    for (const img of el.querySelectorAll('img')) if (!img.complete) img.removeAttribute('src');
-  }
-}
+/** The photos still loading in a layer group's markers stop (map-style.js#cancelImages). @param {L.LayerGroup} group */
+const cancelLayerImages = group => { for (const l of group.getLayers()) { const el = /** @type {any} */ (l).getElement?.(); if (el) cancelImages(el); } };
 
 /**
  * @typedef {{ center: string, latlng: L.LatLng, target: number, ring: { x: number, y: number, r: number } | null,
@@ -1164,7 +1040,7 @@ export class GfMap extends LitElement {
       map.options.zoomSnap = 1;
       for (const h of ['dragging', 'touchZoom', 'doubleClickZoom', 'scrollWheelZoom', 'boxZoom', 'keyboard']) /** @type {any} */ (map)[h]?.enable();
     }
-    cancelImages(layer);
+    cancelLayerImages(layer);
     layer.clearLayers();
     if (!area) return;
     const [lon, lat] = area.center;
@@ -1230,7 +1106,7 @@ export class GfMap extends LitElement {
     let s = this.#smooth;
     const first = !s || s.center !== lon + ',' + lat;
     if (!s || first) {
-      cancelImages(layer);
+      cancelLayerImages(layer);
       layer.clearLayers();
       s = this.#smooth = { center: lon + ',' + lat, latlng: L.latLng(lat, lon), target: area.radius, ring: area.ring, points: null, dots: new Map() };
       // Any zoom (the distance fills the ring exactly); the view is the ring's.
@@ -1289,38 +1165,21 @@ export class GfMap extends LitElement {
     if (!s) return;
     const m = marks || {};
     for (const dot of s.dots.values()) {
-      const el = /** @type {any} */ (dot).getElement?.(), t = /** @type {any} */ (dot).gfPoint?.taxonId;
+      const el = /** @type {any} */ (dot).getElement?.();
       if (!el) continue;
-      el.classList.toggle('gf-top', t != null && t === m.top);
-      el.classList.toggle('gf-matched', t != null && Boolean(m.matched?.includes(t)));
-      el.classList.toggle('gf-passed', t != null && Boolean(m.passed?.includes(t)));
+      for (const [cls, on] of Object.entries(markClasses(/** @type {any} */ (dot).gfPoint, m))) el.classList.toggle(cls, on);
     }
   }
 
-  /** The ring: an SVG circle (its shadow under it) in a pane of its own, over the map and under the points. */
+  /** The ring (map-style.js#ringElement) in a pane of its own, over the map and under the points; held in place. */
   #drawRing() {
     const map = /** @type {L.Map} */ (this.#map), ring = this.#smooth?.ring;
     const pane = map.getPane('gfRing') || map.createPane('gfRing');
     pane.style.zIndex = '450';
     pane.style.pointerEvents = 'none';
     if (!ring) { pane.replaceChildren(); return; }
-    const NS = 'http://www.w3.org/2000/svg', pad = 8, size = 2 * (ring.r + pad);
-    let svg = /** @type {SVGSVGElement | null} */ (pane.querySelector('svg.gf-ring'));
-    if (!svg) {
-      svg = /** @type {SVGSVGElement} */ (document.createElementNS(NS, 'svg'));
-      svg.setAttribute('class', 'gf-ring');
-      svg.setAttribute('aria-hidden', 'true');
-      for (const cls of ['gf-perim-shadow', 'gf-area gf-area-glow']) {
-        const c = document.createElementNS(NS, 'circle');
-        c.setAttribute('class', cls);
-        svg.append(c);
-      }
-      pane.append(svg);
-    }
-    svg.setAttribute('width', String(size));
-    svg.setAttribute('height', String(size));
-    svg.style.cssText = `position:absolute;overflow:visible;left:${ring.x - ring.r - pad}px;top:${ring.y - ring.r - pad}px`;
-    for (const c of svg.querySelectorAll('circle')) { c.setAttribute('cx', String(ring.r + pad)); c.setAttribute('cy', String(ring.r + pad)); c.setAttribute('r', String(ring.r)); }
+    const svg = ringElement(ring, /** @type {SVGSVGElement | null} */ (pane.querySelector('svg.gf-ring')));
+    if (!svg.isConnected) pane.append(svg);
     // The map's panes move as a whole only when the view is reset (never dragged here): the ring held in place.
     const at = L.DomUtil.getPosition(/** @type {HTMLElement} */ (map.getPane('mapPane')));
     svg.style.translate = `${-at.x}px ${-at.y}px`;

@@ -165,6 +165,7 @@ const SHELL = [
   'app/components/gf-facet.js',
   'app/components/gf-filter-panel.js',
   'app/components/gf-map.js',
+  'app/components/map-style.js',
   'app/components/gf-sheet-map.js',
   'app/components/gf-map-page.js',
   'app/components/gf-plant-card.js',

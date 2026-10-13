@@ -25,6 +25,7 @@ import { ui } from '../../styles/ui.js';
 import { DISTANCES, distanceAt, distLabel, distMood, distWords, nameOf } from './cards.js';
 import { sessionOf } from './session.js';
 import '../../components/gf-map.js';
+import { ringAt } from '../../components/map-style.js';
 
 /** The stops labelled under the slider when it is narrow (all of them when there is room). */
 const MAIN_STOPS = new Set([200, 1000, 5000, 50000]);
@@ -129,12 +130,6 @@ export class MaDistance extends LitElement {
     :host([band][folded]) gf-map { display: none; }
     :host([band][folded]) .distance-wrap { position: static; }
     :host([band][folded]) .chipbar { margin: 6px auto; }
-    /* The map's points, lit (gf-map area.marks): the card on top softly; the plants passed dimmed; the matches ringed
-       in pink; the plant chosen's own (its highlight) brighter while its photos' head is hovered. */
-    gf-map .gf-obs-leaf.gf-top .pop { box-shadow: 0 0 0 2px #fff, 0 0 0 5px #f5c542, 0 2px 8px rgb(0 0 0 / 40%); scale: 1.15; }
-    gf-map .gf-obs-leaf.gf-passed:not(.gf-top) .pop { opacity: 0.35; filter: grayscale(0.7); }
-    gf-map .gf-obs-leaf.gf-matched .pop { box-shadow: 0 0 0 2px #fff, 0 0 0 5px #e0245e, 0 2px 8px rgb(0 0 0 / 40%); }
-    gf-map.glow .gf-obs-leaf.hl.chosen .pop { scale: 1.3; box-shadow: 0 0 0 3px #ffd166, 0 0 18px 6px rgb(255 209 102 / 85%), 0 5px 14px rgb(0 0 0 / 45%); }
     @media (prefers-reduced-motion: reduce) {
       .dist output, .dist .mood, .dist .obs > span, .dist .spin { animation: none; }
       .range .rail, .range .stop, .range .mark { transition: none; }
@@ -203,9 +198,7 @@ export class MaDistance extends LitElement {
     if (!wrap || !card || !wrap.isConnected) return;
     const box = wrap.getBoundingClientRect(), top = card.getBoundingClientRect().top - box.top;
     if (!box.width || !box.height) return;
-    const ring = this.#compact
-      ? { x: Math.round(box.width / 2), y: Math.round(top / 2), r: Math.round(Math.max(24, Math.min(0.44 * top, 0.42 * box.width))) }
-      : { x: Math.round(box.width / 2), y: Math.round(Math.max(0.25 * box.height, top - 0.2 * box.height)), r: Math.round(Math.min(0.54 * box.height, 0.42 * box.width)) };
+    const ring = ringAt({ width: box.width, height: box.height, top, chip: this.#compact });
     const was = this._ring;
     if (!was || Math.abs(was.x - ring.x) > 1 || Math.abs(was.y - ring.y) > 1 || Math.abs(was.r - ring.r) > 1) this._ring = ring;
   }
