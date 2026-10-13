@@ -30,7 +30,7 @@ step 'Modules parse (ES modules)'
 # Each file parsed as a module, whatever its extension and the Node release: a script parse misses what only a module
 # rejects (an import clashing with a declaration), and Node's guess from the syntax lets such a file through.
 count=0
-for file in sw.js vendor/*.js lib/*.mjs scripts/*.mjs tools/*.mjs tests/*.mjs $(find app -name '*.js' | sort); do
+for file in sw.js vendor/*.js lib/*.mjs scripts/*.mjs tools/*.mjs $(find tests -name '*.mjs' | sort) $(find app -name '*.js' | sort); do
   count=$((count + 1))
   node --input-type=module --check < "$file" || fail "::error file=$file::$file does not parse"
 done

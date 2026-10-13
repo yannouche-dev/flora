@@ -1,0 +1,80 @@
+{
+  "generatedAt": "2026-01-01T00:00:00.000Z",
+  "sha256": "60794e87a2cfc959d73fa3ba399393c792447a1f1f65641084cd3a9838b476e6",
+  "source": "TAXREF v18 official PatriNat archive",
+  "sourceUrl": "https://assets.patrinat.fr/files/referentiel/TAXREF_v18_2025.zip",
+  "taxrefVersion": "18.0",
+  "criteria": {
+    "rank": "ES",
+    "acceptedNamesOnly": true,
+    "group": "Plantes vasculaires",
+    "territory": "France métropolitaine (FR)",
+    "statuses": [
+      "P",
+      "N",
+      "E",
+      "S",
+      "C",
+      "I",
+      "J"
+    ]
+  },
+  "taxrefRows": 708685,
+  "taxvernRows": 82966,
+  "frenchVernacularRows": 43642,
+  "attachedVernacularRows": 9882,
+  "plants": 300,
+  "families": 69,
+  "genera": 190,
+  "sources": {
+    "baseflor": {
+      "url": "https://api.tela-botanica.org/service:cumulus:doc/c6f031b23d74373071094f2b1347b5813a3fc2c7",
+      "license": "CC BY-SA 2.0 (données), ODbL 1.0 (base) — Ph. Julve, Tela Botanica",
+      "rows": 8292,
+      "matched": 3879,
+      "fetchedAt": "2026-10-13T00:39:50.239Z"
+    },
+    "bdcStatuts": {
+      "url": "https://assets.patrinat.fr/files/referentiel/BDC.zip",
+      "license": "INPN — Base de connaissance Statuts (PatriNat, OFB-MNHN-CNRS), données ouvertes",
+      "rows": 447664,
+      "plants": 3772,
+      "byType": {
+        "PN": 389,
+        "PR": 1448,
+        "PD": 504,
+        "REGL": 1125,
+        "LRN": 719,
+        "LRR": 2623
+      },
+      "fetchedAt": "2026-10-13T00:40:01.828Z"
+    }
+  },
+  "thumbnails": {
+    "source": "Wikidata P18 + Wikimedia Commons",
+    "withThumbnail": 5680,
+    "withoutThumbnail": 2065,
+    "coveragePercent": 73.34,
+    "withWikidata": 6247,
+    "bySource": {
+      "Wikimedia Commons": 4469,
+      "iNaturalist": 460,
+      "GBIF": 751
+    },
+    "wikidataBulk": {
+      "checked": 2065,
+      "matched": 641,
+      "freeP18ImagesAdded": 0
+    },
+    "fallbacks": {
+      "gbif": true,
+      "inaturalist": true,
+      "acceptedLicenses": [
+        "CC0",
+        "CC BY",
+        "CC BY-SA"
+      ]
+    }
+  },
+  "fixture": "tests/fixtures/build-fixture.mjs: a sample of data/plants.json, for the tests only"
+}
