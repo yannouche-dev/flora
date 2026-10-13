@@ -3,8 +3,9 @@
 
 import { PlantSources } from '../../lib/plant-sources.mjs';
 import { config } from '../config.js';
-import * as db from './db.js';
+import * as cache from './cache.js';
 import { appMode, moduleEvents, moduleOn, modulesSignature } from './modules.js';
+import { fetchJson } from './net.js';
 
 /** @returns {string | null} */
 export function getTrefleToken() {
@@ -29,7 +30,7 @@ const sourcesFor = mode => {
   const m = mode || appMode();
   let instance = instances.get(m);
   if (!instance) {
-    instance = new PlantSources({ trefleToken: getTrefleToken(), enabled: (/** @type {any} */ k) => moduleOn(k, m) });
+    instance = new PlantSources({ trefleToken: getTrefleToken(), enabled: (/** @type {any} */ k) => moduleOn(k, m), fetchJson });
     instances.set(m, instance);
   }
   return instance;
@@ -43,36 +44,15 @@ const key = (/** @type {string} */ kind, /** @type {number} */ id, /** @type {Mo
   return kind + ':' + id + (off ? '|off:' + off : '');
 };
 
-/** Requests in flight, shared so two components asking for the same plant hit the network once. */
-const pending = new Map();
+/** A result gathering several services, some of which failed (lib/plant-sources.mjs `unavailable`). @param {any} value */
+const degraded = value => Boolean(value?.unavailable?.length);
 
 /**
- * @template T
- * @param {string} key
- * @param {() => Promise<T>} loader
- * @returns {Promise<T>}
+ * A plant's remote data, cached for config.remoteTtl (core/cache.js: shared requests in flight, failures never stored,
+ * a degraded result kept a few minutes, an expired copy offline).
+ * @template T @param {string} key @param {() => Promise<T>} loader @param {AbortSignal} [signal] @returns {Promise<T>}
  */
-async function cached(key, loader) {
-  const hit = await db.get('plantDetails', key).catch(() => null);
-  if (hit && Date.now() - hit.fetchedAt < config.remoteTtl) return hit.value;
-
-  if (pending.has(key)) return pending.get(key);
-
-  const task = loader()
-    .then(async value => {
-      await db.put('plantDetails', { key, fetchedAt: Date.now(), value }).catch(() => {});
-      return value;
-    })
-    .catch(error => {
-      // Offline or API down: an expired cache entry is better than nothing.
-      if (hit) return hit.value;
-      throw error;
-    })
-    .finally(() => pending.delete(key));
-
-  pending.set(key, task);
-  return task;
-}
+const cached = (key, loader, signal) => cache.cached(key, loader, { ttl: config.remoteTtl, partial: degraded, signal });
 
 /**
  * Thumbnail for a list row: the one embedded in plants.json, otherwise a remote lookup.
@@ -82,7 +62,8 @@ async function cached(key, loader) {
  */
 export function thumbnail(plant, signal, mode) {
   if (plant.thumbnail?.url) return Promise.resolve(plant.thumbnail);
-  return cached(key('thumb', plant.id, mode), () => sourcesFor(mode).thumbnail(plant, { signal }));
+  // 'thumb2': 'thumb' kept null for a week when the services failed (audit STO-9); a failure is now thrown, not stored.
+  return cached(key('thumb2', plant.id, mode), () => sourcesFor(mode).thumbnail(plant, { signal }), signal);
 }
 
 /**
@@ -92,8 +73,9 @@ export function thumbnail(plant, signal, mode) {
  * @param {Mode} [mode]
  */
 export function details(plant, signal, mode) {
-  // 'details2': GBIF data is no longer in it (it comes part by part, below).
-  return cached(key('details2', plant.id, mode), () => sourcesFor(mode).details(plant, { signal }));
+  // 'details3': 'details2' held results of failed calls as « nothing found » for a week (audit STO-9, OPS-2); a
+  // degraded result (some services failed: `unavailable`) is now kept a few minutes only.
+  return cached(key('details3', plant.id, mode), () => sourcesFor(mode).details(plant, { signal }), signal);
 }
 
 /**
@@ -104,7 +86,7 @@ export function details(plant, signal, mode) {
  * @returns {Promise<{ all: number[], flowering: number[], fruiting: number[], taxonId: number, sourceUrl: string } | null>}
  */
 export function phenology(plant, signal, mode) {
-  return cached(key('phenology', plant.id, mode), () => sourcesFor(mode).phenology(plant, { signal }));
+  return cached(key('phenology', plant.id, mode), () => sourcesFor(mode).phenology(plant, { signal }), signal);
 }
 
 /** @param {any} plant */
@@ -130,7 +112,7 @@ export function wikipedia(plant, qid, signal, mode) {
     const article = claims.frwiki ? await sourcesFor(mode).wikipediaArticle(claims.frwiki, { signal }) : null;
     if (article) return { ...article, aliases, english };
     return aliases.length || english ? { url: null, extract: '', sections: [], aliases, english } : null;
-  });
+  }, signal);
 }
 
 /**
@@ -142,7 +124,7 @@ export function wikipedia(plant, qid, signal, mode) {
  */
 export function wikidataScience(plant, qid, signal, mode) {
   if (!qid) return Promise.resolve(null);
-  return cached(key('wikidata-science', plant.id, mode), () => sourcesFor(mode).wikidataScience(qid, { signal }));
+  return cached(key('wikidata-science', plant.id, mode), () => sourcesFor(mode).wikidataScience(qid, { signal }), signal);
 }
 
 // ── GBIF, part by part: each block asks only for what it shows ────────────────────────────────────────
@@ -152,7 +134,7 @@ export function wikidataScience(plant, qid, signal, mode) {
  * @param {any} plant @param {AbortSignal} [signal] @param {Mode} [mode]
  */
 export function gbifTaxon(plant, signal, mode) {
-  return cached(key('gbif-taxon', plant.id, mode), () => sourcesFor(mode).gbifTaxon(plant, { signal }));
+  return cached(key('gbif-taxon', plant.id, mode), () => sourcesFor(mode).gbifTaxon(plant, { signal }), signal);
 }
 
 /**
@@ -161,7 +143,7 @@ export function gbifTaxon(plant, signal, mode) {
  */
 export function gbifSpecies(plant, gbifKey, part, signal, mode) {
   if (!gbifKey) return Promise.resolve(null);
-  return cached(key('gbif-' + part, plant.id, mode), () => sourcesFor(mode).gbifSpecies(gbifKey, part, { signal }));
+  return cached(key('gbif-' + part, plant.id, mode), () => sourcesFor(mode).gbifSpecies(gbifKey, part, { signal }), signal);
 }
 
 /**
@@ -170,7 +152,7 @@ export function gbifSpecies(plant, gbifKey, part, signal, mode) {
  */
 export function gbifStats(plant, gbifKey, signal, mode) {
   if (!gbifKey) return Promise.resolve(null);
-  return cached(key('gbif-stats', plant.id, mode), () => sourcesFor(mode).gbifOccurrenceStats(gbifKey, { signal }));
+  return cached(key('gbif-stats', plant.id, mode), () => sourcesFor(mode).gbifOccurrenceStats(gbifKey, { signal }), signal);
 }
 
 /**
@@ -180,7 +162,7 @@ export function gbifStats(plant, gbifKey, signal, mode) {
 export function gbifMedia(plant, gbifKey, kind, signal, mode) {
   if (!gbifKey) return Promise.resolve([]);
   // media3: records read again since their free-text fields are plain text (lib/plant-sources.mjs, audit SEC-2).
-  return cached(key('gbif-media3-' + kind, plant.id, mode), () => sourcesFor(mode).gbifOccurrenceMedia(gbifKey, kind, { signal }));
+  return cached(key('gbif-media3-' + kind, plant.id, mode), () => sourcesFor(mode).gbifOccurrenceMedia(gbifKey, kind, { signal }), signal);
 }
 
 /**
@@ -189,25 +171,25 @@ export function gbifMedia(plant, gbifKey, kind, signal, mode) {
  */
 export function inaturalistPhotos(plant, taxonId, signal, mode) {
   if (!taxonId) return Promise.resolve([]);
-  return cached(key('inat-photos', plant.id, mode), () => sourcesFor(mode).inaturalistPhotos(taxonId, { signal }));
+  return cached(key('inat-photos', plant.id, mode), () => sourcesFor(mode).inaturalistPhotos(taxonId, { signal }), signal);
 }
 
 /** @param {any} plant @param {number | null | undefined} gbifKey @param {AbortSignal} [signal] @param {Mode} [mode] */
 export function gbifLiterature(plant, gbifKey, signal, mode) {
   if (!gbifKey) return Promise.resolve(null);
-  return cached(key('gbif-literature', plant.id, mode), () => sourcesFor(mode).gbifLiterature(gbifKey, { signal }));
+  return cached(key('gbif-literature', plant.id, mode), () => sourcesFor(mode).gbifLiterature(gbifKey, { signal }), signal);
 }
 
 /** Title of a GBIF dataset (cached for every plant). @param {string} datasetKey @param {AbortSignal} [signal] @param {Mode} [mode] */
 export function gbifDatasetTitle(datasetKey, signal, mode) {
   if (!moduleOn('gbif', mode || appMode())) return Promise.resolve(null);
-  return cached('gbif-dataset:' + datasetKey, () => sourcesFor(mode).gbifDatasetTitle(datasetKey, { signal }));
+  return cached('gbif-dataset:' + datasetKey, () => sourcesFor(mode).gbifDatasetTitle(datasetKey, { signal }), signal);
 }
 
 /** Name of a region or département (GADM id). @param {string} gid @param {AbortSignal} [signal] @param {Mode} [mode] */
 export function gadmName(gid, signal, mode) {
   if (!moduleOn('gbif', mode || appMode())) return Promise.resolve(null);
-  return cached('gadm:' + gid, () => sourcesFor(mode).gadmName(gid, { signal }));
+  return cached('gadm:' + gid, () => sourcesFor(mode).gadmName(gid, { signal }), signal);
 }
 
 /**
@@ -227,7 +209,7 @@ export function gbifNear(gbifKey, point, radius, signal, mode, limit = 5) {
 export function gbifBounds(gbifKey, filter, signal, mode) {
   if (!gbifKey) return Promise.resolve(null);
   const id = Object.entries(filter).sort().map(([k, v]) => k + '=' + v).join('&');
-  return cached('gbif-bounds2:' + gbifKey + ':' + id, () => sourcesFor(mode).gbifOccurrenceBounds(gbifKey, filter, { signal }));
+  return cached('gbif-bounds2:' + gbifKey + ':' + id, () => sourcesFor(mode).gbifOccurrenceBounds(gbifKey, filter, { signal }), signal);
 }
 
 /**

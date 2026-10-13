@@ -124,6 +124,14 @@ const sources = new PlantSources({
 
 Trefle impose actuellement un token et une limite standard de 60 requêtes par minute. Pour une application publique, il est préférable de placer le token derrière un petit proxy si le quota doit être protégé.
 
+**Source indisponible — Réessayer.** Une source qui ne répond pas n'est plus prise pour une absence de donnée. Chaque bloc de la fiche (Descriptions, Noms, Occurrences, Interactions, Climat, Usages, Taxonomie, Identifiants…), le Calendrier et les infos d'un lieu (zones naturelles, plantes vues ici, pollens, climat) affichent « Source indisponible : GBIF (hors ligne | pas de réponse à temps | erreur 503 | réponse inattendue) — Réessayer » ; « Réessayer » redemande ce qui a échoué. Les messages « Aucune… » sont réservés aux réponses valides et vides, et un module coupé dans les Réglages reste « module désactivé » (rien n'est demandé). Un appel qui ne répond pas abandonne après 15 secondes : plus de « chargement… » sans fin sur un portail captif ou en zone blanche.
+
+Côté code (audit STO-7, STO-8, STO-9, OPS-2, QUA-6, ARC-14, PERF-15, STO-17) :
+
+- `app/core/net.js` : `fetchJson(url, { signal, headers, timeout, expect, allowEmpty })`, seul chemin des appels JSON distants : délai (15 s, corps compris, `AbortSignal.any` avec le signal de l'appelant), contrôle de forme minimal (`expect`, sinon `SchemaError`), erreurs typées (`SourceError.kind` : `offline`, `timeout`, `http`, `schema`, `network` ; `errorKind()` y ajoute `aborted` et `module-off`). `lib/plant-sources.mjs` le reçoit en option (`new PlantSources({ fetchJson })`) et nomme les services en échec (`unavailable`) au lieu de les lire comme « absent » ;
+- `app/core/cache.js` : le seul cache des réponses (store `plantDetails`), utilisé par `sources.js`, `geoservices.js`, `open-data.js`, `nearby.js`, `uses.js`, `protected.js`, `ign.js` : requêtes en vol partagées, une panne jamais enregistrée (cache négatif de 5 min, en mémoire seulement, oublié par « Réessayer »), un résultat dégradé jamais gardé plus de quelques minutes ni à la place d'une copie complète, une copie expirée en repli hors ligne (pas après une annulation). Chaque entrée garde sa durée de vie (`ttl`) ; une purge, une fois par jour après le démarrage et au repos, retire les entrées expirées depuis plus de 30 jours, puis les moins récemment utilisées au-delà de 4 000 entrées ou d'environ 40 Mo. Clés versionnées à dessein pour oublier les réponses de panne déjà gardées : `details3`, `thumb2`, `wikibooks2` ;
+- `app/core/source-state.js` : le message « Source indisponible — Réessayer » des blocs et des volets.
+
 ### Politique média
 
 Par défaut, GeoFlora préfère uniquement les médias dont la licence est clairement compatible avec une réutilisation libre :
@@ -205,6 +213,8 @@ app/
     query.js             requête (texte, filtres, tri) ↔ URL, recherches récentes
     highlight.js         surlignage insensible aux accents
     sources.js           PlantSources + cache IndexedDB persistant (7 jours)
+    net.js               fetchJson : délai, contrôle de forme, erreurs typées (hors ligne, délai, HTTP, forme)
+    cache.js             cache des réponses distantes : pannes jamais gardées, cache négatif court, purge LRU/TTL
     collections.js       favoris, listes et lieux (GeoJSON), saison, distances, export/import
     share.js             partage par lien (collections encodées dans l'URL)
     place-model.js       format d'une collection, migrations des anciens formats

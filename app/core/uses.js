@@ -8,8 +8,9 @@
 //  - Wikibooks (live, CC BY-SA): recipes in French and English.
 // Nothing here says a plant is edible: each line is a claim with its source.
 
-import * as db from './db.js';
+import * as cache from './cache.js';
 import { ModuleOffError, moduleOn } from './modules.js';
+import { fetchJson } from './net.js';
 import { wikimediaHeaders } from '../../lib/plant-sources.mjs';
 
 /** @typedef {import('./modules.js').Mode} Mode */
@@ -46,27 +47,12 @@ export async function safetyOf(plant) {
 
 /**
  * Wikibooks' API is told who asks (Api-User-Agent, lib/plant-sources.mjs); the query service is not.
- * @param {string} url @param {AbortSignal} [signal] @param {Record<string, string>} [headers]
+ * @param {string} url @param {AbortSignal} [signal] @param {Record<string, string>} [headers] @param {(data: any) => boolean} [expect]
  */
-async function json(url, signal, headers = {}) {
-  const response = await fetch(url, { signal, headers: { accept: 'application/json', ...wikimediaHeaders(url), ...headers } });
-  if (!response.ok) throw new Error(`${new URL(url).host} ${response.status}`);
-  return response.json();
-}
+const json = (url, signal, headers = {}, expect) => fetchJson(url, { signal, headers: { ...wikimediaHeaders(url), ...headers }, expect });
 
-/** @template T @param {string} key @param {number} ttl @param {() => Promise<T>} load @returns {Promise<T>} */
-async function cached(key, ttl, load) {
-  const hit = await db.get('plantDetails', key).catch(() => null);
-  if (hit && Date.now() - hit.fetchedAt < ttl) return hit.value;
-  try {
-    const value = await load();
-    await db.put('plantDetails', { key, fetchedAt: Date.now(), value }).catch(() => {});
-    return value;
-  } catch (error) {
-    if (hit && /** @type {Error} */ (error).name !== 'AbortError') return hit.value;
-    throw error;
-  }
-}
+/** Cached for `ttl` (core/cache.js: a failure is never stored). @template T @param {string} key @param {number} ttl @param {() => Promise<T>} load @returns {Promise<T>} */
+const cached = (key, ttl, load) => cache.cached(key, load, { ttl });
 
 /** Kinds of uses (Wikidata P366 values), to group them. */
 const FOOD = /nourriture|légume|fruit|épice|condiment|aliment|boisson|brassage|salade|infusion|tisane|aromat|food|vegetable|spice|edible|beverage|herb/i;
@@ -97,7 +83,7 @@ export async function wikidataUses(qid, signal, mode) {
               OPTIONAL { ?site schema:about ?val ; schema:isPartOf <https://fr.wikipedia.org/> } }
       UNION { ?taxon wdt:P4301 ?val . BIND("pfaf" AS ?kind) }
       SERVICE wikibase:label { bd:serviceParam wikibase:language "fr,en". } }`;
-    const data = await json('https://query.wikidata.org/sparql?format=json&query=' + encodeURIComponent(q), signal, { accept: 'application/sparql-results+json' });
+    const data = await json('https://query.wikidata.org/sparql?format=json&query=' + encodeURIComponent(q), signal, { accept: 'application/sparql-results+json' }, d => Array.isArray(d.results?.bindings));
     /** @type {WikidataUses} */
     const out = { uses: [], products: [], dishes: [], pfaf: null, qid };
     const id = (/** @type {string} */ uri) => uri.split('/').pop() || uri;
@@ -127,11 +113,12 @@ export async function wikidataUses(qid, signal, mode) {
  */
 export async function recipes(names, signal) {
   if (!moduleOn('wikibooks')) throw new ModuleOffError('wikibooks');
-  const key = 'wikibooks:' + [names.french, names.latin, names.english].filter(Boolean).join('|');
+  // 'wikibooks2': 'wikibooks' kept a failed search as « no recipe » for a month (audit STO-9).
+  const key = 'wikibooks2:' + [names.french, names.latin, names.english].filter(Boolean).join('|');
   return cached(key, 30 * DAY, async () => {
-    const search = (/** @type {string} */ host, /** @type {string} */ q, /** @type {number} */ ns) => json(`https://${host}/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&srnamespace=${ns}&srlimit=5&format=json&origin=*`, signal)
-      .then(d => (d.query?.search || []).map((/** @type {any} */ r) => ({ title: r.title, url: `https://${host}/wiki/${encodeURIComponent(r.title.replace(/ /g, '_'))}`, lang: host.slice(0, 2) })))
-      .catch(() => []);
+    const search = (/** @type {string} */ host, /** @type {string} */ q, /** @type {number} */ ns) => json(`https://${host}/w/api.php?action=query&list=search&srsearch=${encodeURIComponent(q)}&srnamespace=${ns}&srlimit=5&format=json&origin=*`, signal, {}, d => Array.isArray(d.query?.search))
+      .then(d => d.query.search.map((/** @type {any} */ r) => ({ title: r.title, url: `https://${host}/wiki/${encodeURIComponent(r.title.replace(/ /g, '_'))}`, lang: host.slice(0, 2) })));
+    // A failed search is thrown (never cached as « no recipe », audit STO-9).
     const fr = names.french ? await search('fr.wikibooks.org', `"${names.french}" recette`, 0) : [];
     const en = await search('en.wikibooks.org', names.english || names.latin, 102);
     // Recipes only (French: the cookbook and the « Recettes » books; English: the Cookbook namespace).

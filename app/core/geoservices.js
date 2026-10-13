@@ -2,8 +2,9 @@
 // IGN Géoplateforme services (free, no key): address search, nearest address, altitude.
 // Point lookups are cached in IndexedDB so places already seen keep their address and altitude offline.
 
-import * as db from './db.js';
+import * as cache from './cache.js';
 import { ModuleOffError, moduleOn } from './modules.js';
+import { fetchJson } from './net.js';
 
 const GEOCODING = 'https://data.geopf.fr/geocodage';
 const ALTIMETRY = 'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json';
@@ -12,28 +13,19 @@ const TTL = 365 * 24 * 3600 * 1000;
 
 /** @typedef {{ label: string, detail: string, coordinates: [number, number], kind: string }} GeoResult */
 
-/** @param {string} url @param {AbortSignal} [signal] */
-async function json(url, signal) {
-  const response = await fetch(url, { signal, headers: { accept: 'application/json' } });
-  if (!response.ok) throw new Error('Géoplateforme ' + response.status);
-  return response.json();
-}
+/** @param {string} url @param {AbortSignal} [signal] @param {(data: any) => boolean} [expect] */
+const json = (url, signal, expect) => fetchJson(url, { signal, expect });
+
+/** A GeoJSON answer (WFS, geocoding): its `features` a list. @param {any} d */
+const features = d => Array.isArray(d.features);
 
 const key5 = (/** @type {[number, number]} */ [lon, lat]) => `${lat.toFixed(5)},${lon.toFixed(5)}`;
 
-/** @template T @param {string} key @param {() => Promise<T>} load @returns {Promise<T>} */
-async function cached(key, load) {
-  const hit = await db.get('plantDetails', key).catch(() => null);
-  if (hit && Date.now() - hit.fetchedAt < TTL) return hit.value;
-  try {
-    const value = await load();
-    await db.put('plantDetails', { key, fetchedAt: Date.now(), value }).catch(() => {});
-    return value;
-  } catch (error) {
-    if (hit) return hit.value;
-    throw error;
-  }
-}
+/**
+ * Cached a year (core/cache.js); `partial`: the answer is degraded (kept a few minutes only).
+ * @template T @param {string} key @param {() => Promise<T>} load @param {(value: T) => boolean} [partial] @returns {Promise<T>}
+ */
+const cached = (key, load, partial) => cache.cached(key, load, { ttl: TTL, partial });
 
 const KINDS = { municipality: 'Commune', locality: 'Lieu-dit', street: 'Voie', housenumber: 'Adresse', administratif: 'Commune' };
 
@@ -47,7 +39,7 @@ export async function searchPlaces(text, signal) {
   const q = text.trim();
   if (q.length < 3) return [];
   if (!moduleOn('ignGeo')) throw new ModuleOffError('ignGeo');
-  const data = await json(`${GEOCODING}/completion?text=${encodeURIComponent(q)}&maximumResponses=6`, signal);
+  const data = await json(`${GEOCODING}/completion?text=${encodeURIComponent(q)}&maximumResponses=6`, signal, d => Array.isArray(d.results));
   return (data.results || [])
     .filter(r => Number.isFinite(r.x) && Number.isFinite(r.y))
     .map(r => {
@@ -69,7 +61,7 @@ export async function searchPlaces(text, signal) {
 export function addressAt(point) {
   if (!moduleOn('ignGeo')) return Promise.resolve(null);
   return cached('geo:rev2:' + key5(point), async () => {
-    const data = await json(`${GEOCODING}/reverse?lon=${point[0]}&lat=${point[1]}&limit=1`);
+    const data = await json(`${GEOCODING}/reverse?lon=${point[0]}&lat=${point[1]}&limit=1`, undefined, features);
     const p = data.features?.[0]?.properties;
     if (!p) return null;
     const far = Number(p.distance) > 500;
@@ -85,7 +77,7 @@ export function addressAt(point) {
 export function altitudeAt(point) {
   if (!moduleOn('ignGeo')) return Promise.resolve(null);
   return cached('geo:alt:' + key5(point), async () => {
-    const data = await json(`${ALTIMETRY}?lon=${point[0]}&lat=${point[1]}&resource=ign_rge_alti_wld&zonly=true`);
+    const data = await json(`${ALTIMETRY}?lon=${point[0]}&lat=${point[1]}&resource=ign_rge_alti_wld&zonly=true`, undefined, d => Array.isArray(d.elevations));
     const z = data.elevations?.[0];
     const value = typeof z === 'object' ? z?.z : z;
     return Number.isFinite(value) && value > -1000 ? Math.round(value) : null;
@@ -122,7 +114,7 @@ export function adminShape(type, name) {
       SERVICE: 'WFS', VERSION: '2.0.0', REQUEST: 'GetFeature', TYPENAMES: `ADMINEXPRESS-COG-CARTO.LATEST:${type}`,
       outputFormat: 'application/json', count: '1', CQL_FILTER: `nom_officiel='${name.replace(/'/g, "''")}'`
     });
-    const data = await json(`${WFS}?${q}`);
+    const data = await json(`${WFS}?${q}`, undefined, features);
     const geometry = data.features?.[0]?.geometry;
     if (!geometry?.coordinates) return null;
     // [lon, lat] whatever the server's axis order (France: longitudes under 10°, latitudes over 41°).
@@ -154,12 +146,12 @@ export function adminShape(type, name) {
 const wfsFeatures = async (typename, filter, count, signal) => {
   const q = new URLSearchParams({ SERVICE: 'WFS', VERSION: '2.0.0', REQUEST: 'GetFeature', TYPENAMES: typename,
     outputFormat: 'application/json', COUNT: String(count), CQL_FILTER: filter });
-  const get = async () => /** @type {any[]} */ ((await json(`${WFS}?${q}`, signal)).features || []);
+  const get = async () => /** @type {any[]} */ ((await json(`${WFS}?${q}`, signal, features)).features);
   try {
     return await get();
   } catch (error) {
     // Too many requests at once (the map's tiles come from the same servers): once more, a moment later.
-    if (signal?.aborted || !/ (429|503)$/.test(String(/** @type {Error} */ (error).message))) throw error;
+    if (signal?.aborted || ![429, 503].includes(/** @type {any} */ (error).status)) throw error;
     await new Promise(done => setTimeout(done, 1200 + Math.random() * 800));
     return get();
   }
@@ -310,6 +302,8 @@ export function finestName(layers, point) {
  */
 export function placeNameAt(point) {
   if (!moduleOn('ignGeo')) return Promise.resolve(null);
+  // A layer that failed (the commune answered): the name found is kept a few minutes only, not a year.
+  let some = false;
   return cached('geo:name2:' + key5(point), async () => {
     const at = `POINT(${point[1]} ${point[0]})`;
     /** @type {[string, string, string, number][]} */
@@ -324,12 +318,13 @@ export function placeNameAt(point) {
     ];
     const answers = await Promise.allSettled(asked.map(([, type, filter, count]) => wfsFeatures(type, filter, count)));
     // Nothing at all: out of reach (not kept, asked again next time). The commune alone missing: not kept either.
-    if (answers[6].status === 'rejected') throw new Error('Géoplateforme injoignable');
+    if (answers[6].status === 'rejected') throw answers[6].reason;
+    some = answers.some(a => a.status === 'rejected');
     /** @type {Record<string, any[]>} */
     const layers = {};
     asked.forEach(([key], i) => { const a = answers[i]; layers[key] = a.status === 'fulfilled' ? a.value : []; });
     // The woods asked near the point (300 m) count too, should the wider request fail.
     layers.woods = [...layers.woods, ...layers.spots];
     return finestName(layers, point);
-  });
+  }, () => some);
 }

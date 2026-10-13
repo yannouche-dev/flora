@@ -1,6 +1,9 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import * as sources from '../core/sources.js';
+import { forgetFailures } from '../core/cache.js';
+import { isUnavailable } from '../core/net.js';
+import { sourceDown, sourceDownStyles } from '../core/source-state.js';
 
 const MONTHS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
 const MONTH_NAMES = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
@@ -76,6 +79,7 @@ export class GfCalendar extends LitElement {
     .notes a { color: var(--gf-accent); }
     .muted { color: var(--gf-text-muted); font-size: 0.8rem; margin: 6px 0 0; }
     .loading { height: 18px; border-radius: 4px; background: var(--gf-surface-2); grid-column: 2 / -1; }
+    ${sourceDownStyles}
   `;
 
   constructor() {
@@ -112,9 +116,15 @@ export class GfCalendar extends LitElement {
     try {
       const data = await sources.phenology(this.plant, abort.signal, this.mode || undefined);
       if (!abort.signal.aborted) this._phenology = data;
-    } catch {
-      if (!abort.signal.aborted) this._phenology = null;
+    } catch (error) {
+      // iNaturalist unavailable: said, with « Réessayer » (a module switched off: nothing).
+      if (!abort.signal.aborted) this._phenology = isUnavailable(error) ? { error } : null;
     }
+  }
+
+  #retry() {
+    forgetFailures();
+    this.#load();
   }
 
   /**
@@ -143,8 +153,11 @@ export class GfCalendar extends LitElement {
     const bloomTotal = sum(ph?.flowering);
     const fruitTotal = sum(ph?.fruiting);
     const max = (/** @type {number[]} */ a) => Math.max(1, ...a);
-    this._empty = !flowering.size && !loading && !bloomTotal && !fruitTotal;
+    const failed = ph?.error;
+    this._empty = !flowering.size && !loading && !bloomTotal && !fruitTotal && !failed;
     if (this._empty) return nothing;
+    // Nothing known locally and iNaturalist unavailable: only that, and « Réessayer » (no empty table).
+    if (failed && !flowering.size) return html`${this.notitle ? nothing : html`<h2>Calendrier</h2>`}${sourceDown(failed, () => this.#retry())}`;
     const now = new Date().getMonth();
 
     return html`
@@ -157,6 +170,7 @@ export class GfCalendar extends LitElement {
         ${fruitTotal ? this.#row('Vue en fruits', 'fruit', m => ph.fruiting[m] / max(ph.fruiting), 'observations en fruits') : nothing}
         ${loading ? html`<span class="label muted">iNaturalist…</span><span class="loading"></span>` : nothing}
       </div>
+      ${failed ? sourceDown(failed, () => this.#retry()) : nothing}
       <ul class="notes">
         ${flowering.size ? html`<li>Floraison : ${range(flowering)} — Baseflor, Ph. Julve, <a href="https://www.tela-botanica.org/" target="_blank" rel="noopener">Tela Botanica</a> (CC BY-SA).</li>` : nothing}
         ${bloomTotal || fruitTotal ? html`<li>

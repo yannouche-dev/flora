@@ -3,6 +3,7 @@
 
 import './components/gf-app.js';
 import { syncDataset } from './core/dataset.js';
+import { schedulePurge } from './core/cache.js';
 import { fromHash, startUrlSync } from './core/query.js';
 import { context } from './core/context.js';
 import { parse } from './core/router.js';
@@ -38,6 +39,8 @@ async function start() {
     await runSearch();
     store.set({ status: 'ready', statusText: '' });
     if (update) followUpdate(update);
+    // The cache of the online services' answers, bounded: once a day, well after the start (core/cache.js).
+    schedulePurge();
   } catch (error) {
     console.error(error);
     // Never an empty banner (an IndexedDB error may have no message).

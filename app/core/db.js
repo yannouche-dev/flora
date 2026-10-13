@@ -172,6 +172,30 @@ export const clear = store =>
     return done(tx);
   });
 
+/**
+ * Reads every record of a store, one by one (a cursor: never the whole store in one array).
+ * @param {string} store @param {(value: any) => void} fn
+ */
+export const scan = (store, fn) =>
+  run(store, 'readonly', tx => new Promise((resolve, reject) => {
+    const request = tx.objectStore(store).openCursor();
+    request.onsuccess = () => {
+      const cursor = request.result;
+      if (!cursor) { resolve(undefined); return; }
+      fn(cursor.value);
+      cursor.continue();
+    };
+    request.onerror = () => reject(request.error);
+  }));
+
+/** Deletes these keys of a store, in one transaction. @param {string} store @param {IDBValidKey[]} keys */
+export const removeMany = (store, keys) =>
+  run(store, 'readwrite', tx => {
+    const objectStore = tx.objectStore(store);
+    for (const key of keys) objectStore.delete(key);
+    return done(tx);
+  });
+
 /** @param {string} store @param {any} value @param {IDBValidKey} [key] */
 export const put = (store, value, key) =>
   run(store, 'readwrite', tx => {

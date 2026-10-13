@@ -4,6 +4,7 @@
 import { config } from '../config.js';
 import * as db from './db.js';
 import { isQuotaError, writeLocal } from './quota.js';
+import { timeoutSignal } from './net.js';
 
 /**
  * @typedef {{ phase: 'checking' | 'downloading' | 'storing' | 'ready', meta?: any, offline?: boolean }} SyncProgress
@@ -20,14 +21,6 @@ async function fetchMeta(timeout) {
   const response = await fetch(config.metaUrl, { cache: 'no-cache', signal: timeout ? timeoutSignal(timeout) : undefined });
   if (!response.ok) throw new Error(response.status + ' ' + response.statusText);
   return response.json();
-}
-
-/** AbortSignal.timeout, where the browser has it. @param {number} ms */
-function timeoutSignal(ms) {
-  if (typeof AbortSignal.timeout === 'function') return AbortSignal.timeout(ms);
-  const controller = new AbortController();
-  setTimeout(() => controller.abort(new DOMException('Délai dépassé', 'TimeoutError')), ms);
-  return controller.signal;
 }
 
 /**

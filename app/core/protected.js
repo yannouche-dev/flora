@@ -4,8 +4,9 @@
 // and INPN links are fetched (no geometry): enough to say « you are looking at… » on a map.
 // Cached in IndexedDB by rounded view, so a place already seen keeps its banner offline.
 
-import * as db from './db.js';
+import * as cache from './cache.js';
 import { ModuleOffError, moduleOn } from './modules.js';
+import { fetchJson } from './net.js';
 
 const WFS = 'https://data.geopf.fr/wfs/ows';
 /** Protected-area boundaries change rarely: a month. */
@@ -36,18 +37,14 @@ export async function protectedAreasIn(bounds, signal) {
   if (!moduleOn('ignProtected')) throw new ModuleOffError('ignProtected');
   const box = [down(bounds.south), down(bounds.west), up(bounds.north), up(bounds.east)];
   const key = 'protected:' + box.join(',');
-  const hit = await db.get('plantDetails', key).catch(() => null);
-  if (hit && Date.now() - hit.fetchedAt < TTL) return hit.value;
-  try {
+  return cache.cached(key, async () => {
     const lists = await Promise.all(PROTECTED_LAYERS.map(async layer => {
       const params = new URLSearchParams({
         SERVICE: 'WFS', VERSION: '2.0.0', REQUEST: 'GetFeature', TYPENAMES: layer.typeName,
         BBOX: box.join(',') + ',urn:ogc:def:crs:EPSG::4326', OUTPUTFORMAT: 'application/json', COUNT: '20',
         PROPERTYNAME: 'nom_site,url_fiche,id_mnhn' + layer.extra
       });
-      const response = await fetch(WFS + '?' + params, { signal });
-      if (!response.ok) throw new Error('Géoplateforme WFS ' + response.status);
-      const { features = [] } = await response.json();
+      const { features } = await fetchJson(WFS + '?' + params, { signal, expect: d => Array.isArray(d.features) });
       return features
         // A national park's « aire d'adhésion » is not a protected area in the strict sense: only its core.
         .filter((/** @type {any} */ f) => !/adh/i.test(f.properties?.zone || ''))
@@ -59,11 +56,6 @@ export async function protectedAreasIn(bounds, signal) {
         }));
     }));
     const seen = new Set();
-    const value = lists.flat().filter(a => a.name && !seen.has(a.id) && seen.add(a.id));
-    await db.put('plantDetails', { key, fetchedAt: Date.now(), value }).catch(() => {});
-    return value;
-  } catch (error) {
-    if (hit && !signal?.aborted) return hit.value;
-    throw error;
-  }
+    return lists.flat().filter(a => a.name && !seen.has(a.id) && seen.add(a.id));
+  }, { ttl: TTL, signal });
 }
