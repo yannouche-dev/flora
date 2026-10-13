@@ -4,7 +4,7 @@
 import { LitElement, html, nothing } from 'lit';
 import * as L from 'leaflet';
 import { config } from '../config.js';
-import { watchLocation } from '../core/geo.js';
+import { watchLocation, whenGranted } from '../core/geo.js';
 import { BASES, FRANCE_BOUNDS, OVERLAYS, addCatalogLayer, addedLayers, isOverlay, tileLayer } from '../core/ign.js';
 import { inSeason, placeAbundance, placeTitle } from '../core/collections.js';
 import { store as appStore } from '../core/store.js';
@@ -91,10 +91,13 @@ function leafGlyph() {
 }
 
 /**
- * A badge's photo: shown once it has loaded (a fade), over the leaf; gone if it fails (the leaf stays).
+ * A badge's photo: shown once it has loaded (a fade), over the leaf; gone if it fails (the leaf stays). Every plant
+ * photo of the map comes through here: with the « Photos en ligne » module off, none is loaded (the leaf stays).
  * @param {string} src @param {{ loading?: 'lazy' | 'eager', decoding?: 'async' | 'sync' | 'auto' }} [props]
+ * @returns {Node}
  */
 function fadeImg(src, props = {}) {
+  if (!moduleOn('photos')) return document.createTextNode('');
   const img = dropImg(src, props);
   img.classList.add('gf-fade');
   // Already there (cached): no fade, at once.
@@ -879,6 +882,8 @@ export class GfMap extends LitElement {
     this.#areasAbort?.abort();
     this.#unwatch?.();
     this.#unwatch = null;
+    this.#unwait?.();
+    this.#unwait = null;
   }
 
   #syncAll() {
@@ -1069,12 +1074,20 @@ export class GfMap extends LitElement {
     }
   }
 
+  /** « Me localiser » was touched: the position may be asked for. */
+  #asked = false;
+  /** @type {(() => void) | null} */ #unwait = null;
+
+  /** `track` shows my position once the permission is granted (or after « Me localiser »): never asked on its own. */
   #syncTracking() {
     if (this.track && !this.#unwatch) {
-      this.#unwatch = watchLocation(({ fix }) => this.#showFix(fix));
-    } else if (!this.track && this.#unwatch) {
-      this.#unwatch();
+      if (this.#asked) { this.#unwait?.(); this.#unwait = null; this.#unwatch = watchLocation(({ fix }) => this.#showFix(fix)); }
+      else this.#unwait ??= whenGranted(() => { this.#unwait = null; this.#asked = true; if (this.isConnected) this.#syncTracking(); });
+    } else if (!this.track && (this.#unwatch || this.#unwait)) {
+      this.#unwatch?.();
       this.#unwatch = null;
+      this.#unwait?.();
+      this.#unwait = null;
     }
   }
 
@@ -1524,9 +1537,10 @@ export class GfMap extends LitElement {
   }
 
   #locate() {
+    this.#asked = true;
     if (!this.track) {
       this.track = true;
-    }
+    } else this.#syncTracking();
     this.#setFollow(true);
     if (this.#fix) {
       const [lon, lat] = this.#fix;

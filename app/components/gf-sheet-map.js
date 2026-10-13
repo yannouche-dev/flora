@@ -126,6 +126,7 @@ export class GfSheetMap extends LitElement {
     gf-map { position: absolute; inset: 0; min-height: 0; }
     .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
     .actions .button, .actions button { font-size: 0.85rem; min-height: 36px; padding: 4px 12px; }
+    .actions .near-note { flex-basis: 100%; font-size: 0.75rem; color: var(--gf-text-muted); }
     .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; font-size: 0.78rem; color: var(--gf-text-muted); }
     .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; border: 1px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 20%); }
     .hint { font-size: 0.78rem; color: var(--gf-text-muted); margin: 6px 0 0; }
@@ -464,7 +465,8 @@ export class GfSheetMap extends LitElement {
       ${this.#scope(gbifReady)}
       ${this.#legend(gbifOn)}
       <div class="actions">
-        ${c.near !== 'off' && (!near || near.state === 'error') ? html`<button type="button" class="near-ask" @click=${() => this.#findNear()}>${icon('crosshair')} Observations autour de moi (${formatDistance(savedRadius())})</button>` : nothing}
+        ${c.near !== 'off' && (!near || near.state === 'error') ? html`<button type="button" class="near-ask" @click=${() => this.#findNear()}>${icon('crosshair')} Observations autour de moi (${formatDistance(savedRadius())})</button>
+          <span class="near-note">Votre position précise est envoyée à ${c.near === 'both' ? 'iNaturalist et GBIF' : c.near === 'gbif' ? 'GBIF' : 'iNaturalist'} pour cette recherche.</span>` : nothing}
         ${c.actions.open ? html`<a class="button" href=${href.map({ plant: plant.id })}>${icon('map')} Ouvrir dans la Carte</a>` : nothing}
         ${c.actions.spot ? html`<a class="button" href=${href.newSpot(plant.id)}>${icon('geo-alt-fill')} Noter ici</a>` : nothing}
       </div>

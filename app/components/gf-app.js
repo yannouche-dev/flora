@@ -6,6 +6,7 @@ import { href, RouterController } from '../core/router.js';
 import { setKingMode, setMode, StoreController } from '../core/store.js';
 import './gf-flora.js';
 import './gf-settings.js';
+import './gf-legal.js';
 import './gf-map-page.js';
 import './gf-spot-editor.js';
 import './gf-collections.js';
@@ -23,7 +24,7 @@ import { icon } from '../core/icons.js';
 /** @param {string} name */
 const tabOf = name => name === 'map' ? 'map' : name === 'discover' ? 'discover'
   : ['collections', 'spot', 'spot-new', 'shared'].includes(name) ? 'mine'
-  : name === 'settings' ? 'more' : 'flore';
+  : name === 'settings' || name === 'legal' ? 'more' : 'flore';
 
 /** App shell: header + route outlet + (phone) bottom tab bar. */
 export class GfApp extends LitElement {
@@ -293,6 +294,8 @@ export class GfApp extends LitElement {
       case 'settings':
         document.title = 'Réglages — GeoFlora';
         return html`<gf-settings></gf-settings>`;
+      case 'legal':
+        return html`<gf-legal></gf-legal>`;
       default:
         return html`<div class="banner">Page introuvable. <a href=${href.search()}>Retour à la recherche</a></div>`;
     }

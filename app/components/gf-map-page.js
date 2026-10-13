@@ -399,7 +399,7 @@ export class GfMapPage extends LitElement {
     const head = html`
       <button class="close icon-btn" type="button" aria-label="Fermer" @click=${() => this.#toggleAround()}>${icon('x-lg')}</button>
       <h2>Autour · ${km(a.radius)}</h2>
-      <div class="meta"><span>Centre : ${a.where}</span>
+      <div class="meta"><span>Centre envoyé à iNaturalist : ${a.where}</span>
         <button type="button" class="link" @click=${() => {
           const c = /** @type {any} */ (this.renderRoot.querySelector('gf-map'))?.center();
           if (c) this.#searchAround(c, 'centre de la carte');
@@ -703,7 +703,7 @@ export class GfMapPage extends LitElement {
         <button type="button" aria-expanded=${this._plantMenu ? 'true' : 'false'} aria-pressed=${this._plants.length ? 'true' : 'false'}
           @click=${() => { this._plantMenu = !this._plantMenu; }}>Plantes${this._plants.length ? ' · ' + this._plants.length : ''} ${icon('chevron-down')}</button>
         <button type="button" class="around-toggle" ?disabled=${this._editing} aria-pressed=${this._around ? 'true' : 'false'}
-          title="Plantes observées autour (iNaturalist)" @click=${() => this.#toggleAround()}>Autour</button>
+          title="Plantes observées autour (iNaturalist) : le lieu choisi, sinon votre position, sinon le centre de la carte est envoyé à iNaturalist" @click=${() => this.#toggleAround()}>Autour</button>
         <div class="segmented" role="group" aria-label="Affichage">
           <button type="button" aria-pressed=${this._view === 'map' ? 'true' : 'false'} @click=${() => { this._view = 'map'; }}>Carte</button>
           <button type="button" ?disabled=${this._editing} aria-pressed=${this._view === 'list' ? 'true' : 'false'} @click=${() => { this._view = 'list'; }}>Liste</button>

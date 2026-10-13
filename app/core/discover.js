@@ -112,6 +112,9 @@ export function plantSeen(id) {
 /** Where the user discovers (their position or a commune), kept for the next visit. @param {[number, number]} point @param {string | null} place */
 export const setDiscoverPoint = (point, place) => save({ point, place });
 
+/** The place kept for the next visit forgotten (Mentions légales et confidentialité › « Oublier »). */
+export const forgetDiscoverPoint = () => save({ point: null, place: null });
+
 /** The distance of the search, in metres. @param {number} radius */
 export const setDiscoverRadius = radius => save({ radius });
 

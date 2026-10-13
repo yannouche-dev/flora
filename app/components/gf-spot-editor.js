@@ -3,6 +3,7 @@ import { LitElement, html, css, nothing, repeat } from 'lit';
 import { config } from '../config.js';
 import * as db from '../core/db.js';
 import { GeoController } from '../core/geo.js';
+import { moduleOn } from '../core/modules.js';
 import { href } from '../core/router.js';
 import { back, replaceHash } from '../core/history.js';
 import {
@@ -449,7 +450,9 @@ export class GfSpotEditor extends LitElement {
       this._manual = true;
       document.title = 'Nouvelle collection — GeoFlora';
     } else {
-      // A point picked on the map ("Créer un endroit ici") wins over the GPS.
+      // A point picked on the map ("Créer un endroit ici") wins over the GPS. A new place noted here (« Noter
+      // ici », « Nouveau lieu »: the user's gesture) asks for the position; any other place only shows it once granted.
+      if (!this.at) this.#geo.start();
       const fix = this.at ? null : this.#geo.state.fix;
       // Without a fix yet, start at the centre of France; the pin jumps to the GPS position when it arrives.
       let place = newPlace(this.at || fix?.coordinates || [2.35, 46.6], { accuracy: fix ? Math.round(fix.accuracy) : null });
@@ -761,6 +764,7 @@ export class GfSpotEditor extends LitElement {
       <span class="dot ${good ? 'good' : 'weak'}"></span>
       Position GPS <strong>± ${Math.round(fix.accuracy)} m</strong>
       <span class="hint">${good ? 'Précision suffisante.' : 'Précision faible : patientez à découvert, ou ajustez l’épingle.'}</span>
+      ${this.#isNew && moduleOn('ignGeo') ? html`<span class="hint">Le point est envoyé à l’IGN pour son adresse et son altitude ; le lieu reste sur cet appareil.</span>` : nothing}
     </div>`;
   }
 

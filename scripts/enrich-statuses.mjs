@@ -5,7 +5,10 @@
 //   { type, code, label, area, level, iso }
 //   type: PN (protection nationale), PR (régionale), PD (départementale), REGL (réglementation de la
 //         cueillette ou du commerce), LRN / LRR (Liste rouge nationale / régionale).
-// The archive is found on the INPN / PatriNat download pages (or BDC_URL); any failure only logs a warning.
+// The archive is found on the INPN / PatriNat download pages (or BDC_URL). When no archive can be read, the statuses
+// of the dataset as last committed are kept (scripts/previous-data.mjs), with a ::warning::, and meta.json says since
+// when: build-plants.mjs rewrites plants.json without statuses, and an outage must not ship the flora without its
+// protection warnings. With no previous dataset either, the script fails.
 
 import { execFileSync } from 'node:child_process';
 import { createReadStream } from 'node:fs';
@@ -14,6 +17,7 @@ import { mkdtemp, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { baselineName, keepPrevious, previousJson } from './previous-data.mjs';
 
 const PLANTS_FILE = process.env.PLANTS_FILE || 'data/plants.json';
 const META_FILE = process.env.META_FILE || 'data/meta.json';
@@ -190,7 +194,13 @@ async function main() {
     }
     if (!result) throw new Error('aucun tableau de statuts exploitable (définir la variable BDC_URL)');
   } catch (error) {
-    console.warn('::warning::Statuts INPN ignorés :', error.message);
+    const kept = keepPrevious(plants, 'statuses', 'data/plants.json');
+    if (kept < 1) throw new Error(`Statuts INPN illisibles (${error.message}) et aucun statut précédent à reprendre (${baselineName()})`);
+    const before = previousJson('data/meta.json')?.sources?.bdcStatuts;
+    meta.sources = { ...(meta.sources || {}), bdcStatuts: { ...before, kept: true, keptAt: new Date().toISOString() } };
+    console.warn(`::warning::Statuts INPN non lus (${error.message}) : les statuts de ${kept} plantes sont repris du jeu précédent (${baselineName()}, lu le ${before?.fetchedAt?.slice(0, 10) || 'jour inconnu'})`);
+    await writeFile(PLANTS_FILE, JSON.stringify(plants, null, 2) + '\n', 'utf8');
+    await writeFile(META_FILE, JSON.stringify(meta, null, 2) + '\n', 'utf8');
     return;
   }
   const count = { PN: 0, PR: 0, PD: 0, REGL: 0, LRN: 0, LRR: 0 };

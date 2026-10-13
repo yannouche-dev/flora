@@ -153,6 +153,13 @@ export const remove = (store, key) =>
     return done(tx);
   });
 
+/** Empties a store. @param {string} store */
+export const clear = store =>
+  run(store, 'readwrite', tx => {
+    tx.objectStore(store).clear();
+    return done(tx);
+  });
+
 /** @param {string} store @param {any[]} values */
 export const putAll = (store, values) =>
   run(store, 'readwrite', tx => {

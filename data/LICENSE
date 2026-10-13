@@ -1,0 +1,62 @@
+Données de GeoFlora (dossier data/)
+====================================
+
+Les bases de données de ce dossier, telles que GeoFlora les assemble à partir des sources ci-dessous, sont mises
+à disposition sous la licence Open Database License (ODbL) version 1.0 :
+
+    https://opendatacommons.org/licenses/odbl/1-0/
+
+Cette licence s'applique notamment à data/plants.json, data/meta.json et data/thumbnails.json, qui intègrent des
+données de Baseflor, base publiée sous ODbL 1.0 : toute base dérivée qui en reprend une partie substantielle doit
+être partagée sous la même licence. Le contenu de chaque enregistrement reste soumis à la licence de sa source.
+
+Vous pouvez copier, distribuer, utiliser et adapter ces bases, y compris pour en produire d'autres, à condition :
+  - de citer GeoFlora et les sources ci-dessous (attribution) ;
+  - de partager toute base adaptée sous ODbL 1.0 (partage à l'identique) ;
+  - de ne pas en restreindre l'accès par des mesures techniques sans en fournir aussi une version ouverte.
+
+Le code de l'application n'est pas concerné par ce fichier.
+
+
+Sources et attributions
+-----------------------
+
+data/plants.json, data/meta.json — la flore
+  - TAXREF v18 : référentiel taxonomique national, PatriNat (OFB, MNHN, CNRS) — Licence Ouverte / Open
+    Licence (Etalab). Noms acceptés, synonymes, noms français, statuts biogéographiques.
+    https://assets.patrinat.fr/files/referentiel/TAXREF_v18_2025.zip
+  - Baseflor : index botanique, écologique et chorologique de la flore de France, Philippe Julve (programme
+    CATMINAT), diffusé par Tela Botanica — données sous licence CC BY-SA 2.0, base sous ODbL 1.0. Mois de
+    floraison (champ `flowering`).
+    https://www.tela-botanica.org/ressources/donnees/telechargements/
+  - Base de connaissance Statuts (BDC Statuts) de l'INPN : PatriNat (OFB, MNHN, CNRS) — données ouvertes.
+    Protections nationale, régionales et départementales, réglementation de la cueillette, listes rouges
+    (champ `statuses`).
+
+data/thumbnails.json et vignettes de data/plants.json
+  - Wikimedia Commons et Wikidata : adresses des images, avec leur auteur et leur licence (CC0, CC BY,
+    CC BY-SA) ; chaque image reste sous sa propre licence et doit être créditée comme elle l'indique.
+
+data/safety.json — risques et usages médicinaux traditionnels
+  - ANSM, Pharmacopée française : liste A des plantes médicinales utilisées traditionnellement et liste B des
+    plantes dont les effets indésirables potentiels sont supérieurs au bénéfice thérapeutique attendu.
+    https://ansm.sante.fr/pharmacopee/liste-des-plantes-medicinales-utilisees-traditionnellement
+  - Agroscope, Toxic Plants – Phytotoxins database (TPPT) : utilisation libre avec mention de la source ; usage
+    commercial soumis à l'autorisation d'Agroscope. Cette restriction s'applique aux entrées `tppt` de
+    data/safety.json, en plus de l'ODbL : GeoFlora est non commercial.
+    https://www.agroscope.admin.ch/agroscope/en/home/services/dienste/futtermittel/toxische-pflanzen.html
+
+data/lookalikes.json — plantes à confondre
+  - Anses et Centres antipoison : confusions, critères pour distinguer les plantes et symptômes, repris de leurs
+    publications citées dans le fichier (champ `sources`), avec leur adresse.
+
+data/territories.json — contours des départements et régions
+  - france-geojson (G. David), d'après IGN ADMIN EXPRESS — Licence Ouverte (Etalab).
+    https://github.com/gregoiredavid/france-geojson
+
+
+Avertissement
+-------------
+
+Ces données sont fournies telles quelles, sans garantie d'exactitude ni d'exhaustivité. Elles ne remplacent ni un
+botaniste, ni un médecin, ni un Centre antipoison : ne consommez jamais une plante sur la seule foi de ces données.

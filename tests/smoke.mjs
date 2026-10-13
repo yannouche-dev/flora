@@ -12,7 +12,7 @@ import { chromium } from 'playwright';
 
 const BASE = new URL(process.argv[2] || 'http://localhost:8000/').href;
 const ORIGIN = new URL(BASE).origin;
-const ROUTES = ['#/', '#/?q=ortie', '#/plant/128268', '#/discover', '#/discover?s=harvest', '#/discover?s=trail', '#/map', '#/collections', '#/settings'];
+const ROUTES = ['#/', '#/?q=ortie', '#/plant/128268', '#/discover', '#/discover?s=harvest', '#/discover?s=trail', '#/map', '#/collections', '#/settings', '#/legal'];
 const DEVICES = {
   phone: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
   desktop: { viewport: { width: 1280, height: 900 }, returning: true }

@@ -19,6 +19,7 @@ import { encodeCollection, share } from '../core/share.js';
 import { hasColumns } from '../core/sheet-blocks.js';
 import { PaneSizer, paneStyles } from '../core/panes.js';
 import { hideImg, showImg } from '../core/img.js';
+import { photoOf } from '../core/thumb.js';
 
 /** Up to this many thumbnails per collection row. */
 const THUMBS = 4;
@@ -269,7 +270,7 @@ export class GfCollections extends LitElement {
       <span class="side">${side || ''}${has ? html` <span class="chev" aria-hidden="true">${icon('chevron-down')}</span>` : nothing}</span>
       <span class="sub">
         <span class="thumbs" aria-hidden="true">
-          ${p.plantIds.slice(0, THUMBS).map(id => this._thumbs.get(id)
+          ${p.plantIds.slice(0, THUMBS).map(id => photoOf(this._thumbs.get(id))
             ? html`<img src=${/** @type {string} */ (this._thumbs.get(id))} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />`
             : html`<span></span>`)}
         </span>
@@ -333,7 +334,7 @@ export class GfCollections extends LitElement {
     if (plant === null) return nothing;
     const current = this.route.plant === id && (!this.route.open || this.route.open === c.id);
     return html`<li><a href=${href.collections({ open: this.route.open === c.id || c.properties.kind === 'place' ? c.id : this.route.open, plant: id })} aria-current=${current ? 'true' : 'false'}>
-      ${plant?.thumb ? html`<img src=${plant.thumb} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />` : html`<span class="ph" aria-hidden="true"></span>`}
+      ${photoOf(plant?.thumb) ? html`<img src=${plant?.thumb} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />` : html`<span class="ph" aria-hidden="true"></span>`}
       <span class="pname">${plant?.name ?? '…'}</span>
       <span class="psci">${plant?.sci ?? ''}</span>
     </a></li>`;
