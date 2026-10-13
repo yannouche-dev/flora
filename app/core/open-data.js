@@ -113,15 +113,6 @@ export async function interactions(name, signal, mode) {
   });
 }
 
-/** French names of GloBI's interaction types, from the plant's side. */
-export const TYPE_LABELS = {
-  pollinatedBy: 'pollinisée par', flowersVisitedBy: 'fleurs visitées par', visitedBy: 'visitée par', eatenBy: 'mangée par', hostOf: 'hôte de',
-  hasParasite: 'parasitée par', hasParasitoid: 'hôte du parasitoïde', hasPathogen: 'maladie', hasVector: 'vecteur', mutualistOf: 'mutualiste',
-  symbiontOf: 'symbiote', ectomycorrhizalHostOf: 'ectomycorhize', arbuscularMycorrhizalHostOf: 'mycorhize à arbuscules', interactsWith: 'interagit avec',
-  parasiteOf: 'parasite de', hemiparasiteOf: 'hémiparasite de', eats: 'se nourrit de', hasHost: 'a pour hôte', createsHabitatFor: 'abrite',
-  hasDispersalVector: 'dispersée par', epiphyteOf: 'épiphyte de', pathogenOf: 'pathogène de', visitsFlowersOf: 'visite les fleurs de', pollinates: 'pollinise'
-};
-
 // ── Open-Meteo: pollens and climate ──────────────────────────────────────────────────────────────────────
 
 /** Pollens forecast by CAMS (via Open-Meteo), and the plants that make them. */

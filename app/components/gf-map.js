@@ -87,6 +87,7 @@ function photoIcon(photo, delay) {
 /** The leaf a plant's badge shows until its photo has loaded (and for good without one). */
 function leafGlyph() {
   const glyph = elem('span', 'glyph');
+  // eslint-disable-next-line no-unsanitized/property -- the markup of a bundled icon, no data in it
   glyph.innerHTML = iconMarkup('leaf-fill');
   return glyph;
 }
@@ -252,6 +253,7 @@ const editIcon = placeIconOf('#16a34a', 0, 'selected editing');
 const lockedIcon = placeIconOf('#16a34a', 0, 'selected');
 
 const readStored = (/** @type {string} */ key, fallback) => {
+  // eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
   try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; }
 };
 /** Map look chosen last; `cadastre: true` from earlier versions becomes an overlay. */
@@ -281,6 +283,7 @@ const emptyMoves = () => ({ pin: null, places: new Map(), plants: new Map() });
 const movesCount = (/** @type {Moves} */ m) => (m.pin ? 1 : 0) + m.places.size + m.plants.size;
 
 const store = (/** @type {string} */ key, value) => {
+  // eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
   try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* not persisted */ }
 };
 
@@ -373,7 +376,7 @@ export class GfMap extends LitElement {
 
   constructor() {
     super();
-    /** @type {import('../core/collections.js').Spot[]} */
+    /** @type {import('../core/collections.js').Place[]} */
     this.spots = [];
     /** @type {string | null} */
     this.selectedId = null;
@@ -1576,6 +1579,7 @@ export class GfMap extends LitElement {
   #buildButtons() {
     const buttons = this.#buttons = Object.assign(document.createElement('div'), { className: 'gf-map-buttons' });
     // With the search pill, the layers button lives at its end; otherwise it is a round button like "locate".
+    // eslint-disable-next-line no-unsanitized/property -- fixed markup and bundled icons, no data in it
     buttons.innerHTML = `
       ${this.#hasSearch ? '' : `<button type="button" class="layers" aria-label="Carte : fond, couches, légende" title="Carte : fond, couches, légende">${iconMarkup('layers')}</button>`}
       <button type="button" class="locate" aria-label="Me localiser" title="Me localiser" aria-pressed="false">${iconMarkup('crosshair')}</button>

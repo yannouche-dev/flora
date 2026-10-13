@@ -52,12 +52,8 @@ export const listPlaces = async () => (await listCollections()).filter(isPlace);
 export const collectionsForPlant = async plantId =>
   /** @type {Collection[]} */ ((await db.getAllByIndex('spots', 'by_plant', plantId)).map(read).filter(Boolean));
 
-/** Places where a plant grows. @param {number} plantId @returns {Promise<Place[]>} */
-export const placesForPlant = async plantId => (await collectionsForPlant(plantId)).filter(isPlace);
-
 /** @param {string} id @returns {Promise<Collection | undefined>} */
 export const getPlace = async id => read(await db.get('spots', id)) || undefined;
-export const getCollection = getPlace;
 
 /** @param {string} id */
 export async function deletePlace(id) {
@@ -323,14 +319,6 @@ export async function setInCollection(collectionId, plant, on) {
   if (!current) throw new Error('Collection introuvable.');
   if (Boolean(findEntry(current, plant.id)) === on) return current;
   return savePlace(on ? withPlant(current, plant) : withoutPlant(current, plant.id));
-}
-
-/** Adds a harvest to one plant of a place and saves. @param {Place} place @param {string | number | null} ref @param {Harvest} harvest */
-export function addHarvest(place, ref, harvest) {
-  const entry = findEntry(place, ref);
-  if (!entry) throw new Error('Plante absente de ce lieu.');
-  const harvests = [...entry.harvests, harvest].sort((a, b) => b.date.localeCompare(a.date));
-  return savePlace(withEntry(place, entry.id, { harvests }));
 }
 
 /**

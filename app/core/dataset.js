@@ -116,7 +116,7 @@ export async function syncDataset(onProgress = () => {}) {
     return { meta: local, updated: false, offline: false, update: checkForUpdate(local) };
   }
 
-  let remote = null;
+  let remote;
   try {
     remote = await fetchMeta();
   } catch (error) {
@@ -124,7 +124,7 @@ export async function syncDataset(onProgress = () => {}) {
       onProgress({ phase: 'ready', meta: local, offline: true });
       return { meta: local, updated: false, offline: true, update: null };
     }
-    throw new Error('Impossible de télécharger la flore (hors ligne ?) : ' + /** @type {Error} */ (error).message);
+    throw new Error('Impossible de télécharger la flore (hors ligne ?) : ' + /** @type {Error} */ (error).message, { cause: error });
   }
 
   onProgress({ phase: 'downloading', meta: remote });
@@ -136,7 +136,7 @@ export async function syncDataset(onProgress = () => {}) {
       onProgress({ phase: 'ready', meta: local, offline: true });
       return { meta: local, updated: false, offline: true, update: null };
     }
-    throw new Error('Impossible de télécharger la flore : ' + /** @type {Error} */ (error).message);
+    throw new Error('Impossible de télécharger la flore : ' + /** @type {Error} */ (error).message, { cause: error });
   }
 
   onProgress({ phase: 'storing', meta: remote });

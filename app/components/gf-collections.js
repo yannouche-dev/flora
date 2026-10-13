@@ -9,7 +9,7 @@ import {
 import { config } from '../config.js';
 import { StoreController, plantViewOf, whenReady } from '../core/store.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
-import { back } from '../core/history.js';
+import { back, openView, replaceView } from '../core/history.js';
 import './gf-map.js';
 import './gf-plant-detail.js';
 import './gf-pager.js';
@@ -29,6 +29,7 @@ const REMIND_AFTER = 14 * 86400000;
 /** Ids of the collections unfolded in Mes plantes. @returns {Set<string>} */
 function readOpen() {
   try {
+    // eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
     const ids = JSON.parse(localStorage.getItem(config.storageKeys.collectionsOpen) || '[]');
     return new Set(Array.isArray(ids) ? ids.filter(id => typeof id === 'string') : []);
   } catch {
@@ -307,10 +308,10 @@ export class GfCollections extends LitElement {
   #headClick(c) {
     const isPlace = c.properties.kind === 'place' && Boolean(c.geometry);
     const open = this._open.has(c.id);
-    if (open && this.route.open !== c.id && isPlace) { location.hash = href.collections({ open: c.id }); return; }
+    if (open && this.route.open !== c.id && isPlace) { openView(href.collections({ open: c.id })); return; }
     this.#toggle(c.id);
-    if (!open && isPlace) location.hash = href.collections({ open: c.id });
-    else if (open && this.route.open === c.id) location.replace(href.collections({ plant: this.route.plant }));
+    if (!open && isPlace) openView(href.collections({ open: c.id }));
+    else if (open && this.route.open === c.id) replaceView(href.collections({ plant: this.route.plant }));
   }
 
   /** A place on its map: the place and each of its plants; a plant opens beside. @param {import('../core/collections.js').Collection} place */
@@ -324,7 +325,7 @@ export class GfCollections extends LitElement {
       no-search
       .frame=${{ key: place.id + ':' + points.map(c => c.join(',')).join(';'), points, ease: true }}
       .selectedPlant=${this.route.plant && findEntry(place, this.route.plant) ? place.id + ':' + findEntry(place, this.route.plant)?.id : null}
-      @plant-select=${(/** @type {CustomEvent} */ e) => { location.hash = href.collections({ open: place.id, plant: e.detail.plantId }); }}
+      @plant-select=${(/** @type {CustomEvent} */ e) => { openView(href.collections({ open: place.id, plant: e.detail.plantId })); }}
     ></gf-map>`;
   }
 
@@ -357,7 +358,7 @@ export class GfCollections extends LitElement {
     const plant = (/** @type {number | undefined} */ id) => { const p = id === undefined ? null : this._plants.get(id); return p ? { name: p.name } : id === undefined ? null : { name: '…' }; };
     return html`<gf-pager ?simple=${simple} .index=${i} .total=${ids.length} source=${collectionTitle(c)}
       .prev=${plant(ids[i - 1])} .next=${plant(ids[i + 1])}
-      @page=${(/** @type {CustomEvent} */ e) => { location.hash = href.collections({ open: this.route.open || c.id, plant: ids[e.detail.index] }); }}></gf-pager>`;
+      @page=${(/** @type {CustomEvent} */ e) => { openView(href.collections({ open: this.route.open || c.id, plant: ids[e.detail.index] })); }}></gf-pager>`;
   }
 
   /** ← → : the previous / next plant of the list (not while typing). @param {KeyboardEvent} e */
@@ -396,6 +397,7 @@ export class GfCollections extends LitElement {
     if (open.has(id)) open.delete(id);
     else open.add(id);
     this._open = open;
+    // eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
     try { localStorage.setItem(config.storageKeys.collectionsOpen, JSON.stringify([...open])); } catch { /* not remembered */ }
     this.#loadPlants();
   }
@@ -451,6 +453,7 @@ export class GfCollections extends LitElement {
   }
 
   #dismissReminder() {
+    // eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
     try { localStorage.setItem(config.storageKeys.backupReminder, new Date().toISOString()); } catch { /* not persisted */ }
     this.requestUpdate();
   }
@@ -462,6 +465,7 @@ export class GfCollections extends LitElement {
     const last = lastExportDate();
     if (last && Date.now() - Date.parse(last) < REMIND_AFTER) return false;
     let dismissed = null;
+    // eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
     try { dismissed = localStorage.getItem(config.storageKeys.backupReminder); } catch { /* storage unavailable */ }
     const latest = withPlants.reduce((m, c) => (c.properties.updatedAt > m ? c.properties.updatedAt : m), '');
     return !dismissed || dismissed < latest;
@@ -610,7 +614,7 @@ export class GfCollections extends LitElement {
             ${p.head('map', collectionTitle(place), html`
               <a class="icon-btn" href=${href.map({ spot: place.id })} title="Ouvrir sur la Carte" aria-label="Ouvrir sur la Carte">${icon('arrows-angle-expand')}</a>
               <button class="icon-btn" type="button" title="Fermer la carte" aria-label="Fermer la carte"
-                @click=${() => location.replace(href.collections({ plant: plantId }))}>${icon('x-lg')}</button>`)}
+                @click=${() => replaceView(href.collections({ plant: plantId }))}>${icon('x-lg')}</button>`)}
             <div class="pane-body">${this.#placeMap(place)}</div>
           </section>`) : nothing}
           ${plantId ? (plantFolded ? p.rail('plant', true) : html`
@@ -620,7 +624,7 @@ export class GfCollections extends LitElement {
               ${p.head('plant', 'Plante', html`
                 <a class="icon-btn" href=${href.plant(plantId)} title="Ouvrir la fiche dans Flore" aria-label="Ouvrir la fiche dans Flore">${icon('arrows-angle-expand')}</a>
                 <button class="icon-btn" type="button" title="Fermer la fiche" aria-label="Fermer la fiche"
-                  @click=${() => location.replace(href.collections({ open: this.route.open }))}>${icon('x-lg')}</button>`, true)}
+                  @click=${() => replaceView(href.collections({ open: this.route.open }))}>${icon('x-lg')}</button>`, true)}
               <div class="pane-body"><gf-plant-detail embedded plant-id=${plantId} view=${plantViewOf(this.#store.state)}></gf-plant-detail>${this.#pager(plantId, false)}</div>
             </section>`) : nothing}
         </div>

@@ -100,9 +100,10 @@ export function details(plant, signal, mode) {
  * Flowering / fruiting observations per month in France (iNaturalist), cached like the details.
  * @param {any} plant
  * @param {AbortSignal} [signal]
+ * @param {Mode} [mode] the surface's mode; the app mode when omitted
  * @returns {Promise<{ all: number[], flowering: number[], fruiting: number[], taxonId: number, sourceUrl: string } | null>}
  */
-export function phenology(plant, signal, /** @type {Mode | undefined} */ mode) {
+export function phenology(plant, signal, mode) {
   return cached(key('phenology', plant.id, mode), () => sourcesFor(mode).phenology(plant, { signal }));
 }
 
@@ -115,10 +116,11 @@ export const links = plant => sourcesFor().links(plant);
  * @param {any} plant
  * @param {string | null | undefined} qid
  * @param {AbortSignal} [signal]
+ * @param {Mode} [mode] the surface's mode; the app mode when omitted
  * @returns {Promise<{ title?: string, extract?: string, url: string | null, description?: string | null, touched?: string | null,
  *   sections: { theme: string, title: string, text: string }[], aliases: string[], english?: string | null } | null>}
  */
-export function wikipedia(plant, qid, signal, /** @type {Mode | undefined} */ mode) {
+export function wikipedia(plant, qid, signal, mode) {
   if (!qid) return Promise.resolve(null);
   return cached(key('wikipedia2', plant.id, mode), async () => {
     const claims = await sourcesFor(mode).wikidataClaims(qid, { signal });
@@ -136,21 +138,11 @@ export function wikipedia(plant, qid, signal, /** @type {Mode | undefined} */ mo
  * @param {any} plant
  * @param {string | null | undefined} qid
  * @param {AbortSignal} [signal]
+ * @param {Mode} [mode] the surface's mode; the app mode when omitted
  */
-export function wikidataScience(plant, qid, signal, /** @type {Mode | undefined} */ mode) {
+export function wikidataScience(plant, qid, signal, mode) {
   if (!qid) return Promise.resolve(null);
   return cached(key('wikidata-science', plant.id, mode), () => sourcesFor(mode).wikidataScience(qid, { signal }));
-}
-
-/**
- * GBIF occurrences recorded in France (presences, coordinates without known issue).
- * @param {any} plant
- * @param {number | null | undefined} gbifKey
- * @param {AbortSignal} [signal]
- * @returns {Promise<number | null>}
- */
-export function occurrencesFR(plant, gbifKey, signal, /** @type {Mode | undefined} */ mode) {
-  return gbifStats(plant, gbifKey, signal, mode).then(stats => stats?.count ?? null);
 }
 
 // ── GBIF, part by part: each block asks only for what it shows ────────────────────────────────────────

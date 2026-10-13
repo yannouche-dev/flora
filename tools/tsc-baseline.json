@@ -1,0 +1,73 @@
+{
+  "typescript": "7.0.2",
+  "total": 107,
+  "errors": {
+    "app/components/gf-calendar.js": {
+      "TS2339": 1
+    },
+    "app/components/gf-discover.js": {
+      "TS2322": 1,
+      "TS2339": 14,
+      "TS2353": 3
+    },
+    "app/components/gf-lookalikes.js": {
+      "TS2339": 2
+    },
+    "app/components/gf-map-page.js": {
+      "TS2339": 3,
+      "TS2353": 4
+    },
+    "app/components/gf-map.js": {
+      "TS2339": 2,
+      "TS2551": 4
+    },
+    "app/components/gf-media-viewer.js": {
+      "TS2339": 2,
+      "TS2551": 2
+    },
+    "app/components/gf-plant-detail.js": {
+      "TS2339": 35,
+      "TS2345": 2
+    },
+    "app/components/gf-plant-spots.js": {
+      "TS2339": 4,
+      "TS2551": 1
+    },
+    "app/components/gf-point-card.js": {
+      "TS2739": 1
+    },
+    "app/components/gf-sheet-map.js": {
+      "TS2339": 1,
+      "TS2353": 2
+    },
+    "app/components/gf-spot-editor.js": {
+      "TS2322": 3
+    },
+    "app/components/start-screen.js": {
+      "TS1127": 1
+    },
+    "app/core/collections.js": {
+      "TS2322": 1
+    },
+    "app/core/context.js": {
+      "TS2322": 2
+    },
+    "app/core/open-data.js": {
+      "TS2339": 1,
+      "TS2353": 5
+    },
+    "app/core/router.js": {
+      "TS2322": 2
+    },
+    "app/core/share.js": {
+      "TS2322": 1
+    },
+    "app/core/sheet-blocks.js": {
+      "TS2339": 3,
+      "TS2353": 3
+    },
+    "app/core/territory.js": {
+      "TS2345": 1
+    }
+  }
+}

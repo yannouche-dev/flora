@@ -33,7 +33,7 @@ export class GfLookalikes extends LitElement {
     /** The sheet has a map: each look-alike species can be compared on it (map-focus.js). */
     mapLinked: { type: Boolean, attribute: 'map-linked' },
     /** The sheet's map focus (which look-alike is compared). */
-    focus: { attribute: false },
+    mapFocus: { attribute: false },
     _list: { state: true },
     _loading: { state: true },
     _error: { state: true }
@@ -127,7 +127,7 @@ export class GfLookalikes extends LitElement {
     if (!species.length) return nothing;
     return html`<p class="compare">${species.map(o => {
       /** @type {import('../core/map-focus.js').CompareFocus} */ const f = { kind: 'compare', label: o.label, taxon: o.taxon };
-      const on = isFocused(this.focus, f);
+      const on = isFocused(this.mapFocus, f);
       return html`<button type="button" aria-pressed=${on ? 'true' : 'false'} @click=${() => sendFocus(this, f)}>${icon('map')} ${on ? 'Comparée sur la carte' : 'Comparer sur la carte'} : ${o.label}</button>`;
     })}</p>`;
   }

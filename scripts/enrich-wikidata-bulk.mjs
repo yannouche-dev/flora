@@ -190,7 +190,7 @@ async function main() {
   let images = 0;
 
   for (const batch of chunks(pending, BATCH_SIZE)) {
-    let matches = new Map();
+    let matches;
 
     try {
       matches = await wikidataBatch(batch);

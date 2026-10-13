@@ -51,11 +51,13 @@ const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** The image's height in the sheet, as a proportion of its width (the grip); null: the default shape. */
 const RATIO_KEY = 'geoflora.mediaRatio';
+// eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
 let stageRatio = (() => { try { const r = Number(localStorage.getItem(RATIO_KEY)); return r >= 0.3 && r <= 2 ? r : null; } catch { return null; } })();
 const ratioEvents = new EventTarget();
 /** @param {number | null} r */
 function setStageRatio(r) {
   stageRatio = r == null ? null : Math.min(2, Math.max(0.3, r));
+  // eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
   try { if (stageRatio == null) localStorage.removeItem(RATIO_KEY); else localStorage.setItem(RATIO_KEY, stageRatio.toFixed(3)); } catch { /* this visit */ }
   ratioEvents.dispatchEvent(new Event('change'));
 }
@@ -1110,7 +1112,7 @@ export class GfMediaViewer extends LitElement {
     const count = (/** @type {string} */ p) => p === 'all' ? items.length : items.filter(i => i.part === p).length;
     return html`<div class="parts" role="radiogroup" aria-label="Partie de la plante">
       ${['all', ...PARTS].map(p => {
-        const n = count(p), [label, ic] = PART_INFO[/** @type {keyof PART_INFO} */ (p)];
+        const n = count(p), [label, ic] = PART_INFO[/** @type {keyof typeof PART_INFO} */ (p)];
         if (p === 'other' && !n) return nothing;
         return html`<button type="button" role="radio" aria-checked=${String(this._part === p)} ?disabled=${!n} title=${label + ' (' + n + ')'}
           aria-label=${label + ', ' + n + ' image' + (n > 1 ? 's' : '')} @click=${() => this.#setFilter(this._filter, p)}>${icon(/** @type {any} */ (ic))}</button>`;
@@ -1190,7 +1192,6 @@ export class GfMediaViewer extends LitElement {
   /**
    * The view button: the view shown (« Largeur », or its zoom: « 50 % », « 100 % »…), a touch for the next
    * one — the choice is kept for the next images and plants.
-   * @param {number} z @param {number} pct @param {number} one
    */
   #lockButton() {
     const on = Boolean(sheetSession.media.lock);

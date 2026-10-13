@@ -24,8 +24,8 @@ const words = (/** @type {string} */ text) => text.split(' ').filter(Boolean);
  * @property {string[]} synonyms
  * @property {string} family
  * @property {string} haystack
- * @property {Record<string, string>} values   facet values
- * @property {{ fr: number, sci: number, family: number }} rank   precomputed sort positions
+ * @property {Record<string, string | string[]>} values   facet values (legal: several)
+ * @property {{ fr: number, sci: number, family: number, genus: number, status: number, legal: number }} rank   precomputed sort positions
  */
 
 /**

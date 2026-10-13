@@ -46,9 +46,11 @@ export const paneStyles = css`
   .rail:hover { color: var(--gf-text); background: var(--gf-surface-2); }
 `;
 
+/** @typedef {import('lit').ReactiveController} ReactiveController */
+
 /**
  * Widths and folds of a layout's panes, saved under `storageKey`.
- * @implements {import('lit').ReactiveController}
+ * @implements {ReactiveController}
  */
 export class PaneSizer {
   /**

@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "es2023",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "lib": ["es2023", "dom", "dom.iterable"],
+    "allowJs": true,
+    "checkJs": true,
+    "strict": false,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "useDefineForClassFields": false,
+    "paths": {
+      "lit": ["./types/lit.d.ts"],
+      "leaflet": ["./node_modules/@types/leaflet/index.d.ts"]
+    },
+    "types": []
+  },
+  "include": ["app/**/*.js", "types/*.d.ts"]
+}

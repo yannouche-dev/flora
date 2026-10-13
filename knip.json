@@ -1,0 +1,32 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "entry": [
+    "app/main.js",
+    "app/workers/search.worker.js",
+    "sw.js",
+    "scripts/*.mjs",
+    "tools/*.mjs",
+    "tests/**/*.mjs"
+  ],
+  "project": [
+    "app/**/*.js",
+    "lib/**/*.mjs",
+    "scripts/*.mjs",
+    "tools/*.mjs",
+    "tests/**/*.mjs"
+  ],
+  "ignoreDependencies": [
+    "leaflet",
+    "xlsx"
+  ],
+  "ignoreBinaries": [
+    "pdftotext"
+  ],
+  "ignoreUnresolved": [
+    "^\\.?/app/"
+  ],
+  "ignoreExportsUsedInFile": true,
+  "rules": {
+    "duplicates": "warn"
+  }
+}

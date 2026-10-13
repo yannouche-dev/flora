@@ -48,7 +48,9 @@ export class GfTabbar extends LitElement {
     :host([locked]) nav { opacity: 0.38; filter: grayscale(1); }
   `;
 
-  // Tabs lead back to where each part was left (context.js), which changes as the user moves.
+  // Tabs lead back to where each part was left (context.js), which changes as the user moves: the controller
+  // re-renders the bar on each change of the store (it is never read, its being there is what matters).
+  // eslint-disable-next-line no-unused-private-class-members -- registered with the host by its constructor
   #store = new StoreController(this);
 
   constructor() {

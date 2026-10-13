@@ -100,13 +100,16 @@ export const href = {
     const search = params.toString();
     return '#/map' + (search ? '?' + search : '');
   },
-  /** New place (GPS, or `at` [lon, lat] picked on the map), optionally with a first plant. */
-  newSpot: (/** @type {number | null | undefined} */ plantId, /** @type {[number, number] | null | undefined} */ at) =>
+  /**
+   * New place (GPS, or `at` [lon, lat] picked on the map), optionally with a first plant.
+   * @param {number | null} [plantId] @param {[number, number] | null} [at]
+   */
+  newSpot: (plantId, at) =>
     '#/collection/new?kind=place' + (plantId ? '&plant=' + plantId : '') + (at ? `&at=${at[1].toFixed(6)},${at[0].toFixed(6)}` : ''),
-  /** New list, optionally with a first plant. */
-  newList: (/** @type {number | null | undefined} */ plantId) => '#/collection/new?kind=list' + (plantId ? '&plant=' + plantId : ''),
-  /** A collection; `add` pre-adds a plant to it, `pick` opens the plant picker. */
-  spot: (/** @type {string} */ id, /** @type {number | null | undefined} */ add, /** @type {boolean} */ pick = false) =>
+  /** New list, optionally with a first plant. @param {number | null} [plantId] */
+  newList: plantId => '#/collection/new?kind=list' + (plantId ? '&plant=' + plantId : ''),
+  /** A collection; `add` pre-adds a plant to it, `pick` opens the plant picker. @param {string} id @param {number | null} [add] @param {boolean} [pick] */
+  spot: (id, add, pick = false) =>
     '#/collection/' + id + (add ? '?add=' + add : pick ? '?pick=1' : ''),
   shared: (/** @type {string} */ data) => '#/shared?d=' + data
 };

@@ -11,6 +11,7 @@
 import { href, parse } from './router.js';
 import { setHarvestMode, setMode } from './store.js';
 import { discoverState, finishDiscover, resetChoices, restartDiscover } from './discover.js';
+import { openView } from './history.js';
 
 /**
  * @typedef {{ key: string, title: string, pitch: string, icon: import('./icons.js').IconName, play: () => void, played?: () => boolean }} Scenario
@@ -23,15 +24,15 @@ const current = key => { const r = parse(location.hash); return r.name === 'disc
 export const SCENARIOS = [
   { key: 'meet', title: 'Rencontres', icon: 'heart-fill', pitch: 'Les plantes observées autour de vous, une carte à la fois : à droite si elle vous plaît, à gauche sinon.',
     // Played again: from the very start (place, distance, cards, matches, steps, fork, tabs).
-    play: () => { restartDiscover(); location.hash = href.discover(null, 'meet'); }, played: () => { const s = discoverState(); return Boolean(s.point || s.matches.length || s.step); } },
+    play: () => { restartDiscover(); openView(href.discover(null, 'meet')); }, played: () => { const s = discoverState(); return Boolean(s.point || s.matches.length || s.step); } },
   { key: 'harvest', title: 'Cueillette prudente', icon: 'leaf', pitch: 'Ce qui se cueille autour de vous… et ses sosies dangereux, les mortels d’abord. Le mode cueillette s’allume.',
-    play: () => { if (current('harvest')) resetChoices(); setHarvestMode(true); location.hash = href.discover(null, 'harvest'); }, played: () => current('harvest') },
+    play: () => { if (current('harvest')) resetChoices(); setHarvestMode(true); openView(href.discover(null, 'harvest')); }, played: () => current('harvest') },
   { key: 'mosaic', title: 'Mosaïque', icon: 'images', pitch: 'Toutes les photos des plantes du coin, en grand. Une image touchée : toutes celles de la plante.',
-    play: () => { if (current('mosaic')) resetChoices(); location.hash = href.discover(null, 'mosaic'); }, played: () => current('mosaic') },
+    play: () => { if (current('mosaic')) resetChoices(); openView(href.discover(null, 'mosaic')); }, played: () => current('mosaic') },
   { key: 'trail', title: 'Parcours botanique', icon: 'geo-alt-fill', pitch: 'Marchez, nommez les plantes que vous croisez : chacune prend sa place sur la carte de votre parcours.',
-    play: () => { location.hash = href.discover(null, 'trail'); }, played: () => current('trail') },
+    play: () => { openView(href.discover(null, 'trail')); }, played: () => current('trail') },
   { key: 'science', title: 'Scientifique', icon: 'table', pitch: 'Toutes les données et tous les outils : la flore complète, les fiches en mode Scientifique.',
-    play: () => { setMode('scientific'); finishDiscover(); location.hash = href.search(); } }
+    play: () => { setMode('scientific'); finishDiscover(); openView(href.search()); } }
 ];
 
 /** The scenario of a key (Rencontres for none, or one unknown). @param {string | null | undefined} key */

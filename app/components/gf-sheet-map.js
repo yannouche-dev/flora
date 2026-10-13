@@ -20,6 +20,7 @@ import { icon } from '../core/icons.js';
 import { knownThumb } from '../core/thumb.js';
 import { ui } from '../styles/ui.js';
 import './gf-map.js';
+import { openView } from '../core/history.js';
 
 /** The box of an outline, as two corners [lon, lat]. @param {any} feature @returns {[number, number][] | null} */
 function zoneBounds(feature) {
@@ -97,7 +98,7 @@ export class GfSheetMap extends LitElement {
     /** Pinned: fills the dock's height instead of its own. */
     fill: { type: Boolean, reflect: true },
     /** What the sheet's data asks it to show: a GBIF filter, a point, a plant to compare (map-focus.js). */
-    focus: { attribute: false },
+    mapFocus: { attribute: false },
     _spots: { state: true },
     _near: { state: true },
     _compare: { state: true },
@@ -168,7 +169,7 @@ export class GfSheetMap extends LitElement {
     this.mode = 'standard';
     this.fill = false;
     /** @type {import('../core/map-focus.js').SheetFocus} */
-    this.focus = noFocus();
+    this.mapFocus = noFocus();
     /** The compared plant's GBIF key: { taxon, key } (key null: not in GBIF; undefined: looking). @type {any} */
     this._compare = null;
     /** Extent of the filtered occurrences, for a place filter: { id, points } (points empty: none). @type {any} */
@@ -239,7 +240,7 @@ export class GfSheetMap extends LitElement {
     if (changed.has('_near')) this.#findRegion();
     if (changed.has('plant')) { this._near = undefined; this.#loadSpots(); this.#loadLookalikes(); }
     else if (changed.has('config') && (changed.get('config')?.subject !== this.config.subject || changed.get('config')?.collection !== this.config.collection)) this.#loadSpots();
-    if (changed.has('focus') || changed.has('gbifKey')) this.#loadFocus();
+    if (changed.has('mapFocus') || changed.has('gbifKey')) this.#loadFocus();
     const near = this.config.near;
     if ((changed.has('config') || changed.has('plant') || changed.has('gbifKey') || changed.has('inatId')) && near !== 'off') {
       // The sources asked changed: look again (automatically once allowed in this visit).
@@ -251,14 +252,14 @@ export class GfSheetMap extends LitElement {
 
   /** What the focus needs: the compared plant's GBIF key, the extent of a place filter's occurrences. */
   async #loadFocus() {
-    const f = this.focus || noFocus();
+    const f = this.mapFocus || noFocus();
     const mode = /** @type {any} */ (this.mode);
     const taxon = f.compare?.taxon;
     if (!taxon) this._compare = null;
     else if (this._compare?.taxon !== taxon) {
       this._compare = { taxon, key: undefined };
       const hit = await sources.gbifTaxon({ id: 'cmp:' + taxon, scientificName: taxon }, undefined, mode).catch(() => null);
-      if (this.focus?.compare?.taxon === taxon) this._compare = { taxon, key: hit?.key ?? null };
+      if (this.mapFocus?.compare?.taxon === taxon) this._compare = { taxon, key: hit?.key ?? null };
     }
     const filter = f.filter;
     const id = focusId(filter);
@@ -364,11 +365,6 @@ export class GfSheetMap extends LitElement {
     }
   }
 
-  /** Framing: France, the content shown, or the circle around me. */
-  get #frame() {
-    return this.#framing().frame;
-  }
-
   /**
    * What the map frames, from its settings and what it shows: « Automatique » follows the layers — the circle
    * around me once looked, else my places and their plants, else the world for a worldwide GBIF distribution,
@@ -395,7 +391,7 @@ export class GfSheetMap extends LitElement {
     if (b && b.points === null && this.#lastFraming) return this.#lastFraming;
     const zoneBox = b?.zone ? zoneBounds(b.zone) : null;
     if (b && (zoneBox || b.points?.length)) {
-      const world = !/^FRA\./.test(this.focus?.filter?.params.gadmGid || '') && this.focus?.filter?.params.country !== 'FR';
+      const world = !/^FRA\./.test(this.mapFocus?.filter?.params.gadmGid || '') && this.mapFocus?.filter?.params.country !== 'FR';
       return (this.#lastFraming = { frame: { key: 'filter|' + b.id + '|' + c.height, points: zoneBox || b.points, ease: true }, world });
     }
     const box = (/** @type {any} */ bounds) => /** @type {[number, number][]} */ ([[bounds.getWest(), bounds.getSouth()], [bounds.getEast(), bounds.getNorth()]]);
@@ -424,7 +420,7 @@ export class GfSheetMap extends LitElement {
     if (!plant) return nothing;
     const near = this._near;
     const spots = c.places ? this._spots : [];
-    const f = this.focus || noFocus();
+    const f = this.mapFocus || noFocus();
     const gbifReady = this.#aboutPlant && Boolean(this.gbifKey) && moduleOn('gbif', /** @type {any} */ (this.mode));
     // A filter shows the plant's occurrences even on a map set without them.
     const gbifOn = gbifReady && (c.gbif !== 'off' || Boolean(f.filter));
@@ -455,8 +451,8 @@ export class GfSheetMap extends LitElement {
           ?no-create=${!c.actions.create}
           .createPlant=${plant.id}
           ?no-locate=${!c.actions.locate}
-          @spot-select=${e => { location.hash = href.map({ spot: e.detail.id }); }}
-          @plant-select=${e => { location.hash = href.map({ spot: e.detail.placeId, focus: e.detail.entryId ?? e.detail.plantId }); }}
+          @spot-select=${e => { openView(href.map({ spot: e.detail.id })); }}
+          @plant-select=${e => { openView(href.map({ spot: e.detail.placeId, focus: e.detail.entryId ?? e.detail.plantId })); }}
           @positions-save=${e => this.#savePositions(e.detail.plants)}
           @layers-change=${e => this.dispatchEvent(new CustomEvent('map-layers', { detail: e.detail }))}
         ></gf-map>
@@ -567,7 +563,7 @@ export class GfSheetMap extends LitElement {
           <button type="button" data-layer="gbif-world" aria-pressed=${String(c.gbif === 'world')} title="Répartition GBIF dans le monde" @click=${() => this.#set({ gbif: c.gbif === 'world' ? 'off' : 'world' })}><i style="background:#f97316"></i>Monde</button>` : nothing}
         ${this._spots.length || !about ? html`<button type="button" data-layer="places" aria-pressed=${String(c.places)} @click=${() => this.#set({ places: !c.places })}>${icon('geo-alt-fill')} Mes lieux <small>${this._spots.length}</small></button>` : nothing}
         ${about && inatReady ? html`<button type="button" data-layer="inat" aria-pressed=${String(inatNear)} title="Observations iNaturalist autour de moi" @click=${() => this.#set({ near: nearOf(gbifNear, !inatNear) })}><i style="background:#74ac00"></i>iNaturalist autour${near?.state === 'done' && near.inatOn ? html` <small>${near.inatCount ?? 0}</small>` : nothing}</button>` : nothing}
-        ${gbifReady ? this._lookalikes.map(o => html`<button type="button" data-layer="compare" data-taxon=${o.taxon} aria-pressed=${String(this.focus?.compare?.taxon === o.taxon)}
+        ${gbifReady ? this._lookalikes.map(o => html`<button type="button" data-layer="compare" data-taxon=${o.taxon} aria-pressed=${String(this.mapFocus?.compare?.taxon === o.taxon)}
           title=${'Sa répartition (GBIF) à côté : ' + o.label + ' — une plante avec laquelle elle se confond'}
           @click=${() => this.dispatchEvent(new CustomEvent(FOCUS_EVENT, { detail: { kind: 'compare', label: o.label, taxon: o.taxon }, bubbles: true, composed: true }))}><i style="background:#7b3294"></i>Sosie : ${o.label}</button>`) : nothing}
         ${gbifReady ? html`<button type="button" data-layer="gbif-near" aria-pressed=${String(gbifNear)} title="Occurrences GBIF autour de moi" @click=${() => this.#set({ near: nearOf(!gbifNear, inatNear) })}><i style="background:#4e7b9f"></i>GBIF autour${near?.state === 'done' && near.gbifOn ? html` <small>${(near.gbifTotal ?? 0).toLocaleString('fr-FR')}</small>` : nothing}</button>` : nothing}
@@ -584,7 +580,7 @@ export class GfSheetMap extends LitElement {
     const c = this.config;
     const near = this._near;
     const parts = [];
-    const f = this.focus || noFocus();
+    const f = this.mapFocus || noFocus();
     if (gbifOn) parts.push(f.filter
       ? html`<span><i style="background:#f59e0b"></i>Occurrences GBIF : ${f.filter.label}${this._bounds?.points === null ? ' …' : this._bounds?.count ? ` (${this._bounds.count.toLocaleString('fr-FR')}${this._bounds.count > (this._bounds.occ?.length || 0) ? `, ${this._bounds.occ.length} placées en points` : ''})` : ''}</span>
         ${this._bounds?.zone ? html`<span><i style="background:transparent;border:2px solid #a3e68a;box-shadow:0 1px 0 rgb(0 0 0 / 30%)"></i>Limites : ${f.filter.label} (IGN)</span>` : nothing}`

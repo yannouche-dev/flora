@@ -10,9 +10,12 @@ name: CI
 #  - « tests »: the unit tests (node --test, tests/unit) and the end-to-end specs (@playwright/test, tests/e2e).
 #  - « a11y »: tools/axe.mjs runs axe-core (WCAG A/AA and best practices) on the main screens, phone and desktop, and
 #    fails on more violations than tools/axe-baseline.json allows, rule by rule: a ratchet, the baseline only goes down.
+#  - « lint »: static analysis (README, « Analyse statique ») — tsc on the JSDoc types of app/ against
+#    tools/tsc-baseline.json (a ratchet too, per file and error code), ESLint (eslint.config.js) and knip (knip.json:
+#    unused files, exports and dependencies).
 # Not required checks of main yet: the data workflows push to main with GITHUB_TOKEN, which no ruleset bypass list
 # accepts (README, « Protéger main »); until they push as a GitHub App, merge a pull request (or a merge queue entry)
-# only when all four are green.
+# only when all five are green.
 on:
   pull_request:
   merge_group:
@@ -48,6 +51,38 @@ jobs:
 
       - name: Check modules, imports, precache, safety data, CSP
         run: bash tools/check.sh
+
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      # TypeScript, ESLint and its plugins, knip, lit and @types/leaflet (for their types), at the versions and
+      # checksums of package-lock.json, without install scripts.
+      - name: Install dev dependencies
+        run: npm ci --ignore-scripts
+
+      # Each step runs even when the one before failed, so one run lists every problem.
+      - name: Types against the baseline (tsc)
+        run: npm run typecheck
+
+      - name: ESLint
+        if: ${{ !cancelled() }}
+        run: npx eslint .
+
+      - name: Unused files, exports and dependencies (knip)
+        if: ${{ !cancelled() }}
+        run: npx knip
 
   smoke:
     # Pinned: Playwright installs the browser's system libraries for a known Ubuntu release.

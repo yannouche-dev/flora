@@ -73,7 +73,7 @@ export function splitLine(line, sep) {
 
 /** Column indexes from the header line. */
 export function columns(header) {
-  const h = header.map(c => fold(c).replace(/^﻿/, ''));
+  const h = header.map(c => fold(c).replace(/^\uFEFF/, ''));
   const at = (...names) => names.map(n => h.indexOf(n)).find(i => i >= 0) ?? -1;
   return {
     ref: at('cd_ref'), nom: at('cd_nom'), type: at('cd_type_statut'), typeLabel: at('lb_type_statut'),
@@ -195,7 +195,7 @@ async function main() {
     if (!result) throw new Error('aucun tableau de statuts exploitable (définir la variable BDC_URL)');
   } catch (error) {
     const kept = keepPrevious(plants, 'statuses', 'data/plants.json');
-    if (kept < 1) throw new Error(`Statuts INPN illisibles (${error.message}) et aucun statut précédent à reprendre (${baselineName()})`);
+    if (kept < 1) throw new Error(`Statuts INPN illisibles (${error.message}) et aucun statut précédent à reprendre (${baselineName()})`, { cause: error });
     const before = previousJson('data/meta.json')?.sources?.bdcStatuts;
     meta.sources = { ...(meta.sources || {}), bdcStatuts: { ...before, kept: true, keptAt: new Date().toISOString() } };
     console.warn(`::warning::Statuts INPN non lus (${error.message}) : les statuts de ${kept} plantes sont repris du jeu précédent (${baselineName()}, lu le ${before?.fetchedAt?.slice(0, 10) || 'jour inconnu'})`);

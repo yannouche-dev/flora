@@ -291,7 +291,7 @@ async function main() {
     console.log(`Baseflor: flowering months for ${matched} / ${plants.length} plants`);
   } catch (error) {
     const kept = keepPrevious(plants, 'flowering', 'data/plants.json');
-    if (kept < 1) throw new Error(`Baseflor not read (${error.message}), and no previous flowering months to keep (${baselineName()})`);
+    if (kept < 1) throw new Error(`Baseflor not read (${error.message}), and no previous flowering months to keep (${baselineName()})`, { cause: error });
     const before = previousJson('data/meta.json')?.sources?.baseflor;
     meta.sources = { ...(meta.sources || {}), baseflor: { ...before, kept: true, keptAt: new Date().toISOString() } };
     console.warn(`::warning::Baseflor not read (${error.message}): the flowering months of ${kept} plants are kept from the previous dataset (${baselineName()}, read ${before?.fetchedAt?.slice(0, 10) || 'on an unknown day'})`);

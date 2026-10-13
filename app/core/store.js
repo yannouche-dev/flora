@@ -40,7 +40,7 @@ import { treeFromPlaces } from './pane-tree.js';
  * @property {import('./modes.js').ModeInfo[]} modes  the display modes: the app's three and the ones made from them
  * @property {boolean} kingMode         « Mode King »: the plant sheet blocks can be moved, folded and revived (left with the crown)
  * @property {boolean} harvestMode      "Mode cueillette": harvest log, seasons, look-alike warnings
- * @property {{ id: string, name: string, kind: string, count: number }[]} collections
+ * @property {import('./collections.js').CollectionSummary[]} collections
  */
 
 export class Store extends EventTarget {

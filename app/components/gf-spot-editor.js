@@ -5,7 +5,7 @@ import * as db from '../core/db.js';
 import { GeoController } from '../core/geo.js';
 import { moduleOn } from '../core/modules.js';
 import { href } from '../core/router.js';
-import { back, replaceHash } from '../core/history.js';
+import { back, replaceHash, replaceView } from '../core/history.js';
 import {
   ABUNDANCE, defaultPlantPosition, deletePlace, distance, entryInSeason, entryName, entryPosition, exportGeoJSON, findEntry,
   formatDistance, getPlace, lastHarvest, matchCollections, plantMarkers,
@@ -60,7 +60,7 @@ export class GfSpotEditor extends LitElement {
     /** Embedded: the Carte's map is editing positions. */
     mapEditing: { attribute: false },
     /** Embedded: the plant tapped on the map (its entry opens). */
-    focus: { attribute: false },
+    focusEntry: { attribute: false },
     _saveState: { state: true },
     _place: { state: true },
     _manual: { state: true },
@@ -231,8 +231,8 @@ export class GfSpotEditor extends LitElement {
     this.at = null;
     this.embedded = false;
     this.mapEditing = false;
-    /** @type {number | null} */
-    this.focus = null;
+    /** @type {string | number | null} an occurrence id, or a plant id (its first occurrence) */
+    this.focusEntry = null;
     /** Address and altitude of the place point (IGN). @type {{ key: string, address?: string | null, alt?: number | null }} */
     this._where = { key: '' };
     /** @type {'' | 'saving' | 'saved' | 'error'} */
@@ -245,11 +245,11 @@ export class GfSpotEditor extends LitElement {
     this._manual = false;
     /** Positions editing: off for a saved place (read-only map), on while creating one. */
     this._editPos = false;
-    /** Plant entry whose details are expanded. @type {number | null} */
+    /** Plant entry (its occurrence id) whose details are expanded. @type {string | null} */
     this._open = null;
     this._picker = false;
     this._pickerQuery = '';
-    /** Plants added during this edit → "harvested today" quantity ('' = yes, no quantity; null = no). @type {Map<number | null, string | null>} */
+    /** Occurrences (ids) added during this edit → "harvested today" quantity ('' = yes, no quantity; null = no). @type {Map<string | null, string | null>} */
     this._todayFor = new Map();
     /** @type {{ place: import('../core/collections.js').Place, distance: number }[]} */
     this._nearby = [];
@@ -365,7 +365,7 @@ export class GfSpotEditor extends LitElement {
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
     if (changed.has('spotId') || changed.has('plantId') || changed.has('addPlant') || changed.has('kind') || changed.has('at')) this.#load();
-    if (changed.has('focus') && this.focus != null) this._open = this.#entryKey(this.focus);
+    if (changed.has('focusEntry') && this.focusEntry != null) this._open = this.#entryKey(this.focusEntry);
     if (changed.has('_place')) this.#updateWhere();
 
     // A new place follows the GPS until the user places it by hand.
@@ -420,11 +420,11 @@ export class GfSpotEditor extends LitElement {
       let place = await getPlace(this.spotId);
       // A saved place is shown on the Carte, in its panel (same map, same page).
       if (place?.geometry && place.properties.kind === 'place' && !this.embedded) {
-        location.replace(href.map({ spot: place.id, add: this.addPlant ?? undefined, pick: this.pick }));
+        replaceView(href.map({ spot: place.id, add: this.addPlant ?? undefined, pick: this.pick }));
         return;
       }
       this.#savedAt = place?.properties.updatedAt || '';
-      if (this.embedded && this.focus != null && place) this._open = findEntry(place, this.focus)?.id ?? null;
+      if (this.embedded && this.focusEntry != null && place) this._open = findEntry(place, this.focusEntry)?.id ?? null;
       if (place && this.addPlant && place.properties.kind === 'place') {
         if (!findEntry(place, this.addPlant)) {
           const plant = await db.get('plants', this.addPlant);
@@ -655,7 +655,7 @@ export class GfSpotEditor extends LitElement {
       if (this.#persisted && this.#createdHere) await deletePlace(draft.id);
       this.#persisted = false;
       // In place of this draft: Back does not return to it.
-      location.replace(href.spot(targetId));
+      replaceView(href.spot(targetId));
     } catch (error) {
       this._error = 'Ajout impossible : ' + /** @type {Error} */ (error).message;
     }
@@ -673,7 +673,7 @@ export class GfSpotEditor extends LitElement {
   /** @param {import('../core/collections.js').Place} target */
   #useExisting(target) {
     const first = this._place?.properties.plants[0];
-    location.replace(href.spot(target.id, first?.plantId ?? undefined));
+    replaceView(href.spot(target.id, first?.plantId ?? undefined));
   }
 
   /** @param {SubmitEvent} event */
@@ -695,7 +695,7 @@ export class GfSpotEditor extends LitElement {
       const saved = await savePlace(this.#payload());
       this.#persisted = true;
       // The new place replaces its form in history.
-      location.replace(href.map({ spot: saved.id }));
+      replaceView(href.map({ spot: saved.id }));
     } catch (error) {
       this._error = 'Enregistrement impossible : ' + /** @type {Error} */ (error).message;
     }
@@ -711,7 +711,7 @@ export class GfSpotEditor extends LitElement {
     const wasPlace = this.#isPlace;
     if (!this.#isNew) await deletePlace(this._place.id);
     // Gone: Back must not lead to it.
-    location.replace(wasPlace ? href.map() : href.collections());
+    replaceView(wasPlace ? href.map() : href.collections());
   }
 
   #doneHref() {

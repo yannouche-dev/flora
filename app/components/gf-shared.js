@@ -11,6 +11,7 @@ import './gf-map.js';
 import './gf-thumb.js';
 import { ui } from '../styles/ui.js';
 import { kindIcon } from '../core/icons.js';
+import { openView } from '../core/history.js';
 
 /** Preview of a collection received by link (#/shared?d=…), with "Enregistrer dans mes plantes". */
 export class GfShared extends LitElement {
@@ -121,7 +122,7 @@ export class GfShared extends LitElement {
         if (collection !== before && row.abundance) collection = withEntry(collection, /** @type {any} */ (lastEntry(collection)).id, { abundance: /** @type {any} */ (row.abundance) });
       }
       const saved = await saveCollection(collection);
-      location.hash = href.spot(saved.id);
+      openView(href.spot(saved.id));
     } catch (error) {
       this._error = 'Enregistrement impossible : ' + /** @type {Error} */ (error).message;
     } finally {

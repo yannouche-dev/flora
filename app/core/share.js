@@ -105,7 +105,7 @@ export async function decodeCollection(data) {
   } catch (error) {
     throw new Error(/** @type {Error} */ (error).message === 'unsupported'
       ? 'Ce navigateur ne sait pas ouvrir ce lien compressé.'
-      : 'Ce lien de partage est incomplet ou abîmé.');
+      : 'Ce lien de partage est incomplet ou abîmé.', { cause: error });
   }
   if (json?.v !== 1 || !Array.isArray(json.p)) throw new Error('Ce lien de partage n’est pas reconnu.');
 
@@ -164,7 +164,7 @@ export async function decodePortable(data) {
   } catch (error) {
     throw new Error(/** @type {Error} */ (error).message === 'unsupported'
       ? 'Ce navigateur ne sait pas ouvrir ce lien compressé.'
-      : 'Ce lien de transfert est incomplet ou abîmé.');
+      : 'Ce lien de transfert est incomplet ou abîmé.', { cause: error });
   }
   if (json?.type !== 'FeatureCollection' || !Array.isArray(json.features)) throw new Error('Ce lien de transfert n’est pas reconnu.');
   return json;

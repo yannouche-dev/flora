@@ -87,12 +87,12 @@ export const SUBS = {
   ]
 };
 
+const TABLE_LIST = [{ key: 'table', title: 'Tableau' }, { key: 'list', title: 'Liste' }];
 /**
  * Blocks shown in more than one style, chosen per mode in Mode King: the first style is the default, except
  * where the mode's own default is given.
  * @type {Record<string, { styles: { key: string, title: string }[], defaults?: Partial<Record<Mode, string>> }>}
  */
-const TABLE_LIST = [{ key: 'table', title: 'Tableau' }, { key: 'list', title: 'Liste' }];
 export const STYLES = {
   names: { styles: TABLE_LIST, defaults: { epure: 'list' } },
   // Tabular data: a table by default, or a list.
@@ -106,9 +106,6 @@ export const STYLES = {
   // Médias: the stage and its filmstrip, every image in a grid, or one image after the other, full frame.
   media: { styles: [{ key: 'scene', title: 'Scène' }, { key: 'mosaic', title: 'Mosaïque' }, { key: 'slideshow', title: 'Diaporama' }] }
 };
-
-/** The action bar docked at the bottom of the sheet: its actions, shown or not and ordered per mode (sub-blocks of 'actions'). */
-export const ACTIONS = SUBS.actions;
 
 /** Default order of each mode: what the mode is about first. Note blocks follow, in their creation order. @type {Record<Mode, string[]>} */
 const DEFAULTS = {
@@ -190,7 +187,7 @@ function merge(saved, keys) {
 
 /** The block keys of a view, in the order chosen on this device. @param {Mode} view @returns {string[]} */
 export const blockOrder = view =>
-  merge((layout().order[view] || []).map(k => RENAMED[/** @type {keyof RENAMED} */ (k)] || k), defaults(view));
+  merge((layout().order[view] || []).map(k => RENAMED[/** @type {keyof typeof RENAMED} */ (k)] || k), defaults(view));
 
 /** Has this view been arranged by hand? @param {Mode} view */
 export function isCustom(view) {
@@ -544,7 +541,6 @@ const writeNotes = notes => {
   } catch { /* not persisted */ }
 };
 
-/** Delete a note block everywhere, with what was written in it. @param {string} key */
 /** A deleted block leaves every mode's places. @param {string} key */
 const unplace = key => Object.fromEntries(Object.entries(layout().place || {}).map(([v, per]) => {
   const rest = { ...per };
@@ -552,6 +548,7 @@ const unplace = key => Object.fromEntries(Object.entries(layout().place || {}).m
   return [v, rest];
 }).filter(([, per]) => Object.keys(per).length));
 
+/** Delete a note block everywhere, with what was written in it. @param {string} key */
 export function deleteNote(key) {
   const id = key.slice('note:'.length);
   const strip = (/** @type {Partial<Record<Mode, string[]>>} */ per) =>
