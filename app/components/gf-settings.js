@@ -513,10 +513,10 @@ export class GfSettings extends LitElement {
           <label><input type="radio" name="map-renderer" value="3d" .checked=${s.renderer === '3d'} ?disabled=${!webgl && s.renderer !== '3d'} @change=${() => setMapSettings({ renderer: '3d' })} /> 3D <small class="muted">(relief, inclinaison, rotation, bâtiments, ciel)</small></label>
         </fieldset>
         ${webgl ? nothing : html`<p class="muted" role="status">Cet appareil n’affiche pas la 3D (WebGL2 requis) : les cartes restent en 2D.</p>`}
-        <p class="muted">Chaque carte a aussi son bouton <strong>3D</strong> / <strong>2D</strong> (en haut à droite) pour changer de vue le temps de la regarder.
-          En 3D : glisser du clic droit, ou à deux doigts, pour tourner et incliner ; Maj + flèches au clavier. La 3D se télécharge à sa première ouverture (environ 1,6 Mo), en ligne.
-          L’étape « Jusqu’où part l’expédition ? » reste vue de dessus ; sur une fiche plante, seule la carte principale passe en 3D ; pendant la modification des positions, la carte repasse en 2D.</p>
-        ${s.renderer === '3d' ? options : html`<details><summary>Options de la 3D</summary>${options}</details>`}
+        <p class="muted">Le choix vaut pour toutes les cartes : la Carte, la carte de la fiche plante, Mes plantes, Parcours, Rencontres, le partage.
+          En 3D : glisser du clic droit, ou à deux doigts, pour tourner et incliner ; Maj + flèches au clavier ; la boussole revient au nord. La 3D se télécharge à sa première ouverture (environ 1,6 Mo), en ligne.
+          L’étape « Jusqu’où part l’expédition ? » reste vue de dessus ; sur une fiche plante, les cartes ajoutées en plus de la carte principale restent en 2D ; pendant la modification des positions, la carte repasse en 2D le temps de l’édition.</p>
+        ${s.renderer === '3d' ? options : nothing}
         <p class="muted">Le relief vient d’AWS Terrain Tiles (s3.amazonaws.com, module « Vue 3D (relief) »), les bâtiments et le plan vectoriel de l’IGN (data.geopf.fr, module « IGN – fonds de carte ») : ces serveurs voient la zone de carte affichée.</p>
         <p><button type="button" class="small" @click=${() => resetMapSettings()}>${icon('arrow-counterclockwise')} Options des cartes par défaut</button></p>
       </div>`;

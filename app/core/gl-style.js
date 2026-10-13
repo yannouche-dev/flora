@@ -181,7 +181,8 @@ export function buildStyle(o) {
       layers.push(...vector.layers);
     } else {
       sources[t.id] = { type: 'raster', tiles: [tileUrl(t.url, o.cacheOnly)], tileSize: 256, minzoom: t.nativeMin, maxzoom: t.nativeMax };
-      layers.push({ id: t.id, type: 'raster', source: t.id, minzoom: t.minzoom, metadata: { 'gf:key': t.key },
+      // The globe: the backgrounds from the furthest zoom (the IGN's cover the world at small scales).
+      layers.push({ id: t.id, type: 'raster', source: t.id, minzoom: t.base && s.globe ? 0 : t.minzoom, metadata: { 'gf:key': t.key },
         paint: { 'raster-opacity': t.opacity, 'raster-fade-duration': 150, ...(night && t.base ? { 'raster-brightness-max': 0.55 } : {}) } });
     }
     // The relief's shading right over the background (under the overlays).

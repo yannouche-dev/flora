@@ -20,6 +20,8 @@ import { openModal } from '../core/history.js';
 import { icon, iconMarkup } from '../core/icons.js';
 import { ATTRIBUTION as IGN_ATTRIBUTION } from '../core/ign.js';
 import { PIN_COLORS } from './gf-map.js';
+import { mapSettings } from '../core/map-settings.js';
+import { DEM_ATTRIBUTION, DEM_MAX, DEM_TILES as DEM } from '../core/gl-style.js';
 
 /** MapLibre, vendored: its address as a value (not a literal import), so the type checker never reads 1 MB of it. */
 const MAPLIBRE = new URL('../../vendor/maplibre/maplibre-gl.mjs', import.meta.url).href;
@@ -28,17 +30,11 @@ const MAPLIBRE_CSS = new URL('../../vendor/maplibre/maplibre-gl.css', import.met
 /** IGN Géoplateforme WMTS, Web Mercator (as core/ign.js asks it), aerial photos. */
 const IGN_PHOTOS = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&TILEMATRIXSET=PM'
   + '&LAYER=ORTHOIMAGERY.ORTHOPHOTOS&STYLE=normal&FORMAT=image/jpeg&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}';
-/**
- * AWS Terrain Tiles (Mapzen), Terrarium encoding, 256 px, keyless, CORS. Over France every zoom is EU-DEM (25 m):
- * z12 (≈ 27 m a pixel at 46° N) already holds it all — past it, the same data resampled, 4 to 64 times the tiles.
- */
-const DEM = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
-const DEM_MAX = 12;
-const DEM_ATTRIBUTION = 'Relief : <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">Terrain Tiles</a> (Mapzen · EU-DEM © Copernicus)';
+// The relief: AWS Terrain Tiles (Mapzen), Terrarium encoding, 256 px, keyless, CORS (core/gl-style.js, shared with the
+// maps in 3D). Over France every zoom is EU-DEM (25 m): z12 already holds it all.
 /** This many relief tiles failed (offline, the host out of reach): the view goes on flat. */
 const DEM_GIVE_UP = 3;
 const IGN_GIVE_UP = 3;
-const EXAGGERATION = 1.3;
 const PITCH = 60;
 
 /** MapLibre's own words, in French. */
@@ -386,7 +382,8 @@ export class GfMap3d extends LitElement {
     const duration = matchMedia('(prefers-reduced-motion: reduce)').matches ? 0 : 1200;
     if (on) {
       if (this._terrain) {
-        map.setTerrain({ source: 'dem', exaggeration: EXAGGERATION });
+        // The exaggeration chosen in Réglages › Cartes (1.3 by default).
+        map.setTerrain({ source: 'dem', exaggeration: mapSettings().exaggeration });
         map.setSky(SKY);
       }
       // A tilted view shows less of the walk at the same zoom: a little further.

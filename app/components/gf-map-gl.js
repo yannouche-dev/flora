@@ -24,7 +24,7 @@
 // « Photos en ligne » module).
 
 import * as L from 'leaflet';
-import { lightMoment, mapSettings, mapSettingsEvents, setMapSettings, sunPosition } from '../core/map-settings.js';
+import { lightMoment, mapSettings, mapSettingsEvents, sunPosition } from '../core/map-settings.js';
 import { moduleEvents, moduleOn } from '../core/modules.js';
 import { DEM_ATTRIBUTION, IGN_VECTOR_STYLE, buildStyle, circlePolygon, describeTileLayer, mergeVectorStyle, pathStyle } from '../core/gl-style.js';
 import { LOCALE, MAPLIBRE_CSS, MAP_GL_CSS, hasWebGL2, linkCss, loadMapLibre, noWebGL2 } from '../core/maplibre.js';
@@ -101,13 +101,11 @@ export class GlView {
     this.connect();
   }
 
-  /** This map's own choice (its 2D ⇄ 3D button), while it is shown: null follows Réglages. @type {boolean | null} */
-  #override = null;
   /** @type {'off' | 'loading' | 'ready'} */
   #state = 'off';
   /** Why the map is in 2D though 3D is wanted (a note key), or ''. */
   #blocked = '';
-  /** A failure that holds until the map's button is touched again (no WebGL2, MapLibre not loaded, context lost). */
+  /** A failure that holds until Réglages › Cartes change, or the network comes back (MapLibre not loaded, context lost). */
   #failed = '';
   /** @type {any} MapLibre */
   #ml = null;
@@ -138,21 +136,15 @@ export class GlView {
   #connected = false;
   #demCredited = false;
 
-  // ── What the user sees: the 2D ⇄ 3D button, the note, the altitude ──────────────────────────────
+  // ── What the user sees: the note, the altitude ──────────────────────────────────────────────────
+  // (No 2D ⇄ 3D button on the maps: the choice is Réglages › Cartes', the same for every map.)
 
-  /** @type {HTMLButtonElement | null} */ #button = null;
   /** @type {HTMLElement | null} */ #note = null;
   /** @type {HTMLElement | null} */ #alt = null;
   /** @type {ReturnType<typeof setTimeout> | undefined} */ #noteTimer;
 
   #buildUi() {
     if (!this.allowed) { this.host.dataset.renderer = '2d'; return; }
-    const buttons = this.root.querySelector('.gf-map-buttons');
-    const button = this.#button = Object.assign(document.createElement('button'), { type: 'button', className: 'gl3d', textContent: '3D' });
-    button.setAttribute('aria-pressed', 'false');
-    button.addEventListener('click', () => this.toggle());
-    L.DomEvent.disableClickPropagation(button);
-    buttons?.prepend(button);
     const note = this.#note = Object.assign(document.createElement('div'), { className: 'gf-gl-note', hidden: true });
     note.setAttribute('role', 'status');
     // eslint-disable-next-line no-unsanitized/property -- fixed markup and a bundled icon, no data in it
@@ -172,18 +164,10 @@ export class GlView {
     if (text && !stay) this.#noteTimer = setTimeout(() => { note.hidden = true; }, 7000);
   }
 
-  /** 3D wanted for this map: its own choice, else Réglages. */
-  get wanted() { return this.allowed && (this.#override ?? mapSettings().renderer === '3d'); }
+  /** 3D wanted for this map: Réglages › Cartes say so (and the map may be in 3D). */
+  get wanted() { return this.allowed && mapSettings().renderer === '3d'; }
   /** Drawn in 3D now (or loading). */
   get on() { return this.#state !== 'off'; }
-
-  /** The 2D ⇄ 3D button: this map only, while it is shown. */
-  toggle() {
-    const next = !(this.on || (this.wanted && Boolean(this.#blocked)));
-    this.#override = next;
-    this.#failed = '';
-    this.sync();
-  }
 
   // ── When it is drawn in 3D ──────────────────────────────────────────────────────────────────────
 
@@ -214,14 +198,8 @@ export class GlView {
     this.#syncButton();
   }
 
+  /** The map says how it is drawn (data-renderer, data-gl: its styles, the tests). */
   #syncButton() {
-    const b = this.#button;
-    if (!b) return;
-    b.setAttribute('aria-pressed', String(this.on));
-    const label = this.on ? 'Vue 2D (carte à plat, vue de dessus)' : 'Vue 3D (relief, inclinaison, bâtiments)';
-    b.setAttribute('aria-label', label);
-    b.title = label;
-    b.textContent = this.on ? '2D' : '3D';
     this.host.dataset.renderer = this.#state === 'ready' ? '3d' : '2d';
     if (this.#state === 'off') delete this.host.dataset.gl; else this.host.dataset.gl = this.#state;
     this.#syncPanel();
@@ -253,14 +231,14 @@ export class GlView {
   /** @type {[EventTarget, string, (e: any) => void][]} */
   #global = [
     [mapSettingsEvents, 'change', () => {
-      // Réglages changed: a map whose own choice they now make is theirs again.
-      if (this.#override !== null && this.#override === (mapSettings().renderer === '3d')) this.#override = null;
+      // Réglages changed: a failure is tried again.
+      this.#failed = this.#failed === 'webgl' ? 'webgl' : '';
       this.sync();
       if (this.#state === 'ready') { this.#restyle(); this.#applyPitch(); this.#fetchVector(); }
       this.#syncPanel();
     }],
     [moduleEvents, 'change', () => { if (this.on) this.#restyle(); this.#syncPanel(); }],
-    [window, 'online', () => { if (this.on) { this.#demFailed = false; this.#vectorFailed = false; this.#restyle(); this.#fetchVector(); } }],
+    [window, 'online', () => { if (this.#failed === 'loadOffline') { this.#failed = ''; this.sync(); } if (this.on) { this.#demFailed = false; this.#vectorFailed = false; this.#restyle(); this.#fetchVector(); } }],
     [window, 'offline', () => { if (this.on) this.#restyle(); }]
   ];
 
@@ -346,7 +324,8 @@ export class GlView {
       fadeDuration: reduceMotion() ? 0 : 300,
       cancelPendingTileRequestsWhileZooming: true
     });
-    map.addControl(new ml.NavigationControl({ visualizePitch: true, showCompass: true, showZoom: true }), 'bottom-left');
+    // Touch screens pinch to zoom (no + −, as in 2D); the compass stays: north again, the tilt shown.
+    map.addControl(new ml.NavigationControl({ visualizePitch: true, showCompass: true, showZoom: !matchMedia('(pointer: coarse)').matches }), 'bottom-left');
     map.addControl(new ml.ScaleControl({ unit: 'metric', maxWidth: 90 }), 'bottom-left');
     const frame = this.host.querySelector('.gf-map-frame');
     map.addControl(new ml.FullscreenControl(frame ? { container: frame } : {}), 'bottom-left');
@@ -786,23 +765,12 @@ export class GlView {
     this.#map?.getSource('gf-paths')?.setData(this.#paths);
   }
 
-  // ── The panel « Carte »: its 3D part ────────────────────────────────────────────────────────────
-
-  /** @type {any} */ #panel = null;
+  // ── The panel « Carte »: says the map is in 3D (its options: Réglages › Cartes) ─────────────────
 
   #syncPanel() {
     const panel = /** @type {any} */ (this.root.querySelector('gf-map-panel'));
     if (!panel) return;
-    if (panel !== this.#panel) {
-      this.#panel = panel;
-      panel.addEventListener('gl-renderer', () => this.toggle());
-      panel.addEventListener('gl-setting', (/** @type {CustomEvent} */ e) => setMapSettings(e.detail));
-    }
-    panel.gl = this.allowed ? {
-      on: this.on, settings: mapSettings(),
-      relief: moduleOn('relief3d'), ign: moduleOn('ignMaps'), online: this.#online(),
-      webgl: hasWebGL2(), note: this.#blocked ? NOTES[/** @type {keyof typeof NOTES} */ (this.#blocked)] || '' : ''
-    } : null;
+    panel.gl = this.on ? { on: true, note: this.#flatWhy() } : null;
   }
 
   // ── For the tests (and the curious): what the 3D map shows now ──────────────────────────────────
@@ -810,15 +778,17 @@ export class GlView {
   /** @returns {any} */
   state() {
     const map = this.#map;
+    const style = map?.getStyle();
     return {
       renderer: this.#state === 'ready' ? '3d' : '2d', state: this.#state, blocked: this.#blocked, wanted: this.wanted, allowed: this.allowed,
+      demFailed: this.#demFailed, vectorFailed: this.#vectorFailed,
       ...(map ? {
-        layers: map.getStyle().layers.map((/** @type {any} */ l) => l.id),
-        sources: Object.keys(map.getStyle().sources),
+        layers: style.layers.map((/** @type {any} */ l) => l.id),
+        sources: Object.keys(style.sources),
         tiles: this.#tiles(),
         terrain: Boolean(map.getTerrain()),
         exaggeration: map.getTerrain()?.exaggeration ?? null,
-        sky: Boolean(map.getStyle().sky),
+        sky: Boolean(style.sky),
         projection: map.getProjection?.()?.type ?? 'mercator',
         pitch: Math.round(map.getPitch()), bearing: Math.round(map.getBearing()), zoom: map.getZoom(),
         markers: [...this.#mirrors.values()].filter(m => m.kind === 'marker' || m.kind === 'dot').length,

@@ -13,6 +13,11 @@ gf-map .gf-map-gl {
   z-index: 450;
   background: #dfe6d8;
   font: inherit;
+  container-type: size;
+}
+/* A small map (a block of the plant sheet): its controls few. */
+@container (max-height: 300px) {
+  gf-map .gf-map-gl .maplibregl-ctrl-group:has(.maplibregl-ctrl-fullscreen), gf-map .gf-map-gl .maplibregl-ctrl-scale { display: none; }
 }
 gf-map .gf-map-gl[hidden] { display: none; }
 gf-map .gf-map-gl .maplibregl-canvas:focus-visible { outline: 3px solid var(--gf-accent, #2f6b3a); outline-offset: -3px; }
@@ -67,9 +72,6 @@ gf-map .gf-map-gl .maplibregl-canvas:focus-visible { outline: 3px solid var(--gf
   pointer-events: none;
 }
 .gf-gl-label.below { bottom: auto; top: calc(100% + 8px); }
-
-/* The 2D ⇄ 3D button, among the map's buttons. */
-gf-map .gf-map-buttons button.gl3d { font-size: 0.72rem; font-weight: 800; letter-spacing: 0.02em; }
 
 /* What the 3D map says (loading, back in 2D and why, flat for lack of relief): under the search pill, centred. */
 gf-map .gf-gl-note {

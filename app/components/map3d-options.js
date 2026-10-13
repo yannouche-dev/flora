@@ -43,6 +43,7 @@ export function map3dOptions(s, change, o) {
 /** Their styles (in a shadow root with the app's `ui`). */
 export const map3dOptionsCss = css`
   .opts3d { display: grid; gap: 6px; }
+  .opts3d input { accent-color: var(--gf-accent); }
   .opt3d.switch { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; padding: 4px 0; }
   .opt3d.switch input { flex: none; margin-top: 3px; }
   .opt3d.switch span { display: grid; }
