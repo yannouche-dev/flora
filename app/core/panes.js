@@ -1,12 +1,33 @@
 // @ts-check
 // Panes of a layout (Mes plantes, the Carte's place panel…), as in Flore: each one resizable by dragging its
-// separator (a guide line follows the pointer; the pane takes its width on release), with ← → on the focused
-// separator, a double click giving back the default width, and a fold button (« ») turning it into a narrow
-// rail with its title written vertically. Widths and folds are remembered per layout.
+// separator (a guide line follows the pointer; the pane takes its width on release), with ← → (Maj : by 64 px),
+// Début / Fin on the focused separator, a double click or Entrée giving back the default width, and a fold button
+// (« ») turning it into a narrow rail with its title written vertically. Widths and folds are remembered per layout.
 
 import { html, css, nothing } from 'lit';
 
 /** @typedef {{ widths: Record<string, number>, folded: Record<string, boolean> }} PaneState */
+
+/**
+ * The separators alone (Flore, the place editor: views with their own heads and rails): a 1 px line, a 7 px grip
+ * (24 px and a tab to hold with a finger), the guide line of a drag, the accent on hover and focus.
+ */
+export const splitStyles = css`
+  .guide { position: absolute; top: 0; bottom: 0; left: -1px; width: 3px; background: var(--gf-accent); z-index: 5; pointer-events: none; will-change: transform; }
+  .guide span { position: absolute; top: 50%; left: 8px; padding: 2px 8px; border-radius: var(--gf-radius-pill); background: var(--gf-accent); color: var(--gf-accent-contrast); font-size: 0.75rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .split { flex: none; width: 7px; margin: 0 -3px; z-index: 3; cursor: col-resize; position: relative; touch-action: none; }
+  .split::after { content: ''; position: absolute; inset: 0 3px; background: var(--gf-border); transition: background 0.12s; }
+  .split:hover::after, .split:focus-visible::after, .split.dragging::after { background: var(--gf-accent); inset: 0 2px; }
+  .split:focus-visible { outline: none; }
+  /* A finger: a wider grip, and a tab to hold in the middle. */
+  @media (pointer: coarse) {
+    .split { width: 24px; margin: 0 -12px; }
+    .split::after { inset: 0 11.5px; }
+    .split::before { content: ''; position: absolute; top: 50%; left: 50%; width: 10px; height: 44px; translate: -50% -50%; border-radius: 5px;
+      background: var(--gf-surface); border: 1px solid var(--gf-border); box-shadow: 0 1px 4px rgb(0 0 0 / 18%); z-index: 1; }
+  }
+  :host(.resizing) { cursor: col-resize; user-select: none; }
+`;
 
 /** Styles shared by these layouts (the same head, separators and rails as Flore's). */
 export const paneStyles = css`
@@ -23,20 +44,7 @@ export const paneStyles = css`
   .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
   .pane-head h2 { margin: 0; min-width: 0; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gf-text-muted); flex: 1; display: flex; gap: 8px; align-items: center; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .pane-head .icon-btn { width: 32px; height: 32px; font-size: 1rem; flex: none; }
-  .guide { position: absolute; top: 0; bottom: 0; left: -1px; width: 3px; background: var(--gf-accent); z-index: 5; pointer-events: none; will-change: transform; }
-  .guide span { position: absolute; top: 50%; left: 8px; padding: 2px 8px; border-radius: var(--gf-radius-pill); background: var(--gf-accent); color: var(--gf-accent-contrast); font-size: 0.75rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
-  .split { flex: none; width: 7px; margin: 0 -3px; z-index: 3; cursor: col-resize; position: relative; touch-action: none; }
-  .split::after { content: ''; position: absolute; inset: 0 3px; background: var(--gf-border); transition: background 0.12s; }
-  .split:hover::after, .split:focus-visible::after, .split.dragging::after { background: var(--gf-accent); inset: 0 2px; }
-  .split:focus-visible { outline: none; }
-  /* A finger: a wider grip, and a tab to hold in the middle. */
-  @media (pointer: coarse) {
-    .split { width: 24px; margin: 0 -12px; }
-    .split::after { inset: 0 11.5px; }
-    .split::before { content: ''; position: absolute; top: 50%; left: 50%; width: 10px; height: 44px; translate: -50% -50%; border-radius: 5px;
-      background: var(--gf-surface); border: 1px solid var(--gf-border); box-shadow: 0 1px 4px rgb(0 0 0 / 18%); z-index: 1; }
-  }
-  :host(.resizing) { cursor: col-resize; user-select: none; }
+  ${splitStyles}
   .rail {
     flex: none; width: 40px; min-height: 0; border: 0; border-radius: 0; border-right: 1px solid var(--gf-border);
     background: var(--gf-surface); writing-mode: vertical-rl; padding: 14px 0; justify-content: flex-start; gap: 8px;
@@ -57,7 +65,8 @@ export class PaneSizer {
    * @param {import('lit').ReactiveControllerHost & HTMLElement & { renderRoot: ParentNode }} host
    * @param {string} storageKey
    * @param {Record<string, { width: number, min: number, title: string }>} panes
-   * @param {{ onChange?: (pane: string) => void }} [opts] `onChange`: a width about to change (a map beside it: hold its view)
+   * @param {{ onChange?: (pane: string) => void, legacy?: (raw: any) => PaneState | null }} [opts] `onChange`: a width
+   *   about to change (a map beside it: hold its view); `legacy`: what was saved in an older shape, read as widths and folds
    */
   constructor(host, storageKey, panes, opts = {}) {
     this.host = host;
@@ -68,7 +77,8 @@ export class PaneSizer {
     this.state = { widths: {}, folded: {} };
     try {
       const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
-      if (saved && typeof saved === 'object') this.state = { widths: { ...saved.widths }, folded: { ...saved.folded } };
+      const read = saved && typeof saved === 'object' && !('widths' in saved) && opts.legacy ? opts.legacy(saved) : saved;
+      if (read && typeof read === 'object') this.state = { widths: { ...read.widths }, folded: { ...read.folded } };
     } catch { /* defaults */ }
     host.addController(this);
   }
@@ -119,16 +129,17 @@ export class PaneSizer {
 
   /**
    * The separator that resizes `pane`. `side`: where the pane is, left or right of the separator.
-   * `max()`: the widest it may be now (the other panes keep their minimum).
-   * @param {string} pane @param {'left' | 'right'} side @param {() => number} max
+   * `max()`: the widest it may be now (the other panes keep their minimum). `controls`: the id of the pane's element.
+   * @param {string} pane @param {'left' | 'right'} side @param {() => number} max @param {string} [controls]
    */
-  split(pane, side, max) {
+  split(pane, side, max, controls) {
     const t = this.panes[pane].title;
     const clamp = (/** @type {number} */ w) => Math.round(Math.min(Math.max(this.panes[pane].min, max()), Math.max(this.panes[pane].min, w)));
     return html`<div class="split" role="separator" aria-orientation="vertical" tabindex="0" data-pane=${pane}
-      aria-label=${'Largeur du panneau ' + t.toLowerCase()} aria-valuenow=${this.width(pane)} aria-valuemin=${this.panes[pane].min}
+      aria-label=${'Redimensionner le panneau ' + t.toLowerCase()} aria-controls=${controls ?? nothing}
+      aria-valuenow=${Math.max(this.panes[pane].min, Math.min(this.width(pane), Math.round(max())))} aria-valuemin=${this.panes[pane].min}
       aria-valuemax=${Math.max(this.panes[pane].min, Math.round(max()))}
-      title="Glisser pour redimensionner · ← → au clavier · double-clic : largeur par défaut"
+      title="Glisser pour redimensionner · ← → au clavier · double-clic ou Entrée : largeur par défaut"
       @pointerdown=${(/** @type {PointerEvent} */ e) => this.#drag(e, pane, side, clamp)}
       @keydown=${(/** @type {KeyboardEvent} */ e) => {
         const dir = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
@@ -137,7 +148,8 @@ export class PaneSizer {
         e.preventDefault();
         e.stopPropagation();
         if (e.key === 'Enter') { this.reset(pane); return; }
-        if (!dir) { this.setWidth(pane, clamp((e.key === 'End') === (side === 'left') ? Infinity : 0)); return; }
+        // Début / Fin: the pane at its least / its widest (the separator's value, aria-valuemin / max), whichever side it is on.
+        if (!dir) { this.setWidth(pane, clamp(e.key === 'End' ? Infinity : 0)); return; }
         // From the width it has on screen (a default in % may differ from the one remembered).
         const el = /** @type {HTMLElement} */ (e.currentTarget)[side === 'left' ? 'previousElementSibling' : 'nextElementSibling'];
         const now = el ? Math.round(el.getBoundingClientRect().width) : this.width(pane);
@@ -159,7 +171,9 @@ export class PaneSizer {
   #drag(e, pane, side, clamp) {
     if (e.button !== 0) return;
     const handle = /** @type {HTMLElement} */ (e.currentTarget);
-    const box = /** @type {HTMLElement | null} */ (handle.parentElement);
+    // Its box: the element holding it, or the host when it sits at the top of a shadow root (the place editor).
+    const root = handle.getRootNode();
+    const box = /** @type {HTMLElement | null} */ (handle.parentElement ?? (root instanceof ShadowRoot ? root.host : null));
     const el = /** @type {HTMLElement | null} */ (side === 'left' ? handle.previousElementSibling : handle.nextElementSibling);
     if (!box || !el) return;
     e.preventDefault();
@@ -174,7 +188,7 @@ export class PaneSizer {
     const guide = document.createElement('div');
     guide.className = 'guide';
     const label = guide.appendChild(document.createElement('span'));
-    box.append(guide);
+    (handle.parentElement ? box : /** @type {ShadowRoot} */ (root)).append(guide);
     let width = w0;
     let frame = 0;
     const paint = () => {
