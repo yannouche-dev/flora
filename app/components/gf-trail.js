@@ -15,6 +15,8 @@ import * as db from '../core/db.js';
 import { href, parse } from '../core/router.js';
 import { encodeCollection, share } from '../core/share.js';
 import { ui } from '../styles/ui.js';
+import { PaneSizer } from '../core/panes.js';
+import { config } from '../config.js';
 import './gf-map.js';
 import './gf-voice-button.js';
 import './gf-thumb.js';
@@ -116,9 +118,25 @@ export class GfTrail extends LitElement {
     .head, .mapcol, .list { transition: opacity 0.2s ease; }
     .seeking .head, .seeking .mapcol, .seeking .list { opacity: 0; }
     .sheet > :first-child { margin-top: auto; }
+    /* The separator between the parcours and the map (wide screens). */
+    .wrap > .split { display: none; width: 9px; margin-left: -4px; z-index: 6; cursor: col-resize; position: relative; touch-action: none; }
+    .wrap > .split::after { content: ''; position: absolute; inset: 0 4px; transition: background 0.12s; }
+    .wrap > .split:hover::after, .wrap > .split:focus-visible::after, .wrap > .split.dragging::after { background: var(--gf-accent); inset: 0 3px; }
+    .wrap > .split:focus-visible { outline: none; }
+    .wrap > .guide { position: absolute; top: 0; bottom: 0; left: -1px; width: 3px; background: var(--gf-accent); z-index: 7; pointer-events: none; }
+    .wrap > .guide span { position: absolute; top: 50%; left: 8px; padding: 2px 8px; border-radius: var(--gf-radius-pill); background: var(--gf-accent); color: var(--gf-accent-contrast); font-size: 0.75rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    @media (pointer: coarse) {
+      .wrap > .split { width: 24px; margin-left: -12px; }
+      .wrap > .split::before { content: ''; position: absolute; top: 50%; left: 50%; width: 10px; height: 44px; translate: -50% -50%; border-radius: 5px;
+        background: var(--gf-surface); border: 1px solid var(--gf-border); box-shadow: 0 1px 4px rgb(0 0 0 / 18%); z-index: 1; }
+    }
+    :host(.resizing) { cursor: col-resize; user-select: none; }
     .sheet .hint { padding: 4px 4px 0; }
     @container (min-width: 900px) {
-      .wrap.on { grid-template-columns: minmax(360px, 480px) minmax(0, 1fr); grid-template-areas: "side map"; grid-template-rows: minmax(0, 1fr); }
+      .wrap.on { grid-template-columns: minmax(360px, 480px) 0 minmax(0, 1fr); grid-template-areas: "side split map"; grid-template-rows: minmax(0, 1fr); }
+      /* A width chosen (the separator): kept while the map keeps 360 px. */
+      .wrap.on.sized { grid-template-columns: max(320px, min(var(--w-side), calc(100% - 360px))) 0 minmax(0, 1fr); }
+      .wrap > .split { display: block; grid-area: split; }
       .side { grid-area: side; display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; overflow: hidden; border-right: 1px solid var(--gf-border); }
       .head { grid-area: 1 / 1; padding: 14px 14px 10px; }
       .list { grid-area: 2 / 1; max-height: none; border-top: 0; padding: 4px 14px; }
@@ -316,6 +334,9 @@ export class GfTrail extends LitElement {
   }
 
   /** The sheet is open (searching), as last rendered; and as the toast last knew it. */
+  /** The parcours' column (wide screens): its width, remembered; the map takes the rest. */
+  #sizer = new PaneSizer(this, config.storageKeys.trailLayout, { side: { width: 480, min: 320, title: 'Parcours' } },
+    { onChange: () => /** @type {any} */ (this.renderRoot.querySelector('.mapcol gf-map'))?.holdFrame?.() });
   #open = false;
   #toastOpen = false;
 
@@ -658,7 +679,8 @@ export class GfTrail extends LitElement {
     const open = Boolean(this._q) || this._listening || (this._peek && phone);
     this.#open = open;
     // Under the suggestions, the parcours is out of reach (the keyboard's Tab, the screen readers): only what is seen.
-    return html`<div class="wrap on ${open ? 'seeking' : ''}">
+    const sized = 'side' in this.#sizer.state.widths;
+    return html`<div class="wrap on ${open ? 'seeking' : ''} ${sized ? 'sized' : ''}" style=${sized ? `--w-side: ${this.#sizer.width('side')}px` : ''}>
       <div class="side">
         <div class="head" ?inert=${open}>${this.#card(t)}</div>
         <section class="list" aria-label="Les plantes du parcours" ?inert=${open}>
@@ -698,6 +720,7 @@ export class GfTrail extends LitElement {
           </div>
         </div>
       </div>
+      ${this.#sizer.split('side', 'left', () => this.clientWidth - 360)}
       <div class="mapcol">${this.#map(t)}</div>
       ${this._toast && !open ? html`<div class="toast" role="status">${icon('check-lg')} <span>${this._toast.text}</span>
         ${this._toast.undo ? html`<button type="button" @click=${() => { this._toast?.undo?.(); this._toast = null; }}>Annuler</button>` : nothing}</div>` : nothing}

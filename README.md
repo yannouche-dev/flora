@@ -257,6 +257,7 @@ Le plus simple des modes : un parcours, c'est un lieu de « Mes plantes » où c
 - **La même plante, plusieurs fois** : une ortie rencontrée plus loin s'ajoute encore (le même marqueur ＋, la proposition dit « Déjà une fois dans le parcours ») ; chaque **occurrence** a sa position.
 - **La liste** des plantes du parcours, qui défile : **une ligne par plante**, sa vignette (photo), ses noms et, rencontrée plusieurs fois, « × 3 » ; la dernière rencontrée en haut. **Toucher une plante** (dans la liste ou sur la carte) l'allume : **ses occurrences en évidence sur la carte** (les autres plantes ne changent pas), cadrées avec votre position, et **dans l'en-tête** son nom, **le marqueur ＋** (« Ajouter ici ») — une occurrence de plus, là où vous êtes — et ✕, qui retire l'occurrence touchée sur la carte (sinon la dernière), avec « Annuler ». La toucher à nouveau l'éteint.
 - **La carte** : **un marqueur par occurrence** (pas de repère qui les regroupe), avec votre position qui suit ; elle est **toujours cadrée sur tout le parcours** (son départ et chaque plante), et se recadre à chaque ajout.
+- **Sur ordinateur, la colonne du parcours se redimensionne** : glisser le séparateur entre elle et la carte (une ligne guide suit le pointeur, la largeur est prise au relâcher), ← → au clavier (Maj : par grands pas), Début / Fin pour les extrêmes, double-clic ou Entrée pour la largeur par défaut ; la carte garde toujours 360 px et ne se recadre pas pendant le changement. La largeur est mémorisée.
 
 ### Découvrir : les plantes autour de vous (premiers pas)
 
@@ -277,6 +278,8 @@ Le plus simple des modes : un parcours, c'est un lieu de « Mes plantes » où c
 - **Les outils arrivent quand ils servent** : la barre d'onglets ne montre d'abord que Découvrir (et Réglages) ; **Mes plantes** vient avec le premier match ou favori, la **Carte** avec le premier lieu noté, **Flore** (toute la flore, recherche et filtres) après 5 plantes rencontrées — chaque fois annoncé (« Nouveau : la Carte — … », l'onglet s'éclaire). Pas de micro-astuces : les outils se présentent par les étapes.
 - Quelqu'un qui utilisait déjà l'application garde tout, tout de suite. *Réglages › Premiers pas* : « Tout montrer maintenant » ou « Recommencer la découverte ».
 - **Rejouer** (icône film › Rencontres, ou « Recommencer la découverte ») repart de zéro : lieu, distance, cartes passées, matchs, étapes, embranchement et onglets venus sont oubliés (les favoris restent). Rejouer Cueillette prudente ou Mosaïque (le scénario affiché) oublie le lieu, la distance et les cartes ; passer d'un scénario à un autre garde le lieu choisi.
+
+- **Sur ordinateur, les colonnes se redimensionnent** : au premier pas, un séparateur entre la carte et les cartes ; ensuite, deux (carte ┃ cartes ┃ volets de la plante). Glisser le séparateur (une ligne guide suit le pointeur), ← → au clavier (sans faire passer la carte du dessus), Début / Fin, double-clic ou Entrée pour la largeur par défaut. Les volets de la plante gardent toujours 320 px, les cartes 300 : une largeur choisie sur un grand écran se resserre sur un plus petit. La carte ne se recadre pas pendant le changement. Les largeurs sont mémorisées ; sur téléphone, les colonnes restent empilées.
 
 ### Onglet Flore : filtres, résultats, plante
 

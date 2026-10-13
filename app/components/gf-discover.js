@@ -34,6 +34,8 @@ import { href, parse } from '../core/router.js';
 import { depth, replaceHash } from '../core/history.js';
 import { floweringMonths } from './gf-calendar.js';
 import { hideImg, showImg } from '../core/img.js';
+import { PaneSizer } from '../core/panes.js';
+import { config } from '../config.js';
 import { ui } from '../styles/ui.js';
 import './gf-plant-detail.js';
 import { emergency } from './gf-lookalikes.js';
@@ -331,7 +333,9 @@ export class GfDiscover extends LitElement {
     .guided.asking .g-deck { flex: 0 0 0 !important; padding: 0 !important; overflow: hidden; border: 0 !important; }
     .guided.asking .g-map { flex: 1 1 auto; border-right: 0; }
     .g-map { flex: 1 1 0; min-width: 260px; min-height: 0; display: flex; flex-direction: column; border-right: 1px solid var(--gf-border); background: var(--gf-surface); }
-    .guided.with-panes .g-map { flex: 0 0 min(30%, 380px); }
+    .guided.with-panes .g-map { flex: 0 1 var(--w-map, min(30%, 380px)); }
+    /* A width remembered on a wider window: the map and the cards give way, the plant's panes keep 320 px. */
+    .guided.with-panes .g-plant { min-width: 320px; }
     .g-mapbox { position: relative; flex: 1; min-height: 0; isolation: isolate; }
     .g-mapbox gf-map { position: absolute; inset: 0; display: block; }
     .g-mapbox gf-map .leaflet-container { background: #2f4a2c; }
@@ -393,8 +397,22 @@ export class GfDiscover extends LitElement {
     /* The panel says the distance: the map's scale would say it again. */
     .g-mapbox gf-map .leaflet-control-scale { display: none; }
     .g-deck { flex: 0 0 min(400px, 42%); min-width: 0; overflow-y: auto; padding: 14px 12px 90px; }
-    .guided:not(.with-panes) .g-deck { flex: 1 1 0; }
-    .guided.with-panes .g-deck { flex-basis: min(360px, 32%); border-right: 1px solid var(--gf-border); }
+    .guided:not(.with-panes) .g-deck { flex: 0 1 var(--w-cards, 50%); }
+    .guided.with-panes .g-deck { flex: 0 1 var(--w-deck, min(360px, 32%)); border-right: 1px solid var(--gf-border); }
+    /* The separators (wide screens): the map's and the cards' widths, remembered (PaneSizer). */
+    .g-scroll > .split { flex: none; width: 9px; margin: 0 -4px; z-index: 3; cursor: col-resize; position: relative; touch-action: none; }
+    .g-scroll > .split::after { content: ''; position: absolute; inset: 0 4px; background: transparent; transition: background 0.12s; }
+    .g-scroll > .split:hover::after, .g-scroll > .split:focus-visible::after, .g-scroll > .split.dragging::after { background: var(--gf-accent); inset: 0 3px; }
+    .g-scroll > .split:focus-visible { outline: none; }
+    .g-scroll > .guide { position: absolute; top: 0; bottom: 0; left: -1px; width: 3px; background: var(--gf-accent); z-index: 5; pointer-events: none; }
+    .g-scroll > .guide span { position: absolute; top: 50%; left: 8px; padding: 2px 8px; border-radius: var(--gf-radius-pill); background: var(--gf-accent); color: var(--gf-accent-contrast); font-size: 0.75rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    @media (pointer: coarse) {
+      .g-scroll > .split { width: 24px; margin: 0 -12px; }
+      .g-scroll > .split::before { content: ''; position: absolute; top: 50%; left: 50%; width: 10px; height: 44px; translate: -50% -50%; border-radius: 5px;
+        background: var(--gf-surface); border: 1px solid var(--gf-border); box-shadow: 0 1px 4px rgb(0 0 0 / 18%); z-index: 1; }
+    }
+    :host(.resizing) { cursor: col-resize; user-select: none; }
+    @media (max-width: 899px) { .g-scroll > .split { display: none; } }
     .g-deck .deck { max-height: calc(100dvh - 320px); min-height: 300px; }
     .g-wait { text-align: center; padding: 40px 10px; }
     .g-plant { flex: 1; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--gf-surface); isolation: isolate; animation: g-in 0.35s ease-out; }
@@ -416,7 +434,7 @@ export class GfDiscover extends LitElement {
       .g-deck .left { display: none; }
       .g-deck .actions { gap: 14px; }
       .g-deck .round { width: 50px; height: 50px; font-size: 1.3rem; }
-      .g-plant { flex: none; height: 85dvh; }
+      .g-plant, .guided.with-panes .g-plant { flex: none; height: 85dvh; min-width: 0; }
       .guided.asking .g-mapbox { flex: 1; height: auto; }
       .guided.asking .g-scroll { overflow: hidden; }
     }
@@ -497,6 +515,32 @@ export class GfDiscover extends LitElement {
     this._unread = false; this._view = 'swipe'; this._loading = false;
     this.#navs = 0; this.#navsAtStep = 0;
   };
+  /** The guided view's widths (wide screens): the map, the cards; the plant's panes take the rest. */
+  #sizer = new PaneSizer(this, config.storageKeys.discoverLayout, {
+    map: { width: 380, min: 260, title: 'Carte' },
+    deck: { width: 360, min: 300, title: 'Cartes' },
+    // The first step: the map and the cards only, the cards' column wider.
+    cards: { width: 520, min: 300, title: 'Cartes' }
+  }, { onChange: () => /** @type {any} */ (this.renderRoot.querySelector('.g-mapbox gf-map'))?.holdFrame?.() });
+
+  /**
+   * The widths of the map and the cards, as shown: the ones chosen, made to fit (the plant's panes keep 320 px, the
+   * cards 300). `all`: the view's width. @param {number} all
+   */
+  #fit(all) {
+    const z = this.#sizer;
+    const map = Math.max(z.panes.map.min, Math.min(z.width('map'), all - 320 - z.panes.deck.min));
+    const deck = Math.max(z.panes.deck.min, Math.min(z.width('deck'), all - 320 - map));
+    return { map, deck, cards: Math.max(z.panes.cards.min, Math.min(z.width('cards'), all - z.panes.map.min)) };
+  }
+
+  /** The widest `pane` may be now. @param {'map' | 'deck' | 'cards'} pane */
+  #paneMax(pane) {
+    const all = this.renderRoot.querySelector('.g-scroll')?.getBoundingClientRect().width || this.clientWidth;
+    const z = this.#sizer.panes;
+    return pane === 'map' ? all - 320 - z.deck.min : pane === 'deck' ? all - 320 - this.#fit(all).map : all - z.map.min;
+  }
+
   #onKey = (/** @type {KeyboardEvent} */ e) => {
     if (e.altKey || e.ctrlKey || e.metaKey) return;
     // The first match waits for its one button: no key closes it.
@@ -1630,7 +1674,8 @@ export class GfDiscover extends LitElement {
     const panes = !asking && step >= 1;
     // Rencontres: the map, the place (distance) and the cards — no legend, no « Où pousse-t-elle encore ? ».
     const quiet = this.#stage === 1;
-    return html`<section class="guided ${asking ? 'asking' : ''} ${panes ? 'with-panes' : ''} ${step >= 4 && !asking ? 'listed' : ''}" aria-label="Découverte">
+    return html`<section class="guided ${asking ? 'asking' : ''} ${panes ? 'with-panes' : ''} ${step >= 4 && !asking ? 'listed' : ''}" aria-label="Découverte"
+      style=${this.#widths(asking, panes)}>
       ${this.#steps()}
       <div class="g-scroll">
         <div class="g-map">
@@ -1640,7 +1685,9 @@ export class GfDiscover extends LitElement {
           ${asking ? nothing : this.#wherePanel(panelCard, quiet)}
           ${step >= 4 && !asking ? this.#aroundList(cards) : nothing}
         </div>
+        ${asking ? nothing : panes ? this.#sizer.split('map', 'left', () => this.#paneMax('map')) : this.#sizer.split('cards', 'right', () => this.#paneMax('cards'))}
         <div class="g-deck">${asking ? nothing : this._cards ? this.#deckView() : html`<p class="muted g-wait">Recherche des plantes observées autour…</p>`}</div>
+        ${panes ? this.#sizer.split('deck', 'left', () => this.#paneMax('deck')) : nothing}
         ${panes ? html`<div class="g-plant" aria-label=${card ? 'Volets : ' + (card.plant.vernacularNames?.[0] || card.plant.scientificName) : 'Volets'}>
           ${id != null ? html`<gf-plant-detail embedded panes-only plant-id=${id} view=${this.#view} .paneKeys=${this.#paneKeys}>
             <div class="g-empty">${icon('binoculars')}<p>Ses photos, son histoire, ses secrets viendront s’installer ici.</p></div>
@@ -1648,6 +1695,14 @@ export class GfDiscover extends LitElement {
         </div>` : nothing}
       </div>
     </section>`;
+  }
+
+  /** The widths chosen (the separators), as the view's CSS variables; none: the defaults. @param {boolean} asking @param {boolean} panes */
+  #widths(asking, panes) {
+    const chosen = this.#sizer.state.widths;
+    if (asking || this.clientWidth < 900 || !Object.keys(chosen).length) return '';
+    const w = this.#fit(this.clientWidth);
+    return panes ? (chosen.map || chosen.deck ? `--w-map: ${w.map}px; --w-deck: ${w.deck}px` : '') : chosen.cards ? `--w-cards: ${w.cards}px` : '';
   }
 
   #plantSheet() {
