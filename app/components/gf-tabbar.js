@@ -44,6 +44,10 @@ export class GfTabbar extends LitElement {
     a[aria-current='page'] .icon { background: var(--gf-accent-soft); }
     @media (prefers-reduced-motion: reduce) { .icon { transition: none; } a.new .icon { animation: none; } }
     a:focus-visible { outline: none; box-shadow: var(--gf-focus); border-radius: var(--gf-radius-sm); }
+    /* The narrowest phones (320 px): each label on one line, whole (« Mes plantes » no longer cut in two). */
+    a { min-width: 0; }
+    a > span:last-child { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    @media (max-width: 359px) { a { font-size: 0.64rem; } .icon { width: 48px; } }
   `;
 
   // Tabs lead back to where each part was left (context.js), which changes as the user moves: the controller

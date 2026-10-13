@@ -8,6 +8,7 @@
 // Owns — everything « Rejouer » / « Recommencer » empties, here and in the other tabs, as if never opened:
 //  - geoflora.app.cueillette.state: its place and name, distance, cards swiped right (this game's matches) and left, the
 //    step it was left at; geoflora.app.cueillette.layout: its columns' widths (runtime.js#replay);
+//    geoflora.app.cueillette.sheet: the width of a plant's sheet beside the cards;
 //  - in memory: the cards found, the observations, what Wikipédia says, the undo stack, the deck's order, the view
 //    chosen, the swipe hint shown (kit/session.js: a new session, forgetGame).
 //  - in Mes plantes, the favourites its matches added (their origin, core/collections.js#forgetMadeBy) — not one
@@ -29,7 +30,7 @@ export default defineMiniApp({
   pitch: 'Ce qui se cueille autour de vous… et ses sosies dangereux, les mortels d’abord. Le mode cueillette s’allume.',
   uses: ['inaturalist'],
   exit: { label: 'Quitter la cueillette' },
-  owns: { reset: () => { forgetGame('cueillette'); return forgetMadeBy('cueillette'); } },
+  owns: { keys: ['geoflora.app.cueillette.sheet'], reset: () => { forgetGame('cueillette'); return forgetMadeBy('cueillette'); } },
   shared: ['Mes plantes (sauf les favoris ajoutés par ses matchs)', 'lieux', 'mode cueillette', 'réglages'],
   context: aroundContext(),
   actions: { locate },

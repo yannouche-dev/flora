@@ -68,7 +68,9 @@ export class MaWalk extends LitElement {
     .wrap > .guide { position: absolute; top: 0; bottom: 0; left: -1px; width: 3px; background: var(--gf-accent); z-index: 7; pointer-events: none; }
     .wrap > .guide span { position: absolute; top: 50%; left: 8px; padding: 2px 8px; border-radius: var(--gf-radius-pill); background: var(--gf-accent); color: var(--gf-accent-contrast); font-size: 0.75rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
     @media (pointer: coarse) {
-      .wrap > .split { width: 24px; margin-left: -12px; }
+      .wrap > .split { width: 44px; margin-left: -22px; }
+      .wrap > .split::after { inset: 0 21.5px; }
+      .wrap > .split:hover::after, .wrap > .split:focus-visible::after, .wrap > .split.dragging::after { inset: 0 20.5px; }
       .wrap > .split::before { content: ''; position: absolute; top: 50%; left: 50%; width: 10px; height: 44px; translate: -50% -50%; border-radius: 5px;
         background: var(--gf-surface); border: 1px solid var(--gf-border); box-shadow: 0 1px 4px rgb(0 0 0 / 18%); z-index: 1; }
     }

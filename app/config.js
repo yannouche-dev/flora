@@ -63,8 +63,18 @@ export const config = {
     // Display modes made from the app's three (Réglages › Modes d'affichage).
     modes: 'geoflora.modes',
     // Storing the flora failed for lack of room: the free space then (bytes), so it is not downloaded again in vain.
-    datasetQuota: 'geoflora.datasetQuota'
+    datasetQuota: 'geoflora.datasetQuota',
+    // The media viewer, wide: the width of « À propos de l’image » beside the image.
+    mediaLayout: 'geoflora.mediaLayout'
   },
+
+  /**
+   * The keys of the panes' widths (core/panes.js), one per screen: the first steps (core/discover.js) never read
+   * them as « used before » — a new visitor who drags a separator keeps them. A new layout's key goes here too.
+   * (A mini-app's layouts are under its own prefix, storageKeys.appPrefix.)
+   */
+  paneLayouts: ['geoflora.discoverLayout', 'geoflora.trailLayout', 'geoflora.floraLayout', 'geoflora.collectionsLayout',
+    'geoflora.mapLayout', 'geoflora.placeLayout', 'geoflora.mediaLayout'],
 
   /** GPS fixes at or under this accuracy (metres) are considered good enough to save. */
   goodAccuracy: 15,

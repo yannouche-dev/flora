@@ -34,6 +34,8 @@ export class GfApp extends LitElement {
     :host {
       display: grid;
       grid-template-rows: auto 1fr auto;
+      /* The window's width, never a view's: a layout wider than the screen never makes the page scroll sideways. */
+      grid-template-columns: minmax(0, 1fr);
       height: 100%;
     }
     /* Three parts: the sections (left), the logo (centred), the tools (right). */
@@ -97,7 +99,7 @@ export class GfApp extends LitElement {
       line-height: 1;
       padding: 4px;
     }
-    main { position: relative; min-height: 0; display: flex; flex-direction: column; }
+    main { position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
     gf-settings { flex: 1; min-height: 0; }
     .banner {
       padding: 8px 16px;

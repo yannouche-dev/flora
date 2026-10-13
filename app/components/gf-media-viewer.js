@@ -27,6 +27,8 @@ import { imageKey, loadMedia, PARTS } from '../core/media-items.js';
 import { sheetSession, setMediaSession } from '../core/sheet-session.js';
 import { safeUrl } from '../core/safe-url.js';
 import { ui } from '../styles/ui.js';
+import { config } from '../config.js';
+import { PaneSizer, splitStyles } from '../core/panes.js';
 import './gf-attribution.js';
 
 /** @typedef {import('../core/media-items.js').MediaItem} MediaItem */
@@ -156,7 +158,15 @@ export class GfMediaViewer extends LitElement {
     /* Short of room, the stage gives way (clipped), never sliding under the thumbnails. */
     :host(:not([compact])) .main { overflow: hidden; }
     :host(:not([compact])) .stage { min-height: 140px; }
-    @container (min-width: 760px) { .main.with-info { grid-template-columns: minmax(0, 1fr) clamp(240px, 30%, 380px); } }
+    /* Wide (760 px): « À propos de l’image » beside the image, its width the user's (a separator, core/panes.js, kept
+       under mediaLayout; by default 30 % between 240 and 380 px) — the image keeps 320 px. */
+    @container (min-width: 760px) {
+      .main.with-info { grid-template-columns: minmax(0, 1fr) 0 var(--w-info, clamp(240px, 30%, 380px)); }
+      .main.with-info > .stage { grid-column: 1; grid-row: 1; }
+      .main.with-info > .split { grid-column: 2; grid-row: 1; }
+      .main.with-info > .info { grid-column: 3; grid-row: 1; }
+    }
+    @container (max-width: 759px) { .main > .split { display: none; } }
 
     /* The stage: the image fitted, zoomed and moved by one transform. */
     /* Its own stacking context: the zoomed image (and its layers) never paints over what is beside it. */
@@ -252,6 +262,10 @@ export class GfMediaViewer extends LitElement {
     .info .tip { color: var(--gf-text-muted); font-size: 0.8rem; margin: 0; }
     .info gf-attribution { white-space: normal; font-size: 0.82rem; }
     @container (min-width: 760px) { .main.with-info .info { border-left: 1px solid var(--gf-border); } }
+    ${splitStyles}
+    /* Its line is the details' border: the grip alone, over it (accent on hover and focus). */
+    .main > .split { z-index: 5; }
+    .main > .split:not(:hover):not(:focus-visible):not(.dragging)::after { background: transparent; }
     /* Narrow: the details under the image (never over it: whole, whatever the zoom). */
     @container (max-width: 759px) {
       .main.with-info { grid-template-rows: minmax(0, 1fr) auto; }
@@ -358,6 +372,28 @@ export class GfMediaViewer extends LitElement {
 
   /** @type {AbortController | null} */ #abort = null;
 
+  /** Wide: the width of « À propos de l’image » beside the image (the separator between them). */
+  #sizer = new PaneSizer(this, config.storageKeys.mediaLayout, { info: { width: 320, min: 240, title: 'À propos de l’image' } });
+  /** The viewer's width (its container queries'), to know when the details are beside the image. */
+  #w = 0;
+  #size = new ResizeObserver(([e]) => { const w = Math.round(e.contentRect.width); if (w !== this.#w) { this.#w = w; this.requestUpdate(); } });
+  /** The widest the details may be: the image keeps 320 px. */
+  get #infoMax() { return Math.max(240, (this.#w || this.getBoundingClientRect().width) - 320); }
+
+  /** The separator between the image and its details, when they are beside it. */
+  #infoSplit() {
+    if (this.#w < 760) return nothing;
+    // Its default: 30 % of the viewer, between 240 and 380 px (as the grid draws it).
+    this.#sizer.panes.info.width = Math.round(Math.min(380, Math.max(240, 0.3 * this.#w)));
+    return this.#sizer.split('info', 'right', () => this.#infoMax, 'media-info');
+  }
+
+  /** The width chosen for the details, as the grid wants it (none chosen: the default, in %). */
+  get #infoStyle() {
+    const w = this.#sizer.state.widths.info;
+    return w == null || this.#w < 760 ? '' : `--w-info: ${Math.max(240, Math.min(w, this.#infoMax))}px`;
+  }
+
   firstUpdated() {
     // Alone in a pane: the keys are the viewer's at once (in the sheet, after a click in it).
     if (!this.compact && !this.local) this.focus({ preventScroll: true });
@@ -375,6 +411,7 @@ export class GfMediaViewer extends LitElement {
     this.#applyRatio();
     // The keys belong to the viewer only while it has the focus: the page (and ← → for plants) keeps its own.
     this.addEventListener('keydown', this.#onKey);
+    this.#size.observe(this);
     if (!this.hasAttribute('tabindex')) this.tabIndex = -1;
   }
 
@@ -382,6 +419,7 @@ export class GfMediaViewer extends LitElement {
     super.disconnectedCallback();
     ratioEvents.removeEventListener('change', this.#applyRatio);
     this.removeEventListener('keydown', this.#onKey);
+    this.#size.disconnect();
     this.#abort?.abort();
     clearTimeout(this.#settleTimer);
     clearInterval(this.#timer);
@@ -1059,7 +1097,7 @@ export class GfMediaViewer extends LitElement {
           @click=${() => this.#toPane()}>${icon('arrows-angle-expand')}</button>` : nothing}
       </div>`}
       ${!item ? (this._done ? this.#empty(plant) : this.#skeleton()) : this.#view === 'mosaic' ? this.#mosaic(shown) : html`
-        <div class="main ${this._info ? 'with-info' : ''} ${this.#view === 'slideshow' ? 'slideshow' : ''}">${this.#stage(item, at, shown.length)}${this._info ? this.#details(item) : nothing}</div>
+        <div class="main ${this._info ? 'with-info' : ''} ${this.#view === 'slideshow' ? 'slideshow' : ''}" style=${this._info ? this.#infoStyle : ''}>${this.#stage(item, at, shown.length)}${this._info ? html`${this.#infoSplit()}${this.#details(item)}` : nothing}</div>
         ${this.compact ? this.#grip() : nothing}
         ${this.#caption(item)}
         ${this.#view === 'slideshow' || (shown.length < 2 && this._done) ? nothing : html`<div class="strip">${this.#thumbs(shown, item)}</div>`}`}`;
@@ -1277,7 +1315,7 @@ export class GfMediaViewer extends LitElement {
     const n = this._hd === 'on' || item.width ? this._natural : null;
     const page = item.pageUrl || item.sourceUrl;
     const where = [item.locality, item.country].filter(Boolean).join(', ');
-    return html`<aside class="info" aria-label="À propos de l’image">
+    return html`<aside class="info" id="media-info" aria-label="À propos de l’image">
       <span class="kind">${KIND_LABEL[item.kind]} · ${item.source}</span>
       ${item.title ? html`<h3>${item.title}</h3>` : nothing}
       <gf-attribution .media=${item}></gf-attribution>

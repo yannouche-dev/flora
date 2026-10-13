@@ -6,6 +6,7 @@
 // Owns — everything « Rejouer » / « Recommencer » empties, here and in the other tabs, as if never opened:
 //  - geoflora.app.mosaique.state: its place and name, distance, cards swiped right (this game's matches) and left, the
 //    step it was left at; geoflora.app.mosaique.layout: its columns' widths (runtime.js#replay);
+//    geoflora.app.mosaique.sheet: the width of a plant's sheet beside the cards;
 //  - in memory: the cards found, the observations, what Wikipédia says, the undo stack, the deck's order, the view
 //    chosen, the « En fleur » filter, the swipe hint shown (kit/session.js: a new session, forgetGame).
 //  - in Mes plantes, the favourites its matches added (their origin, core/collections.js#forgetMadeBy) — not one
@@ -27,7 +28,7 @@ export default defineMiniApp({
   pitch: 'Toutes les photos des plantes du coin, en grand. Une image touchée : toutes celles de la plante.',
   uses: ['inaturalist'],
   exit: { label: 'Quitter la mosaïque' },
-  owns: { reset: () => { forgetGame('mosaique'); return forgetMadeBy('mosaique'); } },
+  owns: { keys: ['geoflora.app.mosaique.sheet'], reset: () => { forgetGame('mosaique'); return forgetMadeBy('mosaique'); } },
   shared: ['Mes plantes (sauf les favoris ajoutés par ses matchs)', 'lieux', 'réglages'],
   context: aroundContext(),
   actions: { locate },

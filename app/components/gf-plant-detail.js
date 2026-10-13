@@ -826,9 +826,9 @@ export class GfPlantDetail extends LitElement {
     .split.col > .split-grip::after { left: 0; right: 0; top: -1px; height: 3px; }
     .split-grip:hover::after, .split-grip:focus-visible::after { background: var(--gf-accent); }
     .split-grip:focus-visible { outline: none; }
-    /* A finger: a 24 px grip, and a tab to hold in the middle (as core/panes.js). */
+    /* A finger: a 44 px grip (a touch target), and a tab to hold in the middle (as core/panes.js). */
     @media (pointer: coarse) {
-      .split-grip::before { inset: -12px; }
+      .split-grip::before { inset: -22px; }
       .split.row > .split-grip:not(:hover):not(:focus-visible)::after, .split.col > .split-grip:not(:hover):not(:focus-visible)::after {
         inset: auto; top: 50%; left: 50%; width: 10px; height: 44px; translate: -50% -50%; border-radius: 5px;
         background: var(--gf-surface); border: 1px solid var(--gf-border); box-shadow: 0 1px 4px rgb(0 0 0 / 18%); }
