@@ -42,9 +42,10 @@ export class GfPager extends LitElement {
     .jump { display: flex; align-items: center; gap: 4px; font-size: 0.8rem; color: var(--gf-text-muted); white-space: nowrap; margin: 0 6px; }
     .jump input { width: 3.4em; padding: 3px 6px; font: inherit; font-variant-numeric: tabular-nums; text-align: right; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-sm); background: var(--gf-surface); color: var(--gf-text); }
     .source { font-size: 0.72rem; color: var(--gf-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 14em; }
-    /* Narrower panes: the source goes, then the pages. */
-    @container (max-width: 560px) { .source { display: none; } }
-    @container (max-width: 420px) { .pages { display: none; } }
+    /* Narrower panes: the source goes, then the pages — before they would overlap the field and the arrows (the
+       pages need some 540 px with the four arrows and the field, the source 170 more). */
+    @container (max-width: 719px) { .source { display: none; } }
+    @container (max-width: 559px) { .pages { display: none; } }
 
     /* Simple (phone): ‹  6 / 24 · Résultats  ›, big targets. */
     :host([simple]) nav { gap: 8px; padding: 4px 10px; min-height: 48px; }

@@ -2,7 +2,9 @@
 // Panes of a layout (Mes plantes, the Carte's place panel…), as in Flore: each one resizable by dragging its
 // separator (a guide line follows the pointer; the pane takes its width on release), with ← → (Maj : by 64 px),
 // Début / Fin on the focused separator, a double click or Entrée giving back the default width, and a fold button
-// (« ») turning it into a narrow rail with its title written vertically. Widths and folds are remembered per layout.
+// (« ») turning it into a narrow rail with its title written vertically. Widths and folds are remembered per layout;
+// the window resized or turned, the host is drawn again so each width is clamped anew to the room there is (the
+// width remembered is never rewritten: back to a wider window, the pane has it again).
 
 import { html, css, nothing } from 'lit';
 
@@ -10,7 +12,7 @@ import { html, css, nothing } from 'lit';
 
 /**
  * The separators alone (Flore, the place editor: views with their own heads and rails): a 1 px line, a 7 px grip
- * (24 px and a tab to hold with a finger), the guide line of a drag, the accent on hover and focus.
+ * (44 px and a tab to hold with a finger: a touch target), the guide line of a drag, the accent on hover and focus.
  */
 export const splitStyles = css`
   .guide { position: absolute; top: 0; bottom: 0; left: -1px; width: 3px; background: var(--gf-accent); z-index: 5; pointer-events: none; will-change: transform; }
@@ -19,10 +21,11 @@ export const splitStyles = css`
   .split::after { content: ''; position: absolute; inset: 0 3px; background: var(--gf-border); transition: background 0.12s; }
   .split:hover::after, .split:focus-visible::after, .split.dragging::after { background: var(--gf-accent); inset: 0 2px; }
   .split:focus-visible { outline: none; }
-  /* A finger: a wider grip, and a tab to hold in the middle. */
+  /* A finger: a grip 44 px wide (a touch target), and a tab to hold in the middle. */
   @media (pointer: coarse) {
-    .split { width: 24px; margin: 0 -12px; }
-    .split::after { inset: 0 11.5px; }
+    .split { width: 44px; margin: 0 -22px; }
+    .split::after { inset: 0 21.5px; }
+    .split:hover::after, .split:focus-visible::after, .split.dragging::after { inset: 0 20.5px; }
     .split::before { content: ''; position: absolute; top: 50%; left: 50%; width: 10px; height: 44px; translate: -50% -50%; border-radius: 5px;
       background: var(--gf-surface); border: 1px solid var(--gf-border); box-shadow: 0 1px 4px rgb(0 0 0 / 18%); z-index: 1; }
   }
@@ -83,7 +86,26 @@ export class PaneSizer {
     host.addController(this);
   }
 
-  hostConnected() {}
+  /** The window resized or turned: the host drawn again (once a frame), its panes' widths clamped to the room now. */
+  #onResize = () => {
+    if (this.#frame) return;
+    this.#frame = requestAnimationFrame(() => { this.#frame = 0; this.host.requestUpdate(); });
+  };
+  #frame = 0;
+
+  hostConnected() { addEventListener('resize', this.#onResize); }
+
+  hostDisconnected() {
+    removeEventListener('resize', this.#onResize);
+    cancelAnimationFrame(this.#frame);
+    this.#frame = 0;
+  }
+
+  /** No longer the host's (another one takes its place: a mini-app's grid given another app). */
+  dispose() {
+    this.hostDisconnected();
+    this.host.removeController(this);
+  }
 
   #save() {
     try { localStorage.setItem(this.key, JSON.stringify(this.state)); } catch { /* not remembered */ }

@@ -107,7 +107,9 @@ export class MaGuided extends LitElement {
     .g-scroll > .guide { position: absolute; top: 0; bottom: 0; left: -1px; width: 3px; background: var(--gf-accent); z-index: 5; pointer-events: none; }
     .g-scroll > .guide span { position: absolute; top: 50%; left: 8px; padding: 2px 8px; border-radius: var(--gf-radius-pill); background: var(--gf-accent); color: var(--gf-accent-contrast); font-size: 0.75rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
     @media (pointer: coarse) {
-      .g-scroll > .split { width: 24px; margin: 0 -12px; }
+      .g-scroll > .split { width: 44px; margin: 0 -22px; }
+      .g-scroll > .split::after { inset: 0 21.5px; }
+      .g-scroll > .split:hover::after, .g-scroll > .split:focus-visible::after, .g-scroll > .split.dragging::after { inset: 0 20.5px; }
       .g-scroll > .split::before { content: ''; position: absolute; top: 50%; left: 50%; width: 10px; height: 44px; translate: -50% -50%; border-radius: 5px;
         background: var(--gf-surface); border: 1px solid var(--gf-border); box-shadow: 0 1px 4px rgb(0 0 0 / 18%); z-index: 1; }
     }

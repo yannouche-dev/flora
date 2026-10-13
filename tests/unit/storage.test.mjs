@@ -161,3 +161,10 @@ test('quota : une écriture refusée faute de place est dite une fois, jamais av
   assert.equal(quota.isQuotaError(new Error('autre')), false);
   assert.equal(quota.noteStorageError(new Error('autre')), false);
 });
+
+test('les largeurs des volets : chaque clé de mise en page est dans config.paneLayouts, que les premiers pas ignorent', () => {
+  const keys = Object.values(config.storageKeys);
+  // sheetLayout is the plant sheet's whole layout (its blocks, its panes), the user's own: not widths only.
+  const layouts = keys.filter(k => /Layout$/.test(k) && k !== config.storageKeys.sheetLayout);
+  assert.deepEqual([...layouts].sort(), [...config.paneLayouts].sort());
+});

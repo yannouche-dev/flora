@@ -56,7 +56,8 @@ export class MaGrid extends LitElement {
     .fresh { display: inline-block; width: 7px; height: 7px; margin-left: 6px; border-radius: 50%; background: var(--gf-accent); }
     .grid { position: relative; }
     .grid > .split { grid-row: 1 / span ${ROWS}; margin: 0 -3px; width: auto; }
-    @media (pointer: coarse) { .grid > .split { margin: 0 -9px; } }
+    /* A finger: 44 px to hold (a touch target), over the 7 px of its column. */
+    @media (pointer: coarse) { .grid > .split { margin: 0 -18.5px; } }
   `];
 
   constructor() {
@@ -89,6 +90,7 @@ export class MaGrid extends LitElement {
   willUpdate(changed) {
     // The widths of this app's columns, per tier ('wide:list'), kept as Mes plantes keeps its panes'.
     if (changed.has('app') && this.app) {
+      this.#sizer?.dispose();
       this.#sizer = new PaneSizer(this, storageKey(this.app.m.id, 'layout'), {}, {
         // A map beside the separator keeps its frame as its column changes width.
         onChange: () => { for (const m of this.renderRoot.querySelectorAll('gf-map')) /** @type {any} */ (m).holdFrame?.(); }
