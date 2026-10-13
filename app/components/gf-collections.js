@@ -600,11 +600,11 @@ export class GfCollections extends LitElement {
     return html`
       ${plantId ? nothing : html`<h1 class="visually-hidden">Mes plantes</h1>`}
       <div class="layout">
-        ${listFolded ? p.rail('list') : html`<section class="pane list-pane" aria-label="Mes plantes" style=${`width:${Math.min(p.width('list'), Math.max(280, this.#max('list')))}px`}>
+        ${listFolded ? p.rail('list') : html`<section class="pane list-pane" id="mine-list" aria-label="Mes plantes" style=${`width:${Math.min(p.width('list'), Math.max(280, this.#max('list')))}px`}>
           ${p.head('list', 'Mes plantes')}
           <div class="pane-body scroll">${this.#list(false)}</div>
         </section>
-        ${p.split('list', 'left', () => this.#max('list'))}`}
+        ${p.split('list', 'left', () => this.#max('list'), 'mine-list')}`}
         <div class="side-panes">
           ${!place && !plantId ? html`<section class="pane empty-pane" aria-label="Aperçu">
             <div class="pane-head"><h2>Aperçu</h2></div>
@@ -618,8 +618,8 @@ export class GfCollections extends LitElement {
             <div class="pane-body">${this.#placeMap(place)}</div>
           </section>`) : nothing}
           ${plantId ? (plantFolded ? p.rail('plant', true) : html`
-            ${mapOpen && !this.#tablet.matches ? p.split(this.#plantKey, 'right', () => this.#max('plant')) : nothing}
-            <section class="pane plant-pane ${plantFills ? 'fill' : ''}" aria-label="Plante"
+            ${mapOpen && !this.#tablet.matches ? p.split(this.#plantKey, 'right', () => this.#max('plant'), 'mine-plant') : nothing}
+            <section class="pane plant-pane ${plantFills ? 'fill' : ''}" id="mine-plant" aria-label="Plante"
               style=${plantFills || this.#tablet.matches ? '' : `width:${Math.min(p.width(this.#plantKey), Math.max(360, this.#max('plant')))}px`}>
               ${p.head('plant', 'Plante', html`
                 <a class="icon-btn" href=${href.plant(plantId)} title="Ouvrir la fiche dans Flore" aria-label="Ouvrir la fiche dans Flore">${icon('arrows-angle-expand')}</a>

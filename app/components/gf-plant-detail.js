@@ -28,7 +28,7 @@ import {
   setBlockOrder, setHidden, setNoteText, setSubHidden, setSubOrder, shownSubs, subOrder, subTitle,
   isOnEdge, placeOf, orderByCategory, treeOf, paneOf, dockBlock, toSheet, setPaneSizes, setStackState
 } from '../core/sheet-blocks.js';
-import { leaves as paneLeaves } from '../core/pane-tree.js';
+import { leaves as paneLeaves, stackOf, setSizes as treeSizes, patchStack, dock, undock } from '../core/pane-tree.js';
 import { pressDock } from '../core/dock-drag.js';
 import { CATEGORIES, blockCategory, categoryOf } from '../core/categories.js';
 import { FOCUS_EVENT, isFocused, noFocus, toggleFocus } from '../core/map-focus.js';
@@ -88,6 +88,9 @@ const BLOCK_LOADS = {
 
 /** Loads whose value is in _open, by load key. @type {Record<string, string>} */
 const OPEN_KEYS = { globi: 'interactions', niche: 'niche', 'uses:wikidata': 'wdUses', 'uses:recipes': 'recipes' };
+
+/** The least share of a pane beside a grip, by the keyboard (a drag keeps each pane's own minimum in px). */
+const MIN_SHARE = 0.08;
 
 /** A block not moved: the layout would have too many panes nested to be exported and read back (pane-tree.js dock). */
 const TOO_DEEP = 'pas déplacé, trop de volets imbriqués';
@@ -384,6 +387,12 @@ export class GfPlantDetail extends LitElement {
     panesOnly: { type: Boolean, attribute: 'panes-only' },
     /** Panes only: the blocks shown in them (Découvrir: those its steps added), the others left out. */
     paneKeys: { attribute: false },
+    /**
+     * A tree of panes of the host's own (a mini-app's plant column), shown in place of the mode's: what is done to it
+     * (a grip dragged, a tab, a fold, a block moved) never touches the mode's layout (sheetLayout) — the tree changed
+     * comes back to the host as `pane-sizes` (detail: the new tree; not composed), for it to keep and hand back.
+     */
+    tree: { attribute: false },
     /** Épuré (photo and one-tap actions), standard (general public), scientific (every data). */
     view: { reflect: true },
     _wiki: { state: true },
@@ -817,6 +826,14 @@ export class GfPlantDetail extends LitElement {
     .split.col > .split-grip::after { left: 0; right: 0; top: -1px; height: 3px; }
     .split-grip:hover::after, .split-grip:focus-visible::after { background: var(--gf-accent); }
     .split-grip:focus-visible { outline: none; }
+    /* A finger: a 24 px grip, and a tab to hold in the middle (as core/panes.js). */
+    @media (pointer: coarse) {
+      .split-grip::before { inset: -12px; }
+      .split.row > .split-grip:not(:hover):not(:focus-visible)::after, .split.col > .split-grip:not(:hover):not(:focus-visible)::after {
+        inset: auto; top: 50%; left: 50%; width: 10px; height: 44px; translate: -50% -50%; border-radius: 5px;
+        background: var(--gf-surface); border: 1px solid var(--gf-border); box-shadow: 0 1px 4px rgb(0 0 0 / 18%); }
+      .split.col > .split-grip:not(:hover):not(:focus-visible)::after { width: 44px; height: 10px; }
+    }
     .frame.edged .main { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; padding: 0 16px; }
     :host([embedded]) .frame.edged .main { padding: 0 14px; }
     /* Narrow: the panes as bands above and under the sheet, sharing the height left to it. */
@@ -1014,6 +1031,8 @@ export class GfPlantDetail extends LitElement {
     this.panesOnly = false;
     /** @type {string[] | null} */
     this.paneKeys = null;
+    /** @type {import('../core/pane-tree.js').PaneNode | null} */
+    this.tree = null;
     this._newNote = false;
     /** Note block whose text was just saved. @type {string | null} */
     this._noteSaved = null;
@@ -1608,7 +1627,7 @@ export class GfPlantDetail extends LitElement {
       n.kids.forEach((/** @type {any} */ k, /** @type {number} */ i) => { const c = drop(k); if (c) { kids.push(c); sizes.push(n.sizes[i]); } });
       return !kids.length ? null : kids.length === 1 ? kids[0] : { ...n, kids, sizes };
     };
-    const tree = drop(this.#shownNode(ctx, treeOf(this.view)));
+    const tree = drop(this.#shownNode(ctx, this.#tree()));
     if (!tree) return html`<slot></slot>`;
     if (this._wideSheet === false) {
       return html`<div class="frame edged narrow panes-only">${repeat(paneLeaves(tree), n => n.id, n => html`<div class="cell band-cell grow">${this.#pane(ctx, /** @type {any} */ (n), /** @type {any} */ (n).tabs, 'col')}</div>`)}</div>`;
@@ -1838,7 +1857,7 @@ export class GfPlantDetail extends LitElement {
     /** @type {Map<string, { cat: string, keys: string[], pane: string[] }>} */
     const by = new Map();
     for (const k of blockOrder(this.view)) {
-      if (k === 'name' || isHidden(this.view, k) || (k === 'web' && !paneOf(this.view, 'web'))) continue;
+      if (k === 'name' || isHidden(this.view, k) || (k === 'web' && !this.#paneOf('web'))) continue;
       const cat = blockCategory(k);
       const g = by.get(cat) || { cat, keys: [], pane: [] };
       by.set(cat, g);
@@ -2020,7 +2039,7 @@ export class GfPlantDetail extends LitElement {
   /** Shown here: everything in Mode King; outside it, not folded, not left out for being empty. @param {string} k @param {any} ctx */
   #visible(k, ctx) {
     // « Page web » works in a pane only: elsewhere, Mode King alone shows it (to be placed).
-    if (k === 'web') return this.#store.state.kingMode || Boolean(paneOf(this.view, 'web'));
+    if (k === 'web') return this.#store.state.kingMode || Boolean(this.#paneOf('web'));
     return this.#store.state.kingMode || (!isHidden(this.view, k) && !(hidesEmpty(this.view, k) && this.#emptyHere(k, ctx)));
   }
 
@@ -2036,7 +2055,7 @@ export class GfPlantDetail extends LitElement {
    */
   #placePicker(key) {
     const title = blockTitle(key);
-    const tree = treeOf(this.view), here = paneOf(this.view, key);
+    const tree = this.#tree(), here = this.#paneOf(key);
     const move = (/** @type {Event} */ e, /** @type {() => unknown} */ fn, /** @type {string} */ said) => {
       /** @type {HTMLDetailsElement | null} */ ((/** @type {HTMLElement} */ (e.currentTarget)).closest('details'))?.removeAttribute('open');
       this._said = `« ${title} » : ${fn() === false ? TOO_DEEP : said}`;
@@ -2046,9 +2065,9 @@ export class GfPlantDetail extends LitElement {
     return html`<details class="place-pick" @keydown=${(/** @type {KeyboardEvent} */ e) => { if (e.key === 'Escape') { e.stopPropagation(); /** @type {HTMLDetailsElement} */ (e.currentTarget).removeAttribute('open'); } }}>
       <summary class="tool" title="Déplacer vers…" aria-label=${`Déplacer « ${title} » vers…`}>${icon('arrows-angle-expand')}</summary>
       <div class="move-menu" role="menu" aria-label=${'Déplacer « ' + title + ' » vers'}>
-        <button type="button" role="menuitem" ?disabled=${!here} @click=${(/** @type {Event} */ e) => move(e, () => toSheet(this.view, key), 'dans la fiche')}>${icon('list-ul')} Dans la fiche</button>
-        ${sides.map(([side, label, ic]) => html`<button type="button" role="menuitem" @click=${(/** @type {Event} */ e) => move(e, () => dockBlock(this.view, key, 'sheet', side), 'nouveau volet ' + label + ' de la fiche')}>${icon(ic)} Nouveau volet ${label}</button>`)}
-        ${panes.map(p => html`<button type="button" role="menuitem" @click=${(/** @type {Event} */ e) => move(e, () => dockBlock(this.view, key, p.id, 'center'), 'onglet de « ' + blockTitle(/** @type {string} */ (p.active)) + ' »')}>
+        <button type="button" role="menuitem" ?disabled=${!here} @click=${(/** @type {Event} */ e) => move(e, () => this.#toSheet(key), 'dans la fiche')}>${icon('list-ul')} Dans la fiche</button>
+        ${sides.map(([side, label, ic]) => html`<button type="button" role="menuitem" @click=${(/** @type {Event} */ e) => move(e, () => this.#dock(key, 'sheet', side), 'nouveau volet ' + label + ' de la fiche')}>${icon(ic)} Nouveau volet ${label}</button>`)}
+        ${panes.map(p => html`<button type="button" role="menuitem" @click=${(/** @type {Event} */ e) => move(e, () => this.#dock(key, p.id, 'center'), 'onglet de « ' + blockTitle(/** @type {string} */ (p.active)) + ' »')}>
           ${icon('collection')} Onglet de « ${blockTitle(/** @type {string} */ (p.active))} »</button>`)}
       </div>
     </details>`;
@@ -2068,7 +2087,7 @@ export class GfPlantDetail extends LitElement {
     const bare = Boolean(node.bare) && !king && !max;
     const where = '« ' + blockTitle(tab) + ' »';
     const tabs = html`<span class="edge-tabs" role="tablist" aria-label=${'Blocs du volet ' + where}>${keys.map(k => html`<button type="button" role="tab" data-drag-key=${k}
-      aria-selected=${k === tab ? 'true' : 'false'} title=${blockTitle(k)} @click=${() => setStackState(this.view, node.id, { active: k, folded: false })}
+      aria-selected=${k === tab ? 'true' : 'false'} title=${blockTitle(k)} @click=${() => this.#setStack(node.id, { active: k, folded: false })}
       @pointerdown=${king ? (/** @type {PointerEvent} */ e) => this.#press(e, k) : null}>
       ${icon(k === 'web' ? 'globe-europe-africa' : categoryOf(blockCategory(k)).icon)}<span class="tab-name">${blockTitle(k)}</span></button>`)}</span>`;
     return html`<aside class="edge ${column ? 'col' : 'band'} ${folded ? 'folded' : ''} ${bare ? 'bare' : ''} ${max ? 'max' : ''} ${king ? 'king' : ''}"
@@ -2082,14 +2101,14 @@ export class GfPlantDetail extends LitElement {
         ${folded ? nothing : html`<details class="edge-opts">
           <summary class="edge-btn" title="Options d’affichage" aria-label=${'Options d’affichage du volet ' + where}>${icon('gear')}</summary>
           <div class="opts-pop">
-            <label><input type="checkbox" .checked=${Boolean(node.bare)} @change=${(/** @type {any} */ e) => setStackState(this.view, node.id, { bare: e.target.checked })} /> Sans titre ni cadre</label>
-            <label><input type="checkbox" .checked=${Boolean(node.folded)} @change=${(/** @type {any} */ e) => setStackState(this.view, node.id, { folded: e.target.checked })} /> Replié (s’ouvre au toucher)</label>
+            <label><input type="checkbox" .checked=${Boolean(node.bare)} @change=${(/** @type {any} */ e) => this.#setStack(node.id, { bare: e.target.checked })} /> Sans titre ni cadre</label>
+            <label><input type="checkbox" .checked=${Boolean(node.folded)} @change=${(/** @type {any} */ e) => this.#setStack(node.id, { folded: e.target.checked })} /> Replié (s’ouvre au toucher)</label>
           </div>
         </details>`}
         <button class="edge-btn" type="button" title=${max ? 'Remettre à sa place (Échap)' : 'Agrandir à tout le panneau'}
           aria-label=${(max ? 'Remettre le volet ' : 'Agrandir le volet ') + where} @click=${() => { this._maxEdge = max ? null : node.id; }}>${icon(max ? 'fullscreen-exit' : 'arrows-fullscreen')}</button>
         ${max ? nothing : html`<button class="edge-btn" type="button" aria-expanded=${folded ? 'false' : 'true'} aria-label=${(folded ? 'Déplier le volet ' : 'Replier le volet ') + where}
-          @click=${() => setStackState(this.view, node.id, { folded: !node.folded })}>${icon(folded ? 'chevron-down' : 'chevron-up')}</button>`}
+          @click=${() => this.#setStack(node.id, { folded: !node.folded })}>${icon(folded ? 'chevron-down' : 'chevron-up')}</button>`}
       </div>`}
       ${folded ? nothing : html`<div class="edge-body">${repeat([tab], k => k, k => king ? this.#block(k, ctx, null) : this.#plainBlock(k, ctx))}</div>`}
     </aside>`;
@@ -2099,6 +2118,41 @@ export class GfPlantDetail extends LitElement {
   #mediaControls() {
     const viewer = /** @type {any} */ (this.renderRoot.querySelector('.edge gf-media-viewer[bar-out]'));
     return html`<span class="media-ctl">${viewer ? viewer.controls() : nothing}</span>`;
+  }
+
+  // ── The tree of panes: the mode's (sheetLayout), or the host's own (`tree`, handed back as pane-sizes) ──────────
+
+  /** The tree of panes shown: the host's, else the mode's. @returns {import('../core/pane-tree.js').PaneNode} */
+  #tree() { return this.tree ?? treeOf(this.view); }
+
+  /** The pane holding a block. @param {string} key */
+  #paneOf(key) { return this.tree ? stackOf(this.tree, key) : paneOf(this.view, key); }
+
+  /** The host's tree changed: back to it, the mode's layout left alone. @param {import('../core/pane-tree.js').PaneNode} next */
+  #handBack(next) { if (next !== this.tree) this.dispatchEvent(new CustomEvent('pane-sizes', { detail: next })); }
+
+  /** New shares for a split's children. @param {string} id @param {number[]} sizes */
+  #setSizes(id, sizes) { if (this.tree) this.#handBack(treeSizes(this.tree, id, sizes)); else setPaneSizes(this.view, id, sizes); }
+
+  /** A pane's state (its tab, folded, bare). @param {string} id @param {Partial<import('../core/pane-tree.js').StackNode>} patch */
+  #setStack(id, patch) { if (this.tree) this.#handBack(patchStack(this.tree, id, patch)); else setStackState(this.view, id, patch); }
+
+  /**
+   * A block docked (a new pane, a tab); false: not moved (too many panes nested).
+   * @param {string} key @param {string} target @param {import('../core/pane-tree.js').Zone} zone
+   */
+  #dock(key, target, zone) {
+    if (!this.tree) return dockBlock(this.view, key, target, zone);
+    const next = dock(this.tree, key, target, zone);
+    if (next === this.tree) return false;
+    this.#handBack(next);
+    return true;
+  }
+
+  /** A block back in the sheet. @param {string} key @param {string | null} [beforeKey] */
+  #toSheet(key, beforeKey = null) {
+    if (this.tree) this.#handBack(undock(this.tree, key));
+    else toSheet(this.view, key, beforeKey);
   }
 
   /**
@@ -2125,12 +2179,23 @@ export class GfPlantDetail extends LitElement {
     if (node.t === 'sheet') return html`<div class="main" data-drop-node="sheet">${sheet}</div>`;
     if (node.t === 'stack') return this.#pane(ctx, node, node.tabs, dir);
     const total = node.sizes.reduce((a, b) => a + b, 0);
+    const pct = (/** @type {number} */ s) => Math.round(100 * s / total);
     return html`<div class="split ${node.dir}" data-split=${node.id}>${repeat(node.kids, k => k.id, (k, i) => html`
       ${i ? html`<div class="split-grip" role="separator" tabindex="0" aria-orientation=${node.dir === 'row' ? 'vertical' : 'horizontal'}
-        aria-label="Partage entre deux volets" title="Tirer pour partager la place (double-clic : parts égales)"
-        @pointerdown=${(/** @type {PointerEvent} */ e) => this.#splitDown(e, node, i)} @dblclick=${() => setPaneSizes(this.view, node.id, node.sizes.map(() => 1))}
+        aria-label=${`Redimensionner ${this.#nodeName(node.kids[i - 1])} et ${this.#nodeName(k)}`} aria-controls=${'cell-' + node.kids[i - 1].id}
+        aria-valuenow=${pct(node.sizes[i - 1])} aria-valuemin=${Math.round(100 * MIN_SHARE)} aria-valuemax=${pct(node.sizes[i - 1] + node.sizes[i]) - Math.round(100 * MIN_SHARE)}
+        aria-valuetext=${pct(node.sizes[i - 1]) + ' %'}
+        title=${`Tirer pour partager la place · ${node.dir === 'row' ? '← →' : '↑ ↓'} au clavier · double-clic ou Entrée : parts égales`}
+        @pointerdown=${(/** @type {PointerEvent} */ e) => this.#splitDown(e, node, i)} @dblclick=${() => this.#setSizes(node.id, node.sizes.map(() => 1))}
         @keydown=${(/** @type {KeyboardEvent} */ e) => this.#splitKey(e, node, i)}></div>` : nothing}
-      <div class="cell ${k.t === 'stack' && k.folded && this._maxEdge !== k.id ? 'folded' : ''}" style=${`flex:${node.sizes[i] / total} 1 0`}>${this.#node(ctx, k, sheet, node.dir)}</div>`)}</div>`;
+      <div class="cell ${k.t === 'stack' && k.folded && this._maxEdge !== k.id ? 'folded' : ''}" id=${'cell-' + k.id} style=${`flex:${node.sizes[i] / total} 1 0`}>${this.#node(ctx, k, sheet, node.dir)}</div>`)}</div>`;
+  }
+
+  /** What a grip's name says of a side: « la fiche », a pane by its block shown, a split by its first pane. @param {import('../core/pane-tree.js').PaneNode} n @returns {string} */
+  #nodeName(n) {
+    if (n.t === 'sheet') return 'la fiche';
+    if (n.t === 'stack') return '« ' + blockTitle(/** @type {string} */ (n.active && n.tabs.includes(n.active) ? n.active : n.tabs[0])) + ' »';
+    return this.#nodeName(n.kids[0]);
   }
 
   /** Dragging a grip between two children of a split: their shares, live, kept for the mode. @param {PointerEvent} e @param {any} node @param {number} i */
@@ -2158,22 +2223,29 @@ export class GfPlantDetail extends LitElement {
     };
     const up = () => {
       grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', up);
-      if (Math.abs(na - wa) > 0.002) { const sizes = node.sizes.map((/** @type {number} */ s) => s / total); sizes[i - 1] = na; sizes[i] = nb; setPaneSizes(this.view, node.id, sizes); }
+      if (Math.abs(na - wa) > 0.002) { const sizes = node.sizes.map((/** @type {number} */ s) => s / total); sizes[i - 1] = na; sizes[i] = nb; this.#setSizes(node.id, sizes); }
     };
     grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', up);
   }
 
-  /** ← → (↑ ↓ in a column) on a grip: 5 % to one side. @param {KeyboardEvent} e @param {any} node @param {number} i */
+  /**
+   * The keyboard on a grip: ← → (↑ ↓ in a column) 5 % to one side (Maj : 20 %), Début / Fin as far as it goes,
+   * Entrée equal shares (as a double click). @param {KeyboardEvent} e @param {any} node @param {number} i
+   */
   #splitKey(e, node, i) {
     const keys = node.dir === 'row' ? ['ArrowLeft', 'ArrowRight'] : ['ArrowUp', 'ArrowDown'];
-    if (!keys.includes(e.key)) return;
+    if (![...keys, 'Home', 'End', 'Enter'].includes(e.key)) return;
     e.preventDefault(); e.stopPropagation();
+    if (e.key === 'Enter') { this.#setSizes(node.id, node.sizes.map(() => 1)); return; }
     const total = node.sizes.reduce((/** @type {number} */ x, /** @type {number} */ y) => x + y, 0);
     const sizes = node.sizes.map((/** @type {number} */ s) => s / total);
-    const d = e.key === keys[0] ? -0.05 : 0.05;
-    if (sizes[i - 1] + d < 0.08 || sizes[i] - d < 0.08) return;
-    sizes[i - 1] += d; sizes[i] -= d;
-    setPaneSizes(this.view, node.id, sizes);
+    const pair = sizes[i - 1] + sizes[i];
+    const step = e.shiftKey ? 0.2 : 0.05;
+    const a = e.key === 'Home' ? MIN_SHARE : e.key === 'End' ? pair - MIN_SHARE : sizes[i - 1] + (e.key === keys[0] ? -step : step);
+    const next = Math.max(MIN_SHARE, Math.min(pair - MIN_SHARE, a));
+    if (Math.abs(next - sizes[i - 1]) < 0.001) return;
+    sizes[i - 1] = next; sizes[i] = pair - next;
+    this.#setSizes(node.id, sizes);
   }
 
   /** The sheet, with its panes when it has some. @param {any} ctx @param {unknown} article */
@@ -2254,7 +2326,7 @@ export class GfPlantDetail extends LitElement {
     const mark = this.renderRoot.querySelector(`.rub-mark[data-cat="${CSS.escape(cat)}"]`);
     if (mark) {
       this.#arrive(mark, { flash: mark.nextElementSibling });
-      if (first && paneOf(this.view, first) && !mark.parentElement?.querySelector(':scope > .block')) this.#goTo(first);
+      if (first && this.#paneOf(first) && !mark.parentElement?.querySelector(':scope > .block')) this.#goTo(first);
       return;
     }
     // Mode King (no rubrics): its first block.
@@ -2263,8 +2335,8 @@ export class GfPlantDetail extends LitElement {
 
   /** To a block: its place in the sheet — or, in a pane, its tab (unfolded): the sheet does not move. @param {string} key */
   async #goTo(key) {
-    const pane = paneOf(this.view, key);
-    if (pane && (pane.active !== key || pane.folded)) setStackState(this.view, pane.id, { active: key, folded: false });
+    const pane = this.#paneOf(key);
+    if (pane && (pane.active !== key || pane.folded)) this.#setStack(pane.id, { active: key, folded: false });
     await this.updateComplete;
     if (pane) return;
     const section = this.renderRoot.querySelector(`.blocks .block[data-key="${CSS.escape(key)}"]`);
@@ -2574,7 +2646,7 @@ export class GfPlantDetail extends LitElement {
    */
   #docked(ctx, article) {
     const sheet = html`${article}${this.#actionBar(ctx.plant)}`;
-    const tree = this.#shownNode(ctx, treeOf(this.view)) || { t: 'sheet', id: 'sheet' };
+    const tree = this.#shownNode(ctx, this.#tree()) || { t: 'sheet', id: 'sheet' };
     if (tree.t === 'sheet') return sheet;
     const wide = this._wideSheet !== false;
     if (!wide) {
@@ -2589,13 +2661,13 @@ export class GfPlantDetail extends LitElement {
 
   /** A page arrived for the « Page web » pane: its tab shown, unfolded. */
   revealWeb() {
-    const pane = paneOf(this.view, 'web');
-    if (pane && (pane.active !== 'web' || pane.folded)) setStackState(this.view, pane.id, { active: 'web', folded: false });
+    const pane = this.#paneOf('web');
+    if (pane && (pane.active !== 'web' || pane.folded)) this.#setStack(pane.id, { active: 'web', folded: false });
   }
 
   updated() {
     // A « Page web » pane in this layout: the app's links to other sites come to it.
-    if (paneOf(this.view, 'web') && !this.only) registerWebPane(this); else unregisterWebPane(this);
+    if (this.#paneOf('web') && !this.only) registerWebPane(this); else unregisterWebPane(this);
     // The sheet scrolls in its middle when it has edges: the host itself does not.
     this.toggleAttribute('edged', Boolean(this.renderRoot.querySelector('.frame.edged')));
     // The action bar's height: the rubrics stacked at the bottom wait above it.
@@ -3565,7 +3637,6 @@ export class GfPlantDetail extends LitElement {
    */
   #press(e, key, make = null) {
     if (e.button !== 0 || /** @type {Element} */ (e.target).closest('button:not(.grip):not([data-drag-key]), summary, details, input, textarea, select')) return;
-    const view = this.view;
     pressDock(e, {
       root: /** @type {ShadowRoot} */ (this.renderRoot), key, label: make ? key : blockTitle(key),
       sheetFallback: this.renderRoot.querySelector('article'),
@@ -3573,7 +3644,7 @@ export class GfPlantDetail extends LitElement {
       onEnd: () => this.toggleAttribute('docking', false),
       onDrop: ({ target, zone, beforeKey }) => {
         const k = make ? make() : key;
-        const moved = zone === 'sheet' ? (toSheet(view, k, beforeKey), true) : dockBlock(view, k, target, zone);
+        const moved = zone === 'sheet' ? (this.#toSheet(k, beforeKey), true) : this.#dock(k, target, zone);
         this._said = `« ${blockTitle(k)} » : ${!moved ? TOO_DEEP : zone === 'sheet' ? 'dans la fiche' : typeof zone === 'object' || zone === 'center' ? 'onglet d’un volet' : 'nouveau volet'}`;
       }
     });
@@ -3588,7 +3659,7 @@ export class GfPlantDetail extends LitElement {
     return html`<div class="palette" aria-label="Ajouter un bloc : glisser vers la fiche ou un volet">
       <span class="pal-title">${icon('plus-lg')} Ajouter</span>
       ${hidden.map(k => html`<button type="button" class="chip" data-drag-key=${k} title="Glisser vers un volet, ou toucher pour l’afficher dans la fiche"
-        @pointerdown=${(/** @type {PointerEvent} */ e) => this.#press(e, k)} @click=${() => toSheet(this.view, k)}>${icon(categoryOf(blockCategory(k)).icon)} ${blockTitle(k)}</button>`)}
+        @pointerdown=${(/** @type {PointerEvent} */ e) => this.#press(e, k)} @click=${() => this.#toSheet(k)}>${icon(categoryOf(blockCategory(k)).icon)} ${blockTitle(k)}</button>`)}
       <button type="button" class="chip new" data-drag-key="new-map" title="Glisser une nouvelle carte vers un volet"
         @pointerdown=${(/** @type {PointerEvent} */ e) => this.#press(e, 'Nouvelle carte', () => createMap('Carte'))}>${icon('map')} Nouvelle carte</button>
     </div>`;

@@ -787,8 +787,8 @@ export class GfMapPage extends LitElement {
     // Arrived with « add this plant » / « pick a plant » for this place (links to a place, « Y ajouter… »).
     const arrival = this.#arrival?.spot === place.id ? this.#arrival : null;
     return html`
-      ${wide ? p.split('place', 'right', max) : nothing}
-      <section class="panel ${this._panelFull ? 'full' : ''}" aria-label="Lieu sélectionné" style=${wide ? `width:${Math.min(p.width('place'), Math.max(320, max()))}px` : ''}>
+      ${wide ? p.split('place', 'right', max, 'map-place') : nothing}
+      <section class="panel ${this._panelFull ? 'full' : ''}" id="map-place" aria-label="Lieu sélectionné" style=${wide ? `width:${Math.min(p.width('place'), Math.max(320, max()))}px` : ''}>
         <div class="panel-head">
           <button class="grip" type="button" aria-label=${this._panelFull ? 'Réduire la fiche' : 'Agrandir la fiche'}
             aria-expanded=${this._panelFull ? 'true' : 'false'} @click=${() => { this._panelFull = !this._panelFull; }}></button>

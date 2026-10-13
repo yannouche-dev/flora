@@ -6,6 +6,7 @@ import { activeFilterCount, clearFilters, lastSearchHash } from '../core/query.j
 import { href } from '../core/router.js';
 import { backTo, depth, openModal, openView, replaceView } from '../core/history.js';
 import { plantViewOf, StoreController } from '../core/store.js';
+import { PaneSizer, splitStyles } from '../core/panes.js';
 import { ui } from '../styles/ui.js';
 import './gf-results-bar.js';
 import './gf-filter-panel.js';
@@ -20,61 +21,49 @@ import { blockTitle, hasColumns } from '../core/sheet-blocks.js';
 const GRID_MIN = 560;
 const MIN = { filters: 220, results: 280, plant: 360 };
 const MAX = { filters: 480 };
-const DEFAULTS = { filters: 280, plant: 480, plantPinned: 900, folded: { filters: false, results: false, plant: false } };
 const TITLES = { filters: 'Filtres', results: 'Résultats', plant: 'Plante' };
+/** The panes' default widths and minimums (core/panes.js); `plantPinned`: the plant's, its sheet with pinned blocks. */
+const PANES = {
+  filters: { width: 280, min: MIN.filters, title: TITLES.filters },
+  results: { width: 0, min: MIN.results, title: TITLES.results },
+  plant: { width: 480, min: MIN.plant, title: TITLES.plant },
+  plantPinned: { width: 900, min: MIN.plant, title: TITLES.plant }
+};
 
 /** @typedef {'filters' | 'results' | 'plant'} Pane */
 
-function readLayout() {
-  try {
-    // eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
-    const saved = JSON.parse(localStorage.getItem(config.storageKeys.floraLayout) || 'null') || {};
-    return { ...DEFAULTS, ...saved, folded: { ...DEFAULTS.folded, ...saved.folded } };
-  } catch { return structuredClone(DEFAULTS); }
+/**
+ * The layout as Flore kept it before core/panes.js ({ filters, plant, plantPinned, folded }): its widths and folds.
+ * @param {any} raw @returns {import('../core/panes.js').PaneState}
+ */
+function legacyLayout(raw) {
+  /** @type {Record<string, number>} */
+  const widths = {};
+  for (const k of ['filters', 'plant', 'plantPinned']) if (Number.isFinite(raw[k]) && raw[k] !== /** @type {any} */ (PANES)[k].width) widths[k] = Math.round(raw[k]);
+  /** @type {Record<string, boolean>} */
+  const folded = {};
+  for (const [k, v] of Object.entries(raw.folded || {})) if (v === true) folded[k] = true;
+  return { widths, folded };
 }
 
 /**
  * The Flore tab. Desktop: Filtres ┃ Résultats ┃ Plante, each pane foldable (vertical rail) and resizable
- * (drag the separators, or focus one and use ←/→; double-click resets). Tablet: filters in a bottom sheet,
+ * (core/panes.js: drag the separators, or focus one and use ← →, Début / Fin; double-click or Entrée resets; widths
+ * and folds kept under floraLayout). Tablet: filters in a bottom sheet,
  * Résultats ┃ Plante. Phone: results, the plant sliding over them full screen.
  * The list stays mounted while a plant is open, so its scroll position is kept.
  */
 export class GfFlora extends LitElement {
   static properties = {
     route: { attribute: false },
-    _layout: { state: true },
     _grid: { state: true },
     _under: { state: true },
     _paneFull: { state: true }
   };
 
-  static styles = [ui, css`
+  static styles = [ui, splitStyles, css`
     :host { display: flex; flex-direction: column; min-height: 0; flex: 1; }
     .panes { display: flex; flex: 1; min-height: 0; position: relative; }
-    /* Resize guide: follows the pointer while a separator is dragged. */
-    .guide {
-      position: absolute;
-      top: 0;
-      bottom: 0;
-      left: -1px;
-      width: 3px;
-      background: var(--gf-accent);
-      z-index: 5;
-      pointer-events: none;
-      will-change: transform;
-    }
-    .guide span {
-      position: absolute;
-      top: 50%;
-      left: 8px;
-      padding: 2px 8px;
-      border-radius: var(--gf-radius-pill);
-      background: var(--gf-accent);
-      color: var(--gf-accent-contrast);
-      font-size: 0.75rem;
-      font-variant-numeric: tabular-nums;
-      white-space: nowrap;
-    }
     .pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--gf-surface); }
     .pane.results { flex: 1 1 0; background: var(--gf-bg); }
     .pane.results.fill-plant { flex: 0 0 auto; }
@@ -129,27 +118,6 @@ export class GfFlora extends LitElement {
     .rail.right { border-right: 0; border-left: 1px solid var(--gf-border); }
     .rail:hover { color: var(--gf-text); background: var(--gf-surface-2); }
     .rail .badge { writing-mode: horizontal-tb; background: var(--gf-accent); color: var(--gf-accent-contrast); }
-
-    /* Separators between panes: drag to resize. */
-    .split {
-      flex: none;
-      width: 7px;
-      margin: 0 -3px;
-      z-index: 3;
-      cursor: col-resize;
-      position: relative;
-      touch-action: none;
-    }
-    .split::after {
-      content: '';
-      position: absolute;
-      inset: 0 3px;
-      background: var(--gf-border);
-      transition: background 0.12s;
-    }
-    .split:hover::after, .split:focus-visible::after, .split.dragging::after { background: var(--gf-accent); inset: 0 2px; }
-    .split:focus-visible { outline: none; }
-    :host(.resizing) { cursor: col-resize; user-select: none; }
 
     /* Phone: the plant slides over the results, full screen. */
     .sheet-plant {
@@ -256,7 +224,6 @@ export class GfFlora extends LitElement {
     super();
     /** @type {any} */
     this.route = { name: 'search' };
-    this._layout = readLayout();
     this._grid = false;
     /** The plant waiting under the card while it is swiped (its sheet is ready when the card flies off). @type {number | null} */
     this._under = null;
@@ -586,16 +553,11 @@ export class GfFlora extends LitElement {
     return this.#store.state.results.items.find(p => p.id === id)?.scientificName || '';
   }
 
-  #save() {
-    // eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
-    try { localStorage.setItem(config.storageKeys.floraLayout, JSON.stringify(this._layout)); } catch { /* not persisted */ }
-  }
+  /** The panes' widths and folds, kept (floraLayout; the separators: core/panes.js). */
+  #sizer = new PaneSizer(this, config.storageKeys.floraLayout, PANES, { legacy: legacyLayout });
 
   /** @param {Pane} pane @param {boolean} folded */
-  #fold(pane, folded) {
-    this._layout = { ...this._layout, folded: { ...this._layout.folded, [pane]: folded } };
-    this.#save();
-  }
+  #fold(pane, folded) { this.#sizer.fold(pane, folded); }
 
   #closePlant() {
     // Back to the list (past the plants browsed with ‹ ›), else to the search as a new view.
@@ -613,96 +575,21 @@ export class GfFlora extends LitElement {
   }
 
   /** @param {'filters' | 'plant'} pane */
-  #width(pane) { return this._layout[this.#key(pane)] ?? DEFAULTS[this.#key(pane)]; }
+  #width(pane) { return this.#sizer.width(this.#key(pane)); }
 
   /** Largest width a side pane may take, leaving the other panes their minimum. @param {'filters' | 'plant'} pane */
   #max(pane) {
     const total = this.renderRoot.querySelector('.panes')?.getBoundingClientRect().width || innerWidth;
-    const { folded } = this._layout;
+    const folded = (/** @type {Pane} */ p) => this.#sizer.folded(p);
     const others = pane === 'filters'
-      ? (folded.results ? 0 : MIN.results) + (this.#plantId && !folded.plant ? this.#width('plant') : 0)
-      : (folded.results ? 0 : MIN.results) + (this.#wide.matches ? (folded.filters ? 40 : this._layout.filters) : 0);
-    return Math.max(MIN[pane], Math.min(MAX[pane] || Infinity, total - others - 16));
+      ? (folded('results') ? 0 : MIN.results) + (this.#plantId && !folded('plant') ? Math.min(this.#width('plant'), this.#max('plant')) : 0)
+      : (folded('results') ? 0 : MIN.results) + (this.#wide.matches ? (folded('filters') ? 40 : Math.min(this.#width('filters'), MAX.filters)) : 0);
+    return Math.max(MIN[pane], Math.min(/** @type {any} */ (MAX)[pane] || Infinity, total - others - 16));
   }
 
-  /** @param {'filters' | 'plant'} pane @param {number} width */
-  #resize(pane, width) {
-    const w = Math.round(Math.min(this.#max(pane), Math.max(MIN[pane], width)));
-    if (w !== this.#width(pane)) this._layout = { ...this._layout, [this.#key(pane)]: w };
-  }
-
-  /**
-   * Dragging moves a guide line only; the panes take the new width once, on release. Reflowing the results and
-   * the plant sheet (photos, map) on every frame froze the page.
-   * @param {PointerEvent} e @param {'filters' | 'plant'} pane
-   */
-  #startDrag(e, pane) {
-    if (e.button !== 0) return;
-    const handle = /** @type {HTMLElement} */ (e.currentTarget);
-    const el = this.renderRoot.querySelector(`.pane.${pane}`);
-    const panes = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.panes'));
-    if (!el || !panes) return;
-    e.preventDefault();
-    handle.setPointerCapture(e.pointerId);
-    handle.classList.add('dragging');
-    this.classList.add('resizing');
-    const box = panes.getBoundingClientRect();
-    const rect = el.getBoundingClientRect();
-    const x0 = e.clientX;
-    const w0 = Math.min(this.#width(pane), this.#max(pane));
-    const max = this.#max(pane);
-    const guide = document.createElement('div');
-    guide.className = 'guide';
-    const label = guide.appendChild(document.createElement('span'));
-    panes.append(guide);
-    let width = w0;
-    let frame = 0;
-    const paint = () => {
-      frame = 0;
-      const edge = pane === 'filters' ? rect.left + width : rect.right - width;
-      guide.style.transform = `translateX(${Math.round(edge - box.left)}px)`;
-      label.textContent = width + ' px';
-    };
-    paint();
-    const move = (/** @type {PointerEvent} */ ev) => {
-      const dx = ev.clientX - x0;
-      width = Math.round(Math.min(max, Math.max(MIN[pane], pane === 'filters' ? w0 + dx : w0 - dx)));
-      if (!frame) frame = requestAnimationFrame(paint);
-    };
-    const end = () => {
-      cancelAnimationFrame(frame);
-      handle.removeEventListener('pointermove', move);
-      handle.removeEventListener('pointerup', end);
-      handle.removeEventListener('pointercancel', end);
-      handle.classList.remove('dragging');
-      this.classList.remove('resizing');
-      guide.remove();
-      if (width !== this.#width(pane)) this._layout = { ...this._layout, [this.#key(pane)]: width };
-      this.#save();
-    };
-    handle.addEventListener('pointermove', move);
-    handle.addEventListener('pointerup', end);
-    handle.addEventListener('pointercancel', end);
-  }
-
-  /** @param {KeyboardEvent} e @param {'filters' | 'plant'} pane */
-  #keyResize(e, pane) {
-    const step = e.shiftKey ? 64 : 16;
-    const dir = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0;
-    if (!dir) return;
-    e.preventDefault();
-    this.#resize(pane, Math.min(this.#width(pane), this.#max(pane)) + (pane === 'filters' ? dir : -dir) * step);
-    this.#save();
-  }
-
-  /** @param {'filters' | 'plant'} pane */
+  /** The separator of a side pane (core/panes.js). @param {'filters' | 'plant'} pane */
   #split(pane) {
-    return html`<div class="split" role="separator" aria-orientation="vertical" tabindex="0"
-      aria-label=${'Largeur du panneau ' + TITLES[pane].toLowerCase()} aria-valuenow=${this.#width(pane)}
-      aria-valuemin=${MIN[pane]} title="Glisser pour redimensionner · double-clic : largeur par défaut"
-      @pointerdown=${e => this.#startDrag(e, pane)}
-      @keydown=${e => this.#keyResize(e, pane)}
-      @dblclick=${() => { this._layout = { ...this._layout, [this.#key(pane)]: DEFAULTS[this.#key(pane)] }; this.#save(); }}></div>`;
+    return this.#sizer.split(this.#key(pane), pane === 'filters' ? 'left' : 'right', () => this.#max(pane), 'flore-' + pane);
   }
 
   // ── Filters ────────────────────────────────────────────────────────────────
@@ -713,7 +600,7 @@ export class GfFlora extends LitElement {
   async #focusFacet(e) {
     const facet = e.detail.facet;
     if (this.#wide.matches) {
-      if (this._layout.folded.filters) this.#fold('filters', false);
+      if (this.#sizer.folded('filters')) this.#fold('filters', false);
     } else {
       openModal(this.#dialog);
     }
@@ -765,7 +652,7 @@ export class GfFlora extends LitElement {
     const wide = this.#wide.matches;
     const phone = this.#phone.matches;
     const plantId = this.#plantId;
-    const { folded } = this._layout;
+    const folded = { filters: this.#sizer.folded('filters'), results: this.#sizer.folded('results'), plant: this.#sizer.folded('plant') };
     const total = this.#store.state.results.total;
     const showPlant = plantId !== null && !phone;
     const media = showPlant && this.#pane !== null;
@@ -783,7 +670,7 @@ export class GfFlora extends LitElement {
       ${plantId === null ? html`<h1 class="visually-hidden">Flore : recherche</h1>` : nothing}
       <div class="panes">
         ${wide ? (folded.filters || media ? this.#rail('filters') : html`
-          <section class="pane filters" aria-label="Filtres" style="width:${this._layout.filters}px">
+          <section class="pane filters" id="flore-filters" aria-label="Filtres" style="width:${Math.min(this.#width('filters'), this.#max('filters'))}px">
             ${this.#head('filters', this.#filtersTitle())}
             <div class="pane-body"><gf-filter-panel></gf-filter-panel></div>
           </section>
@@ -801,7 +688,7 @@ export class GfFlora extends LitElement {
 
         ${showPlant ? (plantFolded ? this.#rail('plant', true) : html`
           ${resultsFolded && !media ? nothing : this.#split('plant')}
-          <section class="pane plant ${resultsFolded && !media ? 'fill' : ''}" aria-label="Plante" @open-pane=${this.#openPane}
+          <section class="pane plant ${resultsFolded && !media ? 'fill' : ''}" id="flore-plant" aria-label="Plante" @open-pane=${this.#openPane}
             style=${resultsFolded && !media ? '' : `width:${Math.min(this.#width('plant'), this.#max('plant'))}px`}>
             ${this.#head('plant', 'Plante', html`
               <a class="icon-btn" href=${'#/plant/' + plantId} title="Ouvrir la fiche seule" aria-label="Ouvrir la fiche seule"

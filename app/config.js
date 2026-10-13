@@ -53,6 +53,8 @@ export const config = {
     floraLayout: 'geoflora.floraLayout',
     collectionsLayout: 'geoflora.collectionsLayout',
     mapLayout: 'geoflora.mapLayout',
+    // A new place on its own (gf-spot-editor, wide): the width of its form beside the map.
+    placeLayout: 'geoflora.placeLayout',
     // Mes plantes: the collections unfolded to show their plants.
     collectionsOpen: 'geoflora.collectionsOpen',
     // Where the user is in each part (search, plant, collection, Carte): kept across tabs and reloads.

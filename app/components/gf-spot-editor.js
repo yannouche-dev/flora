@@ -13,6 +13,8 @@ import {
 import { encodeCollection, share } from '../core/share.js';
 import { StoreController, whenReady } from '../core/store.js';
 import { addressAt, altitudeAt, formatCoordinates } from '../core/geoservices.js';
+import { BP } from '../core/media.js';
+import { PaneSizer, splitStyles } from '../core/panes.js';
 import { ui } from '../styles/ui.js';
 import './gf-lookalikes.js';
 import './gf-map.js';
@@ -49,6 +51,9 @@ const shortDate = (/** @type {string} */ iso) =>
  * then asks it through events — map-fly {coordinates, zoom}, map-edit (✎ positions), plant-focus {plantId},
  * panel-close — and the Carte hands moves back with `savePositions()`. Opened on its own, a saved place
  * redirects to the Carte.
+ *
+ * On its own, from BP.phone wide (its own width, not the window's): the map ┃ the form, side by side, the form's
+ * width the user's (a separator, core/panes.js, kept under placeLayout); narrower, the map above the form.
  */
 export class GfSpotEditor extends LitElement {
   static properties = {
@@ -76,10 +81,12 @@ export class GfSpotEditor extends LitElement {
     _where: { state: true },
     _editPos: { state: true },
     /** Why its « Vue 3D » did not open (no WebGL2, the module off). */
-    _note3d: { state: true }
+    _note3d: { state: true },
+    /** Its own width (px). */
+    _w: { state: true }
   };
 
-  static styles = [ui, css`
+  static styles = [ui, splitStyles, css`
     details.insights { margin: 16px 0 4px; padding: 10px 12px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface); }
     details.insights summary { cursor: pointer; font-weight: 600; font-size: 0.9rem; display: flex; gap: 6px; align-items: center; }
     details.insights[open] summary { margin-bottom: 10px; }
@@ -89,6 +96,9 @@ export class GfSpotEditor extends LitElement {
       min-height: 0;
     }
     :host([nogeo]) { grid-template-rows: 1fr; }
+    /* Wide: the map ┃ the form (its width chosen, --w-form), the separator in a 1 px column between them. */
+    :host([wide]) { grid-template-rows: minmax(0, 1fr); grid-template-columns: minmax(260px, 1fr) 1px var(--w-form, 480px); }
+    :host([wide]) > .split { width: auto; }
     /* In the Carte's panel: the panel scrolls, the map is the Carte's. */
     :host([embedded]) { display: block; }
     :host([embedded]) form { overflow: visible; padding-top: 4px; }
@@ -218,11 +228,20 @@ export class GfSpotEditor extends LitElement {
 
   #geo = new GeoController(this);
   #store = new StoreController(this);
+  /** Wide: the form's width beside the map (the map holds its frame while it changes). */
+  #sizer = new PaneSizer(this, config.storageKeys.placeLayout, { form: { width: 480, min: 360, title: 'Lieu' } },
+    { onChange: () => /** @type {any} */ (this.renderRoot.querySelector('.map-area gf-map'))?.holdFrame?.() });
+  #size = new ResizeObserver(([e]) => { const w = Math.round(e.contentRect.width); if (w !== this._w) this._w = w; });
+  /** The map ┃ the form, side by side (on its own, a place with its map, from BP.phone wide). */
+  #wide = false;
+  /** The widest the form may be: the map keeps 260 px. */
+  get #formMax() { return this._w - 260 - 1; }
   /** Harvest details (rating, log, "harvested today") only in harvest mode, and only for places. */
   get #harvest() { return this.#store.state.harvestMode && this.#isPlace; }
 
   constructor() {
     super();
+    this._w = 0;
     /** @type {string | null} */
     this.spotId = null;
     /** @type {number | null} */
@@ -372,11 +391,13 @@ export class GfSpotEditor extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     spotEvents.addEventListener('change', this.#onSpotsChange);
+    this.#size.observe(this);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     spotEvents.removeEventListener('change', this.#onSpotsChange);
+    this.#size.disconnect();
     // Leaving the page: save what is pending right away.
     this.#flush();
   }
@@ -403,6 +424,10 @@ export class GfSpotEditor extends LitElement {
     if (changed.has('spotId') || changed.has('plantId') || changed.has('addPlant') || changed.has('kind') || changed.has('at')) this.#load();
     if (changed.has('focusEntry') && this.focusEntry != null) this._open = this.#entryKey(this.focusEntry);
     if (changed.has('_place')) this.#updateWhere();
+    this.#wide = !this.embedded && Boolean(this._place?.geometry) && this._w >= BP.phone;
+    this.toggleAttribute('wide', this.#wide);
+    if (this.#wide) this.style.setProperty('--w-form', Math.max(360, Math.min(this.#sizer.width('form'), this.#formMax)) + 'px');
+    else this.style.removeProperty('--w-form');
 
     // A new place follows the GPS until the user places it by hand.
     const fix = this.#geo.state.fix;
@@ -1063,8 +1088,9 @@ export class GfSpotEditor extends LitElement {
           no-create
         ></gf-map>
       </div>` : nothing}
+      ${this.#wide ? this.#sizer.split('form', 'right', () => this.#formMax, 'place-form') : nothing}
 
-      <form @submit=${this.#save}>
+      <form id="place-form" @submit=${this.#save}>
         ${isPlace && !this.embedded ? this.#gpsStatus() : nothing}
         ${isPlace ? this.#nearbyBanner() : nothing}
 

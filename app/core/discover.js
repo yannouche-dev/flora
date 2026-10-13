@@ -43,7 +43,8 @@ function usedBefore() {
       // or a mini-app: a new visitor who drags a separator or opens a mini-app keeps the first steps.
       if (k.startsWith(config.storageKeys.appPrefix)) continue;
       if (k.startsWith('geoflora.') && ![KEY, config.storageKeys.modules, config.storageKeys.context, config.storageKeys.showSteps,
-        config.storageKeys.discoverLayout, config.storageKeys.trailLayout].includes(k)) return true;
+        config.storageKeys.discoverLayout, config.storageKeys.trailLayout, config.storageKeys.floraLayout, config.storageKeys.collectionsLayout,
+        config.storageKeys.mapLayout, config.storageKeys.placeLayout].includes(k)) return true;
     }
   } catch { /* no storage: first steps every time, harmless */ }
   return false;
