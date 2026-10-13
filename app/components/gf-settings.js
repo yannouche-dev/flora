@@ -318,7 +318,7 @@ export class GfSettings extends LitElement {
         <p class="muted">Personnalisez la fiche plante : glissez les blocs par leur titre (ou ci-dessous, par leur poignée ${icon('grip-vertical')}), masquez-les avec la corbeille ${icon('trash3')},
           réaffichez-les avec ${icon('arrow-counterclockwise')}. Tout est enregistré automatiquement, pour chaque mode d’affichage ;
           masquer un bloc de service (Wikipédia, GBIF, Trefle, photos) coupe ce module dans ce mode. Quittez en touchant la couronne en bas de l’écran.
-          La mise en page s’exporte en fichier JSON (pour la sauvegarder ou la copier sur un autre appareil).</p>
+          La mise en page s’exporte en fichier JSON, avec les réglages des cartes (pour la sauvegarder ou la copier sur un autre appareil).</p>
         <div class="row layout-file">
           <button type="button" @click=${this.#exportLayout}>${icon('download')} Exporter la mise en page</button>
           <label class="button file">${icon('upload')} Importer…

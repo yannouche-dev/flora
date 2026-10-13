@@ -13,6 +13,7 @@ import { isOverlay } from './ign.js';
 import { emptyLayout, migratePlaces, migrateTree, store } from './store.js';
 import { allNoteTexts, deleteNoteTexts, fromPortable, mergeNoteTexts, noteText as storedText, notesWithText, portableNotes, setNoteText as storeText } from './sheet-notes.js';
 import { writeLocal } from './quota.js';
+import { cleanMapSettings, mapSettings, mapSettingsDiff, setMapSettings } from './map-settings.js';
 import { SHEET, dock, normalize, patchStack, setSizes, sheetInRow, stackOf, undock, validTree } from './pane-tree.js';
 
 /** @typedef {import('./modules.js').Mode} Mode */
@@ -666,7 +667,9 @@ export function exportLayout() {
     layout: layout(),
     notes: allNoteTexts(),
     modes: ownModes(),
-    modulesOff: Object.fromEntries(modeKeys().map(v => [v, foldedModules(v)]))
+    modulesOff: Object.fromEntries(modeKeys().map(v => [v, foldedModules(v)])),
+    // Réglages › Cartes (2D or 3D, the 3D options): what differs from the defaults.
+    maps3d: mapSettingsDiff(mapSettings())
   }, null, 2);
 }
 
@@ -708,6 +711,8 @@ export function importLayout(text) {
     && (!data.modulesOff || perView(data.modulesOff, x => Array.isArray(x) && x.every(m => MODULES.some(mm => mm.key === m))));
   if (!valid) throw new Error('Mise en page illisible ou incomplète.');
   importModes(data.modes || []);
+  // Réglages › Cartes, when the file has them (an older one has not: they stay as they are here).
+  if (data.maps3d && typeof data.maps3d === 'object') setMapSettings(cleanMapSettings(data.maps3d));
   // Note blocks holding a text on this device are kept, after the file's.
   const written = new Set(notesWithText());
   const kept = layout().notes.filter(n => written.has(n.id) && !l.notes.some((/** @type {any} */ m) => m.id === n.id));
