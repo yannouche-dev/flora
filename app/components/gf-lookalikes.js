@@ -1,6 +1,6 @@
 // @ts-check
 import { LitElement, html, css, nothing, repeat } from 'lit';
-import { UNREAD_LOOKALIKES, genusOf, lookalikesOf } from '../core/lookalikes.js';
+import { UNREAD_LOOKALIKES, genusOf, lookalikesOf, severityOf } from '../core/lookalikes.js';
 import { href } from '../core/router.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
@@ -67,6 +67,7 @@ export class GfLookalikes extends LitElement {
     .mortel .sev { color: #b91c1c; }
     ul { margin: 4px 0 0; padding-left: 18px; }
     li { margin: 2px 0; }
+    .no-tell { margin: 4px 0 0; font-style: italic; }
     .muted { color: var(--gf-text-muted); font-size: 0.8rem; }
     .src { margin: 4px 0 0; }
     .src a { color: inherit; }
@@ -136,18 +137,22 @@ export class GfLookalikes extends LitElement {
   #item(l) {
     const { pair, side, others } = l;
     // Épuré (folded): the symptoms one line under the head; in full once open.
-    const symptoms = (this.detailed || pair.severity === 'mortel') && pair.symptoms;
+    const sev = severityOf(pair);
+    const symptoms = (this.detailed || sev.danger) && pair.symptoms;
     const names = others.map((o, i) => html`${i ? ', ' : ''}${this.#other(o)}`);
     const head = side === 'edible'
       ? html`<strong>${icon('exclamation-triangle-fill')} Peut être confondue avec ${names}</strong>`
-      : html`<strong>${icon('exclamation-octagon-fill')} Plante ${pair.severity === 'mortel' ? 'mortelle' : 'toxique'}, confondue avec ${names}</strong>`;
-    return html`<details class="alert ${pair.severity}" ?open=${!this.compact}>
-      <summary><span class="what">${head}<span class="sev">${pair.severity}</span> <span class="muted">· ${pair.part}</span>
+      : html`<strong>${icon('exclamation-octagon-fill')} Plante ${sev.plant}, confondue avec ${names}</strong>`;
+    // « mortel » and « grave » share the red tone (class mortel); the badge says which.
+    return html`<details class="alert ${sev.danger ? 'mortel' : 'toxique'}" ?open=${!this.compact}>
+      <summary><span class="what">${head}<span class="sev">${sev.tag}</span> <span class="muted">· ${pair.part}</span>
         ${symptoms && this.compact ? html`<span class="sym"><b>Symptômes :</b> ${pair.symptoms}</span>` : nothing}</span>
         <span class="chev" aria-hidden="true">${icon('chevron-down')}</span></summary>
-      ${pair.tell.length ? html`<ul>${pair.tell.map(t => html`<li>${t}</li>`)}</ul>` : nothing}
+      ${pair.tell.length ? html`<ul>${pair.tell.map(t => html`<li>${t}</li>`)}</ul>`
+        : html`<p class="no-tell">Nos sources ne donnent pas de critère pour les distinguer : en cas de doute, ne la cueillez pas.</p>`}
       ${this.mapLinked ? this.#compare(others) : nothing}
       ${symptoms ? html`<p class="src"><b>Symptômes :</b> ${pair.symptoms}</p>` : nothing}
+      ${pair.severityFrom === 'tppt' ? html`<p class="src muted">Gravité : plante toxique au niveau le plus haut de la base TPPT (Agroscope), « très fortement toxique ».</p>` : nothing}
       <p class="src muted">Source${l.sources.length > 1 ? 's' : ''} : ${l.sources.map((s, i) => {
         const name = `${s.publisher} (${String(s.date).slice(0, 4)})`, url = safeUrl(s.url);
         return html`${i ? ' · ' : ''}${url ? html`<a href=${url} target="_blank" rel="noopener" title=${s.title}>${name}</a>` : html`<span title=${s.title}>${name}</span>`}`;

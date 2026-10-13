@@ -1,5 +1,5 @@
 {
-  "about": "Plantes comestibles et plantes toxiques avec lesquelles elles sont confondues. Uniquement les confusions et critères cités par les sources ci-dessous (Anses et Centres antipoison). Un taxon d'un seul mot désigne tout le genre (« Digitalis sp. » dans la source).",
+  "about": "Plantes comestibles et plantes toxiques avec lesquelles elles sont confondues. Uniquement les confusions et critères cités par les sources ci-dessous (Anses et Centres antipoison). Un taxon d'un seul mot désigne tout le genre (« Digitalis sp. » dans la source). Gravité : « mortel » quand ces sources le disent ; « grave » quand la plante toxique est au niveau le plus haut de la base TPPT d'Agroscope (« very strong toxic », très fortement toxique : severityFrom « tppt ») ; « toxique » sinon. Liste de référence des confusions et de leur relecture : data/confusions-reference.json (vérifiée en CI par scripts/check-confusions.mjs).",
   "sources": {
     "aide-memoire": {
       "title": "Plantes toxiques et plantes comestibles : attention aux confusions ! (aide-mémoire)",
@@ -50,7 +50,8 @@
       "toxic": [{ "taxon": "Convallaria majalis", "label": "Muguet" }],
       "edible": [{ "taxon": "Allium ursinum", "label": "Ail des ours" }],
       "part": "feuilles",
-      "severity": "toxique",
+      "severity": "grave",
+      "severityFrom": "tppt",
       "tell": [],
       "sources": ["vigilanses-8"]
     },
@@ -102,7 +103,8 @@
       "toxic": [{ "taxon": "Conium maculatum", "label": "Grande ciguë" }, { "taxon": "Aethusa cynapium", "label": "Petite ciguë" }],
       "edible": [{ "taxon": "Petroselinum crispum", "label": "Persil plat" }],
       "part": "feuilles",
-      "severity": "toxique",
+      "severity": "grave",
+      "severityFrom": "tppt",
       "tell": [],
       "sources": ["vigilanses-8"]
     },
@@ -110,7 +112,8 @@
       "toxic": [{ "taxon": "Arum", "label": "Arum" }],
       "edible": [{ "taxon": "Rumex", "label": "Oseille" }],
       "part": "feuilles",
-      "severity": "toxique",
+      "severity": "grave",
+      "severityFrom": "tppt",
       "tell": [],
       "symptoms": "Douleurs abdominales, irritation oropharyngée (voire brûlure et œdème buccal).",
       "sources": ["aide-memoire", "vigilanses-8"]
@@ -119,7 +122,8 @@
       "toxic": [{ "taxon": "Laburnum anagyroides", "label": "Cytise" }],
       "edible": [{ "taxon": "Robinia pseudoacacia", "label": "Acacia (robinier)" }],
       "part": "fleurs",
-      "severity": "toxique",
+      "severity": "grave",
+      "severityFrom": "tppt",
       "tell": ["Confusion des fleurs, celles de l’acacia étant consommées en beignets."],
       "symptoms": "Signes digestifs (vomissements, diarrhée), tachycardie, asthénie, vertiges, céphalées (voire tremblements, confusion, convulsions).",
       "sources": ["aide-memoire", "vigilanses-8"]
@@ -159,7 +163,16 @@
       "sources": ["ete"]
     },
     {
-      "toxic": [{ "taxon": "Nerium oleander", "label": "Laurier rose" }, { "taxon": "Prunus laurocerasus", "label": "Laurier cerise" }],
+      "toxic": [{ "taxon": "Nerium oleander", "label": "Laurier rose" }],
+      "edible": [{ "taxon": "Laurus nobilis", "label": "Laurier sauce" }],
+      "part": "feuilles",
+      "severity": "grave",
+      "severityFrom": "tppt",
+      "tell": ["Seul le laurier sauce (Laurus nobilis) est comestible ; le laurier rose est hautement toxique."],
+      "sources": ["ete", "vigilanses-8"]
+    },
+    {
+      "toxic": [{ "taxon": "Prunus laurocerasus", "label": "Laurier cerise" }],
       "edible": [{ "taxon": "Laurus nobilis", "label": "Laurier sauce" }],
       "part": "feuilles",
       "severity": "toxique",
@@ -170,7 +183,8 @@
       "toxic": [{ "taxon": "Datura stramonium", "label": "Datura" }],
       "edible": [{ "taxon": "Tetragonia tetragonoides", "label": "Tétragone cornue" }],
       "part": "feuilles",
-      "severity": "toxique",
+      "severity": "grave",
+      "severityFrom": "tppt",
       "tell": [],
       "sources": ["gare-aux-confusions"]
     }

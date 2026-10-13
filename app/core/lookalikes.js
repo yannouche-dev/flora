@@ -9,10 +9,32 @@ import * as db from './db.js';
 /**
  * @typedef {{ taxon: string, label: string }} Taxon   One word: the whole genus (« Digitalis sp. »).
  * @typedef {{ title: string, publisher: string, date: string, url: string }} Source
- * @typedef {{ toxic: Taxon[], edible: Taxon[], part: string, severity: 'mortel' | 'toxique', tell: string[],
- *   symptoms?: string, sources: string[] }} Pair
+ * @typedef {{ toxic: Taxon[], edible: Taxon[], part: string, severity: 'mortel' | 'grave' | 'toxique', severityFrom?: 'tppt',
+ *   tell: string[], symptoms?: string, sources: string[] }} Pair
  * @typedef {{ side: 'edible' | 'toxic', pair: Pair, others: (Taxon & { id: number | null })[], sources: Source[] }} Lookalike
+ * @typedef {{ key: Pair['severity'], rank: number, tag: string, plant: string, danger: boolean }} Severity
  */
+
+/**
+ * How each severity reads: « mortel » when the Anses or the Centres antipoison say so; « grave » when the toxic plant
+ * is at the top level of Agroscope's TPPT base (very strong toxic: « très toxique », severityFrom « tppt »); « toxique »
+ * otherwise. `tag`: the badge and « (…) » after a name; `plant`: « Plante … »; `danger`: the red tone.
+ * @type {Record<Pair['severity'], Severity>}
+ */
+export const SEVERITY = {
+  mortel: { key: 'mortel', rank: 2, tag: 'mortel', plant: 'mortelle', danger: true },
+  grave: { key: 'grave', rank: 1, tag: 'très toxique', plant: 'très toxique', danger: true },
+  toxique: { key: 'toxique', rank: 0, tag: 'toxique', plant: 'toxique', danger: false }
+};
+
+/** A pair's severity (an unknown value reads as « toxique », never as nothing). @param {Pair | undefined} pair */
+export const severityOf = pair => SEVERITY[/** @type {Pair['severity']} */ (pair?.severity)] || SEVERITY.toxique;
+
+/** The gravest severity of some confusions (« toxique » for none). @param {Lookalike[]} list */
+export const gravest = list => list.reduce((worst, l) => severityOf(l.pair).rank > worst.rank ? severityOf(l.pair) : worst, SEVERITY.toxique);
+
+/** « (mortel) », « (très toxique) » after a name; nothing for « toxique ». @param {Pair} pair */
+export const severityNote = pair => severityOf(pair).rank > 0 ? ` (${severityOf(pair).tag})` : '';
 
 /** @type {Promise<{ sources: Record<string, Source>, pairs: Pair[] }> | null} */
 let loading = null;
@@ -134,7 +156,7 @@ export async function lookalikesOf(plant) {
     const others = await Promise.all((side === 'edible' ? pair.toxic : pair.edible).map(async t => ({ ...t, id: await plantId(t.taxon) })));
     found.push({ side, pair, others, sources: pair.sources.map(id => sources[id]).filter(Boolean) });
   }
-  return found.sort((a, b) => Number(b.pair.severity === 'mortel') - Number(a.pair.severity === 'mortel'));
+  return found.sort((a, b) => severityOf(b.pair).rank - severityOf(a.pair).rank);
 }
 
 /** When the list cannot be read: said, never left out. */
@@ -150,9 +172,9 @@ export async function lookalikeWarning(plant) {
   try { list = await lookalikesOf(plant); } catch { return { toxic: true, unread: true, text: UNREAD_LOOKALIKES }; }
   const edible = list.filter(l => l.side === 'edible');
   if (edible.length) {
-    const names = edible.flatMap(l => l.others.map(o => o.label + (l.pair.severity === 'mortel' ? ' (mortel)' : '')));
+    const names = edible.flatMap(l => l.others.map(o => o.label + severityNote(l.pair)));
     return { toxic: false, text: 'Ne pas confondre avec : ' + [...new Set(names)].join(', ') };
   }
   const toxic = list.find(l => l.side === 'toxic');
-  return toxic ? { toxic: true, text: `Plante ${toxic.pair.severity === 'mortel' ? 'mortelle' : 'toxique'}, confondue avec : ${toxic.others.map(o => o.label).join(', ')}` } : null;
+  return toxic ? { toxic: true, text: `Plante ${severityOf(toxic.pair).plant}, confondue avec : ${toxic.others.map(o => o.label).join(', ')}` } : null;
 }

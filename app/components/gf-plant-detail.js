@@ -34,7 +34,8 @@ import { CATEGORIES, blockCategory, categoryOf } from '../core/categories.js';
 import { FOCUS_EVENT, isFocused, noFocus, toggleFocus } from '../core/map-focus.js';
 import * as openData from '../core/open-data.js';
 import * as usesData from '../core/uses.js';
-import { lookalikesOf } from '../core/lookalikes.js';
+import { gravest, lookalikesOf, severityNote } from '../core/lookalikes.js';
+import { harvestRuleText } from '../core/regulation.js';
 import { formatAltitude } from '../core/altitude.js';
 import { chartStyles, climateChart, groupColor, groupLegend, networkChart, nicheChart } from '../core/charts.js';
 import { unsafeCSS } from 'lit';
@@ -3339,19 +3340,20 @@ export class GfPlantDetail extends LitElement {
       out.push({ level: 'stop', text: html`<b>${what} pour le moment</b> : ne consommez aucune plante sans vérification. <button type="button" class="link" @click=${() => this.#retrySafety()}>Réessayer</button>` });
     }
     const ansm = /** @type {any[]} */ (o.safety?.ansm || []), tppt = o.safety?.tppt;
-    for (const b of ansm.filter(a => a.list === 'B')) out.push({ level: 'stop', text: html`<b>Pharmacopée française, liste B</b>${b.genus ? ' (tout le genre)' : ''} : plante médicinale dont les effets indésirables potentiels l’emportent sur le bénéfice attendu${b.parts ? html` — partie concernée : ${b.parts}` : nothing}. <span class="src">ANSM</span>` });
+    for (const b of ansm.filter(a => a.list === 'B')) out.push({ level: 'stop', text: html`<b>Pharmacopée française, liste B</b>${b.from ? ` (listée sous « ${b.from} sp. », genre dont elle faisait partie)` : b.genus ? ' (tout le genre)' : ''} : plante médicinale dont les effets indésirables potentiels l’emportent sur le bénéfice attendu${b.parts ? html` — partie concernée : ${b.parts}` : nothing}. <span class="src">ANSM</span>` });
     for (const a of ansm.filter(a => a.list === 'A' && a.toxicParts)) out.push({ level: 'warn', text: html`<b>Parties toxiques</b> : ${a.toxicParts}. <span class="src">ANSM, Pharmacopée liste A</span>` });
-    if (tppt) out.push({ level: tppt.level >= 3 ? 'stop' : 'warn', text: html`<b>${tppt.level >= 2 ? 'Plante toxique' : 'Attention'}</b>${tppt.levelLabel ? ` (${tppt.levelLabel})` : ''}${tppt.parts ? html` — ${tppt.level >= 2 ? 'parties toxiques' : 'parties concernées'} : ${tppt.parts}` : nothing}${tppt.toxins?.length ? html` ; substances : ${tppt.toxins.slice(0, 4).join(', ')}` : nothing}. <span class="src">Agroscope, base TPPT</span>` });
+    // TPPT in French; the base's own words on hover (levelEn, partsEn). Level 0: listed, toxicity to humans unknown.
+    if (tppt) out.push({ level: tppt.level >= 3 ? 'stop' : 'warn', text: html`<b title=${tppt.levelEn ? 'TPPT : ' + tppt.levelEn : nothing}>${tppt.level >= 2 ? 'Plante toxique' : tppt.level === 0 ? 'Toxicité pour l’humain inconnue' : 'Attention'}</b>${tppt.levelLabel && tppt.level > 0 ? ` (${tppt.levelLabel})` : ''}${tppt.parts ? html` — <span title=${tppt.partsEn ? 'TPPT : ' + tppt.partsEn : nothing}>${tppt.level >= 2 ? 'parties toxiques' : 'parties concernées'} : ${tppt.parts}</span>` : nothing}${tppt.toxins?.length ? html` ; substances : ${tppt.toxins.slice(0, 4).join(', ')}` : nothing}. <span class="src">Agroscope, base TPPT</span>` });
     // The pair's severity, on both sides: the toxic side is the dangerous plant itself, even without ANSM or TPPT data.
     const confusions = /** @type {import('../core/lookalikes.js').Lookalike[]} */ (Array.isArray(o.confusions) ? o.confusions : []);
     const toxicSide = confusions.filter(l => l.side === 'toxic'), edibleSide = confusions.filter(l => l.side === 'edible');
-    const deadly = (/** @type {typeof confusions} */ list) => list.some(l => l.pair.severity === 'mortel');
     const see = html` Voir « ${blockTitle('lookalikes')} ». <span class="src">Anses, Centres antipoison</span>`;
-    if (toxicSide.length) out.push({ level: 'stop', text: html`<b>Plante ${deadly(toxicSide) ? 'mortelle' : 'toxique'}</b>, confondue avec ${[...new Set(toxicSide.flatMap(l => l.others.map(x => x.label)))].join(', ')}.${see}` });
-    if (edibleSide.length) out.push({ level: deadly(edibleSide) ? 'stop' : 'warn', text: html`<b>Risque de confusion</b> avec une plante ${deadly(edibleSide) ? 'mortelle' : 'toxique'} : ${[...new Set(edibleSide.flatMap(l => l.others.map(x => x.label + (l.pair.severity === 'mortel' ? ' (mortel)' : ''))))].join(', ')}.${see}` });
+    if (toxicSide.length) out.push({ level: 'stop', text: html`<b>Plante ${gravest(toxicSide).plant}</b>, confondue avec ${[...new Set(toxicSide.flatMap(l => l.others.map(x => x.label)))].join(', ')}.${see}` });
+    if (edibleSide.length) out.push({ level: gravest(edibleSide).danger ? 'stop' : 'warn', text: html`<b>Risque de confusion</b> avec une plante ${gravest(edibleSide).plant} : ${[...new Set(edibleSide.flatMap(l => l.others.map(x => x.label + severityNote(l.pair))))].join(', ')}.${see}` });
     const st = plant.statuses || [];
+    const rule = harvestRuleText(st);
     if (st.some((/** @type {any} */ x) => /^P[NRD]$/.test(x.type))) out.push({ level: 'stop', text: html`<b>Espèce protégée</b> (${[...new Set(st.filter((/** @type {any} */ x) => /^P[NRD]$/.test(x.type)).map((/** @type {any} */ x) => x.area || x.label))].slice(0, 3).join(', ')}) : cueillette interdite là où elle l’est. <span class="src">INPN</span>` });
-    else if (st.some((/** @type {any} */ x) => x.type === 'REGL')) out.push({ level: 'warn', text: html`<b>Cueillette réglementée</b> dans certains départements (voir « ${blockTitle('status')} »). <span class="src">INPN</span>` });
+    else if (rule) out.push({ level: 'warn', text: html`<b>${rule}</b> (voir « ${blockTitle('status')} »). <span class="src">INPN</span>` });
     // The gravest first (stable sort: the source order stays within a level).
     return out.sort((a, b) => (a.level === 'stop' ? 0 : 1) - (b.level === 'stop' ? 0 : 1));
   }

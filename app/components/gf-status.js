@@ -2,6 +2,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import * as db from '../core/db.js';
 import { myRegion, sortStatuses, territoryFor } from '../core/territory.js';
+import { harvestRules, tradeRules } from '../core/regulation.js';
 import { ui } from '../styles/ui.js';
 
 /** @typedef {import('../core/territory.js').Status} Status */
@@ -23,7 +24,8 @@ export async function statusWarning(plant, point) {
   const { national, here } = sortStatuses(plant.statuses, await territoryFor(point).catch(() => null));
   const protection = [...national, ...here].find(s => PROTECTION.includes(s.type));
   if (protection) return `Espèce protégée (${protection.type === 'PN' ? 'France' : protection.area})`;
-  const rule = here.find(s => s.type === 'REGL');
+  // Only a picking rule of this department or region (never a CITES annex, an overseas or invasive species list).
+  const rule = harvestRules(here)[0];
   return rule ? `Cueillette réglementée (${rule.area})` : null;
 }
 
@@ -126,10 +128,14 @@ export class GfStatus extends LitElement {
     const territory = this._territory;
     const { national, here, elsewhere } = sortStatuses(statuses, territory);
     const protections = [...national, ...here].filter(s => PROTECTION.includes(s.type));
-    const rules = here.filter(s => s.type === 'REGL');
+    // Picking rules: this department's or region's, then the national ones (PV1: a prefect may regulate it; NV3).
+    // Trade rules (CITES) on a line of their own; overseas and invasive species lists rule no picking here.
+    const rules = harvestRules(here);
+    const nationalRules = harvestRules(national);
+    const trade = tradeRules(national);
     const redLists = [...national, ...here].filter(s => s.type === 'LRN' || s.type === 'LRR');
-    const away = elsewhere.filter(s => PROTECTION.includes(s.type) || s.type === 'REGL');
-    if (!protections.length && !rules.length && !redLists.length && !away.length) return nothing;
+    const away = [...elsewhere.filter(s => PROTECTION.includes(s.type)), ...harvestRules(elsewhere)];
+    if (!protections.length && !rules.length && !nationalRules.length && !trade.length && !redLists.length && !away.length) return nothing;
     this._empty = false;
     const place = territory ? (territory.deptName ? `${territory.deptName}, ${territory.regionName}` : territory.regionName) : null;
 
@@ -146,6 +152,14 @@ export class GfStatus extends LitElement {
             <strong>Cueillette réglementée${place ? ' ici' : ''}</strong>
             ${rules.map(s => html`<div>${s.area} — ${s.label}</div>`)}
           </div>` : nothing}
+        ${nationalRules.length ? html`
+          <div class="alert regulated">
+            <strong>${nationalRules.some(s => s.code !== 'PV1') ? 'Cueillette réglementée en France métropolitaine' : 'Cueillette pouvant être réglementée par arrêté préfectoral'}</strong>
+            ${nationalRules.map(s => html`<div>${s.area} — ${s.label}</div>`)}
+            ${nationalRules.every(s => s.code === 'PV1') ? html`<div class="muted">Un arrêté du préfet peut en limiter ou en interdire la cueillette dans un département : renseignez-vous avant de cueillir.</div>` : nothing}
+          </div>` : nothing}
+        ${trade.length ? html`
+          <div class="info">Commerce réglementé : ${trade.map((s, i) => html`${i ? ' ; ' : ''}${s.label}`)}.</div>` : nothing}
         ${redLists.length ? html`
           <div class="info">Liste rouge : ${redLists.map((s, i) => html`${i ? ', ' : ''}<strong>${s.label}</strong> (${this.#where(s)})`)}</div>` : nothing}
         ${away.length ? html`

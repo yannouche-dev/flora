@@ -158,8 +158,16 @@ export async function territoryFor(point) {
 
 const fold = (/** @type {string} */ s) => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
 
-/** Whether a status applies to the whole country. @param {Status} s */
-export const isNational = s => s.type === 'PN' || s.type === 'LRN' || /etat|national|france/i.test(fold(s.level) + ' ' + fold(s.area)) && !/^FR-..+/.test(s.iso || '');
+/** The areas of a status that covers the whole country (BDC Statuts: « France », « France métropolitaine »). */
+const NATIONAL_AREAS = new Set(['france', 'france metropolitaine']);
+
+/**
+ * Whether a status applies to the whole country: national protection or Red List, or a status of no region or
+ * department (no ISO code « FR-… ») whose area is France itself — never « Ile-de-France » (FR-J), whose name holds
+ * « France ».
+ * @param {Status} s
+ */
+export const isNational = s => s.type === 'PN' || s.type === 'LRN' || (!/^FR-/i.test(s.iso || '') && NATIONAL_AREAS.has(fold(s.area)));
 
 /**
  * Whether a regional/departmental status applies in the territory: ISO code, department, current or former

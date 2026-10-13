@@ -77,6 +77,7 @@ const SHELL = [
   'app/core/place-model.js',
   'app/core/portable.js',
   'app/core/territory.js',
+  'app/core/regulation.js',
   'app/core/thumb.js',
   'app/core/lookalikes.js',
   'app/core/safe-url.js',

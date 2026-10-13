@@ -19,6 +19,7 @@ import './gf-map.js';
 import './gf-status.js';
 import './gf-thumb.js';
 import { icon, kindIcon } from '../core/icons.js';
+import { harvestRisk } from '../core/alerts.js';
 import './gf-plant-pick-list.js';
 import './gf-place-insights.js';
 
@@ -461,7 +462,7 @@ export class GfSpotEditor extends LitElement {
           const plant = await db.get('plants', this.addPlant);
           if (plant) {
             place = withPlant(place, plant, defaultPlantPosition(place, this.#geo.state.fix));
-            this._todayFor = new Map([[/** @type {any} */ (lastEntry(place)).id, '']]);
+            this._todayFor = new Map([[/** @type {any} */ (lastEntry(place)).id, null]]);
           }
         }
         this._open = findEntry(place, this.addPlant)?.id ?? null;
@@ -491,7 +492,7 @@ export class GfSpotEditor extends LitElement {
       if (plant) {
         place = withPlant(place, plant, fix ? { coordinates: fix.coordinates, accuracy: Math.round(fix.accuracy) } : undefined);
         const added = /** @type {any} */ (lastEntry(place)).id;
-        this._todayFor = new Map([[added, '']]);
+        this._todayFor = new Map([[added, null]]);
         this._open = added;
       } else {
         this._picker = true;
@@ -617,7 +618,7 @@ export class GfSpotEditor extends LitElement {
     const plant = await db.get('plants', summary.id);
     this._place = withPlant(this._place, plant, defaultPlantPosition(this._place, this.#geo.state.fix), { again: true });
     const added = /** @type {any} */ (lastEntry(this._place)).id;
-    if (this.#isPlace) this._todayFor = new Map(this._todayFor).set(added, '');
+    if (this.#isPlace) this._todayFor = new Map(this._todayFor).set(added, null);
     this._open = added;
     this._pickerQuery = '';
     this._picker = false;
@@ -636,13 +637,26 @@ export class GfSpotEditor extends LitElement {
     this.#changed();
   }
 
+  /**
+   * Before a harvest of this plant is noted: when our sources say it is toxic (or cannot be read), the warning, to be
+   * answered (alerts.js harvestRisk). True when there is nothing to say, or the user confirms.
+   * @param {any} entry
+   */
+  async #harvestAllowed(entry) {
+    if (entry?.plantId == null) return true;
+    const plant = await db.get('plants', entry.plantId).catch(() => null);
+    const risk = await harvestRisk(plant || { id: entry.plantId, scientificName: entry.scientificName, genus: entry.scientificName.split(' ')[0] });
+    if (!risk) return true;
+    return confirm(`Plante toxique : récolte déconseillée.\n\n${entryName(entry)} — d’après nos sources :\n${risk.reasons.map(r => '• ' + r).join('\n')}\n\nNe la consommez pas. Centre antipoison : centres-antipoison.net ; 15 ou 112 en cas de détresse vitale.\n\nNoter quand même cette récolte ?`);
+  }
+
   /** @param {string} key its entry id @param {Event} event */
-  #addHarvest(key, event) {
+  async #addHarvest(key, event) {
     const box = /** @type {HTMLElement} */ (event.target).closest('.add-harvest');
     const get = (/** @type {string} */ name) => /** @type {HTMLInputElement} */ (box?.querySelector(`[name="${name}"]`));
     const date = get('date').value;
     const entry = this._place && findEntry(this._place, key);
-    if (!date || !entry) return;
+    if (!date || !entry || !await this.#harvestAllowed(entry)) return;
     const harvests = [...entry.harvests, { date, quantity: get('quantity').value.trim(), note: get('note').value.trim() }]
       .sort((a, b) => b.date.localeCompare(a.date));
     this.#patchEntry(key, { harvests });
@@ -901,7 +915,12 @@ export class GfSpotEditor extends LitElement {
             ${fresh && this.#harvest ? html`
               <div class="today">
                 <input id="today-${key}" type="checkbox" .checked=${todayQuantity !== null}
-                  @change=${e => { this._todayFor = new Map(this._todayFor).set(key, e.target.checked ? '' : null); }} />
+                  @change=${async e => {
+                    const box = /** @type {HTMLInputElement} */ (e.target);
+                    const on = box.checked && await this.#harvestAllowed(entry);
+                    box.checked = on;
+                    this._todayFor = new Map(this._todayFor).set(key, on ? '' : null);
+                  }} />
                 <label for="today-${key}">Récolté aujourd’hui</label>
                 ${todayQuantity !== null ? html`<input type="text" placeholder="Quantité (ex. 500 g)" .value=${todayQuantity || ''}
                   @input=${e => { this._todayFor = new Map(this._todayFor).set(key, e.target.value); }} />` : nothing}

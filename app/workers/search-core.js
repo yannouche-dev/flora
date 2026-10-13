@@ -3,6 +3,7 @@
 // the worker (search.worker.js) feeds it the plants, and the unit tests (tests/unit) import it in Node.
 
 import { fold } from '../core/fold.js';
+import { harvestRules } from '../core/regulation.js';
 
 /** Facets, in the order the filter panel shows them. Values within a facet are OR'ed, facets are AND'ed. */
 export const FACETS = /** @type {const} */ (['mine', 'status', 'legal', 'family', 'genus', 'photo', 'french']);
@@ -263,15 +264,16 @@ function suggest({ taxa }, q, filters) {
 
 /**
  * "Protection et menace" facet (INPN statuses; several values per plant): protected nationally, protected
- * somewhere (region or department), harvest regulated somewhere, threatened in France (national Red List).
- * @param {{ type: string }[] | undefined} statuses
+ * somewhere (region or department), harvest regulated in metropolitan France (core/regulation.js: never a CITES
+ * annex, an overseas or invasive species list), threatened in France (national Red List).
+ * @param {Partial<import('../core/territory.js').Status>[] | undefined} statuses
  */
 export function legalValues(statuses) {
   const types = new Set((statuses || []).map(s => s.type));
   const values = [];
   if (types.has('PN')) values.push('nationale');
   if (types.has('PN') || types.has('PR') || types.has('PD')) values.push('protegee');
-  if (types.has('REGL')) values.push('reglementee');
+  if (harvestRules(/** @type {any[]} */ (statuses)).length) values.push('reglementee');
   if (types.has('LRN')) values.push('menacee');
   return values;
 }

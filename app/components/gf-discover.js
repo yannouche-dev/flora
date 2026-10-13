@@ -25,7 +25,8 @@ import { UNREAD, alertsOf } from '../core/alerts.js';
 import { plantViewOf, setHarvestMode, setMode, StoreController, whenReady } from '../core/store.js';
 import { dockBlock, modulesOffFor, paneOf, setStackState } from '../core/sheet-blocks.js';
 import { stepBack, chooseBranch, discoverEvents, discoverState, discovering, finishDiscover, firstMatchShown, plantSeen, resetPassed, setDiscoverPoint, setDiscoverRadius, setStep, swiped, unswipe, LAST_STEP, PLANTS_BEFORE_FLORE } from '../core/discover.js';
-import { UNREAD_LOOKALIKES, lookalikesOf } from '../core/lookalikes.js';
+import { UNREAD_LOOKALIKES, gravest, lookalikesOf, severityOf } from '../core/lookalikes.js';
+import { harvestRules } from '../core/regulation.js';
 import { scenarioOf } from '../core/scenarios.js';
 import { MODULES, moduleEvents, moduleOn } from '../core/modules.js';
 import { geoProblem, startScreen, startStyles } from './start-screen.js';
@@ -802,7 +803,7 @@ export class GfDiscover extends LitElement {
         }
         if (abort.signal.aborted) return;
         this._unread = unread;
-        const deadly = (/** @type {Card} */ c) => Number((c.confusions || []).some(l => l.pair.severity === 'mortel'));
+        const deadly = (/** @type {Card} */ c) => gravest(c.confusions || []).rank;
         list = list.filter(c => unread || c.confusions?.length)
           .sort((a, b) => deadly(b) - deadly(a) || Number(b.confusions?.some(l => l.side === 'edible')) - Number(a.confusions?.some(l => l.side === 'edible')) || b.count - a.count);
       } else {
@@ -1119,8 +1120,8 @@ export class GfDiscover extends LitElement {
     // Cueillette prudente: the confusion first.
     for (const l of (c.confusions || []).slice(0, 2)) {
       const others = l.others.map(o => o.label).join(', ');
-      out.push(l.side === 'edible' ? `⚠️ Ne me confondez pas avec ${others}${l.pair.severity === 'mortel' ? ' (mortel)' : ' (toxique)'}. Partie : ${l.pair.part}.`
-        : `☠️ Je suis le sosie ${l.pair.severity === 'mortel' ? 'mortel' : 'toxique'} de ${others}.`);
+      out.push(l.side === 'edible' ? `⚠️ Ne me confondez pas avec ${others} (${severityOf(l.pair).tag}). Partie : ${l.pair.part}.`
+        : `☠️ Je suis le sosie ${severityOf(l.pair).tag} de ${others}.`);
     }
     // Safety before the rest (only 4 lines are kept). Data unreadable: said, never left out (alerts.js).
     if (a?.unread) out.push('⚠️ ' + UNREAD + '.');
@@ -1132,7 +1133,7 @@ export class GfDiscover extends LitElement {
       // Never « comestible »: the part the Anses says is eaten, and no « à table » for a plant toxic (TPPT 2 or more,
       // ANSM), protected or regulated, or whose toxicity could not be read.
       const n = a.edible.text.length;
-      const kept = (p.statuses || []).some((/** @type {any} */ s) => /^(PN|PR|PD|REGL)$/.test(s.type));
+      const kept = (p.statuses || []).some((/** @type {any} */ s) => /^(PN|PR|PD)$/.test(s.type)) || harvestRules(p.statuses).length > 0;
       out.push(a.toxic || kept || a.unread ? `⚠️ J’ai des sosies dangereux (${n}). Lisez ma fiche avant toute cueillette.`
         : a.edible.parts?.length ? `🍽️ Partie consommée selon l’Anses : ${a.edible.parts.join(', ')}. J’ai des sosies dangereux (${n}) : lisez ma fiche avant de passer à table.`
         : `⚠️ J’ai des sosies dangereux (${n}) : lisez ma fiche avant de passer à table.`);

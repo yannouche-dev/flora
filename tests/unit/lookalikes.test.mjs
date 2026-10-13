@@ -3,7 +3,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { UNREAD_LOOKALIKES, genusOf, lookalikeWarning, lookalikesOf, nameKey } from '../../app/core/lookalikes.js';
+import { UNREAD_LOOKALIKES, genusOf, lookalikeWarning, lookalikesOf, nameKey, severityOf } from '../../app/core/lookalikes.js';
+import { harvestRisk } from '../../app/core/alerts.js';
 
 const plants = JSON.parse(await readFile(new URL('../fixtures/plants.json', import.meta.url), 'utf8'));
 const plant = (/** @type {string} */ name) => {
@@ -39,11 +40,34 @@ test('colchique (toxique, désigné par son genre) : plante mortelle, confondue 
 test('les paires mortelles d’abord ; une plante sans confusion connue : rien', async () => {
   const list = await lookalikesOf(plant('Daucus carota'));
   assert.ok(list.length > 0);
-  const severities = list.map(l => l.pair.severity);
-  assert.deepEqual(severities, [...severities].sort((a, b) => Number(b === 'mortel') - Number(a === 'mortel')));
+  const ranks = list.map(l => severityOf(l.pair).rank);
+  assert.deepEqual(ranks, [...ranks].sort((a, b) => b - a));
   assert.ok(list.every(l => l.sources.length > 0), 'chaque paire cite sa source');
   assert.equal(await lookalikeWarning(plant('Geum urbanum')), null);
   assert.deepEqual(await lookalikesOf({}), []);
+});
+
+test('SAFE-5 : gravité alignée sur le TPPT — ciguë, muguet « très toxique », jamais « toxique » seul ; mortel d’abord', async () => {
+  const conium = await lookalikeWarning(plant('Conium maculatum'));
+  assert.equal(conium?.toxic, true);
+  assert.match(conium?.text || '', /^Plante très toxique, confondue avec : Persil plat/);
+  const parsley = await lookalikeWarning(plant('Petroselinum crispum'));
+  assert.match(parsley?.text || '', /Grande ciguë \(très toxique\)/);
+  const garlic = await lookalikesOf(plant('Allium ursinum'));
+  assert.deepEqual(garlic.map(l => l.pair.severity), ['mortel', 'grave'], 'colchique (mortel), puis muguet (grave)');
+  assert.equal(severityOf(garlic[1].pair).tag, 'très toxique');
+  assert.equal(severityOf(garlic[1].pair).danger, true);
+});
+
+test('SAFE-4 : avant de noter une récolte, la toxicité est dite (ANSM, TPPT, confusion) ; rien pour une plante sans donnée', async () => {
+  const risk = await harvestRisk(plant('Conium maculatum'));
+  assert.ok(risk && !risk.unread);
+  assert.ok(risk.reasons.some(r => /liste B/.test(r)), risk.reasons.join('\n'));
+  assert.ok(risk.reasons.some(r => /très fortement toxique/.test(r)));
+  assert.ok(risk.reasons.some(r => /Plante très toxique, confondue avec Persil plat/.test(r)));
+  assert.equal(await harvestRisk(plant('Atriplex halimus')), null);
+  // The edible side of a confusion is no reason by itself (its look-alike is the toxic one).
+  assert.equal(await harvestRisk(plant('Tetragonia tetragonoides')), null);
 });
 
 test('nameKey et genusOf : auteurs, casse et hybrides laissés de côté', () => {
