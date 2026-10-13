@@ -44,6 +44,7 @@ export function layoutAt(m, path) {
     if (!step) continue;
     newest = [];
     for (const p of step.add ?? []) {
+      if (p.when && !p.when()) continue;
       const had = places.get(p.id);
       if (had) {
         // More blocks for a component already there (a plant sheet's): the same component, never a second one.

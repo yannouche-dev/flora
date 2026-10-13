@@ -1,14 +1,15 @@
 // Rencontres (its list, once the first steps are over): the first match of a game brings the photos of that plant —
 // the viewer of the sheet's « Médias » (kit/ma-meet-media.js) — with a line on how it works: beside the deck on a wide
-// screen (a pane, its separator, then the card on top), full screen over it on a phone (Échap closes it, the focus back
-// on the deck). The next matches: a heart only. The match undone (↺): closed, and brought by the next one; « Rejouer »:
+// screen (a pane, its separator), full screen over it on a phone (Échap closes it, the focus back on the deck). The
+// plant shown is the one chosen: each later heart chooses its own (a phone: no screen over the deck again, « Ses
+// photos » shows it); passes change nothing. The match undone (↺): closed, and brought by the next one; « Rejouer »:
 // brought again, the pane's width forgotten. The « Photos en ligne » module off, or a plant without photos: nothing.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 
 test.use({ reducedMotion: 'reduce' });
 test.beforeEach(({ context }) => answerAround(context));
 
-const AIL = 'Allium ursinum', PISSENLIT = 'Taraxacum officinale', PLANTAIN = 'Plantago lanceolata';
+const AIL = 'Allium ursinum', PISSENLIT = 'Taraxacum officinale';
 
 /** The game's context kept on the device (its photos: `media`). @param {import('@playwright/test').Page} page */
 const kept = page => page.evaluate(() => JSON.parse(localStorage.getItem('geoflora.app.rencontres.state') || 'null')?.ctx ?? null);
@@ -53,7 +54,7 @@ async function introduced(page, phone, name) {
     await expect(split).toHaveAttribute('aria-label', 'Redimensionner le panneau photos');
     await expect(split).toHaveAttribute('aria-controls', 'meet-media-pane');
   }
-  await expect.poll(async () => (await kept(page)).media).toEqual({ id: plantId(name), closed: false });
+  await expect.poll(async () => (await kept(page)).media).toEqual({ id: plantId(name), was: [], closed: false });
 }
 
 /** A phone: the full-screen photos closed (Échap), back to the deck, the focus in it. @param {import('@playwright/test').Page} page */
@@ -77,25 +78,26 @@ test('le premier coup de cœur présente ses photos ; les suivants, un cœur seu
   await introduced(page, phone, AIL);
   if (phone) {
     await closeFull(page);
-    // Out of sight: « Ses photos » on the deck shows them again (the card on top), full screen.
+    // Out of sight: « Ses photos » on the deck shows them again (the plant chosen), full screen.
     await expect(page.locator('ma-deck .round.photos')).toBeVisible();
   } else {
-    // Beside the deck, the photos follow the card on top from the next swipe on; the line on them is gone.
+    // Beside the deck, the photos of the plant chosen: a pass changes nothing; the line on them is gone.
     await expect(page.locator('ma-deck .round.photos')).toHaveCount(0);
   }
   await like(page, PISSENLIT);
   if (phone) await expect(photos(page, true)).toHaveCount(0);
   else {
-    await expect(photos(page, false).locator('gf-media-viewer')).toHaveAttribute('plant-id', String(plantId(PLANTAIN)));
+    // The next heart chose its plant.
+    await expect(photos(page, false).locator('gf-media-viewer')).toHaveAttribute('plant-id', String(plantId(PISSENLIT)));
     await expect(photos(page, false).locator('.coach')).toHaveCount(0);
   }
-  expect((await kept(page)).media).toEqual({ id: plantId(AIL), closed: false });
+  await expect.poll(async () => (await kept(page)).media).toEqual({ id: plantId(PISSENLIT), was: [plantId(AIL)], closed: false });
 
   if (!phone) {
     // × closes the pane (kept so after a reload); « Ses photos » opens it again, its heading focused.
     await photos(page, false).getByRole('button', { name: /Fermer les photos/ }).click();
     await expect(photos(page, false)).toHaveCount(0);
-    await expect.poll(async () => (await kept(page)).media).toEqual({ id: plantId(AIL), closed: true });
+    await expect.poll(async () => (await kept(page)).media).toEqual({ id: plantId(PISSENLIT), was: [plantId(AIL)], closed: true });
     await page.locator('ma-deck .round.photos').click();
     await expect(photos(page, false)).toHaveCount(1);
     await expect(photos(page, false).getByRole('heading', { level: 2 })).toBeFocused();
@@ -104,7 +106,7 @@ test('le premier coup de cœur présente ses photos ; les suivants, un cœur seu
     await expect(photos(page, false)).toHaveCount(0);
   } else {
     await page.locator('ma-deck .round.photos').click();
-    await expect(photos(page, true).locator('gf-media-viewer')).toHaveAttribute('plant-id', String(plantId(PLANTAIN)));
+    await expect(photos(page, true).locator('gf-media-viewer')).toHaveAttribute('plant-id', String(plantId(PISSENLIT)));
     await expect(photos(page, true).locator('.coach')).toHaveCount(0);
     await closeFull(page);
   }

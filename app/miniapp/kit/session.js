@@ -83,6 +83,8 @@ export class AroundSession extends EventTarget {
     /** @type {any} */
     this.timers = { points: 0, radius: 0, burst: 0 };
     this.pointsFor = '';
+    /** The photos' pane hovered: the plant chosen lit on the map. */
+    this.chosenGlow = false;
     app.addEventListener('dispose', () => this.dispose(), { once: true });
   }
 
@@ -90,6 +92,16 @@ export class AroundSession extends EventTarget {
   get c() { return this.app.c; }
 
   changed() { this.dispatchEvent(new Event('change')); }
+
+  /** The photos' pane hovered (its head): the plant chosen lit on the map beside. @param {boolean} on */
+  glowChosen(on) {
+    if (this.chosenGlow === on) return;
+    this.chosenGlow = on;
+    this.changed();
+  }
+
+  /** A match touched on the map: chosen (Rencontres' list shows its photos: the event `choose`). @param {number} id */
+  choose(id) { this.dispatchEvent(new CustomEvent('choose', { detail: { id } })); }
 
   /** The deck's swipe hint: not shown yet in this app (and now it is). */
   hintOnce() {

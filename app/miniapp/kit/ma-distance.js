@@ -8,11 +8,21 @@
 // measured), its lower part behind the card — and the map zooms under it as the distance changes, the place under
 // its centre, while the observations of the new circle come (those shown meanwhile dimmed, the count saying it
 // searches).
+// The step « cards » keeps this same map beside the cards (the same element, the same Leaflet map: kit/around.js
+// puts the cards in a column of their own): the card folds into a chip (« 1 km · Changer »), the circle in the middle
+// of the room above it; the map lights the card on top (a soft ring), the plants passed (dimmed), the matches (a pink
+// ring) and the plant chosen (Rencontres: the one whose photos show — its observations in the circle, large, on top;
+// brighter while the photos' head is hovered). A match touched on the map is chosen. A phone: a band on top of the
+// cards (a third of the height), folded to its chip at will.
 
-import { LitElement, html, css, repeat } from 'lit';
+import { LitElement, html, css, nothing, repeat } from 'lit';
 import { icon } from '../../core/icons.js';
+import { moduleOn } from '../../core/modules.js';
+import { observationsAround } from '../../core/nearby.js';
+import { plantViewOf, StoreController } from '../../core/store.js';
+import { PHONE_QUERY } from '../../core/media.js';
 import { ui } from '../../styles/ui.js';
-import { DISTANCES, distanceAt, distLabel, distMood, distWords } from './cards.js';
+import { DISTANCES, distanceAt, distLabel, distMood, distWords, nameOf } from './cards.js';
 import { sessionOf } from './session.js';
 import '../../components/gf-map.js';
 
@@ -22,6 +32,9 @@ const MAIN_STOPS = new Set([200, 1000, 5000, 50000]);
 /** One element per value: a new one fades in as the value changes (lit's repeat, keyed by the value). @param {string} v @param {(v: string) => unknown} t */
 const fresh = (v, t) => repeat([v], x => x, t);
 
+/** A phone: the map a band over the cards (step « cards »). */
+const PHONE = matchMedia(PHONE_QUERY);
+
 export class MaDistance extends LitElement {
   static properties = {
     app: { attribute: false },
@@ -30,7 +43,11 @@ export class MaDistance extends LitElement {
     /** The list's own view, back to it as the cards come (Mosaïque: the grid). */
     view: {},
     /** The circle on the screen: its centre and radius, in px from the map's top left corner. */
-    _ring: { state: true }
+    _ring: { state: true },
+    /** The plant chosen's observations in the circle (Rencontres, step « cards »), for the map's highlight. */
+    _hl: { state: true },
+    /** A phone, step « cards »: the band folded to its chip. */
+    _folded: { state: true }
   };
 
   static styles = [ui, css`
@@ -98,6 +115,26 @@ export class MaDistance extends LitElement {
       /* Two lines kept for the count: the card keeps its height (the circle above it does not move). */
       .dist .obs { min-height: 2.6em; align-content: start; }
     }
+    /* Step « cards »: the map beside the cards, its distance a chip at the bottom. */
+    :host([compact]) { overflow: hidden; }
+    :host([compact]) .distance-wrap { height: 100%; min-height: 0; }
+    .chipbar { position: relative; z-index: 1; align-self: end; justify-self: center; display: flex; gap: 6px; align-items: center; margin: 0 12px 40px; }
+    .chipbar button { display: inline-flex; gap: 6px; align-items: center; min-height: 40px; padding: 6px 14px; border-radius: var(--gf-radius-pill); border: 0;
+      background: color-mix(in srgb, var(--gf-surface) 94%, transparent); color: var(--gf-text); box-shadow: var(--gf-shadow-float); font: inherit; font-size: 0.9rem; cursor: pointer; }
+    .chipbar button b { color: var(--gf-accent); font-variant-numeric: tabular-nums; }
+    .chipbar .fold { padding: 6px 10px; }
+    /* A phone: a band over the cards, a third of the height; folded, its chip alone. */
+    :host([band]) { flex: none !important; height: 34dvh; border-bottom: 1px solid var(--gf-border); }
+    :host([band][folded]) { height: auto; }
+    :host([band][folded]) gf-map { display: none; }
+    :host([band][folded]) .distance-wrap { position: static; }
+    :host([band][folded]) .chipbar { margin: 6px auto; }
+    /* The map's points, lit (gf-map area.marks): the card on top softly; the plants passed dimmed; the matches ringed
+       in pink; the plant chosen's own (its highlight) brighter while its photos' head is hovered. */
+    gf-map .gf-obs-leaf.gf-top .pop { box-shadow: 0 0 0 2px #fff, 0 0 0 5px #f5c542, 0 2px 8px rgb(0 0 0 / 40%); scale: 1.15; }
+    gf-map .gf-obs-leaf.gf-passed:not(.gf-top) .pop { opacity: 0.35; filter: grayscale(0.7); }
+    gf-map .gf-obs-leaf.gf-matched .pop { box-shadow: 0 0 0 2px #fff, 0 0 0 5px #e0245e, 0 2px 8px rgb(0 0 0 / 40%); }
+    gf-map.glow .gf-obs-leaf.hl.chosen .pop { scale: 1.3; box-shadow: 0 0 0 3px #ffd166, 0 0 18px 6px rgb(255 209 102 / 85%), 0 5px 14px rgb(0 0 0 / 45%); }
     @media (prefers-reduced-motion: reduce) {
       .dist output, .dist .mood, .dist .obs > span, .dist .spin { animation: none; }
       .range .rail, .range .stop, .range .mark { transition: none; }
@@ -114,7 +151,12 @@ export class MaDistance extends LitElement {
     this.view = null;
     /** @type {{ x: number, y: number, r: number } | null} */
     this._ring = null;
+    /** @type {any} */
+    this._hl = null;
+    this._folded = false;
   }
+
+  #store = new StoreController(this);
 
   #onChange = () => this.requestUpdate();
   /** @type {import('./session.js').AroundSession | null} */ #session = null;
@@ -125,12 +167,14 @@ export class MaDistance extends LitElement {
     super.connectedCallback();
     // The discovery screens: no zone alerts on their maps (gf-map).
     this.setAttribute('no-areas', '');
+    PHONE.addEventListener('change', this.#onChange);
     this.#observe();
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this.#measure.disconnect();
+    PHONE.removeEventListener('change', this.#onChange);
     this.#session?.removeEventListener('change', this.#onChange);
     this.#session = null;
   }
@@ -140,7 +184,7 @@ export class MaDistance extends LitElement {
   /** The card and the map's box observed (once each: they stay while the screen shows). */
   #observed = /** @type {Element[]} */ ([]);
   #observe() {
-    const wrap = this.renderRoot.querySelector('.distance-wrap'), card = this.renderRoot.querySelector('.welcome');
+    const wrap = this.renderRoot.querySelector('.distance-wrap'), card = this.renderRoot.querySelector('.welcome, .chipbar');
     if (!wrap || !card || (this.#observed[0] === wrap && this.#observed[1] === card)) return;
     this.#measure.disconnect();
     this.#measure.observe(wrap);
@@ -152,17 +196,22 @@ export class MaDistance extends LitElement {
   /**
    * Where the circle stands: in the middle of the map's width, its centre a fifth of the map's height above the card's
    * top (a quarter of the height from the top at least); its radius 54 % of the map's height, at most 42 % of its width.
+   * Step « cards » (the chip): in the middle of the room above the chip, as large as it fits there.
    */
   #roomFor() {
     const [wrap, card] = /** @type {HTMLElement[]} */ (this.#observed);
     if (!wrap || !card || !wrap.isConnected) return;
     const box = wrap.getBoundingClientRect(), top = card.getBoundingClientRect().top - box.top;
     if (!box.width || !box.height) return;
-    const ring = { x: Math.round(box.width / 2), y: Math.round(Math.max(0.25 * box.height, top - 0.2 * box.height)),
-      r: Math.round(Math.min(0.54 * box.height, 0.42 * box.width)) };
+    const ring = this.#compact
+      ? { x: Math.round(box.width / 2), y: Math.round(top / 2), r: Math.round(Math.max(24, Math.min(0.44 * top, 0.42 * box.width))) }
+      : { x: Math.round(box.width / 2), y: Math.round(Math.max(0.25 * box.height, top - 0.2 * box.height)), r: Math.round(Math.min(0.54 * box.height, 0.42 * box.width)) };
     const was = this._ring;
     if (!was || Math.abs(was.x - ring.x) > 1 || Math.abs(was.y - ring.y) > 1 || Math.abs(was.r - ring.r) > 1) this._ring = ring;
   }
+
+  /** Step « cards »: the map beside the cards, its distance a chip. */
+  get #compact() { return Boolean(this.app && this.app.step.id !== 'map'); }
 
   willUpdate() {
     if (!this.app) return;
@@ -174,16 +223,63 @@ export class MaDistance extends LitElement {
     }
     // The distance changed: the map's observations follow (a moment after the slider stops).
     s.watchPoints();
+    const compact = this.#compact;
+    if (compact !== this.hasAttribute('compact')) { this.toggleAttribute('compact', compact); queueMicrotask(() => this.#roomFor()); }
+    this.toggleAttribute('band', compact && PHONE.matches);
+    this.toggleAttribute('folded', compact && PHONE.matches && this._folded);
+    this.#loadChosen();
   }
+
+  /** The plant chosen (Rencontres: its photos shown), as a card of the game, or none. */
+  get #chosen() {
+    const id = this.#compact ? this.c?.media?.id : null;
+    return id == null ? null : (this.#session?.cards || []).find(x => x.plant.id === id) ?? null;
+  }
+
+  /** The plant chosen's observations in the circle (iNaturalist, cached): its highlight on the map. */
+  async #loadChosen() {
+    const card = this.#chosen, c = this.c;
+    const key = card?.taxonId && c?.point ? `${card.taxonId}:${c.radius}:${c.point}` : '';
+    if (key === this.#hlFor) return;
+    this.#hlFor = key;
+    if (!key || !card || !c) { this._hl = null; return; }
+    const photo = card.photo && moduleOn('photos', plantViewOf(this.#store.state)) ? card.photo.replace('/medium.', '/small.') : null;
+    const pts = await observationsAround(/** @type {number} */ (card.taxonId), c.point, c.radius).catch(() => []);
+    if (this.#hlFor !== key) return;
+    const title = nameOf(card.plant);
+    this._hl = { key, photo, credit: photo ? card.credit : null, common: card.plant.vernacularNames?.[0] || null, sci: card.plant.scientificName, taxonId: card.taxonId,
+      points: pts.slice(0, 60).map(p => ({ coordinates: p.coordinates, title, url: p.url, date: p.date })) };
+  }
+  #hlFor = '';
+
+  /** What the map lights (step « cards »): the card on top, the matches, the plants passed (by iNaturalist taxon). */
+  #marks() {
+    const s = this.#session, c = this.c;
+    if (!this.#compact || !s?.cards || !c) return null;
+    const taxa = (/** @type {number[]} */ ids) => s.cards?.filter(x => ids.includes(x.plant.id)).map(x => x.taxonId).filter(t => t != null) ?? [];
+    const top = s.deck[0]?.taxonId ?? null;
+    const key = `${top}|${c.matches.join()}|${c.passed.length}`;
+    if (this.#marksMemo?.key === key) return this.#marksMemo;
+    return (this.#marksMemo = { key, top, matched: taxa(c.matches), passed: taxa(c.passed) });
+  }
+  /** @type {any} */ #marksMemo = null;
+
+  /** A point touched on the map (step « cards »): a match there is chosen (its photos shown). @param {CustomEvent} e */
+  #onPick = e => {
+    const t = e.detail?.point?.taxonId, s = this.#session, c = this.c;
+    if (t == null || !s?.cards || !c) return;
+    const card = s.cards.find(x => x.taxonId === t && c.matches.includes(x.plant.id));
+    if (card) s.choose(card.plant.id);
+  };
 
   /** The circle and its observations, the same object while they do not change (the map does not redraw them). */
   #area() {
     const s = /** @type {import('./session.js').AroundSession} */ (this.#session), c = /** @type {Record<string, any>} */ (this.c);
-    const a = this.#areaMemo, ring = this._ring, loading = s.obsLoading;
-    if (a && a.center === c.point && a.radius === c.radius && a.obs === s.obs && a.ring === ring && a.loading === loading) return a;
+    const a = this.#areaMemo, ring = this._ring, loading = s.obsLoading, marks = this.#marks();
+    if (a && a.center === c.point && a.radius === c.radius && a.obs === s.obs && a.ring === ring && a.loading === loading && a.marks === marks) return a;
     // The circle still on the screen, the map zooming under it (smooth). The 100 latest, each its plant's photo
     // popping in (a small card of the plant on hover); kept in place as the distance changes.
-    return (this.#areaMemo = { center: c.point, radius: c.radius, fit: true, leaves: true, smooth: true, ring, points: s.obs, obs: s.obs, asking: true, loading });
+    return (this.#areaMemo = { center: c.point, radius: c.radius, fit: true, leaves: true, smooth: true, ring, marks, points: s.obs, obs: s.obs, asking: true, loading });
   }
   /** @type {any} */ #areaMemo = null;
 
@@ -218,13 +314,22 @@ export class MaDistance extends LitElement {
     </div>`;
   }
 
-  render() {
-    const app = this.app, c = this.c;
-    if (!app || !c || !this.#session || !c.point) return html``;
-    const line = this.#obsLine(), waiting = Boolean(this.#session.obsLoading);
-    // The card first (the keyboard reaches the slider before the map's points), drawn over the map.
-    return html`<div class="distance-wrap">
-      <section class="welcome distance">
+  /** Step « cards »: the distance as a chip (back to the step « map »), and on a phone the band's fold. */
+  #chip() {
+    const app = /** @type {import('../runtime.js').MiniApp} */ (this.app), c = /** @type {Record<string, any>} */ (this.c);
+    return html`<div class="chipbar">
+      <button type="button" class="dist-chip" aria-label=${`Distance : ${distWords(c.radius)} autour ${c.place ? 'de ' + c.place : 'de vous'}. Changer`}
+        @click=${() => app.go('map')}>${icon('geo-alt')} <b>${distLabel(c.radius)}</b> · Changer</button>
+      ${this.hasAttribute('band') ? html`<button type="button" class="fold" aria-expanded=${String(!this._folded)} aria-label=${this._folded ? 'Montrer la carte' : 'Replier la carte'}
+        title=${this._folded ? 'Montrer la carte' : 'Replier la carte'} @click=${() => { this._folded = !this._folded; }}>${icon(this._folded ? 'chevron-down' : 'chevron-up')}</button>` : nothing}
+    </div>`;
+  }
+
+  /** Step « map »: the card — how far, the slider, the count, « Qui pousse par ici ? », « Changer de lieu ». */
+  #card() {
+    const app = /** @type {import('../runtime.js').MiniApp} */ (this.app), c = /** @type {Record<string, any>} */ (this.c);
+    const line = this.#obsLine(), waiting = Boolean(this.#session?.obsLoading);
+    return html`<section class="welcome distance">
       <div class="leaf" aria-hidden="true">${icon('geo-alt-fill')}</div>
       <h1>Jusqu’où part l’expédition ?</h1>
       <p>Autour ${c.place ? 'de ' + c.place : 'de vous'}. Plus le cercle est grand, plus la récolte de rencontres est riche — et plus il faudra marcher pour aller les saluer.</p>
@@ -236,8 +341,18 @@ export class MaDistance extends LitElement {
       </div>
       <button class="primary go" type="button" @click=${() => this.#go()}>${icon('binoculars')} Qui pousse par ici ?</button>
       <button class="link skip" type="button" @click=${() => app.go('start')}>Changer de lieu</button>
-    </section>
-    <gf-map no-search no-create no-locate .area=${this.#area()}></gf-map></div>`;
+    </section>`;
+  }
+
+  render() {
+    const app = this.app, c = this.c;
+    if (!app || !c || !this.#session || !c.point) return html``;
+    const compact = this.#compact;
+    // The card (or the chip) first: the keyboard reaches the slider before the map's points; drawn over the map. One
+    // template for both steps: the map stays the same element (the same Leaflet map) from one to the other.
+    return html`<div class="distance-wrap">${compact ? this.#chip() : this.#card()}
+      <gf-map class=${compact && this.#session.chosenGlow ? 'glow' : ''} no-search no-create no-locate .area=${this.#area()} .highlight=${compact ? this._hl : null}
+        point-click=${compact ? 'pick' : 'none'} @point-pick=${this.#onPick}></gf-map></div>`;
   }
 }
 

@@ -19,7 +19,7 @@
 
 import { forgetMadeBy } from '../core/collections.js';
 import { defineMiniApp } from '../miniapp/define.js';
-import { aroundContext, aroundSteps, locate } from '../miniapp/kit/around.js';
+import { aroundColumns, aroundContext, aroundSteps, locate } from '../miniapp/kit/around.js';
 import { forgetGame } from '../miniapp/kit/session.js';
 
 export default defineMiniApp({
@@ -34,11 +34,9 @@ export default defineMiniApp({
   shared: ['Mes plantes (sauf les favoris ajoutés par ses matchs)', 'lieux', 'mode cueillette', 'réglages'],
   context: aroundContext(),
   actions: { locate },
-  columns: [{ id: 'main', base: 'fill', min: 300, rank: 1, heavy: true, title: 'Cueillette prudente' }],
-  phone: { rows: [['main', '1fr']] },
+  ...aroundColumns('Cueillette prudente'),
   steps: aroundSteps('harvest', {
-    map: [{ id: 'distance', use: 'distance', col: 'main', title: 'Distance' }],
-    drop: ['distance'],
-    cards: [{ id: 'list', use: 'aroundList', col: 'main', title: 'Cueillette prudente', props: { harvest: true, heading: 'Cueillette prudente' } }]
+    map: [{ id: 'distance', use: 'distance', col: 'map', title: 'Carte' }],
+    cards: [{ id: 'list', use: 'aroundList', col: 'cards', title: 'Cueillette prudente', props: { harvest: true, heading: 'Cueillette prudente' } }]
   })
 });

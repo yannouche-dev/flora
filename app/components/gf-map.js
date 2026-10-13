@@ -1199,6 +1199,7 @@ export class GfMap extends LitElement {
       : chosen ? L.marker([y, x], { icon: chosenIcon(chosen, Math.min(delay, 750), this.#chosenSize(40)), keyboard: false, bubblingMouseEvents: false, riseOnHover: true })
       : L.circleMarker([y, x], { radius: 6, className: 'gf-obs', bubblingMouseEvents: false });
     /** @type {any} */ (dot).gfName = [p.common || p.title, p.sci].filter(Boolean).join(', ');
+    /** @type {any} */ (dot).gfPoint = p;
     // With a photo: a small card of the plant on hover (a first touch, on a touch screen); else its name.
     if (fancy && (p.photo || p.sci)) this.#tip(dot, () => obsCard(p), { card: true, gap: 6 });
     else if (chosen) this.#tip(dot, () => obsCard({ ...p, photo: chosen, credit: area.credit }), { card: true, gap: 6 });
@@ -1275,6 +1276,24 @@ export class GfMap extends LitElement {
       }
       s.dots = keep;
       this.#relight();
+    }
+    this.#markDots(area.marks);
+  }
+
+  /**
+   * The points lit (area.marks, by iNaturalist taxon): the card on top (gf-top), the matches (gf-matched), the plants
+   * passed (gf-passed) — the page styles them. @param {{ top?: number | null, matched?: number[], passed?: number[] } | null | undefined} marks
+   */
+  #markDots(marks) {
+    const s = this.#smooth;
+    if (!s) return;
+    const m = marks || {};
+    for (const dot of s.dots.values()) {
+      const el = /** @type {any} */ (dot).getElement?.(), t = /** @type {any} */ (dot).gfPoint?.taxonId;
+      if (!el) continue;
+      el.classList.toggle('gf-top', t != null && t === m.top);
+      el.classList.toggle('gf-matched', t != null && Boolean(m.matched?.includes(t)));
+      el.classList.toggle('gf-passed', t != null && Boolean(m.passed?.includes(t)));
     }
   }
 

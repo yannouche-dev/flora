@@ -53,8 +53,8 @@ export class MaMeetMedia extends LitElement {
     mode: {},
     /** The line saying how it works (the first time). */
     coach: { type: Boolean },
-    /** Beside the deck: what it shows next (the card on top), said after the line. */
-    follows: { type: Boolean }
+    /** Beside the deck: the next heart chooses the plant it shows, said after the line. */
+    chooses: { type: Boolean }
   };
 
   static styles = [ui, css`
@@ -101,7 +101,7 @@ export class MaMeetMedia extends LitElement {
     /** @type {'pane' | 'dialog'} */
     this.mode = 'pane';
     this.coach = false;
-    this.follows = false;
+    this.chooses = false;
   }
 
   #id = `meet-media-${++ids}`;
@@ -131,12 +131,14 @@ export class MaMeetMedia extends LitElement {
 
   #content() {
     const head = `${this.#id}-h`;
-    return html`<div class="m-head">
+    // Its head hovered: the plant's points lit on the map (the list passes it on: kit/session.js#glowChosen).
+    const glow = (/** @type {boolean} */ on) => this.dispatchEvent(new CustomEvent('meet-media-hover', { detail: { on }, bubbles: true, composed: true }));
+    return html`<div class="m-head" @mouseenter=${() => glow(true)} @mouseleave=${() => glow(false)}>
         <h2 id=${head} tabindex="-1">${icon('images')}<span>Photos · ${this.name}</span></h2>
         <span class="media-ctl">${/** @type {any} */ (this.renderRoot?.querySelector?.('gf-media-viewer'))?.controls?.() ?? nothing}</span>
         <button class="icon-btn close" type="button" aria-label=${'Fermer les photos de ' + this.name} title="Fermer (Échap)" @click=${() => this.close()}>${icon('x-lg')}</button>
       </div>
-      ${this.coach ? html`<div class="coach" role="note">${icon('lightbulb')}<p><b>Voici ses photos.</b> ${coachText()}${this.follows ? ' Ce volet montre ensuite la carte du dessus.' : ''}</p>
+      ${this.coach ? html`<div class="coach" role="note">${icon('lightbulb')}<p><b>Voici ses photos.</b> ${coachText()}${this.chooses ? ' Chaque nouveau coup de cœur la remplace ici.' : ''}</p>
         <button class="secondary" type="button" @click=${() => this.dispatchEvent(new CustomEvent('meet-media-coached', { bubbles: true, composed: true }))}>Compris</button></div>` : nothing}
       <gf-media-viewer prefer-photos bar-out ?local=${this.mode === 'pane'} @media-bar=${() => this.requestUpdate()} plant-id=${this.plantId} .view=${this.view} presentation=${blockStyle(/** @type {any} */ (this.view), 'media')}
         @media-close=${(/** @type {Event} */ e) => { e.stopPropagation(); this.close(); }}></gf-media-viewer>`;

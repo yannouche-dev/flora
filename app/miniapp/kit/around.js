@@ -91,6 +91,21 @@ export function aroundStart(c, app, kind) {
   };
 }
 
+/**
+ * The columns of the three games: the map (its step « map », then beside the cards; its width the user's — kept per
+ * tier with the layout, forgotten by « Recommencer »), the cards filling the rest (and the photos, Rencontres: their
+ * pane inside it while there is room for the deck and them, else full screen). A phone: the map a band on top, the
+ * cards under it. @param {string} title the cards' column
+ * @returns {{ columns: import('../define.js').Column[], phone: { rows: [string, string][] } }}
+ */
+export const aroundColumns = title => ({
+  columns: [
+    { id: 'map', base: 480, min: 300, max: 1100, rank: 1, heavy: true, title: 'Carte', mergeInto: 'cards' },
+    { id: 'cards', base: 'fill', min: 380, rank: 2, title }
+  ],
+  phone: { rows: [['map', 'auto'], ['cards', '1fr']] }
+});
+
 /** The last step's name in the steps bar, and what it shows. */
 const CARDS = {
   meet: { label: 'Rencontres', about: 'Une carte à la fois' },
@@ -99,7 +114,8 @@ const CARDS = {
 };
 
 /**
- * The steps: the start, the map (how far), the cards. `map` and `cards` add the components of each app.
+ * The steps: the start, the map (how far), the cards — added beside the map, which stays (the same map: its circle,
+ * its points; its distance a chip then). `map` and `cards` add the components of each app.
  * @param {AroundKind} kind @param {{ map?: import('../define.js').Place[], cards?: import('../define.js').Place[], drop?: string[] }} put
  * @returns {import('../define.js').Step[]}
  */

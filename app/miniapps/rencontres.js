@@ -25,7 +25,7 @@ import { forgetMadeBy } from '../core/collections.js';
 import { discovering, replayMeet } from '../core/discover.js';
 import { defineMiniApp } from '../miniapp/define.js';
 import { forgetGame } from '../miniapp/kit/session.js';
-import { aroundContext, aroundSteps, locate } from '../miniapp/kit/around.js';
+import { aroundColumns, aroundContext, aroundSteps, locate } from '../miniapp/kit/around.js';
 
 export default defineMiniApp({
   id: 'rencontres',
@@ -41,7 +41,11 @@ export default defineMiniApp({
   context: { ...aroundContext(), media: { init: null, persist: true } },
   actions: { locate },
   ownBar: (c, app) => discovering() && app.step.id !== 'start',
-  columns: [{ id: 'main', base: 'fill', min: 300, rank: 1, heavy: true, title: 'Rencontres' }],
-  phone: { rows: [['main', '1fr']] },
-  steps: aroundSteps('meet', { map: [{ id: 'meet', use: 'meet', col: 'main', title: 'Rencontres', props: { media: true } }] })
+  ...aroundColumns('Rencontres'),
+  // During the first steps, its guided way covers both steps (map, cards, photos: kit/ma-guided.js); after them, the
+  // map then the cards beside it, as the others.
+  steps: aroundSteps('meet', {
+    map: [{ id: 'meet', use: 'meet', col: 'map', title: 'Carte' }],
+    cards: [{ id: 'list', use: 'aroundList', col: 'cards', title: 'Rencontres', props: { media: true }, when: () => !discovering() }]
+  })
 });

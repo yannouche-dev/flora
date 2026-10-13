@@ -59,10 +59,11 @@ test('la carte du dessous grandit avec le glissé, sans saut à l’échange', a
   await expect(under).not.toHaveClass(/following/);
   await expect.poll(() => under.evaluate(el => /** @type {HTMLElement} */ (el).style.getPropertyValue('--rise'))).toBe('');
   await expect(top).toHaveAttribute('data-id', String(plantId(AIL)));
-  // A heart: the card underneath rises while the top one flies, then takes its place — its width never jumps.
+  // Passed: the card underneath rises while the top one flies, then takes its place — its width never jumps. (A pass:
+  // a heart would bring the photos beside the deck, its column narrower.)
   await page.waitForTimeout(400);
   const swapping = atSwap(page, id);
-  await page.locator('ma-deck .round.like').click();
+  await page.locator('ma-deck .round.pass').click();
   const w = await swapping;
   await expect(page.locator('ma-deck .swipe-card.top')).toHaveAttribute('data-id', id);
   // The deck's own width (the card on top at rest; its box above may lean, the first time).

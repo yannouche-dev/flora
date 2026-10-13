@@ -53,14 +53,14 @@ const aroundList = {
 };
 
 /**
- * Rencontres: during the first steps, its guided way (map, cards and the plant's panes, one layout across the steps
- * « map » and « cards »); after them, the distance then the list, as the others. @type {Component}
+ * Rencontres' map: during the first steps, its guided way (map, cards and the plant's panes, one layout across the
+ * steps « map » and « cards »); after them, the map and its distance, the list then beside it, as the others.
+ * @type {Component}
  */
 const meet = {
   reads: [...AROUND, 'media'],
   heavy: true,
-  render: (c, app, p) => discovering() ? html`<ma-guided .app=${app} .c=${c}></ma-guided>`
-    : app.step.id === 'map' ? distance.render(c, app, p) : aroundList.render(c, app, p)
+  render: (c, app, p) => discovering() ? html`<ma-guided .app=${app} .c=${c}></ma-guided>` : distance.render(c, app, p)
 };
 
 /** The Parcours, walking: its card, its plants, its search under the thumb, its map (step « walk »). @type {Component} */
