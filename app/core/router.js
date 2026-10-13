@@ -52,13 +52,14 @@ export function parse(hash) {
 
   if (path === 'settings') return { name: 'settings' };
   if (path === 'legal') return { name: 'legal' };
-  // « Découvrir »: the flora around; ?p=<id> the plant open.
   // A mini-app (app/miniapps), alone on the screen: #/app/<id>[/<step>][?p=<plant>].
   const app = /^app\/([a-z][a-z0-9-]{1,23})(?:\/([a-z][a-z0-9-]{1,23}))?$/.exec(path);
   if (app) return { name: 'app', id: app[1], step: app[2] ?? null, plant: number('p') };
-  // Rencontres and the Parcours, scenarios of Découvrir before they were mini-apps: their old addresses open them.
-  const was = path === 'discover' ? { meet: 'rencontres', trail: 'parcours' }[params.get('s') || ''] : undefined;
+  // Rencontres and the Parcours, scenarios of Découvrir before they were mini-apps: their old addresses open them
+  // (a plant open over Découvrir with no scenario, #/discover?p=<id>, was over Rencontres' cards).
+  const was = path === 'discover' ? { meet: 'rencontres', trail: 'parcours' }[params.get('s') || (params.has('p') ? 'meet' : '')] : undefined;
   if (was) return { name: 'app', id: was, step: null, plant: number('p') };
+  // « Découvrir »: the list of the ways to play; ?s=<scenario> one played on its screen (harvest, mosaic), ?p=<id> a plant open.
   if (path === 'discover') return { name: 'discover', plant: number('p'), scenario: /^[a-z]{2,12}$/.test(params.get('s') || '') ? params.get('s') : null };
   return { name: 'not-found' };
 }
@@ -74,10 +75,10 @@ export const href = {
   settings: () => '#/settings',
   /** Mentions légales et confidentialité (from Réglages). */
   legal: () => '#/legal',
-  /** « Découvrir » (the flora around), with a plant open. */
+  /** « Découvrir »: the list of the ways to play; with a scenario (Cueillette, Mosaïque), its screen, a plant open. */
   discover: (/** @type {number | null | undefined} */ plantId = null, /** @type {string | null | undefined} */ scenario = null) => {
     const params = new URLSearchParams();
-    if (scenario && scenario !== 'meet') params.set('s', scenario);
+    if (scenario) params.set('s', scenario);
     if (plantId) params.set('p', String(plantId));
     const q = params.toString();
     return '#/discover' + (q ? '?' + q : '');

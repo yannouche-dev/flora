@@ -32,7 +32,7 @@ import { MODULES, moduleEvents, moduleOn } from '../core/modules.js';
 import { geoProblem, startScreen, startStyles } from './start-screen.js';
 import { sheetSession } from '../core/sheet-session.js';
 import { isFavorite, toggleFavorite } from '../core/collections.js';
-import { href, parse } from '../core/router.js';
+import { href } from '../core/router.js';
 import { depth, openModal, openView, replaceHash } from '../core/history.js';
 import { floweringMonths } from './gf-calendar.js';
 import { hideImg, showImg } from '../core/img.js';
@@ -773,9 +773,6 @@ export class GfDiscover extends LitElement {
     // Its own département and région (found again for this point): never the last place's meanwhile.
     this._admin = null;
     this.#adminFor = '';
-    // The start page (#/) shows Découvrir only until Flore comes: the discovery gets its own address, so a tab
-    // arriving midway does not take the screen away.
-    if (!this.boxed && parse(location.hash).name !== 'discover') { replaceHash(href.discover(null, this.scenario)); dispatchEvent(new HashChangeEvent('hashchange')); }
     setDiscoverPoint(point, place);
     this._cards = null;
     this._asking = true;

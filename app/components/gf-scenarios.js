@@ -1,15 +1,13 @@
 // @ts-check
-// The film icon of the header (and of a mini-app's bar): the launcher. The mini-apps first (app/miniapps: each one
-// opens alone on the screen, at #/app/<id>), then the scenarios still played in Découvrir (core/scenarios.js), in
-// cards — what each one does, « Jouer » (« Rejouer » once played). A mini-app is played again from its own ⋯.
+// The film icon of the header (and of a mini-app's bar): the launcher. Its dialog holds the list of the ways to play
+// (gf-launcher, the same list as the Découvrir tab's page): the mini-apps first, then the scenarios still played in
+// Découvrir. A mini-app is played again from its own ⋯.
 
 import { LitElement, html, css } from 'lit';
 import { icon } from '../core/icons.js';
-import { openModal, openView } from '../core/history.js';
-import { href, parse } from '../core/router.js';
-import { SCENARIOS } from '../core/scenarios.js';
-import { MINIAPPS } from '../miniapps/index.js';
+import { openModal } from '../core/history.js';
 import { ui } from '../styles/ui.js';
+import './gf-launcher.js';
 
 export class GfScenarios extends LitElement {
   static styles = [ui, css`
@@ -23,44 +21,28 @@ export class GfScenarios extends LitElement {
     dialog::backdrop { background: rgb(0 0 0 / 45%); }
     .head { display: flex; align-items: center; gap: 10px; padding: 16px 18px 8px; }
     .head h2 { margin: 0; flex: 1; font-size: 1.25rem; }
-    .head p { margin: 0; }
     .intro { margin: 0 18px 10px; color: var(--gf-text-muted); font-size: 0.9rem; }
-    ul { list-style: none; margin: 0; padding: 4px 14px 18px; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); gap: 10px; }
-    li { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; align-items: start; padding: 14px; border: 1px solid var(--gf-border); border-radius: 14px; }
-    li .ic { grid-row: span 3; width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-size: 1.3rem; background: var(--gf-accent-soft); color: var(--gf-accent); }
-    li b { font-size: 1rem; }
-    li p { margin: 0; font-size: 0.86rem; color: var(--gf-text-muted); }
-    li button { justify-self: start; margin-top: 6px; }
+    gf-launcher { padding: 4px 14px 18px; }
   `];
-
-  /** The mini-app on screen. @param {string} id */
-  #here(id) { const r = parse(location.hash); return r.name === 'app' && r.id === id; }
 
   get #dialog() { return /** @type {HTMLDialogElement | null} */ (this.renderRoot.querySelector('dialog')); }
 
-  /** The scenarios, shown (from elsewhere: « Autres scénarios » of the Parcours). */
-  async open() { this.requestUpdate(); await this.updateComplete; openModal(this.#dialog); }
+  /** The scenarios, shown (also from elsewhere: « Quitter … : autres scénarios »), as they are now. */
+  async open() {
+    const list = /** @type {import('./gf-launcher.js').GfLauncher | null} */ (this.renderRoot.querySelector('gf-launcher'));
+    list?.requestUpdate();
+    await list?.updateComplete;
+    openModal(this.#dialog);
+  }
 
   render() {
     return html`<button class="open" type="button" title="Scénarios : des façons de découvrir la flore" aria-label="Scénarios"
-        @click=${() => { this.requestUpdate(); openModal(this.#dialog); }}>${icon('camera-reels')}</button>
+        @click=${() => this.open()}>${icon('camera-reels')}</button>
       <dialog aria-label="Scénarios" @click=${(/** @type {Event} */ e) => { if (e.target === e.currentTarget) this.#dialog?.close(); }}>
         <div class="head">${icon('camera-reels')}<h2>Scénarios</h2>
           <button class="icon-btn" type="button" aria-label="Fermer" @click=${() => this.#dialog?.close()}>${icon('x-lg')}</button></div>
         <p class="intro">Des façons de découvrir la flore, chacune avec les outils qu’il lui faut. On peut en changer quand on veut.</p>
-        <ul>${MINIAPPS.map(a => { const here = this.#here(a.id); return html`<li data-app=${a.id}>
-          <span class="ic" aria-hidden="true">${icon(a.icon)}</span>
-          <b>${a.title}</b>
-          <p>${a.pitch}</p>
-          <button class="primary" type="button" ?disabled=${here} @click=${() => { this.#dialog?.close(); openView(href.app(a.id)); }}>${here ? 'En cours' : 'Jouer'}</button>
-        </li>`; })}
-        ${SCENARIOS.map(s => html`<li>
-          <span class="ic" aria-hidden="true">${icon(s.icon)}</span>
-          <b>${s.title}</b>
-          <p>${s.pitch}</p>
-          <button class="primary" type="button" title=${s.played?.() ? 'Tout reprendre du début : lieu, distance, cartes, étapes' : ''}
-            @click=${() => { s.play(); this.#dialog?.close(); this.requestUpdate(); }}>${s.played?.() ? 'Rejouer' : 'Jouer'}</button>
-        </li>`)}</ul>
+        <gf-launcher @launched=${() => this.#dialog?.close()}></gf-launcher>
       </dialog>`;
   }
 }

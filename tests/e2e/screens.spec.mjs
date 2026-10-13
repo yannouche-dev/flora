@@ -1,4 +1,4 @@
-// Every main screen opens on the reduced flora, the first launch shows Découvrir alone, and the real flora still
+// Every main screen opens on the reduced flora, the first launch shows Découvrir alone (its list), and the real flora still
 // loads (the one spec on data/plants.json as published). Migrated from smoke.cjs, startup.cjs, tabbar.cjs.
 import { readdirSync } from 'node:fs';
 import { test, expect, plantId } from './fixtures.mjs';
@@ -45,8 +45,8 @@ test.describe('premier lancement', () => {
 
   test('Découvrir accueille, les autres onglets viennent ensuite', async ({ app, page }) => {
     await app.open('#/');
-    await expect(page.getByRole('heading', { name: 'Rencontrez les plantes d’ici' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Autour de moi' })).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Découvrir' })).toBeVisible();
+    await expect(page.locator('gf-launcher li[data-app="rencontres"]').getByRole('button', { name: 'Jouer' })).toBeVisible();
     expect(await app.tabs()).toContain('Découvrir');
     expect(await app.tabs()).not.toContain('Flore');
     // An address of the flora still opens it (a shared link): the discovery never locks one out.
