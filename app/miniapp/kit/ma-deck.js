@@ -2,12 +2,12 @@
 // The deck of a mini-app around a place: one card at a time, the next under it — its photo and credit, what
 // Wikipédia says of it, a short bio (its safety first: kit/cards.js#bio). Dragged, it leans and shows its stamp
 // (MATCH, BOF); far enough, or thrown, it flies off: right a match, left passed; up (or a touch), its sheet. The three
-// buttons (↺ undo, ✕, ♥, and « ⋯ » its sheet unless `guided`) and the keys (→ ←, ↑) do the same — the keys only when
+// buttons (↺ undo, ✕, ♥, « ⋯ » its sheet unless `guided`, and its photos when asked: `photos`) and the keys (→ ←, ↑) do the same — the keys only when
 // the deck has the focus or nothing has (never a match by mistake from a tab, a slider or the map), and only while
 // `active` (no plant open, no match on screen). The first time, the top card leans right then left: it can be swiped.
 // The hint once per app open (and again after « Rejouer »: kit/session.js#forgetGame). No more cards: further (« Chercher jusqu’à … »), or the ones passed again.
 // It decides nothing itself: the card flown off, the event `deck-decide` (detail { card, liked }); `deck-open`
-// (detail { id }), `deck-undo`. The session (kit/session.js) gives the rest.
+// (detail { id }), `deck-undo`, `deck-photos` (detail { id }). The session (kit/session.js) gives the rest.
 
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { icon } from '../../core/icons.js';
@@ -32,7 +32,9 @@ export class MaDeck extends LitElement {
     /** Rencontres while discovering: no « ⋯ », no ↑ (the plant is beside it), its size in the guided layout. */
     guided: { type: Boolean, reflect: true },
     /** The keys act on the deck (no plant open, no match on screen). */
-    active: { type: Boolean }
+    active: { type: Boolean },
+    /** A button for the photos of the card on top (Rencontres, once they were shown: kit/ma-meet-media.js). */
+    photos: { type: Boolean }
   };
 
   static styles = [ui, css`
@@ -111,6 +113,7 @@ export class MaDeck extends LitElement {
     this.c = null;
     this.guided = false;
     this.active = false;
+    this.photos = false;
   }
 
   #onChange = () => this.requestUpdate();
@@ -270,6 +273,8 @@ export class MaDeck extends LitElement {
         <button class="round undo" type="button" aria-label="Revenir à la carte précédente" title="Revenir à la carte précédente" ?disabled=${!s.history.length}
           @click=${() => this.dispatchEvent(new CustomEvent('deck-undo', { bubbles: true, composed: true }))}>${icon('arrow-counterclockwise')}</button>
         <button class="round pass" type="button" aria-label=${'Passer : ' + name} title="Passer (←)" @click=${() => this.decide(top, false)}>${icon('x-lg')}</button>
+        ${this.photos ? html`<button class="round info photos" type="button" aria-label=${'Ses photos : ' + name} title="Ses photos"
+          @click=${() => this.dispatchEvent(new CustomEvent('deck-photos', { detail: { id: top.plant.id }, bubbles: true, composed: true }))}>${icon('images')}</button>` : nothing}
         ${this.guided ? nothing : html`<button class="round info" type="button" aria-label=${'Voir sa fiche : ' + name} title="Sa fiche (↑)" @click=${() => this.#open(top)}>${icon('three-dots')}</button>`}
         <button class="round like" type="button" aria-label=${`J’aime ${name} : c’est un match`} title="Match (→)" @click=${() => this.decide(top, true)}>${icon('heart-fill')}</button>
       </div>

@@ -43,12 +43,13 @@ const distance = {
 
 /**
  * The plants around, a page of cards (step « cards »). props: harvest (Cueillette prudente's cards and warnings),
- * mosaic (« Toutes » as a mosaic), heading (its name before « Autour de … »), view (the one it opens on). @type {Component}
+ * mosaic (« Toutes » as a mosaic), heading (its name before « Autour de … »), view (the one it opens on), media (Rencontres:
+ * the photos of the first match beside the deck — the context's `media`). @type {Component}
  */
 const aroundList = {
   reads: AROUND,
   render: (c, app, p) => html`<ma-around-list .app=${app} .c=${c} ?harvest=${Boolean(p.props?.harvest)} ?mosaic=${Boolean(p.props?.mosaic)}
-    .heading=${p.props?.heading ?? null} .view=${p.props?.view ?? 'swipe'}></ma-around-list>`
+    .heading=${p.props?.heading ?? null} .view=${p.props?.view ?? 'swipe'} ?media=${Boolean(p.props?.media)}></ma-around-list>`
 };
 
 /**
@@ -56,7 +57,7 @@ const aroundList = {
  * « map » and « cards »); after them, the distance then the list, as the others. @type {Component}
  */
 const meet = {
-  reads: AROUND,
+  reads: [...AROUND, 'media'],
   heavy: true,
   render: (c, app, p) => discovering() ? html`<ma-guided .app=${app} .c=${c}></ma-guided>`
     : app.step.id === 'map' ? distance.render(c, app, p) : aroundList.render(c, app, p)

@@ -6,7 +6,9 @@
 // Built from the kit (app/miniapp/kit): ma-guided during the first steps, else ma-distance then ma-around-list.
 // Owns — everything « Rejouer » / « Recommencer » empties, here and in the other tabs, as if never opened:
 //  - geoflora.app.rencontres.state: its place and name, distance, cards swiped right (this game's matches) and left,
-//    the step it was left at; geoflora.app.rencontres.layout: its columns' widths (runtime.js#replay);
+//    the step it was left at, the photos its first match brought (the plant, the pane closed: kit/ma-around-list.js);
+//    geoflora.app.rencontres.layout: its columns' widths (runtime.js#replay); geoflora.app.rencontres.media: the
+//    width of the photos' pane;
 //  - geoflora.discoverLayout: the widths of the map and the cards of its guided way;
 //  - in geoflora.discover, its guided way: the step reached, the fork (cueillette or science), the first match
 //    celebrated (core/discover.js#replayMeet);
@@ -33,12 +35,13 @@ export default defineMiniApp({
   pitch: 'Les plantes observées autour de vous, une carte à la fois : à droite si elle vous plaît, à gauche sinon.',
   uses: ['inaturalist'],
   exit: { label: 'Quitter Rencontres' },
-  owns: { keys: ['geoflora.discoverLayout'], reset: () => { replayMeet(); forgetGame('rencontres'); return forgetMadeBy('rencontres'); } },
+  owns: { keys: ['geoflora.discoverLayout', 'geoflora.app.rencontres.media'], reset: () => { replayMeet(); forgetGame('rencontres'); return forgetMadeBy('rencontres'); } },
   shared: ['Mes plantes (sauf les favoris ajoutés par ses matchs)', 'lieux', 'premiers pas de l’application', 'réglages'],
-  context: aroundContext(),
+  // The photos its first match brought (once a game): { id: the plant, closed: the pane closed } — none: not yet.
+  context: { ...aroundContext(), media: { init: null, persist: true } },
   actions: { locate },
   ownBar: (c, app) => discovering() && app.step.id !== 'start',
   columns: [{ id: 'main', base: 'fill', min: 300, rank: 1, heavy: true, title: 'Rencontres' }],
   phone: { rows: [['main', '1fr']] },
-  steps: aroundSteps('meet', { map: [{ id: 'meet', use: 'meet', col: 'main', title: 'Rencontres' }] })
+  steps: aroundSteps('meet', { map: [{ id: 'meet', use: 'meet', col: 'main', title: 'Rencontres', props: { media: true } }] })
 });
