@@ -42,6 +42,7 @@ import './gf-sortable-list.js';
 import './gf-media-viewer.js';
 import './gf-web-pane.js';
 import { registerWebPane, unregisterWebPane } from '../core/web-pane.js';
+import { notesEvents } from '../core/sheet-notes.js';
 import { alertsOf } from '../core/alerts.js';
 import { sheetSession, setAnchorLock } from '../core/sheet-session.js';
 import { openModal } from '../core/history.js';
@@ -395,6 +396,7 @@ export class GfPlantDetail extends LitElement {
     _mapsOpen: { state: true },
     _newNote: { state: true },
     _noteSaved: { state: true },
+    _noteFailed: { state: true },
     /** What the sheet's maps show beyond their settings: a filter, a point, a compared plant (map-focus.js). */
     _focus: { state: true },
     /** Open data crossed with the plant: GloBI interactions, climate niche; « here » (pollen and climate of my position). */
@@ -672,6 +674,7 @@ export class GfPlantDetail extends LitElement {
     .gallery.herbarium img { aspect-ratio: 3 / 4; object-fit: contain; background: #f4f1ea; }
     .specimen { display: block; font-size: 0.75rem; font-weight: 600; margin-bottom: 2px; }
     .credit a { color: inherit; }
+    .credit.error { color: var(--gf-danger); }
     .wiki p.credit { margin-top: 6px; }
     /* The Wikipédia summary reads like the other blocks: flush left, no card (its source line names it). */
     .description.wiki { background: none; padding: 0; border-radius: 0; }
@@ -983,6 +986,8 @@ export class GfPlantDetail extends LitElement {
     this._newNote = false;
     /** Note block whose text was just saved. @type {string | null} */
     this._noteSaved = null;
+    /** Note block whose text could not be stored (storage full or unavailable). @type {string | null} */
+    this._noteFailed = null;
     /** @type {any} */ this._wiki = undefined;
     /** @type {Set<string>} */
     this._wikiOpen = new Set();
@@ -1021,8 +1026,12 @@ export class GfPlantDetail extends LitElement {
     return parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
   }
 
+  /** The note texts read (at startup) or changed in another tab: shown. */
+  #onNotes = () => this.requestUpdate();
+
   connectedCallback() {
     super.connectedCallback();
+    notesEvents.addEventListener('change', this.#onNotes);
     this.#resize.observe(this);
     // The hand (wheel, touch, keys, pointer): a place kept for a moment lets go at once; where the sheet stops,
     // once the hand has moved it, is noted for the next plant (#noteRead) — nothing is computed while it scrolls.
@@ -1133,6 +1142,7 @@ export class GfPlantDetail extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    notesEvents.removeEventListener('change', this.#onNotes);
     for (const ev of ['touchend', 'touchcancel', 'pointerup', 'pointercancel']) window.removeEventListener(ev, this.#onLift, { capture: true });
     this.#touching = this.#buttonDown = false;
     unregisterWebPane(this);
@@ -2736,9 +2746,18 @@ export class GfPlantDetail extends LitElement {
       @input=${e => {
         const text = e.target.value;
         clearTimeout(this.#noteTimer);
-        this.#noteTimer = setTimeout(() => { setNoteText(key, plant.id, text); this._noteSaved = key; setTimeout(() => { if (this._noteSaved === key) this._noteSaved = null; }, 1500); }, 400);
+        this.#noteTimer = setTimeout(async () => {
+          // Said only once it is stored: a refusal (storage full) is said, never a false « Enregistré ».
+          const stored = await setNoteText(key, plant.id, text);
+          this._noteFailed = stored ? null : key;
+          if (!stored) return;
+          this._noteSaved = key;
+          setTimeout(() => { if (this._noteSaved === key) this._noteSaved = null; }, 1500);
+        }, 400);
       }}></textarea>
-      <p class="credit" aria-live="polite">${this._noteSaved === key ? 'Enregistré sur cet appareil.' : 'Note personnelle, gardée sur cet appareil.'}</p>`;
+      ${this._noteFailed === key
+        ? html`<p class="credit error" role="alert">Non enregistré : stockage plein ou indisponible. Copiez votre texte, puis exportez vos plantes et libérez de l’espace.</p>`
+        : html`<p class="credit" aria-live="polite">${this._noteSaved === key ? 'Enregistré sur cet appareil.' : 'Note personnelle, gardée sur cet appareil (et dans l’export de Mes plantes).'}</p>`}`;
   }
 
   /**

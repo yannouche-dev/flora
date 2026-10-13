@@ -7,11 +7,15 @@
 
 import { config } from '../config.js';
 import * as db from './db.js';
-import { FAVORITES_ID, newEntryId, normalizeEntry, normalizeCollection, plantIdsOf } from './place-model.js';
+import { FAVORITES_ID, mergeCollections, newEntryId, normalizeEntry, normalizeCollection, plantIdsOf, rebase, sameContent } from './place-model.js';
 import { store } from './store.js';
 import { toPortable } from './portable.js';
 import { encodePortable } from './share.js';
 import { fillAltitudes } from './altitude.js';
+import { publish, subscribe } from './sync.js';
+import { exportNotes, importNotes } from './sheet-blocks.js';
+import { notesEvents, notesLoaded } from './sheet-notes.js';
+import { noteStorageError } from './quota.js';
 
 export { FAVORITES_ID };
 
@@ -30,12 +34,37 @@ export const ABUNDANCE = [
 ];
 const ABUNDANCE_RANK = { rare: 0, moyen: 1, abondant: 2 };
 
-/** Fired on `spotEvents` whenever collections change, so maps and lists refresh. */
+/**
+ * Fired on `spotEvents` whenever collections change — here or in another tab (sync.js) — so maps, lists and open
+ * editors read them again.
+ */
 export const spotEvents = new EventTarget();
 async function changed() {
   await refreshMembership().catch(error => console.error(error));
   await writeBackup().catch(error => console.error(error));
+  publish('spots');
   spotEvents.dispatchEvent(new Event('change'));
+}
+
+// Another tab wrote: the same as a write here, but its backup copy is already written.
+subscribe('spots', async () => {
+  await refreshMembership().catch(error => console.error(error));
+  spotEvents.dispatchEvent(new Event('change'));
+});
+
+// The notes of the plant sheet are in the backup copy too: written again shortly after one changes.
+/** @type {any} */ let notesBackup = 0;
+notesEvents.addEventListener('change', () => {
+  clearTimeout(notesBackup);
+  notesBackup = setTimeout(() => writeBackup().catch(error => console.error(error)), 1500);
+});
+
+/** A collection deleted (in another tab, or here) before a change to it was written: it is not made again. */
+export class GoneError extends Error {
+  constructor() {
+    super('Supprimé entre-temps (dans un autre onglet ?) : rien n’a été enregistré.');
+    this.name = 'GoneError';
+  }
 }
 
 /** Records are migrated on upgrade; normalizing on read also covers collections imported mid-upgrade. */
@@ -222,21 +251,65 @@ export const withEntry = (place, ref, patch) =>
 /** @param {Place} place @param {PlantEntry[]} plants @returns {Place} */
 const withPlants = (place, plants) => ({ ...place, properties: { ...place.properties, plants, plantIds: plantIdsOf(plants) } });
 
-/** @param {Collection} place */
-export async function savePlace(place) {
-  const saved = {
-    ...place,
-    geometry: place.geometry ? { type: 'Point', coordinates: roundCoordinates(place.geometry.coordinates) } : null,
-    properties: { ...place.properties, plantIds: plantIdsOf(place.properties.plants), updatedAt: new Date().toISOString() }
-  };
-  await db.put('spots', saved);
+/** The record as stored: rounded point, derived plant ids, the time of this change. @param {Collection} place @returns {Collection} */
+const stamped = place => ({
+  ...place,
+  geometry: place.geometry ? { type: 'Point', coordinates: roundCoordinates(place.geometry.coordinates) } : null,
+  properties: { ...place.properties, plantIds: plantIdsOf(place.properties.plants), updatedAt: new Date().toISOString() }
+});
+
+/** @param {Collection} saved */
+async function afterSave(saved) {
   markHasSpots();
   await changed();
   // The altitudes of its new or moved positions, in the background (saved again once found).
-  if (saved.geometry) fillAltitudes(saved.id, getPlace, savePlace);
-  return /** @type {Collection} */ (saved);
+  if (saved.geometry) fillAltitudes(saved.id, getPlace, updatePlace);
+}
+
+/**
+ * Stores a whole collection as given: a new one (created here), or one put back as it was (« Annuler »). A change
+ * to a collection that exists goes through updatePlace, which starts from the stored record.
+ * @param {Collection} place
+ */
+export async function savePlace(place) {
+  const saved = stamped(place);
+  await db.put('spots', saved);
+  await afterSave(saved);
+  return saved;
 }
 export const saveCollection = savePlace;
+
+/**
+ * Changes a stored collection atomically: `change` gets it as stored now (read in the same transaction as the write,
+ * so nothing written meanwhile — by another tab, the altitudes, « Noter ici » — is lost) and returns it changed, or
+ * the same object to leave it as it is. A collection deleted meanwhile is not made again: GoneError (except the
+ * favorites, created on first use).
+ * @param {string} id @param {(current: Collection) => Collection} change
+ * @returns {Promise<Collection>} as stored
+ */
+export async function updatePlace(id, change) {
+  /** @type {Collection | null} */
+  let saved = null;
+  let wrote = false;
+  await db.update('spots', id, record => {
+    const current = read(record) || (id === FAVORITES_ID ? newCollection('favorites') : undefined);
+    if (!current) return undefined;
+    const next = change(current);
+    if (next === current && record) { saved = current; return undefined; }
+    wrote = true;
+    return saved = stamped(next);
+  });
+  if (!saved) throw new GoneError();
+  if (wrote) await afterSave(saved);
+  return saved;
+}
+
+/**
+ * An editor's edits saved: what it changed since it read the collection (`base` → `mine`) applied to the record as
+ * stored now (place-model.js rebase), atomically. A collection deleted meanwhile throws GoneError.
+ * @param {Collection} base @param {Collection} mine @returns {Promise<Collection>}
+ */
+export const savePatch = (base, mine) => updatePlace(mine.id, theirs => rebase(base, mine, theirs));
 
 // ── Favorites & membership ────────────────────────────────────────────────
 
@@ -304,9 +377,11 @@ export const isFavorite = plantId => membership.favorites.has(plantId);
  * @returns {Promise<boolean>} new state
  */
 export async function toggleFavorite(plant) {
-  const current = (await getPlace(FAVORITES_ID)) || newCollection('favorites');
-  const on = !findEntry(current, plant.id);
-  await savePlace(on ? withPlant(current, plant) : withoutPlant(current, plant.id));
+  let on = false;
+  await updatePlace(FAVORITES_ID, current => {
+    on = !findEntry(current, plant.id);
+    return on ? withPlant(current, plant) : withoutPlant(current, plant.id);
+  });
   return on;
 }
 
@@ -315,10 +390,13 @@ export async function toggleFavorite(plant) {
  * @param {string} collectionId @param {any} plant @param {boolean} on
  */
 export async function setInCollection(collectionId, plant, on) {
-  const current = await getPlace(collectionId) || (collectionId === FAVORITES_ID ? newCollection('favorites') : null);
-  if (!current) throw new Error('Collection introuvable.');
-  if (Boolean(findEntry(current, plant.id)) === on) return current;
-  return savePlace(on ? withPlant(current, plant) : withoutPlant(current, plant.id));
+  try {
+    return await updatePlace(collectionId, current =>
+      Boolean(findEntry(current, plant.id)) === on ? current : on ? withPlant(current, plant) : withoutPlant(current, plant.id));
+  } catch (error) {
+    if (error instanceof GoneError) throw new Error('Collection introuvable.', { cause: error });
+    throw error;
+  }
 }
 
 /**
@@ -492,7 +570,7 @@ const BACKUP_LIMIT = 2_500_000;
 /** Set by a deliberate deletion: an empty list may then overwrite a non-empty backup. */
 let allowEmptyBackup = false;
 
-/** @typedef {{ savedAt: string, features: any[] }} Backup */
+/** @typedef {{ savedAt: string, features: any[], sheetNotes?: any[] }} Backup */
 
 /** @returns {Backup | null} */
 export function readBackup() {
@@ -510,14 +588,20 @@ export function readBackup() {
 export async function writeBackup() {
   const all = (await listCollections()).filter(c => c.properties.plants.length || c.properties.kind !== 'favorites');
   const previous = readBackup();
+  // The plant sheet's notes too; not read yet, or none left (a wiped database, like the collections): the copy's kept.
+  let sheetNotes = notesLoaded() ? exportNotes() : [];
+  if (!sheetNotes.length) sheetNotes = previous?.sheetNotes || [];
   if (!all.length && previous?.features.length && !allowEmptyBackup) return 'kept';
   allowEmptyBackup = false;
-  const json = JSON.stringify({ savedAt: new Date().toISOString(), features: toPortable(all).features });
+  const json = JSON.stringify({ savedAt: new Date().toISOString(), features: toPortable(all).features, ...(sheetNotes.length ? { sheetNotes } : {}) });
   if (json.length > BACKUP_LIMIT) return 'too-large';
   try {
     localStorage.setItem(config.storageKeys.backup, json);
     return 'saved';
-  } catch { return 'failed'; }
+  } catch (error) {
+    noteStorageError(error);
+    return 'failed';
+  }
 }
 
 /** Collections in the backup that the database no longer has. @returns {Promise<Collection[]>} */
@@ -531,8 +615,9 @@ export async function missingFromBackup() {
   return missing;
 }
 
-/** Puts the missing collections back. @returns {Promise<number>} how many were restored */
+/** Puts the missing collections back, and the plant sheet's notes this device lost. @returns {Promise<number>} how many collections were restored */
 export async function restoreBackup() {
+  await importNotes(readBackup()?.sheetNotes).catch(error => console.error(error));
   const missing = await missingFromBackup();
   if (!missing.length) return 0;
   const { added, updated } = await importFeatures(missing);
@@ -586,7 +671,8 @@ export async function protectStorage() {
  */
 export async function exportGeoJSON(only) {
   const features = (only || await listCollections()).sort((a, b) => a.properties.createdAt.localeCompare(b.properties.createdAt));
-  const collection = toPortable(features, { name: only?.length === 1 ? 'GeoFlora — ' + collectionTitle(only[0]) : 'GeoFlora — mes plantes' });
+  // Everything (not one collection): the plant sheet's notes with it, so the file restores them too.
+  const collection = toPortable(features, { name: only?.length === 1 ? 'GeoFlora — ' + collectionTitle(only[0]) : 'GeoFlora — mes plantes', sheetNotes: only ? undefined : exportNotes() });
   const date = new Date().toISOString().slice(0, 10);
   const slug = only?.length === 1
     ? collectionTitle(only[0]).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'collection'
@@ -624,8 +710,11 @@ export function lastExportDate() {
   try { return localStorage.getItem(config.storageKeys.lastExport); } catch { return null; }
 }
 
-/** Merges a decoded transfer link (slim GeoJSON). @param {{ features: any[] }} featureCollection */
-export const importPortable = featureCollection => importFeatures(featureCollection.features);
+/** Merges a decoded transfer link (slim GeoJSON), its sheet notes included. @param {{ features: any[], sheetNotes?: any[] }} featureCollection */
+export async function importPortable(featureCollection) {
+  const notes = await importNotes(featureCollection.sheetNotes);
+  return { ...(await importFeatures(featureCollection.features)), notes };
+}
 
 /**
  * Link carrying every collection, to open on another device (#/shared?d=g…).
@@ -634,28 +723,8 @@ export const importPortable = featureCollection => importFeatures(featureCollect
  */
 export async function transferLink({ personal }) {
   const all = (await listCollections()).filter(c => c.properties.plants.length || c.properties.kind !== 'favorites');
-  const data = await encodePortable(toPortable(all, { personal }));
+  const data = await encodePortable(toPortable(all, { personal, sheetNotes: personal ? exportNotes() : undefined }));
   return { url: '#/shared?d=' + data, count: all.length };
-}
-
-/**
- * A newer copy without notes or harvest logs (a link shared without them) must not erase this
- * device's: keep them wherever the incoming copy has none.
- * @param {Collection} incoming @param {Collection} current @returns {Collection}
- */
-function keepPersonal(incoming, current) {
-  const plants = incoming.properties.plants.map(entry => {
-    // The same occurrence (its id), else the plant if this device has it once.
-    const mine = current.properties.plants.find(e => e.id === entry.id)
-      || (entriesOf(current, entry.plantId).length === 1 ? findEntry(current, entry.plantId) : null);
-    if (!mine) return entry;
-    return {
-      ...entry,
-      notes: entry.notes || mine.notes,
-      harvests: entry.harvests.length ? entry.harvests : mine.harvests
-    };
-  });
-  return { ...incoming, properties: { ...incoming.properties, notes: incoming.properties.notes || current.properties.notes, plants } };
 }
 
 /**
@@ -682,8 +751,9 @@ function fillNames(collections, plants) {
  * Merges a GeoJSON file into the local places: same id → the most recently updated wins.
  * Accepts both the current format (properties.plants) and the first one (one plant per feature).
  * Plants without a TAXREF id are matched by scientific name.
+ * The plant sheet's notes it carries are merged too (`notes`: how many were added or updated).
  * @param {File} file
- * @returns {Promise<{ added: number, updated: number, unchanged: number, skipped: number }>}
+ * @returns {Promise<{ added: number, updated: number, unchanged: number, skipped: number, notes: number }>}
  */
 export async function importGeoJSON(file) {
   let data;
@@ -694,51 +764,47 @@ export async function importGeoJSON(file) {
   }
   const features = data?.type === 'FeatureCollection' ? data.features : data?.type === 'Feature' ? [data] : null;
   if (!Array.isArray(features)) throw new Error('Le fichier ne contient pas de FeatureCollection GeoJSON.');
-  return importFeatures(features);
+  const notes = await importNotes(data.sheetNotes);
+  return { ...(await importFeatures(features)), notes };
 }
 
 /**
- * Merges features (GeoJSON or collections) into the local ones: same id → the most recently updated wins.
+ * Merges features (GeoJSON or collections) into the local ones, each collection read and written in one transaction:
+ * a new one is added; one this device has gets the newer copy's fields and the plants of both copies (place-model.js
+ * mergeCollections: a plant added on either device is never dropped, harvest logs are joined).
  * @param {any[]} features
  * @returns {Promise<{ added: number, updated: number, unchanged: number, skipped: number }>}
  */
 async function importFeatures(features) {
   const plants = await db.getAll('plants');
-
-  const existing = new Map((await listCollections()).map(place => [place.id, place]));
   const result = { added: 0, updated: 0, unchanged: 0, skipped: 0 };
-  /** @type {Place[]} */
-  const toSave = [];
-
+  /** @type {Map<string, Collection>} the same id twice in a file: both copies, merged */
+  const incoming = new Map();
   for (const feature of features) {
-    let place = normalizeCollection(feature);
+    const place = normalizeCollection(feature);
     if (!place) { result.skipped++; continue; }
     if (place.geometry) place.geometry.coordinates = roundCoordinates(place.geometry.coordinates);
     fillNames([place], plants);
-    place.properties.plantIds = plantIdsOf(place.properties.plants);
-
-    const current = existing.get(place.id);
-    if (current && place.id === FAVORITES_ID) {
-      // Favorites from two devices: keep the union rather than one side.
-      const merged = place.properties.plants.reduce((acc, entry) => findEntry(acc, entry.plantId) ? acc : withPlants(acc, [...acc.properties.plants, entry]), current);
-      if (merged === current) { result.unchanged++; continue; }
-      place = { ...merged, properties: { ...merged.properties, updatedAt: new Date().toISOString() } };
-      result.updated++;
-    } else if (!current) {
-      result.added++;
-    } else if (place.properties.updatedAt > current.properties.updatedAt) {
-      place = keepPersonal(place, current);
-      result.updated++;
-    } else {
-      result.unchanged++;
-      continue;
-    }
-    existing.set(place.id, place);
-    toSave.push(place);
+    const before = incoming.get(place.id);
+    incoming.set(place.id, before ? mergeCollections(before, place) : place);
   }
+  if (!incoming.size) return result;
 
-  if (toSave.length) {
-    await db.putAll('spots', toSave);
+  const outcomes = await db.updateMany('spots', [...incoming.keys()], (record, id) => {
+    const place = /** @type {Collection} */ (incoming.get(/** @type {string} */ (id)));
+    const current = read(record);
+    if (!current) return { kind: 'added', record: { ...place, properties: { ...place.properties, plantIds: plantIdsOf(place.properties.plants) } } };
+    const merged = mergeCollections(current, place);
+    if (sameContent(merged, current)) return undefined;
+    // Made here, from both copies: dated now (imported back elsewhere, it is the newer copy).
+    const updatedAt = sameContent(merged, place) ? place.properties.updatedAt : new Date().toISOString();
+    return { kind: 'updated', record: { ...merged, properties: { ...merged.properties, updatedAt } } };
+  }, outcome => outcome?.record);
+  for (const outcome of outcomes) {
+    if (!outcome) result.unchanged++;
+    else result[/** @type {'added' | 'updated'} */ (outcome.kind)]++;
+  }
+  if (result.added || result.updated) {
     markHasSpots();
     await changed();
   }

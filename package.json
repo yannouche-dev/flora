@@ -3,7 +3,7 @@
   "private": true,
   "license": "MIT",
   "type": "module",
-  "description": "Outils de développement de GeoFlora (l'app elle-même n'a ni dépendance ni build, et ce fichier n'est pas déployé) : Playwright, pour le test de fumée et les tests de bout en bout (tests/e2e) ; axe-core, pour le contrôle d'accessibilité (tools/axe.mjs) ; TypeScript (tsc, avec les types de lit et de Leaflet), ESLint et knip, pour l'analyse statique (npm run typecheck, npm run lint) ; les tests unitaires (tests/unit) n'utilisent que node:test. SheetJS, que lisent les scripts du jeu de données, est dans scripts/package.json.",
+  "description": "Outils de développement de GeoFlora (l'app elle-même n'a ni dépendance ni build, et ce fichier n'est pas déployé) : Playwright, pour le test de fumée et les tests de bout en bout (tests/e2e) ; axe-core, pour le contrôle d'accessibilité (tools/axe.mjs) ; TypeScript (tsc, avec les types de lit et de Leaflet), ESLint et knip, pour l'analyse statique (npm run typecheck, npm run lint) ; les tests unitaires (tests/unit) utilisent node:test, et fake-indexeddb (une base IndexedDB en mémoire) pour le stockage. SheetJS, que lisent les scripts du jeu de données, est dans scripts/package.json.",
   "scripts": {
     "check": "bash tools/check.sh",
     "check:data": "node scripts/check-data.mjs",
@@ -25,6 +25,7 @@
     "eslint-plugin-import-x": "4.17.1",
     "eslint-plugin-lit": "2.3.1",
     "eslint-plugin-no-unsanitized": "4.1.5",
+    "fake-indexeddb": "6.2.5",
     "globals": "17.13.0",
     "knip": "6.39.0",
     "lit": "3.3.3",

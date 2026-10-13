@@ -7,7 +7,7 @@ import { href } from '../core/router.js';
 import { openModal } from '../core/history.js';
 import {
   deleteCollection, distance, listPlaces, nearbyPlaces, newPlace, placeTitle, recentPlants, rememberPlant,
-  saveCollection, withEntry, withPlant, entriesOf, lastEntry } from '../core/collections.js';
+  saveCollection, updatePlace, withEntry, withPlant, withoutPlant, entriesOf, lastEntry } from '../core/collections.js';
 import { store, StoreController } from '../core/store.js';
 import { lookalikeWarning } from '../core/lookalikes.js';
 import { statusWarning } from './gf-status.js';
@@ -227,18 +227,27 @@ export class GfCapture extends LitElement {
       const here = { coordinates: fix.coordinates, accuracy: Math.round(fix.accuracy) };
       // Already noted right here (within a few metres): the same occurrence (today's harvest goes on it);
       // elsewhere in the place: another occurrence of it, at this spot.
-      const same = before ? entriesOf(before, plant.id).find(e => e.coordinates && distance(e.coordinates, here.coordinates) <= SAME_SPOT) : null;
-      let place = same && before ? before
-        : before ? withPlant(before, plant, here, { again: true })
-        : withPlant(newPlace(fix.coordinates, { accuracy: here.accuracy }), plant, here);
       const harvest = this.#store.state.harvestMode && this._harvestToday;
-      if (harvest) {
-        const entry = /** @type {any} */ (same || lastEntry(place));
-        if (!entry.harvests.some(h => h.date === today())) {
-          place = withEntry(place, entry.id, { harvests: [{ date: today(), quantity: '', note: '' }, ...entry.harvests] });
+      /** What this note added (for « Annuler »): an occurrence, or today's harvest on one already there. */
+      const did = { entry: /** @type {string | null} */ (null), harvestOn: /** @type {string | null} */ (null) };
+      /** The plant noted in `place` (and today's harvest). @param {import('../core/collections.js').Place} place */
+      const note = place => {
+        did.entry = did.harvestOn = null;
+        const same = entriesOf(place, plant.id).find(e => e.coordinates && distance(e.coordinates, here.coordinates) <= SAME_SPOT);
+        let next = same ? place : withPlant(place, plant, here, { again: true });
+        if (!same) did.entry = /** @type {any} */ (lastEntry(next)).id;
+        if (harvest) {
+          const entry = /** @type {any} */ (same || lastEntry(next));
+          if (!entry.harvests.some((/** @type {any} */ h) => h.date === today())) {
+            next = withEntry(next, entry.id, { harvests: [{ date: today(), quantity: '', note: '' }, ...entry.harvests] });
+            if (same) did.harvestOn = entry.id;
+          }
         }
-      }
-      const saved = await saveCollection(place);
+        return next;
+      };
+      // An existing place: noted in it as stored now (one transaction: nothing written meanwhile is lost).
+      const saved = before ? await updatePlace(before.id, note)
+        : await saveCollection(note(newPlace(fix.coordinates, { accuracy: here.accuracy })));
       rememberPlant(plant.id);
       this.#close();
 
@@ -255,8 +264,17 @@ export class GfCapture extends LitElement {
         text: before ? `${name} ajouté au lieu « ${placeTitle(before)} »${harvest ? ' · récolte notée' : ''}` : `${name} noté ici (nouveau lieu)${harvest ? ' · récolte notée' : ''}`,
         details: href.spot(saved.id),
         undo: async () => {
-          if (before) await saveCollection(before);
-          else await deleteCollection(saved.id);
+          // Only this note undone (the place's other changes since stay).
+          if (!before) await deleteCollection(saved.id);
+          else if (did.entry) await updatePlace(before.id, current => withoutPlant(current, /** @type {string} */ (did.entry)));
+          else if (did.harvestOn) {
+            const id = did.harvestOn;
+            await updatePlace(before.id, current => {
+              const entry = current.properties.plants.find(e => e.id === id);
+              const at = entry ? entry.harvests.findIndex(h => h.date === today() && !h.quantity && !h.note) : -1;
+              return at < 0 ? current : withEntry(current, id, { harvests: entry.harvests.filter((_, i) => i !== at) });
+            });
+          }
         }
       });
     } catch (error) {

@@ -149,7 +149,7 @@ export async function encodePortable(featureCollection) {
 
 /**
  * @param {string} data
- * @returns {Promise<{ type: 'FeatureCollection', features: any[], name?: string, exportedAt?: string }>}
+ * @returns {Promise<{ type: 'FeatureCollection', features: any[], name?: string, exportedAt?: string, sheetNotes?: any[] }>}
  */
 export async function decodePortable(data) {
   let json;

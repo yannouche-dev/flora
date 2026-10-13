@@ -3,6 +3,7 @@
 
 import { config } from '../config.js';
 import { normalizeCollection } from './place-model.js';
+import { noteStorageError } from './quota.js';
 
 /**
  * Stores:
@@ -13,6 +14,9 @@ import { normalizeCollection } from './place-model.js';
  *                  Version 3: a place holds several plants; `by_plant` indexes properties.plantIds.
  *                  Version 4: collections — `properties.kind` (favorites | list | place); lists have no geometry.
  *                  Version 5: each plant of a place has its own `coordinates` (initially the place's point).
+ *  - sheetNotes:   version 6 — the texts of the plant sheet's « Note » blocks (keyPath key, "<note id>|<plant id>"),
+ *                  until then in localStorage (geoflora.plantNotes; moved over once by sheet-notes.js).
+ * Every step only adds: a store that exists is never dropped or recreated.
  * @param {IDBDatabase} db @param {IDBTransaction} tx @param {number} oldVersion
  */
 function upgrade(db, tx, oldVersion) {
@@ -27,6 +31,9 @@ function upgrade(db, tx, oldVersion) {
   }
   if (!db.objectStoreNames.contains('meta')) {
     db.createObjectStore('meta');
+  }
+  if (!db.objectStoreNames.contains('sheetNotes')) {
+    db.createObjectStore('sheetNotes', { keyPath: 'key' });
   }
   if (!db.objectStoreNames.contains('spots')) {
     const spots = db.createObjectStore('spots', { keyPath: 'id' });
@@ -126,7 +133,12 @@ async function run(stores, mode, fn) {
       }
       throw error;
     }
-    return fn(tx);
+    /** @type {Promise<T>} */
+    let result;
+    // A request can also throw at once (a value that cannot be stored, a full disk on some browsers).
+    try { result = fn(tx); } catch (error) { result = Promise.reject(error); }
+    // A write refused for lack of room is said once, on screen (quota.js); the caller still gets the error.
+    return mode === 'readwrite' ? result.catch(error => { noteStorageError(error); throw error; }) : result;
   }
 }
 
@@ -160,14 +172,6 @@ export const clear = store =>
     return done(tx);
   });
 
-/** @param {string} store @param {any[]} values */
-export const putAll = (store, values) =>
-  run(store, 'readwrite', tx => {
-    const objectStore = tx.objectStore(store);
-    for (const value of values) objectStore.put(value);
-    return done(tx);
-  });
-
 /** @param {string} store @param {any} value @param {IDBValidKey} [key] */
 export const put = (store, value, key) =>
   run(store, 'readwrite', tx => {
@@ -188,3 +192,76 @@ export const replacePlants = (plants, meta) =>
     tx.objectStore('meta').put(meta, 'dataset');
     return done(tx);
   });
+
+/** Returned by an `update` function: delete the record. */
+export const DELETE = Symbol('delete');
+
+/**
+ * Reads and writes records in one transaction: nothing can be written in between (another tab, another call).
+ * `fn(current, key)` gets each stored record (undefined when absent) and returns the one to store, `DELETE`, or
+ * undefined to leave it as it is. It runs inside the transaction: synchronous, no await. Throwing in it aborts
+ * the whole transaction (nothing written) and rejects with that error.
+ * Resolves with what `fn` returned for each key, once the transaction is committed. `toRecord`, when given, picks
+ * the record to store from what `fn` returned (so `fn` can return more: what it did).
+ * @template T
+ * @param {string} store a store with a keyPath
+ * @param {IDBValidKey[]} keys
+ * @param {(current: any, key: IDBValidKey) => T} fn
+ * @param {(result: T) => any} [toRecord]
+ * @returns {Promise<T[]>}
+ */
+export const updateMany = (store, keys, fn, toRecord = result => result) =>
+  run(store, 'readwrite', tx => new Promise((resolve, reject) => {
+    const objectStore = tx.objectStore(store);
+    /** @type {T[]} */
+    const results = [];
+    /** @type {unknown} */
+    let thrown = null;
+    keys.forEach((key, i) => {
+      const request = objectStore.get(key);
+      request.onsuccess = () => {
+        if (thrown) return;
+        try {
+          const result = fn(request.result, key);
+          results[i] = result;
+          const next = result === DELETE ? DELETE : toRecord(result);
+          if (next === DELETE) objectStore.delete(key);
+          else if (next !== undefined) objectStore.put(next);
+        } catch (error) {
+          thrown = error;
+          tx.abort();
+        }
+      };
+    });
+    tx.oncomplete = () => resolve(results);
+    tx.onabort = () => reject(thrown || tx.error || new Error('Transaction aborted'));
+  }));
+
+/**
+ * One record read and written in the same transaction (see updateMany).
+ * @template T @param {string} store @param {IDBValidKey} key @param {(current: any, key: IDBValidKey) => T} fn
+ * @returns {Promise<T>}
+ */
+export const update = (store, key, fn) => updateMany(store, [key], fn).then(results => results[0]);
+
+/**
+ * Adds the records whose key is not in the store yet, leaving the others as they are, in one transaction
+ * (running it again changes nothing). Resolves with how many were added.
+ * @param {string} store a store with a keyPath @param {any[]} values
+ * @returns {Promise<number>}
+ */
+export const addMissing = (store, values) =>
+  run(store, 'readwrite', tx => new Promise((resolve, reject) => {
+    const objectStore = tx.objectStore(store);
+    let added = 0;
+    for (const value of values) {
+      const request = objectStore.add(value);
+      request.onsuccess = () => { added++; };
+      // Already there: not an error, and the transaction goes on.
+      request.onerror = event => {
+        if (request.error?.name === 'ConstraintError') { event.preventDefault(); event.stopPropagation(); }
+      };
+    }
+    tx.oncomplete = () => resolve(added);
+    tx.onabort = () => reject(tx.error || new Error('Transaction aborted'));
+  }));

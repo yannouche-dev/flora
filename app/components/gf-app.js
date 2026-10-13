@@ -3,7 +3,8 @@ import { LitElement, html, css, nothing } from 'lit';
 import { tabHref } from '../core/context.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
 import { href, RouterController } from '../core/router.js';
-import { setKingMode, setMode, StoreController } from '../core/store.js';
+import { setKingMode, setMode, store, StoreController } from '../core/store.js';
+import { exportGeoJSON } from '../core/collections.js';
 import './gf-flora.js';
 import './gf-settings.js';
 import './gf-legal.js';
@@ -81,6 +82,12 @@ export class GfApp extends LitElement {
     .unlocked button { background: none; border: 0; color: #cfd8cf; font: inherit; cursor: pointer; min-height: 32px; }
     @keyframes up { from { transform: translate(-50%, 20px); opacity: 0; } }
     @media (prefers-reduced-motion: reduce) { .unlocked { animation: none; } }
+    /* Storage full: over everything (a plant's sheet covers the page on a phone), until closed. */
+    .full { position: fixed; z-index: 1004; left: 50%; transform: translateX(-50%); top: calc(8px + env(safe-area-inset-top, 0px)); width: min(520px, calc(100vw - 24px));
+      box-sizing: border-box; padding: 10px 14px; border-radius: 14px; background: var(--gf-surface); color: var(--gf-text); border: 2px solid var(--gf-danger); box-shadow: var(--gf-shadow); font-size: 0.9rem; }
+    .full p { margin: 0 0 8px; }
+    .full strong { color: var(--gf-danger); }
+    .full div { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
     .settings {
       flex: none;
       color: var(--gf-text-muted);
@@ -205,7 +212,7 @@ export class GfApp extends LitElement {
   render() {
     const route = this.#router.route;
     const tab = this.#tab(route);
-    const { status, statusText, offline, updateReady, datasetDeferred } = this.#store.state;
+    const { status, statusText, offline, updateReady, datasetDeferred, storageFull } = this.#store.state;
     const phone = this.#phone.matches;
     // The Parcours botanique, an app of its own: the rest of GeoFlora out of reach (dimmed) until another scenario is chosen.
     const locked = route.name === 'discover' && scenarioOf(route.scenario).key === 'trail';
@@ -240,6 +247,11 @@ export class GfApp extends LitElement {
         ${this.#outlet(route)}
       </main>
       ${phone ? html`<gf-tabbar current=${tab} ?locked=${locked}></gf-tabbar>` : html`<span></span>`}
+      ${storageFull && status !== 'error' ? html`<div class="full" role="alert">
+        <p><strong>Espace de stockage plein</strong> : GeoFlora n’a pas pu enregistrer une modification sur cet appareil.
+          Exportez vos plantes pour ne rien perdre, puis libérez de l’espace (fichiers, applications, données d’autres sites) et rechargez la page.</p>
+        <div><button class="primary" type="button" @click=${() => exportGeoJSON().catch(error => console.error(error))}>Exporter mes plantes</button>
+          <button class="link" type="button" @click=${() => store.set({ storageFull: false })}>Fermer</button></div></div>` : nothing}
       ${this._unlocked ? this.#unlockedView(/** @type {keyof typeof UNLOCKS} */ (this._unlocked)) : nothing}
       <gf-capture></gf-capture>
       ${this.#store.state.kingMode ? html`<button class="king" type="button" aria-pressed="true" aria-label="Quitter le mode King"

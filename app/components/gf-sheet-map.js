@@ -1,7 +1,7 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { href } from '../core/router.js';
-import { collectionsForPlant, formatDistance, listCollections, plantMarkers, savePlace, spotEvents, withEntry } from '../core/collections.js';
+import { collectionsForPlant, formatDistance, listCollections, plantMarkers, spotEvents, updatePlace, withEntry } from '../core/collections.js';
 import { store } from '../core/store.js';
 import { lastFix, watchLocation } from '../core/geo.js';
 import { FRANCE_BOUNDS, WORLD_BOUNDS } from '../core/ign.js';
@@ -361,7 +361,8 @@ export class GfSheetMap extends LitElement {
       const place = this._spots.find(p => p.id === placeId);
       if (!place) continue;
       const rounded = /** @type {[number, number]} */ (coordinates.map(v => Math.round(v * 1e7) / 1e7));
-      await savePlace(withEntry(place, entryId ?? plantId, { coordinates: rounded, accuracy: null })).catch(() => {});
+      // On the place as stored now (its other plants may have changed meanwhile, in another tab).
+      await updatePlace(place.id, current => withEntry(current, entryId ?? plantId, { coordinates: rounded, accuracy: null })).catch(error => console.error(error));
     }
   }
 

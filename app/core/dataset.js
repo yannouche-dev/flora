@@ -3,6 +3,7 @@
 
 import { config } from '../config.js';
 import * as db from './db.js';
+import { isQuotaError, writeLocal } from './quota.js';
 
 /**
  * @typedef {{ phase: 'checking' | 'downloading' | 'storing' | 'ready', meta?: any, offline?: boolean }} SyncProgress
@@ -96,6 +97,37 @@ async function checkForUpdate(local) {
   return { meta: remote, offline: false, deferred: false };
 }
 
+/** More room than when storing failed, by this much (bytes): worth trying again. */
+const MARGIN = 5 * 1024 * 1024;
+
+/** Free room for this site (bytes), when the browser says. @returns {Promise<number | null>} */
+async function freeSpace() {
+  try {
+    const estimate = await navigator.storage?.estimate?.();
+    return typeof estimate?.quota === 'number' && typeof estimate.usage === 'number' ? Math.max(0, estimate.quota - estimate.usage) : null;
+  } catch { return null; }
+}
+
+/** The free room when storing the flora last failed for lack of it, else null. @returns {number | null} */
+function readQuotaFailure() {
+  try {
+    const value = localStorage.getItem(config.storageKeys.datasetQuota);
+    return value === null ? null : Number(value) || 0;
+  } catch { return null; }
+}
+
+/** @param {number} bytes */
+const mb = bytes => `${Math.max(1, Math.round(bytes / 1048576)).toLocaleString('fr-FR')} Mo`;
+
+/** The flora could not be stored for lack of room: what to do, in French. @param {number | null} free */
+function storageFull(free) {
+  const error = new Error('Espace de stockage insuffisant : la flore (environ 25 Mo une fois enregistrée) ne tient pas sur cet appareil'
+    + (free !== null ? ` (${mb(free)} disponibles pour GeoFlora)` : '')
+    + '. Libérez de l’espace (fichiers, applications, données d’autres sites), puis rechargez la page.');
+  error.name = 'QuotaExceededError';
+  return error;
+}
+
 /**
  * The flora to start on. With a complete local copy, at once: data/meta.json is checked in the background
  * (`update`), so a slow or silent network never holds the search back. On a first visit (or an incomplete copy),
@@ -127,6 +159,11 @@ export async function syncDataset(onProgress = () => {}) {
     throw new Error('Impossible de télécharger la flore (hors ligne ?) : ' + /** @type {Error} */ (error).message, { cause: error });
   }
 
+  // The last try ran out of room, and there is no more room now: the 11.5 MB are not downloaded again for nothing.
+  const free = await freeSpace();
+  const failedWith = readQuotaFailure();
+  if (failedWith !== null && free !== null && free < failedWith + MARGIN) throw storageFull(free);
+
   onProgress({ phase: 'downloading', meta: remote });
   let plants;
   try {
@@ -140,7 +177,15 @@ export async function syncDataset(onProgress = () => {}) {
   }
 
   onProgress({ phase: 'storing', meta: remote });
-  await db.replacePlants(plants, remote);
+  try {
+    await db.replacePlants(plants, remote);
+  } catch (error) {
+    if (!isQuotaError(error)) throw error;
+    const left = await freeSpace();
+    writeLocal(config.storageKeys.datasetQuota, String(left ?? 0));
+    throw storageFull(left);
+  }
+  writeLocal(config.storageKeys.datasetQuota, null);
 
   onProgress({ phase: 'ready', meta: remote });
   return { meta: remote, updated: true, offline: false, update: null };

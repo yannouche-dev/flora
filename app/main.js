@@ -9,6 +9,7 @@ import { parse } from './core/router.js';
 import { loadIndex, runSearch } from './core/search.js';
 import { anyHarvest, hasSpots, refreshMembership, requestPersistence, spotEvents, writeBackup } from './core/collections.js';
 import { initHarvestMode, store } from './core/store.js';
+import { loadNotes } from './core/sheet-notes.js';
 
 const PHASES = {
   checking: 'Vérification de la flore…',
@@ -21,12 +22,14 @@ async function start() {
   try {
     // Before any IndexedDB connection exists: granting persistence may close open connections.
     if (hasSpots()) await requestPersistence();
+    // The plant sheet's notes (moved from localStorage on the first launch of version 6 of the database).
+    const notes = loadNotes().catch(error => console.error(error));
     const { meta, offline, update } = await syncDataset(({ phase }) => store.set({ statusText: PHASES[phase] }));
     store.set({ meta, offline, statusText: 'Préparation de la recherche…' });
     await loadIndex();
     await refreshMembership().catch(error => console.error(error));
-    // Collections saved before the backup existed get one now (an empty database never erases it).
-    writeBackup().catch(error => console.error(error));
+    // Collections saved before the backup existed get one now (an empty database never erases it), with the notes.
+    notes.then(() => writeBackup()).catch(error => console.error(error));
     initHarvestMode(await anyHarvest().catch(() => false));
     // Opened elsewhere than the list (a plant, the Carte, after a reload): the search left last comes back, so
     // the Flore tab and a plant's ‹ › find the same results.
@@ -37,7 +40,11 @@ async function start() {
     if (update) followUpdate(update);
   } catch (error) {
     console.error(error);
-    store.set({ status: 'error', statusText: /** @type {Error} */ (error).message });
+    // Never an empty banner (an IndexedDB error may have no message).
+    const e = /** @type {Error} */ (error);
+    const fallback = e.name === 'QuotaExceededError' ? 'Espace de stockage insuffisant sur cet appareil : libérez de l’espace, puis rechargez la page.'
+      : `Démarrage impossible (${e.name || 'erreur inconnue'}).`;
+    store.set({ status: 'error', statusText: e.message || fallback });
   }
 }
 
