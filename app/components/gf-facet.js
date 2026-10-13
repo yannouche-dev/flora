@@ -2,12 +2,11 @@
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
+import { foldLetters as fold } from '../core/fold.js';
 
 /**
  * @typedef {{ value: string, label: string, count: number, title?: string, icon?: import('../core/icons.js').IconName }} FacetOption
  */
-
-const fold = (/** @type {string} */ s) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 /**
  * One multi-select filter group: checkboxes with live counts (selecting never reorders the list),

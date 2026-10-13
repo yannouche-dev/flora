@@ -7,7 +7,7 @@
 //  - IGN map tiles: cache-first, capped — areas already viewed stay available offline
 //  - remote API JSON: not cached here (app/core/sources.js caches it in IndexedDB)
 
-const VERSION = 'v99';
+const VERSION = 'v100';
 const SHELL_CACHE = 'geoflora-shell-' + VERSION;
 const IMAGE_CACHE = 'geoflora-images-' + VERSION;
 const IMAGE_LIMIT = 400;
@@ -58,6 +58,7 @@ const SHELL = [
   'app/core/altitude.js',
   'app/core/geo.js',
   'app/core/highlight.js',
+  'app/core/fold.js',
   'app/core/ign.js',
   'app/core/place-model.js',
   'app/core/portable.js',
@@ -162,9 +163,15 @@ self.addEventListener('fetch', event => {
   if (url.origin === self.location.origin) {
     // The flora lives in IndexedDB; only the small, static department outlines are part of the shell.
     if (url.pathname.includes('/data/') && !/\/(territories|lookalikes|safety)\.json$/.test(url.pathname)) return;
-    // SPA navigations (any hash route) are served by the cached index.html.
-    const key = request.mode === 'navigate' ? 'index.html' : request;
-    event.respondWith(staleWhileRevalidate(event, SHELL_CACHE, key));
+    // The app's navigations (any hash route, to the root or to index.html) are served by the cached index.html.
+    // A file of the site opened in a tab (an icon, the manifest) is no launch of the app: straight from the network,
+    // and never stored as the app's page.
+    if (request.mode === 'navigate') {
+      if (!isAppPage(url)) return;
+      event.respondWith(staleWhileRevalidate(event, SHELL_CACHE, 'index.html', 0, isHtml));
+      return;
+    }
+    event.respondWith(staleWhileRevalidate(event, SHELL_CACHE, request));
     return;
   }
 
@@ -182,12 +189,22 @@ self.addEventListener('fetch', event => {
   }
 });
 
+/** The app's page: the root of the worker's scope, or its index.html. */
+function isAppPage(url) {
+  const root = new URL('./', self.registration.scope).pathname;
+  return url.pathname === root || url.pathname === root + 'index.html';
+}
+
+/** An HTML page (not an error page of a proxy or captive portal served as something else). */
+const isHtml = response => (response.headers.get('content-type') || '').startsWith('text/html');
+
 /** An original file: iNaturalist « original », a Commons file outside /thumb/. */
 function isOriginal(url) {
   return /\/photos\/\d+\/original\./.test(url.pathname) || (url.hostname === 'upload.wikimedia.org' && !url.pathname.includes('/thumb/'));
 }
 
-async function staleWhileRevalidate(event, cacheName, key, limit) {
+/** @param {(response: Response) => boolean} [storable] what may be stored under `key`, besides being a success */
+async function staleWhileRevalidate(event, cacheName, key, limit, storable = () => true) {
   const { request } = event;
   const cache = await caches.open(cacheName);
   const cached = await cache.match(key, { ignoreSearch: request.mode === 'navigate' });
@@ -195,7 +212,7 @@ async function staleWhileRevalidate(event, cacheName, key, limit) {
   const network = fetch(request)
     .then(async response => {
       // Opaque (no-cors) image responses have status 0 but are still worth caching.
-      if (response.ok || response.type === 'opaque') {
+      if ((response.ok || response.type === 'opaque') && storable(response)) {
         await cache.put(key, response.clone());
         if (limit) await trim(cache, limit);
       }

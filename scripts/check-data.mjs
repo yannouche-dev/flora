@@ -11,6 +11,8 @@
 //    file unambiguous (354 synonyms are another plant's accepted name). Severity is one the app reads, sources
 //    are cited ones;
 //  - every id of safety.json is a plant of the flora, and its three sources (ANSM lists A and B, TPPT) are there;
+//  - data/meta.json carries the fingerprint of plants.json (sha256, scripts/fingerprint-dataset.mjs) and its count of
+//    plants: the app compares the fingerprint to know whether to download the flora, and checks the download with it;
 //  - counts stay above floors (about 90 % of what the sources gave on 2026-10-12): a source that failed upstream,
 //    or a format change read as nothing, shows as a drop under them;
 //  - counts drop by no more than MAX_DROP (default 5 %) from the dataset as last committed (git HEAD, or
@@ -22,6 +24,7 @@
 
 import { readFileSync } from 'node:fs';
 import { baselineName, previousJson } from './previous-data.mjs';
+import { fingerprint } from './fingerprint-dataset.mjs';
 
 const PLANTS_FILE = process.env.PLANTS_FILE || 'data/plants.json';
 const LOOKALIKES_FILE = process.env.LOOKALIKES_FILE || 'data/lookalikes.json';
@@ -96,6 +99,17 @@ const plants = Array.isArray(plantsFile?.data) ? plantsFile.data : [];
 if (plantsFile && !plants.length) error(PLANTS_FILE, 'is no list of plants');
 
 const summary = [];
+
+// ── Fingerprint of the flora ──
+const metaFile = load(META_FILE);
+if (plantsFile && metaFile) {
+  const { sha256, plants: count } = metaFile.data || {};
+  const actual = fingerprint(readFileSync(PLANTS_FILE));
+  if (!sha256) error(META_FILE, `has no sha256: installed apps would download the flora on every build (run scripts/fingerprint-dataset.mjs)`);
+  else if (sha256 !== actual) error(META_FILE, `sha256 ${sha256} is not that of ${PLANTS_FILE} (${actual}): installed apps would refuse the download (run scripts/fingerprint-dataset.mjs)`);
+  if (count !== plants.length) error(META_FILE, `plants: ${count}, but ${PLANTS_FILE} has ${plants.length}`);
+  if (sha256 === actual) summary.push(`${META_FILE}: sha256 ${actual.slice(0, 12)}…`);
+}
 
 if (plants.length) {
   const accepted = new Map(plants.map(p => [p.scientificName, p]));

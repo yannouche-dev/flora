@@ -2,17 +2,10 @@
 // Accent-insensitive highlighting: "benoite" marks "Benoîte" in "Benoîte des villes".
 
 import { html } from 'lit';
+import { foldLetters } from './fold.js';
 
 /** Same folding as the search worker, one character at a time (keeps a map back to the original). */
-const fold = (/** @type {string} */ char) => char
-  .normalize('NFD')
-  .replace(/[̀-ͯ]/g, '')
-  .replace(/œ/g, 'oe')
-  .replace(/Œ/g, 'oe')
-  .replace(/æ/g, 'ae')
-  .replace(/Æ/g, 'ae')
-  .toLowerCase()
-  .replace(/[^a-z0-9]/g, ' ');
+const foldChar = (/** @type {string} */ char) => foldLetters(char).replace(/[^a-z0-9]/g, ' ');
 
 /**
  * @param {string | null | undefined} text
@@ -21,7 +14,7 @@ const fold = (/** @type {string} */ char) => char
  */
 export function highlight(text, query) {
   if (!text) return text ?? '';
-  const tokens = fold(query).split(' ').filter(token => token.length >= 2);
+  const tokens = foldChar(query).split(' ').filter(token => token.length >= 2);
   if (!tokens.length) return text;
 
   // folded[k] comes from text[origin[k]]
@@ -29,7 +22,7 @@ export function highlight(text, query) {
   /** @type {number[]} */
   const origin = [];
   [...text].reduce((offset, char) => {
-    for (const f of fold(char)) { folded += f; origin.push(offset); }
+    for (const f of foldChar(char)) { folded += f; origin.push(offset); }
     return offset + char.length;
   }, 0);
 

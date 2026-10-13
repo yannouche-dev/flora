@@ -2,6 +2,7 @@ import { createReadStream } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import path from 'node:path';
+import { fingerprint } from './fingerprint-dataset.mjs';
 
 const SOURCE_DIR = process.env.TAXREF_DIR || '.cache/taxref';
 const TAXREF_FILE = process.env.TAXREF_FILE || path.join(SOURCE_DIR, 'TAXREFv18.txt');
@@ -296,10 +297,13 @@ async function main() {
   }
 
   await mkdir('data', { recursive: true });
-  await writeFile('data/plants.json', JSON.stringify(plants, null, 2) + '\n', 'utf8');
+  const plantsText = JSON.stringify(plants, null, 2) + '\n';
+  await writeFile('data/plants.json', plantsText, 'utf8');
 
   const meta = {
     generatedAt: new Date().toISOString(),
+    // The content's fingerprint, which the app compares (set again after the enrichment scripts: fingerprint-dataset.mjs).
+    sha256: fingerprint(plantsText),
     source: 'TAXREF v18 official PatriNat archive',
     sourceUrl: 'https://assets.patrinat.fr/files/referentiel/TAXREF_v18_2025.zip',
     taxrefVersion: VERSION,

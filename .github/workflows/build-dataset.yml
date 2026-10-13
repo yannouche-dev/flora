@@ -100,6 +100,9 @@ jobs:
           WIKIDATA_BULK_DELAY_MS: '350'
         run: node scripts/enrich-wikidata-bulk.mjs
 
+      # After the last step that writes plants.json: the fingerprint the app compares (and checks the download with).
+      - name: Fingerprint the dataset
+        run: node scripts/fingerprint-dataset.mjs
 
       - name: Validate dataset
         run: |

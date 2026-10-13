@@ -21,7 +21,7 @@ async function start() {
   try {
     // Before any IndexedDB connection exists: granting persistence may close open connections.
     if (hasSpots()) await requestPersistence();
-    const { meta, offline } = await syncDataset(({ phase }) => store.set({ statusText: PHASES[phase] }));
+    const { meta, offline, update } = await syncDataset(({ phase }) => store.set({ statusText: PHASES[phase] }));
     store.set({ meta, offline, statusText: 'Préparation de la recherche…' });
     await loadIndex();
     await refreshMembership().catch(error => console.error(error));
@@ -34,9 +34,30 @@ async function start() {
     if (parse(location.hash).name !== 'search' && saved) store.set({ query: fromHash(saved) });
     await runSearch();
     store.set({ status: 'ready', statusText: '' });
+    if (update) followUpdate(update);
   } catch (error) {
     console.error(error);
     store.set({ status: 'error', statusText: /** @type {Error} */ (error).message });
+  }
+}
+
+/**
+ * The app runs on the local flora while data/meta.json is checked: a new dataset, once stored, replaces the index
+ * the search runs on (the results on screen are found again in it); none, or its download failing, changes nothing
+ * but a word on the list.
+ * @param {Promise<import('./core/dataset.js').UpdateOutcome>} update
+ */
+async function followUpdate(update) {
+  try {
+    const { meta, offline, deferred } = await update;
+    if (offline) store.set({ offline: true });
+    if (deferred) store.set({ datasetDeferred: true });
+    if (!meta) return;
+    await loadIndex();
+    store.set({ meta });
+    await runSearch();
+  } catch (error) {
+    console.error(error);
   }
 }
 

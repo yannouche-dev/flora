@@ -67,6 +67,8 @@ export class GfApp extends LitElement {
     .brand span { font-size: 1.12rem; font-weight: 600; letter-spacing: 0.01em; }
     nav.tabs { flex: none; }
     nav.tabs a { color: var(--gf-text); text-decoration: none; white-space: nowrap; display: inline-flex; align-items: center; }
+    /* The page's tab, on the accent: its contrasting text (the rule above outweighs the .segmented one of ui.js). */
+    nav.tabs a[aria-current='page'] { color: var(--gf-accent-contrast); }
     .note, .mode { flex: none; }
     gf-map-page, gf-spot-editor, gf-collections, gf-shared, gf-flora, gf-discover { flex: 1; min-height: 0; }
     /* A tool that just came (first steps): announced once. */
@@ -203,7 +205,7 @@ export class GfApp extends LitElement {
   render() {
     const route = this.#router.route;
     const tab = this.#tab(route);
-    const { status, statusText, offline, updateReady } = this.#store.state;
+    const { status, statusText, offline, updateReady, datasetDeferred } = this.#store.state;
     const phone = this.#phone.matches;
     // The Parcours botanique, an app of its own: the rest of GeoFlora out of reach (dimmed) until another scenario is chosen.
     const locked = route.name === 'discover' && scenarioOf(route.scenario).key === 'trail';
@@ -231,7 +233,8 @@ export class GfApp extends LitElement {
         ${status === 'loading' ? html`<div class="banner ${route.name === 'discover' ? 'over' : ''}" role="status">${statusText || 'Chargement…'}</div>` : nothing}
         ${status === 'error' ? html`<div class="banner error" role="alert">${statusText}
           <button class="link" type="button" @click=${() => location.reload()}>Recharger</button></div>` : nothing}
-        ${offline && status === 'ready' && route.name === 'search' ? html`<div class="banner">Hors ligne — recherche sur la copie locale.</div>` : nothing}
+        ${offline && status === 'ready' && route.name === 'search' ? html`<div class="banner">Hors ligne — recherche sur la copie locale.</div>`
+          : datasetDeferred && status === 'ready' && route.name === 'search' ? html`<div class="banner" role="status">Mise à jour de la flore reportée — recherche sur la copie locale.</div>` : nothing}
         ${this.#outlet(route)}
       </main>
       ${phone ? html`<gf-tabbar current=${tab} ?locked=${locked}></gf-tabbar>` : html`<span></span>`}

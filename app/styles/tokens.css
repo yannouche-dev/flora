@@ -26,7 +26,8 @@
   --gf-shadow: 0 1px 2px rgb(0 0 0 / 6%), 0 2px 8px rgb(0 0 0 / 5%);
   /* Floating things: map buttons, sheets, menus, toasts. */
   --gf-shadow-float: 0 4px 16px rgb(0 0 0 / 22%);
-  --gf-focus: 0 0 0 3px color-mix(in srgb, var(--gf-accent) 40%, transparent);
+  /* Keyboard focus: an opaque ring in the accent (5.9:1 on the page), parted from the control by the page's colour. */
+  --gf-focus: 0 0 0 2px var(--gf-bg), 0 0 0 4px var(--gf-accent);
 
   --gf-fav: #e11d48;
   --gf-season: #fde047;

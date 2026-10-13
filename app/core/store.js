@@ -23,6 +23,7 @@ import { treeFromPlaces } from './pane-tree.js';
  * @property {string} [statusText]
  * @property {any} [meta]
  * @property {boolean} offline
+ * @property {boolean} [datasetDeferred]  a new flora was announced but could not be downloaded: the local copy stays, until the next launch
  * @property {boolean} [updateReady]  a new version of the app is installed: reloading shows it
  * @property {Query} query
  * @property {Results} results
