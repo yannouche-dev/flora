@@ -6,6 +6,8 @@ import { href } from '../core/router.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 import { openModal } from '../core/history.js';
+import { href } from '../core/router.js';
+import { map3dOptions, map3dOptionsCss } from './map3d-options.js';
 
 const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
 
@@ -23,11 +25,18 @@ export class GfMapPanel extends LitElement {
     distributionOn: { attribute: false },
     legend: { type: Boolean },
     _open: { state: true },
+    /** The 3D view of this map (gf-map-gl.js), null where it cannot be: { on, settings, relief, ign, online, webgl, note }. */
+    gl: { attribute: false },
     _catalog: { state: true },
     _q: { state: true }
   };
 
-  static styles = [ui, css`
+  static styles = [ui, map3dOptionsCss, css`
+    .seg3d { display: inline-flex; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill); overflow: hidden; }
+    .seg3d button { min-height: 36px; padding: 4px 16px; border: 0; border-radius: 0; background: transparent; font-weight: 600; }
+    .seg3d button[aria-pressed='true'] { background: var(--gf-accent); color: var(--gf-accent-contrast, #fff); }
+    .gl-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
     dialog {
       position: fixed;
       inset: auto 0 0 0;
@@ -95,6 +104,8 @@ export class GfMapPanel extends LitElement {
     this.distributionOn = false;
     /** « Ajouter une couche de l'IGN… » touched: the catalogue is shown. */
     this._open = false;
+    /** @type {any} */
+    this.gl = null;
     /** IGN's whole catalogue, as core/ign-catalog.js has it. @type {import('../core/ign-catalog.js').CatalogState | null} */
     this._catalog = null;
     this._q = '';
@@ -186,6 +197,24 @@ export class GfMapPanel extends LitElement {
     </label>`;
   }
 
+  /** « Vue 3D »: 2D or 3D for this map, and the 3D options (Réglages › Cartes, the same for every map). */
+  #gl() {
+    const g = this.gl;
+    if (!g) return nothing;
+    const set = (/** @type {boolean} */ on) => { if (on !== g.on) this.#emit('gl-renderer', { on }); };
+    return html`<h3 class="kicker">Vue</h3>
+      <div class="gl-head">
+        <div class="seg3d" role="group" aria-label="Affichage de cette carte">
+          <button type="button" aria-pressed=${String(!g.on)} @click=${() => set(false)}>2D</button>
+          <button type="button" aria-pressed=${String(g.on)} ?disabled=${!g.webgl} @click=${() => set(true)}>3D</button>
+        </div>
+        <a class="note" href=${href.settings()}>Par défaut : Réglages › Cartes</a>
+      </div>
+      ${g.note ? html`<p class="note" role="status">${g.note}</p>` : !g.webgl ? html`<p class="note">3D indisponible sur cet appareil (WebGL2 requis).</p>` : nothing}
+      ${g.on ? html`${map3dOptions(g.settings, patch => this.#emit('gl-setting', patch), { relief: g.relief, ign: g.ign, id: 'panel3d' })}
+        ${g.online ? nothing : html`<p class="note">Hors ligne : relief, bâtiments et plan vectoriel reviennent avec le réseau.</p>`}` : nothing}`;
+  }
+
   render() {
     const group = (/** @type {string} */ g) => Object.keys(OVERLAYS).filter(k => OVERLAYS[k].group === g);
     return html`
@@ -195,6 +224,7 @@ export class GfMapPanel extends LitElement {
           <button class="icon-btn" type="button" aria-label="Fermer" @click=${() => this.close()}>${icon('x-lg')}</button>
         </header>
         <div class="body">
+          ${this.#gl()}
           <h3 class="kicker">Fond</h3>
           <div class="bases" role="group" aria-label="Fond de carte">
             ${Object.entries(BASES).map(([key, def]) => html`
@@ -235,6 +265,7 @@ export class GfMapPanel extends LitElement {
           <h3 class="kicker">Sources</h3>
           <p class="sources">
             Fonds, cadastre, courbes de niveau, adresses et altitudes : <a href="https://geoservices.ign.fr/" target="_blank" rel="noopener">IGN – Géoplateforme</a>.
+            ${this.gl?.on ? html`Bâtiments et plan vectoriel : IGN (BD TOPO). Relief 3D : <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">AWS Terrain Tiles</a> (Mapzen, EU-DEM © Copernicus).` : nothing}
             Forêts publiques : ONF. Espaces protégés : <a href="https://inpn.mnhn.fr/" target="_blank" rel="noopener">INPN – PatriNat</a>.
             ${this.distribution ? html`Répartition : <a href="https://www.gbif.org/" target="_blank" rel="noopener">GBIF.org</a>.` : nothing}
           </p>

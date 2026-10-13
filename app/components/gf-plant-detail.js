@@ -2853,8 +2853,9 @@ export class GfPlantDetail extends LitElement {
     // Pinned, or alone in a pane: the map fills the room.
     const fill = isOnEdge(this.view, key) || this.only === key;
     if (this.preview) return html`<div class="map-placeholder ${fill ? 'fill' : ''}" style=${`height:${{ s: 180, m: 260, l: 380 }[config.height]}px`}></div>`;
+    // One WebGL map per sheet: the main « Carte » block may show in 3D, the map blocks added stay in 2D (gf-map-gl.js).
     return html`<gf-sheet-map .plant=${plant} .gbifKey=${details?.identifiers?.gbif?.id ?? null} .inatId=${inat?.id ?? null}
-      .config=${config} mode=${this.view} ?fill=${fill} .mapFocus=${this._focus}
+      map-3d=${key === 'map' ? 'auto' : 'off'} .config=${config} mode=${this.view} ?fill=${fill} .mapFocus=${this._focus}
       @map-config=${(/** @type {CustomEvent} */ e) => setMapConfig(key, e.detail)}
       @focus-clear=${(/** @type {CustomEvent} */ e) => { this._focus = { ...this._focus, [e.detail.kind]: null }; }}
       @map-layers=${(/** @type {CustomEvent} */ e) => {

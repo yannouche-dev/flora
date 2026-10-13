@@ -17,6 +17,7 @@ import { gbifTileUrl } from '../core/sources.js';
 import './gf-map-panel.js';
 import './gf-map-search.js';
 import './gf-point-card.js';
+import { attachGl } from './gf-map-gl.js';
 import { icon, iconHref, iconMarkup } from '../core/icons.js';
 import { inMiniApp } from '../miniapp/quiet-links.js';
 import { cancelImages, chosenGroupMarker, chosenMarker, elem, fadeImg, leafGlyph, leafMarker, markClasses, obsCard, photoMarker, ringElement, speciesKey } from './map-style.js';
@@ -704,11 +705,18 @@ export class GfMap extends LitElement {
     });
     this.#resized.observe(this.#root);
     this.#syncAll();
+    // 3D (Réglages › Cartes, or this map's own button): MapLibre over this map, which it mirrors (gf-map-gl.js).
+    this.#gl = attachGl(this, map);
   }
+
+  /** The 3D adapter of this map (gf-map-gl.js): null before the map exists. @type {import('./gf-map-gl.js').GlView | null} */
+  #gl = null;
+  get gl() { return this.#gl; }
 
   /** @param {Map<string, any>} changed */
   updated(changed) {
     if (!this.#map) return;
+    this.#gl?.changed(changed);
     if (changed.has('base') && this.base && this.base !== this.#base) this.#setBase(/** @type {any} */ (this.base));
     if (changed.has('overlays') && this.overlays) {
       for (const key of new Set([...Object.keys(OVERLAYS), ...addedLayers(), ...this.#overlays])) {
@@ -780,6 +788,7 @@ export class GfMap extends LitElement {
     super.connectedCallback();
     moduleEvents.addEventListener('change', this.#onModules);
     if (this.#map) { this.#resized?.observe(this.#root); this.#syncTracking(); }
+    this.#gl?.connect();
   }
 
   disconnectedCallback() {
@@ -792,6 +801,7 @@ export class GfMap extends LitElement {
     this.#unwatch = null;
     this.#unwait?.();
     this.#unwait = null;
+    this.#gl?.disconnect();
   }
 
   #syncAll() {

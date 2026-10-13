@@ -123,6 +123,7 @@ export class GfPlantSpots extends LitElement {
       ${this._error ? html`<p role="alert">${this._error} <button type="button" @click=${() => this.#load()}>Réessayer</button></p>` : nothing}
       ${spots.length ? html`
         <gf-map
+          map-3d="off"
           .plants=${plantMarkers(spots, e => e.plantId === this.plantId)}
           plant-zoom="0"
           fit
