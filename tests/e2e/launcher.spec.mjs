@@ -175,7 +175,8 @@ test('la liste avec une partie en cours (captures)', async ({ app, page }, info)
   await page.locator('gf-miniapp .quit').click();
   await expect(list(page).getByRole('button', { name: 'Continuer : Cueillette prudente' })).toBeVisible();
   await expect(list(page).getByRole('button', { name: 'Jouer : Rencontres' })).toBeVisible();
-  await expect(list(page).getByRole('button', { name: 'Jouer : Scientifique' })).toBeVisible();
+  await expect(list(page).getByRole('button', { name: 'Jouer : Mosaïque' })).toBeVisible();
+  await expect(list(page).getByRole('button', { name: 'Jouer : Scientifique' })).toHaveCount(0);
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/launcher-underway-${info.project.name}.png`, fullPage: false });
 });
 

@@ -1,12 +1,13 @@
 // @ts-check
-// The list of the ways to play, one card each: the mini-apps first (app/miniapps: each one opens alone on the
-// screen, at #/app/<id>), then the other scenarios (core/scenarios.js: Scientifique) — what each one does and
-// « Jouer ». A mini-app with a game under way on this device offers two actions instead: « Continuer » (where it was
-// left: its last step) and « Recommencer » — asked first in a dialog, it empties what the mini-app owns, as its
-// « Rejouer » does (runtime.js#replay, the other tabs too), and opens it at its first step. One list, two places:
+// The list of the ways to play, one card each: the mini-apps (app/miniapps: Rencontres, Parcours botanique, Cueillette
+// prudente, Mosaïque; each one opens alone on the screen, at #/app/<id>) — what each one does and « Jouer ». (Not
+// Scientifique: a mode, chosen in the header's switch or in Réglages, not a way to play.) A mini-app with a game under
+// way on this device offers two actions instead: « Continuer » (where it was left: its last step) and « Recommencer »
+// — asked first in a dialog, it empties what the mini-app owns, as its « Rejouer » does (runtime.js#replay, the other
+// tabs too), and opens it at its first step. One list, two places:
 //  - `page`: the Découvrir tab (#/discover, and the start page during the first steps), a page of its own — a title,
-//    each card with its picture (core/scenes.js); cards in a grid on a wide screen, a list on a phone; during the
-//    first steps, « Passer : montrer toute l'application »;
+//    each card with its picture (core/scenes.js); cards on a wide screen (a row of four; two by two on a medium one),
+//    a list on a phone; during the first steps, « Passer : montrer toute l'application »;
 //  - in the launcher's dialog (gf-scenarios, the film icon): compact, an icon each.
 // A card played fires `launched` (the dialog closes on it).
 
@@ -15,7 +16,6 @@ import { icon } from '../core/icons.js';
 import { openView } from '../core/history.js';
 import { href, parse } from '../core/router.js';
 import { scene, sceneStyles } from '../core/scenes.js';
-import { SCENARIOS } from '../core/scenarios.js';
 import { leftAt } from '../core/around-sessions.js';
 import { discoverEvents, discovering, finishDiscover } from '../core/discover.js';
 import { openModal } from '../core/history.js';
@@ -26,23 +26,20 @@ import { ui } from '../styles/ui.js';
 import { fr } from './start-screen.js';
 
 /**
- * @typedef {{ key: string, app: import('../miniapps/index.js').MiniAppEntry | null, title: string, pitch: string, icon: import('../core/icons.js').IconName,
- *   scene: string | null, here: boolean, underWay: boolean, run: () => void }} Entry
+ * @typedef {{ key: string, app: import('../miniapps/index.js').MiniAppEntry, title: string, pitch: string, icon: import('../core/icons.js').IconName,
+ *   scene: string, here: boolean, underWay: boolean, run: () => void }} Entry
  */
 
 /** The entries, in the launcher's order, as they are now (the address, the games under way). @returns {Entry[]} */
 function entries() {
   const r = parse(location.hash);
-  return [
-    ...MINIAPPS.map(a => {
-      const here = r.name === 'app' && r.id === a.id;
-      return { key: a.id, app: a, title: a.title, pitch: a.pitch, icon: a.icon, scene: a.scene, here, underWay: here || a.underWay(),
-        // « Jouer » opens its start; « Continuer », the step it was left at (the box goes back to the start if that
-        // step may no longer be entered).
-        run: () => { a.play?.(); if (!here) openView(href.app(a.id, a.underWay() ? leftAt(a.id) : null)); } };
-    }),
-    ...SCENARIOS.map(s => ({ key: s.key, app: null, title: s.title, pitch: s.pitch, icon: s.icon, scene: s.scene ?? null, here: false, underWay: false, run: s.play }))
-  ];
+  return MINIAPPS.map(a => {
+    const here = r.name === 'app' && r.id === a.id;
+    return { key: a.id, app: a, title: a.title, pitch: a.pitch, icon: a.icon, scene: a.scene, here, underWay: here || a.underWay(),
+      // « Jouer » opens its start; « Continuer », the step it was left at (the box goes back to the start if that
+      // step may no longer be entered).
+      run: () => { a.play?.(); if (!here) openView(href.app(a.id, a.underWay() ? leftAt(a.id) : null)); } };
+  });
 }
 
 export class GfLauncher extends LitElement {
@@ -71,13 +68,14 @@ export class GfLauncher extends LitElement {
     .page h1 { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 1.6rem; line-height: 1.2; }
     .page h1 .bi { color: var(--gf-accent); }
     .page .intro { margin: 6px 0 0; max-width: 40em; color: var(--gf-text-muted); font-size: 1rem; line-height: 1.45; }
-    .page ul { gap: 16px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+    /* The four cards: two by two on a medium screen, a row of four on a wide one (never three and one left alone). */
+    .page ul { gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    @container (min-width: 1000px) { .page ul { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
     /* A wide screen: cards, the picture on top, the action at the bottom. */
     .page li { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr auto; gap: 6px; padding: 0 0 16px; overflow: hidden; border-radius: 18px; box-shadow: var(--gf-shadow); }
     .page li > :not(.pic) { margin-inline: 16px; }
     .pic { display: grid; place-items: center; aspect-ratio: 320 / 190; padding: 12px 16px 0; background: color-mix(in srgb, var(--gf-accent-soft) 45%, var(--gf-surface)); }
     .pic .scene { width: 100%; max-width: 300px; }
-    .pic .ic { width: 72px; height: 72px; border-radius: 20px; font-size: 2.1rem; }
     .page h2 { margin-top: 10px; font-size: 1.2rem; }
     .page li p { font-size: 0.95rem; line-height: 1.45; }
     .page li button { margin-top: 10px; min-width: 132px; min-height: 44px; font-size: 1rem; }
@@ -89,11 +87,10 @@ export class GfLauncher extends LitElement {
       .page { padding: 16px 16px 24px; }
       .page h1 { font-size: 1.4rem; }
       .page .intro { font-size: 0.95rem; }
-      .page ul { gap: 12px; }
+      .page ul { gap: 12px; grid-template-columns: 1fr; }
       .page li { grid-template-columns: 104px 1fr; grid-template-rows: auto auto auto; gap: 2px 12px; padding: 12px; }
       .page li > :not(.pic) { margin-inline: 0; }
       .pic { grid-row: span 3; align-self: start; padding: 4px; border-radius: 12px; }
-      .pic .ic { width: 52px; height: 52px; border-radius: 14px; font-size: 1.5rem; }
       .page h2 { margin-top: 0; font-size: 1.05rem; }
       .page li p { font-size: 0.875rem; }
       .page li button, .page li .acts button { margin-top: 6px; min-width: 0; }
@@ -135,7 +132,6 @@ export class GfLauncher extends LitElement {
 
   /** « Recommencer »: asked first, in a dialog (Annuler, Échap: nothing changes). @param {Entry} e */
   async #ask(e) {
-    if (!e.app) return;
     // What will be deleted, said: what it made in Mes plantes (its favourites, its parcours), the game.
     const m = (await e.app.load()).default;
     this._asking = { ...e, items: replayItems(m, await madeByApp(m.id).catch(() => ({ favorites: [], collections: [], kept: { favorites: 0, collections: 0 } }))) };
@@ -170,9 +166,9 @@ export class GfLauncher extends LitElement {
     const id = 'play-' + e.key;
     const title = this.page ? html`<h2 id=${id}>${e.title}</h2>` : html`<h3 id=${id}>${e.title}</h3>`;
     const picture = this.page
-      ? html`<div class="pic" aria-hidden="true">${e.scene ? scene(e.scene) : html`<span class="ic">${icon(e.icon)}</span>`}</div>`
+      ? html`<div class="pic" aria-hidden="true">${scene(e.scene)}</div>`
       : html`<span class="ic" aria-hidden="true">${icon(e.icon)}</span>`;
-    return html`<li data-app=${e.app ? e.key : nothing} data-scenario=${e.app ? nothing : e.key}>
+    return html`<li data-app=${e.key}>
       ${picture}
       ${title}
       <p>${e.pitch}</p>

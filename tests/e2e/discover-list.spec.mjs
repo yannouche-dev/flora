@@ -1,5 +1,5 @@
 // The Découvrir tab: the list of the ways to play (gf-launcher, the same as the launcher's dialog) as a page of its
-// own — the mini-apps first, then Scientifique. « Jouer » opens one, « Quitter » comes
+// own — the mini-apps, nothing else (Scientifique is a mode, not a way to play). « Jouer » opens one, « Quitter » comes
 // back to the list; the first launch lands on it, and a mini-app played there brings the tabs; the old addresses of
 // Découvrir lead to the mini-apps. Rencontres' services answered here.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
@@ -7,7 +7,7 @@ import { test, expect, plantId, answerAround } from './fixtures.mjs';
 test.use({ reducedMotion: 'reduce' });
 test.beforeEach(({ context }) => answerAround(context));
 
-const ORDER = ['Rencontres', 'Parcours botanique', 'Cueillette prudente', 'Mosaïque', 'Scientifique'];
+const ORDER = ['Rencontres', 'Parcours botanique', 'Cueillette prudente', 'Mosaïque'];
 /** @param {import('@playwright/test').Page} page */
 const hash = page => page.evaluate(() => location.hash);
 /** The page's list (not the launcher's dialog). @param {import('@playwright/test').Page} page */
@@ -28,7 +28,8 @@ test('l’onglet Découvrir montre la liste ; « Jouer » ouvre Rencontres, « Q
   // Not Rencontres by itself: no start screen of a game here.
   await expect(page.getByRole('heading', { name: 'Rencontrez les plantes d’ici' })).toHaveCount(0);
   // Each card: its picture, its pitch, one action named after it.
-  await expect(list(page).locator('li .pic')).toHaveCount(5);
+  await expect(list(page).locator('li .pic')).toHaveCount(4);
+  await expect(list(page).getByRole('button', { name: 'Jouer : Scientifique' })).toHaveCount(0);
   await expect(list(page).locator('li[data-app="rencontres"] p')).toContainText('une carte à la fois');
 
   await list(page).getByRole('button', { name: 'Jouer : Rencontres' }).click();
@@ -69,6 +70,13 @@ test('les anciennes adresses de Découvrir mènent où elles menaient', async ({
   // An unknown scenario: the list.
   await app.go('#/discover?s=inconnu');
   await expect(list(page).getByRole('heading', { level: 1, name: 'Découvrir' })).toBeVisible();
+  // Scientifique's old card (a mode now, no longer in the list): the list too, the mode untouched.
+  await app.go('#/collections');
+  const mode = await app.state('mode');
+  await app.go('#/discover?s=science');
+  await expect(list(page).getByRole('heading', { level: 1, name: 'Découvrir' })).toBeVisible();
+  expect((await list(page).getByRole('heading', { level: 2 }).allTextContents()).map(t => t.trim())).toEqual(ORDER);
+  expect(await app.state('mode')).toBe(mode);
 });
 
 test.describe('premier lancement', () => {
