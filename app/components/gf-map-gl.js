@@ -319,7 +319,6 @@ export class GlView {
       zoom: Math.max(0, lf.getZoom() - 1),
       pitch: s.pitch,
       bearing: 0,
-      maxPitch: 85,
       minZoom: this.#minZoom(),
       maxZoom: 20,
       locale: LOCALE,
@@ -328,8 +327,9 @@ export class GlView {
       fadeDuration: reduceMotion() ? 0 : 300,
       cancelPendingTileRequestsWhileZooming: true
     });
-    // Touch screens pinch to zoom (no + −, as in 2D); the compass stays: north again, the tilt shown.
-    map.addControl(new ml.NavigationControl({ visualizePitch: true, showCompass: true, showZoom: !matchMedia('(pointer: coarse)').matches }), 'bottom-left');
+    // The usual 3D navigation, MapLibre's defaults on every device: drag to pan, right-drag (Ctrl-drag) or two
+    // fingers to rotate and tilt, wheel or pinch to zoom, arrow keys; + −, and the compass (north again, the tilt shown).
+    map.addControl(new ml.NavigationControl({ visualizePitch: true }), 'bottom-left');
     map.addControl(new ml.ScaleControl({ unit: 'metric', maxWidth: 90 }), 'bottom-left');
     const frame = this.host.querySelector('.gf-map-frame');
     map.addControl(new ml.FullscreenControl(frame ? { container: frame } : {}), 'bottom-left');

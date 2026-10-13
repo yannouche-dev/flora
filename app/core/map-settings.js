@@ -20,7 +20,7 @@ import { onStorage } from './sync.js';
  * @property {boolean} relief         the ground's relief (module « Vue 3D (relief) » too)
  * @property {number} exaggeration    1 … 3
  * @property {boolean} hillshade      the relief's shading under the IGN layers
- * @property {number} pitch           the tilt a map opens with, 0 … 85°
+ * @property {number} pitch           the tilt a map opens with, 0 … 60° (MapLibre's own limit)
  * @property {boolean} buildings      IGN buildings, extruded (from zoom 15)
  * @property {boolean} sky            sky, horizon haze, atmosphere
  * @property {boolean} globe          the Earth as a globe when zoomed out
@@ -31,12 +31,12 @@ import { onStorage } from './sync.js';
 
 /** @type {Readonly<MapSettings>} */
 export const MAP_DEFAULTS = Object.freeze({
-  renderer: '2d', relief: true, exaggeration: 1.3, hillshade: true, pitch: 55, buildings: true, sky: true, globe: false,
+  renderer: '2d', relief: true, exaggeration: 1.3, hillshade: true, pitch: 50, buildings: true, sky: true, globe: false,
   plan: 'raster', light: 'fixed', hour: 15
 });
 
 /** The bounds of the sliders (Réglages and the map's panel use the same). */
-export const LIMITS = Object.freeze({ exaggeration: [1, 3, 0.1], pitch: [0, 85, 5], hour: [0, 24, 0.5] });
+export const LIMITS = Object.freeze({ exaggeration: [1, 3, 0.1], pitch: [0, 60, 5], hour: [0, 24, 0.5] });
 
 /** @param {unknown} v @param {[number, number, number]} range @param {number} fallback */
 function num(v, [min, max, step], fallback) {

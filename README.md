@@ -679,7 +679,7 @@ En 3D, c'est **la même carte** (`gf-map`), avec les mêmes marqueurs, groupes, 
 
 **Options** (Réglages › Cartes, visibles en 3D) :
 - **Relief** (tuiles AWS Terrain Tiles, Terrarium : Mapzen, EU-DEM © Copernicus) et son **exagération** (× 1 à × 3) ; **ombrage** des pentes sous les couches ; les **courbes de niveau** de l'IGN se drapent sur le relief comme toutes les couches ;
-- **inclinaison à l'ouverture** (0 à 85°) ; on tourne et on incline au clic droit, à deux doigts, ou au clavier (**Maj + flèches** ; flèches pour se déplacer, + et − pour zoomer) ; la **boussole** remet le nord ;
+- **inclinaison à l'ouverture** (0 à 60°, la limite de MapLibre) ; navigation 3D habituelle, la même sur ordinateur et téléphone : glisser pour se déplacer, clic droit (ou Ctrl + glisser) ou deux doigts pour tourner et incliner, molette ou pincement pour zoomer, ou au clavier (**Maj + flèches** ; flèches pour se déplacer, + et − pour zoomer) ; la **boussole** remet le nord ;
 - **bâtiments en 3D** (tuiles vectorielles PLAN IGN de la Géoplateforme, surfaces bâties de la BD TOPO extrudées à leur hauteur, dès le zoom 15) ;
 - **ciel et brume** (horizon, atmosphère au loin) ; **globe à petite échelle** (la Terre ronde en dézoomant) ;
 - **plan IGN vectoriel** au lieu des images du « Plan IGN » (noms et traits plus nets ; le style, les polices et symboles de la Géoplateforme) ;
