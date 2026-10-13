@@ -132,7 +132,7 @@ export class GfLegal extends LitElement {
       <p>Un lien vers un autre site (INPN, Tela Botanica, une source citée…) ouvre ce site, dans un onglet ou dans un volet « Page web » de la fiche : c’est alors ce site qui vous sert la page.</p>
 
       <h2>Données et licences</h2>
-      <p>La flore vient de TAXREF (PatriNat), les floraisons de Baseflor (Ph. Julve, Tela Botanica), les statuts de protection de l’INPN, les données de toxicité de l’ANSM et d’Agroscope (base TPPT, usage non commercial), les plantes à confondre de l’Anses et des Centres antipoison. Les bases assemblées par GeoFlora sont diffusées sous licence ODbL 1.0, comme le demande Baseflor : sources et licences dans <a href=${REPO + '/blob/main/data/LICENSE'} target="_blank" rel="noopener">data/LICENSE</a>. Chaque photo reste sous sa propre licence, créditée sous l’image.</p>
+      <p>La flore vient de TAXREF (PatriNat), les floraisons de Baseflor (Ph. Julve, Tela Botanica), les statuts de protection de l’INPN, les données de toxicité de l’ANSM et d’Agroscope (base TPPT, usage non commercial), les plantes à confondre de l’Anses et des Centres antipoison. Les bases assemblées par GeoFlora sont diffusées sous licence ODbL 1.0, comme le demande Baseflor : sources et licences dans <a href=${REPO + '/blob/main/data/LICENSE'} target="_blank" rel="noopener">data/LICENSE</a>. Chaque photo reste sous sa propre licence, créditée sous l’image. Le code de l’application est sous licence <a href=${REPO + '/blob/main/LICENSE'} target="_blank" rel="noopener">MIT</a>.</p>
     </article>`;
   }
 }
