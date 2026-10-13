@@ -19,6 +19,11 @@ import { harvestRules } from '../../core/regulation.js';
 export const DISTANCES = [200, 500, 1000, 2000, 5000, 10000, 20000, 50000];
 /** @param {number} m */
 export const distLabel = m => m >= 1000 ? (m / 1000).toLocaleString('fr-FR') + ' km' : m + ' m';
+/** The distance in words, as a screen reader says it (« 2 kilomètres », « 500 mètres »). @param {number} m */
+export const distWords = m => {
+  const n = m >= 1000 ? m / 1000 : m, unit = m >= 1000 ? 'kilomètre' : 'mètre';
+  return `${n.toLocaleString('fr-FR')} ${unit}${n >= 2 ? 's' : ''}`;
+};
 /** A word for the distance, for fun. @param {number} m */
 export const distMood = m => m <= 200 ? 'Juste devant la porte' : m <= 1000 ? 'Le quartier' : m <= 5000 ? 'Une balade à pied' : m <= 20000 ? 'Un tour à vélo' : 'Toute la région';
 /** The next distance offered past `m` (none past 50 km). @param {number} m */

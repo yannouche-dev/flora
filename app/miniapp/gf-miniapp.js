@@ -29,6 +29,7 @@ import { MiniApp, replayItems } from './runtime.js';
 import './ma-grid.js';
 import './ma-steps.js';
 import './kit/ma-plant-sheet.js';
+import { quietLinks } from './quiet-links.js';
 
 export class GfMiniapp extends LitElement {
   static properties = {
@@ -150,6 +151,8 @@ export class GfMiniapp extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    // No way out to another site from inside (but the credits a licence asks for).
+    quietLinks(this);
     // « Rejouer » in another tab: emptied here too.
     this.#unsync = subscribe('miniapp', d => { if (d.op === 'replay' && d.id === this._app?.m.id) this._app.replay(true); });
   }

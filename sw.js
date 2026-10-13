@@ -126,6 +126,7 @@ const SHELL = [
   'app/miniapp/layout.js',
   'app/miniapp/runtime.js',
   'app/miniapp/kit.js',
+  'app/miniapp/quiet-links.js',
   'app/miniapp/gf-miniapp.js',
   'app/miniapp/ma-grid.js',
   'app/miniapp/ma-steps.js',

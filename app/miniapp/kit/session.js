@@ -64,6 +64,10 @@ export class AroundSession extends EventTarget {
     /** The observations in the circle (the map), and how many there are in all (the map shows up to 100). @type {AroundPoint[]} */
     this.obs = [];
     this.obsTotal = 0;
+    /** The observations of another circle on their way (those of the last one still shown, dimmed). */
+    this.obsLoading = false;
+    /** @type {AbortController | null} */
+    this.pointsAbort = null;
     /** What is said of a plant (Wikipédia), by plant id: the text, null (nothing), or absent (not asked yet). @type {Map<number, string | null>} */
     this.ethno = new Map();
     /** ↺: the last swipes, to undo. @type {{ id: number, liked: boolean, fav: boolean }[]} */
@@ -129,7 +133,11 @@ export class AroundSession extends EventTarget {
   /** Further (« Chercher jusqu’à … »): the distance, and the cards searched again at once. @param {number} m */
   widen(m) { this.app.set({ radius: m }); this.load(); }
 
-  /** The observations in the circle (the map): asked again 400 ms after the place or the distance changed. */
+  /**
+   * The observations in the circle (the map): asked again 250 ms after the place or the distance changed (the slider
+   * at rest); meanwhile `obsLoading` (the map dims the points shown, its circle breathing). A request overtaken by
+   * another is cancelled, and a late answer for another circle dropped.
+   */
   watchPoints() {
     const { point, radius } = this.c;
     const key = point ? radius + ':' + point : '';
@@ -137,15 +145,21 @@ export class AroundSession extends EventTarget {
     const first = !this.pointsFor && !this.obs.length;
     this.pointsFor = key;
     clearTimeout(this.timers.points);
-    if (first) this.#loadPoints();
-    else this.timers.points = setTimeout(() => this.#loadPoints(), 400);
+    this.pointsAbort?.abort();
+    this.pointsAbort = null;
+    if (!this.obsLoading) { this.obsLoading = true; queueMicrotask(() => this.changed()); }
+    if (first) { this.#loadPoints(); return; }
+    this.timers.points = setTimeout(() => this.#loadPoints(), 250);
   }
 
   async #loadPoints() {
     const { point, radius } = this.c;
     if (!point) return;
-    const found = await observationPointsAround(point, radius).catch(() => ({ points: [], total: 0 }));
-    if (this.c.point === point && this.c.radius === radius) { this.obs = found.points; this.obsTotal = found.total; this.changed(); }
+    const abort = this.pointsAbort = new AbortController();
+    const found = await observationPointsAround(point, radius, abort.signal).catch(() => (abort.signal.aborted ? null : { points: [], total: 0 }));
+    if (!found || abort.signal.aborted || this.pointsAbort !== abort) return;
+    this.pointsAbort = null;
+    if (this.c.point === point && this.c.radius === radius) { this.obs = found.points; this.obsTotal = found.total; this.obsLoading = false; this.changed(); }
   }
 
   // ── What grows around ────────────────────────────────────────────────
@@ -312,6 +326,7 @@ export class AroundSession extends EventTarget {
   /** Its requests and timers stopped (the app gone, or played again). */
   dispose() {
     this.abort?.abort();
+    this.pointsAbort?.abort();
     for (const t of Object.values(this.timers)) clearTimeout(t);
   }
 }

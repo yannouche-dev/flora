@@ -36,7 +36,7 @@ export class GfAttribution extends LitElement {
     const licenseUrl = safeUrl(m.licenseUrl), sourceUrl = safeUrl(m.sourceUrl || m.pageUrl);
     const label = licenseLabel(m.license);
     const license = label
-      ? (licenseUrl ? html`<a href=${licenseUrl} target="_blank" rel="noopener">${label}</a>` : label)
+      ? (licenseUrl ? html`<a href=${licenseUrl} target="_blank" rel="license noopener noreferrer">${label}</a>` : label)
       : nothing;
     const source = sourceUrl
       ? html`<a href=${sourceUrl} target="_blank" rel="noopener">${m.source || 'Wikimedia Commons'}</a>`
@@ -44,7 +44,7 @@ export class GfAttribution extends LitElement {
     // No « © » where nothing is reserved (CC0, public domain). A CC BY image whose author its record does not give:
     // its page names them, and is pointed to.
     const who = author ? html`${unreserved(m.license) ? '' : '© '}${author} · `
-      : needsAuthor(m.license) && sourceUrl ? html`<a href=${sourceUrl} target="_blank" rel="noopener">auteur sur sa page</a> · ` : nothing;
+      : needsAuthor(m.license) && sourceUrl ? html`<a href=${sourceUrl} target="_blank" rel="author noopener noreferrer">auteur sur sa page</a> · ` : nothing;
 
     return html`${who}${license}${license !== nothing ? ' · ' : nothing}${source}`;
   }
