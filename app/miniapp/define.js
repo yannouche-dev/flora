@@ -55,7 +55,10 @@ import { MODULES } from '../core/modules.js';
  * @property {{ default: (c: any, s: any) => string }} [fork]
  * @property {number} version
  * @property {boolean} [driven]                                   its component leads its steps (see above)
- * @property {{ keys?: string[], reset?: () => unknown }} owns     the session data it owns, emptied by « Rejouer »
+ * @property {(c: any, app: any) => boolean} [ownBar]             its component shows a steps bar of its own now: the box's is left out
+ * @property {{ keys?: string[], reset?: () => unknown, made?: { label: string, kept: [string, string] } }} owns     the session data it owns,
+ *   emptied by « Rejouer »; `made`: what it calls a collection it makes in Mes plantes, still its own (« le parcours en
+ *   cours »), and those the user made their own, kept (one, many — {n} the count)
  * @property {string[]} shared                                    the user's data it uses and never clears (said, not enforced)
  * @property {(data: any, from: number) => any} [migrate]
  */
@@ -142,6 +145,7 @@ export function defineMiniApp(spec) {
   if (!isObj(m.owns)) fail('owns must be an object: { keys?, reset? }');
   if (m.owns.keys !== undefined && (!Array.isArray(m.owns.keys) || m.owns.keys.some(k => typeof k !== 'string' || !k.startsWith('geoflora.')))) fail('owns.keys: storage keys of the app (geoflora.…)');
   if (m.owns.reset !== undefined && !isFn(m.owns.reset)) fail('owns.reset must be a function');
+  if (m.owns.made !== undefined && (typeof m.owns.made?.label !== 'string' || !Array.isArray(m.owns.made.kept) || m.owns.made.kept.length !== 2)) fail('owns.made: { label, kept: [one, many] }');
   if (!Array.isArray(m.shared) || m.shared.some(x => typeof x !== 'string')) fail('shared must be a list of what it uses of the user\'s');
 
   // The context and what is derived from it: one name each.
@@ -230,6 +234,7 @@ export function defineMiniApp(spec) {
   }
   if (m.full !== undefined && !steps.has(m.full)) fail(`full: no step « ${m.full} »`);
   if (m.fork !== undefined && !isFn(m.fork?.default)) fail('fork.default must be a function');
+  if (m.ownBar !== undefined && !isFn(m.ownBar)) fail('ownBar must be a function');
 
   // Along every path: a component, or a block of it, added once; a drop only of one there.
   for (const path of paths(m)) {

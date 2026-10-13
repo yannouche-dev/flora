@@ -1,8 +1,9 @@
 // @ts-check
 // The list of the ways to play, one card each: the mini-apps first (app/miniapps: each one opens alone on the
-// screen, at #/app/<id>), then the scenarios still played in Découvrir (core/scenarios.js) — what each one does and
-// « Jouer » (« Reprendre » for a mini-app with a game under way, « En cours » for the one on screen, « Rejouer » for
-// the scenario on screen). One list, two places:
+// screen, at #/app/<id>), then the other scenarios (core/scenarios.js: Scientifique) — what each one does and
+// « Jouer ». A mini-app with a game under way on this device offers two actions instead: « Continuer » (where it was
+// left: its last step) and « Recommencer » — asked first in a dialog, it empties what the mini-app owns, as its
+// « Rejouer » does (runtime.js#replay, the other tabs too), and opens it at its first step. One list, two places:
 //  - `page`: the Découvrir tab (#/discover, and the start page during the first steps), a page of its own — a title,
 //    each card with its picture (core/scenes.js); cards in a grid on a wide screen, a list on a phone; during the
 //    first steps, « Passer : montrer toute l'application »;
@@ -15,13 +16,18 @@ import { openView } from '../core/history.js';
 import { href, parse } from '../core/router.js';
 import { scene, sceneStyles } from '../core/scenes.js';
 import { SCENARIOS } from '../core/scenarios.js';
+import { leftAt } from '../core/around-sessions.js';
 import { discoverEvents, discovering, finishDiscover } from '../core/discover.js';
+import { openModal } from '../core/history.js';
 import { MINIAPPS } from '../miniapps/index.js';
+import { madeByApp } from '../core/collections.js';
+import { replayApp, replayItems } from '../miniapp/runtime.js';
 import { ui } from '../styles/ui.js';
+import { fr } from './start-screen.js';
 
 /**
- * @typedef {{ key: string, app: boolean, title: string, pitch: string, icon: import('../core/icons.js').IconName, scene: string | null,
- *   verb: string, hint: string, here: boolean, run: () => void }} Entry
+ * @typedef {{ key: string, app: import('../miniapps/index.js').MiniAppEntry | null, title: string, pitch: string, icon: import('../core/icons.js').IconName,
+ *   scene: string | null, here: boolean, underWay: boolean, run: () => void }} Entry
  */
 
 /** The entries, in the launcher's order, as they are now (the address, the games under way). @returns {Entry[]} */
@@ -30,25 +36,16 @@ function entries() {
   return [
     ...MINIAPPS.map(a => {
       const here = r.name === 'app' && r.id === a.id;
-      const resume = !here && a.resume();
-      return { key: a.id, app: true, title: a.title, pitch: a.pitch, icon: a.icon, scene: a.scene, here,
-        verb: here ? 'En cours' : resume ? 'Reprendre' : 'Jouer', hint: resume ? 'Reprendre la partie là où vous l’aviez laissée' : '',
-        run: () => openView(href.app(a.id)) };
+      return { key: a.id, app: a, title: a.title, pitch: a.pitch, icon: a.icon, scene: a.scene, here, underWay: here || a.underWay(),
+        // « Jouer » opens its start; « Continuer », the step it was left at (the box goes back to the start if that
+        // step may no longer be entered).
+        run: () => { a.play?.(); if (!here) openView(href.app(a.id, a.underWay() ? leftAt(a.id) : null)); } };
     }),
-    ...SCENARIOS.map(s => {
-      const again = Boolean(s.played?.());
-      return { key: s.key, app: false, title: s.title, pitch: s.pitch, icon: s.icon, scene: s.scene ?? null, here: false,
-        verb: again ? 'Rejouer' : 'Jouer', hint: again ? 'Tout reprendre du début : lieu, distance, cartes, étapes' : '', run: s.play };
-    })
+    ...SCENARIOS.map(s => ({ key: s.key, app: null, title: s.title, pitch: s.pitch, icon: s.icon, scene: s.scene ?? null, here: false, underWay: false, run: s.play }))
   ];
 }
 
 export class GfLauncher extends LitElement {
-  static properties = {
-    /** The Découvrir tab's page (else: the launcher's dialog). */
-    page: { type: Boolean, reflect: true }
-  };
-
   static styles = [ui, sceneStyles, css`
     :host { display: block; }
     ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
@@ -58,6 +55,14 @@ export class GfLauncher extends LitElement {
     h2, h3 { margin: 0; font-size: 1rem; line-height: 1.3; }
     li p { margin: 0; font-size: 0.86rem; color: var(--gf-text-muted); }
     li button { justify-self: start; margin-top: 6px; }
+    li .acts { display: flex; flex-wrap: wrap; gap: 8px; justify-self: start; }
+    li .acts button { margin-top: 6px; }
+    dialog.ask { width: min(440px, calc(100vw - 24px)); padding: 20px; border: 0; border-radius: 16px; background: var(--gf-surface); color: var(--gf-text); box-shadow: var(--gf-shadow-float); }
+    dialog.ask::backdrop { background: rgb(0 0 0 / 45%); }
+    dialog.ask h2 { margin: 0 0 8px; font-size: 1.15rem; }
+    dialog.ask p { margin: 0 0 16px; color: var(--gf-text-muted); }
+    dialog.ask .row { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
+    dialog.ask .row button { margin: 0; }
 
     /* The page: the tab's own screen. */
     :host([page]) { height: 100%; overflow-y: auto; background: var(--gf-bg); container-type: inline-size; }
@@ -76,6 +81,7 @@ export class GfLauncher extends LitElement {
     .page h2 { margin-top: 10px; font-size: 1.2rem; }
     .page li p { font-size: 0.95rem; line-height: 1.45; }
     .page li button { margin-top: 10px; min-width: 132px; min-height: 44px; font-size: 1rem; }
+    .page li .acts button { margin-top: 10px; }
     .page .skip { margin: 24px 0 0; text-align: center; font-size: 0.9rem; }
     .page .skip a { display: inline-flex; align-items: center; min-height: 44px; }
     /* A phone: a list, a small picture beside the words. */
@@ -90,13 +96,22 @@ export class GfLauncher extends LitElement {
       .pic .ic { width: 52px; height: 52px; border-radius: 14px; font-size: 1.5rem; }
       .page h2 { margin-top: 0; font-size: 1.05rem; }
       .page li p { font-size: 0.875rem; }
-      .page li button { margin-top: 6px; min-width: 0; }
+      .page li button, .page li .acts button { margin-top: 6px; min-width: 0; }
     }
   `];
+
+  static properties = {
+    /** The Découvrir tab's page (else: the launcher's dialog). */
+    page: { type: Boolean, reflect: true },
+    /** « Recommencer » asked for (its entry, and what it will delete), waiting for its confirmation. */
+    _asking: { state: true }
+  };
 
   constructor() {
     super();
     this.page = false;
+    /** @type {(Entry & { items: { gone: string[], kept: string[] } }) | null} */
+    this._asking = null;
   }
 
   #onChange = () => this.requestUpdate();
@@ -118,6 +133,38 @@ export class GfLauncher extends LitElement {
     this.requestUpdate();
   }
 
+  /** « Recommencer »: asked first, in a dialog (Annuler, Échap: nothing changes). @param {Entry} e */
+  async #ask(e) {
+    if (!e.app) return;
+    // What will be deleted, said: what it made in Mes plantes (its favourites, its parcours), the game.
+    const m = (await e.app.load()).default;
+    this._asking = { ...e, items: replayItems(m, await madeByApp(m.id).catch(() => ({ favorites: [], collections: [], kept: { favorites: 0, collections: 0 } }))) };
+    await this.updateComplete;
+    openModal(/** @type {HTMLDialogElement | null} */ (this.renderRoot.querySelector('dialog.ask')));
+  }
+
+  /**
+   * « Recommencer » confirmed: what the mini-app owns emptied (its « Rejouer »: here, in the box if it is the one on
+   * screen, and in the other tabs), then the mini-app at its first step.
+   */
+  async #restart() {
+    const e = this._asking, a = e?.app;
+    const dialog = /** @type {HTMLDialogElement | null} */ (this.renderRoot.querySelector('dialog.ask'));
+    if (!e || !a) return;
+    if (e.here) {
+      // The one on screen: its box plays it again (event ma-replay, up to gf-miniapp).
+      this.dispatchEvent(new CustomEvent('ma-replay', { detail: { id: a.id }, bubbles: true, composed: true }));
+    } else {
+      await replayApp((await a.load()).default);
+      a.play?.();
+      openView(href.app(a.id, 'start'));
+    }
+    dialog?.close();
+    this._asking = null;
+    this.dispatchEvent(new CustomEvent('launched', { detail: e.key, bubbles: true, composed: true }));
+    this.requestUpdate();
+  }
+
   /** @param {Entry} e */
   #card(e) {
     const id = 'play-' + e.key;
@@ -129,13 +176,32 @@ export class GfLauncher extends LitElement {
       ${picture}
       ${title}
       <p>${e.pitch}</p>
-      <button class="primary" type="button" ?disabled=${e.here} aria-label=${`${e.verb} : ${e.title}`} title=${e.hint || nothing}
-        @click=${() => this.#play(e)}>${e.verb}</button>
+      ${e.underWay ? html`<div class="acts">
+          <button class="primary continue" type="button" aria-label=${`Continuer : ${e.title}`} title="Reprendre la partie là où vous l’aviez laissée"
+            @click=${() => this.#play(e)}>Continuer</button>
+          <button class="secondary restart" type="button" aria-label=${`Recommencer : ${e.title}`} title="Tout recommencer depuis le début"
+            @click=${() => this.#ask(e)}>Recommencer</button>
+        </div>`
+        : html`<button class="primary" type="button" aria-label=${`Jouer : ${e.title}`} @click=${() => this.#play(e)}>Jouer</button>`}
     </li>`;
   }
 
+  /** The confirmation of « Recommencer » (a step in history: Back says no). */
+  #askView() {
+    const e = this._asking;
+    return html`<dialog class="ask" aria-labelledby="restart-title" aria-describedby="restart-text" @close=${() => { this._asking = null; }}>
+      <h2 id="restart-title">${fr('Recommencer : tout effacer ?')}</h2>
+      <p id="restart-text">${e ? fr(`Seront supprimés : ${e.items.gone.join(', ')}. Cette action est définitive.`) : ''}${(e?.items.kept ?? []).map(k => ' ' + fr(k))}</p>
+      <p class="kept">${e ? fr(`Ce qui ne vient pas de ${e.title} reste : vos autres plantes et favoris, vos lieux, vos réglages.`) : ''}</p>
+      <div class="row">
+        <button type="button" autofocus @click=${(/** @type {Event} */ ev) => /** @type {HTMLElement} */ (ev.currentTarget).closest('dialog')?.close()}>Annuler</button>
+        <button class="danger" type="button" @click=${() => this.#restart()}>${icon('arrow-counterclockwise')} Recommencer</button>
+      </div>
+    </dialog>`;
+  }
+
   render() {
-    const list = html`<ul>${entries().map(e => this.#card(e))}</ul>`;
+    const list = html`<ul>${entries().map(e => this.#card(e))}</ul>${this.#askView()}`;
     if (!this.page) return list;
     return html`<section class="page" aria-labelledby="discover-title">
       <header>

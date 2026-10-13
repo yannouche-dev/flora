@@ -1,14 +1,29 @@
 // @ts-check
-// Rencontres: the plants observed around you, one card at a time — right if it pleases you, left if not. Ported
-// whole from Découvrir (gf-discover, scenario 'meet'): its start (« Autour de moi », a commune, « Reprendre »), how
-// far to look over the map, then the cards, the matches and all of them; the plant open over it at ?p=. Its element
-// leads the steps (driven) and says each one it reaches.
-// Owns: the session kept by core/discover.js — the place, the distance, the cards swiped, this game's matches, the
-// steps of its guided way and the fork. Shares (never cleared): the favourites a match adds, the first steps of the
-// app (the tabs that came), the settings.
+// Rencontres: the plants observed around you, one card at a time — right if it pleases you, left if not. Its start
+// (« Autour de moi », a commune, « Reprendre » the place kept), how far to look over the map, then the cards, the
+// matches and all of them; the plant open over them at ?p=. During the first steps of the app, its guided way: the
+// map, the cards and the plant's panes in one layout transformed step by step, under a steps bar of its own (ownBar).
+// Built from the kit (app/miniapp/kit): ma-guided during the first steps, else ma-distance then ma-around-list.
+// Owns — everything « Rejouer » / « Recommencer » empties, here and in the other tabs, as if never opened:
+//  - geoflora.app.rencontres.state: its place and name, distance, cards swiped right (this game's matches) and left,
+//    the step it was left at; geoflora.app.rencontres.layout: its columns' widths (runtime.js#replay);
+//  - geoflora.discoverLayout: the widths of the map and the cards of its guided way;
+//  - in geoflora.discover, its guided way: the step reached, the fork (cueillette or science), the first match
+//    celebrated (core/discover.js#replayMeet);
+//  - in memory: the cards found, the observations, what Wikipédia says, the undo stack, the deck's order, the view
+//    chosen, the swipe hint shown (kit/session.js: a new session, forgetGame).
+//  - in Mes plantes, the favourites its matches added (their origin, core/collections.js#forgetMadeBy) — not one
+//    that was a favourite before the match, nor one set elsewhere, nor one the user then put in a collection or
+//    gave a note (made their own: place-model.js#promoted).
+// Shares (never cleared, the user's whole app): Mes plantes but for those favourites, the places, the first
+// steps of the app (the tabs that came, the plants seen), the settings and the plant sheets' layouts, the answers of
+// the online services kept in cache (shared with the rest of the app).
 
-import { replayMeet } from '../core/discover.js';
+import { forgetMadeBy } from '../core/collections.js';
+import { discovering, replayMeet } from '../core/discover.js';
 import { defineMiniApp } from '../miniapp/define.js';
+import { forgetGame } from '../miniapp/kit/session.js';
+import { aroundContext, aroundSteps, locate } from '../miniapp/kit/around.js';
 
 export default defineMiniApp({
   id: 'rencontres',
@@ -18,16 +33,12 @@ export default defineMiniApp({
   pitch: 'Les plantes observées autour de vous, une carte à la fois : à droite si elle vous plaît, à gauche sinon.',
   uses: ['inaturalist'],
   exit: { label: 'Quitter Rencontres' },
-  driven: true,
-  owns: { reset: replayMeet },
-  shared: ['favoris (les matchs y restent)', 'premiers pas de l’application', 'réglages'],
-  context: { focus: { init: null } },
+  owns: { keys: ['geoflora.discoverLayout'], reset: () => { replayMeet(); forgetGame('rencontres'); return forgetMadeBy('rencontres'); } },
+  shared: ['Mes plantes (sauf les favoris ajoutés par ses matchs)', 'lieux', 'premiers pas de l’application', 'réglages'],
+  context: aroundContext(),
+  actions: { locate },
+  ownBar: (c, app) => discovering() && app.step.id !== 'start',
   columns: [{ id: 'main', base: 'fill', min: 300, rank: 1, heavy: true, title: 'Rencontres' }],
   phone: { rows: [['main', '1fr']] },
-  steps: [
-    { id: 'start', kind: 'start', label: 'Départ', about: 'Autour de vous, ou d’une commune', next: 'map',
-      add: [{ id: 'meet', use: 'meet', col: 'main', title: 'Rencontres' }] },
-    { id: 'map', label: 'Carte', about: 'Jusqu’où chercher', next: 'cards' },
-    { id: 'cards', label: 'Rencontres', about: 'Une carte à la fois' }
-  ]
+  steps: aroundSteps('meet', { map: [{ id: 'meet', use: 'meet', col: 'main', title: 'Rencontres' }] })
 });

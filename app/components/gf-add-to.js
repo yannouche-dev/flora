@@ -1,6 +1,6 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
-import { FAVORITES_ID, getMembership, matchCollections, newCollection, saveCollection, setInCollection, withPlant } from '../core/collections.js';
+import { FAVORITES_ID, getMembership, matchCollections, newCollection, promoteFavorite, saveCollection, setInCollection, withPlant } from '../core/collections.js';
 import { href } from '../core/router.js';
 import { openModal } from '../core/history.js';
 import { setTarget, StoreController } from '../core/store.js';
@@ -107,6 +107,8 @@ export class GfAddTo extends LitElement {
     this._busy = true;
     try {
       const created = newCollection('list', { name });
+      // A favourite of a game put in a collection: the user's own now.
+      await promoteFavorite(this.plant.id);
       await saveCollection(withPlant(created, this.plant));
       setTarget(created.id);
       this._creating = false;

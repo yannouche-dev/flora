@@ -1,7 +1,7 @@
 // The Découvrir tab: the list of the ways to play (gf-launcher, the same as the launcher's dialog) as a page of its
-// own — the mini-apps first, then the scenarios still played in Découvrir. « Jouer » opens one, « Quitter » comes
+// own — the mini-apps first, then Scientifique. « Jouer » opens one, « Quitter » comes
 // back to the list; the first launch lands on it, and a mini-app played there brings the tabs; the old addresses of
-// Découvrir still lead where they did. Rencontres' services answered here.
+// Découvrir lead to the mini-apps. Rencontres' services answered here.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 
 test.use({ reducedMotion: 'reduce' });
@@ -42,14 +42,20 @@ test('l’onglet Découvrir montre la liste ; « Jouer » ouvre Rencontres, « Q
   await expect(current).toContainText('Découvrir');
 });
 
-test('une partie en cours se reprend ; Cueillette prudente se joue dans Découvrir', async ({ app, page }) => {
+test('une partie en cours se continue ; Cueillette prudente est une mini-application', async ({ app, page }) => {
   await app.open('#/discover');
   await expect(list(page).getByRole('button', { name: 'Jouer : Parcours botanique' })).toBeVisible();
-  await page.evaluate(async () => (await import('/app/core/discover.js')).setDiscoverPoint([2.35, 48.85], 'Paris'));
-  await expect(list(page).getByRole('button', { name: 'Reprendre : Rencontres' })).toBeVisible();
+  // A place kept by Rencontres: « Continuer » (and « Recommencer ») for it only.
+  await page.evaluate(() => localStorage.setItem('geoflora.app.rencontres.state', JSON.stringify({ v: 1, path: ['start', 'map', 'cards'], ctx: { point: [2.35, 48.85], place: 'Paris' }, finished: false })));
+  await app.go('#/collections');
+  await app.go('#/discover');
+  await expect(list(page).getByRole('button', { name: 'Continuer : Rencontres' })).toBeVisible();
+  await expect(list(page).getByRole('button', { name: 'Recommencer : Rencontres' })).toBeVisible();
+  await expect(list(page).getByRole('button', { name: 'Jouer : Cueillette prudente' })).toBeVisible();
   await list(page).getByRole('button', { name: 'Jouer : Cueillette prudente' }).click();
-  await expect.poll(() => hash(page)).toBe('#/discover?s=harvest');
-  await expect(page.locator('gf-discover')).toBeVisible();
+  await expect.poll(() => hash(page)).toBe('#/app/cueillette/start');
+  // Launched, the harvest mode comes on.
+  await expect.poll(() => app.state('harvestMode')).toBe(true);
   await expect(list(page)).toHaveCount(0);
 });
 
@@ -58,6 +64,7 @@ test('les anciennes adresses de Découvrir mènent où elles menaient', async ({
   await app.open(`#/discover?p=${ail}`);
   await expect.poll(() => hash(page)).toMatch(new RegExp(`^#/app/rencontres/[a-z]+\\?p=${ail}$`));
   await app.go('#/discover?s=mosaic');
+  await expect.poll(() => hash(page)).toBe('#/app/mosaique/start');
   await expect(page.getByRole('heading', { name: 'La mosaïque du coin' })).toBeVisible();
   // An unknown scenario: the list.
   await app.go('#/discover?s=inconnu');
@@ -76,7 +83,7 @@ test.describe('premier lancement', () => {
 
     await list(page).getByRole('button', { name: 'Jouer : Rencontres' }).click();
     await page.getByRole('button', { name: 'Autour de moi' }).click();
-    const discover = page.locator('gf-discover');
+    const discover = page.locator('ma-guided');
     await discover.locator('.g-steps [data-step="go"]').click();
     await expect(discover.locator('.swipe-card.top')).toHaveAttribute('data-id', String(plantId('Allium ursinum')));
     await page.keyboard.press('ArrowRight');
@@ -84,7 +91,7 @@ test.describe('premier lancement', () => {
 
     await page.locator('gf-miniapp .quit').click();
     await expect.poll(() => hash(page)).toBe('#/discover');
-    await expect(list(page).getByRole('button', { name: 'Reprendre : Rencontres' })).toBeVisible();
+    await expect(list(page).getByRole('button', { name: 'Continuer : Rencontres' })).toBeVisible();
     await expect.poll(() => app.tabs()).toContain('Mes plantes');
     expect(await app.tabs()).not.toContain('Flore');
   });

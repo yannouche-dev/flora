@@ -11,7 +11,7 @@
 //  - Kept under geoflora.app.<id>.state: { v, path, ctx (the persist keys), finished }, written 300 ms after a change.
 //    The start is always shown first; the path kept is offered as « Reprendre ».
 //  - Events: 'change' (anything to render again), 'navigate' (detail { step, replace? }: a step reached, for the
-//    address), 'exit' (the way out asked).
+//    address), 'exit' (the way out asked), 'scenarios' (the launcher asked for, over the app).
 
 import { config } from '../config.js';
 import { MODULES, moduleOn } from '../core/modules.js';
@@ -29,6 +29,40 @@ import { layoutAt } from './layout.js';
 
 /** Storage key of a mini-app's state, or of its layout. @param {string} id @param {'state' | 'layout'} part */
 export const storageKey = (id, part) => config.storageKeys.appPrefix + id + '.' + part;
+
+/**
+ * What « Rejouer » / « Recommencer » will delete, said in its confirmation — the favourites its matches added, each
+ * collection it made in Mes plantes still its own (« le parcours en cours (4 plantes) »), the game — and what it keeps
+ * of what came from it (the user's own: a parcours finished, a favourite put in a collection). Pure.
+ * @param {Manifest} m @param {import('../core/place-model.js').Made} made @returns {{ gone: string[], kept: string[] }}
+ */
+export function replayItems(m, made) {
+  const s = (/** @type {number} */ n) => n > 1 ? 's' : '';
+  const n = made.favorites.length;
+  const label = m.owns.made?.label ?? 'la collection';
+  const count = (/** @type {[string, string]} */ [one, many], /** @type {number} */ k) => (k > 1 ? many : one).replace('{n}', String(k));
+  return {
+    gone: [
+      ...(n ? [`${n} favori${s(n)} ajouté${s(n)} par ${m.title}`] : []),
+      ...made.collections.map(c => `${label}${c.name ? ` « ${c.name} »` : ''} (${c.plants} plante${s(c.plants)})`),
+      'la partie en cours'
+    ],
+    kept: [
+      ...(made.kept.collections && m.owns.made ? [count(m.owns.made.kept, made.kept.collections)] : []),
+      ...(made.kept.favorites ? [count(['Votre favori venu de cette partie, rangé ou annoté depuis, est conservé.', 'Vos {n} favoris venus de cette partie, rangés ou annotés depuis, sont conservés.'], made.kept.favorites)] : [])
+    ]
+  };
+}
+
+/**
+ * « Recommencer » from the list of the ways to play, the mini-app not on screen: what it owns emptied as its
+ * « Rejouer » does (here and in the other tabs), nothing left behind. @param {Manifest} m
+ */
+export async function replayApp(m) {
+  const app = new MiniApp(m);
+  await app.replay();
+  app.dispose();
+}
 
 /** @param {string} key @returns {any} */
 function readJSON(key) {
@@ -188,7 +222,7 @@ export class MiniApp extends EventTarget {
    */
   async replay(remote = false) {
     await this.m.owns.reset?.();
-    for (const key of [...(this.m.owns.keys ?? []), storageKey(this.m.id, 'state')]) {
+    for (const key of [...(this.m.owns.keys ?? []), storageKey(this.m.id, 'state'), storageKey(this.m.id, 'layout')]) {
       try { localStorage.removeItem(key); } catch { /* nothing kept */ }
     }
     this.cleared();
@@ -232,6 +266,9 @@ export class MiniApp extends EventTarget {
   /** The way out asked (the box asks for confirmation if the manifest wants it). */
   exit() { this.#emit('exit'); }
 
+  /** The launcher asked for (« Quitter … : autres scénarios »): the box opens it over the app. */
+  scenarios() { this.#emit('scenarios'); }
+
   /** What the exit may change in the app (exit.handoff), within the manifest's grants, and where it goes (to). */
   handoff() {
     const all = this.m.exit.handoff?.(this.c, this.path) ?? {};
@@ -245,8 +282,9 @@ export class MiniApp extends EventTarget {
   }
 
   /**
-   * The screen of a start or screen step, from its manifest: with the exit of the manifest (never another one),
-   * and, a module it needs switched off, that said in place of an error, the action disabled.
+   * The screen of a start or screen step, from its manifest: with the exit of the manifest unless the step gives its
+   * own (« Quitter … : autres scénarios »), and, a module it needs switched off, that said in place of an error, the
+   * action disabled.
    * @param {Step} step @returns {import('../components/start-screen.js').StartSpec}
    */
   startSpec(step) {
@@ -256,17 +294,31 @@ export class MiniApp extends EventTarget {
       ...spec,
       error: off ? `« ${off} » est désactivé dans Réglages › Modules : ${this.m.title} en a besoin.` : spec.error ?? this.error,
       primary: off ? { ...spec.primary, disabled: true } : spec.primary,
-      exit: { label: this.m.exit.label, icon: 'x-lg', run: () => this.exit() }
+      exit: spec.exit ?? { label: this.m.exit.label, icon: 'x-lg', run: () => this.exit() }
     };
   }
 
   /** What is kept: the path, the persist keys, finished once. @returns {Saved} */
   saved() { return { v: this.m.version, path: this.path, ctx: this.ctx.persisted(), finished: this.finished }; }
 
-  /** Written now (the box leaving), not 300 ms later. */
+  /**
+   * Nothing to keep: at its start, its context as it starts, never finished — as if never opened (no state written:
+   * after « Rejouer », the app leaves nothing behind).
+   */
+  get pristine() {
+    const ctx = this.ctx.persisted();
+    return this.path.length === 1 && !this.finished
+      && Object.entries(ctx).every(([k, v]) => JSON.stringify(v) === JSON.stringify(this.m.context[k].init));
+  }
+
+  /** Written now (the box leaving), not 300 ms later; nothing to keep, nothing written (the key removed). */
   flush() {
     clearTimeout(this.saveTimer);
-    try { localStorage.setItem(storageKey(this.m.id, 'state'), JSON.stringify(this.saved())); } catch { /* not kept */ }
+    const key = storageKey(this.m.id, 'state');
+    try {
+      if (this.pristine) localStorage.removeItem(key);
+      else localStorage.setItem(key, JSON.stringify(this.saved()));
+    } catch { /* not kept */ }
   }
 
   /** Stops its loads and timers (the box gone). */

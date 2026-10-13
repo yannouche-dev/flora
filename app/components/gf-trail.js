@@ -11,7 +11,7 @@ import { watchLocation, whenGranted } from '../core/geo.js';
 import { photoOf } from '../core/thumb.js';
 import { atPlace, placeNameAt } from '../core/geoservices.js';
 import { findPlants } from '../core/search.js';
-import { distance, entriesOf, getPlace, lastEntry, newPlace, plantMarkers, savePlace, spotEvents, updatePlace, withPlant, withoutPlant, refreshMembership } from '../core/collections.js';
+import { distance, entriesOf, getPlace, lastEntry, newPlace, plantMarkers, promotePlace, savePlace, spotEvents, updatePlace, withPlant, withoutPlant, refreshMembership } from '../core/collections.js';
 import * as db from '../core/db.js';
 import { href, parse } from '../core/router.js';
 import { encodeCollection, share } from '../core/share.js';
@@ -29,10 +29,15 @@ import { openMap3d } from './gf-map3d.js';
 const KEY = 'geoflora.trail', LIST = 'geoflora.trails', DONE = 'geoflora.trailDone';
 // eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
 const read = (/** @type {string} */ k, /** @type {any} */ d) => { try { return JSON.parse(localStorage.getItem(k) || 'null') ?? d; } catch { return d; } };
+// Nothing (null): the key removed — a parcours never opened, or played again, leaves none behind.
 // eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
-const write = (/** @type {string} */ k, /** @type {any} */ v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* not kept */ } };
-/** A parcours under way on this device (the list of the ways to play says « Reprendre »). */
+const write = (/** @type {string} */ k, /** @type {any} */ v) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch { /* not kept */ } };
+/** A parcours under way on this device (the list of the ways to play says « Continuer »). */
 export const walkUnderWay = () => Boolean(read(KEY, null));
+/** The parcours this device kept (under way, to take up again, just ended): theirs before origins were recorded. @returns {string[]} */
+export const keptWalks = () => [...(/** @type {string[]} */ (read(LIST, []))), read(DONE, null)].filter(x => typeof x === 'string');
+/** The parcours under way (its place id), if any. @returns {string | null} */
+export const walkOn = () => read(KEY, null);
 
 /** A new parcours' name, until the place where it starts is known (« Mon parcours botanique en forêt de … »). */
 const NAMED = 'Mon parcours botanique';
@@ -502,7 +507,8 @@ export class GfTrail extends LitElement {
     this._locating = true;
     try {
       const name = where ? `${NAMED} ${atPlace({ name: where, kind: 'commune', commune: '' })}` : NAMED;
-      const place = newPlace(at, { name: name.slice(0, 80), notes: 'Parcours botanique' });
+      // Made by the Parcours (its origin): « Recommencer » it, and the walk goes with every plant in it.
+      const place = newPlace(at, { name: name.slice(0, 80), notes: 'Parcours botanique', origin: { app: 'parcours' } });
       // Started where I stand: its point is the walk's first step (the recap's distance counts from it).
       if (!where) /** @type {any} */ (place.properties).startedHere = true;
       // Asked at once; given once the parcours is saved (it may answer first: from the cache).
@@ -575,7 +581,7 @@ export class GfTrail extends LitElement {
     const plant = await db.get('plants', hit.id).catch(() => null) || { id: hit.id, scientificName: hit.scientificName, vernacularName: hit.vernacularName };
     const position = this._fix ? { coordinates: this._fix.coordinates, accuracy: Math.round(this._fix.accuracy) } : undefined;
     // Added to the parcours as stored now (another add, another tab, the altitudes may have written meanwhile).
-    const next = await this.#update(trail.id, current => withPlant(current, plant, position, { again: true }));
+    const next = await this.#update(trail.id, current => withPlant(current, plant, position, { again: true, origin: { app: 'parcours' } }));
     if (!next) return;
     const added = /** @type {any} */ (lastEntry(next)).id;
     this._fresh = added;
@@ -612,6 +618,8 @@ export class GfTrail extends LitElement {
     const t = place || this._trail;
     if (!t) return;
     const url = href.shared(await encodeCollection(t));
+    // Shared: the user's own now (« Recommencer » the Parcours keeps it).
+    promotePlace(t.id);
     const result = await share({ title: t.properties.name + ' — GeoFlora', text: `${t.properties.name} · ${this.#count(t)}`, url });
     if (result === 'copied') this.#say('Lien du parcours copié : collez-le où vous voulez');
   }
@@ -640,11 +648,17 @@ export class GfTrail extends LitElement {
     if (!this.#toastOpen) this.#toastTimer = setTimeout(() => { this._toast = null; }, 4500);
   }
 
-  /** « Terminer »: the parcours stays in Mes plantes; its recap shows; another one can start. */
+  /**
+   * « Terminer »: the parcours stays in Mes plantes; its recap shows; another one can start. With plants, it is the
+   * user's own now: « Recommencer » the Parcours keeps it (collections.js#promotePlace).
+   */
   async #end() {
     await this.#flushName();
+    const ended = this._trail;
     write(KEY, null);
-    write(DONE, this._trail?.id ?? null);
+    write(DONE, ended?.id ?? null);
+    // Promoted once no longer under way: the reload its change brings (spotEvents) finds the recap, not the walk.
+    if (ended?.properties.plants.length) promotePlace(ended.id);
     this.#stopGeo?.(); this.#stopGeo = null; this.#waitGeo?.(); this.#waitGeo = null;
     this._done = this._trail;
     this._trail = null; this._q = ''; this._hits = []; this._sel = null; this._selEntry = null; this._peek = false; this._toast = null;
@@ -708,7 +722,8 @@ export class GfTrail extends LitElement {
    */
   async #update(id, change) {
     try {
-      const saved = await updatePlace(id, change);
+      // Written by the Parcours itself: its walk stays its own (« Recommencer » takes it away while under way).
+      const saved = await updatePlace(id, change, { by: 'parcours' });
       if (this._trail?.id === id) this._trail = saved;
       return saved;
     } catch (error) {

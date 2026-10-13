@@ -9,7 +9,7 @@ import { moduleOn } from '../core/modules.js';
 import { observationsAround, RADII, savedRadius, saveRadius } from '../core/nearby.js';
 import { addressAt, zoneShape } from '../core/geoservices.js';
 import { bundledOutline } from '../core/territory.js';
-import { discoverState } from '../core/discover.js';
+import { keptPlace } from '../core/around-sessions.js';
 import { regionOf } from '../core/regions.js';
 import * as sources from '../core/sources.js';
 import { MAP_DEFAULTS } from '../core/sheet-blocks.js';
@@ -198,7 +198,7 @@ export class GfSheetMap extends LitElement {
 
   /** Where I am, as far as the app knows without asking: my last position, else the place chosen in Découvrir. */
   get #whereIAm() {
-    return /** @type {[number, number] | null} */ (this._near?.point || lastFix()?.coordinates || discoverState().point || null);
+    return /** @type {[number, number] | null} */ (this._near?.point || lastFix()?.coordinates || keptPlace()?.point || null);
   }
 
   /** My region (IGN address of where I am), once. */

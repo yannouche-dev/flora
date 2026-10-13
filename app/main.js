@@ -8,7 +8,8 @@ import { fromHash, startUrlSync } from './core/query.js';
 import { context } from './core/context.js';
 import { parse } from './core/router.js';
 import { loadIndex, runSearch } from './core/search.js';
-import { anyHarvest, hasSpots, refreshMembership, requestPersistence, spotEvents, writeBackup } from './core/collections.js';
+import { anyHarvest, hasSpots, refreshMembership, requestPersistence, spotEvents, tagLegacyOrigins, writeBackup } from './core/collections.js';
+import { keptWalks, walkOn } from './components/gf-trail.js';
 import { initHarvestMode, store } from './core/store.js';
 import { loadNotes } from './core/sheet-notes.js';
 
@@ -29,6 +30,8 @@ async function start() {
     store.set({ meta, offline, statusText: 'Préparation de la recherche…' });
     await loadIndex();
     await refreshMembership().catch(error => console.error(error));
+    // What the mini-apps made before its origin was recorded, tagged once (their « Recommencer » takes it away).
+    tagLegacyOrigins({ walks: keptWalks(), walk: walkOn() }).catch(error => console.error(error));
     // Collections saved before the backup existed get one now (an empty database never erases it), with the notes.
     notes.then(() => writeBackup()).catch(error => console.error(error));
     initHarvestMode(await anyHarvest().catch(() => false));

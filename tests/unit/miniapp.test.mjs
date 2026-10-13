@@ -201,9 +201,12 @@ test('runtime : « Rejouer » vide ce que l’application possède, et seulement
   assert.equal(localStorage.getItem('geoflora.favorites-of-the-user'), '"kept"', 'what it only uses stays');
   assert.deepEqual(navigations, [{ step: 'start', replace: true }]);
   app.flush();
+  // Nothing left behind, as if never opened: no state, no layout.
+  assert.equal(localStorage.getItem(storageKey('meet-replay', 'state')), null);
+  assert.equal(localStorage.getItem(storageKey('meet-replay', 'layout')), null);
   // As found again on the next visit: nothing to take up again.
   const again = new MiniApp(m);
-  assert.deepEqual([again.c.point, again.savedPath, again.finished, again.resume()], [null, ['start'], false, null]);
+  assert.deepEqual([again.c.point, again.savedPath, again.finished, again.resume()], [null, [], false, null]);
   again.dispose();
   app.dispose();
 });
