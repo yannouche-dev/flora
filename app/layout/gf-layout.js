@@ -116,6 +116,9 @@ export class GfLayout extends LitElement {
     .bar .spacer { flex: 1; }
     .bar button, .bar summary { min-height: 34px; padding: 4px 12px; font-size: 0.85rem; }
     .bar .icon-btn { width: 36px; height: 36px; padding: 0; font-size: 1rem; }
+    .bar a.btn { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; box-sizing: border-box; padding: 4px 12px; font-size: 0.85rem; color: var(--gf-text); text-decoration: none;
+      border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill); background: var(--gf-surface); }
+    .bar a.btn:hover { border-color: var(--gf-accent); }
     .presets { position: relative; }
     .presets summary { list-style: none; display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill); cursor: pointer; background: var(--gf-surface); }
     .presets summary::-webkit-details-marker { display: none; }
@@ -761,6 +764,7 @@ export class GfLayout extends LitElement {
           <summary title="Dispositions toutes prêtes" aria-label="Modèles de disposition">${icon('list-ul')} <span class="lbl">Modèles</span></summary>
           <ul>${PRESETS.map(p => html`<li><a href=${href.layout(p.spec)} @click=${(/** @type {Event} */ e) => /** @type {HTMLElement} */ (e.currentTarget).closest('details')?.removeAttribute('open')}><b>${p.title}</b><small>${p.about}</small></a></li>`)}</ul>
         </details>
+        <a class="btn" href=${href.builder()} title="Créer une app pas à pas : une grille, puis des blocs">${icon('window-desktop')} <span class="lbl">Créer une app</span></a>
         <button type="button" aria-pressed=${this._editing ? 'true' : 'false'} aria-label="Modifier la disposition" title="Modifier la disposition" @click=${() => this.#edit()}>${icon('pencil')} <span class="lbl">Modifier la disposition</span></button>
         <button class="icon-btn" type="button" title=${this._copied ? 'Lien copié' : 'Partager ce lien (la disposition, la plante, la zone, la recherche)'}
           aria-label=${this._copied ? 'Lien copié' : 'Partager ce lien'} @click=${() => this.#share()}>${icon(this._copied ? 'check-lg' : 'share')}</button>

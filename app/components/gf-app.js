@@ -31,7 +31,8 @@ const SCREENS = {
   settings: () => import('./gf-settings.js'),
   legal: () => import('./gf-legal.js'),
   app: () => import('../miniapp/gf-miniapp.js'),
-  layout: () => import('../layout/gf-layout.js')
+  layout: () => import('../layout/gf-layout.js'),
+  builder: () => import('../layout/gf-builder.js')
 };
 /** The screens asked for, and those loaded. @type {Set<string>} */
 const asked = new Set(), loaded = new Set();
@@ -52,7 +53,7 @@ function screenReady(name, then) {
 /** @param {string} name */
 const tabOf = name => name === 'map' ? 'map' : name === 'discover' ? 'discover'
   : ['collections', 'spot', 'spot-new', 'shared'].includes(name) ? 'mine'
-  : name === 'settings' || name === 'legal' || name === 'layout' ? 'more' : 'flore';
+  : name === 'settings' || name === 'legal' || name === 'layout' || name === 'builder' ? 'more' : 'flore';
 
 /** App shell: header + route outlet + (phone) bottom tab bar. */
 export class GfApp extends LitElement {
@@ -100,7 +101,7 @@ export class GfApp extends LitElement {
     /* The page's tab, on the accent: its contrasting text (the rule above outweighs the .segmented one of ui.js). */
     nav.tabs a[aria-current='page'] { color: var(--gf-accent-contrast); }
     .note, .mode { flex: none; }
-    gf-map-page, gf-spot-editor, gf-collections, gf-shared, gf-flora, gf-miniapp, gf-launcher, gf-layout { flex: 1; min-height: 0; }
+    gf-map-page, gf-spot-editor, gf-collections, gf-shared, gf-flora, gf-miniapp, gf-launcher, gf-layout, gf-builder { flex: 1; min-height: 0; }
     /* A tool that just came (first steps): announced once. */
     .unlocked { position: fixed; z-index: 1003; left: 50%; transform: translateX(-50%); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); width: min(440px, calc(100vw - 24px));
       display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; background: #1f2a1f; color: #fff; box-shadow: 0 10px 30px rgb(0 0 0 / 35%); animation: up 0.3s ease-out; }
@@ -360,6 +361,9 @@ export class GfApp extends LitElement {
         return html`<gf-legal></gf-legal>`;
       case 'app':
         return html`<gf-miniapp .route=${route}></gf-miniapp>`;
+      case 'builder':
+        // « Créer une app » (app/layout/gf-builder.js): the grid first.
+        return html`<gf-builder .route=${route}></gf-builder>`;
       case 'layout':
         // « Disposition libre » (app/layout): its layout and its state in the address.
         return html`<gf-layout .route=${route}></gf-layout>`;

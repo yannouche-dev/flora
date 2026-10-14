@@ -17,7 +17,9 @@ const NAMES = [
   'flower2', 'flag-fill', 'sun-fill', 'tree-fill', 'basket2-fill', 'cloud-fill', 'stars', 'signpost-split-fill',
   // A free layout's menu of columns (app/layout/registry.js): each block of the sheet its own, an unknown component.
   'tag', 'translate', 'diagram-2', 'hash', 'film', 'camera', 'shield', 'quote', 'pin-map', 'bug', 'cloud-sun', 'journal-text', 'link-45deg',
-  'question-circle'
+  'question-circle',
+  // « Créer une app » (app/layout/gf-builder.js): its grids, the one chosen, the desktop.
+  'layout-text-window', 'layout-three-columns', 'grid-1x2', 'check-circle-fill', 'window-desktop'
 ];
 
 // Drawn for the app, in the same 16 × 16 grid, where Bootstrap Icons has none.
