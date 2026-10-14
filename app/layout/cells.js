@@ -7,7 +7,9 @@
 //    its radius (a slider), « Autour de moi », « Toute la France » (no scope). Its settings (registry.js, map-options.js)
 //    change each of these: its own scope while the address has none (lieu, autour), its background and 3D, its IGN
 //    layers, its points (sources, period, style, the current plant's grouped), how it follows the state (suit, plante,
-//    toucher), its controls (ui: by its width, compact, none);
+//    toucher), its controls (ui: by its width, compact, none; ctl: exactly which — the zone and a handle on the circle's
+//    edge that drags its radius, the address search, « Me localiser », the layers, 2D / 3D, the other background's
+//    thumbnail, the current plant's chip, the period's chips, the count, the legend, the zoom: map-options.js);
 //  - place: the scope alone — « Autour de moi », a commune (gf-place-search), the radius;
 //  - search: Flore's search bar (gf-results-bar: text, sort, filters chosen, « Filtrer par »), its filters (gf-filter-
 //    panel, opened by the funnel) and its list; filters and results: each part alone. They read and write the store's
@@ -33,16 +35,17 @@ import { href } from '../core/router.js';
 import * as db from '../core/db.js';
 import { alertsOf } from '../core/alerts.js';
 import { thumbCredit } from '../core/credit.js';
+import { cachedThumb, thumbUrl } from '../core/thumb.js';
 import { hintView, takeHint } from '../core/hints.js';
 import { isFavorite, toggleFavorite } from '../core/collections.js';
 import { ui } from '../styles/ui.js';
 import { floweringMonths } from '../components/gf-calendar.js';
 import { geoProblem } from '../components/start-screen.js';
-import { DISTANCES, distanceAt, distanceEvents } from '../miniapp/kit/cards.js';
+import { DISTANCES, distanceAt, distanceEvents, distanceKey } from '../miniapp/kit/cards.js';
 import { pushHash } from '../core/history.js';
 import { addCatalogLayer } from '../core/ign.js';
 import { cellIcon, distanceLabel } from './registry.js';
-import { COMPACT_WIDTH, catalogLayers, inWhen, overlayKeys, uiMode } from './map-options.js';
+import { COMPACT_WIDTH, MAP_LAYERS, catalogLayers, inWhen, mapControls, overlayKeys, snapRadius, uiMode } from './map-options.js';
 import { obsId } from './state.js';
 import '../components/gf-map.js';
 import '../components/gf-place-search.js';
@@ -168,8 +171,23 @@ const radiusSlider = state => {
 
 // ── map ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
+/** The other background, as its thumbnail says it. */
+const OTHER_BASE = { photo: { key: 'plan', label: 'Plan', words: 'le plan IGN' }, plan: { key: 'photo', label: 'Photo', words: 'les photos aériennes' } };
+
+/** The period's chips (when=), in their order. */
+const PERIODS = [['toujours', 'Toujours'], ['annee', 'Cette année'], ['mois', 'Ce mois-ci']];
+
+/** « 214 observations », « 1 espèce ». @param {number} n @param {string} word */
+const counted = (n, word) => `${n.toLocaleString('fr-FR')} ${word}${n > 1 ? 's' : ''}`;
+
 export class DlMap extends LitElement {
-  static properties = { state: { attribute: false }, params: { attribute: false }, _busy: { state: true }, _narrow: { state: true } };
+  static properties = {
+    state: { attribute: false }, params: { attribute: false },
+    /** The cell's path in the layout ('0', '2.1') and how it changes one of its parameters in the address (gf-layout.js). */
+    path: { attribute: false }, setParam: { attribute: false },
+    _busy: { state: true }, _narrow: { state: true }, _only: { state: true }, _d3: { state: true }, _when: { state: true },
+    _legend: { state: true }, _zone: { state: true }, _thumb: { state: true }
+  };
 
   static styles = [ui, scopeStyles, css`
     :host { display: flex; flex-direction: column; position: relative; min-height: 0; isolation: isolate; }
@@ -191,8 +209,74 @@ export class DlMap extends LitElement {
     .panel.compact .row .words { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     :host([ui='compacte']) gf-map .gf-map-buttons button { width: 28px; height: 28px; font-size: 0.85rem; }
     :host([ui='compacte']) gf-map .leaflet-control-zoom a { width: 26px; height: 26px; line-height: 26px; font-size: 16px; }
-    /* None (ui=nue): the map alone — no search, no buttons, no zoom (the cell's head says the zone). */
-    :host([ui='nue']) gf-map .gf-map-buttons, :host([ui='nue']) gf-map .leaflet-control-zoom { display: none; }
+    /* The controls as ctl= says (map-options.js mapControls): the zoom only when it is one of them; « Me localiser »
+       large on the ground (terrain). None (ui=nue): the map alone (the cell's head says the zone). */
+    :host(:not([ctl~='zoom'])) gf-map .leaflet-control-zoom { display: none; }
+    :host([big-gps]) gf-map .gf-map-buttons button.locate { width: 48px; height: 48px; font-size: 1.35rem; opacity: 1; }
+    .panel.top { top: 8px; }
+    /* Compact: the zone a pill (« 2 km ▾ »), its stops and « Autour de moi » under it once opened. */
+    .zone { position: absolute; z-index: 501; left: 8px; top: 8px; max-width: calc(100% - 64px); }
+    .zone.low { top: 60px; }
+    .zone > button { min-height: 32px; padding: 4px 12px; border-radius: 999px; font-size: 0.85rem; font-weight: 600; box-shadow: var(--gf-shadow);
+      background: color-mix(in srgb, var(--gf-surface) 95%, transparent); display: inline-flex; align-items: center; gap: 4px; }
+    .zone > button.error { color: var(--gf-danger); }
+    .zone .drop { margin-top: 6px; display: grid; gap: 6px; padding: 8px 10px; border-radius: 12px; width: 240px; max-width: 100%; box-sizing: border-box;
+      background: color-mix(in srgb, var(--gf-surface) 97%, transparent); box-shadow: var(--gf-shadow); }
+    .stops { display: flex; flex-wrap: wrap; gap: 4px; }
+    .stops button { min-height: 32px; padding: 2px 8px; font-size: 0.8rem; }
+    .stops button[aria-pressed='true'] { background: var(--gf-accent); color: var(--gf-accent-contrast); border-color: transparent; }
+    /* The controls of ctl=, each in its fixed place: top right under the map's own buttons (3D, the other background),
+       bottom left over the zoom (the current plant, the legend), bottom right over the credits (the period, the count). */
+    .ctl { position: absolute; z-index: 500; display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+    .ctl > * { pointer-events: auto; }
+    .tr { right: 8px; top: var(--tr-top, 52px); align-items: flex-end; }
+    /* Their heights over the map's own corners (zoom and scale, credits; MapLibre's in 3D) are measured (#placeControls). */
+    .bl { left: 8px; bottom: var(--bl-bottom, 40px); align-items: flex-start; max-width: min(300px, calc(100% - 16px)); }
+    .br { right: 8px; bottom: var(--br-bottom, 26px); align-items: flex-end; max-width: calc(100% - 16px); }
+    /* In 3D, « Observations autour » (bottom middle) has the right corner lower. */
+    .stage:has(gf-map[data-renderer='3d']) .br { bottom: max(64px, var(--br-bottom, 26px)); }
+    .round { width: 32px; height: 32px; padding: 0; border-radius: 50%; display: grid; place-items: center; font-size: 0.72rem; font-weight: 700;
+      background: color-mix(in srgb, var(--gf-surface) 85%, transparent); box-shadow: 0 1px 3px rgb(0 0 0 / 14%); }
+    .round[aria-pressed='true'] { background: var(--gf-accent); color: var(--gf-accent-contrast); }
+    /* The other background's thumbnail: its look drawn (no tile asked), its name under it. */
+    .base { width: 48px; height: 48px; padding: 0; border-radius: 10px; overflow: hidden; display: grid; align-items: end; border: 2px solid #fff;
+      box-shadow: 0 1px 4px rgb(0 0 0 / 30%); font-size: 0.68rem; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgb(0 0 0 / 70%); }
+    .base.photo { background: radial-gradient(circle at 30% 30%, #7f9b55 0 18%, transparent 19%), radial-gradient(circle at 70% 65%, #4f6d33 0 22%, transparent 23%),
+      linear-gradient(135deg, #5d7a3e, #8a8f5a 55%, #3e5a2c); }
+    .base.plan { background: linear-gradient(90deg, transparent 45%, #f6d27a 45% 55%, transparent 55%), linear-gradient(0deg, transparent 62%, #fff 62% 68%, transparent 68%),
+      linear-gradient(135deg, #eef0e6, #dfe7d4); color: #1d2419; text-shadow: 0 0 2px #fff; }
+    .base span { display: block; padding: 1px 0 2px; text-align: center; background: rgb(0 0 0 / 28%); }
+    .base.plan span { background: rgb(255 255 255 / 70%); }
+    :host([ctl-compact]) .round { width: 28px; height: 28px; }
+    :host([ctl-compact]) .base { width: 36px; height: 36px; }
+    :host([ctl-compact]) .base span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    /* The current plant: its photo, its name (its sheet ↗), « Seule », ✕. */
+    .chip { display: flex; align-items: center; gap: 2px; max-width: 100%; padding: 3px; border-radius: 999px; background: color-mix(in srgb, var(--gf-surface) 96%, transparent);
+      box-shadow: var(--gf-shadow); font-size: 0.82rem; }
+    .chip .open { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 32px; padding: 0 6px 0 0; color: inherit; text-decoration: none; border-radius: 999px; }
+    .chip .open:focus-visible, .chip button:focus-visible { outline: none; box-shadow: var(--gf-focus); }
+    .chip img, .chip .ph { flex: none; width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: var(--gf-surface-2); display: grid; place-items: center; }
+    .chip .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+    .chip button { flex: none; min-height: 32px; min-width: 32px; padding: 0 8px; border-radius: 999px; font-size: 0.78rem; }
+    .chip button[aria-pressed='true'] { background: var(--gf-accent); color: var(--gf-accent-contrast); border-color: transparent; }
+    :host([ctl-compact]) .chip .name { max-width: 9em; }
+    /* The legend (legende): its button, its lines once opened. */
+    .legend > button { min-height: 32px; padding: 2px 12px; border-radius: 999px; font-size: 0.8rem; box-shadow: var(--gf-shadow); background: color-mix(in srgb, var(--gf-surface) 95%, transparent); }
+    .legend ul { list-style: none; margin: 6px 0 0; padding: 8px 10px; display: grid; gap: 4px; border-radius: 12px; font-size: 0.8rem;
+      background: color-mix(in srgb, var(--gf-surface) 97%, transparent); box-shadow: var(--gf-shadow); }
+    .legend li { display: flex; align-items: center; gap: 8px; }
+    .legend i { flex: none; width: 12px; height: 12px; border-radius: 50%; background: var(--c, #6b8f3a); border: 1px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 20%); }
+    .legend i.obs { border: 0; background: radial-gradient(circle at 35% 30%, #ff6f9c, #e0245e 75%); box-shadow: 0 0 0 1.5px #ffd166; }
+    .legend i.outline { background: transparent; border: 2px solid #a3e68a; box-shadow: 0 1px 0 rgb(0 0 0 / 30%); }
+    .legend i.area { border-radius: 3px; background: color-mix(in srgb, #7c3aed 35%, transparent); border-color: #7c3aed; }
+    /* The period: three chips in one. */
+    .period { display: flex; border-radius: 999px; overflow: hidden; box-shadow: var(--gf-shadow); background: color-mix(in srgb, var(--gf-surface) 95%, transparent); }
+    .period button { min-height: 32px; padding: 2px 10px; border: 0; border-radius: 0; background: none; font-size: 0.78rem; white-space: nowrap; }
+    .period button + button { border-left: 1px solid var(--gf-border); }
+    .period button[aria-pressed='true'] { background: var(--gf-accent); color: var(--gf-accent-contrast); }
+    /* The count: the points shown, the plants found; touched, the map's « État ». */
+    .count { min-height: 28px; padding: 2px 10px; border-radius: 999px; font-size: 0.78rem; font-variant-numeric: tabular-nums; white-space: nowrap;
+      background: color-mix(in srgb, var(--gf-surface) 90%, transparent); box-shadow: 0 1px 3px rgb(0 0 0 / 14%); }
   `];
 
   #store = new StoreController(this);
@@ -205,26 +289,50 @@ export class DlMap extends LitElement {
     this._busy = false;
     /** Narrower than COMPACT_WIDTH (ui=auto: compact controls). */
     this._narrow = false;
+    /** @type {string | null} */ this.path = null;
+    /** @type {((path: string, key: string, value: unknown) => void) | null} */ this.setParam = null;
+    /** The current plant's chip « Seule », live (null: as plante= says). @type {boolean | null} */ this._only = null;
+    /** The 2D / 3D switch, live (null: as 3d= says, else Réglages › Cartes). @type {boolean | null} */ this._d3 = null;
+    /** The period chosen by its chips, live, when the cell cannot write it in the address (null: as when= says). @type {string | null} */ this._when = null;
+    /** The legend opened; the compact zone's pill opened. */
+    this._legend = false;
+    this._zone = false;
+    /** The current plant's photo, once found (core/thumb.js): its id and address. @type {{ id: number, url: string | null } | null} */ this._thumb = null;
   }
 
   /** The cell's width followed: under 360 px, compact controls (ui=auto). */
   #resize = new ResizeObserver(entries => {
     const w = entries[entries.length - 1]?.contentRect.width ?? 0;
     if (w > 0) this._narrow = uiMode('auto', w) === 'compacte';
+    this.#placeControls();
   });
 
   connectedCallback() { super.connectedCallback(); this.#resize.observe(this); }
   disconnectedCallback() { super.disconnectedCallback(); this.#resize.disconnect(); }
 
-  /** The map's settings (registry.js), their defaults when none were given. */
+  /** The map's settings (registry.js), their defaults when none were given — and what its controls changed, live. */
   get #p() {
     const p = this.params ?? {};
+    const plante = /** @type {string} */ (p.plante ?? 'grand');
     return {
-      src: /** @type {string[]} */ (p.src ?? ['inat']), when: /** @type {string} */ (p.when ?? 'toujours'), suit: p.suit !== false,
-      plante: /** @type {string} */ (p.plante ?? 'grand'), toucher: /** @type {string} */ (p.toucher ?? 'plante'), pts: /** @type {string} */ (p.pts ?? 'photo'),
+      src: /** @type {string[]} */ (p.src ?? ['inat']), when: /** @type {string} */ (this._when ?? p.when ?? 'toujours'), suit: p.suit !== false,
+      plante: this._only === null ? plante : this._only ? 'seule' : plante === 'seule' ? 'grand' : plante,
+      toucher: /** @type {string} */ (p.toucher ?? 'plante'), pts: /** @type {string} */ (p.pts ?? 'photo'),
       ui: uiMode(p.ui, this._narrow ? COMPACT_WIDTH - 1 : COMPACT_WIDTH)
     };
   }
+
+  /** The controls drawn over the map (ctl=, else by ui and the intent: map-options.js) and whether they are compact. */
+  get #ctl() {
+    const p = this.params ?? {};
+    return mapControls({ ctl: p.ctl ?? null, ui: p.ui, intent: p.intent }, this._narrow ? COMPACT_WIDTH - 1 : COMPACT_WIDTH);
+  }
+
+  /** The map's 3D: the switch's, else as 3d= says (null: as Réglages › Cartes say). @returns {boolean | null} */
+  get #d3() { return this._d3 ?? this.params?.['3d'] ?? null; }
+
+  /** The radius' handle on the circle (gf-map radiusHandle): the slider's stops, its keys, its words. */
+  #radiusHandle = { snap: (/** @type {number} */ m) => snapRadius(m, DISTANCES), step: distanceKey, label: distanceLabel };
 
   /** The map's view held while its cell changes size (a separator dragged beside it). */
   holdFrame() { /** @type {any} */ (this.renderRoot.querySelector('gf-map'))?.holdFrame?.(); }
@@ -393,7 +501,7 @@ export class DlMap extends LitElement {
   /** The long press's first-use hint (core/hints.js: the first layout map without a zone ever), until its ✕. @type {boolean | undefined} */
   #pressHint;
 
-  /** The map's 3D as written (3d=1, 3d=0), last told to its 3D adapter. @type {boolean | null | undefined} */
+  /** The map's 3D as written (3d=1, 3d=0) or switched, last told to its 3D adapter. @type {boolean | null | undefined} */
   #was3d;
 
   /**
@@ -402,10 +510,14 @@ export class DlMap extends LitElement {
    */
   updated() {
     const s = this.state, map = this.#map;
+    const ctl = this.#ctl;
     this.setAttribute('ui', this.#p.ui);
+    this.setAttribute('ctl', [...ctl.on].join(' '));
+    this.toggleAttribute('ctl-compact', ctl.compact);
+    this.toggleAttribute('big-gps', this.params?.intent === 'terrain' && ctl.on.has('gps'));
     if (!s || !map) return;
     this.#defaultScope();
-    const d3 = this.params?.['3d'] ?? null;
+    const d3 = this.#d3;
     if (d3 !== this.#was3d) { if (this.#was3d !== undefined) map.gl?.recheck(); this.#was3d = d3; }
     map.busy('scope', Boolean(s.live.at) && s.speciesState === 'loading', 'Plantes de la zone : recherche');
     map.setStatus('scope', s.live.at && s.speciesState === 'error' ? s.speciesError : '', { level: 'warn' });
@@ -413,32 +525,202 @@ export class DlMap extends LitElement {
     const said = s.live.at && s.speciesState !== 'loading' && s.speciesState !== 'error' ? scopeNote(s) : '';
     if (said && said !== this.#said) map.announce(said);
     this.#said = said;
+    this.#placeControls();
+    // Once the map's own controls are drawn (a frame later: a rebuilt search pill, the 3D map's controls).
+    requestAnimationFrame(() => this.#placeControls());
   }
   #said = '';
+
+  /**
+   * The controls placed around the map's own, whose number and size vary (measured): top right under its buttons;
+   * bottom left over its zoom and scale, bottom right over its credits (MapLibre's controls in 3D); on a narrow map,
+   * bottom left over bottom right, never on it.
+   */
+  #placeControls() {
+    const stage = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.stage')), map = this.#map;
+    const buttons = map?.querySelector('.gf-map-buttons');
+    if (!stage || !buttons) return;
+    const box = stage.getBoundingClientRect();
+    if (!box.height) return;
+    const set = (/** @type {string} */ name, /** @type {number} */ px) => { if (stage.style.getPropertyValue(name) !== px + 'px') stage.style.setProperty(name, px + 'px'); };
+    const shown = [...buttons.children].filter(b => !(/** @type {HTMLElement} */ (b).hidden) && b.getBoundingClientRect().height > 0);
+    set('--tr-top', shown.length ? Math.round(shown[shown.length - 1].getBoundingClientRect().bottom - box.top + 8) : map.hasAttribute('search') ? 66 : 8);
+    const in3d = map.dataset.renderer === '3d';
+    /** The height a corner of the map's own controls takes from the bottom. @param {string} sel */
+    const corner = sel => {
+      const kids = [...(map.querySelector(sel)?.children ?? [])].map(k => k.getBoundingClientRect()).filter(r => r.height > 0);
+      return kids.length ? Math.max(0, Math.round(box.bottom - Math.min(...kids.map(r => r.top)))) : 0;
+    };
+    const right = Math.max(20, corner(in3d ? '.maplibregl-ctrl-bottom-right' : '.leaflet-bottom.leaflet-right')) + 6;
+    let left = Math.max(30, corner(in3d ? '.maplibregl-ctrl-bottom-left' : '.leaflet-bottom.leaflet-left')) + 8;
+    const br = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.br'));
+    const bl = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.bl'));
+    // Too narrow for both side by side: the bottom left's over the bottom right's.
+    if (br && bl && bl.offsetWidth + br.offsetWidth + 24 > box.width) left = Math.max(left, right + br.offsetHeight + 8);
+    set('--br-bottom', right);
+    set('--bl-bottom', left);
+  }
+
+  /** The current plant: none (✕); the plant now shown alone or not (« Seule », this map only). */
+  #unpick() { this._only = null; /** @type {LayoutState} */ (this.state).set({ plant: null, obs: null }, 'push'); }
+
+  /**
+   * The period chosen by its chips: written in the address as when= (the cell's parameter, gf-layout.js) — else, a
+   * cell that cannot, this map's alone. @param {string} when
+   */
+  #setWhen(when) {
+    if (this.setParam && this.path !== null) { this._when = null; this.setParam(this.path, 'when', when); } else this._when = when;
+  }
+
+  /** The other background shown (its thumbnail touched), kept as the panel « Carte » keeps it (gf-map setBase). */
+  #switchBase() {
+    const map = this.#map;
+    if (!map) return;
+    map.setBase(OTHER_BASE[/** @type {'photo' | 'plan'} */ (map.baseShown)]?.key ?? 'plan');
+  }
+
+  /** The current plant's photo: the scope's (iNaturalist), else the one at hand, else found (once) — null: a flower. @param {number} id */
+  #thumbOf(id) {
+    const sp = /** @type {LayoutState} */ (this.state).species?.byPlant.get(id);
+    if (sp?.photo && !this.#badThumbs.has(sp.photo)) return sp.photo;
+    const known = cachedThumb(id);
+    if (known !== undefined) return known && !this.#badThumbs.has(known) ? known : null;
+    if (this._thumb?.id === id) return this._thumb.url && !this.#badThumbs.has(this._thumb.url) ? this._thumb.url : null;
+    if (this.#thumbAsked !== id) {
+      this.#thumbAsked = id;
+      thumbUrl(id).then(url => { if (this.state?.live.plant === id) this._thumb = { id, url }; });
+    }
+    return null;
+  }
+  /** @type {number | null} */ #thumbAsked = null;
+  /** Photos that did not load (offline, gone): the flower instead. @type {Set<string>} */ #badThumbs = new Set();
+
+  /** The zone: its panel (complete), or its pill « 2 km ▾ » (compact) — its words, its radius, « Autour de moi » (gps). @param {LayoutState} s @param {{ on: Set<string>, compact: boolean }} ctl */
+  #zoneView(s, ctl) {
+    const low = ctl.on.has('lieu');
+    const around = ctl.on.has('gps') ? html`<div class="row"><button type="button" class=${this._busy ? 'busy' : ''} ?disabled=${this._busy} aria-busy=${String(this._busy)}
+      title="Autour de moi" @click=${() => this.#locate()}>${icon('geo-alt')} <span class="words">Autour de moi</span></button></div>` : nothing;
+    if (!ctl.compact) {
+      return html`<div class="panel ${low ? '' : 'top'}" role="group" aria-label="Zone de la disposition">
+        ${where(s)}
+        ${s.live.at ? radiusSlider(s) : nothing}
+        ${around}
+      </div>`;
+    }
+    const failed = Boolean(s.placeError && !s.live.at);
+    const label = s.live.at ? distanceLabel(s.radius) : failed ? 'Lieu introuvable' : 'Zone';
+    return html`<div class="zone ${low ? 'low' : ''}" role="group" aria-label="Zone de la disposition">
+      <button type="button" class=${failed ? 'error' : ''} aria-expanded=${String(this._zone)} aria-controls="zone-drop" title=${scopeWords(s)}
+        @click=${() => { this._zone = !this._zone; }}>${failed ? icon('exclamation-triangle-fill') : nothing}${label} ${icon('caret-down-fill')}</button>
+      ${failed && !this._zone ? html`<span class="visually-hidden" role="alert">${scopeWords(s)}</span>` : nothing}
+      ${this._zone ? html`<div class="drop" id="zone-drop">
+        ${where(s)}
+        ${s.live.at ? html`<div class="stops" role="group" aria-label="Rayon de la zone">${DISTANCES.map(m => html`<button type="button" aria-pressed=${String(m === s.radius)}
+          @click=${() => { s.set({ r: m }, 'replace'); this._zone = false; }}>${distanceLabel(m)}</button>`)}</div>` : nothing}
+        ${around}
+      </div>` : nothing}
+    </div>`;
+  }
+
+  /** Top right, under the map's own buttons: the 2D / 3D switch, the other background's thumbnail. @param {Set<string>} on */
+  #topRight(on) {
+    if (!on.has('3d') && !on.has('fond')) return nothing;
+    const map = this.#map;
+    const in3d = this.#d3 ?? Boolean(map?.gl?.wanted);
+    const other = OTHER_BASE[/** @type {'photo' | 'plan'} */ (map?.baseShown ?? this.params?.base ?? 'photo')] ?? OTHER_BASE.photo;
+    return html`<div class="ctl tr">
+      ${on.has('3d') ? html`<button type="button" class="round" aria-pressed=${String(in3d)} aria-label="Vue 3D" title=${in3d ? 'Vue 3D (repasser en 2D)' : 'Vue 3D'}
+        @click=${() => { this._d3 = !in3d; }}>3D</button>` : nothing}
+      ${on.has('fond') ? html`<button type="button" class="base ${other.key}" aria-label=${'Fond : ' + other.words} title=${'Passer à ' + other.words}
+        @click=${() => this.#switchBase()}><span>${other.label}</span></button>` : nothing}
+    </div>`;
+  }
+
+  /** Bottom left, over the zoom: the current plant's chip, the legend. @param {LayoutState} s @param {Set<string>} on */
+  #bottomLeft(s, on) {
+    const id = s.live.plant, info = s.plantInfo;
+    const chip = on.has('plante') && id != null && info?.id === id;
+    if (!chip && !on.has('legende')) return nothing;
+    return html`<div class="ctl bl">
+      ${chip ? this.#chip(id, /** @type {{ name: string }} */ (info).name) : nothing}
+      ${on.has('legende') ? this.#legendView(s) : nothing}
+    </div>`;
+  }
+
+  /** The current plant on the map: its photo and name (its sheet ↗), « Seule » (its points alone), ✕. @param {number} id @param {string} name */
+  #chip(id, name) {
+    const photo = this.#thumbOf(id);
+    const only = this.#p.plante === 'seule';
+    return html`<div class="chip" role="group" aria-label=${'Plante courante : ' + name}>
+      <a class="open" href=${href.plant(id)} data-open aria-label=${'Ouvrir la fiche : ' + name} title=${'Ouvrir la fiche : ' + name}>${photo
+        ? html`<img src=${photo} alt="" decoding="async" @error=${() => { this.#badThumbs.add(photo); this.requestUpdate(); }} />` : html`<span class="ph" aria-hidden="true">${icon('flower1')}</span>`}<span class="name">${name}</span>${icon('box-arrow-up-right')}</a>
+      <button type="button" aria-pressed=${String(only)} title="Seulement ses observations sur cette carte" @click=${() => { this._only = !only; }}>Seule</button>
+      <button type="button" aria-label="Aucune plante courante" title="Aucune plante courante" @click=${() => this.#unpick()}>${icon('x-lg')}</button>
+    </div>`;
+  }
+
+  /** The legend: what the map's marks and the cell's layers are, its lines once opened. @param {LayoutState} s */
+  #legendView(s) {
+    const layers = /** @type {string[]} */ (this.params?.layers ?? []);
+    const plant = s.live.plant != null && s.plantInfo?.id === s.live.plant && this.#p.plante !== 'non' ? s.plantInfo.name : null;
+    return html`<div class="legend">
+      <button type="button" aria-expanded=${String(this._legend)} aria-controls="map-legend" @click=${() => { this._legend = !this._legend; }}>Légende</button>
+      ${this._legend ? html`<ul id="map-legend" aria-label="Légende de la carte">
+        ${s.live.at ? html`<li><i class="outline"></i>La zone (${distanceLabel(s.radius)})</li>` : nothing}
+        <li><i></i>Observations des plantes trouvées</li>
+        ${plant ? html`<li><i class="obs"></i>${plant} : ses observations</li>` : nothing}
+        ${layers.map(l => html`<li><i class="area"></i>${MAP_LAYERS[l]?.label ?? l}</li>`)}
+      </ul>` : nothing}
+    </div>`;
+  }
+
+  /**
+   * Bottom right, over the credits: the period's chips (when=), the count — the points shown, the plants found in the
+   * scope —, which opens the map's « État ». @param {LayoutState} s @param {{ on: Set<string>, compact: boolean }} ctl
+   * @param {{ points: any[] } | null} area
+   */
+  #bottomRight(s, ctl, area) {
+    const period = ctl.on.has('periode'), count = ctl.on.has('compte') && Boolean(s.live.at);
+    if (!period && !count) return nothing;
+    const when = this.#p.when;
+    const n = area?.points.length ?? 0, k = this.#store.state.results.total;
+    const words = `${counted(n, 'observation')} · ${counted(k, 'espèce')}`;
+    return html`<div class="ctl br">
+      ${period ? html`<div class="period" role="group" aria-label="Période des observations">${PERIODS.map(([v, label]) => html`<button type="button"
+        aria-pressed=${String(when === v)} @click=${() => this.#setWhen(v)}>${label}</button>`)}</div>` : nothing}
+      ${count ? html`<button type="button" class="count" aria-label=${words + ' — état de la carte'} title="État de la carte"
+        @click=${() => this.#map?.openPanel()}>${ctl.compact ? n.toLocaleString('fr-FR') : words}</button>` : nothing}
+    </div>`;
+  }
 
   render() {
     const s = this.state;
     if (!s) return nothing;
     if (!s.live.at && this.#pressHint === undefined) this.#pressHint = takeHint('layout-map-press');
-    const P = this.#p, d3 = this.params?.['3d'] ?? null;
+    const P = this.#p, d3 = this.#d3, ctl = this.#ctl, on = ctl.on;
+    // No current plant any more: « Seule » forgotten.
+    if (s.live.plant == null && this._only !== null) this._only = null;
     const press = 'Appui long sur la carte : la zone s’y centre.';
     const hl = P.plante === 'non' ? null : this.#highlight;
     // regroupe: the current plant's observations grouped by where they fall at the zoom shown (gf-map `cluster`).
     const grouped = Boolean(this.params?.regroupe);
-    const compact = P.ui !== 'complete';
+    const area = this.#area;
+    const why2d = d3 !== false ? nothing : this._d3 === false ? 'Cette carte de la disposition est en 2D (sa bascule 2D / 3D ; le choix vaut pour elle seule).'
+      : 'Cette carte de la disposition reste en 2D (3d=0 dans son adresse ; le choix vaut pour les autres cartes).';
     return html`${!s.live.at && this.#pressHint ? hintView(press, () => { this.#pressHint = false; this.requestUpdate(); }, 'press-hint') : nothing}
       <div class="stage"><gf-map no-create point-click=${P.toucher === 'rien' ? 'none' : 'pick'} map-3d=${d3 === null ? nothing : d3 ? 'on' : 'off'}
-        map-3d-why=${d3 === false ? 'Cette carte de la disposition reste en 2D (3d=0 dans son adresse ; le choix vaut pour les autres cartes).' : nothing}
-        .base=${this.params?.base ?? null} .overlays=${this.#overlays} .area=${this.#area} .highlight=${grouped ? null : hl} .cluster=${grouped ? hl : null}
-        .focusPoint=${this.#focus} .noSearch=${compact} .noLocate=${P.ui === 'nue'} .track=${Boolean(this.params?.autour)}
+        map-3d-why=${why2d}
+        .base=${this.params?.base ?? null} .overlays=${this.#overlays} .area=${area} .highlight=${grouped ? null : hl} .cluster=${grouped ? hl : null}
+        .focusPoint=${this.#focus} .noSearch=${!on.has('lieu')} .noLocate=${!on.has('gps')} .noLayers=${!on.has('couches')} .track=${Boolean(this.params?.autour)}
+        .radiusHandle=${on.has('rayon') ? this.#radiusHandle : null}
         aria-description=${press}
-        @point-pick=${(/** @type {CustomEvent} */ e) => this.#onPick(e)} @point-info=${(/** @type {CustomEvent} */ e) => this.#onPress(e)}></gf-map>
-      ${P.ui === 'nue' ? nothing : html`<div class="panel ${compact ? 'compact' : ''}" role="group" aria-label="Zone de la disposition">
-        ${where(s)}
-        ${s.live.at ? radiusSlider(s) : nothing}
-        <div class="row"><button type="button" class=${this._busy ? 'busy' : ''} ?disabled=${this._busy} aria-busy=${String(this._busy)}
-          title="Autour de moi" @click=${() => this.#locate()}>${icon('geo-alt')} <span class="words">Autour de moi</span></button></div>
-      </div>`}</div>`;
+        @point-pick=${(/** @type {CustomEvent} */ e) => this.#onPick(e)} @point-info=${(/** @type {CustomEvent} */ e) => this.#onPress(e)}
+        @radius-change=${(/** @type {CustomEvent} */ e) => s.set({ r: e.detail.radius }, 'replace')}
+        @base-shown=${() => this.requestUpdate()}></gf-map>
+      ${on.has('rayon') ? this.#zoneView(s, ctl) : nothing}
+      ${this.#topRight(on)}
+      ${this.#bottomLeft(s, on)}
+      ${this.#bottomRight(s, ctl, area)}</div>`;
   }
 }
 customElements.define('dl-map', DlMap);
@@ -791,7 +1073,9 @@ customElements.define('dl-deck', DlDeck);
 
 /**
  * What a cell shows: its component's piece, given the state; an unknown component: what is wrong and how to fix it.
- * @param {Resolved} r @param {{ state: LayoutState, view: string, plant: number | null, first: { id: number, name: string } | null }} ctx
+ * @param {Resolved} r @param {{ state: LayoutState, view: string, plant: number | null, first: { id: number, name: string } | null,
+ *   path?: string, setParam?: ((path: string, key: string, value: unknown) => void) | null }} ctx  `path`, `setParam`: the cell's place in the layout,
+ *   and how one of its parameters is changed in the address (a map's period chips)
  */
 export function renderCell(r, ctx) {
   if (!r.known) {
@@ -804,7 +1088,7 @@ export function renderCell(r, ctx) {
   }
   const { state } = ctx;
   const id = r.spec.id;
-  if (id === 'map') return html`<dl-map .state=${state} .params=${r.params}></dl-map>`;
+  if (id === 'map') return html`<dl-map .state=${state} .params=${r.params} .path=${ctx.path ?? null} .setParam=${ctx.setParam ?? null}></dl-map>`;
   if (id === 'place') return html`<dl-place .state=${state}></dl-place>`;
   if (id === 'search') return html`<dl-search .state=${state} .params=${r.params}></dl-search>`;
   if (id === 'results') return html`<dl-results .state=${state} .params=${r.params}></dl-results>`;

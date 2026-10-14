@@ -44,7 +44,7 @@ import { BP, MediaController } from '../core/media.js';
 import { gripStyles, shareGrip } from '../core/split-grip.js';
 import { ui } from '../styles/ui.js';
 import { cell as makeCell, dirAt, moveAt, nodeAt, parse, removeAt, replaceAt, serialize, setShares, shapeKey, shares, splitAt } from './grammar.js';
-import { cellIcon, cellMark, cellName, COMPONENTS, distanceLabel, menuLooks, paramName, resolveTree, touchOf, valueText } from './registry.js';
+import { cellIcon, cellMark, cellName, COMPONENTS, defaultOf, distanceLabel, menuLooks, paramName, resolve, resolveTree, same, touchOf, valueText } from './registry.js';
 import { cleanText, LayoutState, liveSearch, readLive, readQuery, sameLive } from './state.js';
 import { forgetShares, savedShares, saveShares } from './sizes.js';
 import { PRESETS } from './presets.js';
@@ -303,7 +303,8 @@ export class GfLayout extends LitElement {
       if (e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
       const path = e.composedPath();
       const a = /** @type {HTMLAnchorElement | undefined} */ (path.find(n => n instanceof HTMLAnchorElement && n.hasAttribute('href')));
-      const m = a && /^#\/plant\/(\d+)(?:\?|$)/.exec(a.getAttribute('href') || '');
+      // One marked data-open (the map's current plant ↗): its sheet opened, as any link.
+      const m = a && !a.hasAttribute('data-open') && /^#\/plant\/(\d+)(?:\?|$)/.exec(a.getAttribute('href') || '');
       if (!m) return;
       const at = /** @type {HTMLElement | undefined} */ (path.find(n => n instanceof HTMLElement && n.matches('section.cell[data-cell]')));
       const r = at ? this.#shown.cells.get(/** @type {string} */ (at.dataset.cell)) : undefined;
@@ -603,6 +604,30 @@ export class GfLayout extends LitElement {
     this.requestUpdate();
   }
 
+  /**
+   * A cell's parameter changed by the cell itself (a map's period chips: when=): written in the layout as the editor
+   * writes it — left out when the cell gives that value without it (its default, its intent's) —, the address replaced
+   * (no new entry); while editing, in the draft. @param {string} at the cell's path ('0', '2.1') @param {string} key @param {unknown} v
+   */
+  #setCellParam = (/** @type {string} */ at, /** @type {string} */ key, /** @type {unknown} */ v) => {
+    const editing = this._draft !== null;
+    const tree = editing ? this.#shown.tree : this.#layout.tree;
+    const path = at.split('.').map(Number);
+    const n = nodeAt(tree, path);
+    if (!n || n.t !== 'cell') return;
+    const r = resolve(n);
+    if (!r.known || !r.spec.params[key]) return;
+    const params = n.params.filter(p => paramName(r.spec, p) !== key);
+    const without = resolve({ ...n, params });
+    if (v !== null && v !== '' && !(without.known && same(without.params[key], v))) params.push({ key, value: valueText(r.spec.params[key], v) });
+    const text = serialize(replaceAt(tree, path, { ...n, params }));
+    if (editing) { this._draft = text; this._field = text; return; }
+    this.#layout = show(text);
+    this.#shown = this.#layout;
+    this.#write('replace');
+    this.requestUpdate();
+  };
+
   /** Every share back to the default: the ones kept and the ones written. */
   #resetSizes() {
     forgetShares(this.#layout.shape);
@@ -681,7 +706,8 @@ export class GfLayout extends LitElement {
         return html`<label><input type="checkbox" data-param=${key} .checked=${Boolean(r.params[key])} @change=${(/** @type {any} */ e) => setParam(key, e.target.checked)} /> ${ps.label}</label>`;
       }
       if (ps.kind === 'list') {
-        const on = /** @type {string[]} */ (r.params[key]);
+        // Not written, one whose default the others make (ctl: by ui and the intent): those it has.
+        const on = /** @type {string[]} */ (r.params[key] ?? defaultOf(ps, r.params) ?? []);
         const toggle = (/** @type {string} */ v, /** @type {boolean} */ checked) => setParam(key, Object.keys(ps.values ?? {}).filter(x => x === v ? checked : on.includes(x)));
         return html`<span class="list" role="group" aria-label=${ps.label} data-param=${key}>${Object.entries(ps.values ?? {}).map(([v, label]) => html`<label><input type="checkbox"
           value=${v} .checked=${on.includes(v)} @change=${(/** @type {any} */ e) => toggle(v, e.target.checked)} /> ${label}</label>`)}</span>`;
@@ -857,7 +883,7 @@ export class GfLayout extends LitElement {
       ${head === 'non' ? nothing : head === 'simple' ? html`<header class="cell-head"><h2>${title}</h2><span class="spacer"></span>${actions}</header>`
         : html`<header class="cell-head"><h2>${icon(cellIcon(r))} ${title}${mark ? html`<b class="cell-mark" aria-hidden="true" title=${mark.label} data-mark=${mark.short}></b>` : nothing}</h2><span class="sub">${sub}</span>
         ${actions}${this._editing ? this.#tools(n, path, r) : nothing}</header>`}
-      <div class="cell-body" ?hidden=${folded}>${renderCell(r, { state: s, view: plantViewOf(this.#store.state), plant: s.live.plant, first })}</div>
+      <div class="cell-body" ?hidden=${folded}>${renderCell(r, { state: s, view: plantViewOf(this.#store.state), plant: s.live.plant, first, path: key, setParam: this.#setCellParam })}</div>
     </section>`;
   }
 

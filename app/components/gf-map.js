@@ -315,6 +315,15 @@ export class GfMap extends LitElement {
     minZoom: { type: Number, attribute: 'min-zoom' },
     /** No « Me localiser » button. */
     noLocate: { type: Boolean, attribute: 'no-locate' },
+    /** No button for the panel « Carte » (round, or at the end of the search pill): a free layout's map without it (ctl=). */
+    noLayers: { type: Boolean, attribute: false },
+    /**
+     * A handle on the area's circle (its east edge) that changes its radius: dragged (the circle follows, the distance
+     * in a bubble, `radius-input` {radius} meanwhile), let go — or a key on it — `radius-change` {radius}. Given:
+     * { snap(m): the radius a distance dragged gives, step(key, m): the one a key gives (null: not its key),
+     * label(m): the distance in words }. null: none.
+     */
+    radiusHandle: { attribute: false },
     /** No « protected areas in view » notice (also under any element marked `no-areas`: Découvrir). */
     noAreas: { type: Boolean, attribute: 'no-areas' },
     /** A walk to draw ({ key, coordinates: [lon, lat][] }): a line on a white casing (the « Vue 3D » of a parcours). */
@@ -371,6 +380,9 @@ export class GfMap extends LitElement {
     /** @type {number | null} */
     this.createPlant = null;
     this.noLocate = false;
+    this.noLayers = false;
+    /** @type {{ snap: (m: number) => number, step: (key: string, m: number) => number | null, label: (m: number) => string } | null} */
+    this.radiusHandle = null;
     this.noAreas = false;
     /** @type {{ key: string, coordinates: [number, number][] } | null} */
     this.line = null;
@@ -946,7 +958,9 @@ export class GfMap extends LitElement {
     if (!this.#map) return;
     this.#gl?.changed(changed);
     // Its address search given or taken back (a free layout's map, by its width): its buttons made again with it.
-    if (['search', 'noSearch'].some(k => changed.has(k) && changed.get(k) !== undefined) && this.hasAttribute('search') !== this.#hasSearch) this.#rebuildControls();
+    if ((['search', 'noSearch'].some(k => changed.has(k) && changed.get(k) !== undefined) && this.hasAttribute('search') !== this.#hasSearch)
+      || (changed.has('noLayers') && changed.get('noLayers') !== undefined)) this.#rebuildControls();
+    if (changed.has('radiusHandle')) this.#syncHandle();
     if (changed.has('line')) this.#syncLine();
     if (changed.has('base') && this.base && this.base !== this.#base) this.#setBase(/** @type {any} */ (this.base));
     if (changed.has('overlays') && this.overlays) {
@@ -1330,8 +1344,9 @@ export class GfMap extends LitElement {
     const [lon, lat] = area.center;
     // `leaves`: the observations as small leaves popping in one after the other, the circle glowing (Découvrir).
     // Its shadow: the same circle, darker, a little lower (a still line — no filter to redraw at each move).
-    L.circle([lat, lon], { radius: area.radius, className: 'gf-perim-shadow', interactive: false }).addTo(layer);
+    const shadow = L.circle([lat, lon], { radius: area.radius, className: 'gf-perim-shadow', interactive: false }).addTo(layer);
     const circle = L.circle([lat, lon], { radius: area.radius, className: fancy ? 'gf-area gf-area-glow' : 'gf-area', interactive: false }).addTo(layer);
+    this.#areaCircles = [shadow, circle];
     const bounds = area.fit ? circle.getBounds() : null;
     // The same circle again (the points arrived): no move; another one: the view eases to it (the old tiles
     // glide while the new ones come; the page gives the map a background of its colour, no pale flash).
@@ -1345,7 +1360,135 @@ export class GfMap extends LitElement {
     const all = fresh.length === dots.size;
     for (const [i, { point, key }] of fresh.entries()) dots.set(key, this.#areaDot(area, point, all ? Math.min(i, 40) * 25 : Math.min(i, 30) * 14).addTo(layer));
     this.#relight();
+    this.#syncHandle();
   }
+
+  // ── The radius' handle (radiusHandle: a free layout's map) ─────────────────────────────────────────
+
+  /** The area's circle and its shadow, as last drawn (not a smooth area's). @type {L.Circle[]} */
+  #areaCircles = [];
+  /** @type {L.Marker | null} */ #handle = null;
+  /** The radius while the handle is held or stepped, until the area says it (null: the area's). @type {number | null} */ #held = null;
+
+  /** The radius the circle shows now: the one held, else the area's. */
+  get #radiusNow() { return this.#held ?? /** @type {any} */ (this.area)?.radius ?? 0; }
+
+  /**
+   * The handle on the circle's east edge (where the circle is drawn: its bounds), its words for screen readers; none
+   * without an area (or a smooth one: a ring held on the screen), or without radiusHandle.
+   */
+  #syncHandle() {
+    const map = this.#map, area = /** @type {any} */ (this.area), h = this.radiusHandle;
+    const circle = this.#areaCircles[1];
+    if (!map || !h || !area || area.smooth || !circle || !this.#areaLayer?.hasLayer(circle)) {
+      this.#handle?.remove();
+      this.#handle = null;
+      return;
+    }
+    // The area drawn again: its radius is the one shown (a held radius given back by the area: let go).
+    if (!this.#handle?.getElement()?.querySelector('.held')) this.#held = null;
+    const at = L.latLng(circle.getLatLng().lat, circle.getBounds().getEast());
+    if (!this.#handle) {
+      const el = elem('span', 'gf-radius-handle');
+      el.tabIndex = 0;
+      el.setAttribute('role', 'slider');
+      el.setAttribute('aria-label', 'Poignée du rayon de la zone');
+      el.setAttribute('aria-valuemin', '100');
+      el.setAttribute('aria-valuemax', '50000');
+      el.title = 'Glisser pour changer le rayon (← → : de cran en cran)';
+      const bubble = elem('span', 'bubble');
+      bubble.hidden = true;
+      el.append(elem('span', 'knob'), bubble);
+      this.#handle = L.marker(at, { icon: L.divIcon({ className: 'gf-radius-mk', iconSize: [36, 36], iconAnchor: [18, 18], html: el }), keyboard: false, zIndexOffset: 2500 }).addTo(map);
+      this.#holdHandle(el);
+    } else this.#handle.setLatLng(at);
+    this.#sayRadius();
+  }
+
+  /** The handle's value, in words (aria) and in its bubble. */
+  #sayRadius() {
+    const el = /** @type {HTMLElement | null | undefined} */ (this.#handle?.getElement()?.querySelector('.gf-radius-handle'));
+    const h = this.radiusHandle;
+    if (!el || !h) return;
+    const m = this.#radiusNow;
+    el.setAttribute('aria-valuenow', String(Math.round(m)));
+    el.setAttribute('aria-valuetext', h.label(m));
+    /** @type {HTMLElement} */ (el.querySelector('.bubble')).textContent = h.label(m);
+  }
+
+  /** The circle (and the handle) at a radius, while it is held: nothing asked yet. @param {number} m */
+  #showRadius(m) {
+    this.#held = m;
+    for (const c of this.#areaCircles) c.setRadius(m);
+    const circle = this.#areaCircles[1];
+    if (circle && this.#handle) this.#handle.setLatLng(L.latLng(circle.getLatLng().lat, circle.getBounds().getEast()));
+    this.#sayRadius();
+  }
+
+  /**
+   * The handle's gestures: held and dragged (a mouse, a finger, a pen: its pointer captured, the map never panned
+   * meanwhile), the radius the distance from the centre gives (snapped to the stops near it); let go, the radius
+   * changed (`radius-change`). A key: the next stop, or the one before. @param {HTMLElement} el
+   */
+  #holdHandle(el) {
+    const map = /** @type {L.Map} */ (this.#map);
+    const bubble = /** @type {HTMLElement} */ (el.querySelector('.bubble'));
+    /** @type {number | null} */ let pointer = null;
+    let from = 0;
+    const end = (/** @type {PointerEvent} */ e) => {
+      if (e.pointerId !== pointer) return;
+      pointer = null;
+      el.classList.remove('held');
+      bubble.hidden = true;
+      map.dragging.enable();
+      const m = this.#held ?? from;
+      if (m !== from) this.#emit('radius-change', { radius: m });
+      else this.#showRadius(from);
+    };
+    el.addEventListener('pointerdown', e => {
+      if (pointer !== null || (e.pointerType === 'mouse' && e.button !== 0)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      pointer = e.pointerId;
+      try { el.setPointerCapture(e.pointerId); } catch { /* a pointer already gone */ }
+      from = this.#radiusNow;
+      map.dragging.disable();
+      el.classList.add('held');
+      bubble.hidden = false;
+      el.focus({ preventScroll: true });
+      this.#sayRadius();
+    });
+    el.addEventListener('pointermove', e => {
+      const circle = this.#areaCircles[1];
+      if (e.pointerId !== pointer || !this.radiusHandle || !circle) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const box = map.getContainer().getBoundingClientRect();
+      const ll = map.containerPointToLatLng([e.clientX - box.left, e.clientY - box.top]);
+      const m = this.radiusHandle.snap(map.distance(circle.getLatLng(), ll));
+      if (m === this.#radiusNow) return;
+      this.#showRadius(m);
+      this.#emit('radius-input', { radius: m });
+    });
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+    el.addEventListener('lostpointercapture', end);
+    el.addEventListener('keydown', e => {
+      const m = this.radiusHandle?.step(e.key, this.#radiusNow) ?? null;
+      if (m === null) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (m === this.#radiusNow) return;
+      this.#showRadius(m);
+      this.#emit('radius-change', { radius: m });
+    });
+    // Never a click, a long press nor a pan of the map from it.
+    L.DomEvent.disableClickPropagation(el);
+    for (const type of ['mousedown', 'touchstart', 'contextmenu']) {
+      el.addEventListener(type, ev => { ev.stopPropagation(); if (type !== 'mousedown') ev.preventDefault(); });
+    }
+  }
+
   /** The points of a (not smooth) area drawn, by what they show, and how they were drawn. @type {{ sig: string, dots: Map<string, L.Layer> } | null} */
   #areaDots = null;
 
@@ -2006,7 +2149,7 @@ export class GfMap extends LitElement {
     // With the search pill, the layers button lives at its end; otherwise it is a round button like "locate".
     // eslint-disable-next-line no-unsanitized/property -- fixed markup and bundled icons, no data in it
     buttons.innerHTML = `
-      ${this.#hasSearch ? '' : `<button type="button" class="layers" aria-label="Carte : fond, couches, légende" title="Carte : fond, couches, légende">${iconMarkup('layers')}</button>`}
+      ${this.#hasSearch || this.noLayers ? '' : `<button type="button" class="layers" aria-label="Carte : fond, couches, légende" title="Carte : fond, couches, légende">${iconMarkup('layers')}</button>`}
       <button type="button" class="locate" aria-label="Me localiser" title="Me localiser" aria-pressed="false">${iconMarkup('crosshair')}</button>
       <button type="button" class="edit" aria-label="Modifier les positions" title="Modifier les positions" aria-pressed="false" hidden>${iconMarkup('pencil')}</button>`;
     buttons.querySelector('.locate')?.addEventListener('click', () => this.#locate());
@@ -2045,7 +2188,7 @@ export class GfMap extends LitElement {
   }
 
   #buildSearch() {
-    const search = Object.assign(document.createElement('gf-map-search'), { className: 'gf-map-search' });
+    const search = Object.assign(document.createElement('gf-map-search'), { className: 'gf-map-search', noPanel: this.noLayers });
     search.addEventListener('open-panel', () => this.openPanel());
     search.addEventListener('place-pick', (/** @type {any} */ e) => {
       const [lon, lat] = e.detail.coordinates;
@@ -2130,7 +2273,18 @@ export class GfMap extends LitElement {
     this.#base = key;
     /** @type {L.TileLayer} */ (this.#layer(key).addTo(map)).bringToBack();
     this.#saveLayers();
+    this.#emit('base-shown', { base: key });
   }
+
+  /** The background shown now ('photo' or 'plan'). */
+  get baseShown() { return this.#base; }
+
+  /**
+   * Another background shown, as the panel's choice is (a free layout's thumbnail of the other one): kept as the panel
+   * keeps it — this map's own (`layers-change`) when it has one, else the Carte's shared choice. `base-shown` {base} after.
+   * @param {'photo' | 'plan'} key
+   */
+  setBase(key) { if (this.#map) this.#setBase(key); }
 
   /** @param {string} key @param {boolean} on */
   #setOverlay(key, on) {

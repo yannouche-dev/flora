@@ -109,3 +109,78 @@ export function uiMode(ui, width = 0) {
   if (ui === 'complete' || ui === 'compacte' || ui === 'nue') return ui;
   return width > 0 && width < COMPACT_WIDTH ? 'compacte' : 'complete';
 }
+
+/**
+ * The controls a map cell draws over its map (ctl=rayon+lieu+…), in the order the address writes them, each in its
+ * fixed place: the address search on top (lieu), the layers button at its end or top right (couches), under it
+ * « Me localiser » (gps — and « Autour de moi » in the zone), the 2D / 3D switch (3d) and the other background's
+ * thumbnail (fond); the zone with its radius top left (rayon: its panel, and a handle on the circle's edge); bottom
+ * left the current plant's chip (plante) and the legend (legende) over the zoom (zoom); bottom right the period's
+ * chips (periode) and the counter (compte).
+ * @type {Record<string, { label: string }>}
+ */
+export const MAP_CONTROLS = {
+  rayon: { label: 'Zone et poignée du rayon' },
+  lieu: { label: 'Recherche d’adresse' },
+  gps: { label: 'Me localiser, autour de moi' },
+  couches: { label: 'Bouton des couches' },
+  '3d': { label: 'Bascule 2D / 3D' },
+  fond: { label: 'Vignette de l’autre fond' },
+  plante: { label: 'Plante courante' },
+  periode: { label: 'Période' },
+  compte: { label: 'Compteur' },
+  legende: { label: 'Légende' },
+  zoom: { label: 'Zoom' }
+};
+
+/** Other names of the controls (folded, no spaces) → their name. */
+export const MAP_CONTROL_ALIASES = {
+  zone: 'rayon', poignee: 'rayon', radius: 'rayon', cercle: 'rayon', recherche: 'lieu', adresse: 'lieu', search: 'lieu',
+  localiser: 'gps', locate: 'gps', position: 'gps', moi: 'gps', layers: 'couches', calques: 'couches', couche: 'couches',
+  relief: '3d', '2d3d': '3d', base: 'fond', fonds: 'fond', vignette: 'fond', plant: 'plante', puce: 'plante',
+  when: 'periode', dates: 'periode', compteur: 'compte', count: 'compte', nombre: 'compte', legend: 'legende'
+};
+
+/** The controls of complete ones (ui=complete; auto on a wide cell). */
+const COMPLETE_CONTROLS = ['rayon', 'lieu', 'gps', 'couches', '3d', 'compte', 'zoom', 'plante'];
+
+/** What each intent adds to them (nue: none, whatever the intent). @type {Record<string, string[]>} */
+export const INTENT_CONTROLS = { floraison: ['periode'], protege: ['legende'], repartition: ['plante'], terrain: ['gps'] };
+
+/**
+ * The controls a map cell has when ctl= is not written: its `ui`'s set — complete (`auto` too, whatever the width:
+ * the address does not know it), compacte the same without the address search, nue none — and its intent's, in the
+ * address' order. @param {string | null | undefined} ui @param {string | null | undefined} [intent] @returns {string[]}
+ */
+export function defaultControls(ui, intent) {
+  if (ui === 'nue') return [];
+  const base = ui === 'compacte' ? COMPLETE_CONTROLS.filter(c => c !== 'lieu') : COMPLETE_CONTROLS;
+  const on = new Set([...base, ...(INTENT_CONTROLS[intent ?? ''] ?? [])]);
+  return Object.keys(MAP_CONTROLS).filter(c => on.has(c));
+}
+
+/**
+ * The controls drawn, and how: ctl= as written (exactly that set), else by `ui` (auto: by the cell's width) and the
+ * intent; compact (smaller, icons alone, the zone a pill) when the controls are compact.
+ * @param {{ ctl?: string[] | null, ui?: string | null, intent?: string | null }} params @param {number} [width]
+ * @returns {{ on: Set<string>, compact: boolean, mode: 'complete' | 'compacte' | 'nue' }}
+ */
+export function mapControls(params, width = 0) {
+  const mode = uiMode(params.ui, width);
+  const on = new Set(params.ctl ?? defaultControls(mode, params.intent));
+  return { on, compact: mode === 'compacte', mode };
+}
+
+/** Within this share of a stop, a radius dragged sticks to it. */
+export const SNAP = 0.06;
+
+/**
+ * A radius dragged (the circle's handle): the stop it is near (within SNAP), else itself rounded (10 m under 1 km,
+ * 100 m beyond), between 100 m and 50 km. @param {number} m @param {number[]} stops @param {number} [tol] @returns {number}
+ */
+export function snapRadius(m, stops, tol = SNAP) {
+  const near = stops.find(s => Math.abs(m - s) <= s * tol);
+  if (near !== undefined) return near;
+  const r = m < 1000 ? Math.round(m / 10) * 10 : Math.round(m / 100) * 100;
+  return Math.min(50_000, Math.max(100, r));
+}

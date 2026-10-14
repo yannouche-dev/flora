@@ -16,6 +16,8 @@ export class GfMapSearch extends LitElement {
   static properties = {
     /** Why the panel's button has its dot ('' : none): « espaces protégés en vue ». */
     flag: { type: String },
+    /** No button for the panel « Carte » at its end (a free layout's map without its layers control: ctl=). */
+    noPanel: { type: Boolean, attribute: false },
     _query: { state: true },
     _results: { state: true },
     _busy: { state: true },
@@ -72,6 +74,7 @@ export class GfMapSearch extends LitElement {
   constructor() {
     super();
     this.flag = '';
+    this.noPanel = false;
     this._query = '';
     /** @type {import('../core/geoservices.js').GeoResult[]} */
     this._results = [];
@@ -145,8 +148,8 @@ export class GfMapSearch extends LitElement {
           .value=${this._query} @input=${this.#input}
           @focus=${() => { this._active = true; }}
           @keydown=${e => { if (e.key === 'Enter' && this._results[0]) this.#pick(this._results[0]); if (e.key === 'Escape') this._active = false; }} />
-        <button class="icon-btn" type="button" aria-label=${panel} title=${panel}
-          @click=${() => this.#emit('open-panel', {})}>${icon('layers')}${this.flag ? html`<span class="dot" aria-hidden="true"></span>` : nothing}</button>
+        ${this.noPanel ? nothing : html`<button class="icon-btn" type="button" aria-label=${panel} title=${panel}
+          @click=${() => this.#emit('open-panel', {})}>${icon('layers')}${this.flag ? html`<span class="dot" aria-hidden="true"></span>` : nothing}</button>`}
       </div>
       ${open ? html`<ul role="listbox" aria-label="Résultats">
         ${this._results.map(r => html`<li><button type="button" @click=${() => this.#pick(r)}>

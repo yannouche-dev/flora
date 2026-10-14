@@ -145,12 +145,14 @@ test('interface : aucune commande (nue), compacte dans une case étroite (auto),
   await expect(page.locator('dl-map .gf-map-buttons')).toBeHidden();
   await expect(page.locator('dl-map .leaflet-control-zoom')).toBeHidden();
   await expect(page.locator('dl-map .panel')).toHaveCount(0);
-  // A narrow cell (auto): compact — no address search, the zone at the top, « Autour de moi » its icon alone.
+  // A narrow cell (auto): compact — no address search, the zone a pill at the top (« 1 km ▾ »), « Autour de moi »
+  // under it once opened.
   await app.go(`#/layout/[map(r=1km)@20,plant,search]?${AT}`);
   await expect(page.locator('dl-map')).toHaveAttribute('ui', 'compacte');
   await expect(page.locator('dl-map gf-map-search')).toHaveCount(0);
-  await expect(page.locator('dl-map .panel.compact')).toBeVisible();
+  await expect(page.locator('dl-map .zone > button')).toHaveText(/1 km/);
   await expect(page.locator('dl-map .gf-map-buttons .layers')).toBeVisible();
+  await page.locator('dl-map .zone > button').click();
   await expect(page.locator('dl-map').getByRole('button', { name: 'Autour de moi' })).toBeVisible();
   // Wide: complete — the search there again (the map's own controls made again with it).
   await app.go(`#/layout/[map(r=1km)@50,plant]?${AT}`);
@@ -167,7 +169,8 @@ test('intentions : terrain (photo, compacte, autour de moi), protégé (les espa
   let g = await given(page);
   expect([g.base, g.noSearch, g.track]).toEqual(['photo', true, true]);
   await expect(page.locator('dl-map')).toHaveAttribute('ui', 'compacte');
-  // The scope taken off (✕): it stays off.
+  // The scope taken off (✕, in its pill): it stays off.
+  await page.locator('dl-map .zone > button').click();
   await page.locator('dl-map').getByRole('button', { name: 'Toute la France (sans zone)' }).click();
   await expect.poll(() => param(page, 'at')).toBe(null);
   await page.waitForTimeout(300);
