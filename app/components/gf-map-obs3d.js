@@ -725,14 +725,23 @@ export class Obs3dLayer {
     for (const type of ['mousedown', 'touchstart', 'wheel', 'click']) card.addEventListener(type, e => e.stopPropagation());
     this.box.append(card);
     this.#cardPinned = pin;
-    // Above the point, in the map (below it when there is no room above).
+    // Above the point, in the map (below it when there is no room above) — never under what lies over the map's top
+    // (the Carte's search pill: a card there could not be closed on a phone).
     const box = this.box.getBoundingClientRect(), w = card.offsetWidth, h = card.offsetHeight;
+    const top = this.#topInset(box);
     const x = Math.min(box.width - w - 8, Math.max(8, near.left + near.width / 2 - box.left - w / 2));
     let y = near.top - box.top - h - 10;
-    if (y < 8) y = Math.min(box.height - h - 8, near.bottom - box.top + 10);
+    if (y < top) y = Math.min(box.height - h - 8, near.bottom - box.top + 10);
     card.style.left = Math.round(x) + 'px';
-    card.style.top = Math.round(Math.max(8, y)) + 'px';
+    card.style.top = Math.round(Math.max(top, y)) + 'px';
     if (pin) /** @type {HTMLElement | null} */ (card.querySelector('.gf-o3-close'))?.focus({ preventScroll: true });
+  }
+
+  /** Where a card may start, from the map's top: below the search pill when the map has one. @param {DOMRect} box */
+  #topInset(box) {
+    const pill = /** @type {HTMLElement | null} */ (this.host.querySelector?.('.gf-map-search'));
+    const r = pill && pill.offsetParent ? pill.getBoundingClientRect() : null;
+    return r && r.height ? Math.max(8, Math.round(r.bottom - box.top + 8)) : 8;
   }
 
   #hideCard() {
