@@ -212,22 +212,7 @@ export async function observationPointsAround(point, radius, signal) {
   // « around-points6 »: the points cached with the observations' own photos are not used again.
   const found = await cached(`around-points6:${area(point, radius)}`, async () => {
     const data = await json(`${API}/observations?${area(point, radius)}&iconic_taxa=Plantae&quality_grade=research&locale=fr&per_page=100&order_by=observed_on`, signal);
-    const points = (data.results || []).filter(o => Array.isArray(o.geojson?.coordinates)).map(o => {
-      const url = o.uri || `https://www.inaturalist.org/observations/${o.id}`;
-      // The plant's photo, never the observation's own (most are under iNaturalist's default licence, CC BY-NC, never
-      // shown: the points were leaves but for the plant chosen's): its taxon's under a free licence — the one its card
-      // shows (speciesAround) —, else the flora's (withThumbs). One address a plant, shared by all its points.
-      const taxon = o.taxon?.default_photo?.square_url && inatCredit(o.taxon.default_photo) ? o.taxon.default_photo : null;
-      const common = o.taxon?.preferred_common_name || null, sci = o.taxon?.name || '';
-      return {
-        coordinates: /** @type {[number, number]} */ (o.geojson.coordinates),
-        title: common || sci || 'Plante', common, sci, taxonId: o.taxon?.id ?? null,
-        photo: taxon ? String(taxon.square_url).replace(/\/(square|thumb|small|medium)\./, '/square.') : null,
-        credit: taxon ? inatCredit(taxon) : null,
-        date: o.observed_on || null, place: o.place_guess || null,
-        url
-      };
-    });
+    const points = (data.results || []).filter(o => Array.isArray(o.geojson?.coordinates)).map(aroundPoint);
     return { points, total: Number(data.total_results) || points.length };
   });
   return withThumbs(found);
@@ -253,6 +238,43 @@ async function withThumbs(found) {
     return thumb ? { ...p, photo: /** @type {string} */ (thumb.url), credit: thumbCredit(thumb) } : p;
   });
   return { ...found, points };
+}
+
+/**
+ * More of them, for a map that draws hundreds (the 3D view of the observations around, components/gf-map-obs3d.js):
+ * up to `max` of the most recent (200 a page), the same points. Cached a day; a page missing, a few minutes.
+ * @param {[number, number]} point @param {number} radius @param {number} max @param {AbortSignal} [signal]
+ * @returns {Promise<{ points: AroundPoint[], total: number }>}
+ */
+export function observationPointsMany(point, radius, max, signal) {
+  if (!moduleOn('inaturalist')) return Promise.reject(new ModuleOffError('inaturalist'));
+  let partial = false;
+  return cached(`around-many2:${max}:${area(point, radius)}`, async () => {
+    const page = await paged(`${area(point, radius)}&iconic_taxa=Plantae&quality_grade=research&locale=fr&order_by=observed_on`, max, signal);
+    partial = page.partial;
+    return { points: page.results.map(aroundPoint), total: page.total };
+  }, () => partial).then(withThumbs);
+}
+
+/**
+ * An iNaturalist observation as a point of the map: its plant's photo, never the observation's own (most are under
+ * iNaturalist's default licence, CC BY-NC, never shown: the points were leaves but for the plant chosen's) — its
+ * taxon's under a free licence, the one its card shows (speciesAround), else the flora's (withThumbs, after the cache).
+ * One address a plant, shared by all its points. Its names, date, place and page.
+ * @param {any} o @returns {AroundPoint}
+ */
+function aroundPoint(o) {
+  const url = o.uri || `https://www.inaturalist.org/observations/${o.id}`;
+  const taxon = o.taxon?.default_photo?.square_url && inatCredit(o.taxon.default_photo) ? o.taxon.default_photo : null;
+  const common = o.taxon?.preferred_common_name || null, sci = o.taxon?.name || '';
+  return {
+    coordinates: /** @type {[number, number]} */ (o.geojson.coordinates),
+    title: common || sci || 'Plante', common, sci, taxonId: o.taxon?.id ?? null,
+    photo: taxon ? String(taxon.square_url).replace(/\/(square|thumb|small|medium)\./, '/square.') : null,
+    credit: taxon ? inatCredit(taxon) : null,
+    date: o.observed_on || null, place: o.place_guess || null,
+    url
+  };
 }
 
 /**

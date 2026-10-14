@@ -42,6 +42,8 @@ export const config = {
     mapView: 'geoflora.mapView',
     /** Réglages › Cartes: 2D or 3D, and the 3D options (core/map-settings.js). */
     maps3d: 'geoflora.maps3d',
+    /** The observations around a centre on the maps in 3D, per map: shown, radius, sources, density (core/around3d.js). */
+    around3d: 'geoflora.around3d',
     discoverLayout: 'geoflora.discoverLayout',
     trailLayout: 'geoflora.trailLayout',
     // Mini-apps (app/miniapp): « Afficher les étapes » (auto, on, off); each one's state and layout under the prefix.

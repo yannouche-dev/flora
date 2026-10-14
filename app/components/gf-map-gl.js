@@ -21,6 +21,8 @@
 // in a short note, while its positions are being edited (markers dragged), without WebGL2, when MapLibre cannot load
 // (offline before its first download), when too many maps are in 3D at once (one WebGL context each), or when the GPU
 // takes its context back.
+// The observations around a place (gf-map-obs3d.js): every 3D map has them at will — iNaturalist's, GBIF's and the
+// user's plants in a circle on the relief, its wall, its radius; their sources and layers in this map's style.
 // Modules: « Vue 3D (relief) » off → no relief asked (flat 3D); « IGN – fonds de carte » off → IGN tiles from the
 // cache only, no vector plan nor buildings; offline → flat, from the cache. Photos: the markers' own (gf-map asks the
 // « Photos en ligne » module).
@@ -32,6 +34,7 @@ import { DEM_ATTRIBUTION, IGN_VECTOR_STYLE, buildStyle, circlePolygon, describeT
 import { LOCALE, MAPLIBRE_CSS, MAP_GL_CSS, hasWebGL2, linkCss, loadMapLibre, noWebGL2 } from '../core/maplibre.js';
 import { formatAltitude } from '../core/altitude.js';
 import { iconMarkup } from '../core/icons.js';
+import { Obs3dLayer } from './gf-map-obs3d.js';
 
 /** WebGL maps at once (each holds a context; browsers allow some 16, phones fewer, and each costs memory). */
 export const MAX_GL = 3;
@@ -181,6 +184,8 @@ export class GlView {
   #sunTimer;
   #connected = false;
   #demCredited = false;
+  /** The observations around (its button, its circle, its points). @type {Obs3dLayer | null} */
+  #obs = null;
 
   // ── What the user sees: the note, the altitude ──────────────────────────────────────────────────
   // (No 2D ⇄ 3D button on the maps: the choice is in Réglages › Cartes and in each map's panel « Carte », one choice
@@ -259,6 +264,7 @@ export class GlView {
   /** gf-map's properties changed: editing starts or ends, markers become draggable. @param {Map<string, any>} changed */
   changed(changed) {
     if (['editing', 'editable', 'draggablePlants', 'pin', 'pinDraggable', 'area'].some(k => changed.has(k))) queueMicrotask(() => this.sync());
+    this.#obs?.changed(changed);
   }
 
   /** In the page (again): it follows Réglages, the modules and the network while it is. */
@@ -398,6 +404,7 @@ export class GlView {
     });
     this.#watchIcons();
     this.#credit();
+    this.#obs = new Obs3dLayer({ host: this.host, lf, ml, map, box, root: this.root, restyle: () => this.#restyle() });
 
     const ready = () => {
       if (this.#map !== map) return;
@@ -418,6 +425,8 @@ export class GlView {
     clearInterval(this.#sunTimer);
     this.#iconWatch?.disconnect();
     this.#iconWatch = null;
+    this.#obs?.destroy();
+    this.#obs = null;
     this.#unlistenLeaflet();
     for (const layer of [...this.#mirrors.keys()]) this.#unmirror(layer);
     this.#credit(true);
@@ -471,7 +480,7 @@ export class GlView {
   }
 
   #style() {
-    return buildStyle({
+    const style = buildStyle({
       tiles: /** @type {any} */ (this.#tiles()),
       settings: mapSettings(),
       terrain: this.#terrainOn(),
@@ -482,6 +491,9 @@ export class GlView {
       sun: this.#sun(),
       paths: this.#paths
     });
+    // The observations around, over the rest.
+    this.#obs?.addTo(style);
+    return style;
   }
 
   /** Drawn again (a layer, a setting, a module, the network changed): only what differs (MapLibre's diff). */
@@ -859,7 +871,8 @@ export class GlView {
         pitch: Math.round(map.getPitch()), bearing: Math.round(map.getBearing()), zoom: map.getZoom(),
         markers: [...this.#mirrors.values()].filter(m => m.kind === 'marker' || m.kind === 'dot').length,
         paths: this.#paths.features.length,
-        light: map.getLight?.() ?? null
+        light: map.getLight?.() ?? null,
+        obs3d: this.#obs?.state() ?? null
       } : {})
     };
   }
