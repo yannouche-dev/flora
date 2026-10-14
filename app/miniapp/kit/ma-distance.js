@@ -23,7 +23,7 @@ import { observationsAround } from '../../core/nearby.js';
 import { plantViewOf, StoreController } from '../../core/store.js';
 import { PHONE_QUERY } from '../../core/media.js';
 import { ui } from '../../styles/ui.js';
-import { DISTANCES, distanceAt, distLabel, distMood, distWords, nameOf } from './cards.js';
+import { DISTANCES, distanceAt, distanceEvents, distLabel, distMood, distWords, nameOf } from './cards.js';
 import { sessionOf } from './session.js';
 import '../../components/gf-map.js';
 import { ringAt } from '../../components/map-style.js';
@@ -300,13 +300,14 @@ export class MaDistance extends LitElement {
   /** The slider of the distances: its stops, the main ones labelled. @param {number} radius */
   #range(radius) {
     const app = /** @type {import('../runtime.js').MiniApp} */ (this.app), at = distanceAt(radius), n = DISTANCES.length - 1;
+    const on = distanceEvents(() => /** @type {Record<string, any>} */ (this.c).radius, m => app.set({ radius: m }));
     return html`<div class="range" style="--n:${n};--p:${at / n}">
       <div class="rail" aria-hidden="true"></div>
       ${DISTANCES.map((d, i) => html`<span class="stop ${i <= at ? 'on' : ''}" style="--i:${i}" aria-hidden="true"></span>`)}
       ${DISTANCES.map((d, i) => html`<span class="mark ${MAIN_STOPS.has(d) ? '' : 'minor'} ${i === 0 ? 'first' : i === n ? 'last' : ''} ${i === at ? 'cur' : ''}"
         style="--i:${i}" aria-hidden="true">${distLabel(d)}</span>`)}
-      <input type="range" min="0" max=${n} step="1" .value=${String(at)} aria-label="Distance de la recherche"
-        aria-valuetext=${distWords(radius)} @input=${(/** @type {any} */ e) => app.set({ radius: DISTANCES[Number(e.target.value)] })} />
+      <input type="range" min="0" max=${n} step="any" .value=${String(at)} aria-label="Distance de la recherche"
+        aria-valuetext=${distWords(radius)} @input=${on.input} @keydown=${on.keydown} />
     </div>`;
   }
 

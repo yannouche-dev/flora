@@ -96,7 +96,11 @@ export const COMPONENTS = [
       filters: { kind: 'bool', label: 'Filtres ouverts', def: false, words: ['filtres', 'facettes'] },
       list: { kind: 'bool', label: 'Liste des résultats', def: true, words: ['liste', 'resultats', 'results'] }
     },
-    main: 'filters', reads: ['query', 'results', 'plant'], writes: ['query', 'plant'], min: { w: 260, h: 160 }
+    // 280 px: its bar (gf-results-bar) gives way in a narrow cell (the sort menu beside its tools, the count being in the
+    // cell's head, its longest words cut short as on a phone; the chips wrapped), every control inside the cell — and a
+    // bar taller than its cell scrolls in it (cells.js); at 280 px its field still shows about eleven letters beside its
+    // ✕ and its microphone — narrower, too few to read what is typed (measured: 86 px at 280, 67 at 260).
+    main: 'filters', reads: ['query', 'results', 'plant'], writes: ['query', 'plant'], min: { w: 280, h: 160 }
   },
   {
     id: 'filters', title: 'Filtres', icon: 'funnel', aliases: ['filtres', 'facettes'],

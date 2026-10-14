@@ -30,7 +30,7 @@ import { isFavorite, toggleFavorite } from '../core/collections.js';
 import { ui } from '../styles/ui.js';
 import { floweringMonths } from '../components/gf-calendar.js';
 import { geoProblem } from '../components/start-screen.js';
-import { DISTANCES } from '../miniapp/kit/cards.js';
+import { DISTANCES, distanceAt, distanceEvents } from '../miniapp/kit/cards.js';
 import { distanceLabel } from './registry.js';
 import { obsId } from './state.js';
 import '../components/gf-map.js';
@@ -74,9 +74,6 @@ async function nameScope(state, at) {
   const a = await addressAt(at).catch(() => null);
   if (a?.city && state.live.at === at) state.set({ place: a.city }, 'replace');
 }
-
-/** The slider's position of a radius (the closest distance offered). @param {number} m */
-const stepOf = m => DISTANCES.reduce((best, d, i) => Math.abs(d - m) < Math.abs(DISTANCES[best] - m) ? i : best, 0);
 
 /** Watches the state: the host drawn again on each change. */
 class StateController {
@@ -126,11 +123,18 @@ const scopeStyles = css`
   .where .icon-btn { width: 32px; height: 32px; font-size: 1rem; flex: none; }
 `;
 
-/** @param {LayoutState} state */
-const radiusSlider = state => html`<label class="radius"><span class="visually-hidden">Rayon de la zone</span>
-  <input type="range" min="0" max=${DISTANCES.length - 1} step="1" .value=${String(stepOf(state.radius))} aria-label="Rayon de la zone"
-    aria-valuetext=${distanceLabel(state.radius)} @input=${(/** @type {any} */ e) => state.set({ r: DISTANCES[Number(e.target.value)] }, 'replace')} />
-  <b>${distanceLabel(state.radius)}</b></label>`;
+/**
+ * The radius' slider (map, place): Rencontres' stops (kit/cards.js), the radius shown where it is — one the address
+ * gives between two stops (r=3km) sits between them, never on a stop it is not; moved, it goes from stop to stop.
+ * @param {LayoutState} state
+ */
+const radiusSlider = state => {
+  const on = distanceEvents(() => state.radius, m => state.set({ r: m }, 'replace'));
+  return html`<label class="radius"><span class="visually-hidden">Rayon de la zone</span>
+    <input type="range" min="0" max=${DISTANCES.length - 1} step="any" .value=${String(distanceAt(state.radius))} aria-label="Rayon de la zone"
+      aria-valuetext=${distanceLabel(state.radius)} @input=${on.input} @keydown=${on.keydown} />
+    <b>${distanceLabel(state.radius)}</b></label>`;
+};
 
 // ── map ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -265,8 +269,10 @@ customElements.define('dl-map', DlMap);
 export class DlPlace extends LitElement {
   static properties = { state: { attribute: false }, _busy: { state: true }, _error: { state: true } };
 
+  // Positioned: what it places absolutely (the slider's hidden label) scrolls with it — placed by the cell instead, it
+  // stood below the cell's edge when the zone holds more than the cell's height, and the cell (which clips) overflowed.
   static styles = [ui, scopeStyles, css`
-    :host { display: block; overflow-y: auto; padding: 10px 12px; }
+    :host { display: block; position: relative; overflow-y: auto; padding: 10px 12px; }
     .box { display: grid; gap: 10px; }
     .primary { justify-self: start; }
   `];
@@ -352,12 +358,16 @@ customElements.define('dl-results', DlResults);
 export class DlSearch extends LitElement {
   static properties = { state: { attribute: false }, params: { attribute: false }, _filters: { state: true } };
 
+  /* A cell lower than its bar (a narrow one, where the bar folds onto more lines; a short row: « Étude », « Grille et
+     photos » at 720 px, or on a phone): the cell scrolls, never cuts the bar's last lines (the chips, « Filtrer par »)
+     out of reach — the cell around it clips. Below the bar, the filters opened and the list keep a little room of
+     their own (reached by scrolling the cell), never squeezed to nothing under a tall bar. */
   static styles = [ui, css`
-    :host { display: flex; flex-direction: column; min-height: 0; }
+    :host { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
     gf-results-bar { flex: none; }
     .filters { flex: none; max-height: 45%; overflow-y: auto; padding: 0 12px; border-bottom: 1px solid var(--gf-border); background: var(--gf-surface); }
-    :host([no-list]) .filters { flex: 1; max-height: none; }
-    dl-results { flex: 1; min-height: 0; }
+    :host([no-list]) .filters { flex: 1; max-height: none; min-height: 8rem; }
+    dl-results { flex: 1; min-height: 8rem; }
   `];
 
   constructor() {
@@ -381,7 +391,7 @@ export class DlSearch extends LitElement {
   render() {
     const open = this._filters ?? Boolean(this.params.filters);
     const list = this.params.list !== false;
-    return html`<gf-results-bar .wide=${false} @open-filters=${(/** @type {Event} */ e) => { e.stopPropagation(); this._filters = !open; }}></gf-results-bar>
+    return html`<gf-results-bar .wide=${false} count-above @open-filters=${(/** @type {Event} */ e) => { e.stopPropagation(); this._filters = !open; }}></gf-results-bar>
       ${open ? html`<div class="filters" role="region" aria-label="Filtres"><gf-filter-panel></gf-filter-panel></div>` : nothing}
       ${list ? html`<dl-results .state=${this.state} .params=${{ view: 'auto' }}></dl-results>` : nothing}`;
   }
@@ -442,6 +452,7 @@ export class DlDeck extends LitElement {
     :host { display: block; overflow-y: auto; padding: 12px 8px; container-type: size; --deck-max: calc(100cqh - 150px); --deck-min: 220px; }
     .empty { display: grid; gap: 10px; justify-items: center; padding: 24px 12px; text-align: center; color: var(--gf-text-muted); }
     .empty .big { font-size: 2rem; color: var(--gf-accent); margin: 0; }
+    .empty .big.warn { color: var(--gf-warn, #b45309); }
   `];
 
   #store = new StoreController(this);
@@ -465,12 +476,13 @@ export class DlDeck extends LitElement {
   /**
    * The cards: the plants found in the scope (the first DECK_MAX, in the search's order), and the current plant when
    * it is not among them (on top: the deck always shows it); made again when they change. Not before the scope's
-   * plants are known (the search is not kept to them yet).
+   * plants are known (the search is not kept to them yet): « Les cartes arrivent… » while they come — and only then:
+   * iNaturalist failing, the deck says so (render), never waits for cards that will not come.
    */
   async #cards() {
     const s = /** @type {LayoutState} */ (this.state);
     const species = s.species;
-    if (!species) { if (s.speciesState === 'loading') this._loading = true; return; }
+    if (!species) { this._loading = s.speciesState === 'loading'; return; }
     const ids = this.#store.state.results.items.map(p => p.id).filter(id => species.byPlant.has(id)).slice(0, DECK_MAX);
     const current = s.live.plant;
     if (current != null && !ids.includes(current)) ids.unshift(current);
@@ -543,8 +555,23 @@ export class DlDeck extends LitElement {
         <button class="primary" type="button" @click=${() => locateOnce().then(at => { s.setScope(at, null); nameScope(s, /** @type {[number, number]} */ (s.live.at)); }, () => {})}>${icon('geo-alt')} Autour de moi</button></div>`;
     }
     const ses = this.#session;
+    if (s.speciesState === 'error') return this.#failed(s);
     if (this._loading && !ses.cards.length) return html`<p class="empty" role="status">Les cartes arrivent…</p>`;
     return html`<ma-deck active .session=${ses} .cards=${ses.deck} .c=${ses.c}></ma-deck>`;
+  }
+
+  /**
+   * The scope's plants could not be had (iNaturalist down, offline, its module off): no cards — said, with what to
+   * do (« Réessayer », or the module turned on), instead of cards of another scope or a wait without end.
+   * @param {LayoutState} s
+   */
+  #failed(s) {
+    const off = s.speciesFailure === 'off';
+    const why = off ? 'Le module iNaturalist est désactivé.' : s.speciesFailure === 'offline' ? 'Hors ligne : iNaturalist est injoignable.' : 'iNaturalist ne répond pas.';
+    return html`<div class="empty" role="status"><p class="big warn">${icon('exclamation-triangle-fill')}</p><p><b>${why}</b></p>
+      <p>Les cartes sont les plantes qu’iNaturalist a vues dans la zone : sans lui, pas de cartes${off ? '' : ' pour l’instant'}.</p>
+      ${off ? html`<p><a href=${href.settings()}>Réglages › Modules</a></p>`
+        : html`<button class="primary" type="button" @click=${() => s.retryScope()}>${icon('arrow-counterclockwise')} Réessayer</button>`}</div>`;
   }
 }
 customElements.define('dl-deck', DlDeck);

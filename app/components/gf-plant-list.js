@@ -19,7 +19,8 @@ const OVERSCAN = 6;
  * Each sortable column sorts the results, and shows how many values of its filter are selected.
  */
 export const COLUMNS = [
-  { key: 'photo', label: 'Photo', sort: 'photo', facet: 'photo', width: '40px' },
+  // Wide enough for its name whole (« Photo », whatever the fonts): its filter's badge goes under it (.th wraps).
+  { key: 'photo', label: 'Photo', sort: 'photo', facet: 'photo', width: '48px' },
   { key: 'fr', label: 'Nom français', sort: 'fr', facet: 'french', width: 'minmax(120px, 1.4fr)' },
   { key: 'family', label: 'Famille', sort: 'family', facet: 'family', width: 'minmax(90px, 1fr)' },
   { key: 'genus', label: 'Genre', sort: 'genus', facet: 'genus', width: 'minmax(80px, 0.9fr)' },
@@ -105,13 +106,16 @@ export class GfPlantList extends LitElement {
       font-weight: 600;
       color: var(--gf-text-muted);
     }
-    .th { display: flex; align-items: center; gap: 2px; min-width: 0; }
+    /* A column too narrow for its name and its filter's badge side by side (Photo: 48 px) puts the badge under the
+       name, never over it — or the name cut to « P… »: both stay whole and readable, in the header's height. */
+    .th { display: flex; flex-wrap: wrap; align-items: center; gap: 1px 2px; min-width: 0; }
     .th button {
       font: inherit;
       color: inherit;
       background: none;
       border: 0;
-      padding: 4px 2px;
+      padding: 3px 2px;
+      line-height: 1.2;
       cursor: pointer;
       border-radius: 6px;
       white-space: nowrap;
@@ -127,6 +131,7 @@ export class GfPlantList extends LitElement {
       flex: none;
       font-size: 0.7rem;
       font-weight: 700;
+      line-height: 1.1;
       padding: 1px 6px;
       border-radius: 999px;
       background: var(--gf-accent);

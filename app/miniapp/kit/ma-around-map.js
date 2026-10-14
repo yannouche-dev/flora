@@ -23,7 +23,7 @@ import { creditText } from '../../core/credit.js';
 import { moduleOn } from '../../core/modules.js';
 import { plantViewOf, StoreController } from '../../core/store.js';
 import { ui } from '../../styles/ui.js';
-import { DISTANCES, distanceAt, distLabel, distMood, nameOf } from './cards.js';
+import { DISTANCES, distanceAt, distanceEvents, distLabel, distMood, nameOf } from './cards.js';
 import '../../components/gf-map.js';
 
 /**
@@ -468,6 +468,7 @@ export class MaAroundMap extends LitElement {
     const scope = scopes ? this._scope : 'around';
     const a = this._admin;
     const km = distLabel(c.radius), mood = distMood(c.radius);
+    const slide = distanceEvents(() => /** @type {Record<string, any>} */ (this.c).radius, m => s.setRadius(m, 700));
     /** @type {[Scope, unknown][]} */
     const chips = [['around', html`${icon('crosshair')} ${km}`], ...(a?.department ? [/** @type {[Scope, unknown]} */ (['department', a.department])] : []),
       ...(a?.region ? [/** @type {[Scope, unknown]} */ (['region', a.region])] : []), ['country', 'France'], ['world', 'Monde']];
@@ -486,8 +487,8 @@ export class MaAroundMap extends LitElement {
         <button class="icon-btn place" type="button" title="Changer de lieu" aria-label="Changer de lieu" @click=${() => this.app?.go('start')}>${icon('geo-alt')}</button>
       </div>
       ${scope === 'around' ? html`<label class="g-radius">${scopes ? html`<span class="mood">${mood}</span>` : nothing}
-        <input type="range" min="0" max=${DISTANCES.length - 1} step="1" .value=${String(distanceAt(c.radius))} aria-label="Distance de la recherche"
-          aria-valuetext=${km} @input=${(/** @type {any} */ e) => s.setRadius(DISTANCES[Number(e.target.value)], 700)} /></label>` : nothing}
+        <input type="range" min="0" max=${DISTANCES.length - 1} step="any" .value=${String(distanceAt(c.radius))} aria-label="Distance de la recherche"
+          aria-valuetext=${km} @input=${slide.input} @keydown=${slide.keydown} /></label>` : nothing}
       ${legend}
     </div>`;
   }
@@ -498,6 +499,7 @@ export class MaAroundMap extends LitElement {
    */
   #launch() {
     const c = /** @type {Record<string, any>} */ (this.c), s = /** @type {AroundSession} */ (this.session);
+    const slide = distanceEvents(() => /** @type {Record<string, any>} */ (this.c).radius, m => s.setRadius(m));
     /** @type {Map<string, import('./session.js').AroundPoint>} */
     const species = new Map();
     for (const o of s.obs) if (o.sci && !species.has(o.sci)) species.set(o.sci, o);
@@ -508,8 +510,8 @@ export class MaAroundMap extends LitElement {
       <h2>${icon('binoculars')} Jusqu’où part l’expédition ?</h2>
       <p class="where">Autour ${c.place ? 'de ' + c.place : 'de vous'} · <button class="link" type="button" @click=${() => this.app?.go('start')}>changer de lieu</button></p>
       <label class="g-dist"><span class="d">${distLabel(c.radius)}</span><span class="mood">${distMood(c.radius)}</span>
-        <input type="range" min="0" max=${DISTANCES.length - 1} step="1" .value=${String(distanceAt(c.radius))} aria-label="Distance de la recherche"
-          aria-valuetext=${distLabel(c.radius)} @input=${(/** @type {any} */ e) => s.setRadius(DISTANCES[Number(e.target.value)])} /></label>
+        <input type="range" min="0" max=${DISTANCES.length - 1} step="any" .value=${String(distanceAt(c.radius))} aria-label="Distance de la recherche"
+          aria-valuetext=${distLabel(c.radius)} @input=${slide.input} @keydown=${slide.keydown} /></label>
       <div class="g-seen" aria-live="polite">
         ${faces.length ? html`<span class="faces" aria-hidden="true">${faces.map(o => html`<img src=${/** @type {string} */ (o.photo)} alt="" title=${o.credit ? creditText(o.credit) : ''} loading="lazy" referrerpolicy="no-referrer" @error=${(/** @type {any} */ e) => e.target.remove()} />`)}</span>` : nothing}
         <span>${s.obs.length ? html`<b>${fr(total)}</b> observation${total > 1 ? 's' : ''} de plantes, <b>${fr(species.size)}</b> espèce${species.size > 1 ? 's' : ''} différente${species.size > 1 ? 's' : ''}${total > s.obs.length ? ` — les ${fr(s.obs.length)} plus récentes sur la carte` : ' sur la carte'}` : 'Les observations arrivent…'}</span>

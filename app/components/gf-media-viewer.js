@@ -22,6 +22,7 @@
 
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import * as db from '../core/db.js';
+import { whenReady } from '../core/store.js';
 import { icon } from '../core/icons.js';
 import { imageKey, loadMedia, PARTS } from '../core/media-items.js';
 import { sheetSession, setMediaSession } from '../core/sheet-session.js';
@@ -459,6 +460,11 @@ export class GfMediaViewer extends LitElement {
     this._items = []; this._done = false; this._key = null; this._lost = new Set();
     this.#settled = false;
     clearTimeout(this.#settleTimer);
+    // Not before the flora is in the database (as the sheet: gf-plant-detail.js#load): a viewer drawn while a first
+    // visit still downloads it (a free layout's media cell, ?p= in its address) would read « no such plant » and,
+    // its plant unchanged, never read it again — « Plante introuvable » for a plant that is there. The skeleton waits.
+    await whenReady();
+    if (abort.signal.aborted) return;
     const plant = await db.get('plants', /** @type {number} */ (this.plantId)).catch(() => null);
     if (abort.signal.aborted) return;
     this._plant = plant;

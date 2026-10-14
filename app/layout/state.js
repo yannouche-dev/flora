@@ -17,6 +17,7 @@
 // circle dropped. Pure functions (readLive, liveSearch) are tested under Node; the class needs the app.
 
 import * as db from '../core/db.js';
+import { forgetFailures } from '../core/cache.js';
 import { observationPointsAround, observationsAround, speciesAround } from '../core/nearby.js';
 import { fromHash, toHash } from '../core/query.js';
 import { runSearch, setSearchScope } from '../core/search.js';
@@ -101,6 +102,8 @@ export class LayoutState extends EventTarget {
     this.speciesState = 'idle';
     /** @type {string | null} */
     this.speciesError = null;
+    /** Why they failed (the cells word it their own way: the deck has no cards without them). @type {'off' | 'offline' | 'unreachable' | null} */
+    this.speciesFailure = null;
     /** The latest observations in the scope (the map), and how many there are in all. @type {AroundPoint[]} */
     this.points = [];
     this.pointsTotal = 0;
@@ -144,6 +147,17 @@ export class LayoutState extends EventTarget {
   /** The scope: a circle around `at` (null: none — the whole flora). @param {[number, number] | null} at @param {string | null} [place] @param {How} [how] */
   setScope(at, place = null, how = 'push') { this.set({ at, place: at ? place : null, obs: null }, how); }
 
+  /**
+   * « Réessayer »: the scope's plants asked again, iNaturalist having failed. The failure the cache remembers a few
+   * minutes (core/cache.js) is forgotten first, or it would only come back.
+   */
+  retryScope() {
+    if (!this.live.at) return;
+    forgetFailures('around');
+    this.scopeFor = '';
+    this.follow();
+  }
+
   /** A changed state: its loads started (the scope's, after a rest; the plant's names and observations). */
   follow() {
     const key = this.scopeKey;
@@ -153,7 +167,7 @@ export class LayoutState extends EventTarget {
       this.abort?.abort();
       this.abort = null;
       if (!key) {
-        this.species = null; this.speciesState = 'idle'; this.speciesError = null; this.points = []; this.pointsTotal = 0;
+        this.species = null; this.speciesState = 'idle'; this.speciesError = null; this.speciesFailure = null; this.points = []; this.pointsTotal = 0;
         this.#rescope(null);
         this.#changed();
       } else {
@@ -183,14 +197,16 @@ export class LayoutState extends EventTarget {
       this.species = { key, list, byPlant: new Map(list.map(s => [/** @type {number} */ (s.plantId), s])), plantOf: new Map(list.map(s => [s.taxonId, /** @type {number} */ (s.plantId)])) };
       this.speciesState = 'ready';
       this.speciesError = null;
+      this.speciesFailure = null;
       this.#rescope(list.map(s => /** @type {number} */ (s.plantId)));
     } catch (error) {
       if (abort.signal.aborted || key !== this.scopeKey) return;
       const e = /** @type {Error} */ (error);
       this.species = null;
       this.speciesState = 'error';
-      this.speciesError = e.name === 'ModuleOffError' ? 'Le module iNaturalist est désactivé (Réglages › Modules) : la zone ne filtre pas les plantes.'
-        : navigator.onLine ? 'iNaturalist ne répond pas : la zone ne filtre pas les plantes pour l’instant.' : 'Hors ligne : la zone ne filtre pas les plantes (iNaturalist est en ligne).';
+      this.speciesFailure = e.name === 'ModuleOffError' ? 'off' : navigator.onLine ? 'unreachable' : 'offline';
+      this.speciesError = this.speciesFailure === 'off' ? 'Le module iNaturalist est désactivé (Réglages › Modules) : la zone ne filtre pas les plantes.'
+        : this.speciesFailure === 'unreachable' ? 'iNaturalist ne répond pas : la zone ne filtre pas les plantes pour l’instant.' : 'Hors ligne : la zone ne filtre pas les plantes (iNaturalist est en ligne).';
       this.#rescope(null);
     }
     this.#changed();
@@ -211,16 +227,25 @@ export class LayoutState extends EventTarget {
     runSearch();
   }
 
-  /** The current plant: its names (the cells' heads), its observations in the scope (the map). */
+  /**
+   * The current plant: its names (the cells' heads), its observations in the scope (the map). Its names are read once
+   * the flora is in the database: on a first visit the layout is drawn while it downloads, and a plant read then (?p=
+   * in the address) would be none — its heads empty for good, since the same plant is never read twice.
+   */
   async #loadPlant() {
     const id = this.live.plant;
     if (id && this.infoFor !== id) {
       this.infoFor = id;
-      const plant = await db.get('plants', id).catch(() => null);
+      await whenReady();
+      const plant = this.live.plant === id ? await db.get('plants', id).catch(() => null) : null;
       if (this.live.plant !== id) return;
       this.plantInfo = plant ? { id, name: plant.vernacularNames?.[0] || plant.scientificName, sci: plant.scientificName } : null;
       this.#changed();
-    } else if (!id && this.plantInfo) { this.infoFor = 0; this.plantInfo = null; this.#changed(); }
+    } else if (!id) {
+      // None now (Back) while one was still being read: chosen again, it is read again.
+      this.infoFor = 0;
+      if (this.plantInfo) { this.plantInfo = null; this.#changed(); }
+    }
     const s = this.species;
     const taxon = id && s ? s.byPlant.get(id)?.taxonId ?? null : null;
     const key = id && s ? id + '@' + s.key : '';
