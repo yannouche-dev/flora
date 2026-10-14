@@ -33,6 +33,7 @@ import {
 } from '../core/sheet-blocks.js';
 import { leaves as paneLeaves, stackOf, setSizes as treeSizes, patchStack, dock, undock } from '../core/pane-tree.js';
 import { pressDock } from '../core/dock-drag.js';
+import { gripStyles, shareGrip } from '../core/split-grip.js';
 import { CATEGORIES, blockCategory, categoryOf } from '../core/categories.js';
 import { FOCUS_EVENT, isFocused, noFocus, toggleFocus } from '../core/map-focus.js';
 import * as openData from '../core/open-data.js';
@@ -91,9 +92,6 @@ const BLOCK_LOADS = {
 
 /** Loads whose value is in _open, by load key. @type {Record<string, string>} */
 const OPEN_KEYS = { globi: 'interactions', niche: 'niche', 'uses:wikidata': 'wdUses', 'uses:recipes': 'recipes' };
-
-/** The least share of a pane beside a grip, by the keyboard (a drag keeps each pane's own minimum in px). */
-const MIN_SHARE = 0.08;
 
 /** A block not moved: the layout would have too many panes nested to be exported and read back (pane-tree.js dock). */
 const TOO_DEEP = 'pas déplacé, trop de volets imbriqués';
@@ -827,23 +825,7 @@ export class GfPlantDetail extends LitElement {
     .split.row > .cell:not(.folded):has(gf-media-viewer:not([compact])) { min-width: 280px; }
     .cell > * { flex: 1; min-width: 0; min-height: 0; }
     .cell.folded { flex: 0 0 auto !important; }
-    .split-grip { flex: none; position: relative; z-index: 8; background: var(--gf-border); touch-action: none; }
-    .split.row > .split-grip { width: 1px; cursor: col-resize; }
-    .split.col > .split-grip { height: 1px; cursor: row-resize; }
-    .split-grip::before { content: ''; position: absolute; inset: -5px; }
-    .split-grip::after { content: ''; position: absolute; background: transparent; transition: background 0.12s; }
-    .split.row > .split-grip::after { top: 0; bottom: 0; left: -1px; width: 3px; }
-    .split.col > .split-grip::after { left: 0; right: 0; top: -1px; height: 3px; }
-    .split-grip:hover::after, .split-grip:focus-visible::after { background: var(--gf-accent); }
-    .split-grip:focus-visible { outline: none; }
-    /* A finger: a 44 px grip (a touch target), and a tab to hold in the middle (as core/panes.js). */
-    @media (pointer: coarse) {
-      .split-grip::before { inset: -22px; }
-      .split.row > .split-grip:not(:hover):not(:focus-visible)::after, .split.col > .split-grip:not(:hover):not(:focus-visible)::after {
-        inset: auto; top: 50%; left: 50%; width: 10px; height: 44px; translate: -50% -50%; border-radius: 5px;
-        background: var(--gf-surface); border: 1px solid var(--gf-border); box-shadow: 0 1px 4px rgb(0 0 0 / 18%); }
-      .split.col > .split-grip:not(:hover):not(:focus-visible)::after { width: 44px; height: 10px; }
-    }
+    /* The grips between them: core/split-grip.js (gripStyles, at the end of the styles). */
     .frame.edged .main { flex: 1; min-width: 0; min-height: 0; overflow-y: auto; padding: 0 16px; }
     :host([embedded]) .frame.edged .main { padding: 0 14px; }
     /* Narrow: the panes as bands above and under the sheet, sharing the height left to it. */
@@ -1006,7 +988,7 @@ export class GfPlantDetail extends LitElement {
     .block[data-flash] { animation: flash 1.2s ease-out; }
     @keyframes flash { from { box-shadow: 0 0 0 3px var(--gf-accent); } to { box-shadow: 0 0 0 3px transparent; } }
     @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } .block[data-flash], .rub-head[data-flash] { animation: none; } }
-  `];
+  `, gripStyles];
 
   constructor() {
     super();
@@ -2194,15 +2176,9 @@ export class GfPlantDetail extends LitElement {
     if (node.t === 'sheet') return html`<div class="main" data-drop-node="sheet">${sheet}</div>`;
     if (node.t === 'stack') return this.#pane(ctx, node, node.tabs, dir);
     const total = node.sizes.reduce((a, b) => a + b, 0);
-    const pct = (/** @type {number} */ s) => Math.round(100 * s / total);
+    const set = (/** @type {number[]} */ sizes) => this.#setSizes(node.id, sizes);
     return html`<div class="split ${node.dir}" data-split=${node.id}>${repeat(node.kids, k => k.id, (k, i) => html`
-      ${i ? html`<div class="split-grip" role="separator" tabindex="0" aria-orientation=${node.dir === 'row' ? 'vertical' : 'horizontal'}
-        aria-label=${`Redimensionner ${this.#nodeName(node.kids[i - 1])} et ${this.#nodeName(k)}`} aria-controls=${'cell-' + node.kids[i - 1].id}
-        aria-valuenow=${pct(node.sizes[i - 1])} aria-valuemin=${Math.round(100 * MIN_SHARE)} aria-valuemax=${pct(node.sizes[i - 1] + node.sizes[i]) - Math.round(100 * MIN_SHARE)}
-        aria-valuetext=${pct(node.sizes[i - 1]) + ' %'}
-        title=${`Tirer pour partager la place · ${node.dir === 'row' ? '← →' : '↑ ↓'} au clavier · double-clic ou Entrée : parts égales`}
-        @pointerdown=${(/** @type {PointerEvent} */ e) => this.#splitDown(e, node, i)} @dblclick=${() => this.#setSizes(node.id, node.sizes.map(() => 1))}
-        @keydown=${(/** @type {KeyboardEvent} */ e) => this.#splitKey(e, node, i)}></div>` : nothing}
+      ${i ? shareGrip({ dir: node.dir, sizes: node.sizes, i, set, label: `Redimensionner ${this.#nodeName(node.kids[i - 1])} et ${this.#nodeName(k)}`, controls: 'cell-' + node.kids[i - 1].id }) : nothing}
       <div class="cell ${k.t === 'stack' && k.folded && this._maxEdge !== k.id ? 'folded' : ''}" id=${'cell-' + k.id} style=${`flex:${node.sizes[i] / total} 1 0`}>${this.#node(ctx, k, sheet, node.dir)}</div>`)}</div>`;
   }
 
@@ -2211,56 +2187,6 @@ export class GfPlantDetail extends LitElement {
     if (n.t === 'sheet') return 'la fiche';
     if (n.t === 'stack') return '« ' + blockTitle(/** @type {string} */ (n.active && n.tabs.includes(n.active) ? n.active : n.tabs[0])) + ' »';
     return this.#nodeName(n.kids[0]);
-  }
-
-  /** Dragging a grip between two children of a split: their shares, live, kept for the mode. @param {PointerEvent} e @param {any} node @param {number} i */
-  #splitDown(e, node, i) {
-    const grip = /** @type {HTMLElement} */ (e.currentTarget);
-    const split = /** @type {HTMLElement} */ (grip.parentElement);
-    const cells = /** @type {HTMLElement[]} */ ([...split.children].filter(c => c.classList.contains('cell')));
-    const a = cells[i - 1], b = cells[i];
-    if (!a || !b) return;
-    e.preventDefault();
-    try { grip.setPointerCapture(e.pointerId); } catch { /* synthetic */ }
-    const row = node.dir === 'row';
-    const start = row ? e.clientX : e.clientY;
-    const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
-    const pa = row ? ra.width : ra.height, pb = row ? rb.width : rb.height;
-    // Each side keeps its own minimum (the media's pane: room for its viewer), else 60 px.
-    const least = (/** @type {HTMLElement} */ c) => Math.max(60, parseFloat(getComputedStyle(c)[row ? 'minWidth' : 'minHeight']) || 0);
-    const ma = least(a), mb = least(b);
-    const total = node.sizes.reduce((x, y) => x + y, 0), wa = node.sizes[i - 1] / total, wb = node.sizes[i] / total;
-    let na = wa, nb = wb;
-    const move = (/** @type {PointerEvent} */ ev) => {
-      const d = Math.max(-pa + ma, Math.min(pb - mb, (row ? ev.clientX : ev.clientY) - start));
-      na = wa * (pa + d) / pa; nb = wb * (pb - d) / pb;
-      a.style.flexGrow = String(na); b.style.flexGrow = String(nb);
-    };
-    const up = () => {
-      grip.removeEventListener('pointermove', move); grip.removeEventListener('pointerup', up); grip.removeEventListener('pointercancel', up);
-      if (Math.abs(na - wa) > 0.002) { const sizes = node.sizes.map((/** @type {number} */ s) => s / total); sizes[i - 1] = na; sizes[i] = nb; this.#setSizes(node.id, sizes); }
-    };
-    grip.addEventListener('pointermove', move); grip.addEventListener('pointerup', up); grip.addEventListener('pointercancel', up);
-  }
-
-  /**
-   * The keyboard on a grip: ← → (↑ ↓ in a column) 5 % to one side (Maj : 20 %), Début / Fin as far as it goes,
-   * Entrée equal shares (as a double click). @param {KeyboardEvent} e @param {any} node @param {number} i
-   */
-  #splitKey(e, node, i) {
-    const keys = node.dir === 'row' ? ['ArrowLeft', 'ArrowRight'] : ['ArrowUp', 'ArrowDown'];
-    if (![...keys, 'Home', 'End', 'Enter'].includes(e.key)) return;
-    e.preventDefault(); e.stopPropagation();
-    if (e.key === 'Enter') { this.#setSizes(node.id, node.sizes.map(() => 1)); return; }
-    const total = node.sizes.reduce((/** @type {number} */ x, /** @type {number} */ y) => x + y, 0);
-    const sizes = node.sizes.map((/** @type {number} */ s) => s / total);
-    const pair = sizes[i - 1] + sizes[i];
-    const step = e.shiftKey ? 0.2 : 0.05;
-    const a = e.key === 'Home' ? MIN_SHARE : e.key === 'End' ? pair - MIN_SHARE : sizes[i - 1] + (e.key === keys[0] ? -step : step);
-    const next = Math.max(MIN_SHARE, Math.min(pair - MIN_SHARE, a));
-    if (Math.abs(next - sizes[i - 1]) < 0.001) return;
-    sizes[i - 1] = next; sizes[i] = pair - next;
-    this.#setSizes(node.id, sizes);
   }
 
   /** The sheet, with its panes when it has some. @param {any} ctx @param {unknown} article */

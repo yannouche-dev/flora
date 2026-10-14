@@ -73,7 +73,8 @@ const SCREENS = {
   },
   'Cueillette, ses cartes': async (app, page) => { await app.open('#/app/cueillette'); await toCards(page, 'cueillette'); },
   'Mosaïque, une plante à côté': mosaicPlant,
-  'Parcours, en marche': async (app, page) => { await app.open('#/app/parcours'); await page.locator('gf-miniapp .go').click(); await expect(page.locator('gf-miniapp .card input.name')).toBeVisible(); }
+  'Parcours, en marche': async (app, page) => { await app.open('#/app/parcours'); await page.locator('gf-miniapp .go').click(); await expect(page.locator('gf-miniapp .card input.name')).toBeVisible(); },
+  'Disposition libre': async (app, page) => { await app.open('#/layout/[map,search,[plant.wikipedia,plant.calendar]]'); await expect(page.locator('gf-layout section.cell')).toHaveCount(4); }
 };
 
 /** The screens of one column (no panneaux side by side, at any width): cards, lists, settings, a map alone. */

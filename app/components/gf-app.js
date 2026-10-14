@@ -18,6 +18,7 @@ import './gf-mode-switch.js';
 import './gf-scenarios.js';
 import './gf-launcher.js';
 import '../miniapp/gf-miniapp.js';
+import '../layout/gf-layout.js';
 import { discoverEvents, tabShown, UNLOCKS } from '../core/discover.js';
 import { replaceView } from '../core/history.js';
 import { ui } from '../styles/ui.js';
@@ -26,7 +27,7 @@ import { icon } from '../core/icons.js';
 /** @param {string} name */
 const tabOf = name => name === 'map' ? 'map' : name === 'discover' ? 'discover'
   : ['collections', 'spot', 'spot-new', 'shared'].includes(name) ? 'mine'
-  : name === 'settings' || name === 'legal' ? 'more' : 'flore';
+  : name === 'settings' || name === 'legal' || name === 'layout' ? 'more' : 'flore';
 
 /** App shell: header + route outlet + (phone) bottom tab bar. */
 export class GfApp extends LitElement {
@@ -74,7 +75,7 @@ export class GfApp extends LitElement {
     /* The page's tab, on the accent: its contrasting text (the rule above outweighs the .segmented one of ui.js). */
     nav.tabs a[aria-current='page'] { color: var(--gf-accent-contrast); }
     .note, .mode { flex: none; }
-    gf-map-page, gf-spot-editor, gf-collections, gf-shared, gf-flora, gf-miniapp, gf-launcher { flex: 1; min-height: 0; }
+    gf-map-page, gf-spot-editor, gf-collections, gf-shared, gf-flora, gf-miniapp, gf-launcher, gf-layout { flex: 1; min-height: 0; }
     /* A tool that just came (first steps): announced once. */
     .unlocked { position: fixed; z-index: 1003; left: 50%; transform: translateX(-50%); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); width: min(440px, calc(100vw - 24px));
       display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; background: #1f2a1f; color: #fff; box-shadow: 0 10px 30px rgb(0 0 0 / 35%); animation: up 0.3s ease-out; }
@@ -333,6 +334,9 @@ export class GfApp extends LitElement {
         return html`<gf-legal></gf-legal>`;
       case 'app':
         return html`<gf-miniapp .route=${route}></gf-miniapp>`;
+      case 'layout':
+        // « Disposition libre » (app/layout): its layout and its state in the address.
+        return html`<gf-layout .route=${route}></gf-layout>`;
       default:
         return html`<div class="banner">Page introuvable. <a href=${href.search()}>Retour à la recherche</a></div>`;
     }

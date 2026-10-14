@@ -38,13 +38,22 @@ export async function loadIndex() {
 
 let searchRun = 0;
 
+/**
+ * The plants the search is kept to: a free layout's scope (app/layout/state.js: the plants observed around its place),
+ * set while it is on screen and taken off when it goes; null: the whole flora. @type {number[] | null}
+ */
+let scope = null;
+
+/** Keeps the search to these plants (null: the whole flora); the next runSearch() follows. @param {Iterable<number> | null} ids */
+export function setSearchScope(ids) { scope = ids ? [...ids] : null; }
+
 /** Runs the search for the current store query and publishes results, facets and suggestions. */
 export async function runSearch() {
   const { q, filters, sort } = store.state.query;
   const run = ++searchRun;
   let response;
   try {
-    response = await call({ type: 'search', q, filters, sort, membership: mineValues(filters) });
+    response = await call({ type: 'search', q, filters, sort, membership: mineValues(filters), only: scope });
   } catch (error) {
     console.error(error);
     if (run === searchRun) store.set({ status: 'error', statusText: 'Recherche impossible : ' + /** @type {Error} */ (error).message });
