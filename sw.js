@@ -171,6 +171,8 @@ const SHELL = [
   'app/components/gf-map.js',
   'app/components/map-style.js',
   'app/components/gf-map-gl.js',
+  'app/components/gf-map-obs3d.js',
+  'app/core/around3d.js',
   'app/components/map3d-options.js',
   'app/core/map-settings.js',
   'app/core/gl-style.js',

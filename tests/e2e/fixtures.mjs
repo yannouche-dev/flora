@@ -76,6 +76,49 @@ export async function answerAround(context) {
   });
 }
 
+const OBS_NAMES = [['Ortie dioïque', 'Urtica dioica'], ['Ail des ours', 'Allium ursinum'], ['Pâquerette', 'Bellis perennis'], ['Benoîte commune', 'Geum urbanum'],
+  ['Pissenlit', 'Taraxacum officinale'], ['Lierre grimpant', 'Hedera helix'], ['Plantain lancéolé', 'Plantago lanceolata'], ['Bouton d’or', 'Ranunculus acris']];
+
+/**
+ * The observations around a centre, for the maps in 3D (gf-map-obs3d.js): iNaturalist's (`inat` of them, each with a
+ * free photo, one in four in the same species, Ortie dioïque) and GBIF's (`gbif`, one of iNaturalist's copies among
+ * them, left out by the app), spread in the circle asked — and `outside` of each just beyond it (the app keeps only
+ * those inside). `seen`: the addresses asked.
+ * @param {import('@playwright/test').Page | import('@playwright/test').BrowserContext} page
+ * @param {{ inat?: number, gbif?: number, outside?: number, seen?: string[] }} [o]
+ */
+export async function answerObservations(page, { inat = 60, gbif = 24, outside = 6, seen } = {}) {
+  /** Points spread in a circle (a sunflower's spiral), then `outside` beyond it. @param {number} lat @param {number} lng @param {number} km @param {number} n */
+  const spread = (lat, lng, km, n) => Array.from({ length: n + outside }, (_, i) => {
+    const out = i >= n, r = out ? km * (1.15 + 0.1 * (i - n)) : km * 0.93 * Math.sqrt((i + 0.5) / n), a = i * 2.39996;
+    return [lng + (r * Math.sin(a)) / (111.32 * Math.cos(lat * Math.PI / 180)), lat + (r * Math.cos(a)) / 110.54];
+  });
+  const json = (/** @type {import('@playwright/test').Route} */ route, /** @type {any} */ body) =>
+    route.fulfill({ contentType: 'application/json', body: JSON.stringify(body), headers: { 'access-control-allow-origin': '*' } });
+  await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?/, route => {
+    const q = new URL(route.request().url()).searchParams;
+    seen?.push(route.request().url());
+    if (q.get('page') && q.get('page') !== '1') return json(route, { total_results: inat + outside, results: [] });
+    const pts = spread(Number(q.get('lat')), Number(q.get('lng')), Number(q.get('radius')), inat);
+    return json(route, { total_results: pts.length, results: pts.map(([x, y], i) => {
+      const [common, sci] = OBS_NAMES[i % 4 === 0 ? 0 : i % OBS_NAMES.length];
+      return { id: 9000 + i, uri: `https://www.inaturalist.org/observations/${9000 + i}`, geojson: { type: 'Point', coordinates: [x, y] }, observed_on: '2026-05-' + String(1 + (i % 28)).padStart(2, '0'),
+        place_guess: 'Clermont-Ferrand', taxon: { id: 50 + (i % 4 === 0 ? 0 : i % OBS_NAMES.length), name: sci, preferred_common_name: common },
+        photos: [{ id: 7000 + i, url: `https://inaturalist-open-data.s3.amazonaws.com/photos/${7000 + i}/square.jpg`, license_code: 'cc-by', attribution: '(c) Camille, some rights reserved (CC BY)' }] };
+    }) });
+  });
+  await page.route(/^https:\/\/api\.gbif\.org\/v1\/occurrence\/search\?/, route => {
+    const url = new URL(route.request().url());
+    seen?.push(url.href);
+    const [lat, lng, km] = (url.searchParams.get('geoDistance') || '0,0,1km').replace('km', '').split(',').map(Number);
+    const pts = spread(lat, lng, km, gbif);
+    return json(route, { count: pts.length, results: pts.map(([x, y], i) => ({
+      key: 4000 + i, decimalLatitude: y, decimalLongitude: x, species: OBS_NAMES[(i + 3) % OBS_NAMES.length][1], scientificName: OBS_NAMES[(i + 3) % OBS_NAMES.length][1] + ' L.',
+      eventDate: '2024-06-1' + (i % 10), datasetName: 'Inventaire du CBN', datasetKey: i === 0 ? '50c9509d-22c7-4a22-a47d-8c48425ef4a7' : 'cbn-mc'
+    })) });
+  });
+}
+
 /**
  * @typedef {{ realData: boolean, firstVisit: boolean, offlineData: boolean }} Options
  * @typedef {{ pageErrors: string[], app: import('./app.mjs').App, newDevice: () => Promise<{ page: import('@playwright/test').Page, app: import('./app.mjs').App }> }} Fixtures

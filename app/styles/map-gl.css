@@ -133,3 +133,120 @@ gf-map:has(.gf-point-card) .gf-map-gl .maplibregl-ctrl-bottom-left,
 gf-map:has(.gf-point-card) .gf-gl-alt { visibility: hidden; }
 gf-map .gf-map-gl .maplibregl-ctrl-group button { width: 32px; height: 32px; }
 @media (pointer: coarse) { gf-map .gf-map-gl .maplibregl-ctrl-group button { width: 38px; height: 38px; } }
+
+/* ── The observations around (gf-map-obs3d.js) ─────────────────────────────────────────────────────── */
+
+/* Its button, with the map's others: only while the map is in 3D. */
+gf-map:not([data-renderer='3d']) .gf-map-buttons button.around3d { display: none; }
+
+/* The markers among themselves (their z-index: the nearest over), under the map's controls and this card. */
+.gf-map-gl .maplibregl-canvas-container { isolation: isolate; }
+
+/* A point, standing on the ground: its foot on the point, a thin stem, its head (the 2D marker) on top — the stem as
+   tall as the view is tilted (--gf-tilt, 0 from above: the head on the point), the head smaller further away (--s). */
+.gf-o3-mk { width: 0; height: 0; cursor: pointer; --lift: calc(var(--gf-tilt, 0) * 34px * var(--s, 1)); }
+.gf-o3-mk:focus-visible { outline: none; }
+.gf-o3-mk .gf-o3-foot { position: absolute; left: -3px; top: -3px; width: 6px; height: 6px; border-radius: 50%; background: #fff;
+  box-shadow: 0 0 0 1.5px rgb(46 125 50 / 70%), 0 1px 3px rgb(0 0 0 / 45%); opacity: var(--gf-tilt, 0); pointer-events: none; }
+.gf-o3-mk .gf-o3-stem { position: absolute; left: -1px; bottom: 0; width: 2px; height: var(--lift); border-radius: 1px;
+  background: linear-gradient(to top, rgb(255 255 255 / 35%), #fff); box-shadow: 0 0 2px rgb(0 0 0 / 35%); pointer-events: none; }
+.gf-o3-mk .gf-o3-head { position: absolute; left: 0; top: 0; width: 0; height: 0; translate: 0 calc(-1 * var(--lift) - var(--gf-tilt, 0) * 15px); scale: var(--s, 1);
+  transition: scale 0.2s ease-out; }
+.gf-o3-mk .gf-o3-head > span { position: absolute; left: 0; top: 0; translate: -50% -50%; display: grid; place-items: center; }
+.gf-o3-mk:hover .gf-o3-head, .gf-o3-mk:focus-visible .gf-o3-head { scale: calc(var(--s, 1) * 1.18); }
+.gf-o3-mk:focus-visible .gf-o3-head > span .pop, .gf-o3-mk:focus-visible .gf-o3-stack .gf-o3-n { box-shadow: var(--gf-focus, 0 0 0 3px #2f6b3a); }
+.gf-o3-mk.lit .gf-o3-stem { background: linear-gradient(to top, rgb(255 209 102 / 40%), #ffd166); width: 3px; left: -1.5px; }
+.gf-o3-mk.lit .gf-o3-foot { box-shadow: 0 0 0 2px #e0245e, 0 1px 3px rgb(0 0 0 / 45%); }
+.gf-o3-mk.mine .pop { box-shadow: 0 1px 5px rgb(0 0 0 / 45%), 0 0 0 2px #fff, 0 0 0 4px #f5c542; }
+/* A group: a stack of its photos, fanned, its count on top (never a bubble). */
+.gf-o3-mk .gf-o3-stack { position: absolute; left: 0; top: 0; width: 0; height: 0; }
+.gf-o3-mk .gf-o3-stack .gf-o3-face { position: absolute; left: 0; top: 0; translate: -50% -50%; }
+.gf-o3-mk .gf-o3-stack .gf-o3-face .pop { animation: none; }
+.gf-o3-mk .gf-o3-stack .gf-o3-face.f1 { translate: calc(-50% - 7px) calc(-50% + 3px); rotate: -12deg; }
+.gf-o3-mk .gf-o3-stack .gf-o3-face.f2 { translate: calc(-50% + 7px) calc(-50% + 4px); rotate: 11deg; }
+.gf-o3-mk .gf-o3-stack .gf-o3-face.f1 .pop, .gf-o3-mk .gf-o3-stack .gf-o3-face.f2 .pop { filter: brightness(0.9); }
+.gf-o3-mk .gf-o3-stack .gf-o3-n { position: absolute; left: 6px; top: -22px; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; border-radius: 10px;
+  background: #2f6b3a; color: #fff; font: 700 11px/20px system-ui, sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff, 0 1px 3px rgb(0 0 0 / 40%); }
+.gf-map-gl.gf-o3-loading .gf-o3-mk .gf-o3-head { opacity: 0.55; filter: saturate(0.4); }
+
+/* The radius, on a pill at the circle's south. */
+.gf-o3-rlabel { padding: 2px 9px; border-radius: 999px; background: rgb(20 30 22 / 78%); color: #d9f7c8; font: 700 12px/1.5 system-ui, sans-serif;
+  font-variant-numeric: tabular-nums; box-shadow: 0 1px 4px rgb(0 0 0 / 35%); pointer-events: none; white-space: nowrap; }
+.gf-map-gl:not(.gf-o3-on) .gf-o3-rlabel { display: none; }
+
+/* A point's card (map-style.js obsCard), over the map. */
+.gf-o3-card { position: absolute; z-index: 8; overflow: hidden; border-radius: 12px; border: 1px solid rgb(255 255 255 / 55%); background-clip: padding-box;
+  background: var(--gf-surface, #fff); color: var(--gf-text, #1f2a1f); box-shadow: 0 8px 24px rgb(0 0 0 / 30%); animation: gf-tip-in 0.18s ease-out; }
+.gf-o3-card:not(.pinned) { pointer-events: none; }
+.gf-o3-card .gf-obs-card img { width: 180px; height: 120px; }
+.gf-o3-card .gf-obs-card .gf-o3-more { color: var(--gf-text, #1f2a1f); }
+.gf-o3-card .gf-o3-close { position: absolute; top: 4px; right: 4px; width: 26px; height: 26px; min-height: 0; padding: 0; border: 0; border-radius: 50%;
+  display: grid; place-items: center; background: rgb(0 0 0 / 45%); color: #fff; cursor: pointer; font-size: 12px; }
+.gf-o3-card .gf-o3-close:focus-visible { outline: 2px solid #fff; }
+.gf-o3-hexcard { width: auto; min-width: 150px; max-width: 220px; }
+
+/* Its card at the bottom: the chip (radius, count), unfolded the stepped slider (the mini-apps' distance), the sources,
+   the density, « Centrer ici ». */
+.gf-o3-bar { position: absolute; z-index: 9; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); translate: -50% 0; display: grid; justify-items: center; gap: 8px;
+  width: min(400px, calc(100% - 24px)); pointer-events: none; font: 14px/1.35 system-ui, sans-serif; color: var(--gf-text, #1f2a1f); }
+.gf-o3-bar[hidden] { display: none; }
+.gf-o3-bar > * { pointer-events: auto; }
+gf-map:has(.gf-point-card) .gf-o3-bar { visibility: hidden; }
+.gf-o3-chip { display: inline-flex; gap: 6px; align-items: center; min-height: 38px; padding: 6px 14px; border-radius: 999px; border: 0; cursor: pointer;
+  background: color-mix(in srgb, var(--gf-surface, #fff) 94%, transparent); color: var(--gf-text, #1f2a1f); box-shadow: 0 4px 16px rgb(0 0 0 / 28%); font: inherit; }
+.gf-o3-chip b { color: var(--gf-accent, #2f6b3a); font-variant-numeric: tabular-nums; }
+.gf-o3-chip .gf-o3-n { min-width: 22px; padding: 0 6px; border-radius: 999px; background: var(--gf-accent, #2f6b3a); color: var(--gf-accent-contrast, #fff);
+  font-size: 0.78rem; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; }
+.gf-o3-chip:focus-visible, .gf-o3-panel button:focus-visible { outline: none; box-shadow: var(--gf-focus, 0 0 0 3px #2f6b3a); }
+.gf-o3-bar .gf-o3-spin { display: inline-block; width: 11px; height: 11px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--gf-accent, #2f6b3a) 25%, transparent);
+  border-top-color: var(--gf-accent, #2f6b3a); animation: gf-o3-spin 0.8s linear infinite; }
+@keyframes gf-o3-spin { to { transform: rotate(360deg); } }
+.gf-o3-panel { width: 100%; box-sizing: border-box; display: grid; gap: 6px; justify-items: center; padding: 12px 14px 10px; border-radius: 18px;
+  background: color-mix(in srgb, var(--gf-surface, #fff) 92%, transparent); backdrop-filter: blur(6px); box-shadow: 0 8px 28px rgb(0 0 0 / 30%);
+  animation: gf-tip-in 0.18s ease-out; container-type: inline-size; }
+.gf-o3-panel .gf-o3-top { width: 100%; display: grid; grid-template-columns: 1fr auto; align-items: center; column-gap: 8px; }
+.gf-o3-panel .gf-o3-top .gf-o3-where { grid-column: 1; font-size: 0.78rem; color: var(--gf-text-muted, #5b6b5b); }
+.gf-o3-panel .gf-o3-top .gf-o3-close { grid-row: 1 / span 2; grid-column: 2; width: 30px; height: 30px; min-height: 0; padding: 0; border: 0; border-radius: 50%;
+  background: transparent; color: var(--gf-text-muted, #5b6b5b); cursor: pointer; display: grid; place-items: center; }
+.gf-o3-panel .gf-o3-value { font-size: 1.9rem; line-height: 2.2rem; font-weight: 800; color: var(--gf-accent, #2f6b3a); font-variant-numeric: tabular-nums; }
+.gf-o3-panel .gf-o3-count { margin: 0; min-height: 1.3em; font-size: 0.8rem; color: var(--gf-text-muted, #5b6b5b); text-align: center; display: flex; gap: 6px; align-items: center; justify-content: center; }
+.gf-o3-panel .gf-o3-row { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; justify-content: center; }
+.gf-o3-panel .gf-o3-row small { font-size: 0.72rem; color: var(--gf-text-muted, #5b6b5b); }
+.gf-o3-toggle { display: inline-flex; gap: 6px; align-items: center; min-height: 32px; padding: 2px 10px 2px 8px; border-radius: 999px; cursor: pointer;
+  border: 1px solid color-mix(in srgb, var(--gf-text-muted, #5b6b5b) 30%, transparent); font-size: 0.85rem; }
+.gf-o3-toggle:has(input:checked) { border-color: var(--gf-accent, #2f6b3a); background: color-mix(in srgb, var(--gf-accent, #2f6b3a) 12%, transparent); }
+.gf-o3-toggle input { margin: 0; accent-color: var(--gf-accent, #2f6b3a); }
+.gf-o3-panel .gf-o3-recentre { display: inline-flex; gap: 6px; align-items: center; border: 0; background: none; color: var(--gf-accent, #2f6b3a); font: inherit; font-size: 0.85rem;
+  font-weight: 600; cursor: pointer; min-height: 32px; padding: 2px 6px; }
+/* The stepped slider, as in the mini-apps' « Jusqu’où part l’expédition ? » (kit/ma-distance.js). */
+.gf-o3-range { --t: 24px; position: relative; width: 100%; height: 50px; }
+.gf-o3-range .gf-o3-rail { position: absolute; left: calc(var(--t) / 2 - 4px); right: calc(var(--t) / 2 - 4px); top: 10px; height: 6px; border-radius: 3px;
+  background: linear-gradient(90deg, var(--gf-accent, #2f6b3a) calc(4px + (100% - 8px) * var(--p)), color-mix(in srgb, var(--gf-text-muted, #5b6b5b) 28%, transparent) 0); transition: background 0.2s; }
+.gf-o3-range .gf-o3-stop { position: absolute; top: 13px; left: calc(var(--t) / 2 + (100% - var(--t)) * var(--i) / var(--n)); width: 10px; height: 10px; margin: -5px 0 0 -5px;
+  border-radius: 50%; box-sizing: border-box; background: var(--gf-surface, #fff); border: 2px solid color-mix(in srgb, var(--gf-text-muted, #5b6b5b) 45%, transparent);
+  transition: background 0.2s, border-color 0.2s; pointer-events: none; }
+.gf-o3-range .gf-o3-stop.on { background: var(--gf-accent, #2f6b3a); border-color: var(--gf-surface, #fff); }
+.gf-o3-range .gf-o3-mark { position: absolute; top: 30px; left: calc(var(--t) / 2 + (100% - var(--t)) * var(--i) / var(--n)); translate: -50% 0; font-size: 0.7rem;
+  color: var(--gf-text-muted, #5b6b5b); white-space: nowrap; font-variant-numeric: tabular-nums; pointer-events: none; }
+.gf-o3-range .gf-o3-mark.first { translate: calc(var(--t) / -2) 0; }
+.gf-o3-range .gf-o3-mark.last { translate: calc(-100% + var(--t) / 2) 0; }
+.gf-o3-range .gf-o3-mark.minor { display: none; }
+.gf-o3-range .gf-o3-mark.cur { color: var(--gf-accent, #2f6b3a); font-weight: 700; }
+@container (min-width: 360px) { .gf-o3-range .gf-o3-mark.minor { display: block; } }
+.gf-o3-range input { position: absolute; inset: 0 0 auto; width: 100%; height: 26px; margin: 0; padding: 0; border: 0; border-radius: 0; background: none;
+  appearance: none; -webkit-appearance: none; cursor: pointer; }
+.gf-o3-range input:focus-visible { outline: none; }
+.gf-o3-range input::-webkit-slider-runnable-track { height: 26px; background: none; border: 0; }
+.gf-o3-range input::-moz-range-track { height: 26px; background: none; border: 0; }
+.gf-o3-range input::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: var(--t); height: var(--t); margin-top: 1px; border-radius: 50%;
+  background: var(--gf-accent, #2f6b3a); border: 3px solid var(--gf-surface, #fff); box-sizing: border-box; box-shadow: 0 1px 4px rgb(0 0 0 / 35%); }
+.gf-o3-range input::-moz-range-thumb { width: var(--t); height: var(--t); border-radius: 50%; background: var(--gf-accent, #2f6b3a); border: 3px solid var(--gf-surface, #fff);
+  box-sizing: border-box; box-shadow: 0 1px 4px rgb(0 0 0 / 35%); }
+.gf-o3-range input:focus-visible::-webkit-slider-thumb { box-shadow: var(--gf-focus, 0 0 0 3px #2f6b3a); }
+/* A small map (a block of the plant sheet): the card kept small. */
+@container (max-height: 300px) { .gf-o3-bar { bottom: 8px; } .gf-o3-panel .gf-o3-value, .gf-o3-panel .gf-o3-row small { display: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .gf-o3-card, .gf-o3-panel { animation: none; }
+  .gf-o3-bar .gf-o3-spin { animation-duration: 2s; }
+  .gf-o3-mk .gf-o3-head, .gf-o3-range .gf-o3-rail, .gf-o3-range .gf-o3-stop { transition: none; }
+}
