@@ -313,7 +313,7 @@ Exemples :
 
 | Composant | Alias | Paramètres | Ce qu'il montre, ce qu'il change |
 | --- | --- | --- | --- |
-| `map` | carte | `r` rayon de la zone (`500m`, `2km`, un nombre seul en km), `base` `photo` ou `plan` | la carte mère (`gf-map`, en 3D si Réglages › Cartes le dit) : le cercle de la zone, les observations des plantes trouvées, celles de la plante courante en grand, l'observation choisie ; un point touché : sa plante devient la plante courante ; appui long ou adresse cherchée : la zone s'y centre ; curseur du rayon (les crans de Rencontres, 200 m à 50 km ; un rayon écrit entre deux crans, `r=3km`, est montré entre eux, jamais sur un cran qu'il n'est pas ; déplacé, il va de cran en cran), « Autour de moi », ✕ « Toute la France » |
+| `map` | carte | une intention (`terrain`, `floraison`, `protege`, `repartition`, `relief`) ; `r` rayon de la zone (`500m`, `2km`, un nombre seul en km), `lieu`, `autour`, `base` `photo` ou `plan`, `3d`, `layers`, `src`, `when`, `pts`, `regroupe`, `suit`, `plante`, `toucher`, `ui` — voir **Les réglages de la carte** ci-dessous | la carte mère (`gf-map`, en 3D si Réglages › Cartes le dit) : le cercle de la zone, les observations des plantes trouvées, celles de la plante courante en grand, l'observation choisie ; un point touché : sa plante devient la plante courante ; appui long ou adresse cherchée : la zone s'y centre ; curseur du rayon (les crans de Rencontres, 200 m à 50 km ; un rayon écrit entre deux crans, `r=3km`, est montré entre eux, jamais sur un cran qu'il n'est pas ; déplacé, il va de cran en cran), « Autour de moi », ✕ « Toute la France » |
 | `place` | lieu, zone | `r` | la zone seule : « Autour de moi », une commune (`gf-place-search`), le rayon |
 | `search` | recherche | `filters` (`1` : filtres ouverts), `list` (`0` : sans la liste) | la recherche de Flore (`gf-results-bar` : texte, tri, filtres choisis, « Filtrer par »), ses filtres (`gf-filter-panel`, ouverts par l'entonnoir) et sa liste ; le compte est dans l'en-tête de la case, pas répété dans la barre : le tri prend sa place, à côté de ses outils ; au moins 280 px : dans une case étroite, la barre se replie (requêtes de conteneur : les filtres choisis à la ligne ; le tri écourté au besoin, comme sur téléphone) ; plus haute que sa case (une rangée basse), la case défile — rien de coupé ni hors d'atteinte |
 | `filters` | filtres | — | les filtres seuls |
@@ -321,6 +321,46 @@ Exemples :
 | `plant` | fiche, plante | `mode` `epure`, `standard` ou `scientific` ; un bloc : `plant.<bloc>` | la fiche de la plante courante (`gf-plant-detail`), entière ou un bloc seul : `name`, `media`, `photos`, `status`, `lookalikes`, `uses`, `taxonomy`, `mine`, `calendar`, `wikipedia`, `descriptions`, `names`, `occurrences`, `map`, `interactions`, `climate`, `gbifMedia`, `gbifProfile`, `literature`, `trefle`, `ids`, `resources` (en français aussi : `wiki`, `calendrier`, `floraison`, `medias`, `usages`, `statuts`, `sosies`, `classification`, `noms`, `repartition`, `carte`, `climat`…) |
 | `media` | photos, médias | `style` `scene`, `mosaic` ou `slideshow` | la visionneuse de photos de la plante courante (`gf-media-viewer`) |
 | `deck` | cartes, rencontres | — | les plantes trouvées dans la zone en cartes de Rencontres (`ma-deck`) : celle du dessus est la plante courante ; à droite un coup de cœur (vos favoris), à gauche la suivante, ↺ ; iNaturalist injoignable (ou hors ligne) : le paquet le dit, avec « Réessayer » (son module coupé : Réglages › Modules) |
+
+**Les réglages de la carte** (`app/layout/registry.js`, `app/layout/map-options.js`, branchés dans `cells.js#DlMap`) : tous écrits dans `map(...)`, séparés par `;` ou `,`. Sans réglage, la carte est celle de toujours (les valeurs par défaut ci-dessous) : les dispositions existantes ne changent pas.
+
+| Groupe | Réglage | Valeurs (défaut en premier) | Effet |
+| --- | --- | --- | --- |
+| Où | `r` | une distance (`500m`, `2km`, `20`) | le rayon de la zone, tant que l'adresse n'en dit pas |
+| Où | `lieu` | des mots : `lieu=Mirabel Ménétrol 63`, `lieu=Fontainebleau 77` | le lieu de départ, cherché à l'IGN comme `?place=` (la première suggestion de la barre de recherche, dans le département s'il est dit), **seulement si l'adresse n'a pas de zone** (ni `at=` ni `place=`) ; trouvé, l'adresse prend `at=` et `place=` comme d'habitude. Pas de `,` `;` `(` `)` `[` `]` `=` `@` dans les mots : des espaces (le département à la fin, sans virgule). Toujours écrit en dernier dans l'adresse |
+| Où | `autour` | `0`, `1` (seul : `autour`) | « Autour de moi » au départ, même condition (`lieu` l'emporte s'il y a les deux) ; la position suivie sur la carte. Une zone ôtée ensuite (✕) le reste |
+| Fond | `base` | celui de la Carte, `photo`, `plan` | le fond de carte de cette case |
+| Fond | `3d` | selon Réglages › Cartes, `1` (seul : `3d`), `0` (seul : `2d`) | cette carte en 3D (relief) ou toujours à plat, quel que soit le choix des autres cartes |
+| Couches | `layers` | aucune, puis des noms joints par `+` | les couches IGN de cette case (pas enregistrées pour les autres cartes) : `znieff` (types I et II), `znieff1`, `znieff2`, `n2000` (Natura 2000 : habitats et oiseaux), `parcs` (nationaux), `pnr` (parcs naturels régionaux), `reserves` (naturelles), `biotopes` (APPB), `cen` (conservatoires d'espaces naturels), `forets` (publiques), `cadastre`, `courbes` (de niveau), `estompage` (relief ombré), `hydro` (cours d'eau) ; alias : `natura2000`, `appb`, `onf`, `contours`, `relief`… Un nom inconnu est dit et laissé |
+| Points | `src` | `inat`, `inat+gbif`, `gbif` | les sources des points : iNaturalist, et les occurrences GBIF de la zone (la copie d'iNaturalist exclue, chacune avec la photo et le nom de sa plante) |
+| Points | `when` | `toujours`, `annee`, `mois` | les observations de cette année, ou de **ce mois-ci, toutes années confondues** (la floraison du moment) — filtrées par leur date |
+| Points | `pts` | `photo`, `pastille` | la photo de chaque plante, ou de simples pastilles |
+| Points | `regroupe` | `0`, `1` | les observations de la plante courante groupées selon le zoom (une pile, son nombre) au lieu d'être montrées une à une |
+| Liens | `suit` | `1`, `0` | les points des seules plantes que garde la recherche, ou de toutes les plantes observées dans la zone |
+| Liens | `plante` | `grand`, `seule`, `non` | la plante courante en grand par-dessus les autres, seule sur la carte, ou pas montrée |
+| Liens | `toucher` | `plante`, `fiche`, `rien` | un point touché : sa plante devient la plante courante, sa fiche s'ouvre, ou rien |
+| Interface | `ui` | `auto`, `complete`, `compacte`, `nue` | complètes : la recherche d'adresse, « Me localiser », zoom, la zone ; compactes : sans la recherche d'adresse, boutons plus petits, la zone en haut et « Autour de moi » en icône ; aucune : la carte seule (ni recherche, ni boutons, ni zoom, ni panneau de zone : la zone est dite dans l'en-tête de la case) ; `auto` : compactes sous 360 px de large, complètes au-delà |
+
+**Les intentions** : un mot seul, un ensemble de réglages ; un réglage écrit à côté, avant ou après, l'emporte (`map(terrain;base=plan)`). Accents et casse indifférents (`protégé`, `Répartition`).
+
+| Intention | Donne |
+| --- | --- |
+| `explorer` | rien : la carte telle quelle (le défaut, jamais écrit) |
+| `terrain` | `autour`, `base=photo`, `ui=compacte` (alias : `balade`, `sortie`) |
+| `floraison` | `when=mois`, `regroupe` |
+| `protege` | `layers=znieff+n2000+parcs+reserves+biotopes` |
+| `repartition` | `src=inat+gbif`, `suit=0`, `plante=seule` |
+| `relief` | `3d` |
+
+**Une valeur seule** va au réglage qui la lit : une distance au rayon (`map(20km)`), un mot d'intention à l'intention (`map(terrain)`), `photo` ou `plan` au fond, `3d` / `2d` à la 3D, des noms de couches aux couches (`map(znieff+n2000)`), `mois`, `pastille`, `seule`, `fiche`, `nue`… à leur réglage. **L'adresse réécrite reste courte** : l'intention d'abord, seule, puis les seuls réglages qu'elle ne donne pas, dans l'ordre des groupes, le lieu en dernier — `map(Terrain ; base=photo ; r=2km)` devient `map(terrain,r=2km)`. Dans l'éditeur, les réglages de la carte sont repliés sous « Réglages », par groupe (une liste : une case à cocher par valeur ; ce qu'une intention donne est dit « selon l'intention »).
+
+```text
+#/layout/[map(terrain,r=2km),plant]                                  sur le terrain : autour de moi, photos, commandes compactes
+#/layout/[map(protege,lieu=Fontainebleau 77),search,plant]           les espaces protégés autour de Fontainebleau
+#/layout/[map(floraison,pts=pastille),results]                       ce qui fleurit ce mois-ci, en pastilles
+#/layout/[map(repartition,r=20km),plant]?p=128268                    toutes les observations de la plante, iNaturalist et GBIF
+#/layout/[map(r=1km,ui=nue,toucher=fiche)@30,search]                 une carte nue dont les points ouvrent la fiche
+```
 
 **Le câblage** (`app/layout/state.js`) : un seul état partagé, que chaque case lit et écrit — jamais une case vers une autre :
 - **la zone** (`at`, `r`, `place`) : les plantes observées dans le cercle (iNaturalist, rapprochées de la flore : `core/nearby.js`) **gardent la recherche à elles** (`core/search.js#setSearchScope` : les résultats, leurs compteurs et les facettes des filtres sont ceux de la zone ; quitter la disposition rend toute la flore) ; sans zone, toute la flore de France ;

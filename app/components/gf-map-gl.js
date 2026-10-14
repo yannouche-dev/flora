@@ -235,6 +235,14 @@ export class GlView {
     return '';
   }
 
+  /** Its map-3d attribute changed (a free layout's map, 3d=1 or 3d=0): whether it may be in 3D read again, and shown so. */
+  recheck() {
+    this.why2d = why2d(this.host);
+    this.allowed = !this.why2d;
+    if (!this.allowed) this.host.dataset.renderer = '2d';
+    this.sync();
+  }
+
   /** Shows the map as it should be now: 2D or 3D. */
   sync() {
     if (!this.#connected) return;

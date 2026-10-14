@@ -28,6 +28,7 @@ import { forgetFailures } from '../core/cache.js';
 import { findPlace } from '../core/geoservices.js';
 import { errorKind } from '../core/net.js';
 import { observationPointsAround, observationsAround, speciesAround } from '../core/nearby.js';
+import { observations3d } from '../core/around3d.js';
 import { fromHash, toHash } from '../core/query.js';
 import { runSearch, setSearchScope } from '../core/search.js';
 import { whenReady } from '../core/store.js';
@@ -152,6 +153,14 @@ export class LayoutState extends EventTarget {
     this.scopeFor = '';
     this.obsFor = '';
     this.infoFor = 0;
+    /** GBIF's occurrences in the scope (a map cell whose points include GBIF's: src=inat+gbif), and why they failed. */
+    /** @type {{ key: string, points: import('../core/around3d.js').Obs3d[] } | null} */
+    this.gbif = null;
+    /** @type {string | null} */ this.gbifError = null;
+    /** @type {string} */ this.gbifFor = '';
+    /** @type {AbortController | null} */ this.gbifAbort = null;
+    /** The map's own scope (its lieu=, its autour), applied once for each (dl-map), the address having none. */
+    this.defaultedFor = '';
   }
 
   /** The radius in use: the address', else the layout's default. */
@@ -317,6 +326,28 @@ export class LayoutState extends EventTarget {
     }, () => {});
   }
 
+  /**
+   * GBIF's plant occurrences in the scope (core/around3d.js: iNaturalist's copy left out, each its plant's photo and
+   * French name), for a map that shows them (`want`): loaded once for each scope, `gbif` then; failed, `gbifError`.
+   * @param {boolean} want
+   */
+  gbifOf(want) {
+    const at = this.live.at, r = this.radius;
+    const key = want && at ? this.scopeKey : '';
+    if (key === this.gbifFor) return;
+    this.gbifFor = key;
+    this.gbifAbort?.abort();
+    this.gbifAbort = null;
+    if (!key || !at) { if (this.gbif || this.gbifError) { this.gbif = null; this.gbifError = null; this.#changed(); } return; }
+    const abort = this.gbifAbort = new AbortController();
+    observations3d(at, r, { inat: false, gbif: true }, abort.signal).then(found => {
+      if (abort.signal.aborted || this.gbifFor !== key) return;
+      this.gbif = { key, points: found.points };
+      this.gbifError = found.failed.length ? 'GBIF ne répond pas : ses occurrences manquent sur la carte.' : null;
+      this.#changed();
+    }, () => {});
+  }
+
   /** The search kept to these plants (null: the whole flora), and run again. @param {number[] | null} ids */
   async #rescope(ids) {
     if (!ids && !this.scoped) return;
@@ -363,6 +394,7 @@ export class LayoutState extends EventTarget {
     clearTimeout(this.timer);
     this.abort?.abort();
     this.findAbort?.abort();
+    this.gbifAbort?.abort();
     if (this.scoped) { this.scoped = false; setSearchScope(null); whenReady().then(() => runSearch()); }
   }
 }
