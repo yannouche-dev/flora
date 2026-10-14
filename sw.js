@@ -66,6 +66,8 @@ const SHELL = [
   'app/layout/sizes.js',
   'app/layout/presets.js',
   'app/layout/gf-builder.js',
+  'app/layout/gf-builder-grids.js',
+  'app/layout/builder-grid.js',
   'app/core/split-grip.js',
   'app/config.js',
   'app/styles/tokens.css',

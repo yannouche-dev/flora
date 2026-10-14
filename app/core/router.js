@@ -11,7 +11,7 @@ import './history.js';
  *   | { name: 'shared', data: string } | { name: 'discover' }
  *   | AppRoute
  *   | { name: 'layout', spec: string, search: string }
- *   | { name: 'builder', grid: string | null }
+ *   | { name: 'builder', grid: string | null, spec: string | null }
  *   | { name: 'not-found' }} Route
  */
 
@@ -81,9 +81,10 @@ export function parse(hash) {
   if (path === 'discover') return { name: 'discover' };
   // « Disposition libre » (app/layout): #/layout/<layout>?<state> — the layout as written (app/layout/grammar.js),
   // its live state (plant, scope, search) read by the layout itself (app/layout/state.js).
-  // « Créer une app » (app/layout/gf-builder.js): #/builder[/<grid>], the grid chosen at its first step.
+  // « Créer une app » (app/layout/gf-builder.js): #/builder[/<grid>][?g=<layout>], the grid chosen at its first step,
+  // and as cut and sized since (g: a layout of empty places, builder-grid.js).
   const builder = /^builder(?:\/([a-z][a-z0-9-]{0,23}))?$/.exec(path);
-  if (builder) return { name: 'builder', grid: builder[1] ?? null };
+  if (builder) return { name: 'builder', grid: builder[1] ?? null, spec: builder[1] ? params.get('g') : null };
   const layout = /^layout(?:\/(.*))?$/s.exec(path);
   if (layout) return { name: 'layout', spec: layout[1] ?? '', search };
   return { name: 'not-found' };
@@ -159,8 +160,8 @@ export const href = {
    * as they are, anything else an address may not hold encoded) and its state (app/layout/state.js, already encoded).
    * @param {string} spec @param {string} [search]
    */
-  /** « Créer une app »: its first step, a grid chosen or not. @param {string | null} [grid] */
-  builder: (grid = null) => '#/builder' + (grid ? '/' + grid : ''),
+  /** « Créer une app »: its first step, a grid chosen or not, and as cut and sized since (`spec`). @param {string | null} [grid] @param {string | null} [spec] */
+  builder: (grid = null, spec = null) => '#/builder' + (grid ? '/' + grid + (spec ? '?g=' + spec.replace(/[^\w\-.~!$'()*,;:@[\]]/g, c => encodeURIComponent(c)) : '') : ''),
   layout: (spec, search = '') => '#/layout/' + spec.replace(/[^\w\-.~!$&'()*+,;=:@[\]]/g, c => encodeURIComponent(c)) + (search ? '?' + search : '')
 };
 
