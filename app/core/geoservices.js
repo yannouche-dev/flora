@@ -55,8 +55,9 @@ export async function searchPlaces(text, signal) {
 }
 
 /**
- * A place typed as words (« mirabel, menetrol, 63 », « Fontainebleau 77 »: core/place-find.js reads and ranks), found
- * with the geocoder's search (GeoJSON): the commune said first, when one is (`index=address&type=municipality`), then
+ * A place typed as words (« mirabel, menetrol, 63 », « Fontainebleau 77 »: core/place-find.js reads them): the first
+ * suggestion of the map's search bar for them (firstSuggestion); none, or that service down: the geocoder's search
+ * (GeoJSON, ranked by core/place-find.js): the commune said first, when one is (`index=address&type=municipality`), then
  * the places of that name (`index=poi`: lieux-dits, summits, hills… — around the commune's centre when there is one,
  * the geocoder favouring the nearest) and, no commune said, the communes of that name too (both at once). Null: none
  * fits. Cached a year once found (a place's point hardly moves); « none » only a few minutes (asked again on a reload).
@@ -68,6 +69,42 @@ export function findPlace(text, signal) {
   const q = parsePlace(text);
   if (!q) return Promise.resolve(null);
   if (!moduleOn('ignGeo')) return Promise.reject(new ModuleOffError('ignGeo'));
+  return cache.cached(`geo:first:${normalize(q.text)}`, async () => {
+    const first = await firstSuggestion(q, signal).catch(e => { if (signal?.aborted) throw e; return null; });
+    return first ?? searchPlace(q, signal);
+  }, { ttl: TTL, partial: v => !v, signal });
+}
+
+/**
+ * The words asked as the map's search bar asks them (/geocodage/completion: lieux-dits, communes, addresses), its
+ * first suggestion kept — the name and its commune first (« Mirabel Ménétrol »), then the name alone; a département
+ * said: the first one in it (its postcode). Null: none.
+ * @param {import('./place-find.js').PlaceQuery} q @param {AbortSignal} [signal]
+ * @returns {Promise<import('./place-find.js').FoundPlace | null>}
+ */
+async function firstSuggestion(q, signal) {
+  const tries = [...new Set([[q.name, q.commune].filter(Boolean).join(' '), q.name])].filter(t => t.trim().length >= 3);
+  for (const words of tries) {
+    const data = await json(`${GEOCODING}/completion?text=${encodeURIComponent(words)}&maximumResponses=10`, signal, d => Array.isArray(d.results));
+    const hit = (data.results || []).find(r => Number.isFinite(r.x) && Number.isFinite(r.y)
+      && (!q.dept || String(r.zipcode ?? '').startsWith(/^2[AB]$/i.test(q.dept) ? '20' : q.dept)));
+    if (hit) {
+      const [name, ...rest] = String(hit.fulltext || '').split(', ');
+      const city = String(hit.city || rest.find(x => !/^\d/.test(x)) || '').trim();
+      const label = city && normalize(city) !== normalize(name) ? `${name} (${city})` : name;
+      const kind = hit.kind === 'municipality' || hit.kind === 'administratif' ? 'municipality' : 'poi';
+      return { label: label.slice(0, 80), coordinates: /** @type {[number, number]} */ ([hit.x, hit.y]), kind };
+    }
+  }
+  return null;
+}
+
+/**
+ * No suggestion: the geocoder's search, ranked (core/place-find.js).
+ * @param {import('./place-find.js').PlaceQuery} q @param {AbortSignal} [signal]
+ * @returns {Promise<import('./place-find.js').FoundPlace | null>}
+ */
+function searchPlace(q, signal) {
   /** @param {string} params @returns {Promise<import('./place-find.js').Candidate[]>} */
   const search = async params => {
     const data = await json(`${GEOCODING}/search?${params}`, signal, features);
