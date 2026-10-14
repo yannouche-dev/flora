@@ -419,6 +419,13 @@ test.describe('les mini-applications', () => {
     await page.waitForTimeout(7000);
     await expect(toast).toBeVisible();
     await name.focus();
+    // What holds it, should it stay (said in the CI log): the focus, the walk's search, the session's hold.
+    const why = async () => page.evaluate(() => {
+      const deep = (/** @type {any} */ d) => { let a = d.activeElement; while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement; return a; };
+      const a = deep(document);
+      return JSON.stringify({ active: a ? a.localName + '.' + a.className : null, inToast: !!a?.closest?.('.gf-brief-toast'), toasts: document.querySelectorAll('.gf-brief-toast').length });
+    });
+    console.log('toast hold state after leaving:', await why(), 'search open:', await trail.locator('ma-walk').evaluate(w => /** @type {any} */ (w)._open));
     // Left: its full time again (ACTION_TOAST_MS, 6 s), then gone — with room for a slow runner's frames.
     await expect(toast).toHaveCount(0, { timeout: 12_000 });
   });
