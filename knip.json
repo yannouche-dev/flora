@@ -21,7 +21,8 @@
     "xlsx"
   ],
   "ignoreBinaries": [
-    "pdftotext"
+    "pdftotext",
+    "openssl"
   ],
   "ignoreUnresolved": [
     "^\\.?/app/"

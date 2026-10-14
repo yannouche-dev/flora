@@ -21,6 +21,9 @@ on: # zizmor: ignore[dangerous-triggers]
       - scripts/build-ign-catalog.mjs
       - tools/assemble-site.sh
       - tools/stamp-sw.mjs
+      - tools/pack-flora.mjs
+      - tools/preload-modules.mjs
+      - tools/check-imports.mjs
       - tools/check-live.mjs
       - .github/workflows/deploy-pages.yml
       - .github/workflows/post-deploy.yml

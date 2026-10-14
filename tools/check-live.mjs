@@ -69,7 +69,10 @@ try {
   console.log(`live:     the same, at ${BASE.href}`);
 
   // Every precached file, those kept on demand (MapLibre) and the data files, a few at a time (HEAD: the bytes are not needed).
-  const paths = [...new Set([...shellPaths(source), ...onDemandPaths(source), ...DATA])];
+  // With the flora packed for the first launch (tools/pack-flora.mjs), as data/meta.json lists it.
+  const files = JSON.parse(readFileSync(join(site, 'data/meta.json'), 'utf8')).files;
+  const packed = files ? [files.index?.path, files.details?.path].filter(Boolean) : [];
+  const paths = [...new Set([...shellPaths(source), ...onDemandPaths(source), ...DATA, ...packed])];
   const missing = [];
   for (let i = 0; i < paths.length; i += 8) {
     const answers = await Promise.all(paths.slice(i, i + 8).map(p => get(p, { method: 'HEAD' }).then(r => [p, r.status], e => [p, String(e)])));

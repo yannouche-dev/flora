@@ -231,7 +231,9 @@ app/
   layout/                « Disposition libre » : grammar.js (la grammaire), registry.js (les composants), state.js (l'état partagé),
                          cells.js (chaque composant branché), gf-layout.js (l'écran), sizes.js, presets.js
   workers/
-    search.worker.js     recherche, filtres à facettes, tri, abréviations, fautes de frappe
+    search.worker.js     recherche, filtres à facettes, tri, abréviations, fautes de frappe ; téléchargement, vérification et
+                         enregistrement de la flore (hors du fil de la page)
+    flora-pack.js        la flore en deux fichiers pour un premier lancement rapide (index de recherche, puis détails)
   components/            gf-app, gf-search-bar, gf-results-bar, gf-active-filters,
                          gf-filter-panel, gf-facet, gf-plant-list (virtualisée),
                          gf-plant-card, gf-plant-detail, gf-attribution, gf-settings,
@@ -553,10 +555,11 @@ Sur ordinateur, les filtres sont dans un panneau latéral ; sur mobile, dans un 
 
 Fonctionnement :
 
-1. au démarrage, l'app part **aussitôt sur la copie locale** de la flore quand elle en a une ; `data/meta.json` est vérifié en arrière-plan (8 s au plus : un réseau lent ou muet ne bloque jamais la recherche). `data/plants.json` n'est téléchargé que si son contenu a changé (son empreinte sha256, publiée dans `meta.json` — une nouvelle construction de la même flore ne se retélécharge pas), vérifié (empreinte, nombre de plantes) puis stocké dans IndexedDB à la place de l'ancienne copie ; la recherche passe alors sur la nouvelle flore, sans recharger. Un téléchargement qui échoue ou ne correspond pas laisse la copie locale intacte (« Mise à jour de la flore reportée ») ; il est retenté au lancement suivant. Seule la première visite attend le téléchargement ;
-2. un Web Worker construit l'index de recherche depuis IndexedDB ;
-3. la fiche plante appelle `PlantSources.details()` à la demande, et la réponse reste en cache dans IndexedDB ;
-4. sans réseau, la recherche, les fiches déjà consultées et les images déjà vues restent disponibles. Seule la page de l'app (la racine du site ou `index.html`) est servie et gardée comme telle par le service worker : un fichier du site ouvert dans un onglet (une icône, le manifeste) ne la remplace plus.
+1. au démarrage, l'app part **aussitôt sur la copie locale** de la flore quand elle en a une ; `data/meta.json` est vérifié en arrière-plan (8 s au plus : un réseau lent ou muet ne bloque jamais la recherche). `data/plants.json` n'est téléchargé que si son contenu a changé (son empreinte sha256, publiée dans `meta.json` — une nouvelle construction de la même flore ne se retélécharge pas), vérifié (empreinte, nombre de plantes) puis stocké dans IndexedDB à la place de l'ancienne copie ; la recherche passe alors sur la nouvelle flore, sans recharger. Un téléchargement qui échoue ou ne correspond pas laisse la copie locale intacte (« Mise à jour de la flore reportée ») ; il est retenté au lancement suivant. Téléchargement, vérification, lecture et enregistrement se font dans le Web Worker de la recherche : jamais une tâche longue de la page ;
+2. **première visite** : le déploiement (`tools/assemble-site.sh`) publie aussi la flore en deux fichiers compacts (`tools/pack-flora.mjs` → `data/flora/index.<empreinte>.json`, ~0,7 Mo compressé : noms, famille, genre, statut, vignette et facette protection ; `data/flora/details.<empreinte>.json`, ~0,25 Mo : le reste de chaque fiche), décrits dans `meta.json` (`files` : chemin, sha256 et taille de chacun, vérifiés au téléchargement ; l'empreinte `sha256` de la flore reste celle de `plants.json`). La recherche marche **dès que l'index est arrivé** ; les fiches complètes suivent et s'enregistrent en arrière-plan, signalées discrètement à côté du nombre d'espèces (« · mise hors ligne… ») ; une fiche ouverte entre-temps attend la sienne (lue dans le worker), et le service worker ne s'installe qu'une fois la flore enregistrée (son précache ne dispute pas le réseau à la flore ; il revalide les fichiers déjà chargés au lieu de les retélécharger). Un fichier du paquet absent ou qui ne correspond pas : `plants.json`, vérifié comme avant (le dépôt, sans paquet, part toujours de `plants.json`). Le site déployé précharge aussi les modules du démarrage (`tools/preload-modules.mjs`, `<link rel="modulepreload">`), puis ceux de la fiche quand elle est demandée ; les écrans autres que Flore et Découvrir (Carte, Mes plantes, Réglages, mini-apps, disposition libre) se chargent à leur première ouverture. Mesure : `node tools/measure-launch.mjs _site` (premier lancement à froid, réseau « Fast 4G » et processeur ×4) ;
+3. un Web Worker construit l'index de recherche depuis IndexedDB (les lancements suivants) ;
+4. la fiche plante appelle `PlantSources.details()` à la demande, et la réponse reste en cache dans IndexedDB ;
+5. sans réseau, la recherche, les fiches déjà consultées et les images déjà vues restent disponibles. Seule la page de l'app (la racine du site ou `index.html`) est servie et gardée comme telle par le service worker : un fichier du site ouvert dans un onglet (une icône, le manifeste) ne la remplace plus.
 
 Lancer en local (n'importe quel serveur statique fait l'affaire) :
 

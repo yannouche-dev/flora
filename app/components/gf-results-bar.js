@@ -67,6 +67,8 @@ export class GfResultsBar extends LitElement {
     .search gf-plant-search { flex: 1; min-width: 0; }
     .search .filters { min-height: 40px; }
     .count { font-weight: 600; margin-right: auto; white-space: nowrap; }
+    /* A first launch: the flora searched before it is stored — said quietly, beside the count, until it is. */
+    .count .storing { font-weight: 400; color: var(--gf-text-muted); }
     button, select { min-height: 32px; padding: 4px 12px; font-size: 0.85rem; }
     /* One line on phones too: the sort menu gives way rather than pushing the icons below. */
     select { padding-right: 28px; border-radius: var(--gf-radius-pill); min-width: 0; flex: 0 1 auto; }
@@ -145,6 +147,8 @@ export class GfResultsBar extends LitElement {
       <div class="row">
         <span class="count" aria-live="polite">
           ${status === 'ready' ? html`${results.total.toLocaleString('fr-FR')} espèce${results.total > 1 ? 's' : ''}` : nothing}
+          ${status === 'ready' && this.#store.state.floraStoring ? html`<small class="storing"
+            title="La flore s’enregistre sur cet appareil : bientôt disponible hors ligne">· mise hors ligne…</small>` : nothing}
         </span>
         ${this.grid ? html`
           ${results.sort === 'relevance' || !query.q ? nothing : html`<button type="button" title="Trier par pertinence" @click=${() => setQuery({ sort: '' })}>Pertinence</button>`}

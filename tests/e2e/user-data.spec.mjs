@@ -127,13 +127,16 @@ test('deux onglets : un module coupé dans l’un reste coupé quand l’autre e
 });
 
 test('stockage plein au premier lancement : la flore n’est pas retéléchargée en vain, le message dit quoi faire (STO-4)', async ({ page, context }) => {
-  // No room for the flora: every write of a plant refused.
-  await context.addInitScript(() => {
-    const put = IDBObjectStore.prototype.put;
-    IDBObjectStore.prototype.put = function (...args) {
-      if (this.name === 'plants') throw new DOMException('Quota exceeded', 'QuotaExceededError');
-      return put.apply(this, /** @type {any} */ (args));
-    };
+  // No room for the flora: every write of a plant refused — in the search worker, which stores it (its script served
+  // with the refusal first; an init script reaches the page only).
+  await context.route(/\/app\/workers\/search\.worker\.js$/, async route => {
+    const response = await route.fetch();
+    const refuse = `{ const put = IDBObjectStore.prototype.put;
+      IDBObjectStore.prototype.put = function (...args) {
+        if (this.name === 'plants') throw new DOMException('Quota exceeded', 'QuotaExceededError');
+        return put.apply(this, args);
+      }; }\n`;
+    await route.fulfill({ response, body: refuse + await response.text() });
   });
   let downloads = 0;
   page.on('request', request => { if (/\/data\/plants\.json/.test(request.url())) downloads++; });

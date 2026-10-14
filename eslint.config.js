@@ -92,5 +92,5 @@ export default [
   { files: ['app/workers/**/*.js'], languageOptions: { globals: globals.worker } },
   { files: ['sw.js'], languageOptions: { globals: globals.serviceworker } },
   // Playwright: the functions given to page.evaluate run in the page.
-  { files: ['tests/**/*.mjs', 'tools/axe.mjs'], languageOptions: { globals: { ...globals.node, ...globals.browser } } }
+  { files: ['tests/**/*.mjs', 'tools/axe.mjs', 'tools/measure-launch.mjs'], languageOptions: { globals: { ...globals.node, ...globals.browser } } }
 ];

@@ -71,6 +71,8 @@ try {
         const view = main?.lastElementChild;
         if (!view) return null;
         if (main.querySelector('.banner.error')) return 'error: ' + main.querySelector('.banner.error')?.textContent?.trim();
+        // A screen loaded the first time it shows (gf-app): its module still coming.
+        if (view.classList.contains('loading-screen')) return null;
         if (!view.localName.includes('-')) return 'not a view: ' + (view.textContent || '').trim().slice(0, 60);
         return customElements.get(view.localName) && view.shadowRoot?.childElementCount ? 'ok' : null;
       }, null, { timeout: 15000 }).then(h => h.jsonValue(), () => 'nothing shown in the main area (an unknown or empty view)');

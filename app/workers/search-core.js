@@ -32,12 +32,18 @@ const words = (/** @type {string} */ text) => text.split(' ').filter(Boolean);
 /**
  * @typedef {object} Index
  * @property {Entry[]} entries
- * @property {Map<string, Map<string, Set<number>>>} vocabulary   words (≥ 4 letters) → entries containing them, bucketed by first letter for typo matching
+ * @property {Map<string, Map<string, number[]>> | null} vocabulary   words (≥ 4 letters) → entries containing them (ascending), bucketed by
+ *   first letter for typo matching: built on the first typo-tolerant search (vocabularyOf), or ahead (search.worker.js)
  * @property {{ type: 'family' | 'genus', name: string, key: string, count: number }[]} taxa
  */
 
-/** @param {any} plant @returns {Entry} */
+/**
+ * A plant of plants.json, or of the index of the flora (flora-pack.js: its `legal` values computed at deploy, without
+ * the INPN statuses they come from).
+ * @param {any} plant @returns {Entry}
+ */
 function toEntry(plant) {
+  const legal = plant.legal ?? legalValues(plant.statuses);
   const names = (plant.vernacularNames || []).map(normalize);
   const synonyms = (plant.synonyms || []).map(normalize);
   const sci = normalize(plant.scientificName);
@@ -52,7 +58,7 @@ function toEntry(plant) {
       genus: plant.genus,
       species: plant.species,
       status: plant.status?.france || null,
-      legal: legalValues(plant.statuses),
+      legal,
       thumbnail: plant.thumbnail || null
     },
     sci,
@@ -69,47 +75,59 @@ function toEntry(plant) {
       genus: plant.genus,
       photo: plant.thumbnail?.url ? 'avec' : 'sans',
       french: plant.vernacularNames?.length ? 'avec' : 'sans',
-      legal: legalValues(plant.statuses)
+      legal
     },
     rank: { fr: 0, sci: 0, family: 0, genus: 0, status: 0, legal: 0 }
   };
+}
+
+/**
+ * The collation position of each value (Intl.Collator, French, base letters, numbers as numbers), values that
+ * compare equal sharing one: each distinct value compared once, not once per plant. Sorting plants by these
+ * positions orders them exactly as comparing their values with the collator would (Array.prototype.sort is stable).
+ * @param {Intl.Collator} collator @param {string[]} values @returns {Map<string, number>}
+ */
+function collationPositions(collator, values) {
+  const distinct = [...new Set(values)].sort(collator.compare);
+  /** @type {Map<string, number>} */
+  const positions = new Map();
+  distinct.forEach((value, i) => {
+    positions.set(value, i > 0 && collator.compare(distinct[i - 1], value) === 0 ? /** @type {number} */ (positions.get(distinct[i - 1])) : i);
+  });
+  return positions;
 }
 
 /** The index of a list of plants (as data/plants.json holds them). @param {any[]} plants @returns {Index} */
 export function buildIndex(plants) {
   const entries = plants.map(toEntry);
 
-  // Sort positions computed once, so sorting results is a cheap integer comparison.
+  // Sort positions computed once, so sorting results is a cheap integer comparison. Each distinct name, family, genus
+  // or status is collated once (collationPositions), then the plants sorted on integers.
   const collator = new Intl.Collator('fr', { sensitivity: 'base', numeric: true });
   const label = (/** @type {Entry} */ e) => e.summary.vernacularName || e.summary.scientificName;
+  const position = (/** @type {(e: Entry) => string} */ value) => {
+    const positions = collationPositions(collator, entries.map(value));
+    return (/** @type {Entry} */ e) => /** @type {number} */ (positions.get(value(e)));
+  };
   const assign = (/** @type {'fr' | 'sci' | 'family' | 'genus' | 'status' | 'legal'} */ key, compare) =>
     entries.slice().sort(compare).forEach((entry, i) => { entry.rank[key] = i; });
 
-  assign('sci', (a, b) => collator.compare(a.summary.scientificName, b.summary.scientificName));
+  const sci = position(e => e.summary.scientificName);
+  assign('sci', (a, b) => sci(a) - sci(b));
   // Species without a French name go last in the French sort.
-  assign('fr', (a, b) =>
-    (a.summary.vernacularName ? 0 : 1) - (b.summary.vernacularName ? 0 : 1) || collator.compare(label(a), label(b)));
-  assign('family', (a, b) => collator.compare(a.summary.family, b.summary.family) || a.rank.sci - b.rank.sci);
-  assign('genus', (a, b) => collator.compare(a.summary.genus || '', b.summary.genus || '') || a.rank.sci - b.rank.sci);
+  const fr = position(label);
+  assign('fr', (a, b) => (a.summary.vernacularName ? 0 : 1) - (b.summary.vernacularName ? 0 : 1) || fr(a) - fr(b));
+  const family = position(e => e.summary.family);
+  assign('family', (a, b) => family(a) - family(b) || a.rank.sci - b.rank.sci);
+  const genus = position(e => e.summary.genus || '');
+  assign('genus', (a, b) => genus(a) - genus(b) || a.rank.sci - b.rank.sci);
   // Status code order (P présent, E endémique…), plants without status last.
-  assign('status', (a, b) => (a.values.status ? 0 : 1) - (b.values.status ? 0 : 1) || collator.compare(a.values.status, b.values.status) || a.rank.fr - b.rank.fr);
+  const status = position(e => /** @type {string} */ (e.values.status));
+  assign('status', (a, b) => (a.values.status ? 0 : 1) - (b.values.status ? 0 : 1) || status(a) - status(b) || a.rank.fr - b.rank.fr);
   // Strongest legal status first: national protection, protection somewhere, regulated, threatened, none.
   const strength = (/** @type {Entry} */ e) => ['nationale', 'protegee', 'reglementee', 'menacee'].findIndex(v => e.values.legal.includes(v));
   const level = (/** @type {Entry} */ e) => { const i = strength(e); return i < 0 ? 9 : i; };
   assign('legal', (a, b) => level(a) - level(b) || a.rank.fr - b.rank.fr);
-
-  /** @type {Index['vocabulary']} */
-  const vocabulary = new Map();
-  entries.forEach((entry, i) => {
-    for (const word of words(entry.haystack.replace(/\|/g, ' '))) {
-      if (word.length < 4) continue;
-      let bucket = vocabulary.get(word[0]);
-      if (!bucket) vocabulary.set(word[0], bucket = new Map());
-      let ids = bucket.get(word);
-      if (!ids) bucket.set(word, ids = new Set());
-      ids.add(i);
-    }
-  });
 
   const counts = { family: new Map(), genus: new Map() };
   for (const entry of entries) {
@@ -120,7 +138,30 @@ export function buildIndex(plants) {
     ...[...counts.family].map(([name, count]) => ({ type: /** @type {const} */ ('family'), name, key: normalize(name), count })),
     ...[...counts.genus].map(([name, count]) => ({ type: /** @type {const} */ ('genus'), name, key: normalize(name), count }))
   ];
-  return { entries, vocabulary, taxa };
+  return { entries, vocabulary: null, taxa };
+}
+
+/**
+ * The words of the flora for the typo-tolerant search (Index.vocabulary), built once: a third of an index's cost, not
+ * needed by the first, exact, results (a first launch searches sooner without it).
+ * @param {Index} index
+ */
+export function vocabularyOf(index) {
+  if (index.vocabulary) return index.vocabulary;
+  /** @type {Map<string, Map<string, number[]>>} */
+  const vocabulary = new Map();
+  index.entries.forEach((entry, i) => {
+    for (const word of words(entry.haystack.replace(/\|/g, ' '))) {
+      if (word.length < 4) continue;
+      let bucket = vocabulary.get(word[0]);
+      if (!bucket) vocabulary.set(word[0], bucket = new Map());
+      const ids = bucket.get(word);
+      // Entries in order: a word twice in one entry is listed once.
+      if (!ids) bucket.set(word, [i]);
+      else if (ids[ids.length - 1] !== i) ids.push(i);
+    }
+  });
+  return index.vocabulary = vocabulary;
 }
 
 /**
@@ -217,7 +258,8 @@ export function distance(a, b, max) {
  * @param {Index} index @param {string[]} tokens
  * @returns {Map<number, number>} entry index → total distance
  */
-function fuzzyMatches({ entries, vocabulary }, tokens) {
+function fuzzyMatches(index, tokens) {
+  const { entries } = index;
   /** @type {Map<number, number> | null} */
   let result = null;
 
@@ -229,7 +271,7 @@ function fuzzyMatches({ entries, vocabulary }, tokens) {
     if (max === 0) {
       entries.forEach((entry, i) => { if (entry.haystack.includes(token)) found.set(i, 0); });
     } else {
-      for (const [word, ids] of vocabulary.get(token[0]) || []) {
+      for (const [word, ids] of vocabularyOf(index).get(token[0]) || []) {
         const d = Math.min(
           distance(token, word, max),
           word.length > token.length ? distance(token, word.slice(0, token.length), max) : max + 1

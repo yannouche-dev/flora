@@ -8,7 +8,8 @@
 //  - on demand (ON_DEMAND): files deployed but not precached — MapLibre (~1.6 MB, the « Vue 3D » only, which needs
 //    the network for its relief anyway). Fetched the first time the 3D view opens, then kept in this version's cache:
 //    served like the shell from then on (offline too), gone with the version.
-//  - data/*.json: network only — the dataset lives in IndexedDB, so it is not duplicated here
+//  - data/*.json and data/flora/ (the flora packed for a first launch): network only — the dataset lives in IndexedDB,
+//    so it is not duplicated here
 //    (except data/territories.json, data/lookalikes.json and data/safety.json: small and static, precached —
 //    the look-alike and toxicity warnings must work offline, where the picking happens — and data/ign-catalog.json,
 //    IGN's catalogue of map layers, written at each deploy: listed offline too, and part of the version)
@@ -125,6 +126,7 @@ const SHELL = [
   'app/core/sync.js',
   'app/core/quota.js',
   'app/workers/search-core.js',
+  'app/workers/flora-pack.js',
   'app/workers/search.worker.js',
   'app/workers/ign-catalog.worker.js',
   'app/components/gf-app.js',
@@ -241,9 +243,11 @@ const KEPT = new Set(ON_DEMAND.map(path => new URL(path, self.location.href).hre
 self.addEventListener('install', event => {
   // All or nothing: one file missing and this version never installs (its partial cache goes; not in the repository,
   // where every worker shares the 'dev' cache), the one running keeps its own cache.
+  // Each file revalidated with the server ('no-cache': never a stale copy of the HTTP cache), not downloaded again
+  // ('reload' did): on a first launch the page has just loaded most of them, and the server answers 304 for those.
   event.waitUntil(
     caches.open(SHELL_CACHE)
-      .then(cache => cache.addAll(SHELL.map(path => new Request(path, { cache: 'reload' }))))
+      .then(cache => cache.addAll(SHELL.map(path => new Request(path, { cache: 'no-cache' }))))
       .catch(error => (DEV ? Promise.resolve() : caches.delete(SHELL_CACHE)).then(() => { throw error; }))
       .then(() => self.skipWaiting())
   );
