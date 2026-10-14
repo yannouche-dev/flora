@@ -1,7 +1,7 @@
-// « Toutes les couches de l'IGN » (Carte panel): the catalogue shipped with the app (data/ign-catalog.json) shows at
-// once, whatever the service does; an old copy is refreshed in the background from GetCapabilities, read as it
-// streams (a slow download is not cut, only a stalled one); a failure is said as such — offline, or the service not
-// answering — with « Réessayer », and never hides the list.
+// « Toutes les couches de l'IGN » (Carte panel, gf-ign-layers.js): the catalogue shipped with the app
+// (data/ign-catalog.json) shows at once, whatever the service does; an old copy is refreshed in the background from
+// GetCapabilities, read as it streams (a slow download is not cut, only a stalled one); a failure is said as such —
+// offline, or the service not answering — with « Réessayer », and never hides the list. (Browsing it: ign-layers.spec.mjs.)
 import { readFileSync } from 'node:fs';
 import { test, expect } from './fixtures.mjs';
 
@@ -15,9 +15,12 @@ const OLD_COPY = JSON.stringify({ fetchedAt: '2026-01-02T00:00:00Z', layers: [
 async function openCatalog(page) {
   await page.locator('gf-map').first().evaluate(map => /** @type {any} */ (map).openPanel());
   const panel = page.locator('gf-map-panel');
-  await panel.getByRole('button', { name: /Ajouter une couche de l’IGN/ }).click();
+  await panel.getByRole('button', { name: /Parcourir les couches de l’IGN/ }).click();
   return panel;
 }
+
+/** The search box, whose placeholder says how many layers the list has. @param {import('@playwright/test').Locator} panel */
+const searchbox = panel => panel.getByRole('searchbox', { name: 'Chercher une couche de l’IGN' });
 
 test('la copie livrée s’affiche aussitôt, GetCapabilities bloqué : jamais « indisponible »', async ({ page, app }) => {
   /** @type {string[]} */
@@ -25,20 +28,21 @@ test('la copie livrée s’affiche aussitôt, GetCapabilities bloqué : jamais �
   await page.route(CAPS_URL, route => { asked.push(route.request().url()); return route.abort(); });
   await app.open('#/map');
   const panel = await openCatalog(page);
-  const items = panel.locator('ul[aria-label="Couches de l’IGN"] li');
-  await expect(items).toHaveCount(60, { timeout: 3000 });
-  await expect(panel.getByRole('searchbox', { name: 'Chercher une couche de l’IGN' })).toHaveAttribute('placeholder', /Chercher parmi \d{3} couches/);
+  await expect(searchbox(panel)).toHaveAttribute('placeholder', /Chercher parmi \d{3} couches/, { timeout: 3000 });
+  await expect(panel.locator('summary', { hasText: 'Recommandées pour la botanique' })).toBeVisible();
   // The copy shipped is a seed: the service is asked, fails, and that is said — the list stays.
   await expect(panel.locator('.catalog .state')).toContainText('Le catalogue de l’IGN ne répond pas');
   await expect(panel.getByRole('button', { name: 'Réessayer' })).toBeVisible();
   await expect(panel).not.toContainText('indisponible');
   expect(asked.length).toBe(1);
-  // The search reads all the layers (hundreds), the rendering stays capped.
-  await panel.getByRole('searchbox', { name: 'Chercher une couche de l’IGN' }).fill('foret publique');
-  await expect(items.filter({ hasText: 'Forêts publiques' }).first()).toBeVisible();
-  // A layer added joins the list of the panel, checked.
-  await items.filter({ hasText: 'Forêts publiques' }).first().getByRole('button', { name: 'Ajouter' }).click();
-  await expect(panel.locator('.catalog label.layer', { hasText: 'FORETS.PUBLIQUES' }).locator('input')).toBeChecked();
+  // The search reads all the layers (hundreds), accents aside.
+  await searchbox(panel).fill('foret publique');
+  const row = panel.locator('li.row', { hasText: 'Forêts publiques' }).first();
+  await expect(row).toBeVisible();
+  // The app's own overlay (« Forêts publiques », in Règles de cueillette): the same one, checked in both lists.
+  await row.getByRole('checkbox').check();
+  await expect(panel.locator('ul.active li', { hasText: 'Forêts publiques' })).toBeVisible();
+  await expect(panel.locator('label.layer', { hasText: 'Forêts publiques' }).locator('input')).toBeChecked();
 });
 
 test('une mise à jour lente (40 s, sans arrêt) va au bout et remplace la liste', async ({ page, app }) => {
@@ -64,11 +68,11 @@ test('une mise à jour lente (40 s, sans arrêt) va au bout et remplace la liste
   }, CAPS);
   await app.open('#/map');
   const panel = await openCatalog(page);
-  const items = panel.locator('ul[aria-label="Couches de l’IGN"] li');
-  await expect(items).toHaveCount(1);
+  await expect(searchbox(panel)).toHaveAttribute('placeholder', /Chercher parmi 1 couche /);
   await expect(panel.locator('.catalog .state')).toContainText('Mise à jour du catalogue');
-  await expect(items.filter({ hasText: 'Relief ombré (estompage)' })).toHaveCount(1, { timeout: 70_000 });
-  await expect(items).toHaveCount(6);
+  await expect(searchbox(panel)).toHaveAttribute('placeholder', /Chercher parmi 6 couches/, { timeout: 70_000 });
+  await searchbox(panel).fill('estompage');
+  await expect(panel.locator('li.row', { hasText: 'Relief ombré (estompage)' })).toHaveCount(1);
   await expect(panel.locator('.catalog .state')).toHaveCount(0);
 });
 
@@ -76,13 +80,13 @@ test('hors ligne : la liste gardée et « Hors ligne », sans appel', async ({ p
   await page.route(/\/data\/ign-catalog\.json(\?|$)/, route => route.fulfill({ contentType: 'application/json', body: OLD_COPY }));
   await app.open('#/map');
   const panel = await openCatalog(page);
-  await expect(panel.locator('ul[aria-label="Couches de l’IGN"] li')).toHaveCount(1);
+  await expect(searchbox(panel)).toHaveAttribute('placeholder', /Chercher parmi 1 couche /);
   await expect(panel.locator('.catalog .state')).toContainText('ne répond pas');
   await page.locator('gf-map-panel').evaluate(p => /** @type {any} */ (p).close());
   await context.setOffline(true);
   await page.locator('gf-map').first().evaluate(map => /** @type {any} */ (map).openPanel());
   await expect(panel.locator('.catalog .state')).toContainText('Hors ligne : catalogue livré avec l’app (2 janvier 2026)');
-  await expect(panel.locator('ul[aria-label="Couches de l’IGN"] li')).toHaveCount(1);
+  await expect(searchbox(panel)).toHaveAttribute('placeholder', /Chercher parmi 1 couche /);
   await context.setOffline(false);
 });
 
@@ -97,7 +101,7 @@ test('« Réessayer » après un échec redemande le service et met la liste à 
   await expect(panel.locator('.catalog .state')).toContainText('Le catalogue de l’IGN ne répond pas (erreur 503) — catalogue livré avec l’app');
   up = true;
   await panel.getByRole('button', { name: 'Réessayer' }).click();
-  await expect(panel.locator('ul[aria-label="Couches de l’IGN"] li')).toHaveCount(6);
+  await expect(searchbox(panel)).toHaveAttribute('placeholder', /Chercher parmi 6 couches/);
   await expect(panel.locator('.catalog .state')).toHaveCount(0);
 });
 
@@ -108,7 +112,7 @@ test('module « IGN – fonds de carte » coupé : la liste livrée, rien demand
   await page.route(CAPS_URL, route => { asked.push(route.request().url()); return route.abort(); });
   await app.open('#/map');
   const panel = await openCatalog(page);
-  await expect(panel.locator('ul[aria-label="Couches de l’IGN"] li')).toHaveCount(60);
+  await expect(searchbox(panel)).toHaveAttribute('placeholder', /Chercher parmi \d{3} couches/);
   await expect(panel.locator('.catalog .state')).toContainText('Module « IGN – fonds de carte » désactivé : une couche ajoutée n’affichera que les zones déjà vues');
   await expect(panel.locator('.catalog .state a')).toHaveAttribute('href', '#/settings');
   expect(asked).toEqual([]);

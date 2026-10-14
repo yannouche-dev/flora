@@ -29,6 +29,9 @@
     <Layer>
       <ows:Title>Forêts publiques</ows:Title>
       <ows:Abstract>Localisation des forêts publiques domaniales et non domaniales gérées par l'Office national des forêts (ONF).</ows:Abstract>
+      <ows:Keywords><ows:Keyword>Forêt</ows:Keyword><ows:Keyword>ONF</ows:Keyword><ows:Keyword>Forêt</ows:Keyword><ows:Keyword>  Usage des sols </ows:Keyword></ows:Keywords>
+      <ows:WGS84BoundingBox><ows:LowerCorner>-5.1406 41.3625</ows:LowerCorner><ows:UpperCorner>9.5600 51.0890</ows:UpperCorner></ows:WGS84BoundingBox>
+      <ows:Metadata xlink:href="https://data.geopf.fr/csw?REQUEST=GetRecordById&amp;ID=IGNF_FORETS-PUBLIQUES"/>
       <ows:Identifier>FORETS.PUBLIQUES</ows:Identifier>
       <Style><ows:Title>Données brutes</ows:Title><ows:Identifier>normal</ows:Identifier></Style>
       <Style isDefault="true"><ows:Title>FORETS PUBLIQUES ONF</ows:Title><ows:Identifier>FORETS PUBLIQUES ONF</ows:Identifier>
@@ -83,6 +86,7 @@
     </Layer>
     <Layer>
       <ows:Title>Carte géologique</ows:Title>
+      <ows:Metadata xlink:href="javascript:alert(1)"/>
       <ows:Abstract>Carte géologique de la France au 1/50 000 (BRGM).</ows:Abstract>
       <ows:Identifier>GEOLOGIE.CARTE</ows:Identifier>
       <Format>image/png</Format>

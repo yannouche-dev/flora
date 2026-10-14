@@ -77,7 +77,7 @@ function wmts(def, base, key, minZoom = 5) {
     maxZoom: 21,
     // CORS requests give the service worker readable responses (opaque ones cost ~7 MB of quota each).
     crossOrigin: 'anonymous',
-    opacity: base ? 1 : 0.8,
+    opacity: base ? 1 : overlayOpacity(key),
     className: 'gf-tiles-' + key
   });
 }
@@ -96,10 +96,7 @@ export function tileLayer(key, minZoom) {
 
 // ── Every IGN layer ──────────────────────────────────────────────────────────
 
-/**
- * A layer of IGN's whole WMTS catalogue (GetCapabilities), compact.
- * @typedef {{ id: string, title: string, about: string, format: string, style: string, minNative: number, maxNative: number }} CatalogLayer
- */
+/** A layer of IGN's whole WMTS catalogue (GetCapabilities), compact and classified. @typedef {import('../../lib/ign-catalog.mjs').CatalogLayer} CatalogLayer */
 
 /** A layer of the catalogue, as an overlay key. */
 export const IGN_PREFIX = 'ign:';
@@ -121,13 +118,50 @@ export const overlayDef = key => OVERLAYS[key] || added.get(key) || null;
 /** The catalogue's layers added, in the order they were. */
 export const addedLayers = () => [...added.keys()];
 
-/** A layer of the catalogue made an overlay (kept for next time). @param {CatalogLayer} l @returns {string} its key */
+/**
+ * A layer of the catalogue made an overlay (kept for next time): its readable title, with its variant for one of a
+ * series (« Photographies aériennes par année — 1950-1965 »). @param {CatalogLayer} l @returns {string} its key
+ */
 export function addCatalogLayer(l) {
   const key = IGN_PREFIX + l.id;
   if (!SAFE_ID.test(l.id) || !/^image\/(png|jpeg)$/.test(l.format)) return key;
-  added.set(key, { label: l.title || l.id, hint: l.id, group: 'ign', layers: [{ id: l.id, format: l.format, style: l.style || 'normal', minNative: l.minNative, maxNative: l.maxNative }] });
+  const label = l.group && l.gtitle ? `${l.gtitle} — ${l.variant || l.title}` : l.label || l.title || l.id;
+  added.set(key, { label, hint: l.id, group: 'ign', layers: [{ id: l.id, format: l.format, style: l.style || 'normal', minNative: l.minNative, maxNative: l.maxNative }] });
   try { localStorage.setItem(config.storageKeys.ignLayers, JSON.stringify(Object.fromEntries(added))); } catch { /* not kept */ }
   return key;
+}
+
+/**
+ * The catalogue layer that is one of the app's own overlays (« Forêts publiques », « Parcs nationaux »…): its key, so
+ * the list toggles that one rather than a copy of it. @param {string} id @returns {string | null}
+ */
+export function builtinKeyOf(id) {
+  for (const [key, def] of Object.entries(OVERLAYS)) if (def.layers.length === 1 && def.layers[0].id === id) return key;
+  return null;
+}
+
+// ── Opacity of each overlay ──────────────────────────────────────────────────
+
+/** An overlay's opacity unless chosen (the backgrounds are opaque). */
+export const DEFAULT_OPACITY = 0.8;
+
+/** The opacity chosen for each overlay (key → 0…1), kept on the device for every map. @type {Record<string, number>} */
+let opacities = {};
+try {
+  const saved = JSON.parse(localStorage.getItem(config.storageKeys.overlayOpacity) || '{}');
+  if (saved && typeof saved === 'object') for (const [k, v] of Object.entries(saved)) if (typeof v === 'number' && v >= 0 && v <= 1) opacities[k] = v;
+} catch { /* none */ }
+
+/** An overlay's opacity (0…1). @param {string} key */
+export const overlayOpacity = key => opacities[key] ?? DEFAULT_OPACITY;
+
+/** Sets an overlay's opacity (0…1, by 0.05), kept for next time. @param {string} key @param {number} value */
+export function setOverlayOpacity(key, value) {
+  const v = Math.round(Math.min(1, Math.max(0, Number(value) || 0)) * 20) / 20;
+  opacities = { ...opacities, [key]: v };
+  if (v === DEFAULT_OPACITY) delete opacities[key];
+  try { localStorage.setItem(config.storageKeys.overlayOpacity, JSON.stringify(opacities)); } catch { /* not kept */ }
+  return v;
 }
 
 // The catalogue itself (the copy shipped with the app, refreshed from GetCapabilities): app/core/ign-catalog.js.

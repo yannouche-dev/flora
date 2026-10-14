@@ -5,7 +5,7 @@ import { LitElement, html, nothing } from 'lit';
 import * as L from 'leaflet';
 import { config } from '../config.js';
 import { watchLocation, whenGranted } from '../core/geo.js';
-import { BASES, FRANCE_BOUNDS, OVERLAYS, addCatalogLayer, addedLayers, isOverlay, tileLayer } from '../core/ign.js';
+import { BASES, FRANCE_BOUNDS, OVERLAYS, addCatalogLayer, addedLayers, isOverlay, setOverlayOpacity, tileLayer } from '../core/ign.js';
 import { inSeason, placeAbundance, placeTitle } from '../core/collections.js';
 import { store as appStore } from '../core/store.js';
 import { cachedThumb, thumbUrl } from '../core/thumb.js';
@@ -530,6 +530,7 @@ export class GfMap extends LitElement {
     this.#layers = {};
     /** @type {L.TileLayer} */ (this.#layer(this.#base).addTo(map)).bringToBack();
     for (const key of this.#overlays) this.#layer(key).addTo(map);
+    this.#restack();
     this.#syncDistribution();
   };
 
@@ -643,6 +644,7 @@ export class GfMap extends LitElement {
     if (this.overlays) this.#overlays = this.overlays.filter(isOverlay);
     this.#layer(this.#base).addTo(map);
     for (const key of this.#overlays) this.#layer(key).addTo(map);
+    this.#restack();
 
     this.#areaLayer = L.layerGroup().addTo(map);
     this.#pointsLayer = L.layerGroup().addTo(map);
@@ -1790,6 +1792,9 @@ export class GfMap extends LitElement {
         const key = e.detail.layer ? addCatalogLayer(e.detail.layer) : e.detail.key;
         this.#setOverlay(key, e.detail.on);
       });
+      // The panel's « Actives » list (gf-ign-layers.js): an overlay's opacity, the overlays' order.
+      panel.addEventListener('overlay-opacity', (/** @type {any} */ e) => this.#setOpacity(e.detail.key, e.detail.opacity, e.detail.commit));
+      panel.addEventListener('overlay-order', (/** @type {any} */ e) => this.#setOrder(e.detail.keys));
       panel.addEventListener('distribution-toggle', (/** @type {any} */ e) => {
         this.#distributionOn = e.detail.on;
         this.#saveLayers();
@@ -1853,9 +1858,51 @@ export class GfMap extends LitElement {
     if (on) {
       this.#overlays.push(key);
       this.#layer(key).addTo(map);
+      this.#restack();
     } else {
       this.#layer(key).remove();
     }
+    this.#saveLayers();
+  }
+
+  /** The overlays drawn in their order (the last on top), over the background and under GBIF's layers (20, 21). */
+  #restack() {
+    this.#overlays.forEach((key, i) => {
+      const layer = /** @type {any} */ (this.#layers[key]);
+      if (!layer) return;
+      for (const l of layer.eachLayer ? layer.getLayers() : [layer]) l.setZIndex?.(Math.min(19, 2 + i));
+    });
+  }
+
+  /**
+   * An overlay's opacity: shown at once (the slider moving), kept when let go (`commit`). In 3D the overlay is put back
+   * on the map then, so the 3D map (which mirrors the 2D one's layers as they are added) draws it again.
+   * @param {string} key @param {number} opacity @param {boolean} commit
+   */
+  #setOpacity(key, opacity, commit) {
+    const value = commit ? setOverlayOpacity(key, opacity) : Math.min(1, Math.max(0, Number(opacity) || 0));
+    const layer = /** @type {any} */ (this.#layers[key]);
+    if (!layer) return;
+    for (const l of layer.eachLayer ? layer.getLayers() : [layer]) l.setOpacity?.(value);
+    if (commit && this.#gl?.on && this.#overlays.includes(key)) {
+      const map = /** @type {L.Map} */ (this.#map);
+      layer.remove();
+      layer.addTo(map);
+    }
+  }
+
+  /** The overlays in a new order (bottom first: the last drawn on top). @param {string[]} keys */
+  #setOrder(keys) {
+    const map = /** @type {L.Map} */ (this.#map);
+    const on = new Set(this.#overlays);
+    const next = keys.filter(k => on.has(k));
+    // Any left out keep their place at the top (a list out of step: nothing lost).
+    for (const k of this.#overlays) if (!next.includes(k)) next.push(k);
+    if (next.join('\n') === this.#overlays.join('\n')) return;
+    this.#overlays = next;
+    this.#restack();
+    // In 3D: put back in order, the 3D map draws them anew.
+    if (this.#gl?.on) for (const k of next) { const l = this.#layer(k); l.remove(); l.addTo(map); }
     this.#saveLayers();
   }
 

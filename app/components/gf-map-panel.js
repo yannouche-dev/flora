@@ -1,7 +1,6 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
-import { BASES, OVERLAYS, IGN_PREFIX, addedLayers, overlayDef } from '../core/ign.js';
-import { loadCatalog, onCatalog } from '../core/ign-catalog.js';
+import { BASES, OVERLAYS, overlayDef } from '../core/ign.js';
 import { href } from '../core/router.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
@@ -10,15 +9,18 @@ import { mapSettings, mapSettingsEvents, setMapSettings } from '../core/map-sett
 import { moduleEvents, moduleOn } from '../core/modules.js';
 import { hasWebGL2 } from '../core/maplibre.js';
 import { map3dOptions, map3dOptionsCss, mapRendererChoice } from './map3d-options.js';
+import './gf-ign-layers.js';
 
 const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
 
 /**
  * "Carte" panel: everything about how the map looks, in one bottom sheet — its display (2D or 3D, and the 3D
  * options: the maps' one choice, core/map-settings.js, the same as Réglages › Cartes — every map follows), background,
- * overlays (terrain, protected areas, and any layer of IGN's whole catalogue), legend, sources. Every map has it
- * (gf-map: its round button, or the end of its search pill). Events: base-change {key}, overlay-toggle {key, on,
- * layer?} (`layer`: a catalogue layer to add); the display is stored here (setMapSettings).
+ * overlays (terrain, protected areas, and any layer of IGN's whole catalogue: gf-ign-layers.js, with the overlays
+ * shown, their opacity and order), legend, sources. Every map has it (gf-map: its round button, or the end of its
+ * search pill). Events: base-change {key}, overlay-toggle {key, on, layer?} (`layer`: a catalogue layer to add), and
+ * from gf-ign-layers overlay-opacity {key, opacity, commit}, overlay-order {keys}; the display is stored here
+ * (setMapSettings).
  */
 export class GfMapPanel extends LitElement {
   static properties = {
@@ -28,14 +30,11 @@ export class GfMapPanel extends LitElement {
     distribution: { attribute: false },
     distributionOn: { attribute: false },
     legend: { type: Boolean },
-    _open: { state: true },
     /**
      * How the map is drawn (gf-map-gl.js): { on: in 3D (or loading), fixed: { renderer, why } when this map is always
      * drawn one way, note: why it is in 2D though 3D is chosen, or flat }; null: not known yet.
      */
-    gl: { attribute: false },
-    _catalog: { state: true },
-    _q: { state: true }
+    gl: { attribute: false }
   };
 
   static styles = [ui, map3dOptionsCss, css`
@@ -84,17 +83,6 @@ export class GfMapPanel extends LitElement {
     .legend i.square { border-radius: 3px; }
     .sources { font-size: 0.8rem; color: var(--gf-text-muted); margin: 0 4px; }
     .sources a { color: inherit; }
-    .catalog { display: grid; gap: 6px; }
-    .catalog input[type=search] { width: 100%; box-sizing: border-box; }
-    .catalog ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; max-height: 40dvh; overflow-y: auto; }
-    .catalog li { display: flex; align-items: center; gap: 10px; padding: 6px 4px; border-radius: var(--gf-radius-sm); }
-    .catalog li:hover { background: var(--gf-surface-2); }
-    .catalog li span { display: grid; flex: 1; min-width: 0; }
-    .catalog li small { color: var(--gf-text-muted); font-size: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .catalog li button { flex: none; }
-    .catalog .state { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 2px 4px 4px; }
-    .catalog .state .note { margin: 0; }
-    .catalog .state button { min-height: 32px; padding: 2px 12px; font-size: 0.85rem; }
   `];
 
   constructor() {
@@ -106,20 +94,12 @@ export class GfMapPanel extends LitElement {
     /** @type {string | null} */
     this.distribution = null;
     this.distributionOn = false;
-    /** « Ajouter une couche de l'IGN… » touched: the catalogue is shown. */
-    this._open = false;
     /** @type {any} */
     this.gl = null;
-    /** IGN's whole catalogue, as core/ign-catalog.js has it. @type {import('../core/ign-catalog.js').CatalogState | null} */
-    this._catalog = null;
-    this._q = '';
-    /** @type {(() => void) | null} */
-    this._unsubscribe = null;
   }
 
   connectedCallback() {
     super.connectedCallback();
-    this._unsubscribe = onCatalog(state => { this._catalog = state; });
     // The display's choice, changed here, in Réglages or another tab; a module that the 3D options depend on.
     mapSettingsEvents.addEventListener('change', this.#redraw);
     moduleEvents.addEventListener('change', this.#redraw);
@@ -127,68 +107,15 @@ export class GfMapPanel extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    this._unsubscribe?.();
     mapSettingsEvents.removeEventListener('change', this.#redraw);
     moduleEvents.removeEventListener('change', this.#redraw);
   }
 
   #redraw = () => this.requestUpdate();
 
-  /** Shows the catalogue; `retry` (« Réessayer »): the service asked now. @param {boolean} [retry] */
-  #loadCatalog(retry = false) {
-    this._open = true;
-    loadCatalog({ retry }).catch(error => console.warn('Catalogue IGN :', error));
-  }
-
-  /** The searchable text of each layer, folded once per list (hundreds of layers, searched at each key). */
-  #folded = new WeakMap();
-
-  /** @param {import('../core/ign-catalog.js').CatalogState} c */
-  #catalogState(c) {
-    const day = c.date ? new Date(c.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
-    const kept = !c.layers ? '' : c.origin === 'bundled' ? (day ? `catalogue livré avec l’app (${day})` : 'catalogue livré avec l’app') : `catalogue gardé du ${day}`;
-    const retry = html`<button type="button" @click=${() => this.#loadCatalog(true)}>${icon('arrow-counterclockwise')} Réessayer</button>`;
-    if (c.problem === 'module-off') {
-      return html`<div class="state"><p class="note" role="status">Module « IGN – fonds de carte » désactivé : ${c.layers ? 'une couche ajoutée n’affichera que les zones déjà vues' : 'le catalogue n’est pas demandé'}.
-        <a href=${href.settings()}>Réglages › Modules</a></p></div>`;
-    }
-    if (c.problem === 'offline') {
-      return html`<div class="state"><p class="note" role="status">${c.layers ? `Hors ligne : ${kept}.` : 'Hors ligne : le catalogue de l’IGN n’est pas encore sur l’appareil.'}</p>${c.layers ? nothing : retry}</div>`;
-    }
-    if (c.problem === 'down') {
-      return html`<div class="state"><p class="note" role="status">Le catalogue de l’IGN ne répond pas${c.reason ? ` (${c.reason})` : ''}${c.layers ? ` — ${kept}` : ''}.</p>${retry}</div>`;
-    }
-    if (c.refreshing || !c.layers) return html`<div class="state"><p class="note" role="status">${c.layers ? 'Mise à jour du catalogue de l’IGN…' : 'Chargement du catalogue de l’IGN…'}</p></div>`;
-    return nothing;
-  }
-
-  /** IGN's whole catalogue: the layers added, and a search among all the others. */
-  #catalog() {
-    const c = this._catalog;
-    const layers = c?.layers;
-    const fold = (/** @type {string} */ t) => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
-    const words = fold(this._q).split(/\s+/).filter(Boolean);
-    const added = new Set(addedLayers());
-    let folded = layers ? this.#folded.get(layers) : null;
-    if (layers && !folded) this.#folded.set(layers, folded = layers.map(l => fold(l.title + ' ' + l.id + ' ' + l.about)));
-    const shown = layers ? layers.filter((l, i) => !added.has(IGN_PREFIX + l.id) && words.every(w => folded[i].includes(w))) : [];
-    return html`<div class="catalog">
-      ${addedLayers().map(k => this.#layer(k))}
-      ${!this._open || !c ? html`<button type="button" @click=${() => this.#loadCatalog()}>${icon('layers')} Ajouter une couche de l’IGN…</button>`
-        : html`${this.#catalogState(c)}
-          ${!layers ? nothing : html`<input type="search" placeholder=${'Chercher parmi ' + layers.length + ' couches (relief, forêts, géologie…)'} aria-label="Chercher une couche de l’IGN"
-            .value=${this._q} @input=${(/** @type {any} */ e) => { this._q = e.target.value; }} />
-          <ul aria-label="Couches de l’IGN">${shown.slice(0, 60).map(l => html`<li>
-            <span>${l.title}<small title=${l.about || l.id}>${l.about || l.id}</small></span>
-            <button type="button" @click=${() => this.#emit('overlay-toggle', { key: IGN_PREFIX + l.id, on: true, layer: l })}>${icon('plus-lg')} Ajouter</button>
-          </li>`)}</ul>
-          ${shown.length > 60 ? html`<p class="note">${shown.length - 60} autres : précisez la recherche.</p>` : !shown.length ? html`<p class="note">Aucune couche ne correspond.</p>` : nothing}`}`}
-    </div>`;
-  }
-
   open() {
     // The catalogue shown before: asked again (online again, a month gone, the module switched…).
-    if (this._open) this.#loadCatalog();
+    /** @type {any} */ (this.renderRoot.querySelector('gf-ign-layers'))?.reopen();
     openModal(/** @type {HTMLDialogElement} */ (this.renderRoot.querySelector('dialog')));
   }
 
@@ -259,8 +186,8 @@ export class GfMapPanel extends LitElement {
           ${group('terrain').map(k => this.#layer(k))}
 
           <h3 class="kicker">Toutes les couches de l’IGN</h3>
-          <p class="note">Tout le catalogue de la Géoplateforme : relief, géologie, forêts, hydrographie, cartes anciennes…</p>
-          ${this.#catalog()}
+          <p class="note">Tout le catalogue de la Géoplateforme, rangé par thème : photos anciennes, forêts, espaces protégés, sols, relief, cartes anciennes…</p>
+          <gf-ign-layers .overlays=${this.overlays}></gf-ign-layers>
 
           <h3 class="kicker">Règles de cueillette</h3>
           <p class="note">Dans ces zones, la cueillette a souvent des règles propres : vérifiez-les avant de cueillir.</p>

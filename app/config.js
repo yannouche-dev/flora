@@ -37,6 +37,8 @@ export const config = {
     mapLayer: 'geoflora.mapLayer',
     /** The layers of IGN's whole catalogue added to the maps (their definitions, so they show at once, offline too). */
     ignLayers: 'geoflora.ignLayers',
+    /** The opacity chosen for each overlay of the maps (key → 0…1; core/ign.js). */
+    overlayOpacity: 'geoflora.overlayOpacity',
     mapView: 'geoflora.mapView',
     /** Réglages › Cartes: 2D or 3D, and the 3D options (core/map-settings.js). */
     maps3d: 'geoflora.maps3d',

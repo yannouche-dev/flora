@@ -5,7 +5,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { CATALOG_TTL, fetchedAtOf, isStale, layersOf, parseCapabilities, readXml } from '../../lib/ign-catalog.mjs';
+import { ABOUT_MAX, CATALOG_TTL, fetchedAtOf, fileLayers, isStale, layersOf, parseCapabilities, readXml } from '../../lib/ign-catalog.mjs';
+import { TAXONOMY_VERSION } from '../../lib/ign-classify.mjs';
 import { createCatalog, fetchTextStall } from '../../app/core/ign-catalog.js';
 
 const XML = readFileSync(new URL('../fixtures/ign-capabilities.xml', import.meta.url), 'utf8');
@@ -33,13 +34,57 @@ test('parseCapabilities : les couches en Web Mercator (PM et PM_<min>_<max>), PN
   assert.equal(byId['FORETS.PUBLIQUES'].style, 'FORETS PUBLIQUES ONF');
   assert.equal(byId['ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW'].style, 'estompage_grayscale');
   assert.equal(byId['GEOLOGIE.CARTE'].style, 'normal');
-  // Entities decoded; a description in CDATA without its markup, cut at 240 characters.
+  // Entities decoded; a description in CDATA without its markup, whole (up to ABOUT_MAX characters).
   assert.equal(byId['HYDROGRAPHY.BCAE.LATEST'].title, 'Cours d\'eau & plans d\'eau (BCAE)');
   const about = byId['ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW'].about;
-  assert.equal(about.length, 240);
+  assert.ok(about.length > 240 && about.length <= ABOUT_MAX, `${about.length} caractères`);
   assert.ok(about.startsWith('Estompage multidirectionnel du relief'));
+  assert.ok(about.endsWith('massifs montagneux de la France entière.'));
   // The first Plan IGN, not its double.
   assert.equal(byId['GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2'].title, 'Plan IGN');
+});
+
+test('parseCapabilities : mots-clés, emprise, légende, fiche de métadonnées, et la place de chaque couche', () => {
+  const byId = Object.fromEntries(parseCapabilities(XML).map(l => [l.id, l]));
+  const forets = byId['FORETS.PUBLIQUES'];
+  // Keywords trimmed, each once; the box rounded to 0.001°; the default style's legend; an https metadata sheet, its
+  // entities decoded; no « javascript: » address ever kept.
+  assert.deepEqual(forets.kw, ['Forêt', 'ONF', 'Usage des sols']);
+  assert.deepEqual(forets.bbox, [-5.141, 41.363, 9.56, 51.089]);
+  assert.equal(forets.legend, 'https://data.geopf.fr/annexes/ressources/legendes/FORETS.PUBLIQUES-legend.png');
+  assert.equal(forets.meta, 'https://data.geopf.fr/csw?REQUEST=GetRecordById&ID=IGNF_FORETS-PUBLIQUES');
+  assert.equal(byId['GEOLOGIE.CARTE'].meta, undefined);
+  assert.deepEqual(byId['GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2'].bbox, [-179.9, -85, 179.9, 85]);
+  // Classified as it is read (the worker's result is the same as the deploy's).
+  assert.deepEqual(Object.fromEntries(Object.values(byId).map(l => [l.id, `${l.cat}/${l.sub}`])), {
+    'GEOLOGIE.CARTE': 'sols/geologie',
+    'GEOGRAPHICALGRIDSYSTEMS.ETATMAJOR40': 'cartes/historiques',
+    'HYDROGRAPHY.BCAE.LATEST': 'eau/cours',
+    'FORETS.PUBLIQUES': 'vegetation/forets',
+    'GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2': 'cartes/plans',
+    'ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW': 'relief/ombrages'
+  });
+  assert.equal(forets.botany, 1);
+  assert.equal(forets.source, 'ONF');
+});
+
+test('fichier : le format 2 se relit tel quel, le format 1 (sans classement) est classé à la lecture', () => {
+  const layers = parseCapabilities(XML);
+  const { groups, layers: rows } = fileLayers(layers);
+  const v2 = { version: 2, taxonomy: TAXONOMY_VERSION, fetchedAt: '2026-10-01T00:00:00Z', groups, layers: rows };
+  assert.deepEqual(layersOf(JSON.parse(JSON.stringify(v2))), layers);
+  // Format 1: the same layers without their place, read and classified.
+  const v1 = { fetchedAt: '2026-10-01T00:00:00Z', layers: layers.map(({ id, title, about, format, style, minNative, maxNative }) => ({ id, title, about, format, style, minNative, maxNative })) };
+  const read = layersOf(v1);
+  assert.deepEqual(read.map(l => `${l.id} ${l.cat}/${l.sub}`), layers.map(l => `${l.id} ${l.cat}/${l.sub}`));
+  // Another taxonomy, or a place this app does not know: classified again, never trusted.
+  const odd = layersOf({ ...v2, layers: rows.map(l => ({ ...l, cat: 'inconnue', sub: 'x' })) });
+  assert.ok(odd.every(l => l.cat !== 'inconnue'));
+  // An unsafe address, a box out of range: dropped.
+  const [bad] = layersOf({ layers: [{ ...rows[0], legend: 'javascript:alert(1)', meta: 'http://x/y', bbox: [0, 0, 200, 10] }] });
+  assert.equal(bad.legend, undefined);
+  assert.equal(bad.meta, undefined);
+  assert.equal(bad.bbox, undefined);
 });
 
 test('parseCapabilities : ni autre grille (WGS84G, Lambert-93), ni autre format (BIL), ni identifiant douteux', () => {
