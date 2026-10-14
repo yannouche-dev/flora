@@ -782,3 +782,14 @@ dialog.gf-map3d::backdrop { background: rgb(0 0 0 / 50%); }
 .gf3d-card-x:focus-visible { outline: none; box-shadow: var(--gf-focus); }
 /* A walk's start (a point of the map): dark, ringed in white. */
 .gf-obs.gf-obs-start { fill: #1d2b20; stroke: #fff; }
+/* The radius' handle (a free layout's map, gf-map radiusHandle): a knob on the circle's east edge, a finger's room
+   around it (36 px); dragged, the distance in a bubble above it. Never in 3D (the 2D map's handle). */
+.gf-radius-mk { background: none; border: 0; }
+.gf-radius-handle { position: absolute; inset: 0; display: grid; place-items: center; border-radius: 50%; cursor: ew-resize; touch-action: none; outline: none; }
+.gf-radius-handle .knob { width: 18px; height: 18px; border-radius: 50%; background: #fff; border: 3px solid #3f7d20; box-shadow: 0 1px 4px rgb(0 0 0 / 45%); transition: transform 0.12s; }
+.gf-radius-handle:hover .knob, .gf-radius-handle.held .knob { transform: scale(1.25); }
+.gf-radius-handle:focus-visible .knob { box-shadow: var(--gf-focus, 0 0 0 3px #2f6b3a); }
+.gf-radius-handle .bubble { position: absolute; bottom: calc(100% + 2px); left: 50%; transform: translateX(-50%); white-space: nowrap; padding: 2px 8px; border-radius: 999px;
+  background: var(--gf-surface, #fff); color: var(--gf-text, #1d2419); font: 600 0.8rem/1.4 system-ui, sans-serif; box-shadow: 0 1px 4px rgb(0 0 0 / 30%); pointer-events: none; }
+.gf-radius-handle .bubble[hidden] { display: none; }
+.gf-gl-mk:has(.gf-radius-handle) { display: none; }

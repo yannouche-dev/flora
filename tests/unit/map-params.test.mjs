@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as G from '../../app/layout/grammar.js';
 import { cellMark, resolve, resolveTree } from '../../app/layout/registry.js';
-import { MAP_INTENTS, MAP_LAYERS, catalogLayers, inWhen, overlayKeys, uiMode } from '../../app/layout/map-options.js';
+import { MAP_CONTROLS, MAP_INTENTS, MAP_LAYERS, catalogLayers, defaultControls, inWhen, mapControls, overlayKeys, snapRadius, uiMode } from '../../app/layout/map-options.js';
 
 /** A layout typed → its canonical text and what was wrong. @param {string} text */
 function read(text) {
@@ -21,7 +21,7 @@ const params = text => read(text).cell.params;
 test('chaque réglage de la carte se lit : ses noms, ses valeurs, leurs autres graphies', () => {
   const p = params('map(r=2km;lieu=Mirabel Ménétrol 63;autour=1;base=photo;3d=1;layers=znieff+n2000;src=inat+gbif;when=mois;pts=pastille;regroupe=1;suit=0;plante=seule;toucher=fiche;ui=nue)');
   assert.deepEqual(p, { intent: 'explorer', r: 2000, lieu: 'Mirabel Ménétrol 63', autour: true, base: 'photo', '3d': true, layers: ['znieff', 'n2000'], src: ['inat', 'gbif'],
-    when: 'mois', pts: 'pastille', regroupe: true, suit: false, plante: 'seule', toucher: 'fiche', ui: 'nue', tete: 'oui', titre: null, actions: [] });
+    when: 'mois', pts: 'pastille', regroupe: true, suit: false, plante: 'seule', toucher: 'fiche', ui: 'nue', tete: 'oui', titre: null, actions: [], ctl: null });
   // In French, its other words, accents and case free.
   const q = params('carte(rayon=500m;commune=Fontainebleau 77;moi=oui;fond=satellite;vue3d=non;couches=Natura+ZNIEFF1;sources=iNaturalist;période=Année;style=Pastilles;groupes=1;recherche=non;courante=only;tap=sheet;commandes=Compact)');
   assert.deepEqual([q.r, q.lieu, q.autour, q.base, q['3d'], q.layers, q.src, q.when, q.pts, q.regroupe, q.suit, q.plante, q.toucher, q.ui],
@@ -29,7 +29,7 @@ test('chaque réglage de la carte se lit : ses noms, ses valeurs, leurs autres g
   // Defaults: the map as it always was.
   const d = params('map');
   assert.deepEqual(d, { intent: 'explorer', r: null, lieu: null, autour: false, base: null, '3d': null, layers: [], src: ['inat'], when: 'toujours', pts: 'photo',
-    regroupe: false, suit: true, plante: 'grand', toucher: 'plante', ui: 'auto', tete: 'oui', titre: null, actions: [] });
+    regroupe: false, suit: true, plante: 'grand', toucher: 'plante', ui: 'auto', tete: 'oui', titre: null, actions: [], ctl: null });
   assert.equal(read('map').text, '[map]');
 });
 
@@ -162,4 +162,67 @@ test('la période, les commandes selon la largeur', () => {
   assert.equal(uiMode('auto'), 'complete', 'largeur inconnue : complètes');
   assert.equal(uiMode('nue', 800), 'nue');
   assert.equal(uiMode(null, 359), 'compacte');
+});
+
+test('les commandes sur la carte (ctl=) : lues, dans l’ordre de l’adresse ; écrites seulement quand elles diffèrent de celles de ui et de l’intention', () => {
+  // Read in their order, aliases and French words free; an unknown one said and left out.
+  assert.deepEqual(params('map(ctl=zoom+compte+Zone+légende)').ctl, ['rayon', 'compte', 'legende', 'zoom']);
+  assert.deepEqual(params('map(boutons=calques+compteur)').ctl, ['couches', 'compte']);
+  const bad = read('map(ctl=zoom+boussole)');
+  assert.equal(bad.text, '[map(ctl=zoom)]');
+  assert.match(bad.problems[0], /« boussole » n’est pas une valeur de commandes sur la carte \(attendu : rayon, lieu, gps, couches, 3d, fond, plante, periode, compte, legende, zoom, joints par « \+ »\)/);
+  // None: written so (ctl=aucune), the map bare whatever its ui.
+  assert.equal(read('map(ctl=aucune)').text, '[map(ctl=aucune)]');
+  assert.deepEqual(params('map(ctl=aucune)').ctl, []);
+  // Never a bare value: map(zoom) is not ctl=zoom; map(3d), map(gps) keep their own settings.
+  assert.equal(read('map(3d)').text, '[map(3d=1)]');
+  assert.equal(read('map(gps)').text, '[map(autour=1)]');
+  assert.match(read('map(compte)').problems[0], /valeur « compte »|n’est pas une valeur/);
+  // The defaults: complete (auto too), compact without the address search, none; each intent adds its own.
+  assert.deepEqual(defaultControls('complete'), ['rayon', 'lieu', 'gps', 'couches', '3d', 'plante', 'compte', 'zoom']);
+  assert.deepEqual(defaultControls('auto'), defaultControls('complete'));
+  assert.deepEqual(defaultControls('compacte'), ['rayon', 'gps', 'couches', '3d', 'plante', 'compte', 'zoom']);
+  assert.deepEqual(defaultControls('nue', 'floraison'), []);
+  assert.deepEqual(defaultControls('auto', 'floraison'), ['rayon', 'lieu', 'gps', 'couches', '3d', 'plante', 'periode', 'compte', 'zoom']);
+  assert.deepEqual(defaultControls('auto', 'protege').filter(c => !defaultControls('auto').includes(c)), ['legende']);
+  assert.deepEqual(defaultControls('compacte', 'terrain'), defaultControls('compacte'), 'terrain : « Me localiser » (en grand) est déjà là');
+  // Written as the default gives them: left out; otherwise kept, whole (the exact set).
+  assert.equal(read('map(ctl=rayon+lieu+gps+couches+3d+plante+compte+zoom)').text, '[map]');
+  assert.equal(read('map(ui=nue;ctl=aucune)').text, '[map(ui=nue)]');
+  assert.equal(read('map(floraison;ctl=rayon+lieu+gps+couches+3d+plante+periode+compte+zoom)').text, '[map(floraison)]');
+  assert.equal(read('map(floraison;ctl=rayon+lieu+gps+couches+3d+plante+compte+zoom)').text, '[map(floraison,ctl=rayon+lieu+gps+couches+3d+plante+compte+zoom)]');
+  assert.equal(read('map(ui=compacte;ctl=rayon+gps+couches+3d+plante+compte+zoom)').text, '[map(ui=compacte)]');
+  assert.equal(read('map(ctl=zoom+fond;ui=nue)').text, '[map(ui=nue,ctl=fond+zoom)]');
+  // Round trip, every control.
+  const all = `[map(ctl=${Object.keys(MAP_CONTROLS).join('+')})]`;
+  assert.equal(read(all).text, all);
+  assert.deepEqual(read(all).problems, []);
+  // Its mark: only when it differs from the default.
+  const mark = (/** @type {string} */ t) => cellMark(resolve(G.parse(t).tree.kids[0]))?.short ?? null;
+  assert.equal(mark('map(ctl=rayon+lieu+gps+couches+3d+plante+compte+zoom)'), null);
+  assert.equal(mark('map(ctl=zoom)'), 'Ct');
+});
+
+test('les commandes dessinées : ctl tel quel, sinon selon ui (auto : la largeur) et l’intention', () => {
+  const on = (/** @type {any} */ p, w = 0) => [...mapControls(p, w).on];
+  assert.deepEqual(on({ ui: 'auto' }, 800), defaultControls('complete'));
+  assert.deepEqual(on({ ui: 'auto' }, 300), defaultControls('compacte'));
+  assert.equal(mapControls({ ui: 'auto' }, 300).compact, true);
+  assert.equal(mapControls({ ui: 'auto' }, 800).compact, false);
+  assert.deepEqual(on({ ui: 'auto', intent: 'floraison' }, 800).includes('periode'), true);
+  assert.deepEqual(on({ ui: 'nue' }), []);
+  assert.deepEqual(on({ ui: 'auto', ctl: ['zoom'] }, 300), ['zoom'], 'ctl : exactement ces commandes');
+  assert.deepEqual(on({ ui: 'nue', ctl: ['compte'] }), ['compte']);
+});
+
+test('la poignée du rayon : aimantée aux crans du curseur à quelques % près, sinon arrondie, entre 100 m et 50 km', () => {
+  const stops = [200, 500, 1000, 2000, 5000, 10000, 20000, 50000];
+  assert.equal(snapRadius(2080, stops), 2000);
+  assert.equal(snapRadius(1910, stops), 2000);
+  assert.equal(snapRadius(2300, stops), 2300);
+  assert.equal(snapRadius(3456, stops), 3500);
+  assert.equal(snapRadius(734, stops), 730);
+  assert.equal(snapRadius(40, stops), 100);
+  assert.equal(snapRadius(90_000, stops), 50_000);
+  assert.equal(snapRadius(48_000, stops), 50_000);
 });

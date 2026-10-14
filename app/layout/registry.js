@@ -16,16 +16,18 @@
 import { fold } from '../core/fold.js';
 import { BLOCKS } from '../core/sheet-blocks.js';
 import { blockCategory, categoryOf } from '../core/categories.js';
-import { MAP_INTENT_ALIASES, MAP_INTENTS, MAP_LAYER_ALIASES, MAP_LAYERS } from './map-options.js';
+import { MAP_CONTROL_ALIASES, MAP_CONTROLS, MAP_INTENT_ALIASES, MAP_INTENTS, MAP_LAYER_ALIASES, MAP_LAYERS, defaultControls } from './map-options.js';
 
 /**
  * @typedef {'distance' | 'enum' | 'bool' | 'list' | 'text' | 'intent' | 'id'} ParamKind
  * @typedef {{ kind: ParamKind, label: string, def: unknown, values?: Record<string, string>, aliases?: Record<string, string>, words?: string[],
- *   off?: string[], group?: string, mark?: string, bundles?: Record<string, Record<string, string>>, max?: number, frame?: boolean }} ParamSpec
+ *   off?: string[], group?: string, mark?: string, bundles?: Record<string, Record<string, string>>, defOf?: (params: Record<string, any>) => unknown,
+ *   named?: boolean, max?: number, frame?: boolean }} ParamSpec
  *   `values`: an enum's (a list's, an intent's) canonical values and their French labels; `aliases`: other spellings of
  *   a value → canonical; `words`: other names of the parameter; `off`: words that, alone, set a yes-or-no one to no
  *   (map(2d)); `group`: its heading in the editor and the README (Où, Fond…); `mark`: its mark in a menu (cellMark),
- *   else its label's first letter.
+ *   else its label's first letter; `defOf`: its default as the other parameters make it (ctl: by ui and the intent) —
+ *   a value written that is the same left out of the address; `named`: never given a bare value (map(zoom) is not ctl=zoom).
  *   Kinds: `list` — several of its values joined by « + » (layers=znieff+n2000), each unknown one said and left out;
  *   `text` — free words (lieu=Mirabel Ménétrol 63: never a bare value); `intent` — one word for a bundle of the other
  *   parameters (`bundles`: each value's, as the address writes them), which a parameter written beside it overrides;
@@ -110,7 +112,12 @@ const MAP_PARAMS = {
   plante: { kind: 'enum', label: 'Plante courante', def: 'grand', group: 'Liens', values: { grand: 'En grand', seule: 'Seule', non: 'Pas montrée' }, aliases: { large: 'grand', only: 'seule', seulement: 'seule', off: 'non', aucune: 'non' }, words: ['plant', 'courante'] },
   toucher: { kind: 'enum', label: 'Toucher un point', def: 'plante', group: 'Liens', values: { plante: 'Choisit sa plante', fiche: 'Ouvre sa fiche', rien: 'Rien' }, aliases: { pick: 'plante', choisir: 'plante', sheet: 'fiche', ouvrir: 'fiche', none: 'rien', aucun: 'rien' }, words: ['tap', 'clic', 'click', 'touch', 'touche'] },
   // Interface.
-  ui: { kind: 'enum', label: 'Commandes', def: 'auto', group: 'Interface', values: { auto: 'Selon la largeur', complete: 'Complètes', compacte: 'Compactes', nue: 'Aucune' }, aliases: { full: 'complete', completes: 'complete', compact: 'compacte', compactes: 'compacte', nu: 'nue', minimal: 'nue', minimale: 'nue', aucune: 'nue' }, words: ['interface', 'commandes', 'controles'] }
+  ui: { kind: 'enum', label: 'Commandes', def: 'auto', group: 'Interface', values: { auto: 'Selon la largeur', complete: 'Complètes', compacte: 'Compactes', nue: 'Aucune' }, aliases: { full: 'complete', completes: 'complete', compact: 'compacte', compactes: 'compacte', nu: 'nue', minimal: 'nue', minimale: 'nue', aucune: 'nue' }, words: ['interface', 'commandes', 'controles'] },
+  // Which controls, exactly (map-options.js MAP_CONTROLS); not written: those of `ui` and the intent (defaultControls).
+  ctl: {
+    kind: 'list', label: 'Commandes sur la carte', def: null, group: 'Interface', mark: 'Ct', values: labels(MAP_CONTROLS), aliases: MAP_CONTROL_ALIASES,
+    words: ['boutons', 'outils', 'controls'], named: true, defOf: p => defaultControls(p.ui, p.intent)
+  }
 };
 
 /**
@@ -309,7 +316,7 @@ function paramOf(spec, word) {
 function bareParam(spec, value) {
   // Never a list's « none » alone (map(rien): toucher=rien, not layers=aucune).
   const fits = (/** @type {string} */ k) => {
-    const v = spec.params[k].kind === 'text' ? undefined : readValue(spec.params[k], value);
+    const v = spec.params[k].kind === 'text' || spec.params[k].named ? undefined : readValue(spec.params[k], value);
     return v !== undefined && !(Array.isArray(v) && !v.length);
   };
   if (spec.main && fits(spec.main)) return spec.main;
@@ -318,7 +325,7 @@ function bareParam(spec, value) {
   const named = paramOf(spec, value) ?? offOf(spec, value);
   if (named && spec.params[named].kind === 'bool') return named;
   // Some of a list's words among others (map(znieff+foo)): that list, the others said.
-  return Object.keys(spec.params).find(k => spec.params[k].kind === 'list' && readList(spec.params[k], value).values.length) ?? spec.main ?? null;
+  return Object.keys(spec.params).find(k => spec.params[k].kind === 'list' && !spec.params[k].named && readList(spec.params[k], value).values.length) ?? spec.main ?? null;
 }
 
 /**
@@ -334,6 +341,12 @@ function bundleOf(r) {
 
 /** A parameter written as the cell's intent gives it (left out of the address, and of the marks). @param {Resolved & { known: true }} r @param {string} k */
 const asIntent = (r, k) => { const b = bundleOf(r); return k in b && same(b[k], r.params[k]); };
+
+/** A parameter written as its default made by the others gives it (ctl: the controls of ui and the intent), left out. @param {Resolved & { known: true }} r @param {string} k */
+const asDefault = (r, k) => { const d = r.spec.params[k].defOf; return Boolean(d) && same(r.params[k], d?.(r.params)); };
+
+/** The value a parameter has when not written: its default, or the one the others make (defOf). @param {ParamSpec} ps @param {Record<string, any>} params */
+export const defaultOf = (ps, params) => ps.defOf ? ps.defOf(params) : ps.def;
 
 /** The yes-or-no parameter a word sets to no, alone (map(2d)). @param {ComponentSpec} spec @param {string} word @returns {string | null} */
 function offOf(spec, word) {
@@ -395,7 +408,7 @@ export const valueText = (p, v) => p.kind === 'distance' ? distanceText(/** @typ
   : p.kind === 'list' ? (/** @type {string[]} */ (v).length ? /** @type {string[]} */ (v).join('+') : 'aucune') : String(v);
 
 /** Two values the same (lists: the same values, in the same order). @param {unknown} a @param {unknown} b */
-const same = (a, b) => a === b || (Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => x === b[i]));
+export const same = (a, b) => a === b || (Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => x === b[i]));
 
 /** What a parameter expects, in French. @param {ParamSpec} ps */
 const expected = ps => ps.kind === 'distance' ? 'une distance (500m, 2km)' : ps.kind === 'bool' ? 'oui ou non (1, 0)' : ps.kind === 'text' ? 'des mots'
@@ -501,7 +514,7 @@ export function canonical(cell, r = resolve(cell)) {
   const order = Object.keys(ps).sort((a, b) => Number(ps[a].kind === 'text') - Number(ps[b].kind === 'text'));
   for (const k of order) {
     // The frame's: never written when default (actions=aucune, tete=oui).
-    if (!r.given.has(k) || ps[k].kind === 'intent' || asIntent(r, k) || (ps[k].frame && same(r.params[k], ps[k].def))) continue;
+    if (!r.given.has(k) || ps[k].kind === 'intent' || asIntent(r, k) || asDefault(r, k) || (ps[k].frame && same(r.params[k], ps[k].def))) continue;
     params.push({ key: k, value: valueText(ps[k], r.params[k]) });
   }
   return { t: 'cell', name: r.spec.id, view: r.view?.key ?? null, params, size: cell.size };
@@ -570,7 +583,7 @@ export function cellMark(r) {
   const first = (/** @type {string} */ s) => fold(s).charAt(0);
   const lower = (/** @type {string} */ s) => s.charAt(0).toLowerCase() + s.slice(1);
   // Not the frame's (its head, its links: said in the cell itself, never a mark).
-  const marks = Object.entries(r.spec.params).filter(([k, p]) => !p.frame && p.kind !== 'distance' && p.kind !== 'text' && r.given.has(k) && !same(r.params[k], p.def) && !asIntent(r, k)).map(([k, p]) => {
+  const marks = Object.entries(r.spec.params).filter(([k, p]) => !p.frame && p.kind !== 'distance' && p.kind !== 'text' && r.given.has(k) && !same(r.params[k], defaultOf(p, r.params)) && !asIntent(r, k)).map(([k, p]) => {
     const letter = p.mark ?? p.label.charAt(0).toUpperCase();
     if (p.kind === 'bool') return r.params[k] ? { label: lower(p.label), short: letter } : { label: 'sans ' + lower(p.label), short: '−' + letter };
     // A list: its words after the parameter's (« couches : ZNIEFF (types I et II), Natura 2000 »), the parameter's letter.
