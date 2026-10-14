@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as G from '../../app/layout/grammar.js';
 import { cellIcon, cellMark, cellName, COMPONENTS, distanceText, menuLooks, names, parseDistance, resolve, resolveTree } from '../../app/layout/registry.js';
-import { liveSearch, readLive, readQuery } from '../../app/layout/state.js';
+import { cleanText, liveSearch, readLive, readQuery } from '../../app/layout/state.js';
 import { PRESETS } from '../../app/layout/presets.js';
 import { href, parse as route } from '../../app/core/router.js';
 import { fromHash } from '../../app/core/query.js';
@@ -269,19 +269,40 @@ test('l’éditeur : une cellule à côté ou dessous, retirée, déplacée ; le
 
 test('l’état dans l’adresse : plante, zone, observation, recherche — lus et écrits, le reste ignoré', () => {
   const live = readLive('p=81541&at=48.85,2.35&r=1km&place=Paris%2010e&o=12345&q=ortie&family=Urticaceae');
-  assert.deepEqual(live, { plant: 81541, at: [2.35, 48.85], r: 1000, place: 'Paris 10e', obs: '12345' });
+  assert.deepEqual(live, { title: null, plant: 81541, at: [2.35, 48.85], r: 1000, place: 'Paris 10e', obs: '12345' });
   const query = readQuery('p=81541&q=ortie&family=Urticaceae&sort=sci');
   assert.equal(query.q, 'ortie');
   assert.deepEqual(query.filters.family, ['Urticaceae']);
   const search = liveSearch(live, query);
   assert.equal(search, 'p=81541&at=48.85000,2.35000&r=1km&place=Paris+10e&o=12345&q=ortie&family=Urticaceae&sort=sci');
   assert.deepEqual(readLive(search), live);
-  // No scope: no radius nor place written; the default radius when the state has none.
-  assert.equal(liveSearch({ plant: null, at: null, r: 5000, place: 'X', obs: null }, fromHash('#/')), '');
-  assert.equal(liveSearch({ plant: null, at: [2, 48], r: null, place: null, obs: null }, fromHash('#/'), 500), 'at=48.00000,2.00000&r=500m');
+  // No scope: no radius written; a place without at= is one still to find (state.js): kept, with the radius said;
+  // the default radius when the state has none.
+  assert.equal(liveSearch({ title: null, plant: null, at: null, r: null, place: null, obs: null }, fromHash('#/')), '');
+  assert.equal(liveSearch({ title: null, plant: null, at: null, r: 5000, place: 'X', obs: null }, fromHash('#/')), 'r=5km&place=X');
+  assert.equal(liveSearch({ title: null, plant: null, at: [2, 48], r: null, place: null, obs: null }, fromHash('#/'), 500), 'at=48.00000,2.00000&r=500m');
   // Wrong values left out.
-  assert.deepEqual(readLive('p=abc&at=200,2&r=loin&o=<x>'), { plant: null, at: null, r: null, place: null, obs: null });
-  assert.deepEqual(readLive('p=0&at=48.8'), { plant: null, at: null, r: null, place: null, obs: null });
+  const none = { title: null, plant: null, at: null, r: null, place: null, obs: null };
+  assert.deepEqual(readLive('p=abc&at=200,2&r=loin&o=<x>'), none);
+  assert.deepEqual(readLive('p=0&at=48.8'), none);
+});
+
+test('le titre et un lieu à trouver dans l’adresse : texte simple, une ligne, 80 caractères au plus, le titre écrit en premier', () => {
+  const live = readLive('title=Orchid%C3%A9es%20de%20la%20colline%20de%20Mirabel&place=mirabel,%20menetrol,%2063&family=Orchidaceae');
+  assert.deepEqual(live, { title: 'Orchidées de la colline de Mirabel', plant: null, at: null, r: null, place: 'mirabel, menetrol, 63', obs: null });
+  const query = readQuery('family=Orchidaceae');
+  const search = liveSearch(live, query);
+  assert.equal(search, 'title=Orchid%C3%A9es+de+la+colline+de+Mirabel&place=mirabel,+menetrol,+63&family=Orchidaceae');
+  assert.deepEqual(readLive(search), live);
+  // Found (state.js): at= and the label found replace the words, r= kept; the title still first.
+  const found = { ...live, at: /** @type {[number, number]} */ ([3.1093, 45.8732]), place: 'Puy de Mirabel (Ménétrol)', r: 1000 };
+  assert.equal(liveSearch(found, query), 'title=Orchid%C3%A9es+de+la+colline+de+Mirabel&at=45.87320,3.10930&r=1km&place=Puy+de+Mirabel+%28M%C3%A9n%C3%A9trol%29&family=Orchidaceae');
+  // Spaces, lines and control characters folded; too long: cut; empty: none. Never HTML: kept as the text it is.
+  assert.equal(readLive('title=%20%20Mes%0Aplantes%09%20').title, 'Mes plantes');
+  assert.equal(readLive('title=' + 'a'.repeat(120)).title, 'a'.repeat(80));
+  assert.equal(readLive('title=%20%20').title, null);
+  assert.equal(readLive('title=' + encodeURIComponent('<b>Prés</b> & bois')).title, '<b>Prés</b> & bois');
+  assert.equal(cleanText(' a\u0000b  '), 'a b');
 });
 
 test('le routeur : #/layout/<disposition>?<état>, aller-retour par href.layout', () => {

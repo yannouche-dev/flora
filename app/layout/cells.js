@@ -97,9 +97,15 @@ class StateController {
   hostConnected() { if (this.host.state) { this.watched = this.host.state; this.watched.addEventListener('change', this.onChange); } }
 }
 
-/** The scope in words: « 2 km autour de Paris », « Toute la France ». @param {LayoutState} state */
+/**
+ * The scope in words: « 2 km autour de Paris », « Toute la France »; a place of the address still to find (place=
+ * without at=, state.js): « Recherche du lieu : … », or why it was not found (« Lieu introuvable : … »).
+ * @param {LayoutState} state
+ */
 export function scopeWords(state) {
   const { at, place } = state.live;
+  if (!at && place && state.placeState === 'finding') return `Recherche du lieu : ${place}…`;
+  if (!at && place && state.placeError) return state.placeError;
   return at ? `${distanceLabel(state.radius)} autour ${place ? 'de ' + place : 'du point choisi'}` : 'Toute la France';
 }
 
@@ -122,7 +128,20 @@ const scopeStyles = css`
   .where { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 0.85rem; font-weight: 600; }
   .where span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .where .icon-btn { width: 32px; height: 32px; font-size: 1rem; flex: none; }
+  .where.error { color: var(--gf-danger); }
 `;
+
+/**
+ * The scope's line (map, place): its words — in the danger's colour, and read at once, when a place of the address
+ * was not found — and ✕: no scope (nor a place to find).
+ * @param {LayoutState} s
+ */
+const where = s => {
+  const failed = Boolean(s.placeError && !s.live.at);
+  const words = scopeWords(s);
+  return html`<div class="where ${failed ? 'error' : ''}" data-place-state=${s.placeState}>${icon(failed ? 'exclamation-triangle-fill' : 'crosshair')}<span role=${failed ? 'alert' : nothing} title=${words}>${words}</span>
+    ${s.live.at || s.live.place ? html`<button class="icon-btn" type="button" title="Toute la France (sans zone)" aria-label="Toute la France (sans zone)" @click=${() => s.setScope(null)}>${icon('x-lg')}</button>` : nothing}</div>`;
+};
 
 /**
  * The radius' slider (map, place): Rencontres' stops (kit/cards.js), the radius shown where it is — one the address
@@ -282,8 +301,7 @@ export class DlMap extends LitElement {
         aria-description=${press}
         @point-pick=${(/** @type {CustomEvent} */ e) => this.#onPick(e)} @point-info=${(/** @type {CustomEvent} */ e) => this.#onPress(e)}></gf-map>
       <div class="panel" role="group" aria-label="Zone de la disposition">
-        <div class="where">${icon('crosshair')}<span>${scopeWords(s)}</span>
-          ${s.live.at ? html`<button class="icon-btn" type="button" title="Toute la France (sans zone)" aria-label="Toute la France (sans zone)" @click=${() => s.setScope(null)}>${icon('x-lg')}</button>` : nothing}</div>
+        ${where(s)}
         ${s.live.at ? radiusSlider(s) : nothing}
         <div class="row"><button type="button" class=${this._busy ? 'busy' : ''} ?disabled=${this._busy} aria-busy=${String(this._busy)}
           @click=${() => this.#locate()}>${icon('geo-alt')} Autour de moi</button></div>
@@ -327,8 +345,7 @@ export class DlPlace extends LitElement {
     if (!s) return nothing;
     const note = this._error || scopeNote(s);
     return html`<div class="box">
-      <div class="where">${icon('crosshair')}<span>${scopeWords(s)}</span>
-        ${s.live.at ? html`<button class="icon-btn" type="button" title="Toute la France (sans zone)" aria-label="Toute la France (sans zone)" @click=${() => s.setScope(null)}>${icon('x-lg')}</button>` : nothing}</div>
+      ${where(s)}
       <button class="primary" type="button" ?disabled=${this._busy} @click=${() => this.#locate()}>${icon('geo-alt-fill')} ${this._busy ? 'Localisation…' : 'Autour de moi'}</button>
       <gf-place-search label="Choisir une commune pour la zone" @place-pick=${(/** @type {CustomEvent} */ e) => s.setScope(e.detail.coordinates, e.detail.label || null)}></gf-place-search>
       ${s.live.at ? radiusSlider(s) : nothing}

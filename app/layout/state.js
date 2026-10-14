@@ -1,11 +1,18 @@
 // @ts-check
 // The live state a free layout's cells share (« Disposition libre », gf-layout.js): one small store, an EventTarget,
 // that every cell reads and writes — never one cell to another. What it holds, and the address beside the layout:
-//   ?p=<plant>                         the current plant: every plant cell (plant, plant.<block>, media) shows it, the
+//   ?title=<words>                     the screen's own title (its heading, the page's title, the share's): plain
+//                                      text, 80 characters at most, written first;
+//   &p=<plant>                         the current plant: every plant cell (plant, plant.<block>, media) shows it, the
 //                                      results and the deck light it, the map lights its observations in the scope;
 //   &at=<lat>,<lon>&r=<500m|2km>&place=<name>   the scope: a circle; the plants observed in it (iNaturalist, matched to
 //                                      the flora: core/nearby.js) keep the search to them (core/search.js#setSearchScope),
 //                                      the map shows its observations of the plants found;
+//   &place=<words> without at=         a place to find: the IGN geocoder asked (core/geoservices.js#findPlace:
+//                                      « mirabel, menetrol, 63 »), the scope set there and the address replaced by its
+//                                      at= and the label found (r= kept, else the layout's); not found, offline or the
+//                                      module off: no scope, the reason said where the scope is (cells.js#scopeWords),
+//                                      place= left in the address so that a reload asks again;
 //   &o=<observation>                   an observation lit on the map (a point touched);
 //   &q=…&family=…&sort=…               the search itself: Flore's (core/query.js — the same words as #/?q=…), kept in the
 //                                      store, so the search cell is Flore's own bar, filters and list.
@@ -18,6 +25,8 @@
 
 import * as db from '../core/db.js';
 import { forgetFailures } from '../core/cache.js';
+import { findPlace } from '../core/geoservices.js';
+import { errorKind } from '../core/net.js';
 import { observationPointsAround, observationsAround, speciesAround } from '../core/nearby.js';
 import { fromHash, toHash } from '../core/query.js';
 import { runSearch, setSearchScope } from '../core/search.js';
@@ -25,7 +34,7 @@ import { whenReady } from '../core/store.js';
 import { DISTANCE, distanceText, parseDistance } from './registry.js';
 
 /**
- * @typedef {{ plant: number | null, at: [number, number] | null, r: number | null, place: string | null, obs: string | null }} Live
+ * @typedef {{ title: string | null, plant: number | null, at: [number, number] | null, r: number | null, place: string | null, obs: string | null }} Live
  *   `at`: [lon, lat]; `r`: metres (null: not said — the layout's default)
  * @typedef {import('../core/nearby.js').NearbySpecies} NearbySpecies
  * @typedef {import('../core/nearby.js').AroundPoint} AroundPoint
@@ -37,7 +46,10 @@ import { DISTANCE, distanceText, parseDistance } from './registry.js';
 export const DEFAULT_RADIUS = 2000;
 
 /** @type {Live} */
-export const EMPTY = Object.freeze({ plant: null, at: null, r: null, place: null, obs: null });
+export const EMPTY = Object.freeze({ title: null, plant: null, at: null, r: null, place: null, obs: null });
+
+/** A title or a place as the address keeps it: plain text on one line, no control characters, 80 characters at most (shown as text, never as HTML). @param {string | null | undefined} text */
+export const cleanText = text => String(text ?? '').replace(/\p{Cc}/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 80).trim() || null;
 
 /** An observation's id in the address: the end of its iNaturalist address. @param {string} url */
 export const obsId = url => /(\d+)\/?$/.exec(url)?.[1] ?? url;
@@ -53,26 +65,32 @@ export function readLive(search) {
   const ok = at.length === 2 && at.every(Number.isFinite) && Math.abs(at[0]) <= 90 && Math.abs(at[1]) <= 180;
   const o = params.get('o') || '';
   return {
+    title: cleanText(params.get('title')),
     plant: /^\d{1,9}$/.test(p) && Number(p) > 0 ? Number(p) : null,
     at: ok ? [at[1], at[0]] : null,
     r: parseDistance(params.get('r')),
-    place: (params.get('place') || '').trim().slice(0, 80) || null,
+    place: cleanText(params.get('place')),
     obs: /^[\w-]{1,40}$/.test(o) ? o : null
   };
 }
 
 /**
- * The query of an address for this state and this search: the plant, the scope (its radius always said: `radius` when
- * the state has none), the observation, then the search's own words (core/query.js).
+ * The query of an address for this state and this search: the title, the plant, the scope (its radius always said:
+ * `radius` when the state has none), or a place still to find (with the radius said, if one is), the observation, then
+ * the search's own words (core/query.js).
  * @param {Live} live @param {import('../core/store.js').Query} query @param {number} [radius] @returns {string}
  */
 export function liveSearch(live, query, radius = DEFAULT_RADIUS) {
   const params = new URLSearchParams();
+  if (live.title) params.set('title', live.title);
   if (live.plant) params.set('p', String(live.plant));
   if (live.at) {
     params.set('at', `${live.at[1].toFixed(5)},${live.at[0].toFixed(5)}`);
     params.set('r', distanceText(live.r ?? radius));
     if (live.place) params.set('place', live.place);
+  } else if (live.place) {
+    if (live.r != null) params.set('r', distanceText(live.r));
+    params.set('place', live.place);
   }
   if (live.obs) params.set('o', live.obs);
   const own = params.toString().replace(/%2C/g, ',');
@@ -84,17 +102,29 @@ export function liveSearch(live, query, radius = DEFAULT_RADIUS) {
 export const readQuery = search => fromHash('#/?' + search);
 
 /** Two states the same? @param {Live} a @param {Live} b */
-export const sameLive = (a, b) => a.plant === b.plant && a.r === b.r && a.place === b.place && a.obs === b.obs
+export const sameLive = (a, b) => a.title === b.title && a.plant === b.plant && a.r === b.r && a.place === b.place && a.obs === b.obs
   && (a.at === b.at || (a.at !== null && b.at !== null && a.at[0] === b.at[0] && a.at[1] === b.at[1]));
 
 /** The live state of a layout on screen, and what it loads for it. Fires `change` (detail: { how, keys }). */
 export class LayoutState extends EventTarget {
-  /** @param {{ radius?: number | null }} [defaults] the layout's own default radius (a map or a place cell's r=) */
+  /**
+   * @param {{ radius?: number | null, find?: typeof findPlace }} [defaults] the layout's own default radius (a map or a
+   *   place cell's r=); `find`: how a place typed is found (the IGN geocoder; tests give their own)
+   */
   constructor(defaults = {}) {
     super();
     /** @type {Live} */
     this.live = EMPTY;
     this.defaultRadius = defaults.radius ?? DEFAULT_RADIUS;
+    this.find = defaults.find ?? findPlace;
+    /** A place to find (place= without at=): being found, or why it was not (in French; null: none to find, or found). */
+    /** @type {'idle' | 'finding' | 'failed'} */
+    this.placeState = 'idle';
+    /** @type {string | null} */
+    this.placeError = null;
+    /** The place being found (its words), and its request. */
+    this.findFor = '';
+    /** @type {AbortController | null} */ this.findAbort = null;
     /** The plants observed in the scope (null: no scope, or not yet), and whether they are coming or failed. */
     /** @type {{ key: string, list: NearbySpecies[], byPlant: Map<number, NearbySpecies>, plantOf: Map<number, number> } | null} */
     this.species = null;
@@ -158,8 +188,16 @@ export class LayoutState extends EventTarget {
     this.follow();
   }
 
-  /** A changed state: its loads started (the scope's, after a rest; the plant's names and observations). */
+  /** A changed state: its loads started (a place to find; the scope's, after a rest; the plant's names and observations). */
   follow() {
+    const want = !this.live.at && this.live.place ? this.live.place : '';
+    if (want !== this.findFor) {
+      this.findFor = want;
+      this.findAbort?.abort();
+      this.findAbort = null;
+      if (want) this.#findPlace(want);
+      else if (this.placeState !== 'idle') { this.placeState = 'idle'; this.placeError = null; this.#changed(); }
+    }
     const key = this.scopeKey;
     if (key !== this.scopeFor) {
       this.scopeFor = key;
@@ -177,6 +215,41 @@ export class LayoutState extends EventTarget {
       }
     }
     this.#loadPlant();
+  }
+
+  /**
+   * A place typed in the address (place= without at=): found, it is the scope, the address replaced (at=, the label
+   * found; no new entry: Back does not come back to the words); not, the reason said and the address left as it is.
+   * @param {string} text
+   */
+  async #findPlace(text) {
+    const abort = this.findAbort = new AbortController();
+    this.placeState = 'finding';
+    this.placeError = null;
+    this.#changed();
+    /** @type {string} */
+    let error;
+    try {
+      const found = await this.find(text, abort.signal);
+      if (abort.signal.aborted || this.findFor !== text) return;
+      if (found) {
+        this.placeState = 'idle';
+        this.findFor = '';
+        this.findAbort = null;
+        this.set({ at: found.coordinates, place: found.label, obs: null }, 'replace');
+        return;
+      }
+      error = `Lieu introuvable : ${text}`;
+    } catch (e) {
+      if (abort.signal.aborted || this.findFor !== text) return;
+      const kind = errorKind(e);
+      error = kind === 'module-off' ? `Lieu non cherché : ${text} (le module « IGN – adresses et altitudes » est désactivé, Réglages › Modules)`
+        : kind === 'offline' ? `Hors ligne : lieu non cherché (${text})`
+        : `Lieu introuvable : ${text} (le géocodeur de l’IGN ne répond pas)`;
+    }
+    this.placeState = 'failed';
+    this.placeError = error;
+    this.#changed();
   }
 
   /** Something loaded: the cells draw again (the address does not change). */
@@ -263,6 +336,7 @@ export class LayoutState extends EventTarget {
   dispose() {
     clearTimeout(this.timer);
     this.abort?.abort();
+    this.findAbort?.abort();
     if (this.scoped) { this.scoped = false; setSearchScope(null); whenReady().then(() => runSearch()); }
   }
 }
