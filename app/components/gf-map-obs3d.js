@@ -17,7 +17,8 @@
 //    its south;
 //  - the points: the same markers as in 2D (map-style.js: a photo over its leaf, a leaf alone, the plant chosen in its
 //    pink and gold ring) — a GBIF occurrence as an iNaturalist observation: its plant's photo, the same seed, the same
-//    card but for its source (core/around3d.js) —, standing on the ground on a thin stem as the map tilts (none from
+//    card but for its source (core/around3d.js); the photos of plants without one in the flora's data, found online
+//    after the points are drawn, drawn again with them (morePhotos) —, standing on the ground on a thin stem as the map tilts (none from
 //    above), smaller further away, faded where the relief hides them (MapLibre's own test of the terrain). Only the
 //    nearest ones are elements:
 //    the points on the screen are grouped by distance on the screen (the nearest first, the plant chosen before all),
@@ -36,7 +37,7 @@
 // relief, the same, flat.
 
 import { html, nothing, render } from 'lit';
-import { RADII_3D, around3dPrefs, fitZoom, hexBins, metres, observations3d, radiusLabel, radiusWords, ringWall, setAround3dPrefs, wallHeight } from '../core/around3d.js';
+import { RADII_3D, around3dPrefs, fitZoom, hexBins, metres, morePhotos, observations3d, radiusLabel, radiusWords, ringWall, setAround3dPrefs, wallHeight } from '../core/around3d.js';
 import { circlePolygon } from '../core/gl-style.js';
 import { mapSettings } from '../core/map-settings.js';
 import { cachedThumb } from '../core/thumb.js';
@@ -98,6 +99,8 @@ export class Obs3dLayer {
   /** Why the centre is there: 'area', 'point', 'place', 'view'. */
   why = 'view';
   /** @type {Obs3d[]} */ #remote = [];
+  /** The points or their photos changed (new points, photos found online): every marker drawn again (its signature). */
+  #photoGen = 0;
   /** @type {Obs3d[]} */ #points = [];
   /** @type {{ inat: number | null, gbif: number | null }} */ #totals = { inat: null, gbif: null };
   /** @type {string[]} */ #failed = [];
@@ -339,6 +342,9 @@ export class Obs3dLayer {
       this.#remote = r.points;
       this.#totals = r.totals;
       this.#failed = r.failed;
+      // New points: each marker drawn again (the same point may have another photo: a source switched on or off).
+      this.#photoGen++;
+      this.#morePhotos(r.points, abort.signal);
     } catch (error) {
       if (abort.signal.aborted || !this.#alive) return;
       console.warn('Observations autour (3D) :', error);
@@ -347,6 +353,21 @@ export class Obs3dLayer {
     }
     this.#loading = false;
     this.box.classList.remove('gf-o3-loading');
+    this.#merge();
+    this.#layout();
+    this.#syncUi();
+  }
+
+  /**
+   * The photos of the plants without one in the flora's data, looked up once the points are drawn (core/around3d.js
+   * morePhotos: their sheet's photo): the points drawn again with them, if these points are still the ones shown.
+   * @param {Obs3d[]} points @param {AbortSignal} signal
+   */
+  async #morePhotos(points, signal) {
+    const more = await morePhotos(points).catch(() => null);
+    if (!more || signal.aborted || !this.#alive || this.#remote !== points) return;
+    this.#remote = more;
+    this.#photoGen++;
     this.#merge();
     this.#layout();
     this.#syncUi();
@@ -588,7 +609,7 @@ export class Obs3dLayer {
       const head = this.#points[g.head.i];
       const key = (g.members.length > 1 ? 'g:' : 'p:') + head.id;
       keep.add(key);
-      const sig = g.members.length > 1 ? 'g' + g.members.length + ':' + g.members.slice(0, 3).join(',') : 'p' + (g.head.lit ? 'hl' : '');
+      const sig = (g.members.length > 1 ? 'g' + g.members.length + ':' + g.members.slice(0, 3).join(',') : 'p' + (g.head.lit ? 'hl' : '')) + '#' + this.#photoGen;
       let m = this.#marks.get(key);
       if (!m) m = this.#mark(key, head);
       if (m.sig !== sig) this.#fill(m, g.members, g.head.lit, sig);
@@ -776,6 +797,8 @@ export class Obs3dLayer {
       sources: { inat: this.prefs.inat, gbif: this.prefs.gbif }, density: this.prefs.density, failed: this.#failed,
       points: this.#points.length, kinds: { inat: by('inat'), gbif: by('gbif'), mine: by('mine') }, totals: this.#totals,
       photos: { inat: pictured('inat'), gbif: pictured('gbif'), mine: pictured('mine') },
+      // Each plant's photo and name on its points, by source (one plant, one photo, whatever the source).
+      plants: Object.fromEntries(['inat', 'gbif'].map(k => [k, Object.fromEntries(this.#points.filter(p => p.kind === k).map(p => [p.sci, { photo: p.photo, common: p.common }]))])),
       farthest: c ? Math.round(Math.max(0, ...this.#points.map(p => metres(c, p.coordinates)))) : null,
       markers: this.#marks.size, onMarkers: this.#shown.size, seeds: this.#points.length - this.#shown.size, hexes: this.#hex.features.length,
       lit: [...this.#lit]

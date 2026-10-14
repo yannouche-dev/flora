@@ -8,6 +8,7 @@ import * as db from './db.js';
 import { ModuleOffError, moduleOn } from './modules.js';
 import { fetchJson } from './net.js';
 import { inatCredit, thumbCredit } from './credit.js';
+import { cachedCredit, cachedThumb, thumbUrl } from './thumb.js';
 
 const API = 'https://api.inaturalist.org/v1';
 /** Results kept a day (offline: an older copy is better than nothing). */
@@ -45,10 +46,10 @@ export const binomial = (/** @type {string} */ name) =>
   String(name || '').toLowerCase().replace(/\s+[×x]\s+/, ' x ').split(/\s+/).slice(0, 2).join(' ');
 
 /** Lower-case scientific name, single-spaced, the hybrid sign as « x » (iNaturalist writes « × », TAXREF « x »). */
-const fullName = (/** @type {string} */ name) => String(name || '').toLowerCase().replace(/×/g, ' x ').trim().split(/\s+/).join(' ');
+export const fullName = (/** @type {string} */ name) => String(name || '').toLowerCase().replace(/×/g, ' x ').trim().split(/\s+/).join(' ');
 
 /** A hybrid: a formula (« A b x C d ») or a nothotaxon (« A x b », « x Genus b »). */
-const isHybrid = (/** @type {string} */ name) => /(^| )x( |$)/.test(fullName(name));
+export const isHybrid = (/** @type {string} */ name) => /(^| )x( |$)/.test(fullName(name));
 
 /** First word of a scientific name; an intergeneric hybrid keeps its sign ("× Anacamptorchis"). */
 const genusOf = (/** @type {string} */ name) => {
@@ -236,11 +237,12 @@ async function withThumbs(found) {
 
 /**
  * Points of any source (iNaturalist's observations, GBIF's occurrences) completed from the flora, matched by their
- * scientific name: the plant's thumbnail (plants.json, with its credit) on those without a photo — one address a
- * plant, the one its card and the plant chosen show —, and with `names`, its French name on those without one (GBIF's
- * records seldom have one: their card then reads as an iNaturalist observation's). A plant the flora does not know,
- * or without a thumbnail, stays as it was (a leaf). Never changes the points given (a cache may hold them): a new
- * object for each one completed.
+ * scientific name: the plant's photo on those without one — its thumbnail (plants.json), else the one found online
+ * for it this session (core/thumb.js: the photo its sheet shows; findPhotos looks them up), each with its credit; one
+ * address a plant, the one its card and the plant chosen show —, and with `names`, its French name on those without
+ * one (GBIF's records seldom have one: their card then reads as an iNaturalist observation's). A plant the flora does
+ * not know, or without a photo, stays as it was (a leaf). Never changes the points given (a cache may hold them): a
+ * new object for each one completed.
  * @template {{ sci: string, photo: string | null, credit?: Credit | null, common?: string | null, title?: string }} T
  * @param {T[]} points @param {{ names?: boolean }} [o] @returns {Promise<T[]>}
  */
@@ -254,16 +256,42 @@ export async function floraPhotos(points, { names = false } = {}) {
     if (!p.sci || (p.photo && (!names || p.common))) return p;
     if (!seen.has(p.sci)) seen.set(p.sci, lookup(index, p.sci));
     const local = seen.get(p.sci);
-    const thumb = p.photo ? null : local?.thumbnail;
+    const thumb = p.photo || !local ? null
+      : local.thumbnail ? { url: /** @type {string} */ (local.thumbnail.url), credit: thumbCredit(local.thumbnail) }
+      : cachedThumb(local.id) ? { url: /** @type {string} */ (cachedThumb(local.id)), credit: cachedCredit(local.id) } : null;
     const common = names && !p.common ? local?.common : null;
     if (!thumb && !common) return p;
     return {
       ...p,
-      ...(thumb ? { photo: /** @type {string} */ (thumb.url), credit: thumbCredit(thumb) } : {}),
+      ...(thumb ? { photo: thumb.url, credit: thumb.credit } : {}),
       // Named by its scientific name until now: its French name instead.
       ...(common ? { common, title: !p.title || p.title === p.sci ? common : p.title } : {})
     };
   });
+}
+
+/**
+ * The photos of the flora's plants among `points` still without one that are not known yet (no thumbnail in
+ * plants.json, not looked up this session): looked up (core/thumb.js thumbUrl — iNaturalist's taxon photo under a
+ * free licence, else Commons', as their sheet shows; a few at a time, cached), `max` plants at most. True when one
+ * was found: floraPhotos then gives it to their points.
+ * @param {{ sci: string, photo: string | null }[]} points @param {{ max?: number }} [o] @returns {Promise<boolean>}
+ */
+export async function findPhotos(points, { max = 40 } = {}) {
+  const index = await nameIndex().catch(() => null);
+  if (!index) return false;
+  /** @type {Set<number>} */ const ids = new Set();
+  /** @type {Set<string>} */ const seen = new Set();
+  for (const p of points) {
+    if (p.photo || !p.sci || seen.has(p.sci)) continue;
+    seen.add(p.sci);
+    const local = lookup(index, p.sci);
+    if (local && !local.thumbnail && cachedThumb(local.id) === undefined) ids.add(local.id);
+    if (ids.size >= max) break;
+  }
+  if (!ids.size) return false;
+  const found = await Promise.all([...ids].map(id => thumbUrl(id).catch(() => null)));
+  return found.some(Boolean);
 }
 
 /**

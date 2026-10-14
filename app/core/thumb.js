@@ -1,17 +1,23 @@
 // @ts-check
 // Photo URL of a plant for thumbnails (lists, map markers): the one bundled in plants.json, else a remote
-// lookup cached in IndexedDB (sources.thumbnail). Results are kept in memory for the session.
+// lookup cached in IndexedDB (sources.thumbnail). Results are kept in memory for the session, each with its credit
+// (its author and licence: a map's card shows them with the photo).
 
 import * as db from './db.js';
 import * as sources from './sources.js';
 import { moduleEvents, moduleOn } from './modules.js';
+import { foundCredit, thumbCredit } from './credit.js';
+
+/** @typedef {import('./credit.js').Credit} Credit */
 
 /** @type {Map<number, string | null>} */
 const known = new Map();
+/** The credit of each photo in `known` (null: none found, or none owed). @type {Map<number, Credit | null>} */
+const credits = new Map();
 /** @type {Map<number, Promise<string | null>>} */
 const pending = new Map();
 // Lookups made with other modules on or off are stale: forget them.
-moduleEvents.addEventListener('change', () => { known.clear(); pending.clear(); });
+moduleEvents.addEventListener('change', () => { known.clear(); credits.clear(); pending.clear(); });
 
 /** Remote lookups at once (plants without a bundled photo). */
 const PARALLEL = 4;
@@ -51,6 +57,20 @@ export const photoOf = (url, mode) => url && moduleOn('photos', mode) ? url : nu
 export const cachedThumb = id => moduleOn('photos') ? known.get(Number(id)) : null;
 
 /**
+ * The credit of the photo knownThumb gives (its author, licence and source): the bundled thumbnail's, else the one
+ * found online's (sources.thumbnail: iNaturalist's taxon photo, Commons'…); null when none is known yet.
+ * @param {any} plant @returns {Credit | null}
+ */
+export function knownCredit(plant) {
+  if (!plant || !moduleOn('photos')) return null;
+  if (plant.thumbnail?.url) return thumbCredit(plant.thumbnail);
+  return plant.id != null ? credits.get(Number(plant.id)) ?? null : null;
+}
+
+/** The credit of the photo cachedThumb gives. @param {number} id @returns {Credit | null} */
+export const cachedCredit = id => moduleOn('photos') ? credits.get(Number(id)) ?? null : null;
+
+/**
  * @param {number | null | undefined} plantId
  * @param {any} [record] the plant when already loaded
  * @returns {Promise<string | null>}
@@ -63,13 +83,15 @@ export function thumbUrl(plantId, record) {
   const task = (async () => {
     const plant = record?.id === id && 'thumbnail' in record ? record : await db.get('plants', id).catch(() => null);
     if (!plant) return null;
-    if (plant.thumbnail?.url) return plant.thumbnail.url;
+    if (plant.thumbnail?.url) return { url: /** @type {string} */ (plant.thumbnail.url), credit: thumbCredit(plant.thumbnail) };
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return null;
     const found = await limited(() => sources.thumbnail(plant)).catch(() => null);
-    return found?.url || null;
-  })().then(url => {
+    // Its credit kept with it: the photo is shown with its author and licence wherever a card shows it.
+    return found?.url ? { url: /** @type {string} */ (found.url), credit: foundCredit(found) } : null;
+  })().then(hit => {
+    const url = hit?.url || null;
     // An offline miss is not remembered: the photo may come once back online.
-    if (url || navigator.onLine !== false) known.set(id, url);
+    if (url || navigator.onLine !== false) { known.set(id, url); credits.set(id, hit?.credit ?? null); }
     pending.delete(id);
     return url;
   });

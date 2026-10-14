@@ -2,9 +2,10 @@
 // its plant's photo (never a source's colour), the same groups (stacks of that photo, their count on a badge), the same
 // plant lit, the same card (photo and credit, names, when, where) but for the line saying where it comes from. The
 // maps: a plant sheet's (the observations around me from iNaturalist and GBIF, from GBIF alone, GBIF's occurrences of
-// an area touched in the sheet — the plant's own photo on each), and the 3D « Observations autour » (each its plant's
-// photo: an iNaturalist observation's of the same plant, else the flora's). Every source answered here (fixtures.mjs
-// answerPlantNear, answerObservations; tiles.mjs), the 3D in real WebGL (SwiftShader).
+// an area touched in the sheet — the plant's own photo on each, its credit even when found online; each record once),
+// a map with many points alone (each its photo, in sight), and the 3D « Observations autour » (each its plant's photo,
+// the same whichever sources are on: its taxon's on iNaturalist, else the flora's). Every source answered here
+// (fixtures.mjs answerPlantNear, answerObservations; tiles.mjs), the 3D in real WebGL (SwiftShader).
 import { test, expect, answerObservations, answerPlantNear, plantId } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
 
@@ -107,7 +108,7 @@ test('fiche plante : autour de moi, les occurrences GBIF comme les observations 
   expect(asked.some(u => u.includes('api.gbif.org') && u.includes('geoDistance='))).toBe(true);
   // The legend and the buttons: the plant's marker for both sources, never a source's colour.
   await expect(block.locator('.legend')).toContainText('iNaturalist (6)');
-  await expect(block.locator('.legend')).toContainText('GBIF (7 à moins de 5 km)');
+  await expect(block.locator('.legend')).toContainText('GBIF (7 à moins de 5 km, 6 placées en points, 1 déjà sur iNaturalist)');
   await expect(block.locator('.legend i.obs')).toHaveCount(2);
   await expect(block.locator('.scope [data-layer="gbif-near"] i.obs, .scope [data-layer="inat"] i.obs')).toHaveCount(2);
 
@@ -120,6 +121,16 @@ test('fiche plante : autour de moi, les occurrences GBIF comme les observations 
   const inat = await cardSaying(map, 'Observation : iNaturalist', app.phone);
   await plantCard(inat);
   await expect(inat).toContainText('Paris 5e');
+
+  // An area touched while they are shown: each record once — GBIF's copy of an iNaturalist observation shown here
+  // left out, an occurrence of the area also around me placed once (12 + 12 − 1 − 1).
+  await page.locator('gf-plant-detail').first().evaluate(async el => {
+    const { sendFocus } = await import('/app/core/map-focus.js');
+    sendFocus(el, { kind: 'filter', label: 'Île-de-France', params: { gadmGid: 'FRA.8_1' } });
+  });
+  await expect(block.locator('.chip[data-kind="filter"] i.obs')).toHaveCount(1);
+  await allPhotos(map, 22, 'an area touched, the observations around me shown');
+  await expect(block.locator('.legend')).toContainText('Occurrences GBIF : Île-de-France (120, 11 placées en points, 1 déjà sur iNaturalist)');
 });
 
 test('fiche plante : GBIF seul autour de moi, puis les occurrences d’une zone touchée — la photo de la plante sur chacune', async ({ app, page }) => {
@@ -138,12 +149,87 @@ test('fiche plante : GBIF seul autour de moi, puis les occurrences d’une zone 
     sendFocus(el, { kind: 'filter', label: 'Île-de-France', params: { gadmGid: 'FRA.8_1' } });
   });
   await expect(block.locator('.chip[data-kind="filter"]')).toBeVisible();
+  // The chip: the points' look, never the orange of the dots of before.
+  await expect(block.locator('.chip[data-kind="filter"] i.obs')).toHaveCount(1);
+  // iNaturalist's not shown: GBIF's copy of one of its observations kept.
   await allPhotos(map, 12, 'an area touched');
-  await expect(block.locator('.legend')).toContainText('Occurrences GBIF : Île-de-France');
+  await expect(block.locator('.legend')).toContainText('Occurrences GBIF : Île-de-France (120, 12 placées en points)');
   await expect(block.locator('.legend i.obs')).toHaveCount(1);
   const card = await cardSaying(map, 'Observation : GBIF · Inventaire régional', app.phone);
   await plantCard(card);
   await expect(card).toContainText('Essonne');
+});
+
+test('fiche plante sans photo dans la flore : le point touché dans la fiche, puis chaque observation autour, la photo trouvée en ligne avec son auteur et sa licence', async ({ app, page }) => {
+  // Allium coloratum has no thumbnail in the flora: its sheet finds iNaturalist's photo of its taxon, under CC BY.
+  await answerPlantNear(page, { inat: 3, gbif: 4, plant: { sci: 'Allium coloratum', gbifKey: 7777, taxonId: 999, common: 'Ail coloré', license: 'cc-by', author: 'Jane Doe' } });
+  await app.open('#/collections');
+  await page.evaluate(async () => { (await import('/app/core/sheet-blocks.js')).setMapConfig('map', { near: 'both', gbif: 'off' }); });
+  await app.go(`#/plant/${plantId('Allium coloratum')}`);
+  const block = page.locator('gf-sheet-map:not([map-3d="off"])').first();
+  await block.scrollIntoViewIfNeeded();
+  const map = block.locator('gf-map');
+  // A point touched in the sheet first (« Près d'ici », a record's place), nothing else on the map yet: the plant's
+  // marker with the photo found, never a bare dot.
+  await page.locator('gf-plant-detail').first().evaluate(async el => {
+    const { sendFocus } = await import('/app/core/map-focus.js');
+    sendFocus(el, { kind: 'point', label: 'Près d’ici', coordinates: [2.36, 48.86] });
+  });
+  await expect(map.locator('.leaflet-marker-pane .gf-obs-leaf.chosen.focus img')).toHaveAttribute('src', /photos\/77\//);
+  await expect(map.locator('.gf-focus-point')).toHaveCount(0);
+  await block.locator('.chip[data-kind="point"]').click();
+  await expect(map.locator('.leaflet-marker-pane .focus')).toHaveCount(0);
+
+  await block.locator('.near-ask').click();
+  // 3 of iNaturalist's, 4 of GBIF's less its copy of one of them: each the photo found.
+  await expect.poll(async () => { const d = await drawn(map); return d.points === 6 && d.photos === d.markers ? d.srcs.every(u => /photos\/77\//.test(u)) : JSON.stringify(d); },
+    { timeout: 15_000 }).toBe(true);
+  for (const text of ['Observation : GBIF', 'Observation : iNaturalist']) {
+    const card = await cardSaying(map, text, app.phone);
+    await expect(card.locator('img')).toHaveAttribute('src', /photos\/77\//);
+    await expect(card.locator('.credit')).toHaveText('Photo : © Jane Doe · CC BY · iNaturalist');
+    await expect(card.locator('b')).toHaveText('Ail coloré');
+  }
+});
+
+test('beaucoup de points seuls : chacun la photo de sa plante là où on les voit, jamais un point nu ; ceux qu’un déplacement amène aussi', async ({ app, page }) => {
+  await app.open('#/map');
+  const map = page.locator('gf-map-page gf-map');
+  await expect(map.locator('.leaflet-container')).toBeVisible();
+  // One plant's points, 74 px apart (each alone in its 72 px cell: more than 40 in sight, a phone's too), over three
+  // times the view each way.
+  const view = await map.evaluate(el => {
+    const m = /** @type {any} */ (el), box = el.querySelector('.leaflet-container')?.getBoundingClientRect() || el.getBoundingClientRect();
+    const points = [];
+    for (let x = -box.width + 30; x < 2 * box.width; x += 74) for (let y = -box.height + 30; y < 2 * box.height; y += 74) {
+      points.push({ coordinates: m.placeAt(x, y), title: 'GBIF', date: '2024-06-12', place: 'Ici', source: 'GBIF · Jeu' });
+    }
+    m.cluster = { key: 'many', photo: 'https://upload.wikimedia.org/wikipedia/commons/thumb/1/16/Brennnessel_1.JPG/120px-Brennnessel_1.JPG',
+      credit: { author: 'Jane', license: 'CC BY-SA 4.0', source: 'Wikimedia Commons' }, common: 'Ortie dioïque', sci: 'Urtica dioica', points };
+    return { x: box.x, y: box.y, w: box.width, h: box.height, n: points.length };
+  });
+  /** Inside the map's box: its points alone that are photo markers, those that are dots, and the dots outside. */
+  const inView = () => map.evaluate((el, v) => {
+    const inside = (/** @type {Element} */ e) => { const r = e.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2; return x > v.x && x < v.x + v.w && y > v.y && y < v.y + v.h; };
+    const photos = [...el.querySelectorAll('.leaflet-marker-pane .gf-obs-leaf.hl.chosen')].filter(inside);
+    const dots = [...el.querySelectorAll('path.gf-occ')];
+    return { photos: photos.length, withImg: photos.filter(m => m.querySelector('img')).length, dots: dots.filter(inside).length, far: dots.length };
+  }, view);
+  await expect.poll(async () => { const r = await inView(); return r.photos > 40 && r.withImg === r.photos && r.dots === 0 && r.far > 0 ? 'ok' : JSON.stringify(r); },
+    { timeout: 15_000 }).toBe('ok');
+  // A point's card: the plant's photo and its credit, the record's source.
+  const one = map.locator('.leaflet-marker-pane .gf-obs-leaf.hl.chosen').first();
+  await one.dispatchEvent(app.phone ? 'click' : 'mouseover');
+  await expect(map.locator('.gf-float-tip.on .gf-obs-card .source')).toHaveText('Observation : GBIF · Jeu');
+  if (!app.phone) await one.dispatchEvent('mouseout');
+  // The map moved by hand: the dots it brings in sight become photo markers.
+  const box = /** @type {{ x: number, y: number, width: number, height: number }} */ (await map.locator('.leaflet-container').boundingBox());
+  await page.mouse.move(box.x + box.width * 0.8, box.y + box.height * 0.5);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.3, { steps: 8 });
+  await page.mouse.up();
+  await expect.poll(async () => { const r = await inView(); return r.photos > 40 && r.withImg === r.photos && r.dots === 0 ? 'ok' : JSON.stringify(r); },
+    { timeout: 15_000 }).toBe('ok');
 });
 
 test.describe('en 3D', () => {
@@ -230,5 +316,42 @@ test.describe('en 3D', () => {
     expect(st.photos).toMatchObject({ inat: 20, gbif: 23 });
     await expect.poll(async () => (await marks(map)).leaves, SLOW).toBe(0);
     await expect(map.locator(COLOURED)).toHaveCount(0);
+  });
+
+  test('« Observations autour » : GBIF seul, la photo de son taxon sur iNaturalist — la même une fois iNaturalist coché, même hors de la flore', async ({ page, app }) => {
+    test.slow();
+    await answerTiles(page);
+    await answerObservations(page, { inat: 20, gbif: 24, taxa: true });
+    await page.addInitScript(() => {
+      if (sessionStorage.getItem('gf-gbif3d-set')) return;
+      sessionStorage.setItem('gf-gbif3d-set', '1');
+      localStorage.setItem('geoflora.maps3d', JSON.stringify({ renderer: '3d', relief: false, buildings: false, hillshade: false, sky: false, pitch: 30 }));
+      localStorage.setItem('geoflora.mapView', JSON.stringify({ lat: 45.7772, lng: 3.087, zoom: 14 }));
+      localStorage.setItem('geoflora.around3d', JSON.stringify({ 'gf-map-page': { on: true, radius: 2000, inat: false, gbif: true } }));
+    });
+    await app.open('#/collections');
+    await page.evaluate(async () => {
+      const col = await import('/app/core/collections.js');
+      await col.savePlace(col.newPlace([3.0890, 45.7790], { name: 'Jardin Lecoq' }));
+    });
+    await app.go('#/map');
+    const map = page.locator('gf-map-page gf-map');
+    await expect(map).toHaveAttribute('data-renderer', '3d', SLOW);
+    await expect.poll(async () => (await obs(map)).kinds?.gbif, SLOW).toBe(23);
+    const alone = (await obs(map)).plants.gbif;
+    // Each plant its taxon's photo on iNaturalist (not the flora's), iNaturalist's observations off; the plant outside
+    // the flora too, with its French name.
+    expect(Object.keys(alone).length).toBeGreaterThan(4);
+    for (const [sci, p] of Object.entries(alone)) expect(p.photo, sci).toMatch(/inaturalist-open-data\.s3\.amazonaws\.com\/photos\/5\d\d\/square\.jpg$/);
+    expect(alone['Xanthium imaginarium']).toEqual({ photo: expect.stringContaining('/photos/508/'), common: 'Lampourde imaginaire' });
+    await expect.poll(async () => (await marks(map)).leaves, SLOW).toBe(0);
+
+    // iNaturalist's observations on: GBIF's points the same photos and names; iNaturalist's of each plant the same.
+    await map.locator('.gf-o3-chip').click();
+    await map.locator('.gf-o3-panel .gf-o3-toggle', { hasText: 'iNaturalist' }).locator('input').check();
+    await expect.poll(async () => (await obs(map)).kinds, SLOW).toEqual({ inat: 20, gbif: 23, mine: 0 });
+    const { plants } = await obs(map);
+    expect(plants.gbif).toEqual(alone);
+    for (const [sci, p] of Object.entries(plants.inat)) if (alone[sci]) expect(/** @type {any} */ (p).photo, sci).toBe(alone[sci].photo);
   });
 });

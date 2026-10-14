@@ -6,8 +6,11 @@
 //   observations3d(center, radius, { inat, gbif }, signal) → the points in the circle: iNaturalist's research-grade
 //     observations (up to 400, each its plant's photo, core/nearby.js) and GBIF's plant occurrences (up to 300,
 //     without iNaturalist's, which GBIF holds too), cached a day (offline: the copy kept) — each source on with its
-//     module (« iNaturalist », « GBIF »). A GBIF occurrence is shown as an iNaturalist observation is: its plant's
-//     photo and French name (sharePhotos, then the flora's), its date and place, its source on its card;
+//     module (« iNaturalist », « GBIF »). A GBIF occurrence is shown as an iNaturalist observation is, whichever
+//     sources are on: its plant's photo and French name — its taxon's on iNaturalist under a free licence (the
+//     circle's plants on iNaturalist, sharePhotos), else the flora's —, its date and place, its source on its card;
+//   morePhotos(points) → the points again once the photos of the flora's plants without one in plants.json are found
+//     online (their sheet's), or null: the map draws them first, then again with them;
 //   sharePhotos, inCircle, hexBins (the density's columns), ringWall (the circle's wall, in short pieces: each stands
 //     on the relief where it is), fitZoom: pure, tested under Node (tests/unit/around3d.test.mjs).
 
@@ -15,7 +18,7 @@ import { config } from '../config.js';
 import * as cache from './cache.js';
 import { moduleOn } from './modules.js';
 import { fetchJson } from './net.js';
-import { binomial, floraPhotos, observationPointsMany } from './nearby.js';
+import { binomial, findPhotos, floraPhotos, fullName, isHybrid, observationPointsMany, speciesAround } from './nearby.js';
 import { writeLocal } from './quota.js';
 
 /** The radii offered (metres): the mini-apps' distances, 200 m to 50 km (what iNaturalist's circle search allows). */
@@ -137,26 +140,41 @@ function gbifAround([lon, lat], radius, signal) {
 }
 
 /**
- * Points of another source (GBIF's) given what an iNaturalist observation of the same plant shows among `from`: its
- * photo and its credit (the same photo for the same plant, whatever its source), its French name, its taxon (the
- * plant a page lights, markClasses) — the plant by its binomial. Those without a twin keep theirs (the flora's comes
- * next: core/nearby.js floraPhotos). Pure: new objects, the points given unchanged.
+ * Points of another source (GBIF's) given what iNaturalist shows of the same plant among `from` (its taxa in the
+ * circle, its observations): its photo and its credit (the same photo for the same plant, whatever its source), its
+ * French name, its taxon (the plant a page lights, markClasses) — a twin without a free photo gives its name and taxon
+ * only (an iNaturalist observation of it shows that name, and the flora's photo). The plant by its whole name first,
+ * else by its binomial (a subspecies is its species' plant) — never for a hybrid, on either side, as core/nearby.js
+ * matches the flora: « Heracleum mantegazzianum × sphondylium » is not the giant hogweed, nor « Mentha × villosa »
+ * « Mentha × piperita ». One twin a plant: one with a photo over one without, then a species' own over a
+ * subspecies', then the first. Those without a twin keep theirs (the flora's comes next: core/nearby.js floraPhotos).
+ * Pure: new objects, the points given unchanged.
  * @template {{ sci: string, photo: string | null, credit: import('./credit.js').Credit | null, common: string | null, title: string, taxonId: number | null }} T
  * @param {T[]} points @param {{ sci: string, photo: string | null, credit: import('./credit.js').Credit | null, common: string | null, taxonId: number | null }[]} from
  * @returns {T[]}
  */
 export function sharePhotos(points, from) {
-  /** @type {Map<string, (typeof from)[number]>} */
-  const twins = new Map();
+  /** @typedef {(typeof from)[number]} Twin */
+  /** @type {Map<string, Twin>} */ const whole = new Map();
+  /** @type {Map<string, Twin>} */ const loose = new Map();
+  const species = (/** @type {string} */ sci) => fullName(sci) === binomial(sci);
+  const better = (/** @type {Twin | undefined} */ kept, /** @type {Twin} */ p) =>
+    !kept || (Boolean(p.photo) !== Boolean(kept.photo) ? Boolean(p.photo) : species(p.sci) && !species(kept.sci));
   for (const p of from) {
-    const key = binomial(p.sci);
-    if (key && p.photo && !twins.has(key)) twins.set(key, p);
+    if (!p.sci || !(p.photo || p.common)) continue;
+    if (better(whole.get(fullName(p.sci)), p)) whole.set(fullName(p.sci), p);
+    if (!isHybrid(p.sci) && better(loose.get(binomial(p.sci)), p)) loose.set(binomial(p.sci), p);
   }
   return points.map(p => {
-    const twin = p.photo ? null : twins.get(binomial(p.sci));
-    if (!twin) return p;
-    const common = p.common || twin.common;
-    return { ...p, photo: twin.photo, credit: twin.credit, common, title: common && (!p.title || p.title === p.sci) ? common : p.title, taxonId: p.taxonId ?? twin.taxonId };
+    if (!p.sci || (p.photo && p.common)) return p;
+    const twin = whole.get(fullName(p.sci)) ?? (isHybrid(p.sci) ? undefined : loose.get(binomial(p.sci)));
+    const photo = !p.photo && twin?.photo ? twin : null;
+    const common = p.common || twin?.common || null;
+    if (!twin || (!photo && common === p.common)) return p;
+    return {
+      ...p, ...(photo ? { photo: photo.photo, credit: photo.credit } : {}),
+      common, title: common && (!p.title || p.title === p.sci) ? common : p.title, taxonId: p.taxonId ?? twin.taxonId
+    };
   });
 }
 
@@ -170,22 +188,38 @@ export async function observations3d(center, radius, sources, signal) {
   const useInat = sources.inat && moduleOn('inaturalist'), useGbif = sources.gbif && moduleOn('gbif');
   /** @type {string[]} */ const failed = [];
   const fail = (/** @type {string} */ name) => (/** @type {any} */ error) => { if (error?.name === 'AbortError') throw error; failed.push(name); return null; };
-  const [inat, gbif] = await Promise.all([
+  const [inat, gbif, taxa] = await Promise.all([
     useInat ? observationPointsMany(center, radius, INAT_MAX, signal).catch(fail('iNaturalist')) : null,
-    useGbif ? gbifAround(center, radius, signal).catch(fail('GBIF')) : null
+    useGbif ? gbifAround(center, radius, signal).catch(fail('GBIF')) : null,
+    // The plants iNaturalist knows in the circle (one call, cached a day, shared with « Autour »): each its taxon's
+    // photo under a free licence and its French name — what an iNaturalist observation of it shows —, for GBIF's
+    // points whether iNaturalist's are shown or not (its module on: its photos are the plants' photos).
+    useGbif && moduleOn('inaturalist') ? speciesAround(center, radius, signal).catch(error => { if (error?.name === 'AbortError') throw error; return null; }) : null
   ]);
   /** @type {Obs3d[]} */
   const points = [];
   for (const [i, p] of (inat?.points || []).entries()) {
     points.push({ ...p, id: 'i' + (p.url?.match(/(\d+)$/)?.[1] ?? i), kind: 'inat', url: p.url || null, source: 'iNaturalist' });
   }
-  // GBIF's as iNaturalist's: the photo and name of the same plant's observation here, else the flora's.
+  // GBIF's as iNaturalist's: the photo and name its plant has on iNaturalist here, else the flora's.
   if (gbif) {
+    const known = (taxa?.species || []).map(s => ({ sci: s.name, photo: s.photo, credit: s.credit, common: s.common, taxonId: s.taxonId }));
     /** @type {Obs3d[]} */
-    const shared = sharePhotos(gbif.points, points);
+    const shared = sharePhotos(gbif.points, [...known, ...points]);
     points.push(...await floraPhotos(shared, { names: true }));
   }
   return { points: inCircle(points, center, radius), totals: { inat: inat ? inat.total : null, gbif: gbif ? gbif.total : null }, failed };
+}
+
+/**
+ * The points again with the photos of the flora's plants that have none in plants.json — found online, as their
+ * sheet shows them (core/nearby.js findPhotos: iNaturalist's taxon photo, else Commons') —, whatever their source; null
+ * when none was found (nothing to draw again). Never changes the points given.
+ * @param {Obs3d[]} points @returns {Promise<Obs3d[] | null>}
+ */
+export async function morePhotos(points) {
+  if (!(await findPhotos(points).catch(() => false))) return null;
+  return floraPhotos(points, { names: true });
 }
 
 // ── Shapes ──────────────────────────────────────────────────────────────────────────────────────

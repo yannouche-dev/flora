@@ -209,7 +209,8 @@ export function gbifNear(gbifKey, point, radius, signal, mode, limit = 5) {
 export function gbifBounds(gbifKey, filter, signal, mode) {
   if (!gbifKey) return Promise.resolve(null);
   const id = Object.entries(filter).sort().map(([k, v]) => k + '=' + v).join('&');
-  return cached('gbif-bounds2:' + gbifKey + ':' + id, () => sourcesFor(mode).gbifOccurrenceBounds(gbifKey, filter, { signal }), signal);
+  // « gbif-bounds3 »: the occurrences cached without their place, dataset and record number are not used again.
+  return cached('gbif-bounds3:' + gbifKey + ':' + id, () => sourcesFor(mode).gbifOccurrenceBounds(gbifKey, filter, { signal }), signal);
 }
 
 /**
