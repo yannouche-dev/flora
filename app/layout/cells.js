@@ -17,6 +17,10 @@
 //  - deck: Rencontres' cards (miniapp/kit/ma-deck.js) for the plants found in the scope, the one on top the current
 //    plant; a heart: a favourite.
 // A link to a plant's sheet anywhere in a cell (a result, a look-alike) makes it the current plant (gf-layout.js).
+// The frame every cell shares (registry.js#FRAME: its head, its actions, its empty state) is gf-layout.js'; its links
+// are honoured here: a plant of its own (plante=: renderCell), the whole flora instead of the zone (results zone=0:
+// DlResults, state.js#wholeOf), a card touched and the swipes (toucher, ecrit=0: DlDeck); the deck tells the layout
+// when it has no cards (`cell-empty`), for a deck that hides meanwhile (vide=masque).
 
 import { LitElement, html, css, nothing } from 'lit';
 import { icon } from '../core/icons.js';
@@ -519,6 +523,12 @@ export class DlResults extends LitElement {
     if (!s) return nothing;
     const view = this.params.view ?? 'auto';
     const grid = view === 'grid' || (view === 'auto' && this._wide);
+    // zone=0: the search over the whole flora, whatever the zone (state.js#wholeOf, asked by the layout), said so.
+    if (this.params.zone === false) {
+      const whole = s.whole;
+      return html`${s.live.at ? html`<div class="scope" role="note">${icon('globe-europe-africa')}<span>Toute la France : cette case ne suit pas la zone.</span></div>` : nothing}
+        <gf-plant-list ?grid=${grid} .current=${s.live.plant} .items=${whole?.items ?? []}></gf-plant-list>`;
+    }
     const note = s.live.at ? scopeNote(s) : '';
     return html`${s.live.at ? html`<div class="scope ${s.speciesState === 'error' ? 'error' : ''}" role="status">${icon('crosshair')}<span title=${note}>${scopeWords(s)} · ${note}</span>
         <button class="link" type="button" @click=${() => s.setScope(null)}>Toute la France</button></div>` : nothing}
@@ -620,7 +630,7 @@ class DeckSession extends EventTarget {
 const DECK_MAX = 60;
 
 export class DlDeck extends LitElement {
-  static properties = { state: { attribute: false }, _loading: { state: true } };
+  static properties = { state: { attribute: false }, params: { attribute: false }, _loading: { state: true } };
 
   static styles = [ui, css`
     :host { display: block; overflow-y: auto; padding: 12px 8px; container-type: size; --deck-max: calc(100cqh - 150px); --deck-min: 220px; }
@@ -639,12 +649,39 @@ export class DlDeck extends LitElement {
     super();
     new StateController(this);
     /** @type {LayoutState | null} */ this.state = null;
+    /** @type {Record<string, any>} */ this.params = {};
     this._loading = false;
     this.#session.widen = m => this.state?.set({ r: m }, 'replace');
     this.#session.addEventListener('change', () => this.requestUpdate());
     this.addEventListener('deck-decide', e => this.#decide(/** @type {CustomEvent} */ (e).detail));
-    this.addEventListener('deck-open', e => { e.stopPropagation(); this.state?.pick(/** @type {CustomEvent} */ (e).detail.id); });
+    // A card touched, as the cell says (toucher, ecrit: registry.js#touchOf): the current plant, its sheet, or nothing.
+    this.addEventListener('deck-open', e => {
+      e.stopPropagation();
+      const id = /** @type {CustomEvent} */ (e).detail.id;
+      const touch = this.params?.toucher === 'rien' ? 'rien' : this.params?.toucher === 'fiche' || !this.#writes ? 'fiche' : 'plante';
+      if (touch === 'plante') this.state?.pick(id);
+      else if (touch === 'fiche') pushHash(href.plant(id));
+    });
     this.addEventListener('deck-undo', e => { e.stopPropagation(); this.#undo(); });
+  }
+
+  /** The deck changes the current plant (its swipes, its first card): not with ecrit=0 — its cards then go their own way. */
+  get #writes() { return this.params?.ecrit !== false; }
+
+  /** Nothing to show (registry.js#FRAME, vide): told to the layout (gf-layout.js: a cell vide=masque hidden meanwhile). */
+  #empty = /** @type {boolean | null} */ (null);
+
+  /**
+   * Whether the deck has cards to show: none without a zone, nor when the zone's plants could not be had, nor when the
+   * zone has none; while they come, not empty. The cards swiped do not count: the deck's end is something to show.
+   */
+  updated() {
+    const s = this.state;
+    if (!s) return;
+    const empty = !s.live.at || s.speciesState === 'error' || (s.speciesState === 'ready' && !this._loading && !this.#session.cards.length);
+    if (empty === this.#empty) return;
+    this.#empty = empty;
+    this.dispatchEvent(new CustomEvent('cell-empty', { detail: { empty }, bubbles: true, composed: true }));
   }
 
   /**
@@ -682,7 +719,7 @@ export class DlDeck extends LitElement {
     for (const c of this.#session.cards) alertsOf(c.plant).then(a => { c.alerts = a; this.#session.changed(); }, () => {});
     // No plant chosen yet: the card on top is the current plant.
     const first = this.#session.deck[0];
-    if (first && s.live.plant == null) s.pick(first.plant.id, { how: 'replace' });
+    if (first && s.live.plant == null && this.#writes) s.pick(first.plant.id, { how: 'replace' });
     this.#session.changed();
   }
 
@@ -696,7 +733,7 @@ export class DlDeck extends LitElement {
     if (liked) { ses.burst++; setTimeout(() => { ses.burst = 0; ses.changed(); }, 900); }
     ses.top = null;
     const next = ses.deck[0];
-    if (next) this.state?.pick(next.plant.id, { how: 'replace' });
+    if (next && this.#writes) this.state?.pick(next.plant.id, { how: 'replace' });
     ses.changed();
   }
 
@@ -708,7 +745,7 @@ export class DlDeck extends LitElement {
     ses.c = { ...ses.c, matches: ses.c.matches.filter(x => x !== last.id), passed: ses.c.passed.filter(x => x !== last.id) };
     const card = ses.cards.find(c => c.plant.id === last.id);
     if (last.fav && card && isFavorite(last.id)) toggleFavorite(card.plant).catch(() => {});
-    this.state?.pick(last.id, { how: 'replace' });
+    if (this.#writes) this.state?.pick(last.id, { how: 'replace' });
     ses.changed();
   }
 
@@ -772,9 +809,9 @@ export function renderCell(r, ctx) {
   if (id === 'search') return html`<dl-search .state=${state} .params=${r.params}></dl-search>`;
   if (id === 'results') return html`<dl-results .state=${state} .params=${r.params}></dl-results>`;
   if (id === 'filters') return html`<div class="scroll pad"><gf-filter-panel></gf-filter-panel></div>`;
-  if (id === 'deck') return html`<dl-deck .state=${state}></dl-deck>`;
-  // A plant cell: the current plant, or how to choose one.
-  const plant = ctx.plant;
+  if (id === 'deck') return html`<dl-deck .state=${state} .params=${r.params}></dl-deck>`;
+  // A plant cell: its own plant (plante=: fixed, whatever the current one), else the current plant, or how to choose one.
+  const plant = r.params.plante ?? ctx.plant;
   if (plant == null) {
     return html`<div class="placeholder quiet" role="note">${icon(cellIcon(r))}<p>Aucune plante choisie : touchez un résultat, un point de la carte ou une carte.</p>
       ${ctx.first ? html`<button type="button" @click=${() => state.pick(/** @type {any} */ (ctx.first).id)}>Voir ${ctx.first.name}</button>` : nothing}</div>`;

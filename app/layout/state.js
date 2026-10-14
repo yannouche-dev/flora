@@ -30,8 +30,8 @@ import { errorKind } from '../core/net.js';
 import { observationPointsAround, observationsAround, speciesAround } from '../core/nearby.js';
 import { observations3d } from '../core/around3d.js';
 import { fromHash, toHash } from '../core/query.js';
-import { runSearch, setSearchScope } from '../core/search.js';
-import { whenReady } from '../core/store.js';
+import { runSearch, searchWhole, setSearchScope } from '../core/search.js';
+import { store, whenReady } from '../core/store.js';
 import { DISTANCE, distanceText, parseDistance } from './registry.js';
 
 /**
@@ -161,6 +161,10 @@ export class LayoutState extends EventTarget {
     /** @type {AbortController | null} */ this.gbifAbort = null;
     /** The map's own scope (its lieu=, its autour), applied once for each (dl-map), the address having none. */
     this.defaultedFor = '';
+    /** The search over the whole flora (wholeOf: a results cell with zone=0), and the search it answers. */
+    /** @type {{ key: string, total: number, items: any[] } | null} */
+    this.whole = null;
+    /** @type {string} */ this.wholeFor = '';
   }
 
   /** The radius in use: the address', else the layout's default. */
@@ -344,6 +348,24 @@ export class LayoutState extends EventTarget {
       if (abort.signal.aborted || this.gbifFor !== key) return;
       this.gbif = { key, points: found.points };
       this.gbifError = found.failed.length ? 'GBIF ne répond pas : ses occurrences manquent sur la carte.' : null;
+      this.#changed();
+    }, () => {});
+  }
+
+  /**
+   * The search on screen over the whole flora, whatever the zone (a results cell that leaves it: results(zone=0)), for
+   * a layout that has one (`want`): loaded once for each search (its text, filters, sort), `whole` then.
+   * @param {boolean} want
+   */
+  wholeOf(want) {
+    const query = store.state.query;
+    const key = want ? 'q:' + toHash(query) : '';
+    if (key === this.wholeFor) return;
+    this.wholeFor = key;
+    if (!key) { if (this.whole) { this.whole = null; queueMicrotask(() => this.#changed()); } return; }
+    whenReady().then(() => this.wholeFor === key ? searchWhole(query) : null).then(found => {
+      if (!found || this.wholeFor !== key) return;
+      this.whole = { key, total: found.total, items: found.items };
       this.#changed();
     }, () => {});
   }

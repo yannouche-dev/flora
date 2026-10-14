@@ -19,16 +19,18 @@ import { blockCategory, categoryOf } from '../core/categories.js';
 import { MAP_INTENT_ALIASES, MAP_INTENTS, MAP_LAYER_ALIASES, MAP_LAYERS } from './map-options.js';
 
 /**
- * @typedef {'distance' | 'enum' | 'bool' | 'list' | 'text' | 'intent'} ParamKind
+ * @typedef {'distance' | 'enum' | 'bool' | 'list' | 'text' | 'intent' | 'id'} ParamKind
  * @typedef {{ kind: ParamKind, label: string, def: unknown, values?: Record<string, string>, aliases?: Record<string, string>, words?: string[],
- *   off?: string[], group?: string, mark?: string, bundles?: Record<string, Record<string, string>> }} ParamSpec
+ *   off?: string[], group?: string, mark?: string, bundles?: Record<string, Record<string, string>>, max?: number, frame?: boolean }} ParamSpec
  *   `values`: an enum's (a list's, an intent's) canonical values and their French labels; `aliases`: other spellings of
  *   a value → canonical; `words`: other names of the parameter; `off`: words that, alone, set a yes-or-no one to no
  *   (map(2d)); `group`: its heading in the editor and the README (Où, Fond…); `mark`: its mark in a menu (cellMark),
  *   else its label's first letter.
  *   Kinds: `list` — several of its values joined by « + » (layers=znieff+n2000), each unknown one said and left out;
  *   `text` — free words (lieu=Mirabel Ménétrol 63: never a bare value); `intent` — one word for a bundle of the other
- *   parameters (`bundles`: each value's, as the address writes them), which a parameter written beside it overrides.
+ *   parameters (`bundles`: each value's, as the address writes them), which a parameter written beside it overrides;
+ *   `id` — a plant's number (plante=128268). `max`: a text's characters at most (80 else); `frame`: one of the frame
+ *   every cell shares (FRAME below: its head, its actions, its empty state, its links), not the component's own.
  * @typedef {'scope' | 'query' | 'results' | 'plant' | 'obs'} StateKey
  * @typedef {{ key: string, title: string }} ViewSpec
  * @typedef {object} ComponentSpec
@@ -111,6 +113,72 @@ const MAP_PARAMS = {
   ui: { kind: 'enum', label: 'Commandes', def: 'auto', group: 'Interface', values: { auto: 'Selon la largeur', complete: 'Complètes', compacte: 'Compactes', nue: 'Aucune' }, aliases: { full: 'complete', completes: 'complete', compact: 'compacte', compactes: 'compacte', nu: 'nue', minimal: 'nue', minimale: 'nue', aucune: 'nue' }, words: ['interface', 'commandes', 'controles'] }
 };
 
+/**
+ * The frame every cell shares (« Cadre » in the editor, written after the component's own parameters, never when
+ * default): its head (tete: whole, its title only, none — the cell's content takes the room), a title of its own
+ * (titre: in its head and its tab on a phone), the actions of its head (agrandir: over the layout, Échap returns;
+ * replier: folded to its head, its share to its siblings; partager: a link to a layout of this cell alone, with the same
+ * state), its empty state (vide: a message, or the cell hidden while it has nothing to show — its share to its siblings).
+ * And its links (« Liens »): a plant of its own instead of the current one (plante), the whole of France instead of
+ * the zone (zone=0), what touching a plant does (toucher), whether it changes the current plant at all (ecrit=0).
+ * Each component takes only those it honours (FRAME_OF): never a setting that does nothing.
+ * @type {Record<string, ParamSpec>}
+ */
+const FRAME = {
+  tete: {
+    kind: 'enum', label: 'En-tête', def: 'oui', group: 'Cadre', frame: true, values: { oui: 'Complet', simple: 'Titre seul', non: 'Aucun' },
+    aliases: { complet: 'oui', complete: 'oui', full: 'oui', yes: 'oui', seul: 'simple', minimal: 'simple', aucun: 'non', sans: 'non', no: 'non', none: 'non' },
+    words: ['entete', 'en-tete', 'head', 'header', 'bandeau']
+  },
+  titre: { kind: 'text', label: 'Titre de la case', def: null, max: 40, group: 'Cadre', frame: true, words: ['title', 'nom', 'intitule'] },
+  actions: {
+    kind: 'list', label: 'Actions de l’en-tête', def: [], group: 'Cadre', frame: true, values: { agrandir: 'Agrandir', replier: 'Replier', partager: 'Partager' },
+    aliases: { maximize: 'agrandir', maximiser: 'agrandir', pleinecran: 'agrandir', plein: 'agrandir', agrandi: 'agrandir', collapse: 'replier', plier: 'replier',
+      fold: 'replier', reduire: 'replier', share: 'partager', partage: 'partager', lien: 'partager' },
+    words: ['action', 'boutons', 'outils']
+  },
+  vide: {
+    kind: 'enum', label: 'Sans rien à montrer', def: 'message', group: 'Cadre', frame: true, values: { message: 'Un message', masque: 'Case masquée' },
+    aliases: { texte: 'message', dire: 'message', masquee: 'masque', masquer: 'masque', cache: 'masque', cachee: 'masque', cacher: 'masque', hide: 'masque', hidden: 'masque' },
+    words: ['empty', 'etatvide']
+  },
+  plante: { kind: 'id', label: 'Plante fixée', def: null, group: 'Liens', frame: true, words: ['plant', 'fixe', 'fixee', 'epingle'] },
+  zone: { kind: 'bool', label: 'Suit la zone', def: true, group: 'Liens', frame: true, off: ['france', 'toutelafrance'], words: ['scope', 'suitzone', 'perimetre'] },
+  toucher: {
+    kind: 'enum', label: 'Toucher une plante', def: 'plante', group: 'Liens', frame: true, values: { plante: 'La choisit', fiche: 'Ouvre sa fiche', rien: 'Rien' },
+    aliases: { pick: 'plante', choisir: 'plante', sheet: 'fiche', ouvrir: 'fiche', none: 'rien', aucun: 'rien' }, words: ['tap', 'clic', 'click', 'touch', 'touche']
+  },
+  ecrit: { kind: 'bool', label: 'Change la plante courante', def: true, group: 'Liens', frame: true, words: ['ecrire', 'write', 'writes', 'choisit'] }
+};
+
+/**
+ * The frame's settings each component honours besides tete, titre and actions (every one's): vide where a cell can
+ * have nothing to show (a plant's: no plant; the results: none found; the deck: no cards — the map, the search, the
+ * filters and the zone always have something), plante where a cell shows a plant (the sheet, a block, the photos),
+ * zone where a cell can leave the zone (the results), toucher and ecrit where a plant can be touched (a result, a
+ * card, a link in the sheet). The map has links of its own (suit, plante, toucher: MAP_PARAMS).
+ * @type {Record<string, string[]>}
+ */
+export const FRAME_OF = {
+  map: [], place: [], filters: [], search: ['toucher', 'ecrit'], results: ['vide', 'zone', 'toucher', 'ecrit'],
+  plant: ['vide', 'plante', 'toucher', 'ecrit'], media: ['vide', 'plante'], deck: ['vide', 'toucher', 'ecrit']
+};
+
+/**
+ * What touching a plant does in a cell that honours toucher (a result, a card, a link in a sheet): it becomes the
+ * current plant (`plante`), its sheet opens (`fiche`: the layout left, as a link would), or nothing; a cell that does
+ * not change the current plant (ecrit=0) opens the sheet instead of choosing. null: the cell has no say (the map has
+ * its own). @param {Resolved} r @returns {'plante' | 'fiche' | 'rien' | null}
+ */
+export function touchOf(r) {
+  if (!r.known || !FRAME_OF[r.spec.id]?.includes('toucher')) return null;
+  const t = r.params.toucher ?? 'plante';
+  return t === 'plante' && r.params.ecrit === false ? 'fiche' : t;
+}
+
+/** The frame's settings of a component, in their order (FRAME). @param {string} id @returns {Record<string, ParamSpec>} */
+const frameOf = id => Object.fromEntries(Object.entries(FRAME).filter(([k]) => ['tete', 'titre', 'actions', ...(FRAME_OF[id] ?? [])].includes(k)));
+
 /** French names of the sheet's blocks (folded) → their key (sheet-blocks.js#BLOCKS). */
 const BLOCK_ALIASES = {
   wiki: 'wikipedia', calendrier: 'calendar', floraison: 'calendar', fleurs: 'calendar', medias: 'media', galerie: 'media', photo: 'photos',
@@ -184,6 +252,9 @@ export const COMPONENTS = [
     params: { r: RADIUS }, main: 'r', reads: ['scope'], writes: ['scope'], min: { w: 220, h: 170 }
   }
 ];
+
+// Every component's parameters: its own, then the frame's it honours (after them: the address writes them after).
+for (const c of COMPONENTS) c.params = { ...c.params, ...frameOf(c.id) };
 
 /** @type {Map<string, ComponentSpec>} folded names and aliases → component */
 const BY_NAME = new Map(COMPONENTS.flatMap(c => [c.id, ...c.aliases].map(n => [fold(n).replace(/ /g, ''), c])));
@@ -298,8 +369,8 @@ export function readList(p, text) {
   return { values: Object.keys(p.values ?? {}).filter(v => found.has(v)), unknown };
 }
 
-/** Free words, as the address keeps them: one line, 80 characters at most (null: none). @param {string} text */
-const cleanWords = text => String(text).replace(/\p{Cc}/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 80).trim() || null;
+/** Free words, as the address keeps them: one line, 80 characters at most (`max`; null: none). @param {string} text @param {number} [max] */
+const cleanWords = (text, max = 80) => String(text).replace(/\p{Cc}/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, max).trim() || null;
 
 /**
  * A value read for a parameter, canonical (enum, intent: its value; bool: true / false; distance: metres; list: its
@@ -308,7 +379,8 @@ const cleanWords = text => String(text).replace(/\p{Cc}/gu, ' ').replace(/\s+/g,
  */
 export function readValue(p, text) {
   if (p.kind === 'distance') return parseDistance(text) ?? undefined;
-  if (p.kind === 'text') return cleanWords(text) ?? undefined;
+  if (p.kind === 'text') return cleanWords(text, p.max) ?? undefined;
+  if (p.kind === 'id') return /^\s*\d{1,9}\s*$/.test(text) && Number(text) > 0 ? Number(text) : undefined;
   if (p.kind === 'list') {
     const l = readList(p, text);
     return l.unknown.length || (!l.values.length && !NONE.has(key(text))) ? undefined : l.values;
@@ -327,6 +399,7 @@ const same = (a, b) => a === b || (Array.isArray(a) && Array.isArray(b) && a.len
 
 /** What a parameter expects, in French. @param {ParamSpec} ps */
 const expected = ps => ps.kind === 'distance' ? 'une distance (500m, 2km)' : ps.kind === 'bool' ? 'oui ou non (1, 0)' : ps.kind === 'text' ? 'des mots'
+  : ps.kind === 'id' ? 'le numéro d’une plante (celui de p= dans l’adresse)'
   : Object.keys(ps.values ?? {}).join(', ') + (ps.kind === 'list' ? ', joints par « + »' : '');
 
 /**
@@ -369,6 +442,9 @@ export function resolve(cell) {
   }
   for (const p of paramList) {
     const name = paramName(spec, p);
+    // One of the frame's that this component does not honour (filters(vide=masque): never empty): said so.
+    const notHere = !name && p.key !== null ? Object.keys(FRAME).find(k => key(k) === key(/** @type {string} */ (p.key)) || (FRAME[k].words ?? []).some(w => key(w) === key(/** @type {string} */ (p.key)))) : null;
+    if (notHere) { problems.push(`${spec.title} : « ${notHere} » ne s’applique pas à ce composant.`); continue; }
     if (!name) {
       problems.push(p.key === null ? `${spec.title} : valeur « ${p.value} » sans nom de paramètre.` : `${spec.title} : paramètre inconnu « ${p.key} ».`);
       continue;
@@ -401,7 +477,8 @@ export function resolve(cell) {
       }
     }
   }
-  const title = view ? view.title : spec.title;
+  // A title of its own (titre=): the cell's name everywhere (its head, its tab on a phone, its grips).
+  const title = params.titre ?? (view ? view.title : spec.title);
   return { known: true, spec, view, params, given, implied, problems, title };
 }
 
@@ -423,7 +500,8 @@ export function canonical(cell, r = resolve(cell)) {
   // (grammar.js) — before 3d=1, they would take it.
   const order = Object.keys(ps).sort((a, b) => Number(ps[a].kind === 'text') - Number(ps[b].kind === 'text'));
   for (const k of order) {
-    if (!r.given.has(k) || ps[k].kind === 'intent' || asIntent(r, k)) continue;
+    // The frame's: never written when default (actions=aucune, tete=oui).
+    if (!r.given.has(k) || ps[k].kind === 'intent' || asIntent(r, k) || (ps[k].frame && same(r.params[k], ps[k].def))) continue;
     params.push({ key: k, value: valueText(ps[k], r.params[k]) });
   }
   return { t: 'cell', name: r.spec.id, view: r.view?.key ?? null, params, size: cell.size };
@@ -491,7 +569,8 @@ export function cellMark(r) {
   if (!r.known) return null;
   const first = (/** @type {string} */ s) => fold(s).charAt(0);
   const lower = (/** @type {string} */ s) => s.charAt(0).toLowerCase() + s.slice(1);
-  const marks = Object.entries(r.spec.params).filter(([k, p]) => p.kind !== 'distance' && p.kind !== 'text' && r.given.has(k) && !same(r.params[k], p.def) && !asIntent(r, k)).map(([k, p]) => {
+  // Not the frame's (its head, its links: said in the cell itself, never a mark).
+  const marks = Object.entries(r.spec.params).filter(([k, p]) => !p.frame && p.kind !== 'distance' && p.kind !== 'text' && r.given.has(k) && !same(r.params[k], p.def) && !asIntent(r, k)).map(([k, p]) => {
     const letter = p.mark ?? p.label.charAt(0).toUpperCase();
     if (p.kind === 'bool') return r.params[k] ? { label: lower(p.label), short: letter } : { label: 'sans ' + lower(p.label), short: '−' + letter };
     // A list: its words after the parameter's (« couches : ZNIEFF (types I et II), Natura 2000 »), the parameter's letter.

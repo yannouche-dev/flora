@@ -212,7 +212,7 @@ test('l’éditeur : les réglages de la carte par groupe, un choix écrit dans 
   await page.getByRole('button', { name: 'Modifier la disposition' }).click();
   const tools = page.locator('gf-layout section.cell[data-comp="map"] .tools');
   await tools.locator('details.params summary').click();
-  await expect(tools.locator('fieldset legend')).toHaveText(['Où', 'Fond', 'Couches', 'Points', 'Liens', 'Interface']);
+  await expect(tools.locator('fieldset legend')).toHaveText(['Où', 'Fond', 'Couches', 'Points', 'Liens', 'Interface', 'Cadre']);
   // What the intent gives, said as such.
   await expect(tools.locator('select[data-param="base"] option').first()).toHaveText('Fond de carte : selon l’intention (Photos aériennes)');
   await tools.locator('select[data-param="toucher"]').selectOption('fiche');

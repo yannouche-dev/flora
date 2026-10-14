@@ -66,6 +66,8 @@ export class GfPlantList extends LitElement {
     grid: { type: Boolean, reflect: true },
     /** Id of the plant open in the plant pane. */
     current: { type: Number },
+    /** The plants to list instead of the search's (a free layout's results over the whole flora: results(zone=0)); null: the search's. */
+    items: { attribute: false },
     _scrollTop: { state: true },
     _height: { state: true },
     _width: { state: true }
@@ -162,6 +164,8 @@ export class GfPlantList extends LitElement {
     this.grid = false;
     /** @type {number | null} */
     this.current = null;
+    /** @type {any[] | null} */
+    this.items = null;
     this.addEventListener('scroll', () => {
       cancelAnimationFrame(this.#frame);
       this.#frame = requestAnimationFrame(() => { this._scrollTop = this.scrollTop; });
@@ -187,7 +191,8 @@ export class GfPlantList extends LitElement {
   /** @param {Map<string, unknown>} changed */
   updated(changed) {
     if (changed.has('current')) this.#reveal();
-    const { results: { items }, query } = this.#store.state;
+    const { query } = this.#store.state;
+    const items = this.#list;
     if (items === this.#items) return;
     const key = searchKey(query);
     const first = this.#items === null;
@@ -199,6 +204,9 @@ export class GfPlantList extends LitElement {
     this._scrollTop = top;
   }
 
+  /** The plants listed: those given (items), else the search's. @returns {any[]} */
+  get #list() { return this.items ?? this.#store.state.results.items; }
+
   /** Height of a row in the current display. */
   get #rowHeight() {
     const gridView = gridViewOf(this.#store.state);
@@ -207,7 +215,7 @@ export class GfPlantList extends LitElement {
 
   /** The open plant's row stays in view as the plant sheet moves to the previous / next one. */
   #reveal() {
-    const i = this.current === null ? -1 : this.#store.state.results.items.findIndex(p => p.id === this.current);
+    const i = this.current === null ? -1 : this.#list.findIndex(p => p.id === this.current);
     if (i < 0 || !this.clientHeight) return;
     const h = this.#rowHeight, offset = this.grid ? HEADER_HEIGHT : 0;
     const top = offset + i * h;
@@ -246,7 +254,8 @@ export class GfPlantList extends LitElement {
   }
 
   render() {
-    const { results: { items }, query: { q }, compact, status } = this.#store.state;
+    const { query: { q }, compact, status } = this.#store.state;
+    const items = this.#list;
     const gridView = gridViewOf(this.#store.state);
     const columns = this.grid ? gridColumns(gridView, this._width) : [];
     if (this.grid) this.style.setProperty('--gf-cols', columns.map(k => columnWidth(k, gridView)).join(' '));
