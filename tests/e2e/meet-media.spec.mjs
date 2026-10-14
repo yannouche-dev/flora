@@ -54,7 +54,10 @@ async function introduced(page, phone, name) {
     await expect(split).toHaveAttribute('aria-label', 'Redimensionner le panneau photos');
     await expect(split).toHaveAttribute('aria-controls', 'meet-media-pane');
   }
-  await expect.poll(async () => (await kept(page)).media).toEqual({ id: plantId(name), was: [], closed: false });
+  await expect.poll(async () => (await kept(page)).media).toEqual({ by: plantId(name), closed: false });
+  // The plant chosen: the one loved, kept with the game and in the address.
+  expect((await kept(page)).focus).toBe(plantId(name));
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe(`#/app/rencontres/cards?p=${plantId(name)}`);
 }
 
 /** A phone: the full-screen photos closed (Échap), back to the deck, the focus in it. @param {import('@playwright/test').Page} page */
@@ -91,13 +94,14 @@ test('le premier coup de cœur présente ses photos ; les suivants, un cœur seu
     await expect(photos(page, false).locator('gf-media-viewer')).toHaveAttribute('plant-id', String(plantId(PISSENLIT)));
     await expect(photos(page, false).locator('.coach')).toHaveCount(0);
   }
-  await expect.poll(async () => (await kept(page)).media).toEqual({ id: plantId(PISSENLIT), was: [plantId(AIL)], closed: false });
+  await expect.poll(async () => (await kept(page)).media).toEqual({ by: plantId(AIL), closed: false });
+  expect((await kept(page)).focus).toBe(plantId(PISSENLIT));
 
   if (!phone) {
     // × closes the pane (kept so after a reload); « Ses photos » opens it again, its heading focused.
     await photos(page, false).getByRole('button', { name: /Fermer les photos/ }).click();
     await expect(photos(page, false)).toHaveCount(0);
-    await expect.poll(async () => (await kept(page)).media).toEqual({ id: plantId(PISSENLIT), was: [plantId(AIL)], closed: true });
+    await expect.poll(async () => (await kept(page)).media).toEqual({ by: plantId(AIL), closed: true });
     await page.locator('ma-deck .round.photos').click();
     await expect(photos(page, false)).toHaveCount(1);
     await expect(photos(page, false).getByRole('heading', { level: 2 })).toBeFocused();

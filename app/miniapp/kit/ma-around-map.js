@@ -333,7 +333,7 @@ export class MaAroundMap extends LitElement {
     const c = /** @type {Record<string, any>} */ (this.c);
     const title = nameOf(card.plant);
     const photo = this.#photo(card.photo) ? /** @type {string} */ (card.photo).replace('/medium.', '/small.') : null;
-    const who = { photo, credit: photo ? card.credit : null, common: card.plant.vernacularNames?.[0] || null, sci: card.plant.scientificName, taxonId: card.taxonId ?? null };
+    const who = { plantId: card.plant.id, photo, credit: photo ? card.credit : null, common: card.plant.vernacularNames?.[0] || null, sci: card.plant.scientificName, taxonId: card.taxonId ?? null };
     const pointsOf = (/** @type {{ coordinates: [number, number], date: string | null, url: string }[]} */ pts) => pts.map(p => ({ coordinates: p.coordinates, title, url: p.url, date: p.date }));
     if (scope === 'around') {
       const pts = await observationsAround(/** @type {number} */ (card.taxonId), c.point, c.radius).catch(() => null);

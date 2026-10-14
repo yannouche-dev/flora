@@ -11,9 +11,10 @@
 // The step « cards » keeps this same map beside the cards (the same element, the same Leaflet map: kit/around.js
 // puts the cards in a column of their own): the card folds into a chip (« 1 km · Changer »), the circle in the middle
 // of the room above it; the map lights the card on top (a soft ring), the plants passed (dimmed), the matches (a pink
-// ring) and the plant chosen (Rencontres: the one whose photos show — its observations in the circle, large, on top;
-// brighter while the photos' head is hovered). A match touched on the map is chosen. A phone: a band on top of the
-// cards (a third of the height), folded to its chip at will.
+// ring) and pins the plant chosen (Rencontres: the plant of the screen, kit/session.js#chosenId — the one its photos
+// and its sheet show; before any heart, the card on top — its observations in the circle, large, on top; brighter
+// while the photos' head is hovered). A point touched on the map chooses its plant (one of the cards). A phone: a
+// band on top of the cards (a third of the height), folded to its chip at will.
 
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { icon } from '../../core/icons.js';
@@ -223,16 +224,15 @@ export class MaDistance extends LitElement {
     this.#loadChosen();
   }
 
-  /** The plant chosen (Rencontres: its photos shown), as a card of the game, or none. */
+  /** The plant chosen (Rencontres: the plant of the screen), as a card of the game, or none. */
   get #chosen() {
-    const id = this.#compact ? this.c?.media?.id : null;
-    return id == null ? null : (this.#session?.cards || []).find(x => x.plant.id === id) ?? null;
+    return this.#compact ? this.#session?.chosenCard ?? null : null;
   }
 
   /** The plant chosen's observations in the circle (iNaturalist, cached): its highlight on the map. */
   async #loadChosen() {
     const card = this.#chosen, c = this.c;
-    const key = card?.taxonId && c?.point ? `${card.taxonId}:${c.radius}:${c.point}` : '';
+    const key = card?.taxonId && c?.point ? `${card.plant.id}:${card.taxonId}:${c.radius}:${c.point}` : '';
     if (key === this.#hlFor) return;
     this.#hlFor = key;
     if (!key || !card || !c) { this._hl = null; return; }
@@ -240,7 +240,7 @@ export class MaDistance extends LitElement {
     const pts = await observationsAround(/** @type {number} */ (card.taxonId), c.point, c.radius).catch(() => []);
     if (this.#hlFor !== key) return;
     const title = nameOf(card.plant);
-    this._hl = { key, photo, credit: photo ? card.credit : null, common: card.plant.vernacularNames?.[0] || null, sci: card.plant.scientificName, taxonId: card.taxonId,
+    this._hl = { key, plantId: card.plant.id, photo, credit: photo ? card.credit : null, common: card.plant.vernacularNames?.[0] || null, sci: card.plant.scientificName, taxonId: card.taxonId,
       points: pts.slice(0, 60).map(p => ({ coordinates: p.coordinates, title, url: p.url, date: p.date })) };
   }
   #hlFor = '';
@@ -257,11 +257,14 @@ export class MaDistance extends LitElement {
   }
   /** @type {any} */ #marksMemo = null;
 
-  /** A point touched on the map (step « cards »): a match there is chosen (its photos shown). @param {CustomEvent} e */
+  /**
+   * A point touched on the map (step « cards »): its plant, one of the cards, chosen (Rencontres: the map, its photos,
+   * its sheet and the address follow). @param {CustomEvent} e
+   */
   #onPick = e => {
-    const t = e.detail?.point?.taxonId, s = this.#session, c = this.c;
-    if (t == null || !s?.cards || !c) return;
-    const card = s.cards.find(x => x.taxonId === t && c.matches.includes(x.plant.id));
+    const t = e.detail?.point?.taxonId, s = this.#session;
+    if (t == null || !s?.cards || !s.chooses) return;
+    const card = s.cards.find(x => x.taxonId === t);
     if (card) s.choose(card.plant.id);
   };
 
@@ -290,7 +293,7 @@ export class MaDistance extends LitElement {
   #go() {
     const s = /** @type {import('./session.js').AroundSession} */ (this.#session);
     s.invalidate();
-    s.setView(this.view);
+    s.setView(null);
     this.app?.go('cards');
   }
 

@@ -63,7 +63,7 @@ test('une partie en cours se continue ; Cueillette prudente est une mini-applica
 test('les anciennes adresses de Découvrir mènent où elles menaient', async ({ app, page }) => {
   const ail = plantId('Allium ursinum');
   await app.open(`#/discover?p=${ail}`);
-  await expect.poll(() => hash(page)).toMatch(new RegExp(`^#/app/rencontres/[a-z]+\\?p=${ail}$`));
+  await expect.poll(() => hash(page)).toMatch(new RegExp(`^#/app/rencontres/[a-z]+\\?p=${ail}&fiche=1$`));
   await app.go('#/discover?s=mosaic');
   await expect.poll(() => hash(page)).toBe('#/app/mosaique/start');
   await expect(page.getByRole('heading', { name: 'La mosaïque du coin' })).toBeVisible();

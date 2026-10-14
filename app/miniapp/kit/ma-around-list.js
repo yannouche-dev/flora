@@ -7,14 +7,17 @@
 // kept). The first match during the first steps: a screen of its own (« C’est un match ! »). A plant open (?p=): its
 // sheet beside the list (kit/ma-plant-sheet.js). The step « cards » of Cueillette prudente, Mosaïque, and Rencontres
 // once its first steps are over.
-// Rencontres (`media`): the first match of a game whose plant has photos brings them (kit/ma-meet-media.js) — beside
-// the deck while the column has room for both (its width the user's, a separator), else the viewer full screen over
-// the deck, closed back to it. The plant shown is the one CHOSEN: the plant of that first heart, then of each later
-// heart (a pass changes nothing); a match touched in « Matchs » is chosen too. Kept in the game's context (`media`:
-// { id: the plant chosen, was: those chosen before, closed }), emptied by « Recommencer »; the heart that chose it
-// undone (↺): back to the one chosen before (none: closed, the next heart brings them again). Closed, « Ses photos »
-// on the deck shows the plant chosen again. The map beside (kit/ma-distance.js) lights the plant chosen, the card on
-// top, the matches and the plants passed (kit/session.js carries them).
+// Rencontres (`media`): ONE plant on the screen, the plant CHOSEN (kit/session.js#chosenId, the address's ?p=) — the
+// map beside it (kit/ma-distance.js) pins it, its photos and its sheet show it, never another: before any heart, the
+// card on top of the deck; then the plant of each heart (a pass changes nothing: the card on top is only a candidate,
+// a line over the deck names the plant chosen when it is not that card); a tile of « Matchs » or « Toutes », the
+// sheet's « Préc. » / « Suivante », a point of the map choose it too; the heart that chose it undone (↺): the one
+// chosen before. The first match of a game whose plant has photos brings them (kit/ma-meet-media.js) — beside the deck
+// while the column has room for both (its width the user's, a separator), else the viewer full screen over the deck,
+// closed back to it; the game keeps that they came, and the pane closed (`media`: { by: the plant whose heart brought
+// them — its ↺ takes them away, the next heart brings them again —, closed }), emptied by « Recommencer ». Closed,
+// « Ses photos » on the deck shows them again. Its sheet open (&fiche=1) takes the photos' place (its own « Médias »
+// show the same plant). The view of the list (&v=) and the image shown (&m=) are in the address too.
 
 import { LitElement, html, css, nothing } from 'lit';
 import { icon } from '../../core/icons.js';
@@ -83,6 +86,12 @@ export class MaAroundList extends LitElement {
       .list.swiping > ma-deck { flex: 1 1 0; min-height: 0; container-type: size; overflow-y: auto; scrollbar-width: thin;
         --deck-max: calc(100cqh - 124px); --deck-min: 180px; }
     }
+    /* Rencontres: the plant chosen, named over the deck when it is not the card on top (the map pins it). */
+    .chosen-line { display: flex; align-items: center; justify-content: center; gap: 6px; margin: -6px auto 8px; max-width: 100%; font-size: 0.82rem;
+      color: var(--gf-text-muted); white-space: nowrap; overflow: hidden; }
+    .chosen-line .bi { flex: none; color: #e0245e; }
+    .chosen-line span { overflow: hidden; text-overflow: ellipsis; }
+    .chosen-line b { color: var(--gf-text); }
     /* What is said aloud: out of the flow at the top (not a line of scroll under the list). */
     p.visually-hidden { top: 0; left: 0; margin: 0; }
     .error { color: var(--gf-danger); font-size: 0.9rem; }
@@ -205,12 +214,8 @@ export class MaAroundList extends LitElement {
     removeEventListener('keydown', this.#onKey);
     this.#room.disconnect();
     this.#session?.removeEventListener('change', this.#onChange);
-    this.#session?.removeEventListener('choose', this.#onChosen);
     this.#session = null;
   }
-
-  /** A match touched on the map: chosen, its photos shown. @param {Event} e */
-  #onChosen = e => { if (this.media) this.#chooseShown(/** @type {CustomEvent} */ (e).detail.id); };
 
   /**
    * Its width followed: the photos beside the deck while there is room for both; with them, drawn again as it changes
@@ -234,16 +239,17 @@ export class MaAroundList extends LitElement {
     const s = sessionOf(this.app);
     if (s !== this.#session) {
       this.#session?.removeEventListener('change', this.#onChange);
-      this.#session?.removeEventListener('choose', this.#onChosen);
       this.#session = s;
       s.addEventListener('change', this.#onChange);
-      s.addEventListener('choose', this.#onChosen);
     }
     // The cards of the place and distance chosen (searched unless they are there).
     s.ensure(this.harvest);
-    const open = this.c.focus;
-    if (changed.has('c') && open != null && changed.get('c')?.focus !== open) plantSeen(open);
+    const open = this.#sheetId;
+    if (changed.has('c') && open != null && changed.get('c')?.focus !== this.c.focus) plantSeen(open);
     this.toggleAttribute('opened', open != null);
+    // A phone, the photos full screen: on the plant chosen, whatever chose it.
+    const chosen = s.chosenId;
+    if (this._full != null && chosen != null && this._full !== chosen) this._full = chosen;
     // Rencontres' photos: the width of their pane, the user's (the game's: « Recommencer » forgets it).
     if (this.media && !this.#sizer) {
       this.#sizer = new PaneSizer(this, config.storageKeys.appPrefix + this.app.m.id + '.media', { media: { width: 440, min: 300, title: 'Photos' } });
@@ -261,10 +267,24 @@ export class MaAroundList extends LitElement {
   get #s() { return /** @type {import('./session.js').AroundSession} */ (this.#session); }
   get #view() { return this.#s.viewOr(this.view); }
 
+  /** The plant in the sheet: Rencontres, the plant chosen while its sheet is open; the others, the plant open (?p=). */
+  get #sheetId() {
+    const c = this.c, s = this.#session;
+    if (!c || !s) return null;
+    return s.chooses ? (c.sheet ? s.chosenId : null) : c.focus ?? null;
+  }
+
+  /** The image shown (&m=): its place among the plant's media, from the viewer on screen. @param {CustomEvent} e */
+  #onMediaIndex = e => {
+    e.stopPropagation();
+    const at = Number(e.detail?.index) || null;
+    if (this.c && this.c.mediaAt !== at) this.app?.set({ mediaAt: at });
+  };
+
   /** A plant's photo, unless the « Photos en ligne » module is off in this view (a leaf shows instead). @param {string | null | undefined} url */
   #photo(url) { return url && moduleOn('photos', plantViewOf(this.#store.state)) ? url : null; }
 
-  /** A plant opened in its sheet, which steps through `ids`. @param {number} id @param {number[]} ids */
+  /** A plant opened in its sheet (Rencontres: chosen, its sheet open), which steps through `ids`. @param {number} id @param {number[]} ids */
   #openPlant(id, ids) {
     this.#s.sheetIds = ids;
     this.dispatchEvent(new CustomEvent('ma-plant', { detail: { id }, bubbles: true, composed: true }));
@@ -290,7 +310,7 @@ export class MaAroundList extends LitElement {
     if (at < 0 || to < 0) return;
     e.preventDefault();
     e.stopPropagation();
-    this.#s.setView(/** @type {string} */ (tabs[to].dataset.view));
+    this.#s.setView(/** @type {string} */ (tabs[to].dataset.view), this.view);
     tabs[to].focus();
   };
 
@@ -308,46 +328,28 @@ export class MaAroundList extends LitElement {
     // The first match (while discovering): its screen, once. The next ones: a heart.
     if (discovering() && !discoverState().firstMatch) this._match = card;
     else s.heart();
-    // The first heart brings the photos; each later one chooses the plant they show.
-    if (this.#mediaState) this.#choose(card.plant.id);
-    else this.#introduce(card);
+    // The heart chose its plant (kit/session.js#swiped): the photos show it; the first heart brings them.
+    if (!this.#mediaState) this.#introduce(card);
   };
 
   /**
-   * ↺: the last card back on top — the heart that chose the plant shown undone, back to the one chosen before; none:
-   * the photos close and come with the next heart.
+   * ↺: the last card back on top — the heart that chose the plant undone, back to the one chosen before
+   * (kit/session.js#rewind); the heart that brought the photos undone: they close, and come with the next heart.
    */
   #onUndo = () => {
     const last = this.#s.history.at(-1);
     this.#s.rewind();
     this._match = null;
     const m = this.#mediaState;
-    if (!last?.liked || m?.id !== last.id) return;
-    const was = m.was ?? [];
-    if (was.length) {
-      this.app?.set({ media: { ...m, id: was[was.length - 1], was: was.slice(0, -1) } });
-      if (this._full != null) this._full = was[was.length - 1];
-      return;
-    }
+    if (!last?.liked || m?.by !== last.id) return;
     this.app?.set({ media: null });
     this._coach = false;
     this.#closeFull();
   };
 
-  /**
-   * The plant chosen: its photos shown (the pane, or full screen when it is open), the map lighting it. The one chosen
-   * before kept, for ↺. @param {number} id
-   */
-  #choose(id) {
-    const m = this.#mediaState;
-    if (!m || !this.app) return;
-    if (m.id !== id) this.app.set({ media: { ...m, id, was: [...(m.was ?? []).filter(x => x !== id), m.id].slice(-30) } });
-    if (this._full != null) this._full = id;
-  }
-
   // ── Rencontres: the photos of the first match ─────────────────────────
 
-  /** What the game keeps of its photos: the plant chosen, those chosen before, the pane closed — none: not yet. @returns {{ id: number, was?: number[], closed: boolean } | null} */
+  /** What the game keeps of its photos: the plant whose heart brought them, the pane closed — none: not yet. @returns {{ by?: number, closed: boolean } | null} */
   get #mediaState() { return this.media ? this.c?.media ?? null : null; }
 
   /** The display mode (the modules, the media's presentation). */
@@ -373,18 +375,18 @@ export class MaAroundList extends LitElement {
     // Undone meanwhile, or brought another way: nothing; none to show: the match made meanwhile, if any.
     if (!ok || !this.c?.matches.includes(id)) { if (next) this.#introduce(next); return; }
     if (this.#mediaState) return;
-    this.app.set({ media: { id, was: [], closed: false } });
+    this.app.set({ media: { by: id, closed: false } });
     this._coach = true;
     if (!this._roomy) this.#openFull(id);
     this._said = `${this._said} Photos de ${nameOf(card.plant)} ouvertes${this._roomy ? ', à côté des cartes' : ''}.`.trim();
   }
 
-  /** The plant the pane beside the deck shows (room for it), else none: the plant chosen. */
+  /** The plant the pane beside the deck shows (room for it, the sheet not open): the plant chosen — else none. */
   get #paneId() {
     const m = this.#mediaState;
-    if (!m || m.closed || !this._roomy || !this.c || this.c.focus != null || !this.#session?.cards || this.#view === 'all') return null;
+    if (!m || m.closed || !this._roomy || !this.c || this.#sheetId != null || !this.#session?.cards || this.#view === 'all') return null;
     if (!moduleOn('photos', this.#mode)) return null;
-    return m.id;
+    return this.#s.chosenId;
   }
 
   /** A plant's name, from the cards. @param {number} id */
@@ -429,9 +431,9 @@ export class MaAroundList extends LitElement {
   /** « Ses photos » on the deck: the pane again (room for it), or full screen, on the plant chosen. @param {CustomEvent} e */
   #onPhotos = e => {
     const m = this.#mediaState;
-    const id = m?.id ?? /** @type {number} */ (e.detail.id);
+    const id = this.#s.chosenId ?? /** @type {number} */ (e.detail.id);
     if (!this._roomy) { this.#openFull(id); return; }
-    this.app?.set({ media: { was: [], ...m, id, closed: false } });
+    this.app?.set({ media: { ...m, closed: false } });
     this._said = `Photos de ${this.#nameOf(id)} ouvertes, à côté des cartes.`;
     // Its heading takes the focus once the pane is there (the context comes back through the box: updated()).
     this.#focusPane = true;
@@ -451,16 +453,16 @@ export class MaAroundList extends LitElement {
     if (id == null || !z) return nothing;
     const w = Math.min(z.width('media'), this.#paneMax());
     return html`${z.split('media', 'right', () => this.#paneMax(), 'meet-media-pane')}
-      <ma-meet-media id="meet-media-pane" mode="pane" style=${`--w-media: ${w}px`} plant-id=${id} .name=${this.#nameOf(id)} .view=${this.#mode} ?coach=${this._coach} chooses
-        @meet-media-close=${() => this.#closePane()} @meet-media-hover=${(/** @type {CustomEvent} */ e) => this.#s.glowChosen(e.detail.on)} @meet-media-coached=${() => { this._coach = false; }}></ma-meet-media>`;
+      <ma-meet-media id="meet-media-pane" mode="pane" style=${`--w-media: ${w}px`} plant-id=${id} .name=${this.#nameOf(id)} .view=${this.#mode} .index=${this.c?.mediaAt ?? 0} ?coach=${this._coach} chooses
+        @media-index=${this.#onMediaIndex} @meet-media-close=${() => this.#closePane()} @meet-media-hover=${(/** @type {CustomEvent} */ e) => this.#s.glowChosen(e.detail.on)} @meet-media-coached=${() => { this._coach = false; }}></ma-meet-media>`;
   }
 
   /** A phone: the photos full screen over the deck (a modal dialog). */
   #fullView() {
     const id = this._full;
     if (!this.media || id == null) return nothing;
-    return html`<ma-meet-media mode="dialog" plant-id=${id} .name=${this.#nameOf(id)} .view=${this.#mode} ?coach=${this._coach}
-      @meet-media-close=${() => this.#closeFull()} @meet-media-coached=${() => { this._coach = false; }}></ma-meet-media>`;
+    return html`<ma-meet-media mode="dialog" plant-id=${id} .name=${this.#nameOf(id)} .view=${this.#mode} .index=${this.c?.mediaAt ?? 0} ?coach=${this._coach}
+      @media-index=${this.#onMediaIndex} @meet-media-close=${() => this.#closeFull()} @meet-media-coached=${() => { this._coach = false; }}></ma-meet-media>`;
   }
 
   /** « Ses photos » on the deck: once the photos were brought, when they are out of sight (closed, or a phone). */
@@ -488,7 +490,10 @@ export class MaAroundList extends LitElement {
     const ds = discoverState();
     const matchCards = s.matchCards, matches = matchCards.length;
     const further = nextDistance(c.radius);
-    return html`<div class="duo"><section class="list ${this.harvest ? 'harvest' : this.mosaic ? 'mosaic' : 'meet'} ${cards?.length && view === 'swipe' ? 'swiping' : ''}">
+    // Rencontres: the plant chosen, when it is not the card on top (a heart, a tile, a point of the map chose it): named
+    // over the deck — the map pins it, the photos and the sheet show it; the card on top is a candidate.
+    const chosen = s.chooses && view === 'swipe' && c.focus != null && s.deck[0]?.plant.id !== s.chosenId ? s.chosenCard : undefined;
+    return html`<div class="duo"><section class="list ${this.harvest ? 'harvest' : this.mosaic ? 'mosaic' : 'meet'} ${cards?.length && view === 'swipe' ? 'swiping' : ''} ${chosen ? 'chose' : ''}">
       <div class="head">
         <h1>${this.heading ? this.heading + ' · ' : ''}Autour ${c.place ? 'de ' + c.place : 'de vous'}</h1>
         <span class="where">${cards ? `${cards.length} plantes à moins de ${km}${cards.some(x => x.blooming) ? ` · ${cards.filter(x => x.blooming).length} en fleur en ${month}` : ''}` : ''}</span>
@@ -505,12 +510,13 @@ export class MaAroundList extends LitElement {
       ${this.mosaic && cards?.length ? html`<label class="bloom-only"><input type="checkbox" .checked=${this._bloomOnly} @change=${(/** @type {any} */ e) => { this._bloomOnly = e.target.checked; }} /> En fleur maintenant (${cards.filter(x => x.blooming).length})</label>` : nothing}
       ${cards && cards.length ? html`<div class="views segmented" role="tablist" aria-label="Affichage" @keydown=${this.#tabKey}>
         ${[['swipe', 'Rencontres'], ['matches', `Matchs${matches ? ' · ' + matches : ''}`], ['all', 'Toutes']].map(([k, l]) => html`<button type="button" role="tab"
-          data-view=${k} aria-selected=${String(view === k)} tabindex=${view === k ? '0' : '-1'} @click=${() => s.setView(k)}>${l}</button>`)}
+          data-view=${k} aria-selected=${String(view === k)} tabindex=${view === k ? '0' : '-1'} @click=${() => s.setView(k, this.view)}>${l}</button>`)}
       </div>` : nothing}
+      ${chosen ? html`<p class="chosen-line" role="note">${icon('geo-alt-fill')}<span>Plante choisie : <b>${nameOf(chosen.plant)}</b> — sur la carte${this.#mediaState ? ' et dans ses photos' : ''}</span></p>` : nothing}
       ${s.loading ? html`<p class="muted">Recherche des plantes observées autour…</p>` : nothing}
       ${s.error ? html`<p class="error" role="alert">${s.error} <button class="link" type="button" @click=${() => s.load()}>Réessayer</button></p>` : nothing}
       ${cards && !cards.length && !s.loading ? html`<p class="muted">Aucune plante observée ici pour le moment. Essayez une autre commune.</p>` : nothing}
-      ${cards && view === 'swipe' ? html`<ma-deck .session=${s} .cards=${s.deck} .c=${c} ?active=${c.focus == null && !this._match && this._full == null}
+      ${cards && view === 'swipe' ? html`<ma-deck .session=${s} .cards=${s.deck} .c=${c} ?active=${this.#sheetId == null && !this._match && this._full == null}
           ?photos=${this.#photosButton} @deck-decide=${this.#onDecide} @deck-undo=${this.#onUndo} @deck-photos=${this.#onPhotos}
           @deck-open=${(/** @type {CustomEvent} */ e) => this.#openPlant(e.detail.id, s.deck.map(x => x.plant.id))}></ma-deck>` : nothing}
       ${cards && view === 'matches' ? (matches ? html`<div class="grid">${matchCards.map(x => html`<div class="mwrap">${this.#card(x, matchCards.map(m => m.plant.id), this.media && this.#mediaState ? () => this.#chooseShown(x.plant.id) : null)}
@@ -525,7 +531,8 @@ export class MaAroundList extends LitElement {
     <p class="visually-hidden" role="status">${this._said || ''}</p>
     ${this._match ? this.#matchView(this._match) : nothing}
     ${this.#fullView()}
-    ${c.focus != null ? html`<ma-plant-sheet .open=${c.focus} .cards=${s.sheetCards} scoped layout-key=${config.storageKeys.appPrefix + this.app.m.id + '.sheet'} @ma-plant=${this.#onSheet}></ma-plant-sheet>` : nothing}`;
+    ${this.#sheetId != null ? html`<ma-plant-sheet .open=${this.#sheetId} .cards=${s.sheetCards} .mediaAt=${c.mediaAt ?? 0} scoped layout-key=${config.storageKeys.appPrefix + this.app.m.id + '.sheet'}
+      @ma-plant=${this.#onSheet} @media-index=${this.#onMediaIndex}></ma-plant-sheet>` : nothing}`;
   }
 
   /** « Toutes »: the grid (Mosaïque: large photos, the names over them; « En fleur » filters). @param {Card[]} all */
@@ -563,8 +570,8 @@ export class MaAroundList extends LitElement {
   #chooseShown(id) {
     const m = this.#mediaState;
     if (!m) return;
-    const was = m.id === id ? m.was ?? [] : [...(m.was ?? []).filter(x => x !== id), m.id].slice(-30);
-    this.app?.set({ media: { ...m, id, was, closed: this._roomy ? false : m.closed } });
+    this.#s.choose(id);
+    if (this._roomy && m.closed) this.app?.set({ media: { ...m, closed: false } });
     if (!this._roomy) { this.#openFull(id); return; }
     this._said = `Photos de ${this.#nameOf(id)} ouvertes, à côté des cartes.`;
   }
@@ -582,8 +589,10 @@ export class MaAroundList extends LitElement {
     const ds = discoverState();
     // The photo's credit, shown on it; not in the button's name (the plant's), which a screen reader says at each tile.
     const credit = photo && c.credit ? html`<small class="credit" aria-hidden="true">${creditText(c.credit)}</small>` : nothing;
-    const chosen = Boolean(pick) && this.#mediaState?.id === p.id;
-    return html`<button class="card ${chosen ? 'chosen' : ''}" type="button" aria-current=${String(this.c?.focus === p.id)} aria-pressed=${pick ? String(chosen) : nothing} @click=${() => {
+    // The plant of the screen (Rencontres: the plant chosen; the others: the plant open in its sheet).
+    const current = this.#s.chooses ? this.#s.chosenId : this.c?.focus;
+    const chosen = Boolean(pick) && current === p.id;
+    return html`<button class="card ${chosen ? 'chosen' : ''}" type="button" aria-current=${String(current === p.id)} aria-pressed=${pick ? String(chosen) : nothing} @click=${() => {
       if (pick) { pick(); return; }
       if (mosaic) { sheetSession.anchor = 'images'; sheetSession.anchorBlock = 'media'; sheetSession.anchorOffset = 0; }
       this.#openPlant(p.id, ids);

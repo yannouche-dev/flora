@@ -26,7 +26,9 @@ const footprint = page => page.evaluate(() => {
   const out = {};
   for (let i = 0; i < localStorage.length; i++) {
     const k = /** @type {string} */ (localStorage.key(i));
-    if (!k.startsWith('geoflora.') || ['geoflora.harvestMode', 'geoflora.backup', 'geoflora.hasSpots', 'geoflora.context', 'geoflora.showSteps'].includes(k)) continue;
+    // (geoflora.cachePurgedAt: the shared cache of the online services, purged 30 s after the app starts — never a
+    // mini-app's; a slow run would see it come between two footprints.)
+    if (!k.startsWith('geoflora.') || ['geoflora.harvestMode', 'geoflora.backup', 'geoflora.hasSpots', 'geoflora.context', 'geoflora.showSteps', 'geoflora.cachePurgedAt'].includes(k)) continue;
     const v = JSON.parse(localStorage.getItem(k) || 'null');
     // The first steps of the app (the tabs that came, the plants seen) are the user's: only Rencontres' guided way.
     out[k] = k === 'geoflora.discover' ? { step: v.step, firstMatch: v.firstMatch, branch: v.branch } : v;
@@ -88,9 +90,9 @@ for (const id of /** @type {(keyof typeof TITLES)[]} */ (Object.keys(TITLES))) {
     await page.locator('gf-miniapp .quit').click();
     await expect.poll(() => hash(page)).toBe('#/discover');
 
-    // « Continuer »: back at the step it was left at.
+    // « Continuer »: back at the step it was left at (Rencontres: on the plant chosen by its heart, kept with the game).
     await list(page).getByRole('button', { name: `Continuer : ${TITLES[id]}` }).click();
-    await expect.poll(() => hash(page)).toBe(`#/app/${id}/${step}`);
+    await expect.poll(() => hash(page)).toBe(`#/app/${id}/${step}${id === 'rencontres' ? '?p=' + plantId('Allium ursinum') : ''}`);
     if (id === 'parcours') await expect(page.locator('gf-miniapp .mine > li')).toHaveCount(1);
     else await expect(page.locator('ma-around-list .head')).toBeVisible();
     await page.locator('gf-miniapp .quit').click();

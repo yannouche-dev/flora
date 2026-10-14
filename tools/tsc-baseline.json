@@ -1,6 +1,6 @@
 {
   "typescript": "7.0.2",
-  "total": 85,
+  "total": 82,
   "errors": {
     "app/components/gf-calendar.js": {
       "TS2339": 1
@@ -13,7 +13,7 @@
       "TS2353": 4
     },
     "app/components/gf-map.js": {
-      "TS2551": 4
+      "TS2551": 3
     },
     "app/components/gf-media-viewer.js": {
       "TS2339": 2,
@@ -46,9 +46,6 @@
     "app/core/open-data.js": {
       "TS2339": 1,
       "TS2353": 5
-    },
-    "app/core/router.js": {
-      "TS2322": 2
     },
     "app/core/share.js": {
       "TS2322": 1

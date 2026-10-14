@@ -4,7 +4,9 @@
 // `layout-key`, which « Recommencer » forgets); « ‹ Préc. » and « Suivante › » through the cards it was opened from, a quick sideways
 // swipe or ← → too; Échap or ← (the head's arrow) closes it. Over a start screen (a link with a plant), the sheet
 // alone. It never navigates: the event `ma-plant` (detail.id: the plant to show, null: closed) goes up to the box,
-// which keeps the address (Back closes a plant opened here).
+// which keeps the address (another plant: a new entry, Back returns to it). It keeps no plant of its own: the one it
+// shows is `open`, the pager's place is that plant's among the cards. Its « Médias » open at `mediaAt` (&m=), and say
+// the image shown (the event media-index, for the address).
 
 import { LitElement, html, css, nothing } from 'lit';
 import * as db from '../../core/db.js';
@@ -19,6 +21,8 @@ export class MaPlantSheet extends LitElement {
   static properties = {
     /** The plant shown. */
     open: { type: Number },
+    /** The image its « Médias » open at: its place among the plant's media (the address's &m=). */
+    mediaAt: { type: Number },
     /** The cards it steps through (none: no pager). */
     cards: { attribute: false },
     /** In a mini-app's box (always): the sheet keeps to it (gf-plant-detail `scoped`). */
@@ -52,6 +56,7 @@ export class MaPlantSheet extends LitElement {
     super();
     /** @type {number | null} */
     this.open = null;
+    this.mediaAt = 0;
     /** @type {import('./cards.js').Card[]} */
     this.cards = [];
     this.scoped = false;
@@ -144,7 +149,7 @@ export class MaPlantSheet extends LitElement {
         <button class="icon-btn" type="button" aria-label="Retour aux plantes autour" title="Retour (Échap)" @click=${() => this.#show(null)}>${icon('arrow-left')}</button>
         <strong>${name || 'Plante'}</strong>
       </div>
-      <gf-plant-detail embedded plant-id=${this.open} view="epure" ?scoped=${this.scoped}></gf-plant-detail>
+      <gf-plant-detail embedded plant-id=${this.open} view="epure" ?scoped=${this.scoped} .mediaAt=${this.mediaAt}></gf-plant-detail>
       ${at >= 0 ? html`<nav class="pager" aria-label="Plantes autour">
         <button class="secondary prev" type="button" ?disabled=${at <= 0} @click=${() => this.#step(-1)}>${icon('chevron-left')} Préc.</button>
         <span>${at + 1} / ${list.length}</span>

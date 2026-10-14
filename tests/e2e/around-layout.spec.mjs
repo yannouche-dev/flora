@@ -126,21 +126,24 @@ test.describe('un grand écran', () => {
     await expect(page.locator('ma-deck .swipe-card.top')).toHaveAttribute('data-id', String(plantId(BENOITE)));
     await page.locator('ma-deck .round.like').click();
     await expect(pane.locator('gf-media-viewer')).toHaveAttribute('plant-id', String(plantId(BENOITE)));
-    await expect.poll(async () => (await kept(page)).media).toEqual({ id: plantId(BENOITE), was: [plantId(AIL)], closed: false });
+    await expect.poll(async () => (await kept(page)).focus).toBe(plantId(BENOITE));
+    await expect.poll(async () => (await kept(page)).media).toEqual({ by: plantId(AIL), closed: false });
     // ↺ of that heart: back to the one chosen before.
     await page.locator('ma-deck .round.undo').click();
     await expect(pane.locator('gf-media-viewer')).toHaveAttribute('plant-id', String(plantId(AIL)));
-    await expect.poll(async () => (await kept(page)).media).toEqual({ id: plantId(AIL), was: [], closed: false });
+    await expect.poll(async () => (await kept(page)).focus).toBe(plantId(AIL));
     // Closed, « Ses photos » shows the plant chosen (not the card on top).
     await pane.getByRole('button', { name: /Fermer les photos/ }).click();
     await expect(pane).toHaveCount(0);
     await page.locator('ma-deck').getByRole('button', { name: /Ses photos/ }).click();
     await expect(pane.locator('gf-media-viewer')).toHaveAttribute('plant-id', String(plantId(AIL)));
     // Kept with the game: after a reload, « Reprendre » finds it.
-    await expect.poll(async () => (await kept(page)).media).toEqual({ id: plantId(AIL), was: [], closed: false });
+    await expect.poll(async () => (await kept(page)).media).toEqual({ by: plantId(AIL), closed: false });
     await page.reload();
     await app.ready();
-    expect((await kept(page)).media).toEqual({ id: plantId(AIL), was: [], closed: false });
+    expect((await kept(page)).media).toEqual({ by: plantId(AIL), closed: false });
+    expect((await kept(page)).focus).toBe(plantId(AIL));
+    await expect(pane.locator('gf-media-viewer')).toHaveAttribute('plant-id', String(plantId(AIL)));
   });
 
   for (const [width, height] of [[1280, 800], [1920, 920]]) {
