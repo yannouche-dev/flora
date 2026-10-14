@@ -23,7 +23,7 @@ import { MediaController } from '../core/media.js';
 import { PaneSizer, paneStyles } from '../core/panes.js';
 import { config } from '../config.js';
 import { hideImg, showImg } from '../core/img.js';
-import { creditText } from '../core/credit.js';
+import { creditText, thumbCredit } from '../core/credit.js';
 
 const shortDate = (/** @type {string} */ iso) =>
   new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -252,7 +252,8 @@ export class GfMapPage extends LitElement {
      * "Autour": iNaturalist species observed in a circle.
      * @type {null | { center: [number, number], radius: number, where: string, status: 'loading' | 'ok' | 'error',
      *   error?: string, result?: import('../core/nearby.js').NearbyResult, species?: import('../core/nearby.js').NearbySpecies | null,
-     *   obs?: import('../core/nearby.js').NearbyObservation[] | null, frame: string }}
+     *   obs?: import('../core/nearby.js').NearbyObservation[] | null, frame: string,
+     *   thumb?: { url: string, credit: import('../core/credit.js').Credit | null } | null }}
      */
     this._around = null;
     /** The map is in position editing (its ✎ control): the sheets and Autour wait. */
@@ -345,8 +346,14 @@ export class GfMapPage extends LitElement {
   async #pickSpecies(species) {
     const around = this._around;
     if (!around) return;
-    this._around = { ...around, species, obs: null };
+    this._around = { ...around, species, obs: null, thumb: null };
     if (!species) return;
+    // No photo of iNaturalist's under a free licence (its default one, CC BY-NC, is never shown): the flora's
+    // thumbnail on its points, with its credit — never a bare dot for a plant the app has a photo of.
+    if (!species.photo && species.plantId) db.get('plants', species.plantId).then(plant => {
+      const t = /** @type {any} */ (plant)?.thumbnail;
+      if (t?.url && this._around?.species === species) this._around = { ...this._around, thumb: { url: t.url, credit: thumbCredit(t) } };
+    }, () => {});
     try {
       const obs = await observationsAround(species.taxonId, around.center, around.radius);
       if (this._around?.species === species) this._around = { ...this._around, obs };
@@ -368,8 +375,9 @@ export class GfMapPage extends LitElement {
   get #area() {
     const a = this._around;
     if (!a) return null;
-    // The species picked: its photo on each of its observations (when photos are on).
-    const photo = a.species?.photo && this.#store.state.modules.photos[this.#store.state.mode] ? a.species.photo : null;
+    // The species picked: its photo on each of its observations (when photos are on) — iNaturalist's, else the flora's.
+    const own = a.species?.photo || a.thumb?.url || null;
+    const photo = own && this.#store.state.modules.photos[this.#store.state.mode] ? own : null;
     const m = this.#areaMemo;
     if (m && m.center === a.center && m.radius === a.radius && m.obs === a.obs && m.species === a.species && m.photo === photo) return m.value;
     const name = a.species ? a.species.common || a.species.name : '';
@@ -378,7 +386,7 @@ export class GfMapPage extends LitElement {
       radius: a.radius,
       photo,
       // Its credit (author, licence: a free one, nearby.js), on each point's card.
-      credit: photo ? a.species?.credit || null : null,
+      credit: !photo ? null : a.species?.photo ? a.species.credit || null : a.thumb?.credit || null,
       points: (a.obs || []).map(o => ({ coordinates: o.coordinates, title: name + (o.date ? ' · ' + shortDate(o.date) : ''), url: o.url,
         common: a.species?.common || null, sci: a.species?.name || '', date: o.date || null }))
     };

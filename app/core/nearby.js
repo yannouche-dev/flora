@@ -7,7 +7,7 @@ import * as cache from './cache.js';
 import * as db from './db.js';
 import { ModuleOffError, moduleOn } from './modules.js';
 import { fetchJson } from './net.js';
-import { inatCredit } from './credit.js';
+import { inatCredit, thumbCredit } from './credit.js';
 
 const API = 'https://api.inaturalist.org/v1';
 /** Results kept a day (offline: an older copy is better than nothing). */
@@ -56,7 +56,7 @@ const genusOf = (/** @type {string} */ name) => {
   return (first === 'x' || first === '×') && second ? '× ' + second : first || null;
 };
 
-/** @typedef {{ id: number, family: string, genus: string }} FloraMatch */
+/** @typedef {{ id: number, family: string, genus: string, thumbnail: any }} FloraMatch */
 
 /** @type {Promise<{ exact: Map<string, FloraMatch>, loose: Map<string, FloraMatch> }> | null} */
 let index = null;
@@ -68,7 +68,8 @@ let index = null;
  */
 function nameIndex() {
   index ??= db.getAll('plants').then(plants => {
-    const match = (/** @type {any} */ p) => ({ id: p.id, family: p.family, genus: p.genus });
+    // Its bundled thumbnail (plants.json) too: the photo of an observation iNaturalist gives none under a free licence.
+    const match = (/** @type {any} */ p) => ({ id: p.id, family: p.family, genus: p.genus, thumbnail: p.thumbnail?.url ? p.thumbnail : null });
     /** @type {Map<string, FloraMatch>} */ const exact = new Map();
     /** @type {Map<string, FloraMatch>} */ const loose = new Map();
     /** @type {Map<string, number>} */ const rank = new Map();
@@ -201,34 +202,57 @@ export function observationsInBox(taxonId, [w, s, e, n], signal) {
 
 /**
  * Where plants were observed in the circle: the 100 most recent research-grade observations (every species), each
- * with its photo, names, date and place — for a map behind the distance chosen —, and how many there are in all.
- * Cached for a day like the rest.
+ * with its plant's photo, names, date and place — for a map behind the distance chosen —, and how many there are in
+ * all. Cached for a day like the rest.
  * @param {[number, number]} point @param {number} radius @param {AbortSignal} [signal]
  * @returns {Promise<{ points: AroundPoint[], total: number }>}
  */
-export function observationPointsAround(point, radius, signal) {
-  if (!moduleOn('inaturalist')) return Promise.reject(new ModuleOffError('inaturalist'));
-  // « around-points5 »: the points cached before the licences were read are not used again.
-  return cached(`around-points5:${area(point, radius)}`, async () => {
+export async function observationPointsAround(point, radius, signal) {
+  if (!moduleOn('inaturalist')) throw new ModuleOffError('inaturalist');
+  // « around-points6 »: the points cached with the observations' own photos are not used again.
+  const found = await cached(`around-points6:${area(point, radius)}`, async () => {
     const data = await json(`${API}/observations?${area(point, radius)}&iconic_taxa=Plantae&quality_grade=research&locale=fr&per_page=100&order_by=observed_on`, signal);
     const points = (data.results || []).filter(o => Array.isArray(o.geojson?.coordinates)).map(o => {
       const url = o.uri || `https://www.inaturalist.org/observations/${o.id}`;
-      // The observation's first photo under a free licence, else the taxon's (free too), else none: a leaf.
-      const own = (o.photos || []).find((/** @type {any} */ p) => p?.url && inatCredit(p));
-      const taxon = !own && o.taxon?.default_photo?.square_url && inatCredit(o.taxon.default_photo) ? o.taxon.default_photo : null;
-      const photo = own?.url || taxon?.square_url || null;
+      // The plant's photo, never the observation's own (most are under iNaturalist's default licence, CC BY-NC, never
+      // shown: the points were leaves but for the plant chosen's): its taxon's under a free licence — the one its card
+      // shows (speciesAround) —, else the flora's (withThumbs). One address a plant, shared by all its points.
+      const taxon = o.taxon?.default_photo?.square_url && inatCredit(o.taxon.default_photo) ? o.taxon.default_photo : null;
       const common = o.taxon?.preferred_common_name || null, sci = o.taxon?.name || '';
       return {
         coordinates: /** @type {[number, number]} */ (o.geojson.coordinates),
         title: common || sci || 'Plante', common, sci, taxonId: o.taxon?.id ?? null,
-        photo: photo ? photo.replace(/\/(square|thumb|small|medium)\./, '/square.') : null,
-        credit: own ? inatCredit(own, url) : taxon ? inatCredit(taxon) : null,
+        photo: taxon ? String(taxon.square_url).replace(/\/(square|thumb|small|medium)\./, '/square.') : null,
+        credit: taxon ? inatCredit(taxon) : null,
         date: o.observed_on || null, place: o.place_guess || null,
         url
       };
     });
     return { points, total: Number(data.total_results) || points.length };
   });
+  return withThumbs(found);
+}
+
+/**
+ * The points whose plant iNaturalist gives no photo for under a free licence get its thumbnail from the flora
+ * (plants.json, with its credit) — one address a plant, the one its card and the plant chosen show —, matched by name;
+ * a plant the flora does not know, or without a thumbnail, stays a leaf. Done after the cache (the cached points are iNaturalist's alone; the flora may change meanwhile),
+ * never changing them (a new object for each point given a photo).
+ * @param {{ points: AroundPoint[], total: number }} found @returns {Promise<{ points: AroundPoint[], total: number }>}
+ */
+async function withThumbs(found) {
+  if (found.points.every(p => p.photo)) return found;
+  const names = await nameIndex().catch(() => null);
+  if (!names) return found;
+  /** @type {Map<string, FloraMatch | undefined>} */
+  const seen = new Map();
+  const points = found.points.map(p => {
+    if (p.photo || !p.sci) return p;
+    if (!seen.has(p.sci)) seen.set(p.sci, lookup(names, p.sci));
+    const thumb = seen.get(p.sci)?.thumbnail;
+    return thumb ? { ...p, photo: /** @type {string} */ (thumb.url), credit: thumbCredit(thumb) } : p;
+  });
+  return { ...found, points };
 }
 
 /**

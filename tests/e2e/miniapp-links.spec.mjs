@@ -26,8 +26,10 @@ async function answerPoints(page) {
     const results = Array.from({ length: 20 }, (_, i) => ({
       id: 500 + i, uri: `https://www.inaturalist.org/observations/${500 + i}`, observed_on: '2026-05-0' + (1 + (i % 9)),
       geojson: { coordinates: [2.35 + ((i % 5) - 2) * 0.003, 48.85 + (Math.floor(i / 5) - 1.5) * 0.002] },
-      taxon: { id: 1000 + i, name: 'Urtica dioica', preferred_common_name: 'Ortie' },
-      photos: [{ id: i, url: `https://inaturalist-open-data.s3.amazonaws.com/photos/${900 + i}/square.jpg`, license_code: 'cc-by', attribution: '(c) Anne Martin' }]
+      // The plant's photo (its taxon's: a point never shows the observation's own).
+      taxon: { id: 1000 + i, name: 'Urtica dioica', preferred_common_name: 'Ortie',
+        default_photo: { id: i, square_url: `https://inaturalist-open-data.s3.amazonaws.com/photos/${900 + i}/square.jpg`, license_code: 'cc-by', attribution: '(c) Anne Martin' } },
+      photos: []
     }));
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ total_results: 20, results }) });
   });
