@@ -10,6 +10,7 @@ import './history.js';
  *   | { name: 'spot', id: string, add: number | null, pick: boolean }
  *   | { name: 'shared', data: string } | { name: 'discover' }
  *   | AppRoute
+ *   | { name: 'layout', spec: string, search: string }
  *   | { name: 'not-found' }} Route
  */
 
@@ -77,6 +78,10 @@ export function parse(hash) {
   if (was) return { name: 'app', id: was, step: was !== 'parcours' && params.has('p') ? 'cards' : null, plant: number('p'), view: null, media: null, sheet: was === 'rencontres' && params.has('p') };
   // « Découvrir »: the list of the ways to play (any other scenario, Scientifique's old ?s=science among them: the list too).
   if (path === 'discover') return { name: 'discover' };
+  // « Disposition libre » (app/layout): #/layout/<layout>?<state> — the layout as written (app/layout/grammar.js),
+  // its live state (plant, scope, search) read by the layout itself (app/layout/state.js).
+  const layout = /^layout(?:\/(.*))?$/s.exec(path);
+  if (layout) return { name: 'layout', spec: layout[1] ?? '', search };
   return { name: 'not-found' };
 }
 
@@ -144,7 +149,13 @@ export const href = {
     if (more.sheet) params.set('fiche', '1');
     const search = params.toString();
     return '#/app/' + id + (step ? '/' + step : '') + (search ? '?' + search : '');
-  }
+  },
+  /**
+   * A free layout (« Disposition libre »): its text (app/layout/grammar.js; brackets, parentheses, « @ » and « = » kept
+   * as they are, anything else an address may not hold encoded) and its state (app/layout/state.js, already encoded).
+   * @param {string} spec @param {string} [search]
+   */
+  layout: (spec, search = '') => '#/layout/' + spec.replace(/[^\w\-.~!$&'()*+,;=:@[\]]/g, c => encodeURIComponent(c)) + (search ? '?' + search : '')
 };
 
 /** Lit ReactiveController exposing the current route and re-rendering on navigation. */

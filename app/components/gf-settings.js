@@ -25,6 +25,7 @@ import { openView } from '../core/history.js';
 import { mapSettings, mapSettingsEvents, resetMapSettings, setMapSettings } from '../core/map-settings.js';
 import { hasWebGL2 } from '../core/maplibre.js';
 import { map3dOptions, map3dOptionsCss, mapRendererChoice } from './map3d-options.js';
+import { PRESETS } from '../layout/presets.js';
 
 /** French names of the icons a mode can have. */
 const ICON_NAMES = { image: 'Photo', 'list-ul': 'Liste', table: 'Tableau', images: 'Médias', map: 'Carte', leaf: 'Feuille', flower1: 'Fleur', 'diagram-3': 'Réseau', star: 'Étoile', layers: 'Couches', search: 'Loupe', crown: 'Couronne' };
@@ -76,6 +77,10 @@ export class GfSettings extends LitElement {
     details { margin-top: 10px; }
     summary { cursor: pointer; }
     label.file { position: relative; }
+    .layouts { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
+    .layouts a { display: grid; gap: 2px; padding: 8px 12px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-sm); background: var(--gf-surface); text-decoration: none; }
+    .layouts a:hover { border-color: var(--gf-accent); }
+    .layouts small { color: var(--gf-text-muted); }
     label.file input { position: absolute; width: 1px; height: 1px; opacity: 0; }
     label.file:focus-within { box-shadow: var(--gf-focus); }
     .mode-line { display: flex; align-items: center; gap: 10px; }
@@ -539,6 +544,16 @@ export class GfSettings extends LitElement {
         @change=${() => setShowSteps(key)} /> ${label}${note ? html` <small class="muted">(${note})</small>` : nothing}</label>`)}
     </fieldset>`;
   }
+  /** « Disposition libre » (app/layout): the ready-made layouts, and one of one's own. */
+  #layouts() {
+    return html`<h2 id="disposition">Disposition libre</h2>
+      <p class="muted">Un écran à composer avec les outils de GeoFlora côte à côte — la carte, la recherche, la fiche ou une seule de ses rubriques, les photos,
+        les cartes à swiper —, tous reliés : une plante choisie dans l’un s’affiche dans tous les autres, la zone choisie sur la carte filtre la recherche.
+        Colonnes et lignes se redimensionnent ; la disposition s’écrit dans l’adresse, un lien la partage telle quelle.</p>
+      <ul class="layouts">${PRESETS.map(p => html`<li><a href=${href.layout(p.spec)}><b>${p.title}</b><small>${p.about}</small></a></li>`)}</ul>
+      <p><a class="button" href=${href.layout('')}>${icon('pencil')} Composer la mienne</a></p>`;
+  }
+
   render() {
     const { meta, offline } = this.#store.state;
     return html`
@@ -547,6 +562,7 @@ export class GfSettings extends LitElement {
         <h1>À propos et réglages</h1>
         <p class="muted"><a href=${href.legal()}>${icon('shield-check')} Mentions légales et confidentialité</a> : qui publie GeoFlora, ce qui reste sur cet appareil, ce que reçoit chaque service en ligne (votre position surtout).</p>
         ${this.#firstSteps()}
+        ${this.#layouts()}
         ${this.#king()}
 
         <h2>Données</h2>

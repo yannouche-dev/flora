@@ -1,0 +1,235 @@
+// « Disposition libre » (app/layout): the grammar of a layout written in the address (grammar.js), what its cells are
+// (registry.js: names in English or French, parameters checked, an unknown component a placeholder, never a throw),
+// the live state beside it (state.js: plant, scope, search), and the router's route. A layout read and written back is
+// the same; whatever is typed, something sound comes out, with what was wrong said in French.
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import * as G from '../../app/layout/grammar.js';
+import { COMPONENTS, distanceText, names, parseDistance, resolve, resolveTree } from '../../app/layout/registry.js';
+import { liveSearch, readLive, readQuery } from '../../app/layout/state.js';
+import { PRESETS } from '../../app/layout/presets.js';
+import { href, parse as route } from '../../app/core/router.js';
+import { fromHash } from '../../app/core/query.js';
+import { random } from './support/random.mjs';
+
+/** A layout typed → its canonical text (resolved) and what was wrong. @param {string} text */
+function read(text) {
+  const p = G.parse(text);
+  const r = resolveTree(p.tree);
+  return { text: G.serialize(r.tree), errors: p.errors.map(e => e.message), problems: r.problems.map(x => x.message), tree: r.tree, cells: r.cells };
+}
+
+test('les exemples de la demande : colonnes, une colonne coupée en lignes, paramètres et rubriques', () => {
+  const a = read('[map:radius(20), search, fiche]');
+  assert.equal(a.text, '[map(r=20km),search,plant]');
+  assert.deepEqual([a.errors, a.problems], [[], []]);
+  const b = read('[map:radius(20), search, [plant:wiki:categorie, plant:calendrier]]');
+  assert.equal(b.text, '[map(r=20km),search,[plant.wikipedia,plant.calendar]]');
+  assert.deepEqual(b.errors, []);
+  assert.match(b.problems[0], /« categorie » ignoré/);
+  assert.equal(G.dirAt(0), 'row');
+  assert.equal(G.dirAt(1), 'col');
+  assert.equal(/** @type {any} */ (G.nodeAt(b.tree, [2])).t, 'list', 'la 3e colonne est une liste de deux lignes');
+});
+
+test('crochets extérieurs facultatifs ; une liste seule en haut est la disposition ; [[a,b]] : une colonne de deux lignes', () => {
+  assert.equal(read('map,search').text, '[map,search]');
+  assert.equal(read('[map,search]').text, '[map,search]');
+  const one = read('[[map,search]]');
+  assert.equal(one.text, '[[map,search]]');
+  assert.equal(one.tree.kids.length, 1);
+  // A list of one cell inside another is the cell; its share kept.
+  assert.equal(read('[map,[search]@30]').text, '[map,search@30]');
+  // A list next to cells at the top: a column of rows.
+  assert.equal(read('[map,search],plant').text, '[[map,search],plant]');
+});
+
+test('noms et valeurs en français ou en anglais, casse et accents indifférents ; écrits sous leur forme canonique', () => {
+  assert.equal(read('Carte(Plan), RECHERCHE(filtres), Résultats(grille), Médias(mosaïque), Plante(scientifique)').text,
+    '[map(base=plan),search(filters=1),results(view=grid),media(style=mosaic),plant(mode=scientific)]');
+  assert.equal(read('[lieu(rayon=500 m),cartes,plant.Usages,plant.sosies,plant.repartition]').text,
+    '[place(r=500m),deck,plant.uses,plant.lookalikes,plant.occurrences]');
+  // A decimal comma (« 2,5 ») is one; between parameters, a comma or « ; ».
+  assert.equal(read('map(r=2,5km;base=photo)').text, '[map(r=2.5km,base=photo)]');
+  assert.equal(read('map(r=2.5km,base=photo)').text, '[map(r=2.5km,base=photo)]');
+  assert.match(read('map(2km,5km)').problems[0], /donné deux fois/);
+});
+
+test('tailles : @n en %, les autres se partagent le reste ; écrites et relues', () => {
+  const t = /** @type {G.ListNode} */ (G.parse('[map@60,search,plant]').tree);
+  const sh = G.shares(t);
+  assert.deepEqual(sh.map(x => Math.round(x * 100)), [60, 20, 20]);
+  assert.deepEqual(G.shares(/** @type {G.ListNode} */ (G.parse('[a,b]').tree)).map(x => x * 2), [1, 1]);
+  // Shares kept for it (a separator dragged) when the text gives none; the text's win otherwise.
+  assert.deepEqual(G.shares(/** @type {G.ListNode} */ (G.parse('[a,b]').tree), [3, 1]).map(x => x * 4), [3, 1]);
+  assert.deepEqual(G.shares(t, [1, 1, 1]).map(x => Math.round(x * 100)), [60, 20, 20]);
+  // Over 100: each unnamed one the mean of those given.
+  assert.deepEqual(G.shares(/** @type {G.ListNode} */ (G.parse('[a@80,b@40,c]').tree)).map(x => Math.round(x * 180)), [80, 40, 60]);
+  assert.equal(read('[map@33.333,search@66,plant@1%]').text, '[map@33.3,search@66,plant@1]');
+  const set = G.setShares(t, [], [1, 2, 1]);
+  assert.equal(G.serialize(set), '[map@25,search@50,plant@25]');
+  assert.equal(G.serialize(G.setShares(set, [], null)), '[map,search,plant]');
+  assert.equal(G.shapeKey(set), '[map,search,plant]', 'la forme ne dépend ni des tailles ni des paramètres');
+});
+
+test('erreurs : jamais d’exception, la disposition lue au mieux et ce qui ne va pas dit (position comprise)', () => {
+  const cases = [
+    ['[map,search', '[map,search]', /Crochet fermant « \] » manquant/],
+    ['[map,search]]', '[map,search]', /Crochet « \] » en trop/],
+    ['map(r=2km,search', '[map(r=2km,search)]', /Parenthèse fermante/],
+    ['[map,,search]', '[map,search]', null],
+    ['[map search]', '[map,search]', /Virgule attendue/],
+    ['[map,?,search]', '[map,search]', /Caractère « \? » inattendu/],
+    ['[map@,search]', '[map,search]', /Taille attendue/],
+    ['map(=plan)', '[map]', /sans nom/],
+    ['[]', '[]', /Disposition vide/],
+    ['', '[]', /Disposition vide/],
+    ['[a,[b,[c,[d,[e,f]]]]]', '[a,[b,[c,[d,e,f]]]]', /Trop d’imbrication/]
+  ];
+  for (const [text, out, error] of cases) {
+    const p = G.parse(text);
+    assert.equal(G.serialize(p.tree), out, text);
+    if (error) assert.ok(p.errors.some(e => /** @type {RegExp} */ (error).test(e.message)), `${text}: ${p.errors.map(e => e.message).join(' | ')}`);
+    else assert.deepEqual(p.errors, [], text);
+    for (const e of p.errors) assert.ok(e.at >= 0 && e.at <= text.length, `${text}: position ${e.at}`);
+  }
+  // Too many cells: the first MAX_CELLS kept.
+  const many = G.parse(Array.from({ length: G.MAX_CELLS + 3 }, (_, i) => 'c' + i).join(','));
+  assert.equal(G.cells(many.tree).length, G.MAX_CELLS);
+  assert.ok(many.errors.some(e => /Trop de composants/.test(e.message)));
+  // Percent-encoded (a link pasted): read as decoded; a stray « % » kept.
+  assert.equal(G.serialize(G.parse('%5Bmap%2C%5Bsearch%2Cplant%5D%5D').tree), '[map,[search,plant]]');
+  assert.equal(G.parse('map(%zz)').errors.length, 0);
+});
+
+test('composant inconnu : une case qui le dit et propose le plus proche ; paramètres et valeurs vérifiés', () => {
+  const r = resolve(G.cell('mpa'));
+  assert.equal(r.known, false);
+  assert.equal(/** @type {any} */ (r).suggestion, 'map');
+  assert.equal(/** @type {any} */ (resolve(G.cell('serch'))).suggestion, 'search');
+  assert.equal(/** @type {any} */ (resolve(G.cell('zzzz'))).suggestion, null);
+  assert.equal(read('[foo,map]').text, '[foo,map]', 'son nom reste, pour être corrigé');
+  const bad = read('[map(r=loin,base=nuit,zoom=3),plant.inconnue,results(table),search(1,list=non)]');
+  assert.equal(bad.text, '[map,plant,results(view=grid),search(filters=1,list=0)]');
+  assert.deepEqual(bad.problems, [
+    'Carte : « loin » n’est pas une valeur de rayon de la zone (attendu : une distance (500m, 2km)).',
+    'Carte : « nuit » n’est pas une valeur de fond de carte (attendu : photo, plan).',
+    'Carte : paramètre inconnu « zoom ».',
+    'Fiche : rubrique inconnue « inconnue » — la fiche entière est montrée.'
+  ]);
+  // Defaults, and the parameters given.
+  const map = resolve(G.cell('map'));
+  assert.ok(map.known && map.params.r === null && map.params.base === null && map.given.size === 0);
+  const plant = resolve(G.cell('plant', 'calendrier'));
+  assert.ok(plant.known && plant.view?.key === 'calendar' && plant.title === 'Calendrier');
+});
+
+test('distances : 500m, 2km, 2,5 km, un nombre seul en km ; bornées de 100 m à 50 km', () => {
+  assert.equal(parseDistance('500m'), 500);
+  assert.equal(parseDistance('2km'), 2000);
+  assert.equal(parseDistance('2,5 km'), 2500);
+  assert.equal(parseDistance('20'), 20000);
+  assert.equal(parseDistance('5m'), 100);
+  assert.equal(parseDistance('900'), 50000);
+  assert.equal(parseDistance('loin'), null);
+  assert.equal(distanceText(500), '500m');
+  assert.equal(distanceText(2500), '2.5km');
+  assert.equal(parseDistance(distanceText(1234)), 1200);
+});
+
+test('chaque nom du registre se lit, et les modèles sont des dispositions sans remarque', () => {
+  for (const n of names()) {
+    const r = read(n);
+    assert.equal(r.text, '[' + n + ']', n);
+    assert.deepEqual([...r.errors, ...r.problems], [], n);
+  }
+  assert.ok(COMPONENTS.every(c => c.title && c.icon && c.about && c.reads.length && c.min.w > 0));
+  for (const p of PRESETS) {
+    const r = read(p.spec);
+    assert.deepEqual([...r.errors, ...r.problems], [], p.id);
+    assert.equal(r.text, p.spec, `${p.id} : écrit sous sa forme canonique`);
+  }
+});
+
+/** A random layout (names of the registry, views, parameters, shares). @param {(n: number) => number} rnd @param {number} depth @returns {G.LayoutNode} */
+function randomNode(rnd, depth) {
+  if (depth < G.MAX_DEPTH && rnd(3) === 0) {
+    const kids = Array.from({ length: 2 + rnd(2) }, () => randomNode(rnd, depth + 1));
+    return G.list(kids, rnd(3) === 0 ? 10 + rnd(60) : null);
+  }
+  const all = names();
+  const [name, view] = all[rnd(all.length)].split('.');
+  const params = name === 'map' && rnd(2) ? [{ key: 'r', value: ['500m', '2km', '10km'][rnd(3)] }] : name === 'results' && rnd(2) ? [{ key: 'view', value: 'grid' }] : [];
+  return G.cell(name, view ?? null, params, rnd(4) === 0 ? 5 + rnd(50) : null);
+}
+
+test('aller-retour : parse(serialize(t)) redonne t, pour 300 dispositions tirées au hasard', () => {
+  const rnd = random(20261014);
+  for (let n = 0; n < 300; n++) {
+    const tree = G.normalize(G.list(Array.from({ length: 1 + rnd(4) }, () => randomNode(rnd, 1))));
+    const text = G.serialize(tree);
+    const back = G.parse(text);
+    assert.deepEqual(back.errors, [], text);
+    assert.deepEqual(G.strip(back.tree), G.strip(tree), text);
+    assert.equal(G.serialize(back.tree), text);
+    // Resolved (canonical) and written again: the same text.
+    assert.equal(G.serialize(resolveTree(back.tree).tree), text, text);
+  }
+});
+
+test('l’éditeur : une cellule à côté ou dessous, retirée, déplacée ; les bornes tenues', () => {
+  let t = G.parse('[map,search]').tree;
+  t = G.splitAt(t, [1], 'col', G.cell('plant'));
+  assert.equal(G.serialize(t), '[map,[search,plant]]', 'dessous : la colonne devient deux lignes');
+  t = G.splitAt(t, [1, 1], 'col', G.cell('media'));
+  assert.equal(G.serialize(t), '[map,[search,plant,media]]', 'dessous dans une colonne : une ligne de plus');
+  t = G.splitAt(t, [1, 1], 'row', G.cell('deck'));
+  assert.equal(G.serialize(t), '[map,[search,[plant,deck],media]]', 'à côté dans une colonne : la ligne coupée en deux');
+  t = G.splitAt(t, [0], 'row', G.cell('place'));
+  assert.equal(G.serialize(t), '[map,place,[search,[plant,deck],media]]');
+  t = G.moveAt(t, [1], -1);
+  assert.equal(G.serialize(t), '[place,map,[search,[plant,deck],media]]');
+  assert.equal(G.serialize(G.moveAt(t, [0], -1)), G.serialize(t), 'rien avant la première');
+  t = G.removeAt(t, [2, 1, 0]);
+  assert.equal(G.serialize(t), '[place,map,[search,deck,media]]', 'une ligne d’une seule cellule devient la cellule');
+  t = G.replaceAt(t, [2, 1], G.cell('plant', 'wikipedia'));
+  assert.equal(G.serialize(t), '[place,map,[search,plant.wikipedia,media]]');
+  // A shared share is halved.
+  assert.equal(G.serialize(G.splitAt(G.parse('[map@60,search@40]').tree, [0], 'row', G.cell('plant'))), '[map@30,plant@30,search@40]');
+  // Bounds: no cell past MAX_CELLS, no list past MAX_DEPTH.
+  const full = G.parse(Array.from({ length: G.MAX_CELLS }, () => 'map').join(',')).tree;
+  assert.equal(G.splitAt(full, [0], 'row', G.cell('plant')), full);
+  const deep = G.parse('[a,[b,[c,[d,e]]]]').tree;
+  assert.equal(G.splitAt(deep, [1, 1, 1, 0], 'row', G.cell('f')), deep);
+  assert.deepEqual(G.cells(G.removeAt(G.parse('[map]').tree, [0])), []);
+});
+
+test('l’état dans l’adresse : plante, zone, observation, recherche — lus et écrits, le reste ignoré', () => {
+  const live = readLive('p=81541&at=48.85,2.35&r=1km&place=Paris%2010e&o=12345&q=ortie&family=Urticaceae');
+  assert.deepEqual(live, { plant: 81541, at: [2.35, 48.85], r: 1000, place: 'Paris 10e', obs: '12345' });
+  const query = readQuery('p=81541&q=ortie&family=Urticaceae&sort=sci');
+  assert.equal(query.q, 'ortie');
+  assert.deepEqual(query.filters.family, ['Urticaceae']);
+  const search = liveSearch(live, query);
+  assert.equal(search, 'p=81541&at=48.85000,2.35000&r=1km&place=Paris+10e&o=12345&q=ortie&family=Urticaceae&sort=sci');
+  assert.deepEqual(readLive(search), live);
+  // No scope: no radius nor place written; the default radius when the state has none.
+  assert.equal(liveSearch({ plant: null, at: null, r: 5000, place: 'X', obs: null }, fromHash('#/')), '');
+  assert.equal(liveSearch({ plant: null, at: [2, 48], r: null, place: null, obs: null }, fromHash('#/'), 500), 'at=48.00000,2.00000&r=500m');
+  // Wrong values left out.
+  assert.deepEqual(readLive('p=abc&at=200,2&r=loin&o=<x>'), { plant: null, at: null, r: null, place: null, obs: null });
+  assert.deepEqual(readLive('p=0&at=48.8'), { plant: null, at: null, r: null, place: null, obs: null });
+});
+
+test('le routeur : #/layout/<disposition>?<état>, aller-retour par href.layout', () => {
+  const spec = '[map(r=2km),search,[plant.wikipedia,plant.calendar]]';
+  const url = href.layout(spec, 'p=1&q=ortie');
+  assert.equal(url, '#/layout/' + spec + '?p=1&q=ortie', 'crochets, parenthèses, = et @ restent lisibles');
+  assert.deepEqual(route(url), { name: 'layout', spec, search: 'p=1&q=ortie' });
+  assert.deepEqual(route('#/layout'), { name: 'layout', spec: '', search: '' });
+  assert.deepEqual(route('#/layout/'), { name: 'layout', spec: '', search: '' });
+  // What an address may not hold is encoded, and read back.
+  const odd = href.layout('[carte(r=2 km),médias]');
+  assert.equal(odd, '#/layout/[carte(r=2%20km),m%C3%A9dias]');
+  assert.equal(read(/** @type {any} */ (route(odd)).spec).text, '[map(r=2km),media]');
+});

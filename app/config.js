@@ -71,7 +71,9 @@ export const config = {
     // Storing the flora failed for lack of room: the free space then (bytes), so it is not downloaded again in vain.
     datasetQuota: 'geoflora.datasetQuota',
     // The media viewer, wide: the width of « À propos de l’image » beside the image.
-    mediaLayout: 'geoflora.mediaLayout'
+    mediaLayout: 'geoflora.mediaLayout',
+    // « Disposition libre » (app/layout): the shares given to the columns and rows of each layout, by its shape.
+    freeLayout: 'geoflora.freeLayout'
   },
 
   /**
@@ -80,7 +82,7 @@ export const config = {
    * (A mini-app's layouts are under its own prefix, storageKeys.appPrefix.)
    */
   paneLayouts: ['geoflora.discoverLayout', 'geoflora.trailLayout', 'geoflora.floraLayout', 'geoflora.collectionsLayout',
-    'geoflora.mapLayout', 'geoflora.placeLayout', 'geoflora.mediaLayout'],
+    'geoflora.mapLayout', 'geoflora.placeLayout', 'geoflora.mediaLayout', 'geoflora.freeLayout'],
 
   /** GPS fixes at or under this accuracy (metres) are considered good enough to save. */
   goodAccuracy: 15,

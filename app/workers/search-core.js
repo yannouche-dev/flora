@@ -290,11 +290,14 @@ const facetValue = (entry, facet, mine) => facet === 'mine' ? (mine[entry.summar
 const matchesFacet = (value, set) => Array.isArray(value) ? value.some(v => set.has(v)) : set.has(value);
 
 /**
+ * `only`: the plants the search is kept to (a free layout's scope: those observed around a place, app/layout), every
+ * count and facet within them; none: the whole flora.
  * @param {Index} index
- * @param {{ q: string, filters: Record<string, string[]>, sort: string, membership?: Record<number, string[]> }} params
+ * @param {{ q: string, filters: Record<string, string[]>, sort: string, membership?: Record<number, string[]>, only?: number[] | null }} params
  */
-export function search(index, { q: query, filters, sort, membership: mine = {} }) {
+export function search(index, { q: query, filters, sort, membership: mine = {}, only = null }) {
   const { entries } = index;
+  const kept = only ? new Set(only) : null;
   const q = normalize(query);
   const tokens = words(q);
 
@@ -333,6 +336,7 @@ export function search(index, { q: query, filters, sort, membership: mine = {} }
   const candidates = matches ? matches.keys() : entries.keys();
   for (const i of candidates) {
     const entry = entries[i];
+    if (kept && !kept.has(entry.summary.id)) continue;
     let failures = 0;
     let failed = '';
     for (const [facet, set] of active) {
