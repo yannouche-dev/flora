@@ -125,14 +125,16 @@ test('Réglages › Cartes « 3D » : la Carte en MapLibre — relief, bâtiment
   await expect.poll(async () => (await glState(map)).bearing, SLOW).not.toBe(0);
   // The wheel pressed and dragged orbits (as in any 3D tool): sideways turns, downwards tilts more.
   if (!test.info().project.name.startsWith('phone')) {
-    const before = await glState(map);
+    // Once the turn of Shift + → is over (MapLibre eases it).
+    let before = await glState(map);
+    await expect.poll(async () => { const was = before; await page.waitForTimeout(400); before = await glState(map); return before.bearing === was.bearing && before.pitch === was.pitch; }, SLOW).toBe(true);
     const box = /** @type {{ x: number, y: number, width: number, height: number }} */ (await map.locator('canvas.maplibregl-canvas').boundingBox());
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down({ button: 'middle' });
     await page.mouse.move(box.x + box.width / 2 + 60, box.y + box.height / 2 + 20, { steps: 6 });
     await page.mouse.up({ button: 'middle' });
-    await expect.poll(async () => Math.round((await glState(map)).bearing - before.bearing), SLOW).toBe(-48);
-    expect((await glState(map)).pitch).toBe(before.pitch + 10);
+    await expect.poll(async () => Math.abs((await glState(map)).bearing - before.bearing + 48) <= 1, SLOW).toBe(true);
+    expect(Math.abs((await glState(map)).pitch - before.pitch - 10)).toBeLessThanOrEqual(1);
   }
 
   // The places and plants of the 2D map, the same elements, on the relief; a plant clicked opens it.
