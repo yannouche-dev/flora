@@ -1,5 +1,6 @@
-// The grid of « Créer une app » (app/layout/builder-grid.js): read from and written to a layout, cut towards a side,
-// a place taken out, a share moved.
+// A free layout as boxes (app/layout/builder-grid.js, the cross of « Modifier la disposition »): read from and written
+// to a layout, cut towards a side,
+// a place taken out, a share moved — any cell kept as the address writes it, an empty place (`slot`) new.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { boxOf, specOf, split, remove, resize, canSplit, placesOf, MIN_SHARE } from '../../app/layout/builder-grid.js';
@@ -15,8 +16,11 @@ test('les trois grilles : lues, chaque part dite, réécrites telles quelles', (
   // Shared evenly: no share said; in whole per cents.
   assert.equal(specOf(/** @type {any} */ (boxOf('[slot@33.3,slot@33.3,slot]'))), '[slot,slot,slot]');
   assert.equal(specOf(/** @type {any} */ (boxOf('[slot@20.44,[slot,slot]]'))), '[slot@20,[slot,slot]@80]');
-  // Not a grid: an error, a component, nothing.
-  for (const bad of ['[slot,(', '[map,slot]', '', '[slot(r=2)]']) assert.equal(boxOf(bad), null, bad);
+  // Not a layout whole: an error, nothing.
+  for (const bad of ['[slot,(', '', '[]']) assert.equal(boxOf(bad), null, bad);
+  // A component unknown: kept as typed; an empty place's parameter it does not take: left out, as the registry says.
+  assert.equal(specOf(/** @type {any} */ (boxOf('[mpa(x=1),Emplacement]'))), '[mpa(x=1),slot]');
+  assert.equal(specOf(/** @type {any} */ (boxOf('[slot(r=2),slot]'))), '[slot,slot]');
 });
 
 test('couper : à côté dans sa liste quand elle va dans ce sens, sinon la place devient une liste de deux', () => {
@@ -66,4 +70,21 @@ test('régler : la part passe d’une boîte à la suivante, le total gardé, ja
   assert.equal(specOf(resize(g, [], 1, 10)), '[slot@40,slot@20,slot@40]');
   assert.equal(specOf(resize(g, [], 1, 100)), `[slot@${60 - MIN_SHARE},slot@${MIN_SHARE},slot@40]`);
   assert.equal(resize(g, [], 0, 10), g);
+});
+
+test('une place remplie : lue et réécrite sous sa forme canonique, gardée quand on coupe, retire ou règle', () => {
+  const g = /** @type {any} */ (boxOf('[slot@30,carte(floraison;rayon=2km)@35,[slot,fiche:wiki]]'));
+  assert.ok(g);
+  assert.equal(specOf(g), '[slot@30,map(floraison,r=2km)@35,[slot,plant.wikipedia]@35]');
+  assert.equal(g.kids[1].cell, 'map(floraison,r=2km)');
+  assert.equal(placesOf(g), 4);
+  assert.equal(specOf(/** @type {any} */ (boxOf(specOf(g)))), specOf(g));
+  // Cut across its list: the place filled first or last as asked, the new one empty.
+  assert.equal(specOf(split(g, [1], 'bottom').root), '[slot@30,[map(floraison,r=2km),slot]@35,[slot,plant.wikipedia]@35]');
+  assert.equal(specOf(split(g, [1], 'top').root), '[slot@30,[slot,map(floraison,r=2km)]@35,[slot,plant.wikipedia]@35]');
+  // Beside it in its list: kept, halved.
+  assert.equal(specOf(split(g, [1], 'right').root), '[slot@30,map(floraison,r=2km)@18,slot@18,[slot,plant.wikipedia]@35]');
+  // A list left with one filled place: the place, its cell kept.
+  assert.equal(specOf(remove(g, [2, 0])), '[slot@30,map(floraison,r=2km)@35,plant.wikipedia@35]');
+  assert.equal(specOf(resize(g, [], 1, 5)), '[slot@35,map(floraison,r=2km)@30,[slot,plant.wikipedia]@35]');
 });

@@ -210,16 +210,20 @@ test('où : un lieu de départ trouvé comme ?place= l’est, tant que l’adres
   expect(asked).toHaveLength(1);
 });
 
-test('l’éditeur : les réglages de la carte par groupe, un choix écrit dans l’adresse', async ({ app, page }) => {
-  await app.open(`#/layout/[map(terrain;r=1km),plant]?${AT}`);
-  await page.getByRole('button', { name: 'Modifier la disposition' }).click();
-  const tools = page.locator('gf-layout section.cell[data-comp="map"] .tools');
-  await tools.locator('details.params summary').click();
-  await expect(tools.locator('fieldset legend')).toHaveText(['Où', 'Fond', 'Couches', 'Points', 'Liens', 'Interface', 'Cadre']);
+test('« Créer une app » : les réglages de la carte par groupe, un choix écrit dans l’adresse', async ({ app, page }) => {
+  await app.open(`#/builder?g=[map(terrain;r=1km),plant]&${AT}`);
+  await page.locator('gf-builder gf-layout section.cell[data-comp="map"] .cell-head .pick').click();
+  const p = page.locator('gf-block-picker:not([inline])');
+  await expect(p.locator('.row b')).toHaveText(['Que montre-t-il ?', /^Où/, 'Fond', 'Couches', 'Points', 'Liens', 'Interface', 'Cadre']);
   // What the intent gives, said as such.
-  await expect(tools.locator('select[data-param="base"] option').first()).toHaveText('Fond de carte : selon l’intention (Photos aériennes)');
-  await tools.locator('select[data-param="toucher"]').selectOption('fiche');
-  await tools.locator('[data-param="layers"] input[value="znieff"]').check();
-  await page.getByRole('button', { name: 'Appliquer' }).click();
-  await expect.poll(() => layoutOf(page)).toBe('#/layout/[map(terrain,r=1km,layers=znieff,toucher=fiche),plant]');
+  await p.locator('.row[data-group="Fond"]').click();
+  await expect(p.locator('[data-param="base"] .note')).toHaveText('selon l’intention');
+  await expect(p.locator('[data-param="base"] button[data-value="photo"]')).toHaveAttribute('aria-pressed', 'true');
+  await p.locator('.back').click();
+  await p.locator('.row[data-group="Liens"]').click();
+  await p.locator('[data-param="toucher"] button[data-value="fiche"]').click();
+  await p.locator('.back').click();
+  await p.locator('.row[data-group="Couches"]').click();
+  await p.locator('[data-param="layers"] button[data-value="znieff"]').click();
+  await expect.poll(() => page.evaluate(() => new URLSearchParams(location.hash.split('?')[1] || '').get('g'))).toBe('[map(terrain,r=1km,layers=znieff,toucher=fiche),plant]');
 });

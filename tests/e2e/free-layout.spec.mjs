@@ -4,8 +4,8 @@
 // again on a reload and for the same layout opened without them), the wiring (a search keeps the results, whose
 // points the map shows; a result touched is the current plant, every plant cell shows it, the address says it, Back
 // returns to the one before; the scope's radius keeps the results to the plants observed in it; a point of the map
-// touched: its plant), the deck (its top card the current plant, a heart a favourite), the editor (live preview, a
-// component unknown said and shown, « Appliquer » a new entry), each cell's head (the icon and mark of its tab in a
+// touched: its plant), the deck (its top card the current plant, a heart a favourite), « Modifier » (« Créer une app »:
+// builder.spec.mjs), each cell's head (the icon and mark of its tab in a
 // phone's menu, its name alone read), a phone (the columns as a menu of icons on top: one
 // per column, its icons and marks, its whole name; what looked alike once, told apart; tapped, ← → Début Fin; the
 // plant's tab brought and lit; twelve columns: the menu scrolls, the tab shown in sight, the smooth scroll too; a
@@ -215,35 +215,6 @@ test.describe('un grand écran', () => {
     await expect(top).toHaveAttribute('data-id', String(plantId(ORTIE)));
   });
 
-  test('l’éditeur : le texte en aperçu direct, ce qui ne va pas dit, un composant inconnu montré ; les outils d’une case ; « Appliquer » ; Retour', async ({ app, page }) => {
-    await app.open(`#/layout/[map,search]?${AT}`);
-    await page.getByRole('button', { name: 'Modifier la disposition' }).click();
-    const field = page.locator('gf-layout #layout-text');
-    await expect(field).toHaveValue('[map,search]');
-    await field.fill('[mpa,search(filtres),[plant.wiki,plant.calendrier]');
-    // The preview: four cells, the unknown one saying so; what is wrong listed.
-    await expect(page.locator('gf-layout .editor .problems')).toContainText('Crochet fermant « ] » manquant');
-    await expect(page.locator('gf-layout .editor .problems')).toContainText('Composant inconnu « mpa » : vouliez-vous dire « map » ?');
-    await expect(cellOf(page, 'unknown')).toContainText('Composant inconnu : « mpa »');
-    await expect(cellOf(page, 'plant.calendar')).toBeVisible();
-    await expect(cellOf(page, 'search').locator('dl-search gf-filter-panel')).toBeVisible();
-    // The address is not touched while editing.
-    expect(await hash(page)).toContain('#/layout/[map,search]?');
-    // The cell's tools: the unknown one becomes the map; a cell under the search.
-    await cellOf(page, 'unknown').getByLabel('Composant').selectOption('map');
-    await expect(field).toHaveValue('[map,search(filters=1),[plant.wikipedia,plant.calendar]]');
-    await cellOf(page, 'search').getByRole('button', { name: 'Ajouter une cellule en dessous' }).click();
-    await expect(field).toHaveValue('[map,[search(filters=1),plant],[plant.wikipedia,plant.calendar]]');
-    await page.getByRole('button', { name: 'Appliquer' }).click();
-    await expect.poll(() => hash(page)).toBe('#/layout/[map,[search(filters=1),plant],[plant.wikipedia,plant.calendar]]?at=48.85000,2.35000&r=2km');
-    await expect(page.locator('gf-layout .editor')).toHaveCount(0);
-    await expect(page.locator('gf-layout section.cell')).toHaveCount(5);
-    // Back: the layout before.
-    await page.goBack();
-    await expect.poll(() => hash(page)).toContain('#/layout/[map,search]?');
-    await expect(page.locator('gf-layout section.cell')).toHaveCount(2);
-  });
-
   test('l’en-tête de chaque case : l’icône de son onglet sur un téléphone (le bloc de la fiche le sien, un composant inconnu une question), sa marque ; son nom seul lu', async ({ app, page }) => {
     // The same cells in three columns of four rows: room for them all side by side, no menu of columns.
     await app.open(`#/layout/[[map(r=2km),plant.map,media,plant.photos],[mpa,plant.status,plant.lookalikes,search(list=0)],[search(filters=1),plant.literature,plant.wikipedia,plant(epure)]]?${AT}`);
@@ -312,12 +283,6 @@ test.describe('un grand écran', () => {
     await slider.fill('5.4');
     await expect.poll(() => param(page, 'r')).toBe('10km');
     await expect(slider).toHaveValue('5');
-    // A cell's own radius between two stops, in the editor: kept and chosen, never « par défaut ».
-    await app.go(`#/layout/[map(r=3km),place]?${AT}`);
-    await page.getByRole('button', { name: 'Modifier la disposition' }).click();
-    const choice = cellOf(page, 'map').locator('.tools select[aria-label="Rayon de la zone"]');
-    await expect(choice).toHaveValue('3000');
-    await expect(choice.locator('option:checked')).toHaveText('3 km');
   });
 
   test('la grille : le badge du filtre de la colonne Photo sous son nom, jamais par-dessus ni à sa place', async ({ app, page }) => {
@@ -511,31 +476,6 @@ test.describe('le titre et un lieu en mots dans l’adresse', () => {
     await app.go('#/layout/[map(r=1km),place,results]?place=Ménétrol');
     await expect(zone).toHaveText('Lieu introuvable : Ménétrol (le géocodeur de l’IGN ne répond pas)');
     expect(await param(page, 'place')).toBe('Ménétrol');
-  });
-
-  test('le titre : absent, pas de bandeau ; « Titre » dans l’éditeur le change, l’adresse remplacée (pas de nouvelle entrée), l’onglet aussi ; « Annuler » le rend', async ({ app, page }) => {
-    await app.open(`#/layout/[search,results]?${AT}`);
-    await expect(page.locator('gf-layout .titlebar')).toHaveCount(0);
-    await expect(page.getByRole('heading', { level: 1, name: 'Disposition libre' })).toBeVisible();
-    const entries = await page.evaluate(() => history.length);
-    await page.getByRole('button', { name: 'Modifier la disposition' }).click();
-    const field = page.getByLabel('Titre', { exact: true });
-    await field.fill('Mes  plantes ');
-    await expect.poll(() => param(page, 'title')).toBe('Mes plantes');
-    await expect(page.locator('gf-layout .titlebar h1')).toHaveText('Mes plantes');
-    await expect(page).toHaveTitle('Mes plantes · GeoFlora');
-    await expect(field).toHaveValue('Mes  plantes ');
-    expect(await page.evaluate(() => history.length)).toBe(entries);
-    // Never HTML: shown as typed.
-    await field.fill('<b>Prés</b>');
-    await expect(page.locator('gf-layout .titlebar h1')).toHaveText('<b>Prés</b>');
-    await expect(page.locator('gf-layout .titlebar b')).toHaveCount(0);
-    // « Annuler »: no title again.
-    await page.getByRole('button', { name: 'Annuler' }).click();
-    await expect.poll(() => param(page, 'title')).toBe(null);
-    await expect(page.locator('gf-layout .titlebar')).toHaveCount(0);
-    await expect(page).toHaveTitle('Disposition libre — GeoFlora');
-    expect(await page.evaluate(() => history.length)).toBe(entries);
   });
 
   test('sur téléphone, le titre au-dessus du menu des colonnes', async ({ app, page }) => {

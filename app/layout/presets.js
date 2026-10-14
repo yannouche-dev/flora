@@ -1,5 +1,5 @@
 // @ts-check
-// Ready-made free layouts (« Disposition libre »): offered in Réglages, on an empty layout and in the layout's editor.
+// Ready-made free layouts (« Disposition libre »): offered in Réglages, on an empty layout and at « Créer une app »'s start.
 // Each one is only a layout as written (grammar.js): a link opens it, the editor changes it, and nothing is kept
 // but the sizes given to it on this device (sizes.js).
 

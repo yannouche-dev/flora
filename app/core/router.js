@@ -2,6 +2,7 @@
 // Hash router: deep links work on GitHub Pages without server rewrites.
 // history.js first: it marks each new entry with its depth before the app routes.
 import './history.js';
+import { GRIDS } from '../layout/gf-builder-grids.js';
 
 /**
  * @typedef {{ name: 'search' } | { name: 'plant', id: number, pane: string | null, at: number | null } | { name: 'settings' } | { name: 'legal' } | { name: 'collections', open: string | null, plant: number | null }
@@ -11,7 +12,7 @@ import './history.js';
  *   | { name: 'shared', data: string } | { name: 'discover' }
  *   | AppRoute
  *   | { name: 'layout', spec: string, search: string }
- *   | { name: 'builder', grid: string | null, spec: string | null }
+ *   | { name: 'builder', grid: string | null, spec: string | null, search: string }
  *   | { name: 'not-found' }} Route
  */
 
@@ -81,10 +82,15 @@ export function parse(hash) {
   if (path === 'discover') return { name: 'discover' };
   // « Disposition libre » (app/layout): #/layout/<layout>?<state> — the layout as written (app/layout/grammar.js),
   // its live state (plant, scope, search) read by the layout itself (app/layout/state.js).
-  // « Créer une app » (app/layout/gf-builder.js): #/builder[/<grid>][?g=<layout>], the grid chosen at its first step,
-  // and as cut and sized since (g: a layout of empty places, builder-grid.js).
+  // « Créer une app » (app/layout/gf-builder.js): #/builder[/<grid>][?g=<layout>&<state>] — the free layout being built
+  // (g=: its text, grammar.js; else the grid named: gf-builder-grids.js; neither: the builder's start), and the layout's
+  // live state beside it (p, at, r, q…: state.js), as #/layout has it.
   const builder = /^builder(?:\/([a-z][a-z0-9-]{0,23}))?$/.exec(path);
-  if (builder) return { name: 'builder', grid: builder[1] ?? null, spec: builder[1] ? params.get('g') : null };
+  if (builder) {
+    const grid = builder[1] ?? null;
+    const spec = params.get('g') ?? GRIDS.find(g => g.id === grid)?.spec ?? null;
+    return { name: 'builder', grid, spec, search: search.split('&').filter(p => p && !/^g=/.test(p)).join('&') };
+  }
   const layout = /^layout(?:\/(.*))?$/s.exec(path);
   if (layout) return { name: 'layout', spec: layout[1] ?? '', search };
   return { name: 'not-found' };
@@ -160,8 +166,12 @@ export const href = {
    * as they are, anything else an address may not hold encoded) and its state (app/layout/state.js, already encoded).
    * @param {string} spec @param {string} [search]
    */
-  /** « Créer une app »: its first step, a grid chosen or not, and as cut and sized since (`spec`). @param {string | null} [grid] @param {string | null} [spec] */
-  builder: (grid = null, spec = null) => '#/builder' + (grid ? '/' + grid + (spec ? '?g=' + spec.replace(/[^\w\-.~!$'()*,;:@[\]]/g, c => encodeURIComponent(c)) : '') : ''),
+  /**
+   * « Créer une app »: its start (no `spec`), or a layout being built (its text, g=: brackets, parentheses, « @ », « = »
+   * kept, anything else an address may not hold encoded — « + » and « & » among them) and the layout's state (already
+   * encoded). @param {string | null} [spec] @param {string} [search]
+   */
+  builder: (spec = null, search = '') => '#/builder' + (spec === null ? '' : '?g=' + spec.replace(/[^\w\-.~!$'()*,;:@[\]]/g, c => encodeURIComponent(c)) + (search ? '&' + search : '')),
   layout: (spec, search = '') => '#/layout/' + spec.replace(/[^\w\-.~!$&'()*+,;=:@[\]]/g, c => encodeURIComponent(c)) + (search ? '?' + search : '')
 };
 
