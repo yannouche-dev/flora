@@ -3,9 +3,11 @@
 // button of a 3D map shows iNaturalist's and GBIF's observations inside a circle around the view's centre — only those
 // inside, GBIF's copy of iNaturalist left out; the radius from the stepped slider (asked again, kept for that map);
 // the markers touched (a group: closer; a point: its card); the density's columns; a long press, a new centre; the
-// cache offline; and in 2D, nothing of it.
+// cache offline; and in 2D, nothing of it. Quiet (quiet.mjs): its radius and count are the chip's (its name for the
+// count) and its card's, said by the map's live region — no radius pill on the ground, no count badge over the map.
 import { test, expect, answerObservations } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
+import { mapSaid } from './quiet.mjs';
 
 test.use({ launchOptions: { args: ['--enable-unsafe-swiftshader'] } });
 // Software WebGL draws every pixel on the CPU: a smaller window on the desktop, from above-ish, flat, no flights.
@@ -98,10 +100,13 @@ test('en 3D, « Observations autour » : iNaturalist et GBIF dans le cercle seul
   st = await obs(map);
   expect(st.onMarkers + st.seeds).toBe(st.points);
   await expect(map.locator('.gf-o3-mk .gf-obs-leaf').first()).toBeAttached();
-  await expect(map.locator('.gf-o3-rlabel')).toHaveText('2 km');
+  // The radius: the chip's (no pill left on the ground); the count: in its name, said by the map — not a badge.
+  await expect(map.locator('.gf-o3-rlabel')).toHaveCount(0);
   const chip = map.locator('.gf-o3-chip');
   await expect(chip).toContainText('2 km');
-  await expect(chip).toContainText('84');
+  await expect(chip).not.toContainText('84');
+  await expect(chip).toHaveAttribute('aria-label', /^Observations autour : 2 kilomètres, 84 observations\./);
+  await expect(mapSaid(map)).toContainText('Observations autour : 84 observations dans le cercle');
 
   // The plant a page shows (its highlight): its observations lit, markers before any other.
   await map.evaluate(m => { /** @type {any} */ (m).highlight = { key: 'hl', points: [], sci: 'Urtica dioica', common: 'Ortie dioïque' }; });
@@ -131,6 +136,14 @@ test('en 3D, « Observations autour » : iNaturalist et GBIF dans le cercle seul
   const panel = map.locator('.gf-o3-panel');
   await expect(panel).toBeVisible();
   await expect(panel).toContainText('Autour du centre de la vue');
+  // Its count, in the card the user opened (its state: kept there); its long press, a hint once per device, and the
+  // title of « Centrer ici ».
+  await expect(panel.locator('.gf-o3-count')).toContainText('84 observations dans le cercle');
+  await expect(panel.locator('.gf-o3-count')).not.toHaveAttribute('aria-live', /./);
+  await expect(panel.locator('.hint-once')).toContainText('Appui long sur la carte : nouveau centre.');
+  await expect(panel.getByRole('button', { name: 'Centrer ici' })).toHaveAttribute('title', /appui long sur la carte : nouveau centre/);
+  await panel.locator('.hint-once').getByRole('button', { name: 'Masquer l’astuce' }).click();
+  await expect(panel.locator('.hint-once')).toHaveCount(0);
   const slider = panel.getByRole('slider', { name: 'Rayon autour du centre' });
   await expect(slider).toHaveAttribute('aria-valuetext', '2 kilomètres');
   await slider.fill('4');
@@ -139,7 +152,7 @@ test('en 3D, « Observations autour » : iNaturalist et GBIF dans le cercle seul
   await expect.poll(async () => (await obs(map)).farthest, SLOW).toBeGreaterThan(2000);
   st = await obs(map);
   expect(st.farthest).toBeLessThanOrEqual(5000);
-  await expect(map.locator('.gf-o3-rlabel')).toHaveText('5 km');
+  await expect(chip).toContainText('5 km');
   await expect(panel.locator('.gf-o3-value')).toHaveText('5 km');
   expect(await page.evaluate(() => JSON.parse(localStorage.getItem('geoflora.around3d') || '{}')['gf-map-page'])).toMatchObject({ on: true, radius: 5000 });
 

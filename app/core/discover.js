@@ -14,6 +14,7 @@ import { config } from '../config.js';
 import { clearAroundGames, migrateDiscover } from './around-sessions.js';
 import { listCollections, spotEvents, FAVORITES_ID } from './collections.js';
 import { onStorage } from './sync.js';
+import { forgetHints } from './hints.js';
 
 const KEY = 'geoflora.discover';
 /** Plants discovered before Flore (the whole flora, search and filters) comes. */
@@ -140,10 +141,12 @@ export function finishDiscover() { save({ done: true, step: LAST_STEP }); }
 /**
  * The first steps again (Réglages › « Recommencer la découverte »): every choice and all progress forgotten — the
  * steps and the fork, the tabs that had come, and the games around a place (Rencontres, Cueillette prudente,
- * Mosaïque: their place, distance, cards and matches). (The favourites stay: they are the user's.)
+ * Mosaïque: their place, distance, cards and matches), and the maps' first-use hints (core/hints.js). (The favourites
+ * stay: they are the user's.)
  */
 export function restartDiscover() {
   clearAroundGames();
+  forgetHints();
   save({ done: false, unlocked: [], tips: [], seen: [], step: 0, firstMatch: false, branch: null });
 }
 

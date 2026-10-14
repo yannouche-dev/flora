@@ -92,6 +92,8 @@ const SHELL = [
   'app/core/dataset.js',
   'app/core/altitude.js',
   'app/core/geo.js',
+  'app/core/hints.js',
+  'app/core/toast.js',
   'app/core/highlight.js',
   'app/core/fold.js',
   'app/core/ign.js',

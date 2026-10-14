@@ -17,10 +17,12 @@
 // When the map shows in 3D: the maps' one choice « 3D » (core/map-settings.js), made in Réglages › Cartes or in the
 // panel « Carte » of any map (« Affichage », gf-map-panel.js: the panel is told how this map is drawn, and why it
 // cannot change when it cannot). Never for a map marked map-3d="off" (or under one; map-3d-why: why, said in its
-// panel), nor in the « Jusqu’où part l’expédition ? » step (ma-distance: a fixed view from above). Back to 2D, said
-// in a short note, while its positions are being edited (markers dragged), without WebGL2, when MapLibre cannot load
-// (offline before its first download), when too many maps are in 3D at once (one WebGL context each), or when the GPU
-// takes its context back.
+// panel), nor in the « Jusqu’où part l’expédition ? » step (ma-distance: a fixed view from above). Back to 2D while
+// its positions are being edited (markers dragged), without WebGL2, when MapLibre cannot load (offline before its
+// first download), when too many maps are in 3D at once (one WebGL context each), or when the GPU takes its context
+// back. Why, and why it is flat (offline, the relief unreachable), is the map's state (gf-map setStatus, the quiet-map
+// rule): a line of the panel's « État », said once by the map's live region — never a note over the map; its loading,
+// the map's thin line past 400 ms.
 // The observations around a place (gf-map-obs3d.js): every 3D map has them at will — iNaturalist's, GBIF's and the
 // user's plants in a circle on the relief, its wall, its radius; their sources and layers in this map's style.
 // Modules: « Vue 3D (relief) » off → no relief asked (flat 3D); « IGN – fonds de carte » off → IGN tiles from the
@@ -32,8 +34,6 @@ import { lightMoment, mapSettings, mapSettingsEvents, sunPosition } from '../cor
 import { moduleEvents, moduleOn } from '../core/modules.js';
 import { DEM_ATTRIBUTION, IGN_VECTOR_STYLE, buildStyle, circlePolygon, describeTileLayer, mergeVectorStyle, pathStyle } from '../core/gl-style.js';
 import { LOCALE, MAPLIBRE_CSS, MAP_GL_CSS, hasWebGL2, linkCss, loadMapLibre, noWebGL2 } from '../core/maplibre.js';
-import { formatAltitude } from '../core/altitude.js';
-import { iconMarkup } from '../core/icons.js';
 import { Obs3dLayer } from './gf-map-obs3d.js';
 
 /** WebGL maps at once (each holds a context; browsers allow some 16, phones fewer, and each costs memory). */
@@ -43,6 +43,7 @@ const views = new Set();
 /** @type {Set<GlView>} */
 const live = new Set();
 
+/** Why the map is in 2D though 3D is chosen, or flat: the map's state (its panel's « État »). */
 const NOTES = {
   editing: 'Modification des positions : carte en 2D le temps de l’édition.',
   webgl: '3D indisponible sur cet appareil (WebGL2 requis) : carte en 2D.',
@@ -51,9 +52,10 @@ const NOTES = {
   many: 'Trop de cartes en 3D à la fois : celle-ci reste en 2D.',
   lost: 'L’affichage 3D s’est interrompu (mémoire graphique) : carte en 2D.',
   offline: 'Hors ligne : relief, bâtiments et plan vectoriel indisponibles, vue à plat.',
-  dem: 'Relief injoignable : vue à plat.',
-  loading: 'Chargement de la 3D…'
+  dem: 'Relief injoignable : vue à plat.'
 };
+/** Said once the 3D takes more than a moment to come (the map's thin loading line meanwhile). */
+const LOADING = 'Chargement de la 3D';
 
 /** The relief's tiles that may fail before the map goes on flat. */
 const DEM_GIVE_UP = 3;
@@ -129,7 +131,7 @@ export function orbitWithMiddleButton(map) {
 }
 
 /**
- * @typedef {{ kind: 'marker', layer: any, wrap: HTMLElement, gl: any, label?: HTMLElement | null }} MarkerMirror
+ * @typedef {{ kind: 'marker', layer: any, wrap: HTMLElement, gl: any }} MarkerMirror
  * @typedef {{ kind: 'dot', layer: any, el: HTMLElement, gl: any }} DotMirror
  * @typedef {{ kind: 'path', layer: any }} PathMirror
  * @typedef {{ kind: 'tile', layer: any }} TileMirror
@@ -187,33 +189,25 @@ export class GlView {
   /** The observations around (its button, its circle, its points). @type {Obs3dLayer | null} */
   #obs = null;
 
-  // ── What the user sees: the note, the altitude ──────────────────────────────────────────────────
+  // ── What the user is told: the map's state, its loading ─────────────────────────────────────────
   // (No 2D ⇄ 3D button on the maps: the choice is in Réglages › Cartes and in each map's panel « Carte », one choice
-  // for every map.)
-
-  /** @type {HTMLElement | null} */ #note = null;
-  /** @type {HTMLElement | null} */ #alt = null;
-  /** @type {ReturnType<typeof setTimeout> | undefined} */ #noteTimer;
+  // for every map. Nothing written over the map: the quiet-map rule, gf-map.js.)
 
   #buildUi() {
-    if (!this.allowed) { this.host.dataset.renderer = '2d'; return; }
-    const note = this.#note = Object.assign(document.createElement('div'), { className: 'gf-gl-note', hidden: true });
-    note.setAttribute('role', 'status');
-    // eslint-disable-next-line no-unsanitized/property -- fixed markup and a bundled icon, no data in it
-    note.innerHTML = `<span></span><button type="button" aria-label="Masquer" title="Masquer">${iconMarkup('x-lg')}</button>`;
-    note.querySelector('button')?.addEventListener('click', () => { note.hidden = true; });
-    L.DomEvent.disableClickPropagation(note);
-    this.root.append(note);
+    if (!this.allowed) this.host.dataset.renderer = '2d';
   }
 
-  /** @param {string} text @param {boolean} [stay] kept while its cause lasts (else gone after a few seconds) */
-  #say(text, stay = false) {
-    const note = this.#note;
-    if (!note) return;
-    clearTimeout(this.#noteTimer);
-    /** @type {HTMLElement} */ (note.firstElementChild).textContent = text;
-    note.hidden = !text;
-    if (text && !stay) this.#noteTimer = setTimeout(() => { note.hidden = true; }, 7000);
+  /**
+   * Why the map is in 2D though 3D is chosen (editing, no WebGL2, MapLibre not loaded, too many maps, the GPU), or
+   * why it is flat (offline, the relief unreachable): the map's state — a line of its panel's « État », said once as
+   * it changes (gf-map setStatus: a restyle saying the same again says nothing). The device without WebGL2: said once a
+   * visit, whatever the map.
+   */
+  #syncStatus() {
+    const blocked = this.wanted && this.#blocked ? NOTES[/** @type {keyof typeof NOTES} */ (this.#blocked)] || '' : '';
+    this.host.setStatus?.('gl', blocked || (this.on ? this.#flatWhy() : ''), { once: this.#blocked === 'webgl' });
+    // Loading: the map's thin line past 400 ms (no text), « Chargement de la 3D » said then.
+    this.host.busy?.('gl', this.#state === 'loading', LOADING);
   }
 
   /** 3D wanted for this map: Réglages › Cartes say so (or the map is a 3D view: map-3d="on"; and it may be in 3D). */
@@ -245,19 +239,17 @@ export class GlView {
   sync() {
     if (!this.#connected) return;
     const blocked = this.wanted ? this.#blocker() : '';
-    const was = this.#blocked;
     this.#blocked = blocked;
     if (this.wanted && !blocked) { if (!this.on) this.#start(); }
     else if (this.on) this.#stop();
-    if (blocked && blocked !== was) this.#say(NOTES[/** @type {keyof typeof NOTES} */ (blocked)] || '', blocked === 'editing');
-    else if (!blocked && was === 'editing') this.#say('');
     this.#syncButton();
   }
 
-  /** The map says how it is drawn (data-renderer, data-gl: its styles, the tests). */
+  /** The map says how it is drawn (data-renderer, data-gl: its styles, the tests), and why (its state). */
   #syncButton() {
     this.host.dataset.renderer = this.#state === 'ready' ? '3d' : '2d';
     if (this.#state === 'off') delete this.host.dataset.gl; else this.host.dataset.gl = this.#state;
+    this.#syncStatus();
     this.#syncPanel();
   }
 
@@ -316,7 +308,6 @@ export class GlView {
     this.#state = 'loading';
     live.add(this);
     this.#syncButton();
-    this.#say(NOTES.loading, true);
     let ml;
     try {
       [ml] = await Promise.all([loadMapLibre(), linkCss(this.#cssRoot(), MAPLIBRE_CSS), linkCss(this.#cssRoot(), MAP_GL_CSS)]);
@@ -389,10 +380,6 @@ export class GlView {
     const frame = this.host.querySelector('.gf-map-frame');
     map.addControl(new ml.FullscreenControl(frame ? { container: frame } : {}), 'bottom-left');
 
-    const alt = this.#alt = Object.assign(document.createElement('div'), { className: 'gf-gl-alt', hidden: true });
-    alt.setAttribute('aria-live', 'off');
-    box.append(alt);
-
     this.#listenGl(map);
     this.#listenLeaflet();
     // The 2D map: still there, hidden, without tiles; zooms between whole levels, as the 3D map has them.
@@ -410,7 +397,6 @@ export class GlView {
       if (this.#map !== map) return;
       this.#state = 'ready';
       box.style.visibility = '';
-      this.#say(this.#flatWhy());
       this.#syncPitchAttr();
       this.#syncButton();
     };
@@ -438,11 +424,9 @@ export class GlView {
     try { map?.remove(); } catch { /* its context already lost */ }
     this.#box?.remove();
     this.#box = null;
-    this.#alt = null;
     this.#state = 'off';
     live.delete(this);
     this.#syncButton();
-    if (this.#blocked !== 'editing') this.#say('');
     // A map waiting for room (too many in 3D) may have it now.
     for (const v of views) if (v !== this && v.#blocked === 'many') v.sync();
   }
@@ -509,7 +493,9 @@ export class GlView {
       map.setStyle(this.#style(), { diff: true });
       map.setMinZoom(this.#minZoom());
       this.#credit();
-      this.#say(this.#flatWhy());
+      // Flat or not (offline, the relief unreachable): the map's state, said only as it changes.
+      this.#syncStatus();
+      this.#syncPanel();
     });
   }
 
@@ -552,7 +538,6 @@ export class GlView {
     map.on('click', (/** @type {any} */ e) => {
       if (onMarker(e)) return;
       lf.fire('click', { latlng: latlng(e), originalEvent: e.originalEvent });
-      this.#showAltitude(e.lngLat, true);
     });
     // Right click, or a long touch: the point's card (as in 2D).
     let lastMenu = 0;
@@ -572,30 +557,10 @@ export class GlView {
     });
     map.on('touchmove', (/** @type {any} */ e) => { if (pressAt && Math.hypot(e.point.x - pressAt.x, e.point.y - pressAt.y) > 8) clearTimeout(press); });
     map.on('touchend touchcancel movestart', () => clearTimeout(press));
-    // The altitude under the pointer (the relief's).
-    let last = 0;
-    map.on('mousemove', (/** @type {any} */ e) => {
-      const now = performance.now();
-      if (now - last < 80) return;
-      last = now;
-      this.#showAltitude(e.lngLat);
-    });
-    map.getCanvas().addEventListener('mouseleave', () => { if (this.#alt) this.#alt.hidden = true; });
+    // (No altitude following the pointer: the point's card gives it on demand — a long press, a right click: the
+    // IGN's —, and the Vue 3D's plant card for a plant.)
     map.on('error', (/** @type {any} */ e) => this.#onError(e));
     map.on('webglcontextlost', () => this.#fail('lost'));
-  }
-
-  /** @param {any} lngLat @param {boolean} [touch] */
-  #showAltitude(lngLat, touch = false) {
-    const alt = this.#alt, map = this.#map;
-    if (!alt || !map || !map.getTerrain()) { if (alt) alt.hidden = true; return; }
-    const drawn = map.queryTerrainElevation(lngLat);
-    if (drawn == null) { alt.hidden = true; return; }
-    // Drawn exaggerated: the ground's own height.
-    const m = drawn / (map.getTerrain()?.exaggeration || 1);
-    alt.textContent = 'Altitude ≈ ' + formatAltitude(Math.round(m)) + ' (relief)';
-    alt.hidden = false;
-    if (touch) setTimeout(() => { if (this.#alt === alt) alt.hidden = true; }, 4000);
   }
 
   #syncPitchAttr() {
@@ -746,12 +711,16 @@ export class GlView {
     layer.on('move', gl.gfMove);
     if (layer.options.interactive !== false) this.#forward(wrap, layer);
     /** @type {MarkerMirror} */
-    const m = { kind: 'marker', layer, wrap, gl, label: null };
+    const m = { kind: 'marker', layer, wrap, gl };
     this.#mirrors.set(layer, m);
     this.#adopt(m);
   }
 
-  /** The marker's element (Leaflet made a new one: a new look) into its MapLibre marker, with its name if it has one. @param {MarkerMirror} m */
+  /**
+   * The marker's element (Leaflet made a new one: a new look) into its MapLibre marker. (No name left over a point:
+   * gf-map shows names on hover, focus or touch — its floating card —, never a permanent label.)
+   * @param {MarkerMirror} m
+   */
   #adopt(m) {
     const icon = m.layer._icon;
     if (icon && icon.parentNode !== m.wrap) {
@@ -759,19 +728,6 @@ export class GlView {
       m.wrap.prepend(icon);
     }
     m.wrap.style.zIndex = String(10 + Math.max(0, m.layer.options.zIndexOffset || 0));
-    this.#label(m.wrap, m.layer, m);
-  }
-
-  /** A permanent tooltip (a point's name): a label over (or under) the point. @param {HTMLElement} host @param {any} layer @param {{ label?: HTMLElement | null }} m */
-  #label(host, layer, m) {
-    const tip = layer.getTooltip?.();
-    if (!tip?.options?.permanent) { m.label?.remove(); m.label = null; return; }
-    const content = tip.getContent();
-    const text = typeof content === 'string' ? content.replace(/<[^>]*>/g, '') : content?.textContent || '';
-    const label = m.label || (m.label = Object.assign(document.createElement('div'), { className: 'gf-gl-label' }));
-    label.textContent = text;
-    label.classList.toggle('below', tip.options.direction === 'bottom');
-    if (label.parentNode !== host) host.append(label);
   }
 
   /** Leaflet replaces a marker's element when its look changes: the new one goes where the old one was. */
@@ -799,9 +755,7 @@ export class GlView {
     // gf-map places its cards and lights a plant's points by their element: this one, while the map is in 3D.
     layer.getElement = () => el;
     if (o.interactive !== false) this.#forward(el, layer);
-    const m = { kind: /** @type {const} */ ('dot'), layer, el, gl, label: /** @type {HTMLElement | null} */ (null) };
-    this.#label(el, layer, m);
-    this.#mirrors.set(layer, m);
+    this.#mirrors.set(layer, { kind: 'dot', layer, el, gl });
   }
 
   #queuePaths = () => {
@@ -846,9 +800,8 @@ export class GlView {
   #syncPanel() {
     const panel = /** @type {any} */ (this.root.querySelector('gf-map-panel'));
     if (!panel) return;
-    // `note`: why it is in 2D though 3D is wanted (editing, too many maps, no WebGL2…), or why it is flat.
-    const blocked = this.wanted && this.#blocked ? NOTES[/** @type {keyof typeof NOTES} */ (this.#blocked)] || '' : '';
-    panel.gl = { on: this.on, fixed: this.fixed, note: blocked || (this.on ? this.#flatWhy() : '') };
+    // Why it is in 2D though 3D is wanted, or flat: the map's state, in the same panel's « État » (#syncStatus).
+    panel.gl = { on: this.on, fixed: this.fixed };
   }
 
   // ── For the tests (and the curious): what the 3D map shows now ──────────────────────────────────

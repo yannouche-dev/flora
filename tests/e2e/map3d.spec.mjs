@@ -4,9 +4,11 @@
 // releases would stop falling back to it. The real path is tested: MapLibre loaded, the map drawn, its plants (the
 // same markers as every map), the walk, its start, a plant's altitude, Échap, the focus given back; the tiles come
 // from here (tiles.mjs), never from the network. Then the ways it does not open, or opens flat: no WebGL2 (the button
-// says so, MapLibre never asked), the relief out of reach (flat, said), offline, the module off.
+// says so — a brief toast over the recap's map, its title —, MapLibre never asked), the relief out of reach (flat,
+// said: the map's state and live region, never a note over it), offline, the module off.
 import { test, expect, plantId } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
+import { brief, mapSaid, mapState } from './quiet.mjs';
 import { writeFileSync, mkdirSync } from 'node:fs';
 
 test.use({ launchOptions: { args: ['--enable-unsafe-swiftshader'] } });
@@ -123,6 +125,9 @@ test('la Vue 3D du parcours : la carte de l’app en 3D, MapLibre à la demande,
   // A plant touched: its name and its altitude (the IGN's, kept with it).
   await map.locator('.gf-gl-mk .gf-plant').first().dispatchEvent('click');
   await expect(dialog.locator('.gf3d-card')).toContainText(/Altitude : (1|2)\s?\d{3} m \(IGN\)/);
+  // Said by the map's one live region (the card has none of its own); no altitude pill following the pointer.
+  await expect(mapSaid(map)).toContainText(/Altitude : (1|2)\s?\d{3} m \(IGN\)/);
+  await expect(dialog.locator('.gf3d-card[role], .gf-gl-alt')).toHaveCount(0);
   if (SHOTS) {
     mkdirSync(SHOTS, { recursive: true });
     await page.waitForTimeout(1500);
@@ -160,8 +165,12 @@ test('sans WebGL2 : le bouton le dit, MapLibre n’est jamais demandé', async (
     HTMLCanvasElement.prototype.getContext = function (kind, ...rest) { return kind === 'webgl2' ? null : get.call(this, kind, ...rest); };
   });
   const button = await openRecap(app, page);
+  await expect(button).toHaveAttribute('title', '3D indisponible sur cet appareil (WebGL2 requis).');
   await button.click();
-  await expect(page.locator('gf-miniapp .note3d')).toHaveText('3D indisponible sur cet appareil (WebGL2 requis).');
+  // The user asked: one brief toast over the recap's map (gone in under 3 s), said by its live region.
+  await expect(brief(page)).toHaveText('3D indisponible sur cet appareil (WebGL2 requis).');
+  await expect(mapSaid(page.locator('gf-miniapp .recap-map gf-map'))).toContainText('3D indisponible sur cet appareil (WebGL2 requis).');
+  await expect(brief(page)).toHaveCount(0, { timeout: 4000 });
   await expect(page.locator('dialog.gf-map3d[open]')).toHaveCount(0);
   expect(seen.maplibre).toEqual([]);
   // The recap is still there, working.
@@ -179,7 +188,9 @@ test('relief injoignable : la vue s’ouvre à plat et le dit', async ({ app, pa
   const map = viewMap(page);
   await expect(map).toHaveAttribute('data-renderer', '3d', { timeout: 30_000 });
   await expect.poll(async () => (await glState(map)).terrain, SLOW).toBe(false);
-  await expect(map.locator('.gf-gl-note')).toContainText('Relief injoignable : vue à plat.');
+  await expect.poll(() => mapState(map)).toContain('Relief injoignable : vue à plat.');
+  await expect(mapSaid(map)).toContainText('Relief injoignable : vue à plat.');
+  await expect(map.locator('.gf-map-gl')).not.toContainText('Relief injoignable');
   await expect(map.locator('.gf-gl-mk .gf-plant')).toHaveCount(3);
   await page.keyboard.press('Escape');
   await expect(page.locator('dialog.gf-map3d')).not.toHaveAttribute('open', '');
@@ -206,7 +217,8 @@ test('hors ligne : pas de relief demandé, la vue à plat', async ({ app, page, 
   await button.click();
   await expect(map).toHaveAttribute('data-renderer', '3d', { timeout: 30_000 });
   expect((await glState(map)).terrain).toBe(false);
-  await expect(map.locator('.gf-gl-note')).toContainText('Hors ligne : relief, bâtiments et plan vectoriel indisponibles, vue à plat.');
+  await expect.poll(() => mapState(map)).toContain('Hors ligne : relief, bâtiments et plan vectoriel indisponibles, vue à plat.');
+  await expect(mapSaid(map)).toContainText('Hors ligne : relief, bâtiments et plan vectoriel indisponibles, vue à plat.');
   expect(dem).toEqual([]);
   await page.keyboard.press('Escape');
   await context.setOffline(false);
@@ -221,7 +233,8 @@ test('module « Vue 3D (relief) » désactivé, photos coupées : le bouton l’
   await page.addInitScript(() => localStorage.setItem('geoflora.modules', JSON.stringify({ relief3d: false, photos: false })));
   const button = await openRecap(app, page);
   await button.click();
-  await expect(page.locator('gf-miniapp .note3d')).toContainText('Vue 3D désactivée');
+  await expect(brief(page)).toContainText('Vue 3D désactivée');
+  await expect(button).toHaveAttribute('title', /Vue 3D désactivée/);
   await expect(page.locator('dialog.gf-map3d[open]')).toHaveCount(0);
   expect(seen.maplibre).toEqual([]);
 

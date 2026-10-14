@@ -42,6 +42,7 @@ import { circlePolygon } from '../core/gl-style.js';
 import { mapSettings } from '../core/map-settings.js';
 import { cachedThumb } from '../core/thumb.js';
 import { icon, iconMarkup } from '../core/icons.js';
+import { hintView, takeHint } from '../core/hints.js';
 import { PHONE_QUERY } from '../core/media.js';
 import { cancelImages, chosenMarker, elem, leafMarker, obsCard, photoMarker, speciesKey } from './map-style.js';
 
@@ -117,7 +118,6 @@ export class Obs3dLayer {
   #lastLayout = 0;
   #layoutQueued = false;
   #alive = true;
-  /** @type {any} */ #radiusMark = null;
   /** @type {HTMLElement | null} */ #card = null;
   /** The card stays (touched), or follows the pointer (hovered). */
   #cardPinned = false;
@@ -155,10 +155,10 @@ export class Obs3dLayer {
     if (this.prefs.on) render(this.#barView(), bar);
   }
 
-  /** How many, and from where. */
+  /** How many, and from where — a source unreachable said here only (its card is its panel: never a toast). */
   #countLine() {
     const n = this.#points.length;
-    if (this.#loading) return 'Recherche des observations…';
+    if (this.#loading) return '';
     const by = (/** @type {string} */ k) => this.#points.filter(p => p.kind === k).length;
     const parts = [this.prefs.inat ? `iNaturalist ${by('inat')}` : '', this.prefs.gbif ? `GBIF ${by('gbif')}` : '', by('mine') ? `vos plantes ${by('mine')}` : ''].filter(Boolean);
     const failed = this.#failed.length ? ` — ${this.#failed.join(' et ')} injoignable${this.#failed.length > 1 ? 's' : ''}` : '';
@@ -170,15 +170,21 @@ export class Obs3dLayer {
     return { area: 'Autour de la zone de la page', point: 'Autour du point choisi', place: 'Autour du lieu choisi', view: 'Autour du centre de la vue' }[this.why] || '';
   }
 
+  /** The card's first-use hint (core/hints.js: the first card unfolded ever on this device), until its ✕. @type {boolean | undefined} */
+  #pressHint;
+
   #barView() {
     const p = this.prefs, at = Math.max(0, RADII_3D.indexOf(p.radius)), n = RADII_3D.length - 1, count = this.#points.length;
-    const chip = html`<button type="button" class="gf-o3-chip" aria-expanded=${String(this.#open)}
-      aria-label=${`Observations autour : ${radiusWords(p.radius)}, ${count} observation${count > 1 ? 's' : ''}. ${this.#open ? 'Replier' : 'Régler'}`}
+    // The chip: its radius, a spinner while they come (past 400 ms: map-gl.css), its count in its name only (the
+    // quiet-map rule: no number left over the map; the unfolded card says it, the map's live region too).
+    const chip = html`<button type="button" class="gf-o3-chip" aria-expanded=${String(this.#open)} aria-busy=${String(this.#loading)}
+      aria-label=${`Observations autour : ${radiusWords(p.radius)}${this.#loading ? '' : `, ${count} observation${count > 1 ? 's' : ''}`}. ${this.#open ? 'Replier' : 'Régler'}`}
       @click=${() => { this.#open = !this.#open; this.#syncUi(); }}>
       ${icon('binoculars')} <b>${radiusLabel(p.radius)}</b>
-      ${this.#loading ? html`<i class="gf-o3-spin" aria-hidden="true"></i>` : html`<span class="gf-o3-n">${count.toLocaleString('fr-FR')}</span>`}
+      ${this.#loading ? html`<i class="gf-o3-spin" aria-hidden="true"></i>` : nothing}
       ${icon(this.#open ? 'chevron-down' : 'chevron-up')}</button>`;
     if (!this.#open) return chip;
+    this.#pressHint ??= takeHint('obs3d-press');
     const toggle = (/** @type {'inat' | 'gbif' | 'density'} */ k, /** @type {string} */ label) => html`<label class="gf-o3-toggle">
       <input type="checkbox" .checked=${p[k]} @change=${(/** @type {any} */ e) => this.#set({ [k]: e.target.checked })} /> ${label}</label>`;
     return html`<section class="gf-o3-panel" aria-label="Observations autour">
@@ -193,12 +199,13 @@ export class Obs3dLayer {
         <input type="range" min="0" max=${n} step="1" .value=${String(at)} aria-label="Rayon autour du centre" aria-valuetext=${radiusWords(p.radius)}
           @input=${(/** @type {any} */ e) => this.#set({ radius: RADII_3D[Number(e.target.value)] })} />
       </div>
-      <p class="gf-o3-count" aria-live="polite">${this.#loading ? html`<i class="gf-o3-spin" aria-hidden="true"></i>` : nothing}${this.#countLine()}</p>
+      <p class="gf-o3-count" aria-busy=${String(this.#loading)}>${this.#loading ? html`<i class="gf-o3-spin" aria-hidden="true"></i>` : nothing}${this.#countLine()}</p>
       <div class="gf-o3-row">${toggle('inat', 'iNaturalist')}${toggle('gbif', 'GBIF')}${toggle('density', 'Densité')}</div>
       <div class="gf-o3-row">
-        <button type="button" class="gf-o3-recentre" @click=${() => this.#recentre()}>${icon('crosshair')} Centrer ici</button>
-        <small>Appui long sur la carte : nouveau centre.</small>
+        <button type="button" class="gf-o3-recentre" title="Centrer sur le milieu de la vue (ou appui long sur la carte : nouveau centre)"
+          @click=${() => this.#recentre()}>${icon('crosshair')} Centrer ici</button>
       </div>
+      ${this.#pressHint ? hintView('Appui long sur la carte : nouveau centre.', () => { this.#pressHint = false; this.#syncUi(); }, 'gf-o3-hint') : nothing}
     </section>${chip}`;
   }
 
@@ -235,8 +242,6 @@ export class Obs3dLayer {
     this.#open = false;
     this.#clearMarks();
     this.#hideCard();
-    this.#radiusMark?.remove();
-    this.#radiusMark = null;
     this.restyle();
     this.#syncUi();
   }
@@ -356,6 +361,8 @@ export class Obs3dLayer {
     this.#merge();
     this.#layout();
     this.#syncUi();
+    // How many came (a source unreachable with it): said by the map's one live region (gf-map announce).
+    this.host.announce?.(`Observations autour : ${this.#countLine()}`);
   }
 
   /**
@@ -420,18 +427,13 @@ export class Obs3dLayer {
     this.map.getSource(ID + 'hex')?.setData(this.#hex);
   }
 
-  /** The circle: its area, its wall, its radius on a pill at its south. */
+  /** The circle: its area, its wall (its radius is the chip's and the slider's: no pill left on the ground). */
   #zone() {
     const c = this.center;
     if (!c) return;
     this.map.getSource(ID + 'zone')?.setData(this.#zoneData());
     this.map.getSource(ID + 'wall')?.setData(ringWall(c, this.prefs.radius));
     this.restyle();
-    const south = circlePolygon(c, this.prefs.radius, 4)[2];
-    const el = this.#radiusMark?.getElement() || Object.assign(document.createElement('div'), { className: 'gf-o3-rlabel' });
-    el.textContent = radiusLabel(this.prefs.radius);
-    if (!this.#radiusMark) this.#radiusMark = new this.ml.Marker({ element: el, anchor: 'top', offset: [0, 6], opacityWhenCovered: '0.3' }).setLngLat(south).addTo(this.map);
-    else this.#radiusMark.setLngLat(south);
   }
 
   #zoneData() {
@@ -783,7 +785,6 @@ export class Obs3dLayer {
     clearTimeout(this.#loadTimer);
     this.host.removeEventListener('point-info', this.#onPoint);
     for (const [key, m] of [...this.#marks]) this.#dropMark(key, m);
-    this.#radiusMark?.remove();
     this.#hideCard();
     this.#button?.remove();
     this.#bar?.remove();

@@ -178,7 +178,8 @@ test('les photos des points : toutes affichées en 5 s, d’une distance à l’
   const { context, page, errors } = await open(browser);
   await page.getByRole('button', { name: 'Autour de moi' }).click();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/app/rencontres/map');
-  await expect(page.locator('ma-distance .obs')).toContainText('observations de plantes');
+  // How many: said by the map's live region (the quiet-map rule: never written over the map).
+  await expect(page.locator('ma-distance gf-map .gf-map-live')).toContainText('observations de plantes');
   await allShown(page, 'first load');
 
   const slider = page.locator('ma-distance input[type="range"]');
@@ -187,7 +188,8 @@ test('les photos des points : toutes affichées en 5 s, d’une distance à l’
     await page.keyboard.press('ArrowRight');
     await page.waitForTimeout(700);
   }
-  await expect(page.locator('ma-distance .obs')).toContainText('observations de plantes');
+  await expect(page.locator('ma-distance .welcome')).toHaveAttribute('aria-busy', 'false', { timeout: 5000 });
+  await expect(page.locator('ma-distance gf-map .gf-map-live')).toContainText('observations de plantes');
   await allShown(page, 'after 3 distances');
 
   await page.locator('ma-distance').getByRole('button', { name: 'Qui pousse par ici ?' }).click();

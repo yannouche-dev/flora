@@ -8,6 +8,7 @@ import { openModal } from '../core/history.js';
 import { mapSettings, mapSettingsEvents, setMapSettings } from '../core/map-settings.js';
 import { moduleEvents, moduleOn } from '../core/modules.js';
 import { hasWebGL2 } from '../core/maplibre.js';
+import { safeUrl } from '../core/safe-url.js';
 import { map3dOptions, map3dOptionsCss, mapRendererChoice } from './map3d-options.js';
 import './gf-ign-layers.js';
 
@@ -18,7 +19,10 @@ const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
  * options: the maps' one choice, core/map-settings.js, the same as Réglages › Cartes — every map follows), background,
  * overlays (terrain, protected areas, and any layer of IGN's whole catalogue: gf-ign-layers.js, with the overlays
  * shown, their opacity and order), legend, sources. Every map has it (gf-map: its round button, or the end of its
- * search pill). Events: base-change {key}, overlay-toggle {key, on, layer?} (`layer`: a catalogue layer to add), and
+ * search pill). It is also where a map's state is read (the quiet-map rule, gf-map.js): the « État » lines of
+ * « Affichage » (why it is in 2D or flat, the IGN backgrounds off, a source unreachable, the protected areas in view),
+ * the protected areas in view with their INPN pages under « Règles de cueillette », a page's own legend (a plant
+ * sheet's sources and counts) — said by the map's own live region, none here. Events: base-change {key}, overlay-toggle {key, on, layer?} (`layer`: a catalogue layer to add), and
  * from gf-ign-layers overlay-opacity {key, opacity, commit}, overlay-order {keys}; the display is stored here
  * (setMapSettings).
  */
@@ -30,11 +34,20 @@ export class GfMapPanel extends LitElement {
     distribution: { attribute: false },
     distributionOn: { attribute: false },
     legend: { type: Boolean },
+    /** What the colours of the page's own layers mean (gf-map setLegend: a plant sheet's map): { text, swatch? }[]. */
+    legendLines: { attribute: false },
     /**
      * How the map is drawn (gf-map-gl.js): { on: in 3D (or loading), fixed: { renderer, why } when this map is always
-     * drawn one way, note: why it is in 2D though 3D is chosen, or flat }; null: not known yet.
+     * drawn one way }; null: not known yet.
      */
-    gl: { attribute: false }
+    gl: { attribute: false },
+    /**
+     * The map's state (gf-map setStatus: why it is in 2D or flat, the IGN backgrounds off, a source unreachable, the
+     * protected areas in view…): the « État » lines of « Affichage » — what the map never writes over itself.
+     */
+    state: { attribute: false },
+    /** The protected areas in view (gf-map): under « Règles de cueillette », each with its INPN page. */
+    areas: { attribute: false }
   };
 
   static styles = [ui, map3dOptionsCss, css`
@@ -83,6 +96,22 @@ export class GfMapPanel extends LitElement {
     .legend i.square { border-radius: 3px; }
     .sources { font-size: 0.8rem; color: var(--gf-text-muted); margin: 0 4px; }
     .sources a { color: inherit; }
+    /* The map's state (« État »): one short line each, in « Affichage » — what the map no longer writes over itself. */
+    .state { margin: 2px 0 4px; padding: 8px 10px; display: grid; gap: 4px; border-radius: var(--gf-radius-sm);
+      background: var(--gf-surface-2); font-size: 0.82rem; }
+    .state ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+    .state > b { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gf-text-muted); }
+    .state li { display: flex; gap: 6px; align-items: baseline; }
+    .state li .bi { flex: none; color: var(--gf-text-muted); }
+    .state li.warn .bi { color: #b45309; }
+    .state li.error .bi { color: var(--gf-danger); }
+    .state li a { color: var(--gf-accent); white-space: nowrap; }
+    .areas { list-style: none; margin: 0 4px 6px; padding: 8px 10px; display: grid; gap: 4px; border-left: 4px solid #15803d;
+      border-radius: var(--gf-radius-sm); background: var(--gf-surface-2); font-size: 0.85rem; }
+    .areas a { color: var(--gf-accent); font-weight: 600; }
+    .areas small { color: var(--gf-text-muted); }
+    .legend i.obs { border: 0; background: radial-gradient(circle at 35% 30%, #ff6f9c, #e0245e 75%); box-shadow: 0 0 0 1.5px #ffd166; }
+    .legend i.outline { background: transparent; border: 2px solid #a3e68a; box-shadow: 0 1px 0 rgb(0 0 0 / 30%); }
   `];
 
   constructor() {
@@ -96,6 +125,12 @@ export class GfMapPanel extends LitElement {
     this.distributionOn = false;
     /** @type {any} */
     this.gl = null;
+    /** @type {{ key: string, text: string, level: string, link: { href: string, label: string } | null }[]} */
+    this.state = [];
+    /** @type {import('../core/protected.js').ProtectedArea[]} */
+    this.areas = [];
+    /** @type {{ text: string, swatch?: string }[]} */
+    this.legendLines = [];
   }
 
   connectedCallback() {
@@ -146,8 +181,8 @@ export class GfMapPanel extends LitElement {
     const change = (/** @type {Partial<import('../core/map-settings.js').MapSettings>} */ patch) => setMapSettings(patch);
     return html`<h3 class="kicker">Affichage</h3>
       <div class="display">
+        ${this.#state()}
         ${mapRendererChoice(s, change, { id: 'panel', legend: 'Carte en 2D ou en 3D', webgl: hasWebGL2(), fixed })}
-        ${!fixed && g?.note ? html`<p class="note3d" role="status">${g.note}</p>` : nothing}
         ${fixed || s.renderer !== '3d' ? nothing : html`<details class="more3d">
           <summary>Options de la 3D</summary>
           ${map3dOptions(s, change, { relief: moduleOn('relief3d'), ign: moduleOn('ignMaps'), id: 'panel3d' })}
@@ -156,8 +191,35 @@ export class GfMapPanel extends LitElement {
       </div>`;
   }
 
+  /**
+   * « État »: the map's state, one short line each (why it is in 2D or flat, the IGN backgrounds off, the protected
+   * areas in view, a source unreachable…), with what to do when there is something. Said by the map's own live region
+   * as it changes (gf-map): no live region here.
+   */
+  #state() {
+    const lines = this.state || [];
+    if (!lines.length) return nothing;
+    const glyph = (/** @type {string} */ level) => icon(level === 'error' ? 'exclamation-triangle-fill' : level === 'warn' ? 'shield-check' : 'map');
+    return html`<section class="state" aria-label="État de la carte"><b aria-hidden="true">État</b><ul>
+      ${lines.map(l => html`<li class=${l.level} data-key=${l.key}>${glyph(l.level)}<span>${l.text}${l.link
+        ? html` <a href=${l.link.href} @click=${() => this.close()}>${l.link.label}</a>` : nothing}</span></li>`)}
+    </ul></section>`;
+  }
+
+  /** The protected areas in view: each named, its INPN page linked, its kind. */
+  #areas() {
+    const areas = this.areas || [];
+    if (!areas.length) return nothing;
+    return html`<ul class="areas" aria-label="Espaces protégés en vue">
+      ${areas.map(a => html`<li>${safeUrl(a.url) ? html`<a href=${safeUrl(a.url)} target="_blank" rel="noopener">${a.name}</a>` : html`<b>${a.name}</b>`}
+        <small>(${a.kind})</small></li>`)}
+      <li><small>En vue sur la carte : la cueillette y est souvent interdite ou réglementée, vérifiez les règles du site.</small></li>
+    </ul>`;
+  }
+
   render() {
     const group = (/** @type {string} */ g) => Object.keys(OVERLAYS).filter(k => OVERLAYS[k].group === g);
+    const lines = this.legendLines || [];
     return html`
       <dialog aria-label="Carte" @click=${e => { if (e.target === e.currentTarget) this.close(); }}>
         <header>
@@ -190,18 +252,23 @@ export class GfMapPanel extends LitElement {
           <gf-ign-layers .overlays=${this.overlays}></gf-ign-layers>
 
           <h3 class="kicker">Règles de cueillette</h3>
+          ${this.#areas()}
           <p class="note">Dans ces zones, la cueillette a souvent des règles propres : vérifiez-les avant de cueillir.</p>
           ${group('rules').map(k => this.#layer(k))}
 
-          ${this.legend ? html`
+          ${this.legend || lines.length ? html`
             <h3 class="kicker">Légende</h3>
-            <div class="legend">
+            ${lines.length ? html`<div class="legend page" role="list" aria-label="Les couches de cette carte">
+              ${lines.map(l => html`<span role="listitem">${l.swatch ? html`<i class=${l.swatch === 'obs' || l.swatch === 'outline' ? 'round ' + l.swatch : 'round'}
+                style=${l.swatch === 'obs' || l.swatch === 'outline' ? '' : `--c:${l.swatch}`}></i>` : nothing}${l.text}</span>`)}
+            </div>` : nothing}
+            ${this.legend ? html`<div class="legend">
               <span><i class="square"></i>Endroit</span>
               <span><i class="round"></i>Plante (en zoomant)</span>
               <span><i class="round" style="--c:${PIN_COLORS.rare}"></i>Rare</span>
               <span><i class="round" style="--c:${PIN_COLORS.moyen}"></i>Moyen</span>
               <span><i class="round" style="--c:${PIN_COLORS.abondant}"></i>Abondant</span>
-            </div>` : nothing}
+            </div>` : nothing}` : nothing}
 
           <h3 class="kicker">Sources</h3>
           <p class="sources">

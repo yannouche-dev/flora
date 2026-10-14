@@ -26,6 +26,7 @@ import { href } from '../core/router.js';
 import * as db from '../core/db.js';
 import { alertsOf } from '../core/alerts.js';
 import { thumbCredit } from '../core/credit.js';
+import { hintView, takeHint } from '../core/hints.js';
 import { isFavorite, toggleFavorite } from '../core/collections.js';
 import { ui } from '../styles/ui.js';
 import { floweringMonths } from '../components/gf-calendar.js';
@@ -139,7 +140,7 @@ const radiusSlider = state => {
 // ── map ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export class DlMap extends LitElement {
-  static properties = { state: { attribute: false }, params: { attribute: false }, _busy: { state: true }, _error: { state: true } };
+  static properties = { state: { attribute: false }, params: { attribute: false }, _busy: { state: true } };
 
   static styles = [ui, scopeStyles, css`
     :host { display: block; position: relative; min-height: 0; isolation: isolate; }
@@ -159,7 +160,6 @@ export class DlMap extends LitElement {
     /** @type {LayoutState | null} */ this.state = null;
     /** @type {Record<string, any>} */ this.params = {};
     this._busy = false;
-    /** @type {string | null} */ this._error = null;
   }
 
   /** The map's view held while its cell changes size (a separator dragged beside it). */
@@ -219,15 +219,17 @@ export class DlMap extends LitElement {
   }
   /** @type {{ id: string, value: any } | null} */ #focusMemo = null;
 
-  /** A point touched: its plant, the current one (with this observation); one not in the flora: said. @param {CustomEvent} e */
+  /** The cell's map (gf-map: what the cell says goes through it — the quiet-map rule). @returns {any} */
+  get #map() { return this.renderRoot.querySelector('gf-map'); }
+
+  /** A point touched: its plant, the current one (with this observation); one not in the flora: a brief toast. @param {CustomEvent} e */
   #onPick(e) {
     const s = /** @type {LayoutState} */ (this.state);
     const p = e.detail.point;
     // Its plant: by its taxon (iNaturalist's), else its name, else the plant it was drawn for (the current one's points).
     const id = (p.taxonId != null ? s.species?.plantOf.get(p.taxonId) : undefined)
       ?? s.species?.list.find(x => p.sci && x.name === p.sci)?.plantId ?? p.plantId ?? undefined;
-    if (id == null) { this._error = `${p.common || p.sci || p.title || 'Cette plante'} : pas dans la flore de France de GeoFlora.`; return; }
-    this._error = null;
+    if (id == null) { this.#map?.toast(`${p.common || p.sci || p.title || 'Cette plante'} : pas dans la flore de France de GeoFlora.`); return; }
     s.pick(id, { obs: p.url ? obsId(p.url) : null });
   }
 
@@ -241,24 +243,46 @@ export class DlMap extends LitElement {
 
   async #locate() {
     const s = /** @type {LayoutState} */ (this.state);
-    this._busy = true; this._error = null;
+    this._busy = true;
     try { const at = await locateOnce(); s.setScope(at, null); nameScope(s, /** @type {[number, number]} */ (s.live.at)); }
-    catch (error) { this._error = /** @type {Error} */ (error).message; }
+    // Asked, no position: one brief toast over the map.
+    catch (error) { this.#map?.toast(/** @type {Error} */ (error).message); }
     finally { this._busy = false; }
   }
+
+  /** The long press's first-use hint (core/hints.js: the first layout map without a zone ever), until its ✕. @type {boolean | undefined} */
+  #pressHint;
+
+  /**
+   * What the scope says, through the map (the quiet-map rule): its plants coming — the map's thin line past 400 ms;
+   * counted — said once (the results' header writes it); unreachable or off — the map's state (its panel's « État »).
+   */
+  updated() {
+    const s = this.state, map = this.#map;
+    if (!s || !map) return;
+    map.busy('scope', Boolean(s.live.at) && s.speciesState === 'loading', 'Plantes de la zone : recherche');
+    map.setStatus('scope', s.live.at && s.speciesState === 'error' ? s.speciesError : '', { level: 'warn' });
+    const said = s.live.at && s.speciesState !== 'loading' && s.speciesState !== 'error' ? scopeNote(s) : '';
+    if (said && said !== this.#said) map.announce(said);
+    this.#said = said;
+  }
+  #said = '';
 
   render() {
     const s = this.state;
     if (!s) return nothing;
-    const note = this._error || scopeNote(s);
+    if (!s.live.at && this.#pressHint === undefined) this.#pressHint = takeHint('layout-map-press');
+    const press = 'Appui long sur la carte : la zone s’y centre.';
     return html`<gf-map no-create point-click="pick" .base=${this.params.base ?? null} .area=${this.#area} .highlight=${this.#highlight} .focusPoint=${this.#focus}
+        aria-description=${press}
         @point-pick=${(/** @type {CustomEvent} */ e) => this.#onPick(e)} @point-info=${(/** @type {CustomEvent} */ e) => this.#onPress(e)}></gf-map>
       <div class="panel" role="group" aria-label="Zone de la disposition">
         <div class="where">${icon('crosshair')}<span>${scopeWords(s)}</span>
           ${s.live.at ? html`<button class="icon-btn" type="button" title="Toute la France (sans zone)" aria-label="Toute la France (sans zone)" @click=${() => s.setScope(null)}>${icon('x-lg')}</button>` : nothing}</div>
         ${s.live.at ? radiusSlider(s) : nothing}
-        <div class="row"><button type="button" ?disabled=${this._busy} @click=${() => this.#locate()}>${icon('geo-alt')} ${this._busy ? 'Localisation…' : 'Autour de moi'}</button></div>
-        <p class="note ${this._error || s.speciesState === 'error' ? 'error' : ''}" role="status">${note || (s.live.at ? '' : 'Appui long sur la carte : la zone s’y centre.')}</p>
+        <div class="row"><button type="button" class=${this._busy ? 'busy' : ''} ?disabled=${this._busy} aria-busy=${String(this._busy)}
+          @click=${() => this.#locate()}>${icon('geo-alt')} Autour de moi</button></div>
+        ${!s.live.at && this.#pressHint ? hintView(press, () => { this.#pressHint = false; this.requestUpdate(); }) : nothing}
       </div>`;
   }
 }

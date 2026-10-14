@@ -3,9 +3,11 @@
 // never the network. The Carte in MapLibre with its relief, the same layers as in 2D, the options (buildings, sky,
 // globe) switched from its panel, its markers clickable; 2D by default, MapLibre never asked then; no 2D ⇄ 3D
 // button on the maps (the choice is in their panel: maps-panel3d.spec.mjs); back in 2D while positions are edited; the ways it stays in 2D or flat (no WebGL2, modules off, offline);
-// the « Jusqu’où part l’expédition ? » step always from above; one WebGL map per plant sheet.
+// the « Jusqu’où part l’expédition ? » step always from above; one WebGL map per plant sheet. Why a map is in 2D or
+// flat is its state (the panel's « État », said once by its live region), never a note over it (quiet.mjs).
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
+import { mapSaid, mapState } from './quiet.mjs';
 
 test.use({ launchOptions: { args: ['--enable-unsafe-swiftshader'] } });
 // Software WebGL draws every pixel on the CPU: on the desktop, a smaller window keeps each frame (and the run) short.
@@ -231,15 +233,18 @@ test('2D par défaut, MapLibre jamais demandé, aucun bouton 2D ⇄ 3D ; l’éd
   await expect(map).toHaveAttribute('data-pitch', '40');
   await expect(map.getByRole('button', { name: /3D|2D/ })).toHaveCount(0);
 
-  // Editing positions (markers dragged): in 2D for the time of it, said; « Terminé »: 3D again.
+  // Editing positions (markers dragged): in 2D for the time of it, said (its state, its live region; nothing over the
+  // map); « Terminé »: 3D again.
   await map.getByRole('button', { name: 'Modifier les positions' }).click();
   await expect(map).toHaveAttribute('data-renderer', '2d');
-  await expect(map.locator('.gf-gl-note')).toContainText('Modification des positions : carte en 2D le temps de l’édition.');
+  await expect.poll(() => mapState(map)).toContain('Modification des positions : carte en 2D le temps de l’édition.');
+  await expect(mapSaid(map)).toContainText('Modification des positions : carte en 2D le temps de l’édition.');
+  await expect(map.locator('.gf-gl-note')).toHaveCount(0);
   await expect(map.locator('canvas.maplibregl-canvas')).toHaveCount(0);
   await expect(map.locator('.leaflet-marker-pane .gf-place.editing')).toHaveCount(2);
   await map.locator('.gf-map-editbar').getByRole('button', { name: 'Terminé' }).click();
   await expect(map).toHaveAttribute('data-renderer', '3d', { timeout: 30_000 });
-  await expect(map.locator('.gf-gl-note')).toBeHidden();
+  await expect.poll(() => mapState(map), SLOW).not.toContain('Modification des positions : carte en 2D le temps de l’édition.');
   expect(seen.problems).toEqual([]);
 });
 
@@ -253,7 +258,8 @@ test('sans WebGL2 : les cartes restent en 2D et le disent, MapLibre jamais deman
   await settings(page, { renderer: '3d' });
   await app.open('#/map');
   const map = carte(page);
-  await expect(map.locator('.gf-gl-note')).toContainText('3D indisponible sur cet appareil (WebGL2 requis) : carte en 2D.');
+  await expect.poll(() => mapState(map)).toContain('3D indisponible sur cet appareil (WebGL2 requis) : carte en 2D.');
+  await expect(mapSaid(map)).toContainText('3D indisponible sur cet appareil (WebGL2 requis) : carte en 2D.');
   await expect(map).toHaveAttribute('data-renderer', '2d');
   await expect(map.locator('.gf-map-canvas')).toBeVisible();
   expect(seen.maplibre).toEqual([]);
@@ -279,7 +285,7 @@ test('modules coupés et hors ligne : ni relief ni tuile du réseau, la 3D à pl
   expect(st.layers).not.toContain('gf-buildings');
   const source = await map.evaluate(m => /** @type {any} */ (m).gl.glMap.getStyle().sources['gf-tiles-0'].tiles[0]);
   expect(source).toMatch(/^gfcache:\/\/https:\/\/data\.geopf\.fr\/wmts\?/);
-  await expect(map.locator('.gf-map-off')).toContainText('Fonds IGN désactivés');
+  await expect.poll(() => mapState(map)).toContain('Fonds IGN désactivés : seules les zones déjà vues s’affichent.');
   await page.waitForTimeout(1500);
   expect(seen.tiles, 'no tile from the network').toEqual([]);
 
@@ -291,7 +297,8 @@ test('modules coupés et hors ligne : ni relief ni tuile du réseau, la 3D à pl
   await expect.poll(async () => (await glState(map)).terrain, SLOW).toBe(true);
   await context.setOffline(true);
   await expect.poll(async () => (await glState(map)).terrain, SLOW).toBe(false);
-  await expect(map.locator('.gf-gl-note')).toContainText('Hors ligne : relief, bâtiments et plan vectoriel indisponibles, vue à plat.');
+  await expect.poll(() => mapState(map)).toContain('Hors ligne : relief, bâtiments et plan vectoriel indisponibles, vue à plat.');
+  await expect(mapSaid(map)).toContainText('Hors ligne : relief, bâtiments et plan vectoriel indisponibles, vue à plat.');
   st = await glState(map);
   expect(st.layers).not.toContain('gf-buildings');
   await context.setOffline(false);
@@ -310,7 +317,8 @@ test('le relief injoignable : la 3D continue à plat et le dit', async ({ app, p
   const map = carte(page);
   await expect(map).toHaveAttribute('data-renderer', '3d', { timeout: 30_000 });
   await expect.poll(async () => (await glState(map)).terrain, { timeout: 20_000 }).toBe(false);
-  await expect(map.locator('.gf-gl-note')).toContainText('Relief injoignable : vue à plat.');
+  await expect.poll(() => mapState(map)).toContain('Relief injoignable : vue à plat.');
+  await expect(mapSaid(map)).toContainText('Relief injoignable : vue à plat.');
   await expect(map.locator('.gf-gl-mk .gf-place')).toHaveCount(2);
   expect(seen.problems).toEqual([]);
 });

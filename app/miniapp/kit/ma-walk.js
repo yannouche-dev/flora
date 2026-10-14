@@ -6,16 +6,17 @@
 //    over the card, the map and the list, which stay where they are underneath, out of reach.
 //  - Wider (900 px): the same column on the left — its width the user's (a separator, geoflora.trailLayout) —, the
 //    map on the right, in sight beside the suggestions.
-// A word after each action (« Ortie dioïque ajoutée au parcours, ici », « Annuler »), over the bottom, waits under the
-// suggestions. The game (kit/trail-session.js) is followed (my position) while it is on screen.
+// A word after each action (« Ortie dioïque ajoutée au parcours, ici », « Annuler »): the app's brief toast, docked at the
+// bottom of the list (never over the map), waits under the suggestions. The game (kit/trail-session.js) is followed (my
+// position) while it is on screen.
 
 import { LitElement, html, css, nothing } from 'lit';
-import { icon } from '../../core/icons.js';
 import { PaneSizer } from '../../core/panes.js';
 import { config } from '../../config.js';
 import { ui } from '../../styles/ui.js';
 import { trailSessionOf } from './trail-session.js';
 import { SessionWatch } from './watch.js';
+import { briefToast } from '../../core/toast.js';
 import './ma-walk-card.js';
 import './ma-walk-list.js';
 import './ma-walk-map.js';
@@ -87,17 +88,12 @@ export class MaWalk extends LitElement {
       .seeking .mapcol { opacity: 1; }
     }
     @media (prefers-reduced-motion: reduce) { .head, .mapcol, .list { transition: none; } }
-    .toast { position: absolute; z-index: 20; left: 12px; right: 12px; margin: 0 auto; width: fit-content; bottom: calc(84px + env(safe-area-inset-bottom, 0px)); display: flex; gap: 12px; align-items: center; padding: 10px 14px 10px 16px;
-      border-radius: var(--gf-radius-pill); background: #1f2a1f; color: #fff; box-shadow: 0 10px 30px rgb(0 0 0 / 35%); font-size: 0.92rem; animation: up 0.25s ease-out; }
-    .toast button { border: 0; background: none; color: #9be15d; font: inherit; font-weight: 700; cursor: pointer; padding: 4px; }
-    @keyframes up { from { opacity: 0; transform: translateY(10px); } }
     @container (max-width: 899px) {
       .head { padding: 8px 10px 4px; }
       /* A phone, searching: the map under the sheet is out of reach too (Tab, screen readers), once faded. */
       .seeking .mapcol { visibility: hidden; transition: opacity 0.2s ease, visibility 0s linear 0.2s; }
     }
     @media (max-height: 480px) { .list { max-height: 22dvh; } }
-    @media (prefers-reduced-motion: reduce) { .toast { animation: none; } }
   `];
 
   constructor() {
@@ -130,11 +126,36 @@ export class MaWalk extends LitElement {
     super.disconnectedCallback();
     fitKeyboard(false);
     this.#session?.stop();
+    this.#toast?.shown?.hide();
+    this.#toast = null;
   }
 
   updated() {
     // Only while on screen: a late update (a toast's end, a GPS fix, the IGN's name) never sets it elsewhere.
     fitKeyboard(this.isConnected && Boolean(this.#session?.trail));
+    this.#syncToast();
+  }
+
+  /** The word shown now (the session's toast), and how to let it go. @type {{ toast: any, shown: { hide: () => void } | null } | null} */
+  #toast = null;
+
+  /**
+   * The word after an action (« Ortie dioïque ajoutée au parcours, ici », its « Annuler »): the app's brief toast
+   * (core/toast.js) — under 3 s (the session times it), in the top layer, docked at the bottom of the walk's list
+   * (its column on a wide screen: never over the map), read out by itself (role=status); hidden under the search's
+   * suggestions, back once they close.
+   */
+  #syncToast() {
+    const s = this.#session;
+    const toast = s?.trail && !this._open ? s.toast : null;
+    if (this.#toast?.toast === toast) return;
+    this.#toast?.shown?.hide();
+    this.#toast = null;
+    if (!toast || !s) return;
+    const near = this.renderRoot.querySelector('.list');
+    const shown = briefToast(toast.text, { near, at: 'bottom', offset: 10, ms: 0,
+      action: toast.undo ? { label: 'Annuler', run: () => { toast.undo?.(); if (s.toast === toast) { s.toast = null; s.changed(); } } } : null });
+    this.#toast = { toast, shown };
   }
 
   render() {
@@ -152,8 +173,6 @@ export class MaWalk extends LitElement {
       </div>
       ${this.#sizer.split('side', 'left', () => this.clientWidth - 360)}
       <div class="mapcol"><ma-walk-map .session=${s}></ma-walk-map></div>
-      ${s.toast && !open ? html`<div class="toast" role="status">${icon('check-lg')} <span>${s.toast.text}</span>
-        ${s.toast.undo ? html`<button type="button" @click=${() => { s.toast?.undo?.(); s.toast = null; s.changed(); }}>Annuler</button>` : nothing}</div>` : nothing}
     </div>`;
   }
 }

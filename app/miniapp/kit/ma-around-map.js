@@ -1,14 +1,14 @@
 // @ts-check
 // Rencontres' map while discovering (kit/ma-guided.js), the column on the left: the circle and the observations in it.
-//  - First (`asking`, the step « map »): its panel, how far (the slider), what was seen around (a count, a few
-//    faces) and « Qui pousse par ici ? » — the event map-launch;
+//  - First (`asking`, the step « map »): its panel, how far (the slider), a few faces of what was seen around (their
+//    count said by the map, not written) and « Qui pousse par ici ? » — the event map-launch;
 //  - then the perimeter in one panel over the map (under it on a phone): the distance and its slider; after a match,
 //    « Où pousse-t-elle encore ? » — the circle, the département, the région, France, the world: the map eases there,
 //    the outline drawn —; the place to change; and the plant in view (the card on top), lit on the map where it was
-//    observed in that perimeter, its observations counted. Rencontres' own step (`quiet`): the circle and its distance
-//    only.
+//    observed in that perimeter, its observations counted (said by the map, not written). Rencontres' own step
+//    (`quiet`): the circle and its distance only.
 //  - Later (`listed`), the plants around under it: a touch, or a point of the map touched, brings the plant on top of
-//    the deck — the event around-pick (detail.id); one that is not among the cards is said on the map a moment.
+//    the deck — the event around-pick (detail.id); one that is not among the cards: a brief toast over the map.
 
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { icon } from '../../core/icons.js';
@@ -75,9 +75,7 @@ export class MaAroundMap extends LitElement {
     /** The département and région of the place (their names and outlines). */
     _admin: { state: true },
     /** On the map: where the plant in view was observed in the perimeter. */
-    _hl: { state: true },
-    /** A word on the map for a moment. */
-    _note: { state: true }
+    _hl: { state: true }
   };
 
   static styles = [ui, css`
@@ -100,9 +98,6 @@ export class MaAroundMap extends LitElement {
     .g-radius { display: flex; align-items: center; gap: 10px; min-width: 0; }
     .g-radius .mood { flex: none; max-width: 45%; }
     .g-radius input { flex: 1; min-width: 0; margin: 0; accent-color: var(--gf-accent); }
-    .g-legend { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; min-width: 0; color: var(--gf-text); font-size: 0.78rem; }
-    .g-legend b { min-width: 0; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .g-legend > span:last-child { color: var(--gf-text-muted); white-space: nowrap; }
     /* The first map: its panel, the way to the cards. */
     .g-launch { position: absolute; z-index: 500; right: 16px; bottom: 28px; width: min(400px, calc(100% - 32px)); box-sizing: border-box; display: grid; gap: 10px; padding: 16px 18px;
       border-radius: 18px; background: color-mix(in srgb, var(--gf-surface) 95%, transparent); box-shadow: 0 12px 36px rgb(0 0 0 / 28%); backdrop-filter: blur(8px); animation: g-up 0.35s ease-out; }
@@ -132,11 +127,6 @@ export class MaAroundMap extends LitElement {
     .g-scope button { min-height: 0; height: 26px; padding: 0 10px; display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill);
       background: var(--gf-surface); color: var(--gf-text); font: inherit; font-size: 0.78rem; cursor: pointer; white-space: nowrap; font-variant-numeric: tabular-nums; }
     .g-scope button[aria-pressed='true'] { background: var(--gf-accent); border-color: var(--gf-accent); color: var(--gf-accent-contrast, #fff); font-weight: 700; }
-    /* The plant in view: its leaf, then its photo once loaded, in its pink and gold (as on the map). */
-    .g-legend .dot { flex: none; position: relative; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; overflow: hidden;
-      background: #e0245e; color: #fff; font-size: 10px; box-shadow: 0 0 0 2px #ffd166; }
-    .g-legend .dot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.3s ease-out; }
-    .g-legend .dot img.in { opacity: 1; }
     /* The plants around (step 4), under the map: their thumbnails, a touch shows one in the panes. */
     .around { flex: 0 0 45%; width: auto; border-top: 1px solid var(--gf-border); display: flex; flex-direction: column; min-height: 0; background: var(--gf-surface); }
     .around h2 { margin: 0; padding: 10px 12px 6px; font-size: 0.95rem; display: flex; justify-content: space-between; align-items: center; gap: 6px; }
@@ -184,8 +174,6 @@ export class MaAroundMap extends LitElement {
     this._admin = null;
     /** @type {Highlight | null} */
     this._hl = null;
-    /** @type {string | null} */
-    this._note = null;
   }
 
   connectedCallback() {
@@ -196,7 +184,6 @@ export class MaAroundMap extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    clearTimeout(this.#noteTimer);
     this.#watched?.removeEventListener('change', this.#onChange);
     this.#watched = null;
   }
@@ -222,6 +209,7 @@ export class MaAroundMap extends LitElement {
   }
 
   updated() {
+    this.#say();
     this.#showScope();
     // The plant in view lit on the map (where it was seen in the perimeter).
     const c = this.c;
@@ -422,13 +410,33 @@ export class MaAroundMap extends LitElement {
   }
   /** @type {any} */ #areaMemo = null;
 
-  /** A word on the map for a moment. @param {string} text */
-  #say(text) {
-    this._note = text;
-    clearTimeout(this.#noteTimer);
-    this.#noteTimer = setTimeout(() => { this._note = null; }, 3500);
+  /** The map (gf-map: what this panel says goes through it — the quiet-map rule). @returns {any} */
+  get #map() { return this.renderRoot.querySelector('gf-map'); }
+
+  /**
+   * What was counted, said by the map's one live region rather than written over it: the observations around (the
+   * first panel), the plant in view's in the perimeter (its points lit on the map show where). The observations
+   * coming: the map's thin line past 400 ms.
+   */
+  #say() {
+    const s = this.session, map = this.#map;
+    if (!s || !map) return;
+    map.busy('obs', Boolean(this.asking && !s.obs.length && s.obsLoading), 'Les observations arrivent');
+    const words = this.asking ? this.#seenLine() : this.card && !this.quiet && this._hl ? `${nameOf(this.card.plant)} : ${this.#hlLine()}` : '';
+    if (words && words !== this.#said) map.announce(words);
+    this.#said = words;
   }
-  /** @type {any} */ #noteTimer = 0;
+  #said = '';
+
+  /** « 230 observations de plantes, 12 espèces différentes — les 100 plus récentes sur la carte » ('' before any). */
+  #seenLine() {
+    const s = /** @type {AroundSession} */ (this.session);
+    if (!s.obs.length) return '';
+    const species = new Set(s.obs.map(o => o.sci).filter(Boolean)).size;
+    const fr = (/** @type {number} */ x) => x.toLocaleString('fr-FR');
+    const total = Math.max(s.obsTotal || 0, s.obs.length);
+    return `${fr(total)} observation${total > 1 ? 's' : ''} de plantes, ${fr(species)} espèce${species > 1 ? 's' : ''} différente${species > 1 ? 's' : ''}${total > s.obs.length ? ` — les ${fr(s.obs.length)} plus récentes sur la carte` : ' sur la carte'}`;
+  }
 
   /** @param {number} id */
   #pick(id) { this.dispatchEvent(new CustomEvent('around-pick', { detail: { id }, bubbles: true, composed: true })); }
@@ -440,7 +448,8 @@ export class MaAroundMap extends LitElement {
   #onPoint(e) {
     const p = e.detail.point;
     const card = (this.session?.cards || []).find(x => (p.taxonId != null && x.taxonId === p.taxonId) || x.plant.scientificName === p.sci);
-    if (!card) { this.#say(`${p.common || p.sci || 'Cette plante'} n’est pas parmi les rencontres d’ici.`); return; }
+    // Not among the cards: one brief toast over the map (the user touched it).
+    if (!card) { this.#map?.toast(`${p.common || p.sci || 'Cette plante'} n’est pas parmi les rencontres d’ici.`); return; }
     this.#pick(card.plant.id);
   }
 
@@ -472,10 +481,7 @@ export class MaAroundMap extends LitElement {
     /** @type {[Scope, unknown][]} */
     const chips = [['around', html`${icon('crosshair')} ${km}`], ...(a?.department ? [/** @type {[Scope, unknown]} */ (['department', a.department])] : []),
       ...(a?.region ? [/** @type {[Scope, unknown]} */ (['region', a.region])] : []), ['country', 'France'], ['world', 'Monde']];
-    const name = card ? nameOf(card.plant) : '';
-    const legend = this._note ? html`<p class="g-legend" role="status">${this._note}</p>`
-      : card && !quiet ? html`<p class="g-legend" aria-live="polite"><span class="dot">${icon('leaf-fill')}${repeat(this.#photo(card.photo) ? [/** @type {string} */ (card.photo).replace('/medium.', '/square.')] : [], src => src,
-          src => html`<img src=${src} alt="" decoding="async" referrerpolicy="no-referrer" @load=${(/** @type {any} */ e) => e.target.classList.add('in')} @error=${hideImg} />`)}</span><b>${name}</b><span>${this.#hlLine()}</span></p>` : nothing;
+    // (The plant in view and its count: said by the map, #say — its lit points show where; nothing written here.)
     return html`<div class="g-where" role="group" aria-label="Périmètre de la recherche">
       <div class="top">
         ${scopes ? html`<div class="g-scope" role="group" aria-label="Où pousse-t-elle encore ?"
@@ -489,13 +495,13 @@ export class MaAroundMap extends LitElement {
       ${scope === 'around' ? html`<label class="g-radius">${scopes ? html`<span class="mood">${mood}</span>` : nothing}
         <input type="range" min="0" max=${DISTANCES.length - 1} step="any" .value=${String(distanceAt(c.radius))} aria-label="Distance de la recherche"
           aria-valuetext=${km} @input=${slide.input} @keydown=${slide.keydown} /></label>` : nothing}
-      ${legend}
     </div>`;
   }
 
   /**
-   * The first map's panel: how far, what was seen around (its count, a few faces), and the way on — « Qui pousse
-   * par ici ? » brings the cards next to the map.
+   * The first map's panel (the step's own: kept): how far, a few faces of what was seen around, and the way on —
+   * « Qui pousse par ici ? » brings the cards next to the map. How many were seen is said by the map (#say), not
+   * written; while they come, the map's thin line (no text).
    */
   #launch() {
     const c = /** @type {Record<string, any>} */ (this.c), s = /** @type {AroundSession} */ (this.session);
@@ -504,17 +510,14 @@ export class MaAroundMap extends LitElement {
     const species = new Map();
     for (const o of s.obs) if (o.sci && !species.has(o.sci)) species.set(o.sci, o);
     const faces = [...species.values()].filter(o => this.#photo(o.photo)).slice(0, 6);
-    const fr = (/** @type {number} */ x) => x.toLocaleString('fr-FR');
-    const total = Math.max(s.obsTotal || 0, s.obs.length);
     return html`<section class="g-launch" aria-label="Lancer la découverte">
       <h2>${icon('binoculars')} Jusqu’où part l’expédition ?</h2>
       <p class="where">Autour ${c.place ? 'de ' + c.place : 'de vous'} · <button class="link" type="button" @click=${() => this.app?.go('start')}>changer de lieu</button></p>
       <label class="g-dist"><span class="d">${distLabel(c.radius)}</span><span class="mood">${distMood(c.radius)}</span>
         <input type="range" min="0" max=${DISTANCES.length - 1} step="any" .value=${String(distanceAt(c.radius))} aria-label="Distance de la recherche"
           aria-valuetext=${distLabel(c.radius)} @input=${slide.input} @keydown=${slide.keydown} /></label>
-      <div class="g-seen" aria-live="polite">
-        ${faces.length ? html`<span class="faces" aria-hidden="true">${faces.map(o => html`<img src=${/** @type {string} */ (o.photo)} alt="" title=${o.credit ? creditText(o.credit) : ''} loading="lazy" referrerpolicy="no-referrer" @error=${(/** @type {any} */ e) => e.target.remove()} />`)}</span>` : nothing}
-        <span>${s.obs.length ? html`<b>${fr(total)}</b> observation${total > 1 ? 's' : ''} de plantes, <b>${fr(species.size)}</b> espèce${species.size > 1 ? 's' : ''} différente${species.size > 1 ? 's' : ''}${total > s.obs.length ? ` — les ${fr(s.obs.length)} plus récentes sur la carte` : ' sur la carte'}` : 'Les observations arrivent…'}</span>
+      <div class="g-seen" aria-hidden="true">
+        ${faces.length ? html`<span class="faces">${faces.map(o => html`<img src=${/** @type {string} */ (o.photo)} alt="" title=${o.credit ? creditText(o.credit) : ''} loading="lazy" referrerpolicy="no-referrer" @error=${(/** @type {any} */ e) => e.target.remove()} />`)}</span>` : nothing}
       </div>
       <button class="primary go" type="button" @click=${() => this.dispatchEvent(new CustomEvent('map-launch', { bubbles: true, composed: true }))}>${icon('heart-fill')} Qui pousse par ici ? <small>Les rencontres arrivent à côté de la carte</small></button>
     </section>`;

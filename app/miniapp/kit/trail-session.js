@@ -15,6 +15,7 @@ import * as db from '../../core/db.js';
 import { href } from '../../core/router.js';
 import { encodeCollection, share } from '../../core/share.js';
 import { geoProblem } from '../../components/start-screen.js';
+import { TOAST_MS } from '../../core/toast.js';
 import { DONE, KEY, LIST, NAMED, countOf, read, write } from './trail-store.js';
 
 /** @typedef {import('../runtime.js').MiniApp} MiniApp */
@@ -352,7 +353,7 @@ export class TrailSession extends EventTarget {
   say(text, undo) {
     clearTimeout(this.timers.toast);
     this.toast = { text, undo };
-    if (!this.searching) this.timers.toast = setTimeout(() => { this.toast = null; this.changed(); }, 4500);
+    if (!this.searching) this.timers.toast = setTimeout(() => { this.toast = null; this.changed(); }, TOAST_MS);
     this.changed();
   }
 
@@ -361,7 +362,7 @@ export class TrailSession extends EventTarget {
     if (open === this.searching) return;
     this.searching = open;
     clearTimeout(this.timers.toast);
-    if (!open && this.toast) this.timers.toast = setTimeout(() => { this.toast = null; this.changed(); }, 4500);
+    if (!open && this.toast) this.timers.toast = setTimeout(() => { this.toast = null; this.changed(); }, TOAST_MS);
   }
 
   /** Its timers, its GPS, its listening stopped (the app gone, or played again). */

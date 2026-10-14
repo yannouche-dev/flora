@@ -24,7 +24,9 @@ import { icon, kindIcon } from '../core/icons.js';
 import { harvestRisk } from '../core/alerts.js';
 import './gf-plant-pick-list.js';
 import './gf-place-insights.js';
-import { openMap3d } from './gf-map3d.js';
+import { map3dProblem, openMap3d } from './gf-map3d.js';
+import { briefToast } from '../core/toast.js';
+import { hintView, takeHint } from '../core/hints.js';
 
 /** Existing places closer than this are offered instead of creating a duplicate. */
 const NEARBY_RADIUS = 100;
@@ -80,8 +82,6 @@ export class GfSpotEditor extends LitElement {
     _note: { state: true },
     _where: { state: true },
     _editPos: { state: true },
-    /** Why its « Vue 3D » did not open (no WebGL2, the module off). */
-    _note3d: { state: true },
     /** Its own width (px). */
     _w: { state: true }
   };
@@ -110,8 +110,6 @@ export class GfSpotEditor extends LitElement {
     .save-state { font-size: 0.8rem; color: var(--gf-text-muted); margin-right: auto; }
     .save-state.error { color: var(--gf-danger); }
     .toolbar { display: flex; gap: 8px; flex-wrap: wrap; }
-    .note3d { margin: 6px 0 0; font-size: 0.85rem; color: var(--gf-text-muted); }
-    .note3d:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
     /* Dashed "add" buttons: something new goes here. */
     .add { border-style: dashed; border-color: var(--gf-accent); color: var(--gf-accent); font-weight: 600; justify-self: start; }
     .map-area { position: relative; min-height: 0; }
@@ -137,6 +135,8 @@ export class GfSpotEditor extends LitElement {
     .dot.weak { background: #f59e0b; }
     .dot.none { background: var(--gf-danger); }
     .gps .hint { color: var(--gf-text-muted); flex-basis: 100%; font-size: 0.8rem; }
+    .gps .hint-once { flex-basis: 100%; box-shadow: none; background: var(--gf-surface-2); }
+    .gps .hint-once button { margin-left: 0; }
     .gps .where { flex-basis: 100%; font-size: 0.85rem; }
     .gps .coords { font-variant-numeric: tabular-nums; color: var(--gf-text-muted); }
     .gps button { margin-left: auto; }
@@ -824,20 +824,29 @@ export class GfSpotEditor extends LitElement {
 
   /** @type {number | undefined} */ #whereTimer;
 
+  /** The map's gestures here: a first-use hint (core/hints.js: the first editor ever on this device), until its ✕. @type {boolean | undefined} */
+  #gestureHint;
+
+  /** A gesture of the map said once per device (its ✕), never again: the map's own controls say the rest. @param {unknown} words */
+  #gesture(words) {
+    this.#gestureHint ??= takeHint('editor-gestures');
+    return this.#gestureHint ? hintView(words, () => { this.#gestureHint = false; this.requestUpdate(); }, 'gesture') : nothing;
+  }
+
   #gpsStatus() {
     const { fix, error } = this.#geo.state;
     if (this._manual) {
       return html`<div class="gps card"><span class="dot good"></span> Point de l’endroit ${this.#isNew ? 'placé à la main' : 'enregistré'}
         ${fix && this.#editing ? html`<button type="button" @click=${this.#useGps}>Utiliser le GPS</button>` : nothing}
         ${this.#whereLine()}
-        <span class="hint">${this.#editing
+        ${this.#gesture(this.#editing
           ? 'Le carré vert est le point de l’endroit, les ronds sont les plantes : faites-les glisser pour les ajuster.'
-          : html`Le carré vert est le point de l’endroit, les ronds sont les plantes. ${icon('pencil')} sur la carte pour les déplacer.`}</span></div>`;
+          : html`Le carré vert est le point de l’endroit, les ronds sont les plantes. ${icon('pencil')} sur la carte pour les déplacer.`)}</div>`;
     }
     if (!fix) {
       return html`<div class="gps card"><span class="dot ${error ? 'none' : ''}"></span>
         ${error || 'Recherche de la position GPS…'}
-        <span class="hint">Appui long sur la carte pour placer le lieu à la main.</span></div>`;
+        ${this.#gesture('Appui long sur la carte pour placer le lieu à la main.')}</div>`;
     }
     const good = fix.accuracy <= config.goodAccuracy;
     return html`<div class="gps card" aria-live="polite">
@@ -1046,11 +1055,15 @@ export class GfSpotEditor extends LitElement {
       </div>`;
   }
 
-  /** « Vue 3D » of the place (a parcours: its walk too); when it cannot open here, why. @param {Event} e */
+  /**
+   * « Vue 3D » of the place (a parcours: its walk too); when it cannot open here (no WebGL2, the module off), why: a
+   * brief toast above its button (the user asked), its own words read out — and the button's title says it too.
+   * @param {Event} e
+   */
   #open3d = async (/** @type {Event} */ e) => {
     const opener = /** @type {HTMLElement} */ (e.currentTarget);
-    this._note3d = '';
-    if (this._place) this._note3d = await openMap3d(this._place, opener) || '';
+    const problem = this._place ? await openMap3d(this._place, opener) : null;
+    if (problem) briefToast(problem, { near: opener, at: 'above', offset: 8 });
   };
 
   render() {
@@ -1127,10 +1140,9 @@ export class GfSpotEditor extends LitElement {
             ${p.plants.length ? html`<button type="button" @click=${this.#share}>Partager</button>` : nothing}
             <button type="button" @click=${this.#export}>Exporter (GeoJSON)</button>
             ${isPlace && !this.embedded ? html`<a class="button" href=${href.map({ spot: place.id })}>Voir sur la carte</a>` : nothing}
-            ${isPlace && p.plants.length ? html`<button type="button" class="map3d" aria-describedby="note3d" @click=${this.#open3d}>${icon('map')} Vue 3D</button>` : nothing}
+            ${isPlace && p.plants.length ? html`<button type="button" class="map3d" title=${map3dProblem() || 'Le lieu sur le relief'} @click=${this.#open3d}>${icon('map')} Vue 3D</button>` : nothing}
             ${isPlace ? html`<button type="button" @click=${this.#removeLocation}>Retirer la position</button>` : nothing}
-          </div>
-          <p class="note3d" id="note3d" role="status">${this._note3d || ''}</p>`}
+          </div>`}
 
         ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : nothing}
 
