@@ -21,6 +21,9 @@ import { bio, distLabel, nameOf, nextDistance } from './cards.js';
 
 /** @typedef {import('./cards.js').Card} Card */
 
+/** A pointer still this long (ms) before it is let go: the card was held, not thrown. */
+const REST_MS = 60;
+
 export class MaDeck extends LitElement {
   static properties = {
     /** The game (kit/session.js). */
@@ -250,7 +253,11 @@ export class MaDeck extends LitElement {
     const card = this.cards.find(c => c.plant.id === d.id);
     // Far enough (30 % of the card's width), or thrown (fast enough, the same way).
     const w = d.el.offsetWidth || 300, h = d.el.offsetHeight || 400;
-    const thrown = Math.abs(d.dx) > 40 && Math.abs(d.vx) > 0.6 && Math.sign(d.vx) === Math.sign(d.dx);
+    // The speed is that of the last moves: a card held still before it is let go was not thrown, however fast it was
+    // dragged there (the speed is only measured as the pointer moves: without this, a quick drag, a pause, then a
+    // release threw the card — a match by mistake).
+    const vx = performance.now() - d.lt > REST_MS ? 0 : d.vx;
+    const thrown = Math.abs(d.dx) > 40 && Math.abs(vx) > 0.6 && Math.sign(vx) === Math.sign(d.dx);
     if (card && (Math.abs(d.dx) > w * 0.3 || thrown)) { this.decide(card, d.dx > 0, d.el); return; }
     if (card && d.dy < -h * 0.18 && Math.abs(d.dx) < w * 0.25) { this.#reset(d.el); this.#open(card); return; }
     // A touch without moving: its sheet.

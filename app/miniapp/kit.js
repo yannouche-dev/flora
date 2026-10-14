@@ -29,7 +29,7 @@ import './kit/ma-trail-recap.js';
  */
 
 /** What the plants-around components read of the context. */
-const AROUND = ['point', 'place', 'radius', 'matches', 'passed', 'focus'];
+const AROUND = ['point', 'place', 'radius', 'matches', 'passed', 'focus', 'view', 'mediaAt'];
 
 /**
  * How far to look, over the map of the observations in the circle (step « map »). props.view: the list's own view,
@@ -58,7 +58,7 @@ const aroundList = {
  * @type {Component}
  */
 const meet = {
-  reads: [...AROUND, 'media'],
+  reads: [...AROUND, 'media', 'sheet'],
   heavy: true,
   render: (c, app, p) => discovering() ? html`<ma-guided .app=${app} .c=${c}></ma-guided>` : distance.render(c, app, p)
 };

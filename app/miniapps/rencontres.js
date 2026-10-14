@@ -1,12 +1,14 @@
 // @ts-check
 // Rencontres: the plants observed around you, one card at a time — right if it pleases you, left if not. Its start
 // (« Autour de moi », a commune, « Reprendre » the place kept), how far to look over the map, then the cards, the
-// matches and all of them; the plant open over them at ?p=. During the first steps of the app, its guided way: the
-// map, the cards and the plant's panes in one layout transformed step by step, under a steps bar of its own (ownBar).
+// matches and all of them. One plant on the screen, the plant chosen (?p=): the map, its photos and its sheet show
+// it (kit/around.js#chosenContext), the address says the whole screen (router.js). During the first steps of the app,
+// its guided way: the map, the cards and the plant's panes in one layout transformed step by step, under a steps bar
+// of its own (ownBar).
 // Built from the kit (app/miniapp/kit): ma-guided during the first steps, else ma-distance then ma-around-list.
 // Owns — everything « Rejouer » / « Recommencer » empties, here and in the other tabs, as if never opened:
 //  - geoflora.app.rencontres.state: its place and name, distance, cards swiped right (this game's matches) and left,
-//    the step it was left at, the photos its first match brought (the plant, the pane closed: kit/ma-around-list.js);
+//    the step it was left at, the plant chosen, the photos its first match brought (the pane closed: kit/around.js);
 //    geoflora.app.rencontres.layout: its columns' widths (runtime.js#replay); geoflora.app.rencontres.media: the
 //    width of the photos' pane; geoflora.app.rencontres.sheet: the width of a plant's sheet beside the cards;
 //  - geoflora.discoverLayout: the widths of the map and the cards of its guided way;
@@ -25,7 +27,7 @@ import { forgetMadeBy } from '../core/collections.js';
 import { discovering, replayMeet } from '../core/discover.js';
 import { defineMiniApp } from '../miniapp/define.js';
 import { forgetGame } from '../miniapp/kit/session.js';
-import { aroundColumns, aroundContext, aroundSteps, locate } from '../miniapp/kit/around.js';
+import { aroundColumns, aroundContext, aroundSteps, chosenContext, locate } from '../miniapp/kit/around.js';
 
 export default defineMiniApp({
   id: 'rencontres',
@@ -37,8 +39,9 @@ export default defineMiniApp({
   exit: { label: 'Quitter Rencontres' },
   owns: { keys: ['geoflora.discoverLayout', 'geoflora.app.rencontres.media', 'geoflora.app.rencontres.sheet'], reset: () => { replayMeet(); forgetGame('rencontres'); return forgetMadeBy('rencontres'); } },
   shared: ['Mes plantes (sauf les favoris ajoutés par ses matchs)', 'lieux', 'premiers pas de l’application', 'réglages'],
-  // The photos its first match brought (once a game): { id: the plant, closed: the pane closed } — none: not yet.
-  context: { ...aroundContext(), media: { init: null, persist: true } },
+  // One plant on the screen, the plant chosen (?p=): the map, the photos its first match brought and the sheet show it
+  // (kit/around.js#chosenContext).
+  context: { ...aroundContext(), ...chosenContext() },
   actions: { locate },
   ownBar: (c, app) => discovering() && app.step.id !== 'start',
   ...aroundColumns('Rencontres'),

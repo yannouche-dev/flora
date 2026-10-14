@@ -4,7 +4,8 @@
 // brings it, once (kit/ma-around-list.js): on a wide screen a pane beside the cards (its width the user's, a
 // separator), on a phone the viewer full screen over the deck (a modal dialog, a step in history: Back closes it);
 // a short line says how it works, until dismissed. Its heading names the plant; × (and Échap) closes it. It decides
-// nothing: `meet-media-close` goes up (the list keeps whether it is open, in the game: kit/session.js).
+// nothing: `meet-media-close` goes up (the list keeps whether it is open, in the game: kit/session.js); the image
+// shown, `index` (the address's &m=), and the viewer's media-index, to keep the address.
 // hasPhotos(): a plant has images to show (the « Photos en ligne » module on): no empty pane.
 
 import { LitElement, html, css, nothing } from 'lit';
@@ -47,6 +48,8 @@ export class MaMeetMedia extends LitElement {
     plantId: { type: Number, attribute: 'plant-id' },
     /** Its name, in the heading. */
     name: {},
+    /** The image shown: its place among the plant's media (the address's &m=). */
+    index: { type: Number },
     /** The display mode (the modules, the media's presentation). */
     view: {},
     /** 'pane' (beside the deck) or 'dialog' (full screen, modal: a phone). */
@@ -96,6 +99,7 @@ export class MaMeetMedia extends LitElement {
     /** @type {number | null} */
     this.plantId = null;
     this.name = '';
+    this.index = 0;
     /** @type {Mode} */
     this.view = 'standard';
     /** @type {'pane' | 'dialog'} */
@@ -140,7 +144,7 @@ export class MaMeetMedia extends LitElement {
       </div>
       ${this.coach ? html`<div class="coach" role="note">${icon('lightbulb')}<p><b>Voici ses photos.</b> ${coachText()}${this.chooses ? ' Chaque nouveau coup de cœur la remplace ici.' : ''}</p>
         <button class="secondary" type="button" @click=${() => this.dispatchEvent(new CustomEvent('meet-media-coached', { bubbles: true, composed: true }))}>Compris</button></div>` : nothing}
-      <gf-media-viewer prefer-photos bar-out ?local=${this.mode === 'pane'} @media-bar=${() => this.requestUpdate()} plant-id=${this.plantId} .view=${this.view} presentation=${blockStyle(/** @type {any} */ (this.view), 'media')}
+      <gf-media-viewer prefer-photos bar-out ?local=${this.mode === 'pane'} @media-bar=${() => this.requestUpdate()} plant-id=${this.plantId} .view=${this.view} .index=${this.index} presentation=${blockStyle(/** @type {any} */ (this.view), 'media')}
         @media-close=${(/** @type {Event} */ e) => { e.stopPropagation(); this.close(); }}></gf-media-viewer>`;
   }
 

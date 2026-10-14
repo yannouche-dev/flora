@@ -5,7 +5,9 @@
 // persist keys of the manifest, under geoflora.app.<id>.state), written only through app.set. The rest lives while
 // the app is open: the cards found (iNaturalist, matched to the flora; Cueillette prudente: only the plants of a
 // dangerous confusion, the deadliest first), the observations in the circle (the map), what Wikipédia says of each
-// card, the swipes to undo, the view of the list and how many of its cards are shown. Fires `change`.
+// card, the swipes to undo, how many of the list's cards are shown. The view of the list is the context's (`view`,
+// the address's &v=). Rencontres: the plant of the screen, chosen (chosenId: kit/around.js#chosenContext). Fires
+// `change`.
 
 import * as db from '../../core/db.js';
 import { speciesAround, observationPointsAround } from '../../core/nearby.js';
@@ -27,18 +29,23 @@ import { PAGE, aroundOrder, deckOf, ethnoSentence, harvestOrder, swipe, unswipe 
  * @typedef {import('../runtime.js').MiniApp} MiniApp
  */
 
-/** The view chosen in each mini-app's list (Rencontres, Matchs, Toutes), kept while the app is open. @type {Record<string, string>} */
-const views = {};
 /** The mini-apps whose deck has shown it can be swiped (once while the app is open). @type {Set<string>} */
 const hinted = new Set();
 
 /**
+ * The views of the list (kit/ma-around-list.js: « Rencontres », « Matchs », « Toutes »), as the address writes them
+ * (&v=; the list's own view is not written).
+ */
+const VIEW_WORDS = /** @type {const} */ ({ swipe: 'rencontres', matches: 'matchs', all: 'toutes' });
+/** @param {string | null | undefined} word @returns {string | null} */
+const viewOfWord = word => Object.entries(VIEW_WORDS).find(([, w]) => w === word)?.[0] ?? null;
+
+/**
  * What a mini-app around a place keeps in memory forgotten (« Rejouer », « Recommencer »: its manifest's
- * owns.reset; another tab's, by core/sync.js): the view chosen, the swipe hint shown — they come again.
+ * owns.reset; another tab's, by core/sync.js): the swipe hint shown — it comes again.
  * @param {string} id
  */
 export function forgetGame(id) {
-  delete views[id];
   hinted.delete(id);
 }
 subscribe('miniapp', d => { if (d?.op === 'replay' && typeof d.id === 'string') forgetGame(d.id); });
@@ -70,7 +77,7 @@ export class AroundSession extends EventTarget {
     this.pointsAbort = null;
     /** What is said of a plant (Wikipédia), by plant id: the text, null (nothing), or absent (not asked yet). @type {Map<number, string | null>} */
     this.ethno = new Map();
-    /** ↺: the last swipes, to undo. @type {{ id: number, liked: boolean, fav: boolean }[]} */
+    /** ↺: the last swipes, to undo (`was`: the plant chosen before a heart chose this one). @type {{ id: number, liked: boolean, fav: boolean, was?: number | null }[]} */
     this.history = [];
     /** A heart flying off the deck (a match after the first). */
     this.burst = 0;
@@ -100,8 +107,43 @@ export class AroundSession extends EventTarget {
     this.changed();
   }
 
-  /** A match touched on the map: chosen (Rencontres' list shows its photos: the event `choose`). @param {number} id */
-  choose(id) { this.dispatchEvent(new CustomEvent('choose', { detail: { id } })); }
+  // ── The plant of the screen (Rencontres) ─────────────────────────────
+
+  /**
+   * Does this game show one plant chosen (Rencontres: kit/around.js#chosenContext) — the map, the photos and the sheet
+   * on it —, or a plant opened in its sheet (?p=: Cueillette prudente, Mosaïque)?
+   */
+  get chooses() { return 'sheet' in this.app.m.context; }
+
+  /**
+   * The plant of the screen, the one source of what the map lights, the photos and the sheet show: the plant chosen
+   * (the context's `focus`, the address's ?p=) — else, before any heart, the card on top of the deck (followed as it
+   * is swiped). None in a game that does not choose (its sheet is the context's `focus`).
+   * @returns {number | null}
+   */
+  get chosenId() {
+    if (!this.chooses) return null;
+    return this.c.focus ?? this.deck[0]?.plant.id ?? null;
+  }
+
+  /** The card of the plant of the screen (none while the cards are not there). */
+  get chosenCard() {
+    const id = this.chosenId;
+    return id == null ? undefined : (this.cards || []).find(c => c.plant.id === id);
+  }
+
+  /**
+   * A plant chosen — a heart, the sheet's « Suivante », a point of the map, a tile: every pane follows it, and the
+   * address (a new entry: Back returns to the one before, gf-miniapp.js). Its first image shown. `sheet`: its sheet
+   * opened too. @param {number} id @param {{ sheet?: boolean }} [o]
+   */
+  choose(id, o = {}) {
+    /** @type {Record<string, unknown>} */
+    const patch = {};
+    if (this.c.focus !== id) Object.assign(patch, { focus: id, mediaAt: null });
+    if (o.sheet && !this.c.sheet) patch.sheet = true;
+    if (Object.keys(patch).length) this.app.set(patch);
+  }
 
   /** The deck's swipe hint: not shown yet in this app (and now it is). */
   hintOnce() {
@@ -110,11 +152,15 @@ export class AroundSession extends EventTarget {
     return true;
   }
 
-  /** The view of the list (none chosen: the app's own, `fallback`). @param {string} fallback */
-  viewOr(fallback) { return views[this.app.m.id] || fallback; }
-  /** @param {string | null} view */
-  setView(view) {
-    if (view) views[this.app.m.id] = view; else delete views[this.app.m.id];
+  /** The view of the list (the context's, the address's &v=; none chosen: the app's own, `fallback`). @param {string} fallback */
+  viewOr(fallback) { return viewOfWord(this.c.view) ?? fallback; }
+  /**
+   * Another view of the list (none: the app's own, `own`, which the address does not write).
+   * @param {string | null} view @param {string} [own]
+   */
+  setView(view, own) {
+    const word = view && view !== own ? VIEW_WORDS[/** @type {keyof typeof VIEW_WORDS} */ (view)] ?? null : null;
+    if (word !== this.c.view) this.app.set({ view: word });
     this.changed();
   }
 
@@ -285,8 +331,11 @@ export class AroundSession extends EventTarget {
   swiped(card, liked) {
     const id = card.plant.id;
     const fav = liked && !isFavorite(id);
-    this.history = [...this.history, { id, liked, fav }].slice(-30);
-    this.app.set(swipe(this.c, id, liked));
+    // Rencontres: a heart chooses the plant loved (until the next one; a pass changes nothing) — the plant chosen
+    // before kept for its ↺.
+    const choose = liked && this.chooses;
+    this.history = [...this.history, { id, liked, fav, ...(choose ? { was: this.c.focus } : {}) }].slice(-30);
+    this.app.set({ ...swipe(this.c, id, liked), ...(choose && this.c.focus !== id ? { focus: id, mediaAt: null } : {}) });
     plantSeen(id);
     if (liked) {
       // A favourite of this game (its origin): « Recommencer » takes it away again.
@@ -311,7 +360,9 @@ export class AroundSession extends EventTarget {
     const last = this.history[this.history.length - 1];
     if (!last) return;
     this.history = this.history.slice(0, -1);
-    this.app.set(unswipe(this.c, last.id));
+    // The heart that chose the plant undone: the plant chosen before it (none: the card on top again).
+    const back = last.liked && this.chooses && 'was' in last && this.c.focus === last.id ? { focus: last.was ?? null, mediaAt: null } : {};
+    this.app.set({ ...unswipe(this.c, last.id), ...back });
     const card = (this.cards || []).find(c => c.plant.id === last.id);
     if (last.fav && card && isFavorite(last.id)) toggleFavorite(card.plant).catch(() => {});
     this.changed();

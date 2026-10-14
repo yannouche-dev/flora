@@ -54,7 +54,9 @@ test('la carte du dessous grandit avec le glissé, sans saut à l’échange', a
   const rise = Number(await under.evaluate(el => /** @type {HTMLElement} */ (el).style.getPropertyValue('--rise')));
   expect(rise).toBeGreaterThan(0.2);
   expect(rise).toBeLessThan(1);
-  // Let go too soon: back down, smoothly (no longer following).
+  // Held still a moment, then let go too soon (not thrown, however quick the drag was): back down, smoothly (no longer
+  // following).
+  await page.waitForTimeout(150);
   await page.mouse.up();
   await expect(under).not.toHaveClass(/following/);
   await expect.poll(() => under.evaluate(el => /** @type {HTMLElement} */ (el).style.getPropertyValue('--rise'))).toBe('');

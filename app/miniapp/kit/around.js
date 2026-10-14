@@ -27,8 +27,10 @@ const FIX_MAX_AGE = 60_000;
 
 /**
  * The context of a mini-app around a place: kept (persist) — the place chosen and its name, the distance, the cards
- * swiped right (matches) and left (passed); for the visit — the plant open (the address's ?p=), why « Autour de moi »
- * failed. @returns {Record<string, import('../define.js').ContextKey>}
+ * swiped right (matches) and left (passed); for the visit, each in the address (router.js, AppRoute) — the plant open
+ * (?p=), the view of the list (&v=: « matchs », « toutes »; null: its own), the image shown (&m=: its place among the
+ * plant's media; null: the first) —, why « Autour de moi » failed. Rencontres adds the plant chosen (chosenContext).
+ * @returns {Record<string, import('../define.js').ContextKey>}
  */
 export const aroundContext = () => ({
   point: { init: null, persist: true },
@@ -37,7 +39,24 @@ export const aroundContext = () => ({
   matches: { init: [], persist: true },
   passed: { init: [], persist: true },
   focus: { init: null },
+  view: { init: null },
+  mediaAt: { init: null },
   startError: { init: null }
+});
+
+/**
+ * Rencontres: ONE plant on the screen, « la plante choisie » — the map's highlight, the photos beside the deck and the
+ * plant's sheet all show it (kit/session.js#chosenId). `focus` (?p=) is that plant, kept with the game: the last one
+ * loved, or picked since (the sheet's « Suivante », a point of the map, a tile of « Matchs » or « Toutes »); none yet:
+ * the card on top of the deck (followed as it is swiped). `sheet` (&fiche=1): its sheet open, beside the cards (a
+ * phone: over them). `media`: the photos the first heart brought (once a game) — { by: the plant whose heart brought
+ * them (its ↺ takes them away), closed: the pane closed }; none: not yet.
+ * @returns {Record<string, import('../define.js').ContextKey>}
+ */
+export const chosenContext = () => ({
+  focus: { init: null, persist: true },
+  sheet: { init: false },
+  media: { init: null, persist: true }
 });
 
 /** A place chosen: the map and its distance, then the cards. @param {any} c */

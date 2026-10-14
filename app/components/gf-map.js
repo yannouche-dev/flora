@@ -298,6 +298,8 @@ export class GfMap extends LitElement {
     this.area = null;
     /** @type {{ key: string, points: { coordinates: [number, number], title: string }[] } | null} */
     this.highlight = null;
+    /** How a point clicked answers (none given: its record opened, nothing inside a mini-app). @type {'open' | 'pick' | 'none' | null} */
+    this.pointClick = null;
     /** @type {{ key: string, feature: any } | null} */
     this.zone = null;
     /** @type {{ key: string, points: { coordinates: [number, number], title: string, url?: string }[] } | null} */
@@ -1436,8 +1438,12 @@ export class GfMap extends LitElement {
   #onPoint(dot, p) {
     // Inside a mini-app, no record opened on another site: the point's card only.
     const how = this.pointClick || (inMiniApp(this) ? 'none' : 'open');
-    if (how === 'none') return;
-    if (how === 'pick') { dot.on('click', () => this.dispatchEvent(new CustomEvent('point-pick', { detail: { point: p }, bubbles: true, composed: true }))); return; }
+    // 'pick' is read at the click: points kept from one step to the next (area.smooth: the games' map, 'none' on the
+    // step « map », 'pick' beside the cards) answer as the map says now — not as it said when they were drawn.
+    if (how === 'none' || how === 'pick') {
+      dot.on('click', () => { if (this.pointClick === 'pick') this.dispatchEvent(new CustomEvent('point-pick', { detail: { point: p }, bubbles: true, composed: true })); });
+      return;
+    }
     if (!p.url) return;
     // On a touch screen, a point with a card: the first touch shows it (and lights its kin), the second opens the
     // record — not the app left at once.

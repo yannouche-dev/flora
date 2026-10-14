@@ -415,6 +415,8 @@ export class GfPlantDetail extends LitElement {
     /** In a pane (`only` media): the image to open at, by URL (a photo touched) or by place (the address). */
     paneStart: { attribute: false },
     paneAt: { attribute: false },
+    /** Its « Médias » (the block in the sheet, or on an edge) open at this image, by its place (a mini-app's address, &m=). */
+    mediaAt: { attribute: false },
     /** The block shown in the pane beside this sheet (Flore): only a line here, not twice. */
     inPane: { attribute: false },
     /** A block opened over the page (outside Flore, where there is no pane): its key and the image it starts at. */
@@ -1010,6 +1012,8 @@ export class GfPlantDetail extends LitElement {
     super();
     /** @type {number} */
     this.plantId = 0;
+    /** The image its « Médias » open at (a mini-app's &m=). @type {number} */
+    this.mediaAt = 0;
     /** @type {any} */
     this._plant = undefined;
     /** @type {any} */
@@ -3047,7 +3051,7 @@ export class GfPlantDetail extends LitElement {
       case 'media':
         return ctx.photosOff ? html`<p class="muted">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`
           // In the sheet: compact; stuck to an edge: the full viewer, filling it (its keys only when it has the focus).
-          : html`<gf-media-viewer ?prefer-photos=${this.panesOnly} ?showcase=${this.panesOnly} ?bar-out=${isOnEdge(this.view, 'media')} ?compact=${!isOnEdge(this.view, 'media')} ?local=${isOnEdge(this.view, 'media')} plant-id=${plant.id} .view=${this.view}
+          : html`<gf-media-viewer ?prefer-photos=${this.panesOnly} ?showcase=${this.panesOnly} ?bar-out=${isOnEdge(this.view, 'media')} ?compact=${!isOnEdge(this.view, 'media')} ?local=${isOnEdge(this.view, 'media')} plant-id=${plant.id} .view=${this.view} .index=${this.mediaAt ?? 0}
             presentation=${blockStyle(this.view, 'media')} .label=${isTitleShown(this.view, 'media') ? null : blockTitle('media')}
             @open-pane=${(/** @type {CustomEvent} */ e) => { e.stopPropagation(); this.#openPane('media', e.detail.url); }}></gf-media-viewer>`;
       case 'photos': {

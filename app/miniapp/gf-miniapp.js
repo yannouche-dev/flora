@@ -1,12 +1,19 @@
 // @ts-check
-// The box of a mini-app (#/app/<id>[/<step>][?p=<plant>]): the app alone on the screen — no header, no tab bar
+// The box of a mini-app (#/app/<id>[/<step>][?p=<plant>&v=<view>&m=<image>&fiche=1]): the app alone on the screen — no header, no tab bar
 // (gf-app) —, under a bar of 48 px: « × Quitter … » (the one way out), its title, its steps (ma-steps, when
 // « Afficher les étapes » says so), and ⋯: show or hide the steps, the layout back to its own, « Rejouer ».
 //  - Its manifest is loaded when it opens (app/miniapps/index.js), checked against the kit, and run (runtime.js).
-//  - The address follows it: a step reached is a new entry (Back returns to the one before), a step an app ported
-//    whole says it is on replaces the address (Back leaves it, as before); ?p= is the context's `focus`: a plant
-//    opened by a component (the event ma-plant) is a new entry too (Back closes it), the next one in its sheet
-//    replaces it. Over a start screen, the plant of a link (?p=) shows in a sheet of its own (ma-plant-sheet).
+//  - The address is the whole screen, and the screen follows the address (a link, a reload, Back, Forward): the step,
+//    and the context's keys the app has — ?p= its `focus`, &v= its `view`, &m= its `mediaAt`, &fiche=1 its `sheet`
+//    (router.js, AppRoute). Each change of the context writes the address, once (the address applied to the context
+//    writes nothing back: no loop). A step reached is a new entry (Back returns to the one before), a step an app
+//    ported whole says it is on replaces the address (Back leaves it, as before); another plant (?p=) is a new entry
+//    too — Back returns to the plant before —, and so is a sheet opened (Back closes it); the rest (the view, the
+//    image, a sheet closed) replaces the address.
+//  - A plant opened or closed by a component (the event ma-plant): Rencontres (the plant chosen, kit/around.js), the
+//    plant chosen and its sheet open, or its sheet closed (the plant stays chosen); the others, the plant open (?p=:
+//    its sheet), or closed — back to the entry it was opened from. Over a start screen, the plant of a link (?p=)
+//    shows in a sheet of its own (ma-plant-sheet).
 //  - The way out: exit.confirm(c) asks first if it says something; then exit.handoff, within the grants; then back
 //    to where it was opened from (else the start page).
 //  - « Rejouer » asks first, in a dialog; then what the app owns is emptied (runtime.js#replay), here and in the
@@ -86,7 +93,7 @@ export class GfMiniapp extends LitElement {
 
   constructor() {
     super();
-    /** @type {{ name: 'app', id: string, step: string | null, plant: number | null } | null} */
+    /** @type {import('../core/router.js').AppRoute | null} */
     this.route = null;
     /** @type {MiniApp | null} */
     this._app = null;
@@ -121,28 +128,28 @@ export class GfMiniapp extends LitElement {
 
   #scenarios = () => { /** @type {any} */ (this.renderRoot.querySelector('gf-scenarios'))?.open(); };
 
-  /** The next change of the plant (?p=) is a new entry: opened by a component. */
-  #pushPlant = false;
-  /** The plant on screen was opened here (Back closes it), not by a link. */
-  #openedHere = false;
+  /** The depth of the entry before the plant was opened here (closing it goes back to it), else none: opened by a link. @type {number | null} */
+  #sheetFrom = null;
 
   /**
-   * A plant opened (a new entry: Back closes it), or closed — Back when it was opened here, else the address without
-   * it. @param {number | null} id
+   * A plant opened by a component, or closed (null). Rencontres: the plant chosen, its sheet open — or its sheet
+   * closed, the plant still chosen. The others: the plant open (its sheet) — or closed: back to the entry it was
+   * opened from (however many plants its sheet went through since), else the address without it.
+   * @param {number | null} id
    */
   #plant(id) {
     const app = this._app;
     if (!app || !('focus' in app.m.context)) return;
+    const chooses = 'sheet' in app.m.context;
     if (id == null) {
-      if (this.#openedHere && depth() > 0) history.back();
-      else app.set({ focus: null });
-      this.#openedHere = false;
+      if (chooses) app.set({ sheet: false });
+      else if (this.#sheetFrom != null && this.#sheetFrom < depth()) history.go(this.#sheetFrom - depth());
+      else app.set({ focus: null, mediaAt: null });
+      this.#sheetFrom = null;
       return;
     }
-    this.#pushPlant = app.c.focus == null;
-    this.#openedHere ||= this.#pushPlant;
-    app.set({ focus: id });
-    this.#pushPlant = false;
+    if (!chooses && app.c.focus == null) this.#sheetFrom = depth();
+    app.set({ focus: id, ...(app.c.focus !== id ? { mediaAt: null } : {}), ...(chooses ? { sheet: true } : {}) });
   }
 
   /** The depth of the entry it was opened from (Quitter goes back to it). @type {number | null} */ #from = null;
@@ -198,7 +205,7 @@ export class GfMiniapp extends LitElement {
       markEntry({ gfAppFrom: this.#from });
       this._app = app;
       document.title = m.title + ' — GeoFlora';
-      this.#follow();
+      this.#follow(true);
     } catch (error) {
       console.error(error);
       this._error = 'Cette mini-application n’a pas pu s’ouvrir.';
@@ -218,12 +225,27 @@ export class GfMiniapp extends LitElement {
     this._app = null;
   }
 
-  /** The address followed (a link, Back, Forward): its step, and its plant as the focus. */
-  #follow() {
+  /** The address being applied to the context: what it changes is not written back (no loop, no new entry). */
+  #following = false;
+
+  /**
+   * The address followed (a link, a reload, Back, Forward): its step, and the context's keys it carries (?p=, &v=,
+   * &m=, &fiche=1). `opening`: the app just opened — an address with no plant keeps the plant chosen with the game
+   * (Rencontres: « Reprendre » finds it), and writes it. @param {boolean} [opening]
+   */
+  #follow(opening = false) {
     const app = this._app, route = this.route;
     if (!app || !route) return;
-    if ('focus' in app.m.context) app.set({ focus: route.plant });
-    if (route.plant == null) this.#openedHere = false;
+    const ctx = app.m.context;
+    /** @type {Record<string, unknown>} */
+    const patch = {};
+    if ('focus' in ctx && !(opening && route.plant == null && ctx.focus.persist)) patch.focus = route.plant;
+    if ('view' in ctx) patch.view = route.view ?? null;
+    if ('mediaAt' in ctx) patch.mediaAt = route.media ?? null;
+    if ('sheet' in ctx) patch.sheet = Boolean(route.sheet);
+    this.#following = true;
+    try { app.set(patch); } finally { this.#following = false; }
+    if (route.plant == null) this.#sheetFrom = null;
     // An app ported whole leads its own steps: the address only says them.
     // (The step of the address meanwhile, until it says its own: the bar does not jump back to the start.)
     if (app.m.driven) { if (!route.step || !app.reached(route.step)) this.#syncUrl(); return; }
@@ -231,14 +253,22 @@ export class GfMiniapp extends LitElement {
     // entered now (a link, a reload): the start, with no error.
     const step = route.step ?? app.m.resumeAt?.(app.c) ?? null;
     if (!app.follow(step)) { app.follow(null); this.#syncUrl(); }
-    else if (!route.step) this.#syncUrl();
+    else if (!route.step || opening) this.#syncUrl();
   }
 
-  /** The address the box is at now. */
+  /** The address of the screen now: its step and the context's keys the address carries (router.js, AppRoute). */
   #href() {
     const app = /** @type {MiniApp} */ (this._app);
-    const focus = 'focus' in app.m.context ? app.c.focus : null;
-    return href.app(app.m.id, app.step.id, typeof focus === 'number' ? focus : null);
+    const ctx = app.m.context, c = app.c;
+    const num = (/** @type {unknown} */ v) => typeof v === 'number' ? v : null;
+    // Rencontres' start screen shows no plant: the one kept with the game is not in its address (unless its sheet is
+    // open over it: a link).
+    const shown = !('sheet' in ctx) || c.sheet === true || app.step.kind !== 'start';
+    return href.app(app.m.id, app.step.id, 'focus' in ctx && shown ? num(c.focus) : null, {
+      view: 'view' in ctx && typeof c.view === 'string' ? c.view : null,
+      media: 'mediaAt' in ctx ? num(c.mediaAt) : null,
+      sheet: 'sheet' in ctx && c.sheet === true
+    });
   }
 
   /** The address in step, without a new entry (old addresses of Découvrir too). */
@@ -249,13 +279,19 @@ export class GfMiniapp extends LitElement {
   }
 
   #onChange = () => {
-    // The plant (?p=) changed in place: the address follows (a plant opened: a new entry); a step changed:
-    // #onNavigate does.
+    // The context changed in place: the address follows — another plant, or a sheet opened, a new entry (Back returns
+    // to the plant before, or closes the sheet); the rest replaces it. The address being followed: nothing written
+    // (it is the address). A step changed: #onNavigate does.
     const app = this._app;
-    if (app && /^#\/app\/[^/?]+\/([^?]+)/.exec(location.hash)?.[1] === app.step.id) {
+    if (app && !this.#following && /^#\/app\/[^/?]+\/([^?]+)/.exec(location.hash)?.[1] === app.step.id) {
       const want = this.#href();
-      if (this.#pushPlant && location.hash !== want) pushHash(want, { gfAppFrom: this.#from });
-      else this.#syncUrl();
+      if (location.hash !== want) {
+        const now = new URLSearchParams(location.hash.split('?')[1] || ''), next = new URLSearchParams(want.split('?')[1] || '');
+        const newPlant = next.has('p') && next.get('p') !== now.get('p');
+        const sheetOpened = next.get('fiche') === '1' && now.get('fiche') !== '1';
+        if (newPlant || sheetOpened) pushHash(want, { gfAppFrom: this.#from });
+        else replaceHash(want);
+      }
     }
     this.requestUpdate();
   };
@@ -324,7 +360,9 @@ export class GfMiniapp extends LitElement {
     const kind = step.kind ?? 'grid';
     const drawn = kind !== 'grid' && !(m.driven && kind === 'start');
     const bar = app.guided && !this._ownBar && !m.ownBar?.(c, app);
-    const focus = drawn && 'focus' in m.context && typeof c.focus === 'number' ? c.focus : null;
+    // Over a start screen, the plant of a link in a sheet of its own (Rencontres: when the address opens its sheet,
+    // &fiche=1 — never the plant kept with the game).
+    const focus = drawn && (!('sheet' in m.context) || c.sheet) && 'focus' in m.context && typeof c.focus === 'number' ? c.focus : null;
     const asking = this._asking;
     return html`<div class="bar">
         <button class="quit" type="button" title=${fr(m.exit.label)} aria-label=${fr(m.exit.label)} @click=${() => app.exit()}>${icon('x-lg')}<span class="lbl">${fr(m.exit.label)}</span></button>

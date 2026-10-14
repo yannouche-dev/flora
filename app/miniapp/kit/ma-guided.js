@@ -1,10 +1,13 @@
 // @ts-check
 // Rencontres while discovering (the first steps of the app): from simple to complex, one layout transformed at each
-// step. The map alone, its distance (kit/ma-around-map.js); the map and the cards (kit/ma-deck.js), the plant on top
-// lit on the map; on the first match its photos beside them (zoomed); then each step adds its pane — its encyclopedia,
-// a fork (picking: its uses, look-alikes and season; or science: maps, distribution, climate, classification), the
-// plants around under the map —, the last one leaves for the whole app on that plant, the way chosen. The panes are the
-// plant's sheet (gf-plant-detail panes-only), each block docked into the layout of the mode, as Flore will show it.
+// step. The map alone, its distance (kit/ma-around-map.js); the map and the cards (kit/ma-deck.js), the plant of the
+// screen lit on the map — the plant chosen (kit/session.js#chosenId, the address's ?p=): the card on top until the
+// first heart, then the plant of each heart (a pass changes nothing), or the one touched on the map or in the list
+// around; the panes show it, never another —; on the first match its photos beside them (zoomed); then each step
+// adds its pane — its encyclopedia, a fork (picking: its uses, look-alikes and season; or science: maps, distribution,
+// climate, classification), the plants around under the map —, the last one leaves for the whole app on that plant,
+// the way chosen. The panes are the plant's sheet (gf-plant-detail panes-only), each block docked into the layout of
+// the mode, as Flore will show it; the image of its « Médias » is the address's &m=.
 // The steps: a bar above the blocks, always in sight (its own: the box's is left out, manifest `ownBar`) — done, the
 // one shown, to come; « Précédent » and the next one. Its first two are the app's steps « map » and « cards » (the
 // address); the others are the first steps' (core/discover.js: step, branch). The widths of the map and the cards are
@@ -40,13 +43,8 @@ const FORK_BLOCKS = { harvest: ['uses', 'lookalikes', 'calendar'], science: ['ma
 export class MaGuided extends LitElement {
   static properties = {
     app: { attribute: false },
-    /** The app's context (the place, the distance, the swipes). */
+    /** The app's context (the place, the distance, the swipes, the plant chosen). */
     c: { attribute: false },
-    /**
-     * A plant already loved, brought back on top of the deck (touched on the map or in the list around) — else none:
-     * the card on top is the plant the map and the panes show.
-     */
-    _focus: { state: true },
     /** What a swipe did, said to a screen reader (a match, a plant passed, the next card). */
     _said: { state: true }
   };
@@ -141,8 +139,6 @@ export class MaGuided extends LitElement {
     this.app = null;
     /** @type {Record<string, any> | null} */
     this.c = null;
-    /** @type {number | null} */
-    this._focus = null;
     this._said = '';
   }
 
@@ -196,67 +192,50 @@ export class MaGuided extends LitElement {
   /** The mode whose layout the steps build (the one the plant sheet shows in Flore). */
   get #view() { return plantViewOf(this.#store.state); }
 
-  /** The deck as shown: the cards to meet — a plant loved brought back on top of them. */
-  get #shown() {
-    const back = this.#revisit;
-    return back ? [back, ...this.#s.deck] : this.#s.deck;
-  }
-
-  /** A plant already loved, brought back on top (touched on the map or in the list around). */
-  get #revisit() {
-    const id = this._focus;
-    if (id == null || !this.c?.matches.includes(id)) return undefined;
-    return (this.#s.cards || []).find(c => c.plant.id === id);
-  }
-
-  /** The plant of the moment: the card on top (the map lights it, the panes show it). */
-  get #focusId() { return this.#shown[0]?.plant.id ?? null; }
+  /** The plant of the screen: the plant chosen, else (before any heart) the card on top — the map lights it, the panes show it. */
+  get #focusId() { return this.#s.chosenId; }
 
   /**
-   * A plant touched (on the map, or in the list around): its card on top of the deck — the map and the panes follow
-   * it. One passed: back in the deck, on top; one already loved: brought back on top, still loved.
+   * A plant touched (on the map, or in the list around): chosen — the map and the panes follow it, and the address.
+   * One not loved yet comes on top of the deck too (one passed: back in it), to be swiped.
    * @param {number} id
    */
   #aroundGo(id) {
-    if (id === this.#focusId) return;
     const card = (this.#s.cards || []).find(c => c.plant.id === id);
     if (!card) return;
-    if (this.c?.matches.includes(id)) this._focus = id;
-    else {
+    if (!this.c?.matches.includes(id)) {
       if (this.c?.passed.includes(id)) this.#s.unswipe(id);
       this.#s.toTop(card);
-      this._focus = null;
     }
+    this.#s.choose(id);
   }
 
   /**
-   * A card swiped (flown off the deck): whatever the swipe, the card now on top is the plant of the moment — the map
-   * lights it, the panes show it. A plant already loved, brought back on top, is only put back (still loved). The first
-   * match brings its photos at once (the third block, zoomed); the next ones, a heart. @param {CustomEvent} e
+   * A card swiped (flown off the deck): a heart chooses its plant (kit/session.js#swiped) — the map lights it, the
+   * panes show it, until the next heart; a pass changes nothing (before any heart, the card now on top is the plant of
+   * the screen). The first match brings its photos at once (the third block, zoomed); the next ones, a heart.
+   * @param {CustomEvent} e
    */
   #onDecide = e => {
     const { card, liked } = /** @type {{ card: Card, liked: boolean }} */ (e.detail);
     const s = this.#s;
-    const back = this._focus === card.plant.id && this.c?.matches.includes(card.plant.id);
-    this._focus = null;
-    if (back) return;
     const fav = s.swiped(card, liked);
     // Said aloud (the status under the view): what the swipe did, then the card now on top.
-    const next = this.#shown[0];
+    const next = s.deck[0];
     this._said = `${liked ? `Match : ${nameOf(card.plant)}${fav ? ', ajoutée aux favoris' : ''}` : `Passée : ${nameOf(card.plant)}`}. ${next ? `Carte suivante : ${nameOf(next.plant)}.` : 'Plus aucune carte.'}`;
     if (!liked) return;
     if (!discoverState().firstMatch) {
       firstMatchShown();
       // Its photos are the game's now: once the first steps are over, the list keeps them beside the deck
       // (kit/ma-around-list.js, the context's `media`) — not brought a second time.
-      this.app?.set({ media: { id: card.plant.id, closed: false } });
+      this.app?.set({ media: { by: card.plant.id, closed: false } });
       if (discoverState().step === 0) this.#accept(1);
     }
     else s.heart();
   };
 
-  /** ↺: the last card back on top — the plant of the moment again. */
-  #onUndo = () => { this.#s.rewind(); this._focus = null; };
+  /** ↺: the last card back on top — its heart undone, the plant chosen before it (kit/session.js#rewind). */
+  #onUndo = () => { this.#s.rewind(); };
 
   /**
    * A block into the layout (once): a new pane beside another block's pane (or, if that one is in no pane,
@@ -437,12 +416,13 @@ export class MaGuided extends LitElement {
           .card=${panelCard} .focusId=${id} @map-launch=${() => this.#toCards()}
           @around-pick=${(/** @type {CustomEvent} */ e) => this.#aroundGo(e.detail.id)}></ma-around-map>
         ${asking ? nothing : panes ? this.#sizer.split('map', 'left', () => this.#paneMax('map')) : this.#sizer.split('cards', 'right', () => this.#paneMax('cards'))}
-        <div class="g-deck">${asking ? nothing : s.cards ? html`<ma-deck guided .session=${s} .cards=${this.#shown} .c=${c} ?active=${c.focus == null}
+        <div class="g-deck">${asking ? nothing : s.cards ? html`<ma-deck guided .session=${s} .cards=${s.deck} .c=${c} active
             @deck-decide=${this.#onDecide} @deck-undo=${this.#onUndo}></ma-deck>` : html`<p class="muted g-wait">Recherche des plantes observées autour…</p>`}</div>
         ${panes ? this.#sizer.split('deck', 'left', () => this.#paneMax('deck')) : nothing}
         ${panes ? html`<div class="g-plant" aria-label=${card ? 'Volets : ' + nameOf(card.plant) : 'Volets'}>
           ${this.#offNote()}
-          ${id != null ? html`<gf-plant-detail embedded panes-only plant-id=${id} view=${this.#view} .paneKeys=${this.#paneKeys}>
+          ${id != null ? html`<gf-plant-detail embedded panes-only plant-id=${id} view=${this.#view} .paneKeys=${this.#paneKeys} .mediaAt=${c.mediaAt ?? 0}
+            @media-index=${(/** @type {CustomEvent} */ e) => { e.stopPropagation(); const at = Number(e.detail?.index) || null; if (c.mediaAt !== at) app.set({ mediaAt: at }); }}>
             <div class="g-empty">${icon('binoculars')}<p>Ses photos, son histoire, ses secrets viendront s’installer ici.</p></div>
           </gf-plant-detail>` : nothing}
         </div>` : nothing}

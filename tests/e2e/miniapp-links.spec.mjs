@@ -144,7 +144,7 @@ test('dans les mini-applications, seuls les crédits mènent ailleurs ; hors d�
   await onlyCredits(page, 'Rencontres, ses photos');
   // A plant's sheet in the game.
   const ail = plantId('Allium ursinum');
-  await app.go(`#/app/rencontres/cards?p=${ail}`);
+  await app.go(`#/app/rencontres/cards?p=${ail}&fiche=1`);
   await expect(page.locator('ma-plant-sheet gf-plant-detail, ma-plant-sheet .sheet').first()).toBeVisible();
   await page.waitForTimeout(800);
   await onlyCredits(page, 'Rencontres, une fiche');
