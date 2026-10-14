@@ -1,6 +1,6 @@
 {
   "generatedAt": "2026-10-14T08:07:37.012Z",
-  "sha256": "a31b97f162e120e490797ceaacdb3ca9ce4862e92eb2a70fad88e2314bf1c5ad",
+  "sha256": "32569ba4c65fb3251a2723a4fd0137f0f335ee1cc2f7c9c60c3f79396712900a",
   "source": "TAXREF v18 official PatriNat archive",
   "sourceUrl": "https://assets.patrinat.fr/files/referentiel/TAXREF_v18_2025.zip",
   "taxrefVersion": "18.0",
@@ -57,19 +57,28 @@
   },
   "thumbnails": {
     "source": "Wikidata P18 + Wikimedia Commons",
-    "withThumbnail": 5663,
-    "withoutThumbnail": 2082,
-    "coveragePercent": 73.12,
+    "withThumbnail": 5680,
+    "withoutThumbnail": 2065,
+    "coveragePercent": 73.34,
     "withWikidata": 6242,
     "bySource": {
       "Wikimedia Commons": 4467,
-      "iNaturalist": 460,
-      "GBIF": 736
+      "iNaturalist": 462,
+      "GBIF": 751
     },
     "wikidataBulk": {
       "checked": 1862,
       "matched": 592,
       "freeP18ImagesAdded": 20
+    },
+    "fallbacks": {
+      "gbif": true,
+      "inaturalist": true,
+      "acceptedLicenses": [
+        "CC0",
+        "CC BY",
+        "CC BY-SA"
+      ]
     }
   }
 }
