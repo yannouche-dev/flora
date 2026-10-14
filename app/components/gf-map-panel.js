@@ -9,6 +9,7 @@ import { mapSettings, mapSettingsEvents, setMapSettings } from '../core/map-sett
 import { moduleEvents, moduleOn } from '../core/modules.js';
 import { hasWebGL2 } from '../core/maplibre.js';
 import { safeUrl } from '../core/safe-url.js';
+import { sayIn } from '../core/toast.js';
 import { map3dOptions, map3dOptionsCss, mapRendererChoice } from './map3d-options.js';
 import './gf-ign-layers.js';
 
@@ -22,7 +23,8 @@ const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
  * search pill). It is also where a map's state is read (the quiet-map rule, gf-map.js): the « État » lines of
  * « Affichage » (why it is in 2D or flat, the IGN backgrounds off, a source unreachable, the protected areas in view),
  * the protected areas in view with their INPN pages under « Règles de cueillette », a page's own legend (a plant
- * sheet's sources and counts) — said by the map's own live region, none here. Events: base-change {key}, overlay-toggle {key, on, layer?} (`layer`: a catalogue layer to add), and
+ * sheet's sources and counts) — said by the map's own live region, or while the panel is open (a modal: that region
+ * inert) by the panel's own (say). Events: base-change {key}, overlay-toggle {key, on, layer?} (`layer`: a catalogue layer to add), and
  * from gf-ign-layers overlay-opacity {key, opacity, commit}, overlay-order {keys}; the display is stored here
  * (setMapSettings).
  */
@@ -156,6 +158,19 @@ export class GfMapPanel extends LitElement {
 
   close() { /** @type {HTMLDialogElement} */ (this.renderRoot.querySelector('dialog'))?.close(); }
 
+  /**
+   * Said while the panel is open (gf-map announce): the panel is a modal dialog, so the map's own live region, outside
+   * it, is inert meanwhile — its words go to the panel's own region (polite, visually hidden). False when closed.
+   * @param {string} text @returns {boolean}
+   */
+  say(text) {
+    const dialog = /** @type {HTMLDialogElement | null} */ (this.renderRoot.querySelector('dialog'));
+    const live = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.said'));
+    if (!dialog?.open || !live) return false;
+    sayIn(live, text);
+    return true;
+  }
+
   /** @param {string} name @param {any} detail */
   #emit(name, detail) { this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true })); }
 
@@ -194,7 +209,7 @@ export class GfMapPanel extends LitElement {
   /**
    * « État »: the map's state, one short line each (why it is in 2D or flat, the IGN backgrounds off, the protected
    * areas in view, a source unreachable…), with what to do when there is something. Said by the map's own live region
-   * as it changes (gf-map): no live region here.
+   * as it changes (gf-map) — while the panel is open, by its own region (say).
    */
   #state() {
     const lines = this.state || [];
@@ -226,6 +241,7 @@ export class GfMapPanel extends LitElement {
           <h2>Carte</h2>
           <button class="icon-btn" type="button" aria-label="Fermer" @click=${() => this.close()}>${icon('x-lg')}</button>
         </header>
+        <div class="said visually-hidden" aria-live="polite" aria-relevant="additions"></div>
         <div class="body">
           ${this.#display()}
           <h3 class="kicker">Fond</h3>

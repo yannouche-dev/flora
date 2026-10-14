@@ -12,7 +12,7 @@ import { cachedThumb, thumbUrl } from '../core/thumb.js';
 import { moduleEvents, moduleOn } from '../core/modules.js';
 import { protectedAreasIn } from '../core/protected.js';
 import { href } from '../core/router.js';
-import { briefToast } from '../core/toast.js';
+import { briefToast, sayIn } from '../core/toast.js';
 import { takeHint } from '../core/hints.js';
 import { gbifTileUrl } from '../core/sources.js';
 import './gf-map-panel.js';
@@ -455,31 +455,32 @@ export class GfMap extends LitElement {
 
   /**
    * Said once in the map's live region (polite, visually hidden: a line added, gone after a while); the same words
-   * said by any map a moment ago are not said again (a page of four maps, a restyle, a render).
-   * @param {string | null | undefined} text
+   * said by any map a moment ago are not said again (a page of four maps, a restyle, a render) — unless `force` (an
+   * action the user just took that failed again: they must hear it each time, #toast). While the map's panel is open
+   * (a modal dialog: the rest of the page, this region too, is inert), said by the panel's own region instead.
+   * @param {string | null | undefined} text @param {{ force?: boolean }} [o]
    */
-  announce(text) {
+  announce(text, { force = false } = {}) {
     if (!text) return;
     const live = /** @type {HTMLElement | null} */ (this.querySelector('.gf-map-live'));
     if (!live) { this.#unsaid.push(text); return; }
     const now = performance.now();
-    if ((recentlySaid.get(text) ?? -Infinity) > now - SAID_FOR) return;
+    if (!force && (recentlySaid.get(text) ?? -Infinity) > now - SAID_FOR) return;
     recentlySaid.set(text, now);
-    const line = Object.assign(document.createElement('p'), { textContent: text });
-    live.append(line);
-    while (live.childElementCount > 4) live.firstElementChild?.remove();
-    setTimeout(() => line.remove(), 20_000);
+    if (this.#panel?.say?.(text)) return;
+    sayIn(live, text);
   }
 
   /**
    * An action the user has just taken on the map failed: one brief toast over its top (under the search pill), said
-   * too (core/toast.js). Never for a background failure: setStatus.
+   * too (core/toast.js) — each time it shows (the same failure again: said again). Never for a background failure:
+   * setStatus.
    * @param {string | null | undefined} text
    */
   toast(text) {
     if (!text) return;
-    this.announce(text);
-    briefToast(text, { near: this.querySelector('.gf-map-frame') || this, at: 'top', offset: this.#hasSearch && !this.editing ? 62 : 10, live: false });
+    const shown = briefToast(text, { near: this.querySelector('.gf-map-frame') || this, at: 'top', offset: this.#hasSearch && !this.editing ? 62 : 10, live: false });
+    this.announce(text, { force: Boolean(shown) });
   }
 
   /** The loads under way, each with what it says once it lasts. @type {Map<string, string>} */ #busy = new Map();

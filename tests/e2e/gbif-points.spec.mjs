@@ -215,6 +215,8 @@ test('fiche plante sans photo dans la flore : le point touché dans la fiche, pu
 });
 
 test('beaucoup de points seuls : chacun la photo de sa plante là où on les voit, jamais un point nu ; ceux qu’un déplacement amène aussi', async ({ app, page }) => {
+  // The empty Carte's first-use hint already seen: its strip above the map would move the map's box once it comes.
+  await page.addInitScript(() => localStorage.setItem('geoflora.hints', JSON.stringify(['carte-empty'])));
   await app.open('#/map');
   const map = page.locator('gf-map-page gf-map');
   await expect(map.locator('.leaflet-container')).toBeVisible();

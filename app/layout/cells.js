@@ -143,8 +143,12 @@ export class DlMap extends LitElement {
   static properties = { state: { attribute: false }, params: { attribute: false }, _busy: { state: true } };
 
   static styles = [ui, scopeStyles, css`
-    :host { display: block; position: relative; min-height: 0; isolation: isolate; }
-    gf-map { position: absolute; inset: 0; display: block; }
+    :host { display: flex; flex-direction: column; position: relative; min-height: 0; isolation: isolate; }
+    /* The map and its zone panel; above them, in the cell's flow, the long press's first-use hint: never over the map
+       (in the panel it made it taller, over the map's own controls). */
+    .stage { flex: 1; min-height: 0; position: relative; }
+    .stage > gf-map { position: absolute; inset: 0; display: block; }
+    .press-hint { flex: none; margin: 6px 8px; box-shadow: none; background: var(--gf-surface-2); }
     /* Under the map's own address search (whose place picked moves the scope too: its point, below). */
     .panel { position: absolute; z-index: 500; left: 8px; top: 60px; width: min(300px, calc(100% - 64px)); display: grid; gap: 6px; padding: 8px 10px; border-radius: 12px;
       background: color-mix(in srgb, var(--gf-surface) 95%, transparent); box-shadow: var(--gf-shadow); }
@@ -273,7 +277,8 @@ export class DlMap extends LitElement {
     if (!s) return nothing;
     if (!s.live.at && this.#pressHint === undefined) this.#pressHint = takeHint('layout-map-press');
     const press = 'Appui long sur la carte : la zone s’y centre.';
-    return html`<gf-map no-create point-click="pick" .base=${this.params.base ?? null} .area=${this.#area} .highlight=${this.#highlight} .focusPoint=${this.#focus}
+    return html`${!s.live.at && this.#pressHint ? hintView(press, () => { this.#pressHint = false; this.requestUpdate(); }, 'press-hint') : nothing}
+      <div class="stage"><gf-map no-create point-click="pick" .base=${this.params.base ?? null} .area=${this.#area} .highlight=${this.#highlight} .focusPoint=${this.#focus}
         aria-description=${press}
         @point-pick=${(/** @type {CustomEvent} */ e) => this.#onPick(e)} @point-info=${(/** @type {CustomEvent} */ e) => this.#onPress(e)}></gf-map>
       <div class="panel" role="group" aria-label="Zone de la disposition">
@@ -282,8 +287,7 @@ export class DlMap extends LitElement {
         ${s.live.at ? radiusSlider(s) : nothing}
         <div class="row"><button type="button" class=${this._busy ? 'busy' : ''} ?disabled=${this._busy} aria-busy=${String(this._busy)}
           @click=${() => this.#locate()}>${icon('geo-alt')} Autour de moi</button></div>
-        ${!s.live.at && this.#pressHint ? hintView(press, () => { this.#pressHint = false; this.requestUpdate(); }) : nothing}
-      </div>`;
+      </div></div>`;
   }
 }
 customElements.define('dl-map', DlMap);

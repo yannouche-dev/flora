@@ -326,14 +326,15 @@ export class GfCapture extends LitElement {
 
   /**
    * The capture's word (and its safety warnings): the app's one toast place (core/toast.js) — a map's brief toast
-   * shown meanwhile goes, and none comes over a safety warning while it shows (never two toasts stacked).
+   * shown meanwhile goes, and none comes over it while it shows (it carries « Annuler » and « Détails »: weight 2, a
+   * safety warning 3; never two toasts stacked).
    * @param {NonNullable<GfCapture['_toast']>} toast
    */
   #showToast(toast) {
     clearTimeout(this.#toastTimer);
     this.#releaseSlot?.();
     this._toast = toast;
-    this.#releaseSlot = takeToastSlot(() => { clearTimeout(this.#toastTimer); this._toast = null; }, toast.warning || toast.lookalike ? 2 : 1);
+    this.#releaseSlot = takeToastSlot(() => { clearTimeout(this.#toastTimer); this._toast = null; }, toast.warning || toast.lookalike ? 3 : 2);
     this.#toastTimer = setTimeout(() => { this._toast = null; }, toast.lookalike ? 12000 : 7000);
   }
   /** Gives the app's toast place back. @type {(() => void) | null} */ #releaseSlot = null;

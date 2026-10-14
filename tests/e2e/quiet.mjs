@@ -72,3 +72,30 @@ export function overMap(page, allowed = []) {
     return found;
   }, allowed);
 }
+
+/**
+ * The map controls (zoom, compass, full screen, the « Observations autour » chip) that something else than a map
+ * control covers at their middle — a hint, a panel (should be none): each, its name and what covers it.
+ * @param {import('@playwright/test').Page} page @returns {Promise<string[]>}
+ */
+export function coveredControls(page) {
+  return page.evaluate(() => {
+    /** @param {Document | ShadowRoot} root @returns {Generator<Element>} */
+    const deep = function* (root) { for (const el of root.querySelectorAll('*')) { yield el; if (el.shadowRoot) yield* deep(el.shadowRoot); } };
+    const controls = [...deep(document)].filter(e => e.matches('.leaflet-control-zoom a, .maplibregl-ctrl button, .gf-o3-chip') && e.checkVisibility()
+      && /** @type {Element} */ (e).closest('gf-map')?.checkVisibility());
+    /** @type {string[]} */
+    const covered = [];
+    for (const el of controls) {
+      const b = el.getBoundingClientRect();
+      if (b.width < 4 || b.height < 4 || b.bottom < 0 || b.top > innerHeight) continue;
+      const x = b.left + b.width / 2, y = b.top + b.height / 2;
+      let top = document.elementFromPoint(x, y);
+      while (top?.shadowRoot) { const inner = top.shadowRoot.elementFromPoint(x, y); if (!inner || inner === top) break; top = inner; }
+      // Covered by something that is not itself one of the map's controls (their own stacking is MapLibre's, Leaflet's).
+      if (top && (top === el || el.contains(top) || top.closest('.maplibregl-ctrl, .leaflet-control, .gf-o3-bar'))) continue;
+      covered.push((el.getAttribute('aria-label') || el.getAttribute('title') || el.className) + ' ← ' + (top?.className || top?.localName || '?'));
+    }
+    return covered;
+  });
+}

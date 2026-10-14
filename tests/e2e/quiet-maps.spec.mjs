@@ -10,7 +10,7 @@
 // the relief unreachable, editing, the observations around).
 import { test, expect, plantId, answerAround, answerPlantNear, answerObservations } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
-import { brief, mapSaid, mapState, openPanel, overMap } from './quiet.mjs';
+import { brief, coveredControls, mapSaid, mapState, openPanel, overMap } from './quiet.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page @typedef {import('@playwright/test').Locator} Locator */
 
@@ -83,6 +83,11 @@ test.describe('la Carte', () => {
     const hint = page.locator('gf-map-page .hint-once');
     await expect(hint).toContainText('Aucun lieu enregistré.');
     await quiet(page);
+    // Above the map, not over it: every control within reach (zoom, scale).
+    if (!app.phone) await expect(map.locator('.leaflet-control-zoom-in')).toBeVisible();
+    expect(await coveredControls(page)).toEqual([]);
+    const [h, m] = [await hint.boundingBox(), await map.boundingBox()];
+    expect(/** @type {any} */ (h).y + /** @type {any} */ (h).height).toBeLessThanOrEqual(/** @type {any} */ (m).y + 1);
     await hint.getByRole('button', { name: 'Masquer l’astuce' }).click();
     await expect(hint).toHaveCount(0);
     await page.reload();
@@ -129,7 +134,15 @@ test.describe('la Carte', () => {
     const areas = panel.getByRole('list', { name: 'Espaces protégés en vue' });
     await expect(areas.getByRole('link', { name: 'Réserve naturelle nationale du Test' })).toHaveAttribute('href', 'https://inpn.mnhn.fr/espace/protege/FR3600001');
     await expect(areas).toContainText('Biotope des Mares');
-    await expect(panel.locator('.state[role], .note3d[role], [aria-live]')).toHaveCount(0);
+    await expect(panel.locator('.state[role], .note3d[role]')).toHaveCount(0);
+    // Said while the panel is open (a modal: the map's own region inert meanwhile): by the panel's one region.
+    await expect(panel.locator('[aria-live]')).toHaveCount(1);
+    await map.evaluate(m => /** @type {any} */ (m).announce('Dit panneau ouvert'));
+    await expect(panel.locator('[aria-live]')).toHaveText('Dit panneau ouvert');
+    await expect(mapSaid(map)).not.toContainText('Dit panneau ouvert');
+    await panel.getByRole('button', { name: 'Fermer', exact: true }).click();
+    await map.evaluate(m => /** @type {any} */ (m).announce('Dit panneau fermé'));
+    await expect(mapSaid(map)).toContainText('Dit panneau fermé');
   });
 
   test('la recherche d’adresse : rien d’écrit pendant qu’elle cherche ; injoignable, puis sans résultat : un message bref chaque fois', async ({ app, page }) => {
@@ -175,6 +188,11 @@ test.describe('la Carte', () => {
       await expect(brief(page)).toHaveCount(1);
       await expect(brief(page)).toHaveCount(0, { timeout: 3500 });
       await expect(mapSaid(map)).toContainText('Localisation refusée.');
+      // Asked again once it has gone: shown again, and said again (a new line — not dropped as said a moment ago).
+      await mapSaid(map).locator('p').evaluateAll(ps => ps.forEach(p => p.setAttribute('data-old', '')));
+      await map.getByRole('button', { name: 'Me localiser' }).click();
+      await expect(brief(page)).toHaveCount(1);
+      await expect(mapSaid(map).locator('p:not([data-old])')).toHaveText('Localisation refusée. Autorisez-la dans les réglages du navigateur.');
       await quiet(page);
     });
   });
@@ -279,7 +297,10 @@ test.describe('la carte d’une fiche plante', () => {
     const compare = block.locator('.chip[data-kind="compare"]');
     await expect(compare).toHaveAttribute('aria-label', 'Comparaison : Ortie brûlante (absente de GBIF). Retirer la comparaison');
     await expect(compare).toHaveText('Comparaison : Ortie brûlante');
-    await expect(mapSaid(map)).toContainText('Comparaison : Ortie brûlante (absente de GBIF)');
+    // Why nothing is drawn for it: its swatch hollow, a line of the map's « État » (seen on a touch screen too), said.
+    await expect(compare.locator('i.none')).toHaveCount(1);
+    await expect.poll(() => mapState(map)).toContain('Ortie brûlante : absente de GBIF, rien à comparer');
+    await expect(mapSaid(map)).toContainText('Ortie brûlante : absente de GBIF, rien à comparer');
     // The point: shown and flown to, said; its name on hover or touch only (no label left over the map).
     await expect(mapSaid(map)).toContainText('Sur la carte : Herbier P01234 · 1898');
     await expect(map.locator('.gf-focus-tip, .leaflet-tooltip, .gf-gl-label')).toHaveCount(0);
@@ -315,6 +336,8 @@ test.describe('la Disposition libre', () => {
     await expect(map.locator('.leaflet-container')).toBeVisible();
     await expect(cell.locator('.hint-once')).toContainText('Appui long sur la carte : la zone s’y centre.');
     await expect(map).toHaveAttribute('aria-description', 'Appui long sur la carte : la zone s’y centre.');
+    // Above the map (not in its zone panel, which it made taller over the map's controls).
+    expect(await coveredControls(page)).toEqual([]);
     await cell.locator('.hint-once').getByRole('button', { name: 'Masquer l’astuce' }).click();
     await expect(cell.locator('.hint-once, .note')).toHaveCount(0);
 
@@ -388,7 +411,15 @@ test.describe('les mini-applications', () => {
     // Docked under the list: not over the walk's map.
     const t = await toast.boundingBox(), m = await trail.locator('ma-walk-map gf-map').boundingBox();
     if (t && m && !app.phone) expect(t.x + t.width <= m.x + 1 || t.y >= m.y + m.height - 1 || t.y + t.height <= m.y + 1, 'the toast beside the map').toBe(true);
-    await expect(toast).toHaveCount(0, { timeout: 3500 });
+    // Read out by the toasts' one region (its text changed, not a toast injected with role=status).
+    await expect(toast).not.toHaveAttribute('role', 'status');
+    await expect(page.locator('body > .gf-toast-live')).toContainText('ajoutée au parcours');
+    // Its « Annuler » within reach: it stays while it holds the focus (past its time), goes once left.
+    await toast.getByRole('button', { name: 'Annuler' }).focus();
+    await page.waitForTimeout(7000);
+    await expect(toast).toBeVisible();
+    await name.focus();
+    await expect(toast).toHaveCount(0, { timeout: 7500 });
   });
 });
 
@@ -397,6 +428,28 @@ test.describe('une carte en 3D', () => {
   test.beforeEach(async ({ page }, info) => {
     if (info.project.name.startsWith('desktop')) await page.setViewportSize({ width: 1024, height: 680 });
     await page.emulateMedia({ reducedMotion: 'reduce' });
+  });
+
+  test('les astuces d’une première fois ne couvrent aucune commande : la Carte vide (et ses observations autour), la Disposition', async ({ app, page }) => {
+    await answerObservations(page, { inat: 8, gbif: 2 });
+    await preset(page, { 'geoflora.maps3d': JSON.stringify({ renderer: '3d', buildings: false, hillshade: false, sky: false, pitch: 30 }) });
+    await app.open('#/map');
+    const map = carte(page);
+    await expect(map).toHaveAttribute('data-renderer', '3d', { timeout: 60_000 });
+    await expect(page.locator('gf-map-page .hint-once')).toContainText('Aucun lieu enregistré.');
+    await expect(map.locator('.maplibregl-ctrl-zoom-in')).toBeVisible();
+    await map.getByRole('button', { name: 'Observations autour', exact: true }).click();
+    await expect(map.locator('.gf-o3-chip')).toBeVisible({ timeout: 30_000 });
+    expect(await coveredControls(page)).toEqual([]);
+    await map.locator('.gf-o3-chip').click();
+    await expect(map.locator('.gf-o3-panel')).toBeVisible();
+
+    await app.go('#/layout/[map,search]');
+    const cell = page.locator('dl-map').first();
+    await expect(cell.locator('gf-map')).toHaveAttribute('data-renderer', '3d', { timeout: 60_000 });
+    await expect(cell.locator('.hint-once')).toContainText('Appui long sur la carte : la zone s’y centre.');
+    await expect(cell.locator('.maplibregl-ctrl-fullscreen')).toBeVisible();
+    expect(await coveredControls(page)).toEqual([]);
   });
 
   test('chargement lent, relief injoignable, édition, observations autour : jamais de pastille ni de note sur la carte — l’État et la zone d’annonce', async ({ app, page }) => {

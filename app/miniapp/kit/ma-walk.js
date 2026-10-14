@@ -141,9 +141,9 @@ export class MaWalk extends LitElement {
 
   /**
    * The word after an action (« Ortie dioïque ajoutée au parcours, ici », its « Annuler »): the app's brief toast
-   * (core/toast.js) — under 3 s (the session times it), in the top layer, docked at the bottom of the walk's list
-   * (its column on a wide screen: never over the map), read out by itself (role=status); hidden under the search's
-   * suggestions, back once they close.
+   * (core/toast.js) — a few seconds (the session times it: longer with its « Annuler », waiting while it is hovered or
+   * focused), in the top layer, docked at the bottom of the walk's list (its column on a wide screen: never over the
+   * map), read out by the toasts' own live region; hidden under the search's suggestions, back once they close.
    */
   #syncToast() {
     const s = this.#session;
@@ -153,7 +153,7 @@ export class MaWalk extends LitElement {
     this.#toast = null;
     if (!toast || !s) return;
     const near = this.renderRoot.querySelector('.list');
-    const shown = briefToast(toast.text, { near, at: 'bottom', offset: 10, ms: 0,
+    const shown = briefToast(toast.text, { near, at: 'bottom', offset: 10, ms: 0, onHold: held => s.holdToast(held),
       action: toast.undo ? { label: 'Annuler', run: () => { toast.undo?.(); if (s.toast === toast) { s.toast = null; s.changed(); } } } : null });
     this.#toast = { toast, shown };
   }

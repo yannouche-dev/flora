@@ -15,7 +15,7 @@ import * as db from '../../core/db.js';
 import { href } from '../../core/router.js';
 import { encodeCollection, share } from '../../core/share.js';
 import { geoProblem } from '../../components/start-screen.js';
-import { TOAST_MS } from '../../core/toast.js';
+import { ACTION_TOAST_MS, TOAST_MS } from '../../core/toast.js';
 import { DONE, KEY, LIST, NAMED, countOf, read, write } from './trail-store.js';
 
 /** @typedef {import('../runtime.js').MiniApp} MiniApp */
@@ -349,20 +349,38 @@ export class TrailSession extends EventTarget {
     this.reload();
   }
 
-  /** A word said for a while (its time waits while the search is open). @param {string} text @param {() => void} [undo] */
+  /**
+   * A word said for a while (core/toast.js: longer with its « Annuler »; its time waits while the search is open, or
+   * while the word is hovered or focused: holdToast). @param {string} text @param {() => void} [undo]
+   */
   say(text, undo) {
-    clearTimeout(this.timers.toast);
     this.toast = { text, undo };
-    if (!this.searching) this.timers.toast = setTimeout(() => { this.toast = null; this.changed(); }, TOAST_MS);
+    this.#held = false;
+    this.#timeToast();
     this.changed();
+  }
+
+  /** The word's time, from now (none while the search is open, or while it is held). */
+  #timeToast() {
+    clearTimeout(this.timers.toast);
+    const toast = this.toast;
+    if (!toast || this.searching || this.#held) return;
+    this.timers.toast = setTimeout(() => { if (this.toast === toast) { this.toast = null; this.changed(); } }, toast.undo ? ACTION_TOAST_MS : TOAST_MS);
+  }
+
+  /** The word hovered or focused (its « Annuler » within reach): it waits; let go, its time runs again. */
+  #held = false;
+  /** @param {boolean} held */
+  holdToast(held) {
+    this.#held = held;
+    this.#timeToast();
   }
 
   /** The search open or left: the word's time waits under it, and runs again once it is left. @param {boolean} open */
   setSearching(open) {
     if (open === this.searching) return;
     this.searching = open;
-    clearTimeout(this.timers.toast);
-    if (!open && this.toast) this.timers.toast = setTimeout(() => { this.toast = null; this.changed(); }, TOAST_MS);
+    this.#timeToast();
   }
 
   /** Its timers, its GPS, its listening stopped (the app gone, or played again). */

@@ -216,8 +216,9 @@ export class GfMapPage extends LitElement {
     .list .dist { font-variant-numeric: tabular-nums; color: var(--gf-text-muted); font-size: 0.85rem; text-align: right; }
     .list .sub { grid-column: 2 / -1; font-size: 0.8rem; color: var(--gf-text-muted); }
     .empty { padding: 32px 20px; text-align: center; color: var(--gf-text-muted); max-width: 420px; margin: 0 auto; }
-    /* The empty Carte's first-use hint (once per device, its ✕): low over the map, clear of its controls. */
-    .empty-hint { position: absolute; z-index: 550; left: 16px; right: 84px; bottom: 28px; max-width: 420px; }
+    /* The empty Carte's first-use hint (once per device, its ✕): a strip above the map, not over it — so it never
+       covers a control (Leaflet's zoom and scale, MapLibre's, the « Observations autour » chip). */
+    .empty-hint { flex: none; margin: 8px 12px 0; box-shadow: none; background: var(--gf-surface-2); }
     .bar .count.error { color: var(--gf-danger); display: inline-flex; align-items: center; gap: 6px; }
     .bar .count.error .link { min-height: 0; padding: 0 4px; }
   `];
@@ -750,6 +751,7 @@ export class GfMapPage extends LitElement {
 
       <div class="body ${selected && this._view === 'map' && !this._around ? 'with-panel' : ''}" @click=${() => { if (this._plantMenu) this._plantMenu = false; }}>
         ${this._view === 'map' ? html`
+          ${this.#empty()}
           <gf-map
             .spots=${spots}
             .selectedId=${this.route.spot}
@@ -775,9 +777,7 @@ export class GfMapPage extends LitElement {
           ></gf-map>
           ${this._editing || !this._around ? nothing : this.#aroundPanel()}
           ${selected && !this._around ? this.#panel(selected) : nothing}
-        ` : this.#list(spots)}
-
-        ${this.#empty()}
+        ` : html`${this.#list(spots)}${this.#empty()}`}
 
         ${(selected || this._editing) && this._view === 'map' ? nothing : html`
           <button class="fab" type="button" aria-label="Noter une plante ici" title="Noter une plante ici : sur place, un lieu créé à votre position"
@@ -788,7 +788,7 @@ export class GfMapPage extends LitElement {
 
   /**
    * No place yet. The list: says so, and how to start. The map: the same words once per device (a first-use hint, its
-   * ✕), never again — then the bar's « 0 lieu » and the list say it (the quiet-map rule, gf-map.js).
+   * ✕, in a strip above the map), never again — then the bar's « 0 lieu » and the list say it (the quiet-map rule, gf-map.js).
    */
   #empty() {
     if (!this._loaded || this._spots.length || this._error) return nothing;

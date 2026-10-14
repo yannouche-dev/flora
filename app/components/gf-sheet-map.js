@@ -126,6 +126,8 @@ export class GfSheetMap extends LitElement {
       background: var(--gf-surface); color: var(--gf-text); box-shadow: var(--gf-shadow); font-size: 0.75rem; font-weight: 600; cursor: pointer; }
     .chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .chip i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+    /* Nothing of it drawn (none placed, absent from GBIF): its swatch hollow — why, in the map's panel « État ». */
+    .chip i.none { box-sizing: border-box; border: 1.5px dashed var(--gf-text-muted); background: none; }
     .chip svg { flex: none; font-size: 0.9rem; color: var(--gf-text-muted); }
     .chip:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     .frame { position: relative; border-radius: var(--gf-radius); overflow: hidden; border: 1px solid var(--gf-border); background: var(--gf-surface-2); }
@@ -524,17 +526,19 @@ export class GfSheetMap extends LitElement {
 
   /** @param {Map<string, any>} changed */
   updated(changed) {
-    // The map's legend (its panel) and what changed in it, said once; the chips' states, said once.
+    // The map's legend (its panel) and what changed in it, said once; the chips' states: lines of its panel's « État »
+    // (said once by the map, seen there on a touch screen too — a chip has no hover).
     const map = this.#map;
     if (!map) return;
     map.setLegend?.(this.#legendNow);
+    for (const [key, text] of Object.entries(this.#chipState)) map.setStatus?.(key, text);
     for (const said of this.#toSay.splice(0)) map.announce?.(said);
     if (changed.has('config') || changed.has('_spots')) map.setAttribute('aria-description', this.#gestures);
   }
 
   /** The legend drawn last (render) for the map's panel. @type {{ text: string, swatch?: string }[]} */ #legendNow = [];
   /** Words to say once the map is there (updated). @type {string[]} */ #toSay = [];
-  /** The chips' states said already. @type {Set<string>} */ #chipSaid = new Set();
+  /** The chips' states (render), for the map's « État » (updated): '' when there is none. */ #chipState = { filter: '', compare: '' };
 
   /**
    * The points shown — the occurrences of the place touched (GBIF), the observations around me (iNaturalist, GBIF) —,
@@ -593,29 +597,30 @@ export class GfSheetMap extends LitElement {
 
   /**
    * What the sheet's data shows on the map, each with its ✕ (a control: kept). Its state (looking, none placed,
-   * absent from GBIF) is no suffix written over the map: in its name and title, and said once by the map's live region.
+   * absent from GBIF) is no suffix written over the map: in its name and title, its swatch hollow (no text), and a line
+   * of the map's panel « État » (gf-map setStatus, in updated: said once by the map's live region).
    * @param {import('../core/map-focus.js').SheetFocus} f
    */
   #chips(f) {
     const clear = (/** @type {string} */ kind) => this.dispatchEvent(new CustomEvent('focus-clear', { detail: { kind }, bubbles: true, composed: true }));
-    /** A chip's state said once (updated). @param {string} words */
-    const say = words => { if (!this.#chipSaid.has(words)) { this.#chipSaid.add(words); this.#toSay.push(words); } };
     const chips = [];
+    this.#chipState = { filter: '', compare: '' };
     if (f.filter) {
       const none = this._bounds && Array.isArray(this._bounds.points) && !this._bounds.points.length;
       const name = `Filtre : ${f.filter.label}${none ? ' (aucune occurrence localisée)' : ''}`;
-      if (none) say(name);
+      if (none) this.#chipState.filter = `${f.filter.label} : aucune occurrence localisée`;
       chips.push(html`<button class="chip ${this._bounds?.points === null ? 'busy' : ''}" type="button" data-kind="filter" title=${name + ' — retirer le filtre'}
         aria-label=${name + '. Retirer le filtre'} aria-busy=${String(this._bounds?.points === null)} @click=${() => clear('filter')}>
-        <i class="obs"></i><span>Filtre : ${f.filter.label}</span>${icon('x-lg')}</button>`);
+        <i class=${none ? 'none' : 'obs'}></i><span>Filtre : ${f.filter.label}</span>${icon('x-lg')}</button>`);
     }
     if (f.compare) {
       const looking = this._compare?.key === undefined;
-      const name = `Comparaison : ${f.compare.label}${this._compare?.key === null ? ' (absente de GBIF)' : ''}`;
-      if (this._compare?.key === null) say(name);
+      const absent = this._compare?.key === null;
+      const name = `Comparaison : ${f.compare.label}${absent ? ' (absente de GBIF)' : ''}`;
+      if (absent) this.#chipState.compare = `${f.compare.label} : absente de GBIF, rien à comparer`;
       chips.push(html`<button class="chip ${looking ? 'busy' : ''}" type="button" data-kind="compare" title=${name + ' — retirer la comparaison'}
         aria-label=${name + '. Retirer la comparaison'} aria-busy=${String(looking)} @click=${() => clear('compare')}>
-        <i style="background:#7b3294"></i><span>Comparaison : ${f.compare.label}</span>${icon('x-lg')}</button>`);
+        <i class=${absent ? 'none' : ''} style=${absent ? '' : 'background:#7b3294'}></i><span>Comparaison : ${f.compare.label}</span>${icon('x-lg')}</button>`);
     }
     if (f.point) {
       chips.push(html`<button class="chip" type="button" data-kind="point" title=${f.point.label + ' — retirer le point'} aria-label=${f.point.label + '. Retirer le point'}
