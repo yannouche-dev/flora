@@ -14,11 +14,13 @@
 //    position's accuracy): one GeoJSON source, draped on the relief;
 //  - the camera: the 3D map follows the mirror's moves (gf-map's flights, frames, « me localiser »), and gives it its
 //    own (pan, zoom) once they end. Tilt and rotation are the 3D map's alone. MapLibre's zoom is Leaflet's minus one.
-// When the map shows in 3D: Réglages › Cartes (core/map-settings.js) « 3D », or this map's own 2D ⇄ 3D button (for as
-// long as it is shown, never stored). Never for a map marked map-3d="off" (or under one), nor in the « Jusqu’où part
-// l’expédition ? » step (ma-distance: a fixed view from above). Back to 2D, said in a short note, while its positions
-// are being edited (markers dragged), without WebGL2, when MapLibre cannot load (offline before its first download),
-// when too many maps are in 3D at once (one WebGL context each), or when the GPU takes its context back.
+// When the map shows in 3D: the maps' one choice « 3D » (core/map-settings.js), made in Réglages › Cartes or in the
+// panel « Carte » of any map (« Affichage », gf-map-panel.js: the panel is told how this map is drawn, and why it
+// cannot change when it cannot). Never for a map marked map-3d="off" (or under one; map-3d-why: why, said in its
+// panel), nor in the « Jusqu’où part l’expédition ? » step (ma-distance: a fixed view from above). Back to 2D, said
+// in a short note, while its positions are being edited (markers dragged), without WebGL2, when MapLibre cannot load
+// (offline before its first download), when too many maps are in 3D at once (one WebGL context each), or when the GPU
+// takes its context back.
 // Modules: « Vue 3D (relief) » off → no relief asked (flat 3D); « IGN – fonds de carte » off → IGN tiles from the
 // cache only, no vector plan nor buildings; offline → flat, from the cache. Photos: the markers' own (gf-map asks the
 // « Photos en ligne » module).
@@ -64,22 +66,64 @@ function ignVectorStyle() {
   return vectorStyle;
 }
 
+/** Why a map is always seen from above, said in its panel. */
+const FROM_ABOVE = 'Cette étape montre la distance vue de dessus : la carte reste en 2D (le choix vaut pour les autres cartes).';
+
 /**
- * Whether this map may ever be shown in 3D: not marked map-3d="off" (nor under such an element), not in the
- * « Jusqu’où part l’expédition ? » step of the mini-apps (a fixed top-down view, by the user's wish).
+ * Why this map may never be shown in 3D, or '' when it may: marked map-3d="off" (or under such an element: its
+ * map-3d-why says why), or in the « Jusqu’où part l’expédition ? » step of the mini-apps (a fixed top-down view, by
+ * the user's wish).
  * @param {Element} host
  */
-export function allows3d(host) {
+export function why2d(host) {
   /** @type {Node | null} */ let n = host;
   while (n) {
-    if (n instanceof Element && (n.getAttribute('map-3d') === 'off' || n.localName === 'ma-distance')) return false;
+    if (n instanceof Element && n.localName === 'ma-distance') return FROM_ABOVE;
+    if (n instanceof Element && n.getAttribute('map-3d') === 'off') return n.getAttribute('map-3d-why') || 'Cette carte reste en 2D (le choix vaut pour les autres cartes).';
     n = n.parentNode || (n instanceof ShadowRoot ? n.host : null);
   }
-  return true;
+  return '';
 }
 
 /** @param {HTMLElement} host @param {L.Map} leaflet */
 export function attachGl(host, leaflet) { return new GlView(host, leaflet); }
+
+/**
+ * The wheel pressed and dragged orbits, as in every 3D tool (Google Earth, Blender, Cesium…): sideways turns around the
+ * middle of the map, up and down tilts — MapLibre only does it with the right button (or Ctrl), the wheel's press
+ * would else start the browser's auto-scroll. Same speeds as MapLibre's right-drag; the tilt within the map's limits.
+ * @param {any} map a MapLibre map
+ */
+export function orbitWithMiddleButton(map) {
+  const box = map.getCanvasContainer();
+  /** @type {{ x: number, y: number } | null} */
+  let last = null;
+  const move = (/** @type {MouseEvent} */ e) => {
+    if (!last) return;
+    const dx = e.clientX - last.x, dy = e.clientY - last.y;
+    last = { x: e.clientX, y: e.clientY };
+    map.jumpTo({ bearing: map.getBearing() - dx * 0.8, pitch: Math.min(map.getMaxPitch(), Math.max(map.getMinPitch(), map.getPitch() + dy * 0.5)) });
+  };
+  const up = (/** @type {MouseEvent} */ e) => {
+    if (e.button !== 1 || !last) return;
+    last = null;
+    box.style.cursor = '';
+    removeEventListener('mousemove', move);
+    removeEventListener('mouseup', up);
+  };
+  // Caught on its way down: a marker under the pointer (which keeps its presses from the map) orbits too.
+  box.addEventListener('mousedown', (/** @type {MouseEvent} */ e) => {
+    if (e.button !== 1) return;
+    e.preventDefault();
+    last = { x: e.clientX, y: e.clientY };
+    box.style.cursor = 'move';
+    map.stop();
+    addEventListener('mousemove', move);
+    addEventListener('mouseup', up);
+  }, true);
+  // No auto-scroll, no link opened in a new tab by the wheel's click over the map.
+  box.addEventListener('auxclick', (/** @type {MouseEvent} */ e) => { if (e.button === 1) e.preventDefault(); });
+}
 
 /**
  * @typedef {{ kind: 'marker', layer: any, wrap: HTMLElement, gl: any, label?: HTMLElement | null }} MarkerMirror
@@ -95,7 +139,9 @@ export class GlView {
     this.host = /** @type {any} */ (host);
     this.lf = /** @type {any} */ (leaflet);
     this.root = /** @type {HTMLElement} */ (host.querySelector('.gf-map-root'));
-    this.allowed = allows3d(host);
+    /** Why it is never in 3D ('' : it may be). */
+    this.why2d = why2d(host);
+    this.allowed = !this.why2d;
     this.#buildUi();
     this.#listenMap();
     this.connect();
@@ -137,7 +183,8 @@ export class GlView {
   #demCredited = false;
 
   // ── What the user sees: the note, the altitude ──────────────────────────────────────────────────
-  // (No 2D ⇄ 3D button on the maps: the choice is Réglages › Cartes', the same for every map.)
+  // (No 2D ⇄ 3D button on the maps: the choice is in Réglages › Cartes and in each map's panel « Carte », one choice
+  // for every map.)
 
   /** @type {HTMLElement | null} */ #note = null;
   /** @type {HTMLElement | null} */ #alt = null;
@@ -327,9 +374,11 @@ export class GlView {
       fadeDuration: reduceMotion() ? 0 : 300,
       cancelPendingTileRequestsWhileZooming: true
     });
-    // The usual 3D navigation, MapLibre's defaults on every device: drag to pan, right-drag (Ctrl-drag) or two
-    // fingers to rotate and tilt, wheel or pinch to zoom, arrow keys; + −, and the compass (north again, the tilt shown).
+    // The usual 3D navigation, MapLibre's defaults on every device: drag to pan, the wheel pressed (as in any 3D
+    // tool), right-drag (Ctrl-drag) or two fingers to rotate and tilt, wheel or pinch to zoom, arrow keys; + −, and
+    // the compass (north again, the tilt shown).
     map.addControl(new ml.NavigationControl({ visualizePitch: true }), 'bottom-left');
+    orbitWithMiddleButton(map);
     map.addControl(new ml.ScaleControl({ unit: 'metric', maxWidth: 90 }), 'bottom-left');
     const frame = this.host.querySelector('.gf-map-frame');
     map.addControl(new ml.FullscreenControl(frame ? { container: frame } : {}), 'bottom-left');
@@ -769,12 +818,25 @@ export class GlView {
     this.#map?.getSource('gf-paths')?.setData(this.#paths);
   }
 
-  // ── The panel « Carte »: says the map is in 3D (its options: Réglages › Cartes) ─────────────────
+  // ── The panel « Carte »: its « Affichage » (2D / 3D, the 3D options) knows how this map is drawn ────────
+
+  /**
+   * This map drawn one way whatever the choice ({ renderer, why }), or null: the choice applies to it.
+   * @returns {{ renderer: '2d' | '3d', why: string } | null}
+   */
+  get fixed() {
+    if (!this.allowed) return { renderer: '2d', why: this.why2d };
+    if (this.host.area?.ring) return { renderer: '2d', why: FROM_ABOVE };
+    if (this.host.getAttribute('map-3d') === 'on') return { renderer: '3d', why: 'Cette vue est toujours en 3D (le choix vaut pour les autres cartes).' };
+    return null;
+  }
 
   #syncPanel() {
     const panel = /** @type {any} */ (this.root.querySelector('gf-map-panel'));
     if (!panel) return;
-    panel.gl = this.on ? { on: true, note: this.#flatWhy() } : null;
+    // `note`: why it is in 2D though 3D is wanted (editing, too many maps, no WebGL2…), or why it is flat.
+    const blocked = this.wanted && this.#blocked ? NOTES[/** @type {keyof typeof NOTES} */ (this.#blocked)] || '' : '';
+    panel.gl = { on: this.on, fixed: this.fixed, note: blocked || (this.on ? this.#flatWhy() : '') };
   }
 
   // ── For the tests (and the curious): what the 3D map shows now ──────────────────────────────────

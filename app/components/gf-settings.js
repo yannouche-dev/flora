@@ -24,7 +24,7 @@ import { discoverEvents, discovering, finishDiscover, restartDiscover } from '..
 import { openView } from '../core/history.js';
 import { mapSettings, mapSettingsEvents, resetMapSettings, setMapSettings } from '../core/map-settings.js';
 import { hasWebGL2 } from '../core/maplibre.js';
-import { map3dOptions, map3dOptionsCss } from './map3d-options.js';
+import { map3dOptions, map3dOptionsCss, mapRendererChoice } from './map3d-options.js';
 
 /** French names of the icons a mode can have. */
 const ICON_NAMES = { image: 'Photo', 'list-ul': 'Liste', table: 'Tableau', images: 'Médias', map: 'Carte', leaf: 'Feuille', flower1: 'Fleur', 'diagram-3': 'Réseau', star: 'Étoile', layers: 'Couches', search: 'Loupe', crown: 'Couronne' };
@@ -498,8 +498,9 @@ export class GfSettings extends LitElement {
   }
 
   /**
-   * « Cartes »: every map in 2D (Leaflet) or 3D (MapLibre, loaded only then), and the 3D options. Each map's own
-   * 2D ⇄ 3D button changes that map only, while it is shown.
+   * « Cartes »: every map in 2D (Leaflet) or 3D (MapLibre, loaded only then), and the 3D options — the defaults, the
+   * same settings as each map's « Carte » panel (« Affichage ») and the plant sheet's map blocks: changed here or
+   * there, every map follows.
    */
   #maps() {
     const s = mapSettings();
@@ -507,13 +508,8 @@ export class GfSettings extends LitElement {
     const options = map3dOptions(s, patch => setMapSettings(patch), { relief: moduleOn('relief3d'), ign: moduleOn('ignMaps'), id: 'settings3d' });
     return html`<h2 id="cartes">Cartes</h2>
       <div class="maps-card">
-        <fieldset class="steps-choice">
-          <legend>Affichage des cartes</legend>
-          <label><input type="radio" name="map-renderer" value="2d" .checked=${s.renderer === '2d'} @change=${() => setMapSettings({ renderer: '2d' })} /> 2D <small class="muted">(vue de dessus, la plus légère)</small></label>
-          <label><input type="radio" name="map-renderer" value="3d" .checked=${s.renderer === '3d'} ?disabled=${!webgl && s.renderer !== '3d'} @change=${() => setMapSettings({ renderer: '3d' })} /> 3D <small class="muted">(relief, inclinaison, rotation, bâtiments, ciel)</small></label>
-        </fieldset>
-        ${webgl ? nothing : html`<p class="muted" role="status">Cet appareil n’affiche pas la 3D (WebGL2 requis) : les cartes restent en 2D.</p>`}
-        <p class="muted">Le choix vaut pour toutes les cartes : la Carte, la carte de la fiche plante, Mes plantes, Parcours, Rencontres, le partage.
+        ${mapRendererChoice(s, patch => setMapSettings(patch), { id: 'settings', legend: 'Affichage des cartes', webgl })}
+        <p class="muted">Le choix vaut pour toutes les cartes : la Carte, la carte de la fiche plante, Mes plantes, Parcours, Rencontres, le partage ; chaque carte le propose aussi dans son panneau « Carte » (Affichage), le même choix.
           En 3D : glisser du clic droit, ou à deux doigts, pour tourner et incliner ; Maj + flèches au clavier ; la boussole revient au nord. La 3D se télécharge à sa première ouverture (environ 1,6 Mo), en ligne.
           L’étape « Jusqu’où part l’expédition ? » reste vue de dessus ; sur une fiche plante, les cartes ajoutées en plus de la carte principale restent en 2D ; pendant la modification des positions, la carte repasse en 2D le temps de l’édition.</p>
         ${s.renderer === '3d' ? options : nothing}

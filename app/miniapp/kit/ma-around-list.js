@@ -212,8 +212,18 @@ export class MaAroundList extends LitElement {
   /** A match touched on the map: chosen, its photos shown. @param {Event} e */
   #onChosen = e => { if (this.media) this.#chooseShown(/** @type {CustomEvent} */ (e).detail.id); };
 
-  /** Its width followed: the photos beside the deck while there is room for both. */
-  #room = new ResizeObserver(([e]) => { const roomy = e.contentRect.width >= ROOMY; if (roomy !== this._roomy) this._roomy = roomy; });
+  /**
+   * Its width followed: the photos beside the deck while there is room for both; with them, drawn again as it changes
+   * (their widest, and so their separator's value, come from it — a scrollbar come or gone, the window resized).
+   */
+  #room = new ResizeObserver(([e]) => {
+    const roomy = e.contentRect.width >= ROOMY;
+    if (roomy !== this._roomy) this._roomy = roomy;
+    const w = Math.round(this.getBoundingClientRect().width);
+    if (w !== this.#roomWidth) { this.#roomWidth = w; if (this.#paneId != null) this.requestUpdate(); }
+  });
+  /** Its width once laid out (the observer's), not measured while it is being drawn (a frame may hold a passing one). */
+  #roomWidth = 0;
 
   /** The first match waits for its one button: no key closes it. @param {KeyboardEvent} e */
   #onKey = e => { if (this._match && e.key === 'Escape') e.preventDefault(); };
@@ -431,7 +441,7 @@ export class MaAroundList extends LitElement {
   #focusPane = false;
 
   /** The widest the photos' pane may be: the deck keeps 380 px. */
-  #paneMax() { return Math.max(300, (this.getBoundingClientRect().width || innerWidth) - 380); }
+  #paneMax() { return Math.max(300, (this.#roomWidth || this.getBoundingClientRect().width || innerWidth) - 380); }
 
   /** @type {PaneSizer | null} */ #sizer = null;
 

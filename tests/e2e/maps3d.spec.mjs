@@ -1,8 +1,8 @@
-// Every map in 3D (gf-map-gl.js): Réglages › Cartes « 3D », or a map's own 2D ⇄ 3D button. Real WebGL (SwiftShader,
+// Every map in 3D (gf-map-gl.js): the maps' one choice « 3D », in Réglages › Cartes or a map's panel « Carte ». Real WebGL (SwiftShader,
 // as in map3d.spec.mjs), every tile made here (tiles.mjs: the IGN's photos and plan, the relief, a block of buildings),
 // never the network. The Carte in MapLibre with its relief, the same layers as in 2D, the options (buildings, sky,
-// globe) switched from its panel, its markers clickable; 2D by default, MapLibre never asked then; each map's own
-// button; back in 2D while positions are edited; the ways it stays in 2D or flat (no WebGL2, modules off, offline);
+// globe) switched from its panel, its markers clickable; 2D by default, MapLibre never asked then; no 2D ⇄ 3D
+// button on the maps (the choice is in their panel: maps-panel3d.spec.mjs); back in 2D while positions are edited; the ways it stays in 2D or flat (no WebGL2, modules off, offline);
 // the « Jusqu’où part l’expédition ? » step always from above; one WebGL map per plant sheet.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
@@ -123,6 +123,19 @@ test('Réglages › Cartes « 3D » : la Carte en MapLibre — relief, bâtiment
   await map.locator('canvas.maplibregl-canvas').focus();
   await page.keyboard.press('Shift+ArrowRight');
   await expect.poll(async () => (await glState(map)).bearing, SLOW).not.toBe(0);
+  // The wheel pressed and dragged orbits (as in any 3D tool): sideways turns, downwards tilts more.
+  if (!test.info().project.name.startsWith('phone')) {
+    // Once the turn of Shift + → is over (MapLibre eases it).
+    let before = await glState(map);
+    await expect.poll(async () => { const was = before; await page.waitForTimeout(400); before = await glState(map); return before.bearing === was.bearing && before.pitch === was.pitch; }, SLOW).toBe(true);
+    const box = /** @type {{ x: number, y: number, width: number, height: number }} */ (await map.locator('canvas.maplibregl-canvas').boundingBox());
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down({ button: 'middle' });
+    await page.mouse.move(box.x + box.width / 2 + 60, box.y + box.height / 2 + 20, { steps: 6 });
+    await page.mouse.up({ button: 'middle' });
+    await expect.poll(async () => Math.abs((await glState(map)).bearing - before.bearing + 48) <= 1, SLOW).toBe(true);
+    expect(Math.abs((await glState(map)).pitch - before.pitch - 10)).toBeLessThanOrEqual(1);
+  }
 
   // The places and plants of the 2D map, the same elements, on the relief; a plant clicked opens it.
   const plants = map.locator('.gf-gl-mk .gf-plant');
@@ -166,8 +179,11 @@ test('en 3D, le panneau « Carte » : les mêmes couches qu’en 2D ; les option
   for (const name of ['Parcelles cadastrales', 'Courbes de niveau', 'Forêts publiques', 'Parcs nationaux', 'Réserves naturelles', 'Protection de biotope']) {
     await expect(panel.getByRole('checkbox', { name: new RegExp(name) })).toBeVisible();
   }
-  // No 2D ⇄ 3D switch here: the panel says where the 3D is set.
-  await expect(panel).toContainText('Carte en 3D');
+  // « Affichage »: the maps' one choice (3D, as Réglages say), its options folded; a link to Réglages › Cartes.
+  await expect(panel.getByRole('group', { name: 'Carte en 2D ou en 3D' }).getByRole('radio', { name: /^3D/ })).toBeChecked();
+  await expect(panel.getByRole('checkbox', { name: /Bâtiments en 3D/ })).toBeHidden();
+  await panel.getByText('Options de la 3D').click();
+  await expect(panel.getByRole('checkbox', { name: /Bâtiments en 3D/ })).toBeChecked();
   await expect(panel.getByRole('link', { name: 'Réglages › Cartes' })).toHaveAttribute('href', '#/settings');
   await expect(panel.getByRole('button', { name: /^(2D|3D)$/ })).toHaveCount(0);
   await panel.getByRole('checkbox', { name: /Courbes de niveau/ }).check();

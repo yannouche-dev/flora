@@ -8,7 +8,8 @@
 //   cleanMapSettings(value) → a valid whole from anything (a file imported, an old version), never throws.
 // Stored in localStorage (config.storageKeys.maps3d), only what differs from the defaults, and only when the user
 // changes something: a real setting, so the first steps (core/discover.js) count it as « used before » like the
-// others. Each map's own 2D ⇄ 3D button is a choice for that map while it is shown, never stored.
+// others. One choice for every map: Réglages › Cartes, the « Carte » panel of any map (« Affichage ») and the plant
+// sheet's map blocks change these same settings, and every map shown follows at once (no map has a choice of its own).
 
 import { config } from '../config.js';
 import { writeLocal } from './quota.js';
@@ -35,7 +36,7 @@ export const MAP_DEFAULTS = Object.freeze({
   plan: 'raster', light: 'fixed', hour: 15
 });
 
-/** The bounds of the sliders (Réglages and the map's panel use the same). */
+/** The bounds of the sliders (Réglages, the maps' panel and the map blocks' form use the same). */
 export const LIMITS = Object.freeze({ exaggeration: [1, 3, 0.1], pitch: [0, 60, 5], hour: [0, 24, 0.5] });
 
 /** @param {unknown} v @param {[number, number, number]} range @param {number} fallback */
