@@ -4,7 +4,10 @@
 //  - map: the mother map (gf-map; 3D as Réglages › Cartes says): the scope's circle, the latest observations of the
 //    plants found in it (those the search keeps), the current plant's own observations lit, the observation chosen.
 //    A point touched: its plant is the current one; a long press: the scope moves there. Over it, the scope: its place,
-//    its radius (a slider), « Autour de moi », « Toute la France » (no scope);
+//    its radius (a slider), « Autour de moi », « Toute la France » (no scope). Its settings (registry.js, map-options.js)
+//    change each of these: its own scope while the address has none (lieu, autour), its background and 3D, its IGN
+//    layers, its points (sources, period, style, the current plant's grouped), how it follows the state (suit, plante,
+//    toucher), its controls (ui: by its width, compact, none);
 //  - place: the scope alone — « Autour de moi », a commune (gf-place-search), the radius;
 //  - search: Flore's search bar (gf-results-bar: text, sort, filters chosen, « Filtrer par »), its filters (gf-filter-
 //    panel, opened by the funnel) and its list; filters and results: each part alone. They read and write the store's
@@ -32,7 +35,10 @@ import { ui } from '../styles/ui.js';
 import { floweringMonths } from '../components/gf-calendar.js';
 import { geoProblem } from '../components/start-screen.js';
 import { DISTANCES, distanceAt, distanceEvents } from '../miniapp/kit/cards.js';
+import { pushHash } from '../core/history.js';
+import { addCatalogLayer } from '../core/ign.js';
 import { cellIcon, distanceLabel } from './registry.js';
+import { COMPACT_WIDTH, catalogLayers, inWhen, overlayKeys, uiMode } from './map-options.js';
 import { obsId } from './state.js';
 import '../components/gf-map.js';
 import '../components/gf-place-search.js';
@@ -159,7 +165,7 @@ const radiusSlider = state => {
 // ── map ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export class DlMap extends LitElement {
-  static properties = { state: { attribute: false }, params: { attribute: false }, _busy: { state: true } };
+  static properties = { state: { attribute: false }, params: { attribute: false }, _busy: { state: true }, _narrow: { state: true } };
 
   static styles = [ui, scopeStyles, css`
     :host { display: flex; flex-direction: column; position: relative; min-height: 0; isolation: isolate; }
@@ -173,6 +179,16 @@ export class DlMap extends LitElement {
       background: color-mix(in srgb, var(--gf-surface) 95%, transparent); box-shadow: var(--gf-shadow); }
     .row { display: flex; flex-wrap: wrap; gap: 6px; }
     .row button { min-height: 32px; padding: 4px 12px; font-size: 0.82rem; }
+    /* Compact controls (ui=compacte, or a narrow cell): no address search, the zone at the top, smaller; « Autour de
+       moi » its icon alone; the map's own buttons and zoom smaller. */
+    .panel.compact { top: 8px; width: min(240px, calc(100% - 56px)); gap: 4px; padding: 6px 8px; }
+    .panel.compact .where { font-size: 0.8rem; }
+    .panel.compact .row button { min-height: 28px; padding: 2px 8px; }
+    .panel.compact .row .words { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+    :host([ui='compacte']) gf-map .gf-map-buttons button { width: 28px; height: 28px; font-size: 0.85rem; }
+    :host([ui='compacte']) gf-map .leaflet-control-zoom a { width: 26px; height: 26px; line-height: 26px; font-size: 16px; }
+    /* None (ui=nue): the map alone — no search, no buttons, no zoom (the cell's head says the zone). */
+    :host([ui='nue']) gf-map .gf-map-buttons, :host([ui='nue']) gf-map .leaflet-control-zoom { display: none; }
   `];
 
   #store = new StoreController(this);
@@ -183,6 +199,27 @@ export class DlMap extends LitElement {
     /** @type {LayoutState | null} */ this.state = null;
     /** @type {Record<string, any>} */ this.params = {};
     this._busy = false;
+    /** Narrower than COMPACT_WIDTH (ui=auto: compact controls). */
+    this._narrow = false;
+  }
+
+  /** The cell's width followed: under 360 px, compact controls (ui=auto). */
+  #resize = new ResizeObserver(entries => {
+    const w = entries[entries.length - 1]?.contentRect.width ?? 0;
+    if (w > 0) this._narrow = uiMode('auto', w) === 'compacte';
+  });
+
+  connectedCallback() { super.connectedCallback(); this.#resize.observe(this); }
+  disconnectedCallback() { super.disconnectedCallback(); this.#resize.disconnect(); }
+
+  /** The map's settings (registry.js), their defaults when none were given. */
+  get #p() {
+    const p = this.params ?? {};
+    return {
+      src: /** @type {string[]} */ (p.src ?? ['inat']), when: /** @type {string} */ (p.when ?? 'toujours'), suit: p.suit !== false,
+      plante: /** @type {string} */ (p.plante ?? 'grand'), toucher: /** @type {string} */ (p.toucher ?? 'plante'), pts: /** @type {string} */ (p.pts ?? 'photo'),
+      ui: uiMode(p.ui, this._narrow ? COMPACT_WIDTH - 1 : COMPACT_WIDTH)
+    };
   }
 
   /** The map's view held while its cell changes size (a separator dragged beside it). */
@@ -197,40 +234,74 @@ export class DlMap extends LitElement {
   /** @type {any[] | null} */ #foundFor = null;
   /** @type {Set<number>} */ #foundSet = new Set();
 
-  /** The circle and the observations of the plants found in it: the same object while nothing changed (the map keeps its points). */
+  /** The plants of the scope by their scientific name (GBIF's points, which seldom have iNaturalist's taxon). */
+  get #byName() {
+    const list = /** @type {LayoutState} */ (this.state).species?.list ?? null;
+    if (this.#namesFor !== list) { this.#namesFor = list; this.#names = new Map((list ?? []).map(x => [x.name, /** @type {number} */ (x.plantId)])); }
+    return this.#names;
+  }
+  /** @type {any[] | null} */ #namesFor = null;
+  /** @type {Map<string, number>} */ #names = new Map();
+
+  /** The plant of a point: iNaturalist's by its taxon; GBIF's by its taxon, else its name. @param {any} p @returns {number | undefined} */
+  #plantOf(p) {
+    const plantOf = /** @type {LayoutState} */ (this.state).species?.plantOf;
+    const id = p.taxonId != null ? plantOf?.get(p.taxonId) : undefined;
+    return id ?? (p.kind === 'gbif' && p.sci ? this.#byName.get(p.sci) : undefined);
+  }
+
+  /**
+   * The circle and its observations, as the settings say: their sources (src: iNaturalist's, GBIF's), those of the
+   * plants the search keeps (suit; else every plant observed), of the current plant alone (plante=seule), of a period
+   * (when: this year, this month), as photos or dots (pts) — the same object while nothing changed (the map keeps its points).
+   */
   get #area() {
     const s = /** @type {LayoutState} */ (this.state);
     const at = s.live.at;
     if (!at) return null;
+    const P = this.#p;
+    const inat = P.src.includes('inat'), gbifOn = P.src.includes('gbif');
     const found = this.#found, plantOf = s.species?.plantOf;
     // A search keeping a few of the plants of the scope (a family, a filter): their own observations asked
     // (state.pointsOf) — those of rarer plants (orchids) are seldom among the most recent of all.
-    const kept = s.species && found.size < s.species.list.length ? s.species.list.filter(x => found.has(/** @type {number} */ (x.plantId))).map(x => x.taxonId).slice(0, 200) : [];
+    const kept = inat && P.suit && P.plante !== 'seule' && s.species && found.size < s.species.list.length
+      ? s.species.list.filter(x => found.has(/** @type {number} */ (x.plantId))).map(x => x.taxonId).slice(0, 200) : [];
     s.pointsOf(kept);
+    s.gbifOf(gbifOn);
     const subset = s.subset?.key === s.subsetFor ? s.subset : null;
+    const gbif = gbifOn && s.gbif?.key === s.scopeKey ? s.gbif.points : null;
+    const current = P.plante === 'seule' ? s.live.plant : null;
+    const sig = JSON.stringify([P.src, P.when, P.suit, P.plante, P.pts, current]);
     const memo = this.#areaMemo;
-    if (memo && memo.at === at && memo.r === s.radius && memo.pts === s.points && memo.found === found && memo.plantOf === plantOf && memo.subset === subset) return memo.value;
-    // The plants the search keeps: their points only (all of them while the plants of the scope are unknown).
+    if (memo && memo.at === at && memo.r === s.radius && memo.pts === s.points && memo.found === found && memo.plantOf === plantOf && memo.subset === subset
+      && memo.gbif === gbif && memo.sig === sig) return memo.value;
     const seen = new Set();
-    const all = subset ? [...subset.points, ...s.points].filter(p => !p.url || (seen.has(p.url) ? false : (seen.add(p.url), true))) : s.points;
-    const points = plantOf ? all.filter(p => { const id = p.taxonId != null ? plantOf.get(p.taxonId) : undefined; return id !== undefined && found.has(id); }) : all;
-    const value = { center: at, radius: s.radius, fit: true, leaves: true, points };
-    this.#areaMemo = { at, r: s.radius, pts: s.points, found, plantOf, subset, value };
+    /** @type {any[]} */
+    const fromInat = !inat ? [] : subset ? [...subset.points, ...s.points].filter(p => !p.url || (seen.has(p.url) ? false : (seen.add(p.url), true))) : s.points;
+    const all = [...fromInat, ...(gbif ?? [])];
+    // The current plant's alone (none chosen: none); else the plants the search keeps (all of them while the plants of
+    // the scope are unknown), or every plant observed (suit=0).
+    let points = P.plante === 'seule' ? (current ? all.filter(p => this.#plantOf(p) === current) : [])
+      : P.suit && plantOf ? all.filter(p => { const id = this.#plantOf(p); return id !== undefined && found.has(id); }) : all;
+    if (P.when !== 'toujours') points = points.filter(p => inWhen(p.date, P.when));
+    const value = { center: at, radius: s.radius, fit: true, leaves: P.pts !== 'pastille', points };
+    this.#areaMemo = { at, r: s.radius, pts: s.points, found, plantOf, subset, gbif, sig, value };
     return value;
   }
   /** @type {any} */ #areaMemo = null;
 
-  /** The current plant's observations in the scope, large, its photo in each. */
+  /** The current plant's observations in the scope, large, its photo in each (those of the period: when). */
   get #highlight() {
     const s = /** @type {LayoutState} */ (this.state);
-    const obs = s.plantObs, info = s.plantInfo;
-    if (!obs || !info || !obs.points.length) return null;
-    if (this.#hlMemo?.key === obs.key + ':' + info.name) return this.#hlMemo.value;
+    const obs = s.plantObs, info = s.plantInfo, when = this.#p.when;
+    if (!obs || !info || !obs.points.length || !this.#p.src.includes('inat')) return null;
+    if (this.#hlMemo?.key === obs.key + ':' + info.name + ':' + when) return this.#hlMemo.value;
     const sp = s.species?.byPlant.get(info.id);
     const photo = sp?.photo && moduleOn('photos', plantViewOf(this.#store.state)) ? sp.photo.replace(/\/square\./, '/small.') : null;
-    const value = { key: obs.key, photo, credit: photo ? sp?.credit ?? null : null, common: info.name, sci: info.sci, taxonId: sp?.taxonId ?? null,
-      points: obs.points.map(p => ({ coordinates: p.coordinates, title: info.name, url: p.url, date: p.date, taxonId: sp?.taxonId ?? null, sci: info.sci, plantId: info.id })) };
-    this.#hlMemo = { key: obs.key + ':' + info.name, value };
+    const points = obs.points.filter(p => inWhen(p.date, when));
+    const value = !points.length ? null : { key: obs.key + ':' + when, photo, credit: photo ? sp?.credit ?? null : null, common: info.name, sci: info.sci, taxonId: sp?.taxonId ?? null,
+      points: points.map(p => ({ coordinates: p.coordinates, title: info.name, url: p.url, date: p.date, taxonId: sp?.taxonId ?? null, sci: info.sci, plantId: info.id })) };
+    this.#hlMemo = { key: obs.key + ':' + info.name + ':' + when, value };
     return value;
   }
   /** @type {{ key: string, value: any } | null} */ #hlMemo = null;
@@ -249,10 +320,28 @@ export class DlMap extends LitElement {
   }
   /** @type {{ id: string, value: any } | null} */ #focusMemo = null;
 
+  /**
+   * The cell's own layers (layers=znieff+n2000): the overlays of gf-map, those of the catalogue added to the maps
+   * first (core/ign.js); none written: null — the Carte's shared choice. The same array while they are the same.
+   */
+  get #overlays() {
+    const names = /** @type {string[]} */ (this.params?.layers ?? []);
+    const k = names.join('+');
+    if (this.#overlaysMemo?.k === k) return this.#overlaysMemo.value;
+    for (const l of catalogLayers(names)) addCatalogLayer(/** @type {any} */ (l));
+    const value = names.length ? overlayKeys(names) : null;
+    this.#overlaysMemo = { k, value };
+    return value;
+  }
+  /** @type {{ k: string, value: string[] | null } | null} */ #overlaysMemo = null;
+
   /** The cell's map (gf-map: what the cell says goes through it — the quiet-map rule). @returns {any} */
   get #map() { return this.renderRoot.querySelector('gf-map'); }
 
-  /** A point touched: its plant, the current one (with this observation); one not in the flora: a brief toast. @param {CustomEvent} e */
+  /**
+   * A point touched: its plant, the current one (with this observation) — or its sheet opened (toucher=fiche); one not
+   * in the flora: a brief toast. @param {CustomEvent} e
+   */
   #onPick(e) {
     const s = /** @type {LayoutState} */ (this.state);
     const p = e.detail.point;
@@ -260,6 +349,7 @@ export class DlMap extends LitElement {
     const id = (p.taxonId != null ? s.species?.plantOf.get(p.taxonId) : undefined)
       ?? s.species?.list.find(x => p.sci && x.name === p.sci)?.plantId ?? p.plantId ?? undefined;
     if (id == null) { this.#map?.toast(`${p.common || p.sci || p.title || 'Cette plante'} : pas dans la flore de France de GeoFlora.`); return; }
+    if (this.#p.toucher === 'fiche') { pushHash(href.plant(id)); return; }
     s.pick(id, { obs: p.url ? obsId(p.url) : null });
   }
 
@@ -271,17 +361,36 @@ export class DlMap extends LitElement {
     nameScope(s, /** @type {[number, number]} */ (s.live.at));
   }
 
-  async #locate() {
+  /** « Autour de moi »: the scope around the position. @param {import('./state.js').How} [how] */
+  async #locate(how = 'push') {
     const s = /** @type {LayoutState} */ (this.state);
     this._busy = true;
-    try { const at = await locateOnce(); s.setScope(at, null); nameScope(s, /** @type {[number, number]} */ (s.live.at)); }
+    try { const at = await locateOnce(); s.setScope(at, null, how); nameScope(s, /** @type {[number, number]} */ (s.live.at)); }
     // Asked, no position: one brief toast over the map.
     catch (error) { this.#map?.toast(/** @type {Error} */ (error).message); }
     finally { this._busy = false; }
   }
 
+  /**
+   * The map's own scope (lieu=, autour), when the address has none: the place found as ?place= is (state.js), or
+   * « Autour de moi » — once for each (a scope taken off afterwards, ✕, stays off). The address' always wins.
+   */
+  #defaultScope() {
+    const s = /** @type {LayoutState} */ (this.state);
+    const lieu = this.params?.lieu ?? null, autour = Boolean(this.params?.autour);
+    const want = lieu ? 'lieu:' + lieu : autour ? 'autour' : '';
+    if (!want || s.defaultedFor === want) return;
+    s.defaultedFor = want;
+    if (s.live.at || s.live.place) return;
+    if (lieu) s.set({ place: lieu, obs: null }, 'replace');
+    else this.#locate('replace');
+  }
+
   /** The long press's first-use hint (core/hints.js: the first layout map without a zone ever), until its ✕. @type {boolean | undefined} */
   #pressHint;
+
+  /** The map's 3D as written (3d=1, 3d=0), last told to its 3D adapter. @type {boolean | null | undefined} */
+  #was3d;
 
   /**
    * What the scope says, through the map (the quiet-map rule): its plants coming — the map's thin line past 400 ms;
@@ -289,9 +398,14 @@ export class DlMap extends LitElement {
    */
   updated() {
     const s = this.state, map = this.#map;
+    this.setAttribute('ui', this.#p.ui);
     if (!s || !map) return;
+    this.#defaultScope();
+    const d3 = this.params?.['3d'] ?? null;
+    if (d3 !== this.#was3d) { if (this.#was3d !== undefined) map.gl?.recheck(); this.#was3d = d3; }
     map.busy('scope', Boolean(s.live.at) && s.speciesState === 'loading', 'Plantes de la zone : recherche');
     map.setStatus('scope', s.live.at && s.speciesState === 'error' ? s.speciesError : '', { level: 'warn' });
+    map.setStatus('gbif', s.live.at && this.#p.src.includes('gbif') ? s.gbifError : '', { level: 'warn' });
     const said = s.live.at && s.speciesState !== 'loading' && s.speciesState !== 'error' ? scopeNote(s) : '';
     if (said && said !== this.#said) map.announce(said);
     this.#said = said;
@@ -302,17 +416,25 @@ export class DlMap extends LitElement {
     const s = this.state;
     if (!s) return nothing;
     if (!s.live.at && this.#pressHint === undefined) this.#pressHint = takeHint('layout-map-press');
+    const P = this.#p, d3 = this.params?.['3d'] ?? null;
     const press = 'Appui long sur la carte : la zone s’y centre.';
+    const hl = P.plante === 'non' ? null : this.#highlight;
+    // regroupe: the current plant's observations grouped by where they fall at the zoom shown (gf-map `cluster`).
+    const grouped = Boolean(this.params?.regroupe);
+    const compact = P.ui !== 'complete';
     return html`${!s.live.at && this.#pressHint ? hintView(press, () => { this.#pressHint = false; this.requestUpdate(); }, 'press-hint') : nothing}
-      <div class="stage"><gf-map no-create point-click="pick" .base=${this.params.base ?? null} .area=${this.#area} .highlight=${this.#highlight} .focusPoint=${this.#focus}
+      <div class="stage"><gf-map no-create point-click=${P.toucher === 'rien' ? 'none' : 'pick'} map-3d=${d3 === null ? nothing : d3 ? 'on' : 'off'}
+        map-3d-why=${d3 === false ? 'Cette carte de la disposition reste en 2D (3d=0 dans son adresse ; le choix vaut pour les autres cartes).' : nothing}
+        .base=${this.params?.base ?? null} .overlays=${this.#overlays} .area=${this.#area} .highlight=${grouped ? null : hl} .cluster=${grouped ? hl : null}
+        .focusPoint=${this.#focus} .noSearch=${compact} .noLocate=${P.ui === 'nue'} .track=${Boolean(this.params?.autour)}
         aria-description=${press}
         @point-pick=${(/** @type {CustomEvent} */ e) => this.#onPick(e)} @point-info=${(/** @type {CustomEvent} */ e) => this.#onPress(e)}></gf-map>
-      <div class="panel" role="group" aria-label="Zone de la disposition">
+      ${P.ui === 'nue' ? nothing : html`<div class="panel ${compact ? 'compact' : ''}" role="group" aria-label="Zone de la disposition">
         ${where(s)}
         ${s.live.at ? radiusSlider(s) : nothing}
         <div class="row"><button type="button" class=${this._busy ? 'busy' : ''} ?disabled=${this._busy} aria-busy=${String(this._busy)}
-          @click=${() => this.#locate()}>${icon('geo-alt')} Autour de moi</button></div>
-      </div></div>`;
+          title="Autour de moi" @click=${() => this.#locate()}>${icon('geo-alt')} <span class="words">Autour de moi</span></button></div>
+      </div>`}</div>`;
   }
 }
 customElements.define('dl-map', DlMap);

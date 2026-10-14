@@ -289,7 +289,8 @@ export class GfMap extends LitElement {
     /** Over the area: where one plant was observed ({ key, points: { coordinates, title, date? }[], photo?, common?, sci?, taxonId? }), its photo in each, large (Découvrir). */
     highlight: { attribute: false },
     remember: { type: Boolean },
-    search: { type: Boolean },
+    /** Its address search (the `search` attribute only says whether it is shown: map.css). */
+    search: { type: Boolean, attribute: false },
     legend: { type: Boolean },
     noCreate: { type: Boolean, attribute: 'no-create' },
     noSearch: { type: Boolean, attribute: 'no-search' },
@@ -944,6 +945,8 @@ export class GfMap extends LitElement {
     }
     if (!this.#map) return;
     this.#gl?.changed(changed);
+    // Its address search given or taken back (a free layout's map, by its width): its buttons made again with it.
+    if (['search', 'noSearch'].some(k => changed.has(k) && changed.get(k) !== undefined) && this.hasAttribute('search') !== this.#hasSearch) this.#rebuildControls();
     if (changed.has('line')) this.#syncLine();
     if (changed.has('base') && this.base && this.base !== this.#base) this.#setBase(/** @type {any} */ (this.base));
     if (changed.has('overlays') && this.overlays) {
@@ -2018,6 +2021,16 @@ export class GfMap extends LitElement {
 
   get #hasSearch() { return this.search && !this.noSearch; }
 
+  /** The search pill and the round buttons made again (the search given or taken back): the layers button goes in the pill, or out of it. */
+  #rebuildControls() {
+    this.#buttons?.remove();
+    this.querySelector('gf-map-search')?.remove();
+    this.#buildButtons();
+    this.toggleAttribute('search', this.#hasSearch);
+    if (this.#hasSearch) this.#buildSearch();
+    this.#syncState();
+  }
+
   /** ✎: shown on editable maps, disabled when there is nothing to move. */
   #syncButtons() {
     const edit = /** @type {HTMLButtonElement | null | undefined} */ (this.#buttons?.querySelector('.edit'));
@@ -2177,7 +2190,7 @@ export class GfMap extends LitElement {
 
   #saveLayers() {
     // A map with its own layers (map block): tell its owner, leave the Carte's choice alone.
-    if (this.base) this.#emit('layers-change', { base: this.#base, overlays: [...this.#overlays] });
+    if (this.base || this.overlays) this.#emit('layers-change', { base: this.#base, overlays: [...this.#overlays] });
     else store(config.storageKeys.mapLayer, { base: this.#base, overlays: this.#overlays, distribution: this.#distributionOn });
     if (this.#panel) Object.assign(this.#panel, { base: this.#base, overlays: [...this.#overlays], ...this.#distributionInfo() });
   }

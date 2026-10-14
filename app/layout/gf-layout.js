@@ -37,7 +37,7 @@ import { BP, MediaController } from '../core/media.js';
 import { gripStyles, shareGrip } from '../core/split-grip.js';
 import { ui } from '../styles/ui.js';
 import { cell as makeCell, dirAt, moveAt, nodeAt, parse, removeAt, replaceAt, serialize, setShares, shapeKey, shares, splitAt } from './grammar.js';
-import { cellIcon, cellMark, cellName, COMPONENTS, distanceLabel, menuLooks, resolveTree, valueText } from './registry.js';
+import { cellIcon, cellMark, cellName, COMPONENTS, distanceLabel, menuLooks, paramName, resolveTree, valueText } from './registry.js';
 import { cleanText, LayoutState, liveSearch, readLive, readQuery, sameLive } from './state.js';
 import { forgetShares, savedShares, saveShares } from './sizes.js';
 import { PRESETS } from './presets.js';
@@ -223,6 +223,14 @@ export class GfLayout extends LitElement {
     .tools select { min-height: 30px; padding: 2px 24px 2px 8px; font-size: 0.8rem; border-radius: 8px; }
     .tools button { min-height: 30px; min-width: 30px; padding: 2px 8px; font-size: 0.8rem; }
     .tools label { display: inline-flex; align-items: center; gap: 4px; font-size: 0.78rem; }
+    /* A map's settings, folded: its intent, then each group under its heading. */
+    .tools details.params { flex-basis: 100%; color: var(--gf-text); }
+    .tools details.params summary { display: inline-flex; align-items: center; gap: 4px; min-height: 30px; cursor: pointer; font-size: 0.8rem; font-weight: 600; }
+    .tools details.params[open] { display: grid; gap: 6px; padding-bottom: 4px; }
+    .tools fieldset { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; padding: 4px 8px 6px; border: 1px solid var(--gf-border); border-radius: 8px; }
+    .tools legend { padding: 0 4px; font-size: 0.74rem; font-weight: 700; color: var(--gf-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .tools .list { display: inline-flex; flex-wrap: wrap; gap: 2px 8px; }
+    .tools input[type='text'] { min-height: 30px; padding: 2px 8px; font-size: 0.8rem; width: 16em; max-width: 100%; }
     .empty { padding: 20px 16px; overflow-y: auto; }
     .empty h2 { margin: 0 0 6px; }
     .empty ul { list-style: none; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
@@ -504,6 +512,49 @@ export class GfLayout extends LitElement {
     this.#typing = setTimeout(() => { this._draft = text; }, 300);
   }
 
+  /**
+   * A cell's parameters, editing: each by its kind — a yes-or-no, a box (one whose default is « as the settings say »,
+   * 3d: a choice of three); a distance, a choice, an intent: a menu (« par défaut », or what the intent gives); a list:
+   * a box for each of its values; words: a field. A component whose parameters come in groups (the map): folded
+   * under « Réglages », its intent first, then each group under its heading.
+   * @param {Resolved & { known: true }} r @param {(key: string, v: unknown) => void} setParam
+   */
+  #paramFields(r, setParam) {
+    const field = (/** @type {string} */ key) => {
+      const ps = r.spec.params[key];
+      const given = r.given.has(key);
+      if (ps.kind === 'bool' && ps.def !== null) {
+        return html`<label><input type="checkbox" data-param=${key} .checked=${Boolean(r.params[key])} @change=${(/** @type {any} */ e) => setParam(key, e.target.checked)} /> ${ps.label}</label>`;
+      }
+      if (ps.kind === 'list') {
+        const on = /** @type {string[]} */ (r.params[key]);
+        const toggle = (/** @type {string} */ v, /** @type {boolean} */ checked) => setParam(key, Object.keys(ps.values ?? {}).filter(x => x === v ? checked : on.includes(x)));
+        return html`<span class="list" role="group" aria-label=${ps.label} data-param=${key}>${Object.entries(ps.values ?? {}).map(([v, label]) => html`<label><input type="checkbox"
+          value=${v} .checked=${on.includes(v)} @change=${(/** @type {any} */ e) => toggle(v, e.target.checked)} /> ${label}</label>`)}</span>`;
+      }
+      if (ps.kind === 'text') {
+        return html`<label>${ps.label} <input type="text" data-param=${key} maxlength="80" .value=${given ? String(r.params[key]) : ''} placeholder="par exemple : Fontainebleau 77"
+          @change=${(/** @type {any} */ e) => setParam(key, e.target.value.replace(/[,;()[\]=@]/g, ' ').trim() || null)} /></label>`;
+      }
+      const choices = ps.kind === 'distance' ? distanceChoices(given ? r.params[key] : null).map(d => [String(d), distanceLabel(d)])
+        : ps.kind === 'bool' ? [['true', 'Oui'], ['false', 'Non']] : Object.entries(ps.values ?? {});
+      // Not written, given by the intent: said so (« selon l’intention : Photos aériennes »).
+      const implied = r.implied.has(key) ? choices.find(([v]) => v === String(r.params[key]))?.[1] : null;
+      return html`<select aria-label=${ps.label} title=${ps.label} data-param=${key} @change=${(/** @type {any} */ e) => setParam(key, e.target.value === '' ? null
+        : ps.kind === 'distance' ? Number(e.target.value) : ps.kind === 'bool' ? e.target.value === 'true' : e.target.value)}>
+          <option value="" ?selected=${!given}>${ps.label} : ${implied ? 'selon l’intention (' + implied + ')' : 'par défaut'}</option>
+          ${choices.map(([v, label]) => html`<option value=${v} ?selected=${given && String(r.params[key]) === v}>${label}</option>`)}
+        </select>`;
+    };
+    const keys = Object.keys(r.spec.params);
+    if (!keys.some(k => r.spec.params[k].group)) return keys.map(field);
+    const groups = [...new Set(keys.map(k => r.spec.params[k].group).filter(Boolean))];
+    return html`<details class="params"><summary>${icon('gear')} Réglages</summary>
+      ${keys.filter(k => !r.spec.params[k].group).map(field)}
+      ${groups.map(g => html`<fieldset><legend>${g}</legend>${keys.filter(k => r.spec.params[k].group === g).map(field)}</fieldset>`)}
+    </details>`;
+  }
+
   /** A cell's tools, editing: its component, its parameters, a cell beside / under it, moved, removed. @param {CellNode} n @param {number[]} path @param {Resolved} r */
   #tools(n, path, r) {
     const depth = path.length - 1;
@@ -516,7 +567,8 @@ export class GfLayout extends LitElement {
     const setParam = (/** @type {string} */ key, /** @type {unknown} */ v) => {
       if (!r.known) return;
       const ps = r.spec.params[key];
-      const params = n.params.filter(p => p.key !== key && !(p.key === null && r.spec.main === key));
+      // What sets it already (its name, or a bare value it reads: map(20km), map(terrain)) gives way.
+      const params = n.params.filter(p => paramName(r.spec, p) !== key);
       if (v !== null && v !== '') params.push({ key, value: valueText(ps, v) });
       this.#editDraft(t => replaceAt(t, path, { ...n, params }));
     };
@@ -528,12 +580,7 @@ export class GfLayout extends LitElement {
         ${COMPONENTS.map(c => html`<option value=${c.id} ?selected=${value === c.id}>${c.title}</option>
           ${(c.views?.() ?? []).map(v => html`<option value=${c.id + '.' + v.key} ?selected=${value === c.id + '.' + v.key}>${c.title} › ${v.title}</option>`)}`)}
       </select>
-      ${r.known ? Object.entries(r.spec.params).map(([key, ps]) => ps.kind === 'bool'
-        ? html`<label><input type="checkbox" .checked=${Boolean(r.params[key])} @change=${(/** @type {any} */ e) => setParam(key, e.target.checked)} /> ${ps.label}</label>`
-        : html`<select aria-label=${ps.label} title=${ps.label} @change=${(/** @type {any} */ e) => setParam(key, e.target.value === '' ? null : ps.kind === 'distance' ? Number(e.target.value) : e.target.value)}>
-            <option value="" ?selected=${!r.given.has(key)}>${ps.label} : par défaut</option>
-            ${(ps.kind === 'distance' ? distanceChoices(r.given.has(key) ? r.params[key] : null).map(d => [String(d), distanceLabel(d)]) : Object.entries(ps.values ?? {})).map(([v, label]) => html`<option value=${v} ?selected=${r.given.has(key) && String(r.params[key]) === v}>${label}</option>`)}
-          </select>`) : nothing}
+      ${r.known ? this.#paramFields(r, setParam) : nothing}
       <button type="button" title="Une cellule à droite" aria-label="Ajouter une cellule à droite" @click=${() => this.#editDraft(t => splitAt(t, path, 'row', makeCell('plant')))}>${icon('chevron-bar-right')}</button>
       <button type="button" title="Une cellule en dessous" aria-label="Ajouter une cellule en dessous" @click=${() => this.#editDraft(t => splitAt(t, path, 'col', makeCell('plant')))}>${icon('chevron-down')}</button>
       <button type="button" title=${dir === 'row' ? 'Vers la gauche' : 'Vers le haut'} aria-label="Déplacer avant" ?disabled=${at === 0} @click=${() => this.#editDraft(t => moveAt(t, path, -1))}>${icon(dir === 'row' ? 'chevron-left' : 'chevron-up')}</button>

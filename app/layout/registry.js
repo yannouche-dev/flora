@@ -16,11 +16,19 @@
 import { fold } from '../core/fold.js';
 import { BLOCKS } from '../core/sheet-blocks.js';
 import { blockCategory, categoryOf } from '../core/categories.js';
+import { MAP_INTENT_ALIASES, MAP_INTENTS, MAP_LAYER_ALIASES, MAP_LAYERS } from './map-options.js';
 
 /**
- * @typedef {'distance' | 'enum' | 'bool'} ParamKind
- * @typedef {{ kind: ParamKind, label: string, def: unknown, values?: Record<string, string>, aliases?: Record<string, string>, words?: string[] }} ParamSpec
- *   `values`: an enum's canonical values and their French labels; `aliases`: other spellings of a value → canonical; `words`: other names of the parameter
+ * @typedef {'distance' | 'enum' | 'bool' | 'list' | 'text' | 'intent'} ParamKind
+ * @typedef {{ kind: ParamKind, label: string, def: unknown, values?: Record<string, string>, aliases?: Record<string, string>, words?: string[],
+ *   off?: string[], group?: string, mark?: string, bundles?: Record<string, Record<string, string>> }} ParamSpec
+ *   `values`: an enum's (a list's, an intent's) canonical values and their French labels; `aliases`: other spellings of
+ *   a value → canonical; `words`: other names of the parameter; `off`: words that, alone, set a yes-or-no one to no
+ *   (map(2d)); `group`: its heading in the editor and the README (Où, Fond…); `mark`: its mark in a menu (cellMark),
+ *   else its label's first letter.
+ *   Kinds: `list` — several of its values joined by « + » (layers=znieff+n2000), each unknown one said and left out;
+ *   `text` — free words (lieu=Mirabel Ménétrol 63: never a bare value); `intent` — one word for a bundle of the other
+ *   parameters (`bundles`: each value's, as the address writes them), which a parameter written beside it overrides.
  * @typedef {'scope' | 'query' | 'results' | 'plant' | 'obs'} StateKey
  * @typedef {{ key: string, title: string }} ViewSpec
  * @typedef {object} ComponentSpec
@@ -30,14 +38,14 @@ import { blockCategory, categoryOf } from '../core/categories.js';
  * @property {string} about                   one sentence, for the editor and the README
  * @property {string[]} aliases               other names (French): folded, as typed
  * @property {Record<string, ParamSpec>} params
- * @property {string} [main]                 the parameter a bare value sets: map(20km) = map(r=20km)
+ * @property {string} [main]                 the parameter a bare value sets first: map(20km) = map(r=20km) (else the first that reads it)
  * @property {() => ViewSpec[]} [views]      its sub-views (plant: one block of the sheet)
  * @property {Record<string, string>} [viewAliases]   other names of a view (folded) → its key
  * @property {StateKey[]} reads
  * @property {StateKey[]} writes
  * @property {{ w: number, h: number }} min  the least room it works in (px)
  *
- * @typedef {{ known: true, spec: ComponentSpec, view: ViewSpec | null, params: Record<string, any>, given: Set<string>, problems: string[], title: string }
+ * @typedef {{ known: true, spec: ComponentSpec, view: ViewSpec | null, params: Record<string, any>, given: Set<string>, implied: Set<string>, problems: string[], title: string }
  *   | { known: false, name: string, suggestion: string | null, problems: string[], title: string }} Resolved
  */
 
@@ -67,6 +75,42 @@ const BOOL = { oui: 'true', non: 'false', yes: 'true', no: 'false', on: 'true', 
 /** The radius of the scope: a default, until the address says another one (?r=). @type {ParamSpec} */
 const RADIUS = { kind: 'distance', label: 'Rayon de la zone', def: null, words: ['radius', 'rayon', 'distance', 'zone'] };
 
+/** A value of a list, its words: each name's label. @param {Record<string, { label: string }>} o */
+const labels = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v.label]));
+
+/**
+ * The map's settings, by group (the editor's headings, the README's): Où, Fond, Couches, Points, Liens, Interface —
+ * and first, its intent (one word, a bundle of them: map-options.js). Their defaults: the map as it always was.
+ * @type {Record<string, ParamSpec>}
+ */
+const MAP_PARAMS = {
+  intent: {
+    kind: 'intent', label: 'Intention', def: 'explorer', values: labels(MAP_INTENTS), aliases: MAP_INTENT_ALIASES, words: ['intention', 'usage', 'pour'],
+    bundles: Object.fromEntries(Object.entries(MAP_INTENTS).map(([k, v]) => [k, v.set]))
+  },
+  // Où: the map's own scope, until the address says one (no at= nor place=); the address' always wins, and the scope
+  // stays the layout's, shared by every cell.
+  r: { ...RADIUS, group: 'Où' },
+  lieu: { kind: 'text', label: 'Lieu de départ', def: null, group: 'Où', words: ['place', 'commune', 'ville', 'adresse'] },
+  autour: { kind: 'bool', label: 'Autour de moi au départ', def: false, group: 'Où', words: ['around', 'moi', 'gps', 'position'] },
+  // Fond.
+  base: { kind: 'enum', label: 'Fond de carte', def: null, group: 'Fond', values: { photo: 'Photos aériennes', plan: 'Plan IGN' }, aliases: { photos: 'photo', ortho: 'photo', satellite: 'photo', ign: 'plan', carte: 'plan' }, words: ['fond', 'layer'] },
+  '3d': { kind: 'bool', label: 'Vue 3D', def: null, group: 'Fond', mark: '3D', off: ['2d', 'plat', 'plate'], words: ['vue3d', 'relief3d', 'rendu'] },
+  // Couches.
+  layers: { kind: 'list', label: 'Couches', def: [], group: 'Couches', values: labels(MAP_LAYERS), aliases: MAP_LAYER_ALIASES, words: ['couches', 'calques', 'overlays', 'couche'] },
+  // Points.
+  src: { kind: 'list', label: 'Sources des points', def: ['inat'], group: 'Points', mark: 'So', values: { inat: 'iNaturalist', gbif: 'GBIF' }, aliases: { inaturalist: 'inat' }, words: ['sources', 'source', 'donnees'] },
+  when: { kind: 'enum', label: 'Période', def: 'toujours', group: 'Points', values: { toujours: 'Toujours', annee: 'Cette année', mois: 'Ce mois-ci' }, aliases: { tout: 'toujours', always: 'toujours', year: 'annee', an: 'annee', cetteannee: 'annee', month: 'mois', cemois: 'mois' }, words: ['quand', 'periode', 'date', 'dates'] },
+  pts: { kind: 'enum', label: 'Style des points', def: 'photo', group: 'Points', values: { photo: 'Photos', pastille: 'Pastilles' }, aliases: { pastilles: 'pastille', dots: 'pastille', ronds: 'pastille', points: 'pastille' }, words: ['points', 'style', 'marqueurs'] },
+  regroupe: { kind: 'bool', label: 'Plante courante en groupes', def: false, group: 'Points', mark: 'G', words: ['cluster', 'groupes', 'grouper', 'regrouper', 'groupe'] },
+  // Liens: how the map follows the layout's state, and changes it.
+  suit: { kind: 'bool', label: 'Suit la recherche', def: true, group: 'Liens', mark: 'R', words: ['suivre', 'recherche', 'filtre'] },
+  plante: { kind: 'enum', label: 'Plante courante', def: 'grand', group: 'Liens', values: { grand: 'En grand', seule: 'Seule', non: 'Pas montrée' }, aliases: { large: 'grand', only: 'seule', seulement: 'seule', off: 'non', aucune: 'non' }, words: ['plant', 'courante'] },
+  toucher: { kind: 'enum', label: 'Toucher un point', def: 'plante', group: 'Liens', values: { plante: 'Choisit sa plante', fiche: 'Ouvre sa fiche', rien: 'Rien' }, aliases: { pick: 'plante', choisir: 'plante', sheet: 'fiche', ouvrir: 'fiche', none: 'rien', aucun: 'rien' }, words: ['tap', 'clic', 'click', 'touch', 'touche'] },
+  // Interface.
+  ui: { kind: 'enum', label: 'Commandes', def: 'auto', group: 'Interface', values: { auto: 'Selon la largeur', complete: 'Complètes', compacte: 'Compactes', nue: 'Aucune' }, aliases: { full: 'complete', completes: 'complete', compact: 'compacte', compactes: 'compacte', nu: 'nue', minimal: 'nue', minimale: 'nue', aucune: 'nue' }, words: ['interface', 'commandes', 'controles'] }
+};
+
 /** French names of the sheet's blocks (folded) → their key (sheet-blocks.js#BLOCKS). */
 const BLOCK_ALIASES = {
   wiki: 'wikipedia', calendrier: 'calendar', floraison: 'calendar', fleurs: 'calendar', medias: 'media', galerie: 'media', photo: 'photos',
@@ -84,10 +128,7 @@ export const COMPONENTS = [
   {
     id: 'map', title: 'Carte', icon: 'map', aliases: ['carte'],
     about: 'La zone (cercle autour d’un lieu), les observations des plantes trouvées, celles de la plante courante en grand. Toucher un point : sa plante devient la plante courante ; appui long : la zone s’y centre.',
-    params: {
-      r: RADIUS,
-      base: { kind: 'enum', label: 'Fond de carte', def: null, values: { photo: 'Photos aériennes', plan: 'Plan IGN' }, aliases: { photos: 'photo', ortho: 'photo', satellite: 'photo', ign: 'plan', carte: 'plan' }, words: ['fond', 'layer'] }
-    },
+    params: MAP_PARAMS,
     main: 'r', reads: ['scope', 'results', 'plant', 'obs'], writes: ['scope', 'plant', 'obs'], min: { w: 240, h: 180 }
   },
   {
@@ -189,36 +230,109 @@ function paramOf(spec, word) {
 
 /**
  * The parameter a bare value sets: the main one when the value is one of its own, else the first that reads it
- * (map(plan): its background), else a yes-or-no one it names (search(filtres)), else the main one (to say why not).
+ * (map(plan): its background; map(terrain): its intent; map(znieff+n2000): its layers) — never a text one (any words
+ * would do) —, else a yes-or-no one it names, or one of its words for no (search(filtres), map(3d), map(2d)), else the
+ * main one (to say why not).
  * @param {ComponentSpec} spec @param {string} value @returns {string | null}
  */
 function bareParam(spec, value) {
-  const fits = (/** @type {string} */ k) => readValue(spec.params[k], value) !== undefined;
+  // Never a list's « none » alone (map(rien): toucher=rien, not layers=aucune).
+  const fits = (/** @type {string} */ k) => {
+    const v = spec.params[k].kind === 'text' ? undefined : readValue(spec.params[k], value);
+    return v !== undefined && !(Array.isArray(v) && !v.length);
+  };
   if (spec.main && fits(spec.main)) return spec.main;
   const other = Object.keys(spec.params).find(fits);
   if (other) return other;
-  const named = paramOf(spec, value);
-  return named && spec.params[named].kind === 'bool' ? named : spec.main ?? null;
+  const named = paramOf(spec, value) ?? offOf(spec, value);
+  if (named && spec.params[named].kind === 'bool') return named;
+  // Some of a list's words among others (map(znieff+foo)): that list, the others said.
+  return Object.keys(spec.params).find(k => spec.params[k].kind === 'list' && readList(spec.params[k], value).values.length) ?? spec.main ?? null;
 }
 
 /**
- * A value read for a parameter, canonical (enum: its value; bool: true / false; distance: metres). undefined: not one.
- * @param {ParamSpec} p @param {string} text @returns {unknown}
+ * What a cell's intent gives (its bundle, each value read), when one is written; {} else. @param {Resolved & { known: true }} r
+ * @returns {Record<string, unknown>}
  */
-export function readValue(p, text) {
-  if (p.kind === 'distance') return parseDistance(text) ?? undefined;
-  const k = key(text);
-  if (p.kind === 'bool') return k in BOOL ? BOOL[/** @type {keyof typeof BOOL} */ (k)] === 'true' : undefined;
+function bundleOf(r) {
+  const ps = r.spec.params;
+  const intent = Object.keys(ps).find(k => ps[k].kind === 'intent' && r.given.has(k));
+  const bundle = intent ? ps[intent].bundles?.[r.params[intent]] ?? {} : {};
+  return Object.fromEntries(Object.entries(bundle).filter(([k]) => ps[k]).map(([k, text]) => [k, readValue(ps[k], text)]));
+}
+
+/** A parameter written as the cell's intent gives it (left out of the address, and of the marks). @param {Resolved & { known: true }} r @param {string} k */
+const asIntent = (r, k) => { const b = bundleOf(r); return k in b && same(b[k], r.params[k]); };
+
+/** The yes-or-no parameter a word sets to no, alone (map(2d)). @param {ComponentSpec} spec @param {string} word @returns {string | null} */
+function offOf(spec, word) {
+  const k = key(word);
+  return Object.entries(spec.params).find(([, s]) => s.kind === 'bool' && (s.off ?? []).some(w => key(w) === k))?.[0] ?? null;
+}
+
+/**
+ * The parameter a written one sets (its name, or a bare value's: bareParam), or null: none — the editor replaces it
+ * by what is chosen. @param {ComponentSpec} spec @param {import('./grammar.js').Param} p @returns {string | null}
+ */
+export const paramName = (spec, p) => p.key === null ? bareParam(spec, p.value) : paramOf(spec, p.key);
+
+/** One value of an enum, a list or an intent, canonical (undefined: not one). @param {ParamSpec} p @param {string} k folded */
+function oneValue(p, k) {
   const values = Object.keys(p.values ?? {});
   return values.find(v => key(v) === k) ?? (p.aliases?.[k] && values.includes(p.aliases[k]) ? p.aliases[k] : undefined);
 }
 
+/** Words for none, in a list (layers=aucune). */
+const NONE = new Set(['aucune', 'aucun', 'non', 'none', 'rien', '0', 'sans']);
+
+/**
+ * A list as written (« znieff+n2000 »; spaces or « / » too): its known values, each once, in the parameter's order,
+ * and the words it does not know. @param {ParamSpec} p @param {string} text @returns {{ values: string[], unknown: string[] }}
+ */
+export function readList(p, text) {
+  const words = String(text).split(/[+/\s]+/).map(w => w.trim()).filter(Boolean);
+  if (words.length === 1 && NONE.has(key(words[0]))) return { values: [], unknown: [] };
+  /** @type {Set<string>} */ const found = new Set();
+  /** @type {string[]} */ const unknown = [];
+  for (const w of words) { const v = oneValue(p, key(w)); if (v === undefined) unknown.push(w); else found.add(v); }
+  return { values: Object.keys(p.values ?? {}).filter(v => found.has(v)), unknown };
+}
+
+/** Free words, as the address keeps them: one line, 80 characters at most (null: none). @param {string} text */
+const cleanWords = text => String(text).replace(/\p{Cc}/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 80).trim() || null;
+
+/**
+ * A value read for a parameter, canonical (enum, intent: its value; bool: true / false; distance: metres; list: its
+ * values — every word known, else undefined —; text: the words). undefined: not one.
+ * @param {ParamSpec} p @param {string} text @returns {unknown}
+ */
+export function readValue(p, text) {
+  if (p.kind === 'distance') return parseDistance(text) ?? undefined;
+  if (p.kind === 'text') return cleanWords(text) ?? undefined;
+  if (p.kind === 'list') {
+    const l = readList(p, text);
+    return l.unknown.length || (!l.values.length && !NONE.has(key(text))) ? undefined : l.values;
+  }
+  const k = key(text);
+  if (p.kind === 'bool') return k in BOOL ? BOOL[/** @type {keyof typeof BOOL} */ (k)] === 'true' : undefined;
+  return oneValue(p, k);
+}
+
 /** A value as the address writes it. @param {ParamSpec} p @param {unknown} v */
-export const valueText = (p, v) => p.kind === 'distance' ? distanceText(/** @type {number} */ (v)) : p.kind === 'bool' ? (v ? '1' : '0') : String(v);
+export const valueText = (p, v) => p.kind === 'distance' ? distanceText(/** @type {number} */ (v)) : p.kind === 'bool' ? (v ? '1' : '0')
+  : p.kind === 'list' ? (/** @type {string[]} */ (v).length ? /** @type {string[]} */ (v).join('+') : 'aucune') : String(v);
+
+/** Two values the same (lists: the same values, in the same order). @param {unknown} a @param {unknown} b */
+const same = (a, b) => a === b || (Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => x === b[i]));
+
+/** What a parameter expects, in French. @param {ParamSpec} ps */
+const expected = ps => ps.kind === 'distance' ? 'une distance (500m, 2km)' : ps.kind === 'bool' ? 'oui ou non (1, 0)' : ps.kind === 'text' ? 'des mots'
+  : Object.keys(ps.values ?? {}).join(', ') + (ps.kind === 'list' ? ', joints par « + »' : '');
 
 /**
  * What a cell is: its component (or none: unknown, with the closest name), its view, its parameters with their
- * defaults, and what was wrong (said in French, never thrown).
+ * defaults, and what was wrong (said in French, never thrown). An intent written (map(terrain)) gives its bundle's
+ * values (`implied`); a parameter written beside it, before or after, wins (`given`).
  * @param {import('./grammar.js').CellNode} cell @returns {Resolved}
  */
 export function resolve(cell) {
@@ -235,6 +349,8 @@ export function resolve(cell) {
   const params = Object.fromEntries(Object.entries(spec.params).map(([k, p]) => [k, p.def]));
   /** @type {Set<string>} */
   const given = new Set();
+  /** @type {Set<string>} */
+  const implied = new Set();
   let paramList = cell.params;
   /** @type {ViewSpec | null} */
   let view = null;
@@ -252,35 +368,64 @@ export function resolve(cell) {
     if (view && rest.length) problems.push(`${spec.title} : « ${rest.join('.')} » ignoré, un bloc se montre en entier.`);
   }
   for (const p of paramList) {
-    const name = p.key === null ? bareParam(spec, p.value) : paramOf(spec, p.key);
+    const name = paramName(spec, p);
     if (!name) {
       problems.push(p.key === null ? `${spec.title} : valeur « ${p.value} » sans nom de paramètre.` : `${spec.title} : paramètre inconnu « ${p.key} ».`);
       continue;
     }
     const ps = spec.params[name];
-    // « search(filtres) »: a yes-or-no parameter named alone is on.
-    const v = p.key === null && ps.kind === 'bool' && paramOf(spec, p.value) === name ? true : readValue(ps, p.value);
+    // « search(filtres) », « map(3d) »: a yes-or-no parameter named alone is on; « map(2d) »: one of its words for no.
+    let v = p.key === null && ps.kind === 'bool' && paramOf(spec, p.value) === name ? true
+      : p.key === null && ps.kind === 'bool' && offOf(spec, p.value) === name ? false : readValue(ps, p.value);
+    if (v === undefined && ps.kind === 'list') {
+      // A list: each word it does not know said and left out, the others kept.
+      const l = readList(ps, p.value);
+      for (const w of l.unknown) problems.push(`${spec.title} : « ${w} » n’est pas une valeur de ${ps.label.toLowerCase()} (attendu : ${expected(ps)}).`);
+      if (!l.values.length) continue;
+      v = l.values;
+    }
     if (v === undefined) {
-      const expected = ps.kind === 'distance' ? 'une distance (500m, 2km)' : ps.kind === 'bool' ? 'oui ou non (1, 0)' : Object.keys(ps.values ?? {}).join(', ');
-      problems.push(`${spec.title} : « ${p.value} » n’est pas une valeur de ${ps.label.toLowerCase()} (attendu : ${expected}).`);
+      problems.push(`${spec.title} : « ${p.value} » n’est pas une valeur de ${ps.label.toLowerCase()} (attendu : ${expected(ps)}).`);
       continue;
     }
     if (given.has(name)) problems.push(`${spec.title} : ${ps.label.toLowerCase()} donné deux fois, le dernier compte.`);
     params[name] = v;
     given.add(name);
+    implied.delete(name);
+    // An intent: its bundle, for each parameter not written before it (those written after it win too).
+    if (ps.kind === 'intent') {
+      for (const [k, text] of Object.entries(ps.bundles?.[/** @type {string} */ (v)] ?? {})) {
+        if (given.has(k) || !spec.params[k]) continue;
+        const iv = readValue(spec.params[k], text);
+        if (iv !== undefined) { params[k] = iv; implied.add(k); }
+      }
+    }
   }
   const title = view ? view.title : spec.title;
-  return { known: true, spec, view, params, given, problems, title };
+  return { known: true, spec, view, params, given, implied, problems, title };
 }
 
 /**
  * The cell as the address writes it: the component's id, its view's key, the parameters given (valid ones, in the
- * component's order, their canonical values), its share. An unknown component keeps its name as typed.
+ * component's order, free words last, their canonical values), its share. An intent is written first, alone (map(terrain,r=2km)) —
+ * not the default one (explorer) —, and a parameter written as its intent gives it is left out: the address stays
+ * short. An unknown component keeps its name as typed.
  * @param {import('./grammar.js').CellNode} cell @param {Resolved} [r] @returns {import('./grammar.js').CellNode}
  */
 export function canonical(cell, r = resolve(cell)) {
   if (!r.known) return { t: 'cell', name: cell.name, view: cell.view, params: cell.params, size: cell.size };
-  const params = Object.keys(r.spec.params).filter(k => r.given.has(k)).map(k => ({ key: k, value: valueText(r.spec.params[k], r.params[k]) }));
+  const ps = r.spec.params;
+  const intent = Object.keys(ps).find(k => ps[k].kind === 'intent' && r.given.has(k));
+  /** @type {import('./grammar.js').Param[]} */
+  const params = [];
+  if (intent && r.params[intent] !== ps[intent].def) params.push({ key: null, value: String(r.params[intent]) });
+  // Free words last: they may end with digits (« Fontainebleau 77 »), and a comma between two digits is a decimal one
+  // (grammar.js) — before 3d=1, they would take it.
+  const order = Object.keys(ps).sort((a, b) => Number(ps[a].kind === 'text') - Number(ps[b].kind === 'text'));
+  for (const k of order) {
+    if (!r.given.has(k) || ps[k].kind === 'intent' || asIntent(r, k)) continue;
+    params.push({ key: k, value: valueText(ps[k], r.params[k]) });
+  }
   return { t: 'cell', name: r.spec.id, view: r.view?.key ?? null, params, size: cell.size };
 }
 
@@ -346,11 +491,17 @@ export function cellMark(r) {
   if (!r.known) return null;
   const first = (/** @type {string} */ s) => fold(s).charAt(0);
   const lower = (/** @type {string} */ s) => s.charAt(0).toLowerCase() + s.slice(1);
-  const marks = Object.entries(r.spec.params).filter(([k, p]) => p.kind !== 'distance' && r.given.has(k) && r.params[k] !== p.def).map(([k, p]) => {
-    if (p.kind === 'bool') return r.params[k] ? { label: lower(p.label), short: p.label.charAt(0).toUpperCase() } : { label: 'sans ' + lower(p.label), short: '−' + p.label.charAt(0).toUpperCase() };
-    const labels = Object.values(p.values ?? {});
+  const marks = Object.entries(r.spec.params).filter(([k, p]) => p.kind !== 'distance' && p.kind !== 'text' && r.given.has(k) && !same(r.params[k], p.def) && !asIntent(r, k)).map(([k, p]) => {
+    const letter = p.mark ?? p.label.charAt(0).toUpperCase();
+    if (p.kind === 'bool') return r.params[k] ? { label: lower(p.label), short: letter } : { label: 'sans ' + lower(p.label), short: '−' + letter };
+    // A list: its words after the parameter's (« couches : ZNIEFF (types I et II), Natura 2000 »), the parameter's letter.
+    if (p.kind === 'list') {
+      const chosen = /** @type {string[]} */ (r.params[k]).map(v => p.values?.[v] ?? v);
+      return { label: `${lower(p.label)} : ${chosen.length ? chosen.join(', ') : 'aucune'}`, short: letter };
+    }
+    const all = Object.values(p.values ?? {});
     const label = /** @type {string} */ (p.values?.[r.params[k]]);
-    const shared = labels.some(l => l !== label && first(l) === first(label));
+    const shared = all.some(l => l !== label && first(l) === first(label));
     return { label, short: label.charAt(0).toUpperCase() + (shared ? label.charAt(1) : '') };
   });
   return marks.length ? { label: marks.map(m => m.label).join(', '), short: marks.map(m => m.short).join('') } : null;

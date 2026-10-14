@@ -61,6 +61,7 @@ const SHELL = [
   'app/layout/gf-layout.js',
   'app/layout/grammar.js',
   'app/layout/registry.js',
+  'app/layout/map-options.js',
   'app/layout/state.js',
   'app/layout/cells.js',
   'app/layout/sizes.js',
