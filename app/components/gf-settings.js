@@ -77,6 +77,13 @@ export class GfSettings extends LitElement {
     details { margin-top: 10px; }
     summary { cursor: pointer; }
     label.file { position: relative; }
+    /* « Créer une app », first on the page: a card that leads to the builder. */
+    .builder { display: flex; align-items: center; gap: 12px; margin: 12px 0 18px; padding: 14px 16px; border: 1px solid var(--gf-accent); border-radius: var(--gf-radius-lg);
+      background: color-mix(in srgb, var(--gf-accent) 8%, var(--gf-surface)); color: var(--gf-text); text-decoration: none; }
+    .builder:hover { background: color-mix(in srgb, var(--gf-accent) 14%, var(--gf-surface)); }
+    .builder > .bi { flex: none; font-size: 1.6rem; color: var(--gf-accent); }
+    .builder span { flex: 1; display: grid; gap: 2px; min-width: 0; }
+    .builder small { color: var(--gf-text-muted); }
     .layouts { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
     .layouts a { display: grid; gap: 2px; padding: 8px 12px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-sm); background: var(--gf-surface); text-decoration: none; }
     .layouts a:hover { border-color: var(--gf-accent); }
@@ -561,6 +568,8 @@ export class GfSettings extends LitElement {
         <a class="back link" href=${lastSearchHash()}>${icon('arrow-left')} Recherche</a>
         <h1>À propos et réglages</h1>
         <p class="muted"><a href=${href.legal()}>${icon('shield-check')} Mentions légales et confidentialité</a> : qui publie GeoFlora, ce qui reste sur cet appareil, ce que reçoit chaque service en ligne (votre position surtout).</p>
+        <a class="builder" href=${href.builder()}>${icon('window-desktop')}<span><b>Créer une app</b>
+          <small>Une grille à diviser à volonté, puis un bloc dans chaque emplacement (carte, recherche, fiche…) : votre écran, partageable par un lien.</small></span>${icon('chevron-right')}</a>
         ${this.#firstSteps()}
         ${this.#layouts()}
         ${this.#king()}

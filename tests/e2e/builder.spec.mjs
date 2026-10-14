@@ -116,3 +116,15 @@ test('la croix : ses limites — 12 emplacements au plus, pas plus profond que l
   await app.go('#/builder/trois?g=[map,slot]');
   await expect(page.locator('gf-builder .screen .slot')).toHaveCount(3);
 });
+
+test('Réglages : « Créer une app » en tête de la page mène au constructeur', async ({ app, page }) => {
+  await app.open('#/settings');
+  const link = page.locator('gf-settings a.builder');
+  await expect(link).toContainText('Créer une app');
+  // First on the page, above the other sections.
+  const [card, firstH2] = await Promise.all([link.boundingBox(), page.locator('gf-settings h2').first().boundingBox()]);
+  expect(card?.y ?? 0).toBeLessThan(firstH2?.y ?? 0);
+  await link.click();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/builder');
+  await expect(page.locator('gf-builder .choice')).toHaveCount(3);
+});
