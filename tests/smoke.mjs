@@ -12,6 +12,8 @@ import { chromium } from 'playwright';
 
 const BASE = new URL(process.argv[2] || 'http://localhost:8000/').href;
 const ORIGIN = new URL(BASE).origin;
+/** The deployed site (https), not one served here. */
+const LIVE = new URL(BASE).protocol === 'https:';
 const ROUTES = ['#/', '#/?q=ortie', '#/plant/128268', '#/discover', '#/discover?s=harvest', '#/discover?s=trail', '#/app/rencontres', '#/app/parcours', '#/app/cueillette', '#/app/mosaique', '#/map', '#/collections', '#/settings', '#/legal',
   '#/layout', '#/layout/[map(r=2km),search,[plant.wikipedia,plant.calendar]]?p=128268', '#/layout/[[place,map],deck,[media,plant.status]]'];
 const DEVICES = {
@@ -30,6 +32,17 @@ try {
     const context = await browser.newContext({ ...options, serviceWorkers: 'block', locale: 'fr-FR' });
     await context.route(url => new URL(url).origin !== ORIGIN, route =>
       route.request().resourceType() === 'image' ? route.fulfill({ contentType: 'image/svg+xml', body: BLANK }) : route.fulfill({ status: 503, body: '' }));
+    // The live site (post-deploy.yml): a file of its own answered by a server error (5xx: GitHub Pages' CDN, now and
+    // then, on one file among hundreds) asked again (1 s, then 3 s later) before the page sees it; one that lasts fails.
+    if (LIVE) await context.route(url => ours(url.href), async route => {
+      let response;
+      for (const wait of [0, 1000, 3000]) {
+        if (wait) { console.log(`${route.request().url()}: ${response?.status()}, asked again in ${wait / 1000} s`); await new Promise(r => setTimeout(r, wait)); }
+        response = await route.fetch().catch(() => undefined);
+        if (response && response.status() < 500) break;
+      }
+      return response ? route.fulfill({ response }) : route.abort('failed');
+    });
     await context.addInitScript(returning => {
       // Every CSP violation, as the page sees it (a blocked script, style or request).
       /** @type {any} */ (window).__csp = [];

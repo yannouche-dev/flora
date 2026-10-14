@@ -139,10 +139,11 @@ test.describe('un grand écran', () => {
     await expect.poll(() => app.state('results.total')).toBe(12);
     await expect(cellOf(page, 'search').locator('.sub')).toHaveText('12 espèces');
     await expect(dots(page)).toHaveCount(24);
-    // A search: one plant, its two points; the address says it.
+    // A search: one plant, its points — its two among the most recent of all, and its own asked (taxon_id: three
+    // more); the address says it.
     await page.locator('dl-search gf-plant-search input').fill('ortie');
     await expect.poll(() => app.state('results.total')).toBe(1);
-    await expect(dots(page)).toHaveCount(2);
+    await expect(dots(page)).toHaveCount(5);
     await expect.poll(() => param(page, 'q')).toBe('ortie');
     // No plant yet: the plant cells say how to choose one.
     await expect(cellOf(page, 'plant.wikipedia').locator('.placeholder')).toContainText('Aucune plante choisie');
@@ -446,6 +447,47 @@ test.describe('le titre et un lieu en mots dans l’adresse', () => {
     await app.ready();
     await expect.poll(() => circle(page)).toEqual({ center: [3.1093, 45.8732], radius: 1000 });
     expect(asked).toHaveLength(2);
+  });
+
+  test('place= sans at= : les mots demandés comme la barre de recherche de la carte, sa première suggestion dans le département retenue', async ({ app, page }) => {
+    /** @type {string[]} */
+    const asked = [];
+    await page.route(/^https:\/\/data\.geopf\.fr\/geocodage\/completion\?/, route => {
+      const text = new URL(route.request().url()).searchParams.get('text') ?? '';
+      asked.push(text);
+      const results = text === 'Mirabel Ménétrol' ? [
+        { fulltext: 'Mirabel, 26110 Mirabel-aux-Baronnies', zipcode: '26110', city: 'Mirabel-aux-Baronnies', kind: 'lieu-dit', x: 5.099, y: 44.311 },
+        { fulltext: 'Colline de Mirabel, 63200 Ménétrol', zipcode: '63200', city: 'Ménétrol', kind: 'lieu-dit', x: 3.1116, y: 45.8726 },
+        { fulltext: 'Rue de Mirabel, 63200 Ménétrol', zipcode: '63200', city: 'Ménétrol', kind: 'street', x: 3.12, y: 45.87 }] : [];
+      return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ status: 'OK', results }) });
+    });
+    await app.open(`#/layout/[map(r=2km),place,results]?place=${encodeURIComponent('Mirabel, Ménétrol, 63')}`);
+    await expect.poll(() => param(page, 'at')).toBe('45.87260,3.11160');
+    expect(await param(page, 'place')).toBe('Colline de Mirabel (Ménétrol)');
+    expect(await circle(page)).toEqual({ center: [3.1116, 45.8726], radius: 2000 });
+    await expect(page.locator('dl-place .where')).toContainText('Colline de Mirabel (Ménétrol)');
+    expect(asked).toEqual(['Mirabel Ménétrol']);
+  });
+
+  test('une famille gardée (des plantes rares) : la carte demande leurs observations à elles, pas les plus récentes de toutes', async ({ app, page }) => {
+    const json = (/** @type {import('@playwright/test').Route} */ route, /** @type {any} */ body) => route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
+    const taxon = (/** @type {number} */ id, /** @type {string} */ name) => ({ id, name, preferred_common_name: null });
+    /** @type {string[]} */
+    const asked = [];
+    await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\/species_counts\?/, route =>
+      json(route, { results: [{ count: 90, taxon: taxon(50, 'Urtica dioica') }, { count: 2, taxon: taxon(51, 'Allium ursinum') }] }));
+    await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?/, route => {
+      const q = new URL(route.request().url()).searchParams;
+      asked.push(q.get('taxon_id') ?? 'all');
+      // The most recent of all: nettles only; the garlic's own, asked by its taxon.
+      const [id, name, n] = q.get('taxon_id') === '51' ? [51, 'Allium ursinum', 3] : [50, 'Urtica dioica', 20];
+      return json(route, { total_results: n, results: Array.from({ length: n }, (_, i) => ({ id: id * 100 + i, uri: `https://www.inaturalist.org/observations/${id * 100 + i}`,
+        geojson: { coordinates: [2.35 + i * 0.0005, 48.85] }, observed_on: '2026-05-01', taxon: taxon(id, name) })) });
+    });
+    const points = () => page.locator('dl-map gf-map').evaluate(m => (/** @type {any} */ (m).area?.points ?? []).map((/** @type {any} */ p) => p.taxonId));
+    await app.open(`#/layout/[map(r=1km),results]?${AT}&family=Amaryllidaceae`);
+    await expect.poll(points).toEqual([51, 51, 51]);
+    expect(asked).toEqual(['all', '51']);
   });
 
   test('un lieu introuvable, ou l’IGN qui ne répond pas : aucune zone, la raison dite dans la case Zone et sur la carte, place= gardé', async ({ app, page }) => {

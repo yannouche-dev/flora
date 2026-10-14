@@ -36,6 +36,23 @@ const get = (path, init = {}) => fetch(new URL(path, BASE), {
   headers: { 'user-agent': AGENT, 'cache-control': 'no-cache' }
 });
 
+/**
+ * A file of the site, asked again (2 s, then 5 s later) while GitHub Pages answers a server error (5xx) or none — a
+ * passing 503 of its CDN on one file among hundreds is not a broken deploy; one that lasts is.
+ * @param {string} path @param {RequestInit} [init] @returns {Promise<Response>}
+ */
+async function steady(path, init) {
+  /** @type {unknown} */
+  let last;
+  for (const wait of [0, 2000, 5000]) {
+    if (wait) { console.log(`${path}: ${last instanceof Response ? last.status : last}, asked again in ${wait / 1000} s`); await sleep(wait); }
+    last = await get(path, init).catch(e => e);
+    if (last instanceof Response && last.status < 500) return last;
+  }
+  if (last instanceof Response) return last;
+  throw last;
+}
+
 /** What the live site serves now: its sw.js VERSION and its flora fingerprint, past the CDN's copies. */
 async function live() {
   const fresh = `?deploy-check=${Date.now()}`;
@@ -75,7 +92,7 @@ try {
   const paths = [...new Set([...shellPaths(source), ...onDemandPaths(source), ...DATA, ...packed])];
   const missing = [];
   for (let i = 0; i < paths.length; i += 8) {
-    const answers = await Promise.all(paths.slice(i, i + 8).map(p => get(p, { method: 'HEAD' }).then(r => [p, r.status], e => [p, String(e)])));
+    const answers = await Promise.all(paths.slice(i, i + 8).map(p => steady(p, { method: 'HEAD' }).then(r => [p, r.status], e => [p, String(e)])));
     for (const [p, status] of answers) if (status !== 200) missing.push(`${p}: ${status}`);
   }
   for (const m of missing) console.log(`::error::${new URL(m.split(':')[0], BASE).href} does not load (${m})`);
@@ -84,7 +101,7 @@ try {
 
   // IGN's catalogue of map layers, written at each deploy (scripts/build-ign-catalog.mjs): the committed copy stands in
   // when the service could not be read, which is said, not failed (api-health.yml fails when it lasts).
-  const catalog = await (await get('data/ign-catalog.json?deploy-check=' + Date.now())).json();
+  const catalog = await (await steady('data/ign-catalog.json?deploy-check=' + Date.now())).json();
   const age = (Date.now() - Date.parse(catalog.fetchedAt)) / 86400e3;
   if (catalog.seed || !(age <= 45)) console.log(`::warning::data/ign-catalog.json is ${catalog.seed ? 'the starting copy (seed)' : `${Math.round(age)} days old`}: the IGN service could not be read at this deploy (see its « Fresh IGN catalogue » job)`);
   else console.log(`data/ign-catalog.json: ${catalog.layers?.length} layers, read ${catalog.fetchedAt}`);

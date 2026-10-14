@@ -208,15 +208,17 @@ export function observationsInBox(taxonId, [w, s, e, n], signal) {
 /**
  * Where plants were observed in the circle: the 100 most recent research-grade observations (every species), each
  * with its plant's photo, names, date and place — for a map behind the distance chosen —, and how many there are in
- * all. Cached for a day like the rest.
- * @param {[number, number]} point @param {number} radius @param {AbortSignal} [signal]
+ * all. `taxa`: those of these iNaturalist taxa only (the 200 most recent) — a search narrowed to a few plants (a
+ * family: orchids) whose observations are seldom among the 100 most recent of all. Cached for a day like the rest.
+ * @param {[number, number]} point @param {number} radius @param {AbortSignal} [signal] @param {number[]} [taxa]
  * @returns {Promise<{ points: AroundPoint[], total: number }>}
  */
-export async function observationPointsAround(point, radius, signal) {
+export async function observationPointsAround(point, radius, signal, taxa) {
   if (!moduleOn('inaturalist')) throw new ModuleOffError('inaturalist');
+  const only = taxa?.length ? `&taxon_id=${[...taxa].sort((a, b) => a - b).join(',')}` : '';
   // « around-points6 »: the points cached with the observations' own photos are not used again.
-  const found = await cached(`around-points6:${area(point, radius)}`, async () => {
-    const data = await json(`${API}/observations?${area(point, radius)}&iconic_taxa=Plantae&quality_grade=research&locale=fr&per_page=100&order_by=observed_on`, signal);
+  const found = await cached(`around-points6:${area(point, radius)}${only}`, async () => {
+    const data = await json(`${API}/observations?${area(point, radius)}${only || '&iconic_taxa=Plantae'}&quality_grade=research&locale=fr&per_page=${only ? 200 : 100}&order_by=observed_on`, signal);
     const points = (data.results || []).filter(o => Array.isArray(o.geojson?.coordinates)).map(aroundPoint);
     return { points, total: Number(data.total_results) || points.length };
   });
