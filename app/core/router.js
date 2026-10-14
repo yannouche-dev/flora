@@ -11,6 +11,7 @@ import './history.js';
  *   | { name: 'shared', data: string } | { name: 'discover' }
  *   | AppRoute
  *   | { name: 'layout', spec: string, search: string }
+ *   | { name: 'builder', grid: string | null }
  *   | { name: 'not-found' }} Route
  */
 
@@ -80,6 +81,9 @@ export function parse(hash) {
   if (path === 'discover') return { name: 'discover' };
   // « Disposition libre » (app/layout): #/layout/<layout>?<state> — the layout as written (app/layout/grammar.js),
   // its live state (plant, scope, search) read by the layout itself (app/layout/state.js).
+  // « Créer une app » (app/layout/gf-builder.js): #/builder[/<grid>], the grid chosen at its first step.
+  const builder = /^builder(?:\/([a-z][a-z0-9-]{0,23}))?$/.exec(path);
+  if (builder) return { name: 'builder', grid: builder[1] ?? null };
   const layout = /^layout(?:\/(.*))?$/s.exec(path);
   if (layout) return { name: 'layout', spec: layout[1] ?? '', search };
   return { name: 'not-found' };
@@ -155,6 +159,8 @@ export const href = {
    * as they are, anything else an address may not hold encoded) and its state (app/layout/state.js, already encoded).
    * @param {string} spec @param {string} [search]
    */
+  /** « Créer une app »: its first step, a grid chosen or not. @param {string | null} [grid] */
+  builder: (grid = null) => '#/builder' + (grid ? '/' + grid : ''),
   layout: (spec, search = '') => '#/layout/' + spec.replace(/[^\w\-.~!$&'()*+,;=:@[\]]/g, c => encodeURIComponent(c)) + (search ? '?' + search : '')
 };
 

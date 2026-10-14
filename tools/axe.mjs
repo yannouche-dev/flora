@@ -25,7 +25,7 @@ const AXE_VERSION = require('axe-core/package.json').version;
 const AXE = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
 /** WCAG 2.0, 2.1, 2.2 levels A and AA, and axe's best practices (one h1 per view, landmarks…). */
 const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'];
-const SCREENS = ['#/?q=ortie', '#/plant/128268', '#/discover', '#/app/rencontres', '#/app/parcours', '#/app/cueillette', '#/app/mosaique', '#/map', '#/collections', '#/settings'];
+const SCREENS = ['#/?q=ortie', '#/plant/128268', '#/discover', '#/app/rencontres', '#/app/parcours', '#/app/cueillette', '#/app/mosaique', '#/map', '#/collections', '#/settings', '#/builder/tableau'];
 const DEVICES = {
   phone: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
   desktop: { viewport: { width: 1280, height: 900 } }
