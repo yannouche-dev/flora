@@ -15,6 +15,7 @@
 
 import { fold } from '../core/fold.js';
 import { BLOCKS } from '../core/sheet-blocks.js';
+import { blockCategory, categoryOf } from '../core/categories.js';
 
 /**
  * @typedef {'distance' | 'enum' | 'bool'} ParamKind
@@ -307,3 +308,28 @@ export function resolveTree(tree) {
 
 /** Every name a cell may start with, for the editor's list and the README (the ids, then the views of plant). */
 export const names = () => COMPONENTS.flatMap(c => [c.id, ...(c.views?.() ?? []).map(v => c.id + '.' + v.key)]);
+
+/**
+ * A cell's icon (a narrow layout's menu of columns): its component's; one block of the sheet, the block's own — its
+ * rubric's, as the sheet's panes show it (categories.js) —; an unknown component, a warning.
+ * @param {Resolved} r @returns {import('../core/icons.js').IconName}
+ */
+export const cellIcon = r => !r.known ? 'exclamation-triangle-fill' : r.spec.id === 'plant' && r.view ? categoryOf(blockCategory(r.view.key)).icon : r.spec.icon;
+
+/**
+ * How a cell says it is shown, when it says so — its first choice parameter given another value than its default
+ * (plant(epure), results(grid), media(mosaic), map(base=photo)) —: the value's French words, and a mark of a letter or
+ * two that tells two cells of one component apart at a glance: the first letter of the words, two when another value
+ * of the parameter starts with it (Épuré É, Standard St, Scientifique Sc; Liste L, Grille G). null: as by default.
+ * @param {Resolved} r @returns {{ label: string, short: string } | null}
+ */
+export function cellMark(r) {
+  if (!r.known) return null;
+  const at = Object.entries(r.spec.params).find(([k, p]) => p.kind === 'enum' && r.given.has(k) && r.params[k] !== p.def);
+  if (!at) return null;
+  const labels = Object.values(at[1].values ?? {});
+  const label = /** @type {string} */ (at[1].values?.[r.params[at[0]]]);
+  const first = (/** @type {string} */ s) => fold(s).charAt(0);
+  const shared = labels.some(l => l !== label && first(l) === first(label));
+  return { label, short: label.charAt(0).toUpperCase() + (shared ? label.charAt(1) : '') };
+}

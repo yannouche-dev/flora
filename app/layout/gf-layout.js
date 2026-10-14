@@ -9,8 +9,11 @@
 //  - Sizes: between two parts a grip (core/split-grip.js: drag, ← → / ↑ ↓, Début / Fin, Entrée or a double click: equal
 //    shares); the shares given are written in the address (`@n`, so a link has them) and kept on this device for the
 //    layout's shape (sizes.js: opened again without them, it has them).
-//  - Narrow (a phone, or less room than the columns need): the columns become tabs, their rows one under the other; a
-//    plant chosen in one tab brings the tab of a plant cell.
+//  - Narrow (a phone, or less room than the columns need): the columns become tabs, their rows one under the other —
+//    the tabs a menu of icons on top, each column its cells' icons (three at most, then « +n »; a presentation chosen,
+//    plant(epure), its mark: É), its whole name read and shown on hover; as wide as one another while they fit, else
+//    the menu scrolls sideways, the tab shown kept in sight. A plant chosen in one tab brings the tab of a plant cell
+//    (its icon lit a moment); a finger swiped sideways on a panel, where nothing moves sideways itself, its neighbour.
 //  - « Modifier la disposition »: the layout as text (live preview, what is wrong said under it), each cell's tools
 //    (its component, its parameters, a cell beside or under it, moved, removed), the ready-made ones (presets.js);
 //    « Appliquer » makes it the address (a new entry: Back gives the one before).
@@ -29,7 +32,7 @@ import { BP } from '../core/media.js';
 import { gripStyles, shareGrip } from '../core/split-grip.js';
 import { ui } from '../styles/ui.js';
 import { cell as makeCell, dirAt, moveAt, nodeAt, parse, removeAt, replaceAt, serialize, setShares, shapeKey, shares, splitAt } from './grammar.js';
-import { COMPONENTS, distanceLabel, resolveTree, valueText } from './registry.js';
+import { cellIcon, cellMark, COMPONENTS, distanceLabel, resolveTree, valueText } from './registry.js';
 import { LayoutState, liveSearch, readLive, readQuery, sameLive } from './state.js';
 import { forgetShares, savedShares, saveShares } from './sizes.js';
 import { PRESETS } from './presets.js';
@@ -82,7 +85,9 @@ export class GfLayout extends LitElement {
     _field: { state: true },
     _copied: { state: true },
     /** A cell flashed (a block opened from the sheet that it shows). */
-    _flash: { state: true }
+    _flash: { state: true },
+    /** Narrow: the tab brought by a plant chosen elsewhere (or a block opened), its icon lit a moment; -1: none. */
+    _brought: { state: true }
   };
 
   static styles = [ui, gripStyles, css`
@@ -128,10 +133,40 @@ export class GfLayout extends LitElement {
     .placeholder.quiet .bi { color: var(--gf-accent); }
     .placeholder p { margin: 0; max-width: 34em; }
     .placeholder code { font-size: 0.85em; background: var(--gf-surface-2); padding: 0 4px; border-radius: 4px; }
-    /* Narrow: the columns as tabs. */
-    .tabs { flex: none; display: flex; gap: 2px; padding: 4px 6px 0; overflow-x: auto; border-bottom: 1px solid var(--gf-border); background: var(--gf-surface); }
-    .tabs button { flex: none; min-height: 36px; padding: 4px 12px; border: 0; border-radius: 8px 8px 0 0; background: none; box-shadow: none; font-size: 0.85rem; max-width: 60vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; }
-    .tabs button[aria-selected='true'] { background: var(--gf-accent-soft); color: var(--gf-accent); font-weight: 700; }
+    /* Narrow: the columns as a menu of icons, on top. Its items as wide as one another while they all fit (equal
+       tracks, none narrower than its icons nor than a finger: 52 × 48 px), else it scrolls sideways — no bar drawn, its
+       edge faded on the side where more items wait (data-before / data-after, set as it scrolls). */
+    .tabs { flex: none; position: sticky; top: 0; z-index: 2; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(max-content, 1fr);
+      overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; scrollbar-width: none; border-bottom: 1px solid var(--gf-border); background: var(--gf-surface); }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tabs[data-before] { mask-image: linear-gradient(to right, transparent, #000 32px); }
+    .tabs[data-after] { mask-image: linear-gradient(to left, transparent, #000 32px); }
+    .tabs[data-before][data-after] { mask-image: linear-gradient(to right, transparent, #000 32px, #000 calc(100% - 32px), transparent); }
+    .tab { --ink: var(--gf-text-muted); --under: var(--gf-surface); position: relative; min-width: 52px; min-height: 48px; padding: 0 10px; border: 0; border-radius: 0;
+      background: var(--under); box-shadow: none; color: var(--ink); }
+    @media (hover: hover) { .tab:hover { --ink: var(--gf-text); --under: var(--gf-surface-2); } }
+    /* The tab shown: on the accent's tint, its icons in the accent, underlined. */
+    .tab[aria-selected='true'] { --ink: var(--gf-accent); --under: var(--gf-accent-soft); }
+    .tab[aria-selected='true']::after { content: ''; position: absolute; left: 8px; right: 8px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--gf-accent); }
+    /* A hairline between two columns' icons: where one column ends, the next begins. */
+    .tab + .tab::before { content: ''; position: absolute; left: 0; top: 14px; bottom: 14px; width: 1px; background: var(--gf-border); }
+    .tab[aria-selected='true']::before, .tab[aria-selected='true'] + .tab::before { display: none; }
+    /* The ring inside: the menu clips what passes its edges. */
+    .tab:focus-visible { box-shadow: inset 0 0 0 2px var(--gf-accent); }
+    .glyphs { display: inline-flex; align-items: center; gap: 4px; font-size: 1.3rem; line-height: 1; pointer-events: none; }
+    .glyphs.many { gap: 5px; font-size: 1.05rem; }
+    .glyph { position: relative; display: inline-grid; }
+    .glyph.marked { margin-right: 8px; }
+    /* A presentation chosen (plant(epure): É): a letter or two on the icon's corner, ringed by the tab's ground. */
+    .mark { position: absolute; left: calc(100% - 7px); bottom: -5px; min-width: 13px; padding: 2px 3px; border-radius: 6px; font: 700 9px/1 var(--gf-font);
+      text-align: center; letter-spacing: 0; background: var(--ink); color: var(--gf-surface); box-shadow: 0 0 0 1.5px var(--under); }
+    .more { font-size: 0.72rem; font-weight: 700; }
+    /* Brought by a plant chosen in another tab: lit a moment. */
+    .tab.brought { animation: brought 1.2s ease-out; }
+    .tab.brought .glyphs { animation: nudge 0.5s ease-out; }
+    @keyframes brought { from { box-shadow: inset 0 0 0 3px var(--gf-accent); background: color-mix(in srgb, var(--gf-accent) 30%, var(--gf-surface)); } }
+    @keyframes nudge { 40% { transform: scale(1.18); } }
+    @media (prefers-reduced-motion: reduce) { .tab.brought, .tab.brought .glyphs { animation: none; } .tab.brought { box-shadow: inset 0 0 0 3px var(--gf-accent); } }
     .tabpanel { flex: 1; min-height: 0; display: flex; overflow-y: auto; }
     .tabpanel[hidden] { display: none; }
     /* The editor. */
@@ -180,6 +215,7 @@ export class GfLayout extends LitElement {
     this._copied = false;
     /** @type {string | null} */
     this._flash = null;
+    this._brought = -1;
     this.#state.addEventListener('change', this.#onState);
     // A link to a plant's sheet in a cell: that plant becomes the current one, the layout stays.
     this.addEventListener('click', e => {
@@ -254,6 +290,7 @@ export class GfLayout extends LitElement {
   }
 
   updated() {
+    if (this.#narrow) this.#tabInSight();
     // The search changed by a cell (its text, a filter, the sort): the address follows, without a new entry.
     if (!this.#ready) return;
     const q = toHash(store.state.query);
@@ -312,12 +349,22 @@ export class GfLayout extends LitElement {
   #toPlantTab() {
     const tabOf = (/** @type {string} */ p) => Number(p.split('.')[0]);
     const tabs = [...this.#shown.cells].filter(([, r]) => r.known && FOLLOWS_PLANT.has(r.spec.id)).map(([p]) => tabOf(p));
-    if (tabs.length && !tabs.includes(this._tab)) this._tab = tabs[0];
+    if (tabs.length && !tabs.includes(this.#active)) this.#broughtTo(tabs[0]);
+  }
+
+  /** @type {any} */ #broughtTimer = 0;
+  /** Narrow: a tab shown for what happened in another (not by the hand on the menu): its icon lit a moment. @param {number} j */
+  #broughtTo(j) {
+    if (j === this.#active) return;
+    this._tab = j;
+    this._brought = j;
+    clearTimeout(this.#broughtTimer);
+    this.#broughtTimer = setTimeout(() => { this._brought = -1; }, 1300);
   }
 
   /** A cell brought into view and flashed (narrow: its tab). @param {string} path */
   async #bring(path) {
-    if (this.#narrow) this._tab = Number(path.split('.')[0]);
+    if (this.#narrow) this.#broughtTo(Number(path.split('.')[0]));
     this._flash = path;
     await this.updateComplete;
     this.renderRoot.querySelector(`[data-cell="${path}"]`)?.scrollIntoView({ block: 'nearest' });
@@ -496,15 +543,41 @@ export class GfLayout extends LitElement {
     </section>`;
   }
 
-  /** Narrow: the columns as tabs, each one's rows one under the other. @param {ListNode} tree */
+  /**
+   * A column's cells in reading order (left to right, top to bottom), each with its name — a presentation chosen said
+   * after it: « Fiche (Épuré) » —, its icon and its mark (registry.js).
+   * @param {LayoutNode} n @param {number[]} path @returns {{ name: string, icon: import('../core/icons.js').IconName, mark: string | null }[]}
+   */
+  #cellsOf(n, path) {
+    if (n.t === 'list') return n.kids.flatMap((k, j) => this.#cellsOf(k, [...path, j]));
+    const r = this.#shown.cells.get(path.join('.'));
+    if (!r) return [{ name: n.name, icon: 'exclamation-triangle-fill', mark: null }];
+    const mark = cellMark(r);
+    return [{ name: r.title + (mark ? ` (${mark.label})` : ''), icon: cellIcon(r), mark: mark?.short ?? null }];
+  }
+
+  /** The tab shown (narrow), as last drawn: the one asked, within the columns there are. */
+  #active = 0;
+
+  /**
+   * Narrow: the columns as a menu of icons on top — each its cells' icons, three at most then « +n », its whole name
+   * read (aria-label) and shown on hover (title) — and as tab panels, each one's rows one under the other.
+   * @param {ListNode} tree
+   */
   #tabs(tree) {
-    const active = Math.min(this._tab, tree.kids.length - 1);
-    /** @param {LayoutNode} n @param {number[]} path @returns {string} */
-    const label = (n, path) => n.t === 'cell' ? this.#shown.cells.get(path.join('.'))?.title ?? n.name : n.kids.map((k, j) => label(k, [...path, j])).join(' · ');
-    return html`<div class="tabs" role="tablist" aria-label="Colonnes">${tree.kids.map((k, j) => html`<button type="button" role="tab" id=${'tab-' + j} aria-controls=${'panel-' + j}
-        aria-selected=${j === active ? 'true' : 'false'} tabindex=${j === active ? '0' : '-1'} @click=${() => { this._tab = j; }}
-        @keydown=${(/** @type {KeyboardEvent} */ e) => this.#tabKey(e, j, tree.kids.length)}>${label(k, [j])}</button>`)}</div>
-      ${repeat(tree.kids, (k, j) => (k.t === 'list' ? 'l:' : 'c:') + j + (k.t === 'cell' ? ':' + k.name + '.' + (k.view ?? '') : ''), (k, j) => html`<div class="tabpanel" role="tabpanel" id=${'panel-' + j} aria-labelledby=${'tab-' + j} ?hidden=${j !== active}>
+    const n = tree.kids.length;
+    const active = this.#active = Math.min(this._tab, n - 1);
+    const swipe = { handleEvent: (/** @type {TouchEvent} */ e) => this.#swipe(e), passive: true };
+    return html`<div class="tabs" role="tablist" aria-label="Colonnes" @scroll=${(/** @type {Event} */ e) => edges(/** @type {HTMLElement} */ (e.currentTarget))}>${tree.kids.map((k, j) => {
+      const cells = this.#cellsOf(k, [j]);
+      const label = cells.map(c => c.name).join(' · ');
+      const more = cells.length > 3 ? cells.length - 3 : 0;
+      return html`<button type="button" role="tab" class="tab ${this._brought === j ? 'brought' : ''}" id=${'tab-' + j} aria-controls=${'panel-' + j}
+        aria-selected=${j === active ? 'true' : 'false'} tabindex=${j === active ? '0' : '-1'} aria-label=${label} title=${label} data-icons=${cells.map(c => c.icon).join(' ')}
+        @click=${() => { this._tab = j; }} @keydown=${(/** @type {KeyboardEvent} */ e) => this.#tabKey(e, j, n)}><span class="glyphs ${cells.length > 1 ? 'many' : ''}" aria-hidden="true">${cells.slice(0, 3).map(c => html`<span class="glyph ${c.mark ? 'marked' : ''}" data-icon=${c.icon}>${icon(c.icon)}${c.mark ? html`<b class="mark">${c.mark}</b>` : nothing}</span>`)}${more ? html`<span class="more">+${more}</span>` : nothing}</span></button>`;
+    })}</div>
+      ${repeat(tree.kids, (k, j) => (k.t === 'list' ? 'l:' : 'c:') + j + (k.t === 'cell' ? ':' + k.name + '.' + (k.view ?? '') : ''), (k, j) => html`<div class="tabpanel" role="tabpanel" id=${'panel-' + j} aria-labelledby=${'tab-' + j} ?hidden=${j !== active}
+          @touchstart=${swipe} @touchend=${swipe} @touchcancel=${swipe}>
         ${k.t === 'list' ? this.#split(k, [j], 1, true) : html`<div class="split col"><div class="part" style="flex: 1 1 0">${this.#cell(k, [j])}</div></div>`}</div>`)}`;
   }
 
@@ -515,6 +588,55 @@ export class GfLayout extends LitElement {
     e.preventDefault();
     this._tab = to;
     this.updateComplete.then(() => /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('#tab-' + to))?.focus());
+  }
+
+  /** The menu and the tab last brought into its sight, and the width then: not again while they stay (the hand may scroll the menu). */
+  #inSight = { bar: /** @type {Element | null} */ (null), key: '' };
+
+  /** Narrow: the tab shown in sight in the menu (scrolled to, smoothly once the menu is there), its edges faded where more waits. */
+  #tabInSight() {
+    const bar = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.tabs'));
+    const tab = /** @type {HTMLElement | null} */ (bar?.querySelector('[aria-selected="true"]'));
+    if (!bar || !tab) return;
+    const key = this.#active + ':' + bar.clientWidth + ':' + bar.childElementCount;
+    if (this.#inSight.bar === bar && this.#inSight.key === key) { edges(bar); return; }
+    const fresh = this.#inSight.bar !== bar;
+    this.#inSight = { bar, key };
+    // A neighbour's edge left in sight on the side scrolled toward: the menu says it goes on.
+    const room = Math.min(24, Math.max(0, (bar.clientWidth - tab.offsetWidth) / 2));
+    const left = tab.offsetLeft < bar.scrollLeft + room ? tab.offsetLeft - room
+      : tab.offsetLeft + tab.offsetWidth > bar.scrollLeft + bar.clientWidth - room ? tab.offsetLeft + tab.offsetWidth - bar.clientWidth + room : null;
+    if (left !== null) bar.scrollTo({ left, behavior: fresh || matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
+    edges(bar);
+  }
+
+  /** A finger on a tab panel: where and when it touched, unless on what moves sideways itself. @type {{ x: number, y: number, t: number } | null} */
+  #touch = null;
+
+  /**
+   * Narrow: a finger swiped sideways on a tab panel, quickly and mostly sideways, shows the neighbour tab (to the left:
+   * the next one). Not from what moves sideways itself — a map, photos, the cards, a slider, a field, a grip, anything
+   * that scrolls sideways or takes the finger (touch-action) — nor from a screen's edge (the system's « back »).
+   * @param {TouchEvent} e
+   */
+  #swipe(e) {
+    if (e.type === 'touchstart') {
+      const panel = /** @type {HTMLElement} */ (e.currentTarget);
+      const t = e.touches[0];
+      const path = e.composedPath();
+      const own = path.slice(0, Math.max(0, path.indexOf(panel))).some(el => el instanceof HTMLElement && (el.matches(SWIPE_OWN)
+        || (el.scrollWidth > el.clientWidth + 2 && /auto|scroll/.test(getComputedStyle(el).overflowX)) || takesFinger(getComputedStyle(el).touchAction)));
+      this.#touch = e.touches.length === 1 && !own && t.clientX > 24 && t.clientX < innerWidth - 24 ? { x: t.clientX, y: t.clientY, t: e.timeStamp } : null;
+      return;
+    }
+    const s = this.#touch;
+    this.#touch = null;
+    if (!s || e.type !== 'touchend' || e.touches.length) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - s.x, dy = t.clientY - s.y;
+    if (e.timeStamp - s.t > 700 || Math.abs(dx) < 64 || Math.abs(dx) < 2 * Math.abs(dy) || String(getSelection() ?? '')) return;
+    const to = this.#active + (dx < 0 ? 1 : -1);
+    if (to >= 0 && to < this.#shown.tree.kids.length) this._tab = to;
   }
 
   /** No layout (or nothing readable in it): what it is, and the ready-made ones. */
@@ -563,6 +685,18 @@ export class GfLayout extends LitElement {
  * in its place, never shown as « par défaut »). @param {number | null} given @returns {number[]}
  */
 const distanceChoices = given => given == null || DISTANCES.includes(given) ? DISTANCES : [...DISTANCES, given].sort((a, b) => a - b);
+
+/** What moves sideways itself, in a tab panel: a finger swiped there is its own, never a change of tab. */
+const SWIPE_OWN = 'input, textarea, select, [role="slider"], [role="separator"], [draggable="true"], gf-map, dl-map, .leaflet-container, gf-media-viewer, dl-deck, ma-deck';
+
+/** An element that takes a finger's sideways moves (touch-action: none, or vertical panning only). @param {string} action */
+const takesFinger = action => action === 'none' || (/pan-y/.test(action) && !/pan-x/.test(action));
+
+/** The menu of tabs faded on the side where more items wait, scrolled out of sight. @param {HTMLElement} bar */
+function edges(bar) {
+  bar.toggleAttribute('data-before', bar.scrollLeft > 1);
+  bar.toggleAttribute('data-after', bar.scrollLeft + bar.clientWidth < bar.scrollWidth - 1);
+}
 
 /** The layout of an address as text (its percent-encoding undone). @param {string} spec */
 function decodeSpec(spec) {

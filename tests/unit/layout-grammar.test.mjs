@@ -1,11 +1,12 @@
 // « Disposition libre » (app/layout): the grammar of a layout written in the address (grammar.js), what its cells are
-// (registry.js: names in English or French, parameters checked, an unknown component a placeholder, never a throw),
-// the live state beside it (state.js: plant, scope, search), and the router's route. A layout read and written back is
-// the same; whatever is typed, something sound comes out, with what was wrong said in French.
+// (registry.js: names in English or French, parameters checked, an unknown component a placeholder, never a throw;
+// each cell's icon and mark in a phone's menu of columns), the live state beside it (state.js: plant, scope, search),
+// and the router's route. A layout read and written back is the same; whatever is typed, something sound comes out,
+// with what was wrong said in French.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as G from '../../app/layout/grammar.js';
-import { COMPONENTS, distanceText, names, parseDistance, resolve, resolveTree } from '../../app/layout/registry.js';
+import { cellIcon, cellMark, COMPONENTS, distanceText, names, parseDistance, resolve, resolveTree } from '../../app/layout/registry.js';
 import { liveSearch, readLive, readQuery } from '../../app/layout/state.js';
 import { PRESETS } from '../../app/layout/presets.js';
 import { href, parse as route } from '../../app/core/router.js';
@@ -149,6 +150,31 @@ test('chaque nom du registre se lit, et les modèles sont des dispositions sans 
     assert.deepEqual([...r.errors, ...r.problems], [], p.id);
     assert.equal(r.text, p.spec, `${p.id} : écrit sous sa forme canonique`);
   }
+});
+
+test('le menu des colonnes (téléphone) : l’icône de chaque case, la rubrique de la fiche la sienne ; une présentation choisie, sa marque', () => {
+  /** A cell as typed → its icon and its mark (null: as by default). @param {string} text */
+  const look = text => { const r = resolve(G.parse(text).tree.kids[0]); const m = cellMark(r); return [cellIcon(r), m && m.short, m && m.label]; };
+  assert.deepEqual(look('map(r=5km)'), ['map', null, null]);
+  assert.deepEqual(look('search(list=0)'), ['search', null, null], 'un oui-ou-non n’est pas une présentation');
+  assert.deepEqual(look('plant'), ['card-text', null, null]);
+  // One block of the sheet: its rubric's icon, as the sheet's panes show it (categories.js).
+  assert.deepEqual(look('plant.calendar'), ['flower1', null, null]);
+  assert.deepEqual(look('plant.wikipedia'), ['wikipedia', null, null]);
+  assert.deepEqual(look('plant.status'), ['exclamation-triangle-fill', null, null]);
+  assert.deepEqual(look('plant.interactions'), ['diagram-3', null, null]);
+  assert.deepEqual(look('mpa'), ['exclamation-triangle-fill', null, null], 'un composant inconnu');
+  // Three modes of the sheet told apart: one letter, two where another mode starts with it.
+  assert.deepEqual(look('fiche(épuré)'), ['card-text', 'É', 'Épuré']);
+  assert.deepEqual(look('plant(standard)'), ['card-text', 'St', 'Standard']);
+  assert.deepEqual(look('plant(scientifique)'), ['card-text', 'Sc', 'Scientifique']);
+  assert.deepEqual(look('results(liste)'), ['list-ul', 'L', 'Liste']);
+  assert.deepEqual(look('results(view=grid)'), ['list-ul', 'G', 'Grille']);
+  assert.deepEqual(look('results(view=auto)'), ['list-ul', null, null], 'la valeur par défaut, écrite : sans marque');
+  assert.deepEqual(look('media(mosaic)'), ['images', 'M', 'Mosaïque']);
+  assert.deepEqual(look('map(base=photo)'), ['map', 'Ph', 'Photos aériennes']);
+  // Every block a cell can show has an icon of the sprite's (icons.js names them).
+  for (const n of names()) assert.match(cellIcon(resolve(G.parse(n).tree.kids[0])), /^[a-z0-9-]+$/, n);
 });
 
 /** A random layout (names of the registry, views, parameters, shares). @param {(n: number) => number} rnd @param {number} depth @returns {G.LayoutNode} */
