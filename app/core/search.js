@@ -105,6 +105,16 @@ export async function runSearch() {
   }
 }
 
+/**
+ * The search of a query over the whole flora, whatever scope the search on screen is kept to (setSearchScope): a free
+ * layout's results cell that leaves the zone (results(zone=0)). The store is left alone.
+ * @param {import('./store.js').Query} query @returns {Promise<{ total: number, items: any[] }>}
+ */
+export async function searchWhole({ q, filters, sort }) {
+  const { total, items } = await call({ type: 'search', q, filters, sort, membership: mineValues(filters), only: null });
+  return { total, items };
+}
+
 const NO_FILTERS = { status: [], family: [], genus: [], photo: [], french: [], mine: [] };
 
 /**

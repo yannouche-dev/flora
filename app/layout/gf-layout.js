@@ -23,12 +23,19 @@
 //    (its component, its parameters, a cell beside or under it, moved, removed), the ready-made ones (presets.js);
 //    « Appliquer » makes it the address (a new entry: Back gives the one before).
 //  - A link to a plant's sheet in a cell (a result, a look-alike in the sheet) makes it the current plant instead of
-//    leaving; a block opened from the sheet (⤢) that a cell already shows: that cell, flashed.
+//    leaving (unless the cell says otherwise: toucher=fiche, ecrit=0, toucher=rien); a block opened from the sheet (⤢)
+//    that a cell already shows: that cell, flashed.
+//  - The frame every cell shares (registry.js#FRAME): its head whole, its title alone or none (tete), a title of its
+//    own (titre), the actions of its head (agrandir: over the layout, Échap returns; replier: folded to its head, its
+//    share to the others, never in the address; partager: a link to a layout of this cell alone, the same state), the
+//    cell hidden while it has nothing to show (vide=masque: its share to the others), a plant of its own (plante=); in
+//    the editor, « Cadre » and « Liens » under each cell's « Réglages ».
 
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { pushHash, replaceHash } from '../core/history.js';
 import { href } from '../core/router.js';
 import { toHash } from '../core/query.js';
+import * as db from '../core/db.js';
 import { runSearch } from '../core/search.js';
 import { plantViewOf, store, StoreController, whenReady } from '../core/store.js';
 import { share } from '../core/share.js';
@@ -37,7 +44,7 @@ import { BP, MediaController } from '../core/media.js';
 import { gripStyles, shareGrip } from '../core/split-grip.js';
 import { ui } from '../styles/ui.js';
 import { cell as makeCell, dirAt, moveAt, nodeAt, parse, removeAt, replaceAt, serialize, setShares, shapeKey, shares, splitAt } from './grammar.js';
-import { cellIcon, cellMark, cellName, COMPONENTS, distanceLabel, menuLooks, paramName, resolveTree, valueText } from './registry.js';
+import { cellIcon, cellMark, cellName, COMPONENTS, distanceLabel, menuLooks, paramName, resolveTree, touchOf, valueText } from './registry.js';
 import { cleanText, LayoutState, liveSearch, readLive, readQuery, sameLive } from './state.js';
 import { forgetShares, savedShares, saveShares } from './sizes.js';
 import { PRESETS } from './presets.js';
@@ -102,7 +109,13 @@ export class GfLayout extends LitElement {
     /** Narrow: the tab brought by a plant chosen elsewhere (or a block opened), its icon lit a moment; -1: none. */
     _brought: { state: true },
     /** Narrow: the menu's items show their names beside their icons (#nameRoom). */
-    _named: { state: true }
+    _named: { state: true },
+    /** The cell made large over the layout (actions=agrandir), by its path; null: none. */
+    _max: { state: true },
+    /** The cells folded to their head (actions=replier), by their paths: live only, never in the address. */
+    _folded: { state: true },
+    /** The cell whose link was just copied (actions=partager), by its path. */
+    _cellCopied: { state: true }
   };
 
   static styles = [ui, gripStyles, css`
@@ -137,6 +150,17 @@ export class GfLayout extends LitElement {
     .part > * { flex: 1; min-width: 0; min-height: 0; }
     .cell { display: flex; flex-direction: column; background: var(--gf-surface); overflow: hidden; }
     .cell.flash { animation: flash 1.2s ease-out; }
+    /* The frame (registry.js#FRAME). A cell hidden while it has nothing to show (vide=masque), its body folded
+       (replier): gone, their share to the others. A cell made large (agrandir): over the whole layout, until Échap or
+       its button. */
+    .part[hidden], .cell-body[hidden] { display: none; }
+    .body { position: relative; }
+    .cell.maxed { position: absolute; inset: 0; z-index: 20; box-shadow: var(--gf-shadow-float); }
+    .split.row > .part.folded .cell-head { writing-mode: vertical-rl; flex-wrap: nowrap; padding: 10px 2px; border-bottom: 0; border-right: 1px solid var(--gf-border); }
+    .cell-head .spacer { flex: 1; }
+    .cell-head .cell-acts { flex: none; display: inline-flex; align-items: center; gap: 2px; }
+    .cell-head .cell-acts .icon-btn { width: 30px; height: 30px; min-height: 0; padding: 0; font-size: 0.85rem; }
+    .cell-head .pin { color: var(--gf-accent); }
     @keyframes flash { from { box-shadow: inset 0 0 0 3px var(--gf-accent); } to { box-shadow: inset 0 0 0 3px transparent; } }
     @media (prefers-reduced-motion: reduce) { .cell.flash { animation: none; } }
     .cell-head { flex: none; display: flex; align-items: center; gap: 6px; min-height: 30px; padding: 2px 6px 2px 10px; border-bottom: 1px solid var(--gf-border); background: var(--gf-surface); min-width: 0; flex-wrap: wrap; }
@@ -266,16 +290,37 @@ export class GfLayout extends LitElement {
     this._flash = null;
     this._brought = -1;
     this._named = false;
+    /** @type {string | null} */
+    this._max = null;
+    /** @type {ReadonlySet<string>} */
+    this._folded = new Set();
+    /** @type {string | null} */
+    this._cellCopied = null;
     this.#state.addEventListener('change', this.#onState);
-    // A link to a plant's sheet in a cell: that plant becomes the current one, the layout stays.
+    // A link to a plant's sheet in a cell: that plant becomes the current one, the layout stays — unless the cell says
+    // otherwise (toucher=fiche, ecrit=0: the sheet opens, as a link; toucher=rien: nothing).
     this.addEventListener('click', e => {
       if (e.defaultPrevented || e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
-      const a = /** @type {HTMLAnchorElement | undefined} */ (e.composedPath().find(n => n instanceof HTMLAnchorElement && n.hasAttribute('href')));
+      const path = e.composedPath();
+      const a = /** @type {HTMLAnchorElement | undefined} */ (path.find(n => n instanceof HTMLAnchorElement && n.hasAttribute('href')));
       const m = a && /^#\/plant\/(\d+)(?:\?|$)/.exec(a.getAttribute('href') || '');
       if (!m) return;
+      const at = /** @type {HTMLElement | undefined} */ (path.find(n => n instanceof HTMLElement && n.matches('section.cell[data-cell]')));
+      const r = at ? this.#shown.cells.get(/** @type {string} */ (at.dataset.cell)) : undefined;
+      const touch = r ? touchOf(r) : null;
+      if (touch === 'fiche') return;
       e.preventDefault();
-      this.#state.pick(Number(m[1]));
+      if (touch !== 'rien') this.#state.pick(Number(m[1]));
     });
+    // A cell that has nothing to show, or something again (the deck: its cards), for a cell hidden meanwhile (vide=masque).
+    this.addEventListener('cell-empty', e => {
+      const at = /** @type {HTMLElement | undefined} */ (e.composedPath().find(n => n instanceof HTMLElement && n.matches('section.cell[data-cell]')));
+      if (!at) return;
+      const key = /** @type {string} */ (at.dataset.cell), empty = Boolean(/** @type {CustomEvent} */ (e).detail?.empty);
+      if (this.#said.get(key) !== empty) { this.#said.set(key, empty); this.requestUpdate(); }
+    });
+    // Échap: the cell made large (agrandir) back in its place.
+    this.addEventListener('keydown', e => { if (e.key === 'Escape' && this._max !== null && !e.defaultPrevented) { e.preventDefault(); this.#maximize(null); } });
     // A column's funnel (a results grid): its filter shown, in a search's filters or a filters cell.
     this.addEventListener('focus-facet', e => { e.stopPropagation(); this.#revealFacet(/** @type {CustomEvent} */ (e).detail.facet); });
     // ⤢ on a block of a sheet, a photo touched: a cell that shows that block flashes instead of a dialog.
@@ -337,6 +382,111 @@ export class GfLayout extends LitElement {
       if (this.#draftMemo?.text !== this._draft) this.#draftMemo = { text: this._draft, value: show(this._draft) };
       this.#shown = this.#draftMemo.value;
     } else this.#shown = this.#layout;
+    // A results cell over the whole flora (zone=0): the search asked again without the zone (state.js#wholeOf).
+    this.#state.wholeOf([...this.#shown.cells.values()].some(r => r.known && r.spec.id === 'results' && r.params.zone === false));
+  }
+
+  // ── The frame of each cell (registry.js#FRAME) ─────────────────────────────────────────────────────────
+
+  /** What a cell said of itself: nothing to show (true) or something (false) — the deck's cards (`cell-empty`). @type {Map<string, boolean>} */
+  #said = new Map();
+  /** The cells hidden now (vide=masque, nothing to show), by their paths. @type {Set<string>} */
+  #hidden = new Set();
+
+  /** The plant a cell shows: its own (plante=), else the current one. @param {Resolved} r @returns {number | null} */
+  #plantOf(r) { return (r.known && r.params.plante) || this.#state.live.plant; }
+
+  /**
+   * Whether a cell has nothing to show (registry.js#FRAME_OF: those that take vide): a plant's (the sheet, a block, the
+   * photos), no plant; the results, none found (over the whole flora with zone=0); the deck, no cards (it says so).
+   * Never while it is still coming. @param {string} path @param {Resolved} r
+   */
+  #isEmpty(path, r) {
+    if (!r.known) return false;
+    const id = r.spec.id;
+    if (id === 'plant' || id === 'media') return this.#plantOf(r) == null;
+    if (id === 'results') {
+      if (r.params.zone === false) return this.#state.whole?.key === this.#state.wholeFor && this.#state.whole.total === 0;
+      return this.#store.state.status === 'ready' && this.#store.state.results.total === 0;
+    }
+    if (id === 'deck') return this.#said.get(path) === true;
+    return false;
+  }
+
+  /**
+   * The cells hidden now: those that say so (vide=masque) and have nothing to show — never while the layout is being
+   * edited (each cell's tools are in its head), never all of the screen nor, narrow, all of a tab (their messages then).
+   * @param {boolean} narrow @returns {Set<string>}
+   */
+  #hiddenCells(narrow) {
+    if (this._editing) return new Set();
+    const cells = this.#shown.cells;
+    const hidden = new Set([...cells].filter(([p, r]) => r.known && r.params.vide === 'masque' && this.#isEmpty(p, r)).map(([p]) => p));
+    if (!hidden.size) return hidden;
+    const under = (/** @type {string} */ prefix) => [...cells.keys()].filter(p => prefix === '' || p === prefix || p.startsWith(prefix + '.'));
+    if (under('').every(p => hidden.has(p))) return new Set();
+    if (narrow) {
+      for (const j of this.#shown.tree.kids.keys()) {
+        const tab = under(String(j));
+        if (tab.every(p => hidden.has(p))) for (const p of tab) hidden.delete(p);
+      }
+    }
+    return hidden;
+  }
+
+  /** Whether a node is hidden: a cell hidden, or a list all of whose cells are. @param {LayoutNode} n @param {number[]} path @returns {boolean} */
+  #nodeHidden(n, path) {
+    return n.t === 'cell' ? this.#hidden.has(path.join('.')) : n.kids.every((k, j) => this.#nodeHidden(k, [...path, j]));
+  }
+
+  /** A cell made large over the layout (agrandir), or back in its place (null): the focus on its button. @param {string | null} path */
+  async #maximize(path) {
+    const was = this._max;
+    this._max = path;
+    await this.updateComplete;
+    const at = path ?? was;
+    /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(`section.cell[data-cell="${at}"] .cell-acts [data-act="agrandir"]`))?.focus();
+  }
+
+  /** An action of a cell's head, shown (registry.js#FRAME: actions, and a head to put it in). @param {string} path @param {string} act */
+  #acts(path, act) {
+    const r = this.#shown.cells.get(path);
+    return Boolean(r?.known && (this._editing || r.params.tete !== 'non') && /** @type {string[]} */ (r.params.actions).includes(act));
+  }
+
+  /** Whether a cell is folded to its head now. @param {string} path */
+  #isFolded(path) { return this._folded.has(path) && this._max !== path && this.#acts(path, 'replier'); }
+
+  /** Whether a cell is large over the layout now. @param {string} path */
+  #isMax(path) { return this._max === path && this.#acts(path, 'agrandir'); }
+
+  /** A cell folded to its head, or unfolded (replier). @param {string} path */
+  #fold(path) {
+    const next = new Set(this._folded);
+    if (!next.delete(path)) next.add(path);
+    this._folded = next;
+  }
+
+  /** A link to a layout of this cell alone, with the same state (partager): shared, or copied. @param {CellNode} n @param {string} path @param {Resolved} r */
+  async #shareCell(n, path, r) {
+    const text = serialize({ t: 'list', kids: [{ ...n, size: null }], size: null });
+    const url = href.layout(text, liveSearch(this.#state.live, store.state.query, this.#state.radius));
+    const res = await share({ title: r.title + ' — GeoFlora', url });
+    if (res === 'copied') { this._cellCopied = path; setTimeout(() => { if (this._cellCopied === path) this._cellCopied = null; }, 2000); }
+  }
+
+  /** The names of a plant a cell keeps (plante=), read once from the flora (its head). @type {Map<number, { name: string, sci: string } | null>} */
+  #names = new Map();
+
+  /** A fixed plant's names, read once the flora is there (null: not yet, or none). @param {number} id */
+  #namesOf(id) {
+    if (!this.#names.has(id)) {
+      this.#names.set(id, null);
+      whenReady().then(() => db.get('plants', id)).then(p => {
+        if (p) { this.#names.set(id, { name: p.vernacularNames?.[0] || p.scientificName, sci: p.scientificName }); this.requestUpdate(); }
+      }, () => {});
+    }
+    return this.#names.get(id) ?? null;
   }
 
   /** The page's title the screen's own title gives (« Orchidées de Mirabel · GeoFlora »; null: none — a plant's sheet in a cell may name the page then). */
@@ -364,8 +514,11 @@ export class GfLayout extends LitElement {
     const fresh = next.text !== this.#layout.text || next.errors.length !== this.#layout.errors.length;
     if (fresh) {
       this.#layout = next;
-      // Another layout (a link, Back): the one being edited is left.
+      // Another layout (a link, Back): the one being edited is left; no cell large or folded, nothing said empty.
       if (this._editing) this.#cancel();
+      this._max = null;
+      this._folded = new Set();
+      this.#said.clear();
       // The radius a map or a place cell gives, until the address says one.
       const first = [...next.cells.values()].find(r => r.known && r.params.r != null);
       this.#state.defaultRadius = first?.known ? first.params.r : 2000;
@@ -408,7 +561,8 @@ export class GfLayout extends LitElement {
   /** Narrow: the first tab with a cell showing the plant, unless the one shown has one. */
   #toPlantTab() {
     const tabOf = (/** @type {string} */ p) => Number(p.split('.')[0]);
-    const tabs = [...this.#shown.cells].filter(([, r]) => r.known && FOLLOWS_PLANT.has(r.spec.id)).map(([p]) => tabOf(p));
+    // Not a cell with a plant of its own (plante=): it does not show the plant chosen.
+    const tabs = [...this.#shown.cells].filter(([, r]) => r.known && FOLLOWS_PLANT.has(r.spec.id) && !r.params.plante).map(([p]) => tabOf(p));
     if (tabs.length && !tabs.includes(this.#active)) this.#broughtTo(tabs[0]);
   }
 
@@ -533,8 +687,16 @@ export class GfLayout extends LitElement {
           value=${v} .checked=${on.includes(v)} @change=${(/** @type {any} */ e) => toggle(v, e.target.checked)} /> ${label}</label>`)}</span>`;
       }
       if (ps.kind === 'text') {
-        return html`<label>${ps.label} <input type="text" data-param=${key} maxlength="80" .value=${given ? String(r.params[key]) : ''} placeholder="par exemple : Fontainebleau 77"
-          @change=${(/** @type {any} */ e) => setParam(key, e.target.value.replace(/[,;()[\]=@]/g, ' ').trim() || null)} /></label>`;
+        return html`<label>${ps.label} <input type="text" data-param=${key} maxlength=${ps.max ?? 80} .value=${given ? String(r.params[key]) : ''}
+          placeholder=${ps.frame ? 'par exemple : Ce qui fleurit' : 'par exemple : Fontainebleau 77'}
+          @change=${(/** @type {any} */ e) => setParam(key, e.target.value.replace(/[,;()[\]=@]/g, ' ').replace(/\s+/g, ' ').trim() || null)} /></label>`;
+      }
+      // A plant's number (plante=): typed, or the current plant fixed in one touch; emptied, the cell follows again.
+      if (ps.kind === 'id') {
+        const now = this.#state.live.plant;
+        return html`<label>${ps.label} <input type="text" inputmode="numeric" data-param=${key} maxlength="9" size="9" .value=${given ? String(r.params[key]) : ''} placeholder="la plante courante"
+          @change=${(/** @type {any} */ e) => setParam(key, /^\d+$/.test(e.target.value.trim()) ? Number(e.target.value.trim()) : null)} /></label>
+          ${now && now !== r.params[key] ? html`<button type="button" data-fix=${key} @click=${() => setParam(key, now)}>${icon('pin-angle-fill')} Fixer la plante courante</button>` : nothing}`;
       }
       const choices = ps.kind === 'distance' ? distanceChoices(given ? r.params[key] : null).map(d => [String(d), distanceLabel(d)])
         : ps.kind === 'bool' ? [['true', 'Oui'], ['false', 'Non']] : Object.entries(ps.values ?? {});
@@ -547,11 +709,16 @@ export class GfLayout extends LitElement {
         </select>`;
     };
     const keys = Object.keys(r.spec.params);
-    if (!keys.some(k => r.spec.params[k].group)) return keys.map(field);
-    const groups = [...new Set(keys.map(k => r.spec.params[k].group).filter(Boolean))];
-    return html`<details class="params"><summary>${icon('gear')} Réglages</summary>
-      ${keys.filter(k => !r.spec.params[k].group).map(field)}
-      ${groups.map(g => html`<fieldset><legend>${g}</legend>${keys.filter(k => r.spec.params[k].group === g).map(field)}</fieldset>`)}
+    const own = keys.filter(k => !r.spec.params[k].frame), frame = keys.filter(k => r.spec.params[k].frame);
+    // The frame every cell shares (registry.js#FRAME): « Cadre », then « Liens » — after the component's own groups.
+    const fieldsets = (/** @type {string[]} */ ks) => [...new Set(ks.map(k => r.spec.params[k].group).filter(Boolean))]
+      .map(g => html`<fieldset data-group=${/** @type {string} */ (g)}><legend>${g}</legend>${ks.filter(k => r.spec.params[k].group === g).map(field)}</fieldset>`);
+    // A component without groups of its own: its few parameters in its tools, the frame folded under « Réglages ».
+    const grouped = own.some(k => r.spec.params[k].group);
+    return html`${grouped ? nothing : own.map(field)}<details class="params"><summary>${icon('gear')} Réglages</summary>
+      ${grouped ? own.filter(k => !r.spec.params[k].group).map(field) : nothing}
+      ${grouped ? fieldsets(own) : nothing}
+      ${fieldsets(frame)}
     </details>`;
   }
 
@@ -635,10 +802,17 @@ export class GfLayout extends LitElement {
     const key = path.join('.');
     const sh = shares(n, savedShares(this.#shown.shape, key));
     const cells = this.#shown.cells;
+    // A part hidden (vide=masque, nothing to show) or folded (replier): its share to the others; the grips beside it
+    // wait for it to come back (a grip moves the shares of the two parts it lies between).
+    const hidden = n.kids.map((k, j) => this.#nodeHidden(k, [...path, j]));
+    const folded = n.kids.map((k, j) => k.t === 'cell' && this.#isFolded([...path, j].join('.')));
+    // The shares of the parts in sight, as they would be alone (growing by less than the whole, they would leave room unused).
+    const inSight = sh.reduce((a, x, j) => a + (hidden[j] || folded[j] ? 0 : x), 0) || 1;
+    const grow = hidden.some(Boolean) || folded.some(Boolean) ? sh.map(x => x / inSight) : sh;
     return html`<div class="split ${dir}" data-split=${key}>${repeat(n.kids, (k, j) => (k.t === 'list' ? 'l:' : 'c:') + [...path, j].join('.') + (k.t === 'cell' ? ':' + k.name + '.' + (k.view ?? '') : ''), (k, j) => html`
-      ${j ? shareGrip({ dir, sizes: sh, i: j, part: 'part', label: `Redimensionner ${this.#name(n.kids[j - 1], [...path, j - 1])} et ${this.#name(k, [...path, j])}`,
+      ${j && !hidden[j] && !hidden[j - 1] && !folded[j] && !folded[j - 1] ? shareGrip({ dir, sizes: sh, i: j, part: 'part', label: `Redimensionner ${this.#name(n.kids[j - 1], [...path, j - 1])} et ${this.#name(k, [...path, j])}`,
         set: s => this.#setShares(path, s) }) : nothing}
-      <div class="part" style=${`flex: ${sh[j]} 1 0; ` + (dir === 'row' ? `min-width: ${least(k, cells, [...path, j], 'col')}px` : `min-height: ${least(k, cells, [...path, j], col ? 'col' : 'row', 'h', col)}px`)}>${k.t === 'list' ? this.#split(k, [...path, j], depth + 1, col) : this.#cell(k, [...path, j])}</div>`)}</div>`;
+      <div class="part ${folded[j] ? 'folded' : ''}" ?hidden=${hidden[j]} style=${folded[j] ? 'flex: 0 0 auto' : `flex: ${grow[j]} 1 0; ` + (dir === 'row' ? `min-width: ${least(k, cells, [...path, j], 'col')}px` : `min-height: ${least(k, cells, [...path, j], col ? 'col' : 'row', 'h', col)}px`)}>${k.t === 'list' ? this.#split(k, [...path, j], depth + 1, col) : this.#cell(k, [...path, j])}</div>`)}</div>`;
   }
 
   /**
@@ -654,14 +828,36 @@ export class GfLayout extends LitElement {
     const first = results.items[0] ? { id: results.items[0].id, name: results.items[0].vernacularName || results.items[0].scientificName } : null;
     const id = r.known ? r.spec.id : null;
     const mark = cellMark(r);
+    // Its plant: its own (plante=, a pin before its names), else the current one.
+    const fixed = r.known && r.params.plante ? /** @type {number} */ (r.params.plante) : null;
+    const info = fixed ? this.#namesOf(fixed) : s.plantInfo && s.plantInfo.id === s.live.plant ? s.plantInfo : null;
+    const count = (/** @type {number} */ n) => `${n.toLocaleString('fr-FR')} espèce${n > 1 ? 's' : ''}`;
+    const whole = id === 'results' && r.known && r.params.zone === false;
     const sub = !r.known ? 'à corriger'
       : id === 'map' || id === 'place' ? scopeWords(s)
-      : id === 'search' || id === 'results' || id === 'filters' ? (this.#store.state.status === 'ready' ? `${results.total.toLocaleString('fr-FR')} espèce${results.total > 1 ? 's' : ''}` : '')
-      : s.plantInfo && s.plantInfo.id === s.live.plant ? html`${s.plantInfo.name}${s.plantInfo.name !== s.plantInfo.sci ? html` · <i>${s.plantInfo.sci}</i>` : nothing}` : '';
-    return html`<section class="cell ${this._flash === key ? 'flash' : ''}" data-cell=${key} data-comp=${r.known ? r.spec.id + (r.view ? '.' + r.view.key : '') : 'unknown'} aria-label=${r.title}>
-      <header class="cell-head"><h2>${icon(cellIcon(r))} ${r.title}${mark ? html`<b class="cell-mark" aria-hidden="true" title=${mark.label} data-mark=${mark.short}></b>` : nothing}</h2><span class="sub">${sub}</span>
-        ${this._editing ? this.#tools(n, path, r) : nothing}</header>
-      <div class="cell-body">${renderCell(r, { state: s, view: plantViewOf(this.#store.state), plant: s.live.plant, first })}</div>
+      : whole ? (s.whole?.key === s.wholeFor && s.whole ? count(s.whole.total) + ' · toute la France' : '')
+      : id === 'search' || id === 'results' || id === 'filters' ? (this.#store.state.status === 'ready' ? count(results.total) : '')
+      : info ? html`${fixed ? html`<span class="pin" title=${`Plante fixée (plante=${fixed}) : cette case ne suit pas la plante courante`}>${icon('pin-angle-fill')}<span class="visually-hidden">Plante fixée :</span></span> ` : nothing}${info.name}${info.name !== info.sci ? html` · <i>${info.sci}</i>` : nothing}` : '';
+    // The frame (registry.js#FRAME): its head whole, its title alone, or none (but while editing: the tools are there);
+    // the actions of its head; large over the layout, folded to its head, hidden while it has nothing to show.
+    const head = !r.known || this._editing ? 'oui' : /** @type {string} */ (r.params.tete);
+    const acts = r.known && head !== 'non' ? /** @type {string[]} */ (r.params.actions) : [];
+    const max = this.#isMax(key), folded = this.#isFolded(key);
+    const title = r.title;
+    const actions = acts.length ? html`<span class="cell-acts" role="group" aria-label=${'Actions de « ' + title + ' »'}>
+        ${acts.includes('partager') ? html`<button class="icon-btn" type="button" data-act="partager" title=${this._cellCopied === key ? 'Lien copié' : 'Partager cette case seule (le même état)'}
+          aria-label=${this._cellCopied === key ? 'Lien copié' : `Partager « ${title} » seule`} @click=${() => this.#shareCell(n, key, r)}>${icon(this._cellCopied === key ? 'check-lg' : 'share')}</button>` : nothing}
+        ${acts.includes('replier') && !max ? html`<button class="icon-btn" type="button" data-act="replier" aria-expanded=${folded ? 'false' : 'true'} title=${folded ? 'Déplier' : 'Replier'}
+          aria-label=${(folded ? 'Déplier « ' : 'Replier « ') + title + ' »'} @click=${() => this.#fold(key)}>${icon(folded ? 'chevron-down' : 'chevron-up')}</button>` : nothing}
+        ${acts.includes('agrandir') ? html`<button class="icon-btn" type="button" data-act="agrandir" aria-pressed=${max ? 'true' : 'false'} title=${max ? 'Revenir à la disposition (Échap)' : 'Agrandir'}
+          aria-label=${(max ? 'Revenir à la disposition depuis « ' : 'Agrandir « ') + title + ' »'} @click=${() => this.#maximize(max ? null : key)}>${icon(max ? 'fullscreen-exit' : 'arrows-fullscreen')}</button>` : nothing}
+      </span>` : nothing;
+    return html`<section class="cell ${this._flash === key ? 'flash' : ''} ${max ? 'maxed' : ''} ${folded ? 'folded' : ''}" data-cell=${key} data-comp=${r.known ? r.spec.id + (r.view ? '.' + r.view.key : '') : 'unknown'}
+      data-head=${head} aria-label=${title}>
+      ${head === 'non' ? nothing : head === 'simple' ? html`<header class="cell-head"><h2>${title}</h2><span class="spacer"></span>${actions}</header>`
+        : html`<header class="cell-head"><h2>${icon(cellIcon(r))} ${title}${mark ? html`<b class="cell-mark" aria-hidden="true" title=${mark.label} data-mark=${mark.short}></b>` : nothing}</h2><span class="sub">${sub}</span>
+        ${actions}${this._editing ? this.#tools(n, path, r) : nothing}</header>`}
+      <div class="cell-body" ?hidden=${folded}>${renderCell(r, { state: s, view: plantViewOf(this.#store.state), plant: s.live.plant, first })}</div>
     </section>`;
   }
 
@@ -800,6 +996,7 @@ export class GfLayout extends LitElement {
     const tree = s.tree;
     const w = this._w;
     const narrow = this.#narrow = w > 0 && tree.kids.length > 1 && (w < BP.phone || w < least(tree, s.cells, [], 'row'));
+    this.#hidden = this.#hiddenCells(narrow);
     const remarks = s.errors.length + s.problems.length;
     // The screen's own title (?title=): the page's heading, above the bar (and, narrow, above the menu of columns);
     // the bar's name is then no heading.
