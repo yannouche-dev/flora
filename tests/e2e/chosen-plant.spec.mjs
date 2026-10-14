@@ -33,8 +33,10 @@ async function answerPoints(page) {
     const results = Array.from({ length: n }, (_, i) => ({
       id: (taxon || 7) * 100 + i, observed_on: '2026-05-01',
       geojson: { coordinates: [2.35 + ((i % 6) - 2.5) * 0.0018 + (taxon ? 0.0005 : 0), 48.85 + (Math.floor(i / 6) - 1.5) * 0.0015] },
-      taxon: { id: taxon || 1000 + (i % 12), name: 'Plante', preferred_common_name: null },
-      photos: [{ id: i, url: `https://inaturalist-open-data.s3.amazonaws.com/photos/${(taxon || 7) * 100 + i}/square.jpg`, license_code: 'cc-by', attribution: '(c) A' }]
+      // The plant's photo (its taxon's: a point never shows the observation's own), its address telling the point.
+      taxon: { id: taxon || 1000 + (i % 12), name: 'Plante', preferred_common_name: null,
+        default_photo: { square_url: `https://inaturalist-open-data.s3.amazonaws.com/photos/${(taxon || 7) * 100 + i}/square.jpg`, license_code: 'cc-by', attribution: '(c) A' } },
+      photos: []
     }));
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ total_results: n, results }) });
   });
@@ -92,7 +94,12 @@ async function toCards(app, page) {
 /** A point of the map of `name` (one of its observations among the others) clicked. @param {Page} page @param {string} name */
 async function clickPoint(page, name) {
   const at = await page.locator('ma-distance').evaluate((el, t) => [...(/** @type {ShadowRoot} */ (el.shadowRoot)).querySelectorAll('.leaflet-marker-pane .gf-obs-leaf:not(.hl)')]
-    .findIndex(icon => { const i = Number(/photos\/7(\d\d)\//.exec(icon.querySelector('img')?.getAttribute('src') || '')?.[1] ?? -1); return i >= 0 && 1000 + (i % 12) === t; }), taxonOf(name));
+    .findIndex(icon => {
+      // The point's photo (its plant's), whose address tells its taxon (answerPoints) — loaded or still to load.
+      const img = icon.querySelector('img'), src = img?.getAttribute('src') || img?.dataset.src || '';
+      const i = Number(/photos\/7(\d\d)\//.exec(src)?.[1] ?? -1);
+      return i >= 0 && 1000 + (i % 12) === t;
+    }), taxonOf(name));
   expect(at).toBeGreaterThanOrEqual(0);
   await page.locator('ma-distance .leaflet-marker-pane .gf-obs-leaf:not(.hl)').nth(at).dispatchEvent('click');
 }

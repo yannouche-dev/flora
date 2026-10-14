@@ -1,8 +1,10 @@
 // The photos of the map's points: each its plant's photo, never the observation's own — its taxon's under a free
 // licence, else the plant's thumbnail from the flora (plants.json), as the plant chosen's points always showed (most
 // iNaturalist photos are under its default licence, CC BY-NC, never shown: the points were leaves) — with no plant
-// chosen, after a heart (the plant chosen: its points lit) and after its ↺ (none chosen again). Hovered, a point's card
-// shows that photo too. Only a plant the flora does not know (and without a free photo) stays a leaf.
+// lit (the step « map »), beside the cards (the card on top lit: the plant of the screen before any heart), after a
+// heart (the plant chosen by it: its points lit) and after its ↺ (no plant chosen by a heart again: the card on top
+// lit, as before it). Hovered, a point's card shows that photo too. Only a plant the flora does not know (and without
+// a free photo) stays a leaf.
 import { test, expect, answerAround, plantId } from './fixtures.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
@@ -92,19 +94,35 @@ test('chaque point : la photo de sa plante (jamais celle de l’observation), sa
   expect(await inView(page)).toMatchObject({ own: 0, nettle: 4 });
   await hoverCard(page);
 
-  // The cards, then a heart: the plant chosen's points lit — the others keep their photos.
+  // The cards: the card on top lit (the plant of the screen before any heart: kit/session.js#chosenId) — the other
+  // points keep their photos.
+  const chosen = page.locator('ma-distance .leaflet-marker-pane .gf-obs-leaf.hl.chosen');
   await page.locator('ma-distance').getByRole('button', { name: 'Qui pousse par ici ?' }).click();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/app/rencontres/cards');
   await expect(page.locator('ma-deck .swipe-card.top')).toHaveAttribute('data-id', String(plantId('Allium ursinum')));
-  await mostShown(page, 'the cards');
+  await expect(chosen).toHaveCount(6);
+  await mostShown(page, 'the cards, the card on top lit');
+  await hoverCard(page);
+  // A heart: the plant it chose lit (the address names it), the others keep their photos.
   await page.locator('ma-deck .round.like').click();
-  await expect(page.locator('ma-distance .leaflet-marker-pane .gf-obs-leaf.hl.chosen')).toHaveCount(6);
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe(`#/app/rencontres/cards?p=${plantId('Allium ursinum')}`);
+  await expect(chosen).toHaveCount(6);
   await mostShown(page, 'a plant chosen');
   await hoverCard(page);
 
-  // Its ↺: no plant chosen again, the photos stay.
+  // Its ↺: no plant chosen by a heart again (the address says none) — the card on top lit again; the photos stay.
   await page.locator('ma-deck .round.undo').click();
-  await expect(page.locator('ma-distance .leaflet-marker-pane .gf-obs-leaf.hl.chosen')).toHaveCount(0);
-  await mostShown(page, 'none chosen again');
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/app/rencontres/cards');
+  await expect(page.locator('ma-deck .swipe-card.top')).toHaveAttribute('data-id', String(plantId('Allium ursinum')));
+  await expect(chosen).toHaveCount(6);
+  await mostShown(page, 'none chosen by a heart again');
   await hoverCard(page);
+  // A pass: the next card on top lit, the photos stay.
+  await page.locator('ma-deck .round.pass').click();
+  await expect(page.locator('ma-deck .swipe-card.top')).toHaveAttribute('data-id', String(plantId('Taraxacum officinale')));
+  // (Its card's photo on its points: the flora's, iNaturalist giving none under a free licence here.)
+  await expect.poll(() => chosen.evaluateAll(els => els.map(el => { const img = el.querySelector('img'); return img?.getAttribute('src') || img?.dataset.src || ''; })))
+    .toEqual(Array(6).fill(expect.stringContaining('Taraxacum_officinale')));
+  await mostShown(page, 'the next card on top');
+  expect(await inView(page)).toMatchObject({ own: 0 });
 });
