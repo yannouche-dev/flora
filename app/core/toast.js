@@ -155,8 +155,9 @@ export function briefToast(words, { near = null, at = 'top', offset = 10, ms, li
       if (ms > 0) { clearTimeout(timer); if (!held && el === toast) timer = setTimeout(hide, ms); }
       onHold?.(held);
     };
-    toast.addEventListener('pointerenter', () => { over = true; hold(); });
-    toast.addEventListener('pointerleave', () => { over = false; hold(); });
+    // Hovered by a mouse only: a finger's pointerenter (a tap where the toast then shows) has no leave to follow it.
+    toast.addEventListener('pointerenter', e => { if (e.pointerType !== 'mouse') return; over = true; hold(); });
+    toast.addEventListener('pointerleave', e => { if (e.pointerType !== 'mouse') return; over = false; hold(); });
     toast.addEventListener('focusin', () => { focused = true; hold(); });
     toast.addEventListener('focusout', e => { if (!toast.contains(/** @type {Node | null} */ (e.relatedTarget))) { focused = false; hold(); } });
   }
