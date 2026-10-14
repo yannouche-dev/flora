@@ -59169,13 +59169,7 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/102004",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/102004"
     },
-    "thumbnail": {
-      "url": "http://mediaphoto.mnhn.fr/media/14413578342130FKmavPbEa5kd8za",
-      "source": "GBIF",
-      "sourceUrl": "https://www.gbif.org/occurrence/464765965",
-      "author": null,
-      "license": "http://creativecommons.org/licenses/by/4.0/"
-    },
+    "thumbnail": null,
     "statuses": [
       {
         "type": "LRN",
@@ -60358,13 +60352,7 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/102086",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/102086"
     },
-    "thumbnail": {
-      "url": "http://mediaphoto.mnhn.fr/media/1441357731008WRQ6MmoF0pUBDIic",
-      "source": "GBIF",
-      "sourceUrl": "https://www.gbif.org/occurrence/464757114",
-      "author": null,
-      "license": "http://creativecommons.org/licenses/by/4.0/"
-    },
+    "thumbnail": null,
     "statuses": [
       {
         "type": "LRN",
@@ -64781,13 +64769,7 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/102434",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/102434"
     },
-    "thumbnail": {
-      "url": "http://mediaphoto.mnhn.fr/media/1441348137463STLPYuA1qtBsj9nq",
-      "source": "GBIF",
-      "sourceUrl": "https://www.gbif.org/occurrence/438047350",
-      "author": null,
-      "license": "http://creativecommons.org/licenses/by/4.0/"
-    }
+    "thumbnail": null
   },
   {
     "id": 1017956,
@@ -67067,19 +67049,14 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 102665
+      "taxref": 102665,
+      "wikidata": "Q43374506"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/102665",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/102665"
     },
-    "thumbnail": {
-      "url": "https://www.unimus.no/felles/bilder/web_hent_bilde.php?id=15882349&type=jpeg",
-      "source": "GBIF",
-      "sourceUrl": "https://www.gbif.org/occurrence/5162419606",
-      "author": null,
-      "license": "http://creativecommons.org/licenses/by-sa/4.0/"
-    }
+    "thumbnail": null
   },
   {
     "id": 102669,
@@ -85298,19 +85275,14 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 125583
+      "taxref": 125583,
+      "wikidata": "Q55964816"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/125583",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/125583"
     },
-    "thumbnail": {
-      "url": "http://mediaphoto.mnhn.fr/media/1441346342506MGd7AIqEdqwBIOam",
-      "source": "GBIF",
-      "sourceUrl": "https://www.gbif.org/occurrence/439080775",
-      "author": null,
-      "license": "http://creativecommons.org/licenses/by/4.0/"
-    }
+    "thumbnail": null
   },
   {
     "id": 125585,
@@ -88544,19 +88516,14 @@
       "france": "P"
     },
     "identifiers": {
-      "taxref": 125696
+      "taxref": 125696,
+      "wikidata": "Q55964895"
     },
     "links": {
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/125696",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/125696"
     },
-    "thumbnail": {
-      "url": "http://mediaphoto.mnhn.fr/media/1441357868713zMWoAXkxOLIm0sG9",
-      "source": "GBIF",
-      "sourceUrl": "https://www.gbif.org/occurrence/464722655",
-      "author": null,
-      "license": "http://creativecommons.org/licenses/by/4.0/"
-    }
+    "thumbnail": null
   },
   {
     "id": 125699,
@@ -100310,13 +100277,7 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/81935",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/81935"
     },
-    "thumbnail": {
-      "url": "http://mediaphoto.mnhn.fr/media/14413862381811YKBWijjJ5UTFqvZ",
-      "source": "GBIF",
-      "sourceUrl": "https://www.gbif.org/occurrence/667721939",
-      "author": null,
-      "license": "http://creativecommons.org/licenses/by/4.0/"
-    },
+    "thumbnail": null,
     "statuses": [
       {
         "type": "LRN",
@@ -233024,13 +232985,7 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/124807",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/124807"
     },
-    "thumbnail": {
-      "url": "http://mediaphoto.mnhn.fr/media/1441364166578rjkAegQPVpZ8CJ8k",
-      "source": "GBIF",
-      "sourceUrl": "https://www.gbif.org/occurrence/474668395",
-      "author": null,
-      "license": "http://creativecommons.org/licenses/by/4.0/"
-    },
+    "thumbnail": null,
     "statuses": [
       {
         "type": "LRR",
@@ -267215,13 +267170,7 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/100616",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/100616"
     },
-    "thumbnail": {
-      "url": "http://mediaphoto.mnhn.fr/media/1441306419456co8MTZ7Wx0fOVpZj",
-      "source": "GBIF",
-      "sourceUrl": "https://www.gbif.org/occurrence/437504251",
-      "author": null,
-      "license": "http://creativecommons.org/licenses/by/4.0/"
-    },
+    "thumbnail": null,
     "flowering": [
       5,
       7
@@ -381630,13 +381579,7 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/1039315",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/1039315"
     },
-    "thumbnail": {
-      "url": "http://mediaphoto.mnhn.fr/media/1441337061322UNDGScSLICOOk6nO",
-      "source": "GBIF",
-      "sourceUrl": "https://www.gbif.org/occurrence/437228806",
-      "author": null,
-      "license": "http://creativecommons.org/licenses/by/4.0/"
-    }
+    "thumbnail": null
   },
   {
     "id": 119010,
@@ -381680,13 +381623,7 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/119012",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/119012"
     },
-    "thumbnail": {
-      "url": "http://mediaphoto.mnhn.fr/media/1441353557499Y17kykezh8cbaSYx",
-      "source": "GBIF",
-      "sourceUrl": "https://www.gbif.org/occurrence/438446068",
-      "author": null,
-      "license": "http://creativecommons.org/licenses/by/4.0/"
-    }
+    "thumbnail": null
   },
   {
     "id": 810880,
@@ -381865,13 +381802,7 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/810964",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/810964"
     },
-    "thumbnail": {
-      "url": "http://mediaphoto.mnhn.fr/media/1441354858529DBzzpdC71nxQTpV6",
-      "source": "GBIF",
-      "sourceUrl": "https://www.gbif.org/occurrence/442678705",
-      "author": null,
-      "license": "http://creativecommons.org/licenses/by/4.0/"
-    }
+    "thumbnail": null
   },
   {
     "id": 1017249,
@@ -383060,13 +382991,7 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/1017284",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/1017284"
     },
-    "thumbnail": {
-      "url": "http://mediaphoto.mnhn.fr/media/1441353478421UH7Pc0KsrVRSP7cI",
-      "source": "GBIF",
-      "sourceUrl": "https://www.gbif.org/occurrence/438276286",
-      "author": null,
-      "license": "http://creativecommons.org/licenses/by/4.0/"
-    }
+    "thumbnail": null
   },
   {
     "id": 119074,
@@ -386849,13 +386774,7 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/810942",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/810942"
     },
-    "thumbnail": {
-      "url": "http://mediaphoto.mnhn.fr/media/1441353390711Uw8UvNMobgnqcsLr",
-      "source": "GBIF",
-      "sourceUrl": "https://www.gbif.org/occurrence/439445743",
-      "author": null,
-      "license": "http://creativecommons.org/licenses/by/4.0/"
-    }
+    "thumbnail": null
   },
   {
     "id": 119251,
@@ -389939,13 +389858,7 @@
       "taxref": "https://taxref.mnhn.fr/taxref-web/taxa/1039395",
       "inpn": "https://inpn.mnhn.fr/espece/cd_nom/1039395"
     },
-    "thumbnail": {
-      "url": "https://data.nhm.ac.uk/media/0d43801f-f8ac-4ff5-9d09-b4206a088012",
-      "source": "GBIF",
-      "sourceUrl": "https://www.gbif.org/occurrence/4418937321",
-      "author": null,
-      "license": "http://creativecommons.org/licenses/by/4.0/"
-    }
+    "thumbnail": null
   },
   {
     "id": 119373,
