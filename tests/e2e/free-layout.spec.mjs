@@ -5,14 +5,18 @@
 // points the map shows; a result touched is the current plant, every plant cell shows it, the address says it, Back
 // returns to the one before; the scope's radius keeps the results to the plants observed in it; a point of the map
 // touched: its plant), the deck (its top card the current plant, a heart a favourite), the editor (live preview, a
-// component unknown said and shown, « Appliquer » a new entry), a phone (the columns as tabs, the plant's tab brought),
-// Réglages' presets. And what went wrong once: a first visit (the plant cells drawn while the flora downloads: never a
+// component unknown said and shown, « Appliquer » a new entry), a phone (the columns as a menu of icons on top: one
+// per column, its icons and marks, its whole name; what looked alike once, told apart; tapped, ← → Début Fin; the
+// plant's tab brought and lit; twelve columns: the menu scrolls, the tab shown in sight, the smooth scroll too; a
+// finger swiped on a panel: the neighbour, never on the map), a window too narrow for its columns (their tabs named
+// beside their icons where they have the room), Réglages' presets. And what went wrong once: a first visit (the plant cells drawn while the flora downloads: never a
 // false « Plante introuvable », their heads named once it is there), the deck when iNaturalist fails (said, « Réessayer »,
 // never « Les cartes arrivent… » for good), a radius between two of the slider's stops (r=3km: shown between them), the
 // search's bar in a narrow cell and every preset without a cell overflowing (1280 px and a phone), the grid's Photo
 // column and its filter's badge. iNaturalist answered here: 12 plants around (fixtures.mjs), 3 within 500 m; 24
 // observations, two of each plant, and 3 of a plant asked alone.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
+import { swipe } from './touch.mjs';
 import { PRESETS } from '../../app/layout/presets.js';
 import { parse } from '../../app/layout/grammar.js';
 
@@ -334,6 +338,31 @@ test.describe('un grand écran', () => {
     expect(Math.abs((sort.y + sort.height / 2) - (tool.y + tool.height / 2))).toBeLessThan(2);
     expect(sort.width).toBeGreaterThan(150);
   });
+
+  test('une fenêtre trop étroite pour ses colonnes : leurs onglets, chacun son icône et son nom à côté, là où ils ont la place ; trop nombreux, leurs icônes seules', async ({ app, page }) => {
+    await page.setViewportSize({ width: 1000, height: 800 });
+    await app.open(`#/layout/[carte,recherche,filtres,résultats,fiche,photos]?${AT}`);
+    const tabs = page.getByRole('tablist', { name: 'Colonnes' }).getByRole('tab');
+    await expect(tabs).toHaveCount(6);
+    // Each name whole on screen beside its icon, as the text tabs had them; read once.
+    for (const [i, name] of ['Carte', 'Recherche', 'Filtres', 'Résultats', 'Fiche', 'Photos'].entries()) {
+      const label = tabs.nth(i).locator('.name');
+      await expect(label).toHaveText(name);
+      expect(await label.evaluate(e => e.getBoundingClientRect().width > 20 && e.scrollWidth <= e.clientWidth), name).toBe(true);
+      await expect(tabs.nth(i)).toHaveAccessibleName(name);
+      await expect(tabs.nth(i).locator('.glyph')).toHaveCount(1);
+    }
+    // 680 px: still the room for a name beside each icon.
+    await page.setViewportSize({ width: 680, height: 800 });
+    await expect.poll(() => tabs.evaluateAll(ts => ts.every(t => /** @type {Element} */ (t.querySelector('.name')).getBoundingClientRect().width > 20))).toBe(true);
+    // Twelve columns in 1000 px: no room for their names — icons only (the names read, and shown on hover).
+    await page.setViewportSize({ width: 1000, height: 800 });
+    await app.go('#/layout/[results(list),search(list=0),filters,place,results(grid),search(filters=1),filters,place,results,filters,place,plant.calendar]');
+    await expect(tabs).toHaveCount(12);
+    await expect.poll(() => tabs.evaluateAll(ts => ts.every(t => /** @type {Element} */ (t.querySelector('.name')).getBoundingClientRect().width <= 1))).toBe(true);
+    await expect(tabs.nth(1)).toHaveAccessibleName('Recherche (sans liste des résultats)');
+    await expect(tabs.nth(1)).toHaveAttribute('title', 'Recherche (sans liste des résultats)');
+  });
 });
 
 /** How many cells a layout as written has (grammar.js). @param {string} spec */
@@ -355,7 +384,7 @@ test('les modèles : aucune case ne déborde, ni la page de côté — même la 
       await expect(cellOf(page, 'search').locator('gf-results-bar .suggestions')).toHaveCount(await cellOf(page, 'search').count());
       await expect(page.locator('gf-layout section.cell')).toHaveCount(cellsOf(preset.spec));
       await expect.poll(() => app.state('results.total')).toBeGreaterThan(0);
-      const tabs = page.locator('gf-layout .tabs [role="tab"]');
+      const tabs = page.locator('gf-layout [role="tablist"] [role="tab"]');
       const panes = Math.max(1, await tabs.count());
       for (let i = 0; i < panes; i++) {
         const where = `${preset.id}, ${vp.width}×${height}, ${panes > 1 ? 'onglet ' + (i + 1) : 'l’écran'}`;
@@ -399,28 +428,206 @@ test('une première visite : les cases de la plante attendent la flore, puis la 
   await expect(cellOf(page, 'media')).not.toContainText('Plante introuvable');
 });
 
-test('un téléphone : les colonnes en onglets ; une plante choisie amène l’onglet de la fiche ; jamais de défilement de côté', async ({ app, page, isMobile }) => {
-  test.skip(!isMobile, 'a phone');
-  await app.open(`#/layout/${LAYOUT}?${AT}`);
-  const tabs = page.locator('gf-layout .tabs [role="tab"]');
-  await expect(tabs).toHaveText(['Carte', 'Recherche', 'Wikipédia · Calendrier']);
-  await expect(tabs.first()).toHaveAttribute('aria-selected', 'true');
-  await expect(cellOf(page, 'map')).toBeVisible();
-  await expect(cellOf(page, 'search')).toBeHidden();
-  await tabs.nth(1).click();
-  await expect(cellOf(page, 'search')).toBeVisible();
-  await expect(cellOf(page, 'map')).toBeHidden();
-  await expect.poll(() => app.state('results.total')).toBe(12);
-  await page.locator('dl-search gf-plant-card a.row').first().click();
-  await expect(tabs.nth(2)).toHaveAttribute('aria-selected', 'true');
-  await expect(cellOf(page, 'plant.wikipedia').locator('gf-plant-detail')).toHaveAttribute('plant-id', String(plantId(AIL)));
-  // The rows of the tab, one under the other, side by side never.
-  const [w, c] = await Promise.all([cellOf(page, 'plant.wikipedia'), cellOf(page, 'plant.calendar')].map(box));
-  expect(w.y + w.height).toBeLessThanOrEqual(c.y + 1);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  // Back: no plant (the tab stays).
-  await page.goBack();
-  await expect.poll(() => param(page, 'p')).toBe(null);
+test.describe('un téléphone', () => {
+  test.skip(({ isMobile }) => !isMobile, 'a phone');
+
+  /** The menu of the columns, on top of the layout. @param {Page} page */
+  const menuOf = page => page.getByRole('tablist', { name: 'Colonnes' });
+  /** @param {Page} page */
+  const tabsOf = page => menuOf(page).getByRole('tab');
+  /** Each tab's whole name (its only text, read, and its title, shown on hover), its icons (data-icons), those drawn with their marks, and « +n » (drawn by the style). @param {Page} page */
+  const looks = page => tabsOf(page).evaluateAll(ts => ts.map(t => ({
+    name: t.querySelector('.name')?.textContent, title: t.getAttribute('title'), icons: /** @type {HTMLElement} */ (t).dataset.icons,
+    shown: [...t.querySelectorAll('.glyph')].map(g => /** @type {HTMLElement} */ (g).dataset.icon + (g.querySelector('.mark')?.getAttribute('data-mark') ?? '')),
+    more: t.querySelector('.more') ? '+' + t.querySelector('.more')?.getAttribute('data-more') : '' })));
+  /** Each tab's name on screen (false: read only, an icon menu). @param {Page} page */
+  const namesShown = page => tabsOf(page).evaluateAll(ts => ts.map(t => /** @type {Element} */ (t.querySelector('.name')).getBoundingClientRect().width > 1));
+  /** A tab wholly in sight in the menu, and clear of its faded edges. @param {Page} page @param {number} i */
+  const inSight = (page, i) => tabsOf(page).nth(i).evaluate(t => {
+    const m = /** @type {HTMLElement} */ (t.parentElement), b = m.getBoundingClientRect(), r = t.getBoundingClientRect();
+    return r.left - b.left >= (m.hasAttribute('data-before') ? 31.5 : -0.5) && b.right - r.right >= (m.hasAttribute('data-after') ? 31.5 : -0.5);
+  });
+  /**
+   * Each tab as the browser's accessibility tree has it: its name, and its description (null: none — the title, the
+   * same words as the name, not read a second time). @param {Page} page
+   */
+  const axTabs = async page => {
+    const { nodes } = await (await page.context().newCDPSession(page)).send('Accessibility.getFullAXTree');
+    return nodes.filter(n => n.role?.value === 'tab').map(n => [n.name?.value, n.description?.value ?? null]);
+  };
+  /** How far the page is wider than the window (0: no sideways scroll). @param {Page} page */
+  const sideScroll = page => page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+
+  test('les colonnes en menu d’icônes : une par colonne, ses icônes, son nom entier ; toucher, ← →, Début, Fin ; une plante choisie amène l’onglet de la fiche, éclairé ; jamais de défilement de côté', async ({ app, page }) => {
+    await app.open(`#/layout/${LAYOUT}?${AT}`);
+    const tabs = tabsOf(page);
+    expect(await looks(page)).toEqual([
+      { name: 'Carte', title: 'Carte', icons: 'map', shown: ['map'], more: '' },
+      { name: 'Recherche', title: 'Recherche', icons: 'search', shown: ['search'], more: '' },
+      { name: 'Wikipédia · Calendrier', title: 'Wikipédia · Calendrier', icons: 'wikipedia flower1', shown: ['wikipedia', 'flower1'], more: '' }]);
+    // Icons only (the names read, no second time as a description: the title says the same words), as wide as one
+    // another, filling the menu, each a finger's room.
+    expect(await namesShown(page)).toEqual([false, false, false]);
+    for (const [i, name] of ['Carte', 'Recherche', 'Wikipédia · Calendrier'].entries()) {
+      await expect(tabs.nth(i)).toHaveAccessibleName(name);
+      await expect(tabs.nth(i)).not.toHaveAttribute('aria-label', /./);
+    }
+    expect(await axTabs(page)).toEqual([['Carte', null], ['Recherche', null], ['Wikipédia · Calendrier', null]]);
+    const bar = await box(menuOf(page));
+    const boxes = await Promise.all([0, 1, 2].map(i => box(tabs.nth(i))));
+    for (const b of boxes) { expect(Math.abs(b.width - boxes[0].width)).toBeLessThan(1); expect(b.height).toBeGreaterThanOrEqual(44); }
+    expect(boxes.reduce((a, b) => a + b.width, 0)).toBeGreaterThan(bar.width - 2);
+    await expect(tabs.first()).toHaveAttribute('aria-selected', 'true');
+    await expect(cellOf(page, 'map')).toBeVisible();
+    await expect(cellOf(page, 'search')).toBeHidden();
+    // A tap shows its column; the panel is named by its tab.
+    await tabs.nth(1).tap();
+    await expect(tabs.nth(1)).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tabpanel', { name: 'Recherche' })).toBeVisible();
+    await expect(cellOf(page, 'search')).toBeVisible();
+    await expect(cellOf(page, 'map')).toBeHidden();
+    // The keyboard: ← → (round), Début, Fin; the focus follows the tab shown.
+    await tabs.nth(1).focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(tabs.nth(2)).toBeFocused();
+    await expect(tabs.nth(2)).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('ArrowRight');
+    await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('ArrowLeft');
+    await expect(tabs.nth(2)).toHaveAttribute('aria-selected', 'true');
+    await page.keyboard.press('Home');
+    await expect(tabs.nth(0)).toBeFocused();
+    await page.keyboard.press('End');
+    await expect(tabs.nth(2)).toBeFocused();
+    await expect(cellOf(page, 'plant.calendar')).toBeVisible();
+    await tabs.nth(1).tap();
+    // A plant chosen in the search: the tab of its sheet comes, its icon lit a moment.
+    await expect.poll(() => app.state('results.total')).toBe(12);
+    await page.locator('dl-search gf-plant-card a.row').first().click();
+    await expect(tabs.nth(2)).toHaveAttribute('aria-selected', 'true');
+    await expect(tabs.nth(2)).toHaveClass(/\bbrought\b/);
+    await expect(cellOf(page, 'plant.wikipedia').locator('gf-plant-detail')).toHaveAttribute('plant-id', String(plantId(AIL)));
+    await expect(tabs.nth(2)).not.toHaveClass(/\bbrought\b/);
+    // The rows of the tab, one under the other, side by side never.
+    const [w, c] = await Promise.all([cellOf(page, 'plant.wikipedia'), cellOf(page, 'plant.calendar')].map(box));
+    expect(w.y + w.height).toBeLessThanOrEqual(c.y + 1);
+    expect(await sideScroll(page)).toBeLessThanOrEqual(0);
+    // Back: no plant (the tab stays).
+    await page.goBack();
+    await expect.poll(() => param(page, 'p')).toBe(null);
+    await expect(tabs.nth(2)).toHaveAttribute('aria-selected', 'true');
+  });
+
+  test('deux colonnes du même composant se distinguent : la présentation choisie marquée et dite ; une colonne de plus de trois cases : trois icônes et « +n »', async ({ app, page }) => {
+    await app.open(`#/layout/[résultats(liste)@22,fiche(épuré),fiche(standard),fiche(scientifique)]?${AT}`);
+    expect(await looks(page)).toEqual([
+      { name: 'Résultats (Liste)', title: 'Résultats (Liste)', icons: 'list-ul', shown: ['list-ulL'], more: '' },
+      { name: 'Fiche (Épuré)', title: 'Fiche (Épuré)', icons: 'card-text', shown: ['card-textÉ'], more: '' },
+      { name: 'Fiche (Standard)', title: 'Fiche (Standard)', icons: 'card-text', shown: ['card-textSt'], more: '' },
+      { name: 'Fiche (Scientifique)', title: 'Fiche (Scientifique)', icons: 'card-text', shown: ['card-textSc'], more: '' }]);
+    for (const [i, name] of ['Résultats (Liste)', 'Fiche (Épuré)', 'Fiche (Standard)', 'Fiche (Scientifique)'].entries()) await expect(tabsOf(page).nth(i)).toHaveAccessibleName(name);
+    // The marks drawn, not written: each name read once, never again as a description.
+    expect(await axTabs(page)).toEqual([['Résultats (Liste)', null], ['Fiche (Épuré)', null], ['Fiche (Standard)', null], ['Fiche (Scientifique)', null]]);
+    expect(await sideScroll(page)).toBeLessThanOrEqual(0);
+    await app.go('#/layout/[[place@22,map]@31,[search(list=0)@16,filters@34,results]@23,[plant.name@16,media@44,plant.calendar]@23,[plant.status,plant.lookalikes,plant.interactions,plant.climate]@23]');
+    await expect(page.locator('gf-layout section.cell')).toHaveCount(12);
+    expect(await looks(page)).toEqual([
+      { name: 'Zone · Carte', title: 'Zone · Carte', icons: 'geo-alt map', shown: ['geo-alt', 'map'], more: '' },
+      { name: 'Recherche (sans liste des résultats) · Filtres · Résultats', title: 'Recherche (sans liste des résultats) · Filtres · Résultats', icons: 'search funnel list-ul', shown: ['search−L', 'funnel', 'list-ul'], more: '' },
+      { name: 'Nom · Photos · Calendrier', title: 'Nom · Photos · Calendrier', icons: 'tag images flower1', shown: ['tag', 'images', 'flower1'], more: '' },
+      { name: 'Protection et statuts · Plantes à confondre · Pollinisateurs et interactions · Climat et pollen', title: 'Protection et statuts · Plantes à confondre · Pollinisateurs et interactions · Climat et pollen',
+        icons: 'shield exclamation-triangle-fill bug cloud-sun', shown: ['shield', 'exclamation-triangle-fill', 'bug'], more: '+1' }]);
+    // Four columns on a phone: every tab wholly in sight, the menu not scrolling, the page not either.
+    for (let i = 0; i < 4; i++) expect(await inSight(page, i), `onglet ${i + 1}`).toBe(true);
+    expect(await sideScroll(page)).toBeLessThanOrEqual(0);
+    expect((await axTabs(page)).map(([, d]) => d)).toEqual([null, null, null, null]);
+    // What looked alike once: the sheet's map and the map, its photos and the photos' viewer, a status and a look-alike,
+    // a component mistyped, two searches told by a yes or a no — each its own look, each its own name.
+    await app.go('#/layout/[map(r=2km),plant.map,media,plant.photos,mpa,plant.status,plant.lookalikes,search(list=0),search(filters=1),plant.literature,plant.wikipedia]');
+    const all = await looks(page);
+    expect(all.map(t => [t.shown.join(' '), t.name])).toEqual([
+      ['map', 'Carte'], ['pin-map', 'Fiche › Carte'], ['images', 'Photos'], ['image', 'Fiche › Photos'], ['question-circle', 'mpa (inconnu)'],
+      ['shield', 'Protection et statuts'], ['exclamation-triangle-fill', 'Plantes à confondre'],
+      ['search−L', 'Recherche (sans liste des résultats)'], ['searchF', 'Recherche (filtres ouverts)'], ['journal-text', 'Publications (GBIF)'], ['wikipedia', 'Wikipédia']]);
+    for (const [i, t] of all.entries()) await expect(tabsOf(page).nth(i)).toHaveAccessibleName(/** @type {string} */ (t.name));
+  });
+
+  test('douze colonnes : le menu défile de côté, sans barre ; l’onglet montré toujours en vue — au clavier, et amené par une plante choisie', async ({ app, page }) => {
+    await app.open(`#/layout/[results(list),search(list=0),filters,place,results(grid),search(filters=1),filters,place,results,filters,place,plant.calendar]?${AT}`);
+    const tabs = tabsOf(page);
+    await expect(tabs).toHaveCount(12);
+    const scroll = () => menuOf(page).evaluate(m => ({ left: m.scrollLeft, more: m.scrollWidth - m.clientWidth, before: m.hasAttribute('data-before'), after: m.hasAttribute('data-after'), bar: m.offsetHeight - m.clientHeight }));
+    // Wider than the screen: it scrolls in itself (no scrollbar drawn: only its border's pixel), its far edge faded; the page never.
+    expect(await scroll()).toMatchObject({ left: 0, before: false, after: true, bar: 1 });
+    expect((await scroll()).more).toBeGreaterThan(100);
+    for (let i = 0; i < 12; i++) expect((await box(tabs.nth(i))).width).toBeGreaterThanOrEqual(44);
+    expect(await sideScroll(page)).toBeLessThanOrEqual(0);
+    // Fin: the last tab, scrolled to; Début: the first; ← from the first: the last.
+    await tabs.first().focus();
+    await page.keyboard.press('End');
+    await expect(tabs.nth(11)).toHaveAttribute('aria-selected', 'true');
+    await expect.poll(() => inSight(page, 11)).toBe(true);
+    await expect.poll(scroll).toMatchObject({ before: true, after: false });
+    await page.keyboard.press('Home');
+    await expect.poll(() => inSight(page, 0)).toBe(true);
+    await page.keyboard.press('ArrowLeft');
+    await expect.poll(() => inSight(page, 11)).toBe(true);
+    await page.keyboard.press('Home');
+    await expect.poll(() => inSight(page, 0)).toBe(true);
+    await expect.poll(scroll).toMatchObject({ left: 0, before: false });
+    // A plant chosen in the first column: the sheet's tab, the last, comes into sight, lit.
+    await expect.poll(() => app.state('results.total')).toBe(12);
+    await page.locator('dl-results gf-plant-card a.row').first().click();
+    await expect(tabs.nth(11)).toHaveAttribute('aria-selected', 'true');
+    await expect(tabs.nth(11)).toHaveClass(/\bbrought\b/);
+    await expect.poll(() => inSight(page, 11)).toBe(true);
+    await expect(cellOf(page, 'plant.calendar')).toBeVisible();
+    expect(await sideScroll(page)).toBeLessThanOrEqual(0);
+  });
+
+  test('douze colonnes, le défilement animé (320 et 360 px) : ← une à une, l’onglet montré ramené en vue à chaque fois, jamais laissé au bord estompé', async ({ app, page }) => {
+    // The focus moved by the keys must not stop the smooth scroll that brings the tab into sight (it did: the tab left
+    // past the edge). Animations on, here.
+    await page.emulateMedia({ reducedMotion: 'no-preference' });
+    for (const width of [320, 360]) {
+      await page.setViewportSize({ width, height: 700 });
+      await app.open(`#/layout/[results(list),search(list=0),filters,place,results(grid),search(filters=1),filters,place,results,filters,place,plant.calendar]?${AT}`);
+      const tabs = tabsOf(page);
+      await expect(tabs).toHaveCount(12);
+      await tabs.first().focus();
+      await page.keyboard.press('End');
+      await expect.poll(() => inSight(page, 11), `${width} px, Fin`).toBe(true);
+      for (let i = 10; i >= 5; i--) {
+        await page.keyboard.press('ArrowLeft');
+        await expect(tabs.nth(i)).toBeFocused();
+        await expect(tabs.nth(i)).toHaveAttribute('aria-selected', 'true');
+        await expect.poll(() => inSight(page, i), `${width} px, onglet ${i + 1}`).toBe(true);
+      }
+    }
+  });
+
+  test('un doigt glissé de côté sur un panneau : la colonne voisine — jamais sur la carte, qui se glisse elle-même', async ({ app, page }) => {
+    await app.open(`#/layout/${LAYOUT}?${AT}`);
+    const tabs = tabsOf(page);
+    /** The centre of a locator. @param {import('@playwright/test').Locator} l */
+    const at = async l => { const b = await box(l); return { x: b.x + b.width / 2, y: b.y + b.height / 2 }; };
+    // On the map itself: the map's own (it pans), the tab stays.
+    const map = await at(cellOf(page, 'map').locator('gf-map'));
+    await swipe(page, { x: map.x + 80, y: map.y + 120 }, { x: map.x - 80, y: map.y + 120 });
+    await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true');
+    // On its head (nothing there moves sideways): to the left, the next column; to the right, the one before.
+    const head = await at(cellOf(page, 'map').locator('.cell-head'));
+    await swipe(page, { x: head.x + 80, y: head.y }, { x: head.x - 80, y: head.y + 6 });
+    await expect(tabs.nth(1)).toHaveAttribute('aria-selected', 'true');
+    await expect(cellOf(page, 'search')).toBeVisible();
+    const back = await at(cellOf(page, 'search').locator('.cell-head'));
+    await swipe(page, { x: back.x - 80, y: back.y }, { x: back.x + 80, y: back.y });
+    await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true');
+    // Mostly downward (a scroll that drifts): no swipe; and none before the first column.
+    await swipe(page, { x: head.x + 30, y: head.y }, { x: head.x - 40, y: head.y + 150 });
+    await swipe(page, { x: head.x - 80, y: head.y }, { x: head.x + 80, y: head.y });
+    await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true');
+  });
 });
 
 test('Réglages › Disposition libre : un modèle ouvre sa disposition', async ({ app, page }) => {
