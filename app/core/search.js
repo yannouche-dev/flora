@@ -7,21 +7,27 @@ import { store } from './store.js';
 const worker = new Worker(new URL('../workers/search.worker.js', import.meta.url), { type: 'module' });
 
 let lastRequest = 0;
-/** @type {Map<number, (value: any) => void>} */
+/** @type {Map<number, { resolve: (value: any) => void, progress?: (data: any) => void }>} */
 const waiting = new Map();
 
 worker.addEventListener('message', ({ data }) => {
-  const resolve = waiting.get(data.requestId);
-  if (!resolve) return;
+  const request = waiting.get(data.requestId);
+  if (!request) return;
+  // A step of a long request (install): told, the request still waiting for its answer.
+  if (data.progress) { request.progress?.(data); return; }
   waiting.delete(data.requestId);
-  resolve(data);
+  request.resolve(data);
 });
 
-/** @param {Record<string, any>} message */
-function call(message) {
+/** @param {Record<string, any>} message @param {(data: any) => void} [progress] */
+function call(message, progress) {
   const requestId = ++lastRequest;
   return new Promise((resolve, reject) => {
-    waiting.set(requestId, data => data.error ? reject(new Error(data.error)) : resolve(data));
+    waiting.set(requestId, {
+      // The error's name kept (QuotaExceededError: core/dataset.js tells the lack of room apart).
+      resolve: data => data.error ? reject(Object.assign(new Error(data.error), data.name ? { name: data.name } : {})) : resolve(data),
+      progress
+    });
     worker.postMessage({ ...message, requestId });
   });
 }
@@ -29,11 +35,44 @@ function call(message) {
 /** Genus → family, to keep genus filters consistent with family filters. @type {Map<string, string>} */
 export const genusFamily = new Map();
 
+/** @param {Record<string, string>} pairs */
+function setGenusFamily(pairs) {
+  genusFamily.clear();
+  for (const [genus, family] of Object.entries(pairs)) genusFamily.set(genus, family);
+}
+
 /** (Re)builds the search index from IndexedDB. */
 export async function loadIndex() {
-  const data = await call({ type: 'load' });
-  genusFamily.clear();
-  for (const [genus, family] of Object.entries(data.genusFamily)) genusFamily.set(genus, family);
+  setGenusFamily((await call({ type: 'load' })).genusFamily);
+}
+
+/**
+ * The flora `meta` announces, downloaded, checked and stored by the worker (search.worker.js), off the main thread.
+ * `early` (a first launch, no local copy): `searchable` resolves as soon as the search runs on it (its index come),
+ * `stored` once every record is in IndexedDB; until then plantFromWorker() reads them. Otherwise (an update) the search
+ * moves to the new flora only once it is stored, and both resolve then.
+ * @param {any} meta @param {{ early?: boolean }} [options]
+ * @returns {{ searchable: Promise<void>, stored: Promise<void> }}
+ */
+export function installFlora(meta, { early = false } = {}) {
+  /** @type {() => void} */
+  let searchableNow = () => {};
+  const searchable = new Promise(resolve => { searchableNow = () => resolve(undefined); });
+  const stored = call({ type: 'install', meta, early }, data => {
+    if (data.progress !== 'searchable') return;
+    setGenusFamily(data.genusFamily);
+    searchableNow();
+  }).then(data => { setGenusFamily(data.genusFamily); });
+  const ready = Promise.race([searchable, stored]);
+  // A failure is the caller's to handle, where it awaits (not unhandled when it awaits only one of the two).
+  ready.catch(() => {});
+  stored.catch(() => {});
+  return { searchable: ready, stored };
+}
+
+/** One record of the flora, from the worker: an early install's, before it is stored (else IndexedDB's). @param {number} id */
+export async function plantFromWorker(id) {
+  return (await call({ type: 'plant', id })).plant ?? undefined;
 }
 
 let searchRun = 0;

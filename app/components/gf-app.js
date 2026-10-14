@@ -6,23 +6,48 @@ import { href, RouterController } from '../core/router.js';
 import { setKingMode, setMode, store, StoreController } from '../core/store.js';
 import { exportGeoJSON } from '../core/collections.js';
 import './gf-flora.js';
-import './gf-settings.js';
-import './gf-legal.js';
-import './gf-map-page.js';
-import './gf-spot-editor.js';
-import './gf-collections.js';
-import './gf-shared.js';
 import './gf-capture.js';
 import './gf-tabbar.js';
 import './gf-mode-switch.js';
 import './gf-scenarios.js';
 import './gf-launcher.js';
-import '../miniapp/gf-miniapp.js';
-import '../layout/gf-layout.js';
 import { discoverEvents, tabShown, UNLOCKS } from '../core/discover.js';
 import { replaceView } from '../core/history.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
+
+/**
+ * The screens other than Flore and Découvrir, each loaded the first time it shows: the start of the app — the search —
+ * loads a third less code. A screen is drawn only once its module is there (its element upgraded before it gets its
+ * properties, as when it was loaded with the app). All precached by the service worker: offline they come as fast.
+ * @type {Record<string, () => Promise<unknown>>}
+ */
+const SCREENS = {
+  map: () => import('./gf-map-page.js'),
+  collections: () => import('./gf-collections.js'),
+  shared: () => import('./gf-shared.js'),
+  'spot-new': () => import('./gf-spot-editor.js'),
+  spot: () => import('./gf-spot-editor.js'),
+  settings: () => import('./gf-settings.js'),
+  legal: () => import('./gf-legal.js'),
+  app: () => import('../miniapp/gf-miniapp.js'),
+  layout: () => import('../layout/gf-layout.js')
+};
+/** The screens asked for, and those loaded. @type {Set<string>} */
+const asked = new Set(), loaded = new Set();
+/**
+ * Whether a screen can be drawn now; if not, its module is asked for (once) and `then` runs when it has come (a
+ * failure said in the console, asked again next time).
+ * @param {string} name @param {() => void} then
+ */
+function screenReady(name, then) {
+  if (!SCREENS[name] || loaded.has(name)) return true;
+  if (!asked.has(name)) {
+    asked.add(name);
+    SCREENS[name]().then(() => { loaded.add(name); then(); }, error => { asked.delete(name); console.error(error); });
+  }
+  return false;
+}
 
 /** @param {string} name */
 const tabOf = name => name === 'map' ? 'map' : name === 'discover' ? 'discover'
@@ -307,6 +332,7 @@ export class GfApp extends LitElement {
 
   /** @param {import('../core/router.js').Route} route */
   #outlet(route) {
+    if (!screenReady(route.name, () => this.requestUpdate())) return html`<div class="banner loading-screen" role="status">Chargement…</div>`;
     switch (route.name) {
       case 'discover':
         document.title = 'Découvrir — GeoFlora';

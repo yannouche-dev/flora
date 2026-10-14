@@ -236,8 +236,10 @@ test('beaucoup de points seuls : chacun la photo de sa plante là où on les voi
   const inView = () => map.evaluate((el, v) => {
     const inside = (/** @type {Element} */ e) => { const r = e.getBoundingClientRect(), x = r.x + r.width / 2, y = r.y + r.height / 2; return x > v.x && x < v.x + v.w && y > v.y && y < v.y + v.h; };
     const photos = [...el.querySelectorAll('.leaflet-marker-pane .gf-obs-leaf.hl.chosen')].filter(inside);
+    // A dot Leaflet does not draw (out of its renderer's bounds: « M0 0 », no size, at the layer's origin) is not one in sight.
+    const drawn = (/** @type {Element} */ e) => e.getAttribute('d') !== 'M0 0';
     const dots = [...el.querySelectorAll('path.gf-occ')];
-    return { photos: photos.length, withImg: photos.filter(m => m.querySelector('img')).length, dots: dots.filter(inside).length, far: dots.length };
+    return { photos: photos.length, withImg: photos.filter(m => m.querySelector('img')).length, dots: dots.filter(drawn).filter(inside).length, far: dots.length };
   }, view);
   await expect.poll(async () => { const r = await inView(); return r.photos > 40 && r.withImg === r.photos && r.dots === 0 && r.far > 0 ? 'ok' : JSON.stringify(r); },
     { timeout: 15_000 }).toBe('ok');

@@ -142,21 +142,41 @@ async function run(stores, mode, fn) {
   }
 }
 
+/**
+ * A first launch: the search runs on the flora before it is stored (core/dataset.js), so the plants are read
+ * elsewhere meanwhile — one record from the worker that holds them (`get`), every other read of the store once it is
+ * filled (`stored`). Set and taken away by core/dataset.js, in the page; never in the worker.
+ * @type {{ get: (id: any) => Promise<any>, stored: Promise<unknown> } | null}
+ */
+let plantsSource = null;
+
+/** @param {{ get: (id: any) => Promise<any>, stored: Promise<unknown> } | null} source */
+export function readPlantsFrom(source) { plantsSource = source; }
+
+/** A read of the whole plants store waits for it to be filled. @param {string} store */
+const filled = async store => { if (store === 'plants' && plantsSource) await plantsSource.stored.catch(() => {}); };
+
 /** @param {string} store @param {IDBValidKey} key */
-export const get = (store, key) =>
-  run(store, 'readonly', tx => promisify(tx.objectStore(store).get(key)));
+export const get = (store, key) => store === 'plants' && plantsSource ? plantsSource.get(key)
+  : run(store, 'readonly', tx => promisify(tx.objectStore(store).get(key)));
 
 /** @param {string} store */
-export const getAll = store =>
-  run(store, 'readonly', tx => promisify(tx.objectStore(store).getAll()));
+export const getAll = async store => {
+  await filled(store);
+  return run(store, 'readonly', tx => promisify(tx.objectStore(store).getAll()));
+};
 
 /** @param {string} store */
-export const count = store =>
-  run(store, 'readonly', tx => promisify(tx.objectStore(store).count()));
+export const count = async store => {
+  await filled(store);
+  return run(store, 'readonly', tx => promisify(tx.objectStore(store).count()));
+};
 
 /** @param {string} store @param {string} index @param {IDBValidKey} key */
-export const getAllByIndex = (store, index, key) =>
-  run(store, 'readonly', tx => promisify(tx.objectStore(store).index(index).getAll(key)));
+export const getAllByIndex = async (store, index, key) => {
+  await filled(store);
+  return run(store, 'readonly', tx => promisify(tx.objectStore(store).index(index).getAll(key)));
+};
 
 /** @param {string} store @param {IDBValidKey} key */
 export const remove = (store, key) =>
@@ -176,8 +196,9 @@ export const clear = store =>
  * Reads every record of a store, one by one (a cursor: never the whole store in one array).
  * @param {string} store @param {(value: any) => void} fn
  */
-export const scan = (store, fn) =>
-  run(store, 'readonly', tx => new Promise((resolve, reject) => {
+export const scan = async (store, fn) => {
+  await filled(store);
+  return run(store, 'readonly', tx => new Promise((resolve, reject) => {
     const request = tx.objectStore(store).openCursor();
     request.onsuccess = () => {
       const cursor = request.result;
@@ -187,6 +208,7 @@ export const scan = (store, fn) =>
     };
     request.onerror = () => reject(request.error);
   }));
+};
 
 /** Deletes these keys of a store, in one transaction. @param {string} store @param {IDBValidKey[]} keys */
 export const removeMany = (store, keys) =>

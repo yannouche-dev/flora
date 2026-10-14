@@ -24,10 +24,16 @@ export class App {
     await this.page.evaluate(h => { location.hash = h; }, hash);
   }
 
-  /** The flora loaded into IndexedDB and indexed (store.state.status 'ready'). */
+  /**
+   * The flora indexed (store.state.status 'ready') and stored in IndexedDB: a first launch searches before its
+   * records are stored (floraStoring), and the specs reload, go offline or read the store right after.
+   */
   async ready() {
     await this.page.waitForFunction(() => customElements.get('gf-app') && document.querySelector('gf-app')?.shadowRoot?.childElementCount);
     await expect.poll(() => this.state('status'), { timeout: 30_000 }).toBe('ready');
+    await expect.poll(() => this.state('floraStoring'), { timeout: 30_000 }).toBeFalsy();
+    // The screen of the address drawn: those other than Flore and Découvrir load their module the first time (gf-app).
+    await expect(this.page.locator('gf-app .loading-screen')).toHaveCount(0);
   }
 
   /**

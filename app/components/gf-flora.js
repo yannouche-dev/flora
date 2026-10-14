@@ -5,17 +5,37 @@ import { MediaController, PHONE_QUERY } from '../core/media.js';
 import { activeFilterCount, clearFilters, lastSearchHash } from '../core/query.js';
 import { href } from '../core/router.js';
 import { backTo, depth, openModal, openView, replaceView } from '../core/history.js';
-import { plantViewOf, StoreController } from '../core/store.js';
+import { plantViewOf, StoreController, whenReady } from '../core/store.js';
 import { PaneSizer, splitStyles } from '../core/panes.js';
 import { ui } from '../styles/ui.js';
 import './gf-results-bar.js';
 import './gf-filter-panel.js';
 import './gf-plant-list.js';
-import './gf-plant-detail.js';
 import './gf-pager.js';
-import './gf-media-viewer.js';
 import { icon } from '../core/icons.js';
 import { blockTitle, hasColumns } from '../core/sheet-blocks.js';
+
+/**
+ * The plant sheet (gf-plant-detail, its maps and media viewer: more code than the rest of the start), loaded the
+ * first time a sheet shows, else once the search is ready, when the page is idle (a tap on a result then finds it):
+ * the search comes first. Its modules asked all at once when the deployed index.html lists them (tools/preload-modules.mjs),
+ * not one level of imports at a time. @type {Promise<unknown> | null}
+ */
+let sheetModule = null;
+const loadSheet = () => {
+  if (!sheetModule) {
+    const listed = document.querySelector('meta[name="geoflora-preload-sheet"]')?.getAttribute('content') || '';
+    for (const path of listed.split(' ').filter(Boolean)) {
+      document.head.append(Object.assign(document.createElement('link'), { rel: 'modulepreload', href: path }));
+    }
+  }
+  sheetModule ??= import('./gf-plant-detail.js').catch(error => { sheetModule = null; console.error(error); });
+  return sheetModule;
+};
+whenReady().then(() => {
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(() => loadSheet(), { timeout: 3000 });
+  else setTimeout(loadSheet, 500);
+});
 
 /** Results pane narrower than this: cards instead of the grid. */
 const GRID_MIN = 560;
@@ -652,6 +672,7 @@ export class GfFlora extends LitElement {
     const wide = this.#wide.matches;
     const phone = this.#phone.matches;
     const plantId = this.#plantId;
+    if (plantId !== null) loadSheet();
     const folded = { filters: this.#sizer.folded('filters'), results: this.#sizer.folded('results'), plant: this.#sizer.folded('plant') };
     const total = this.#store.state.results.total;
     const showPlant = plantId !== null && !phone;

@@ -25,6 +25,7 @@ import { onStorage } from './sync.js';
  * @property {string} [statusText]
  * @property {any} [meta]
  * @property {boolean} offline
+ * @property {boolean} [floraStoring]  a first launch: the search runs on the flora while its records are still being stored (not offline yet)
  * @property {boolean} [datasetDeferred]  a new flora was announced but could not be downloaded: the local copy stays, until the next launch
  * @property {boolean} [updateReady]  a new version of the app is installed: reloading shows it
  * @property {boolean} [storageFull]  a write was refused for lack of room (QuotaExceededError): a banner says what to do
