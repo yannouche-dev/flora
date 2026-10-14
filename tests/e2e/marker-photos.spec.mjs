@@ -84,7 +84,7 @@ const common = () => `${hosts.cors}flaky/photos/999/square.jpg`;
 
 /**
  * iNaturalist's observations in the circle: 45 points, each distance its own; the first 15 the common plant's (no
- * photo of their own: the taxon's), the others their own photo, from one host or another in turn.
+ * photo but the taxon's), the others each its own taxon and photo, from one host or another in turn.
  * @param {number} radius
  */
 function observations(radius) {
@@ -97,9 +97,10 @@ function observations(radius) {
     const host = [hosts.cors, hosts.plain, hosts.refusing][i % 3];
     return {
       id, observed_on: '2026-05-01', geojson: { coordinates: [2.35 + Math.cos(a) * d / 0.658, 48.85 + Math.sin(a) * d] },
-      taxon: mine ? { id: 1001 + (i % 11), name: NAMES[1 + (i % 11)], preferred_common_name: null }
+      // The plant's photo, its taxon's (a point never shows the observation's own): the others' each its own taxon.
+      taxon: mine ? { id: 2000 + i, name: NAMES[1 + (i % 11)], preferred_common_name: null, default_photo: { square_url: `${host}photos/${id}/square.jpg`, ...lic } }
         : { id: 1000, name: 'Urtica dioica', preferred_common_name: 'Ortie', default_photo: { square_url: common(), ...lic } },
-      photos: mine ? [{ id, url: `${host}photos/${id}/square.jpg`, ...lic }] : []
+      photos: []
     };
   });
 }

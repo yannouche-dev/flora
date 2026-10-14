@@ -29,8 +29,10 @@ async function answerPoints(page) {
     const results = Array.from({ length: n }, (_, i) => ({
       id: (taxon || 7) * 100 + i, observed_on: '2026-05-01',
       geojson: { coordinates: [2.35 + ((i % 6) - 2.5) * 0.0018 + (taxon ? 0.0005 : 0), 48.85 + (Math.floor(i / 6) - 1.5) * 0.0015] },
-      taxon: { id: taxon || 1000 + (i % 12), name: 'Plante', preferred_common_name: null },
-      photos: [{ id: i, url: `https://inaturalist-open-data.s3.amazonaws.com/photos/${(taxon || 7) * 100 + i}/square.jpg`, license_code: 'cc-by', attribution: '(c) A' }]
+      // The plant's photo (its taxon's: a point never shows the observation's own), its address telling the point.
+      taxon: { id: taxon || 1000 + (i % 12), name: 'Plante', preferred_common_name: null,
+        default_photo: { square_url: `https://inaturalist-open-data.s3.amazonaws.com/photos/${(taxon || 7) * 100 + i}/square.jpg`, license_code: 'cc-by', attribution: '(c) A' } },
+      photos: []
     }));
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ total_results: n, results }) });
   });

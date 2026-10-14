@@ -32,8 +32,9 @@ async function answerPoints(page, { n = 30, delay = () => 0, photo = () => null 
       const a = i * 2.39996, d = (0.15 + 0.8 * ((i * 37) % n) / n) * r / 111.32;
       const url = photo(r, i);
       return { id: Math.round(r * 1000) * 1000 + i, observed_on: '2026-05-01', geojson: { coordinates: [2.35 + Math.cos(a) * d / 0.658, 48.85 + Math.sin(a) * d] },
-        taxon: { id: 1000 + (i % 12), name: 'Urtica dioica', preferred_common_name: 'Ortie' },
-        photos: url ? [{ id: i, url, license_code: 'cc-by', attribution: '(c) Anne' }] : [] };
+        // The plant's photo: its taxon's (a point never shows the observation's own); a plant the flora does not know.
+        taxon: { id: 1000 + (i % 12), name: 'Plante', preferred_common_name: 'Ortie', ...(url ? { default_photo: { square_url: url, license_code: 'cc-by', attribution: '(c) Anne' } } : {}) },
+        photos: [] };
     });
     await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ total_results: n * 3, results }) }).catch(() => {});
   });
