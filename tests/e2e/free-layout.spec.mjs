@@ -6,9 +6,15 @@
 // returns to the one before; the scope's radius keeps the results to the plants observed in it; a point of the map
 // touched: its plant), the deck (its top card the current plant, a heart a favourite), the editor (live preview, a
 // component unknown said and shown, « Appliquer » a new entry), a phone (the columns as tabs, the plant's tab brought),
-// Réglages' presets. iNaturalist answered here: 12 plants around (fixtures.mjs), 3 within 500 m; 24 observations, two
-// of each plant, and 3 of a plant asked alone.
+// Réglages' presets. And what went wrong once: a first visit (the plant cells drawn while the flora downloads: never a
+// false « Plante introuvable », their heads named once it is there), the deck when iNaturalist fails (said, « Réessayer »,
+// never « Les cartes arrivent… » for good), a radius between two of the slider's stops (r=3km: shown between them), the
+// search's bar in a narrow cell and every preset without a cell overflowing (1280 px and a phone), the grid's Photo
+// column and its filter's badge. iNaturalist answered here: 12 plants around (fixtures.mjs), 3 within 500 m; 24
+// observations, two of each plant, and 3 of a plant asked alone.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
+import { PRESETS } from '../../app/layout/presets.js';
+import { parse } from '../../app/layout/grammar.js';
 
 /** @typedef {import('@playwright/test').Page} Page */
 
@@ -231,6 +237,141 @@ test.describe('un grand écran', () => {
     await expect(page.getByRole('heading', { name: 'Composez votre écran' })).toBeVisible();
     await expect(page.locator('gf-layout .empty li')).toHaveCount(5);
   });
+
+  test('les cartes de Rencontres quand iNaturalist ne répond pas : elles le disent, « Réessayer » les fait venir', async ({ app, page }) => {
+    let down = true;
+    await page.route(/^https:\/\/api\.inaturalist\.org\//, route => down ? route.fulfill({ status: 503, body: '' }) : route.fallback());
+    await app.open(`#/layout/[map(r=500m),deck,plant.status]?${AT}`);
+    const said = page.locator('dl-deck .empty');
+    // Said, with what to do — never « Les cartes arrivent… » for cards that will not come.
+    await expect(said).toContainText('iNaturalist ne répond pas');
+    await expect(said).not.toContainText('Les cartes arrivent');
+    await expect(page.locator('dl-deck ma-deck')).toHaveCount(0);
+    // iNaturalist back: « Réessayer » (its failure, remembered a few minutes, forgotten), the cards come.
+    down = false;
+    await page.locator('dl-deck').getByRole('button', { name: 'Réessayer' }).click();
+    await expect(page.locator('dl-deck ma-deck .swipe-card.top')).toHaveAttribute('data-id', String(plantId(AIL)));
+    await expect.poll(() => param(page, 'p')).toBe(String(plantId(AIL)));
+  });
+
+  test('un rayon entre deux crans (r=3km) : le curseur le montre entre 2 et 5 km, l’adresse le garde ; ← → vont aux crans voisins', async ({ app, page }) => {
+    await app.open(`#/layout/[map,place]?${AT}&r=3km`);
+    // Both sliders (the map's, the place's): between the stops of 2 km (3) and 5 km (4), where 3 km is — not on 2 km.
+    for (const cell of ['dl-map', 'dl-place']) {
+      const slider = page.locator(cell + ' input[type="range"]');
+      await expect(slider).toHaveAttribute('aria-valuetext', '3 km');
+      await expect(page.locator(cell + ' .radius b')).toHaveText('3 km');
+      const at = Number(await slider.inputValue());
+      expect(at).toBeGreaterThan(3.3);
+      expect(at).toBeLessThan(3.6);
+    }
+    await expect.poll(() => param(page, 'r')).toBe('3km');
+    // The keys: the stops on either side; touched or dragged, the closest stop.
+    const slider = page.locator('dl-place input[type="range"]');
+    await slider.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(() => param(page, 'r')).toBe('5km');
+    await expect(slider).toHaveValue('4');
+    await expect(page.locator('dl-map input[type="range"]')).toHaveValue('4');
+    await page.keyboard.press('ArrowLeft');
+    await page.keyboard.press('ArrowLeft');
+    await expect.poll(() => param(page, 'r')).toBe('1km');
+    await expect(slider).toHaveValue('2');
+    await slider.fill('5.4');
+    await expect.poll(() => param(page, 'r')).toBe('10km');
+    await expect(slider).toHaveValue('5');
+    // A cell's own radius between two stops, in the editor: kept and chosen, never « par défaut ».
+    await app.go(`#/layout/[map(r=3km),place]?${AT}`);
+    await page.getByRole('button', { name: 'Modifier la disposition' }).click();
+    const choice = cellOf(page, 'map').locator('.tools select[aria-label="Rayon de la zone"]');
+    await expect(choice).toHaveValue('3000');
+    await expect(choice.locator('option:checked')).toHaveText('3 km');
+  });
+
+  test('la grille : le badge du filtre de la colonne Photo sous son nom, jamais par-dessus ni à sa place', async ({ app, page }) => {
+    await app.open('#/layout/[search,results(view=grid)]?photo=avec');
+    const head = cellOf(page, 'results').locator('gf-plant-list .head');
+    const th = head.locator('.th').first();
+    const name = th.locator('button.sort'), badge = th.locator('button.funnel');
+    await expect(name).toHaveText('Photo');
+    await expect(badge).toHaveText('1');
+    const [h, t, n, b] = await Promise.all([head, th, name, badge].map(box));
+    // The name whole (not « P… »), and the badge over none of it.
+    expect(await name.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    expect(n.x + n.width <= b.x || b.x + b.width <= n.x || n.y + n.height <= b.y || b.y + b.height <= n.y).toBe(true);
+    // Both in the column, and in the header's height.
+    for (const r of [n, b]) {
+      expect(r.x).toBeGreaterThanOrEqual(t.x - 0.5);
+      expect(r.x + r.width).toBeLessThanOrEqual(t.x + t.width + 0.5);
+      expect(r.y).toBeGreaterThanOrEqual(h.y - 0.5);
+      expect(r.y + r.height).toBeLessThanOrEqual(h.y + h.height + 0.5);
+    }
+  });
+
+  test('la recherche dans une case étroite (sa largeur minimale) : sa barre tient, rien de coupé ; le tri sous le compte', async ({ app, page }) => {
+    await app.open('#/layout/[search@5,results]?q=ail&photo=avec&family=Amaryllidaceae');
+    const cell = cellOf(page, 'search');
+    await expect(cell.locator('.sub')).toHaveText(/espèces?$/);
+    const c = await box(cell);
+    // Nothing past its edge, at its least width (registry.js), however small the share asked.
+    expect(await cell.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    expect(Math.round(c.width)).toBe(280);
+    // Every control of the bar inside the cell: the field, ✕ and the microphone, the funnel, the sort, the tools, the chips.
+    const bar = cell.locator('gf-results-bar');
+    const controls = bar.locator('input, select, button, a');
+    expect(await controls.count()).toBeGreaterThan(5);
+    for (const r of await controls.evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.width).map(r => ({ x: r.x, right: r.right })))) {
+      expect(r.x).toBeGreaterThanOrEqual(c.x - 0.5);
+      expect(r.right).toBeLessThanOrEqual(c.x + c.width + 0.5);
+    }
+    // The field keeps room to read what is typed; the sort menu on its own line, whole, under the count.
+    expect((await box(bar.locator('gf-plant-search input'))).width).toBeGreaterThan(180);
+    const [count, sort] = await Promise.all([bar.locator('.count'), bar.locator('select')].map(box));
+    expect(sort.y).toBeGreaterThan(count.y + count.height - 1);
+    expect(sort.width).toBeGreaterThan(220);
+  });
+});
+
+/** How many cells a layout as written has (grammar.js). @param {string} spec */
+const cellsOf = spec => {
+  /** @param {import('../../app/layout/grammar.js').LayoutNode} n @returns {number} */
+  const count = n => n.t === 'cell' ? 1 : n.kids.reduce((a, k) => a + count(k), 0);
+  return count(parse(spec).tree);
+};
+
+test('les modèles : aucune case ne déborde, ni la page de côté — même la recherche dans sa colonne étroite (« Grille et photos »)', async ({ app, page }) => {
+  await app.open('#/layout');
+  for (const preset of PRESETS) {
+    // A search with chips (a filter, a family), « Filtrer par », the scope: the bar at its fullest.
+    await app.go(`#/layout/${preset.spec}?${AT}&q=ail&photo=avec&family=Amaryllidaceae`);
+    await expect(page.locator('gf-layout section.cell')).toHaveCount(cellsOf(preset.spec));
+    await expect.poll(() => app.state('results.total')).toBeGreaterThan(0);
+    const tabs = page.locator('gf-layout .tabs [role="tab"]');
+    const panes = Math.max(1, await tabs.count());
+    for (let i = 0; i < panes; i++) {
+      if (await tabs.count()) await tabs.nth(i).click();
+      await page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
+      const over = await page.locator('gf-layout section.cell').evaluateAll(cells => cells
+        .filter(c => c.scrollWidth > c.clientWidth + 1).map(c => `${/** @type {HTMLElement} */ (c).dataset.comp} : ${c.scrollWidth - c.clientWidth} px`));
+      expect(over, `${preset.id}, ${panes > 1 ? 'onglet ' + (i + 1) : 'l’écran'}`).toEqual([]);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    }
+  }
+});
+
+test('une première visite : les cases de la plante attendent la flore, puis la montrent — jamais « Plante introuvable », leur en-tête nommé', async ({ app, page, context }) => {
+  // The flora slow to come (a first visit, 11 MB): the layout is drawn well before it is stored.
+  await context.route(/\/data\/plants\.json(\?|$)/, async route => { await new Promise(done => setTimeout(done, 1500)); await route.fallback(); });
+  const id = plantId(AIL);
+  await page.goto(`#/layout/[media,plant.name]?p=${id}`);
+  await expect(cellOf(page, 'media')).toBeAttached();
+  expect(await app.state('status')).toBe('loading');
+  await app.ready();
+  for (const comp of ['media', 'plant.name']) await expect(cellOf(page, comp).locator('.sub')).toContainText('Ail des ours');
+  await expect(cellOf(page, 'plant.name').locator('gf-plant-detail')).toContainText('Allium ursinum');
+  await expect(cellOf(page, 'media').locator('gf-media-viewer')).toHaveAttribute('plant-id', String(id));
+  await expect(cellOf(page, 'media').locator('gf-media-viewer .empty', { hasText: 'introuvable' })).toHaveCount(0);
+  await expect(cellOf(page, 'media')).not.toContainText('Plante introuvable');
 });
 
 test('un téléphone : les colonnes en onglets ; une plante choisie amène l’onglet de la fiche ; jamais de défilement de côté', async ({ app, page, isMobile }) => {

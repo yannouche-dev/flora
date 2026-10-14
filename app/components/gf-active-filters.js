@@ -35,6 +35,14 @@ export class GfActiveFilters extends LitElement {
     ul::-webkit-scrollbar { display: none; }
     li { flex: none; }
     button { white-space: nowrap; padding-right: 8px; }
+    /* In a narrow results bar (its container, gf-results-bar.js: a free layout's search cell), the chips wrap, every
+       one in sight — a row scrolled sideways, its scrollbar hidden, would keep most of them (and « Tout effacer »)
+       out of reach there; a long one is cut, never wider than the bar. */
+    @container results-bar (max-width: 320px) {
+      ul { flex-wrap: wrap; overflow-x: visible; }
+      li { max-width: 100%; }
+      button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+    }
     button .x { font-size: 1rem; line-height: 1; color: var(--gf-text-muted); }
   `];
 

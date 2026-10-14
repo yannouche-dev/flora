@@ -1,11 +1,12 @@
 // The games around a place (Rencontres, Cueillette prudente, Mosaïque): the pure part of their cards
-// (app/miniapp/kit/cards.js — Cueillette prudente's order, the safety lines of a card's bio, the swipes), each game's
+// (app/miniapp/kit/cards.js — Cueillette prudente's order, the safety lines of a card's bio, the swipes, the slider of
+// the distances: a distance between two stops shown between them, its keys from stop to stop), each game's
 // own session and its hand-over from the shared one of before (core/around-sessions.js), and what a mini-app made in
 // Mes plantes, taken away by « Recommencer » (place-model.js#madeBy, withoutMadeBy, tagLegacy; runtime.js#replayItems).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { bio, deckOf, distLabel, ethnoSentence, harvestOrder, nextDistance, swipe, unswipe } from '../../app/miniapp/kit/cards.js';
+import { bio, deckOf, distanceAt, distanceEvents, distanceKey, distanceNear, distLabel, ethnoSentence, harvestOrder, nextDistance, swipe, unswipe } from '../../app/miniapp/kit/cards.js';
 import { lookalikesOf } from '../../app/core/lookalikes.js';
 import { UNREAD } from '../../app/core/alerts.js';
 import { aroundKept, forgetPlaces, keptPlace, leftAt, migrateDiscover, clearAroundGames } from '../../app/core/around-sessions.js';
@@ -65,6 +66,63 @@ test('cartes : balayées à droite (match) ou à gauche, reprises ; le paquet sa
   assert.equal(nextDistance(50000), undefined);
   assert.equal(ethnoSentence({ sections: [{ theme: 'names', text: 'Son nom vient du latin ursus, l’ours. Et puis…' }] }), 'Son nom vient du latin ursus, l’ours.');
   assert.equal(ethnoSentence(null), '');
+});
+
+test('le curseur des distances : une distance entre deux crans montrée entre eux (3 km entre 2 et 5), jamais sur un cran qu’elle n’est pas ; glissé, le cran le plus proche ; au clavier, de cran en cran', () => {
+  // Its stops: 200 m, 500 m, 1, 2, 5, 10, 20, 50 km (0…7).
+  assert.equal(distanceAt(200), 0);
+  assert.equal(distanceAt(2000), 3);
+  assert.equal(distanceAt(50000), 7);
+  // A free layout's r=3km: between 2 km (3) and 5 km (4), as far along as its ratio (log 1.5 / log 2.5).
+  assert.ok(Math.abs(distanceAt(3000) - (3 + Math.log(1.5) / Math.log(2.5))) < 1e-9);
+  assert.ok(distanceAt(3000) > 3 && distanceAt(3000) < 4);
+  assert.ok(distanceAt(1500) > 2 && distanceAt(1500) < 3);
+  // Before the first stop (a layout's 100 m) or past the last: at that end.
+  assert.equal(distanceAt(100), 0);
+  assert.equal(distanceAt(80000), 7);
+  // Dragged, the track touched: the closest stop.
+  assert.equal(distanceNear(3.44), 2000);
+  assert.equal(distanceNear(3.5), 5000);
+  assert.equal(distanceNear('4'), 5000);
+  assert.equal(distanceNear(-1), 200);
+  assert.equal(distanceNear(9), 50000);
+  // The keys: from 3 km, → 5 km and ← 2 km (its two neighbours), never 3 km again by a stop it is not.
+  assert.equal(distanceKey('ArrowRight', 3000), 5000);
+  assert.equal(distanceKey('ArrowUp', 3000), 5000);
+  assert.equal(distanceKey('ArrowLeft', 3000), 2000);
+  assert.equal(distanceKey('ArrowDown', 3000), 2000);
+  assert.equal(distanceKey('ArrowRight', 2000), 5000);
+  assert.equal(distanceKey('ArrowLeft', 2000), 1000);
+  assert.equal(distanceKey('PageUp', 3000), 10000);
+  assert.equal(distanceKey('PageDown', 3000), 1000);
+  assert.equal(distanceKey('Home', 3000), 200);
+  assert.equal(distanceKey('End', 3000), 50000);
+  // At an end, the same distance; another key, none.
+  assert.equal(distanceKey('ArrowRight', 50000), 50000);
+  assert.equal(distanceKey('ArrowLeft', 200), 200);
+  assert.equal(distanceKey('ArrowLeft', 100), 100);
+  assert.equal(distanceKey('a', 3000), null);
+  // The listeners: the distance set, the thumb put on its stop; an unchanged one not set again; other keys left alone.
+  let radius = 3000;
+  /** @type {number[]} */
+  const set = [];
+  const on = distanceEvents(() => radius, m => { set.push(m); radius = m; });
+  const target = { value: '3.44' };
+  let prevented = 0;
+  on.keydown({ key: 'ArrowRight', target, preventDefault: () => { prevented++; } });
+  assert.deepEqual(set, [5000]);
+  assert.equal(target.value, '4');
+  assert.equal(prevented, 1);
+  on.keydown({ key: 'Tab', target, preventDefault: () => { prevented++; } });
+  assert.equal(prevented, 1);
+  target.value = '4.3';
+  on.input({ target });
+  assert.deepEqual(set, [5000]);
+  assert.equal(target.value, '4');
+  target.value = '5.6';
+  on.input({ target });
+  assert.deepEqual(set, [5000, 20000]);
+  assert.equal(target.value, '6');
 });
 
 test('sessions : la partie partagée d’avant donnée à la dernière jouée (sinon Rencontres), une fois ; « Oublier ma position »', () => {

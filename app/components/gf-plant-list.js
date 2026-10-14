@@ -105,13 +105,16 @@ export class GfPlantList extends LitElement {
       font-weight: 600;
       color: var(--gf-text-muted);
     }
-    .th { display: flex; align-items: center; gap: 2px; min-width: 0; }
+    /* A column too narrow for its name and its filter's badge side by side (Photo: 40 px) puts the badge under the
+       name, never over it — or the name cut to « P… »: both stay whole and readable, in the header's height. */
+    .th { display: flex; flex-wrap: wrap; align-items: center; gap: 1px 2px; min-width: 0; }
     .th button {
       font: inherit;
       color: inherit;
       background: none;
       border: 0;
-      padding: 4px 2px;
+      padding: 3px 2px;
+      line-height: 1.2;
       cursor: pointer;
       border-radius: 6px;
       white-space: nowrap;
@@ -127,6 +130,7 @@ export class GfPlantList extends LitElement {
       flex: none;
       font-size: 0.7rem;
       font-weight: 700;
+      line-height: 1.1;
       padding: 1px 6px;
       border-radius: 999px;
       background: var(--gf-accent);

@@ -418,7 +418,7 @@ export class GfLayout extends LitElement {
         ? html`<label><input type="checkbox" .checked=${Boolean(r.params[key])} @change=${(/** @type {any} */ e) => setParam(key, e.target.checked)} /> ${ps.label}</label>`
         : html`<select aria-label=${ps.label} title=${ps.label} @change=${(/** @type {any} */ e) => setParam(key, e.target.value === '' ? null : ps.kind === 'distance' ? Number(e.target.value) : e.target.value)}>
             <option value="" ?selected=${!r.given.has(key)}>${ps.label} : par défaut</option>
-            ${(ps.kind === 'distance' ? DISTANCES.map(d => [String(d), distanceLabel(d)]) : Object.entries(ps.values ?? {})).map(([v, label]) => html`<option value=${v} ?selected=${r.given.has(key) && String(r.params[key]) === v}>${label}</option>`)}
+            ${(ps.kind === 'distance' ? distanceChoices(r.given.has(key) ? r.params[key] : null).map(d => [String(d), distanceLabel(d)]) : Object.entries(ps.values ?? {})).map(([v, label]) => html`<option value=${v} ?selected=${r.given.has(key) && String(r.params[key]) === v}>${label}</option>`)}
           </select>`) : nothing}
       <button type="button" title="Une cellule à droite" aria-label="Ajouter une cellule à droite" @click=${() => this.#editDraft(t => splitAt(t, path, 'row', makeCell('plant')))}>${icon('chevron-bar-right')}</button>
       <button type="button" title="Une cellule en dessous" aria-label="Ajouter une cellule en dessous" @click=${() => this.#editDraft(t => splitAt(t, path, 'col', makeCell('plant')))}>${icon('chevron-down')}</button>
@@ -557,6 +557,12 @@ export class GfLayout extends LitElement {
         : narrow ? this.#tabs(tree) : html`<div class="grid">${this.#split(tree, [], 0, false)}</div>`}</div>`;
   }
 }
+
+/**
+ * The radii a cell's tools offer: the slider's stops, and the one the cell gives when it is none of them (r=3km: kept,
+ * in its place, never shown as « par défaut »). @param {number | null} given @returns {number[]}
+ */
+const distanceChoices = given => given == null || DISTANCES.includes(given) ? DISTANCES : [...DISTANCES, given].sort((a, b) => a - b);
 
 /** The layout of an address as text (its percent-encoding undone). @param {string} spec */
 function decodeSpec(spec) {

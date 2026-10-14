@@ -29,15 +29,26 @@ export class GfResultsBar extends LitElement {
   };
 
   static styles = [ui, css`
+    /* Never wider than the room it is given — a free layout's search cell may be 280 px (layout/registry.js): its one
+       column cannot grow past it (an auto one took the widest row's width, the field and the buttons then cut off by
+       the cell), and its rows give way below (the container query). The sides narrower with it (4 % of the room). */
     :host {
       display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      container: results-bar / inline-size;
       gap: 8px;
-      padding: 10px 16px;
+      padding: 10px clamp(10px, 4%, 16px);
       background: var(--gf-bg);
       border-bottom: 1px solid var(--gf-border);
       font-size: 0.875rem;
     }
     .row { display: flex; align-items: center; gap: 8px; }
+    /* Too narrow for the count, the sort menu and the tools on one line (the menu would shrink past its words): the
+       count and the tools on the first, the menu on its own below, whole. A phone keeps one line (wider than this). */
+    @container results-bar (max-width: 320px) {
+      .row { flex-wrap: wrap; row-gap: 6px; }
+      .row select { order: 1; flex: 1 1 100%; }
+    }
     /* Icon-only toggles and actions of the row (compact, share): round, same height as the other controls. */
     .tool { flex: none; width: 34px; height: 34px; min-height: 0; padding: 0; display: inline-grid; place-items: center; font-size: 1rem; }
     .search { display: flex; gap: 8px; align-items: center; }

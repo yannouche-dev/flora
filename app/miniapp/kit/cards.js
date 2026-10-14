@@ -1,8 +1,8 @@
 // @ts-check
 // The cards of the plants around a place (Rencontres, Cueillette prudente, Mosaïque): what is pure about them — the
-// distances offered and their words, the order of Cueillette prudente (only the plants of a dangerous confusion, the
-// deadliest first), the deck (the cards not yet swiped), a swipe kept or taken back, the first sentence of what
-// Wikipédia says, and a card's short « bio », its safety lines first. No DOM, no network: tested under Node
+// distances offered, their words and their slider, the order of Cueillette prudente (only the plants of a dangerous
+// confusion, the deadliest first), the deck (the cards not yet swiped), a swipe kept or taken back, the first sentence
+// of what Wikipédia says, and a card's short « bio », its safety lines first. No DOM, no network: tested under Node
 // (tests/unit/around-cards.test.mjs).
 
 import { UNREAD } from '../../core/alerts.js';
@@ -28,8 +28,69 @@ export const distWords = m => {
 export const distMood = m => m <= 200 ? 'Juste devant la porte' : m <= 1000 ? 'Le quartier' : m <= 5000 ? 'Une balade à pied' : m <= 20000 ? 'Un tour à vélo' : 'Toute la région';
 /** The next distance offered past `m` (none past 50 km). @param {number} m */
 export const nextDistance = m => DISTANCES.find(d => d > m);
-/** The slider's position of a distance. @param {number} m */
-export const distanceAt = m => Math.max(0, DISTANCES.indexOf(m));
+
+// A slider of the distances (Rencontres' « Jusqu'où ? », a free layout's radius): its stops are DISTANCES, each the
+// same width, and its value a position among them — any distance shown where it is, never moved to a stop it is not:
+// a free layout's address may say r=3km, which sits between 2 and 5 km (the thumb there, the label « 3 km »). So the
+// input is step="any": dragged or touched, it gives the closest stop (distanceNear), and its keys are its own
+// (distanceKey: from stop to stop — the browser's would creep by hundredths).
+
+/**
+ * The slider's position of a distance: its stop (0…7), or between the two stops around it, as far along as its ratio
+ * to them (3 km: 0.44 of the way from 2 to 5 km); before the first stop or past the last, at that end.
+ * @param {number} m
+ */
+export function distanceAt(m) {
+  const at = DISTANCES.indexOf(m);
+  if (at >= 0) return at;
+  const next = DISTANCES.findIndex(d => d > m);
+  if (next <= 0) return next === 0 ? 0 : DISTANCES.length - 1;
+  return next - 1 + Math.log(m / DISTANCES[next - 1]) / Math.log(DISTANCES[next] / DISTANCES[next - 1]);
+}
+
+/** The stop closest to a position of the slider (a thumb dragged, the track touched). @param {number} at */
+export const distanceNear = at => DISTANCES[Math.min(DISTANCES.length - 1, Math.max(0, Math.round(Number(at) || 0)))];
+
+/**
+ * The distance a key gives on the slider, from `m`: → ↑ the next stop past it, ← ↓ the one before (from between two
+ * stops: one of those two), Page ↑ / Page ↓ two stops, Début / Fin the ends (at an end, `m` itself); null for any other key.
+ * @param {string} key @param {number} m @returns {number | null}
+ */
+export function distanceKey(key, m) {
+  const up = (/** @type {number} */ n) => { const past = DISTANCES.filter(d => d > m); return past.length ? past[Math.min(n, past.length) - 1] : m; };
+  const down = (/** @type {number} */ n) => { const before = DISTANCES.filter(d => d < m); return before.length ? before[Math.max(0, before.length - n)] : m; };
+  switch (key) {
+    case 'ArrowRight': case 'ArrowUp': return up(1);
+    case 'ArrowLeft': case 'ArrowDown': return down(1);
+    case 'PageUp': return up(2);
+    case 'PageDown': return down(2);
+    case 'Home': return DISTANCES[0];
+    case 'End': return DISTANCES[DISTANCES.length - 1];
+    default: return null;
+  }
+}
+
+/**
+ * The listeners of a distance slider (`@input`, `@keydown`): the distance set, and the thumb put on it at once (a
+ * drag between two stops shows the stop it gives, not where the pointer is).
+ * @param {() => number} now the distance shown @param {(m: number) => void} set
+ * @returns {{ input: (e: any) => void, keydown: (e: any) => void }}
+ */
+export function distanceEvents(now, set) {
+  const to = (/** @type {any} */ e, /** @type {number} */ m) => {
+    if (m !== now()) set(m);
+    e.target.value = String(distanceAt(m));
+  };
+  return {
+    input: e => to(e, distanceNear(e.target.value)),
+    keydown: e => {
+      const m = distanceKey(e.key, now());
+      if (m === null) return;
+      e.preventDefault();
+      to(e, m);
+    }
+  };
+}
 export const MONTH = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
 /** The cards shown at first in « Toutes », and each « Voir plus ». */
 export const PAGE = 12;
