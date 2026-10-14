@@ -1099,7 +1099,7 @@ export class GfMediaViewer extends LitElement {
       ${this.barOut ? nothing : html`<div class="bar">
         ${this.compact ? html`${icon('images')}<h2>${this.label || 'Médias'}</h2>` : html`<h2></h2>`}
         ${this.#controls(kinds, item, shown, at)}
-        ${this.compact ? html`<button class="icon-btn" type="button" title="Ouvrir en grand, à côté de la fiche" aria-label="Ouvrir les médias en volet"
+        ${this.compact ? html`<button class="icon-btn" type="button" title="Ouvrir en grand, à côté de la fiche" aria-label="Ouvrir les médias en panneau"
           @click=${() => this.#toPane()}>${icon('arrows-angle-expand')}</button>` : nothing}
       </div>`}
       ${!item ? (this._done ? this.#empty(plant) : this.#skeleton()) : this.#view === 'mosaic' ? this.#mosaic(shown) : html`

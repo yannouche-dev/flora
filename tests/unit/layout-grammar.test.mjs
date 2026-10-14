@@ -20,7 +20,7 @@ function read(text) {
   return { text: G.serialize(r.tree), errors: p.errors.map(e => e.message), problems: r.problems.map(x => x.message), tree: r.tree, cells: r.cells };
 }
 
-test('les exemples de la demande : colonnes, une colonne coupée en lignes, paramètres et rubriques', () => {
+test('les exemples de la demande : colonnes, une colonne coupée en lignes, paramètres et blocs', () => {
   const a = read('[map:radius(20), search, fiche]');
   assert.equal(a.text, '[map(r=20km),search,plant]');
   assert.deepEqual([a.errors, a.problems], [[], []]);
@@ -116,7 +116,7 @@ test('composant inconnu : une case qui le dit et propose le plus proche ; param�
     'Carte : « loin » n’est pas une valeur de rayon de la zone (attendu : une distance (500m, 2km)).',
     'Carte : « nuit » n’est pas une valeur de fond de carte (attendu : photo, plan).',
     'Carte : paramètre inconnu « zoom ».',
-    'Fiche : rubrique inconnue « inconnue » — la fiche entière est montrée.'
+    'Fiche : bloc inconnu « inconnue » — la fiche entière est montrée.'
   ]);
   // Defaults, and the parameters given.
   const map = resolve(G.cell('map'));
@@ -152,7 +152,7 @@ test('chaque nom du registre se lit, et les modèles sont des dispositions sans 
   }
 });
 
-test('le menu des colonnes (téléphone) : l’icône de chaque case, chaque rubrique de la fiche la sienne ; une présentation, un oui ou un non choisis, leur marque ; son nom entier', () => {
+test('le menu des colonnes (téléphone) : l’icône de chaque case, chaque bloc de la fiche le sien ; une présentation, un oui ou un non choisis, leur marque ; son nom entier', () => {
   /** A cell as typed → its icon, its mark (null: as by default), its whole name. @param {string} text */
   const look = text => { const r = resolve(G.parse(text).tree.kids[0]); const m = cellMark(r); return [cellIcon(r), m && m.short, cellName(r)]; };
   assert.deepEqual(look('map(r=5km)'), ['map', null, 'Carte'], 'un rayon n’est pas une marque : la zone est celle de toute la disposition');
@@ -172,7 +172,7 @@ test('le menu des colonnes (téléphone) : l’icône de chaque case, chaque rub
   assert.deepEqual(look('mpa'), ['question-circle', null, 'mpa (inconnu)'], 'un composant inconnu : une question, son nom tel que tapé');
   const blocks = names().filter(n => n.startsWith('plant.'));
   const icons = blocks.map(n => look(n)[0]);
-  assert.equal(new Set(icons).size, blocks.length, 'chaque rubrique son icône');
+  assert.equal(new Set(icons).size, blocks.length, 'chaque bloc son icône');
   for (const [i, n] of blocks.entries()) assert.ok(!COMPONENTS.some(c => c.icon === icons[i]) && icons[i] !== 'question-circle', `${n} : ni l’icône d’un composant ni celle d’un inconnu`);
   // Three modes of the sheet told apart: one letter, two where another mode starts with it.
   assert.deepEqual(look('fiche(épuré)'), ['card-text', 'É', 'Fiche (Épuré)']);

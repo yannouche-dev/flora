@@ -26,10 +26,10 @@ const where = (/** @type {import('@playwright/test').Page} */ page, /** @type {s
 
 test('mode King : « Déplacer vers… » un nouveau volet, puis de retour dans la fiche', async ({ app, page }) => {
   await kingSheet(app);
-  await moveTo(page, 'Classification', 'Nouveau volet à droite');
+  await moveTo(page, 'Classification', 'Nouveau panneau à droite');
   await expect.poll(() => where(page, 'taxonomy')).toBe(true);
   await expect(page.locator('gf-plant-detail [data-pane]').first()).toBeVisible();
-  await expect(page.locator('gf-plant-detail .said')).toHaveText('« Classification » : nouveau volet à droite de la fiche');
+  await expect(page.locator('gf-plant-detail .said')).toHaveText('« Classification » : nouveau panneau à droite de la fiche');
   await moveTo(page, 'Classification', 'Dans la fiche');
   await expect.poll(() => where(page, 'taxonomy')).toBe(false);
 });
@@ -45,8 +45,8 @@ test('TEST-6 / GAP3-10 : un volet de trop est refusé et annoncé, la mise en pa
   });
   expect(built).toEqual([true, true, true, true, true, true]);
   const before = await page.evaluate(async () => (await import('/app/core/sheet-blocks.js')).exportLayout());
-  await moveTo(page, 'Classification', 'Nouveau volet à droite');
-  await expect(page.locator('gf-plant-detail .said')).toHaveText('« Classification » : pas déplacé, trop de volets imbriqués');
+  await moveTo(page, 'Classification', 'Nouveau panneau à droite');
+  await expect(page.locator('gf-plant-detail .said')).toHaveText('« Classification » : pas déplacé, trop de panneaux imbriqués');
   expect(await where(page, 'taxonomy')).toBe(false);
   // Exported, everything reset, imported back: the same panes (the file the user keeps is never refused).
   const after = await page.evaluate(async () => {

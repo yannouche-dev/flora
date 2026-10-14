@@ -541,7 +541,7 @@ export class GfFlora extends LitElement {
         <div class="title">${blockTitle(key)} <span class="pane-plant">${this.#paneName}</span></div>
         ${phone ? nothing : html`<button class="icon-btn" type="button" aria-pressed=${String(this._paneFull)} title=${this._paneFull ? 'Quitter le plein écran' : 'Plein écran'}
           aria-label="Plein écran" @click=${() => { this._paneFull = !this._paneFull; }}>${icon(this._paneFull ? 'fullscreen-exit' : 'arrows-fullscreen')}</button>`}
-        <button class="icon-btn" type="button" title="Fermer le volet" aria-label="Fermer le volet" @click=${this.#closePane}>${icon('x-lg')}</button>
+        <button class="icon-btn" type="button" title="Fermer le panneau" aria-label="Fermer le panneau" @click=${this.#closePane}>${icon('x-lg')}</button>
       </div>
       <gf-plant-detail embedded only=${key} plant-id=${id} view=${view} .paneAt=${route.at ?? null} .paneStart=${this.#paneStart}></gf-plant-detail>
     </section>`;

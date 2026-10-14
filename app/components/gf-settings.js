@@ -408,7 +408,7 @@ export class GfSettings extends LitElement {
       pressDock(e, { root: scope, key, label: blockTitle(key),
         onDrop: ({ target, zone }) => { if (zone === 'sheet') toSheet(mode, key); else dockBlock(mode, key, target, zone); } });
     };
-    const chip = (/** @type {string} */ k) => html`<button type="button" class="mt-chip ${isHidden(mode, k) ? 'off' : ''}" data-drag-key=${k} title=${'Glisser « ' + blockTitle(k) + ' » vers un volet'}
+    const chip = (/** @type {string} */ k) => html`<button type="button" class="mt-chip ${isHidden(mode, k) ? 'off' : ''}" data-drag-key=${k} title=${'Glisser « ' + blockTitle(k) + ' » vers un panneau'}
       @pointerdown=${(/** @type {PointerEvent} */ e) => press(e, k)}>${blockTitle(k)}</button>`;
     /** @param {any} n @returns {unknown} */
     const node = n => {
@@ -418,7 +418,7 @@ export class GfSettings extends LitElement {
       const total = n.sizes.reduce((/** @type {number} */ a, /** @type {number} */ b) => a + b, 0);
       return html`<div class="mt-split ${n.dir}">${n.kids.map((/** @type {any} */ k, /** @type {number} */ i) => html`<div class="mt-cell" style=${`flex:${n.sizes[i] / total} 1 0`}>${node(k)}</div>`)}</div>`;
     };
-    return html`<div class="mini-tree" data-drop-node="root" aria-label=${'Volets du panneau Plante, ' + modeLabel(mode) + ' : glisser un bloc vers un bord (nouveau volet), au centre d’un volet (onglet) ou dans la fiche'}>${node(tree)}</div>`;
+    return html`<div class="mini-tree" data-drop-node="root" aria-label=${'Panneaux de la fiche Plante, ' + modeLabel(mode) + ' : glisser un bloc vers un bord (nouveau panneau), au centre d’un panneau (onglet) ou dans la fiche'}>${node(tree)}</div>`;
   }
 
   /** A block's sub-blocks in a mode. @param {any} mode @param {string} block */
@@ -480,7 +480,7 @@ export class GfSettings extends LitElement {
   #modes() {
     const modes = this.#store.state.modes;
     return html`<h3 id="modes">Modes d’affichage</h3>
-      <p class="muted">Créez vos modes à partir d’un autre (ses blocs, sa disposition, ses volets, ses modules et sa grille sont copiés) :
+      <p class="muted">Créez vos modes à partir d’un autre (ses blocs, sa disposition, ses panneaux, ses modules et sa grille sont copiés) :
         par exemple une visionneuse de médias toute simple, ou un poste scientifique qui croise toutes les données. Chacun s’arrange ensuite
         en mode King et dans les modules ; il s’affiche à la manière de son modèle (Épuré, Standard ou Scientifique).</p>
       <ul class="mode-list">
@@ -547,7 +547,7 @@ export class GfSettings extends LitElement {
   /** « Disposition libre » (app/layout): the ready-made layouts, and one of one's own. */
   #layouts() {
     return html`<h2 id="disposition">Disposition libre</h2>
-      <p class="muted">Un écran à composer avec les outils de GeoFlora côte à côte — la carte, la recherche, la fiche ou une seule de ses rubriques, les photos,
+      <p class="muted">Un écran à composer avec les outils de GeoFlora côte à côte — la carte, la recherche, la fiche ou un seul de ses blocs, les photos,
         les cartes à swiper —, tous reliés : une plante choisie dans l’un s’affiche dans tous les autres, la zone choisie sur la carte filtre la recherche.
         Colonnes et lignes se redimensionnent ; la disposition s’écrit dans l’adresse, un lien la partage telle quelle.</p>
       <ul class="layouts">${PRESETS.map(p => html`<li><a href=${href.layout(p.spec)}><b>${p.title}</b><small>${p.about}</small></a></li>`)}</ul>

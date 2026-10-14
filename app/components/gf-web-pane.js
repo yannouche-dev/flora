@@ -47,7 +47,7 @@ export class GfWebPane extends LitElement {
     let host = '', path = '';
     if (url) { try { const u = new URL(url); host = u.hostname.replace(/^www\./, ''); path = decodeURIComponent(u.pathname + u.search); } catch { host = url; } }
     if (this.inactive) {
-      return html`<div class="empty">${icon('globe-europe-africa')}<p>Placez ce bloc dans un volet : les liens vers d’autres sites (Wikipédia, INPN, GBIF…) s’y ouvriront.</p></div>`;
+      return html`<div class="empty">${icon('globe-europe-africa')}<p>Placez ce bloc dans un panneau : les liens vers d’autres sites (Wikipédia, INPN, GBIF…) s’y ouvriront.</p></div>`;
     }
     return html`<div class="bar">
         <button class="icon-btn" type="button" aria-label="Page précédente" title="Page précédente" ?disabled=${this._at <= 0} @click=${() => goPage(-1)}>${icon('arrow-left')}</button>

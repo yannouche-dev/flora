@@ -561,7 +561,7 @@ export class GfLayout extends LitElement {
       <details><summary>Comment l’écrire</summary>
         <p><code>[a,b,c]</code> : trois colonnes ; <code>[a,[b,c]]</code> : la 2<sup>e</sup> colonne coupée en deux lignes ; un niveau de plus coupe une ligne en colonnes.
           <code>@30</code> après une cellule ou une liste : sa part en %. Paramètres entre parenthèses : <code>map(r=2km,base=plan)</code>, <code>results(grid)</code>, <code>search(filters=1)</code>,
-          <code>media(mosaic)</code>, <code>plant(scientific)</code>. Une rubrique de la fiche seule : <code>plant.wikipedia</code>, <code>plant.calendar</code>, <code>plant.uses</code>…
+          <code>media(mosaic)</code>, <code>plant(scientific)</code>. Un bloc de la fiche seul : <code>plant.wikipedia</code>, <code>plant.calendar</code>, <code>plant.uses</code>…
           Composants : ${COMPONENTS.map((c, i) => html`${i ? ', ' : ''}<code>${c.id}</code> (${c.title})`)}.</p>
       </details>
     </section>`;
@@ -733,7 +733,7 @@ export class GfLayout extends LitElement {
   #empty() {
     return html`<div class="empty">
       <h2>Composez votre écran</h2>
-      <p>Une disposition met côte à côte les outils de GeoFlora — la carte, la recherche, la fiche ou une seule de ses rubriques, les photos, les cartes à swiper —,
+      <p>Une disposition met côte à côte les outils de GeoFlora — la carte, la recherche, la fiche ou un seul de ses blocs, les photos, les cartes à swiper —,
         tous reliés : une plante choisie dans l’un s’affiche dans tous les autres. Elle s’écrit dans l’adresse : un lien la partage.
         « Modifier la disposition » pour l’écrire, ou partez d’un modèle :</p>
       <ul>${PRESETS.map(p => html`<li><a href=${href.layout(p.spec)}><b>${p.title}</b><small>${p.about}</small><code>${p.spec}</code></a></li>`)}</ul>
