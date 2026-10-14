@@ -5,14 +5,28 @@
 // an area touched in the sheet — the plant's own photo on each, its credit even when found online; each record once),
 // a map with many points alone (each its photo, in sight), and the 3D « Observations autour » (each its plant's photo,
 // the same whichever sources are on: its taxon's on iNaturalist, else the flora's). Every source answered here
-// (fixtures.mjs answerPlantNear, answerObservations; tiles.mjs), the 3D in real WebGL (SwiftShader).
+// (fixtures.mjs answerPlantNear, answerObservations; tiles.mjs), the 3D in real WebGL (SwiftShader). What the colours
+// mean and how many each source has: the map's legend, in its panel « Carte » (never written by the map: quiet.mjs),
+// each new count said once by its live region.
 import { test, expect, answerObservations, answerPlantNear, plantId } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
+import { mapSaid, openPanel } from './quiet.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page @typedef {import('@playwright/test').Locator} Locator */
 
 // Software WebGL for the 3D (as maps3d.spec.mjs); the 2D maps never ask for it.
 test.use({ launchOptions: { args: ['--enable-unsafe-swiftshader'] } });
+
+/**
+ * The map's legend, in its panel « Carte »: `check` runs on it (its lines), then the panel is closed.
+ * @param {Locator} map @param {(legend: Locator) => Promise<void>} check
+ */
+async function inLegend(map, check) {
+  const panel = await openPanel(map);
+  await check(panel.locator('.legend.page'));
+  await panel.getByRole('button', { name: 'Fermer', exact: true }).click();
+  await expect(panel).toBeHidden();
+}
 
 /** No point drawn in a source's colour, nor as a coloured bubble, nor as a bare dot (fewer than 40 alone here). */
 const COLOURED = '.gf-obs-gbif, .gf-obs-inat, .gf-occ-gbif, .gf-occ-inat, .gf-occ-group-gbif, .gf-occ-group-inat, .gf-occ-group-occ, path.gf-occ, path.gf-obs, .gf-gl-dot.gf-occ';
@@ -106,10 +120,15 @@ test('fiche plante : autour de moi, les occurrences GBIF comme les observations 
   await allPhotos(map, 12, 'iNaturalist and GBIF');
   expect(asked.some(u => u.includes('api.inaturalist.org') && u.includes('taxon_id=48460'))).toBe(true);
   expect(asked.some(u => u.includes('api.gbif.org') && u.includes('geoDistance='))).toBe(true);
-  // The legend and the buttons: the plant's marker for both sources, never a source's colour.
-  await expect(block.locator('.legend')).toContainText('iNaturalist (6)');
-  await expect(block.locator('.legend')).toContainText('GBIF (7 à moins de 5 km, 6 placées en points, 1 déjà sur iNaturalist)');
-  await expect(block.locator('.legend i.obs')).toHaveCount(2);
+  // The legend (the map's panel; nothing written by the map) and the buttons: the plant's marker for both sources,
+  // never a source's colour; its counts said once.
+  await expect(block.locator('.legend')).toHaveCount(0);
+  await inLegend(map, async legend => {
+    await expect(legend).toContainText('iNaturalist (6)');
+    await expect(legend).toContainText('GBIF (7 à moins de 5 km, 6 placées en points, 1 déjà sur iNaturalist)');
+    await expect(legend.locator('i.obs')).toHaveCount(2);
+  });
+  await expect(mapSaid(map)).toContainText('GBIF (7 à moins de 5 km, 6 placées en points, 1 déjà sur iNaturalist)');
   await expect(block.locator('.scope [data-layer="gbif-near"] i.obs, .scope [data-layer="inat"] i.obs')).toHaveCount(2);
 
   // A GBIF point's card: the plant's photo and its credit, its names, when and where — and its source; an iNaturalist
@@ -130,7 +149,7 @@ test('fiche plante : autour de moi, les occurrences GBIF comme les observations 
   });
   await expect(block.locator('.chip[data-kind="filter"] i.obs')).toHaveCount(1);
   await allPhotos(map, 22, 'an area touched, the observations around me shown');
-  await expect(block.locator('.legend')).toContainText('Occurrences GBIF : Île-de-France (120, 11 placées en points, 1 déjà sur iNaturalist)');
+  await inLegend(map, legend => expect(legend).toContainText('Occurrences GBIF : Île-de-France (120, 11 placées en points, 1 déjà sur iNaturalist)'));
 });
 
 test('fiche plante : GBIF seul autour de moi, puis les occurrences d’une zone touchée — la photo de la plante sur chacune', async ({ app, page }) => {
@@ -139,7 +158,7 @@ test('fiche plante : GBIF seul autour de moi, puis les occurrences d’une zone 
   const map = block.locator('gf-map');
   // GBIF alone: its 7, its copy of an iNaturalist observation kept (iNaturalist's are not shown).
   await allPhotos(map, 7, 'GBIF alone');
-  await expect(block.locator('.legend')).toContainText('GBIF (7 à moins de 5 km)');
+  await inLegend(map, legend => expect(legend).toContainText('GBIF (7 à moins de 5 km)'));
   await plantCard(await cardSaying(map, 'Observation : GBIF', app.phone));
 
   // An area touched in the sheet (a région): its occurrences, the same photo markers.
@@ -153,8 +172,11 @@ test('fiche plante : GBIF seul autour de moi, puis les occurrences d’une zone 
   await expect(block.locator('.chip[data-kind="filter"] i.obs')).toHaveCount(1);
   // iNaturalist's not shown: GBIF's copy of one of its observations kept.
   await allPhotos(map, 12, 'an area touched');
-  await expect(block.locator('.legend')).toContainText('Occurrences GBIF : Île-de-France (120, 12 placées en points)');
-  await expect(block.locator('.legend i.obs')).toHaveCount(1);
+  await inLegend(map, async legend => {
+    await expect(legend).toContainText('Occurrences GBIF : Île-de-France (120, 12 placées en points)');
+    await expect(legend.locator('i.obs')).toHaveCount(1);
+  });
+  await expect(mapSaid(map)).toContainText('Occurrences GBIF : Île-de-France (120, 12 placées en points)');
   const card = await cardSaying(map, 'Observation : GBIF · Inventaire régional', app.phone);
   await plantCard(card);
   await expect(card).toContainText('Essonne');
@@ -193,6 +215,8 @@ test('fiche plante sans photo dans la flore : le point touché dans la fiche, pu
 });
 
 test('beaucoup de points seuls : chacun la photo de sa plante là où on les voit, jamais un point nu ; ceux qu’un déplacement amène aussi', async ({ app, page }) => {
+  // The empty Carte's first-use hint already seen: its strip above the map would move the map's box once it comes.
+  await page.addInitScript(() => localStorage.setItem('geoflora.hints', JSON.stringify(['carte-empty'])));
   await app.open('#/map');
   const map = page.locator('gf-map-page gf-map');
   await expect(map.locator('.leaflet-container')).toBeVisible();

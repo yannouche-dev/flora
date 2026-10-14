@@ -24,6 +24,7 @@ import { PaneSizer, paneStyles } from '../core/panes.js';
 import { config } from '../config.js';
 import { hideImg, showImg } from '../core/img.js';
 import { creditText, thumbCredit } from '../core/credit.js';
+import { hintView, takeHint } from '../core/hints.js';
 
 const shortDate = (/** @type {string} */ iso) =>
   new Date(iso + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
@@ -42,7 +43,8 @@ export class GfMapPage extends LitElement {
     _spots: { state: true },
     _view: { state: true },
     _plants: { state: true },
-    _toast: { state: true },
+    _loaded: { state: true },
+    _emptyHint: { state: true },
     _error: { state: true },
     _plantMenu: { state: true },
     _around: { state: true },
@@ -214,13 +216,11 @@ export class GfMapPage extends LitElement {
     .list .dist { font-variant-numeric: tabular-nums; color: var(--gf-text-muted); font-size: 0.85rem; text-align: right; }
     .list .sub { grid-column: 2 / -1; font-size: 0.8rem; color: var(--gf-text-muted); }
     .empty { padding: 32px 20px; text-align: center; color: var(--gf-text-muted); max-width: 420px; margin: 0 auto; }
-    .toast {
-      position: absolute;
-      z-index: 800;
-      left: 50%;
-      transform: translateX(-50%);
-      top: 12px;
-    }
+    /* The empty Carte's first-use hint (once per device, its ✕): a strip above the map, not over it — so it never
+       covers a control (Leaflet's zoom and scale, MapLibre's, the « Observations autour » chip). */
+    .empty-hint { flex: none; margin: 8px 12px 0; box-shadow: none; background: var(--gf-surface-2); }
+    .bar .count.error { color: var(--gf-danger); display: inline-flex; align-items: center; gap: 6px; }
+    .bar .count.error .link { min-height: 0; padding: 0 4px; }
   `];
 
   #geo = new GeoController(this);
@@ -245,8 +245,10 @@ export class GfMapPage extends LitElement {
     this._flore = null;
     /** One plant filtered: its GBIF distribution, offered in the Carte panel. @type {{ key: number, label: string } | null} */
     this._distribution = null;
-    /** @type {string | null} */
-    this._toast = null;
+    /** The places read once (before: no « no place yet » hint). */
+    this._loaded = false;
+    /** The empty Carte's way to start: a first-use hint (core/hints.js), until its ✕. */
+    this._emptyHint = false;
     this._plantMenu = false;
     /**
      * "Autour": iNaturalist species observed in a circle.
@@ -272,7 +274,7 @@ export class GfMapPage extends LitElement {
     const id = this.route.spot;
     if (editor && id && places.every(p => p.id === id) && plants.every(p => p.placeId === id)) {
       editor.savePositions({ pin: places[0]?.coordinates ?? null, plants });
-      this.#showToast('Position enregistrée');
+      this.#map?.announce('Position enregistrée');
       return;
     }
     // The moves of each place, applied to it as stored now (in one transaction: nothing changed meanwhile is lost).
@@ -287,13 +289,18 @@ export class GfMapPage extends LitElement {
     for (const { placeId, entryId, plantId, coordinates } of plants) {
       add(placeId, place => withEntry(place, entryId ?? plantId, { coordinates: round(coordinates), accuracy: null }));
     }
+    // Saved: said to screen readers only (the user's own drag needs no toast); failed: one brief toast over the map,
+    // in the top layer (over the full-screen editing frame).
     try {
       for (const [id, list] of changes) await updatePlace(id, place => list.reduce((p, change) => change(p), place));
-      this.#showToast('Position enregistrée');
+      this.#map?.announce('Position enregistrée');
     } catch (error) {
-      this.#showToast('Enregistrement impossible : ' + /** @type {Error} */ (error).message);
+      this.#map?.toast('Enregistrement impossible : ' + /** @type {Error} */ (error).message);
     }
   }
+
+  /** The Carte's map (gf-map: what it says goes through it — the quiet-map rule). @returns {any} */
+  get #map() { return this.renderRoot.querySelector('gf-map'); }
 
   /** @type {AbortController | null} */ #aroundAbort = null;
   #aroundFrames = 0;
@@ -334,11 +341,16 @@ export class GfMapPage extends LitElement {
       const result = await speciesAround(center, radius, abort.signal);
       if (abort.signal.aborted) return;
       this._around = { ...this._around, status: 'ok', result };
+      const n = result.species.length;
+      this.#map?.announce(n ? `Autour : ${n} espèce${n > 1 ? 's' : ''} observée${n > 1 ? 's' : ''}` : 'Autour : aucune observation validée de plante dans ce cercle');
     } catch (error) {
       if (abort.signal.aborted) return;
-      this._around = { ...this._around, status: 'error', off: /** @type {Error} */ (error).name === 'ModuleOffError',
-        error: /** @type {Error} */ (error).name === 'ModuleOffError' ? 'Le module iNaturalist est désactivé.'
-          : navigator.onLine === false ? 'Hors ligne : les observations ne peuvent pas être chargées.' : 'iNaturalist ne répond pas pour le moment.' };
+      const off = /** @type {Error} */ (error).name === 'ModuleOffError';
+      const text = off ? 'Le module iNaturalist est désactivé.'
+        : navigator.onLine === false ? 'Hors ligne : les observations ne peuvent pas être chargées.' : 'iNaturalist ne répond pas pour le moment.';
+      // Asked, failed: one brief toast over the map; the sheet keeps what to do (Réessayer, Réglages).
+      this._around = { ...this._around, status: 'error', off, error: text };
+      this.#map?.toast(text);
     }
   }
 
@@ -354,12 +366,14 @@ export class GfMapPage extends LitElement {
       const t = /** @type {any} */ (plant)?.thumbnail;
       if (t?.url && this._around?.species === species) this._around = { ...this._around, thumb: { url: t.url, credit: thumbCredit(t) } };
     }, () => {});
-    try {
-      const obs = await observationsAround(species.taxonId, around.center, around.radius);
-      if (this._around?.species === species) this._around = { ...this._around, obs };
-    } catch {
-      if (this._around?.species === species) this._around = { ...this._around, obs: [] };
-    }
+    /** @type {any[]} */ let obs = [];
+    try { obs = await observationsAround(species.taxonId, around.center, around.radius); } catch { /* none placed */ }
+    if (this._around?.species !== species) return;
+    this._around = { ...this._around, obs };
+    // How many are on the map: said (the sheet keeps the species' own count).
+    const name = species.common || species.name;
+    this.#map?.announce(obs.length ? `${name} : ${obs.length} point${obs.length > 1 ? 's' : ''} sur la carte${obs.length < species.count ? ' (les plus récents)' : ''}`
+      : `${name} : aucun point localisé`);
   }
 
   /** Search text / family chip of the species list (kept while a species is open). @param {object} patch */
@@ -423,11 +437,13 @@ export class GfMapPage extends LitElement {
     const source = html`<p class="source">Source : <a href=${a.species ? exploreUrl(a.center, a.radius, a.species.taxonId) : exploreUrl(a.center, a.radius)}
       target="_blank" rel="noopener">iNaturalist</a>, observations validées (niveau recherche), toutes dates. Photos d’iNaturalist sous licence libre seulement (CC0, CC BY, CC BY-SA) ; auteur et licence en ouvrant l’espèce.</p>`;
 
-    if (a.status === 'loading') return html`<section class="sheet around" aria-label="Autour">${head}<p class="notes">Chargement des observations…</p></section>`;
-    if (a.status === 'error') return html`<section class="sheet around" aria-label="Autour">${head}<p class="notes">${a.error}</p>
+    // Coming: the sheet's head only (aria-busy; the map's thin line past 400 ms). Failed: the brief toast said why; the
+    // sheet keeps what to do, its button named by it.
+    if (a.status === 'loading') return html`<section class="sheet around" aria-label="Autour" aria-busy="true">${head}</section>`;
+    if (a.status === 'error') return html`<section class="sheet around" aria-label="Autour">${head}
       <div class="actions">${a.off
-        ? html`<a class="button" href=${href.settings()}>Réglages › Modules</a>`
-        : html`<button type="button" @click=${() => this.#searchAround(a.center, a.where)}>Réessayer</button>`}</div></section>`;
+        ? html`<a class="button" href=${href.settings()} title=${a.error || ''}>Réglages › Modules</a>`
+        : html`<button type="button" title=${a.error || ''} @click=${() => this.#searchAround(a.center, a.where)}>Réessayer</button>`}</div></section>`;
 
     const result = /** @type {import('../core/nearby.js').NearbyResult} */ (a.result);
     const s = a.species;
@@ -440,8 +456,7 @@ export class GfMapPage extends LitElement {
           <div><h2>${s.common || s.name}</h2>${s.common ? html`<span class="sci">${s.name}</span>` : nothing}
             ${!s.plantId && s.photo && s.credit && this.#store.state.modules.photos[this.#store.state.mode] ? html`<small class="credit">Photo : ${creditText(s.credit)}</small>` : nothing}</div>
         </div>
-        <div class="meta"><span>${s.count} observation${s.count > 1 ? 's' : ''} dans le cercle</span>
-          <span>${a.obs === null ? 'Chargement des points…' : a.obs?.length ? `${a.obs.length} point${a.obs.length > 1 ? 's' : ''} sur la carte${a.obs.length < s.count ? ' (les plus récents)' : ''}` : 'Aucun point localisé'}</span></div>
+        <div class="meta" aria-busy=${a.obs === null ? 'true' : 'false'}><span>${s.count} observation${s.count > 1 ? 's' : ''} dans le cercle</span></div>
         <div class="actions">
           ${s.plantId ? html`<a class="button primary" href=${href.plant(s.plantId)}>Fiche de la plante</a>` : html`<span class="notes">Absente de la flore de l’app (TAXREF).</span>`}
           <a class="button" href=${exploreUrl(a.center, a.radius, s.taxonId)} target="_blank" rel="noopener">Observations</a>
@@ -533,6 +548,11 @@ export class GfMapPage extends LitElement {
       this.#findDistribution();
       setContext({ mapPlants: [...this._plants] });
     }
+    // What the map says (the quiet-map rule): Autour's plants or points coming — its thin line past 400 ms; the places
+    // unreadable — its state (and the bar's « Réessayer »).
+    const map = this.#map, a = this._around;
+    map?.busy('around', Boolean(a && (a.status === 'loading' || (a.species && a.obs === null))), 'Recherche des observations autour');
+    map?.setStatus('places', this._error, { level: 'error' });
   }
 
   /** Exactly one plant filtered: look up its GBIF taxon, for the distribution layer. */
@@ -625,6 +645,10 @@ export class GfMapPage extends LitElement {
     try {
       this._spots = await listPlaces();
       this._error = null;
+      // No place yet: how to start, said once per device on the map (core/hints.js); then the bar's « 0 lieu » and
+      // the list say it.
+      if (!this._loaded && !this._spots.length) this._emptyHint = takeHint('carte-empty');
+      this._loaded = true;
     } catch (error) {
       console.error(error);
       this._error = 'Lieux illisibles pour le moment : ' + /** @type {Error} */ (error).message;
@@ -682,12 +706,6 @@ export class GfMapPage extends LitElement {
     return fix ? distance(fix.coordinates, spot.geometry.coordinates) : null;
   }
 
-  /** @param {string} message */
-  #showToast(message) {
-    this._toast = message;
-    setTimeout(() => { if (this._toast === message) this._toast = null; }, 2500);
-  }
-
   #plantOptions() {
     const counts = new Map();
     for (const place of this._spots) {
@@ -709,7 +727,9 @@ export class GfMapPage extends LitElement {
     return html`
       <h1 class="visually-hidden">Carte des lieux</h1>
       <div class="bar">
-        <span class="count">${spots.length} lieu${spots.length > 1 ? 'x' : ''}</span>
+        ${this._error ? html`<span class="count error" title=${this._error}>${icon('exclamation-triangle-fill')} Lieux illisibles
+          <button type="button" class="link" @click=${() => this.#load()}>Réessayer</button></span>`
+          : html`<span class="count">${spots.length} lieu${spots.length > 1 ? 'x' : ''}</span>`}
         ${this._flore ? html`<button type="button" class="flore-chip" aria-pressed="true" title="Seulement les lieux qui ont une plante de la recherche Flore"
           @click=${() => this.#navigate({ flore: false })}>${icon('leaf')} Recherche Flore (${this._flore.size.toLocaleString('fr-FR')}) ${icon('x')}</button>` : nothing}
         ${this.#harvest ? html`<button type="button" aria-pressed=${this.route.season ? 'true' : 'false'}
@@ -731,6 +751,7 @@ export class GfMapPage extends LitElement {
 
       <div class="body ${selected && this._view === 'map' && !this._around ? 'with-panel' : ''}" @click=${() => { if (this._plantMenu) this._plantMenu = false; }}>
         ${this._view === 'map' ? html`
+          ${this.#empty()}
           <gf-map
             .spots=${spots}
             .selectedId=${this.route.spot}
@@ -756,21 +777,25 @@ export class GfMapPage extends LitElement {
           ></gf-map>
           ${this._editing || !this._around ? nothing : this.#aroundPanel()}
           ${selected && !this._around ? this.#panel(selected) : nothing}
-        ` : this.#list(spots)}
-
-        ${!this._spots.length && !this._point ? html`
-          <p class="empty" style=${this._view === 'map' ? 'position:absolute;inset:auto 16px 100px;z-index:550;background:var(--gf-surface);border-radius:16px;box-shadow:0 2px 12px rgb(0 0 0 / 25%)' : ''}>
-            Aucun lieu enregistré. Sur place, touchez <strong>+</strong> pour créer un lieu et y noter les plantes qui y poussent, ou ouvrez une fiche plante et touchez « Ajouter un lieu ».
-          </p>` : nothing}
+        ` : html`${this.#list(spots)}${this.#empty()}`}
 
         ${(selected || this._editing) && this._view === 'map' ? nothing : html`
-          <button class="fab" type="button" aria-label="Noter une plante ici"
+          <button class="fab" type="button" aria-label="Noter une plante ici" title="Noter une plante ici : sur place, un lieu créé à votre position"
             @click=${() => this.dispatchEvent(new CustomEvent('open-capture', { bubbles: true, composed: true }))}>+</button>`}
-        ${this._toast ? html`<div class="toast" role="status">${this._toast}</div>` : nothing}
-        ${this._error ? html`<div class="toast" role="alert">${this._error}
-          <button type="button" @click=${() => this.#load()}>Réessayer</button></div>` : nothing}
       </div>
     `;
+  }
+
+  /**
+   * No place yet. The list: says so, and how to start. The map: the same words once per device (a first-use hint, its
+   * ✕, in a strip above the map), never again — then the bar's « 0 lieu » and the list say it (the quiet-map rule, gf-map.js).
+   */
+  #empty() {
+    if (!this._loaded || this._spots.length || this._error) return nothing;
+    const words = html`Aucun lieu enregistré. Sur place, touchez <strong>+</strong> pour créer un lieu et y noter les plantes qui y poussent, ou ouvrez une fiche plante et touchez « Ajouter un lieu ».`;
+    if (this._view === 'list') return html`<p class="empty">${words}</p>`;
+    if (!this._emptyHint || this._point || this._around || this._editing) return nothing;
+    return hintView(words, () => { this._emptyHint = false; }, 'empty-hint');
   }
 
   /** Plant markers of the shown places (only the filtered plants when a plant filter is on). */

@@ -11,7 +11,7 @@ import { plantMarkers } from '../../core/collections.js';
 import { formatAltitude } from '../../core/altitude.js';
 import { href, parse } from '../../core/router.js';
 import { startScreen, startStyles } from '../../components/start-screen.js';
-import { openMap3d } from '../../components/gf-map3d.js';
+import { map3dProblem, openMap3d } from '../../components/gf-map3d.js';
 import { ui } from '../../styles/ui.js';
 import { DONE, countOf, groupsOf, recapOf, write } from './trail-store.js';
 import { trailSessionOf } from './trail-session.js';
@@ -24,9 +24,7 @@ const NO_SPOTS = /** @type {any[]} */ ([]);
 
 export class MaTrailRecap extends LitElement {
   static properties = {
-    app: { attribute: false },
-    /** Why its « Vue 3D » did not open (no WebGL2, the module off), said under its map. */
-    _note3d: { state: true }
+    app: { attribute: false }
   };
 
   static styles = [ui, startStyles, css`
@@ -40,8 +38,6 @@ export class MaTrailRecap extends LitElement {
     /* « Vue 3D », over the recap's map (above Leaflet's panes and controls). */
     .recap-map .map3d { position: absolute; top: 8px; left: 8px; z-index: 1000; min-height: 44px; padding: 0 14px; gap: 6px; border-radius: 999px;
       background: var(--gf-surface); color: var(--gf-text); border: 1px solid var(--gf-border); box-shadow: var(--gf-shadow); font-weight: 600; }
-    .note3d { margin: 0; font-size: 0.8rem; color: var(--gf-text-muted); text-align: center; }
-    .note3d:empty { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
     .met { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; }
     .met .more-n { align-self: center; font-size: 0.8rem; font-weight: 700; color: var(--gf-text-muted); padding: 0 4px; }
     /* The walk's altitude profile, under the plants met. */
@@ -65,7 +61,6 @@ export class MaTrailRecap extends LitElement {
     super();
     /** @type {import('../runtime.js').MiniApp | null} */
     this.app = null;
-    this._note3d = '';
   }
 
   get #session() { return this.app ? trailSessionOf(this.app) : null; }
@@ -80,10 +75,14 @@ export class MaTrailRecap extends LitElement {
     if (this.#session?.done && parse(location.hash).name !== 'collections') write(DONE, null);
   }
 
-  /** « Vue 3D » of the walk; when it cannot open here, why (under the map). @param {any} t @param {Event} e */
+  /**
+   * « Vue 3D » of the walk; when it cannot open here (no WebGL2, the module off), why: a brief toast over its map, said
+   * by the map's live region (the user asked; the quiet-map rule, gf-map.js) — and the button's title says it too.
+   * @param {any} t @param {Event} e
+   */
   async #open3d(t, e) {
-    this._note3d = '';
-    this._note3d = await openMap3d(t, /** @type {HTMLElement} */ (e.currentTarget)) || '';
+    const problem = await openMap3d(t, /** @type {HTMLElement} */ (e.currentTarget));
+    if (problem) /** @type {any} */ (this.renderRoot.querySelector('.recap-map gf-map'))?.toast(problem);
   }
 
   render() {
@@ -97,8 +96,7 @@ export class MaTrailRecap extends LitElement {
     const walk = [time && 'en ' + time, dist && 'sur ' + dist, profile && profile.climb >= 10 && `${formatAltitude(profile.climb)} de montée`].filter(Boolean).join(', ');
     const art = html`<div class="recap">
       <div class="recap-map"><gf-map no-search no-create .spots=${NO_SPOTS} .plants=${markers} plant-zoom="0" .frame=${frame}></gf-map>
-        ${markers.length ? html`<button type="button" class="map3d" aria-describedby="note3d" @click=${(/** @type {Event} */ e) => this.#open3d(t, e)}>${icon('map')} Vue 3D</button>` : nothing}</div>
-      <p class="note3d" id="note3d" role="status">${this._note3d || ''}</p>
+        ${markers.length ? html`<button type="button" class="map3d" title=${map3dProblem() || 'Le parcours sur le relief'} @click=${(/** @type {Event} */ e) => this.#open3d(t, e)}>${icon('map')} Vue 3D</button>` : nothing}</div>
       ${groups.length ? html`<ul class="met" aria-label="Les plantes du parcours">${groups.slice(0, 8).map(g => html`<li title=${g.last.vernacularName || g.last.scientificName}><gf-thumb plant-id=${g.plantId} size="44" round></gf-thumb></li>`)}
         ${groups.length > 8 ? html`<li class="more-n">+${groups.length - 8}</li>` : nothing}</ul>` : nothing}
       ${profile ? this.#profile(profile) : nothing}

@@ -168,4 +168,33 @@ export const ui = css`
     font-size: 0.9rem;
   }
   :where(.toast .link, .toast a) { color: var(--gf-accent-soft); font-weight: 600; }
+
+  /* A map's first-use hint (core/hints.js): shown once per device, its ✕ lets it go. */
+  :where(.hint-once) {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    margin: 0;
+    padding: 6px 4px 6px 12px;
+    border-radius: var(--gf-radius);
+    background: var(--gf-surface);
+    color: var(--gf-text-muted);
+    box-shadow: var(--gf-shadow);
+    font-size: 0.8rem;
+    line-height: 1.35;
+  }
+  :where(.hint-once) > span { flex: 1; min-width: 0; padding-top: 2px; }
+  :where(.hint-once .hint-x) { flex: none; width: 26px; height: 26px; min-height: 0; padding: 0; border: 0; border-radius: 50%; background: none;
+    color: var(--gf-text-muted); font-size: 0.8rem; }
+
+  /* A control whose action is under way (its .busy class, with aria-busy): past 400 ms, a light sweeping over it — no
+     text, and nothing at all for a quicker one. */
+  .busy:is(button, a, .button, .chip) {
+    background-image: linear-gradient(100deg, transparent 30%, color-mix(in srgb, var(--gf-accent) 22%, transparent) 50%, transparent 70%);
+    background-size: 250% 100%;
+    background-position: 125% 0;
+    animation: gf-busy-sweep 1.2s linear 0.4s infinite;
+  }
+  @keyframes gf-busy-sweep { from { background-position: 125% 0; } to { background-position: -125% 0; } }
+  @media (prefers-reduced-motion: reduce) { .busy:is(button, a, .button, .chip) { animation-duration: 3s; } }
 `;

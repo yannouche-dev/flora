@@ -26,3 +26,45 @@ gf-app {
 
 /* Bootstrap Icons (app/core/icons.js) outside shadow roots. */
 .bi { flex: none; vertical-align: -0.125em; }
+
+/* The brief toast (core/toast.js): an action just taken that failed, a word on it — small, dark, for under 3 s, over
+   the element it is about, in the top layer (a popover); placed by its script (left, top). It never takes the
+   pointer, but for its own action. */
+.gf-brief-toast {
+  position: fixed;
+  z-index: 6000;
+  inset: auto;
+  margin: 0;
+  width: max-content;
+  max-width: min(360px, calc(100vw - 16px));
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 7px 14px;
+  border: 0;
+  border-radius: var(--gf-radius-pill);
+  background: rgb(20 30 22 / 92%);
+  color: #fff;
+  font: 500 0.82rem/1.35 var(--gf-font);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 30%);
+  overflow: visible;
+  pointer-events: none;
+  opacity: 0;
+  translate: 0 -4px;
+  transition: opacity 0.18s ease-out, translate 0.18s ease-out;
+}
+.gf-brief-toast.on { opacity: 1; translate: 0 0; }
+.gf-brief-toast button {
+  pointer-events: auto;
+  flex: none;
+  min-height: 32px;
+  padding: 4px 6px;
+  border: 0;
+  background: none;
+  color: #9be15d;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+.gf-brief-toast button:focus-visible { outline: 2px solid #fff; border-radius: 6px; }
+@media (prefers-reduced-motion: reduce) { .gf-brief-toast { transition: none; translate: none; } }

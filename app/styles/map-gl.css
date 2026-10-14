@@ -9,7 +9,7 @@ gf-map[data-renderer='3d'] .gf-map-canvas .leaflet-control-attribution { visibil
 gf-map .gf-map-gl {
   position: absolute;
   inset: 0;
-  /* Over Leaflet's panes (400), under the map's buttons, notes and cards (650 and more). */
+  /* Over Leaflet's panes (400), under the map's buttons and cards (650 and more). */
   z-index: 450;
   background: #dfe6d8;
   font: inherit;
@@ -50,81 +50,12 @@ gf-map .gf-map-gl .maplibregl-canvas:focus-visible { outline: 3px solid var(--gf
 .gf-gl-dot.gf-kin { border-color: #ffd166; border-width: 3px; z-index: 5000; }
 @media (prefers-reduced-motion: reduce) { .gf-gl-dot { transition: none; } }
 
-/* A point's permanent name (the value touched in the plant sheet). */
-.gf-gl-label {
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% + 8px);
-  translate: -50% 0;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: #fff;
-  color: #1d2419;
-  font-size: 12px;
-  font-weight: 600;
-  white-space: nowrap;
-  box-shadow: 0 1px 4px rgb(0 0 0 / 35%);
-  pointer-events: none;
-}
-.gf-gl-label.below { bottom: auto; top: calc(100% + 8px); }
-
-/* What the 3D map says (loading, back in 2D and why, flat for lack of relief): under the search pill, centred. */
-gf-map .gf-gl-note {
-  position: absolute;
-  z-index: 1002;
-  left: 50%;
-  top: 12px;
-  translate: -50% 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  max-width: calc(100% - 96px);
-  padding: 6px 6px 6px 12px;
-  border-radius: 999px;
-  background: rgb(20 30 22 / 85%);
-  color: #fff;
-  font-size: 0.8rem;
-  line-height: 1.3;
-}
-gf-map[search] .gf-gl-note { top: 66px; }
-gf-map .gf-gl-note[hidden] { display: none; }
-gf-map .gf-gl-note button {
-  flex: none;
-  width: 24px;
-  height: 24px;
-  min-height: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: #fff;
-  cursor: pointer;
-}
-gf-map .gf-gl-note button:focus-visible { outline: 2px solid #fff; }
-
-/* The altitude under the pointer (the relief's), above the scale. */
-gf-map .gf-gl-alt {
-  position: absolute;
-  z-index: 3;
-  left: 50%;
-  bottom: 8px;
-  translate: -50% 0;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgb(255 255 255 / 90%);
-  color: #1d2419;
-  font-size: 11px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 30%);
-  pointer-events: none;
-}
-gf-map .gf-gl-alt[hidden] { display: none; }
+/* (Nothing else written over the 3D map: why it is in 2D or flat, its loading, are the map's state and its thin
+   loading line — the quiet-map rule, gf-map.js; a point's name shows on hover, focus or touch, its card.) */
 
 /* MapLibre's controls: like the 2D map's (bottom left), clear of the point card and of the place sheet. */
 gf-map .gf-map-gl .maplibregl-ctrl-bottom-left { margin-bottom: env(safe-area-inset-bottom, 0px); }
-gf-map:has(.gf-point-card) .gf-map-gl .maplibregl-ctrl-bottom-left,
-gf-map:has(.gf-point-card) .gf-gl-alt { visibility: hidden; }
+gf-map:has(.gf-point-card) .gf-map-gl .maplibregl-ctrl-bottom-left { visibility: hidden; }
 gf-map .gf-map-gl .maplibregl-ctrl-group button { width: 32px; height: 32px; }
 @media (pointer: coarse) { gf-map .gf-map-gl .maplibregl-ctrl-group button { width: 38px; height: 38px; } }
 
@@ -163,10 +94,6 @@ gf-map:not([data-renderer='3d']) .gf-map-buttons button.around3d { display: none
   background: #2f6b3a; color: #fff; font: 700 11px/20px system-ui, sans-serif; text-align: center; box-shadow: 0 0 0 2px #fff, 0 1px 3px rgb(0 0 0 / 40%); }
 .gf-map-gl.gf-o3-loading .gf-o3-mk .gf-o3-head { opacity: 0.55; filter: saturate(0.4); }
 
-/* The radius, on a pill at the circle's south. */
-.gf-o3-rlabel { padding: 2px 9px; border-radius: 999px; background: rgb(20 30 22 / 78%); color: #d9f7c8; font: 700 12px/1.5 system-ui, sans-serif;
-  font-variant-numeric: tabular-nums; box-shadow: 0 1px 4px rgb(0 0 0 / 35%); pointer-events: none; white-space: nowrap; }
-.gf-map-gl:not(.gf-o3-on) .gf-o3-rlabel { display: none; }
 
 /* A point's card (map-style.js obsCard), over the map. */
 .gf-o3-card { position: absolute; z-index: 8; overflow: hidden; border-radius: 12px; border: 1px solid rgb(255 255 255 / 55%); background-clip: padding-box;
@@ -189,12 +116,14 @@ gf-map:has(.gf-point-card) .gf-o3-bar { visibility: hidden; }
 .gf-o3-chip { display: inline-flex; gap: 6px; align-items: center; min-height: 38px; padding: 6px 14px; border-radius: 999px; border: 0; cursor: pointer;
   background: color-mix(in srgb, var(--gf-surface, #fff) 94%, transparent); color: var(--gf-text, #1f2a1f); box-shadow: 0 4px 16px rgb(0 0 0 / 28%); font: inherit; }
 .gf-o3-chip b { color: var(--gf-accent, #2f6b3a); font-variant-numeric: tabular-nums; }
-.gf-o3-chip .gf-o3-n { min-width: 22px; padding: 0 6px; border-radius: 999px; background: var(--gf-accent, #2f6b3a); color: var(--gf-accent-contrast, #fff);
-  font-size: 0.78rem; font-weight: 700; font-variant-numeric: tabular-nums; text-align: center; }
 .gf-o3-chip:focus-visible, .gf-o3-panel button:focus-visible { outline: none; box-shadow: var(--gf-focus, 0 0 0 3px #2f6b3a); }
+/* Its spinner while the points come: seen only past 400 ms (nothing for a quick load), no text. */
 .gf-o3-bar .gf-o3-spin { display: inline-block; width: 11px; height: 11px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--gf-accent, #2f6b3a) 25%, transparent);
-  border-top-color: var(--gf-accent, #2f6b3a); animation: gf-o3-spin 0.8s linear infinite; }
+  border-top-color: var(--gf-accent, #2f6b3a); opacity: 0; animation: gf-o3-spin 0.8s linear infinite, gf-o3-show 0.01s linear 0.4s forwards; }
 @keyframes gf-o3-spin { to { transform: rotate(360deg); } }
+@keyframes gf-o3-show { to { opacity: 1; } }
+/* Its first-use hint (core/hints.js), at the card's foot. */
+.gf-o3-panel .gf-o3-hint { width: 100%; box-sizing: border-box; box-shadow: none; background: color-mix(in srgb, var(--gf-text-muted, #5b6b5b) 10%, transparent); }
 .gf-o3-panel { width: 100%; box-sizing: border-box; display: grid; gap: 6px; justify-items: center; padding: 12px 14px 10px; border-radius: 18px;
   background: color-mix(in srgb, var(--gf-surface, #fff) 92%, transparent); backdrop-filter: blur(6px); box-shadow: 0 8px 28px rgb(0 0 0 / 30%);
   animation: gf-tip-in 0.18s ease-out; container-type: inline-size; }
@@ -241,6 +170,6 @@ gf-map:has(.gf-point-card) .gf-o3-bar { visibility: hidden; }
 @container (max-height: 300px) { .gf-o3-bar { bottom: 8px; } .gf-o3-panel .gf-o3-value, .gf-o3-panel .gf-o3-row small { display: none; } }
 @media (prefers-reduced-motion: reduce) {
   .gf-o3-card, .gf-o3-panel { animation: none; }
-  .gf-o3-bar .gf-o3-spin { animation-duration: 2s; }
+  .gf-o3-bar .gf-o3-spin { animation-duration: 2s, 0.01s; }
   .gf-o3-mk .gf-o3-head, .gf-o3-range .gf-o3-rail, .gf-o3-range .gf-o3-stop { transition: none; }
 }

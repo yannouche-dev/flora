@@ -12,13 +12,15 @@ import { cachedThumb, thumbUrl } from '../core/thumb.js';
 import { moduleEvents, moduleOn } from '../core/modules.js';
 import { protectedAreasIn } from '../core/protected.js';
 import { href } from '../core/router.js';
-import { safeUrl } from '../core/safe-url.js';
+import { briefToast, sayIn } from '../core/toast.js';
+import { takeHint } from '../core/hints.js';
 import { gbifTileUrl } from '../core/sources.js';
 import './gf-map-panel.js';
 import './gf-map-search.js';
 import './gf-point-card.js';
 import { attachGl } from './gf-map-gl.js';
 import { icon, iconHref, iconMarkup } from '../core/icons.js';
+import { geoProblem } from './start-screen.js';
 import { inMiniApp } from '../miniapp/quiet-links.js';
 import { cancelImages, chosenGroupMarker, chosenMarker, elem, fadeImg, leafGlyph, leafMarker, markClasses, obsCard, photoMarker, resumeImages, ringElement, speciesKey } from './map-style.js';
 
@@ -98,6 +100,23 @@ const PHOTO_SINGLES = 40;
 const SIGHT_PAD = 0.5;
 /** The map's attribution while plant photos are on its points (#photoCredit). */
 const PHOTO_CREDIT = 'Photos : <a href="https://www.inaturalist.org/" target="_blank" rel="noopener">iNaturalist</a> (CC0, CC BY, CC BY-SA), Wikimedia Commons — auteur et licence sur chaque point';
+
+/**
+ * A line of a map's state (setStatus): its key, its words, how much it matters, a link to act on it.
+ * @typedef {{ key: string, text: string, level: 'info' | 'warn' | 'error', link: { href: string, label: string } | null }} MapStatus
+ * A line of a map's legend (setLegend): its words, its swatch — 'obs' (a plant's points: its pink and gold ring),
+ * 'outline' (an area's border), or a CSS colour.
+ * @typedef {{ text: string, swatch?: string }} LegendLine
+ */
+
+/** A load said (a thin line at the map's top, its words in the live region) only past this long (ms). */
+const BUSY_AFTER = 400;
+/** The same words said by any map within this long (ms) are not said again. */
+const SAID_FOR = 8000;
+/** When each thing was said last, by any map. @type {Map<string, number>} */
+const recentlySaid = new Map();
+/** States said once a visit whatever the map (setStatus `once`: a device's, a setting's). @type {Set<string>} */
+const saidOnce = new Set();
 
 /** Room between a point and its card. @param {{ gap?: number }} o */
 const gap = o => o.gap ?? 8;
@@ -221,6 +240,26 @@ const store = (/** @type {string} */ key, value) => {
  *         plant-move {placeId, entryId, plantId, coordinates}, map-longpress {coordinates} (while the pin can be placed),
  *         point-info {coordinates} (long press elsewhere: the point card opens), point-close,
  *         edit-change {editing}, positions-save {pin, places: [{id, coordinates}], plants: [{placeId, entryId, plantId, coordinates}]}
+ *
+ * What a map says — the quiet-map rule, for every map of the app (this one, its 3D mirror gf-map-gl.js and its
+ * « Observations autour » gf-map-obs3d.js, and every page around a map): nothing persistent is written over the map
+ * (no banner, note, pill or count over its canvas); what is worth knowing goes where the user looks for it, through
+ * this one mechanism —
+ *  - setStatus(key, text, { level, link, once }): a lasting state (« IGN – fonds de carte » off, the 3D back to 2D and
+ *    why, flat for lack of relief, protected areas in view, a background source unreachable…): one line in the « État »
+ *    of the panel « Carte » (its Affichage), said once in the map's live region — again only when its words change;
+ *    '' lets it go;
+ *  - announce(text): said once in the map's one live region (visually hidden, polite: a count that arrived, a point
+ *    flown to, a save done); the same words said by any map a moment ago are not said again;
+ *  - toast(text): an action the user has just taken on the map failed (« Me localiser » refused, a search without a
+ *    result, a point whose plant is not there): one brief toast over the map's top (core/toast.js: under 3 s, the top
+ *    layer, never two at once), said too. Never for a background failure (a tile source, iNaturalist, the relief);
+ *  - busy(key, on, label): a load under way: past 400 ms, a thin line at the map's top (no text), its label said once;
+ *  - setLegend(lines): what the colours of a page's own layers mean (a plant sheet's map), in the panel's « Légende ».
+ * Its own parts (the search pill, the point card) say theirs by the events map-say {text}, map-toast {text} and
+ * map-busy {key, on, label}. A gesture worth knowing is a first-use hint (core/hints.js: once per device,
+ * dismissible), and stays in the controls' title and aria. Kept on the map: the credits (the attribution, small) and
+ * the controls (zoom, compass, layers, Me localiser, ✎, the radius chip, « Observations autour »).
  */
 export class GfMap extends LitElement {
   static properties = {
@@ -279,10 +318,7 @@ export class GfMap extends LitElement {
     noAreas: { type: Boolean, attribute: 'no-areas' },
     /** A walk to draw ({ key, coordinates: [lon, lat][] }): a line on a white casing (the « Vue 3D » of a parcours). */
     line: { attribute: false },
-    _moves: { state: true },
-    _areas: { state: true },
-    _areasClosed: { state: true },
-    _areasOpen: { state: true }
+    _moves: { state: true }
   };
 
   constructor() {
@@ -343,56 +379,190 @@ export class GfMap extends LitElement {
     this.editing = false;
     /** Working copy while editing positions. */
     this._moves = emptyMoves();
-    /** Protected areas in view (« IGN – espaces protégés »). @type {import('../core/protected.js').ProtectedArea[]} */
-    this._areas = [];
-    /** The set of areas whose banner was closed (it comes back for other areas). */
-    this._areasClosed = '';
-    this._areasOpen = false;
+    // Its own parts say what they have to say through the map (its search pill, its point card).
+    this.addEventListener('map-say', e => { e.stopPropagation(); this.announce(/** @type {CustomEvent} */ (e).detail?.text); });
+    this.addEventListener('map-toast', e => { e.stopPropagation(); this.toast(/** @type {CustomEvent} */ (e).detail?.text); });
+    this.addEventListener('map-busy', e => {
+      e.stopPropagation();
+      const d = /** @type {CustomEvent} */ (e).detail || {};
+      this.busy(d.key, Boolean(d.on), d.label);
+    });
   }
 
   createRenderRoot() { return this; }
 
+  /** How positions are moved here, by what the map holds: the editing bar's first-use hint, said as editing starts. */
+  get #editWords() {
+    return (this.pin || this.selectedId ? 'Glissez le lieu ou ses plantes · appui long : placer le lieu'
+      : this.spots.length ? 'Glissez les lieux et les plantes (en zoomant)' : 'Glissez les plantes')
+      + ' — enregistré dès que vous lâchez';
+  }
+
+  /** The editing bar's hint shows: the first time ever positions are edited on this device (core/hints.js), until its ✕. */
+  #editHint = false;
+
   // Lit owns this one wrapper; Leaflet and the map buttons live inside it, out of Lit's way
   // (anything appended straight to the host would be cleared by Lit's next render).
   render() {
-    const hint = (this.pin || this.selectedId ? 'Glissez le lieu ou ses plantes · appui long : placer le lieu'
-      : this.spots.length ? 'Glissez les lieux et les plantes (en zoomant)' : 'Glissez les plantes')
-      + ' — enregistré dès que vous lâchez';
     // The frame goes full screen while editing positions: in the browser's top layer (popover), so no
-    // ancestor (a pane with `contain`, the header, the tab bar) can clip or cover it.
+    // ancestor (a pane with `contain`, the header, the tab bar) can clip or cover it. Over the map, besides its
+    // controls: its thin loading line (no text) and, unseen, its one live region.
     return html`<div class="gf-map-frame" popover="manual"><div class="gf-map-root"></div>
-      <div class="gf-map-notes">
-        ${moduleOn('ignMaps') ? nothing : html`<div class="gf-map-off" role="status">Fonds IGN désactivés : seules les zones déjà vues s’affichent.
-          <a href=${href.settings()}>Réglages › Modules</a></div>`}
-        ${this.#protectedBanner()}
-      </div>
+      <div class="gf-map-busy" aria-hidden="true"></div>
+      <div class="gf-map-live" aria-live="polite" aria-relevant="additions"></div>
       ${this.editing ? html`<div class="gf-map-editbar" role="group" aria-label="Modifier les positions">
-        <span class="hint">${hint}</span>
+        ${this.#editHint ? html`<span class="hint">${this.#editWords}<button type="button" class="hint-x" aria-label="Masquer l’astuce"
+          title="Masquer l’astuce" @click=${() => { this.#editHint = false; this.requestUpdate(); }}>${icon('x-lg')}</button></span>` : nothing}
         <span class="actions">
-          <button type="button" class="primary" @click=${() => this.#setEditing(false)}>Terminé</button>
+          <button type="button" class="primary" title=${this.#editWords} @click=${() => this.#setEditing(false)}>Terminé</button>
         </span>
       </div>` : nothing}</div>`;
   }
 
+  // ── What the map says (the quiet-map rule: see the class's comment) ────────────────────────────
+
+  /** @type {Map<string, MapStatus>} */ #status = new Map();
+
+  /**
+   * A lasting state of the map (one line per key): in the panel's « État », said once in the live region — again
+   * only when its words change (`once`: once a visit, whatever the map — a device's or a setting's state, else said
+   * at each map's birth; `quiet`: never said). '' or null lets it go.
+   * @param {string} key @param {string | null | undefined} text
+   * @param {{ level?: 'info' | 'warn' | 'error', link?: { href: string, label: string } | null, once?: boolean, quiet?: boolean }} [o]
+   */
+  setStatus(key, text, o = {}) {
+    const was = this.#status.get(key);
+    if (!text) {
+      if (!was) return;
+      this.#status.delete(key);
+      this.#syncState();
+      return;
+    }
+    const level = o.level || 'info';
+    if (was && was.text === text && was.level === level) return;
+    this.#status.set(key, { key, text, level, link: o.link || null });
+    this.#syncState();
+    if (o.quiet || (o.once && saidOnce.has(text))) return;
+    saidOnce.add(text);
+    this.announce(text);
+  }
+
+  /** The map's state now: its panel's « État » (and the tests). @returns {MapStatus[]} */
+  get statusLines() { return [...this.#status.values()]; }
+
+  /** Said before the live region was drawn. @type {string[]} */
+  #unsaid = [];
+
+  /**
+   * Said once in the map's live region (polite, visually hidden: a line added, gone after a while); the same words
+   * said by any map a moment ago are not said again (a page of four maps, a restyle, a render) — unless `force` (an
+   * action the user just took that failed again: they must hear it each time, #toast). While the map's panel is open
+   * (a modal dialog: the rest of the page, this region too, is inert), said by the panel's own region instead.
+   * @param {string | null | undefined} text @param {{ force?: boolean }} [o]
+   */
+  announce(text, { force = false } = {}) {
+    if (!text) return;
+    const live = /** @type {HTMLElement | null} */ (this.querySelector('.gf-map-live'));
+    if (!live) { this.#unsaid.push(text); return; }
+    const now = performance.now();
+    if (!force && (recentlySaid.get(text) ?? -Infinity) > now - SAID_FOR) return;
+    recentlySaid.set(text, now);
+    if (this.#panel?.say?.(text)) return;
+    sayIn(live, text);
+  }
+
+  /**
+   * An action the user has just taken on the map failed: one brief toast over its top (under the search pill), said
+   * too (core/toast.js) — each time it shows (the same failure again: said again). Never for a background failure:
+   * setStatus.
+   * @param {string | null | undefined} text
+   */
+  toast(text) {
+    if (!text) return;
+    const shown = briefToast(text, { near: this.querySelector('.gf-map-frame') || this, at: 'top', offset: this.#hasSearch && !this.editing ? 62 : 10, live: false });
+    this.announce(text, { force: Boolean(shown) });
+  }
+
+  /** The loads under way, each with what it says once it lasts. @type {Map<string, string>} */ #busy = new Map();
+  /** @type {ReturnType<typeof setTimeout> | undefined} */ #busyTimer;
+
+  /**
+   * A load under way (`key`), or done: past 400 ms, a thin line at the map's top (no text), its `label` said once;
+   * aria-busy on the map meanwhile. Nothing at all for a quicker one.
+   * @param {string} key @param {boolean} on @param {string} [label]
+   */
+  busy(key, on, label = '') {
+    if (!key || on === this.#busy.has(key)) return;
+    if (on) this.#busy.set(key, label); else this.#busy.delete(key);
+    const frame = this.querySelector('.gf-map-frame');
+    if (!this.#busy.size) {
+      clearTimeout(this.#busyTimer);
+      this.#busyTimer = undefined;
+      this.removeAttribute('busy');
+      frame?.removeAttribute('aria-busy');
+      return;
+    }
+    frame?.setAttribute('aria-busy', 'true');
+    if (this.hasAttribute('busy')) { if (on && label) this.announce(label); return; }
+    if (this.#busyTimer !== undefined) return;
+    this.#busyTimer = setTimeout(() => {
+      this.#busyTimer = undefined;
+      if (!this.#busy.size) return;
+      this.setAttribute('busy', '');
+      for (const said of new Set(this.#busy.values())) if (said) this.announce(said);
+    }, BUSY_AFTER);
+  }
+
+  /** What the colours of a page's own layers mean (a plant sheet's map: its sources, their counts). @type {LegendLine[]} */
+  #legendLines = [];
+
+  /** The panel's « Légende » for this page's layers (its colour, its words). @param {LegendLine[]} lines */
+  setLegend(lines) {
+    const next = lines || [];
+    if (JSON.stringify(next) === JSON.stringify(this.#legendLines)) return;
+    this.#legendLines = next;
+    if (this.#panel) this.#panel.legendLines = next;
+  }
+
+  /** The panel (once opened) and the layers button follow the state and the protected areas in view. */
+  #syncState() {
+    const areas = this.editing ? [] : this.#areas;
+    if (this.#panel) Object.assign(this.#panel, { state: this.statusLines, areas });
+    // The layers button: a discreet dot while protected areas are in view (their rules in the panel), said in its name.
+    const flag = areas.length ? `${areas.length > 1 ? 'espaces protégés' : 'espace protégé'} en vue` : '';
+    const layers = this.#buttons?.querySelector('.layers');
+    if (layers) {
+      const label = 'Carte : fond, couches, légende' + (flag ? ' — ' + flag : '');
+      layers.classList.toggle('flag', Boolean(flag));
+      layers.setAttribute('aria-label', label);
+      layers.setAttribute('title', label);
+    }
+    const search = /** @type {any} */ (this.querySelector('gf-map-search'));
+    if (search) search.flag = flag;
+  }
+
   // ── Protected areas ────────────────────────────────────────────────────────────────────────────
 
-  get #areasKey() { return this._areas.map(a => a.id).sort().join(','); }
+  /** Protected areas in view (« IGN – espaces protégés »): listed in the panel (« Règles de cueillette »). @type {import('../core/protected.js').ProtectedArea[]} */
+  #areas = [];
 
-  /** « Réserve naturelle de … — la cueillette y est souvent interdite ou réglementée » (not while editing). */
-  #protectedBanner() {
-    const areas = this._areas;
-    if (!areas.length || this.editing || this.#areasKey === this._areasClosed) return nothing;
-    const shown = this._areasOpen ? areas : areas.slice(0, 2);
-    const more = areas.length - shown.length;
-    return html`<div class="gf-map-protected" role="status">
-      <span class="what">${icon('shield-check')} ${shown.map((a, i) => html`${i ? ' · ' : ''}${safeUrl(a.url)
-        ? html`<a href=${safeUrl(a.url)} target="_blank" rel="noopener" title=${a.kind}>${a.name}</a>` : html`<b title=${a.kind}>${a.name}</b>`}
-        <span class="kind">(${a.kind})</span>`)}${more > 0
-        ? html` · <button type="button" class="more" @click=${() => { this._areasOpen = true; }}>${icon('plus-lg')} ${more} autre${more > 1 ? 's' : ''}</button>` : nothing}
-        — la cueillette y est souvent interdite ou réglementée : vérifiez les règles du site.</span>
-      <button type="button" class="close" aria-label="Masquer" title="Masquer"
-        @click=${() => { this._areasClosed = this.#areasKey; }}>${icon('x-lg')}</button>
-    </div>`;
+  /** @param {import('../core/protected.js').ProtectedArea[]} areas */
+  #setAreas(areas) {
+    const key = (/** @type {import('../core/protected.js').ProtectedArea[]} */ list) => list.map(a => a.id).sort().join(',');
+    if (key(areas) === key(this.#areas)) return;
+    this.#areas = areas;
+    // One État line, said once per new set (none while positions are edited: #checkAreas).
+    const names = areas.slice(0, 2).map(a => a.name).join(', ') + (areas.length > 2 ? ` et ${areas.length - 2} autre${areas.length > 3 ? 's' : ''}` : '');
+    this.setStatus('areas', areas.length
+      ? `${areas.length > 1 ? 'Espaces protégés' : 'Espace protégé'} en vue : ${names} — la cueillette y est souvent interdite ou réglementée (voir Règles de cueillette).`
+      : '', { level: 'warn' });
+    this.#syncState();
+  }
+
+  /** « IGN – fonds de carte » off: the backgrounds from the cache only — said in the panel, never over the map. @param {boolean} [birth] */
+  #syncIgn(birth = false) {
+    this.setStatus('ign', moduleOn('ignMaps') ? '' : 'Fonds IGN désactivés : seules les zones déjà vues s’affichent.',
+      { link: { href: href.settings(), label: 'Réglages › Modules' }, once: birth });
   }
 
   /** @type {ReturnType<typeof setTimeout> | undefined} */ #areasTimer;
@@ -418,8 +588,9 @@ export class GfMap extends LitElement {
     const map = this.#map;
     this.#areasAbort?.abort();
     this.#areasAbort = null;
-    if (!map || !map.getSize().x || map.getZoom() < PROTECTED_ZOOM || !moduleOn('ignProtected') || this.#quietAreas()) {
-      this._areas = [];
+    // (Not while positions are edited: said again once it ends.)
+    if (!map || !map.getSize().x || map.getZoom() < PROTECTED_ZOOM || !moduleOn('ignProtected') || this.#quietAreas() || this.editing) {
+      this.#setAreas([]);
       return;
     }
     const abort = this.#areasAbort = new AbortController();
@@ -427,10 +598,9 @@ export class GfMap extends LitElement {
     try {
       const areas = await protectedAreasIn({ south: b.getSouth(), west: b.getWest(), north: b.getNorth(), east: b.getEast() }, abort.signal);
       if (abort.signal.aborted) return;
-      this._areas = areas;
-      this._areasOpen = false;
+      this.#setAreas(this.editing ? [] : areas);
     } catch (error) {
-      if (!abort.signal.aborted) this._areas = [];
+      if (!abort.signal.aborted) this.#setAreas([]);
     }
   }
 
@@ -534,7 +704,7 @@ export class GfMap extends LitElement {
 
   /** « IGN – fonds de carte » switched on or off: rebuild the tile layers (network or cache only). */
   #onModules = () => {
-    this.requestUpdate();
+    this.#syncIgn();
     this.#scheduleAreas();
     const map = this.#map;
     if (!map) return;
@@ -572,7 +742,11 @@ export class GfMap extends LitElement {
     return layer.addTo(map);
   }
 
-  /** The point touched in the sheet: the plant's photo, large (a ringed dot without one), named; the map flies to it. */
+  /**
+   * The point touched in the sheet: the plant's photo, large (a ringed dot without one); the map flies to it, its name
+   * said once. Its name on hover, focus or a touch (its card), never a label left over the map: the chip that set it
+   * (the sheet's, the cell's) names it already.
+   */
   #syncFocusPoint() {
     const layer = this.#focusLayer;
     if (!layer || !this.#map) return;
@@ -584,16 +758,15 @@ export class GfMap extends LitElement {
     layer.clearLayers();
     if (!p) return;
     const [x, y] = p.coordinates;
+    // Its name: the marker's title (a photo) and its card on hover, focus or touch (#tip: text, never HTML — the
+    // title comes from the user's places, a shared link's names, or GBIF records).
     const dot = p.photo
-      ? L.marker([y, x], { icon: chosenIcon(p.photo, 0, 46, 'focus'), keyboard: false, bubblingMouseEvents: false, zIndexOffset: 2000 }).addTo(layer)
+      ? L.marker([y, x], { icon: chosenIcon(p.photo, 0, 46, 'focus'), keyboard: false, bubblingMouseEvents: false, zIndexOffset: 2000, title: p.title }).addTo(layer)
       : L.circleMarker([y, x], { radius: 9, className: 'gf-focus-point', bubblingMouseEvents: false }).addTo(layer);
-    // A node, not a string: Leaflet sets a string as innerHTML, and the title comes from the user's places (a
-    // shared link's names) or from GBIF records.
-    // Above the point; on a low map (a pinned block), below it — the filter's chip is over the map's top.
-    const low = this.#map.getSize().y < 260;
-    dot.bindTooltip(elem('span', '', p.title), { direction: low ? 'bottom' : 'top', permanent: true, className: 'gf-focus-tip', offset: p.photo ? [0, low ? 22 : -22] : [0, 0] });
+    this.#tip(dot, p.title, { gap: 6 });
     this.#onPoint(dot, p);
     if (this.#map.getSize().x) this.#map.flyTo([y, x], Math.max(this.#map.getZoom(), 11), { duration: 0.6 });
+    this.announce(`Sur la carte : ${p.title}`);
   }
 
   #focusKey = '';
@@ -725,6 +898,9 @@ export class GfMap extends LitElement {
     this.#resized.observe(this.#root);
     this.#syncAll();
     if (this.line) this.#syncLine();
+    // What it had to say before its live region was there; « IGN – fonds de carte » off, said once a visit.
+    for (const text of this.#unsaid.splice(0)) this.announce(text);
+    this.#syncIgn(true);
     // 3D (Réglages › Cartes): MapLibre over this map, which it mirrors (gf-map-gl.js).
     this.#gl = attachGl(this, map);
   }
@@ -752,7 +928,20 @@ export class GfMap extends LitElement {
   get gl() { return this.#gl; }
 
   /** @param {Map<string, any>} changed */
+  willUpdate(changed) {
+    // Editing starts: its hint the first time ever (core/hints.js); it ends: the hint goes.
+    if (changed.has('editing') && this.editing !== Boolean(changed.get('editing'))) this.#editHint = this.editing && takeHint('map-edit');
+  }
+
+  /** @param {Map<string, any>} changed */
   updated(changed) {
+    if (changed.has('editing') && this.editing !== Boolean(changed.get('editing'))) {
+      // Said as it starts (its words also on « Terminé »'s title); the protected areas wait for its end.
+      if (this.editing) this.announce(`Modification des positions : ${this.#editWords}. « Terminé » pour finir.`);
+      if (this.editing) this.#setAreas([]);
+      else this.#scheduleAreas();
+      this.#syncState();
+    }
     if (!this.#map) return;
     this.#gl?.changed(changed);
     if (changed.has('line')) this.#syncLine();
@@ -835,6 +1024,8 @@ export class GfMap extends LitElement {
     moduleEvents.removeEventListener('change', this.#onModules);
     this.#resized?.disconnect();
     clearTimeout(this.#areasTimer);
+    clearTimeout(this.#busyTimer);
+    this.#busyTimer = undefined;
     this.#areasAbort?.abort();
     this.#unwatch?.();
     this.#unwatch = null;
@@ -1036,10 +1227,15 @@ export class GfMap extends LitElement {
   #asked = false;
   /** @type {(() => void) | null} */ #unwait = null;
 
+  /** « Me localiser » touched, its answer awaited: a refusal or no position said once (a brief toast). */
+  #locating = false;
+  /** The last answer was a failure: « Me localiser » touched again asks anew. */
+  #geoFailed = false;
+
   /** `track` shows my position once the permission is granted (or after « Me localiser »): never asked on its own. */
   #syncTracking() {
     if (this.track && !this.#unwatch) {
-      if (this.#asked) { this.#unwait?.(); this.#unwait = null; this.#unwatch = watchLocation(({ fix }) => this.#showFix(fix)); }
+      if (this.#asked) { this.#unwait?.(); this.#unwait = null; this.#unwatch = watchLocation(s => this.#onGeo(s)); }
       else this.#unwait ??= whenGranted(() => { this.#unwait = null; this.#asked = true; if (this.isConnected) this.#syncTracking(); });
     } else if (!this.track && (this.#unwatch || this.#unwait)) {
       this.#unwatch?.();
@@ -1047,6 +1243,19 @@ export class GfMap extends LitElement {
       this.#unwait?.();
       this.#unwait = null;
     }
+  }
+
+  /**
+   * The position's news: a fix shown; a failure right after « Me localiser » was touched said in a brief toast (the
+   * user asked) — never for the quiet watch of a map that follows me (`track`).
+   * @param {import('../core/geo.js').GeoState} s
+   */
+  #onGeo(s) {
+    this.#geoFailed = Boolean(s.error);
+    if (s.fix) { this.#locating = false; this.#showFix(s.fix); return; }
+    if (!s.error || !this.#locating) return;
+    this.#locating = false;
+    this.toast(geoProblem(s.code ?? null).text);
   }
 
   /** @param {import('../core/geo.js').Fix | null} fix */
@@ -1349,7 +1558,11 @@ export class GfMap extends LitElement {
     this.#tipOwner = dot;
     tip.className = 'gf-float-tip' + (o.card ? ' card' : '');
     if (typeof content === 'function') tip.replaceChildren(content()); else tip.textContent = content;
-    if (/** @type {any} */ (dot).gfAgain) (tip.querySelector('.gf-obs-card .t') || tip).append(elem('small', 'again', 'Touchez encore pour ouvrir l’observation'));
+    // A second touch opens the record: said on the card the first time ever (a first-use hint, gone with the card),
+    // afterwards to screen readers only.
+    if (/** @type {any} */ (dot).gfAgain) {
+      (tip.querySelector('.gf-obs-card .t') || tip).append(elem('small', takeHint('map-touch-again') ? 'again' : 'again gf-map-sr', 'Touchez encore pour ouvrir l’observation'));
+    }
     // Its photo arriving changes nothing (fixed size), but placed again once there, to be sure.
     tip.querySelector('img')?.addEventListener('load', () => { if (this.#tipOwner === dot) this.#placeTip(el, gap(o)); }, { once: true });
     try { if (tip.popover && !tip.matches(':popover-open')) tip.showPopover(); } catch { /* not connected */ }
@@ -1772,6 +1985,9 @@ export class GfMap extends LitElement {
 
   #locate() {
     this.#asked = true;
+    this.#locating = !this.#fix;
+    // Refused or unavailable before: asked anew (the shared watch starts again for a newcomer after a failure).
+    if (this.#geoFailed && this.#unwatch) { this.#unwatch(); this.#unwatch = null; }
     if (!this.track) {
       this.track = true;
     } else this.#syncTracking();
@@ -1827,6 +2043,7 @@ export class GfMap extends LitElement {
     L.DomEvent.disableClickPropagation(search);
     L.DomEvent.disableScrollPropagation(search);
     this.#root.append(search);
+    this.#syncState();
   }
 
   /**
@@ -1853,7 +2070,8 @@ export class GfMap extends LitElement {
       });
       this.#root.append(panel);
     }
-    Object.assign(this.#panel, { base: this.#base, overlays: [...this.#overlays], legend: this.legend, ...this.#distributionInfo() });
+    Object.assign(this.#panel, { base: this.#base, overlays: [...this.#overlays], legend: this.legend, legendLines: this.#legendLines, ...this.#distributionInfo() });
+    this.#syncState();
     this.#panel.updateComplete.then(() => this.#panel.open());
   }
 

@@ -44,6 +44,14 @@ export class GfPointCard extends LitElement {
     details.insights summary { cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--gf-accent); }
     details.insights[open] summary { margin-bottom: 8px; }
     details.insights gf-place-insights { max-height: 42vh; overflow-y: auto; }
+    /* Still coming (the address, the altitude): a placeholder, no text — seen only past 400 ms, a light sweeping it. */
+    .ph { display: inline-block; vertical-align: middle; width: 14em; max-width: 70%; height: 0.95em; border-radius: 4px; opacity: 0;
+      background: linear-gradient(100deg, var(--gf-surface-2) 30%, color-mix(in srgb, var(--gf-text-muted) 22%, var(--gf-surface-2)) 50%, var(--gf-surface-2) 70%) 0 0 / 250% 100%;
+      animation: pc-show 0.01s linear 0.4s forwards, pc-sweep 1.2s linear 0.4s infinite; }
+    .ph.short { width: 3.2em; }
+    @keyframes pc-show { to { opacity: 1; } }
+    @keyframes pc-sweep { from { background-position: 125% 0; } to { background-position: -125% 0; } }
+    @media (prefers-reduced-motion: reduce) { .ph { animation: pc-show 0.01s linear 0.4s forwards; } }
   `];
 
   constructor() {
@@ -86,14 +94,17 @@ export class GfPointCard extends LitElement {
   render() {
     const p = this.point;
     if (!p) return nothing;
-    const title = this.label || (this._address === undefined ? 'Recherche de l’adresse…' : this._address || 'Point sur la carte');
-    return html`<section class="card" aria-label="Point sur la carte">
+    // Still coming: a text-free placeholder (past 400 ms), its words for screen readers only.
+    const coming = (/** @type {string} */ words, /** @type {string} */ cls = '') => html`<span class="ph ${cls}" aria-hidden="true"></span><span class="visually-hidden">${words}</span>`;
+    const title = this.label || (this._address === undefined ? coming('Recherche de l’adresse') : this._address || 'Point sur la carte');
+    const loading = !this.label && this._address === undefined || this._altitude === undefined;
+    return html`<section class="card" aria-label="Point sur la carte" aria-busy=${loading ? 'true' : 'false'}>
       <button class="close icon-btn" type="button" aria-label="Fermer"
         @click=${() => this.dispatchEvent(new CustomEvent('close', { bubbles: true, composed: true }))}>${icon('x-lg')}</button>
       <h2>${title}</h2>
       ${this.label && this._address ? html`<div class="meta">${this._address}</div>` : nothing}
       <div class="meta">
-        <span>${icon('triangle')} ${this._altitude === undefined ? '…' : this._altitude === null ? 'altitude inconnue' : this._altitude + ' m'}</span>
+        <span>${icon('triangle')} ${this._altitude === undefined ? coming('Altitude', 'short') : this._altitude === null ? 'altitude inconnue' : this._altitude + ' m'}</span>
         <span class="coords">${formatCoordinates(p)}</span>
         <button class="link" type="button" @click=${this.#copy}>${this._copied ? html`Copié ${icon('check-lg')}` : 'Copier'}</button>
       </div>

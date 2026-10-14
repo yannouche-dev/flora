@@ -3,7 +3,7 @@
 // no answer in time, an HTTP error, an answer of another shape — core/net.js). Distinct from « module désactivé »
 // (the user switched it off: nothing to retry) and from « aucune donnée » (the service answered, with nothing).
 
-import { css, html } from 'lit';
+import { css, html, nothing } from 'lit';
 
 /** For a component without the shared ui styles (styles/ui.js): « Réessayer » as a text action. */
 export const sourceDownStyles = css`
@@ -38,15 +38,21 @@ export function describeFailure(error) {
   return { name, reason: known ? unavailableReason(error) : '' };
 }
 
-/**
- * « Source indisponible : GBIF (hors ligne) — Réessayer ». `errors`: one or several failures (their services
- * named once each); `retry`: asks again.
- * @param {any | any[]} errors @param {() => void} retry @returns {import('lit').TemplateResult}
- */
-export function sourceDown(errors, retry) {
+/** « Source indisponible : GBIF (hors ligne) »: a failure's words. @param {any | any[]} errors */
+export function sourceDownText(errors) {
   const list = (Array.isArray(errors) ? errors : [errors]).map(describeFailure);
   const names = [...new Set(list.map(d => d.name).filter(Boolean))];
   const reasons = [...new Set(list.map(d => d.reason).filter(Boolean))];
-  return html`<p class="muted source-down" role="status">Source indisponible${names.length ? ' : ' + names.join(', ') : ''}${reasons.length ? ` (${reasons.join(', ')})` : ''} —
+  return `Source indisponible${names.length ? ' : ' + names.join(', ') : ''}${reasons.length ? ` (${reasons.join(', ')})` : ''}`;
+}
+
+/**
+ * « Source indisponible : GBIF (hors ligne) — Réessayer ». `errors`: one or several failures (their services
+ * named once each); `retry`: asks again. `live: false`: not a live region of its own — over a map (its point card), the
+ * map's one live region says it (the quiet-map rule, gf-map.js).
+ * @param {any | any[]} errors @param {() => void} retry @param {{ live?: boolean }} [o] @returns {import('lit').TemplateResult}
+ */
+export function sourceDown(errors, retry, { live = true } = {}) {
+  return html`<p class="muted source-down" role=${live ? 'status' : nothing}>${sourceDownText(errors)} —
     <button class="link" type="button" @click=${retry}>Réessayer</button></p>`;
 }

@@ -22,6 +22,7 @@ import { INAT_DATASET, gbifSource } from '../core/around3d.js';
 import { ui } from '../styles/ui.js';
 import './gf-map.js';
 import { openView } from '../core/history.js';
+import { hintView, takeHint } from '../core/hints.js';
 
 /** An iNaturalist observation's number, from its address (« …/observations/123 »); '' for another. @param {string | null | undefined} url */
 const inatId = url => /\/observations\/(\d+)/.exec(String(url || ''))?.[1] || '';
@@ -119,12 +120,14 @@ export class GfSheetMap extends LitElement {
     :host { display: block; }
     :host([fill]) { display: flex; flex-direction: column; }
     :host([fill]) .frame { flex: 1; min-height: 160px; }
-    :host([fill]) .hint { display: none; }
+    :host([fill]) .hint-once { display: none; }
     .chips { position: absolute; z-index: 2; top: 8px; left: 8px; right: 52px; display: flex; flex-wrap: wrap; gap: 4px; pointer-events: none; }
     .chip { pointer-events: auto; display: inline-flex; align-items: center; gap: 4px; max-width: 100%; min-height: 0; padding: 3px 4px 3px 10px; border: 0; border-radius: var(--gf-radius-pill);
       background: var(--gf-surface); color: var(--gf-text); box-shadow: var(--gf-shadow); font-size: 0.75rem; font-weight: 600; cursor: pointer; }
     .chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .chip i { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+    /* Nothing of it drawn (none placed, absent from GBIF): its swatch hollow — why, in the map's panel « État ». */
+    .chip i.none { box-sizing: border-box; border: 1.5px dashed var(--gf-text-muted); background: none; }
     .chip svg { flex: none; font-size: 0.9rem; color: var(--gf-text-muted); }
     .chip:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     .frame { position: relative; border-radius: var(--gf-radius); overflow: hidden; border: 1px solid var(--gf-border); background: var(--gf-surface-2); }
@@ -132,11 +135,9 @@ export class GfSheetMap extends LitElement {
     .actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
     .actions .button, .actions button { font-size: 0.85rem; min-height: 36px; padding: 4px 12px; }
     .actions .near-note { flex-basis: 100%; font-size: 0.75rem; color: var(--gf-text-muted); }
-    .legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 6px; font-size: 0.78rem; color: var(--gf-text-muted); }
-    .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 5px; vertical-align: -1px; border: 1px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 20%); }
     /* The plant's points (its observations, whatever their source): its marker's pink and gold ring. */
-    .legend i.obs, .scope button i.obs, .chip i.obs { border: 0; background: radial-gradient(circle at 35% 30%, #ff6f9c, #e0245e 75%); box-shadow: 0 0 0 1.5px #ffd166; }
-    .hint { font-size: 0.78rem; color: var(--gf-text-muted); margin: 6px 0 0; }
+    .scope button i.obs, .chip i.obs { border: 0; background: radial-gradient(circle at 35% 30%, #ff6f9c, #e0245e 75%); box-shadow: 0 0 0 1.5px #ffd166; }
+    .hint-once.gestures { margin-top: 6px; }
     /* What the map can show: how to frame it, how far around me, which data. */
     .scope { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 8px; align-items: center; margin-top: 8px; font-size: 0.78rem; }
     .scope > b { color: var(--gf-text-muted); font-weight: 600; white-space: nowrap; }
@@ -337,7 +338,13 @@ export class GfSheetMap extends LitElement {
     this._near = { state: 'locating', wanted };
     const fix = await locate();
     if (this.plant !== plant) return;
-    if (!fix || 'error' in fix) { this._near = { state: 'error', wanted, message: fix && 'error' in fix ? fix.error : 'Position introuvable pour le moment.' }; return; }
+    if (!fix || 'error' in fix) {
+      // Asked, no position: one brief toast over the map (the button stays, to try again).
+      const message = fix && 'error' in fix ? fix.error : 'Position introuvable pour le moment.';
+      this._near = { state: 'error', wanted, message };
+      this.#map?.toast(message);
+      return;
+    }
     const radius = savedRadius();
     const point = /** @type {[number, number]} */ (fix.coordinates);
     this._near = { state: 'loading', wanted, point, radius };
@@ -368,7 +375,12 @@ export class GfSheetMap extends LitElement {
     }
     this._near = { state: 'done', wanted, point, radius, points, inatIds, gbifTotal: gbif?.total ?? null, gbifPlaced, gbifCopies: copies,
       inatCount: inat?.length ?? null, gbifOn: Boolean(useGbif), inatOn: Boolean(useInat) };
+    // How many came: said by the map's live region (the counts in its panel's « Légende », never written over it).
+    this.#map?.announce(points.length ? `Autour de vous : ${points.length} observation${points.length > 1 ? 's' : ''} sur la carte` : 'Autour de vous : aucune observation de cette plante');
   }
+
+  /** The block's map (gf-map: what it says goes through it — the quiet-map rule). @returns {any} */
+  get #map() { return this.renderRoot.querySelector('gf-map'); }
 
   /** ✎ on the map: this plant's new position in each place it was moved in. @param {{ placeId: string, plantId: number | null, coordinates: [number, number] }[]} moves */
   async #savePositions(moves) {
@@ -444,6 +456,10 @@ export class GfSheetMap extends LitElement {
     const compare = this._compare?.key && gbifReady ? { key: this._compare.key, label: f.compare?.label || '', country } : null;
     const framing = this.#framing();
     const frame = framing.frame;
+    // What the colours mean: the map's panel « Légende » (gf-map setLegend, updated), not a block of text by the map.
+    this.#legendNow = this.#legend(gbifOn);
+    const gestures = this.#gestures;
+    if (gestures && this.#gestureHint === undefined && !this.fill) this.#gestureHint = takeHint('sheet-map-gestures');
     return html`
       <div class="frame" style=${this.fill ? '' : `height:${HEIGHTS[c.height] || HEIGHTS.m}px`}>
         <gf-map
@@ -475,20 +491,54 @@ export class GfSheetMap extends LitElement {
         ${this.#chips(f)}
       </div>
       ${this.#scope(gbifReady)}
-      ${this.#legend(gbifOn)}
       <div class="actions">
-        ${c.near !== 'off' && (!near || near.state === 'error') ? html`<button type="button" class="near-ask" @click=${() => this.#findNear()}>${icon('crosshair')} Observations autour de moi (${formatDistance(savedRadius())})</button>
-          <span class="near-note">Votre position précise est envoyée à ${c.near === 'both' ? 'iNaturalist et GBIF' : c.near === 'gbif' ? 'GBIF' : 'iNaturalist'} pour cette recherche.</span>` : nothing}
+        ${c.near !== 'off' && near?.state !== 'done' ? this.#nearButton(near) : nothing}
         ${c.actions.open ? html`<a class="button" href=${href.map({ plant: plant.id })}>${icon('map')} Ouvrir dans la Carte</a>` : nothing}
         ${c.actions.spot ? html`<a class="button" href=${href.newSpot(plant.id)}>${icon('geo-alt-fill')} Noter ici</a>` : nothing}
       </div>
-      ${near?.state === 'error' ? html`<p class="hint" role="alert">${near.message}</p>` : nothing}
-      ${near?.state === 'locating' || near?.state === 'loading' ? html`<p class="hint">Recherche des observations autour de vous…</p>` : nothing}
-      ${c.actions.create || (c.actions.edit && this._spots.length) ? html`<p class="hint">${[
-        c.actions.create ? 'Appui long sur la carte : adresse, altitude, créer un endroit avec cette plante' : '',
-        c.actions.edit && c.places && this._spots.length ? '✎ : déplacer mes plants' : '',
-        'les couches : fond et couches IGN de cette carte'].filter(Boolean).join(' · ')}.</p>` : nothing}`;
+      ${gestures && this.#gestureHint ? hintView(gestures + '.', () => { this.#gestureHint = false; this.requestUpdate(); }, 'gestures') : nothing}`;
   }
+
+  /** The gestures' first-use hint shows (core/hints.js: the first map block ever, not a pinned one), until its ✕. @type {boolean | undefined} */
+  #gestureHint;
+
+  /**
+   * « Observations autour de moi », its privacy line under it (its description). While it looks (locating, then
+   * asking): disabled, aria-busy, a light sweeping it past 400 ms — no text; a refusal: a brief toast over the map.
+   * @param {any} near
+   */
+  #nearButton(near) {
+    const c = this.config;
+    const busy = near?.state === 'locating' || near?.state === 'loading';
+    return html`<button type="button" class="near-ask ${busy ? 'busy' : ''}" ?disabled=${busy} aria-busy=${String(busy)} aria-describedby="near-note"
+        @click=${() => this.#findNear()}>${icon('crosshair')} Observations autour de moi (${formatDistance(savedRadius())})</button>
+      <span class="near-note" id="near-note">Votre position précise est envoyée à ${c.near === 'both' ? 'iNaturalist et GBIF' : c.near === 'gbif' ? 'GBIF' : 'iNaturalist'} pour cette recherche.</span>`;
+  }
+
+  /** What the map's gestures do here (long press, ✎, its layers): a first-use hint once per device, and the map's own description. */
+  get #gestures() {
+    const c = this.config;
+    if (!c.actions.create && !(c.actions.edit && this._spots.length)) return '';
+    return [c.actions.create ? 'Appui long sur la carte : adresse, altitude, créer un endroit avec cette plante' : '',
+      c.actions.edit && c.places && this._spots.length ? '✎ : déplacer mes plants' : '',
+      'les couches : fond et couches IGN de cette carte'].filter(Boolean).join(' · ');
+  }
+
+  /** @param {Map<string, any>} changed */
+  updated(changed) {
+    // The map's legend (its panel) and what changed in it, said once; the chips' states: lines of its panel's « État »
+    // (said once by the map, seen there on a touch screen too — a chip has no hover).
+    const map = this.#map;
+    if (!map) return;
+    map.setLegend?.(this.#legendNow);
+    for (const [key, text] of Object.entries(this.#chipState)) map.setStatus?.(key, text);
+    for (const said of this.#toSay.splice(0)) map.announce?.(said);
+    if (changed.has('config') || changed.has('_spots')) map.setAttribute('aria-description', this.#gestures);
+  }
+
+  /** The legend drawn last (render) for the map's panel. @type {{ text: string, swatch?: string }[]} */ #legendNow = [];
+  /** Words to say once the map is there (updated). @type {string[]} */ #toSay = [];
+  /** The chips' states (render), for the map's « État » (updated): '' when there is none. */ #chipState = { filter: '', compare: '' };
 
   /**
    * The points shown — the occurrences of the place touched (GBIF), the observations around me (iNaturalist, GBIF) —,
@@ -545,23 +595,36 @@ export class GfSheetMap extends LitElement {
   }
   /** @type {number | null} */ #thumbFor = null;
 
-  /** What the sheet's data shows on the map, each with its ✕. @param {import('../core/map-focus.js').SheetFocus} f */
+  /**
+   * What the sheet's data shows on the map, each with its ✕ (a control: kept). Its state (looking, none placed,
+   * absent from GBIF) is no suffix written over the map: in its name and title, its swatch hollow (no text), and a line
+   * of the map's panel « État » (gf-map setStatus, in updated: said once by the map's live region).
+   * @param {import('../core/map-focus.js').SheetFocus} f
+   */
   #chips(f) {
     const clear = (/** @type {string} */ kind) => this.dispatchEvent(new CustomEvent('focus-clear', { detail: { kind }, bubbles: true, composed: true }));
     const chips = [];
+    this.#chipState = { filter: '', compare: '' };
     if (f.filter) {
       const none = this._bounds && Array.isArray(this._bounds.points) && !this._bounds.points.length;
-      chips.push(html`<button class="chip" type="button" data-kind="filter" title="Retirer le filtre" @click=${() => clear('filter')}>
-        <i class="obs"></i><span>Filtre : ${f.filter.label}${none ? ' (aucune occurrence localisée)' : ''}</span>${icon('x-lg')}</button>`);
+      const name = `Filtre : ${f.filter.label}${none ? ' (aucune occurrence localisée)' : ''}`;
+      if (none) this.#chipState.filter = `${f.filter.label} : aucune occurrence localisée`;
+      chips.push(html`<button class="chip ${this._bounds?.points === null ? 'busy' : ''}" type="button" data-kind="filter" title=${name + ' — retirer le filtre'}
+        aria-label=${name + '. Retirer le filtre'} aria-busy=${String(this._bounds?.points === null)} @click=${() => clear('filter')}>
+        <i class=${none ? 'none' : 'obs'}></i><span>Filtre : ${f.filter.label}</span>${icon('x-lg')}</button>`);
     }
     if (f.compare) {
-      const state = this._compare?.key === null ? ' (absente de GBIF)' : this._compare?.key === undefined ? '…' : '';
-      chips.push(html`<button class="chip" type="button" data-kind="compare" title="Retirer la comparaison" @click=${() => clear('compare')}>
-        <i style="background:#7b3294"></i><span>Comparaison : ${f.compare.label}${state}</span>${icon('x-lg')}</button>`);
+      const looking = this._compare?.key === undefined;
+      const absent = this._compare?.key === null;
+      const name = `Comparaison : ${f.compare.label}${absent ? ' (absente de GBIF)' : ''}`;
+      if (absent) this.#chipState.compare = `${f.compare.label} : absente de GBIF, rien à comparer`;
+      chips.push(html`<button class="chip ${looking ? 'busy' : ''}" type="button" data-kind="compare" title=${name + ' — retirer la comparaison'}
+        aria-label=${name + '. Retirer la comparaison'} aria-busy=${String(looking)} @click=${() => clear('compare')}>
+        <i class=${absent ? 'none' : ''} style=${absent ? '' : 'background:#7b3294'}></i><span>Comparaison : ${f.compare.label}</span>${icon('x-lg')}</button>`);
     }
     if (f.point) {
-      chips.push(html`<button class="chip" type="button" data-kind="point" title="Retirer le point" @click=${() => clear('point')}>
-        <i style="background:#e11d48"></i><span>${f.point.label}</span>${icon('x-lg')}</button>`);
+      chips.push(html`<button class="chip" type="button" data-kind="point" title=${f.point.label + ' — retirer le point'} aria-label=${f.point.label + '. Retirer le point'}
+        @click=${() => clear('point')}><i style="background:#e11d48"></i><span>${f.point.label}</span>${icon('x-lg')}</button>`);
     }
     return chips.length ? html`<div class="chips">${chips}</div>` : nothing;
   }
@@ -626,35 +689,45 @@ export class GfSheetMap extends LitElement {
     </div>`;
   }
 
-  /** What the colours mean, and where the data comes from. @param {any} gbifOn */
+  /**
+   * What the colours mean, where the data comes from, how many each source has: the lines of the map's panel
+   * « Légende » (gf-map setLegend — not a block of text by the map; the quiet-map rule). Each new line said once.
+   * @param {any} gbifOn @returns {{ text: string, swatch?: string }[]}
+   */
   #legend(gbifOn) {
     const c = this.config;
     const near = this._near;
-    const parts = [];
+    /** @type {{ text: string, swatch?: string }[]} */
+    const lines = [];
     const f = this.mapFocus || noFocus();
     // How many each source has, how many are placed as points — and those not placed twice (GBIF's copies of the
     // iNaturalist observations shown: #findNear, #occurrences).
     const placed = (/** @type {number} */ total, /** @type {number} */ n, /** @type {number} */ copies) =>
       `${total > n ? `, ${n.toLocaleString('fr-FR')} placée${n > 1 ? 's' : ''} en points` : ''}${copies ? `, ${copies} déjà sur iNaturalist` : ''}`;
     const occ = this._bounds?.count ? this.#occurrences() : null;
-    if (gbifOn) parts.push(f.filter
-      ? html`<span><i class="obs"></i>Occurrences GBIF : ${f.filter.label}${this._bounds?.points === null ? ' …' : this._bounds?.count ? ` (${this._bounds.count.toLocaleString('fr-FR')}${placed(this._bounds.count, occ?.areaPlaced ?? (this._bounds.occ?.length || 0), occ?.areaCopies || 0)})` : ''}</span>
-        ${this._bounds?.zone ? html`<span><i style="background:transparent;border:2px solid #a3e68a;box-shadow:0 1px 0 rgb(0 0 0 / 30%)"></i>Limites : ${f.filter.label} (IGN)</span>` : nothing}`
-      : html`<span>Densité GBIF${c.gbif === 'fr' ? ' (France)' : ''}</span>`);
-    if (f.compare && this._compare?.key) parts.push(html`<span><i style="background:#7b3294"></i>${f.compare.label} (GBIF, comparaison)</span>`);
+    if (gbifOn && f.filter) {
+      const counted = this._bounds?.points === null ? ' …' : this._bounds?.count
+        ? ` (${this._bounds.count.toLocaleString('fr-FR')}${placed(this._bounds.count, occ?.areaPlaced ?? (this._bounds.occ?.length || 0), occ?.areaCopies || 0)})` : '';
+      lines.push({ text: `Occurrences GBIF : ${f.filter.label}${counted}`, swatch: 'obs' });
+      if (this._bounds?.zone) lines.push({ text: `Limites : ${f.filter.label} (IGN)`, swatch: 'outline' });
+    } else if (gbifOn) lines.push({ text: `Densité GBIF${c.gbif === 'fr' ? ' (France)' : ''}`, swatch: '#f97316' });
+    if (f.compare && this._compare?.key) lines.push({ text: `${f.compare.label} (GBIF, comparaison)`, swatch: '#7b3294' });
     if (c.places && (this._spots.length || !this.#aboutPlant)) {
       const chosen = this._collections?.find((/** @type {any} */ x) => x.id === c.collection);
-      parts.push(html`<span>${c.subject === 'results' ? `Mes lieux avec des plantes des résultats (${this._spots.length})`
+      lines.push({ text: c.subject === 'results' ? `Mes lieux avec des plantes des résultats (${this._spots.length})`
         : c.subject === 'collection' ? `${chosen?.kind === 'place' ? 'Le lieu' : 'Mes lieux de la collection'} « ${chosen?.name || '…'} » (${this._spots.length})`
-        : `Mes lieux (${this._spots.length})`}</span>`);
+        : `Mes lieux (${this._spots.length})` });
     }
     // Its observations around me, drawn alike whatever their source (while shown: #occurrences).
     if (near?.state === 'done' && c.near !== 'off') {
-      if (near.inatOn) parts.push(html`<span><i class="obs"></i>iNaturalist (${near.inatCount ?? 0})</span>`);
-      if (near.gbifOn) parts.push(html`<span><i class="obs"></i>GBIF (${(near.gbifTotal ?? 0).toLocaleString('fr-FR')} à moins de ${formatDistance(near.radius)}${placed(near.gbifTotal ?? 0, near.gbifPlaced ?? 0, near.gbifCopies || 0)})</span>`);
+      if (near.inatOn) lines.push({ text: `iNaturalist (${near.inatCount ?? 0})`, swatch: 'obs' });
+      if (near.gbifOn) lines.push({ text: `GBIF (${(near.gbifTotal ?? 0).toLocaleString('fr-FR')} à moins de ${formatDistance(near.radius)}${placed(near.gbifTotal ?? 0, near.gbifPlaced ?? 0, near.gbifCopies || 0)})`, swatch: 'obs' });
     }
-    return parts.length ? html`<div class="legend">${parts}</div>` : nothing;
+    // A count that came (not « … »): said once.
+    for (const l of lines) if (!l.text.endsWith('…') && /\d/.test(l.text) && !this.#legendSaid.has(l.text)) { this.#legendSaid.add(l.text); this.#toSay.push(l.text); }
+    return lines;
   }
+  /** The legend's lines said already. @type {Set<string>} */ #legendSaid = new Set();
 }
 
 customElements.define('gf-sheet-map', GfSheetMap);

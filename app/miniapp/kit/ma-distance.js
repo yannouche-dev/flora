@@ -6,8 +6,8 @@
 // The card sits at the bottom of the map, in its middle; the circle stays still on the screen for the whole step —
 // in the middle of the map's width, its centre a fifth of the map's height above the card (the card's real size
 // measured), its lower part behind the card — and the map zooms under it as the distance changes, the place under
-// its centre, while the observations of the new circle come (those shown meanwhile dimmed, the count saying it
-// searches).
+// its centre, while the observations of the new circle come (those shown meanwhile dimmed, the ring breathing — no
+// text: how many came is said by the map, gf-map announce).
 // The step « cards » keeps this same map beside the cards (the same element, the same Leaflet map: kit/around.js
 // puts the cards in a column of their own): the card folds into a chip (« 1 km · Changer »), the circle in the middle
 // of the room above it; the map lights the card on top (a soft ring), the plants passed (dimmed), the matches (a pink
@@ -66,13 +66,7 @@ export class MaDistance extends LitElement {
     .dist output { font-size: 2.4rem; line-height: 3.1rem; font-weight: 800; color: var(--gf-accent); font-variant-numeric: tabular-nums; animation: ma-in 0.28s ease-out; }
     .dist .moods { display: grid; justify-items: center; }
     .dist .mood { color: var(--gf-text-muted); font-style: italic; animation: ma-in 0.32s ease-out; }
-    .dist .obs { display: grid; justify-items: center; font-size: 0.8rem; color: var(--gf-text-muted); min-height: 1.3em; }
-    .dist .obs > span { grid-area: 1 / 1; display: inline-flex; gap: 6px; align-items: center; animation: ma-fade 0.3s ease-out; }
-    .dist .spin { width: 11px; height: 11px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--gf-accent) 25%, transparent);
-      border-top-color: var(--gf-accent); animation: ma-spin 0.8s linear infinite; }
     @keyframes ma-in { from { opacity: 0; transform: translateY(4px); } }
-    @keyframes ma-fade { from { opacity: 0; } }
-    @keyframes ma-spin { to { transform: rotate(360deg); } }
 
     /* The slider: its rail filled up to the thumb, a dot at each stop (the stops passed in the accent colour), the main
        ones labelled under it — all of them when there is room; the stop chosen in bold. The native input on top (its
@@ -114,8 +108,6 @@ export class MaDistance extends LitElement {
     .distance-wrap .welcome h1 { font-size: 1.35rem; }
     @container (max-width: 520px) {
       .distance-wrap .welcome { margin-bottom: 12px; padding: 14px 14px 12px; gap: 8px; }
-      /* Two lines kept for the count: the card keeps its height (the circle above it does not move). */
-      .dist .obs { min-height: 2.6em; align-content: start; }
     }
     /* Step « cards »: the map beside the cards, its distance a chip at the bottom. */
     :host([compact]) { overflow: hidden; }
@@ -132,7 +124,7 @@ export class MaDistance extends LitElement {
     :host([band][folded]) .distance-wrap { position: static; }
     :host([band][folded]) .chipbar { margin: 6px auto; }
     @media (prefers-reduced-motion: reduce) {
-      .dist output, .dist .mood, .dist .obs > span, .dist .spin { animation: none; }
+      .dist output, .dist .mood { animation: none; }
       .range .rail, .range .stop, .range .mark { transition: none; }
     }
   `];
@@ -175,7 +167,15 @@ export class MaDistance extends LitElement {
     this.#session = null;
   }
 
-  updated() { this.#observe(); }
+  updated() {
+    this.#observe();
+    // How many observations came: said by the map's one live region, never written over it (the quiet-map rule,
+    // gf-map.js); while they come, the ring breathes and the points shown dim (no text).
+    const line = this.#session && !this.#session.obsLoading ? this.#obsLine() : '';
+    if (line && line !== this.#said) /** @type {any} */ (this.renderRoot.querySelector('gf-map'))?.announce?.(line);
+    if (line) this.#said = line;
+  }
+  #said = '';
 
   /** The card and the map's box observed (once each: they stay while the screen shows). */
   #observed = /** @type {Element[]} */ ([]);
@@ -279,10 +279,9 @@ export class MaDistance extends LitElement {
   }
   /** @type {any} */ #areaMemo = null;
 
-  /** How many observations: all of them, and how many are on the map; searching, said so. */
+  /** How many observations: all of them, and how many are on the map (said, not written: updated). */
   #obsLine() {
     const s = /** @type {import('./session.js').AroundSession} */ (this.#session);
-    if (s.obsLoading) return 'Recherche des observations…';
     const n = s.obs.length, total = Math.max(s.obsTotal || 0, n);
     if (!n) return '';
     const fr = (/** @type {number} */ x) => x.toLocaleString('fr-FR');
@@ -325,8 +324,7 @@ export class MaDistance extends LitElement {
   /** Step « map »: the card — how far, the slider, the count, « Qui pousse par ici ? », « Changer de lieu ». */
   #card() {
     const app = /** @type {import('../runtime.js').MiniApp} */ (this.app), c = /** @type {Record<string, any>} */ (this.c);
-    const line = this.#obsLine(), waiting = Boolean(this.#session?.obsLoading);
-    return html`<section class="welcome distance">
+    return html`<section class="welcome distance" aria-busy=${String(Boolean(this.#session?.obsLoading))}>
       <div class="leaf" aria-hidden="true">${icon('geo-alt-fill')}</div>
       <h1>Jusqu’où part l’expédition ?</h1>
       <p>Autour ${c.place ? 'de ' + c.place : 'de vous'}. Plus le cercle est grand, plus la récolte de rencontres est riche — et plus il faudra marcher pour aller les saluer.</p>
@@ -334,7 +332,6 @@ export class MaDistance extends LitElement {
         <div class="value">${fresh(distLabel(c.radius), v => html`<output>${v}</output>`)}</div>
         <div class="moods">${fresh(distMood(c.radius), v => html`<span class="mood">${v}</span>`)}</div>
         ${this.#range(c.radius)}
-        <span class="obs" aria-live="polite" aria-busy=${waiting ? 'true' : 'false'}>${line ? fresh(line, v => html`<span>${waiting ? html`<i class="spin" aria-hidden="true"></i>` : ''}${v}</span>`) : ''}</span>
       </div>
       <button class="primary go" type="button" @click=${() => this.#go()}>${icon('binoculars')} Qui pousse par ici ?</button>
       <button class="link skip" type="button" @click=${() => app.go('start')}>Changer de lieu</button>

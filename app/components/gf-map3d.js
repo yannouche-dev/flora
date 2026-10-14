@@ -74,8 +74,9 @@ export class GfMap3d extends LitElement {
         <button type="button" class="gf3d-close" autofocus aria-label="Fermer la vue 3D" @click=${() => this.#dialog.close()}>${icon('x-lg')}</button>
       </header>
       <div class="gf3d-canvas">${place ? this.#map(place) : nothing}</div>
-      ${this._card ? html`<div class="gf3d-card" role="status"><b>${this._card.name}</b>${this._card.sci && this._card.sci !== this._card.name ? html`<i>${this._card.sci}</i>` : nothing}
-        <small>${this._card.m == null ? 'Altitude inconnue' : `Altitude : ${formatAltitude(this._card.m)} (IGN)`}</small></div>` : nothing}
+      ${this._card ? html`<div class="gf3d-card"><b>${this._card.name}</b>${this._card.sci && this._card.sci !== this._card.name ? html`<i>${this._card.sci}</i>` : nothing}
+        <small>${this.#altitude(this._card)}</small>
+        <button type="button" class="gf3d-card-x" aria-label="Fermer la fiche de la plante" title="Fermer" @click=${() => { this._card = null; }}>${icon('x-lg')}</button></div>` : nothing}
     </dialog>`;
   }
 
@@ -92,13 +93,21 @@ export class GfMap3d extends LitElement {
       @plant-select=${(/** @type {CustomEvent} */ e) => this.#pick(e.detail.entryId)}></gf-map>`;
   }
 
-  /** A plant touched: its name and altitude. @param {string} entryId */
+  /** @param {{ m: number | null }} card */
+  #altitude(card) { return card.m == null ? 'Altitude inconnue' : `Altitude : ${formatAltitude(card.m)} (IGN)`; }
+
+  /**
+   * A plant touched: its name and altitude, in a small card over the map's top (the answer to a touch: its ✕ lets it
+   * go), said by the map's one live region — not a live region of its own (the quiet-map rule, gf-map.js).
+   * @param {string} entryId
+   */
   #pick(entryId) {
     const place = this._place;
     const entry = place?.properties.plants.find((/** @type {any} */ e) => e.id === entryId);
     if (!entry) return;
     const m = altitudeOf(entry, entry.coordinates) ?? (entry.coordinates ? null : altitudeOf(place.properties, place.geometry?.coordinates));
-    this._card = { name: entry.vernacularName || entry.scientificName || 'Plante', sci: entry.scientificName || '', m };
+    const card = this._card = { name: entry.vernacularName || entry.scientificName || 'Plante', sci: entry.scientificName || '', m };
+    /** @type {any} */ (this.querySelector('gf-map'))?.announce?.(`${card.name} : ${this.#altitude(card)}`);
   }
 
   /**

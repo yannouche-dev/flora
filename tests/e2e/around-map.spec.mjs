@@ -2,12 +2,14 @@
 // at the bottom of the map, in its middle; the circle still on the screen for the whole step (the map's middle, its
 // centre a fifth of the map's height above the card), the map zooming under it — the place under its centre, the
 // distance chosen to its edge (a larger one: a lower zoom); the slider's stops (a dot each,
-// ← → one stop, Home / End, its value said in words); a slow iNaturalist: the points shown stay (dimmed) while
-// « Recherche des observations… », then the new ones; a quick run of changes asks only for the last distance; and
+// ← → one stop, Home / End, its value said in words); a slow iNaturalist: the points shown stay (dimmed, the ring
+// breathing — no text: the quiet-map rule) while the new ones come, then they come, their count said by the map's live
+// region (quiet.mjs), not written over it; a quick run of changes asks only for the last distance; and
 // every point that has a photo shows it after any run of changes (the photos of points gone no longer hold up the
 // browser's few connections to the photos' host).
 import http from 'node:http';
 import { test, expect, answerAround } from './fixtures.mjs';
+import { mapSaid } from './quiet.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
 
@@ -158,7 +160,7 @@ test('le curseur : un point par palier, ← → d’un palier, Début / Fin, sa 
   expect(marks[marks.length - 1][1]).toBeLessThanOrEqual(/** @type {any} */ (range).x + /** @type {any} */ (range).width + 1);
 });
 
-test('iNaturalist lent : les points restent, estompés, pendant « Recherche des observations… », puis les nouveaux', async ({ app, page }) => {
+test('iNaturalist lent : les points restent, estompés (sans texte), puis les nouveaux, leur nombre dit', async ({ app, page }) => {
   await answerPoints(page, { delay: r => r === 2 ? 2000 : 0 });
   await toMap(app, page);
   const map = page.locator('ma-distance gf-map');
@@ -167,15 +169,16 @@ test('iNaturalist lent : les points restent, estompés, pendant « Recherche des
   const before = await dots.evaluateAll(els => els.map(e => /** @type {HTMLElement} */ (e).style.transform));
   await page.locator('ma-distance input[type="range"]').focus();
   await page.keyboard.press('ArrowRight');
-  const line = page.locator('ma-distance .obs');
-  await expect(line).toHaveText('Recherche des observations…');
-  await expect(line.locator('.spin')).toHaveCount(1);
+  // Coming: no text over the map (the card says nothing of it; aria-busy), the points dimmed.
+  await expect(page.locator('ma-distance .obs, ma-distance .spin')).toHaveCount(0);
+  await expect(page.locator('ma-distance .welcome')).toHaveAttribute('aria-busy', 'true');
   await expect(map.locator('.leaflet-container')).toHaveClass(/gf-area-loading/);
   // The points of before still there, dimmed.
   await page.waitForTimeout(800);
   await expect(dots).toHaveCount(30);
   expect(Number(await dots.first().locator('.pop').evaluate(e => getComputedStyle(e).opacity))).toBeLessThan(0.6);
-  await expect(line).toHaveText('90 observations de plantes — les 30 plus récentes sur la carte', { timeout: 5000 });
+  await expect(page.locator('ma-distance .welcome')).toHaveAttribute('aria-busy', 'false', { timeout: 5000 });
+  await expect(mapSaid(map)).toContainText('90 observations de plantes — les 30 plus récentes sur la carte');
   await expect(map.locator('.leaflet-container')).not.toHaveClass(/gf-area-loading/);
   await expect(dots).toHaveCount(30);
   const after = await dots.evaluateAll(els => els.map(e => /** @type {HTMLElement} */ (e).style.transform));
@@ -186,7 +189,7 @@ test('iNaturalist lent : les points restent, estompés, pendant « Recherche des
 test('des changements rapides : seule la dernière distance est demandée', async ({ app, page }) => {
   const asked = await answerPoints(page);
   await toMap(app, page);
-  await expect(page.locator('ma-distance .obs')).toContainText('observations de plantes');
+  await expect(mapSaid(page.locator('ma-distance gf-map'))).toContainText('observations de plantes');
   expect(asked).toEqual([1]);
   // The slider dragged: 2, 5, 10 then back to 5 km, each a moment after the other (a hand's pace, under the 250 ms).
   await page.locator('ma-distance input[type="range"]').evaluate(async el => {
@@ -198,7 +201,8 @@ test('des changements rapides : seule la dernière distance est demandée', asyn
     }
   });
   await expect(page.locator('ma-distance input[type="range"]')).toHaveAttribute('aria-valuetext', '5 kilomètres');
-  await expect(page.locator('ma-distance .obs')).toContainText('observations de plantes', { timeout: 5000 });
+  await expect(page.locator('ma-distance .welcome')).toHaveAttribute('aria-busy', 'false', { timeout: 5000 });
+  await expect(mapSaid(page.locator('ma-distance gf-map'))).toContainText('observations de plantes');
   await page.waitForTimeout(600);
   expect(asked).toEqual([1, 5]);
 });
@@ -229,7 +233,8 @@ test.describe('les photos des points', () => {
       await page.waitForTimeout(900);
     }
     await expect(slider).toHaveAttribute('aria-valuetext', '20 kilomètres');
-    await expect(page.locator('ma-distance .obs')).toContainText('observations de plantes');
+    await expect(page.locator('ma-distance .welcome')).toHaveAttribute('aria-busy', 'false', { timeout: 5000 });
+    await expect(mapSaid(page.locator('ma-distance gf-map'))).toContainText('observations de plantes');
     const dots = page.locator('ma-distance .leaflet-marker-pane .gf-obs-leaf:not(.gf-leave)');
     await expect(dots).toHaveCount(60);
     /** Of the points shown: those with a photo, those whose photo shows, those without any (a leaf each). */

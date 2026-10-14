@@ -13,7 +13,7 @@ import { creditsText } from '../core/credit.js';
 import { safeUrl } from '../core/safe-url.js';
 import { forgetFailures } from '../core/cache.js';
 import { isUnavailable } from '../core/net.js';
-import { sourceDown, sourceDownStyles } from '../core/source-state.js';
+import { sourceDown, sourceDownStyles, sourceDownText } from '../core/source-state.js';
 
 /** Radius of « Plantes vues ici » (metres). */
 const SEEN_RADIUS = 500;
@@ -99,6 +99,7 @@ export class GfPlaceInsights extends LitElement {
       if (this.point === point) /** @type {any} */ (this)[k] = isUnavailable(error) ? { error } : null;
     };
     this._zones = this._seen = this._pollen = this._climate = undefined;
+    this.#said.clear();
     if (moduleOn('ignNature')) openData.zonesAt(point).then(keep('_zones'), fail('_zones')); else this._zones = 'off';
     if (moduleOn('inaturalist')) speciesAround(point, SEEN_RADIUS).then(keep('_seen'), fail('_seen')); else this._seen = 'off';
     if (moduleOn('openmeteo')) {
@@ -113,10 +114,23 @@ export class GfPlaceInsights extends LitElement {
     this.#load();
   }
 
-  /** The « Source indisponible — Réessayer » line of a part that failed, or nothing. @param {any} part */
+  /**
+   * The « Source indisponible — Réessayer » line of a part that failed, or nothing. In a map's point card (`compact`):
+   * kept in the card the user opened, with its « Réessayer », but said by the map's one live region (map-say), not a
+   * live region of its own each (the quiet-map rule, gf-map.js).
+   * @param {any} part
+   */
   #down(part) {
-    return part?.error ? sourceDown(part.error, () => this.#retry()) : nothing;
+    if (!part?.error) return nothing;
+    if (!this.compact) return sourceDown(part.error, () => this.#retry());
+    const text = sourceDownText(part.error);
+    if (!this.#said.has(text)) {
+      this.#said.add(text);
+      queueMicrotask(() => this.dispatchEvent(new CustomEvent('map-say', { detail: { text }, bubbles: true, composed: true })));
+    }
+    return sourceDown(part.error, () => this.#retry(), { live: false });
   }
+  /** The failures said already for this point (once each). @type {Set<string>} */ #said = new Set();
 
   render() {
     if (!this.point) return nothing;
