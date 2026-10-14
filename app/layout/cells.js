@@ -269,8 +269,10 @@ customElements.define('dl-map', DlMap);
 export class DlPlace extends LitElement {
   static properties = { state: { attribute: false }, _busy: { state: true }, _error: { state: true } };
 
+  // Positioned: what it places absolutely (the slider's hidden label) scrolls with it — placed by the cell instead, it
+  // stood below the cell's edge when the zone holds more than the cell's height, and the cell (which clips) overflowed.
   static styles = [ui, scopeStyles, css`
-    :host { display: block; overflow-y: auto; padding: 10px 12px; }
+    :host { display: block; position: relative; overflow-y: auto; padding: 10px 12px; }
     .box { display: grid; gap: 10px; }
     .primary { justify-self: start; }
   `];
@@ -356,12 +358,16 @@ customElements.define('dl-results', DlResults);
 export class DlSearch extends LitElement {
   static properties = { state: { attribute: false }, params: { attribute: false }, _filters: { state: true } };
 
+  /* A cell lower than its bar (a narrow one, where the bar folds onto more lines; a short row: « Étude », « Grille et
+     photos » at 720 px, or on a phone): the cell scrolls, never cuts the bar's last lines (the chips, « Filtrer par »)
+     out of reach — the cell around it clips. Below the bar, the filters opened and the list keep a little room of
+     their own (reached by scrolling the cell), never squeezed to nothing under a tall bar. */
   static styles = [ui, css`
-    :host { display: flex; flex-direction: column; min-height: 0; }
+    :host { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; }
     gf-results-bar { flex: none; }
     .filters { flex: none; max-height: 45%; overflow-y: auto; padding: 0 12px; border-bottom: 1px solid var(--gf-border); background: var(--gf-surface); }
-    :host([no-list]) .filters { flex: 1; max-height: none; }
-    dl-results { flex: 1; min-height: 0; }
+    :host([no-list]) .filters { flex: 1; max-height: none; min-height: 8rem; }
+    dl-results { flex: 1; min-height: 8rem; }
   `];
 
   constructor() {
@@ -385,7 +391,7 @@ export class DlSearch extends LitElement {
   render() {
     const open = this._filters ?? Boolean(this.params.filters);
     const list = this.params.list !== false;
-    return html`<gf-results-bar .wide=${false} @open-filters=${(/** @type {Event} */ e) => { e.stopPropagation(); this._filters = !open; }}></gf-results-bar>
+    return html`<gf-results-bar .wide=${false} count-above @open-filters=${(/** @type {Event} */ e) => { e.stopPropagation(); this._filters = !open; }}></gf-results-bar>
       ${open ? html`<div class="filters" role="region" aria-label="Filtres"><gf-filter-panel></gf-filter-panel></div>` : nothing}
       ${list ? html`<dl-results .state=${this.state} .params=${{ view: 'auto' }}></dl-results>` : nothing}`;
   }

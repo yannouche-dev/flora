@@ -25,6 +25,8 @@ export class GfResultsBar extends LitElement {
     wide: { type: Boolean },
     /** The list is a grid whose column headers sort: no sort menu or density toggle then. */
     grid: { type: Boolean },
+    /** The count is shown just above the bar, by its host (a free layout's cell head: « Recherche · 66 espèces »). */
+    countAbove: { type: Boolean, attribute: 'count-above' },
     _copied: { state: true }
   };
 
@@ -43,11 +45,21 @@ export class GfResultsBar extends LitElement {
       font-size: 0.875rem;
     }
     .row { display: flex; align-items: center; gap: 8px; }
+    /* With its count shown just above (count-above: a free layout's cell head, « Recherche · 66 espèces »), the bar
+       does not say it twice: its count is kept for screen readers only (still announced as it changes), and the sort
+       menu takes its place, at the start of the row — whole at a column's usual width (where beside the count it was
+       cut: « Nom scientifiqu »), giving way as on a phone in the narrowest cells rather than taking a line of its own. */
+    :host([count-above]) .count { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+    :host([count-above]) .row select { margin-right: auto; }
     /* Too narrow for the count, the sort menu and the tools on one line (the menu would shrink past its words): the
-       count and the tools on the first, the menu on its own below, whole. A phone keeps one line (wider than this). */
+       count and the tools on the first, the menu on its own below, whole. A phone keeps one line (wider than this).
+       No count beside it (count-above), the menu stays on the tools' line: a line less in a cell already short of
+       height (« Grille et photos »: 213 px for the bar at its fullest, not 251). */
     @container results-bar (max-width: 320px) {
       .row { flex-wrap: wrap; row-gap: 6px; }
       .row select { order: 1; flex: 1 1 100%; }
+      :host([count-above]) .row { flex-wrap: nowrap; }
+      :host([count-above]) .row select { order: 0; flex: 0 1 auto; }
     }
     /* Icon-only toggles and actions of the row (compact, share): round, same height as the other controls. */
     .tool { flex: none; width: 34px; height: 34px; min-height: 0; padding: 0; display: inline-grid; place-items: center; font-size: 1rem; }
@@ -87,6 +99,7 @@ export class GfResultsBar extends LitElement {
     super();
     this.wide = true;
     this.grid = false;
+    this.countAbove = false;
     this._copied = false;
   }
 

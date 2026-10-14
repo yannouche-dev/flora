@@ -308,7 +308,7 @@ test.describe('un grand écran', () => {
     }
   });
 
-  test('la recherche dans une case étroite (sa largeur minimale) : sa barre tient, rien de coupé ; le tri sous le compte', async ({ app, page }) => {
+  test('la recherche dans une case étroite (sa largeur minimale) : sa barre tient, rien de coupé ; le compte dans l’en-tête, le tri à sa place', async ({ app, page }) => {
     await app.open('#/layout/[search@5,results]?q=ail&photo=avec&family=Amaryllidaceae');
     const cell = cellOf(page, 'search');
     await expect(cell.locator('.sub')).toHaveText(/espèces?$/);
@@ -324,11 +324,15 @@ test.describe('un grand écran', () => {
       expect(r.x).toBeGreaterThanOrEqual(c.x - 0.5);
       expect(r.right).toBeLessThanOrEqual(c.x + c.width + 0.5);
     }
-    // The field keeps room to read what is typed; the sort menu on its own line, whole, under the count.
+    // The field keeps room to read what is typed. The count, in the cell's head, is not said twice in the bar (kept
+    // for screen readers, out of sight): the sort menu takes its place, on the line of the tools — no line of its own.
     expect((await box(bar.locator('gf-plant-search input'))).width).toBeGreaterThan(180);
-    const [count, sort] = await Promise.all([bar.locator('.count'), bar.locator('select')].map(box));
-    expect(sort.y).toBeGreaterThan(count.y + count.height - 1);
-    expect(sort.width).toBeGreaterThan(220);
+    const count = bar.locator('.count');
+    await expect(count).toHaveText(await cell.locator('.sub').innerText());
+    expect((await box(count)).width).toBeLessThanOrEqual(1);
+    const [sort, tool] = await Promise.all([bar.locator('select'), bar.locator('.row .tool').first()].map(box));
+    expect(Math.abs((sort.y + sort.height / 2) - (tool.y + tool.height / 2))).toBeLessThan(2);
+    expect(sort.width).toBeGreaterThan(150);
   });
 });
 
@@ -341,20 +345,41 @@ const cellsOf = spec => {
 
 test('les modèles : aucune case ne déborde, ni la page de côté — même la recherche dans sa colonne étroite (« Grille et photos »)', async ({ app, page }) => {
   await app.open('#/layout');
-  for (const preset of PRESETS) {
-    // A search with chips (a filter, a family), « Filtrer par », the scope: the bar at its fullest.
-    await app.go(`#/layout/${preset.spec}?${AT}&q=ail&photo=avec&family=Amaryllidaceae`);
-    await expect(page.locator('gf-layout section.cell')).toHaveCount(cellsOf(preset.spec));
-    await expect.poll(() => app.state('results.total')).toBeGreaterThan(0);
-    const tabs = page.locator('gf-layout .tabs [role="tab"]');
-    const panes = Math.max(1, await tabs.count());
-    for (let i = 0; i < panes; i++) {
-      if (await tabs.count()) await tabs.nth(i).click();
-      await page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
-      const over = await page.locator('gf-layout section.cell').evaluateAll(cells => cells
-        .filter(c => c.scrollWidth > c.clientWidth + 1).map(c => `${/** @type {HTMLElement} */ (c).dataset.comp} : ${c.scrollWidth - c.clientWidth} px`));
-      expect(over, `${preset.id}, ${panes > 1 ? 'onglet ' + (i + 1) : 'l’écran'}`).toEqual([]);
-      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  const vp = /** @type {{ width: number, height: number }} */ (page.viewportSize());
+  // The desktop also at 720 px high: the rows lower than the search's bar there (« Étude », « Grille et photos »).
+  for (const height of vp.width > 600 ? [vp.height, 720] : [vp.height]) {
+    await page.setViewportSize({ width: vp.width, height });
+    for (const preset of PRESETS) {
+      // A search with chips (a filter, a family), « Filtrer par » (the genus Allium), the scope: the bar at its fullest.
+      await app.go(`#/layout/${preset.spec}?${AT}&q=allium&photo=avec&family=Amaryllidaceae`);
+      await expect(cellOf(page, 'search').locator('gf-results-bar .suggestions')).toHaveCount(await cellOf(page, 'search').count());
+      await expect(page.locator('gf-layout section.cell')).toHaveCount(cellsOf(preset.spec));
+      await expect.poll(() => app.state('results.total')).toBeGreaterThan(0);
+      const tabs = page.locator('gf-layout .tabs [role="tab"]');
+      const panes = Math.max(1, await tabs.count());
+      for (let i = 0; i < panes; i++) {
+        const where = `${preset.id}, ${vp.width}×${height}, ${panes > 1 ? 'onglet ' + (i + 1) : 'l’écran'}`;
+        if (await tabs.count()) await tabs.nth(i).click();
+        await page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
+        // No cell cuts what it holds, sideways or below (a cell clips: what passes its edge is out of reach).
+        const over = await page.locator('gf-layout section.cell').evaluateAll(cells => cells.flatMap(c => [
+          ...c.scrollWidth > c.clientWidth + 1 ? [`${/** @type {HTMLElement} */ (c).dataset.comp} : ${c.scrollWidth - c.clientWidth} px de côté`] : [],
+          ...c.scrollHeight > c.clientHeight + 1 ? [`${/** @type {HTMLElement} */ (c).dataset.comp} : ${c.scrollHeight - c.clientHeight} px dessous`] : []]));
+        expect(over, where).toEqual([]);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        // The search's bar taller than its cell: the cell scrolls (the wheel, as a hand would), its last line reached.
+        const search = cellOf(page, 'search');
+        if (!await search.isVisible()) continue;
+        const controls = search.locator('gf-results-bar').locator('input, select, button, a');
+        const s = await box(search);
+        await page.mouse.move(s.x + s.width / 2, s.y + 44);
+        await page.mouse.wheel(0, 1000);
+        // How far the lowest control of the bar ends below the cell (≤ 0: in sight).
+        await expect.poll(async () => {
+          const [cell, bottoms] = await Promise.all([box(search), controls.evaluateAll(els => els.map(e => e.getBoundingClientRect()).filter(r => r.height).map(r => r.bottom))]);
+          return Math.max(...bottoms) - (cell.y + cell.height);
+        }, where).toBeLessThanOrEqual(0.5);
+      }
     }
   }
 });
