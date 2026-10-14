@@ -1205,9 +1205,13 @@ export class GfPlantDetail extends LitElement {
     clearTimeout(this.#readTimer);
   }
 
-  /** The page's title: this plant, unless it is only a preview. */
+  /** The page's title: this plant, unless it is only a preview, or in a free layout that has its own title (?title=). */
   #title() {
     const plant = this._plant;
+    /** @type {Node | null} */
+    let host = this;
+    while (host && host.nodeName !== 'GF-LAYOUT') { const root = host.getRootNode(); host = root instanceof ShadowRoot ? root.host : null; }
+    if (/** @type {any} */ (host)?.pageTitle) return;
     if (!this.preview && !this.only && plant && !plant.failed) document.title = (plant.vernacularNames?.[0] || plant.scientificName) + ' — GeoFlora';
   }
 

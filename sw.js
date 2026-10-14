@@ -111,6 +111,7 @@ const SHELL = [
   'app/core/voice.js',
   'app/core/nearby.js',
   'app/core/geoservices.js',
+  'app/core/place-find.js',
   'app/core/media.js',
   'app/styles/ui.js',
   'app/core/query.js',

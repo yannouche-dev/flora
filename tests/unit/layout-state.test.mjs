@@ -44,3 +44,40 @@ test('une plante dans l’adresse avant que la flore soit là : ses noms lus une
   assert.deepEqual(s.plantInfo, { id: ORTIE.id, name: 'Ortie dioïque', sci: 'Urtica dioica' });
   s.dispose();
 });
+
+test('un lieu en mots dans l’adresse (place= sans at=) : trouvé, il devient la zone et l’adresse le remplace ; introuvable ou hors ligne : dit, place= gardé', async () => {
+  /** @type {string[]} */
+  const asked = [];
+  const found = { label: 'Puy de Mirabel (Ménétrol)', coordinates: /** @type {[number, number]} */ ([3.1093, 45.8732]), kind: /** @type {'poi'} */ ('poi') };
+  /** @param {string} text */
+  const find = async text => {
+    asked.push(text);
+    if (text === 'hors ligne') throw Object.assign(new Error('offline'), { name: 'SourceError', kind: 'offline' });
+    return text.startsWith('mirabel') ? found : null;
+  };
+  const s = new LayoutState({ radius: 1000, find });
+  /** @type {{ how: string, keys: string[] }[]} */
+  const changes = [];
+  s.addEventListener('change', e => { const d = /** @type {CustomEvent} */ (e).detail; if (d.keys.length) changes.push(d); });
+  s.set({ place: 'mirabel, menetrol, 63' }, 'none');
+  assert.equal(s.placeState, 'finding');
+  await tick();
+  assert.deepEqual(s.live.at, [3.1093, 45.8732]);
+  assert.equal(s.live.place, 'Puy de Mirabel (Ménétrol)');
+  assert.deepEqual([s.placeState, s.placeError], ['idle', null]);
+  // The address replaced, not a new entry.
+  assert.deepEqual(changes.at(-1), { how: 'replace', keys: ['at', 'place'] });
+  assert.deepEqual(asked, ['mirabel, menetrol, 63']);
+  // Not found: no scope, why said, the words kept (a reload asks again).
+  s.setScope(null);
+  s.set({ place: 'Zzyzx' }, 'none');
+  await tick();
+  assert.deepEqual([s.live.at, s.live.place, s.placeState, s.placeError], [null, 'Zzyzx', 'failed', 'Lieu introuvable : Zzyzx']);
+  s.set({ place: 'hors ligne' }, 'none');
+  await tick();
+  assert.equal(s.placeError, 'Hors ligne : lieu non cherché (hors ligne)');
+  // No scope asked: nothing said any more.
+  s.setScope(null);
+  assert.deepEqual([s.placeState, s.placeError], ['idle', null]);
+  s.dispose();
+});

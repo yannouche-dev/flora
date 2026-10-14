@@ -365,6 +365,119 @@ test.describe('un grand écran', () => {
   });
 });
 
+/**
+ * The IGN geocoder answered (data.geopf.fr/geocodage/search): Ménétrol (63) for a commune asked, the Puy de Mirabel
+ * there and a far-away Mirabel (Drôme) for places; nothing else. Each request's query kept, in order.
+ * @param {Page} page @returns {Promise<URLSearchParams[]>}
+ */
+async function answerGeocoder(page) {
+  /** @type {URLSearchParams[]} */
+  const asked = [];
+  const feature = (/** @type {[number, number]} */ at, /** @type {any} */ properties) => ({ type: 'Feature', geometry: { type: 'Point', coordinates: at }, properties });
+  await page.route(/^https:\/\/data\.geopf\.fr\/geocodage\/search\?/, route => {
+    const p = new URL(route.request().url()).searchParams;
+    asked.push(p);
+    const q = (p.get('q') || '').toLowerCase();
+    const features = p.get('index') === 'poi'
+      ? q === 'mirabel' ? [
+        feature([5.099, 44.311], { _type: 'poi', toponym: 'Mirabel', category: ['lieu-dit habité'], city: ['Mirabel-aux-Baronnies'], citycode: ['26187'], postcode: ['26110'], score: 0.99 }),
+        feature([3.1093, 45.8732], { _type: 'poi', toponym: 'Puy de Mirabel', category: ['sommet'], city: ['Ménétrol'], citycode: ['63224'], postcode: ['63200'], score: 0.8 })] : []
+      : q === 'menetrol' ? [feature([3.1244, 45.8711], { _type: 'address', type: 'municipality', name: 'Ménétrol', label: 'Ménétrol', city: 'Ménétrol', citycode: '63224', postcode: '63200', score: 0.95 })] : [];
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ type: 'FeatureCollection', features }) });
+  });
+  return asked;
+}
+
+test.describe('le titre et un lieu en mots dans l’adresse', () => {
+  // A wide screen (every cell in sight), but the last one: a phone's.
+  test.beforeEach(({ isMobile }, info) => { test.skip(isMobile !== info.title.startsWith('sur téléphone'), 'a wide screen, or a phone for the last'); });
+  const TITLE = 'Orchidées de la colline de Mirabel';
+  /** The scope's circle on the map: its centre [lon, lat] and radius, or null. @param {Page} page */
+  const circle = page => page.locator('dl-map gf-map').evaluate(m => { const a = /** @type {any} */ (m).area; return a ? { center: a.center, radius: a.radius } : null; });
+
+  test('place= sans at= : le lieu cherché à l’IGN, la zone posée là, l’adresse réécrite (at=, le nom trouvé, r= gardé) ; le titre en tête, dans l’onglet et le partage', async ({ app, page }) => {
+    const asked = await answerGeocoder(page);
+    await app.open(`#/layout/[map(r=1km),place,results]?title=${encodeURIComponent(TITLE)}&place=${encodeURIComponent('mirabel, menetrol, 63')}`);
+    await expect.poll(() => param(page, 'at')).toBe('45.87320,3.10930');
+    expect(await param(page, 'place')).toBe('Puy de Mirabel (Ménétrol)');
+    expect(await param(page, 'r')).toBe('1km');
+    // The title kept, first.
+    expect(await page.evaluate(() => location.hash.split('?')[1].split('&')[0])).toBe('title=' + new URLSearchParams({ t: TITLE }).toString().slice(2));
+    // The circle there; the label found shown in the Zone cell and on the map, so a wrong guess is seen.
+    expect(await circle(page)).toEqual({ center: [3.1093, 45.8732], radius: 1000 });
+    await expect(cellOf(page, 'place').locator('.sub')).toHaveText('1 km autour de Puy de Mirabel (Ménétrol)');
+    await expect(page.locator('dl-place .where')).toContainText('Puy de Mirabel (Ménétrol)');
+    await expect(page.locator('dl-map .where')).toContainText('Puy de Mirabel (Ménétrol)');
+    // The requests: the commune first, then the places of that name around its centre.
+    expect(asked.map(p => p.toString())).toEqual(['q=menetrol&index=address&type=municipality&limit=20', 'q=mirabel&index=poi&limit=20&lon=3.12440&lat=45.87110']);
+    // The title: the page's heading (above the bar), the tab's title.
+    await expect(page.locator('gf-layout .titlebar h1')).toHaveText(TITLE);
+    await expect(page.getByRole('heading', { level: 1, name: TITLE })).toBeVisible();
+    await expect(page).toHaveTitle(`${TITLE} · GeoFlora`);
+    // Reloaded: the address has the point, the geocoder is not asked again.
+    await page.reload();
+    await app.ready();
+    await expect.poll(() => circle(page)).toEqual({ center: [3.1093, 45.8732], radius: 1000 });
+    expect(asked).toHaveLength(2);
+  });
+
+  test('un lieu introuvable, ou l’IGN qui ne répond pas : aucune zone, la raison dite dans la case Zone et sur la carte, place= gardé', async ({ app, page }) => {
+    const asked = await answerGeocoder(page);
+    await app.open('#/layout/[map(r=1km),place,results]?place=zzyzx');
+    const zone = page.locator('dl-place .where');
+    await expect(zone).toHaveText(/Lieu introuvable : zzyzx/);
+    await expect(zone).toHaveClass(/error/);
+    await expect(page.locator('dl-map .where')).toContainText('Lieu introuvable : zzyzx');
+    await expect(cellOf(page, 'place').locator('.sub')).toHaveText('Lieu introuvable : zzyzx');
+    expect(await circle(page)).toBe(null);
+    expect([await param(page, 'place'), await param(page, 'at')]).toEqual(['zzyzx', null]);
+    await expect.poll(() => app.state('results.total')).toBe(300);
+    expect(asked.map(p => p.get('index')).sort()).toEqual(['address', 'poi']);
+    // ✕: no place to find any more.
+    await page.locator('dl-place').getByRole('button', { name: 'Toute la France (sans zone)' }).click();
+    await expect.poll(() => param(page, 'place')).toBe(null);
+    await expect(zone).toHaveText('Toute la France');
+    // The geocoder down (503: fixtures.mjs): said too.
+    await page.unroute(/^https:\/\/data\.geopf\.fr\/geocodage\/search\?/);
+    await app.go('#/layout/[map(r=1km),place,results]?place=Ménétrol');
+    await expect(zone).toHaveText('Lieu introuvable : Ménétrol (le géocodeur de l’IGN ne répond pas)');
+    expect(await param(page, 'place')).toBe('Ménétrol');
+  });
+
+  test('le titre : absent, pas de bandeau ; « Titre » dans l’éditeur le change, l’adresse remplacée (pas de nouvelle entrée), l’onglet aussi ; « Annuler » le rend', async ({ app, page }) => {
+    await app.open(`#/layout/[search,results]?${AT}`);
+    await expect(page.locator('gf-layout .titlebar')).toHaveCount(0);
+    await expect(page.getByRole('heading', { level: 1, name: 'Disposition libre' })).toBeVisible();
+    const entries = await page.evaluate(() => history.length);
+    await page.getByRole('button', { name: 'Modifier la disposition' }).click();
+    const field = page.getByLabel('Titre', { exact: true });
+    await field.fill('Mes  plantes ');
+    await expect.poll(() => param(page, 'title')).toBe('Mes plantes');
+    await expect(page.locator('gf-layout .titlebar h1')).toHaveText('Mes plantes');
+    await expect(page).toHaveTitle('Mes plantes · GeoFlora');
+    await expect(field).toHaveValue('Mes  plantes ');
+    expect(await page.evaluate(() => history.length)).toBe(entries);
+    // Never HTML: shown as typed.
+    await field.fill('<b>Prés</b>');
+    await expect(page.locator('gf-layout .titlebar h1')).toHaveText('<b>Prés</b>');
+    await expect(page.locator('gf-layout .titlebar b')).toHaveCount(0);
+    // « Annuler »: no title again.
+    await page.getByRole('button', { name: 'Annuler' }).click();
+    await expect.poll(() => param(page, 'title')).toBe(null);
+    await expect(page.locator('gf-layout .titlebar')).toHaveCount(0);
+    await expect(page).toHaveTitle('Disposition libre — GeoFlora');
+    expect(await page.evaluate(() => history.length)).toBe(entries);
+  });
+
+  test('sur téléphone, le titre au-dessus du menu des colonnes', async ({ app, page }) => {
+    await app.open(`#/layout/${LAYOUT}?title=Mes%20plantes&${AT}`);
+    const bar = await box(page.locator('gf-layout .titlebar'));
+    const menu = await box(page.getByRole('tablist', { name: 'Colonnes' }));
+    expect(bar.y + bar.height).toBeLessThanOrEqual(menu.y + 1);
+    await expect(page.locator('gf-layout .titlebar h1')).toHaveText('Mes plantes');
+  });
+});
+
 /** How many cells a layout as written has (grammar.js). @param {string} spec */
 const cellsOf = spec => {
   /** @param {import('../../app/layout/grammar.js').LayoutNode} n @returns {number} */

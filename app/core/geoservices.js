@@ -5,6 +5,7 @@
 import * as cache from './cache.js';
 import { ModuleOffError, moduleOn } from './modules.js';
 import { fetchJson } from './net.js';
+import { candidateOf, normalize, parsePlace, pickCommune, rankPlaces } from './place-find.js';
 
 const GEOCODING = 'https://data.geopf.fr/geocodage';
 const ALTIMETRY = 'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json';
@@ -51,6 +52,38 @@ export async function searchPlaces(text, signal) {
         kind: KINDS[r.kind] || (r.country === 'PositionOfInterest' ? 'Lieu' : 'Adresse')
       };
     });
+}
+
+/**
+ * A place typed as words (« mirabel, menetrol, 63 », « Fontainebleau 77 »: core/place-find.js reads and ranks), found
+ * with the geocoder's search (GeoJSON): the commune said first, when one is (`index=address&type=municipality`), then
+ * the places of that name (`index=poi`: lieux-dits, summits, hills… — around the commune's centre when there is one,
+ * the geocoder favouring the nearest) and, no commune said, the communes of that name too (both at once). Null: none
+ * fits. Cached a year once found (a place's point hardly moves); « none » only a few minutes (asked again on a reload).
+ * @param {string} text
+ * @param {AbortSignal} [signal]
+ * @returns {Promise<import('./place-find.js').FoundPlace | null>}
+ */
+export function findPlace(text, signal) {
+  const q = parsePlace(text);
+  if (!q) return Promise.resolve(null);
+  if (!moduleOn('ignGeo')) return Promise.reject(new ModuleOffError('ignGeo'));
+  /** @param {string} params @returns {Promise<import('./place-find.js').Candidate[]>} */
+  const search = async params => {
+    const data = await json(`${GEOCODING}/search?${params}`, signal, features);
+    return (data.features || []).map(candidateOf).filter(/** @returns {c is import('./place-find.js').Candidate} */ c => c !== null);
+  };
+  const towns = (/** @type {string} */ name) => search(`q=${encodeURIComponent(name)}&index=address&type=municipality&limit=20`);
+  const places = (/** @type {[number, number] | null} */ near) => search(`q=${encodeURIComponent(q.name)}&index=poi&limit=20`
+    + (near ? `&lon=${near[0].toFixed(5)}&lat=${near[1].toFixed(5)}` : ''));
+  return cache.cached(`geo:find:${normalize(q.name)}|${normalize(q.commune ?? '')}|${q.dept ?? ''}`, async () => {
+    if (q.commune) {
+      const commune = pickCommune(q.commune, await towns(q.commune), q.dept);
+      return rankPlaces(q, { pois: await places(commune?.coordinates ?? null), commune });
+    }
+    const [pois, communes] = await Promise.all([places(null), towns(q.name)]);
+    return rankPlaces(q, { pois, communes });
+  }, { ttl: TTL, partial: v => !v, signal });
 }
 
 /**

@@ -16,6 +16,9 @@
 //    another while they fit, else the menu scrolls sideways, the tab shown kept in sight. A plant chosen in one tab
 //    brings the tab of a plant cell (its icon lit a moment); a finger swiped sideways on a panel, where nothing moves
 //    sideways itself, its neighbour.
+//  - A title (?title=, state.js): a discreet line above the bar (the page's heading; narrow, above the menu of
+//    columns), the page's title (« <title> · GeoFlora », a plant's sheet in a cell not naming it then) and the share's;
+//    none: no line. Typed in the editor's « Titre »: the address replaced as it is typed (no new entry).
 //  - « Modifier la disposition »: the layout as text (live preview, what is wrong said under it), each cell's tools
 //    (its component, its parameters, a cell beside or under it, moved, removed), the ready-made ones (presets.js);
 //    « Appliquer » makes it the address (a new entry: Back gives the one before).
@@ -35,7 +38,7 @@ import { gripStyles, shareGrip } from '../core/split-grip.js';
 import { ui } from '../styles/ui.js';
 import { cell as makeCell, dirAt, moveAt, nodeAt, parse, removeAt, replaceAt, serialize, setShares, shapeKey, shares, splitAt } from './grammar.js';
 import { cellIcon, cellMark, cellName, COMPONENTS, distanceLabel, menuLooks, resolveTree, valueText } from './registry.js';
-import { LayoutState, liveSearch, readLive, readQuery, sameLive } from './state.js';
+import { cleanText, LayoutState, liveSearch, readLive, readQuery, sameLive } from './state.js';
 import { forgetShares, savedShares, saveShares } from './sizes.js';
 import { PRESETS } from './presets.js';
 import { renderCell, revealFacet, scopeWords } from './cells.js';
@@ -92,6 +95,8 @@ export class GfLayout extends LitElement {
     /** The editor's field as typed (previewed a moment after the last key). */
     _field: { state: true },
     _copied: { state: true },
+    /** The editor's « Titre » as typed (the screen's title: its clean text). */
+    _titleField: { state: true },
     /** A cell flashed (a block opened from the sheet that it shows). */
     _flash: { state: true },
     /** Narrow: the tab brought by a plant chosen elsewhere (or a block opened), its icon lit a moment; -1: none. */
@@ -103,8 +108,11 @@ export class GfLayout extends LitElement {
   static styles = [ui, gripStyles, css`
     :host { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--gf-bg); container-type: inline-size; }
     .bar { flex: none; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 4px 8px 4px 14px; background: var(--gf-surface); border-bottom: 1px solid var(--gf-border); min-width: 0; }
-    .bar h1 { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 1rem; white-space: nowrap; }
-    .bar h1 .bi { color: var(--gf-accent); }
+    .bar .app { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 1rem; font-weight: 700; white-space: nowrap; }
+    .bar .app .bi { color: var(--gf-accent); }
+    /* The screen's own title (?title=): a discreet line above the bar, one line, cut by « … ». */
+    .titlebar { flex: none; display: flex; align-items: center; min-height: 32px; padding: 4px 14px; min-width: 0; background: var(--gf-bg); border-bottom: 1px solid var(--gf-border); }
+    .titlebar h1 { margin: 0; min-width: 0; font-size: 0.95rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .bar .spacer { flex: 1; }
     .bar button, .bar summary { min-height: 34px; padding: 4px 12px; font-size: 0.85rem; }
     .bar .icon-btn { width: 36px; height: 36px; padding: 0; font-size: 1rem; }
@@ -218,7 +226,7 @@ export class GfLayout extends LitElement {
     /* Narrow: the bar's words go (its buttons keep their names); the title is still read. */
     @container (max-width: 699px) {
       .bar .lbl { display: none; } .bar { padding-left: 10px; }
-      .bar h1 span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+      .bar .app span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
     }
   `];
 
@@ -239,6 +247,7 @@ export class GfLayout extends LitElement {
     this._draft = null;
     this._field = '';
     this._copied = false;
+    this._titleField = '';
     /** @type {string | null} */
     this._flash = null;
     this._brought = -1;
@@ -316,8 +325,18 @@ export class GfLayout extends LitElement {
     } else this.#shown = this.#layout;
   }
 
+  /** The page's title the screen's own title gives (« Orchidées de Mirabel · GeoFlora »; null: none — a plant's sheet in a cell may name the page then). */
+  get pageTitle() { const t = this.#state.live.title; return t ? t + ' · GeoFlora' : null; }
+
+  /** The page's title last set from the screen's own title. @type {string | null} */
+  #titled = null;
+
   updated() {
     if (this.#narrow) { this.#nameRoom(); this.#tabInSight(); }
+    const page = this.pageTitle;
+    if (page && document.title !== page) document.title = page;
+    else if (!page && this.#titled) document.title = 'Disposition libre — GeoFlora';
+    this.#titled = page;
     // The search changed by a cell (its text, a filter, the sort): the address follows, without a new entry.
     if (!this.#ready) return;
     const q = toHash(store.state.query);
@@ -435,9 +454,24 @@ export class GfLayout extends LitElement {
     // A layout that could not be read whole: as it was typed (what is wrong said under it).
     this._field = this.#layout.errors.length ? decodeSpec(this.route?.spec ?? '') : this.#layout.text;
     this._draft = this._field;
+    this._titleField = this.#state.live.title ?? '';
+    this.#titleBefore = this.#state.live.title;
   }
 
   #cancel() { this._editing = false; this._draft = null; clearTimeout(this.#typing); }
+
+  /** The screen's title when the editor opened: « Annuler » gives it back. @type {string | null} */
+  #titleBefore = null;
+
+  /**
+   * « Titre » typed in: the screen's title at once, the address replaced (no new entry). The field keeps what is typed
+   * (a space at the end, while a word is coming); the state, the address and the heading its clean text (state.js#cleanText).
+   * @param {string} text
+   */
+  #typeTitle(text) {
+    this._titleField = text;
+    this.#state.set({ title: cleanText(text) }, 'replace');
+  }
 
   /** The draft made the address: a new entry (Back gives the layout before). */
   #apply() {
@@ -507,6 +541,9 @@ export class GfLayout extends LitElement {
     const s = this.#shown;
     const problems = [...s.errors.map(e => `${e.message} (caractère ${e.at + 1})`), ...s.problems.map(p => p.message)];
     return html`<section class="editor" aria-label="Modifier la disposition">
+      <label for="layout-title">Titre</label>
+      <input id="layout-title" type="text" maxlength="80" autocomplete="off" placeholder="Sans titre (par exemple : Orchidées de la colline de Mirabel)"
+        .value=${this._titleField} @input=${(/** @type {any} */ e) => this.#typeTitle(e.target.value)} />
       <label for="layout-text">La disposition (texte, comme dans l’adresse)</label>
       <textarea id="layout-text" spellcheck="false" autocomplete="off" .value=${this._field} @input=${(/** @type {any} */ e) => this.#type(e.target.value)}
         @keydown=${(/** @type {KeyboardEvent} */ e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); this._draft = this._field; this.updateComplete.then(() => this.#apply()); } }}></textarea>
@@ -514,7 +551,7 @@ export class GfLayout extends LitElement {
         : html`<p class="ok" role="status">Aperçu en direct. Lue ainsi : <code>${s.text}</code></p>`}
       <div class="row">
         <button class="primary" type="button" ?disabled=${!s.tree.kids.length} @click=${() => { this._draft = this._field; this.updateComplete.then(() => this.#apply()); }}>${icon('check-lg')} Appliquer</button>
-        <button type="button" @click=${() => this.#cancel()}>Annuler</button>
+        <button type="button" @click=${() => { this.#cancel(); this.#state.set({ title: this.#titleBefore }, 'replace'); }}>Annuler</button>
         <button type="button" @click=${() => this.#resetSizes()}>${icon('arrows-collapse')} Tailles par défaut</button>
       </div>
       <div class="models" role="group" aria-label="Modèles">${PRESETS.map(p => html`<button type="button" title=${p.about} @click=${() => { this._field = p.spec; this._draft = p.spec; }}>${p.title}</button>`)}</div>
@@ -696,7 +733,7 @@ export class GfLayout extends LitElement {
   }
 
   async #share() {
-    const r = await share({ title: 'Disposition libre — GeoFlora', url: this.#href() });
+    const r = await share({ title: this.pageTitle ?? 'Disposition libre — GeoFlora', url: this.#href() });
     if (r === 'copied') { this._copied = true; setTimeout(() => { this._copied = false; }, 2000); }
   }
 
@@ -706,8 +743,11 @@ export class GfLayout extends LitElement {
     const w = this._w;
     const narrow = this.#narrow = w > 0 && tree.kids.length > 1 && (w < BP.phone || w < least(tree, s.cells, [], 'row'));
     const remarks = s.errors.length + s.problems.length;
-    return html`<div class="bar">
-        <h1>${icon('layers')} <span>Disposition libre</span></h1>
+    // The screen's own title (?title=): the page's heading, above the bar (and, narrow, above the menu of columns);
+    // the bar's name is then no heading.
+    const title = this.#state.live.title;
+    return html`${title ? html`<header class="titlebar"><h1 title=${title}>${title}</h1></header>` : nothing}<div class="bar">
+        ${title ? html`<p class="app">${icon('layers')} <span>Disposition libre</span></p>` : html`<h1 class="app">${icon('layers')} <span>Disposition libre</span></h1>`}
         <span class="spacer"></span>
         <details class="presets" @keydown=${(/** @type {KeyboardEvent} */ e) => { if (e.key === 'Escape') /** @type {HTMLDetailsElement} */ (e.currentTarget).removeAttribute('open'); }}>
           <summary title="Dispositions toutes prêtes" aria-label="Modèles de disposition">${icon('list-ul')} <span class="lbl">Modèles</span></summary>
