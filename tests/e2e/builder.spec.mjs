@@ -60,3 +60,59 @@ test('les poignées entre les colonnes : glissées ou au clavier, la largeur pas
   expect(Math.abs(least.reduce((a, b) => a + b, 0) - total)).toBeLessThan(2);
   await expect(grips.nth(1)).toHaveAttribute('aria-orientation', 'vertical');
 });
+
+/** The grid as the address keeps it (g=), decoded. @param {import('@playwright/test').Page} page */
+const spec = page => page.evaluate(() => new URLSearchParams(location.hash.split('?')[1] || '').get('g'));
+
+test('la croix : diviser un emplacement dans les quatre sens, le retirer ; l’adresse garde la grille et ses parts', async ({ app, page }) => {
+  await app.open('#/builder/trois');
+  const slot = (/** @type {string} */ path) => page.locator(`gf-builder .screen [data-path="${path}"]`);
+  // The build button opens the cross: four arms, the middle (retirer, fermer); Escape closes it, the button focused again.
+  await slot('1').locator('.build').click();
+  await expect(slot('1').locator('.arm')).toHaveCount(4);
+  await page.keyboard.press('Escape');
+  await expect(slot('1').locator('.cross')).toHaveCount(0);
+  await expect(slot('1').locator('.build')).toBeFocused();
+  // Below the middle column: a column of two there.
+  await slot('1').locator('.build').click();
+  await slot('1').locator('.arm.bottom').click();
+  await expect.poll(() => spec(page)).toBe('[slot@30,[slot,slot]@35,slot@35]');
+  await expect(slot('1.1').locator('.build')).toBeFocused();
+  // Right of the new one: a row of two inside; left of the first column: beside it in the top row.
+  await slot('1.1').locator('.build').click();
+  await slot('1.1').locator('.arm.right').click();
+  await slot('0').locator('.build').click();
+  await slot('0').locator('.arm.left').click();
+  await expect.poll(() => spec(page)).toBe('[slot@15,slot@15,[slot,[slot,slot]]@35,slot@35]');
+  await expect(page.locator('gf-builder .screen .slot')).toHaveCount(6);
+  await expect(page.locator('gf-builder .reset')).toBeVisible();
+  // A height grip: ↓ gives room to the top of the middle column.
+  const hgrip = page.locator('gf-builder .screen .g.col > .grip').first();
+  await hgrip.focus();
+  await page.keyboard.press('Shift+ArrowDown');
+  await expect.poll(() => spec(page)).toBe('[slot@15,slot@15,[slot@60,[slot,slot]@40]@35,slot@35]');
+  // Taken out: its room to its neighbour; a list of one gives way.
+  await slot('2.1.0').locator('.build').click();
+  await slot('2.1.0').locator('.del').click();
+  await expect.poll(() => spec(page)).toBe('[slot@15,slot@15,[slot@60,slot@40]@35,slot@35]');
+  // Reloaded: the same grid.
+  await page.reload();
+  await app.ready();
+  await expect(page.locator('gf-builder .screen .slot')).toHaveCount(5);
+  // Back to the grid offered: no g= left.
+  await page.locator('gf-builder .reset').click();
+  await expect.poll(() => spec(page)).toBe(null);
+  await expect(page.locator('gf-builder .screen .slot')).toHaveCount(3);
+});
+
+test('la croix : ses limites — 12 emplacements au plus, pas plus profond que la grammaire, le dernier emplacement reste', async ({ app, page }) => {
+  await app.open('#/builder/trois?g=' + '[' + Array(12).fill('slot').join(',') + ']');
+  await page.locator('gf-builder .screen [data-path="0"] .build').click();
+  await expect(page.locator('gf-builder .screen [data-path="0"] .arm:disabled')).toHaveCount(4);
+  await app.go('#/builder/trois?g=[slot]');
+  await page.locator('gf-builder .screen [data-path="0"] .build').click();
+  await expect(page.locator('gf-builder .screen [data-path="0"] .del')).toBeDisabled();
+  // An address that is no grid: the grid offered.
+  await app.go('#/builder/trois?g=[map,slot]');
+  await expect(page.locator('gf-builder .screen .slot')).toHaveCount(3);
+});
