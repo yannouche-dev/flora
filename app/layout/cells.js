@@ -203,12 +203,19 @@ export class DlMap extends LitElement {
     const at = s.live.at;
     if (!at) return null;
     const found = this.#found, plantOf = s.species?.plantOf;
+    // A search keeping a few of the plants of the scope (a family, a filter): their own observations asked
+    // (state.pointsOf) — those of rarer plants (orchids) are seldom among the most recent of all.
+    const kept = s.species && found.size < s.species.list.length ? s.species.list.filter(x => found.has(/** @type {number} */ (x.plantId))).map(x => x.taxonId).slice(0, 200) : [];
+    s.pointsOf(kept);
+    const subset = s.subset?.key === s.subsetFor ? s.subset : null;
     const memo = this.#areaMemo;
-    if (memo && memo.at === at && memo.r === s.radius && memo.pts === s.points && memo.found === found && memo.plantOf === plantOf) return memo.value;
+    if (memo && memo.at === at && memo.r === s.radius && memo.pts === s.points && memo.found === found && memo.plantOf === plantOf && memo.subset === subset) return memo.value;
     // The plants the search keeps: their points only (all of them while the plants of the scope are unknown).
-    const points = plantOf ? s.points.filter(p => { const id = p.taxonId != null ? plantOf.get(p.taxonId) : undefined; return id !== undefined && found.has(id); }) : s.points;
+    const seen = new Set();
+    const all = subset ? [...subset.points, ...s.points].filter(p => !p.url || (seen.has(p.url) ? false : (seen.add(p.url), true))) : s.points;
+    const points = plantOf ? all.filter(p => { const id = p.taxonId != null ? plantOf.get(p.taxonId) : undefined; return id !== undefined && found.has(id); }) : all;
     const value = { center: at, radius: s.radius, fit: true, leaves: true, points };
-    this.#areaMemo = { at, r: s.radius, pts: s.points, found, plantOf, value };
+    this.#areaMemo = { at, r: s.radius, pts: s.points, found, plantOf, subset, value };
     return value;
   }
   /** @type {any} */ #areaMemo = null;

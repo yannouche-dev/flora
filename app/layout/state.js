@@ -137,6 +137,10 @@ export class LayoutState extends EventTarget {
     /** The latest observations in the scope (the map), and how many there are in all. @type {AroundPoint[]} */
     this.points = [];
     this.pointsTotal = 0;
+    /** @type {{ key: string, points: import('../core/nearby.js').AroundPoint[] } | null} the observations of the plants the search keeps (pointsOf) */
+    this.subset = null;
+    /** @type {string} */ this.subsetFor = '';
+    /** @type {AbortController | null} */ this.subsetAbort = null;
     /** The current plant's own observations in the scope. @type {{ key: string, points: Observation[] } | null} */
     this.plantObs = null;
     /** The current plant's names (the cells' heads). @type {{ id: number, name: string, sci: string } | null} */
@@ -289,6 +293,28 @@ export class LayoutState extends EventTarget {
     this.points = found?.points ?? [];
     this.pointsTotal = found?.total ?? 0;
     this.#changed();
+  }
+
+  /**
+   * The observations of these iNaturalist taxa only, in the scope (the map's, when the search keeps a few of the
+   * plants of the scope: theirs are seldom among the most recent of all): loaded once for each set, `subset` then.
+   * None (an empty list): no subset.
+   * @param {number[]} taxa
+   */
+  pointsOf(taxa) {
+    const at = this.live.at, r = this.radius;
+    const key = at && taxa.length ? `${this.scopeKey}|${taxa.join(',')}` : '';
+    if (key === this.subsetFor) return;
+    this.subsetFor = key;
+    this.subsetAbort?.abort();
+    this.subsetAbort = null;
+    if (!key || !at) { if (this.subset) { this.subset = null; this.#changed(); } return; }
+    const abort = this.subsetAbort = new AbortController();
+    observationPointsAround(at, r, abort.signal, taxa).then(found => {
+      if (abort.signal.aborted || this.subsetFor !== key) return;
+      this.subset = { key, points: found.points };
+      this.#changed();
+    }, () => {});
   }
 
   /** The search kept to these plants (null: the whole flora), and run again. @param {number[] | null} ids */
