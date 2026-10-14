@@ -119,6 +119,68 @@ export async function answerObservations(page, { inat = 60, gbif = 24, outside =
   });
 }
 
+/** GBIF's copy of iNaturalist's research-grade observations (core/around3d.js INAT_DATASET). */
+const INAT_DATASET = '50c9509d-22c7-4a22-a47d-8c48425ef4a7';
+
+/**
+ * A plant sheet's map and its sources (gf-sheet-map.js): the nettle (Urtica dioica) found on GBIF (taxon 5341) and on
+ * iNaturalist (taxon 48460, its own photo under CC BY-NC: never shown, the flora's thumbnail is), and its records:
+ * around a point (iNaturalist's `inat` observations, GBIF's `gbif` occurrences — one of them GBIF's copy of an
+ * iNaturalist one, left out when iNaturalist's are shown too), spread in the circle asked, each source on its own
+ * side (iNaturalist west, GBIF east); and in an area touched in the sheet (a GADM id: `area` occurrences around Paris).
+ * `seen`: the addresses asked.
+ * @param {import('@playwright/test').Page | import('@playwright/test').BrowserContext} page
+ * @param {{ inat?: number, gbif?: number, area?: number, seen?: string[] }} [o]
+ */
+export async function answerPlantNear(page, { inat = 6, gbif = 6, area = 12, seen } = {}) {
+  const json = (/** @type {import('@playwright/test').Route} */ route, /** @type {any} */ body) =>
+    route.fulfill({ contentType: 'application/json', body: JSON.stringify(body), headers: { 'access-control-allow-origin': '*' } });
+  /** `n` points on a half circle (east: 1, west: -1), from a third of `km` to 90 % of it. @param {number} lat @param {number} lng @param {number} km @param {number} n @param {number} side */
+  const half = (lat, lng, km, n, side) => Array.from({ length: n }, (_, i) => {
+    const r = km * (0.35 + 0.55 * (i % 3) / 2), a = (Math.PI * (i + 0.5)) / n;
+    return [lng + side * (r * Math.sin(a)) / (111.32 * Math.cos(lat * Math.PI / 180)), lat + (r * Math.cos(a)) / 110.54];
+  });
+  await page.route(/^https:\/\/api\.gbif\.org\/v1\/species\/match\?/, route => json(route, {
+    usageKey: 5341, scientificName: 'Urtica dioica L.', canonicalName: 'Urtica dioica', rank: 'SPECIES', status: 'ACCEPTED', matchType: 'EXACT', confidence: 99
+  }));
+  await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/taxa\?/, route => json(route, { results: [{
+    id: 48460, name: 'Urtica dioica', rank: 'species', preferred_common_name: 'Grande ortie',
+    default_photo: { license_code: 'cc-by-nc', square_url: 'https://inaturalist-open-data.s3.amazonaws.com/photos/1/square.jpg', medium_url: 'https://inaturalist-open-data.s3.amazonaws.com/photos/1/medium.jpg' }
+  }] }));
+  await page.route(/^https:\/\/api\.gbif\.org\/v1\/occurrence\/search\?/, route => {
+    const q = new URL(route.request().url()).searchParams;
+    if (q.get('taxonKey') !== '5341') return route.fallback();
+    seen?.push(route.request().url());
+    const where = q.get('geoDistance');
+    if (where) {
+      const [lat, lng, km] = where.replace('km', '').split(',').map(Number);
+      return json(route, { count: gbif, results: half(lat, lng, km, gbif, 1).map(([x, y], i) => ({
+        key: 3000 + i, decimalLatitude: y, decimalLongitude: x, eventDate: '2024-06-1' + (i % 10), basisOfRecord: 'HUMAN_OBSERVATION',
+        datasetName: i === 0 ? 'iNaturalist research-grade observations' : 'Inventaire du CBN du Bassin parisien', datasetKey: i === 0 ? INAT_DATASET : 'cbn-bp',
+        locality: 'Bois de Vincennes'
+      })) });
+    }
+    if (q.get('gadmGid')) {
+      return json(route, { count: 120, results: half(48.85, 2.35, 30, area, 1).map(([x, y], i) => ({
+        key: 5000 + i, decimalLatitude: y, decimalLongitude: x, eventDate: '2023-05-0' + (1 + (i % 9)), datasetName: 'Inventaire régional', datasetKey: 'region', locality: 'Essonne'
+      })) });
+    }
+    return route.fallback();
+  });
+  await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?/, route => {
+    const q = new URL(route.request().url()).searchParams;
+    if (q.get('taxon_id') !== '48460') return route.fallback();
+    seen?.push(route.request().url());
+    if (q.get('page') && q.get('page') !== '1') return json(route, { total_results: inat, results: [] });
+    const pts = half(Number(q.get('lat')), Number(q.get('lng')), Number(q.get('radius')), inat, -1);
+    return json(route, { total_results: pts.length, results: pts.map(([x, y], i) => ({
+      id: 8000 + i, uri: `https://www.inaturalist.org/observations/${8000 + i}`, geojson: { type: 'Point', coordinates: [x, y] }, observed_on: '2026-05-0' + (1 + (i % 9)),
+      place_guess: 'Paris 5e', taxon: { id: 48460, name: 'Urtica dioica', preferred_common_name: 'Grande ortie' },
+      photos: [{ id: 6000 + i, url: `https://inaturalist-open-data.s3.amazonaws.com/photos/${6000 + i}/square.jpg`, license_code: 'cc-by', attribution: '(c) Camille' }]
+    })) });
+  });
+}
+
 /**
  * @typedef {{ realData: boolean, firstVisit: boolean, offlineData: boolean }} Options
  * @typedef {{ pageErrors: string[], app: import('./app.mjs').App, newDevice: () => Promise<{ page: import('@playwright/test').Page, app: import('./app.mjs').App }> }} Fixtures

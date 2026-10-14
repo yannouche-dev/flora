@@ -471,10 +471,6 @@ path.gf-occ:hover {
   .gf-obs-leaf .pop, .gf-plant svg, .gf-plant .ring:is(span), .gf-place svg, path.gf-obs, path.gf-occ, .gf-fade { transition: none; }
 }
 
-/* Observations around, by source (map blocks of the plant sheet). */
-.gf-obs-inat { fill: #74ac00; stroke: #fff; }
-.gf-obs-gbif { fill: #4e7b9f; stroke: #fff; }
-
 /* Search pill on top of the map (Carte tab). */
 gf-map .gf-map-search {
   position: absolute;
@@ -562,36 +558,12 @@ gf-map:has(.gf-point-card) .leaflet-bottom {
 }
 .gf-focus-tip { font-weight: 600; }
 
-/* An area touched in the sheet (a région, a département): its outline (a perimeter, above), its occurrences grouped. */
-.gf-occ { stroke: #fff; stroke-width: 2; fill: #f59e0b; fill-opacity: 0.95; filter: drop-shadow(0 1px 2px rgb(0 0 0 / 35%)); cursor: pointer; }
-.gf-occ:hover { fill: #b45309; }
+/* One plant's points grouped (gf-map's `cluster`: Découvrir's plant in a wider scope, a plant sheet's map — its
+   observations around me, iNaturalist's and GBIF's alike, its occurrences in an area touched): in pink and gold, its
+   photo in each group (its leaf without one), their number on a badge; alone, the plant chosen's marker — past many
+   of them, small dots. Never a source's colour. */
+.gf-occ { stroke: #ffd166; stroke-width: 2; fill: #e0245e; fill-opacity: 0.95; filter: drop-shadow(0 1px 2px rgb(0 0 0 / 35%)); cursor: pointer; }
 .gf-occ-group { background: none; border: 0; }
-.gf-occ-group > span:not(.g) {
-  display: grid;
-  place-items: center;
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  background: radial-gradient(circle at 35% 30%, #fbbf24, #d97706 75%);
-  color: #fff;
-  font: 700 12px/1 system-ui, sans-serif;
-  text-shadow: 0 1px 1px rgb(0 0 0 / 35%);
-  box-shadow: 0 0 0 4px rgb(245 158 11 / 30%), 0 2px 8px rgb(0 0 0 / 35%);
-  cursor: pointer;
-  animation: gf-leaf-pop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
-}
-.gf-occ-group > span:not(.g) { transition: scale 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
-.gf-occ-group:hover > span:not(.g) { background: radial-gradient(circle at 35% 30%, #f59e0b, #b45309 75%); scale: 1.08; }
-@media (prefers-reduced-motion: reduce) { .gf-occ-group > span:not(.g) { animation: none; } }
-/* Observations around me, by source: iNaturalist green, GBIF blue (dots and groups). */
-.gf-occ.gf-occ-inat { fill: #74ac00; }
-.gf-occ.gf-occ-gbif { fill: #4e7b9f; }
-.gf-occ-group-inat > span { background: radial-gradient(circle at 35% 30%, #a3d23a, #5c8a00 75%); box-shadow: 0 0 0 4px rgb(116 172 0 / 30%), 0 2px 8px rgb(0 0 0 / 35%); }
-.gf-occ-group-gbif > span { background: radial-gradient(circle at 35% 30%, #7aa6c8, #3a6283 75%); box-shadow: 0 0 0 4px rgb(78 123 159 / 30%), 0 2px 8px rgb(0 0 0 / 35%); }
-/* Découvrir: the plant in view, in a wider scope (a région, France…), grouped in pink and gold — its photo in the
-   group when known, their number on a badge. */
-.gf-occ.gf-occ-hl { fill: #e0245e; stroke: #ffd166; }
-.gf-occ-group-hl > span:not(.g) { background: radial-gradient(circle at 35% 30%, #ff6f9c, #e0245e 75%); box-shadow: 0 0 0 3px #ffd166, 0 2px 8px rgb(0 0 0 / 35%); }
 .gf-occ-group-hl.photo .g { position: relative; display: block; width: 100%; height: 100%; cursor: pointer;
   animation: gf-chosen-in 0.55s cubic-bezier(0.34, 1.56, 0.64, 1) backwards; transition: scale 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); }
 .gf-occ-group-hl.photo .ph { position: relative; display: grid; place-items: center; color: #fff; font-size: 18px; width: 100%; height: 100%; border-radius: 50%; overflow: hidden;
@@ -604,7 +576,7 @@ gf-map:has(.gf-point-card) .leaflet-bottom {
 .gf-occ-group-hl.photo.gf-kin .ph { box-shadow: 0 0 0 3px #ffd166, 0 0 16px 4px rgb(255 209 102 / 80%), 0 5px 14px rgb(0 0 0 / 45%); }
 @media (prefers-reduced-motion: reduce) { .gf-occ-group-hl.photo .g { animation: none; transition: none; } }
 /* Drawn again at another zoom: at once, no entrance (it played when they came). */
-.gf-obs-leaf.chosen.still .pop, .gf-obs-leaf.chosen.still .pop::after, .gf-occ-group.still > span:not(.g), .gf-occ-group-hl.photo.still .g { animation: none; }
+.gf-obs-leaf.chosen.still .pop, .gf-obs-leaf.chosen.still .pop::after, .gf-occ-group-hl.photo.still .g { animation: none; }
 /* Découvrir: the observations around, each its plant's photo; on hover, a small card of the plant. */
 .gf-obs-photo .pop { position: relative; width: 30px; height: 30px; padding: 0; overflow: hidden; color: #fff; font-size: 14px; background: #2e7d32; box-shadow: 0 1px 5px rgb(0 0 0 / 45%), 0 0 0 2px #fff; }
 .gf-obs-photo .pop img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 50%; }

@@ -21,7 +21,7 @@ export const DEFAULT_RADIUS = 5000;
  * @typedef {import('./credit.js').Credit} Credit
  * @typedef {{ taxonId: number, name: string, common: string | null, count: number, photo: string | null, credit: Credit | null, plantId: number | null, family: string | null, genus: string | null }} NearbySpecies
  * @typedef {{ species: NearbySpecies[], observations: number, sourceUrl: string, fetchedAt: number }} NearbyResult
- * @typedef {{ coordinates: [number, number], date: string | null, url: string }} NearbyObservation
+ * @typedef {{ coordinates: [number, number], date: string | null, url: string, place?: string | null }} NearbyObservation
  */
 
 const area = ([lon, lat], radius) =>
@@ -56,7 +56,7 @@ const genusOf = (/** @type {string} */ name) => {
   return (first === 'x' || first === '×') && second ? '× ' + second : first || null;
 };
 
-/** @typedef {{ id: number, family: string, genus: string, thumbnail: any }} FloraMatch */
+/** @typedef {{ id: number, family: string, genus: string, common: string | null, thumbnail: any }} FloraMatch */
 
 /** @type {Promise<{ exact: Map<string, FloraMatch>, loose: Map<string, FloraMatch> }> | null} */
 let index = null;
@@ -68,8 +68,9 @@ let index = null;
  */
 function nameIndex() {
   index ??= db.getAll('plants').then(plants => {
-    // Its bundled thumbnail (plants.json) too: the photo of an observation iNaturalist gives none under a free licence.
-    const match = (/** @type {any} */ p) => ({ id: p.id, family: p.family, genus: p.genus, thumbnail: p.thumbnail?.url ? p.thumbnail : null });
+    // Its bundled thumbnail (plants.json) too: the photo of an observation iNaturalist gives none under a free licence;
+    // and its French name, for a record that has none (GBIF's seldom do).
+    const match = (/** @type {any} */ p) => ({ id: p.id, family: p.family, genus: p.genus, common: p.vernacularNames?.[0] || null, thumbnail: p.thumbnail?.url ? p.thumbnail : null });
     /** @type {Map<string, FloraMatch>} */ const exact = new Map();
     /** @type {Map<string, FloraMatch>} */ const loose = new Map();
     /** @type {Map<string, number>} */ const rank = new Map();
@@ -159,8 +160,11 @@ export function observationsAround(taxonId, point, radius, signal) {
   }, () => partial);
 }
 
-/** An iNaturalist observation, for a map. @param {any} o @returns {NearbyObservation} */
-const toObservation = o => ({ coordinates: /** @type {[number, number]} */ (o.geojson.coordinates), date: o.observed_on || null, url: o.uri || `https://www.inaturalist.org/observations/${o.id}` });
+/** An iNaturalist observation, for a map: where, when, its page, the place it names (its card says it). @param {any} o @returns {NearbyObservation} */
+const toObservation = o => ({
+  coordinates: /** @type {[number, number]} */ (o.geojson.coordinates), date: o.observed_on || null, url: o.uri || `https://www.inaturalist.org/observations/${o.id}`,
+  place: o.place_guess || null
+});
 
 /**
  * Up to `max` observations of a query (200 a page, iNaturalist's most: the first page tells how many there are,
@@ -227,17 +231,39 @@ export async function observationPointsAround(point, radius, signal) {
  */
 async function withThumbs(found) {
   if (found.points.every(p => p.photo)) return found;
-  const names = await nameIndex().catch(() => null);
-  if (!names) return found;
+  return { ...found, points: await floraPhotos(found.points) };
+}
+
+/**
+ * Points of any source (iNaturalist's observations, GBIF's occurrences) completed from the flora, matched by their
+ * scientific name: the plant's thumbnail (plants.json, with its credit) on those without a photo — one address a
+ * plant, the one its card and the plant chosen show —, and with `names`, its French name on those without one (GBIF's
+ * records seldom have one: their card then reads as an iNaturalist observation's). A plant the flora does not know,
+ * or without a thumbnail, stays as it was (a leaf). Never changes the points given (a cache may hold them): a new
+ * object for each one completed.
+ * @template {{ sci: string, photo: string | null, credit?: Credit | null, common?: string | null, title?: string }} T
+ * @param {T[]} points @param {{ names?: boolean }} [o] @returns {Promise<T[]>}
+ */
+export async function floraPhotos(points, { names = false } = {}) {
+  if (points.every(p => p.photo && (!names || p.common))) return points;
+  const index = await nameIndex().catch(() => null);
+  if (!index) return points;
   /** @type {Map<string, FloraMatch | undefined>} */
   const seen = new Map();
-  const points = found.points.map(p => {
-    if (p.photo || !p.sci) return p;
-    if (!seen.has(p.sci)) seen.set(p.sci, lookup(names, p.sci));
-    const thumb = seen.get(p.sci)?.thumbnail;
-    return thumb ? { ...p, photo: /** @type {string} */ (thumb.url), credit: thumbCredit(thumb) } : p;
+  return points.map(p => {
+    if (!p.sci || (p.photo && (!names || p.common))) return p;
+    if (!seen.has(p.sci)) seen.set(p.sci, lookup(index, p.sci));
+    const local = seen.get(p.sci);
+    const thumb = p.photo ? null : local?.thumbnail;
+    const common = names && !p.common ? local?.common : null;
+    if (!thumb && !common) return p;
+    return {
+      ...p,
+      ...(thumb ? { photo: /** @type {string} */ (thumb.url), credit: thumbCredit(thumb) } : {}),
+      // Named by its scientific name until now: its French name instead.
+      ...(common ? { common, title: !p.title || p.title === p.sci ? common : p.title } : {})
+    };
   });
-  return { ...found, points };
 }
 
 /**

@@ -4,17 +4,18 @@
 //   around3dPrefs(scope) / setAround3dPrefs(scope, patch): shown or not, the radius, the sources, the density view —
 //     one record per map (its scope: the page or block it is in), stored as the Carte's own layers are;
 //   observations3d(center, radius, { inat, gbif }, signal) → the points in the circle: iNaturalist's research-grade
-//     observations (up to 400, each with its free photo, core/nearby.js) and GBIF's plant occurrences (up to 300,
+//     observations (up to 400, each its plant's photo, core/nearby.js) and GBIF's plant occurrences (up to 300,
 //     without iNaturalist's, which GBIF holds too), cached a day (offline: the copy kept) — each source on with its
-//     module (« iNaturalist », « GBIF »);
-//   inCircle, hexBins (the density's columns), ringWall (the circle's wall, in short pieces: each stands on the relief
-//     where it is), fitZoom: pure, tested under Node (tests/unit/around3d.test.mjs).
+//     module (« iNaturalist », « GBIF »). A GBIF occurrence is shown as an iNaturalist observation is: its plant's
+//     photo and French name (sharePhotos, then the flora's), its date and place, its source on its card;
+//   sharePhotos, inCircle, hexBins (the density's columns), ringWall (the circle's wall, in short pieces: each stands
+//     on the relief where it is), fitZoom: pure, tested under Node (tests/unit/around3d.test.mjs).
 
 import { config } from '../config.js';
 import * as cache from './cache.js';
 import { moduleOn } from './modules.js';
 import { fetchJson } from './net.js';
-import { observationPointsMany } from './nearby.js';
+import { binomial, floraPhotos, observationPointsMany } from './nearby.js';
 import { writeLocal } from './quota.js';
 
 /** The radii offered (metres): the mini-apps' distances, 200 m to 50 km (what iNaturalist's circle search allows). */
@@ -82,21 +83,37 @@ export function setAround3dPrefs(scope, patch) {
 // ── Where they come from ────────────────────────────────────────────────────────────────────────
 
 /**
- * A point of the 3D map: an observation (iNaturalist), an occurrence (GBIF), or a plant of the user's places.
+ * A point of the 3D map: an observation (iNaturalist), an occurrence (GBIF), or a plant of the user's places. `source`:
+ * where the record comes from, as its card says it (« iNaturalist », « GBIF · <its dataset> »).
  * @typedef {{ id: string, kind: 'inat' | 'gbif' | 'mine', coordinates: [number, number], title: string, common: string | null,
  *   sci: string, taxonId: number | null, photo: string | null, credit: import('./credit.js').Credit | null, date: string | null,
- *   place: string | null, url: string | null, plant?: { placeId: string, entryId?: string, plantId: number | null } }} Obs3d
+ *   place: string | null, source?: string | null, url: string | null, plant?: { placeId: string, entryId?: string, plantId: number | null } }} Obs3d
  * @typedef {{ points: Obs3d[], totals: { inat: number | null, gbif: number | null }, failed: string[] }} Obs3dResult
  */
 
+/** A record's free text, shown as text on a card: one line, `max` characters at most. @param {unknown} v @param {number} max */
+const clip = (v, max) => {
+  const t = typeof v === 'string' ? v.replace(/\s+/g, ' ').trim() : '';
+  return t.length > max ? t.slice(0, max - 1).trimEnd() + '…' : t;
+};
+
+/** Where a GBIF record comes from, as its card says it: « GBIF · <its dataset> ». @param {unknown} dataset */
+export const gbifSource = dataset => {
+  const name = clip(dataset, 60);
+  return name ? 'GBIF · ' + name : 'GBIF';
+};
+
 /**
- * GBIF's plant occurrences in the circle (iNaturalist's copy left out), cached a day.
+ * GBIF's plant occurrences in the circle (iNaturalist's copy left out), cached a day: where (its locality, else its
+ * commune or its county), when, its dataset — as an iNaturalist observation is shown (observations3d gives it its
+ * plant's photo and name, after the cache).
  * @param {[number, number]} center @param {number} radius @param {AbortSignal} [signal]
  * @returns {Promise<{ points: Obs3d[], total: number }>}
  */
 function gbifAround([lon, lat], radius, signal) {
   const where = `${lat.toFixed(4)},${lon.toFixed(4)},${(radius / 1000).toFixed(2)}km`;
-  return cache.cached(`around3d-gbif1:${where}`, async () => {
+  // « gbif2 »: the points cached with their dataset as their place are not used again.
+  return cache.cached(`around3d-gbif2:${where}`, async () => {
     const url = 'https://api.gbif.org/v1/occurrence/search?taxonKey=6&hasCoordinate=true&hasGeospatialIssue=false&occurrenceStatus=PRESENT'
       + `&geoDistance=${encodeURIComponent(where)}&limit=${GBIF_MAX}`;
     const data = await fetchJson(url, { signal, expect: d => Array.isArray(d.results) });
@@ -104,18 +121,43 @@ function gbifAround([lon, lat], radius, signal) {
     const points = [];
     for (const o of data.results) {
       if (typeof o.decimalLatitude !== 'number' || typeof o.decimalLongitude !== 'number' || o.datasetKey === INAT_DATASET) continue;
-      const sci = String(o.species || o.scientificName || '').trim();
-      const common = typeof o.vernacularName === 'string' && o.vernacularName ? o.vernacularName : null;
+      const sci = clip(o.species || o.scientificName, 120);
+      const common = clip(o.vernacularName, 80) || null;
       points.push({
         id: 'g' + o.key, kind: 'gbif', coordinates: [o.decimalLongitude, o.decimalLatitude],
         title: common || sci || 'Plante', common, sci, taxonId: null, photo: null, credit: null,
         date: o.eventDate ? String(o.eventDate).slice(0, 10) : null,
-        place: ['GBIF', o.datasetName || o.institutionCode || ''].filter(Boolean).join(' · '),
+        place: clip(o.locality || o.municipality || o.county, 80) || null,
+        source: gbifSource(o.datasetName || o.institutionCode),
         url: o.key ? `https://www.gbif.org/occurrence/${o.key}` : null
       });
     }
     return { points, total: typeof data.count === 'number' ? data.count : points.length };
   }, { ttl: DAY, signal });
+}
+
+/**
+ * Points of another source (GBIF's) given what an iNaturalist observation of the same plant shows among `from`: its
+ * photo and its credit (the same photo for the same plant, whatever its source), its French name, its taxon (the
+ * plant a page lights, markClasses) — the plant by its binomial. Those without a twin keep theirs (the flora's comes
+ * next: core/nearby.js floraPhotos). Pure: new objects, the points given unchanged.
+ * @template {{ sci: string, photo: string | null, credit: import('./credit.js').Credit | null, common: string | null, title: string, taxonId: number | null }} T
+ * @param {T[]} points @param {{ sci: string, photo: string | null, credit: import('./credit.js').Credit | null, common: string | null, taxonId: number | null }[]} from
+ * @returns {T[]}
+ */
+export function sharePhotos(points, from) {
+  /** @type {Map<string, (typeof from)[number]>} */
+  const twins = new Map();
+  for (const p of from) {
+    const key = binomial(p.sci);
+    if (key && p.photo && !twins.has(key)) twins.set(key, p);
+  }
+  return points.map(p => {
+    const twin = p.photo ? null : twins.get(binomial(p.sci));
+    if (!twin) return p;
+    const common = p.common || twin.common;
+    return { ...p, photo: twin.photo, credit: twin.credit, common, title: common && (!p.title || p.title === p.sci) ? common : p.title, taxonId: p.taxonId ?? twin.taxonId };
+  });
 }
 
 /**
@@ -135,9 +177,14 @@ export async function observations3d(center, radius, sources, signal) {
   /** @type {Obs3d[]} */
   const points = [];
   for (const [i, p] of (inat?.points || []).entries()) {
-    points.push({ ...p, id: 'i' + (p.url?.match(/(\d+)$/)?.[1] ?? i), kind: 'inat', url: p.url || null });
+    points.push({ ...p, id: 'i' + (p.url?.match(/(\d+)$/)?.[1] ?? i), kind: 'inat', url: p.url || null, source: 'iNaturalist' });
   }
-  if (gbif) points.push(...gbif.points);
+  // GBIF's as iNaturalist's: the photo and name of the same plant's observation here, else the flora's.
+  if (gbif) {
+    /** @type {Obs3d[]} */
+    const shared = sharePhotos(gbif.points, points);
+    points.push(...await floraPhotos(shared, { names: true }));
+  }
   return { points: inCircle(points, center, radius), totals: { inat: inat ? inat.total : null, gbif: gbif ? gbif.total : null }, failed };
 }
 

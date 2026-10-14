@@ -355,13 +355,13 @@ export class MaAroundMap extends LitElement {
   }
   /** @type {{ key: string, value: Highlight } | null} */ #qhMemo = null;
 
-  /** The plant's observations in a wider scope, many: grouped (pink and gold). */
+  /** The plant's observations in a wider scope, many: grouped (pink and gold: gf-map's `cluster` is one plant's points). */
   get #cluster() {
     const many = this._hl && this._hl.points.length > MANY ? this._hl : null;
     if (!many) return null;
     const key = many.key;
     if (this.#gcMemo?.key === key) return this.#gcMemo.value;
-    const value = { key, photo: many.photo, credit: many.credit, common: many.common, sci: many.sci, taxonId: many.taxonId, points: many.points.map(p => ({ ...p, kind: 'hl' })) };
+    const value = { key, photo: many.photo, credit: many.credit, common: many.common, sci: many.sci, taxonId: many.taxonId, points: many.points };
     this.#gcMemo = { key, value };
     return value;
   }

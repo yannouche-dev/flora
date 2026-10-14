@@ -43,13 +43,7 @@ gf-map .gf-map-gl .maplibregl-canvas:focus-visible { outline: 3px solid var(--gf
   transition: scale 0.15s ease-out;
 }
 .gf-gl-dot.inert { pointer-events: none; cursor: default; }
-.gf-gl-dot.gf-obs-inat { background: #74ac00; border-color: #fff; }
-.gf-gl-dot.gf-obs-gbif { background: #4e7b9f; border-color: #fff; }
 .gf-gl-dot.gf-obs-start { background: #1d2b20; border-color: #fff; }
-.gf-gl-dot.gf-occ { background: #f59e0b; border-color: #fff; }
-.gf-gl-dot.gf-occ-inat { background: #74ac00; }
-.gf-gl-dot.gf-occ-gbif { background: #4e7b9f; }
-.gf-gl-dot.gf-occ-hl { background: #e0245e; border-color: #ffd166; }
 .gf-gl-dot.gf-focus-point { background: #e11d48; border: 3px solid #fff; box-shadow: 0 0 6px rgb(225 29 72 / 80%); }
 .gf-gl-dot.gf-spread-center { background: rgb(61 74 61 / 80%); border-color: #fff; }
 .gf-gl-dot:hover, .gf-gl-dot.gf-kin { scale: 1.45; }

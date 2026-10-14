@@ -72,7 +72,7 @@ const leafIcon = delay => divIcon(leafMarker(delay));
 const photoIcon = (photo, delay) => divIcon(photoMarker(photo, delay));
 /** @param {string | null | undefined} photo @param {number} delay @param {number} [size] @param {string} [extra] */
 const chosenIcon = (photo, delay, size, extra) => divIcon(chosenMarker(photo, delay, size, extra));
-/** @param {string} photo @param {number} n @param {number} size @param {boolean} [still] */
+/** @param {string | null} photo @param {number} n @param {number} size @param {boolean} [still] */
 const chosenGroupIcon = (photo, n, size, still) => divIcon(chosenGroupMarker(photo, n, size, still));
 
 /** The photos still loading in a layer group's markers stop (map-style.js#cancelImages). @param {L.LayerGroup} group */
@@ -235,7 +235,12 @@ export class GfMap extends LitElement {
     area: { attribute: false },
     /** An area's outline to draw ({ key, feature }: a GeoJSON Feature), dashed, lightly filled. */
     zone: { attribute: false },
-    /** Points grouped when they are close at the zoom shown ({ key, points: { coordinates, title, url? }[], photo? }): `photo` shows on the plant chosen's (kind 'hl'). */
+    /**
+     * One plant's points, grouped when they are close at the zoom shown ({ key, points: { coordinates, title, url?, date?,
+     * place?, source? }[], photo?, credit?, common?, sci?, taxonId? }): its observations in a wider scope (Découvrir),
+     * those of its sheet's map (iNaturalist's and GBIF's around me, GBIF's in an area touched) — each the plant chosen's
+     * marker, its photo (a leaf without one), whatever its source.
+     */
     cluster: { attribute: false },
     /** Over the area: where one plant was observed ({ key, points: { coordinates, title, date? }[], photo?, common?, sci?, taxonId? }), its photo in each, large (Découvrir). */
     highlight: { attribute: false },
@@ -257,7 +262,7 @@ export class GfMap extends LitElement {
     /** This map's own background and overlays (not the shared choice of the Carte); changes emit `layers-change`. */
     base: { attribute: false },
     overlays: { attribute: false },
-    /** Points drawn as small circles: [{ coordinates, title, url?, kind? }] (kind: 'gbif' | 'inat', its colour). */
+    /** Points drawn as small circles: [{ coordinates, title, url?, kind? }] (kind 'start': a walk's start, dark). Never an observation: those are the plants' markers (area, highlight, cluster). */
     points: { attribute: false },
     /** The point card's « Créer un endroit ici » makes a place with this plant already in it. */
     createPlant: { type: Number, attribute: 'create-plant' },
@@ -302,7 +307,7 @@ export class GfMap extends LitElement {
     this.pointClick = null;
     /** @type {{ key: string, feature: any } | null} */
     this.zone = null;
-    /** @type {{ key: string, points: { coordinates: [number, number], title: string, url?: string }[] } | null} */
+    /** @type {{ key: string, points: { coordinates: [number, number], title: string, url?: string }[], photo?: string | null } | null} */
     this.cluster = null;
     /** Persist the last viewed area (main map only). */
     this.remember = false;
@@ -847,7 +852,7 @@ export class GfMap extends LitElement {
     if (this.focusPoint && !this.#focusLayer?.getLayers().length) this.#syncFocusPoint();
   }
 
-  /** Observations around (iNaturalist, GBIF): small circles in their source's colour, each linking to its record. */
+  /** Small circles (a walk's start, gf-map3d.js), each named, linking to its page when it has one. */
   #syncPoints() {
     const layer = this.#pointsLayer;
     if (!layer) return;
@@ -1464,13 +1469,13 @@ export class GfMap extends LitElement {
   #zooming = false;
 
   /**
-   * A group's points spread around it, each on a thread to its place: a dot of its source's colour, its card on
-   * hover, its record on a touch. A touch on the map, or a zoom, gathers them back.
-   * @param {L.LatLng} at @param {{ coordinates: [number, number], title: string, url?: string }[]} pts @param {string} kind
-   * @param {string | null} [photo] the plant chosen's: each of its points shows it
-   * @param {{ common?: string, sci?: string, taxonId?: number } | null} [who] the plant chosen (its card's names, its kin)
+   * A group's points spread around it, each on a thread to its place: the plant's photo in its ring (its leaf without
+   * one), its card on hover, its record on a touch. A touch on the map, or a zoom, gathers them back.
+   * @param {L.LatLng} at @param {{ coordinates: [number, number], title: string, url?: string }[]} pts
+   * @param {{ photo?: string | null, credit?: any, common?: string, sci?: string, taxonId?: number }} who the plant
+   *   (its photo, its card's names, its kin)
    */
-  #spread(at, pts, kind, photo = null, who = null) {
+  #spread(at, pts, who) {
     const map = /** @type {L.Map} */ (this.#map);
     this.#gather();
     const layer = this.#spreadLayer = L.layerGroup().addTo(map);
@@ -1483,15 +1488,11 @@ export class GfMap extends LitElement {
       const r = n <= 10 ? 34 + n * 3 : 26 + i * 4.2;
       const spot = map.layerPointToLatLng(L.point(c.x + r * Math.cos(angle), c.y + r * Math.sin(angle)));
       L.polyline([at, spot], { className: 'gf-spread-thread', interactive: false }).addTo(layer);
-      const dot = photo
-        ? L.marker(spot, { icon: chosenIcon(photo, Math.min(i, 30) * 15, 30), keyboard: false, bubblingMouseEvents: false, riseOnHover: true, zIndexOffset: 1000 }).addTo(layer)
-        : L.circleMarker(spot, { radius: 7, className: 'gf-occ gf-occ-' + (/** @type {any} */ (p).kind || kind), bubblingMouseEvents: false }).addTo(layer);
-      const q = /** @type {any} */ (p);
-      if (photo) this.#tip(dot, () => obsCard({ ...q, photo, common: who?.common, sci: who?.sci, credit: /** @type {any} */ (who)?.credit }), { card: true, gap: 6 });
-      else if (q.photo || q.sci) this.#tip(dot, () => obsCard(q), { card: true });
-      else this.#tip(dot, p.title);
+      const photo = who.photo || null;
+      const dot = L.marker(spot, { icon: chosenIcon(photo, Math.min(i, 30) * 15, 30), keyboard: false, bubblingMouseEvents: false, riseOnHover: true, zIndexOffset: 1000 }).addTo(layer);
+      this.#tip(dot, () => obsCard({ .../** @type {any} */ (p), photo, common: who.common, sci: who.sci, credit: photo ? who.credit : null }), { card: true, gap: 6 });
       this.#onPoint(dot, p);
-      this.#kin(dot, photo ? speciesKey(who) || 'hl' : null);
+      this.#kin(dot, speciesKey(who) || 'hl');
     });
     L.circleMarker(at, { radius: 5, className: 'gf-spread-center', interactive: false }).addTo(layer);
     map.once('click zoomstart', () => this.#gather());
@@ -1524,8 +1525,11 @@ export class GfMap extends LitElement {
   }
 
   /**
-   * The points given, grouped by the screen cell they fall in at this zoom: alone, a dot (its record on a touch);
-   * together, a disc with their number, larger for more (a touch zooms in on them). Grouped again at each zoom.
+   * One plant's points (`cluster`), grouped by the screen cell they fall in at this zoom, whatever their source
+   * (iNaturalist, GBIF): alone, the plant chosen's marker — its photo in its pink and gold ring, its leaf without one
+   * (past PHOTO_SINGLES of them, small pink dots) —, its card on hover, its record on a touch; together, a stack: its
+   * photo in a disc sized by their number, their count on a badge (a touch spreads them; a large group is zoomed in
+   * on first). Never a source's colour. Grouped again at each zoom.
    * @param {boolean} [rezoom]
    */
   #syncCluster(rezoom = false) {
@@ -1548,50 +1552,45 @@ export class GfMap extends LitElement {
     const cells = new Map();
     for (const p of c.points) {
       const px = map.project([p.coordinates[1], p.coordinates[0]], zoom);
-      // Each source grouped apart: its colour stays seen beside the others.
-      const id = (/** @type {any} */ (p).kind || 'occ') + ':' + Math.floor(px.x / CELL) + ':' + Math.floor(px.y / CELL);
+      // Every source in the same groups: a GBIF occurrence is one more observation of the plant.
+      const id = Math.floor(px.x / CELL) + ':' + Math.floor(px.y / CELL);
       const cell = cells.get(id) || { pts: [], x: 0, y: 0 };
       cell.pts.push(p); cell.x += px.x; cell.y += px.y;
       cells.set(id, cell);
     }
-    // The plant chosen (Découvrir, a wider scope): its names on its points' cards; its kin key, the same as its
-    // points in the circle (they light together).
+    // The plant (Découvrir's in a wider scope, a sheet's): its photo and its names on its points' cards; its kin key,
+    // the same as its points in the circle (they light together).
     const who = /** @type {any} */ (c);
-    const hlKin = speciesKey(who) || 'hl';
+    const kin = speciesKey(who) || 'hl';
+    const photo = who.photo || null;
     // Its points alone get its photo while they are few; past that, dots (hundreds of images and bounces weigh).
-    const singles = [...cells.values()].filter(cell => cell.pts.length === 1 && /** @type {any} */ (cell.pts[0]).kind === 'hl').length;
+    const singles = [...cells.values()].filter(cell => cell.pts.length === 1).length;
     for (const cell of cells.values()) {
       const n = cell.pts.length;
       const at = map.unproject([cell.x / n, cell.y / n], zoom);
-      // The plant chosen's points: its photo, alone or on the group with their number.
-      const photo = /** @type {any} */ (cell.pts[0]).kind === 'hl' ? who.photo || null : null;
       if (n === 1) {
         const p = cell.pts[0];
-        const kind = /** @type {any} */ (p).kind || 'occ';
-        const dot = photo && singles <= PHOTO_SINGLES
+        const dot = singles <= PHOTO_SINGLES
           ? L.marker([p.coordinates[1], p.coordinates[0]], { icon: chosenIcon(photo, 0, 34, still), keyboard: false, bubblingMouseEvents: false, riseOnHover: true, zIndexOffset: 1000 }).addTo(layer)
-          : L.circleMarker([p.coordinates[1], p.coordinates[0]], { radius: 6, className: 'gf-occ gf-occ-' + kind, bubblingMouseEvents: false }).addTo(layer);
-        if (photo) this.#tip(dot, () => obsCard({ .../** @type {any} */ (p), photo, common: who.common, sci: who.sci, credit: who.credit }), { card: true, gap: 6 });
-        else this.#tip(dot, p.title);
+          : L.circleMarker([p.coordinates[1], p.coordinates[0]], { radius: 6, className: 'gf-occ', bubblingMouseEvents: false }).addTo(layer);
+        this.#tip(dot, () => obsCard({ .../** @type {any} */ (p), photo, common: who.common, sci: who.sci, credit: photo ? who.credit : null }), { card: true, gap: 6 });
         this.#onPoint(dot, p);
-        this.#kin(dot, kind === 'hl' ? hlKin : null);
+        this.#kin(dot, kin);
         continue;
       }
       const size = Math.round(Math.min(54, 26 + Math.log2(n) * 6));
-      const kind = /** @type {any} */ (cell.pts[0]).kind || 'occ';
       const m = L.marker(at, {
-        icon: photo ? chosenGroupIcon(photo, n, size, Boolean(still))
-          : L.divIcon({ className: 'gf-occ-group gf-occ-group-' + kind + still, iconSize: [size, size], iconAnchor: [size / 2, size / 2], html: `<span>${n > 999 ? Math.round(n / 1000) + 'k' : n}</span>` }),
+        icon: chosenGroupIcon(photo, n, size, Boolean(still)),
         keyboard: true, bubblingMouseEvents: false, title: `${n} points — toucher pour zoomer`, riseOnHover: true,
-        // The plant chosen's groups above the others' (and the larger above the smaller: their number stays seen).
-        zIndexOffset: photo ? 1000 + Math.min(n, 999) : 0
+        // Above the other markers (and the larger above the smaller: their number stays seen).
+        zIndexOffset: 1000 + Math.min(n, 999)
       }).addTo(layer);
-      this.#kin(m, kind === 'hl' ? hlKin : null);
+      this.#kin(m, kin);
       // A touch: its points, spread around it (a large group: zoomed in on first).
       m.on('click', () => {
         const b = L.latLngBounds(cell.pts.map(p => [p.coordinates[1], p.coordinates[0]]));
         if (n > SPREAD_MAX && !b.getNorthEast().equals(b.getSouthWest()) && map.getZoom() < 17) { map.flyToBounds(b, { padding: [40, 40], duration: 0.5, maxZoom: 17 }); return; }
-        this.#spread(at, cell.pts, kind, photo, photo ? who : null);
+        this.#spread(at, cell.pts, who);
       });
     }
     this.#relight();

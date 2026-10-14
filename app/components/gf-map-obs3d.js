@@ -16,8 +16,10 @@
 //    lost in the relief; the wall in short pieces, each standing on the ground where it is; the radius on a pill at
 //    its south;
 //  - the points: the same markers as in 2D (map-style.js: a photo over its leaf, a leaf alone, the plant chosen in its
-//    pink and gold ring), standing on the ground on a thin stem as the map tilts (none from above), smaller further
-//    away, faded where the relief hides them (MapLibre's own test of the terrain). Only the nearest ones are elements:
+//    pink and gold ring) — a GBIF occurrence as an iNaturalist observation: its plant's photo, the same seed, the same
+//    card but for its source (core/around3d.js) —, standing on the ground on a thin stem as the map tilts (none from
+//    above), smaller further away, faded where the relief hides them (MapLibre's own test of the terrain). Only the
+//    nearest ones are elements:
 //    the points on the screen are grouped by distance on the screen (the nearest first, the plant chosen before all),
 //    and the first groups (40 on a phone, 70 otherwise) are markers — a point alone its photo, a group a stack of
 //    photos with its count (as the 2D groups: never a bubble); every other point is a small seed drawn by MapLibre
@@ -52,8 +54,8 @@ const DOM_WIDE = 70;
 const GROUP_PX = 46;
 /** The layout again while the view moves: at most this often (ms). */
 const LAYOUT_EVERY = 120;
-/** Its seeds' colours: the 2D points' (iNaturalist's green, GBIF's olive, the user's plants gold). */
-const SEED = { inat: '#5c8a00', gbif: '#6f7f3a', mine: '#f5c542' };
+/** Its seeds' colours: an observation's green (iNaturalist's and GBIF's alike), the user's plants gold. */
+const SEED = { obs: '#5c8a00', mine: '#f5c542' };
 
 const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -453,11 +455,11 @@ export class Obs3dLayer {
           'fill-extrusion-vertical-gradient': true
         } });
     } else {
-      // The points not shown as markers: seeds on the ground, the colour of their source.
+      // The points not shown as markers: seeds on the ground, an observation's green whatever its source (the user's plants gold).
       style.layers.push({ id: ID + 'seeds', type: 'circle', source: ID + 'pts',
         paint: {
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 2, 14, 3.5, 18, 5],
-          'circle-color': ['case', ['get', 'hl'], '#e0245e', ['match', ['get', 'k'], 'gbif', SEED.gbif, 'mine', SEED.mine, SEED.inat]],
+          'circle-color': ['case', ['get', 'hl'], '#e0245e', ['match', ['get', 'k'], 'mine', SEED.mine, SEED.obs]],
           'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1.2, 'circle-pitch-alignment': 'map',
           'circle-opacity': ['case', ['boolean', ['feature-state', 'dom'], false], 0, 0.95],
           'circle-stroke-opacity': ['case', ['boolean', ['feature-state', 'dom'], false], 0, 0.95]
@@ -685,7 +687,7 @@ export class Obs3dLayer {
       return;
     }
     const card = obsCard(first);
-    card.classList.add(first.kind === 'gbif' ? 'gbif' : first.kind);
+    card.classList.add(first.kind);
     if (pts.length > 1) {
       const others = [...new Set(pts.slice(1).map(p => p.title))];
       card.querySelector('.t')?.append(elem('small', 'gf-o3-more', `Et ${pts.length - 1} autre${pts.length > 2 ? 's' : ''} ici : ${others.slice(0, 4).join(', ')}${others.length > 4 ? '…' : ''}`));
@@ -768,10 +770,12 @@ export class Obs3dLayer {
 
   state() {
     const by = (/** @type {string} */ k) => this.#points.filter(p => p.kind === k).length, c = this.center;
+    const pictured = (/** @type {string} */ k) => this.#points.filter(p => p.kind === k && p.photo).length;
     return {
       on: this.prefs.on, scope: this.scope, center: this.center, why: this.why, radius: this.prefs.radius, loading: this.#loading,
       sources: { inat: this.prefs.inat, gbif: this.prefs.gbif }, density: this.prefs.density, failed: this.#failed,
       points: this.#points.length, kinds: { inat: by('inat'), gbif: by('gbif'), mine: by('mine') }, totals: this.#totals,
+      photos: { inat: pictured('inat'), gbif: pictured('gbif'), mine: pictured('mine') },
       farthest: c ? Math.round(Math.max(0, ...this.#points.map(p => metres(c, p.coordinates)))) : null,
       markers: this.#marks.size, onMarkers: this.#shown.size, seeds: this.#points.length - this.#shown.size, hexes: this.#hex.features.length,
       lit: [...this.#lit]
