@@ -32,7 +32,7 @@ import { ui } from '../styles/ui.js';
 import { floweringMonths } from '../components/gf-calendar.js';
 import { geoProblem } from '../components/start-screen.js';
 import { DISTANCES, distanceAt, distanceEvents } from '../miniapp/kit/cards.js';
-import { distanceLabel } from './registry.js';
+import { cellIcon, distanceLabel } from './registry.js';
 import { obsId } from './state.js';
 import '../components/gf-map.js';
 import '../components/gf-place-search.js';
@@ -647,7 +647,7 @@ export function renderCell(r, ctx) {
   // A plant cell: the current plant, or how to choose one.
   const plant = ctx.plant;
   if (plant == null) {
-    return html`<div class="placeholder quiet" role="note">${icon(r.spec.icon)}<p>Aucune plante choisie : touchez un résultat, un point de la carte ou une carte.</p>
+    return html`<div class="placeholder quiet" role="note">${icon(cellIcon(r))}<p>Aucune plante choisie : touchez un résultat, un point de la carte ou une carte.</p>
       ${ctx.first ? html`<button type="button" @click=${() => state.pick(/** @type {any} */ (ctx.first).id)}>Voir ${ctx.first.name}</button>` : nothing}</div>`;
   }
   const view = r.params.mode ?? ctx.view;

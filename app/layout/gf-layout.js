@@ -138,6 +138,9 @@ export class GfLayout extends LitElement {
     @media (prefers-reduced-motion: reduce) { .cell.flash { animation: none; } }
     .cell-head { flex: none; display: flex; align-items: center; gap: 6px; min-height: 30px; padding: 2px 6px 2px 10px; border-bottom: 1px solid var(--gf-border); background: var(--gf-surface); min-width: 0; flex-wrap: wrap; }
     .cell-head h2 { margin: 0; display: flex; align-items: center; gap: 6px; font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gf-text-muted); white-space: nowrap; }
+    /* How the cell is shown, when not as by default (plant(epure): É): the menu's mark, quiet, after the title (said by the menu's name, not here). */
+    .cell-head .cell-mark { padding: 1px 4px; border-radius: 5px; font: 700 0.66rem/1 var(--gf-font); letter-spacing: 0; text-transform: none; color: var(--gf-text-muted); box-shadow: inset 0 0 0 1px var(--gf-border); }
+    .cell-head .cell-mark::before { content: attr(data-mark); }
     .cell-head .sub { flex: 1; min-width: 0; font-size: 0.8rem; color: var(--gf-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .cell-head .sub i { font-family: var(--gf-font-serif); }
     .cell-body { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
@@ -588,7 +591,11 @@ export class GfLayout extends LitElement {
       <div class="part" style=${`flex: ${sh[j]} 1 0; ` + (dir === 'row' ? `min-width: ${least(k, cells, [...path, j], 'col')}px` : `min-height: ${least(k, cells, [...path, j], col ? 'col' : 'row', 'h', col)}px`)}>${k.t === 'list' ? this.#split(k, [...path, j], depth + 1, col) : this.#cell(k, [...path, j])}</div>`)}</div>`;
   }
 
-  /** A cell: its head (its title, what it shows now, its tools while editing) and its component. @param {CellNode} n @param {number[]} path */
+  /**
+   * A cell: its head (the icon and mark of its tab in the menu of columns — registry.js#cellIcon, #cellMark: a block of
+   * the sheet its own, an unknown component a question —, its title, what it shows now, its tools while editing) and its
+   * component. @param {CellNode} n @param {number[]} path
+   */
   #cell(n, path) {
     const key = path.join('.');
     const r = /** @type {Resolved} */ (this.#shown.cells.get(key));
@@ -596,12 +603,13 @@ export class GfLayout extends LitElement {
     const results = this.#store.state.results;
     const first = results.items[0] ? { id: results.items[0].id, name: results.items[0].vernacularName || results.items[0].scientificName } : null;
     const id = r.known ? r.spec.id : null;
+    const mark = cellMark(r);
     const sub = !r.known ? 'à corriger'
       : id === 'map' || id === 'place' ? scopeWords(s)
       : id === 'search' || id === 'results' || id === 'filters' ? (this.#store.state.status === 'ready' ? `${results.total.toLocaleString('fr-FR')} espèce${results.total > 1 ? 's' : ''}` : '')
       : s.plantInfo && s.plantInfo.id === s.live.plant ? html`${s.plantInfo.name}${s.plantInfo.name !== s.plantInfo.sci ? html` · <i>${s.plantInfo.sci}</i>` : nothing}` : '';
     return html`<section class="cell ${this._flash === key ? 'flash' : ''}" data-cell=${key} data-comp=${r.known ? r.spec.id + (r.view ? '.' + r.view.key : '') : 'unknown'} aria-label=${r.title}>
-      <header class="cell-head"><h2>${icon(r.known ? r.spec.icon : 'exclamation-triangle-fill')} ${r.title}</h2><span class="sub">${sub}</span>
+      <header class="cell-head"><h2>${icon(cellIcon(r))} ${r.title}${mark ? html`<b class="cell-mark" aria-hidden="true" title=${mark.label} data-mark=${mark.short}></b>` : nothing}</h2><span class="sub">${sub}</span>
         ${this._editing ? this.#tools(n, path, r) : nothing}</header>
       <div class="cell-body">${renderCell(r, { state: s, view: plantViewOf(this.#store.state), plant: s.live.plant, first })}</div>
     </section>`;

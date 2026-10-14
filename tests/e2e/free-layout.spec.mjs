@@ -5,7 +5,8 @@
 // points the map shows; a result touched is the current plant, every plant cell shows it, the address says it, Back
 // returns to the one before; the scope's radius keeps the results to the plants observed in it; a point of the map
 // touched: its plant), the deck (its top card the current plant, a heart a favourite), the editor (live preview, a
-// component unknown said and shown, « Appliquer » a new entry), a phone (the columns as a menu of icons on top: one
+// component unknown said and shown, « Appliquer » a new entry), each cell's head (the icon and mark of its tab in a
+// phone's menu, its name alone read), a phone (the columns as a menu of icons on top: one
 // per column, its icons and marks, its whole name; what looked alike once, told apart; tapped, ← → Début Fin; the
 // plant's tab brought and lit; twelve columns: the menu scrolls, the tab shown in sight, the smooth scroll too; a
 // finger swiped on a panel: the neighbour, never on the map), a window too narrow for its columns (their tabs named
@@ -61,6 +62,19 @@ const cellOf = (page, comp) => page.locator(`gf-layout section.cell[data-comp="$
 const box = async l => /** @type {{ x: number, y: number, width: number, height: number }} */ (await l.boundingBox());
 /** The map's points shown (the observations of the plants found). @param {Page} page */
 const dots = page => page.locator('dl-map .leaflet-marker-pane .gf-obs-leaf:not(.gf-leave):not(.hl)');
+/**
+ * Each cell's head, in reading order: the icon drawn (its sprite's symbol) with its mark (drawn by the style, not
+ * written), and its heading's text (neither the icon nor the mark in it), the icon and mark hidden from readers. @param {Page} page
+ */
+const heads = page => page.locator('gf-layout section.cell .cell-head h2').evaluateAll(hs => hs.map(h => ({
+  shown: (h.querySelector('svg use')?.getAttribute('href') ?? '').split('#')[1] + (h.querySelector('.cell-mark')?.getAttribute('data-mark') ?? ''),
+  text: h.textContent?.trim(), hidden: [...h.querySelectorAll('svg, .cell-mark')].every(e => e.getAttribute('aria-hidden') === 'true') })));
+/** One cell of each look the phone's menu tells apart (its marks, a block's own icon, a component mistyped). */
+const LOOKS = '[map(r=2km),plant.map,media,plant.photos,mpa,plant.status,plant.lookalikes,search(list=0),search(filters=1),plant.literature,plant.wikipedia,plant(epure)]';
+/** Their heads: the icon of the menu's tab with its mark, the cell's title. */
+const LOOKS_HEADS = [['map', 'Carte'], ['pin-map', 'Carte'], ['images', 'Photos'], ['image', 'Photos'], ['question-circle', 'mpa'],
+  ['shield', 'Protection et statuts'], ['exclamation-triangle-fill', 'Plantes à confondre'], ['search−L', 'Recherche'], ['searchF', 'Recherche'],
+  ['journal-text', 'Publications (GBIF)'], ['wikipedia', 'Wikipédia'], ['card-textÉ', 'Fiche']];
 
 test.describe('un grand écran', () => {
   test.skip(({ isMobile }) => isMobile, 'a wide screen');
@@ -227,6 +241,19 @@ test.describe('un grand écran', () => {
     await page.goBack();
     await expect.poll(() => hash(page)).toContain('#/layout/[map,search]?');
     await expect(page.locator('gf-layout section.cell')).toHaveCount(2);
+  });
+
+  test('l’en-tête de chaque case : l’icône de son onglet sur un téléphone (le bloc de la fiche le sien, un composant inconnu une question), sa marque ; son nom seul lu', async ({ app, page }) => {
+    // The same cells in three columns of four rows: room for them all side by side, no menu of columns.
+    await app.open(`#/layout/[[map(r=2km),plant.map,media,plant.photos],[mpa,plant.status,plant.lookalikes,search(list=0)],[search(filters=1),plant.literature,plant.wikipedia,plant(epure)]]?${AT}`);
+    await expect(page.locator('gf-layout section.cell')).toHaveCount(12);
+    await expect(page.getByRole('tablist', { name: 'Colonnes' })).toHaveCount(0);
+    const all = await heads(page);
+    expect(all.map(h => [h.shown, h.text])).toEqual(LOOKS_HEADS);
+    expect(all.every(h => h.hidden)).toBe(true);
+    await expect(cellOf(page, 'plant.map').getByRole('heading', { level: 2 })).toHaveAccessibleName('Carte');
+    await expect(cellOf(page, 'plant').getByRole('heading', { level: 2 })).toHaveAccessibleName('Fiche');
+    await expect(cellOf(page, 'search').first().getByRole('heading', { level: 2 })).toHaveAccessibleName('Recherche');
   });
 
   test('une adresse bancale ne casse rien : la disposition lue au mieux, les remarques dites, sans erreur', async ({ app, page }) => {
@@ -663,6 +690,20 @@ test.describe('un téléphone', () => {
       ['shield', 'Protection et statuts'], ['exclamation-triangle-fill', 'Plantes à confondre'],
       ['search−L', 'Recherche (sans liste des résultats)'], ['searchF', 'Recherche (filtres ouverts)'], ['journal-text', 'Publications (GBIF)'], ['wikipedia', 'Wikipédia']]);
     for (const [i, t] of all.entries()) await expect(tabsOf(page).nth(i)).toHaveAccessibleName(/** @type {string} */ (t.name));
+  });
+
+  test('l’en-tête de chaque panneau : l’icône de son onglet, sa marque ; son nom seul lu', async ({ app, page }) => {
+    await app.open(`#/layout/${LOOKS}?${AT}`);
+    const tabs = await looks(page);
+    expect(tabs).toHaveLength(12);
+    // Every panel's head, the shown one and the hidden ones: the same look as its tab's (one cell a column here).
+    const all = await heads(page);
+    expect(all.map(h => h.shown)).toEqual(tabs.map(t => t.shown.join(' ')));
+    expect(all.map(h => [h.shown, h.text])).toEqual(LOOKS_HEADS);
+    expect(all.every(h => h.hidden)).toBe(true);
+    await tabsOf(page).nth(11).click();
+    await expect(cellOf(page, 'plant').getByRole('heading', { level: 2 })).toHaveAccessibleName('Fiche');
+    await expect(cellOf(page, 'plant').locator('.cell-head .cell-mark')).toBeVisible();
   });
 
   test('douze colonnes : le menu défile de côté, sans barre ; l’onglet montré toujours en vue — au clavier, et amené par une plante choisie', async ({ app, page }) => {
