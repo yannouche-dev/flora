@@ -1,12 +1,12 @@
 // « Disposition libre » (app/layout): the grammar of a layout written in the address (grammar.js), what its cells are
 // (registry.js: names in English or French, parameters checked, an unknown component a placeholder, never a throw;
-// each cell's icon and mark in a phone's menu of columns), the live state beside it (state.js: plant, scope, search),
-// and the router's route. A layout read and written back is the same; whatever is typed, something sound comes out,
-// with what was wrong said in French.
+// each cell's icon, mark and name in a phone's menu of columns, and how its columns look there), the live state beside
+// it (state.js: plant, scope, search), and the router's route. A layout read and written back is the same; whatever is
+// typed, something sound comes out, with what was wrong said in French.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as G from '../../app/layout/grammar.js';
-import { cellIcon, cellMark, COMPONENTS, distanceText, names, parseDistance, resolve, resolveTree } from '../../app/layout/registry.js';
+import { cellIcon, cellMark, cellName, COMPONENTS, distanceText, menuLooks, names, parseDistance, resolve, resolveTree } from '../../app/layout/registry.js';
 import { liveSearch, readLive, readQuery } from '../../app/layout/state.js';
 import { PRESETS } from '../../app/layout/presets.js';
 import { href, parse as route } from '../../app/core/router.js';
@@ -152,29 +152,66 @@ test('chaque nom du registre se lit, et les modèles sont des dispositions sans 
   }
 });
 
-test('le menu des colonnes (téléphone) : l’icône de chaque case, la rubrique de la fiche la sienne ; une présentation choisie, sa marque', () => {
-  /** A cell as typed → its icon and its mark (null: as by default). @param {string} text */
-  const look = text => { const r = resolve(G.parse(text).tree.kids[0]); const m = cellMark(r); return [cellIcon(r), m && m.short, m && m.label]; };
-  assert.deepEqual(look('map(r=5km)'), ['map', null, null]);
-  assert.deepEqual(look('search(list=0)'), ['search', null, null], 'un oui-ou-non n’est pas une présentation');
-  assert.deepEqual(look('plant'), ['card-text', null, null]);
-  // One block of the sheet: its rubric's icon, as the sheet's panes show it (categories.js).
-  assert.deepEqual(look('plant.calendar'), ['flower1', null, null]);
-  assert.deepEqual(look('plant.wikipedia'), ['wikipedia', null, null]);
-  assert.deepEqual(look('plant.status'), ['exclamation-triangle-fill', null, null]);
-  assert.deepEqual(look('plant.interactions'), ['diagram-3', null, null]);
-  assert.deepEqual(look('mpa'), ['exclamation-triangle-fill', null, null], 'un composant inconnu');
+test('le menu des colonnes (téléphone) : l’icône de chaque case, chaque rubrique de la fiche la sienne ; une présentation, un oui ou un non choisis, leur marque ; son nom entier', () => {
+  /** A cell as typed → its icon, its mark (null: as by default), its whole name. @param {string} text */
+  const look = text => { const r = resolve(G.parse(text).tree.kids[0]); const m = cellMark(r); return [cellIcon(r), m && m.short, cellName(r)]; };
+  assert.deepEqual(look('map(r=5km)'), ['map', null, 'Carte'], 'un rayon n’est pas une marque : la zone est celle de toute la disposition');
+  assert.deepEqual(look('plant'), ['card-text', null, 'Fiche']);
+  // One block of the sheet: its own icon, finer than its rubric's — the statuses and the look-alikes, the four
+  // encyclopedias, the sheet's map and the map, its photos and the photos' viewer: never alike.
+  assert.deepEqual(look('plant.calendar'), ['flower1', null, 'Calendrier']);
+  assert.deepEqual(look('plant.wikipedia'), ['wikipedia', null, 'Wikipédia']);
+  assert.deepEqual(look('plant.literature'), ['journal-text', null, 'Publications (GBIF)']);
+  assert.deepEqual(look('plant.status'), ['shield', null, 'Protection et statuts']);
+  assert.deepEqual(look('plant.lookalikes'), ['exclamation-triangle-fill', null, 'Plantes à confondre']);
+  assert.deepEqual(look('plant.mine'), ['collection', null, 'Mes collections']);
+  // A block named as a component is: said as the sheet's.
+  assert.deepEqual(look('plant.map'), ['pin-map', null, 'Fiche › Carte']);
+  assert.deepEqual(look('plant.photos'), ['image', null, 'Fiche › Photos']);
+  assert.deepEqual(look('plant.media'), ['film', null, 'Médias']);
+  assert.deepEqual(look('mpa'), ['question-circle', null, 'mpa (inconnu)'], 'un composant inconnu : une question, son nom tel que tapé');
+  const blocks = names().filter(n => n.startsWith('plant.'));
+  const icons = blocks.map(n => look(n)[0]);
+  assert.equal(new Set(icons).size, blocks.length, 'chaque rubrique son icône');
+  for (const [i, n] of blocks.entries()) assert.ok(!COMPONENTS.some(c => c.icon === icons[i]) && icons[i] !== 'question-circle', `${n} : ni l’icône d’un composant ni celle d’un inconnu`);
   // Three modes of the sheet told apart: one letter, two where another mode starts with it.
-  assert.deepEqual(look('fiche(épuré)'), ['card-text', 'É', 'Épuré']);
-  assert.deepEqual(look('plant(standard)'), ['card-text', 'St', 'Standard']);
-  assert.deepEqual(look('plant(scientifique)'), ['card-text', 'Sc', 'Scientifique']);
-  assert.deepEqual(look('results(liste)'), ['list-ul', 'L', 'Liste']);
-  assert.deepEqual(look('results(view=grid)'), ['list-ul', 'G', 'Grille']);
-  assert.deepEqual(look('results(view=auto)'), ['list-ul', null, null], 'la valeur par défaut, écrite : sans marque');
-  assert.deepEqual(look('media(mosaic)'), ['images', 'M', 'Mosaïque']);
-  assert.deepEqual(look('map(base=photo)'), ['map', 'Ph', 'Photos aériennes']);
-  // Every block a cell can show has an icon of the sprite's (icons.js names them).
+  assert.deepEqual(look('fiche(épuré)'), ['card-text', 'É', 'Fiche (Épuré)']);
+  assert.deepEqual(look('plant(standard)'), ['card-text', 'St', 'Fiche (Standard)']);
+  assert.deepEqual(look('plant(scientifique)'), ['card-text', 'Sc', 'Fiche (Scientifique)']);
+  assert.deepEqual(look('plant.calendar(epure)'), ['flower1', 'É', 'Calendrier (Épuré)']);
+  assert.deepEqual(look('results(liste)'), ['list-ul', 'L', 'Résultats (Liste)']);
+  assert.deepEqual(look('results(view=grid)'), ['list-ul', 'G', 'Résultats (Grille)']);
+  assert.deepEqual(look('results(view=auto)'), ['list-ul', null, 'Résultats'], 'la valeur par défaut, écrite : sans marque');
+  assert.deepEqual(look('media(mosaic)'), ['images', 'M', 'Photos (Mosaïque)']);
+  assert.deepEqual(look('map(base=photo)'), ['map', 'Ph', 'Carte (Photos aériennes)']);
+  // A yes or a no: its first letter, a no after a minus; two of them, both.
+  assert.deepEqual(look('search(filters=1)'), ['search', 'F', 'Recherche (filtres ouverts)']);
+  assert.deepEqual(look('search(list=0)'), ['search', '−L', 'Recherche (sans liste des résultats)']);
+  assert.deepEqual(look('search(list=0,filters=1)'), ['search', 'F−L', 'Recherche (filtres ouverts, sans liste des résultats)']);
+  assert.deepEqual(look('search(list=1)'), ['search', null, 'Recherche']);
+  // Every cell has an icon of the sprite's (icons.js names them).
   for (const n of names()) assert.match(cellIcon(resolve(G.parse(n).tree.kids[0])), /^[a-z0-9-]+$/, n);
+});
+
+test('le menu des colonnes : une icône pareille montrée une fois, trois au plus et « +n » ; deux colonnes qui se ressembleraient encore, numérotées', () => {
+  /** A layout's columns as the menu shows them. @param {string} text */
+  const menu = text => {
+    const { tree, cells } = resolveTree(G.parse(text).tree);
+    /** @param {G.LayoutNode} n @param {number[]} path @returns {import('../../app/layout/registry.js').MenuCell[]} */
+    const of = (n, path) => n.t === 'list' ? n.kids.flatMap((k, j) => of(k, [...path, j]))
+      : [(r => ({ name: cellName(r), icon: cellIcon(r), mark: cellMark(r)?.short ?? null }))(/** @type {any} */ (cells.get(path.join('.'))))];
+    return menuLooks(tree.kids.map((k, j) => of(k, [j]))).map(m => [m.glyphs.map(g => g.icon + (g.mark ?? '')).join(' '), m.more, m.nth, m.label]);
+  };
+  assert.deepEqual(menu('[map(r=2km),plant.map]'), [['map', 0, 0, 'Carte'], ['pin-map', 0, 0, 'Fiche › Carte']]);
+  assert.deepEqual(menu('[search(list=0),search(filters=1)]'), [['search−L', 0, 0, 'Recherche (sans liste des résultats)'], ['searchF', 0, 0, 'Recherche (filtres ouverts)']]);
+  // Alike in one column: once, the cells past the icons counted.
+  assert.deepEqual(menu('[[plant.status,plant.status,plant.lookalikes],[map,map]]'), [
+    ['shield exclamation-triangle-fill', 1, 0, 'Protection et statuts · Protection et statuts · Plantes à confondre'], ['map', 1, 0, 'Carte · Carte']]);
+  assert.deepEqual(menu('[[plant.status,plant.lookalikes,plant.interactions,plant.climate]]'), [
+    ['shield exclamation-triangle-fill bug', 1, 0, 'Protection et statuts · Plantes à confondre · Pollinisateurs et interactions · Climat et pollen']]);
+  // What differs hidden past three icons: numbered (the same column twice, the same number).
+  assert.deepEqual(menu('[[plant.name,plant.names,plant.ids,plant.uses],[plant.name,plant.names,plant.ids,plant.calendar],[plant.name,plant.names,plant.ids,plant.uses]]').map(m => m.slice(0, 3)), [
+    ['tag translate hash', 1, 1], ['tag translate hash', 1, 2], ['tag translate hash', 1, 1]]);
 });
 
 /** A random layout (names of the registry, views, parameters, shares). @param {(n: number) => number} rnd @param {number} depth @returns {G.LayoutNode} */

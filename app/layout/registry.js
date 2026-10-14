@@ -310,26 +310,86 @@ export function resolveTree(tree) {
 export const names = () => COMPONENTS.flatMap(c => [c.id, ...(c.views?.() ?? []).map(v => c.id + '.' + v.key)]);
 
 /**
- * A cell's icon (a narrow layout's menu of columns): its component's; one block of the sheet, the block's own — its
- * rubric's, as the sheet's panes show it (categories.js) —; an unknown component, a warning.
- * @param {Resolved} r @returns {import('../core/icons.js').IconName}
+ * The icon of each block of the sheet a cell shows alone, in a narrow layout's menu of columns: its own, finer than its
+ * rubric's (categories.js, the sheet's panes: the statuses and the look-alikes share a triangle there, the four
+ * encyclopedias a W), and never a component's (the sheet's map is not the map, its photos not the photos' viewer) —
+ * so that two columns of one block each are told apart at a glance. A block without one: its rubric's.
+ * @type {Record<string, import('../core/icons.js').IconName>}
  */
-export const cellIcon = r => !r.known ? 'exclamation-triangle-fill' : r.spec.id === 'plant' && r.view ? categoryOf(blockCategory(r.view.key)).icon : r.spec.icon;
+const BLOCK_ICONS = {
+  name: 'tag', names: 'translate', taxonomy: 'diagram-2', ids: 'hash', media: 'film', photos: 'image', gbifMedia: 'camera', status: 'shield',
+  lookalikes: 'exclamation-triangle-fill', uses: 'basket', mine: 'collection', calendar: 'flower1', wikipedia: 'wikipedia', descriptions: 'quote',
+  occurrences: 'globe-europe-africa', map: 'pin-map', interactions: 'bug', climate: 'cloud-sun', gbifProfile: 'tree', literature: 'journal-text',
+  trefle: 'leaf', resources: 'link-45deg'
+};
+
+/** The icon of a component unknown (mistyped: « mpa »), in the menu: a question, unlike any block's. */
+export const UNKNOWN_ICON = 'question-circle';
 
 /**
- * How a cell says it is shown, when it says so — its first choice parameter given another value than its default
- * (plant(epure), results(grid), media(mosaic), map(base=photo)) —: the value's French words, and a mark of a letter or
- * two that tells two cells of one component apart at a glance: the first letter of the words, two when another value
- * of the parameter starts with it (Épuré É, Standard St, Scientifique Sc; Liste L, Grille G). null: as by default.
+ * A cell's icon (a narrow layout's menu of columns): its component's; one block of the sheet, the block's own
+ * (BLOCK_ICONS); an unknown component, a question. @param {Resolved} r @returns {import('../core/icons.js').IconName}
+ */
+export const cellIcon = r => !r.known ? UNKNOWN_ICON : r.spec.id === 'plant' && r.view ? BLOCK_ICONS[r.view.key] ?? categoryOf(blockCategory(r.view.key)).icon : r.spec.icon;
+
+/**
+ * How a cell says it is shown, when it says so — its choices given another value than their default, in the
+ * component's order: a presentation (plant(epure), results(grid), media(mosaic), map(base=photo)), a yes-or-no
+ * (search(filters=1), search(list=0)) —: their French words, and a mark of a letter or two each that tells two cells of
+ * one component apart at a glance. A presentation: the first letter of its words, two when another value of the
+ * parameter starts with it (Épuré É, Standard St, Scientifique Sc; Liste L, Grille G); a yes: the first letter of the
+ * parameter's words (Filtres ouverts F), a no: the same after a minus (sans liste des résultats −L). A distance is no
+ * mark: the zone is the layout's, one for every cell (map(r=2km) only gives its default). null: as by default.
  * @param {Resolved} r @returns {{ label: string, short: string } | null}
  */
 export function cellMark(r) {
   if (!r.known) return null;
-  const at = Object.entries(r.spec.params).find(([k, p]) => p.kind === 'enum' && r.given.has(k) && r.params[k] !== p.def);
-  if (!at) return null;
-  const labels = Object.values(at[1].values ?? {});
-  const label = /** @type {string} */ (at[1].values?.[r.params[at[0]]]);
   const first = (/** @type {string} */ s) => fold(s).charAt(0);
-  const shared = labels.some(l => l !== label && first(l) === first(label));
-  return { label, short: label.charAt(0).toUpperCase() + (shared ? label.charAt(1) : '') };
+  const lower = (/** @type {string} */ s) => s.charAt(0).toLowerCase() + s.slice(1);
+  const marks = Object.entries(r.spec.params).filter(([k, p]) => p.kind !== 'distance' && r.given.has(k) && r.params[k] !== p.def).map(([k, p]) => {
+    if (p.kind === 'bool') return r.params[k] ? { label: lower(p.label), short: p.label.charAt(0).toUpperCase() } : { label: 'sans ' + lower(p.label), short: '−' + p.label.charAt(0).toUpperCase() };
+    const labels = Object.values(p.values ?? {});
+    const label = /** @type {string} */ (p.values?.[r.params[k]]);
+    const shared = labels.some(l => l !== label && first(l) === first(label));
+    return { label, short: label.charAt(0).toUpperCase() + (shared ? label.charAt(1) : '') };
+  });
+  return marks.length ? { label: marks.map(m => m.label).join(', '), short: marks.map(m => m.short).join('') } : null;
+}
+
+/**
+ * A cell's whole name, in the menu of columns (read, and shown on hover): its title — a block named as a component is
+ * (« Carte », « Photos ») said as the sheet's: « Fiche › Carte » —, how it is shown after it (« Fiche (Épuré) »,
+ * « Recherche (sans liste des résultats) »); an unknown component, its name as typed: « mpa (inconnu) ».
+ * @param {Resolved} r @returns {string}
+ */
+export function cellName(r) {
+  if (!r.known) return `${r.title} (inconnu)`;
+  const mark = cellMark(r);
+  const title = r.view && COMPONENTS.some(c => c.title === r.title) ? `${r.spec.title} › ${r.title}` : r.title;
+  return title + (mark ? ` (${mark.label})` : '');
+}
+
+/**
+ * @typedef {{ name: string, icon: import('../core/icons.js').IconName, mark: string | null }} MenuCell  a cell, in the menu of columns
+ * @typedef {{ label: string, glyphs: { icon: import('../core/icons.js').IconName, mark: string | null }[], more: number, nth: number }} MenuItem
+ */
+
+/**
+ * A narrow layout's menu of columns, as each item looks: the column's whole name (its cells' names: « Recherche ·
+ * Filtres · Résultats »), its cells' icons with their marks — one alike shown once (two maps: one map), three at most
+ * —, how many cells more than the icons shown (« +n »), and, the rare time two columns would still look alike (the
+ * same three icons and « +n », what differs hidden past them), a number each (1, 2…) that tells them apart; 0: none.
+ * @param {MenuCell[][]} columns @returns {MenuItem[]}
+ */
+export function menuLooks(columns) {
+  const items = columns.map(cells => {
+    const glyphs = cells.filter((c, i) => cells.findIndex(d => d.icon === c.icon && d.mark === c.mark) === i).slice(0, 3).map(c => ({ icon: c.icon, mark: c.mark }));
+    return { label: cells.map(c => c.name).join(' · '), glyphs, more: cells.length - glyphs.length, nth: 0 };
+  });
+  const look = (/** @type {MenuItem} */ m) => m.glyphs.map(g => g.icon + (g.mark ? ':' + g.mark : '')).join(' ') + ' +' + m.more;
+  for (const m of items) {
+    const labels = [...new Set(items.filter(o => look(o) === look(m)).map(o => o.label))];
+    if (labels.length > 1) m.nth = labels.indexOf(m.label) + 1;
+  }
+  return items;
 }
