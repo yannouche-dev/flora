@@ -44,6 +44,7 @@ const SHELL = [
   'vendor/leaflet.css',
   'lib/plant-sources.mjs',
   'lib/ign-catalog.mjs',
+  'lib/ign-classify.mjs',
   'data/territories.json',
   'data/lookalikes.json',
   'data/safety.json',
@@ -204,6 +205,7 @@ const SHELL = [
   'app/components/gf-status.js',
   'app/components/gf-thumb.js',
   'app/components/gf-map-panel.js',
+  'app/components/gf-ign-layers.js',
   'app/components/gf-map-search.js',
   'app/components/gf-point-card.js',
   'app/components/gf-tabbar.js'
