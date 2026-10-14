@@ -154,7 +154,7 @@ export function parse(input) {
         i++;
         const parts = [word()];
         while ((s[i] === '.' || s[i] === ':') && WORD.test(s[i + 1] ?? '')) { i++; parts.push(word()); }
-        if (!parts[0]) fail(`Rubrique attendue après « ${name}${s[i - 1]} ».`, at);
+        if (!parts[0]) fail(`Bloc attendu après « ${name}${s[i - 1]} ».`, at);
         else view = parts.join('.');
       }
       space();

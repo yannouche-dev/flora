@@ -17,7 +17,7 @@ import { icon } from '../core/icons.js';
  * one; with `place`, where the block sits: in the sheet, on an edge of the plant pane, or beside it).
  */
 /** Where a block sits (sheet-blocks.js › tree of panes): the sheet, a pane, or a new pane on a side of the sheet. */
-const PLACE_OPTIONS = [['', 'Dans la fiche'], ['pane', 'Dans un volet'], ['right', 'Nouveau volet à droite'], ['left', 'Nouveau volet à gauche'], ['top', 'Nouveau volet en haut'], ['bottom', 'Nouveau volet en bas']];
+const PLACE_OPTIONS = [['', 'Dans la fiche'], ['pane', 'Dans un panneau'], ['right', 'Nouveau panneau à droite'], ['left', 'Nouveau panneau à gauche'], ['top', 'Nouveau panneau en haut'], ['bottom', 'Nouveau panneau en bas']];
 
 export class GfSortableList extends LitElement {
   static properties = {

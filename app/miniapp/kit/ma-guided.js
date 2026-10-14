@@ -310,7 +310,7 @@ export class MaGuided extends LitElement {
     const off = [...new Set(this.#stepKeys.flatMap(k => modulesOffFor(this.#view, k)))];
     if (!off.length) return nothing;
     const names = off.map(m => `« ${MODULES.find(x => x.key === m)?.name || m} »`);
-    return html`<p class="g-off" role="note">${icon('eye-slash')} ${names.length > 1 ? `Modules ${names.slice(0, -1).join(', ')} et ${names.at(-1)} désactivés` : `Module ${names[0]} désactivé`} : ${names.length > 1 ? 'leurs volets ne sont pas ajoutés' : 'son volet n’est pas ajouté'}. Vous pouvez ${names.length > 1 ? 'les' : 'le'} réactiver dans <a href=${href.settings()}>Réglages › Modules</a>.</p>`;
+    return html`<p class="g-off" role="note">${icon('eye-slash')} ${names.length > 1 ? `Modules ${names.slice(0, -1).join(', ')} et ${names.at(-1)} désactivés` : `Module ${names[0]} désactivé`} : ${names.length > 1 ? 'leurs panneaux ne sont pas ajoutés' : 'son panneau n’est pas ajouté'}. Vous pouvez ${names.length > 1 ? 'les' : 'le'} réactiver dans <a href=${href.settings()}>Réglages › Modules</a>.</p>`;
   }
 
   /** Where the discovery is: 0 the map, 1 the cards, 2 the photos, 3 the encyclopedia, 4 the fork, 5 the plants around. */
@@ -419,7 +419,7 @@ export class MaGuided extends LitElement {
         <div class="g-deck">${asking ? nothing : s.cards ? html`<ma-deck guided .session=${s} .cards=${s.deck} .c=${c} active
             @deck-decide=${this.#onDecide} @deck-undo=${this.#onUndo}></ma-deck>` : html`<p class="muted g-wait">Recherche des plantes observées autour…</p>`}</div>
         ${panes ? this.#sizer.split('deck', 'left', () => this.#paneMax('deck')) : nothing}
-        ${panes ? html`<div class="g-plant" aria-label=${card ? 'Volets : ' + nameOf(card.plant) : 'Volets'}>
+        ${panes ? html`<div class="g-plant" aria-label=${card ? 'Panneaux : ' + nameOf(card.plant) : 'Panneaux'}>
           ${this.#offNote()}
           ${id != null ? html`<gf-plant-detail embedded panes-only plant-id=${id} view=${this.#view} .paneKeys=${this.#paneKeys} .mediaAt=${c.mediaAt ?? 0}
             @media-index=${(/** @type {CustomEvent} */ e) => { e.stopPropagation(); const at = Number(e.detail?.index) || null; if (c.mediaAt !== at) app.set({ mediaAt: at }); }}>

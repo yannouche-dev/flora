@@ -94,7 +94,7 @@ const BLOCK_LOADS = {
 const OPEN_KEYS = { globi: 'interactions', niche: 'niche', 'uses:wikidata': 'wdUses', 'uses:recipes': 'recipes' };
 
 /** A block not moved: the layout would have too many panes nested to be exported and read back (pane-tree.js dock). */
-const TOO_DEEP = 'pas déplacé, trop de volets imbriqués';
+const TOO_DEEP = 'pas déplacé, trop de panneaux imbriqués';
 
 const truncate = (/** @type {string} */ text, max = 900) =>
   text.length > max ? text.slice(0, max).replace(/\s+\S*$/, '') + '…' : text;
@@ -1891,7 +1891,7 @@ export class GfPlantDetail extends LitElement {
           aria-haspopup="dialog" aria-controls="toc" aria-expanded="false" @click=${(/** @type {Event} */ e) => this.#openToc(e)}>${icon('list-ul')}</button>`}
       </div>
       ${repeat(g.keys, k => k, k => this.#plainBlock(k, ctx))}
-      ${g.pane.length ? html`<p class="rub-note">${g.pane.map(k => blockTitle(k)).join(' · ')} : dans un volet.
+      ${g.pane.length ? html`<p class="rub-note">${g.pane.map(k => blockTitle(k)).join(' · ')} : dans un panneau.
         <button type="button" class="link" @click=${() => this.#goTo(g.pane[0])}>Afficher</button></p>` : nothing}
       ${g.keys.length || g.pane.length ? nothing : html`<p class="rub-note">${this.#loading ? 'Chargement…' : 'Rien dans les sources consultées.'}</p>`}
     </div>`;
@@ -2067,7 +2067,7 @@ export class GfPlantDetail extends LitElement {
       <summary class="tool" title="Déplacer vers…" aria-label=${`Déplacer « ${title} » vers…`}>${icon('arrows-angle-expand')}</summary>
       <div class="move-menu" role="menu" aria-label=${'Déplacer « ' + title + ' » vers'}>
         <button type="button" role="menuitem" ?disabled=${!here} @click=${(/** @type {Event} */ e) => move(e, () => this.#toSheet(key), 'dans la fiche')}>${icon('list-ul')} Dans la fiche</button>
-        ${sides.map(([side, label, ic]) => html`<button type="button" role="menuitem" @click=${(/** @type {Event} */ e) => move(e, () => this.#dock(key, 'sheet', side), 'nouveau volet ' + label + ' de la fiche')}>${icon(ic)} Nouveau volet ${label}</button>`)}
+        ${sides.map(([side, label, ic]) => html`<button type="button" role="menuitem" @click=${(/** @type {Event} */ e) => move(e, () => this.#dock(key, 'sheet', side), 'nouveau panneau ' + label + ' de la fiche')}>${icon(ic)} Nouveau panneau ${label}</button>`)}
         ${panes.map(p => html`<button type="button" role="menuitem" @click=${(/** @type {Event} */ e) => move(e, () => this.#dock(key, p.id, 'center'), 'onglet de « ' + blockTitle(/** @type {string} */ (p.active)) + ' »')}>
           ${icon('collection')} Onglet de « ${blockTitle(/** @type {string} */ (p.active))} »</button>`)}
       </div>
@@ -2087,28 +2087,28 @@ export class GfPlantDetail extends LitElement {
     const folded = Boolean(node.folded) && !max;
     const bare = Boolean(node.bare) && !king && !max;
     const where = '« ' + blockTitle(tab) + ' »';
-    const tabs = html`<span class="edge-tabs" role="tablist" aria-label=${'Blocs du volet ' + where}>${keys.map(k => html`<button type="button" role="tab" data-drag-key=${k}
+    const tabs = html`<span class="edge-tabs" role="tablist" aria-label=${'Blocs du panneau ' + where}>${keys.map(k => html`<button type="button" role="tab" data-drag-key=${k}
       aria-selected=${k === tab ? 'true' : 'false'} title=${blockTitle(k)} @click=${() => this.#setStack(node.id, { active: k, folded: false })}
       @pointerdown=${king ? (/** @type {PointerEvent} */ e) => this.#press(e, k) : null}>
       ${icon(k === 'web' ? 'globe-europe-africa' : categoryOf(blockCategory(k)).icon)}<span class="tab-name">${blockTitle(k)}</span></button>`)}</span>`;
     return html`<aside class="edge ${column ? 'col' : 'band'} ${folded ? 'folded' : ''} ${bare ? 'bare' : ''} ${max ? 'max' : ''} ${king ? 'king' : ''}"
-        data-pane=${node.id} data-drop-node=${node.id} aria-label=${'Volet ' + where}>
+        data-pane=${node.id} data-drop-node=${node.id} aria-label=${'Panneau ' + where}>
       ${bare ? html`<div class="edge-float">${keys.length > 1 ? tabs : nothing}${tab === 'media' ? this.#mediaControls() : nothing}
-          <button class="edge-btn" type="button" title="Agrandir à tout le panneau" aria-label=${'Agrandir le volet ' + where} @click=${() => { this._maxEdge = node.id; }}>${icon('arrows-fullscreen')}</button></div>`
+          <button class="edge-btn" type="button" title="Agrandir à tout le panneau" aria-label=${'Agrandir le panneau ' + where} @click=${() => { this._maxEdge = node.id; }}>${icon('arrows-fullscreen')}</button></div>`
         : html`<div class="edge-bar">
         ${tabs}
         ${tab === 'media' && !folded ? this.#mediaControls() : nothing}
         ${king ? this.#placePicker(tab) : nothing}
         ${folded ? nothing : html`<details class="edge-opts">
-          <summary class="edge-btn" title="Options d’affichage" aria-label=${'Options d’affichage du volet ' + where}>${icon('gear')}</summary>
+          <summary class="edge-btn" title="Options d’affichage" aria-label=${'Options d’affichage du panneau ' + where}>${icon('gear')}</summary>
           <div class="opts-pop">
             <label><input type="checkbox" .checked=${Boolean(node.bare)} @change=${(/** @type {any} */ e) => this.#setStack(node.id, { bare: e.target.checked })} /> Sans titre ni cadre</label>
             <label><input type="checkbox" .checked=${Boolean(node.folded)} @change=${(/** @type {any} */ e) => this.#setStack(node.id, { folded: e.target.checked })} /> Replié (s’ouvre au toucher)</label>
           </div>
         </details>`}
         <button class="edge-btn" type="button" title=${max ? 'Remettre à sa place (Échap)' : 'Agrandir à tout le panneau'}
-          aria-label=${(max ? 'Remettre le volet ' : 'Agrandir le volet ') + where} @click=${() => { this._maxEdge = max ? null : node.id; }}>${icon(max ? 'fullscreen-exit' : 'arrows-fullscreen')}</button>
-        ${max ? nothing : html`<button class="edge-btn" type="button" aria-expanded=${folded ? 'false' : 'true'} aria-label=${(folded ? 'Déplier le volet ' : 'Replier le volet ') + where}
+          aria-label=${(max ? 'Remettre le panneau ' : 'Agrandir le panneau ') + where} @click=${() => { this._maxEdge = max ? null : node.id; }}>${icon(max ? 'fullscreen-exit' : 'arrows-fullscreen')}</button>
+        ${max ? nothing : html`<button class="edge-btn" type="button" aria-expanded=${folded ? 'false' : 'true'} aria-label=${(folded ? 'Déplier le panneau ' : 'Replier le panneau ') + where}
           @click=${() => this.#setStack(node.id, { folded: !node.folded })}>${icon(folded ? 'chevron-down' : 'chevron-up')}</button>`}
       </div>`}
       ${folded ? nothing : html`<div class="edge-body">${repeat([tab], k => k, k => king ? this.#block(k, ctx, null) : this.#plainBlock(k, ctx))}</div>`}
@@ -2212,7 +2212,7 @@ export class GfPlantDetail extends LitElement {
       const c = categoryOf(g.cat);
       return {
         key: g.cat, label: c.label, question: c.question, icon: c.icon, badge: this.#badge(g.cat),
-        blocks: this.#categoryBlocks(ctx, g.cat).map(k => ({ key: k, title: blockTitle(k), note: placeOf(this.view, k) ? 'dans un volet' : undefined,
+        blocks: this.#categoryBlocks(ctx, g.cat).map(k => ({ key: k, title: blockTitle(k), note: placeOf(this.view, k) ? 'dans un panneau' : undefined,
           // The article's themes, each to its anchor in the Wikipédia block.
           subs: k === 'wikipedia' && !placeOf(this.view, k) ? this.#wikiThemes.map(t => ({ key: 'wiki:' + t, title: WIKI_THEMES[t][0] })) : undefined }))
       };
@@ -2674,7 +2674,7 @@ export class GfPlantDetail extends LitElement {
 
   /** A block open in the pane beside: a line saying so (and bringing it back). @param {string} key */
   #shownInPane(key) {
-    return html`<p class="muted in-pane">${icon('arrows-angle-expand')} « ${blockTitle(key)} » affiché dans le volet, à côté.</p>`;
+    return html`<p class="muted in-pane">${icon('arrows-angle-expand')} « ${blockTitle(key)} » affiché dans le panneau, à côté.</p>`;
   }
 
   /** Blocks that make no sense alone in a pane. */
@@ -2683,7 +2683,7 @@ export class GfPlantDetail extends LitElement {
   /** ⤢ on a block: open it in the pane beside the sheet. @param {string} key */
   #paneButton(key) {
     if (this.preview || GfPlantDetail.NO_PANE.includes(key) || isNote(key)) return nothing;
-    return html`<button class="icon-btn to-pane" type="button" title="Ouvrir en volet, à côté de la fiche" aria-label=${`Ouvrir « ${blockTitle(key)} » en volet`}
+    return html`<button class="icon-btn to-pane" type="button" title="Ouvrir en panneau, à côté de la fiche" aria-label=${`Ouvrir « ${blockTitle(key)} » en panneau`}
       @click=${() => this.#openPane(key)}>${icon('arrows-angle-expand')}</button>`;
   }
 
@@ -3609,7 +3609,7 @@ export class GfPlantDetail extends LitElement {
       onDrop: ({ target, zone, beforeKey }) => {
         const k = make ? make() : key;
         const moved = zone === 'sheet' ? (this.#toSheet(k, beforeKey), true) : this.#dock(k, target, zone);
-        this._said = `« ${blockTitle(k)} » : ${!moved ? TOO_DEEP : zone === 'sheet' ? 'dans la fiche' : typeof zone === 'object' || zone === 'center' ? 'onglet d’un volet' : 'nouveau volet'}`;
+        this._said = `« ${blockTitle(k)} » : ${!moved ? TOO_DEEP : zone === 'sheet' ? 'dans la fiche' : typeof zone === 'object' || zone === 'center' ? 'onglet d’un panneau' : 'nouveau panneau'}`;
       }
     });
   }
@@ -3620,11 +3620,11 @@ export class GfPlantDetail extends LitElement {
    */
   #palette() {
     const hidden = blockOrder(this.view).filter(k => isHidden(this.view, k) && k !== 'actions');
-    return html`<div class="palette" aria-label="Ajouter un bloc : glisser vers la fiche ou un volet">
+    return html`<div class="palette" aria-label="Ajouter un bloc : glisser vers la fiche ou un panneau">
       <span class="pal-title">${icon('plus-lg')} Ajouter</span>
-      ${hidden.map(k => html`<button type="button" class="chip" data-drag-key=${k} title="Glisser vers un volet, ou toucher pour l’afficher dans la fiche"
+      ${hidden.map(k => html`<button type="button" class="chip" data-drag-key=${k} title="Glisser vers un panneau, ou toucher pour l’afficher dans la fiche"
         @pointerdown=${(/** @type {PointerEvent} */ e) => this.#press(e, k)} @click=${() => this.#toSheet(k)}>${icon(categoryOf(blockCategory(k)).icon)} ${blockTitle(k)}</button>`)}
-      <button type="button" class="chip new" data-drag-key="new-map" title="Glisser une nouvelle carte vers un volet"
+      <button type="button" class="chip new" data-drag-key="new-map" title="Glisser une nouvelle carte vers un panneau"
         @pointerdown=${(/** @type {PointerEvent} */ e) => this.#press(e, 'Nouvelle carte', () => createMap('Carte'))}>${icon('map')} Nouvelle carte</button>
     </div>`;
   }

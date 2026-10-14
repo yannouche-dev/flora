@@ -118,7 +118,7 @@ export const COMPONENTS = [
   },
   {
     id: 'plant', title: 'Fiche', icon: 'card-text', aliases: ['fiche', 'plante', 'sheet'],
-    about: 'La fiche de la plante courante, entière (plant), ou une seule de ses rubriques (plant.wikipedia, plant.calendar…).',
+    about: 'La fiche de la plante courante, entière (plant), ou un seul de ses blocs (plant.wikipedia, plant.calendar…).',
     params: {
       mode: { kind: 'enum', label: 'Mode d’affichage', def: null, values: { epure: 'Épuré', standard: 'Standard', scientific: 'Scientifique' }, aliases: { scientifique: 'scientific', science: 'scientific', simple: 'epure' }, words: ['vue', 'view'] }
     },
@@ -246,10 +246,10 @@ export function resolve(cell) {
     if (named) paramList = paramList.map(p => p.key === null ? { key: named, value: p.value } : p);
     else if (!view) {
       const near = spec.views ? closest(key(first), (spec.views() ?? []).map(v => v.key)) : null;
-      problems.push(spec.views ? `${spec.title} : rubrique inconnue « ${first} »${near ? ` (« ${near} » ?)` : ''} — la fiche entière est montrée.`
-        : `${spec.title} n’a pas de rubrique « ${first} ».`);
+      problems.push(spec.views ? `${spec.title} : bloc inconnu « ${first} »${near ? ` (« ${near} » ?)` : ''} — la fiche entière est montrée.`
+        : `${spec.title} n’a pas de bloc « ${first} ».`);
     }
-    if (view && rest.length) problems.push(`${spec.title} : « ${rest.join('.')} » ignoré, une rubrique se montre en entier.`);
+    if (view && rest.length) problems.push(`${spec.title} : « ${rest.join('.')} » ignoré, un bloc se montre en entier.`);
   }
   for (const p of paramList) {
     const name = p.key === null ? bareParam(spec, p.value) : paramOf(spec, p.key);

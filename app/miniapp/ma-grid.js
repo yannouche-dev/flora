@@ -121,7 +121,7 @@ export class MaGrid extends LitElement {
     return html`<div class="grid ${f.tier}" style=${style}>${repeat(items, it => it.key, it => {
       // Placed by the grid itself: its row is set (.split below), its column is the next free one, between the two.
       if (it.kind === 'handle') return this.#handle(it.l, it.r, f, sizer);
-      if (it.kind === 'tabs') return html`<div class="strip" role="tablist" aria-label="Volets" style=${it.area}>${it.tabs.map(t => html`<button type="button" role="tab"
+      if (it.kind === 'tabs') return html`<div class="strip" role="tablist" aria-label="Panneaux" style=${it.area}>${it.tabs.map(t => html`<button type="button" role="tab"
         aria-selected=${t.id === it.active ? 'true' : 'false'} @click=${() => { this._tabs = { ...this._tabs, [it.group]: t.id }; }}>${t.label}${t.fresh ? html`<span class="fresh" title="Nouveau"></span><span class="visually-hidden"> (nouveau)</span>` : nothing}</button>`)}</div>`;
       const p = /** @type {Place} */ (byPlace.get(it.place.id) ?? it.place);
       const comp = kit[/** @type {string} */ (p.use)];
