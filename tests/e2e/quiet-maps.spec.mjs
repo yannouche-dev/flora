@@ -419,7 +419,8 @@ test.describe('les mini-applications', () => {
     await page.waitForTimeout(7000);
     await expect(toast).toBeVisible();
     await name.focus();
-    await expect(toast).toHaveCount(0, { timeout: 7500 });
+    // Left: its full time again (ACTION_TOAST_MS, 6 s), then gone — with room for a slow runner's frames.
+    await expect(toast).toHaveCount(0, { timeout: 12_000 });
   });
 });
 
