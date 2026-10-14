@@ -241,18 +241,17 @@ test.describe('au bureau', () => {
     await expect.poll(() => layoutOf(page)).toBe('#/layout/[map,results]');
   });
 
-  test('l’éditeur : les commandes sur la carte, une case chacune', async ({ app, page }) => {
-    await app.open(`#/layout/[map(r=1km),plant]?${AT}`);
-    await page.getByRole('button', { name: 'Modifier la disposition' }).click();
-    const tools = page.locator('gf-layout section.cell[data-comp="map"] .tools');
-    await tools.locator('details.params summary').click();
-    const ctl = tools.locator('[data-param="ctl"]');
-    await expect(ctl.locator('input[value="zoom"]')).toBeChecked();
-    await expect(ctl.locator('input[value="periode"]')).not.toBeChecked();
-    await ctl.locator('input[value="zoom"]').uncheck();
-    await ctl.locator('input[value="fond"]').check();
-    await page.getByRole('button', { name: 'Appliquer' }).click();
-    await expect.poll(() => layoutOf(page)).toBe('#/layout/[map(r=1km,ctl=rayon+lieu+gps+couches+3d+fond+plante+compte),plant]');
+  test('« Créer une app » : les commandes sur la carte, une pastille chacune', async ({ app, page }) => {
+    await app.open(`#/builder?g=[map(r=1km),plant]&${AT}`);
+    await page.locator('gf-builder gf-layout section.cell[data-comp="map"] .cell-head .pick').click();
+    const p = page.locator('gf-block-picker:not([inline])');
+    await p.locator('.row[data-group="Interface"]').click();
+    const ctl = p.locator('[data-param="ctl"]');
+    await expect(ctl.locator('button[data-value="zoom"]')).toHaveAttribute('aria-pressed', 'true');
+    await expect(ctl.locator('button[data-value="periode"]')).toHaveAttribute('aria-pressed', 'false');
+    await ctl.locator('button[data-value="zoom"]').click();
+    await ctl.locator('button[data-value="fond"]').click();
+    await expect.poll(() => page.evaluate(() => new URLSearchParams(location.hash.split('?')[1] || '').get('g'))).toBe('[map(r=1km,ctl=rayon+lieu+gps+couches+3d+fond+plante+compte),plant]');
   });
 });
 

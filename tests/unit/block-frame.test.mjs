@@ -18,7 +18,8 @@ test('chaque composant a l’en-tête, le titre et les actions ; vide, plante, z
   assert.deepEqual(frame, {
     map: ['tete', 'titre', 'actions'], search: ['tete', 'titre', 'actions', 'toucher', 'ecrit'], filters: ['tete', 'titre', 'actions'],
     results: ['tete', 'titre', 'actions', 'vide', 'zone', 'toucher', 'ecrit'], plant: ['tete', 'titre', 'actions', 'vide', 'plante', 'toucher', 'ecrit'],
-    media: ['tete', 'titre', 'actions', 'vide', 'plante'], deck: ['tete', 'titre', 'actions', 'vide', 'toucher', 'ecrit'], place: ['tete', 'titre', 'actions']
+    media: ['tete', 'titre', 'actions', 'vide', 'plante'], deck: ['tete', 'titre', 'actions', 'vide', 'toucher', 'ecrit'], place: ['tete', 'titre', 'actions'],
+    slot: ['tete', 'titre', 'actions']
   });
   assert.deepEqual(Object.keys(FRAME_OF).sort(), COMPONENTS.map(c => c.id).sort());
   // The frame after the component's own, grouped « Cadre » then « Liens ».

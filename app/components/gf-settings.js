@@ -77,7 +77,7 @@ export class GfSettings extends LitElement {
     details { margin-top: 10px; }
     summary { cursor: pointer; }
     label.file { position: relative; }
-    /* « Créer une app », first on the page: a card that leads to the builder. */
+    /* « Créer une app », first on the page: a card that leads to the builder's start (its grids, its models). */
     .builder { display: flex; align-items: center; gap: 12px; margin: 12px 0 18px; padding: 14px 16px; border: 1px solid var(--gf-accent); border-radius: var(--gf-radius-lg);
       background: color-mix(in srgb, var(--gf-accent) 8%, var(--gf-surface)); color: var(--gf-text); text-decoration: none; }
     .builder:hover { background: color-mix(in srgb, var(--gf-accent) 14%, var(--gf-surface)); }

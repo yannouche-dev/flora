@@ -1,6 +1,7 @@
 // @ts-check
-// The grids « Créer une app » offers to start from (gf-builder.js): layouts of the free layout's grammar (grammar.js)
-// whose cells are empty places (`slot`, builder-grid.js). Pure data, read under Node by the unit tests.
+// The grids a free layout offers to start from (gf-layout.js, its start screen; the old « Créer une app » links,
+// router.js): layouts of the grammar (grammar.js) whose cells are empty places (`slot`, registry.js). Pure data, read
+// under Node by the unit tests.
 
 /**
  * `spec`: the layout of empty places; `about`: what it suits.

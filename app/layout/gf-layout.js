@@ -18,21 +18,28 @@
 //    sideways itself, its neighbour.
 //  - A title (?title=, state.js): a discreet line above the bar (the page's heading; narrow, above the menu of
 //    columns), the page's title (« <title> · GeoFlora », a plant's sheet in a cell not naming it then) and the share's;
-//    none: no line. Typed in the editor's « Titre »: the address replaced as it is typed (no new entry).
-//  - « Modifier la disposition »: the layout as text (live preview, what is wrong said under it), each cell's tools
-//    (its component, its parameters, a cell beside or under it, moved, removed), the ready-made ones (presets.js);
-//    « Appliquer » makes it the address (a new entry: Back gives the one before).
+//    none: no line. Typed in the builder's « Titre » (setTitle): the address replaced as it is typed (no new entry).
+//  - Two modes. The app (#/layout, `mode` « app »): the layout as it is, its bar's « Modifier » opening it in « Créer
+//    une app » (#/builder?g=<the same layout>&<the same state>). Built (`mode` « builder », in gf-builder.js, which
+//    gives it its route): the same layout, live, with each cell's tools — its content (✎: the block picker,
+//    gf-block-picker.js, docked on the right; a bottom sheet on a phone), its cross (builder-grid.js: cut in two towards
+//    a side — a new « Emplacement », `slot` —, moved before or after, taken out — its room to its neighbour; 12 cells at
+//    most, the grammar's depth) —, every head shown (tete=non too), no cell hidden; each change written at once in the
+//    builder's address (no new entry). `layout-change` tells the host the text, what is wrong and the title; setText,
+//    setTitle, resetSizes, address and appAddress are the host's.
+//  - An « Emplacement » (slot), built or in the app: a place to build a component in — the block picker's first level
+//    drawn in it (its tiles, then the intents of the one chosen), one tap and the place is that component.
 //  - A link to a plant's sheet in a cell (a result, a look-alike in the sheet) makes it the current plant instead of
 //    leaving (unless the cell says otherwise: toucher=fiche, ecrit=0, toucher=rien); a block opened from the sheet (⤢)
 //    that a cell already shows: that cell, flashed.
 //  - The frame every cell shares (registry.js#FRAME): its head whole, its title alone or none (tete), a title of its
 //    own (titre), the actions of its head (agrandir: over the layout, Échap returns; replier: folded to its head, its
 //    share to the others, never in the address; partager: a link to a layout of this cell alone, the same state), the
-//    cell hidden while it has nothing to show (vide=masque: its share to the others), a plant of its own (plante=); in
-//    the editor, « Cadre » and « Liens » under each cell's « Réglages ».
+//    cell hidden while it has nothing to show (vide=masque: its share to the others), a plant of its own (plante=); set
+//    in the block picker (« Cadre », « Liens »).
 
 import { LitElement, html, css, nothing, repeat } from 'lit';
-import { pushHash, replaceHash } from '../core/history.js';
+import { openView, pushHash, replaceHash } from '../core/history.js';
 import { href } from '../core/router.js';
 import { toHash } from '../core/query.js';
 import * as db from '../core/db.js';
@@ -43,13 +50,15 @@ import { icon } from '../core/icons.js';
 import { BP, MediaController } from '../core/media.js';
 import { gripStyles, shareGrip } from '../core/split-grip.js';
 import { ui } from '../styles/ui.js';
-import { cell as makeCell, dirAt, moveAt, nodeAt, parse, removeAt, replaceAt, serialize, setShares, shapeKey, shares, splitAt } from './grammar.js';
-import { cellIcon, cellMark, cellName, COMPONENTS, defaultOf, distanceLabel, menuLooks, paramName, resolve, resolveTree, same, touchOf, valueText } from './registry.js';
+import { cell as makeCell, cells as cellsOf, dirAt, moveAt, nodeAt, parse, replaceAt, serialize, setShares, shapeKey, shares } from './grammar.js';
+import { cellIcon, cellMark, cellName, menuLooks, paramName, resolve, resolveTree, same, touchOf, valueText } from './registry.js';
 import { cleanText, LayoutState, liveSearch, readLive, readQuery, sameLive } from './state.js';
 import { forgetShares, savedShares, saveShares } from './sizes.js';
 import { PRESETS } from './presets.js';
 import { renderCell, revealFacet, scopeWords } from './cells.js';
-import { DISTANCES } from '../miniapp/kit/cards.js';
+import { cellOf, cellText } from './picker-model.js';
+import { pickerBounds } from './gf-block-picker.js';
+import { boxOf, canSplit, placesOf, remove as removeBox, SLOT, specOf, split } from './builder-grid.js';
 
 /**
  * @typedef {import('./grammar.js').ListNode} ListNode
@@ -95,15 +104,8 @@ export class GfLayout extends LitElement {
     _w: { state: true },
     /** The tab shown, narrow. */
     _tab: { state: true },
-    /** The editor open. */
-    _editing: { state: true },
-    /** The layout being edited (its text), previewed; null: the address'. */
-    _draft: { state: true },
-    /** The editor's field as typed (previewed a moment after the last key). */
-    _field: { state: true },
-    _copied: { state: true },
-    /** The editor's « Titre » as typed (the screen's title: its clean text). */
-    _titleField: { state: true },
+    /** « app » (#/layout: the layout as it is) or « builder » (in « Créer une app »: each cell's tools). */
+    mode: { type: String },
     /** A cell flashed (a block opened from the sheet that it shows). */
     _flash: { state: true },
     /** Narrow: the tab brought by a plant chosen elsewhere (or a block opened), its icon lit a moment; -1: none. */
@@ -115,17 +117,27 @@ export class GfLayout extends LitElement {
     /** The cells folded to their head (actions=replier), by their paths: live only, never in the address. */
     _folded: { state: true },
     /** The cell whose link was just copied (actions=partager), by its path. */
-    _cellCopied: { state: true }
+    _cellCopied: { state: true },
+    /** The cell whose block picker is open, by its path; null: none. */
+    _pick: { state: true },
+    /** The block picker open (reflected: its host leaves it its room). */
+    picking: { type: Boolean, reflect: true },
+    /** Built: the cell whose cross is open, by its path; null: none. */
+    _cross: { state: true }
   };
 
   static styles = [ui, gripStyles, css`
     :host { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--gf-bg); container-type: inline-size; }
+    /* « Choisir le contenu »: in the head; with a mouse, shown on hover or focus (always on a touch screen). */
+    .cell-head .pick { flex: none; width: 30px; height: 30px; min-height: 0; padding: 0; font-size: 0.9rem; }
+    .cell-head .pick[aria-expanded='true'] { color: var(--gf-accent); background: var(--gf-accent-soft); }
+    .cell.picked { box-shadow: inset 0 0 0 2px var(--gf-accent); }
     .bar { flex: none; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 4px 8px 4px 14px; background: var(--gf-surface); border-bottom: 1px solid var(--gf-border); min-width: 0; }
     .bar .app { margin: 0; display: flex; align-items: center; gap: 8px; font-size: 1rem; font-weight: 700; white-space: nowrap; }
     .bar .app .bi { color: var(--gf-accent); }
     /* The screen's own title (?title=): a discreet line above the bar, one line, cut by « … ». */
     .titlebar { flex: none; display: flex; align-items: center; min-height: 32px; padding: 4px 14px; min-width: 0; background: var(--gf-bg); border-bottom: 1px solid var(--gf-border); }
-    .titlebar h1 { margin: 0; min-width: 0; font-size: 0.95rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .titlebar h1, .titlebar .h { margin: 0; min-width: 0; font-size: 0.95rem; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .bar .spacer { flex: 1; }
     .bar button, .bar summary { min-height: 34px; padding: 4px 12px; font-size: 0.85rem; }
     .bar .icon-btn { width: 36px; height: 36px; padding: 0; font-size: 1rem; }
@@ -176,7 +188,7 @@ export class GfLayout extends LitElement {
     .cell-body .scroll { overflow-y: auto; }
     .cell-body .pad { padding: 0 12px; }
     .placeholder { display: grid; align-content: center; justify-items: center; gap: 6px; padding: 16px; text-align: center; font-size: 0.9rem; overflow-y: auto; }
-    .placeholder .bi { font-size: 1.6rem; color: var(--gf-warn, #b45309); }
+    .placeholder > .bi { font-size: 1.6rem; color: var(--gf-warn, #b45309); }
     .placeholder.quiet { color: var(--gf-text-muted); }
     .placeholder.quiet .bi { color: var(--gf-accent); }
     .placeholder p { margin: 0; max-width: 34em; }
@@ -231,30 +243,22 @@ export class GfLayout extends LitElement {
     @media (prefers-reduced-motion: reduce) { .tab.brought, .tab.brought .glyphs { animation: none; } .tab.brought { box-shadow: inset 0 0 0 3px var(--gf-accent); } }
     .tabpanel { flex: 1; min-height: 0; display: flex; overflow-y: auto; }
     .tabpanel[hidden] { display: none; }
-    /* The editor. */
-    .editor { flex: none; display: grid; gap: 8px; padding: 10px 14px; max-height: 45%; overflow-y: auto; border-bottom: 1px solid var(--gf-border); background: var(--gf-surface-2); }
-    .editor label { display: grid; gap: 4px; font-size: 0.85rem; font-weight: 600; }
-    .editor textarea { min-height: 56px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9rem; }
-    .editor ul.problems { margin: 0; padding-left: 18px; font-size: 0.82rem; color: var(--gf-danger); }
-    .editor .ok { margin: 0; font-size: 0.82rem; color: var(--gf-text-muted); }
-    .editor .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-    .editor .row button { min-height: 34px; padding: 4px 12px; font-size: 0.85rem; }
-    .editor details { font-size: 0.82rem; color: var(--gf-text-muted); }
-    .editor details code { color: var(--gf-text); }
-    .editor .models { display: flex; flex-wrap: wrap; gap: 6px; }
-    .editor .models button { min-height: 30px; padding: 2px 10px; font-size: 0.8rem; }
-    .tools { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; width: 100%; padding: 2px 0 4px; }
-    .tools select { min-height: 30px; padding: 2px 24px 2px 8px; font-size: 0.8rem; border-radius: 8px; }
-    .tools button { min-height: 30px; min-width: 30px; padding: 2px 8px; font-size: 0.8rem; }
-    .tools label { display: inline-flex; align-items: center; gap: 4px; font-size: 0.78rem; }
-    /* A map's settings, folded: its intent, then each group under its heading. */
-    .tools details.params { flex-basis: 100%; color: var(--gf-text); }
-    .tools details.params summary { display: inline-flex; align-items: center; gap: 4px; min-height: 30px; cursor: pointer; font-size: 0.8rem; font-weight: 600; }
-    .tools details.params[open] { display: grid; gap: 6px; padding-bottom: 4px; }
-    .tools fieldset { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0; padding: 4px 8px 6px; border: 1px solid var(--gf-border); border-radius: 8px; }
-    .tools legend { padding: 0 4px; font-size: 0.74rem; font-weight: 700; color: var(--gf-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
-    .tools .list { display: inline-flex; flex-wrap: wrap; gap: 2px 8px; }
-    .tools input[type='text'] { min-height: 30px; padding: 2px 8px; font-size: 0.8rem; width: 16em; max-width: 100%; }
+    /* Built: each cell's build button opens its cross over the cell — an arm towards each side cuts it in two
+       that way, the middle moves it or takes it out. */
+    .cell-head .build { flex: none; width: 30px; height: 30px; min-height: 0; padding: 0; font-size: 0.9rem; }
+    .cell-head .build[aria-expanded='true'] { color: var(--gf-accent); background: var(--gf-accent-soft); }
+    .cross { position: absolute; inset: 6px; z-index: 6; display: grid; grid-template: 1fr 1.3fr 1fr / 1fr 1.3fr 1fr; gap: 6px; container-type: size; }
+    .cross button { min-width: 0; min-height: 0; padding: 2px; font-size: 0.85rem; border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    .cross .arm { background: color-mix(in srgb, var(--gf-accent) 14%, var(--gf-surface)); border: 2px dashed var(--gf-accent); color: var(--gf-text); }
+    .cross .arm:hover:not(:disabled), .cross .arm:focus-visible { background: color-mix(in srgb, var(--gf-accent) 30%, var(--gf-surface)); border-style: solid; }
+    .cross .arm:disabled { opacity: .45; cursor: not-allowed; }
+    .cross .top { grid-area: 1 / 2; } .cross .bottom { grid-area: 3 / 2; } .cross .left { grid-area: 2 / 1; } .cross .right { grid-area: 2 / 3; }
+    .cross .mid { grid-area: 2 / 2; display: flex; align-items: center; justify-content: center; gap: 4px; flex-wrap: wrap; padding: 2px; border-radius: 10px; background: var(--gf-surface); border: 2px solid var(--gf-accent); }
+    .cross .mid button { width: 32px; height: 32px; padding: 0; font-size: 0.95rem; }
+    .cross .mid .del { color: var(--gf-danger); }
+    @container (max-width: 300px) { .cross .lbl { display: none; } }
+    /* An « Emplacement »: the block picker's first level in it. */
+    .cell-body > gf-block-picker[inline] { flex: 1; min-height: 0; }
     .empty { padding: 20px 16px; overflow-y: auto; }
     .empty h2 { margin: 0 0 6px; }
     .empty ul { list-style: none; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
@@ -280,12 +284,7 @@ export class GfLayout extends LitElement {
     this.route = null;
     this._w = 0;
     this._tab = 0;
-    this._editing = false;
-    /** @type {string | null} */
-    this._draft = null;
-    this._field = '';
-    this._copied = false;
-    this._titleField = '';
+    this.mode = 'app';
     /** @type {string | null} */
     this._flash = null;
     this._brought = -1;
@@ -296,6 +295,11 @@ export class GfLayout extends LitElement {
     this._folded = new Set();
     /** @type {string | null} */
     this._cellCopied = null;
+    /** @type {string | null} */
+    this._pick = null;
+    this.picking = false;
+    /** @type {string | null} */
+    this._cross = null;
     this.#state.addEventListener('change', this.#onState);
     // A link to a plant's sheet in a cell: that plant becomes the current one, the layout stays — unless the cell says
     // otherwise (toucher=fiche, ecrit=0: the sheet opens, as a link; toucher=rien: nothing).
@@ -337,7 +341,7 @@ export class GfLayout extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.#size.observe(this);
-    document.title = 'Disposition libre — GeoFlora';
+    document.title = this.#pageName;
     this.#ready = store.state.status === 'ready';
     // Back on the page (moved, not made anew): its state read again from the address.
     if (this.hasUpdated && this.route) { this.#layout = show(''); this.#follow(); }
@@ -369,20 +373,15 @@ export class GfLayout extends LitElement {
   #lastQuery = '';
   /** @type {Shown} */
   #layout = show('');
-  /** The layout on screen: the draft being edited, else the address'. @type {Shown} */
+  /** The layout on screen (the address'). @type {Shown} */
   #shown = this.#layout;
-  /** @type {{ text: string, value: Shown } | null} */
-  #draftMemo = null;
   /** Narrow (tabs) at the last render. */
   #narrow = false;
 
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
     if (changed.has('route') && this.route) this.#follow();
-    if (this._draft !== null) {
-      if (this.#draftMemo?.text !== this._draft) this.#draftMemo = { text: this._draft, value: show(this._draft) };
-      this.#shown = this.#draftMemo.value;
-    } else this.#shown = this.#layout;
+    this.#shown = this.#layout;
     // A results cell over the whole flora (zone=0): the search asked again without the zone (state.js#wholeOf).
     this.#state.wholeOf([...this.#shown.cells.values()].some(r => r.known && r.spec.id === 'results' && r.params.zone === false));
   }
@@ -420,7 +419,7 @@ export class GfLayout extends LitElement {
    * @param {boolean} narrow @returns {Set<string>}
    */
   #hiddenCells(narrow) {
-    if (this._editing) return new Set();
+    if (this.#building) return new Set();
     const cells = this.#shown.cells;
     const hidden = new Set([...cells].filter(([p, r]) => r.known && r.params.vide === 'masque' && this.#isEmpty(p, r)).map(([p]) => p));
     if (!hidden.size) return hidden;
@@ -452,7 +451,7 @@ export class GfLayout extends LitElement {
   /** An action of a cell's head, shown (registry.js#FRAME: actions, and a head to put it in). @param {string} path @param {string} act */
   #acts(path, act) {
     const r = this.#shown.cells.get(path);
-    return Boolean(r?.known && (this._editing || r.params.tete !== 'non') && /** @type {string[]} */ (r.params.actions).includes(act));
+    return Boolean(r?.known && (this.#building || r.params.tete !== 'non') && /** @type {string[]} */ (r.params.actions).includes(act));
   }
 
   /** Whether a cell is folded to its head now. @param {string} path */
@@ -490,6 +489,9 @@ export class GfLayout extends LitElement {
     return this.#names.get(id) ?? null;
   }
 
+  /** The page's name when the screen has no title of its own. */
+  get #pageName() { return this.#building ? 'Créer une app — GeoFlora' : 'Disposition libre — GeoFlora'; }
+
   /** The page's title the screen's own title gives (« Orchidées de Mirabel · GeoFlora »; null: none — a plant's sheet in a cell may name the page then). */
   get pageTitle() { const t = this.#state.live.title; return t ? t + ' · GeoFlora' : null; }
 
@@ -498,9 +500,10 @@ export class GfLayout extends LitElement {
 
   updated() {
     if (this.#narrow) { this.#nameRoom(); this.#tabInSight(); }
+    if (this.#building) this.#tell();
     const page = this.pageTitle;
     if (page && document.title !== page) document.title = page;
-    else if (!page && this.#titled) document.title = 'Disposition libre — GeoFlora';
+    else if (!page && this.#titled) document.title = this.#pageName;
     this.#titled = page;
     // The search changed by a cell (its text, a filter, the sort): the address follows, without a new entry.
     if (!this.#ready) return;
@@ -515,8 +518,11 @@ export class GfLayout extends LitElement {
     const fresh = next.text !== this.#layout.text || next.errors.length !== this.#layout.errors.length;
     if (fresh) {
       this.#layout = next;
-      // Another layout (a link, Back): the one being edited is left; no cell large or folded, nothing said empty.
-      if (this._editing) this.#cancel();
+      this.#raw = decodeSpec(route.spec);
+      // Another layout (a link, Back): the one being edited is left; no cell large or folded, nothing said empty, no
+      // cell's picker open.
+      this._cross = null;
+      this.#closePick(false);
       this._max = null;
       this._folded = new Set();
       this.#said.clear();
@@ -537,10 +543,64 @@ export class GfLayout extends LitElement {
     if (!next.errors.length && fresh) queueMicrotask(() => this.#write('replace'));
   }
 
-  /** The address of the screen now (a layout that could not be read whole: as it was typed, to be corrected). */
+  /** The layout's text as it was given (the address', or the builder's « Avancé »). */
+  #raw = '';
+
+  /** The layout as the address writes it: canonical, or as it was given when it cannot be read whole (to be corrected). */
+  get #written() { return this.#layout.errors.length ? this.#raw : this.#layout.text; }
+
+  /** Built in « Créer une app » (not the app). */
+  get #building() { return this.mode === 'builder'; }
+
+  /** The layout's state as the address writes it (state.js). */
+  #search() { return liveSearch(this.#state.live, store.state.query, this.#state.radius); }
+
+  /**
+   * The address of the screen now — the app's (#/layout), or the builder's (#/builder?g=): a layout that could not be
+   * read whole, as it was typed (to be corrected).
+   */
   #href() {
-    const spec = this.#layout.errors.length && this.route ? decodeSpec(this.route.spec) : this.#layout.text;
-    return href.layout(spec, liveSearch(this.#state.live, store.state.query, this.#state.radius));
+    const spec = this.#written;
+    return this.#building ? href.builder(spec, this.#search()) : href.layout(spec, this.#search());
+  }
+
+  /** The address of the screen now (the builder's share). */
+  get address() { return this.#href(); }
+
+  /** The app this layout is (« Ouvrir l'app »): the same layout and state in #/layout; null: none that can be read whole. */
+  get appAddress() {
+    return this.#layout.errors.length || !this.#layout.tree.kids.length ? null : href.layout(this.#layout.text, this.#search());
+  }
+
+  /** The layout's text set (the builder's « Avancé »): shown, and written in the address (no new entry). @param {string} text */
+  setText(text) {
+    this.#raw = text;
+    this.#layout = show(text);
+    this.#shown = this.#layout;
+    this.#afterChange();
+  }
+
+  /** The screen's title typed (the builder's « Titre »): at once, the address replaced. @param {string} text */
+  setTitle(text) { this.#state.set({ title: cleanText(text) }, 'replace'); }
+
+  /** The layout changed here (built: the cross, the picker): the radius it gives, the address replaced, drawn. */
+  #afterChange() {
+    const first = [...this.#layout.cells.values()].find(r => r.known && r.params.r != null);
+    this.#state.defaultRadius = first?.known ? first.params.r : 2000;
+    this.#write('replace');
+    this.requestUpdate();
+  }
+
+  /** The layout last told to the host (`layout-change`), and its title. */
+  #told = { text: '', title: /** @type {string | null} */ (null), errors: -1 };
+
+  /** The host told what the layout is now: its text, what is wrong, its title, whether a place is filled. */
+  #tell() {
+    const l = this.#layout, title = this.#state.live.title;
+    if (l.text === this.#told.text && title === this.#told.title && l.errors.length + l.problems.length === this.#told.errors) return;
+    this.#told = { text: l.text, title, errors: l.errors.length + l.problems.length };
+    const problems = [...l.errors.map(e => `${e.message} (caractère ${e.at + 1})`), ...l.problems.map(p => p.message)];
+    this.dispatchEvent(new CustomEvent('layout-change', { detail: { text: this.#written, problems, title, app: this.appAddress } }));
   }
 
   /** The address follows the screen: a new entry, the same one, or not at all. @param {import('./state.js').How} how */
@@ -596,7 +656,6 @@ export class GfLayout extends LitElement {
 
   /** A split given new shares: kept for the layout's shape, and written in the address (a link has them). @param {number[]} path @param {number[]} sizes */
   #setShares(path, sizes) {
-    if (this._draft !== null) { this.#editDraft(t => setShares(t, path, sizes)); return; }
     saveShares(this.#layout.shape, path.join('.'), sizes);
     this.#layout = show(serialize(setShares(this.#layout.tree, path, sizes)));
     this.#shown = this.#layout;
@@ -610,8 +669,7 @@ export class GfLayout extends LitElement {
    * (no new entry); while editing, in the draft. @param {string} at the cell's path ('0', '2.1') @param {string} key @param {unknown} v
    */
   #setCellParam = (/** @type {string} */ at, /** @type {string} */ key, /** @type {unknown} */ v) => {
-    const editing = this._draft !== null;
-    const tree = editing ? this.#shown.tree : this.#layout.tree;
+    const tree = this.#layout.tree;
     const path = at.split('.').map(Number);
     const n = nodeAt(tree, path);
     if (!n || n.t !== 'cell') return;
@@ -621,193 +679,168 @@ export class GfLayout extends LitElement {
     const without = resolve({ ...n, params });
     if (v !== null && v !== '' && !(without.known && same(without.params[key], v))) params.push({ key, value: valueText(r.spec.params[key], v) });
     const text = serialize(replaceAt(tree, path, { ...n, params }));
-    if (editing) { this._draft = text; this._field = text; return; }
     this.#layout = show(text);
     this.#shown = this.#layout;
     this.#write('replace');
     this.requestUpdate();
   };
 
-  /** Every share back to the default: the ones kept and the ones written. */
-  #resetSizes() {
+  /** Every share back to the default: the ones kept and the ones written (the builder's « Tailles par défaut »). */
+  resetSizes() {
     forgetShares(this.#layout.shape);
     /** @param {LayoutNode} n @returns {LayoutNode} */
     const strip = n => n.t === 'cell' ? { ...n, size: null } : { ...n, size: null, kids: n.kids.map(strip) };
     this.#layout = show(serialize(/** @type {ListNode} */ (strip(this.#layout.tree))));
-    if (this._draft !== null) this._draft = serialize(/** @type {ListNode} */ (strip(this.#shown.tree)));
+    this.#shown = this.#layout;
     this.#write('replace');
     this.requestUpdate();
   }
 
-  // ── Editing ──────────────────────────────────────────────────────────────────────────────────────────────
+  // ── Built: each cell's cross ─────────────────────────────────────────────────────────────────────────────
 
-  #edit() {
-    if (this._editing) { this.#cancel(); return; }
-    this._editing = true;
-    // A layout that could not be read whole: as it was typed (what is wrong said under it).
-    this._field = this.#layout.errors.length ? decodeSpec(this.route?.spec ?? '') : this.#layout.text;
-    this._draft = this._field;
-    this._titleField = this.#state.live.title ?? '';
-    this.#titleBefore = this.#state.live.title;
-  }
+  /** The arms of a cell's cross: their side, their words, their arrow. @type {{ side: import('./builder-grid.js').Side, label: string, icon: import('../core/icons.js').IconName }[]} */
+  static ARMS = [
+    { side: 'top', label: 'Au-dessus', icon: 'arrow-up' },
+    { side: 'left', label: 'À gauche', icon: 'arrow-left' },
+    { side: 'right', label: 'À droite', icon: 'arrow-right' },
+    { side: 'bottom', label: 'En dessous', icon: 'arrow-down' }
+  ];
 
-  #cancel() { this._editing = false; this._draft = null; clearTimeout(this.#typing); }
+  /** The layout as boxes (builder-grid.js), or null when its text cannot be read whole (the builder says why). */
+  get #box() { return this.#layout.errors.length ? null : boxOf(this.#layout.text); }
 
-  /** The screen's title when the editor opened: « Annuler » gives it back. @type {string | null} */
-  #titleBefore = null;
-
-  /**
-   * « Titre » typed in: the screen's title at once, the address replaced (no new entry). The field keeps what is typed
-   * (a space at the end, while a word is coming); the state, the address and the heading its clean text (state.js#cleanText).
-   * @param {string} text
-   */
-  #typeTitle(text) {
-    this._titleField = text;
-    this.#state.set({ title: cleanText(text) }, 'replace');
-  }
-
-  /** The draft made the address: a new entry (Back gives the layout before). */
-  #apply() {
-    const text = this.#shown.text;
-    this._editing = false;
-    this._draft = null;
-    clearTimeout(this.#typing);
-    const url = href.layout(text, liveSearch(this.#state.live, store.state.query, this.#state.radius));
-    if (location.hash !== url) pushHash(url);
-  }
-
-  /** The draft changed by a cell's tools: the field shows its text. @param {(t: ListNode) => ListNode} fn */
-  #editDraft(fn) {
-    const text = serialize(fn(this.#shown.tree));
-    this._draft = text;
-    this._field = text;
-  }
-
-  /** @type {any} */ #typing = 0;
-  /** The field typed in: previewed once the keys rest. @param {string} text */
-  #type(text) {
-    this._field = text;
-    clearTimeout(this.#typing);
-    this.#typing = setTimeout(() => { this._draft = text; }, 300);
+  /** A cell's cross, open or closed (its build button focused again when closed). @param {string} key */
+  async #toggleCross(key) {
+    const open = this._cross !== key;
+    this._cross = open ? key : null;
+    await this.updateComplete;
+    /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(open ? `section.cell[data-cell="${key}"] .cross .arm:not(:disabled)` : `section.cell[data-cell="${key}"] .build`))?.focus();
   }
 
   /**
-   * A cell's parameters, editing: each by its kind — a yes-or-no, a box (one whose default is « as the settings say »,
-   * 3d: a choice of three); a distance, a choice, an intent: a menu (« par défaut », or what the intent gives); a list:
-   * a box for each of its values; words: a field. A component whose parameters come in groups (the map): folded
-   * under « Réglages », its intent first, then each group under its heading.
-   * @param {Resolved & { known: true }} r @param {(key: string, v: unknown) => void} setParam
+   * The layout changed by a cell's cross: its boxes made anew (builder-grid.js), written in the address; then the
+   * build button of `focus` (a path) focused. @param {(b: import('./builder-grid.js').Box) => import('./builder-grid.js').Box} fn @param {number[] | null} focus
    */
-  #paramFields(r, setParam) {
-    const field = (/** @type {string} */ key) => {
-      const ps = r.spec.params[key];
-      const given = r.given.has(key);
-      if (ps.kind === 'bool' && ps.def !== null) {
-        return html`<label><input type="checkbox" data-param=${key} .checked=${Boolean(r.params[key])} @change=${(/** @type {any} */ e) => setParam(key, e.target.checked)} /> ${ps.label}</label>`;
-      }
-      if (ps.kind === 'list') {
-        // Not written, one whose default the others make (ctl: by ui and the intent): those it has.
-        const on = /** @type {string[]} */ (r.params[key] ?? defaultOf(ps, r.params) ?? []);
-        const toggle = (/** @type {string} */ v, /** @type {boolean} */ checked) => setParam(key, Object.keys(ps.values ?? {}).filter(x => x === v ? checked : on.includes(x)));
-        return html`<span class="list" role="group" aria-label=${ps.label} data-param=${key}>${Object.entries(ps.values ?? {}).map(([v, label]) => html`<label><input type="checkbox"
-          value=${v} .checked=${on.includes(v)} @change=${(/** @type {any} */ e) => toggle(v, e.target.checked)} /> ${label}</label>`)}</span>`;
-      }
-      if (ps.kind === 'text') {
-        return html`<label>${ps.label} <input type="text" data-param=${key} maxlength=${ps.max ?? 80} .value=${given ? String(r.params[key]) : ''}
-          placeholder=${ps.frame ? 'par exemple : Ce qui fleurit' : 'par exemple : Fontainebleau 77'}
-          @change=${(/** @type {any} */ e) => setParam(key, e.target.value.replace(/[,;()[\]=@]/g, ' ').replace(/\s+/g, ' ').trim() || null)} /></label>`;
-      }
-      // A plant's number (plante=): typed, or the current plant fixed in one touch; emptied, the cell follows again.
-      if (ps.kind === 'id') {
-        const now = this.#state.live.plant;
-        return html`<label>${ps.label} <input type="text" inputmode="numeric" data-param=${key} maxlength="9" size="9" .value=${given ? String(r.params[key]) : ''} placeholder="la plante courante"
-          @change=${(/** @type {any} */ e) => setParam(key, /^\d+$/.test(e.target.value.trim()) ? Number(e.target.value.trim()) : null)} /></label>
-          ${now && now !== r.params[key] ? html`<button type="button" data-fix=${key} @click=${() => setParam(key, now)}>${icon('pin-angle-fill')} Fixer la plante courante</button>` : nothing}`;
-      }
-      const choices = ps.kind === 'distance' ? distanceChoices(given ? r.params[key] : null).map(d => [String(d), distanceLabel(d)])
-        : ps.kind === 'bool' ? [['true', 'Oui'], ['false', 'Non']] : Object.entries(ps.values ?? {});
-      // Not written, given by the intent: said so (« selon l’intention : Photos aériennes »).
-      const implied = r.implied.has(key) ? choices.find(([v]) => v === String(r.params[key]))?.[1] : null;
-      return html`<select aria-label=${ps.label} title=${ps.label} data-param=${key} @change=${(/** @type {any} */ e) => setParam(key, e.target.value === '' ? null
-        : ps.kind === 'distance' ? Number(e.target.value) : ps.kind === 'bool' ? e.target.value === 'true' : e.target.value)}>
-          <option value="" ?selected=${!given}>${ps.label} : ${implied ? 'selon l’intention (' + implied + ')' : 'par défaut'}</option>
-          ${choices.map(([v, label]) => html`<option value=${v} ?selected=${given && String(r.params[key]) === v}>${label}</option>`)}
-        </select>`;
-    };
-    const keys = Object.keys(r.spec.params);
-    const own = keys.filter(k => !r.spec.params[k].frame), frame = keys.filter(k => r.spec.params[k].frame);
-    // The frame every cell shares (registry.js#FRAME): « Cadre », then « Liens » — after the component's own groups.
-    const fieldsets = (/** @type {string[]} */ ks) => [...new Set(ks.map(k => r.spec.params[k].group).filter(Boolean))]
-      .map(g => html`<fieldset data-group=${/** @type {string} */ (g)}><legend>${g}</legend>${ks.filter(k => r.spec.params[k].group === g).map(field)}</fieldset>`);
-    // A component without groups of its own: its few parameters in its tools, the frame folded under « Réglages ».
-    const grouped = own.some(k => r.spec.params[k].group);
-    return html`${grouped ? nothing : own.map(field)}<details class="params"><summary>${icon('gear')} Réglages</summary>
-      ${grouped ? own.filter(k => !r.spec.params[k].group).map(field) : nothing}
-      ${grouped ? fieldsets(own) : nothing}
-      ${fieldsets(frame)}
-    </details>`;
+  async #crossEdit(fn, focus) {
+    const box = this.#box;
+    if (!box) return;
+    this.setText(specOf(fn(box)));
+    this._cross = null;
+    await this.updateComplete;
+    /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(focus ? `section.cell[data-cell="${focus.join('.')}"] .build` : '.cell-head .build'))?.focus();
   }
 
-  /** A cell's tools, editing: its component, its parameters, a cell beside / under it, moved, removed. @param {CellNode} n @param {number[]} path @param {Resolved} r */
-  #tools(n, path, r) {
-    const depth = path.length - 1;
-    const dir = this.#narrow ? 'col' : dirAt(depth);
-    const value = r.known ? r.spec.id + (r.view ? '.' + r.view.key : '') : '';
-    const choose = (/** @type {string} */ name) => {
-      const [id, view] = name.split('.');
-      this.#editDraft(t => replaceAt(t, path, makeCell(id, view ?? null, [], n.size)));
-    };
-    const setParam = (/** @type {string} */ key, /** @type {unknown} */ v) => {
-      if (!r.known) return;
-      const ps = r.spec.params[key];
-      // What sets it already (its name, or a bare value it reads: map(20km), map(terrain)) gives way.
-      const params = n.params.filter(p => paramName(r.spec, p) !== key);
-      if (v !== null && v !== '') params.push({ key, value: valueText(ps, v) });
-      this.#editDraft(t => replaceAt(t, path, { ...n, params }));
-    };
+  /**
+   * A cell's cross, over it (editing): an arm towards each side cuts it in two that way (a new « Emplacement » there; not
+   * past 12 cells nor the grammar's depth: said why), the middle moves it before or after among its neighbours, takes
+   * it out (its room to its neighbour; never the last), closes. Échap closes too.
+   * @param {number[]} path @param {string} title
+   */
+  #cross(path, title) {
+    const key = path.join('.');
+    const box = this.#box;
     const siblings = /** @type {ListNode} */ (nodeAt(this.#shown.tree, path.slice(0, -1))).kids.length;
     const at = path[path.length - 1];
-    return html`<div class="tools" role="group" aria-label=${'Modifier la cellule ' + r.title}>
-      <select aria-label="Composant" .value=${value} @change=${(/** @type {any} */ e) => choose(e.target.value)}>
-        ${r.known ? nothing : html`<option value="" selected>${r.title} (inconnu)</option>`}
-        ${COMPONENTS.map(c => html`<option value=${c.id} ?selected=${value === c.id}>${c.title}</option>
-          ${(c.views?.() ?? []).map(v => html`<option value=${c.id + '.' + v.key} ?selected=${value === c.id + '.' + v.key}>${c.title} › ${v.title}</option>`)}`)}
-      </select>
-      ${r.known ? this.#paramFields(r, setParam) : nothing}
-      <button type="button" title="Une cellule à droite" aria-label="Ajouter une cellule à droite" @click=${() => this.#editDraft(t => splitAt(t, path, 'row', makeCell('plant')))}>${icon('chevron-bar-right')}</button>
-      <button type="button" title="Une cellule en dessous" aria-label="Ajouter une cellule en dessous" @click=${() => this.#editDraft(t => splitAt(t, path, 'col', makeCell('plant')))}>${icon('chevron-down')}</button>
-      <button type="button" title=${dir === 'row' ? 'Vers la gauche' : 'Vers le haut'} aria-label="Déplacer avant" ?disabled=${at === 0} @click=${() => this.#editDraft(t => moveAt(t, path, -1))}>${icon(dir === 'row' ? 'chevron-left' : 'chevron-up')}</button>
-      <button type="button" title=${dir === 'row' ? 'Vers la droite' : 'Vers le bas'} aria-label="Déplacer après" ?disabled=${at >= siblings - 1} @click=${() => this.#editDraft(t => moveAt(t, path, 1))}>${icon(dir === 'row' ? 'chevron-right' : 'chevron-down')}</button>
-      <button class="danger" type="button" title="Retirer cette cellule" aria-label="Retirer cette cellule" @click=${() => this.#editDraft(t => removeAt(t, path))}>${icon('trash3')}</button>
+    const dir = this.#narrow ? 'col' : dirAt(path.length - 1);
+    const places = box ? placesOf(box) : 0;
+    return html`<div class="cross" role="group" aria-label=${`« ${title} » : la diviser, la déplacer ou la retirer`}
+        @keydown=${(/** @type {KeyboardEvent} */ e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); this.#toggleCross(key); } }}>
+      ${GfLayout.ARMS.map(a => {
+        const ok = Boolean(box && canSplit(box, path, a.side));
+        return html`<button type="button" class="arm ${a.side}" data-side=${a.side} ?disabled=${!ok}
+          aria-label=${`Ajouter un emplacement ${a.label.toLowerCase()} de « ${title} »`}
+          title=${ok ? `Ajouter un emplacement ${a.label.toLowerCase()}` : !box ? 'Corrigez d’abord le texte de la disposition' : places >= 12 ? '12 cases au plus' : 'Pas plus de découpes dans ce sens ici'}
+          @click=${() => this.#crossEdit(b => { const r = split(b, path, a.side); this.#added = r.added; return r.root; }, null).then(() => this.#focusAdded())}>${icon(a.icon)}<span class="lbl">${a.label}</span></button>`;
+      })}
+      <div class="mid">
+        <button type="button" data-act="before" title=${dir === 'row' ? 'Vers la gauche' : 'Vers le haut'} aria-label=${`Déplacer « ${title} » avant`} ?disabled=${at === 0}
+          @click=${() => this.#move(path, -1)}>${icon(dir === 'row' ? 'chevron-left' : 'chevron-up')}</button>
+        <button type="button" class="del" data-act="remove" ?disabled=${!box || places <= 1} title="Retirer cette case (sa place revient à sa voisine)"
+          aria-label=${`Retirer « ${title} »`} @click=${() => this.#crossEdit(b => removeBox(b, path), null)}>${icon('trash3')}</button>
+        <button type="button" data-act="after" title=${dir === 'row' ? 'Vers la droite' : 'Vers le bas'} aria-label=${`Déplacer « ${title} » après`} ?disabled=${at >= siblings - 1}
+          @click=${() => this.#move(path, 1)}>${icon(dir === 'row' ? 'chevron-right' : 'chevron-down')}</button>
+        <button type="button" class="close" title="Fermer" aria-label="Fermer" @click=${() => this.#toggleCross(key)}>${icon('x-lg')}</button>
+      </div>
     </div>`;
   }
 
-  /** The editor: the layout as text, what is wrong, the ready-made ones, how it is written. */
-  #editor() {
-    const s = this.#shown;
-    const problems = [...s.errors.map(e => `${e.message} (caractère ${e.at + 1})`), ...s.problems.map(p => p.message)];
-    return html`<section class="editor" aria-label="Modifier la disposition">
-      <label for="layout-title">Titre</label>
-      <input id="layout-title" type="text" maxlength="80" autocomplete="off" placeholder="Sans titre (par exemple : Orchidées de la colline de Mirabel)"
-        .value=${this._titleField} @input=${(/** @type {any} */ e) => this.#typeTitle(e.target.value)} />
-      <label for="layout-text">La disposition (texte, comme dans l’adresse)</label>
-      <textarea id="layout-text" spellcheck="false" autocomplete="off" .value=${this._field} @input=${(/** @type {any} */ e) => this.#type(e.target.value)}
-        @keydown=${(/** @type {KeyboardEvent} */ e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); this._draft = this._field; this.updateComplete.then(() => this.#apply()); } }}></textarea>
-      ${problems.length ? html`<ul class="problems" role="alert">${problems.map(p => html`<li>${p}</li>`)}</ul>`
-        : html`<p class="ok" role="status">Aperçu en direct. Lue ainsi : <code>${s.text}</code></p>`}
-      <div class="row">
-        <button class="primary" type="button" ?disabled=${!s.tree.kids.length} @click=${() => { this._draft = this._field; this.updateComplete.then(() => this.#apply()); }}>${icon('check-lg')} Appliquer</button>
-        <button type="button" @click=${() => { this.#cancel(); this.#state.set({ title: this.#titleBefore }, 'replace'); }}>Annuler</button>
-        <button type="button" @click=${() => this.#resetSizes()}>${icon('arrows-collapse')} Tailles par défaut</button>
-      </div>
-      <div class="models" role="group" aria-label="Modèles">${PRESETS.map(p => html`<button type="button" title=${p.about} @click=${() => { this._field = p.spec; this._draft = p.spec; }}>${p.title}</button>`)}</div>
-      <details><summary>Comment l’écrire</summary>
-        <p><code>[a,b,c]</code> : trois colonnes ; <code>[a,[b,c]]</code> : la 2<sup>e</sup> colonne coupée en deux lignes ; un niveau de plus coupe une ligne en colonnes.
-          <code>@30</code> après une cellule ou une liste : sa part en %. Paramètres entre parenthèses : <code>map(r=2km,base=plan)</code>, <code>results(grid)</code>, <code>search(filters=1)</code>,
-          <code>media(mosaic)</code>, <code>plant(scientific)</code>. Un bloc de la fiche seul : <code>plant.wikipedia</code>, <code>plant.calendar</code>, <code>plant.uses</code>…
-          Composants : ${COMPONENTS.map((c, i) => html`${i ? ', ' : ''}<code>${c.id}</code> (${c.title})`)}.</p>
-      </details>
-    </section>`;
+  /** A cell moved among its neighbours (−1: before, +1: after), its build button focused. @param {number[]} path @param {number} by */
+  async #move(path, by) {
+    this.setText(serialize(moveAt(this.#layout.tree, path, by)));
+    this._cross = null;
+    await this.updateComplete;
+    const to = [...path.slice(0, -1), path[path.length - 1] + by].join('.');
+    /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(`section.cell[data-cell="${to}"] .build`))?.focus();
+  }
+
+  /** The place a cross just added (its path). @type {number[] | null} */
+  #added = null;
+
+  /** The place just added: its first tile focused. */
+  async #focusAdded() {
+    const added = this.#added;
+    this.#added = null;
+    if (added) this.#focusTiles(added.join('.'));
+  }
+
+  /** A place's tiles: the first focused, once drawn. @param {string} key */
+  async #focusTiles(key) {
+    await this.updateComplete;
+    const picker = /** @type {any} */ (this.renderRoot.querySelector(`section.cell[data-cell="${key}"] gf-block-picker[inline]`));
+    await picker?.updateComplete;
+    picker?.focusFirst();
+  }
+
+  // ── The block picker ─────────────────────────────────────────────────────────────────────────────────────
+
+  /** The room of the cell picked (px), measured when its picker opened. @type {{ w: number, h: number } | null} */
+  #pickRoom = null;
+
+  /** A cell's picker opened, or closed when it is open. @param {string} key */
+  #openPick(key) {
+    if (this._pick === key) { this.#closePick(); return; }
+    const rect = this.renderRoot.querySelector(`section.cell[data-cell="${key}"]`)?.getBoundingClientRect();
+    this.#pickRoom = rect ? { w: rect.width, h: rect.height } : null;
+    this._pick = key;
+    this._cross = null;
+    this.picking = true;
+  }
+
+  /** The picker closed: its button focused again (`focus`). @param {boolean} [focus] */
+  async #closePick(focus = true) {
+    const key = this._pick;
+    if (key === null) return;
+    this._pick = null;
+    this.picking = false;
+    if (!focus) return;
+    await this.updateComplete;
+    /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(`section.cell[data-cell="${key}"] .cell-head .pick`) ?? this.renderRoot.querySelector('.cell-head .pick'))?.focus();
+  }
+
+  /** The layout changed by the picker: written at once (the builder's address, no new entry). @param {(t: ListNode) => ListNode} fn */
+  #pickEdit(fn) { this.setText(serialize(fn(this.#layout.tree))); }
+
+  /** The picker of the cell open: its changes written at once, the cell keeping its share. */
+  #picker() {
+    const key = this._pick;
+    if (key === null) return nothing;
+    const tree = this.#shown.tree;
+    const path = key.split('.').map(Number);
+    const n = nodeAt(tree, path);
+    if (!n || n.t !== 'cell') return nothing;
+    const all = cellsOf(tree);
+    const index = all.findIndex(c => c.path.join('.') === key);
+    // Docked to the host's view (the builder's), not to this layout's.
+    const host = /** @type {ShadowRoot} */ (this.getRootNode()).host ?? this;
+    return html`<gf-block-picker style=${pickerBounds(host)} .cell=${cellText(n)} .label=${'Case ' + (index + 1)} .room=${this.#pickRoom}
+      .others=${all.filter(c => c.path.join('.') !== key).map(c => cellText(c.cell))} .plant=${this.#state.live.plant}
+      clear-label="Changer de bloc"
+      @change=${(/** @type {CustomEvent} */ e) => {
+        const next = cellOf(e.detail.text);
+        if (next) this.#pickEdit(t => replaceAt(t, path, { ...next, size: n.size }));
+      }}
+      @clear=${() => { this.#pickEdit(t => replaceAt(t, path, makeCell(SLOT, null, [], n.size))); this.#closePick(false); this.#focusTiles(key); }}
+      @close=${() => this.#closePick()}></gf-block-picker>`;
   }
 
   // ── Rendering ────────────────────────────────────────────────────────────────────────────────────────────
@@ -866,10 +899,19 @@ export class GfLayout extends LitElement {
       : info ? html`${fixed ? html`<span class="pin" title=${`Plante fixée (plante=${fixed}) : cette case ne suit pas la plante courante`}>${icon('pin-angle-fill')}<span class="visually-hidden">Plante fixée :</span></span> ` : nothing}${info.name}${info.name !== info.sci ? html` · <i>${info.sci}</i>` : nothing}` : '';
     // The frame (registry.js#FRAME): its head whole, its title alone, or none (but while editing: the tools are there);
     // the actions of its head; large over the layout, folded to its head, hidden while it has nothing to show.
-    const head = !r.known || this._editing ? 'oui' : /** @type {string} */ (r.params.tete);
+    const building = this.#building;
+    const head = !r.known || building ? 'oui' : /** @type {string} */ (r.params.tete);
     const acts = r.known && head !== 'non' ? /** @type {string[]} */ (r.params.actions) : [];
     const max = this.#isMax(key), folded = this.#isFolded(key);
-    const title = r.title;
+    // An « Emplacement » numbered in reading order (its name told apart from the others').
+    const title = r.known && r.spec.empty && !r.params.titre ? `${r.title} ${cellsOf(this.#shown.tree).findIndex(c => c.path.join('.') === key) + 1}` : r.title;
+    const picking = this._pick === key;
+    const crossed = building && this._cross === key;
+    // Built: its content (the picker) and its cross.
+    const pick = !building ? nothing : html`<button class="icon-btn pick" type="button" data-act="choisir" aria-expanded=${picking ? 'true' : 'false'} title="Choisir le contenu"
+      aria-label=${'Choisir le contenu de « ' + title + ' »'} @click=${() => this.#openPick(key)}>${icon('sliders')}</button><button class="icon-btn build" type="button" data-act="construire" aria-expanded=${crossed ? 'true' : 'false'} title="Diviser, déplacer ou retirer cette case"
+        aria-label=${'Construire : diviser, déplacer ou retirer « ' + title + ' »'} @click=${() => this.#toggleCross(key)}>${icon('tools')}</button>`;
+    const empty = r.known && r.spec.empty;
     const actions = acts.length ? html`<span class="cell-acts" role="group" aria-label=${'Actions de « ' + title + ' »'}>
         ${acts.includes('partager') ? html`<button class="icon-btn" type="button" data-act="partager" title=${this._cellCopied === key ? 'Lien copié' : 'Partager cette case seule (le même état)'}
           aria-label=${this._cellCopied === key ? 'Lien copié' : `Partager « ${title} » seule`} @click=${() => this.#shareCell(n, key, r)}>${icon(this._cellCopied === key ? 'check-lg' : 'share')}</button>` : nothing}
@@ -878,13 +920,30 @@ export class GfLayout extends LitElement {
         ${acts.includes('agrandir') ? html`<button class="icon-btn" type="button" data-act="agrandir" aria-pressed=${max ? 'true' : 'false'} title=${max ? 'Revenir à la disposition (Échap)' : 'Agrandir'}
           aria-label=${(max ? 'Revenir à la disposition depuis « ' : 'Agrandir « ') + title + ' »'} @click=${() => this.#maximize(max ? null : key)}>${icon(max ? 'fullscreen-exit' : 'arrows-fullscreen')}</button>` : nothing}
       </span>` : nothing;
-    return html`<section class="cell ${this._flash === key ? 'flash' : ''} ${max ? 'maxed' : ''} ${folded ? 'folded' : ''}" data-cell=${key} data-comp=${r.known ? r.spec.id + (r.view ? '.' + r.view.key : '') : 'unknown'}
+    return html`<section class="cell ${this._flash === key ? 'flash' : ''} ${max ? 'maxed' : ''} ${folded ? 'folded' : ''} ${picking ? 'picked' : ''}" data-cell=${key} data-comp=${r.known ? r.spec.id + (r.view ? '.' + r.view.key : '') : 'unknown'}
       data-head=${head} aria-label=${title}>
-      ${head === 'non' ? nothing : head === 'simple' ? html`<header class="cell-head"><h2>${title}</h2><span class="spacer"></span>${actions}</header>`
+      ${head === 'non' ? nothing : head === 'simple' ? html`<header class="cell-head"><h2>${title}</h2><span class="spacer"></span>${pick}${actions}</header>`
         : html`<header class="cell-head"><h2>${icon(cellIcon(r))} ${title}${mark ? html`<b class="cell-mark" aria-hidden="true" title=${mark.label} data-mark=${mark.short}></b>` : nothing}</h2><span class="sub">${sub}</span>
-        ${actions}${this._editing ? this.#tools(n, path, r) : nothing}</header>`}
-      <div class="cell-body" ?hidden=${folded}>${renderCell(r, { state: s, view: plantViewOf(this.#store.state), plant: s.live.plant, first, path: key, setParam: this.#setCellParam })}</div>
+        ${pick}${actions}</header>`}
+      <div class="cell-body" ?hidden=${folded}>${empty ? this.#slot(key) : renderCell(r, { state: s, view: plantViewOf(this.#store.state), plant: s.live.plant, first, path: key, setParam: this.#setCellParam })}
+        ${crossed ? this.#cross(path, title) : nothing}</div>
     </section>`;
+  }
+
+  /**
+   * An « Emplacement »: a place to build a component in — the block picker's first level in it (its tiles, sized to
+   * the place; then the intents of the one chosen); chosen, the place is that component. @param {string} key
+   */
+  #slot(key) {
+    const tree = this.#layout.tree;
+    const all = cellsOf(tree);
+    const path = key.split('.').map(Number);
+    const index = all.findIndex(c => c.path.join('.') === key);
+    return html`<gf-block-picker inline .cell=${SLOT} .label=${'Case ' + (index + 1)} .others=${all.filter(c => c.path.join('.') !== key).map(c => cellText(c.cell))}
+      @change=${(/** @type {CustomEvent} */ e) => {
+        const next = cellOf(e.detail.text), n = nodeAt(this.#layout.tree, path);
+        if (next && n) this.setText(serialize(replaceAt(this.#layout.tree, path, { ...next, size: n.size })));
+      }}></gf-block-picker>`;
   }
 
   /**
@@ -1001,15 +1060,21 @@ export class GfLayout extends LitElement {
     if (to >= 0 && to < this.#shown.tree.kids.length) this._tab = to;
   }
 
-  /** No layout (or nothing readable in it): what it is, and the ready-made ones. */
+  /** No layout (or nothing readable in it): what it is, « Créer une app », and the ready-made ones. */
   #empty() {
     return html`<div class="empty">
       <h2>Composez votre écran</h2>
       <p>Une disposition met côte à côte les outils de GeoFlora — la carte, la recherche, la fiche ou un seul de ses blocs, les photos, les cartes à swiper —,
         tous reliés : une plante choisie dans l’un s’affiche dans tous les autres. Elle s’écrit dans l’adresse : un lien la partage.
-        « Modifier la disposition » pour l’écrire, ou partez d’un modèle :</p>
+        <a href=${href.builder()}>Créer une app</a> pour la composer (une grille, puis un bloc dans chaque emplacement), ou partez d’un modèle :</p>
       <ul>${PRESETS.map(p => html`<li><a href=${href.layout(p.spec)}><b>${p.title}</b><small>${p.about}</small><code>${p.spec}</code></a></li>`)}</ul>
     </div>`;
+  }
+
+  /** « Modifier »: this layout, with its state, in « Créer une app » (a new entry: Back returns to the app). */
+  #modify() {
+    const spec = this.#written;
+    openView(href.builder(spec, this.#search()));
   }
 
   async #share() {
@@ -1027,6 +1092,13 @@ export class GfLayout extends LitElement {
     // The screen's own title (?title=): the page's heading, above the bar (and, narrow, above the menu of columns);
     // the bar's name is then no heading.
     const title = this.#state.live.title;
+    // Built: the builder's own bar and heading; the screen's title drawn as the app will draw it.
+    if (this.#building) {
+      return html`${title ? html`<div class="titlebar"><p class="h" title=${title}>${title}</p></div>` : nothing}
+        <div class="body">${!w ? nothing : !tree.kids.length ? nothing
+          : narrow ? this.#tabs(tree) : html`<div class="grid">${this.#split(tree, [], 0, false)}</div>`}</div>
+        ${this.#picker()}`;
+    }
     return html`${title ? html`<header class="titlebar"><h1 title=${title}>${title}</h1></header>` : nothing}<div class="bar">
         ${title ? html`<p class="app">${icon('layers')} <span>Disposition libre</span></p>` : html`<h1 class="app">${icon('layers')} <span>Disposition libre</span></h1>`}
         <span class="spacer"></span>
@@ -1034,24 +1106,17 @@ export class GfLayout extends LitElement {
           <summary title="Dispositions toutes prêtes" aria-label="Modèles de disposition">${icon('list-ul')} <span class="lbl">Modèles</span></summary>
           <ul>${PRESETS.map(p => html`<li><a href=${href.layout(p.spec)} @click=${(/** @type {Event} */ e) => /** @type {HTMLElement} */ (e.currentTarget).closest('details')?.removeAttribute('open')}><b>${p.title}</b><small>${p.about}</small></a></li>`)}</ul>
         </details>
-        <a class="btn" href=${href.builder()} title="Créer une app pas à pas : une grille, puis des blocs">${icon('window-desktop')} <span class="lbl">Créer une app</span></a>
-        <button type="button" aria-pressed=${this._editing ? 'true' : 'false'} aria-label="Modifier la disposition" title="Modifier la disposition" @click=${() => this.#edit()}>${icon('pencil')} <span class="lbl">Modifier la disposition</span></button>
+        <button type="button" data-act="modifier" title="Modifier cette app dans « Créer une app »" @click=${() => this.#modify()}>${icon('pencil')} <span class="lbl">Modifier</span></button>
         <button class="icon-btn" type="button" title=${this._copied ? 'Lien copié' : 'Partager ce lien (la disposition, la plante, la zone, la recherche)'}
           aria-label=${this._copied ? 'Lien copié' : 'Partager ce lien'} @click=${() => this.#share()}>${icon(this._copied ? 'check-lg' : 'share')}</button>
       </div>
-      ${remarks && !this._editing && tree.kids.length ? html`<p class="remarks" role="status">${icon('exclamation-triangle-fill')} ${remarks} remarque${remarks > 1 ? 's' : ''} sur cette disposition.
-        <button class="link" type="button" @click=${() => this.#edit()}>Voir et corriger</button></p>` : nothing}
-      ${this._editing ? this.#editor() : nothing}
+      ${remarks && tree.kids.length ? html`<p class="remarks" role="status">${icon('exclamation-triangle-fill')} ${remarks} remarque${remarks > 1 ? 's' : ''} sur cette disposition.
+        <button class="link" type="button" @click=${() => this.#modify()}>Voir et corriger</button></p>` : nothing}
       <div class="body">${!w ? nothing : !tree.kids.length ? this.#empty()
-        : narrow ? this.#tabs(tree) : html`<div class="grid">${this.#split(tree, [], 0, false)}</div>`}</div>`;
+        : narrow ? this.#tabs(tree) : html`<div class="grid">${this.#split(tree, [], 0, false)}</div>`}</div>
+      ${this.#picker()}`;
   }
 }
-
-/**
- * The radii a cell's tools offer: the slider's stops, and the one the cell gives when it is none of them (r=3km: kept,
- * in its place, never shown as « par défaut »). @param {number | null} given @returns {number[]}
- */
-const distanceChoices = given => given == null || DISTANCES.includes(given) ? DISTANCES : [...DISTANCES, given].sort((a, b) => a - b);
 
 /** What moves sideways itself, in a tab panel: a finger swiped there is its own, never a change of tab. */
 const SWIPE_OWN = 'input, textarea, select, [role="slider"], [role="separator"], [draggable="true"], gf-map, dl-map, .leaflet-container, gf-media-viewer, dl-deck, ma-deck';

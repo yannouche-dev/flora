@@ -48,6 +48,7 @@ import { MAP_CONTROL_ALIASES, MAP_CONTROLS, MAP_INTENT_ALIASES, MAP_INTENTS, MAP
  * @property {StateKey[]} reads
  * @property {StateKey[]} writes
  * @property {{ w: number, h: number }} min  the least room it works in (px)
+ * @property {boolean} [empty]              a place to build in (slot): what « Changer de bloc » leaves, never offered as content
  *
  * @typedef {{ known: true, spec: ComponentSpec, view: ViewSpec | null, params: Record<string, any>, given: Set<string>, implied: Set<string>, problems: string[], title: string }
  *   | { known: false, name: string, suggestion: string | null, problems: string[], title: string }} Resolved
@@ -167,7 +168,7 @@ const FRAME = {
  * @type {Record<string, string[]>}
  */
 export const FRAME_OF = {
-  map: [], place: [], filters: [], search: ['toucher', 'ecrit'], results: ['vide', 'zone', 'toucher', 'ecrit'],
+  map: [], place: [], filters: [], slot: [], search: ['toucher', 'ecrit'], results: ['vide', 'zone', 'toucher', 'ecrit'],
   plant: ['vide', 'plante', 'toucher', 'ecrit'], media: ['vide', 'plante'], deck: ['vide', 'toucher', 'ecrit']
 };
 
@@ -257,6 +258,13 @@ export const COMPONENTS = [
     id: 'place', title: 'Zone', icon: 'geo-alt', aliases: ['lieu', 'zone', 'scope', 'autour'],
     about: 'Choisir la zone : autour de moi, une commune, et le rayon. Sans zone, toute la flore de France.',
     params: { r: RADIUS }, main: 'r', reads: ['scope'], writes: ['scope'], min: { w: 220, h: 170 }
+  },
+  {
+    // A place of a layout to build a component in (a starting grid's places, a cell cut in two, « Changer de bloc »):
+    // the block picker's first level drawn in it (gf-layout.js, gf-block-picker.js `inline`): one tap, the place is that block.
+    id: 'slot', title: 'Emplacement', icon: 'plus-lg', aliases: ['emplacement', 'case'],
+    about: 'Un emplacement où construire un bloc : ses tuiles le proposent, un toucher le choisit.',
+    params: {}, reads: [], writes: [], min: { w: 120, h: 80 }, empty: true
   }
 ];
 

@@ -362,7 +362,7 @@ export class GfApp extends LitElement {
       case 'app':
         return html`<gf-miniapp .route=${route}></gf-miniapp>`;
       case 'builder':
-        // « Créer une app » (app/layout/gf-builder.js): the grid first.
+        // « Créer une app » (app/layout/gf-builder.js): a grid or a model, then the free layout built on it, live.
         return html`<gf-builder .route=${route}></gf-builder>`;
       case 'layout':
         // « Disposition libre » (app/layout): its layout and its state in the address.

@@ -166,32 +166,37 @@ test.describe('un grand écran', () => {
     await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+/);
   });
 
-  test('l’éditeur : « Cadre » et « Liens » sous « Réglages », écrits dans l’adresse', async ({ app, page }) => {
-    await app.open(`#/layout/[results(list),plant.wikipedia]?p=${plantId(ORTIE)}`);
-    await page.getByRole('button', { name: 'Modifier la disposition' }).click();
-    const tools = cellOf(page, 'plant.wikipedia').locator('.tools');
-    await tools.locator('details.params summary').click();
-    const cadre = tools.locator('fieldset[data-group="Cadre"]');
-    await expect(cadre.locator('legend')).toHaveText('Cadre');
-    await expect(tools.locator('fieldset[data-group="Liens"]')).toBeVisible();
-    await cadre.locator('select[data-param="tete"]').selectOption('simple');
-    await cadre.locator('[data-param="actions"] input[value="agrandir"]').check();
-    await cadre.locator('select[data-param="vide"]').selectOption('masque');
-    await cadre.locator('input[data-param="titre"]').fill('Article, (le) mien');
-    await cadre.locator('input[data-param="titre"]').press('Enter');
+  test('« Créer une app » : « Cadre » et « Liens » dans le choix du contenu, écrits dans l’adresse ; l’app les montre', async ({ app, page }) => {
+    await app.open(`#/builder?g=[results(list),plant.wikipedia]&p=${plantId(ORTIE)}`);
+    const p = page.locator('gf-block-picker:not([inline])');
+    await page.locator('gf-builder gf-layout section.cell[data-comp="plant.wikipedia"] .cell-head .pick').click();
+    await expect(p.locator('.row')).toHaveText([/Réglages/, /Cadre/, /Liens/]);
+    await p.locator('.row[data-group="Cadre"]').click();
+    await p.locator('[data-param="tete"] button[data-value="simple"]').click();
+    await p.locator('[data-param="actions"] button[data-value="agrandir"]').click();
+    await p.locator('[data-param="vide"] button[data-value="masque"]').click();
+    await p.locator('[data-param="titre"] input').fill('Article, (le) mien');
+    await p.locator('[data-param="titre"] input').press('Enter');
+    await p.locator('.back').click();
     // The current plant fixed in one touch.
-    await tools.locator('fieldset[data-group="Liens"] [data-fix="plante"]').click();
+    await p.locator('.row[data-group="Liens"]').click();
+    await p.locator('[data-param="plante"] [data-act="fix"]').click();
     await shot(page, 'editeur-cadre');
-    // Live: the preview reads it as the address will write it.
-    await expect(page.locator('.editor .ok code')).toHaveText(`[results(view=list),plant.wikipedia(tete=simple,actions=agrandir,vide=masque,plante=${plantId(ORTIE)},titre=Article le mien)]`);
-    await page.getByRole('button', { name: 'Appliquer' }).click();
-    await expect.poll(() => hash(page)).toBe(`#/layout/[results(view=list),plant.wikipedia(tete=simple,actions=agrandir,vide=masque,plante=${plantId(ORTIE)},titre=Article le mien)]?p=${plantId(ORTIE)}`);
+    const spec = `[results(view=list),plant.wikipedia(tete=simple,actions=agrandir,vide=masque,plante=${plantId(ORTIE)},titre=Article le mien)]`;
+    await expect.poll(() => page.evaluate(() => new URLSearchParams(location.hash.split('?')[1] || '').get('g'))).toBe(spec);
+    await page.keyboard.press('Escape');
+    await page.locator('gf-builder [data-act="open-app"]').click();
+    await expect.poll(() => hash(page)).toBe(`#/layout/${spec}?p=${plantId(ORTIE)}`);
     await expect(cellOf(page, 'plant.wikipedia').locator('.cell-head h2')).toHaveText('Article le mien');
-    // A component that cannot be empty has no « Sans rien à montrer »; the map none of the plant links.
-    await page.getByRole('button', { name: 'Modifier la disposition' }).click();
-    await cellOf(page, 'results').locator('.tools details.params summary').click();
-    await expect(cellOf(page, 'results').locator('.tools [data-param="plante"]')).toHaveCount(0);
-    await expect(cellOf(page, 'results').locator('.tools input[type="checkbox"][data-param="zone"]')).toBeChecked();
+    // A component that cannot be empty has no « Sans rien à montrer »; the results, not the plant links but the zone.
+    await page.locator('gf-layout [data-act="modifier"]').click();
+    await page.locator('gf-builder gf-layout section.cell[data-comp="results"] .cell-head .pick').click();
+    await p.locator('.row[data-group="Cadre"]').click();
+    await expect(p.locator('[data-param="vide"]')).toHaveCount(1);
+    await p.locator('.back').click();
+    await p.locator('.row[data-group="Liens"]').click();
+    await expect(p.locator('[data-param="plante"]')).toHaveCount(0);
+    await expect(p.locator('[data-param="zone"] [role="switch"]')).toHaveAttribute('aria-checked', 'true');
   });
 });
 
