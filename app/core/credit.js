@@ -48,6 +48,20 @@ export const thumbCredit = thumb => thumb?.url
   : null;
 
 /**
+ * The credit of a photo found online for a plant without one in plants.json (lib/plant-sources.mjs `thumbnail`:
+ * iNaturalist's taxon photo under a free licence, else Commons', else Trefle's): its author — from iNaturalist's
+ * « (c) Jane Doe, some rights reserved (CC BY) » as inatCredit reads it —, its licence, where it comes from.
+ * @param {any} found @returns {Credit | null}
+ */
+export function foundCredit(found) {
+  if (!found?.url) return null;
+  const inat = found.source === 'iNaturalist' ? inatCredit({ license_code: found.license, attribution: found.attribution }, found.sourceUrl || null) : null;
+  if (inat) return inat;
+  const author = String(found.author || found.attribution || '').replace(/^\s*(\(c\)|©)\s*/i, '').trim() || null;
+  return { author, license: found.license || null, source: found.source || 'Wikimedia Commons', sourceUrl: found.sourceUrl || null };
+}
+
+/**
  * The credits of a row of small photos, in one line: « Jane Doe, Li Wei (CC BY, CC0) via iNaturalist ».
  * @param {(Credit | null | undefined)[]} credits
  */

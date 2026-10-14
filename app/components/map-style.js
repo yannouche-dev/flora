@@ -1,8 +1,9 @@
 // @ts-check
 // The look of the app's maps, whatever draws them (components/gf-map.js with Leaflet; a MapLibre renderer later): one
 // style for every map — the observations' markers (a leaf, or the plant's photo over its leaf; the plant chosen
-// large in its pink and gold ring; many of them as one disc with their count), the small card of a point (its photo
-// and credit, its names, when and where), the kin of a point (its species), the states a page lights (the card on
+// large in its pink and gold ring; many of them as one disc with their count) — whatever their source: a GBIF
+// occurrence is drawn as an iNaturalist observation is —, the small card of a point (its photo and credit, its names,
+// when and where, its source), the kin of a point (its species), the states a page lights (the card on
 // top, the matches, the plants passed), and the circle still on the screen of the games' step « map » (its place
 // and size, its SVG). Data in, descriptors and DOM out: a renderer wraps a MarkerSpec in its own marker (Leaflet's
 // divIcon) and places the ring's SVG over its map; the CSS is styles/map.css. No renderer imported here.
@@ -148,14 +149,16 @@ export function chosenMarker(photo, delay, size = 44, extra = '') {
 }
 
 /**
- * Many observations of the plant chosen, together (a wider scope): its photo in a disc sized by their number, the
- * count on a badge. `still`: drawn again at another zoom, no entrance.
- * @param {string} photo @param {number} n @param {number} size @param {boolean} [still] @returns {MarkerSpec}
+ * Many observations of the plant chosen, together (a wider scope, its sheet's map — whatever their source): its photo
+ * in a disc sized by their number, the count on a badge; its leaf without a photo. `still`: drawn again at another
+ * zoom, no entrance.
+ * @param {string | null | undefined} photo @param {number} n @param {number} size @param {boolean} [still] @returns {MarkerSpec}
  */
 export function chosenGroupMarker(photo, n, size, still = false) {
   const g = elem('span', 'g');
   const ph = elem('span', 'ph');
-  ph.append(leafGlyph(), fadeImg(photo, { decoding: 'async' }));
+  ph.append(leafGlyph());
+  if (photo) ph.append(fadeImg(photo, { decoding: 'async' }));
   g.append(ph, elem('b', 'n', n > 999 ? Math.round(n / 1000) + 'k' : String(n)));
   return { className: 'gf-occ-group gf-occ-group-hl photo' + (still ? ' still' : ''), size: [size, size], html: g };
 }
@@ -172,10 +175,12 @@ export const speciesKey = p => {
 
 /**
  * The small plant card shown over an observation: its photo and its credit (author, licence, source — as text), its
- * names, when and where. Built as nodes, the texts as text: names and places come from iNaturalist / GBIF, never
- * parsed as HTML. No link: a point's card leads nowhere (the mini-apps lead nowhere outside).
+ * names, when and where, and where the record comes from (`source`: « iNaturalist », « GBIF · <its dataset> » — the
+ * one thing that tells a GBIF occurrence from an iNaturalist observation, drawn alike). Built as nodes, the texts as
+ * text: names and places come from iNaturalist / GBIF, never parsed as HTML. No link: a point's card leads nowhere
+ * (the mini-apps lead nowhere outside).
  * @param {{ title: string, common?: string | null, sci?: string, photo?: string | null, credit?: import('../core/credit.js').Credit | null,
- *   date?: string | null, place?: string | null }} p
+ *   date?: string | null, place?: string | null, source?: string | null }} p
  */
 export function obsCard(p) {
   const big = p.photo ? p.photo.replace('/square.', '/small.') : null;
@@ -185,6 +190,7 @@ export function obsCard(p) {
   t.append(elem('b', '', p.common || p.sci || p.title));
   if (p.common && p.sci) t.append(elem('i', '', p.sci));
   if (when || p.place) t.append(elem('small', '', [when, p.place].filter(Boolean).join(' · ')));
+  if (p.source) t.append(elem('small', 'source', 'Observation : ' + p.source));
   if (big && p.credit && moduleOn('photos')) t.append(elem('small', 'credit', 'Photo : ' + creditText(p.credit)));
   card.append(t);
   return card;
