@@ -51,7 +51,8 @@ import { addCatalogLayer, DEFAULT_OPACITY, isOverlay } from '../core/ign.js';
 import { loadCatalog } from '../core/ign-catalog.js';
 import { RADII_3D } from '../core/around3d.js';
 import { cellIcon, distanceLabel } from './registry.js';
-import { COMPACT_WIDTH, MAP_LAYERS, catalogLayers, inWhen, layersOf, mapControls, opacitiesOf, opacText, overlaysOf, snapRadius, uiMode, viewOf, viewText } from './map-options.js';
+import { COMPACT_WIDTH, MAP_LAYERS, WIDE_FRAMES, catalogLayers, inatTiles, inWhen, layersOf, mapControls, opacitiesOf, opacText, overlaysOf, snapRadius, uiMode, viewOf, viewText } from './map-options.js';
+import { periodQuery, taxonIdOf } from '../core/nearby.js';
 import { obsId } from './state.js';
 import '../components/gf-map.js';
 import '../components/gf-place-search.js';
@@ -143,7 +144,9 @@ function scopeNote(state) {
   if (state.speciesState === 'loading') return 'Plantes de la zone : recherche…';
   if (state.speciesState === 'error') return state.speciesError ?? '';
   const n = state.species?.list.length ?? 0;
-  return n ? `${n.toLocaleString('fr-FR')} plante${n > 1 ? 's' : ''} observée${n > 1 ? 's' : ''} dans la zone (iNaturalist)` : 'Aucune plante observée dans la zone (iNaturalist).';
+  // The layout's period (state.js): the plants of the zone that year, that month.
+  const when = state.periode === 'annee' ? ' cette année' : state.periode === 'mois' ? ' ce mois-ci' : '';
+  return n ? `${n.toLocaleString('fr-FR')} plante${n > 1 ? 's' : ''} observée${n > 1 ? 's' : ''} dans la zone${when} (iNaturalist)` : `Aucune plante observée dans la zone${when} (iNaturalist).`;
 }
 
 /** Shared by the scope's controls (map, place): the radius slider, « Autour de moi », the place's name. */
@@ -194,6 +197,18 @@ const PERIODS = [['toujours', 'Toujours'], ['annee', 'Cette année'], ['mois', '
 
 /** « 214 observations », « 1 espèce ». @param {number} n @param {string} word */
 const counted = (n, word) => `${n.toLocaleString('fr-FR')} ${word}${n > 1 ? 's' : ''}`;
+
+/**
+ * iNaturalist's taxa of names of the flora (families, genera, species), each found once (core/nearby.js#taxonIdOf,
+ * cached), four at a time — never forty requests at once; those not found left out.
+ * @param {string[]} names @returns {Promise<number[]>}
+ */
+async function namesToTaxa(names) {
+  /** @type {(number | null)[]} */
+  const ids = [];
+  for (let i = 0; i < names.length; i += 4) ids.push(...await Promise.all(names.slice(i, i + 4).map(n => taxonIdOf(n).catch(() => null))));
+  return /** @type {number[]} */ (ids.filter(Boolean));
+}
 
 export class DlMap extends LitElement {
   static properties = {
@@ -323,9 +338,11 @@ export class DlMap extends LitElement {
   get #p() {
     const p = this.params ?? {};
     return {
-      src: /** @type {string[]} */ (p.src ?? ['inat']), when: /** @type {string} */ (p.when ?? 'toujours'), suit: p.suit !== false,
+      // The period: the layout's, shared by every cell (the address' periode=, else a map's when=: state.js).
+      src: /** @type {string[]} */ (p.src ?? ['inat']), when: /** @type {string} */ (this.state?.periode ?? p.when ?? 'toujours'), suit: p.suit !== false,
       plante: /** @type {string} */ (p.plante ?? 'grand'),
       toucher: /** @type {string} */ (p.toucher ?? 'plante'), pts: /** @type {string} */ (p.pts ?? 'photo'),
+      portee: /** @type {'zone' | 'france' | 'monde'} */ (p.portee ?? 'zone'),
       ui: uiMode(p.ui, this._narrow ? COMPACT_WIDTH - 1 : COMPACT_WIDTH)
     };
   }
@@ -375,8 +392,10 @@ export class DlMap extends LitElement {
 
   /**
    * The circle and its observations, as the settings say: their sources (src: iNaturalist's, GBIF's), those of the
-   * plants the search keeps (suit; else every plant observed), of the current plant alone (plante=seule), of a period
-   * (when: this year, this month), as photos or dots (pts) — the same object while nothing changed (the map keeps its points).
+   * plants the search keeps — every one of the list (suit; else every plant observed in the zone): their own
+   * observations asked (state.js#pointsFor), not the most recent of the whole zone, where the rarer plants (orchids)
+   * seldom are —, of the current plant alone (plante=seule), of the layout's period (this year, this month), as photos
+   * or dots (pts) — the same object while nothing changed (the map keeps its points).
    */
   get #area() {
     const s = /** @type {LayoutState} */ (this.state);
@@ -385,22 +404,21 @@ export class DlMap extends LitElement {
     const P = this.#p;
     const inat = P.src.includes('inat'), gbifOn = P.src.includes('gbif');
     const found = this.#found, plantOf = s.species?.plantOf;
-    // A search keeping a few of the plants of the scope (a family, a filter): their own observations asked
-    // (state.pointsOf) — those of rarer plants (orchids) are seldom among the most recent of all.
-    const kept = inat && P.suit && P.plante !== 'seule' && s.species && found.size < s.species.list.length
-      ? s.species.list.filter(x => found.has(/** @type {number} */ (x.plantId))).map(x => x.taxonId).slice(0, 200) : [];
-    s.pointsOf(kept);
+    const list = s.species?.list ?? null;
+    const taxa = inat && list && P.plante !== 'seule' ? (P.suit ? list.filter(x => found.has(/** @type {number} */ (x.plantId))) : list).map(x => x.taxonId) : [];
+    const set = s.pointsFor(taxa);
     s.gbifOf(gbifOn);
-    const subset = s.subset?.key === s.subsetFor ? s.subset : null;
     const gbif = gbifOn && s.gbif?.key === s.scopeKey ? s.gbif.points : null;
     const current = P.plante === 'seule' ? s.live.plant : null;
+    // The list's own, with the zone's most recent (theirs kept below: never fewer than before they came).
+    const own = set?.points.length ? set.points : null;
     const sig = JSON.stringify([P.src, P.when, P.suit, P.plante, P.pts, current]);
     const memo = this.#areaMemo;
-    if (memo && memo.at === at && memo.r === s.radius && memo.pts === s.points && memo.found === found && memo.plantOf === plantOf && memo.subset === subset
+    if (memo && memo.at === at && memo.r === s.radius && memo.pts === s.points && memo.found === found && memo.plantOf === plantOf && memo.own === own
       && memo.gbif === gbif && memo.sig === sig) return memo.value;
     const seen = new Set();
     /** @type {any[]} */
-    const fromInat = !inat ? [] : subset ? [...subset.points, ...s.points].filter(p => !p.url || (seen.has(p.url) ? false : (seen.add(p.url), true))) : s.points;
+    const fromInat = !inat ? [] : own ? [...own, ...s.points].filter(p => !p.url || (seen.has(p.url) ? false : (seen.add(p.url), true))) : s.points;
     const all = [...fromInat, ...(gbif ?? [])];
     // The current plant's alone (none chosen: none); else the plants the search keeps (all of them while the plants of
     // the scope are unknown), or every plant observed (suit=0).
@@ -408,7 +426,7 @@ export class DlMap extends LitElement {
       : P.suit && plantOf ? all.filter(p => { const id = this.#plantOf(p); return id !== undefined && found.has(id); }) : all;
     if (P.when !== 'toujours') points = points.filter(p => inWhen(p.date, P.when));
     const value = { center: at, radius: s.radius, fit: true, leaves: P.pts !== 'pastille', points };
-    this.#areaMemo = { at, r: s.radius, pts: s.points, found, plantOf, subset, gbif, sig, value };
+    this.#areaMemo = { at, r: s.radius, pts: s.points, found, plantOf, own, gbif, sig, value };
     return value;
   }
   /** @type {any} */ #areaMemo = null;
@@ -428,6 +446,66 @@ export class DlMap extends LitElement {
     return value;
   }
   /** @type {{ key: string, value: any } | null} */ #hlMemo = null;
+
+  /**
+   * A map of France or of the world (portee=): the iNaturalist taxa of the plants it shows — the plants found in the
+   * zone (the zone's list, as the search keeps it); without a zone, those the search keeps: its families and genera
+   * when it filters by them, else its plants when they are few (40 at most), each name found once on iNaturalist
+   * (core/nearby.js#taxonIdOf); else every plant (null). undefined: still being found; []: none found.
+   * @returns {number[] | null | undefined}
+   */
+  #wideTaxa() {
+    const s = /** @type {LayoutState} */ (this.state), P = this.#p;
+    const list = s.species?.list;
+    if (s.live.at && list) {
+      const found = this.#found;
+      return (P.suit ? list.filter(x => found.has(/** @type {number} */ (x.plantId))) : list).map(x => x.taxonId).slice(0, 400);
+    }
+    if (!P.suit) return null;
+    const st = this.#store.state;
+    const facets = [...st.query.filters.family, ...st.query.filters.genus];
+    const few = st.results.total > 0 && st.results.total <= 40 && st.results.items.length === st.results.total;
+    const names = facets.length ? facets : few ? st.results.items.map(i => i.scientificName) : [];
+    if (!names.length) return st.results.total === 0 && st.status === 'ready' && (st.query.q || facets.length) ? [] : null;
+    const key = names.join('|');
+    if (this.#named?.key !== key) {
+      const named = this.#named = { key, ids: /** @type {number[] | undefined} */ (undefined) };
+      namesToTaxa(names).then(ids => { if (this.#named === named) { named.ids = ids; this.requestUpdate(); } });
+    }
+    return this.#named.ids;
+  }
+  /** @type {{ key: string, ids: number[] | undefined } | null} */ #named = null;
+
+  /** The current plant's iNaturalist taxon (its points over a map of France or the world), found once by its name. */
+  get #plantTaxon() {
+    const s = /** @type {LayoutState} */ (this.state), id = s.live.plant;
+    if (id == null || this.#p.plante === 'non') return null;
+    const known = s.species?.byPlant.get(id)?.taxonId;
+    if (known) return known;
+    const sci = s.plantInfo?.id === id ? s.plantInfo.sci : null;
+    if (!sci) return null;
+    if (this.#plantNamed?.sci !== sci) {
+      const named = this.#plantNamed = { sci, id: /** @type {number | null} */ (null) };
+      taxonIdOf(sci).then(t => { if (this.#plantNamed === named) { named.id = t; this.requestUpdate(); } }, () => {});
+    }
+    return this.#plantNamed.id;
+  }
+  /** @type {{ sci: string, id: number | null } | null} */ #plantNamed = null;
+
+  /** The tiles of a map of France or the world: its plants' observations, the current plant's on top (the same array while the same). */
+  get #wideTiles() {
+    const taxa = this.#wideTaxa();
+    const when = periodQuery(this.state?.periode);
+    const plant = this.#plantTaxon;
+    const key = JSON.stringify([taxa, when, plant]);
+    if (this.#tilesMemo?.key !== key) {
+      // Still finding their taxa: none yet (never all plants for a moment); none found: the current plant's alone.
+      const value = taxa === undefined ? [] : taxa !== null && !taxa.length ? inatTiles([], when, plant).filter(t => t.key === 'plant') : inatTiles(taxa, when, plant);
+      this.#tilesMemo = { key, value };
+    }
+    return this.#tilesMemo.value;
+  }
+  /** @type {{ key: string, value: any[] } | null} */ #tilesMemo = null;
 
   /** The observation chosen (?o=), shown and flown to. */
   get #focus() {
@@ -763,16 +841,17 @@ export class DlMap extends LitElement {
    * @param {{ points: any[] } | null} area
    */
   #bottomRight(s, ctl, area) {
-    const period = ctl.on.has('periode'), count = ctl.on.has('compte') && Boolean(s.live.at);
+    const period = ctl.on.has('periode'), count = ctl.on.has('compte') && (Boolean(s.live.at) || this.#p.portee !== 'zone');
     if (!period && !count) return nothing;
     const when = this.#p.when;
     const n = area?.points.length ?? 0, k = this.#store.state.results.total;
-    const words = `${counted(n, 'observation')} · ${counted(k, 'espèce')}`;
+    const wide = this.#p.portee !== 'zone';
+    const words = wide ? counted(k, 'espèce') : `${counted(n, 'observation')} · ${counted(k, 'espèce')}`;
     return html`<div class="ctl br">
       ${period ? html`<div class="period" role="group" aria-label="Période des observations">${PERIODS.map(([v, label]) => html`<button type="button"
-        aria-pressed=${String(when === v)} @click=${() => this.#set({ when: v })}>${label}</button>`)}</div>` : nothing}
+        aria-pressed=${String(when === v)} @click=${() => s.set({ periode: v === s.defaultPeriode ? null : /** @type {any} */ (v) }, 'replace')}>${label}</button>`)}</div>` : nothing}
       ${count ? html`<button type="button" class="count" aria-label=${words + ' — état de la carte'} title="État de la carte"
-        @click=${() => this.#map?.openPanel()}>${ctl.compact ? n.toLocaleString('fr-FR') : words}</button>` : nothing}
+        @click=${() => this.#map?.openPanel()}>${ctl.compact ? (wide ? k : n).toLocaleString('fr-FR') : words}</button>` : nothing}
     </div>`;
   }
 
@@ -781,26 +860,31 @@ export class DlMap extends LitElement {
     if (!s) return nothing;
     if (!s.live.at && this.#pressHint === undefined) this.#pressHint = takeHint('layout-map-press');
     const P = this.#p, d3 = this.#d3, ctl = this.#ctl, on = ctl.on;
+    // France, the world (portee=): their plants' observations in tiles; the zone's circle (where it is), never framed.
+    const wide = P.portee !== 'zone';
     const press = 'Appui long sur la carte : la zone s’y centre.';
     const hl = P.plante === 'non' ? null : this.#highlight;
     // regroupe: the current plant's observations grouped by where they fall at the zoom shown (gf-map `cluster`).
     const grouped = Boolean(this.params?.regroupe);
-    const area = this.#area;
+    const zoneArea = this.#area;
+    const area = wide ? (zoneArea ? { center: zoneArea.center, radius: zoneArea.radius, fit: false, points: [] } : null) : zoneArea;
     const why2d = d3 !== false ? nothing : 'Cette carte de la disposition reste en 2D (3d=0 dans son adresse, ou sa bascule 2D / 3D ; le choix vaut pour elle seule).';
     return html`${!s.live.at && this.#pressHint ? hintView(press, () => { this.#pressHint = false; this.requestUpdate(); }, 'press-hint') : nothing}
       <div class="stage"><gf-map no-create point-click=${P.toucher === 'rien' ? 'none' : 'pick'} map-3d=${d3 === null ? nothing : d3 ? 'on' : 'off'}
         map-3d-why=${why2d}
         .base=${this.params?.base ?? 'photo'} .overlays=${this.#overlays} .opacities=${this.#opacities} .around3d=${this.#around3d} .view=${this.#view}
-        .area=${area} .highlight=${grouped ? null : hl} .cluster=${grouped ? hl : null}
+        .area=${area} .highlight=${wide || grouped ? null : hl} .cluster=${!wide && grouped ? hl : null}
+        .tiles=${wide ? this.#wideTiles : null} .frame=${wide && !this.#view ? { key: P.portee, points: WIDE_FRAMES[P.portee] } : null}
+        min-zoom=${P.portee === 'monde' ? 1 : nothing}
         .focusPoint=${this.#focus} .noSearch=${!on.has('lieu')} .noLocate=${!on.has('gps')} .noLayers=${!on.has('couches')} .track=${Boolean(this.params?.autour)}
-        .radiusHandle=${on.has('rayon') ? this.#radiusHandle : null}
+        .radiusHandle=${!wide && on.has('rayon') ? this.#radiusHandle : null}
         aria-description=${press}
         @point-pick=${(/** @type {CustomEvent} */ e) => this.#onPick(e)} @point-info=${(/** @type {CustomEvent} */ e) => this.#onPress(e)}
         @radius-change=${(/** @type {CustomEvent} */ e) => s.set({ r: e.detail.radius }, 'replace')}
         @layers-change=${(/** @type {CustomEvent} */ e) => this.#onLayers(e)} @around3d-change=${(/** @type {CustomEvent} */ e) => this.#onAround(e)}
         @view-change=${(/** @type {CustomEvent} */ e) => this.#onView(e)}
         @base-shown=${() => this.requestUpdate()}></gf-map>
-      ${on.has('rayon') ? this.#zoneView(s, ctl) : nothing}
+      ${!wide && on.has('rayon') ? this.#zoneView(s, ctl) : nothing}
       ${this.#topRight(on)}
       ${this.#bottomLeft(s, on)}
       ${this.#bottomRight(s, ctl, area)}</div>`;

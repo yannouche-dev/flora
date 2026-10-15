@@ -51,7 +51,7 @@ import { BP, MediaController } from '../core/media.js';
 import { gripStyles, shareGrip } from '../core/split-grip.js';
 import { ui } from '../styles/ui.js';
 import { cell as makeCell, cells as cellsOf, dirAt, moveAt, nodeAt, parse, replaceAt, serialize, setShares, shapeKey, shares } from './grammar.js';
-import { cellIcon, cellMark, cellName, menuLooks, resolveTree, touchOf, withParam } from './registry.js';
+import { CURRENT, LINKS, cellIcon, cellMark, cellName, linksOf, menuLooks, resolveTree, touchOf, withParam } from './registry.js';
 import { cleanText, LayoutState, liveSearch, readLive, readQuery, sameLive } from './state.js';
 import { forgetShares, savedShares, saveShares } from './sizes.js';
 import { PRESETS } from './presets.js';
@@ -170,6 +170,13 @@ export class GfLayout extends LitElement {
     .cell-head .spacer { flex: 1; }
     .cell-head .cell-acts { flex: none; display: inline-flex; align-items: center; gap: 2px; }
     .cell-head .cell-acts .icon-btn { width: 30px; height: 30px; min-height: 0; padding: 0; font-size: 0.85rem; }
+    /* How a cell is wired (while building): a chip a link, lit when it follows the others. */
+    .cell-head .cell-links { flex: none; display: inline-flex; gap: 2px; }
+    .cell-head .link-chip { width: 24px; height: 24px; min-height: 0; padding: 0; display: inline-grid; place-items: center; border-radius: 50%; font-size: 0.72rem;
+      border: 1px dashed var(--gf-border); background: none; color: var(--gf-text-muted); }
+    .cell-head .link-chip[aria-pressed='true'], .cell-head .link-chip[data-on='true'] { border-style: solid; border-color: transparent;
+      background: color-mix(in srgb, var(--gf-accent) 18%, transparent); color: var(--gf-accent); }
+    .cell-head button.link-chip:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     /* A results cell's list / grid switch (view=). */
     .cell-head .cell-views { flex: none; display: inline-flex; gap: 2px; padding: 2px; border-radius: 8px; background: var(--gf-surface-2, var(--gf-bg)); }
     .cell-head .cell-views .icon-btn { width: 28px; height: 26px; min-height: 0; padding: 0; font-size: 0.85rem; border-radius: 6px; }
@@ -534,9 +541,7 @@ export class GfLayout extends LitElement {
       this.#closePick(false);
       this._max = null;
       this.#said.clear();
-      // The radius a map or a place cell gives, until the address says one.
-      const first = [...next.cells.values()].find(r => r.known && r.params.r != null);
-      this.#state.defaultRadius = first?.known ? first.params.r : 2000;
+      this.#defaults(next);
     }
     const live = readLive(route.search);
     if (!sameLive(live, this.#state.live)) this.#state.set(live, 'none');
@@ -593,10 +598,24 @@ export class GfLayout extends LitElement {
 
   /** The layout changed here (built: the cross, the picker): the radius it gives, the address replaced, drawn. */
   #afterChange() {
-    const first = [...this.#layout.cells.values()].find(r => r.known && r.params.r != null);
-    this.#state.defaultRadius = first?.known ? first.params.r : 2000;
+    if (this.#defaults(this.#layout)) this.#state.follow();
     this.#write('replace');
     this.requestUpdate();
+  }
+
+  /**
+   * What the layout gives until the address says otherwise: the radius of a map or a place cell (r=), the period of a
+   * map (when=: this year, this month). Returns whether it changed. @param {Shown} l
+   */
+  #defaults(l) {
+    const cells = [...l.cells.values()];
+    const first = cells.find(r => r.known && r.params.r != null);
+    const when = cells.find(r => r.known && r.spec.id === 'map' && r.params.when && r.params.when !== 'toujours');
+    const radius = first?.known ? first.params.r : 2000, periode = when?.known ? when.params.when : 'toujours';
+    const changed = radius !== this.#state.defaultRadius || periode !== this.#state.defaultPeriode;
+    this.#state.defaultRadius = radius;
+    this.#state.defaultPeriode = periode;
+    return changed;
   }
 
   /** The layout last told to the host (`layout-change`), and its title. */
@@ -689,6 +708,7 @@ export class GfLayout extends LitElement {
     if (text === this.#layout.text) return;
     this.#layout = show(text);
     this.#shown = this.#layout;
+    if (this.#defaults(this.#layout)) this.#state.follow();
     this.#write('replace');
     this.requestUpdate();
   }
@@ -921,6 +941,7 @@ export class GfLayout extends LitElement {
         aria-label=${'Construire : diviser, déplacer ou retirer « ' + title + ' »'} @click=${() => this.#toggleCross(key)}>${icon('tools')}</button>`;
     const empty = r.known && r.spec.empty;
     const views = r.known && r.spec.id === 'results' && head === 'oui' ? this.#viewSwitch(key, r, title) : nothing;
+    const links = building ? this.#links(key, r, title) : nothing;
     const actions = acts.length ? html`<span class="cell-acts" role="group" aria-label=${'Actions de « ' + title + ' »'}>
         ${acts.includes('partager') ? html`<button class="icon-btn" type="button" data-act="partager" title=${this._cellCopied === key ? 'Lien copié' : 'Partager cette case seule (le même état)'}
           aria-label=${this._cellCopied === key ? 'Lien copié' : `Partager « ${title} » seule`} @click=${() => this.#shareCell(n, key, r)}>${icon(this._cellCopied === key ? 'check-lg' : 'share')}</button>` : nothing}
@@ -933,10 +954,32 @@ export class GfLayout extends LitElement {
       data-head=${head} aria-label=${title}>
       ${head === 'non' ? nothing : head === 'simple' ? html`<header class="cell-head"><h2>${title}</h2><span class="spacer"></span>${pick}${actions}</header>`
         : html`<header class="cell-head"><h2>${icon(cellIcon(r))} ${title}${mark ? html`<b class="cell-mark" aria-hidden="true" title=${mark.label} data-mark=${mark.short}></b>` : nothing}</h2><span class="sub">${sub}</span>
-        ${views}${pick}${actions}</header>`}
+        ${links}${views}${pick}${actions}</header>`}
       <div class="cell-body" ?hidden=${folded}>${empty ? this.#slot(key) : renderCell(r, { state: s, view: plantViewOf(this.#store.state), plant: s.live.plant, first, building: this.#building })}
         ${crossed ? this.#cross(path, title) : nothing}</div>
     </section>`;
+  }
+
+  /**
+   * How a cell is wired to the others (registry.js#linksOf), in its head while building: a chip each — the zone, the
+   * search, the period, the current plant —, lit when it follows (and changes) it; touched, it detaches the cell or
+   * attaches it again (the setting that does it, written). One that cannot be changed is said, never a switch.
+   * @param {string} key @param {Resolved} r @param {string} title
+   */
+  #links(key, r, title) {
+    const all = linksOf(r);
+    if (!all.length) return nothing;
+    const ICONS = /** @type {const} */ ({ zone: 'geo-alt', recherche: 'search', periode: 'sun-fill', plante: 'flower1' });
+    const plant = this.#state.live.plant;
+    return html`<span class="cell-links" role="group" aria-label=${'Liens de « ' + title + ' »'}>${all.map(l => {
+      const words = `${LINKS[l.link]} : ${l.on ? 'reliée' : 'détachée'} — ${l.why}`;
+      if (!l.toggle) return html`<span class="link-chip" data-link=${l.link} data-on=${String(l.on)} role="img" aria-label=${words} title=${words}>${icon(ICONS[l.link])}</span>`;
+      const values = Object.fromEntries(Object.entries(l.toggle).map(([k, v]) => [k, v === CURRENT ? plant : v]));
+      const can = !Object.values(values).some(v => v === null && Object.values(l.toggle ?? {}).includes(CURRENT));
+      return html`<button type="button" class="link-chip" data-link=${l.link} aria-pressed=${String(l.on)} ?disabled=${!can} aria-label=${words}
+        title=${can ? words + (l.on ? ' (toucher : la détacher)' : ' (toucher : la relier)') : words + ' — choisissez d’abord une plante'}
+        @click=${() => this.#setCellParam(key, values)}>${icon(ICONS[l.link])}</button>`;
+    })}</span>`;
   }
 
   /**

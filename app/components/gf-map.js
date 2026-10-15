@@ -326,6 +326,11 @@ export class GfMap extends LitElement {
     around3d: { attribute: false },
     /** The view it starts on ({ lat, lon, zoom, pitch?, bearing? }), rather than framed on its area; null: framed. */
     view: { attribute: false },
+    /**
+     * Observations drawn as tiles over everything but the markers ({ key, url, minZoom?, maxZoom?, opacity }[]: a free
+     * layout's map of France or of the world, iNaturalist's squares and points); null: none.
+     */
+    tiles: { attribute: false },
     /** Points drawn as small circles: [{ coordinates, title, url?, kind? }] (kind 'start': a walk's start, dark). Never an observation: those are the plants' markers (area, highlight, cluster). */
     points: { attribute: false },
     /** The point card's « Créer un endroit ici » makes a place with this plant already in it. */
@@ -400,6 +405,8 @@ export class GfMap extends LitElement {
     this.around3d = null;
     /** @type {{ lat: number, lon: number, zoom: number, pitch?: number, bearing?: number } | null} */
     this.view = null;
+    /** @type {{ key: string, url: string, minZoom?: number, maxZoom?: number, opacity: number }[] | null} */
+    this.tiles = null;
     /** @type {{ coordinates: [number, number], title: string, url?: string, kind?: string }[]} */
     this.points = [];
     /** @type {number | null} */
@@ -766,6 +773,31 @@ export class GfMap extends LitElement {
     this.#compareLayer = this.#syncGbifLayer(this.#compareLayer, c && moduleOn('gbif') ? { key: c.key, country: c.country, filter: null } : null, 'purpleYellow.point', 21);
   }
 
+  /** The tile layers given (`tiles`), each by its key: one whose address changed made again, those gone taken off. @type {Map<string, L.TileLayer>} */
+  #tileLayers = new Map();
+
+  #syncTiles() {
+    const map = this.#map;
+    if (!map) return;
+    const want = new Map((this.tiles ?? []).map(t => [t.key, t]));
+    for (const [key, layer] of this.#tileLayers) {
+      if (/** @type {any} */ (layer).gfUrl === want.get(key)?.url) continue;
+      layer.remove();
+      this.#tileLayers.delete(key);
+    }
+    let z = 22;
+    for (const [key, t] of want) {
+      z++;
+      if (this.#tileLayers.has(key)) continue;
+      const layer = L.tileLayer(t.url, {
+        attribution: 'Observations : <a href="https://www.inaturalist.org/" target="_blank" rel="noopener">iNaturalist</a>',
+        opacity: t.opacity, crossOrigin: 'anonymous', minZoom: t.minZoom ?? 0, maxZoom: t.maxZoom ?? 21, maxNativeZoom: 18, zIndex: z, className: 'gf-tiles-obs gf-tiles-obs-' + key
+      });
+      /** @type {any} */ (layer).gfUrl = t.url;
+      this.#tileLayers.set(key, layer.addTo(map));
+    }
+  }
+
   /** @param {L.TileLayer | null} layer @param {{ key: number, country?: string, filter?: Record<string, string> | null } | null} d @param {string} style @param {number} zIndex */
   #syncGbifLayer(layer, d, style, zIndex) {
     const map = this.#map;
@@ -1025,6 +1057,7 @@ export class GfMap extends LitElement {
       this.#onModules();
     }
     if (changed.has('focusPoint')) this.#syncFocusPoint();
+    if (changed.has('tiles')) this.#syncTiles();
     if (changed.has('distribution') || changed.has('distributionOn') || changed.has('compare')) {
       this.#syncDistribution();
       if (this.#panel) Object.assign(this.#panel, this.#distributionInfo());
@@ -1109,6 +1142,7 @@ export class GfMap extends LitElement {
     this.#syncZone();
     this.#syncCluster();
     this.#syncPoints();
+    this.#syncTiles();
     this.#photoCredit();
     if (!this.#applyFrame() && this.fit) this.#fitToContent();
     if (this.focusPoint && !this.#focusLayer?.getLayers().length) this.#syncFocusPoint();

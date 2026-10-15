@@ -143,7 +143,7 @@ test.describe('au bureau', () => {
     await expect.poll(() => page.evaluate(() => location.hash)).toBe(`#/plant/${ortie}`);
   });
 
-  test('la période : ses puces filtrent les points et s’écrivent dans la disposition (when=) ; le compteur, et l’État', async ({ app, page }) => {
+  test('la période : ses puces filtrent les points, celle de toutes les cases (periode= dans l’adresse) ; le compteur, et l’État', async ({ app, page }) => {
     await app.open(`#/layout/[map(r=1km;ctl=rayon+lieu+periode+compte),results]?${AT}`);
     await expect.poll(async () => (await view(page)).points).toBe(24);
     const period = cell(page).getByRole('group', { name: 'Période des observations' });
@@ -152,19 +152,21 @@ test.describe('au bureau', () => {
     await expect(count).toHaveText(/^24 observations · \d+ espèces$/);
     await period.getByRole('button', { name: 'Ce mois-ci' }).click();
     await expect.poll(async () => (await view(page)).points).toBe(16);
-    await expect.poll(() => layoutOf(page)).toBe('#/layout/[map(r=1km,when=mois,ctl=rayon+lieu+periode+compte),results]');
+    await expect.poll(() => param(page, 'periode')).toBe('mois');
+    expect(await layoutOf(page)).toBe('#/layout/[map(r=1km,ctl=rayon+lieu+periode+compte),results]');
     await expect(count).toHaveText(/^16 observations · /);
     await period.getByRole('button', { name: 'Cette année' }).click();
     await expect.poll(async () => (await view(page)).points).toBe(16);
     expect((/** @type {any[]} */ (await mapOf(page).evaluate(m => /** @type {any} */ (m).area.points))).every(p => p.date.startsWith(String(now.getFullYear())))).toBe(true);
     await period.getByRole('button', { name: 'Toujours' }).click();
-    await expect.poll(() => layoutOf(page)).toBe('#/layout/[map(r=1km,ctl=rayon+lieu+periode+compte),results]');
+    await expect.poll(() => param(page, 'periode')).toBe(null);
     await expect.poll(async () => (await view(page)).points).toBe(24);
-    // Floraison: its chips there by its intent, this month chosen; « Toujours » written against it.
+    // Floraison: its chips there by its intent, this month the layout's; « Toujours » written against it.
     await app.go(`#/layout/[map(floraison;r=1km),results]?${AT}`);
     await expect(period.getByRole('button', { name: 'Ce mois-ci' })).toHaveAttribute('aria-pressed', 'true');
     await period.getByRole('button', { name: 'Toujours' }).click();
-    await expect.poll(() => layoutOf(page)).toBe('#/layout/[map(floraison,r=1km,when=toujours),results]');
+    await expect.poll(() => param(page, 'periode')).toBe('toujours');
+    expect(await layoutOf(page)).toBe('#/layout/[map(floraison,r=1km),results]');
     // The count touched: the map's panel, its « État ».
     await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\/species_counts\?/, route => route.fulfill({ status: 503, body: '' }));
     await app.go(`#/layout/[map(r=3km),results]?at=48.86,2.36`);
