@@ -270,7 +270,7 @@ test('l’éditeur : une cellule à côté ou dessous, retirée, déplacée ; le
 
 test('l’état dans l’adresse : plante, zone, observation, recherche — lus et écrits, le reste ignoré', () => {
   const live = readLive('p=81541&at=48.85,2.35&r=1km&place=Paris%2010e&o=12345&q=ortie&family=Urticaceae');
-  assert.deepEqual(live, { title: null, plant: 81541, at: [2.35, 48.85], r: 1000, place: 'Paris 10e', obs: '12345' });
+  assert.deepEqual(live, { title: null, plant: 81541, at: [2.35, 48.85], r: 1000, place: 'Paris 10e', obs: '12345', periode: null });
   const query = readQuery('p=81541&q=ortie&family=Urticaceae&sort=sci');
   assert.equal(query.q, 'ortie');
   assert.deepEqual(query.filters.family, ['Urticaceae']);
@@ -283,14 +283,18 @@ test('l’état dans l’adresse : plante, zone, observation, recherche — lus 
   assert.equal(liveSearch({ title: null, plant: null, at: null, r: 5000, place: 'X', obs: null }, fromHash('#/')), 'r=5km&place=X');
   assert.equal(liveSearch({ title: null, plant: null, at: [2, 48], r: null, place: null, obs: null }, fromHash('#/'), 500), 'at=48.00000,2.00000&r=500m');
   // Wrong values left out.
-  const none = { title: null, plant: null, at: null, r: null, place: null, obs: null };
-  assert.deepEqual(readLive('p=abc&at=200,2&r=loin&o=<x>'), none);
+  const none = { title: null, plant: null, at: null, r: null, place: null, obs: null, periode: null };
+  assert.deepEqual(readLive('p=abc&at=200,2&r=loin&o=<x>&periode=hier'), none);
+  // The period every cell shows: read, written after the observation.
+  const month = readLive('at=48.85,2.35&r=1km&periode=mois');
+  assert.equal(month.periode, 'mois');
+  assert.equal(liveSearch(month, fromHash('#/')), 'at=48.85000,2.35000&r=1km&periode=mois');
   assert.deepEqual(readLive('p=0&at=48.8'), none);
 });
 
 test('le titre et un lieu à trouver dans l’adresse : texte simple, une ligne, 80 caractères au plus, le titre écrit en premier', () => {
   const live = readLive('title=Orchid%C3%A9es%20de%20la%20colline%20de%20Mirabel&place=mirabel,%20menetrol,%2063&family=Orchidaceae');
-  assert.deepEqual(live, { title: 'Orchidées de la colline de Mirabel', plant: null, at: null, r: null, place: 'mirabel, menetrol, 63', obs: null });
+  assert.deepEqual(live, { title: 'Orchidées de la colline de Mirabel', plant: null, at: null, r: null, place: 'mirabel, menetrol, 63', obs: null, periode: null });
   const query = readQuery('family=Orchidaceae');
   const search = liveSearch(live, query);
   assert.equal(search, 'title=Orchid%C3%A9es+de+la+colline+de+Mirabel&place=mirabel,+menetrol,+63&family=Orchidaceae');

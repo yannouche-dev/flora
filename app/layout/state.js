@@ -14,6 +14,9 @@
 //                                      module off: no scope, the reason said where the scope is (cells.js#scopeWords),
 //                                      place= left in the address so that a reload asks again;
 //   &o=<observation>                   an observation lit on the map (a point touched);
+//   &periode=<toujours|annee|mois>     the period every cell shows: the plants observed in the zone that year, or that
+//                                      month of any year (what flowers now) — the results, the deck, the maps' points
+//                                      (core/nearby.js periodQuery); not said, the layout's own (a map's when=);
 //   &q=…&family=…&sort=…               the search itself: Flore's (core/query.js — the same words as #/?q=…), kept in the
 //                                      store, so the search cell is Flore's own bar, filters and list.
 // A link with them gives the same screen; Back and Forward walk the plants and places chosen (a new entry each), while
@@ -27,7 +30,7 @@ import * as db from '../core/db.js';
 import { forgetFailures } from '../core/cache.js';
 import { findPlace } from '../core/geoservices.js';
 import { errorKind } from '../core/net.js';
-import { observationPointsAround, observationsAround, speciesAround } from '../core/nearby.js';
+import { observationPointsAround, observationPointsOf, observationsAround, speciesAround, taxonIdOf } from '../core/nearby.js';
 import { observations3d } from '../core/around3d.js';
 import { fromHash, toHash } from '../core/query.js';
 import { runSearch, searchWhole, setSearchScope } from '../core/search.js';
@@ -35,8 +38,9 @@ import { store, whenReady } from '../core/store.js';
 import { DISTANCE, distanceText, parseDistance } from './registry.js';
 
 /**
- * @typedef {{ title: string | null, plant: number | null, at: [number, number] | null, r: number | null, place: string | null, obs: string | null }} Live
- *   `at`: [lon, lat]; `r`: metres (null: not said — the layout's default)
+ * @typedef {{ title: string | null, plant: number | null, at: [number, number] | null, r: number | null, place: string | null, obs: string | null, periode: Period | null }} Live
+ *   `at`: [lon, lat]; `r`: metres (null: not said — the layout's default); `periode`: null, not said — the layout's own
+ * @typedef {'toujours' | 'annee' | 'mois'} Period
  * @typedef {import('../core/nearby.js').NearbySpecies} NearbySpecies
  * @typedef {import('../core/nearby.js').AroundPoint} AroundPoint
  * @typedef {{ coordinates: [number, number], date: string | null, url: string }} Observation
@@ -46,8 +50,14 @@ import { DISTANCE, distanceText, parseDistance } from './registry.js';
 /** The radius of a scope when neither the address nor a cell says one. */
 export const DEFAULT_RADIUS = 2000;
 
+/** A map's points of a set of plants (pointsFor): taxa a request, points in all, sets kept. */
+const BATCH = 300, MAX_POINTS = 800, SETS = 4;
+
 /** @type {Live} */
-export const EMPTY = Object.freeze({ title: null, plant: null, at: null, r: null, place: null, obs: null });
+export const EMPTY = Object.freeze({ title: null, plant: null, at: null, r: null, place: null, obs: null, periode: null });
+
+/** The periods, in their order. @type {Period[]} */
+export const PERIODS = ['toujours', 'annee', 'mois'];
 
 /** A title or a place as the address keeps it: plain text on one line, no control characters, 80 characters at most (shown as text, never as HTML). @param {string | null | undefined} text */
 export const cleanText = text => String(text ?? '').replace(/\p{Cc}/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 80).trim() || null;
@@ -65,13 +75,15 @@ export function readLive(search) {
   const at = (params.get('at') || '').split(',').map(Number);
   const ok = at.length === 2 && at.every(Number.isFinite) && Math.abs(at[0]) <= 90 && Math.abs(at[1]) <= 180;
   const o = params.get('o') || '';
+  const per = /** @type {Period} */ (params.get('periode') || '');
   return {
     title: cleanText(params.get('title')),
     plant: /^\d{1,9}$/.test(p) && Number(p) > 0 ? Number(p) : null,
     at: ok ? [at[1], at[0]] : null,
     r: parseDistance(params.get('r')),
     place: cleanText(params.get('place')),
-    obs: /^[\w-]{1,40}$/.test(o) ? o : null
+    obs: /^[\w-]{1,40}$/.test(o) ? o : null,
+    periode: PERIODS.includes(per) ? per : null
   };
 }
 
@@ -94,6 +106,7 @@ export function liveSearch(live, query, radius = DEFAULT_RADIUS) {
     params.set('place', live.place);
   }
   if (live.obs) params.set('o', live.obs);
+  if (live.periode) params.set('periode', live.periode);
   const own = params.toString().replace(/%2C/g, ',');
   const words = toHash(query).replace(/^#\/\??/, '');
   return [own, words].filter(Boolean).join('&');
@@ -103,7 +116,7 @@ export function liveSearch(live, query, radius = DEFAULT_RADIUS) {
 export const readQuery = search => fromHash('#/?' + search);
 
 /** Two states the same? @param {Live} a @param {Live} b */
-export const sameLive = (a, b) => a.title === b.title && a.plant === b.plant && a.r === b.r && a.place === b.place && a.obs === b.obs
+export const sameLive = (a, b) => a.title === b.title && a.plant === b.plant && a.r === b.r && a.place === b.place && a.obs === b.obs && a.periode === b.periode
   && (a.at === b.at || (a.at !== null && b.at !== null && a.at[0] === b.at[0] && a.at[1] === b.at[1]));
 
 /** The live state of a layout on screen, and what it loads for it. Fires `change` (detail: { how, keys }). */
@@ -117,6 +130,8 @@ export class LayoutState extends EventTarget {
     /** @type {Live} */
     this.live = EMPTY;
     this.defaultRadius = defaults.radius ?? DEFAULT_RADIUS;
+    /** The layout's own period (a map's when=), until the address says one. @type {Period} */
+    this.defaultPeriode = 'toujours';
     this.find = defaults.find ?? findPlace;
     /** A place to find (place= without at=): being found, or why it was not (in French; null: none to find, or found). */
     /** @type {'idle' | 'finding' | 'failed'} */
@@ -138,10 +153,12 @@ export class LayoutState extends EventTarget {
     /** The latest observations in the scope (the map), and how many there are in all. @type {AroundPoint[]} */
     this.points = [];
     this.pointsTotal = 0;
-    /** @type {{ key: string, points: import('../core/nearby.js').AroundPoint[] } | null} the observations of the plants the search keeps (pointsOf) */
-    this.subset = null;
-    /** @type {string} */ this.subsetFor = '';
-    /** @type {AbortController | null} */ this.subsetAbort = null;
+    /**
+     * The observations of sets of plants in the scope (pointsFor: the plants a map shows — those the search keeps, the
+     * zone's), each loaded once, a few kept: two maps never take each other's.
+     * @type {Map<string, { key: string, points: AroundPoint[], total: number, done: boolean, abort: AbortController }>}
+     */
+    this.sets = new Map();
     /** The current plant's own observations in the scope. @type {{ key: string, points: Observation[] } | null} */
     this.plantObs = null;
     /** The current plant's names (the cells' heads). @type {{ id: number, name: string, sci: string } | null} */
@@ -170,8 +187,11 @@ export class LayoutState extends EventTarget {
   /** The radius in use: the address', else the layout's default. */
   get radius() { return this.live.r ?? this.defaultRadius; }
 
-  /** The scope's key ('' without one). */
-  get scopeKey() { return this.live.at ? this.radius + ':' + this.live.at.join(',') : ''; }
+  /** The period every cell shows: the address', else the layout's own. @returns {Period} */
+  get periode() { return this.live.periode ?? this.defaultPeriode; }
+
+  /** The scope's key ('' without one): its circle and its period. */
+  get scopeKey() { return this.live.at ? this.radius + ':' + this.live.at.join(',') + ':' + this.periode : ''; }
 
   /**
    * A change: the address follows as `how` says (gf-layout.js listens), and what it needs is loaded.
@@ -221,8 +241,13 @@ export class LayoutState extends EventTarget {
       clearTimeout(this.timer);
       this.abort?.abort();
       this.abort = null;
+      // Another zone: what was loaded for the old one goes at once (never its points under the new circle).
+      this.points = []; this.pointsTotal = 0;
+      for (const set of this.sets.values()) set.abort.abort();
+      this.sets.clear();
+      if (this.gbif?.key !== key) { this.gbifAbort?.abort(); this.gbif = null; this.gbifError = null; this.gbifFor = ''; }
       if (!key) {
-        this.species = null; this.speciesState = 'idle'; this.speciesError = null; this.speciesFailure = null; this.points = []; this.pointsTotal = 0;
+        this.species = null; this.speciesState = 'idle'; this.speciesError = null; this.speciesFailure = null;
         this.#rescope(null);
         this.#changed();
       } else {
@@ -281,7 +306,7 @@ export class LayoutState extends EventTarget {
     if (abort.signal.aborted || key !== this.scopeKey) return;
     const points = observationPointsAround(at, r, abort.signal).catch(() => null);
     try {
-      const found = await speciesAround(at, r, abort.signal);
+      const found = await speciesAround(at, r, abort.signal, this.periode);
       if (abort.signal.aborted || key !== this.scopeKey) return;
       const list = found.species.filter(s => s.plantId);
       this.species = { key, list, byPlant: new Map(list.map(s => [/** @type {number} */ (s.plantId), s])), plantOf: new Map(list.map(s => [s.taxonId, /** @type {number} */ (s.plantId)])) };
@@ -309,25 +334,44 @@ export class LayoutState extends EventTarget {
   }
 
   /**
-   * The observations of these iNaturalist taxa only, in the scope (the map's, when the search keeps a few of the
-   * plants of the scope: theirs are seldom among the most recent of all): loaded once for each set, `subset` then.
-   * None (an empty list): no subset.
-   * @param {number[]} taxa
+   * The observations of these plants (iNaturalist taxa) in the scope, of the period: what a map shows of the list
+   * (the plants the search keeps, or all the zone's) — every one of them, not the most recent of the whole zone. Asked
+   * in batches of BATCH taxa (each its POINTS_MAX / batches most recent, MAX_POINTS in all), each batch shown as it
+   * comes; loaded once for each set, the last SETS kept (two maps, two sets). null: no scope, or none.
+   * @param {number[]} taxa @returns {{ key: string, points: AroundPoint[], total: number, done: boolean } | null}
    */
-  pointsOf(taxa) {
+  pointsFor(taxa) {
     const at = this.live.at, r = this.radius;
-    const key = at && taxa.length ? `${this.scopeKey}|${taxa.join(',')}` : '';
-    if (key === this.subsetFor) return;
-    this.subsetFor = key;
-    this.subsetAbort?.abort();
-    this.subsetAbort = null;
-    if (!key || !at) { if (this.subset) { this.subset = null; this.#changed(); } return; }
-    const abort = this.subsetAbort = new AbortController();
-    observationPointsAround(at, r, abort.signal, taxa).then(found => {
-      if (abort.signal.aborted || this.subsetFor !== key) return;
-      this.subset = { key, points: found.points };
-      this.#changed();
-    }, () => {});
+    if (!at || !taxa.length) return null;
+    const ids = [...new Set(taxa)].sort((a, b) => a - b);
+    const key = `${this.scopeKey}|${ids.join(',')}`;
+    const had = this.sets.get(key);
+    if (had) { this.sets.delete(key); this.sets.set(key, had); return had; }
+    const abort = new AbortController();
+    const set = { key, points: /** @type {AroundPoint[]} */ ([]), total: 0, done: false, abort };
+    this.sets.set(key, set);
+    while (this.sets.size > SETS) {
+      const [oldest] = this.sets.values();
+      oldest.abort.abort();
+      this.sets.delete(oldest.key);
+    }
+    const batches = Array.from({ length: Math.ceil(ids.length / BATCH) }, (_, i) => ids.slice(i * BATCH, (i + 1) * BATCH));
+    const max = Math.max(200, Math.ceil(MAX_POINTS / batches.length / 200) * 200);
+    let left = batches.length;
+    const seen = new Set();
+    for (const batch of batches) {
+      observationPointsOf(at, r, batch, { periode: this.periode, max, signal: abort.signal }).then(found => {
+        if (abort.signal.aborted || this.sets.get(key) !== set) return;
+        const fresh = found.points.filter(p => !seen.has(p.url) && (seen.add(p.url), true));
+        set.points = [...set.points, ...fresh].sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? ''))).slice(0, MAX_POINTS);
+        set.total += found.total;
+      }, () => {}).finally(() => {
+        if (abort.signal.aborted || this.sets.get(key) !== set) return;
+        set.done = --left === 0;
+        this.#changed();
+      });
+    }
+    return set;
   }
 
   /**
@@ -337,12 +381,12 @@ export class LayoutState extends EventTarget {
    */
   gbifOf(want) {
     const at = this.live.at, r = this.radius;
+    // A map without GBIF asks nothing — and never takes another's away (they are let go with the zone).
     const key = want && at ? this.scopeKey : '';
-    if (key === this.gbifFor) return;
+    if (!key || !at || key === this.gbifFor) return;
     this.gbifFor = key;
     this.gbifAbort?.abort();
     this.gbifAbort = null;
-    if (!key || !at) { if (this.gbif || this.gbifError) { this.gbif = null; this.gbifError = null; this.#changed(); } return; }
     const abort = this.gbifAbort = new AbortController();
     observations3d(at, r, { inat: false, gbif: true }, abort.signal).then(found => {
       if (abort.signal.aborted || this.gbifFor !== key) return;
@@ -399,13 +443,16 @@ export class LayoutState extends EventTarget {
       if (this.plantInfo) { this.plantInfo = null; this.#changed(); }
     }
     const s = this.species;
-    const taxon = id && s ? s.byPlant.get(id)?.taxonId ?? null : null;
     const key = id && s ? id + '@' + s.key : '';
     if (key === this.obsFor) return;
     this.obsFor = key;
     if (!key || !this.live.at) { if (this.plantObs) { this.plantObs = null; this.#changed(); } return; }
+    // A plant not among the zone's (chosen elsewhere: the whole flora's results, a fixed plant): its taxon found by its
+    // name — its observations in the zone, if any, shown all the same (never an empty map without a word).
+    const taxon = s?.byPlant.get(id)?.taxonId ?? (this.plantInfo?.id === id ? await taxonIdOf(this.plantInfo.sci).catch(() => null) : null);
+    if (this.obsFor !== key) return;
     if (!taxon) { this.plantObs = { key, points: [] }; this.#changed(); return; }
-    const pts = await observationsAround(taxon, this.live.at, this.radius).catch(() => []);
+    const pts = await observationsAround(taxon, /** @type {[number, number]} */ (this.live.at), this.radius).catch(() => []);
     if (this.obsFor !== key) return;
     this.plantObs = { key, points: pts };
     this.#changed();
@@ -417,6 +464,8 @@ export class LayoutState extends EventTarget {
     this.abort?.abort();
     this.findAbort?.abort();
     this.gbifAbort?.abort();
+    for (const set of this.sets.values()) set.abort.abort();
+    this.sets.clear();
     if (this.scoped) { this.scoped = false; setSearchScope(null); whenReady().then(() => runSearch()); }
   }
 }

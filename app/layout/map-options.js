@@ -98,6 +98,32 @@ export function inWhen(date, when, now = new Date()) {
   return when === 'annee' ? Number(m[1]) === now.getFullYear() : Number(m[2]) === now.getMonth() + 1;
 }
 
+/** iNaturalist's taxon of all plants (a map of France or the world when the search keeps them all). */
+export const PLANTAE = 47126;
+
+/** What a map of France or of the world frames once (portee=): [lon, lat] corners. */
+export const WIDE_FRAMES = { france: [[-5.14, 41.33], [9.56, 51.09]], monde: [[-170, -56], [180, 75]] };
+
+/**
+ * A map of France or of the world (portee=): where these plants were observed, iNaturalist's tiles — squares far out
+ * (grid, to zoom 9), points closer —, of a period (`when`: core/nearby.js periodQuery). `taxa`: their iNaturalist
+ * taxa (null: all plants), the current plant's in its colour on top. Each tile layer: its key, its address, its zooms.
+ * @param {number[] | null} taxa @param {string} when @param {number | null} [plant] the current plant's taxon
+ * @returns {{ key: string, url: string, minZoom?: number, maxZoom?: number, opacity: number }[]}
+ */
+export function inatTiles(taxa, when, plant = null) {
+  const api = 'https://api.inaturalist.org/v1';
+  const of = (/** @type {number[]} */ ids, /** @type {string} */ color) => `taxon_id=${ids.join(',')}&quality_grade=research${when}&color=${encodeURIComponent(color)}`;
+  const all = of(taxa ?? [PLANTAE], '#5c8a00');
+  /** @type {{ key: string, url: string, minZoom?: number, maxZoom?: number, opacity: number }[]} */
+  const layers = [
+    { key: 'grid', url: `${api}/grid/{z}/{x}/{y}.png?${all}`, maxZoom: 9, opacity: 0.75 },
+    { key: 'points', url: `${api}/points/{z}/{x}/{y}.png?${all}`, minZoom: 10, opacity: 0.9 }
+  ];
+  if (plant) layers.push({ key: 'plant', url: `${api}/points/{z}/{x}/{y}.png?${of([plant], '#e0245e')}`, opacity: 1 });
+  return layers;
+}
+
 /** Under this width (px), a map cell « auto » has compact controls. */
 export const COMPACT_WIDTH = 360;
 

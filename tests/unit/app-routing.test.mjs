@@ -101,3 +101,19 @@ test('ce que règlent les commandes de la case n’est pas dans « Affiner » du
   for (const k of ['vue', 'opac', 'jumelles', 'jrayon', 'legende', 'etat']) assert.ok(!keys.includes(k), k);
   for (const k of ['base', '3d', 'layers', 'when']) assert.ok(keys.includes(k), k);
 });
+
+test('les liens d’une case (le constructeur) : ce qu’elle suit et change, et le réglage qui l’en détache', async () => {
+  const { linksOf, CURRENT } = await import('../../app/layout/registry.js');
+  const links = (/** @type {string} */ text) => linksOf(resolve(cellOf(text))).map(l => [l.link, l.on, l.toggle]);
+  assert.deepEqual(links('map'), [['zone', true, { portee: 'france' }], ['recherche', true, { suit: false }], ['periode', true, null], ['plante', true, { plante: 'non' }]]);
+  assert.deepEqual(links('map(france,suit=0,plante=non)'), [['zone', false, { portee: null }], ['recherche', false, { suit: null }], ['periode', true, null], ['plante', false, { plante: null }]]);
+  assert.deepEqual(links('results(zone=0)').map(l => l.slice(0, 2)), [['recherche', true], ['zone', false], ['periode', false], ['plante', true]]);
+  assert.deepEqual(links('plant.wikipedia'), [['plante', true, { plante: CURRENT }]]);
+  assert.deepEqual(links('plant(plante=128268)'), [['plante', false, { plante: null }]]);
+  assert.deepEqual(links('slot'), []);
+  // The map's reach: read, written short, a bare word.
+  assert.equal(read('map(france)').text, '[map(portee=france)]');
+  assert.equal(read('carte(monde)').text, '[map(portee=monde)]');
+  assert.equal(read('map(portee=zone)').text, '[map(portee=zone)]');
+  assert.equal(changed('map(portee=france)', { portee: 'zone' }), '[map]');
+});

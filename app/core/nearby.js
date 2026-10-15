@@ -28,6 +28,20 @@ export const DEFAULT_RADIUS = 5000;
 const area = ([lon, lat], radius) =>
   `lat=${lat.toFixed(5)}&lng=${lon.toFixed(5)}&radius=${(radius / 1000).toFixed(2)}`;
 
+/**
+ * A period in iNaturalist's words: this year's observations (`annee`), this month's of any year — what flowers now
+ * (`mois`); else every one ('' — `toujours`). @param {string | null | undefined} periode @param {Date} [now]
+ */
+export const periodQuery = (periode, now = new Date()) =>
+  periode === 'annee' ? `&year=${now.getFullYear()}` : periode === 'mois' ? `&month=${now.getMonth() + 1}` : '';
+
+/** A short sum of a list of ids (a cache key that stays short for hundreds of taxa). @param {number[]} ids */
+const idsKey = ids => {
+  let h = 5381;
+  for (const c of ids.join(',')) h = ((h * 33) ^ c.charCodeAt(0)) >>> 0;
+  return ids.length + '-' + h.toString(36);
+};
+
 /** iNaturalist page listing what this query counts. */
 export const exploreUrl = (/** @type {[number, number]} */ point, /** @type {number} */ radius, /** @type {number} */ taxonId = 0) =>
   `https://www.inaturalist.org/observations?${area(point, radius)}&quality_grade=research&${taxonId ? 'taxon_id=' + taxonId : 'iconic_taxa=Plantae'}`;
@@ -98,18 +112,20 @@ const lookup = (/** @type {{ exact: Map<string, FloraMatch>, loose: Map<string, 
   names.exact.get(fullName(name)) ?? (isHybrid(name) ? undefined : names.loose.get(binomial(name)));
 
 /**
- * Plant species observed in the circle, most observed first.
+ * Plant species observed in the circle, most observed first — of a period (periodQuery: this year, this month).
  * @param {[number, number]} point [lon, lat]
  * @param {number} radius metres
  * @param {AbortSignal} [signal]
+ * @param {string | null} [periode]
  * @returns {Promise<NearbyResult>}
  */
-export async function speciesAround(point, radius, signal) {
+export async function speciesAround(point, radius, signal, periode = null) {
   if (!moduleOn('inaturalist')) throw new ModuleOffError('inaturalist');
+  const when = periodQuery(periode);
   // « around2 »: the results cached before the licences were read (every photo kept) are not used again.
-  const key = `around2:${area(point, radius)}`;
+  const key = `around2:${area(point, radius)}${when}`;
   const raw = await cached(key, async () => {
-    const data = await json(`${API}/observations/species_counts?${area(point, radius)}&iconic_taxa=Plantae&quality_grade=research&locale=fr&per_page=500`, signal);
+    const data = await json(`${API}/observations/species_counts?${area(point, radius)}&iconic_taxa=Plantae&quality_grade=research&locale=fr&per_page=500${when}`, signal);
     return (data.results || []).map(r => {
       // The taxon's photo only under a free licence, with its credit; else none (the flora's thumbnail, if any).
       const photo = r.taxon.default_photo?.square_url || null;
@@ -223,6 +239,42 @@ export async function observationPointsAround(point, radius, signal, taxa) {
     return { points, total: Number(data.total_results) || points.length };
   });
   return withThumbs(found);
+}
+
+/**
+ * Where these plants (iNaturalist taxa: those a search keeps, the zone's — 300 at most a call) were observed in the
+ * circle, of a period: their `max` most recent research-grade observations (200 a page), each with its plant's photo,
+ * names, date and place — the points of a map that shows the list —, and how many there are in all. Cached a day.
+ * @param {[number, number]} point @param {number} radius @param {number[]} taxa
+ * @param {{ periode?: string | null, max?: number, signal?: AbortSignal }} [o]
+ * @returns {Promise<{ points: AroundPoint[], total: number }>}
+ */
+export async function observationPointsOf(point, radius, taxa, { periode = null, max = 400, signal } = {}) {
+  if (!moduleOn('inaturalist')) throw new ModuleOffError('inaturalist');
+  const ids = [...new Set(taxa)].sort((a, b) => a - b);
+  const when = periodQuery(periode);
+  let partial = false;
+  const found = await cached(`around-set1:${area(point, radius)}${when}:${max}:${idsKey(ids)}`, async () => {
+    const page = await paged(`${area(point, radius)}&taxon_id=${ids.join(',')}&quality_grade=research&locale=fr&order_by=observed_on${when}`, max, signal);
+    partial = page.partial;
+    return { points: page.results.map(aroundPoint), total: page.total };
+  }, () => partial);
+  return withThumbs(found);
+}
+
+/**
+ * iNaturalist's taxon for a name of the flora (a species, a genus, a family: « Orchidaceae »), or null: none. Cached
+ * a day (a name found once is not asked again). @param {string} name @param {AbortSignal} [signal] @returns {Promise<number | null>}
+ */
+export function taxonIdOf(name, signal) {
+  if (!moduleOn('inaturalist')) return Promise.reject(new ModuleOffError('inaturalist'));
+  const q = String(name).trim();
+  return cached(`inat-taxon1:${q.toLowerCase()}`, async () => {
+    const data = await json(`${API}/taxa?q=${encodeURIComponent(q)}&is_active=true&per_page=5&locale=fr`, signal);
+    const want = fullName(q);
+    const hit = (data.results || []).find((/** @type {any} */ t) => fullName(t.name) === want) ?? null;
+    return hit ? Number(hit.id) : null;
+  });
 }
 
 /**

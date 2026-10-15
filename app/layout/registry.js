@@ -99,8 +99,14 @@ const MAP_PARAMS = {
     kind: 'intent', label: 'Intention', def: 'explorer', values: labels(MAP_INTENTS), aliases: MAP_INTENT_ALIASES, words: ['intention', 'usage', 'pour'],
     bundles: Object.fromEntries(Object.entries(MAP_INTENTS).map(([k, v]) => [k, v.set]))
   },
-  // Où: the map's own scope, until the address says one (no at= nor place=); the address' always wins, and the scope
-  // stays the layout's, shared by every cell.
+  // Où: how far it sees — the zone (its circle, the observations of the plants found in it), the whole of France or
+  // the world (the plants found, observed there: iNaturalist's tiles) —; the map's own scope, until the address says
+  // one (no at= nor place=); the address' always wins, and the scope stays the layout's, shared by every cell.
+  portee: {
+    kind: 'enum', label: 'Étendue', def: 'zone', group: 'Où', values: { zone: 'La zone', france: 'La France', monde: 'Le monde' },
+    aliases: { ici: 'zone', cercle: 'zone', pays: 'france', fr: 'france', world: 'monde', terre: 'monde', planete: 'monde', global: 'monde' },
+    words: ['etendue', 'echelle', 'scope', 'reach']
+  },
   r: { ...RADIUS, group: 'Où' },
   lieu: { kind: 'text', label: 'Lieu de départ', def: null, group: 'Où', words: ['place', 'commune', 'ville', 'adresse'] },
   autour: { kind: 'bool', label: 'Autour de moi au départ', def: false, group: 'Où', words: ['around', 'moi', 'gps', 'position'] },
@@ -694,4 +700,64 @@ export function menuLooks(columns) {
     if (labels.length > 1) m.nth = labels.indexOf(m.label) + 1;
   }
   return items;
+}
+
+/**
+ * @typedef {'zone' | 'recherche' | 'periode' | 'plante'} LinkKey
+ * @typedef {{ link: LinkKey, on: boolean, why: string, toggle: Record<string, unknown> | null }} Link
+ *   `on`: the cell follows (and changes) that shared state; `toggle`: its settings detached or attached again (null:
+ *   always so — said, never a switch); `why`: what it does, in French
+ */
+
+/** In a link's toggle: the current plant's number, put there by the layout (a plant cell fixed on it). */
+export const CURRENT = 'courante';
+
+/** The links, in their order, and their words. @type {Record<LinkKey, string>} */
+export const LINKS = { zone: 'Zone', recherche: 'Recherche', periode: 'Période', plante: 'Plante' };
+
+/**
+ * How a cell is wired to the others — what of the layout's shared state it follows and changes (the zone, the
+ * search, the period, the current plant), and the setting that detaches it from one, or attaches it again: the
+ * builder's chips in each cell's head. A place to build in, an unknown component: none.
+ * @param {Resolved} r @returns {Link[]}
+ */
+export function linksOf(r) {
+  if (!r.known || r.spec.empty) return [];
+  const p = r.params, id = r.spec.id;
+  /** @type {Link[]} */
+  const out = [];
+  const add = (/** @type {LinkKey} */ link, /** @type {boolean} */ on, /** @type {string} */ why, /** @type {Record<string, unknown> | null} */ toggle = null) => out.push({ link, on, why, toggle });
+  // The current plant: shown (a fixed one detaches it), chosen by a touch (toucher, ecrit).
+  const chooses = (/** @type {string} */ what) => p.ecrit === false ? `Toucher ${what} ouvre sa fiche, sans changer la plante courante`
+    : p.toucher === 'rien' ? `Toucher ${what} ne fait rien` : p.toucher === 'fiche' ? `Toucher ${what} ouvre sa fiche` : `Toucher ${what} en fait la plante courante`;
+  if (id === 'map') {
+    const zone = p.portee === 'zone';
+    add('zone', zone, zone ? 'Montre la zone ; l’appui long, le rayon la déplacent' : `Montre ${p.portee === 'france' ? 'toute la France' : 'le monde'} (l’appui long y pose la zone)`,
+      { portee: zone ? 'france' : null });
+    add('recherche', p.suit !== false, p.suit !== false ? 'Ses points : les plantes que garde la recherche' : 'Ses points : toutes les plantes de la zone', { suit: p.suit === false ? null : false });
+    add('periode', true, 'Ses points : ceux de la période de toutes les cases');
+    add('plante', p.plante !== 'non', p.plante === 'non' ? 'La plante courante n’y est pas montrée' : 'La plante courante en grand ; toucher un point la choisit',
+      { plante: p.plante === 'non' ? null : 'non' });
+  } else if (id === 'place') {
+    add('zone', true, 'Choisit la zone de toutes les cases');
+  } else if (id === 'search' || id === 'filters') {
+    add('recherche', true, 'La recherche de toutes les cases : ce qu’on y tape, ses filtres');
+    add('zone', true, 'Ses plantes : celles de la zone');
+    if (id === 'search') add('plante', p.ecrit !== false, chooses('une plante'), { ecrit: p.ecrit === false ? null : false });
+  } else if (id === 'results') {
+    add('recherche', true, 'Les plantes que garde la recherche');
+    add('zone', p.zone !== false, p.zone !== false ? 'Ses plantes : celles de la zone' : 'Toute la France, quelle que soit la zone', { zone: p.zone === false ? null : false });
+    add('periode', p.zone !== false, 'Celles de la zone pendant la période de toutes les cases');
+    add('plante', p.ecrit !== false, chooses('une plante'), { ecrit: p.ecrit === false ? null : false });
+  } else if (id === 'deck') {
+    add('zone', true, 'Ses cartes : les plantes de la zone');
+    add('recherche', true, 'Ses cartes : celles que garde la recherche');
+    add('plante', p.ecrit !== false, p.ecrit !== false ? 'La carte du dessus est la plante courante' : 'Ses cartes vont leur chemin, sans changer la plante courante', { ecrit: p.ecrit === false ? null : false });
+  } else {
+    // A plant's sheet, one of its blocks, its photos: the current plant, or one of its own (fixed: plante=).
+    const fixed = p.plante != null;
+    // Attached again: the current plant followed; detached: the current one fixed (gf-layout.js puts its number for CURRENT).
+    add('plante', !fixed, fixed ? 'Montre toujours sa plante fixée' : 'Montre la plante courante', { plante: fixed ? null : CURRENT });
+  }
+  return out;
 }

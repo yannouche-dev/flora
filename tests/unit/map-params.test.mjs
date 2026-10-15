@@ -20,7 +20,7 @@ const params = text => read(text).cell.params;
 
 test('chaque réglage de la carte se lit : ses noms, ses valeurs, leurs autres graphies', () => {
   const p = params('map(r=2km;lieu=Mirabel Ménétrol 63;autour=1;base=photo;3d=1;layers=znieff+n2000;src=inat+gbif;when=mois;pts=pastille;regroupe=1;suit=0;plante=seule;toucher=fiche;ui=nue)');
-  assert.deepEqual(p, { intent: 'explorer', r: 2000, lieu: 'Mirabel Ménétrol 63', autour: true, base: 'photo', '3d': true, layers: ['znieff', 'n2000'], src: ['inat', 'gbif'],
+  assert.deepEqual(p, { intent: 'explorer', portee: 'zone', r: 2000, lieu: 'Mirabel Ménétrol 63', autour: true, base: 'photo', '3d': true, layers: ['znieff', 'n2000'], src: ['inat', 'gbif'],
     when: 'mois', pts: 'pastille', regroupe: true, suit: false, plante: 'seule', toucher: 'fiche', ui: 'nue', tete: 'oui', titre: null, actions: [], ctl: null,
     vue: null, opac: null, jumelles: null, jrayon: null, legende: false, etat: 'ouvert' });
   // In French, its other words, accents and case free.
@@ -29,7 +29,7 @@ test('chaque réglage de la carte se lit : ses noms, ses valeurs, leurs autres g
     [500, 'Fontainebleau 77', true, 'photo', false, ['n2000', 'znieff1'], ['inat'], 'annee', 'pastille', true, false, 'seule', 'fiche', 'compacte']);
   // Defaults: the map as it always was.
   const d = params('map');
-  assert.deepEqual(d, { intent: 'explorer', r: null, lieu: null, autour: false, base: 'photo', '3d': null, layers: [], src: ['inat'], when: 'toujours', pts: 'photo',
+  assert.deepEqual(d, { intent: 'explorer', portee: 'zone', r: null, lieu: null, autour: false, base: 'photo', '3d': null, layers: [], src: ['inat'], when: 'toujours', pts: 'photo',
     regroupe: false, suit: true, plante: 'grand', toucher: 'plante', ui: 'auto', tete: 'oui', titre: null, actions: [], ctl: null,
     vue: null, opac: null, jumelles: null, jrayon: null, legende: false, etat: 'ouvert' });
   assert.equal(read('map').text, '[map]');
