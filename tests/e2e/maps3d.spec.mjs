@@ -482,8 +482,8 @@ test('une carte de la disposition en 3D : ses points tous là, opaques, quand la
 
   // Their slider moves the zone (its handle's way): 5 km — the zone's, theirs with it, still one circle; no radius
   // of their own written in the address (they follow the zone).
-  // (Its chip by its event: on a phone, the map's credits, long here, lie over the bottom of the map.)
-  await map.locator('.gf-o3-chip').dispatchEvent('click');
+  // Its chip touched for real: on a phone the map's credits, long here, run over it — a touch goes through them.
+  await map.locator('.gf-o3-chip').click();
   const panel = map.locator('.gf-o3-panel');
   await expect(panel.locator('.gf-o3-value')).toHaveText('3 km');
   await expect(panel).toContainText('Autour de la zone de la page');
