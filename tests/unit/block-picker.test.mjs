@@ -42,7 +42,7 @@ test('les groupes de réglages : ceux du composant, puis le cadre ; leur ligne ;
 
 test('le contrôle de chaque sorte de réglage', () => {
   const m = spec('map').params;
-  assert.equal(controlOf(m.base), 'segmented');      // two values and « Par défaut »
+  assert.equal(controlOf(m.base), 'segmented');      // two values
   assert.equal(controlOf(m.ui), 'segmented');        // four
   assert.equal(controlOf(m['3d']), 'segmented');     // yes, no, as the settings say
   assert.equal(controlOf(m.regroupe), 'switch');
@@ -52,7 +52,7 @@ test('le contrôle de chaque sorte de réglage', () => {
   assert.equal(controlOf(m.intent), 'cards');
   assert.equal(controlOf(spec('plant').params.plante), 'id');
   assert.equal(controlOf({ kind: 'enum', label: 'x', def: 'a', values: { a: 'A', b: 'B', c: 'C', d: 'D', e: 'E' } }), 'select');
-  assert.deepEqual(optionsOf(m.base).map(o => o.label), ['Par défaut', 'Photos aériennes', 'Plan IGN']);
+  assert.deepEqual(optionsOf(m.base).map(o => o.label), ['Photos aériennes', 'Plan IGN']);
   assert.deepEqual(optionsOf(m['3d']).map(o => o.value), [null, true, false]);
   assert.equal(cleanWords(' Mirabel, (Ménétrol) = 63 '), 'Mirabel Ménétrol 63');
 });
@@ -60,7 +60,8 @@ test('le contrôle de chaque sorte de réglage', () => {
 test('changer un réglage, une intention, un composant : le texte canonique de la case', () => {
   const c = /** @type {any} */ (cellOf('carte(floraison;rayon=2km)'));
   assert.equal(cellText(c), 'carte(floraison,rayon=2km)');
-  assert.equal(setParam(c, 'base', 'photo'), 'map(floraison,r=2km,base=photo)');
+  assert.equal(setParam(c, 'base', 'plan'), 'map(floraison,r=2km,base=plan)');
+  assert.equal(setParam(c, 'base', 'photo'), 'map(floraison,r=2km)');
   // What the intent gives: left out; against it: written.
   assert.equal(setParam(c, 'regroupe', true), 'map(floraison,r=2km)');
   assert.equal(setParam(c, 'when', 'toujours'), 'map(floraison,r=2km,when=toujours)');
@@ -83,8 +84,8 @@ test('changer un réglage, une intention, un composant : le texte canonique de l
 });
 
 test('la place qu’il faut, les suggestions selon les autres cases', () => {
-  assert.equal(fitReason(spec('map'), { w: 200, h: 400 }), '« Carte » demande 240 px de large (la case en a 200)');
-  assert.equal(fitReason(spec('deck'), { w: 300, h: 200 }), '« Rencontres » demande 360 px de haut (la case en a 200)');
+  assert.equal(fitReason(spec('map'), { w: 200, h: 400 }), 'Un peu étroit pour « Carte » : 240 px de large conseillés (la case en a 200)');
+  assert.equal(fitReason(spec('deck'), { w: 300, h: 200 }), 'Un peu bas pour « Rencontres » : 360 px de haut conseillés (la case en a 200)');
   assert.equal(fitReason(spec('map'), { w: 400, h: 400 }), null);
   assert.equal(fitReason(spec('map'), null), null);
   // Nothing chooses a plant: those that do.

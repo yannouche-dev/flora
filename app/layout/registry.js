@@ -16,13 +16,14 @@
 import { fold } from '../core/fold.js';
 import { BLOCKS } from '../core/sheet-blocks.js';
 import { blockCategory, categoryOf } from '../core/categories.js';
-import { MAP_CONTROL_ALIASES, MAP_CONTROLS, MAP_INTENT_ALIASES, MAP_INTENTS, MAP_LAYER_ALIASES, MAP_LAYERS, defaultControls } from './map-options.js';
+import { MAP_CONTROL_ALIASES, MAP_CONTROLS, MAP_INTENT_ALIASES, MAP_INTENTS, MAP_LAYER_ALIASES, MAP_LAYERS, defaultControls, layerWord, readOpacities, readView } from './map-options.js';
 
 /**
  * @typedef {'distance' | 'enum' | 'bool' | 'list' | 'text' | 'intent' | 'id'} ParamKind
  * @typedef {{ kind: ParamKind, label: string, def: unknown, values?: Record<string, string>, aliases?: Record<string, string>, words?: string[],
  *   off?: string[], group?: string, mark?: string, bundles?: Record<string, Record<string, string>>, defOf?: (params: Record<string, any>) => unknown,
- *   named?: boolean, max?: number, frame?: boolean }} ParamSpec
+ *   named?: boolean, max?: number, frame?: boolean, own?: boolean, more?: (word: string) => string | undefined, ordered?: boolean,
+ *   read?: (text: string) => string | undefined }} ParamSpec
  *   `values`: an enum's (a list's, an intent's) canonical values and their French labels; `aliases`: other spellings of
  *   a value → canonical; `words`: other names of the parameter; `off`: words that, alone, set a yes-or-no one to no
  *   (map(2d)); `group`: its heading in the editor and the README (Où, Fond…); `mark`: its mark in a menu (cellMark),
@@ -33,6 +34,11 @@ import { MAP_CONTROL_ALIASES, MAP_CONTROLS, MAP_INTENT_ALIASES, MAP_INTENTS, MAP
  *   parameters (`bundles`: each value's, as the address writes them), which a parameter written beside it overrides;
  *   `id` — a plant's number (plante=128268). `max`: a text's characters at most (80 else); `frame`: one of the frame
  *   every cell shares (FRAME below: its head, its actions, its empty state, its links), not the component's own.
+ *   `own`: set by the cell's own controls (the map's 3D, its layers' opacity, its view…), never in the editor's
+ *   « Affiner » nor a mark — the address keeps what was done in the cell. A list's `more`: a word beyond its values that
+ *   it takes all the same, canonical (layers: a layer of IGN's catalogue « ign:<id> »), else undefined; `ordered`: its
+ *   values in the order written (layers: the last drawn on top), not the parameter's. A text's `read`: its words
+ *   checked, canonical (vue: « 45.77/3.08/13 »), else undefined.
  * @typedef {'scope' | 'query' | 'results' | 'plant' | 'obs'} StateKey
  * @typedef {{ key: string, title: string }} ViewSpec
  * @typedef {object} ComponentSpec
@@ -98,21 +104,36 @@ const MAP_PARAMS = {
   r: { ...RADIUS, group: 'Où' },
   lieu: { kind: 'text', label: 'Lieu de départ', def: null, group: 'Où', words: ['place', 'commune', 'ville', 'adresse'] },
   autour: { kind: 'bool', label: 'Autour de moi au départ', def: false, group: 'Où', words: ['around', 'moi', 'gps', 'position'] },
-  // Fond.
-  base: { kind: 'enum', label: 'Fond de carte', def: null, group: 'Fond', values: { photo: 'Photos aériennes', plan: 'Plan IGN' }, aliases: { photos: 'photo', ortho: 'photo', satellite: 'photo', ign: 'plan', carte: 'plan' }, words: ['fond', 'layer'] },
+  // The view it starts on (its centre, its zoom; in 3D its tilt and turn), the map moved in « Créer une app »: else
+  // framed on the zone.
+  vue: { kind: 'text', label: 'Cadrage de départ', def: null, group: 'Où', own: true, named: true, max: 60, read: readView, words: ['view', 'cadrage', 'camera'] },
+  // Fond: the photos unless it says (a layout's map is the same for everyone: never the Carte's shared choice).
+  base: { kind: 'enum', label: 'Fond de carte', def: 'photo', group: 'Fond', values: { photo: 'Photos aériennes', plan: 'Plan IGN' }, aliases: { photos: 'photo', ortho: 'photo', satellite: 'photo', ign: 'plan', carte: 'plan' }, words: ['fond', 'layer'] },
   '3d': { kind: 'bool', label: 'Vue 3D', def: null, group: 'Fond', mark: '3D', off: ['2d', 'plat', 'plate'], words: ['vue3d', 'relief3d', 'rendu'] },
   // Couches.
-  layers: { kind: 'list', label: 'Couches', def: [], group: 'Couches', values: labels(MAP_LAYERS), aliases: MAP_LAYER_ALIASES, words: ['couches', 'calques', 'overlays', 'couche'] },
+  // Any layer of IGN's catalogue too (ign:<id>), in the order drawn (the last on top); their opacity when not the usual.
+  layers: {
+    kind: 'list', label: 'Couches', def: [], group: 'Couches', values: labels(MAP_LAYERS), aliases: MAP_LAYER_ALIASES, more: layerWord, ordered: true,
+    words: ['couches', 'calques', 'overlays', 'couche']
+  },
+  opac: { kind: 'text', label: 'Opacité des couches', def: null, group: 'Couches', own: true, named: true, max: 400, read: readOpacities, words: ['opacite', 'opacity', 'transparence'] },
   // Points.
   src: { kind: 'list', label: 'Sources des points', def: ['inat'], group: 'Points', mark: 'So', values: { inat: 'iNaturalist', gbif: 'GBIF' }, aliases: { inaturalist: 'inat' }, words: ['sources', 'source', 'donnees'] },
   when: { kind: 'enum', label: 'Période', def: 'toujours', group: 'Points', values: { toujours: 'Toujours', annee: 'Cette année', mois: 'Ce mois-ci' }, aliases: { tout: 'toujours', always: 'toujours', year: 'annee', an: 'annee', cetteannee: 'annee', month: 'mois', cemois: 'mois' }, words: ['quand', 'periode', 'date', 'dates'] },
   pts: { kind: 'enum', label: 'Style des points', def: 'photo', group: 'Points', values: { photo: 'Photos', pastille: 'Pastilles' }, aliases: { pastilles: 'pastille', dots: 'pastille', ronds: 'pastille', points: 'pastille' }, words: ['points', 'style', 'marqueurs'] },
   regroupe: { kind: 'bool', label: 'Plante courante en groupes', def: false, group: 'Points', mark: 'G', words: ['cluster', 'groupes', 'grouper', 'regrouper', 'groupe'] },
+  // « Observations autour » of the map in 3D (the binoculars): on with its sources (absent: off; aucune: on, none), its radius.
+  jumelles: {
+    kind: 'list', label: 'Observations autour (3D)', def: null, group: 'Points', own: true, named: true, values: { inat: 'iNaturalist', gbif: 'GBIF', densite: 'Densité' },
+    aliases: { inaturalist: 'inat', density: 'densite', hex: 'densite' }, words: ['binoculars', 'autour3d', 'observationsautour']
+  },
+  jrayon: { kind: 'distance', label: 'Rayon des observations autour', def: null, group: 'Points', own: true, named: true, words: ['rayon3d', 'jumellesrayon'] },
   // Liens: how the map follows the layout's state, and changes it.
   suit: { kind: 'bool', label: 'Suit la recherche', def: true, group: 'Liens', mark: 'R', words: ['suivre', 'recherche', 'filtre'] },
   plante: { kind: 'enum', label: 'Plante courante', def: 'grand', group: 'Liens', values: { grand: 'En grand', seule: 'Seule', non: 'Pas montrée' }, aliases: { large: 'grand', only: 'seule', seulement: 'seule', off: 'non', aucune: 'non' }, words: ['plant', 'courante'] },
   toucher: { kind: 'enum', label: 'Toucher un point', def: 'plante', group: 'Liens', values: { plante: 'Choisit sa plante', fiche: 'Ouvre sa fiche', rien: 'Rien' }, aliases: { pick: 'plante', choisir: 'plante', sheet: 'fiche', ouvrir: 'fiche', none: 'rien', aucun: 'rien' }, words: ['tap', 'clic', 'click', 'touch', 'touche'] },
   // Interface.
+  legende: { kind: 'bool', label: 'Légende ouverte', def: false, group: 'Interface', own: true, named: true, words: ['legend'] },
   ui: { kind: 'enum', label: 'Commandes', def: 'auto', group: 'Interface', values: { auto: 'Selon la largeur', complete: 'Complètes', compacte: 'Compactes', nue: 'Aucune' }, aliases: { full: 'complete', completes: 'complete', compact: 'compacte', compactes: 'compacte', nu: 'nue', minimal: 'nue', minimale: 'nue', aucune: 'nue' }, words: ['interface', 'commandes', 'controles'] },
   // Which controls, exactly (map-options.js MAP_CONTROLS); not written: those of `ui` and the intent (defaultControls).
   ctl: {
@@ -144,6 +165,11 @@ const FRAME = {
     aliases: { maximize: 'agrandir', maximiser: 'agrandir', pleinecran: 'agrandir', plein: 'agrandir', agrandi: 'agrandir', collapse: 'replier', plier: 'replier',
       fold: 'replier', reduire: 'replier', share: 'partager', partage: 'partager', lien: 'partager' },
     words: ['action', 'boutons', 'outils']
+  },
+  // Folded to its head by « Replier » (written by the action itself).
+  etat: {
+    kind: 'enum', label: 'État de la case', def: 'ouvert', group: 'Cadre', frame: true, own: true, named: true, values: { ouvert: 'Ouverte', replie: 'Repliée' },
+    aliases: { ouverte: 'ouvert', open: 'ouvert', repliee: 'replie', plie: 'replie', pliee: 'replie', folded: 'replie' }, words: ['state', 'pli']
   },
   vide: {
     kind: 'enum', label: 'Sans rien à montrer', def: 'message', group: 'Cadre', frame: true, values: { message: 'Un message', masque: 'Case masquée' },
@@ -185,7 +211,7 @@ export function touchOf(r) {
 }
 
 /** The frame's settings of a component, in their order (FRAME). @param {string} id @returns {Record<string, ParamSpec>} */
-const frameOf = id => Object.fromEntries(Object.entries(FRAME).filter(([k]) => ['tete', 'titre', 'actions', ...(FRAME_OF[id] ?? [])].includes(k)));
+const frameOf = id => Object.fromEntries(Object.entries(FRAME).filter(([k]) => ['tete', 'titre', 'actions', 'etat', ...(FRAME_OF[id] ?? [])].includes(k)));
 
 /** French names of the sheet's blocks (folded) → their key (sheet-blocks.js#BLOCKS). */
 const BLOCK_ALIASES = {
@@ -384,10 +410,16 @@ const NONE = new Set(['aucune', 'aucun', 'non', 'none', 'rien', '0', 'sans']);
 export function readList(p, text) {
   const words = String(text).split(/[+/\s]+/).map(w => w.trim()).filter(Boolean);
   if (words.length === 1 && NONE.has(key(words[0]))) return { values: [], unknown: [] };
-  /** @type {Set<string>} */ const found = new Set();
+  /** @type {string[]} */ const found = [];
   /** @type {string[]} */ const unknown = [];
-  for (const w of words) { const v = oneValue(p, key(w)); if (v === undefined) unknown.push(w); else found.add(v); }
-  return { values: Object.keys(p.values ?? {}).filter(v => found.has(v)), unknown };
+  for (const w of words) {
+    const v = oneValue(p, key(w)) ?? p.more?.(w);
+    if (v === undefined) unknown.push(w);
+    else if (!found.includes(v)) found.push(v);
+  }
+  // In the parameter's order (those it takes beyond its values after them), or as written (`ordered`).
+  const values = p.ordered ? found : [...Object.keys(p.values ?? {}).filter(v => found.includes(v)), ...found.filter(v => !(v in (p.values ?? {})))];
+  return { values, unknown };
 }
 
 /** Free words, as the address keeps them: one line, 80 characters at most (`max`; null: none). @param {string} text @param {number} [max] */
@@ -400,7 +432,7 @@ const cleanWords = (text, max = 80) => String(text).replace(/\p{Cc}/gu, ' ').rep
  */
 export function readValue(p, text) {
   if (p.kind === 'distance') return parseDistance(text) ?? undefined;
-  if (p.kind === 'text') return cleanWords(text, p.max) ?? undefined;
+  if (p.kind === 'text') { const w = cleanWords(text, p.max); return w === null ? undefined : p.read ? p.read(w) : w; }
   if (p.kind === 'id') return /^\s*\d{1,9}\s*$/.test(text) && Number(text) > 0 ? Number(text) : undefined;
   if (p.kind === 'list') {
     const l = readList(p, text);
@@ -529,6 +561,25 @@ export function canonical(cell, r = resolve(cell)) {
 }
 
 /**
+ * A cell with one of its settings changed (the block picker, the cell's own controls: a map's 3D, its layers…): what
+ * wrote it gives way (its name, or a bare value it reads: map(20km), map(terrain)), the new value written — unless the
+ * cell has that value without it (its default, the one the others make, its intent's: then left out, the address
+ * stays short). null: back to the default (or the intent's). The cell as it is when the setting is not one of its own.
+ * @param {import('./grammar.js').CellNode} cell @param {string} key @param {unknown} v @returns {import('./grammar.js').CellNode}
+ */
+export function withParam(cell, key, v) {
+  const r = resolve(cell);
+  if (!r.known || !r.spec.params[key]) return cell;
+  const ps = r.spec.params[key];
+  const params = cell.params.filter(p => paramName(r.spec, p) !== key);
+  const without = resolve({ ...cell, params });
+  const was = without.known ? without.params[key] ?? defaultOf(ps, without.params) : ps.def;
+  const empty = v === null || v === undefined || v === '';
+  if (!empty && !same(v, was)) params.push({ key, value: valueText(ps, v) });
+  return { ...cell, params };
+}
+
+/**
  * A whole layout resolved: its canonical tree, each cell's resolution by path ('0', '2.1'), and every problem with
  * the path of its cell. @param {import('./grammar.js').ListNode} tree
  * @returns {{ tree: import('./grammar.js').ListNode, cells: Map<string, Resolved>, problems: { path: string, message: string }[] }}
@@ -590,8 +641,8 @@ export function cellMark(r) {
   if (!r.known) return null;
   const first = (/** @type {string} */ s) => fold(s).charAt(0);
   const lower = (/** @type {string} */ s) => s.charAt(0).toLowerCase() + s.slice(1);
-  // Not the frame's (its head, its links: said in the cell itself, never a mark).
-  const marks = Object.entries(r.spec.params).filter(([k, p]) => !p.frame && p.kind !== 'distance' && p.kind !== 'text' && r.given.has(k) && !same(r.params[k], defaultOf(p, r.params)) && !asIntent(r, k)).map(([k, p]) => {
+  // Not the frame's (its head, its links: said in the cell itself, never a mark), nor what the cell's own controls set.
+  const marks = Object.entries(r.spec.params).filter(([k, p]) => !p.frame && !p.own && p.kind !== 'distance' && p.kind !== 'text' && r.given.has(k) && !same(r.params[k], defaultOf(p, r.params)) && !asIntent(r, k)).map(([k, p]) => {
     const letter = p.mark ?? p.label.charAt(0).toUpperCase();
     if (p.kind === 'bool') return r.params[k] ? { label: lower(p.label), short: letter } : { label: 'sans ' + lower(p.label), short: '−' + letter };
     // A list: its words after the parameter's (« couches : ZNIEFF (types I et II), Natura 2000 »), the parameter's letter.

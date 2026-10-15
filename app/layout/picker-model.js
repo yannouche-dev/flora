@@ -7,7 +7,7 @@
 // canonical text (registry.js#canonical), without its share: its host writes it where the cell is. Pure, tested under
 // Node (tests/unit/block-picker.test.mjs).
 
-import { canonical, COMPONENTS, defaultOf, paramName, resolve, same, valueText } from './registry.js';
+import { canonical, COMPONENTS, paramName, resolve, withParam } from './registry.js';
 import { parse, serialize } from './grammar.js';
 import { intentKey } from './summary.js';
 
@@ -35,7 +35,8 @@ export const OWN = 'Réglages';
 export function groupsOf(spec) {
   /** @type {Map<string, string[]>} */
   const groups = new Map();
-  const keys = Object.keys(spec.params).filter(k => spec.params[k].kind !== 'intent');
+  // Not what the cell's own controls set (a map's 3D, its view, its folding): done in the cell, kept in the address.
+  const keys = Object.keys(spec.params).filter(k => spec.params[k].kind !== 'intent' && !spec.params[k].own);
   const add = (/** @type {string} */ name, /** @type {string} */ k) => groups.set(name, [...(groups.get(name) ?? []), k]);
   for (const k of keys) if (!spec.params[k].frame && !spec.params[k].group) add(OWN, k);
   for (const k of keys) if (!spec.params[k].frame && spec.params[k].group) add(/** @type {string} */ (spec.params[k].group), k);
@@ -94,17 +95,7 @@ const write = cell => cellText(canonical(cell));
  * canonical text.
  * @param {CellNode} cell @param {string} key @param {unknown} v @returns {string}
  */
-export function setParam(cell, key, v) {
-  const r = resolve(cell);
-  if (!r.known || !r.spec.params[key]) return write(cell);
-  const ps = r.spec.params[key];
-  const params = cell.params.filter(p => paramName(r.spec, p) !== key);
-  const without = resolve({ ...cell, params });
-  const was = without.known ? without.params[key] ?? defaultOf(ps, without.params) : ps.def;
-  const empty = v === null || v === undefined || v === '';
-  if (!empty && !same(v, was)) params.push({ key, value: valueText(ps, v) });
-  return write({ ...cell, params });
-}
+export const setParam = (cell, key, v) => write(withParam(cell, key, v));
 
 /** Whether a setting is kept when the intent changes or comes back: the frame's, and where the cell is (Où). @param {ParamSpec} ps */
 const kept = ps => Boolean(ps.frame) || ps.group === 'Où';
@@ -152,14 +143,15 @@ export function choose(cell, id, view = null) {
 }
 
 /**
- * Why a component does not fit a cell, or null: its least width and height (registry.js `min`) against the room the
- * cell has (px; unknown: it fits). « « Carte » demande 240 px de large ».
+ * Whether a cell is narrow for a component, or null: its least width and height (registry.js `min`) against the room
+ * the cell has (px; unknown: it fits) — advice only, never a block refused (a cell can be made larger afterwards).
+ * « Un peu étroit pour « Carte » : 240 px de large conseillés (la case en a 200) ».
  * @param {ComponentSpec} spec @param {{ w: number, h: number } | null | undefined} room @returns {string | null}
  */
 export function fitReason(spec, room) {
   if (!room || !(room.w > 0) || !(room.h > 0)) return null;
-  if (room.w < spec.min.w) return `« ${spec.title} » demande ${spec.min.w} px de large (la case en a ${Math.round(room.w)})`;
-  if (room.h < spec.min.h) return `« ${spec.title} » demande ${spec.min.h} px de haut (la case en a ${Math.round(room.h)})`;
+  if (room.w < spec.min.w) return `Un peu étroit pour « ${spec.title} » : ${spec.min.w} px de large conseillés (la case en a ${Math.round(room.w)})`;
+  if (room.h < spec.min.h) return `Un peu bas pour « ${spec.title} » : ${spec.min.h} px de haut conseillés (la case en a ${Math.round(room.h)})`;
   return null;
 }
 

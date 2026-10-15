@@ -114,15 +114,16 @@ export class GfBuilder extends LitElement {
     this._copied = false;
   }
 
-  /** The route the layout is given: made anew only when the address says another layout or state (not at each render). */
+  /**
+   * The route the layout is given: made anew at each move of the address (a link, Back, Forward — router.js), never
+   * at a mere render. Even to the layout and state it was last given: the layout replaces the address as it is built
+   * (no route then), so Back may well return to them — and the layout then follows them again.
+   */
   #layoutRoute = { name: 'layout', spec: '', search: '' };
 
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
-    if (changed.has('route')) {
-      const spec = this.route?.spec ?? '', search = this.route?.search ?? '';
-      if (spec !== this.#layoutRoute.spec || search !== this.#layoutRoute.search) this.#layoutRoute = { name: 'layout', spec, search };
-    }
+    if (changed.has('route')) this.#layoutRoute = { name: 'layout', spec: this.route?.spec ?? '', search: this.route?.search ?? '' };
   }
 
   connectedCallback() {

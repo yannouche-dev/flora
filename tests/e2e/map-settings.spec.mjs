@@ -79,8 +79,8 @@ test('fond, 3D et couches : photo, la 3D voulue puis à plat, les couches IGN pa
   await app.go(`#/layout/[map(photo;2d),plant]?${AT}`);
   await expect.poll(async () => (await given(page)).d3).toBe('off');
   await expect.poll(() => mapOf(page).evaluate(m => /** @type {any} */ (m).gl.state().allowed)).toBe(false);
-  // No layers written: the Carte's choice (null).
-  expect((await given(page)).overlays).toBe(null);
+  // No layers written: none (never the Carte's shared choice — the layout is the same for everyone).
+  expect((await given(page)).overlays).toEqual([]);
 });
 
 test('points : une période (ce mois-ci, toutes années : la floraison du moment ; cette année), en pastilles, GBIF à côté d’iNaturalist', async ({ app, page }) => {

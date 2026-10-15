@@ -21,15 +21,17 @@ const params = text => read(text).cell.params;
 test('chaque réglage de la carte se lit : ses noms, ses valeurs, leurs autres graphies', () => {
   const p = params('map(r=2km;lieu=Mirabel Ménétrol 63;autour=1;base=photo;3d=1;layers=znieff+n2000;src=inat+gbif;when=mois;pts=pastille;regroupe=1;suit=0;plante=seule;toucher=fiche;ui=nue)');
   assert.deepEqual(p, { intent: 'explorer', r: 2000, lieu: 'Mirabel Ménétrol 63', autour: true, base: 'photo', '3d': true, layers: ['znieff', 'n2000'], src: ['inat', 'gbif'],
-    when: 'mois', pts: 'pastille', regroupe: true, suit: false, plante: 'seule', toucher: 'fiche', ui: 'nue', tete: 'oui', titre: null, actions: [], ctl: null });
+    when: 'mois', pts: 'pastille', regroupe: true, suit: false, plante: 'seule', toucher: 'fiche', ui: 'nue', tete: 'oui', titre: null, actions: [], ctl: null,
+    vue: null, opac: null, jumelles: null, jrayon: null, legende: false, etat: 'ouvert' });
   // In French, its other words, accents and case free.
   const q = params('carte(rayon=500m;commune=Fontainebleau 77;moi=oui;fond=satellite;vue3d=non;couches=Natura+ZNIEFF1;sources=iNaturalist;période=Année;style=Pastilles;groupes=1;recherche=non;courante=only;tap=sheet;commandes=Compact)');
   assert.deepEqual([q.r, q.lieu, q.autour, q.base, q['3d'], q.layers, q.src, q.when, q.pts, q.regroupe, q.suit, q.plante, q.toucher, q.ui],
-    [500, 'Fontainebleau 77', true, 'photo', false, ['znieff1', 'n2000'], ['inat'], 'annee', 'pastille', true, false, 'seule', 'fiche', 'compacte']);
+    [500, 'Fontainebleau 77', true, 'photo', false, ['n2000', 'znieff1'], ['inat'], 'annee', 'pastille', true, false, 'seule', 'fiche', 'compacte']);
   // Defaults: the map as it always was.
   const d = params('map');
-  assert.deepEqual(d, { intent: 'explorer', r: null, lieu: null, autour: false, base: null, '3d': null, layers: [], src: ['inat'], when: 'toujours', pts: 'photo',
-    regroupe: false, suit: true, plante: 'grand', toucher: 'plante', ui: 'auto', tete: 'oui', titre: null, actions: [], ctl: null });
+  assert.deepEqual(d, { intent: 'explorer', r: null, lieu: null, autour: false, base: 'photo', '3d': null, layers: [], src: ['inat'], when: 'toujours', pts: 'photo',
+    regroupe: false, suit: true, plante: 'grand', toucher: 'plante', ui: 'auto', tete: 'oui', titre: null, actions: [], ctl: null,
+    vue: null, opac: null, jumelles: null, jrayon: null, legende: false, etat: 'ouvert' });
   assert.equal(read('map').text, '[map]');
 });
 
@@ -49,9 +51,9 @@ test('une valeur seule va au réglage qui la lit : une distance, une intention, 
   }
 });
 
-test('des couches : leurs noms courts et leurs alias, chacune une fois dans l’ordre du registre ; une inconnue dite et laissée', () => {
-  assert.equal(read('map(layers=reserves+natura2000+znieff+n2000)').text, '[map(layers=znieff+n2000+reserves)]');
-  assert.equal(read('map(layers=APPB+forêts+contours+ombrage+rivières+parcelles)').text, '[map(layers=biotopes+forets+cadastre+courbes+estompage+hydro)]');
+test('des couches : leurs noms courts et leurs alias, chacune une fois dans l’ordre écrit (la dernière dessus) ; une inconnue dite et laissée', () => {
+  assert.equal(read('map(layers=reserves+natura2000+znieff+n2000)').text, '[map(layers=reserves+n2000+znieff)]');
+  assert.equal(read('map(layers=APPB+forêts+contours+ombrage+rivières+parcelles)').text, '[map(layers=biotopes+forets+courbes+estompage+hydro+cadastre)]');
   const bad = read('map(layers=znieff+lune+mer)');
   assert.equal(bad.text, '[map(layers=znieff)]');
   assert.equal(bad.problems.length, 2);
@@ -129,7 +131,7 @@ test('les intentions : un mot, un ensemble de réglages ; un réglage écrit à 
 
 test('l’adresse réécrite se relit à l’identique (aller-retour), dans l’ordre des groupes', () => {
   // Its words last: « Fontainebleau 77,3d=1 » would read a decimal comma.
-  const written = '[map(terrain,r=2km,3d=1,layers=znieff+forets,src=inat+gbif,when=annee,pts=pastille,regroupe=1,suit=0,plante=non,toucher=rien,ui=nue,lieu=Fontainebleau 77)]';
+  const written = '[map(terrain,r=2km,3d=1,layers=forets+znieff,src=inat+gbif,when=annee,pts=pastille,regroupe=1,suit=0,plante=non,toucher=rien,ui=nue,lieu=Fontainebleau 77)]';
   const typed = 'map(ui=nue;toucher=rien;plante=non;suit=0;regroupe;pastille;annee;src=gbif+inat;layers=forets+znieff;3d;lieu=Fontainebleau 77;r=2km;terrain)';
   assert.equal(read(typed).text, written);
   assert.equal(read(written).text, written);

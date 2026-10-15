@@ -30,7 +30,7 @@
 // « Photos en ligne » module).
 
 import * as L from 'leaflet';
-import { lightMoment, mapSettings, mapSettingsEvents, sunPosition } from '../core/map-settings.js';
+import { MAX_PITCH, lightMoment, mapSettings, mapSettingsEvents, sunPosition } from '../core/map-settings.js';
 import { moduleEvents, moduleOn } from '../core/modules.js';
 import { DEM_ATTRIBUTION, IGN_VECTOR_STYLE, buildStyle, circlePolygon, describeTileLayer, mergeVectorStyle, pathStyle } from '../core/gl-style.js';
 import { LOCALE, MAPLIBRE_CSS, MAP_GL_CSS, hasWebGL2, linkCss, loadMapLibre, noWebGL2 } from '../core/maplibre.js';
@@ -261,6 +261,15 @@ export class GlView {
     this.#syncPanel();
   }
 
+  /** The view its page gives it (gf-map `view`), shown in 3D too: its centre and zoom, its tilt and turn when it has them. */
+  viewChanged() {
+    const map = this.#map, v = this.host.view;
+    if (!map || !v) return;
+    const tilted = Boolean(v.pitch || v.bearing);
+    map.jumpTo({ center: [v.lon, v.lat], zoom: Math.max(0, v.zoom - 1), ...(tilted ? { pitch: v.pitch, bearing: v.bearing } : {}) }, { gfMirror: true });
+    this.#syncPitchAttr();
+  }
+
   /** gf-map's properties changed: editing starts or ends, markers become draggable. @param {Map<string, any>} changed */
   changed(changed) {
     if (['editing', 'editable', 'draggablePlants', 'pin', 'pinDraggable', 'area'].some(k => changed.has(k))) queueMicrotask(() => this.sync());
@@ -364,13 +373,18 @@ export class GlView {
     this.#syncPaths();
     const c = lf.getCenter();
     const s = mapSettings();
+    // The view its page gives it (a free layout's vue=, tilted or turned): that tilt and turn, else Réglages'.
+    const v = this.host.view;
+    const tilted = Boolean(v && (v.pitch || v.bearing));
     const map = this.#map = new ml.Map({
       container: box,
       style: this.#style(),
       center: [c.lng, c.lat],
       zoom: Math.max(0, lf.getZoom() - 1),
-      pitch: s.pitch,
-      bearing: 0,
+      pitch: tilted ? v.pitch : s.pitch,
+      bearing: tilted ? v.bearing : 0,
+      // Tilted up to the horizon (the orbit, the right button, two fingers): the mountains ahead, not only from above.
+      maxPitch: MAX_PITCH,
       minZoom: this.#minZoom(),
       maxZoom: 20,
       locale: LOCALE,
@@ -540,7 +554,11 @@ export class GlView {
     const latlng = (/** @type {any} */ e) => L.latLng(e.lngLat.lat, e.lngLat.lng);
     const onMarker = (/** @type {any} */ e) => Boolean(e.originalEvent?.target?.closest?.('.maplibregl-marker'));
     // Its own moves (pan, zoom), once they end: the 2D map goes there too (its groups, plants by zoom, protected areas).
-    map.on('moveend', (/** @type {any} */ e) => { if (!e.gfMirror) this.#toLeaflet(); this.#syncPitchAttr(); });
+    // Moved by hand: told to the map (gf-map view-change: a tilt or a turn alone moves no 2D map).
+    map.on('moveend', (/** @type {any} */ e) => {
+      if (!e.gfMirror) { this.#toLeaflet(); this.root.dispatchEvent(new Event('gl-moveend')); }
+      this.#syncPitchAttr();
+    });
     map.on('movestart', (/** @type {any} */ e) => { if (e.originalEvent) lf.fire('movestart'); });
     map.on('dragstart', () => lf.fire('dragstart'));
     map.on('click', (/** @type {any} */ e) => {

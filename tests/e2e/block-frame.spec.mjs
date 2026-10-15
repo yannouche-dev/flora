@@ -138,15 +138,19 @@ test.describe('un grand écran', () => {
     await expect(sheet).toHaveClass(/maxed/);
     await acts.getByRole('button', { name: /Revenir à la disposition/ }).click();
     await expect(sheet).not.toHaveClass(/maxed/);
-    // Replier: its head alone, its share to the results; never in the address.
+    // Replier: its head alone, its share to the results; kept in the layout (etat=replie), as the app is sent.
     const before = (await box(results)).width;
     await acts.getByRole('button', { name: 'Replier « Fiche »' }).click();
     await expect(sheet.locator('.cell-body')).toBeHidden();
     await expect.poll(async () => (await box(results)).width).toBeGreaterThan(before + 200);
     await shot(page, 'replier');
-    expect(await hash(page)).toBe(`#/layout/[results(view=list),plant(actions=agrandir+replier+partager)]?p=${ortie}&q=ortie`);
+    await expect.poll(() => hash(page)).toBe(`#/layout/[results(view=list),plant(actions=agrandir+replier+partager,etat=replie)]?p=${ortie}&q=ortie`);
+    await page.reload();
+    await app.ready();
+    await expect(sheet.locator('.cell-body')).toBeHidden();
     await acts.getByRole('button', { name: 'Déplier « Fiche »' }).click();
     await expect(sheet.locator('gf-plant-detail')).toBeVisible();
+    await expect.poll(() => hash(page)).toBe(`#/layout/[results(view=list),plant(actions=agrandir+replier+partager)]?p=${ortie}&q=ortie`);
     // Partager: a layout of this cell alone, with the same state.
     await acts.locator('[data-act="partager"]').click();
     await expect(acts.locator('[data-act="partager"]')).toHaveAttribute('aria-label', 'Lien copié');
