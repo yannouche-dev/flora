@@ -98,6 +98,15 @@ const SPREAD_MAX = 24;
 const PHOTO_SINGLES = 40;
 /** Around the view, the share of it (each side) where a point alone is its photo marker; further, a dot until seen. */
 const SIGHT_PAD = 0.5;
+
+/**
+ * A view as a page writes it down (layout/map-options.js viewText: 5 decimals, its zoom to 2, its tilt and turn in
+ * whole degrees), as a key. @param {{ lat: number, lon: number, zoom: number, pitch?: number, bearing?: number }} v
+ */
+const viewKey = v => {
+  const round = (/** @type {number} */ n, /** @type {number} */ d) => Math.round(n * 10 ** d) / 10 ** d;
+  return [round(v.lat, 5), round(v.lon, 5), round(v.zoom, 2), Math.round(v.pitch || 0), Math.round(v.bearing || 0)].join(':');
+};
 /** The map's attribution while plant photos are on its points (#photoCredit). */
 const PHOTO_CREDIT = 'Photos : <a href="https://www.inaturalist.org/" target="_blank" rel="noopener">iNaturalist</a> (CC0, CC BY, CC BY-SA), Wikimedia Commons — auteur et licence sur chaque point';
 
@@ -868,8 +877,10 @@ export class GfMap extends LitElement {
     this.#clusterLayer = L.layerGroup().addTo(map);
     this.#spotLayer = L.layerGroup().addTo(map);
     this.#plantLayer = L.layerGroup();
-    // A zoom under way (a flight to a zone): the groups wait for its end, made once at the zoom reached.
-    map.on('zoomstart', () => { this.#zooming = true; });
+    // A zoom under way (a flight to a zone): the groups wait for its end, made once at the zoom reached. (The 3D map's
+    // view given to this one — gf-map-gl.js: any fraction of a zoom — is no flight: its groups stay while the zoom,
+    // rounded, is the same.)
+    map.on('zoomstart', () => { if (!this.#gl?.mirroring) this.#zooming = true; });
     map.on('zoomend', () => { this.#zooming = false; this.#syncPlantVisibility(); this.#syncCluster(true); });
     // A flight stopped short (a drag) ends without a zoomend.
     // A move ended: the points alone it brings in sight become their photo marker (#nearCluster).
@@ -969,6 +980,9 @@ export class GfMap extends LitElement {
   #gl = null;
   get gl() { return this.#gl; }
 
+  /** The user's plants drawn by the map itself now (from plantZoom on): the 3D map's observations around leave them out then. */
+  get plantsShown() { return Boolean(this.#plantLayer && this.#map?.hasLayer(this.#plantLayer)); }
+
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
     // Editing starts: its hint the first time ever (core/hints.js); it ends: the hint goes.
@@ -998,9 +1012,10 @@ export class GfMap extends LitElement {
       for (const key of this.#overlays) if (Math.abs((/** @type {any} */ (this.#layers[key])?.options?.opacity ?? -1) - this.#opacityOf(key)) > 0.001) this.#setOpacity(key, this.#opacityOf(key), true, false);
     }
     if (changed.has('view') && changed.get('view') !== undefined) {
-      if (this.view) this.#applyView();
+      if (this.view) this.#applyView(true);
       // Its view let go (« Recadrer sur la zone »): framed on its area again.
       else if (this.#lastFit === 'view') this.#fitArea(true);
+      if (!this.view) this.#told = [];
     }
     if (changed.has('points')) this.#syncPoints();
     if (changed.has('minZoom') && changed.get('minZoom') !== undefined) {
@@ -1229,8 +1244,10 @@ export class GfMap extends LitElement {
     const map = this.#map;
     const layer = this.#plantLayer;
     if (!map || !layer) return;
-    // Moving a selected place's plants: they show at any zoom.
-    const visible = this.plants.length > 0 && (map.getZoom() >= this.plantZoom || (this.editing && Boolean(this.selectedId || this.pin || !this.spots.length)));
+    // From plantZoom on; shown, until half a zoom under it (in 3D, any fraction of a zoom: no plants coming and going
+    // at its edge). Moving a selected place's plants: they show at any zoom.
+    const near = map.getZoom() >= this.plantZoom - (map.hasLayer(layer) ? 0.5 : 0);
+    const visible = this.plants.length > 0 && (near || (this.editing && Boolean(this.selectedId || this.pin || !this.spots.length)));
     if (visible && !map.hasLayer(layer)) layer.addTo(map);
     else if (!visible && map.hasLayer(layer)) layer.remove();
     // Photos are looked up only for plants actually drawn.
@@ -1328,7 +1345,20 @@ export class GfMap extends LitElement {
       this.#me.setLatLng([lat, lon]);
       this.#meCircle?.setLatLng([lat, lon]).setRadius(fix.accuracy);
     }
+    this.#syncMeCircle();
     if (this.#follow) map.panTo([lat, lon], { animate: true });
+  }
+
+  /**
+   * My position's accuracy circle: never a second circle beside a page's zone (taken for it) — with one shown, only
+   * while it is small against it (under a quarter of its radius).
+   */
+  #syncMeCircle() {
+    const map = this.#map, c = this.#meCircle, r = Number(/** @type {any} */ (this.area)?.radius) || 0;
+    if (!map || !c) return;
+    const wanted = !r || c.getRadius() < r / 4;
+    if (wanted && !map.hasLayer(c)) c.addTo(map);
+    else if (!wanted && map.hasLayer(c)) c.remove();
   }
 
   /** "Autour": the searched circle and the observations of the chosen species. */
@@ -1338,6 +1368,7 @@ export class GfMap extends LitElement {
   #syncArea() {
     const layer = /** @type {L.LayerGroup} */ (this.#areaLayer);
     const area = /** @type {any} */ (this.area);
+    this.#syncMeCircle();
     // `smooth` (the step « map » of the games around a place): the circle and its points kept and changed in place.
     if (area?.smooth) { this.#syncSmoothArea(area); return; }
     if (this.#smooth) {
@@ -1373,7 +1404,8 @@ export class GfMap extends LitElement {
     }
     for (const dot of kept) { const el = /** @type {any} */ (dot).getElement?.(); if (el) resumeImages(el); }
     this.#areaDots = area ? { sig, dots } : null;
-    if (!area) return;
+    // No area: no handle left on the map (its circle gone).
+    if (!area) { this.#areaCircles = []; this.#syncHandle(); return; }
     const [lon, lat] = area.center;
     // `leaves`: the observations as small leaves popping in one after the other, the circle glowing (Découvrir).
     // Its shadow: the same circle, darker, a little lower (a still line — no filter to redraw at each move).
@@ -1802,7 +1834,7 @@ export class GfMap extends LitElement {
       const layers = groups.flatMap(g => g ? g.getLayers() : []);
       if (this.#plantLayer && map.hasLayer(this.#plantLayer)) layers.push(...this.#plantMarkers.values());
       // Only those in sight (a wide scope has hundreds out of it): fewer elements restyled.
-      const view = map.getBounds().pad(0.2);
+      const view = this.#sight(0.2);
       for (const l of layers) {
         if (l.gfKin !== key || (l.getLatLng && !view.contains(l.getLatLng()))) continue;
         const el = l.getElement?.();
@@ -1815,6 +1847,21 @@ export class GfMap extends LitElement {
 
   /** Points drawn again (a new icon has its own classes): the plant lit stays lit, its new points with it. */
   #relight() { if (this.#litKey) this.#light(this.#litKey, this.#litBy ?? undefined); }
+
+  /**
+   * The view and around it (`pad`: a share of its size on each side). In 3D, what the 3D map shows — tilted, turned
+   * (gf-map-gl.js bounds), not this map's box, north up, seen from above —, within a few views of its centre (a view
+   * up to the horizon would hold a whole region).
+   * @param {number} pad
+   */
+  #sight(pad) {
+    const flat = /** @type {L.Map} */ (this.#map).getBounds();
+    const b = this.#gl?.on ? this.#gl.bounds : null;
+    if (!b) return flat.pad(pad);
+    const s = b.pad(pad), far = flat.pad(2 + pad);
+    return L.latLngBounds([Math.max(s.getSouth(), far.getSouth()), Math.max(s.getWest(), far.getWest())],
+      [Math.min(s.getNorth(), far.getNorth()), Math.min(s.getEast(), far.getEast())]);
+  }
 
   /**
    * Plant photos on the points (iNaturalist's under a free licence, the flora's thumbnails): their sources named in
@@ -1896,14 +1943,20 @@ export class GfMap extends LitElement {
       this.#kin(dot, speciesKey(who) || 'hl');
     });
     L.circleMarker(at, { radius: 5, className: 'gf-spread-center', interactive: false }).addTo(layer);
-    map.once('click zoomstart', () => this.#gather());
+    // Gathered by a touch on the map or a zoom — not by the 3D map's view given to this one (gf-map-gl.js: its
+    // fractions of a zoom as the user turns or tilts it).
+    const gather = this.#gatherOn = (/** @type {L.LeafletEvent} */ e) => { if (e.type !== 'zoomstart' || !this.#gl?.mirroring) this.#gather(); };
+    map.on('click zoomstart', gather);
     this.#relight();
   }
+  /** @type {L.LeafletEventHandlerFn | null} */ #gatherOn = null;
 
   /** The points spread gathered back into their group. */
   #gather() {
     this.#spreadLayer?.remove();
     this.#spreadLayer = null;
+    if (this.#gatherOn) this.#map?.off('click zoomstart', this.#gatherOn);
+    this.#gatherOn = null;
   }
 
   /**
@@ -1941,8 +1994,11 @@ export class GfMap extends LitElement {
     // A zoom under way (a flight to the zone chosen): grouped once, at its end (zoomend), at the zoom reached — not
     // here, at the zoom it leaves (hundreds of points alone there, each drawn and bouncing for nothing).
     if (this.#zooming && !rezoom) { layer.clearLayers(); this.#gather(); this.#clusterKey = ''; return; }
-    const key = (c?.key || '') + ':' + map.getZoom();
-    if (key === this.#clusterKey && !rezoom) return;
+    // At a whole zoom: in 3D, the view's fractions of a zoom given to this map (gf-map-gl.js) change no group — the
+    // same points at the same zoom are kept as they are, none made again.
+    const zoom = Math.round(map.getZoom());
+    const key = (c?.key || '') + ':' + zoom;
+    if (key === this.#clusterKey) return;
     // The same points again at another zoom: drawn at once, without their entrance (it played when they came).
     const still = c?.key && this.#clusterKey.startsWith(c.key + ':') ? ' still' : '';
     this.#clusterKey = key;
@@ -1951,7 +2007,7 @@ export class GfMap extends LitElement {
     this.#gather();
     if (!c?.points.length || !map.getSize().x) return;
     // Cells of ~70 px: a few clear groups rather than many small ones.
-    const CELL = 72, zoom = map.getZoom();
+    const CELL = 72;
     /** @type {Map<string, { pts: typeof c.points, x: number, y: number }>} */
     const cells = new Map();
     for (const p of c.points) {
@@ -1969,7 +2025,7 @@ export class GfMap extends LitElement {
     const photo = who.photo || null;
     // Its points alone in sight (and near it): each its photo marker, coming in with a bounce while they are few; the
     // others a dot until seen.
-    const sight = map.getBounds().pad(SIGHT_PAD);
+    const sight = this.#sight(SIGHT_PAD);
     const at1 = (/** @type {any} */ p) => L.latLng(p.coordinates[1], p.coordinates[0]);
     const seen = [...cells.values()].filter(cell => cell.pts.length === 1 && sight.contains(at1(cell.pts[0]))).length;
     const entrance = seen <= PHOTO_SINGLES ? still : ' still';
@@ -2025,7 +2081,7 @@ export class GfMap extends LitElement {
   #nearCluster() {
     const map = this.#map;
     if (!map || !this.#farSingles.length || !this.#clusterLayer) return;
-    const sight = map.getBounds().pad(SIGHT_PAD);
+    const sight = this.#sight(SIGHT_PAD);
     const before = this.#farSingles.length;
     this.#farSingles = this.#farSingles.filter(({ p, dot }) => {
       if (!sight.contains(dot.getLatLng())) return true;
@@ -2103,18 +2159,38 @@ export class GfMap extends LitElement {
       const text = JSON.stringify([view.lat.toFixed(5), view.lon.toFixed(5), view.zoom.toFixed(2), Math.round(view.pitch), Math.round(view.bearing)]);
       if (text === this.#toldView) return;
       this.#toldView = text;
+      this.#told = [viewKey(view), ...this.#told].slice(0, 2);
       this.#emit('view-change', view);
     }, 300);
   }
 
-  /** The view given (`view`) shown: its centre and zoom (in 3D, its tilt and turn too); kept there on a resize. */
-  #applyView() {
+  /**
+   * The view given (`view`) shown: its centre and zoom (in 3D, its tilt and turn too); kept there on a resize. Given
+   * again (`given`): not a view this map told (view-change) and its page wrote down (vue=) — it is where the map is,
+   * or was a moment ago —, nor while a hand moves the map: a jump would stop the gesture, or the turn under way.
+   * @param {boolean} [given]
+   */
+  #applyView(given = false) {
     const map = this.#map, v = this.view;
     if (!map || !v) return;
-    this.#handAt = 0;
     this.#lastFit = 'view';
+    if (given && (this.#told.includes(viewKey(v)) || this.#inGesture())) return;
+    this.#handAt = 0;
     map.setView([v.lat, v.lon], v.zoom, { animate: false });
     this.#gl?.viewChanged?.();
+  }
+
+  /**
+   * The views told last (view-change), as vue= rounds them (viewKey): given back (the page writing them down), not
+   * applied — the map is there, or was a moment ago. @type {string[]}
+   */
+  #told = [];
+
+  /** A hand on the map now: a drag, or the 3D map moving under a gesture (a pan, a pinch, a turn, a tilt). */
+  #inGesture() {
+    const gl = this.#gl?.on ? /** @type {any} */ (this.#gl).glMap : null;
+    const recent = this.#handAt && performance.now() - this.#handAt < 4000;
+    return Boolean((recent && gl?.isMoving?.()) || /** @type {any} */ (this.#map)?.dragging?.moving?.());
   }
 
   /** For a moment, a change of size keeps the view as it is (no framing again): a pane beside it resized by hand. */

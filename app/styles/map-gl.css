@@ -26,8 +26,9 @@ gf-map .gf-map-gl .maplibregl-canvas:focus-visible { outline: 3px solid var(--gf
    margins. */
 .gf-gl-mk { width: 0; height: 0; }
 .gf-gl-mk > .leaflet-marker-icon { position: absolute; left: 0; top: 0; transform: none !important; }
-.gf-gl-mk:hover, .gf-gl-mk:focus-within, .gf-gl-mk:has(> .gf-kin) { z-index: 5000 !important; }
-.gf-gl-mk:has(> .gf-kin-self) { z-index: 6000 !important; }
+/* Their z-index: 200 000 and their offset (gf-map-gl.js MARK_Z: over the observations around); hovered, lit, over all. */
+.gf-gl-mk:hover, .gf-gl-mk:focus-within, .gf-gl-mk:has(> .gf-kin) { z-index: 500000 !important; }
+.gf-gl-mk:has(> .gf-kin-self) { z-index: 600000 !important; }
 .gf-gl-mk > .leaflet-interactive { cursor: pointer; }
 
 /* A point of the 2D map (a circle in SVG there): a disc here, in the same colours. */
@@ -46,8 +47,8 @@ gf-map .gf-map-gl .maplibregl-canvas:focus-visible { outline: 3px solid var(--gf
 .gf-gl-dot.gf-obs-start { background: #1d2b20; border-color: #fff; }
 .gf-gl-dot.gf-focus-point { background: #e11d48; border: 3px solid #fff; box-shadow: 0 0 6px rgb(225 29 72 / 80%); }
 .gf-gl-dot.gf-spread-center { background: rgb(61 74 61 / 80%); border-color: #fff; }
-.gf-gl-dot:hover, .gf-gl-dot.gf-kin { scale: 1.45; }
-.gf-gl-dot.gf-kin { border-color: #ffd166; border-width: 3px; z-index: 5000; }
+.gf-gl-dot:hover, .gf-gl-dot.gf-kin { scale: 1.45; z-index: 500000 !important; }
+.gf-gl-dot.gf-kin { border-color: #ffd166; border-width: 3px; }
 @media (prefers-reduced-motion: reduce) { .gf-gl-dot { transition: none; } }
 
 /* (Nothing else written over the 3D map: why it is in 2D or flat, its loading, are the map's state and its thin
@@ -95,9 +96,12 @@ gf-map:not([data-renderer='3d']) .gf-map-buttons button.around3d { display: none
 .gf-map-gl.gf-o3-loading .gf-o3-mk .gf-o3-head { opacity: 0.55; filter: saturate(0.4); }
 
 
-/* A point's card (map-style.js obsCard), over the map. */
-.gf-o3-card { position: absolute; z-index: 8; overflow: hidden; border-radius: 12px; border: 1px solid rgb(255 255 255 / 55%); background-clip: padding-box;
-  background: var(--gf-surface, #fff); color: var(--gf-text, #1f2a1f); box-shadow: 0 8px 24px rgb(0 0 0 / 30%); animation: gf-tip-in 0.18s ease-out; }
+/* A point's card (map-style.js obsCard): in the top layer (a popover, as gf-map's .gf-float-tip), over every marker,
+   the map's buttons, cards and panels, and the page around the map. */
+.gf-o3-card { position: fixed; inset: auto; left: 0; top: 0; z-index: 6000; margin: 0; padding: 0; overflow: hidden; border-radius: 12px;
+  border: 1px solid rgb(255 255 255 / 55%); background: var(--gf-surface, #fff); background-clip: padding-box;
+  color: var(--gf-text, #1f2a1f); box-shadow: 0 8px 24px rgb(0 0 0 / 30%); animation: gf-tip-in 0.18s ease-out; }
+.gf-o3-card::backdrop { display: none; }
 .gf-o3-card:not(.pinned) { pointer-events: none; }
 .gf-o3-card .gf-obs-card img { width: 180px; height: 120px; }
 .gf-o3-card .gf-obs-card .gf-o3-more { color: var(--gf-text, #1f2a1f); }

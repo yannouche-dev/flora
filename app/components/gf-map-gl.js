@@ -57,6 +57,12 @@ const NOTES = {
 /** Said once the 3D takes more than a moment to come (the map's thin loading line meanwhile). */
 const LOADING = 'Chargement de la 3D';
 
+/**
+ * The page's markers over the observations around (gf-map-obs3d.js: theirs up to some 100 000 + the screen's height):
+ * a plant matched, the plant chosen's photos never under its stacks, however the view turns.
+ */
+const MARK_Z = 200000;
+
 /** The relief's tiles that may fail before the map goes on flat. */
 const DEM_GIVE_UP = 3;
 const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -614,6 +620,22 @@ export class GlView {
 
   // ── The camera, between the two maps ────────────────────────────────────────────────────────────
 
+  /**
+   * The 3D map's view being given to the 2D map now (gf-map: a zoom it makes is no zoom of its own — its groups kept,
+   * its spread points not gathered).
+   */
+  get mirroring() { return this.#fromGl; }
+
+  /**
+   * What the 3D map shows (tilted, turned: the smallest box around it — not the 2D map's, north up, seen from above),
+   * or null when it is not drawn.
+   * @returns {L.LatLngBounds | null}
+   */
+  get bounds() {
+    const b = this.#state === 'ready' ? this.#map?.getBounds() : null;
+    return b ? L.latLngBounds([b.getSouth(), b.getWest()], [b.getNorth(), b.getEast()]) : null;
+  }
+
   /** The 3D map's view given to the 2D map (silently: never sent back). */
   #toLeaflet() {
     const map = this.#map;
@@ -730,9 +752,10 @@ export class GlView {
     const ml = this.#ml, map = this.#map;
     const wrap = Object.assign(document.createElement('div'), { className: 'gf-gl-mk' });
     const { lat, lng } = layer.getLatLng();
-    const gl = new ml.Marker({ element: wrap, anchor: 'top-left', opacityWhenCovered: '0.45', subpixelPositioning: true }).setLngLat([lng, lat]).addTo(map);
-    // Over the others as in 2D (a place selected, the plant chosen's photos).
-    wrap.style.zIndex = String(10 + Math.max(0, layer.options.zIndexOffset || 0));
+    // Never faded behind the relief (MapLibre tests the marker's foot: a head standing clear of a ridge was faded).
+    const gl = new ml.Marker({ element: wrap, anchor: 'top-left', opacityWhenCovered: '1', subpixelPositioning: true }).setLngLat([lng, lat]).addTo(map);
+    // Over the others as in 2D (a place selected, the plant chosen's photos), and over the observations around.
+    wrap.style.zIndex = String(MARK_Z + Math.max(0, layer.options.zIndexOffset || 0));
     gl.gfMove = () => { const p = layer.getLatLng(); gl.setLngLat([p.lng, p.lat]); };
     layer.on('move', gl.gfMove);
     if (layer.options.interactive !== false) this.#forward(wrap, layer);
@@ -753,7 +776,7 @@ export class GlView {
       for (const old of [...m.wrap.children]) if (old.classList.contains('leaflet-marker-icon')) old.remove();
       m.wrap.prepend(icon);
     }
-    m.wrap.style.zIndex = String(10 + Math.max(0, m.layer.options.zIndexOffset || 0));
+    m.wrap.style.zIndex = String(MARK_Z + Math.max(0, m.layer.options.zIndexOffset || 0));
   }
 
   /** Leaflet replaces a marker's element when its look changes: the new one goes where the old one was. */
@@ -775,7 +798,8 @@ export class GlView {
     el.style.setProperty('--r', String(o.radius || 6));
     if (o.interactive === false) el.classList.add('inert');
     const { lat, lng } = layer.getLatLng();
-    const gl = new ml.Marker({ element: el, anchor: 'center', opacityWhenCovered: '0.45' }).setLngLat([lng, lat]).addTo(map);
+    const gl = new ml.Marker({ element: el, anchor: 'center', opacityWhenCovered: '1' }).setLngLat([lng, lat]).addTo(map);
+    el.style.zIndex = String(MARK_Z);
     gl.gfMove = () => { const p = layer.getLatLng(); gl.setLngLat([p.lng, p.lat]); };
     layer.on('move', gl.gfMove);
     // gf-map places its cards and lights a plant's points by their element: this one, while the map is in 3D.

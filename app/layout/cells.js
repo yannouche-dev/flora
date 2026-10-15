@@ -499,13 +499,16 @@ export class DlMap extends LitElement {
   }
   /** @type {{ k: string, value: any } | null} */ #aroundMemo = null;
 
-  /** « Observations autour » changed on the map: kept in the layout. @param {CustomEvent} e */
+  /**
+   * « Observations autour » changed on the map: kept in the layout — their radius only without a zone (with one, the
+   * binoculars follow it: its circle, its radius). @param {CustomEvent} e
+   */
   #onAround(e) {
     const p = e.detail;
     const zone = nearest3d(this.state?.radius ?? 2000);
     this.#set({
       jumelles: p.on ? [p.inat && 'inat', p.gbif && 'gbif', p.density && 'densite'].filter(Boolean) : null,
-      jrayon: p.on && p.radius !== zone ? p.radius : null
+      jrayon: p.on && !this.state?.live.at && p.radius !== zone ? p.radius : null
     });
   }
 
