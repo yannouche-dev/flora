@@ -16,9 +16,9 @@ function read(text) {
 test('chaque composant a l’en-tête, le titre et les actions ; vide, plante, zone, toucher, ecrit seulement là où ils font quelque chose', () => {
   const frame = Object.fromEntries(COMPONENTS.map(c => [c.id, Object.keys(c.params).filter(k => c.params[k].frame)]));
   assert.deepEqual(frame, {
-    map: ['tete', 'titre', 'actions', 'etat'], search: ['tete', 'titre', 'actions', 'etat', 'toucher', 'ecrit'], filters: ['tete', 'titre', 'actions', 'etat'],
-    results: ['tete', 'titre', 'actions', 'etat', 'vide', 'zone', 'toucher', 'ecrit'], plant: ['tete', 'titre', 'actions', 'etat', 'vide', 'plante', 'toucher', 'ecrit'],
-    media: ['tete', 'titre', 'actions', 'etat', 'vide', 'plante'], deck: ['tete', 'titre', 'actions', 'etat', 'vide', 'toucher', 'ecrit'], place: ['tete', 'titre', 'actions', 'etat'],
+    map: ['tete', 'titre', 'actions', 'etat', 'groupe'], search: ['tete', 'titre', 'actions', 'etat', 'toucher', 'ecrit', 'groupe'], filters: ['tete', 'titre', 'actions', 'etat', 'groupe'],
+    results: ['tete', 'titre', 'actions', 'etat', 'vide', 'zone', 'toucher', 'ecrit', 'groupe'], plant: ['tete', 'titre', 'actions', 'etat', 'vide', 'plante', 'toucher', 'ecrit', 'groupe'],
+    media: ['tete', 'titre', 'actions', 'etat', 'vide', 'plante', 'groupe'], deck: ['tete', 'titre', 'actions', 'etat', 'vide', 'toucher', 'ecrit', 'groupe'], place: ['tete', 'titre', 'actions', 'etat', 'groupe'],
     slot: ['tete', 'titre', 'actions', 'etat']
   });
   assert.deepEqual(Object.keys(FRAME_OF).sort(), COMPONENTS.map(c => c.id).sort());

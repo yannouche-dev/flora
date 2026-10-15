@@ -19,6 +19,8 @@
 //                                      (core/nearby.js periodQuery); not said, the layout's own (a map's when=);
 //   &q=…&family=…&sort=…               the search itself: Flore's (core/query.js — the same words as #/?q=…), kept in the
 //                                      store, so the search cell is Flore's own bar, filters and list.
+// A layout's other groups (a cell's groupe=b: its own zone, plant, period and search, apart from the others) have
+// the same keys after their letter: &b.p=…&b.at=…&b.r=…&b.q=…&b.family=… (the first group, a, none: its links as before).
 // A link with them gives the same screen; Back and Forward walk the plants and places chosen (a new entry each), while
 // typing, a filter or the radius only replace the address (as Flore's search does).
 //
@@ -33,8 +35,9 @@ import { errorKind } from '../core/net.js';
 import { observationPointsAround, observationPointsOf, observationsAround, speciesAround, taxonIdOf } from '../core/nearby.js';
 import { observations3d } from '../core/around3d.js';
 import { fromHash, toHash } from '../core/query.js';
-import { runSearch, searchWhole, setSearchScope } from '../core/search.js';
-import { store, whenReady } from '../core/store.js';
+import { searchWhole } from '../core/search.js';
+import { APP } from '../core/search-channel.js';
+import { whenReady } from '../core/store.js';
 import { DISTANCE, distanceText, parseDistance } from './registry.js';
 
 /**
@@ -66,18 +69,34 @@ export const cleanText = text => String(text ?? '').replace(/\p{Cc}/gu, ' ').rep
 export const obsId = url => /(\d+)\/?$/.exec(url)?.[1] ?? url;
 
 /**
- * The live state of an address' query (after « ? »): what is wrong or missing is left out.
- * @param {string} search @returns {Live}
+ * The keys of an address' query that start with a group's letter (« b. »), without it; none: as it is (the first
+ * group's). @param {string} search @param {string} [prefix] @returns {URLSearchParams}
  */
-export function readLive(search) {
-  const params = new URLSearchParams(search);
+export function groupParams(search, prefix = '') {
+  const all = new URLSearchParams(search);
+  if (!prefix) return all;
+  const own = new URLSearchParams();
+  for (const [k, v] of all) if (k.startsWith(prefix)) own.append(k.slice(prefix.length), v);
+  return own;
+}
+
+/** A group's letter as its keys start in the address: '' for the first one (a), « b. » for b. @param {string} group */
+export const groupPrefix = group => !group || group === 'a' ? '' : group + '.';
+
+/**
+ * The live state of an address' query (after « ? »): what is wrong or missing is left out — a group's (its keys
+ * after its letter, `prefix`: « b. »), its title the first group's only.
+ * @param {string} search @param {string} [prefix] @returns {Live}
+ */
+export function readLive(search, prefix = '') {
+  const params = groupParams(search, prefix);
   const p = params.get('p') || '';
   const at = (params.get('at') || '').split(',').map(Number);
   const ok = at.length === 2 && at.every(Number.isFinite) && Math.abs(at[0]) <= 90 && Math.abs(at[1]) <= 180;
   const o = params.get('o') || '';
   const per = /** @type {Period} */ (params.get('periode') || '');
   return {
-    title: cleanText(params.get('title')),
+    title: prefix ? null : cleanText(params.get('title')),
     plant: /^\d{1,9}$/.test(p) && Number(p) > 0 ? Number(p) : null,
     at: ok ? [at[1], at[0]] : null,
     r: parseDistance(params.get('r')),
@@ -90,10 +109,17 @@ export function readLive(search) {
 /**
  * The query of an address for this state and this search: the title, the plant, the scope (its radius always said:
  * `radius` when the state has none), or a place still to find (with the radius said, if one is), the observation, then
- * the search's own words (core/query.js).
- * @param {Live} live @param {import('../core/store.js').Query} query @param {number} [radius] @returns {string}
+ * the search's own words (core/query.js) — a group's, each key after its letter (`prefix`: « b. »).
+ * @param {Live} live @param {import('../core/store.js').Query} query @param {number} [radius] @param {string} [prefix] @returns {string}
  */
-export function liveSearch(live, query, radius = DEFAULT_RADIUS) {
+export function liveSearch(live, query, radius = DEFAULT_RADIUS, prefix = '') {
+  const text = ownSearch(live, query, radius);
+  if (!prefix || !text) return text;
+  return text.split('&').map(kv => prefix + kv).join('&');
+}
+
+/** @param {Live} live @param {import('../core/store.js').Query} query @param {number} radius @returns {string} */
+function ownSearch(live, query, radius) {
   const params = new URLSearchParams();
   if (live.title) params.set('title', live.title);
   if (live.plant) params.set('p', String(live.plant));
@@ -112,8 +138,8 @@ export function liveSearch(live, query, radius = DEFAULT_RADIUS) {
   return [own, words].filter(Boolean).join('&');
 }
 
-/** The search an address' query says (core/query.js). @param {string} search */
-export const readQuery = search => fromHash('#/?' + search);
+/** The search an address' query says (core/query.js) — a group's (its keys after its letter, `prefix`). @param {string} search @param {string} [prefix] */
+export const readQuery = (search, prefix = '') => fromHash('#/?' + (prefix ? groupParams(search, prefix).toString() : search));
 
 /** Two states the same? @param {Live} a @param {Live} b */
 export const sameLive = (a, b) => a.title === b.title && a.plant === b.plant && a.r === b.r && a.place === b.place && a.obs === b.obs && a.periode === b.periode
@@ -122,11 +148,13 @@ export const sameLive = (a, b) => a.title === b.title && a.plant === b.plant && 
 /** The live state of a layout on screen, and what it loads for it. Fires `change` (detail: { how, keys }). */
 export class LayoutState extends EventTarget {
   /**
-   * @param {{ radius?: number | null, find?: typeof findPlace }} [defaults] the layout's own default radius (a map or a
-   *   place cell's r=); `find`: how a place typed is found (the IGN geocoder; tests give their own)
+   * @param {{ radius?: number | null, find?: typeof findPlace, channel?: import('../core/search-channel.js').Channel }} [defaults] the
+   *   layout's own default radius (a map or a place cell's r=); `find`: how a place typed is found (the IGN geocoder;
+   *   tests give their own); `channel`: the search its zone keeps to its plants (core/search-channel.js; the app's)
    */
   constructor(defaults = {}) {
     super();
+    this.channel = defaults.channel ?? APP;
     /** @type {Live} */
     this.live = EMPTY;
     this.defaultRadius = defaults.radius ?? DEFAULT_RADIUS;
@@ -402,7 +430,7 @@ export class LayoutState extends EventTarget {
    * @param {boolean} want
    */
   wholeOf(want) {
-    const query = store.state.query;
+    const query = this.channel.query;
     const key = want ? 'q:' + toHash(query) : '';
     if (key === this.wholeFor) return;
     this.wholeFor = key;
@@ -418,9 +446,9 @@ export class LayoutState extends EventTarget {
   async #rescope(ids) {
     if (!ids && !this.scoped) return;
     this.scoped = Boolean(ids);
-    setSearchScope(ids);
+    this.channel.setScope(ids);
     await whenReady();
-    runSearch();
+    this.channel.run();
   }
 
   /**
@@ -466,6 +494,6 @@ export class LayoutState extends EventTarget {
     this.gbifAbort?.abort();
     for (const set of this.sets.values()) set.abort.abort();
     this.sets.clear();
-    if (this.scoped) { this.scoped = false; setSearchScope(null); whenReady().then(() => runSearch()); }
+    if (this.scoped) { this.scoped = false; this.channel.setScope(null); whenReady().then(() => this.channel.run()); }
   }
 }

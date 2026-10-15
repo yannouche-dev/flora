@@ -2,7 +2,8 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { STATUS_SHORT } from '../config.js';
 import { FACETS, activeFilterCount, clearFilters, toggleValue } from '../core/query.js';
-import { store, StoreController } from '../core/store.js';
+import { store } from '../core/store.js';
+import { SearchController } from '../core/search-channel.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 
@@ -46,7 +47,18 @@ export class GfActiveFilters extends LitElement {
     button .x { font-size: 1rem; line-height: 1; color: var(--gf-text-muted); }
   `];
 
-  #store = new StoreController(this);
+  static properties = {
+    /** The search whose filters it shows (core/search-channel.js: a free layout's group); none: the app's. */
+    channel: { attribute: false }
+  };
+
+  #store = new SearchController(this);
+
+  constructor() {
+    super();
+    /** @type {import('../core/search-channel.js').Channel | null} */
+    this.channel = null;
+  }
 
   render() {
     const { query } = this.#store.state;
@@ -58,11 +70,11 @@ export class GfActiveFilters extends LitElement {
       <ul aria-label="Filtres actifs">
         ${FACETS.flatMap(facet => query.filters[facet].map(value => html`
           <li>
-            <button class="chip" aria-pressed="true" type="button" aria-label="Retirer le filtre ${value}" @click=${() => toggleValue(facet, value)}>
+            <button class="chip" aria-pressed="true" type="button" aria-label="Retirer le filtre ${value}" @click=${() => toggleValue(facet, value, this.#store.channel)}>
               ${LABELS[facet](value)} <span class="x" aria-hidden="true">${icon('x')}</span>
             </button>
           </li>`))}
-        ${total > 1 ? html`<li><button class="link" type="button" @click=${clearFilters}>Tout effacer</button></li>` : nothing}
+        ${total > 1 ? html`<li><button class="link" type="button" @click=${() => clearFilters(this.#store.channel)}>Tout effacer</button></li>` : nothing}
       </ul>
     `;
   }

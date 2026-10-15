@@ -188,7 +188,13 @@ const FRAME = {
     kind: 'enum', label: 'Toucher une plante', def: 'plante', group: 'Liens', frame: true, values: { plante: 'La choisit', fiche: 'Ouvre sa fiche', rien: 'Rien' },
     aliases: { pick: 'plante', choisir: 'plante', sheet: 'fiche', ouvrir: 'fiche', none: 'rien', aucun: 'rien' }, words: ['tap', 'clic', 'click', 'touch', 'touche']
   },
-  ecrit: { kind: 'bool', label: 'Change la plante courante', def: true, group: 'Liens', frame: true, words: ['ecrire', 'write', 'writes', 'choisit'] }
+  ecrit: { kind: 'bool', label: 'Change la plante courante', def: true, group: 'Liens', frame: true, words: ['ecrire', 'write', 'writes', 'choisit'] },
+  // Its group: the cells of one group share a zone, a plant, a period and a search; another's are apart (two lists, two
+  // maps that do not follow each other on one screen). Its keys in the address after its letter (state.js: b.q=).
+  groupe: {
+    kind: 'enum', label: 'Groupe', def: 'a', group: 'Liens', frame: true, named: true, values: { a: 'Groupe A', b: 'Groupe B', c: 'Groupe C' },
+    aliases: { 1: 'a', 2: 'b', 3: 'c' }, words: ['group', 'canal', 'channel']
+  }
 };
 
 /**
@@ -217,7 +223,7 @@ export function touchOf(r) {
 }
 
 /** The frame's settings of a component, in their order (FRAME). @param {string} id @returns {Record<string, ParamSpec>} */
-const frameOf = id => Object.fromEntries(Object.entries(FRAME).filter(([k]) => ['tete', 'titre', 'actions', 'etat', ...(FRAME_OF[id] ?? [])].includes(k)));
+const frameOf = id => Object.fromEntries(Object.entries(FRAME).filter(([k]) => ['tete', 'titre', 'actions', 'etat', ...(id === 'slot' ? [] : ['groupe']), ...(FRAME_OF[id] ?? [])].includes(k)));
 
 /** French names of the sheet's blocks (folded) → their key (sheet-blocks.js#BLOCKS). */
 const BLOCK_ALIASES = {

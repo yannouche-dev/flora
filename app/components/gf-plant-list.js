@@ -1,7 +1,8 @@
 // @ts-check
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { setQuery } from '../core/query.js';
-import { StoreController, gridViewOf } from '../core/store.js';
+import { gridViewOf } from '../core/store.js';
+import { SearchController } from '../core/search-channel.js';
 import { baseOf } from '../core/modes.js';
 import './gf-plant-card.js';
 import { icon } from '../core/icons.js';
@@ -68,6 +69,8 @@ export class GfPlantList extends LitElement {
     current: { type: Number },
     /** The plants to list instead of the search's (a free layout's results over the whole flora: results(zone=0)); null: the search's. */
     items: { attribute: false },
+    /** The search it lists (core/search-channel.js: a free layout's group); none: the app's. */
+    channel: { attribute: false },
     _scrollTop: { state: true },
     _height: { state: true },
     _width: { state: true }
@@ -143,7 +146,7 @@ export class GfPlantList extends LitElement {
     [hidden] { display: none !important; }
   `;
 
-  #store = new StoreController(this);
+  #store = new SearchController(this);
   #resize = new ResizeObserver(([entry]) => {
     const { width, height } = entry.contentRect;
     this._height = height;
@@ -166,6 +169,8 @@ export class GfPlantList extends LitElement {
     this.current = null;
     /** @type {any[] | null} */
     this.items = null;
+    /** @type {import('../core/search-channel.js').Channel | null} */
+    this.channel = null;
     this.addEventListener('scroll', () => {
       cancelAnimationFrame(this.#frame);
       this.#frame = requestAnimationFrame(() => { this._scrollTop = this.scrollTop; });
@@ -227,7 +232,7 @@ export class GfPlantList extends LitElement {
   /** Header click: sort by the column, again to reverse. @param {string} key */
   #sortBy(key) {
     const sort = this.#store.state.results.sort;
-    setQuery({ sort: sort === key ? '-' + key : key });
+    setQuery({ sort: sort === key ? '-' + key : key }, { channel: this.#store.channel });
   }
 
   /** Funnel of a column: show its filter (filters pane or sheet). @param {string} facet */
