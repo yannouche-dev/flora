@@ -7,7 +7,9 @@
 // The centre: the map's area (a page's circle), else the point picked (a long press, a search result: the point card)
 // or the place selected, else the view's centre when it is shown — fixed then: the view moves, the circle stays;
 // « Centrer ici » brings it to the view's centre. The radius: the stops of the mini-apps' distance (200 m to 50 km), on
-// the same stepped slider, in a card at the bottom of the map (folded to its chip: « 2 km · 128 »).
+// the same stepped slider, in a card at the bottom of the map (folded to its chip: « 2 km · 128 »). Around the page's
+// area, the area's own radius (one circle on the map, never two): its ring is the page's, its wall stands on it; the
+// slider then moves the page's zone (gf-map `radius-change`, as its handle does) when the page lets it (radiusHandle).
 // What is drawn, and why (the views tried: every point a DOM marker — a few hundred elements moved at each frame of a
 // tilt, slow on a phone; every point a symbol of MapLibre — fast, but no photos, no card, not the 2D markers; a
 // clustered source — bubbles, not the app's look):
@@ -19,13 +21,15 @@
 //    pink and gold ring) — a GBIF occurrence as an iNaturalist observation: its plant's photo, the same seed, the same
 //    card but for its source (core/around3d.js); the photos of plants without one in the flora's data, found online
 //    after the points are drawn, drawn again with them (morePhotos) —, standing on the ground on a thin stem as the map tilts (none from
-//    above), smaller further away, faded where the relief hides them (MapLibre's own test of the terrain). Only the
-//    nearest ones are elements:
-//    the points on the screen are grouped by distance on the screen (the nearest first, the plant chosen before all),
-//    and the first groups (40 on a phone, 70 otherwise) are markers — a point alone its photo, a group a stack of
-//    photos with its count (as the 2D groups: never a bubble); every other point is a small seed drawn by MapLibre
-//    (one circle layer, the points shown as markers hidden by feature state: no data sent again as the view moves);
-//    laid out again as the view moves (a few times a second) and once it rests;
+//    above), smaller further away, never faded behind the relief (MapLibre tests a marker's foot: a head standing
+//    clear of a ridge was faded). The plant lit (the page's, the one selected): each of its points a marker, always.
+//    The others, when they are more than the markers allowed (40 on a phone, 70 otherwise): grouped by distance on the
+//    screen (the nearest first), the first groups markers — a point alone its photo, a group a stack of photos with
+//    its count (as the 2D groups: never a bubble); every other point is a small seed drawn by MapLibre (one circle
+//    layer, facing the screen however tilted; the points shown as markers hidden by feature state: no data sent again
+//    as the view moves); laid out again once the view rests — never while it moves (a turn, a tilt: the markers stay
+//    as they are, none made again), each marker kept by its point (a group keeps the marker of one of its points);
+//  - the page's own points (its area's, the plant it shows): not again here — its markers, over these;
 //  - the density, at will: the circle in hexagons, a column per hexagon as tall as its share of the busiest one,
 //    coloured from the app's greens to gold — touched, how many and the plants most seen;
 //  - a point hovered or touched: the 2D card (map-style.js obsCard: photo and credit, names, when and where); a
@@ -54,8 +58,6 @@ const DOM_PHONE = 40;
 const DOM_WIDE = 70;
 /** Points closer than this on the screen (px) are one group. */
 const GROUP_PX = 46;
-/** The layout again while the view moves: at most this often (ms). */
-const LAYOUT_EVERY = 120;
 /** Its seeds' colours: an observation's green (iNaturalist's and GBIF's alike), the user's plants gold. */
 const SEED = { obs: '#5c8a00', mine: '#f5c542' };
 
@@ -116,8 +118,9 @@ export class Obs3dLayer {
   /** @type {any} */ #hex = { type: 'FeatureCollection', features: [], max: 1, size: 0 };
   /** @type {[number, number] | null} the point picked last (point card) */ #picked = null;
   #open = false;
-  #lastLayout = 0;
-  #layoutQueued = false;
+  /** The circle drawn last (its centre, radius and why): drawn again only when one changes. */
+  #ringKey = '';
+  #mergeQueued = false;
   #alive = true;
   /** @type {HTMLElement | null} */ #card = null;
   /** The card stays (touched), or follows the pointer (hovered). */
@@ -175,13 +178,18 @@ export class Obs3dLayer {
   #pressHint;
 
   #barView() {
-    const p = this.prefs, at = Math.max(0, RADII_3D.indexOf(p.radius)), n = RADII_3D.length - 1, count = this.#points.length;
+    const p = this.prefs, r = this.#radius, n = RADII_3D.length - 1, count = this.#points.length;
+    // Its stop: the radius', else the nearest (a page's zone may lie between two: r=3km).
+    const at = RADII_3D.reduce((best, d, i) => Math.abs(d - r) < Math.abs(RADII_3D[best] - r) ? i : best, 0);
+    // Around the page's area: the slider moves its zone when the page lets it (a radius handle: it follows them);
+    // else the zone's radius is only said.
+    const zone = this.why === 'area', slider = !zone || Boolean(this.host.radiusHandle);
     // The chip: its radius, a spinner while they come (past 400 ms: map-gl.css), its count in its name only (the
     // quiet-map rule: no number left over the map; the unfolded card says it, the map's live region too).
     const chip = html`<button type="button" class="gf-o3-chip" aria-expanded=${String(this.#open)} aria-busy=${String(this.#loading)}
-      aria-label=${`Observations autour : ${radiusWords(p.radius)}${this.#loading ? '' : `, ${count} observation${count > 1 ? 's' : ''}`}. ${this.#open ? 'Replier' : 'Régler'}`}
+      aria-label=${`Observations autour : ${radiusWords(r)}${this.#loading ? '' : `, ${count} observation${count > 1 ? 's' : ''}`}. ${this.#open ? 'Replier' : 'Régler'}`}
       @click=${() => { this.#open = !this.#open; this.#syncUi(); }}>
-      ${icon('binoculars')} <b>${radiusLabel(p.radius)}</b>
+      ${icon('binoculars')} <b>${radiusLabel(r)}</b>
       ${this.#loading ? html`<i class="gf-o3-spin" aria-hidden="true"></i>` : nothing}
       ${icon(this.#open ? 'chevron-down' : 'chevron-up')}</button>`;
     if (!this.#open) return chip;
@@ -191,15 +199,16 @@ export class Obs3dLayer {
     return html`<section class="gf-o3-panel" aria-label="Observations autour">
       <div class="gf-o3-top"><b>Observations autour</b><span class="gf-o3-where">${this.#whereLine()}</span>
         <button type="button" class="gf-o3-close" aria-label="Masquer les observations" title="Masquer les observations" @click=${() => this.#turnOff()}>${icon('x-lg')}</button></div>
-      <output class="gf-o3-value">${radiusLabel(p.radius)}</output>
-      <div class="gf-o3-range" style="--n:${n};--p:${at / n}">
+      <output class="gf-o3-value">${radiusLabel(r)}</output>
+      ${slider ? html`<div class="gf-o3-range" style="--n:${n};--p:${at / n}">
         <div class="gf-o3-rail" aria-hidden="true"></div>
         ${RADII_3D.map((d, i) => html`<span class="gf-o3-stop ${i <= at ? 'on' : ''}" style="--i:${i}" aria-hidden="true"></span>`)}
         ${RADII_3D.map((d, i) => html`<span class="gf-o3-mark ${[200, 1000, 5000, 50000].includes(d) ? '' : 'minor'} ${i === 0 ? 'first' : i === n ? 'last' : ''} ${i === at ? 'cur' : ''}"
           style="--i:${i}" aria-hidden="true">${radiusLabel(d)}</span>`)}
-        <input type="range" min="0" max=${n} step="1" .value=${String(at)} aria-label="Rayon autour du centre" aria-valuetext=${radiusWords(p.radius)}
-          @input=${(/** @type {any} */ e) => this.#set({ radius: RADII_3D[Number(e.target.value)] })} />
-      </div>
+        <input type="range" min="0" max=${n} step="1" .value=${String(at)} aria-label="Rayon autour du centre" aria-valuetext=${radiusWords(r)}
+          @input=${(/** @type {any} */ e) => { if (!zone) this.#set({ radius: RADII_3D[Number(e.target.value)] }); }}
+          @change=${(/** @type {any} */ e) => { if (zone) this.#zoneRadius(RADII_3D[Number(e.target.value)]); }} />
+      </div>` : nothing}
       <p class="gf-o3-count" aria-busy=${String(this.#loading)}>${this.#loading ? html`<i class="gf-o3-spin" aria-hidden="true"></i>` : nothing}${this.#countLine()}</p>
       <div class="gf-o3-row">${toggle('inat', 'iNaturalist')}${toggle('gbif', 'GBIF')}${toggle('density', 'Densité')}</div>
       <div class="gf-o3-row">
@@ -225,9 +234,25 @@ export class Obs3dLayer {
   #set(patch) {
     const before = this.prefs;
     this.prefs = this.#save(patch);
-    if (patch.radius != null && patch.radius !== before.radius) { this.#zone(); this.#frame(false); this.#queueLoad(); }
+    if (patch.radius != null && patch.radius !== before.radius && this.why !== 'area') { this.#zone(); this.#frame(false); this.#queueLoad(); }
     if ((patch.inat != null && patch.inat !== before.inat) || (patch.gbif != null && patch.gbif !== before.gbif)) this.#queueLoad(0);
     if (patch.density != null && patch.density !== before.density) { this.#density(); this.restyle(); this.#layout(); }
+    this.#syncUi();
+  }
+
+  /**
+   * The radius of the circle drawn: around the page's area, the area's own (its ring is the page's: one circle on the
+   * map, never two — not snapped to the slider's stops), else the one chosen here.
+   */
+  get #radius() {
+    const r = Number(this.host.area?.radius);
+    return this.why === 'area' && r > 0 ? r : this.prefs.radius;
+  }
+
+  /** The slider moved around the page's area: its zone's radius, the page's to change (gf-map `radius-change`, as its handle). @param {number} m */
+  #zoneRadius(m) {
+    if (m !== this.#radius) this.host.dispatchEvent(new CustomEvent('radius-change', { detail: { radius: m }, bubbles: true, composed: true }));
+    // Not followed (or not yet): the slider back on the zone's radius.
     this.#syncUi();
   }
 
@@ -279,7 +304,7 @@ export class Obs3dLayer {
     }
     const patch = /** @type {Partial<import('../core/around3d.js').Around3dPrefs>} */ (Object.fromEntries(Object.entries(next).filter(([k, v]) => /** @type {any} */ (p)[k] !== v)));
     this.prefs = next;
-    if (patch.radius != null) { this.#zone(); this.#frame(false); this.#queueLoad(); }
+    if (patch.radius != null && this.why !== 'area') { this.#zone(); this.#frame(false); this.#queueLoad(); }
     if (patch.inat != null || patch.gbif != null) this.#queueLoad(0);
     if (patch.density != null) { this.#density(); this.restyle(); this.#layout(); }
     this.#syncUi();
@@ -308,14 +333,19 @@ export class Obs3dLayer {
     this.center = [Number(c[0]), Number(c[1])];
   }
 
-  /** The centre moved (a page's area, a point picked, a place selected, « Centrer ici »): there, framed again. */
+  /**
+   * The centre moved (a page's area, a point picked, a place selected, « Centrer ici »): there, framed again. The
+   * page's area changed its radius only: the circle, its points again (the page frames its area itself).
+   */
   #moveCenter() {
     const was = this.center?.join();
     this.#pickCenter();
-    if (this.center?.join() === was) return;
+    const moved = this.center?.join() !== was;
+    if (!moved && this.#ringKey === this.#ringOf()) return;
     this.#zone();
+    this.#density();
     this.#queueLoad(0);
-    this.#frame(true);
+    if (moved) this.#frame(true);
     this.#syncUi();
   }
 
@@ -336,7 +366,14 @@ export class Obs3dLayer {
     if (changed.has('around3d') && this.host.around3d) this.#follow(cleanAround3d(this.host.around3d));
     if (!this.prefs.on) return;
     if (changed.has('area') || changed.has('selectedId')) this.#moveCenter();
-    if (changed.has('plants') || changed.has('highlight') || changed.has('selectedPlant')) { this.#merge(); this.#layout(); }
+    // Once gf-map has drawn them (its plants shown or not, by their zoom; its own points): the points again.
+    if (['plants', 'highlight', 'selectedPlant', 'area', 'cluster'].some(k => changed.has(k)) && !this.#mergeQueued) {
+      this.#mergeQueued = true;
+      queueMicrotask(() => {
+        this.#mergeQueued = false;
+        if (this.#alive && this.prefs.on) { this.#merge(); this.#layout(); }
+      });
+    }
   }
 
   // ── The camera ──────────────────────────────────────────────────────────────────────────────────
@@ -351,7 +388,7 @@ export class Obs3dLayer {
     const canvas = map.getCanvas(), pitch = mapSettings().pitch;
     // The circle across most of the width; tilted, it is shorter than wide (by the tilt's cosine): its depth in the height.
     const px = Math.max(160, Math.min(canvas.clientWidth * 0.8, canvas.clientHeight * 0.7 / Math.max(0.45, Math.cos(pitch * Math.PI / 180))));
-    const zoom = Math.min(18, Math.max(3, fitZoom(this.prefs.radius, c[1], px)));
+    const zoom = Math.min(18, Math.max(3, fitZoom(this.#radius, c[1], px)));
     // Its centre a little above the middle: tilted, its near half is the larger one (and the chip is at the bottom).
     const view = { center: c, zoom, pitch, bearing: map.getBearing(), offset: [0, -Math.round(canvas.clientHeight * pitch / 900)] };
     if (reduceMotion()) { map.easeTo({ ...view, duration: 0 }, { gfObs: true }); return; }
@@ -383,7 +420,7 @@ export class Obs3dLayer {
     const abort = this.#abort = new AbortController();
     this.box.classList.add('gf-o3-loading');
     try {
-      const r = await observations3d(c, p.radius, { inat: p.inat, gbif: p.gbif }, abort.signal);
+      const r = await observations3d(c, this.#radius, { inat: p.inat, gbif: p.gbif }, abort.signal);
       if (abort.signal.aborted || !this.#alive) return;
       this.#remote = r.points;
       this.#totals = r.totals;
@@ -421,11 +458,14 @@ export class Obs3dLayer {
     this.#syncUi();
   }
 
-  /** The points: the sources' and the user's plants in the circle (not while gf-map shows them itself, close up). */
+  /**
+   * The points: the sources' and the user's plants in the circle (not while gf-map shows them itself, close up) — not
+   * those the page draws already (its area's, the plant it shows, its groups': the same record, or the same spot).
+   */
   #merge() {
-    const h = this.host, c = this.center, r = this.prefs.radius;
+    const h = this.host, c = this.center, r = this.#radius;
     /** @type {Obs3d[]} */ const mine = [];
-    const close = this.#close = this.lf.getZoom() >= (h.plantZoom ?? 16);
+    const close = this.#close = Boolean(h.plantsShown);
     if (c && !close) {
       for (const pl of h.plants || []) {
         const [lon, lat] = pl.coordinates || [];
@@ -435,7 +475,14 @@ export class Obs3dLayer {
           plant: { placeId: pl.placeId, entryId: pl.entryId, plantId: pl.plantId } });
       }
     }
-    this.#points = [...mine, ...this.#remote];
+    const spot = (/** @type {number[]} */ x) => Number(x[0]).toFixed(6) + ',' + Number(x[1]).toFixed(6);
+    /** @type {Set<string>} */ const urls = new Set(), spots = new Set();
+    for (const p of [...(h.area?.points || []), ...(h.highlight?.points || []), ...(h.cluster?.points || [])]) {
+      if (p?.url) urls.add(p.url);
+      if (Array.isArray(p?.coordinates)) spots.add(spot(p.coordinates));
+    }
+    const remote = urls.size || spots.size ? this.#remote.filter(p => !(p.url && urls.has(p.url)) && !spots.has(spot(p.coordinates))) : this.#remote;
+    this.#points = [...mine, ...remote];
     // The plants lit: the one a page shows (highlight), the plant selected on the map.
     const lit = new Set();
     const hl = h.highlight;
@@ -464,23 +511,27 @@ export class Obs3dLayer {
   #isLit(p) { const k = speciesKey(p); return Boolean(k && this.#lit.has(k)); }
 
   #density() {
-    this.#hex = this.prefs.density && this.center ? hexBins(this.#points, this.center, this.prefs.radius) : { type: 'FeatureCollection', features: [], max: 1, size: 0 };
+    this.#hex = this.prefs.density && this.center ? hexBins(this.#points, this.center, this.#radius) : { type: 'FeatureCollection', features: [], max: 1, size: 0 };
     this.map.getSource(ID + 'hex')?.setData(this.#hex);
   }
+
+  /** The circle's centre, radius and why, as a key. */
+  #ringOf() { return `${this.center?.join() ?? ''}:${this.#radius}:${this.why}`; }
 
   /** The circle: its area, its wall (its radius is the chip's and the slider's: no pill left on the ground). */
   #zone() {
     const c = this.center;
     if (!c) return;
+    this.#ringKey = this.#ringOf();
     this.map.getSource(ID + 'zone')?.setData(this.#zoneData());
-    this.map.getSource(ID + 'wall')?.setData(ringWall(c, this.prefs.radius));
+    this.map.getSource(ID + 'wall')?.setData(ringWall(c, this.#radius));
     this.restyle();
   }
 
   #zoneData() {
     const c = /** @type {[number, number]} */ (this.center);
     return { type: 'FeatureCollection', features: [
-      { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [circlePolygon(c, this.prefs.radius, 128)] } },
+      { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: [circlePolygon(c, this.#radius, 128)] } },
       { type: 'Feature', properties: { centre: true }, geometry: { type: 'Point', coordinates: c } }
     ] };
   }
@@ -490,7 +541,7 @@ export class Obs3dLayer {
   /** Adds its sources and layers to a style (nothing while it is off). @param {any} style */
   addTo(style) {
     if (!this.prefs.on || !this.center) return;
-    const c = this.center, r = this.prefs.radius, h = wallHeight(r), density = this.prefs.density;
+    const c = this.center, r = this.#radius, h = wallHeight(r), density = this.prefs.density;
     Object.assign(style.sources, {
       [ID + 'zone']: { type: 'geojson', data: this.#zoneData() },
       [ID + 'wall']: { type: 'geojson', data: ringWall(c, r) },
@@ -498,17 +549,20 @@ export class Obs3dLayer {
       [ID + 'hex']: { type: 'geojson', data: this.#hex }
     });
     const zone = ['==', ['geometry-type'], 'Polygon'];
-    style.layers.push(
+    // Its ring on the ground — none around the page's area: the page's own ring is there, the wall stands on it.
+    if (this.why !== 'area') style.layers.push(
       { id: ID + 'zone-fill', type: 'fill', source: ID + 'zone', filter: zone, paint: { 'fill-color': '#a3e68a', 'fill-opacity': density ? 0.05 : 0.1 } },
       { id: ID + 'zone-shadow', type: 'line', source: ID + 'zone', filter: zone, paint: { 'line-color': '#000000', 'line-width': 5, 'line-opacity': 0.3, 'line-blur': 2 } },
-      { id: ID + 'zone-line', type: 'line', source: ID + 'zone', filter: zone, layout: { 'line-join': 'round' }, paint: { 'line-color': '#a3e68a', 'line-width': 3 } },
+      { id: ID + 'zone-line', type: 'line', source: ID + 'zone', filter: zone, layout: { 'line-join': 'round' }, paint: { 'line-color': '#a3e68a', 'line-width': 3 } }
+    );
+    style.layers.push(
       // The wall: translucent, lighter at its foot; its rim, a band of light on top.
       { id: ID + 'wall', type: 'fill-extrusion', source: ID + 'wall',
         paint: { 'fill-extrusion-color': '#a3e68a', 'fill-extrusion-height': h, 'fill-extrusion-base': 0, 'fill-extrusion-opacity': 0.35, 'fill-extrusion-vertical-gradient': true } },
       { id: ID + 'wall-rim', type: 'fill-extrusion', source: ID + 'wall',
         paint: { 'fill-extrusion-color': '#f2ffe6', 'fill-extrusion-height': h, 'fill-extrusion-base': Math.round(h * 0.93), 'fill-extrusion-opacity': 0.75, 'fill-extrusion-vertical-gradient': false } },
       { id: ID + 'centre', type: 'circle', source: ID + 'zone', filter: ['==', ['geometry-type'], 'Point'],
-        paint: { 'circle-radius': 5, 'circle-color': '#ffffff', 'circle-stroke-color': '#2f6b3a', 'circle-stroke-width': 2.5, 'circle-pitch-alignment': 'map' } }
+        paint: { 'circle-radius': 5, 'circle-color': '#ffffff', 'circle-stroke-color': '#2f6b3a', 'circle-stroke-width': 2.5, 'circle-pitch-alignment': 'viewport' } }
     );
     if (density) {
       const top = Math.max(30, r * 0.18);
@@ -519,23 +573,24 @@ export class Obs3dLayer {
           'fill-extrusion-vertical-gradient': true
         } });
     } else {
-      // The points not shown as markers: seeds on the ground, an observation's green whatever its source (the user's plants gold).
+      // The points not shown as markers: seeds on the ground, an observation's green whatever its source (the user's
+      // plants gold) — discs facing the screen, the same size near and far (lying on the map, a tilt made them slivers).
       style.layers.push({ id: ID + 'seeds', type: 'circle', source: ID + 'pts',
         paint: {
-          'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 2, 14, 3.5, 18, 5],
+          'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 4, 14, 4.5, 18, 6],
           'circle-color': ['case', ['get', 'hl'], '#e0245e', ['match', ['get', 'k'], 'mine', SEED.mine, SEED.obs]],
-          'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1.2, 'circle-pitch-alignment': 'map',
+          'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1.2, 'circle-pitch-alignment': 'viewport', 'circle-pitch-scale': 'viewport',
           'circle-opacity': ['case', ['boolean', ['feature-state', 'dom'], false], 0, 0.95],
           'circle-stroke-opacity': ['case', ['boolean', ['feature-state', 'dom'], false], 0, 0.95]
         } });
     }
   }
 
-  // ── The markers: the nearest groups ─────────────────────────────────────────────────────────────
+  // ── The markers: the plant lit, the nearest groups ──────────────────────────────────────────────
 
   #listen() {
     const map = this.map;
-    map.on('move', () => this.#queueLayout());
+    // Laid out once the view rests, never while it moves (a turn, a tilt: no marker made again, none gone).
     map.on('moveend', () => this.#layout());
     map.on('idle', () => this.#layout());
     map.on('pitch', () => this.#tilt());
@@ -554,7 +609,8 @@ export class Obs3dLayer {
       });
     });
     // Close enough for gf-map to show the user's plants itself (or no longer): they leave the points (or come back).
-    map.on('moveend', () => { const close = this.lf.getZoom() >= (this.host.plantZoom ?? 16); if (close !== this.#close && this.prefs.on) { this.#merge(); this.#layout(); } });
+    // (gf-map-gl.js gives the 2D map the view first: gf-map has shown them, or not, by then.)
+    map.on('moveend', () => { const close = Boolean(this.host.plantsShown); if (close !== this.#close && this.prefs.on) { this.#merge(); this.#layout(); } });
     map.on('click', (/** @type {any} */ e) => {
       if (!this.prefs.on) return;
       if (this.prefs.density && map.getLayer(ID + 'hex')) {
@@ -581,28 +637,20 @@ export class Obs3dLayer {
     this.box.style.setProperty('--gf-tilt', t.toFixed(3));
   }
 
-  #queueLayout() {
-    if (this.#layoutQueued) return;
-    this.#layoutQueued = true;
-    requestAnimationFrame(() => {
-      this.#layoutQueued = false;
-      if (performance.now() - this.#lastLayout >= LAYOUT_EVERY) this.#layout();
-      else this.#queueLayout();
-    });
-  }
-
   /**
-   * The points on the screen grouped (the nearest first: lowest on the screen of a tilted view, the plant lit before
-   * all), the first groups as markers, the others left to their seeds.
+   * The points on the screen as markers: the plant lit's, each its own, all of them; the others each its own too when
+   * they fit (DOM_PHONE, DOM_WIDE), else grouped (the nearest first: lowest on the screen of a tilted view) and the
+   * first groups markers — the rest left to their seeds. A marker is its point's (a group's: the marker one of its
+   * points already had): kept as the view changes, never made again.
    */
   #layout() {
     if (!this.#alive) return;
-    this.#lastLayout = performance.now();
     const map = this.map;
     if (!this.prefs.on || this.prefs.density || !this.#points.length) { this.#clearMarks(); return; }
     const canvas = map.getCanvas(), W = canvas.clientWidth, H = canvas.clientHeight;
     const tilted = map.getPitch() > 8;
-    /** @type {{ i: number, x: number, y: number, lit: boolean, photo: boolean }[]} */
+    /** @typedef {{ i: number, x: number, y: number, lit: boolean, photo: boolean }} Seen */
+    /** @type {Seen[]} */
     const seen = [];
     for (const [i, p] of this.#points.entries()) {
       const s = map.project(p.coordinates);
@@ -610,34 +658,46 @@ export class Obs3dLayer {
       seen.push({ i, x: s.x, y: s.y, lit: this.#isLit(p), photo: Boolean(p.photo) });
     }
     seen.sort((a, b) => Number(b.lit) - Number(a.lit) || (tilted ? b.y - a.y : 0) || Number(b.photo) - Number(a.photo) || a.i - b.i);
-    // Greedy groups on a grid of GROUP_PX cells: a point joins the group whose head is within GROUP_PX (a lit point never joins another's).
-    /** @type {{ head: typeof seen[0], members: number[] }[]} */
-    const groups = [];
-    /** @type {Map<string, number[]>} */
-    const grid = new Map();
-    const cell = (/** @type {number} */ x, /** @type {number} */ y) => Math.floor(x / GROUP_PX) + ',' + Math.floor(y / GROUP_PX);
-    for (const s of seen) {
-      let joined = -1;
-      // Further away (smaller), closer together before they are one.
-      const near = GROUP_PX * (tilted ? Math.min(1.1, Math.max(0.62, 0.55 + 0.6 * s.y / H)) : 1);
-      if (!s.lit) {
+    const max = this.#phone ? DOM_PHONE : DOM_WIDE;
+    const rest = seen.filter(s => !s.lit);
+    /** @type {{ head: Seen, members: number[] }[]} */
+    const chosen = seen.filter(s => s.lit).map(s => ({ head: s, members: [s.i] }));
+    if (rest.length <= max) chosen.push(...rest.map(s => ({ head: s, members: [s.i] })));
+    else {
+      // Greedy groups on a grid of GROUP_PX cells: a point joins the group whose head is within GROUP_PX.
+      /** @type {{ head: Seen, members: number[] }[]} */
+      const groups = [];
+      /** @type {Map<string, number[]>} */
+      const grid = new Map();
+      for (const s of rest) {
+        let joined = -1;
+        // Further away (smaller), closer together before they are one.
+        const near = GROUP_PX * (tilted ? Math.min(1.1, Math.max(0.62, 0.55 + 0.6 * s.y / H)) : 1);
         const cx = Math.floor(s.x / GROUP_PX), cy = Math.floor(s.y / GROUP_PX);
         for (let dx = -1; dx <= 1 && joined < 0; dx++) for (let dy = -1; dy <= 1 && joined < 0; dy++) {
           for (const g of grid.get((cx + dx) + ',' + (cy + dy)) || []) {
             const h = groups[g].head;
-            if (!h.lit && Math.hypot(h.x - s.x, h.y - s.y) < near) { joined = g; break; }
+            if (Math.hypot(h.x - s.x, h.y - s.y) < near) { joined = g; break; }
           }
         }
+        if (joined >= 0) groups[joined].members.push(s.i);
+        else {
+          const key = cx + ',' + cy;
+          grid.set(key, [...(grid.get(key) || []), groups.length]);
+          groups.push({ head: s, members: [s.i] });
+        }
       }
-      if (joined >= 0) groups[joined].members.push(s.i);
-      else {
-        const key = cell(s.x, s.y);
-        grid.set(key, [...(grid.get(key) || []), groups.length]);
-        groups.push({ head: s, members: [s.i] });
-      }
+      chosen.push(...groups.slice(0, max));
     }
-    const max = this.#phone ? DOM_PHONE : DOM_WIDE;
-    const chosen = groups.slice(0, max);
+    // A group led by the point whose marker it already has (the marker stays: no new element, no new photo).
+    const where = new Map(seen.map(s => [s.i, s]));
+    for (const g of chosen) {
+      if (g.members.length < 2 || this.#marks.has(this.#points[g.head.i].id)) continue;
+      const kept = g.members.find(i => this.#marks.has(this.#points[i].id));
+      if (kept === undefined) continue;
+      g.members = [kept, ...g.members.filter(i => i !== kept)];
+      g.head = /** @type {Seen} */ (where.get(kept));
+    }
     // The seeds of the points now shown as markers hidden, the others shown again (only those that change).
     const shown = new Set(chosen.flatMap(g => g.members));
     const source = map.getSource(ID + 'pts') ? ID + 'pts' : null;
@@ -650,17 +710,17 @@ export class Obs3dLayer {
     const keep = new Set();
     for (const [rank, g] of chosen.entries()) {
       const head = this.#points[g.head.i];
-      const key = (g.members.length > 1 ? 'g:' : 'p:') + head.id;
+      const key = head.id;
       keep.add(key);
       const sig = (g.members.length > 1 ? 'g' + g.members.length + ':' + g.members.slice(0, 3).join(',') : 'p' + (g.head.lit ? 'hl' : '')) + '#' + this.#photoGen;
       let m = this.#marks.get(key);
       if (!m) m = this.#mark(key, head);
       if (m.sig !== sig) this.#fill(m, g.members, g.head.lit, sig);
       m.members = g.members;
-      // Nearer, over; smaller further away (in a tilted view).
+      // Nearer, over; smaller further away (in a tilted view). Under the page's own markers (gf-map-gl.js: 200 000 and over).
       const scale = tilted ? Math.min(1.1, Math.max(0.62, 0.55 + 0.6 * g.head.y / H)) : 1;
       m.el.style.setProperty('--s', scale.toFixed(2));
-      m.el.style.zIndex = String((g.head.lit ? 100000 : 0) + Math.round(tilted ? g.head.y : max - rank));
+      m.el.style.zIndex = String((g.head.lit ? 100000 : 0) + Math.max(0, Math.round(tilted ? g.head.y + 40 : chosen.length - rank)));
     }
     for (const [key, m] of this.#marks) if (!keep.has(key)) this.#dropMark(key, m);
   }
@@ -674,7 +734,8 @@ export class Obs3dLayer {
     el.addEventListener('mouseenter', () => { if (!this.#cardPinned && !matchMedia('(hover: none)').matches) this.#touch(m, false); });
     el.addEventListener('mouseleave', () => { if (!this.#cardPinned) this.#hideCard(); });
     el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.#touch(m, true); } });
-    const gl = new this.ml.Marker({ element: el, anchor: 'center', opacityWhenCovered: '0.3', subpixelPositioning: true }).setLngLat(head.coordinates).addTo(this.map);
+    // Never faded behind the relief (MapLibre tests its foot: a head standing clear of a ridge was faded).
+    const gl = new this.ml.Marker({ element: el, anchor: 'center', opacityWhenCovered: '1', subpixelPositioning: true }).setLngLat(head.coordinates).addTo(this.map);
     /** @type {Mark} */
     const m = { key, gl, el, sig: '', members: [] };
     this.#marks.set(key, m);
@@ -789,29 +850,25 @@ export class Obs3dLayer {
       card.append(close);
     }
     for (const type of ['mousedown', 'touchstart', 'wheel', 'click']) card.addEventListener(type, e => e.stopPropagation());
+    // In the top layer where the browser has it (a popover, as gf-map's cards of the 2D points): over every marker, the
+    // map's buttons, cards and panels, and the page around the map — never under any of them.
+    if ('popover' in card) card.popover = 'manual';
     this.box.append(card);
+    try { card.showPopover?.(); } catch { /* not connected */ }
     this.#cardPinned = pin;
-    // Above the point, in the map (below it when there is no room above) — never under what lies over the map's top
-    // (the Carte's search pill: a card there could not be closed on a phone).
-    const box = this.box.getBoundingClientRect(), w = card.offsetWidth, h = card.offsetHeight;
-    const top = this.#topInset(box);
-    const x = Math.min(box.width - w - 8, Math.max(8, near.left + near.width / 2 - box.left - w / 2));
-    let y = near.top - box.top - h - 10;
-    if (y < top) y = Math.min(box.height - h - 8, near.bottom - box.top + 10);
+    // Above the point (below it when there is no room above), within the window.
+    const w = card.offsetWidth, h = card.offsetHeight;
+    const x = Math.min(innerWidth - w - 8, Math.max(8, near.left + near.width / 2 - w / 2));
+    let y = near.top - h - 10;
+    if (y < 8) y = near.bottom + 10;
     card.style.left = Math.round(x) + 'px';
-    card.style.top = Math.round(Math.max(top, y)) + 'px';
+    card.style.top = Math.round(Math.max(8, Math.min(innerHeight - h - 8, y))) + 'px';
     if (pin) /** @type {HTMLElement | null} */ (card.querySelector('.gf-o3-close'))?.focus({ preventScroll: true });
-  }
-
-  /** Where a card may start, from the map's top: below the search pill when the map has one. @param {DOMRect} box */
-  #topInset(box) {
-    const pill = /** @type {HTMLElement | null} */ (this.host.querySelector?.('.gf-map-search'));
-    const r = pill && pill.offsetParent ? pill.getBoundingClientRect() : null;
-    return r && r.height ? Math.max(8, Math.round(r.bottom - box.top + 8)) : 8;
   }
 
   #hideCard() {
     if (this.#card) cancelImages(this.#card);
+    try { if (this.#card?.matches(':popover-open')) this.#card.hidePopover(); } catch { /* closed */ }
     this.#card?.remove();
     this.#card = null;
     this.#cardPinned = false;
@@ -835,7 +892,9 @@ export class Obs3dLayer {
     const by = (/** @type {string} */ k) => this.#points.filter(p => p.kind === k).length, c = this.center;
     const pictured = (/** @type {string} */ k) => this.#points.filter(p => p.kind === k && p.photo).length;
     return {
-      on: this.prefs.on, scope: this.scope, center: this.center, why: this.why, radius: this.prefs.radius, loading: this.#loading,
+      on: this.prefs.on, scope: this.scope, center: this.center, why: this.why, radius: this.#radius, loading: this.#loading,
+      // Its own ring on the ground (none around the page's area: the page's is there).
+      ring: this.why !== 'area',
       sources: { inat: this.prefs.inat, gbif: this.prefs.gbif }, density: this.prefs.density, failed: this.#failed,
       points: this.#points.length, kinds: { inat: by('inat'), gbif: by('gbif'), mine: by('mine') }, totals: this.#totals,
       photos: { inat: pictured('inat'), gbif: pictured('gbif'), mine: pictured('mine') },

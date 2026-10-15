@@ -3,9 +3,12 @@
 // never the network. The Carte in MapLibre with its relief, the same layers as in 2D, the options (buildings, sky,
 // globe) switched from its panel, its markers clickable; 2D by default, MapLibre never asked then; no 2D ⇄ 3D
 // button on the maps (the choice is in their panel: maps-panel3d.spec.mjs); back in 2D while positions are edited; the ways it stays in 2D or flat (no WebGL2, modules off, offline);
-// the « Jusqu’où part l’expédition ? » step always from above; one WebGL map per plant sheet. Why a map is in 2D or
-// flat is its state (the panel's « État », said once by its live region), never a note over it (quiet.mjs).
-import { test, expect, plantId, answerAround } from './fixtures.mjs';
+// the « Jusqu’où part l’expédition ? » step always from above; one WebGL map per plant sheet. A free layout's map in
+// 3D: its pins all there, never faded, over the observations around as the view turns and tilts; the binoculars
+// around its zone (r=3km), one circle; a point's card over everything; its groups not made again by a fraction of a
+// zoom. Why a map is in 2D or flat is its state (the panel's « État », said once by its live region), never a note
+// over it (quiet.mjs).
+import { test, expect, plantId, answerAround, answerObservations } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
 import { mapSaid, mapState } from './quiet.mjs';
 
@@ -368,5 +371,160 @@ test('fiche plante : sa carte principale en 3D, une carte ajoutée reste en 2D (
   await page.evaluate(async () => { (await import('/app/core/map-settings.js')).setMapSettings({ renderer: '2d' }); });
   await expect(main).toHaveAttribute('data-renderer', '2d');
   await expect(page.locator('canvas.maplibregl-canvas')).toHaveCount(0);
+  expect(seen.problems).toEqual([]);
+});
+
+/**
+ * What lies at a point of the window, through the shadow roots (the layout's cells). An element that lets the pointer
+ * through (a point's card) is asked as if it did not: what covers it is what is found.
+ * @param {import('@playwright/test').Locator} card
+ */
+const onTop = card => card.evaluate(el => {
+  const e = /** @type {HTMLElement} */ (el), r = e.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2;
+  const was = e.style.pointerEvents;
+  e.style.pointerEvents = 'auto';
+  /** @type {Document | ShadowRoot} */ let root = document;
+  /** @type {Element | null} */ let hit = null;
+  for (;;) {
+    const at = root.elementFromPoint(x, y);
+    if (!at || at === hit) break;
+    hit = at;
+    if (!at.shadowRoot) break;
+    root = at.shadowRoot;
+  }
+  e.style.pointerEvents = was;
+  return Boolean(hit && e.contains(hit)) || (hit?.localName ?? 'nothing') + '.' + (hit?.className ?? '');
+});
+
+/** The page's markers in 3D: the area's points and the current plant's (their 2D elements in MapLibre's markers). @param {import('@playwright/test').Locator} map */
+const pins = map => map.evaluate(m => [...m.querySelectorAll('.gf-gl-mk')].filter(w => w.querySelector(':scope > .gf-obs-leaf, :scope > .gf-occ-group'))
+  .map(w => ({ opacity: getComputedStyle(w).opacity, z: Number(getComputedStyle(w).zIndex) })));
+
+/** The rings drawn on the 3D map (the page's paths, gf-paths): each one's radius (m) around the zone's centre. @param {import('@playwright/test').Locator} map */
+const rings = map => map.evaluate(async m => {
+  const g = /** @type {any} */ (m), [lon, lat] = g.area.center;
+  const data = await g.gl.glMap.getSource('gf-paths').getData();
+  const metres = (/** @type {number[]} */ [x, y]) => {
+    const r = Math.PI / 180, a = Math.sin((y - lat) * r / 2) ** 2 + Math.cos(lat * r) * Math.cos(y * r) * Math.sin((x - lon) * r / 2) ** 2;
+    return 2 * 6371008.8 * Math.asin(Math.sqrt(a));
+  };
+  return data.features.filter((/** @type {any} */ f) => f.geometry.type === 'Polygon').map((/** @type {any} */ f) => Math.round(metres(f.geometry.coordinates[0][0])));
+});
+
+test('une carte de la disposition en 3D : ses points tous là, opaques, quand la vue tourne et s’incline ; avec les jumelles, un seul cercle ; la carte d’un point par-dessus tout', async ({ app, page }) => {
+  test.slow();
+  const seen = await watch(page);
+  await answerTiles(page);
+  await answerObservations(page, { taxa: true });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  // The relief on (MapLibre fades a marker it finds behind it), the map tilted.
+  await settings(page, { renderer: '3d', buildings: false, hillshade: false, sky: false, pitch: 30 });
+  const nettle = plantId('Urtica dioica');
+  await app.open(`#/layout/[map(r=3km,3d=1,jumelles=inat+gbif),plant]?p=${nettle}&at=45.7772,3.087`);
+  const map = page.locator('dl-map gf-map');
+  await expect(map).toHaveAttribute('data-renderer', '3d', { timeout: 30_000 });
+  /** @returns {Promise<any>} */
+  const obs = () => map.evaluate(m => /** @type {any} */ (m).gl.state().obs3d);
+
+  // The binoculars around the zone: its radius (3 km, between two of their stops), no ring of their own — the zone's
+  // is there, their wall on it: one circle (and its shadow) on the map.
+  await expect.poll(async () => (await obs())?.why, SLOW).toBe('area');
+  await expect.poll(async () => (await obs()).points, SLOW).toBeGreaterThan(0);
+  let st = await obs();
+  expect(st.radius).toBe(3000);
+  expect(st.ring).toBe(false);
+  let layers = (await glState(map)).layers;
+  expect(layers).toEqual(expect.arrayContaining(['gf-o3-wall', 'gf-o3-seeds']));
+  expect(layers).not.toContain('gf-o3-zone-line');
+  expect(layers).not.toContain('gf-o3-zone-fill');
+  await expect.poll(() => rings(map), SLOW).toHaveLength(2);
+  for (const r of await rings(map)) expect(Math.abs(r - 3000)).toBeLessThan(30);
+  await expect(map.locator('.gf-o3-chip')).toContainText('3 km');
+  // The page's own points not again among theirs (the same records: iNaturalist's, the zone's).
+  await expect.poll(() => map.evaluate(m => /** @type {any} */ (m).area?.points?.length ?? 0), SLOW).toBeGreaterThan(0);
+  await expect.poll(async () => (await obs()).kinds.inat, SLOW).toBe(0);
+
+  // The page's markers (the zone's points, the current plant's), once all there: as many, none faded, over the
+  // observations around, however the view turns and tilts.
+  await expect.poll(async () => (await pins(map)).length, SLOW).toBeGreaterThan(10);
+  let count = 0;
+  await expect.poll(async () => { const was = count; await page.waitForTimeout(500); count = (await pins(map)).length; return count === was; }, SLOW).toBe(true);
+  const o3 = await map.evaluate(m => Math.max(0, ...[...m.querySelectorAll('.gf-o3-mk')].map(e => Number(getComputedStyle(e).zIndex) || 0)));
+  for (const [bearing, pitch] of [[60, 55], [150, 75], [-120, 85], [-30, 40]]) {
+    await map.evaluate((m, v) => /** @type {any} */ (m).gl.glMap.jumpTo(v), { bearing, pitch });
+    await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+    const now = await pins(map);
+    expect(now, `turned ${bearing}°, tilted ${pitch}°`).toHaveLength(count);
+    expect(now.filter(p => p.opacity !== '1'), `turned ${bearing}°, tilted ${pitch}°`).toEqual([]);
+    expect(Math.min(...now.map(p => p.z))).toBeGreaterThan(o3);
+  }
+  expect((await glState(map)).pitch).toBe(40);
+
+  // A point's card, hovered (touched on a phone): over everything — the markers, the map's controls, the page.
+  if (!app.phone) {
+    const pin = map.locator('.gf-gl-mk:has(> .gf-obs-leaf:not(.hl))').first();
+    await pin.dispatchEvent('mouseenter');
+    const tip = map.locator('.gf-float-tip.on');
+    await expect(tip.locator('.gf-obs-card')).toBeVisible();
+    expect(await onTop(tip)).toBe(true);
+    await pin.dispatchEvent('mouseleave');
+    await expect(tip).toHaveCount(0);
+  }
+  const mark = map.locator('.gf-o3-mk:not(.group)').first();
+  await expect(mark).toBeAttached(SLOW);
+  if (app.phone) await mark.dispatchEvent('click'); else await mark.dispatchEvent('mouseenter');
+  const card = map.locator('.gf-o3-card');
+  await expect(card.locator('.gf-obs-card')).toBeVisible();
+  expect(await card.evaluate(c => c.matches(':popover-open'))).toBe(true);
+  expect(await onTop(card)).toBe(true);
+  if (app.phone) await card.getByRole('button', { name: 'Fermer' }).click(); else await mark.dispatchEvent('mouseleave');
+  await expect(card).toHaveCount(0);
+
+  // Their slider moves the zone (its handle's way): 5 km — the zone's, theirs with it, still one circle; no radius
+  // of their own written in the address (they follow the zone).
+  // (Its chip by its event: on a phone, the map's credits, long here, lie over the bottom of the map.)
+  await map.locator('.gf-o3-chip').dispatchEvent('click');
+  const panel = map.locator('.gf-o3-panel');
+  await expect(panel.locator('.gf-o3-value')).toHaveText('3 km');
+  await expect(panel).toContainText('Autour de la zone de la page');
+  await panel.getByRole('slider', { name: 'Rayon autour du centre' }).fill('4');
+  await expect.poll(() => page.evaluate(() => new URLSearchParams(location.hash.split('?')[1] || '').get('r'))).toBe('5km');
+  await expect.poll(async () => (await obs()).radius, SLOW).toBe(5000);
+  await expect.poll(async () => (await rings(map)).every(r => Math.abs(r - 5000) < 50), SLOW).toBe(true);
+  expect(await rings(map)).toHaveLength(2);
+  layers = (await glState(map)).layers;
+  expect(layers).not.toContain('gf-o3-zone-line');
+  expect(decodeURIComponent(await page.evaluate(() => location.hash))).not.toContain('jrayon');
+  st = await obs();
+  expect(st.on).toBe(true);
+  expect(seen.problems).toEqual([]);
+});
+
+test('une carte de la disposition en 3D, la plante courante en groupes : tourner, incliner, zoomer d’une fraction ne refait aucun de ses marqueurs', async ({ app, page }) => {
+  test.slow();
+  const seen = await watch(page);
+  await answerTiles(page);
+  await answerObservations(page, { taxa: true });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await settings(page, { renderer: '3d', relief: false, buildings: false, hillshade: false, sky: false, pitch: 30 });
+  await app.open(`#/layout/[map(r=3km,3d=1,regroupe),plant]?p=${plantId('Urtica dioica')}&at=45.7772,3.087`);
+  const map = page.locator('dl-map gf-map');
+  await expect(map).toHaveAttribute('data-renderer', '3d', { timeout: 30_000 });
+  const marks = map.locator('.gf-gl-mk > .gf-occ-group, .gf-gl-mk > .gf-obs-leaf.hl');
+  await expect.poll(() => marks.count(), SLOW).toBeGreaterThan(2);
+  let count = 0;
+  await expect.poll(async () => { const was = count; await page.waitForTimeout(500); count = await marks.count(); return count === was; }, SLOW).toBe(true);
+  // Each marker known by its element: the same ones after the view moved (none made again, none gone).
+  await marks.evaluateAll(els => els.forEach((e, i) => { /** @type {any} */ (e).gfSeen = i + 1; }));
+  const z = await map.evaluate(m => /** @type {any} */ (m).gl.glMap.getZoom());
+  // A fraction of a zoom that keeps the 2D map's whole zoom (MapLibre's is one less).
+  const whole = Math.round(z + 1), to = whole - 1 + (z + 1 - whole > 0 ? -0.2 : 0.2);
+  for (const v of [{ bearing: 70, pitch: 60 }, { zoom: to }, { bearing: -40, pitch: 80, zoom: (z + to) / 2 }]) {
+    await map.evaluate((m, view) => /** @type {any} */ (m).gl.glMap.jumpTo(view), v);
+    await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
+    const now = await marks.evaluateAll(els => els.map(e => /** @type {any} */ (e).gfSeen ?? 0));
+    expect(now, JSON.stringify(v)).toHaveLength(count);
+    expect(now.filter(n => !n), JSON.stringify(v)).toEqual([]);
+  }
   expect(seen.problems).toEqual([]);
 });
