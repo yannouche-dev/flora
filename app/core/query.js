@@ -7,6 +7,9 @@ import { config } from '../config.js';
 import { parse } from './router.js';
 import { genusFamily, runSearch } from './search.js';
 import { store } from './store.js';
+import { APP } from './search-channel.js';
+
+/** @typedef {import('./search-channel.js').Channel} Channel */
 
 /** @typedef {import('./store.js').Query} Query */
 /** @typedef {keyof import('./store.js').Filters} Facet */
@@ -43,24 +46,25 @@ export const activeFilterCount = query => FACETS.reduce((n, facet) => n + query.
 /** Link back to the list exactly as it was (filters, sort, text). */
 export const lastSearchHash = () => toHash(store.state.query);
 
-/** @type {number | undefined} */
-let timer;
+/** Each search's pending run (a keystroke's debounce). @type {WeakMap<Channel, number>} */
+const timers = new WeakMap();
 
 /**
- * Updates the query, mirrors it in the URL and re-runs the search.
+ * Updates the query, mirrors it in the URL and re-runs the search — the app's, or another's (`channel`: a free
+ * layout's second group; its layout writes its address).
  * @param {Partial<Query>} patch
- * @param {{ debounce?: number }} [options]
+ * @param {{ debounce?: number, channel?: Channel }} [options]
  */
-export function setQuery(patch, { debounce = 0 } = {}) {
+export function setQuery(patch, { debounce = 0, channel = APP } = {}) {
   // Something typed: the suggestions kept from the text before give way to the new ones.
-  if (patch.q) held = null;
-  const query = { ...store.state.query, ...patch };
-  store.set({ query });
+  if (patch.q && channel === APP) held = null;
+  const query = { ...channel.query, ...patch };
+  channel.setQuery(query);
   // replaceState (not push): the back button leaves the list instead of undoing filters one by one.
-  if (parse(location.hash).name === 'search') replaceHash(toHash(query));
-  clearTimeout(timer);
-  if (debounce) timer = setTimeout(runSearch, debounce);
-  else runSearch();
+  if (channel === APP && parse(location.hash).name === 'search') replaceHash(toHash(query));
+  clearTimeout(timers.get(channel));
+  if (debounce) timers.set(channel, /** @type {any} */ (setTimeout(() => channel.run(), debounce)));
+  else channel.run();
 }
 
 /**
@@ -74,39 +78,43 @@ let held = null;
 /** The suggestions kept from the text (see `held`), or null. */
 export const heldSuggestions = () => held?.list || null;
 
-/** « Filtrer par : Urtica · genre »: the typed text becomes a filter (again: another one, or off). @param {Facet} facet @param {string} value */
-export function applySuggestion(facet, value) {
-  const { q, filters } = store.state.query;
-  if (q) held = { q, list: /** @type {any} */ (store.state.results.suggestions) };
-  if (filters[facet].includes(value)) return setFacet(facet, filters[facet].filter(v => v !== value));
-  setQuery({ q: '', filters: { ...filters, [facet]: [...filters[facet], value] } });
+/**
+ * « Filtrer par : Urtica · genre »: the typed text becomes a filter (again: another one, or off).
+ * @param {Facet} facet @param {string} value @param {Channel} [channel]
+ */
+export function applySuggestion(facet, value, channel = APP) {
+  const { q, filters } = channel.query;
+  if (q && channel === APP) held = { q, list: /** @type {any} */ (store.state.results.suggestions) };
+  if (filters[facet].includes(value)) return setFacet(facet, filters[facet].filter(v => v !== value), channel);
+  setQuery({ q: '', filters: { ...filters, [facet]: [...filters[facet], value] } }, { channel });
 }
 
-/** @param {Facet} facet @param {string[]} values */
-export function setFacet(facet, values) {
-  const filters = { ...store.state.query.filters, [facet]: values };
+/** @param {Facet} facet @param {string[]} values @param {Channel} [channel] */
+export function setFacet(facet, values, channel = APP) {
+  const filters = { ...channel.query.filters, [facet]: values };
   // Genera only make sense inside the selected families.
   if (facet === 'family' && values.length) {
     filters.genus = filters.genus.filter(genus => values.includes(genusFamily.get(genus) || ''));
   }
   // Every filter the « Filtrer par » suggestions made from the search text is removed: the text comes back
   // (unless something else was typed since).
-  const made = held;
+  const made = channel === APP ? held : null;
   if (made && !made.list.some(x => filters[x.type]?.includes(x.name))) {
     held = null;
     if (!store.state.query.q) return setQuery({ q: made.q, filters });
   }
-  setQuery({ filters });
+  setQuery({ filters }, { channel });
 }
 
-/** @param {Facet} facet @param {string} value */
-export function toggleValue(facet, value) {
-  const current = store.state.query.filters[facet];
-  setFacet(facet, current.includes(value) ? current.filter(v => v !== value) : [...current, value]);
+/** @param {Facet} facet @param {string} value @param {Channel} [channel] */
+export function toggleValue(facet, value, channel = APP) {
+  const current = channel.query.filters[facet];
+  setFacet(facet, current.includes(value) ? current.filter(v => v !== value) : [...current, value], channel);
 }
 
-export function clearFilters() {
-  setQuery({ filters: emptyFilters() });
+/** @param {Channel} [channel] */
+export function clearFilters(channel = APP) {
+  setQuery({ filters: emptyFilters() }, { channel });
 }
 
 /** Keeps the store in sync when the URL changes from outside (back/forward, pasted link). */

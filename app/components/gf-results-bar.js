@@ -3,7 +3,8 @@ import { LitElement, html, css, nothing } from 'lit';
 import { SORTS } from '../config.js';
 import { activeFilterCount, applySuggestion, heldSuggestions, setQuery, toHash } from '../core/query.js';
 import { share } from '../core/share.js';
-import { gridViewOf, setCompact, setGridView, StoreController } from '../core/store.js';
+import { gridViewOf, setCompact, setGridView } from '../core/store.js';
+import { SearchController } from '../core/search-channel.js';
 import './gf-mode-switch.js';
 import './gf-active-filters.js';
 import './gf-plant-search.js';
@@ -27,6 +28,8 @@ export class GfResultsBar extends LitElement {
     grid: { type: Boolean },
     /** The count is shown just above the bar, by its host (a free layout's cell head: « Recherche · 66 espèces »). */
     countAbove: { type: Boolean, attribute: 'count-above' },
+    /** The search it shows and changes (core/search-channel.js: a free layout's group); none: the app's. */
+    channel: { attribute: false },
     _copied: { state: true }
   };
 
@@ -81,7 +84,7 @@ export class GfResultsBar extends LitElement {
     .note { color: var(--gf-warn); }
   `];
 
-  #store = new StoreController(this);
+  #store = new SearchController(this);
 
   /** Shares the current search: text, filters (families, statuses…) and sort are all in the URL. */
   async #share() {
@@ -102,12 +105,14 @@ export class GfResultsBar extends LitElement {
     this.wide = true;
     this.grid = false;
     this.countAbove = false;
+    /** @type {import('../core/search-channel.js').Channel | null} */
+    this.channel = null;
     this._copied = false;
   }
 
   /** @param {import('../core/store.js').Suggestion} suggestion */
   #applySuggestion(suggestion) {
-    applySuggestion(suggestion.type, suggestion.name);
+    applySuggestion(suggestion.type, suggestion.name, this.#store.channel);
   }
 
   /**
@@ -115,7 +120,7 @@ export class GfResultsBar extends LitElement {
    * on, touched again: off). @param {any} query
    */
   #suggestions(query) {
-    const list = (!query.q && heldSuggestions()) || this.#store.state.results.suggestions;
+    const list = (!query.q && !this.channel && heldSuggestions()) || this.#store.state.results.suggestions;
     if (!list.length) return nothing;
     return html`<div class="suggestions">
       Filtrer par :
@@ -142,7 +147,7 @@ export class GfResultsBar extends LitElement {
             @click=${() => this.dispatchEvent(new CustomEvent('open-filters', { bubbles: true, composed: true }))}>
             ${icon(active ? 'funnel-fill' : 'funnel')}${active ? html`<span class="badge">${active}</span>` : nothing}
           </button>`}
-        <gf-plant-search></gf-plant-search>
+        <gf-plant-search .channel=${this.channel}></gf-plant-search>
       </div>
       <div class="row">
         <span class="count" aria-live="polite">
@@ -151,11 +156,11 @@ export class GfResultsBar extends LitElement {
             title="La flore s’enregistre sur cet appareil : bientôt disponible hors ligne">· mise hors ligne…</small>` : nothing}
         </span>
         ${this.grid ? html`
-          ${results.sort === 'relevance' || !query.q ? nothing : html`<button type="button" title="Trier par pertinence" @click=${() => setQuery({ sort: '' })}>Pertinence</button>`}
+          ${results.sort === 'relevance' || !query.q ? nothing : html`<button type="button" title="Trier par pertinence" @click=${() => setQuery({ sort: '' }, { channel: this.#store.channel })}>Pertinence</button>`}
           <gf-mode-switch class="views" scope="la grille" value=${view} ?overridden=${gridView !== null}
             @mode-change=${e => setGridView(e.detail.mode)}></gf-mode-switch>` : html`
           <select aria-label="Trier par" .value=${results.sort}
-            @change=${e => setQuery({ sort: e.target.value })}>
+            @change=${e => setQuery({ sort: e.target.value }, { channel: this.#store.channel })}>
             ${sorts.map(s => html`<option value=${s.value} ?selected=${s.value === results.sort}>${s.label}</option>`)}
             ${sorts.some(s => s.value === results.sort) ? nothing : html`<option value=${results.sort} selected>${columnSortLabel(results.sort)}</option>`}
           </select>
@@ -168,7 +173,7 @@ export class GfResultsBar extends LitElement {
           aria-label=${this._copied ? 'Lien copié' : 'Partager cette recherche (filtres compris)'} @click=${this.#share}>${icon(this._copied ? 'check-lg' : 'share')}</button>
       </div>
 
-      <gf-active-filters></gf-active-filters>
+      <gf-active-filters .channel=${this.channel}></gf-active-filters>
 
       ${this.#suggestions(query)}
 

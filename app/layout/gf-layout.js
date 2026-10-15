@@ -52,7 +52,8 @@ import { gripStyles, shareGrip } from '../core/split-grip.js';
 import { ui } from '../styles/ui.js';
 import { cell as makeCell, cells as cellsOf, dirAt, moveAt, nodeAt, parse, replaceAt, serialize, setShares, shapeKey, shares } from './grammar.js';
 import { CURRENT, LINKS, cellIcon, cellMark, cellName, linksOf, menuLooks, resolveTree, touchOf, withParam } from './registry.js';
-import { cleanText, LayoutState, liveSearch, readLive, readQuery, sameLive } from './state.js';
+import { cleanText, groupPrefix, LayoutState, liveSearch, readLive, readQuery, sameLive } from './state.js';
+import { APP, SearchChannel } from '../core/search-channel.js';
 import { forgetShares, savedShares, saveShares } from './sizes.js';
 import { PRESETS } from './presets.js';
 import { renderCell, revealFacet, scopeWords } from './cells.js';
@@ -170,6 +171,11 @@ export class GfLayout extends LitElement {
     .cell-head .spacer { flex: 1; }
     .cell-head .cell-acts { flex: none; display: inline-flex; align-items: center; gap: 2px; }
     .cell-head .cell-acts .icon-btn { width: 30px; height: 30px; min-height: 0; padding: 0; font-size: 0.85rem; }
+    /* Its group (several in the layout): its letter in its colour. */
+    .cell-head .cell-group { flex: none; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; display: inline-grid; place-items: center;
+      border-radius: 999px; font-size: 0.7rem; font-weight: 700; color: var(--gf-accent-contrast); background: var(--gf-accent); }
+    .cell-head .cell-group[data-group='b'] { color: #fff; background: #1d4ed8; }
+    .cell-head .cell-group[data-group='c'] { color: #fff; background: #6d28d9; }
     /* How a cell is wired (while building): a chip a link, lit when it follows the others. */
     .cell-head .cell-links { flex: none; display: inline-flex; gap: 2px; }
     .cell-head .link-chip { width: 24px; height: 24px; min-height: 0; padding: 0; display: inline-grid; place-items: center; border-radius: 50%; font-size: 0.72rem;
@@ -322,7 +328,7 @@ export class GfLayout extends LitElement {
       const touch = r ? touchOf(r) : null;
       if (touch === 'fiche') return;
       e.preventDefault();
-      if (touch !== 'rien') this.#state.pick(Number(m[1]));
+      if (touch !== 'rien') (r ? this.#stateOf(r) : this.#state).pick(Number(m[1]));
     });
     // A cell that has nothing to show, or something again (the deck: its cards), for a cell hidden meanwhile (vide=masque).
     this.addEventListener('cell-empty', e => {
@@ -382,7 +388,52 @@ export class GfLayout extends LitElement {
     this.#state.removeEventListener('change', this.#onState);
     this.#state = new LayoutState();
     this.#state.addEventListener('change', this.#onState);
+    for (const g of [...this.#others.keys()]) this.#dropGroup(g);
   }
+
+  // ── Groups (registry.js#FRAME groupe): each its own zone, plant, period and search ─────────────────────
+
+  /** The other groups' (b, c): their state and their search, made when a cell of theirs is there. @type {Map<string, { state: LayoutState, channel: SearchChannel }>} */
+  #others = new Map();
+
+  /** A cell's group ('a': the first, the app's search). @param {Resolved} r */
+  #groupOf(r) { return r.known ? /** @type {string} */ (r.params.groupe ?? 'a') : 'a'; }
+
+  /** A group's state and search; another than the first made the first time. @param {string} g */
+  #group(g) {
+    if (g === 'a') return { state: this.#state, channel: /** @type {import('../core/search-channel.js').Channel} */ (APP) };
+    let had = this.#others.get(g);
+    if (!had) {
+      const channel = new SearchChannel();
+      const state = new LayoutState({ channel });
+      state.addEventListener('change', this.#onState);
+      channel.addEventListener('change', this.#onChannel);
+      had = { state, channel };
+      this.#others.set(g, had);
+    }
+    return had;
+  }
+
+  /** A group no cell has any more: its loads stopped. @param {string} g */
+  #dropGroup(g) {
+    const had = this.#others.get(g);
+    if (!had) return;
+    had.state.dispose();
+    had.state.removeEventListener('change', this.#onState);
+    had.channel.removeEventListener('change', this.#onChannel);
+    this.#others.delete(g);
+  }
+
+  /** A cell's state (its group's). @param {Resolved} r */
+  #stateOf(r) { return this.#group(this.#groupOf(r)).state; }
+
+  /** The groups the layout's cells are in, the first always. @param {Shown} [l] @returns {string[]} */
+  #groups(l = this.#layout) {
+    return ['a', ...new Set([...l.cells.values()].map(r => this.#groupOf(r)).filter(g => g !== 'a'))].sort();
+  }
+
+  /** Another group's search changed (typed, filtered, its results come): the address follows, drawn again. */
+  #onChannel = () => { this.#write('replace'); this.requestUpdate(); };
 
   /** The flora is ready: the search's changes are the user's, the address follows them. */
   #ready = false;
@@ -400,7 +451,9 @@ export class GfLayout extends LitElement {
     if (changed.has('route') && this.route) this.#follow();
     this.#shown = this.#layout;
     // A results cell over the whole flora (zone=0): the search asked again without the zone (state.js#wholeOf).
-    this.#state.wholeOf([...this.#shown.cells.values()].some(r => r.known && r.spec.id === 'results' && r.params.zone === false));
+    for (const g of this.#groups(this.#shown)) {
+      this.#group(g).state.wholeOf([...this.#shown.cells.values()].some(r => r.known && r.spec.id === 'results' && r.params.zone === false && this.#groupOf(r) === g));
+    }
   }
 
   // ── The frame of each cell (registry.js#FRAME) ─────────────────────────────────────────────────────────
@@ -411,7 +464,7 @@ export class GfLayout extends LitElement {
   #hidden = new Set();
 
   /** The plant a cell shows: its own (plante=), else the current one. @param {Resolved} r @returns {number | null} */
-  #plantOf(r) { return (r.known && r.params.plante) || this.#state.live.plant; }
+  #plantOf(r) { return (r.known && r.params.plante) || this.#stateOf(r).live.plant; }
 
   /**
    * Whether a cell has nothing to show (registry.js#FRAME_OF: those that take vide): a plant's (the sheet, a block, the
@@ -423,8 +476,9 @@ export class GfLayout extends LitElement {
     const id = r.spec.id;
     if (id === 'plant' || id === 'media') return this.#plantOf(r) == null;
     if (id === 'results') {
-      if (r.params.zone === false) return this.#state.whole?.key === this.#state.wholeFor && this.#state.whole.total === 0;
-      return this.#store.state.status === 'ready' && this.#store.state.results.total === 0;
+      const { state: s, channel } = this.#group(this.#groupOf(r));
+      if (r.params.zone === false) return s.whole?.key === s.wholeFor && s.whole.total === 0;
+      return this.#store.state.status === 'ready' && channel.results.total === 0;
     }
     if (id === 'deck') return this.#said.get(path) === true;
     return false;
@@ -486,7 +540,8 @@ export class GfLayout extends LitElement {
   /** A link to a layout of this cell alone, with the same state (partager): shared, or copied. @param {CellNode} n @param {string} path @param {Resolved} r */
   async #shareCell(n, path, r) {
     const text = serialize({ t: 'list', kids: [{ ...n, size: null }], size: null });
-    const url = href.layout(text, liveSearch(this.#state.live, store.state.query, this.#state.radius));
+    const g = this.#group(this.#groupOf(r));
+    const url = href.layout(text, liveSearch(g.state.live, g.channel.query, g.state.radius, groupPrefix(this.#groupOf(r))));
     const res = await share({ title: r.title + ' — GeoFlora', url });
     if (res === 'copied') { this._cellCopied = path; setTimeout(() => { if (this._cellCopied === path) this._cellCopied = null; }, 2000); }
   }
@@ -552,6 +607,17 @@ export class GfLayout extends LitElement {
       store.set({ query: q });
       if (this.#ready) runSearch();
     }
+    // The other groups: each its state and its search, its keys after its letter (b.p=, b.q=…).
+    const groups = this.#groups(next);
+    for (const g of [...this.#others.keys()]) if (!groups.includes(g)) this.#dropGroup(g);
+    for (const g of groups.filter(x => x !== 'a')) {
+      const had = this.#others.has(g), { state, channel } = this.#group(g);
+      const glive = readLive(route.search, groupPrefix(g));
+      if (!sameLive(glive, state.live)) state.set(glive, 'none');
+      else if (fresh || !had) state.follow();
+      const gq = readQuery(route.search, groupPrefix(g));
+      if (toHash(gq) !== toHash(channel.query) || !had) { /** @type {SearchChannel} */ (channel).query = gq; channel.run(); }
+    }
     // Written as the app writes it (canonical names, its own order of words), unless it could not be read whole.
     if (!next.errors.length && fresh) queueMicrotask(() => this.#write('replace'));
   }
@@ -565,8 +631,15 @@ export class GfLayout extends LitElement {
   /** Built in « Créer une app » (not the app). */
   get #building() { return this.mode === 'builder'; }
 
-  /** The layout's state as the address writes it (state.js). */
-  #search() { return liveSearch(this.#state.live, store.state.query, this.#state.radius); }
+  /** The layout's state as the address writes it (state.js): the first group's, then each other's after its letter. */
+  #search() {
+    const parts = [liveSearch(this.#state.live, store.state.query, this.#state.radius)];
+    for (const g of this.#groups().filter(x => x !== 'a')) {
+      const { state, channel } = this.#group(g);
+      parts.push(liveSearch(state.live, channel.query, state.radius, groupPrefix(g)));
+    }
+    return parts.filter(Boolean).join('&');
+  }
 
   /**
    * The address of the screen now — the app's (#/layout), or the builder's (#/builder?g=): a layout that could not be
@@ -608,13 +681,21 @@ export class GfLayout extends LitElement {
    * map (when=: this year, this month). Returns whether it changed. @param {Shown} l
    */
   #defaults(l) {
-    const cells = [...l.cells.values()];
-    const first = cells.find(r => r.known && r.params.r != null);
-    const when = cells.find(r => r.known && r.spec.id === 'map' && r.params.when && r.params.when !== 'toujours');
-    const radius = first?.known ? first.params.r : 2000, periode = when?.known ? when.params.when : 'toujours';
-    const changed = radius !== this.#state.defaultRadius || periode !== this.#state.defaultPeriode;
-    this.#state.defaultRadius = radius;
-    this.#state.defaultPeriode = periode;
+    let changed = false;
+    for (const g of this.#groups(l)) {
+      const cells = [...l.cells.values()].filter(r => this.#groupOf(r) === g);
+      const first = cells.find(r => r.known && r.params.r != null);
+      const when = cells.find(r => r.known && r.spec.id === 'map' && r.params.when && r.params.when !== 'toujours');
+      const radius = first?.known ? first.params.r : 2000, periode = when?.known ? when.params.when : 'toujours';
+      const state = this.#group(g).state;
+      if (radius !== state.defaultRadius || periode !== state.defaultPeriode) {
+        changed = true;
+        state.defaultRadius = radius;
+        state.defaultPeriode = periode;
+        // Another group's: followed at once (the first's by its caller).
+        if (g !== 'a') state.follow();
+      }
+    }
     return changed;
   }
 
@@ -910,8 +991,9 @@ export class GfLayout extends LitElement {
   #cell(n, path) {
     const key = path.join('.');
     const r = /** @type {Resolved} */ (this.#shown.cells.get(key));
-    const s = this.#state;
-    const results = this.#store.state.results;
+    const group = this.#groupOf(r);
+    const { state: s, channel } = this.#group(group);
+    const results = channel.results;
     const first = results.items[0] ? { id: results.items[0].id, name: results.items[0].vernacularName || results.items[0].scientificName } : null;
     const id = r.known ? r.spec.id : null;
     const mark = cellMark(r);
@@ -942,6 +1024,10 @@ export class GfLayout extends LitElement {
     const empty = r.known && r.spec.empty;
     const views = r.known && r.spec.id === 'results' && head === 'oui' ? this.#viewSwitch(key, r, title) : nothing;
     const links = building ? this.#links(key, r, title) : nothing;
+    // Its group, when the layout has several: a letter in its colour (the cells of one group share zone, plant, search).
+    const badge = r.known && !r.spec.empty && this.#groups().length > 1
+      ? html`<span class="cell-group" data-group=${group} title=${`Groupe ${group.toUpperCase()} : sa zone, sa plante, sa période et sa recherche`}
+          aria-label=${'Groupe ' + group.toUpperCase()}>${group.toUpperCase()}</span>` : nothing;
     const actions = acts.length ? html`<span class="cell-acts" role="group" aria-label=${'Actions de « ' + title + ' »'}>
         ${acts.includes('partager') ? html`<button class="icon-btn" type="button" data-act="partager" title=${this._cellCopied === key ? 'Lien copié' : 'Partager cette case seule (le même état)'}
           aria-label=${this._cellCopied === key ? 'Lien copié' : `Partager « ${title} » seule`} @click=${() => this.#shareCell(n, key, r)}>${icon(this._cellCopied === key ? 'check-lg' : 'share')}</button>` : nothing}
@@ -954,8 +1040,8 @@ export class GfLayout extends LitElement {
       data-head=${head} aria-label=${title}>
       ${head === 'non' ? nothing : head === 'simple' ? html`<header class="cell-head"><h2>${title}</h2><span class="spacer"></span>${pick}${actions}</header>`
         : html`<header class="cell-head"><h2>${icon(cellIcon(r))} ${title}${mark ? html`<b class="cell-mark" aria-hidden="true" title=${mark.label} data-mark=${mark.short}></b>` : nothing}</h2><span class="sub">${sub}</span>
-        ${links}${views}${pick}${actions}</header>`}
-      <div class="cell-body" ?hidden=${folded}>${empty ? this.#slot(key) : renderCell(r, { state: s, view: plantViewOf(this.#store.state), plant: s.live.plant, first, building: this.#building })}
+        ${badge}${links}${views}${pick}${actions}</header>`}
+      <div class="cell-body" ?hidden=${folded}>${empty ? this.#slot(key) : renderCell(r, { state: s, channel: group === 'a' ? null : channel, view: plantViewOf(this.#store.state), plant: s.live.plant, first, building: this.#building })}
         ${crossed ? this.#cross(path, title) : nothing}</div>
     </section>`;
   }

@@ -152,6 +152,7 @@ export class Obs3dLayer {
   #syncUi() {
     const b = this.#button, bar = this.#bar;
     if (!b || !bar) return;
+    this.#clearCredits();
     b.setAttribute('aria-pressed', String(this.prefs.on));
     bar.hidden = !this.prefs.on;
     this.box.classList.toggle('gf-o3-on', this.prefs.on);
@@ -588,8 +589,18 @@ export class Obs3dLayer {
 
   // ── The markers: the plant lit, the nearest groups ──────────────────────────────────────────────
 
+  /**
+   * Its card above the map's credits (the 2D map's, shown over the 3D one): on a narrow map they run over two lines
+   * and their links would take the touch meant for its chip.
+   */
+  #clearCredits() {
+    const credits = /** @type {HTMLElement | null} */ (this.root.querySelector('.leaflet-control-attribution'));
+    this.box.style.setProperty('--gf-credits', Math.round(credits?.getBoundingClientRect().height ?? 0) + 'px');
+  }
+
   #listen() {
     const map = this.map;
+    map.on('resize', () => this.#clearCredits());
     // Laid out once the view rests, never while it moves (a turn, a tilt: no marker made again, none gone).
     map.on('moveend', () => this.#layout());
     map.on('idle', () => this.#layout());

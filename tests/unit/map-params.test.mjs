@@ -22,7 +22,7 @@ test('chaque réglage de la carte se lit : ses noms, ses valeurs, leurs autres g
   const p = params('map(r=2km;lieu=Mirabel Ménétrol 63;autour=1;base=photo;3d=1;layers=znieff+n2000;src=inat+gbif;when=mois;pts=pastille;regroupe=1;suit=0;plante=seule;toucher=fiche;ui=nue)');
   assert.deepEqual(p, { intent: 'explorer', portee: 'zone', r: 2000, lieu: 'Mirabel Ménétrol 63', autour: true, base: 'photo', '3d': true, layers: ['znieff', 'n2000'], src: ['inat', 'gbif'],
     when: 'mois', pts: 'pastille', regroupe: true, suit: false, plante: 'seule', toucher: 'fiche', ui: 'nue', tete: 'oui', titre: null, actions: [], ctl: null,
-    vue: null, opac: null, jumelles: null, jrayon: null, legende: false, etat: 'ouvert' });
+    vue: null, opac: null, jumelles: null, jrayon: null, legende: false, etat: 'ouvert', groupe: 'a' });
   // In French, its other words, accents and case free.
   const q = params('carte(rayon=500m;commune=Fontainebleau 77;moi=oui;fond=satellite;vue3d=non;couches=Natura+ZNIEFF1;sources=iNaturalist;période=Année;style=Pastilles;groupes=1;recherche=non;courante=only;tap=sheet;commandes=Compact)');
   assert.deepEqual([q.r, q.lieu, q.autour, q.base, q['3d'], q.layers, q.src, q.when, q.pts, q.regroupe, q.suit, q.plante, q.toucher, q.ui],
@@ -31,7 +31,7 @@ test('chaque réglage de la carte se lit : ses noms, ses valeurs, leurs autres g
   const d = params('map');
   assert.deepEqual(d, { intent: 'explorer', portee: 'zone', r: null, lieu: null, autour: false, base: 'photo', '3d': null, layers: [], src: ['inat'], when: 'toujours', pts: 'photo',
     regroupe: false, suit: true, plante: 'grand', toucher: 'plante', ui: 'auto', tete: 'oui', titre: null, actions: [], ctl: null,
-    vue: null, opac: null, jumelles: null, jrayon: null, legende: false, etat: 'ouvert' });
+    vue: null, opac: null, jumelles: null, jrayon: null, legende: false, etat: 'ouvert', groupe: 'a' });
   assert.equal(read('map').text, '[map]');
 });
 

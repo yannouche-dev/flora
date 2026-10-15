@@ -33,7 +33,8 @@ import { icon } from '../core/icons.js';
 import { moduleOn } from '../core/modules.js';
 import { watchLocation } from '../core/geo.js';
 import { addressAt } from '../core/geoservices.js';
-import { plantViewOf, StoreController } from '../core/store.js';
+import { plantViewOf } from '../core/store.js';
+import { SearchController } from '../core/search-channel.js';
 import { blockStyle } from '../core/sheet-blocks.js';
 import { href } from '../core/router.js';
 import * as db from '../core/db.js';
@@ -213,6 +214,8 @@ async function namesToTaxa(names) {
 export class DlMap extends LitElement {
   static properties = {
     state: { attribute: false }, params: { attribute: false },
+    /** The search of its group (core/search-channel.js: a layout's group b, c); none: the app's. */
+    channel: { attribute: false },
     /** In « Créer une app »: the map moved there is the view it starts on (vue=). */
     building: { attribute: false },
     _busy: { state: true }, _narrow: { state: true }, _zone: { state: true }, _thumb: { state: true }
@@ -308,12 +311,13 @@ export class DlMap extends LitElement {
       background: color-mix(in srgb, var(--gf-surface) 90%, transparent); box-shadow: 0 1px 3px rgb(0 0 0 / 14%); }
   `];
 
-  #store = new StoreController(this);
+  #store = new SearchController(this);
 
   constructor() {
     super();
     new StateController(this);
     /** @type {LayoutState | null} */ this.state = null;
+    /** The search of its group (core/search-channel.js); none: the app's. @type {import('../core/search-channel.js').Channel | null} */ this.channel = null;
     /** @type {Record<string, any>} */ this.params = {};
     this._busy = false;
     /** Narrower than COMPACT_WIDTH (ui=auto: compact controls). */
@@ -943,7 +947,7 @@ customElements.define('dl-place', DlPlace);
 const GRID_MIN = 560;
 
 export class DlResults extends LitElement {
-  static properties = { state: { attribute: false }, params: { attribute: false }, _wide: { state: true } };
+  static properties = { state: { attribute: false }, params: { attribute: false }, channel: { attribute: false }, _wide: { state: true } };
 
   static styles = [ui, css`
     :host { display: flex; flex-direction: column; min-height: 0; }
@@ -960,6 +964,7 @@ export class DlResults extends LitElement {
     super();
     new StateController(this);
     /** @type {LayoutState | null} */ this.state = null;
+    /** The search of its group (core/search-channel.js); none: the app's. @type {import('../core/search-channel.js').Channel | null} */ this.channel = null;
     /** @type {Record<string, any>} */ this.params = {};
     this._wide = false;
   }
@@ -981,12 +986,12 @@ export class DlResults extends LitElement {
     if (this.params.zone === false) {
       const whole = s.whole;
       return html`${s.live.at ? html`<div class="scope" role="note">${icon('globe-europe-africa')}<span>Toute la France : cette case ne suit pas la zone.</span></div>` : nothing}
-        <gf-plant-list ?grid=${grid} .current=${s.live.plant} .items=${whole?.items ?? []}></gf-plant-list>`;
+        <gf-plant-list ?grid=${grid} .current=${s.live.plant} .items=${whole?.items ?? []} .channel=${this.channel}></gf-plant-list>`;
     }
     const note = s.live.at ? scopeNote(s) : '';
     return html`${s.live.at ? html`<div class="scope ${s.speciesState === 'error' ? 'error' : ''}" role="status">${icon('crosshair')}<span title=${note}>${scopeWords(s)} · ${note}</span>
         <button class="link" type="button" @click=${() => s.setScope(null)}>Toute la France</button></div>` : nothing}
-      <gf-plant-list ?grid=${grid} .current=${s.live.plant}></gf-plant-list>`;
+      <gf-plant-list ?grid=${grid} .current=${s.live.plant} .channel=${this.channel}></gf-plant-list>`;
   }
 }
 customElements.define('dl-results', DlResults);
@@ -994,7 +999,7 @@ customElements.define('dl-results', DlResults);
 // ── search ───────────────────────────────────────────────────────────────────────────────────────────────────
 
 export class DlSearch extends LitElement {
-  static properties = { state: { attribute: false }, params: { attribute: false }, _filters: { state: true } };
+  static properties = { state: { attribute: false }, params: { attribute: false }, channel: { attribute: false }, _filters: { state: true } };
 
   /* A cell lower than its bar (a narrow one, where the bar folds onto more lines; a short row: « Étude », « Grille et
      photos » at 720 px, or on a phone): the cell scrolls, never cuts the bar's last lines (the chips, « Filtrer par »)
@@ -1012,6 +1017,7 @@ export class DlSearch extends LitElement {
     super();
     new StateController(this);
     /** @type {LayoutState | null} */ this.state = null;
+    /** The search of its group (core/search-channel.js); none: the app's. @type {import('../core/search-channel.js').Channel | null} */ this.channel = null;
     /** @type {Record<string, any>} */ this.params = {};
     /** @type {boolean | null} the filters brought into view by a column's funnel, until the cell's parameter says it (null: as it says) */
     this._filters = null;
@@ -1033,9 +1039,9 @@ export class DlSearch extends LitElement {
   render() {
     const open = this._filters ?? Boolean(this.params.filters);
     const list = this.params.list !== false;
-    return html`<gf-results-bar .wide=${false} count-above @open-filters=${(/** @type {Event} */ e) => { e.stopPropagation(); this._filters = !open; setCell(this, { filters: !open }); }}></gf-results-bar>
-      ${open ? html`<div class="filters" role="region" aria-label="Filtres"><gf-filter-panel></gf-filter-panel></div>` : nothing}
-      ${list ? html`<dl-results .state=${this.state} .params=${{ view: 'auto' }}></dl-results>` : nothing}`;
+    return html`<gf-results-bar .wide=${false} count-above .channel=${this.channel} @open-filters=${(/** @type {Event} */ e) => { e.stopPropagation(); this._filters = !open; setCell(this, { filters: !open }); }}></gf-results-bar>
+      ${open ? html`<div class="filters" role="region" aria-label="Filtres"><gf-filter-panel .channel=${this.channel}></gf-filter-panel></div>` : nothing}
+      ${list ? html`<dl-results .state=${this.state} .params=${{ view: 'auto' }} .channel=${this.channel}></dl-results>` : nothing}`;
   }
 }
 customElements.define('dl-search', DlSearch);
@@ -1088,7 +1094,7 @@ class DeckSession extends EventTarget {
 const DECK_MAX = 60;
 
 export class DlDeck extends LitElement {
-  static properties = { state: { attribute: false }, params: { attribute: false }, _loading: { state: true } };
+  static properties = { state: { attribute: false }, params: { attribute: false }, channel: { attribute: false }, _loading: { state: true } };
 
   static styles = [ui, css`
     :host { display: block; overflow-y: auto; padding: 12px 8px; container-type: size; --deck-max: calc(100cqh - 150px); --deck-min: 220px; }
@@ -1097,7 +1103,7 @@ export class DlDeck extends LitElement {
     .empty .big.warn { color: var(--gf-warn, #b45309); }
   `];
 
-  #store = new StoreController(this);
+  #store = new SearchController(this);
   #session = new DeckSession();
   /** Plant records read for the cards, by id. @type {Map<number, any>} */
   #plants = new Map();
@@ -1107,6 +1113,7 @@ export class DlDeck extends LitElement {
     super();
     new StateController(this);
     /** @type {LayoutState | null} */ this.state = null;
+    /** The search of its group (core/search-channel.js); none: the app's. @type {import('../core/search-channel.js').Channel | null} */ this.channel = null;
     /** @type {Record<string, any>} */ this.params = {};
     this._loading = false;
     this.#session.widen = m => this.state?.set({ r: m }, 'replace');
@@ -1250,7 +1257,8 @@ customElements.define('dl-deck', DlDeck);
 /**
  * What a cell shows: its component's piece, given the state; an unknown component: what is wrong and how to fix it.
  * @param {Resolved} r @param {{ state: LayoutState, view: string, plant: number | null, first: { id: number, name: string } | null,
- *   building?: boolean }} ctx  `building`: in « Créer une app »
+ *   building?: boolean, channel?: import('../core/search-channel.js').Channel | null }} ctx  `building`: in « Créer une app »; `channel`:
+ *   the search of the cell's group (none: the app's)
  */
 export function renderCell(r, ctx) {
   if (!r.known) {
@@ -1263,12 +1271,13 @@ export function renderCell(r, ctx) {
   }
   const { state } = ctx;
   const id = r.spec.id;
-  if (id === 'map') return html`<dl-map .state=${state} .params=${r.params} .building=${Boolean(ctx.building)}></dl-map>`;
+  const channel = ctx.channel ?? null;
+  if (id === 'map') return html`<dl-map .state=${state} .params=${r.params} .channel=${channel} .building=${Boolean(ctx.building)}></dl-map>`;
   if (id === 'place') return html`<dl-place .state=${state}></dl-place>`;
-  if (id === 'search') return html`<dl-search .state=${state} .params=${r.params}></dl-search>`;
-  if (id === 'results') return html`<dl-results .state=${state} .params=${r.params}></dl-results>`;
-  if (id === 'filters') return html`<div class="scroll pad"><gf-filter-panel></gf-filter-panel></div>`;
-  if (id === 'deck') return html`<dl-deck .state=${state} .params=${r.params}></dl-deck>`;
+  if (id === 'search') return html`<dl-search .state=${state} .params=${r.params} .channel=${channel}></dl-search>`;
+  if (id === 'results') return html`<dl-results .state=${state} .params=${r.params} .channel=${channel}></dl-results>`;
+  if (id === 'filters') return html`<div class="scroll pad"><gf-filter-panel .channel=${channel}></gf-filter-panel></div>`;
+  if (id === 'deck') return html`<dl-deck .state=${state} .params=${r.params} .channel=${channel}></dl-deck>`;
   // A plant cell: its own plant (plante=: fixed, whatever the current one), else the current plant, or how to choose one.
   const plant = r.params.plante ?? ctx.plant;
   if (plant == null) {

@@ -3,8 +3,12 @@
    markers (so every effect of map.css applies). Loaded by the map itself, next to MapLibre's stylesheet. */
 
 gf-map[data-renderer='3d'] .gf-map-canvas { visibility: hidden; }
-/* The credits stay those of the 2D map (its layers, the photos' sources), shown over the 3D one. */
+/* The credits stay those of the 2D map (its layers, the photos' sources), shown over the 3D one — never in the way of
+   its controls under them (« Observations autour » on a narrow map, where the credits run over two lines): a touch
+   goes through them, but on their links. */
 gf-map[data-renderer='3d'] .gf-map-canvas .leaflet-control-attribution { visibility: visible; }
+gf-map[data-renderer='3d'] .gf-map-canvas .leaflet-bottom, gf-map[data-renderer='3d'] .gf-map-canvas .leaflet-control-attribution { pointer-events: none; }
+gf-map[data-renderer='3d'] .gf-map-canvas .leaflet-control-attribution a { pointer-events: auto; }
 
 gf-map .gf-map-gl {
   position: absolute;
@@ -112,7 +116,7 @@ gf-map:not([data-renderer='3d']) .gf-map-buttons button.around3d { display: none
 
 /* Its card at the bottom: the chip (radius, count), unfolded the stepped slider (the mini-apps' distance), the sources,
    the density, « Centrer ici ». */
-.gf-o3-bar { position: absolute; z-index: 9; left: 50%; bottom: calc(14px + env(safe-area-inset-bottom, 0px)); translate: -50% 0; display: grid; justify-items: center; gap: 8px;
+.gf-o3-bar { position: absolute; z-index: 9; left: 50%; bottom: calc(10px + var(--gf-credits, 4px) + env(safe-area-inset-bottom, 0px)); translate: -50% 0; display: grid; justify-items: center; gap: 8px;
   width: min(400px, calc(100% - 24px)); pointer-events: none; font: 14px/1.35 system-ui, sans-serif; color: var(--gf-text, #1f2a1f); }
 .gf-o3-bar[hidden] { display: none; }
 .gf-o3-bar > * { pointer-events: auto; }

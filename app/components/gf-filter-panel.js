@@ -3,24 +3,31 @@ import { LitElement, html, css } from 'lit';
 import { STATUS_LABELS, STATUS_SHORT } from '../config.js';
 import { setFacet } from '../core/query.js';
 import { genusFamily } from '../core/search.js';
-import { StoreController } from '../core/store.js';
+import { SearchController } from '../core/search-channel.js';
 import './gf-facet.js';
 
 const STATUS_ORDER = ['P', 'E', 'S', 'C', 'I', 'J'];
 
 /** All filter groups. Rendered as the desktop sidebar or inside the mobile bottom sheet. */
 export class GfFilterPanel extends LitElement {
+  static properties = {
+    /** The search it filters (core/search-channel.js: a free layout's group); none: the app's. */
+    channel: { attribute: false }
+  };
+
   static styles = css`
     :host { display: block; padding-bottom: 24px; }
   `;
 
-  #store = new StoreController(this);
+  #store = new SearchController(this);
 
   constructor() {
     super();
+    /** @type {import('../core/search-channel.js').Channel | null} */
+    this.channel = null;
     this.addEventListener('facet-change', event => {
       const { name, values } = /** @type {CustomEvent} */ (event).detail;
-      setFacet(name, values);
+      setFacet(name, values, this.#store.channel);
     });
   }
 

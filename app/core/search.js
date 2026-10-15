@@ -115,6 +115,16 @@ export async function searchWhole({ q, filters, sort }) {
   return { total, items };
 }
 
+/**
+ * The search of a query kept to these plants (null: the whole flora), its whole answer — results, facets,
+ * suggestions —, the store left alone: a search of its own beside the app's (core/search-channel.js: a free layout's
+ * second group). @param {import('./store.js').Query} query @param {number[] | null} only
+ */
+export async function searchIn({ q, filters, sort }, only) {
+  const { total, items, facets, suggestions, fuzzy, sort: effectiveSort } = await call({ type: 'search', q, filters, sort, membership: mineValues(filters), only });
+  return { total, items, facets, suggestions, fuzzy, sort: effectiveSort };
+}
+
 const NO_FILTERS = { status: [], family: [], genus: [], photo: [], french: [], mine: [] };
 
 /**

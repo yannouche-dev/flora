@@ -2,7 +2,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { config } from '../config.js';
 import { clearRecentSearches, recentSearches, rememberSearch, setQuery } from '../core/query.js';
-import { StoreController } from '../core/store.js';
+import { SearchController } from '../core/search-channel.js';
 import './gf-voice-button.js';
 import { icon } from '../core/icons.js';
 import { voiceAvailable } from '../core/voice.js';
@@ -10,6 +10,8 @@ import { voiceAvailable } from '../core/voice.js';
 /** Plant search (top of the results), with a recent-searches menu (shown when focused and empty). */
 export class GfPlantSearch extends LitElement {
   static properties = {
+    /** The search it types in (core/search-channel.js: a free layout's group); none: the app's. */
+    channel: { attribute: false },
     _open: { state: true },
     _active: { state: true }
   };
@@ -77,10 +79,12 @@ export class GfPlantSearch extends LitElement {
     [role='option'][aria-selected='true'], [role='option']:hover { background: var(--gf-surface-2); }
   `;
 
-  #store = new StoreController(this);
+  #store = new SearchController(this);
 
   constructor() {
     super();
+    /** @type {import('../core/search-channel.js').Channel | null} */
+    this.channel = null;
     this._open = false;
     this._active = -1;
   }
@@ -88,27 +92,27 @@ export class GfPlantSearch extends LitElement {
   /** @param {InputEvent} event */
   #onInput(event) {
     const q = /** @type {HTMLInputElement} */ (event.target).value;
-    setQuery({ q }, { debounce: config.searchDebounce });
+    setQuery({ q }, { debounce: config.searchDebounce, channel: this.#store.channel });
     this._open = !q;
     this._active = -1;
   }
 
   /** Dictated: the query follows the voice, and is remembered once final. @param {CustomEvent<{ text: string, final: boolean }>} event */
   #onVoice({ detail: { text, final } }) {
-    setQuery({ q: text });
+    setQuery({ q: text }, { channel: this.#store.channel });
     this._open = false;
     if (final && text) rememberSearch(text);
   }
 
   /** ✕: empty the search, keep typing. */
   #clear() {
-    setQuery({ q: '' });
+    setQuery({ q: '' }, { channel: this.#store.channel });
     /** @type {HTMLInputElement | null} */ (this.renderRoot.querySelector('input'))?.focus();
   }
 
   /** @param {string} q */
   #pick(q) {
-    setQuery({ q });
+    setQuery({ q }, { channel: this.#store.channel });
     rememberSearch(q);
     this._open = false;
   }
@@ -129,7 +133,7 @@ export class GfPlantSearch extends LitElement {
       /** @type {HTMLInputElement} */ (event.target).blur();
     } else if (event.key === 'Escape') {
       if (this._open) this._open = false;
-      else if (this.#store.state.query.q) setQuery({ q: '' });
+      else if (this.#store.state.query.q) setQuery({ q: '' }, { channel: this.#store.channel });
     }
   }
 

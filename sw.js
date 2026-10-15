@@ -126,6 +126,7 @@ const SHELL = [
   'app/core/history.js',
   'app/core/router.js',
   'app/core/search.js',
+  'app/core/search-channel.js',
   'app/core/sources.js',
   'app/core/collections.js',
   'app/core/share.js',
