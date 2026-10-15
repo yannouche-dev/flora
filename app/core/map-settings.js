@@ -21,7 +21,7 @@ import { onStorage } from './sync.js';
  * @property {boolean} relief         the ground's relief (module « Vue 3D (relief) » too)
  * @property {number} exaggeration    1 … 3
  * @property {boolean} hillshade      the relief's shading under the IGN layers
- * @property {number} pitch           the tilt a map opens with, 0 … 60° (MapLibre's own limit)
+ * @property {number} pitch           the tilt a map opens with, 0 … 85° (MAX_PITCH: the horizon, the mountains ahead)
  * @property {boolean} buildings      IGN buildings, extruded (from zoom 15)
  * @property {boolean} sky            sky, horizon haze, atmosphere
  * @property {boolean} globe          the Earth as a globe when zoomed out
@@ -37,7 +37,13 @@ export const MAP_DEFAULTS = Object.freeze({
 });
 
 /** The bounds of the sliders (Réglages, the maps' panel and the map blocks' form use the same). */
-export const LIMITS = Object.freeze({ exaggeration: [1, 3, 0.1], pitch: [0, 60, 5], hour: [0, 24, 0.5] });
+/**
+ * How far a 3D map tilts (°): to the horizon, the mountains seen ahead as from a valley — MapLibre stops at 60° unless
+ * told (beyond 90° the eye would go under the ground, its centre being on it).
+ */
+export const MAX_PITCH = 85;
+
+export const LIMITS = Object.freeze({ exaggeration: [1, 3, 0.1], pitch: [0, MAX_PITCH, 5], hour: [0, 24, 0.5] });
 
 /** @param {unknown} v @param {[number, number, number]} range @param {number} fallback */
 function num(v, [min, max, step], fallback) {

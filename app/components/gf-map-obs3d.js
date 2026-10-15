@@ -37,7 +37,7 @@
 // relief, the same, flat.
 
 import { html, nothing, render } from 'lit';
-import { RADII_3D, around3dPrefs, fitZoom, hexBins, metres, morePhotos, observations3d, radiusLabel, radiusWords, ringWall, setAround3dPrefs, wallHeight } from '../core/around3d.js';
+import { RADII_3D, around3dPrefs, cleanAround3d, fitZoom, hexBins, metres, morePhotos, observations3d, radiusLabel, radiusWords, ringWall, setAround3dPrefs, wallHeight } from '../core/around3d.js';
 import { circlePolygon } from '../core/gl-style.js';
 import { mapSettings } from '../core/map-settings.js';
 import { cachedThumb } from '../core/thumb.js';
@@ -90,7 +90,8 @@ export class Obs3dLayer {
     this.root = root;
     this.restyle = restyle;
     this.scope = scopeOf(host);
-    this.prefs = around3dPrefs(this.scope, host.area?.radius);
+    // Its page's own (a free layout's map: jumelles=, jrayon=), else what this device keeps for its page.
+    this.prefs = host.around3d ? cleanAround3d(host.around3d) : around3dPrefs(this.scope, host.area?.radius);
     this.#buildUi();
     this.#listen();
     if (this.prefs.on) this.#turnOn(true);
@@ -209,10 +210,21 @@ export class Obs3dLayer {
     </section>${chip}`;
   }
 
+  /**
+   * What it keeps changed: its page's own when it has them (told: gf-map `around3d-change`, the page keeps them), else
+   * on this device for its page. @param {Partial<import('../core/around3d.js').Around3dPrefs>} patch
+   */
+  #save(patch) {
+    if (!this.host.around3d) return setAround3dPrefs(this.scope, patch);
+    const next = cleanAround3d({ ...this.prefs, ...patch });
+    this.host.dispatchEvent(new CustomEvent('around3d-change', { detail: { ...next } }));
+    return next;
+  }
+
   /** @param {Partial<import('../core/around3d.js').Around3dPrefs>} patch */
   #set(patch) {
     const before = this.prefs;
-    this.prefs = setAround3dPrefs(this.scope, patch);
+    this.prefs = this.#save(patch);
     if (patch.radius != null && patch.radius !== before.radius) { this.#zone(); this.#frame(false); this.#queueLoad(); }
     if ((patch.inat != null && patch.inat !== before.inat) || (patch.gbif != null && patch.gbif !== before.gbif)) this.#queueLoad(0);
     if (patch.density != null && patch.density !== before.density) { this.#density(); this.restyle(); this.#layout(); }
@@ -221,7 +233,12 @@ export class Obs3dLayer {
 
   /** @param {boolean} opening the map opens with it on (what it kept) */
   #turnOn(opening) {
-    if (!opening) this.prefs = setAround3dPrefs(this.scope, { on: true });
+    if (!opening) this.prefs = this.#save({ on: true });
+    this.#turnOnShown(opening);
+  }
+
+  /** On, shown: its circle, its points, framed on them. @param {boolean} [opening] */
+  #turnOnShown(opening = false) {
     // Folded to its chip: the circle and its points first (the chip unfolds the slider).
     this.#open = false;
     this.#pickCenter();
@@ -235,7 +252,12 @@ export class Obs3dLayer {
   }
 
   #turnOff() {
-    this.prefs = setAround3dPrefs(this.scope, { on: false });
+    this.prefs = this.#save({ on: false });
+    this.#stop();
+  }
+
+  /** Off, shown: no load, no marks, no card. */
+  #stop() {
     this.#abort?.abort();
     clearTimeout(this.#loadTimer);
     this.#loading = false;
@@ -243,6 +265,23 @@ export class Obs3dLayer {
     this.#clearMarks();
     this.#hideCard();
     this.restyle();
+    this.#syncUi();
+  }
+
+  /** Its page's own, as they are now (not told back: they are the page's). @param {import('../core/around3d.js').Around3dPrefs} next */
+  #follow(next) {
+    const p = this.prefs;
+    if (JSON.stringify(p) === JSON.stringify(next)) return;
+    if (next.on !== p.on) {
+      this.prefs = next;
+      if (next.on) this.#turnOnShown(); else this.#stop();
+      return;
+    }
+    const patch = /** @type {Partial<import('../core/around3d.js').Around3dPrefs>} */ (Object.fromEntries(Object.entries(next).filter(([k, v]) => /** @type {any} */ (p)[k] !== v)));
+    this.prefs = next;
+    if (patch.radius != null) { this.#zone(); this.#frame(false); this.#queueLoad(); }
+    if (patch.inat != null || patch.gbif != null) this.#queueLoad(0);
+    if (patch.density != null) { this.#density(); this.restyle(); this.#layout(); }
     this.#syncUi();
   }
 
@@ -293,6 +332,8 @@ export class Obs3dLayer {
 
   /** gf-map's properties changed (gf-map-gl.js tells). @param {Map<string, any>} changed */
   changed(changed) {
+    // Its page's own changed (the address, Back): followed — on or off, its radius, its sources.
+    if (changed.has('around3d') && this.host.around3d) this.#follow(cleanAround3d(this.host.around3d));
     if (!this.prefs.on) return;
     if (changed.has('area') || changed.has('selectedId')) this.#moveCenter();
     if (changed.has('plants') || changed.has('highlight') || changed.has('selectedPlant')) { this.#merge(); this.#layout(); }

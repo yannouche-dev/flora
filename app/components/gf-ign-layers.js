@@ -1,6 +1,6 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
-import { IGN_PREFIX, builtinKeyOf, overlayDef, overlayOpacity, wmtsUrl } from '../core/ign.js';
+import { DEFAULT_OPACITY, IGN_PREFIX, builtinKeyOf, overlayDef, overlayOpacity, wmtsUrl } from '../core/ign.js';
 import { loadCatalog, onCatalog } from '../core/ign-catalog.js';
 import { moduleOn } from '../core/modules.js';
 import { href } from '../core/router.js';
@@ -63,6 +63,8 @@ export class GfIgnLayers extends LitElement {
   static properties = {
     /** The overlays shown, bottom first. */
     overlays: { attribute: false },
+    /** The map's own opacity of its overlays (key → 0…1; the usual one when it says none); null: the device's. */
+    opacities: { attribute: false },
     _catalog: { state: true },
     _open: { state: true },
     _q: { state: true },
@@ -154,6 +156,8 @@ export class GfIgnLayers extends LitElement {
     this._more = new Map();
     /** Opacities while a slider moves (key → 0…1). @type {Map<string, number>} */
     this._opacity = new Map();
+    /** @type {Record<string, number> | null} */
+    this.opacities = null;
     /** @type {(() => void) | null} */
     this._unsubscribe = null;
   }
@@ -242,7 +246,7 @@ export class GfIgnLayers extends LitElement {
       ${!keys.length ? html`<p class="note">Aucune couche par-dessus le fond : cochez-en une ci-dessous ou dans le catalogue.</p>`
         : html`<ul class="active" aria-labelledby="active-title">${keys.map((key, i) => {
           const name = this.#name(key);
-          const pct = Math.round((this._opacity.get(key) ?? overlayOpacity(key)) * 100);
+          const pct = Math.round((this._opacity.get(key) ?? (this.opacities ? this.opacities[key] ?? DEFAULT_OPACITY : overlayOpacity(key))) * 100);
           return html`<li>
             <span class="name">${name}${keys.length > 1 ? html`<small>${i === 0 ? 'au-dessus' : i === keys.length - 1 ? 'au-dessous' : `${i + 1}ᵉ`}</small>` : nothing}</span>
             <span class="tools">

@@ -72,24 +72,24 @@ test.describe('un grand écran', () => {
     await expect(cellAt(page, '0')).toHaveAttribute('data-comp', 'map');
     await expect(p.locator('.row[data-group="Points"] small')).toHaveText('Ce mois-ci · Plante courante en groupes');
 
-    // A group: Fond → photos aériennes; its row marked, the map's background the photos.
+    // A group: Fond → plan IGN; its row marked, the map's background the plan.
     await p.locator('.row[data-group="Fond"]').click();
     await expect(p.locator('ol.crumbs li')).toHaveText(['Case 1', 'Carte', 'Fond']);
-    await p.locator('[data-param="base"] button[data-value="photo"]').click();
-    await expect.poll(() => grid(page)).toBe('[map(floraison,base=photo),results(view=list)]');
-    await expect.poll(() => cellAt(page, '0').locator('dl-map gf-map').evaluate(m => /** @type {any} */ (m).base)).toBe('photo');
-    await expect(p.locator('[data-param="base"] button[data-value="photo"]')).toHaveAttribute('aria-pressed', 'true');
+    await p.locator('[data-param="base"] button[data-value="plan"]').click();
+    await expect.poll(() => grid(page)).toBe('[map(floraison,base=plan),results(view=list)]');
+    await expect.poll(() => cellAt(page, '0').locator('dl-map gf-map').evaluate(m => /** @type {any} */ (m).base)).toBe('plan');
+    await expect(p.locator('[data-param="base"] button[data-value="plan"]')).toHaveAttribute('aria-pressed', 'true');
     // The 3D: a row of three (as the app's settings say, or not); Back to the rows, the line says both.
     await p.locator('[data-param="3d"] button[data-value="false"]').click();
-    await expect.poll(() => grid(page)).toBe('[map(floraison,base=photo,3d=0),results(view=list)]');
+    await expect.poll(() => grid(page)).toBe('[map(floraison,base=plan,3d=0),results(view=list)]');
     await p.locator('.back').click();
-    await expect(p.locator('.row[data-group="Fond"]')).toContainText('Photos aériennes · 2D');
+    await expect(p.locator('.row[data-group="Fond"]')).toContainText('Plan IGN · 2D');
     await expect(p.locator('.row[data-group="Fond"] .dot')).toHaveCount(1);
     await expect(p.locator('.row[data-group="Points"] .dot')).toHaveCount(0);
     // Couches: chips.
     await p.locator('.row[data-group="Couches"]').click();
     await p.locator('[data-param="layers"] button[data-value="znieff"]').click();
-    await expect.poll(() => grid(page)).toBe('[map(floraison,base=photo,3d=0,layers=znieff),results(view=list)]');
+    await expect.poll(() => grid(page)).toBe('[map(floraison,base=plan,3d=0,layers=znieff),results(view=list)]');
     await p.locator('.back').click();
     // « Revenir à l'intention »: the settings written beside it gone.
     await p.locator('[data-act="reset"]').click();
@@ -138,19 +138,19 @@ test.describe('un grand écran', () => {
     await expect(cellAt(page, '2')).toHaveAttribute('data-comp', 'plant.wikipedia');
   });
 
-  test('les tuiles d’un emplacement : à sa taille, un bloc trop grand grisé avec sa raison ; la carte, son intention d’abord', async ({ app, page }) => {
+  test('les tuiles d’un emplacement : à sa taille, jamais un bloc refusé (un conseil quand la case est petite) ; la carte, son intention d’abord', async ({ app, page }) => {
     await app.open('#/builder/tableau');
-    // The row of three, 22 % of the height: compact tiles; too low for a map.
+    // The row of three, 22 % of the height: compact tiles; a little low for a map — said, never refused.
     const small = tilesAt(page, '1.0.0');
     await expect(small.locator('.tile small').first()).toBeHidden();
+    await expect(small.locator('.tile[aria-disabled="true"]')).toHaveCount(0);
     const map = small.locator('.tile[data-comp="map"]');
-    await expect(map).toHaveAttribute('aria-disabled', 'true');
-    await expect(map).toHaveAttribute('title', /« Carte » demande 180 px de haut \(la case en a \d+\)/);
-    await map.dispatchEvent('click');
-    expect(await grid(page)).toBe('[slot@20,[[slot,slot,slot]@22,slot@46,[slot@60,slot]]]');
-    // Those that fit first.
-    const off = await small.locator('.tile').evaluateAll(ts => ts.map(t => t.getAttribute('aria-disabled')));
-    expect(off.indexOf('true')).toBeGreaterThan(off.lastIndexOf('false'));
+    await expect(map.locator('.why.small')).toHaveText(/Un peu bas pour « Carte » : 180 px de haut conseillés \(la case en a \d+\)/);
+    for (const id of ['map', 'results', 'filters']) await expect(small.locator(`.tile[data-comp="${id}"]`)).toBeEnabled();
+    await map.click();
+    await expect(small.locator('.lead')).toHaveText('Carte : que montre-t-elle ?');
+    await small.locator('.tile[data-intent="explorer"]').click();
+    await expect.poll(() => grid(page)).toBe('[slot@20,[[map,slot,slot]@22,slot@46,[slot@60,slot]]]');
     // A large place: its sentences; a map, its intent first, in the place.
     await app.go(builder('[slot,slot]', ''));
     const large = tilesAt(page, '1');

@@ -107,8 +107,7 @@ export class GfBlockPicker extends LitElement {
     .tile .why { grid-column: 2; font-size: 0.78rem; font-weight: 600; }
     .tile .why.sugg { color: var(--gf-accent); }
     .tile .why.warn { color: var(--gf-warn, #9a5b00); }
-    .tile[aria-disabled='true'] { cursor: not-allowed; opacity: .55; background: var(--gf-surface-2, var(--gf-bg)); }
-    .tile[aria-disabled='true'] .why { color: var(--gf-text); }
+    .tile .why.small { color: var(--gf-text-muted); font-weight: 500; }
     .tiles.small .tile { padding: 8px 12px; }
     .tiles.small .tile > .bi { font-size: 1.2rem; grid-row: auto; }
     .chips { display: flex; flex-wrap: wrap; gap: 4px; grid-column: 2; }
@@ -200,7 +199,7 @@ export class GfBlockPicker extends LitElement {
   });
 
   /** The first choice focused (a place just made: the cross). */
-  focusFirst() { /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.tile:not([aria-disabled="true"])'))?.focus(); }
+  focusFirst() { /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.tile'))?.focus(); }
 
   /** The cell, read: its node (null: an « Emplacement ») and what it is. */
   get #node() {
@@ -295,7 +294,7 @@ export class GfBlockPicker extends LitElement {
 
   // ── Levels ──────────────────────────────────────────────────────────────────────────────────────────────
 
-  /** « Contenu »: a tile per component, suggested first, too large last (greyed, with why). */
+  /** « Contenu »: a tile per component, suggested first — every one can be chosen (one a little large for the cell says so). */
   #content() {
     const others = this.#others;
     const sugg = suggestions(others);
@@ -303,18 +302,18 @@ export class GfBlockPicker extends LitElement {
     // Not the place itself: what « Changer de bloc » leaves.
     const room = this.inline ? this._room : this.room;
     const tiles = COMPONENTS.filter(c => !c.empty).map(c => ({ c, why: sugg.get(c.id) ?? null, small: fitReason(c, room), warn: warningOf(c, others) }))
-      .map((t, i) => ({ ...t, rank: (t.small ? 2 : t.why ? 0 : 1) * 100 + i }))
+      .map((t, i) => ({ ...t, rank: (t.why ? 0 : 1) * 100 + i }))
       .sort((a, b) => a.rank - b.rank);
     return html`${this.inline ? nothing : html`<p class="hint">Ce que montre « ${this.label} » : un outil de GeoFlora, relié aux autres cases.</p>`}
       <div class="tiles" role="group" aria-label="Composants">${tiles.map(({ c, why, small, warn }) => {
         const views = Boolean(c.views);
         const on = r?.spec.id === c.id;
-        return html`<button type="button" class="tile" data-comp=${c.id} aria-pressed=${on ? 'true' : 'false'} aria-disabled=${small ? 'true' : 'false'} title=${small ?? c.about}
-          @click=${() => { if (small) return; if (views) this.#go('blocks'); else this.#choose(c); }}>
+        return html`<button type="button" class="tile" data-comp=${c.id} aria-pressed=${on ? 'true' : 'false'} title=${c.about}
+          @click=${() => { if (views) this.#go('blocks'); else this.#choose(c); }}>
           ${icon(c.icon)}<b>${c.title}</b>${views ? html`<span class="go" aria-hidden="true">${icon('chevron-right')}</span>` : nothing}
           <small>${c.about}</small>
-          ${small ? html`<span class="why">${small}</span>` : why ? html`<span class="why sugg">${icon('lightbulb')} Suggéré : ${why}</span>`
-            : warn ? html`<span class="why warn">${icon('exclamation-triangle-fill')} ${warn}</span>` : nothing}
+          ${why ? html`<span class="why sugg">${icon('lightbulb')} Suggéré : ${why}</span>` : warn ? html`<span class="why warn">${icon('exclamation-triangle-fill')} ${warn}</span>` : nothing}
+          ${small ? html`<span class="why small">${icon('arrows-angle-expand')} ${small}</span>` : nothing}
         </button>`;
       })}</div>
       ${this.clearLabel && !this.inline ? html`<div class="foot"><button type="button" data-act="clear" @click=${() => this.#fire('clear')}>${icon('arrow-counterclockwise')} ${this.clearLabel}</button></div>` : nothing}`;

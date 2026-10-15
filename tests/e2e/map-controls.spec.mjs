@@ -124,15 +124,15 @@ test.describe('au bureau', () => {
     await expect(chip.getByRole('link', { name: /^Ouvrir la fiche : / })).toHaveAttribute('href', `#/plant/${ortie}`);
     // Quiet maps: its chip, the count, the zone are controls — nothing else written over the map.
     await expect.poll(() => overMap(page, ['.panel'])).toEqual([]);
-    // Seule: its points alone (this map's view only: the address unchanged).
-    const layout = await layoutOf(page);
+    // Seule: its points alone — kept in the layout (plante=seule), as the app is sent.
     await chip.getByRole('button', { name: 'Seule' }).click();
     await expect(chip.getByRole('button', { name: 'Seule' })).toHaveAttribute('aria-pressed', 'true');
     await expect.poll(async () => (await view(page)).points).toBe(2);
     expect(await mapOf(page).evaluate(m => /** @type {any} */ (m).area.points.map((/** @type {any} */ p) => p.taxonId))).toEqual([1000, 1000]);
-    expect(await layoutOf(page)).toBe(layout);
+    await expect.poll(() => layoutOf(page)).toBe('#/layout/[map(r=1km,plante=seule),results]');
     await chip.getByRole('button', { name: 'Seule' }).click();
     await expect.poll(async () => (await view(page)).points).toBe(24);
+    await expect.poll(() => layoutOf(page)).toBe('#/layout/[map(r=1km),results]');
     // ✕: no current plant.
     await chip.getByRole('button', { name: 'Aucune plante courante' }).click();
     await expect.poll(() => param(page, 'p')).toBe(null);
@@ -175,24 +175,28 @@ test.describe('au bureau', () => {
     await expect(panel.getByRole('region', { name: 'État de la carte' }).or(panel.locator('section.state'))).toBeVisible();
   });
 
-  test('le fond : la vignette de l’autre fond le montre ; gardé comme le panneau le garde', async ({ app, page }) => {
+  test('le fond : la vignette de l’autre fond le montre, gardé dans la disposition (base=) ; jamais le choix partagé de la Carte', async ({ app, page }) => {
+    // The Carte's shared choice says « plan »: a layout's map is the same for everyone, the photos unless it says.
     await app.open(`#/layout/[map(r=1km;ctl=rayon+fond),results]?${AT}`);
+    await page.evaluate(() => localStorage.setItem('geoflora.mapLayer', JSON.stringify({ base: 'plan', overlays: ['cadastre'] })));
+    await page.reload();
+    await app.ready();
     const base = () => mapOf(page).evaluate(m => /** @type {any} */ (m).baseShown);
-    const first = await base();
-    const tile = cell(page).locator('button.base');
-    await expect(tile).toHaveAccessibleName(first === 'photo' ? 'Fond : le plan IGN' : 'Fond : les photos aériennes');
-    await tile.click();
-    await expect.poll(base).toBe(first === 'photo' ? 'plan' : 'photo');
-    await expect(tile).toHaveAccessibleName(first === 'photo' ? 'Fond : les photos aériennes' : 'Fond : le plan IGN');
-    // No background of its own: the Carte's shared choice.
-    expect(await page.evaluate(() => Object.entries(localStorage).find(([k]) => /maplayer/i.test(k))?.[1] ?? '')).toContain(first === 'photo' ? '"plan"' : '"photo"');
-    // Its own (base=photo): switched here, not saved for the other maps.
-    await page.evaluate(() => { for (const k of Object.keys(localStorage)) if (/maplayer/i.test(k)) localStorage.removeItem(k); });
-    await app.open(`#/layout/[map(r=1km;base=photo;ctl=fond),results]?${AT}`);
     await expect.poll(base).toBe('photo');
-    await cell(page).locator('button.base').click();
+    const tile = cell(page).locator('button.base');
+    await expect(tile).toHaveAccessibleName('Fond : le plan IGN');
+    await tile.click();
     await expect.poll(base).toBe('plan');
-    expect(await page.evaluate(() => Object.keys(localStorage).filter(k => /maplayer/i.test(k)).length)).toBe(0);
+    await expect(tile).toHaveAccessibleName('Fond : les photos aériennes');
+    await expect.poll(() => layoutOf(page)).toBe('#/layout/[map(r=1km,base=plan,ctl=rayon+fond),results]');
+    // The shared choice left alone.
+    expect(await page.evaluate(() => localStorage.getItem('geoflora.mapLayer'))).toContain('"plan"');
+    // Back to the photos: the setting left out again.
+    await tile.click();
+    await expect.poll(() => layoutOf(page)).toBe('#/layout/[map(r=1km,ctl=rayon+fond),results]');
+    await page.reload();
+    await app.ready();
+    await expect.poll(base).toBe('photo');
   });
 
   test('ctl= : exactement ces commandes ; par défaut celles de ui (complètes, compactes) et de l’intention ; nue : aucune', async ({ app, page }) => {

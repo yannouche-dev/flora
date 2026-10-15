@@ -85,6 +85,6 @@ test('le fichier de mise en page emporte Réglages › Cartes (2D / 3D et option
   assert.equal(MS.mapSettings().exaggeration, 2);
   SB.importLayout(JSON.stringify({ ...old, maps3d: { renderer: 'holo', pitch: 400 } }));
   assert.equal(MS.mapSettings().renderer, '2d');
-  assert.equal(MS.mapSettings().pitch, 60);
+  assert.equal(MS.mapSettings().pitch, 85);
   MS.resetMapSettings();
 });

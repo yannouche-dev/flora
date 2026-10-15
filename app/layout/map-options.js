@@ -184,3 +184,111 @@ export function snapRadius(m, stops, tol = SNAP) {
   const r = m < 1000 ? Math.round(m / 10) * 10 : Math.round(m / 100) * 100;
   return Math.min(50_000, Math.max(100, r));
 }
+
+// ── What a map cell keeps of what was done on it (registry.js `own`: written by its controls, not by the editor) ──
+
+/** A catalogue layer's id as the maps take it (core/ign.js SAFE_ID). */
+const SAFE_ID = /^[A-Za-z0-9._:-]{1,160}$/;
+
+/**
+ * A layer of IGN's whole catalogue named in layers= (« ign:<id> », added by the Carte panel's « Toutes les couches »):
+ * its name when it is one of MAP_LAYERS alone (ign:Patrinat_PNR is pnr), else itself; undefined: not one.
+ * @param {string} word @returns {string | undefined}
+ */
+export function layerWord(word) {
+  const m = /^ign:(.+)$/i.exec(String(word).trim());
+  if (!m || !SAFE_ID.test(m[1])) return undefined;
+  const key = 'ign:' + m[1];
+  return Object.entries(MAP_LAYERS).find(([, l]) => l.keys.length === 1 && l.keys[0] === key)?.[0] ?? key;
+}
+
+/** A layer's name as written (a name, one of its other names, « ign:<id> »), canonical; undefined: none. @param {string} word */
+function layerName(word) {
+  const k = String(word).toLowerCase().normalize('NFD').replace(/[̀-ͯ\s]/g, '');
+  if (k in MAP_LAYERS) return k;
+  const alias = /** @type {Record<string, string>} */ (MAP_LAYER_ALIASES)[k];
+  return alias ?? layerWord(word);
+}
+
+/**
+ * The overlays of gf-map (their keys, in the order drawn) as layers= names them: a layer of several overlays (znieff:
+ * its two types; n2000: its two directives) when all of them are there, each overlay of the app's own by its name
+ * (contours: courbes), a catalogue's « ign:<id> » — in the order the overlays are drawn (the first of each layer).
+ * @param {string[]} keys @returns {string[]}
+ */
+export function layersOf(keys) {
+  const on = new Set(keys), used = new Set(), out = [];
+  for (const key of keys) {
+    if (used.has(key)) continue;
+    const fits = Object.entries(MAP_LAYERS).filter(([, l]) => l.keys.includes(key) && l.keys.every(k => on.has(k) && !used.has(k)))
+      .sort((a, b) => b[1].keys.length - a[1].keys.length);
+    const name = fits[0]?.[0] ?? layerWord(key);
+    if (!name) continue;
+    for (const k of fits[0]?.[1].keys ?? [key]) used.add(k);
+    out.push(name);
+  }
+  return out;
+}
+
+/** The overlays of gf-map these layers show, in their order, a catalogue's « ign:<id> » itself. @param {string[]} names @returns {string[]} */
+export const overlaysOf = names => [...new Set(names.flatMap(n => MAP_LAYERS[n]?.keys ?? (n.startsWith('ign:') ? [n] : [])))];
+
+/**
+ * The layers' opacity as written (opac=znieff.60+ign:XYZ.40: each layer's name, a dot, its opacity in %), canonical;
+ * undefined: not that. @param {string} text @returns {string | undefined}
+ */
+export function readOpacities(text) {
+  const out = [];
+  for (const part of String(text).split(/[+\s]+/).filter(Boolean)) {
+    const m = /^(.+)\.(\d{1,3})$/.exec(part);
+    const name = m ? layerName(m[1]) : undefined;
+    if (!m || !name || Number(m[2]) > 100) return undefined;
+    out.push(`${name}.${Number(m[2])}`);
+  }
+  return out.length ? out.join('+') : undefined;
+}
+
+/** The opacity of each overlay (0…1) opac= gives. @param {string | null | undefined} text @returns {Record<string, number>} */
+export function opacitiesOf(text) {
+  /** @type {Record<string, number>} */
+  const out = {};
+  for (const part of String(text ?? '').split('+').filter(Boolean)) {
+    const m = /^(.+)\.(\d{1,3})$/.exec(part);
+    if (m) for (const key of overlaysOf([m[1]])) out[key] = Math.min(100, Number(m[2])) / 100;
+  }
+  return out;
+}
+
+/**
+ * opac= for these overlays' opacities (0…1): by layer, as layers= names them (a layer of several overlays, its first's),
+ * only those not at `def`; null: none. @param {Record<string, number>} opacities @param {string[]} keys the overlays shown @param {number} def
+ * @returns {string | null}
+ */
+export function opacText(opacities, keys, def) {
+  const parts = layersOf(keys).map(name => {
+    const v = opacities[overlaysOf([name])[0]];
+    return v === undefined || Math.abs(v - def) < 0.001 ? null : `${name}.${Math.round(v * 100)}`;
+  }).filter(Boolean);
+  return parts.length ? parts.join('+') : null;
+}
+
+/** @typedef {{ lat: number, lon: number, zoom: number, pitch: number, bearing: number }} MapView */
+
+/** A number rounded to `d` decimals. @param {number} n @param {number} d */
+const round = (n, d) => Math.round(n * 10 ** d) / 10 ** d;
+
+/** A view as vue= writes it: « 45.77123:3.08456:13.5 », and « :60:-20 » after it when tilted or turned (3D). @param {MapView} v */
+export const viewText = v => [round(v.lat, 5), round(v.lon, 5), round(v.zoom, 2)]
+  .concat(Math.round(v.pitch) || Math.round(v.bearing) ? [Math.round(v.pitch), Math.round(v.bearing)] : []).join(':');
+
+/** A view as written (vue=), or null: not one. @param {string | null | undefined} text @returns {MapView | null} */
+export function viewOf(text) {
+  const n = String(text ?? '').split(':').map(x => x.trim() === '' ? NaN : Number(x));
+  if ((n.length !== 3 && n.length !== 5) || n.some(x => !Number.isFinite(x))) return null;
+  const [lat, lon, zoom, pitch = 0, bearing = 0] = n;
+  if (Math.abs(lat) > 85 || Math.abs(lon) > 180 || zoom < 0 || zoom > 22 || pitch < 0 || pitch > 85 || Math.abs(bearing) > 180) return null;
+  return { lat, lon, zoom, pitch, bearing };
+}
+
+/** vue= as written, canonical; undefined: not a view. @param {string} text */
+export const readView = text => { const v = viewOf(text); return v ? viewText(v) : undefined; };

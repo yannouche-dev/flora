@@ -18,6 +18,10 @@
 //    viewer (gf-media-viewer). Each shows the current plant;
 //  - deck: Rencontres' cards (miniapp/kit/ma-deck.js) for the plants found in the scope, the one on top the current
 //    plant; a heart: a favourite.
+// What is done in a cell with its own controls is kept in the layout (`cell-param` {key: value…}, gf-layout.js: the
+// address is the app, sent as it is): a map's 3D, background, layers (their order, IGN's catalogue, their opacity),
+// period, « Seule », legend, binoculars (« Observations autour » in 3D), and, in « Créer une app », its view; the
+// search's filters opened; the results as a list or a grid.
 // A link to a plant's sheet anywhere in a cell (a result, a look-alike) makes it the current plant (gf-layout.js).
 // The frame every cell shares (registry.js#FRAME: its head, its actions, its empty state) is gf-layout.js'; its links
 // are honoured here: a plant of its own (plante=: renderCell), the whole flora instead of the zone (results zone=0:
@@ -43,9 +47,11 @@ import { floweringMonths } from '../components/gf-calendar.js';
 import { geoProblem } from '../components/start-screen.js';
 import { DISTANCES, distanceAt, distanceEvents, distanceKey } from '../miniapp/kit/cards.js';
 import { pushHash } from '../core/history.js';
-import { addCatalogLayer } from '../core/ign.js';
+import { addCatalogLayer, DEFAULT_OPACITY, isOverlay } from '../core/ign.js';
+import { loadCatalog } from '../core/ign-catalog.js';
+import { RADII_3D } from '../core/around3d.js';
 import { cellIcon, distanceLabel } from './registry.js';
-import { COMPACT_WIDTH, MAP_LAYERS, catalogLayers, inWhen, mapControls, overlayKeys, snapRadius, uiMode } from './map-options.js';
+import { COMPACT_WIDTH, MAP_LAYERS, catalogLayers, inWhen, layersOf, mapControls, opacitiesOf, opacText, overlaysOf, snapRadius, uiMode, viewOf, viewText } from './map-options.js';
 import { obsId } from './state.js';
 import '../components/gf-map.js';
 import '../components/gf-place-search.js';
@@ -88,6 +94,15 @@ async function nameScope(state, at) {
   const a = await addressAt(at).catch(() => null);
   if (a?.city && state.live.at === at) state.set({ place: a.city }, 'replace');
 }
+
+/**
+ * Settings of the cell an element is in, changed by its own controls: kept in the layout (gf-layout.js, `cell-param`).
+ * @param {Element} el @param {Record<string, unknown>} values
+ */
+const setCell = (el, values) => el.dispatchEvent(new CustomEvent('cell-param', { detail: values, bubbles: true, composed: true }));
+
+/** The radius of « Observations autour » (core/around3d.js RADII_3D) nearest to a distance. @param {number} m */
+const nearest3d = m => RADII_3D.reduce((a, b) => Math.abs(b - m) < Math.abs(a - m) ? b : a);
 
 /** Watches the state: the host drawn again on each change. */
 class StateController {
@@ -183,10 +198,9 @@ const counted = (n, word) => `${n.toLocaleString('fr-FR')} ${word}${n > 1 ? 's' 
 export class DlMap extends LitElement {
   static properties = {
     state: { attribute: false }, params: { attribute: false },
-    /** The cell's path in the layout ('0', '2.1') and how it changes one of its parameters in the address (gf-layout.js). */
-    path: { attribute: false }, setParam: { attribute: false },
-    _busy: { state: true }, _narrow: { state: true }, _only: { state: true }, _d3: { state: true }, _when: { state: true },
-    _legend: { state: true }, _zone: { state: true }, _thumb: { state: true }
+    /** In « Créer une app »: the map moved there is the view it starts on (vue=). */
+    building: { attribute: false },
+    _busy: { state: true }, _narrow: { state: true }, _zone: { state: true }, _thumb: { state: true }
   };
 
   static styles = [ui, scopeStyles, css`
@@ -289,13 +303,8 @@ export class DlMap extends LitElement {
     this._busy = false;
     /** Narrower than COMPACT_WIDTH (ui=auto: compact controls). */
     this._narrow = false;
-    /** @type {string | null} */ this.path = null;
-    /** @type {((path: string, key: string, value: unknown) => void) | null} */ this.setParam = null;
-    /** The current plant's chip « Seule », live (null: as plante= says). @type {boolean | null} */ this._only = null;
-    /** The 2D / 3D switch, live (null: as 3d= says, else Réglages › Cartes). @type {boolean | null} */ this._d3 = null;
-    /** The period chosen by its chips, live, when the cell cannot write it in the address (null: as when= says). @type {string | null} */ this._when = null;
-    /** The legend opened; the compact zone's pill opened. */
-    this._legend = false;
+    this.building = false;
+    /** The compact zone's pill opened. */
     this._zone = false;
     /** The current plant's photo, once found (core/thumb.js): its id and address. @type {{ id: number, url: string | null } | null} */ this._thumb = null;
   }
@@ -310,13 +319,12 @@ export class DlMap extends LitElement {
   connectedCallback() { super.connectedCallback(); this.#resize.observe(this); }
   disconnectedCallback() { super.disconnectedCallback(); this.#resize.disconnect(); }
 
-  /** The map's settings (registry.js), their defaults when none were given — and what its controls changed, live. */
+  /** The map's settings (registry.js), their defaults when none were given. */
   get #p() {
     const p = this.params ?? {};
-    const plante = /** @type {string} */ (p.plante ?? 'grand');
     return {
-      src: /** @type {string[]} */ (p.src ?? ['inat']), when: /** @type {string} */ (this._when ?? p.when ?? 'toujours'), suit: p.suit !== false,
-      plante: this._only === null ? plante : this._only ? 'seule' : plante === 'seule' ? 'grand' : plante,
+      src: /** @type {string[]} */ (p.src ?? ['inat']), when: /** @type {string} */ (p.when ?? 'toujours'), suit: p.suit !== false,
+      plante: /** @type {string} */ (p.plante ?? 'grand'),
       toucher: /** @type {string} */ (p.toucher ?? 'plante'), pts: /** @type {string} */ (p.pts ?? 'photo'),
       ui: uiMode(p.ui, this._narrow ? COMPACT_WIDTH - 1 : COMPACT_WIDTH)
     };
@@ -328,8 +336,11 @@ export class DlMap extends LitElement {
     return mapControls({ ctl: p.ctl ?? null, ui: p.ui, intent: p.intent }, this._narrow ? COMPACT_WIDTH - 1 : COMPACT_WIDTH);
   }
 
-  /** The map's 3D: the switch's, else as 3d= says (null: as Réglages › Cartes say). @returns {boolean | null} */
-  get #d3() { return this._d3 ?? this.params?.['3d'] ?? null; }
+  /** The map's 3D as 3d= says (its switch writes it; null: as Réglages › Cartes say). @returns {boolean | null} */
+  get #d3() { return this.params?.['3d'] ?? null; }
+
+  /** Settings of this cell changed by its controls: kept in the layout. @param {Record<string, unknown>} values */
+  #set(values) { setCell(this, values); }
 
   /** The radius' handle on the circle (gf-map radiusHandle): the slider's stops, its keys, its words. */
   #radiusHandle = { snap: (/** @type {number} */ m) => snapRadius(m, DISTANCES), step: distanceKey, label: distanceLabel };
@@ -433,19 +444,81 @@ export class DlMap extends LitElement {
   /** @type {{ id: string, value: any } | null} */ #focusMemo = null;
 
   /**
-   * The cell's own layers (layers=znieff+n2000): the overlays of gf-map, those of the catalogue added to the maps
-   * first (core/ign.js); none written: null — the Carte's shared choice. The same array while they are the same.
+   * The cell's own layers (layers=znieff+n2000+ign:<id>), in their order: the overlays of gf-map, those of the
+   * catalogue added to the maps first (core/ign.js) — one of IGN's whole catalogue not known on this device found in
+   * it (core/ign-catalog.js), then shown. Never the Carte's shared choice: the layout is the same for everyone who
+   * opens it. The same array while they are the same.
    */
   get #overlays() {
     const names = /** @type {string[]} */ (this.params?.layers ?? []);
     const k = names.join('+');
     if (this.#overlaysMemo?.k === k) return this.#overlaysMemo.value;
     for (const l of catalogLayers(names)) addCatalogLayer(/** @type {any} */ (l));
-    const value = names.length ? overlayKeys(names) : null;
+    const value = overlaysOf(names);
+    const unknown = value.filter(key => !isOverlay(key)).map(key => key.slice('ign:'.length));
+    if (unknown.length) {
+      loadCatalog().then(c => {
+        const found = (c.layers ?? []).filter(l => unknown.includes(l.id));
+        for (const l of found) addCatalogLayer(l);
+        if (found.length) { this.#overlaysMemo = null; this.requestUpdate(); }
+      }, () => {});
+    }
     this.#overlaysMemo = { k, value };
     return value;
   }
-  /** @type {{ k: string, value: string[] | null } | null} */ #overlaysMemo = null;
+  /** @type {{ k: string, value: string[] } | null} */ #overlaysMemo = null;
+
+  /** The overlays' opacity (opac=), by overlay; the same object while it is the same. */
+  get #opacities() {
+    const text = this.params?.opac ?? '';
+    if (this.#opacMemo?.text !== text) this.#opacMemo = { text, value: opacitiesOf(text) };
+    return this.#opacMemo.value;
+  }
+  /** @type {{ text: string, value: Record<string, number> } | null} */ #opacMemo = null;
+
+  /**
+   * The map's background, layers and their opacity changed on it (its panel « Carte »: gf-map `layers-change`): kept
+   * in the layout (base=, layers= in their order, opac=). @param {CustomEvent} e
+   */
+  #onLayers(e) {
+    const { base, overlays, opacities } = e.detail;
+    this.#set({ base, layers: layersOf(overlays), opac: opacText(opacities ?? {}, overlays, DEFAULT_OPACITY) });
+  }
+
+  /**
+   * « Observations autour » (the binoculars, in 3D: gf-map-obs3d.js) as the cell keeps them (jumelles=, jrayon=):
+   * off when not written; their radius, else the nearest to the zone's. The same object while they are the same.
+   */
+  get #around3d() {
+    const j = /** @type {string[] | null} */ (this.params?.jumelles ?? null);
+    const radius = nearest3d(this.params?.jrayon ?? this.state?.radius ?? 2000);
+    const value = { on: j !== null, inat: j ? j.includes('inat') : true, gbif: j ? j.includes('gbif') : true, density: j ? j.includes('densite') : false, radius };
+    const k = JSON.stringify(value);
+    if (this.#aroundMemo?.k !== k) this.#aroundMemo = { k, value };
+    return this.#aroundMemo.value;
+  }
+  /** @type {{ k: string, value: any } | null} */ #aroundMemo = null;
+
+  /** « Observations autour » changed on the map: kept in the layout. @param {CustomEvent} e */
+  #onAround(e) {
+    const p = e.detail;
+    const zone = nearest3d(this.state?.radius ?? 2000);
+    this.#set({
+      jumelles: p.on ? [p.inat && 'inat', p.gbif && 'gbif', p.density && 'densite'].filter(Boolean) : null,
+      jrayon: p.on && p.radius !== zone ? p.radius : null
+    });
+  }
+
+  /** The view it starts on (vue=), read; the same object while it is the same. */
+  get #view() {
+    const text = this.params?.vue ?? '';
+    if (this.#viewMemo?.text !== text) this.#viewMemo = { text, value: viewOf(text) };
+    return this.#viewMemo.value;
+  }
+  /** @type {{ text: string, value: import('./map-options.js').MapView | null } | null} */ #viewMemo = null;
+
+  /** The map moved by hand in « Créer une app »: the view it starts on (vue=). @param {CustomEvent} e */
+  #onView(e) { if (this.building) this.#set({ vue: viewText(e.detail) }); }
 
   /** The cell's map (gf-map: what the cell says goes through it — the quiet-map rule). @returns {any} */
   get #map() { return this.renderRoot.querySelector('gf-map'); }
@@ -465,12 +538,16 @@ export class DlMap extends LitElement {
     s.pick(id, { obs: p.url ? obsId(p.url) : null });
   }
 
-  /** A long press on the map: the scope moves there (its place's name found after). @param {CustomEvent} e */
+  /**
+   * A long press on the map, a place picked in its address search: the scope moves there — named as the search named
+   * it, else its place's name found after. @param {CustomEvent} e
+   */
   #onPress(e) {
     const s = /** @type {LayoutState} */ (this.state);
     const at = /** @type {[number, number]} */ (e.detail.coordinates);
-    s.setScope(at, null);
-    nameScope(s, /** @type {[number, number]} */ (s.live.at));
+    const label = typeof e.detail.label === 'string' && e.detail.label.trim() ? e.detail.label.trim() : null;
+    s.setScope(at, label);
+    if (!label) nameScope(s, /** @type {[number, number]} */ (s.live.at));
   }
 
   /** « Autour de moi »: the scope around the position. @param {import('./state.js').How} [how] */
@@ -517,6 +594,10 @@ export class DlMap extends LitElement {
     this.toggleAttribute('big-gps', this.params?.intent === 'terrain' && ctl.on.has('gps'));
     if (!s || !map) return;
     this.#defaultScope();
+    // The zone moved while building: the view kept was the old zone's — framed on the new one.
+    const zone = s.live.at ? s.live.at.join(',') + ':' + s.radius : '';
+    if (this.building && this.params?.vue && this.#zoneWas !== undefined && zone !== this.#zoneWas) this.#set({ vue: null });
+    this.#zoneWas = zone;
     const d3 = this.#d3;
     if (d3 !== this.#was3d) { if (this.#was3d !== undefined) map.gl?.recheck(); this.#was3d = d3; }
     map.busy('scope', Boolean(s.live.at) && s.speciesState === 'loading', 'Plantes de la zone : recherche');
@@ -530,6 +611,7 @@ export class DlMap extends LitElement {
     requestAnimationFrame(() => this.#placeControls());
   }
   #said = '';
+  /** The zone at the last update (undefined: none yet). @type {string | undefined} */ #zoneWas;
 
   /**
    * The controls placed around the map's own, whose number and size vary (measured): top right under its buttons;
@@ -561,22 +643,13 @@ export class DlMap extends LitElement {
     set('--bl-bottom', left);
   }
 
-  /** The current plant: none (✕); the plant now shown alone or not (« Seule », this map only). */
-  #unpick() { this._only = null; /** @type {LayoutState} */ (this.state).set({ plant: null, obs: null }, 'push'); }
+  /** The current plant: none (✕). */
+  #unpick() { /** @type {LayoutState} */ (this.state).set({ plant: null, obs: null }, 'push'); }
 
-  /**
-   * The period chosen by its chips: written in the address as when= (the cell's parameter, gf-layout.js) — else, a
-   * cell that cannot, this map's alone. @param {string} when
-   */
-  #setWhen(when) {
-    if (this.setParam && this.path !== null) { this._when = null; this.setParam(this.path, 'when', when); } else this._when = when;
-  }
-
-  /** The other background shown (its thumbnail touched), kept as the panel « Carte » keeps it (gf-map setBase). */
+  /** The other background shown (its thumbnail touched): kept in the layout (base=). */
   #switchBase() {
-    const map = this.#map;
-    if (!map) return;
-    map.setBase(OTHER_BASE[/** @type {'photo' | 'plan'} */ (map.baseShown)]?.key ?? 'plan');
+    const shown = /** @type {'photo' | 'plan'} */ (this.#map?.baseShown ?? this.params?.base ?? 'photo');
+    this.#set({ base: OTHER_BASE[shown]?.key ?? 'plan' });
   }
 
   /** The current plant's photo: the scope's (iNaturalist), else the one at hand, else found (once) — null: a flower. @param {number} id */
@@ -622,15 +695,21 @@ export class DlMap extends LitElement {
     </div>`;
   }
 
-  /** Top right, under the map's own buttons: the 2D / 3D switch, the other background's thumbnail. @param {Set<string>} on */
+  /**
+   * Top right, under the map's own buttons: the 2D / 3D switch, the other background's thumbnail — and, in « Créer une
+   * app » once the map was moved (vue=), « Recadrer sur la zone ». @param {Set<string>} on
+   */
   #topRight(on) {
-    if (!on.has('3d') && !on.has('fond')) return nothing;
+    const reframe = this.building && Boolean(this.params?.vue);
+    if (!on.has('3d') && !on.has('fond') && !reframe) return nothing;
     const map = this.#map;
     const in3d = this.#d3 ?? Boolean(map?.gl?.wanted);
     const other = OTHER_BASE[/** @type {'photo' | 'plan'} */ (map?.baseShown ?? this.params?.base ?? 'photo')] ?? OTHER_BASE.photo;
     return html`<div class="ctl tr">
       ${on.has('3d') ? html`<button type="button" class="round" aria-pressed=${String(in3d)} aria-label="Vue 3D" title=${in3d ? 'Vue 3D (repasser en 2D)' : 'Vue 3D'}
-        @click=${() => { this._d3 = !in3d; }}>3D</button>` : nothing}
+        @click=${() => this.#set({ '3d': !in3d })}>3D</button>` : nothing}
+      ${reframe ? html`<button type="button" class="round" data-act="reframe" aria-label="Recadrer sur la zone" title="Recadrer sur la zone (la carte part alors de la zone)"
+        @click=${() => this.#set({ vue: null })}>${icon('crosshair')}</button>` : nothing}
       ${on.has('fond') ? html`<button type="button" class="base ${other.key}" aria-label=${'Fond : ' + other.words} title=${'Passer à ' + other.words}
         @click=${() => this.#switchBase()}><span>${other.label}</span></button>` : nothing}
     </div>`;
@@ -654,7 +733,7 @@ export class DlMap extends LitElement {
     return html`<div class="chip" role="group" aria-label=${'Plante courante : ' + name}>
       <a class="open" href=${href.plant(id)} data-open aria-label=${'Ouvrir la fiche : ' + name} title=${'Ouvrir la fiche : ' + name}>${photo
         ? html`<img src=${photo} alt="" decoding="async" @error=${() => { this.#badThumbs.add(photo); this.requestUpdate(); }} />` : html`<span class="ph" aria-hidden="true">${icon('flower1')}</span>`}<span class="name">${name}</span>${icon('box-arrow-up-right')}</a>
-      <button type="button" aria-pressed=${String(only)} title="Seulement ses observations sur cette carte" @click=${() => { this._only = !only; }}>Seule</button>
+      <button type="button" aria-pressed=${String(only)} title="Seulement ses observations sur cette carte" @click=${() => this.#set({ plante: only ? 'grand' : 'seule' })}>Seule</button>
       <button type="button" aria-label="Aucune plante courante" title="Aucune plante courante" @click=${() => this.#unpick()}>${icon('x-lg')}</button>
     </div>`;
   }
@@ -663,9 +742,10 @@ export class DlMap extends LitElement {
   #legendView(s) {
     const layers = /** @type {string[]} */ (this.params?.layers ?? []);
     const plant = s.live.plant != null && s.plantInfo?.id === s.live.plant && this.#p.plante !== 'non' ? s.plantInfo.name : null;
+    const open = this.params?.legende === true;
     return html`<div class="legend">
-      <button type="button" aria-expanded=${String(this._legend)} aria-controls="map-legend" @click=${() => { this._legend = !this._legend; }}>Légende</button>
-      ${this._legend ? html`<ul id="map-legend" aria-label="Légende de la carte">
+      <button type="button" aria-expanded=${String(open)} aria-controls="map-legend" @click=${() => this.#set({ legende: !open })}>Légende</button>
+      ${open ? html`<ul id="map-legend" aria-label="Légende de la carte">
         ${s.live.at ? html`<li><i class="outline"></i>La zone (${distanceLabel(s.radius)})</li>` : nothing}
         <li><i></i>Observations des plantes trouvées</li>
         ${plant ? html`<li><i class="obs"></i>${plant} : ses observations</li>` : nothing}
@@ -687,7 +767,7 @@ export class DlMap extends LitElement {
     const words = `${counted(n, 'observation')} · ${counted(k, 'espèce')}`;
     return html`<div class="ctl br">
       ${period ? html`<div class="period" role="group" aria-label="Période des observations">${PERIODS.map(([v, label]) => html`<button type="button"
-        aria-pressed=${String(when === v)} @click=${() => this.#setWhen(v)}>${label}</button>`)}</div>` : nothing}
+        aria-pressed=${String(when === v)} @click=${() => this.#set({ when: v })}>${label}</button>`)}</div>` : nothing}
       ${count ? html`<button type="button" class="count" aria-label=${words + ' — état de la carte'} title="État de la carte"
         @click=${() => this.#map?.openPanel()}>${ctl.compact ? n.toLocaleString('fr-FR') : words}</button>` : nothing}
     </div>`;
@@ -698,24 +778,24 @@ export class DlMap extends LitElement {
     if (!s) return nothing;
     if (!s.live.at && this.#pressHint === undefined) this.#pressHint = takeHint('layout-map-press');
     const P = this.#p, d3 = this.#d3, ctl = this.#ctl, on = ctl.on;
-    // No current plant any more: « Seule » forgotten.
-    if (s.live.plant == null && this._only !== null) this._only = null;
     const press = 'Appui long sur la carte : la zone s’y centre.';
     const hl = P.plante === 'non' ? null : this.#highlight;
     // regroupe: the current plant's observations grouped by where they fall at the zoom shown (gf-map `cluster`).
     const grouped = Boolean(this.params?.regroupe);
     const area = this.#area;
-    const why2d = d3 !== false ? nothing : this._d3 === false ? 'Cette carte de la disposition est en 2D (sa bascule 2D / 3D ; le choix vaut pour elle seule).'
-      : 'Cette carte de la disposition reste en 2D (3d=0 dans son adresse ; le choix vaut pour les autres cartes).';
+    const why2d = d3 !== false ? nothing : 'Cette carte de la disposition reste en 2D (3d=0 dans son adresse, ou sa bascule 2D / 3D ; le choix vaut pour elle seule).';
     return html`${!s.live.at && this.#pressHint ? hintView(press, () => { this.#pressHint = false; this.requestUpdate(); }, 'press-hint') : nothing}
       <div class="stage"><gf-map no-create point-click=${P.toucher === 'rien' ? 'none' : 'pick'} map-3d=${d3 === null ? nothing : d3 ? 'on' : 'off'}
         map-3d-why=${why2d}
-        .base=${this.params?.base ?? null} .overlays=${this.#overlays} .area=${area} .highlight=${grouped ? null : hl} .cluster=${grouped ? hl : null}
+        .base=${this.params?.base ?? 'photo'} .overlays=${this.#overlays} .opacities=${this.#opacities} .around3d=${this.#around3d} .view=${this.#view}
+        .area=${area} .highlight=${grouped ? null : hl} .cluster=${grouped ? hl : null}
         .focusPoint=${this.#focus} .noSearch=${!on.has('lieu')} .noLocate=${!on.has('gps')} .noLayers=${!on.has('couches')} .track=${Boolean(this.params?.autour)}
         .radiusHandle=${on.has('rayon') ? this.#radiusHandle : null}
         aria-description=${press}
         @point-pick=${(/** @type {CustomEvent} */ e) => this.#onPick(e)} @point-info=${(/** @type {CustomEvent} */ e) => this.#onPress(e)}
         @radius-change=${(/** @type {CustomEvent} */ e) => s.set({ r: e.detail.radius }, 'replace')}
+        @layers-change=${(/** @type {CustomEvent} */ e) => this.#onLayers(e)} @around3d-change=${(/** @type {CustomEvent} */ e) => this.#onAround(e)}
+        @view-change=${(/** @type {CustomEvent} */ e) => this.#onView(e)}
         @base-shown=${() => this.requestUpdate()}></gf-map>
       ${on.has('rayon') ? this.#zoneView(s, ctl) : nothing}
       ${this.#topRight(on)}
@@ -798,13 +878,18 @@ export class DlResults extends LitElement {
   }
 
   connectedCallback() { super.connectedCallback(); this.#size.observe(this); }
+
+  /** Shown as a grid now (view=grid, or auto and wide): its cell's head says so (gf-layout.js, its list / grid switch). */
+  get grid() { const v = this.params?.view ?? 'auto'; return v === 'grid' || (v === 'auto' && this._wide); }
+
+  /** @param {Map<string, any>} changed */
+  updated(changed) { if (changed.has('_wide')) this.dispatchEvent(new CustomEvent('results-shown', { bubbles: true, composed: true })); }
   disconnectedCallback() { super.disconnectedCallback(); this.#size.disconnect(); }
 
   render() {
     const s = this.state;
     if (!s) return nothing;
-    const view = this.params.view ?? 'auto';
-    const grid = view === 'grid' || (view === 'auto' && this._wide);
+    const grid = this.grid;
     // zone=0: the search over the whole flora, whatever the zone (state.js#wholeOf, asked by the layout), said so.
     if (this.params.zone === false) {
       const whole = s.whole;
@@ -841,23 +926,27 @@ export class DlSearch extends LitElement {
     new StateController(this);
     /** @type {LayoutState | null} */ this.state = null;
     /** @type {Record<string, any>} */ this.params = {};
-    /** @type {boolean | null} the filters shown (null: as the cell's parameter says) */
+    /** @type {boolean | null} the filters brought into view by a column's funnel, until the cell's parameter says it (null: as it says) */
     this._filters = null;
   }
 
   /** A facet brought into view (a column's funnel in a list): the filters opened on it. @param {string} facet */
   async revealFacet(facet) {
     this._filters = true;
+    if (!this.params.filters) setCell(this, { filters: true });
     await this.updateComplete;
     return revealFacet(this.renderRoot.querySelector('gf-filter-panel'), facet);
   }
+
+  /** @param {Map<string, any>} changed */
+  willUpdate(changed) { if (changed.has('params')) this._filters = null; }
 
   updated() { this.toggleAttribute('no-list', this.params.list === false); }
 
   render() {
     const open = this._filters ?? Boolean(this.params.filters);
     const list = this.params.list !== false;
-    return html`<gf-results-bar .wide=${false} count-above @open-filters=${(/** @type {Event} */ e) => { e.stopPropagation(); this._filters = !open; }}></gf-results-bar>
+    return html`<gf-results-bar .wide=${false} count-above @open-filters=${(/** @type {Event} */ e) => { e.stopPropagation(); this._filters = !open; setCell(this, { filters: !open }); }}></gf-results-bar>
       ${open ? html`<div class="filters" role="region" aria-label="Filtres"><gf-filter-panel></gf-filter-panel></div>` : nothing}
       ${list ? html`<dl-results .state=${this.state} .params=${{ view: 'auto' }}></dl-results>` : nothing}`;
   }
@@ -1074,8 +1163,7 @@ customElements.define('dl-deck', DlDeck);
 /**
  * What a cell shows: its component's piece, given the state; an unknown component: what is wrong and how to fix it.
  * @param {Resolved} r @param {{ state: LayoutState, view: string, plant: number | null, first: { id: number, name: string } | null,
- *   path?: string, setParam?: ((path: string, key: string, value: unknown) => void) | null }} ctx  `path`, `setParam`: the cell's place in the layout,
- *   and how one of its parameters is changed in the address (a map's period chips)
+ *   building?: boolean }} ctx  `building`: in « Créer une app »
  */
 export function renderCell(r, ctx) {
   if (!r.known) {
@@ -1088,7 +1176,7 @@ export function renderCell(r, ctx) {
   }
   const { state } = ctx;
   const id = r.spec.id;
-  if (id === 'map') return html`<dl-map .state=${state} .params=${r.params} .path=${ctx.path ?? null} .setParam=${ctx.setParam ?? null}></dl-map>`;
+  if (id === 'map') return html`<dl-map .state=${state} .params=${r.params} .building=${Boolean(ctx.building)}></dl-map>`;
   if (id === 'place') return html`<dl-place .state=${state}></dl-place>`;
   if (id === 'search') return html`<dl-search .state=${state} .params=${r.params}></dl-search>`;
   if (id === 'results') return html`<dl-results .state=${state} .params=${r.params}></dl-results>`;

@@ -32,6 +32,8 @@ export class GfMapPanel extends LitElement {
   static properties = {
     base: { type: String },
     overlays: { attribute: false },
+    /** The map's own opacity of its overlays (key → 0…1), when it has its own (a free layout's map); null: the device's. */
+    opacities: { attribute: false },
     /** Name of the plant whose GBIF distribution can be shown (null: none offered). */
     distribution: { attribute: false },
     distributionOn: { attribute: false },
@@ -121,6 +123,8 @@ export class GfMapPanel extends LitElement {
     this.base = 'photo';
     /** @type {string[]} */
     this.overlays = [];
+    /** @type {Record<string, number> | null} */
+    this.opacities = null;
     this.legend = false;
     /** @type {string | null} */
     this.distribution = null;
@@ -265,7 +269,7 @@ export class GfMapPanel extends LitElement {
 
           <h3 class="kicker">Toutes les couches de l’IGN</h3>
           <p class="note">Tout le catalogue de la Géoplateforme, rangé par thème : photos anciennes, forêts, espaces protégés, sols, relief, cartes anciennes…</p>
-          <gf-ign-layers .overlays=${this.overlays}></gf-ign-layers>
+          <gf-ign-layers .overlays=${this.overlays} .opacities=${this.opacities}></gf-ign-layers>
 
           <h3 class="kicker">Règles de cueillette</h3>
           ${this.#areas()}

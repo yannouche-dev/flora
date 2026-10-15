@@ -519,6 +519,34 @@ gf-map[search] .gf-map-buttons {
   top: 66px;
 }
 
+/* The overlays' opacity, at hand (its button among the map's): a slider each, the top one first. */
+gf-map .gf-opacity {
+  position: absolute;
+  z-index: 1001;
+  right: 50px;
+  top: 8px;
+  width: min(260px, calc(100% - 66px));
+  max-height: calc(100% - 16px);
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 6px 10px 10px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--gf-surface) 96%, transparent);
+  box-shadow: var(--gf-shadow);
+  color: var(--gf-text);
+  font-size: 0.82rem;
+}
+gf-map[search] .gf-opacity { top: 66px; max-height: calc(100% - 74px); }
+gf-map .gf-opacity[hidden] { display: none; }
+gf-map .gf-opacity-head { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+gf-map .gf-opacity-head button { width: 30px; height: 30px; border: 0; border-radius: 50%; background: none; color: var(--gf-text-muted); cursor: pointer; display: grid; place-items: center; }
+gf-map .gf-opacity-head button:focus-visible, gf-map .gf-opacity input:focus-visible { outline: none; box-shadow: var(--gf-focus); }
+gf-map .gf-opacity ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 8px; }
+gf-map .gf-opacity li { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 8px; }
+gf-map .gf-opacity .name { grid-column: 1 / -1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+gf-map .gf-opacity input { width: 100%; min-width: 0; margin: 0; accent-color: var(--gf-accent); }
+gf-map .gf-opacity output { min-width: 3.2em; text-align: right; font-variant-numeric: tabular-nums; color: var(--gf-text-muted); }
+
 /* Position editing: its « Terminé » (all maps) — alone but the first time ever, when its hint says how (core/hints.js). */
 gf-map .gf-map-editbar {
   position: absolute;
