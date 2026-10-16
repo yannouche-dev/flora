@@ -18,7 +18,6 @@ export const LOCALE = {
   'AttributionControl.ToggleAttribution': 'Afficher ou masquer les crédits',
   'Map.Title': 'Carte en 3D — flèches : se déplacer ; Maj + flèches : tourner et incliner ; + et − : zoomer',
   'Marker.Title': 'Repère',
-  'NavigationControl.ResetBearing': 'Revenir au nord (glisser pour tourner et incliner)',
   'NavigationControl.ZoomIn': 'Zoomer',
   'NavigationControl.ZoomOut': 'Dézoomer',
   'FullscreenControl.Enter': 'Plein écran',

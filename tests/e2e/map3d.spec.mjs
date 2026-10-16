@@ -120,7 +120,7 @@ test('la Vue 3D du parcours : la carte de l’app en 3D, MapLibre à la demande,
   // The attribution: IGN and the relief's sources.
   await expect(map.locator('.leaflet-control-attribution')).toContainText('IGN');
   await expect(map.locator('.leaflet-control-attribution')).toContainText('Terrain Tiles (Mapzen · EU-DEM © Copernicus)');
-  await expect(map.locator('.maplibregl-ctrl-compass')).toBeVisible();
+  await expect(map.locator('.gf-map-buttons .compass')).toHaveAttribute('aria-label', 'Revenir au nord');
 
   // A plant touched: its name and its altitude (the IGN's, kept with it).
   await map.locator('.gf-gl-mk .gf-plant').first().dispatchEvent('click');

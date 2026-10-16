@@ -244,6 +244,7 @@ export class DlMap extends LitElement {
     /* The controls as ctl= says (map-options.js mapControls): the zoom only when it is one of them; « Me localiser »
        large on the ground (terrain). None (ui=nue): the map alone (the cell's head says the zone). */
     :host(:not([ctl~='zoom'])) gf-map .leaflet-control-zoom { display: none; }
+    :host([ui='nue']) gf-map .gf-map-buttons button.compass { display: none; }
     :host([big-gps]) gf-map .gf-map-buttons button.locate { width: 48px; height: 48px; font-size: 1.35rem; opacity: 1; }
     .panel.top { top: 8px; }
     /* Compact: the zone a pill (« 2 km ▾ »), its stops and « Autour de moi » under it once opened. */
