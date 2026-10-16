@@ -17,7 +17,7 @@ const SPRITE = new URL('../../assets/icons/bi.svg', import.meta.url).href;
  *   | 'arrows-fullscreen' | 'box-arrow-up-right' | 'fullscreen-exit' | 'images' | 'zoom-in' | 'tree' | 'flower3' | 'fruit' | 'bark' | 'binoculars' | 'binoculars-fill' | 'geo-alt' | 'lightbulb' | 'camera-reels' | 'card-text' | 'wikipedia' | 'basket' | 'lock-fill' | 'unlock'
  *   | 'flower2' | 'flag-fill' | 'sun-fill' | 'tree-fill' | 'basket2-fill' | 'cloud-fill' | 'stars' | 'signpost-split-fill'
  *   | 'tag' | 'translate' | 'diagram-2' | 'hash' | 'film' | 'camera' | 'shield' | 'quote' | 'pin-map' | 'bug' | 'cloud-sun' | 'journal-text' | 'link-45deg'
- *   | 'question-circle' | 'layout-text-window' | 'layout-three-columns' | 'grid-1x2' | 'check-circle-fill' | 'window-desktop' | 'tools' | 'arrow-up' | 'arrow-down' | 'sliders' | 'phone'} IconName
+ *   | 'question-circle' | 'layout-text-window' | 'layout-three-columns' | 'grid-1x2' | 'check-circle-fill' | 'window-desktop' | 'tools' | 'arrow-up' | 'arrow-down' | 'sliders' | 'phone' | 'north'} IconName
  */
 
 /** An icon in a Lit template. @param {IconName} name */

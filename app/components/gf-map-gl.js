@@ -262,6 +262,7 @@ export class GlView {
   /** The map says how it is drawn (data-renderer, data-gl: its styles, the tests), and why (its state). */
   #syncButton() {
     this.host.dataset.renderer = this.#state === 'ready' ? '3d' : '2d';
+    this.host.setNorth?.(this.#state === 'ready' && this.#map ? this.#map.getBearing() : null);
     if (this.#state === 'off') delete this.host.dataset.gl; else this.host.dataset.gl = this.#state;
     this.#syncStatus();
     this.#syncPanel();
@@ -274,6 +275,11 @@ export class GlView {
     const tilted = Boolean(v.pitch || v.bearing);
     map.jumpTo({ center: [v.lon, v.lat], zoom: Math.max(0, v.zoom - 1), ...(tilted ? { pitch: v.pitch, bearing: v.bearing } : {}) }, { gfMirror: true });
     this.#syncPitchAttr();
+  }
+
+  /** Its compass touched: back to the north, the tilt kept (an ease; a jump with « reduced motion »). */
+  resetNorth() {
+    this.#map?.easeTo({ bearing: 0, duration: reduceMotion() ? 0 : 500 });
   }
 
   /** gf-map's properties changed: editing starts or ends, markers become draggable. @param {Map<string, any>} changed */
@@ -400,9 +406,9 @@ export class GlView {
       cancelPendingTileRequestsWhileZooming: true
     });
     // The usual 3D navigation, MapLibre's defaults on every device: drag to pan, the wheel pressed (as in any 3D
-    // tool), right-drag (Ctrl-drag) or two fingers to rotate and tilt, wheel or pinch to zoom, arrow keys; + −, and
-    // the compass (north again, the tilt shown).
-    map.addControl(new ml.NavigationControl({ visualizePitch: true }), 'bottom-left');
+    // tool), right-drag (Ctrl-drag) or two fingers to rotate and tilt, wheel or pinch to zoom, arrow keys; + −. The
+    // compass is the map's own, among its buttons (gf-map setNorth: every map has it, 2D too).
+    map.addControl(new ml.NavigationControl({ showCompass: false }), 'bottom-left');
     orbitWithMiddleButton(map);
     map.addControl(new ml.ScaleControl({ unit: 'metric', maxWidth: 90 }), 'bottom-left');
     const frame = this.host.querySelector('.gf-map-frame');
@@ -593,6 +599,8 @@ export class GlView {
     // IGN's —, and the Vue 3D's plant card for a plant.)
     map.on('error', (/** @type {any} */ e) => this.#onError(e));
     map.on('webglcontextlost', () => this.#fail('lost'));
+    // The compass turns with the map.
+    map.on('rotate', () => { if (this.#state === 'ready') this.host.setNorth?.(map.getBearing()); });
   }
 
   #syncPitchAttr() {
