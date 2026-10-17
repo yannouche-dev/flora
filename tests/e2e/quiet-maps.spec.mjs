@@ -275,7 +275,8 @@ test.describe('la carte d’une fiche plante', () => {
     await page.evaluate(async () => { (await import('/app/core/sheet-blocks.js')).setMapConfig('map', { near: 'both', gbif: 'off' }); });
     await app.go(`#/plant/${plantId('Urtica dioica')}`);
     const block = page.locator('gf-sheet-map:not([map-3d="off"])').first();
-    await block.scrollIntoViewIfNeeded();
+    // Its rubric at the top of the sheet: the map under its heading, not scrolled beneath it (a sticky heading).
+    await block.evaluate(el => el.closest('section')?.scrollIntoView({ block: 'start' }));
     const map = block.locator('gf-map');
     await expect(map.locator('.leaflet-container')).toBeVisible();
     // Its gestures: a hint the first time (refermable), the map's own description always.
