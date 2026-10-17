@@ -96,12 +96,12 @@ test('points : une période (ce mois-ci, toutes années : la floraison du moment
   expect((await given(page)).leaves).toBe(false);
   await expect(page.locator('dl-map path.gf-obs')).toHaveCount(16);
   await app.go(`#/layout/[map(r=1km;when=annee),plant]?${AT}`);
-  await expect.poll(async () => ((await given(page)).points ?? []).map(p => p.date.slice(0, 4)).filter(y => y !== String(now.getFullYear())).length).toBe(0);
-  expect((await given(page)).points).toHaveLength(16);
+  await expect.poll(async () => (await given(page)).points?.length).toBe(16);
+  expect((/** @type {any[]} */ ((await given(page)).points)).every(p => p.date.startsWith(String(now.getFullYear())))).toBe(true);
   // GBIF's too: its occurrences of the plants of the scope, beside iNaturalist's.
   await app.go(`#/layout/[map(r=1km;src=inat+gbif),plant]?${AT}`);
-  await expect.poll(async () => ((await given(page)).points ?? []).filter(p => p.kind === 'gbif').length).toBe(8);
-  expect((await given(page)).points).toHaveLength(32);
+  await expect.poll(async () => ((await given(page)).points ?? []).length).toBe(32);
+  expect((/** @type {any[]} */ ((await given(page)).points)).filter(p => p.kind === 'gbif')).toHaveLength(8);
 });
 
 test('liens : toutes les plantes de la zone (suit=0), la plante courante seule ou pas montrée, un point touché ouvre sa fiche', async ({ app, page }) => {

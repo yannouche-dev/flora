@@ -426,7 +426,7 @@ const rings = map => map.evaluate(async m => {
   return data.features.filter((/** @type {any} */ f) => f.geometry.type === 'Polygon').map((/** @type {any} */ f) => Math.round(metres(f.geometry.coordinates[0][0])));
 });
 
-test('une carte de la disposition en 3D : ses points tous là, opaques, quand la vue tourne et s’incline ; avec les jumelles, un seul cercle ; la carte d’un point par-dessus tout', async ({ app, page }) => {
+test('une carte de la disposition en 3D : ses points tous là quand la vue tourne et s’incline, estompés derrière le relief comme MapLibre le fait ; avec les jumelles, un seul cercle ; la carte d’un point par-dessus tout', async ({ app, page }) => {
   test.slow();
   const seen = await watch(page);
   await answerTiles(page);
@@ -459,8 +459,8 @@ test('une carte de la disposition en 3D : ses points tous là, opaques, quand la
   await expect.poll(() => map.evaluate(m => /** @type {any} */ (m).area?.points?.length ?? 0), SLOW).toBeGreaterThan(0);
   await expect.poll(async () => (await obs()).kinds.inat, SLOW).toBe(0);
 
-  // The page's markers (the zone's points, the current plant's), once all there: as many, none faded, over the
-  // observations around, however the view turns and tilts.
+  // The page's markers (the zone's points, the current plant's), once all there: as many, over the observations
+  // around, however the view turns and tilts — faded only where the relief hides one (MapLibre's default opacities).
   await expect.poll(async () => (await pins(map)).length, SLOW).toBeGreaterThan(10);
   let count = 0;
   await expect.poll(async () => { const was = count; await page.waitForTimeout(500); count = (await pins(map)).length; return count === was; }, SLOW).toBe(true);
@@ -470,7 +470,7 @@ test('une carte de la disposition en 3D : ses points tous là, opaques, quand la
     await page.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))));
     const now = await pins(map);
     expect(now, `turned ${bearing}°, tilted ${pitch}°`).toHaveLength(count);
-    expect(now.filter(p => p.opacity !== '1'), `turned ${bearing}°, tilted ${pitch}°`).toEqual([]);
+    expect(now.filter(p => p.opacity !== '1' && p.opacity !== '0.2'), `turned ${bearing}°, tilted ${pitch}°`).toEqual([]);
     expect(Math.min(...now.map(p => p.z))).toBeGreaterThan(o3);
   }
   expect((await glState(map)).pitch).toBe(40);

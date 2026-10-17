@@ -35,13 +35,6 @@ const area = ([lon, lat], radius) =>
 export const periodQuery = (periode, now = new Date()) =>
   periode === 'annee' ? `&year=${now.getFullYear()}` : periode === 'mois' ? `&month=${now.getMonth() + 1}` : '';
 
-/** A short sum of a list of ids (a cache key that stays short for hundreds of taxa). @param {number[]} ids */
-const idsKey = ids => {
-  let h = 5381;
-  for (const c of ids.join(',')) h = ((h * 33) ^ c.charCodeAt(0)) >>> 0;
-  return ids.length + '-' + h.toString(36);
-};
-
 /** iNaturalist page listing what this query counts. */
 export const exploreUrl = (/** @type {[number, number]} */ point, /** @type {number} */ radius, /** @type {number} */ taxonId = 0) =>
   `https://www.inaturalist.org/observations?${area(point, radius)}&quality_grade=research&${taxonId ? 'taxon_id=' + taxonId : 'iconic_taxa=Plantae'}`;
@@ -242,24 +235,25 @@ export async function observationPointsAround(point, radius, signal, taxa) {
 }
 
 /**
- * Where these plants (iNaturalist taxa: those a search keeps, the zone's — 300 at most a call) were observed in the
- * circle, of a period: their `max` most recent research-grade observations (200 a page), each with its plant's photo,
- * names, date and place — the points of a map that shows the list —, and how many there are in all. Cached a day.
- * @param {[number, number]} point @param {number} radius @param {number[]} taxa
- * @param {{ periode?: string | null, max?: number, signal?: AbortSignal }} [o]
- * @returns {Promise<{ points: AroundPoint[], total: number }>}
+ * The plants of observations (a layout's map: its points make its list), most observed first: each iNaturalist
+ * taxon once, its observations counted, its names and photo (its points'), the flora's plant it is (matched as
+ * speciesAround does) — one the flora does not know kept, without a plant.
+ * @param {AroundPoint[]} points @returns {Promise<NearbySpecies[]>}
  */
-export async function observationPointsOf(point, radius, taxa, { periode = null, max = 400, signal } = {}) {
-  if (!moduleOn('inaturalist')) throw new ModuleOffError('inaturalist');
-  const ids = [...new Set(taxa)].sort((a, b) => a - b);
-  const when = periodQuery(periode);
-  let partial = false;
-  const found = await cached(`around-set1:${area(point, radius)}${when}:${max}:${idsKey(ids)}`, async () => {
-    const page = await paged(`${area(point, radius)}&taxon_id=${ids.join(',')}&quality_grade=research&locale=fr&order_by=observed_on${when}`, max, signal);
-    partial = page.partial;
-    return { points: page.results.map(aroundPoint), total: page.total };
-  }, () => partial);
-  return withThumbs(found);
+export async function speciesOf(points) {
+  /** @type {Map<number, NearbySpecies>} */
+  const by = new Map();
+  for (const p of points) {
+    if (p.taxonId == null || !p.sci) continue;
+    const had = by.get(p.taxonId);
+    if (had) { had.count++; if (!had.photo && p.photo) { had.photo = p.photo; had.credit = p.credit; } continue; }
+    by.set(p.taxonId, { taxonId: p.taxonId, name: p.sci, common: p.common, count: 1, photo: p.photo, credit: p.credit, plantId: null, family: null, genus: null });
+  }
+  const names = await nameIndex().catch(() => ({ exact: new Map(), loose: new Map() }));
+  return [...by.values()].map(s => {
+    const local = lookup(names, s.name);
+    return { ...s, plantId: local?.id ?? null, family: local?.family || null, genus: local?.genus || genusOf(s.name) };
+  }).sort((a, b) => b.count - a.count);
 }
 
 /**
@@ -349,16 +343,19 @@ export async function findPhotos(points, { max = 40 } = {}) {
 }
 
 /**
- * More of them, for a map that draws hundreds (the 3D view of the observations around, components/gf-map-obs3d.js):
- * up to `max` of the most recent (200 a page), the same points. Cached a day; a page missing, a few minutes.
+ * More of them, for a map that draws hundreds (the 3D view of the observations around, components/gf-map-obs3d.js; a
+ * layout's map, whose plants make its list: layout/state.js): up to `max` of the most recent (200 a page), the same
+ * points — of a period (periodQuery: this year, this month). Cached a day; a page missing, a few minutes.
  * @param {[number, number]} point @param {number} radius @param {number} max @param {AbortSignal} [signal]
+ * @param {string | null} [periode]
  * @returns {Promise<{ points: AroundPoint[], total: number }>}
  */
-export function observationPointsMany(point, radius, max, signal) {
+export function observationPointsMany(point, radius, max, signal, periode = null) {
   if (!moduleOn('inaturalist')) return Promise.reject(new ModuleOffError('inaturalist'));
+  const when = periodQuery(periode);
   let partial = false;
-  return cached(`around-many2:${max}:${area(point, radius)}`, async () => {
-    const page = await paged(`${area(point, radius)}&iconic_taxa=Plantae&quality_grade=research&locale=fr&order_by=observed_on`, max, signal);
+  return cached(`around-many2:${max}:${area(point, radius)}${when}`, async () => {
+    const page = await paged(`${area(point, radius)}&iconic_taxa=Plantae&quality_grade=research&locale=fr&order_by=observed_on${when}`, max, signal);
     partial = page.partial;
     return { points: page.results.map(aroundPoint), total: page.total };
   }, () => partial).then(withThumbs);

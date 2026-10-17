@@ -1,9 +1,9 @@
-// « Disposition libre » : cells that mirror each other (state.js, cells.js dl-map). The map shows the list — the
-// observations of every plant the search keeps in the zone, asked for them (taxon_id), not the zone's most recent —
-// and follows a filter; the period is every cell's (periode= in the address: the plants of the zone that month, the
-// results, the map's points); a map of France and one of the world (portee=) show where the same plants were observed
-// (iNaturalist's tiles, their taxa), the current plant's on top; a plant chosen outside the zone's list still has its
-// observations in the zone (its taxon found by its name). iNaturalist answered here: 12 plants around.
+// « Disposition libre » : cells that mirror each other (state.js, cells.js dl-map). The list is the map's: the map
+// shows the zone's observations (iNaturalist's latest, of the period), the list their plants (one each, the flora's),
+// and a filter keeps both to its plants; the period is every cell's (periode= in the address: the zone's observations
+// that month, their plants the results); a map of France and one of the world (portee=) show where the same plants
+// were observed (iNaturalist's tiles, their taxa), the current plant's on top; a plant chosen outside the zone's list
+// still has its observations in the zone (its taxon found by its name). iNaturalist answered here: 12 plants around.
 import { test, expect, plantId } from './fixtures.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
@@ -13,13 +13,15 @@ test.use({ reducedMotion: 'reduce' });
 const NAMES = ['Urtica dioica', 'Allium ursinum', 'Conium maculatum', 'Geum urbanum', 'Taraxacum officinale', 'Quercus robur', 'Hedera helix',
   'Galium aparine', 'Plantago lanceolata', 'Bellis perennis', 'Ranunculus acris', 'Trifolium repens'];
 const AT = 'at=48.85,2.35';
+/** iNaturalist's taxon of a plant the flora does not know, observed in the zone. */
+const UNKNOWN = 7777;
 const now = new Date();
 const MONTH = String(now.getMonth() + 1);
 
 /**
- * iNaturalist: the 12 plants of the zone (6 of them this month), the 10 most recent observations of the zone (only
- * the first two plants'), and each plant's own when asked for (taxon_id: two each, this month's dated so); a name
- * looked up (/taxa): its taxon; tiles: a transparent pixel. Every address asked kept.
+ * iNaturalist: the zone's observations — two of each of its 12 plants (this month, 6 of them), and one of a plant the
+ * flora does not know —, and a plant's own when asked for (taxon_id: two each); a name looked up (/taxa): its taxon;
+ * tiles: a transparent pixel. Every address asked kept.
  * @param {Page} page @returns {Promise<string[]>}
  */
 async function answer(page) {
@@ -43,12 +45,13 @@ async function answer(page) {
       const taxa = (url.searchParams.get('taxon_id') || '').split(',').filter(Boolean).map(Number);
       const month = url.searchParams.get('month');
       const date = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-03`;
-      const of = taxa.length ? taxa : [1000, 1001];
-      const results = of.flatMap((t, k) => Array.from({ length: taxa.length ? 2 : 5 }, (_, i) => ({
+      const of = taxa.length ? taxa : [...(month ? NAMES.slice(0, 6) : NAMES).map((_, i) => 1000 + i), ...(month ? [] : [UNKNOWN])];
+      const results = of.flatMap((t, k) => Array.from({ length: 2 }, (_, i) => ({
         id: t * 10 + i, observed_on: month || i % 2 === 0 ? date : '2020-01-03',
         geojson: { coordinates: [2.35 + ((k % 6) - 2.5) * 0.0015 + i * 0.0003, 48.85 + (Math.floor(k / 6) - 1) * 0.0015] },
-        taxon: { id: t, name: NAMES[t - 1000] ?? 'Planta', preferred_common_name: null }
+        taxon: { id: t, name: NAMES[t - 1000] ?? 'Planta ignota', preferred_common_name: null }
       })));
+      if (Number(url.searchParams.get('page') || 1) > 1) return json({ total_results: results.length, results: [] });
       return json({ total_results: results.length, results });
     }
     return route.fulfill({ status: 404, body: '' });
@@ -64,17 +67,21 @@ const param = (/** @type {Page} */ page, /** @type {string} */ key) => page.eval
 test.describe('un grand écran', () => {
   test.skip(({ isMobile }) => isMobile, 'a wide screen');
 
-  test('la carte montre la liste : les observations de chaque plante trouvée, demandées pour elles ; un filtre, ses seules plantes', async ({ app, page }) => {
+  test('la liste est celle de la carte : les plantes des observations de la zone, une chacune ; un filtre, ses seules plantes sur les deux', async ({ app, page }) => {
     const asked = await answer(page);
     await app.open(`#/layout/[map(r=1km),search]?${AT}`);
+    // The zone's observations asked (its plants, not each plant's): their 12 plants of the flora, the list.
     await expect.poll(() => app.state('results.total')).toBe(12);
-    // Every plant of the list on the map — not only the two of the zone's most recent.
     await expect.poll(() => taxaOn(page, 0)).toEqual(NAMES.map((_, i) => 1000 + i));
-    expect(asked.some(u => /\/v1\/observations\?.*taxon_id=1000(%2C|,)1001(%2C|,).*1011/.test(u))).toBe(true);
+    expect(asked.some(u => /\/v1\/observations\?.*iconic_taxa=Plantae/.test(u) && !u.includes('taxon_id='))).toBe(true);
+    expect(asked.some(u => u.includes('species_counts'))).toBe(false);
     // A search: its plant alone, on the map too.
     await page.locator('dl-search gf-plant-search input').fill('ortie');
     await expect.poll(() => app.state('results.total')).toBe(1);
     await expect.poll(() => taxaOn(page, 0)).toEqual([1000]);
+    // A map that does not follow the search: every observation of the zone, the plant the flora does not know too.
+    await app.go(`#/layout/[map(r=1km,suit=0),search]?${AT}&q=ortie`);
+    await expect.poll(() => taxaOn(page, 0)).toEqual([...NAMES.map((_, i) => 1000 + i), UNKNOWN]);
   });
 
   test('la période est celle de toutes les cases : ce mois-ci, les plantes de la zone ce mois-ci, la liste et la carte ; dans l’adresse', async ({ app, page }) => {
@@ -83,8 +90,8 @@ test.describe('un grand écran', () => {
     await expect.poll(() => app.state('results.total')).toBe(12);
     await page.locator('dl-map').getByRole('group', { name: 'Période des observations' }).getByRole('button', { name: 'Ce mois-ci' }).click();
     await expect.poll(() => param(page, 'periode')).toBe('mois');
-    // The zone's plants of this month: the results follow, the map too.
-    await expect.poll(() => asked.some(u => u.includes('species_counts') && u.includes(`month=${MONTH}`))).toBe(true);
+    // The zone's observations of this month: their plants the results, the map theirs.
+    await expect.poll(() => asked.some(u => /\/v1\/observations\?/.test(u) && u.includes(`month=${MONTH}`))).toBe(true);
     await expect.poll(() => app.state('results.total')).toBe(6);
     await expect.poll(() => taxaOn(page, 0)).toEqual([1000, 1001, 1002, 1003, 1004, 1005]);
     // Reloaded: the same period.

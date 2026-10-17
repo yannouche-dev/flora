@@ -342,9 +342,10 @@ test.describe('la Disposition libre', () => {
     await cell.locator('.hint-once').getByRole('button', { name: 'Masquer l’astuce' }).click();
     await expect(cell.locator('.hint-once, .note')).toHaveCount(0);
 
-    // A zone whose plants iNaturalist cannot give: no « recherche… », no error line over the map — its state.
-    await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\/species_counts/, async route => { await new Promise(r => setTimeout(r, 1200)); return route.fulfill({ status: 503, body: '' }); });
-    await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?/, route => {
+    // A zone whose observations iNaturalist cannot give: no « recherche… », no error line over the map — its state.
+    let down = true;
+    await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?/, async route => {
+      if (down) { await new Promise(r => setTimeout(r, 1200)); return route.fulfill({ status: 503, body: '' }); }
       const results = Array.from({ length: 12 }, (_, i) => ({ id: 500 + i, observed_on: '2026-05-01', geojson: { coordinates: [2.35 + (i % 4 - 2) * 0.002, 48.85 + (Math.floor(i / 4) - 1) * 0.002] },
         taxon: { id: 999, name: 'Xanthium imaginarium', preferred_common_name: 'Lampourde imaginaire' }, photos: [] }));
       return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ total_results: 12, results }) });
@@ -356,7 +357,9 @@ test.describe('la Disposition libre', () => {
     await expect(mapSaid(map)).toContainText('iNaturalist ne répond pas : la zone ne filtre pas les plantes pour l’instant.');
     await quiet(page, ['.panel']);
 
-    // A point of a plant outside the flora, touched: one brief toast.
+    // A point of a plant outside the flora (a map showing every observation of the zone: suit=0), touched: one brief toast.
+    down = false;
+    await app.go('#/layout/[map(r=2km,suit=0),search]?at=48.85,2.35');
     const leaf = map.locator('.leaflet-marker-pane .gf-obs-leaf').first();
     await expect(leaf).toBeVisible({ timeout: 10_000 });
     if (app.phone) await leaf.tap({ force: true }); else await leaf.click({ force: true });

@@ -5,9 +5,10 @@
 //                                      text, 80 characters at most, written first;
 //   &p=<plant>                         the current plant: every plant cell (plant, plant.<block>, media) shows it, the
 //                                      results and the deck light it, the map lights its observations in the scope;
-//   &at=<lat>,<lon>&r=<500m|2km>&place=<name>   the scope: a circle; the plants observed in it (iNaturalist, matched to
-//                                      the flora: core/nearby.js) keep the search to them (core/search.js#setSearchScope),
-//                                      the map shows its observations of the plants found;
+//   &at=<lat>,<lon>&r=<500m|2km>&place=<name>   the scope: a circle; its observations (iNaturalist's latest, of the
+//                                      period: the map's points) and their plants (matched to the flora: core/nearby.js),
+//                                      which keep the search to them (core/search.js#setSearchScope) — the list is the
+//                                      map's plants, the map those of the list;
 //   &place=<words> without at=         a place to find: the IGN geocoder asked (core/geoservices.js#findPlace:
 //                                      « mirabel, menetrol, 63 »), the scope set there and the address replaced by its
 //                                      at= and the label found (r= kept, else the layout's); not found, offline or the
@@ -24,7 +25,7 @@
 // A link with them gives the same screen; Back and Forward walk the plants and places chosen (a new entry each), while
 // typing, a filter or the radius only replace the address (as Flore's search does).
 //
-// What it loads for the scope (the plants observed in the circle, its latest observations, the current plant's own
+// What it loads for the scope (the circle's latest observations — their plants the list —, the current plant's own
 // observations there) is asked once the circle rests (250 ms), the request before cancelled, a late answer for another
 // circle dropped. Pure functions (readLive, liveSearch) are tested under Node; the class needs the app.
 
@@ -32,7 +33,7 @@ import * as db from '../core/db.js';
 import { forgetFailures } from '../core/cache.js';
 import { findPlace } from '../core/geoservices.js';
 import { errorKind } from '../core/net.js';
-import { observationPointsAround, observationPointsOf, observationsAround, speciesAround, taxonIdOf } from '../core/nearby.js';
+import { observationPointsMany, observationsAround, speciesOf, taxonIdOf } from '../core/nearby.js';
 import { observations3d } from '../core/around3d.js';
 import { fromHash, toHash } from '../core/query.js';
 import { searchWhole } from '../core/search.js';
@@ -53,8 +54,8 @@ import { DISTANCE, distanceText, parseDistance } from './registry.js';
 /** The radius of a scope when neither the address nor a cell says one. */
 export const DEFAULT_RADIUS = 2000;
 
-/** A map's points of a set of plants (pointsFor): taxa a request, points in all, sets kept. */
-const BATCH = 300, MAX_POINTS = 800, SETS = 4;
+/** The zone's observations a layout loads (the most recent of the period): its map's points, whose plants make its list. */
+const ZONE_MAX = 1000;
 
 /** @type {Live} */
 export const EMPTY = Object.freeze({ title: null, plant: null, at: null, r: null, place: null, obs: null, periode: null });
@@ -169,7 +170,7 @@ export class LayoutState extends EventTarget {
     /** The place being found (its words), and its request. */
     this.findFor = '';
     /** @type {AbortController | null} */ this.findAbort = null;
-    /** The plants observed in the scope (null: no scope, or not yet), and whether they are coming or failed. */
+    /** The plants of the scope's observations, the flora's (null: no scope, or not yet), and whether they are coming or failed. */
     /** @type {{ key: string, list: NearbySpecies[], byPlant: Map<number, NearbySpecies>, plantOf: Map<number, number> } | null} */
     this.species = null;
     /** @type {'idle' | 'loading' | 'ready' | 'error'} */
@@ -178,15 +179,9 @@ export class LayoutState extends EventTarget {
     this.speciesError = null;
     /** Why they failed (the cells word it their own way: the deck has no cards without them). @type {'off' | 'offline' | 'unreachable' | null} */
     this.speciesFailure = null;
-    /** The latest observations in the scope (the map), and how many there are in all. @type {AroundPoint[]} */
+    /** The scope's observations (the map's points: the latest ZONE_MAX of the period), and how many there are in all. @type {AroundPoint[]} */
     this.points = [];
     this.pointsTotal = 0;
-    /**
-     * The observations of sets of plants in the scope (pointsFor: the plants a map shows — those the search keeps, the
-     * zone's), each loaded once, a few kept: two maps never take each other's.
-     * @type {Map<string, { key: string, points: AroundPoint[], total: number, done: boolean, abort: AbortController }>}
-     */
-    this.sets = new Map();
     /** The current plant's own observations in the scope. @type {{ key: string, points: Observation[] } | null} */
     this.plantObs = null;
     /** The current plant's names (the cells' heads). @type {{ id: number, name: string, sci: string } | null} */
@@ -271,8 +266,6 @@ export class LayoutState extends EventTarget {
       this.abort = null;
       // Another zone: what was loaded for the old one goes at once (never its points under the new circle).
       this.points = []; this.pointsTotal = 0;
-      for (const set of this.sets.values()) set.abort.abort();
-      this.sets.clear();
       if (this.gbif?.key !== key) { this.gbifAbort?.abort(); this.gbif = null; this.gbifError = null; this.gbifFor = ''; }
       if (!key) {
         this.species = null; this.speciesState = 'idle'; this.speciesError = null; this.speciesFailure = null;
@@ -325,18 +318,22 @@ export class LayoutState extends EventTarget {
   /** Something loaded: the cells draw again (the address does not change). */
   #changed() { this.dispatchEvent(new CustomEvent('change', { detail: { how: 'none', keys: [] } })); }
 
-  /** @param {string} key */
+  /**
+   * The scope's observations (the latest ZONE_MAX of the period: the map's points) and their plants (the list: the
+   * search kept to them). @param {string} key
+   */
   async #loadScope(key) {
     const at = /** @type {[number, number]} */ (this.live.at), r = this.radius;
     const abort = this.abort = new AbortController();
     // The flora in the database first: iNaturalist's names are matched to it (core/nearby.js reads it once).
     await whenReady();
     if (abort.signal.aborted || key !== this.scopeKey) return;
-    const points = observationPointsAround(at, r, abort.signal).catch(() => null);
     try {
-      const found = await speciesAround(at, r, abort.signal, this.periode);
+      const found = await observationPointsMany(at, r, ZONE_MAX, abort.signal, this.periode);
+      const list = (await speciesOf(found.points)).filter(s => s.plantId);
       if (abort.signal.aborted || key !== this.scopeKey) return;
-      const list = found.species.filter(s => s.plantId);
+      this.points = found.points;
+      this.pointsTotal = found.total;
       this.species = { key, list, byPlant: new Map(list.map(s => [/** @type {number} */ (s.plantId), s])), plantOf: new Map(list.map(s => [s.taxonId, /** @type {number} */ (s.plantId)])) };
       this.speciesState = 'ready';
       this.speciesError = null;
@@ -345,6 +342,7 @@ export class LayoutState extends EventTarget {
     } catch (error) {
       if (abort.signal.aborted || key !== this.scopeKey) return;
       const e = /** @type {Error} */ (error);
+      this.points = []; this.pointsTotal = 0;
       this.species = null;
       this.speciesState = 'error';
       this.speciesFailure = e.name === 'ModuleOffError' ? 'off' : navigator.onLine ? 'unreachable' : 'offline';
@@ -354,52 +352,6 @@ export class LayoutState extends EventTarget {
     }
     this.#changed();
     this.#loadPlant();
-    const found = await points;
-    if (abort.signal.aborted || key !== this.scopeKey) return;
-    this.points = found?.points ?? [];
-    this.pointsTotal = found?.total ?? 0;
-    this.#changed();
-  }
-
-  /**
-   * The observations of these plants (iNaturalist taxa) in the scope, of the period: what a map shows of the list
-   * (the plants the search keeps, or all the zone's) — every one of them, not the most recent of the whole zone. Asked
-   * in batches of BATCH taxa (each its POINTS_MAX / batches most recent, MAX_POINTS in all), each batch shown as it
-   * comes; loaded once for each set, the last SETS kept (two maps, two sets). null: no scope, or none.
-   * @param {number[]} taxa @returns {{ key: string, points: AroundPoint[], total: number, done: boolean } | null}
-   */
-  pointsFor(taxa) {
-    const at = this.live.at, r = this.radius;
-    if (!at || !taxa.length) return null;
-    const ids = [...new Set(taxa)].sort((a, b) => a - b);
-    const key = `${this.scopeKey}|${ids.join(',')}`;
-    const had = this.sets.get(key);
-    if (had) { this.sets.delete(key); this.sets.set(key, had); return had; }
-    const abort = new AbortController();
-    const set = { key, points: /** @type {AroundPoint[]} */ ([]), total: 0, done: false, abort };
-    this.sets.set(key, set);
-    while (this.sets.size > SETS) {
-      const [oldest] = this.sets.values();
-      oldest.abort.abort();
-      this.sets.delete(oldest.key);
-    }
-    const batches = Array.from({ length: Math.ceil(ids.length / BATCH) }, (_, i) => ids.slice(i * BATCH, (i + 1) * BATCH));
-    const max = Math.max(200, Math.ceil(MAX_POINTS / batches.length / 200) * 200);
-    let left = batches.length;
-    const seen = new Set();
-    for (const batch of batches) {
-      observationPointsOf(at, r, batch, { periode: this.periode, max, signal: abort.signal }).then(found => {
-        if (abort.signal.aborted || this.sets.get(key) !== set) return;
-        const fresh = found.points.filter(p => !seen.has(p.url) && (seen.add(p.url), true));
-        set.points = [...set.points, ...fresh].sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? ''))).slice(0, MAX_POINTS);
-        set.total += found.total;
-      }, () => {}).finally(() => {
-        if (abort.signal.aborted || this.sets.get(key) !== set) return;
-        set.done = --left === 0;
-        this.#changed();
-      });
-    }
-    return set;
   }
 
   /**
@@ -492,8 +444,6 @@ export class LayoutState extends EventTarget {
     this.abort?.abort();
     this.findAbort?.abort();
     this.gbifAbort?.abort();
-    for (const set of this.sets.values()) set.abort.abort();
-    this.sets.clear();
     if (this.scoped) { this.scoped = false; this.channel.setScope(null); whenReady().then(() => this.channel.run()); }
   }
 }

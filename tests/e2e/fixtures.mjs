@@ -76,6 +76,26 @@ export async function answerAround(context) {
   });
 }
 
+/**
+ * A layout's zone (app/layout/state.js: the zone's latest observations, their plants the list): iNaturalist's
+ * observations around the point asked, `each` of each of the 12 plants above (taxa 1000…1011, the most observed
+ * first) — a plant's own (taxon_id) left to the routes before (answerAround's). `seen`: the addresses asked.
+ * @param {import('@playwright/test').Page} page @param {{ each?: number, seen?: string[] }} [o]
+ */
+export async function answerZone(page, { each = 2, seen } = {}) {
+  await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?/, route => {
+    const q = new URL(route.request().url()).searchParams;
+    if (q.get('taxon_id')) return route.fallback();
+    seen?.push(route.request().url());
+    const lat = Number(q.get('lat')), lng = Number(q.get('lng'));
+    const results = q.get('page') && q.get('page') !== '1' ? [] : NAMES.flatMap((name, i) => Array.from({ length: each }, (_, k) => ({
+      id: 3000 + i * 10 + k, uri: `https://www.inaturalist.org/observations/${3000 + i * 10 + k}`, observed_on: `2026-05-0${1 + (k % 9)}`, place_guess: 'Paris',
+      geojson: { coordinates: [lng + (i - 5.5) * 0.0008, lat + (k - (each - 1) / 2) * 0.0008] },
+      taxon: { id: 1000 + i, name, preferred_common_name: null } })));
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ total_results: results.length, results }) });
+  });
+}
+
 const OBS_NAMES = [['Ortie dioïque', 'Urtica dioica'], ['Ail des ours', 'Allium ursinum'], ['Pâquerette', 'Bellis perennis'], ['Benoîte commune', 'Geum urbanum'],
   ['Pissenlit', 'Taraxacum officinale'], ['Lierre grimpant', 'Hedera helix'], ['Plantain lancéolé', 'Plantago lanceolata'], ['Bouton d’or', 'Ranunculus acris']];
 
