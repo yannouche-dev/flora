@@ -9,6 +9,108 @@ import { foldLetters as fold } from '../core/fold.js';
  */
 
 /**
+ * A filter group's look (its stuck header, its body, its rows of checkboxes and counts): a facet's, and any other group
+ * shown among them (layout/obs-filters.js, « Observations de la zone »).
+ */
+export const facetStyles = css`
+  /*
+   * The host has no box: the header's sticky box is then bounded by the whole filter list, not by this facet.
+   * Headers stay stuck once scrolled past, stacked in order at the top (--stack: this facet's position); those
+   * still to come wait stacked at the bottom (--count: the number of facets). Every header is always in view —
+   * unless the filters are too low for them all (gf-filter-panel compact: --stacked 0): then the header of the
+   * group being read alone, at the top.
+   */
+  :host { display: contents; --head-h: 40px; }
+  .head {
+    position: sticky;
+    top: calc(var(--stack, 0) * var(--stacked, 1) * var(--head-h));
+    bottom: var(--head-bottom, calc((var(--count, 1) - var(--stack, 0) - 1) * var(--head-h)));
+    z-index: 2;
+    height: var(--head-h);
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--gf-surface);
+    border-bottom: 1px solid var(--gf-border);
+  }
+  :host(.flash) .head, :host(.flash) .body { animation: flash 1.2s ease-out; }
+  @keyframes flash { from { background: var(--gf-accent-soft); } }
+  .toggle {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: none;
+    color: var(--gf-text);
+    font-weight: 600;
+    font-size: 0.9rem;
+    text-align: left;
+  }
+  .toggle::after {
+    content: '';
+    margin: 0 4px 0 auto;
+    width: 8px;
+    height: 8px;
+    border-right: 2px solid var(--gf-text-muted);
+    border-bottom: 2px solid var(--gf-text-muted);
+    transform: translateY(-2px) rotate(45deg);
+    transition: transform 0.15s;
+  }
+  :host([open]) .toggle::after { transform: translateY(2px) rotate(-135deg); }
+  .toggle:focus-visible { box-shadow: var(--gf-focus); }
+  .body {
+    padding: 2px 0 12px;
+    border-bottom: 1px solid var(--gf-border);
+    /* Scrolled to (funnel in the results grid): lands just below the stacked headers. */
+    scroll-margin-top: calc((var(--stack, 0) * var(--stacked, 1) + 1) * var(--head-h));
+    scroll-margin-bottom: calc((var(--count, 1) - var(--stack, 0) - 1) * var(--stacked, 1) * var(--head-h));
+  }
+  /* A line above too: stuck at the bottom, the list goes under it cleanly. */
+  .head { box-shadow: 0 -1px 0 var(--gf-border); }
+  .badge {
+    background: var(--gf-accent);
+    color: var(--gf-accent-contrast);
+    border-radius: var(--gf-radius-pill);
+    font-size: 0.7rem;
+    padding: 0 7px;
+    line-height: 1.5;
+  }
+  .link { font-size: 0.8rem; }
+  /* Its filter stays under the header while its list scrolls; it leaves with the end of the facet. */
+  /*
+   * Its filter, in a band of solid background stuck right under the header while the list scrolls: stuck where
+   * it already is (the body has no top padding when it has a filter), so it does not move when it sticks.
+   */
+  .body.filtered { padding-top: 0; }
+  .filter { position: sticky; top: calc((var(--stack, 0) * var(--stacked, 1) + 1) * var(--head-h)); z-index: 1; padding: 10px 0 6px; background: var(--gf-surface); }
+  .filter input[type='search'] { display: block; width: 100%; margin: 0; font-size: 0.85rem; min-height: 34px; padding: 6px 12px; }
+  ul { list-style: none; margin: 6px 0 0; padding: 0; }
+  li label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 2px;
+    font-size: 0.875rem;
+    cursor: pointer;
+    border-radius: 6px;
+  }
+  li label:hover { background: var(--gf-surface-2); }
+  input[type='checkbox'] { width: 16px; height: 16px; margin: 0; flex: none; }
+  .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .count { color: var(--gf-text-muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+  li.empty label { opacity: 0.45; }
+  .link.more { display: block; margin-top: 6px; }
+  .none { font-size: 0.8rem; color: var(--gf-text-muted); padding: 4px 2px; }
+`;
+
+/**
  * One multi-select filter group: checkboxes with live counts (selecting never reorders the list),
  * optional inner search and "voir plus" for long lists.
  * Fires `facet-change` with `{ name, values }`.
@@ -31,101 +133,7 @@ export class GfFacet extends LitElement {
     _expanded: { state: true }
   };
 
-  static styles = [ui, css`
-    /*
-     * The host has no box: the header's sticky box is then bounded by the whole filter list, not by this facet.
-     * Headers stay stuck once scrolled past, stacked in order at the top (--stack: this facet's position); those
-     * still to come wait stacked at the bottom (--count: the number of facets). Every header is always in view.
-     */
-    :host { display: contents; --head-h: 40px; }
-    .head {
-      position: sticky;
-      top: calc(var(--stack, 0) * var(--head-h));
-      bottom: calc((var(--count, 1) - var(--stack, 0) - 1) * var(--head-h));
-      z-index: 2;
-      height: var(--head-h);
-      box-sizing: border-box;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: var(--gf-surface);
-      border-bottom: 1px solid var(--gf-border);
-    }
-    :host(.flash) .head, :host(.flash) .body { animation: flash 1.2s ease-out; }
-    @keyframes flash { from { background: var(--gf-accent-soft); } }
-    .toggle {
-      flex: 1;
-      min-width: 0;
-      height: 100%;
-      display: flex;
-      align-items: center;
-      justify-content: flex-start;
-      gap: 8px;
-      padding: 0;
-      border: 0;
-      border-radius: 0;
-      background: none;
-      color: var(--gf-text);
-      font-weight: 600;
-      font-size: 0.9rem;
-      text-align: left;
-    }
-    .toggle::after {
-      content: '';
-      margin: 0 4px 0 auto;
-      width: 8px;
-      height: 8px;
-      border-right: 2px solid var(--gf-text-muted);
-      border-bottom: 2px solid var(--gf-text-muted);
-      transform: translateY(-2px) rotate(45deg);
-      transition: transform 0.15s;
-    }
-    :host([open]) .toggle::after { transform: translateY(2px) rotate(-135deg); }
-    .toggle:focus-visible { box-shadow: var(--gf-focus); }
-    .body {
-      padding: 2px 0 12px;
-      border-bottom: 1px solid var(--gf-border);
-      /* Scrolled to (funnel in the results grid): lands just below the stacked headers. */
-      scroll-margin-top: calc((var(--stack, 0) + 1) * var(--head-h));
-      scroll-margin-bottom: calc((var(--count, 1) - var(--stack, 0) - 1) * var(--head-h));
-    }
-    /* A line above too: stuck at the bottom, the list goes under it cleanly. */
-    .head { box-shadow: 0 -1px 0 var(--gf-border); }
-    .badge {
-      background: var(--gf-accent);
-      color: var(--gf-accent-contrast);
-      border-radius: var(--gf-radius-pill);
-      font-size: 0.7rem;
-      padding: 0 7px;
-      line-height: 1.5;
-    }
-    .link { font-size: 0.8rem; }
-    /* Its filter stays under the header while its list scrolls; it leaves with the end of the facet. */
-    /*
-     * Its filter, in a band of solid background stuck right under the header while the list scrolls: stuck where
-     * it already is (the body has no top padding when it has a filter), so it does not move when it sticks.
-     */
-    .body.filtered { padding-top: 0; }
-    .filter { position: sticky; top: calc((var(--stack, 0) + 1) * var(--head-h)); z-index: 1; padding: 10px 0 6px; background: var(--gf-surface); }
-    .filter input[type='search'] { display: block; width: 100%; margin: 0; font-size: 0.85rem; min-height: 34px; padding: 6px 12px; }
-    ul { list-style: none; margin: 6px 0 0; padding: 0; }
-    li label {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 5px 2px;
-      font-size: 0.875rem;
-      cursor: pointer;
-      border-radius: 6px;
-    }
-    li label:hover { background: var(--gf-surface-2); }
-    input[type='checkbox'] { width: 16px; height: 16px; margin: 0; flex: none; }
-    .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .count { color: var(--gf-text-muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
-    li.empty label { opacity: 0.45; }
-    .link.more { display: block; margin-top: 6px; }
-    .none { font-size: 0.8rem; color: var(--gf-text-muted); padding: 4px 2px; }
-  `];
+  static styles = [ui, facetStyles];
 
   constructor() {
     super();
@@ -179,14 +187,16 @@ export class GfFacet extends LitElement {
     return null;
   }
 
-  /** Its list in view, between the headers stacked at the top and those at the bottom. */
+  /** Its list in view, between the headers stacked at the top and those at the bottom (compact: its header alone). */
   #bodyInView() {
     const body = this.renderRoot.querySelector('.body'), sc = this.#scroller();
     if (!body || !sc) return true;
     const head = this.renderRoot.querySelector('.head')?.getBoundingClientRect().height || 40;
-    const count = Number(getComputedStyle(this).getPropertyValue('--count')) || 1;
+    const style = getComputedStyle(this);
+    const count = Number(style.getPropertyValue('--count')) || 1;
+    const stacked = style.getPropertyValue('--stacked').trim() === '0' ? 0 : 1;
     const r = body.getBoundingClientRect(), s = sc.getBoundingClientRect();
-    return r.top < s.bottom - (count - this.stack - 1) * head - 24 && r.bottom > s.top + (this.stack + 1) * head + 24;
+    return r.top < s.bottom - (count - this.stack - 1) * stacked * head - 24 && r.bottom > s.top + (this.stack * stacked + 1) * head + 24;
   }
 
   /**

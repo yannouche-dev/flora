@@ -29,7 +29,7 @@ test('chaque réglage de la carte se lit : ses noms, ses valeurs, leurs autres g
     [500, 'Fontainebleau 77', true, 'photo', false, ['n2000', 'znieff1'], ['inat'], 'annee', 'pastille', true, false, 'seule', 'fiche', 'compacte']);
   // Defaults: the map as it always was.
   const d = params('map');
-  assert.deepEqual(d, { intent: 'explorer', portee: 'zone', r: null, lieu: null, autour: false, base: 'photo', '3d': null, layers: [], src: ['inat'], when: 'toujours', pts: 'photo',
+  assert.deepEqual(d, { intent: 'explorer', portee: 'zone', r: null, lieu: null, autour: false, base: 'photo', '3d': null, layers: [], src: null, when: 'toujours', pts: 'photo',
     regroupe: false, suit: true, plante: 'grand', toucher: 'plante', ui: 'auto', tete: 'oui', titre: null, actions: [], ctl: null,
     vue: null, opac: null, jumelles: null, jrayon: null, legende: false, etat: 'ouvert', groupe: 'a' });
   assert.equal(read('map').text, '[map]');

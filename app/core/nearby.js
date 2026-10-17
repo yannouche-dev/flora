@@ -20,7 +20,8 @@ export const DEFAULT_RADIUS = 5000;
 
 /**
  * @typedef {import('./credit.js').Credit} Credit
- * @typedef {{ taxonId: number, name: string, common: string | null, count: number, photo: string | null, credit: Credit | null, plantId: number | null, family: string | null, genus: string | null }} NearbySpecies
+ * @typedef {{ taxonId: number | null, name: string, common: string | null, count: number, photo: string | null, credit: Credit | null, plantId: number | null, family: string | null, genus: string | null }} NearbySpecies
+ *   `taxonId`: iNaturalist's (null: a plant known by another source only — GBIF's — speciesOf)
  * @typedef {{ species: NearbySpecies[], observations: number, sourceUrl: string, fetchedAt: number }} NearbyResult
  * @typedef {{ coordinates: [number, number], date: string | null, url: string, place?: string | null }} NearbyObservation
  */
@@ -234,26 +235,53 @@ export async function observationPointsAround(point, radius, signal, taxa) {
   return withThumbs(found);
 }
 
+/** A record's key among the plants of observations (speciesOf): its iNaturalist taxon, else its name. @param {{ taxonId: number | null, sci: string }} p */
+const recordKey = p => p.taxonId != null ? 't' + p.taxonId : 'n' + fullName(p.sci);
+
+/**
+ * A point's plant among those speciesOf found (its `plantOf`): by its iNaturalist taxon, else its name — GBIF's
+ * records, and points drawn elsewhere (« Observations autour »), have no taxon of these.
+ * @param {Map<string, number>} plantOf @param {{ taxonId?: number | null, sci?: string | null }} p @returns {number | undefined}
+ */
+export const plantOfPoint = (plantOf, p) => (p.taxonId != null ? plantOf.get('t' + p.taxonId) : undefined) ?? (p.sci ? plantOf.get('n' + fullName(p.sci)) : undefined);
+
 /**
  * The plants of observations (a layout's map: its points make its list), most observed first: each iNaturalist
- * taxon once, its observations counted, its names and photo (its points'), the flora's plant it is (matched as
- * speciesAround does) — one the flora does not know kept, without a plant.
- * @param {AroundPoint[]} points @returns {Promise<NearbySpecies[]>}
+ * taxon once — a record without one (GBIF's) by its name —, its observations counted, its names and photo (its
+ * points'), the flora's plant it is (matched as speciesAround does: one plant once, its records counted together) —
+ * one the flora does not know kept, without a plant. And each record's plant (`plantOf`, by its taxon and by its
+ * name: plantOfPoint), the map's points kept to the list's plants by it.
+ * @param {{ taxonId: number | null, sci: string, common: string | null, photo: string | null, credit: Credit | null }[]} points
+ * @returns {Promise<{ list: NearbySpecies[], plantOf: Map<string, number> }>}
  */
 export async function speciesOf(points) {
-  /** @type {Map<number, NearbySpecies>} */
+  /** @type {Map<string, NearbySpecies>} */
   const by = new Map();
   for (const p of points) {
-    if (p.taxonId == null || !p.sci) continue;
-    const had = by.get(p.taxonId);
+    if (!p.sci) continue;
+    const key = recordKey(p);
+    const had = by.get(key);
     if (had) { had.count++; if (!had.photo && p.photo) { had.photo = p.photo; had.credit = p.credit; } continue; }
-    by.set(p.taxonId, { taxonId: p.taxonId, name: p.sci, common: p.common, count: 1, photo: p.photo, credit: p.credit, plantId: null, family: null, genus: null });
+    by.set(key, { taxonId: p.taxonId, name: p.sci, common: p.common, count: 1, photo: p.photo, credit: p.credit, plantId: null, family: null, genus: null });
   }
   const names = await nameIndex().catch(() => ({ exact: new Map(), loose: new Map() }));
-  return [...by.values()].map(s => {
+  /** @type {Map<number, NearbySpecies>} */
+  const plants = new Map();
+  /** @type {Map<string, number>} */
+  const plantOf = new Map();
+  /** @type {NearbySpecies[]} */
+  const list = [];
+  for (const [key, s] of by) {
     const local = lookup(names, s.name);
-    return { ...s, plantId: local?.id ?? null, family: local?.family || null, genus: local?.genus || genusOf(s.name) };
-  }).sort((a, b) => b.count - a.count);
+    const one = { ...s, plantId: local?.id ?? null, family: local?.family || null, genus: local?.genus || genusOf(s.name) };
+    if (one.plantId != null) { plantOf.set(key, one.plantId); plantOf.set('n' + fullName(s.name), one.plantId); }
+    const had = one.plantId != null ? plants.get(one.plantId) : undefined;
+    // The same plant again (iNaturalist's taxon and GBIF's name): one, its records together, iNaturalist's taxon kept.
+    if (had) { had.count += one.count; had.taxonId ??= one.taxonId; had.photo ??= one.photo; had.credit ??= one.credit; had.common ??= one.common; continue; }
+    if (one.plantId != null) plants.set(one.plantId, one);
+    list.push(one);
+  }
+  return { list: list.sort((a, b) => b.count - a.count), plantOf };
 }
 
 /**
@@ -342,20 +370,24 @@ export async function findPhotos(points, { max = 40 } = {}) {
   return found.some(Boolean);
 }
 
+/** iNaturalist's observations as the app shows them unless told otherwise: research grade (core/observations.js inatQuery). */
+const RESEARCH = '&quality_grade=research';
+
 /**
  * More of them, for a map that draws hundreds (the 3D view of the observations around, components/gf-map-obs3d.js; a
- * layout's map, whose plants make its list: layout/state.js): up to `max` of the most recent (200 a page), the same
- * points — of a period (periodQuery: this year, this month). Cached a day; a page missing, a few minutes.
+ * layout's map, whose plants make its list: core/observations.js): up to `max` of the most recent (200 a page), the
+ * same points — of a period (periodQuery: this year, this month), as the filters say (`filters`: iNaturalist's own
+ * words, core/observations.js inatQuery; research grade by default). Cached a day; a page missing, a few minutes.
  * @param {[number, number]} point @param {number} radius @param {number} max @param {AbortSignal} [signal]
- * @param {string | null} [periode]
+ * @param {string | null} [periode] @param {string} [filters]
  * @returns {Promise<{ points: AroundPoint[], total: number }>}
  */
-export function observationPointsMany(point, radius, max, signal, periode = null) {
+export function observationPointsMany(point, radius, max, signal, periode = null, filters = RESEARCH) {
   if (!moduleOn('inaturalist')) return Promise.reject(new ModuleOffError('inaturalist'));
   const when = periodQuery(periode);
   let partial = false;
-  return cached(`around-many2:${max}:${area(point, radius)}${when}`, async () => {
-    const page = await paged(`${area(point, radius)}&iconic_taxa=Plantae&quality_grade=research&locale=fr&order_by=observed_on${when}`, max, signal);
+  return cached(`around-many2:${max}:${area(point, radius)}${when}${filters === RESEARCH ? '' : '|' + (filters || 'toutes')}`, async () => {
+    const page = await paged(`${area(point, radius)}&iconic_taxa=Plantae${filters}&locale=fr&order_by=observed_on${when}`, max, signal);
     partial = page.partial;
     return { points: page.results.map(aroundPoint), total: page.total };
   }, () => partial).then(withThumbs);
