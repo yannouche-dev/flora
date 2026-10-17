@@ -3402,8 +3402,17 @@
   "81935": {
     "checkedAt": "2026-10-17T17:55:07.077Z",
     "wikidata": "Q80695953",
-    "thumbnail": null,
-    "wikidataBulkCheckedAt": "2026-10-17T17:55:27.275Z"
+    "thumbnail": {
+      "url": "http://mediaphoto.mnhn.fr/media/14413862381811YKBWijjJ5UTFqvZ",
+      "source": "GBIF",
+      "sourceUrl": "https://www.gbif.org/occurrence/667721939",
+      "author": null,
+      "license": "http://creativecommons.org/licenses/by/4.0/",
+      "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+      "provider": "MNHN"
+    },
+    "wikidataBulkCheckedAt": "2026-10-17T17:55:27.275Z",
+    "fallbackCheckedAt": "2026-10-17T17:56:04.498Z"
   },
   "81936": {
     "checkedAt": "2026-10-06T19:25:52.208Z",
@@ -32385,7 +32394,16 @@
   "100616": {
     "checkedAt": "2026-10-17T17:55:17.480Z",
     "wikidata": null,
-    "thumbnail": null
+    "thumbnail": {
+      "url": "http://mediaphoto.mnhn.fr/media/1441306419456co8MTZ7Wx0fOVpZj",
+      "source": "GBIF",
+      "sourceUrl": "https://www.gbif.org/occurrence/437504251",
+      "author": null,
+      "license": "http://creativecommons.org/licenses/by/4.0/",
+      "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+      "provider": "MNHN"
+    },
+    "fallbackCheckedAt": "2026-10-17T17:56:05.110Z"
   },
   "100618": {
     "checkedAt": "2026-10-06T19:28:37.165Z",
@@ -35016,8 +35034,17 @@
   "102004": {
     "checkedAt": "2026-10-17T17:55:03.767Z",
     "wikidata": "Q55866356",
-    "thumbnail": null,
-    "wikidataBulkCheckedAt": "2026-10-17T17:55:25.343Z"
+    "thumbnail": {
+      "url": "http://mediaphoto.mnhn.fr/media/14413578342130FKmavPbEa5kd8za",
+      "source": "GBIF",
+      "sourceUrl": "https://www.gbif.org/occurrence/464765965",
+      "author": null,
+      "license": "http://creativecommons.org/licenses/by/4.0/",
+      "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+      "provider": "MNHN"
+    },
+    "wikidataBulkCheckedAt": "2026-10-17T17:55:25.343Z",
+    "fallbackCheckedAt": "2026-10-17T17:56:03.223Z"
   },
   "102013": {
     "checkedAt": "2026-10-06T19:24:59.785Z",
@@ -35301,8 +35328,17 @@
   "102086": {
     "checkedAt": "2026-10-17T17:55:03.767Z",
     "wikidata": "Q109664583",
-    "thumbnail": null,
-    "wikidataBulkCheckedAt": "2026-10-17T17:55:25.858Z"
+    "thumbnail": {
+      "url": "http://mediaphoto.mnhn.fr/media/1441357731008WRQ6MmoF0pUBDIic",
+      "source": "GBIF",
+      "sourceUrl": "https://www.gbif.org/occurrence/464757114",
+      "author": null,
+      "license": "http://creativecommons.org/licenses/by/4.0/",
+      "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+      "provider": "MNHN"
+    },
+    "wikidataBulkCheckedAt": "2026-10-17T17:55:25.858Z",
+    "fallbackCheckedAt": "2026-10-17T17:56:03.577Z"
   },
   "102087": {
     "checkedAt": "2026-10-06T19:25:02.167Z",
@@ -36348,8 +36384,17 @@
   "102434": {
     "checkedAt": "2026-10-17T17:55:03.767Z",
     "wikidata": "Q15578952",
-    "thumbnail": null,
-    "wikidataBulkCheckedAt": "2026-10-17T17:55:25.858Z"
+    "thumbnail": {
+      "url": "http://mediaphoto.mnhn.fr/media/1441348137463STLPYuA1qtBsj9nq",
+      "source": "GBIF",
+      "sourceUrl": "https://www.gbif.org/occurrence/438047350",
+      "author": null,
+      "license": "http://creativecommons.org/licenses/by/4.0/",
+      "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+      "provider": "MNHN"
+    },
+    "wikidataBulkCheckedAt": "2026-10-17T17:55:25.858Z",
+    "fallbackCheckedAt": "2026-10-17T17:56:04.001Z"
   },
   "102443": {
     "checkedAt": "2026-10-06T19:25:09.087Z",
@@ -36824,8 +36869,17 @@
   "102665": {
     "checkedAt": "2026-10-17T17:55:03.767Z",
     "wikidata": "Q43374506",
-    "thumbnail": null,
-    "wikidataBulkCheckedAt": "2026-10-17T17:55:26.342Z"
+    "thumbnail": {
+      "url": "https://www.unimus.no/felles/bilder/web_hent_bilde.php?id=15882349&type=jpeg",
+      "source": "GBIF",
+      "sourceUrl": "https://www.gbif.org/occurrence/5162419606",
+      "author": null,
+      "license": "http://creativecommons.org/licenses/by-sa/4.0/",
+      "licenseUrl": "http://creativecommons.org/licenses/by-sa/4.0/",
+      "provider": "BG"
+    },
+    "wikidataBulkCheckedAt": "2026-10-17T17:55:26.342Z",
+    "fallbackCheckedAt": "2026-10-17T17:56:03.595Z"
   },
   "102669": {
     "checkedAt": "2026-10-06T19:25:11.509Z",
@@ -62819,8 +62873,17 @@
   "119012": {
     "checkedAt": "2026-10-17T17:55:21.026Z",
     "wikidata": "Q80709354",
-    "thumbnail": null,
-    "wikidataBulkCheckedAt": "2026-10-17T17:55:34.256Z"
+    "thumbnail": {
+      "url": "http://mediaphoto.mnhn.fr/media/1441353557499Y17kykezh8cbaSYx",
+      "source": "GBIF",
+      "sourceUrl": "https://www.gbif.org/occurrence/438446068",
+      "author": null,
+      "license": "http://creativecommons.org/licenses/by/4.0/",
+      "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+      "provider": "MNHN"
+    },
+    "wikidataBulkCheckedAt": "2026-10-17T17:55:34.256Z",
+    "fallbackCheckedAt": "2026-10-17T17:56:05.176Z"
   },
   "119023": {
     "checkedAt": "2026-10-06T19:30:41.271Z",
@@ -71796,8 +71859,17 @@
   "124807": {
     "checkedAt": "2026-10-17T17:55:14.135Z",
     "wikidata": "Q15368424",
-    "thumbnail": null,
-    "wikidataBulkCheckedAt": "2026-10-17T17:55:29.254Z"
+    "thumbnail": {
+      "url": "http://mediaphoto.mnhn.fr/media/1441364166578rjkAegQPVpZ8CJ8k",
+      "source": "GBIF",
+      "sourceUrl": "https://www.gbif.org/occurrence/474668395",
+      "author": null,
+      "license": "http://creativecommons.org/licenses/by/4.0/",
+      "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+      "provider": "MNHN"
+    },
+    "wikidataBulkCheckedAt": "2026-10-17T17:55:29.254Z",
+    "fallbackCheckedAt": "2026-10-17T17:56:04.968Z"
   },
   "124814": {
     "checkedAt": "2026-10-06T19:28:10.020Z",
@@ -73316,8 +73388,17 @@
   "125583": {
     "checkedAt": "2026-10-17T17:55:03.767Z",
     "wikidata": "Q55964816",
-    "thumbnail": null,
-    "wikidataBulkCheckedAt": "2026-10-17T17:55:26.342Z"
+    "thumbnail": {
+      "url": "http://mediaphoto.mnhn.fr/media/1441346342506MGd7AIqEdqwBIOam",
+      "source": "GBIF",
+      "sourceUrl": "https://www.gbif.org/occurrence/439080775",
+      "author": null,
+      "license": "http://creativecommons.org/licenses/by/4.0/",
+      "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+      "provider": "MNHN"
+    },
+    "wikidataBulkCheckedAt": "2026-10-17T17:55:26.342Z",
+    "fallbackCheckedAt": "2026-10-17T17:56:03.993Z"
   },
   "125585": {
     "checkedAt": "2026-10-06T19:25:33.277Z",
@@ -74139,8 +74220,17 @@
   "125696": {
     "checkedAt": "2026-10-17T17:55:03.767Z",
     "wikidata": "Q55964895",
-    "thumbnail": null,
-    "wikidataBulkCheckedAt": "2026-10-17T17:55:26.343Z"
+    "thumbnail": {
+      "url": "http://mediaphoto.mnhn.fr/media/1441357868713zMWoAXkxOLIm0sG9",
+      "source": "GBIF",
+      "sourceUrl": "https://www.gbif.org/occurrence/464722655",
+      "author": null,
+      "license": "http://creativecommons.org/licenses/by/4.0/",
+      "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+      "provider": "MNHN"
+    },
+    "wikidataBulkCheckedAt": "2026-10-17T17:55:26.343Z",
+    "fallbackCheckedAt": "2026-10-17T17:56:04.216Z"
   },
   "125699": {
     "checkedAt": "2026-10-06T19:25:37.785Z",
@@ -93110,8 +93200,17 @@
   "810942": {
     "checkedAt": "2026-10-17T17:55:21.026Z",
     "wikidata": "Q80711147",
-    "thumbnail": null,
-    "wikidataBulkCheckedAt": "2026-10-17T17:55:34.256Z"
+    "thumbnail": {
+      "url": "http://mediaphoto.mnhn.fr/media/1441353390711Uw8UvNMobgnqcsLr",
+      "source": "GBIF",
+      "sourceUrl": "https://www.gbif.org/occurrence/439445743",
+      "author": null,
+      "license": "http://creativecommons.org/licenses/by/4.0/",
+      "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+      "provider": "MNHN"
+    },
+    "wikidataBulkCheckedAt": "2026-10-17T17:55:34.256Z",
+    "fallbackCheckedAt": "2026-10-17T17:56:06.065Z"
   },
   "810943": {
     "checkedAt": "2026-10-06T19:30:46.046Z",
@@ -93202,8 +93301,17 @@
   "810964": {
     "checkedAt": "2026-10-17T17:55:21.026Z",
     "wikidata": "Q80709401",
-    "thumbnail": null,
-    "wikidataBulkCheckedAt": "2026-10-17T17:55:34.256Z"
+    "thumbnail": {
+      "url": "http://mediaphoto.mnhn.fr/media/1441354858529DBzzpdC71nxQTpV6",
+      "source": "GBIF",
+      "sourceUrl": "https://www.gbif.org/occurrence/442678705",
+      "author": null,
+      "license": "http://creativecommons.org/licenses/by/4.0/",
+      "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+      "provider": "MNHN"
+    },
+    "wikidataBulkCheckedAt": "2026-10-17T17:55:34.256Z",
+    "fallbackCheckedAt": "2026-10-17T17:56:05.817Z"
   },
   "810965": {
     "checkedAt": "2026-10-06T19:30:50.646Z",
@@ -96384,7 +96492,16 @@
   "1017284": {
     "checkedAt": "2026-10-17T17:55:21.026Z",
     "wikidata": null,
-    "thumbnail": null
+    "thumbnail": {
+      "url": "http://mediaphoto.mnhn.fr/media/1441353478421UH7Pc0KsrVRSP7cI",
+      "source": "GBIF",
+      "sourceUrl": "https://www.gbif.org/occurrence/438276286",
+      "author": null,
+      "license": "http://creativecommons.org/licenses/by/4.0/",
+      "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+      "provider": "MNHN"
+    },
+    "fallbackCheckedAt": "2026-10-17T17:56:06.043Z"
   },
   "1017676": {
     "checkedAt": "2026-10-06T19:28:13.038Z",
@@ -97523,8 +97640,17 @@
   "1039315": {
     "checkedAt": "2026-10-17T17:55:21.026Z",
     "wikidata": "Q17244726",
-    "thumbnail": null,
-    "wikidataBulkCheckedAt": "2026-10-17T17:55:33.682Z"
+    "thumbnail": {
+      "url": "http://mediaphoto.mnhn.fr/media/1441337061322UNDGScSLICOOk6nO",
+      "source": "GBIF",
+      "sourceUrl": "https://www.gbif.org/occurrence/437228806",
+      "author": null,
+      "license": "http://creativecommons.org/licenses/by/4.0/",
+      "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+      "provider": "MNHN"
+    },
+    "wikidataBulkCheckedAt": "2026-10-17T17:55:33.682Z",
+    "fallbackCheckedAt": "2026-10-17T17:56:05.022Z"
   },
   "1039318": {
     "checkedAt": "2026-10-06T19:30:41.271Z",
@@ -97906,8 +98032,17 @@
   "1039395": {
     "checkedAt": "2026-10-17T17:55:21.026Z",
     "wikidata": "Q17250941",
-    "thumbnail": null,
-    "wikidataBulkCheckedAt": "2026-10-17T17:55:34.867Z"
+    "thumbnail": {
+      "url": "https://data.nhm.ac.uk/media/0d43801f-f8ac-4ff5-9d09-b4206a088012",
+      "source": "GBIF",
+      "sourceUrl": "https://www.gbif.org/occurrence/4418937321",
+      "author": null,
+      "license": "http://creativecommons.org/licenses/by/4.0/",
+      "licenseUrl": "http://creativecommons.org/licenses/by/4.0/",
+      "provider": "NHMUK"
+    },
+    "wikidataBulkCheckedAt": "2026-10-17T17:55:34.867Z",
+    "fallbackCheckedAt": "2026-10-17T17:56:06.145Z"
   },
   "1039396": {
     "checkedAt": "2026-10-06T19:30:50.646Z",
