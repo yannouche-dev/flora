@@ -30,9 +30,7 @@ const EXTRA = {
   crown: '<path d="M1 4.5 4.6 7.6 8 2l3.4 5.6L15 4.5 13.6 12H2.4zM2.4 13h11.2v1.5H2.4z"/>',
   // Plant parts (Médias): a cluster of berries on a stem, and a piece of bark.
   fruit: '<path d="M8 1c.3 1.4 1.3 2.4 3 2.7-.9.5-2 .5-3-.1V5.5h-1V1z"/><circle cx="5" cy="8.5" r="2.6"/><circle cx="10.6" cy="8.2" r="2.6"/><circle cx="7.8" cy="12.4" r="2.6"/>',
-  bark: '<path d="M4 1h8l-.6 14H4.6zM6 3.2c.4 1.6.2 3.4-.4 5 .9 1.5 1 3.1.6 4.8h1c.4-1.8.3-3.5-.6-5 .6-1.6.8-3.2.4-4.8zm3.2 0c-.5 2 .1 3.5.7 5.1-.5 1.4-.6 3-.2 4.7h1c-.4-1.6-.3-3.1.2-4.6-.6-1.7-1.1-3.2-.7-5.2z"/>',
-  // The maps' compass (gf-map): the north alone, an N over an arrow.
-  north: '<path d="M4.8 6.6V.3h1.4l3.6 4.1V.3h1.4v6.3H9.8L6.2 2.5v4.1zM8 7.8l2.8 7.9L8 14l-2.8 1.7z"/>'
+  bark: '<path d="M4 1h8l-.6 14H4.6zM6 3.2c.4 1.6.2 3.4-.4 5 .9 1.5 1 3.1.6 4.8h1c.4-1.8.3-3.5-.6-5 .6-1.6.8-3.2.4-4.8zm3.2 0c-.5 2 .1 3.5.7 5.1-.5 1.4-.6 3-.2 4.7h1c-.4-1.6-.3-3.1.2-4.6-.6-1.7-1.1-3.2-.7-5.2z"/>'
 };
 
 const pkg = process.argv[2] || 'node_modules/bootstrap-icons';

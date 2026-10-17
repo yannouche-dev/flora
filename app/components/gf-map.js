@@ -91,7 +91,7 @@ const FLOWER = `<svg x="5" y="5" width="12" height="12" viewBox="0 0 16 16" fill
 
 /** Past this many points, a group touched is zoomed in on before its points are spread. */
 const SPREAD_MAX = 24;
-/** The compass's words, in 2D as in 3D. */
+/** The 2D compass's words (MapLibre's own in 3D: core/maplibre.js). */
 const NORTH = 'Revenir au nord';
 /**
  * Up to this many points of the plant chosen alone in sight, each comes in with its bounce; past it, they are there at
@@ -894,6 +894,20 @@ export class GfMap extends LitElement {
       minZoom: this.minZoom
     });
     map.attributionControl.setPrefix(false);
+    // The compass under + −, as MapLibre draws them in 3D (its own there): in 2D the north is always up — the needle
+    // still, touched, the map already to the north. First: the lowest of the corner.
+    const compass = new L.Control({ position: 'bottomleft' });
+    compass.onAdd = () => {
+      const bar = L.DomUtil.create('div', 'leaflet-bar gf-compass-bar');
+      const a = L.DomUtil.create('a', 'gf-compass', bar);
+      Object.assign(a, { href: '#', title: NORTH });
+      a.setAttribute('role', 'button');
+      a.setAttribute('aria-label', NORTH);
+      L.DomEvent.disableClickPropagation(bar);
+      L.DomEvent.on(a, 'click', L.DomEvent.preventDefault);
+      return bar;
+    };
+    compass.addTo(map);
     L.control.zoom({ position: 'bottomleft' }).addTo(map);
     L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(map);
 
@@ -2328,14 +2342,11 @@ export class GfMap extends LitElement {
     // With the search pill, the layers button lives at its end; otherwise it is a round button like "locate".
     // eslint-disable-next-line no-unsanitized/property -- fixed markup and bundled icons, no data in it
     buttons.innerHTML = `
-      <button type="button" class="compass" aria-label="${NORTH}" title="${NORTH}">${iconMarkup('north')}</button>
       ${this.#hasSearch || this.noLayers ? '' : `<button type="button" class="layers" aria-label="Carte : fond, couches, légende" title="Carte : fond, couches, légende">${iconMarkup('layers')}</button>`}
       ${this.noLayers ? '' : `<button type="button" class="opacity" aria-label="Opacité des couches" title="Opacité des couches" aria-expanded="false" hidden>${iconMarkup('sliders')}</button>`}
       <button type="button" class="locate" aria-label="Me localiser" title="Me localiser" aria-pressed="false">${iconMarkup('crosshair')}</button>
       <button type="button" class="edit" aria-label="Modifier les positions" title="Modifier les positions" aria-pressed="false" hidden>${iconMarkup('pencil')}</button>`;
     buttons.querySelector('.locate')?.addEventListener('click', () => this.#locate());
-    // In 2D the map is always to the north: the same button, nothing to turn.
-    buttons.querySelector('.compass')?.addEventListener('click', () => { if (this.#gl?.on) this.#gl.resetNorth(); });
     buttons.querySelector('.layers')?.addEventListener('click', () => this.openPanel());
     buttons.querySelector('.opacity')?.addEventListener('click', () => this.#toggleOpacity());
     buttons.querySelector('.edit')?.addEventListener('click', () => {
@@ -2345,17 +2356,6 @@ export class GfMap extends LitElement {
     this.#root.append(buttons);
     this.#syncButtons();
     this.#syncOpacity();
-    const gl = this.dataset.renderer === '3d' ? /** @type {any} */ (this.#gl)?.glMap : null;
-    this.setNorth(gl ? gl.getBearing() : null);
-  }
-
-  /**
-   * The compass (the north alone), the same button in 2D and 3D: turned as the map is, touched, the map back to the north
-   * (its tilt kept). In 2D the north is always up. @param {number | null} bearing the 3D map's; null in 2D
-   */
-  setNorth(bearing) {
-    const compass = /** @type {HTMLElement | null | undefined} */ (this.#buttons?.querySelector('.compass'));
-    compass?.style.setProperty('--gf-north', `${bearing ? Math.round(-bearing * 10) / 10 : 0}deg`);
   }
 
   // ── The overlays' opacity, at hand: a button among the map's (when overlays are shown), a card with a slider each ──

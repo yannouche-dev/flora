@@ -121,11 +121,10 @@ test('Réglages › Cartes « 3D » : la Carte en MapLibre — relief, bâtiment
   await expect.poll(async () => (await glState(map)).terrain, SLOW).toBe(false);
   expect((await glState(map)).layers).not.toContain('gf-buildings');
   await expect(map.locator('.leaflet-control-attribution')).not.toContainText('Terrain Tiles');
-  // The map's own compass (the north alone), as in 2D; none of MapLibre's beside it. The canvas reachable by
-  // keyboard, in French.
-  const compass = map.locator('.gf-map-buttons .compass');
-  await expect(compass).toHaveAttribute('aria-label', 'Revenir au nord');
-  await expect(map.locator('.maplibregl-ctrl-compass')).toHaveCount(0);
+  // MapLibre's buttons in French (its compass; the 2D one hidden with the 2D map), the canvas reachable by keyboard.
+  const compass = map.locator('.maplibregl-ctrl-compass');
+  await expect(compass).toHaveAttribute('aria-label', /Revenir au nord/);
+  await expect(map.locator('.gf-compass')).toBeHidden();
   await expect(map.locator('canvas.maplibregl-canvas')).toHaveAttribute('aria-label', /Carte en 3D/);
   // Shift + arrows: rotate and tilt (MapLibre's keyboard).
   await map.locator('canvas.maplibregl-canvas').focus();
@@ -144,14 +143,12 @@ test('Réglages › Cartes « 3D » : la Carte en MapLibre — relief, bâtiment
     await expect.poll(async () => Math.abs((await glState(map)).bearing - before.bearing + 48) <= 1, SLOW).toBe(true);
     expect(Math.abs((await glState(map)).pitch - before.pitch - 10)).toBeLessThanOrEqual(1);
   }
-  // The compass turned with the map; touched: the north again, the tilt kept.
-  await expect.poll(() => compass.evaluate(b => /** @type {HTMLElement} */ (b).style.getPropertyValue('--gf-north'))).not.toBe('0deg');
+  // MapLibre's compass touched: the north again, and flat (its own behaviour).
   let settled = await glState(map);
   await expect.poll(async () => { const was = settled; await page.waitForTimeout(400); settled = await glState(map); return settled.bearing === was.bearing && settled.pitch === was.pitch; }, SLOW).toBe(true);
   await compass.click();
   await expect.poll(async () => Math.abs((await glState(map)).bearing), SLOW).toBe(0);
-  expect((await glState(map)).pitch).toBe(settled.pitch);
-  await expect.poll(() => compass.evaluate(b => /** @type {HTMLElement} */ (b).style.getPropertyValue('--gf-north'))).toBe('0deg');
+  await expect.poll(async () => (await glState(map)).pitch, SLOW).toBe(0);
 
   // The places and plants of the 2D map, the same elements, on the relief; a plant clicked opens it.
   const plants = map.locator('.gf-gl-mk .gf-plant');
@@ -239,13 +236,13 @@ test('2D par défaut, MapLibre jamais demandé, aucun bouton 2D ⇄ 3D ; l’éd
   expect(seen.maplibre).toEqual([]);
   // The choice is Réglages': no map has a 2D ⇄ 3D button.
   await expect(map.getByRole('button', { name: /3D|2D/ })).toHaveCount(0);
-  // The compass, on every map, the same in 2D: the north up, touched, the map stays to the north.
-  const compass = map.locator('.gf-map-buttons .compass');
+  // MapLibre's compass in 2D too (under + −): the north always up, touched, the map stays to the north.
+  const compass = map.locator('.leaflet-bottom.leaflet-left .gf-compass');
+  await expect(compass).toBeVisible();
   await expect(compass).toHaveAttribute('aria-label', 'Revenir au nord');
-  await expect(compass).not.toHaveAttribute('aria-disabled');
-  await expect(compass).toHaveAttribute('style', /--gf-north: 0deg/);
   await compass.click();
   await expect(map).toHaveAttribute('data-renderer', '2d');
+  expect(await page.evaluate(() => location.hash)).not.toMatch(/#$/);
 
   // 3D in Réglages: the Carte follows.
   await page.evaluate(async () => { (await import('/app/core/map-settings.js')).setMapSettings({ renderer: '3d', buildings: false, pitch: 40 }); });

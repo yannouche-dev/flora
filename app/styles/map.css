@@ -343,10 +343,14 @@ gf-map .gf-map-buttons button[aria-pressed='true'] {
   color: var(--gf-accent-contrast);
 }
 
-/* The compass: the north alone (an N over an arrow), red as on a compass, turned as the map is (gf-map setNorth); the
-   same in 2D, where the north is always up. */
-gf-map .gf-map-buttons button.compass { color: #d0342c; }
-gf-map .gf-map-buttons button.compass svg { font-size: 1.4em; rotate: var(--gf-north, 0deg); }
+/* The 2D map's compass: MapLibre's (its needle, under + − in one group, as in 3D); the north always up. */
+gf-map .leaflet-bar a.gf-compass {
+  background: #fff url("data:image/svg+xml;charset=utf-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2229%22%20height%3D%2229%22%20fill%3D%22%23333%22%20viewBox%3D%220%200%2029%2029%22%3E%3Cpath%20d%3D%22m10.5%2014%204-8%204%208z%22%2F%3E%3Cpath%20fill%3D%22%23ccc%22%20d%3D%22m10.5%2016%204%208%204-8z%22%2F%3E%3C%2Fsvg%3E") center / 100% no-repeat;
+}
+gf-map .leaflet-bar a.gf-compass:hover { background-color: #f4f4f4; }
+gf-map .leaflet-control-zoom:has(+ .gf-compass-bar) { margin-bottom: 0; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+gf-map .leaflet-control-zoom:has(+ .gf-compass-bar) a:last-child { border-bottom: 1px solid #ccc; border-radius: 0; }
+gf-map .leaflet-control-zoom + .gf-compass-bar { margin-top: 0; border-top: 0; border-top-left-radius: 0; border-top-right-radius: 0; }
 
 gf-map .gf-layer-menu {
   position: absolute;
