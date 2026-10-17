@@ -752,8 +752,8 @@ export class GlView {
     const ml = this.#ml, map = this.#map;
     const wrap = Object.assign(document.createElement('div'), { className: 'gf-gl-mk' });
     const { lat, lng } = layer.getLatLng();
-    // Never faded behind the relief (MapLibre tests the marker's foot: a head standing clear of a ridge was faded).
-    const gl = new ml.Marker({ element: wrap, anchor: 'top-left', opacityWhenCovered: '1', subpixelPositioning: true }).setLngLat([lng, lat]).addTo(map);
+    // Faded where the relief hides it: MapLibre's own test, its default opacity.
+    const gl = new ml.Marker({ element: wrap, anchor: 'top-left', subpixelPositioning: true }).setLngLat([lng, lat]).addTo(map);
     // Over the others as in 2D (a place selected, the plant chosen's photos), and over the observations around.
     wrap.style.zIndex = String(MARK_Z + Math.max(0, layer.options.zIndexOffset || 0));
     gl.gfMove = () => { const p = layer.getLatLng(); gl.setLngLat([p.lng, p.lat]); };
@@ -798,7 +798,7 @@ export class GlView {
     el.style.setProperty('--r', String(o.radius || 6));
     if (o.interactive === false) el.classList.add('inert');
     const { lat, lng } = layer.getLatLng();
-    const gl = new ml.Marker({ element: el, anchor: 'center', opacityWhenCovered: '1' }).setLngLat([lng, lat]).addTo(map);
+    const gl = new ml.Marker({ element: el, anchor: 'center' }).setLngLat([lng, lat]).addTo(map);
     el.style.zIndex = String(MARK_Z);
     gl.gfMove = () => { const p = layer.getLatLng(); gl.setLngLat([p.lng, p.lat]); };
     layer.on('move', gl.gfMove);

@@ -346,7 +346,7 @@ Exemples :
 | Points | `regroupe` | `0`, `1` | les observations de la plante courante groupées selon le zoom (une pile, son nombre) au lieu d'être montrées une à une |
 | Points | `jumelles` | éteintes, ou des sources jointes par `+` : `inat`, `gbif`, `densite` (`aucune` : allumées sans source) | **les jumelles** (« Observations autour » d'une carte en 3D) allumées, avec leurs sources et la densité ; écrit par leur bouton. Jamais une valeur seule |
 | Points | `jrayon` | celui de la zone (le cran le plus proche), une distance | le rayon des jumelles, quand il n'est pas celui de la zone |
-| Liens | `suit` | `1`, `0` | les points des seules plantes que garde la recherche, ou de toutes les plantes observées dans la zone |
+| Liens | `suit` | `1`, `0` | les observations des seules plantes que garde la recherche, ou toutes celles de la zone |
 | Liens | `plante` | `grand`, `seule`, `non` | la plante courante en grand par-dessus les autres, seule sur la carte, ou pas montrée |
 | Liens | `toucher` | `plante`, `fiche`, `rien` | un point touché : sa plante devient la plante courante, sa fiche s'ouvre, ou rien |
 | Interface | `legende` | `0`, `1` | la légende ouverte (son bouton l'écrit) |
@@ -404,8 +404,8 @@ Dans l'éditeur, « Interface » a une case à cocher par commande (cochées : c
 
 **Des cases qui se reflètent** (`state.js`, `cells.js`) — toutes lisent et changent le même état, jamais l'une l'autre :
 
-- **la carte montre la liste** : ses points sont **les observations de chaque plante que garde la recherche dans la zone**, demandées pour elles (`taxon_id`, par lots de 300, 800 points au plus, les plus récents d'abord ; `state.js#pointsFor`), avec les plus récentes de la zone — plus seulement les 100 dernières de la zone, où les plantes rares manquaient ; un filtre, une recherche : ses seules plantes, sur la liste et sur la carte ; deux cartes ont chacune leurs points (jamais celles de l'autre) ;
-- **la période est celle de toutes les cases** (`&periode=toujours|annee|mois` dans l'adresse ; sinon celle d'une carte, `when=`) : les plantes de la zone **observées cette année, ou ce mois-ci** (iNaturalist `year=`, `month=`) — la liste, ses filtres, Rencontres, les points des cartes ; les puces « Toujours · Cette année · Ce mois-ci » d'une carte l'écrivent ;
+- **la liste est celle de la carte** : la carte de la zone montre **ses observations** (les 1 000 plus récentes de la période, de niveau recherche : l'API des observations d'iNaturalist, `state.js#loadScope`) et la liste (recherche, filtres, résultats) en est **les plantes**, une ligne par plante de la flore présente parmi elles, avec son nombre d'observations (`core/nearby.js#speciesOf`) ; ce qui est sur la carte est dans la liste, et inversement ; un filtre, une recherche : ses seules plantes, sur la liste et sur la carte (une observation d'une plante que la flore ne connaît pas n'est sur la carte que si elle ne suit pas la recherche, `suit=0`) ;
+- **la période est celle de toutes les cases** (`&periode=toujours|annee|mois` dans l'adresse ; sinon celle d'une carte, `when=`) : les observations de la zone **de cette année, ou de ce mois-ci** (iNaturalist `year=`, `month=`) — les points des cartes, et donc la liste, ses filtres, Rencontres ; les puces « Toujours · Cette année · Ce mois-ci » d'une carte l'écrivent ;
 - **une plante choisie hors de la liste de la zone** (une plante fixée, une recherche sur toute la France) : son taxon trouvé par son nom, ses observations dans la zone montrées ;
 - **une zone déplacée** : ce qui avait été chargé pour l'ancienne s'en va aussitôt (jamais ses points sous le nouveau cercle) ;
 - **trois cartes, une même recherche** : `[map(r=2km),map(france),map(monde),[search,results]]` — ici, la France, le monde, les mêmes plantes (portee=).
@@ -463,7 +463,7 @@ La carte garde **ses propres liens** (`suit`, `plante`, `toucher` : ci-dessus) ;
 ```
 
 **Le câblage** (`app/layout/state.js`) : un seul état partagé, que chaque case lit et écrit — jamais une case vers une autre :
-- **la zone** (`at`, `r`, `place`) : les plantes observées dans le cercle (iNaturalist, rapprochées de la flore : `core/nearby.js`) **gardent la recherche à elles** (`core/search.js#setSearchScope` : les résultats, leurs compteurs et les facettes des filtres sont ceux de la zone ; quitter la disposition rend toute la flore) ; sans zone, toute la flore de France ;
+- **la zone** (`at`, `r`, `place`) : les plantes de ses observations (iNaturalist, les plus récentes de la période, rapprochées de la flore : `core/nearby.js`) **gardent la recherche à elles** (`core/search.js#setSearchScope` : les résultats, leurs compteurs et les facettes des filtres sont ceux de la zone ; quitter la disposition rend toute la flore) ; sans zone, toute la flore de France ;
 - **la recherche** (texte, filtres, tri) : celle de Flore (le magasin de l'application), donc la barre, les filtres et la liste de Flore telles quelles ; ses résultats donnent **les points de la carte** (les observations des seules plantes trouvées) et les cartes du paquet ;
 - **la plante courante** (`p`) : un résultat, un point de la carte, une carte du paquet, ou n'importe quel lien vers une fiche dans une case (un sosie, par exemple) la choisit ; toutes les cases `plant`, `plant.<bloc>` et `media` la montrent, les résultats la surlignent, le paquet la met dessus, la carte allume ses observations dans la zone ;
 - **l'observation allumée** (`o`) : le point touché, montré sur la carte.

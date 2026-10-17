@@ -2,13 +2,14 @@
 // search; another group's are apart — two lists, two maps that do not follow each other on one screen. The first group
 // (a) keeps the address' keys as before; another's are after its letter (b.q=, b.at=, b.p=…). Each search its own
 // (core/search-channel.js), the first the app's (Flore's); reloaded, the same; in the builder, a cell's group chosen in
-// « Liens » of its picker, a letter in its colour on each head. iNaturalist answered here: 12 plants around.
-import { test, expect, answerAround } from './fixtures.mjs';
+// « Liens » of its picker, a letter in its colour on each head. iNaturalist answered here: the zone's observations,
+// of 12 plants (their plants the list).
+import { test, expect, answerAround, answerZone } from './fixtures.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
 
 test.use({ reducedMotion: 'reduce' });
-test.beforeEach(async ({ context }) => { await answerAround(context); });
+test.beforeEach(async ({ context, page }) => { await answerAround(context); await answerZone(page); });
 
 const param = (/** @type {Page} */ page, /** @type {string} */ key) => page.evaluate(k => new URLSearchParams(location.hash.split('?')[1] || '').get(k), key);
 const cellOf = (/** @type {Page} */ page, /** @type {string} */ path) => page.locator(`gf-layout section.cell[data-cell="${path}"]`);

@@ -168,7 +168,7 @@ test.describe('au bureau', () => {
     await expect.poll(() => param(page, 'periode')).toBe('toujours');
     expect(await layoutOf(page)).toBe('#/layout/[map(floraison,r=1km),results]');
     // The count touched: the map's panel, its « État ».
-    await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\/species_counts\?/, route => route.fulfill({ status: 503, body: '' }));
+    await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?.*lat=48\.86/, route => route.fulfill({ status: 503, body: '' }));
     await app.go(`#/layout/[map(r=3km),results]?at=48.86,2.36`);
     await expect.poll(() => mapOf(page).evaluate(m => /** @type {any} */ (m).statusLines.length), { timeout: 15_000 }).toBeGreaterThan(0);
     await cell(page).locator('button.count').click();

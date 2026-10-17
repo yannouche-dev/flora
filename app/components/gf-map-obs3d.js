@@ -21,12 +21,12 @@
 //    pink and gold ring) — a GBIF occurrence as an iNaturalist observation: its plant's photo, the same seed, the same
 //    card but for its source (core/around3d.js); the photos of plants without one in the flora's data, found online
 //    after the points are drawn, drawn again with them (morePhotos) —, standing on the ground on a thin stem as the map tilts (none from
-//    above), smaller further away, never faded behind the relief (MapLibre tests a marker's foot: a head standing
-//    clear of a ridge was faded). The plant lit (the page's, the one selected): each of its points a marker, always.
+//    above), smaller further away, faded where the relief hides them (MapLibre's own test, its default opacity). The
+//    plant lit (the page's, the one selected): each of its points a marker, always.
 //    The others, when they are more than the markers allowed (40 on a phone, 70 otherwise): grouped by distance on the
 //    screen (the nearest first), the first groups markers — a point alone its photo, a group a stack of photos with
 //    its count (as the 2D groups: never a bubble); every other point is a small seed drawn by MapLibre (one circle
-//    layer, facing the screen however tilted; the points shown as markers hidden by feature state: no data sent again
+//    layer, as MapLibre draws circles by default; the points shown as markers hidden by feature state: no data sent again
 //    as the view moves); laid out again once the view rests — never while it moves (a turn, a tilt: the markers stay
 //    as they are, none made again), each marker kept by its point (a group keeps the marker of one of its points);
 //  - the page's own points (its area's, the plant it shows): not again here — its markers, over these;
@@ -563,7 +563,7 @@ export class Obs3dLayer {
       { id: ID + 'wall-rim', type: 'fill-extrusion', source: ID + 'wall',
         paint: { 'fill-extrusion-color': '#f2ffe6', 'fill-extrusion-height': h, 'fill-extrusion-base': Math.round(h * 0.93), 'fill-extrusion-opacity': 0.75, 'fill-extrusion-vertical-gradient': false } },
       { id: ID + 'centre', type: 'circle', source: ID + 'zone', filter: ['==', ['geometry-type'], 'Point'],
-        paint: { 'circle-radius': 5, 'circle-color': '#ffffff', 'circle-stroke-color': '#2f6b3a', 'circle-stroke-width': 2.5, 'circle-pitch-alignment': 'viewport' } }
+        paint: { 'circle-radius': 5, 'circle-color': '#ffffff', 'circle-stroke-color': '#2f6b3a', 'circle-stroke-width': 2.5 } }
     );
     if (density) {
       const top = Math.max(30, r * 0.18);
@@ -575,12 +575,12 @@ export class Obs3dLayer {
         } });
     } else {
       // The points not shown as markers: seeds on the ground, an observation's green whatever its source (the user's
-      // plants gold) — discs facing the screen, the same size near and far (lying on the map, a tilt made them slivers).
+      // plants gold) — MapLibre's circles as it draws them by default (facing the screen, smaller further away).
       style.layers.push({ id: ID + 'seeds', type: 'circle', source: ID + 'pts',
         paint: {
           'circle-radius': ['interpolate', ['linear'], ['zoom'], 8, 4, 14, 4.5, 18, 6],
           'circle-color': ['case', ['get', 'hl'], '#e0245e', ['match', ['get', 'k'], 'mine', SEED.mine, SEED.obs]],
-          'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1.2, 'circle-pitch-alignment': 'viewport', 'circle-pitch-scale': 'viewport',
+          'circle-stroke-color': '#ffffff', 'circle-stroke-width': 1.2,
           'circle-opacity': ['case', ['boolean', ['feature-state', 'dom'], false], 0, 0.95],
           'circle-stroke-opacity': ['case', ['boolean', ['feature-state', 'dom'], false], 0, 0.95]
         } });
@@ -745,8 +745,8 @@ export class Obs3dLayer {
     el.addEventListener('mouseenter', () => { if (!this.#cardPinned && !matchMedia('(hover: none)').matches) this.#touch(m, false); });
     el.addEventListener('mouseleave', () => { if (!this.#cardPinned) this.#hideCard(); });
     el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.#touch(m, true); } });
-    // Never faded behind the relief (MapLibre tests its foot: a head standing clear of a ridge was faded).
-    const gl = new this.ml.Marker({ element: el, anchor: 'center', opacityWhenCovered: '1', subpixelPositioning: true }).setLngLat(head.coordinates).addTo(this.map);
+    // Faded where the relief hides it: MapLibre's own test, its default opacity.
+    const gl = new this.ml.Marker({ element: el, anchor: 'center', subpixelPositioning: true }).setLngLat(head.coordinates).addTo(this.map);
     /** @type {Mark} */
     const m = { key, gl, el, sig: '', members: [] };
     this.#marks.set(key, m);

@@ -18,12 +18,14 @@ const SHOTS = process.env.SHOTS_DIR || '';
 
 test.beforeEach(async ({ context, page }) => {
   await answerAround(context);
-  await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\/species_counts\?/, route => {
+  // The zone's observations: one of each of its 12 plants (their plants, the list); none of a plant asked alone.
+  await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?/, route => {
+    const q = new URL(route.request().url()).searchParams;
     const names = ['Urtica dioica', 'Allium ursinum', 'Conium maculatum', 'Geum urbanum', 'Taraxacum officinale', 'Quercus robur', 'Hedera helix', 'Galium aparine', 'Plantago lanceolata', 'Bellis perennis', 'Ranunculus acris', 'Trifolium repens'];
-    const results = names.map((name, i) => ({ count: 30 - i, taxon: { id: 1000 + i, name, preferred_common_name: null } }));
-    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ results }) });
+    const results = q.get('taxon_id') || (q.get('page') && q.get('page') !== '1') ? []
+      : names.map((name, i) => ({ id: 3000 + i, observed_on: '2026-05-01', geojson: { coordinates: [2.35 + (i - 6) * 0.001, 48.85] }, taxon: { id: 1000 + i, name, preferred_common_name: null } }));
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ total_results: results.length, results }) });
   });
-  await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?/, route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ total_results: 0, results: [] }) }));
 });
 
 const hash = (/** @type {Page} */ page) => page.evaluate(() => decodeURIComponent(location.hash));

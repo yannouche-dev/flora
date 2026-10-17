@@ -142,12 +142,13 @@ export function scopeWords(state) {
 /** What the scope says of the plants: their count, coming, or why it does not filter. @param {LayoutState} state */
 function scopeNote(state) {
   if (!state.live.at) return '';
-  if (state.speciesState === 'loading') return 'Plantes de la zone : recherche…';
+  if (state.speciesState === 'loading') return 'Observations de la zone : recherche…';
   if (state.speciesState === 'error') return state.speciesError ?? '';
   const n = state.species?.list.length ?? 0;
   // The layout's period (state.js): the plants of the zone that year, that month.
   const when = state.periode === 'annee' ? ' cette année' : state.periode === 'mois' ? ' ce mois-ci' : '';
-  return n ? `${n.toLocaleString('fr-FR')} plante${n > 1 ? 's' : ''} observée${n > 1 ? 's' : ''} dans la zone${when} (iNaturalist)` : `Aucune plante observée dans la zone${when} (iNaturalist).`;
+  // The plants of the zone's latest observations (the map's: state.js), as the flora knows them.
+  return n ? `${n.toLocaleString('fr-FR')} plante${n > 1 ? 's' : ''} dans les observations de la zone${when} (iNaturalist)` : `Aucune plante de la flore dans les observations de la zone${when} (iNaturalist).`;
 }
 
 /** Shared by the scope's controls (map, place): the radius slider, « Autour de moi », the place's name. */
@@ -396,11 +397,10 @@ export class DlMap extends LitElement {
   }
 
   /**
-   * The circle and its observations, as the settings say: their sources (src: iNaturalist's, GBIF's), those of the
-   * plants the search keeps — every one of the list (suit; else every plant observed in the zone): their own
-   * observations asked (state.js#pointsFor), not the most recent of the whole zone, where the rarer plants (orchids)
-   * seldom are —, of the current plant alone (plante=seule), of the layout's period (this year, this month), as photos
-   * or dots (pts) — the same object while nothing changed (the map keeps its points).
+   * The circle and its observations, as the settings say: their sources (src: iNaturalist's — the zone's latest, of
+   * the layout's period, whose plants are the list: state.js —, GBIF's), those of the plants the search keeps (suit:
+   * the list's — a filter, its plants alone; else every observation of the zone), of the current plant alone
+   * (plante=seule), as photos or dots (pts) — the same object while nothing changed (the map keeps its points).
    */
   get #area() {
     const s = /** @type {LayoutState} */ (this.state);
@@ -409,29 +409,22 @@ export class DlMap extends LitElement {
     const P = this.#p;
     const inat = P.src.includes('inat'), gbifOn = P.src.includes('gbif');
     const found = this.#found, plantOf = s.species?.plantOf;
-    const list = s.species?.list ?? null;
-    const taxa = inat && list && P.plante !== 'seule' ? (P.suit ? list.filter(x => found.has(/** @type {number} */ (x.plantId))) : list).map(x => x.taxonId) : [];
-    const set = s.pointsFor(taxa);
     s.gbifOf(gbifOn);
     const gbif = gbifOn && s.gbif?.key === s.scopeKey ? s.gbif.points : null;
     const current = P.plante === 'seule' ? s.live.plant : null;
-    // The list's own, with the zone's most recent (theirs kept below: never fewer than before they came).
-    const own = set?.points.length ? set.points : null;
     const sig = JSON.stringify([P.src, P.when, P.suit, P.plante, P.pts, current]);
     const memo = this.#areaMemo;
-    if (memo && memo.at === at && memo.r === s.radius && memo.pts === s.points && memo.found === found && memo.plantOf === plantOf && memo.own === own
+    if (memo && memo.at === at && memo.r === s.radius && memo.pts === s.points && memo.found === found && memo.plantOf === plantOf
       && memo.gbif === gbif && memo.sig === sig) return memo.value;
-    const seen = new Set();
     /** @type {any[]} */
-    const fromInat = !inat ? [] : own ? [...own, ...s.points].filter(p => !p.url || (seen.has(p.url) ? false : (seen.add(p.url), true))) : s.points;
-    const all = [...fromInat, ...(gbif ?? [])];
+    const all = [...(inat ? s.points : []), ...(gbif ?? [])];
     // The current plant's alone (none chosen: none); else the plants the search keeps (all of them while the plants of
     // the scope are unknown), or every plant observed (suit=0).
     let points = P.plante === 'seule' ? (current ? all.filter(p => this.#plantOf(p) === current) : [])
       : P.suit && plantOf ? all.filter(p => { const id = this.#plantOf(p); return id !== undefined && found.has(id); }) : all;
     if (P.when !== 'toujours') points = points.filter(p => inWhen(p.date, P.when));
     const value = { center: at, radius: s.radius, fit: true, leaves: P.pts !== 'pastille', points };
-    this.#areaMemo = { at, r: s.radius, pts: s.points, found, plantOf, own, gbif, sig, value };
+    this.#areaMemo = { at, r: s.radius, pts: s.points, found, plantOf, gbif, sig, value };
     return value;
   }
   /** @type {any} */ #areaMemo = null;

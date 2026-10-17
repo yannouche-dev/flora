@@ -14,8 +14,8 @@
 // false « Plante introuvable », their heads named once it is there), the deck when iNaturalist fails (said, « Réessayer »,
 // never « Les cartes arrivent… » for good), a radius between two of the slider's stops (r=3km: shown between them), the
 // search's bar in a narrow cell and every preset without a cell overflowing (1280 px and a phone), the grid's Photo
-// column and its filter's badge. iNaturalist answered here: 12 plants around (fixtures.mjs), 3 within 500 m; 24
-// observations, two of each plant, and 3 of a plant asked alone.
+// column and its filter's badge. iNaturalist answered here: the zone's observations, two of each of its 12 plants
+// (their plants the list: state.js), those of 3 within 500 m; and 3 of a plant asked alone.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 import { swipe } from './touch.mjs';
 import { PRESETS } from '../../app/layout/presets.js';
@@ -28,6 +28,8 @@ test.use({ reducedMotion: 'reduce' });
 const ORTIE = 'Urtica dioica', AIL = 'Allium ursinum';
 /** The 3 plants observed within 500 m (iNaturalist's taxa 1000…1002: the first of fixtures.mjs' NAMES). */
 const NEAR = ['Urtica dioica', 'Allium ursinum', 'Conium maculatum'];
+/** The 12 plants observed around (iNaturalist's taxa 1000…1011), NEAR first. */
+const PLANTS = [...NEAR, 'Geum urbanum', 'Taraxacum officinale', 'Quercus robur', 'Hedera helix', 'Galium aparine', 'Plantago lanceolata', 'Bellis perennis', 'Ranunculus acris', 'Trifolium repens'];
 const LAYOUT = '[map(r=1km)@40,search,[plant.wikipedia,plant.calendar]]';
 const AT = 'at=48.85,2.35';
 
@@ -36,17 +38,19 @@ test.beforeEach(async ({ context, page }) => {
   await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\/species_counts\?/, route => {
     const url = new URL(route.request().url());
     const near = Number(url.searchParams.get('radius')) <= 0.5;
-    const results = Array.from({ length: near ? 3 : 12 }, (_, i) => ({ count: 30 - i, taxon: { id: 1000 + i, name: i < 3 ? NEAR[i] : ['Geum urbanum', 'Taraxacum officinale', 'Quercus robur', 'Hedera helix', 'Galium aparine', 'Plantago lanceolata', 'Bellis perennis', 'Ranunculus acris', 'Trifolium repens'][i - 3], preferred_common_name: null } }));
+    const results = Array.from({ length: near ? 3 : 12 }, (_, i) => ({ count: 30 - i, taxon: { id: 1000 + i, name: PLANTS[i], preferred_common_name: null } }));
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ results }) });
   });
   await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?/, route => {
     const url = new URL(route.request().url());
     const taxon = Number(url.searchParams.get('taxon_id')) || 0;
-    const n = taxon ? 3 : 24;
+    // The zone's: two of each of its plants (within 500 m, three of them); a plant's own (taxon_id): three.
+    const plants = Number(url.searchParams.get('radius')) <= 0.5 ? 3 : 12;
+    const n = Number(url.searchParams.get('page') || 1) > 1 ? 0 : taxon ? 3 : plants * 2;
     const results = Array.from({ length: n }, (_, i) => ({
       id: (taxon || 7) * 100 + i, observed_on: '2026-05-01',
       geojson: { coordinates: [2.35 + ((i % 6) - 2.5) * 0.0018 + (taxon ? 0.0005 : 0), 48.85 + (Math.floor(i / 6) - 1.5) * 0.0015] },
-      taxon: { id: taxon || 1000 + (i % 12), name: 'Plante', preferred_common_name: null },
+      taxon: { id: taxon || 1000 + (i % plants), name: taxon ? 'Plante' : PLANTS[i % plants], preferred_common_name: null },
       photos: [{ id: i, url: `https://inaturalist-open-data.s3.amazonaws.com/photos/${(taxon || 7) * 100 + i}/square.jpg`, license_code: 'cc-by', attribution: '(c) A' }]
     }));
     return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ total_results: n, results }) });
@@ -135,15 +139,14 @@ test.describe('un grand écran', () => {
 
   test('le câblage : la recherche garde les résultats, la carte leurs points ; un résultat est la plante de toutes les cases et de l’adresse ; Retour', async ({ app, page }) => {
     await app.open(`#/layout/${LAYOUT}?${AT}`);
-    // The scope keeps the search to the 12 plants observed around; the map shows their 24 points.
+    // The map shows the zone's 24 observations; the search is kept to their 12 plants.
     await expect.poll(() => app.state('results.total')).toBe(12);
     await expect(cellOf(page, 'search').locator('.sub')).toHaveText('12 espèces');
     await expect(dots(page)).toHaveCount(24);
-    // A search: one plant, its points — its two among the most recent of all, and its own asked (taxon_id: three
-    // more); the address says it.
+    // A search: one plant, its points — its two among the zone's; the address says it.
     await page.locator('dl-search gf-plant-search input').fill('ortie');
     await expect.poll(() => app.state('results.total')).toBe(1);
-    await expect(dots(page)).toHaveCount(5);
+    await expect(dots(page)).toHaveCount(2);
     await expect.poll(() => param(page, 'q')).toBe('ortie');
     // No plant yet: the plant cells say how to choose one.
     await expect(cellOf(page, 'plant.wikipedia').locator('.placeholder')).toContainText('Aucune plante choisie');
@@ -434,25 +437,26 @@ test.describe('le titre et un lieu en mots dans l’adresse', () => {
     expect(asked).toEqual(['Mirabel Ménétrol']);
   });
 
-  test('une famille gardée (des plantes rares) : la carte demande leurs observations à elles, pas les plus récentes de toutes', async ({ app, page }) => {
+  test('une famille gardée : ses seules plantes parmi les observations de la zone, sur la liste et sur la carte — rien de plus demandé', async ({ app, page }) => {
     const json = (/** @type {import('@playwright/test').Route} */ route, /** @type {any} */ body) => route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
     const taxon = (/** @type {number} */ id, /** @type {string} */ name) => ({ id, name, preferred_common_name: null });
     /** @type {string[]} */
     const asked = [];
-    await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\/species_counts\?/, route =>
-      json(route, { results: [{ count: 90, taxon: taxon(50, 'Urtica dioica') }, { count: 2, taxon: taxon(51, 'Allium ursinum') }] }));
     await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?/, route => {
       const q = new URL(route.request().url()).searchParams;
       asked.push(q.get('taxon_id') ?? 'all');
-      // The most recent of all: nettles only; the garlic's own, asked by its taxon.
-      const [id, name, n] = q.get('taxon_id') === '51' ? [51, 'Allium ursinum', 3] : [50, 'Urtica dioica', 20];
-      return json(route, { total_results: n, results: Array.from({ length: n }, (_, i) => ({ id: id * 100 + i, uri: `https://www.inaturalist.org/observations/${id * 100 + i}`,
-        geojson: { coordinates: [2.35 + i * 0.0005, 48.85] }, observed_on: '2026-05-01', taxon: taxon(id, name) })) });
+      // The zone's: 20 nettles and 3 garlics.
+      const of = (/** @type {number} */ id, /** @type {string} */ name, /** @type {number} */ n) => Array.from({ length: n }, (_, i) => ({ id: id * 100 + i,
+        uri: `https://www.inaturalist.org/observations/${id * 100 + i}`, geojson: { coordinates: [2.35 + i * 0.0005, 48.85] }, observed_on: '2026-05-01', taxon: taxon(id, name) }));
+      const results = q.get('page') && q.get('page') !== '1' ? [] : [...of(50, 'Urtica dioica', 20), ...of(51, 'Allium ursinum', 3)];
+      return json(route, { total_results: 23, results });
     });
     const points = () => page.locator('dl-map gf-map').evaluate(m => (/** @type {any} */ (m).area?.points ?? []).map((/** @type {any} */ p) => p.taxonId));
     await app.open(`#/layout/[map(r=1km),results]?${AT}&family=Amaryllidaceae`);
+    // The garlic alone, in the list and on the map; only the zone's observations asked.
+    await expect.poll(() => app.state('results.total')).toBe(1);
     await expect.poll(points).toEqual([51, 51, 51]);
-    expect(asked).toEqual(['all', '51']);
+    expect(asked.every(a => a === 'all')).toBe(true);
   });
 
   test('un lieu introuvable, ou l’IGN qui ne répond pas : aucune zone, la raison dite dans la case Zone et sur la carte, place= gardé', async ({ app, page }) => {
