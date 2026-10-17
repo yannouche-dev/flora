@@ -343,11 +343,10 @@ gf-map .gf-map-buttons button[aria-pressed='true'] {
   color: var(--gf-accent-contrast);
 }
 
-/* The compass: the north alone (an N over an arrow), red as on a compass, turned as the map is (gf-map setNorth). In
-   2D the north is always up: still, nothing to do. */
+/* The compass: the north alone (an N over an arrow), red as on a compass, turned as the map is (gf-map setNorth); the
+   same in 2D, where the north is always up. */
 gf-map .gf-map-buttons button.compass { color: #d0342c; }
 gf-map .gf-map-buttons button.compass svg { font-size: 1.4em; rotate: var(--gf-north, 0deg); }
-gf-map .gf-map-buttons button.compass[aria-disabled='true'] { cursor: default; }
 
 gf-map .gf-layer-menu {
   position: absolute;

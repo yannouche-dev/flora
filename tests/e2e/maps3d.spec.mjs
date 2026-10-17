@@ -121,11 +121,10 @@ test('Réglages › Cartes « 3D » : la Carte en MapLibre — relief, bâtiment
   await expect.poll(async () => (await glState(map)).terrain, SLOW).toBe(false);
   expect((await glState(map)).layers).not.toContain('gf-buildings');
   await expect(map.locator('.leaflet-control-attribution')).not.toContainText('Terrain Tiles');
-  // The map's own compass (the north alone), touchable in 3D; none of MapLibre's beside it. The canvas reachable by
+  // The map's own compass (the north alone), as in 2D; none of MapLibre's beside it. The canvas reachable by
   // keyboard, in French.
   const compass = map.locator('.gf-map-buttons .compass');
   await expect(compass).toHaveAttribute('aria-label', 'Revenir au nord');
-  await expect(compass).toHaveAttribute('aria-disabled', 'false');
   await expect(map.locator('.maplibregl-ctrl-compass')).toHaveCount(0);
   await expect(map.locator('canvas.maplibregl-canvas')).toHaveAttribute('aria-label', /Carte en 3D/);
   // Shift + arrows: rotate and tilt (MapLibre's keyboard).
@@ -240,10 +239,13 @@ test('2D par défaut, MapLibre jamais demandé, aucun bouton 2D ⇄ 3D ; l’éd
   expect(seen.maplibre).toEqual([]);
   // The choice is Réglages': no map has a 2D ⇄ 3D button.
   await expect(map.getByRole('button', { name: /3D|2D/ })).toHaveCount(0);
-  // The compass, on every map: in 2D the north is up, nothing to do.
+  // The compass, on every map, the same in 2D: the north up, touched, the map stays to the north.
   const compass = map.locator('.gf-map-buttons .compass');
-  await expect(compass).toHaveAttribute('aria-label', 'Le nord est en haut');
-  await expect(compass).toHaveAttribute('aria-disabled', 'true');
+  await expect(compass).toHaveAttribute('aria-label', 'Revenir au nord');
+  await expect(compass).not.toHaveAttribute('aria-disabled');
+  await expect(compass).toHaveAttribute('style', /--gf-north: 0deg/);
+  await compass.click();
+  await expect(map).toHaveAttribute('data-renderer', '2d');
 
   // 3D in Réglages: the Carte follows.
   await page.evaluate(async () => { (await import('/app/core/map-settings.js')).setMapSettings({ renderer: '3d', buildings: false, pitch: 40 }); });
@@ -251,7 +253,6 @@ test('2D par défaut, MapLibre jamais demandé, aucun bouton 2D ⇄ 3D ; l’éd
   await expect(map.locator('.gf-gl-mk .gf-place')).toHaveCount(2);
   await expect(map).toHaveAttribute('data-pitch', '40');
   await expect(map.getByRole('button', { name: /3D|2D/ })).toHaveCount(0);
-  await expect(compass).toHaveAttribute('aria-disabled', 'false');
 
   // Editing positions (markers dragged): in 2D for the time of it, said (its state, its live region; nothing over the
   // map); « Terminé »: 3D again.

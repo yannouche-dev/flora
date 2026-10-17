@@ -91,9 +91,8 @@ const FLOWER = `<svg x="5" y="5" width="12" height="12" viewBox="0 0 16 16" fill
 
 /** Past this many points, a group touched is zoomed in on before its points are spread. */
 const SPREAD_MAX = 24;
-/** The compass's words: the north up (2D), and in 3D, the map back to the north. */
-const NORTH_UP = 'Le nord est en haut';
-const NORTH_BACK = 'Revenir au nord';
+/** The compass's words, in 2D as in 3D. */
+const NORTH = 'Revenir au nord';
 /**
  * Up to this many points of the plant chosen alone in sight, each comes in with its bounce; past it, they are there at
  * once (hundreds of bounces weigh). Their photo either way.
@@ -2329,12 +2328,13 @@ export class GfMap extends LitElement {
     // With the search pill, the layers button lives at its end; otherwise it is a round button like "locate".
     // eslint-disable-next-line no-unsanitized/property -- fixed markup and bundled icons, no data in it
     buttons.innerHTML = `
-      <button type="button" class="compass" aria-label="${NORTH_UP}" title="${NORTH_UP}" aria-disabled="true">${iconMarkup('north')}</button>
+      <button type="button" class="compass" aria-label="${NORTH}" title="${NORTH}">${iconMarkup('north')}</button>
       ${this.#hasSearch || this.noLayers ? '' : `<button type="button" class="layers" aria-label="Carte : fond, couches, légende" title="Carte : fond, couches, légende">${iconMarkup('layers')}</button>`}
       ${this.noLayers ? '' : `<button type="button" class="opacity" aria-label="Opacité des couches" title="Opacité des couches" aria-expanded="false" hidden>${iconMarkup('sliders')}</button>`}
       <button type="button" class="locate" aria-label="Me localiser" title="Me localiser" aria-pressed="false">${iconMarkup('crosshair')}</button>
       <button type="button" class="edit" aria-label="Modifier les positions" title="Modifier les positions" aria-pressed="false" hidden>${iconMarkup('pencil')}</button>`;
     buttons.querySelector('.locate')?.addEventListener('click', () => this.#locate());
+    // In 2D the map is always to the north: the same button, nothing to turn.
     buttons.querySelector('.compass')?.addEventListener('click', () => { if (this.#gl?.on) this.#gl.resetNorth(); });
     buttons.querySelector('.layers')?.addEventListener('click', () => this.openPanel());
     buttons.querySelector('.opacity')?.addEventListener('click', () => this.#toggleOpacity());
@@ -2350,18 +2350,12 @@ export class GfMap extends LitElement {
   }
 
   /**
-   * The compass (the north alone), turned as the map is: in 3D, touched, the map back to the north (its tilt kept); in
-   * 2D, where the north is always up, still and nothing to do. @param {number | null} bearing the 3D map's; null in 2D
+   * The compass (the north alone), the same button in 2D and 3D: turned as the map is, touched, the map back to the north
+   * (its tilt kept). In 2D the north is always up. @param {number | null} bearing the 3D map's; null in 2D
    */
   setNorth(bearing) {
     const compass = /** @type {HTMLElement | null | undefined} */ (this.#buttons?.querySelector('.compass'));
-    if (!compass) return;
-    compass.style.setProperty('--gf-north', `${bearing ? Math.round(-bearing * 10) / 10 : 0}deg`);
-    const label = bearing === null ? NORTH_UP : NORTH_BACK;
-    if (compass.getAttribute('aria-label') === label) return;
-    compass.setAttribute('aria-label', label);
-    compass.title = label;
-    compass.setAttribute('aria-disabled', String(bearing === null));
+    compass?.style.setProperty('--gf-north', `${bearing ? Math.round(-bearing * 10) / 10 : 0}deg`);
   }
 
   // ── The overlays' opacity, at hand: a button among the map's (when overlays are shown), a card with a slider each ──
