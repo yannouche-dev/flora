@@ -236,6 +236,24 @@ export function metres([lon1, lat1], [lon2, lat2]) {
 /** Only the points in the circle (a source's search may reach a little past it). @template {{ coordinates: [number, number] }} T @param {T[]} points @param {[number, number]} center @param {number} radius @returns {T[]} */
 export const inCircle = (points, center, radius) => points.filter(p => metres(center, p.coordinates) <= radius * 1.001);
 
+/**
+ * The box [west, south, east, north] a circle fits in (its centre, its radius in metres: the Earth of metres()).
+ * @param {[number, number]} center @param {number} radius @returns {[number, number, number, number]}
+ */
+export function circleBox([lon, lat], radius) {
+  const dLat = radius / (R_EARTH * RAD), dLon = dLat / Math.cos(lat * RAD);
+  return [lon - dLon, lat - dLat, lon + dLon, lat + dLat];
+}
+
+/**
+ * Whether a box [west, south, east, north] holds another, within a hair of its size (a map framed on a circle holds
+ * it, whatever its own sums rounded). @param {number[]} outer @param {number[]} inner
+ */
+export function boxHolds([w, s, e, n], [w2, s2, e2, n2]) {
+  const hair = Math.max(e2 - w2, n2 - s2) * 0.01;
+  return w <= w2 + hair && s <= s2 + hair && e >= e2 - hair && n >= n2 - hair;
+}
+
 /** Metres east and north of `c` ⇄ lon, lat (flat around the centre: enough within 50 km). @param {[number, number]} c */
 function local([lon0, lat0]) {
   const kx = Math.cos(lat0 * RAD) * R_EARTH * RAD, ky = R_EARTH * RAD;

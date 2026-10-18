@@ -304,6 +304,24 @@ export function plantCounts(points, plantOf) {
 }
 
 /**
+ * The plants of the points in a box [west, south, east, north] — what a map shows of a layout's zone: its list kept to
+ * them (app/layout/state.js) —, of the sources it shows (`kinds`; null: all): their ids, in order.
+ * @param {{ coordinates: [number, number], kind?: string, taxonId?: number | null, sci?: string | null }[]} points
+ * @param {Map<string, number>} plantOf @param {number[]} box @param {string[] | null} [kinds] @returns {number[]}
+ */
+export function plantsIn(points, plantOf, [w, s, e, n], kinds = null) {
+  /** @type {Set<number>} */
+  const ids = new Set();
+  for (const p of points) {
+    const [x, y] = p.coordinates;
+    if (x < w || x > e || y < s || y > n || (kinds && !kinds.includes(p.kind ?? 'inat'))) continue;
+    const id = plantOfPoint(plantOf, p);
+    if (id !== undefined) ids.add(id);
+  }
+  return [...ids].sort((a, b) => a - b);
+}
+
+/**
  * iNaturalist's taxon for a name of the flora (a species, a genus, a family: « Orchidaceae »), or null: none. Cached
  * a day (a name found once is not asked again). @param {string} name @param {AbortSignal} [signal] @returns {Promise<number | null>}
  */

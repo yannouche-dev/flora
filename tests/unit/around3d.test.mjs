@@ -10,8 +10,8 @@ import assert from 'node:assert/strict';
 
 const { config } = await import('../../app/config.js');
 const {
-  AROUND3D_DEFAULTS, INAT_DATASET, RADII_3D, around3dPrefs, cleanAround3d, fitZoom, gbifSource, hexBins, inCircle, metres, morePhotos, observations3d,
-  radiusLabel, radiusWords, ringWall, setAround3dPrefs, sharePhotos, wallHeight
+  AROUND3D_DEFAULTS, INAT_DATASET, RADII_3D, around3dPrefs, boxHolds, circleBox, cleanAround3d, fitZoom, gbifSource, hexBins, inCircle, metres, morePhotos,
+  observations3d, radiusLabel, radiusWords, ringWall, setAround3dPrefs, sharePhotos, wallHeight
 } = await import('../../app/core/around3d.js');
 const { floraPhotos } = await import('../../app/core/nearby.js');
 const db = await import('../../app/core/db.js');
@@ -131,6 +131,18 @@ test('seuls les points dans le cercle restent', () => {
   const pts = [{ coordinates: at(100, 0) }, { coordinates: at(1990, 90) }, { coordinates: at(2050, 180) }, { coordinates: at(5000, 270) }];
   assert.ok(Math.abs(metres(C, at(1500, 45)) - 1500) < 2);
   assert.deepEqual(inCircle(pts, C, 2000), pts.slice(0, 2));
+});
+
+test('la boîte d’un cercle, et une vue qui le contient (à un cheveu près) ou non', () => {
+  const box = circleBox(C, 2000);
+  // Its edges where the circle's north, east, south and west points are.
+  const [w, s, e, n] = box;
+  assert.ok(Math.abs(n - at(2000, 0)[1]) < 1e-9 && Math.abs(e - at(2000, 90)[0]) < 1e-9 && Math.abs(s - at(2000, 180)[1]) < 1e-9 && Math.abs(w - at(2000, 270)[0]) < 1e-9);
+  // A view framed on it, a little wider: holds it; a hair short (sums rounded): too; the east half: not.
+  assert.ok(boxHolds([w - 0.01, s - 0.01, e + 0.01, n + 0.01], box));
+  assert.ok(boxHolds([w + (e - w) * 0.005, s, e, n], box));
+  assert.ok(!boxHolds([C[0], s, e, n], box));
+  assert.ok(!boxHolds([w, s, e, n - (n - s) * 0.1], box));
 });
 
 test('la densité : des hexagones, chacun son compte, sa part du plus chargé et ses plantes les plus vues', () => {

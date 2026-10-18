@@ -82,12 +82,13 @@ let searchRun = 0;
  * set while it is on screen and taken off when it goes; null: the whole flora. @type {number[] | null}
  */
 let scope = null;
-/** What comes with the scope: each plant's observations in it (the sort « Plus observées »). @type {ScopeExtra} */
+/** What comes with the scope: each plant's observations in it (the sort « Plus observées »), those a map shows of it. @type {ScopeExtra} */
 let scopeExtra = {};
 
 /**
- * @typedef {{ observed?: Record<number, number> | null }} ScopeExtra
- *   `observed`: each plant's observations in the zone, by id (workers/search-core.js: the sort `obs`)
+ * @typedef {{ observed?: Record<number, number> | null, within?: number[] | null }} ScopeExtra
+ *   `observed`: each plant's observations in the zone, by id (workers/search-core.js: the sort `obs`); `within`: the
+ *   plants of the part of the zone a map shows (the results kept to them, the zone's said apart: `inZone`)
  */
 
 /**
@@ -102,16 +103,17 @@ export async function runSearch() {
   const run = ++searchRun;
   let response;
   try {
-    response = await call({ type: 'search', q, filters, sort, membership: mineValues(filters), only: scope, observed: scopeExtra.observed ?? null });
+    response = await call({ type: 'search', q, filters, sort, membership: mineValues(filters), only: scope, observed: scopeExtra.observed ?? null,
+      within: scopeExtra.within ?? null });
   } catch (error) {
     console.error(error);
     if (run === searchRun) store.set({ status: 'error', statusText: 'Recherche impossible : ' + /** @type {Error} */ (error).message });
     return;
   }
-  const { total, items, facets, suggestions, fuzzy, sort: effectiveSort, counted } = response;
+  const { total, items, facets, suggestions, fuzzy, sort: effectiveSort, counted, inZone } = response;
   // Drop answers that a newer keystroke already superseded.
   if (run === searchRun) {
-    store.set({ results: { total, items, facets, suggestions, fuzzy, sort: effectiveSort, counted } });
+    store.set({ results: { total, items, facets, suggestions, fuzzy, sort: effectiveSort, counted, inZone } });
   }
 }
 
@@ -132,9 +134,9 @@ export async function searchWhole({ q, filters, sort }) {
  * @param {import('./store.js').Query} query @param {number[] | null} only @param {ScopeExtra} [extra]
  */
 export async function searchIn({ q, filters, sort }, only, extra = {}) {
-  const { total, items, facets, suggestions, fuzzy, sort: effectiveSort, counted } = await call({ type: 'search', q, filters, sort,
-    membership: mineValues(filters), only, observed: only ? extra.observed ?? null : null });
-  return { total, items, facets, suggestions, fuzzy, sort: effectiveSort, counted };
+  const { total, items, facets, suggestions, fuzzy, sort: effectiveSort, counted, inZone } = await call({ type: 'search', q, filters, sort,
+    membership: mineValues(filters), only, observed: only ? extra.observed ?? null : null, within: only ? extra.within ?? null : null });
+  return { total, items, facets, suggestions, fuzzy, sort: effectiveSort, counted, inZone };
 }
 
 const NO_FILTERS = { status: [], family: [], genus: [], photo: [], french: [], mine: [] };

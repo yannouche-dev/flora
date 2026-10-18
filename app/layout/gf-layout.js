@@ -469,8 +469,9 @@ export class GfLayout extends LitElement {
 
   /**
    * Whether a cell has nothing to show (registry.js#FRAME_OF: those that take vide): a plant's (the sheet, a block, the
-   * photos), no plant; the results, none found (over the whole flora with zone=0); the deck, no cards (it says so).
-   * Never while it is still coming. @param {string} path @param {Resolved} r
+   * photos), no plant; the results, none found in the zone (over the whole flora with zone=0) — kept to what a map
+   * shows, the zone's all the same: a cell hidden there would resize the map, framed again on the zone —; the deck,
+   * no cards (it says so). Never while it is still coming. @param {string} path @param {Resolved} r
    */
   #isEmpty(path, r) {
     if (!r.known) return false;
@@ -479,7 +480,7 @@ export class GfLayout extends LitElement {
     if (id === 'results') {
       const { state: s, channel } = this.#group(this.#groupOf(r));
       if (r.params.zone === false) return s.whole?.key === s.wholeFor && s.whole.total === 0;
-      return this.#store.state.status === 'ready' && channel.results.total === 0;
+      return this.#store.state.status === 'ready' && (channel.results.inZone?.length ?? channel.results.total) === 0;
     }
     if (id === 'deck') return this.#said.get(path) === true;
     return false;
@@ -1012,7 +1013,7 @@ export class GfLayout extends LitElement {
     const sub = !r.known ? 'à corriger'
       : id === 'map' || id === 'place' ? scopeWords(s)
       : whole ? (s.whole?.key === s.wholeFor && s.whole ? count(s.whole.total) + ' · toute la France' : '')
-      : id === 'search' || id === 'results' || id === 'filters' ? (this.#store.state.status === 'ready' ? count(results.total) : '')
+      : id === 'search' || id === 'results' || id === 'filters' ? (this.#store.state.status === 'ready' ? count(results.total) + (results.inZone ? ' · dans la vue' : '') : '')
       : info ? html`${fixed ? html`<span class="pin" title=${`Plante fixée (plante=${fixed}) : cette case ne suit pas la plante courante`}>${icon('pin-angle-fill')}<span class="visually-hidden">Plante fixée :</span></span> ` : nothing}${info.name}${info.name !== info.sci ? html` · <i>${info.sci}</i>` : nothing}` : '';
     // The frame (registry.js#FRAME): its head whole, its title alone, or none (but while editing: the tools are there);
     // the actions of its head; large over the layout, folded to its head, hidden while it has nothing to show.
@@ -1062,7 +1063,7 @@ export class GfLayout extends LitElement {
   #links(key, r, title) {
     const all = linksOf(r);
     if (!all.length) return nothing;
-    const ICONS = /** @type {const} */ ({ zone: 'geo-alt', recherche: 'search', periode: 'sun-fill', plante: 'flower1' });
+    const ICONS = /** @type {const} */ ({ zone: 'geo-alt', recherche: 'search', periode: 'sun-fill', plante: 'flower1', liste: 'list-ul' });
     const plant = this.#state.live.plant;
     return html`<span class="cell-links" role="group" aria-label=${'Liens de « ' + title + ' »'}>${all.map(l => {
       const words = `${LINKS[l.link]} : ${l.on ? 'reliée' : 'détachée'} — ${l.why}`;

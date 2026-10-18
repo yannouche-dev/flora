@@ -335,14 +335,17 @@ const matchesFacet = (value, set) => Array.isArray(value) ? value.some(v => set.
  * `only`: the plants the search is kept to (a free layout's scope: those observed around a place, app/layout), every
  * count and facet within them; none: the whole flora. `observed`: each plant's observations there, by id — the sort
  * `obs` (« Plus observées »: the most observed first, then by French name); without them, that sort is the French
- * name's, and said so (`sort`). `counted`: they were given.
+ * name's, and said so (`sort`). `counted`: they were given. `within`: those of the part of the zone a map shows —
+ * the results (their number, facets, order) kept to them; `inZone`: the zone's all the same (their ids, in the same
+ * order: the maps' points, the deck), null without `within`.
  * @param {Index} index
  * @param {{ q: string, filters: Record<string, string[]>, sort: string, membership?: Record<number, string[]>, only?: number[] | null,
- *   observed?: Record<number, number> | null }} params
+ *   observed?: Record<number, number> | null, within?: number[] | null }} params
  */
-export function search(index, { q: query, filters, sort, membership: mine = {}, only = null, observed = null }) {
+export function search(index, { q: query, filters, sort, membership: mine = {}, only = null, observed = null, within = null }) {
   const { entries } = index;
   const kept = only ? new Set(only) : null;
+  const inside = kept && within ? new Set(within) : null;
   const q = normalize(query);
   const tokens = words(q);
 
@@ -378,10 +381,13 @@ export function search(index, { q: query, filters, sort, membership: mine = {}, 
 
   /** @type {number[]} */
   const hits = [];
+  /** The zone's hits, a map's view aside (`within`). @type {number[]} */
+  const zone = [];
   const candidates = matches ? matches.keys() : entries.keys();
   for (const i of candidates) {
     const entry = entries[i];
     if (kept && !kept.has(entry.summary.id)) continue;
+    const there = !inside || inside.has(entry.summary.id);
     let failures = 0;
     let failed = '';
     for (const [facet, set] of active) {
@@ -391,9 +397,11 @@ export function search(index, { q: query, filters, sort, membership: mine = {}, 
       }
     }
     if (failures === 0) {
+      if (inside) zone.push(i);
+      if (!there) continue;
       hits.push(i);
       for (const facet of FACETS) inc(facet, facetValue(entry, facet, mine));
-    } else if (failures === 1) {
+    } else if (failures === 1 && there) {
       inc(failed, facetValue(entry, failed, mine));
     }
   }
@@ -417,7 +425,8 @@ export function search(index, { q: query, filters, sort, membership: mine = {}, 
     obs: (a, b) => (observed?.[entries[b].summary.id] ?? 0) - (observed?.[entries[a].summary.id] ?? 0) || entries[a].rank.fr - entries[b].rank.fr
   };
   const compare = by[key === 'relevance' && !matches ? 'fr' : key] || by.fr;
-  hits.sort(desc ? (a, b) => compare(b, a) : compare);
+  const order = desc ? (/** @type {number} */ a, /** @type {number} */ b) => compare(b, a) : compare;
+  hits.sort(order);
 
   return {
     total: hits.length,
@@ -429,6 +438,7 @@ export function search(index, { q: query, filters, sort, membership: mine = {}, 
     suggestions: suggest(index, q, filters),
     fuzzy: hits.some(i => matches?.get(i)?.fuzzy) ? fuzzy : 0,
     sort: effectiveSort,
-    counted: Boolean(observed)
+    counted: Boolean(observed),
+    inZone: inside ? zone.sort(order).map(i => entries[i].summary.id) : null
   };
 }

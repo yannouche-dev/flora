@@ -12,7 +12,7 @@ const {
   APPLIES, OBS_DEFAULTS, ObsError, failedText, gbifKeep, gbifQuery, inatQuery, obsChanges, obsKey, obsNotes, obsParams, readObsFilters, sourcesText, zoneObservations
 } = await import('../../app/core/observations.js');
 const { INAT_DATASET } = await import('../../app/core/around3d.js');
-const { plantCounts, plantOfPoint, speciesOf } = await import('../../app/core/nearby.js');
+const { plantCounts, plantOfPoint, plantsIn, speciesOf } = await import('../../app/core/nearby.js');
 const { appMode, setModule } = await import('../../app/core/modules.js');
 const db = await import('../../app/core/db.js');
 
@@ -291,4 +291,17 @@ test('les observations de chaque plante : ses sources à part, comptées comme s
   assert.deepEqual([both.get(2)?.text, both.get(1)?.text], ['1 obs. GBIF', '1 obs. iNat.']);
   assert.deepEqual(obsNotes(new Map([[7, { inat: 1200, gbif: 0 }]]), ['inat']).get(7),
     { n: 1200, detail: '', text: '1\u202f200 obs.', title: '1\u202f200 observations dans la zone : 1\u202f200 iNaturalist' });
+});
+
+test('les plantes de ce que montre une carte : celles de ses points dans sa vue, de ses sources ; une plante inconnue de la flore laiss\u00e9e', async () => {
+  const p = (/** @type {number | null} */ taxonId, /** @type {string} */ sci, /** @type {string} */ kind, /** @type {[number, number]} */ coordinates) =>
+    ({ taxonId, sci, kind, coordinates, common: null, photo: null, credit: null });
+  // West, the ivy and an unknown plant; east, the nettle (iNaturalist) and the daisy (GBIF alone).
+  const points = [p(60, 'Hedera helix', 'inat', [2.30, 48.85]), p(null, 'Plantus ignotus', 'gbif', [2.31, 48.85]),
+    p(50, 'Urtica dioica', 'inat', [2.40, 48.86]), p(null, 'Bellis perennis', 'gbif', [2.41, 48.84])];
+  const { plantOf } = await speciesOf(points);
+  assert.deepEqual(plantsIn(points, plantOf, [2.35, 48.8, 2.5, 48.9]), [2, 3]);
+  assert.deepEqual(plantsIn(points, plantOf, [2.35, 48.8, 2.5, 48.9], ['inat']), [3], 'the sources the map shows');
+  assert.deepEqual(plantsIn(points, plantOf, [2.2, 48.8, 2.5, 48.9]), [1, 2, 3], 'the whole zone: every plant of the flora');
+  assert.deepEqual(plantsIn(points, plantOf, [3, 45, 3.1, 45.1]), []);
 });

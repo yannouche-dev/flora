@@ -3,16 +3,19 @@
 // observées » (workers/search-core.js `observed`) — in the sort menu and the grid's « Observations » column, written in
 // the address (sort=obs) — and never in Flore, which has no zone; the cross hover (state.js hover): a row hovered or
 // reached by the keyboard lights its plant's points on the map (gf-map litKeys), a point hovered lights its plant's row
-// (gf-plant-card lit). iNaturalist answered here: the zone's observations of 12 plants, each a different number of
-// times (1 to 12), each plant's in a column of its own (the first plant's the westmost).
+// (gf-plant-card lit); the list kept to what the map shows once moved by hand (state.js setView, workers/search-core.js
+// within), « Toute la zone » back, never for a move the map makes itself, nor with liste=zone; on a phone too, the map
+// in its tab and the list in another. iNaturalist answered here: the zone's observations of 12 plants, each a
+// different number of times (1 to 12), each plant's in a column of its own (the first plant's the westmost).
 import { test, expect, answerAround } from './fixtures.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
 
 test.use({ reducedMotion: 'reduce' });
-test.skip(({ isMobile }) => isMobile, 'a wide screen: the map and the list side by side');
+const WIDE = 'a wide screen: the map and the list side by side';
 
 const AT = 'at=48.85,2.35&r=1km';
+const LAT = 48.85, LNG = 2.35;
 /** The zone's plants and how many times each was observed. */
 const SEEN = /** @type {[string, number][]} */ ([['Urtica dioica', 3], ['Allium ursinum', 9], ['Conium maculatum', 1], ['Geum urbanum', 6],
   ['Taraxacum officinale', 4], ['Quercus robur', 2], ['Hedera helix', 8], ['Galium aparine', 5], ['Plantago lanceolata', 7], ['Bellis perennis', 10],
@@ -41,8 +44,22 @@ const names = page => page.evaluate(async () => {
   const { store } = await import('/app/core/store.js');
   return store.state.results.items.map((/** @type {any} */ p) => p.scientificName);
 });
+/** What the layout's map shows now, [west, south, east, north] (gf-map bounds). @param {Page} page @returns {Promise<number[]>} */
+const bounds = page => page.locator('dl-map gf-map').evaluate(el => /** @type {any} */ (el).bounds());
+/** The plants with a point in a box (where the route above puts them), sorted. @param {number[]} box */
+const seenIn = ([w, s, e, n]) => SEEN.filter(([, count], i) => Array.from({ length: count }, (_, k) => [LNG + (i - 5.5) * 0.0008, LAT + (k - count / 2) * 0.0004])
+  .some(([x, y]) => x >= w && x <= e && y >= s && y <= n)).map(([name]) => name).sort();
+/** Whether a box holds all of the zone's circle (1 km around its centre). @param {number[]} box */
+const holdsZone = ([w, s, e, n]) => w <= LNG - 0.0137 && e >= LNG + 0.0137 && s <= LAT - 0.009 && n >= LAT + 0.009;
+/** The map zoomed by hand: the wheel over its middle (up: in). @param {Page} page @param {number} [dy] */
+const wheel = async (page, dy = -300) => {
+  const box = /** @type {{ x: number, y: number, width: number, height: number }} */ (await page.locator('dl-map gf-map .leaflet-container').boundingBox());
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, dy);
+};
 
-test('chaque ligne dit les observations de sa plante dans la zone ; « Plus observées » : dans le menu, écrit dans l’adresse, les plus observées d’abord', async ({ app, page }) => {
+test('chaque ligne dit les observations de sa plante dans la zone ; « Plus observées » : dans le menu, écrit dans l’adresse, les plus observées d’abord', async ({ app, page, isMobile }) => {
+  test.skip(isMobile, WIDE);
   // The search's bar, its results as a list (rows, not the grid a wide cell would draw).
   await app.open(`#/layout/[map,[search(list=0),results(view=list)]]?${AT}`);
   await expect.poll(async () => (await names(page)).length).toBe(12);
@@ -65,7 +82,8 @@ test('chaque ligne dit les observations de sa plante dans la zone ; « Plus obse
   await expect(page.locator('dl-search gf-results-bar select')).toHaveValue('obs');
 });
 
-test('la grille : la colonne « Observations » (les plus observées d’abord, puis l’inverse) ; Flore n’a ni la colonne ni le tri', async ({ app, page }) => {
+test('la grille : la colonne « Observations » (les plus observées d’abord, puis l’inverse) ; Flore n’a ni la colonne ni le tri', async ({ app, page, isMobile }) => {
+  test.skip(isMobile, WIDE);
   await app.open(`#/layout/[map,results(view=grid)]?${AT}`);
   await expect.poll(async () => (await names(page)).length).toBe(12);
   const head = page.locator('dl-results gf-plant-list .th').filter({ hasText: 'Observations' });
@@ -86,7 +104,8 @@ test('la grille : la colonne « Observations » (les plus observées d’abord, 
   await expect(page.locator('gf-flora gf-plant-list .th', { hasText: 'Observations' })).toHaveCount(0);
 });
 
-test('survol croisé : une ligne survolée (ou atteinte au clavier) allume les points de sa plante sur la carte, un point survolé la ligne de sa plante ; partis, plus rien', async ({ app, page }) => {
+test('survol croisé : une ligne survolée (ou atteinte au clavier) allume les points de sa plante sur la carte, un point survolé la ligne de sa plante ; partis, plus rien', async ({ app, page, isMobile }) => {
+  test.skip(isMobile, WIDE);
   // The points as dots (pts=pastille): one path each.
   await app.open(`#/layout/[map(pts=pastille),results(view=list)]?${AT}`);
   await expect.poll(async () => (await names(page)).length).toBe(12);
@@ -131,4 +150,84 @@ test('survol croisé : une ligne survolée (ou atteinte au clavier) allume les p
   await expect(map.locator('path.gf-lit')).toHaveCount(seen[order[2]]);
   // Nothing of it in the address.
   expect(await page.evaluate(() => location.hash)).toBe(hash);
+});
+
+test('la liste suit la carte déplacée à la main : les plantes de ce qu’elle montre, dites ; « Toute la zone » la rend et recadre la carte ; un point touché (la carte vole) n’y change rien ; dézoomée sur tout le cercle, toute la zone', async ({ app, page, isMobile }) => {
+  test.skip(isMobile, WIDE);
+  await app.open(`#/layout/[map(pts=pastille),results(view=list)]?${AT}`);
+  await expect.poll(async () => (await names(page)).length).toBe(12);
+  const hash = await page.evaluate(() => location.hash);
+  const line = page.locator('dl-results .scope.view');
+  await expect(line).toHaveCount(0);
+  // Zoomed in by hand: the plants of the points it shows, said — in the cell's head too.
+  await wheel(page);
+  await expect.poll(async () => (await names(page)).length).toBeLessThan(12);
+  const shown = seenIn(await bounds(page));
+  expect(shown.length).toBeGreaterThan(0);
+  await expect.poll(async () => (await names(page)).sort()).toEqual(shown);
+  await expect(line).toContainText(`Dans la vue de la carte : ${shown.length} plante${shown.length > 1 ? 's' : ''} sur 12`);
+  await expect(page.locator('section.cell[data-comp="results"] .cell-head .sub')).toContainText('dans la vue');
+  // The map's points are still the zone's (never kept to its view), and nothing of it in the address.
+  await expect(page.locator('dl-map .leaflet-overlay-pane path.gf-obs')).toHaveCount(78);
+  expect(await page.evaluate(() => location.hash)).toBe(hash);
+  // « Toute la zone »: the whole list, the map framed on the zone again.
+  await line.getByRole('button', { name: 'Toute la zone' }).click();
+  await expect.poll(async () => (await names(page)).length).toBe(12);
+  await expect(line).toHaveCount(0);
+  await expect.poll(async () => holdsZone(await bounds(page))).toBe(true);
+  // A point touched (the mouse's own click: a hand on the map) — one of the eastmost column, clear of the zone's
+  // panel —: its plant chosen, the map flying to it, a move it makes itself: the list stays the zone's. Where the
+  // points are once still (an eased frame has its view at once, its points drawn there a moment later).
+  const dots = () => page.locator('dl-map .leaflet-overlay-pane path.gf-obs').evaluateAll(els => els.map(e => { const r = e.getBoundingClientRect(); return { x: r.x + r.width / 2, y: r.y + r.height / 2 }; }));
+  let at = await dots();
+  await expect.poll(async () => { const was = JSON.stringify(at); at = await dots(); return JSON.stringify(at) === was; }, { intervals: [300] }).toBe(true);
+  const east = Math.max(...at.map(b => b.x));
+  const column = at.filter(b => east - b.x < 2).sort((a, b) => a.y - b.y);
+  const dot = column[Math.floor(column.length / 2)];
+  await page.mouse.click(dot.x, dot.y);
+  await expect.poll(() => param(page, 'p')).not.toBe(null);
+  await page.waitForTimeout(1500);
+  expect((await names(page)).length).toBe(12);
+  await expect(line).toHaveCount(0);
+  // Zoomed in, then out past all of the circle: the whole zone.
+  await wheel(page);
+  await expect.poll(async () => (await names(page)).length).toBeLessThan(12);
+  await wheel(page, 300);
+  await wheel(page, 300);
+  await expect.poll(async () => holdsZone(await bounds(page))).toBe(true);
+  await expect.poll(async () => (await names(page)).length).toBe(12);
+  await expect(line).toHaveCount(0);
+});
+
+test('liste=zone : la carte zoomée laisse la liste à toute la zone ; menée par la carte, un autre rayon lâche sa vue', async ({ app, page, isMobile }) => {
+  test.skip(isMobile, WIDE);
+  await app.open(`#/layout/[map(pts=pastille,liste=zone),results(view=list)]?${AT}`);
+  await expect.poll(async () => (await names(page)).length).toBe(12);
+  await wheel(page);
+  await page.waitForTimeout(1500);
+  expect((await names(page)).length).toBe(12);
+  await expect(page.locator('dl-results .scope.view')).toHaveCount(0);
+  // Led by the map (its default): kept to its view; the radius changed — another circle —: the whole new zone.
+  await app.open(`#/layout/[map(pts=pastille),results(view=list)]?${AT}`);
+  await expect.poll(async () => (await names(page)).length).toBe(12);
+  await wheel(page);
+  await expect.poll(async () => (await names(page)).length).toBeLessThan(12);
+  await page.evaluate(() => { location.hash = location.hash.replace('r=1km', 'r=2km'); });
+  await expect.poll(() => param(page, 'r')).toBe('2km');
+  await expect.poll(async () => (await names(page)).length).toBe(12);
+  await expect(page.locator('dl-results .scope.view')).toHaveCount(0);
+});
+
+test('au téléphone : la carte zoomée dans son onglet, l’onglet de la liste montre ses plantes, et le dit', async ({ app, page, isMobile }) => {
+  test.skip(!isMobile, 'a phone: the map and the list in tabs');
+  await app.open(`#/layout/[map(pts=pastille),results(view=list)]?${AT}`);
+  await expect.poll(async () => (await names(page)).length).toBe(12);
+  await wheel(page);
+  await expect.poll(async () => (await names(page)).length).toBeLessThan(12);
+  const shown = seenIn(await bounds(page));
+  await page.locator('gf-layout [role="tab"]').nth(1).click();
+  const line = page.locator('dl-results .scope.view');
+  await expect(line).toBeVisible();
+  await expect(line).toContainText(`Dans la vue de la carte : ${shown.length} plante${shown.length > 1 ? 's' : ''} sur 12`);
+  expect((await names(page)).sort()).toEqual(shown);
 });

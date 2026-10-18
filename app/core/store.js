@@ -20,6 +20,7 @@ import { onStorage } from './sync.js';
  * @property {number} fuzzy   number of typo-tolerant matches included
  * @property {string} sort    effective sort
  * @property {boolean} [counted]   each plant's observations given (a free layout's zone): the sort « Plus observées »
+ * @property {number[] | null} [inZone]   kept to what a map shows of the zone: the zone's plants all the same, by id, in order
  *
  * @typedef {object} AppState
  * @property {'loading' | 'ready' | 'error'} status

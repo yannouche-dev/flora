@@ -35,7 +35,7 @@ export class SearchChannel extends EventTarget {
   constructor() {
     super();
     /** @type {Query} */ this.query = emptyQuery();
-    this.results = { total: 0, items: [], facets: {}, suggestions: [], fuzzy: 0, sort: 'fr', counted: false };
+    this.results = { total: 0, items: [], facets: {}, suggestions: [], fuzzy: 0, sort: 'fr', counted: false, inZone: null };
     /** The plants it is kept to (a zone's), null: the whole flora, and what comes with them. @type {number[] | null} */ this.scope = null;
     /** @type {ScopeExtra} */ this.extra = {};
     this.ran = 0;

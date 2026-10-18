@@ -142,6 +142,12 @@ const MAP_PARAMS = {
   suit: { kind: 'bool', label: 'Suit la recherche', def: true, group: 'Liens', mark: 'R', words: ['suivre', 'recherche', 'filtre'] },
   plante: { kind: 'enum', label: 'Plante courante', def: 'grand', group: 'Liens', values: { grand: 'En grand', seule: 'Seule', non: 'Pas montrée' }, aliases: { large: 'grand', only: 'seule', seulement: 'seule', off: 'non', aucune: 'non' }, words: ['plant', 'courante'] },
   toucher: { kind: 'enum', label: 'Toucher un point', def: 'plante', group: 'Liens', values: { plante: 'Choisit sa plante', fiche: 'Ouvre sa fiche', rien: 'Rien' }, aliases: { pick: 'plante', choisir: 'plante', sheet: 'fiche', ouvrir: 'fiche', none: 'rien', aucun: 'rien' }, words: ['tap', 'clic', 'click', 'touch', 'touche'] },
+  // The list: the plants of what the map shows of the zone, once moved by hand (the last one moved, of a layout's
+  // maps of the zone), or the zone's all, wherever the map is.
+  liste: {
+    kind: 'enum', label: 'La liste', def: 'vue', group: 'Liens', named: true, values: { vue: 'Ce que montre la carte', zone: 'Toute la zone' },
+    aliases: { view: 'vue', carte: 'vue', visible: 'vue', tout: 'zone', toute: 'zone', all: 'zone' }, words: ['list', 'resultats', 'cadre', 'visible']
+  },
   // Interface.
   legende: { kind: 'bool', label: 'Légende ouverte', def: false, group: 'Interface', own: true, named: true, words: ['legend'] },
   ui: { kind: 'enum', label: 'Commandes', def: 'auto', group: 'Interface', values: { auto: 'Selon la largeur', complete: 'Complètes', compacte: 'Compactes', nue: 'Aucune' }, aliases: { full: 'complete', completes: 'complete', compact: 'compacte', compactes: 'compacte', nu: 'nue', minimal: 'nue', minimale: 'nue', aucune: 'nue' }, words: ['interface', 'commandes', 'controles'] },
@@ -713,7 +719,7 @@ export function menuLooks(columns) {
 }
 
 /**
- * @typedef {'zone' | 'recherche' | 'periode' | 'plante'} LinkKey
+ * @typedef {'zone' | 'recherche' | 'periode' | 'plante' | 'liste'} LinkKey
  * @typedef {{ link: LinkKey, on: boolean, why: string, toggle: Record<string, unknown> | null }} Link
  *   `on`: the cell follows (and changes) that shared state; `toggle`: its settings detached or attached again (null:
  *   always so — said, never a switch); `why`: what it does, in French
@@ -723,7 +729,7 @@ export function menuLooks(columns) {
 export const CURRENT = 'courante';
 
 /** The links, in their order, and their words. @type {Record<LinkKey, string>} */
-export const LINKS = { zone: 'Zone', recherche: 'Recherche', periode: 'Période', plante: 'Plante' };
+export const LINKS = { zone: 'Zone', recherche: 'Recherche', periode: 'Période', plante: 'Plante', liste: 'Liste' };
 
 /**
  * How a cell is wired to the others — what of the layout's shared state it follows and changes (the zone, the
@@ -748,6 +754,11 @@ export function linksOf(r) {
     add('periode', true, 'Ses points : ceux de la période de toutes les cases');
     add('plante', p.plante !== 'non', p.plante === 'non' ? 'La plante courante n’y est pas montrée' : 'La plante courante en grand ; toucher un point la choisit',
       { plante: p.plante === 'non' ? null : 'non' });
+    // The list: what it shows of the zone, once moved by hand — never a map of France or the world's.
+    const leads = zone && p.liste !== 'zone';
+    add('liste', leads, !zone ? 'La liste reste celle de toute la zone (une carte de la France ou du monde ne la mène pas)'
+      : leads ? 'La liste : les plantes de ce qu’elle montre, une fois déplacée à la main' : 'La liste : toute la zone, où que soit la carte',
+    zone ? { liste: leads ? 'zone' : null } : null);
   } else if (id === 'place') {
     add('zone', true, 'Choisit la zone de toutes les cases');
   } else if (id === 'search' || id === 'filters') {

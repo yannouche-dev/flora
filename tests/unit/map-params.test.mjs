@@ -21,7 +21,7 @@ const params = text => read(text).cell.params;
 test('chaque réglage de la carte se lit : ses noms, ses valeurs, leurs autres graphies', () => {
   const p = params('map(r=2km;lieu=Mirabel Ménétrol 63;autour=1;base=photo;3d=1;layers=znieff+n2000;src=inat+gbif;when=mois;pts=pastille;regroupe=1;suit=0;plante=seule;toucher=fiche;ui=nue)');
   assert.deepEqual(p, { intent: 'explorer', portee: 'zone', r: 2000, lieu: 'Mirabel Ménétrol 63', autour: true, base: 'photo', '3d': true, layers: ['znieff', 'n2000'], src: ['inat', 'gbif'],
-    when: 'mois', pts: 'pastille', regroupe: true, suit: false, plante: 'seule', toucher: 'fiche', ui: 'nue', tete: 'oui', titre: null, actions: [], ctl: null,
+    when: 'mois', pts: 'pastille', regroupe: true, suit: false, plante: 'seule', toucher: 'fiche', liste: 'vue', ui: 'nue', tete: 'oui', titre: null, actions: [], ctl: null,
     vue: null, opac: null, jumelles: null, jrayon: null, legende: false, etat: 'ouvert', groupe: 'a' });
   // In French, its other words, accents and case free.
   const q = params('carte(rayon=500m;commune=Fontainebleau 77;moi=oui;fond=satellite;vue3d=non;couches=Natura+ZNIEFF1;sources=iNaturalist;période=Année;style=Pastilles;groupes=1;recherche=non;courante=only;tap=sheet;commandes=Compact)');
@@ -30,7 +30,7 @@ test('chaque réglage de la carte se lit : ses noms, ses valeurs, leurs autres g
   // Defaults: the map as it always was.
   const d = params('map');
   assert.deepEqual(d, { intent: 'explorer', portee: 'zone', r: null, lieu: null, autour: false, base: 'photo', '3d': null, layers: [], src: null, when: 'toujours', pts: 'photo',
-    regroupe: false, suit: true, plante: 'grand', toucher: 'plante', ui: 'auto', tete: 'oui', titre: null, actions: [], ctl: null,
+    regroupe: false, suit: true, plante: 'grand', toucher: 'plante', liste: 'vue', ui: 'auto', tete: 'oui', titre: null, actions: [], ctl: null,
     vue: null, opac: null, jumelles: null, jrayon: null, legende: false, etat: 'ouvert', groupe: 'a' });
   assert.equal(read('map').text, '[map]');
 });
@@ -103,7 +103,7 @@ test('les intentions : un mot, un ensemble de réglages ; un réglage écrit à 
   assert.deepEqual([f.when, f.regroupe], ['mois', true]);
   assert.deepEqual(params('map(protégé)').layers, ['znieff', 'n2000', 'parcs', 'reserves', 'biotopes']);
   const rep = params('map(répartition)');
-  assert.deepEqual([rep.src, rep.suit, rep.plante], [['inat', 'gbif'], false, 'seule']);
+  assert.deepEqual([rep.src, rep.suit, rep.plante, rep.liste], [['inat', 'gbif'], false, 'seule', 'zone']);
   assert.equal(params('map(relief)')['3d'], true);
   // Overrides, wherever written.
   assert.equal(params('map(terrain;base=plan)').base, 'plan');
@@ -127,6 +127,19 @@ test('les intentions : un mot, un ensemble de réglages ; un réglage écrit à 
     assert.equal(read(r.text).text, r.text, name);
     for (const [k, v] of Object.entries(MAP_INTENTS[name].set)) assert.ok(r.cell.implied.has(k), `${name} : ${k}=${v}`);
   }
+});
+
+test('la liste (liste=) : ce que montre la carte par défaut, toute la zone écrite ; jamais pour un mot seul (map(zone) reste l’étendue)', () => {
+  assert.equal(params('map').liste, 'vue');
+  assert.equal(read('map(liste=zone)').text, '[map(liste=zone)]');
+  assert.equal(read(read('map(liste=zone)').text).text, '[map(liste=zone)]');
+  assert.equal(read('carte(liste=Toute)').text, '[map(liste=zone)]');
+  // Its default written: kept as written.
+  assert.equal(read('map(liste=vue)').text, '[map(liste=vue)]');
+  assert.deepEqual(read('map(liste=vue)').problems, []);
+  // A bare « zone »: the reach, never the list.
+  assert.equal(read('map(zone)').text, '[map(portee=zone)]');
+  assert.equal(params('map(zone)').liste, 'vue');
 });
 
 test('l’adresse réécrite se relit à l’identique (aller-retour), dans l’ordre des groupes', () => {

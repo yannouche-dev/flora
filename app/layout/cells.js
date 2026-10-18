@@ -113,12 +113,12 @@ const nearest3d = m => RADII_3D.reduce((a, b) => Math.abs(b - m) < Math.abs(a - 
 class StateController {
   /**
    * @param {LitElement & { state: LayoutState | null }} host
-   * @param {Record<string, () => void>} [also] other events of the state, and what each does
+   * @param {Record<string, (e: Event) => void>} [also] other events of the state, and what each does
    */
   constructor(host, also = {}) {
     this.host = host;
     /** @type {LayoutState | null} */ this.watched = null;
-    /** @type {[string, () => void][]} */
+    /** @type {[string, (e: Event) => void][]} */
     this.handlers = [['change', () => host.requestUpdate()], ...Object.entries(also)];
     host.addController(this);
   }
@@ -326,8 +326,12 @@ export class DlMap extends LitElement {
 
   constructor() {
     super();
-    // A plant hovered in a list: its points lit on the map itself (the cell not drawn again).
-    new StateController(this, { hover: () => this.#lightHovered() });
+    // A plant hovered in a list: its points lit on the map itself (the cell not drawn again). « Toute la zone » beside
+    // the list it led: framed on the zone again.
+    new StateController(this, {
+      hover: () => this.#lightHovered(),
+      refit: e => { if (/** @type {CustomEvent} */ (e).detail?.by === this) this.#map?.refit(); }
+    });
     /** @type {LayoutState | null} */ this.state = null;
     /** The search of its group (core/search-channel.js); none: the app's. @type {import('../core/search-channel.js').Channel | null} */ this.channel = null;
     /** @type {Record<string, any>} */ this.params = {};
@@ -382,13 +386,16 @@ export class DlMap extends LitElement {
   /** The map's view held while its cell changes size (a separator dragged beside it). */
   holdFrame() { /** @type {any} */ (this.renderRoot.querySelector('gf-map'))?.holdFrame?.(); }
 
-  /** The plants found (the search, in the scope), as a set of ids: the same set while the results are the same. */
+  /**
+   * The plants found (the search, in the scope) — the zone's, even while the list keeps to what a map shows of it: the
+   * points never depend on the view —, as a set of ids: the same set while the results are the same.
+   */
   get #found() {
-    const items = this.#store.state.results.items;
-    if (this.#foundFor !== items) { this.#foundFor = items; this.#foundSet = new Set(items.map(p => p.id)); }
+    const results = this.#store.state.results;
+    if (this.#foundFor !== results) { this.#foundFor = results; this.#foundSet = new Set(results.inZone ?? results.items.map(p => p.id)); }
     return this.#foundSet;
   }
-  /** @type {any[] | null} */ #foundFor = null;
+  /** @type {any} */ #foundFor = null;
   /** @type {Set<number>} */ #foundSet = new Set();
 
   /** The plant of a point: by its iNaturalist taxon, else its name (GBIF's: core/nearby.js plantOfPoint). @param {any} p @returns {number | undefined} */
@@ -597,8 +604,28 @@ export class DlMap extends LitElement {
   }
   /** @type {{ text: string, value: import('./map-options.js').MapView | null } | null} */ #viewMemo = null;
 
-  /** The map moved by hand in « Créer une app »: the view it starts on (vue=). @param {CustomEvent} e */
-  #onView(e) { if (this.building) this.#set({ vue: viewText(e.detail) }); }
+  /**
+   * The map moved by hand: the list kept to what it shows (liste=vue: state.js setView) — in « Créer une app », the
+   * view it starts on too (vue=). @param {CustomEvent} e
+   */
+  #onView(e) {
+    if (this.building) this.#set({ vue: viewText(e.detail) });
+    if (this.#leads && e.detail.bounds) this.state?.setView(e.detail.bounds, { kinds: this.#p.src, by: this });
+  }
+
+  /**
+   * The map framed by itself: on the zone (bounds null) — the list it led back to the whole zone —, or on the view it
+   * was given (vue=): the list kept to it, unless another map leads it. @param {CustomEvent} e
+   */
+  #onFramed(e) {
+    const s = this.state, bounds = e.detail.bounds;
+    if (!s) return;
+    if (!bounds) { if (s.view?.by === this) s.setView(null); }
+    else if (this.#leads && (!s.view || s.view.by === this)) s.setView(bounds, { kinds: this.#p.src, by: this });
+  }
+
+  /** It leads the list (what it shows of the zone, once moved): a map of the zone (portee=zone), liste=vue, a zone. */
+  get #leads() { return this.#p.portee === 'zone' && this.params?.liste !== 'zone' && Boolean(this.state?.live.at); }
 
   /** The cell's map (gf-map: what the cell says goes through it — the quiet-map rule). @returns {any} */
   get #map() { return this.renderRoot.querySelector('gf-map'); }
@@ -710,6 +737,8 @@ export class DlMap extends LitElement {
     this.toggleAttribute('big-gps', this.params?.intent === 'terrain' && ctl.on.has('gps'));
     if (!s || !map) return;
     this.#defaultScope();
+    // No longer leading the list (liste=zone, France or the world now): it shows the whole zone again.
+    if (s.view?.by === this && !this.#leads) s.setView(null);
     // The zone moved while building: the view kept was the old zone's — framed on the new one.
     const zone = s.live.at ? s.live.at.join(',') + ':' + s.radius : '';
     if (this.building && this.params?.vue && this.#zoneWas !== undefined && zone !== this.#zoneWas) this.#set({ vue: null });
@@ -882,7 +911,9 @@ export class DlMap extends LitElement {
     const period = ctl.on.has('periode'), count = ctl.on.has('compte') && (Boolean(s.live.at) || this.#p.portee !== 'zone');
     if (!period && !count) return nothing;
     const when = this.#p.when;
-    const n = area?.points.length ?? 0, k = this.#store.state.results.total;
+    // The plants of the zone, even while the list keeps to what a map shows of it.
+    const results = this.#store.state.results;
+    const n = area?.points.length ?? 0, k = results.inZone?.length ?? results.total;
     const wide = this.#p.portee !== 'zone';
     const words = wide ? counted(k, 'espèce') : `${counted(n, 'observation')} · ${counted(k, 'espèce')}`;
     return html`<div class="ctl br">
@@ -921,7 +952,7 @@ export class DlMap extends LitElement {
         @point-hover=${(/** @type {CustomEvent} */ e) => this.#onHover(e)}
         @radius-change=${(/** @type {CustomEvent} */ e) => s.set({ r: e.detail.radius }, 'replace')}
         @layers-change=${(/** @type {CustomEvent} */ e) => this.#onLayers(e)} @around3d-change=${(/** @type {CustomEvent} */ e) => this.#onAround(e)}
-        @view-change=${(/** @type {CustomEvent} */ e) => this.#onView(e)}
+        @view-change=${(/** @type {CustomEvent} */ e) => this.#onView(e)} @view-framed=${(/** @type {CustomEvent} */ e) => this.#onFramed(e)}
         @base-shown=${() => this.requestUpdate()}></gf-map>
       ${!wide && on.has('rayon') ? this.#zoneView(s, ctl) : nothing}
       ${this.#topRight(on)}
@@ -994,6 +1025,8 @@ export class DlResults extends LitElement {
   `];
 
   #size = new ResizeObserver(([e]) => { const wide = e.contentRect.width >= GRID_MIN; if (wide !== this._wide) this._wide = wide; });
+  /** Its group's search: its results kept to what a map shows of the zone, said (inZone). */
+  #store = new SearchController(this);
 
   constructor() {
     super();
@@ -1026,9 +1059,15 @@ export class DlResults extends LitElement {
           .lit=${s.hover?.plant ?? null} @plant-hover=${(/** @type {CustomEvent} */ e) => this.#onHover(e)}></gf-plant-list>`;
     }
     const note = s.live.at ? scopeNote(s) : '';
+    // Kept to what a map shows of the zone (moved by hand: state.js setView): said, with the way back.
+    const results = this.#store.state.results;
+    const zoneOf = s.live.at && results.inZone ? results.inZone.length : null;
     return html`${s.live.at ? html`<div class="scope ${s.speciesState === 'error' ? 'error' : ''}" role="status">${icon('crosshair')}<span title=${note}>${scopeWords(s)} · ${note}</span>
         <button class="link" type="button" @click=${() => s.setScope(null)}>Toute la France</button></div>` : nothing}
+      ${zoneOf !== null ? html`<div class="scope view" role="status">${icon('map')}<span>Dans la vue de la carte : ${counted(results.total, 'plante')} sur ${zoneOf.toLocaleString('fr-FR')}</span>
+        <button class="link" type="button" @click=${() => s.wholeZone()}>Toute la zone</button></div>` : nothing}
       <gf-plant-list ?grid=${grid} .current=${s.live.plant} .channel=${this.channel} .obs=${this.#obs(s)}
+        .empty=${zoneOf !== null ? 'Rien d’observé dans ce que montre la carte : déplacez-la, ou voyez toute la zone.' : null}
         .lit=${s.hover?.plant ?? null} @plant-hover=${(/** @type {CustomEvent} */ e) => this.#onHover(e)}></gf-plant-list>`;
   }
 
@@ -1226,7 +1265,9 @@ export class DlDeck extends LitElement {
     const s = /** @type {LayoutState} */ (this.state);
     const species = s.species;
     if (!species) { this._loading = s.speciesState === 'loading'; return; }
-    const ids = this.#store.state.results.items.map(p => p.id).filter(id => species.byPlant.has(id)).slice(0, DECK_MAX);
+    // The zone's plants, even while the list keeps to what a map shows of it.
+    const results = this.#store.state.results;
+    const ids = (results.inZone ?? results.items.map(p => p.id)).filter(id => species.byPlant.has(id)).slice(0, DECK_MAX);
     const current = s.live.plant;
     if (current != null && !ids.includes(current)) ids.unshift(current);
     const key = species.key + '|' + ids.join(',');

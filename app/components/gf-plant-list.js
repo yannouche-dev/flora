@@ -87,6 +87,8 @@ export class GfPlantList extends LitElement {
     obs: { attribute: false },
     /** The plant hovered elsewhere (a point of a map beside it: a free layout's state.js hover): its row lit, never scrolled to. */
     lit: { attribute: false },
+    /** What it says with no plant (a free layout's list kept to what a map shows); null: none matches the search. */
+    empty: { attribute: false },
     _scrollTop: { state: true },
     _height: { state: true },
     _width: { state: true }
@@ -191,6 +193,8 @@ export class GfPlantList extends LitElement {
     this.obs = null;
     /** @type {number | null} */
     this.lit = null;
+    /** @type {string | null} */
+    this.empty = null;
     this.addEventListener('scroll', () => {
       cancelAnimationFrame(this.#frame);
       this.#frame = requestAnimationFrame(() => { this._scrollTop = this.scrollTop; });
@@ -303,7 +307,7 @@ export class GfPlantList extends LitElement {
     if (this.grid) this.style.setProperty('--gf-cols', columns.map(k => columnWidth(k, gridView)).join(' '));
     const header = this.grid ? this.#header(columns) : nothing;
     if (status === 'ready' && !items.length) {
-      return html`${header}<p class="empty">Aucune plante ne correspond à cette recherche.</p>`;
+      return html`${header}<p class="empty">${this.empty ?? 'Aucune plante ne correspond à cette recherche.'}</p>`;
     }
 
     const rowHeight = this.#rowHeight;
