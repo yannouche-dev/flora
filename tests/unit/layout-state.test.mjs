@@ -81,3 +81,34 @@ test('un lieu en mots dans l’adresse (place= sans at=) : trouvé, il devient l
   assert.deepEqual([s.placeState, s.placeError], ['idle', null]);
   s.dispose();
 });
+
+test('une plante survolée (une ligne, un point) : son propre événement, jamais un changement ni l’adresse ; lâchée seulement par ce qui l’a allumée', () => {
+  const s = new LayoutState();
+  let changes = 0, hovers = 0;
+  s.addEventListener('change', () => changes++);
+  s.addEventListener('hover', () => hovers++);
+  const live = s.live;
+  s.hoverOn(AIL.id, 'list');
+  assert.deepEqual(s.hover, { plant: AIL.id, from: 'list' });
+  // The same again: nothing said.
+  s.hoverOn(AIL.id, 'list');
+  assert.equal(hovers, 1);
+  // Another row left (its leave told after the next row's enter), the map letting go: it stays lit.
+  s.hoverOff(ORTIE.id, 'list');
+  s.hoverOff(null, 'map');
+  assert.deepEqual(s.hover, { plant: AIL.id, from: 'list' });
+  // A point of the map hovered: its plant, from the map — the list letting go of what it lit takes nothing.
+  s.hoverOn(ORTIE.id, 'map');
+  s.hoverOff(null, 'list');
+  assert.deepEqual(s.hover, { plant: ORTIE.id, from: 'map' });
+  s.hoverOff(null, 'map');
+  assert.equal(s.hover, null);
+  assert.equal(hovers, 3);
+  // Never a change: nothing written in the address.
+  assert.equal(changes, 0);
+  assert.equal(s.live, live);
+  // The layout gone: nothing hovered.
+  s.hoverOn(AIL.id, 'list');
+  s.dispose();
+  assert.equal(s.hover, null);
+});

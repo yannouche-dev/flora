@@ -154,7 +154,7 @@ export const readQuery = (search, prefix = '') => fromHash('#/?' + (prefix ? gro
 export const sameLive = (a, b) => a.title === b.title && a.plant === b.plant && a.r === b.r && a.place === b.place && a.obs === b.obs && a.periode === b.periode
   && obsKey(a.filtres) === obsKey(b.filtres) && (a.at === b.at || (a.at !== null && b.at !== null && a.at[0] === b.at[0] && a.at[1] === b.at[1]));
 
-/** The live state of a layout on screen, and what it loads for it. Fires `change` (detail: { how, keys }). */
+/** The live state of a layout on screen, and what it loads for it. Fires `change` (detail: { how, keys }), and `hover` when the plant hovered changes. */
 export class LayoutState extends EventTarget {
   /**
    * @param {{ radius?: number | null, find?: typeof findPlace, channel?: import('../core/search-channel.js').Channel }} [defaults] the
@@ -222,6 +222,11 @@ export class LayoutState extends EventTarget {
     /** @type {{ key: string, total: number, items: any[] } | null} */
     this.whole = null;
     /** @type {string} */ this.wholeFor = '';
+    /**
+     * The plant hovered — a list's row (under the mouse, or the keyboard's focus), a map's point (under the mouse) —,
+     * lit by the other cells; null: none. Never in the address. @type {{ plant: number, from: 'list' | 'map' } | null}
+     */
+    this.hover = null;
   }
 
   /** The radius in use: the address', else the layout's default. */
@@ -270,6 +275,27 @@ export class LayoutState extends EventTarget {
 
   /** The scope: a circle around `at` (null: none — the whole flora). @param {[number, number] | null} at @param {string | null} [place] @param {How} [how] */
   setScope(at, place = null, how = 'push') { this.set({ at, place: at ? place : null, obs: null }, how); }
+
+  /**
+   * A plant hovered (a list's row, a map's point): the other cells light it. Its own event, `hover` — never `change`:
+   * nothing written in the address, only the cells that light it drawn again. @param {number} plant @param {'list' | 'map'} from
+   */
+  hoverOn(plant, from) {
+    if (this.hover?.plant === plant && this.hover.from === from) return;
+    this.hover = { plant, from };
+    this.dispatchEvent(new CustomEvent('hover'));
+  }
+
+  /**
+   * Hovered no more: `plant` (null: whichever `from` lit) — another plant hovered meanwhile, or from elsewhere, stays.
+   * @param {number | null} plant @param {'list' | 'map'} from
+   */
+  hoverOff(plant, from) {
+    const h = this.hover;
+    if (!h || h.from !== from || (plant != null && h.plant !== plant)) return;
+    this.hover = null;
+    this.dispatchEvent(new CustomEvent('hover'));
+  }
 
   /**
    * « Réessayer »: the scope's plants asked again, iNaturalist having failed. The failure the cache remembers a few
@@ -464,8 +490,9 @@ export class LayoutState extends EventTarget {
     this.#changed();
   }
 
-  /** The layout gone: its loads stopped, the search back to the whole flora. */
+  /** The layout gone: its loads stopped, nothing hovered, the search back to the whole flora. */
   dispose() {
+    this.hover = null;
     clearTimeout(this.timer);
     this.abort?.abort();
     this.findAbort?.abort();

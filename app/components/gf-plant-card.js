@@ -18,6 +18,8 @@ export class GfPlantCard extends LitElement {
     compact: { type: Boolean, reflect: true },
     grid: { type: Boolean, reflect: true },
     current: { type: Boolean, reflect: true },
+    /** Its plant hovered elsewhere: a point of a map beside the list, another list's row (a free layout: state.js hover). */
+    lit: { type: Boolean, reflect: true },
     /** Grid: visible column keys, in order (gf-plant-list). */
     columns: { attribute: false },
     /** Its observations in a free layout's zone, in words (core/observations.js obsNotes); null: none said. */
@@ -148,6 +150,9 @@ export class GfPlantCard extends LitElement {
     .tag { flex: none; font-size: 0.72rem; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--gf-surface-2); color: var(--gf-text); }
     .tag.pn, .tag.pr { background: color-mix(in srgb, #dc2626 16%, var(--gf-surface)); color: color-mix(in srgb, #dc2626 70%, var(--gf-text)); }
     .tag.re { background: color-mix(in srgb, #f59e0b 22%, var(--gf-surface)); }
+    /* Lit (its plant hovered on the map beside it): as hovered, with a thin line; the current plant's look wins. */
+    :host([lit]) a.row, :host([lit][grid]) { background: var(--gf-surface-2); box-shadow: inset 2px 0 0 var(--gf-accent); }
+    :host([lit][grid]) a.row { background: none; box-shadow: none; }
     :host([current]) a.row, :host([current][grid]) { background: var(--gf-accent-soft); box-shadow: inset 3px 0 0 var(--gf-accent); }
     :host([current][grid]) a.row { background: none; box-shadow: none; }
   `;
@@ -173,6 +178,7 @@ export class GfPlantCard extends LitElement {
     this.grid = false;
     /** The plant shown in the plant pane. */
     this.current = false;
+    this.lit = false;
     /** @type {string[]} */
     this.columns = [];
     /** @type {{ n: number, text: string, detail: string, title: string } | null} */
@@ -180,6 +186,17 @@ export class GfPlantCard extends LitElement {
     this.view = '';
     /** @type {any} */
     this._thumb = undefined;
+    // Hovered (a mouse, a pen: never a finger, whose touch opens it), or reached by the keyboard: told — a free layout
+    // lights its plant's points on its maps (`plant-hover`). Focus moving inside the row never reaches its host.
+    this.addEventListener('pointerenter', e => { if (e.pointerType !== 'touch') this.#hover(true); });
+    this.addEventListener('pointerleave', e => { if (e.pointerType !== 'touch') this.#hover(false); });
+    this.addEventListener('focusin', e => { if (/** @type {Element} */ (e.composedPath()[0]).matches?.(':focus-visible')) this.#hover(true); });
+    this.addEventListener('focusout', () => this.#hover(false));
+  }
+
+  /** Its plant hovered (`on`), or no more: `plant-hover` {id, on}. @param {boolean} on */
+  #hover(on) {
+    if (this.plant) this.dispatchEvent(new CustomEvent('plant-hover', { detail: { id: this.plant.id, on }, bubbles: true, composed: true }));
   }
 
   /** @type {AbortController | null} */

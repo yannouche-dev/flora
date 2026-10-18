@@ -251,6 +251,7 @@ const store = (/** @type {string} */ key, value) => {
  *         plant-move {placeId, entryId, plantId, coordinates}, map-longpress {coordinates} (while the pin can be placed),
  *         point-info {coordinates, label?} (long press elsewhere, a place picked in its search: the point card opens), point-close,
  *         view-change {lat, lon, zoom, pitch, bearing} (the map moved by hand: its centre, zoom, and in 3D its tilt and turn),
+ *         point-hover {point | null} (a point of its area under the mouse, then none: never on a touch screen),
  *         edit-change {editing}, positions-save {pin, places: [{id, coordinates}], plants: [{placeId, entryId, plantId, coordinates}]}
  *
  * What a map says — the quiet-map rule, for every map of the app (this one, its 3D mirror gf-map-gl.js and its
@@ -277,6 +278,11 @@ export class GfMap extends LitElement {
   static properties = {
     /** A point (observation, occurrence) clicked: 'open' its record (default), 'pick' (a `point-pick` event), 'none'. */
     pointClick: { attribute: 'point-click' },
+    /**
+     * The points of a plant lit from outside the map (a list's row hovered beside it, a free layout's): their kin keys
+     * (map-style.js speciesKey), lit as the map's own hover lights them; null: none.
+     */
+    litKeys: { attribute: false },
     spots: { attribute: false },
     selectedId: { attribute: false },
     pin: { attribute: false },
@@ -382,6 +388,8 @@ export class GfMap extends LitElement {
     this.highlight = null;
     /** How a point clicked answers (none given: its record opened, nothing inside a mini-app). @type {'open' | 'pick' | 'none' | null} */
     this.pointClick = null;
+    /** @type {Set<string> | null} */
+    this.litKeys = null;
     /** @type {{ key: string, feature: any } | null} */
     this.zone = null;
     /** @type {{ key: string, points: { coordinates: [number, number], title: string, url?: string }[], photo?: string | null } | null} */
@@ -957,6 +965,8 @@ export class GfMap extends LitElement {
     for (const type of ['pointerdown', 'wheel', 'keydown', 'touchstart']) root.addEventListener(type, byHand, { passive: true, capture: true });
     root.addEventListener('gl-moveend', () => this.#movedByHand());
     map.on('moveend', () => this.#movedByHand());
+    // A plant lit from outside (litKeys): its points come into sight as the map moves, lit too.
+    map.on('moveend', () => { if (this.litKeys?.size) this.#lightFrom(); });
 
     map.on('moveend', () => {
       this.#scheduleAreas();
@@ -1052,6 +1062,7 @@ export class GfMap extends LitElement {
     if ((['search', 'noSearch'].some(k => changed.has(k) && changed.get(k) !== undefined) && this.hasAttribute('search') !== this.#hasSearch)
       || (changed.has('noLayers') && changed.get('noLayers') !== undefined)) this.#rebuildControls();
     if (changed.has('radiusHandle')) this.#syncHandle();
+    if (changed.has('litKeys')) this.#lightFrom();
     if (changed.has('line')) this.#syncLine();
     // Its owner's background and overlays (in their order) and their opacity: shown, not told back (they are its owner's).
     if (changed.has('base') && this.base && this.base !== this.#base) this.#setBase(/** @type {any} */ (this.base), false);
@@ -1629,6 +1640,13 @@ export class GfMap extends LitElement {
     this.#onPoint(dot, point);
     // Hovered (touched): the other points of the same plant are lit with it.
     this.#kin(dot, speciesKey(p) || (fancy ? null : 'area'));
+    // Under the mouse (never a touch: it picks): told — a list beside the map lights its plant's row (point-hover).
+    if (!matchMedia('(hover: none)').matches) {
+      const leave = () => { if (this.#hovered === dot) { this.#hovered = null; this.#emit('point-hover', { point: null }); } };
+      dot.on('mouseover', () => { this.#hovered = dot; this.#emit('point-hover', { point: p }); });
+      dot.on('mouseout', leave);
+      dot.on('remove', leave);
+    }
     return dot;
   }
 
@@ -1869,6 +1887,18 @@ export class GfMap extends LitElement {
   /** The elements lit now. @type {Element[]} */ #lit = [];
   /** @type {L.Layer | null} */ #litBy = null;
   /** The plant lit now (its kin key). @type {string | null} */ #litKey = null;
+  /** The elements lit from outside (litKeys). @type {Element[]} */ #litFrom = [];
+  /** The area's point under the mouse (point-hover). @type {L.Layer | null} */ #hovered = null;
+
+  /** Every layer of a plant's points (its kin): the area's, the plant chosen's, the groups', the plants of places. @returns {any[]} */
+  #kinLayers() {
+    const map = /** @type {L.Map} */ (this.#map);
+    const groups = [this.#areaLayer, this.#hlLayer, this.#clusterLayer, this.#spreadLayer];
+    /** @type {any[]} */
+    const layers = groups.flatMap(g => g ? g.getLayers() : []);
+    if (this.#plantLayer && map.hasLayer(this.#plantLayer)) layers.push(...this.#plantMarkers.values());
+    return layers;
+  }
 
   /** Lights one plant's points (null: none), `origin` the most. @param {string | null} key @param {L.Layer} [origin] */
   #light(key, origin) {
@@ -1879,10 +1909,7 @@ export class GfMap extends LitElement {
     const map = this.#map;
     if (!map) return;
     if (key) {
-      const groups = [this.#areaLayer, this.#hlLayer, this.#clusterLayer, this.#spreadLayer];
-      /** @type {any[]} */
-      const layers = groups.flatMap(g => g ? g.getLayers() : []);
-      if (this.#plantLayer && map.hasLayer(this.#plantLayer)) layers.push(...this.#plantMarkers.values());
+      const layers = this.#kinLayers();
       // Only those in sight (a wide scope has hundreds out of it): fewer elements restyled.
       const view = this.#sight(0.2);
       for (const l of layers) {
@@ -1895,8 +1922,28 @@ export class GfMap extends LitElement {
     }
   }
 
+  /**
+   * The points of the plant lit from outside (litKeys: a list's row hovered) — those in sight, as the map's own hover
+   * lights them —; none: let go.
+   */
+  #lightFrom() {
+    for (const el of this.#litFrom) el.classList.remove('gf-lit');
+    this.#litFrom = [];
+    const keys = this.litKeys;
+    if (!keys?.size || !this.#map) return;
+    const view = this.#sight(0.2);
+    for (const l of this.#kinLayers()) {
+      if (!keys.has(l.gfKin) || (l.getLatLng && !view.contains(l.getLatLng()))) continue;
+      const el = l.getElement?.();
+      if (el) { el.classList.add('gf-lit'); this.#litFrom.push(el); }
+    }
+  }
+
   /** Points drawn again (a new icon has its own classes): the plant lit stays lit, its new points with it. */
-  #relight() { if (this.#litKey) this.#light(this.#litKey, this.#litBy ?? undefined); }
+  #relight() {
+    if (this.#litKey) this.#light(this.#litKey, this.#litBy ?? undefined);
+    if (this.litKeys?.size) this.#lightFrom();
+  }
 
   /**
    * The view and around it (`pad`: a share of its size on each side). In 3D, what the 3D map shows — tilted, turned

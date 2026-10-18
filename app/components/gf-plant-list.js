@@ -85,6 +85,8 @@ export class GfPlantList extends LitElement {
      * them, its grid has their column; null: none (Flore, the whole flora).
      */
     obs: { attribute: false },
+    /** The plant hovered elsewhere (a point of a map beside it: a free layout's state.js hover): its row lit, never scrolled to. */
+    lit: { attribute: false },
     _scrollTop: { state: true },
     _height: { state: true },
     _width: { state: true }
@@ -187,10 +189,16 @@ export class GfPlantList extends LitElement {
     this.channel = null;
     /** @type {Map<number, { n: number, text: string, detail: string, title: string }> | null} */
     this.obs = null;
+    /** @type {number | null} */
+    this.lit = null;
     this.addEventListener('scroll', () => {
       cancelAnimationFrame(this.#frame);
       this.#frame = requestAnimationFrame(() => { this._scrollTop = this.scrollTop; });
     }, { passive: true });
+    // The pointer gone from the list: none of its rows hovered any more (a row drawn away under it never said so).
+    this.addEventListener('pointerleave', e => {
+      if (e.pointerType !== 'touch') this.dispatchEvent(new CustomEvent('plant-hover', { detail: { id: null, on: false }, bubbles: true, composed: true }));
+    });
   }
 
   connectedCallback() {
@@ -320,6 +328,7 @@ export class GfPlantList extends LitElement {
             ?compact=${compact && !this.grid}
             ?grid=${this.grid}
             ?current=${plant.id === this.current}
+            ?lit=${plant.id === this.lit}
           ></gf-plant-card>
         `)}
       </div>

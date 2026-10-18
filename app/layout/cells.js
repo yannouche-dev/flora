@@ -56,6 +56,7 @@ import { COMPACT_WIDTH, MAP_LAYERS, WIDE_FRAMES, catalogLayers, inatTiles, inWhe
 import { periodQuery, plantOfPoint, taxonIdOf } from '../core/nearby.js';
 import { SOURCE_NAMES, failedText, obsNotes, sourcesText } from '../core/observations.js';
 import { obsId } from './state.js';
+import { speciesKey } from '../components/map-style.js';
 import '../components/gf-map.js';
 import '../components/gf-place-search.js';
 import '../components/gf-results-bar.js';
@@ -108,25 +109,30 @@ const setCell = (el, values) => el.dispatchEvent(new CustomEvent('cell-param', {
 /** The radius of « Observations autour » (core/around3d.js RADII_3D) nearest to a distance. @param {number} m */
 const nearest3d = m => RADII_3D.reduce((a, b) => Math.abs(b - m) < Math.abs(a - m) ? b : a);
 
-/** Watches the state: the host drawn again on each change. */
+/** Watches the state: the host drawn again on each change — and on its other events it names, as it says (`hover`). */
 class StateController {
-  /** @param {LitElement & { state: LayoutState | null }} host */
-  constructor(host) {
+  /**
+   * @param {LitElement & { state: LayoutState | null }} host
+   * @param {Record<string, () => void>} [also] other events of the state, and what each does
+   */
+  constructor(host, also = {}) {
     this.host = host;
     /** @type {LayoutState | null} */ this.watched = null;
-    this.onChange = () => host.requestUpdate();
+    /** @type {[string, () => void][]} */
+    this.handlers = [['change', () => host.requestUpdate()], ...Object.entries(also)];
     host.addController(this);
   }
 
-  hostUpdate() {
-    if (this.host.state === this.watched) return;
-    this.watched?.removeEventListener('change', this.onChange);
-    this.watched = this.host.state;
-    this.watched?.addEventListener('change', this.onChange);
+  /** @param {LayoutState | null} state */
+  watch(state) {
+    for (const [type, fn] of this.handlers) this.watched?.removeEventListener(type, fn);
+    this.watched = state;
+    for (const [type, fn] of this.handlers) state?.addEventListener(type, fn);
   }
 
-  hostDisconnected() { this.watched?.removeEventListener('change', this.onChange); this.watched = null; }
-  hostConnected() { if (this.host.state) { this.watched = this.host.state; this.watched.addEventListener('change', this.onChange); } }
+  hostUpdate() { if (this.host.state !== this.watched) this.watch(this.host.state); }
+  hostDisconnected() { this.watch(null); }
+  hostConnected() { if (this.host.state) this.watch(this.host.state); }
 }
 
 /**
@@ -320,7 +326,8 @@ export class DlMap extends LitElement {
 
   constructor() {
     super();
-    new StateController(this);
+    // A plant hovered in a list: its points lit on the map itself (the cell not drawn again).
+    new StateController(this, { hover: () => this.#lightHovered() });
     /** @type {LayoutState | null} */ this.state = null;
     /** The search of its group (core/search-channel.js); none: the app's. @type {import('../core/search-channel.js').Channel | null} */ this.channel = null;
     /** @type {Record<string, any>} */ this.params = {};
@@ -610,6 +617,43 @@ export class DlMap extends LitElement {
     s.pick(id, { obs: p.url ? obsId(p.url) : null });
   }
 
+  /** A point under the mouse, or none (gf-map `point-hover`): its plant's row lit in the lists (state.js hover). @param {CustomEvent} e */
+  #onHover(e) {
+    const s = /** @type {LayoutState} */ (this.state);
+    const p = e.detail.point;
+    const id = p ? this.#plantOf(p) ?? p.plantId ?? null : null;
+    if (id == null) s.hoverOff(null, 'map');
+    else s.hoverOn(id, 'map');
+  }
+
+  /**
+   * A plant hovered in a list (state.js hover): its points lit as the map's own hover lights them — set on the map,
+   * the cell not drawn again. Hovered on a map: that map lights it itself.
+   */
+  #lightHovered() {
+    const map = this.#map, h = this.state?.hover;
+    if (!map) return;
+    const keys = h?.from === 'list' ? this.#keysOf(h.plant) : null;
+    map.litKeys = keys?.size ? keys : null;
+  }
+
+  /**
+   * A plant's points on the map, by their kin keys (map-style.js speciesKey: a plant's points may carry more than one
+   * name): its observations in the zone, and the current plant's own. @param {number} plant @returns {Set<string>}
+   */
+  #keysOf(plant) {
+    const s = /** @type {LayoutState} */ (this.state);
+    /** @type {Set<string>} */
+    const keys = new Set();
+    for (const p of this.#area?.points ?? []) {
+      const key = this.#plantOf(p) === plant ? speciesKey(p) : null;
+      if (key) keys.add(key);
+    }
+    const hl = this.#highlight;
+    if (hl && s.plantInfo?.id === plant) keys.add(speciesKey(hl) || 'hl');
+    return keys;
+  }
+
   /**
    * A long press on the map, a place picked in its address search: the scope moves there — named as the search named
    * it, else its place's name found after. @param {CustomEvent} e
@@ -874,6 +918,7 @@ export class DlMap extends LitElement {
         .radiusHandle=${!wide && on.has('rayon') ? this.#radiusHandle : null}
         aria-description=${press}
         @point-pick=${(/** @type {CustomEvent} */ e) => this.#onPick(e)} @point-info=${(/** @type {CustomEvent} */ e) => this.#onPress(e)}
+        @point-hover=${(/** @type {CustomEvent} */ e) => this.#onHover(e)}
         @radius-change=${(/** @type {CustomEvent} */ e) => s.set({ r: e.detail.radius }, 'replace')}
         @layers-change=${(/** @type {CustomEvent} */ e) => this.#onLayers(e)} @around3d-change=${(/** @type {CustomEvent} */ e) => this.#onAround(e)}
         @view-change=${(/** @type {CustomEvent} */ e) => this.#onView(e)}
@@ -952,7 +997,8 @@ export class DlResults extends LitElement {
 
   constructor() {
     super();
-    new StateController(this);
+    // A plant hovered (a map's point, a row): its row lit.
+    new StateController(this, { hover: () => this.requestUpdate() });
     /** @type {LayoutState | null} */ this.state = null;
     /** The search of its group (core/search-channel.js); none: the app's. @type {import('../core/search-channel.js').Channel | null} */ this.channel = null;
     /** @type {Record<string, any>} */ this.params = {};
@@ -976,12 +1022,21 @@ export class DlResults extends LitElement {
     if (this.params.zone === false) {
       const whole = s.whole;
       return html`${s.live.at ? html`<div class="scope" role="note">${icon('globe-europe-africa')}<span>Toute la France : cette case ne suit pas la zone.</span></div>` : nothing}
-        <gf-plant-list ?grid=${grid} .current=${s.live.plant} .items=${whole?.items ?? []} .channel=${this.channel}></gf-plant-list>`;
+        <gf-plant-list ?grid=${grid} .current=${s.live.plant} .items=${whole?.items ?? []} .channel=${this.channel}
+          .lit=${s.hover?.plant ?? null} @plant-hover=${(/** @type {CustomEvent} */ e) => this.#onHover(e)}></gf-plant-list>`;
     }
     const note = s.live.at ? scopeNote(s) : '';
     return html`${s.live.at ? html`<div class="scope ${s.speciesState === 'error' ? 'error' : ''}" role="status">${icon('crosshair')}<span title=${note}>${scopeWords(s)} · ${note}</span>
         <button class="link" type="button" @click=${() => s.setScope(null)}>Toute la France</button></div>` : nothing}
-      <gf-plant-list ?grid=${grid} .current=${s.live.plant} .channel=${this.channel} .obs=${this.#obs(s)}></gf-plant-list>`;
+      <gf-plant-list ?grid=${grid} .current=${s.live.plant} .channel=${this.channel} .obs=${this.#obs(s)}
+        .lit=${s.hover?.plant ?? null} @plant-hover=${(/** @type {CustomEvent} */ e) => this.#onHover(e)}></gf-plant-list>`;
+  }
+
+  /** A row hovered, or no more (gf-plant-card `plant-hover`): the maps beside light its plant's points (state.js hover). @param {CustomEvent} e */
+  #onHover(e) {
+    const { id, on } = e.detail;
+    if (on) this.state?.hoverOn(id, 'list');
+    else this.state?.hoverOff(id, 'list');
   }
 
   /**
