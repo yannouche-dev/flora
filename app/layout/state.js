@@ -37,7 +37,8 @@ import * as db from '../core/db.js';
 import { forgetFailures } from '../core/cache.js';
 import { findPlace } from '../core/geoservices.js';
 import { errorKind } from '../core/net.js';
-import { observationsAround, speciesOf, taxonIdOf } from '../core/nearby.js';
+import { observationsAround, plantCounts, plantsIn, speciesOf, taxonIdOf } from '../core/nearby.js';
+import { boxHolds, circleBox } from '../core/around3d.js';
 import { OBS_DEFAULTS, SOURCE_NAMES, failedText, obsKey, obsParams, readObsFilters, sourcesText, zoneObservations } from '../core/observations.js';
 import { fromHash, toHash } from '../core/query.js';
 import { searchWhole } from '../core/search.js';
@@ -154,7 +155,7 @@ export const readQuery = (search, prefix = '') => fromHash('#/?' + (prefix ? gro
 export const sameLive = (a, b) => a.title === b.title && a.plant === b.plant && a.r === b.r && a.place === b.place && a.obs === b.obs && a.periode === b.periode
   && obsKey(a.filtres) === obsKey(b.filtres) && (a.at === b.at || (a.at !== null && b.at !== null && a.at[0] === b.at[0] && a.at[1] === b.at[1]));
 
-/** The live state of a layout on screen, and what it loads for it. Fires `change` (detail: { how, keys }). */
+/** The live state of a layout on screen, and what it loads for it. Fires `change` (detail: { how, keys }), and `hover` when the plant hovered changes. */
 export class LayoutState extends EventTarget {
   /**
    * @param {{ radius?: number | null, find?: typeof findPlace, channel?: import('../core/search-channel.js').Channel }} [defaults] the
@@ -198,6 +199,11 @@ export class LayoutState extends EventTarget {
     this.points = [];
     this.pointsTotal = 0;
     /** @type {{ inat: number | null, gbif: number | null }} */ this.totals = { inat: null, gbif: null };
+    /**
+     * Each plant's observations in the zone, its sources apart (the list's rows: core/observations.js obsNotes), and the
+     * sources that answered; null: no zone, or not yet. @type {{ counts: Map<number, { inat: number, gbif: number }>, sources: import('../core/observations.js').ObsSource[] } | null}
+     */
+    this.obsCounts = null;
     /** @type {import('../core/observations.js').ObsFailure[]} */ this.failed = [];
     /** @type {{ key: string, count: number }[]} */ this.datasets = [];
     /** The current plant's own observations in the scope. @type {{ key: string, points: Observation[] } | null} */
@@ -217,6 +223,19 @@ export class LayoutState extends EventTarget {
     /** @type {{ key: string, total: number, items: any[] } | null} */
     this.whole = null;
     /** @type {string} */ this.wholeFor = '';
+    /**
+     * The plant hovered — a list's row (under the mouse, or the keyboard's focus), a map's point (under the mouse) —,
+     * lit by the other cells; null: none. Never in the address. @type {{ plant: number, from: 'list' | 'map' } | null}
+     */
+    this.hover = null;
+    /**
+     * What a map shows of the zone (moved by hand: its box [west, south, east, north], the sources of its points, the
+     * map), the list kept to it; null: the whole zone (a map that shows all of the circle too). Never in the address.
+     * @type {{ box: number[], kinds: string[] | null, by: object | null } | null}
+     */
+    this.view = null;
+    /** The plants observed in that view (the search kept to them: workers/search-core.js within); null: the zone's all. @type {number[] | null} */
+    this.within = null;
   }
 
   /** The radius in use: the address', else the layout's default. */
@@ -238,6 +257,10 @@ export class LayoutState extends EventTarget {
   /** @type {Readonly<ObsFilters>} */ #filters = OBS_DEFAULTS;
   /** The zone (radius, centre, period) GBIF's datasets were counted in. */
   #datasetsZone = '';
+  /** Each plant's observations in the zone, by id (the search's sort « Plus observées »); null: none. @type {Record<number, number> | null} */
+  #observed = null;
+  /** The circle a view was taken in (its radius and centre; '' without a zone). */
+  #circle = '';
 
   /** The scope's key ('' without one): its circle, its period, its observations' sources and filters. */
   get scopeKey() { return this.live.at ? this.radius + ':' + this.live.at.join(',') + ':' + this.periode + ':' + obsKey(this.filters) : ''; }
@@ -265,6 +288,67 @@ export class LayoutState extends EventTarget {
   setScope(at, place = null, how = 'push') { this.set({ at, place: at ? place : null, obs: null }, how); }
 
   /**
+   * A plant hovered (a list's row, a map's point): the other cells light it. Its own event, `hover` — never `change`:
+   * nothing written in the address, only the cells that light it drawn again. @param {number} plant @param {'list' | 'map'} from
+   */
+  hoverOn(plant, from) {
+    if (this.hover?.plant === plant && this.hover.from === from) return;
+    this.hover = { plant, from };
+    this.dispatchEvent(new CustomEvent('hover'));
+  }
+
+  /**
+   * Hovered no more: `plant` (null: whichever `from` lit) — another plant hovered meanwhile, or from elsewhere, stays.
+   * @param {number | null} plant @param {'list' | 'map'} from
+   */
+  hoverOff(plant, from) {
+    const h = this.hover;
+    if (!h || h.from !== from || (plant != null && h.plant !== plant)) return;
+    this.hover = null;
+    this.dispatchEvent(new CustomEvent('hover'));
+  }
+
+  /**
+   * What a map shows of the zone (`box` [west, south, east, north]; null: let go), the sources of its points
+   * (`kinds`), the map (`by`): the list kept to the plants observed there — the whole zone when it shows all of the
+   * circle. The search runs again only when those plants change.
+   * @param {number[] | null} box @param {{ kinds?: string[] | null, by?: object | null }} [o]
+   */
+  setView(box, { kinds = null, by = null } = {}) {
+    const at = this.live.at;
+    const view = box && at && !boxHolds(box, circleBox(at, this.radius)) ? { box, kinds, by } : null;
+    if (!view && !this.view) return;
+    this.view = view;
+    this.#narrow();
+  }
+
+  /** « Toute la zone »: the list back to the whole zone, and the map that led it framed on it again (`refit`, detail: { by }). */
+  wholeZone() {
+    const by = this.view?.by ?? null;
+    this.setView(null);
+    this.dispatchEvent(new CustomEvent('refit', { detail: { by } }));
+  }
+
+  /** The plants of the view, now (none without one, or before the zone's plants are known). @returns {number[] | null} */
+  #withinNow() {
+    const v = this.view, s = this.species;
+    return v && s ? plantsIn(this.points, s.plantOf, v.box, v.kinds) : null;
+  }
+
+  /**
+   * The list kept to the view's plants: the search run again when they changed, the cells told. The zone's points
+   * still coming (another period, other filters): found among them once there (#loadScope).
+   */
+  #narrow() {
+    if (this.speciesState === 'loading') return;
+    const within = this.#withinNow();
+    if (String(within) === String(this.within)) return;
+    this.within = within;
+    if (this.species) this.#rescope(this.species.list.map(s => /** @type {number} */ (s.plantId)));
+    this.#changed();
+  }
+
+  /**
    * « Réessayer »: the scope's plants asked again, iNaturalist having failed. The failure the cache remembers a few
    * minutes (core/cache.js) is forgotten first, or it would only come back.
    */
@@ -285,6 +369,10 @@ export class LayoutState extends EventTarget {
       if (want) this.#findPlace(want);
       else if (this.placeState !== 'idle') { this.placeState = 'idle'; this.placeError = null; this.#changed(); }
     }
+    // Another circle: a view of the old one is let go (the list the whole of the new zone); another period, other
+    // filters keep it (its plants found again among the new points).
+    const circle = this.live.at ? this.radius + ':' + this.live.at.join(',') : '';
+    if (circle !== this.#circle) { this.#circle = circle; this.view = null; this.within = null; }
     const key = this.scopeKey;
     if (key !== this.scopeFor) {
       this.scopeFor = key;
@@ -293,7 +381,7 @@ export class LayoutState extends EventTarget {
       this.abort = null;
       // Another zone: what was loaded for the old one goes at once (never its points under the new circle) — GBIF's
       // datasets kept while only the filters changed (counted as if none were chosen: one being ticked stays in view).
-      this.points = []; this.pointsTotal = 0; this.totals = { inat: null, gbif: null }; this.failed = [];
+      this.points = []; this.pointsTotal = 0; this.totals = { inat: null, gbif: null }; this.failed = []; this.obsCounts = null; this.#observed = null;
       const zone = key.split(':').slice(0, 3).join(':');
       if (zone !== this.#datasetsZone) { this.datasets = []; this.#datasetsZone = zone; }
       if (!key) {
@@ -368,6 +456,12 @@ export class LayoutState extends EventTarget {
       this.failed = found.failed;
       this.datasets = found.datasets;
       this.species = { key, list, byPlant: new Map(list.map(s => [/** @type {number} */ (s.plantId), s])), plantOf: plants.plantOf };
+      const counts = plantCounts(found.points, plants.plantOf);
+      this.obsCounts = { counts, sources: this.filters.sources.filter(x => !found.failed.some(f => f.name === SOURCE_NAMES[x])) };
+      // The search's sort « Plus observées » (workers/search-core.js `observed`): each plant's total, cloned to the worker.
+      this.#observed = Object.fromEntries([...counts].map(([id, c]) => [id, c.inat + c.gbif]));
+      // A map's view kept (another period, other filters): its plants among the new points.
+      this.within = this.#withinNow();
       this.speciesState = 'ready';
       this.speciesError = null;
       this.speciesFailure = null;
@@ -378,8 +472,9 @@ export class LayoutState extends EventTarget {
       const sources = this.filters.sources;
       const said = /** @type {{ failed?: import('../core/observations.js').ObsFailure[] }} */ (error).failed;
       const failed = said?.length ? said : sources.map(x => ({ name: SOURCE_NAMES[x], off: false }));
-      this.points = []; this.pointsTotal = 0; this.totals = { inat: null, gbif: null }; this.failed = failed; this.datasets = [];
+      this.points = []; this.pointsTotal = 0; this.totals = { inat: null, gbif: null }; this.failed = failed; this.datasets = []; this.obsCounts = null; this.#observed = null;
       this.species = null;
+      this.within = null;
       this.speciesState = 'error';
       this.speciesFailure = failed.every(f => f.off) ? 'off' : navigator.onLine ? 'unreachable' : 'offline';
       this.speciesError = this.speciesFailure === 'off' ? `${failedText(failed)} (Réglages › Modules) : la zone ne filtre pas les plantes.`
@@ -409,11 +504,11 @@ export class LayoutState extends EventTarget {
     }, () => {});
   }
 
-  /** The search kept to these plants (null: the whole flora), and run again. @param {number[] | null} ids */
+  /** The search kept to these plants (null: the whole flora) — and to a map's view of them —, and run again. @param {number[] | null} ids */
   async #rescope(ids) {
     if (!ids && !this.scoped) return;
     this.scoped = Boolean(ids);
-    this.channel.setScope(ids);
+    this.channel.setScope(ids, { observed: ids ? this.#observed : null, within: ids ? this.within : null });
     await whenReady();
     this.channel.run();
   }
@@ -453,8 +548,9 @@ export class LayoutState extends EventTarget {
     this.#changed();
   }
 
-  /** The layout gone: its loads stopped, the search back to the whole flora. */
+  /** The layout gone: its loads stopped, nothing hovered, the search back to the whole flora. */
   dispose() {
+    this.hover = null;
     clearTimeout(this.timer);
     this.abort?.abort();
     this.findAbort?.abort();

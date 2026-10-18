@@ -105,8 +105,12 @@ test('ce que règlent les commandes de la case n’est pas dans « Affiner » du
 test('les liens d’une case (le constructeur) : ce qu’elle suit et change, et le réglage qui l’en détache', async () => {
   const { linksOf, CURRENT } = await import('../../app/layout/registry.js');
   const links = (/** @type {string} */ text) => linksOf(resolve(cellOf(text))).map(l => [l.link, l.on, l.toggle]);
-  assert.deepEqual(links('map'), [['zone', true, { portee: 'france' }], ['recherche', true, { suit: false }], ['periode', true, null], ['plante', true, { plante: 'non' }]]);
-  assert.deepEqual(links('map(france,suit=0,plante=non)'), [['zone', false, { portee: null }], ['recherche', false, { suit: null }], ['periode', true, null], ['plante', false, { plante: null }]]);
+  assert.deepEqual(links('map'), [['zone', true, { portee: 'france' }], ['recherche', true, { suit: false }], ['periode', true, null], ['plante', true, { plante: 'non' }],
+    ['liste', true, { liste: 'zone' }]]);
+  assert.deepEqual(links('map(france,suit=0,plante=non)'), [['zone', false, { portee: null }], ['recherche', false, { suit: null }], ['periode', true, null], ['plante', false, { plante: null }],
+    ['liste', false, null]]);
+  // The list: the zone's all (liste=zone), then what the map shows again; a map of France never leads it, said.
+  assert.deepEqual(links('map(liste=zone)').at(-1), ['liste', false, { liste: null }]);
   assert.deepEqual(links('results(zone=0)').map(l => l.slice(0, 2)), [['recherche', true], ['zone', false], ['periode', false], ['plante', true]]);
   assert.deepEqual(links('plant.wikipedia'), [['plante', true, { plante: CURRENT }]]);
   assert.deepEqual(links('plant(plante=128268)'), [['plante', false, { plante: null }]]);

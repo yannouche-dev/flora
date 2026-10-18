@@ -10,8 +10,10 @@ import { runSearch, searchIn, setSearchScope } from './search.js';
 
 /**
  * @typedef {import('./store.js').Query} Query
+ * @typedef {import('./search.js').ScopeExtra} ScopeExtra
  * @typedef {{ readonly query: Query, readonly results: any, setQuery(query: Query): void, run(): void,
- *   setScope(ids: number[] | null): void, addEventListener: EventTarget['addEventListener'], removeEventListener: EventTarget['removeEventListener'] }} Channel
+ *   setScope(ids: number[] | null, extra?: ScopeExtra): void, addEventListener: EventTarget['addEventListener'], removeEventListener: EventTarget['removeEventListener'] }} Channel
+ *   `setScope`: the plants it is kept to (null: the whole flora), with what comes with them (each one's observations)
  */
 
 /** A query with nothing in it. @returns {Query} */
@@ -23,7 +25,7 @@ export const APP = {
   get results() { return store.state.results; },
   setQuery(query) { store.set({ query }); },
   run() { runSearch(); },
-  setScope(ids) { setSearchScope(ids); },
+  setScope(ids, extra) { setSearchScope(ids, extra); },
   addEventListener: (type, fn) => store.addEventListener(type, fn),
   removeEventListener: (type, fn) => store.removeEventListener(type, fn)
 };
@@ -33,22 +35,23 @@ export class SearchChannel extends EventTarget {
   constructor() {
     super();
     /** @type {Query} */ this.query = emptyQuery();
-    this.results = { total: 0, items: [], facets: {}, suggestions: [], fuzzy: 0, sort: 'fr' };
-    /** The plants it is kept to (a zone's), null: the whole flora. @type {number[] | null} */ this.scope = null;
+    this.results = { total: 0, items: [], facets: {}, suggestions: [], fuzzy: 0, sort: 'fr', counted: false, inZone: null };
+    /** The plants it is kept to (a zone's), null: the whole flora, and what comes with them. @type {number[] | null} */ this.scope = null;
+    /** @type {ScopeExtra} */ this.extra = {};
     this.ran = 0;
   }
 
   /** @param {Query} query */
   setQuery(query) { this.query = query; this.#changed(); }
 
-  /** @param {number[] | null} ids */
-  setScope(ids) { this.scope = ids ? [...ids] : null; }
+  /** @param {number[] | null} ids @param {ScopeExtra} [extra] */
+  setScope(ids, extra = {}) { this.scope = ids ? [...ids] : null; this.extra = ids ? extra : {}; }
 
   /** Its search run in the worker (once the flora is there), the answer of an older query dropped. */
   async run() {
     const run = ++this.ran;
     await whenReady();
-    const found = await searchIn(this.query, this.scope).catch(() => null);
+    const found = await searchIn(this.query, this.scope, this.extra).catch(() => null);
     if (!found || run !== this.ran) return;
     this.results = found;
     this.#changed();

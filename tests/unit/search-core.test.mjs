@@ -87,6 +87,49 @@ test('tri : français par défaut (sans nom français en dernier), scientifique,
   assert.equal(find('', { sort: 'relevance' }).items[0].id, fr.items[0].id, 'pertinence sans texte : ordre français');
 });
 
+test('tri « Plus observées » : les observations de la zone d’abord, puis le nom français ; sans elles, le nom français, dit', () => {
+  const id = (/** @type {string} */ sci) => /** @type {any} */ (plants.find((/** @type {any} */ p) => p.scientificName === sci)).id;
+  const zone = ['Urtica dioica', 'Allium ursinum', 'Geum urbanum', 'Bellis perennis'].map(id);
+  const observed = { [id('Allium ursinum')]: 9, [id('Geum urbanum')]: 3, [id('Urtica dioica')]: 3, [id('Bellis perennis')]: 1 };
+  const run = (/** @type {string} */ sort, /** @type {any} */ o = observed) => search(index, { q: '', filters: NONE, sort, only: zone, observed: o });
+  const most = run('obs');
+  assert.equal(most.sort, 'obs');
+  assert.equal(most.counted, true);
+  // Ties (3 each): by French name — Benoîte des villes before Ortie dioïque.
+  assert.deepEqual(names(most), ['Allium ursinum', 'Geum urbanum', 'Urtica dioica', 'Bellis perennis']);
+  assert.deepEqual(names(run('-obs')), ['Bellis perennis', 'Urtica dioica', 'Geum urbanum', 'Allium ursinum'], 'the least observed first');
+  // No counts (Flore, the whole flora): the French name's order, and the answer says so.
+  const none = run('obs', null);
+  assert.deepEqual([none.sort, none.counted], ['fr', false]);
+  assert.deepEqual(names(none), names(run('fr')));
+  assert.equal(find('', { sort: 'obs' }).sort, 'fr');
+});
+
+test('ce que montre une carte de la zone (within) : la liste, son nombre, ses facettes et son ordre ; la zone entière à part (inZone), dans le même ordre', () => {
+  const id = (/** @type {string} */ sci) => /** @type {any} */ (plants.find((/** @type {any} */ p) => p.scientificName === sci)).id;
+  const zone = ['Urtica dioica', 'Allium ursinum', 'Geum urbanum', 'Bellis perennis'].map(id);
+  const view = ['Allium ursinum', 'Bellis perennis'].map(id);
+  const observed = { [id('Allium ursinum')]: 9, [id('Geum urbanum')]: 3, [id('Urtica dioica')]: 3, [id('Bellis perennis')]: 1 };
+  const all = search(index, { q: '', filters: NONE, sort: 'obs', only: zone, observed });
+  const kept = search(index, { q: '', filters: NONE, sort: 'obs', only: zone, observed, within: view });
+  assert.equal(all.inZone, null, 'no view: no zone said apart');
+  assert.deepEqual(names(kept), ['Allium ursinum', 'Bellis perennis']);
+  assert.equal(kept.total, 2);
+  // Its facets count its plants only; the zone's, all of them, in the list's order.
+  assert.equal(Object.values(kept.facets.photo).reduce((a, b) => a + b, 0), 2);
+  assert.deepEqual(kept.inZone, all.items.map((/** @type {any} */ p) => p.id));
+  // A filter: both keep to it.
+  const family = /** @type {any} */ (plants.find((/** @type {any} */ p) => p.scientificName === 'Allium ursinum')).family;
+  const filtered = search(index, { q: '', filters: { ...NONE, family: [family] }, sort: 'fr', only: zone, within: view });
+  assert.deepEqual(names(filtered), ['Allium ursinum']);
+  assert.deepEqual(filtered.inZone, [id('Allium ursinum')]);
+  // Nothing of the zone in view: none listed, the zone's still said.
+  const none = search(index, { q: '', filters: NONE, sort: 'fr', only: zone, within: [] });
+  assert.deepEqual([none.total, none.inZone?.length], [0, 4]);
+  // Without a zone (the whole flora), a view means nothing.
+  assert.equal(search(index, { q: '', filters: NONE, sort: 'fr', within: view }).total, plants.length);
+});
+
 test('suggestions : familles et genres qui commencent par le texte, pas déjà filtrés', () => {
   const r = find('urtic');
   assert.deepEqual(r.suggestions.map((/** @type {any} */ s) => `${s.type}:${s.name}`), ['family:Urticaceae', 'genus:Urtica']);

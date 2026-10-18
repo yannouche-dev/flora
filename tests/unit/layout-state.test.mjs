@@ -81,3 +81,90 @@ test('un lieu en mots dans l’adresse (place= sans at=) : trouvé, il devient l
   assert.deepEqual([s.placeState, s.placeError], ['idle', null]);
   s.dispose();
 });
+
+test('une plante survolée (une ligne, un point) : son propre événement, jamais un changement ni l’adresse ; lâchée seulement par ce qui l’a allumée', () => {
+  const s = new LayoutState();
+  let changes = 0, hovers = 0;
+  s.addEventListener('change', () => changes++);
+  s.addEventListener('hover', () => hovers++);
+  const live = s.live;
+  s.hoverOn(AIL.id, 'list');
+  assert.deepEqual(s.hover, { plant: AIL.id, from: 'list' });
+  // The same again: nothing said.
+  s.hoverOn(AIL.id, 'list');
+  assert.equal(hovers, 1);
+  // Another row left (its leave told after the next row's enter), the map letting go: it stays lit.
+  s.hoverOff(ORTIE.id, 'list');
+  s.hoverOff(null, 'map');
+  assert.deepEqual(s.hover, { plant: AIL.id, from: 'list' });
+  // A point of the map hovered: its plant, from the map — the list letting go of what it lit takes nothing.
+  s.hoverOn(ORTIE.id, 'map');
+  s.hoverOff(null, 'list');
+  assert.deepEqual(s.hover, { plant: ORTIE.id, from: 'map' });
+  s.hoverOff(null, 'map');
+  assert.equal(s.hover, null);
+  assert.equal(hovers, 3);
+  // Never a change: nothing written in the address.
+  assert.equal(changes, 0);
+  assert.equal(s.live, live);
+  // The layout gone: nothing hovered.
+  s.hoverOn(AIL.id, 'list');
+  s.dispose();
+  assert.equal(s.hover, null);
+});
+
+test('ce que montre une carte de la zone : la liste gardée à ses plantes, la recherche relancée seulement quand elles changent ; tout le cercle : la zone ; un autre cercle lâche la vue, une autre période la garde ; « Toute la zone » recadre la carte', async t => {
+  // The zone's observations (iNaturalist, answered here): the wild garlic east of the centre, the nettle west.
+  const fetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = fetch; });
+  const AT = /** @type {[number, number]} */ ([4.81, 45.76]);
+  const row = (/** @type {number} */ id, /** @type {any} */ plant, /** @type {number} */ lon) => ({ id, uri: `https://www.inaturalist.org/observations/${id}`,
+    geojson: { type: 'Point', coordinates: [lon, AT[1]] }, observed_on: '2026-05-02', place_guess: 'Lyon', taxon: { id: plant.id + 1, name: plant.scientificName, preferred_common_name: null } });
+  globalThis.fetch = /** @type {any} */ (async (/** @type {string} */ input) => new URL(String(input)).host === 'api.inaturalist.org'
+    ? new Response(JSON.stringify({ total_results: 2, results: [row(1, AIL, AT[0] + 0.004), row(2, ORTIE, AT[0] - 0.004)] }), { headers: { 'content-type': 'application/json' } })
+    : new Response('', { status: 503 }));
+  // Its search: what it is kept to, each time it is.
+  /** @type {{ ids: number[] | null, within: number[] | null }[]} */
+  const kept = [];
+  const channel = /** @type {any} */ ({ query: {}, results: {}, setQuery() {}, run() {}, addEventListener() {}, removeEventListener() {},
+    setScope(/** @type {number[] | null} */ ids, /** @type {any} */ extra = {}) { kept.push({ ids: ids && [...ids].sort((a, b) => a - b), within: extra.within ?? null }); } });
+  const s = new LayoutState({ radius: 1000, channel });
+  let refit = null;
+  s.addEventListener('refit', e => { refit = /** @type {CustomEvent} */ (e).detail; });
+  const ready = async () => { for (let i = 0; i < 100 && s.speciesState !== 'ready'; i++) await tick(); assert.equal(s.speciesState, 'ready'); };
+  s.set({ at: AT }, 'none');
+  await ready();
+  assert.deepEqual(kept.at(-1), { ids: [AIL.id, ORTIE.id].sort((a, b) => a - b), within: null });
+  // The east half of the zone shown: the garlic alone.
+  const east = [AT[0], AT[1] - 0.02, AT[0] + 0.02, AT[1] + 0.02];
+  s.setView(east, { kinds: ['inat'], by: 'map' });
+  assert.deepEqual(s.within, [AIL.id]);
+  assert.deepEqual(kept.at(-1)?.within, [AIL.id]);
+  // Moved a little, the same plants: the search not run again.
+  const runs = kept.length;
+  s.setView([AT[0] + 0.001, AT[1] - 0.02, AT[0] + 0.021, AT[1] + 0.02], { kinds: ['inat'], by: 'map' });
+  assert.equal(kept.length, runs);
+  // Another source shown alone: none of these points.
+  s.setView(east, { kinds: ['gbif'], by: 'map' });
+  assert.deepEqual(s.within, []);
+  // All of the circle shown: the whole zone, no view.
+  s.setView([AT[0] - 0.05, AT[1] - 0.05, AT[0] + 0.05, AT[1] + 0.05], { kinds: ['inat'], by: 'map' });
+  assert.deepEqual([s.view, s.within, kept.at(-1)?.within], [null, null, null]);
+  // Another period: the view kept, its plants found among the new points.
+  s.setView(east, { kinds: ['inat'], by: 'map' });
+  s.set({ periode: 'annee' }, 'none');
+  await tick();
+  await ready();
+  assert.deepEqual([s.view?.box, s.within, kept.at(-1)?.within], [east, [AIL.id], [AIL.id]]);
+  // « Toute la zone »: the whole zone, the map that led it framed again.
+  s.wholeZone();
+  assert.deepEqual([s.view, s.within, kept.at(-1)?.within, refit], [null, null, null, { by: 'map' }]);
+  // Another circle: the view let go.
+  s.setView(east, { kinds: ['inat'], by: 'map' });
+  s.set({ r: 2000 }, 'none');
+  assert.deepEqual([s.view, s.within], [null, null]);
+  await tick();
+  await ready();
+  assert.equal(kept.at(-1)?.within, null);
+  s.dispose();
+});

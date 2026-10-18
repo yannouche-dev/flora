@@ -130,11 +130,17 @@ test.describe('un grand écran', () => {
     await app.open(`#/builder?g=${encodeURIComponent('[map(r=1km),results,plant.wikipedia]')}&${AT}&p=${ortie}`);
     const grid = () => page.evaluate(() => new URLSearchParams(location.hash.split('?')[1] || '').get('g'));
     const chips = (/** @type {string} */ comp) => page.locator(`gf-builder section.cell[data-comp="${comp}"] .cell-links`);
-    await expect(chips('map').locator('.link-chip')).toHaveCount(4);
+    await expect(chips('map').locator('.link-chip')).toHaveCount(5);
     // The map's points: every plant of the zone, not only the search's.
     await chips('map').locator('[data-link="recherche"]').click();
     await expect.poll(grid).toBe('[map(r=1km,suit=0),results,plant.wikipedia]');
     await expect(chips('map').locator('[data-link="recherche"]')).toHaveAttribute('aria-pressed', 'false');
+    // The list: the whole zone, wherever the map is; then what it shows again.
+    await chips('map').locator('[data-link="liste"]').click();
+    await expect.poll(grid).toBe('[map(r=1km,suit=0,liste=zone),results,plant.wikipedia]');
+    await expect(chips('map').locator('[data-link="liste"]')).toHaveAttribute('aria-pressed', 'false');
+    await chips('map').locator('[data-link="liste"]').click();
+    await expect.poll(grid).toBe('[map(r=1km,suit=0),results,plant.wikipedia]');
     // The results over the whole of France.
     await chips('results').locator('[data-link="zone"]').click();
     await expect.poll(grid).toBe('[map(r=1km,suit=0),results(zone=0),plant.wikipedia]');

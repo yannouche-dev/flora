@@ -250,7 +250,10 @@ const store = (/** @type {string} */ key, value) => {
  * Events: spot-select {id}, plant-select {placeId, entryId, plantId}, pin-move {coordinates},
  *         plant-move {placeId, entryId, plantId, coordinates}, map-longpress {coordinates} (while the pin can be placed),
  *         point-info {coordinates, label?} (long press elsewhere, a place picked in its search: the point card opens), point-close,
- *         view-change {lat, lon, zoom, pitch, bearing} (the map moved by hand: its centre, zoom, and in 3D its tilt and turn),
+ *         view-change {lat, lon, zoom, pitch, bearing, bounds} (the map moved by hand: its centre, zoom, in 3D its tilt and
+ *         turn, and what it shows: bounds()), view-framed {bounds} (framed by itself: on its area — bounds null — or on
+ *         the view given),
+ *         point-hover {point | null} (a point of its area under the mouse, then none: never on a touch screen),
  *         edit-change {editing}, positions-save {pin, places: [{id, coordinates}], plants: [{placeId, entryId, plantId, coordinates}]}
  *
  * What a map says — the quiet-map rule, for every map of the app (this one, its 3D mirror gf-map-gl.js and its
@@ -277,6 +280,11 @@ export class GfMap extends LitElement {
   static properties = {
     /** A point (observation, occurrence) clicked: 'open' its record (default), 'pick' (a `point-pick` event), 'none'. */
     pointClick: { attribute: 'point-click' },
+    /**
+     * The points of a plant lit from outside the map (a list's row hovered beside it, a free layout's): their kin keys
+     * (map-style.js speciesKey), lit as the map's own hover lights them; null: none.
+     */
+    litKeys: { attribute: false },
     spots: { attribute: false },
     selectedId: { attribute: false },
     pin: { attribute: false },
@@ -382,6 +390,8 @@ export class GfMap extends LitElement {
     this.highlight = null;
     /** How a point clicked answers (none given: its record opened, nothing inside a mini-app). @type {'open' | 'pick' | 'none' | null} */
     this.pointClick = null;
+    /** @type {Set<string> | null} */
+    this.litKeys = null;
     /** @type {{ key: string, feature: any } | null} */
     this.zone = null;
     /** @type {{ key: string, points: { coordinates: [number, number], title: string, url?: string }[], photo?: string | null } | null} */
@@ -837,7 +847,7 @@ export class GfMap extends LitElement {
       : L.circleMarker([y, x], { radius: 9, className: 'gf-focus-point', bubblingMouseEvents: false }).addTo(layer);
     this.#tip(dot, p.title, { gap: 6 });
     this.#onPoint(dot, p);
-    if (this.#map.getSize().x) this.#map.flyTo([y, x], Math.max(this.#map.getZoom(), 11), { duration: 0.6 });
+    if (this.#map.getSize().x) { this.#selfMove(); this.#map.flyTo([y, x], Math.max(this.#map.getZoom(), 11), { duration: 0.6 }); }
     this.announce(`Sur la carte : ${p.title}`);
   }
 
@@ -957,6 +967,8 @@ export class GfMap extends LitElement {
     for (const type of ['pointerdown', 'wheel', 'keydown', 'touchstart']) root.addEventListener(type, byHand, { passive: true, capture: true });
     root.addEventListener('gl-moveend', () => this.#movedByHand());
     map.on('moveend', () => this.#movedByHand());
+    // A plant lit from outside (litKeys): its points come into sight as the map moves, lit too.
+    map.on('moveend', () => { if (this.litKeys?.size) this.#lightFrom(); });
 
     map.on('moveend', () => {
       this.#scheduleAreas();
@@ -991,9 +1003,12 @@ export class GfMap extends LitElement {
       this.#applyFrame();
       // Resized (a column coming beside it): framed again on what it was last framed on — the area's circle, or
       // the frame given.
-      if (this.#lastFit === 'frame' && this.#framedBounds) map.fitBounds(this.#framedBounds, { paddingTopLeft: [40, 56], paddingBottomRight: [40, 40], maxZoom: this.#framedMax, animate: false });
-      // On the view it was given (vue=): it stays there.
-      else if (this.#lastFit !== 'view') this.#fitArea();
+      if (this.#lastFit === 'frame' && this.#framedBounds) {
+        this.#selfMove();
+        map.fitBounds(this.#framedBounds, { paddingTopLeft: [40, 56], paddingBottomRight: [40, 40], maxZoom: this.#framedMax, animate: false });
+      // On the view it was given (vue=): it stays there — showing more of it, or less.
+      } else if (this.#lastFit === 'view') { if (map.getSize().x) this.#emit('view-framed', { bounds: this.bounds() }); }
+      else this.#fitArea();
       if (this.fit && !this.#fitted) this.#fitToContent();
     });
     this.#resized.observe(this.#root);
@@ -1052,6 +1067,7 @@ export class GfMap extends LitElement {
     if ((['search', 'noSearch'].some(k => changed.has(k) && changed.get(k) !== undefined) && this.hasAttribute('search') !== this.#hasSearch)
       || (changed.has('noLayers') && changed.get('noLayers') !== undefined)) this.#rebuildControls();
     if (changed.has('radiusHandle')) this.#syncHandle();
+    if (changed.has('litKeys')) this.#lightFrom();
     if (changed.has('line')) this.#syncLine();
     // Its owner's background and overlays (in their order) and their opacity: shown, not told back (they are its owner's).
     if (changed.has('base') && this.base && this.base !== this.#base) this.#setBase(/** @type {any} */ (this.base), false);
@@ -1123,7 +1139,7 @@ export class GfMap extends LitElement {
     const marker = this.#markers.get(id);
     if (!marker || !map.getSize().x) return;
     const latLng = marker.getLatLng();
-    if (!map.getBounds().pad(-0.15).contains(latLng)) map.setView(latLng, Math.max(map.getZoom(), 16));
+    if (!map.getBounds().pad(-0.15).contains(latLng)) { this.#selfMove(); map.setView(latLng, Math.max(map.getZoom(), 16)); }
   }
 
   connectedCallback() {
@@ -1396,7 +1412,7 @@ export class GfMap extends LitElement {
       this.#meCircle?.setLatLng([lat, lon]).setRadius(fix.accuracy);
     }
     this.#syncMeCircle();
-    if (this.#follow) map.panTo([lat, lon], { animate: true });
+    if (this.#follow) { this.#selfMove(); map.panTo([lat, lon], { animate: true }); }
   }
 
   /**
@@ -1629,6 +1645,13 @@ export class GfMap extends LitElement {
     this.#onPoint(dot, point);
     // Hovered (touched): the other points of the same plant are lit with it.
     this.#kin(dot, speciesKey(p) || (fancy ? null : 'area'));
+    // Under the mouse (never a touch: it picks): told — a list beside the map lights its plant's row (point-hover).
+    if (!matchMedia('(hover: none)').matches) {
+      const leave = () => { if (this.#hovered === dot) { this.#hovered = null; this.#emit('point-hover', { point: null }); } };
+      dot.on('mouseover', () => { this.#hovered = dot; this.#emit('point-hover', { point: p }); });
+      dot.on('mouseout', leave);
+      dot.on('remove', leave);
+    }
     return dot;
   }
 
@@ -1869,6 +1892,18 @@ export class GfMap extends LitElement {
   /** The elements lit now. @type {Element[]} */ #lit = [];
   /** @type {L.Layer | null} */ #litBy = null;
   /** The plant lit now (its kin key). @type {string | null} */ #litKey = null;
+  /** The elements lit from outside (litKeys). @type {Element[]} */ #litFrom = [];
+  /** The area's point under the mouse (point-hover). @type {L.Layer | null} */ #hovered = null;
+
+  /** Every layer of a plant's points (its kin): the area's, the plant chosen's, the groups', the plants of places. @returns {any[]} */
+  #kinLayers() {
+    const map = /** @type {L.Map} */ (this.#map);
+    const groups = [this.#areaLayer, this.#hlLayer, this.#clusterLayer, this.#spreadLayer];
+    /** @type {any[]} */
+    const layers = groups.flatMap(g => g ? g.getLayers() : []);
+    if (this.#plantLayer && map.hasLayer(this.#plantLayer)) layers.push(...this.#plantMarkers.values());
+    return layers;
+  }
 
   /** Lights one plant's points (null: none), `origin` the most. @param {string | null} key @param {L.Layer} [origin] */
   #light(key, origin) {
@@ -1879,10 +1914,7 @@ export class GfMap extends LitElement {
     const map = this.#map;
     if (!map) return;
     if (key) {
-      const groups = [this.#areaLayer, this.#hlLayer, this.#clusterLayer, this.#spreadLayer];
-      /** @type {any[]} */
-      const layers = groups.flatMap(g => g ? g.getLayers() : []);
-      if (this.#plantLayer && map.hasLayer(this.#plantLayer)) layers.push(...this.#plantMarkers.values());
+      const layers = this.#kinLayers();
       // Only those in sight (a wide scope has hundreds out of it): fewer elements restyled.
       const view = this.#sight(0.2);
       for (const l of layers) {
@@ -1895,8 +1927,28 @@ export class GfMap extends LitElement {
     }
   }
 
+  /**
+   * The points of the plant lit from outside (litKeys: a list's row hovered) — those in sight, as the map's own hover
+   * lights them —; none: let go.
+   */
+  #lightFrom() {
+    for (const el of this.#litFrom) el.classList.remove('gf-lit');
+    this.#litFrom = [];
+    const keys = this.litKeys;
+    if (!keys?.size || !this.#map) return;
+    const view = this.#sight(0.2);
+    for (const l of this.#kinLayers()) {
+      if (!keys.has(l.gfKin) || (l.getLatLng && !view.contains(l.getLatLng()))) continue;
+      const el = l.getElement?.();
+      if (el) { el.classList.add('gf-lit'); this.#litFrom.push(el); }
+    }
+  }
+
   /** Points drawn again (a new icon has its own classes): the plant lit stays lit, its new points with it. */
-  #relight() { if (this.#litKey) this.#light(this.#litKey, this.#litBy ?? undefined); }
+  #relight() {
+    if (this.#litKey) this.#light(this.#litKey, this.#litBy ?? undefined);
+    if (this.litKeys?.size) this.#lightFrom();
+  }
 
   /**
    * The view and around it (`pad`: a share of its size on each side). In 3D, what the 3D map shows — tilted, turned
@@ -2178,18 +2230,39 @@ export class GfMap extends LitElement {
   /** The zoom the last frame may not exceed (kept for refits on resize: a single point never zooms to the max). */
   #framedMax = 18;
 
-  /** The circle framed (area.fit), with a margin; `ease`: a short zoom animation. @param {boolean} [ease] */
+  /** The circle framed (area.fit), with a margin; `ease`: a short zoom animation. Told: `view-framed` (bounds null). @param {boolean} [ease] */
   #fitArea(ease = false) {
     const map = this.#map, b = this.#areaBounds;
     if (!map || !b || !map.getSize().x) return;
     this.#lastFit = 'area';
-    this.#handAt = 0;
+    this.#selfMove();
     // The area seen through its ring: the distance under it again at once (a resize).
     if (this.#smooth) { this.#tweenArea(this.#smooth, false); return; }
     // area.inset: room kept free of the circle (a panel over the map: its height below, its width on the right).
     const inset = /** @type {any} */ (this.area)?.inset || {};
     map.fitBounds(b, { paddingTopLeft: [16, 16], paddingBottomRight: [16 + (inset.right || 0), 16 + (inset.bottom || 0)], animate: ease });
+    this.#emit('view-framed', { bounds: null });
   }
+
+  /** Framed on its area again (« Toute la zone » beside it). */
+  refit() { this.#fitArea(true); }
+
+  /**
+   * What the map shows, as [west, south, east, north] — in 3D, what the 3D map shows (#sight) —; null before it has a
+   * size. @returns {number[] | null}
+   */
+  bounds() {
+    const map = this.#map;
+    if (!map || !map.getSize().x) return null;
+    const b = this.#sight(0);
+    return [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+  }
+
+  /**
+   * A move the map makes itself (a flight to a point, a frame, the position followed, a place found): never told as
+   * one by hand, even just after a touch (a point touched: the map flies to it).
+   */
+  #selfMove() { this.#handAt = 0; clearTimeout(this.#viewTimer); this.#toldView = ''; }
 
   /** When the map was last touched by hand (performance.now(); 0: never, or since moved by the map itself). */
   #handAt = 0;
@@ -2210,7 +2283,7 @@ export class GfMap extends LitElement {
       if (text === this.#toldView) return;
       this.#toldView = text;
       this.#told = [viewKey(view), ...this.#told].slice(0, 2);
-      this.#emit('view-change', view);
+      this.#emit('view-change', { ...view, bounds: this.bounds() });
     }, 300);
   }
 
@@ -2225,9 +2298,10 @@ export class GfMap extends LitElement {
     if (!map || !v) return;
     this.#lastFit = 'view';
     if (given && (this.#told.includes(viewKey(v)) || this.#inGesture())) return;
-    this.#handAt = 0;
+    this.#selfMove();
     map.setView([v.lat, v.lon], v.zoom, { animate: false });
     this.#gl?.viewChanged?.();
+    if (map.getSize().x) this.#emit('view-framed', { bounds: this.bounds() });
   }
 
   /**
@@ -2284,6 +2358,7 @@ export class GfMap extends LitElement {
     this.#framedBounds = bounds;
     const opts = { paddingTopLeft: /** @type {[number, number]} */ ([40, 56]), paddingBottomRight: /** @type {[number, number]} */ ([40, 40 + bottom]), maxZoom: /** @type {any} */ (frame).maxZoom || (single ? 18 : 19) };
     this.#framedMax = opts.maxZoom;
+    this.#selfMove();
     // Eased: from the view shown to the next one, smoothly (an area touched in the sheet, and back).
     if (/** @type {any} */ (frame).ease && !matchMedia('(prefers-reduced-motion: reduce)').matches) { map.flyToBounds(bounds, { ...opts, duration: 0.8 }); return true; }
     map.fitBounds(bounds, { ...opts, animate: false });
@@ -2303,6 +2378,7 @@ export class GfMap extends LitElement {
     // Not laid out yet: fitting now would compute a view for a 0×0 map.
     if (!points.length || !map.getSize().x) return;
     this.#fitted = true;
+    this.#selfMove();
     if (points.length === 1) {
       const [lon, lat] = points[0];
       map.setView([lat, lon], 17);
@@ -2313,6 +2389,7 @@ export class GfMap extends LitElement {
 
   /** Centers the map on a spot or point. @param {[number, number]} coordinates @param {number} [zoom] */
   flyTo([lon, lat], zoom) {
+    this.#selfMove();
     this.#map?.flyTo([lat, lon], zoom ?? Math.max(this.#map.getZoom(), 16), { duration: 0.6 });
   }
 
@@ -2333,6 +2410,7 @@ export class GfMap extends LitElement {
     this.#setFollow(true);
     if (this.#fix) {
       const [lon, lat] = this.#fix;
+      this.#selfMove();
       this.#map?.flyTo([lat, lon], Math.max(this.#map.getZoom(), 17), { duration: 0.6 });
     }
   }
@@ -2436,6 +2514,7 @@ export class GfMap extends LitElement {
     search.addEventListener('place-pick', (/** @type {any} */ e) => {
       const [lon, lat] = e.detail.coordinates;
       this.#setFollow(false);
+      this.#selfMove();
       this.#map?.flyTo([lat, lon], Math.max(this.#map.getZoom(), 15), { duration: 0.6 });
       this.showPoint(e.detail.coordinates, e.detail.label);
     });

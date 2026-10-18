@@ -18,8 +18,12 @@ export class GfPlantCard extends LitElement {
     compact: { type: Boolean, reflect: true },
     grid: { type: Boolean, reflect: true },
     current: { type: Boolean, reflect: true },
+    /** Its plant hovered elsewhere: a point of a map beside the list, another list's row (a free layout: state.js hover). */
+    lit: { type: Boolean, reflect: true },
     /** Grid: visible column keys, in order (gf-plant-list). */
     columns: { attribute: false },
+    /** Its observations in a free layout's zone, in words (core/observations.js obsNotes); null: none said. */
+    obs: { attribute: false },
     /** Grid view: epure (big photos), standard, scientific. */
     view: { reflect: true },
     _thumb: { state: true }
@@ -82,6 +86,9 @@ export class GfPlantCard extends LitElement {
     .sci { font-family: var(--gf-font-serif); font-style: italic; }
     .sci .author { font-style: normal; color: var(--gf-text-muted); font-size: 0.85em; }
     .meta { font-size: 0.8rem; color: var(--gf-text-muted); }
+    .meta .obs { color: var(--gf-text); font-variant-numeric: tabular-nums; }
+    :host([grid]) .cell.obs { font-variant-numeric: tabular-nums; }
+    :host([grid]) .cell.obs small { display: block; font-size: 0.72rem; color: var(--gf-text-muted); overflow: hidden; text-overflow: ellipsis; }
     .fuzzy { color: var(--gf-warn); }
     mark { background: var(--gf-accent-soft); color: inherit; border-radius: 2px; padding: 0 1px; }
 
@@ -143,6 +150,9 @@ export class GfPlantCard extends LitElement {
     .tag { flex: none; font-size: 0.72rem; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--gf-surface-2); color: var(--gf-text); }
     .tag.pn, .tag.pr { background: color-mix(in srgb, #dc2626 16%, var(--gf-surface)); color: color-mix(in srgb, #dc2626 70%, var(--gf-text)); }
     .tag.re { background: color-mix(in srgb, #f59e0b 22%, var(--gf-surface)); }
+    /* Lit (its plant hovered on the map beside it): as hovered, with a thin line; the current plant's look wins. */
+    :host([lit]) a.row, :host([lit][grid]) { background: var(--gf-surface-2); box-shadow: inset 2px 0 0 var(--gf-accent); }
+    :host([lit][grid]) a.row { background: none; box-shadow: none; }
     :host([current]) a.row, :host([current][grid]) { background: var(--gf-accent-soft); box-shadow: inset 3px 0 0 var(--gf-accent); }
     :host([current][grid]) a.row { background: none; box-shadow: none; }
   `;
@@ -168,11 +178,25 @@ export class GfPlantCard extends LitElement {
     this.grid = false;
     /** The plant shown in the plant pane. */
     this.current = false;
+    this.lit = false;
     /** @type {string[]} */
     this.columns = [];
+    /** @type {{ n: number, text: string, detail: string, title: string } | null} */
+    this.obs = null;
     this.view = '';
     /** @type {any} */
     this._thumb = undefined;
+    // Hovered (a mouse, a pen: never a finger, whose touch opens it), or reached by the keyboard: told — a free layout
+    // lights its plant's points on its maps (`plant-hover`). Focus moving inside the row never reaches its host.
+    this.addEventListener('pointerenter', e => { if (e.pointerType !== 'touch') this.#hover(true); });
+    this.addEventListener('pointerleave', e => { if (e.pointerType !== 'touch') this.#hover(false); });
+    this.addEventListener('focusin', e => { if (/** @type {Element} */ (e.composedPath()[0]).matches?.(':focus-visible')) this.#hover(true); });
+    this.addEventListener('focusout', () => this.#hover(false));
+  }
+
+  /** Its plant hovered (`on`), or no more: `plant-hover` {id, on}. @param {boolean} on */
+  #hover(on) {
+    if (this.plant) this.dispatchEvent(new CustomEvent('plant-hover', { detail: { id: this.plant.id, on }, bubbles: true, composed: true }));
   }
 
   /** @type {AbortController | null} */
@@ -235,6 +259,9 @@ export class GfPlantCard extends LitElement {
       genus: () => html`<span class="cell"><i>${p.genus || ''}</i></span>`,
       species: () => html`<span class="cell sci" title=${p.scientificName + (p.author ? ' ' + p.author : '')}>${highlight(p.species || p.scientificName, q)}${p.fuzzy ? html` <span class="fuzzy">≈</span>` : nothing}${this.view === 'scientific' && p.author ? html` <span class="author">${p.author}</span>` : nothing}</span>`,
       status: () => html`<span class="cell muted" title=${STATUS_LABELS[p.status] || ''}>${STATUS_SHORT[p.status] || '—'}</span>`,
+      obs: () => this.obs
+        ? html`<span class="cell obs" title=${this.obs.title}><b>${this.obs.n.toLocaleString('fr-FR')}</b>${this.obs.detail ? html`<small>${this.obs.detail}</small>` : nothing}</span>`
+        : html`<span class="cell obs muted">—</span>`,
       legal: () => html`<span class="cell legal">
         ${legal.includes('nationale') ? html`<span class="tag pn" title="Protégée en France (protection nationale)">Protégée FR</span>`
           : legal.includes('protegee') ? html`<span class="tag pr" title="Protégée dans une région ou un département">Protégée</span>` : nothing}
@@ -277,7 +304,7 @@ export class GfPlantCard extends LitElement {
           <div class="name ${p.vernacularName ? '' : 'latin'}">${highlight(title, q)}</div>
           <div class="sci">${p.vernacularName ? highlight(p.scientificName, q) : nothing} <span class="author">${this.compact ? '' : p.author || ''}</span></div>
           <div class="meta">
-            ${p.family}${p.match ? html` · ${p.match === 'syn.' ? 'synonyme' : highlight(p.match, q)}` : nothing}${p.fuzzy ? html` · <span class="fuzzy">approchant</span>` : nothing}
+            ${this.obs ? html`<span class="obs" title=${this.obs.title}>${this.obs.text}</span> · ` : nothing}${p.family}${p.match ? html` · ${p.match === 'syn.' ? 'synonyme' : highlight(p.match, q)}` : nothing}${p.fuzzy ? html` · <span class="fuzzy">approchant</span>` : nothing}
           </div>
         </span>
       </a>

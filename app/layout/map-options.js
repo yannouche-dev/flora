@@ -75,7 +75,7 @@ export const MAP_INTENTS = {
   terrain: { label: 'Sur le terrain', about: 'photos aériennes, autour de moi (ma position suivie), commandes compactes', set: { autour: '1', base: 'photo', ui: 'compacte' } },
   floraison: { label: 'Floraison du moment', about: 'les observations de ce mois-ci, la plante courante en groupes', set: { when: 'mois', regroupe: '1' } },
   protege: { label: 'Espaces protégés', about: 'ZNIEFF, Natura 2000, parcs nationaux, réserves, biotopes', set: { layers: 'znieff+n2000+parcs+reserves+biotopes' } },
-  repartition: { label: 'Répartition de la plante', about: 'la plante courante seule, toutes ses observations (iNaturalist et GBIF)', set: { src: 'inat+gbif', suit: '0', plante: 'seule' } },
+  repartition: { label: 'Répartition de la plante', about: 'la plante courante seule, toutes ses observations (iNaturalist et GBIF)', set: { src: 'inat+gbif', suit: '0', plante: 'seule', liste: 'zone' } },
   relief: { label: 'Relief', about: 'la carte en 3D', set: { '3d': '1' } }
 };
 

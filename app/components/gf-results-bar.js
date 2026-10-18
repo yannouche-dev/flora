@@ -17,7 +17,7 @@ import { href } from '../core/router.js';
  * family/genus suggestions and the "approximate results" note.
  * Fires `open-filters` when the mobile filter button is pressed.
  */
-const COLUMN_LABELS = { fr: 'Nom français', sci: 'Nom scientifique', family: 'Famille', genus: 'Genre', status: 'Statut', legal: 'Protection', photo: 'Photo' };
+const COLUMN_LABELS = { fr: 'Nom français', sci: 'Nom scientifique', family: 'Famille', genus: 'Genre', status: 'Statut', legal: 'Protection', photo: 'Photo', obs: 'Observations' };
 /** Sort chosen in the grid (e.g. "-family") shown in the card view's menu. @param {string} sort */
 const columnSortLabel = sort => (COLUMN_LABELS[sort.replace(/^-/, '')] || sort) + (sort.startsWith('-') ? ' (inverse)' : '');
 
@@ -138,7 +138,8 @@ export class GfResultsBar extends LitElement {
     const { query, results, compact, status, gridView } = this.#store.state;
     const view = gridViewOf(this.#store.state);
     const active = activeFilterCount(query);
-    const sorts = SORTS.filter(s => s.value !== 'relevance' || query.q);
+    // « Pertinence » with a text only; « Plus observées » with the zone's counts only (a free layout's: never in Flore).
+    const sorts = SORTS.filter(s => (s.value !== 'relevance' || query.q) && (s.value !== 'obs' || results.counted));
 
     return html`
       <div class="search">

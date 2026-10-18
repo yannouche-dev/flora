@@ -82,9 +82,20 @@ let searchRun = 0;
  * set while it is on screen and taken off when it goes; null: the whole flora. @type {number[] | null}
  */
 let scope = null;
+/** What comes with the scope: each plant's observations in it (the sort « Plus observées »), those a map shows of it. @type {ScopeExtra} */
+let scopeExtra = {};
 
-/** Keeps the search to these plants (null: the whole flora); the next runSearch() follows. @param {Iterable<number> | null} ids */
-export function setSearchScope(ids) { scope = ids ? [...ids] : null; }
+/**
+ * @typedef {{ observed?: Record<number, number> | null, within?: number[] | null }} ScopeExtra
+ *   `observed`: each plant's observations in the zone, by id (workers/search-core.js: the sort `obs`); `within`: the
+ *   plants of the part of the zone a map shows (the results kept to them, the zone's said apart: `inZone`)
+ */
+
+/**
+ * Keeps the search to these plants (null: the whole flora), with what comes with them; the next runSearch() follows.
+ * @param {Iterable<number> | null} ids @param {ScopeExtra} [extra]
+ */
+export function setSearchScope(ids, extra = {}) { scope = ids ? [...ids] : null; scopeExtra = ids ? extra : {}; }
 
 /** Runs the search for the current store query and publishes results, facets and suggestions. */
 export async function runSearch() {
@@ -92,16 +103,17 @@ export async function runSearch() {
   const run = ++searchRun;
   let response;
   try {
-    response = await call({ type: 'search', q, filters, sort, membership: mineValues(filters), only: scope });
+    response = await call({ type: 'search', q, filters, sort, membership: mineValues(filters), only: scope, observed: scopeExtra.observed ?? null,
+      within: scopeExtra.within ?? null });
   } catch (error) {
     console.error(error);
     if (run === searchRun) store.set({ status: 'error', statusText: 'Recherche impossible : ' + /** @type {Error} */ (error).message });
     return;
   }
-  const { total, items, facets, suggestions, fuzzy, sort: effectiveSort } = response;
+  const { total, items, facets, suggestions, fuzzy, sort: effectiveSort, counted, inZone } = response;
   // Drop answers that a newer keystroke already superseded.
   if (run === searchRun) {
-    store.set({ results: { total, items, facets, suggestions, fuzzy, sort: effectiveSort } });
+    store.set({ results: { total, items, facets, suggestions, fuzzy, sort: effectiveSort, counted, inZone } });
   }
 }
 
@@ -116,13 +128,15 @@ export async function searchWhole({ q, filters, sort }) {
 }
 
 /**
- * The search of a query kept to these plants (null: the whole flora), its whole answer — results, facets,
- * suggestions —, the store left alone: a search of its own beside the app's (core/search-channel.js: a free layout's
- * second group). @param {import('./store.js').Query} query @param {number[] | null} only
+ * The search of a query kept to these plants (null: the whole flora), with what comes with them (setSearchScope), its
+ * whole answer — results, facets, suggestions —, the store left alone: a search of its own beside the app's
+ * (core/search-channel.js: a free layout's second group).
+ * @param {import('./store.js').Query} query @param {number[] | null} only @param {ScopeExtra} [extra]
  */
-export async function searchIn({ q, filters, sort }, only) {
-  const { total, items, facets, suggestions, fuzzy, sort: effectiveSort } = await call({ type: 'search', q, filters, sort, membership: mineValues(filters), only });
-  return { total, items, facets, suggestions, fuzzy, sort: effectiveSort };
+export async function searchIn({ q, filters, sort }, only, extra = {}) {
+  const { total, items, facets, suggestions, fuzzy, sort: effectiveSort, counted, inZone } = await call({ type: 'search', q, filters, sort,
+    membership: mineValues(filters), only, observed: only ? extra.observed ?? null : null, within: only ? extra.within ?? null : null });
+  return { total, items, facets, suggestions, fuzzy, sort: effectiveSort, counted, inZone };
 }
 
 const NO_FILTERS = { status: [], family: [], genus: [], photo: [], french: [], mine: [] };

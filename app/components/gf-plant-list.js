@@ -16,8 +16,9 @@ const OVERSCAN = 6;
 
 /**
  * Grid columns: the plant (photo, French name), its classification in the order of the filters
- * (family, genus, species), its statuses, then the row actions (♥, 📍).
- * Each sortable column sorts the results, and shows how many values of its filter are selected.
+ * (family, genus, species), its statuses, its observations in a free layout's zone, then the row actions (♥, 📍).
+ * Each sortable column sorts the results, and shows how many values of its filter are selected; `desc`: its first
+ * order is the largest first (the most observed).
  */
 export const COLUMNS = [
   // Wide enough for its name whole (« Photo », whatever the fonts): its filter's badge goes under it (.th wraps).
@@ -28,26 +29,34 @@ export const COLUMNS = [
   { key: 'species', label: 'Espèce', sort: 'sci', width: 'minmax(80px, 1fr)' },
   { key: 'status', label: 'Statut', sort: 'status', facet: 'status', width: 'minmax(80px, 0.8fr)' },
   { key: 'legal', label: 'Protection', sort: 'legal', facet: 'legal', width: 'minmax(96px, 1.1fr)' },
+  // A free layout's zone only (its plants' observations given: `obs`), before ♥ and 📍 (the row's link spans those before).
+  { key: 'obs', label: 'Observations', sort: 'obs', desc: true, width: 'minmax(84px, 0.7fr)' },
   { key: 'fav', label: '', width: '36px' },
   { key: 'pin', label: '', width: '36px' }
 ];
 
 /** Columns of each grid view. */
 const VIEW_COLUMNS = {
-  standard: ['photo', 'fr', 'family', 'genus', 'species', 'fav', 'pin'],
-  epure: ['photo', 'fr', 'family', 'genus', 'species', 'fav', 'pin'],
+  standard: ['photo', 'fr', 'family', 'genus', 'species', 'obs', 'fav', 'pin'],
+  epure: ['photo', 'fr', 'family', 'genus', 'species', 'obs', 'fav', 'pin'],
   scientific: COLUMNS.map(c => c.key)
 };
 
 /** Results pane narrower than this: the least useful columns go. */
 const NARROW = 760;
 
-/** Visible column keys for a view and a pane width. @param {string} view @param {number} width @returns {string[]} */
-export function gridColumns(view, width) {
+/**
+ * Visible column keys for a view and a pane width — the observations' with them only (`obs`: a free layout's zone).
+ * @param {string} view @param {number} width @param {{ obs?: boolean }} [o] @returns {string[]}
+ */
+export function gridColumns(view, width, { obs = false } = {}) {
   const keys = VIEW_COLUMNS[baseOf(view)] || VIEW_COLUMNS.standard;
-  const drop = width < NARROW ? (baseOf(view) === 'scientific' ? ['genus', 'status'] : ['genus']) : [];
+  const drop = [...(width < NARROW ? (baseOf(view) === 'scientific' ? ['genus', 'status'] : ['genus']) : []), ...(obs ? [] : ['obs'])];
   return keys.filter(k => !drop.includes(k));
 }
+
+/** No columns (a list of cards): the same array each render, its rows not drawn again for it. @type {string[]} */
+const NO_COLUMNS = [];
 
 /** @param {string} key @param {string} view */
 const columnWidth = (key, view) => key === 'photo' && baseOf(view) === 'epure' ? '96px'
@@ -71,6 +80,15 @@ export class GfPlantList extends LitElement {
     items: { attribute: false },
     /** The search it lists (core/search-channel.js: a free layout's group); none: the app's. */
     channel: { attribute: false },
+    /**
+     * Each plant's observations in a free layout's zone, by id (core/observations.js obsNotes: its words): its rows say
+     * them, its grid has their column; null: none (Flore, the whole flora).
+     */
+    obs: { attribute: false },
+    /** The plant hovered elsewhere (a point of a map beside it: a free layout's state.js hover): its row lit, never scrolled to. */
+    lit: { attribute: false },
+    /** What it says with no plant (a free layout's list kept to what a map shows); null: none matches the search. */
+    empty: { attribute: false },
     _scrollTop: { state: true },
     _height: { state: true },
     _width: { state: true }
@@ -171,10 +189,20 @@ export class GfPlantList extends LitElement {
     this.items = null;
     /** @type {import('../core/search-channel.js').Channel | null} */
     this.channel = null;
+    /** @type {Map<number, { n: number, text: string, detail: string, title: string }> | null} */
+    this.obs = null;
+    /** @type {number | null} */
+    this.lit = null;
+    /** @type {string | null} */
+    this.empty = null;
     this.addEventListener('scroll', () => {
       cancelAnimationFrame(this.#frame);
       this.#frame = requestAnimationFrame(() => { this._scrollTop = this.scrollTop; });
     }, { passive: true });
+    // The pointer gone from the list: none of its rows hovered any more (a row drawn away under it never said so).
+    this.addEventListener('pointerleave', e => {
+      if (e.pointerType !== 'touch') this.dispatchEvent(new CustomEvent('plant-hover', { detail: { id: null, on: false }, bubbles: true, composed: true }));
+    });
   }
 
   connectedCallback() {
@@ -240,16 +268,29 @@ export class GfPlantList extends LitElement {
     this.dispatchEvent(new CustomEvent('focus-facet', { detail: { facet }, bubbles: true, composed: true }));
   }
 
+  /** The grid's columns: the same array while they are the same (each row's `columns`: never drawn again for nothing). */
+  #columns() {
+    if (!this.grid) return NO_COLUMNS;
+    const view = gridViewOf(this.#store.state);
+    const key = [view, this._width < NARROW, Boolean(this.obs)].join('|');
+    if (this.#columnsFor !== key) { this.#columnsFor = key; this.#columnsMemo = gridColumns(view, this._width, { obs: Boolean(this.obs) }); }
+    return this.#columnsMemo;
+  }
+  #columnsFor = '';
+  /** @type {string[]} */ #columnsMemo = [];
+
   /** @param {string[]} keys */
   #header(keys) {
     const { results: { sort }, query: { filters } } = this.#store.state;
     return html`<div class="head" role="row">
       ${keys.map(key => /** @type {any} */ (COLUMNS.find(c => c.key === key))).map(c => {
-        const active = c.sort && (sort === c.sort ? 'ascending' : sort === '-' + c.sort ? 'descending' : null);
+        // Its first order (sort=key) is the largest first for a `desc` column (« Observations »: the most observed).
+        const first = c.sort && sort === c.sort, second = c.sort && sort === '-' + c.sort;
+        const active = first || second ? (first !== Boolean(c.desc) ? 'ascending' : 'descending') : null;
         const count = c.facet ? filters[c.facet]?.length || 0 : 0;
         return html`<div class="th" role="columnheader" aria-sort=${active || 'none'}>
           ${c.sort ? html`<button class="sort" type="button" ?data-active=${Boolean(active)}
-            title=${'Trier par ' + c.label.toLowerCase() + (active === 'ascending' ? ' (ordre inverse)' : '')}
+            title=${'Trier par ' + c.label.toLowerCase() + (first ? ' (ordre inverse)' : '')}
             @click=${() => this.#sortBy(/** @type {string} */ (c.sort))}>${c.label}${active === 'ascending' ? html` ${icon('caret-up-fill')}` : active === 'descending' ? html` ${icon('caret-down-fill')}` : ''}</button>` : nothing}
           ${count ? html`<button class="funnel" type="button" title=${`Filtre ${c.label.toLowerCase()} : ${count} valeur${count > 1 ? 's' : ''}`}
             @click=${() => this.#showFacet(/** @type {string} */ (c.facet))}>${icon('funnel-fill')} ${count}</button>` : nothing}
@@ -262,11 +303,11 @@ export class GfPlantList extends LitElement {
     const { query: { q }, compact, status } = this.#store.state;
     const items = this.#list;
     const gridView = gridViewOf(this.#store.state);
-    const columns = this.grid ? gridColumns(gridView, this._width) : [];
+    const columns = this.#columns();
     if (this.grid) this.style.setProperty('--gf-cols', columns.map(k => columnWidth(k, gridView)).join(' '));
     const header = this.grid ? this.#header(columns) : nothing;
     if (status === 'ready' && !items.length) {
-      return html`${header}<p class="empty">Aucune plante ne correspond à cette recherche.</p>`;
+      return html`${header}<p class="empty">${this.empty ?? 'Aucune plante ne correspond à cette recherche.'}</p>`;
     }
 
     const rowHeight = this.#rowHeight;
@@ -286,10 +327,12 @@ export class GfPlantList extends LitElement {
             .plant=${plant}
             .query=${q}
             .columns=${columns}
+            .obs=${this.obs?.get(plant.id) ?? null}
             view=${this.grid ? baseOf(gridView) : ''}
             ?compact=${compact && !this.grid}
             ?grid=${this.grid}
             ?current=${plant.id === this.current}
+            ?lit=${plant.id === this.lit}
           ></gf-plant-card>
         `)}
       </div>
