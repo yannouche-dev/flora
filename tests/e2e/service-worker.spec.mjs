@@ -206,13 +206,13 @@ test('MapLibre (ON_DEMAND) : pas précaché, gardé dans le cache de la version 
   // Installed without it: the app's 1.6 MB lighter.
   expect(await kept()).toEqual([]);
   // Asked as MapLibre asks for its worker (with ?v=…): kept under its address without the query.
-  const worker = await fetched(page, 'vendor/maplibre/maplibre-gl-worker.mjs?v=6.13.0');
+  const worker = await fetched(page, 'vendor/maplibre/maplibre-gl-worker.mjs?v=6.14.0');
   expect(worker).toContain('MapLibre GL JS');
   await expect.poll(kept).toEqual(['/vendor/maplibre/maplibre-gl-worker.mjs']);
   // The site out of reach: served from that cache, whatever the query.
   siteDown = true;
   await context.setOffline(true);
-  expect(await fetched(page, 'vendor/maplibre/maplibre-gl-worker.mjs?v=6.13.0')).toBe(worker);
+  expect(await fetched(page, 'vendor/maplibre/maplibre-gl-worker.mjs?v=6.14.0')).toBe(worker);
   expect(await fetched(page, 'vendor/maplibre/maplibre-gl-worker.mjs')).toBe(worker);
   expect(errors).toEqual([]);
   await context.close();

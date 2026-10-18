@@ -202,7 +202,7 @@ GeoFlora est une application HTML5 **sans serveur et sans étape de build** : de
 index.html               shell + import map ("lit", "leaflet" → vendor/)
 manifest.webmanifest     PWA installable
 sw.js                    service worker (shell précaché et versionné au déploiement, images et tuiles IGN en cache)
-vendor/                  Lit 3 et Leaflet 1.9 en modules ES autonomes ; maplibre/ : MapLibre GL JS 6.13.0, ses fichiers ESM tels que publiés (cartes en 3D, chargé à la demande) (scripts/vendor.sh)
+vendor/                  Lit 3 et Leaflet 1.9 en modules ES autonomes ; maplibre/ : MapLibre GL JS 6.14.0, ses fichiers ESM tels que publiés (cartes en 3D, chargé à la demande) (scripts/vendor.sh)
 lib/plant-sources.mjs    enrichissement distant (réutilisé tel quel)
 app/
   main.js                démarrage : synchro du dataset → index de recherche

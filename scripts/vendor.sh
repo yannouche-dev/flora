@@ -13,7 +13,7 @@ set -euo pipefail
 LIT_VERSION="${LIT_VERSION:-3.3.3}"
 LEAFLET_VERSION="${LEAFLET_VERSION:-1.9.4}"
 # A release at least 7 days old (the repository's rule for dependencies).
-MAPLIBRE_VERSION="${MAPLIBRE_VERSION:-6.13.0}"
+MAPLIBRE_VERSION="${MAPLIBRE_VERSION:-6.14.0}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
