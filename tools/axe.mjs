@@ -10,22 +10,17 @@
 // Needs the dev dependencies (npm ci: Playwright and axe-core, at the versions of package-lock.json) and Chromium.
 
 import { readFileSync, writeFileSync } from 'node:fs';
-import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
+import { AXE, AXE_VERSION, TAGS } from './axe-rules.mjs';
 
 const args = process.argv.slice(2);
 const UPDATE = args.includes('--update');
 const BASE = new URL(args.find(a => !a.startsWith('--')) || 'http://localhost:8000/').href;
 const ORIGIN = new URL(BASE).origin;
 const BASELINE = join(dirname(fileURLToPath(import.meta.url)), 'axe-baseline.json');
-const require = createRequire(import.meta.url);
-const AXE_VERSION = require('axe-core/package.json').version;
-const AXE = readFileSync(require.resolve('axe-core/axe.min.js'), 'utf8');
-/** WCAG 2.0, 2.1, 2.2 levels A and AA, and axe's best practices (one h1 per view, landmarks…). */
-const TAGS = ['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa', 'best-practice'];
-const SCREENS = ['#/?q=ortie', '#/plant/128268', '#/discover', '#/app/rencontres', '#/app/parcours', '#/app/cueillette', '#/app/mosaique', '#/map', '#/collections', '#/settings', '#/builder/tableau'];
+const SCREENS = ['#/?q=ortie', '#/plant/128268', '#/discover', '#/app/rencontres', '#/app/parcours', '#/app/cueillette', '#/app/mosaique', '#/app/faux-amis', '#/map', '#/collections', '#/settings', '#/builder/tableau'];
 const DEVICES = {
   phone: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
   desktop: { viewport: { width: 1280, height: 900 } }

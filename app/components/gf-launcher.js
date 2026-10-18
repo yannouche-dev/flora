@@ -1,13 +1,13 @@
 // @ts-check
 // The list of the ways to play, one card each: the mini-apps (app/miniapps: Rencontres, Parcours botanique, Cueillette
-// prudente, Mosaïque; each one opens alone on the screen, at #/app/<id>) — what each one does and « Jouer ». (Not
+// prudente, Mosaïque, Faux amis; each one opens alone on the screen, at #/app/<id>) — what each one does and « Jouer ». (Not
 // Scientifique: a mode, chosen in the header's switch or in Réglages, not a way to play.) A mini-app with a game under
 // way on this device offers two actions instead: « Continuer » (where it was left: its last step) and « Recommencer »
 // — asked first in a dialog, it empties what the mini-app owns, as its « Rejouer » does (runtime.js#replay, the other
 // tabs too), and opens it at its first step. One list, two places:
 //  - `page`: the Découvrir tab (#/discover, and the start page during the first steps), a page of its own — a title,
-//    each card with its picture (core/scenes.js); cards on a wide screen (a row of four; two by two on a medium one),
-//    a list on a phone; during the first steps, « Passer : montrer toute l'application »;
+//    each card with its picture (core/scenes.js); cards on a wide screen (at most four a row, as many on each row as
+//    can be: five, three and two — the shorter row centred; two a row on a medium one), a list on a phone; during the first steps, « Passer : montrer toute l'application »;
 //  - in the launcher's dialog (gf-scenarios, the film icon): compact, an icon each.
 // A card played fires `launched` (the dialog closes on it).
 
@@ -68,9 +68,12 @@ export class GfLauncher extends LitElement {
     .page h1 { display: flex; align-items: center; gap: 10px; margin: 0; font-size: 1.6rem; line-height: 1.2; }
     .page h1 .bi { color: var(--gf-accent); }
     .page .intro { margin: 6px 0 0; max-width: 40em; color: var(--gf-text-muted); font-size: 1rem; line-height: 1.45; }
-    /* The four cards: two by two on a medium screen, a row of four on a wide one (never three and one left alone). */
-    .page ul { gap: 16px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    @container (min-width: 1000px) { .page ul { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    /* The cards in rows as even as can be (never three and one left alone): --wide and --mid, the cards a row there
+       (render: at most four, at most three), the shorter row centred; two a row on a narrower screen. */
+    .page ul { display: flex; flex-wrap: wrap; justify-content: center; gap: 16px; --cols: 2; }
+    .page ul > li { box-sizing: border-box; flex: 0 0 calc((100% - (var(--cols) - 1) * 16px) / var(--cols)); min-width: 0; }
+    @container (min-width: 760px) { .page ul { --cols: var(--mid, 2); } }
+    @container (min-width: 1000px) { .page ul { --cols: var(--wide, 4); } }
     /* A wide screen: cards, the picture on top, the action at the bottom. */
     .page li { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr auto; gap: 6px; padding: 0 0 16px; overflow: hidden; border-radius: 18px; box-shadow: var(--gf-shadow); }
     .page li > :not(.pic) { margin-inline: 16px; }
@@ -87,7 +90,7 @@ export class GfLauncher extends LitElement {
       .page { padding: 16px 16px 24px; }
       .page h1 { font-size: 1.4rem; }
       .page .intro { font-size: 0.95rem; }
-      .page ul { gap: 12px; grid-template-columns: 1fr; }
+      .page ul { display: grid; gap: 12px; grid-template-columns: 1fr; }
       .page li { grid-template-columns: 104px 1fr; grid-template-rows: auto auto auto; gap: 2px 12px; padding: 12px; }
       .page li > :not(.pic) { margin-inline: 0; }
       .pic { grid-row: span 3; align-self: start; padding: 4px; border-radius: 12px; }
@@ -197,7 +200,10 @@ export class GfLauncher extends LitElement {
   }
 
   render() {
-    const list = html`<ul>${entries().map(e => this.#card(e))}</ul>${this.#askView()}`;
+    const all = entries();
+    // The cards a row, at most `max`, the rows as even as can be (five: three and two).
+    const cols = (/** @type {number} */ max) => Math.ceil(all.length / Math.ceil(all.length / max));
+    const list = html`<ul style=${this.page ? `--wide: ${cols(4)}; --mid: ${cols(3)}` : ''}>${all.map(e => this.#card(e))}</ul>${this.#askView()}`;
     if (!this.page) return list;
     return html`<section class="page" aria-labelledby="discover-title">
       <header>

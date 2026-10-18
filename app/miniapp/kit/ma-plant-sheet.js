@@ -29,6 +29,8 @@ export class MaPlantSheet extends LitElement {
     scoped: { type: Boolean },
     /** Where the sheet's width is kept (wide screens; none: not resizable). */
     layoutKey: { type: String, attribute: 'layout-key' },
+    /** What its ← (and Échap) goes back to, said (Faux amis: « Retour au bilan »). */
+    back: { type: String },
     /** The plant's name when it is not among the cards (a link): read from the flora. */
     _name: { state: true }
   };
@@ -62,6 +64,7 @@ export class MaPlantSheet extends LitElement {
     this.scoped = false;
     /** @type {string | null} */
     this.layoutKey = null;
+    this.back = 'Retour aux plantes autour';
     /** @type {string | null} */
     this._name = null;
   }
@@ -146,7 +149,7 @@ export class MaPlantSheet extends LitElement {
       ${z ? z.split('sheet', 'right', () => this.#max, 'ma-sheet-body') : nothing}
       <div class="body" id="ma-sheet-body" style=${w != null && z ? `--w-sheet: ${Math.max(360, Math.min(w, this.#max))}px` : ''}>
       <div class="sheet-head">
-        <button class="icon-btn" type="button" aria-label="Retour aux plantes autour" title="Retour (Échap)" @click=${() => this.#show(null)}>${icon('arrow-left')}</button>
+        <button class="icon-btn" type="button" aria-label=${this.back} title="Retour (Échap)" @click=${() => this.#show(null)}>${icon('arrow-left')}</button>
         <strong>${name || 'Plante'}</strong>
       </div>
       <gf-plant-detail embedded plant-id=${this.open} view="epure" ?scoped=${this.scoped} .mediaAt=${this.mediaAt}></gf-plant-detail>
