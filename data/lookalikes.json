@@ -176,7 +176,7 @@
       "edible": [{ "taxon": "Laurus nobilis", "label": "Laurier sauce" }],
       "part": "feuilles",
       "severity": "toxique",
-      "tell": ["Seul le laurier sauce (Laurus nobilis) est comestible ; le laurier rose est hautement toxique."],
+      "tell": [],
       "sources": ["ete", "vigilanses-8"]
     },
     {

@@ -12,7 +12,8 @@
 //  - severity and TPPT (Agroscope): a pair whose toxic plant is at TPPT level 4 (very strong toxic) is never only
 //    « toxique »; « grave » is that level (severityFrom « tppt »), and needs it;
 //  - a « mortel » or « grave » pair without criteria (tell) or symptoms, unless its reference entry lists the field in
-//    `gaps` (not given by the cited sources, to be completed); a gap that is filled is an error too (stale).
+//    `gaps` (not given by the cited sources, to be completed); a gap that is filled is an error too (stale);
+//  - a criterion (tell) that another pair gives too: copied from another confusion, it describes other plants.
 // The « à vérifier » confusions are listed (::notice::), not required.
 // Paths: PLANTS_FILE, LOOKALIKES_FILE, SAFETY_FILE, REFERENCE_FILE (defaults: data/…).
 
@@ -88,9 +89,16 @@ export function checkConfusions({ reference, lookalikes, plants, safety }) {
     }
   }
 
+  /** Each criterion, and the first pair giving it. @type {Map<string, number>} */
+  const tells = new Map();
   pairs.forEach((p, i) => {
     const name = `pair ${i + 1} (${taxa(p, 'toxic').join(', ')} ↔ ${taxa(p, 'edible').join(', ')})`;
     if (!covered.has(p)) errors.push(`lookalikes.json ${name} is in no « publiée » confusion of the reference list`);
+    for (const t of Array.isArray(p.tell) ? p.tell : []) {
+      const first = tells.get(String(t).trim());
+      if (first === undefined) tells.set(String(t).trim(), i);
+      else if (first !== i) errors.push(`lookalikes.json ${name}: its criterion « ${t} » is pair ${first + 1}'s too (copied from another confusion?)`);
+    }
     // Severity and TPPT.
     const level = Math.max(0, ...taxa(p, 'toxic').map((/** @type {string} */ t) => tpptLevel(t, plants, entries)));
     if (level >= 4 && p.severity === 'toxique') errors.push(`lookalikes.json ${name}: « toxique », but its toxic plant is at TPPT level 4 (très fortement toxique): « grave » (severityFrom « tppt ») or « mortel »`);

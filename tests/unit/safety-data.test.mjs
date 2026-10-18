@@ -103,7 +103,7 @@ test('SAFE-2 / SAFE-5 / SAFE-13 : les données livrées passent la comparaison a
   assert.ok(pending.length > 0, 'des pistes restent à vérifier contre une source');
 });
 
-test('check-confusions : confusion de référence absente, piste non vérifiée montrée, gravité sous le TPPT, critères manquants', () => {
+test('check-confusions : confusion de référence absente, piste non vérifiée montrée, gravité sous le TPPT, critères manquants ou recopiés', () => {
   const clone = (/** @type {any} */ x) => structuredClone(x);
   const run = (/** @type {any} */ ref, /** @type {any} */ look) => checkConfusions({ reference: ref, lookalikes: look, plants, safety }).errors;
   // A published confusion removed from lookalikes.json.
@@ -133,4 +133,10 @@ test('check-confusions : confusion de référence absente, piste non vérifiée 
   const ref6 = clone(reference);
   ref6.confusions.push({ id: 'x', toxic: ['Plantus inventus'], edible: ['Daucus carota'], status: 'à vérifier' });
   assert.ok(run(ref6, lookalikes).some(e => /Plantus inventus/.test(e)));
+  // A criterion copied from another pair (the laurier rose one given to the laurier cerise).
+  const look7 = clone(lookalikes);
+  const nerium = look7.pairs.find((/** @type {any} */ p) => p.toxic[0].taxon === 'Nerium oleander');
+  look7.pairs.find((/** @type {any} */ p) => p.toxic[0].taxon === 'Prunus laurocerasus').tell = [...nerium.tell];
+  const errors7 = run(reference, look7);
+  assert.ok(errors7.some(e => /Prunus laurocerasus.*criterion .* is pair 14's too/.test(e)), errors7.join('\n'));
 });
