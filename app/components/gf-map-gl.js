@@ -607,8 +607,6 @@ export class GlView {
     const map = this.#map;
     if (!map) return;
     const source = e?.sourceId || e?.source?.id || '';
-    // A failed tile asks for no new frame: one more settles the view (offline, the host out of reach).
-    map.triggerRepaint();
     if ((source === 'gf-dem' || source === 'gf-shade') && ++this.#demErrors === DEM_GIVE_UP && !this.#demFailed) {
       this.#demFailed = true;
       this.#restyle();
