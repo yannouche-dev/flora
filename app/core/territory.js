@@ -5,6 +5,7 @@
 // Also sorts a plant's INPN statuses into national / here / elsewhere.
 
 import { config } from '../config.js';
+import { readText, writeText } from './prefs.js';
 
 /**
  * @typedef {{ code: string, name: string, region: string, former: string, polygons: number[][][][] }} Department
@@ -134,15 +135,12 @@ export async function bundledOutline(kind, name = '') {
 
 /** @returns {string | null} ISO code of the chosen region */
 export function myRegion() {
-  try { return localStorage.getItem(config.storageKeys.region) || null; } catch { return null; }
+  return readText(config.storageKeys.region) || null;
 }
 
 /** @param {string | null} iso */
 export function setMyRegion(iso) {
-  try {
-    if (iso) localStorage.setItem(config.storageKeys.region, iso);
-    else localStorage.removeItem(config.storageKeys.region);
-  } catch { /* not persisted */ }
+  writeText(config.storageKeys.region, iso || null); // not written: not persisted
   dispatchEvent(new Event('geoflora-region'));
 }
 

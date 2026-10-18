@@ -8,6 +8,7 @@
 // privacy page (« Oublier ma dernière position »), the first steps started again (Réglages).
 
 import { config } from '../config.js';
+import { readJSON, writeJSON } from './prefs.js';
 
 /** The mini-apps around a place, Rencontres first (the one whose place is « the last one » for the rest of the app). */
 export const AROUND_APPS = /** @type {const} */ (['rencontres', 'cueillette', 'mosaique']);
@@ -24,15 +25,13 @@ const keyOf = id => config.storageKeys.appPrefix + id + '.state';
 
 /** @param {string} id @returns {Saved | null} */
 function read(id) {
-  try {
-    const saved = JSON.parse(localStorage.getItem(keyOf(id)) || 'null');
-    return saved && typeof saved === 'object' && saved.v === V ? saved : null;
-  } catch { return null; }
+  const saved = readJSON(keyOf(id), null);
+  return saved && typeof saved === 'object' && saved.v === V ? saved : null;
 }
 
 /** @param {string} id @param {Saved} saved */
 function write(id, saved) {
-  try { localStorage.setItem(keyOf(id), JSON.stringify(saved)); } catch { /* not kept */ }
+  writeJSON(keyOf(id), saved); // not written: not kept
 }
 
 /**
@@ -40,29 +39,24 @@ function write(id, saved) {
  * null: none kept. @param {string} id @returns {string | null}
  */
 export function leftAt(id) {
-  try {
-    const path = JSON.parse(localStorage.getItem(keyOf(id)) || 'null')?.path;
-    return Array.isArray(path) && typeof path[path.length - 1] === 'string' ? path[path.length - 1] : null;
-  } catch { return null; }
+  const path = readJSON(keyOf(id), null)?.path;
+  return Array.isArray(path) && typeof path[path.length - 1] === 'string' ? path[path.length - 1] : null;
 }
 
-/** What a mini-app around a place keeps (nothing: {}). @param {string} id @returns {AroundCtx} */
-export const aroundKept = id => read(id)?.ctx ?? {};
-
 /**
- * What any mini-app keeps in its context (nothing: {}), read as the runtime reads it — a state of another version is
- * none (runtime.js drops it): the list of the ways to play asks Faux amis whether a game is under way.
- * @param {string} id @returns {Record<string, unknown>}
+ * What a mini-app keeps in its context (nothing: {}), read as the runtime reads it — a state of another version is
+ * none (runtime.js drops it): the place of a game around a place, whether Faux amis has a game under way.
+ * @param {string} id @returns {AroundCtx & Record<string, unknown>}
  */
 export const keptCtx = id => read(id)?.ctx ?? {};
 
 /** A game under way: a place chosen in that mini-app. @param {string} id */
-export const aroundUnderWay = id => Array.isArray(aroundKept(id).point);
+export const aroundUnderWay = id => Array.isArray(keptCtx(id).point);
 
 /** The last place chosen in one of them (Rencontres' first), with its name; null: none. @returns {{ point: [number, number], place: string | null } | null} */
 export function keptPlace() {
   for (const id of AROUND_APPS) {
-    const c = aroundKept(id);
+    const c = keptCtx(id);
     if (Array.isArray(c.point)) return { point: c.point, place: c.place ?? null };
   }
   return null;
@@ -79,7 +73,7 @@ export function forgetPlaces() {
 /** Every game around a place forgotten (the first steps started again, Réglages): their states removed. */
 export function clearAroundGames() {
   for (const id of AROUND_APPS) {
-    try { localStorage.removeItem(keyOf(id)); } catch { /* nothing kept */ }
+    writeJSON(keyOf(id), null);
   }
 }
 

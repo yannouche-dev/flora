@@ -4,6 +4,7 @@
 // tabs come back to where they were, a plant goes to its places, a place to its plants in Flore.
 
 import { config } from '../config.js';
+import { readJSON, writeJSON } from './prefs.js';
 import { parse } from './router.js';
 import { store } from './store.js';
 
@@ -23,20 +24,18 @@ const EMPTY = { flore: null, query: null, plant: null, collection: null, mine: n
 
 /** @returns {Context} */
 function read() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(config.storageKeys.context) || 'null');
-    if (!saved || typeof saved !== 'object') return { ...EMPTY };
-    const str = (/** @type {any} */ v, /** @type {string} */ prefix) => typeof v === 'string' && v.startsWith(prefix) ? v : null;
-    return {
-      flore: str(saved.flore, '#/'),
-      query: str(saved.query, '#/'),
-      plant: Number.isInteger(saved.plant) ? saved.plant : null,
-      collection: typeof saved.collection === 'string' ? saved.collection : null,
-      mine: str(saved.mine, '#/collections'),
-      map: str(saved.map, '#/map'),
-      mapPlants: Array.isArray(saved.mapPlants) ? saved.mapPlants.filter(Number.isInteger) : []
-    };
-  } catch { return { ...EMPTY }; }
+  const saved = readJSON(config.storageKeys.context, null);
+  if (!saved || typeof saved !== 'object') return { ...EMPTY };
+  const str = (/** @type {any} */ v, /** @type {string} */ prefix) => typeof v === 'string' && v.startsWith(prefix) ? v : null;
+  return {
+    flore: str(saved.flore, '#/'),
+    query: str(saved.query, '#/'),
+    plant: Number.isInteger(saved.plant) ? saved.plant : null,
+    collection: typeof saved.collection === 'string' ? saved.collection : null,
+    mine: str(saved.mine, '#/collections'),
+    map: str(saved.map, '#/map'),
+    mapPlants: Array.isArray(saved.mapPlants) ? saved.mapPlants.filter(Number.isInteger) : []
+  };
 }
 
 /** The current context. @returns {Context} */
@@ -46,7 +45,7 @@ export const context = () => store.state.context || EMPTY;
 export function setContext(patch) {
   const next = { ...context(), ...patch };
   if (JSON.stringify(next) === JSON.stringify(context())) return;
-  try { localStorage.setItem(config.storageKeys.context, JSON.stringify(next)); } catch { /* kept for this visit only */ }
+  writeJSON(config.storageKeys.context, next); // not written: kept for this visit only
   store.set({ context: next });
 }
 

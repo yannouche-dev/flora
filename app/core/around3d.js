@@ -19,7 +19,7 @@ import * as cache from './cache.js';
 import { moduleOn } from './modules.js';
 import { fetchJson } from './net.js';
 import { binomial, findPhotos, floraPhotos, fullName, isHybrid, observationPointsMany, speciesAround } from './nearby.js';
-import { writeLocal } from './quota.js';
+import { readJSON, writeJSON } from './prefs.js';
 
 /** The radii offered (metres): the mini-apps' distances, 200 m to 50 km (what iNaturalist's circle search allows). */
 export const RADII_3D = [200, 500, 1000, 2000, 5000, 10000, 20000, 50000];
@@ -60,10 +60,8 @@ export function cleanAround3d(v) {
 }
 
 function readAll() {
-  try {
-    const v = JSON.parse(localStorage.getItem(config.storageKeys.around3d) || '{}');
-    return v && typeof v === 'object' && !Array.isArray(v) ? /** @type {Record<string, unknown>} */ (v) : {};
-  } catch { return {}; }
+  const v = readJSON(config.storageKeys.around3d, {});
+  return v && typeof v === 'object' && !Array.isArray(v) ? /** @type {Record<string, unknown>} */ (v) : {};
 }
 
 /** What a map keeps (`radius`: a page's own circle, when the map has never been given one). @param {string} scope @param {number} [radius] */
@@ -79,7 +77,7 @@ export function setAround3dPrefs(scope, patch) {
   const all = readAll();
   const next = cleanAround3d({ ...cleanAround3d(all[scope]), ...patch });
   all[scope] = next;
-  writeLocal(config.storageKeys.around3d, JSON.stringify(all));
+  writeJSON(config.storageKeys.around3d, all);
   return next;
 }
 

@@ -15,7 +15,7 @@ import { fillAltitudes } from './altitude.js';
 import { publish, subscribe } from './sync.js';
 import { exportNotes, importNotes } from './sheet-blocks.js';
 import { notesEvents, notesLoaded } from './sheet-notes.js';
-import { noteStorageError } from './quota.js';
+import { readJSON, readText, writeJSON, writeText } from './prefs.js';
 
 export { FAVORITES_ID };
 
@@ -488,16 +488,14 @@ export async function requestPersistence() {
 
 /** Remembers, without opening the database, that this device holds places worth protecting. */
 function markHasSpots() {
-  try {
-    if (localStorage.getItem(config.storageKeys.hasSpots)) return;
-    localStorage.setItem(config.storageKeys.hasSpots, '1');
-  } catch { /* storage unavailable */ }
+  if (readText(config.storageKeys.hasSpots)) return;
+  writeText(config.storageKeys.hasSpots, '1');
   // First place ever: ask now (later sessions ask at startup).
   requestPersistence();
 }
 
 export function hasSpots() {
-  try { return localStorage.getItem(config.storageKeys.hasSpots) === '1'; } catch { return false; }
+  return readText(config.storageKeys.hasSpots) === '1';
 }
 
 // ── Season, labels & distance ─────────────────────────────────────────────
@@ -545,13 +543,14 @@ export async function anyHarvest() {
 
 /** Recently used plants (quick capture suggestions). @returns {number[]} */
 export function recentPlants() {
-  try { return JSON.parse(localStorage.getItem(config.storageKeys.recentPlants) || '[]'); } catch { return []; }
+  const list = readJSON(config.storageKeys.recentPlants, []);
+  return Array.isArray(list) ? list.filter(Number.isInteger) : [];
 }
 
 /** @param {number} plantId */
 export function rememberPlant(plantId) {
   const list = [plantId, ...recentPlants().filter(id => id !== plantId)].slice(0, 12);
-  try { localStorage.setItem(config.storageKeys.recentPlants, JSON.stringify(list)); } catch { /* not persisted */ }
+  writeJSON(config.storageKeys.recentPlants, list);
 }
 
 /** @param {Place} place @param {Date} [today] */
@@ -650,10 +649,8 @@ let allowEmptyBackup = false;
 
 /** @returns {Backup | null} */
 export function readBackup() {
-  try {
-    const data = JSON.parse(localStorage.getItem(config.storageKeys.backup) || 'null');
-    return data && Array.isArray(data.features) ? data : null;
-  } catch { return null; }
+  const data = readJSON(config.storageKeys.backup, null);
+  return data && Array.isArray(data.features) ? data : null;
 }
 
 /**
@@ -671,13 +668,8 @@ export async function writeBackup() {
   allowEmptyBackup = false;
   const json = JSON.stringify({ savedAt: new Date().toISOString(), features: toPortable(all).features, ...(sheetNotes.length ? { sheetNotes } : {}) });
   if (json.length > BACKUP_LIMIT) return 'too-large';
-  try {
-    localStorage.setItem(config.storageKeys.backup, json);
-    return 'saved';
-  } catch (error) {
-    noteStorageError(error);
-    return 'failed';
-  }
+  // Refused for lack of room: said on screen (quota.js).
+  return writeText(config.storageKeys.backup, json) ? 'saved' : 'failed';
 }
 
 /** Collections in the backup that the database no longer has. @returns {Promise<Collection[]>} */
@@ -768,7 +760,7 @@ export async function exportGeoJSON(only) {
     download(file);
   }
   if (!only) {
-    try { localStorage.setItem(config.storageKeys.lastExport, new Date().toISOString()); } catch { /* not persisted */ }
+    writeText(config.storageKeys.lastExport, new Date().toISOString());
   }
   return { count: features.length, cancelled: false };
 }
@@ -785,7 +777,7 @@ function download(file) {
 
 /** @returns {string | null} */
 export function lastExportDate() {
-  try { return localStorage.getItem(config.storageKeys.lastExport); } catch { return null; }
+  return readText(config.storageKeys.lastExport);
 }
 
 /** Merges a decoded transfer link (slim GeoJSON), its sheet notes included. @param {{ features: any[], sheetNotes?: any[] }} featureCollection */

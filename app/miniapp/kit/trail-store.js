@@ -4,25 +4,26 @@
 // its occurrences together), counted, and its recap's numbers (how long, how far, how high). Tested under Node
 // (tests/unit/trail.test.mjs). A walk itself is a place of Mes plantes (core/collections.js).
 
+import { config } from '../../config.js';
 import { distance } from '../../core/collections.js';
+import { readJSON } from '../../core/prefs.js';
 import { altitudeOf, profileOf } from '../../core/altitude.js';
 import { walkOf } from '../../core/walk.js';
 
-/** The parcours being walked (its place id), those walked before, and the one just ended (its recap, until left). */
-export const KEY = 'geoflora.trail', LIST = 'geoflora.trails', DONE = 'geoflora.trailDone';
-/** @param {string} k @param {any} d */
-export const read = (k, d) => { try { return JSON.parse(localStorage.getItem(k) || 'null') ?? d; } catch { return d; } };
-/** Nothing (null): the key removed — a parcours never opened, or played again, leaves none behind. @param {string} k @param {any} v */
-export const write = (k, v) => { try { if (v == null) localStorage.removeItem(k); else localStorage.setItem(k, JSON.stringify(v)); } catch { /* not kept */ } };
+/**
+ * The parcours being walked (its place id), those walked before, and the one just ended (its recap, until left); none
+ * (null): the key removed — a parcours never opened, or played again, leaves none behind.
+ */
+export const KEY = config.storageKeys.trail, LIST = config.storageKeys.trails, DONE = config.storageKeys.trailDone;
 
 /** A parcours under way on this device (the list of the ways to play says « Continuer »). */
-export const walkUnderWay = () => Boolean(read(KEY, null));
+export const walkUnderWay = () => Boolean(readJSON(KEY, null));
 /** The parcours under way (its place id), if any. @returns {string | null} */
-export const walkOn = () => read(KEY, null);
+export const walkOn = () => readJSON(KEY, null);
 /** The parcours just ended, whose recap shows (its place id), if any. @returns {string | null} */
-export const walkDone = () => read(DONE, null);
+export const walkDone = () => readJSON(DONE, null);
 /** The parcours this device kept (to take up again, just ended): theirs before origins were recorded. @returns {string[]} */
-export const keptWalks = () => [...(/** @type {string[]} */ (read(LIST, []))), read(DONE, null)].filter(x => typeof x === 'string');
+export const keptWalks = () => [...(/** @type {string[]} */ (readJSON(LIST, []))), readJSON(DONE, null)].filter(x => typeof x === 'string');
 
 /** A new parcours' name, until the place where it starts is known (« Mon parcours botanique en forêt de … »). */
 export const NAMED = 'Mon parcours botanique';

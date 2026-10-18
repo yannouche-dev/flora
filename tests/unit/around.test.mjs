@@ -9,7 +9,7 @@ import { readFile } from 'node:fs/promises';
 import { bio, deckOf, distanceAt, distanceEvents, distanceKey, distanceNear, distLabel, ethnoSentence, harvestOrder, nextDistance, swipe, unswipe } from '../../app/miniapp/kit/cards.js';
 import { lookalikesOf } from '../../app/core/lookalikes.js';
 import { UNREAD } from '../../app/core/alerts.js';
-import { aroundKept, forgetPlaces, keptPlace, leftAt, migrateDiscover, clearAroundGames } from '../../app/core/around-sessions.js';
+import { keptCtx, forgetPlaces, keptPlace, leftAt, migrateDiscover, clearAroundGames } from '../../app/core/around-sessions.js';
 import * as M from '../../app/core/place-model.js';
 import { toPortable } from '../../app/core/portable.js';
 import { defineMiniApp } from '../../app/miniapp/define.js';
@@ -130,23 +130,23 @@ test('sessions : la partie partagée d’avant donnée à la dernière jouée (s
   const old = { point: [2.35, 48.85], place: 'Paris', radius: 2000, matches: [7], passed: [8] };
   localStorage.setItem('geoflora.app.rencontres.state', JSON.stringify({ v: 1, path: ['start', 'map', 'cards'], ctx: {}, finished: false }));
   migrateDiscover(old, '#/collections');
-  assert.deepEqual(aroundKept('rencontres'), old, 'rien ne dit laquelle : Rencontres');
-  assert.deepEqual([aroundKept('cueillette'), aroundKept('mosaique')], [{}, {}], 'les autres : rien, pas de « Continuer »');
+  assert.deepEqual(keptCtx('rencontres'), old, 'rien ne dit laquelle : Rencontres');
+  assert.deepEqual([keptCtx('cueillette'), keptCtx('mosaique')], [{}, {}], 'les autres : rien, pas de « Continuer »');
   assert.equal(leftAt('rencontres'), 'cards', 'l’étape où on l’a laissée, gardée');
   assert.equal(leftAt('cueillette'), null);
   clearAroundGames();
   // Opened at the old address of a scenario: that one was played last.
   migrateDiscover(old, '#/discover?s=mosaic&p=3');
-  assert.deepEqual(aroundKept('mosaique'), old);
-  assert.deepEqual([aroundKept('rencontres'), aroundKept('cueillette')], [{}, {}]);
+  assert.deepEqual(keptCtx('mosaique'), old);
+  assert.deepEqual([keptCtx('rencontres'), keptCtx('cueillette')], [{}, {}]);
   clearAroundGames();
   migrateDiscover(old, '#/discover?s=harvest');
-  assert.deepEqual(aroundKept('cueillette'), old);
+  assert.deepEqual(keptCtx('cueillette'), old);
   assert.equal(leftAt('cueillette'), 'start');
   assert.deepEqual(keptPlace(), { point: [2.35, 48.85], place: 'Paris' });
   forgetPlaces();
   assert.equal(keptPlace(), null);
-  assert.deepEqual(aroundKept('cueillette').matches, [7], 'le reste de la partie gardé');
+  assert.deepEqual(keptCtx('cueillette').matches, [7], 'le reste de la partie gardé');
   // Nothing to hand over: nothing written.
   clearAroundGames();
   migrateDiscover({ point: null, matches: [], passed: [] });

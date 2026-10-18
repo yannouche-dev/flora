@@ -45,7 +45,7 @@ const RESTRICTED = {
   },
   storage: {
     selector: "Identifier[name='localStorage']",
-    message: 'Components keep their settings through a core module (store.js and the other app/core services), not localStorage.'
+    message: 'Read and write localStorage through core/prefs.js (readJSON, writeJSON, definePref…), its keys in config.storageKeys.'
   }
 };
 const restricted = (/** @type {(keyof typeof RESTRICTED)[]} */ ...keys) => ['error', ...keys.map(k => RESTRICTED[k])];
@@ -80,15 +80,16 @@ export default [
     ...lit.configs['flat/recommended'],
     rules: {
       ...lit.configs['flat/recommended'].rules,
-      'no-restricted-syntax': restricted('nativeMember', 'tooltip', 'hash', 'replace')
+      'no-restricted-syntax': restricted('nativeMember', 'tooltip', 'hash', 'replace', 'storage')
     }
   },
   // Every import of the app finds its file. Not in tests/ (their page.evaluate imports resolve in the page, from the
   // site's root) nor in scripts/ (SheetJS is installed by scripts/package.json, for the data workflows only).
   { files: ['app/**/*.js', 'lib/**/*.mjs', 'sw.js'], rules: { 'import-x/no-unresolved': 'error' } },
-  { files: ['app/components/**/*.js'], rules: { 'no-restricted-syntax': restricted('nativeMember', 'tooltip', 'hash', 'replace', 'storage') } },
   // The navigation helpers themselves.
-  { files: ['app/core/history.js'], rules: { 'no-restricted-syntax': restricted('nativeMember', 'tooltip') } },
+  { files: ['app/core/history.js'], rules: { 'no-restricted-syntax': restricted('nativeMember', 'tooltip', 'storage') } },
+  // localStorage itself: the storage layer, and the channel between tabs it listens to.
+  { files: ['app/core/prefs.js', 'app/core/sync.js'], rules: { 'no-restricted-syntax': restricted('nativeMember', 'tooltip', 'hash', 'replace') } },
   { files: ['app/workers/**/*.js'], languageOptions: { globals: globals.worker } },
   { files: ['sw.js'], languageOptions: { globals: globals.serviceworker } },
   // Playwright: the functions given to page.evaluate run in the page.

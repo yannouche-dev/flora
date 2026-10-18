@@ -15,6 +15,7 @@
 // edited, added to from Mes plantes, shared, exported alone: their origin dropped (place-model.js#promoted) —, the
 // other places and their plants, the favourites, the settings, the answers of the online services kept in cache.
 
+import { config } from '../config.js';
 import { forgetMadeBy } from '../core/collections.js';
 import { defineMiniApp } from '../miniapp/define.js';
 import { trailSessionOf } from '../miniapp/kit/trail-session.js';
@@ -28,7 +29,7 @@ export default defineMiniApp({
   scene: 'trail',
   pitch: 'Marchez, nommez les plantes que vous croisez : chacune prend sa place sur la carte de votre parcours.',
   exit: { label: 'Quitter le parcours' },
-  owns: { keys: ['geoflora.trail', 'geoflora.trails', 'geoflora.trailDone', 'geoflora.trailLayout'], reset: () => forgetMadeBy('parcours'),
+  owns: { keys: [config.storageKeys.trail, config.storageKeys.trails, config.storageKeys.trailDone, config.storageKeys.trailLayout], reset: () => forgetMadeBy('parcours'),
     made: { label: 'le parcours en cours', kept: ['Votre parcours enregistré dans Mes plantes est conservé.', 'Vos {n} parcours enregistrés dans Mes plantes sont conservés.'] } },
   shared: ['Mes plantes (sauf les parcours qu’il y a enregistrés)', 'favoris', 'réglages'],
   // « Commencer ici »: located, the walk created there (its game: trail-session.js).

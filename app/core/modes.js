@@ -5,8 +5,7 @@
 // Scientifique); then it is arranged on its own, in Mode King and Réglages. No dependency on the store.
 
 import { config } from '../config.js';
-import { writeLocal } from './quota.js';
-import { onStorage } from './sync.js';
+import { definePref } from './prefs.js';
 
 /** The modes every installation has, which the others are made from. */
 export const BASE_MODES = /** @type {const} */ (['epure', 'standard', 'scientific']);
@@ -28,34 +27,23 @@ const BUILT_IN = [
 /** A key of a mode made here. */
 const OWN_KEY = /^m[a-z0-9]{2,12}$/;
 
-/** @returns {ModeInfo[]} */
-function read() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(config.storageKeys.modes) || '[]');
-    if (!Array.isArray(saved)) return [];
-    return saved.filter(m => m && OWN_KEY.test(m.key) && typeof m.label === 'string' && BASE_MODES.includes(m.base))
-      .map(m => ({ key: m.key, label: m.label.slice(0, 40), base: m.base, icon: MODE_ICON_CHOICES.includes(m.icon) ? m.icon : 'star', builtIn: false }));
-  } catch { return []; }
-}
+/** The modes made here, as stored (anything else dropped). @param {any} saved @returns {ModeInfo[]} */
+const cleanModes = saved => !Array.isArray(saved) ? [] : saved
+  .filter(m => m && OWN_KEY.test(m.key) && typeof m.label === 'string' && BASE_MODES.includes(m.base))
+  .map(m => ({ key: m.key, label: m.label.slice(0, 40), base: m.base, icon: MODE_ICON_CHOICES.includes(m.icon) ? m.icon : 'star', builtIn: false }));
 
-let own = read();
+// Made, renamed or deleted in another tab: this one lists them too.
+const pref = definePref({ key: config.storageKeys.modes, fallback: [], clean: cleanModes,
+  store: list => list.length ? list.map(({ builtIn, ...m }) => m) : null });
+const own = pref.get;
+/** @param {ModeInfo[]} next */
+const save = next => { pref.set(next); };
 
 /** Fires `change` when a mode is made, renamed or deleted. */
-export const modeEvents = new EventTarget();
-
-function save() {
-  writeLocal(config.storageKeys.modes, own.length ? JSON.stringify(own.map(({ builtIn, ...m }) => m)) : null);
-  modeEvents.dispatchEvent(new Event('change'));
-}
-
-// Modes made, renamed or deleted in another tab: this one lists them too.
-onStorage(config.storageKeys.modes, () => {
-  own = read();
-  modeEvents.dispatchEvent(new Event('change'));
-});
+export const modeEvents = pref.events;
 
 /** Every mode, the app's first. */
-export const modeList = () => [...BUILT_IN, ...own];
+export const modeList = () => [...BUILT_IN, ...own()];
 /** Every mode's key. */
 export const modeKeys = () => modeList().map(m => m.key);
 /** @param {unknown} key @returns {key is Mode} */
@@ -81,35 +69,31 @@ function newKey() {
 export function addMode(label, from) {
   const key = newKey();
   const model = modeInfo(from);
-  own = [...own, { key, label: label.trim().slice(0, 40) || 'Nouveau mode', base: model.base, icon: from === model.key && model.builtIn ? 'star' : model.icon, builtIn: false }];
-  save();
+  save([...own(), { key, label: label.trim().slice(0, 40) || 'Nouveau mode', base: model.base, icon: from === model.key && model.builtIn ? 'star' : model.icon, builtIn: false }]);
   return key;
 }
 
 /** @param {Mode} key @param {{ label?: string, icon?: typeof MODE_ICON_CHOICES[number] }} patch */
 export function updateMode(key, patch) {
-  own = own.map(m => m.key !== key ? m : {
+  save(own().map(m => m.key !== key ? m : {
     ...m,
     ...(patch.label !== undefined ? { label: patch.label.trim().slice(0, 40) || m.label } : {}),
     ...(patch.icon && MODE_ICON_CHOICES.includes(patch.icon) ? { icon: patch.icon } : {})
-  });
-  save();
+  }));
 }
 
 /** @param {Mode} key */
 export function removeMode(key) {
-  own = own.filter(m => m.key !== key);
-  save();
+  save(own().filter(m => m.key !== key));
 }
 
 /** Modes of a layout file, added when missing (same key: kept as it is here). @param {any[]} list */
 export function importModes(list) {
   if (!Array.isArray(list)) return;
   const known = modeKeys();
-  const add = list.filter(m => m && OWN_KEY.test(m.key) && !known.includes(m.key) && typeof m.label === 'string' && BASE_MODES.includes(m.base))
-    .map(m => ({ key: m.key, label: String(m.label).slice(0, 40), base: m.base, icon: MODE_ICON_CHOICES.includes(m.icon) ? m.icon : 'star', builtIn: false }));
-  if (add.length) { own = [...own, ...add]; save(); }
+  const add = cleanModes(list).filter(m => !known.includes(m.key));
+  if (add.length) save([...own(), ...add]);
 }
 
 /** The modes made here, for a layout file. */
-export const ownModes = () => own.map(({ builtIn, ...m }) => m);
+export const ownModes = () => own().map(({ builtIn, ...m }) => m);

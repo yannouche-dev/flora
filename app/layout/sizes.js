@@ -5,6 +5,7 @@
 // its address finds them; one with shares (a link) shows those. The 40 layouts used last are kept.
 
 import { config } from '../config.js';
+import { readText, writeJSON } from '../core/prefs.js';
 
 const KEY = config.storageKeys.freeLayout;
 const KEEP = 40;
@@ -14,19 +15,18 @@ let last = { raw: /** @type {string | null} */ (null), value: /** @type {Record<
 
 /** @returns {Record<string, Record<string, number[]>>} a copy, to change */
 function read() {
-  try {
-    const raw = localStorage.getItem(KEY);
-    if (raw !== last.raw) {
-      const v = JSON.parse(raw || 'null');
-      last = { raw, value: v && typeof v === 'object' && !Array.isArray(v) ? v : {} };
-    }
-    return { ...last.value };
-  } catch { return {}; }
+  const raw = readText(KEY);
+  if (raw !== last.raw) {
+    let v = null;
+    try { v = JSON.parse(raw || 'null'); } catch { /* unreadable: none */ }
+    last = { raw, value: v && typeof v === 'object' && !Array.isArray(v) ? v : {} };
+  }
+  return { ...last.value };
 }
 
 /** @param {Record<string, Record<string, number[]>>} all */
 function write(all) {
-  try { localStorage.setItem(KEY, JSON.stringify(all)); } catch { /* kept for this visit only */ }
+  writeJSON(KEY, all); // not written: kept for this visit only
 }
 
 /** The shares kept for a split of a layout (null: none). @param {string} shape @param {string} path @returns {number[] | null} */

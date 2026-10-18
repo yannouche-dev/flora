@@ -23,6 +23,7 @@
 // steps of the app (the tabs that came, the plants seen), the settings and the plant sheets' layouts, the answers of
 // the online services kept in cache (shared with the rest of the app).
 
+import { config } from '../config.js';
 import { forgetMadeBy } from '../core/collections.js';
 import { discovering, replayMeet } from '../core/discover.js';
 import { defineMiniApp } from '../miniapp/define.js';
@@ -37,7 +38,7 @@ export default defineMiniApp({
   pitch: 'Les plantes observées autour de vous, une carte à la fois : à droite si elle vous plaît, à gauche sinon.',
   uses: ['inaturalist'],
   exit: { label: 'Quitter Rencontres' },
-  owns: { keys: ['geoflora.discoverLayout', 'geoflora.app.rencontres.media', 'geoflora.app.rencontres.sheet'], reset: () => { replayMeet(); forgetGame('rencontres'); return forgetMadeBy('rencontres'); } },
+  owns: { keys: [config.storageKeys.discoverLayout, 'geoflora.app.rencontres.media', 'geoflora.app.rencontres.sheet'], reset: () => { replayMeet(); forgetGame('rencontres'); return forgetMadeBy('rencontres'); } },
   shared: ['Mes plantes (sauf les favoris ajoutés par ses matchs)', 'lieux', 'premiers pas de l’application', 'réglages'],
   // One plant on the screen, the plant chosen (?p=): the map, the photos its first match brought and the sheet show it
   // (kit/around.js#chosenContext).

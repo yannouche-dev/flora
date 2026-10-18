@@ -16,6 +16,7 @@
 
 import { config } from '../config.js';
 import { MODULES, moduleOn } from '../core/modules.js';
+import { readJSON, writeJSON } from '../core/prefs.js';
 import { publish } from '../core/sync.js';
 import { createContext } from './context.js';
 import { followers } from './define.js';
@@ -65,11 +66,6 @@ export async function replayApp(m) {
   app.dispose();
 }
 
-/** @param {string} key @returns {any} */
-function readJSON(key) {
-  try { return JSON.parse(localStorage.getItem(key) || 'null'); } catch { return null; }
-}
-
 /**
  * The steps bar shown? 'on': always; 'off': never; 'auto': until the mini-app was finished once.
  * @param {ShowSteps} showSteps @param {boolean} finished
@@ -111,7 +107,7 @@ export class MiniApp extends EventTarget {
     super();
     this.m = m;
     this.showSteps = opts.showSteps ?? 'auto';
-    let saved = opts.saved === undefined ? readJSON(storageKey(m.id, 'state')) : opts.saved;
+    let saved = opts.saved === undefined ? readJSON(storageKey(m.id, 'state'), null) : opts.saved;
     if (saved && saved.v !== m.version) saved = m.migrate ? m.migrate(saved, saved.v) : null;
     /** The path kept from the last visit, offered as « Reprendre ». @type {string[]} */
     this.savedPath = Array.isArray(saved?.path) ? saved.path.filter((/** @type {unknown} */ s) => typeof s === 'string') : [];
@@ -227,7 +223,7 @@ export class MiniApp extends EventTarget {
   async replay(remote = false) {
     await this.m.owns.reset?.();
     for (const key of [...(this.m.owns.keys ?? []), storageKey(this.m.id, 'state'), storageKey(this.m.id, 'layout')]) {
-      try { localStorage.removeItem(key); } catch { /* nothing kept */ }
+      writeJSON(key, null);
     }
     this.cleared();
     // Told once, by the tab where it was asked (the others empty theirs the same way: it is the same each time).
@@ -322,10 +318,7 @@ export class MiniApp extends EventTarget {
   flush() {
     clearTimeout(this.saveTimer);
     const key = storageKey(this.m.id, 'state');
-    try {
-      if (this.pristine) localStorage.removeItem(key);
-      else localStorage.setItem(key, JSON.stringify(this.saved()));
-    } catch { /* not kept */ }
+    writeJSON(key, this.pristine ? null : this.saved()); // not written: not kept
   }
 
   /** Stops its loads and timers (the box gone); `dispose` told (a component's game stops its own). */

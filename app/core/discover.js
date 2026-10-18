@@ -15,8 +15,9 @@ import { clearAroundGames, migrateDiscover } from './around-sessions.js';
 import { listCollections, spotEvents, FAVORITES_ID } from './collections.js';
 import { onStorage } from './sync.js';
 import { forgetHints } from './hints.js';
+import { readJSON, storedKeys, writeJSON } from './prefs.js';
 
-const KEY = 'geoflora.discover';
+const KEY = config.storageKeys.discover;
 /** Plants discovered before Flore (the whole flora, search and filters) comes. */
 export const PLANTS_BEFORE_FLORE = 5;
 
@@ -37,41 +38,34 @@ const HANDED = ['point', 'place', 'radius', 'matches', 'passed'];
 
 /** Someone who already used the app (any setting of it): no first steps. */
 function usedBefore() {
-  try {
-    for (let i = 0; i < localStorage.length; i++) {
-      const k = localStorage.key(i) || '';
-      // Not the keys every visit writes by itself (where the user is, the modules' defaults), nor those of a layout
-      // or a mini-app: a new visitor who drags a separator or opens a mini-app keeps the first steps.
-      if (k.startsWith(config.storageKeys.appPrefix)) continue;
-      if (k.startsWith('geoflora.') && ![KEY, config.storageKeys.modules, config.storageKeys.context, config.storageKeys.showSteps,
-        ...config.paneLayouts].includes(k)) return true;
-    }
-  } catch { /* no storage: first steps every time, harmless */ }
-  return false;
+  // Not the keys every visit writes by itself (where the user is, the modules' defaults), nor those of a layout or a
+  // mini-app: a new visitor who drags a separator or opens a mini-app keeps the first steps. No storage: first steps
+  // every time, harmless.
+  const own = [KEY, config.storageKeys.modules, config.storageKeys.context, config.storageKeys.showSteps, ...config.paneLayouts];
+  return storedKeys(config.storagePrefix).some(k => !k.startsWith(config.storageKeys.appPrefix) && !own.includes(k));
 }
 
 /** @returns {DiscoverState} */
 function read() {
   /** @type {DiscoverState} */
   const fresh = { done: false, unlocked: [], tips: [], seen: [], step: 0, firstMatch: false, branch: null };
-  try {
-    const saved = JSON.parse(localStorage.getItem(KEY) || 'null');
-    if (saved && typeof saved === 'object') {
-      // The session of the games around a place, kept here before: theirs now (once; written back without it).
-      if (HANDED.some(k => k in saved)) {
-        migrateDiscover(saved, typeof location === 'object' ? location.hash : '');
-        for (const k of HANDED) delete saved[k];
-        localStorage.setItem(KEY, JSON.stringify(saved));
-      }
-      return { ...fresh, ...saved };
+  const saved = readJSON(KEY, null);
+  if (saved && typeof saved === 'object') {
+    // The session of the games around a place, kept here before: theirs now (once; written back without it).
+    if (HANDED.some(k => k in saved)) {
+      migrateDiscover(saved, typeof location === 'object' ? location.hash : '');
+      for (const k of HANDED) delete saved[k];
+      writeJSON(KEY, saved);
     }
-  } catch { /* fresh */ }
+    return { ...fresh, ...saved };
+  }
   return usedBefore() ? { ...fresh, done: true } : fresh;
 }
 
 let state = read();
-// Written at once: on the next visit, the app's other settings no longer mean « used before ».
-try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* kept for this visit */ }
+// Written at once: on the next visit, the app's other settings no longer mean « used before » (not written: kept for
+// this visit).
+writeJSON(KEY, state);
 
 /** Fires `change` (detail: the state) and `unlock` (detail: the tab). */
 export const discoverEvents = new EventTarget();
@@ -79,7 +73,7 @@ export const discoverEvents = new EventTarget();
 /** @param {Partial<DiscoverState>} patch */
 function save(patch) {
   state = { ...state, ...patch };
-  try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* kept for this visit */ }
+  writeJSON(KEY, state);
   discoverEvents.dispatchEvent(new CustomEvent('change', { detail: state }));
 }
 

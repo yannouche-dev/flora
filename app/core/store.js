@@ -5,6 +5,7 @@ import { config } from '../config.js';
 import { moduleEvents, modulesState, useModeSource } from './modules.js';
 import { baseOf, isMode, modeEvents, modeList } from './modes.js';
 import { treeFromPlaces } from './pane-tree.js';
+import { readJSON, readText, writeText } from './prefs.js';
 import { quotaEvents } from './quota.js';
 import { onStorage } from './sync.js';
 
@@ -71,18 +72,7 @@ export class Store extends EventTarget {
 const asMode = v => isMode(v) ? v : v === 'illustrated' ? 'epure' : null;
 
 /** @param {string} key */
-const readMode = key => {
-  try { return asMode(localStorage.getItem(key)); } catch { return null; }
-};
-
-/** @param {string} key @param {string | null} value */
-const writeKey = (key, value) => {
-  try { if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, value); } catch { /* not persisted */ }
-};
-
-const readCompact = () => {
-  try { return localStorage.getItem(config.storageKeys.compact) === '1'; } catch { return false; }
-};
+const readMode = key => asMode(readText(key));
 
 /**
  * The plant sheet layout: per view, block order and folded blocks, sub-block order and hidden sub-blocks;
@@ -99,11 +89,9 @@ const readCompact = () => {
 export const emptyLayout = () => ({ order: {}, hidden: {}, subOrder: {}, subHidden: {}, styles: {}, titleShown: {}, hideEmpty: {}, tree: {}, titles: {}, notes: [], mapBlocks: [], maps: {} });
 
 /** @param {string} key */
-const readJSON = key => {
-  try {
-    const value = JSON.parse(localStorage.getItem(key) || 'null');
-    return value && typeof value === 'object' ? value : null;
-  } catch { return null; }
+const readObject = key => {
+  const value = readJSON(key, null);
+  return value && typeof value === 'object' ? value : null;
 };
 
 /**
@@ -149,11 +137,11 @@ export function migrateTree(l) {
 
 /** The saved layout, or the one of earlier versions (block order and folded blocks only). @returns {SheetLayout} */
 const readLayout = () => {
-  const saved = readJSON(config.storageKeys.sheetLayout);
+  const saved = readObject(config.storageKeys.sheetLayout);
   if (saved) return { ...emptyLayout(), ...migrateTree(migratePlaces(saved)) };
-  return { ...emptyLayout(), order: readJSON(config.storageKeys.sheetBlocks) || {}, hidden: readJSON(config.storageKeys.sheetHidden) || {} };
+  return { ...emptyLayout(), order: readObject(config.storageKeys.sheetBlocks) || {}, hidden: readObject(config.storageKeys.sheetHidden) || {} };
 };
-const readTarget = () => { try { return localStorage.getItem(config.storageKeys.target); } catch { return null; } };
+const readTarget = () => readText(config.storageKeys.target);
 
 const initialMode = readMode(config.storageKeys.mode) || 'standard';
 /** An override equal to the mode is no override. @param {string} key */
@@ -165,7 +153,7 @@ export const store = new Store({
   offline: false,
   query: { q: '', filters: { status: [], legal: [], family: [], genus: [], photo: [], french: [], mine: [] }, sort: '' },
   results: { total: 0, items: [], facets: {}, suggestions: [], fuzzy: 0, sort: 'fr' },
-  compact: readCompact(),
+  compact: readText(config.storageKeys.compact) === '1',
   favorites: new Set(),
   placed: new Map(),
   mode: initialMode,
@@ -176,7 +164,7 @@ export const store = new Store({
   modules: modulesState(),
   modes: modeList(),
   collections: [],
-  kingMode: (() => { try { return localStorage.getItem(config.storageKeys.kingMode) === '1'; } catch { return false; } })(),
+  kingMode: readText(config.storageKeys.kingMode) === '1',
   harvestMode: readHarvestMode() ?? false,
   showSteps: readShowSteps()
 });
@@ -201,35 +189,31 @@ useModeSource(() => store.state.mode);
 
 /** Stored choice, or null when the user never chose (decided at startup from existing harvests). */
 function readHarvestMode() {
-  try {
-    const value = localStorage.getItem(config.storageKeys.harvestMode);
-    return value === null ? null : value === '1';
-  } catch { return null; }
+  const value = readText(config.storageKeys.harvestMode);
+  return value === null ? null : value === '1';
 }
 
 /** @param {boolean} on */
 export function setHarvestMode(on) {
-  try { localStorage.setItem(config.storageKeys.harvestMode, on ? '1' : '0'); } catch { /* not persisted */ }
+  writeText(config.storageKeys.harvestMode, on ? '1' : '0');
   store.set({ harvestMode: on });
 }
 
 /** « Afficher les étapes » of the mini-apps: 'auto' unless chosen. @returns {ShowSteps} */
 function readShowSteps() {
-  try {
-    const value = localStorage.getItem(config.storageKeys.showSteps);
-    return value === 'on' || value === 'off' ? value : 'auto';
-  } catch { return 'auto'; }
+  const value = readText(config.storageKeys.showSteps);
+  return value === 'on' || value === 'off' ? value : 'auto';
 }
 
 /** @param {ShowSteps} value */
 export function setShowSteps(value) {
-  writeKey(config.storageKeys.showSteps, value === 'auto' ? null : value);
+  writeText(config.storageKeys.showSteps, value === 'auto' ? null : value);
   store.set({ showSteps: value });
 }
 
 /** Enter or leave « Mode King » (editing the plant sheet blocks); kept until left. @param {boolean} on */
 export function setKingMode(on) {
-  try { if (on) localStorage.setItem(config.storageKeys.kingMode, '1'); else localStorage.removeItem(config.storageKeys.kingMode); } catch { /* not persisted */ }
+  writeText(config.storageKeys.kingMode, on ? '1' : null);
   store.set({ kingMode: on });
 }
 
@@ -240,15 +224,15 @@ export function initHarvestMode(/** @type {boolean} */ hasHarvests) {
 
 /** @param {boolean} compact */
 export function setCompact(compact) {
-  try { localStorage.setItem(config.storageKeys.compact, compact ? '1' : '0'); } catch { /* not persisted */ }
+  writeText(config.storageKeys.compact, compact ? '1' : '0');
   store.set({ compact });
 }
 
 /** App-wide mode: applies everywhere, so it clears the grid and plant sheet overrides. @param {Mode} mode */
 export function setMode(mode) {
-  writeKey(config.storageKeys.mode, mode);
-  writeKey(config.storageKeys.gridView, null);
-  writeKey(config.storageKeys.plantView, null);
+  writeText(config.storageKeys.mode, mode);
+  writeText(config.storageKeys.gridView, null);
+  writeText(config.storageKeys.plantView, null);
   store.set({ mode, gridView: null, plantView: null });
   // Maps, Autour and thumbnails follow the app mode's modules.
   moduleEvents.dispatchEvent(new CustomEvent('change', { detail: { mode } }));
@@ -257,20 +241,20 @@ export function setMode(mode) {
 /** Results grid override; null (or the mode itself) follows the mode. @param {Mode | null} view */
 export function setGridView(view) {
   const gridView = view === store.state.mode ? null : view;
-  writeKey(config.storageKeys.gridView, gridView);
+  writeText(config.storageKeys.gridView, gridView);
   store.set({ gridView });
 }
 
 /** Plant sheet override; null (or the mode itself) follows the mode. @param {Mode | null} view */
 export function setPlantView(view) {
   const plantView = view === store.state.mode ? null : view;
-  writeKey(config.storageKeys.plantView, plantView);
+  writeText(config.storageKeys.plantView, plantView);
   store.set({ plantView });
 }
 
 /** The one-tap target of the Épuré plant sheet: set when chosen there, or when a plant is added to a collection. @param {string | null} target */
 export function setTarget(target) {
-  writeKey(config.storageKeys.target, target);
+  writeText(config.storageKeys.target, target);
   if (target !== store.state.target) store.set({ target });
 }
 

@@ -1,7 +1,8 @@
 // @ts-check
 // Storage full: a write to IndexedDB or localStorage refused for lack of room (QuotaExceededError). It is never
 // swallowed in silence: the first one fires `full` on `quotaEvents` (the store shows a banner saying what to do),
-// and callers that keep user data say « Non enregistré » where it was typed. No imports: usable in the worker too.
+// and callers that keep user data say « Non enregistré » where it was typed (localStorage: prefs.js#writeText). No
+// imports: usable in the worker too.
 
 /** Fires `full` once per session, the first time a write is refused for lack of room. */
 export const quotaEvents = new EventTarget();
@@ -26,20 +27,4 @@ export function noteStorageError(error) {
     quotaEvents.dispatchEvent(new Event('full'));
   }
   return true;
-}
-
-/**
- * localStorage.setItem (or removeItem, `value` null) that never throws: false when not written — the quota
- * reported, a storage switched off only skipped.
- * @param {string} key @param {string | null} value
- */
-export function writeLocal(key, value) {
-  try {
-    if (value === null) localStorage.removeItem(key);
-    else localStorage.setItem(key, value);
-    return true;
-  } catch (error) {
-    noteStorageError(error);
-    return false;
-  }
 }

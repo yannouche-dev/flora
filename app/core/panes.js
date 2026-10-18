@@ -7,6 +7,7 @@
 // width remembered is never rewritten: back to a wider window, the pane has it again).
 
 import { html, css, nothing } from 'lit';
+import { readJSON, writeJSON } from './prefs.js';
 
 /** @typedef {{ widths: Record<string, number>, folded: Record<string, boolean> }} PaneState */
 
@@ -78,11 +79,9 @@ export class PaneSizer {
     this.panes = panes;
     /** @type {PaneState} */
     this.state = { widths: {}, folded: {} };
-    try {
-      const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
-      const read = saved && typeof saved === 'object' && !('widths' in saved) && opts.legacy ? opts.legacy(saved) : saved;
-      if (read && typeof read === 'object') this.state = { widths: { ...read.widths }, folded: { ...read.folded } };
-    } catch { /* defaults */ }
+    const saved = readJSON(storageKey, null);
+    const read = saved && typeof saved === 'object' && !('widths' in saved) && opts.legacy ? opts.legacy(saved) : saved;
+    if (read && typeof read === 'object') this.state = { widths: { ...read.widths }, folded: { ...read.folded } };
     host.addController(this);
   }
 
@@ -108,7 +107,7 @@ export class PaneSizer {
   }
 
   #save() {
-    try { localStorage.setItem(this.key, JSON.stringify(this.state)); } catch { /* not remembered */ }
+    writeJSON(this.key, this.state); // not written: not remembered
     this.host.requestUpdate();
   }
 

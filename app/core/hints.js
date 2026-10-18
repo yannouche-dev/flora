@@ -9,19 +9,18 @@
 import { html } from 'lit';
 import { config } from '../config.js';
 import { icon } from './icons.js';
+import { readJSON, writeJSON } from './prefs.js';
 
 /** @returns {Set<string>} */
 function read() {
-  try {
-    const saved = JSON.parse(localStorage.getItem(config.storageKeys.hints) || '[]');
-    return new Set(Array.isArray(saved) ? saved.filter(x => typeof x === 'string') : []);
-  } catch { return new Set(); }
+  const saved = readJSON(config.storageKeys.hints, []);
+  return new Set(Array.isArray(saved) ? saved.filter(x => typeof x === 'string') : []);
 }
 
 let seen = read();
 
 function write() {
-  try { localStorage.setItem(config.storageKeys.hints, JSON.stringify([...seen])); } catch { /* this visit only */ }
+  writeJSON(config.storageKeys.hints, [...seen]);
 }
 
 /** True the first time ever this hint is asked for on this device — it is marked seen at once. @param {string} id */

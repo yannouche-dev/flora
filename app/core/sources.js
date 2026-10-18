@@ -6,18 +6,17 @@ import { config } from '../config.js';
 import * as cache from './cache.js';
 import { appMode, moduleEvents, moduleOn, modulesSignature } from './modules.js';
 import { fetchJson } from './net.js';
+import { readText, writeText } from './prefs.js';
 
 /** @returns {string | null} */
 export function getTrefleToken() {
-  try { return localStorage.getItem(config.storageKeys.trefleToken) || null; } catch { return null; }
+  return readText(config.storageKeys.trefleToken) || null;
 }
 
 /** @param {string | null} token */
 export function setTrefleToken(token) {
-  try {
-    if (token) localStorage.setItem(config.storageKeys.trefleToken, token);
-    else localStorage.removeItem(config.storageKeys.trefleToken);
-  } catch { /* storage unavailable: the token simply won't persist */ }
+  // Storage unavailable: the token simply won't persist.
+  writeText(config.storageKeys.trefleToken, token || null);
   instances.clear();
 }
 

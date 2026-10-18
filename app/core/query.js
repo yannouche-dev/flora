@@ -4,6 +4,7 @@
 
 import { replaceHash } from './history.js';
 import { config } from '../config.js';
+import { readJSON, writeJSON } from './prefs.js';
 import { parse } from './router.js';
 import { genusFamily, runSearch } from './search.js';
 import { store } from './store.js';
@@ -134,7 +135,8 @@ export function startUrlSync() {
 
 /** @returns {string[]} */
 export function recentSearches() {
-  try { return JSON.parse(localStorage.getItem(config.storageKeys.recentSearches) || '[]'); } catch { return []; }
+  const list = readJSON(config.storageKeys.recentSearches, []);
+  return Array.isArray(list) ? list.filter(item => typeof item === 'string') : [];
 }
 
 /** @param {string} q */
@@ -142,9 +144,9 @@ export function rememberSearch(q) {
   const value = q.trim();
   if (value.length < 2) return;
   const list = [value, ...recentSearches().filter(item => item.toLowerCase() !== value.toLowerCase())].slice(0, 8);
-  try { localStorage.setItem(config.storageKeys.recentSearches, JSON.stringify(list)); } catch { /* not persisted */ }
+  writeJSON(config.storageKeys.recentSearches, list);
 }
 
 export function clearRecentSearches() {
-  try { localStorage.removeItem(config.storageKeys.recentSearches); } catch { /* nothing to clear */ }
+  writeJSON(config.storageKeys.recentSearches, null);
 }

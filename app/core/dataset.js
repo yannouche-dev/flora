@@ -6,7 +6,8 @@
 
 import { config } from '../config.js';
 import * as db from './db.js';
-import { isQuotaError, writeLocal } from './quota.js';
+import { readText, writeText } from './prefs.js';
+import { isQuotaError } from './quota.js';
 import { timeoutSignal } from './net.js';
 import { installFlora, plantFromWorker } from './search.js';
 
@@ -80,10 +81,8 @@ async function freeSpace() {
 
 /** The free room when storing the flora last failed for lack of it, else null. @returns {number | null} */
 function readQuotaFailure() {
-  try {
-    const value = localStorage.getItem(config.storageKeys.datasetQuota);
-    return value === null ? null : Number(value) || 0;
-  } catch { return null; }
+  const value = readText(config.storageKeys.datasetQuota);
+  return value === null ? null : Number(value) || 0;
 }
 
 /** @param {number} bytes */
@@ -154,7 +153,7 @@ export async function syncDataset(onProgress = () => {}) {
   }
 
   const storedNow = install.stored.then(() => {
-    writeLocal(config.storageKeys.datasetQuota, null);
+    writeText(config.storageKeys.datasetQuota, null);
     db.readPlantsFrom(null);
   }, async error => {
     // The records stay in the worker: this session's sheets still open; the next launch downloads again.
@@ -167,6 +166,6 @@ export async function syncDataset(onProgress = () => {}) {
 /** No room to store the flora: noted (the next launch does not download it in vain), and said. */
 async function noRoom() {
   const left = await freeSpace();
-  writeLocal(config.storageKeys.datasetQuota, String(left ?? 0));
+  writeText(config.storageKeys.datasetQuota, String(left ?? 0));
   return storageFull(left);
 }
