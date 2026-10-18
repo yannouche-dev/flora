@@ -4,6 +4,7 @@
 
 import * as L from 'leaflet';
 import { moduleOn } from './modules.js';
+import { readJSON, writeJSON } from './prefs.js';
 import { config } from '../config.js';
 
 const WMTS = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&TILEMATRIXSET=PM'
@@ -104,10 +105,9 @@ const SAFE_ID = /^[A-Za-z0-9._:-]{1,160}$/;
 
 /** The catalogue's layers added to the maps (key → definition), kept so they show at once and offline. @type {Map<string, LayerDef>} */
 const added = new Map();
-try {
-  const saved = JSON.parse(localStorage.getItem(config.storageKeys.ignLayers) || '{}');
-  for (const [key, def] of Object.entries(saved)) if (key.startsWith(IGN_PREFIX) && SAFE_ID.test(def?.layers?.[0]?.id || '')) added.set(key, def);
-} catch { /* none */ }
+for (const [key, def] of Object.entries(readJSON(config.storageKeys.ignLayers, {}))) {
+  if (key.startsWith(IGN_PREFIX) && SAFE_ID.test(def?.layers?.[0]?.id || '')) added.set(key, def);
+}
 
 /** An overlay the maps know: one of the app's, or a layer of the catalogue added. @param {string} key */
 export const isOverlay = key => key in OVERLAYS || added.has(key);
@@ -127,7 +127,7 @@ export function addCatalogLayer(l) {
   if (!SAFE_ID.test(l.id) || !/^image\/(png|jpeg)$/.test(l.format)) return key;
   const label = l.group && l.gtitle ? `${l.gtitle} — ${l.variant || l.title}` : l.label || l.title || l.id;
   added.set(key, { label, hint: l.id, group: 'ign', layers: [{ id: l.id, format: l.format, style: l.style || 'normal', minNative: l.minNative, maxNative: l.maxNative }] });
-  try { localStorage.setItem(config.storageKeys.ignLayers, JSON.stringify(Object.fromEntries(added))); } catch { /* not kept */ }
+  writeJSON(config.storageKeys.ignLayers, Object.fromEntries(added));
   return key;
 }
 
@@ -147,10 +147,7 @@ export const DEFAULT_OPACITY = 0.8;
 
 /** The opacity chosen for each overlay (key → 0…1), kept on the device for every map. @type {Record<string, number>} */
 let opacities = {};
-try {
-  const saved = JSON.parse(localStorage.getItem(config.storageKeys.overlayOpacity) || '{}');
-  if (saved && typeof saved === 'object') for (const [k, v] of Object.entries(saved)) if (typeof v === 'number' && v >= 0 && v <= 1) opacities[k] = v;
-} catch { /* none */ }
+for (const [k, v] of Object.entries(readJSON(config.storageKeys.overlayOpacity, {}))) if (typeof v === 'number' && v >= 0 && v <= 1) opacities[k] = v;
 
 /** An overlay's opacity (0…1). @param {string} key */
 export const overlayOpacity = key => opacities[key] ?? DEFAULT_OPACITY;
@@ -160,7 +157,7 @@ export function setOverlayOpacity(key, value) {
   const v = Math.round(Math.min(1, Math.max(0, Number(value) || 0)) * 20) / 20;
   opacities = { ...opacities, [key]: v };
   if (v === DEFAULT_OPACITY) delete opacities[key];
-  try { localStorage.setItem(config.storageKeys.overlayOpacity, JSON.stringify(opacities)); } catch { /* not kept */ }
+  writeJSON(config.storageKeys.overlayOpacity, opacities);
   return v;
 }
 

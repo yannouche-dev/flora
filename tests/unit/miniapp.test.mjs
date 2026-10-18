@@ -178,10 +178,10 @@ test('runtime : le chemin, can, l’avance par done, guided', () => {
 });
 
 test('runtime : « Rejouer » vide ce que l’application possède, et seulement cela, puis revient au départ', async () => {
-  localStorage.setItem('geoflora.test-session', '"walk"');
+  localStorage.setItem('geoflora.app.meet-replay.session', '"walk"');
   localStorage.setItem('geoflora.favorites-of-the-user', '"kept"');
   let resets = 0;
-  const m = defineMiniApp(meet({ id: 'meet-replay', owns: { keys: ['geoflora.test-session'], reset: () => { resets++; } }, shared: ['favoris'] }));
+  const m = defineMiniApp(meet({ id: 'meet-replay', owns: { keys: ['geoflora.app.meet-replay.session'], reset: () => { resets++; } }, shared: ['favoris'] }));
   const app = new MiniApp(m, { saved: null });
   app.set({ point: [2.35, 48.85], radius: 5000 });
   app.go('cards');
@@ -197,7 +197,7 @@ test('runtime : « Rejouer » vide ce que l’application possède, et seulement
   assert.deepEqual({ point: app.c.point, radius: app.c.radius, liked: app.c.liked }, { point: null, radius: 1000, liked: [] });
   assert.equal(app.generation, generation + 1);
   assert.equal(resets, 1);
-  assert.equal(localStorage.getItem('geoflora.test-session'), null);
+  assert.equal(localStorage.getItem('geoflora.app.meet-replay.session'), null);
   assert.equal(localStorage.getItem('geoflora.favorites-of-the-user'), '"kept"', 'what it only uses stays');
   assert.deepEqual(navigations, [{ step: 'start', replace: true }]);
   app.flush();

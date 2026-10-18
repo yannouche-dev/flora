@@ -1,7 +1,7 @@
 // The user's data on this device (audit, chantier « Données utilisateur »), against an IndexedDB in memory
 // (fake-indexeddb): app/core/db.js update (read and write in one transaction), collections.js updatePlace (never
 // remakes a deleted collection) and the import's merge, sheet-notes.js (the plant sheet's notes moved from
-// localStorage to IndexedDB, once, without loss), sync.js (BroadcastChannel between tabs), quota.js.
+// localStorage to IndexedDB, once, without loss), sync.js (BroadcastChannel between tabs), quota.js and prefs.js.
 import 'fake-indexeddb/auto';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -15,6 +15,7 @@ const C = await import('../../app/core/collections.js');
 const notes = await import('../../app/core/sheet-notes.js');
 const sync = await import('../../app/core/sync.js');
 const quota = await import('../../app/core/quota.js');
+const prefs = await import('../../app/core/prefs.js');
 const { toPortable } = await import('../../app/core/portable.js');
 
 const plant = (/** @type {number} */ id) => ({ id, scientificName: 'Planta ' + id, vernacularNames: ['Plante ' + id] });
@@ -152,14 +153,86 @@ test('quota : une écriture refusée faute de place est dite une fois, jamais av
   const setItem = localStorage.setItem;
   localStorage.setItem = () => { throw full; };
   try {
-    assert.equal(quota.writeLocal('k', 'v'), false);
-    assert.equal(quota.writeLocal('k', 'v'), false);
+    assert.equal(prefs.writeText('k', 'v'), false);
+    assert.equal(prefs.writeText('k', 'v'), false);
   } finally {
     localStorage.setItem = setItem;
   }
   assert.equal(told, 1);
   assert.equal(quota.isQuotaError(new Error('autre')), false);
   assert.equal(quota.noteStorageError(new Error('autre')), false);
+});
+
+test('prefs : une clé illisible, absente ou sans stockage donne sa valeur par défaut ; null efface', () => {
+  localStorage.setItem('geoflora.essai', '{pas du json');
+  assert.deepEqual(prefs.readJSON('geoflora.essai', { a: 1 }), { a: 1 });
+  assert.equal(prefs.writeJSON('geoflora.essai', { b: 2 }), true);
+  assert.deepEqual(prefs.readJSON('geoflora.essai', null), { b: 2 });
+  assert.deepEqual(prefs.storedKeys('geoflora.ess'), ['geoflora.essai']);
+  prefs.writeJSON('geoflora.essai', null);
+  assert.equal(prefs.readText('geoflora.essai'), null);
+  const getItem = localStorage.getItem;
+  localStorage.getItem = () => { throw new DOMException('coupé', 'SecurityError'); };
+  try {
+    assert.equal(prefs.readText('geoflora.essai'), null);
+  } finally {
+    localStorage.getItem = getItem;
+  }
+});
+
+test('prefs.definePref : nettoyée à la lecture, gardée, rétablie, et `change` à chaque fois', () => {
+  localStorage.setItem('geoflora.essaiPref', JSON.stringify({ n: 'trois' }));
+  const pref = prefs.definePref({ key: 'geoflora.essaiPref', fallback: {}, clean: v => ({ n: Number.isInteger(v?.n) ? v.n : 0 }),
+    store: v => v.n ? v : null });
+  /** @type {any[]} */ const heard = [];
+  pref.events.addEventListener('change', e => heard.push(/** @type {CustomEvent} */ (e).detail));
+  assert.deepEqual(pref.get(), { n: 0 });
+  pref.set({ n: 4 });
+  assert.equal(localStorage.getItem('geoflora.essaiPref'), '{"n":4}');
+  assert.deepEqual(pref.fresh(), { n: 4 });
+  pref.set({ n: 0 });
+  assert.equal(localStorage.getItem('geoflora.essaiPref'), null, 'la valeur par défaut : rien de gardé');
+  pref.set({ n: 5 });
+  pref.reset();
+  assert.deepEqual([pref.get(), localStorage.getItem('geoflora.essaiPref')], [{ n: 0 }, null]);
+  assert.deepEqual(heard, [{ n: 4 }, { n: 0 }, { n: 5 }, { n: 0 }]);
+});
+
+test('modules : un mode copié a les services de son modèle tels qu’ils sont gardés, même quand un choix n’a pu l’être', async () => {
+  const modules = await import('../../app/core/modules.js');
+  localStorage.removeItem(config.storageKeys.modules);
+  modules.setModule('gbif', 'standard', false);
+  modules.copyModules('standard', 'mcopie');
+  assert.equal(modules.moduleOn('gbif', 'mcopie'), false, 'le modèle coupé : la copie aussi');
+  modules.setModule('gbif', 'standard', true);
+  const setItem = localStorage.setItem;
+  localStorage.setItem = () => { throw new DOMException('plein', 'QuotaExceededError'); };
+  try {
+    modules.setModule('gbif', 'standard', false); // pas gardé
+    modules.copyModules('standard', 'mcopie2');
+  } finally {
+    localStorage.setItem = setItem;
+  }
+  assert.equal(modules.moduleOn('gbif', 'mcopie2'), true, 'ce qui est gardé du modèle, pas le choix non écrit');
+  modules.dropModules('mcopie');
+  modules.dropModules('mcopie2');
+  localStorage.removeItem(config.storageKeys.modules);
+});
+
+test('prefs : chaque clé que l’app nomme est une clé de config.storageKeys, ou sous le préfixe d’une mini-app', async () => {
+  const { readdir, readFile } = await import('node:fs/promises');
+  const root = new URL('../../app/', import.meta.url);
+  const keys = new Set(Object.values(config.storageKeys));
+  assert.ok([...keys].every(k => k.startsWith(config.storagePrefix)));
+  /** @type {string[]} */ const strays = [];
+  for (const file of await readdir(root, { recursive: true })) {
+    if (!file.endsWith('.js') || file === 'config.js') continue;
+    const text = await readFile(new URL(file, root), 'utf8');
+    for (const [, key] of text.matchAll(/['"`](geoflora\.[A-Za-z0-9._-]*)['"`]/g)) {
+      if (!keys.has(key) && !key.startsWith(config.storageKeys.appPrefix) && key !== config.storageKeys.appPrefix) strays.push(`${file}: ${key}`);
+    }
+  }
+  assert.deepEqual(strays, []);
 });
 
 test('les largeurs des volets : chaque clé de mise en page est dans config.paneLayouts, que les premiers pas ignorent', () => {

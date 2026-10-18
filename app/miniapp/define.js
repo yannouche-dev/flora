@@ -18,7 +18,11 @@
 // column of the manifest, or adds blocks to one already there (same id, no `use`); along any path through the steps
 // the same component, or the same block of it, is never added twice, and only one added before is dropped.
 
+import { config } from '../config.js';
 import { MODULES } from '../core/modules.js';
+
+/** The app's storage keys (a manifest's `owns.keys` are among them, or under its prefix). */
+const KEYS = new Set(Object.values(config.storageKeys));
 
 /**
  * @typedef {{ init: unknown, persist?: boolean, min?: number, max?: number }} ContextKey
@@ -145,7 +149,8 @@ export function defineMiniApp(spec) {
   if (m.exit.handoff && !m.grants.length) fail('exit.handoff changes nothing without grants');
   if (!Number.isInteger(m.version) || m.version < 1) fail('version must be a whole number from 1');
   if (!isObj(m.owns)) fail('owns must be an object: { keys?, reset? }');
-  if (m.owns.keys !== undefined && (!Array.isArray(m.owns.keys) || m.owns.keys.some(k => typeof k !== 'string' || !k.startsWith('geoflora.')))) fail('owns.keys: storage keys of the app (geoflora.…)');
+  const appKey = (/** @type {unknown} */ k) => typeof k === 'string' && (KEYS.has(k) || k.startsWith(config.storageKeys.appPrefix));
+  if (m.owns.keys !== undefined && (!Array.isArray(m.owns.keys) || !m.owns.keys.every(appKey))) fail('owns.keys: storage keys of the app (config.storageKeys, or geoflora.app.…)');
   if (m.owns.reset !== undefined && !isFn(m.owns.reset)) fail('owns.reset must be a function');
   if (m.owns.made !== undefined && (typeof m.owns.made?.label !== 'string' || !Array.isArray(m.owns.made.kept) || m.owns.made.kept.length !== 2)) fail('owns.made: { label, kept: [one, many] }');
   if (!Array.isArray(m.shared) || m.shared.some(x => typeof x !== 'string')) fail('shared must be a list of what it uses of the user\'s');

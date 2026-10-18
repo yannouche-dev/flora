@@ -12,7 +12,7 @@ import { baseOf, importModes, modeKeys, ownModes } from './modes.js';
 import { isOverlay } from './ign.js';
 import { emptyLayout, migratePlaces, migrateTree, store } from './store.js';
 import { allNoteTexts, deleteNoteTexts, fromPortable, mergeNoteTexts, noteText as storedText, notesWithText, portableNotes, setNoteText as storeText } from './sheet-notes.js';
-import { writeLocal } from './quota.js';
+import { writeJSON, writeText } from './prefs.js';
 import { cleanMapSettings, mapSettings, mapSettingsDiff, setMapSettings } from './map-settings.js';
 import { SHEET, dock, normalize, patchStack, setSizes, sheetInRow, stackOf, undock, validTree } from './pane-tree.js';
 
@@ -210,10 +210,10 @@ function save(patch) {
   const isEmpty = !next.notes.length && !Object.keys(next.titles).length && !next.mapBlocks?.length && !Object.keys(next.maps || {}).length
     && ['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown', 'hideEmpty', 'tree'].every(p => !Object.keys(/** @type {any} */ (next)[p] || {}).length);
   // A refusal for lack of room is said on screen (quota.js); the layout still applies to this session.
-  if (writeLocal(config.storageKeys.sheetLayout, isEmpty ? null : JSON.stringify(next))) {
+  if (writeJSON(config.storageKeys.sheetLayout, isEmpty ? null : next)) {
     // Earlier versions' keys: carried over once, then gone.
-    writeLocal(config.storageKeys.sheetBlocks, null);
-    writeLocal(config.storageKeys.sheetHidden, null);
+    writeText(config.storageKeys.sheetBlocks, null);
+    writeText(config.storageKeys.sheetHidden, null);
   }
   store.set({ sheetLayout: next });
 }

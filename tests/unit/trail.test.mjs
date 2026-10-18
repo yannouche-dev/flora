@@ -3,7 +3,8 @@
 // from plant to plant, from the start when it was started here); and what it keeps on the device.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { countOf, groupsOf, keptWalks, recapOf, shortName, walkDone, walkOn, walkUnderWay, write, KEY, LIST, DONE } from '../../app/miniapp/kit/trail-store.js';
+import { countOf, groupsOf, keptWalks, recapOf, shortName, walkDone, walkOn, walkUnderWay, KEY, LIST, DONE } from '../../app/miniapp/kit/trail-store.js';
+import { writeJSON } from '../../app/core/prefs.js';
 
 /** A walk started here at 9:00, with plants at their own places. @param {any[]} plants */
 const walk = plants => ({ id: 'w', geometry: { type: 'Point', coordinates: [2.35, 48.85] },
@@ -34,8 +35,8 @@ test('le bilan : la durée sans les pauses, la distance de plante en plante depu
 test('ce que le parcours garde sur l’appareil', () => {
   localStorage.clear();
   assert.deepEqual([walkUnderWay(), walkOn(), walkDone(), keptWalks()], [false, null, null, []]);
-  write(KEY, 'a'); write(LIST, ['a', 'b']); write(DONE, 'c');
+  writeJSON(KEY, 'a'); writeJSON(LIST, ['a', 'b']); writeJSON(DONE, 'c');
   assert.deepEqual([walkUnderWay(), walkOn(), walkDone(), keptWalks()], [true, 'a', 'c', ['a', 'b', 'c']]);
-  write(KEY, null);
+  writeJSON(KEY, null);
   assert.equal(localStorage.getItem(KEY), null, 'rien : la clé retirée');
 });

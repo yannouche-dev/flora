@@ -3,10 +3,12 @@
 // (identification confirmed by the community). All observations ever made in the circle, not per month.
 // Species are matched to the local flora (TAXREF) by scientific name or synonym.
 
+import { config } from '../config.js';
 import * as cache from './cache.js';
 import * as db from './db.js';
 import { ModuleOffError, moduleOn } from './modules.js';
 import { fetchJson } from './net.js';
+import { readText, writeText } from './prefs.js';
 import { inatCredit, thumbCredit } from './credit.js';
 import { cachedCredit, cachedThumb, thumbUrl } from './thumb.js';
 
@@ -458,13 +460,11 @@ function aroundPoint(o) {
 
 /** The radius chosen last (Carte → Autour). */
 export function savedRadius() {
-  try {
-    const value = Number(localStorage.getItem('geoflora.aroundRadius'));
-    return RADII.includes(value) ? value : DEFAULT_RADIUS;
-  } catch { return DEFAULT_RADIUS; }
+  const value = Number(readText(config.storageKeys.aroundRadius));
+  return RADII.includes(value) ? value : DEFAULT_RADIUS;
 }
 
 /** @param {number} radius */
 export function saveRadius(radius) {
-  try { localStorage.setItem('geoflora.aroundRadius', String(radius)); } catch { /* not persisted */ }
+  writeText(config.storageKeys.aroundRadius, String(radius));
 }

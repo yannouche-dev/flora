@@ -15,6 +15,7 @@ import { href } from '../core/router.js';
 import { briefToast, sayIn } from '../core/toast.js';
 import { takeHint } from '../core/hints.js';
 import { gbifTileUrl } from '../core/sources.js';
+import { readJSON, writeJSON } from '../core/prefs.js';
 import './gf-map-panel.js';
 import './gf-map-search.js';
 import './gf-point-card.js';
@@ -185,13 +186,9 @@ const editIcon = placeIconOf('#16a34a', 0, 'selected editing');
 /** The same place point when positions are locked (read-only map). */
 const lockedIcon = placeIconOf('#16a34a', 0, 'selected');
 
-const readStored = (/** @type {string} */ key, fallback) => {
-  // eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
-  try { return JSON.parse(localStorage.getItem(key) || 'null') ?? fallback; } catch { return fallback; }
-};
 /** Map look chosen last; `cadastre: true` from earlier versions becomes an overlay. */
 function readLayers() {
-  const saved = readStored(config.storageKeys.mapLayer, {});
+  const saved = readJSON(config.storageKeys.mapLayer, {});
   const overlays = Array.isArray(saved.overlays) ? saved.overlays : saved.cadastre ? ['cadastre'] : [];
   return {
     base: saved.base in BASES ? saved.base : 'photo',
@@ -214,11 +211,6 @@ const pointIcon = L.divIcon({
  */
 const emptyMoves = () => ({ pin: null, places: new Map(), plants: new Map() });
 const movesCount = (/** @type {Moves} */ m) => (m.pin ? 1 : 0) + m.places.size + m.plants.size;
-
-const store = (/** @type {string} */ key, value) => {
-  // eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* not persisted */ }
-};
 
 /**
  * Properties:
@@ -952,7 +944,7 @@ export class GfMap extends LitElement {
     map.on('click zoomstart', () => this.#light(null));
     map.getContainer().addEventListener('mouseleave', () => { if (!matchMedia('(hover: none)').matches) this.#light(null); });
 
-    const view = this.remember ? readStored(config.storageKeys.mapView, null) : null;
+    const view = this.remember ? readJSON(config.storageKeys.mapView, null) : null;
     if (this.view) this.#applyView();
     else if (view) map.setView([view.lat, view.lng], view.zoom);
     else map.fitBounds(FRANCE_BOUNDS);
@@ -974,7 +966,7 @@ export class GfMap extends LitElement {
       this.#scheduleAreas();
       if (!this.remember) return;
       const center = map.getCenter();
-      store(config.storageKeys.mapView, { lat: center.lat, lng: center.lng, zoom: map.getZoom() });
+      writeJSON(config.storageKeys.mapView, { lat: center.lat, lng: center.lng, zoom: map.getZoom() });
     });
     map.on('dragstart', () => { this.#setFollow(false); cancelAnimationFrame(this.#tween); this.#tween = 0; });
     map.on('contextmenu', event => {
@@ -2706,7 +2698,7 @@ export class GfMap extends LitElement {
     if (this.base || this.overlays) {
       const opacities = Object.fromEntries(this.#overlays.map(k => [k, this.#opacityOf(k)]));
       this.#emit('layers-change', { base: this.#base, overlays: [...this.#overlays], opacities });
-    } else store(config.storageKeys.mapLayer, { base: this.#base, overlays: this.#overlays, distribution: this.#distributionOn });
+    } else writeJSON(config.storageKeys.mapLayer, { base: this.#base, overlays: this.#overlays, distribution: this.#distributionOn });
     if (this.#panel) Object.assign(this.#panel, { base: this.#base, overlays: [...this.#overlays], opacities: this.opacities, ...this.#distributionInfo() });
   }
 

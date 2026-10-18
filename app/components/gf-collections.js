@@ -18,6 +18,7 @@ import { icon, kindIcon } from '../core/icons.js';
 import { encodeCollection, share } from '../core/share.js';
 import { hasColumns } from '../core/sheet-blocks.js';
 import { PaneSizer, paneStyles } from '../core/panes.js';
+import { readJSON, readText, writeJSON, writeText } from '../core/prefs.js';
 import { hideImg, showImg } from '../core/img.js';
 import { photoOf } from '../core/thumb.js';
 
@@ -28,13 +29,8 @@ const REMIND_AFTER = 14 * 86400000;
 
 /** Ids of the collections unfolded in Mes plantes. @returns {Set<string>} */
 function readOpen() {
-  try {
-    // eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
-    const ids = JSON.parse(localStorage.getItem(config.storageKeys.collectionsOpen) || '[]');
-    return new Set(Array.isArray(ids) ? ids.filter(id => typeof id === 'string') : []);
-  } catch {
-    return new Set();
-  }
+  const ids = readJSON(config.storageKeys.collectionsOpen, []);
+  return new Set(Array.isArray(ids) ? ids.filter(id => typeof id === 'string') : []);
 }
 
 /**
@@ -397,8 +393,7 @@ export class GfCollections extends LitElement {
     if (open.has(id)) open.delete(id);
     else open.add(id);
     this._open = open;
-    // eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
-    try { localStorage.setItem(config.storageKeys.collectionsOpen, JSON.stringify([...open])); } catch { /* not remembered */ }
+    writeJSON(config.storageKeys.collectionsOpen, [...open]); // not written: not remembered
     this.#loadPlants();
   }
 
@@ -453,8 +448,7 @@ export class GfCollections extends LitElement {
   }
 
   #dismissReminder() {
-    // eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
-    try { localStorage.setItem(config.storageKeys.backupReminder, new Date().toISOString()); } catch { /* not persisted */ }
+    writeText(config.storageKeys.backupReminder, new Date().toISOString());
     this.requestUpdate();
   }
 
@@ -464,9 +458,7 @@ export class GfCollections extends LitElement {
     if (!withPlants.length) return false;
     const last = lastExportDate();
     if (last && Date.now() - Date.parse(last) < REMIND_AFTER) return false;
-    let dismissed = null;
-    // eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
-    try { dismissed = localStorage.getItem(config.storageKeys.backupReminder); } catch { /* storage unavailable */ }
+    const dismissed = readText(config.storageKeys.backupReminder);
     const latest = withPlants.reduce((m, c) => (c.properties.updatedAt > m ? c.properties.updatedAt : m), '');
     return !dismissed || dismissed < latest;
   }

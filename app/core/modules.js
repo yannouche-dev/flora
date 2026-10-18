@@ -5,8 +5,7 @@
 
 import { config } from '../config.js';
 import { modeKeys } from './modes.js';
-import { writeLocal } from './quota.js';
-import { onStorage } from './sync.js';
+import { definePref } from './prefs.js';
 
 /**
  * @typedef {'ignMaps' | 'ignGeo' | 'ignProtected' | 'ignNature' | 'relief3d' | 'voice' | 'globi' | 'openmeteo' | 'wikibooks' | 'inaturalist' | 'gbif' | 'wikidata' | 'wikipedia' | 'commons' | 'trefle' | 'photos'} ModuleKey
@@ -63,19 +62,18 @@ export class ModuleOffError extends Error {
 
 /**
  * Only the exceptions are stored: { gbif: { epure: false } } = GBIF off in Épuré, on elsewhere.
- * @returns {Partial<Record<ModuleKey, Partial<Record<Mode, boolean>>>>}
+ * @param {any} value @returns {Partial<Record<ModuleKey, Partial<Record<Mode, boolean>>>>}
  */
-function read() {
-  try {
-    const value = JSON.parse(localStorage.getItem(config.storageKeys.modules) || '{}');
-    if (!value || typeof value !== 'object') return {};
-    // A module switched off everywhere was stored as `false`.
-    for (const [k, v] of Object.entries(value)) if (v === false) value[k] = { epure: false, standard: false, scientific: false };
-    return value;
-  } catch { return {}; }
+function cleanModules(value) {
+  if (!value || typeof value !== 'object') return {};
+  // A module switched off everywhere was stored as `false`.
+  for (const [k, v] of Object.entries(value)) if (v === false) value[k] = { epure: false, standard: false, scientific: false };
+  return value;
 }
 
-let state = read();
+// Switched on or off in another tab: this one follows (a refusal made there is never undone from here).
+const pref = definePref({ key: config.storageKeys.modules, fallback: {}, clean: cleanModules,
+  store: next => Object.keys(next).length ? next : null });
 
 /** The mode a call happens in when the caller does not say (the app-wide mode); set by the store. */
 let currentMode = () => /** @type {Mode} */ ('standard');
@@ -85,14 +83,14 @@ export function useModeSource(source) { currentMode = source; }
 export const appMode = () => currentMode();
 
 /** Fires `change` when a module is switched on or off, or when the mode modules follow changes. */
-export const moduleEvents = new EventTarget();
+export const moduleEvents = pref.events;
 
 /**
  * Is this service used in this mode? The plant sheet asks with its own view, the results grid with its own,
  * everything else (maps, Autour, lists) with the app mode.
  * @param {ModuleKey} key @param {Mode} [mode]
  */
-export const moduleOn = (key, mode = currentMode()) => state[key]?.[mode] !== false;
+export const moduleOn = (key, mode = currentMode()) => pref.get()[key]?.[mode] !== false;
 
 /** Modules off in a mode, as a short stable string: part of cache keys, so their data never shows. @param {Mode} [mode] */
 export const modulesSignature = (mode = currentMode()) => MODULES.filter(m => !moduleOn(m.key, mode)).map(m => m.key).join(',');
@@ -101,57 +99,40 @@ export const modulesSignature = (mode = currentMode()) => MODULES.filter(m => !m
 export const modulesState = () => /** @type {any} */ (Object.fromEntries(MODULES.map(m =>
   [m.key, Object.fromEntries(modeKeys().map(mode => [mode, moduleOn(m.key, mode)]))])));
 
-// Switched on or off in another tab: this one follows (a refusal made there is never undone from here).
-onStorage(config.storageKeys.modules, () => {
-  state = read();
-  moduleEvents.dispatchEvent(new CustomEvent('change', { detail: {} }));
-});
-
-/** @param {typeof state} next */
-const persist = next => writeLocal(config.storageKeys.modules, Object.keys(next).length ? JSON.stringify(next) : null);
-
 /** @param {ModuleKey} key @param {Mode} mode @param {boolean} on */
 export function setModule(key, mode, on) {
   // From what is stored now, not this tab's copy: another tab's choices since are kept (read, changed, written
   // at once — localStorage is synchronous: nothing comes in between).
-  const fresh = read();
+  const fresh = pref.fresh();
   const modes = { ...fresh[key] };
   if (on) delete modes[mode]; else modes[mode] = false;
   const next = { ...fresh };
   if (Object.keys(modes).length) next[key] = modes; else delete next[key];
-  state = next;
-  persist(next);
-  moduleEvents.dispatchEvent(new CustomEvent('change', { detail: { key, mode, on } }));
-}
-
-/** Store the exceptions of every module at once. @param {typeof state} next */
-function writeAll(next) {
-  state = next;
-  persist(next);
-  moduleEvents.dispatchEvent(new CustomEvent('change', { detail: {} }));
+  pref.set(next);
 }
 
 /** A new mode uses the services of its model. @param {Mode} from @param {Mode} to */
 export function copyModules(from, to) {
-  state = read();
-  const next = { ...state };
+  // The model's switches and the result from one reading of what is stored (this tab's copy may hold a choice that
+  // could not be written).
+  const fresh = pref.fresh();
+  const next = { ...fresh };
   for (const m of MODULES) {
     const modes = { ...next[m.key] };
-    if (moduleOn(m.key, from)) delete modes[to]; else modes[to] = false;
+    if (fresh[m.key]?.[from] !== false) delete modes[to]; else modes[to] = false;
     if (Object.keys(modes).length) next[m.key] = modes; else delete next[m.key];
   }
-  writeAll(next);
+  pref.set(next);
 }
 
 /** A mode deleted: its choices go. @param {Mode} mode */
 export function dropModules(mode) {
-  state = read();
-  const next = { ...state };
+  const next = { ...pref.fresh() };
   for (const [k, modes] of Object.entries(next)) {
     if (!modes || !(mode in modes)) continue;
     const rest = { ...modes };
     delete rest[mode];
     if (Object.keys(rest).length) next[/** @type {ModuleKey} */ (k)] = rest; else delete next[/** @type {ModuleKey} */ (k)];
   }
-  writeAll(next);
+  pref.set(next);
 }

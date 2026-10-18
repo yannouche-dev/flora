@@ -16,7 +16,8 @@ import { href } from '../../core/router.js';
 import { encodeCollection, share } from '../../core/share.js';
 import { geoProblem } from '../../components/start-screen.js';
 import { ACTION_TOAST_MS, TOAST_MS } from '../../core/toast.js';
-import { DONE, KEY, LIST, NAMED, countOf, read, write } from './trail-store.js';
+import { readJSON, writeJSON } from '../../core/prefs.js';
+import { DONE, KEY, LIST, NAMED, countOf } from './trail-store.js';
 
 /** @typedef {import('../runtime.js').MiniApp} MiniApp */
 
@@ -81,19 +82,19 @@ export class TrailSession extends EventTarget {
 
   /** The walk walked (and those before, the one just ended), from Mes plantes. */
   async reload() {
-    const id = read(KEY, null);
+    const id = readJSON(KEY, null);
     const trail = id ? await getPlace(id).catch(() => undefined) : undefined;
     this.trail = trail || null;
-    if (!trail && id) write(KEY, null);
+    if (!trail && id) writeJSON(KEY, null);
     // The walk just ended: its recap again (back from Mes plantes, the page reloaded), as it is now.
-    const done = !trail && read(DONE, null);
+    const done = !trail && readJSON(DONE, null);
     if (done) {
       this.done = await getPlace(done).catch(() => undefined) || null;
-      if (!this.done) write(DONE, null);
+      if (!this.done) writeJSON(DONE, null);
       // Its altitudes, for its profile (a walk noted offline, or before they were kept): saved again once found.
       else fillAltitudes(this.done.id, getPlace, updatePlace);
     } else if (!trail) this.done = null;
-    const ids = /** @type {string[]} */ (read(LIST, []));
+    const ids = /** @type {string[]} */ (readJSON(LIST, []));
     this.past = /** @type {any[]} */ ((await Promise.all(ids.filter(x => x !== id).map(x => getPlace(x).catch(() => undefined)))).filter(Boolean));
     this.known = true;
     // Gone meanwhile (deleted from Mes plantes, in another tab): its step left for the start.
@@ -169,8 +170,8 @@ export class TrailSession extends EventTarget {
       const found = where ? null : this.#placeName(at, accuracy > 250);
       await savePlace(place);
       this.leaveRecap();
-      write(KEY, place.id);
-      write(LIST, [place.id, ...(/** @type {string[]} */ (read(LIST, []))).filter(x => x !== place.id)].slice(0, 20));
+      writeJSON(KEY, place.id);
+      writeJSON(LIST, [place.id, ...(/** @type {string[]} */ (readJSON(LIST, []))).filter(x => x !== place.id)].slice(0, 20));
       await refreshMembership().catch(() => {});
       this.trail = place;
       if (found) this.#nameAfter(place.id, found);
@@ -187,7 +188,7 @@ export class TrailSession extends EventTarget {
   resume(place) {
     this.app.cancel('locate');
     this.leaveRecap();
-    write(KEY, place.id);
+    writeJSON(KEY, place.id);
     this.trail = place;
     this.sel = null; this.selEntry = null;
     this.follow(true);
@@ -198,7 +199,7 @@ export class TrailSession extends EventTarget {
   /** The recap left (another walk, the scenarios): it is not shown again. */
   leaveRecap() {
     this.done = null;
-    write(DONE, null);
+    writeJSON(DONE, null);
   }
 
   /** « Un nouveau parcours » (the recap): back to the start. */
@@ -339,8 +340,8 @@ export class TrailSession extends EventTarget {
   async end() {
     await this.flushName();
     const ended = this.trail;
-    write(KEY, null);
-    write(DONE, ended?.id ?? null);
+    writeJSON(KEY, null);
+    writeJSON(DONE, ended?.id ?? null);
     this.stop();
     if (ended?.properties.plants.length) promotePlace(ended.id);
     this.done = ended;

@@ -13,7 +13,8 @@ import { href, parse } from '../../core/router.js';
 import { startScreen, startStyles } from '../../components/start-screen.js';
 import { map3dProblem, openMap3d } from '../../components/gf-map3d.js';
 import { ui } from '../../styles/ui.js';
-import { DONE, countOf, groupsOf, recapOf, write } from './trail-store.js';
+import { writeJSON } from '../../core/prefs.js';
+import { DONE, countOf, groupsOf, recapOf } from './trail-store.js';
 import { trailSessionOf } from './trail-session.js';
 import { SessionWatch } from './watch.js';
 import '../../components/gf-map.js';
@@ -72,7 +73,7 @@ export class MaTrailRecap extends LitElement {
     super.disconnectedCallback();
     // The recap left for another scenario (not for « Le voir dans Mes plantes », whose Back comes to it again; not for
     // another walk, which leaves it itself).
-    if (this.#session?.done && parse(location.hash).name !== 'collections') write(DONE, null);
+    if (this.#session?.done && parse(location.hash).name !== 'collections') writeJSON(DONE, null);
   }
 
   /**

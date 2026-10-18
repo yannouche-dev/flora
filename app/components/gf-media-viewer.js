@@ -30,6 +30,7 @@ import { safeUrl } from '../core/safe-url.js';
 import { ui } from '../styles/ui.js';
 import { config } from '../config.js';
 import { PaneSizer, splitStyles } from '../core/panes.js';
+import { readText, writeText } from '../core/prefs.js';
 import './gf-attribution.js';
 
 /** @typedef {import('../core/media-items.js').MediaItem} MediaItem */
@@ -53,15 +54,13 @@ const FADE = 350;
 const still = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** The image's height in the sheet, as a proportion of its width (the grip); null: the default shape. */
-const RATIO_KEY = 'geoflora.mediaRatio';
-// eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
-let stageRatio = (() => { try { const r = Number(localStorage.getItem(RATIO_KEY)); return r >= 0.3 && r <= 2 ? r : null; } catch { return null; } })();
+const RATIO_KEY = config.storageKeys.mediaRatio;
+let stageRatio = (() => { const r = Number(readText(RATIO_KEY)); return r >= 0.3 && r <= 2 ? r : null; })();
 const ratioEvents = new EventTarget();
 /** @param {number | null} r */
 function setStageRatio(r) {
   stageRatio = r == null ? null : Math.min(2, Math.max(0.3, r));
-  // eslint-disable-next-line no-restricted-syntax -- a setting of this view only, read and written in a try (storage may be off)
-  try { if (stageRatio == null) localStorage.removeItem(RATIO_KEY); else localStorage.setItem(RATIO_KEY, stageRatio.toFixed(3)); } catch { /* this visit */ }
+  writeText(RATIO_KEY, stageRatio == null ? null : stageRatio.toFixed(3));
   ratioEvents.dispatchEvent(new Event('change'));
 }
 /** @param {number} v @param {number} a @param {number} b */

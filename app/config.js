@@ -75,8 +75,25 @@ export const config = {
     // « Disposition libre » (app/layout): the shares given to the columns and rows of each layout, by its shape.
     freeLayout: 'geoflora.freeLayout',
     // The first-use hints of the maps already shown on this device (core/hints.js): never shown again.
-    hints: 'geoflora.hints'
+    hints: 'geoflora.hints',
+    // The first steps (core/discover.js): the tabs unlocked, the step reached.
+    discover: 'geoflora.discover',
+    // The radius chosen last on the Carte's « Autour » (core/nearby.js), metres.
+    aroundRadius: 'geoflora.aroundRadius',
+    // The media viewer in the sheet: the image's height as a proportion of its width (its grip).
+    mediaRatio: 'geoflora.mediaRatio',
+    // When the sources' cache was last purged (core/cache.js), ms.
+    cachePurgedAt: 'geoflora.cachePurgedAt',
+    // The Parcours botanique (miniapp/kit/trail-store.js): the walk under way, those to take up again, the one ended.
+    trail: 'geoflora.trail',
+    trails: 'geoflora.trails',
+    trailDone: 'geoflora.trailDone',
+    // Between tabs, where BroadcastChannel is missing (core/sync.js).
+    sync: 'geoflora.sync'
   },
+
+  /** Every key above starts so (core/prefs.js#storedKeys: the app's own, among a shared origin's). */
+  storagePrefix: 'geoflora.',
 
   /**
    * The keys of the panes' widths (core/panes.js), one per screen: the first steps (core/discover.js) never read

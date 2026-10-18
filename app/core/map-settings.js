@@ -12,8 +12,7 @@
 // sheet's map blocks change these same settings, and every map shown follows at once (no map has a choice of its own).
 
 import { config } from '../config.js';
-import { writeLocal } from './quota.js';
-import { onStorage } from './sync.js';
+import { definePref } from './prefs.js';
 
 /**
  * @typedef {object} MapSettings
@@ -87,37 +86,27 @@ export function mapSettingsDiff(s) {
   return /** @type {any} */ (Object.fromEntries(Object.entries(clean).filter(([k, v]) => /** @type {any} */ (MAP_DEFAULTS)[k] !== v)));
 }
 
-function read() {
-  try { return cleanMapSettings(JSON.parse(localStorage.getItem(config.storageKeys.maps3d) || '{}')); } catch { return cleanMapSettings({}); }
-}
-
-let state = read();
+// Kept: what differs from the defaults. Changed in another tab: this one follows (its maps redraw).
+const pref = definePref({
+  key: config.storageKeys.maps3d,
+  fallback: {},
+  clean: cleanMapSettings,
+  store: s => { const diff = mapSettingsDiff(s); return Object.keys(diff).length ? diff : null; }
+});
 
 /** Fires `change` (detail: the settings) when they change, here or in another tab. */
-export const mapSettingsEvents = new EventTarget();
-const changed = () => mapSettingsEvents.dispatchEvent(new CustomEvent('change', { detail: state }));
+export const mapSettingsEvents = pref.events;
 
 /** The settings now. @returns {MapSettings} */
-export const mapSettings = () => state;
-
-/** @param {MapSettings} next */
-function write(next) {
-  state = next;
-  const diff = mapSettingsDiff(next);
-  writeLocal(config.storageKeys.maps3d, Object.keys(diff).length ? JSON.stringify(diff) : null);
-  changed();
-}
+export const mapSettings = pref.get;
 
 /** Changes some settings (from what is stored now: another tab's choices since are kept). @param {Partial<MapSettings>} patch */
 export function setMapSettings(patch) {
-  write(cleanMapSettings({ ...read(), ...patch }));
+  pref.set(cleanMapSettings({ ...pref.fresh(), ...patch }));
 }
 
 /** Back to the defaults (the key removed). */
-export function resetMapSettings() { write(cleanMapSettings({})); }
-
-// Changed in another tab: this one follows (its maps redraw).
-onStorage(config.storageKeys.maps3d, () => { state = read(); changed(); });
+export function resetMapSettings() { pref.reset(); }
 
 // ── The sun ─────────────────────────────────────────────────────────────────
 

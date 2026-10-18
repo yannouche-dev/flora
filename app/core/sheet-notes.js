@@ -9,6 +9,7 @@
 
 import { config } from '../config.js';
 import * as db from './db.js';
+import { readJSON, writeText } from './prefs.js';
 import { noteStorageError } from './quota.js';
 import { publish, subscribe } from './sync.js';
 
@@ -43,8 +44,7 @@ const isRecord = r => r && typeof r.note === 'string' && Number.isInteger(r.plan
 
 /** The texts of the earlier versions (localStorage), as records. @param {string} at @returns {NoteText[]} */
 function legacyTexts(at) {
-  let data;
-  try { data = JSON.parse(localStorage.getItem(config.storageKeys.plantNotes) || 'null'); } catch { return []; }
+  const data = readJSON(config.storageKeys.plantNotes, null);
   if (!data || typeof data !== 'object') return [];
   /** @type {NoteText[]} */
   const out = [];
@@ -66,7 +66,7 @@ export async function loadNotes() {
     try {
       // Only what the database does not have: a text already moved (and maybe edited since) is left as it is.
       await db.addMissing(STORE, legacy);
-      try { localStorage.removeItem(config.storageKeys.plantNotes); } catch { /* moved all the same */ }
+      writeText(config.storageKeys.plantNotes, null); // not removed: moved all the same
       moved = true;
     } catch (error) {
       noteStorageError(error);

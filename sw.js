@@ -133,6 +133,7 @@ const SHELL = [
   'app/core/share.js',
   'app/core/store.js',
   'app/core/sync.js',
+  'app/core/prefs.js',
   'app/core/quota.js',
   'app/workers/search-core.js',
   'app/workers/flora-pack.js',

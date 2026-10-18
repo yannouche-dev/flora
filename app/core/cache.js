@@ -14,6 +14,7 @@
 import { config } from '../config.js';
 import * as db from './db.js';
 import { errorKind, SourceError } from './net.js';
+import { readText, writeText } from './prefs.js';
 
 const MINUTE = 60 * 1000;
 const DAY = 24 * 60 * MINUTE;
@@ -154,7 +155,7 @@ const idbStore = {
 const shared = createCache({ store: idbStore });
 export const { cached, forgetFailures, purge } = shared;
 
-const PURGED_KEY = 'geoflora.cachePurgedAt';
+const PURGED_KEY = config.storageKeys.cachePurgedAt;
 
 /**
  * The purge, once a day, well after the start (the local flora and the search come first) and when the page is idle;
@@ -162,12 +163,12 @@ const PURGED_KEY = 'geoflora.cachePurgedAt';
  * @param {number} [delay] ms
  */
 export function schedulePurge(delay = 30000) {
-  let last = 0;
-  try { last = Number(localStorage.getItem(PURGED_KEY)) || 0; } catch { /* no storage: purged each visit */ }
+  // No storage: purged each visit.
+  const last = Number(readText(PURGED_KEY)) || 0;
   if (Date.now() - last < DAY) return;
   setTimeout(() => {
     const go = () => purge()
-      .then(() => { try { localStorage.setItem(PURGED_KEY, String(Date.now())); } catch { /* not remembered */ } })
+      .then(() => { writeText(PURGED_KEY, String(Date.now())); })
       .catch(error => console.warn('Purge du cache des sources :', error));
     if (typeof requestIdleCallback === 'function') requestIdleCallback(go, { timeout: 10000 }); else go();
   }, delay);
