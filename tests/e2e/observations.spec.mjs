@@ -22,8 +22,9 @@ const INAT_DATASET = '50c9509d-22c7-4a22-a47d-8c48425ef4a7';
 const TITLES = { 'cbn-mc': 'Inventaire du CBN Massif central', plantnet: 'Pl@ntNet, observations identifiées' };
 
 /**
- * GBIF answered (its occurrences around the point asked, the datasets chosen only; its datasets counted as if none
- * were; their titles), unless `down`. `seen`: the addresses of its occurrences asked.
+ * GBIF answered as it does (its occurrences around the point asked, the datasets chosen only — none with limit=0; its
+ * datasets counted as if none were, when asked; their titles), unless `down`. `seen`: the addresses of its occurrences
+ * asked.
  * @param {Page} page @param {{ seen?: string[], down?: boolean }} [o]
  */
 async function answerGbif(page, { seen, down = false } = {}) {
@@ -37,11 +38,11 @@ async function answerGbif(page, { seen, down = false } = {}) {
       species, scientificName: species + ' L.', taxonRank: 'SPECIES', eventDate: '2026-06-0' + (key % 9 + 1), datasetKey, datasetName: TITLES[datasetKey] ?? 'iNaturalist', media });
     const all = [row(5001, 'Sambucus nigra', 'cbn-mc', 0.001), row(5002, 'Sambucus nigra', 'plantnet', -0.001), row(5003, 'Urtica dioica', INAT_DATASET, 0.002)];
     const chosen = url.searchParams.getAll('datasetKey');
-    const results = chosen.length ? all.filter(r => chosen.includes(r.datasetKey)) : all;
+    const results = url.searchParams.get('limit') === '0' ? [] : chosen.length ? all.filter(r => chosen.includes(r.datasetKey)) : all;
     const counts = [{ name: INAT_DATASET, count: 100 }, { name: 'cbn-mc', count: 30 }, { name: 'plantnet', count: 12 }];
     const count = counts.filter(c => !chosen.length || chosen.includes(c.name)).reduce((n, c) => n + c.count, 0);
     return route.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' },
-      body: JSON.stringify({ count, results, facets: [{ field: 'DATASET_KEY', counts }] }) });
+      body: JSON.stringify({ count, results, ...(url.searchParams.get('facet') ? { facets: [{ field: 'DATASET_KEY', counts }] } : {}) }) });
   });
   await page.route(/^https:\/\/api\.gbif\.org\/v1\/dataset\/[^/?]+$/, route => {
     const key = decodeURIComponent(new URL(route.request().url()).pathname.split('/').pop() ?? '');
@@ -62,6 +63,11 @@ const names = page => page.evaluate(async () => {
 const mapPoints = page => page.locator('dl-map gf-map').evaluate(m => (/** @type {any} */ (m).area?.points ?? []).map((/** @type {any} */ p) => ({ kind: p.kind, sci: p.sci })));
 /** The last address asked of a service, its parameters. @param {string[]} seen */
 const lastAsked = seen => new URL(seen[seen.length - 1]).searchParams;
+/**
+ * GBIF's last request of a kind, its parameters: its count and datasets (limit=0), or their occurrences (limit=300).
+ * @param {string[]} seen @param {'0' | '300'} limit
+ */
+const gbifAsked = (seen, limit) => new URL([...seen].reverse().find(u => new URL(u).searchParams.get('limit') === limit) ?? 'https://x/').searchParams;
 
 test.beforeEach(async ({ context }) => { await answerAround(context); });
 
@@ -90,9 +96,11 @@ test('la section de la liste : avec la zone seulement ; ses sources comptées ; 
   // GBIF too: written, asked (its datasets counted), its count without its copy of iNaturalist's.
   await sources.getByRole('checkbox', { name: /GBIF/ }).check();
   await expect.poll(() => param(page, 'sources')).toBe('inat,gbif');
-  await expect.poll(() => gbif.length).toBeGreaterThan(0);
-  expect([lastAsked(gbif).get('taxonKey'), lastAsked(gbif).get('facet'), lastAsked(gbif).get('facetMultiselect'), lastAsked(gbif).get('datasetKey.facetLimit')])
-    .toEqual(['6', 'datasetKey', 'true', '30']);
+  await expect.poll(() => gbif.length).toBeGreaterThan(1);
+  // In two requests: the zone's count and datasets first, then the occurrences of its datasets but iNaturalist's copy.
+  const head = gbifAsked(gbif, '0');
+  expect([head.get('taxonKey'), head.get('facet'), head.get('facetMultiselect'), head.get('datasetKey.facetLimit')]).toEqual(['6', 'datasetKey', 'true', '50']);
+  await expect.poll(() => { const q = gbifAsked(gbif, '300'); return [q.getAll('datasetKey'), q.get('facet')]; }).toEqual([['cbn-mc', 'plantnet'], null]);
   await expect(sources.locator('li').nth(1)).toContainText('42');
   // Its datasets in the zone: their titles and counts, iNaturalist's copy not among them; one chosen: written, asked.
   const datasets = section(page).getByRole('group', { name: 'Jeux de données GBIF' });
@@ -102,7 +110,7 @@ test('la section de la liste : avec la zone seulement ; ses sources comptées ; 
   await expect(datasets.locator('li').nth(1)).toContainText(TITLES.plantnet);
   await datasets.getByRole('checkbox', { name: new RegExp(TITLES.plantnet.replace(/[.@]/g, '.')) }).check();
   await expect.poll(() => param(page, 'jeux')).toBe('plantnet');
-  await expect.poll(() => lastAsked(gbif).getAll('datasetKey')).toEqual(['plantnet']);
+  await expect.poll(() => gbifAsked(gbif, '300').getAll('datasetKey')).toEqual(['plantnet']);
   await expect(datasets.getByRole('checkbox'), 'the others still there to choose').toHaveCount(2);
 
   // The rank, the quality, a free photo, wild plants: each written, each asked in each source's words.
@@ -117,7 +125,7 @@ test('la section de la liste : avec la zone seulement ; ses sources comptées ; 
   await expect.poll(() => param(page, 'sauvages')).toBe('1');
   await expect.poll(() => { const q = lastAsked(inat); return [q.get('hrank'), q.get('quality_grade'), q.get('photo_license'), q.get('captive')]; })
     .toEqual(['species', null, 'cc0,cc-by,cc-by-sa', 'false']);
-  await expect.poll(() => lastAsked(gbif).get('mediaType')).toBe('StillImage');
+  await expect.poll(() => [gbifAsked(gbif, '0').get('mediaType'), gbifAsked(gbif, '300').get('mediaType')]).toEqual(['StillImage', 'StillImage']);
   await expect(section(page).locator('.badge')).toHaveText('6');
 
   // Reloaded: the same settings shown.

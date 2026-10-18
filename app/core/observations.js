@@ -10,7 +10,8 @@
 //     qualite=, taxon=, photos=, sauvages=, jeux=);
 //   inatQuery(f), gbifQuery(f, periode), gbifKeep(record, f), APPLIES: what each source does of each filter;
 //   zoneObservations(center, radius, { filters, periode, signal }) → { points, totals, failed, datasets } (every source
-//     failing: an ObsError, which says each one's failure); sourcesText(sources), failedText(failed): in words.
+//     failing: an ObsError, which says each one's failure) — GBIF asked in two requests, its datasets first, then their
+//     occurrences (never its copy of iNaturalist's); sourcesText(sources), failedText(failed): in words.
 // The filters and their translation are pure, tested under Node (tests/unit/observations.test.mjs).
 
 import * as cache from './cache.js';
@@ -200,10 +201,15 @@ const clip = (v, max) => {
   return t.length > max ? t.slice(0, max - 1).trimEnd() + '…' : t;
 };
 
+/** GBIF's datasets of a zone counted at most (the facet of its first request): those past them are never asked. */
+const GBIF_DATASETS = 50;
+
 /**
- * GBIF's plant occurrences in the circle, as the filters say (iNaturalist's copy left out, and from its count), cached
- * a day; the datasets of the zone, counted. What the filters need of each record is kept (rank, media, establishment),
- * the rest left.
+ * GBIF's plant occurrences in the circle, as the filters say, cached a day — in two requests: the zone's count and its
+ * datasets first (counted as if none were chosen), then the occurrences of the datasets chosen, else of every one of
+ * the zone but GBIF's copy of iNaturalist's (never its records in GBIF's page of 300: they are iNaturalist's own, asked
+ * of it). An answer without the facet (an older GBIF): one page as before, the copy left out after. What the filters
+ * need of each record is kept (rank, media, establishment), the rest left.
  * @param {[number, number]} center @param {number} radius @param {ObsFilters} f @param {string | null} periode @param {AbortSignal} [signal]
  * @returns {Promise<{ points: Obs[], total: number, datasets: { key: string, count: number }[] }>}
  */
@@ -211,11 +217,21 @@ async function gbifZone([lon, lat], radius, f, periode, signal) {
   if (!moduleOn('gbif')) throw new ModuleOffError('gbif');
   const where = `${lat.toFixed(4)},${lon.toFixed(4)},${(radius / 1000).toFixed(2)}km`;
   const query = gbifQuery(f, periode);
-  // « around-zone… »: forgotten with the zone's other failures (layout/state.js retryScope).
-  const found = await cache.cached(`around-zone-gbif1:${where}${query}`, async () => {
-    const url = 'https://api.gbif.org/v1/occurrence/search?taxonKey=6&hasCoordinate=true&hasGeospatialIssue=false&occurrenceStatus=PRESENT'
-      + `&geoDistance=${encodeURIComponent(where)}${query}&limit=${GBIF_MAX}&facet=datasetKey&facetMultiselect=true&datasetKey.facetLimit=30`;
-    const data = await fetchJson(url, { signal, expect: d => Array.isArray(d.results) });
+  const base = 'https://api.gbif.org/v1/occurrence/search?taxonKey=6&hasCoordinate=true&hasGeospatialIssue=false&occurrenceStatus=PRESENT'
+    + `&geoDistance=${encodeURIComponent(where)}`;
+  // « around-zone… »: forgotten with the zone's other failures (layout/state.js retryScope); « gbif2 »: in two requests.
+  const found = await cache.cached(`around-zone-gbif2:${where}${query}`, async () => {
+    const head = await fetchJson(`${base}${query}&limit=0&facet=datasetKey&facetMultiselect=true&datasetKey.facetLimit=${GBIF_DATASETS}`,
+      { signal, expect: d => typeof d.count === 'number' });
+    const facet = (Array.isArray(head.facets) ? head.facets : []).find((/** @type {any} */ x) => /dataset/i.test(String(x?.field)));
+    const counts = (facet?.counts || []).filter((/** @type {any} */ c) => DATASET.test(String(c?.name)))
+      .map((/** @type {any} */ c) => ({ key: String(c.name), count: Number(c.count) || 0 }));
+    const datasets = counts.filter(c => c.key !== INAT_DATASET);
+    // The datasets whose occurrences are asked: those chosen, else the zone's — never GBIF's copy of iNaturalist's.
+    const keys = (f.jeux.length ? f.jeux : datasets.map(d => d.key)).filter(k => k !== INAT_DATASET);
+    const url = !facet ? `${base}${query}&limit=${GBIF_MAX}`
+      : head.count > 0 && keys.length ? `${base}${gbifQuery({ ...f, jeux: keys }, periode)}&limit=${GBIF_MAX}` : null;
+    const data = url ? await fetchJson(url, { signal, expect: d => Array.isArray(d.results) }) : { results: [], count: 0 };
     const records = [];
     for (const o of data.results) {
       if (typeof o.decimalLatitude !== 'number' || typeof o.decimalLongitude !== 'number' || o.datasetKey === INAT_DATASET) continue;
@@ -227,13 +243,10 @@ async function gbifZone([lon, lat], radius, f, periode, signal) {
         source: gbifSource(o.datasetName || o.institutionCode)
       });
     }
-    const facet = (Array.isArray(data.facets) ? data.facets : []).find((/** @type {any} */ x) => /dataset/i.test(String(x?.field)));
-    const counts = (facet?.counts || []).filter((/** @type {any} */ c) => DATASET.test(String(c?.name)))
-      .map((/** @type {any} */ c) => ({ key: String(c.name), count: Number(c.count) || 0 }));
     // GBIF's count holds its copy of iNaturalist's (its dataset's, as the facet counts it): not GBIF's own.
     const copies = !f.jeux.length || f.jeux.includes(INAT_DATASET) ? counts.find(c => c.key === INAT_DATASET)?.count ?? 0 : 0;
-    const total = typeof data.count === 'number' ? Math.max(records.length, data.count - copies) : records.length;
-    return { records, total, datasets: counts.filter(c => c.key !== INAT_DATASET) };
+    const count = facet ? head.count : typeof data.count === 'number' ? data.count : records.length;
+    return { records, total: Math.max(records.length, count - copies), datasets };
   }, { ttl: 24 * 3600 * 1000, signal });
   /** @type {Obs[]} */
   const points = found.records.filter(r => gbifKeep(/** @type {any} */ (r), f)).map(r => ({
