@@ -3,7 +3,7 @@
 // than « chargement… » for ever or « aucune donnée » (audit STO-7, STO-8, OPS-2).
 import { after, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SchemaError, SourceError, anySignal, errorKind, fetchJson, fetchOk, isUnavailable, unavailableReason } from '../../app/core/net.js';
+import { SchemaError, SourceError, anySignal, errorKind, fetchJson, isUnavailable, unavailableReason } from '../../app/core/net.js';
 import { ModuleOffError } from '../../app/core/modules.js';
 
 // Node's AbortSignal.timeout does not keep the process alive (a browser's page does): a timer that does, meanwhile.
@@ -87,7 +87,7 @@ test('erreur HTTP : SourceError « http » avec son statut', async t => {
   assert.equal(error.status, 503);
   assert.equal(unavailableReason(error), 'erreur 503');
   stubFetch(t, async () => new Response('', { status: 429 }));
-  assert.equal(unavailableReason(await fetchOk('https://x.org/').catch(e => e)), 'trop de demandes');
+  assert.equal(unavailableReason(await fetchJson('https://x.org/').catch(e => e)), 'trop de demandes');
 });
 
 test('mauvaise forme : pas du JSON, pas un objet, ou pas la forme attendue → SchemaError', async t => {

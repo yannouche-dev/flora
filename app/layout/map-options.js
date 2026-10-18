@@ -59,9 +59,6 @@ export const MAP_LAYER_ALIASES = {
   contours: 'courbes', niveaux: 'courbes', relief: 'estompage', ombrage: 'estompage', eau: 'hydro', rivieres: 'hydro', coursdeau: 'hydro'
 };
 
-/** The overlays of gf-map these layers show, each once, in their order. @param {string[]} names @returns {string[]} */
-export const overlayKeys = names => [...new Set(names.flatMap(n => MAP_LAYERS[n]?.keys ?? []))];
-
 /** The catalogue's layers these layers need added to the maps (core/ign.js addCatalogLayer) before they show. @param {string[]} names */
 export const catalogLayers = names => names.flatMap(n => MAP_LAYERS[n]?.catalog ?? []);
 

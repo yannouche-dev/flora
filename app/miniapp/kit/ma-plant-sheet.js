@@ -9,7 +9,7 @@
 // the image shown (the event media-index, for the address).
 
 import { LitElement, html, css, nothing } from 'lit';
-import * as db from '../../core/db.js';
+import { getPlant } from '../../core/plants.js';
 import { icon } from '../../core/icons.js';
 import { PaneSizer, splitStyles } from '../../core/panes.js';
 import { whenReady } from '../../core/store.js';
@@ -89,7 +89,7 @@ export class MaPlantSheet extends LitElement {
     // Opened from a link, not among the cards: its name read from the flora for the header.
     const id = this.open;
     if (changed.has('open') && id != null && !this.cards.some(c => c.plant.id === id)) {
-      whenReady().then(() => db.get('plants', id)).then(p => { if (p && this.open === id) this._name = nameOf(p); }, () => {});
+      whenReady().then(() => getPlant(id)).then(p => { if (p && this.open === id) this._name = nameOf(p); });
     }
   }
 

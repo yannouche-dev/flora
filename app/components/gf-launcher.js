@@ -23,7 +23,7 @@ import { MINIAPPS } from '../miniapps/index.js';
 import { madeByApp } from '../core/collections.js';
 import { replayApp, replayItems } from '../miniapp/runtime.js';
 import { ui } from '../styles/ui.js';
-import { fr } from './start-screen.js';
+import { fr } from '../core/fr.js';
 
 /**
  * @typedef {{ key: string, app: import('../miniapps/index.js').MiniAppEntry, title: string, pitch: string, icon: import('../core/icons.js').IconName,

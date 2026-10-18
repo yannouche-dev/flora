@@ -4,19 +4,11 @@ import { UNREAD_LOOKALIKES, genusOf, lookalikesOf, severityOf } from '../core/lo
 import { href } from '../core/router.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
+import { emergency } from '../core/poison.js';
 import { isFocused, sendFocus } from '../core/map-focus.js';
 import { safeUrl } from '../core/safe-url.js';
 
 /** @typedef {import('../core/lookalikes.js').Lookalike} Lookalike */
-
-/** The official list of the Centres antipoison (each with its phone number). */
-const POISON_CENTRES = 'https://centres-antipoison.net/';
-
-/**
- * What to do after eating a plant, wherever a confusion or a toxicity is shown (no full stop: a sentence ends it).
- * The numbers work offline.
- */
-export const emergency = () => html`<span class="sos">Centre antipoison : <a href=${POISON_CENTRES} target="_blank" rel="noopener">centres-antipoison.net</a> (liste officielle) · <a href="tel:15">15</a> ou <a href="tel:112">112</a> en cas de détresse vitale</span>`;
 
 /**
  * « Peut être confondue avec… »: the confusions the Anses and the Centres antipoison report for this plant,

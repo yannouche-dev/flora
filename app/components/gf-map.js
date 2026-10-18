@@ -4,7 +4,7 @@
 import { LitElement, html, nothing, render } from 'lit';
 import * as L from 'leaflet';
 import { config } from '../config.js';
-import { watchLocation, whenGranted } from '../core/geo.js';
+import { geoProblem, watchLocation, whenGranted } from '../core/geo.js';
 import { BASES, DEFAULT_OPACITY, FRANCE_BOUNDS, addCatalogLayer, isOverlay, overlayDef, overlayOpacity, setOverlayOpacity, tileLayer } from '../core/ign.js';
 import { inSeason, placeAbundance, placeTitle } from '../core/collections.js';
 import { store as appStore } from '../core/store.js';
@@ -21,7 +21,6 @@ import './gf-map-search.js';
 import './gf-point-card.js';
 import { attachGl } from './gf-map-gl.js';
 import { icon, iconHref, iconMarkup } from '../core/icons.js';
-import { geoProblem } from './start-screen.js';
 import { inMiniApp } from '../miniapp/quiet-links.js';
 import { cancelImages, chosenGroupMarker, chosenMarker, elem, fadeImg, leafGlyph, leafMarker, markClasses, obsCard, photoMarker, resumeImages, ringElement, speciesKey } from './map-style.js';
 

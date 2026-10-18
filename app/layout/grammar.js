@@ -22,8 +22,8 @@
 // each with its position and a sentence in French): a bracket missing is closed, a character out of place skipped, a
 // list too deep flattened, cells past MAX_CELLS left out, an empty one dropped.
 //
-// The editor's operations (split a cell beside or under itself, remove it, move it among its siblings, give a split
-// its shares) work on this tree too, each returning a new, normalized one.
+// The editor's operations (replace a cell, move it among its siblings, give a split its shares) work on this tree too,
+// each returning a new, normalized one; « Modifier la disposition » splits and removes cells as boxes (builder-grid.js).
 
 /**
  * @typedef {{ key: string | null, value: string }} Param
@@ -313,31 +313,6 @@ function edit(tree, path, fn) {
 
 /** The node at `path` replaced. @param {ListNode} tree @param {number[]} path @param {LayoutNode} node */
 export const replaceAt = (tree, path, node) => edit(tree, path, () => node);
-
-/** The node at `path` taken out (its siblings share its room). @param {ListNode} tree @param {number[]} path */
-export const removeAt = (tree, path) => path.length ? edit(tree, path, () => null) : list([]);
-
-/**
- * A node put beside (`row`) or under (`col`) the one at `path`, sharing its room: a sibling when its list already runs
- * that way, else the node becomes a list of the two (one level deeper). Past MAX_DEPTH or MAX_CELLS: the tree as it was.
- * @param {ListNode} tree @param {number[]} path @param {Dir} dir @param {LayoutNode} added @returns {ListNode}
- */
-export function splitAt(tree, path, dir, added) {
-  if (!path.length || countCells(tree) + countCells(added) > MAX_CELLS) return tree;
-  const parent = /** @type {ListNode | null} */ (nodeAt(tree, path.slice(0, -1)));
-  const at = path[path.length - 1];
-  if (!parent || parent.t !== 'list') return tree;
-  const old = parent.kids[at];
-  if (dirAt(path.length - 1) === dir) {
-    // Beside it in its own list: the two share its share.
-    const half = old.size != null ? old.size / 2 : null;
-    const kids = [...parent.kids];
-    kids.splice(at, 1, { ...old, size: half }, { ...added, size: half });
-    return replaceAt(tree, path.slice(0, -1), { ...parent, kids });
-  }
-  if (path.length > MAX_DEPTH) return tree;
-  return replaceAt(tree, path, list([{ ...old, size: null }, { ...added, size: null }], old.size));
-}
 
 /** The node at `path` moved by `by` among its siblings (−1: before, +1: after). @param {ListNode} tree @param {number[]} path @param {number} by @returns {ListNode} */
 export function moveAt(tree, path, by) {

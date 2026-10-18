@@ -10,6 +10,7 @@
 
 import { html, css, nothing } from 'lit';
 import { icon } from '../core/icons.js';
+import { fr } from '../core/fr.js';
 import { scene, sceneStyles } from '../core/scenes.js';
 import './gf-place-search.js';
 
@@ -51,27 +52,6 @@ import './gf-place-search.js';
  * @property {(StartAlternative | false | null | undefined)[]} [alternatives]
  * @property {StartExit} exit                the one way out
  */
-
-/**
- * French spacing: a narrow no-break space before : ; ! ? » and after «, so a line never starts with « : ».
- * Strings only. @template T @param {T} t @returns {T}
- */
-export const fr = t => /** @type {any} */ (typeof t === 'string' ? t.replace(/ ([:;!?»])/g, ' $1').replace(/« /g, '« ') : t);
-
-/**
- * A GPS failure said on a start screen, from geo.js's code. `place`: a commune can be chosen instead.
- * @param {string | null | undefined} code @param {{ place?: boolean, retry?: () => void }} [o] @returns {StartError}
- */
-export function geoProblem(code, o = {}) {
-  const or = o.place ? ', ou choisissez une commune.' : '.';
-  switch (code) {
-    case 'denied': return { text: 'Localisation refusée. Autorisez-la dans les réglages du navigateur' + or };
-    case 'timeout': return { text: 'Position introuvable pour le moment (essayez à découvert)' + or, retry: o.retry };
-    case 'unsupported': return { text: 'Ce navigateur ne donne pas votre position.' + (o.place ? ' Choisissez une commune.' : '') };
-    // Often passing (no position yet, the device's location off): worth trying again.
-    default: return { text: 'Position indisponible pour le moment. Vérifiez que la localisation de l’appareil est activée' + or, retry: o.retry };
-  }
-}
 
 /** @param {StartChoice} c */
 const choice = c => html`<button type="button" data-key=${c.key} @click=${() => c.run()}>

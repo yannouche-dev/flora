@@ -42,9 +42,6 @@ export const find = (tree, id) => nodes(tree).find(n => n.id === id) || null;
 /** The stack holding a block. @param {PaneNode} tree @param {string} key @returns {StackNode | null} */
 export const stackOf = (tree, key) => /** @type {StackNode | undefined} */ (nodes(tree).find(n => n.t === 'stack' && n.tabs.includes(key))) || null;
 
-/** The blocks in stacks. @param {PaneNode} tree */
-export const stacked = tree => new Set(nodes(tree).flatMap(n => n.t === 'stack' ? n.tabs : []));
-
 /** Is the sheet in a row next to other panes (the plant pane is made wider for it)? @param {PaneNode} tree */
 export const sheetInRow = tree => nodes(tree).some(n => n.t === 'split' && n.dir === 'row' && n.kids.length > 1 && nodes(n).some(m => m.t === 'sheet'));
 

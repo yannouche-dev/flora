@@ -3,7 +3,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { href } from '../core/router.js';
 import { collectionsForPlant, formatDistance, listCollections, plantMarkers, spotEvents, updatePlace, withEntry } from '../core/collections.js';
 import { store } from '../core/store.js';
-import { lastFix, watchLocation } from '../core/geo.js';
+import { lastFix, oneFix } from '../core/geo.js';
 import { FRANCE_BOUNDS, WORLD_BOUNDS } from '../core/ign.js';
 import { moduleOn } from '../core/modules.js';
 import { observationsAround, RADII, savedRadius, saveRadius } from '../core/nearby.js';
@@ -18,6 +18,7 @@ import { lookalikesOf } from '../core/lookalikes.js';
 import { OVERLAYS } from '../core/ign.js';
 import { icon } from '../core/icons.js';
 import { knownCredit, knownThumb, photoOf, thumbUrl } from '../core/thumb.js';
+import { commonOf, nameOf } from '../core/plants.js';
 import { INAT_DATASET, gbifSource } from '../core/around3d.js';
 import { ui } from '../styles/ui.js';
 import './gf-map.js';
@@ -66,22 +67,8 @@ let nearAllowed = false;
 function locate() {
   const known = lastFix();
   if (known && Date.now() - known.timestamp < 5 * 60000) return Promise.resolve(known);
-  return new Promise(resolve => {
-    /** @type {(() => void) | null} */ let stop = null;
-    let done = false;
-    const finish = (/** @type {any} */ value) => {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-      queueMicrotask(() => stop?.());
-      resolve(value);
-    };
-    const timer = setTimeout(() => finish(null), 20000);
-    stop = watchLocation(state => {
-      if (state.fix) finish(state.fix);
-      else if (state.error) finish({ error: state.error });
-    });
-  });
+  // Else whatever fix the watch gives, however old (no maxAge): the one it holds comes back at once.
+  return oneFix({ timeout: 20000 });
 }
 
 /**
@@ -471,7 +458,7 @@ export class GfSheetMap extends LitElement {
           min-zoom=${framing.world || compare ? 1 : 5}
           .area=${this.#aboutPlant && near?.state === 'done' && c.near !== 'off' ? { center: near.point, radius: near.radius } : null}
           .points=${[]}
-          .distribution=${gbifOn ? { key: this.gbifKey, label: plant.vernacularNames?.[0] || plant.scientificName, country, filter: f.filter?.params || null } : null}
+          .distribution=${gbifOn ? { key: this.gbifKey, label: nameOf(plant), country, filter: f.filter?.params || null } : null}
           .compare=${compare}
           .focusPoint=${f.point ? { coordinates: f.point.coordinates, title: f.point.label, url: f.point.url, photo: this.#photo().photo } : null}
           .zone=${this.#aboutPlant && this._bounds?.zone ? { key: this._bounds.id, feature: this._bounds.zone } : null}
@@ -567,7 +554,7 @@ export class GfSheetMap extends LitElement {
     }
     const drawn = new Set(area.map(p => p.gbif));
     const value = {
-      key, photo, credit, common: plant.vernacularNames?.[0] || null, sci: plant.scientificName, taxonId: this.inatId ?? null,
+      key, photo, credit, common: commonOf(plant), sci: plant.scientificName, taxonId: this.inatId ?? null,
       areaPlaced: area.length, areaCopies,
       points: [...area, ...(near?.points || []).filter((/** @type {any} */ p) => p.gbif == null || !drawn.has(p.gbif)).map((/** @type {any} */ p) => ({ ...p }))]
     };

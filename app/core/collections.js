@@ -16,6 +16,7 @@ import { publish, subscribe } from './sync.js';
 import { exportNotes, importNotes } from './sheet-blocks.js';
 import { notesEvents, notesLoaded } from './sheet-notes.js';
 import { readJSON, readText, writeJSON, writeText } from './prefs.js';
+import { metres as distance } from './distance.js';
 
 export { FAVORITES_ID };
 
@@ -92,7 +93,6 @@ export async function deletePlace(id) {
   allowEmptyBackup = true;
   await changed();
 }
-export const deleteCollection = deletePlace;
 
 /** 7 decimals ≈ 1 cm: plenty, and keeps exports readable. @param {[number, number]} c @returns {[number, number]} */
 const roundCoordinates = ([lon, lat]) => [Math.round(lon * 1e7) / 1e7, Math.round(lat * 1e7) / 1e7];
@@ -343,7 +343,7 @@ export async function refreshMembership() {
   const placed = new Map();
   for (const c of all) if (isPlace(c)) for (const id of c.properties.plantIds) if (!placed.has(id)) placed.set(id, c.id);
   const collections = all
-    .map(c => ({ id: c.id, name: collectionTitle(c), kind: c.properties.kind, count: c.properties.plants.length }))
+    .map(c => ({ id: c.id, name: placeTitle(c), kind: c.properties.kind, count: c.properties.plants.length }))
     .sort((a, b) => (a.kind === 'favorites' ? -1 : b.kind === 'favorites' ? 1 : 0) || a.name.localeCompare(b.name, 'fr'));
   membership = { favorites, byPlant, collections };
   store.set({ favorites, placed, collections });
@@ -593,26 +593,13 @@ export function placeTitle(place) {
   return `${entryName(plants[0])} + ${plants.length - 1} autre${plants.length > 2 ? 's' : ''}`;
 }
 
-export const collectionTitle = placeTitle;
-
 /** @param {number} n */
 export const plantCount = n => `${n} plante${n > 1 ? 's' : ''}`;
 
-/**
- * Great-circle distance in metres.
- * @param {[number, number]} a [lon, lat] @param {[number, number]} b [lon, lat]
- */
-export function distance([lon1, lat1], [lon2, lat2]) {
-  const rad = Math.PI / 180;
-  const dLat = (lat2 - lat1) * rad;
-  const dLon = (lon2 - lon1) * rad;
-  const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * rad) * Math.cos(lat2 * rad) * Math.sin(dLon / 2) ** 2;
-  return 2 * 6371008.8 * Math.asin(Math.sqrt(h));
-}
-
-/** @param {number} metres */
-export const formatDistance = metres =>
-  metres < 1000 ? Math.round(metres) + ' m' : (metres / 1000).toLocaleString('fr-FR', { maximumFractionDigits: metres < 10000 ? 1 : 0 }) + ' km';
+// The great-circle distance in metres, and a distance said (« 1,5 km »): core/distance.js's, offered here too (screens
+// import them from this module; `distance` is read here as well).
+export { distance };
+export { formatDistance } from './distance.js';
 
 /**
  * Existing places within `radius` metres, nearest first.
@@ -742,10 +729,10 @@ export async function exportGeoJSON(only) {
   if (only) for (const c of only) if (c.properties.origin) await promotePlace(c.id);
   const features = (only || await listCollections()).sort((a, b) => a.properties.createdAt.localeCompare(b.properties.createdAt));
   // Everything (not one collection): the plant sheet's notes with it, so the file restores them too.
-  const collection = toPortable(features, { name: only?.length === 1 ? 'GeoFlora — ' + collectionTitle(only[0]) : 'GeoFlora — mes plantes', sheetNotes: only ? undefined : exportNotes() });
+  const collection = toPortable(features, { name: only?.length === 1 ? 'GeoFlora — ' + placeTitle(only[0]) : 'GeoFlora — mes plantes', sheetNotes: only ? undefined : exportNotes() });
   const date = new Date().toISOString().slice(0, 10);
   const slug = only?.length === 1
-    ? collectionTitle(only[0]).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'collection'
+    ? placeTitle(only[0]).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'collection'
     : 'mes-plantes';
   const file = new File([JSON.stringify(collection)], `geoflora-${slug}-${date}.geojson`, { type: 'application/geo+json' });
 

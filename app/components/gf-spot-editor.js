@@ -2,6 +2,7 @@
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { config } from '../config.js';
 import * as db from '../core/db.js';
+import { getPlant } from '../core/plants.js';
 import { GeoController } from '../core/geo.js';
 import { moduleOn } from '../core/modules.js';
 import { href } from '../core/router.js';
@@ -676,7 +677,7 @@ export class GfSpotEditor extends LitElement {
    */
   async #harvestAllowed(entry) {
     if (entry?.plantId == null) return true;
-    const plant = await db.get('plants', entry.plantId).catch(() => null);
+    const plant = await getPlant(entry.plantId);
     const risk = await harvestRisk(plant || { id: entry.plantId, scientificName: entry.scientificName, genus: entry.scientificName.split(' ')[0] });
     if (!risk) return true;
     return confirm(`Plante toxique : récolte déconseillée.\n\n${entryName(entry)} — d’après nos sources :\n${risk.reasons.map(r => '• ' + r).join('\n')}\n\nNe la consommez pas. Centre antipoison : centres-antipoison.net ; 15 ou 112 en cas de détresse vitale.\n\nNoter quand même cette récolte ?`);

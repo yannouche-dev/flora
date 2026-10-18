@@ -8,6 +8,7 @@ import { findEntry,
   placeAbundance, placeLastHarvest, placeTitle, plantCount, spotEvents, updatePlace, withEntry
 } from '../core/collections.js';
 import { RADII, exploreUrl, observationsAround, saveRadius, savedRadius, speciesAround } from '../core/nearby.js';
+import { radiusLabel } from '../core/distance.js';
 import { StoreController, whenReady } from '../core/store.js';
 import { ui } from '../styles/ui.js';
 import './gf-facet.js';
@@ -16,7 +17,7 @@ import './gf-spot-editor.js';
 import './gf-thumb.js';
 import { icon } from '../core/icons.js';
 import { foldLetters as fold } from '../core/fold.js';
-import * as db from '../core/db.js';
+import { getPlant, nameOf } from '../core/plants.js';
 import { gbifTaxon } from '../core/sources.js';
 import { context, setContext } from '../core/context.js';
 import { MediaController } from '../core/media.js';
@@ -362,10 +363,10 @@ export class GfMapPage extends LitElement {
     if (!species) return;
     // No photo of iNaturalist's under a free licence (its default one, CC BY-NC, is never shown): the flora's
     // thumbnail on its points, with its credit — never a bare dot for a plant the app has a photo of.
-    if (!species.photo && species.plantId) db.get('plants', species.plantId).then(plant => {
+    if (!species.photo && species.plantId) getPlant(species.plantId).then(plant => {
       const t = /** @type {any} */ (plant)?.thumbnail;
       if (t?.url && this._around?.species === species) this._around = { ...this._around, thumb: { url: t.url, credit: thumbCredit(t) } };
-    }, () => {});
+    });
     /** @type {any[]} */ let obs = [];
     try { obs = await observationsAround(species.taxonId, around.center, around.radius); } catch { /* none placed */ }
     if (this._around?.species !== species) return;
@@ -421,10 +422,9 @@ export class GfMapPage extends LitElement {
 
   #aroundPanel() {
     const a = /** @type {NonNullable<typeof this._around>} */ (this._around);
-    const km = r => r < 1000 ? r + ' m' : r / 1000 + ' km';
     const head = html`
       <button class="close icon-btn" type="button" aria-label="Fermer" @click=${() => this.#toggleAround()}>${icon('x-lg')}</button>
-      <h2>Autour · ${km(a.radius)}</h2>
+      <h2>Autour · ${radiusLabel(a.radius)}</h2>
       <div class="meta"><span>Centre envoyé à iNaturalist : ${a.where}</span>
         <button type="button" class="link" @click=${() => {
           const c = /** @type {any} */ (this.renderRoot.querySelector('gf-map'))?.center();
@@ -432,7 +432,7 @@ export class GfMapPage extends LitElement {
         }}>Chercher au centre de la carte</button></div>
       <div class="radii" role="group" aria-label="Rayon">
         ${RADII.map(r => html`<button type="button" aria-pressed=${r === a.radius ? 'true' : 'false'}
-          @click=${() => { saveRadius(r); this.#searchAround(a.center, a.where, r); }}>${km(r)}</button>`)}
+          @click=${() => { saveRadius(r); this.#searchAround(a.center, a.where, r); }}>${radiusLabel(r)}</button>`)}
       </div>`;
     const source = html`<p class="source">Source : <a href=${a.species ? exploreUrl(a.center, a.radius, a.species.taxonId) : exploreUrl(a.center, a.radius)}
       target="_blank" rel="noopener">iNaturalist</a>, observations validées (niveau recherche), toutes dates. Photos d’iNaturalist sous licence libre seulement (CC0, CC BY, CC BY-SA) ; auteur et licence en ouvrant l’espèce.</p>`;
@@ -563,10 +563,10 @@ export class GfMapPage extends LitElement {
     this.#distributionFor = id;
     this._distribution = null;
     try {
-      const plant = await db.get('plants', id);
+      const plant = await getPlant(id);
       const taxon = plant ? await gbifTaxon(plant) : null;
       if (this.#distributionFor === id && taxon?.id) {
-        this._distribution = { key: taxon.id, label: plant.vernacularNames?.[0] || plant.scientificName };
+        this._distribution = { key: taxon.id, label: nameOf(plant) };
       }
     } catch { /* GBIF off or unreachable: no layer offered */ }
   }

@@ -31,26 +31,25 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { icon } from '../core/icons.js';
 import { moduleOn } from '../core/modules.js';
-import { watchLocation } from '../core/geo.js';
+import { FIX_MAX_AGE, geoProblem, takeFix } from '../core/geo.js';
 import { addressAt } from '../core/geoservices.js';
 import { plantViewOf } from '../core/store.js';
 import { SearchController } from '../core/search-channel.js';
 import { blockStyle } from '../core/sheet-blocks.js';
 import { href } from '../core/router.js';
-import * as db from '../core/db.js';
+import { floweringMonths, getPlant } from '../core/plants.js';
 import { alertsOf } from '../core/alerts.js';
 import { thumbCredit } from '../core/credit.js';
 import { cachedThumb, thumbUrl } from '../core/thumb.js';
 import { hintView, takeHint } from '../core/hints.js';
 import { isFavorite, toggleFavorite } from '../core/collections.js';
 import { ui } from '../styles/ui.js';
-import { floweringMonths } from '../components/gf-calendar.js';
-import { geoProblem } from '../components/start-screen.js';
 import { DISTANCES, distanceAt, distanceEvents, distanceKey } from '../miniapp/kit/cards.js';
 import { pushHash } from '../core/history.js';
 import { addCatalogLayer, DEFAULT_OPACITY, isOverlay } from '../core/ign.js';
 import { loadCatalog } from '../core/ign-catalog.js';
 import { RADII_3D } from '../core/around3d.js';
+import { nearestStop } from '../core/distance.js';
 import { cellIcon, distanceLabel } from './registry.js';
 import { COMPACT_WIDTH, MAP_LAYERS, WIDE_FRAMES, catalogLayers, inatTiles, inWhen, layersOf, mapControls, opacitiesOf, opacText, overlaysOf, snapRadius, uiMode, viewOf, viewText } from './map-options.js';
 import { periodQuery, plantOfPoint, taxonIdOf } from '../core/nearby.js';
@@ -73,23 +72,17 @@ import '../miniapp/kit/ma-deck.js';
  * @typedef {import('../miniapp/kit/cards.js').Card} Card
  */
 
-/** A position fixed this long ago at most is taken for « Autour de moi » (ms). */
-const FIX_MAX_AGE = 60_000;
-
 /**
- * « Autour de moi »: the position, once (a fix older than a minute is not taken). Rejects with the reason, in French.
+ * « Autour de moi »: the position, once (a fix older than a minute is not taken: geo.js FIX_MAX_AGE). Rejects with the
+ * reason, in French.
  * @returns {Promise<[number, number]>}
  */
 export function locateOnce() {
   return new Promise((resolve, reject) => {
-    const since = Date.now() - FIX_MAX_AGE;
-    let live = true;
-    /** @type {() => void} */
-    let stop = () => {};
-    stop = watchLocation(s => {
-      if (!live) return;
-      if (s.fix && s.fix.timestamp >= since) { live = false; queueMicrotask(() => stop()); resolve(s.fix.coordinates); }
-      else if (s.error) { live = false; queueMicrotask(() => stop()); reject(new Error(geoProblem(s.code ?? null, { place: true }).text)); }
+    takeFix({ maxAge: FIX_MAX_AGE }, r => {
+      if (!r) return; // never: no timeout, no signal
+      if ('error' in r) reject(new Error(geoProblem(r.code, { place: true }).text));
+      else resolve(r.coordinates);
     });
   });
 }
@@ -105,9 +98,6 @@ async function nameScope(state, at) {
  * @param {Element} el @param {Record<string, unknown>} values
  */
 const setCell = (el, values) => el.dispatchEvent(new CustomEvent('cell-param', { detail: values, bubbles: true, composed: true }));
-
-/** The radius of « Observations autour » (core/around3d.js RADII_3D) nearest to a distance. @param {number} m */
-const nearest3d = m => RADII_3D.reduce((a, b) => Math.abs(b - m) < Math.abs(a - m) ? b : a);
 
 /** Watches the state: the host drawn again on each change — and on its other events it names, as it says (`hover`). */
 class StateController {
@@ -575,7 +565,7 @@ export class DlMap extends LitElement {
    */
   get #around3d() {
     const j = /** @type {string[] | null} */ (this.params?.jumelles ?? null);
-    const radius = nearest3d(this.params?.jrayon ?? this.state?.radius ?? 2000);
+    const radius = nearestStop(this.params?.jrayon ?? this.state?.radius ?? 2000, RADII_3D);
     const value = { on: j !== null, inat: j ? j.includes('inat') : true, gbif: j ? j.includes('gbif') : true, density: j ? j.includes('densite') : false, radius };
     const k = JSON.stringify(value);
     if (this.#aroundMemo?.k !== k) this.#aroundMemo = { k, value };
@@ -589,7 +579,7 @@ export class DlMap extends LitElement {
    */
   #onAround(e) {
     const p = e.detail;
-    const zone = nearest3d(this.state?.radius ?? 2000);
+    const zone = nearestStop(this.state?.radius ?? 2000, RADII_3D);
     this.#set({
       jumelles: p.on ? [p.inat && 'inat', p.gbif && 'gbif', p.density && 'densite'].filter(Boolean) : null,
       jrayon: p.on && !this.state?.live.at && p.radius !== zone ? p.radius : null
@@ -1276,7 +1266,7 @@ export class DlDeck extends LitElement {
     this._loading = true;
     const month = new Date().getMonth();
     const cards = (await Promise.all(ids.map(async id => {
-      const plant = this.#plants.get(id) ?? await db.get('plants', id).catch(() => null);
+      const plant = this.#plants.get(id) ?? await getPlant(id);
       if (!plant) return null;
       this.#plants.set(id, plant);
       const sp = species.byPlant.get(id);

@@ -3,7 +3,7 @@
 // lookup cached in IndexedDB (sources.thumbnail). Results are kept in memory for the session, each with its credit
 // (its author and licence: a map's card shows them with the photo).
 
-import * as db from './db.js';
+import { getPlant } from './plants.js';
 import * as sources from './sources.js';
 import { moduleEvents, moduleOn } from './modules.js';
 import { foundCredit, thumbCredit } from './credit.js';
@@ -81,7 +81,7 @@ export function thumbUrl(plantId, record) {
   if (known.has(id)) return Promise.resolve(/** @type {string | null} */ (known.get(id)));
   if (pending.has(id)) return /** @type {Promise<string | null>} */ (pending.get(id));
   const task = (async () => {
-    const plant = record?.id === id && 'thumbnail' in record ? record : await db.get('plants', id).catch(() => null);
+    const plant = record?.id === id && 'thumbnail' in record ? record : await getPlant(id);
     if (!plant) return null;
     if (plant.thumbnail?.url) return { url: /** @type {string} */ (plant.thumbnail.url), credit: thumbCredit(plant.thumbnail) };
     if (typeof navigator !== 'undefined' && navigator.onLine === false) return null;

@@ -42,6 +42,7 @@
 
 import { html, nothing, render } from 'lit';
 import { RADII_3D, around3dPrefs, cleanAround3d, fitZoom, hexBins, metres, morePhotos, observations3d, radiusLabel, radiusWords, ringWall, setAround3dPrefs, wallHeight } from '../core/around3d.js';
+import { MAJOR_STOPS, nearestStop } from '../core/distance.js';
 import { circlePolygon } from '../core/gl-style.js';
 import { mapSettings } from '../core/map-settings.js';
 import { cachedThumb } from '../core/thumb.js';
@@ -181,7 +182,7 @@ export class Obs3dLayer {
   #barView() {
     const p = this.prefs, r = this.#radius, n = RADII_3D.length - 1, count = this.#points.length;
     // Its stop: the radius', else the nearest (a page's zone may lie between two: r=3km).
-    const at = RADII_3D.reduce((best, d, i) => Math.abs(d - r) < Math.abs(RADII_3D[best] - r) ? i : best, 0);
+    const at = RADII_3D.indexOf(nearestStop(r, RADII_3D));
     // Around the page's area: the slider moves its zone when the page lets it (a radius handle: it follows them);
     // else the zone's radius is only said.
     const zone = this.why === 'area', slider = !zone || Boolean(this.host.radiusHandle);
@@ -204,7 +205,7 @@ export class Obs3dLayer {
       ${slider ? html`<div class="gf-o3-range" style="--n:${n};--p:${at / n}">
         <div class="gf-o3-rail" aria-hidden="true"></div>
         ${RADII_3D.map((d, i) => html`<span class="gf-o3-stop ${i <= at ? 'on' : ''}" style="--i:${i}" aria-hidden="true"></span>`)}
-        ${RADII_3D.map((d, i) => html`<span class="gf-o3-mark ${[200, 1000, 5000, 50000].includes(d) ? '' : 'minor'} ${i === 0 ? 'first' : i === n ? 'last' : ''} ${i === at ? 'cur' : ''}"
+        ${RADII_3D.map((d, i) => html`<span class="gf-o3-mark ${MAJOR_STOPS.includes(d) ? '' : 'minor'} ${i === 0 ? 'first' : i === n ? 'last' : ''} ${i === at ? 'cur' : ''}"
           style="--i:${i}" aria-hidden="true">${radiusLabel(d)}</span>`)}
         <input type="range" min="0" max=${n} step="1" .value=${String(at)} aria-label="Rayon autour du centre" aria-valuetext=${radiusWords(r)}
           @input=${(/** @type {any} */ e) => { if (!zone) this.#set({ radius: RADII_3D[Number(e.target.value)] }); }}

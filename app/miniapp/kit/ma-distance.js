@@ -24,12 +24,14 @@ import { plantViewOf, StoreController } from '../../core/store.js';
 import { PHONE_QUERY } from '../../core/media.js';
 import { ui } from '../../styles/ui.js';
 import { DISTANCES, distanceAt, distanceEvents, distLabel, distMood, distWords, nameOf } from './cards.js';
+import { commonOf } from '../../core/plants.js';
 import { sessionOf } from './session.js';
 import '../../components/gf-map.js';
 import { ringAt } from '../../components/map-style.js';
+import { MAJOR_STOPS } from '../../core/distance.js';
 
 /** The stops labelled under the slider when it is narrow (all of them when there is room). */
-const MAIN_STOPS = new Set([200, 1000, 5000, 50000]);
+const MAIN_STOPS = new Set(MAJOR_STOPS);
 
 /** One element per value: a new one fades in as the value changes (lit's repeat, keyed by the value). @param {string} v @param {(v: string) => unknown} t */
 const fresh = (v, t) => repeat([v], x => x, t);
@@ -240,7 +242,7 @@ export class MaDistance extends LitElement {
     const pts = await observationsAround(/** @type {number} */ (card.taxonId), c.point, c.radius).catch(() => []);
     if (this.#hlFor !== key) return;
     const title = nameOf(card.plant);
-    this._hl = { key, plantId: card.plant.id, photo, credit: photo ? card.credit : null, common: card.plant.vernacularNames?.[0] || null, sci: card.plant.scientificName, taxonId: card.taxonId,
+    this._hl = { key, plantId: card.plant.id, photo, credit: photo ? card.credit : null, common: commonOf(card.plant), sci: card.plant.scientificName, taxonId: card.taxonId,
       points: pts.slice(0, 60).map(p => ({ coordinates: p.coordinates, title, url: p.url, date: p.date })) };
   }
   #hlFor = '';

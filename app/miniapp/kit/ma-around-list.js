@@ -31,7 +31,7 @@ import { config } from '../../config.js';
 import { PaneSizer, splitStyles } from '../../core/panes.js';
 import { sheetSession } from '../../core/sheet-session.js';
 import { plantViewOf, StoreController } from '../../core/store.js';
-import { emergency } from '../../components/gf-lookalikes.js';
+import { emergency } from '../../core/poison.js';
 import { ui } from '../../styles/ui.js';
 import { MONTH, PAGE, distLabel, nameOf, nextDistance } from './cards.js';
 import { sessionOf } from './session.js';

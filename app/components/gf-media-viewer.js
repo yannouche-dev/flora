@@ -21,7 +21,7 @@
 // frame keeps one shape (nothing jumps from one plant to the next) and where the wheel scrolls the sheet.
 
 import { LitElement, html, css, nothing, repeat } from 'lit';
-import * as db from '../core/db.js';
+import { getPlant } from '../core/plants.js';
 import { whenReady } from '../core/store.js';
 import { icon } from '../core/icons.js';
 import { imageKey, loadMedia, PARTS } from '../core/media-items.js';
@@ -464,7 +464,7 @@ export class GfMediaViewer extends LitElement {
     // its plant unchanged, never read it again — « Plante introuvable » for a plant that is there. The skeleton waits.
     await whenReady();
     if (abort.signal.aborted) return;
-    const plant = await db.get('plants', /** @type {number} */ (this.plantId)).catch(() => null);
+    const plant = await getPlant(/** @type {number} */ (this.plantId));
     if (abort.signal.aborted) return;
     this._plant = plant;
     if (!plant) { this._done = true; return; }

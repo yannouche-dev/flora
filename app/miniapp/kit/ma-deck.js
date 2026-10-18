@@ -15,7 +15,7 @@ import { hideImg, showImg } from '../../core/img.js';
 import { creditText } from '../../core/credit.js';
 import { moduleEvents, moduleOn } from '../../core/modules.js';
 import { plantViewOf, StoreController } from '../../core/store.js';
-import { floweringMonths } from '../../components/gf-calendar.js';
+import { floweringMonths } from '../../core/plants.js';
 import { ui } from '../../styles/ui.js';
 import { bio, distLabel, nameOf, nextDistance } from './cards.js';
 

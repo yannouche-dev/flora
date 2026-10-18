@@ -4,8 +4,7 @@
 // 2D », the intents' cards). Read from the registry's schema (registry.js), never from a
 // component by name. Pure, tested under Node (tests/unit/block-picker.test.mjs).
 
-import { defaultOf, distanceLabel, readValue, resolve, same } from './registry.js';
-import { parse } from './grammar.js';
+import { defaultOf, distanceLabel, readValue, same } from './registry.js';
 
 /**
  * @typedef {import('./registry.js').ParamSpec} ParamSpec
@@ -91,12 +90,6 @@ export function cellChips(r) {
     chips.push(ps.kind === 'text' && ps.frame ? `« ${label} »` : ps.kind === 'text' ? `${ps.label} : ${label}` : label);
   }
   return chips;
-}
-
-/** A cell written alone (« map(floraison,r=2km) »), its chips. @param {string} text @returns {string[]} */
-export function textChips(text) {
-  const cell = parse(text).tree.kids[0];
-  return cell?.t === 'cell' ? cellChips(resolve(cell)) : [];
 }
 
 /**

@@ -11,13 +11,15 @@ import { fetchJson } from './net.js';
 import { readText, writeText } from './prefs.js';
 import { inatCredit, thumbCredit } from './credit.js';
 import { cachedCredit, cachedThumb, thumbUrl } from './thumb.js';
+import { commonOf } from './plants.js';
+import { AROUND_STOPS as RADII } from './distance.js';
 
 const API = 'https://api.inaturalist.org/v1';
 /** Results kept a day (offline: an older copy is better than nothing). */
 const TTL = 24 * 3600 * 1000;
 
-/** Radii offered, in metres. */
-export const RADII = [500, 1000, 2000, 5000, 10000];
+// Radii offered, in metres (core/distance.js AROUND_STOPS): a radius kept must be one of them (savedRadius).
+export { RADII };
 export const DEFAULT_RADIUS = 5000;
 
 /**
@@ -81,7 +83,7 @@ function nameIndex() {
   index ??= db.getAll('plants').then(plants => {
     // Its bundled thumbnail (plants.json) too: the photo of an observation iNaturalist gives none under a free licence;
     // and its French name, for a record that has none (GBIF's seldom do).
-    const match = (/** @type {any} */ p) => ({ id: p.id, family: p.family, genus: p.genus, common: p.vernacularNames?.[0] || null, thumbnail: p.thumbnail?.url ? p.thumbnail : null });
+    const match = (/** @type {any} */ p) => ({ id: p.id, family: p.family, genus: p.genus, common: commonOf(p), thumbnail: p.thumbnail?.url ? p.thumbnail : null });
     /** @type {Map<string, FloraMatch>} */ const exact = new Map();
     /** @type {Map<string, FloraMatch>} */ const loose = new Map();
     /** @type {Map<string, number>} */ const rank = new Map();

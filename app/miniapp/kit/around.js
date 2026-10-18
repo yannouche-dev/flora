@@ -4,10 +4,9 @@
 // first screen (« Autour de moi », a commune, « Reprendre » the place kept), the action that finds where you are, and
 // the steps start › map › cards (a place chosen: the map, its distance; then the cards).
 
-import { watchLocation } from '../../core/geo.js';
+import { FIX_MAX_AGE, geoProblem, takeFix } from '../../core/geo.js';
 import { discovering, finishDiscover } from '../../core/discover.js';
 import { href } from '../../core/router.js';
-import { geoProblem } from '../../components/start-screen.js';
 import { distLabel } from './cards.js';
 import { sessionOf } from './session.js';
 
@@ -21,9 +20,6 @@ export const WORDS = {
     caution: { text: 'Ne cueillez jamais une plante sans être sûr de vous.' } },
   mosaic: { name: 'la mosaïque', title: 'La mosaïque du coin', lead: 'Les photos des plantes observées près d’ici, en grand. Touchez une image pour voir toutes celles de la plante.' }
 };
-
-/** « Autour de moi » takes a position at most this old (ms). */
-const FIX_MAX_AGE = 60_000;
 
 /**
  * The context of a mini-app around a place: kept (persist) — the place chosen and its name, the distance, the cards
@@ -70,17 +66,12 @@ export const locate = {
   mode: 'exclusive',
   run: (/** @type {import('../runtime.js').MiniApp} */ app) => new Promise(resolve => {
     app.set({ startError: null });
-    const since = Date.now() - FIX_MAX_AGE;
-    const signal = app.signal('locate');
-    let live = true;
-    /** @type {() => void} */
-    let unsubscribe = () => {};
-    const end = () => { if (!live) return; live = false; queueMicrotask(() => unsubscribe()); resolve(undefined); };
-    signal.addEventListener('abort', end, { once: true });
-    unsubscribe = watchLocation(s => {
-      if (!live) return;
-      if (s.fix && s.fix.timestamp >= since) { end(); sessionOf(app).setPoint(s.fix.coordinates, null); app.go('map'); }
-      else if (s.error) { end(); app.set({ startError: geoProblem(s.code, { place: true, retry: () => app.do('locate') }) }); }
+    // Within the watch's call (takeFix): a fix the watch already holds is on the map before the start is drawn again.
+    takeFix({ maxAge: FIX_MAX_AGE, signal: app.signal('locate') }, r => {
+      resolve(undefined);
+      if (!r) return;
+      if ('error' in r) app.set({ startError: geoProblem(r.code, { place: true, retry: () => app.do('locate') }) });
+      else { sessionOf(app).setPoint(r.coordinates, null); app.go('map'); }
     });
   })
 };

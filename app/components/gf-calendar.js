@@ -4,26 +4,10 @@ import * as sources from '../core/sources.js';
 import { forgetFailures } from '../core/cache.js';
 import { isUnavailable } from '../core/net.js';
 import { sourceDown, sourceDownStyles } from '../core/source-state.js';
+import { floweringMonths } from '../core/plants.js';
 
 const MONTHS = ['J', 'F', 'M', 'A', 'M', 'J', 'J', 'A', 'S', 'O', 'N', 'D'];
 const MONTH_NAMES = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
-
-/**
- * Months (0–11) of a Baseflor flowering period [first, last] (1–12); last < first wraps over the year end.
- * @param {[number, number] | null | undefined} period
- * @returns {Set<number>}
- */
-export function floweringMonths(period) {
-  const months = new Set();
-  if (!Array.isArray(period)) return months;
-  const [first, last] = period;
-  if (!(first >= 1 && first <= 12 && last >= 1 && last <= 12)) return months;
-  for (let m = first; ; m = m % 12 + 1) {
-    months.add(m - 1);
-    if (m === last) break;
-  }
-  return months;
-}
 
 /** @param {Set<number>} months */
 const range = months => {

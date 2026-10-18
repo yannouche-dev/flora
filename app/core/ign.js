@@ -10,7 +10,7 @@ import { config } from '../config.js';
 const WMTS = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&TILEMATRIXSET=PM'
   + '&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}';
 
-export const ATTRIBUTION = '© <a href="https://geoservices.ign.fr/" target="_blank" rel="noopener">IGN – Géoplateforme</a>';
+const ATTRIBUTION = '© <a href="https://geoservices.ign.fr/" target="_blank" rel="noopener">IGN – Géoplateforme</a>';
 
 /**
  * @typedef {{ id: string, format: string, style?: string, minNative?: number, maxNative?: number }} WmtsLayer
@@ -114,9 +114,6 @@ export const isOverlay = key => key in OVERLAYS || added.has(key);
 
 /** Its definition (null: unknown). @param {string} key @returns {LayerDef | null} */
 export const overlayDef = key => OVERLAYS[key] || added.get(key) || null;
-
-/** The catalogue's layers added, in the order they were. */
-export const addedLayers = () => [...added.keys()];
 
 /**
  * A layer of the catalogue made an overlay (kept for next time): its readable title, with its variant for one of a
