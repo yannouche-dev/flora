@@ -54,6 +54,7 @@ import { cell as makeCell, cells as cellsOf, dirAt, moveAt, nodeAt, parse, repla
 import { CURRENT, LINKS, cellIcon, cellMark, cellName, linksOf, menuLooks, resolveTree, touchOf, withParam } from './registry.js';
 import { cleanText, groupPrefix, LayoutState, liveSearch, readLive, readQuery, sameLive } from './state.js';
 import { APP, SearchChannel } from '../core/search-channel.js';
+import { OBS_DEFAULTS, SOURCES } from '../core/observations.js';
 import { forgetShares, savedShares, saveShares } from './sizes.js';
 import { PRESETS } from './presets.js';
 import { renderCell, revealFacet, scopeWords } from './cells.js';
@@ -687,11 +688,17 @@ export class GfLayout extends LitElement {
       const first = cells.find(r => r.known && r.params.r != null);
       const when = cells.find(r => r.known && r.spec.id === 'map' && r.params.when && r.params.when !== 'toujours');
       const radius = first?.known ? first.params.r : 2000, periode = when?.known ? when.params.when : 'toujours';
+      // The sources its maps say (src=, or their intent: répartition), all of them; none says: iNaturalist
+      // (core/observations.js OBS_DEFAULTS).
+      const said = cells.flatMap(r => r.known && r.spec.id === 'map' && Array.isArray(r.params.src) ? /** @type {string[]} */ (r.params.src) : []);
+      const sources = /** @type {('inat' | 'gbif')[]} */ (SOURCES.filter(x => said.includes(x)));
       const state = this.#group(g).state;
-      if (radius !== state.defaultRadius || periode !== state.defaultPeriode) {
+      const own = sources.length ? sources : OBS_DEFAULTS.sources;
+      if (radius !== state.defaultRadius || periode !== state.defaultPeriode || own.join() !== state.defaultSources.join()) {
         changed = true;
         state.defaultRadius = radius;
         state.defaultPeriode = periode;
+        state.defaultSources = own;
         // Another group's: followed at once (the first's by its caller).
         if (g !== 'a') state.follow();
       }

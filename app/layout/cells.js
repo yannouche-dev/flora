@@ -53,12 +53,14 @@ import { loadCatalog } from '../core/ign-catalog.js';
 import { RADII_3D } from '../core/around3d.js';
 import { cellIcon, distanceLabel } from './registry.js';
 import { COMPACT_WIDTH, MAP_LAYERS, WIDE_FRAMES, catalogLayers, inatTiles, inWhen, layersOf, mapControls, opacitiesOf, opacText, overlaysOf, snapRadius, uiMode, viewOf, viewText } from './map-options.js';
-import { periodQuery, taxonIdOf } from '../core/nearby.js';
+import { periodQuery, plantOfPoint, taxonIdOf } from '../core/nearby.js';
+import { SOURCE_NAMES, failedText, sourcesText } from '../core/observations.js';
 import { obsId } from './state.js';
 import '../components/gf-map.js';
 import '../components/gf-place-search.js';
 import '../components/gf-results-bar.js';
 import '../components/gf-filter-panel.js';
+import './obs-filters.js';
 import '../components/gf-plant-list.js';
 import '../components/gf-plant-detail.js';
 import '../components/gf-media-viewer.js';
@@ -147,8 +149,9 @@ function scopeNote(state) {
   const n = state.species?.list.length ?? 0;
   // The layout's period (state.js): the plants of the zone that year, that month.
   const when = state.periode === 'annee' ? ' cette année' : state.periode === 'mois' ? ' ce mois-ci' : '';
-  // The plants of the zone's latest observations (the map's: state.js), as the flora knows them.
-  return n ? `${n.toLocaleString('fr-FR')} plante${n > 1 ? 's' : ''} dans les observations de la zone${when} (iNaturalist)` : `Aucune plante de la flore dans les observations de la zone${when} (iNaturalist).`;
+  // The plants of the zone's latest observations (the map's: state.js), as the flora knows them — and from where.
+  const from = sourcesText(state.filters.sources.filter(x => !state.failed.some(f => f.name === SOURCE_NAMES[x])));
+  return n ? `${n.toLocaleString('fr-FR')} plante${n > 1 ? 's' : ''} dans les observations de la zone${when} (${from})` : `Aucune plante de la flore dans les observations de la zone${when} (${from}).`;
 }
 
 /** Shared by the scope's controls (map, place): the radius slider, « Autour de moi », the place's name. */
@@ -344,8 +347,9 @@ export class DlMap extends LitElement {
   get #p() {
     const p = this.params ?? {};
     return {
-      // The period: the layout's, shared by every cell (the address' periode=, else a map's when=: state.js).
-      src: /** @type {string[]} */ (p.src ?? ['inat']), when: /** @type {string} */ (this.state?.periode ?? p.when ?? 'toujours'), suit: p.suit !== false,
+      // The period: the layout's, shared by every cell (the address' periode=, else a map's when=: state.js). The
+      // sources of its points: those it says among its group's (core/observations.js), else all of them.
+      src: /** @type {string[]} */ (p.src ?? this.state?.filters.sources ?? ['inat']), when: /** @type {string} */ (this.state?.periode ?? p.when ?? 'toujours'), suit: p.suit !== false,
       plante: /** @type {string} */ (p.plante ?? 'grand'),
       toucher: /** @type {string} */ (p.toucher ?? 'plante'), pts: /** @type {string} */ (p.pts ?? 'photo'),
       portee: /** @type {'zone' | 'france' | 'monde'} */ (p.portee ?? 'zone'),
@@ -380,51 +384,39 @@ export class DlMap extends LitElement {
   /** @type {any[] | null} */ #foundFor = null;
   /** @type {Set<number>} */ #foundSet = new Set();
 
-  /** The plants of the scope by their scientific name (GBIF's points, which seldom have iNaturalist's taxon). */
-  get #byName() {
-    const list = /** @type {LayoutState} */ (this.state).species?.list ?? null;
-    if (this.#namesFor !== list) { this.#namesFor = list; this.#names = new Map((list ?? []).map(x => [x.name, /** @type {number} */ (x.plantId)])); }
-    return this.#names;
-  }
-  /** @type {any[] | null} */ #namesFor = null;
-  /** @type {Map<string, number>} */ #names = new Map();
-
-  /** The plant of a point: iNaturalist's by its taxon; GBIF's by its taxon, else its name. @param {any} p @returns {number | undefined} */
+  /** The plant of a point: by its iNaturalist taxon, else its name (GBIF's: core/nearby.js plantOfPoint). @param {any} p @returns {number | undefined} */
   #plantOf(p) {
     const plantOf = /** @type {LayoutState} */ (this.state).species?.plantOf;
-    const id = p.taxonId != null ? plantOf?.get(p.taxonId) : undefined;
-    return id ?? (p.kind === 'gbif' && p.sci ? this.#byName.get(p.sci) : undefined);
+    return plantOf ? plantOfPoint(plantOf, p) : undefined;
   }
 
   /**
-   * The circle and its observations, as the settings say: their sources (src: iNaturalist's — the zone's latest, of
-   * the layout's period, whose plants are the list: state.js —, GBIF's), those of the plants the search keeps (suit:
-   * the list's — a filter, its plants alone; else every observation of the zone), of the current plant alone
-   * (plante=seule), as photos or dots (pts) — the same object while nothing changed (the map keeps its points).
+   * The circle and its observations, as the settings say: their sources (src: those it shows of the zone's — the
+   * latest of the layout's period, from its group's sources, merged: state.js, core/observations.js —, whose plants
+   * are the list), those of the plants the search keeps (suit: the list's — a filter, its plants alone; else every
+   * observation of the zone), of the current plant alone (plante=seule), as photos or dots (pts) — the same object
+   * while nothing changed (the map keeps its points).
    */
   get #area() {
     const s = /** @type {LayoutState} */ (this.state);
     const at = s.live.at;
     if (!at) return null;
     const P = this.#p;
-    const inat = P.src.includes('inat'), gbifOn = P.src.includes('gbif');
     const found = this.#found, plantOf = s.species?.plantOf;
-    s.gbifOf(gbifOn);
-    const gbif = gbifOn && s.gbif?.key === s.scopeKey ? s.gbif.points : null;
     const current = P.plante === 'seule' ? s.live.plant : null;
     const sig = JSON.stringify([P.src, P.when, P.suit, P.plante, P.pts, current]);
     const memo = this.#areaMemo;
     if (memo && memo.at === at && memo.r === s.radius && memo.pts === s.points && memo.found === found && memo.plantOf === plantOf
-      && memo.gbif === gbif && memo.sig === sig) return memo.value;
+      && memo.sig === sig) return memo.value;
     /** @type {any[]} */
-    const all = [...(inat ? s.points : []), ...(gbif ?? [])];
+    const all = s.points.filter(p => P.src.includes(p.kind));
     // The current plant's alone (none chosen: none); else the plants the search keeps (all of them while the plants of
     // the scope are unknown), or every plant observed (suit=0).
     let points = P.plante === 'seule' ? (current ? all.filter(p => this.#plantOf(p) === current) : [])
       : P.suit && plantOf ? all.filter(p => { const id = this.#plantOf(p); return id !== undefined && found.has(id); }) : all;
     if (P.when !== 'toujours') points = points.filter(p => inWhen(p.date, P.when));
     const value = { center: at, radius: s.radius, fit: true, leaves: P.pts !== 'pastille', points };
-    this.#areaMemo = { at, r: s.radius, pts: s.points, found, plantOf, gbif, sig, value };
+    this.#areaMemo = { at, r: s.radius, pts: s.points, found, plantOf, sig, value };
     return value;
   }
   /** @type {any} */ #areaMemo = null;
@@ -433,7 +425,8 @@ export class DlMap extends LitElement {
   get #highlight() {
     const s = /** @type {LayoutState} */ (this.state);
     const obs = s.plantObs, info = s.plantInfo, when = this.#p.when;
-    if (!obs || !info || !obs.points.length || !this.#p.src.includes('inat')) return null;
+    // Its own observations are iNaturalist's (state.js): a map that shows only GBIF's has none of them.
+    if (!obs || !info || !obs.points.length || !this.#p.src.includes('inat') || !s.filters.sources.includes('inat')) return null;
     if (this.#hlMemo?.key === obs.key + ':' + info.name + ':' + when) return this.#hlMemo.value;
     const sp = s.species?.byPlant.get(info.id);
     const photo = sp?.photo && moduleOn('photos', plantViewOf(this.#store.state)) ? sp.photo.replace(/\/square\./, '/small.') : null;
@@ -457,7 +450,8 @@ export class DlMap extends LitElement {
     const list = s.species?.list;
     if (s.live.at && list) {
       const found = this.#found;
-      return (P.suit ? list.filter(x => found.has(/** @type {number} */ (x.plantId))) : list).map(x => x.taxonId).slice(0, 400);
+      // iNaturalist's tiles: the plants it knows here (a plant seen by GBIF alone has no taxon of it).
+      return /** @type {number[]} */ ((P.suit ? list.filter(x => found.has(/** @type {number} */ (x.plantId))) : list).map(x => x.taxonId).filter(t => t != null).slice(0, 400));
     }
     if (!P.suit) return null;
     const st = this.#store.state;
@@ -610,8 +604,7 @@ export class DlMap extends LitElement {
     const s = /** @type {LayoutState} */ (this.state);
     const p = e.detail.point;
     // Its plant: by its taxon (iNaturalist's), else its name, else the plant it was drawn for (the current one's points).
-    const id = (p.taxonId != null ? s.species?.plantOf.get(p.taxonId) : undefined)
-      ?? s.species?.list.find(x => p.sci && x.name === p.sci)?.plantId ?? p.plantId ?? undefined;
+    const id = (s.species ? plantOfPoint(s.species.plantOf, p) : undefined) ?? p.plantId ?? undefined;
     if (id == null) { this.#map?.toast(`${p.common || p.sci || p.title || 'Cette plante'} : pas dans la flore de France de GeoFlora.`); return; }
     if (this.#p.toucher === 'fiche') { pushHash(href.plant(id)); return; }
     s.pick(id, { obs: p.url ? obsId(p.url) : null });
@@ -681,7 +674,10 @@ export class DlMap extends LitElement {
     if (d3 !== this.#was3d) { if (this.#was3d !== undefined) map.gl?.recheck(); this.#was3d = d3; }
     map.busy('scope', Boolean(s.live.at) && s.speciesState === 'loading', 'Plantes de la zone : recherche');
     map.setStatus('scope', s.live.at && s.speciesState === 'error' ? s.speciesError : '', { level: 'warn' });
-    map.setStatus('gbif', s.live.at && this.#p.src.includes('gbif') ? s.gbifError : '', { level: 'warn' });
+    // A source of the zone that failed, the others shown (core/observations.js): said on the map — every one failing
+    // is the scope's error above.
+    const partial = s.live.at && s.speciesState === 'ready' && s.failed.length ? s.failed : [];
+    map.setStatus('sources', partial.length ? `${failedText(partial)} : ${partial.length > 1 ? 'leurs' : 'ses'} observations manquent sur la carte et dans la liste.` : '', { level: 'warn' });
     const said = s.live.at && s.speciesState !== 'loading' && s.speciesState !== 'error' ? scopeNote(s) : '';
     if (said && said !== this.#said) map.announce(said);
     this.#said = said;
@@ -1034,11 +1030,21 @@ export class DlSearch extends LitElement {
     const open = this._filters ?? Boolean(this.params.filters);
     const list = this.params.list !== false;
     return html`<gf-results-bar .wide=${false} count-above .channel=${this.channel} @open-filters=${(/** @type {Event} */ e) => { e.stopPropagation(); this._filters = !open; setCell(this, { filters: !open }); }}></gf-results-bar>
-      ${open ? html`<div class="filters" role="region" aria-label="Filtres"><gf-filter-panel .channel=${this.channel}></gf-filter-panel></div>` : nothing}
+      ${open ? html`<div class="filters" role="region" aria-label="Filtres">${filterPanel(this.state, this.channel)}</div>` : nothing}
       ${list ? html`<dl-results .state=${this.state} .params=${{ view: 'auto' }} .channel=${this.channel}></dl-results>` : nothing}`;
   }
 }
 customElements.define('dl-search', DlSearch);
+
+/**
+ * The filters of a layout's search: Flore's (gf-filter-panel), « Observations de la zone » first when its group has a
+ * zone (obs-filters.js: where its observations come from, which of them count). @param {LayoutState | null} state
+ * @param {import('../core/search-channel.js').Channel | null} channel
+ */
+const filterPanel = (state, channel) => {
+  const zone = Boolean(state?.live.at);
+  return html`<gf-filter-panel .channel=${channel} .lead=${zone ? 1 : 0}>${zone ? html`<dl-obs-filters slot="lead" .state=${state}></dl-obs-filters>` : nothing}</gf-filter-panel>`;
+};
 
 /** A filter of a filters panel opened and scrolled to, flashing a moment. @param {Element | null} panel @param {string} facet */
 export async function revealFacet(panel, facet) {
@@ -1147,7 +1153,7 @@ export class DlDeck extends LitElement {
    * The cards: the plants found in the scope (the first DECK_MAX, in the search's order), and the current plant when
    * it is not among them (on top: the deck always shows it); made again when they change. Not before the scope's
    * plants are known (the search is not kept to them yet): « Les cartes arrivent… » while they come — and only then:
-   * iNaturalist failing, the deck says so (render), never waits for cards that will not come.
+   * the zone's sources failing, the deck says so (render), never waits for cards that will not come.
    */
   async #cards() {
     const s = /** @type {LayoutState} */ (this.state);
@@ -1231,15 +1237,18 @@ export class DlDeck extends LitElement {
   }
 
   /**
-   * The scope's plants could not be had (iNaturalist down, offline, its module off): no cards — said, with what to
+   * The scope's plants could not be had (its sources down, offline, their modules off): no cards — said, with what to
    * do (« Réessayer », or the module turned on), instead of cards of another scope or a wait without end.
    * @param {LayoutState} s
    */
   #failed(s) {
     const off = s.speciesFailure === 'off';
-    const why = off ? 'Le module iNaturalist est désactivé.' : s.speciesFailure === 'offline' ? 'Hors ligne : iNaturalist est injoignable.' : 'iNaturalist ne répond pas.';
+    // The zone's sources (core/observations.js): « iNaturalist », « iNaturalist et GBIF ».
+    const names = sourcesText(s.filters.sources), many = s.filters.sources.length > 1;
+    const why = s.speciesFailure === 'offline' ? `Hors ligne : ${names} ${many ? 'sont injoignables' : 'est injoignable'}.` : `${failedText(s.failed)}.`;
+    const seen = `${/^[aeiouy]/i.test(names) ? 'qu’' : 'que '}${names} ${many ? 'ont vues dans la zone : sans eux' : 'a vues dans la zone : sans lui'}`;
     return html`<div class="empty" role="status"><p class="big warn">${icon('exclamation-triangle-fill')}</p><p><b>${why}</b></p>
-      <p>Les cartes sont les plantes qu’iNaturalist a vues dans la zone : sans lui, pas de cartes${off ? '' : ' pour l’instant'}.</p>
+      <p>Les cartes sont les plantes ${seen}, pas de cartes${off ? '' : ' pour l’instant'}.</p>
       ${off ? html`<p><a href=${href.settings()}>Réglages › Modules</a></p>`
         : html`<button class="primary" type="button" @click=${() => s.retryScope()}>${icon('arrow-counterclockwise')} Réessayer</button>`}</div>`;
   }
@@ -1270,7 +1279,7 @@ export function renderCell(r, ctx) {
   if (id === 'place') return html`<dl-place .state=${state}></dl-place>`;
   if (id === 'search') return html`<dl-search .state=${state} .params=${r.params} .channel=${channel}></dl-search>`;
   if (id === 'results') return html`<dl-results .state=${state} .params=${r.params} .channel=${channel}></dl-results>`;
-  if (id === 'filters') return html`<div class="scroll pad"><gf-filter-panel .channel=${channel}></gf-filter-panel></div>`;
+  if (id === 'filters') return html`<div class="scroll pad">${filterPanel(state, channel)}</div>`;
   if (id === 'deck') return html`<dl-deck .state=${state} .params=${r.params} .channel=${channel}></dl-deck>`;
   // A plant cell: its own plant (plante=: fixed, whatever the current one), else the current plant, or how to choose one.
   const plant = r.params.plante ?? ctx.plant;

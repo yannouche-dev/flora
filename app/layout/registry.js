@@ -23,12 +23,13 @@ import { MAP_CONTROL_ALIASES, MAP_CONTROLS, MAP_INTENT_ALIASES, MAP_INTENTS, MAP
  * @typedef {{ kind: ParamKind, label: string, def: unknown, values?: Record<string, string>, aliases?: Record<string, string>, words?: string[],
  *   off?: string[], group?: string, mark?: string, bundles?: Record<string, Record<string, string>>, defOf?: (params: Record<string, any>) => unknown,
  *   named?: boolean, max?: number, frame?: boolean, own?: boolean, more?: (word: string) => string | undefined, ordered?: boolean,
- *   read?: (text: string) => string | undefined }} ParamSpec
+ *   read?: (text: string) => string | undefined, unset?: string }} ParamSpec
  *   `values`: an enum's (a list's, an intent's) canonical values and their French labels; `aliases`: other spellings of
  *   a value → canonical; `words`: other names of the parameter; `off`: words that, alone, set a yes-or-no one to no
  *   (map(2d)); `group`: its heading in the editor and the README (Où, Fond…); `mark`: its mark in a menu (cellMark),
  *   else its label's first letter; `defOf`: its default as the other parameters make it (ctl: by ui and the intent) —
- *   a value written that is the same left out of the address; `named`: never given a bare value (map(zoom) is not ctl=zoom).
+ *   a value written that is the same left out of the address; `named`: never given a bare value (map(zoom) is not ctl=zoom);
+ *   `unset`: what it means not said, in a few words (the editor says it beside a list none of whose values is chosen).
  *   Kinds: `list` — several of its values joined by « + » (layers=znieff+n2000), each unknown one said and left out;
  *   `text` — free words (lieu=Mirabel Ménétrol 63: never a bare value); `intent` — one word for a bundle of the other
  *   parameters (`bundles`: each value's, as the address writes them), which a parameter written beside it overrides;
@@ -124,7 +125,10 @@ const MAP_PARAMS = {
   },
   opac: { kind: 'text', label: 'Opacité des couches', def: null, group: 'Couches', own: true, named: true, max: 400, read: readOpacities, words: ['opacite', 'opacity', 'transparence'] },
   // Points.
-  src: { kind: 'list', label: 'Sources des points', def: ['inat'], group: 'Points', mark: 'So', values: { inat: 'iNaturalist', gbif: 'GBIF' }, aliases: { inaturalist: 'inat' }, words: ['sources', 'source', 'donnees'] },
+  // The sources this map draws among its group's (core/observations.js: the zone's observations, merged); none said:
+  // all of them — and the sources a map says are its group's own, unless the address says others (sources=).
+  src: { kind: 'list', label: 'Sources des points', def: null, unset: 'toutes celles du groupe', group: 'Points', mark: 'So', values: { inat: 'iNaturalist', gbif: 'GBIF' }, aliases: { inaturalist: 'inat' },
+    words: ['sources', 'source', 'donnees'] },
   when: { kind: 'enum', label: 'Période', def: 'toujours', group: 'Points', values: { toujours: 'Toujours', annee: 'Cette année', mois: 'Ce mois-ci' }, aliases: { tout: 'toujours', always: 'toujours', year: 'annee', an: 'annee', cetteannee: 'annee', month: 'mois', cemois: 'mois' }, words: ['quand', 'periode', 'date', 'dates'] },
   pts: { kind: 'enum', label: 'Style des points', def: 'photo', group: 'Points', values: { photo: 'Photos', pastille: 'Pastilles' }, aliases: { pastilles: 'pastille', dots: 'pastille', ronds: 'pastille', points: 'pastille' }, words: ['points', 'style', 'marqueurs'] },
   regroupe: { kind: 'bool', label: 'Plante courante en groupes', def: false, group: 'Points', mark: 'G', words: ['cluster', 'groupes', 'grouper', 'regrouper', 'groupe'] },

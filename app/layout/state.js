@@ -18,6 +18,10 @@
 //   &periode=<toujours|annee|mois>     the period every cell shows: the plants observed in the zone that year, or that
 //                                      month of any year (what flowers now) — the results, the deck, the maps' points
 //                                      (core/nearby.js periodQuery); not said, the layout's own (a map's when=);
+//   &sources=inat,gbif&qualite=…&taxon=espece&photos=avec|libre&sauvages=1&jeux=<GBIF datasets>
+//                                      the zone's observations: their sources and the filters every source applies
+//                                      (core/observations.js); not said, the defaults — the sources a map says (src=),
+//                                      else iNaturalist's research grade;
 //   &q=…&family=…&sort=…               the search itself: Flore's (core/query.js — the same words as #/?q=…), kept in the
 //                                      store, so the search cell is Flore's own bar, filters and list.
 // A layout's other groups (a cell's groupe=b: its own zone, plant, period and search, apart from the others) have
@@ -33,8 +37,8 @@ import * as db from '../core/db.js';
 import { forgetFailures } from '../core/cache.js';
 import { findPlace } from '../core/geoservices.js';
 import { errorKind } from '../core/net.js';
-import { observationPointsMany, observationsAround, speciesOf, taxonIdOf } from '../core/nearby.js';
-import { observations3d } from '../core/around3d.js';
+import { observationsAround, speciesOf, taxonIdOf } from '../core/nearby.js';
+import { OBS_DEFAULTS, SOURCE_NAMES, failedText, obsKey, obsParams, readObsFilters, sourcesText, zoneObservations } from '../core/observations.js';
 import { fromHash, toHash } from '../core/query.js';
 import { searchWhole } from '../core/search.js';
 import { APP } from '../core/search-channel.js';
@@ -42,8 +46,10 @@ import { whenReady } from '../core/store.js';
 import { DISTANCE, distanceText, parseDistance } from './registry.js';
 
 /**
- * @typedef {{ title: string | null, plant: number | null, at: [number, number] | null, r: number | null, place: string | null, obs: string | null, periode: Period | null }} Live
- *   `at`: [lon, lat]; `r`: metres (null: not said — the layout's default); `periode`: null, not said — the layout's own
+ * @typedef {import('../core/observations.js').ObsFilters} ObsFilters
+ * @typedef {{ title: string | null, plant: number | null, at: [number, number] | null, r: number | null, place: string | null, obs: string | null, periode: Period | null, filtres: Readonly<Partial<ObsFilters>> | null }} Live
+ *   `at`: [lon, lat]; `r`: metres (null: not said — the layout's default); `periode`: null, not said — the layout's own;
+ *   `filtres`: the zone's observations' sources and filters said (the others the layout's defaults)
  * @typedef {'toujours' | 'annee' | 'mois'} Period
  * @typedef {import('../core/nearby.js').NearbySpecies} NearbySpecies
  * @typedef {import('../core/nearby.js').AroundPoint} AroundPoint
@@ -58,7 +64,7 @@ export const DEFAULT_RADIUS = 2000;
 const ZONE_MAX = 1000;
 
 /** @type {Live} */
-export const EMPTY = Object.freeze({ title: null, plant: null, at: null, r: null, place: null, obs: null, periode: null });
+export const EMPTY = Object.freeze({ title: null, plant: null, at: null, r: null, place: null, obs: null, periode: null, filtres: null });
 
 /** The periods, in their order. @type {Period[]} */
 export const PERIODS = ['toujours', 'annee', 'mois'];
@@ -103,7 +109,8 @@ export function readLive(search, prefix = '') {
     r: parseDistance(params.get('r')),
     place: cleanText(params.get('place')),
     obs: /^[\w-]{1,40}$/.test(o) ? o : null,
-    periode: PERIODS.includes(per) ? per : null
+    periode: PERIODS.includes(per) ? per : null,
+    filtres: readObsFilters(params)
   };
 }
 
@@ -134,6 +141,7 @@ function ownSearch(live, query, radius) {
   }
   if (live.obs) params.set('o', live.obs);
   if (live.periode) params.set('periode', live.periode);
+  for (const [k, v] of obsParams(live.filtres)) params.set(k, v);
   const own = params.toString().replace(/%2C/g, ',');
   const words = toHash(query).replace(/^#\/\??/, '');
   return [own, words].filter(Boolean).join('&');
@@ -144,7 +152,7 @@ export const readQuery = (search, prefix = '') => fromHash('#/?' + (prefix ? gro
 
 /** Two states the same? @param {Live} a @param {Live} b */
 export const sameLive = (a, b) => a.title === b.title && a.plant === b.plant && a.r === b.r && a.place === b.place && a.obs === b.obs && a.periode === b.periode
-  && (a.at === b.at || (a.at !== null && b.at !== null && a.at[0] === b.at[0] && a.at[1] === b.at[1]));
+  && obsKey(a.filtres) === obsKey(b.filtres) && (a.at === b.at || (a.at !== null && b.at !== null && a.at[0] === b.at[0] && a.at[1] === b.at[1]));
 
 /** The live state of a layout on screen, and what it loads for it. Fires `change` (detail: { how, keys }). */
 export class LayoutState extends EventTarget {
@@ -161,6 +169,8 @@ export class LayoutState extends EventTarget {
     this.defaultRadius = defaults.radius ?? DEFAULT_RADIUS;
     /** The layout's own period (a map's when=), until the address says one. @type {Period} */
     this.defaultPeriode = 'toujours';
+    /** The layout's own sources of observations (its maps' src=), until the address says them. @type {ObsFilters['sources']} */
+    this.defaultSources = OBS_DEFAULTS.sources;
     this.find = defaults.find ?? findPlace;
     /** A place to find (place= without at=): being found, or why it was not (in French; null: none to find, or found). */
     /** @type {'idle' | 'finding' | 'failed'} */
@@ -171,7 +181,8 @@ export class LayoutState extends EventTarget {
     this.findFor = '';
     /** @type {AbortController | null} */ this.findAbort = null;
     /** The plants of the scope's observations, the flora's (null: no scope, or not yet), and whether they are coming or failed. */
-    /** @type {{ key: string, list: NearbySpecies[], byPlant: Map<number, NearbySpecies>, plantOf: Map<number, number> } | null} */
+    /** `plantOf`: each record's plant, by its taxon and its name (core/nearby.js plantOfPoint). */
+    /** @type {{ key: string, list: NearbySpecies[], byPlant: Map<number, NearbySpecies>, plantOf: Map<string, number> } | null} */
     this.species = null;
     /** @type {'idle' | 'loading' | 'ready' | 'error'} */
     this.speciesState = 'idle';
@@ -179,9 +190,16 @@ export class LayoutState extends EventTarget {
     this.speciesError = null;
     /** Why they failed (the cells word it their own way: the deck has no cards without them). @type {'off' | 'offline' | 'unreachable' | null} */
     this.speciesFailure = null;
-    /** The scope's observations (the map's points: the latest ZONE_MAX of the period), and how many there are in all. @type {AroundPoint[]} */
+    /**
+     * The scope's observations (the map's points: the latest of the period, from the sources the filters keep, merged:
+     * core/observations.js), how many there are in all, each source's count, the sources that failed, GBIF's datasets
+     * in the zone (counted). @type {import('../core/observations.js').Obs[]}
+     */
     this.points = [];
     this.pointsTotal = 0;
+    /** @type {{ inat: number | null, gbif: number | null }} */ this.totals = { inat: null, gbif: null };
+    /** @type {import('../core/observations.js').ObsFailure[]} */ this.failed = [];
+    /** @type {{ key: string, count: number }[]} */ this.datasets = [];
     /** The current plant's own observations in the scope. @type {{ key: string, points: Observation[] } | null} */
     this.plantObs = null;
     /** The current plant's names (the cells' heads). @type {{ id: number, name: string, sci: string } | null} */
@@ -193,12 +211,6 @@ export class LayoutState extends EventTarget {
     this.scopeFor = '';
     this.obsFor = '';
     this.infoFor = 0;
-    /** GBIF's occurrences in the scope (a map cell whose points include GBIF's: src=inat+gbif), and why they failed. */
-    /** @type {{ key: string, points: import('../core/around3d.js').Obs3d[] } | null} */
-    this.gbif = null;
-    /** @type {string | null} */ this.gbifError = null;
-    /** @type {string} */ this.gbifFor = '';
-    /** @type {AbortController | null} */ this.gbifAbort = null;
     /** The map's own scope (its lieu=, its autour), applied once for each (dl-map), the address having none. */
     this.defaultedFor = '';
     /** The search over the whole flora (wholeOf: a results cell with zone=0), and the search it answers. */
@@ -213,8 +225,22 @@ export class LayoutState extends EventTarget {
   /** The period every cell shows: the address', else the layout's own. @returns {Period} */
   get periode() { return this.live.periode ?? this.defaultPeriode; }
 
-  /** The scope's key ('' without one): its circle and its period. */
-  get scopeKey() { return this.live.at ? this.radius + ':' + this.live.at.join(',') + ':' + this.periode : ''; }
+  /** The zone's observations' sources and filters: the address', else the layout's (core/observations.js). @returns {Readonly<ObsFilters>} */
+  get filters() {
+    const key = obsKey(this.live.filtres) + '|' + this.defaultSources.join();
+    if (this.#filtersFor !== key) {
+      this.#filtersFor = key;
+      this.#filters = Object.freeze({ ...OBS_DEFAULTS, sources: this.defaultSources, ...(this.live.filtres ?? {}) });
+    }
+    return this.#filters;
+  }
+  #filtersFor = '';
+  /** @type {Readonly<ObsFilters>} */ #filters = OBS_DEFAULTS;
+  /** The zone (radius, centre, period) GBIF's datasets were counted in. */
+  #datasetsZone = '';
+
+  /** The scope's key ('' without one): its circle, its period, its observations' sources and filters. */
+  get scopeKey() { return this.live.at ? this.radius + ':' + this.live.at.join(',') + ':' + this.periode + ':' + obsKey(this.filters) : ''; }
 
   /**
    * A change: the address follows as `how` says (gf-layout.js listens), and what it needs is loaded.
@@ -223,7 +249,8 @@ export class LayoutState extends EventTarget {
   set(patch, how = 'replace') {
     const next = { ...this.live, ...patch };
     if (next.r != null) next.r = Math.min(DISTANCE.max, Math.max(DISTANCE.min, next.r));
-    const keys = /** @type {(keyof Live)[]} */ (Object.keys(patch)).filter(k => k === 'at' ? !sameLive({ ...EMPTY, at: next.at }, { ...EMPTY, at: this.live.at }) : next[k] !== this.live[k]);
+    const keys = /** @type {(keyof Live)[]} */ (Object.keys(patch)).filter(k => k === 'at' ? !sameLive({ ...EMPTY, at: next.at }, { ...EMPTY, at: this.live.at })
+      : k === 'filtres' ? obsKey(next.filtres) !== obsKey(this.live.filtres) : next[k] !== this.live[k]);
     if (!keys.length) return false;
     this.live = Object.freeze(next);
     this.dispatchEvent(new CustomEvent('change', { detail: { how, keys } }));
@@ -264,9 +291,11 @@ export class LayoutState extends EventTarget {
       clearTimeout(this.timer);
       this.abort?.abort();
       this.abort = null;
-      // Another zone: what was loaded for the old one goes at once (never its points under the new circle).
-      this.points = []; this.pointsTotal = 0;
-      if (this.gbif?.key !== key) { this.gbifAbort?.abort(); this.gbif = null; this.gbifError = null; this.gbifFor = ''; }
+      // Another zone: what was loaded for the old one goes at once (never its points under the new circle) — GBIF's
+      // datasets kept while only the filters changed (counted as if none were chosen: one being ticked stays in view).
+      this.points = []; this.pointsTotal = 0; this.totals = { inat: null, gbif: null }; this.failed = [];
+      const zone = key.split(':').slice(0, 3).join(':');
+      if (zone !== this.#datasetsZone) { this.datasets = []; this.#datasetsZone = zone; }
       if (!key) {
         this.species = null; this.speciesState = 'idle'; this.speciesError = null; this.speciesFailure = null;
         this.#rescope(null);
@@ -319,8 +348,8 @@ export class LayoutState extends EventTarget {
   #changed() { this.dispatchEvent(new CustomEvent('change', { detail: { how: 'none', keys: [] } })); }
 
   /**
-   * The scope's observations (the latest ZONE_MAX of the period: the map's points) and their plants (the list: the
-   * search kept to them). @param {string} key
+   * The scope's observations (the latest of the period, from the sources the filters keep, merged: the map's points)
+   * and their plants (the list: the search kept to them). @param {string} key
    */
   async #loadScope(key) {
     const at = /** @type {[number, number]} */ (this.live.at), r = this.radius;
@@ -329,51 +358,37 @@ export class LayoutState extends EventTarget {
     await whenReady();
     if (abort.signal.aborted || key !== this.scopeKey) return;
     try {
-      const found = await observationPointsMany(at, r, ZONE_MAX, abort.signal, this.periode);
-      const list = (await speciesOf(found.points)).filter(s => s.plantId);
+      const found = await zoneObservations(at, r, { filters: this.filters, periode: this.periode, max: ZONE_MAX, signal: abort.signal });
+      const plants = await speciesOf(found.points);
       if (abort.signal.aborted || key !== this.scopeKey) return;
+      const list = plants.list.filter(s => s.plantId);
       this.points = found.points;
-      this.pointsTotal = found.total;
-      this.species = { key, list, byPlant: new Map(list.map(s => [/** @type {number} */ (s.plantId), s])), plantOf: new Map(list.map(s => [s.taxonId, /** @type {number} */ (s.plantId)])) };
+      this.pointsTotal = (found.totals.inat ?? 0) + (found.totals.gbif ?? 0);
+      this.totals = found.totals;
+      this.failed = found.failed;
+      this.datasets = found.datasets;
+      this.species = { key, list, byPlant: new Map(list.map(s => [/** @type {number} */ (s.plantId), s])), plantOf: plants.plantOf };
       this.speciesState = 'ready';
       this.speciesError = null;
       this.speciesFailure = null;
       this.#rescope(list.map(s => /** @type {number} */ (s.plantId)));
     } catch (error) {
       if (abort.signal.aborted || key !== this.scopeKey) return;
-      const e = /** @type {Error} */ (error);
-      this.points = []; this.pointsTotal = 0;
+      // Each source's failure (core/observations.js ObsError); else every source asked, not answering.
+      const sources = this.filters.sources;
+      const said = /** @type {{ failed?: import('../core/observations.js').ObsFailure[] }} */ (error).failed;
+      const failed = said?.length ? said : sources.map(x => ({ name: SOURCE_NAMES[x], off: false }));
+      this.points = []; this.pointsTotal = 0; this.totals = { inat: null, gbif: null }; this.failed = failed; this.datasets = [];
       this.species = null;
       this.speciesState = 'error';
-      this.speciesFailure = e.name === 'ModuleOffError' ? 'off' : navigator.onLine ? 'unreachable' : 'offline';
-      this.speciesError = this.speciesFailure === 'off' ? 'Le module iNaturalist est désactivé (Réglages › Modules) : la zone ne filtre pas les plantes.'
-        : this.speciesFailure === 'unreachable' ? 'iNaturalist ne répond pas : la zone ne filtre pas les plantes pour l’instant.' : 'Hors ligne : la zone ne filtre pas les plantes (iNaturalist est en ligne).';
+      this.speciesFailure = failed.every(f => f.off) ? 'off' : navigator.onLine ? 'unreachable' : 'offline';
+      this.speciesError = this.speciesFailure === 'off' ? `${failedText(failed)} (Réglages › Modules) : la zone ne filtre pas les plantes.`
+        : this.speciesFailure === 'unreachable' ? `${failedText(failed)} : la zone ne filtre pas les plantes pour l’instant.`
+        : `Hors ligne : la zone ne filtre pas les plantes (${sourcesText(sources)} ${sources.length > 1 ? 'sont' : 'est'} en ligne).`;
       this.#rescope(null);
     }
     this.#changed();
     this.#loadPlant();
-  }
-
-  /**
-   * GBIF's plant occurrences in the scope (core/around3d.js: iNaturalist's copy left out, each its plant's photo and
-   * French name), for a map that shows them (`want`): loaded once for each scope, `gbif` then; failed, `gbifError`.
-   * @param {boolean} want
-   */
-  gbifOf(want) {
-    const at = this.live.at, r = this.radius;
-    // A map without GBIF asks nothing — and never takes another's away (they are let go with the zone).
-    const key = want && at ? this.scopeKey : '';
-    if (!key || !at || key === this.gbifFor) return;
-    this.gbifFor = key;
-    this.gbifAbort?.abort();
-    this.gbifAbort = null;
-    const abort = this.gbifAbort = new AbortController();
-    observations3d(at, r, { inat: false, gbif: true }, abort.signal).then(found => {
-      if (abort.signal.aborted || this.gbifFor !== key) return;
-      this.gbif = { key, points: found.points };
-      this.gbifError = found.failed.length ? 'GBIF ne répond pas : ses occurrences manquent sur la carte.' : null;
-      this.#changed();
-    }, () => {});
   }
 
   /**
@@ -443,7 +458,6 @@ export class LayoutState extends EventTarget {
     clearTimeout(this.timer);
     this.abort?.abort();
     this.findAbort?.abort();
-    this.gbifAbort?.abort();
     if (this.scoped) { this.scoped = false; this.channel.setScope(null); whenReady().then(() => this.channel.run()); }
   }
 }
