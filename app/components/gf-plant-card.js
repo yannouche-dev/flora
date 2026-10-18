@@ -20,6 +20,8 @@ export class GfPlantCard extends LitElement {
     current: { type: Boolean, reflect: true },
     /** Grid: visible column keys, in order (gf-plant-list). */
     columns: { attribute: false },
+    /** Its observations in a free layout's zone, in words (core/observations.js obsNotes); null: none said. */
+    obs: { attribute: false },
     /** Grid view: epure (big photos), standard, scientific. */
     view: { reflect: true },
     _thumb: { state: true }
@@ -82,6 +84,9 @@ export class GfPlantCard extends LitElement {
     .sci { font-family: var(--gf-font-serif); font-style: italic; }
     .sci .author { font-style: normal; color: var(--gf-text-muted); font-size: 0.85em; }
     .meta { font-size: 0.8rem; color: var(--gf-text-muted); }
+    .meta .obs { color: var(--gf-text); font-variant-numeric: tabular-nums; }
+    :host([grid]) .cell.obs { font-variant-numeric: tabular-nums; }
+    :host([grid]) .cell.obs small { display: block; font-size: 0.72rem; color: var(--gf-text-muted); overflow: hidden; text-overflow: ellipsis; }
     .fuzzy { color: var(--gf-warn); }
     mark { background: var(--gf-accent-soft); color: inherit; border-radius: 2px; padding: 0 1px; }
 
@@ -170,6 +175,8 @@ export class GfPlantCard extends LitElement {
     this.current = false;
     /** @type {string[]} */
     this.columns = [];
+    /** @type {{ n: number, text: string, detail: string, title: string } | null} */
+    this.obs = null;
     this.view = '';
     /** @type {any} */
     this._thumb = undefined;
@@ -235,6 +242,9 @@ export class GfPlantCard extends LitElement {
       genus: () => html`<span class="cell"><i>${p.genus || ''}</i></span>`,
       species: () => html`<span class="cell sci" title=${p.scientificName + (p.author ? ' ' + p.author : '')}>${highlight(p.species || p.scientificName, q)}${p.fuzzy ? html` <span class="fuzzy">≈</span>` : nothing}${this.view === 'scientific' && p.author ? html` <span class="author">${p.author}</span>` : nothing}</span>`,
       status: () => html`<span class="cell muted" title=${STATUS_LABELS[p.status] || ''}>${STATUS_SHORT[p.status] || '—'}</span>`,
+      obs: () => this.obs
+        ? html`<span class="cell obs" title=${this.obs.title}><b>${this.obs.n.toLocaleString('fr-FR')}</b>${this.obs.detail ? html`<small>${this.obs.detail}</small>` : nothing}</span>`
+        : html`<span class="cell obs muted">—</span>`,
       legal: () => html`<span class="cell legal">
         ${legal.includes('nationale') ? html`<span class="tag pn" title="Protégée en France (protection nationale)">Protégée FR</span>`
           : legal.includes('protegee') ? html`<span class="tag pr" title="Protégée dans une région ou un département">Protégée</span>` : nothing}
@@ -277,7 +287,7 @@ export class GfPlantCard extends LitElement {
           <div class="name ${p.vernacularName ? '' : 'latin'}">${highlight(title, q)}</div>
           <div class="sci">${p.vernacularName ? highlight(p.scientificName, q) : nothing} <span class="author">${this.compact ? '' : p.author || ''}</span></div>
           <div class="meta">
-            ${p.family}${p.match ? html` · ${p.match === 'syn.' ? 'synonyme' : highlight(p.match, q)}` : nothing}${p.fuzzy ? html` · <span class="fuzzy">approchant</span>` : nothing}
+            ${this.obs ? html`<span class="obs" title=${this.obs.title}>${this.obs.text}</span> · ` : nothing}${p.family}${p.match ? html` · ${p.match === 'syn.' ? 'synonyme' : highlight(p.match, q)}` : nothing}${p.fuzzy ? html` · <span class="fuzzy">approchant</span>` : nothing}
           </div>
         </span>
       </a>

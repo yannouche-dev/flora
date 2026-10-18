@@ -333,11 +333,14 @@ const matchesFacet = (value, set) => Array.isArray(value) ? value.some(v => set.
 
 /**
  * `only`: the plants the search is kept to (a free layout's scope: those observed around a place, app/layout), every
- * count and facet within them; none: the whole flora.
+ * count and facet within them; none: the whole flora. `observed`: each plant's observations there, by id — the sort
+ * `obs` (« Plus observées »: the most observed first, then by French name); without them, that sort is the French
+ * name's, and said so (`sort`). `counted`: they were given.
  * @param {Index} index
- * @param {{ q: string, filters: Record<string, string[]>, sort: string, membership?: Record<number, string[]>, only?: number[] | null }} params
+ * @param {{ q: string, filters: Record<string, string[]>, sort: string, membership?: Record<number, string[]>, only?: number[] | null,
+ *   observed?: Record<number, number> | null }} params
  */
-export function search(index, { q: query, filters, sort, membership: mine = {}, only = null }) {
+export function search(index, { q: query, filters, sort, membership: mine = {}, only = null, observed = null }) {
   const { entries } = index;
   const kept = only ? new Set(only) : null;
   const q = normalize(query);
@@ -395,7 +398,8 @@ export function search(index, { q: query, filters, sort, membership: mine = {}, 
     }
   }
 
-  const effectiveSort = sort || (q ? 'relevance' : 'fr');
+  const wanted = sort || (q ? 'relevance' : 'fr');
+  const effectiveSort = /^-?obs$/.test(wanted) && !observed ? 'fr' : wanted;
   // "-family": the same order, reversed (column header clicked twice).
   const desc = effectiveSort.startsWith('-');
   const key = desc ? effectiveSort.slice(1) : effectiveSort;
@@ -409,7 +413,8 @@ export function search(index, { q: query, filters, sort, membership: mine = {}, 
     legal: (a, b) => entries[a].rank.legal - entries[b].rank.legal,
     photo: (a, b) =>
       (entries[a].values.photo === 'avec' ? 0 : 1) - (entries[b].values.photo === 'avec' ? 0 : 1) ||
-      entries[a].rank.fr - entries[b].rank.fr
+      entries[a].rank.fr - entries[b].rank.fr,
+    obs: (a, b) => (observed?.[entries[b].summary.id] ?? 0) - (observed?.[entries[a].summary.id] ?? 0) || entries[a].rank.fr - entries[b].rank.fr
   };
   const compare = by[key === 'relevance' && !matches ? 'fr' : key] || by.fr;
   hits.sort(desc ? (a, b) => compare(b, a) : compare);
@@ -423,6 +428,7 @@ export function search(index, { q: query, filters, sort, membership: mine = {}, 
     facets: Object.fromEntries(FACETS.map(f => [f, Object.fromEntries(counts[f])])),
     suggestions: suggest(index, q, filters),
     fuzzy: hits.some(i => matches?.get(i)?.fuzzy) ? fuzzy : 0,
-    sort: effectiveSort
+    sort: effectiveSort,
+    counted: Boolean(observed)
   };
 }

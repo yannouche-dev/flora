@@ -37,7 +37,7 @@ import * as db from '../core/db.js';
 import { forgetFailures } from '../core/cache.js';
 import { findPlace } from '../core/geoservices.js';
 import { errorKind } from '../core/net.js';
-import { observationsAround, speciesOf, taxonIdOf } from '../core/nearby.js';
+import { observationsAround, plantCounts, speciesOf, taxonIdOf } from '../core/nearby.js';
 import { OBS_DEFAULTS, SOURCE_NAMES, failedText, obsKey, obsParams, readObsFilters, sourcesText, zoneObservations } from '../core/observations.js';
 import { fromHash, toHash } from '../core/query.js';
 import { searchWhole } from '../core/search.js';
@@ -198,6 +198,11 @@ export class LayoutState extends EventTarget {
     this.points = [];
     this.pointsTotal = 0;
     /** @type {{ inat: number | null, gbif: number | null }} */ this.totals = { inat: null, gbif: null };
+    /**
+     * Each plant's observations in the zone, its sources apart (the list's rows: core/observations.js obsNotes), and the
+     * sources that answered; null: no zone, or not yet. @type {{ counts: Map<number, { inat: number, gbif: number }>, sources: import('../core/observations.js').ObsSource[] } | null}
+     */
+    this.obsCounts = null;
     /** @type {import('../core/observations.js').ObsFailure[]} */ this.failed = [];
     /** @type {{ key: string, count: number }[]} */ this.datasets = [];
     /** The current plant's own observations in the scope. @type {{ key: string, points: Observation[] } | null} */
@@ -238,6 +243,8 @@ export class LayoutState extends EventTarget {
   /** @type {Readonly<ObsFilters>} */ #filters = OBS_DEFAULTS;
   /** The zone (radius, centre, period) GBIF's datasets were counted in. */
   #datasetsZone = '';
+  /** Each plant's observations in the zone, by id (the search's sort « Plus observées »); null: none. @type {Record<number, number> | null} */
+  #observed = null;
 
   /** The scope's key ('' without one): its circle, its period, its observations' sources and filters. */
   get scopeKey() { return this.live.at ? this.radius + ':' + this.live.at.join(',') + ':' + this.periode + ':' + obsKey(this.filters) : ''; }
@@ -293,7 +300,7 @@ export class LayoutState extends EventTarget {
       this.abort = null;
       // Another zone: what was loaded for the old one goes at once (never its points under the new circle) — GBIF's
       // datasets kept while only the filters changed (counted as if none were chosen: one being ticked stays in view).
-      this.points = []; this.pointsTotal = 0; this.totals = { inat: null, gbif: null }; this.failed = [];
+      this.points = []; this.pointsTotal = 0; this.totals = { inat: null, gbif: null }; this.failed = []; this.obsCounts = null; this.#observed = null;
       const zone = key.split(':').slice(0, 3).join(':');
       if (zone !== this.#datasetsZone) { this.datasets = []; this.#datasetsZone = zone; }
       if (!key) {
@@ -368,6 +375,10 @@ export class LayoutState extends EventTarget {
       this.failed = found.failed;
       this.datasets = found.datasets;
       this.species = { key, list, byPlant: new Map(list.map(s => [/** @type {number} */ (s.plantId), s])), plantOf: plants.plantOf };
+      const counts = plantCounts(found.points, plants.plantOf);
+      this.obsCounts = { counts, sources: this.filters.sources.filter(x => !found.failed.some(f => f.name === SOURCE_NAMES[x])) };
+      // The search's sort « Plus observées » (workers/search-core.js `observed`): each plant's total, cloned to the worker.
+      this.#observed = Object.fromEntries([...counts].map(([id, c]) => [id, c.inat + c.gbif]));
       this.speciesState = 'ready';
       this.speciesError = null;
       this.speciesFailure = null;
@@ -378,7 +389,7 @@ export class LayoutState extends EventTarget {
       const sources = this.filters.sources;
       const said = /** @type {{ failed?: import('../core/observations.js').ObsFailure[] }} */ (error).failed;
       const failed = said?.length ? said : sources.map(x => ({ name: SOURCE_NAMES[x], off: false }));
-      this.points = []; this.pointsTotal = 0; this.totals = { inat: null, gbif: null }; this.failed = failed; this.datasets = [];
+      this.points = []; this.pointsTotal = 0; this.totals = { inat: null, gbif: null }; this.failed = failed; this.datasets = []; this.obsCounts = null; this.#observed = null;
       this.species = null;
       this.speciesState = 'error';
       this.speciesFailure = failed.every(f => f.off) ? 'off' : navigator.onLine ? 'unreachable' : 'offline';
@@ -413,7 +424,7 @@ export class LayoutState extends EventTarget {
   async #rescope(ids) {
     if (!ids && !this.scoped) return;
     this.scoped = Boolean(ids);
-    this.channel.setScope(ids);
+    this.channel.setScope(ids, { observed: ids ? this.#observed : null });
     await whenReady();
     this.channel.run();
   }

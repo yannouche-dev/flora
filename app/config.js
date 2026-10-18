@@ -117,6 +117,8 @@ export const STATUS_SHORT = {
 
 export const SORTS = [
   { value: 'relevance', label: 'Pertinence' },
+  // A free layout's zone only (its plants' observations counted: workers/search-core.js `observed`).
+  { value: 'obs', label: 'Plus observées' },
   { value: 'fr', label: 'Nom français A–Z' },
   { value: 'sci', label: 'Nom scientifique A–Z' },
   { value: 'family', label: 'Famille' },

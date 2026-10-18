@@ -285,6 +285,25 @@ export async function speciesOf(points) {
 }
 
 /**
+ * Each plant's observations among points (a layout's zone), its sources apart, by its id: a point's plant as speciesOf
+ * found it (plantOfPoint: by its taxon, else its name); a point of no plant of the flora not counted.
+ * @param {{ kind?: string, taxonId?: number | null, sci?: string | null }[]} points @param {Map<string, number>} plantOf
+ * @returns {Map<number, { inat: number, gbif: number }>}
+ */
+export function plantCounts(points, plantOf) {
+  /** @type {Map<number, { inat: number, gbif: number }>} */
+  const out = new Map();
+  for (const p of points) {
+    const id = plantOfPoint(plantOf, p);
+    if (id === undefined) continue;
+    const c = out.get(id) ?? { inat: 0, gbif: 0 };
+    if (p.kind === 'gbif') c.gbif++; else c.inat++;
+    out.set(id, c);
+  }
+  return out;
+}
+
+/**
  * iNaturalist's taxon for a name of the flora (a species, a genus, a family: « Orchidaceae »), or null: none. Cached
  * a day (a name found once is not asked again). @param {string} name @param {AbortSignal} [signal] @returns {Promise<number | null>}
  */

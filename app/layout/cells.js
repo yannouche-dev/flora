@@ -54,7 +54,7 @@ import { RADII_3D } from '../core/around3d.js';
 import { cellIcon, distanceLabel } from './registry.js';
 import { COMPACT_WIDTH, MAP_LAYERS, WIDE_FRAMES, catalogLayers, inatTiles, inWhen, layersOf, mapControls, opacitiesOf, opacText, overlaysOf, snapRadius, uiMode, viewOf, viewText } from './map-options.js';
 import { periodQuery, plantOfPoint, taxonIdOf } from '../core/nearby.js';
-import { SOURCE_NAMES, failedText, sourcesText } from '../core/observations.js';
+import { SOURCE_NAMES, failedText, obsNotes, sourcesText } from '../core/observations.js';
 import { obsId } from './state.js';
 import '../components/gf-map.js';
 import '../components/gf-place-search.js';
@@ -981,8 +981,20 @@ export class DlResults extends LitElement {
     const note = s.live.at ? scopeNote(s) : '';
     return html`${s.live.at ? html`<div class="scope ${s.speciesState === 'error' ? 'error' : ''}" role="status">${icon('crosshair')}<span title=${note}>${scopeWords(s)} · ${note}</span>
         <button class="link" type="button" @click=${() => s.setScope(null)}>Toute la France</button></div>` : nothing}
-      <gf-plant-list ?grid=${grid} .current=${s.live.plant} .channel=${this.channel}></gf-plant-list>`;
+      <gf-plant-list ?grid=${grid} .current=${s.live.plant} .channel=${this.channel} .obs=${this.#obs(s)}></gf-plant-list>`;
   }
+
+  /**
+   * Each plant's observations in the zone, in words (core/observations.js obsNotes: its rows say them, its grid has their
+   * column): the same Map while they are the same; none without a zone. @param {LayoutState} s
+   */
+  #obs(s) {
+    const c = s.live.at ? s.obsCounts : null;
+    if (this.#obsFor !== c) { this.#obsFor = c; this.#obsMemo = c ? obsNotes(c.counts, c.sources) : null; }
+    return this.#obsMemo;
+  }
+  /** @type {LayoutState['obsCounts']} */ #obsFor = null;
+  /** @type {ReturnType<typeof obsNotes> | null} */ #obsMemo = null;
 }
 customElements.define('dl-results', DlResults);
 

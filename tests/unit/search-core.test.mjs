@@ -87,6 +87,24 @@ test('tri : français par défaut (sans nom français en dernier), scientifique,
   assert.equal(find('', { sort: 'relevance' }).items[0].id, fr.items[0].id, 'pertinence sans texte : ordre français');
 });
 
+test('tri « Plus observées » : les observations de la zone d’abord, puis le nom français ; sans elles, le nom français, dit', () => {
+  const id = (/** @type {string} */ sci) => /** @type {any} */ (plants.find((/** @type {any} */ p) => p.scientificName === sci)).id;
+  const zone = ['Urtica dioica', 'Allium ursinum', 'Geum urbanum', 'Bellis perennis'].map(id);
+  const observed = { [id('Allium ursinum')]: 9, [id('Geum urbanum')]: 3, [id('Urtica dioica')]: 3, [id('Bellis perennis')]: 1 };
+  const run = (/** @type {string} */ sort, /** @type {any} */ o = observed) => search(index, { q: '', filters: NONE, sort, only: zone, observed: o });
+  const most = run('obs');
+  assert.equal(most.sort, 'obs');
+  assert.equal(most.counted, true);
+  // Ties (3 each): by French name — Benoîte des villes before Ortie dioïque.
+  assert.deepEqual(names(most), ['Allium ursinum', 'Geum urbanum', 'Urtica dioica', 'Bellis perennis']);
+  assert.deepEqual(names(run('-obs')), ['Bellis perennis', 'Urtica dioica', 'Geum urbanum', 'Allium ursinum'], 'the least observed first');
+  // No counts (Flore, the whole flora): the French name's order, and the answer says so.
+  const none = run('obs', null);
+  assert.deepEqual([none.sort, none.counted], ['fr', false]);
+  assert.deepEqual(names(none), names(run('fr')));
+  assert.equal(find('', { sort: 'obs' }).sort, 'fr');
+});
+
 test('suggestions : familles et genres qui commencent par le texte, pas déjà filtrés', () => {
   const r = find('urtic');
   assert.deepEqual(r.suggestions.map((/** @type {any} */ s) => `${s.type}:${s.name}`), ['family:Urticaceae', 'genus:Urtica']);

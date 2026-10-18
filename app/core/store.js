@@ -19,6 +19,7 @@ import { onStorage } from './sync.js';
  * @property {Suggestion[]} suggestions
  * @property {number} fuzzy   number of typo-tolerant matches included
  * @property {string} sort    effective sort
+ * @property {boolean} [counted]   each plant's observations given (a free layout's zone): the sort « Plus observées »
  *
  * @typedef {object} AppState
  * @property {'loading' | 'ready' | 'error'} status

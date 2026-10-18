@@ -11,7 +11,7 @@
 //   inatQuery(f), gbifQuery(f, periode), gbifKeep(record, f), APPLIES: what each source does of each filter;
 //   zoneObservations(center, radius, { filters, periode, signal }) → { points, totals, failed, datasets } (every source
 //     failing: an ObsError, which says each one's failure) — GBIF asked in two requests, its datasets first, then their
-//     occurrences (never its copy of iNaturalist's); sourcesText(sources), failedText(failed): in words.
+//     occurrences (never its copy of iNaturalist's); sourcesText(sources), failedText(failed), obsNotes(counts): in words.
 // The filters and their translation are pure, tested under Node (tests/unit/observations.test.mjs).
 
 import * as cache from './cache.js';
@@ -48,6 +48,28 @@ export function failedText(failed) {
     off.length > 1 ? `Les modules ${off.join(' et ')} sont désactivés` : off.length ? `Le module ${off[0]} est désactivé` : '',
     down.length ? `${down.join(' et ')} ${down.length > 1 ? 'ne répondent pas' : 'ne répond pas'}` : ''
   ].filter(Boolean).join(' et ');
+}
+
+/**
+ * Each plant's observations in words (a layout's list: core/nearby.js plantCounts): « 12 obs. »; with both sources asked
+ * « 12 obs. (9 iNat., 3 GBIF) », or the one alone that saw it (« 3 obs. GBIF ») — `detail` that part alone (a grid's
+ * cell); its title « 12 observations dans la zone : 9 iNaturalist, 3 GBIF ».
+ * @param {Map<number, { inat: number, gbif: number }>} counts @param {readonly ObsSource[]} sources
+ * @returns {Map<number, { n: number, text: string, detail: string, title: string }>}
+ */
+export function obsNotes(counts, sources) {
+  const both = sources.includes('inat') && sources.includes('gbif');
+  const fr = (/** @type {number} */ n) => n.toLocaleString('fr-FR');
+  /** @type {Map<number, { n: number, text: string, detail: string, title: string }>} */
+  const out = new Map();
+  for (const [id, c] of counts) {
+    const n = c.inat + c.gbif;
+    const detail = !both ? '' : c.inat && c.gbif ? `${fr(c.inat)} iNat., ${fr(c.gbif)} GBIF` : c.gbif ? 'GBIF' : 'iNat.';
+    const parts = [c.inat ? `${fr(c.inat)} iNaturalist` : '', c.gbif ? `${fr(c.gbif)} GBIF` : ''].filter(Boolean);
+    out.set(id, { n, detail, text: `${fr(n)} obs.${!detail ? '' : c.inat && c.gbif ? ` (${detail})` : ' ' + detail}`,
+      title: `${fr(n)} observation${n > 1 ? 's' : ''} dans la zone : ${parts.join(', ')}` });
+  }
+  return out;
 }
 
 /** Every source asked failed (zoneObservations): each one's failure (`failed`), the first as its cause. */

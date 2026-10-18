@@ -9,10 +9,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 const {
-  APPLIES, OBS_DEFAULTS, ObsError, failedText, gbifKeep, gbifQuery, inatQuery, obsChanges, obsKey, obsParams, readObsFilters, sourcesText, zoneObservations
+  APPLIES, OBS_DEFAULTS, ObsError, failedText, gbifKeep, gbifQuery, inatQuery, obsChanges, obsKey, obsNotes, obsParams, readObsFilters, sourcesText, zoneObservations
 } = await import('../../app/core/observations.js');
 const { INAT_DATASET } = await import('../../app/core/around3d.js');
-const { plantOfPoint, speciesOf } = await import('../../app/core/nearby.js');
+const { plantCounts, plantOfPoint, speciesOf } = await import('../../app/core/nearby.js');
 const { appMode, setModule } = await import('../../app/core/modules.js');
 const db = await import('../../app/core/db.js');
 
@@ -271,4 +271,24 @@ test('les plantes des observations : une plante une fois, que iNaturalist (son t
   assert.equal(plantOfPoint(plantOf, { taxonId: null, sci: 'Bellis perennis' }), 2);
   assert.equal(plantOfPoint(plantOf, { taxonId: 999, sci: 'Hedera helix' }), 1, 'a taxon not among them: its name');
   assert.equal(plantOfPoint(plantOf, { taxonId: null, sci: 'Plantus ignotus' }), undefined);
+});
+
+test('les observations de chaque plante : ses sources à part, comptées comme sa ligne de la liste ; en mots', async () => {
+  const p = (/** @type {number | null} */ taxonId, /** @type {string} */ sci, /** @type {string} */ kind) => ({ taxonId, sci, kind, common: null, photo: null, credit: null });
+  const points = [p(50, 'Urtica dioica', 'inat'), p(50, 'Urtica dioica', 'inat'), p(null, 'Urtica dioica', 'gbif'), p(null, 'Bellis perennis', 'gbif'),
+    p(60, 'Hedera helix', 'inat'), p(null, 'Plantus ignotus', 'gbif')];
+  const { list, plantOf } = await speciesOf(points);
+  const counts = plantCounts(points, plantOf);
+  assert.deepEqual([...counts].sort((a, b) => a[0] - b[0]), [[1, { inat: 1, gbif: 0 }], [2, { inat: 0, gbif: 1 }], [3, { inat: 2, gbif: 1 }]],
+    'a plant unknown to the flora not counted');
+  for (const s of list.filter(x => x.plantId)) {
+    const c = /** @type {any} */ (counts.get(/** @type {number} */ (s.plantId)));
+    assert.equal(c.inat + c.gbif, s.count, s.name);
+  }
+  // In words: both sources asked — the part of each; one source — the number alone.
+  const both = obsNotes(counts, ['inat', 'gbif']);
+  assert.deepEqual(both.get(3), { n: 3, detail: '2 iNat., 1 GBIF', text: '3 obs. (2 iNat., 1 GBIF)', title: '3 observations dans la zone : 2 iNaturalist, 1 GBIF' });
+  assert.deepEqual([both.get(2)?.text, both.get(1)?.text], ['1 obs. GBIF', '1 obs. iNat.']);
+  assert.deepEqual(obsNotes(new Map([[7, { inat: 1200, gbif: 0 }]]), ['inat']).get(7),
+    { n: 1200, detail: '', text: '1\u202f200 obs.', title: '1\u202f200 observations dans la zone : 1\u202f200 iNaturalist' });
 });
