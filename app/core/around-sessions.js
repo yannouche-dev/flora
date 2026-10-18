@@ -49,6 +49,13 @@ export function leftAt(id) {
 /** What a mini-app around a place keeps (nothing: {}). @param {string} id @returns {AroundCtx} */
 export const aroundKept = id => read(id)?.ctx ?? {};
 
+/**
+ * What any mini-app keeps in its context (nothing: {}), read as the runtime reads it — a state of another version is
+ * none (runtime.js drops it): the list of the ways to play asks Faux amis whether a game is under way.
+ * @param {string} id @returns {Record<string, unknown>}
+ */
+export const keptCtx = id => read(id)?.ctx ?? {};
+
 /** A game under way: a place chosen in that mini-app. @param {string} id */
 export const aroundUnderWay = id => Array.isArray(aroundKept(id).point);
 

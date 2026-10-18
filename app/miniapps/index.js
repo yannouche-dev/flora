@@ -5,9 +5,9 @@
 // `underWay`: a game under way, kept on this device (the list offers « Continuer » and « Recommencer »); `play`: what
 // launching it changes in the app (Cueillette prudente: the harvest mode on).
 
-import { aroundUnderWay } from '../core/around-sessions.js';
+import { aroundUnderWay, keptCtx } from '../core/around-sessions.js';
 import { setHarvestMode } from '../core/store.js';
-import { keptGame, underWay } from '../miniapp/kit/faux-amis.js';
+import { underWay } from '../miniapp/kit/faux-amis-store.js';
 import { walkUnderWay } from '../miniapp/kit/trail-store.js';
 
 /**
@@ -36,7 +36,7 @@ export const MINIAPPS = [
     load: () => import('./mosaique.js') },
   { id: 'faux-amis', title: 'Faux amis', icon: 'lightbulb', scene: 'twins',
     pitch: 'Six paires de plantes qu’on confond : à qui est chaque indice ? Sans indice sûr, on ne cueille pas.',
-    underWay: () => underWay(keptGame()),
+    underWay: () => underWay(/** @type {any} */ (keptCtx('faux-amis').game)),
     load: () => import('./faux-amis.js') }
 ];
 

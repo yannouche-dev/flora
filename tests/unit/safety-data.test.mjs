@@ -133,10 +133,19 @@ test('check-confusions : confusion de référence absente, piste non vérifiée 
   const ref6 = clone(reference);
   ref6.confusions.push({ id: 'x', toxic: ['Plantus inventus'], edible: ['Daucus carota'], status: 'à vérifier' });
   assert.ok(run(ref6, lookalikes).some(e => /Plantus inventus/.test(e)));
-  // A criterion copied from another pair (the laurier rose one given to the laurier cerise).
-  const look7 = clone(lookalikes);
-  const nerium = look7.pairs.find((/** @type {any} */ p) => p.toxic[0].taxon === 'Nerium oleander');
-  look7.pairs.find((/** @type {any} */ p) => p.toxic[0].taxon === 'Prunus laurocerasus').tell = [...nerium.tell];
-  const errors7 = run(reference, look7);
-  assert.ok(errors7.some(e => /Prunus laurocerasus.*criterion .* is pair 14's too/.test(e)), errors7.join('\n'));
+  // A criterion copied from another pair (the laurier rose one given to the laurier cerise), word for word or not, or one
+  // about a plant of another pair: it names a plant that is not in its own.
+  const tellOf = (/** @type {any} */ look, /** @type {string} */ toxic) => look.pairs.find((/** @type {any} */ p) => p.toxic[0].taxon === toxic);
+  const nerium = tellOf(lookalikes, 'Nerium oleander').tell[0];
+  for (const tell of [nerium, nerium.replace(' ;', ';').replace(/\.$/, ''), 'Laurier rose : feuilles étroites, fleurs roses en bouquets.']) {
+    const look7 = clone(lookalikes);
+    tellOf(look7, 'Prunus laurocerasus').tell = [tell];
+    const errors7 = run(reference, look7);
+    assert.ok(errors7.some(e => /Prunus laurocerasus.*names « laurier rose ».*not a plant of this pair/.test(e)), `${tell}\n${errors7.join('\n')}`);
+  }
+  // A criterion about a plant both pairs have (Ail des ours, in pairs 1 and 2) is that plant's, wherever it is quoted.
+  const look8 = clone(lookalikes), ref8 = clone(reference);
+  tellOf(look8, 'Convallaria majalis').tell = [tellOf(lookalikes, 'Colchicum').tell[0]];
+  ref8.confusions.find((/** @type {any} */ c) => c.id === 'convallaria-majalis-allium-ursinum').gaps = ['symptoms'];
+  assert.deepEqual(run(ref8, look8), []);
 });

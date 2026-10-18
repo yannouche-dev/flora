@@ -13,7 +13,8 @@
 //    « toxique »; « grave » is that level (severityFrom « tppt »), and needs it;
 //  - a « mortel » or « grave » pair without criteria (tell) or symptoms, unless its reference entry lists the field in
 //    `gaps` (not given by the cited sources, to be completed); a gap that is filled is an error too (stale);
-//  - a criterion (tell) that another pair gives too: copied from another confusion, it describes other plants.
+//  - a criterion (tell) that names a plant of the file that is not in its pair (by its label, the label's first words or
+//    its taxon; case, accents and punctuation aside): copied from another confusion, it describes other plants.
 // The « à vérifier » confusions are listed (::notice::), not required.
 // Paths: PLANTS_FILE, LOOKALIKES_FILE, SAFETY_FILE, REFERENCE_FILE (defaults: data/…).
 
@@ -27,6 +28,17 @@ const GAPS = ['tell', 'symptoms'];
 
 /** @param {string} a @param {string[]} list */
 const has = (a, list) => list.includes(a);
+
+/** A text as names are looked for in it: lower case, no accents, every run of non-letters one space, a space each end. @param {string} s */
+const plain = s => ` ${String(s).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/[^\p{L}]+/gu, ' ').trim()} `;
+
+/**
+ * The names a pair's plants go by in a criterion: each label, its words before a parenthesis (« Acacia (robinier) »),
+ * each taxon — as plain() writes them. @param {any} pair @returns {string[]}
+ */
+const namesOf = pair => [...(pair.toxic || []), ...(pair.edible || [])]
+  .flatMap((/** @type {any} */ t) => [t.label, String(t.label || '').split('(')[0], t.taxon])
+  .map(plain).filter(n => n.trim().length > 2);
 
 /**
  * The highest TPPT human toxicity level of a taxon: its plant (accepted name) or, for a genus, any of its plants.
@@ -89,15 +101,17 @@ export function checkConfusions({ reference, lookalikes, plants, safety }) {
     }
   }
 
-  /** Each criterion, and the first pair giving it. @type {Map<string, number>} */
-  const tells = new Map();
+  /** Every plant name of the file (plain()). */
+  const names = new Set(pairs.flatMap(namesOf));
   pairs.forEach((p, i) => {
     const name = `pair ${i + 1} (${taxa(p, 'toxic').join(', ')} ↔ ${taxa(p, 'edible').join(', ')})`;
     if (!covered.has(p)) errors.push(`lookalikes.json ${name} is in no « publiée » confusion of the reference list`);
+    // A criterion names only plants of its pair.
+    const own = new Set(namesOf(p));
     for (const t of Array.isArray(p.tell) ? p.tell : []) {
-      const first = tells.get(String(t).trim());
-      if (first === undefined) tells.set(String(t).trim(), i);
-      else if (first !== i) errors.push(`lookalikes.json ${name}: its criterion « ${t} » is pair ${first + 1}'s too (copied from another confusion?)`);
+      const text = plain(t);
+      const foreign = [...names].filter(n => !own.has(n) && text.includes(n));
+      if (foreign.length) errors.push(`lookalikes.json ${name}: its criterion « ${t} » names ${foreign.map(n => `« ${n.trim()} »`).join(', ')}, not a plant of this pair (copied from another confusion?)`);
     }
     // Severity and TPPT.
     const level = Math.max(0, ...taxa(p, 'toxic').map((/** @type {string} */ t) => tpptLevel(t, plants, entries)));

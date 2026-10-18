@@ -177,6 +177,7 @@ const SHELL = [
   'app/miniapp/kit/ma-walk-search.js',
   'app/miniapp/kit/ma-trail-recap.js',
   'app/miniapp/kit/faux-amis.js',
+  'app/miniapp/kit/faux-amis-store.js',
   'app/miniapp/kit/ma-faux-amis.js',
   'app/miniapps/index.js',
   'app/miniapps/rencontres.js',

@@ -84,7 +84,7 @@ const recap = {
  * @type {Component}
  */
 const fauxAmis = {
-  reads: ['game', 'lookalikes', 'cards', 'focus'],
+  reads: ['game', 'lookalikes', 'retry', 'cards', 'focus'],
   render: (c, app) => html`<ma-faux-amis .app=${app} .c=${c}></ma-faux-amis>`
 };
 
