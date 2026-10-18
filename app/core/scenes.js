@@ -96,8 +96,27 @@ const mosaic = () => {
   })}`;
 };
 
-const SCENES = { trail, meet, harvest, mosaic };
-const LABELS = { trail: 'Un chemin parmi les fleurs', meet: 'Des cartes de plantes et un cœur', harvest: 'Un panier et ce qui se cueille', mosaic: 'Une mosaïque de photos de plantes' };
+/** Faux amis: two plant cards alike — the one sought, its look-alike —, a lightbulb for the clue between them. */
+const twins = () => svg`
+  ${ground}
+  ${loose(46, 36, 'sun-fill', 'var(--sun)', 26, 0.2, 0, 'spin')}
+  ${[[116, -7, 0.1], [204, 7, 0.25]].map(([x, rot, d]) => svg`
+    <g transform="translate(${x} 106) rotate(${rot})"><g class="pop" style="--d:${d}s">
+      <rect x="-36" y="-50" width="72" height="94" rx="12" fill="var(--shade)" transform="translate(2.5 3)"/>
+      <rect x="-36" y="-50" width="72" height="94" rx="12" fill="var(--card)" stroke="var(--rim)" stroke-width="2.2"/>
+      <rect x="-28" y="-42" width="56" height="56" rx="8" fill="var(--leaf)"/>
+      <use href=${iconHref('leaf-fill')} x="-15" y="-29" width="30" height="30" fill="#fff"/>
+      <rect x="-28" y="20" width="42" height="6" rx="3" fill="var(--line)"/><rect x="-28" y="30" width="26" height="5" rx="2.5" fill="var(--line)"/>
+    </g></g>`)}
+  ${sticker(160, 40, 'lightbulb', 'var(--sun)', 18, 0.5, 'var(--ink-dark)')}
+  ${sticker(238, 56, 'exclamation-triangle-fill', 'var(--red)', 12, 0.75, '#fff', 8)}
+  ${sticker(66, 134, 'shield-check', 'var(--blue)', 15, 0.9, '#fff', -6)}
+  ${loose(272, 140, 'leaf', 'var(--leaf)', 18, 0.6, 20)}
+  ${loose(268, 30, 'leaf-fill', 'var(--leaf2)', 15, 1.1, 25, 'fly')}`;
+
+const SCENES = { trail, meet, harvest, mosaic, twins };
+const LABELS = { trail: 'Un chemin parmi les fleurs', meet: 'Des cartes de plantes et un cœur', harvest: 'Un panier et ce qui se cueille', mosaic: 'Une mosaïque de photos de plantes',
+  twins: 'Deux plantes qui se ressemblent et une ampoule' };
 
 /** The picture of a scenario (Rencontres for one without its own). @param {string} kind */
 export const scene = kind => {

@@ -7,6 +7,7 @@
 
 import { aroundUnderWay } from '../core/around-sessions.js';
 import { setHarvestMode } from '../core/store.js';
+import { keptGame, underWay } from '../miniapp/kit/faux-amis.js';
 import { walkUnderWay } from '../miniapp/kit/trail-store.js';
 
 /**
@@ -32,7 +33,11 @@ export const MINIAPPS = [
   { id: 'mosaique', title: 'Mosaïque', icon: 'images', scene: 'mosaic',
     pitch: 'Toutes les photos des plantes du coin, en grand. Une image touchée : toutes celles de la plante.',
     underWay: () => aroundUnderWay('mosaique'),
-    load: () => import('./mosaique.js') }
+    load: () => import('./mosaique.js') },
+  { id: 'faux-amis', title: 'Faux amis', icon: 'lightbulb', scene: 'twins',
+    pitch: 'Six paires de plantes qu’on confond : à qui est chaque indice ? Sans indice sûr, on ne cueille pas.',
+    underWay: () => underWay(keptGame()),
+    load: () => import('./faux-amis.js') }
 ];
 
 /** A mini-app of the launcher, by id (null: none). @param {string} id */

@@ -8,9 +8,9 @@ import { test, expect, plantId, answerAround } from './fixtures.mjs';
 test.use({ reducedMotion: 'reduce' });
 test.beforeEach(({ context }) => answerAround(context));
 
-const TITLES = { rencontres: 'Rencontres', parcours: 'Parcours botanique', cueillette: 'Cueillette prudente', mosaique: 'Mosaïque' };
+const TITLES = { rencontres: 'Rencontres', parcours: 'Parcours botanique', cueillette: 'Cueillette prudente', mosaique: 'Mosaïque', 'faux-amis': 'Faux amis' };
 /** The first screen of each, as its start screen says it. */
-const START = { rencontres: 'Rencontrez les plantes d’ici', parcours: null, cueillette: 'Cueillette prudente', mosaique: 'La mosaïque du coin' };
+const START = { rencontres: 'Rencontrez les plantes d’ici', parcours: null, cueillette: 'Cueillette prudente', mosaique: 'La mosaïque du coin', 'faux-amis': 'Faux amis' };
 
 /** @param {import('@playwright/test').Page} page */
 const hash = page => page.evaluate(() => location.hash);
@@ -42,8 +42,19 @@ const favourites = page => page.evaluate(async () => {
   return Object.fromEntries((fav?.properties.plants ?? []).map((/** @type {any} */ e) => [e.plantId, e.origin?.app ?? null]));
 });
 
-/** A game played in a mini-app, from its start: to its cards (a heart on the first), or a walk with a plant. @param {import('@playwright/test').Page} page @param {string} id */
+/**
+ * A game played in a mini-app, from its start: to its cards (a heart on the first), a walk with a plant, or Faux amis'
+ * first card answered. @param {import('@playwright/test').Page} page @param {string} id
+ */
 async function play(page, id) {
+  if (id === 'faux-amis') {
+    await page.locator('gf-miniapp .start .go').click();
+    await expect.poll(() => hash(page)).toBe('#/app/faux-amis/play');
+    const game = page.locator('ma-faux-amis');
+    await game.locator('button.pick, button.skip').first().click();
+    await expect(game.locator('.verdict')).toBeVisible();
+    return 'play';
+  }
   if (id === 'parcours') {
     const trail = page.locator('gf-miniapp');
     await trail.locator('.go').click();
@@ -94,6 +105,7 @@ for (const id of /** @type {(keyof typeof TITLES)[]} */ (Object.keys(TITLES))) {
     await list(page).getByRole('button', { name: `Continuer : ${TITLES[id]}` }).click();
     await expect.poll(() => hash(page)).toBe(`#/app/${id}/${step}${id === 'rencontres' ? '?p=' + plantId('Allium ursinum') : ''}`);
     if (id === 'parcours') await expect(page.locator('gf-miniapp .mine > li')).toHaveCount(1);
+    else if (id === 'faux-amis') await expect(page.locator('ma-faux-amis .count')).toHaveText('Carte 2 sur 6');
     else await expect(page.locator('ma-around-list .head')).toBeVisible();
     await page.locator('gf-miniapp .quit').click();
     await expect.poll(() => hash(page)).toBe('#/discover');
@@ -108,6 +120,7 @@ for (const id of /** @type {(keyof typeof TITLES)[]} */ (Object.keys(TITLES))) {
     await expect(dialog).toContainText('Recommencer : tout effacer ?');
     await expect(dialog).toContainText(id === 'parcours'
       ? 'Seront supprimés : le parcours en cours « Chemin du lavoir » (1 plante), la partie en cours. Cette action est définitive.'
+      : id === 'faux-amis' ? 'Seront supprimés : la partie en cours. Cette action est définitive.'
       : `Seront supprimés : 1 favori ajouté par ${TITLES[id]}, la partie en cours. Cette action est définitive.`);
     await dialog.getByRole('button', { name: 'Annuler' }).click();
     await expect(dialog).toBeHidden();

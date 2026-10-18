@@ -12,7 +12,8 @@
 // the grid or mosaic, the plant's sheet ma-plant-sheet, the first match), and Rencontres' guided way during the
 // first steps (ma-guided: the map ma-around-map, the deck, the plant's panes, its own steps bar). The Parcours
 // composes its own (app/miniapp/kit/: its game trail-session.js, its start screen trail-start.js): the walk (ma-walk:
-// its card, its plants, its search, its map) and the recap (ma-trail-recap).
+// its card, its plants, its search, its map) and the recap (ma-trail-recap). Faux amis, its cards and recap
+// (ma-faux-amis; its game faux-amis.js).
 
 import { html } from 'lit';
 import { discovering } from '../core/discover.js';
@@ -21,6 +22,7 @@ import './kit/ma-around-list.js';
 import './kit/ma-guided.js';
 import './kit/ma-walk.js';
 import './kit/ma-trail-recap.js';
+import './kit/ma-faux-amis.js';
 
 /**
  * @typedef {import('./define.js').Place} Place
@@ -77,5 +79,14 @@ const recap = {
   render: (c, app) => html`<ma-trail-recap .app=${app}></ma-trail-recap>`
 };
 
+/**
+ * Faux amis: the card to answer, its answer, the recap (step « play »); a plant's sheet over it from the recap.
+ * @type {Component}
+ */
+const fauxAmis = {
+  reads: ['game', 'lookalikes', 'cards', 'focus'],
+  render: (c, app) => html`<ma-faux-amis .app=${app} .c=${c}></ma-faux-amis>`
+};
+
 /** The components, by their `use` name. @type {Record<string, Component>} */
-export const kit = { distance, aroundList, meet, walk, recap };
+export const kit = { distance, aroundList, meet, walk, recap, fauxAmis };

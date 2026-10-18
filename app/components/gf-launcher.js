@@ -1,6 +1,6 @@
 // @ts-check
 // The list of the ways to play, one card each: the mini-apps (app/miniapps: Rencontres, Parcours botanique, Cueillette
-// prudente, Mosaïque; each one opens alone on the screen, at #/app/<id>) — what each one does and « Jouer ». (Not
+// prudente, Mosaïque, Faux amis; each one opens alone on the screen, at #/app/<id>) — what each one does and « Jouer ». (Not
 // Scientifique: a mode, chosen in the header's switch or in Réglages, not a way to play.) A mini-app with a game under
 // way on this device offers two actions instead: « Continuer » (where it was left: its last step) and « Recommencer »
 // — asked first in a dialog, it empties what the mini-app owns, as its « Rejouer » does (runtime.js#replay, the other

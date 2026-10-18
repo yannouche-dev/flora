@@ -7,7 +7,7 @@ import { test, expect, plantId, answerAround } from './fixtures.mjs';
 test.use({ reducedMotion: 'reduce' });
 test.beforeEach(({ context }) => answerAround(context));
 
-const ORDER = ['Rencontres', 'Parcours botanique', 'Cueillette prudente', 'Mosaïque'];
+const ORDER = ['Rencontres', 'Parcours botanique', 'Cueillette prudente', 'Mosaïque', 'Faux amis'];
 /** @param {import('@playwright/test').Page} page */
 const hash = page => page.evaluate(() => location.hash);
 /** The page's list (not the launcher's dialog). @param {import('@playwright/test').Page} page */
@@ -28,7 +28,7 @@ test('l’onglet Découvrir montre la liste ; « Jouer » ouvre Rencontres, « Q
   // Not Rencontres by itself: no start screen of a game here.
   await expect(page.getByRole('heading', { name: 'Rencontrez les plantes d’ici' })).toHaveCount(0);
   // Each card: its picture, its pitch, one action named after it.
-  await expect(list(page).locator('li .pic')).toHaveCount(4);
+  await expect(list(page).locator('li .pic')).toHaveCount(5);
   await expect(list(page).getByRole('button', { name: 'Jouer : Scientifique' })).toHaveCount(0);
   await expect(list(page).locator('li[data-app="rencontres"] p')).toContainText('une carte à la fois');
 
