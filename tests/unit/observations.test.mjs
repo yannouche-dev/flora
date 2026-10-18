@@ -168,6 +168,9 @@ test('les observations de la zone : iNaturalist seul comme toujours, puis iNatur
   assert.deepEqual([g.get('taxonKey'), g.get('mediaType'), g.getAll('datasetKey'), g.get('facet'), g.get('facetMultiselect'), g.get('year')],
     ['6', 'StillImage', ['cbn', 'plantnet'], 'datasetKey', 'true', String(new Date().getFullYear())]);
   assert.match(String(g.get('geoDistance')), /^45\.8000,3\.2000,2\.00km$/);
+  // The size of the datasets' facet as GBIF documents it: by field (a bare facetLimit is not one of its words).
+  assert.equal(g.get('datasetKey.facetLimit'), '30');
+  assert.equal(g.has('facetLimit'), false);
   assert.deepEqual(both.points.map(p => p.id), ['i902', 'i901', 'i903', 'g1'], 'iNaturalist’s and GBIF’s own, the most recent first');
   const daisy = /** @type {any} */ (both.points.find(p => p.id === 'g1'));
   assert.deepEqual({ kind: daisy.kind, sci: daisy.sci, common: daisy.common, url: daisy.url }, { kind: 'gbif', sci: 'Bellis perennis', common: 'Pâquerette', url: 'https://www.gbif.org/occurrence/1' });

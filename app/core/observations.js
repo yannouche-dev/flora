@@ -214,7 +214,7 @@ async function gbifZone([lon, lat], radius, f, periode, signal) {
   // « around-zone… »: forgotten with the zone's other failures (layout/state.js retryScope).
   const found = await cache.cached(`around-zone-gbif1:${where}${query}`, async () => {
     const url = 'https://api.gbif.org/v1/occurrence/search?taxonKey=6&hasCoordinate=true&hasGeospatialIssue=false&occurrenceStatus=PRESENT'
-      + `&geoDistance=${encodeURIComponent(where)}${query}&limit=${GBIF_MAX}&facet=datasetKey&facetMultiselect=true&facetLimit=30`;
+      + `&geoDistance=${encodeURIComponent(where)}${query}&limit=${GBIF_MAX}&facet=datasetKey&facetMultiselect=true&datasetKey.facetLimit=30`;
     const data = await fetchJson(url, { signal, expect: d => Array.isArray(d.results) });
     const records = [];
     for (const o of data.results) {

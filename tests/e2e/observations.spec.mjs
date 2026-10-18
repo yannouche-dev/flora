@@ -91,7 +91,8 @@ test('la section de la liste : avec la zone seulement ; ses sources comptées ; 
   await sources.getByRole('checkbox', { name: /GBIF/ }).check();
   await expect.poll(() => param(page, 'sources')).toBe('inat,gbif');
   await expect.poll(() => gbif.length).toBeGreaterThan(0);
-  expect([lastAsked(gbif).get('taxonKey'), lastAsked(gbif).get('facet'), lastAsked(gbif).get('facetMultiselect')]).toEqual(['6', 'datasetKey', 'true']);
+  expect([lastAsked(gbif).get('taxonKey'), lastAsked(gbif).get('facet'), lastAsked(gbif).get('facetMultiselect'), lastAsked(gbif).get('datasetKey.facetLimit')])
+    .toEqual(['6', 'datasetKey', 'true', '30']);
   await expect(sources.locator('li').nth(1)).toContainText('42');
   // Its datasets in the zone: their titles and counts, iNaturalist's copy not among them; one chosen: written, asked.
   const datasets = section(page).getByRole('group', { name: 'Jeux de données GBIF' });

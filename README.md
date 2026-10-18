@@ -488,7 +488,7 @@ L'adresse porte cet état à côté de la disposition — `?title=<titre>&p=<pla
 
 Les observations de la zone d'une disposition (les points de sa carte, les plantes de sa liste) viennent de **plusieurs sources**, interrogées ensemble et fusionnées par une couche commune (`app/core/observations.js`) : **iNaturalist** et **GBIF** — et, par GBIF, les jeux de données qu'il rassemble (Pl@ntNet, Observation.org, l'inventaire national, les conservatoires botaniques, les herbiers…). Par-dessus, **des filtres globaux**, les mêmes pour toutes les sources : chacune les applique dans ses propres mots quand elle le sait, l'app les applique sinon, ou ils sont dits sans objet pour elle. Par exemple « toutes les observations identifiées à l'espèce, avec une photo libre, de plantes sauvages » : `&sources=inat,gbif&taxon=espece&photos=libre&sauvages=1`.
 
-**Ce que chaque API sait filtrer** (en gras, ce dont la couche commune se sert) :
+**Ce que chaque API sait filtrer** (en gras, ce dont la couche commune se sert ; vérifié dans les descriptions de pyinaturalist 0.21 et pygbif 0.7, qui reprennent la doc des deux API) :
 
 | iNaturalist (API v1, `/v1/observations`) | Paramètres |
 |---|---|
@@ -496,12 +496,12 @@ Les observations de la zone d'une disposition (les points de sa carte, les plant
 | Groupe, taxon | **`iconic_taxa=Plantae`** ; `taxon_id`, `without_taxon_id`, `taxon_name` |
 | Rang | **`hrank=species`** (à l'espèce ou en dessous) ; `rank`, `lrank` |
 | Qualité | **`quality_grade`** : `research` (identification confirmée), `needs_id` (à identifier), `casual` (cultivées, incomplètes) ; `verifiable` |
-| Photos, sons | **`photos=true`**, **`photo_license=cc0,cc-by,cc-by-sa`** ; `sounds`, `license` (celle de l'observation) |
+| Photos, sons | **`photos=true`**, **`photo_license=cc0,cc-by,cc-by-sa`** (au moins une photo sous l'une d'elles) ; `photo_licensed` (une photo sous licence), `sounds`, `license` (celle de l'observation) |
 | Captives, cultivées | **`captive=false`** (le niveau recherche les exclut déjà) |
 | Origine | `native`, `introduced`, `endemic`, `threatened` — selon un lieu (`place_id`) : la couche commune s'en remet au « Statut en France » de la flore |
 | Dates | **`year`, `month`** (la période) ; `d1`, `d2`, `day`, `created_d1`… |
 | Identification, annotations | `identified`, `identifications`, `user_id`, `project_id`, `term_id` / `term_value_id` (phénologie : en fleur, en fruit…) |
-| Précision | `acc_below`, `geoprivacy` |
+| Précision | `acc_below`, `acc_above` (en mètres), `geoprivacy`, `taxon_geoprivacy` |
 | Tri, pages | **`order_by=observed_on`**, `per_page` (200 au plus), `page` (10 000 résultats au plus) — la couche en prend 1 000 |
 
 | GBIF (`/v1/occurrence/search`) | Paramètres |
@@ -511,11 +511,11 @@ Les observations de la zone d'une disposition (les points de sa carte, les plant
 | Présence | **`occurrenceStatus=PRESENT`** |
 | Nature | `basisOfRecord` : `HUMAN_OBSERVATION`, `MACHINE_OBSERVATION`, `PRESERVED_SPECIMEN` (herbiers), `MATERIAL_SAMPLE`… |
 | Médias | **`mediaType=StillImage`** ; `Sound`, `MovingImage` — la licence de chaque photo (`media[].license`) lue par l'app (`license` est celle de l'occurrence) |
-| Origine | `establishmentMeans`, `degreeOfEstablishment` — des valeurs à garder, rarement remplies : l'app écarte celles qui ne sont pas sauvages |
+| Origine | `establishmentMeans` (`NATIVE`, `INTRODUCED`, `NATURALISED`, `INVASIVE`, `MANAGED`, `UNCERTAIN`), `degreeOfEstablishment` — des valeurs à garder, rarement remplies : l'app écarte celles qui ne sont pas sauvages |
 | Sources | **`datasetKey`** (répété : l'un ou l'autre) ; `publishingOrg`, `institutionCode`, `collectionCode`, `recordedBy`, `networkKey` |
 | Qualité | pas de note de qualité ; `issue` (les défauts relevés par GBIF), `coordinateUncertaintyInMeters` |
 | Dates | **`year`, `month`** ; `eventDate`, des intervalles (`year=2020,2024`) |
-| Facettes | **`facet=datasetKey`, `facetMultiselect=true`, `facetLimit=30`** (les jeux de la zone comptés, comme si aucun n'était choisi) |
+| Facettes | **`facet=datasetKey`, `facetMultiselect=true`, `datasetKey.facetLimit=30`** (les jeux de la zone comptés, comme si aucun n'était choisi ; la taille d'une facette se donne par champ, `<champ>.facetLimit`, 10 sinon) |
 | Pages | **`limit`** (300 au plus), `offset` |
 
 **Les filtres globaux** (`core/observations.js` : `inatQuery`, `gbifQuery`, `gbifKeep`, `APPLIES`) :
