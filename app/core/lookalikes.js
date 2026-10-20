@@ -158,7 +158,7 @@ export async function lookalikesOf(plant) {
 export const UNREAD_LOOKALIKES = 'Liste des confusions indisponible pour le moment : ne consommez aucune plante sans vérification.';
 
 /**
- * One line for the harvest toasts: what this plant can be mistaken for (or that it is the toxic one), or that the
+ * One line for the toast of « Noter ici »: what this plant can be mistaken for (or that it is the toxic one), or that the
  * list could not be read (`unread`).
  * @param {any} plant @returns {Promise<{ toxic: boolean, text: string, unread?: boolean } | null>}
  */

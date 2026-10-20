@@ -1,13 +1,15 @@
 // @ts-check
 // Cueillette prudente: around you, only the plants that matter for picking — those of the Anses and Centres antipoison
 // list of dangerous confusions, the deadliest first —, each card saying its look-alikes, its toxicity, its protection
-// before anything else; the list says, in red, never to pick without a certain identification, and whom to call. Its
-// start (« Autour de moi », a commune, « Reprendre »), how far to look over the map, then the cards. Launched, the
-// harvest mode comes on (app/miniapps/index.js).
+// before anything else; the list says, in red, never to pick without a certain identification, and whom to call. A
+// toxic look-alike is never a match nor a favourite: swiped right, it is recognised, to avoid (kit/session.js#swiped),
+// counted apart. Its start (« Autour de moi », a commune, « Reprendre »), how far to look over the map, then the
+// cards. Launched, the harvest mode comes on (app/miniapps/index.js).
 // Built from the kit (app/miniapp/kit): ma-distance, then ma-around-list (harvest).
 // Owns — everything « Rejouer » / « Recommencer » empties, here and in the other tabs, as if never opened:
-//  - geoflora.app.cueillette.state: its place and name, distance, cards swiped right (this game's matches) and left, the
-//    step it was left at; geoflora.app.cueillette.layout: its columns' widths (runtime.js#replay);
+//  - geoflora.app.cueillette.state: its place and name, distance, cards swiped right (this game's matches; its toxic
+//    look-alikes recognised, `avoided`) and left, the step it was left at; geoflora.app.cueillette.layout: its columns'
+//    widths (runtime.js#replay);
 //    geoflora.app.cueillette.sheet: the width of a plant's sheet beside the cards;
 //  - in memory: the cards found, the observations, what Wikipédia says, the undo stack, the deck's order, the view
 //    chosen, the swipe hint shown (kit/session.js: a new session, forgetGame).
@@ -32,7 +34,8 @@ export default defineMiniApp({
   exit: { label: 'Quitter la cueillette' },
   owns: { keys: ['geoflora.app.cueillette.sheet'], reset: () => { forgetGame('cueillette'); return forgetMadeBy('cueillette'); } },
   shared: ['Mes plantes (sauf les favoris ajoutés par ses matchs)', 'lieux', 'mode cueillette', 'réglages'],
-  context: aroundContext(),
+  // Its own: the toxic look-alikes recognised, to avoid (kit/cards.js#avoid) — never among the matches.
+  context: { ...aroundContext(), avoided: { init: [], persist: true } },
   actions: { locate },
   ...aroundColumns('Cueillette prudente'),
   steps: aroundSteps('harvest', {

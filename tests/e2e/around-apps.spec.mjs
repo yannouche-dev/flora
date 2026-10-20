@@ -1,9 +1,12 @@
 // The games around a place as mini-apps — Cueillette prudente and Mosaïque beside Rencontres —, each with its own
 // game: its start, its map and distance, its cards (#/app/<id>/<step>); Cueillette prudente's safety warnings exactly
-// as before (never pick without a certain identification, the look-alikes, the deadliest first, toxicity); Mosaïque's
-// photo grid; the old addresses of Découvrir; the session the three shared before handed over to each; « Rejouer » in
-// one leaving the others as they were. Rencontres' services answered here.
-import { test, expect, plantId, answerAround } from './fixtures.mjs';
+// as before (never pick without a certain identification, the look-alikes, the deadliest first, toxicity) — a deadly
+// plant seen once among more than 120 is in its deck, a toxic look-alike is never a match nor a favourite (« à ne pas
+// cueillir »), an empty list says one thing; Mosaïque's photo grid; the old addresses of Découvrir; the session the
+// three shared before handed over to each; « Rejouer » in one leaving the others as they were. Rencontres' services
+// answered here.
+import { readFileSync } from 'node:fs';
+import { test, expect, plantId, answerAround, fixturePlants } from './fixtures.mjs';
 
 test.use({ reducedMotion: 'reduce' });
 test.beforeEach(({ context }) => answerAround(context));
@@ -56,6 +59,81 @@ test('Cueillette prudente : ses avertissements de sécurité, tels qu’avant ; 
   // « Toutes »: each tile says « Attention ».
   await list.getByRole('tab', { name: 'Toutes' }).click();
   await expect(list.locator('.grid .card .chip.danger')).toHaveText(['Attention · 3', 'Attention · 3']);
+});
+
+/**
+ * iNaturalist's plants around, the most observed first: `names` (count each), then `more` plants of the reduced flora
+ * of no dangerous confusion (none of the genera of data/lookalikes.json, by name or synonym), then `last` seen once.
+ * @param {import('@playwright/test').Page} page @param {{ names?: string[], more?: number, last?: string[] }} o
+ */
+async function answerSpecies(page, { names = [], more = 0, last = [] }) {
+  const pairs = JSON.parse(readFileSync(new URL('../../data/lookalikes.json', import.meta.url), 'utf8')).pairs;
+  const genera = new Set(pairs.flatMap((/** @type {any} */ p) => [...p.toxic, ...p.edible]).map((/** @type {any} */ t) => t.taxon.split(/\s+/)[0].toLowerCase()));
+  const plain = fixturePlants.filter((/** @type {any} */ p) => ![p.scientificName, ...(p.synonyms || [])].some(n => genera.has(String(n).split(/\s+/)[0].toLowerCase())))
+    .slice(0, more).map((/** @type {any} */ p) => p.scientificName);
+  const all = [...names.map(n => [n, 900]), ...plain.map((n, i) => [n, 700 - i]), ...last.map(n => [n, 1])];
+  await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\/species_counts\?/, route => route.fulfill({ contentType: 'application/json',
+    body: JSON.stringify({ results: all.map(([name, count], i) => ({ count, taxon: { id: 5000 + i, name, preferred_common_name: null, default_photo: null } })) }) }));
+}
+
+test('Cueillette prudente : la colchique vue une fois, derrière plus de 120 plantes plus observées, dans le paquet ; un sosie toxique « à ne pas cueillir » — jamais un match ni un favori, ↺ le reprend', async ({ app, page }) => {
+  await answerSpecies(page, { names: ['Conium maculatum'], more: 125, last: ['Colchicum autumnale'] });
+  const colchique = plantId('Colchicum autumnale'), cigue = plantId('Conium maculatum');
+  await app.open('#/app/cueillette');
+  await toCards(page, 'cueillette');
+  const list = page.locator('ma-around-list');
+  // Of the 127 plants around, the two of a dangerous confusion: the deadly one first, though seen once.
+  await expect(list.locator('.head .where')).toHaveText(/^2 plantes à moins de 1 km/);
+  const deck = list.locator('ma-deck');
+  const top = deck.locator('.swipe-card.top');
+  await expect(top).toHaveAttribute('data-id', String(colchique));
+  await expect(top.locator('.bio li').first()).toHaveText('☠️ Je suis le sosie mortel de Ail des ours, Poireau sauvage.');
+  // Its right: recognised, to avoid — never « J’aime », never a heart.
+  await expect(top.locator('.avoid-tag')).toHaveText('À ne pas cueillir');
+  await expect(top.locator('.stamp.like')).toHaveText('À ÉVITER');
+  const right = deck.getByRole('button', { name: 'Je reconnais Colchique d\'automne : à ne pas cueillir' });
+  await expect(right).toHaveAttribute('title', 'Je la reconnais : à ne pas cueillir (→)');
+  await expect(deck.getByRole('button', { name: /match/ })).toHaveCount(0);
+  await expect(deck.locator('.deck')).toHaveAttribute('aria-label', /Flèche droite : je la reconnais, à ne pas cueillir/);
+  await right.click();
+  await expect(top).toHaveAttribute('data-id', String(cigue));
+  await expect(list.getByRole('status')).toHaveText('Reconnue, à ne pas cueillir : Colchique d\'automne. Carte suivante : Ciguë maculée.');
+  await expect.poll(() => kept(page, 'cueillette')).toMatchObject({ matches: [], passed: [], avoided: [colchique] });
+  // ↺: back on top, no longer recognised.
+  await deck.getByRole('button', { name: 'Revenir à la carte précédente' }).click();
+  await expect(top).toHaveAttribute('data-id', String(colchique));
+  await expect.poll(async () => (await kept(page, 'cueillette'))?.avoided).toEqual([]);
+  // → on the deck: the same, for both.
+  await deck.locator('.deck').focus();
+  await page.keyboard.press('ArrowRight');
+  await expect(top).toHaveAttribute('data-id', String(cigue));
+  await page.keyboard.press('ArrowRight');
+  // Counted apart, never with the matches; no favourite.
+  const end = deck.locator('.deck-end');
+  await expect(end.locator('.avoided')).toHaveText('2 plantes reconnues à ne pas cueillir.');
+  await expect(end).toContainText('Aucun coup de cœur ?');
+  await expect(list.getByRole('tab', { name: 'Matchs' })).toHaveText('Matchs');
+  await expect.poll(() => kept(page, 'cueillette')).toMatchObject({ matches: [], avoided: [colchique, cigue] });
+  expect(await page.evaluate(async () => (await (await import('/app/core/collections.js')).listCollections())
+    .find((/** @type {any} */ c) => c.id === 'favorites')?.properties.plants.length ?? 0)).toBe(0);
+  // « Revoir les plantes passées »: they come back.
+  await end.getByRole('button', { name: 'Revoir les plantes passées' }).click();
+  await expect(top).toHaveAttribute('data-id', String(colchique));
+  await expect.poll(async () => (await kept(page, 'cueillette'))?.avoided).toEqual([]);
+});
+
+test('Cueillette prudente : aucune plante à sosie dangereux observée — un seul message (pas observée ne veut pas dire absente), et plus loin', async ({ app, page }) => {
+  await answerSpecies(page, { more: 12 });
+  await app.open('#/app/cueillette');
+  await toCards(page, 'cueillette');
+  const list = page.locator('ma-around-list');
+  const end = list.locator('.deck-end');
+  await expect(end).toHaveCount(1);
+  await expect(end.locator('p')).toHaveText(['Aucune observation confirmée ici pour ces plantes : cela ne veut pas dire qu’elles sont absentes.']);
+  await expect(end.getByRole('button')).toHaveText(['Chercher jusqu’à 2 km']);
+  await expect(list.locator('ma-deck')).toHaveCount(0);
+  await expect(list.getByText('Aucune plante observée ici')).toHaveCount(0);
+  await expect(list.getByText('toutes les plantes du coin')).toHaveCount(0);
 });
 
 test('Mosaïque : la grille des photos, « En fleur maintenant », une image touchée ouvre la plante (Retour la ferme)', async ({ app, page }) => {

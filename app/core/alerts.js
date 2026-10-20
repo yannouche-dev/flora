@@ -86,7 +86,7 @@ export async function harvestRisk(plant) {
   if (ansm.some(a => a.list === 'B')) reasons.push('Pharmacopée française, liste B (ANSM) : effets indésirables supérieurs au bénéfice attendu');
   for (const a of ansm.filter(a => a.list === 'A' && a.toxicParts)) reasons.push(`Parties toxiques : ${a.toxicParts} (ANSM, liste A)`);
   const tppt = safety?.tppt;
-  if ((tppt?.level ?? 0) >= 2) reasons.push(`Toxicité : ${tppt.levelLabel}${tppt.parts ? ` — parties toxiques : ${tppt.parts}` : ''} (Agroscope, base TPPT)`);
+  if ((tppt?.level ?? 0) >= 2) reasons.push(`Toxicité : ${tppt.levelLabel}${tppt.parts ? ` — parties toxiques : ${tppt.parts}` : ''} (${tppt.reviewed ? 'genre toxique, revu à la main' : 'Agroscope, base TPPT'})`);
   const toxicSide = confusions.filter(c => c.side === 'toxic');
   if (toxicSide.length) reasons.push(`Plante ${gravest(toxicSide).plant}, confondue avec ${[...new Set(toxicSide.flatMap(c => c.others.map(o => o.label)))].join(', ')} (Anses, Centres antipoison)`);
   return reasons.length ? { reasons, unread } : null;

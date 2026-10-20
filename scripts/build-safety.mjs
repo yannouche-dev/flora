@@ -19,9 +19,10 @@
 //    source to be cited; commercial use needs Agroscope's permission (GeoFlora is non-commercial).
 //
 // Output: { about, sources, plants: { [taxrefId]: { ansm?: [{ list, name, parts, toxicParts, genus?, from? }],
-//   tppt?: { level, levelLabel, levelEn, animal, parts, partsEn, toxins, name } } } }
+//   tppt?: { level, levelLabel, levelEn, animal, parts, partsEn, toxins, name, reviewed? } } } }
 //   TPPT level: 4 very strong toxic … 1 weak toxic, irritant, allergenic, estrogenic; carcinogenic is 2 (toxic);
 //   0 when the base gives no human toxicity (« unknown »). levelEn and partsEn: the base's words, kept beside.
+//   « nontoxic »: no entry (the app never says a plant is harmless), unless KEPT_TOXIC keeps it toxic (`reviewed`).
 
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
@@ -236,25 +237,37 @@ const LEVELS = [['very strong toxic', 4, 'très fortement toxique'], ['strong to
 const IRRITANT = [['skin-irritating', 'irritante pour la peau'], ['allergenic', 'allergisante'], ['phototoxic', 'phototoxique'], ['irritating', 'irritante']];
 
 /**
- * TPPT's other human toxicity values, word for word (never milder): a carcinogenic plant is a toxic one (level 2);
- * « unknown » is no level at all (0: the base lists the plant, its toxicity to humans is not established).
+ * TPPT's other human toxicity values, word for word (never milder): a carcinogenic plant is a toxic one (level 2), and
+ * so is a cytotoxic one; « unknown » is no level at all (0: the base lists the plant, its toxicity to humans is not
+ * established).
  */
-const OTHER = [['carcinogenic', 2, 'cancérogène'], ['estrogenic', 1, 'œstrogénique'], ['infested plants only', 1, 'seulement les plantes infestées'], ['unknown', 0, 'toxicité inconnue']];
+const OTHER = [['carcinogenic', 2, 'cancérogène'], ['cytotoxic', 2, 'toxique'], ['estrogenic', 1, 'œstrogénique'], ['infested plants only', 1, 'seulement les plantes infestées'], ['unknown', 0, 'toxicité inconnue']];
 
 /** Every French label toxicity() gives (check-data.mjs: no English left in safety.json). */
 export const TOXICITY_LABELS = [...LEVELS.map(([, , fr]) => fr), ...IRRITANT.map(([, fr]) => fr), ...OTHER.map(([, , fr]) => fr)];
 
+/** « nontoxic »: the base says the plant is harmless to humans — a word the app never says (keptTppt). */
+const NONTOXIC = 'nontoxic';
+
 /**
- * French reading of a TPPT toxicity value: level 0–4 and label. A value read nowhere here keeps its words, at level 1
- * (check-data.mjs then fails: its translation is to be added).
+ * The plants TPPT says « nontoxic » that stay toxic, reviewed by hand (never milder than what a user would fear):
+ * Latin name (nameKey) → why. Rhododendron hirsutum: a rhododendron, whose genus carries grayanotoxins (the leaves, the
+ * nectar and its honey poison) — kept at level 2, its source saying so (`reviewed`).
+ */
+export const KEPT_TOXIC = new Map([
+  ['rhododendron hirsutum', 'La base TPPT le dit non toxique ; gardé toxique, comme son genre : les rhododendrons contiennent des grayanotoxines (feuilles, nectar, miel).']
+]);
+
+/**
+ * French reading of a TPPT toxicity value: level 0–4 and label. Its levels read as whole words (« nontoxic » and
+ * « phototoxic » are no « toxic »); « nontoxic » gives null, like no value: no human toxicity to say (keptTppt). A
+ * value read nowhere here keeps its words, at level 1 (check-data.mjs then fails: its translation is to be added).
  * @param {string} value @returns {{ level: number, label: string } | null}
  */
 export function toxicity(value) {
   const v = String(value || '').toLowerCase().trim();
-  if (!v) return null;
-  // « phototoxic » is no toxicity level (« toxic »): read without it.
-  const levels = v.replace(/phototoxic/g, '');
-  for (const [en, level, fr] of LEVELS) if (levels.includes(en)) return { level: /** @type {number} */ (level), label: /** @type {string} */ (fr) };
+  if (!v || v === NONTOXIC) return null;
+  for (const [en, level, fr] of LEVELS) if (new RegExp(`(^|[^a-z-])${en}($|[^a-z-])`).test(v)) return { level: /** @type {number} */ (level), label: /** @type {string} */ (fr) };
   const irr = IRRITANT.filter(([en]) => en === 'irritating' ? /(^|[^-])irritating/.test(v.replace(/skin-irritating/g, '')) : v.includes(en)).map(([, fr]) => fr);
   // Phototoxic stays at level 2, where older builds put it (read as « toxic »): never milder than before.
   if (irr.length) return { level: irr.includes('phototoxique') ? 2 : 1, label: irr.join(', ') };
@@ -313,6 +326,18 @@ export function retranslate(entry) {
   };
 }
 
+/**
+ * A TPPT entry as safety.json keeps it, or null. A plant the base says « nontoxic » has nothing to warn about, and the
+ * app never says a plant is harmless: its entry is left out (its animal toxicity too — the app shows none), unless
+ * KEPT_TOXIC keeps it toxic, saying why (`reviewed`).
+ * @param {any} entry @returns {any}
+ */
+export function keptTppt(entry) {
+  if (String(entry?.levelEn || '').toLowerCase().trim() !== NONTOXIC) return entry;
+  const why = KEPT_TOXIC.get(nameKey(entry.name)?.key ?? '');
+  return why ? { ...entry, level: 2, levelLabel: 'toxique', reviewed: why } : null;
+}
+
 /** @param {any} XLSX @param {Buffer} buffer @param {ReturnType<typeof indexPlants>} index @param {Set<string>} [skipped] */
 export function matchTppt(XLSX, buffer, index, skipped = new Set()) {
   const wb = XLSX.read(buffer, { type: 'buffer' });
@@ -329,11 +354,12 @@ export function matchTppt(XLSX, buffer, index, skipped = new Set()) {
   for (const p of sheet('Plants')) {
     const human = toxicity(p.Human_toxicity), animal = toxicity(p.Animal_toxicity);
     if (!human && !animal) continue;
-    out.set(String(p.Latin_plant_name).trim(), {
+    const entry = keptTppt({
       level: human?.level ?? 0, levelLabel: human?.label ?? null, levelEn: String(p.Human_toxicity || '').trim() || null, animal: animal?.label ?? null,
       parts: partsFr(p.Toxic_plant_part) || null, partsEn: String(p.Toxic_plant_part || '').trim() || null,
       toxins: [...new Set(toxins.get(p.Plant_number) || [])].slice(0, 6), name: String(p.Latin_plant_name).trim()
     });
+    if (entry) out.set(entry.name, entry);
   }
   return linkTppt(out.values(), index, skipped);
 }
@@ -436,12 +462,13 @@ async function main() {
         }
         // Read again with this build's rules: translations, attachment by name (not through a shared synonym), split genera.
         if (key === 'tppt') {
-          const kept = got[key];
-          got[key] = linkTppt([...kept.values()].map(retranslate), index, skipped);
+          // Read again, « nontoxic » left out (keptTppt) as from the base itself.
+          const kept = new Map([...got[key]].map(([id, entry]) => [id, keptTppt(retranslate(entry))]).filter(([, entry]) => entry));
+          got[key] = linkTppt(kept.values(), index, skipped);
           // A name this flora no longer resolves (and shares with no other plant) stays where it was.
           for (const [id, entry] of kept) {
             const k = nameKey(entry.name)?.key;
-            if (!(k && (index.byName.has(k) || index.ambiguous.has(k))) && !got[key].has(id)) got[key].set(id, retranslate(entry));
+            if (!(k && (index.byName.has(k) || index.ambiguous.has(k))) && !got[key].has(id)) got[key].set(id, entry);
           }
         }
         if (key === 'ansmB') extendSplitGenera(got[key], index);

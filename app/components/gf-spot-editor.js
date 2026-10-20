@@ -237,7 +237,10 @@ export class GfSpotEditor extends LitElement {
   #wide = false;
   /** The widest the form may be: the map keeps 260 px. */
   get #formMax() { return this._w - 260 - 1; }
-  /** Harvest details (rating, log, "harvested today") only in harvest mode, and only for places. */
+  /**
+   * Harvest details (rating, log, "harvested today") only in harvest mode, and only for places. The confusion
+   * reminder is not one: an opened plant always shows it, whatever the mode.
+   */
   get #harvest() { return this.#store.state.harvestMode && this.#isPlace; }
 
   constructor() {
@@ -952,7 +955,7 @@ export class GfSpotEditor extends LitElement {
         ${open ? html`
           <div class="body">
             ${id !== null ? html`<gf-status plant-id=${id} .point=${entryPosition(this._place, entry) || null}></gf-status>` : nothing}
-            ${id !== null && this.#harvest ? html`<gf-lookalikes compact
+            ${id !== null ? html`<gf-lookalikes compact
               .plant=${{ id, scientificName: entry.scientificName, genus: entry.scientificName.split(' ')[0] }}></gf-lookalikes>` : nothing}
             ${fresh && this.#harvest ? html`
               <div class="today">

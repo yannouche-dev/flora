@@ -1,12 +1,13 @@
 // The games around a place (Rencontres, Cueillette prudente, Mosaïque): the pure part of their cards
-// (app/miniapp/kit/cards.js — Cueillette prudente's order, the safety lines of a card's bio, the swipes, the slider of
+// (app/miniapp/kit/cards.js — Cueillette prudente's order and its toxic look-alikes, never a match but recognised to
+// avoid, the safety lines of a card's bio, the swipes, the slider of
 // the distances: a distance between two stops shown between them, its keys from stop to stop), each game's
 // own session and its hand-over from the shared one of before (core/around-sessions.js), and what a mini-app made in
 // Mes plantes, taken away by « Recommencer » (place-model.js#madeBy, withoutMadeBy, tagLegacy; runtime.js#replayItems).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { bio, deckOf, distanceAt, distanceEvents, distanceKey, distanceNear, distLabel, ethnoSentence, harvestOrder, nextDistance, swipe, unswipe } from '../../app/miniapp/kit/cards.js';
+import { avoid, bio, deckOf, distanceAt, distanceEvents, distanceKey, distanceNear, distLabel, ethnoSentence, harvestOrder, nextDistance, swipe, toAvoid, unswipe } from '../../app/miniapp/kit/cards.js';
 import { lookalikesOf } from '../../app/core/lookalikes.js';
 import { UNREAD } from '../../app/core/alerts.js';
 import { keptCtx, forgetPlaces, keptPlace, leftAt, migrateDiscover, clearAroundGames } from '../../app/core/around-sessions.js';
@@ -66,6 +67,28 @@ test('cartes : balayées à droite (match) ou à gauche, reprises ; le paquet sa
   assert.equal(nextDistance(50000), undefined);
   assert.equal(ethnoSentence({ sections: [{ theme: 'names', text: 'Son nom vient du latin ursus, l’ours. Et puis…' }] }), 'Son nom vient du latin ursus, l’ours.');
   assert.equal(ethnoSentence(null), '');
+});
+
+test('Cueillette prudente : un sosie toxique jamais aimé — à droite, reconnu à éviter (compté à part, hors du paquet), repris par ↺', async () => {
+  const cards = await Promise.all(['Allium ursinum', 'Colchicum autumnale', 'Urtica dioica'].map(async n => {
+    const c = card(n);
+    c.confusions = await lookalikesOf(c.plant);
+    return c;
+  }));
+  const [ail, colchique, ortie] = cards;
+  // The toxic side only (the wild garlic is the edible one); a card without its confusions (Rencontres): never.
+  assert.deepEqual(cards.map(toAvoid), [false, true, false]);
+  assert.equal(toAvoid(card('Colchicum autumnale')), false);
+  const id = colchique.plant.id;
+  /** @type {import('../../app/miniapp/kit/cards.js').Swipes} */
+  let s = { matches: [id], passed: [id], avoided: [] };
+  s = avoid(s, id);
+  assert.deepEqual(s, { matches: [], passed: [], avoided: [id] }, 'jamais un match en même temps');
+  assert.deepEqual(deckOf(cards, s), [ail, ortie]);
+  assert.deepEqual(unswipe(s, id), { matches: [], passed: [], avoided: [] });
+  assert.deepEqual(swipe(s, id, false), { matches: [], passed: [id], avoided: [] });
+  // A game that does not keep them (Rencontres, Mosaïque): no key added.
+  assert.deepEqual(unswipe({ matches: [1], passed: [] }, 1), { matches: [], passed: [] });
 });
 
 test('le curseur des distances : une distance entre deux crans montrée entre eux (3 km entre 2 et 5), jamais sur un cran qu’elle n’est pas ; glissé, le cran le plus proche ; au clavier, de cran en cran', () => {

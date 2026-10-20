@@ -46,7 +46,7 @@ import { onStorage } from './sync.js';
  * @property {Record<import('./modules.js').ModuleKey, Record<Mode, boolean>>} modules  online services used in each mode (Réglages › Modules)
  * @property {import('./modes.js').ModeInfo[]} modes  the display modes: the app's three and the ones made from them
  * @property {boolean} kingMode         « Mode King »: the plant sheet blocks can be moved, folded and revived (left with the crown)
- * @property {boolean} harvestMode      "Mode cueillette": harvest log, seasons, look-alike warnings
+ * @property {boolean} harvestMode      "Mode cueillette": harvest log, quality, seasons (look-alike warnings show without it)
  * @property {ShowSteps} showSteps       mini-apps: their steps bar shown until one is finished once (auto), always (on), never (off)
  * @property {import('./collections.js').CollectionSummary[]} collections
  */
