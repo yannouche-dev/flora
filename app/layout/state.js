@@ -33,7 +33,7 @@
 // observations there) is asked once the circle rests (250 ms), the request before cancelled, a late answer for another
 // circle dropped. Pure functions (readLive, liveSearch) are tested under Node; the class needs the app.
 
-import * as db from '../core/db.js';
+import { getPlant, nameOf } from '../core/plants.js';
 import { forgetFailures } from '../core/cache.js';
 import { findPlace } from '../core/geoservices.js';
 import { errorKind } from '../core/net.js';
@@ -523,9 +523,9 @@ export class LayoutState extends EventTarget {
     if (id && this.infoFor !== id) {
       this.infoFor = id;
       await whenReady();
-      const plant = this.live.plant === id ? await db.get('plants', id).catch(() => null) : null;
+      const plant = this.live.plant === id ? await getPlant(id) : null;
       if (this.live.plant !== id) return;
-      this.plantInfo = plant ? { id, name: plant.vernacularNames?.[0] || plant.scientificName, sci: plant.scientificName } : null;
+      this.plantInfo = plant ? { id, name: nameOf(plant), sci: plant.scientificName } : null;
       this.#changed();
     } else if (!id) {
       // None now (Back) while one was still being read: chosen again, it is read again.

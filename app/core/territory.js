@@ -5,6 +5,7 @@
 // Also sorts a plant's INPN statuses into national / here / elsewhere.
 
 import { config } from '../config.js';
+import { bundledJSON } from './bundled.js';
 import { readText, writeText } from './prefs.js';
 
 /**
@@ -14,17 +15,13 @@ import { readText, writeText } from './prefs.js';
  * @typedef {{ type: string, code: string, label: string, area: string, level: string, iso: string }} Status
  */
 
-/** @type {Promise<{ regions: Region[], departments: Department[], country?: { name: string, polygons: number[][][][] } }> | null} */
-let loading = null;
-
-/** The outlines and region table (bundled with the app, cached by the service worker). */
+/**
+ * The outlines and region table (bundled with the app, cached by the service worker); rejects (and is asked again
+ * next time) when the file cannot be read.
+ * @returns {Promise<{ regions: Region[], departments: Department[], country?: { name: string, polygons: number[][][][] } }>}
+ */
 export function territories() {
-  loading ??= fetch(new URL('../../data/territories.json', import.meta.url)).then(r => {
-    if (!r.ok) throw new Error('territories ' + r.status);
-    return r.json();
-  });
-  loading.catch(() => { loading = null; });
-  return loading;
+  return bundledJSON('territories.json');
 }
 
 /** Ray casting. @param {number[][]} ring @param {number} x @param {number} y */

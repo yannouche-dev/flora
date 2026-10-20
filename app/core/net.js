@@ -74,18 +74,9 @@ export function anySignal(signals) {
 
 /**
  * A fetch with a time limit, its failures as SourceError (a cancel by the caller stays an AbortError).
- * @param {string} url
- * @param {{ signal?: AbortSignal, headers?: Record<string, string>, timeout?: number, init?: RequestInit }} [options]
- * @returns {Promise<Response>} an ok response
- */
-export function fetchOk(url, { signal, headers, timeout = TIMEOUT, init } = {}) {
-  return request(url, signal, timeoutSignal(timeout), timeout, { ...init, headers });
-}
-
-/**
  * @param {string} url @param {AbortSignal | undefined} signal the caller's @param {AbortSignal} timer
  * @param {number} timeout @param {RequestInit} init
- * @returns {Promise<Response>}
+ * @returns {Promise<Response>} an ok response
  */
 async function request(url, signal, timer, timeout, init) {
   const source = hostOf(url);

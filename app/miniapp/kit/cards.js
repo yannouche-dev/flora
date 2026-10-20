@@ -8,6 +8,7 @@
 import { UNREAD } from '../../core/alerts.js';
 import { gravest, severityOf } from '../../core/lookalikes.js';
 import { harvestRules } from '../../core/regulation.js';
+import { STOPS as DISTANCES } from '../../core/distance.js';
 
 /**
  * @typedef {{ plant: any, taxonId?: number, count: number, photo: string | null, credit: import('../../core/credit.js').Credit | null,
@@ -15,15 +16,11 @@ import { harvestRules } from '../../core/regulation.js';
  * @typedef {{ matches: number[], passed: number[] }} Swipes
  */
 
-/** How far to look, in metres (iNaturalist searches a circle; beyond 50 km the list is a region's, not « around »). */
-export const DISTANCES = [200, 500, 1000, 2000, 5000, 10000, 20000, 50000];
-/** @param {number} m */
-export const distLabel = m => m >= 1000 ? (m / 1000).toLocaleString('fr-FR') + ' km' : m + ' m';
-/** The distance in words, as a screen reader says it (« 2 kilomètres », « 500 mètres »). @param {number} m */
-export const distWords = m => {
-  const n = m >= 1000 ? m / 1000 : m, unit = m >= 1000 ? 'kilomètre' : 'mètre';
-  return `${n.toLocaleString('fr-FR')} ${unit}${n >= 2 ? 's' : ''}`;
-};
+// How far to look, in metres (iNaturalist searches a circle; beyond 50 km the list is a region's, not « around »), and
+// the distance shown (« 2 km », unrounded: a free layout's may lie between two stops) and in words, as a screen reader
+// says it (« 2 kilomètres », « 500 mètres »): core/distance.js's.
+export { DISTANCES };
+export { radiusLabel as distLabel, radiusWords as distWords } from '../../core/distance.js';
 /** A word for the distance, for fun. @param {number} m */
 export const distMood = m => m <= 200 ? 'Juste devant la porte' : m <= 1000 ? 'Le quartier' : m <= 5000 ? 'Une balade à pied' : m <= 20000 ? 'Un tour à vélo' : 'Toute la région';
 /** The next distance offered past `m` (none past 50 km). @param {number} m */
@@ -95,8 +92,9 @@ export const MONTH = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'ju
 /** The cards shown at first in « Toutes », and each « Voir plus ». */
 export const PAGE = 12;
 
-/** A plant's name: its first common name, else its scientific one. @param {any} plant @returns {string} */
-export const nameOf = plant => plant.vernacularNames?.[0] || plant.scientificName;
+// A plant's name (its first common name, else its scientific one) is core/plants.js's, offered here too: the kit's
+// screens import it from this module, and so do two e2e specs, in the page.
+export { nameOf } from '../../core/plants.js';
 
 /**
  * Cueillette prudente: only the plants of the Anses / Centres antipoison confusions, the deadliest first, then

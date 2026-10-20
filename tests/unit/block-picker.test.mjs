@@ -4,22 +4,24 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { COMPONENTS, resolve } from '../../app/layout/registry.js';
-import { cellChips, groupSummary, textChips, valueLabel, changed } from '../../app/layout/summary.js';
+import { cellChips, groupSummary, valueLabel, changed } from '../../app/layout/summary.js';
 import { cellOf, cellText, choose, cleanWords, controlOf, fitReason, groupsOf, optionsOf, resetSettings, setParam, suggestions, warningOf, withIntent } from '../../app/layout/picker-model.js';
 
 const spec = (/** @type {string} */ id) => /** @type {import('../../app/layout/registry.js').ComponentSpec} */ (COMPONENTS.find(c => c.id === id));
 const known = (/** @type {string} */ text) => /** @type {any} */ (resolve(/** @type {any} */ (cellOf(text))));
+/** A cell written alone (« map(floraison,r=2km) »), its chips. */
+const chips = (/** @type {string} */ text) => cellChips(known(text));
 
 test('une case en quelques mots : son composant, son bloc, son intention, ses réglages écrits', () => {
-  assert.deepEqual(textChips('map(floraison,r=2km)'), ['Carte', 'Floraison du moment', '2 km']);
-  assert.deepEqual(textChips('carte(terrain;base=plan;2d)'), ['Carte', 'Sur le terrain', 'Plan IGN', '2D']);
+  assert.deepEqual(chips('map(floraison,r=2km)'), ['Carte', 'Floraison du moment', '2 km']);
+  assert.deepEqual(chips('carte(terrain;base=plan;2d)'), ['Carte', 'Sur le terrain', 'Plan IGN', '2D']);
   // What the intent gives is the intent's: not said again.
-  assert.deepEqual(textChips('map(floraison,when=mois,regroupe)'), ['Carte', 'Floraison du moment']);
-  assert.deepEqual(textChips('map(layers=znieff+n2000)'), ['Carte', 'ZNIEFF (types I et II) + Natura 2000']);
-  assert.deepEqual(textChips('plant.wikipedia(titre=Article,vide=masque)'), ['Fiche', 'Wikipédia', '« Article »', 'Case masquée']);
-  assert.deepEqual(textChips('results(list,zone=0)'), ['Résultats', 'Liste', 'France']);
-  assert.deepEqual(textChips('search(filters=1,list=0)'), ['Recherche', 'Filtres ouverts', 'sans liste des résultats']);
-  assert.deepEqual(textChips('plant(plante=128268)'), ['Fiche', 'plante n° 128268']);
+  assert.deepEqual(chips('map(floraison,when=mois,regroupe)'), ['Carte', 'Floraison du moment']);
+  assert.deepEqual(chips('map(layers=znieff+n2000)'), ['Carte', 'ZNIEFF (types I et II) + Natura 2000']);
+  assert.deepEqual(chips('plant.wikipedia(titre=Article,vide=masque)'), ['Fiche', 'Wikipédia', '« Article »', 'Case masquée']);
+  assert.deepEqual(chips('results(list,zone=0)'), ['Résultats', 'Liste', 'France']);
+  assert.deepEqual(chips('search(filters=1,list=0)'), ['Recherche', 'Filtres ouverts', 'sans liste des résultats']);
+  assert.deepEqual(chips('plant(plante=128268)'), ['Fiche', 'plante n° 128268']);
   assert.deepEqual(cellChips(resolve(/** @type {any} */ (cellOf('mpa')))), ['mpa', 'inconnu']);
   assert.equal(valueLabel(spec('map').params.r, null), null);
 });

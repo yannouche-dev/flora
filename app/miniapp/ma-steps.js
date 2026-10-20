@@ -6,7 +6,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { followers } from './define.js';
 import { pathTo } from './runtime.js';
-import { fr } from '../components/start-screen.js';
+import { fr } from '../core/fr.js';
 import { icon } from '../core/icons.js';
 import { ui } from '../styles/ui.js';
 

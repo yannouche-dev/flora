@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as G from '../../app/layout/grammar.js';
 import { cellMark, resolve, resolveTree } from '../../app/layout/registry.js';
-import { MAP_CONTROLS, MAP_INTENTS, MAP_LAYERS, catalogLayers, defaultControls, inWhen, mapControls, overlayKeys, snapRadius, uiMode } from '../../app/layout/map-options.js';
+import { MAP_CONTROLS, MAP_INTENTS, MAP_LAYERS, catalogLayers, defaultControls, inWhen, mapControls, overlaysOf, snapRadius, uiMode } from '../../app/layout/map-options.js';
 
 /** A layout typed → its canonical text and what was wrong. @param {string} text */
 function read(text) {
@@ -75,7 +75,7 @@ test('des couches : leurs noms courts et leurs alias, chacune une fois dans l’
     assert.ok(l.keys.length, name);
     for (const k of l.keys) assert.ok(!k.startsWith('ign:') || (l.catalog ?? []).some(c => 'ign:' + c.id === k), `${name} : ${k} au catalogue`);
   }
-  assert.deepEqual(overlayKeys(['znieff', 'znieff1', 'parcs']), ['ign:Patrinat_ZNIEFF1', 'ign:Patrinat_ZNIEFF2', 'parcs']);
+  assert.deepEqual(overlaysOf(['znieff', 'znieff1', 'parcs']), ['ign:Patrinat_ZNIEFF1', 'ign:Patrinat_ZNIEFF2', 'parcs']);
   assert.deepEqual(catalogLayers(['n2000', 'parcs']).map(l => l.id), ['Patrinat_SIC', 'Patrinat_ZPS']);
 });
 

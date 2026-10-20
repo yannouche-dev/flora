@@ -1,6 +1,6 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
-import * as db from '../core/db.js';
+import { getPlant } from '../core/plants.js';
 import { myRegion, sortStatuses, territoryFor } from '../core/territory.js';
 import { harvestRules, tradeRules } from '../core/regulation.js';
 import { ui } from '../styles/ui.js';
@@ -107,7 +107,7 @@ export class GfStatus extends LitElement {
   async #loadPlant() {
     if (this.plant?.statuses || !this.plantId) { this._plant = this.plant; return; }
     this._plant = this.plant;
-    const record = await db.get('plants', this.plantId).catch(() => null);
+    const record = await getPlant(this.plantId);
     if (record && (record.id === this.plantId)) this._plant = record;
   }
 

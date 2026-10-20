@@ -4,7 +4,7 @@
 // leads anywhere. Kept, minimal: the credits a licence asks for — a licence link (rel="license": gf-attribution's
 // « CC BY-SA 4.0 »), the author's page when the record names no author (rel="author"), the links of a credit line
 // (`.credit`: « Source : GBIF.org », « D’après Wikipédia ») and of the map's attribution (IGN, the photos' sources) —;
-// and, for safety, the poison centres' official list and the emergency numbers (`.sos`, gf-lookalikes.js#emergency).
+// and, for safety, the poison centres' official list and the emergency numbers (`.sos`, core/poison.js#emergency).
 // One watcher over the mini-app's box (gf-miniapp), through every shadow root under it, as they render; a click
 // on what would still lead out is stopped too. Outside the mini-apps nothing changes.
 

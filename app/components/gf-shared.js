@@ -1,6 +1,6 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
-import * as db from '../core/db.js';
+import { getPlants, nameOf } from '../core/plants.js';
 import { href } from '../core/router.js';
 import { importPortable, lastEntry, newCollection, newPlace, plantCount, saveCollection, withEntry, withPlant } from '../core/collections.js';
 import { FAVORITES_ID } from '../core/place-model.js';
@@ -95,7 +95,7 @@ export class GfShared extends LitElement {
       await whenReady();
       // One record per plant; the shared rows (occurrences) refer to them.
       const ids = [...new Set(shared.plants.map(p => p.plantId))];
-      const records = (await Promise.all(ids.map(id => db.get('plants', id)))).filter(Boolean);
+      const records = await getPlants(ids);
       this._plants = records;
       this._shared = shared;
       document.title = (shared.name || 'Collection partagée') + ' — GeoFlora';
@@ -181,7 +181,7 @@ export class GfShared extends LitElement {
       return {
         key: 'shared:s' + i, placeId: 'shared', entryId: 's' + i, plantId: r.plantId, sci: plant?.scientificName,
         coordinates: r.coordinates || origin, own: Boolean(r.coordinates), abundance: r.abundance || 'moyen',
-        label: plant?.vernacularNames?.[0] || plant?.scientificName || 'Plante', season: false
+        label: nameOf(plant) || 'Plante', season: false
       };
     });
     const points = [origin, ...plants.map(m => m.coordinates)];
@@ -219,7 +219,7 @@ export class GfShared extends LitElement {
           ${this._plants.map(plant => html`
             <li><a href=${href.plant(plant.id)}>
               <gf-thumb .plant=${plant} size="44"></gf-thumb>
-              <span class="nm">${plant.vernacularNames?.[0] || plant.scientificName}${(times.get(plant.id) || 0) > 1 ? html` <small class="times">× ${times.get(plant.id)}</small>` : nothing}</span>
+              <span class="nm">${nameOf(plant)}${(times.get(plant.id) || 0) > 1 ? html` <small class="times">× ${times.get(plant.id)}</small>` : nothing}</span>
               <span class="sci">${plant.scientificName}</span>
             </a></li>`)}
         </ul>

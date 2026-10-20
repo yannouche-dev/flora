@@ -11,8 +11,7 @@
 //    that way (the place's share halved), else the place made a list of two in that direction (half each) — the new
 //    place an « Emplacement » (`slot`), the one cut keeping its cell; never past MAX_CELLS nor MAX_DEPTH;
 //  - remove: a place taken out (its share given to its neighbour, the others as they were); a list left with one box
-//    gives way to it;
-//  - resize: width or height moved from one box of a list to the next, the list's total kept.
+//    gives way to it.
 
 import { parse, dirAt, MAX_CELLS, MAX_DEPTH } from './grammar.js';
 import { canonical } from './registry.js';
@@ -20,9 +19,6 @@ import { cellText } from './picker-model.js';
 
 /** @typedef {{ share: number, kids?: Box[], cell?: string }} Box  `cell`: its cell as the address writes it (no share); none: an « Emplacement » (slot) */
 /** @typedef {'top' | 'bottom' | 'left' | 'right'} Side */
-
-/** A box's least share of its list (%). */
-export const MIN_SHARE = 8;
 
 /** The name of an « Emplacement » (registry.js `slot`). */
 export const SLOT = 'slot';
@@ -148,24 +144,3 @@ function collapse(root, path) {
   else kids.splice(i, 1, ...only.kids.map(k => ({ ...k, share: k.share * list.share / 100 })));
   return root;
 }
-
-/**
- * Width or height moved from box i - 1 to box i of the list at `path` (in shares of that list); each kept at
- * MIN_SHARE at least. Returns the same grid when nothing moves.
- * @param {Box} root @param {number[]} path @param {number} i @param {number} delta @returns {Box}
- */
-export function resize(root, path, i, delta) {
-  const list = at(root, path);
-  if (!list?.kids || i < 1 || i >= list.kids.length) return root;
-  const a = list.kids[i - 1], b = list.kids[i];
-  const pair = a.share + b.share;
-  const was = a.share;
-  const now = Math.min(pair - MIN_SHARE, Math.max(MIN_SHARE, was + delta));
-  if (Math.abs(now - was) < 1e-9) return root;
-  const next = copy(root);
-  const kids = /** @type {Box[]} */ (/** @type {Box} */ (at(next, path)).kids);
-  kids[i - 1].share = now;
-  kids[i].share = pair - now;
-  return next;
-}
-

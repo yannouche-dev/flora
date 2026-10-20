@@ -1,8 +1,9 @@
 // Loaded before the unit tests (node --import, package.json « test:unit »): the app's modules are browser modules,
 // so Node gets the little of a browser they touch while loading — history and location (core/history.js), a Worker
 // (core/search.js), localStorage (core/store.js), and a 'leaflet' resolved to a stub (core/ign.js extends
-// L.TileLayer when loaded) — and a fetch that reads the repository's files for file: URLs (core/lookalikes.js fetches
-// data/lookalikes.json next to the module). Nothing here is under test: the tests only import modules through it.
+// L.TileLayer when loaded) — and a fetch that reads the repository's files for file: URLs (core/bundled.js fetches
+// data/lookalikes.json, for core/lookalikes.js, next to the module). Nothing here is under test: the tests only import
+// modules through it.
 
 import { register } from 'node:module';
 import { readFile } from 'node:fs/promises';

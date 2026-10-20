@@ -241,31 +241,13 @@ test('aller-retour : parse(serialize(t)) redonne t, pour 300 dispositions tirée
   }
 });
 
-test('l’éditeur : une cellule à côté ou dessous, retirée, déplacée ; les bornes tenues', () => {
-  let t = G.parse('[map,search]').tree;
-  t = G.splitAt(t, [1], 'col', G.cell('plant'));
-  assert.equal(G.serialize(t), '[map,[search,plant]]', 'dessous : la colonne devient deux lignes');
-  t = G.splitAt(t, [1, 1], 'col', G.cell('media'));
-  assert.equal(G.serialize(t), '[map,[search,plant,media]]', 'dessous dans une colonne : une ligne de plus');
-  t = G.splitAt(t, [1, 1], 'row', G.cell('deck'));
-  assert.equal(G.serialize(t), '[map,[search,[plant,deck],media]]', 'à côté dans une colonne : la ligne coupée en deux');
-  t = G.splitAt(t, [0], 'row', G.cell('place'));
-  assert.equal(G.serialize(t), '[map,place,[search,[plant,deck],media]]');
+test('l’éditeur : une cellule déplacée, remplacée', () => {
+  let t = G.parse('[map,place,[search,deck,media]]').tree;
   t = G.moveAt(t, [1], -1);
-  assert.equal(G.serialize(t), '[place,map,[search,[plant,deck],media]]');
+  assert.equal(G.serialize(t), '[place,map,[search,deck,media]]');
   assert.equal(G.serialize(G.moveAt(t, [0], -1)), G.serialize(t), 'rien avant la première');
-  t = G.removeAt(t, [2, 1, 0]);
-  assert.equal(G.serialize(t), '[place,map,[search,deck,media]]', 'une ligne d’une seule cellule devient la cellule');
   t = G.replaceAt(t, [2, 1], G.cell('plant', 'wikipedia'));
   assert.equal(G.serialize(t), '[place,map,[search,plant.wikipedia,media]]');
-  // A shared share is halved.
-  assert.equal(G.serialize(G.splitAt(G.parse('[map@60,search@40]').tree, [0], 'row', G.cell('plant'))), '[map@30,plant@30,search@40]');
-  // Bounds: no cell past MAX_CELLS, no list past MAX_DEPTH.
-  const full = G.parse(Array.from({ length: G.MAX_CELLS }, () => 'map').join(',')).tree;
-  assert.equal(G.splitAt(full, [0], 'row', G.cell('plant')), full);
-  const deep = G.parse('[a,[b,[c,[d,e]]]]').tree;
-  assert.equal(G.splitAt(deep, [1, 1, 1, 0], 'row', G.cell('f')), deep);
-  assert.deepEqual(G.cells(G.removeAt(G.parse('[map]').tree, [0])), []);
 });
 
 test('l’état dans l’adresse : plante, zone, observation, recherche — lus et écrits, le reste ignoré', () => {

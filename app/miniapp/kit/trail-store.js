@@ -5,7 +5,7 @@
 // (tests/unit/trail.test.mjs). A walk itself is a place of Mes plantes (core/collections.js).
 
 import { config } from '../../config.js';
-import { distance } from '../../core/collections.js';
+import { metres as distance } from '../../core/distance.js';
 import { readJSON } from '../../core/prefs.js';
 import { altitudeOf, profileOf } from '../../core/altitude.js';
 import { walkOf } from '../../core/walk.js';

@@ -1,7 +1,7 @@
-// app/core/walk.js: a parcours as a walk (the recap's distance and profile, the « Vue 3D »'s line) and its framing.
+// app/core/walk.js: a parcours as a walk (the recap's distance and profile, the « Vue 3D »'s line).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boundsOf, byAddedAt, fitPadding, walkOf } from '../../app/core/walk.js';
+import { byAddedAt, walkOf } from '../../app/core/walk.js';
 
 const at = /** @type {[number, number]} */ ([6.8925, 45.972]);
 /** A parcours: its point, and plants given in another order than they were added. */
@@ -48,37 +48,4 @@ test('un lieu sans point (une liste) : pas de départ, pas de trait sans positio
   const w = walkOf(/** @type {any} */ ({ geometry: null, properties: { startedHere: true, plants: [{ id: 'x', addedAt: '1' }] } }));
   assert.equal(w.start, null);
   assert.deepEqual(w.line, []);
-});
-
-test('le cadre : la boîte des points', () => {
-  const b = boundsOf([[6.8952, 45.9741], [6.9013, 45.9789], [6.8925, 45.972]]);
-  assert.deepEqual(b, [[6.8925, 45.972], [6.9013, 45.9789]]);
-});
-
-test('le cadre : au moins 300 m de côté autour d’un seul point (ou de points voisins)', () => {
-  const b = /** @type {[[number, number], [number, number]]} */ (boundsOf([at]));
-  const metresNS = (b[1][1] - b[0][1]) * 111_320;
-  const metresEW = (b[1][0] - b[0][0]) * 111_320 * Math.cos(at[1] * Math.PI / 180);
-  assert.ok(Math.abs(metresNS - 300) < 0.5, `nord-sud ${metresNS}`);
-  assert.ok(Math.abs(metresEW - 300) < 0.5, `est-ouest ${metresEW}`);
-  // Centred on the point.
-  assert.ok(Math.abs((b[0][0] + b[1][0]) / 2 - at[0]) < 1e-12 && Math.abs((b[0][1] + b[1][1]) / 2 - at[1]) < 1e-12);
-  // A larger minimum, asked.
-  const wide = /** @type {[[number, number], [number, number]]} */ (boundsOf([at], 1000));
-  assert.ok(Math.abs((wide[1][1] - wide[0][1]) * 111_320 - 1000) < 0.5);
-});
-
-test('le cadre : les points invalides ignorés, aucun point → null', () => {
-  assert.equal(boundsOf([]), null);
-  assert.equal(boundsOf(/** @type {any} */ ([null, [NaN, 1]])), null);
-  assert.deepEqual(boundsOf(/** @type {any} */ ([null, [2, 48], [2.1, 48.1]])), [[2, 48], [2.1, 48.1]]);
-});
-
-test('les marges du cadre : un huitième de chaque côté, entre 24 et 80 px, plus en haut incliné', () => {
-  assert.deepEqual(fitPadding(1280, 840), { top: 80, bottom: 80, left: 80, right: 80 });
-  assert.deepEqual(fitPadding(390, 780), { top: 80, bottom: 80, left: 49, right: 49 });
-  assert.deepEqual(fitPadding(160, 120), { top: 24, bottom: 24, left: 24, right: 24 });
-  const tilted = fitPadding(390, 300, true);
-  assert.ok(tilted.top > fitPadding(390, 300).top, 'incliné : plus de place en haut');
-  assert.equal(tilted.top, 60);
 });

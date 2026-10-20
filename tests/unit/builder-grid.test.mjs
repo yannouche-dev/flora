@@ -1,9 +1,9 @@
 // A free layout as boxes (app/layout/builder-grid.js, the cross of « Modifier la disposition »): read from and written
 // to a layout, cut towards a side,
-// a place taken out, a share moved — any cell kept as the address writes it, an empty place (`slot`) new.
+// a place taken out — any cell kept as the address writes it, an empty place (`slot`) new.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { boxOf, specOf, split, remove, resize, canSplit, placesOf, MIN_SHARE } from '../../app/layout/builder-grid.js';
+import { boxOf, specOf, split, remove, canSplit, placesOf } from '../../app/layout/builder-grid.js';
 import { GRIDS } from '../../app/layout/gf-builder-grids.js';
 
 test('les trois grilles : lues, chaque part dite, réécrites telles quelles', () => {
@@ -65,14 +65,7 @@ test('retirer : sa part au voisin ; une liste d’une seule place lui cède la s
   assert.equal(remove(one, [0]), one);
 });
 
-test('régler : la part passe d’une boîte à la suivante, le total gardé, jamais sous le minimum', () => {
-  const g = /** @type {any} */ (boxOf('[slot@30,slot@30,slot@40]'));
-  assert.equal(specOf(resize(g, [], 1, 10)), '[slot@40,slot@20,slot@40]');
-  assert.equal(specOf(resize(g, [], 1, 100)), `[slot@${60 - MIN_SHARE},slot@${MIN_SHARE},slot@40]`);
-  assert.equal(resize(g, [], 0, 10), g);
-});
-
-test('une place remplie : lue et réécrite sous sa forme canonique, gardée quand on coupe, retire ou règle', () => {
+test('une place remplie : lue et réécrite sous sa forme canonique, gardée quand on coupe ou retire', () => {
   const g = /** @type {any} */ (boxOf('[slot@30,carte(floraison;rayon=2km)@35,[slot,fiche:wiki]]'));
   assert.ok(g);
   assert.equal(specOf(g), '[slot@30,map(floraison,r=2km)@35,[slot,plant.wikipedia]@35]');
@@ -86,5 +79,4 @@ test('une place remplie : lue et réécrite sous sa forme canonique, gardée qua
   assert.equal(specOf(split(g, [1], 'right').root), '[slot@30,map(floraison,r=2km)@18,slot@18,[slot,plant.wikipedia]@35]');
   // A list left with one filled place: the place, its cell kept.
   assert.equal(specOf(remove(g, [2, 0])), '[slot@30,map(floraison,r=2km)@35,plant.wikipedia@35]');
-  assert.equal(specOf(resize(g, [], 1, 5)), '[slot@35,map(floraison,r=2km)@30,[slot,plant.wikipedia]@35]');
 });

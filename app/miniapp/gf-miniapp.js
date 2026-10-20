@@ -26,7 +26,8 @@ import { plantViewOf, setHarvestMode, setMode, setShowSteps, StoreController } f
 import { subscribe } from '../core/sync.js';
 import { icon } from '../core/icons.js';
 import { ui } from '../styles/ui.js';
-import { startScreen, startStyles, fr } from '../components/start-screen.js';
+import { startScreen, startStyles } from '../components/start-screen.js';
+import { fr } from '../core/fr.js';
 import '../components/gf-scenarios.js';
 import { miniApp } from '../miniapps/index.js';
 import { madeByApp } from '../core/collections.js';

@@ -1,11 +1,12 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import * as db from '../core/db.js';
+import { commonOf, getPlant, nameOf } from '../core/plants.js';
 import { GeoController } from '../core/geo.js';
 import { href } from '../core/router.js';
 import {
-  FAVORITES_ID, collectionTitle, discardMissingBackup, distance, exportGeoJSON, formatDistance, inSeason, lastExportDate,
-  listCollections, missingFromBackup, plantCount, plantMarkers, restoreBackup, soon, spotEvents, findEntry } from '../core/collections.js';
+  FAVORITES_ID, discardMissingBackup, distance, exportGeoJSON, formatDistance, inSeason, lastExportDate,
+  listCollections, missingFromBackup, placeTitle, plantCount, plantMarkers, restoreBackup, soon, spotEvents, findEntry } from '../core/collections.js';
 import { config } from '../config.js';
 import { StoreController, plantViewOf, whenReady } from '../core/store.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
@@ -254,7 +255,7 @@ export class GfCollections extends LitElement {
   /** @param {import('../core/collections.js').Collection} c @param {string | null} side */
   #row(c, side) {
     const p = c.properties;
-    const title = collectionTitle(c);
+    const title = placeTitle(c);
     const has = p.plantIds.length > 0;
     const isPlace = p.kind === 'place' && Boolean(c.geometry);
     const open = has && this._open.has(c.id);
@@ -352,7 +353,7 @@ export class GfCollections extends LitElement {
     if (ids.length < 2) return nothing;
     if (ids.some(id => !this._plants.has(id))) queueMicrotask(() => this.#loadPlantsOf(ids));
     const plant = (/** @type {number | undefined} */ id) => { const p = id === undefined ? null : this._plants.get(id); return p ? { name: p.name } : id === undefined ? null : { name: '…' }; };
-    return html`<gf-pager ?simple=${simple} .index=${i} .total=${ids.length} source=${collectionTitle(c)}
+    return html`<gf-pager ?simple=${simple} .index=${i} .total=${ids.length} source=${placeTitle(c)}
       .prev=${plant(ids[i - 1])} .next=${plant(ids[i + 1])}
       @page=${(/** @type {CustomEvent} */ e) => { openView(href.collections({ open: this.route.open || c.id, plant: ids[e.detail.index] })); }}></gf-pager>`;
   }
@@ -378,8 +379,8 @@ export class GfCollections extends LitElement {
     await whenReady();
     const plants = new Map(this._plants);
     await Promise.all(missing.map(async id => {
-      const plant = await db.get('plants', id).catch(() => null);
-      plants.set(id, plant ? { name: plant.vernacularNames?.[0] || plant.scientificName, sci: plant.vernacularNames?.[0] ? plant.scientificName : '', thumb: plant.thumbnail?.url || null } : null);
+      const plant = await getPlant(id);
+      plants.set(id, plant ? { name: nameOf(plant), sci: commonOf(plant) ? plant.scientificName : '', thumb: plant.thumbnail?.url || null } : null);
     }));
     this.#loadingPager = false;
     this._plants = plants;
@@ -405,8 +406,8 @@ export class GfCollections extends LitElement {
     await whenReady();
     const plants = new Map(this._plants);
     await Promise.all(missing.map(async id => {
-      const plant = await db.get('plants', id).catch(() => null);
-      plants.set(id, plant ? { name: plant.vernacularNames?.[0] || plant.scientificName, sci: plant.vernacularNames?.[0] ? plant.scientificName : '', thumb: plant.thumbnail?.url || null } : null);
+      const plant = await getPlant(id);
+      plants.set(id, plant ? { name: nameOf(plant), sci: commonOf(plant) ? plant.scientificName : '', thumb: plant.thumbnail?.url || null } : null);
     }));
     this._plants = plants;
   }
@@ -415,7 +416,7 @@ export class GfCollections extends LitElement {
   async #share(c) {
     const p = c.properties;
     if (p.kind === 'place' && !confirm('Le lien contiendra la position exacte de ce lieu. Partager ?')) return;
-    const title = collectionTitle(c);
+    const title = placeTitle(c);
     const result = await share({ title: title + ' — GeoFlora', text: `${title} · ${plantCount(p.plants.length)}`, url: href.shared(await encodeCollection(c)) });
     if (result !== 'copied') return;
     this._shareNote = { id: c.id, text: 'Lien copié.' };
@@ -470,7 +471,7 @@ export class GfCollections extends LitElement {
       ${missing.length ? html`
         <div class="notice card restore" role="alert">
           <p><strong>${missing.length} collection${missing.length > 1 ? 's' : ''} retrouvée${missing.length > 1 ? 's' : ''} dans la copie de secours</strong>
-            de cet appareil : ${missing.slice(0, 4).map(c => collectionTitle(c)).join(', ')}${missing.length > 4 ? '…' : ''}.</p>
+            de cet appareil : ${missing.slice(0, 4).map(c => placeTitle(c)).join(', ')}${missing.length > 4 ? '…' : ''}.</p>
           <div class="row actions">
             <button class="primary" type="button" ?disabled=${this._busy} @click=${this.#restore}>Restaurer</button>
             <button class="link muted" type="button" @click=${this.#discard}>Oublier</button>
@@ -603,7 +604,7 @@ export class GfCollections extends LitElement {
             <div class="pane-body"><p class="hint">${icon('collection')} Touchez un endroit pour voir sa carte, une plante pour sa fiche : elles s’ouvrent ici.</p></div>
           </section>` : nothing}
           ${place ? (mapFolded ? p.rail('map') : html`<section class="pane map-pane" aria-label="Carte du lieu">
-            ${p.head('map', collectionTitle(place), html`
+            ${p.head('map', placeTitle(place), html`
               <a class="icon-btn" href=${href.map({ spot: place.id })} title="Ouvrir sur la Carte" aria-label="Ouvrir sur la Carte">${icon('arrows-angle-expand')}</a>
               <button class="icon-btn" type="button" title="Fermer la carte" aria-label="Fermer la carte"
                 @click=${() => replaceView(href.collections({ plant: plantId }))}>${icon('x-lg')}</button>`)}

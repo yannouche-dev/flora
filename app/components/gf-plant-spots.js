@@ -1,7 +1,7 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { href } from '../core/router.js';
-import { collectionsForPlant, collectionTitle, plantMarkers, entryInSeason, findEntry, lastHarvest, plantCount, spotEvents, updatePlace, withEntry } from '../core/collections.js';
+import { collectionsForPlant, placeTitle, plantMarkers, entryInSeason, findEntry, lastHarvest, plantCount, spotEvents, updatePlace, withEntry } from '../core/collections.js';
 import { StoreController } from '../core/store.js';
 import './gf-map.js';
 import { ui } from '../styles/ui.js';
@@ -120,7 +120,7 @@ export class GfPlantSpots extends LitElement {
         <a class="primary add" href=${href.newSpot(this.plantId)}>${icon('geo-alt-fill')} Ajouter un lieu</a>
       </div>
       ${lists.length ? html`<div class="chips">${lists.map(c => html`
-        <a class="button chip" href=${href.spot(c.id)}>${kindIcon(c.properties.kind)} ${collectionTitle(c)}</a>`)}</div>` : nothing}
+        <a class="button chip" href=${href.spot(c.id)}>${kindIcon(c.properties.kind)} ${placeTitle(c)}</a>`)}</div>` : nothing}
       ${this._error ? html`<p role="alert">${this._error} <button type="button" @click=${() => this.#load()}>Réessayer</button></p>` : nothing}
       ${spots.length ? html`
         <gf-map

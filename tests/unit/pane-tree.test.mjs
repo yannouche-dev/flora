@@ -8,6 +8,8 @@ import { random } from './support/random.mjs';
 /** The panes in their narrow-screen order: 'sheet', or a stack's tabs joined. @param {T.PaneNode} tree */
 const panes = tree => T.leaves(tree).map(n => n.t === 'stack' ? n.tabs.join('+') : 'sheet');
 const depth = (/** @type {any} */ n) => n.t === 'split' ? 1 + Math.max(...n.kids.map(depth)) : 0;
+/** The blocks in stacks. @param {T.PaneNode} tree */
+const stacked = tree => new Set(T.leaves(tree).flatMap(n => n.t === 'stack' ? n.tabs : []));
 
 test('dock à droite de la fiche : une ligne [fiche, volet], parts 58/42', () => {
   const tree = T.dock(T.SHEET, 'map', 'sheet', 'right');
@@ -83,7 +85,7 @@ test('TEST-6 / GAP3-10 : des volets imbriqués en alternance s’arrêtent avant
   });
   assert.ok(refused > 0, 'le 7e volet imbriqué est refusé');
   assert.equal(depth(tree), 6);
-  assert.equal(T.stacked(tree).size, keys.length - refused, 'un volet refusé laisse le bloc dans la fiche');
+  assert.equal(stacked(tree).size, keys.length - refused, 'un volet refusé laisse le bloc dans la fiche');
 });
 
 test('propriété : 400 suites aléatoires de dock/undock gardent un arbre valide, sans bloc perdu ni dupliqué', () => {
@@ -107,7 +109,7 @@ test('propriété : 400 suites aléatoires de dock/undock gardent un arbre valid
       const tabs = T.leaves(tree).flatMap(n => n.t === 'stack' ? n.tabs : []);
       assert.equal(tabs.length, new Set(tabs).size, `run ${run} step ${step} : bloc dupliqué`);
     }
-    assert.deepEqual([...T.stacked(tree)].sort(), [...docked].sort(), `run ${run} : blocs empilés ≠ blocs attendus`);
+    assert.deepEqual([...stacked(tree)].sort(), [...docked].sort(), `run ${run} : blocs empilés ≠ blocs attendus`);
   }
 });
 

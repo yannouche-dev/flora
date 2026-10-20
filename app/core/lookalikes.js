@@ -4,6 +4,7 @@
 // Bundled with the app (precached): the warning must work offline, where the picking happens.
 // A file that cannot be read is an error, never « no confusion »: callers say the list is unavailable.
 
+import { bundledJSON } from './bundled.js';
 import * as db from './db.js';
 
 /**
@@ -36,18 +37,12 @@ export const gravest = list => list.reduce((worst, l) => severityOf(l.pair).rank
 /** « (mortel) », « (très toxique) » after a name; nothing for « toxique ». @param {Pair} pair */
 export const severityNote = pair => severityOf(pair).rank > 0 ? ` (${severityOf(pair).tag})` : '';
 
-/** @type {Promise<{ sources: Record<string, Source>, pairs: Pair[] }> | null} */
-let loading = null;
-
-/** The look-alikes file; rejects (and is asked again next time) when it cannot be read or has no pairs. */
+/**
+ * The look-alikes file; rejects (and is asked again next time) when it cannot be read or has no pairs.
+ * @returns {Promise<{ sources: Record<string, Source>, pairs: Pair[] }>}
+ */
 export function lookalikeData() {
-  loading ??= fetch(new URL('../../data/lookalikes.json', import.meta.url)).then(async r => {
-    if (!r.ok) throw new Error('lookalikes ' + r.status);
-    const data = await r.json();
-    if (!Array.isArray(data?.pairs) || !data.pairs.length) throw new Error('lookalikes: no pairs');
-    return data;
-  }).catch(error => { loading = null; throw error; });
-  return loading;
+  return bundledJSON('lookalikes.json', { check: d => Array.isArray(d?.pairs) && d.pairs.length ? null : 'no pairs' });
 }
 
 /**

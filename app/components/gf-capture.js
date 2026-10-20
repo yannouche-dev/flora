@@ -2,17 +2,18 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { config } from '../config.js';
 import * as db from '../core/db.js';
+import { getPlant, getPlants, nameOf } from '../core/plants.js';
 import { watchLocation } from '../core/geo.js';
 import { href } from '../core/router.js';
 import { openModal } from '../core/history.js';
 import {
-  deleteCollection, distance, listPlaces, nearbyPlaces, newPlace, placeTitle, recentPlants, rememberPlant,
+  deletePlace, distance, listPlaces, nearbyPlaces, newPlace, placeTitle, recentPlants, rememberPlant,
   saveCollection, updatePlace, withEntry, withPlant, withoutPlant, entriesOf, lastEntry } from '../core/collections.js';
 import { store, StoreController } from '../core/store.js';
 import { lookalikeWarning } from '../core/lookalikes.js';
 import { harvestRisk } from '../core/alerts.js';
 import { statusWarning } from './gf-status.js';
-import { emergency } from './gf-lookalikes.js';
+import { emergency } from '../core/poison.js';
 import { ui } from '../styles/ui.js';
 import './gf-thumb.js';
 import './gf-voice-button.js';
@@ -191,8 +192,6 @@ export class GfCapture extends LitElement {
   }
 
   async #loadSuggestions() {
-    const plantsById = async (/** @type {number[]} */ ids) =>
-      (await Promise.all(ids.map(id => db.get('plants', id)))).filter(Boolean);
     try {
       /** @type {Map<number, { plant: any, d: number }>} */
       const around = new Map();
@@ -214,9 +213,9 @@ export class GfCapture extends LitElement {
       favoriteIds.forEach(id => shown.add(id));
       const recentIds = recentPlants().filter(id => !shown.has(id)).slice(0, 8);
       this._suggest = {
-        around: (await plantsById(aroundIds)).map(p => ({ ...p, d: around.get(p.id)?.d })),
-        favorites: await plantsById(favoriteIds),
-        recent: await plantsById(recentIds)
+        around: (await getPlants(aroundIds)).map(p => ({ ...p, d: around.get(p.id)?.d })),
+        favorites: await getPlants(favoriteIds),
+        recent: await getPlants(recentIds)
       };
     } catch (error) {
       console.error(error);
@@ -290,9 +289,9 @@ export class GfCapture extends LitElement {
       rememberPlant(plant.id);
       this.#close();
 
-      const name = plant.vernacularNames?.[0] || plant.scientificName;
+      const name = nameOf(plant);
       // Protected or regulated where it was just noted: say so right away (INPN statuses).
-      const record = plant.statuses ? plant : await db.get('plants', plant.id).catch(() => null);
+      const record = plant.statuses ? plant : await getPlant(plant.id);
       const warning = await statusWarning(record, fix.coordinates);
       // Mode cueillette: the plants it can be mistaken for (Anses / Centres antipoison).
       const lookalike = this.#store.state.harvestMode ? await lookalikeWarning(plant) : null;
@@ -304,7 +303,7 @@ export class GfCapture extends LitElement {
         details: href.spot(saved.id),
         undo: async () => {
           // Only this note undone (the place's other changes since stay).
-          if (!before) await deleteCollection(saved.id);
+          if (!before) await deletePlace(saved.id);
           else if (did.entry) await updatePlace(before.id, current => withoutPlant(current, /** @type {string} */ (did.entry)));
           else if (did.harvestOn) {
             const id = did.harvestOn;
@@ -357,7 +356,7 @@ export class GfCapture extends LitElement {
     return html`<h3 class="kicker">${title}</h3><div class="chips">${plants.map(p => html`
       <button type="button" ?disabled=${!this._fix || this._busy} @click=${() => this.#capture(p)}>
         <gf-thumb .plant=${p} size="30" round></gf-thumb>
-        ${p.vernacularNames?.[0] || p.scientificName}${p.d !== undefined ? html` <small>· ${Math.round(p.d)} m</small>` : nothing}
+        ${nameOf(p)}${p.d !== undefined ? html` <small>· ${Math.round(p.d)} m</small>` : nothing}
       </button>`)}</div>`;
   }
 
@@ -367,7 +366,7 @@ export class GfCapture extends LitElement {
    */
   #warning() {
     const c = /** @type {NonNullable<GfCapture['_confirm']>} */ (this._confirm);
-    const name = c.plant.vernacularNames?.[0] || c.plant.scientificName;
+    const name = nameOf(c.plant);
     const title = c.risk.unread && c.risk.reasons.length === 1 ? 'Toxicité inconnue pour le moment : récolte déconseillée' : 'Plante toxique : récolte déconseillée';
     return html`<section class="danger" role="alertdialog" aria-labelledby="harvest-warning" aria-describedby="harvest-reasons">
       <h3 id="harvest-warning">${icon('exclamation-octagon-fill')} ${title}</h3>

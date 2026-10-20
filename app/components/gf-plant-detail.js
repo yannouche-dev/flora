@@ -2,11 +2,12 @@
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { STATUS_LABELS } from '../config.js';
 import * as db from '../core/db.js';
+import { commonOf, nameOf } from '../core/plants.js';
 import { lastSearchHash } from '../core/query.js';
 import { StoreController, whenReady } from '../core/store.js';
 import { formatDistance, getMembership, promoteFavorite, setInCollection, toggleFavorite } from '../core/collections.js';
 import { context } from '../core/context.js';
-import { lastFix, watchLocation } from '../core/geo.js';
+import { lastFix, oneFix } from '../core/geo.js';
 import { savedRadius } from '../core/nearby.js';
 import { href } from '../core/router.js';
 import { share } from '../core/share.js';
@@ -17,7 +18,8 @@ import './gf-attribution.js';
 import './gf-plant-spots.js';
 import './gf-calendar.js';
 import './gf-status.js';
-import { emergency } from './gf-lookalikes.js';
+import './gf-lookalikes.js';
+import { emergency } from '../core/poison.js';
 import './gf-add-to.js';
 import './gf-sheet-map.js';
 import { OVERLAYS } from '../core/ign.js';
@@ -239,30 +241,6 @@ const percent = (n, total) => total ? (n / total * 100).toLocaleString('fr-FR', 
 let nearAllowed = false;
 /** My position used for pollen and climate once in this visit: later sheets show them without asking. */
 let hereAllowed = false;
-
-/**
- * One GPS fix, or why there is none (20 s at most).
- * @returns {Promise<{ coordinates: [number, number], timestamp: number } | { error: string } | null>}
- */
-function oneFix() {
-  return new Promise(resolve => {
-    /** @type {(() => void) | null} */ let stop = null;
-    let done = false;
-    const finish = (/** @type {any} */ value) => {
-      if (done) return;
-      done = true;
-      clearTimeout(timer);
-      // The watch calls back synchronously once before `stop` is known.
-      queueMicrotask(() => stop?.());
-      resolve(value);
-    };
-    const timer = setTimeout(() => finish(null), 20000);
-    stop = watchLocation(state => {
-      if (state.fix && Date.now() - state.fix.timestamp < 5 * 60000) finish(state.fix);
-      else if (state.error) finish({ error: state.error });
-    });
-  });
-}
 
 /** Kinds of GBIF records, in French. */
 const BASIS_LABELS = {
@@ -1212,7 +1190,7 @@ export class GfPlantDetail extends LitElement {
     let host = this;
     while (host && host.nodeName !== 'GF-LAYOUT') { const root = host.getRootNode(); host = root instanceof ShadowRoot ? root.host : null; }
     if (/** @type {any} */ (host)?.pageTitle) return;
-    if (!this.preview && !this.only && plant && !plant.failed) document.title = (plant.vernacularNames?.[0] || plant.scientificName) + ' — GeoFlora';
+    if (!this.preview && !this.only && plant && !plant.failed) document.title = nameOf(plant) + ' — GeoFlora';
   }
 
   /** @param {number} id */
@@ -1392,7 +1370,7 @@ export class GfPlantDetail extends LitElement {
         if (usesQid && moduleOn('wikidata', v)) settle(usesData.wikidataUses(usesQid, signal, v), x => putOpen('wdUses', x), 'uses:wikidata'); else putOpen('wdUses', null);
       }
       if (!isSubHidden(v, 'uses', 'kitchen') && once('uses:recipes')) {
-        if (moduleOn('wikibooks', v)) settle(usesData.recipes({ french: plant.vernacularNames?.[0] || null, latin: plant.scientificName }, signal), x => putOpen('recipes', x), 'uses:recipes');
+        if (moduleOn('wikibooks', v)) settle(usesData.recipes({ french: commonOf(plant), latin: plant.scientificName }, signal), x => putOpen('recipes', x), 'uses:recipes');
         else putOpen('recipes', null);
       }
     }
@@ -1429,7 +1407,9 @@ export class GfPlantDetail extends LitElement {
     hereAllowed = true;
     this._open = { ...this._open, here: { state: 'locating' } };
     const known = lastFix();
-    const fix = known && Date.now() - known.timestamp < 30 * 60000 ? known : await oneFix();
+    // A fix of the last half hour if known, else the GPS asked once: a fix of the last five minutes, or why there is
+    // none (20 s at most).
+    const fix = known && Date.now() - known.timestamp < 30 * 60000 ? known : await oneFix({ maxAge: 5 * 60000, timeout: 20000 });
     if (this._plant !== plant) return;
     if (!fix || 'error' in fix) { this._open = { ...this._open, here: { state: 'error', message: fix && 'error' in fix ? fix.error : 'Position introuvable pour le moment.' } }; return; }
     const point = /** @type {[number, number]} */ (fix.coordinates);
@@ -1523,7 +1503,7 @@ export class GfPlantDetail extends LitElement {
     const v = this.view;
     const king = this.#store.state.kingMode;
     const fav = this.#store.state.favorites.has(plant.id);
-    const name = plant.vernacularNames?.[0] || plant.scientificName;
+    const name = nameOf(plant);
     /** @type {Record<string, () => unknown>} */
     const buttons = {
       fav: () => html`<button type="button" class="fav" aria-pressed=${fav ? 'true' : 'false'} @click=${() => toggleFavorite(plant)}>
@@ -1679,7 +1659,7 @@ export class GfPlantDetail extends LitElement {
       plant,
       details,
       loading: details === undefined,
-      name: plant.vernacularNames?.[0] || plant.scientificName,
+      name: nameOf(plant),
       // Photos en ligne switched off (Réglages › Modules): no remote image anywhere on the sheet.
       photosOff: !this.#store.state.modules.photos[this.view],
       images: this.#store.state.modules.photos[this.view] ? gallery(plant, details) : [],
@@ -3281,7 +3261,7 @@ export class GfPlantDetail extends LitElement {
     nearAllowed = true;
     this._near = { state: 'locating' };
     const known = lastFix();
-    const fix = known && Date.now() - known.timestamp < 5 * 60000 ? known : await oneFix();
+    const fix = known && Date.now() - known.timestamp < 5 * 60000 ? known : await oneFix({ maxAge: 5 * 60000, timeout: 20000 });
     if (this._plant !== plant) return;
     if (!fix || 'error' in fix) { this._near = { state: 'error', message: fix && 'error' in fix ? fix.error : 'Position introuvable pour le moment.' }; return; }
     const radius = savedRadius();

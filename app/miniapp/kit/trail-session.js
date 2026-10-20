@@ -7,22 +7,18 @@
 // another. Each walk is written as it is stored now (collections.js updatePlace, by the Parcours: it stays its own
 // while under way). It leads the app's steps (app.go: start › walk › done). Fires `change`.
 
-import { watchLocation, whenGranted } from '../../core/geo.js';
+import { FIX_MAX_AGE, geoProblem, takeFix, watchLocation, whenGranted } from '../../core/geo.js';
 import { atPlace, placeNameAt } from '../../core/geoservices.js';
 import { entriesOf, getPlace, lastEntry, newPlace, promotePlace, refreshMembership, savePlace, spotEvents, updatePlace, withPlant, withoutPlant } from '../../core/collections.js';
 import { fillAltitudes } from '../../core/altitude.js';
-import * as db from '../../core/db.js';
+import { getPlant } from '../../core/plants.js';
 import { href } from '../../core/router.js';
 import { encodeCollection, share } from '../../core/share.js';
-import { geoProblem } from '../../components/start-screen.js';
 import { ACTION_TOAST_MS, TOAST_MS } from '../../core/toast.js';
 import { readJSON, writeJSON } from '../../core/prefs.js';
 import { DONE, KEY, LIST, NAMED, countOf } from './trail-store.js';
 
 /** @typedef {import('../runtime.js').MiniApp} MiniApp */
-
-/** « Commencer ici » takes a position at most this old (ms): the shared watch may still hold one from an hour ago. */
-const FIX_MAX_AGE = 60_000;
 
 export class TrailSession extends EventTarget {
   /** @param {MiniApp} app */
@@ -134,16 +130,12 @@ export class TrailSession extends EventTarget {
     return new Promise(resolve => {
       if (this.creating) { resolve(undefined); return; }
       this.startError = null;
-      const since = Date.now() - FIX_MAX_AGE;
-      let live = true;
-      /** @type {() => void} */
-      let unsubscribe = () => {};
-      const end = () => { if (!live) return; live = false; queueMicrotask(() => unsubscribe()); resolve(undefined); };
-      signal.addEventListener('abort', end, { once: true });
-      unsubscribe = watchLocation(s => {
-        if (!live) return;
-        if (s.fix && s.fix.timestamp >= since) { end(); this.create(s.fix.coordinates, null, s.fix.accuracy); }
-        else if (s.error) { end(); this.startError = geoProblem(s.code, { place: true, retry: () => this.app.do('locate') }); this.changed(); }
+      // Within the watch's call (takeFix): a fix the watch already holds starts the walk before the start is drawn again.
+      takeFix({ maxAge: FIX_MAX_AGE, signal }, r => {
+        resolve(undefined);
+        if (!r) return;
+        if ('error' in r) { this.startError = geoProblem(r.code, { place: true, retry: () => this.app.do('locate') }); this.changed(); }
+        else this.create(r.coordinates, null, r.accuracy);
       });
     });
   }
@@ -217,7 +209,7 @@ export class TrailSession extends EventTarget {
   async add(hit) {
     const trail = this.trail;
     if (!trail) return false;
-    const plant = await db.get('plants', hit.id).catch(() => null) || { id: hit.id, scientificName: hit.scientificName, vernacularName: hit.vernacularName };
+    const plant = await getPlant(hit.id) || { id: hit.id, scientificName: hit.scientificName, vernacularName: hit.vernacularName };
     const position = this.fix ? { coordinates: this.fix.coordinates, accuracy: Math.round(this.fix.accuracy) } : undefined;
     // Added to the walk as stored now (another add, another tab, the altitudes may have written meanwhile).
     const next = await this.update(trail.id, current => withPlant(current, plant, position, { again: true, origin: { app: 'parcours' } }));

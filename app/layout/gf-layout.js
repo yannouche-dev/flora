@@ -42,7 +42,7 @@ import { LitElement, html, css, nothing, repeat } from 'lit';
 import { openView, pushHash, replaceHash } from '../core/history.js';
 import { href } from '../core/router.js';
 import { toHash } from '../core/query.js';
-import * as db from '../core/db.js';
+import { getPlant, nameOf } from '../core/plants.js';
 import { runSearch } from '../core/search.js';
 import { plantViewOf, store, StoreController, whenReady } from '../core/store.js';
 import { share } from '../core/share.js';
@@ -555,9 +555,9 @@ export class GfLayout extends LitElement {
   #namesOf(id) {
     if (!this.#names.has(id)) {
       this.#names.set(id, null);
-      whenReady().then(() => db.get('plants', id)).then(p => {
-        if (p) { this.#names.set(id, { name: p.vernacularNames?.[0] || p.scientificName, sci: p.scientificName }); this.requestUpdate(); }
-      }, () => {});
+      whenReady().then(() => getPlant(id)).then(p => {
+        if (p) { this.#names.set(id, { name: nameOf(p), sci: p.scientificName }); this.requestUpdate(); }
+      });
     }
     return this.#names.get(id) ?? null;
   }

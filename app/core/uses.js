@@ -8,6 +8,7 @@
 //  - Wikibooks (live, CC BY-SA): recipes in French and English.
 // Nothing here says a plant is edible: each line is a claim with its source.
 
+import { bundledJSON } from './bundled.js';
 import * as cache from './cache.js';
 import { ModuleOffError, moduleOn } from './modules.js';
 import { fetchJson } from './net.js';
@@ -17,21 +18,13 @@ import { wikimediaHeaders } from '../../lib/plant-sources.mjs';
 
 const DAY = 24 * 3600 * 1000;
 
-/** @type {Promise<any> | null} */
-let safetyLoading = null;
-
 /**
  * The safety file (sources and per-plant entries). Rejects when it cannot be read (an HTTP error, a broken or empty
  * file), and is asked again next time: an error is not « no data » — the sheet says the data is unavailable.
+ * @returns {Promise<any>}
  */
 export function safetyData() {
-  safetyLoading ??= fetch(new URL('../../data/safety.json', import.meta.url)).then(async r => {
-    if (!r.ok) throw new Error('safety ' + r.status);
-    const data = await r.json();
-    if (!data?.plants || typeof data.plants !== 'object' || !Object.keys(data.plants).length) throw new Error('safety: no plants');
-    return data;
-  }).catch(error => { safetyLoading = null; throw error; });
-  return safetyLoading;
+  return bundledJSON('safety.json', { check: d => d?.plants && typeof d.plants === 'object' && Object.keys(d.plants).length ? null : 'no plants' });
 }
 
 /**

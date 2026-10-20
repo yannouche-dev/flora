@@ -9,7 +9,7 @@
 // the address's &v=). Rencontres: the plant of the screen, chosen (chosenId: kit/around.js#chosenContext). Fires
 // `change`.
 
-import * as db from '../../core/db.js';
+import { floweringMonths, getPlant } from '../../core/plants.js';
 import { speciesAround, observationPointsAround } from '../../core/nearby.js';
 import { addressAt } from '../../core/geoservices.js';
 import { alertsOf } from '../../core/alerts.js';
@@ -20,7 +20,6 @@ import { thumbCredit } from '../../core/credit.js';
 import * as sources from '../../core/sources.js';
 import { whenReady } from '../../core/store.js';
 import { subscribe } from '../../core/sync.js';
-import { floweringMonths } from '../../components/gf-calendar.js';
 import { PAGE, aroundOrder, deckOf, ethnoSentence, harvestOrder, swipe, unswipe } from './cards.js';
 
 /**
@@ -251,7 +250,7 @@ export class AroundSession extends EventTarget {
       const month = new Date().getMonth();
       const species = (found?.species || []).filter(s => s.plantId).slice(0, 120);
       const cards = (await Promise.all(species.map(async s => {
-        const plant = await db.get('plants', /** @type {number} */ (s.plantId)).catch(() => null);
+        const plant = await getPlant(/** @type {number} */ (s.plantId));
         if (!plant) return null;
         // iNaturalist's photo (a free licence only, nearby.js), else the flora's thumbnail: each with its credit.
         /** @type {Card} */
