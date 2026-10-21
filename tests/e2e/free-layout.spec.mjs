@@ -540,12 +540,17 @@ test('les modèles : aucune case ne déborde, ni la page de côté — même la 
 });
 
 test('une première visite : les cases de la plante attendent la flore, puis la montrent — jamais « Plante introuvable », leur en-tête nommé', async ({ app, page, context }) => {
-  // The flora slow to come (a first visit, 11 MB): the layout is drawn well before it is stored.
-  await context.route(/\/data\/plants\.json(\?|$)/, async route => { await new Promise(done => setTimeout(done, 1500)); await route.fallback(); });
+  // The flora slow to come (a first visit, 11 MB): held until the layout is drawn, so its cells are seen waiting for it
+  // whatever the machine's speed (a fixed delay raced the layout on a busy runner).
+  /** @type {() => void} */
+  let release = () => {};
+  const held = new Promise(done => { release = () => done(undefined); });
+  await context.route(/\/data\/plants\.json(\?|$)/, async route => { await held; await route.fallback(); });
   const id = plantId(AIL);
   await page.goto(`#/layout/[media,plant.name]?p=${id}`);
   await expect(cellOf(page, 'media')).toBeAttached();
   expect(await app.state('status')).toBe('loading');
+  release();
   await app.ready();
   for (const comp of ['media', 'plant.name']) await expect(cellOf(page, comp).locator('.sub')).toContainText('Ail des ours');
   await expect(cellOf(page, 'plant.name').locator('gf-plant-detail')).toContainText('Allium ursinum');
