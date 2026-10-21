@@ -613,7 +613,7 @@ export class GfSettings extends LitElement {
             @mode-change=${e => setMode(e.detail.mode || 'standard')}></gf-mode-switch>
           <strong>${modeLabel(this.#store.state.mode)}</strong>
         </p>
-        <p class="muted">Épuré : grandes photos et actions rapides (ajouter à la collection en cours). Standard : l’essentiel pour tous.
+        <p class="muted">Épuré : grandes photos et actions rapides (ajouter d’un geste à la collection courante). Standard : l’essentiel pour tous.
           Scientifique : toutes les données, locales et distantes. La grille et la fiche plante ont aussi leur propre choix, qui revient au mode de l’application quand celui-ci change.</p>
         ${this.#modes()}
 

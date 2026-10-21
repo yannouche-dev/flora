@@ -754,7 +754,7 @@ L'app fonctionne hors ligne avec la flore locale ; chaque service en ligne est u
 
 Un mode pour toute l'application, choisi par trois icônes dans l'en-tête (ou dans Réglages › Affichage sur téléphone) :
 
-- **Épuré** — grandes photos et actions rapides. La fiche plante devient une « porte de collection » : photo, noms, famille, alertes de protection, calendrier de floraison, et un gros bouton **« ＋ Ajouter à <collection en cours> »** (« ✓ Dans … » une fois ajoutée, un nouvel appui la retire). La collection ou le lieu en cours se choisit dans la liste juste dessous et reste mémorisé ; c'est aussi la dernière collection utilisée dans « Ajouter à… ».
+- **Épuré** — grandes photos et actions rapides : photo, noms, famille, alertes de protection, calendrier de floraison ; la barre d'actions de la fiche ajoute la plante d'un geste à la **collection courante** (« ＋ *collection courante* », ci-dessous).
 - **Standard** — grand public : calendrier, photos, description (résumé Wikipédia, sinon GBIF), noms ; « Dans mes collections » tient en une ligne qu'on déplie.
 - **Scientifique** — tout ce que l'application connaît ou peut obtenir, sources citées : classification (Wikidata, jusqu'à l'ordre), auteur, synonymes, noms dans d'autres langues, tous les statuts INPN par territoire, statut UICN mondial, phénologie, observations iNaturalist, occurrences GBIF en France, répartition et descriptions GBIF, médias GBIF, données Trefle (avec votre jeton), identifiants (TAXREF, INPN, GBIF, iNaturalist, Wikidata, Tela Botanica, IPNI, POWO).
 
@@ -913,11 +913,11 @@ L'application retient où vous en êtes dans chaque partie, aussi après un rech
 
 - **Flore** : la recherche (texte, filtres, tri) et la plante ouverte. L'onglet Flore rouvre la plante ; touché une seconde fois, il revient à la liste. Rouvert ailleurs (Carte, lien), la recherche est restaurée : les flèches ‹ › d'une fiche parcourent les mêmes résultats.
 - **Mes plantes** : la collection ou l'endroit ouvert et la plante à côté. **Carte** : le lieu choisi et le filtre de plantes.
-- **Plante courante** : la dernière ouverte, où que ce soit. **Collection courante** : la dernière collection ou le dernier lieu ouvert.
+- **Collection courante** : la dernière collection ou le dernier lieu ouvert, ou celui où une plante vient d'être rangée (« Ajouter à… ») — jamais un parcours en cours (sa marche y range déjà ses plantes).
 
 Passerelles :
 
-- d'une **fiche** : « Carte » (l'onglet Carte filtré sur la plante, avec sa répartition GBIF) et « + *collection courante* », qui ajoute la plante d'un geste à la dernière collection ou au dernier lieu ouvert (le bouton disparaît une fois la plante ajoutée) ; deux actions de la barre, à afficher ou non par mode ;
+- d'une **fiche** : « Carte » (l'onglet Carte filtré sur la plante, avec sa répartition GBIF) et « + *collection courante* », qui ajoute la plante d'un geste à la collection courante (le bouton disparaît une fois la plante ajoutée) ; deux actions de la barre, à afficher ou non par mode ;
 - d'une **collection ou d'un lieu** : « Voir dans Flore » (Mes plantes, éditeur de collection, fiche d'un lieu sur la Carte) ouvre la recherche filtrée sur ses plantes ;
 - des **résultats Flore** : l'icône carte ouvre la Carte limitée à mes lieux qui ont une plante de ces résultats (puce « Recherche Flore » pour l'enlever) ;
 
