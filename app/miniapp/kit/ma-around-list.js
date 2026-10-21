@@ -283,8 +283,8 @@ export class MaAroundList extends LitElement {
     if (this.c && this.c.mediaAt !== at) this.app?.set({ mediaAt: at });
   };
 
-  /** A plant's photo, unless the « Photos en ligne » module is off in this view (a leaf shows instead). @param {string | null | undefined} url */
-  #photo(url) { return url && moduleOn('photos', this.#store.state.mode) ? url : null; }
+  /** A plant's photo, unless the « Photos en ligne » module is off (a leaf shows instead). @param {string | null | undefined} url */
+  #photo(url) { return url && moduleOn('photos') ? url : null; }
 
   /** A plant opened in its sheet (Rencontres: chosen, its sheet open), which steps through `ids`. @param {number} id @param {number[]} ids */
   #openPlant(id, ids) {
@@ -376,7 +376,7 @@ export class MaAroundList extends LitElement {
     if (this.#checking != null) { this.#waiting = card; return; }
     const id = card.plant.id;
     this.#checking = id;
-    const ok = await hasPhotos(card.plant, this.#mode).catch(() => false);
+    const ok = await hasPhotos(card.plant).catch(() => false);
     this.#checking = null;
     const next = this.#waiting;
     this.#waiting = null;
@@ -393,7 +393,7 @@ export class MaAroundList extends LitElement {
   get #paneId() {
     const m = this.#mediaState;
     if (!m || m.closed || !this._roomy || !this.c || this.#sheetId != null || !this.#session?.cards || this.#view === 'all') return null;
-    if (!moduleOn('photos', this.#mode)) return null;
+    if (!moduleOn('photos')) return null;
     return this.#s.chosenId;
   }
 
@@ -476,7 +476,7 @@ export class MaAroundList extends LitElement {
   /** « Ses photos » on the deck: once the photos were brought, when they are out of sight (closed, or a phone). */
   get #photosButton() {
     const m = this.#mediaState;
-    return Boolean(m && moduleOn('photos', this.#mode) && (!this._roomy || m.closed));
+    return Boolean(m && moduleOn('photos') && (!this._roomy || m.closed));
   }
 
   /** The match's window closed: the deck goes on, the focus back on the views. @param {Card} c */

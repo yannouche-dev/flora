@@ -161,7 +161,7 @@ test('module « Photos en ligne » désactivé : aucun volet, aucun bouton', asy
   await app.open('#/app/rencontres');
   await page.evaluate(async () => {
     const m = await import('/app/core/modules.js');
-    for (const mode of ['epure', 'standard', 'scientific']) m.setModule('photos', /** @type {any} */ (mode), false);
+    m.setModule('photos', false);
   });
   await toCards(page);
   await like(page, AIL);

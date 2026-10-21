@@ -310,7 +310,8 @@ test('modules coupés et hors ligne : ni relief ni tuile du réseau, la 3D à pl
   // Modules back on, then offline: flat, said; no relief asked.
   await page.evaluate(async () => {
     const { setModule } = await import('/app/core/modules.js');
-    for (const mode of ['epure', 'standard', 'scientific']) { setModule('relief3d', /** @type {any} */ (mode), true); setModule('ignMaps', /** @type {any} */ (mode), true); }
+    setModule('relief3d', true);
+    setModule('ignMaps', true);
   });
   await expect.poll(async () => (await glState(map)).terrain, SLOW).toBe(true);
   await context.setOffline(true);

@@ -198,25 +198,49 @@ test('prefs.definePref : nettoyée à la lecture, gardée, rétablie, et `change
   assert.deepEqual(heard, [{ n: 4 }, { n: 0 }, { n: 5 }, { n: 0 }]);
 });
 
-test('modules : un mode copié a les services de son modèle tels qu’ils sont gardés, même quand un choix n’a pu l’être', async () => {
+test('modules : un choix pour tout l’appareil, parti de ce qui est stocké (un choix qui n’a pu l’être ne revient pas)', async () => {
   const modules = await import('../../app/core/modules.js');
-  localStorage.removeItem(config.storageKeys.modules);
-  modules.setModule('gbif', 'standard', false);
-  modules.copyModules('standard', 'mcopie');
-  assert.equal(modules.moduleOn('gbif', 'mcopie'), false, 'le modèle coupé : la copie aussi');
-  modules.setModule('gbif', 'standard', true);
+  const key = config.storageKeys.modules;
+  localStorage.removeItem(key);
+  modules.setModule('gbif', false);
+  assert.equal(modules.moduleOn('gbif'), false);
+  assert.equal(localStorage.getItem(key), '{"gbif":false}', 'seuls les modules coupés sont gardés');
   const setItem = localStorage.setItem;
   localStorage.setItem = () => { throw new DOMException('plein', 'QuotaExceededError'); };
   try {
-    modules.setModule('gbif', 'standard', false); // pas gardé
-    modules.copyModules('standard', 'mcopie2');
+    modules.setModule('photos', false); // pas gardé
   } finally {
     localStorage.setItem = setItem;
   }
-  assert.equal(modules.moduleOn('gbif', 'mcopie2'), true, 'ce qui est gardé du modèle, pas le choix non écrit');
-  modules.dropModules('mcopie');
-  modules.dropModules('mcopie2');
-  localStorage.removeItem(config.storageKeys.modules);
+  modules.setModule('globi', false);
+  assert.deepEqual(JSON.parse(localStorage.getItem(key) || '{}'), { gbif: false, globi: false }, 'ce qui est gardé, pas le choix non écrit');
+  assert.equal(modules.moduleOn('photos'), true);
+  modules.setModule('gbif', true);
+  modules.setModule('globi', true);
+  assert.equal(localStorage.getItem(key), null, 'tout allumé : rien de gardé');
+});
+
+test('modules : l’ancien format, mode par mode, repris au plus strict — coupé dans un mode, coupé partout', async () => {
+  const modules = await import('../../app/core/modules.js');
+  const key = config.storageKeys.modules;
+  /** Written by the version before (or another tab): this one reads it again, as on a `storage` event. @param {unknown} value */
+  const stored = value => {
+    if (value === null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(value));
+    dispatchEvent(Object.assign(new Event('storage'), { key, storageArea: localStorage }));
+  };
+  stored({ gbif: { epure: false }, photos: { standard: true, scientific: false }, wikidata: false, globi: { epure: true }, openmeteo: {} });
+  const state = modules.modulesState();
+  assert.deepEqual(['gbif', 'photos', 'wikidata', 'globi', 'openmeteo', 'inaturalist'].map(k => state[/** @type {any} */ (k)]), [false, false, false, true, true, true]);
+  assert.equal(modules.modulesSignature(), 'gbif,wikidata,photos');
+  // The next change writes the new format, from the strictest reading.
+  modules.setModule('globi', false);
+  assert.deepEqual(JSON.parse(localStorage.getItem(key) || '{}'), { gbif: false, photos: false, wikidata: false, globi: false });
+  modules.setModule('gbif', true);
+  assert.equal(modules.moduleOn('gbif'), true, 'rallumé une fois : partout');
+  // Unreadable: everything on.
+  stored(['gbif']);
+  assert.equal(modules.modulesSignature(), '');
+  stored(null);
 });
 
 test('prefs : chaque clé que l’app nomme est une clé de config.storageKeys, ou sous le préfixe d’une mini-app', async () => {

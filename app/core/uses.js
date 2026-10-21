@@ -14,7 +14,6 @@ import { ModuleOffError, moduleOn } from './modules.js';
 import { fetchJson } from './net.js';
 import { wikimediaHeaders } from '../../lib/plant-sources.mjs';
 
-/** @typedef {import('./modules.js').Mode} Mode */
 
 const DAY = 24 * 3600 * 1000;
 
@@ -61,10 +60,10 @@ export const useKind = label => FOOD.test(label) ? 'food' : MEDICINE.test(label)
 
 /**
  * Uses, products (with the part they come from) and dishes of a plant on Wikidata.
- * @param {string} qid @param {AbortSignal} [signal] @param {Mode} [mode] @returns {Promise<WikidataUses>}
+ * @param {string} qid @param {AbortSignal} [signal] @returns {Promise<WikidataUses>}
  */
-export async function wikidataUses(qid, signal, mode) {
-  if (!moduleOn('wikidata', mode)) throw new ModuleOffError('wikidata');
+export async function wikidataUses(qid, signal) {
+  if (!moduleOn('wikidata')) throw new ModuleOffError('wikidata');
   return cached('wd-uses:' + qid, 14 * DAY, async () => {
     const q = `SELECT ?kind ?val ?valLabel ?partLabel ?site WHERE {
       VALUES ?taxon { wd:${qid} }

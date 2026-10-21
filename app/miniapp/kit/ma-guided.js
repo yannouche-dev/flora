@@ -254,7 +254,7 @@ export class MaGuided extends LitElement {
   #dockTabs(keys, side) {
     const v = this.#view;
     // The first block whose module is on opens the pane; the others join it as tabs.
-    const shown = keys.filter(k => !modulesOffFor(v, k).length);
+    const shown = keys.filter(k => !modulesOffFor(k).length);
     if (!shown.length) return;
     this.#dockAt(shown[0], null, side, true);
     const pane = paneOf(v, shown[0]);
@@ -296,7 +296,7 @@ export class MaGuided extends LitElement {
 
   /** The blocks the steps reached have added to the panes (only those are shown while discovering). */
   get #paneKeys() {
-    return this.#stepKeys.filter(k => !modulesOffFor(this.#view, k).length);
+    return this.#stepKeys.filter(k => !modulesOffFor(k).length);
   }
 
   /** The blocks the steps reached would add, modules off or not. */
@@ -307,7 +307,7 @@ export class MaGuided extends LitElement {
 
   /** Why some steps added nothing: their modules are off (Réglages › Modules), and Découvrir leaves them so. */
   #offNote() {
-    const off = [...new Set(this.#stepKeys.flatMap(k => modulesOffFor(this.#view, k)))];
+    const off = [...new Set(this.#stepKeys.flatMap(k => modulesOffFor(k)))];
     if (!off.length) return nothing;
     const names = off.map(m => `« ${MODULES.find(x => x.key === m)?.name || m} »`);
     return html`<p class="g-off" role="note">${icon('eye-slash')} ${names.length > 1 ? `Modules ${names.slice(0, -1).join(', ')} et ${names.at(-1)} désactivés` : `Module ${names[0]} désactivé`} : ${names.length > 1 ? 'leurs panneaux ne sont pas ajoutés' : 'son panneau n’est pas ajouté'}. Vous pouvez ${names.length > 1 ? 'les' : 'le'} réactiver dans <a href=${href.settings()}>Réglages › Modules</a>.</p>`;

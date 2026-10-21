@@ -241,7 +241,7 @@ test('module « Vue 3D (relief) » désactivé, photos coupées : le bouton l’
   // Back on: from the parcours in Mes plantes; « Photos en ligne » off, the leaves only.
   await page.evaluate(async () => {
     const { setModule } = await import('/app/core/modules.js');
-    for (const mode of ['epure', 'standard', 'scientific']) setModule('relief3d', /** @type {any} */ (mode), true);
+    setModule('relief3d', true);
   });
   const id = await page.evaluate(() => JSON.parse(localStorage.getItem('geoflora.trailDone') || 'null'));
   await app.go(`#/spot/${id}`);

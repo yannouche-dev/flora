@@ -16,7 +16,7 @@ import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
 import {
   STYLES, SUBS, orderByCategory, canBeEmpty, hidesEmpty, setHidesEmpty, placeOf, setPlace, treeOf, paneOf, dockBlock, toSheet, blockModuleName, blockStyle, isTitleShown, setBlockStyle, setTitleShown, blockOrder, blockTitle, createNote, deleteNote, createMap, deleteMap, isAddedMap, exportLayout, importLayout, isCustom, isHidden, isNote,
-  isSubHidden, renameBlock, resetAll, resetBlocks, setBlockOrder, setHidden, setSubHidden, setSubOrder, subOrder, subTitle
+  isSubHidden, renameBlock, resetAll, resetBlocks, setBlockOrder, setHidden, setSubHidden, setSubOrder, subOrder, subTitle, foldedByHand, serviceOffNote
 } from '../core/sheet-blocks.js';
 import './gf-sortable-list.js';
 import { ui } from '../styles/ui.js';
@@ -104,9 +104,7 @@ export class GfSettings extends LitElement {
     .module .host { color: var(--gf-text-muted); font-weight: 400; margin-left: 4px; }
     .module .state { margin-left: 6px; color: var(--gf-text-muted); font-style: italic; }
     .module form { margin-top: 8px; }
-    .module .modes { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 8px; }
-    .module .mode { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer; }
-    .module .mode svg { color: var(--gf-text-muted); }
+    .module .use { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 0.85rem; cursor: pointer; }
     .king-card { margin: 12px 0 20px; border: 2px solid color-mix(in srgb, #d4a017 40%, var(--gf-border)); }
     /* Mode King: room at the end of the page so the floating crown never covers the last rows. */
     :host([king]) article { padding-bottom: 96px; }
@@ -133,7 +131,7 @@ export class GfSettings extends LitElement {
     .block-order .head button { margin-left: auto; }
     .layout-tools, .layout-file { margin-top: 8px; gap: 8px; }
     .layout-tools form { gap: 6px; }
-    .module .mode input { width: 18px; height: 18px; margin: 0; }
+    .module .use input { width: 18px; height: 18px; margin: 0; }
   `];
 
   #store = new StoreController(this);
@@ -275,34 +273,32 @@ export class GfSettings extends LitElement {
     this._saved = true;
   }
 
-  /** Réglages › Modules: one card per online service, with its switch (Trefle: its token too). */
+  /** Réglages › Modules: one card per online service, with its switch for the whole device (Trefle: its token too). */
   #modules() {
     const on = this.#store.state.modules;
     const token = getTrefleToken();
     return html`
       <h2 id="modules">Modules : services en ligne</h2>
       <p class="muted">Tout fonctionne hors ligne avec la flore locale ; chaque module ajoute des données d’un service en ligne.
-        Cochez les modes où il sert : la fiche plante suit son affichage, la grille des résultats le sien, la carte et le reste le mode
-        de l’application. Décoché, le service n’est pas appelé dans ce mode et ses données ne s’y affichent pas.
+        Le choix vaut pour tout l’appareil, quel que soit le mode d’affichage : décoché, le service n’est jamais appelé et ses données
+        ne s’affichent nulle part (fiche plante, grille, cartes, mini-applications). Masquer un bloc de la fiche en mode King ne coupe pas son service.
         Ce que chacun reçoit, votre position surtout : <a href=${href.legal()}>Mentions légales et confidentialité</a>.</p>
       ${CATEGORIES.filter(c => MODULES.some(m => m.category === c.key)).map(c => html`
       <h3 class="category">${icon(c.icon)} ${c.label} <small>${c.question}</small></h3>
       <ul class="modules">
         ${MODULES.filter(m => m.category === c.key).map(m => {
           const blocked = Boolean(m.needsToken && !token);
-          const any = !blocked && this.#modeKeys.some(mode => on[m.key][mode]);
-          return html`<li class="module ${any ? 'on' : ''}">
+          const used = !blocked && on[m.key];
+          return html`<li class="module ${used ? 'on' : ''}">
             <div class="title"><strong>${m.name}</strong> <small class="host">${m.hosts}</small>
               ${blocked ? html`<small class="state">jeton requis</small>` : nothing}</div>
             <p class="muted">${m.provides}</p>
             ${m.also.length ? html`<p class="also">Sert aussi : ${m.also.map(k => html`<span class="cat-chip">${categoryOf(k).label}</span>`)}</p>` : nothing}
-            <div class="modes" role="group" aria-label=${'Modes où ' + m.name + ' est utilisé'}>
-              ${this.#modeKeys.map(mode => html`<label class="mode">
-                <input type="checkbox" .checked=${on[m.key][mode] && !blocked} ?disabled=${blocked}
-                  @change=${e => setModule(m.key, mode, e.target.checked)} />
-                ${modeIcon(mode)}<span>${modeLabel(mode)}</span>
-              </label>`)}
-            </div>
+            <label class="use">
+              <input type="checkbox" aria-label=${'Utilisé sur cet appareil : ' + m.name} .checked=${used} ?disabled=${blocked}
+                @change=${e => setModule(m.key, e.target.checked)} />
+              <span>Utilisé sur cet appareil</span>
+            </label>
             ${m.key === 'trefle' ? html`
               <p class="muted">Un <a href="https://trefle.io" target="_blank" rel="noopener">jeton Trefle</a> gratuit ;
                 il reste dans ce navigateur uniquement.</p>
@@ -329,8 +325,9 @@ export class GfSettings extends LitElement {
             @click=${() => setKingMode(!on)}>${on ? 'Quitter le mode King' : 'Entrer en mode King'}</button>
         </div>
         <p class="muted">Personnalisez la fiche plante : glissez les blocs par leur titre (ou ci-dessous, par leur poignée ${icon('grip-vertical')}), masquez-les avec la corbeille ${icon('trash3')},
-          réaffichez-les avec ${icon('arrow-counterclockwise')}. Tout est enregistré automatiquement, pour chaque mode d’affichage ;
-          masquer un bloc de service (Wikipédia, GBIF, Trefle, photos) coupe ce module dans ce mode. Quittez en touchant la couronne en bas de l’écran.
+          réaffichez-les avec ${icon('arrow-counterclockwise')}. Tout est enregistré automatiquement, pour chaque mode d’affichage.
+          Masquer un bloc ne coupe pas son service : les services en ligne se choisissent pour tout l’appareil, dans « Modules », plus bas ;
+          un bloc dont le service y est coupé reste masqué. Quittez en touchant la couronne en bas de l’écran.
           La mise en page s’exporte en fichier JSON, avec les réglages des cartes (pour la sauvegarder ou la copier sur un autre appareil).</p>
         <div class="row layout-file">
           <button type="button" @click=${this.#exportLayout}>${icon('download')} Exporter la mise en page</button>
@@ -343,7 +340,7 @@ export class GfSettings extends LitElement {
       </section>`;
   }
 
-  /** « Blocs de la fiche »: each mode's blocks and sub-blocks (the same switches as the sheet and the modules), notes, file. */
+  /** « Blocs de la fiche »: each mode's blocks and sub-blocks (the same switches as the sheet), notes, file. */
   #blockOrders() {
     void this.#store.state.sheetLayout;
     void this.#store.state.modules;
@@ -365,7 +362,7 @@ export class GfSettings extends LitElement {
         ${this.#modeKeys.map(mode => html`
           <div class="card block-order">
             <div class="head">${modeIcon(mode)}<strong>${modeLabel(mode)}</strong>
-              <button type="button" class="small" ?disabled=${!isCustom(mode) && !blockOrder(mode).some(k => isHidden(mode, k))}
+              <button type="button" class="small" ?disabled=${!isCustom(mode)}
                 @click=${() => resetBlocks(mode)}>Par défaut</button>
               <button type="button" class="small" title="Les blocs d’une même catégorie ensemble (Noms, Images, Savoirs…), chacun gardant sa place parmi les siens"
                 @click=${() => orderByCategory(mode, k => CATEGORIES.findIndex(c => c.key === blockCategory(k)))}>Ranger par catégorie</button>
@@ -373,13 +370,14 @@ export class GfSettings extends LitElement {
             ${this.#miniTree(mode)}
             <gf-sortable-list label=${'Blocs de la fiche, ' + modeLabel(mode)}
               .items=${blockOrder(mode).map(k => ({
-                key: k, label: blockTitle(k), checked: !isHidden(mode, k), renamable: true, removable: isNote(k) || isAddedMap(k), nested: Boolean(SUBS[k]),
+                key: k, label: blockTitle(k), checked: !foldedByHand(mode, k), renamable: true, removable: isNote(k) || isAddedMap(k), nested: Boolean(SUBS[k]),
                 titled: isTitleShown(mode, k),
                 emptyHidden: canBeEmpty(k) ? hidesEmpty(mode, k) : undefined,
                 place: ['name', 'actions'].includes(k) ? undefined : placeOf(mode, k) || '',
                 tag: categoryOf(blockCategory(k)).label,
                 choices: STYLES[k]?.styles.map(st => ({ key: st.key, label: st.title })), choice: blockStyle(mode, k) ?? undefined,
-                note: blockModuleName(k) ? `(module ${blockModuleName(k)})` : isNote(k) ? '(note)' : isAddedMap(k) || k === 'map' ? '(carte, réglée sur la fiche)' : ''
+                // Its service off: the block stays folded whatever it is ticked here (Modules, below).
+                note: serviceOffNote(k) ? `(${serviceOffNote(k)})` : blockModuleName(k) ? `(module ${blockModuleName(k)})` : isNote(k) ? '(note)' : isAddedMap(k) || k === 'map' ? '(carte, réglée sur la fiche)' : ''
               }))}
               .renderNested=${(/** @type {string} */ k) => this.#subList(mode, k)}
               @reorder=${e => setBlockOrder(mode, e.detail.keys)}
@@ -488,9 +486,9 @@ export class GfSettings extends LitElement {
   #modes() {
     const modes = this.#store.state.modes;
     return html`<h3 id="modes">Modes d’affichage</h3>
-      <p class="muted">Créez vos modes à partir d’un autre (ses blocs, sa disposition, ses panneaux, ses modules et sa grille sont copiés) :
+      <p class="muted">Créez vos modes à partir d’un autre (ses blocs, sa disposition, ses panneaux et sa grille sont copiés) :
         par exemple une visionneuse de médias toute simple, ou un poste scientifique qui croise toutes les données. Chacun s’arrange ensuite
-        en mode King et dans les modules ; il s’affiche à la manière de son modèle (Épuré, Standard ou Scientifique).</p>
+        en mode King ; il s’affiche à la manière de son modèle (Épuré, Standard ou Scientifique). Les services en ligne, eux, valent pour tous les modes (Modules).</p>
       <ul class="mode-list">
         ${modes.map(m => html`<li class="mode-item">
           <span class="mode-icon">${modeIcon(m.key)}</span>
@@ -503,7 +501,7 @@ export class GfSettings extends LitElement {
             <button type="button" class="small" title=${'Nouveau mode à partir de « ' + m.label + ' »'}
               @click=${() => { const key = createMode(m.label + ' (copie)', m.key); this._modeNote = `Mode « ${modeLabel(key)} » créé : choisissez-le dans les sélecteurs d’affichage, puis arrangez-le en mode King.`; }}>${icon('plus-lg')} Dupliquer</button>
             ${m.builtIn ? nothing : html`<button type="button" class="small" aria-label=${'Supprimer le mode ' + m.label}
-              @click=${() => { if (confirm(`Supprimer le mode « ${m.label} », sa mise en page et ses choix de modules ?`)) deleteMode(m.key); }}>${icon('trash3')} Supprimer</button>`}
+              @click=${() => { if (confirm(`Supprimer le mode « ${m.label} » et sa mise en page ?`)) deleteMode(m.key); }}>${icon('trash3')} Supprimer</button>`}
           </span>
         </li>`)}
       </ul>

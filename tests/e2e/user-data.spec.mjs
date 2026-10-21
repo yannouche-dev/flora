@@ -112,9 +112,9 @@ test('deux onglets : un module coupé dans l’un reste coupé quand l’autre e
   await expect.poll(() => other.evaluate(async () => (await import('/app/core/store.js')).store.state.status)).toBe('ready');
   const set = (/** @type {import('@playwright/test').Page} */ p, /** @type {string} */ key) => p.evaluate(async k => {
     const m = await import('/app/core/modules.js');
-    for (const mode of ['epure', 'standard', 'scientific']) m.setModule(/** @type {any} */ (k), mode, false);
+    m.setModule(/** @type {any} */ (k), false);
   }, key);
-  const on = (/** @type {import('@playwright/test').Page} */ p, /** @type {string} */ key) => p.evaluate(async k => (await import('/app/core/modules.js')).moduleOn(/** @type {any} */ (k), 'standard'), key);
+  const on = (/** @type {import('@playwright/test').Page} */ p, /** @type {string} */ key) => p.evaluate(async k => (await import('/app/core/modules.js')).moduleOn(/** @type {any} */ (k)), key);
   await set(page, 'gbif');
   // The other tab follows at once (storage event), and its own change keeps the first.
   await expect.poll(() => on(other, 'gbif')).toBe(false);

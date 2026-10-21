@@ -104,7 +104,6 @@ export class GfMediaViewer extends LitElement {
     plantId: { type: Number, attribute: 'plant-id' },
     /** The block's title (compact). */
     label: {},
-    view: {},
     /** Open at this item (the URL's ?i=n), applied once the media are loaded. */
     index: { type: Number },
     /** Open at the image of this URL (a photo clicked on the sheet). */
@@ -330,8 +329,6 @@ export class GfMediaViewer extends LitElement {
     this.plantId = null;
     /** @type {string | null} */
     this.label = null;
-    /** @type {any} */
-    this.view = 'standard';
     this.index = 0;
     /** @type {string | null} */
     this.startUrl = null;
@@ -429,7 +426,7 @@ export class GfMediaViewer extends LitElement {
 
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
-    if ((changed.has('plantId') || changed.has('view')) && this.plantId != null) this.#load();
+    if (changed.has('plantId') && this.plantId != null) this.#load();
     // Another image asked by the address (Back / Forward, a link) while the viewer is open.
     else if (changed.has('index') && changed.get('index') !== undefined && this._done && this._items[this.index]) { this._filter = 'all'; this.#select(this._items[this.index]); }
     // Another photo clicked on the sheet while the viewer is open.
@@ -468,7 +465,7 @@ export class GfMediaViewer extends LitElement {
     if (abort.signal.aborted) return;
     this._plant = plant;
     if (!plant) { this._done = true; return; }
-    await loadMedia(plant, this.view, abort.signal, (items, done) => {
+    await loadMedia(plant, abort.signal, (items, done) => {
       this._items = items;
       this._done = done;
       if (this._key === null && this.startUrl) {

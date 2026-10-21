@@ -30,7 +30,7 @@ import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 import {
   STYLES, SUBS, canBeEmpty, hidesEmpty, setHidesEmpty, isMap, isAddedMap, mapConfig, setMapConfig, createMap, deleteMap, blockModuleName, blockOrder, blockStyle, blockTitle, isTitleShown, setBlockStyle, setTitleShown, createNote, deleteNote, isHidden, isNote, isSubHidden, noteText, renameBlock,
-  setBlockOrder, setHidden, setNoteText, setSubHidden, setSubOrder, shownSubs, subOrder, subTitle,
+  foldedByHand, serviceOffNote, setBlockOrder, setHidden, setNoteText, setSubHidden, setSubOrder, shownSubs, subOrder, subTitle,
   isOnEdge, placeOf, orderByCategory, treeOf, paneOf, dockBlock, toSheet, setPaneSizes, setStackState
 } from '../core/sheet-blocks.js';
 import { leaves as paneLeaves, stackOf, setSizes as treeSizes, patchStack, dock, undock } from '../core/pane-tree.js';
@@ -1156,20 +1156,18 @@ export class GfPlantDetail extends LitElement {
       // The themes of the article opened or closed (not the sections read whole, which are this plant's).
       if (changed.has('_wikiOpen')) sheetSession.wikiThemes = new Set([...this._wikiOpen].filter(k => /^(theme|closed):/.test(k)));
     }
-    const signature = modulesSignature(this.view);
+    const signature = modulesSignature();
     const hidden = this.#store.state.sheetLayout;
-    const modulesChanged = this.#signature !== null && !changed.has('view') && signature !== this.#signature;
+    const modulesChanged = this.#signature !== null && signature !== this.#signature;
     const hiddenChanged = hidden !== this.#hidden;
     this.#signature = signature;
     this.#hidden = hidden;
     if (changed.has('plantId')) this.#load(this.plantId);
     // The card underneath became the sheet.
     else if (changed.has('preview') && !this.preview) this.#title();
-    // A module switched on or off (a block folded or revived, or Réglages): its data comes or goes.
+    // A module switched on or off (Réglages › Modules): its data comes or goes.
     else if (modulesChanged) this.#refresh();
     else if (hiddenChanged && this._plant && this._details !== undefined) this.#loadExtras(this._plant, this._details, this.#abort?.signal);
-    // Another view may use other modules (Réglages › Modules): reload what depends on them.
-    else if (changed.has('view') && changed.get('view') !== undefined && modulesSignature(this.view) !== modulesSignature(changed.get('view'))) this.#load(this.plantId);
     else if (changed.has('view') && this._plant && this._details !== undefined) this.#loadExtras(this._plant, this._details, this.#abort?.signal);
   }
 
@@ -1241,7 +1239,7 @@ export class GfPlantDetail extends LitElement {
     alertsOf(plant).then(a => { if (!abort.signal.aborted) this._alerts = a; }, () => {});
 
     try {
-      const details = await sources.details(plant, abort.signal, this.view);
+      const details = await sources.details(plant, abort.signal);
       if (!abort.signal.aborted) { this._details = details; this.#noteDetails(details); }
       if (!abort.signal.aborted) this.#loadExtras(plant, details, abort.signal);
     } catch (error) {
@@ -1270,7 +1268,7 @@ export class GfPlantDetail extends LitElement {
     this._near = undefined;
     this._failed = {};
     this._error = null;
-    const details = await sources.details(plant, abort.signal, this.view).catch(error => {
+    const details = await sources.details(plant, abort.signal).catch(error => {
       if (!abort.signal.aborted && isUnavailable(error)) this._failed = { ...this._failed, 'details:all': error };
       return null;
     });
@@ -1351,15 +1349,15 @@ export class GfPlantDetail extends LitElement {
     };
     const once = (/** @type {string} */ key) => !this.#requested.has(key) && Boolean(this.#requested.add(key));
     // Wikipédia feeds its block and, by theme, Descriptions, Calendrier, Habitat, Occurrences, Usages and Noms.
-    if (['wikipedia', 'descriptions', 'calendar', 'gbifProfile', 'occurrences', 'uses', 'names'].some(shown) && once('wiki')) settle(sources.wikipedia(plant, qid, signal, v), x => { this._wiki = x; }, 'wiki');
+    if (['wikipedia', 'descriptions', 'calendar', 'gbifProfile', 'occurrences', 'uses', 'names'].some(shown) && once('wiki')) settle(sources.wikipedia(plant, qid, signal), x => { this._wiki = x; }, 'wiki');
     const science = shown('ids') || (baseOf(v) === 'scientific' && (shown('taxonomy') || shown('status')));
-    if (science && once('science')) settle(sources.wikidataScience(plant, qid, signal, v), x => { this._science = x; }, 'science');
+    if (science && once('science')) settle(sources.wikidataScience(plant, qid, signal), x => { this._science = x; }, 'science');
     this.#loadGbif(plant, details, signal, settle, once, shown);
     const putOpen = (/** @type {string} */ k, /** @type {any} */ x) => { this._open = { ...this._open, [k]: x }; };
-    if (shown('interactions') && once('globi')) settle(openData.interactions(plant.scientificName, signal, v), x => putOpen('interactions', x), 'globi');
+    if (shown('interactions') && once('globi')) settle(openData.interactions(plant.scientificName, signal), x => putOpen('interactions', x), 'globi');
     const gbifKey = details?.identifiers?.gbif?.id ?? null;
     if (shown('climate') && !isSubHidden(v, 'climate', 'niche') && details !== undefined && once('niche')) {
-      if (gbifKey) settle(openData.climateNiche(gbifKey, signal, v), x => putOpen('niche', x), 'niche'); else putOpen('niche', null);
+      if (gbifKey) settle(openData.climateNiche(gbifKey, signal), x => putOpen('niche', x), 'niche'); else putOpen('niche', null);
     }
     // « Usages et cuisine sauvage »: the local safety file first, then Wikidata and Wikibooks.
     if (shown('uses')) {
@@ -1370,10 +1368,10 @@ export class GfPlantDetail extends LitElement {
       }
       const usesQid = plant.identifiers?.wikidata || details?.identifiers?.wikidata?.id;
       if (details !== undefined && once('uses:wikidata')) {
-        if (usesQid && moduleOn('wikidata', v)) settle(usesData.wikidataUses(usesQid, signal, v), x => putOpen('wdUses', x), 'uses:wikidata'); else putOpen('wdUses', null);
+        if (usesQid && moduleOn('wikidata')) settle(usesData.wikidataUses(usesQid, signal), x => putOpen('wdUses', x), 'uses:wikidata'); else putOpen('wdUses', null);
       }
       if (!isSubHidden(v, 'uses', 'kitchen') && once('uses:recipes')) {
-        if (moduleOn('wikibooks', v)) settle(usesData.recipes({ french: commonOf(plant), latin: plant.scientificName }, signal), x => putOpen('recipes', x), 'uses:recipes');
+        if (moduleOn('wikibooks')) settle(usesData.recipes({ french: commonOf(plant), latin: plant.scientificName }, signal), x => putOpen('recipes', x), 'uses:recipes');
         else putOpen('recipes', null);
       }
     }
@@ -1441,7 +1439,7 @@ export class GfPlantDetail extends LitElement {
       if (!key) { put(name, null); return; }
       settle(load(), x => put(name, x), 'gbif:' + name);
     };
-    const species = (/** @type {string} */ name, /** @type {string} */ api = name) => part(name, () => sources.gbifSpecies(plant, key, api, signal, v));
+    const species = (/** @type {string} */ name, /** @type {string} */ api = name) => part(name, () => sources.gbifSpecies(plant, key, api, signal));
     if (shown('names')) species('vernacularNames');
     if (shown('descriptions')) species('descriptions');
     if (sub('occurrences', 'distribution')) species('distributions');
@@ -1449,14 +1447,14 @@ export class GfPlantDetail extends LitElement {
     if (baseOf(v) === 'scientific' && sub('taxonomy', 'gbifSynonyms')) species('synonyms');
     if (baseOf(v) === 'scientific' && sub('status', 'iucn')) species('iucn', 'iucnRedListCategory');
     if (['gbif', 'months', 'years', 'regions', 'basis', 'datasets'].some(k => sub('occurrences', k))) {
-      part('stats', () => sources.gbifStats(plant, key, signal, v).then(stats => { this.#loadTitles(stats, signal); return stats; }));
+      part('stats', () => sources.gbifStats(plant, key, signal).then(stats => { this.#loadTitles(stats, signal); return stats; }));
     }
-    if (!this.#store.state.modules.photos[v]) { if (once('gbif:noPhotos')) { put('photos', []); put('herbarium', []); } }
+    if (!this.#store.state.modules.photos) { if (once('gbif:noPhotos')) { put('photos', []); put('herbarium', []); } }
     else {
-      if (sub('gbifMedia', 'photos')) part('photos', () => sources.gbifMedia(plant, key, 'photos', signal, v));
-      if (sub('gbifMedia', 'herbarium')) part('herbarium', () => sources.gbifMedia(plant, key, 'herbarium', signal, v));
+      if (sub('gbifMedia', 'photos')) part('photos', () => sources.gbifMedia(plant, key, 'photos', signal));
+      if (sub('gbifMedia', 'herbarium')) part('herbarium', () => sources.gbifMedia(plant, key, 'herbarium', signal));
     }
-    if (shown('literature')) part('literature', () => sources.gbifLiterature(plant, key, signal, v));
+    if (shown('literature')) part('literature', () => sources.gbifLiterature(plant, key, signal));
     // « Près d’ici » asked on an earlier sheet of this visit: look around again, without asking.
     if (nearAllowed && key && sub('occurrences', 'near') && once('gbif:near')) queueMicrotask(() => this.#findNear());
     // Arrived before the region and source names were shown: name them now.
@@ -1471,10 +1469,10 @@ export class GfPlantDetail extends LitElement {
     /** @type {[string, Promise<string | null>][]} */
     const wanted = [];
     const titles = this._gbif.titles || {};
-    if (shown('datasets')) for (const d of stats.datasets) if (!(d.key in titles)) wanted.push([d.key, sources.gbifDatasetTitle(d.key, signal, v)]);
+    if (shown('datasets')) for (const d of stats.datasets) if (!(d.key in titles)) wanted.push([d.key, sources.gbifDatasetTitle(d.key, signal)]);
     if (shown('regions')) {
-      for (const r of stats.regions) if (!(r.gid in titles)) wanted.push([r.gid, sources.gadmName(r.gid, signal, v)]);
-      for (const d of stats.departments.slice(0, 5)) if (!(d.gid in titles)) wanted.push([d.gid, sources.gadmName(d.gid, signal, v)]);
+      for (const r of stats.regions) if (!(r.gid in titles)) wanted.push([r.gid, sources.gadmName(r.gid, signal)]);
+      for (const d of stats.departments.slice(0, 5)) if (!(d.gid in titles)) wanted.push([d.gid, sources.gadmName(d.gid, signal)]);
     }
     if (!wanted.length) return;
     const plant = this._plant;
@@ -1623,7 +1621,7 @@ export class GfPlantDetail extends LitElement {
   #onlyBlock(key, ctx) {
     if (key === 'media') {
       return ctx.photosOff ? html`<p class="muted only-pad">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`
-        : html`<gf-media-viewer plant-id=${ctx.plant.id} .view=${this.view} presentation=${blockStyle(this.view, 'media')} .index=${this.paneAt ?? 0} .startUrl=${this.paneStart ?? null}></gf-media-viewer>`;
+        : html`<gf-media-viewer plant-id=${ctx.plant.id} presentation=${blockStyle(this.view, 'media')} .index=${this.paneAt ?? 0} .startUrl=${this.paneStart ?? null}></gf-media-viewer>`;
     }
     return html`<div class="only-pad ${isMap(key) ? 'fill' : ''}"><section class="block only ${isMap(key) ? 'map-block' : ''}" data-key=${key}><div class="content">${this.#content(key, ctx)}</div></section></div>`;
   }
@@ -1664,8 +1662,8 @@ export class GfPlantDetail extends LitElement {
       loading: details === undefined,
       name: nameOf(plant),
       // Photos en ligne switched off (Réglages › Modules): no remote image anywhere on the sheet.
-      photosOff: !this.#store.state.modules.photos[this.view],
-      images: this.#store.state.modules.photos[this.view] ? gallery(plant, details) : [],
+      photosOff: !this.#store.state.modules.photos,
+      images: this.#store.state.modules.photos ? gallery(plant, details) : [],
       inat,
       wikidata: plant.identifiers?.wikidata || details?.identifiers?.wikidata?.id,
       links: sources.links(plant),
@@ -2678,6 +2676,8 @@ export class GfPlantDetail extends LitElement {
     const title = blockTitle(key);
     const off = isHidden(this.view, key);
     const module = blockModuleName(key);
+    // Its service off for the whole device: folded, nothing to show; only Réglages › Modules brings it back.
+    const cut = serviceOffNote(key);
     const dragging = this._dragKey === key;
     const subsOpen = this._subsOpen.has(key);
     const style = slot === null ? '' : `order:${slot}${dragging ? `;transform:translateY(${this._dragY}px)` : ''}`;
@@ -2692,7 +2692,7 @@ export class GfPlantDetail extends LitElement {
               @blur=${e => this.#rename(key, e.target.value)} />`
           : html`<span class="name">${title}</span>`}
         <span class="cat" title=${categoryOf(blockCategory(key)).question}>${categoryOf(blockCategory(key)).label}</span>
-        ${off && module ? html`<small class="off-note">module ${module} désactivé dans ce mode</small>` : nothing}
+        ${cut ? html`<small class="off-note">${cut} (Réglages › Modules)</small>` : nothing}
         <button class="tool" type="button" aria-pressed=${titled ? 'true' : 'false'} aria-label=${(titled ? 'Masquer' : 'Montrer') + ` le titre « ${title} » hors mode King`}
           title=${titled ? 'Titre affiché (toucher pour le cacher)' : 'Titre caché hors mode King (toucher pour l’afficher)'}
           @click=${() => setTitleShown(this.view, key, !titled)}>${icon('type-h2')}</button>
@@ -2708,10 +2708,12 @@ export class GfPlantDetail extends LitElement {
             @click=${() => setBlockStyle(this.view, key, st.key)}>${icon(/** @type {any} */ ({ list: 'list-ul', graph: 'diagram-3', scene: 'image', mosaic: 'images', slideshow: 'arrows-fullscreen' })[st.key] || 'table')} ${st.title}</button>`)}</span>` : nothing}
         ${SUBS[key] && !off ? html`<button class="tool" type="button" aria-expanded=${subsOpen ? 'true' : 'false'} aria-label="Sous-blocs de « ${title} »" title="Sous-blocs : ordre et présence"
           @click=${() => { const open = new Set(this._subsOpen); if (subsOpen) open.delete(key); else open.add(key); this._subsOpen = open; }}>${icon('list-nested')}</button>` : nothing}
-        ${off
+        ${cut
+          ? html`<a class="tool" href=${href.settings()} aria-label=${`Réglages › Modules : ${cut}`} title="Réglages › Modules">${icon('gear')}</a>`
+          : off
           ? html`<button class="tool" type="button" aria-label="Réafficher le bloc « ${title} »" title="Réafficher"
               @click=${() => setHidden(this.view, key, false)}>${icon('arrow-counterclockwise')}</button>`
-          : html`<button class="tool" type="button" aria-label="Masquer le bloc « ${title} »" title=${module ? `Masquer (coupe le module ${module} dans ce mode)` : 'Masquer'}
+          : html`<button class="tool" type="button" aria-label="Masquer le bloc « ${title} »" title=${module ? `Masquer dans ce mode (le service ${module} reste utilisé)` : 'Masquer'}
               @click=${() => setHidden(this.view, key, true)}>${icon('trash3')}</button>`}
         ${isMap(key) && !off ? html`<button class="tool" type="button" aria-expanded=${this._mapsOpen.has(key) ? 'true' : 'false'} aria-label="Configurer la carte « ${title} »" title="Ce que la carte montre et permet"
           @click=${() => { const open = new Set(this._mapsOpen); if (open.has(key)) open.delete(key); else open.add(key); this._mapsOpen = open; }}>${icon('gear')}</button>` : nothing}
@@ -2786,7 +2788,7 @@ export class GfPlantDetail extends LitElement {
     if (this.preview) return html`<div class="map-placeholder ${fill ? 'fill' : ''}" style=${`height:${{ s: 180, m: 260, l: 380 }[config.height]}px`}></div>`;
     // One WebGL map per sheet: the main « Carte » block may show in 3D, the map blocks added stay in 2D (gf-map-gl.js).
     return html`<gf-sheet-map .plant=${plant} .gbifKey=${details?.identifiers?.gbif?.id ?? null} .inatId=${inat?.id ?? null}
-      map-3d=${key === 'map' ? 'auto' : 'off'} map-3d-why=${ONE_GL_PER_SHEET} .config=${config} mode=${this.view} ?fill=${fill} .mapFocus=${this._focus}
+      map-3d=${key === 'map' ? 'auto' : 'off'} map-3d-why=${ONE_GL_PER_SHEET} .config=${config} ?fill=${fill} .mapFocus=${this._focus}
       @map-config=${(/** @type {CustomEvent} */ e) => setMapConfig(key, e.detail)}
       @focus-clear=${(/** @type {CustomEvent} */ e) => { this._focus = { ...this._focus, [e.detail.kind]: null }; }}
       @map-layers=${(/** @type {CustomEvent} */ e) => {
@@ -2967,7 +2969,7 @@ export class GfPlantDetail extends LitElement {
       case 'media':
         return ctx.photosOff ? html`<p class="muted">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`
           // In the sheet: compact; stuck to an edge: the full viewer, filling it (its keys only when it has the focus).
-          : html`<gf-media-viewer ?prefer-photos=${this.panesOnly} ?showcase=${this.panesOnly} ?bar-out=${isOnEdge(this.view, 'media')} ?compact=${!isOnEdge(this.view, 'media')} ?local=${isOnEdge(this.view, 'media')} plant-id=${plant.id} .view=${this.view} .index=${this.mediaAt ?? 0}
+          : html`<gf-media-viewer ?prefer-photos=${this.panesOnly} ?showcase=${this.panesOnly} ?bar-out=${isOnEdge(this.view, 'media')} ?compact=${!isOnEdge(this.view, 'media')} ?local=${isOnEdge(this.view, 'media')} plant-id=${plant.id} .index=${this.mediaAt ?? 0}
             presentation=${blockStyle(this.view, 'media')} .label=${isTitleShown(this.view, 'media') ? null : blockTitle('media')}
             @open-pane=${(/** @type {CustomEvent} */ e) => { e.stopPropagation(); this.#openPane('media', e.detail.url); }}></gf-media-viewer>`;
       case 'photos': {
@@ -2999,7 +3001,7 @@ export class GfPlantDetail extends LitElement {
           ${this._spotsOpen ? html`<gf-plant-spots plant-id=${plant.id} notitle ?map-linked=${this.#hasMap} .mapFocus=${this._focus}></gf-plant-spots>` : nothing}`;
       }
       case 'calendar':
-        return html`<gf-calendar .plant=${plant} mode=${v} notitle></gf-calendar>${this.#wikiSections(['biology']).length ? this.#wikiBits(['biology']) : ifEmpty('Aucune période de floraison ni d’observation connue.')}`;
+        return html`<gf-calendar .plant=${plant} notitle></gf-calendar>${this.#wikiSections(['biology']).length ? this.#wikiBits(['biology']) : ifEmpty('Aucune période de floraison ni d’observation connue.')}`;
       case 'wikipedia':
         return this._wiki ? this.#wikipedia() : this._wiki === undefined ? pending : empty('Pas d’article Wikipédia en français trouvé.');
       case 'descriptions': {
@@ -3273,8 +3275,8 @@ export class GfPlantDetail extends LitElement {
     const radius = savedRadius();
     this._near = { state: 'loading' };
     try {
-      const result = await sources.gbifNear(key, fix.coordinates, radius, undefined, this.view);
-      if (this._plant === plant) this._near = result ? { state: 'done', radius, ...result } : { state: 'error', message: 'GBIF est désactivé dans ce mode.' };
+      const result = await sources.gbifNear(key, fix.coordinates, radius);
+      if (this._plant === plant) this._near = result ? { state: 'done', radius, ...result } : { state: 'error', message: 'GBIF est désactivé (Réglages › Modules).' };
     } catch {
       if (this._plant === plant) this._near = { state: 'error', message: 'GBIF ne répond pas pour le moment.' };
     }
@@ -3282,7 +3284,7 @@ export class GfPlantDetail extends LitElement {
 
   /** « Médias GBIF »: field photos and herbarium sheets, apart. @param {any} ctx */
   #gbifMedia({ plant, photosOff }) {
-    if (photosOff) return html`<p class="muted">Photos en ligne désactivées dans ce mode.</p>`;
+    if (photosOff) return html`<p class="muted">Photos en ligne désactivées (Réglages › Modules).</p>`;
     const g = this._gbif;
     return html`${this.#subs('gbifMedia', {
       photos: () => this.#mediaGallery(plant, 'Photos d’observation (France)', g.photos, 'Aucune photo d’observation sous licence libre sur GBIF.', false),
@@ -3587,7 +3589,7 @@ export class GfPlantDetail extends LitElement {
    * @param {PointerEvent} e @param {string} key @param {(() => string) | null} [make] a new block made on the drop (palette « Nouvelle carte »)
    */
   #press(e, key, make = null) {
-    if (e.button !== 0 || /** @type {Element} */ (e.target).closest('button:not(.grip):not([data-drag-key]), summary, details, input, textarea, select')) return;
+    if (e.button !== 0 || /** @type {Element} */ (e.target).closest('button:not(.grip):not([data-drag-key]), a[href], summary, details, input, textarea, select')) return;
     pressDock(e, {
       root: /** @type {ShadowRoot} */ (this.renderRoot), key, label: make ? key : blockTitle(key),
       sheetFallback: this.renderRoot.querySelector('article'),
@@ -3602,11 +3604,11 @@ export class GfPlantDetail extends LitElement {
   }
 
   /**
-   * Mode King: the blocks to add — those not shown in this mode, and new map and note blocks; dragged to a
-   * place (or touched: back in the sheet).
+   * Mode King: the blocks to add — those folded in this mode (not those folded only because their service is off:
+   * Réglages › Modules brings them back), and new map and note blocks; dragged to a place (or touched: back in the sheet).
    */
   #palette() {
-    const hidden = blockOrder(this.view).filter(k => isHidden(this.view, k) && k !== 'actions');
+    const hidden = blockOrder(this.view).filter(k => foldedByHand(this.view, k) && k !== 'actions');
     return html`<div class="palette" aria-label="Ajouter un bloc : glisser vers la fiche ou un panneau">
       <span class="pal-title">${icon('plus-lg')} Ajouter</span>
       ${hidden.map(k => html`<button type="button" class="chip" data-drag-key=${k} title="Glisser vers un panneau, ou toucher pour l’afficher dans la fiche"

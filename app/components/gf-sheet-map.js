@@ -85,8 +85,6 @@ export class GfSheetMap extends LitElement {
     inatId: { attribute: false },
     /** What it shows and lets do (sheet-blocks.js › MapConfig). */
     config: { attribute: false },
-    /** Plant sheet mode (the modules on in it). */
-    mode: {},
     /** Pinned: fills the dock's height instead of its own. */
     fill: { type: Boolean, reflect: true },
     /** What the sheet's data asks it to show: a GBIF filter, a point, a plant to compare (map-focus.js). */
@@ -160,7 +158,6 @@ export class GfSheetMap extends LitElement {
     this.inatId = null;
     /** @type {import('../core/sheet-blocks.js').MapConfig} */
     this.config = MAP_DEFAULTS;
-    this.mode = 'standard';
     this.fill = false;
     /** @type {import('../core/map-focus.js').SheetFocus} */
     this.mapFocus = noFocus();
@@ -247,12 +244,11 @@ export class GfSheetMap extends LitElement {
   /** What the focus needs: the compared plant's GBIF key, the extent of a place filter's occurrences. */
   async #loadFocus() {
     const f = this.mapFocus || noFocus();
-    const mode = /** @type {any} */ (this.mode);
     const taxon = f.compare?.taxon;
     if (!taxon) this._compare = null;
     else if (this._compare?.taxon !== taxon) {
       this._compare = { taxon, key: undefined };
-      const hit = await sources.gbifTaxon({ id: 'cmp:' + taxon, scientificName: taxon }, undefined, mode).catch(() => null);
+      const hit = await sources.gbifTaxon({ id: 'cmp:' + taxon, scientificName: taxon }).catch(() => null);
       if (this.mapFocus?.compare?.taxon === taxon) this._compare = { taxon, key: hit?.key ?? null };
     }
     const filter = f.filter;
@@ -264,7 +260,7 @@ export class GfSheetMap extends LitElement {
       // Until both are in, the map stays where it is (no default view in between).
       this._bounds = { id: wanted, points: null, occ: [], zone: undefined };
       const [found, zone] = await Promise.all([
-        sources.gbifBounds(this.gbifKey, filter.params, undefined, mode).catch(() => null),
+        sources.gbifBounds(this.gbifKey, filter.params).catch(() => null),
         placeOutline(filter.params, filter.label).catch(() => null)
       ]);
       if (this._bounds?.id === wanted) this._bounds = { id: wanted, points: found?.bounds || [], occ: found?.points || [], zone, count: found?.count ?? 0 };
@@ -335,10 +331,10 @@ export class GfSheetMap extends LitElement {
     const radius = savedRadius();
     const point = /** @type {[number, number]} */ (fix.coordinates);
     this._near = { state: 'loading', wanted, point, radius };
-    const useGbif = (c.near === 'gbif' || c.near === 'both') && this.gbifKey && moduleOn('gbif', /** @type {any} */ (this.mode));
-    const useInat = (c.near === 'inat' || c.near === 'both') && this.inatId && moduleOn('inaturalist', /** @type {any} */ (this.mode));
+    const useGbif = (c.near === 'gbif' || c.near === 'both') && this.gbifKey && moduleOn('gbif');
+    const useInat = (c.near === 'inat' || c.near === 'both') && this.inatId && moduleOn('inaturalist');
     const [gbif, inat] = await Promise.all([
-      useGbif ? sources.gbifNear(this.gbifKey, point, radius, undefined, /** @type {any} */ (this.mode), 30).catch(() => null) : null,
+      useGbif ? sources.gbifNear(this.gbifKey, point, radius, undefined, 30).catch(() => null) : null,
       useInat ? observationsAround(/** @type {number} */ (this.inatId), point, radius).catch(() => null) : null
     ]);
     if (this.plant !== plant) return;
@@ -436,7 +432,7 @@ export class GfSheetMap extends LitElement {
     const near = this._near;
     const spots = c.places ? this._spots : [];
     const f = this.mapFocus || noFocus();
-    const gbifReady = this.#aboutPlant && Boolean(this.gbifKey) && moduleOn('gbif', /** @type {any} */ (this.mode));
+    const gbifReady = this.#aboutPlant && Boolean(this.gbifKey) && moduleOn('gbif');
     // A filter shows the plant's occurrences even on a map set without them.
     const gbifOn = gbifReady && (c.gbif !== 'off' || Boolean(f.filter));
     const country = f.filter && isPlaceFilter(f.filter.params) ? '' : c.gbif === 'world' ? '' : 'FR';
@@ -566,8 +562,7 @@ export class GfSheetMap extends LitElement {
   /**
    * The plant's photo on its points and on the point touched in the sheet: the one its card and its markers on my
    * places show (core/thumb.js: the flora's, else one found for it — asked here once when not known yet), with its
-   * credit (its author and licence, wherever it was found); none with « Photos en ligne » off in this sheet's mode
-   * (its leaf then).
+   * credit (its author and licence, wherever it was found); none with « Photos en ligne » off (its leaf then).
    * @returns {{ photo: string | null, credit: import('../core/credit.js').Credit | null }}
    */
   #photo() {
@@ -577,7 +572,7 @@ export class GfSheetMap extends LitElement {
       this.#thumbFor = plant.id;
       thumbUrl(plant.id, plant).then(found => { if (found && this.plant === plant) this.requestUpdate(); }, () => {});
     }
-    const photo = photoOf(url, /** @type {any} */ (this.mode));
+    const photo = photoOf(url);
     return { photo, credit: photo ? knownCredit(plant) : null };
   }
   /** @type {number | null} */ #thumbFor = null;
@@ -629,7 +624,7 @@ export class GfSheetMap extends LitElement {
     /** @param {string} value @param {unknown} label @param {string} [title] @param {() => void} [act] */
     const frameBtn = (value, label, title, act) => html`<button type="button" aria-pressed=${String(c.frame === value)}
       title=${title || ''} data-frame=${value} @click=${act || (() => this.#set({ frame: value }))}>${label}</button>`;
-    const inatReady = Boolean(this.inatId) && moduleOn('inaturalist', /** @type {any} */ (this.mode));
+    const inatReady = Boolean(this.inatId) && moduleOn('inaturalist');
     const gbifNear = c.near === 'gbif' || c.near === 'both', inatNear = c.near === 'inat' || c.near === 'both';
     const nearOf = (/** @type {boolean} */ g, /** @type {boolean} */ i) => g && i ? 'both' : g ? 'gbif' : i ? 'inat' : 'off';
     const r = near?.radius || savedRadius();

@@ -2,7 +2,7 @@
 // Tiny observable store + a Lit reactive controller to re-render subscribers.
 
 import { config } from '../config.js';
-import { moduleEvents, modulesState, useModeSource } from './modules.js';
+import { moduleEvents, modulesState } from './modules.js';
 import { baseOf, isMode, modeEvents, modeList } from './modes.js';
 import { treeFromPlaces } from './pane-tree.js';
 import { readJSON, readText, writeText } from './prefs.js';
@@ -41,7 +41,7 @@ import { onStorage } from './sync.js';
  * @property {Mode | null} gridView      results grid override of the mode (null: follow the mode)
  * @property {SheetLayout} sheetLayout  the plant sheet as arranged in « Mode King » (see sheet-blocks.js)
  * @property {import('./context.js').Context} [context]  where the user is in each part (see context.js)
- * @property {Record<import('./modules.js').ModuleKey, Record<Mode, boolean>>} modules  online services used in each mode (Réglages › Modules)
+ * @property {Record<import('./modules.js').ModuleKey, boolean>} modules  online services used on this device (Réglages › Modules)
  * @property {import('./modes.js').ModeInfo[]} modes  the display modes: the app's three and the ones made from them
  * @property {boolean} kingMode         « Mode King »: the plant sheet blocks can be moved, folded and revived (left with the crown)
  * @property {boolean} harvestMode      "Mode cueillette": harvest log, quality, seasons (look-alike warnings show without it)
@@ -171,15 +171,12 @@ modeEvents.addEventListener('change', () => {
   const fallback = (/** @type {Mode} */ m) => isMode(m) ? m : 'standard';
   if (!isMode(mode)) setMode(fallback(baseOf(mode)));
   if (gridView && !isMode(gridView)) setGridView(null);
-  store.set({ modes: modeList(), modules: modulesState() });
+  store.set({ modes: modeList() });
 });
 // Storage full: said once, in a banner (gf-app), until closed.
 quotaEvents.addEventListener('full', () => store.set({ storageFull: true }));
 // The layout arranged in another tab: this one shows it too (and its next change starts from it).
 onStorage(config.storageKeys.sheetLayout, () => store.set({ sheetLayout: readLayout() }));
-
-// Modules asked without a mode follow the app mode (maps, Autour, lists).
-useModeSource(() => store.state.mode);
 
 /** Stored choice, or null when the user never chose (decided at startup from existing harvests). */
 function readHarvestMode() {
@@ -227,8 +224,6 @@ export function setMode(mode) {
   writeText(config.storageKeys.mode, mode);
   writeText(config.storageKeys.gridView, null);
   store.set({ mode, gridView: null });
-  // Maps, Autour and thumbnails follow the app mode's modules.
-  moduleEvents.dispatchEvent(new CustomEvent('change', { detail: { mode } }));
 }
 
 /** Results grid override; null (or the mode itself) follows the mode. @param {Mode | null} view */

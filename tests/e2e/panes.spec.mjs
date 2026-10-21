@@ -133,8 +133,8 @@ test.describe('ordinateur', () => {
     await app.open('#/');
     await page.evaluate(async () => {
       const sb = await import('/app/core/sheet-blocks.js');
-      const { plantViewOf, store } = await import('/app/core/store.js');
-      sb.dockBlock(plantViewOf(store.state), 'taxonomy', 'sheet', 'right');
+      const { store } = await import('/app/core/store.js');
+      sb.dockBlock(store.state.mode, 'taxonomy', 'sheet', 'right');
     });
     await app.go(`#/plant/${plantId('Urtica dioica')}`);
     const grip = page.locator('gf-flora .swipe:not(.under) gf-plant-detail .split-grip').first();
@@ -195,8 +195,8 @@ test.describe('téléphone', () => {
     // The sheet with a pane docked beside it: on a phone, a band above or under it, no grip.
     await page.evaluate(async () => {
       const sb = await import('/app/core/sheet-blocks.js');
-      const { plantViewOf, store } = await import('/app/core/store.js');
-      sb.dockBlock(plantViewOf(store.state), 'taxonomy', 'sheet', 'right');
+      const { store } = await import('/app/core/store.js');
+      sb.dockBlock(store.state.mode, 'taxonomy', 'sheet', 'right');
     });
     await app.go(`#/plant/${plantId('Urtica dioica')}`);
     await expect(page.locator('gf-flora .sheet-plant')).toBeVisible();
