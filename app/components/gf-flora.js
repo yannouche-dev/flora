@@ -203,7 +203,7 @@ export class GfFlora extends LitElement {
     }
 
     /* Filters (tablet and phone): bottom sheet. */
-    dialog.sheet { --sheet-w: 640px; --sheet-h: 88dvh; }
+    dialog.drawer { --drawer-w: 640px; --drawer-h: 88dvh; }
     .sheet-head { padding: 4px 16px 0; border-bottom: 1px solid var(--gf-border); }
     .sheet-head::before { content: ''; display: block; width: 36px; height: 4px; margin: 6px auto 0; border-radius: 2px; background: var(--gf-border); }
     .sheet-head h2 { font-size: 1rem; margin: 12px 0 8px; display: flex; align-items: center; }
@@ -714,7 +714,7 @@ export class GfFlora extends LitElement {
       ${phone && plantId !== null && this.#pane !== null ? this.#paneSection(true) : nothing}
 
       ${wide ? nothing : html`
-        <dialog class="sheet rises" aria-label="Filtres" @click=${e => { if (e.target === e.currentTarget) this.#dialog?.close(); }}>
+        <dialog class="drawer rises" aria-label="Filtres" @click=${e => { if (e.target === e.currentTarget) this.#dialog?.close(); }}>
           <div class="sheet-head"><h2>${this.#filtersTitle()}</h2></div>
           <div class="sheet-body"><gf-filter-panel></gf-filter-panel></div>
           <div class="sheet-foot">

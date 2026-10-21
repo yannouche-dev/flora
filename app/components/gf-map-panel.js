@@ -58,7 +58,7 @@ export class GfMapPanel extends LitElement {
   static styles = [ui, sheetStyles, map3dOptionsCss, css`
     .display { display: grid; gap: 6px; }
 
-    dialog.sheet { --sheet-dim: 35%; }
+    dialog.drawer { --drawer-dim: 35%; }
     header { display: flex; align-items: center; padding: 10px 8px 6px 16px; border-bottom: 1px solid var(--gf-border); }
     header h2 { margin: 0; font-size: 1.1rem; flex: 1; }
     .body { overflow-y: auto; padding: 4px 16px calc(16px + env(safe-area-inset-bottom)); display: grid; gap: 4px; }
@@ -225,7 +225,7 @@ export class GfMapPanel extends LitElement {
     const group = (/** @type {string} */ g) => Object.keys(OVERLAYS).filter(k => OVERLAYS[k].group === g);
     const lines = this.legendLines || [];
     return html`
-      <dialog class="sheet centered" aria-label="Carte" @click=${e => { if (e.target === e.currentTarget) this.close(); }}>
+      <dialog class="drawer centered" aria-label="Carte" @click=${e => { if (e.target === e.currentTarget) this.close(); }}>
         <header>
           <h2>Carte</h2>
           <button class="icon-btn" type="button" aria-label="Fermer" @click=${() => this.close()}>${icon('x-lg')}</button>

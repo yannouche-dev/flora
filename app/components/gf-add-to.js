@@ -22,7 +22,7 @@ export class GfAddTo extends LitElement {
   };
 
   static styles = [ui, sheetStyles, css`
-    dialog.sheet { --sheet-h: 80dvh; }
+    dialog.drawer { --drawer-h: 80dvh; }
     header { padding: 14px 16px 8px; border-bottom: 1px solid var(--gf-border); }
     h2 { margin: 0; font-size: 1.05rem; }
     header p { margin: 2px 0 0; color: var(--gf-text-muted); font-size: 0.85rem; }
@@ -130,7 +130,7 @@ export class GfAddTo extends LitElement {
       </label></li>`;
 
     return html`
-      <dialog class="sheet centered" aria-label="Ajouter à une collection" @click=${e => { if (e.target === e.currentTarget) this.#close(); }}>
+      <dialog class="drawer centered" aria-label="Ajouter à une collection" @click=${e => { if (e.target === e.currentTarget) this.#close(); }}>
         <header>
           <h2>Ajouter à…</h2>
           <p>${name}</p>
