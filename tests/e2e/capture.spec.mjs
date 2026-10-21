@@ -1,7 +1,9 @@
 // « Noter ici » in mode cueillette (SAFE-4): the harvest box is never ticked for you, not even by the last opening;
-// a harvest of a plant our sources say is toxic waits for a warning to be answered — noted without the harvest by
-// default, with it only once the user ticked « J’ai lu cet avertissement ». A plant without toxicity data is noted at
-// once. The confusion reminders (« Noter ici », the place editor) show whatever the mode.
+// a harvest of a plant our sources say is toxic — or protected where it is noted — waits for a warning to be answered
+// (gf-harvest-warning, the place editor's too, never the browser's confirm()) — noted without the harvest by default
+// (in the place editor, the plant noted already: « Annuler » first, nothing to note without it), with it only once the
+// user ticked « J’ai lu cet avertissement ». A plant without toxicity data is noted at once. The
+// confusion reminders (« Noter ici », the place editor) show whatever the mode.
 import { test, expect, plantId } from './fixtures.mjs';
 
 /**
@@ -48,6 +50,8 @@ test('Noter ici, mode cueillette : case de récolte décochée ; plante toxique 
   await expect(warning.getByRole('link', { name: 'centres-antipoison.net' })).toBeVisible();
   // Nothing noted yet; the harvest only once the warning is read.
   expect(await harvestsOf(page, plantId('Conium maculatum'))).toEqual([]);
+  // The safe choice first, focused.
+  await expect(warning.getByRole('button', { name: 'Noter sans récolte' })).toBeFocused();
   const anyway = warning.getByRole('button', { name: 'Noter la récolte quand même' });
   await expect(anyway).toBeDisabled();
   await expect(warning.getByRole('checkbox', { name: 'J’ai lu cet avertissement' })).not.toBeChecked();
@@ -60,24 +64,76 @@ test('Noter ici, mode cueillette : case de récolte décochée ; plante toxique 
   expect(await harvestsOf(page, plantId('Conium maculatum'))).toEqual([0]);
 });
 
-test('Nouveau lieu, mode cueillette : « Récolté aujourd’hui » décoché ; le cocher pour une plante toxique demande confirmation', async ({ app, page }) => {
+test('Nouveau lieu, mode cueillette : « Récolté aujourd’hui » décoché ; le cocher pour une plante toxique ouvre l’avertissement de « Noter ici », jamais confirm()', async ({ app, page }) => {
   // On a desktop, the place saved at once moves to the Carte's panel: the editor of a new place is the phone's.
   test.skip(!app.phone, 'éditeur d’un nouveau lieu : téléphone');
+  /** The browser's own dialogs (confirm(): its OK would note the harvest): none. @type {string[]} */
+  const native = [];
+  page.on('dialog', dialog => { native.push(dialog.message()); dialog.dismiss(); });
   await app.open('#/');
   await page.evaluate(async () => (await import('/app/core/store.js')).setHarvestMode(true));
   await app.go(`#/collection/new?kind=place&plant=${plantId('Conium maculatum')}&at=48.851000,2.351000`);
   const editor = page.locator('gf-spot-editor');
   const today = editor.getByRole('checkbox', { name: 'Récolté aujourd’hui' });
   await expect(today).not.toBeChecked();
-  // The warning (a confirm) refused: the box stays unticked.
-  /** @type {string[]} */
-  const asked = [];
-  page.once('dialog', dialog => { asked.push(dialog.message()); dialog.dismiss(); });
   await today.click();
-  await expect.poll(() => asked.length).toBe(1);
-  expect(asked[0]).toMatch(/^Plante toxique : récolte déconseillée/);
-  expect(asked[0]).toMatch(/très fortement toxique/);
+  const warning = page.getByRole('alertdialog', { name: /Plante toxique : récolte déconseillée/ });
+  await expect(warning).toBeVisible();
+  await expect(warning.getByText(/très fortement toxique/)).toBeVisible();
+  await expect(warning.getByRole('link', { name: 'centres-antipoison.net' })).toBeVisible();
+  // The plant is noted already: no « Noter sans récolte » (it would note nothing), the safe choice « Annuler » first
+  // (focused); the harvest only once the warning is read.
+  await expect(warning.getByRole('button')).toHaveText(['Annuler', 'Noter la récolte quand même']);
+  await expect(warning.getByRole('button', { name: 'Annuler' })).toBeFocused();
+  await expect(warning.getByRole('button', { name: 'Noter la récolte quand même' })).toBeDisabled();
+  await warning.getByRole('button', { name: 'Annuler' }).click();
+  await expect(warning).toHaveCount(0);
   await expect(today).not.toBeChecked();
+  // Asked again, read: the harvest.
+  await today.click();
+  await expect(warning).toBeVisible();
+  await warning.getByRole('checkbox', { name: 'J’ai lu cet avertissement' }).check();
+  await warning.getByRole('button', { name: 'Noter la récolte quand même' }).click();
+  await expect(warning).toHaveCount(0);
+  await expect(today).toBeChecked();
+  expect(native).toEqual([]);
+});
+
+test('Éditeur d’un lieu, mode cueillette : une espèce protégée en France — l’avertissement avant que la récolte soit notée, « Annuler » d’abord', async ({ app, page }) => {
+  /** @type {string[]} */
+  const native = [];
+  page.on('dialog', dialog => { native.push(dialog.message()); dialog.dismiss(); });
+  await app.open('#/');
+  const moly = plantId('Allium chamaemoly');
+  const id = await page.evaluate(async plant => {
+    (await import('/app/core/store.js')).setHarvestMode(true);
+    const c = await import('/app/core/collections.js');
+    const db = await import('/app/core/db.js');
+    const place = c.withPlant(c.newPlace([2.351, 48.851], { name: 'Pelouse sèche' }), await db.get('plants', plant));
+    await c.saveCollection(place);
+    return place.id;
+  }, moly);
+  await app.go(`#/collection/${id}`);
+  const editor = page.locator('gf-spot-editor');
+  await editor.locator('li.entry button.head').filter({ hasText: 'Ail faux moly' }).first().click();
+  const entry = editor.locator('li.entry.open');
+  await entry.getByRole('button', { name: 'Ajouter une récolte' }).click();
+  const warning = page.getByRole('alertdialog', { name: 'Espèce protégée : cueillette interdite' });
+  await expect(warning).toBeVisible();
+  await expect(warning.getByText('Espèce protégée en France : cueillette interdite (INPN)')).toBeVisible();
+  // Its verdict: the same chip as on its sheet and its cards.
+  await expect(warning.locator('.sev-chip.danger')).toHaveText('Protégée');
+  // Said before: nothing noted yet.
+  expect(await harvestsOf(page, moly)).toEqual([0]);
+  // Noted here already: it stays, without a harvest — « Annuler » the safe choice, first and focused.
+  await expect(warning.getByText('Laissez-la où elle pousse : elle reste notée, sans récolte.')).toBeVisible();
+  await expect(warning.getByRole('button')).toHaveText(['Annuler', 'Noter la récolte quand même']);
+  await expect(warning.getByRole('button', { name: 'Annuler' })).toBeFocused();
+  await warning.getByRole('button', { name: 'Annuler' }).click();
+  await expect(warning).toHaveCount(0);
+  await expect(entry.getByText('Aucune récolte notée.')).toBeVisible();
+  expect(await harvestsOf(page, moly)).toEqual([0]);
+  expect(native).toEqual([]);
 });
 
 test('Noter ici : la récolte d’une plante toxique seulement après « J’ai lu cet avertissement » ; une plante sans donnée, tout de suite', async ({ app, page }) => {

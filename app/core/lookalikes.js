@@ -12,7 +12,8 @@ import * as db from './db.js';
  * @typedef {{ title: string, publisher: string, date: string, url: string }} Source
  * @typedef {{ toxic: Taxon[], edible: Taxon[], part: string, severity: 'mortel' | 'grave' | 'toxique', severityFrom?: 'tppt',
  *   tell: string[], symptoms?: string, sources: string[] }} Pair
- * @typedef {{ side: 'edible' | 'toxic', pair: Pair, others: (Taxon & { id: number | null })[], sources: Source[] }} Lookalike
+ * @typedef {{ side: 'edible' | 'toxic', pair: Pair, others: (Taxon & { id: number | null })[], sources: Source[], named: boolean }} Lookalike
+ *   `named`: the pair names this plant itself (its name or a synonym), not only its genus (« Symphytum »: every consoude)
  * @typedef {{ key: Pair['severity'], rank: number, tag: string, plant: string, danger: boolean }} Severity
  */
 
@@ -120,17 +121,18 @@ async function plantId(name) {
 }
 
 /**
- * Does this taxon of a pair name this plant? Its genus (one word without its author, nameKey), its accepted name, or
- * one of its synonyms that is no other plant's accepted name (plantId). A record without synonyms (a collection
- * entry) is checked through the flora.
+ * Does this taxon of a pair name this plant, and how? Its genus (one word without its author, nameKey): 'genus'; its
+ * accepted name, or one of its synonyms that is no other plant's accepted name (plantId): 'species'. A record without
+ * synonyms (a collection entry) is checked through the flora.
  * @param {Taxon} taxon @param {any} plant @param {string} name the plant's name, as a key @param {Set<string> | null} own its synonyms, as keys
+ * @returns {Promise<'genus' | 'species' | null>}
  */
 async function matches(taxon, plant, name, own) {
   const key = nameKey(taxon.taxon);
-  if (genusKey(key)) return nameKey(plant.genus) === key;
-  if (key === name) return true;
-  if (own && !own.has(key)) return false;
-  return plant.id != null && await plantId(taxon.taxon) === plant.id;
+  if (genusKey(key)) return nameKey(plant.genus) === key ? 'genus' : null;
+  if (key === name) return 'species';
+  if (own && !own.has(key)) return null;
+  return plant.id != null && await plantId(taxon.taxon) === plant.id ? 'species' : null;
 }
 
 /**
@@ -142,16 +144,39 @@ export async function lookalikesOf(plant) {
   const { sources, pairs } = await lookalikeData();
   const name = nameKey(plant.scientificName);
   const own = Array.isArray(plant.synonyms) ? new Set(plant.synonyms.map(nameKey)) : null;
-  const any = async (/** @type {Taxon[]} */ taxa) => { for (const t of taxa) if (await matches(t, plant, name, own)) return true; return false; };
+  // How a side names the plant: by name before by genus (a pair may name both).
+  const how = async (/** @type {Taxon[]} */ taxa) => {
+    let by = null;
+    for (const t of taxa) { const m = await matches(t, plant, name, own); if (m === 'species') return m; by ||= m; }
+    return by;
+  };
   /** @type {Lookalike[]} */
   const found = [];
   for (const pair of pairs) {
-    const side = await any(pair.edible) ? 'edible' : await any(pair.toxic) ? 'toxic' : null;
+    const edible = await how(pair.edible), toxic = edible ? null : await how(pair.toxic);
+    const side = edible ? 'edible' : toxic ? 'toxic' : null;
     if (!side) continue;
     const others = await Promise.all((side === 'edible' ? pair.toxic : pair.edible).map(async t => ({ ...t, id: await plantId(t.taxon) })));
-    found.push({ side, pair, others, sources: pair.sources.map(id => sources[id]).filter(Boolean) });
+    found.push({ side, pair, others, sources: pair.sources.map(id => sources[id]).filter(Boolean), named: (edible || toxic) === 'species' });
   }
   return found.sort((a, b) => severityOf(b.pair).rank - severityOf(a.pair).rank);
+}
+
+/** Words that say a plant can be eaten: never the app's (« comestible », « consommées en beignets », « se mange »). */
+const EATEN = /comestible|consomm|se mange/i;
+
+/**
+ * The one « comestible » filter, read by the plant sheet (gf-lookalikes), Faux amis and the cards of the games: the app
+ * never says a plant can be eaten. Of a confusion, its criteria without those that say a plant is eaten (« Seul le
+ * laurier sauce (Laurus nobilis) est comestible… »), and the part its source says is picked — only for the species the
+ * source names (`named`, the edible side), never for a plant it reaches through its genus: « Symphytum » names no
+ * consoude in particular, so no consoude gets « partie consommée » (its confusion with the digitale is still said).
+ * @param {{ pair: Pair, side?: Lookalike['side'], named?: boolean }} l a plant's confusion, or a pair alone (no part)
+ * @returns {{ criteria: string[], part: string | null }}
+ */
+export function edibleFilter({ pair, side, named }) {
+  return { criteria: (Array.isArray(pair?.tell) ? pair.tell : []).filter(t => !EATEN.test(String(t))),
+    part: side === 'edible' && named && pair?.part ? pair.part : null };
 }
 
 /** When the list cannot be read: said, never left out. */

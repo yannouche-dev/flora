@@ -1,10 +1,12 @@
 // @ts-check
 // Templates and styles shared by the app's screens, written once: a sheet from the bottom (dialog.drawer: Flore's
-// filters, « Ajouter à… », the map's panel), a modal question (dialog.ask) and « Recommencer : tout effacer ? » (the
-// launcher, gf-launcher.js, and a mini-app's box, gf-miniapp.js, ask it the same way).
+// filters, « Ajouter à… », the map's panel, the harvest warning), a modal question (dialog.ask), « Recommencer : tout
+// effacer ? » (the launcher, gf-launcher.js, and a mini-app's box, gf-miniapp.js, ask it the same way) and a plant's
+// verdict as a chip (core/danger.js: the sheet, the cards of the games, the harvest warning, the confusions).
 
-import { css, html } from 'lit';
+import { css, html, nothing } from 'lit';
 import { fr } from '../core/fr.js';
+import { icon } from '../core/icons.js';
 
 /**
  * A sheet from the bottom (<dialog class="drawer">): the whole width on a phone, at most --drawer-w wide (520px) and
@@ -43,3 +45,29 @@ export function replayQuestion(title, items, id) {
     <p id=${id + '-text'}>${items ? fr(`Seront supprimés : ${items.gone.join(', ')}. Cette action est définitive.`) : ''}${(items?.kept ?? []).map(k => ' ' + fr(k))}</p>
     <p class="kept">${title ? fr(`Ce qui ne vient pas de ${title} reste : vos autres plantes et favoris, vos lieux, vos réglages.`) : ''}</p>`;
 }
+
+/**
+ * A verdict's chip (core/danger.js#dangerLevel, or a confusion's: danger.js#confusionChip): its word in its level's
+ * colour — `info` neutral, `warn` amber, `danger` red, `deadly` red filled —, after it the number of its reasons when
+ * `count`, its reasons on hover. Nothing for `none` or no word: no chip ever says a plant is harmless. Not imported
+ * from danger.js: this module is in the app's start, the verdict is not (tools/start-baseline.json).
+ * @param {{ level: string, word: string, reasons?: { text: string }[] } | null | undefined} v
+ * @param {{ count?: boolean }} [o]
+ */
+export function severityChip(v, { count = false } = {}) {
+  if (!v?.word || !v.level || v.level === 'none') return nothing;
+  const n = v.reasons?.length ?? 0;
+  const glyph = v.level === 'deadly' || v.level === 'danger' ? icon('exclamation-octagon-fill') : v.level === 'warn' ? icon('exclamation-triangle-fill') : nothing;
+  return html`<span class="sev-chip ${v.level}" title=${n ? v.reasons?.map(r => r.text).join('\n') ?? nothing : nothing}>${glyph}${fr(v.word)}${count && n ? ` · ${n}` : ''}</span>`;
+}
+
+/** The chip's colours (Faux amis' tag, one per level): text at 4.5:1 on its tint, light or dark; `deadly` filled. */
+export const severityStyles = css`
+  .sev-chip { display: inline-flex; align-items: center; gap: 4px; max-width: 100%; padding: 2px 8px; box-sizing: border-box; border-radius: var(--gf-radius-pill);
+    font-size: 0.75rem; font-weight: 700; line-height: 1.35; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; vertical-align: middle;
+    background: var(--gf-surface-2); color: var(--gf-text); }
+  .sev-chip .bi { flex: none; }
+  .sev-chip.warn { background: var(--gf-warn-bg); color: color-mix(in srgb, var(--gf-warn) 78%, var(--gf-text)); }
+  .sev-chip.danger { background: var(--gf-danger-bg); color: var(--gf-danger); }
+  .sev-chip.deadly { background: var(--gf-deadly); color: var(--gf-deadly-contrast); }
+`;

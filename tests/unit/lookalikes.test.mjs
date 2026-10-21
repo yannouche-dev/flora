@@ -4,7 +4,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { UNREAD_LOOKALIKES, genusOf, lookalikeWarning, lookalikesOf, nameKey, severityOf } from '../../app/core/lookalikes.js';
-import { harvestRisk } from '../../app/core/alerts.js';
+import { verdictOf } from '../../app/core/alerts.js';
+import { harvestStop, reasonLine } from '../../app/core/danger.js';
 
 const plants = JSON.parse(await readFile(new URL('../fixtures/plants.json', import.meta.url), 'utf8'));
 const plant = (/** @type {string} */ name) => {
@@ -60,14 +61,15 @@ test('SAFE-5 : gravité alignée sur le TPPT — ciguë, muguet « très toxique
 });
 
 test('SAFE-4 : avant de noter une récolte, la toxicité est dite (ANSM, TPPT, confusion) ; rien pour une plante sans donnée', async () => {
-  const risk = await harvestRisk(plant('Conium maculatum'));
-  assert.ok(risk && !risk.unread);
-  assert.ok(risk.reasons.some(r => /liste B/.test(r)), risk.reasons.join('\n'));
-  assert.ok(risk.reasons.some(r => /très fortement toxique/.test(r)));
-  assert.ok(risk.reasons.some(r => /Plante très toxique, confondue avec Persil plat/.test(r)));
-  assert.equal(await harvestRisk(plant('Atriplex halimus')), null);
-  // The edible side of a confusion is no reason by itself (its look-alike is the toxic one).
-  assert.equal(await harvestRisk(plant('Tetragonia tetragonoides')), null);
+  const risk = await verdictOf(plant('Conium maculatum'));
+  assert.ok(harvestStop(risk) && !risk.unread);
+  const lines = risk.reasons.map(reasonLine);
+  assert.ok(lines.some(r => /liste B/.test(r)), lines.join('\n'));
+  assert.ok(lines.some(r => /très fortement toxique/.test(r)));
+  assert.ok(lines.some(r => /Plante très toxique, confondue avec Persil plat/.test(r)));
+  assert.equal(harvestStop(await verdictOf(plant('Atriplex halimus'))), false);
+  // The edible side of a confusion is no reason by itself (its look-alike is the toxic one): said after, not before.
+  assert.equal(harvestStop(await verdictOf(plant('Tetragonia tetragonoides'))), false);
 });
 
 test('nameKey et genusOf : auteurs, casse et hybrides laissés de côté', () => {

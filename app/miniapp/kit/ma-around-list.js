@@ -35,6 +35,7 @@ import { sheetSession } from '../../core/sheet-session.js';
 import { StoreController } from '../../core/store.js';
 import { emergency } from '../../core/poison.js';
 import { ui } from '../../styles/ui.js';
+import { severityChip, severityStyles } from '../../components/ui-kit.js';
 import { MONTH, PAGE, distLabel, nameOf, nextDistance } from './cards.js';
 import { sessionOf } from './session.js';
 import './ma-deck.js';
@@ -75,7 +76,7 @@ export class MaAroundList extends LitElement {
     _full: { state: true }
   };
 
-  static styles = [ui, splitStyles, css`
+  static styles = [ui, splitStyles, severityStyles, css`
     /* Its column's size known (cqh): « Rencontres » fits it, the deck shrinking on a short window, never a scrollbar;
        the grids scroll, a thin bar against the column's edge (never a second divider beside the separator). */
     :host { display: block; position: relative; min-height: 0; overflow-y: auto; background: var(--gf-bg, var(--gf-surface-2)); container-type: size;
@@ -118,8 +119,7 @@ export class MaAroundList extends LitElement {
     .chips { position: absolute; top: 8px; left: 8px; right: 8px; display: flex; gap: 4px; flex-wrap: wrap; pointer-events: none; }
     .chip { padding: 2px 8px; border-radius: var(--gf-radius-pill); font-size: 0.72rem; font-weight: 600; background: rgb(255 255 255 / 92%); color: #1f3d1f; }
     .chip.bloom { background: #fdf3c4; color: #6b4e00; }
-    .chip.warn { background: #fff1d6; color: var(--gf-warn); }
-    .chip.danger { background: #fde2df; color: var(--gf-danger); }
+    .chips .sev-chip { font-size: 0.72rem; box-shadow: 0 0 0 1px rgb(0 0 0 / 8%); }
     .seen { position: absolute; right: 8px; bottom: 54px; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--gf-accent); color: #fff; font-size: 0.75rem; }
     .more { display: block; margin: 16px auto 0; }
     .src { margin-top: 18px; font-size: 0.75rem; color: var(--gf-text-muted); text-align: center; }
@@ -593,8 +593,6 @@ export class MaAroundList extends LitElement {
    */
   #card(c, ids, pick = null) {
     const p = c.plant, name = nameOf(p);
-    const a = c.alerts, danger = a?.safety?.tone === 'danger' || a?.edible?.tone === 'danger';
-    const n = (a?.safety?.count || 0) + (a?.edible?.count || 0);
     const photo = this.#photo(c.photo);
     const mosaic = this.mosaic && this.#view === 'all';
     const ds = discoverState();
@@ -611,7 +609,7 @@ export class MaAroundList extends LitElement {
       ${/** @type {number[]} */ (this.c?.matches ?? []).includes(p.id) ? html`<span class="heart" aria-label="Match">${icon('heart-fill')}</span>` : nothing}
       <div class="ph">${photo ? html`<img src=${photo} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} @load=${showImg} />` : nothing}${mosaic ? nothing : credit}</div>
       <div class="chips">${c.blooming ? html`<span class="chip bloom">En fleur</span>` : nothing}
-        ${n ? html`<span class="chip ${danger ? 'danger' : 'warn'}">${danger ? 'Attention' : 'À savoir'} · ${n}</span>` : nothing}</div>
+        ${severityChip(c.verdict, { count: true })}</div>
       ${ds.seen.includes(p.id) ? html`<span class="seen" title="Déjà découverte" aria-label="Déjà découverte">${icon('check-lg')}</span>` : nothing}
       <div class="txt"><b>${name}</b><i>${p.scientificName}</i>${mosaic ? credit : nothing}</div>
     </button>`;

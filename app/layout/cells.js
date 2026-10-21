@@ -37,7 +37,7 @@ import { SearchController } from '../core/search-channel.js';
 import { blockStyle } from '../core/sheet-blocks.js';
 import { href } from '../core/router.js';
 import { floweringMonths, getPlant } from '../core/plants.js';
-import { alertsOf } from '../core/alerts.js';
+import { verdictOf } from '../core/alerts.js';
 import { thumbCredit } from '../core/credit.js';
 import { cachedThumb, thumbUrl } from '../core/thumb.js';
 import { hintView, takeHint } from '../core/hints.js';
@@ -1275,14 +1275,14 @@ export class DlDeck extends LitElement {
       const sp = species.byPlant.get(id);
       /** @type {Card} */
       const card = { plant, taxonId: sp?.taxonId, count: sp?.count ?? 0, photo: sp?.photo ? sp.photo.replace(/\/square\./, '/medium.') : plant.thumbnail?.url || null,
-        credit: sp?.photo ? sp.credit : thumbCredit(plant.thumbnail), blooming: floweringMonths(plant.flowering).has(month), alerts: null };
+        credit: sp?.photo ? sp.credit : thumbCredit(plant.thumbnail), blooming: floweringMonths(plant.flowering).has(month), verdict: null };
       return card;
     }))).filter(c => c !== null);
     if (key !== this.#cardsFor) return;
     this.#session.cards = /** @type {Card[]} */ (cards);
     this._loading = false;
-    // Their safety (local data), as it comes: never a card without it once known.
-    for (const c of this.#session.cards) alertsOf(c.plant).then(a => { c.alerts = a; this.#session.changed(); }, () => {});
+    // Their verdict (local data; protection at the zone's point), as it comes: never a card without it once known.
+    for (const c of this.#session.cards) verdictOf(c.plant, { at: s.live.at }).then(v => { c.verdict = v; this.#session.changed(); }, () => {});
     // No plant chosen yet: the card on top is the current plant.
     const first = this.#session.deck[0];
     if (first && s.live.plant == null && this.#writes) s.pick(first.plant.id, { how: 'replace' });

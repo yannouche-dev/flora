@@ -1,18 +1,21 @@
 // @ts-check
 import { LitElement, html, css, nothing, repeat } from 'lit';
-import { UNREAD_LOOKALIKES, genusOf, lookalikesOf, severityOf } from '../core/lookalikes.js';
+import { UNREAD_LOOKALIKES, edibleFilter, genusOf, lookalikesOf, severityOf } from '../core/lookalikes.js';
+import { confusionChip } from '../core/danger.js';
 import { href } from '../core/router.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 import { emergency } from '../core/poison.js';
 import { isFocused, sendFocus } from '../core/map-focus.js';
 import { safeUrl } from '../core/safe-url.js';
+import { severityChip, severityStyles } from './ui-kit.js';
 
 /** @typedef {import('../core/lookalikes.js').Lookalike} Lookalike */
 
 /**
  * « Peut être confondue avec… »: the confusions the Anses and the Centres antipoison report for this plant,
- * with how to tell them apart and the source. Each confusion folds on its own: closed at first when `compact`
+ * with how to tell them apart (never a criterion that says a plant can be eaten: lookalikes.js#edibleFilter, as Faux
+ * amis and the cards) and the source; each confusion's severity as the verdict's chip (danger.js#confusionChip). Each confusion folds on its own: closed at first when `compact`
  * (Épuré: one line each), open otherwise. The symptoms of a deadly confusion in every mode (Épuré: one line outside
  * the fold, in full once open), the others' when `detailed` (Scientifique). Nothing for other plants; when the list
  * cannot be read, says so (never « nothing »), with « Réessayer » (it also tells the sheet: `safety-retry`).
@@ -31,7 +34,7 @@ export class GfLookalikes extends LitElement {
     _error: { state: true }
   };
 
-  static styles = [ui, css`
+  static styles = [ui, severityStyles, css`
     :host { display: block; }
     :host([hidden]) { display: none; }
     .box { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
@@ -55,8 +58,7 @@ export class GfLookalikes extends LitElement {
     .sym { display: block; margin-top: 2px; font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     details[open] .sym { display: none; }
     .alert strong a { color: inherit; }
-    .sev { font-weight: 700; text-transform: uppercase; font-size: 0.72rem; letter-spacing: 0.03em; margin-left: 4px; }
-    .mortel .sev { color: #b91c1c; }
+    .alert .sev-chip { margin-left: 4px; text-transform: uppercase; font-size: 0.68rem; letter-spacing: 0.03em; }
     ul { margin: 4px 0 0; padding-left: 18px; }
     li { margin: 2px 0; }
     .no-tell { margin: 4px 0 0; font-style: italic; }
@@ -129,18 +131,19 @@ export class GfLookalikes extends LitElement {
   #item(l) {
     const { pair, side, others } = l;
     // Épuré (folded): the symptoms one line under the head; in full once open.
-    const sev = severityOf(pair);
+    const sev = severityOf(pair), chip = confusionChip(pair, side);
     const symptoms = (this.detailed || sev.danger) && pair.symptoms;
+    const criteria = edibleFilter(l).criteria;
     const names = others.map((o, i) => html`${i ? ', ' : ''}${this.#other(o)}`);
     const head = side === 'edible'
       ? html`<strong>${icon('exclamation-triangle-fill')} Peut être confondue avec ${names}</strong>`
       : html`<strong>${icon('exclamation-octagon-fill')} Plante ${sev.plant}, confondue avec ${names}</strong>`;
-    // « mortel » and « grave » share the red tone (class mortel); the badge says which.
-    return html`<details class="alert ${sev.danger ? 'mortel' : 'toxique'}" ?open=${!this.compact}>
-      <summary><span class="what">${head}<span class="sev">${sev.tag}</span> <span class="muted">· ${pair.part}</span>
+    // A danger (« mortel », « très toxique », the toxic plant itself) has the red box (class mortel); the chip says which.
+    return html`<details class="alert ${chip.level === 'warn' ? 'toxique' : 'mortel'}" ?open=${!this.compact}>
+      <summary><span class="what">${head}${severityChip(chip)} <span class="muted">· ${pair.part}</span>
         ${symptoms && this.compact ? html`<span class="sym"><b>Symptômes :</b> ${pair.symptoms}</span>` : nothing}</span>
         <span class="chev" aria-hidden="true">${icon('chevron-down')}</span></summary>
-      ${pair.tell.length ? html`<ul>${pair.tell.map(t => html`<li>${t}</li>`)}</ul>`
+      ${criteria.length ? html`<ul>${criteria.map(t => html`<li>${t}</li>`)}</ul>`
         : html`<p class="no-tell">Nos sources ne donnent pas de critère pour les distinguer : en cas de doute, ne la cueillez pas.</p>`}
       ${this.mapLinked ? this.#compare(others) : nothing}
       ${symptoms ? html`<p class="src"><b>Symptômes :</b> ${pair.symptoms}</p>` : nothing}

@@ -13,7 +13,7 @@
 import { floweringMonths, getPlant } from '../../core/plants.js';
 import { speciesAround, observationPointsAround } from '../../core/nearby.js';
 import { addressAt } from '../../core/geoservices.js';
-import { alertsOf } from '../../core/alerts.js';
+import { verdictOf } from '../../core/alerts.js';
 import { lookalikesOf } from '../../core/lookalikes.js';
 import { plantSeen } from '../../core/discover.js';
 import { forgetFavoriteMadeBy, isFavorite, toggleFavorite } from '../../core/collections.js';
@@ -262,7 +262,7 @@ export class AroundSession extends EventTarget {
         // iNaturalist's photo (a free licence only, nearby.js), else the flora's thumbnail: each with its credit.
         /** @type {Card} */
         const card = { plant, taxonId: s.taxonId, count: s.count, photo: s.photo ? s.photo.replace(/\/square\./, '/medium.') : plant.thumbnail?.url || null,
-          credit: s.photo ? s.credit : thumbCredit(plant.thumbnail), blooming: floweringMonths(plant.flowering).has(month), alerts: null };
+          credit: s.photo ? s.credit : thumbCredit(plant.thumbnail), blooming: floweringMonths(plant.flowering).has(month), verdict: null };
         return card;
       }))).filter(c => c !== null);
       if (abort.signal.aborted) return;
@@ -289,8 +289,8 @@ export class AroundSession extends EventTarget {
         }
       } else list = aroundOrder(list);
       this.cards = list;
-      // The alerts of each plant (local data), as they come.
-      for (const c of list) alertsOf(c.plant).then(a => { c.alerts = a; this.changed(); }, () => {});
+      // The verdict on each plant (local data; its protection here, at the circle's centre), as they come.
+      for (const c of list) verdictOf(c.plant, { at: point }).then(v => { c.verdict = v; this.changed(); }, () => {});
     } catch (error) {
       if (abort.signal.aborted) return;
       const e = /** @type {Error} */ (error);

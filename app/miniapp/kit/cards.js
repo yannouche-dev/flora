@@ -5,14 +5,14 @@
 // not yet swiped), a swipe kept or taken back, the first sentence of what Wikipédia says, and a card's short « bio »,
 // its safety lines first. No DOM, no network: tested under Node (tests/unit/around.test.mjs).
 
-import { UNREAD } from '../../core/alerts.js';
+import { UNREAD, rank } from '../../core/danger.js';
 import { gravest, severityOf } from '../../core/lookalikes.js';
-import { harvestRules } from '../../core/regulation.js';
 import { STOPS as DISTANCES } from '../../core/distance.js';
 
 /**
  * @typedef {{ plant: any, taxonId?: number, count: number, photo: string | null, credit: import('../../core/credit.js').Credit | null,
- *   blooming: boolean, alerts: any, confusions?: import('../../core/lookalikes.js').Lookalike[] }} Card
+ *   blooming: boolean, verdict: import('../../core/danger.js').Verdict | null, confusions?: import('../../core/lookalikes.js').Lookalike[] }} Card
+ *   `verdict`: the plant's (core/alerts.js#verdictOf, at the place), null until read
  * @typedef {{ matches: number[], passed: number[], avoided?: number[] }} Swipes `avoided`: Cueillette prudente's toxic
  *   look-alikes recognised (toAvoid); a game without it never gets the key.
  */
@@ -158,34 +158,42 @@ export function ethnoSentence(wiki) {
   return pick('names') || pick('history') || first(wiki?.description || '') || '';
 }
 
+/** The reasons that say the plant itself is toxic; the toxic side of a confusion too, unless the card says it already. */
+const TOXIC = new Set(['tppt', 'ansm-b', 'ansm-a']);
+
 /**
  * A short bio, from the plant's real data — with a wink. Safety first (only 4 lines are kept): Cueillette prudente's
- * confusions, toxicity data unreadable, toxic or protected; « à table » never said of a plant toxic, protected,
- * regulated or whose toxicity could not be read. `months`: its flowering months (0 = January).
+ * confusions, toxicity data unreadable, toxic or protected — its verdict's reasons (core/danger.js); « à table » only
+ * for the species the Anses names as picked (lookalikes.js#edibleFilter: never through its genus), never for a plant
+ * toxic, protected, regulated or whose toxicity could not be read. `months`: its flowering months (0 = January).
  * @param {Card} c @param {Set<number>} months @returns {string[]}
  */
 export function bio(c, months) {
-  const p = c.plant, a = c.alerts, out = [];
-  // Cueillette prudente: the confusion first.
-  for (const l of (c.confusions || []).slice(0, 2)) {
+  const p = c.plant, v = c.verdict, out = [];
+  // Cueillette prudente: the confusion first (only its cards carry their confusions).
+  const said = (c.confusions || []).slice(0, 2);
+  for (const l of said) {
     const others = l.others.map(o => o.label).join(', ');
     out.push(l.side === 'edible' ? `⚠️ Ne me confondez pas avec ${others} (${severityOf(l.pair).tag}). Partie : ${l.pair.part}.`
       : `☠️ Je suis le sosie ${severityOf(l.pair).tag} de ${others}.`);
   }
-  // Data unreadable: said, never left out (alerts.js).
-  if (a?.unread) out.push('⚠️ ' + UNREAD + '.');
-  const facts = /** @type {string[]} */ (a?.safety?.text || []).filter(t => t !== UNREAD);
-  const toxicLine = a?.safety?.tone === 'danger' && facts.find(t => /toxi|mortel|ANSM/i.test(t));
-  if (toxicLine) out.push('☠️ ' + toxicLine + '. On regarde, on ne goûte pas.');
-  else if (facts.some(t => /Protégée/.test(t))) out.push('🛡️ Espèce protégée : on m’admire, on ne me cueille pas.');
-  if (a?.edible) {
-    // Never « comestible »: the part the Anses says is eaten, and no « à table » for a plant toxic (TPPT 2 or more,
-    // ANSM), protected or regulated, or whose toxicity could not be read.
-    const n = a.edible.text.length;
-    const kept = (p.statuses || []).some((/** @type {any} */ s) => /^(PN|PR|PD)$/.test(s.type)) || harvestRules(p.statuses).length > 0;
-    out.push(a.toxic || kept || a.unread ? `⚠️ J’ai des sosies dangereux (${n}). Lisez ma fiche avant toute cueillette.`
-      : a.edible.parts?.length ? `🍽️ Partie consommée selon l’Anses : ${a.edible.parts.join(', ')}. J’ai des sosies dangereux (${n}) : lisez ma fiche avant de passer à table.`
-      : `⚠️ J’ai des sosies dangereux (${n}) : lisez ma fiche avant de passer à table.`);
+  // Data unreadable: said, never left out (danger.js).
+  if (v?.unread) out.push('⚠️ ' + UNREAD + '.');
+  const reasons = v?.reasons || [];
+  // The toxic side of a confusion is the plant's own ☠️ line wherever no confusion line says it (Rencontres, Mosaïque,
+  // a free layout's deck: a card without its confusions — « Plante mortelle, confondue avec Carotte sauvage »).
+  const saidSide = said.some(l => l.side === 'toxic');
+  const toxicLine = reasons.find(r => (TOXIC.has(r.kind) || (r.kind === 'toxic-side' && !saidSide)) && rank(r.level) >= rank('danger'));
+  if (toxicLine) out.push('☠️ ' + toxicLine.text + '. On regarde, on ne goûte pas.');
+  else if (reasons.some(r => r.kind === 'protected' || r.kind === 'protected-elsewhere')) out.push('🛡️ Espèce protégée : on m’admire, on ne me cueille pas.');
+  const n = reasons.filter(r => r.kind === 'edible-side').length;
+  if (n && v) {
+    // Never « comestible »: the part the Anses says is picked, for the species it names; no « à table » for a plant
+    // toxic (TPPT 2 or more, ANSM), protected or regulated, whose toxicity could not be read, or reached by its genus.
+    const kept = reasons.some(r => r.kind === 'protected' || r.kind === 'protected-elsewhere' || r.kind === 'regulated');
+    out.push(!v.toxic && !kept && !v.unread && v.eaten.length
+      ? `🍽️ Partie consommée selon l’Anses : ${v.eaten.join(', ')}. J’ai des sosies dangereux (${n}) : lisez ma fiche avant de passer à table.`
+      : `⚠️ J’ai des sosies dangereux (${n}). Lisez ma fiche avant toute cueillette.`);
   }
   if (c.blooming) out.push('🌼 En fleur en ce moment : c’est le jour de la photo.');
   else if (months.size) out.push(`🗓️ Je fleuris de ${MONTH[[...months][0]]} à ${MONTH[[...months][months.size - 1]]}. Repassez me voir.`);
