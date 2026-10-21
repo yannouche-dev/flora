@@ -1,6 +1,6 @@
 {
   "entry": "app/main.js",
-  "total": 61,
+  "total": 62,
   "modules": [
     "app/components/gf-active-filters.js",
     "app/components/gf-app.js",
@@ -17,6 +17,7 @@
     "app/components/gf-scenarios.js",
     "app/components/gf-tabbar.js",
     "app/components/gf-voice-button.js",
+    "app/components/ui-kit.js",
     "app/config.js",
     "app/core/around-sessions.js",
     "app/core/cache.js",

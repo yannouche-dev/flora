@@ -26,6 +26,7 @@ import { plantViewOf, setHarvestMode, setMode, setShowSteps, StoreController } f
 import { subscribe } from '../core/sync.js';
 import { icon } from '../core/icons.js';
 import { ui } from '../styles/ui.js';
+import { askStyles, replayQuestion } from '../components/ui-kit.js';
 import { startScreen, startStyles } from '../components/start-screen.js';
 import { fr } from '../core/fr.js';
 import '../components/gf-scenarios.js';
@@ -51,7 +52,7 @@ export class GfMiniapp extends LitElement {
     _ownBar: { state: true }
   };
 
-  static styles = [ui, startStyles, css`
+  static styles = [ui, startStyles, askStyles, css`
     :host { display: grid; grid-template-rows: auto minmax(0, 1fr); min-height: 0; background: var(--gf-bg, var(--gf-surface-2)); }
     .bar { display: flex; align-items: center; gap: 8px; min-height: 48px; padding: 4px 8px; background: var(--gf-surface); border-bottom: 1px solid var(--gf-border); min-width: 0; }
     .quit { flex: none; min-height: 40px; padding: 4px 12px 4px 8px; gap: 6px; border: 0; background: none; box-shadow: none; color: var(--gf-text-muted); font-weight: 500; }
@@ -74,11 +75,6 @@ export class GfMiniapp extends LitElement {
     .body > ma-grid { height: 100%; }
     .start-host { height: 100%; overflow-y: auto; }
     .missing { padding: 24px 16px; }
-    dialog { width: min(440px, calc(100vw - 24px)); padding: 20px; border: 0; border-radius: 16px; background: var(--gf-surface); color: var(--gf-text); box-shadow: var(--gf-shadow-float); }
-    dialog::backdrop { background: rgb(0 0 0 / 45%); }
-    dialog h2 { margin: 0 0 8px; font-size: 1.15rem; }
-    dialog p { margin: 0 0 16px; color: var(--gf-text-muted); }
-    dialog .row { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
     /* A phone: the way out as an icon, the steps on a line of their own. */
     @container (max-width: 699px) { .bar { flex-wrap: wrap; } }
     @media (max-width: 699px) {
@@ -389,9 +385,7 @@ export class GfMiniapp extends LitElement {
           ${asking?.kind === 'leave'
             ? html`<h2 id="ask-title">${fr(m.exit.label)} ?</h2><p id="ask-text">${fr(asking.text)}</p>
               <div class="row"><button value="no" type="submit" autofocus>Rester</button><button class="primary" value="yes" type="submit">Quitter</button></div>`
-            : html`<h2 id="ask-title">${fr('Recommencer : tout effacer ?')}</h2>
-              <p id="ask-text">${fr(`Seront supprimés : ${(asking?.items?.gone ?? []).join(', ')}. Cette action est définitive.`)}${(asking?.items?.kept ?? []).map(k => ' ' + fr(k))}</p>
-              <p class="kept">${fr(`Ce qui ne vient pas de ${m.title} reste : vos autres plantes et favoris, vos lieux, vos réglages.`)}</p>
+            : html`${replayQuestion(m.title, asking?.items ?? { gone: [], kept: [] }, 'ask')}
               <div class="row"><button value="no" type="submit" autofocus>Annuler</button><button class="danger" value="yes" type="submit">${icon('arrow-counterclockwise')} Rejouer</button></div>`}
         </form>
       </dialog>`;

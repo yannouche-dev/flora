@@ -22,7 +22,7 @@ import { openModal } from '../core/history.js';
 import { MINIAPPS } from '../miniapps/index.js';
 import { madeByApp } from '../core/collections.js';
 import { ui } from '../styles/ui.js';
-import { fr } from '../core/fr.js';
+import { askStyles, replayQuestion } from './ui-kit.js';
 
 /**
  * @typedef {{ key: string, app: import('../miniapps/index.js').MiniAppEntry, title: string, pitch: string, icon: import('../core/icons.js').IconName,
@@ -42,7 +42,7 @@ function entries() {
 }
 
 export class GfLauncher extends LitElement {
-  static styles = [ui, sceneStyles, css`
+  static styles = [ui, sceneStyles, askStyles, css`
     :host { display: block; }
     ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
     li { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; align-items: start; padding: 14px; border: 1px solid var(--gf-border); border-radius: 14px;
@@ -53,12 +53,6 @@ export class GfLauncher extends LitElement {
     li button { justify-self: start; margin-top: 6px; }
     li .acts { display: flex; flex-wrap: wrap; gap: 8px; justify-self: start; }
     li .acts button { margin-top: 6px; }
-    dialog.ask { width: min(440px, calc(100vw - 24px)); padding: 20px; border: 0; border-radius: 16px; background: var(--gf-surface); color: var(--gf-text); box-shadow: var(--gf-shadow-float); }
-    dialog.ask::backdrop { background: rgb(0 0 0 / 45%); }
-    dialog.ask h2 { margin: 0 0 8px; font-size: 1.15rem; }
-    dialog.ask p { margin: 0 0 16px; color: var(--gf-text-muted); }
-    dialog.ask .row { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
-    dialog.ask .row button { margin: 0; }
 
     /* The page: the tab's own screen. */
     :host([page]) { height: 100%; overflow-y: auto; background: var(--gf-bg); container-type: inline-size; }
@@ -190,9 +184,7 @@ export class GfLauncher extends LitElement {
   #askView() {
     const e = this._asking;
     return html`<dialog class="ask" aria-labelledby="restart-title" aria-describedby="restart-text" @close=${() => { this._asking = null; }}>
-      <h2 id="restart-title">${fr('Recommencer : tout effacer ?')}</h2>
-      <p id="restart-text">${e ? fr(`Seront supprimés : ${e.items.gone.join(', ')}. Cette action est définitive.`) : ''}${(e?.items.kept ?? []).map(k => ' ' + fr(k))}</p>
-      <p class="kept">${e ? fr(`Ce qui ne vient pas de ${e.title} reste : vos autres plantes et favoris, vos lieux, vos réglages.`) : ''}</p>
+      ${replayQuestion(e?.title ?? '', e?.items, 'restart')}
       <div class="row">
         <button type="button" autofocus @click=${(/** @type {Event} */ ev) => /** @type {HTMLElement} */ (ev.currentTarget).closest('dialog')?.close()}>Annuler</button>
         <button class="danger" type="button" @click=${() => this.#restart()}>${icon('arrow-counterclockwise')} Recommencer</button>
