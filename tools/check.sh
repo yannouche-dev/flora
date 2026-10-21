@@ -15,6 +15,7 @@
 #    (never bumped by hand), the fingerprint of the site's files in an assembled site;
 #  - against an assembled site: the flora packed for the first launch is the one of its plants.json, as its meta.json
 #    describes it (tools/pack-flora.mjs), and index.html preloads the modules of the start (tools/preload-modules.mjs);
+#  - the modules of the app's start are those of tools/start-baseline.json, a ratchet (tools/preload-modules.mjs);
 #  - the safety data: look-alike pairs, toxicity sources, protection statuses (scripts/check-data.mjs);
 #  - the licence rules of the images and their credits, as a table (tests/licenses.mjs);
 #  - the CSP of index.html allows its inline scripts by hash (tools/csp-hash.mjs, when present).
@@ -122,9 +123,10 @@ fi
 if [ -n "$SITE" ]; then
   step "Flora packed for the first launch (tools/pack-flora.mjs, against $SITE)"
   node tools/pack-flora.mjs "$SITE" --check || failed=1
-  step "Modules preloaded by index.html (tools/preload-modules.mjs, against $SITE)"
-  node tools/preload-modules.mjs "$SITE" --check || failed=1
 fi
+
+step "Start of the app (tools/preload-modules.mjs: tools/start-baseline.json${SITE:+, and the preloads of $SITE})"
+node tools/preload-modules.mjs "${SITE:-.}" --check || failed=1
 
 step 'Safety data (scripts/check-data.mjs)'
 node scripts/check-data.mjs || failed=1
