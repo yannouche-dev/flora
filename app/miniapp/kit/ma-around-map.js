@@ -21,7 +21,7 @@ import { discoverState } from '../../core/discover.js';
 import { hideImg, showImg } from '../../core/img.js';
 import { creditText } from '../../core/credit.js';
 import { moduleOn } from '../../core/modules.js';
-import { plantViewOf, StoreController } from '../../core/store.js';
+import { StoreController } from '../../core/store.js';
 import { ui } from '../../styles/ui.js';
 import { DISTANCES, distanceAt, distanceEvents, distLabel, distMood, nameOf } from './cards.js';
 import { commonOf } from '../../core/plants.js';
@@ -233,7 +233,7 @@ export class MaAroundMap extends LitElement {
   #hlFor = '';
 
   /** A plant's photo, unless the « Photos en ligne » module is off in this view (a leaf shows instead). @param {string | null | undefined} url */
-  #photo(url) { return url && moduleOn('photos', plantViewOf(this.#store.state)) ? url : null; }
+  #photo(url) { return url && moduleOn('photos', this.#store.state.mode) ? url : null; }
 
   /** The zone chosen, in sight in its row (scrolled sideways on a touch screen): a row drawn again starts at its left. */
   #showScope() {

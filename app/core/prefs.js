@@ -47,6 +47,11 @@ export function readJSON(key, fallback) {
 /** Writes a value as JSON (null or undefined: the key removed). @param {string} key @param {unknown} value */
 export const writeJSON = (key, value) => writeText(key, value == null ? null : JSON.stringify(value));
 
+/** The keys of settings the app no longer has, removed (main.js, at start). @param {string[]} keys */
+export function forgetObsolete(keys) {
+  for (const key of keys) if (readText(key) !== null) writeText(key, null);
+}
+
 /** The keys kept under a prefix (none: no storage). @param {string} prefix @returns {string[]} */
 export function storedKeys(prefix) {
   /** @type {string[]} */ const keys = [];

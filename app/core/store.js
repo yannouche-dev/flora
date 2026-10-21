@@ -39,9 +39,7 @@ import { onStorage } from './sync.js';
  * @property {Map<number, string>} placed  plant id → one of my places where it is noted
  * @property {Mode} mode                  display mode of the app: épuré (actions, big photos), standard, scientifique
  * @property {Mode | null} gridView      results grid override of the mode (null: follow the mode)
- * @property {Mode | null} plantView     plant sheet override of the mode (null: follow the mode)
  * @property {SheetLayout} sheetLayout  the plant sheet as arranged in « Mode King » (see sheet-blocks.js)
- * @property {string | null} target       collection or place the Épuré plant sheet adds to in one tap (last used)
  * @property {import('./context.js').Context} [context]  where the user is in each part (see context.js)
  * @property {Record<import('./modules.js').ModuleKey, Record<Mode, boolean>>} modules  online services used in each mode (Réglages › Modules)
  * @property {import('./modes.js').ModeInfo[]} modes  the display modes: the app's three and the ones made from them
@@ -141,7 +139,6 @@ const readLayout = () => {
   if (saved) return { ...emptyLayout(), ...migrateTree(migratePlaces(saved)) };
   return { ...emptyLayout(), order: readObject(config.storageKeys.sheetBlocks) || {}, hidden: readObject(config.storageKeys.sheetHidden) || {} };
 };
-const readTarget = () => readText(config.storageKeys.target);
 
 const initialMode = readMode(config.storageKeys.mode) || 'standard';
 /** An override equal to the mode is no override. @param {string} key */
@@ -158,9 +155,7 @@ export const store = new Store({
   placed: new Map(),
   mode: initialMode,
   gridView: readOverride(config.storageKeys.gridView),
-  plantView: readOverride(config.storageKeys.plantView),
   sheetLayout: readLayout(),
-  target: readTarget(),
   modules: modulesState(),
   modes: modeList(),
   collections: [],
@@ -172,11 +167,10 @@ export const store = new Store({
 moduleEvents.addEventListener('change', () => store.set({ modules: modulesState() }));
 // A mode made or deleted: the switches list it; a deleted one in use gives way to its model.
 modeEvents.addEventListener('change', () => {
-  const { mode, gridView, plantView } = store.state;
+  const { mode, gridView } = store.state;
   const fallback = (/** @type {Mode} */ m) => isMode(m) ? m : 'standard';
   if (!isMode(mode)) setMode(fallback(baseOf(mode)));
   if (gridView && !isMode(gridView)) setGridView(null);
-  if (plantView && !isMode(plantView)) setPlantView(null);
   store.set({ modes: modeList(), modules: modulesState() });
 });
 // Storage full: said once, in a banner (gf-app), until closed.
@@ -228,12 +222,11 @@ export function setCompact(compact) {
   store.set({ compact });
 }
 
-/** App-wide mode: applies everywhere, so it clears the grid and plant sheet overrides. @param {Mode} mode */
+/** App-wide mode: applies everywhere, so it clears the grid's override. @param {Mode} mode */
 export function setMode(mode) {
   writeText(config.storageKeys.mode, mode);
   writeText(config.storageKeys.gridView, null);
-  writeText(config.storageKeys.plantView, null);
-  store.set({ mode, gridView: null, plantView: null });
+  store.set({ mode, gridView: null });
   // Maps, Autour and thumbnails follow the app mode's modules.
   moduleEvents.dispatchEvent(new CustomEvent('change', { detail: { mode } }));
 }
@@ -245,23 +238,8 @@ export function setGridView(view) {
   store.set({ gridView });
 }
 
-/** Plant sheet override; null (or the mode itself) follows the mode. @param {Mode | null} view */
-export function setPlantView(view) {
-  const plantView = view === store.state.mode ? null : view;
-  writeText(config.storageKeys.plantView, plantView);
-  store.set({ plantView });
-}
-
-/** The one-tap target of the Épuré plant sheet: set when chosen there, or when a plant is added to a collection. @param {string | null} target */
-export function setTarget(target) {
-  writeText(config.storageKeys.target, target);
-  if (target !== store.state.target) store.set({ target });
-}
-
 /** @param {AppState} state @returns {Mode} */
 export const gridViewOf = state => state.gridView ?? state.mode;
-/** @param {AppState} state @returns {Mode} */
-export const plantViewOf = state => state.plantView ?? state.mode;
 
 /** Resolves once the local dataset is in IndexedDB (deep links on a first visit must wait for it). */
 export function whenReady() {

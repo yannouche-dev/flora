@@ -26,14 +26,12 @@ export const config = {
     compact: 'geoflora.compact',
     mode: 'geoflora.mode',
     gridView: 'geoflora.gridView',
-    plantView: 'geoflora.plantView',
     // Before sheetLayout (read once, to carry the order and folded blocks over).
     sheetBlocks: 'geoflora.sheetBlocks',
     sheetHidden: 'geoflora.sheetHidden',
     sheetLayout: 'geoflora.sheetLayout',
     plantNotes: 'geoflora.plantNotes',
     kingMode: 'geoflora.kingMode',
-    target: 'geoflora.target',
     mapLayer: 'geoflora.mapLayer',
     /** The layers of IGN's whole catalogue added to the maps (their definitions, so they show at once, offline too). */
     ignLayers: 'geoflora.ignLayers',
@@ -94,6 +92,12 @@ export const config = {
 
   /** Every key above starts so (core/prefs.js#storedKeys: the app's own, among a shared origin's). */
   storagePrefix: 'geoflora.',
+
+  /**
+   * Keys of settings the app no longer has, removed at start (core/prefs.js#forgetObsolete): the plant sheet's own
+   * mode (it follows the app's), the one-tap target of the Épuré sheet (never read).
+   */
+  obsoleteKeys: ['geoflora.plantView', 'geoflora.target'],
 
   /**
    * The keys of the panes' widths (core/panes.js), one per screen: the first steps (core/discover.js) never read

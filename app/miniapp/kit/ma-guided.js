@@ -21,7 +21,7 @@ import { MODULES, moduleEvents } from '../../core/modules.js';
 import { PaneSizer } from '../../core/panes.js';
 import { href } from '../../core/router.js';
 import { openView } from '../../core/history.js';
-import { plantViewOf, setHarvestMode, setMode, StoreController } from '../../core/store.js';
+import { setHarvestMode, setMode, StoreController } from '../../core/store.js';
 import { config } from '../../config.js';
 import { ui } from '../../styles/ui.js';
 import { nameOf } from './cards.js';
@@ -190,7 +190,7 @@ export class MaGuided extends LitElement {
   get #asking() { return this.app?.step.id === 'map'; }
 
   /** The mode whose layout the steps build (the one the plant sheet shows in Flore). */
-  get #view() { return plantViewOf(this.#store.state); }
+  get #view() { return this.#store.state.mode; }
 
   /** The plant of the screen: the plant chosen, else (before any heart) the card on top — the map lights it, the panes show it. */
   get #focusId() { return this.#s.chosenId; }

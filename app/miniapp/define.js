@@ -7,7 +7,7 @@
 // (geoflora.app.<id>.*) and what its manifest lists in `owns` — the storage keys of its session (`keys`), and
 // `reset()` for the rest of it (a deck's swipes kept by a core module); « Rejouer » empties exactly that, then starts
 // again at its first step. What it only USES is the user's, and it never clears it: `shared` names it (Mes plantes,
-// the favourites, the places, the settings), for the reader; `grants` lists the app settings its exit may change.
+// the favourites, the places, the settings), for the reader. Leaving a mini-app changes nothing in the app.
 //
 // An app ported whole from before the mini-apps (`driven`): one component draws every screen, the start too, and
 // says which step it is on (the event ma-step); the steps follow it rather than lead it. Its first step then adds
@@ -36,7 +36,7 @@ const KEYS = new Set(Object.values(config.storageKeys));
  *   start?: (c: any, app: any) => import('../components/start-screen.js').StartSpec,
  *   add?: Place[], drop?: string[], next?: string, choose?: Choice[], done?: (c: any) => boolean, can?: (c: any) => boolean,
  *   action?: { label: string, run: (app: any) => void } }} Step
- * @typedef {{ label: string, confirm?: (c: any) => string | null, handoff?: (c: any, path: string[]) => Record<string, unknown> }} Exit
+ * @typedef {{ label: string, confirm?: (c: any) => string | null }} Exit
  * @typedef {{ key: (c: any) => unknown, load: (app: any, key: any, signal: AbortSignal) => Promise<unknown>, debounce?: number, into: string }} DataSpec
  * @typedef {{ run: (app: any, ...args: any[]) => unknown, mode?: 'exclusive' | 'parallel' }} ActionSpec
  *
@@ -47,7 +47,6 @@ const KEYS = new Set(Object.values(config.storageKeys));
  * @property {string} [pitch]
  * @property {string} [scene]
  * @property {import('../core/modules.js').ModuleKey[]} uses     online modules it needs: checked as it starts
- * @property {('mode' | 'harvestMode')[]} grants                 what its exit (handoff) may change in the app
  * @property {Exit} exit
  * @property {Record<string, ContextKey>} context
  * @property {Record<string, (c: any) => unknown>} derive         pure, memoized on what they read
@@ -71,7 +70,6 @@ const KEYS = new Set(Object.values(config.storageKeys));
 
 /** Ids of mini-apps, steps, columns and components: what an address carries (router.js). */
 export const ID = /^[a-z][a-z0-9-]{1,23}$/;
-const GRANTS = ['mode', 'harvestMode'];
 const PHONE = ['top', 'main', 'tab', 'sheet', 'hide'];
 const KINDS = ['start', 'grid', 'screen'];
 
@@ -122,7 +120,7 @@ export function paths(m) {
 }
 
 /**
- * Checks a manifest and returns it frozen, with its defaults (no modules, no grants, empty context…).
+ * Checks a manifest and returns it frozen, with its defaults (no modules, empty context…).
  * @param {Partial<Manifest> & { id: string, title: string, steps: Step[], columns: Column[], exit: Exit }} spec @returns {Readonly<Manifest>}
  */
 export function defineMiniApp(spec) {
@@ -134,19 +132,15 @@ export function defineMiniApp(spec) {
 
   /** @type {Manifest} */
   const m = {
-    uses: [], grants: [], context: {}, derive: {}, data: {}, actions: {}, phone: { rows: [] }, version: 1, owns: {}, shared: [],
+    uses: [], context: {}, derive: {}, data: {}, actions: {}, phone: { rows: [] }, version: 1, owns: {}, shared: [],
     ...spec, icon: /** @type {string} */ (spec.icon)
   };
 
   const known = new Set(MODULES.map(x => x.key));
   if (!Array.isArray(m.uses)) fail('uses must be a list of modules');
   for (const u of m.uses) if (!known.has(u)) fail(`uses: unknown module « ${u} »`);
-  if (!Array.isArray(m.grants)) fail('grants must be a list');
-  for (const g of m.grants) if (!GRANTS.includes(g)) fail(`grants: « ${g} » is not one of ${GRANTS.join(', ')}`);
   if (!isObj(m.exit) || typeof m.exit.label !== 'string' || !m.exit.label) fail('exit needs a label (« Quitter … »)');
   if (m.exit.confirm !== undefined && !isFn(m.exit.confirm)) fail('exit.confirm must be a function');
-  if (m.exit.handoff !== undefined && !isFn(m.exit.handoff)) fail('exit.handoff must be a function');
-  if (m.exit.handoff && !m.grants.length) fail('exit.handoff changes nothing without grants');
   if (!Number.isInteger(m.version) || m.version < 1) fail('version must be a whole number from 1');
   if (!isObj(m.owns)) fail('owns must be an object: { keys?, reset? }');
   const appKey = (/** @type {unknown} */ k) => typeof k === 'string' && (KEYS.has(k) || k.startsWith(config.storageKeys.appPrefix));

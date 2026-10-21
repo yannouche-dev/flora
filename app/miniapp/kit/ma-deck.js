@@ -17,7 +17,7 @@ import { icon } from '../../core/icons.js';
 import { hideImg, showImg } from '../../core/img.js';
 import { creditText } from '../../core/credit.js';
 import { moduleEvents, moduleOn } from '../../core/modules.js';
-import { plantViewOf, StoreController } from '../../core/store.js';
+import { StoreController } from '../../core/store.js';
 import { floweringMonths } from '../../core/plants.js';
 import { ui } from '../../styles/ui.js';
 import { bio, distLabel, nameOf, nextDistance } from './cards.js';
@@ -177,7 +177,7 @@ export class MaDeck extends LitElement {
   }
 
   /** A plant's photo, unless the « Photos en ligne » module is off in this view (a leaf shows instead). @param {string | null | undefined} url */
-  #photo(url) { return url && moduleOn('photos', plantViewOf(this.#store.state)) ? url : null; }
+  #photo(url) { return url && moduleOn('photos', this.#store.state.mode) ? url : null; }
 
   #onKey = (/** @type {KeyboardEvent} */ e) => {
     if (e.altKey || e.ctrlKey || e.metaKey || !this.active) return;

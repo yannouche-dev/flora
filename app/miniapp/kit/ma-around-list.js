@@ -32,7 +32,7 @@ import { openModal } from '../../core/history.js';
 import { config } from '../../config.js';
 import { PaneSizer, splitStyles } from '../../core/panes.js';
 import { sheetSession } from '../../core/sheet-session.js';
-import { plantViewOf, StoreController } from '../../core/store.js';
+import { StoreController } from '../../core/store.js';
 import { emergency } from '../../core/poison.js';
 import { ui } from '../../styles/ui.js';
 import { MONTH, PAGE, distLabel, nameOf, nextDistance } from './cards.js';
@@ -284,7 +284,7 @@ export class MaAroundList extends LitElement {
   };
 
   /** A plant's photo, unless the « Photos en ligne » module is off in this view (a leaf shows instead). @param {string | null | undefined} url */
-  #photo(url) { return url && moduleOn('photos', plantViewOf(this.#store.state)) ? url : null; }
+  #photo(url) { return url && moduleOn('photos', this.#store.state.mode) ? url : null; }
 
   /** A plant opened in its sheet (Rencontres: chosen, its sheet open), which steps through `ids`. @param {number} id @param {number[]} ids */
   #openPlant(id, ids) {
@@ -361,7 +361,7 @@ export class MaAroundList extends LitElement {
   get #mediaState() { return this.media ? this.c?.media ?? null : null; }
 
   /** The display mode (the modules, the media's presentation). */
-  get #mode() { return plantViewOf(this.#store.state); }
+  get #mode() { return this.#store.state.mode; }
 
   /** A plant looked at for its photos (a first match), and the last match made meanwhile (looked at next if it has none). */
   /** @type {number | null} */ #checking = null;

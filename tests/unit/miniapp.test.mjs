@@ -39,7 +39,7 @@ const refused = spec => { try { defineMiniApp(spec); return ''; } catch (e) { as
 test('defineMiniApp : un manifeste juste passe, gelé, avec ses valeurs par défaut', () => {
   const m = defineMiniApp(meet());
   assert.ok(Object.isFrozen(m));
-  assert.deepEqual([m.uses, m.grants, m.version, m.shared], [[], [], 1, []]);
+  assert.deepEqual([m.uses, m.version, m.shared], [[], 1, []]);
   assert.deepEqual(paths(m), [['start', 'map', 'cards', 'photos', 'wiki', 'harvest', 'around'], ['start', 'map', 'cards', 'photos', 'wiki', 'science', 'around']]);
 });
 
@@ -53,7 +53,6 @@ test('defineMiniApp : chaque règle refuse ce qu’elle doit, en le disant', () 
   assert.match(refused({ ...m, steps: [m.steps[0], { ...m.steps[1], next: undefined }, ...m.steps.slice(2)] }), /says how it goes on/);
   assert.match(refused({ ...m, steps: [{ ...m.steps[0], next: 'nowhere' }, ...m.steps.slice(1)] }), /no step « nowhere »/);
   assert.match(refused({ ...m, uses: ['nothing'] }), /unknown module/);
-  assert.match(refused({ ...m, grants: ['everything'] }), /grants/);
   assert.match(refused({ ...m, exit: {} }), /exit needs a label/);
   assert.match(refused({ ...m, columns: [...m.columns, { id: 'more', base: 'fill', min: 100, rank: 0 }] }), /one column at most fills/);
   assert.match(refused({ ...m, columns: m.columns.map(c => c.id === 'map' ? { ...c, mergeInto: 'side' } : c) }), /in a loop/);
