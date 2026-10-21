@@ -1,9 +1,26 @@
 // @ts-check
-// Templates and styles shared by the app's screens, written once: a modal question (dialog.ask) and « Recommencer :
-// tout effacer ? » (the launcher, gf-launcher.js, and a mini-app's box, gf-miniapp.js, ask it the same way).
+// Templates and styles shared by the app's screens, written once: a sheet from the bottom (dialog.sheet: Flore's
+// filters, « Ajouter à… », the map's panel), a modal question (dialog.ask) and « Recommencer : tout effacer ? » (the
+// launcher, gf-launcher.js, and a mini-app's box, gf-miniapp.js, ask it the same way).
 
 import { css, html } from 'lit';
 import { fr } from '../core/fr.js';
+
+/**
+ * A sheet from the bottom (<dialog class="sheet">): the whole width on a phone, at most --sheet-w wide (520px) and
+ * --sheet-h high (86dvh), the page dimmed by --sheet-dim (40%); `centered`: in the middle from 700 px wide; `rises`:
+ * slides up as it opens (not with reduced motion).
+ */
+export const sheetStyles = css`
+  dialog.sheet { position: fixed; inset: auto 0 0 0; width: 100%; max-width: var(--sheet-w, 520px); max-height: var(--sheet-h, 86dvh); margin: 0 auto; padding: 0;
+    border: 0; border-radius: var(--gf-radius-lg) var(--gf-radius-lg) 0 0; background: var(--gf-surface); color: var(--gf-text); flex-direction: column; }
+  dialog.sheet[open] { display: flex; }
+  dialog.sheet::backdrop { background: rgb(0 0 0 / var(--sheet-dim, 40%)); }
+  dialog.sheet.rises[open] { animation: sheet-up 0.2s ease-out; }
+  @keyframes sheet-up { from { transform: translateY(40px); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { dialog.sheet.rises[open] { animation: none; } }
+  @media (min-width: 700px) { dialog.sheet.centered { inset: 0; margin: auto; border-radius: var(--gf-radius-lg); height: fit-content; } }
+`;
 
 /** A modal question (<dialog class="ask">): its box, its title, its text, its row of buttons at the end. */
 export const askStyles = css`

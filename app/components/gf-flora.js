@@ -8,6 +8,7 @@ import { backTo, depth, openModal, openView, replaceView } from '../core/history
 import { plantViewOf, StoreController, whenReady } from '../core/store.js';
 import { PaneSizer, splitStyles } from '../core/panes.js';
 import { ui } from '../styles/ui.js';
+import { sheetStyles } from './ui-kit.js';
 import './gf-results-bar.js';
 import './gf-filter-panel.js';
 import './gf-plant-list.js';
@@ -81,7 +82,7 @@ export class GfFlora extends LitElement {
     _paneFull: { state: true }
   };
 
-  static styles = [ui, splitStyles, css`
+  static styles = [ui, sheetStyles, splitStyles, css`
     :host { display: flex; flex-direction: column; min-height: 0; flex: 1; }
     .panes { display: flex; flex: 1; min-height: 0; position: relative; }
     .pane { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--gf-surface); }
@@ -202,25 +203,7 @@ export class GfFlora extends LitElement {
     }
 
     /* Filters (tablet and phone): bottom sheet. */
-    dialog {
-      position: fixed;
-      inset: auto 0 0 0;
-      width: 100%;
-      max-width: 640px;
-      max-height: 88dvh;
-      margin: 0 auto;
-      padding: 0;
-      border: 0;
-      border-radius: var(--gf-radius-lg) var(--gf-radius-lg) 0 0;
-      background: var(--gf-surface);
-      color: var(--gf-text);
-      display: none;
-      flex-direction: column;
-    }
-    dialog[open] { display: flex; animation: slide-up 0.2s ease-out; }
-    dialog::backdrop { background: rgb(0 0 0 / 40%); }
-    @keyframes slide-up { from { transform: translateY(40px); opacity: 0; } }
-    @media (prefers-reduced-motion: reduce) { dialog[open] { animation: none; } }
+    dialog.sheet { --sheet-w: 640px; --sheet-h: 88dvh; }
     .sheet-head { padding: 4px 16px 0; border-bottom: 1px solid var(--gf-border); }
     .sheet-head::before { content: ''; display: block; width: 36px; height: 4px; margin: 6px auto 0; border-radius: 2px; background: var(--gf-border); }
     .sheet-head h2 { font-size: 1rem; margin: 12px 0 8px; display: flex; align-items: center; }
@@ -731,7 +714,7 @@ export class GfFlora extends LitElement {
       ${phone && plantId !== null && this.#pane !== null ? this.#paneSection(true) : nothing}
 
       ${wide ? nothing : html`
-        <dialog aria-label="Filtres" @click=${e => { if (e.target === e.currentTarget) this.#dialog?.close(); }}>
+        <dialog class="sheet rises" aria-label="Filtres" @click=${e => { if (e.target === e.currentTarget) this.#dialog?.close(); }}>
           <div class="sheet-head"><h2>${this.#filtersTitle()}</h2></div>
           <div class="sheet-body"><gf-filter-panel></gf-filter-panel></div>
           <div class="sheet-foot">
