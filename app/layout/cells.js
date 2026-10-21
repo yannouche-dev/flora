@@ -771,10 +771,14 @@ export class DlMap extends LitElement {
       const kids = [...(map.querySelector(sel)?.children ?? [])].map(k => k.getBoundingClientRect()).filter(r => r.height > 0);
       return kids.length ? Math.max(0, Math.round(box.bottom - Math.min(...kids.map(r => r.top)))) : 0;
     };
-    const right = Math.max(20, corner(in3d ? '.maplibregl-ctrl-bottom-right' : '.leaflet-bottom.leaflet-right')) + 6;
+    let right = Math.max(20, corner(in3d ? '.maplibregl-ctrl-bottom-right' : '.leaflet-bottom.leaflet-right')) + 6;
     let left = Math.max(30, corner(in3d ? '.maplibregl-ctrl-bottom-left' : '.leaflet-bottom.leaflet-left')) + 8;
     const br = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.br'));
     const bl = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.bl'));
+    // In 3D, « Observations autour » (bottom middle, over the credits — taller on a narrow phone): the right corner's
+    // controls above its chip when they would reach over it, never covering it.
+    const o3 = in3d ? map.querySelector('.gf-o3-bar:not([hidden])')?.getBoundingClientRect() : null;
+    if (o3?.height && br && o3.right > box.right - 8 - br.offsetWidth) right = Math.max(right, Math.round(box.bottom - o3.top) + 6);
     // Too narrow for both side by side: the bottom left's over the bottom right's.
     if (br && bl && bl.offsetWidth + br.offsetWidth + 24 > box.width) left = Math.max(left, right + br.offsetHeight + 8);
     set('--br-bottom', right);
