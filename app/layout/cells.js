@@ -250,7 +250,7 @@ export class DlMap extends LitElement {
     /* Compact: the zone a pill (« 2 km ▾ »), its stops and « Autour de moi » under it once opened. */
     .zone { position: absolute; z-index: 501; left: 8px; top: 8px; max-width: calc(100% - 64px); }
     .zone.low { top: 60px; }
-    .zone > button { min-height: 32px; padding: 4px 12px; border-radius: 999px; font-size: 0.85rem; font-weight: 600; box-shadow: var(--gf-shadow);
+    .zone > button { min-height: 32px; padding: 4px 12px; border-radius: var(--gf-radius-pill); font-size: 0.85rem; font-weight: 600; box-shadow: var(--gf-shadow);
       background: color-mix(in srgb, var(--gf-surface) 95%, transparent); display: inline-flex; align-items: center; gap: 4px; }
     .zone > button.error { color: var(--gf-danger); }
     .zone .drop { margin-top: 6px; display: grid; gap: 6px; padding: 8px 10px; border-radius: 12px; width: 240px; max-width: 100%; box-sizing: border-box;
@@ -284,31 +284,31 @@ export class DlMap extends LitElement {
     :host([ctl-compact]) .base { width: 36px; height: 36px; }
     :host([ctl-compact]) .base span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
     /* The current plant: its photo, its name (its sheet ↗), « Seule », ✕. */
-    .chip { display: flex; align-items: center; gap: 2px; max-width: 100%; padding: 3px; border-radius: 999px; background: color-mix(in srgb, var(--gf-surface) 96%, transparent);
+    .chip { display: flex; align-items: center; gap: 2px; max-width: 100%; padding: 3px; border-radius: var(--gf-radius-pill); background: color-mix(in srgb, var(--gf-surface) 96%, transparent);
       box-shadow: var(--gf-shadow); font-size: 0.82rem; }
-    .chip .open { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 32px; padding: 0 6px 0 0; color: inherit; text-decoration: none; border-radius: 999px; }
+    .chip .open { display: flex; align-items: center; gap: 6px; min-width: 0; min-height: 32px; padding: 0 6px 0 0; color: inherit; text-decoration: none; border-radius: var(--gf-radius-pill); }
     .chip .open:focus-visible, .chip button:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     .chip img, .chip .ph { flex: none; width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: var(--gf-surface-2); display: grid; place-items: center; }
     .chip .name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
-    .chip button { flex: none; min-height: 32px; min-width: 32px; padding: 0 8px; border-radius: 999px; font-size: 0.78rem; }
+    .chip button { flex: none; min-height: 32px; min-width: 32px; padding: 0 8px; border-radius: var(--gf-radius-pill); font-size: 0.78rem; }
     .chip button[aria-pressed='true'] { background: var(--gf-accent); color: var(--gf-accent-contrast); border-color: transparent; }
     :host([ctl-compact]) .chip .name { max-width: 9em; }
     /* The legend (legende): its button, its lines once opened. */
-    .legend > button { min-height: 32px; padding: 2px 12px; border-radius: 999px; font-size: 0.8rem; box-shadow: var(--gf-shadow); background: color-mix(in srgb, var(--gf-surface) 95%, transparent); }
+    .legend > button { min-height: 32px; padding: 2px 12px; border-radius: var(--gf-radius-pill); font-size: 0.8rem; box-shadow: var(--gf-shadow); background: color-mix(in srgb, var(--gf-surface) 95%, transparent); }
     .legend ul { list-style: none; margin: 6px 0 0; padding: 8px 10px; display: grid; gap: 4px; border-radius: 12px; font-size: 0.8rem;
       background: color-mix(in srgb, var(--gf-surface) 97%, transparent); box-shadow: var(--gf-shadow); }
     .legend li { display: flex; align-items: center; gap: 8px; }
     .legend i { flex: none; width: 12px; height: 12px; border-radius: 50%; background: var(--c, #6b8f3a); border: 1px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 20%); }
-    .legend i.obs { border: 0; background: radial-gradient(circle at 35% 30%, #ff6f9c, #e0245e 75%); box-shadow: 0 0 0 1.5px #ffd166; }
+    .legend i.obs { border: 0; background: radial-gradient(circle at 35% 30%, #ff6f9c, var(--gf-kin) 75%); box-shadow: 0 0 0 1.5px var(--gf-highlight); }
     .legend i.outline { background: transparent; border: 2px solid #a3e68a; box-shadow: 0 1px 0 rgb(0 0 0 / 30%); }
     .legend i.area { border-radius: 3px; background: color-mix(in srgb, #7c3aed 35%, transparent); border-color: #7c3aed; }
     /* The period: three chips in one. */
-    .period { display: flex; border-radius: 999px; overflow: hidden; box-shadow: var(--gf-shadow); background: color-mix(in srgb, var(--gf-surface) 95%, transparent); }
+    .period { display: flex; border-radius: var(--gf-radius-pill); overflow: hidden; box-shadow: var(--gf-shadow); background: color-mix(in srgb, var(--gf-surface) 95%, transparent); }
     .period button { min-height: 32px; padding: 2px 10px; border: 0; border-radius: 0; background: none; font-size: 0.78rem; white-space: nowrap; }
     .period button + button { border-left: 1px solid var(--gf-border); }
     .period button[aria-pressed='true'] { background: var(--gf-accent); color: var(--gf-accent-contrast); }
     /* The count: the points shown, the plants found; touched, the map's « État ». */
-    .count { min-height: 28px; padding: 2px 10px; border-radius: 999px; font-size: 0.78rem; font-variant-numeric: tabular-nums; white-space: nowrap;
+    .count { min-height: 28px; padding: 2px 10px; border-radius: var(--gf-radius-pill); font-size: 0.78rem; font-variant-numeric: tabular-nums; white-space: nowrap;
       background: color-mix(in srgb, var(--gf-surface) 90%, transparent); box-shadow: 0 1px 3px rgb(0 0 0 / 14%); }
   `];
 
@@ -771,10 +771,14 @@ export class DlMap extends LitElement {
       const kids = [...(map.querySelector(sel)?.children ?? [])].map(k => k.getBoundingClientRect()).filter(r => r.height > 0);
       return kids.length ? Math.max(0, Math.round(box.bottom - Math.min(...kids.map(r => r.top)))) : 0;
     };
-    const right = Math.max(20, corner(in3d ? '.maplibregl-ctrl-bottom-right' : '.leaflet-bottom.leaflet-right')) + 6;
+    let right = Math.max(20, corner(in3d ? '.maplibregl-ctrl-bottom-right' : '.leaflet-bottom.leaflet-right')) + 6;
     let left = Math.max(30, corner(in3d ? '.maplibregl-ctrl-bottom-left' : '.leaflet-bottom.leaflet-left')) + 8;
     const br = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.br'));
     const bl = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.bl'));
+    // In 3D, « Observations autour » (bottom middle, over the credits — taller on a narrow phone): the right corner's
+    // controls above its chip when they would reach over it, never covering it.
+    const o3 = in3d ? map.querySelector('.gf-o3-bar:not([hidden])')?.getBoundingClientRect() : null;
+    if (o3?.height && br && o3.right > box.right - 8 - br.offsetWidth) right = Math.max(right, Math.round(box.bottom - o3.top) + 6);
     // Too narrow for both side by side: the bottom left's over the bottom right's.
     if (br && bl && bl.offsetWidth + br.offsetWidth + 24 > box.width) left = Math.max(left, right + br.offsetHeight + 8);
     set('--br-bottom', right);
@@ -1392,6 +1396,6 @@ export function renderCell(r, ctx) {
       : html`<p class="placeholder quiet">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`;
   }
   return r.view
-    ? html`<gf-plant-detail embedded only=${r.view.key} plant-id=${plant} view=${view}></gf-plant-detail>`
-    : html`<gf-plant-detail embedded plant-id=${plant} view=${view}></gf-plant-detail>`;
+    ? html`<gf-plant-detail embedded subheading only=${r.view.key} plant-id=${plant} view=${view}></gf-plant-detail>`
+    : html`<gf-plant-detail embedded subheading plant-id=${plant} view=${view}></gf-plant-detail>`;
 }

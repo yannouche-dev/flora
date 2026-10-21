@@ -140,11 +140,11 @@ export const startStyles = [sceneStyles, css`
   .start .lead { margin: 10px auto 0; max-width: 30em; font-size: 1.125rem; font-size: clamp(1.125rem, 1rem + 0.45cqi, 1.25rem); line-height: 1.45; text-wrap: pretty;
     color: var(--gf-text-muted); color: color-mix(in srgb, var(--gf-text) 40%, var(--gf-text-muted)); }
   .start .caution { justify-self: center; display: inline-flex; align-items: flex-start; gap: 8px; margin: 14px auto 0; max-width: 30em; padding: 8px 14px; border-radius: 12px;
-    background: color-mix(in srgb, var(--gf-warn) 12%, var(--gf-surface)); color: var(--gf-text); font-size: 1rem; font-weight: 600; line-height: 1.35; text-align: left; }
+    background: var(--gf-warn-bg); color: var(--gf-text); font-size: 1rem; font-weight: 600; line-height: 1.35; text-align: left; }
   .start .caution .bi { flex: none; color: var(--gf-warn); margin-top: 0.15em; }
 
   .start .act { display: grid; justify-items: center; gap: 8px; margin-top: 24px; }
-  .start .go { min-height: 56px; min-width: min(100%, 280px); padding: 14px 32px; gap: 10px; border-radius: var(--gf-radius-pill, 999px);
+  .start .go { min-height: 56px; min-width: min(100%, 280px); padding: 14px 32px; gap: 10px; border-radius: var(--gf-radius-pill);
     font-size: 1.1875rem; font-size: clamp(1.1875rem, 1.1rem + 0.3cqi, 1.3125rem); font-weight: 600; line-height: 1.2;
     box-shadow: 0 10px 22px -10px color-mix(in srgb, var(--gf-accent) 70%, transparent); }
   .start .go .bi { font-size: 1.1em; }
@@ -165,7 +165,7 @@ export const startStyles = [sceneStyles, css`
   .start .or::before, .start .or::after { content: ''; flex: 1; border-top: 1px solid var(--gf-border); }
   .start .query { position: relative; margin: 0; }
   .start .query .bi { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--gf-text-muted); pointer-events: none; }
-  .start .query input { width: 100%; box-sizing: border-box; min-height: 44px; padding: 8px 16px 8px 38px; font-size: 1rem; border-radius: var(--gf-radius-pill, 999px); background: var(--gf-surface); }
+  .start .query input { width: 100%; box-sizing: border-box; min-height: 44px; padding: 8px 16px 8px 38px; font-size: 1rem; border-radius: var(--gf-radius-pill); background: var(--gf-surface); }
   .start .choices { display: grid; gap: 6px; margin-top: 4px; text-align: left; }
   .start .choices h2 { margin: 0 0 2px; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--gf-text-muted); }
   .start .choices button { justify-content: flex-start; width: 100%; min-height: 44px; padding: 6px 12px; gap: 10px; border-radius: var(--gf-radius);

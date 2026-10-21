@@ -147,7 +147,7 @@ export class GfPlantCard extends LitElement {
     :host([grid]) .muted { color: var(--gf-text-muted); }
     :host([grid]) [hidden] { display: none; }
     .legal { display: flex; gap: 4px; overflow: hidden; }
-    .tag { flex: none; font-size: 0.72rem; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--gf-surface-2); color: var(--gf-text); }
+    .tag { flex: none; font-size: 0.72rem; font-weight: 600; padding: 1px 7px; border-radius: var(--gf-radius-pill); background: var(--gf-surface-2); color: var(--gf-text); }
     .tag.pn, .tag.pr { background: color-mix(in srgb, #dc2626 16%, var(--gf-surface)); color: color-mix(in srgb, #dc2626 70%, var(--gf-text)); }
     .tag.re { background: color-mix(in srgb, #f59e0b 22%, var(--gf-surface)); }
     /* Lit (its plant hovered on the map beside it): as hovered, with a thin line; the current plant's look wins. */

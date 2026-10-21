@@ -152,7 +152,7 @@ export class MaPlantSheet extends LitElement {
         <button class="icon-btn" type="button" aria-label=${this.back} title="Retour (Échap)" @click=${() => this.#show(null)}>${icon('arrow-left')}</button>
         <strong>${name || 'Plante'}</strong>
       </div>
-      <gf-plant-detail embedded plant-id=${this.open} view="epure" ?scoped=${this.scoped} .mediaAt=${this.mediaAt}></gf-plant-detail>
+      <gf-plant-detail embedded subheading plant-id=${this.open} view="epure" ?scoped=${this.scoped} .mediaAt=${this.mediaAt}></gf-plant-detail>
       ${at >= 0 ? html`<nav class="pager" aria-label="Plantes autour">
         <button class="secondary prev" type="button" ?disabled=${at <= 0} @click=${() => this.#step(-1)}>${icon('chevron-left')} Préc.</button>
         <span>${at + 1} / ${list.length}</span>

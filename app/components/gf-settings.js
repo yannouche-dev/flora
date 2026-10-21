@@ -127,7 +127,7 @@ export class GfSettings extends LitElement {
     .mt-pane { border-color: var(--gf-accent); background: var(--gf-accent-soft); }
     .mt-pane.folded { opacity: 0.7; }
     .mt-chips { display: flex; flex-wrap: wrap; gap: 3px; }
-    .mt-chip { min-height: 0; padding: 1px 6px; border: 1px solid var(--gf-border); border-radius: 999px; background: var(--gf-surface); font: inherit; font-size: 0.68rem; cursor: grab; touch-action: none; white-space: nowrap; }
+    .mt-chip { min-height: 0; padding: 1px 6px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill); background: var(--gf-surface); font: inherit; font-size: 0.68rem; cursor: grab; touch-action: none; white-space: nowrap; }
     .mt-chip.off { opacity: 0.5; text-decoration: line-through; }
     .block-order .head { display: flex; align-items: center; gap: 8px; }
     .block-order .head button { margin-left: auto; }

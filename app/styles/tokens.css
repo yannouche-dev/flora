@@ -29,6 +29,13 @@
   /* Keyboard focus: an opaque ring in the accent (5.9:1 on the page), parted from the control by the page's colour. */
   --gf-focus: 0 0 0 2px var(--gf-bg), 0 0 0 4px var(--gf-accent);
 
+  /* What is lit (hovered, chosen, a plant's kin on a map): its gold ring; the plant chosen, its pink. */
+  --gf-highlight: #ffd166;
+  --gf-kin: #e0245e;
+  /* A warning's or a danger's box: its colour, faint over the surface. */
+  --gf-danger-bg: var(--gf-danger-bg);
+  --gf-warn-bg: var(--gf-warn-bg);
+
   --gf-fav: #e11d48;
   --gf-season: #fde047;
   --gf-season-text: #422006;

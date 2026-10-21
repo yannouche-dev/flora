@@ -154,6 +154,7 @@ const SHELL = [
   'app/components/gf-place-search.js',
   'app/components/gf-scenarios.js',
   'app/components/gf-launcher.js',
+  'app/components/ui-kit.js',
   'app/miniapp/define.js',
   'app/miniapp/context.js',
   'app/miniapp/layout.js',

@@ -5,6 +5,7 @@ import { href } from '../core/router.js';
 import { openModal } from '../core/history.js';
 import { setTarget, StoreController } from '../core/store.js';
 import { ui } from '../styles/ui.js';
+import { sheetStyles } from './ui-kit.js';
 import { icon, kindIcon } from '../core/icons.js';
 
 /**
@@ -20,24 +21,8 @@ export class GfAddTo extends LitElement {
     _busy: { state: true }
   };
 
-  static styles = [ui, css`
-    dialog {
-      position: fixed;
-      inset: auto 0 0 0;
-      width: 100%;
-      max-width: 520px;
-      max-height: 80dvh;
-      margin: 0 auto;
-      padding: 0;
-      border: 0;
-      border-radius: var(--gf-radius-lg) var(--gf-radius-lg) 0 0;
-      background: var(--gf-surface);
-      color: var(--gf-text);
-      flex-direction: column;
-    }
-    dialog[open] { display: flex; }
-    dialog::backdrop { background: rgb(0 0 0 / 40%); }
-    @media (min-width: 700px) { dialog { inset: 0; margin: auto; border-radius: var(--gf-radius-lg); height: fit-content; } }
+  static styles = [ui, sheetStyles, css`
+    dialog.drawer { --drawer-h: 80dvh; }
     header { padding: 14px 16px 8px; border-bottom: 1px solid var(--gf-border); }
     h2 { margin: 0; font-size: 1.05rem; }
     header p { margin: 2px 0 0; color: var(--gf-text-muted); font-size: 0.85rem; }
@@ -145,7 +130,7 @@ export class GfAddTo extends LitElement {
       </label></li>`;
 
     return html`
-      <dialog aria-label="Ajouter à une collection" @click=${e => { if (e.target === e.currentTarget) this.#close(); }}>
+      <dialog class="drawer centered" aria-label="Ajouter à une collection" @click=${e => { if (e.target === e.currentTarget) this.#close(); }}>
         <header>
           <h2>Ajouter à…</h2>
           <p>${name}</p>

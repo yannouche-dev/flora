@@ -63,7 +63,7 @@ export class GfBuilder extends LitElement {
     .choice { box-sizing: border-box; display: flex; flex-direction: column; gap: 8px; padding: 12px; text-decoration: none; color: var(--gf-text);
       border: 1px solid var(--gf-border); border-radius: var(--gf-radius-lg); background: var(--gf-surface); transition: border-color .15s; }
     .choice:hover { border-color: var(--gf-accent); }
-    .choice:focus-visible { outline: 2px solid var(--gf-focus); outline-offset: 2px; }
+    .choice:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     .choice .thumb { aspect-ratio: 16 / 10; border-radius: var(--gf-radius-sm); background: var(--gf-bg); padding: 6px; box-sizing: border-box; display: flex; }
     .choice b { display: flex; align-items: center; gap: 6px; }
     .choice small { color: var(--gf-text-muted); line-height: 1.35; }
