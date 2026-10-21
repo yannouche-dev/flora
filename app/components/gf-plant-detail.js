@@ -358,6 +358,8 @@ export class GfPlantDetail extends LitElement {
     plantId: { type: Number, attribute: 'plant-id' },
     /** Shown in the Flore tab's plant pane: compact padding, the pane has its own close / back controls. */
     embedded: { type: Boolean, reflect: true },
+    /** Under a screen's own title (a mini-app, a layout's cell): its name a heading of level 2, never a second h1. */
+    subheading: { type: Boolean },
     /** The plant waiting under the swiped card (Flore): not the page's plant yet, so it leaves the title alone. */
     preview: { type: Boolean },
     /** Opened in a scenario played as an app of its own (the Parcours): no action leading out of it (Carte, Noter ici). */
@@ -439,9 +441,9 @@ export class GfPlantDetail extends LitElement {
     :host([embedded]) { padding: 0 14px; }
     :host([embedded]) article { padding-top: 4px; }
     :host([embedded]) .back { display: none; }
-    :host([embedded]) h1 { margin-top: 4px; }
+    :host([embedded]) :is(h1, h2.h1) { margin-top: 4px; }
     .back { font-size: 0.9rem; }
-    h1 { margin: 8px 0 0; font-size: 1.6rem; line-height: 1.2; }
+    :is(h1, h2.h1) { margin: 8px 0 0; font-size: 1.6rem; line-height: 1.2; }
     .sci { font-family: var(--gf-font-serif); font-size: 1.2rem; }
     .sci i { font-style: italic; }
     .author { color: var(--gf-text-muted); font-size: 0.9em; }
@@ -526,7 +528,7 @@ export class GfPlantDetail extends LitElement {
     /* The name and the actions read without a title (Mode King titles them, to move them like the others). */
     .block.headless { margin-top: 8px; }
     .block.headless:first-child { margin-top: 0; }
-    .block[data-key='name'] h1 { margin-top: 4px; }
+    .block[data-key='name'] :is(h1, h2.h1) { margin-top: 4px; }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; }
     /* Other names: a quiet list, in italics. */
     .names-list, .names { margin: 0; font-style: italic; font-size: 0.88rem; color: var(--gf-text-muted); line-height: 1.5; }
@@ -659,7 +661,7 @@ export class GfPlantDetail extends LitElement {
     .paned { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 10px; font-size: 0.85rem; color: var(--gf-text-muted); }
     .paned button { display: inline-flex; align-items: center; gap: 5px; border: 1px solid var(--gf-border); background: var(--gf-surface); border-radius: var(--gf-radius-pill); padding: 3px 10px; font: inherit; color: var(--gf-text); cursor: pointer; }
     .paned button:hover { border-color: var(--gf-accent); }
-    .epure h1 { font-size: 1.8rem; }
+    .epure :is(h1, h2.h1) { font-size: 1.8rem; }
     .meta { color: var(--gf-text-muted); margin: 6px 0 10px; }
     .more { margin-top: 18px; }
 
@@ -1001,6 +1003,7 @@ export class GfPlantDetail extends LitElement {
     /** @type {{ safety: any, edible: any } | null} */
     this._alerts = null;
     this.panesOnly = false;
+    this.subheading = false;
     /** @type {string[] | null} */
     this.paneKeys = null;
     /** @type {import('../core/pane-tree.js').PaneNode | null} */
@@ -1571,13 +1574,13 @@ export class GfPlantDetail extends LitElement {
     if (plant?.failed) {
       return html`<article>
         <a class="back link" href=${lastSearchHash()}>${icon('arrow-left')} Recherche</a>
-        <h1>Impossible de lire la flore locale</h1>
+        ${this.#heading('Impossible de lire la flore locale')}
         <p class="muted">${plant.failed}</p>
         <p><button class="primary" type="button" @click=${() => this.#load(this.plantId)}>Réessayer</button></p>
       </article>`;
     }
     if (plant === null) {
-      return html`<article><a class="back link" href=${lastSearchHash()}>${icon('arrow-left')} Recherche</a><h1>Plante introuvable</h1></article>`;
+      return html`<article><a class="back link" href=${lastSearchHash()}>${icon('arrow-left')} Recherche</a>${this.#heading('Plante introuvable')}</article>`;
     }
 
     const ctx = this.#context(plant);
@@ -1670,10 +1673,13 @@ export class GfPlantDetail extends LitElement {
     };
   }
 
+  /** The sheet's title: its h1, or under a screen's own title (`subheading`) an h2 that looks the same. @param {string} text */
+  #heading(text) { return this.subheading ? html`<h2 class="h1">${text}</h2>` : html`<h1>${text}</h1>`; }
+
   /** The « Nom » block: French and scientific names (Épuré: the family too; flowering is the Calendrier's). @param {any} ctx */
   #name({ plant, name }) {
     return html`
-      <h1>${name}</h1>
+      ${this.#heading(name)}
       <div class="sci"><i>${plant.scientificName}</i> <span class="author">${plant.author}</span></div>
       ${baseOf(this.view) === 'epure' ? html`<p class="meta">${plant.family}</p>` : nothing}`;
   }

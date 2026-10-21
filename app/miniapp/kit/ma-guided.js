@@ -421,7 +421,7 @@ export class MaGuided extends LitElement {
         ${panes ? this.#sizer.split('deck', 'left', () => this.#paneMax('deck')) : nothing}
         ${panes ? html`<div class="g-plant" aria-label=${card ? 'Panneaux : ' + nameOf(card.plant) : 'Panneaux'}>
           ${this.#offNote()}
-          ${id != null ? html`<gf-plant-detail embedded panes-only plant-id=${id} view=${this.#view} .paneKeys=${this.#paneKeys} .mediaAt=${c.mediaAt ?? 0}
+          ${id != null ? html`<gf-plant-detail embedded subheading panes-only plant-id=${id} view=${this.#view} .paneKeys=${this.#paneKeys} .mediaAt=${c.mediaAt ?? 0}
             @media-index=${(/** @type {CustomEvent} */ e) => { e.stopPropagation(); const at = Number(e.detail?.index) || null; if (c.mediaAt !== at) app.set({ mediaAt: at }); }}>
             <div class="g-empty">${icon('binoculars')}<p>Ses photos, son histoire, ses secrets viendront s’installer ici.</p></div>
           </gf-plant-detail>` : nothing}

@@ -1392,6 +1392,6 @@ export function renderCell(r, ctx) {
       : html`<p class="placeholder quiet">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`;
   }
   return r.view
-    ? html`<gf-plant-detail embedded only=${r.view.key} plant-id=${plant} view=${view}></gf-plant-detail>`
-    : html`<gf-plant-detail embedded plant-id=${plant} view=${view}></gf-plant-detail>`;
+    ? html`<gf-plant-detail embedded subheading only=${r.view.key} plant-id=${plant} view=${view}></gf-plant-detail>`
+    : html`<gf-plant-detail embedded subheading plant-id=${plant} view=${view}></gf-plant-detail>`;
 }
