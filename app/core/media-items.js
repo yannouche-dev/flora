@@ -9,7 +9,6 @@
 import * as sources from './sources.js';
 import { moduleOn } from './modules.js';
 
-/** @typedef {import('./modules.js').Mode} Mode */
 
 /**
  * @typedef {{
@@ -142,23 +141,23 @@ function byDetail(items) {
 
 /**
  * Loads the media of a plant (each part cached like the sheet's), calling `update` as parts arrive.
- * Modules off in that mode: their images are left out (no request).
- * @param {any} plant @param {Mode} mode @param {AbortSignal} signal @param {(items: MediaItem[], done: boolean) => void} update
+ * Modules off: their images are left out (no request).
+ * @param {any} plant @param {AbortSignal} signal @param {(items: MediaItem[], done: boolean) => void} update
  */
-export async function loadMedia(plant, mode, signal, update) {
-  if (!moduleOn('photos', mode)) { update([], true); return; }
+export async function loadMedia(plant, signal, update) {
+  if (!moduleOn('photos')) { update([], true); return; }
   /** @type {any} */
   const data = {};
   const push = (/** @type {boolean} */ done) => { if (!signal.aborted) update(mediaOf(plant, data), done); };
   push(false);
-  data.details = await sources.details(plant, signal, mode).catch(() => null);
+  data.details = await sources.details(plant, signal).catch(() => null);
   push(false);
   const gbifKey = data.details?.identifiers?.gbif?.id;
   const taxon = data.details?.identifiers?.inaturalist?.id;
   await Promise.all([
-    sources.inaturalistPhotos(plant, taxon, signal, mode).then(x => { data.inat = x; push(false); }, () => {}),
-    sources.gbifMedia(plant, gbifKey, 'photos', signal, mode).then(x => { data.gbifPhotos = x; push(false); }, () => {}),
-    sources.gbifMedia(plant, gbifKey, 'herbarium', signal, mode).then(x => { data.herbarium = x; push(false); }, () => {})
+    sources.inaturalistPhotos(plant, taxon, signal).then(x => { data.inat = x; push(false); }, () => {}),
+    sources.gbifMedia(plant, gbifKey, 'photos', signal).then(x => { data.gbifPhotos = x; push(false); }, () => {}),
+    sources.gbifMedia(plant, gbifKey, 'herbarium', signal).then(x => { data.herbarium = x; push(false); }, () => {})
   ]);
   push(true);
 }

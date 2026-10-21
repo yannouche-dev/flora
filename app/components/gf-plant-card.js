@@ -6,7 +6,7 @@ import { rememberSearch } from '../core/query.js';
 import { href } from '../core/router.js';
 import * as sources from '../core/sources.js';
 import { toggleFavorite } from '../core/collections.js';
-import { gridViewOf, StoreController } from '../core/store.js';
+import { StoreController } from '../core/store.js';
 import { icon } from '../core/icons.js';
 import { hideImg, showImg } from '../core/img.js';
 
@@ -158,8 +158,8 @@ export class GfPlantCard extends LitElement {
   `;
 
   #store = new StoreController(this);
-  /** Photos en ligne used in the results' display mode (Réglages › Modules). */
-  get #photos() { return this.#store.state.modules.photos[gridViewOf(this.#store.state)]; }
+  /** Photos en ligne used on this device (Réglages › Modules). */
+  get #photos() { return this.#store.state.modules.photos; }
 
   /** @param {Event} event */
   async #toggleFavorite(event) {
@@ -228,7 +228,7 @@ export class GfPlantCard extends LitElement {
     if (!this.#photos) return;
     this.#timer = setTimeout(() => {
       this.#abort = new AbortController();
-      sources.thumbnail(plant, this.#abort.signal, gridViewOf(this.#store.state))
+      sources.thumbnail(plant, this.#abort.signal)
         .then(thumb => { if (this.plant === plant) this._thumb = thumb || null; })
         .catch(() => { if (this.plant === plant) this._thumb = null; });
     }, config.thumbnailDelay);

@@ -13,6 +13,8 @@ import { anyHarvest, hasSpots, refreshMembership, requestPersistence, spotEvents
 import { keptWalks, walkOn } from './miniapp/kit/trail-store.js';
 import { initHarvestMode, store } from './core/store.js';
 import { loadNotes } from './core/sheet-notes.js';
+import { forgetObsolete } from './core/prefs.js';
+import { config } from './config.js';
 
 const PHASES = {
   checking: 'Vérification de la flore…',
@@ -137,5 +139,6 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   if (controlled) registerWorker();
 }
 
+forgetObsolete(config.obsoleteKeys);
 startUrlSync();
 start();

@@ -272,12 +272,6 @@ export class MiniApp extends EventTarget {
   /** The launcher asked for (« Quitter … : autres scénarios »): the box opens it over the app. */
   scenarios() { this.#emit('scenarios'); }
 
-  /** What the exit may change in the app (exit.handoff), within the manifest's grants, and where it goes (to). */
-  handoff() {
-    const all = this.m.exit.handoff?.(this.c, this.path) ?? {};
-    return Object.fromEntries(Object.entries(all).filter(([k]) => k === 'to' || this.m.grants.includes(/** @type {any} */ (k))));
-  }
-
   /** A module it needs switched off (its name), else null: checked at the start. */
   blocked() {
     const off = this.m.uses.find(u => !moduleOn(u));

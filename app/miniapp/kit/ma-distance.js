@@ -18,9 +18,8 @@
 
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { icon } from '../../core/icons.js';
-import { moduleOn } from '../../core/modules.js';
 import { observationsAround } from '../../core/nearby.js';
-import { plantViewOf, StoreController } from '../../core/store.js';
+import { StoreController } from '../../core/store.js';
 import { PHONE_QUERY } from '../../core/media.js';
 import { ui } from '../../styles/ui.js';
 import { DISTANCES, distanceAt, distanceEvents, distLabel, distMood, distWords, nameOf } from './cards.js';
@@ -238,7 +237,7 @@ export class MaDistance extends LitElement {
     if (key === this.#hlFor) return;
     this.#hlFor = key;
     if (!key || !card || !c) { this._hl = null; return; }
-    const photo = card.photo && moduleOn('photos', plantViewOf(this.#store.state)) ? card.photo.replace('/medium.', '/small.') : null;
+    const photo = card.photo && this.#store.state.modules.photos ? card.photo.replace('/medium.', '/small.') : null;
     const pts = await observationsAround(/** @type {number} */ (card.taxonId), c.point, c.radius).catch(() => []);
     if (this.#hlFor !== key) return;
     const title = nameOf(card.plant);

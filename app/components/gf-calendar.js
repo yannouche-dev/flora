@@ -28,8 +28,6 @@ const range = months => {
 export class GfCalendar extends LitElement {
   static properties = {
     plant: { attribute: false },
-    /** Mode of the sheet showing the calendar: its modules decide whether iNaturalist is asked. */
-    mode: {},
     /** Inside a titled block (plant sheet): no title of its own. */
     notitle: { type: Boolean },
     _phenology: { state: true }
@@ -84,7 +82,7 @@ export class GfCalendar extends LitElement {
 
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
-    if (changed.has('plant') || changed.has('mode')) this.#load();
+    if (changed.has('plant')) this.#load();
   }
 
   disconnectedCallback() {
@@ -98,7 +96,7 @@ export class GfCalendar extends LitElement {
     if (!this.plant) return;
     const abort = this.#abort = new AbortController();
     try {
-      const data = await sources.phenology(this.plant, abort.signal, this.mode || undefined);
+      const data = await sources.phenology(this.plant, abort.signal);
       if (!abort.signal.aborted) this._phenology = data;
     } catch (error) {
       // iNaturalist unavailable: said, with « Réessayer » (a module switched off: nothing).

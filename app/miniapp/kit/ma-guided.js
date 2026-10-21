@@ -21,7 +21,7 @@ import { MODULES, moduleEvents } from '../../core/modules.js';
 import { PaneSizer } from '../../core/panes.js';
 import { href } from '../../core/router.js';
 import { openView } from '../../core/history.js';
-import { plantViewOf, setHarvestMode, setMode, StoreController } from '../../core/store.js';
+import { setHarvestMode, setMode, StoreController } from '../../core/store.js';
 import { config } from '../../config.js';
 import { ui } from '../../styles/ui.js';
 import { nameOf } from './cards.js';
@@ -190,7 +190,7 @@ export class MaGuided extends LitElement {
   get #asking() { return this.app?.step.id === 'map'; }
 
   /** The mode whose layout the steps build (the one the plant sheet shows in Flore). */
-  get #view() { return plantViewOf(this.#store.state); }
+  get #view() { return this.#store.state.mode; }
 
   /** The plant of the screen: the plant chosen, else (before any heart) the card on top — the map lights it, the panes show it. */
   get #focusId() { return this.#s.chosenId; }
@@ -254,7 +254,7 @@ export class MaGuided extends LitElement {
   #dockTabs(keys, side) {
     const v = this.#view;
     // The first block whose module is on opens the pane; the others join it as tabs.
-    const shown = keys.filter(k => !modulesOffFor(v, k).length);
+    const shown = keys.filter(k => !modulesOffFor(k).length);
     if (!shown.length) return;
     this.#dockAt(shown[0], null, side, true);
     const pane = paneOf(v, shown[0]);
@@ -296,7 +296,7 @@ export class MaGuided extends LitElement {
 
   /** The blocks the steps reached have added to the panes (only those are shown while discovering). */
   get #paneKeys() {
-    return this.#stepKeys.filter(k => !modulesOffFor(this.#view, k).length);
+    return this.#stepKeys.filter(k => !modulesOffFor(k).length);
   }
 
   /** The blocks the steps reached would add, modules off or not. */
@@ -307,7 +307,7 @@ export class MaGuided extends LitElement {
 
   /** Why some steps added nothing: their modules are off (Réglages › Modules), and Découvrir leaves them so. */
   #offNote() {
-    const off = [...new Set(this.#stepKeys.flatMap(k => modulesOffFor(this.#view, k)))];
+    const off = [...new Set(this.#stepKeys.flatMap(k => modulesOffFor(k)))];
     if (!off.length) return nothing;
     const names = off.map(m => `« ${MODULES.find(x => x.key === m)?.name || m} »`);
     return html`<p class="g-off" role="note">${icon('eye-slash')} ${names.length > 1 ? `Modules ${names.slice(0, -1).join(', ')} et ${names.at(-1)} désactivés` : `Module ${names[0]} désactivé`} : ${names.length > 1 ? 'leurs panneaux ne sont pas ajoutés' : 'son panneau n’est pas ajouté'}. Vous pouvez ${names.length > 1 ? 'les' : 'le'} réactiver dans <a href=${href.settings()}>Réglages › Modules</a>.</p>`;

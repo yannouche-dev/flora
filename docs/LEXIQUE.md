@@ -17,5 +17,5 @@ Les mots de l'interface de GeoFlora, chacun avec sa définition et son nom dans 
 | **mini-app** | Un jeu ou un parcours ouvert seul à l'écran (`#/app/<id>`) : Rencontres, Parcours, Cueillette, Mosaïque, Faux amis. | mini-app, `app/miniapp/` (moteur), `app/miniapps/<id>.js` (manifestes) |
 | **parcours** | La mini-app de marche botanique : les plantes rencontrées, notées sur la carte du chemin, puis le bilan. | walk / trail, `app/miniapps/parcours.js`, `app/core/walk.js` |
 | **zone** / **rayon** | Le cercle autour d'un lieu (centre et rayon : 500 m, 2 km…) qui limite les plantes cherchées et observées. | scope / radius, `app/layout/state.js` (`at`, `r`), `app/core/nearby.js` |
-| **module** | Un service en ligne (Wikipédia, GBIF, iNaturalist…) qu'on active ou coupe dans Réglages › Modules ; coupé, il n'est jamais appelé. | module, `app/core/modules.js` |
+| **module** | Un service en ligne (Wikipédia, GBIF, iNaturalist…) qu'on active ou coupe pour tout l'appareil, quel que soit le mode d'affichage, dans Réglages › Modules ; coupé, il n'est jamais appelé (masquer un bloc ne le coupe pas). | module, `app/core/modules.js` |
 | **mode** | Une façon d'afficher la fiche et les résultats : Épuré, Standard, Scientifique, ou un mode créé à partir d'eux ; le **Mode King** les arrange. | display mode, `app/core/modes.js` |

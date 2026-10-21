@@ -1,6 +1,6 @@
 // @ts-check
 // Display modes: the three of the app (Épuré, Standard, Scientifique) and the ones made from them.
-// A mode made here starts as a copy of another (its blocks, layout, panes, modules, results grid) and keeps
+// A mode made here starts as a copy of another (its blocks, layout, panes, results grid) and keeps
 // the way its model draws things (`base`: compact like Épuré, general like Standard, complete like
 // Scientifique); then it is arranged on its own, in Mode King and Réglages. No dependency on the store.
 
@@ -63,7 +63,7 @@ function newKey() {
 }
 
 /**
- * Records a new mode drawn like `from` (its copy of the layout and modules is made by the caller, see
+ * Records a new mode drawn like `from` (its copy of the layout is made by the caller, see
  * mode-admin.js). @param {string} label @param {Mode} from @returns {Mode}
  */
 export function addMode(label, from) {

@@ -32,7 +32,7 @@ import { openModal } from '../../core/history.js';
 import { config } from '../../config.js';
 import { PaneSizer, splitStyles } from '../../core/panes.js';
 import { sheetSession } from '../../core/sheet-session.js';
-import { plantViewOf, StoreController } from '../../core/store.js';
+import { StoreController } from '../../core/store.js';
 import { emergency } from '../../core/poison.js';
 import { ui } from '../../styles/ui.js';
 import { MONTH, PAGE, distLabel, nameOf, nextDistance } from './cards.js';
@@ -283,8 +283,8 @@ export class MaAroundList extends LitElement {
     if (this.c && this.c.mediaAt !== at) this.app?.set({ mediaAt: at });
   };
 
-  /** A plant's photo, unless the « Photos en ligne » module is off in this view (a leaf shows instead). @param {string | null | undefined} url */
-  #photo(url) { return url && moduleOn('photos', plantViewOf(this.#store.state)) ? url : null; }
+  /** A plant's photo, unless the « Photos en ligne » module is off (a leaf shows instead). @param {string | null | undefined} url */
+  #photo(url) { return url && moduleOn('photos') ? url : null; }
 
   /** A plant opened in its sheet (Rencontres: chosen, its sheet open), which steps through `ids`. @param {number} id @param {number[]} ids */
   #openPlant(id, ids) {
@@ -361,7 +361,7 @@ export class MaAroundList extends LitElement {
   get #mediaState() { return this.media ? this.c?.media ?? null : null; }
 
   /** The display mode (the modules, the media's presentation). */
-  get #mode() { return plantViewOf(this.#store.state); }
+  get #mode() { return this.#store.state.mode; }
 
   /** A plant looked at for its photos (a first match), and the last match made meanwhile (looked at next if it has none). */
   /** @type {number | null} */ #checking = null;
@@ -376,7 +376,7 @@ export class MaAroundList extends LitElement {
     if (this.#checking != null) { this.#waiting = card; return; }
     const id = card.plant.id;
     this.#checking = id;
-    const ok = await hasPhotos(card.plant, this.#mode).catch(() => false);
+    const ok = await hasPhotos(card.plant).catch(() => false);
     this.#checking = null;
     const next = this.#waiting;
     this.#waiting = null;
@@ -393,7 +393,7 @@ export class MaAroundList extends LitElement {
   get #paneId() {
     const m = this.#mediaState;
     if (!m || m.closed || !this._roomy || !this.c || this.#sheetId != null || !this.#session?.cards || this.#view === 'all') return null;
-    if (!moduleOn('photos', this.#mode)) return null;
+    if (!moduleOn('photos')) return null;
     return this.#s.chosenId;
   }
 
@@ -476,7 +476,7 @@ export class MaAroundList extends LitElement {
   /** « Ses photos » on the deck: once the photos were brought, when they are out of sight (closed, or a phone). */
   get #photosButton() {
     const m = this.#mediaState;
-    return Boolean(m && moduleOn('photos', this.#mode) && (!this._roomy || m.closed));
+    return Boolean(m && moduleOn('photos') && (!this._roomy || m.closed));
   }
 
   /** The match's window closed: the deck goes on, the focus back on the views. @param {Card} c */

@@ -14,15 +14,15 @@
 //    plant chosen and its sheet open, or its sheet closed (the plant stays chosen); the others, the plant open (?p=:
 //    its sheet), or closed — back to the entry it was opened from. Over a start screen, the plant of a link (?p=)
 //    shows in a sheet of its own (ma-plant-sheet).
-//  - The way out: exit.confirm(c) asks first if it says something; then exit.handoff, within the grants; then back
-//    to where it was opened from (else the start page).
+//  - The way out: exit.confirm(c) asks first if it says something; then back to where it was opened from (else the
+//    start page). Leaving changes nothing in the app (no mode, no setting).
 //  - « Rejouer » asks first, in a dialog; then what the app owns is emptied (runtime.js#replay), here and in the
 //    other tabs (core/sync.js), and it starts again at its first step.
 
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { backTo, depth, entryValue, markEntry, openModal, pushHash, replaceHash } from '../core/history.js';
 import { href } from '../core/router.js';
-import { plantViewOf, setHarvestMode, setMode, setShowSteps, StoreController } from '../core/store.js';
+import { setShowSteps, StoreController } from '../core/store.js';
 import { subscribe } from '../core/sync.js';
 import { icon } from '../core/icons.js';
 import { ui } from '../styles/ui.js';
@@ -171,7 +171,7 @@ export class GfMiniapp extends LitElement {
   willUpdate(changed) {
     const route = this.route;
     if (!route) return;
-    if (this._app) { this._app.showSteps = this.#store.state.showSteps; this._app.view = plantViewOf(this.#store.state); }
+    if (this._app) { this._app.showSteps = this.#store.state.showSteps; this._app.view = this.#store.state.mode; }
     if (changed.has('route')) {
       if (this._app?.m.id === route.id) this.#follow();
       else if (this.#loading !== route.id) this.#open(route.id);
@@ -191,7 +191,7 @@ export class GfMiniapp extends LitElement {
       if (problems.length) throw new Error(`mini-app ${id}: ${problems.join('; ')}`);
       if (this.#loading !== id) return;
       const app = new MiniApp(m, { showSteps: this.#store.state.showSteps });
-      app.view = plantViewOf(this.#store.state);
+      app.view = this.#store.state.mode;
       app.addEventListener('change', this.#onChange);
       app.addEventListener('navigate', this.#onNavigate);
       app.addEventListener('exit', this.#onExit);
@@ -308,11 +308,8 @@ export class GfMiniapp extends LitElement {
     if (!app) return;
     const text = app.m.exit.confirm?.(app.c);
     if (text && !(await this.#ask('leave', text))) return;
-    const h = app.handoff();
-    if (h.mode) setMode(/** @type {any} */ (h.mode));
-    if (typeof h.harvestMode === 'boolean') setHarvestMode(h.harvestMode);
     app.flush();
-    backTo(typeof h.to === 'string' ? null : this.#from, typeof h.to === 'string' ? h.to : '#/');
+    backTo(this.#from, '#/');
   };
 
   /** « Rejouer », once confirmed. */

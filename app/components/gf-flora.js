@@ -5,7 +5,7 @@ import { MediaController, PHONE_QUERY } from '../core/media.js';
 import { activeFilterCount, clearFilters, lastSearchHash } from '../core/query.js';
 import { href } from '../core/router.js';
 import { backTo, depth, openModal, openView, replaceView } from '../core/history.js';
-import { plantViewOf, StoreController, whenReady } from '../core/store.js';
+import { StoreController, whenReady } from '../core/store.js';
 import { PaneSizer, splitStyles } from '../core/panes.js';
 import { ui } from '../styles/ui.js';
 import { sheetStyles } from './ui-kit.js';
@@ -535,7 +535,7 @@ export class GfFlora extends LitElement {
   /** The pane: its bar (block, plant, full screen, close) and the block alone. @param {boolean} phone */
   #paneSection(phone) {
     const id = this.#plantId, key = /** @type {string} */ (this.#pane);
-    const view = plantViewOf(this.#store.state);
+    const view = this.#store.state.mode;
     const route = /** @type {any} */ (this.route);
     return html`<section class=${phone ? 'sheet-pane' : `pane block-pane ${this._paneFull ? 'full' : ''}`} aria-label=${blockTitle(key)}
         @media-index=${this.#mediaIndex} @media-close=${this.#closePane}>
@@ -574,7 +574,7 @@ export class GfFlora extends LitElement {
    * (the sheet and its pinned map side by side). @param {'filters' | 'plant'} pane @returns {'filters' | 'plant' | 'plantPinned'}
    */
   #key(pane) {
-    return pane === 'plant' && hasColumns(plantViewOf(this.#store.state)) ? 'plantPinned' : pane;
+    return pane === 'plant' && hasColumns(this.#store.state.mode) ? 'plantPinned' : pane;
   }
 
   /** @param {'filters' | 'plant'} pane */
@@ -664,7 +664,7 @@ export class GfFlora extends LitElement {
     const resultsFolded = folded.results && showPlant && !folded.plant;
     const plantFolded = showPlant && folded.plant;
 
-    const plantView = plantViewOf(this.#store.state);
+    const plantView = this.#store.state.mode;
 
     // Phone, a plant open: its sheet covers the results (and the app's header, gf-app): out of reach (inert) until
     // it closes; above it, a block's pane covers the sheet in turn.

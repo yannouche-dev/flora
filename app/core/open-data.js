@@ -7,8 +7,6 @@ import * as cache from './cache.js';
 import { ModuleOffError, moduleOn } from './modules.js';
 import { fetchJson } from './net.js';
 
-/** @typedef {import('./modules.js').Mode} Mode */
-
 const DAY = 24 * 3600 * 1000;
 
 /** @param {string} url @param {AbortSignal} [signal] @param {(data: any) => boolean} [expect] */
@@ -21,9 +19,9 @@ const json = (url, signal, expect) => fetchJson(url, { signal, expect });
  */
 const cached = (key, ttl, load, partial) => cache.cached(key, load, { ttl, partial });
 
-/** @param {import('./modules.js').ModuleKey} key @param {Mode} [mode] */
-function need(key, mode) {
-  if (!moduleOn(key, mode)) throw new ModuleOffError(key);
+/** @param {import('./modules.js').ModuleKey} key */
+function need(key) {
+  if (!moduleOn(key)) throw new ModuleOffError(key);
 }
 
 /** Coordinates rounded for cache keys and requests (~100 m): the exact position is not needed. @param {[number, number]} p */
@@ -68,10 +66,10 @@ export function partnerGroup(path) {
 
 /**
  * What GloBI knows of the plant's interactions, grouped by role, partners by number of mentions.
- * @param {string} name scientific name @param {AbortSignal} [signal] @param {Mode} [mode] @returns {Promise<Interactions>}
+ * @param {string} name scientific name @param {AbortSignal} [signal] @returns {Promise<Interactions>}
  */
-export async function interactions(name, signal, mode) {
-  need('globi', mode);
+export async function interactions(name, signal) {
+  need('globi');
   const taxon = String(name).split(/\s+/).slice(0, 2).join(' ');
   return cached('globi2:' + taxon, 7 * DAY, async () => {
     const fields = ['interaction_type', 'target_taxon_name', 'target_taxon_path', 'study_citation'].map(f => 'fields=' + f).join('&');
@@ -176,12 +174,12 @@ function monthly(daily, years) {
  * Climate niche of a species: the climate (annual mean temperature, annual precipitation, from ERA5 over two
  * years) of up to 24 of its GBIF occurrences in France, spread over the country; and the altitudes at which they
  * were observed (those of the 300 occurrences that give one: most of them, 10th–90th percentile, and the extremes).
- * @param {number} gbifKey @param {AbortSignal} [signal] @param {Mode} [mode]
+ * @param {number} gbifKey @param {AbortSignal} [signal]
  * @returns {Promise<{ points: { coordinates: [number, number], temp: number, precip: number }[], years: string, altitudes: Altitudes | null } | null>}
  */
-export async function climateNiche(gbifKey, signal, mode) {
-  need('openmeteo', mode);
-  need('gbif', mode);
+export async function climateNiche(gbifKey, signal) {
+  need('openmeteo');
+  need('gbif');
   const end = new Date().getFullYear() - 1;
   return cached(`niche2:${end}:${gbifKey}`, 90 * DAY, async () => {
     const occ = await json(`https://api.gbif.org/v1/occurrence/search?taxonKey=${gbifKey}&country=FR&occurrenceStatus=PRESENT&hasGeospatialIssue=false&hasCoordinate=true&limit=300`, signal, d => Array.isArray(d.results));

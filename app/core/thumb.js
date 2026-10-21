@@ -48,10 +48,10 @@ export function knownThumb(plant) {
 
 /**
  * A plant photo at hand (a dataset thumbnail, an iNaturalist photo…), or null when the « Photos en ligne » module is
- * off in that mode: every <img> of a plant photo goes through here or the functions above.
- * @param {string | null | undefined} url @param {import('./modes.js').Mode} [mode] the app mode when not given
+ * off: every <img> of a plant photo goes through here or the functions above.
+ * @param {string | null | undefined} url
  */
-export const photoOf = (url, mode) => url && moduleOn('photos', mode) ? url : null;
+export const photoOf = url => url && moduleOn('photos') ? url : null;
 
 /** @param {number} id @returns {string | null | undefined} */
 export const cachedThumb = id => moduleOn('photos') ? known.get(Number(id)) : null;

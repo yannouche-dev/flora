@@ -4,7 +4,7 @@
 import { PlantSources } from '../../lib/plant-sources.mjs';
 import { config } from '../config.js';
 import * as cache from './cache.js';
-import { appMode, moduleEvents, moduleOn, modulesSignature } from './modules.js';
+import { moduleEvents, moduleOn, modulesSignature } from './modules.js';
 import { fetchJson } from './net.js';
 import { readText, writeText } from './prefs.js';
 
@@ -17,29 +17,18 @@ export function getTrefleToken() {
 export function setTrefleToken(token) {
   // Storage unavailable: the token simply won't persist.
   writeText(config.storageKeys.trefleToken, token || null);
-  instances.clear();
+  instance = null;
 }
 
-/** @typedef {import('./modules.js').Mode} Mode */
-
-/** One PlantSources per mode, each calling only the modules that mode uses. @type {Map<string, PlantSources>} */
-const instances = new Map();
-/** @param {Mode} [mode] the surface's mode (plant sheet, grid); the app mode when omitted */
-const sourcesFor = mode => {
-  const m = mode || appMode();
-  let instance = instances.get(m);
-  if (!instance) {
-    instance = new PlantSources({ trefleToken: getTrefleToken(), enabled: (/** @type {any} */ k) => moduleOn(k, m), fetchJson });
-    instances.set(m, instance);
-  }
-  return instance;
-};
+/** The PlantSources calling only the modules on (made again when a module or the Trefle token changes). @type {PlantSources | null} */
+let instance = null;
+const sourcesFor = () => instance ??= new PlantSources({ trefleToken: getTrefleToken(), enabled: (/** @type {any} */ k) => moduleOn(k), fetchJson });
 // A module switched on again must not get an empty answer from the in-memory cache of an old instance.
-moduleEvents.addEventListener('change', () => instances.clear());
+moduleEvents.addEventListener('change', () => { instance = null; });
 
-/** Cache key of a plant's remote data: it changes with the modules off in that mode, so their data never shows. */
-const key = (/** @type {string} */ kind, /** @type {number} */ id, /** @type {Mode | undefined} */ mode) => {
-  const off = modulesSignature(mode);
+/** Cache key of a plant's remote data: it changes with the modules off, so their data never shows. */
+const key = (/** @type {string} */ kind, /** @type {number} */ id) => {
+  const off = modulesSignature();
   return kind + ':' + id + (off ? '|off:' + off : '');
 };
 
@@ -57,35 +46,32 @@ const cached = (key, loader, signal) => cache.cached(key, loader, { ttl: config.
  * Thumbnail for a list row: the one embedded in plants.json, otherwise a remote lookup.
  * @param {any} plant
  * @param {AbortSignal} [signal]
- * @param {Mode} [mode]
  */
-export function thumbnail(plant, signal, mode) {
+export function thumbnail(plant, signal) {
   if (plant.thumbnail?.url) return Promise.resolve(plant.thumbnail);
   // 'thumb2': 'thumb' kept null for a week when the services failed (audit STO-9); a failure is now thrown, not stored.
-  return cached(key('thumb2', plant.id, mode), () => sourcesFor(mode).thumbnail(plant, { signal }), signal);
+  return cached(key('thumb2', plant.id), () => sourcesFor().thumbnail(plant, { signal }), signal);
 }
 
 /**
  * Everything the detail page needs (identifiers, GBIF, Commons, Trefle, links).
  * @param {any} plant
  * @param {AbortSignal} [signal]
- * @param {Mode} [mode]
  */
-export function details(plant, signal, mode) {
+export function details(plant, signal) {
   // 'details3': 'details2' held results of failed calls as « nothing found » for a week (audit STO-9, OPS-2); a
   // degraded result (some services failed: `unavailable`) is now kept a few minutes only.
-  return cached(key('details3', plant.id, mode), () => sourcesFor(mode).details(plant, { signal }), signal);
+  return cached(key('details3', plant.id), () => sourcesFor().details(plant, { signal }), signal);
 }
 
 /**
  * Flowering / fruiting observations per month in France (iNaturalist), cached like the details.
  * @param {any} plant
  * @param {AbortSignal} [signal]
- * @param {Mode} [mode] the surface's mode; the app mode when omitted
  * @returns {Promise<{ all: number[], flowering: number[], fruiting: number[], taxonId: number, sourceUrl: string } | null>}
  */
-export function phenology(plant, signal, mode) {
-  return cached(key('phenology', plant.id, mode), () => sourcesFor(mode).phenology(plant, { signal }), signal);
+export function phenology(plant, signal) {
+  return cached(key('phenology', plant.id), () => sourcesFor().phenology(plant, { signal }), signal);
 }
 
 /** @param {any} plant */
@@ -97,18 +83,17 @@ export const links = plant => sourcesFor().links(plant);
  * @param {any} plant
  * @param {string | null | undefined} qid
  * @param {AbortSignal} [signal]
- * @param {Mode} [mode] the surface's mode; the app mode when omitted
  * @returns {Promise<{ title?: string, extract?: string, url: string | null, description?: string | null, touched?: string | null,
  *   sections: { theme: string, title: string, text: string }[], aliases: string[], english?: string | null } | null>}
  */
-export function wikipedia(plant, qid, signal, mode) {
+export function wikipedia(plant, qid, signal) {
   if (!qid) return Promise.resolve(null);
-  return cached(key('wikipedia2', plant.id, mode), async () => {
-    const claims = await sourcesFor(mode).wikidataClaims(qid, { signal });
+  return cached(key('wikipedia2', plant.id), async () => {
+    const claims = await sourcesFor().wikidataClaims(qid, { signal });
     if (!claims) return null;
     const aliases = claims.aliases || [];
     const english = claims.enwiki ? 'https://en.wikipedia.org/wiki/' + encodeURIComponent(claims.enwiki.replace(/ /g, '_')) : null;
-    const article = claims.frwiki ? await sourcesFor(mode).wikipediaArticle(claims.frwiki, { signal }) : null;
+    const article = claims.frwiki ? await sourcesFor().wikipediaArticle(claims.frwiki, { signal }) : null;
     if (article) return { ...article, aliases, english };
     return aliases.length || english ? { url: null, extract: '', sections: [], aliases, english } : null;
   }, signal);
@@ -119,97 +104,96 @@ export function wikipedia(plant, qid, signal, mode) {
  * @param {any} plant
  * @param {string | null | undefined} qid
  * @param {AbortSignal} [signal]
- * @param {Mode} [mode] the surface's mode; the app mode when omitted
  */
-export function wikidataScience(plant, qid, signal, mode) {
+export function wikidataScience(plant, qid, signal) {
   if (!qid) return Promise.resolve(null);
-  return cached(key('wikidata-science', plant.id, mode), () => sourcesFor(mode).wikidataScience(qid, { signal }), signal);
+  return cached(key('wikidata-science', plant.id), () => sourcesFor().wikidataScience(qid, { signal }), signal);
 }
 
 // ── GBIF, part by part: each block asks only for what it shows ────────────────────────────────────────
 
 /**
  * The plant's GBIF Backbone taxon (key and match), for pages that need it without the whole sheet (Carte).
- * @param {any} plant @param {AbortSignal} [signal] @param {Mode} [mode]
+ * @param {any} plant @param {AbortSignal} [signal]
  */
-export function gbifTaxon(plant, signal, mode) {
-  return cached(key('gbif-taxon', plant.id, mode), () => sourcesFor(mode).gbifTaxon(plant, { signal }), signal);
+export function gbifTaxon(plant, signal) {
+  return cached(key('gbif-taxon', plant.id), () => sourcesFor().gbifTaxon(plant, { signal }), signal);
 }
 
 /**
  * One kind of species data: 'vernacularNames' | 'descriptions' | 'distributions' | 'speciesProfiles' | 'synonyms' | 'iucnRedListCategory'.
- * @param {any} plant @param {number | null | undefined} gbifKey @param {string} part @param {AbortSignal} [signal] @param {Mode} [mode]
+ * @param {any} plant @param {number | null | undefined} gbifKey @param {string} part @param {AbortSignal} [signal]
  */
-export function gbifSpecies(plant, gbifKey, part, signal, mode) {
+export function gbifSpecies(plant, gbifKey, part, signal) {
   if (!gbifKey) return Promise.resolve(null);
-  return cached(key('gbif-' + part, plant.id, mode), () => sourcesFor(mode).gbifSpecies(gbifKey, part, { signal }), signal);
+  return cached(key('gbif-' + part, plant.id), () => sourcesFor().gbifSpecies(gbifKey, part, { signal }), signal);
 }
 
 /**
  * Occurrences in France: count, by month, year, kind of record, dataset, region and département.
- * @param {any} plant @param {number | null | undefined} gbifKey @param {AbortSignal} [signal] @param {Mode} [mode]
+ * @param {any} plant @param {number | null | undefined} gbifKey @param {AbortSignal} [signal]
  */
-export function gbifStats(plant, gbifKey, signal, mode) {
+export function gbifStats(plant, gbifKey, signal) {
   if (!gbifKey) return Promise.resolve(null);
-  return cached(key('gbif-stats', plant.id, mode), () => sourcesFor(mode).gbifOccurrenceStats(gbifKey, { signal }), signal);
+  return cached(key('gbif-stats', plant.id), () => sourcesFor().gbifOccurrenceStats(gbifKey, { signal }), signal);
 }
 
 /**
  * Images of occurrences: 'herbarium' (preserved specimens) or 'photos' (field observations in France).
- * @param {any} plant @param {number | null | undefined} gbifKey @param {'herbarium' | 'photos'} kind @param {AbortSignal} [signal] @param {Mode} [mode]
+ * @param {any} plant @param {number | null | undefined} gbifKey @param {'herbarium' | 'photos'} kind @param {AbortSignal} [signal]
  */
-export function gbifMedia(plant, gbifKey, kind, signal, mode) {
+export function gbifMedia(plant, gbifKey, kind, signal) {
   if (!gbifKey) return Promise.resolve([]);
   // media3: records read again since their free-text fields are plain text (lib/plant-sources.mjs, audit SEC-2).
-  return cached(key('gbif-media3-' + kind, plant.id, mode), () => sourcesFor(mode).gbifOccurrenceMedia(gbifKey, kind, { signal }), signal);
+  return cached(key('gbif-media3-' + kind, plant.id), () => sourcesFor().gbifOccurrenceMedia(gbifKey, kind, { signal }), signal);
 }
 
 /**
  * The photos chosen for the taxon on iNaturalist (free licences, every size), for the media viewer.
- * @param {any} plant @param {number | null | undefined} taxonId @param {AbortSignal} [signal] @param {Mode} [mode]
+ * @param {any} plant @param {number | null | undefined} taxonId @param {AbortSignal} [signal]
  */
-export function inaturalistPhotos(plant, taxonId, signal, mode) {
+export function inaturalistPhotos(plant, taxonId, signal) {
   if (!taxonId) return Promise.resolve([]);
-  return cached(key('inat-photos', plant.id, mode), () => sourcesFor(mode).inaturalistPhotos(taxonId, { signal }), signal);
+  return cached(key('inat-photos', plant.id), () => sourcesFor().inaturalistPhotos(taxonId, { signal }), signal);
 }
 
-/** @param {any} plant @param {number | null | undefined} gbifKey @param {AbortSignal} [signal] @param {Mode} [mode] */
-export function gbifLiterature(plant, gbifKey, signal, mode) {
+/** @param {any} plant @param {number | null | undefined} gbifKey @param {AbortSignal} [signal] */
+export function gbifLiterature(plant, gbifKey, signal) {
   if (!gbifKey) return Promise.resolve(null);
-  return cached(key('gbif-literature', plant.id, mode), () => sourcesFor(mode).gbifLiterature(gbifKey, { signal }), signal);
+  return cached(key('gbif-literature', plant.id), () => sourcesFor().gbifLiterature(gbifKey, { signal }), signal);
 }
 
-/** Title of a GBIF dataset (cached for every plant). @param {string} datasetKey @param {AbortSignal} [signal] @param {Mode} [mode] */
-export function gbifDatasetTitle(datasetKey, signal, mode) {
-  if (!moduleOn('gbif', mode || appMode())) return Promise.resolve(null);
-  return cached('gbif-dataset:' + datasetKey, () => sourcesFor(mode).gbifDatasetTitle(datasetKey, { signal }), signal);
+/** Title of a GBIF dataset (cached for every plant). @param {string} datasetKey @param {AbortSignal} [signal] */
+export function gbifDatasetTitle(datasetKey, signal) {
+  if (!moduleOn('gbif')) return Promise.resolve(null);
+  return cached('gbif-dataset:' + datasetKey, () => sourcesFor().gbifDatasetTitle(datasetKey, { signal }), signal);
 }
 
-/** Name of a region or département (GADM id). @param {string} gid @param {AbortSignal} [signal] @param {Mode} [mode] */
-export function gadmName(gid, signal, mode) {
-  if (!moduleOn('gbif', mode || appMode())) return Promise.resolve(null);
-  return cached('gadm:' + gid, () => sourcesFor(mode).gadmName(gid, { signal }), signal);
+/** Name of a region or département (GADM id). @param {string} gid @param {AbortSignal} [signal] */
+export function gadmName(gid, signal) {
+  if (!moduleOn('gbif')) return Promise.resolve(null);
+  return cached('gadm:' + gid, () => sourcesFor().gadmName(gid, { signal }), signal);
 }
 
 /**
  * GBIF occurrences around a point (never cached: the position changes).
  * @param {number | null | undefined} gbifKey @param {[number, number]} point [lon, lat] @param {number} radius metres
- * @param {AbortSignal} [signal] @param {Mode} [mode] @param {number} [limit] how many of the nearest
+ * @param {AbortSignal} [signal] @param {number} [limit] how many of the nearest
  */
-export function gbifNear(gbifKey, point, radius, signal, mode, limit = 5) {
+export function gbifNear(gbifKey, point, radius, signal, limit = 5) {
   if (!gbifKey) return Promise.resolve(null);
-  return sourcesFor(mode).gbifNear(gbifKey, point, radius, { signal, limit });
+  return sourcesFor().gbifNear(gbifKey, point, radius, { signal, limit });
 }
 
 /**
  * The extent of a taxon's occurrences matching a filter (see PlantSources.gbifOccurrenceBounds).
- * @param {number | null | undefined} gbifKey @param {Record<string, string>} filter @param {AbortSignal} [signal] @param {Mode} [mode]
+ * @param {number | null | undefined} gbifKey @param {Record<string, string>} filter @param {AbortSignal} [signal]
  */
-export function gbifBounds(gbifKey, filter, signal, mode) {
+export function gbifBounds(gbifKey, filter, signal) {
   if (!gbifKey) return Promise.resolve(null);
   const id = Object.entries(filter).sort().map(([k, v]) => k + '=' + v).join('&');
   // « gbif-bounds3 »: the occurrences cached without their place, dataset and record number are not used again.
-  return cached('gbif-bounds3:' + gbifKey + ':' + id, () => sourcesFor(mode).gbifOccurrenceBounds(gbifKey, filter, { signal }), signal);
+  return cached('gbif-bounds3:' + gbifKey + ':' + id, () => sourcesFor().gbifOccurrenceBounds(gbifKey, filter, { signal }), signal);
 }
 
 /**

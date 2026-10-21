@@ -13,7 +13,7 @@ const {
 } = await import('../../app/core/observations.js');
 const { INAT_DATASET } = await import('../../app/core/around3d.js');
 const { plantCounts, plantOfPoint, plantsIn, speciesOf } = await import('../../app/core/nearby.js');
-const { appMode, setModule } = await import('../../app/core/modules.js');
+const { setModule } = await import('../../app/core/modules.js');
 const db = await import('../../app/core/db.js');
 
 const FLORA = [
@@ -231,7 +231,7 @@ test('GBIF en deux temps : sans facette, une page comme avant (la copie écarté
 
 test('une source en panne : dite, les autres montrées ; toutes en panne : une erreur qui dit chacune ; un module coupé : dit comme tel', async t => {
   const fetch = globalThis.fetch;
-  t.after(() => { globalThis.fetch = fetch; setModule('gbif', appMode(), true); });
+  t.after(() => { globalThis.fetch = fetch; setModule('gbif', true); });
   /** @type {string[]} */ const asked = [];
   const c = /** @type {[number, number]} */ ([3.4, 46]);
   globalThis.fetch = /** @type {any} */ (answerZone(asked, { down: ['api.gbif.org'] }));
@@ -249,7 +249,7 @@ test('une source en panne : dite, les autres montrées ; toutes en panne : une e
     return true;
   });
 
-  setModule('gbif', appMode(), false);
+  setModule('gbif', false);
   const c3 = /** @type {[number, number]} */ ([3.6, 46.2]);
   globalThis.fetch = /** @type {any} */ (answerZone(asked));
   const off = await zoneObservations(c3, 2000, { filters: filters({ sources: ['inat', 'gbif'] }), max: 200 });

@@ -2,8 +2,9 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { FAVORITES_ID, getMembership, matchCollections, newCollection, promoteFavorite, saveCollection, setInCollection, withPlant } from '../core/collections.js';
 import { href } from '../core/router.js';
+import { setContext } from '../core/context.js';
 import { openModal } from '../core/history.js';
-import { setTarget, StoreController } from '../core/store.js';
+import { StoreController } from '../core/store.js';
 import { ui } from '../styles/ui.js';
 import { sheetStyles } from './ui-kit.js';
 import { icon, kindIcon } from '../core/icons.js';
@@ -75,8 +76,8 @@ export class GfAddTo extends LitElement {
     this._busy = true;
     try {
       await setInCollection(id, this.plant, on);
-      // The last collection added to becomes the one-tap target of the Épuré sheet.
-      if (on && id !== FAVORITES_ID) setTarget(id);
+      // The last collection a plant was put in becomes the current one (« Ajouter à … » on the sheet).
+      if (on && id !== FAVORITES_ID) setContext({ collection: id });
     } finally { this._busy = false; }
   }
 
@@ -95,7 +96,7 @@ export class GfAddTo extends LitElement {
       // A favourite of a game put in a collection: the user's own now.
       await promoteFavorite(this.plant.id);
       await saveCollection(withPlant(created, this.plant));
-      setTarget(created.id);
+      setContext({ collection: created.id });
       this._creating = false;
       this._query = '';
     } finally { this._busy = false; }
@@ -106,7 +107,7 @@ export class GfAddTo extends LitElement {
     this._busy = true;
     try {
       await setInCollection(id, this.plant, true);
-      setTarget(id);
+      setContext({ collection: id });
       this._creating = false;
       this._query = '';
     } finally { this._busy = false; }

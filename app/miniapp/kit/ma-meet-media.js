@@ -17,19 +17,19 @@ import { openModal } from '../../core/history.js';
 import { ui } from '../../styles/ui.js';
 import '../../components/gf-media-viewer.js';
 
-/** @typedef {import('../../core/modules.js').Mode} Mode */
+/** @typedef {import('../../core/modes.js').Mode} Mode */
 
 /**
- * Has this plant images to show in this mode (the « Photos en ligne » module on, an image found)? Answers at the first
+ * Has this plant images to show (the « Photos en ligne » module on, an image found)? Answers at the first
  * image found (its thumbnail, at once), else once every source has answered.
- * @param {any} plant @param {Mode} mode @returns {Promise<boolean>}
+ * @param {any} plant @returns {Promise<boolean>}
  */
-export async function hasPhotos(plant, mode) {
-  if (!plant || !moduleOn('photos', mode)) return false;
+export async function hasPhotos(plant) {
+  if (!plant || !moduleOn('photos')) return false;
   if (plant.thumbnail?.url) return true;
   const abort = new AbortController();
   return new Promise(resolve => {
-    loadMedia(plant, mode, abort.signal, (items, done) => {
+    loadMedia(plant, abort.signal, (items, done) => {
       if (items.length) { abort.abort(); resolve(true); } else if (done) resolve(false);
     }).catch(() => resolve(false));
   });
@@ -50,7 +50,7 @@ export class MaMeetMedia extends LitElement {
     name: {},
     /** The image shown: its place among the plant's media (the address's &m=). */
     index: { type: Number },
-    /** The display mode (the modules, the media's presentation). */
+    /** The display mode (the media's presentation). */
     view: {},
     /** 'pane' (beside the deck) or 'dialog' (full screen, modal: a phone). */
     mode: {},
@@ -144,7 +144,7 @@ export class MaMeetMedia extends LitElement {
       </div>
       ${this.coach ? html`<div class="coach" role="note">${icon('lightbulb')}<p><b>Voici ses photos.</b> ${coachText()}${this.chooses ? ' Chaque nouveau coup de cœur la remplace ici.' : ''}</p>
         <button class="secondary" type="button" @click=${() => this.dispatchEvent(new CustomEvent('meet-media-coached', { bubbles: true, composed: true }))}>Compris</button></div>` : nothing}
-      <gf-media-viewer prefer-photos bar-out ?local=${this.mode === 'pane'} @media-bar=${() => this.requestUpdate()} plant-id=${this.plantId} .view=${this.view} .index=${this.index} presentation=${blockStyle(/** @type {any} */ (this.view), 'media')}
+      <gf-media-viewer prefer-photos bar-out ?local=${this.mode === 'pane'} @media-bar=${() => this.requestUpdate()} plant-id=${this.plantId} .index=${this.index} presentation=${blockStyle(/** @type {any} */ (this.view), 'media')}
         @media-close=${(/** @type {Event} */ e) => { e.stopPropagation(); this.close(); }}></gf-media-viewer>`;
   }
 

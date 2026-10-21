@@ -33,7 +33,6 @@ import { icon } from '../core/icons.js';
 import { moduleOn } from '../core/modules.js';
 import { FIX_MAX_AGE, geoProblem, takeFix } from '../core/geo.js';
 import { addressAt } from '../core/geoservices.js';
-import { plantViewOf } from '../core/store.js';
 import { SearchController } from '../core/search-channel.js';
 import { blockStyle } from '../core/sheet-blocks.js';
 import { href } from '../core/router.js';
@@ -433,7 +432,7 @@ export class DlMap extends LitElement {
     if (!obs || !info || !obs.points.length || !this.#p.src.includes('inat') || !s.filters.sources.includes('inat')) return null;
     if (this.#hlMemo?.key === obs.key + ':' + info.name + ':' + when) return this.#hlMemo.value;
     const sp = s.species?.byPlant.get(info.id);
-    const photo = sp?.photo && moduleOn('photos', plantViewOf(this.#store.state)) ? sp.photo.replace(/\/square\./, '/small.') : null;
+    const photo = sp?.photo && moduleOn('photos') ? sp.photo.replace(/\/square\./, '/small.') : null;
     const points = obs.points.filter(p => inWhen(p.date, when));
     const value = !points.length ? null : { key: obs.key + ':' + when, photo, credit: photo ? sp?.credit ?? null : null, common: info.name, sci: info.sci, taxonId: sp?.taxonId ?? null,
       points: points.map(p => ({ coordinates: p.coordinates, title: info.name, url: p.url, date: p.date, taxonId: sp?.taxonId ?? null, sci: info.sci, plantId: info.id })) };
@@ -1391,8 +1390,8 @@ export function renderCell(r, ctx) {
   }
   const view = r.params.mode ?? ctx.view;
   if (id === 'media') {
-    return moduleOn('photos', /** @type {any} */ (view))
-      ? html`<gf-media-viewer plant-id=${plant} .view=${view} presentation=${r.params.style ?? blockStyle(/** @type {any} */ (view), 'media')}></gf-media-viewer>`
+    return moduleOn('photos')
+      ? html`<gf-media-viewer plant-id=${plant} presentation=${r.params.style ?? blockStyle(/** @type {any} */ (view), 'media')}></gf-media-viewer>`
       : html`<p class="placeholder quiet">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`;
   }
   return r.view

@@ -44,7 +44,7 @@ import { href } from '../core/router.js';
 import { toHash } from '../core/query.js';
 import { getPlant, nameOf } from '../core/plants.js';
 import { runSearch } from '../core/search.js';
-import { plantViewOf, store, StoreController, whenReady } from '../core/store.js';
+import { store, StoreController, whenReady } from '../core/store.js';
 import { share } from '../core/share.js';
 import { icon } from '../core/icons.js';
 import { BP, MediaController } from '../core/media.js';
@@ -1049,7 +1049,7 @@ export class GfLayout extends LitElement {
       ${head === 'non' ? nothing : head === 'simple' ? html`<header class="cell-head"><h2>${title}</h2><span class="spacer"></span>${pick}${actions}</header>`
         : html`<header class="cell-head"><h2>${icon(cellIcon(r))} ${title}${mark ? html`<b class="cell-mark" aria-hidden="true" title=${mark.label} data-mark=${mark.short}></b>` : nothing}</h2><span class="sub">${sub}</span>
         ${badge}${links}${views}${pick}${actions}</header>`}
-      <div class="cell-body" ?hidden=${folded}>${empty ? this.#slot(key) : renderCell(r, { state: s, channel: group === 'a' ? null : channel, view: plantViewOf(this.#store.state), plant: s.live.plant, first, building: this.#building })}
+      <div class="cell-body" ?hidden=${folded}>${empty ? this.#slot(key) : renderCell(r, { state: s, channel: group === 'a' ? null : channel, view: this.#store.state.mode, plant: s.live.plant, first, building: this.#building })}
         ${crossed ? this.#cross(path, title) : nothing}</div>
     </section>`;
   }

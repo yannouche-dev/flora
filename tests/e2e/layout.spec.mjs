@@ -20,8 +20,8 @@ async function moveTo(page, title, item) {
 
 const where = (/** @type {import('@playwright/test').Page} */ page, /** @type {string} */ key) => page.evaluate(async k => {
   const sb = await import('/app/core/sheet-blocks.js');
-  const { plantViewOf, store } = await import('/app/core/store.js');
-  return sb.isOnEdge(plantViewOf(store.state), k);
+  const { store } = await import('/app/core/store.js');
+  return sb.isOnEdge(store.state.mode, k);
 }, key);
 
 test('mode King : « Déplacer vers… » un nouveau volet, puis de retour dans la fiche', async ({ app, page }) => {
@@ -39,8 +39,8 @@ test('TEST-6 / GAP3-10 : un volet de trop est refusé et annoncé, la mise en pa
   // Six panes nested, alternately right and under the sheet: the deepest the import reads.
   const built = await page.evaluate(async () => {
     const sb = await import('/app/core/sheet-blocks.js');
-    const { plantViewOf, store } = await import('/app/core/store.js');
-    const view = plantViewOf(store.state);
+    const { store } = await import('/app/core/store.js');
+    const view = store.state.mode;
     return ['calendar', 'names', 'uses', 'ids', 'mine', 'status'].map((k, i) => sb.dockBlock(view, k, 'sheet', i % 2 ? 'bottom' : 'right'));
   });
   expect(built).toEqual([true, true, true, true, true, true]);

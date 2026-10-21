@@ -2,12 +2,13 @@
 // The plant sheet is made of titled blocks, the same ones in every display mode (each mode shows them its own
 // way: compact in Épuré, complete in Scientifique), some made of sub-blocks (buttons, fact rows, links). In
 // « Mode King » each mode gets its own order of blocks and sub-blocks and its own folded ones; blocks can be
-// renamed, and « Note » blocks created (free text per plant) and deleted. Folding a block that shows a service
-// is switching that module off for the mode (Réglages › Modules), and the other way round.
+// renamed, and « Note » blocks created (free text per plant) and deleted. A block that shows a service is folded
+// while that module is off (Réglages › Modules, a choice for the whole device, whatever the mode): there is nothing
+// to show. Folding or showing a block never switches a module.
 // The layout can be exported to a file and imported back.
 
 import { config } from '../config.js';
-import { MODULES, moduleOn, setModule } from './modules.js';
+import { MODULES, moduleOn } from './modules.js';
 import { baseOf, importModes, modeKeys, ownModes } from './modes.js';
 import { isOverlay } from './ign-layers.js';
 import { emptyLayout, migratePlaces, migrateTree, store } from './store.js';
@@ -16,7 +17,7 @@ import { writeJSON, writeText } from './prefs.js';
 import { cleanMapSettings, mapSettings, mapSettingsDiff, setMapSettings } from './map-settings.js';
 import { SHEET, dock, normalize, patchStack, setSizes, sheetInRow, stackOf, undock, validTree } from './pane-tree.js';
 
-/** @typedef {import('./modules.js').Mode} Mode */
+/** @typedef {import('./modes.js').Mode} Mode */
 /** @typedef {import('./modules.js').ModuleKey} ModuleKey */
 /** @typedef {import('./store.js').SheetLayout} SheetLayout */
 /** @typedef {{ key: string, title: string, module?: ModuleKey, note?: boolean }} SheetBlock */
@@ -128,6 +129,12 @@ const DEFAULT_HIDDEN = { epure: ['media', 'web'], standard: ['photos', 'gbifMedi
 /** The blocks folded by hand (or by default) in a view. @param {Mode} view @returns {string[]} */
 const hiddenList = view => layout().hidden[view] ?? DEFAULT_HIDDEN[baseOf(view)] ?? [];
 
+/**
+ * Folded by hand (or by default) in this view, whatever its service: the block's own choice, which Mode King's
+ * « Réafficher » and Réglages' block lists change. @param {Mode} view @param {string} key
+ */
+export const foldedByHand = (view, key) => hiddenList(view).includes(key);
+
 /** Keys of earlier versions (one list per mode) → today's block. */
 const RENAMED = { photo: 'photos', about: 'taxonomy', statuses: 'status', description: 'wikipedia' };
 
@@ -226,9 +233,6 @@ export function setBlockOrder(view, keys) {
   save({ order });
 }
 
-/** The blocks that show a module (GBIF has several). @param {ModuleKey} module */
-const blocksOf = module => BLOCKS.filter(b => b.module === module).map(b => b.key);
-
 /** @param {Mode} view @param {Set<string>} keys */
 function writeHidden(view, keys) {
   const all = { ...layout().hidden };
@@ -239,50 +243,46 @@ function writeHidden(view, keys) {
 }
 
 /**
- * Is this block folded in this view? A block of a module is folded when the module is off, or when it was
- * folded itself (a module may have several blocks: folding one leaves the others).
- * @param {Mode} view @param {string} key
+ * The modules a block needs that are off on this device (Wikipédia needs Wikidata too: the article is found through
+ * it), empty when none: only the user switches them on again, in Réglages › Modules.
+ * @param {string} key @returns {ModuleKey[]}
  */
-export function isHidden(view, key) {
+export function modulesOffFor(key) {
   const module = blockOf(key)?.module;
-  const own = hiddenList(view).includes(key);
-  if (module) return own || !moduleOn(module, view) || (module === 'wikipedia' && !moduleOn('wikidata', view));
-  return own;
+  if (!module) return [];
+  return /** @type {ModuleKey[]} */ ([module, ...(module === 'wikipedia' ? ['wikidata'] : [])]).filter(m => !moduleOn(m));
+}
+
+/** Does this block show a service switched off on this device (Réglages › Modules)? @param {string} key */
+export const serviceOff = key => modulesOffFor(key).length > 0;
+
+/**
+ * What a block folded for its service says (Mode King, Réglages): « service GBIF coupé pour tout l’appareil »; null
+ * when its services are on. @param {string} key
+ */
+export function serviceOffNote(key) {
+  const names = modulesOffFor(key).map(m => MODULES.find(x => x.key === m)?.name || m);
+  if (!names.length) return null;
+  return names.length > 1 ? `services ${names.slice(0, -1).join(', ')} et ${names.at(-1)} coupés pour tout l’appareil`
+    : `service ${names[0]} coupé pour tout l’appareil`;
 }
 
 /**
- * Fold a block away, or bring it back. A module goes off with the last of its blocks, and comes back on
- * with the first one (its other blocks staying folded).
+ * Is this block folded in this view? Folded by hand (or by default), or its service off on this device (serviceOff):
+ * it has nothing to show.
+ * @param {Mode} view @param {string} key
+ */
+export const isHidden = (view, key) => foldedByHand(view, key) || serviceOff(key);
+
+/**
+ * Fold a block away, or bring it back, in this view: the block's own choice only. Its service stays as it is (a block
+ * brought back while its module is off stays folded until the module is on again, Réglages › Modules).
  * @param {Mode} view @param {string} key @param {boolean} hidden
  */
 export function setHidden(view, key, hidden) {
   const keys = new Set(hiddenList(view));
-  const module = blockOf(key)?.module;
-  if (!module) {
-    if (hidden) keys.add(key); else keys.delete(key);
-    writeHidden(view, keys);
-    return;
-  }
-  const siblings = blocksOf(module);
-  if (hidden) {
-    keys.add(key);
-    if (siblings.every(k => keys.has(k))) {
-      // The last one: the module goes off (Réglages › Modules), its blocks folded with it.
-      for (const k of siblings) keys.delete(k);
-      writeHidden(view, keys);
-      setModule(module, view, false);
-      return;
-    }
-    writeHidden(view, keys);
-    return;
-  }
-  // The module was off: only this block comes back.
-  if (!moduleOn(module, view)) for (const k of siblings) keys.add(k);
-  keys.delete(key);
+  if (hidden) keys.add(key); else keys.delete(key);
   writeHidden(view, keys);
-  setModule(module, view, true);
-  // The Wikipédia article is found through Wikidata.
-  if (module === 'wikipedia' && !moduleOn('wikidata', view)) setModule('wikidata', view, true);
 }
 
 // ── Sub-blocks ─────────────────────────────────────────────────────────────
@@ -406,37 +406,26 @@ function setTree(view, tree) {
 }
 
 /**
- * The modules a block needs that are off in this view (Wikipédia needs Wikidata too), empty when none: only the
- * user switches them on again (Réglages › Modules, or by bringing the block back by hand).
- * @param {Mode} view @param {string} key @returns {import('./modules.js').ModuleKey[]}
- */
-export function modulesOffFor(view, key) {
-  const module = blockOf(key)?.module;
-  if (!module) return [];
-  return /** @type {import('./modules.js').ModuleKey[]} */ ([module, ...(module === 'wikipedia' ? ['wikidata'] : [])]).filter(m => !moduleOn(m, view));
-}
-
-/**
  * A block docked: on a side of a pane (or of the sheet, or of the whole frame: target 'root'), in a pane's
- * centre (a tab), or among its tabs. A hidden block comes back, its module switched on with it, when the user
- * moves it; `auto` (a layout the app makes itself, like Découvrir's steps) never switches a module on: a block whose
- * module is off is left where it is, and false returned. False too when the layout would be too deep (too many
- * panes nested: pane-tree.js dock refuses what an export could not be imported back from): nothing moves.
+ * centre (a tab), or among its tabs. A block folded by hand comes back when the user moves it (its service stays as
+ * it is: off, the block stays folded); `auto` (a layout the app makes itself, like Découvrir's steps) leaves out a
+ * block whose module is off: it is left where it is, and false returned. False too when the layout would be too deep
+ * (too many panes nested: pane-tree.js dock refuses what an export could not be imported back from): nothing moves.
  * @param {Mode} view @param {string} key @param {string} target a node's id ('sheet', a pane's id, 'root') @param {Zone} zone
  * @param {{ auto?: boolean }} [options]
  */
 export function dockBlock(view, key, target, zone, { auto = false } = {}) {
-  if (auto && modulesOffFor(view, key).length) return false;
+  if (auto && serviceOff(key)) return false;
   const before = treeOf(view), after = dock(before, key, target, zone);
   if (after === before) return false;
-  if (isHidden(view, key)) setHidden(view, key, false);
+  if (foldedByHand(view, key)) setHidden(view, key, false);
   setTree(view, after);
   return true;
 }
 
 /** A block back in the sheet, before another one (or where it was in the order). @param {Mode} view @param {string} key @param {string | null} [beforeKey] */
 export function toSheet(view, key, beforeKey = null) {
-  if (isHidden(view, key)) setHidden(view, key, false);
+  if (foldedByHand(view, key)) setHidden(view, key, false);
   if (stackOf(treeOf(view), key)) setTree(view, undock(treeOf(view), key));
   if (beforeKey && beforeKey !== key) {
     const order = blockOrder(view).filter(k => k !== key);
@@ -639,35 +628,34 @@ export async function importNotes(list) {
 
 // ── Reset, export, import ──────────────────────────────────────────────────
 
-/** The modules that have blocks. */
-const blockModules = () => [...new Set(BLOCKS.filter(b => b.module).map(b => /** @type {ModuleKey} */ (b.module)))];
-
-/** Modules with blocks that are off in a view (each block's own folding is in the layout). @param {Mode} view */
-const foldedModules = view => blockModules().filter(m => !moduleOn(m, view));
-
-/** Back to the default order, every block and sub-block shown (modules included). Titles and notes stay. @param {Mode} view */
+/**
+ * Back to the mode's defaults: order, folded blocks and sub-blocks, styles, titles shown, blocks left out when empty.
+ * Titles and notes stay; so do the services (Réglages › Modules): a block whose module is off stays folded.
+ * @param {Mode} view
+ */
 export function resetBlocks(view) {
   const l = layout();
   const without = (/** @type {any} */ per) => { const next = { ...per }; delete next[view]; return next; };
   save({ order: without(l.order), hidden: without(l.hidden), subOrder: without(l.subOrder), subHidden: without(l.subHidden), styles: without(l.styles || {}), titleShown: without(l.titleShown || {}), hideEmpty: without(l.hideEmpty || {}), place: without(l.place || {}), edges: without(l.edges || {}) });
-  for (const b of BLOCKS) if (b.module && !moduleOn(b.module, view)) setHidden(view, b.key, false);
 }
 
-/** Everything back to the defaults, note blocks and titles included (the notes' texts are deleted). */
+/** Everything back to the defaults, note blocks and titles included (the notes' texts are deleted); services stay. */
 export function resetAll() {
   for (const n of layout().notes) deleteNote('note:' + n.id);
   save(emptyLayout());
   for (const view of modeKeys()) resetBlocks(view);
 }
 
-/** The layout as a file: blocks, sub-blocks, titles, note blocks and their texts, folded modules. */
+/**
+ * The layout as a file: blocks, sub-blocks, titles, note blocks and their texts, the modes made here. Not the services
+ * (Réglages › Modules): they are this device's.
+ */
 export function exportLayout() {
   return JSON.stringify({
     app: 'geoflora', kind: 'sheet-layout', version: 2,
     layout: layout(),
     notes: allNoteTexts(),
     modes: ownModes(),
-    modulesOff: Object.fromEntries(modeKeys().map(v => [v, foldedModules(v)])),
     // Réglages › Cartes (2D or 3D, the 3D options): what differs from the defaults.
     maps3d: mapSettingsDiff(mapSettings())
   }, null, 2);
@@ -707,8 +695,9 @@ export function importLayout(text) {
     && Array.isArray(l.notes) && l.notes.every((/** @type {any} */ n) => typeof n?.id === 'string' && /^[a-z0-9]{1,24}$/.test(n.id) && typeof n.title === 'string' && n.title.length <= 60)
     && (!l.mapBlocks || (Array.isArray(l.mapBlocks) && l.mapBlocks.every((/** @type {any} */ m) => typeof m?.id === 'string' && /^[a-z0-9]{1,24}$/.test(m.id) && typeof m.title === 'string' && m.title.length <= 60)))
     && (!l.maps || (typeof l.maps === 'object' && !Array.isArray(l.maps) && Object.keys(l.maps).every(k => k === 'map' || /^map:[a-z0-9]{1,24}$/.test(k))))
-    && (!data.notes || (typeof data.notes === 'object' && Object.values(data.notes).every(byPlant => byPlant && typeof byPlant === 'object' && Object.values(byPlant).every(t => typeof t === 'string'))))
-    && (!data.modulesOff || perView(data.modulesOff, x => Array.isArray(x) && x.every(m => MODULES.some(mm => mm.key === m))));
+    && (!data.notes || (typeof data.notes === 'object' && Object.values(data.notes).every(byPlant => byPlant && typeof byPlant === 'object' && Object.values(byPlant).every(t => typeof t === 'string'))));
+  // `modulesOff` (files of earlier versions: the services folded with their blocks, per mode) is left aside: services
+  // are this device's, chosen in Réglages › Modules, and a layout never switches one.
   if (!valid) throw new Error('Mise en page illisible ou incomplète.');
   importModes(data.modes || []);
   // Réglages › Cartes, when the file has them (an older one has not: they stay as they are here).
@@ -720,11 +709,6 @@ export function importLayout(text) {
     .map(([plantId, t]) => ({ key: '', note, plantId: Number(plantId), text: t, updatedAt: '' })));
   save({ ...emptyLayout(), order: l.order || {}, hidden: l.hidden || {}, subOrder: l.subOrder || {}, subHidden: l.subHidden || {}, styles: l.styles || {}, titleShown: l.titleShown || {}, hideEmpty: l.hideEmpty || {}, tree: l.tree || {}, titles: l.titles, notes: [...l.notes, ...kept],
     mapBlocks: l.mapBlocks || [], maps: Object.fromEntries(Object.entries(l.maps || {}).map(([k, c]) => [k, cleanMap(c)])) });
-  for (const view of modeKeys()) {
-    const off = data.modulesOff?.[view] || [];
-    for (const m of blockModules()) setModule(m, view, !off.includes(m));
-    if (!off.includes('wikipedia') && !moduleOn('wikidata', view)) setModule('wikidata', view, true);
-  }
   return mergeNoteTexts(texts, { keepMine: true });
 }
 

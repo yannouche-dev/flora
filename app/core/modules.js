@@ -1,10 +1,10 @@
 // @ts-check
-// Modules: the online services the app may call. Each one can be switched off in Réglages; a module
-// that is off is never called (its data and photos are not shown, cached copies included).
+// Modules: the online services the app may call. Each one can be switched off in Réglages, for the whole device
+// (a permission, whatever the display mode); a module that is off is never called (its data and photos are not
+// shown, cached copies included). Hiding a block of the plant sheet never switches one.
 // Everything works offline with the local flora; modules only add data.
 
 import { config } from '../config.js';
-import { modeKeys } from './modes.js';
 import { definePref } from './prefs.js';
 
 /**
@@ -58,81 +58,43 @@ export class ModuleOffError extends Error {
   }
 }
 
-/** @typedef {import('./modes.js').Mode} Mode */
-
 /**
- * Only the exceptions are stored: { gbif: { epure: false } } = GBIF off in Épuré, on elsewhere.
- * @param {any} value @returns {Partial<Record<ModuleKey, Partial<Record<Mode, boolean>>>>}
+ * Only the modules switched off are stored: { gbif: false }. Earlier versions kept a choice per display mode
+ * ({ gbif: { epure: false } }): a module off in any mode is off everywhere — the strictest, so a service cut
+ * somewhere is never called again without the user saying so.
+ * @param {any} value @returns {Partial<Record<ModuleKey, false>>}
  */
 function cleanModules(value) {
-  if (!value || typeof value !== 'object') return {};
-  // A module switched off everywhere was stored as `false`.
-  for (const [k, v] of Object.entries(value)) if (v === false) value[k] = { epure: false, standard: false, scientific: false };
-  return value;
+  /** @type {Record<string, false>} */
+  const off = {};
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return off;
+  for (const [k, v] of Object.entries(value)) {
+    if (v === false || (v && typeof v === 'object' && Object.values(v).includes(false))) off[k] = false;
+  }
+  return off;
 }
 
 // Switched on or off in another tab: this one follows (a refusal made there is never undone from here).
 const pref = definePref({ key: config.storageKeys.modules, fallback: {}, clean: cleanModules,
   store: next => Object.keys(next).length ? next : null });
 
-/** The mode a call happens in when the caller does not say (the app-wide mode); set by the store. */
-let currentMode = () => /** @type {Mode} */ ('standard');
-/** @param {() => Mode} source */
-export function useModeSource(source) { currentMode = source; }
-/** The mode modules follow when a caller does not give one. */
-export const appMode = () => currentMode();
-
-/** Fires `change` when a module is switched on or off, or when the mode modules follow changes. */
+/** Fires `change` when a module is switched on or off (here or in another tab). */
 export const moduleEvents = pref.events;
 
-/**
- * Is this service used in this mode? The plant sheet asks with its own view, the results grid with its own,
- * everything else (maps, Autour, lists) with the app mode.
- * @param {ModuleKey} key @param {Mode} [mode]
- */
-export const moduleOn = (key, mode = currentMode()) => pref.get()[key]?.[mode] !== false;
+/** Is this service used on this device? @param {ModuleKey} key */
+export const moduleOn = key => pref.get()[key] !== false;
 
-/** Modules off in a mode, as a short stable string: part of cache keys, so their data never shows. @param {Mode} [mode] */
-export const modulesSignature = (mode = currentMode()) => MODULES.filter(m => !moduleOn(m.key, mode)).map(m => m.key).join(',');
+/** Modules off, as a short stable string: part of cache keys, so their data never shows. */
+export const modulesSignature = () => MODULES.filter(m => !moduleOn(m.key)).map(m => m.key).join(',');
 
-/** Every module × mode. @returns {Record<ModuleKey, Record<Mode, boolean>>} */
-export const modulesState = () => /** @type {any} */ (Object.fromEntries(MODULES.map(m =>
-  [m.key, Object.fromEntries(modeKeys().map(mode => [mode, moduleOn(m.key, mode)]))])));
+/** Every module, on or off. @returns {Record<ModuleKey, boolean>} */
+export const modulesState = () => /** @type {Record<ModuleKey, boolean>} */ (Object.fromEntries(MODULES.map(m => [m.key, moduleOn(m.key)])));
 
-/** @param {ModuleKey} key @param {Mode} mode @param {boolean} on */
-export function setModule(key, mode, on) {
+/** @param {ModuleKey} key @param {boolean} on */
+export function setModule(key, on) {
   // From what is stored now, not this tab's copy: another tab's choices since are kept (read, changed, written
   // at once — localStorage is synchronous: nothing comes in between).
-  const fresh = pref.fresh();
-  const modes = { ...fresh[key] };
-  if (on) delete modes[mode]; else modes[mode] = false;
-  const next = { ...fresh };
-  if (Object.keys(modes).length) next[key] = modes; else delete next[key];
-  pref.set(next);
-}
-
-/** A new mode uses the services of its model. @param {Mode} from @param {Mode} to */
-export function copyModules(from, to) {
-  // The model's switches and the result from one reading of what is stored (this tab's copy may hold a choice that
-  // could not be written).
-  const fresh = pref.fresh();
-  const next = { ...fresh };
-  for (const m of MODULES) {
-    const modes = { ...next[m.key] };
-    if (fresh[m.key]?.[from] !== false) delete modes[to]; else modes[to] = false;
-    if (Object.keys(modes).length) next[m.key] = modes; else delete next[m.key];
-  }
-  pref.set(next);
-}
-
-/** A mode deleted: its choices go. @param {Mode} mode */
-export function dropModules(mode) {
   const next = { ...pref.fresh() };
-  for (const [k, modes] of Object.entries(next)) {
-    if (!modes || !(mode in modes)) continue;
-    const rest = { ...modes };
-    delete rest[mode];
-    if (Object.keys(rest).length) next[/** @type {ModuleKey} */ (k)] = rest; else delete next[/** @type {ModuleKey} */ (k)];
-  }
+  if (on) delete next[key]; else next[key] = false;
   pref.set(next);
 }
