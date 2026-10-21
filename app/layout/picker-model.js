@@ -64,12 +64,15 @@ export function controlOf(ps) {
 
 /**
  * The choices of a row of buttons or a menu: « Par défaut » first when the default is none, then the values with their
- * labels (a yes or no: Oui, Non). @param {ParamSpec} ps @returns {{ value: unknown, label: string }[]}
+ * labels (a yes or no: Oui, Non) — those the cell's other settings leave, in their order (`offer`: annee's, by its
+ * background, the most recent first). @param {ParamSpec} ps @param {Record<string, any>} [params] the cell's
+ * @returns {{ value: unknown, label: string }[]}
  */
-export function optionsOf(ps) {
+export function optionsOf(ps, params = {}) {
   const none = ps.def === null ? [{ value: null, label: 'Par défaut' }] : [];
   if (ps.kind === 'bool') return [...none, { value: true, label: 'Oui' }, { value: false, label: 'Non' }];
-  return [...none, ...Object.entries(ps.values ?? {}).map(([value, label]) => ({ value, label }))];
+  const values = ps.offer?.(params) ?? Object.keys(ps.values ?? {});
+  return [...none, ...values.map(value => ({ value, label: /** @type {string} */ (ps.values?.[value]) }))];
 }
 
 /** Words as the grammar keeps them: none of its separators (, ; ( ) [ ] = @), one line, no spaces around. @param {string} text */

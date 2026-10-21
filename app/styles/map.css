@@ -44,6 +44,10 @@ gf-map .gf-map-frame.fullscreen {
   background: var(--gf-surface-2);
 }
 
+/* Under the photos of a year or of a period, the most recent ones where those are missing, greyed and pale — never
+   mistaken for the black and white historical ones (core/backgrounds.js; in 3D the same: core/gl-style.js FILLER). */
+gf-map .gf-grey { filter: grayscale(1) contrast(0.36) brightness(1.25); }
+
 /* The quiet-map rule (gf-map.js): nothing is written over the map but its controls and credits. Its state is in the
    panel « Carte » (« État »), what it says in its one live region, hidden here; a load past 400 ms is this thin line
    at its top, no text. */

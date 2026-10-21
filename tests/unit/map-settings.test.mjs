@@ -200,6 +200,35 @@ test('une carte à son propre fond : ses champs à elle, les autres communs, et 
   resetMapLook();
 });
 
+test('un fond d’une année, d’une période, historique, SPOT : gardé sous la même clé, une chaîne, relu ; une clé inconnue revient aux photos', () => {
+  /** @type {any[]} */
+  const seen = [];
+  const on = (/** @type {any} */ e) => seen.push(plain(e.detail));
+  mapLookEvents.addEventListener('change', on);
+  setMapLook({ base: 'photo:2016-2020' });
+  assert.equal(mapLook().base, 'photo:2016-2020');
+  assert.equal(JSON.parse(localStorage.getItem(LAYER) || 'null').base, 'photo:2016-2020', 'le champ base de geoflora.mapLayer, une chaîne');
+  setMapLook({ base: 'spot:2020' });
+  assert.equal(mapLook().base, 'spot:2020');
+  assert.equal(seen.length, 2);
+  // Another tab's: read as it is (a historical one too).
+  localStorage.setItem(LAYER, JSON.stringify({ base: 'photo:1950-1965', overlays: ['forets'] }));
+  fromAnotherTab(LAYER);
+  assert.deepEqual(plain(mapLook()), { base: 'photo:1950-1965', names: true, overlays: ['forets'], opacities: {} });
+  // A year no version has, a kind without a year, a key of a later version: the photos.
+  for (const base of ['photo:1999', 'spot:2030', 'spot', 'photo:', 'photo:toString', 'satellite', 'PHOTO']) {
+    localStorage.setItem(LAYER, JSON.stringify({ base, overlays: [] }));
+    fromAnotherTab(LAYER);
+    assert.equal(mapLook().base, 'photo', base);
+    assert.equal(cleanOwnLook({ base }), null, base);
+  }
+  // A map's own: its background of a year over the common one.
+  assert.deepEqual(cleanOwnLook({ base: 'spot:2013', overlays: ['parcs'] }), { base: 'spot:2013', overlays: ['parcs'] });
+  assert.equal(lookFor({ base: 'photo:2000' }).base, 'photo:2000');
+  mapLookEvents.removeEventListener('change', on);
+  resetMapLook();
+});
+
 test('un fond ou une couche : seulement les leurs, jamais une clé héritée d’un objet (« constructor », « toString »)', () => {
   for (const base of ['constructor', 'toString', '__proto__', 'hasOwnProperty', ['photo'], 1]) assert.equal(cleanOwnLook({ base }), null, String(base));
   assert.deepEqual(cleanOwnLook({ base: 'constructor', overlays: ['toString', 'cadastre', 'constructor'] }), { overlays: ['cadastre'] });

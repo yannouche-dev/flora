@@ -122,6 +122,19 @@ test('les blocs Carte : leur propre fond (MapConfig.look) ; ceux d’avant, leur
   SB.importLayout(JSON.stringify(odd));
   assert.equal(SB.mapConfig('map').look, null);
   assert.deepEqual(SB.mapConfig('map:abc').look, { overlays: ['cadastre'] });
+  // Its own background of a year, a period, SPOT's: kept, exported and read back; one no version has (1999), left out.
+  SB.setMapConfig('map', { look: { base: 'photo:2016-2020' } });
+  SB.setMapConfig('map:abc', { look: { base: 'spot:2020', overlays: ['cadastre'] } });
+  const years = SB.exportLayout();
+  SB.resetAll();
+  SB.importLayout(years);
+  assert.deepEqual(SB.mapConfig('map').look, { base: 'photo:2016-2020' });
+  assert.deepEqual(SB.mapConfig('map:abc').look, { base: 'spot:2020', overlays: ['cadastre'] });
+  const gone = JSON.parse(years);
+  gone.layout.maps = { map: { look: { base: 'photo:1999' } }, 'map:abc': { look: { base: 'spot:2030', overlays: ['cadastre'] } } };
+  SB.importLayout(JSON.stringify(gone));
+  assert.equal(SB.mapConfig('map').look, null);
+  assert.deepEqual(SB.mapConfig('map:abc').look, { overlays: ['cadastre'] });
   SB.resetAll();
 });
 

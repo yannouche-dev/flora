@@ -14,6 +14,7 @@
 // lit on the map). reads / writes below say which a component follows and which it changes.
 
 import { fold } from '../core/fold.js';
+import { ALL_WHENS, LATEST_SPOT, PHOTO_HISTORIC, PHOTO_PERIODS, PHOTO_YEARS, SPOT_YEARS, baseKeyOf, baseLabel, whenLabel } from '../core/backgrounds.js';
 import { BLOCKS } from '../core/sheet-blocks.js';
 import { blockCategory, categoryOf } from '../core/categories.js';
 import { MAP_CONTROL_ALIASES, MAP_CONTROLS, MAP_INTENT_ALIASES, MAP_INTENTS, MAP_LAYER_ALIASES, MAP_LAYERS, defaultControls, layerWord, readOpacities, readView } from './map-options.js';
@@ -23,14 +24,20 @@ import { MAP_CONTROL_ALIASES, MAP_CONTROLS, MAP_INTENT_ALIASES, MAP_INTENTS, MAP
  * @typedef {{ kind: ParamKind, label: string, def: unknown, values?: Record<string, string>, aliases?: Record<string, string>, words?: string[],
  *   off?: string[], group?: string, mark?: string, bundles?: Record<string, Record<string, string>>, defOf?: (params: Record<string, any>) => unknown,
  *   named?: boolean, max?: number, frame?: boolean, own?: boolean, more?: (word: string) => string | undefined, ordered?: boolean,
- *   read?: (text: string) => string | undefined, unset?: string }} ParamSpec
+ *   read?: (text: string) => string | undefined, unset?: string, expects?: string, check?: (v: any, params: Record<string, any>) => string | undefined,
+ *   offer?: (params: Record<string, any>) => string[], say?: (v: any, params: Record<string, any>, marked: Set<string>) => string | undefined }} ParamSpec
  *   `values`: an enum's (a list's, an intent's) canonical values and their French labels; `aliases`: other spellings of
  *   a value → canonical; `words`: other names of the parameter; `off`: words that, alone, set a yes-or-no one to no
  *   (map(2d)); `group`: its heading in the editor and the README (Où, Fond…); `mark`: its mark in a menu (cellMark),
  *   else its label's first letter; `defOf`: its default as the other parameters make it (ctl: by ui and the intent) —
  *   a value written that is the same left out of the address; `named`: never given a bare value (map(zoom) is not ctl=zoom);
  *   `unset`: what it means not said, in a few words (the editor says it beside a list none of whose values is chosen,
- *   an enum without its value).
+ *   an enum without its value); `expects`: what it takes, in French, when its values are too many to list (annee=);
+ *   `check`: why a value the others make impossible is not one (map(base=plan,annee=2020)) — said, and left out;
+ *   `offer`: the values the editor offers, in their order, as the others make them (annee: its background's years, the
+ *   most recent first — never one `check` refuses), else all of `values`; `say`: its words in a cell's name (cellMark) as
+ *   the others make them — undefined: its value's label; '': said by another one marked (`marked`): base= by annee=, which
+ *   says the whole background (« Images satellite SPOT de 2020 », annee=1950-1965 alone « Photos aériennes historiques… »).
  *   Kinds: `list` — several of its values joined by « + » (layers=znieff+n2000), each unknown one said and left out;
  *   `text` — free words (lieu=Mirabel Ménétrol 63: never a bare value); `intent` — one word for a bundle of the other
  *   parameters (`bundles`: each value's, as the address writes them), which a parameter written beside it overrides;
@@ -115,10 +122,24 @@ const MAP_PARAMS = {
   // The view it starts on (its centre, its zoom; in 3D its tilt and turn), the map moved in « Créer une app »: else
   // framed on the zone.
   vue: { kind: 'text', label: 'Cadrage de départ', def: null, group: 'Où', own: true, named: true, max: 60, read: readView, words: ['view', 'cadrage', 'camera'] },
-  // Fond: the maps' common look (core/map-settings.js) unless it says one (its own then, kept by the cell: base=), as
-  // 2D or 3D (3d=: unless written, the common choice).
-  base: { kind: 'enum', label: 'Fond de carte', def: null, unset: 'le fond commun à toutes les cartes', group: 'Fond', values: { photo: 'Photos aériennes', plan: 'Plan IGN' },
-    aliases: { photos: 'photo', ortho: 'photo', satellite: 'photo', ign: 'plan', carte: 'plan' }, words: ['fond', 'layer'] },
+  // Fond: the maps' common look (core/map-settings.js) unless it says one (its own then, kept by the cell: base=, and
+  // annee= its photos' year or period, SPOT's year — core/backgrounds.js; without it the most recent), as 2D or 3D (3d=:
+  // unless written, the common choice).
+  base: { kind: 'enum', label: 'Fond de carte', def: null, unset: 'le fond commun à toutes les cartes', group: 'Fond', values: { photo: 'Photos aériennes', plan: 'Plan IGN', spot: 'Satellite (SPOT)' },
+    aliases: { photos: 'photo', ortho: 'photo', orthophoto: 'photo', ign: 'plan', carte: 'plan', satellite: 'spot', sat: 'spot' }, words: ['fond', 'layer'],
+    say: (v, p, marked) => marked.has('annee') ? '' : undefined },
+  annee: {
+    kind: 'enum', label: 'Date du fond', def: null, unset: 'la plus récente', group: 'Fond', named: true,
+    values: Object.fromEntries(ALL_WHENS.map(w => [w, whenLabel(w)])), defOf: p => p.base === 'spot' ? LATEST_SPOT : null,
+    expects: `une année des photos (${PHOTO_YEARS.at(-1)} à ${PHOTO_YEARS[0]}) ou de SPOT (${SPOT_YEARS.at(-1)} à ${SPOT_YEARS[0]}), une période (${PHOTO_PERIODS.join(', ')}), des photos historiques (${PHOTO_HISTORIC.join(', ')})`,
+    check: (v, p) => p.base === 'plan' ? 'le plan IGN n’a pas d’année' : baseKeyOf(p.base, v) ? undefined
+      : `pas ${p.base === 'spot' ? 'd’images SPOT' : 'de photos aériennes'} pour ${whenLabel(v)}`,
+    // `values` keyed by years list them oldest first (a year is an integer key): offered as ALL_WHENS, those of its background.
+    offer: p => ALL_WHENS.filter(w => baseKeyOf(p.base, w)),
+    // The whole background in a cell's name, written or not (map(annee=2025): « Images satellite SPOT de 2025 »).
+    say: (v, p) => baseLabel(baseKeyOf(p.base, v)),
+    words: ['an', 'millesime', 'year']
+  },
   '3d': { kind: 'bool', label: 'Vue 3D', def: null, group: 'Fond', mark: '3D', off: ['2d', 'plat', 'plate'], words: ['vue3d', 'relief3d', 'rendu'] },
   // Couches.
   // Any layer of IGN's catalogue too (ign:<id>), in the order drawn (the last on top); their opacity when not the usual.
@@ -477,9 +498,9 @@ export const valueText = (p, v) => p.kind === 'distance' ? distanceText(/** @typ
 export const same = (a, b) => a === b || (Array.isArray(a) && Array.isArray(b) && a.length === b.length && a.every((x, i) => x === b[i]));
 
 /** What a parameter expects, in French. @param {ParamSpec} ps */
-const expected = ps => ps.kind === 'distance' ? 'une distance (500m, 2km)' : ps.kind === 'bool' ? 'oui ou non (1, 0)' : ps.kind === 'text' ? 'des mots'
+const expected = ps => ps.expects ?? (ps.kind === 'distance' ? 'une distance (500m, 2km)' : ps.kind === 'bool' ? 'oui ou non (1, 0)' : ps.kind === 'text' ? 'des mots'
   : ps.kind === 'id' ? 'le numéro d’une plante (celui de p= dans l’adresse)'
-  : Object.keys(ps.values ?? {}).join(', ') + (ps.kind === 'list' ? ', joints par « + »' : '');
+  : Object.keys(ps.values ?? {}).join(', ') + (ps.kind === 'list' ? ', joints par « + »' : ''));
 
 /**
  * What a cell is: its component (or none: unknown, with the closest name), its view, its parameters with their
@@ -555,6 +576,14 @@ export function resolve(cell) {
         if (iv !== undefined) { params[k] = iv; implied.add(k); }
       }
     }
+  }
+  // A value the others make impossible (map(base=spot,annee=2010): no SPOT images that year): said, and left out.
+  for (const k of [...given]) {
+    const why = spec.params[k].check?.(params[k], params);
+    if (!why) continue;
+    problems.push(`${spec.title} : ${why}.`);
+    params[k] = spec.params[k].def;
+    given.delete(k);
   }
   // A title of its own (titre=): the cell's name everywhere (its head, its tab on a phone, its grips).
   const title = params.titre ?? (view ? view.title : spec.title);
@@ -668,7 +697,9 @@ export function cellMark(r) {
   const first = (/** @type {string} */ s) => fold(s).charAt(0);
   const lower = (/** @type {string} */ s) => s.charAt(0).toLowerCase() + s.slice(1);
   // Not the frame's (its head, its links: said in the cell itself, never a mark), nor what the cell's own controls set.
-  const marks = Object.entries(r.spec.params).filter(([k, p]) => !p.frame && !p.own && p.kind !== 'distance' && p.kind !== 'text' && r.given.has(k) && !same(r.params[k], defaultOf(p, r.params)) && !asIntent(r, k)).map(([k, p]) => {
+  const shown = Object.entries(r.spec.params).filter(([k, p]) => !p.frame && !p.own && p.kind !== 'distance' && p.kind !== 'text' && r.given.has(k) && !same(r.params[k], defaultOf(p, r.params)) && !asIntent(r, k));
+  const marked = new Set(shown.map(([k]) => k));
+  const marks = shown.map(([k, p]) => {
     const letter = p.mark ?? p.label.charAt(0).toUpperCase();
     if (p.kind === 'bool') return r.params[k] ? { label: lower(p.label), short: letter } : { label: 'sans ' + lower(p.label), short: '−' + letter };
     // A list: its words after the parameter's (« couches : ZNIEFF (types I et II), Natura 2000 »), the parameter's letter.
@@ -679,9 +710,9 @@ export function cellMark(r) {
     const all = Object.values(p.values ?? {});
     const label = /** @type {string} */ (p.values?.[r.params[k]]);
     const shared = all.some(l => l !== label && first(l) === first(label));
-    return { label, short: label.charAt(0).toUpperCase() + (shared ? label.charAt(1) : '') };
+    return { label: p.say?.(r.params[k], r.params, marked) ?? label, short: label.charAt(0).toUpperCase() + (shared ? label.charAt(1) : '') };
   });
-  return marks.length ? { label: marks.map(m => m.label).join(', '), short: marks.map(m => m.short).join('') } : null;
+  return marks.length ? { label: marks.map(m => m.label).filter(Boolean).join(', '), short: marks.map(m => m.short).join('') } : null;
 }
 
 /**

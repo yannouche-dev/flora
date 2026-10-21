@@ -110,6 +110,7 @@ const SHELL = [
   'app/core/fold.js',
   'app/core/ign.js',
   'app/core/ign-layers.js',
+  'app/core/backgrounds.js',
   'app/core/ign-catalog.js',
   'app/core/place-model.js',
   'app/core/portable.js',

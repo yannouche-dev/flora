@@ -399,11 +399,11 @@ export class GfBlockPicker extends LitElement {
         <button type="button" class="switch" role="switch" aria-labelledby=${id} aria-checked=${v ? 'true' : 'false'} @click=${() => set(!v)}></button></div></div>`;
     }
     if (kind === 'segmented') {
-      body = html`<div class="seg" role="group" aria-labelledby=${id}>${optionsOf(ps).map(o => html`<button type="button" data-value=${String(o.value)}
+      body = html`<div class="seg" role="group" aria-labelledby=${id}>${optionsOf(ps, r.params).map(o => html`<button type="button" data-value=${String(o.value)}
         aria-pressed=${(v ?? null) === o.value ? 'true' : 'false'} @click=${() => set(o.value)}>${o.label}</button>`)}</div>`;
     } else if (kind === 'select') {
       body = html`<select aria-labelledby=${id} @change=${(/** @type {any} */ e) => set(e.target.value === '' ? null : e.target.value)}>
-        ${optionsOf(ps).map(o => html`<option value=${o.value === null ? '' : String(o.value)} ?selected=${(v ?? null) === o.value}>${o.label}</option>`)}</select>`;
+        ${optionsOf(ps, r.params).map(o => html`<option value=${o.value === null ? '' : String(o.value)} ?selected=${(v ?? null) === o.value}>${o.label}</option>`)}</select>`;
     } else if (kind === 'slider') {
       const m = /** @type {number | null} */ (v);
       const ev = distanceEvents(() => m ?? 2000, x => set(x));

@@ -5,7 +5,8 @@ import { LitElement, html, nothing, render } from 'lit';
 import * as L from 'leaflet';
 import { config } from '../config.js';
 import { geoProblem, watchLocation, whenGranted } from '../core/geo.js';
-import { BASES, DEFAULT_OPACITY, FRANCE_BOUNDS, isOverlay, overlayDef, tileLayer } from '../core/ign.js';
+import { DEFAULT_OPACITY, FRANCE_BOUNDS, isOverlay, overlayDef, tileLayer } from '../core/ign.js';
+import { isBaseKey } from '../core/backgrounds.js';
 import { lookFor, mapDistribution, mapLookEvents, setMapDistribution, setMapLook } from '../core/map-settings.js';
 import { inSeason, placeAbundance, placeTitle } from '../core/collections.js';
 import { store as appStore } from '../core/store.js';
@@ -39,6 +40,15 @@ export const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf
 export const PLANT_ZOOM = 16;
 /** From this zoom on (a few km across), maps say which protected areas are in view. */
 export const PROTECTED_ZOOM = 11;
+
+/**
+ * A background put under every other tile layer: each of its layers, the top one first (a year's photos, then the
+ * most recent ones greyed under them). @param {L.Layer} layer
+ */
+function toBack(layer) {
+  const layers = layer instanceof L.LayerGroup ? layer.getLayers() : [layer];
+  for (const l of layers.reverse()) /** @type {L.GridLayer} */ (l).bringToBack();
+}
 
 /**
  * Place: a rounded-square marker on a stem, with the number of plants — unlike plants (small circles).
@@ -224,9 +234,10 @@ const movesCount = (/** @type {Moves} */ m) => (m.pin ? 1 : 0) + m.places.size +
  *    `bottom` is the share of the height kept free below them (e.g. for a sheet)
  *  - search (default on; `no-search` removes it): address search pill on top, with the ▦ "Carte" panel button;
  *    legend (default on): legend in the panel
- *  - look: its own look (a Partial<MapLook> of core/map-settings.js: background, overlays, their opacity), kept by its
- *    owner; null (the default): the maps' common look, followed as it changes (here, on another map, in Réglages, in
- *    another tab). Each field given is its own, the others the common ones. Its panel ▦ changes the common look, or —
+ *  - look: its own look (a Partial<MapLook> of core/map-settings.js: background — core/backgrounds.js: the plan, the
+ *    photos, those of a year or a period over the most recent ones greyed, SPOT's images of a year —, overlays, their
+ *    opacity), kept by its owner; null (the default): the maps' common look, followed as it changes (here, on another
+ *    map, in Réglages, in another tab). Each field given is its own, the others the common ones. Its panel ▦ changes the common look, or —
  *    the map having its own — its own, told by `look-change`.
  *  - no-create: the point card (long press) has no "Créer un endroit ici"
  *  - editable: the ✎ control (always shown) switches position editing on. While `editing`, every marker
@@ -760,7 +771,7 @@ export class GfMap extends LitElement {
     if (!map) return;
     for (const layer of Object.values(this.#layers)) layer.remove();
     this.#layers = {};
-    /** @type {L.TileLayer} */ (this.#layer(this.#base).addTo(map)).bringToBack();
+    toBack(this.#layer(this.#base).addTo(map));
     for (const key of this.#overlays) this.#layer(key).addTo(map);
     this.#restack();
     this.#syncDistribution();
@@ -853,7 +864,7 @@ export class GfMap extends LitElement {
   /** Its own look as it shows it: its owner's (`look`), with the changes made on it since (told by `look-change`). @type {Partial<import('../core/map-settings.js').MapLook> | null} */
   #own = null;
   /** What it shows: the background, the overlays (in their order), their opacity — its own look over the common one. */
-  #base = /** @type {'photo' | 'plan'} */ ('photo');
+  #base = /** @type {import('../core/backgrounds.js').BaseKey} */ ('photo');
   /** @type {string[]} */ #overlays = [];
   /** @type {Record<string, number>} */ #opacities = {};
   #distributionOn = mapDistribution();
@@ -2653,13 +2664,13 @@ export class GfMap extends LitElement {
     this.#emit('look-change', { look: null });
   }
 
-  /** The background shown (its look's). `base-shown` {base} after. @param {'photo' | 'plan'} key */
+  /** The background shown (its look's). `base-shown` {base} after. @param {import('../core/backgrounds.js').BaseKey} key */
   #setBase(key) {
     const map = /** @type {L.Map} */ (this.#map);
-    if (key === this.#base || !Object.hasOwn(BASES, key)) return;
+    if (key === this.#base || !isBaseKey(key)) return;
     this.#layer(this.#base).remove();
     this.#base = key;
-    /** @type {L.TileLayer} */ (this.#layer(key).addTo(map)).bringToBack();
+    toBack(this.#layer(key).addTo(map));
     this.#emit('base-shown', { base: key });
   }
 
@@ -2683,14 +2694,14 @@ export class GfMap extends LitElement {
     this.#syncOpacity();
   }
 
-  /** The background shown now ('photo' or 'plan'). */
+  /** The background shown now (core/backgrounds.js: 'plan', 'photo', 'photo:2016-2020', 'spot:2020'…). */
   get baseShown() { return this.#base; }
 
   /**
    * Another background shown, as its panel's choice is: the common look's when it follows it, else its own
-   * (`look-change`). `base-shown` {base} after. @param {'photo' | 'plan'} key
+   * (`look-change`). `base-shown` {base} after. @param {import('../core/backgrounds.js').BaseKey} key
    */
-  setBase(key) { if (this.#map && Object.hasOwn(BASES, key) && key !== this.#base) this.#editLook({ base: key }); }
+  setBase(key) { if (this.#map && isBaseKey(key) && key !== this.#base) this.#editLook({ base: key }); }
 
   /** The overlays drawn in their order (the last on top), over the background and under GBIF's layers (20, 21). */
   #restack() {

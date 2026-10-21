@@ -102,6 +102,11 @@ test('erreurs : jamais d’exception, la disposition lue au mieux et ce qui ne v
   // Percent-encoded (a link pasted): read as decoded; a stray « % » kept.
   assert.equal(G.serialize(G.parse('%5Bmap%2C%5Bsearch%2Cplant%5D%5D').tree), '[map,[search,plant]]');
   assert.equal(G.parse('map(%zz)').errors.length, 0);
+  // A value ending in a digit before a parameter starting with one: « ; » between them, never a decimal comma.
+  const digits = G.list([G.cell('map', null, [{ key: 'annee', value: '2020' }, { key: '3d', value: '1' }, { key: null, value: '20km' }, { key: null, value: '5' }])]);
+  assert.equal(G.serialize(digits), '[map(annee=2020;3d=1;20km,5)]');
+  assert.deepEqual(G.parse(G.serialize(digits)).errors, []);
+  assert.deepEqual(G.strip(G.parse(G.serialize(digits)).tree), G.strip(digits));
 });
 
 test('composant inconnu : une case qui le dit et propose le plus proche ; paramètres et valeurs vérifiés', () => {
@@ -115,7 +120,7 @@ test('composant inconnu : une case qui le dit et propose le plus proche ; param�
   assert.equal(bad.text, '[map,plant,results(view=grid),search(filters=1,list=0)]');
   assert.deepEqual(bad.problems, [
     'Carte : « loin » n’est pas une valeur de rayon de la zone (attendu : une distance (500m, 2km)).',
-    'Carte : « nuit » n’est pas une valeur de fond de carte (attendu : photo, plan).',
+    'Carte : « nuit » n’est pas une valeur de fond de carte (attendu : photo, plan, spot).',
     'Carte : paramètre inconnu « zoom ».',
     'Fiche : bloc inconnu « inconnue » — la fiche entière est montrée.'
   ]);

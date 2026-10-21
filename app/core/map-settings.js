@@ -10,18 +10,20 @@
 //      cleanMapSettings(value) → a valid whole from anything (a file imported, an old version), never throws.
 //    Stored in localStorage (config.storageKeys.maps3d), only what differs from the defaults, and only when the user
 //    changes something: a real setting, so the first steps (core/discover.js) count it as « used before » like the others.
-//  - MapLook: what they show — the background, the IGN overlays (bottom first), each overlay's opacity. The common look
+//  - MapLook: what they show — the background (core/backgrounds.js: the plan, the photos — the most recent, of a year, of
+//    a period, historical —, SPOT's images of a year), the IGN overlays (bottom first), each overlay's opacity. The common look
 //    (« réglages communs à toutes les cartes »): every open map follows it, 2D and 3D, at once (mapLookEvents).
 //      mapLook() → the look now; setMapLook(patch); resetMapLook(); mapLookEvents fires `change` (here or in another tab).
-//    A map may have its own look, which its owner keeps (a free layout's cell: base=, layers=, opac= in its address; a
+//    A map may have its own look, which its owner keeps (a free layout's cell: base=, annee=, layers=, opac= in its address; a
 //    map block of the plant sheet: MapConfig.look): a Partial<MapLook>, each field given replacing the common one
 //    (lookFor), the others following it; « Revenir aux réglages communs » lets it go (gf-map `look-change` null).
-//    Stored under the keys of before (config.storageKeys.mapLayer: { base, overlays, distribution }, and names only
-//    when off; overlayOpacity: key → 0…1, only those not at DEFAULT_OPACITY; the catalogue's layers added stay
+//    Stored under the keys of before (config.storageKeys.mapLayer: { base, overlays, distribution } — base the
+//    background's key, a string: 'plan' and 'photo' as before, 'photo:2016-2020', 'spot:2020' —, and names only when off; overlayOpacity: key → 0…1, only those not at DEFAULT_OPACITY; the catalogue's layers added stay
 //    core/ign-layers.js's, under ignLayers) — nothing written by merely reading them.
 
 import { config } from '../config.js';
-import { BASES, DEFAULT_OPACITY, isOverlay } from './ign-layers.js';
+import { DEFAULT_OPACITY, isOverlay } from './ign-layers.js';
+import { isBaseKey } from './backgrounds.js';
 import { definePref } from './prefs.js';
 
 /**
@@ -120,9 +122,11 @@ export function resetMapSettings() { pref.reset(); }
 
 // ── The look: background, overlays, opacities ─────────────────────────────
 
+/** @typedef {import('./backgrounds.js').BaseKey} BaseKey */
+
 /**
  * @typedef {object} MapLook
- * @property {'photo' | 'plan'} base              the background
+ * @property {BaseKey} base                       the background (core/backgrounds.js: 'plan', 'photo', 'photo:2016-2020', 'spot:2020'…)
  * @property {boolean} names                      place names over the background (kept for a later step: not drawn yet)
  * @property {string[]} overlays                  IGN overlays, bottom first: the app's own and the catalogue's added (core/ign-layers.js)
  * @property {Record<string, number>} opacities   each overlay's opacity (0…1, by 0.05) when not the usual (DEFAULT_OPACITY)
@@ -130,9 +134,6 @@ export function resetMapSettings() { pref.reset(); }
 
 /** @type {Readonly<MapLook>} */
 export const LOOK_DEFAULTS = Object.freeze({ base: 'photo', names: true, overlays: /** @type {string[]} */ (Object.freeze([])), opacities: Object.freeze({}) });
-
-/** One of the backgrounds (its own key: never one an object inherits, « constructor »). @param {unknown} v @returns {v is 'photo' | 'plan'} */
-const isBase = v => typeof v === 'string' && Object.hasOwn(BASES, v);
 
 /** @param {unknown} v @returns {Record<string, any>} */
 const objectOf = v => /** @type {Record<string, any>} */ (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
@@ -163,7 +164,8 @@ export function cleanOwnLook(value) {
   const v = objectOf(value);
   /** @type {Partial<MapLook>} */
   const out = {};
-  if (isBase(v.base)) out.base = v.base;
+  // A background exactly (core/backgrounds.js): never a key of another version, nor one an object inherits (« constructor »).
+  if (isBaseKey(v.base)) out.base = v.base;
   if (typeof v.names === 'boolean') out.names = v.names;
   if (Array.isArray(v.overlays)) out.overlays = cleanOverlays(v.overlays);
   if (v.opacities && typeof v.opacities === 'object' && !Array.isArray(v.opacities)) out.opacities = cleanOpacities(v.opacities);
@@ -173,13 +175,13 @@ export function cleanOwnLook(value) {
 /**
  * mapLayer as kept: the background, the overlays, the names, and the GBIF distribution layer of the Carte's panel (not
  * a look: kept beside it, as before). `cadastre: true` from earlier versions becomes an overlay.
- * @typedef {{ base: 'photo' | 'plan', names: boolean, overlays: string[], distribution: boolean }} StoredLayers
+ * @typedef {{ base: BaseKey, names: boolean, overlays: string[], distribution: boolean }} StoredLayers
  * @param {unknown} value @returns {StoredLayers}
  */
 function cleanLayers(value) {
   const v = objectOf(value);
   return {
-    base: isBase(v.base) ? v.base : LOOK_DEFAULTS.base,
+    base: isBaseKey(v.base) ? v.base : LOOK_DEFAULTS.base,
     names: bool(v.names, LOOK_DEFAULTS.names),
     overlays: cleanOverlays(Array.isArray(v.overlays) ? v.overlays : v.cadastre === true ? ['cadastre'] : []),
     distribution: v.distribution === true
