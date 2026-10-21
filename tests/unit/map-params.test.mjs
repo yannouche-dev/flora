@@ -27,9 +27,9 @@ test('chaque réglage de la carte se lit : ses noms, ses valeurs, leurs autres g
   const q = params('carte(rayon=500m;commune=Fontainebleau 77;moi=oui;fond=satellite;vue3d=non;couches=Natura+ZNIEFF1;sources=iNaturalist;période=Année;style=Pastilles;groupes=1;recherche=non;courante=only;tap=sheet;commandes=Compact)');
   assert.deepEqual([q.r, q.lieu, q.autour, q.base, q['3d'], q.layers, q.src, q.when, q.pts, q.regroupe, q.suit, q.plante, q.toucher, q.ui],
     [500, 'Fontainebleau 77', true, 'photo', false, ['n2000', 'znieff1'], ['inat'], 'annee', 'pastille', true, false, 'seule', 'fiche', 'compacte']);
-  // Defaults: the map as it always was.
+  // Defaults: the map as it always was — its background, its layers and its 2D or 3D, the maps' common ones (none written).
   const d = params('map');
-  assert.deepEqual(d, { intent: 'explorer', portee: 'zone', r: null, lieu: null, autour: false, base: 'photo', '3d': null, layers: [], src: null, when: 'toujours', pts: 'photo',
+  assert.deepEqual(d, { intent: 'explorer', portee: 'zone', r: null, lieu: null, autour: false, base: null, '3d': null, layers: null, src: null, when: 'toujours', pts: 'photo',
     regroupe: false, suit: true, plante: 'grand', toucher: 'plante', liste: 'vue', ui: 'auto', tete: 'oui', titre: null, actions: [], ctl: null,
     vue: null, opac: null, jumelles: null, jrayon: null, legende: false, etat: 'ouvert', groupe: 'a' });
   assert.equal(read('map').text, '[map]');
@@ -59,17 +59,19 @@ test('des couches : leurs noms courts et leurs alias, chacune une fois dans l’
   assert.equal(bad.problems.length, 2);
   assert.match(bad.problems[0], /^Carte : « lune » n’est pas une valeur de couches \(attendu : znieff, znieff1, .*, joints par « \+ »\)\.$/);
   assert.match(bad.problems[1], /« mer »/);
-  // All unknown: none kept, the default holds.
+  // All unknown: none kept, the default holds (the maps' common layers).
   const none = read('map(layers=lune)');
   assert.equal(none.text, '[map]');
-  assert.deepEqual(none.cell.params.layers, []);
+  assert.equal(none.cell.params.layers, null);
   // A bare list with an unknown word: the list still, the word said.
   const bare = read('map(znieff+foo)');
   assert.equal(bare.text, '[map(layers=znieff)]');
   assert.match(bare.problems[0], /« foo » n’est pas une valeur de couches/);
-  // « aucune »: none, written so (it overrides an intent's).
+  // « aucune »: none, written so (it overrides an intent's, and the maps' common layers: not the default).
   assert.equal(read('map(protege;layers=aucune)').text, '[map(protege,layers=aucune)]');
   assert.deepEqual(params('map(protege;layers=aucune)').layers, []);
+  assert.equal(read('map(layers=aucune)').text, '[map(layers=aucune)]');
+  assert.deepEqual(params('map(couches=rien)').layers, []);
   // Every layer's overlays: the app's own or the catalogue's (added before they show).
   for (const [name, l] of Object.entries(MAP_LAYERS)) {
     assert.ok(l.keys.length, name);

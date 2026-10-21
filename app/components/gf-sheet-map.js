@@ -15,7 +15,6 @@ import * as sources from '../core/sources.js';
 import { MAP_DEFAULTS } from '../core/sheet-blocks.js';
 import { FOCUS_EVENT, focusId, isPlaceFilter, noFocus } from '../core/map-focus.js';
 import { lookalikesOf } from '../core/lookalikes.js';
-import { OVERLAYS } from '../core/ign.js';
 import { icon } from '../core/icons.js';
 import { knownCredit, knownThumb, photoOf, thumbUrl } from '../core/thumb.js';
 import { commonOf, nameOf } from '../core/plants.js';
@@ -73,9 +72,9 @@ function locate() {
 
 /**
  * A « Carte » block of the plant sheet: the layers it was set to show (GBIF distribution, my places with this
- * plant, observations around me from iNaturalist and / or GBIF), on its own IGN background and overlays, framed
- * as chosen, with the gates to the rest of the app (open in the Carte, create a place here, move my plants,
- * note it here, locate me).
+ * plant, observations around me from iNaturalist and / or GBIF), on the maps' common look — or its own, changed in its
+ * panel ▦ (config.look, kept through `map-config`) —, framed as chosen, with the gates to the rest of the app (open in
+ * the Carte, create a place here, move my plants, note it here, locate me).
  */
 export class GfSheetMap extends LitElement {
   static properties = {
@@ -460,8 +459,7 @@ export class GfSheetMap extends LitElement {
           .zone=${this.#aboutPlant && this._bounds?.zone ? { key: this._bounds.id, feature: this._bounds.zone } : null}
           .cluster=${this.#occurrences()}
           ?distribution-on=${Boolean(gbifOn)}
-          .base=${c.base}
-          .overlays=${c.overlays}
+          .look=${c.look}
           no-search
           ?no-create=${!c.actions.create}
           .createPlant=${plant.id}
@@ -469,7 +467,7 @@ export class GfSheetMap extends LitElement {
           @spot-select=${e => { openView(href.map({ spot: e.detail.id })); }}
           @plant-select=${e => { openView(href.map({ spot: e.detail.placeId, focus: e.detail.entryId ?? e.detail.plantId })); }}
           @positions-save=${e => this.#savePositions(e.detail.plants)}
-          @layers-change=${e => this.dispatchEvent(new CustomEvent('map-layers', { detail: e.detail }))}
+          @look-change=${e => this.dispatchEvent(new CustomEvent('map-config', { detail: { look: e.detail.look } }))}
         ></gf-map>
         ${this.#chips(f)}
       </div>
@@ -614,7 +612,8 @@ export class GfSheetMap extends LitElement {
   /**
    * What this map can show, suggested from what is known: how to frame it (my region when it is known, around me,
    * the points shown, France, the world), how far around me once located, and the data it can show — the GBIF
-   * distribution, my places with this plant, the observations around me (iNaturalist, GBIF) — each with a touch.
+   * distribution, my places with this plant, the observations around me (iNaturalist, GBIF) — each with a touch. (Its
+   * background and IGN's layers: its panel ▦, as on every map.)
    * @param {boolean} gbifReady
    */
   #scope(gbifReady) {
@@ -663,10 +662,6 @@ export class GfSheetMap extends LitElement {
           title=${'Sa répartition (GBIF) à côté : ' + o.label + ' — une plante avec laquelle elle se confond'}
           @click=${() => this.dispatchEvent(new CustomEvent(FOCUS_EVENT, { detail: { kind: 'compare', label: o.label, taxon: o.taxon }, bubbles: true, composed: true }))}><i style="background:#7b3294"></i>Sosie : ${o.label}</button>`) : nothing}
         ${gbifReady ? html`<button type="button" data-layer="gbif-near" aria-pressed=${String(gbifNear)} title="Occurrences GBIF autour de moi" @click=${() => this.#set({ near: nearOf(!gbifNear, inatNear) })}><i class="obs"></i>GBIF autour${near?.state === 'done' && near.gbifOn ? html` <small>${(near.gbifTotal ?? 0).toLocaleString('fr-FR')}</small>` : nothing}</button>` : nothing}
-      </div>
-      <b>Couches IGN</b><div class="row">
-        ${Object.entries(OVERLAYS).map(([k, def]) => html`<button type="button" data-layer=${'ign-' + k} aria-pressed=${String(c.overlays.includes(k))} title=${def.hint || def.label}
-          @click=${() => this.#set({ overlays: c.overlays.includes(k) ? c.overlays.filter(o => o !== k) : [...c.overlays, k] })}>${def.label}</button>`)}
       </div>
     </div>`;
   }

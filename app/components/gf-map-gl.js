@@ -15,9 +15,11 @@
 //  - the camera: the 3D map follows the mirror's moves (gf-map's flights, frames, « me localiser »), and gives it its
 //    own (pan, zoom) once they end. Tilt and rotation are the 3D map's alone. MapLibre's zoom is Leaflet's minus one.
 // When the map shows in 3D: the maps' one choice « 3D » (core/map-settings.js), made in Réglages › Cartes or in the
-// panel « Carte » of any map (« Affichage », gf-map-panel.js: the panel is told how this map is drawn, and why it
-// cannot change when it cannot). Never for a map marked map-3d="off" (or under one; map-3d-why: why, said in its
-// panel), nor in the « Jusqu’où part l’expédition ? » step (ma-distance: a fixed view from above). Back to 2D while
+// panel ▦ of any map (« Affichage », gf-map-options.js: the panel is told how this map is drawn, and why it cannot
+// change when it cannot). Its look (background, overlays, their opacity) is its 2D map's, mirrored: it follows the
+// common look, or the map's own, as the 2D map does. Never for a map marked map-3d="off" (or under one; map-3d-why:
+// why, said in its panel), always for one marked map-3d="on" (its why too), nor in the « Jusqu’où part
+// l’expédition ? » step (ma-distance: a fixed view from above). Back to 2D while
 // its positions are being edited (markers dragged), without WebGL2, when MapLibre cannot load (offline before its
 // first download), when too many maps are in 3D at once (one WebGL context each), or when the GPU takes its context
 // back. Why, and why it is flat (offline, the relief unreachable), is the map's state (gf-map setStatus, the quiet-map
@@ -196,8 +198,8 @@ export class GlView {
   #obs = null;
 
   // ── What the user is told: the map's state, its loading ─────────────────────────────────────────
-  // (No 2D ⇄ 3D button on the maps: the choice is in Réglages › Cartes and in each map's panel « Carte », one choice
-  // for every map. Nothing written over the map: the quiet-map rule, gf-map.js.)
+  // (No 2D ⇄ 3D button on the maps: the choice is in Réglages › Cartes and in each map's panel ▦, one choice for every
+  // map. Nothing written over the map: the quiet-map rule, gf-map.js.)
 
   #buildUi() {
     if (!this.allowed) this.host.dataset.renderer = '2d';
@@ -841,7 +843,7 @@ export class GlView {
   get fixed() {
     if (!this.allowed) return { renderer: '2d', why: this.why2d };
     if (this.host.area?.ring) return { renderer: '2d', why: FROM_ABOVE };
-    if (this.host.getAttribute('map-3d') === 'on') return { renderer: '3d', why: 'Cette vue est toujours en 3D (le choix vaut pour les autres cartes).' };
+    if (this.host.getAttribute('map-3d') === 'on') return { renderer: '3d', why: this.host.getAttribute('map-3d-why') || 'Cette vue est toujours en 3D (le choix vaut pour les autres cartes).' };
     return null;
   }
 

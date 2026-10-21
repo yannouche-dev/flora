@@ -390,7 +390,7 @@ export class GfBlockPicker extends LitElement {
     const v = r.params[key];
     const id = 'p-' + key;
     const note = r.implied.has(key) ? html`<span class="note">selon l’intention</span>` : changed(r, key) ? html`<span class="note">● modifié</span>`
-      : v == null && ps.unset ? html`<span class="note">aucune choisie : ${ps.unset}</span>` : nothing;
+      : v == null && ps.unset ? html`<span class="note">${ps.kind === 'list' ? 'aucune choisie' : 'par défaut'} : ${ps.unset}</span>` : nothing;
     const kind = controlOf(ps);
     /** @type {unknown} */
     let body = nothing;

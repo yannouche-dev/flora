@@ -46,11 +46,12 @@ import { ui } from '../styles/ui.js';
 import { DISTANCES, distanceAt, distanceEvents, distanceKey } from '../miniapp/kit/cards.js';
 import { pushHash } from '../core/history.js';
 import { addCatalogLayer, DEFAULT_OPACITY, isOverlay } from '../core/ign.js';
+import { mapLook } from '../core/map-settings.js';
 import { loadCatalog } from '../core/ign-catalog.js';
 import { RADII_3D } from '../core/around3d.js';
 import { nearestStop } from '../core/distance.js';
 import { cellIcon, distanceLabel } from './registry.js';
-import { COMPACT_WIDTH, MAP_LAYERS, WIDE_FRAMES, catalogLayers, inatTiles, inWhen, layersOf, mapControls, opacitiesOf, opacText, overlaysOf, snapRadius, uiMode, viewOf, viewText } from './map-options.js';
+import { COMPACT_WIDTH, MAP_INTENTS, MAP_LAYERS, WIDE_FRAMES, catalogLayers, inatTiles, inWhen, layersOf, mapControls, opacitiesOf, opacText, overlaysOf, snapRadius, uiMode, viewOf, viewText } from './map-options.js';
 import { periodQuery, plantOfPoint, taxonIdOf } from '../core/nearby.js';
 import { SOURCE_NAMES, failedText, obsNotes, sourcesText } from '../core/observations.js';
 import { obsId } from './state.js';
@@ -517,45 +518,53 @@ export class DlMap extends LitElement {
   /** @type {{ id: string, value: any } | null} */ #focusMemo = null;
 
   /**
-   * The cell's own layers (layers=znieff+n2000+ign:<id>), in their order: the overlays of gf-map, those of the
-   * catalogue added to the maps first (core/ign.js) — one of IGN's whole catalogue not known on this device found in
-   * it (core/ign-catalog.js), then shown. Never the Carte's shared choice: the layout is the same for everyone who
-   * opens it. The same array while they are the same.
+   * The cell's own look (core/map-settings.js), as its address says it: its background (base=), its layers in their
+   * order (layers=znieff+n2000+ign:<id>: the catalogue's added to the maps first, core/ign.js — one of IGN's whole
+   * catalogue not known on this device found in it, core/ign-catalog.js, then shown) and their opacity (opac=); what it
+   * does not say follows the maps' common look (gf-map `look`) — layers=aucune says none of its own, not the common
+   * ones. null: it says none. The same object while the same.
+   * @returns {Partial<import('../core/map-settings.js').MapLook> | null}
    */
-  get #overlays() {
-    const names = /** @type {string[]} */ (this.params?.layers ?? []);
-    const k = names.join('+');
-    if (this.#overlaysMemo?.k === k) return this.#overlaysMemo.value;
+  get #look() {
+    const p = this.params ?? {};
+    const names = /** @type {string[]} */ (p.layers ?? []);
+    const k = JSON.stringify([p.base ?? null, p.layers ?? null, p.opac ?? null]);
+    if (this.#lookMemo?.k === k) return this.#lookMemo.value;
     for (const l of catalogLayers(names)) addCatalogLayer(/** @type {any} */ (l));
-    const value = overlaysOf(names);
-    const unknown = value.filter(key => !isOverlay(key)).map(key => key.slice('ign:'.length));
+    const overlays = overlaysOf(names);
+    const unknown = overlays.filter(key => !isOverlay(key)).map(key => key.slice('ign:'.length));
     if (unknown.length) {
       loadCatalog().then(c => {
         const found = (c.layers ?? []).filter(l => unknown.includes(l.id));
         for (const l of found) addCatalogLayer(l);
-        if (found.length) { this.#overlaysMemo = null; this.requestUpdate(); }
+        if (found.length) { this.#lookMemo = null; this.requestUpdate(); }
       }, () => {});
     }
-    this.#overlaysMemo = { k, value };
+    /** @type {Partial<import('../core/map-settings.js').MapLook>} */
+    const own = {};
+    if (p.base) own.base = p.base;
+    // Its layers and their opacity go together (gf-map#editLook): either written, both its own.
+    if (p.layers != null || p.opac) Object.assign(own, { overlays, opacities: opacitiesOf(p.opac) });
+    const value = Object.keys(own).length ? own : null;
+    this.#lookMemo = { k, value };
     return value;
   }
-  /** @type {{ k: string, value: string[] } | null} */ #overlaysMemo = null;
-
-  /** The overlays' opacity (opac=), by overlay; the same object while it is the same. */
-  get #opacities() {
-    const text = this.params?.opac ?? '';
-    if (this.#opacMemo?.text !== text) this.#opacMemo = { text, value: opacitiesOf(text) };
-    return this.#opacMemo.value;
-  }
-  /** @type {{ text: string, value: Record<string, number> } | null} */ #opacMemo = null;
+  /** @type {{ k: string, value: Partial<import('../core/map-settings.js').MapLook> | null } | null} */ #lookMemo = null;
 
   /**
-   * The map's background, layers and their opacity changed on it (its panel « Carte »: gf-map `layers-change`): kept
-   * in the layout (base=, layers= in their order, opac=). @param {CustomEvent} e
+   * Its own look changed on the map (its panel ▦, its opacity card: gf-map `look-change`): kept in the layout (base=,
+   * layers= in their order, opac=); null — « Revenir aux réglages communs » —: all three left out. @param {CustomEvent} e
    */
-  #onLayers(e) {
-    const { base, overlays, opacities } = e.detail;
-    this.#set({ base, layers: layersOf(overlays), opac: opacText(opacities ?? {}, overlays, DEFAULT_OPACITY) });
+  #onLook(e) {
+    const look = e.detail.look;
+    /** @type {Record<string, unknown>} */
+    const values = look ? {} : { base: null, layers: null, opac: null };
+    if (look?.base) values.base = look.base;
+    if (look?.overlays) Object.assign(values, { layers: layersOf(look.overlays), opac: opacText(look.opacities ?? {}, look.overlays, DEFAULT_OPACITY) });
+    this.#set(values);
+    // What the address says now, given back (an intent's background is not one to leave out: the map shows it again).
+    this.#lookMemo = null;
+    this.requestUpdate();
   }
 
   /**
@@ -787,11 +796,21 @@ export class DlMap extends LitElement {
   /** The current plant: none (✕). */
   #unpick() { /** @type {LayoutState} */ (this.state).set({ plant: null, obs: null }, 'push'); }
 
-  /** The other background shown (its thumbnail touched): kept in the layout (base=). */
+  /**
+   * The other background shown (its thumbnail touched): kept in the layout as its own (base=) — unless it is the maps'
+   * common one: then none written, the cell follows it again (not against its intent's: map(terrain) says the photos).
+   */
   #switchBase() {
-    const shown = /** @type {'photo' | 'plan'} */ (this.#map?.baseShown ?? this.params?.base ?? 'photo');
-    this.#set({ base: OTHER_BASE[shown]?.key ?? 'plan' });
+    const shown = /** @type {'photo' | 'plan'} */ (this.#map?.baseShown ?? this.params?.base ?? mapLook().base);
+    const next = OTHER_BASE[shown]?.key ?? 'plan';
+    this.#set({ base: next === mapLook().base && !('base' in this.#intended) ? null : next });
   }
+
+  /**
+   * What its intent gives, as the address writes it (map(relief): 3d=1; map(protege): its layers): what its own controls
+   * cannot let go — without it written, the intent's again, never the maps' common choice. @returns {Record<string, string>}
+   */
+  get #intended() { return /** @type {Record<string, string>} */ (MAP_INTENTS[this.params?.intent ?? '']?.set ?? {}); }
 
   /** The current plant's photo: the scope's (iNaturalist), else the one at hand, else found (once) — null: a flower. @param {number} id */
   #thumbOf(id) {
@@ -845,7 +864,7 @@ export class DlMap extends LitElement {
     if (!on.has('3d') && !on.has('fond') && !reframe) return nothing;
     const map = this.#map;
     const in3d = this.#d3 ?? Boolean(map?.gl?.wanted);
-    const other = OTHER_BASE[/** @type {'photo' | 'plan'} */ (map?.baseShown ?? this.params?.base ?? 'photo')] ?? OTHER_BASE.photo;
+    const other = OTHER_BASE[/** @type {'photo' | 'plan'} */ (map?.baseShown ?? this.params?.base ?? mapLook().base)] ?? OTHER_BASE.photo;
     return html`<div class="ctl tr">
       ${on.has('3d') ? html`<button type="button" class="round" aria-pressed=${String(in3d)} aria-label="Vue 3D" title=${in3d ? 'Vue 3D (repasser en 2D)' : 'Vue 3D'}
         @click=${() => this.#set({ '3d': !in3d })}>3D</button>` : nothing}
@@ -930,11 +949,23 @@ export class DlMap extends LitElement {
     const grouped = Boolean(this.params?.regroupe);
     const zoneArea = this.#area;
     const area = wide ? (zoneArea ? { center: zoneArea.center, radius: zoneArea.radius, fit: false, points: [] } : null) : zoneArea;
-    const why2d = d3 !== false ? nothing : 'Cette carte de la disposition reste en 2D (3d=0 dans son adresse, ou sa bascule 2D / 3D ; le choix vaut pour elle seule).';
+    // 3d= written: its 2D or 3D fixed, why said in its panel ▦, which offers the common choice back (renderer-follow) —
+    // not when its intent says one (map(relief)): then said so, and no way back (without 3d=, the intent's).
+    const intended = this.#intended, intent = `son intention « ${MAP_INTENTS[this.params?.intent ?? '']?.label} »`;
+    const own3d = d3 !== null && !('3d' in intended);
+    const why3d = d3 === null ? nothing : !own3d && d3 === (intended['3d'] === '1')
+      ? `Cette carte de la disposition ${d3 ? 'est en 3D' : 'reste en 2D'} (${intent} ; le choix vaut pour elle seule).`
+      : `Cette carte de la disposition ${d3 ? 'est en 3D (3d=1' : 'reste en 2D (3d=0'} dans son adresse, ou sa bascule 2D / 3D ; le choix vaut pour elle seule).`;
+    // Its own look given by its intent alone (map(protege): its layers; map(terrain): the photos): said so, no way back
+    // either. A part written by its address too (map(terrain,layers=parcs)): « Revenir » takes that part back.
+    const p = this.params ?? {};
+    const written = Boolean(p.opac) || (p.base ?? null) !== (intended.base ?? null)
+      || (p.layers != null && p.layers.join('+') !== intended.layers);
+    const lookWhy = ('base' in intended || 'layers' in intended) && !written ? intent + ' dans la disposition' : '';
     return html`${!s.live.at && this.#pressHint ? hintView(press, () => { this.#pressHint = false; this.requestUpdate(); }, 'press-hint') : nothing}
       <div class="stage"><gf-map no-create point-click=${P.toucher === 'rien' ? 'none' : 'pick'} map-3d=${d3 === null ? nothing : d3 ? 'on' : 'off'}
-        map-3d-why=${why2d}
-        .base=${this.params?.base ?? 'photo'} .overlays=${this.#overlays} .opacities=${this.#opacities} .around3d=${this.#around3d} .view=${this.#view}
+        map-3d-why=${why3d} .own3d=${own3d}
+        .look=${this.#look} .lookWhy=${lookWhy} .around3d=${this.#around3d} .view=${this.#view}
         .area=${area} .highlight=${wide || grouped ? null : hl} .cluster=${!wide && grouped ? hl : null}
         .tiles=${wide ? this.#wideTiles : null} .frame=${wide && !this.#view ? { key: P.portee, points: WIDE_FRAMES[P.portee] } : null}
         min-zoom=${P.portee === 'monde' ? 1 : nothing}
@@ -944,7 +975,8 @@ export class DlMap extends LitElement {
         @point-pick=${(/** @type {CustomEvent} */ e) => this.#onPick(e)} @point-info=${(/** @type {CustomEvent} */ e) => this.#onPress(e)}
         @point-hover=${(/** @type {CustomEvent} */ e) => this.#onHover(e)}
         @radius-change=${(/** @type {CustomEvent} */ e) => s.set({ r: e.detail.radius }, 'replace')}
-        @layers-change=${(/** @type {CustomEvent} */ e) => this.#onLayers(e)} @around3d-change=${(/** @type {CustomEvent} */ e) => this.#onAround(e)}
+        @look-change=${(/** @type {CustomEvent} */ e) => this.#onLook(e)} @renderer-follow=${() => this.#set({ '3d': null })}
+        @around3d-change=${(/** @type {CustomEvent} */ e) => this.#onAround(e)}
         @view-change=${(/** @type {CustomEvent} */ e) => this.#onView(e)} @view-framed=${(/** @type {CustomEvent} */ e) => this.#onFramed(e)}
         @base-shown=${() => this.requestUpdate()}></gf-map>
       ${!wide && on.has('rayon') ? this.#zoneView(s, ctl) : nothing}

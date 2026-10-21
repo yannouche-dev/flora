@@ -1,7 +1,7 @@
 // « Créer une app » : what is done in a cell is kept in the layout — the address is the app, sent as it is (`cell-param`,
-// gf-layout.js; registry.js#withParam). A map's 3D, its background, its legend, « Seule »; its layers chosen in its
-// panel « Carte » (in their order) and their opacity at hand (its button among the map's) — never the Carte's shared
-// choice; the view it starts on, the map moved in the builder, « Recadrer sur la zone »; the search's filters opened;
+// gf-layout.js; registry.js#withParam). A map's 3D, its background, its legend, « Seule »; its own layers chosen in its
+// panel ▦ (in their order) and their opacity at hand (its button among the map's) — never the maps' common look; the
+// view it starts on, the map moved in the builder, « Recadrer sur la zone »; the search's filters opened;
 // the results as a list or a grid (their head's switch); Back in the builder; the binoculars of a map in 3D. Each one
 // written at once (no new entry), read back the same after a reload and in « Ouvrir l'app ».
 import { test, expect, answerAround, answerObservations, plantId } from './fixtures.mjs';
@@ -65,10 +65,10 @@ test.describe('un grand écran', () => {
     await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,3d=1,ctl=rayon+3d+fond+plante+legende),results]');
   });
 
-  test('les couches : choisies dans le panneau « Carte », dans leur ordre (layers=) ; leur opacité à portée de main (opac=) ; jamais le choix partagé', async ({ app, page }) => {
+  test('les couches : les siennes, choisies dans son panneau ▦, dans leur ordre (layers=) ; leur opacité à portée de main (opac=) ; jamais les réglages communs', async ({ app, page }) => {
     await app.open(`#/layout/[map(r=1km;layers=parcs+reserves),results]?${AT}`);
     const map = mapOf(page);
-    await expect.poll(() => map.evaluate(m => /** @type {any} */ (m).overlays)).toEqual(['parcs', 'reserves']);
+    await expect.poll(() => map.evaluate(m => /** @type {any} */ (m).lookShown.overlays)).toEqual(['parcs', 'reserves']);
     // The opacity at hand: a button among the map's, a slider each (the top one first).
     const button = map.getByRole('button', { name: 'Opacité des couches' });
     await expect(button).toBeVisible();
@@ -86,20 +86,21 @@ test.describe('un grand écran', () => {
     await page.keyboard.press('Escape');
     await expect(card).toBeHidden();
     await expect(button).toBeFocused();
-    // The panel « Carte »: a layer taken off, another put on top.
+    // The panel ▦: this map's own layers, said; one taken off, another put on top.
     await map.evaluate(m => /** @type {any} */ (m).openPanel());
     const panel = map.locator('gf-map-panel');
+    await expect(panel.locator('.scope')).toContainText('Cette carte a ses propres couches');
     await panel.locator('label.layer', { hasText: 'Parcs nationaux' }).locator('input').uncheck();
     await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,layers=reserves,opac=reserves.40),results]');
     await panel.locator('label.layer', { hasText: 'Parcelles cadastrales' }).locator('input').check();
     await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,layers=reserves+cadastre,opac=reserves.40),results]');
-    // Never the Carte's shared choice, nor the device's opacity.
+    // Never the maps' common look, nor its opacities.
     expect(await page.evaluate(() => [localStorage.getItem('geoflora.mapLayer'), Object.keys(localStorage).filter(k => /opacity/i.test(k)).map(k => localStorage.getItem(k)).join('')]))
       .toEqual([null, '']);
     // Reloaded: the same layers, the same opacity.
     await page.reload();
     await app.ready();
-    await expect.poll(() => map.evaluate(m => /** @type {any} */ (m).overlays)).toEqual(['reserves', 'cadastre']);
+    await expect.poll(() => map.evaluate(m => /** @type {any} */ (m).lookShown.overlays)).toEqual(['reserves', 'cadastre']);
     await expect.poll(() => map.evaluate(m => getComputedStyle(/** @type {HTMLElement} */ (m.querySelector('.gf-tiles-reserves'))).opacity)).toBe('0.4');
   });
 

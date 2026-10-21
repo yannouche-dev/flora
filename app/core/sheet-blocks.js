@@ -10,11 +10,10 @@
 import { config } from '../config.js';
 import { MODULES, moduleOn } from './modules.js';
 import { baseOf, importModes, modeKeys, ownModes } from './modes.js';
-import { isOverlay } from './ign-layers.js';
 import { emptyLayout, migratePlaces, migrateTree, store } from './store.js';
 import { allNoteTexts, deleteNoteTexts, fromPortable, mergeNoteTexts, noteText as storedText, notesWithText, portableNotes, setNoteText as storeText } from './sheet-notes.js';
 import { writeJSON, writeText } from './prefs.js';
-import { cleanMapSettings, mapSettings, mapSettingsDiff, setMapSettings } from './map-settings.js';
+import { cleanMapSettings, cleanOwnLook, mapSettings, mapSettingsDiff, setMapSettings } from './map-settings.js';
 import { SHEET, dock, normalize, patchStack, setSizes, sheetInRow, stackOf, undock, validTree } from './pane-tree.js';
 
 /** @typedef {import('./modes.js').Mode} Mode */
@@ -541,21 +540,33 @@ export function deleteNote(key) {
 
 /**
  * What a map block shows and lets do (the same in every mode).
- * @typedef {{ gbif: 'fr' | 'world' | 'off', places: boolean, near: 'off' | 'gbif' | 'inat' | 'both', base: 'plan' | 'photo',
- *   overlays: string[], frame: 'auto' | 'france' | 'world' | 'content' | 'me' | 'region', height: 's' | 'm' | 'l',
- *   actions: { open: boolean, create: boolean, edit: boolean, spot: boolean, locate: boolean },
+ * @typedef {{ gbif: 'fr' | 'world' | 'off', places: boolean, near: 'off' | 'gbif' | 'inat' | 'both',
+ *   look: Partial<import('./map-settings.js').MapLook> | null, frame: 'auto' | 'france' | 'world' | 'content' | 'me' | 'region',
+ *   height: 's' | 'm' | 'l', actions: { open: boolean, create: boolean, edit: boolean, spot: boolean, locate: boolean },
  *   subject: 'plant' | 'results' | 'collection', collection: string | null }} MapConfig
  * `subject`: what the map is about — the plant of the sheet, the plants of the results (the search and its
- * filters), or a collection (`collection`: its id) — its places shown.
+ * filters), or a collection (`collection`: its id) — its places shown. `look`: its own look (core/map-settings.js),
+ * changed in its panel ▦ — null: the maps' common look, followed (2D or 3D always is).
  */
 
 /** @type {MapConfig} */
 export const MAP_DEFAULTS = {
-  gbif: 'fr', places: true, near: 'off', base: 'plan', overlays: [], frame: 'auto', height: 'm',
+  gbif: 'fr', places: true, near: 'off', look: null, frame: 'auto', height: 'm',
   actions: { open: true, create: true, edit: true, spot: true, locate: true }, subject: 'plant', collection: null
 };
 
-const MAP_CHOICES = { gbif: ['fr', 'world', 'off'], near: ['off', 'gbif', 'inat', 'both'], base: ['plan', 'photo'], frame: ['auto', 'france', 'world', 'content', 'me', 'region'], height: ['s', 'm', 'l'], subject: ['plant', 'results', 'collection'] };
+const MAP_CHOICES = { gbif: ['fr', 'world', 'off'], near: ['off', 'gbif', 'inat', 'both'], frame: ['auto', 'france', 'world', 'content', 'me', 'region'], height: ['s', 'm', 'l'], subject: ['plant', 'results', 'collection'] };
+
+/**
+ * The look of a configuration of before (its own background, « plan » unless chosen, and IGN overlays, set in the
+ * block's form): carried into its own look when it was not that default (the plan, no overlay) — a block left as it
+ * was follows the common look, as every map. @param {any} c @returns {Partial<import('./map-settings.js').MapLook> | null}
+ */
+function oldLook(c) {
+  const base = c.base === 'photo' ? 'photo' : 'plan';
+  const overlays = Array.isArray(c.overlays) ? c.overlays : [];
+  return base !== 'plan' || overlays.length ? cleanOwnLook({ base, overlays }) : null;
+}
 
 /** A map's configuration, cleaned (unknown values give the default). @param {any} saved @returns {MapConfig} */
 function cleanMap(saved) {
@@ -565,7 +576,8 @@ function cleanMap(saved) {
   if (typeof c.places === 'boolean') out.places = c.places;
   if (typeof c.collection === 'string' && c.collection.length < 80) out.collection = c.collection;
   if (out.subject === 'collection' && !out.collection) out.subject = 'plant';
-  if (Array.isArray(c.overlays)) out.overlays = c.overlays.filter((/** @type {any} */ o) => typeof o === 'string' && isOverlay(o));
+  // Its look: kept as `look` (null: the common one); a configuration of before, read once from its old fields.
+  out.look = 'look' in c ? cleanOwnLook(c.look) : oldLook(c);
   for (const a of Object.keys(MAP_DEFAULTS.actions)) if (typeof c.actions?.[a] === 'boolean') out.actions[a] = c.actions[a];
   return out;
 }

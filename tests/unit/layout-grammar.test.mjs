@@ -121,7 +121,7 @@ test('composant inconnu : une case qui le dit et propose le plus proche ; param�
   ]);
   // Defaults, and the parameters given.
   const map = resolve(G.cell('map'));
-  assert.ok(map.known && map.params.r === null && map.params.base === 'photo' && map.given.size === 0);
+  assert.ok(map.known && map.params.r === null && map.params.base === null && map.given.size === 0);
   const plant = resolve(G.cell('plant', 'calendrier'));
   assert.ok(plant.known && plant.view?.key === 'calendar' && plant.title === 'Calendrier');
 });
@@ -185,7 +185,8 @@ test('le menu des colonnes (téléphone) : l’icône de chaque case, chaque blo
   assert.deepEqual(look('results(view=auto)'), ['list-ul', null, 'Résultats'], 'la valeur par défaut, écrite : sans marque');
   assert.deepEqual(look('media(mosaic)'), ['images', 'M', 'Photos (Mosaïque)']);
   assert.deepEqual(look('map(base=plan)'), ['map', 'Pl', 'Carte (Plan IGN)']);
-  assert.deepEqual(look('map(base=photo)'), ['map', null, 'Carte'], 'les photos, le fond par défaut : sans marque');
+  assert.deepEqual(look('map(base=photo)'), ['map', 'Ph', 'Carte (Photos aériennes)'], 'les photos écrites : le fond propre de la case, marqué');
+  assert.deepEqual(look('map'), ['map', null, 'Carte'], 'aucun fond écrit : le fond commun, sans marque');
   // A yes or a no: its first letter, a no after a minus; two of them, both.
   assert.deepEqual(look('search(filters=1)'), ['search', 'F', 'Recherche (filtres ouverts)']);
   assert.deepEqual(look('search(list=0)'), ['search', '−L', 'Recherche (sans liste des résultats)']);

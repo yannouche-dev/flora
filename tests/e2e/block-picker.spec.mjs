@@ -77,7 +77,7 @@ test.describe('un grand écran', () => {
     await expect(p.locator('ol.crumbs li')).toHaveText(['Case 1', 'Carte', 'Fond']);
     await p.locator('[data-param="base"] button[data-value="plan"]').click();
     await expect.poll(() => grid(page)).toBe('[map(floraison,base=plan),results(view=list)]');
-    await expect.poll(() => cellAt(page, '0').locator('dl-map gf-map').evaluate(m => /** @type {any} */ (m).base)).toBe('plan');
+    await expect.poll(() => cellAt(page, '0').locator('dl-map gf-map').evaluate(m => /** @type {any} */ (m).look?.base)).toBe('plan');
     await expect(p.locator('[data-param="base"] button[data-value="plan"]')).toHaveAttribute('aria-pressed', 'true');
     // The 3D: a row of three (as the app's settings say, or not); Back to the rows, the line says both.
     await p.locator('[data-param="3d"] button[data-value="false"]').click();

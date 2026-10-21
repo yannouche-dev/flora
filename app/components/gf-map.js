@@ -5,7 +5,8 @@ import { LitElement, html, nothing, render } from 'lit';
 import * as L from 'leaflet';
 import { config } from '../config.js';
 import { geoProblem, watchLocation, whenGranted } from '../core/geo.js';
-import { BASES, DEFAULT_OPACITY, FRANCE_BOUNDS, addCatalogLayer, isOverlay, overlayDef, overlayOpacity, setOverlayOpacity, tileLayer } from '../core/ign.js';
+import { BASES, DEFAULT_OPACITY, FRANCE_BOUNDS, isOverlay, overlayDef, tileLayer } from '../core/ign.js';
+import { lookFor, mapDistribution, mapLookEvents, setMapDistribution, setMapLook } from '../core/map-settings.js';
 import { inSeason, placeAbundance, placeTitle } from '../core/collections.js';
 import { store as appStore } from '../core/store.js';
 import { cachedThumb, thumbUrl } from '../core/thumb.js';
@@ -185,17 +186,6 @@ const editIcon = placeIconOf('#16a34a', 0, 'selected editing');
 /** The same place point when positions are locked (read-only map). */
 const lockedIcon = placeIconOf('#16a34a', 0, 'selected');
 
-/** Map look chosen last; `cadastre: true` from earlier versions becomes an overlay. */
-function readLayers() {
-  const saved = readJSON(config.storageKeys.mapLayer, {});
-  const overlays = Array.isArray(saved.overlays) ? saved.overlays : saved.cadastre ? ['cadastre'] : [];
-  return {
-    base: saved.base in BASES ? saved.base : 'photo',
-    overlays: overlays.filter(isOverlay),
-    distribution: saved.distribution === true
-  };
-}
-
 /** A point picked on the map (long press, search result). */
 const pointIcon = L.divIcon({
   className: 'gf-point',
@@ -234,6 +224,10 @@ const movesCount = (/** @type {Moves} */ m) => (m.pin ? 1 : 0) + m.places.size +
  *    `bottom` is the share of the height kept free below them (e.g. for a sheet)
  *  - search (default on; `no-search` removes it): address search pill on top, with the ▦ "Carte" panel button;
  *    legend (default on): legend in the panel
+ *  - look: its own look (a Partial<MapLook> of core/map-settings.js: background, overlays, their opacity), kept by its
+ *    owner; null (the default): the maps' common look, followed as it changes (here, on another map, in Réglages, in
+ *    another tab). Each field given is its own, the others the common ones. Its panel ▦ changes the common look, or —
+ *    the map having its own — its own, told by `look-change`.
  *  - no-create: the point card (long press) has no "Créer un endroit ici"
  *  - editable: the ✎ control (always shown) switches position editing on. While `editing`, every marker
  *    (places, plants, the pin) is dragged freely; each drop (or long press: place the pin / selected place)
@@ -245,7 +239,10 @@ const movesCount = (/** @type {Moves} */ m) => (m.pin ? 1 : 0) + m.places.size +
  *         turn, and what it shows: bounds()), view-framed {bounds} (framed by itself: on its area — bounds null — or on
  *         the view given),
  *         point-hover {point | null} (a point of its area under the mouse, then none: never on a touch screen),
- *         edit-change {editing}, positions-save {pin, places: [{id, coordinates}], plants: [{placeId, entryId, plantId, coordinates}]}
+ *         edit-change {editing}, positions-save {pin, places: [{id, coordinates}], plants: [{placeId, entryId, plantId, coordinates}]},
+ *         look-change {look} (its own look changed on it, its panel's or its opacity card's: for its owner to keep and give
+ *         back; null: « Revenir aux réglages communs »), renderer-follow (« Suivre le réglage commun »: the 2D or 3D its
+ *         owner fixed — own3d — let go), base-shown {base}
  *
  * What a map says — the quiet-map rule, for every map of the app (this one, its 3D mirror gf-map-gl.js and its
  * « Observations autour » gf-map-obs3d.js, and every page around a map): nothing persistent is written over the map
@@ -315,11 +312,18 @@ export class GfMap extends LitElement {
     compare: { attribute: false },
     /** A point to show and fly to (a value touched in the plant sheet): { coordinates, title, url?, photo? } (the plant's photo on it). */
     focusPoint: { attribute: false },
-    /** This map's own background and overlays (not the shared choice of the Carte); changes emit `layers-change` {base, overlays, opacities}. */
-    base: { attribute: false },
-    overlays: { attribute: false },
-    /** Its overlays' own opacity (key → 0…1; not the device's choice, core/ign.js), kept by its owner (`layers-change`). */
-    opacities: { attribute: false },
+    /**
+     * Its own look (core/map-settings.js: a Partial<MapLook>, each field given replacing the common one), kept by its
+     * owner (`look-change`); null: the maps' common look, followed.
+     */
+    look: { attribute: false },
+    /** Its map-3d (on or off) is its owner's choice (a free layout's 3d=): its panel offers to let it go (`renderer-follow`). */
+    own3d: { type: Boolean, attribute: false },
+    /**
+     * Why its own look is its owner's to keep (a free layout's intent: map(protege), its layers): said in its panel in
+     * place of « Revenir aux réglages communs ». '': none, the way back offered.
+     */
+    lookWhy: { type: String, attribute: false },
     /**
      * Its « Observations autour » in 3D (gf-map-obs3d.js: { on, radius, inat, gbif, density }), kept by its owner
      * (`around3d-change` with them) rather than on the device. null: the device's, for its page.
@@ -398,12 +402,10 @@ export class GfMap extends LitElement {
     this.compare = null;
     /** @type {{ coordinates: [number, number], title: string, url?: string } | null} */
     this.focusPoint = null;
-    /** @type {string | null} */
-    this.base = null;
-    /** @type {string[] | null} */
-    this.overlays = null;
-    /** @type {Record<string, number> | null} */
-    this.opacities = null;
+    /** @type {Partial<import('../core/map-settings.js').MapLook> | null} */
+    this.look = null;
+    this.own3d = false;
+    this.lookWhy = '';
     /** @type {import('../core/around3d.js').Around3dPrefs | null} */
     this.around3d = null;
     /** @type {{ lat: number, lon: number, zoom: number, pitch?: number, bearing?: number } | null} */
@@ -848,9 +850,13 @@ export class GfMap extends LitElement {
 
   /** @type {L.Map | null} */ #map = null;
   /** @type {Record<string, L.Layer>} */ #layers = {};
-  #base = /** @type {'photo' | 'plan'} */ (readLayers().base);
-  /** @type {string[]} */ #overlays = readLayers().overlays;
-  #distributionOn = readLayers().distribution;
+  /** Its own look as it shows it: its owner's (`look`), with the changes made on it since (told by `look-change`). @type {Partial<import('../core/map-settings.js').MapLook> | null} */
+  #own = null;
+  /** What it shows: the background, the overlays (in their order), their opacity — its own look over the common one. */
+  #base = /** @type {'photo' | 'plan'} */ ('photo');
+  /** @type {string[]} */ #overlays = [];
+  /** @type {Record<string, number>} */ #opacities = {};
+  #distributionOn = mapDistribution();
   /** @type {L.TileLayer | null} */ #distributionLayer = null;
   /** @type {L.TileLayer | null} */ #compareLayer = null;
   /** @type {L.LayerGroup | null} */ #focusLayer = null;
@@ -912,8 +918,11 @@ export class GfMap extends LitElement {
     L.control.zoom({ position: 'bottomleft' }).addTo(map);
     L.control.scale({ imperial: false, position: 'bottomleft' }).addTo(map);
 
-    if (this.base && this.base in BASES) this.#base = /** @type {'photo' | 'plan'} */ (this.base);
-    if (this.overlays) this.#overlays = this.overlays.filter(isOverlay);
+    this.#own = this.look;
+    const look = lookFor(this.#own);
+    this.#base = look.base;
+    this.#overlays = look.overlays.filter(isOverlay);
+    this.#opacities = look.opacities;
     this.#layer(this.#base).addTo(map);
     for (const key of this.#overlays) this.#layer(key).addTo(map);
     this.#restack();
@@ -1060,12 +1069,10 @@ export class GfMap extends LitElement {
     if (changed.has('radiusHandle')) this.#syncHandle();
     if (changed.has('litKeys')) this.#lightFrom();
     if (changed.has('line')) this.#syncLine();
-    // Its owner's background and overlays (in their order) and their opacity: shown, not told back (they are its owner's).
-    if (changed.has('base') && this.base && this.base !== this.#base) this.#setBase(/** @type {any} */ (this.base), false);
-    if (changed.has('overlays') && this.overlays) this.#showOverlays(this.overlays.filter(isOverlay));
-    if (changed.has('opacities') && changed.get('opacities') !== undefined && this.opacities) {
-      for (const key of this.#overlays) if (Math.abs((/** @type {any} */ (this.#layers[key])?.options?.opacity ?? -1) - this.#opacityOf(key)) > 0.001) this.#setOpacity(key, this.#opacityOf(key), true, false);
-    }
+    // Its owner's look given (or let go): shown, not told back (it is its owner's).
+    if (changed.has('look') && changed.get('look') !== undefined) { this.#own = this.look; this.#showLook(); }
+    if (changed.has('own3d') && this.#panel) this.#panel.own3d = this.own3d;
+    if (changed.has('lookWhy') && this.#panel) this.#panel.lookWhy = this.lookWhy;
     if (changed.has('view') && changed.get('view') !== undefined) {
       if (this.view) this.#applyView(true);
       // Its view let go (« Recadrer sur la zone »): framed on its area again.
@@ -1136,6 +1143,9 @@ export class GfMap extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     moduleEvents.addEventListener('change', this.#onModules);
+    mapLookEvents.addEventListener('change', this.#onCommonLook);
+    // Back in the page: the common look may have changed meanwhile.
+    if (this.#map) this.#showLook();
     if (this.#map) { this.#resized?.observe(this.#root); this.#syncTracking(); }
     this.#gl?.connect();
   }
@@ -1143,6 +1153,7 @@ export class GfMap extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     moduleEvents.removeEventListener('change', this.#onModules);
+    mapLookEvents.removeEventListener('change', this.#onCommonLook);
     this.#resized?.disconnect();
     clearTimeout(this.#areasTimer);
     clearTimeout(this.#busyTimer);
@@ -2516,30 +2527,29 @@ export class GfMap extends LitElement {
   }
 
   /**
-   * The "Carte" panel: display (2D / 3D and the 3D options, the maps' one choice: gf-map-gl.js tells the panel how
-   * this map is drawn), background, overlays, legend, sources. Every map has its button: round among the map's
-   * buttons, or at the end of the search pill.
+   * The panel ▦ « Carte » (gf-map-panel.js), the home of the maps' look: its options (gf-map-options.js: 2D / 3D and the
+   * 3D options — gf-map-gl.js tells the panel how this map is drawn —, the background, IGN's layers: the common look,
+   * or this map's own), its state, legend, sources. Every map has its button: round among the map's buttons, or at
+   * the end of the search pill.
    */
   openPanel() {
     if (!this.#panel) {
       const panel = this.#panel = document.createElement('gf-map-panel');
-      panel.addEventListener('base-change', (/** @type {any} */ e) => this.#setBase(e.detail.key));
-      panel.addEventListener('overlay-toggle', (/** @type {any} */ e) => {
-        // A layer of IGN's whole catalogue: known from now on (kept, for this map and the next ones).
-        const key = e.detail.layer ? addCatalogLayer(e.detail.layer) : e.detail.key;
-        this.#setOverlay(key, e.detail.on);
-      });
-      // The panel's « Actives » list (gf-ign-layers.js): an overlay's opacity, the overlays' order.
-      panel.addEventListener('overlay-opacity', (/** @type {any} */ e) => { this.#setOpacity(e.detail.key, e.detail.opacity, e.detail.commit); if (e.detail.commit) this.#syncOpacity(); });
-      panel.addEventListener('overlay-order', (/** @type {any} */ e) => this.#setOrder(e.detail.keys));
-      panel.addEventListener('distribution-toggle', (/** @type {any} */ e) => {
-        this.#distributionOn = e.detail.on;
-        this.#saveLayers();
+      // Its options (gf-map-options.js): kept inside the map — it decides where each change goes.
+      const on = (/** @type {string} */ type, /** @type {(d: any) => void} */ fn) => panel.addEventListener(type, (/** @type {any} */ e) => { e.stopPropagation(); fn(e.detail); });
+      on('look-edit', d => this.#editLook(d.patch));
+      on('look-preview', d => this.#setOpacity(d.key, d.opacity, false));
+      on('look-common', () => this.#commonLook());
+      on('renderer-follow', () => this.#emit('renderer-follow', {}));
+      on('distribution-toggle', d => {
+        this.#distributionOn = d.on;
+        setMapDistribution(d.on);
         this.#syncDistribution();
+        if (this.#panel) Object.assign(this.#panel, this.#distributionInfo());
       });
       this.#root.append(panel);
     }
-    Object.assign(this.#panel, { base: this.#base, overlays: [...this.#overlays], opacities: this.opacities, legend: this.legend, legendLines: this.#legendLines, ...this.#distributionInfo() });
+    Object.assign(this.#panel, { ...this.#lookInfo(), own3d: this.own3d, legend: this.legend, legendLines: this.#legendLines, ...this.#distributionInfo() });
     this.#syncState();
     this.#panel.updateComplete.then(() => this.#panel.open());
   }
@@ -2574,32 +2584,88 @@ export class GfMap extends LitElement {
 
   /** @param {string} key */
   #layer(key) {
-    if (!this.#layers[key]) {
-      this.#layers[key] = tileLayer(key, this.minZoom);
-      // Its own opacity (its owner's), rather than the device's.
-      if (this.opacities && !(key in BASES)) this.#setOpacity(key, this.#opacityOf(key), false, false);
-    }
+    this.#layers[key] ??= tileLayer(key, this.minZoom, this.#opacityOf(key));
     return this.#layers[key];
   }
 
-  /** An overlay's opacity on this map: its owner's (the usual one when it says none), else the device's (core/ign.js). @param {string} key */
-  #opacityOf(key) { return this.opacities ? this.opacities[key] ?? DEFAULT_OPACITY : overlayOpacity(key); }
+  /** An overlay's opacity on this map (its look's; the usual one when it says none). @param {string} key */
+  #opacityOf(key) { return this.#opacities[key] ?? DEFAULT_OPACITY; }
 
-  /** @param {'photo' | 'plan'} key @param {boolean} [tell] told to its owner (a choice made on it), or not (given by it) */
-  #setBase(key, tell = true) {
+  /** The look it shows: its own over the common one (core/map-settings.js lookFor). */
+  get lookShown() { return lookFor(this.#own); }
+
+  /** What its panel shows of its look: the look, what of it is its own, why that is kept (its owner's). */
+  #lookInfo() { return { look: this.lookShown, own: this.#own, lookWhy: this.lookWhy }; }
+
+  /** The common look changed (here, on another map, in Réglages, in another tab): followed for what is not its own. */
+  #onCommonLook = () => { if (this.#map) this.#showLook(); };
+
+  /**
+   * Shows its look now (its own over the common one): the background, the overlays in their order, their opacity —
+   * only what differs. Never told back.
+   */
+  #showLook() {
+    const map = this.#map;
+    if (!map) return;
+    const look = this.lookShown;
+    if (look.base !== this.#base) this.#setBase(look.base);
+    const before = this.#opacities;
+    this.#opacities = look.opacities;
+    this.#showOverlays(look.overlays.filter(isOverlay));
+    for (const key of this.#overlays) {
+      // A layer of several (reserves: a group) has its opacity on each of them. Its look's changed: set, and in 3D
+      // drawn again — even when its slider here already gave it to the 2D layer (the 3D map draws only what is added).
+      const layer = /** @type {any} */ (this.#layers[key]);
+      const at = (layer?.getLayers?.()[0] ?? layer)?.options?.opacity;
+      const now = this.#opacityOf(key);
+      if (Math.abs((at ?? -1) - now) > 0.001 || Math.abs((before[key] ?? DEFAULT_OPACITY) - now) > 0.001) this.#setOpacity(key, now, true, true);
+    }
+    if (this.#panel) Object.assign(this.#panel, this.#lookInfo());
+    this.#syncOpacity();
+  }
+
+  /**
+   * A change of its look made on it (its panel, its opacity card, setBase): the common look's when it follows it (every
+   * map then follows, this one too); else its own — shown, and told to its owner (`look-change`). Its overlays and
+   * their opacity go together: changing one makes both its own.
+   * @param {Partial<import('../core/map-settings.js').MapLook>} patch
+   */
+  #editLook(patch) {
+    if (!this.#own) { setMapLook(patch); return; }
+    const now = this.lookShown;
+    /** @type {Partial<import('../core/map-settings.js').MapLook>} */
+    const own = { ...this.#own };
+    if (patch.base) own.base = patch.base;
+    if (typeof patch.names === 'boolean') own.names = patch.names;
+    if (patch.overlays || patch.opacities) {
+      own.overlays = [...(patch.overlays ?? now.overlays)];
+      own.opacities = { ...(patch.opacities ?? now.opacities) };
+    }
+    this.#own = own;
+    this.#showLook();
+    this.#emit('look-change', { look: own });
+  }
+
+  /** « Revenir aux réglages communs »: its own look let go, the common one shown; told to its owner. */
+  #commonLook() {
+    this.#own = null;
+    this.#showLook();
+    this.#emit('look-change', { look: null });
+  }
+
+  /** The background shown (its look's). `base-shown` {base} after. @param {'photo' | 'plan'} key */
+  #setBase(key) {
     const map = /** @type {L.Map} */ (this.#map);
-    if (key === this.#base || !(key in BASES)) return;
+    if (key === this.#base || !Object.hasOwn(BASES, key)) return;
     this.#layer(this.#base).remove();
     this.#base = key;
     /** @type {L.TileLayer} */ (this.#layer(key).addTo(map)).bringToBack();
-    if (tell) this.#saveLayers();
-    else if (this.#panel) Object.assign(this.#panel, { base: this.#base });
     this.#emit('base-shown', { base: key });
   }
 
   /**
-   * The overlays its owner gives, in their order (the last on top): those not among them taken off, the others put on,
-   * restacked — not told back. @param {string[]} keys
+   * The overlays of its look, in their order (the last on top): those not among them taken off, the others put on,
+   * restacked. @param {string[]} keys
    */
   #showOverlays(keys) {
     const map = /** @type {L.Map} */ (this.#map);
@@ -2614,7 +2680,6 @@ export class GfMap extends LitElement {
       if (!map.hasLayer(l)) l.addTo(map);
     }
     this.#restack();
-    if (this.#panel) Object.assign(this.#panel, { overlays: [...this.#overlays], opacities: this.opacities });
     this.#syncOpacity();
   }
 
@@ -2622,27 +2687,10 @@ export class GfMap extends LitElement {
   get baseShown() { return this.#base; }
 
   /**
-   * Another background shown, as the panel's choice is (a free layout's thumbnail of the other one): kept as the panel
-   * keeps it — this map's own (`layers-change`) when it has one, else the Carte's shared choice. `base-shown` {base} after.
-   * @param {'photo' | 'plan'} key
+   * Another background shown, as its panel's choice is: the common look's when it follows it, else its own
+   * (`look-change`). `base-shown` {base} after. @param {'photo' | 'plan'} key
    */
-  setBase(key) { if (this.#map) this.#setBase(key); }
-
-  /** @param {string} key @param {boolean} on */
-  #setOverlay(key, on) {
-    const map = /** @type {L.Map} */ (this.#map);
-    if (!isOverlay(key)) return;
-    this.#overlays = this.#overlays.filter(k => k !== key);
-    if (on) {
-      this.#overlays.push(key);
-      this.#layer(key).addTo(map);
-      this.#restack();
-    } else {
-      this.#layer(key).remove();
-    }
-    this.#saveLayers();
-    this.#syncOpacity();
-  }
+  setBase(key) { if (this.#map && Object.hasOwn(BASES, key) && key !== this.#base) this.#editLook({ base: key }); }
 
   /** The overlays drawn in their order (the last on top), over the background and under GBIF's layers (20, 21). */
   #restack() {
@@ -2654,18 +2702,14 @@ export class GfMap extends LitElement {
   }
 
   /**
-   * An overlay's opacity: shown at once (the slider moving), kept when let go (`commit`) — its owner's (this map's own,
-   * `layers-change`), else the device's (core/ign.js). In 3D the overlay is put back on the map then, so the 3D map
-   * (which mirrors the 2D one's layers as they are added) draws it again.
-   * @param {string} key @param {number} opacity @param {boolean} commit @param {boolean} [tell] a choice made on it (else given by its owner)
+   * An overlay's opacity on the map: shown at once (a slider moving), kept when let go (`commit`: a change of its look,
+   * #editLook — unless `shown`, its look's already). In 3D the overlay is put back on the map once committed, so the
+   * 3D map (which mirrors the 2D one's layers as they are added) draws it again.
+   * @param {string} key @param {number} opacity @param {boolean} commit @param {boolean} [shown] its look's already (not a change)
    */
-  #setOpacity(key, opacity, commit, tell = true) {
-    let value = Math.min(1, Math.max(0, Number(opacity) || 0));
-    if (commit && tell && this.opacities) {
-      value = Math.round(value * 20) / 20;
-      this.opacities = { ...this.opacities, [key]: value };
-      this.#saveLayers();
-    } else if (commit && tell) value = setOverlayOpacity(key, opacity);
+  #setOpacity(key, opacity, commit, shown = false) {
+    const value = Math.round(Math.min(1, Math.max(0, Number(opacity) || 0)) * (commit ? 20 : 100)) / (commit ? 20 : 100);
+    if (commit && !shown) { this.#editLook({ opacities: { ...this.#opacities, [key]: value } }); return; }
     const layer = /** @type {any} */ (this.#layers[key]);
     if (!layer) return;
     for (const l of layer.eachLayer ? layer.getLayers() : [layer]) l.setOpacity?.(value);
@@ -2674,31 +2718,6 @@ export class GfMap extends LitElement {
       layer.remove();
       layer.addTo(map);
     }
-  }
-
-  /** The overlays in a new order (bottom first: the last drawn on top). @param {string[]} keys */
-  #setOrder(keys) {
-    const map = /** @type {L.Map} */ (this.#map);
-    const on = new Set(this.#overlays);
-    const next = keys.filter(k => on.has(k));
-    // Any left out keep their place at the top (a list out of step: nothing lost).
-    for (const k of this.#overlays) if (!next.includes(k)) next.push(k);
-    if (next.join('\n') === this.#overlays.join('\n')) return;
-    this.#overlays = next;
-    this.#restack();
-    // In 3D: put back in order, the 3D map draws them anew.
-    if (this.#gl?.on) for (const k of next) { const l = this.#layer(k); l.remove(); l.addTo(map); }
-    this.#saveLayers();
-    this.#syncOpacity();
-  }
-
-  #saveLayers() {
-    // A map with its own layers (map block, a free layout's map): tell its owner, leave the Carte's choice alone.
-    if (this.base || this.overlays) {
-      const opacities = Object.fromEntries(this.#overlays.map(k => [k, this.#opacityOf(k)]));
-      this.#emit('layers-change', { base: this.#base, overlays: [...this.#overlays], opacities });
-    } else writeJSON(config.storageKeys.mapLayer, { base: this.#base, overlays: this.#overlays, distribution: this.#distributionOn });
-    if (this.#panel) Object.assign(this.#panel, { base: this.#base, overlays: [...this.#overlays], opacities: this.opacities, ...this.#distributionInfo() });
   }
 
   /** What the panel says of the GBIF layer: nothing without a plant (or with GBIF off). */

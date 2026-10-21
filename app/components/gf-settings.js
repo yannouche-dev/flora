@@ -7,7 +7,7 @@ import { MODE_ICON_CHOICES, modeLabel } from '../core/modes.js';
 import { createMode, deleteMode, editMode } from '../core/mode-admin.js';
 import './gf-mode-switch.js';
 import { getTrefleToken, setTrefleToken } from '../core/sources.js';
-import { MODULES, moduleOn, setModule } from '../core/modules.js';
+import { MODULES, setModule } from '../core/modules.js';
 import { CATEGORIES, blockCategory, categoryOf } from '../core/categories.js';
 import { icon, modeIcon } from '../core/icons.js';
 import { pressDock } from '../core/dock-drag.js';
@@ -23,9 +23,8 @@ import { ui } from '../styles/ui.js';
 import { discoverEvents, discovering, finishDiscover, restartDiscover } from '../core/discover.js';
 import { forgetHints } from '../core/hints.js';
 import { openView } from '../core/history.js';
-import { mapSettings, mapSettingsEvents, resetMapSettings, setMapSettings } from '../core/map-settings.js';
-import { hasWebGL2 } from '../core/maplibre.js';
-import { map3dOptions, map3dOptionsCss, mapRendererChoice } from './map3d-options.js';
+import { resetMapLook, resetMapSettings } from '../core/map-settings.js';
+import './gf-map-options.js';
 import { PRESETS } from '../layout/presets.js';
 
 /** French names of the icons a mode can have. */
@@ -47,9 +46,8 @@ export class GfSettings extends LitElement {
     _modeNote: { state: true }
   };
 
-  static styles = [ui, map3dOptionsCss, css`
+  static styles = [ui, css`
     .maps-card { display: grid; gap: 8px; }
-    .maps-card .opts3d { padding: 4px 0 0; }
     .steps-choice { display: grid; gap: 6px; margin: 4px 0 12px; padding: 10px 14px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius); }
     .steps-choice legend { padding: 0 4px; font-weight: 600; }
     .steps-choice label { display: flex; align-items: center; gap: 8px; min-height: 32px; }
@@ -137,11 +135,9 @@ export class GfSettings extends LitElement {
   #store = new StoreController(this);
   #onSpots = () => this.#countSpots();
   #onDiscover = () => this.requestUpdate();
-  #onMaps = () => this.requestUpdate();
 
   connectedCallback() {
     super.connectedCallback();
-    mapSettingsEvents.addEventListener('change', this.#onMaps);
     spotEvents.addEventListener('change', this.#onSpots);
     discoverEvents.addEventListener('change', this.#onDiscover);
     this.#countSpots();
@@ -149,7 +145,6 @@ export class GfSettings extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    mapSettingsEvents.removeEventListener('change', this.#onMaps);
     spotEvents.removeEventListener('change', this.#onSpots);
     discoverEvents.removeEventListener('change', this.#onDiscover);
   }
@@ -509,23 +504,20 @@ export class GfSettings extends LitElement {
   }
 
   /**
-   * « Cartes »: every map in 2D (Leaflet) or 3D (MapLibre, loaded only then), and the 3D options — the defaults, the
-   * same settings as each map's « Carte » panel (« Affichage ») and the plant sheet's map blocks: changed here or
-   * there, every map follows.
+   * « Cartes »: the maps' common settings — 2D (Leaflet) or 3D (MapLibre, loaded only then) and the 3D options, the
+   * background, IGN's layers —: the same options as each map's panel ▦ (gf-map-options.js); changed here or there,
+   * every map that follows them follows at once.
    */
   #maps() {
-    const s = mapSettings();
-    const webgl = hasWebGL2();
-    const options = map3dOptions(s, patch => setMapSettings(patch), { relief: moduleOn('relief3d'), ign: moduleOn('ignMaps'), id: 'settings3d' });
     return html`<h2 id="cartes">Cartes</h2>
       <div class="maps-card">
-        ${mapRendererChoice(s, patch => setMapSettings(patch), { id: 'settings', legend: 'Affichage des cartes', webgl })}
-        <p class="muted">Le choix vaut pour toutes les cartes : la Carte, la carte de la fiche plante, Mes plantes, Parcours, Rencontres, le partage ; chaque carte le propose aussi dans son panneau « Carte » (Affichage), le même choix.
-          En 3D : glisser du clic droit, ou à deux doigts, pour tourner et incliner ; Maj + flèches au clavier ; la boussole revient au nord. La 3D se télécharge à sa première ouverture (environ 1,6 Mo), en ligne.
+        <p class="muted">Réglages communs à toutes les cartes : la Carte, la carte de la fiche plante, Mes plantes, Parcours, Rencontres, le partage, les cartes des dispositions libres. Chaque carte les propose aussi dans son panneau ▦ (les mêmes réglages, changés pour toutes).
+          Une carte qui a son propre fond le garde — une case de disposition libre dont l’adresse dit son fond (base=) ou ses couches (layers=), une carte de fiche réglée avant —, et son panneau ▦ propose de revenir aux réglages communs.</p>
+        <gf-map-options scope="defaults"></gf-map-options>
+        <p class="muted">En 3D : glisser du clic droit, ou à deux doigts, pour tourner et incliner ; Maj + flèches au clavier ; la boussole revient au nord. La 3D se télécharge à sa première ouverture (environ 1,6 Mo), en ligne.
           L’étape « Jusqu’où part l’expédition ? » reste vue de dessus ; sur une fiche plante, les cartes ajoutées en plus de la carte principale restent en 2D ; pendant la modification des positions, la carte repasse en 2D le temps de l’édition.</p>
-        ${s.renderer === '3d' ? options : nothing}
         <p class="muted">Le relief vient d’AWS Terrain Tiles (s3.amazonaws.com, module « Vue 3D (relief) »), les bâtiments et le plan vectoriel de l’IGN (data.geopf.fr, module « IGN – fonds de carte ») : ces serveurs voient la zone de carte affichée.</p>
-        <p><button type="button" class="small" @click=${() => resetMapSettings()}>${icon('arrow-counterclockwise')} Options des cartes par défaut</button></p>
+        <p><button type="button" class="small" @click=${() => { resetMapSettings(); resetMapLook(); }}>${icon('arrow-counterclockwise')} Options des cartes par défaut</button></p>
       </div>`;
   }
 

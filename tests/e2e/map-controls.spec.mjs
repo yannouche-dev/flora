@@ -4,7 +4,7 @@
 // zone's radius changed as the slider changes it (r= in the address); its keys from stop to stop. The current plant's
 // chip: ✕ (none), « Seule » (its points alone, this map only), ↗ (its sheet). The period's chips (when=, written in
 // the layout). The count (the points shown, the plants found), which opens the map's « État ». The other background's
-// thumbnail. ctl= as the exact set, the defaults by ui and the intent, none (nue). iNaturalist answered here: 12
+// thumbnail (the cell's own background, or the common one again). ctl= as the exact set, the defaults by ui and the intent, none (nue). iNaturalist answered here: 12
 // plants around, 24 observations of three dates (this month, another month of this year, this month two years ago).
 import { test, expect, answerAround, plantId } from './fixtures.mjs';
 import { centre } from './touch.mjs';
@@ -177,28 +177,45 @@ test.describe('au bureau', () => {
     await expect(panel.getByRole('region', { name: 'État de la carte' }).or(panel.locator('section.state'))).toBeVisible();
   });
 
-  test('le fond : la vignette de l’autre fond le montre, gardé dans la disposition (base=) ; jamais le choix partagé de la Carte', async ({ app, page }) => {
-    // The Carte's shared choice says « plan »: a layout's map is the same for everyone, the photos unless it says.
+  test('le fond : sans base=, le fond commun à toutes les cartes ; la vignette de l’autre fond en fait le sien (base=), son panneau ▦ le rend aux réglages communs', async ({ app, page }) => {
+    // The maps' common look says « plan », the cadastre over it: a layout's map that writes no background follows it.
     await app.open(`#/layout/[map(r=1km;ctl=rayon+fond),results]?${AT}`);
     await page.evaluate(() => localStorage.setItem('geoflora.mapLayer', JSON.stringify({ base: 'plan', overlays: ['cadastre'] })));
     await page.reload();
     await app.ready();
     const base = () => mapOf(page).evaluate(m => /** @type {any} */ (m).baseShown);
-    await expect.poll(base).toBe('photo');
-    const tile = cell(page).locator('button.base');
-    await expect(tile).toHaveAccessibleName('Fond : le plan IGN');
-    await tile.click();
+    const overlays = () => mapOf(page).evaluate(m => /** @type {any} */ (m).lookShown.overlays);
     await expect.poll(base).toBe('plan');
+    await expect.poll(overlays).toEqual(['cadastre']);
+    const tile = cell(page).locator('button.base');
     await expect(tile).toHaveAccessibleName('Fond : les photos aériennes');
-    await expect.poll(() => layoutOf(page)).toBe('#/layout/[map(r=1km,base=plan,ctl=rayon+fond),results]');
-    // The shared choice left alone.
+    await tile.click();
+    await expect.poll(base).toBe('photo');
+    await expect(tile).toHaveAccessibleName('Fond : le plan IGN');
+    await expect.poll(() => layoutOf(page)).toBe('#/layout/[map(r=1km,base=photo,ctl=rayon+fond),results]');
+    // Its own background: the common one left alone.
     expect(await page.evaluate(() => localStorage.getItem('geoflora.mapLayer'))).toContain('"plan"');
-    // Back to the photos: the setting left out again.
+    // The common look changed elsewhere (another map, Réglages, another tab): its own background kept, its layers follow.
+    await page.evaluate(async () => { (await import('/app/core/map-settings.js')).setMapLook({ base: 'plan', overlays: [] }); });
+    await expect.poll(overlays).toEqual([]);
+    expect(await base()).toBe('photo');
+    // Its panel ▦ says so, and gives the common one back: base= left out, the plan shown again.
+    await mapOf(page).evaluate(m => /** @type {any} */ (m).openPanel());
+    const panel = mapOf(page).locator('gf-map-panel dialog');
+    await expect(panel.locator('.scope')).toContainText('Cette carte a son propre fond');
+    await panel.getByRole('button', { name: 'Revenir aux réglages communs' }).click();
+    await expect.poll(() => layoutOf(page)).toBe('#/layout/[map(r=1km,ctl=rayon+fond),results]');
+    await expect.poll(base).toBe('plan');
+    await expect(panel.locator('.scope')).toContainText('Réglages communs à toutes les cartes');
+    await panel.getByRole('button', { name: 'Fermer' }).click();
+    // The thumbnail to the photos, then back to the plan — the common one: none written, it follows again.
+    await tile.click();
+    await expect.poll(() => layoutOf(page)).toBe('#/layout/[map(r=1km,base=photo,ctl=rayon+fond),results]');
     await tile.click();
     await expect.poll(() => layoutOf(page)).toBe('#/layout/[map(r=1km,ctl=rayon+fond),results]');
     await page.reload();
     await app.ready();
-    await expect.poll(base).toBe('photo');
+    await expect.poll(base).toBe('plan');
   });
 
   test('ctl= : exactement ces commandes ; par défaut celles de ui (complètes, compactes) et de l’intention ; nue : aucune', async ({ app, page }) => {

@@ -22,10 +22,7 @@ import './gf-lookalikes.js';
 import { emergency } from '../core/poison.js';
 import './gf-add-to.js';
 import './gf-sheet-map.js';
-import { OVERLAYS } from '../core/ign.js';
-import { mapSettings, mapSettingsEvents, setMapSettings } from '../core/map-settings.js';
-import { hasWebGL2 } from '../core/maplibre.js';
-import { ONE_GL_PER_SHEET, map3dOptions, map3dOptionsCss, mapRendererChoice } from './map3d-options.js';
+import { ONE_GL_PER_SHEET } from './map3d-options.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 import {
@@ -428,7 +425,7 @@ export class GfPlantDetail extends LitElement {
     _failed: { state: true }
   };
 
-  static styles = [ui, map3dOptionsCss, severityStyles, css`
+  static styles = [ui, severityStyles, css`
     :host {
       display: block;
       overflow-y: auto;
@@ -548,11 +545,7 @@ export class GfPlantDetail extends LitElement {
     .map-form legend { font-weight: 700; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--gf-text-muted); padding: 0; margin-bottom: 2px; }
     .map-form label { display: grid; gap: 2px; }
     .map-form label.check { display: flex; gap: 6px; align-items: center; }
-    .map-form fieldset.display3d { grid-column: 1 / -1; }
-    .map-form .renderer-choice { padding: 6px 10px; border: 1px solid var(--gf-border); }
-    .map-form .renderer-choice legend { text-transform: none; letter-spacing: 0; font-size: 0.85rem; color: var(--gf-text); padding: 0 4px; }
-    .map-form .renderer-choice label, .map-form .opt3d.switch, .map-form .opt3d.light label { display: flex; }
-    .map-form .opt3d.range { display: grid; }
+    .map-form .look-note { grid-column: 1 / -1; margin: 0; color: var(--gf-text-muted); }
     .map-placeholder { border-radius: var(--gf-radius); background: var(--gf-surface-2); }
     .subs-editor { margin: 0 0 10px 20px; padding: 8px 10px; border: 1px dashed var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface); }
     .note-text { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface); color: var(--gf-text); resize: vertical; }
@@ -1071,8 +1064,6 @@ export class GfPlantDetail extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     notesEvents.addEventListener('change', this.#onNotes);
-    // The maps' 2D / 3D choice (Réglages, a map's panel, another tab): the map blocks' form shows it.
-    mapSettingsEvents.addEventListener('change', this.#onNotes);
     this.#resize.observe(this);
     // The hand (wheel, touch, keys, pointer): a place kept for a moment lets go at once; where the sheet stops,
     // once the hand has moved it, is noted for the next plant (#noteRead) — nothing is computed while it scrolls.
@@ -1182,7 +1173,6 @@ export class GfPlantDetail extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     notesEvents.removeEventListener('change', this.#onNotes);
-    mapSettingsEvents.removeEventListener('change', this.#onNotes);
     for (const ev of ['touchend', 'touchcancel', 'pointerup', 'pointercancel']) window.removeEventListener(ev, this.#onLift, { capture: true });
     this.#touching = this.#buttonDown = false;
     unregisterWebPane(this);
@@ -2805,14 +2795,14 @@ export class GfPlantDetail extends LitElement {
     return html`<gf-sheet-map .plant=${plant} .gbifKey=${details?.identifiers?.gbif?.id ?? null} .inatId=${inat?.id ?? null}
       map-3d=${key === 'map' ? 'auto' : 'off'} map-3d-why=${ONE_GL_PER_SHEET} .config=${config} ?fill=${fill} .mapFocus=${this._focus}
       @map-config=${(/** @type {CustomEvent} */ e) => setMapConfig(key, e.detail)}
-      @focus-clear=${(/** @type {CustomEvent} */ e) => { this._focus = { ...this._focus, [e.detail.kind]: null }; }}
-      @map-layers=${(/** @type {CustomEvent} */ e) => {
-        const { base, overlays } = e.detail;
-        if (base !== config.base || overlays.join() !== config.overlays.join()) setMapConfig(key, { base, overlays });
-      }}></gf-sheet-map>`;
+      @focus-clear=${(/** @type {CustomEvent} */ e) => { this._focus = { ...this._focus, [e.detail.kind]: null }; }}></gf-sheet-map>`;
   }
 
-  /** Mode King: what a map block shows and lets do (the same in every mode). @param {string} key */
+  /**
+   * Mode King: what a map block shows and lets do (the same in every mode). Its background, IGN's layers and 2D / 3D:
+   * its panel ▦, as on every map (gf-map-options.js) — said here.
+   * @param {string} key
+   */
   #mapForm(key) {
     const c = mapConfig(key);
     const set = (/** @type {any} */ patch) => setMapConfig(key, patch);
@@ -2833,16 +2823,10 @@ export class GfPlantDetail extends LitElement {
         ${check('Mes lieux de cette plante (et chaque plant)', c.places, on => set({ places: on }))}
         ${select('Observations proches', 'near', [['off', 'Non'], ['both', 'iNaturalist et GBIF'], ['inat', 'iNaturalist'], ['gbif', 'GBIF']])}
       </fieldset>
-      <fieldset><legend>Fond et couches IGN</legend>
-        ${select('Fond', 'base', [['plan', 'Plan IGN'], ['photo', 'Photos aériennes']])}
-        ${Object.entries(OVERLAYS).map(([k, def]) => check(def.label, c.overlays.includes(k),
-          on => set({ overlays: on ? [...c.overlays, k] : c.overlays.filter(o => o !== k) })))}
-      </fieldset>
       <fieldset><legend>Affichage</legend>
         ${select('Cadrage', 'frame', [['auto', 'Automatique (selon les couches)'], ['france', 'France entière'], ['world', 'Monde entier'], ['content', 'Ajusté à ce qui est affiché'], ['me', 'Autour de moi'], ['region', 'Ma région']])}
         ${select('Hauteur', 'height', [['s', 'Petite'], ['m', 'Moyenne'], ['l', 'Grande']])}
       </fieldset>
-      ${this.#mapDisplay(key)}
       <fieldset><legend>Actions</legend>
         ${action('open', 'Ouvrir dans la Carte')}
         ${action('create', 'Créer un endroit ici (appui long)')}
@@ -2850,24 +2834,8 @@ export class GfPlantDetail extends LitElement {
         ${action('spot', 'Noter ici')}
         ${action('locate', 'Me localiser')}
       </fieldset>
+      <p class="look-note">Fond, couches IGN, 2D ou 3D : dans le panneau ▦ de la carte (${c.look ? 'cette carte a son propre fond ; le panneau propose de revenir aux réglages communs' : 'réglages communs à toutes les cartes'}).</p>
     </div>`;
-  }
-
-  /**
-   * The map block's « 2D / 3D »: the maps' one choice (Réglages › Cartes, each map's panel « Carte »: the same
-   * settings), and the 3D options; a block added stays in 2D (one WebGL map per sheet), said.
-   * @param {string} key
-   */
-  #mapDisplay(key) {
-    const s = mapSettings();
-    const change = (/** @type {Partial<import('../core/map-settings.js').MapSettings>} */ patch) => setMapSettings(patch);
-    const fixed = key === 'map' ? null : { renderer: /** @type {const} */ ('2d'), why: ONE_GL_PER_SHEET };
-    return html`<fieldset class="display3d"><legend>Affichage 2D / 3D</legend>
-      ${mapRendererChoice(s, change, { id: 'block-' + key, legend: 'Carte en 2D ou en 3D', webgl: hasWebGL2(), fixed })}
-      ${fixed || s.renderer !== '3d' ? nothing : html`<details class="more3d"><summary>Options de la 3D</summary>
-        ${map3dOptions(s, change, { relief: moduleOn('relief3d'), ign: moduleOn('ignMaps'), id: 'block3d-' + key })}</details>`}
-      <p class="note3d">Le même choix pour toutes les cartes (Réglages › Cartes, le panneau « Carte » de chaque carte).</p>
-    </fieldset>`;
   }
 
   /** @type {number | undefined} */

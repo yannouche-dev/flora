@@ -1,10 +1,11 @@
-// The 2D / 3D choice in the panel « Carte » of every map (gf-map-panel.js « Affichage », the maps' one choice of
+// The 2D / 3D choice in the panel ▦ of every map (gf-map-options.js « Affichage », the maps' one choice of
 // core/map-settings.js): on the Carte, the plant sheet's map (and in its pane beside), Mes plantes' place map, a
 // place's editor, the mini-apps' maps (Rencontres' first steps, Parcours' walk) — each one's panel has « 2D » / « 3D »;
 // « 3D » chosen there swaps that map to MapLibre and is stored for every map (Réglages › Cartes show it); « 2D » there
 // brings it back. The maps that always stay one way show the choice disabled, with why: « Jusqu’où part
 // l’expédition ? » (from above), a second map of a plant sheet (one WebGL map per sheet). The map block's form of the
-// plant sheet (mode King) has the same choice. Real WebGL (SwiftShader), every tile made here (tiles.mjs).
+// plant sheet (mode King, ⚙) no longer has it, nor the background and IGN's layers: its panel ▦ does. Real WebGL
+// (SwiftShader), every tile made here (tiles.mjs).
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
 
@@ -111,7 +112,7 @@ test('un lieu : sa fiche sur la Carte ; un nouveau lieu sur sa propre carte (en 
   await switchFromPanel(page, map);
 });
 
-test('fiche plante : sa carte en 3D depuis son panneau ; une carte ajoutée reste en 2D et le dit ; le formulaire du bloc aussi', async ({ app, page }) => {
+test('fiche plante : sa carte en 3D depuis son panneau ; une carte ajoutée reste en 2D et le dit ; le formulaire du bloc renvoie au panneau', async ({ app, page }) => {
   test.slow();
   await app.open('#/collections');
   await seedPlace(page);
@@ -131,18 +132,17 @@ test('fiche plante : sa carte en 3D depuis son panneau ; une carte ajoutée rest
   await expect(panel).toContainText('Une seule carte en 3D par fiche plante');
   await panel.getByRole('button', { name: 'Fermer' }).click();
 
-  // Mode King: the map block's form, « Affichage 2D / 3D » — the same choice.
+  // Mode King: the map block's form (⚙) keeps its subject, its layers, its framing, its height and its actions; its
+  // background, IGN's layers and 2D / 3D are its panel ▦'s — said.
   await page.evaluate(async () => { (await import('/app/core/store.js')).setKingMode(true); });
   await page.getByRole('button', { name: 'Configurer la carte « Carte »' }).click();
   const form = page.locator('gf-plant-detail .map-form').first();
-  await form.getByRole('group', { name: 'Carte en 2D ou en 3D' }).getByRole('radio', { name: /^3D/ }).check();
-  expect(await stored(page)).toBe('3d');
-  await expect(main).toHaveAttribute('data-renderer', '3d', { timeout: 30_000 });
-  await expect(form.getByText('Options de la 3D')).toBeVisible();
-  await page.getByRole('button', { name: 'Configurer la carte « Ma carte »' }).click();
-  const second = page.locator('gf-plant-detail .map-form').nth(1);
-  await expect(second.getByRole('radio', { name: /^3D/ })).toBeDisabled();
-  await expect(second).toContainText('Une seule carte en 3D par fiche plante');
+  await expect(form.getByRole('combobox', { name: 'La carte montre' })).toBeVisible();
+  await expect(form.getByRole('combobox', { name: 'Hauteur' })).toBeVisible();
+  await expect(form.getByRole('group', { name: 'Carte en 2D ou en 3D' })).toHaveCount(0);
+  await expect(form.getByRole('combobox', { name: 'Fond' })).toHaveCount(0);
+  await expect(form.getByRole('checkbox', { name: 'Parcelles cadastrales' })).toHaveCount(0);
+  await expect(form).toContainText('Fond, couches IGN, 2D ou 3D : dans le panneau ▦ de la carte (réglages communs à toutes les cartes)');
 });
 
 test('la carte d’une fiche dans le volet d’à côté', async ({ app, page }) => {

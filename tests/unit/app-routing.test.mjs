@@ -42,6 +42,18 @@ test('un réglage changé par la case : écrit, retiré quand il revient à ce q
   assert.equal(changed('results', { '3d': true }), '[results]');
 });
 
+test('les couches de la case : absentes, les communes à toutes les cartes ; sa dernière décochée, aucune (layers=aucune), même avec une intention', () => {
+  // Its panel ▦ (gf-map look-change: no overlay left) writes none, not the common layers.
+  assert.equal(changed('map(layers=cadastre)', { layers: [] }), '[map(layers=aucune)]');
+  assert.equal(changed('map(base=plan,layers=cadastre)', { layers: [], opac: null }), '[map(base=plan,layers=aucune)]');
+  assert.equal(changed('map(protege)', { layers: [] }), '[map(protege,layers=aucune)]');
+  // « Revenir aux réglages communs »: left out — the common layers again.
+  assert.equal(changed('map(layers=aucune)', { layers: null }), '[map]');
+  assert.equal(changed('map(layers=cadastre,opac=cadastre.40)', { base: null, layers: null, opac: null }), '[map]');
+  assert.equal(read('map').cell.params.layers, null);
+  assert.deepEqual(read('map(layers=aucune)').cell.params.layers, []);
+});
+
 test('les couches : dans l’ordre dessiné, toute couche du catalogue de l’IGN (ign:<id>), une seule nommée par son nom court', () => {
   assert.equal(read('map(layers=hydro+znieff)').text, '[map(layers=hydro+znieff)]');
   assert.equal(read('map(layers=ign:LANDCOVER.FORESTINVENTORY.V2+znieff)').text, '[map(layers=ign:LANDCOVER.FORESTINVENTORY.V2+znieff)]');

@@ -29,7 +29,8 @@ import { MAP_CONTROL_ALIASES, MAP_CONTROLS, MAP_INTENT_ALIASES, MAP_INTENTS, MAP
  *   (map(2d)); `group`: its heading in the editor and the README (Où, Fond…); `mark`: its mark in a menu (cellMark),
  *   else its label's first letter; `defOf`: its default as the other parameters make it (ctl: by ui and the intent) —
  *   a value written that is the same left out of the address; `named`: never given a bare value (map(zoom) is not ctl=zoom);
- *   `unset`: what it means not said, in a few words (the editor says it beside a list none of whose values is chosen).
+ *   `unset`: what it means not said, in a few words (the editor says it beside a list none of whose values is chosen,
+ *   an enum without its value).
  *   Kinds: `list` — several of its values joined by « + » (layers=znieff+n2000), each unknown one said and left out;
  *   `text` — free words (lieu=Mirabel Ménétrol 63: never a bare value); `intent` — one word for a bundle of the other
  *   parameters (`bundles`: each value's, as the address writes them), which a parameter written beside it overrides;
@@ -114,14 +115,17 @@ const MAP_PARAMS = {
   // The view it starts on (its centre, its zoom; in 3D its tilt and turn), the map moved in « Créer une app »: else
   // framed on the zone.
   vue: { kind: 'text', label: 'Cadrage de départ', def: null, group: 'Où', own: true, named: true, max: 60, read: readView, words: ['view', 'cadrage', 'camera'] },
-  // Fond: the photos unless it says (a layout's map is the same for everyone: never the Carte's shared choice).
-  base: { kind: 'enum', label: 'Fond de carte', def: 'photo', group: 'Fond', values: { photo: 'Photos aériennes', plan: 'Plan IGN' }, aliases: { photos: 'photo', ortho: 'photo', satellite: 'photo', ign: 'plan', carte: 'plan' }, words: ['fond', 'layer'] },
+  // Fond: the maps' common look (core/map-settings.js) unless it says one (its own then, kept by the cell: base=), as
+  // 2D or 3D (3d=: unless written, the common choice).
+  base: { kind: 'enum', label: 'Fond de carte', def: null, unset: 'le fond commun à toutes les cartes', group: 'Fond', values: { photo: 'Photos aériennes', plan: 'Plan IGN' },
+    aliases: { photos: 'photo', ortho: 'photo', satellite: 'photo', ign: 'plan', carte: 'plan' }, words: ['fond', 'layer'] },
   '3d': { kind: 'bool', label: 'Vue 3D', def: null, group: 'Fond', mark: '3D', off: ['2d', 'plat', 'plate'], words: ['vue3d', 'relief3d', 'rendu'] },
   // Couches.
   // Any layer of IGN's catalogue too (ign:<id>), in the order drawn (the last on top); their opacity when not the usual.
+  // Not said: the maps' common layers; aucune: none, whatever they are.
   layers: {
-    kind: 'list', label: 'Couches', def: [], group: 'Couches', values: labels(MAP_LAYERS), aliases: MAP_LAYER_ALIASES, more: layerWord, ordered: true,
-    words: ['couches', 'calques', 'overlays', 'couche']
+    kind: 'list', label: 'Couches', def: null, unset: 'les couches communes à toutes les cartes', group: 'Couches', values: labels(MAP_LAYERS), aliases: MAP_LAYER_ALIASES,
+    more: layerWord, ordered: true, words: ['couches', 'calques', 'overlays', 'couche']
   },
   opac: { kind: 'text', label: 'Opacité des couches', def: null, group: 'Couches', own: true, named: true, max: 400, read: readOpacities, words: ['opacite', 'opacity', 'transparence'] },
   // Points.
