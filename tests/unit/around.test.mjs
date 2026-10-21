@@ -9,7 +9,8 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { avoid, bio, deckOf, distanceAt, distanceEvents, distanceKey, distanceNear, distLabel, ethnoSentence, harvestOrder, nextDistance, swipe, toAvoid, unswipe } from '../../app/miniapp/kit/cards.js';
 import { lookalikesOf } from '../../app/core/lookalikes.js';
-import { UNREAD } from '../../app/core/alerts.js';
+import { UNREAD, dangerLevel, rank } from '../../app/core/danger.js';
+import { verdictOf } from '../../app/core/alerts.js';
 import { keptCtx, forgetPlaces, keptPlace, leftAt, migrateDiscover, clearAroundGames } from '../../app/core/around-sessions.js';
 import * as M from '../../app/core/place-model.js';
 import { toPortable } from '../../app/core/portable.js';
@@ -19,7 +20,7 @@ import { MiniApp, replayItems, storageKey } from '../../app/miniapp/runtime.js';
 const plants = JSON.parse(await readFile(new URL('../fixtures/plants.json', import.meta.url), 'utf8'));
 const plant = (/** @type {string} */ name) => plants.find((/** @type {any} */ x) => x.scientificName === name);
 /** A card of the deck. @param {string} name @param {Partial<import('../../app/miniapp/kit/cards.js').Card>} [more] */
-const card = (name, more = {}) => ({ plant: plant(name), count: 10, photo: null, credit: null, blooming: false, alerts: null, ...more });
+const card = (name, more = {}) => ({ plant: plant(name), count: 10, photo: null, credit: null, blooming: false, verdict: null, ...more });
 
 test('Cueillette prudente : seulement les plantes à sosie dangereux, la mortelle d’abord ; liste illisible : toutes gardées', async () => {
   const cards = await Promise.all(['Urtica dioica', 'Conium maculatum', 'Allium ursinum'].map(async n => {
@@ -37,19 +38,69 @@ test('Cueillette prudente : seulement les plantes à sosie dangereux, la mortell
 test('bio : la sécurité d’abord — confusions, toxicité illisible, toxique, jamais « à table » pour une plante toxique', async () => {
   const ail = card('Allium ursinum');
   ail.confusions = await lookalikesOf(ail.plant);
+  ail.verdict = dangerLevel({ statuses: ail.plant.statuses, confusions: ail.confusions });
   const lines = bio(ail, new Set());
   assert.match(lines[0], /^⚠️ Ne me confondez pas avec Colchique \(mortel\)\. Partie : feuilles\.$/);
-  const cigue = card('Conium maculatum', { alerts: { safety: { tone: 'danger', text: ['Liste B de l’ANSM : toxicité de la plante'] }, edible: null } });
+  // The species the Anses names: the part it says is picked, « à table » (never « comestible »).
+  assert.ok(lines.includes('🍽️ Partie consommée selon l’Anses : feuilles. J’ai des sosies dangereux (2) : lisez ma fiche avant de passer à table.'), lines.join('\n'));
+  const cigue = card('Conium maculatum');
   cigue.confusions = await lookalikesOf(cigue.plant);
+  cigue.verdict = dangerLevel({ statuses: cigue.plant.statuses, safety: { ansm: [{ list: 'B', parts: 'fruit' }] }, confusions: cigue.confusions });
   const l2 = bio(cigue, new Set());
   assert.match(l2[0], /^☠️ Je suis le sosie .* de Persil plat\.$/);
-  assert.ok(l2.includes('☠️ Liste B de l’ANSM : toxicité de la plante. On regarde, on ne goûte pas.'));
-  const unread = bio(card('Urtica dioica', { alerts: { unread: true, safety: { tone: 'danger', text: [UNREAD] }, edible: null } }), new Set());
+  assert.ok(l2.includes('☠️ Pharmacopée française, liste B : effets indésirables supérieurs au bénéfice attendu. On regarde, on ne goûte pas.'), l2.join('\n'));
+  const unread = bio(card('Urtica dioica', { verdict: dangerLevel({ unread: true }) }), new Set());
   assert.equal(unread[0], '⚠️ ' + UNREAD + '.', 'données illisibles : dites en premier');
-  const toxicEdible = bio(card('Urtica dioica', { alerts: { toxic: true, safety: null, edible: { text: ['a', 'b'], parts: ['feuilles'] } } }), new Set());
+  // The species named, but toxic by the ANSM (list B): never « à table ».
+  const toxicEdible = bio(card('Allium ursinum', { verdict: dangerLevel({ safety: { ansm: [{ list: 'B' }] }, confusions: ail.confusions }) }), new Set());
   assert.ok(toxicEdible.some(l => l === '⚠️ J’ai des sosies dangereux (2). Lisez ma fiche avant toute cueillette.'));
-  assert.ok(!toxicEdible.some(l => /à table/.test(l)));
+  assert.ok(!toxicEdible.some(l => /à table|consommée/.test(l)));
   assert.ok(bio(card('Urtica dioica'), new Set()).length <= 4, 'quatre lignes au plus');
+});
+
+test('bio : une plante du côté toxique d’une confusion a sa ligne ☠️ partout — sans ses confusions (Rencontres, Mosaïque, le paquet d’une disposition) aussi', async () => {
+  const skull = (/** @type {string[]} */ lines) => lines.filter(l => l.startsWith('☠️'));
+  // Rencontres: the card carries its verdict, never its confusions.
+  for (const [name, line] of [
+    ['Oenanthe crocata', '☠️ Plante mortelle, confondue avec Carotte sauvage. On regarde, on ne goûte pas.'],
+    ['Colchicum bulbocodium', '☠️ Plante mortelle, confondue avec Ail des ours, Poireau sauvage. On regarde, on ne goûte pas.'],
+    ['Aesculus hippocastanum', '☠️ Plante toxique, confondue avec Châtaigne. On regarde, on ne goûte pas.']
+  ]) {
+    const lines = bio(card(name, { verdict: await verdictOf(plant(name)) }), new Set());
+    assert.equal(lines[0], line, name + ' :\n' + lines.join('\n'));
+  }
+  // Cueillette prudente: its confusion line says it, never twice.
+  const oenanthe = card('Oenanthe crocata', { confusions: await lookalikesOf(plant('Oenanthe crocata')), verdict: await verdictOf(plant('Oenanthe crocata')) });
+  assert.deepEqual(skull(bio(oenanthe, new Set())), ['☠️ Je suis le sosie mortel de Carotte sauvage.']);
+});
+
+test('bio : toute la flore — aucune plante toxique (danger ou mortelle) sans sa ligne ☠️, avec ou sans ses confusions ; jamais une plante au moins « danger » sans ligne de prudence en tête', async () => {
+  const read = async (/** @type {string} */ path) => JSON.parse(await readFile(new URL(path, import.meta.url), 'utf8'));
+  const [flora, safety] = await Promise.all([read('../../data/plants.json'), read('../../data/safety.json')]);
+  const toxicKinds = new Set(['toxic-side', 'tppt', 'ansm-b', 'ansm-a']);
+  let checked = 0;
+  for (const p of flora) {
+    // What verdictOf gives (danger.test.mjs), each file read once: the confusions serve Cueillette prudente's card too.
+    const confusions = await lookalikesOf(p);
+    const v = dangerLevel({ statuses: p.statuses, safety: safety.plants[p.id] ?? null, confusions });
+    if (rank(v.level) < rank('danger')) continue;
+    checked++;
+    const own = v.reasons.filter(r => toxicKinds.has(r.kind) && rank(r.level) >= rank('danger'));
+    // Each game's card: Rencontres, Mosaïque, a free layout's deck (no confusions); Cueillette prudente (its confusions).
+    for (const c of [{ plant: p, verdict: v }, { plant: p, verdict: v, confusions }].map(more => card(p.scientificName, more))) {
+      const lines = bio(c, new Set());
+      const where = `${p.scientificName} (${c.confusions ? 'avec' : 'sans'} ses confusions) :\n${lines.join('\n')}`;
+      assert.match(lines[0], /^(☠️|⚠️|🛡️|🍽️ .*sosies dangereux)/, where);
+      if (!own.length) continue;
+      // Among the first three: what a card shows under its Wikipédia sentence (ma-deck.js).
+      assert.ok(lines.slice(0, 3).some(l => l.startsWith('☠️')), where);
+      // No confusion line on the toxic side: the ☠️ line names what it is mistaken for.
+      const side = own.find(r => r.kind === 'toxic-side');
+      const saidSide = (c.confusions || []).slice(0, 2).some(l => l.side === 'toxic');
+      if (side && !saidSide) assert.ok(lines.includes('☠️ ' + side.text + '. On regarde, on ne goûte pas.'), where);
+    }
+  }
+  assert.ok(checked > 100, 'la flore lue : ' + checked + ' plantes au moins « danger »');
 });
 
 test('cartes : balayées à droite (match) ou à gauche, reprises ; le paquet sans elles ; distances', () => {

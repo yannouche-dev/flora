@@ -16,7 +16,9 @@ import * as db from '../../core/db.js';
 import { creditText } from '../../core/credit.js';
 import { icon } from '../../core/icons.js';
 import { hideImg, showImg } from '../../core/img.js';
-import { severityOf, UNREAD_LOOKALIKES } from '../../core/lookalikes.js';
+import { UNREAD_LOOKALIKES } from '../../core/lookalikes.js';
+import { confusionChip } from '../../core/danger.js';
+import { severityChip, severityStyles } from '../../components/ui-kit.js';
 import { whenReady } from '../../core/store.js';
 import { knownCredit, knownThumb } from '../../core/thumb.js';
 import { emergency } from '../../core/poison.js';
@@ -66,7 +68,7 @@ export class MaFauxAmis extends LitElement {
     _dealing: { state: true }
   };
 
-  static styles = [ui, css`
+  static styles = [ui, severityStyles, css`
     /* It scrolls itself (a grid cell gives it its height), its background all the way down — what is out of the flow too
        (the visually hidden words: positioned, it is their box). */
     :host { display: block; position: relative; height: 100%; min-height: 0; overflow-y: auto; overscroll-behavior: contain; background: var(--gf-bg, var(--gf-surface-2));
@@ -110,12 +112,10 @@ export class MaFauxAmis extends LitElement {
     .credit { margin: 0; padding: 0 4px; font-size: 0.6875rem; line-height: 1.3; color: var(--gf-text-muted); overflow-wrap: anywhere; }
     .tag { display: inline-flex; align-items: center; gap: 4px; justify-self: start; padding: 2px 8px; border-radius: var(--gf-radius-pill); font-size: 0.75rem; font-weight: 700;
       background: var(--gf-surface-2); color: var(--gf-text); }
-    .tag.severe { background: color-mix(in srgb, var(--gf-danger) 14%, var(--gf-surface)); color: var(--gf-danger); }
-    /* The warning colour, a little toward the text's: 4.5:1 on its tint, light or dark. */
-    .tag.mild { background: var(--gf-warn-bg); color: color-mix(in srgb, var(--gf-warn) 78%, var(--gf-text)); }
+    /* The look-alike's tag is its chip (ui-kit severityStyles: the colour of the answer's), its words whole on a narrow card. */
+    .tag.sev-chip { white-space: normal; }
     .yours { font-size: 0.75rem; font-weight: 600; color: var(--gf-text-muted); }
-    figure.toxic .pick { border-color: color-mix(in srgb, var(--gf-warn) 60%, var(--gf-border)); }
-    figure.toxic.severe .pick { border-color: color-mix(in srgb, var(--gf-danger) 65%, var(--gf-border)); }
+    figure.toxic .pick { border-color: color-mix(in srgb, var(--gf-danger) 65%, var(--gf-border)); }
     figure.chosen .pick { box-shadow: 0 0 0 3px color-mix(in srgb, var(--gf-text) 18%, transparent); }
 
     .big { justify-self: center; min-height: 52px; min-width: min(100%, 260px); padding: 12px 28px; gap: 10px; border-radius: var(--gf-radius-pill); font-size: 1.0625rem; }
@@ -306,14 +306,16 @@ export class MaFauxAmis extends LitElement {
     const rec = this._plants.get(p.taxon);
     const found = rec ? knownThumb(rec) : null;
     const url = found && !this.#broken.has(found) ? found : null, credit = url ? knownCredit(rec) : null;
-    const done = card.answer != null, sev = severityOf(card.pair), severe = sev.danger ? 'severe' : 'mild';
+    // The look-alike's tag is the answer's chip (core/danger.js: the toxic side of a confusion is a danger at least,
+    // « mortel » deadly): one word, one colour, one icon on the card.
+    const done = card.answer != null, chip = confusionChip(card.pair, 'toxic');
     const failed = (/** @type {Event} */ e) => { hideImg(e); if (url) this.#broken.add(url); this.requestUpdate(); };
     const body = html`<span class="photo">${url ? html`<img src=${url} alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer" @error=${failed} @load=${showImg} />` : nothing}<span class="ph" aria-hidden="true">${icon('leaf-fill')}</span></span>
       <span class="name">${p.label}</span>${rec?.scientificName ? html`<span class="sci">${rec.scientificName}</span>` : nothing}`;
-    return html`<figure class="${done ? p.side : ''} ${done && p.side === 'toxic' ? severe : ''} ${card.answer === p.taxon ? 'chosen' : ''}">
+    return html`<figure class="${done ? p.side : ''} ${card.answer === p.taxon ? 'chosen' : ''}">
       ${card.clue && !done ? html`<button class="pick" type="button" @click=${() => this.#choose(at, p.taxon)}>${body}</button>` : html`<div class="pick">${body}</div>`}
       ${done ? (p.side === 'toxic'
-        ? html`<span class="tag ${severe}">${icon('exclamation-triangle-fill')} Faux ami · ${sev.tag}</span>`
+        ? html`<span class="tag sev-chip ${chip.level}">${icon(chip.level === 'warn' ? 'exclamation-triangle-fill' : 'exclamation-octagon-fill')} Faux ami · ${chip.word}</span>`
         : html`<span class="tag">Plante cherchée</span>`) : nothing}
       ${card.answer === p.taxon ? html`<span class="yours">Votre choix</span>` : nothing}
       ${credit ? html`<figcaption class="credit">Photo : ${creditText(credit)}</figcaption>` : nothing}
@@ -325,12 +327,12 @@ export class MaFauxAmis extends LitElement {
    * plants, the part mistaken, the sources; on. @param {Card} card @param {Card[]} cards
    */
   #answer(card, cards) {
-    const sev = severityOf(card.pair), more = cards.some(k => k.answer == null);
+    const more = cards.some(k => k.answer == null);
     return html`<div class="answer ${card.right ? 'right' : 'wrong'}">
       <p class="verdict" tabindex="-1">${icon(card.right ? 'check-circle-fill' : 'x-lg')} <strong>${card.clue ? (card.right ? 'Bien vu' : 'Raté') : 'Bonne décision'}</strong>${
         card.clue ? fr(` : cet indice décrit ${card.clue.label}.`) : fr(' : sans critère sûr, on ne cueille pas.')}</p>
       <dl class="facts">
-        <div><dt>${fr('Faux ami :')}</dt><dd>${card.toxic.label} <span class="tag ${sev.danger ? 'severe' : 'mild'}">${sev.tag}</span>${card.pair.severityFrom === 'tppt'
+        <div><dt>${fr('Faux ami :')}</dt><dd>${card.toxic.label} ${severityChip(confusionChip(card.pair, 'toxic'))}${card.pair.severityFrom === 'tppt'
           ? html`<span class="from">${fr('(niveau le plus haut de la base TPPT d’Agroscope, « très fortement toxique »)')}</span>` : nothing}</dd></div>
         ${card.also.length ? html`<div><dt>${fr('Dans la même confusion :')}</dt><dd>${this.#also(card)}</dd></div>` : nothing}
         <div><dt>${fr('Partie confondue :')}</dt><dd>${card.pair.part}</dd></div>
@@ -366,7 +368,6 @@ export class MaFauxAmis extends LitElement {
 
   /** A pair of the recap: right or not, its two plants (their sheets), the others, the part, the criterion and whose it is. @param {Card} card */
   #row(card) {
-    const sev = severityOf(card.pair);
     const plant = (/** @type {Plant} */ p) => {
       const rec = this._plants.get(p.taxon);
       return rec?.id != null
@@ -375,7 +376,7 @@ export class MaFauxAmis extends LitElement {
     };
     return html`<li class="row ${card.right ? 'right' : 'wrong'}">
       <span class="mark">${icon(card.right ? 'check-circle-fill' : 'x-lg')}<span class="visually-hidden">${card.right ? 'Bonne réponse' : 'Raté'}</span></span>
-      <p class="who"><span class="side">${plant(card.toxic)}<span class="tag ${sev.danger ? 'severe' : 'mild'}">${sev.tag}</span></span>
+      <p class="who"><span class="side">${plant(card.toxic)}${severityChip(confusionChip(card.pair, 'toxic'))}</span>
         <span class="vs" aria-hidden="true">↔</span><span class="visually-hidden">à ne pas confondre avec</span><span class="side">${plant(card.sought)}</span></p>
       <p class="part">${fr(`Partie confondue : ${card.pair.part}`)}${card.also.length ? html` · ${fr('Dans la même confusion :')} ${this.#also(card)}` : nothing}</p>
       <p class="said">${card.clue

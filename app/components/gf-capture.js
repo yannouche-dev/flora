@@ -11,7 +11,8 @@ import {
   saveCollection, updatePlace, withEntry, withPlant, withoutPlant, entriesOf, lastEntry } from '../core/collections.js';
 import { store, StoreController } from '../core/store.js';
 import { lookalikeWarning } from '../core/lookalikes.js';
-import { harvestRisk } from '../core/alerts.js';
+import { verdictOf } from '../core/alerts.js';
+import { harvestStop } from '../core/danger.js';
 import { statusWarning } from './gf-status.js';
 import { emergency } from '../core/poison.js';
 import { ui } from '../styles/ui.js';
@@ -21,6 +22,7 @@ import { icon } from '../core/icons.js';
 import { voiceAvailable } from '../core/voice.js';
 import { takeToastSlot } from '../core/toast.js';
 import './gf-plant-pick-list.js';
+import './gf-harvest-warning.js';
 
 /** A plant tapped within this distance of an existing place joins it instead of creating a new one. */
 const JOIN_RADIUS = 30;
@@ -48,7 +50,6 @@ export class GfCapture extends LitElement {
     _query: { state: true },
     _harvestToday: { state: true },
     _confirm: { state: true },
-    _ack: { state: true },
     _busy: { state: true },
     _toast: { state: true }
   };
@@ -105,21 +106,6 @@ export class GfCapture extends LitElement {
     footer { padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--gf-border); display: flex; align-items: center; gap: 10px; }
     footer label { display: flex; align-items: center; gap: 8px; flex: 1; font-size: 0.9rem; }
     p.muted { font-size: 0.9rem; }
-    .danger {
-      margin-top: 8px;
-      padding: 10px 12px;
-      border: 1px solid var(--gf-danger);
-      border-radius: var(--gf-radius);
-      background: color-mix(in srgb, #dc2626 13%, var(--gf-surface));
-      font-size: 0.9rem;
-      line-height: 1.4;
-    }
-    .danger h3 { margin: 0 0 6px; font-size: 1rem; color: var(--gf-danger); display: flex; gap: 6px; align-items: center; }
-    .danger p { margin: 6px 0; }
-    .danger ul { margin: 4px 0; padding-left: 18px; }
-    .danger .sos a { color: inherit; }
-    .danger .ack { display: flex; gap: 8px; align-items: center; margin: 8px 0; }
-    .danger .choices { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
     .toast {
       position: fixed;
       z-index: 2000;
@@ -153,10 +139,8 @@ export class GfCapture extends LitElement {
     this._query = '';
     // Never ticked for you: a harvest is noted only when asked (and, for a toxic plant, once the warning is read).
     this._harvestToday = false;
-    /** The plant whose harvest waits for the toxicity warning to be read (alerts.js harvestRisk). @type {{ plant: any, risk: { reasons: string[], unread: boolean } } | null} */
+    /** The plant whose harvest waits for its warning to be answered (gf-harvest-warning: danger.js#harvestStop). @type {{ plant: any, verdict: import('../core/danger.js').Verdict } | null} */
     this._confirm = null;
-    /** « J’ai lu l’avertissement », ticked by the user only. */
-    this._ack = false;
     this._busy = false;
     /** @type {{ text: string, undo: () => Promise<void>, details: string, warning?: string | null, lookalike?: { toxic: boolean, text: string, unread?: boolean } | null, plantId?: number } | null} */
     this._toast = null;
@@ -241,8 +225,9 @@ export class GfCapture extends LitElement {
   }
 
   /**
-   * Records the plant here. With today's harvest (mode cueillette, box ticked), a plant our sources say is toxic — or
-   * whose toxicity data cannot be read — first shows a warning that must be answered (`confirmed`: the user chose).
+   * Records the plant here. With today's harvest (mode cueillette, box ticked), a plant our sources say is toxic, whose
+   * toxicity data cannot be read, or protected where you stand, first shows a warning that must be answered (its
+   * verdict here, core/danger.js; `confirmed`: the user chose).
    * @param {any} summaryOrPlant @param {{ harvest?: boolean }} [confirmed] the harvest the user chose after the warning
    */
   async #capture(summaryOrPlant, confirmed) {
@@ -253,10 +238,11 @@ export class GfCapture extends LitElement {
       const plant = summaryOrPlant.vernacularNames ? summaryOrPlant : await db.get('plants', summaryOrPlant.id);
       const asked = this.#store.state.harvestMode && this._harvestToday;
       if (asked && !confirmed) {
-        const risk = await harvestRisk(plant);
-        if (risk) {
-          this._ack = false;
-          this._confirm = { plant, risk };
+        // Its statuses: a search summary has none (the protection is read from the record).
+        const record = plant.statuses ? plant : await getPlant(plant.id) ?? plant;
+        const verdict = await verdictOf(record, { at: fix.coordinates });
+        if (harvestStop(verdict)) {
+          this._confirm = { plant, verdict };
           return;
         }
       }
@@ -363,26 +349,13 @@ export class GfCapture extends LitElement {
   }
 
   /**
-   * The warning before a harvest of a toxic plant (or one whose data cannot be read): what our sources say, what to
-   * do after eating it, and a choice — noted without the harvest (the default), or with it once « J’ai lu » is ticked.
+   * The warning before the harvest (gf-harvest-warning, the place editor's too): noted without the harvest (the choice
+   * offered first), or with it once « J’ai lu cet avertissement » is ticked; Annuler, back to the list.
    */
   #warning() {
     const c = /** @type {NonNullable<GfCapture['_confirm']>} */ (this._confirm);
-    const name = nameOf(c.plant);
-    const title = c.risk.unread && c.risk.reasons.length === 1 ? 'Toxicité inconnue pour le moment : récolte déconseillée' : 'Plante toxique : récolte déconseillée';
-    return html`<section class="danger" role="alertdialog" aria-labelledby="harvest-warning" aria-describedby="harvest-reasons">
-      <h3 id="harvest-warning">${icon('exclamation-octagon-fill')} ${title}</h3>
-      <p><b>${name}</b> — d’après nos sources :</p>
-      <ul id="harvest-reasons">${c.risk.reasons.map(r => html`<li>${r}</li>`)}</ul>
-      <p>Ne la consommez pas. ${emergency()}.</p>
-      <label class="ack"><input type="checkbox" .checked=${this._ack} @change=${e => { this._ack = e.target.checked; }} />
-        J’ai lu cet avertissement</label>
-      <div class="choices">
-        <button type="button" class="primary" ?disabled=${this._busy} @click=${() => this.#capture(c.plant, { harvest: false })}>Noter sans récolte</button>
-        <button type="button" ?disabled=${!this._ack || this._busy} @click=${() => this.#capture(c.plant, { harvest: true })}>Noter la récolte quand même</button>
-        <button type="button" class="link" @click=${() => { this._confirm = null; }}>Annuler</button>
-      </div>
-    </section>`;
+    return html`<gf-harvest-warning .plant=${c.plant} .verdict=${c.verdict} ?busy=${this._busy}
+      @harvest-choice=${(/** @type {CustomEvent} */ e) => { if (e.detail.choice) this.#capture(c.plant, { harvest: e.detail.choice === 'harvest' }); else this._confirm = null; }}></gf-harvest-warning>`;
   }
 
   #gps() {

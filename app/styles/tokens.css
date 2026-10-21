@@ -15,6 +15,9 @@
   --gf-accent-soft: #dcebd9;
   --gf-warn: #9a5b00;
   --gf-danger: #a3332b;
+  /* Deadly (a verdict, core/danger.js): the danger's red, filled and darker; its text on it. */
+  --gf-deadly: #7c1d17;
+  --gf-deadly-contrast: #ffffff;
 
   --gf-radius: 10px;
   --gf-radius-sm: 8px;
@@ -55,6 +58,8 @@
     --gf-accent-soft: #263a25;
     --gf-warn: #e0a54a;
     --gf-danger: #f08a80;
+    --gf-deadly: #ffb3ab;
+    --gf-deadly-contrast: #2a0906;
     --gf-shadow: none;
     --gf-shadow-float: 0 4px 16px rgb(0 0 0 / 55%);
   }

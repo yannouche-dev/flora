@@ -55,10 +55,13 @@ test('Cueillette prudente : ses avertissements de sécurité, tels qu’avant ; 
   await page.keyboard.press('ArrowLeft');
   await expect(top).toHaveAttribute('data-id', String(plantId('Conium maculatum')));
   await expect(top.locator('.bio li').first()).toHaveText('☠️ Je suis le sosie très toxique de Persil plat.');
-  await expect(top.locator('.bio')).toContainText('☠️ Liste B de l’ANSM : toxicité de la plante. On regarde, on ne goûte pas.');
-  // « Toutes »: each tile says « Attention ».
+  await expect(top.locator('.bio')).toContainText('☠️ Toxicité : très fortement toxique. On regarde, on ne goûte pas.');
+  // « Toutes »: each tile says its verdict (core/danger.js), as its sheet: the word, the colour, its reasons counted.
   await list.getByRole('tab', { name: 'Toutes' }).click();
-  await expect(list.locator('.grid .card .chip.danger')).toHaveText(['Attention · 3', 'Attention · 3']);
+  const chips = list.locator('.grid .card .sev-chip');
+  await expect(chips).toHaveText(['Sosie mortel · 3', 'Très toxique · 3']);
+  await expect(chips.first()).toHaveClass(/\bdeadly\b/);
+  await expect(chips.nth(1)).toHaveClass(/\bdanger\b/);
 });
 
 /**

@@ -9,9 +9,12 @@
 // the file each time, and a card the file no longer gives (a criterion corrected since) makes the game stale.
 // « The sources give no criterion » means what the plant sheet (gf-lookalikes) and the CI (check-confusions) mean: the
 // pair has no `tell` at all. A pair whose criteria are general (« Confusion des feuilles… ») is not dealt.
-// Never a word that a plant can be eaten: a criterion that says so is left out.
+// Never a word that a plant can be eaten: a criterion that says so is left out (lookalikes.js#edibleFilter, the one
+// filter of the plant sheet and the cards too).
 // No DOM, no network: tested under Node (tests/unit/faux-amis.test.mjs). Where a kept game stands (the card to answer,
 // a game under way): faux-amis-store.js.
+
+import { edibleFilter } from '../../core/lookalikes.js';
 
 /**
  * @typedef {import('../../core/lookalikes.js').Pair} Pair
@@ -33,8 +36,6 @@ export const SKIP = 'skip';
 /** The cards of a game, and how many of them ask whose a criterion is (the others: pairs without one). */
 export const CARDS = 6, CLUED = 4;
 
-/** A word that a plant can be eaten: never in the game. */
-const EATEN = /comestible|consomm|se mange/i;
 const SIDES = /** @type {Side[]} */ (['toxic', 'edible']);
 /** « Ail des ours : odeur d’ail… »: a plant's name, then its criterion (any space before the colon, a French one too). */
 const LABELLED = /^([^:]+?)[\s\u00a0\u202f]*:\s*([\s\S]+)$/;
@@ -54,9 +55,9 @@ export const noCriterion = pair => !(Array.isArray(pair?.tell) && pair.tell.leng
 export function cluesOf(pair) {
   /** @type {Clue[]} */
   const out = [];
-  for (const tell of Array.isArray(pair?.tell) ? pair.tell : []) {
+  for (const tell of edibleFilter({ pair }).criteria) {
     const m = LABELLED.exec(String(tell).trim());
-    if (!m || EATEN.test(tell)) continue;
+    if (!m) continue;
     const label = m[1].trim(), text = m[2].trim();
     const side = SIDES.find(s => (pair[s] || []).some(t => t.label === label));
     const t = side && pair[side].find(x => x.label === label);

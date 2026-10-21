@@ -22,7 +22,7 @@ import './gf-map.js';
 import './gf-status.js';
 import './gf-thumb.js';
 import { icon, kindIcon } from '../core/icons.js';
-import { harvestRisk } from '../core/alerts.js';
+import { askHarvest } from './gf-harvest-warning.js';
 import './gf-plant-pick-list.js';
 import './gf-place-insights.js';
 import { map3dProblem, openMap3d } from './gf-map3d.js';
@@ -674,16 +674,17 @@ export class GfSpotEditor extends LitElement {
   }
 
   /**
-   * Before a harvest of this plant is noted: when our sources say it is toxic (or cannot be read), the warning, to be
-   * answered (alerts.js harvestRisk). True when there is nothing to say, or the user confirms.
+   * Before a harvest of this plant is noted: when our sources say it is toxic, cannot be read, or that it is protected
+   * where it grows, the warning of « Noter ici » (gf-harvest-warning; the plant noted here already: « Annuler » first,
+   * « J’ai lu cet avertissement » before the harvest) — never confirm(), whose OK would note it. True when there is
+   * nothing to say, or once the user chose the harvest.
    * @param {any} entry
    */
   async #harvestAllowed(entry) {
     if (entry?.plantId == null) return true;
     const plant = await getPlant(entry.plantId);
-    const risk = await harvestRisk(plant || { id: entry.plantId, scientificName: entry.scientificName, genus: entry.scientificName.split(' ')[0] });
-    if (!risk) return true;
-    return confirm(`Plante toxique : récolte déconseillée.\n\n${entryName(entry)} — d’après nos sources :\n${risk.reasons.map(r => '• ' + r).join('\n')}\n\nNe la consommez pas. Centre antipoison : centres-antipoison.net ; 15 ou 112 en cas de détresse vitale.\n\nNoter quand même cette récolte ?`);
+    const at = this._place ? entryPosition(this._place, entry) : null;
+    return await askHarvest(plant || { id: entry.plantId, scientificName: entry.scientificName, genus: entry.scientificName.split(' ')[0] }, { at, noted: true }) === 'harvest';
   }
 
   /** @param {string} key its entry id @param {Event} event */

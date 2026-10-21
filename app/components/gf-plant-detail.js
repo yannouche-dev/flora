@@ -42,6 +42,8 @@ import * as openData from '../core/open-data.js';
 import * as usesData from '../core/uses.js';
 import { gravest, lookalikesOf, severityNote } from '../core/lookalikes.js';
 import { harvestRuleText } from '../core/regulation.js';
+import { dangerLevel, rank, reasonLine } from '../core/danger.js';
+import { severityChip, severityStyles } from './ui-kit.js';
 import { formatAltitude } from '../core/altitude.js';
 import { chartStyles, climateChart, groupColor, groupLegend, networkChart, nicheChart } from '../core/charts.js';
 import { unsafeCSS } from 'lit';
@@ -50,7 +52,7 @@ import './gf-media-viewer.js';
 import './gf-web-pane.js';
 import { registerWebPane, unregisterWebPane } from '../core/web-pane.js';
 import { notesEvents } from '../core/sheet-notes.js';
-import { alertsOf } from '../core/alerts.js';
+import { verdictOf } from '../core/alerts.js';
 import { sheetSession, setAnchorLock } from '../core/sheet-session.js';
 import { openModal } from '../core/history.js';
 import { hideImg, dropFigure, showImg } from '../core/img.js';
@@ -399,8 +401,8 @@ export class GfPlantDetail extends LitElement {
     inPane: { attribute: false },
     /** A block opened over the page (outside Flore, where there is no pane): its key and the image it starts at. */
     _paneDialog: { state: true },
-    /** The plant's alerts, as counts on the rubric icons (alerts.js). */
-    _alerts: { state: true },
+    /** The plant's verdict (core/danger.js, read by alerts.js): the Alertes rubric's badge, its count and colour. */
+    _verdict: { state: true },
     /** The sheet is wide enough for its panes beside it (else bands above and under it). */
     /** The edge shown over the whole plant pane for now (Échap or its button puts it back). */
     _maxEdge: { state: true },
@@ -426,7 +428,7 @@ export class GfPlantDetail extends LitElement {
     _failed: { state: true }
   };
 
-  static styles = [ui, map3dOptionsCss, css`
+  static styles = [ui, map3dOptionsCss, severityStyles, css`
     :host {
       display: block;
       overflow-y: auto;
@@ -734,10 +736,14 @@ export class GfPlantDetail extends LitElement {
     ${unsafeCSS(chartStyles)}
     .prudence { border: 1px solid #d97706; background: color-mix(in srgb, #f59e0b 12%, var(--gf-surface)); border-radius: var(--gf-radius); padding: 8px 12px; margin-bottom: 10px; }
     .prudence.grave { border-color: #b91c1c; background: color-mix(in srgb, #ef4444 10%, var(--gf-surface)); }
+    .prudence .verdict { margin: 0 0 6px; }
     .prudence ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
     .prudence li { display: flex; gap: 8px; align-items: baseline; font-size: 0.9rem; line-height: 1.35; }
     .prudence li svg { flex: none; color: #d97706; }
-    .prudence li.stop svg { color: #b91c1c; }
+    /* data-level, not a class: .danger is the shared stylesheet's destructive look (styles/ui.js). */
+    .prudence li[data-level='danger'] svg { color: #b91c1c; }
+    .prudence li[data-level='deadly'] svg { color: var(--gf-deadly); }
+    .prudence li[data-level='info'] svg { color: var(--gf-text-muted); }
     .prudence p { margin: 8px 0 0; }
     .prudence .sos a { color: inherit; }
     .prudence li button.link { min-height: 0; padding: 0 4px; font-size: inherit; }
@@ -921,6 +927,8 @@ export class GfPlantDetail extends LitElement {
     .rub-badge { flex: none; min-width: 18px; height: 18px; padding: 0 5px; box-sizing: border-box; border-radius: var(--gf-radius-pill); display: inline-grid; place-items: center;
       font-size: 0.7rem; font-weight: 700; color: #fff; background: var(--gf-warn, #b45309); }
     .rub-badge.danger { background: var(--gf-danger, #dc2626); }
+    .rub-badge.deadly { background: var(--gf-deadly); color: var(--gf-deadly-contrast); }
+    .rub-badge.info { background: var(--gf-text-muted); }
     @media (prefers-color-scheme: dark) { .rub-badge { color: #1d1405; } }
     .rub-toc { flex: none; width: 28px; height: 28px; min-height: 0; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: none; color: var(--gf-text-muted); cursor: pointer; }
     .rub-toc:hover, .rub-go:hover .rub-label { color: var(--gf-text); }
@@ -1000,8 +1008,8 @@ export class GfPlantDetail extends LitElement {
     /** @type {string | null} */
     this._maxEdge = sheetSession.maxEdge;
     this._said = '';
-    /** @type {{ safety: any, edible: any } | null} */
-    this._alerts = null;
+    /** @type {import('../core/danger.js').Verdict | null} */
+    this._verdict = null;
     this.panesOnly = false;
     this.subheading = false;
     /** @type {string[] | null} */
@@ -1216,7 +1224,7 @@ export class GfPlantDetail extends LitElement {
     this._focus = noFocus();
     this._open = {};
     this._failed = {};
-    this._alerts = null;
+    this._verdict = null;
     this.#requested.clear();
     this.#letGo();
     this.scrollTop = 0;
@@ -1236,7 +1244,7 @@ export class GfPlantDetail extends LitElement {
     this._plant = plant || null;
     if (!plant) return;
     this.#title();
-    alertsOf(plant).then(a => { if (!abort.signal.aborted) this._alerts = a; }, () => {});
+    verdictOf(plant).then(v => { if (!abort.signal.aborted) this._verdict = v; }, () => {});
 
     try {
       const details = await sources.details(plant, abort.signal);
@@ -1399,7 +1407,7 @@ export class GfPlantDetail extends LitElement {
     const [safety, confusions] = this.#safetyTasks(plant);
     safety.then(x => put('safety', x));
     confusions.then(x => put('confusions', x));
-    alertsOf(plant).then(a => { if (this._plant === plant) this._alerts = a; }, () => {});
+    verdictOf(plant).then(v => { if (this._plant === plant) this._verdict = v; }, () => {});
   }
 
   /** Pollen and climate at my position (asked once; later sheets of the visit reuse it). */
@@ -1852,8 +1860,15 @@ export class GfPlantDetail extends LitElement {
     return [...by.values()];
   }
 
-  /** The alerts a rubric carries (Alertes: safety; Usages: the edible plant's dangerous look-alikes). @param {string} cat */
-  #badge(cat) { return cat === 'safety' ? this._alerts?.safety : cat === blockCategory('uses') ? this._alerts?.edible : null; }
+  /**
+   * The badge of a rubric: on Alertes only, the plant's verdict (core/danger.js) — every reason counted, the confusions
+   * too, in the colour of the gravest (as its chip on the cards); none when our sources say nothing.
+   * @param {string} cat @returns {{ count: number, tone: string, text: string[] } | null}
+   */
+  #badge(cat) {
+    const v = this._verdict;
+    return cat === 'safety' && v?.reasons.length ? { count: v.reasons.length, tone: v.level, text: [v.word, ...v.reasons.map(reasonLine)] } : null;
+  }
 
   /**
    * A rubric: its header, stuck while the rubric is read — stacked with the others above and below like the
@@ -2927,7 +2942,7 @@ export class GfPlantDetail extends LitElement {
       case 'literature': return !g.literature?.items?.length;
       case 'interactions': return loaded(this._open.interactions) && !this._open.interactions?.roles?.length;
       // Prudence always says something once read (a warning, the data unavailable, or that none is known).
-      case 'uses': { const o = this._open; return isSubHidden(v, 'uses', 'safety') && !this.#wikiSections(['toxicity', 'food', 'uses']).length && loaded(o.safety) && !o.safety && !o.confusions?.length && loaded(o.wdUses) && !o.wdUses?.uses?.length && !o.wdUses?.products?.length && !o.wdUses?.dishes?.length && !o.recipes?.length && !this.#danger(ctx.plant).length; }
+      case 'uses': { const o = this._open; return isSubHidden(v, 'uses', 'safety') && !this.#wikiSections(['toxicity', 'food', 'uses']).length && loaded(o.safety) && !o.safety && !o.confusions?.length && loaded(o.wdUses) && !o.wdUses?.uses?.length && !o.wdUses?.products?.length && !o.wdUses?.dishes?.length && !o.recipes?.length && !this.#danger(ctx.plant).items.length; }
       case 'climate': return !openData.pollenOf(ctx.plant) && loaded(this._open.niche) && !this._open.niche?.points?.length;
       case 'trefle': return !ctx.loading && !trefleFacts(ctx.details).length;
       default: return false;
@@ -3353,43 +3368,61 @@ export class GfPlantDetail extends LitElement {
 
 
   /**
-   * What says to be careful with this plant, each with its source: ANSM liste B, TPPT toxicity, confusions
-   * with toxic plants (Anses), protection and harvest rules (INPN); first, a file that could not be read.
+   * The plant's verdict from what « Usages » read (core/danger.js#dangerLevel, as the badge, the cards and the harvest
+   * warning have it): the safety file's entry and the confusions, a file that could not be read said first.
    * @param {any} plant
+   */
+  #sheetVerdict(plant) {
+    const o = this._open;
+    return dangerLevel({ statuses: plant.statuses, safety: o.safety === UNREAD ? null : o.safety,
+      confusions: Array.isArray(o.confusions) ? o.confusions : [], unread: o.safety === UNREAD || o.confusions === UNREAD });
+  }
+
+  /**
+   * What says to be careful with this plant, each with its source, at its verdict's level (core/danger.js): a file
+   * that could not be read, ANSM liste B and liste A's toxic parts, TPPT toxicity, confusions with toxic plants
+   * (Anses: the edible side's in one line), protection and harvest rules, the Red List (INPN). The gravest first.
+   * @param {any} plant @returns {{ verdict: import('../core/danger.js').Verdict, items: { level: import('../core/danger.js').Level, text: unknown }[] }}
    */
   #danger(plant) {
     const o = this._open;
-    /** @type {{ level: 'stop' | 'warn', text: unknown }[]} */
+    const verdict = this.#sheetVerdict(plant);
+    /** The level the verdict gives a kind of reason (its gravest, for the confusions). @param {import('../core/danger.js').Kind} kind */
+    const levelOf = kind => verdict.reasons.filter(r => r.kind === kind).reduce((/** @type {import('../core/danger.js').Level} */ l, r) => rank(r.level) > rank(l) ? r.level : l, 'none');
+    /** @type {{ level: import('../core/danger.js').Level, text: unknown }[]} */
     const out = [];
     if (o.safety === UNREAD || o.confusions === UNREAD) {
       const what = o.safety !== UNREAD ? 'Liste des confusions indisponible' : o.confusions === UNREAD ? 'Données de toxicité et liste des confusions indisponibles' : 'Données de toxicité indisponibles';
-      out.push({ level: 'stop', text: html`<b>${what} pour le moment</b> : ne consommez aucune plante sans vérification. <button type="button" class="link" @click=${() => this.#retrySafety()}>Réessayer</button>` });
+      out.push({ level: levelOf('unread'), text: html`<b>${what} pour le moment</b> : ne consommez aucune plante sans vérification. <button type="button" class="link" @click=${() => this.#retrySafety()}>Réessayer</button>` });
     }
-    const ansm = /** @type {any[]} */ (o.safety?.ansm || []), tppt = o.safety?.tppt;
-    for (const b of ansm.filter(a => a.list === 'B')) out.push({ level: 'stop', text: html`<b>Pharmacopée française, liste B</b>${b.from ? ` (listée sous « ${b.from} sp. », genre dont elle faisait partie)` : b.genus ? ' (tout le genre)' : ''} : plante médicinale dont les effets indésirables potentiels l’emportent sur le bénéfice attendu${b.parts ? html` — partie concernée : ${b.parts}` : nothing}. <span class="src">ANSM</span>` });
-    for (const a of ansm.filter(a => a.list === 'A' && a.toxicParts)) out.push({ level: 'warn', text: html`<b>Parties toxiques</b> : ${a.toxicParts}. <span class="src">ANSM, Pharmacopée liste A</span>` });
-    // TPPT in French; the base's own words on hover (levelEn, partsEn). Level 0: listed, toxicity to humans unknown. A
-    // plant kept toxic by hand against the base (`reviewed`): its reason on hover, and the review as its source.
-    if (tppt) out.push({ level: tppt.level >= 3 ? 'stop' : 'warn', text: html`<b title=${tppt.reviewed || (tppt.levelEn ? 'TPPT : ' + tppt.levelEn : nothing)}>${tppt.level >= 2 ? 'Plante toxique' : tppt.level === 0 ? 'Toxicité pour l’humain inconnue' : 'Attention'}</b>${tppt.levelLabel && tppt.level > 0 ? ` (${tppt.levelLabel})` : ''}${tppt.parts ? html` — <span title=${tppt.partsEn ? 'TPPT : ' + tppt.partsEn : nothing}>${tppt.level >= 2 ? 'parties toxiques' : 'parties concernées'} : ${tppt.parts}</span>` : nothing}${tppt.toxins?.length ? html` ; substances : ${tppt.toxins.slice(0, 4).join(', ')}` : nothing}. <span class="src">${tppt.reviewed ? 'Genre toxique, revu à la main' : 'Agroscope, base TPPT'}</span>` });
+    const ansm = /** @type {any[]} */ (o.safety === UNREAD ? [] : [].concat(o.safety?.ansm || [])), tppt = o.safety === UNREAD ? null : o.safety?.tppt;
     // The pair's severity, on both sides: the toxic side is the dangerous plant itself, even without ANSM or TPPT data.
     const confusions = /** @type {import('../core/lookalikes.js').Lookalike[]} */ (Array.isArray(o.confusions) ? o.confusions : []);
     const toxicSide = confusions.filter(l => l.side === 'toxic'), edibleSide = confusions.filter(l => l.side === 'edible');
     const see = html` Voir « ${blockTitle('lookalikes')} ». <span class="src">Anses, Centres antipoison</span>`;
-    if (toxicSide.length) out.push({ level: 'stop', text: html`<b>Plante ${gravest(toxicSide).plant}</b>, confondue avec ${[...new Set(toxicSide.flatMap(l => l.others.map(x => x.label)))].join(', ')}.${see}` });
-    if (edibleSide.length) out.push({ level: gravest(edibleSide).danger ? 'stop' : 'warn', text: html`<b>Risque de confusion</b> avec une plante ${gravest(edibleSide).plant} : ${[...new Set(edibleSide.flatMap(l => l.others.map(x => x.label + severityNote(l.pair))))].join(', ')}.${see}` });
+    if (toxicSide.length) out.push({ level: levelOf('toxic-side'), text: html`<b>Plante ${gravest(toxicSide).plant}</b>, confondue avec ${[...new Set(toxicSide.flatMap(l => l.others.map(x => x.label)))].join(', ')}.${see}` });
+    // TPPT in French; the base's own words on hover (levelEn, partsEn). Level 0: listed, toxicity to humans unknown. A
+    // plant kept toxic by hand against the base (`reviewed`): its reason on hover, and the review as its source.
+    if (tppt) out.push({ level: levelOf('tppt'), text: html`<b title=${tppt.reviewed || (tppt.levelEn ? 'TPPT : ' + tppt.levelEn : nothing)}>${tppt.level >= 2 ? 'Plante toxique' : tppt.level === 0 ? 'Toxicité pour l’humain inconnue' : 'Attention'}</b>${tppt.levelLabel && tppt.level > 0 ? ` (${tppt.levelLabel})` : ''}${tppt.parts ? html` — <span title=${tppt.partsEn ? 'TPPT : ' + tppt.partsEn : nothing}>${tppt.level >= 2 ? 'parties toxiques' : 'parties concernées'} : ${tppt.parts}</span>` : nothing}${tppt.toxins?.length ? html` ; substances : ${tppt.toxins.slice(0, 4).join(', ')}` : nothing}. <span class="src">${tppt.reviewed ? 'Genre toxique, revu à la main' : 'Agroscope, base TPPT'}</span>` });
+    for (const b of ansm.filter(a => a.list === 'B')) out.push({ level: levelOf('ansm-b'), text: html`<b>Pharmacopée française, liste B</b>${b.from ? ` (listée sous « ${b.from} sp. », genre dont elle faisait partie)` : b.genus ? ' (tout le genre)' : ''} : plante médicinale dont les effets indésirables potentiels l’emportent sur le bénéfice attendu${b.parts ? html` — partie concernée : ${b.parts}` : nothing}. <span class="src">ANSM</span>` });
+    for (const a of ansm.filter(a => a.list === 'A' && a.toxicParts)) out.push({ level: levelOf('ansm-a'), text: html`<b>Parties toxiques</b> : ${a.toxicParts}. <span class="src">ANSM, Pharmacopée liste A</span>` });
+    if (edibleSide.length) out.push({ level: levelOf('edible-side'), text: html`<b>Risque de confusion</b> avec une plante ${gravest(edibleSide).plant} : ${[...new Set(edibleSide.flatMap(l => l.others.map(x => x.label + severityNote(l.pair))))].join(', ')}.${see}` });
     const st = plant.statuses || [];
+    const protectedIn = [...new Set(st.filter((/** @type {any} */ x) => /^P[NRD]$/.test(x.type)).map((/** @type {any} */ x) => x.area || x.label))].slice(0, 3);
+    if (protectedIn.length) out.push({ level: levelOf('protected') === 'none' ? levelOf('protected-elsewhere') : levelOf('protected'), text: html`<b>Espèce protégée</b> (${protectedIn.join(', ')}) : cueillette interdite là où elle l’est. <span class="src">INPN</span>` });
     const rule = harvestRuleText(st);
-    if (st.some((/** @type {any} */ x) => /^P[NRD]$/.test(x.type))) out.push({ level: 'stop', text: html`<b>Espèce protégée</b> (${[...new Set(st.filter((/** @type {any} */ x) => /^P[NRD]$/.test(x.type)).map((/** @type {any} */ x) => x.area || x.label))].slice(0, 3).join(', ')}) : cueillette interdite là où elle l’est. <span class="src">INPN</span>` });
-    else if (rule) out.push({ level: 'warn', text: html`<b>${rule}</b> (voir « ${blockTitle('status')} »). <span class="src">INPN</span>` });
-    // The gravest first (stable sort: the source order stays within a level).
-    return out.sort((a, b) => (a.level === 'stop' ? 0 : 1) - (b.level === 'stop' ? 0 : 1));
+    if (rule) out.push({ level: levelOf('regulated'), text: html`<b>${rule}</b> (voir « ${blockTitle('status')} »). <span class="src">INPN</span>` });
+    const red = verdict.reasons.find(r => r.kind === 'threatened');
+    if (red) out.push({ level: red.level, text: html`<b>${red.text}</b> (voir « ${blockTitle('status')} »). <span class="src">${red.source}</span>` });
+    // The gravest first (stable sort: the order above stays within a level, as the verdict's).
+    return { verdict, items: out.sort((a, b) => rank(b.level) - rank(a.level)) };
   }
 
   /** « Usages et cuisine sauvage »: safety first, then sourced uses, parts and products, dishes and recipes. @param {any} ctx */
   #uses({ plant }) {
     const o = this._open;
     const style = blockStyle(this.view, 'uses');
-    const danger = this.#danger(plant);
+    const { verdict, items: danger } = this.#danger(plant);
     const wd = o.wdUses;
     const ansmA = (/** @type {any[]} */ (o.safety?.ansm || [])).filter(a => a.list === 'A');
     const pending = html`<p class="muted">chargement…</p>`;
@@ -3401,8 +3434,10 @@ export class GfPlantDetail extends LitElement {
           || (Array.isArray(o.confusions) && o.confusions.some(l => l.side === 'toxic'));
         const none = o.safety !== undefined && o.safety !== UNREAD && Array.isArray(o.confusions) && !tox;
         if (!danger.length && !none) return nothing;
-        return html`${danger.length ? html`<div class="prudence ${danger.some(d => d.level === 'stop') ? 'grave' : ''}">
-          <ul>${danger.map(d => html`<li class=${d.level}>${icon(d.level === 'stop' ? 'exclamation-octagon-fill' : 'exclamation-triangle-fill')}<span>${d.text}</span></li>`)}</ul>
+        // The verdict's chip on top: the same word and colour as the badge of Alertes and the plant's cards.
+        return html`${danger.length ? html`<div class="prudence ${rank(verdict.level) >= rank('danger') ? 'grave' : ''}">
+          <p class="verdict">${severityChip(verdict)}</p>
+          <ul>${danger.map(d => html`<li data-level=${d.level}>${icon(rank(d.level) >= rank('danger') ? 'exclamation-octagon-fill' : 'exclamation-triangle-fill')}<span>${d.text}</span></li>`)}</ul>
           <p class="small">En cas de doute, ne la consommez pas. ${emergency()}. <span class="src">Anses</span></p>
         </div>` : nothing}${none ? html`<p class="small no-tox">Aucune donnée de toxicité dans nos sources (ANSM, TPPT) : cela ne veut pas dire qu’elle est comestible ni sans danger. En cas de doute, ne la consommez pas.</p>` : nothing}`;
       },
