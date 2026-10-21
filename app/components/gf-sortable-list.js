@@ -31,7 +31,7 @@ export class GfSortableList extends LitElement {
 
   static styles = css`
     :host { display: block; }
-    .tag { display: inline-block; margin-left: 4px; padding: 0 7px; border-radius: 999px; background: var(--gf-surface-2); color: var(--gf-text-muted); font-size: 0.7rem; font-weight: 600; white-space: nowrap; }
+    .tag { display: inline-block; margin-left: 4px; padding: 0 7px; border-radius: var(--gf-radius-pill); background: var(--gf-surface-2); color: var(--gf-text-muted); font-size: 0.7rem; font-weight: 600; white-space: nowrap; }
     ol { margin: 0; padding: 0; list-style: none; font-size: 0.88rem; display: flex; flex-direction: column; gap: 2px; }
     li { border-radius: var(--gf-radius-sm); background: var(--gf-surface); }
     .row { display: flex; align-items: center; gap: 4px; padding: 2px 4px 2px 0; border-radius: var(--gf-radius-sm); cursor: grab; user-select: none; -webkit-user-select: none; }

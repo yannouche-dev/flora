@@ -41,8 +41,8 @@ gf-map .gf-map-gl .maplibregl-canvas:focus-visible { outline: 3px solid var(--gf
   width: calc(var(--r, 6) * 2px);
   height: calc(var(--r, 6) * 2px);
   border-radius: 50%;
-  background: #e0245e;
-  border: 2px solid #ffd166;
+  background: var(--gf-kin);
+  border: 2px solid var(--gf-highlight);
   box-shadow: 0 1px 2px rgb(0 0 0 / 35%);
   cursor: pointer;
   transition: scale 0.15s ease-out;
@@ -52,7 +52,7 @@ gf-map .gf-map-gl .maplibregl-canvas:focus-visible { outline: 3px solid var(--gf
 .gf-gl-dot.gf-focus-point { background: #e11d48; border: 3px solid #fff; box-shadow: 0 0 6px rgb(225 29 72 / 80%); }
 .gf-gl-dot.gf-spread-center { background: rgb(61 74 61 / 80%); border-color: #fff; }
 .gf-gl-dot:hover, .gf-gl-dot:is(.gf-kin, .gf-lit) { scale: 1.45; z-index: 500000 !important; }
-.gf-gl-dot:is(.gf-kin, .gf-lit) { border-color: #ffd166; border-width: 3px; }
+.gf-gl-dot:is(.gf-kin, .gf-lit) { border-color: var(--gf-highlight); border-width: 3px; }
 @media (prefers-reduced-motion: reduce) { .gf-gl-dot { transition: none; } }
 
 /* (Nothing else written over the 3D map: why it is in 2D or flat, its loading, are the map's state and its thin
@@ -85,8 +85,8 @@ gf-map:not([data-renderer='3d']) .gf-map-buttons button.around3d { display: none
 .gf-o3-mk .gf-o3-head > span { position: absolute; left: 0; top: 0; translate: -50% -50%; display: grid; place-items: center; }
 .gf-o3-mk:hover .gf-o3-head, .gf-o3-mk:focus-visible .gf-o3-head { scale: calc(var(--s, 1) * 1.18); }
 .gf-o3-mk:focus-visible .gf-o3-head > span .pop, .gf-o3-mk:focus-visible .gf-o3-stack .gf-o3-n { box-shadow: var(--gf-focus, 0 0 0 3px #2f6b3a); }
-.gf-o3-mk.lit .gf-o3-stem { background: linear-gradient(to top, rgb(255 209 102 / 40%), #ffd166); width: 3px; left: -1.5px; }
-.gf-o3-mk.lit .gf-o3-foot { box-shadow: 0 0 0 2px #e0245e, 0 1px 3px rgb(0 0 0 / 45%); }
+.gf-o3-mk.lit .gf-o3-stem { background: linear-gradient(to top, rgb(255 209 102 / 40%), var(--gf-highlight)); width: 3px; left: -1.5px; }
+.gf-o3-mk.lit .gf-o3-foot { box-shadow: 0 0 0 2px var(--gf-kin), 0 1px 3px rgb(0 0 0 / 45%); }
 .gf-o3-mk.mine .pop { box-shadow: 0 1px 5px rgb(0 0 0 / 45%), 0 0 0 2px #fff, 0 0 0 4px #f5c542; }
 /* A group: a stack of its photos, fanned, its count on top (never a bubble). */
 .gf-o3-mk .gf-o3-stack { position: absolute; left: 0; top: 0; width: 0; height: 0; }
@@ -121,7 +121,7 @@ gf-map:not([data-renderer='3d']) .gf-map-buttons button.around3d { display: none
 .gf-o3-bar[hidden] { display: none; }
 .gf-o3-bar > * { pointer-events: auto; }
 gf-map:has(.gf-point-card) .gf-o3-bar { visibility: hidden; }
-.gf-o3-chip { display: inline-flex; gap: 6px; align-items: center; min-height: 38px; padding: 6px 14px; border-radius: 999px; border: 0; cursor: pointer;
+.gf-o3-chip { display: inline-flex; gap: 6px; align-items: center; min-height: 38px; padding: 6px 14px; border-radius: var(--gf-radius-pill); border: 0; cursor: pointer;
   background: color-mix(in srgb, var(--gf-surface, #fff) 94%, transparent); color: var(--gf-text, #1f2a1f); box-shadow: 0 4px 16px rgb(0 0 0 / 28%); font: inherit; }
 .gf-o3-chip b { color: var(--gf-accent, #2f6b3a); font-variant-numeric: tabular-nums; }
 .gf-o3-chip:focus-visible, .gf-o3-panel button:focus-visible { outline: none; box-shadow: var(--gf-focus, 0 0 0 3px #2f6b3a); }
@@ -143,7 +143,7 @@ gf-map:has(.gf-point-card) .gf-o3-bar { visibility: hidden; }
 .gf-o3-panel .gf-o3-count { margin: 0; min-height: 1.3em; font-size: 0.8rem; color: var(--gf-text-muted, #5b6b5b); text-align: center; display: flex; gap: 6px; align-items: center; justify-content: center; }
 .gf-o3-panel .gf-o3-row { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; justify-content: center; }
 .gf-o3-panel .gf-o3-row small { font-size: 0.72rem; color: var(--gf-text-muted, #5b6b5b); }
-.gf-o3-toggle { display: inline-flex; gap: 6px; align-items: center; min-height: 32px; padding: 2px 10px 2px 8px; border-radius: 999px; cursor: pointer;
+.gf-o3-toggle { display: inline-flex; gap: 6px; align-items: center; min-height: 32px; padding: 2px 10px 2px 8px; border-radius: var(--gf-radius-pill); cursor: pointer;
   border: 1px solid color-mix(in srgb, var(--gf-text-muted, #5b6b5b) 30%, transparent); font-size: 0.85rem; }
 .gf-o3-toggle:has(input:checked) { border-color: var(--gf-accent, #2f6b3a); background: color-mix(in srgb, var(--gf-accent, #2f6b3a) 12%, transparent); }
 .gf-o3-toggle input { margin: 0; accent-color: var(--gf-accent, #2f6b3a); }

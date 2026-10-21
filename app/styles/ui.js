@@ -59,7 +59,7 @@ export const ui = css`
   :where(.primary.large) { min-height: 48px; padding: 12px 22px; font-size: 1rem; }
 
   :where(.danger, a.danger) { color: var(--gf-danger); border-color: color-mix(in srgb, var(--gf-danger) 45%, var(--gf-border)); }
-  :where(.danger:hover) { background: color-mix(in srgb, var(--gf-danger) 10%, var(--gf-surface)); }
+  :where(.danger:hover) { background: var(--gf-danger-bg); }
 
   :where(.link, a.link) {
     min-height: 0;

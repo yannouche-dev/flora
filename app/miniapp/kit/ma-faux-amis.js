@@ -112,7 +112,7 @@ export class MaFauxAmis extends LitElement {
       background: var(--gf-surface-2); color: var(--gf-text); }
     .tag.severe { background: color-mix(in srgb, var(--gf-danger) 14%, var(--gf-surface)); color: var(--gf-danger); }
     /* The warning colour, a little toward the text's: 4.5:1 on its tint, light or dark. */
-    .tag.mild { background: color-mix(in srgb, var(--gf-warn) 12%, var(--gf-surface)); color: color-mix(in srgb, var(--gf-warn) 78%, var(--gf-text)); }
+    .tag.mild { background: var(--gf-warn-bg); color: color-mix(in srgb, var(--gf-warn) 78%, var(--gf-text)); }
     .yours { font-size: 0.75rem; font-weight: 600; color: var(--gf-text-muted); }
     figure.toxic .pick { border-color: color-mix(in srgb, var(--gf-warn) 60%, var(--gf-border)); }
     figure.toxic.severe .pick { border-color: color-mix(in srgb, var(--gf-danger) 65%, var(--gf-border)); }

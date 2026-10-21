@@ -86,12 +86,12 @@ export class MaDeck extends LitElement {
       background: #b91c1c; color: #fff; font-size: 0.8rem; font-weight: 700; }
     /* A plant already loved, brought back on top (touched on the map or in the list around). */
     .loved-badge { position: absolute; top: 12px; left: 12px; z-index: 1; display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: var(--gf-radius-pill);
-      background: #e0245e; color: #fff; font-size: 0.8rem; font-weight: 700; box-shadow: 0 0 0 2px #ffd166, 0 2px 8px rgb(0 0 0 / 35%); pointer-events: none; }
+      background: var(--gf-kin); color: #fff; font-size: 0.8rem; font-weight: 700; box-shadow: 0 0 0 2px var(--gf-highlight), 0 2px 8px rgb(0 0 0 / 35%); pointer-events: none; }
     .actions { display: flex; gap: 22px; align-items: center; }
     .round { width: 62px; height: 62px; border-radius: 50%; border: 0; display: grid; place-items: center; font-size: 1.6rem; cursor: pointer; background: var(--gf-surface);
       box-shadow: 0 6px 16px rgb(0 0 0 / 18%); transition: transform 0.12s; }
     .round:active { transform: scale(0.92); }
-    .round.pass { color: #ef4444; } .round.like { color: #e0245e; } .round.info { width: 46px; height: 46px; font-size: 1.1rem; color: var(--gf-text-muted); }
+    .round.pass { color: #ef4444; } .round.like { color: var(--gf-kin); } .round.info { width: 46px; height: 46px; font-size: 1.1rem; color: var(--gf-text-muted); }
     .round.like.avoid { color: #b91c1c; }
     .round:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     .round.undo { width: 46px; height: 46px; font-size: 1.05rem; color: #d4a017; }
@@ -111,7 +111,7 @@ export class MaDeck extends LitElement {
       background: rgb(0 0 0 / 55%); color: #fff; font-size: 0.68rem; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; }
     .deck:focus-visible { outline: none; border-radius: 20px; box-shadow: var(--gf-focus); }
     /* A match after the first: a heart flies off the deck. */
-    .burst { position: absolute; z-index: 5; left: 50%; top: 45%; font-size: 4rem; color: #e0245e; pointer-events: none; animation: burst 0.9s ease-out forwards; }
+    .burst { position: absolute; z-index: 5; left: 50%; top: 45%; font-size: 4rem; color: var(--gf-kin); pointer-events: none; animation: burst 0.9s ease-out forwards; }
     @keyframes burst { from { transform: translate(-50%, -50%) scale(0.4); opacity: 0; } 30% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); } to { transform: translate(-50%, -120%) scale(1); opacity: 0; } }
     /* Discovering (Rencontres), in its column beside the map. */
     :host([guided]) .deck { max-height: calc(100dvh - 320px); min-height: 300px; }

@@ -89,7 +89,7 @@ export class GfBlockPicker extends LitElement {
     ol.crumbs li { display: inline-flex; align-items: center; gap: 4px; min-width: 0; }
     ol.crumbs li + li::before { content: '›'; }
     ol.crumbs button { all: unset; cursor: pointer; color: var(--gf-accent); border-radius: 4px; }
-    ol.crumbs button:focus-visible { outline: 2px solid var(--gf-focus); outline-offset: 1px; }
+    ol.crumbs button:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     ol.crumbs [aria-current] { color: var(--gf-text); font-weight: 600; }
     h2 { margin: 4px 16px 8px; font-size: 1.1rem; outline: none; }
     .body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 16px 16px; display: grid; gap: 10px; align-content: start; }
@@ -98,7 +98,7 @@ export class GfBlockPicker extends LitElement {
     .tile { all: unset; box-sizing: border-box; cursor: pointer; display: grid; grid-template-columns: auto 1fr auto; gap: 2px 12px; align-items: center; padding: 10px 12px;
       border: 1px solid var(--gf-border); border-radius: var(--gf-radius-lg, 14px); background: var(--gf-surface); }
     .tile:hover { border-color: var(--gf-accent); }
-    .tile:focus-visible { outline: 2px solid var(--gf-focus); outline-offset: 2px; }
+    .tile:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     .tile[aria-pressed='true'] { border-color: var(--gf-accent); box-shadow: 0 0 0 2px var(--gf-accent); }
     .tile > .bi { grid-row: span 3; font-size: 1.6rem; color: var(--gf-accent); }
     .tile b { font-size: 0.95rem; }
@@ -111,7 +111,7 @@ export class GfBlockPicker extends LitElement {
     .tiles.small .tile { padding: 8px 12px; }
     .tiles.small .tile > .bi { font-size: 1.2rem; grid-row: auto; }
     .chips { display: flex; flex-wrap: wrap; gap: 4px; grid-column: 2; }
-    .chips span { font-size: 0.74rem; padding: 1px 8px; border-radius: var(--gf-radius-pill, 999px); background: var(--gf-accent-soft); color: var(--gf-text); }
+    .chips span { font-size: 0.74rem; padding: 1px 8px; border-radius: var(--gf-radius-pill); background: var(--gf-accent-soft); color: var(--gf-text); }
     .card { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-lg, 14px); }
     .card .top { display: flex; align-items: center; gap: 8px; }
     .card .top .bi { font-size: 1.3rem; color: var(--gf-accent); }
@@ -122,7 +122,7 @@ export class GfBlockPicker extends LitElement {
     .row { all: unset; box-sizing: border-box; cursor: pointer; display: grid; grid-template-columns: 1fr auto; gap: 0 8px; align-items: center; padding: 10px 12px;
       border: 1px solid var(--gf-border); border-radius: 12px; }
     .row:hover { border-color: var(--gf-accent); }
-    .row:focus-visible { outline: 2px solid var(--gf-focus); outline-offset: 2px; }
+    .row:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     .row b { display: flex; align-items: center; gap: 6px; font-size: 0.92rem; }
     .row .dot { color: var(--gf-accent); font-size: 0.7rem; }
     .row small { grid-column: 1; color: var(--gf-text-muted); font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -139,7 +139,7 @@ export class GfBlockPicker extends LitElement {
     .switch::after { content: ''; position: absolute; top: 3px; left: 3px; width: 20px; height: 20px; border-radius: 50%; background: var(--gf-surface); box-shadow: 0 1px 3px rgb(0 0 0 / .3); transition: left .15s; }
     .switch[aria-checked='true'] { background: var(--gf-accent); }
     .switch[aria-checked='true']::after { left: 21px; }
-    .switch:focus-visible { outline: 2px solid var(--gf-focus); outline-offset: 2px; }
+    .switch:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     .slider { display: flex; align-items: center; gap: 10px; }
     .slider input { flex: 1; accent-color: var(--gf-accent); }
     .slider output { min-width: 4.5em; text-align: right; font-variant-numeric: tabular-nums; font-size: 0.85rem; }

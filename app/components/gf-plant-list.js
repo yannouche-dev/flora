@@ -156,7 +156,7 @@ export class GfPlantList extends LitElement {
       font-weight: 700;
       line-height: 1.1;
       padding: 1px 6px;
-      border-radius: 999px;
+      border-radius: var(--gf-radius-pill);
       background: var(--gf-accent);
       color: var(--gf-accent-contrast);
     }

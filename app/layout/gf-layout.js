@@ -152,7 +152,7 @@ export class GfLayout extends LitElement {
     .presets a { display: grid; gap: 2px; padding: 8px 10px; border-radius: 8px; color: var(--gf-text); text-decoration: none; }
     .presets a:hover, .presets a:focus-visible { background: var(--gf-surface-2); }
     .presets a small { color: var(--gf-text-muted); }
-    .remarks { flex: none; margin: 0; padding: 6px 14px; font-size: 0.85rem; background: color-mix(in srgb, var(--gf-warn, #b45309) 12%, var(--gf-surface)); }
+    .remarks { flex: none; margin: 0; padding: 6px 14px; font-size: 0.85rem; background: var(--gf-warn-bg); }
     .body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
     /* More rows than the height holds (their least heights): the page of cells scrolls, never squeezes them. */
     .grid { flex: 1; min-height: 0; display: flex; overflow-y: auto; }
@@ -174,7 +174,7 @@ export class GfLayout extends LitElement {
     .cell-head .cell-acts .icon-btn { width: 30px; height: 30px; min-height: 0; padding: 0; font-size: 0.85rem; }
     /* Its group (several in the layout): its letter in its colour. */
     .cell-head .cell-group { flex: none; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; display: inline-grid; place-items: center;
-      border-radius: 999px; font-size: 0.7rem; font-weight: 700; color: var(--gf-accent-contrast); background: var(--gf-accent); }
+      border-radius: var(--gf-radius-pill); font-size: 0.7rem; font-weight: 700; color: var(--gf-accent-contrast); background: var(--gf-accent); }
     .cell-head .cell-group[data-group='b'] { color: #fff; background: #1d4ed8; }
     .cell-head .cell-group[data-group='c'] { color: #fff; background: #6d28d9; }
     /* How a cell is wired (while building): a chip a link, lit when it follows the others. */

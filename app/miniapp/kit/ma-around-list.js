@@ -91,7 +91,7 @@ export class MaAroundList extends LitElement {
     /* Rencontres: the plant chosen, named over the deck when it is not the card on top (the map pins it). */
     .chosen-line { display: flex; align-items: center; justify-content: center; gap: 6px; margin: -6px auto 8px; max-width: 100%; font-size: 0.82rem;
       color: var(--gf-text-muted); white-space: nowrap; overflow: hidden; }
-    .chosen-line .bi { flex: none; color: #e0245e; }
+    .chosen-line .bi { flex: none; color: var(--gf-kin); }
     .chosen-line span { overflow: hidden; text-overflow: ellipsis; }
     .chosen-line b { color: var(--gf-text); }
     /* What is said aloud: out of the flow at the top (not a line of scroll under the list). */
@@ -109,7 +109,7 @@ export class MaAroundList extends LitElement {
     .card:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     .card[aria-current='true'] { box-shadow: 0 0 0 3px var(--gf-accent); }
     /* The match chosen (its photos shown): the map's pink ring. */
-    .card.chosen { box-shadow: 0 0 0 3px #e0245e, var(--gf-shadow); }
+    .card.chosen { box-shadow: 0 0 0 3px var(--gf-kin), var(--gf-shadow); }
     .card .ph { position: relative; width: 100%; aspect-ratio: 4 / 3; background: var(--gf-surface-2); overflow: hidden; }
     .card img { width: 100%; height: 100%; object-fit: cover; display: block; }
     .card .txt { padding: 8px 10px 10px; display: grid; gap: 2px; }
@@ -140,7 +140,7 @@ export class MaAroundList extends LitElement {
     .unmatch { position: absolute; z-index: 3; right: 6px; bottom: 6px; min-height: 28px; padding: 2px 10px; border-radius: var(--gf-radius-pill); border: 1px solid var(--gf-border); background: var(--gf-surface); font: inherit; font-size: 0.75rem; display: inline-flex; gap: 4px; align-items: center; cursor: pointer; }
     .views { display: flex; margin: 0 auto 14px; width: fit-content; }
     .views button[aria-selected='true'] { background: var(--gf-accent); color: var(--gf-accent-contrast); }
-    .card .heart { position: absolute; z-index: 2; right: 8px; top: 8px; color: #e0245e; font-size: 1.2rem; filter: drop-shadow(0 1px 2px rgb(0 0 0 / 40%)); }
+    .card .heart { position: absolute; z-index: 2; right: 8px; top: 8px; color: var(--gf-kin); font-size: 1.2rem; filter: drop-shadow(0 1px 2px rgb(0 0 0 / 40%)); }
     .empty { text-align: center; padding: 30px 10px; }
     .deck-end { text-align: center; padding: 30px 10px; display: grid; gap: 6px; justify-items: center; }
     .deck-end p { margin: 0; }

@@ -213,7 +213,7 @@ export class GfMediaViewer extends LitElement {
     .zoombar button:disabled { opacity: 0.4; cursor: default; }
     .zoombar .pct { min-width: 92px; }
     .zoombar .lock { font-size: 0.85rem; opacity: 0.75; }
-    .zoombar .lock[aria-pressed='true'] { opacity: 1; color: #ffd166; }
+    .zoombar .lock[aria-pressed='true'] { opacity: 1; color: var(--gf-highlight); }
     /* The map comes in softly. */
     .minimap { animation: map-in 0.25s ease-out; }
     @keyframes map-in { from { opacity: 0; transform: translateX(8px); } }

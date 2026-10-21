@@ -123,7 +123,7 @@ export class GfSheetMap extends LitElement {
     .actions .button, .actions button { font-size: 0.85rem; min-height: 36px; padding: 4px 12px; }
     .actions .near-note { flex-basis: 100%; font-size: 0.75rem; color: var(--gf-text-muted); }
     /* The plant's points (its observations, whatever their source): its marker's pink and gold ring. */
-    .scope button i.obs, .chip i.obs { border: 0; background: radial-gradient(circle at 35% 30%, #ff6f9c, #e0245e 75%); box-shadow: 0 0 0 1.5px #ffd166; }
+    .scope button i.obs, .chip i.obs { border: 0; background: radial-gradient(circle at 35% 30%, #ff6f9c, var(--gf-kin) 75%); box-shadow: 0 0 0 1.5px var(--gf-highlight); }
     .hint-once.gestures { margin-top: 6px; }
     /* What the map can show: how to frame it, how far around me, which data. */
     .scope { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 8px; align-items: center; margin-top: 8px; font-size: 0.78rem; }

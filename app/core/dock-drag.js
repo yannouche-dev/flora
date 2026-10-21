@@ -42,7 +42,7 @@ export function pressDock(e, opts) {
     ghost.className = 'dock-ghost';
     ghost.textContent = opts.label;
     ghost.setAttribute('aria-hidden', 'true');
-    ghost.style.cssText = 'position:fixed;z-index:2000;pointer-events:none;padding:4px 10px;border-radius:999px;background:var(--gf-accent,#2e7d32);color:#fff;font:600 0.8rem system-ui,sans-serif;box-shadow:0 6px 18px rgb(0 0 0/30%);white-space:nowrap;transform:translate(12px,12px)';
+    ghost.style.cssText = 'position:fixed;z-index:2000;pointer-events:none;padding:4px 10px;border-radius:var(--gf-radius-pill);background:var(--gf-accent,#2e7d32);color:#fff;font:600 0.8rem system-ui,sans-serif;box-shadow:0 6px 18px rgb(0 0 0/30%);white-space:nowrap;transform:translate(12px,12px)';
     const hint = document.createElement('div');
     hint.className = 'drop-hint';
     hint.style.cssText = 'position:fixed;z-index:1999;pointer-events:none;border:2px solid var(--gf-accent,#2e7d32);background:color-mix(in srgb,var(--gf-accent,#2e7d32) 16%,transparent);border-radius:6px;transition:all 0.08s ease-out;display:none';

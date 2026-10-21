@@ -114,7 +114,7 @@ export class GfMapPanel extends LitElement {
       border-radius: var(--gf-radius-sm); background: var(--gf-surface-2); font-size: 0.85rem; }
     .areas a { color: var(--gf-accent); font-weight: 600; }
     .areas small { color: var(--gf-text-muted); }
-    .legend i.obs { border: 0; background: radial-gradient(circle at 35% 30%, #ff6f9c, #e0245e 75%); box-shadow: 0 0 0 1.5px #ffd166; }
+    .legend i.obs { border: 0; background: radial-gradient(circle at 35% 30%, #ff6f9c, var(--gf-kin) 75%); box-shadow: 0 0 0 1.5px var(--gf-highlight); }
     .legend i.outline { background: transparent; border: 2px solid #a3e68a; box-shadow: 0 1px 0 rgb(0 0 0 / 30%); }
   `];
 
