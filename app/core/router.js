@@ -2,7 +2,6 @@
 // Hash router: deep links work on GitHub Pages without server rewrites.
 // history.js first: it marks each new entry with its depth before the app routes.
 import './history.js';
-import { GRIDS } from '../layout/gf-builder-grids.js';
 
 /**
  * @typedef {{ name: 'search' } | { name: 'plant', id: number, pane: string | null, at: number | null } | { name: 'settings' } | { name: 'legal' } | { name: 'collections', open: string | null, plant: number | null }
@@ -83,12 +82,12 @@ export function parse(hash) {
   // « Disposition libre » (app/layout): #/layout/<layout>?<state> — the layout as written (app/layout/grammar.js),
   // its live state (plant, scope, search) read by the layout itself (app/layout/state.js).
   // « Créer une app » (app/layout/gf-builder.js): #/builder[/<grid>][?g=<layout>&<state>] — the free layout being built
-  // (g=: its text, grammar.js; else the grid named: gf-builder-grids.js; neither: the builder's start), and the layout's
-  // live state beside it (p, at, r, q…: state.js), as #/layout has it.
+  // (g=: its text, grammar.js; else the grid named, resolved by the builder: gf-builder-grids.js#builderSpec; neither:
+  // the builder's start), and the layout's live state beside it (p, at, r, q…: state.js), as #/layout has it.
   const builder = /^builder(?:\/([a-z][a-z0-9-]{0,23}))?$/.exec(path);
   if (builder) {
     const grid = builder[1] ?? null;
-    const spec = params.get('g') ?? GRIDS.find(g => g.id === grid)?.spec ?? null;
+    const spec = params.get('g');
     return { name: 'builder', grid, spec, search: search.split('&').filter(p => p && !/^g=/.test(p)).join('&') };
   }
   const layout = /^layout(?:\/(.*))?$/s.exec(path);

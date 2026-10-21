@@ -3,7 +3,8 @@
 // from plant to plant, from the start when it was started here); and what it keeps on the device.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { countOf, groupsOf, keptWalks, recapOf, shortName, walkDone, walkOn, walkUnderWay, KEY, LIST, DONE } from '../../app/miniapp/kit/trail-store.js';
+import { countOf, groupsOf, keptWalks, shortName, walkDone, walkOn, walkUnderWay, KEY, LIST, DONE } from '../../app/miniapp/kit/trail-store.js';
+import { recapOf } from '../../app/miniapp/kit/trail-recap.js';
 import { writeJSON } from '../../app/core/prefs.js';
 
 /** A walk started here at 9:00, with plants at their own places. @param {any[]} plants */

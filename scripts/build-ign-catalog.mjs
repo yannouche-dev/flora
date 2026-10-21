@@ -18,7 +18,7 @@
 //                                                        (deploy: the committed copy is published)
 //   node scripts/build-ign-catalog.mjs --check file      checks a catalogue file (exit 1 when unusable)
 // A document is refused (nothing written) when it reads as fewer than MIN_LAYERS layers (default 50), when the app's own
-// map layers (app/core/ign.js) are missing from it, or when it lost more than MAX_DROP (default 0.3) of the layers of
+// map layers (app/core/ign-layers.js) are missing from it, or when it lost more than MAX_DROP (default 0.3) of the layers of
 // the copy committed: a broken or truncated answer never replaces a good catalogue.
 // Size: descriptions are kept up to ABOUT_MAX characters, cut shorter (400, 300, 240) while the file is over
 // SIZE_BUDGET bytes (default 600 kB; the service worker precaches it, every phone downloads it).
@@ -114,8 +114,8 @@ async function build() {
   const layers = parseCapabilities(xml);
 
   const problems = [];
-  // The app's own layers (backgrounds and overlays of app/core/ign.js) are each in the catalogue.
-  const own = [...readFileSync(new URL('../app/core/ign.js', import.meta.url), 'utf8').matchAll(/\{ id: '([^']+)', format: 'image\//g)].map(m => m[1]);
+  // The app's own layers (backgrounds and overlays of app/core/ign-layers.js) are each in the catalogue.
+  const own = [...readFileSync(new URL('../app/core/ign-layers.js', import.meta.url), 'utf8').matchAll(/\{ id: '([^']+)', format: 'image\//g)].map(m => m[1]);
   const ids = new Set(layers.map(l => l.id));
   const missing = own.filter(id => !ids.has(id));
   if (missing.length) problems.push(`layers of the app missing: ${missing.join(', ')}`);

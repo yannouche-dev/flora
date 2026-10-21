@@ -20,8 +20,8 @@ const AGENT = 'GeoFlora api-health (https://github.com/yannouche-dev/flora; dail
 const TAXON = 'Urtica dioica';
 const [LON, LAT] = [4.8357, 45.764];
 
-/** The WMTS layers of the app's maps (app/core/ign.js), read from its source: each must still be in the catalogue. */
-const IGN_LAYERS = [...readFileSync(new URL('../app/core/ign.js', import.meta.url), 'utf8')
+/** The WMTS layers of the app's maps (app/core/ign-layers.js), read from its source: each must still be in the catalogue. */
+const IGN_LAYERS = [...readFileSync(new URL('../app/core/ign-layers.js', import.meta.url), 'utf8')
   .matchAll(/\{ id: '([^']+)', format: 'image\//g)].map(m => m[1]);
 
 /** @param {Record<string, string | number>} p */

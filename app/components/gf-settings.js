@@ -21,6 +21,7 @@ import {
 import './gf-sortable-list.js';
 import { ui } from '../styles/ui.js';
 import { discoverEvents, discovering, finishDiscover, restartDiscover } from '../core/discover.js';
+import { forgetHints } from '../core/hints.js';
 import { openView } from '../core/history.js';
 import { mapSettings, mapSettingsEvents, resetMapSettings, setMapSettings } from '../core/map-settings.js';
 import { hasWebGL2 } from '../core/maplibre.js';
@@ -537,7 +538,7 @@ export class GfSettings extends LitElement {
       <p class="muted">${on ? 'La découverte guidée est en cours : les onglets arrivent à mesure qu’ils servent, avec une astuce à la fois.'
         : 'Tous les outils sont là. La découverte guidée (Découvrir, une astuce à la fois, les onglets qui arrivent un à un) peut être refaite.'}</p>
       <p>${on ? html`<button class="secondary" type="button" @click=${() => finishDiscover()}>Tout montrer maintenant</button>`
-        : html`<button class="secondary" type="button" @click=${() => { restartDiscover(); openView('#/discover'); }}>Recommencer la découverte</button>`}</p>
+        : html`<button class="secondary" type="button" @click=${() => { restartDiscover(); forgetHints(); openView('#/discover'); }}>Recommencer la découverte</button>`}</p>
       ${this.#showSteps()}`;
   }
 

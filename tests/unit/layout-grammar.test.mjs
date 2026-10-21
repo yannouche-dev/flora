@@ -10,6 +10,7 @@ import { cellIcon, cellMark, cellName, COMPONENTS, distanceText, menuLooks, name
 import { cleanText, liveSearch, readLive, readQuery } from '../../app/layout/state.js';
 import { PRESETS } from '../../app/layout/presets.js';
 import { href, parse as route } from '../../app/core/router.js';
+import { builderSpec } from '../../app/layout/gf-builder-grids.js';
 import { fromHash } from '../../app/core/query.js';
 import { random } from './support/random.mjs';
 
@@ -322,8 +323,12 @@ test('le routeur : « Créer une app », #/builder[/<grille>][?g=<disposition>&<
   const url = href.builder(spec, 'p=1&at=48.85,2.35');
   assert.equal(url, '#/builder?g=[map(layers%3Dznieff%2Bn2000,lieu%3DA%26B),slot]&p=1&at=48.85,2.35', 'crochets, parenthèses et @ lisibles ; = + & encodés');
   assert.deepEqual(route(url), { name: 'builder', grid: null, spec, search: 'p=1&at=48.85,2.35' });
-  // The old links: a grid by its name; g= wins.
-  assert.deepEqual(route('#/builder/trois'), { name: 'builder', grid: 'trois', spec: '[slot@30,slot@35,slot]', search: '' });
+  // The old links: a grid by its name (resolved by the builder: gf-builder-grids.js#builderSpec); g= wins.
+  assert.deepEqual(route('#/builder/trois'), { name: 'builder', grid: 'trois', spec: null, search: '' });
+  assert.equal(builderSpec(route('#/builder/trois')), '[slot@30,slot@35,slot]');
+  assert.equal(builderSpec(route('#/builder/trois?g=[slot,slot]')), '[slot,slot]');
+  assert.equal(builderSpec(route('#/builder/inconnue')), null);
+  assert.equal(builderSpec(route('#/builder')), null);
   assert.deepEqual(route('#/builder/trois?g=[slot,slot]&r=2km'), { name: 'builder', grid: 'trois', spec: '[slot,slot]', search: 'r=2km' });
   assert.deepEqual(route('#/builder/inconnue'), { name: 'builder', grid: 'inconnue', spec: null, search: '' });
 });

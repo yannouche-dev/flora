@@ -11,7 +11,6 @@ import { FAVORITES_ID, madeBy, mergeCollections, newEntryId, normalizeEntry, nor
 import { store } from './store.js';
 import { toPortable } from './portable.js';
 import { encodePortable } from './share.js';
-import { fillAltitudes } from './altitude.js';
 import { publish, subscribe } from './sync.js';
 import { exportNotes, importNotes } from './sheet-blocks.js';
 import { notesEvents, notesLoaded } from './sheet-notes.js';
@@ -263,8 +262,9 @@ const stamped = place => ({
 async function afterSave(saved) {
   markHasSpots();
   await changed();
-  // The altitudes of its new or moved positions, in the background (saved again once found).
-  if (saved.geometry) fillAltitudes(saved.id, getPlace, updatePlace);
+  // The altitudes of its new or moved positions, in the background (saved again once found); altitude.js comes then,
+  // not with the start of the app.
+  if (saved.geometry) import('./altitude.js').then(a => a.fillAltitudes(saved.id, getPlace, updatePlace)).catch(() => {});
 }
 
 /**

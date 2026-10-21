@@ -9,7 +9,7 @@
 import { config } from '../config.js';
 import { MODULES, moduleOn, setModule } from './modules.js';
 import { baseOf, importModes, modeKeys, ownModes } from './modes.js';
-import { isOverlay } from './ign.js';
+import { isOverlay } from './ign-layers.js';
 import { emptyLayout, migratePlaces, migrateTree, store } from './store.js';
 import { allNoteTexts, deleteNoteTexts, fromPortable, mergeNoteTexts, noteText as storedText, notesWithText, portableNotes, setNoteText as storeText } from './sheet-notes.js';
 import { writeJSON, writeText } from './prefs.js';
