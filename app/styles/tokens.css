@@ -33,8 +33,8 @@
   --gf-highlight: #ffd166;
   --gf-kin: #e0245e;
   /* A warning's or a danger's box: its colour, faint over the surface. */
-  --gf-danger-bg: var(--gf-danger-bg);
-  --gf-warn-bg: var(--gf-warn-bg);
+  --gf-danger-bg: color-mix(in srgb, var(--gf-danger) 10%, var(--gf-surface));
+  --gf-warn-bg: color-mix(in srgb, var(--gf-warn) 12%, var(--gf-surface));
 
   --gf-fav: #e11d48;
   --gf-season: #fde047;
