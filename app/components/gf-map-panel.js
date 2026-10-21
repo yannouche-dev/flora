@@ -1,40 +1,36 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
-import { BASES, OVERLAYS, overlayDef } from '../core/ign.js';
-import { href } from '../core/router.js';
 import { ui } from '../styles/ui.js';
 import { sheetStyles } from './ui-kit.js';
 import { icon } from '../core/icons.js';
 import { openModal } from '../core/history.js';
-import { mapSettings, mapSettingsEvents, setMapSettings } from '../core/map-settings.js';
-import { moduleEvents, moduleOn } from '../core/modules.js';
-import { hasWebGL2 } from '../core/maplibre.js';
 import { safeUrl } from '../core/safe-url.js';
 import { sayIn } from '../core/toast.js';
-import { map3dOptions, map3dOptionsCss, mapRendererChoice } from './map3d-options.js';
-import './gf-ign-layers.js';
+import './gf-map-options.js';
 
 const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
 
 /**
- * "Carte" panel: everything about how the map looks, in one bottom sheet — its display (2D or 3D, and the 3D
- * options: the maps' one choice, core/map-settings.js, the same as Réglages › Cartes — every map follows), background,
- * overlays (terrain, protected areas, and any layer of IGN's whole catalogue: gf-ign-layers.js, with the overlays
- * shown, their opacity and order), legend, sources. Every map has it (gf-map: its round button, or the end of its
- * search pill). It is also where a map's state is read (the quiet-map rule, gf-map.js): the « État » lines of
- * « Affichage » (why it is in 2D or flat, the IGN backgrounds off, a source unreachable, the protected areas in view),
- * the protected areas in view with their INPN pages under « Règles de cueillette », a page's own legend (a plant
- * sheet's sources and counts) — said by the map's own live region, or while the panel is open (a modal: that region
- * inert) by the panel's own (say). Events: base-change {key}, overlay-toggle {key, on, layer?} (`layer`: a catalogue layer to add), and
- * from gf-ign-layers overlay-opacity {key, opacity, commit}, overlay-order {keys}; the display is stored here
- * (setMapSettings).
+ * The panel ▦ « Carte » of every map (gf-map: its round button, or the end of its search pill), in one bottom sheet:
+ * the home of the maps' look — gf-map-options.js (scope="map": 2D or 3D and the 3D options, the background, IGN's
+ * layers; the common settings, the same as Réglages › Cartes, or this map's own look, and the way back) —, and what only
+ * this map has: its state, the GBIF distribution of the Carte's plant, the protected areas in view, its legend, its
+ * sources. It is where a map's state is read (the quiet-map rule, gf-map.js): the « État » lines of « Affichage » (why
+ * it is in 2D or flat, the IGN backgrounds off, a source unreachable, the protected areas in view), the protected areas
+ * in view with their INPN pages under « Règles de cueillette », a page's own legend (a plant sheet's sources and
+ * counts) — said by the map's own live region, or while the panel is open (a modal: that region inert) by the panel's
+ * own (say). Events: distribution-toggle {on}, and gf-map-options' (look-edit, look-preview, look-common,
+ * renderer-follow), for its map.
  */
 export class GfMapPanel extends LitElement {
   static properties = {
-    base: { type: String },
-    overlays: { attribute: false },
-    /** The map's own opacity of its overlays (key → 0…1), when it has its own (a free layout's map); null: the device's. */
-    opacities: { attribute: false },
+    /** The look the map shows (gf-map lookShown) and what of it is its own (null: the common look). */
+    look: { attribute: false },
+    own: { attribute: false },
+    /** Its 2D or 3D fixed by its owner, which « Suivre le réglage commun » lets go (gf-map own3d). */
+    own3d: { attribute: false },
+    /** Why its own look is its owner's to keep, said instead of the way back (gf-map lookWhy). */
+    lookWhy: { attribute: false },
     /** Name of the plant whose GBIF distribution can be shown (null: none offered). */
     distribution: { attribute: false },
     distributionOn: { attribute: false },
@@ -55,25 +51,12 @@ export class GfMapPanel extends LitElement {
     areas: { attribute: false }
   };
 
-  static styles = [ui, sheetStyles, map3dOptionsCss, css`
-    .display { display: grid; gap: 6px; }
-
+  static styles = [ui, sheetStyles, css`
     dialog.drawer { --drawer-dim: 35%; }
     header { display: flex; align-items: center; padding: 10px 8px 6px 16px; border-bottom: 1px solid var(--gf-border); }
     header h2 { margin: 0; font-size: 1.1rem; flex: 1; }
     .body { overflow-y: auto; padding: 4px 16px calc(16px + env(safe-area-inset-bottom)); display: grid; gap: 4px; }
     h3 { margin: 14px 0 6px; }
-    .bases { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-    .bases button {
-      display: grid;
-      justify-items: center;
-      gap: 4px;
-      min-height: 72px;
-      border-radius: var(--gf-radius);
-      font-size: 0.9rem;
-    }
-    .bases .ico { font-size: 1.6rem; line-height: 1; }
-    .bases button[aria-pressed='true'] { background: var(--gf-accent-soft); border-color: var(--gf-accent); border-width: 2px; font-weight: 600; }
     label.layer { display: flex; align-items: center; gap: 12px; padding: 8px 4px; border-radius: var(--gf-radius-sm); cursor: pointer; }
     label.layer:hover { background: var(--gf-surface-2); }
     label.layer span { display: grid; }
@@ -105,11 +88,12 @@ export class GfMapPanel extends LitElement {
 
   constructor() {
     super();
-    this.base = 'photo';
-    /** @type {string[]} */
-    this.overlays = [];
-    /** @type {Record<string, number> | null} */
-    this.opacities = null;
+    /** @type {import('../core/map-settings.js').MapLook | null} */
+    this.look = null;
+    /** @type {Partial<import('../core/map-settings.js').MapLook> | null} */
+    this.own = null;
+    this.own3d = false;
+    this.lookWhy = '';
     this.legend = false;
     /** @type {string | null} */
     this.distribution = null;
@@ -124,24 +108,9 @@ export class GfMapPanel extends LitElement {
     this.legendLines = [];
   }
 
-  connectedCallback() {
-    super.connectedCallback();
-    // The display's choice, changed here, in Réglages or another tab; a module that the 3D options depend on.
-    mapSettingsEvents.addEventListener('change', this.#redraw);
-    moduleEvents.addEventListener('change', this.#redraw);
-  }
-
-  disconnectedCallback() {
-    super.disconnectedCallback();
-    mapSettingsEvents.removeEventListener('change', this.#redraw);
-    moduleEvents.removeEventListener('change', this.#redraw);
-  }
-
-  #redraw = () => this.requestUpdate();
-
   open() {
     // The catalogue shown before: asked again (online again, a month gone, the module switched…).
-    /** @type {any} */ (this.renderRoot.querySelector('gf-ign-layers'))?.reopen();
+    /** @type {any} */ (this.renderRoot.querySelector('gf-map-options'))?.reopen();
     openModal(/** @type {HTMLDialogElement} */ (this.renderRoot.querySelector('dialog')));
   }
 
@@ -163,38 +132,6 @@ export class GfMapPanel extends LitElement {
   /** @param {string} name @param {any} detail */
   #emit(name, detail) { this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true })); }
 
-  /** @param {string} key */
-  #layer(key) {
-    const def = overlayDef(key);
-    if (!def) return nothing;
-    return html`<label class="layer">
-      <input type="checkbox" .checked=${this.overlays.includes(key)}
-        @change=${e => this.#emit('overlay-toggle', { key, on: e.target.checked })} />
-      <span>${def.label}${def.hint ? html`<small>${def.hint}</small>` : nothing}</span>
-    </label>`;
-  }
-
-  /**
-   * « Affichage »: 2D or 3D — the maps' one choice (Réglages › Cartes are the same settings), so every map follows —
-   * and, in 3D, its options (folded: the layers come next). A map always drawn one way says so, the choice disabled.
-   */
-  #display() {
-    const s = mapSettings();
-    const g = this.gl;
-    const fixed = g?.fixed || null;
-    const change = (/** @type {Partial<import('../core/map-settings.js').MapSettings>} */ patch) => setMapSettings(patch);
-    return html`<h3 class="kicker">Affichage</h3>
-      <div class="display">
-        ${this.#state()}
-        ${mapRendererChoice(s, change, { id: 'panel', legend: 'Carte en 2D ou en 3D', webgl: hasWebGL2(), fixed })}
-        ${fixed || s.renderer !== '3d' ? nothing : html`<details class="more3d">
-          <summary>Options de la 3D</summary>
-          ${map3dOptions(s, change, { relief: moduleOn('relief3d'), ign: moduleOn('ignMaps'), id: 'panel3d' })}
-        </details>`}
-        <p class="note">Le même choix pour toutes les cartes ; par défaut dans <a href=${href.settings()}>Réglages › Cartes</a>.</p>
-      </div>`;
-  }
-
   /**
    * « État »: the map's state, one short line each (why it is in 2D or flat, the IGN backgrounds off, the protected
    * areas in view, a source unreachable…), with what to do when there is something. Said by the map's own live region
@@ -204,7 +141,7 @@ export class GfMapPanel extends LitElement {
     const lines = this.state || [];
     if (!lines.length) return nothing;
     const glyph = (/** @type {string} */ level) => icon(level === 'error' ? 'exclamation-triangle-fill' : level === 'warn' ? 'shield-check' : 'map');
-    return html`<section class="state" aria-label="État de la carte"><b aria-hidden="true">État</b><ul>
+    return html`<section class="state" slot="state" aria-label="État de la carte"><b aria-hidden="true">État</b><ul>
       ${lines.map(l => html`<li class=${l.level} data-key=${l.key}>${glyph(l.level)}<span>${l.text}${l.link
         ? html` <a href=${l.link.href} @click=${() => this.close()}>${l.link.label}</a>` : nothing}</span></li>`)}
     </ul></section>`;
@@ -214,7 +151,7 @@ export class GfMapPanel extends LitElement {
   #areas() {
     const areas = this.areas || [];
     if (!areas.length) return nothing;
-    return html`<ul class="areas" aria-label="Espaces protégés en vue">
+    return html`<ul class="areas" slot="rules" aria-label="Espaces protégés en vue">
       ${areas.map(a => html`<li>${safeUrl(a.url) ? html`<a href=${safeUrl(a.url)} target="_blank" rel="noopener">${a.name}</a>` : html`<b>${a.name}</b>`}
         <small>(${a.kind})</small></li>`)}
       <li><small>En vue sur la carte : la cueillette y est souvent interdite ou réglementée, vérifiez les règles du site.</small></li>
@@ -222,44 +159,26 @@ export class GfMapPanel extends LitElement {
   }
 
   render() {
-    const group = (/** @type {string} */ g) => Object.keys(OVERLAYS).filter(k => OVERLAYS[k].group === g);
     const lines = this.legendLines || [];
     return html`
-      <dialog class="drawer centered" aria-label="Carte" @click=${e => { if (e.target === e.currentTarget) this.close(); }}>
+      <dialog class="drawer centered" aria-label="Carte" @click=${(/** @type {Event} */ e) => { if (e.target === e.currentTarget) this.close(); }}>
         <header>
           <h2>Carte</h2>
           <button class="icon-btn" type="button" aria-label="Fermer" @click=${() => this.close()}>${icon('x-lg')}</button>
         </header>
         <div class="said visually-hidden" aria-live="polite" aria-relevant="additions"></div>
         <div class="body">
-          ${this.#display()}
-          <h3 class="kicker">Fond</h3>
-          <div class="bases" role="group" aria-label="Fond de carte">
-            ${Object.entries(BASES).map(([key, def]) => html`
-              <button type="button" aria-pressed=${this.base === key ? 'true' : 'false'} @click=${() => this.#emit('base-change', { key })}>
-                <span class="ico" aria-hidden="true">${icon(key === 'photo' ? 'globe-europe-africa' : 'map')}</span>${def.label}
-              </button>`)}
-          </div>
-
-          ${this.distribution ? html`
-            <h3 class="kicker">Répartition</h3>
-            <label class="layer">
-              <input type="checkbox" .checked=${this.distributionOn}
-                @change=${e => this.#emit('distribution-toggle', { on: e.target.checked })} />
-              <span>Répartition GBIF : ${this.distribution}<small>densité des occurrences connues</small></span>
-            </label>` : nothing}
-
-          <h3 class="kicker">Terrain</h3>
-          ${group('terrain').map(k => this.#layer(k))}
-
-          <h3 class="kicker">Toutes les couches de l’IGN</h3>
-          <p class="note">Tout le catalogue de la Géoplateforme, rangé par thème : photos anciennes, forêts, espaces protégés, sols, relief, cartes anciennes…</p>
-          <gf-ign-layers .overlays=${this.overlays} .opacities=${this.opacities}></gf-ign-layers>
-
-          <h3 class="kicker">Règles de cueillette</h3>
-          ${this.#areas()}
-          <p class="note">Dans ces zones, la cueillette a souvent des règles propres : vérifiez-les avant de cueillir.</p>
-          ${group('rules').map(k => this.#layer(k))}
+          <gf-map-options scope="map" .look=${this.look} .own=${this.own} .gl=${this.gl} .own3d=${Boolean(this.own3d)} .lookWhy=${this.lookWhy}>
+            ${this.#state()}
+            ${this.distribution ? html`<div slot="extra">
+              <h3 class="kicker">Répartition</h3>
+              <label class="layer">
+                <input type="checkbox" .checked=${this.distributionOn}
+                  @change=${(/** @type {any} */ e) => this.#emit('distribution-toggle', { on: e.target.checked })} />
+                <span>Répartition GBIF : ${this.distribution}<small>densité des occurrences connues</small></span>
+              </label></div>` : nothing}
+            ${this.#areas()}
+          </gf-map-options>
 
           ${this.legend || lines.length ? html`
             <h3 class="kicker">Légende</h3>

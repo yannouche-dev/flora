@@ -1,8 +1,8 @@
 // @ts-check
-// The maps' 2D / 3D choice and the 3D options, as forms (core/map-settings.js): Réglages › Cartes, the « Carte »
-// panel of every map (gf-map-panel.js) and the map blocks' form of the plant sheet show the same ones, on the same
-// settings — one choice for every map, Réglages' being the same as each map's. `change` gets the settings changed
-// ({ renderer: '3d' }, { relief: false }…); the caller stores them (setMapSettings).
+// The maps' 2D / 3D choice and the 3D options, as forms (core/map-settings.js), for the maps' options
+// (gf-map-options.js: the panel ▦ of every map and Réglages › Cartes show the same ones, on the same settings — one
+// choice for every map). `change` gets the settings changed ({ renderer: '3d' }, { relief: false }…); the caller
+// stores them (setMapSettings).
 //   mapRendererChoice(s, change, o) → the 2D / 3D radios (and why a map cannot change: WebGL2 missing, a map that
 //   always stays in 2D or in 3D); map3dOptions(s, change, o) → the 3D options.
 

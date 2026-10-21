@@ -90,6 +90,41 @@ test('le fichier de mise en page emporte Réglages › Cartes (2D / 3D et option
   MS.resetMapSettings();
 });
 
+test('les blocs Carte : leur propre fond (MapConfig.look) ; ceux d’avant, leur fond et leurs couches IGN repris une fois', () => {
+  SB.resetAll();
+  // A new block: the maps' common look (none of its own).
+  assert.equal(SB.mapConfig('map').look, null);
+  // A file of before: the main map set to the photos and the cadastre, an added map left on the plan with its height
+  // changed — the first keeps them as its own look, the second follows the common one (the plan was only the default).
+  const file = JSON.parse(SB.exportLayout());
+  file.layout.mapBlocks = [{ id: 'abc', title: 'Ma carte' }];
+  file.layout.maps = { map: { base: 'photo', overlays: ['cadastre', 'lune'], height: 'l' }, 'map:abc': { base: 'plan', overlays: [], height: 's' } };
+  SB.importLayout(JSON.stringify(file));
+  assert.deepEqual(SB.mapConfig('map').look, { base: 'photo', overlays: ['cadastre'] });
+  assert.equal(SB.mapConfig('map').height, 'l');
+  assert.ok(!('base' in SB.mapConfig('map')) && !('overlays' in SB.mapConfig('map')), 'les champs d’avant ne restent pas');
+  assert.equal(SB.mapConfig('map:abc').look, null);
+  // Changed in its panel ▦ (gf-sheet-map `map-config` {look}), kept; « Revenir aux réglages communs »: none again.
+  SB.setMapConfig('map:abc', { look: { base: 'plan', overlays: ['forets'], opacities: { forets: 0.5 } } });
+  assert.deepEqual(SB.mapConfig('map:abc').look, { base: 'plan', overlays: ['forets'], opacities: { forets: 0.5 } });
+  SB.setMapConfig('map', { look: null });
+  assert.equal(SB.mapConfig('map').look, null);
+  assert.equal(SB.mapConfig('map').height, 'l');
+  // Exported and read back as they are.
+  const text = SB.exportLayout();
+  SB.resetAll();
+  SB.importLayout(text);
+  assert.deepEqual(SB.mapConfig('map:abc').look, { base: 'plan', overlays: ['forets'], opacities: { forets: 0.5 } });
+  assert.equal(SB.mapConfig('map').look, null);
+  // A file's look with a background or a layer that is a key every object inherits: left out (the map would not show).
+  const odd = JSON.parse(SB.exportLayout());
+  odd.layout.maps = { map: { look: { base: 'constructor' } }, 'map:abc': { look: { base: 'toString', overlays: ['constructor', 'cadastre'] } } };
+  SB.importLayout(JSON.stringify(odd));
+  assert.equal(SB.mapConfig('map').look, null);
+  assert.deepEqual(SB.mapConfig('map:abc').look, { overlays: ['cadastre'] });
+  SB.resetAll();
+});
+
 // Services are the device's (Réglages › Modules): hiding or showing a block never switches one.
 const GBIF_BLOCKS = ['descriptions', 'occurrences', 'gbifMedia', 'gbifProfile', 'literature'];
 

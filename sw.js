@@ -245,6 +245,7 @@ const SHELL = [
   'app/components/gf-status.js',
   'app/components/gf-thumb.js',
   'app/components/gf-map-panel.js',
+  'app/components/gf-map-options.js',
   'app/components/gf-ign-layers.js',
   'app/components/gf-map-search.js',
   'app/components/gf-point-card.js',

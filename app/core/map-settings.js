@@ -1,17 +1,27 @@
 // @ts-check
-// Réglages › Cartes: how the app's maps are drawn — 2D (Leaflet, the default) or 3D (MapLibre GL, loaded only once a
-// map is shown in 3D) — and, in 3D, what they show: the relief and its exaggeration, its shading, the tilt a map opens
-// with, the buildings, the sky and its haze, the globe from afar, the IGN plan as vector tiles or pictures, the light
-// (fixed, or the sun's at a time of day).
-//   mapSettings() → the settings now (every field, valid); setMapSettings(patch); resetMapSettings();
-//   mapSettingsEvents fires `change` (here, or in another tab: core/sync.js);
-//   cleanMapSettings(value) → a valid whole from anything (a file imported, an old version), never throws.
-// Stored in localStorage (config.storageKeys.maps3d), only what differs from the defaults, and only when the user
-// changes something: a real setting, so the first steps (core/discover.js) count it as « used before » like the
-// others. One choice for every map: Réglages › Cartes, the « Carte » panel of any map (« Affichage ») and the plant
-// sheet's map blocks change these same settings, and every map shown follows at once (no map has a choice of its own).
+// How the app's maps look, in one place: Réglages › Cartes, the panel ▦ of every map (components/gf-map-options.js)
+// and the maps themselves read and change these only.
+//  - MapSettings: how they are drawn — 2D (Leaflet, the default) or 3D (MapLibre GL, loaded only once a map is shown
+//    in 3D) — and, in 3D, what they show: the relief and its exaggeration, its shading, the tilt a map opens with, the
+//    buildings, the sky and its haze, the globe from afar, the IGN plan as vector tiles or pictures, the light (fixed,
+//    or the sun's at a time of day). One choice for every map (a map that always stays one way says why: gf-map-gl.js).
+//      mapSettings() → the settings now (every field, valid); setMapSettings(patch); resetMapSettings();
+//      mapSettingsEvents fires `change` (here, or in another tab: core/sync.js);
+//      cleanMapSettings(value) → a valid whole from anything (a file imported, an old version), never throws.
+//    Stored in localStorage (config.storageKeys.maps3d), only what differs from the defaults, and only when the user
+//    changes something: a real setting, so the first steps (core/discover.js) count it as « used before » like the others.
+//  - MapLook: what they show — the background, the IGN overlays (bottom first), each overlay's opacity. The common look
+//    (« réglages communs à toutes les cartes »): every open map follows it, 2D and 3D, at once (mapLookEvents).
+//      mapLook() → the look now; setMapLook(patch); resetMapLook(); mapLookEvents fires `change` (here or in another tab).
+//    A map may have its own look, which its owner keeps (a free layout's cell: base=, layers=, opac= in its address; a
+//    map block of the plant sheet: MapConfig.look): a Partial<MapLook>, each field given replacing the common one
+//    (lookFor), the others following it; « Revenir aux réglages communs » lets it go (gf-map `look-change` null).
+//    Stored under the keys of before (config.storageKeys.mapLayer: { base, overlays, distribution }, and names only
+//    when off; overlayOpacity: key → 0…1, only those not at DEFAULT_OPACITY; the catalogue's layers added stay
+//    core/ign-layers.js's, under ignLayers) — nothing written by merely reading them.
 
 import { config } from '../config.js';
+import { BASES, DEFAULT_OPACITY, isOverlay } from './ign-layers.js';
 import { definePref } from './prefs.js';
 
 /**
@@ -107,6 +117,158 @@ export function setMapSettings(patch) {
 
 /** Back to the defaults (the key removed). */
 export function resetMapSettings() { pref.reset(); }
+
+// ── The look: background, overlays, opacities ─────────────────────────────
+
+/**
+ * @typedef {object} MapLook
+ * @property {'photo' | 'plan'} base              the background
+ * @property {boolean} names                      place names over the background (kept for a later step: not drawn yet)
+ * @property {string[]} overlays                  IGN overlays, bottom first: the app's own and the catalogue's added (core/ign-layers.js)
+ * @property {Record<string, number>} opacities   each overlay's opacity (0…1, by 0.05) when not the usual (DEFAULT_OPACITY)
+ */
+
+/** @type {Readonly<MapLook>} */
+export const LOOK_DEFAULTS = Object.freeze({ base: 'photo', names: true, overlays: /** @type {string[]} */ (Object.freeze([])), opacities: Object.freeze({}) });
+
+/** One of the backgrounds (its own key: never one an object inherits, « constructor »). @param {unknown} v @returns {v is 'photo' | 'plan'} */
+const isBase = v => typeof v === 'string' && Object.hasOwn(BASES, v);
+
+/** @param {unknown} v @returns {Record<string, any>} */
+const objectOf = v => /** @type {Record<string, any>} */ (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
+
+/** Overlays the maps know (an unknown one dropped: a catalogue's layer never added here), each once. @param {unknown} list @returns {string[]} */
+const cleanOverlays = list => Array.isArray(list) ? [...new Set(list.filter(k => typeof k === 'string' && isOverlay(k)))] : [];
+
+/**
+ * Opacities within 0…1 (another value dropped, as before), by 0.05; the usual one left out (it is what none means).
+ * @param {unknown} value @returns {Record<string, number>}
+ */
+function cleanOpacities(value) {
+  /** @type {Record<string, number>} */
+  const out = {};
+  for (const [k, v] of Object.entries(objectOf(value))) {
+    if (typeof v !== 'number' || !(v >= 0 && v <= 1)) continue;
+    const r = Math.round(v * 20) / 20;
+    if (r !== DEFAULT_OPACITY) out[k] = r;
+  }
+  return out;
+}
+
+/**
+ * A map's own look, from anything (a stored MapConfig, a file): only the valid fields kept; null when none is.
+ * @param {unknown} value @returns {Partial<MapLook> | null}
+ */
+export function cleanOwnLook(value) {
+  const v = objectOf(value);
+  /** @type {Partial<MapLook>} */
+  const out = {};
+  if (isBase(v.base)) out.base = v.base;
+  if (typeof v.names === 'boolean') out.names = v.names;
+  if (Array.isArray(v.overlays)) out.overlays = cleanOverlays(v.overlays);
+  if (v.opacities && typeof v.opacities === 'object' && !Array.isArray(v.opacities)) out.opacities = cleanOpacities(v.opacities);
+  return Object.keys(out).length ? out : null;
+}
+
+/**
+ * mapLayer as kept: the background, the overlays, the names, and the GBIF distribution layer of the Carte's panel (not
+ * a look: kept beside it, as before). `cadastre: true` from earlier versions becomes an overlay.
+ * @typedef {{ base: 'photo' | 'plan', names: boolean, overlays: string[], distribution: boolean }} StoredLayers
+ * @param {unknown} value @returns {StoredLayers}
+ */
+function cleanLayers(value) {
+  const v = objectOf(value);
+  return {
+    base: isBase(v.base) ? v.base : LOOK_DEFAULTS.base,
+    names: bool(v.names, LOOK_DEFAULTS.names),
+    overlays: cleanOverlays(Array.isArray(v.overlays) ? v.overlays : v.cadastre === true ? ['cadastre'] : []),
+    distribution: v.distribution === true
+  };
+}
+
+// Their keys of before, their shapes of before; followed when another tab changes them.
+const layersPref = definePref({
+  key: config.storageKeys.mapLayer,
+  fallback: {},
+  clean: cleanLayers,
+  store: s => ({ base: s.base, overlays: s.overlays, distribution: s.distribution, ...(s.names ? {} : { names: false }) })
+});
+const opacityPref = definePref({
+  key: config.storageKeys.overlayOpacity,
+  fallback: {},
+  clean: cleanOpacities,
+  store: o => Object.keys(o).length ? o : null
+});
+
+/** @returns {Readonly<MapLook>} */
+function buildLook() {
+  const l = layersPref.get();
+  // Frozen: one object shared by every map until it changes (never written to by one of them).
+  return Object.freeze({ base: l.base, names: l.names, overlays: /** @type {string[]} */ (Object.freeze([...l.overlays])), opacities: Object.freeze({ ...opacityPref.get() }) });
+}
+
+let look = buildLook();
+let lookText = JSON.stringify(look);
+/** A change under way (setMapLook writes two keys): said once, at its end. */
+let holding = false;
+
+/** Fires `change` (detail: the look) when the common look changes, here or in another tab. */
+export const mapLookEvents = new EventTarget();
+
+function relook() {
+  if (holding) return;
+  const next = buildLook();
+  const text = JSON.stringify(next);
+  if (text === lookText) return;
+  look = next;
+  lookText = text;
+  mapLookEvents.dispatchEvent(new CustomEvent('change', { detail: look }));
+}
+layersPref.events.addEventListener('change', relook);
+opacityPref.events.addEventListener('change', relook);
+
+/** The common look now (frozen: the same object until it changes). @returns {Readonly<MapLook>} */
+export const mapLook = () => look;
+
+/**
+ * Changes the common look (every open map follows): the fields given, from what is stored now (another tab's choices
+ * since are kept). `opacities`: the whole set (the overlays' not given back to the usual one). @param {Partial<MapLook>} patch
+ */
+export function setMapLook(patch) {
+  const own = cleanOwnLook(patch);
+  if (!own) return;
+  holding = true;
+  try {
+    if ('base' in own || 'names' in own || 'overlays' in own) layersPref.set(cleanLayers({ ...layersPref.fresh(), ...own }));
+    if (own.opacities) opacityPref.set(own.opacities);
+  } finally { holding = false; }
+  relook();
+}
+
+/** The common look back to the defaults (the photos, no overlay, the usual opacities). */
+export const resetMapLook = () => setMapLook(LOOK_DEFAULTS);
+
+/**
+ * The look a map shows: its own fields (`own`: its owner's, null: none), the common look's for the others.
+ * @param {Partial<MapLook> | null | undefined} own @param {Readonly<MapLook>} [common] @returns {MapLook}
+ */
+export function lookFor(own, common = look) {
+  return {
+    base: own?.base ?? common.base,
+    names: own?.names ?? common.names,
+    overlays: [...(own?.overlays ?? common.overlays)],
+    opacities: { ...(own?.opacities ?? common.opacities) }
+  };
+}
+
+/** The GBIF distribution layer of the Carte's panel, shown (kept with the look, not a part of it). */
+export const mapDistribution = () => layersPref.get().distribution;
+
+/** @param {boolean} on */
+export function setMapDistribution(on) {
+  const now = layersPref.fresh();
+  if (now.distribution !== on) layersPref.set({ ...now, distribution: on });
+}
 
 // ── The sun ─────────────────────────────────────────────────────────────────
 

@@ -1,11 +1,13 @@
 // @ts-check
-// The IGN Géoplateforme layers of the maps, without Leaflet (the start of the app needs isOverlay only, through
-// core/sheet-blocks.js; the tiles themselves are core/ign.js's): the backgrounds and overlays, their tile address, the
-// layers of the catalogue added to the maps, and the opacity chosen for each overlay — all read once, kept here only.
+// The IGN Géoplateforme layers of the maps, without Leaflet (the start of the app needs them for the maps' look,
+// core/map-settings.js; the tiles themselves are core/ign.js's): the backgrounds and overlays,
+// their tile address, the layers of the catalogue added to the maps (read again when another tab adds one). Which of
+// them a map shows, and how opaque: the maps' look (core/map-settings.js).
 // Layer identifiers and styles checked against the service's GetCapabilities (tools/api-health.mjs,
 // scripts/build-ign-catalog.mjs read them from this file).
 
 import { readJSON, writeJSON } from './prefs.js';
+import { onStorage } from './sync.js';
 import { config } from '../config.js';
 
 const WMTS = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&TILEMATRIXSET=PM'
@@ -51,12 +53,17 @@ const SAFE_ID = /^[A-Za-z0-9._:-]{1,160}$/;
 
 /** The catalogue's layers added to the maps (key → definition), kept so they show at once and offline. @type {Map<string, LayerDef>} */
 const added = new Map();
-for (const [key, def] of Object.entries(readJSON(config.storageKeys.ignLayers, {}))) {
-  if (key.startsWith(IGN_PREFIX) && SAFE_ID.test(def?.layers?.[0]?.id || '')) added.set(key, def);
+function readAdded() {
+  for (const [key, def] of Object.entries(readJSON(config.storageKeys.ignLayers, {}))) {
+    if (key.startsWith(IGN_PREFIX) && SAFE_ID.test(def?.layers?.[0]?.id || '')) added.set(key, def);
+  }
 }
+readAdded();
+// One added in another tab (written before the look that shows it): known here too, so that look keeps it.
+onStorage(config.storageKeys.ignLayers, readAdded);
 
 /** An overlay the maps know: one of the app's, or a layer of the catalogue added. @param {string} key */
-export const isOverlay = key => key in OVERLAYS || added.has(key);
+export const isOverlay = key => Object.hasOwn(OVERLAYS, key) || added.has(key);
 
 /** Its definition (null: unknown). @param {string} key @returns {LayerDef | null} */
 export const overlayDef = key => OVERLAYS[key] || added.get(key) || null;
@@ -85,21 +92,8 @@ export function builtinKeyOf(id) {
 
 // ── Opacity of each overlay ──────────────────────────────────────────────────
 
-/** An overlay's opacity unless chosen (the backgrounds are opaque). */
+/**
+ * An overlay's opacity unless chosen (the backgrounds are opaque). Those chosen are the maps' look
+ * (core/map-settings.js: the common one under overlayOpacity, a map's own with its owner).
+ */
 export const DEFAULT_OPACITY = 0.8;
-
-/** The opacity chosen for each overlay (key → 0…1), kept on the device for every map. @type {Record<string, number>} */
-let opacities = {};
-for (const [k, v] of Object.entries(readJSON(config.storageKeys.overlayOpacity, {}))) if (typeof v === 'number' && v >= 0 && v <= 1) opacities[k] = v;
-
-/** An overlay's opacity (0…1). @param {string} key */
-export const overlayOpacity = key => opacities[key] ?? DEFAULT_OPACITY;
-
-/** Sets an overlay's opacity (0…1, by 0.05), kept for next time. @param {string} key @param {number} value */
-export function setOverlayOpacity(key, value) {
-  const v = Math.round(Math.min(1, Math.max(0, Number(value) || 0)) * 20) / 20;
-  opacities = { ...opacities, [key]: v };
-  if (v === DEFAULT_OPACITY) delete opacities[key];
-  writeJSON(config.storageKeys.overlayOpacity, opacities);
-  return v;
-}

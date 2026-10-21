@@ -1,6 +1,7 @@
 // « Disposition libre » : the map cell's settings (registry.js `map`, map-options.js, cells.js dl-map), written in the
 // layout's address. Où: its own scope while the address has none (lieu=: the place found as ?place= is; autour: around
-// me), the address' always winning. Fond: the background, the 3D (map-3d on the map, its 3D adapter told). Couches: the
+// me), the address' always winning. Fond: the background, the 3D (map-3d on the map, its 3D adapter told) — written,
+// the cell's own (gf-map `look`), else the maps' common ones. Couches: the
 // IGN layers by their short names, given to the map as its own overlays (the catalogue's added), their tiles asked, an
 // unknown name said and left out. Points: GBIF's beside iNaturalist's, a period (this month: dates kept), dots instead of
 // photos. Liens: every plant of the scope (suit=0), the current plant alone (plante=seule), a point touched opening
@@ -50,10 +51,13 @@ const param = (page, key) => page.evaluate(k => new URLSearchParams(location.has
 const layoutOf = (/** @type {Page} */ page) => page.evaluate(() => decodeURIComponent(location.hash.split('?')[0]));
 /** The cell's map. @param {Page} page */
 const mapOf = page => page.locator('dl-map gf-map');
-/** What the cell gives its map: its own layers, background, points, the current plant's, how a point answers. @param {Page} page */
+/**
+ * What the cell gives its map: its own background and layers (null: none, the maps' common ones), points, the current
+ * plant's, how a point answers. @param {Page} page
+ */
 const given = page => mapOf(page).evaluate(m => {
   const g = /** @type {any} */ (m);
-  return { base: g.base, overlays: g.overlays, leaves: g.area?.leaves ?? null, points: g.area?.points ?? null, highlight: g.highlight?.points?.length ?? null,
+  return { base: g.look?.base ?? null, overlays: g.look?.overlays ?? null, leaves: g.area?.leaves ?? null, points: g.area?.points ?? null, highlight: g.highlight?.points?.length ?? null,
     cluster: g.cluster?.points?.length ?? null, noSearch: g.noSearch, noLocate: g.noLocate, track: g.track, click: g.pointClick, d3: g.getAttribute('map-3d') };
 });
 /** The map's points, once there. @param {Page} page */
@@ -73,14 +77,14 @@ test('fond, 3D et couches : photo, la 3D voulue puis à plat, les couches IGN pa
   expect(await mapOf(page).evaluate(m => /** @type {any} */ (m).gl.state().wanted)).toBe(true);
   // The layers' tiles asked: the catalogue's (ZNIEFF, Natura 2000) and the app's own (Parcs nationaux).
   await expect.poll(() => ['ORTHOIMAGERY.ORTHOPHOTOS', 'Patrinat_ZNIEFF1', 'Patrinat_ZNIEFF2', 'Patrinat_SIC', 'Patrinat_ZPS', 'Patrinat_PN'].filter(l => !tiles.includes(l))).toEqual([]);
-  // The layers not saved as every map's (the Carte's shared choice).
+  // The layers not saved as every map's (the maps' common look).
   expect(await page.evaluate(() => Object.entries(localStorage).filter(([k, v]) => /maplayer/i.test(k) && v.includes('ZNIEFF')).length)).toBe(0);
   // 2D written: the map stays flat (its adapter told at once).
   await app.go(`#/layout/[map(photo;2d),plant]?${AT}`);
   await expect.poll(async () => (await given(page)).d3).toBe('off');
   await expect.poll(() => mapOf(page).evaluate(m => /** @type {any} */ (m).gl.state().allowed)).toBe(false);
-  // No layers written: none (never the Carte's shared choice — the layout is the same for everyone).
-  expect((await given(page)).overlays).toEqual([]);
+  // No layers written: none of its own (the maps' common ones, followed).
+  expect((await given(page)).overlays).toBe(null);
 });
 
 test('points : une période (ce mois-ci, toutes années : la floraison du moment ; cette année), en pastilles, GBIF à côté d’iNaturalist', async ({ app, page }) => {

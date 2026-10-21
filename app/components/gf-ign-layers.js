@@ -1,6 +1,6 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
-import { DEFAULT_OPACITY, IGN_PREFIX, builtinKeyOf, overlayDef, overlayOpacity, wmtsUrl } from '../core/ign.js';
+import { DEFAULT_OPACITY, IGN_PREFIX, builtinKeyOf, overlayDef, wmtsUrl } from '../core/ign-layers.js';
 import { loadCatalog, onCatalog } from '../core/ign-catalog.js';
 import { moduleOn } from '../core/modules.js';
 import { href } from '../core/router.js';
@@ -49,21 +49,23 @@ const count = (n, word) => `${n} ${word}${n > 1 ? 's' : ''}`;
 const keyOf = l => builtinKeyOf(l.id) || IGN_PREFIX + l.id;
 
 /**
- * IGN's layers in the Carte panel (gf-map-panel.js), every map: the overlays shown (« Affichées », top first: opacity,
- * order, off), then the whole catalogue of the Géoplateforme (~700 layers, app/core/ign-catalog.js) to browse —
+ * IGN's layers in the maps' options (gf-map-options.js: each map's panel ▦, Réglages › Cartes): the overlays shown
+ * (« Affichées », top first: opacity, order, off), then the whole catalogue of the Géoplateforme (~700 layers,
+ * app/core/ign-catalog.js) to browse —
  * a search (accents ignored: title, description, keywords, category), « Recommandées pour la botanique », and the
  * taxonomy of lib/ign-classify.mjs as a tree of categories and sub-categories, each with its count, folded: a
  * sub-category's rows are only made when it is opened, 40 at a time. A series (one layer by year, département,
  * town…) is one row with a selector. Each row opens on its full description, zooms, source, legend and one preview
  * tile (asked only then, and never with the module « IGN – fonds de carte » off).
- * Events (bubbling out of the panel to its map, gf-map.js): overlay-toggle {key, on, layer?} (`layer`: a catalogue
- * layer to add), overlay-opacity {key, opacity, commit}, overlay-order {keys} (bottom first).
+ * Events (for gf-map-options.js, which makes them changes of the look): overlay-toggle {key, on, layer?, replace?}
+ * (`layer`: a catalogue layer to add; `replace`: the overlay it takes the place of, another variant of its series),
+ * overlay-opacity {key, opacity, commit}, overlay-order {keys} (bottom first).
  */
 export class GfIgnLayers extends LitElement {
   static properties = {
     /** The overlays shown, bottom first. */
     overlays: { attribute: false },
-    /** The map's own opacity of its overlays (key → 0…1; the usual one when it says none); null: the device's. */
+    /** The overlays' opacity (key → 0…1; the usual one when it says none): the look shown (core/map-settings.js). */
     opacities: { attribute: false },
     _catalog: { state: true },
     _open: { state: true },
@@ -156,8 +158,8 @@ export class GfIgnLayers extends LitElement {
     this._more = new Map();
     /** Opacities while a slider moves (key → 0…1). @type {Map<string, number>} */
     this._opacity = new Map();
-    /** @type {Record<string, number> | null} */
-    this.opacities = null;
+    /** @type {Record<string, number>} */
+    this.opacities = {};
     /** @type {(() => void) | null} */
     this._unsubscribe = null;
   }
@@ -246,7 +248,7 @@ export class GfIgnLayers extends LitElement {
       ${!keys.length ? html`<p class="note">Aucune couche par-dessus le fond : cochez-en une ci-dessous ou dans le catalogue.</p>`
         : html`<ul class="active" aria-labelledby="active-title">${keys.map((key, i) => {
           const name = this.#name(key);
-          const pct = Math.round((this._opacity.get(key) ?? (this.opacities ? this.opacities[key] ?? DEFAULT_OPACITY : overlayOpacity(key))) * 100);
+          const pct = Math.round((this._opacity.get(key) ?? this.opacities?.[key] ?? DEFAULT_OPACITY) * 100);
           return html`<li>
             <span class="name">${name}${keys.length > 1 ? html`<small>${i === 0 ? 'au-dessus' : i === keys.length - 1 ? 'au-dessous' : `${i + 1}ᵉ`}</small>` : nothing}</span>
             <span class="tools">
@@ -318,9 +320,9 @@ export class GfIgnLayers extends LitElement {
     const next = e.layers.find(l => l.id === id);
     if (!next || next === before) return;
     if (this.overlays.includes(keyOf(before))) {
-      this.#emit('overlay-toggle', { key: keyOf(before), on: false });
+      // One change (the variant in the other's place): two in a row would each start from the look of before.
       const key = keyOf(next);
-      this.#emit('overlay-toggle', key.startsWith(IGN_PREFIX) ? { key, on: true, layer: next } : { key, on: true });
+      this.#emit('overlay-toggle', { ...(key.startsWith(IGN_PREFIX) ? { key, on: true, layer: next } : { key, on: true }), replace: keyOf(before) });
     }
   }
 

@@ -4,9 +4,9 @@
 
 import * as L from 'leaflet';
 import { moduleOn } from './modules.js';
-import { BASES, overlayDef, overlayOpacity, wmtsUrl } from './ign-layers.js';
+import { BASES, DEFAULT_OPACITY, overlayDef, wmtsUrl } from './ign-layers.js';
 
-export { BASES, OVERLAYS, wmtsUrl, IGN_PREFIX, isOverlay, overlayDef, addCatalogLayer, builtinKeyOf, DEFAULT_OPACITY, overlayOpacity, setOverlayOpacity } from './ign-layers.js';
+export { BASES, OVERLAYS, wmtsUrl, isOverlay, overlayDef, addCatalogLayer, DEFAULT_OPACITY } from './ign-layers.js';
 
 /** @typedef {import('./ign-layers.js').WmtsLayer} WmtsLayer @typedef {import('./ign-layers.js').LayerDef} LayerDef */
 
@@ -37,8 +37,8 @@ const CachedTileLayer = L.TileLayer.extend({
   }
 });
 
-/** @param {WmtsLayer} def @param {boolean} base @param {string} key @param {number} [minZoom] how far out the map goes */
-function wmts(def, base, key, minZoom = 5) {
+/** @param {WmtsLayer} def @param {string} key @param {number} opacity @param {number} [minZoom] how far out the map goes */
+function wmts(def, key, opacity, minZoom = 5) {
   const Layer = moduleOn('ignMaps') ? L.TileLayer : CachedTileLayer;
   return new Layer(wmtsUrl(def), {
     attribution: ATTRIBUTION,
@@ -48,20 +48,21 @@ function wmts(def, base, key, minZoom = 5) {
     maxZoom: 21,
     // CORS requests give the service worker readable responses (opaque ones cost ~7 MB of quota each).
     crossOrigin: 'anonymous',
-    opacity: base ? 1 : overlayOpacity(key),
+    opacity,
     className: 'gf-tiles-' + key
   });
 }
 
 /**
  * A background map or an overlay as one Leaflet layer. `minZoom`: from how far out it shows (the IGN plan and
- * photos cover the whole world at small scales; 5 frames France).
- * @param {string} key @param {number} [minZoom]
+ * photos cover the whole world at small scales; 5 frames France); `opacity`: an overlay's (the map's look), a
+ * background always opaque.
+ * @param {string} key @param {number} [minZoom] @param {number} [opacity]
  */
-export function tileLayer(key, minZoom) {
+export function tileLayer(key, minZoom, opacity = DEFAULT_OPACITY) {
   const base = key in BASES;
   const def = base ? BASES[/** @type {'photo' | 'plan'} */ (key)] : /** @type {LayerDef} */ (overlayDef(key));
-  const layers = def.layers.map(l => wmts(l, base, key, minZoom));
+  const layers = def.layers.map(l => wmts(l, key, base ? 1 : opacity, minZoom));
   return layers.length === 1 ? layers[0] : L.layerGroup(layers);
 }
 
