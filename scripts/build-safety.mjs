@@ -353,7 +353,8 @@ export function matchTppt(XLSX, buffer, index, skipped = new Set()) {
   const out = new Map();
   for (const p of sheet('Plants')) {
     const human = toxicity(p.Human_toxicity), animal = toxicity(p.Animal_toxicity);
-    if (!human && !animal) continue;
+    // « nontoxic » reads as no level, but goes on to keptTppt: KEPT_TOXIC may keep it toxic.
+    if (!human && !animal && String(p.Human_toxicity || '').toLowerCase().trim() !== NONTOXIC) continue;
     const entry = keptTppt({
       level: human?.level ?? 0, levelLabel: human?.label ?? null, levelEn: String(p.Human_toxicity || '').trim() || null, animal: animal?.label ?? null,
       parts: partsFr(p.Toxic_plant_part) || null, partsEn: String(p.Toxic_plant_part || '').trim() || null,
