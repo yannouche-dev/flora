@@ -3,10 +3,9 @@ import { LitElement, html, css, nothing } from 'lit';
 import { tabHref } from '../core/context.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
 import { href, RouterController } from '../core/router.js';
-import { setKingMode, setMode, store, StoreController } from '../core/store.js';
+import { setKingMode, setMode, store, StoreController, whenReady } from '../core/store.js';
 import { exportGeoJSON } from '../core/collections.js';
 import './gf-flora.js';
-import './gf-capture.js';
 import './gf-tabbar.js';
 import './gf-mode-switch.js';
 import './gf-scenarios.js';
@@ -34,6 +33,18 @@ const SCREENS = {
   layout: () => import('../layout/gf-layout.js'),
   builder: () => import('../layout/gf-builder.js')
 };
+/**
+ * « Noter ici » (gf-capture and what it brings: the plants, their alerts, the position…), out of the start: loaded once
+ * the search is ready, while the app is idle — or at its first opening, if it comes sooner.
+ * @type {Promise<unknown> | null}
+ */
+let captureModule = null;
+const loadCapture = () => (captureModule ??= import('./gf-capture.js').catch(error => { captureModule = null; console.error(error); }));
+whenReady().then(() => {
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(() => loadCapture(), { timeout: 3000 });
+  else setTimeout(loadCapture, 500);
+});
+
 /** The screens asked for, and those loaded. @type {Set<string>} */
 const asked = new Set(), loaded = new Set();
 /**
@@ -230,9 +241,20 @@ export class GfApp extends LitElement {
     if (typing && (scrollY || vv.offsetTop)) scrollTo(0, 0);
   };
 
+  /**
+   * « Noter ici » opened: at once once its module is there (it is, past the first moments: loaded while idle), else as
+   * soon as it comes — drawn first (its dialog), never opened half-made. None in a boxed mini-app's template: nothing.
+   */
+  #openCapture() {
+    const c = /** @type {any} */ (this.renderRoot.querySelector('gf-capture'));
+    if (!c) return;
+    if (c.hasUpdated) { c.open(); return; }
+    loadCapture().then(() => customElements.whenDefined('gf-capture')).then(() => c.updateComplete).then(() => { if (c.isConnected) c.open(); });
+  }
+
   constructor() {
     super();
-    this.addEventListener('open-capture', () => /** @type {any} */ (this.renderRoot.querySelector('gf-capture'))?.open());
+    this.addEventListener('open-capture', () => this.#openCapture());
     this.addEventListener('open-scenarios', () => /** @type {any} */ ([...this.renderRoot.querySelectorAll('gf-scenarios')].find(s => s.getClientRects().length))?.open());
   }
 
@@ -272,7 +294,7 @@ export class GfApp extends LitElement {
         <div class="side end">${phone ? html`<gf-scenarios class="phone-scenarios"></gf-scenarios>` : html`
         ${tabShown('flore') ? html`<gf-mode-switch class="mode" scope="toute l’application" value=${this.#store.state.mode}
           @mode-change=${e => setMode(e.detail.mode || 'standard')}></gf-mode-switch>` : nothing}
-        ${tabShown('map') ? html`<button class="note primary" type="button" aria-label="Noter ici" @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-capture'))?.open()}>${icon('plus-lg')}<span class="lbl"> Noter ici</span></button>` : nothing}
+        ${tabShown('map') ? html`<button class="note primary" type="button" aria-label="Noter ici" @click=${() => this.#openCapture()}>${icon('plus-lg')}<span class="lbl"> Noter ici</span></button>` : nothing}
         <gf-scenarios></gf-scenarios>
         <a class="settings" href=${href.settings()} title="À propos et réglages" aria-label="À propos et réglages">${icon('gear')}</a>`}</div>
       </header>

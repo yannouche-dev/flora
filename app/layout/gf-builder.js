@@ -16,7 +16,7 @@ import { share } from '../core/share.js';
 import { ui } from '../styles/ui.js';
 import { dirAt, parse, shares } from './grammar.js';
 import { COMPONENTS } from './registry.js';
-import { GRIDS } from './gf-builder-grids.js';
+import { builderSpec, GRIDS } from './gf-builder-grids.js';
 import { PRESETS } from './presets.js';
 import './gf-layout.js';
 
@@ -119,11 +119,16 @@ export class GfBuilder extends LitElement {
    * at a mere render. Even to the layout and state it was last given: the layout replaces the address as it is built
    * (no route then), so Back may well return to them — and the layout then follows them again.
    */
+  /** The layout being built (gf-builder-grids.js#builderSpec: g=, else the grid named; null: the start). @type {string | null} */
+  #spec = null;
   #layoutRoute = { name: 'layout', spec: '', search: '' };
 
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
-    if (changed.has('route')) this.#layoutRoute = { name: 'layout', spec: this.route?.spec ?? '', search: this.route?.search ?? '' };
+    if (changed.has('route')) {
+      this.#spec = builderSpec(this.route ?? {});
+      this.#layoutRoute = { name: 'layout', spec: this.#spec ?? '', search: this.route?.search ?? '' };
+    }
   }
 
   connectedCallback() {
@@ -222,6 +227,6 @@ export class GfBuilder extends LitElement {
     </div>`;
   }
 
-  render() { return this.route?.spec == null ? this.#start() : this.#building(); }
+  render() { return this.#spec == null ? this.#start() : this.#building(); }
 }
 customElements.define('gf-builder', GfBuilder);

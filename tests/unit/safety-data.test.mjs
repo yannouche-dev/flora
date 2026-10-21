@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import {
-  KEPT_TOXIC, NAME_LINKS, PARTS_WORDS, TOXICITY_LABELS, extendSplitGenera, indexPlants, keptTppt, linkTppt, matchAnsm, partsFr, retranslate, toxicity
+  KEPT_TOXIC, NAME_LINKS, PARTS_WORDS, TOXICITY_LABELS, extendSplitGenera, indexPlants, keptTppt, linkTppt, matchAnsm, matchTppt, partsFr, retranslate, toxicity
 } from '../../scripts/build-safety.mjs';
 import { checkConfusions } from '../../scripts/check-confusions.mjs';
 
@@ -113,6 +113,21 @@ test('TPPT « nontoxic » : jamais lu « toxic », jamais dit « non toxique » 
   const rhodo = keptTppt(retranslate({ level: 0, levelLabel: null, levelEn: 'nontoxic', name: 'Rhododendron hirsutum L.' }));
   assert.deepEqual([rhodo.level, rhodo.levelLabel, rhodo.reviewed], [2, 'toxique', KEPT_TOXIC.get('rhododendron hirsutum')]);
   assert.deepEqual(keptTppt({ level: 2, levelLabel: 'toxique', levelEn: 'toxic', name: 'X y' }), { level: 2, levelLabel: 'toxique', levelEn: 'toxic', name: 'X y' });
+  // Read fresh from the base (the dataset build), not only from a previous file: the reviewed one kept, its animal
+  // toxicity none; the other « nontoxic » rows left out.
+  const rows = [
+    { Plant_number: 1, Latin_plant_name: 'Rhododendron hirsutum L.', Human_toxicity: 'nontoxic', Animal_toxicity: '', Toxic_plant_part: 'Leaf' },
+    { Plant_number: 2, Latin_plant_name: 'Vaccinium myrtillus L.', Human_toxicity: 'nontoxic', Animal_toxicity: '', Toxic_plant_part: 'Fruit' },
+    { Plant_number: 3, Latin_plant_name: 'Arum maculatum L.', Human_toxicity: 'toxic', Animal_toxicity: '', Toxic_plant_part: 'Fruit' }
+  ];
+  const XLSX = { read: () => ({ Sheets: { Plants: 'Plants', Relationships: 'Relationships' } }), utils: { sheet_to_json: (/** @type {string} */ n) => n === 'Plants' ? rows : [] } };
+  const read = matchTppt(XLSX, Buffer.from(''), indexPlants([
+    { id: 117681, genus: 'Rhododendron', scientificName: 'Rhododendron hirsutum', synonyms: [] },
+    { id: 128345, genus: 'Vaccinium', scientificName: 'Vaccinium myrtillus', synonyms: [] },
+    { id: 82738, genus: 'Arum', scientificName: 'Arum maculatum', synonyms: [] }
+  ]));
+  assert.deepEqual([...read.keys()].sort((a, b) => a - b), [82738, 117681]);
+  assert.deepEqual([read.get(117681).level, read.get(117681).reviewed], [2, KEPT_TOXIC.get('rhododendron hirsutum')]);
   // The shipped file: no « nontoxic » left but the reviewed one; the myrtle, the lamb's lettuce, the Jerusalem
   // artichoke without a TPPT verdict.
   const nontoxic = Object.entries(safety.plants).filter(([, e]) => /** @type {any} */ (e).tppt?.levelEn === 'nontoxic');

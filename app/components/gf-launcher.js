@@ -21,7 +21,6 @@ import { discoverEvents, discovering, finishDiscover } from '../core/discover.js
 import { openModal } from '../core/history.js';
 import { MINIAPPS } from '../miniapps/index.js';
 import { madeByApp } from '../core/collections.js';
-import { replayApp, replayItems } from '../miniapp/runtime.js';
 import { ui } from '../styles/ui.js';
 import { fr } from '../core/fr.js';
 
@@ -136,7 +135,8 @@ export class GfLauncher extends LitElement {
   /** « Recommencer »: asked first, in a dialog (Annuler, Échap: nothing changes). @param {Entry} e */
   async #ask(e) {
     // What will be deleted, said: what it made in Mes plantes (its favourites, its parcours), the game.
-    const m = (await e.app.load()).default;
+    // The runtime of the mini-apps (runtime.js) comes with « Recommencer » only: not at the start of the app.
+    const [{ default: m }, { replayItems }] = await Promise.all([e.app.load(), import('../miniapp/runtime.js')]);
     this._asking = { ...e, items: replayItems(m, await madeByApp(m.id).catch(() => ({ favorites: [], collections: [], kept: { favorites: 0, collections: 0 } }))) };
     await this.updateComplete;
     openModal(/** @type {HTMLDialogElement | null} */ (this.renderRoot.querySelector('dialog.ask')));
@@ -154,6 +154,7 @@ export class GfLauncher extends LitElement {
       // The one on screen: its box plays it again (event ma-replay, up to gf-miniapp).
       this.dispatchEvent(new CustomEvent('ma-replay', { detail: { id: a.id }, bubbles: true, composed: true }));
     } else {
+      const { replayApp } = await import('../miniapp/runtime.js');
       await replayApp((await a.load()).default);
       a.play?.();
       openView(href.app(a.id, 'start'));
