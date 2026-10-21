@@ -4,7 +4,9 @@
 // (a grid; Mosaïque: large photos, the names over them, « En fleur maintenant » filters, a touch opens the plant at its
 // images). Cueillette prudente says first, in red, never to pick without a certain identification, that each plant here
 // has a dangerous look-alike (Anses, Centres antipoison) and whom to call; its list unreadable, it says so (every plant
-// kept). The first match during the first steps: a screen of its own (« C’est un match ! »). A plant open (?p=): its
+// kept); none here, one message — none confirmed is not none there; its toxic look-alikes swiped right are recognised,
+// to avoid, never a match (kit/session.js#swiped). The first match during the first steps: a screen of its own
+// (« C’est un match ! »). A plant open (?p=): its
 // sheet beside the list (kit/ma-plant-sheet.js). The step « cards » of Cueillette prudente, Mosaïque, and Rencontres
 // once its first steps are over.
 // Rencontres (`media`): ONE plant on the screen, the plant CHOSEN (kit/session.js#chosenId, the address's ?p=) — the
@@ -314,17 +316,23 @@ export class MaAroundList extends LitElement {
     tabs[to].focus();
   };
 
-  /** A card swiped (flown off the deck): kept, said; a match celebrated — the first one by a screen of its own. @param {CustomEvent} e */
+  /**
+   * A card swiped (flown off the deck): kept, said; a match celebrated — the first one by a screen of its own.
+   * Cueillette prudente's toxic look-alike swiped right: recognised, to avoid (kit/session.js#swiped) — never celebrated.
+   * @param {CustomEvent} e
+   */
   #onDecide = e => {
     const { card, liked } = /** @type {{ card: Card, liked: boolean }} */ (e.detail);
     const s = this.#s;
+    const avoided = liked && s.avoids(card);
     const fav = s.swiped(card, liked);
     // Said aloud (the status under the view): what the swipe did, then the card now on top.
     const next = s.deck[0];
-    this._said = `${liked ? `Match : ${nameOf(card.plant)}${fav ? ', ajoutée aux favoris' : ''}` : `Passée : ${nameOf(card.plant)}`}. ${next ? `Carte suivante : ${nameOf(next.plant)}.` : 'Plus aucune carte.'}`;
+    const did = avoided ? `Reconnue, à ne pas cueillir : ${nameOf(card.plant)}` : liked ? `Match : ${nameOf(card.plant)}${fav ? ', ajoutée aux favoris' : ''}` : `Passée : ${nameOf(card.plant)}`;
+    this._said = `${did}. ${next ? `Carte suivante : ${nameOf(next.plant)}.` : 'Plus aucune carte.'}`;
     // Rencontres: the line on the photos gives way once the game goes on.
     this._coach = false;
-    if (!liked) return;
+    if (!liked || avoided) return;
     // The first match (while discovering): its screen, once. The next ones: a heart.
     if (discovering() && !discoverState().firstMatch) this._match = card;
     else s.heart();
@@ -493,6 +501,9 @@ export class MaAroundList extends LitElement {
     // Rencontres: the plant chosen, when it is not the card on top (a heart, a tile, a point of the map chose it): named
     // over the deck — the map pins it, the photos and the sheet show it; the card on top is a candidate.
     const chosen = s.chooses && view === 'swipe' && c.focus != null && s.deck[0]?.plant.id !== s.chosenId ? s.chosenCard : undefined;
+    // Cueillette prudente without a plant: one message (none confirmed here is not none here) and the way further —
+    // no deck, no other view.
+    const harvestEmpty = this.harvest && cards?.length === 0 && !s.loading;
     return html`<div class="duo"><section class="list ${this.harvest ? 'harvest' : this.mosaic ? 'mosaic' : 'meet'} ${cards?.length && view === 'swipe' ? 'swiping' : ''} ${chosen ? 'chose' : ''}">
       <div class="head">
         <h1>${this.heading ? this.heading + ' · ' : ''}Autour ${c.place ? 'de ' + c.place : 'de vous'}</h1>
@@ -505,7 +516,7 @@ export class MaAroundList extends LitElement {
         <span class="sos-line">${emergency()}.</span></span></p>` : nothing}
       ${this.harvest && s.unread && !s.loading ? html`<p class="banner-warn" role="alert">${icon('exclamation-octagon-fill')}<span><b>${UNREAD_LOOKALIKES}</b>
         <button class="link" type="button" @click=${() => s.load()}>Réessayer</button></span></p>` : nothing}
-      ${this.harvest && cards && !cards.length && !s.loading && !s.unread ? html`<div class="deck-end"><p><b>Aucune plante de cueillette observée à moins de ${km}.</b></p>
+      ${harvestEmpty ? html`<div class="deck-end"><p><b>Aucune observation confirmée ici pour ces plantes : cela ne veut pas dire qu’elles sont absentes.</b></p>
         ${further ? html`<button class="primary" type="button" @click=${() => s.widen(further)}>Chercher jusqu’à ${distLabel(further)}</button>` : nothing}</div>` : nothing}
       ${this.mosaic && cards?.length ? html`<label class="bloom-only"><input type="checkbox" .checked=${this._bloomOnly} @change=${(/** @type {any} */ e) => { this._bloomOnly = e.target.checked; }} /> En fleur maintenant (${cards.filter(x => x.blooming).length})</label>` : nothing}
       ${cards && cards.length ? html`<div class="views segmented" role="tablist" aria-label="Affichage" @keydown=${this.#tabKey}>
@@ -515,15 +526,15 @@ export class MaAroundList extends LitElement {
       ${chosen ? html`<p class="chosen-line" role="note">${icon('geo-alt-fill')}<span>Plante choisie : <b>${nameOf(chosen.plant)}</b> — sur la carte${this.#mediaState ? ' et dans ses photos' : ''}</span></p>` : nothing}
       ${s.loading ? html`<p class="muted">Recherche des plantes observées autour…</p>` : nothing}
       ${s.error ? html`<p class="error" role="alert">${s.error} <button class="link" type="button" @click=${() => s.load()}>Réessayer</button></p>` : nothing}
-      ${cards && !cards.length && !s.loading ? html`<p class="muted">Aucune plante observée ici pour le moment. Essayez une autre commune.</p>` : nothing}
-      ${cards && view === 'swipe' ? html`<ma-deck .session=${s} .cards=${s.deck} .c=${c} ?active=${this.#sheetId == null && !this._match && this._full == null}
+      ${cards && !cards.length && !s.loading && !this.harvest ? html`<p class="muted">Aucune plante observée ici pour le moment. Essayez une autre commune.</p>` : nothing}
+      ${cards && view === 'swipe' && !harvestEmpty ? html`<ma-deck .session=${s} .cards=${s.deck} .c=${c} ?active=${this.#sheetId == null && !this._match && this._full == null}
           ?photos=${this.#photosButton} @deck-decide=${this.#onDecide} @deck-undo=${this.#onUndo} @deck-photos=${this.#onPhotos}
           @deck-open=${(/** @type {CustomEvent} */ e) => this.#openPlant(e.detail.id, s.deck.map(x => x.plant.id))}></ma-deck>` : nothing}
-      ${cards && view === 'matches' ? (matches ? html`<div class="grid">${matchCards.map(x => html`<div class="mwrap">${this.#card(x, matchCards.map(m => m.plant.id), this.media && this.#mediaState ? () => this.#chooseShown(x.plant.id) : null)}
+      ${cards && view === 'matches' && !harvestEmpty ? (matches ? html`<div class="grid">${matchCards.map(x => html`<div class="mwrap">${this.#card(x, matchCards.map(m => m.plant.id), this.media && this.#mediaState ? () => this.#chooseShown(x.plant.id) : null)}
           <button class="unmatch" type="button" title="Retirer ce match (et des favoris)" aria-label=${'Retirer ' + nameOf(x.plant) + ' des matchs'}
             @click=${() => s.unmatch(x)}>${icon('x-lg')} Retirer</button></div>`)}</div>`
         : html`<p class="muted empty">Pas encore de match. Glissez à droite une plante qui vous plaît dans « Rencontres ».</p>`) : nothing}
-      ${cards && view === 'all' ? this.#allView(cards) : nothing}
+      ${cards && view === 'all' && !harvestEmpty ? this.#allView(cards) : nothing}
       ${cards ? html`
         <p class="src">Observations confirmées d’iNaturalist ; noms, floraison et alertes de la flore embarquée (TAXREF, Baseflor, INPN, ANSM, Anses).
           ${ds.done ? nothing : html`<br />Encore ${Math.max(0, PLANTS_BEFORE_FLORE - ds.seen.length)} plante${PLANTS_BEFORE_FLORE - ds.seen.length > 1 ? 's' : ''} à rencontrer avant la flore complète.`}</p>` : nothing}

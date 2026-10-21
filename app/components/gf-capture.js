@@ -167,6 +167,8 @@ export class GfCapture extends LitElement {
   open() {
     this._query = '';
     this._confirm = null;
+    // Unticked at each opening: a harvest asked for one plant is never carried over to the next one noted.
+    this._harvestToday = false;
     openModal(this.#dialog);
     this.#unwatch ??= watchLocation(({ fix, error }) => {
       const firstFix = !this._fix && fix;
@@ -293,8 +295,8 @@ export class GfCapture extends LitElement {
       // Protected or regulated where it was just noted: say so right away (INPN statuses).
       const record = plant.statuses ? plant : await getPlant(plant.id);
       const warning = await statusWarning(record, fix.coordinates);
-      // Mode cueillette: the plants it can be mistaken for (Anses / Centres antipoison).
-      const lookalike = this.#store.state.harvestMode ? await lookalikeWarning(plant) : null;
+      // The plants it can be mistaken for (Anses / Centres antipoison), whatever the mode: noted here, it may be picked.
+      const lookalike = await lookalikeWarning(plant);
       this.#showToast({
         warning,
         lookalike,

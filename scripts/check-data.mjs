@@ -189,6 +189,13 @@ if (plants.length) {
       if (odd.length) english.set(`parts « ${t.parts} » (${odd.join(', ')})`, id);
     }
     for (const [what, id] of english) error(SAFETY_FILE, `TPPT ${what} of plant ${id} is not translated (scripts/build-safety.mjs: toxicity, PARTS)`);
+    // « nontoxic » is never kept (the app never says a plant is harmless; read as « toxic », it showed 21 harmless plants
+    // as toxic), except a plant kept toxic by hand, which says why (build-safety.mjs: keptTppt, KEPT_TOXIC).
+    const harmless = Object.entries(entries).filter(([, entry]) => {
+      const t = /** @type {any} */ (entry)?.tppt;
+      return t && String(t.levelEn || '').toLowerCase().trim() === 'nontoxic' && !(t.reviewed && t.level >= 2);
+    }).map(([id]) => id);
+    if (harmless.length) error(SAFETY_FILE, `TPPT « nontoxic » kept for plant ${harmless.join(', ')}: left out by scripts/build-safety.mjs#keptTppt, or kept toxic by KEPT_TOXIC with its reason`);
     summary.push(`${SAFETY_FILE}: ${count.safety} plants (ANSM A ${count.ansmA}, ANSM B ${count.ansmB}, TPPT ${count.tppt})`);
   }
 

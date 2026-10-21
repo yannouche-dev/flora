@@ -4,8 +4,11 @@
 // (MATCH, BOF); far enough, or thrown, it flies off: right a match, left passed; up (or a touch), its sheet. The three
 // buttons (↺ undo, ✕, ♥, « ⋯ » its sheet unless `guided`, and its photos when asked: `photos`) and the keys (→ ←, ↑) do the same — the keys only when
 // the deck has the focus or nothing has (never a match by mistake from a tab, a slider or the map), and only while
-// `active` (no plant open, no match on screen). The first time, the top card leans right then left: it can be swiped.
-// The hint once per app open (and again after « Rejouer »: kit/session.js#forgetGame). No more cards: further (« Chercher jusqu’à … »), or the ones passed again.
+// `active` (no plant open, no match on screen). Cueillette prudente's toxic look-alikes (kit/session.js#avoids) are never
+// loved: their right says « Je la reconnais : à ne pas cueillir » (stamp À ÉVITER, ⛔ for ♥, a tag on the card).
+// The first time, the top card leans right then left: it can be swiped.
+// The hint once per app open (and again after « Rejouer »: kit/session.js#forgetGame). No more cards: further (« Chercher jusqu’à … »), or the ones passed again
+// (and those recognised to avoid, counted apart from the matches).
 // It decides nothing itself: the card flown off, the event `deck-decide` (detail { card, liked }); `deck-open`
 // (detail { id }), `deck-undo`, `deck-photos` (detail { id }). The session (kit/session.js) gives the rest.
 
@@ -77,6 +80,10 @@ export class MaDeck extends LitElement {
     .stamp { position: absolute; top: 26px; padding: 4px 12px; border: 4px solid; border-radius: 10px; font-size: 1.8rem; font-weight: 900; letter-spacing: 0.08em; opacity: 0; pointer-events: none; }
     .stamp.like { left: 18px; color: #4ade80; transform: rotate(-14deg); opacity: var(--like, 0); }
     .stamp.nope { right: 18px; color: #f87171; transform: rotate(14deg); opacity: var(--nope, 0); }
+    /* Cueillette prudente, a toxic look-alike: recognised, to avoid — never a match. */
+    .stamp.like.avoid { color: #fbbf24; font-size: 1.5rem; }
+    .avoid-tag { display: flex; align-items: center; gap: 5px; width: fit-content; margin: 0 0 6px; padding: 2px 10px; border-radius: var(--gf-radius-pill);
+      background: #b91c1c; color: #fff; font-size: 0.8rem; font-weight: 700; }
     /* A plant already loved, brought back on top (touched on the map or in the list around). */
     .loved-badge { position: absolute; top: 12px; left: 12px; z-index: 1; display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: var(--gf-radius-pill);
       background: #e0245e; color: #fff; font-size: 0.8rem; font-weight: 700; box-shadow: 0 0 0 2px #ffd166, 0 2px 8px rgb(0 0 0 / 35%); pointer-events: none; }
@@ -85,6 +92,7 @@ export class MaDeck extends LitElement {
       box-shadow: 0 6px 16px rgb(0 0 0 / 18%); transition: transform 0.12s; }
     .round:active { transform: scale(0.92); }
     .round.pass { color: #ef4444; } .round.like { color: #e0245e; } .round.info { width: 46px; height: 46px; font-size: 1.1rem; color: var(--gf-text-muted); }
+    .round.like.avoid { color: #b91c1c; }
     .round:focus-visible { outline: none; box-shadow: var(--gf-focus); }
     .round.undo { width: 46px; height: 46px; font-size: 1.05rem; color: #d4a017; }
     .round:disabled { opacity: 0.35; cursor: default; }
@@ -92,6 +100,7 @@ export class MaDeck extends LitElement {
     .deck-end { text-align: center; padding: 30px 10px; display: grid; gap: 6px; justify-items: center; }
     .deck-end .big { font-size: 3rem; color: var(--gf-accent); margin: 0; }
     .deck-end p { margin: 0; }
+    .deck-end .avoided { display: flex; align-items: center; gap: 6px; color: var(--gf-danger); font-weight: 600; }
     .row { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; margin-top: 8px; }
     /* What is said of it (Wikipédia), on the card. */
     .ethno { margin: 0 0 6px; font-size: 0.86rem; line-height: 1.35; font-style: italic; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
@@ -200,7 +209,8 @@ export class MaDeck extends LitElement {
   }
 
   /**
-   * Right: a match; left: passed. The card flies off first, then `deck-decide` says it.
+   * Right: a match (Cueillette prudente's toxic look-alike: recognised, to avoid — the session decides,
+   * kit/session.js#swiped); left: passed. The card flies off first, then `deck-decide` says it.
    * @param {Card} card @param {boolean} liked @param {HTMLElement} [el]
    */
   decide(card, liked, el) {
@@ -288,21 +298,29 @@ export class MaDeck extends LitElement {
     if (!deck.length) {
       const next = nextDistance(c.radius);
       const matches = s.matchCards.length;
+      // Cueillette prudente: the toxic look-alikes recognised, counted apart — never with the matches. (A layout's
+      // deck, layout/cells.js, has none.)
+      const avoided = s.avoidCards?.length ?? 0;
       return html`<div class="deck-end">
         <p class="big">${icon('flower3')}</p>
         <p><b>Vous avez rencontré toutes les plantes du coin !</b></p>
         <p class="muted">${matches ? `${matches} match${matches > 1 ? 's' : ''} dans votre herbier — à retrouver dans « Matchs ».` : 'Aucun coup de cœur ? Le prochain se cache peut-être un peu plus loin, derrière la haie.'}</p>
+        ${avoided ? html`<p class="avoided">${icon('exclamation-octagon-fill')}${avoided} plante${avoided > 1 ? 's' : ''} reconnue${avoided > 1 ? 's' : ''} à ne pas cueillir.</p>` : nothing}
         <div class="row">${next ? html`<button class="primary" type="button" @click=${() => s.widen(next)}>Chercher jusqu’à ${distLabel(next)}</button>` : nothing}
-          ${c.passed.length ? html`<button class="secondary" type="button" @click=${() => s.resetPassed()}>Revoir les plantes passées</button>` : nothing}</div>
+          ${c.passed.length || c.avoided?.length ? html`<button class="secondary" type="button" @click=${() => s.resetPassed()}>Revoir les plantes passées</button>` : nothing}</div>
       </div>`;
     }
     const [top, under] = deck;
     const name = nameOf(top.plant);
     const left = s.deck.length;
+    // Cueillette prudente: a toxic look-alike on top (or the confusions unreadable) — its right is « recognised, to
+    // avoid », never a match (kit/session.js#avoids; a layout's deck, layout/cells.js, has none). One button for both,
+    // so the focus stays on it from a card to the next.
+    const avoid = s.avoids?.(top) ?? false;
     // The deck takes the focus (a Tab), and ← → ↑ then act on its top card — only there (#onKey): on a tab, a
     // button or the map, the arrows keep their own meaning.
     return html`<div class="deck-wrap">
-      <div class="deck" tabindex="0" role="group" aria-label=${`Carte : ${name}. Flèche droite : match, flèche gauche : passer${this.guided ? '' : ', flèche haut : sa fiche'}`}>
+      <div class="deck" tabindex="0" role="group" aria-label=${`Carte : ${name}. Flèche droite : ${avoid ? 'je la reconnais, à ne pas cueillir' : 'match'}, flèche gauche : passer${this.guided ? '' : ', flèche haut : sa fiche'}`}>
         ${repeat(under ? [under, top] : [top], x => x.plant.id, x => this.#card(x, x === top))}
         ${s.burst ? html`<span class="burst" aria-hidden="true">${icon('heart-fill')}</span>` : nothing}
       </div>
@@ -313,7 +331,8 @@ export class MaDeck extends LitElement {
         ${this.photos ? html`<button class="round info photos" type="button" aria-label=${'Ses photos : ' + name} title="Ses photos"
           @click=${() => this.dispatchEvent(new CustomEvent('deck-photos', { detail: { id: top.plant.id }, bubbles: true, composed: true }))}>${icon('images')}</button>` : nothing}
         ${this.guided ? nothing : html`<button class="round info" type="button" aria-label=${'Voir sa fiche : ' + name} title="Sa fiche (↑)" @click=${() => this.#open(top)}>${icon('three-dots')}</button>`}
-        <button class="round like" type="button" aria-label=${`J’aime ${name} : c’est un match`} title="Match (→)" @click=${() => this.decide(top, true)}>${icon('heart-fill')}</button>
+        <button class="round like ${avoid ? 'avoid' : ''}" type="button" aria-label=${avoid ? `Je reconnais ${name} : à ne pas cueillir` : `J’aime ${name} : c’est un match`}
+          title=${avoid ? 'Je la reconnais : à ne pas cueillir (→)' : 'Match (→)'} @click=${() => this.decide(top, true)}>${icon(avoid ? 'exclamation-octagon-fill' : 'heart-fill')}</button>
       </div>
       <p class="left">${left} plante${left > 1 ? 's' : ''} à rencontrer</p>
     </div>`;
@@ -327,16 +346,19 @@ export class MaDeck extends LitElement {
     const loved = /** @type {number[]} */ (this.c?.matches ?? []).includes(p.id);
     const photo = this.#photo(c.photo);
     const ethno = s.ethnoOf(c);
+    // Cueillette prudente's toxic look-alike: swiped right, recognised — its stamp and its tag say so.
+    const avoid = s.avoids?.(c) ?? false;
     // The card underneath is out of reach (inert) and unread: a screen reader meets the card on top only.
     return html`<article class="swipe-card ${top ? 'top' : 'under'} ${loved ? 'loved' : ''}" aria-label=${loved ? name + ' — déjà aimée' : name} data-id=${p.id}
         ?inert=${!top} aria-hidden=${top ? 'false' : 'true'}
         @pointerdown=${top ? this.#dragStart : null} @pointermove=${top ? this.#dragMove : null} @pointerup=${top ? this.#dragEnd : null} @pointercancel=${top ? this.#dragEnd : null}>
       <div class="nophoto">${icon('leaf')}</div>
       ${photo ? html`<img src=${photo} alt="" loading="eager" decoding="async" referrerpolicy="no-referrer" draggable="false" @error=${hideImg} @load=${showImg} />` : nothing}
-      <span class="stamp like" aria-hidden="true">MATCH</span><span class="stamp nope" aria-hidden="true">BOF</span>
+      <span class="stamp like ${avoid ? 'avoid' : ''}" aria-hidden="true">${avoid ? 'À ÉVITER' : 'MATCH'}</span><span class="stamp nope" aria-hidden="true">BOF</span>
       ${loved ? html`<span class="loved-badge">${icon('heart-fill')} Déjà aimée</span>` : nothing}
       ${photo && c.credit ? html`<p class="credit">Photo : ${creditText(c.credit)}</p>` : nothing}
       <div class="about">
+        ${avoid ? html`<p class="avoid-tag">${icon('exclamation-octagon-fill')} À ne pas cueillir</p>` : nothing}
         <h2>${name}<small>${p.scientificName}</small></h2>
         ${ethno ? html`<p class="ethno"><b>On dit de moi</b> <small class="wsrc">(Wikipédia, CC BY-SA)</small> : ${ethno}</p>` : nothing}
         <ul class="bio">${bio(c, floweringMonths(p.flowering)).slice(0, ethno ? 3 : 4).map(line => html`<li>${line}</li>`)}</ul>

@@ -411,6 +411,15 @@ export async function promoteFavorite(plantId) {
     ? withPlants(c, c.properties.plants.map(e => e.plantId === plantId ? promotedEntry(e) : e)) : c).catch(() => {});
 }
 
+/**
+ * A favourite a mini-app made, taken back — never one the user made, or made their own (promoteFavorite).
+ * @param {number} plantId @param {string} app
+ */
+export async function forgetFavoriteMadeBy(plantId, app) {
+  if (!isFavorite(plantId)) return;
+  await updatePlace(FAVORITES_ID, c => findEntry(c, plantId)?.origin?.app === app ? withoutPlant(c, plantId) : c).catch(() => {});
+}
+
 /** What a mini-app made in Mes plantes (place-model.js#madeBy): its favourites, its collections. @param {string} app */
 export const madeByApp = async app => madeBy(await listCollections(), app);
 

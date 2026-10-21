@@ -1,9 +1,9 @@
 // @ts-check
 // The cards of the plants around a place (Rencontres, Cueillette prudente, Mosaïque): what is pure about them — the
 // distances offered, their words and their slider, the order of Cueillette prudente (only the plants of a dangerous
-// confusion, the deadliest first), the deck (the cards not yet swiped), a swipe kept or taken back, the first sentence
-// of what Wikipédia says, and a card's short « bio », its safety lines first. No DOM, no network: tested under Node
-// (tests/unit/around-cards.test.mjs).
+// confusion, the deadliest first) and its toxic look-alikes (never a match: recognised, to avoid), the deck (the cards
+// not yet swiped), a swipe kept or taken back, the first sentence of what Wikipédia says, and a card's short « bio »,
+// its safety lines first. No DOM, no network: tested under Node (tests/unit/around.test.mjs).
 
 import { UNREAD } from '../../core/alerts.js';
 import { gravest, severityOf } from '../../core/lookalikes.js';
@@ -13,7 +13,8 @@ import { STOPS as DISTANCES } from '../../core/distance.js';
 /**
  * @typedef {{ plant: any, taxonId?: number, count: number, photo: string | null, credit: import('../../core/credit.js').Credit | null,
  *   blooming: boolean, alerts: any, confusions?: import('../../core/lookalikes.js').Lookalike[] }} Card
- * @typedef {{ matches: number[], passed: number[] }} Swipes
+ * @typedef {{ matches: number[], passed: number[], avoided?: number[] }} Swipes `avoided`: Cueillette prudente's toxic
+ *   look-alikes recognised (toAvoid); a game without it never gets the key.
  */
 
 // How far to look, in metres (iNaturalist searches a circle; beyond 50 km the list is a region's, not « around »), and
@@ -111,19 +112,38 @@ export function harvestOrder(list, unread) {
 /** The other ways: the most observed here first (the most photos), then those in flower. @param {Card[]} list */
 export const aroundOrder = list => [...list].sort((a, b) => b.count - a.count || Number(b.blooming) - Number(a.blooming));
 
-/** The cards not yet swiped (passed ones are not shown again; matches neither). @param {Card[]} cards @param {Swipes} s */
-export const deckOf = (cards, s) => cards.filter(c => !s.passed.includes(c.plant.id) && !s.matches.includes(c.plant.id));
+/**
+ * Cueillette prudente: a plant on the toxic side of a confusion (only its cards carry their confusions) — never a
+ * match nor a favourite: swiped right, it is recognised, to avoid (kit/session.js#swiped). @param {Card} c
+ */
+export const toAvoid = c => Boolean(c.confusions?.some(l => l.side === 'toxic'));
+
+/**
+ * The cards not yet swiped (passed ones are not shown again; matches neither, nor the plants recognised to avoid).
+ * @param {Card[]} cards @param {Swipes} s
+ */
+export const deckOf = (cards, s) => cards.filter(c => !s.passed.includes(c.plant.id) && !s.matches.includes(c.plant.id) && !s.avoided?.includes(c.plant.id));
+
+/** The plants recognised to avoid without `id`, in a game that keeps them (Cueillette prudente). @param {Swipes} s @param {number} id */
+const unavoided = (s, id) => (s.avoided ? { avoided: s.avoided.filter(x => x !== id) } : {});
 
 /**
  * A card swiped: right, a match (kept); left, passed (not shown again here; the last 500).
  * @param {Swipes} s @param {number} id @param {boolean} liked @returns {Swipes}
  */
-export const swipe = (s, id, liked) => liked
+export const swipe = (s, id, liked) => ({ ...(liked
   ? { matches: [...s.matches.filter(x => x !== id), id], passed: s.passed.filter(x => x !== id) }
-  : { passed: [...s.passed.filter(x => x !== id), id].slice(-500), matches: s.matches.filter(x => x !== id) };
+  : { passed: [...s.passed.filter(x => x !== id), id].slice(-500), matches: s.matches.filter(x => x !== id) }), ...unavoided(s, id) });
+
+/**
+ * Cueillette prudente: a toxic look-alike swiped right (toAvoid) — recognised, to avoid: never a match, not shown again
+ * here (as a pass; the last 500), counted apart. @param {Swipes} s @param {number} id @returns {Swipes}
+ */
+export const avoid = (s, id) => ({ avoided: [...(s.avoided ?? []).filter(x => x !== id), id].slice(-500),
+  matches: s.matches.filter(x => x !== id), passed: s.passed.filter(x => x !== id) });
 
 /** A card back in the deck (« ↺ »: the last swipe undone, or a match taken back). @param {Swipes} s @param {number} id @returns {Swipes} */
-export const unswipe = (s, id) => ({ matches: s.matches.filter(x => x !== id), passed: s.passed.filter(x => x !== id) });
+export const unswipe = (s, id) => ({ matches: s.matches.filter(x => x !== id), passed: s.passed.filter(x => x !== id), ...unavoided(s, id) });
 
 /**
  * What is said of it, in one sentence: the first of the article's names and etymology, else of its history, else its

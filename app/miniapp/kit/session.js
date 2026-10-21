@@ -1,10 +1,11 @@
 // @ts-check
 // The game of a mini-app around a place (Rencontres, Cueillette prudente, Mosaïque), shared by its components (kit:
 // ma-distance, ma-around-list, ma-deck, ma-guided, ma-around-map) — one per mini-app open, a new one after « Rejouer »
-// (sessionOf). What is kept on the device is the app's context (app.c: point, place, radius, matches, passed —
-// persist keys of the manifest, under geoflora.app.<id>.state), written only through app.set. The rest lives while
-// the app is open: the cards found (iNaturalist, matched to the flora; Cueillette prudente: only the plants of a
-// dangerous confusion, the deadliest first), the observations in the circle (the map), what Wikipédia says of each
+// (sessionOf). What is kept on the device is the app's context (app.c: point, place, radius, matches, passed;
+// Cueillette prudente: avoided — persist keys of the manifest, under geoflora.app.<id>.state), written only through
+// app.set. The rest lives while the app is open: the cards found (iNaturalist, matched to the flora; Cueillette
+// prudente: only the plants of a dangerous confusion, the deadliest first, its toxic look-alikes never a match but
+// recognised, to avoid), the observations in the circle (the map), what Wikipédia says of each
 // card, the swipes to undo, how many of the list's cards are shown. The view of the list is the context's (`view`,
 // the address's &v=). Rencontres: the plant of the screen, chosen (chosenId: kit/around.js#chosenContext). Fires
 // `change`.
@@ -15,12 +16,12 @@ import { addressAt } from '../../core/geoservices.js';
 import { alertsOf } from '../../core/alerts.js';
 import { lookalikesOf } from '../../core/lookalikes.js';
 import { plantSeen } from '../../core/discover.js';
-import { isFavorite, toggleFavorite } from '../../core/collections.js';
+import { forgetFavoriteMadeBy, isFavorite, toggleFavorite } from '../../core/collections.js';
 import { thumbCredit } from '../../core/credit.js';
 import * as sources from '../../core/sources.js';
 import { whenReady } from '../../core/store.js';
 import { subscribe } from '../../core/sync.js';
-import { PAGE, aroundOrder, deckOf, ethnoSentence, harvestOrder, swipe, unswipe } from './cards.js';
+import { PAGE, aroundOrder, avoid, deckOf, ethnoSentence, harvestOrder, swipe, toAvoid, unswipe } from './cards.js';
 
 /**
  * @typedef {import('./cards.js').Card} Card
@@ -30,6 +31,9 @@ import { PAGE, aroundOrder, deckOf, ethnoSentence, harvestOrder, swipe, unswipe 
 
 /** The mini-apps whose deck has shown it can be swiped (once while the app is open). @type {Set<string>} */
 const hinted = new Set();
+
+/** The cards of a search, at most: the most observed (Cueillette prudente: the first in its order, the deadliest first). */
+const MAX_CARDS = 120;
 
 /**
  * The views of the list (kit/ma-around-list.js: « Rencontres », « Matchs », « Toutes »), as the address writes them
@@ -248,7 +252,10 @@ export class AroundSession extends EventTarget {
       const found = await speciesAround(point, this.c.radius, abort.signal);
       if (abort.signal.aborted) return;
       const month = new Date().getMonth();
-      const species = (found?.species || []).filter(s => s.plantId).slice(0, 120);
+      // Rencontres, Mosaïque: the most observed. Cueillette prudente: every plant read, ordered, then cut — a deadly
+      // plant seen once (a colchique at 20 km) never falls behind the most observed ones.
+      const known = (found?.species || []).filter(s => s.plantId);
+      const species = harvest ? known : known.slice(0, MAX_CARDS);
       const cards = (await Promise.all(species.map(async s => {
         const plant = await getPlant(/** @type {number} */ (s.plantId));
         if (!plant) return null;
@@ -265,12 +272,21 @@ export class AroundSession extends EventTarget {
         // unreadable: said, with every plant (each card says it too), never « none to pick ».
         let unread = false;
         for (const c of list) {
+          if (abort.signal.aborted) return;
           c.confusions = await lookalikesOf(c.plant).catch(error => { console.error(error); unread = true; return []; });
           if (unread) break;
         }
         if (abort.signal.aborted) return;
         this.unread = unread;
-        list = harvestOrder(list, unread);
+        list = harvestOrder(list, unread).slice(0, MAX_CARDS);
+        // A toxic look-alike matched before the game knew better: recognised, to avoid — never a match, and the
+        // favourite that match made taken back (not one the user made their own).
+        const wrong = new Set(list.filter(c => toAvoid(c) && this.c.matches.includes(c.plant.id)).map(c => c.plant.id));
+        if (wrong.size) {
+          this.app.set({ matches: this.c.matches.filter((/** @type {number} */ id) => !wrong.has(id)),
+            avoided: [...(this.c.avoided ?? []).filter((/** @type {number} */ id) => !wrong.has(id)), ...wrong] });
+          for (const id of wrong) forgetFavoriteMadeBy(id, this.app.m.id);
+        }
       } else list = aroundOrder(list);
       this.cards = list;
       // The alerts of each plant (local data), as they come.
@@ -291,6 +307,12 @@ export class AroundSession extends EventTarget {
   /** The cards matched. */
   get matchCards() {
     const ids = this.c.matches;
+    return (this.cards || []).filter(c => ids.includes(c.plant.id));
+  }
+
+  /** Cueillette prudente: the toxic look-alikes recognised, to avoid (never among the matches). */
+  get avoidCards() {
+    const ids = this.c.avoided ?? [];
     return (this.cards || []).filter(c => ids.includes(c.plant.id));
   }
 
@@ -324,19 +346,30 @@ export class AroundSession extends EventTarget {
   // ── Swiping ───────────────────────────────────────────────────────────
 
   /**
-   * A card swiped: right, a match (kept by the app, and in the favourites); left, passed. It can be undone (↺).
-   * Returns whether the match put it in the favourites. @param {Card} card @param {boolean} liked
+   * Cueillette prudente: is this card's right « recognised, to avoid »? A toxic look-alike (cards.js#toAvoid) — and,
+   * the list of the confusions unreadable, every card: the game cannot tell a plant's side, so none is a match (fail
+   * closed). The other games: never. @param {Card} card
+   */
+  avoids(card) { return this.harvest && (this.unread || card.confusions === undefined || toAvoid(card)); }
+
+  /**
+   * A card swiped: right, a match (kept by the app, and in the favourites); left, passed. Cueillette prudente: a card
+   * to avoid (avoids) swiped right is recognised, to avoid — never a match nor a favourite, whatever asked it (a
+   * button, a swipe, a key). It can be undone (↺). Returns whether the match put it in the favourites.
+   * @param {Card} card @param {boolean} liked
    */
   swiped(card, liked) {
     const id = card.plant.id;
-    const fav = liked && !isFavorite(id);
+    const avoided = liked && this.avoids(card);
+    const match = liked && !avoided;
+    const fav = match && !isFavorite(id);
     // Rencontres: a heart chooses the plant loved (until the next one; a pass changes nothing) — the plant chosen
     // before kept for its ↺.
-    const choose = liked && this.chooses;
-    this.history = [...this.history, { id, liked, fav, ...(choose ? { was: this.c.focus } : {}) }].slice(-30);
-    this.app.set({ ...swipe(this.c, id, liked), ...(choose && this.c.focus !== id ? { focus: id, mediaAt: null } : {}) });
+    const choose = match && this.chooses;
+    this.history = [...this.history, { id, liked: match, fav, ...(choose ? { was: this.c.focus } : {}) }].slice(-30);
+    this.app.set(avoided ? avoid(this.c, id) : { ...swipe(this.c, id, match), ...(choose && this.c.focus !== id ? { focus: id, mediaAt: null } : {}) });
     plantSeen(id);
-    if (liked) {
+    if (match) {
       // A favourite of this game (its origin): « Recommencer » takes it away again.
       if (fav) toggleFavorite(card.plant, { app: this.app.m.id }).catch(() => {});
       if (matchMedia('(pointer: coarse)').matches) navigator.vibrate?.(30);
@@ -376,8 +409,8 @@ export class AroundSession extends EventTarget {
     if (isFavorite(c.plant.id)) toggleFavorite(c.plant).catch(() => {});
   }
 
-  /** The cards passed, to see them again. */
-  resetPassed() { this.app.set({ passed: [] }); }
+  /** The cards passed (and those recognised to avoid, Cueillette prudente), to see them again. */
+  resetPassed() { this.app.set({ passed: [], avoided: [] }); }
 
   /** A plant brought on top of the deck (touched on the map or in the list around). @param {Card} card */
   toTop(card) {

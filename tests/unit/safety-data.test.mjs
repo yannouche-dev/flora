@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import {
-  NAME_LINKS, PARTS_WORDS, TOXICITY_LABELS, extendSplitGenera, indexPlants, linkTppt, matchAnsm, partsFr, retranslate, toxicity
+  KEPT_TOXIC, NAME_LINKS, PARTS_WORDS, TOXICITY_LABELS, extendSplitGenera, indexPlants, keptTppt, linkTppt, matchAnsm, partsFr, retranslate, toxicity
 } from '../../scripts/build-safety.mjs';
 import { checkConfusions } from '../../scripts/check-confusions.mjs';
 
@@ -95,6 +95,29 @@ test('SAFE-14 : TPPT en français, jamais adouci ; « unknown » sans niveau ; l
     assert.ok(t.levelLabel.split(', ').every((/** @type {string} */ l) => TOXICITY_LABELS.includes(l)), t.levelLabel);
     for (const w of String(t.parts || '').toLowerCase().split(/[^\p{L}]+/u).filter(Boolean)) assert.ok(PARTS_WORDS.has(w), `${w} (${t.parts})`);
   }
+});
+
+test('TPPT « nontoxic » : jamais lu « toxic », jamais dit « non toxique » — l’entrée part, sauf un toxique gardé à la main', () => {
+  // A level is a whole word: « nontoxic » and « phototoxic » are no « toxic »; « liver toxic », « cytotoxic » still are.
+  assert.equal(toxicity('nontoxic'), null);
+  assert.equal(toxicity(' Nontoxic '), null);
+  assert.deepEqual(toxicity('toxic (unknown strength)'), { level: 2, label: 'toxique' });
+  assert.deepEqual(toxicity('liver toxic'), { level: 2, label: 'toxique' });
+  assert.deepEqual(toxicity('cytotoxic'), { level: 2, label: 'toxique' });
+  assert.deepEqual(toxicity('allergenic, phototoxic'), { level: 2, label: 'allergisante, phototoxique' });
+  assert.equal(toxicity('non-toxic')?.label, 'non-toxic', 'une autre graphie : gardée telle quelle, refusée par check-data');
+  // An entry: left out; the reviewed one, kept toxic with its reason (also when read again from a previous file).
+  const myrtle = { level: 2, levelLabel: 'toxique', levelEn: 'nontoxic', name: 'Vaccinium myrtillus L.' };
+  assert.equal(keptTppt(myrtle), null);
+  assert.equal(keptTppt(retranslate(myrtle)), null);
+  const rhodo = keptTppt(retranslate({ level: 0, levelLabel: null, levelEn: 'nontoxic', name: 'Rhododendron hirsutum L.' }));
+  assert.deepEqual([rhodo.level, rhodo.levelLabel, rhodo.reviewed], [2, 'toxique', KEPT_TOXIC.get('rhododendron hirsutum')]);
+  assert.deepEqual(keptTppt({ level: 2, levelLabel: 'toxique', levelEn: 'toxic', name: 'X y' }), { level: 2, levelLabel: 'toxique', levelEn: 'toxic', name: 'X y' });
+  // The shipped file: no « nontoxic » left but the reviewed one; the myrtle, the lamb's lettuce, the Jerusalem
+  // artichoke without a TPPT verdict.
+  const nontoxic = Object.entries(safety.plants).filter(([, e]) => /** @type {any} */ (e).tppt?.levelEn === 'nontoxic');
+  assert.deepEqual(nontoxic.map(([id, e]) => [id, /** @type {any} */ (e).tppt.level, Boolean(/** @type {any} */ (e).tppt.reviewed)]), [['117681', 2, true]]);
+  for (const id of ['128345', '128476', '101055']) assert.equal(/** @type {any} */ (safety.plants)[id]?.tppt, undefined, id);
 });
 
 test('SAFE-2 / SAFE-5 / SAFE-13 : les données livrées passent la comparaison avec la liste de référence', () => {
