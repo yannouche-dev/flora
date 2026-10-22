@@ -168,7 +168,8 @@ export class GfMapPanel extends LitElement {
         </header>
         <div class="said visually-hidden" aria-live="polite" aria-relevant="additions"></div>
         <div class="body">
-          <gf-map-options scope="map" .look=${this.look} .own=${this.own} .gl=${this.gl} .own3d=${Boolean(this.own3d)} .lookWhy=${this.lookWhy}>
+          <gf-map-options scope="map" .look=${this.look} .own=${this.own} .gl=${this.gl} .own3d=${Boolean(this.own3d)} .lookWhy=${this.lookWhy}
+            @options-say=${(/** @type {CustomEvent} */ e) => { e.stopPropagation(); this.say(e.detail.text); }}>
             ${this.#state()}
             ${this.distribution ? html`<div slot="extra">
               <h3 class="kicker">Répartition</h3>

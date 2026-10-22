@@ -228,15 +228,22 @@ export class GfMapOptions extends LitElement {
   /**
    * « Fond »: the plan, the aerial photos, SPOT's satellite images — a button each, the kind shown pressed —; under the
    * photos their date (the most recent, a year, a period, historical ones), under SPOT its year, each a list; under the
-   * photos of a year or a period, where they are missing (the most recent ones, greyed): the list's description, and
-   * said when it comes or goes (a polite live region, always there). @param {MapLook} look
+   * photos of a year or a period, where they are missing (the most recent ones, greyed): the list's description, said
+   * when a date brings it — on a map, by its panel's one live region (`options-say`: the panel is a modal, one region
+   * says all); in Réglages, by its own polite region. @param {MapLook} look
    */
   #bases(look) {
     const kind = parseBase(look.base)?.kind ?? 'photo';
     const id = (this.#defaults ? 'settings' : 'panel') + '-base-when';
     const option = (/** @type {string} */ key, /** @type {string} */ label) => html`<option value=${key} .selected=${look.base === key}>${label}</option>`;
-    const choose = (/** @type {Event} */ e) => this.#edit({ base: /** @type {BaseKey} */ (/** @type {HTMLSelectElement} */ (e.target).value) });
+    const choose = (/** @type {Event} */ e) => {
+      const base = /** @type {BaseKey} */ (/** @type {HTMLSelectElement} */ (e.target).value);
+      this.#edit({ base });
+      const said = fillerNote(base);
+      if (said && !this.#defaults) this.#emit('options-say', { text: said });
+    };
     const note = fillerNote(look.base);
+    const noteView = note ? html`<p class="note" id=${id + '-note'}>${note}</p>` : nothing;
     const described = note ? id + '-note' : nothing;
     return html`<h3 class="kicker">Fond</h3>
       <div class="bases" role="group" aria-label="Fond de carte">
@@ -254,7 +261,7 @@ export class GfMapOptions extends LitElement {
         </select></div>`
       : kind === 'spot' ? html`<div class="when"><label for=${id}>Année des images</label>
         <select id=${id} @change=${choose}>${SPOT_YEARS.map(y => option('spot:' + y, y))}</select></div>` : nothing}
-      <div aria-live="polite">${note ? html`<p class="note" id=${id + '-note'}>${note}</p>` : nothing}</div>`;
+      ${this.#defaults ? html`<div aria-live="polite">${noteView}</div>` : noteView}`;
   }
 
   render() {

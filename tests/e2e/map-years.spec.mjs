@@ -71,11 +71,12 @@ test('les photos d’une période : ses tuiles et, dessous, les plus récentes e
   expect(seen.some(u => /LAYER=ORTHOIMAGERY\.ORTHOPHOTOS2016-2020&STYLE=normal&FORMAT=image%2Fjpeg/.test(u))).toBe(true);
   await expect.poll(async () => (await tileLayers(map)).filter(l => l.cls.includes('gf-tiles-photo:2016-2020')).map(l => [l.cls.includes('gf-grey'), l.filter]))
     .toEqual([[true, PALE], [false, 'none']]);
-  // The note: the list's description, said as it comes (a polite live region).
+  // The note: the list's description, said as it comes — by the panel's one live region (a modal: one region says all).
   const note = 'Là où l’IGN n’a pas photographié de 2016 à 2020 : les photos les plus récentes, en gris pâle. De très loin aussi : celles de 2016 à 2020 apparaissent en s’approchant.';
-  await expect(panel.getByText(note)).toBeVisible();
+  await expect(panel.locator('#panel-base-when-note')).toHaveText(note);
   await expect(date).toHaveAccessibleDescription(note);
-  await expect(panel.locator('[aria-live="polite"]').filter({ hasText: note })).toHaveCount(1);
+  await expect(panel.locator('[aria-live]')).toHaveCount(1);
+  await expect(panel.locator('[aria-live]')).toContainText(note);
   await expect(fond.getByRole('button', { name: /Photos aériennes/ })).toHaveAttribute('aria-pressed', 'true');
   // France whole (zoom 5, a phone's France view): the period's photos still drawn — its zoom 6 tiles, smaller.
   await map.evaluate(m => /** @type {any} */ (m).flyTo([2.35, 46.6], 5));
@@ -97,12 +98,12 @@ test('les photos d’une période : ses tuiles et, dessous, les plus récentes e
   seen.length = 0;
   await panel2.getByRole('combobox', { name: 'Date des photos' }).selectOption('photo:1950-1965');
   await expect.poll(() => seen.some(u => /LAYER=ORTHOIMAGERY\.ORTHOPHOTOS\.1950-1965&STYLE=BDORTHOHISTORIQUE&FORMAT=image%2Fpng/.test(u))).toBe(true);
-  await expect(panel2.getByText('Là où l’IGN n’a pas photographié de 1950 à 1965 : les photos les plus récentes, en gris pâle.')).toBeVisible();
+  await expect(panel2.locator('#panel-base-when-note')).toHaveText('Là où l’IGN n’a pas photographié de 1950 à 1965 : les photos les plus récentes, en gris pâle.');
   // Back to the most recent: one layer, no note, nothing to describe.
   await panel2.getByRole('combobox', { name: 'Date des photos' }).selectOption({ label: 'La plus récente' });
   await expect.poll(() => stored(page)).toBe('photo');
   await expect.poll(async () => (await tileLayers(again)).filter(l => l.cls.includes('gf-grey')).length).toBe(0);
-  await expect(panel2.getByText(/n’a pas photographié/)).toHaveCount(0);
+  await expect(panel2.locator('#panel-base-when-note')).toHaveCount(0);
   await expect(panel2.getByRole('combobox', { name: 'Date des photos' })).not.toHaveAttribute('aria-describedby', /./);
 });
 
@@ -228,7 +229,10 @@ test('Réglages › Cartes : les mêmes choix de fond, que la Carte suit', async
   await expect(options.getByRole('group', { name: 'Fond de carte' })).toBeVisible();
   await options.getByRole('combobox', { name: 'Date des photos' }).selectOption({ label: '2020' });
   await expect.poll(() => stored(page)).toBe('photo:2020');
-  await expect(options.getByText('Là où l’IGN n’a pas photographié en 2020 : les photos les plus récentes, en gris pâle. De très loin aussi : celles de 2020 apparaissent en s’approchant.')).toBeVisible();
+  const note = 'Là où l’IGN n’a pas photographié en 2020 : les photos les plus récentes, en gris pâle. De très loin aussi : celles de 2020 apparaissent en s’approchant.';
+  await expect(options.getByText(note)).toBeVisible();
+  // No map panel here: said by its own polite region.
+  await expect(options.locator('[aria-live="polite"]')).toContainText(note);
   await app.go('#/map');
   await expect.poll(() => baseOf(page.locator('gf-map-page gf-map'))).toBe('photo:2020');
 });
