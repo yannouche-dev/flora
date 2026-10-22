@@ -126,7 +126,8 @@ jobs:
     # end-to-end specs (@playwright/test, tests/e2e) on a phone (390 px) and a desktop (1280 px), on the reduced flora
     # of tests/fixtures, every outside service answered by the tests.
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    # Above its end-to-end step's own 25 minutes (the suite takes about 19 on a usual runner).
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
