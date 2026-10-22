@@ -4,9 +4,10 @@
 // relief, the circle a wall of light standing on the ground. Any map in 3D has it (its button « Observations
 // autour », binoculars, with the map's others); what each map keeps (shown, radius, sources, density) is its own
 // (core/around3d.js, by the page or block the map is in).
-// The centre: the map's area (a page's circle), else the point picked (a long press, a search result: the point card)
-// or the place selected, else the view's centre when it is shown — fixed then: the view moves, the circle stays;
-// « Centrer ici » brings it to the view's centre. The radius: the stops of the mini-apps' distance (200 m to 50 km), on
+// The centre: the map's area (a page's circle), else the map's reference (gf-map `reference`: a long press confirmed,
+// an address picked — the view turns around it too, gf-map-gl.js) or the place selected, else the view's centre when it
+// is shown — fixed then: the view moves, the circle stays; « Centrer ici » brings it to the view's centre (the
+// reference removed, the circle stays where it is). The radius: the stops of the mini-apps' distance (200 m to 50 km), on
 // the same stepped slider, in a card at the bottom of the map (folded to its chip: « 2 km · 128 »). Around the page's
 // area, the area's own radius (one circle on the map, never two): its ring is the page's, its wall stands on it; the
 // slider then moves the page's zone (gf-map `radius-change`, as its handle does) when the page lets it (radiusHandle).
@@ -36,7 +37,9 @@
 //    group touched, the map zooms to it (close already: the card of its first point and the names of the others);
 //    one of the user's plants opens it (plant-select, as in 2D);
 //  - the camera, on open (and when the centre moves): a gentle flight that frames the circle, tilted, then a slow
-//    turn around it (30°); none with « reduced motion » (the view jumps there).
+//    turn around it (30°); none with « reduced motion » (the view jumps there). The 2D map flying (an address picked:
+//    the 3D map follows it there): once it has landed. The map resized on the way (its page laid out again: the
+//    Carte's hint going as the reference's card opens): framed again for its size, from where the flight is.
 // One WebGL context (the 3D map's), no image of the map made; offline, the points cached (a day) are shown; without
 // relief, the same, flat.
 
@@ -82,9 +85,9 @@ function scopeOf(host) {
 
 export class Obs3dLayer {
   /**
-   * @param {{ host: any, lf: any, ml: any, map: any, box: HTMLElement, root: HTMLElement, restyle: () => void }} o
+   * @param {{ host: any, lf: any, ml: any, map: any, box: HTMLElement, root: HTMLElement, restyle: () => void, flying: () => boolean }} o
    */
-  constructor({ host, lf, ml, map, box, root, restyle }) {
+  constructor({ host, lf, ml, map, box, root, restyle, flying }) {
     this.host = host;
     this.lf = lf;
     this.ml = ml;
@@ -92,16 +95,20 @@ export class Obs3dLayer {
     this.box = box;
     this.root = root;
     this.restyle = restyle;
+    /** The 2D map flying (gf-map-gl.js follows its steps): framed once it has landed (landed()). */
+    this.flying = flying;
     this.scope = scopeOf(host);
     // Its page's own (a free layout's map: jumelles=, jrayon=), else what this device keeps for its page.
     this.prefs = host.around3d ? cleanAround3d(host.around3d) : around3dPrefs(this.scope, host.area?.radius);
+    // The map's reference already there: the centre.
+    this.#picked = Array.isArray(host.reference) ? [host.reference[0], host.reference[1]] : null;
     this.#buildUi();
     this.#listen();
     if (this.prefs.on) this.#turnOn(true);
   }
 
   /** @type {[number, number] | null} */ center = null;
-  /** Why the centre is there: 'area', 'point', 'place', 'view'. */
+  /** Why the centre is there: 'area', 'reference', 'point', 'place', 'view'. */
   why = 'view';
   /** @type {Obs3d[]} */ #remote = [];
   /** The points or their photos changed (new points, photos found online): every marker drawn again (its signature). */
@@ -117,7 +124,7 @@ export class Obs3dLayer {
   /** The plants lit (speciesKey). @type {Set<string>} */ #lit = new Set();
   /** @type {any} */ #pts = { type: 'FeatureCollection', features: [] };
   /** @type {any} */ #hex = { type: 'FeatureCollection', features: [], max: 1, size: 0 };
-  /** @type {[number, number] | null} the point picked last (point card) */ #picked = null;
+  /** @type {[number, number] | null} the map's reference, unless « Centrer ici » was touched after it */ #picked = null;
   #open = false;
   /** The circle drawn last (its centre, radius and why): drawn again only when one changes. */
   #ringKey = '';
@@ -173,7 +180,7 @@ export class Obs3dLayer {
   }
 
   #whereLine() {
-    return { area: 'Autour de la zone de la page', point: 'Autour du point choisi', place: 'Autour du lieu choisi', view: 'Autour du centre de la vue' }[this.why] || '';
+    return { area: 'Autour de la zone de la page', reference: 'Autour du repère', point: 'Autour du point choisi', place: 'Autour du lieu choisi', view: 'Autour du centre de la vue' }[this.why] || '';
   }
 
   /** The card's first-use hint (core/hints.js: the first card unfolded ever on this device), until its ✕. @type {boolean | undefined} */
@@ -214,10 +221,10 @@ export class Obs3dLayer {
       <p class="gf-o3-count" aria-busy=${String(this.#loading)}>${this.#loading ? html`<i class="gf-o3-spin" aria-hidden="true"></i>` : nothing}${this.#countLine()}</p>
       <div class="gf-o3-row">${toggle('inat', 'iNaturalist')}${toggle('gbif', 'GBIF')}${toggle('density', 'Densité')}</div>
       <div class="gf-o3-row">
-        <button type="button" class="gf-o3-recentre" title="Centrer sur le milieu de la vue (ou appui long sur la carte : nouveau centre)"
+        <button type="button" class="gf-o3-recentre" title="Centrer sur le milieu de la vue (ou appui long sur la carte : un repère, nouveau centre)"
           @click=${() => this.#recentre()}>${icon('crosshair')} Centrer ici</button>
       </div>
-      ${this.#pressHint ? hintView('Appui long sur la carte : nouveau centre.', () => { this.#pressHint = false; this.#syncUi(); }, 'gf-o3-hint') : nothing}
+      ${this.#pressHint ? hintView('Appui long sur la carte, puis « Confirmer » : un repère, nouveau centre.', () => { this.#pressHint = false; this.#syncUi(); }, 'gf-o3-hint') : nothing}
     </section>${chip}`;
   }
 
@@ -314,12 +321,13 @@ export class Obs3dLayer {
 
   // ── The centre ──────────────────────────────────────────────────────────────────────────────────
 
-  /** The centre now: the page's area, the point picked, the place selected, else the view's centre. */
+  /** The centre now: the page's area, the map's reference, the place selected, else the view's centre. */
   #pickCenter() {
     const h = this.host;
     /** @type {[number, number] | null} */ let c = null;
     if (Array.isArray(h.area?.center)) { c = h.area.center; this.why = 'area'; }
-    else if (this.#picked) { c = this.#picked; this.why = 'point'; }
+    // (The reference as the map has it now: let go — its zone gone elsewhere —, never a point left behind.)
+    else if (this.#picked && h.reference) { c = this.#picked; this.why = 'reference'; }
     else {
       const place = h.selectedId ? (h.spots || []).find((/** @type {any} */ s) => s.id === h.selectedId) : null;
       if (place?.geometry?.coordinates) { c = place.geometry.coordinates; this.why = 'place'; }
@@ -336,7 +344,7 @@ export class Obs3dLayer {
   }
 
   /**
-   * The centre moved (a page's area, a point picked, a place selected, « Centrer ici »): there, framed again. The
+   * The centre moved (a page's area, the map's reference, a place selected, « Centrer ici »): there, framed again. The
    * page's area changed its radius only: the circle, its points again (the page frames its area itself).
    */
   #moveCenter() {
@@ -366,6 +374,14 @@ export class Obs3dLayer {
   changed(changed) {
     // Its page's own changed (the address, Back): followed — on or off, its radius, its sources.
     if (changed.has('around3d') && this.host.around3d) this.#follow(cleanAround3d(this.host.around3d));
+    // The map's reference confirmed (a long press, an address picked): the centre there. Let go: the circle stays where
+    // it is, around the view's centre now (« Centrer ici » brings it to the middle).
+    if (changed.has('reference')) {
+      const ref = this.host.reference;
+      this.#picked = Array.isArray(ref) ? [ref[0], ref[1]] : null;
+      if (!ref && this.why === 'reference') this.why = 'view';
+      if (this.prefs.on) { if (ref) this.#moveCenter(); else this.#syncUi(); }
+    }
     if (!this.prefs.on) return;
     if (changed.has('area') || changed.has('selectedId')) this.#moveCenter();
     // Once gf-map has drawn them (its plants shown or not, by their zoom; its own points): the points again.
@@ -380,13 +396,27 @@ export class Obs3dLayer {
 
   // ── The camera ──────────────────────────────────────────────────────────────────────────────────
 
-  /** Bumped by each flight, and by a hand on the map: a turn never starts after either. */
+  /** Bumped by each flight (or frame waiting), and by a hand on the map: a turn, or a frame waiting, never starts after either. */
   #flight = 0;
+  /** A frame waiting for the 2D map to land (landed()): with its turn or not, and its flight. @type {{ orbit: boolean, flight: number } | null} */
+  #waiting = null;
+  /** The frame's flight under way: its number, the map's size it framed the circle for and the bearing it lands at. @type {{ flight: number, size: string, bearing: number } | null} */
+  #aloft = null;
 
-  /** Framed on the circle: a flight, tilted, then a slow turn of 30° (`orbit`); a jump with « reduced motion ». @param {boolean} orbit */
+  /** The map's size, as its frame reads it. */
+  get #size() { const c = this.map.getCanvas(); return `${c.clientWidth}×${c.clientHeight}`; }
+
+  /**
+   * Framed on the circle: a flight, tilted, then a slow turn of 30° (`orbit`); a jump with « reduced motion ». The 2D
+   * map flying (an address picked: the 3D map follows its steps, each one would stop this flight): once it has landed.
+   * The map resized during the flight: framed again for its size (#listen).
+   * @param {boolean} orbit
+   */
   #frame(orbit) {
     const map = this.map, c = this.center;
     if (!c) return;
+    if (this.flying()) { this.#waiting = { orbit: orbit || this.#waiting?.orbit === true, flight: ++this.#flight }; return; }
+    this.#waiting = null;
     const canvas = map.getCanvas(), pitch = mapSettings().pitch;
     // The circle across most of the width; tilted, it is shorter than wide (by the tilt's cosine): its depth in the height.
     const px = Math.max(160, Math.min(canvas.clientWidth * 0.8, canvas.clientHeight * 0.7 / Math.max(0.45, Math.cos(pitch * Math.PI / 180))));
@@ -395,15 +425,27 @@ export class Obs3dLayer {
     const view = { center: c, zoom, pitch, bearing: map.getBearing(), offset: [0, -Math.round(canvas.clientHeight * pitch / 900)] };
     if (reduceMotion()) { map.easeTo({ ...view, duration: 0 }, { gfObs: true }); return; }
     if (!orbit) { map.easeTo({ ...view, duration: 700 }, { gfObs: true }); return; }
-    const flight = ++this.#flight;
-    map.flyTo({ ...view, bearing: map.getBearing() - 20, duration: 1800, curve: 1.3, essential: false }, { gfObs: 'fly' });
+    // Framed again during its flight (a resize): the same landing bearing, not 20° more from where it has turned to.
+    const aloft = this.#aloft?.flight === this.#flight ? this.#aloft : null;
+    const flight = ++this.#flight, bearing = aloft ? aloft.bearing : map.getBearing() - 20;
+    this.#aloft = { flight, size: this.#size, bearing };
+    map.flyTo({ ...view, bearing, duration: 1800, curve: 1.3, essential: false }, { gfObs: 'fly' });
     const start = (/** @type {any} */ e) => {
       if (e.gfObs !== 'fly') return;
       map.off('moveend', start);
-      // Not stopped by a hand (nor followed by another flight): a turn of 30°, slow, at an even pace.
-      if (flight === this.#flight && this.#alive && this.prefs.on) map.easeTo({ bearing: map.getBearing() + 30, duration: 9000, easing: (/** @type {number} */ t) => t }, { gfObs: 'orbit' });
+      if (this.#aloft?.flight === flight) this.#aloft = null;
+      // Not stopped by a hand (nor followed by another flight): a turn of 30°, slow, at an even pace — around the
+      // reference when the circle is around it (gf-map-gl.js), else about the middle, where the circle is (gfHold).
+      if (flight === this.#flight && this.#alive && this.prefs.on) map.easeTo({ bearing: map.getBearing() + 30, duration: 9000, easing: (/** @type {number} */ t) => t }, { gfObs: 'orbit', gfHold: this.why !== 'reference' });
     };
     map.on('moveend', start);
+  }
+
+  /** The 2D map's flight over (gf-map-gl.js): the frame waiting for it, now — unless a hand was on the map since. */
+  landed() {
+    const w = this.#waiting;
+    this.#waiting = null;
+    if (w && w.flight === this.#flight && this.#alive && this.prefs.on) this.#frame(w.orbit);
   }
 
   // ── The data ────────────────────────────────────────────────────────────────────────────────────
@@ -602,6 +644,13 @@ export class Obs3dLayer {
   #listen() {
     const map = this.map;
     map.on('resize', () => this.#clearCredits());
+    // The map resized during the frame's flight (its page laid out again: the Carte's hint going as the reference's card
+    // opens — gf-map-gl.js lets the flight go on): framed again for its size, from where it is — MapLibre would land the
+    // circle where the old size had it.
+    map.on('resize', () => {
+      const a = this.#aloft;
+      if (a && a.flight === this.#flight && a.size !== this.#size && this.#alive && this.prefs.on) this.#frame(true);
+    });
     // Laid out once the view rests, never while it moves (a turn, a tilt: no marker made again, none gone).
     map.on('moveend', () => this.#layout());
     map.on('idle', () => this.#layout());
@@ -632,16 +681,7 @@ export class Obs3dLayer {
       this.#hideCard();
     });
     this.#tilt();
-    // The point card (a long press, a search result): the centre goes there.
-    this.host.addEventListener('point-info', this.#onPoint);
   }
-
-  /** @param {any} e */
-  #onPoint = e => {
-    if (!this.prefs.on || this.host.area?.center) return;
-    this.#picked = e.detail?.coordinates || null;
-    this.#moveCenter();
-  };
 
   /** How tilted the view is (0 from above, 1 at 50° and more): the stems' height. */
   #tilt() {
@@ -893,7 +933,6 @@ export class Obs3dLayer {
     this.#alive = false;
     this.#abort?.abort();
     clearTimeout(this.#loadTimer);
-    this.host.removeEventListener('point-info', this.#onPoint);
     for (const [key, m] of [...this.#marks]) this.#dropMark(key, m);
     this.#hideCard();
     this.#button?.remove();

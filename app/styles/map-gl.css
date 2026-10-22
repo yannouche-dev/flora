@@ -67,7 +67,8 @@ gf-map .gf-map-gl .maplibregl-ctrl-group button { width: 32px; height: 32px; }
 /* ── The observations around (gf-map-obs3d.js) ─────────────────────────────────────────────────────── */
 
 /* Its button, with the map's others: only while the map is in 3D. */
-gf-map:not([data-renderer='3d']) .gf-map-buttons button.around3d { display: none; }
+gf-map:not([data-renderer='3d']) .gf-map-buttons button.around3d,
+gf-map:not([data-renderer='3d']) .gf-map-buttons button.turn-ref { display: none; }
 
 /* The markers among themselves (their z-index: the nearest over), under the map's controls and this card. */
 .gf-map-gl .maplibregl-canvas-container { isolation: isolate; }

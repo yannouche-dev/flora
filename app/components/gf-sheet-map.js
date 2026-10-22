@@ -364,14 +364,21 @@ export class GfSheetMap extends LitElement {
   /** The block's map (gf-map: what it says goes through it — the quiet-map rule). @returns {any} */
   get #map() { return this.renderRoot.querySelector('gf-map'); }
 
-  /** ✎ on the map: this plant's new position in each place it was moved in. @param {{ placeId: string, plantId: number | null, coordinates: [number, number] }[]} moves */
-  async #savePositions(moves) {
-    for (const { placeId, entryId, plantId, coordinates } of moves) {
-      const place = this._spots.find(p => p.id === placeId);
-      if (!place) continue;
-      const rounded = /** @type {[number, number]} */ (coordinates.map(v => Math.round(v * 1e7) / 1e7));
-      // On the place as stored now (its other plants may have changed meanwhile, in another tab).
-      await updatePlace(place.id, current => withEntry(current, entryId ?? plantId, { coordinates: rounded, accuracy: null })).catch(error => console.error(error));
+  /**
+   * ✎ on the map: a place moved there (once « Déplacer le lieu ici ? » is confirmed), this plant's new position in each
+   * place it was moved in.
+   * @param {{ places: { id: string, coordinates: [number, number] }[], plants: { placeId: string, entryId?: string, plantId: number | null, coordinates: [number, number] }[] }} moves
+   */
+  async #savePositions({ places, plants }) {
+    const round = (/** @type {[number, number]} */ c) => /** @type {[number, number]} */ (c.map(v => Math.round(v * 1e7) / 1e7));
+    // On the place as stored now (its other plants may have changed meanwhile, in another tab).
+    for (const { id, coordinates } of places) {
+      if (!this._spots.some(p => p.id === id)) continue;
+      await updatePlace(id, current => ({ ...current, geometry: { type: 'Point', coordinates: round(coordinates) }, properties: { ...current.properties, accuracy: null } })).catch(error => console.error(error));
+    }
+    for (const { placeId, entryId, plantId, coordinates } of plants) {
+      if (!this._spots.some(p => p.id === placeId)) continue;
+      await updatePlace(placeId, current => withEntry(current, entryId ?? plantId, { coordinates: round(coordinates), accuracy: null })).catch(error => console.error(error));
     }
   }
 
@@ -466,7 +473,7 @@ export class GfSheetMap extends LitElement {
           ?no-locate=${!c.actions.locate}
           @spot-select=${e => { openView(href.map({ spot: e.detail.id })); }}
           @plant-select=${e => { openView(href.map({ spot: e.detail.placeId, focus: e.detail.entryId ?? e.detail.plantId })); }}
-          @positions-save=${e => this.#savePositions(e.detail.plants)}
+          @positions-save=${e => this.#savePositions(e.detail)}
           @look-change=${e => this.dispatchEvent(new CustomEvent('map-config', { detail: { look: e.detail.look } }))}
         ></gf-map>
         ${this.#chips(f)}
@@ -500,7 +507,7 @@ export class GfSheetMap extends LitElement {
   get #gestures() {
     const c = this.config;
     if (!c.actions.create && !(c.actions.edit && this._spots.length)) return '';
-    return [c.actions.create ? 'Appui long sur la carte : adresse, altitude, créer un endroit avec cette plante' : '',
+    return [c.actions.create ? 'Appui long sur la carte : un repère à confirmer, son adresse, son altitude, créer un endroit avec cette plante' : '',
       c.actions.edit && c.places && this._spots.length ? '✎ : déplacer mes plants' : '',
       'les couches : fond et couches IGN de cette carte'].filter(Boolean).join(' · ');
   }

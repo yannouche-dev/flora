@@ -47,7 +47,8 @@ const shortDate = (/** @type {string} */ iso) =>
  *  - edit (`spot-id`, optional `add-plant` / `pick`): changes are saved automatically;
  *  - create a list (`kind="list"`, optional `plant-id`): saved automatically from the first change;
  *  - create a place (`kind="place"`, optional `plant-id`): follows the GPS until "Enregistrer"
- *    (or until the pin is dragged / placed by long press).
+ *    (or until the pin is moved by hand: dragged, or placed by a long press — once « Déplacer le lieu ici ? » is
+ *    confirmed on the map; meanwhile the GPS moves neither the pin dropped nor the point proposed).
  * Places show the IGN map; lists can be given a position, which turns them into places.
  *
  * A saved place lives on the Carte (`embedded`, in its panel): the Carte's map is the place's map. The editor
@@ -559,7 +560,8 @@ export class GfSpotEditor extends LitElement {
   }
 
   /**
-   * ✓ Valider on the map (✎): the place point, then the plants (a new place's plants on its point follow it).
+   * A move on the map (✎): the place point (« Déplacer le lieu ici ? » confirmed), or a plant dropped (a new place's
+   * plants on its point follow it).
    * @param {{ pin: [number, number] | null, plants: { entryId?: string, plantId: number | null, coordinates: [number, number] }[] }} moves
    */
   savePositions({ pin, plants }) {
@@ -851,7 +853,7 @@ export class GfSpotEditor extends LitElement {
     if (!fix) {
       return html`<div class="gps card"><span class="dot ${error ? 'none' : ''}"></span>
         ${error || 'Recherche de la position GPS…'}
-        ${this.#gesture('Appui long sur la carte pour placer le lieu à la main.')}</div>`;
+        ${this.#gesture('Appui long sur la carte, puis « Confirmer », pour placer le lieu à la main.')}</div>`;
     }
     const good = fix.accuracy <= config.goodAccuracy;
     return html`<div class="gps card" aria-live="polite">

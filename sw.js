@@ -215,6 +215,7 @@ const SHELL = [
   'app/components/gf-map.js',
   'app/components/map-style.js',
   'app/components/gf-map-gl.js',
+  'app/core/orbit.js',
   'app/components/gf-map-obs3d.js',
   'app/core/around3d.js',
   'app/core/observations.js',

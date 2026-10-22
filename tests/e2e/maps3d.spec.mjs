@@ -11,6 +11,7 @@
 import { test, expect, plantId, answerAround, answerObservations } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
 import { mapSaid, mapState } from './quiet.mjs';
+import { longPress } from './touch.mjs';
 
 test.use({ launchOptions: { args: ['--enable-unsafe-swiftshader'] } });
 // Software WebGL draws every pixel on the CPU: on the desktop, a smaller window keeps each frame (and the run) short.
@@ -58,15 +59,6 @@ function seedPlaces(page) {
 /** Software WebGL is slow: a change of style may take its time. */
 const SLOW = { timeout: 30_000 };
 const glState = map => map.evaluate(m => /** @type {any} */ (m).gl.state());
-
-/** A finger held on the screen (a long press). @param {import('@playwright/test').Page} page @param {number} x @param {number} y */
-async function longPress(page, x, y) {
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
-  await page.waitForTimeout(900);
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  await cdp.detach();
-}
 
 /** The Carte's map. @param {import('@playwright/test').Page} page */
 const carte = page => page.locator('gf-map-page gf-map');
@@ -158,13 +150,19 @@ test('Réglages › Cartes « 3D » : la Carte en MapLibre — relief, bâtiment
   await plants.first().dispatchEvent('click');
   await expect.poll(() => page.evaluate(() => location.hash)).toContain('focus=');
 
-  // A long press (right click): the point's card, as in 2D.
+  // A long press (right click): « Poser un repère ici ? » with its ghost, as in 2D; confirmed, the reference and its card.
   const box = await map.locator('canvas.maplibregl-canvas').boundingBox();
   if (!box) throw new Error('no canvas');
   if (app.phone) await longPress(page, box.x + box.width * 0.5, box.y + box.height * 0.6);
   else await page.mouse.click(box.x + box.width * 0.5, box.y + box.height * 0.6, { button: 'right' });
-  await expect(map.locator('gf-point-card')).toBeVisible();
-  await expect(map.locator('.gf-gl-mk .gf-point')).toHaveCount(1);
+  const card = map.locator('gf-point-card');
+  await expect(card).toBeVisible();
+  await expect(card.getByRole('heading', { name: 'Poser un repère ici ?' })).toBeVisible();
+  await expect(map.locator('.gf-gl-mk .gf-ref.ghost')).toHaveCount(1);
+  await card.getByRole('button', { name: 'Confirmer' }).click();
+  await expect(card.getByRole('button', { name: 'Retirer le repère' })).toBeVisible();
+  await expect(map.locator('.gf-gl-mk .gf-ref.ghost')).toHaveCount(0);
+  await expect(map.locator('.gf-gl-mk .gf-ref')).toHaveCount(1);
 
   // Back in 2D for good (Réglages): MapLibre's map removed, the 2D map shown with its markers.
   await page.evaluate(async () => { (await import('/app/core/map-settings.js')).setMapSettings({ renderer: '2d' }); });

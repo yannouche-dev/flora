@@ -8,6 +8,7 @@
 import { test, expect, answerObservations } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
 import { mapSaid } from './quiet.mjs';
+import { longPress } from './touch.mjs';
 
 test.use({ launchOptions: { args: ['--enable-unsafe-swiftshader'] } });
 // Software WebGL draws every pixel on the CPU: a smaller window on the desktop, from above-ish, flat, no flights.
@@ -51,15 +52,6 @@ async function open3d(page, around) {
     if (a) localStorage.setItem('geoflora.around3d', JSON.stringify({ 'gf-map-page': a }));
   }, around);
   return problems;
-}
-
-/** A finger held on the screen (a long press). @param {import('@playwright/test').Page} page @param {number} x @param {number} y */
-async function longPress(page, x, y) {
-  const cdp = await page.context().newCDPSession(page);
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
-  await page.waitForTimeout(900);
-  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-  await cdp.detach();
 }
 
 test('en 3D, « Observations autour » : iNaturalist et GBIF dans le cercle seulement ; le rayon, les marqueurs, la densité, un nouveau centre', async ({ app, page }) => {
@@ -140,8 +132,8 @@ test('en 3D, « Observations autour » : iNaturalist et GBIF dans le cercle seul
   // title of « Centrer ici ».
   await expect(panel.locator('.gf-o3-count')).toContainText('84 observations dans le cercle');
   await expect(panel.locator('.gf-o3-count')).not.toHaveAttribute('aria-live', /./);
-  await expect(panel.locator('.hint-once')).toContainText('Appui long sur la carte : nouveau centre.');
-  await expect(panel.getByRole('button', { name: 'Centrer ici' })).toHaveAttribute('title', /appui long sur la carte : nouveau centre/);
+  await expect(panel.locator('.hint-once')).toContainText('Appui long sur la carte, puis « Confirmer » : un repère, nouveau centre.');
+  await expect(panel.getByRole('button', { name: 'Centrer ici' })).toHaveAttribute('title', /appui long sur la carte : un repère, nouveau centre/);
   await panel.locator('.hint-once').getByRole('button', { name: 'Masquer l’astuce' }).click();
   await expect(panel.locator('.hint-once')).toHaveCount(0);
   const slider = panel.getByRole('slider', { name: 'Rayon autour du centre' });
@@ -173,16 +165,20 @@ test('en 3D, « Observations autour » : iNaturalist et GBIF dans le cercle seul
   await chip.click();
   await expect(panel).toHaveCount(0);
 
-  // A long press (a right click): the point card, and the circle there.
+  // A long press (a right click): « Poser un repère ici ? » — the circle stays until it is confirmed, then goes there.
   const box = await map.locator('canvas.maplibregl-canvas').boundingBox();
   if (!box) throw new Error('no canvas');
   const before = (await obs(map)).center;
   if (app.phone) await longPress(page, box.x + box.width * 0.3, box.y + box.height * 0.35);
   else await page.mouse.click(box.x + box.width * 0.3, box.y + box.height * 0.35, { button: 'right' });
-  await expect(map.locator('gf-point-card')).toBeVisible();
-  await expect.poll(async () => (await obs(map)).why, SLOW).toBe('point');
+  const question = map.locator('gf-point-card');
+  await expect(question.getByRole('heading', { name: 'Poser un repère ici ?' })).toBeVisible();
+  expect((await obs(map)).center).toEqual(before);
+  await question.getByRole('button', { name: 'Confirmer' }).click();
+  await expect.poll(async () => (await obs(map)).why, SLOW).toBe('reference');
   st = await obs(map);
   expect(st.center).not.toEqual(before);
+  expect(st.center).toEqual(await map.evaluate(m => /** @type {any} */ (m).reference));
   await expect.poll(async () => (await obs(map)).loading, SLOW).toBe(false);
   expect((await obs(map)).farthest).toBeLessThanOrEqual(5000);
 
