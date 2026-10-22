@@ -1,7 +1,9 @@
 // @ts-check
 // The maps' options, one UI wherever they are changed: the panel ▦ of every map (gf-map-panel.js, scope="map") and
 // Réglages › Cartes (gf-settings.js, scope="defaults") — « Affichage » (2D or 3D, the 3D options folded:
-// map3d-options.js), « Fond », and IGN's layers (terrain, the whole catalogue: gf-ign-layers.js, the rules of picking).
+// map3d-options.js), « Fond » (the plan, the aerial photos — the most recent, of a year, of a period, historical —, SPOT's
+// satellite images of a year: core/backgrounds.js), and IGN's layers (terrain, the whole catalogue: gf-ign-layers.js, the
+// rules of picking).
 // Every option is the maps' common setting (core/map-settings.js), unless the map shown has its own look (`own`: a free
 // layout's cell, a plant sheet's map block): then it says so, its changes are its own, and « Revenir aux réglages
 // communs » lets it go. 2D / 3D and the 3D options are always common (a map always drawn one way says why).
@@ -14,7 +16,8 @@
 // the GBIF distribution of the Carte's plant), `rules` (before the rules' layers: the protected areas in view).
 
 import { LitElement, html, css, nothing } from 'lit';
-import { BASES, OVERLAYS, addCatalogLayer, overlayDef } from '../core/ign-layers.js';
+import { OVERLAYS, addCatalogLayer, overlayDef } from '../core/ign-layers.js';
+import { LATEST_SPOT, PHOTO_HISTORIC, PHOTO_PERIODS, PHOTO_YEARS, SPOT_YEARS, fillerNote, parseBase, whenLabel } from '../core/backgrounds.js';
 import { mapLook, mapLookEvents, mapSettings, mapSettingsEvents, setMapLook, setMapSettings } from '../core/map-settings.js';
 import { moduleEvents, moduleOn } from '../core/modules.js';
 import { hasWebGL2 } from '../core/maplibre.js';
@@ -24,7 +27,18 @@ import { ui } from '../styles/ui.js';
 import { map3dOptions, map3dOptionsCss, mapRendererChoice } from './map3d-options.js';
 import './gf-ign-layers.js';
 
-/** @typedef {import('../core/map-settings.js').MapLook} MapLook */
+/** @typedef {import('../core/map-settings.js').MapLook} MapLook @typedef {import('../core/backgrounds.js').BaseKey} BaseKey */
+
+/**
+ * The kinds of background, one button each: [kind, its name, its icon, the background it shows when chosen (the most
+ * recent: the photos of now, SPOT's latest year)].
+ * @type {[import('../core/backgrounds.js').BaseKind, string, import('../core/icons.js').IconName, BaseKey][]}
+ */
+const KINDS = [
+  ['plan', 'Plan IGN', 'map', 'plan'],
+  ['photo', 'Photos aériennes', 'image', 'photo'],
+  ['spot', 'Satellite (SPOT)', 'globe-europe-africa', `spot:${LATEST_SPOT}`]
+];
 
 /** What of the look a map has of its own, in words. @param {Partial<MapLook>} own */
 function ownWords(own) {
@@ -59,14 +73,19 @@ export class GfMapOptions extends LitElement {
     .scope.own .bi { color: var(--gf-accent); }
     .scope a { color: var(--gf-accent); }
     .scope .link { min-height: 32px; padding: 2px 4px; font-size: 0.85rem; }
-    .bases { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .bases { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
     .bases button {
       display: grid;
       justify-items: center;
+      align-content: center;
       gap: 4px;
       min-height: 72px;
+      min-width: 0;
+      padding: 8px 4px;
       border-radius: var(--gf-radius);
       font-size: 0.9rem;
+      text-align: center;
+      overflow-wrap: anywhere;
     }
     .bases .ico { font-size: 1.6rem; line-height: 1; }
     .bases button[aria-pressed='true'] { background: var(--gf-accent-soft); border-color: var(--gf-accent); border-width: 2px; font-weight: 600; }
@@ -75,6 +94,9 @@ export class GfMapOptions extends LitElement {
     label.layer span { display: grid; }
     label.layer small { color: var(--gf-text-muted); font-size: 0.8rem; }
     .note { margin: 2px 4px 4px; font-size: 0.8rem; color: var(--gf-text-muted); }
+    .when { display: grid; gap: 4px; margin: 10px 0 2px; min-width: 0; }
+    .when label { font-size: 0.85rem; color: var(--gf-text-muted); }
+    .when select { width: 100%; max-width: 100%; }
   `];
 
   constructor() {
@@ -203,19 +225,52 @@ export class GfMapOptions extends LitElement {
       </div>`;
   }
 
+  /**
+   * « Fond »: the plan, the aerial photos, SPOT's satellite images — a button each, the kind shown pressed —; under the
+   * photos their date (the most recent, a year, a period, historical ones), under SPOT its year, each a list; under the
+   * photos of a year or a period, where they are missing (the most recent ones, greyed): the list's description, said
+   * when a date brings it — on a map, by its panel's one live region (`options-say`: the panel is a modal, one region
+   * says all); in Réglages, by its own polite region. @param {MapLook} look
+   */
+  #bases(look) {
+    const kind = parseBase(look.base)?.kind ?? 'photo';
+    const id = (this.#defaults ? 'settings' : 'panel') + '-base-when';
+    const option = (/** @type {string} */ key, /** @type {string} */ label) => html`<option value=${key} .selected=${look.base === key}>${label}</option>`;
+    const choose = (/** @type {Event} */ e) => {
+      const base = /** @type {BaseKey} */ (/** @type {HTMLSelectElement} */ (e.target).value);
+      this.#edit({ base });
+      const said = fillerNote(base);
+      if (said && !this.#defaults) this.#emit('options-say', { text: said });
+    };
+    const note = fillerNote(look.base);
+    const noteView = note ? html`<p class="note" id=${id + '-note'}>${note}</p>` : nothing;
+    const described = note ? id + '-note' : nothing;
+    return html`<h3 class="kicker">Fond</h3>
+      <div class="bases" role="group" aria-label="Fond de carte">
+        ${KINDS.map(([k, label, ico, first]) => html`
+          <button type="button" aria-pressed=${kind === k ? 'true' : 'false'} @click=${() => { if (kind !== k) this.#edit({ base: first }); }}>
+            <span class="ico" aria-hidden="true">${icon(ico)}</span>${label}
+          </button>`)}
+      </div>
+      ${kind === 'photo' ? html`<div class="when"><label for=${id}>Date des photos</label>
+        <select id=${id} aria-describedby=${described} @change=${choose}>
+          ${option('photo', 'La plus récente')}
+          <optgroup label="Une année">${PHOTO_YEARS.map(w => option('photo:' + w, w))}</optgroup>
+          <optgroup label="Une période">${PHOTO_PERIODS.map(w => option('photo:' + w, whenLabel(w)))}</optgroup>
+          <optgroup label="Photos historiques">${PHOTO_HISTORIC.map(w => option('photo:' + w, whenLabel(w)))}</optgroup>
+        </select></div>`
+      : kind === 'spot' ? html`<div class="when"><label for=${id}>Année des images</label>
+        <select id=${id} @change=${choose}>${SPOT_YEARS.map(y => option('spot:' + y, y))}</select></div>` : nothing}
+      ${this.#defaults ? html`<div aria-live="polite">${noteView}</div>` : noteView}`;
+  }
+
   render() {
     const look = this.#look;
     const group = (/** @type {string} */ g) => Object.keys(OVERLAYS).filter(k => OVERLAYS[k].group === g);
     return html`
       ${this.#scope()}
       ${this.#display()}
-      <h3 class="kicker">Fond</h3>
-      <div class="bases" role="group" aria-label="Fond de carte">
-        ${Object.entries(BASES).map(([key, def]) => html`
-          <button type="button" aria-pressed=${look.base === key ? 'true' : 'false'} @click=${() => { if (look.base !== key) this.#edit({ base: /** @type {'photo' | 'plan'} */ (key) }); }}>
-            <span class="ico" aria-hidden="true">${icon(key === 'photo' ? 'globe-europe-africa' : 'map')}</span>${def.label}
-          </button>`)}
-      </div>
+      ${this.#bases(look)}
       <slot name="extra"></slot>
 
       <h3 class="kicker">Terrain</h3>

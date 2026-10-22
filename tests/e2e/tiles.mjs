@@ -1,6 +1,7 @@
-// Map tiles made here, for the specs that draw maps with MapLibre (map3d.spec.mjs, maps3d.spec.mjs): PNG pictures
-// (the IGN's photos, the relief in Terrarium encoding) and a Mapbox Vector Tile of buildings (PLAN.IGN's `bati_surf`
-// layer, each with its `hauteur`) — no network, ever.
+// Map tiles made here, for the specs that draw maps with MapLibre (map3d.spec.mjs, maps3d.spec.mjs) or a background
+// of a year (map-years.spec.mjs): PNG pictures (the IGN's photos — the most recent, those of a year or a period, the
+// historical ones —, SPOT's satellite images, the relief in Terrarium encoding) and a Mapbox Vector Tile of buildings
+// (PLAN.IGN's `bati_surf` layer, each with its `hauteur`) — no network, ever.
 import { deflateSync } from 'node:zlib';
 
 const CRC = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
@@ -30,6 +31,10 @@ export function png(rgb) {
 export const PHOTO = png((x, y) => (x % 64 < 3 || y % 64 < 3 ? [70, 110, 60] : [120 + (x >> 3), 160, 100 + (y >> 3)]));
 /** Plan: pale, with blue-grey roads. */
 export const PLAN = png((x, y) => (x % 85 < 4 || y % 85 < 4 ? [200, 205, 215] : [246, 243, 236]));
+/** SPOT's satellite images: coarser, bluer fields (told apart from the aerial photos at a glance). */
+export const SATELLITE = png((x, y) => ((x >> 5) + (y >> 5)) % 2 ? [74, 104, 112] : [96, 128, 104]);
+/** The photos of a year, of a period, the historical ones: sepia, a darker grid. */
+export const OLD_PHOTO = png((x, y) => (x % 48 < 3 || y % 48 < 3 ? [92, 76, 58] : [170 + (x >> 4), 150 + (y >> 4), 112]));
 /** Terrarium: height = R × 256 + G + B / 256 − 32768; a slope from 1 500 m to some 2 300 m across each tile. */
 export const TERRARIUM = png((x, y) => { const h = 1500 + x * 2 + y + 32768; return [h >> 8, h & 255, 0]; });
 
@@ -149,10 +154,13 @@ export async function answerTiles(page, { dem = 'ok', seen } = {}) {
   await page.route(/^https:\/\/data\.geopf\.fr\/wmts\?.*REQUEST=GetTile/i, route => {
     seen?.push(route.request().url());
     const url = route.request().url();
-    const plan = /PLANIGNV2/.test(url);
+    const layer = new URL(url).searchParams.get('LAYER') || '';
     const [z, row, col] = ['TILEMATRIX', 'TILEROW', 'TILECOL'].map(k => Number(new URL(url).searchParams.get(k)));
-    const photo = /ORTHOPHOTOS/.test(url) && Number.isFinite(z) ? photoTile(z, col, row) : PHOTO;
-    return route.fulfill({ contentType: 'image/png', body: plan ? PLAN : photo, headers: cors });
+    // The plan; SPOT's images of a year; the photos of a year, a period, historical ones; the most recent photos.
+    const body = /PLANIGNV2/.test(layer) ? PLAN : /^ORTHOIMAGERY\.ORTHO-SAT\.SPOT\.\d{4}$/.test(layer) ? SATELLITE
+      : /^ORTHOIMAGERY\.ORTHOPHOTOS\.?\d{4}(-\d{4})?$/.test(layer) ? OLD_PHOTO
+      : /ORTHOPHOTOS/.test(layer) && Number.isFinite(z) ? photoTile(z, col, row) : PHOTO;
+    return route.fulfill({ contentType: 'image/png', body, headers: cors });
   });
   await page.route(/^https:\/\/s3\.amazonaws\.com\/elevation-tiles-prod\/terrarium\//, route => {
     seen?.push(route.request().url());

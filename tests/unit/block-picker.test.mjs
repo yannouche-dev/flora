@@ -44,7 +44,8 @@ test('les groupes de réglages : ceux du composant, puis le cadre ; leur ligne ;
 
 test('le contrôle de chaque sorte de réglage', () => {
   const m = spec('map').params;
-  assert.equal(controlOf(m.base), 'segmented');      // two values, and the common one (none written)
+  assert.equal(controlOf(m.base), 'segmented');      // three values, and the common one (none written)
+  assert.equal(controlOf(m.annee), 'select');        // every year and period: a menu
   assert.equal(controlOf(m.ui), 'segmented');        // four
   assert.equal(controlOf(m['3d']), 'segmented');     // yes, no, as the settings say
   assert.equal(controlOf(m.regroupe), 'switch');
@@ -54,7 +55,25 @@ test('le contrôle de chaque sorte de réglage', () => {
   assert.equal(controlOf(m.intent), 'cards');
   assert.equal(controlOf(spec('plant').params.plante), 'id');
   assert.equal(controlOf({ kind: 'enum', label: 'x', def: 'a', values: { a: 'A', b: 'B', c: 'C', d: 'D', e: 'E' } }), 'select');
-  assert.deepEqual(optionsOf(m.base).map(o => o.label), ['Par défaut', 'Photos aériennes', 'Plan IGN']);
+  assert.deepEqual(optionsOf(m.base).map(o => o.label), ['Par défaut', 'Photos aériennes', 'Plan IGN', 'Satellite (SPOT)']);
+  const years = optionsOf(m.annee);
+  assert.equal(years[0].label, 'Par défaut');
+  assert.ok(years.some(o => o.value === '2016-2020' && o.label === '2016 – 2020'), 'une période');
+  assert.ok(years.some(o => o.value === '1950-1965') && years.some(o => o.value === '2025') && years.some(o => o.value === '2000'));
+  // The dates of its background only (never one it has not: dropped, the choice would not hold), the most recent first.
+  const dates = (/** @type {string | null} */ base) => optionsOf(m.annee, { ...known(base ? `map(base=${base})` : 'map').params }).map(o => o.value);
+  assert.deepEqual(dates('spot'), [null, '2025', '2024', '2023', '2022', '2021', '2020', '2019', '2018', '2017', '2016', '2015', '2014', '2013']);
+  const photo = dates('photo');
+  assert.deepEqual(photo.slice(0, 4), [null, '2024', '2023', '2022']);
+  assert.deepEqual(photo.slice(-9), ['2000', '2021-2023', '2016-2020', '2011-2015', '2006-2010', '2000-2005', '1980-1995', '1965-1980', '1950-1965']);
+  assert.equal(photo.length, 1 + 25 + 5 + 3);
+  assert.deepEqual(dates('plan'), [null]);
+  // None written (the common background): the photos', then SPOT's that only it has, all the most recent first.
+  assert.deepEqual(dates(null).slice(0, 4), [null, '2025', '2024', '2023']);
+  // Each one chosen holds: written in the cell.
+  for (const base of ['spot', 'photo', null]) {
+    for (const w of dates(base).slice(2)) assert.match(setParam(/** @type {any} */ (cellOf(base ? `map(base=${base})` : 'map')), 'annee', w), new RegExp(`annee=${w}\\)$`), `${base} ${w}`);
+  }
   assert.deepEqual(optionsOf(m['3d']).map(o => o.value), [null, true, false]);
   assert.equal(cleanWords(' Mirabel, (Ménétrol) = 63 '), 'Mirabel Ménétrol 63');
 });
@@ -66,6 +85,11 @@ test('changer un réglage, une intention, un composant : le texte canonique de l
   // The photos written are this cell's own background (none written: the maps' common one).
   assert.equal(setParam(c, 'base', 'photo'), 'map(floraison,r=2km,base=photo)');
   assert.equal(setParam(c, 'base', null), 'map(floraison,r=2km)');
+  // Its year (named: never a bare value), after its background; SPOT's latest is SPOT without a year.
+  assert.equal(setParam(/** @type {any} */ (cellOf(setParam(c, 'base', 'spot'))), 'annee', '2020'), 'map(floraison,r=2km,base=spot,annee=2020)');
+  assert.equal(setParam(/** @type {any} */ (cellOf('map(base=spot,annee=2020)')), 'annee', '2025'), 'map(base=spot)');
+  // The plan has no year: the year left out.
+  assert.equal(setParam(/** @type {any} */ (cellOf('map(base=spot,annee=2020)')), 'base', 'plan'), 'map(base=plan)');
   // What the intent gives: left out; against it: written.
   assert.equal(setParam(c, 'regroupe', true), 'map(floraison,r=2km)');
   assert.equal(setParam(c, 'when', 'toujours'), 'map(floraison,r=2km,when=toujours)');

@@ -14,9 +14,9 @@
 // to MAX_DEPTH. `@n` is a node's share of its parent, in % (the others share what is left). Spaces are free, names and
 // views are words of letters, digits, « - » and « _ » (accents kept here, folded by the registry); a value is any run
 // of characters but , ; ( ) [ ] = @ (a comma between two digits is a decimal one: « r=2,5km ») — never one of the
-// separators, so every layout round-trips: serialize(parse(s))
-// is the canonical text, and parse(serialize(t)) gives t back. Percent-encoded text (a link copied and pasted) is read
-// as decoded.
+// separators, and serialize() writes « ; » where its « , » would sit between two digits (annee=2020;3d=1), so every
+// layout round-trips: serialize(parse(s)) is the canonical text, and parse(serialize(t)) gives t back. Percent-encoded
+// text (a link copied and pasted) is read as decoded.
 //
 // Never a throw: whatever is typed, parse() returns the best layout it can read and the problems it met (`errors`,
 // each with its position and a sentence in French): a bracket missing is closed, a character out of place skipped, a
@@ -244,16 +244,20 @@ const validSize = n => typeof n === 'number' && Number.isFinite(n) && n > 0 ? Ma
 const shareText = n => String(Math.round(n * 10) / 10);
 
 /**
- * The canonical text of a tree: outer brackets, no spaces, `,` between parameters, shares when `sizes` (default).
+ * The canonical text of a tree: outer brackets, no spaces, `,` between parameters — `;` after a value ending in a digit
+ * when the next starts with one (annee=2020;3d=1: a comma there would be read as a decimal one) —, shares when `sizes`
+ * (default).
  * @param {ListNode} tree @param {{ sizes?: boolean, params?: boolean }} [options] `params: false`: names and views only
  * @returns {string}
  */
 export function serialize(tree, { sizes = true, params = true } = {}) {
+  /** The separator before a parameter. @param {Param[]} ps @param {number} i */
+  const sep = (ps, i) => i === 0 ? '' : /\d$/.test(ps[i - 1].value) && /^\d/.test(ps[i].key ?? ps[i].value) ? ';' : ',';
   /** @param {LayoutNode} n @returns {string} */
   const text = n => {
     const share = sizes && n.size != null ? '@' + shareText(n.size) : '';
     if (n.t === 'list') return '[' + n.kids.map(text).join(',') + ']' + share;
-    const ps = params && n.params.length ? '(' + n.params.map(p => (p.key ? p.key + '=' : '') + p.value).join(',') + ')' : '';
+    const ps = params && n.params.length ? '(' + n.params.map((p, i) => sep(n.params, i) + (p.key ? p.key + '=' : '') + p.value).join('') + ')' : '';
     return n.name + (n.view ? '.' + n.view : '') + ps + share;
   };
   return text(tree);

@@ -47,6 +47,7 @@ import { DISTANCES, distanceAt, distanceEvents, distanceKey } from '../miniapp/k
 import { pushHash } from '../core/history.js';
 import { addCatalogLayer, DEFAULT_OPACITY, isOverlay } from '../core/ign.js';
 import { mapLook } from '../core/map-settings.js';
+import { addressOf, baseKeyOf, baseKind } from '../core/backgrounds.js';
 import { loadCatalog } from '../core/ign-catalog.js';
 import { RADII_3D } from '../core/around3d.js';
 import { nearestStop } from '../core/distance.js';
@@ -190,8 +191,14 @@ const radiusSlider = state => {
 
 // ── map ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
-/** The other background, as its thumbnail says it. */
-const OTHER_BASE = { photo: { key: 'plan', label: 'Plan', words: 'le plan IGN' }, plan: { key: 'photo', label: 'Photo', words: 'les photos aériennes' } };
+/** A background's thumbnail, by its kind (core/backgrounds.js): its key in the address (base=), its name, its words. */
+const THUMBS = {
+  plan: { key: 'plan', label: 'Plan', words: 'le plan IGN' },
+  photo: { key: 'photo', label: 'Photo', words: 'les photos aériennes' },
+  spot: { key: 'spot', label: 'SPOT', words: 'les images satellite (SPOT)' }
+};
+/** The other background, by the kind shown: the plan beside the photos of any year and SPOT's images, the photos beside the plan. */
+const OTHER_BASE = { photo: THUMBS.plan, spot: THUMBS.plan, plan: THUMBS.photo };
 
 /** The period's chips (when=), in their order. */
 const PERIODS = [['toujours', 'Toujours'], ['annee', 'Cette année'], ['mois', 'Ce mois-ci']];
@@ -278,6 +285,8 @@ export class DlMap extends LitElement {
       linear-gradient(135deg, #5d7a3e, #8a8f5a 55%, #3e5a2c); }
     .base.plan { background: linear-gradient(90deg, transparent 45%, #f6d27a 45% 55%, transparent 55%), linear-gradient(0deg, transparent 62%, #fff 62% 68%, transparent 68%),
       linear-gradient(135deg, #eef0e6, #dfe7d4); color: #1d2419; text-shadow: 0 0 2px #fff; }
+    .base.spot { background: radial-gradient(circle at 65% 35%, #6f7d52 0 20%, transparent 21%), radial-gradient(circle at 28% 68%, #8b7f60 0 17%, transparent 18%),
+      linear-gradient(135deg, #2e4536, #4f6447 50%, #34495a); }
     .base span { display: block; padding: 1px 0 2px; text-align: center; background: rgb(0 0 0 / 28%); }
     .base.plan span { background: rgb(255 255 255 / 70%); }
     :host([ctl-compact]) .round { width: 28px; height: 28px; }
@@ -518,7 +527,8 @@ export class DlMap extends LitElement {
   /** @type {{ id: string, value: any } | null} */ #focusMemo = null;
 
   /**
-   * The cell's own look (core/map-settings.js), as its address says it: its background (base=), its layers in their
+   * The cell's own look (core/map-settings.js), as its address says it: its background (base=, and annee= the year or
+   * period of its photos, SPOT's year: core/backgrounds.js baseKeyOf; without it the most recent), its layers in their
    * order (layers=znieff+n2000+ign:<id>: the catalogue's added to the maps first, core/ign.js — one of IGN's whole
    * catalogue not known on this device found in it, core/ign-catalog.js, then shown) and their opacity (opac=); what it
    * does not say follows the maps' common look (gf-map `look`) — layers=aucune says none of its own, not the common
@@ -528,7 +538,7 @@ export class DlMap extends LitElement {
   get #look() {
     const p = this.params ?? {};
     const names = /** @type {string[]} */ (p.layers ?? []);
-    const k = JSON.stringify([p.base ?? null, p.layers ?? null, p.opac ?? null]);
+    const k = JSON.stringify([p.base ?? null, p.annee ?? null, p.layers ?? null, p.opac ?? null]);
     if (this.#lookMemo?.k === k) return this.#lookMemo.value;
     for (const l of catalogLayers(names)) addCatalogLayer(/** @type {any} */ (l));
     const overlays = overlaysOf(names);
@@ -542,7 +552,9 @@ export class DlMap extends LitElement {
     }
     /** @type {Partial<import('../core/map-settings.js').MapLook>} */
     const own = {};
-    if (p.base) own.base = p.base;
+    // A year its kind has not (the registry says it, and leaves it out): the kind's most recent.
+    const base = p.base || p.annee ? baseKeyOf(p.base, p.annee) ?? baseKeyOf(p.base, null) : null;
+    if (base) own.base = base;
     // Its layers and their opacity go together (gf-map#editLook): either written, both its own.
     if (p.layers != null || p.opac) Object.assign(own, { overlays, opacities: opacitiesOf(p.opac) });
     const value = Object.keys(own).length ? own : null;
@@ -552,14 +564,15 @@ export class DlMap extends LitElement {
   /** @type {{ k: string, value: Partial<import('../core/map-settings.js').MapLook> | null } | null} */ #lookMemo = null;
 
   /**
-   * Its own look changed on the map (its panel ▦, its opacity card: gf-map `look-change`): kept in the layout (base=,
-   * layers= in their order, opac=); null — « Revenir aux réglages communs » —: all three left out. @param {CustomEvent} e
+   * Its own look changed on the map (its panel ▦, its opacity card: gf-map `look-change`): kept in the layout (base=
+   * and annee=, layers= in their order, opac=); null — « Revenir aux réglages communs » —: all of them left out.
+   * @param {CustomEvent} e
    */
   #onLook(e) {
     const look = e.detail.look;
     /** @type {Record<string, unknown>} */
-    const values = look ? {} : { base: null, layers: null, opac: null };
-    if (look?.base) values.base = look.base;
+    const values = look ? {} : { base: null, annee: null, layers: null, opac: null };
+    if (look?.base) Object.assign(values, addressOf(look.base));
     if (look?.overlays) Object.assign(values, { layers: layersOf(look.overlays), opac: opacText(look.opacities ?? {}, look.overlays, DEFAULT_OPACITY) });
     this.#set(values);
     // What the address says now, given back (an intent's background is not one to leave out: the map shows it again).
@@ -797,13 +810,25 @@ export class DlMap extends LitElement {
   #unpick() { /** @type {LayoutState} */ (this.state).set({ plant: null, obs: null }, 'push'); }
 
   /**
-   * The other background shown (its thumbnail touched): kept in the layout as its own (base=) — unless it is the maps'
-   * common one: then none written, the cell follows it again (not against its intent's: map(terrain) says the photos).
+   * The other background shown (its thumbnail touched): kept in the layout as its own (base=, the most recent: no
+   * annee=) — or, the thumbnail offering the one it would follow again, none written: the cell follows the maps' common
+   * background again (its intent's: map(terrain) says the photos).
    */
   #switchBase() {
-    const shown = /** @type {'photo' | 'plan'} */ (this.#map?.baseShown ?? this.params?.base ?? mapLook().base);
-    const next = OTHER_BASE[shown]?.key ?? 'plan';
-    this.#set({ base: next === mapLook().base && !('base' in this.#intended) ? null : next });
+    const other = this.#otherBase;
+    this.#set({ base: other.back ? null : other.key, annee: null });
+  }
+
+  /**
+   * The other background, as its thumbnail says it. The one shown (its own, else the common one) of another kind than
+   * the one it would follow without it (the maps' common one, its intent's): that one (`back`: base= let go) — SPOT's
+   * too, so that two touches always give the common one back; else the other kind's (OTHER_BASE).
+   * @returns {{ key: string, label: string, words: string, back: boolean }}
+   */
+  get #otherBase() {
+    const shown = baseKind(this.#map?.baseShown ?? this.#look?.base ?? mapLook().base) ?? 'photo';
+    const back = baseKind(this.#intended.base ?? mapLook().base) ?? 'photo';
+    return shown !== back ? { ...THUMBS[back], back: true } : { ...OTHER_BASE[shown], back: false };
   }
 
   /**
@@ -864,7 +889,7 @@ export class DlMap extends LitElement {
     if (!on.has('3d') && !on.has('fond') && !reframe) return nothing;
     const map = this.#map;
     const in3d = this.#d3 ?? Boolean(map?.gl?.wanted);
-    const other = OTHER_BASE[/** @type {'photo' | 'plan'} */ (map?.baseShown ?? this.params?.base ?? mapLook().base)] ?? OTHER_BASE.photo;
+    const other = this.#otherBase;
     return html`<div class="ctl tr">
       ${on.has('3d') ? html`<button type="button" class="round" aria-pressed=${String(in3d)} aria-label="Vue 3D" title=${in3d ? 'Vue 3D (repasser en 2D)' : 'Vue 3D'}
         @click=${() => this.#set({ '3d': !in3d })}>3D</button>` : nothing}
@@ -959,7 +984,7 @@ export class DlMap extends LitElement {
     // Its own look given by its intent alone (map(protege): its layers; map(terrain): the photos): said so, no way back
     // either. A part written by its address too (map(terrain,layers=parcs)): « Revenir » takes that part back.
     const p = this.params ?? {};
-    const written = Boolean(p.opac) || (p.base ?? null) !== (intended.base ?? null)
+    const written = Boolean(p.opac) || (p.base ?? null) !== (intended.base ?? null) || p.annee != null
       || (p.layers != null && p.layers.join('+') !== intended.layers);
     const lookWhy = ('base' in intended || 'layers' in intended) && !written ? intent + ' dans la disposition' : '';
     return html`${!s.live.at && this.#pressHint ? hintView(press, () => { this.#pressHint = false; this.requestUpdate(); }, 'press-hint') : nothing}

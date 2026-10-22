@@ -7,7 +7,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as G from '../../app/layout/grammar.js';
-import { cellMark, resolve, resolveTree } from '../../app/layout/registry.js';
+import { cellMark, cellName, resolve, resolveTree, withParam } from '../../app/layout/registry.js';
 import { MAP_CONTROLS, MAP_INTENTS, MAP_LAYERS, catalogLayers, defaultControls, inWhen, mapControls, overlaysOf, snapRadius, uiMode } from '../../app/layout/map-options.js';
 
 /** A layout typed → its canonical text and what was wrong. @param {string} text */
@@ -20,16 +20,16 @@ const params = text => read(text).cell.params;
 
 test('chaque réglage de la carte se lit : ses noms, ses valeurs, leurs autres graphies', () => {
   const p = params('map(r=2km;lieu=Mirabel Ménétrol 63;autour=1;base=photo;3d=1;layers=znieff+n2000;src=inat+gbif;when=mois;pts=pastille;regroupe=1;suit=0;plante=seule;toucher=fiche;ui=nue)');
-  assert.deepEqual(p, { intent: 'explorer', portee: 'zone', r: 2000, lieu: 'Mirabel Ménétrol 63', autour: true, base: 'photo', '3d': true, layers: ['znieff', 'n2000'], src: ['inat', 'gbif'],
+  assert.deepEqual(p, { intent: 'explorer', portee: 'zone', r: 2000, lieu: 'Mirabel Ménétrol 63', autour: true, base: 'photo', annee: null, '3d': true, layers: ['znieff', 'n2000'], src: ['inat', 'gbif'],
     when: 'mois', pts: 'pastille', regroupe: true, suit: false, plante: 'seule', toucher: 'fiche', liste: 'vue', ui: 'nue', tete: 'oui', titre: null, actions: [], ctl: null,
     vue: null, opac: null, jumelles: null, jrayon: null, legende: false, etat: 'ouvert', groupe: 'a' });
   // In French, its other words, accents and case free.
   const q = params('carte(rayon=500m;commune=Fontainebleau 77;moi=oui;fond=satellite;vue3d=non;couches=Natura+ZNIEFF1;sources=iNaturalist;période=Année;style=Pastilles;groupes=1;recherche=non;courante=only;tap=sheet;commandes=Compact)');
   assert.deepEqual([q.r, q.lieu, q.autour, q.base, q['3d'], q.layers, q.src, q.when, q.pts, q.regroupe, q.suit, q.plante, q.toucher, q.ui],
-    [500, 'Fontainebleau 77', true, 'photo', false, ['n2000', 'znieff1'], ['inat'], 'annee', 'pastille', true, false, 'seule', 'fiche', 'compacte']);
+    [500, 'Fontainebleau 77', true, 'spot', false, ['n2000', 'znieff1'], ['inat'], 'annee', 'pastille', true, false, 'seule', 'fiche', 'compacte']);
   // Defaults: the map as it always was — its background, its layers and its 2D or 3D, the maps' common ones (none written).
   const d = params('map');
-  assert.deepEqual(d, { intent: 'explorer', portee: 'zone', r: null, lieu: null, autour: false, base: null, '3d': null, layers: null, src: null, when: 'toujours', pts: 'photo',
+  assert.deepEqual(d, { intent: 'explorer', portee: 'zone', r: null, lieu: null, autour: false, base: null, annee: null, '3d': null, layers: null, src: null, when: 'toujours', pts: 'photo',
     regroupe: false, suit: true, plante: 'grand', toucher: 'plante', liste: 'vue', ui: 'auto', tete: 'oui', titre: null, actions: [], ctl: null,
     vue: null, opac: null, jumelles: null, jrayon: null, legende: false, etat: 'ouvert', groupe: 'a' });
   assert.equal(read('map').text, '[map]');
@@ -38,6 +38,7 @@ test('chaque réglage de la carte se lit : ses noms, ses valeurs, leurs autres g
 test('une valeur seule va au réglage qui la lit : une distance, une intention, un fond, 3d ou 2d, des couches, une période…', () => {
   const cases = [
     ['map(20km)', '[map(r=20km)]'], ['map(20)', '[map(r=20km)]'], ['map(photo)', '[map(base=photo)]'], ['map(plan)', '[map(base=plan)]'],
+    ['map(satellite)', '[map(base=spot)]'], ['map(spot)', '[map(base=spot)]'],
     ['map(terrain)', '[map(terrain)]'], ['map(Protégé)', '[map(protege)]'], ['map(répartition)', '[map(repartition)]'], ['map(floraison)', '[map(floraison)]'],
     ['map(relief)', '[map(relief)]'], ['map(3d)', '[map(3d=1)]'], ['map(2D)', '[map(3d=0)]'], ['map(autour)', '[map(autour=1)]'], ['map(regroupe)', '[map(regroupe=1)]'],
     ['map(znieff+n2000)', '[map(layers=znieff+n2000)]'], ['map(cadastre)', '[map(layers=cadastre)]'], ['map(gbif)', '[map(src=gbif)]'],
@@ -85,7 +86,7 @@ test('les valeurs inconnues dites et laissées : le défaut tient', () => {
   const r = read('map(base=nuit;when=hier;pts=carré;toucher=mordre;ui=géante;plante=petite;suit=peut-être;3d=4d;lieu=;zoom=3)');
   assert.equal(r.text, '[map]');
   assert.deepEqual(r.problems, [
-    'Carte : « nuit » n’est pas une valeur de fond de carte (attendu : photo, plan).',
+    'Carte : « nuit » n’est pas une valeur de fond de carte (attendu : photo, plan, spot).',
     'Carte : « hier » n’est pas une valeur de période (attendu : toujours, annee, mois).',
     'Carte : « carré » n’est pas une valeur de style des points (attendu : photo, pastille).',
     'Carte : « mordre » n’est pas une valeur de toucher un point (attendu : plante, fiche, rien).',
@@ -96,6 +97,75 @@ test('les valeurs inconnues dites et laissées : le défaut tient', () => {
     'Carte : paramètre inconnu « zoom ».'
   ]);
   assert.match(read('map(intent=balade2)').problems[0], /« balade2 » n’est pas une valeur d?e? ?intention/);
+});
+
+test('le fond d’une année : base= (satellite lu spot) et annee= — une année, une période, des photos historiques, SPOT ; ce que le fond n’a pas, dit et laissé', () => {
+  const p = params('map(base=spot;annee=2020)');
+  assert.deepEqual([p.base, p.annee], ['spot', '2020']);
+  assert.equal(read('carte(fond=Satellite;an=2020)').text, '[map(base=spot,annee=2020)]');
+  assert.equal(read('map(sat)').text, '[map(base=spot)]');
+  assert.equal(read('map(base=ortho;millesime=2016-2020)').text, '[map(base=photo,annee=2016-2020)]');
+  // Alone: the photos' year or period (whatever the dash), the historical ones; a year only SPOT has, SPOT's.
+  assert.equal(read('map(annee=2016–2020)').text, '[map(annee=2016-2020)]');
+  assert.equal(read('map(annee=1950-1965)').text, '[map(annee=1950-1965)]');
+  assert.deepEqual(read('map(annee=2025)').problems, []);
+  // SPOT's latest year: SPOT alone (its default; a newer year will be « spot » then).
+  assert.equal(read('map(base=spot,annee=2025)').text, '[map(base=spot)]');
+  // A year that background has not, the plan with a year: said, left out (the background kept).
+  const spot2010 = read('map(base=spot,annee=2010)');
+  assert.equal(spot2010.text, '[map(base=spot)]');
+  assert.deepEqual(spot2010.problems, ['Carte : pas d’images SPOT pour 2010.']);
+  assert.deepEqual(read('map(base=photo,annee=2025)').problems, ['Carte : pas de photos aériennes pour 2025.']);
+  const plan = read('map(plan,annee=2020)');
+  assert.equal(plan.text, '[map(base=plan)]');
+  assert.deepEqual(plan.problems, ['Carte : le plan IGN n’a pas d’année.']);
+  const bad = read('map(annee=1999)');
+  assert.equal(bad.text, '[map]');
+  assert.match(bad.problems[0], /^Carte : « 1999 » n’est pas une valeur de date du fond \(attendu : une année des photos \(2000 à 2024\) ou de SPOT \(2013 à 2025\), une période/);
+  // Never a bare value: map(2020) is a radius (50 km at most), map(annee) the period of the points.
+  assert.equal(read('map(2020)').text, '[map(r=50km)]');
+  assert.equal(read('map(annee)').text, '[map(when=annee)]');
+  // Its name in the menu of columns: the background said once, whole — its kind too when only annee= is written.
+  const name = (/** @type {string} */ text) => cellName(resolve(/** @type {any} */ (G.parse(text).tree.kids[0])));
+  assert.equal(name('map(base=spot,annee=2020)'), 'Carte (Images satellite SPOT de 2020)');
+  assert.equal(name('map(base=spot)'), 'Carte (Satellite (SPOT))');
+  assert.equal(name('map(base=spot,annee=2025)'), 'Carte (Satellite (SPOT))', 'sa dernière année : SPOT seul');
+  assert.equal(name('map(annee=2016-2020)'), 'Carte (Photos aériennes de 2016 à 2020)');
+  assert.equal(name('map(annee=2025)'), 'Carte (Images satellite SPOT de 2025)', 'une année que seul SPOT a : SPOT');
+  assert.equal(name('map(annee=1950-1965)'), 'Carte (Photos aériennes historiques de 1950 à 1965)');
+  assert.equal(name('map(terrain,annee=2020)'), 'Carte (Sur le terrain, Photos aériennes de 2020)', 'le fond de l’intention, son année');
+  assert.equal(name('map(base=photo;annee=2020;3d=1)'), 'Carte (Photos aériennes de 2020, vue 3D)');
+  // Written by the cell (withParam, the background first): SPOT's latest left out, null back to the most recent.
+  const cell = /** @type {any} */ (G.parse('map(r=2km)').tree.kids[0]);
+  const set = (/** @type {any} */ c, /** @type {Record<string, unknown>} */ values) => Object.entries(values).reduce((n, [k, v]) => withParam(n, k, v), c);
+  const text = (/** @type {any} */ c) => G.serialize({ t: 'list', kids: [c], size: null });
+  assert.equal(text(set(cell, { base: 'spot', annee: '2020' })), '[map(r=2km,base=spot,annee=2020)]');
+  assert.equal(text(set(cell, { base: 'spot', annee: '2025' })), '[map(r=2km,base=spot)]');
+  assert.equal(text(set(set(cell, { base: 'photo', annee: '2016-2020' }), { base: 'plan', annee: null })), '[map(r=2km,base=plan)]');
+  assert.equal(text(set(set(cell, { base: 'photo', annee: '2016-2020' }), { base: null, annee: null })), '[map(r=2km)]');
+});
+
+test('une année puis la 3D : l’adresse réécrite se relit telle quelle (jamais « 2020,3d » lu comme un nombre à virgule)', () => {
+  /** A layout typed, then its canonical text read again: the same text, no error, its year and its 3D kept. @param {string} typed */
+  const twice = typed => {
+    const once = read(typed);
+    const again = G.parse(once.text);
+    return { text: once.text, errors: again.errors.map(e => e.message), back: read(once.text).text, cell: read(once.text).cell.params };
+  };
+  for (const [typed, annee, d3] of /** @type {[string, string, boolean][]} */ ([
+    ['[map(base=spot,3d=1,annee=2020),results]', '2020', true], ['[map(3d=0,annee=1950-1965)]', '1950-1965', false], ['[map(2d;base=photo;annee=2016-2020)]', '2016-2020', false]
+  ])) {
+    const t = twice(typed);
+    assert.deepEqual(t.errors, [], t.text);
+    assert.equal(t.back, t.text, typed);
+    assert.deepEqual([t.cell.annee, t.cell['3d']], [annee, d3], typed);
+  }
+  // The cell's own « 3D » (withParam, then the whole layout written as gf-layout writes it): read back whole.
+  const cell = /** @type {any} */ (G.parse('[map(base=spot,annee=2020)]').tree.kids[0]);
+  const written = G.serialize({ t: 'list', kids: [withParam(cell, '3d', true)], size: null });
+  assert.equal(written, '[map(base=spot,annee=2020;3d=1)]');
+  assert.deepEqual(G.parse(written).errors, []);
+  assert.deepEqual([read(written).cell.params.annee, read(written).cell.params['3d']], ['2020', true]);
 });
 
 test('les intentions : un mot, un ensemble de réglages ; un réglage écrit à côté, avant ou après, l’emporte ; l’adresse reste courte', () => {

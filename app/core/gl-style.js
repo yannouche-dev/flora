@@ -3,13 +3,16 @@
 // DOM, no MapLibre — unit-tested (tests/unit/gl-style.test.mjs).
 //  - each tile layer of the Leaflet map (IGN backgrounds and overlays, the catalogue's layers, GBIF's distribution) as
 //    a raster source and layer, in the same order, at the same zooms (MapLibre's zoom is Leaflet's minus one: its
-//    world is 512 px wide at zoom 0, Leaflet's 256);
+//    world is 512 px wide at zoom 0, Leaflet's 256); the most recent photos under a year's (core/backgrounds.js)
+//    greyed and pale, as in 2D;
 //  - the « IGN – fonds de carte » module off: tiles from the device's cache only (the gfcache:// protocol), never the
 //    network;
 //  - the relief (AWS Terrain Tiles, Terrarium) and its shading, the IGN buildings extruded (PLAN.IGN vector tiles), the
 //    IGN plan as vector tiles (the Géoplateforme's own style, merged in), the sky, the globe, the sun's light;
 //  - the lines and areas of the 2D map (the « Autour » circle, an outline, the threads of a group spread, the accuracy
 //    of my position) as one GeoJSON source, styled like map.css styles them in 2D.
+
+import { isBaseKey } from './backgrounds.js';
 
 /** AWS Terrain Tiles (Mapzen), Terrarium encoding, keyless, CORS: z12 already holds EU-DEM (25 m) over France. */
 export const DEM_TILES = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
@@ -29,8 +32,14 @@ export const CACHE_PROTOCOL = 'gfcache';
 const ID = 'gf-';
 
 /**
- * A tile layer of the 2D map, as MapLibre needs it.
- * @typedef {{ id: string, url: string, opacity: number, minzoom: number, maxzoom: number, nativeMin: number, nativeMax: number, base: boolean, key: string, attribution?: string }} TileSpec
+ * The most recent photos under a year's, as map.css draws them in 2D (grayscale(1) contrast(0.36) brightness(1.25):
+ * from black and white to 0.4 and 0.85): without their colours, their contrast lowered, lifted.
+ */
+const FILLER = { 'raster-saturation': -1, 'raster-contrast': -0.4, 'raster-brightness-min': 0.25 };
+
+/**
+ * A tile layer of the 2D map, as MapLibre needs it. `grey`: without its colours (the most recent photos under a year's).
+ * @typedef {{ id: string, url: string, opacity: number, minzoom: number, maxzoom: number, nativeMin: number, nativeMax: number, base: boolean, grey: boolean, key: string, attribution?: string }} TileSpec
  */
 
 /**
@@ -44,7 +53,8 @@ export function describeTileLayer(layer, index) {
   const o = layer.options || {};
   const cls = String(o.className || '');
   const key = /gf-tiles-([\w:.-]+)/.exec(cls)?.[1] || 'layer' + index;
-  const base = key === 'photo' || key === 'plan';
+  // A background (core/backgrounds.js: the plan, the photos of any year, SPOT's), or an overlay.
+  const base = isBaseKey(key);
   return {
     id: ID + 'tiles-' + index,
     url,
@@ -56,6 +66,7 @@ export function describeTileLayer(layer, index) {
     nativeMin: o.minNativeZoom ?? 0,
     nativeMax: o.maxNativeZoom ?? 19,
     base,
+    grey: /(?:^|\s)gf-grey(?:\s|$)/.test(cls),
     key,
     ...(o.attribution ? { attribution: String(o.attribution) } : {})
   };
@@ -174,7 +185,9 @@ export function buildStyle(o) {
   const night = o.sun ? o.sun.altitude < -3 : false;
   const vector = o.vector && o.tiles.some(t => t.key === 'plan') ? o.vector : null;
   const shadeOn = o.terrain && s.hillshade;
-  for (const t of o.tiles) {
+  // The background's last layer (a year's photos over the greyed ones): the shading right over it.
+  const lastBase = o.tiles.map(t => t.base).lastIndexOf(true);
+  for (const [i, t] of o.tiles.entries()) {
     // The plan as vector tiles: its layers in place of its pictures.
     if (vector && t.key === 'plan') {
       Object.assign(sources, vector.sources);
@@ -183,10 +196,10 @@ export function buildStyle(o) {
       sources[t.id] = { type: 'raster', tiles: [tileUrl(t.url, o.cacheOnly)], tileSize: 256, minzoom: t.nativeMin, maxzoom: t.nativeMax };
       // The globe: the backgrounds from the furthest zoom (the IGN's cover the world at small scales).
       layers.push({ id: t.id, type: 'raster', source: t.id, minzoom: t.base && s.globe ? 0 : t.minzoom, metadata: { 'gf:key': t.key },
-        paint: { 'raster-opacity': t.opacity, 'raster-fade-duration': 150, ...(night && t.base ? { 'raster-brightness-max': 0.55 } : {}) } });
+        paint: { 'raster-opacity': t.opacity, 'raster-fade-duration': 150, ...(night && t.base ? { 'raster-brightness-max': 0.55 } : {}), ...(t.grey ? FILLER : {}) } });
     }
     // The relief's shading right over the background (under the overlays).
-    if (t.base && shadeOn) layers.push(hillshade(o));
+    if (i === lastBase && shadeOn) layers.push(hillshade(o));
   }
   if (shadeOn && !o.tiles.some(t => t.base)) layers.splice(1, 0, hillshade(o));
   if (o.terrain) {

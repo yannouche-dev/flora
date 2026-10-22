@@ -1,10 +1,11 @@
 // @ts-check
 // The IGN Géoplateforme layers of the maps, without Leaflet (the start of the app needs them for the maps' look,
-// core/map-settings.js; the tiles themselves are core/ign.js's): the backgrounds and overlays,
-// their tile address, the layers of the catalogue added to the maps (read again when another tab adds one). Which of
-// them a map shows, and how opaque: the maps' look (core/map-settings.js).
+// core/map-settings.js; the tiles themselves are core/ign.js's): the overlays, the tile address of any layer, the
+// layers of the catalogue added to the maps (read again when another tab adds one). The backgrounds — the plan, the
+// photos of each year, SPOT's — are core/backgrounds.js's. Which of them a map shows, and how opaque: the maps' look
+// (core/map-settings.js).
 // Layer identifiers and styles checked against the service's GetCapabilities (tools/api-health.mjs,
-// scripts/build-ign-catalog.mjs read them from this file).
+// scripts/build-ign-catalog.mjs read them from this file, and the backgrounds' from core/backgrounds.js).
 
 import { readJSON, writeJSON } from './prefs.js';
 import { onStorage } from './sync.js';
@@ -17,12 +18,6 @@ const WMTS = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.
  * @typedef {{ id: string, format: string, style?: string, minNative?: number, maxNative?: number }} WmtsLayer
  * @typedef {{ label: string, layers: WmtsLayer[], hint?: string, group?: string }} LayerDef
  */
-
-/** Background maps (one at a time). @type {Record<'photo' | 'plan', LayerDef>} */
-export const BASES = {
-  photo: { label: 'Photos aériennes', layers: [{ id: 'ORTHOIMAGERY.ORTHOPHOTOS', format: 'image/jpeg', maxNative: 19 }] },
-  plan: { label: 'Plan IGN', layers: [{ id: 'GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2', format: 'image/png', maxNative: 19 }] }
-};
 
 /** Overlays, toggled on top. Protected areas: INPN / PatriNat data served by the Géoplateforme. @type {Record<string, LayerDef>} */
 export const OVERLAYS = {

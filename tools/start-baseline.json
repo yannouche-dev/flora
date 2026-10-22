@@ -1,6 +1,6 @@
 {
   "entry": "app/main.js",
-  "total": 62,
+  "total": 63,
   "modules": [
     "app/components/gf-active-filters.js",
     "app/components/gf-app.js",
@@ -20,6 +20,7 @@
     "app/components/ui-kit.js",
     "app/config.js",
     "app/core/around-sessions.js",
+    "app/core/backgrounds.js",
     "app/core/cache.js",
     "app/core/collections.js",
     "app/core/context.js",

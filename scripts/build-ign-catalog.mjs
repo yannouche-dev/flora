@@ -18,7 +18,7 @@
 //                                                        (deploy: the committed copy is published)
 //   node scripts/build-ign-catalog.mjs --check file      checks a catalogue file (exit 1 when unusable)
 // A document is refused (nothing written) when it reads as fewer than MIN_LAYERS layers (default 50), when the app's own
-// map layers (app/core/ign-layers.js) are missing from it, or when it lost more than MAX_DROP (default 0.3) of the layers of
+// map layers (app/core/ign-layers.js, the backgrounds of app/core/backgrounds.js) are missing from it, or when it lost more than MAX_DROP (default 0.3) of the layers of
 // the copy committed: a broken or truncated answer never replaces a good catalogue.
 // Size: descriptions are kept up to ABOUT_MAX characters, cut shorter (400, 300, 240) while the file is over
 // SIZE_BUDGET bytes (default 600 kB; the service worker precaches it, every phone downloads it).
@@ -28,6 +28,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { CAPABILITIES_URL, FORMAT_VERSION, fileLayers, layersOf, parseCapabilities } from '../lib/ign-catalog.mjs';
+import { everyBaseLayer } from '../app/core/backgrounds.js';
 import { CATEGORIES, TAXONOMY_VERSION } from '../lib/ign-classify.mjs';
 
 const COMMITTED = fileURLToPath(new URL('../data/ign-catalog.json', import.meta.url));
@@ -114,8 +115,9 @@ async function build() {
   const layers = parseCapabilities(xml);
 
   const problems = [];
-  // The app's own layers (backgrounds and overlays of app/core/ign-layers.js) are each in the catalogue.
-  const own = [...readFileSync(new URL('../app/core/ign-layers.js', import.meta.url), 'utf8').matchAll(/\{ id: '([^']+)', format: 'image\//g)].map(m => m[1]);
+  // The app's own layers (overlays of app/core/ign-layers.js, backgrounds of app/core/backgrounds.js) are each in the catalogue.
+  const own = [...readFileSync(new URL('../app/core/ign-layers.js', import.meta.url), 'utf8').matchAll(/\{ id: '([^']+)', format: 'image\//g)].map(m => m[1])
+    .concat(everyBaseLayer().map(l => l.id));
   const ids = new Set(layers.map(l => l.id));
   const missing = own.filter(id => !ids.has(id));
   if (missing.length) problems.push(`layers of the app missing: ${missing.join(', ')}`);
