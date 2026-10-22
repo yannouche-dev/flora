@@ -1,7 +1,8 @@
-// Map tiles made here, for the specs that draw maps with MapLibre (map3d.spec.mjs, maps3d.spec.mjs) or a background
-// of a year (map-years.spec.mjs): PNG pictures (the IGN's photos — the most recent, those of a year or a period, the
-// historical ones —, SPOT's satellite images, the relief in Terrarium encoding) and a Mapbox Vector Tile of buildings
-// (PLAN.IGN's `bati_surf` layer, each with its `hauteur`) — no network, ever.
+// Map tiles made here, for the specs that draw maps with MapLibre (map3d.spec.mjs, maps3d.spec.mjs), a background of a
+// year (map-years.spec.mjs) or the names over it (map-names.spec.mjs): PNG pictures (the IGN's photos — the most recent,
+// those of a year or a period, the historical ones —, SPOT's satellite images, the roads, rivers and names over them —
+// transparent but for their lines —, the relief in Terrarium encoding) and a Mapbox Vector Tile of buildings (PLAN.IGN's
+// `bati_surf` layer, each with its `hauteur`) — no network, ever.
 import { deflateSync } from 'node:zlib';
 
 const CRC = Array.from({ length: 256 }, (_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c >>> 0; });
@@ -15,17 +16,26 @@ function chunk(type, data) {
   return Buffer.concat([len, body, crc]);
 }
 
-/** A 256 × 256 RGB PNG, each pixel from `rgb(x, y)`. @param {(x: number, y: number) => [number, number, number]} rgb */
-export function png(rgb) {
-  const raw = Buffer.alloc(256 * (1 + 256 * 3));
+/**
+ * A 256 × 256 PNG, each pixel from `pixel(x, y)`: RGB (3 channels), or RGBA (4: colour type 6, see-through where its
+ * alpha is 0). @param {(x: number, y: number) => number[]} pixel @param {3 | 4} channels
+ */
+function encode(pixel, channels) {
+  const raw = Buffer.alloc(256 * (1 + 256 * channels));
   for (let y = 0; y < 256; y++) {
-    const row = y * (1 + 256 * 3);
-    for (let x = 0; x < 256; x++) raw.set(rgb(x, y), row + 1 + x * 3);
+    const row = y * (1 + 256 * channels);
+    for (let x = 0; x < 256; x++) raw.set(pixel(x, y), row + 1 + x * channels);
   }
   const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(256, 0); ihdr.writeUInt32BE(256, 4); ihdr[8] = 8; ihdr[9] = 2;
+  ihdr.writeUInt32BE(256, 0); ihdr.writeUInt32BE(256, 4); ihdr[8] = 8; ihdr[9] = channels === 4 ? 6 : 2;
   return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
 }
+
+/** A 256 × 256 RGB PNG, each pixel from `rgb(x, y)`. @param {(x: number, y: number) => [number, number, number]} rgb */
+export const png = rgb => encode(rgb, 3);
+
+/** A 256 × 256 RGBA PNG, each pixel from `rgba(x, y)` (alpha 0: see-through). @param {(x: number, y: number) => [number, number, number, number]} rgba */
+const pngAlpha = rgba => encode(rgba, 4);
 
 /** Aerial photo: green fields, a darker grid (the same everywhere: a test's picture, not a place). */
 export const PHOTO = png((x, y) => (x % 64 < 3 || y % 64 < 3 ? [70, 110, 60] : [120 + (x >> 3), 160, 100 + (y >> 3)]));
@@ -35,6 +45,13 @@ export const PLAN = png((x, y) => (x % 85 < 4 || y % 85 < 4 ? [200, 205, 215] : 
 export const SATELLITE = png((x, y) => ((x >> 5) + (y >> 5)) % 2 ? [74, 104, 112] : [96, 128, 104]);
 /** The photos of a year, of a period, the historical ones: sepia, a darker grid. */
 export const OLD_PHOTO = png((x, y) => (x % 48 < 3 || y % 48 < 3 ? [92, 76, 58] : [170 + (x >> 4), 150 + (y >> 4), 112]));
+/** The names over the photos and SPOT's (core/backgrounds.js NAMES_LAYERS), see-through but for their lines: a road (orange, across), a river (blue, down), a name (a dark block). */
+const CLEAR = [0, 0, 0, 0];
+const ROADS = pngAlpha((x, y) => (Math.abs(y - 128) < 4 ? [240, 190, 70, 255] : CLEAR));
+const RIVERS = pngAlpha((x, y) => (Math.abs(x - 64) < 3 ? [70, 130, 220, 255] : CLEAR));
+const NAMES = pngAlpha((x, y) => (x >= 100 && x < 172 && y >= 40 && y < 54 ? [30, 30, 30, 255] : CLEAR));
+/** Each names layer's tile, by its identifier. @type {Map<string, Buffer>} */
+const NAMES_TILES = new Map([['TRANSPORTNETWORKS.ROADS', ROADS], ['HYDROGRAPHY.HYDROGRAPHY', RIVERS], ['GEOGRAPHICALNAMES.NAMES', NAMES]]);
 /** Terrarium: height = R × 256 + G + B / 256 − 32768; a slope from 1 500 m to some 2 300 m across each tile. */
 export const TERRARIUM = png((x, y) => { const h = 1500 + x * 2 + y + 32768; return [h >> 8, h & 255, 0]; });
 
@@ -156,10 +173,11 @@ export async function answerTiles(page, { dem = 'ok', seen } = {}) {
     const url = route.request().url();
     const layer = new URL(url).searchParams.get('LAYER') || '';
     const [z, row, col] = ['TILEMATRIX', 'TILEROW', 'TILECOL'].map(k => Number(new URL(url).searchParams.get(k)));
-    // The plan; SPOT's images of a year; the photos of a year, a period, historical ones; the most recent photos.
-    const body = /PLANIGNV2/.test(layer) ? PLAN : /^ORTHOIMAGERY\.ORTHO-SAT\.SPOT\.\d{4}$/.test(layer) ? SATELLITE
+    // The plan; the names over the photos; SPOT's images of a year; the photos of a year, a period, historical ones; the
+    // most recent photos.
+    const body = /PLANIGNV2/.test(layer) ? PLAN : NAMES_TILES.get(layer) ?? (/^ORTHOIMAGERY\.ORTHO-SAT\.SPOT\.\d{4}$/.test(layer) ? SATELLITE
       : /^ORTHOIMAGERY\.ORTHOPHOTOS\.?\d{4}(-\d{4})?$/.test(layer) ? OLD_PHOTO
-      : /ORTHOPHOTOS/.test(layer) && Number.isFinite(z) ? photoTile(z, col, row) : PHOTO;
+      : /ORTHOPHOTOS/.test(layer) && Number.isFinite(z) ? photoTile(z, col, row) : PHOTO);
     return route.fulfill({ contentType: 'image/png', body, headers: cors });
   });
   await page.route(/^https:\/\/s3\.amazonaws\.com\/elevation-tiles-prod\/terrarium\//, route => {

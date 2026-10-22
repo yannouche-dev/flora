@@ -11,10 +11,11 @@
 //    Stored in localStorage (config.storageKeys.maps3d), only what differs from the defaults, and only when the user
 //    changes something: a real setting, so the first steps (core/discover.js) count it as « used before » like the others.
 //  - MapLook: what they show — the background (core/backgrounds.js: the plan, the photos — the most recent, of a year, of
-//    a period, historical —, SPOT's images of a year), the IGN overlays (bottom first), each overlay's opacity. The common look
+//    a period, historical —, SPOT's images of a year), the names over the photos and SPOT's (the roads, the rivers, the
+//    places' names: on by default), the IGN overlays (bottom first), each overlay's opacity. The common look
 //    (« réglages communs à toutes les cartes »): every open map follows it, 2D and 3D, at once (mapLookEvents).
 //      mapLook() → the look now; setMapLook(patch); resetMapLook(); mapLookEvents fires `change` (here or in another tab).
-//    A map may have its own look, which its owner keeps (a free layout's cell: base=, annee=, layers=, opac= in its address; a
+//    A map may have its own look, which its owner keeps (a free layout's cell: base=, annee=, noms=, layers=, opac= in its address; a
 //    map block of the plant sheet: MapConfig.look): a Partial<MapLook>, each field given replacing the common one
 //    (lookFor), the others following it; « Revenir aux réglages communs » lets it go (gf-map `look-change` null).
 //    Stored under the keys of before (config.storageKeys.mapLayer: { base, overlays, distribution } — base the
@@ -127,7 +128,7 @@ export function resetMapSettings() { pref.reset(); }
 /**
  * @typedef {object} MapLook
  * @property {BaseKey} base                       the background (core/backgrounds.js: 'plan', 'photo', 'photo:2016-2020', 'spot:2020'…)
- * @property {boolean} names                      place names over the background (kept for a later step: not drawn yet)
+ * @property {boolean} names                      the names over the photos and SPOT's images (core/backgrounds.js NAMES_LAYERS: the roads, the rivers, the places' names; the plan has its own)
  * @property {string[]} overlays                  IGN overlays, bottom first: the app's own and the catalogue's added (core/ign-layers.js)
  * @property {Record<string, number>} opacities   each overlay's opacity (0…1, by 0.05) when not the usual (DEFAULT_OPACITY)
  */
@@ -247,7 +248,7 @@ export function setMapLook(patch) {
   relook();
 }
 
-/** The common look back to the defaults (the photos, no overlay, the usual opacities). */
+/** The common look back to the defaults (the photos, their names, no overlay, the usual opacities). */
 export const resetMapLook = () => setMapLook(LOOK_DEFAULTS);
 
 /**

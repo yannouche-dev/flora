@@ -2,8 +2,8 @@
 // The maps' options, one UI wherever they are changed: the panel ▦ of every map (gf-map-panel.js, scope="map") and
 // Réglages › Cartes (gf-settings.js, scope="defaults") — « Affichage » (2D or 3D, the 3D options folded:
 // map3d-options.js), « Fond » (the plan, the aerial photos — the most recent, of a year, of a period, historical —, SPOT's
-// satellite images of a year: core/backgrounds.js), and IGN's layers (terrain, the whole catalogue: gf-ign-layers.js, the
-// rules of picking).
+// satellite images of a year: core/backgrounds.js; over the photos and SPOT's, the names — roads, rivers, places —, a
+// checkbox), and IGN's layers (terrain, the whole catalogue: gf-ign-layers.js, the rules of picking).
 // Every option is the maps' common setting (core/map-settings.js), unless the map shown has its own look (`own`: a free
 // layout's cell, a plant sheet's map block): then it says so, its changes are its own, and « Revenir aux réglages
 // communs » lets it go. 2D / 3D and the 3D options are always common (a map always drawn one way says why).
@@ -17,7 +17,7 @@
 
 import { LitElement, html, css, nothing } from 'lit';
 import { OVERLAYS, addCatalogLayer, overlayDef } from '../core/ign-layers.js';
-import { LATEST_SPOT, PHOTO_HISTORIC, PHOTO_PERIODS, PHOTO_YEARS, SPOT_YEARS, fillerNote, parseBase, whenLabel } from '../core/backgrounds.js';
+import { LATEST_SPOT, PHOTO_HISTORIC, PHOTO_PERIODS, PHOTO_YEARS, SPOT_YEARS, fillerNote, parseBase, takesNames, whenLabel } from '../core/backgrounds.js';
 import { mapLook, mapLookEvents, mapSettings, mapSettingsEvents, setMapLook, setMapSettings } from '../core/map-settings.js';
 import { moduleEvents, moduleOn } from '../core/modules.js';
 import { hasWebGL2 } from '../core/maplibre.js';
@@ -40,10 +40,16 @@ const KINDS = [
   ['spot', 'Satellite (SPOT)', 'globe-europe-africa', `spot:${LATEST_SPOT}`]
 ];
 
-/** What of the look a map has of its own, in words. @param {Partial<MapLook>} own */
-function ownWords(own) {
-  const base = 'base' in own || 'names' in own, layers = 'overlays' in own || 'opacities' in own;
-  return base && layers ? 'son propre fond et ses propres couches' : base ? 'son propre fond' : 'ses propres couches';
+/**
+ * What of the look a map has of its own, in words (its names with its background: its own background says both; its
+ * names alone on the plan, which has its own, said of no effect there) — its panel's, a plant sheet's map block form's
+ * (gf-plant-detail.js). @param {Partial<MapLook>} own @param {string} base the background it shows
+ */
+export function ownWords(own, base) {
+  const names = takesNames(base) ? 'son propre choix des noms' : 'son propre choix des noms, sans effet sur le plan IGN';
+  const fond = 'base' in own ? 'son propre fond' : 'names' in own ? names : '';
+  const layers = 'overlays' in own || 'opacities' in own ? 'ses propres couches' : '';
+  return [fond, layers].filter(Boolean).join(' et ');
 }
 
 export class GfMapOptions extends LitElement {
@@ -195,7 +201,7 @@ export class GfMapOptions extends LitElement {
   #scope() {
     if (this.#defaults) return nothing;
     if (this.own) {
-      return html`<p class="scope own">${icon('pin-map')}<span>Cette carte a ${ownWords(this.own)}${this.lookWhy ? ` (${this.lookWhy})` : ''}</span>
+      return html`<p class="scope own">${icon('pin-map')}<span>Cette carte a ${ownWords(this.own, this.#look.base)}${this.lookWhy ? ` (${this.lookWhy})` : ''}</span>
         ${this.lookWhy ? nothing : html`<button type="button" class="link" @click=${() => this.#emit('look-common')}>${icon('arrow-counterclockwise')} Revenir aux réglages communs</button>`}</p>`;
     }
     return html`<p class="scope">${icon('globe-europe-africa')}<span>Réglages communs à toutes les cartes</span>
@@ -230,7 +236,8 @@ export class GfMapOptions extends LitElement {
    * photos their date (the most recent, a year, a period, historical ones), under SPOT its year, each a list; under the
    * photos of a year or a period, where they are missing (the most recent ones, greyed): the list's description, said
    * when a date brings it — on a map, by its panel's one live region (`options-say`: the panel is a modal, one region
-   * says all); in Réglages, by its own polite region. @param {MapLook} look
+   * says all); in Réglages, by its own polite region. Over the photos and SPOT's, the names (a checkbox, on by default) —
+   * not on the plan, which has its own: no checkbox there, as no date. @param {MapLook} look
    */
   #bases(look) {
     const kind = parseBase(look.base)?.kind ?? 'photo';
@@ -261,7 +268,11 @@ export class GfMapOptions extends LitElement {
         </select></div>`
       : kind === 'spot' ? html`<div class="when"><label for=${id}>Année des images</label>
         <select id=${id} @change=${choose}>${SPOT_YEARS.map(y => option('spot:' + y, y))}</select></div>` : nothing}
-      ${this.#defaults ? html`<div aria-live="polite">${noteView}</div>` : noteView}`;
+      ${this.#defaults ? html`<div aria-live="polite">${noteView}</div>` : noteView}
+      ${takesNames(look.base) ? html`<label class="layer">
+        <input type="checkbox" .checked=${look.names} @change=${(/** @type {any} */ e) => this.#edit({ names: e.target.checked })} />
+        <span>Afficher les noms : villes, routes, rivières, forêts</span>
+      </label>` : nothing}`;
   }
 
   render() {

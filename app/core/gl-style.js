@@ -1,10 +1,10 @@
 // @ts-check
 // The 3D maps' style (MapLibre GL, app/components/gf-map-gl.js), made from what the 2D map shows: pure functions, no
 // DOM, no MapLibre — unit-tested (tests/unit/gl-style.test.mjs).
-//  - each tile layer of the Leaflet map (IGN backgrounds and overlays, the catalogue's layers, GBIF's distribution) as
-//    a raster source and layer, in the same order, at the same zooms (MapLibre's zoom is Leaflet's minus one: its
-//    world is 512 px wide at zoom 0, Leaflet's 256); the most recent photos under a year's (core/backgrounds.js)
-//    greyed and pale, as in 2D;
+//  - each tile layer of the Leaflet map (IGN backgrounds and overlays, the catalogue's layers, the names over the photos
+//    and SPOT's, GBIF's distribution) as a raster source and layer, in the same order (tileSpecs: by their z-index, each
+//    once), at the same zooms (MapLibre's zoom is Leaflet's minus one: its world is 512 px wide at zoom 0, Leaflet's
+//    256); the most recent photos under a year's (core/backgrounds.js) greyed and pale, as in 2D;
 //  - the « IGN – fonds de carte » module off: tiles from the device's cache only (the gfcache:// protocol), never the
 //    network;
 //  - the relief (AWS Terrain Tiles, Terrarium) and its shading, the IGN buildings extruded (PLAN.IGN vector tiles), the
@@ -70,6 +70,17 @@ export function describeTileLayer(layer, index) {
     key,
     ...(o.attribution ? { attribution: String(o.attribution) } : {})
   };
+}
+
+/**
+ * The 2D map's tile layers as the 3D map draws them, bottom first: each once (a layer added again is the same one), by
+ * their z-index — the background under everything, the overlays in their order, the names over them (core/ign.js
+ * NAMES_Z), GBIF's, the observations' —, layers of the same one in the order they came (`orderOf`: Leaflet's stamp).
+ * Those that are not web tiles left out. @param {Iterable<any>} layers @param {(layer: any) => number} orderOf @returns {TileSpec[]}
+ */
+export function tileSpecs(layers, orderOf) {
+  const sorted = [...new Set(layers)].sort((a, b) => (a.options?.zIndex ?? 1) - (b.options?.zIndex ?? 1) || orderOf(a) - orderOf(b));
+  return sorted.map((l, i) => describeTileLayer(l, i)).filter(t => t !== null);
 }
 
 /** Whether a tile address is the IGN's (cached-only when the module is off). @param {string} url */
@@ -194,8 +205,10 @@ export function buildStyle(o) {
       layers.push(...vector.layers);
     } else {
       sources[t.id] = { type: 'raster', tiles: [tileUrl(t.url, o.cacheOnly)], tileSize: 256, minzoom: t.nativeMin, maxzoom: t.nativeMax };
-      // The globe: the backgrounds from the furthest zoom (the IGN's cover the world at small scales).
+      // The globe: the backgrounds from the furthest zoom (the IGN's cover the world at small scales). The names: hidden
+      // past their last zoom, as in 2D (their words never enlarged).
       layers.push({ id: t.id, type: 'raster', source: t.id, minzoom: t.base && s.globe ? 0 : t.minzoom, metadata: { 'gf:key': t.key },
+        ...(t.key === 'names' ? { maxzoom: t.maxzoom } : {}),
         paint: { 'raster-opacity': t.opacity, 'raster-fade-duration': 150, ...(night && t.base ? { 'raster-brightness-max': 0.55 } : {}), ...(t.grey ? FILLER : {}) } });
     }
     // The relief's shading right over the background (under the overlays).

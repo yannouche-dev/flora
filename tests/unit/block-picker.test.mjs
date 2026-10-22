@@ -15,6 +15,7 @@ const chips = (/** @type {string} */ text) => cellChips(known(text));
 test('une case en quelques mots : son composant, son bloc, son intention, ses réglages écrits', () => {
   assert.deepEqual(chips('map(floraison,r=2km)'), ['Carte', 'Floraison du moment', '2 km']);
   assert.deepEqual(chips('carte(terrain;base=plan;2d)'), ['Carte', 'Sur le terrain', 'Plan IGN', '2D']);
+  assert.deepEqual(chips('map(base=spot,noms=0)'), ['Carte', 'Satellite (SPOT)', 'sans noms sur le fond']);
   // What the intent gives is the intent's: not said again.
   assert.deepEqual(chips('map(floraison,when=mois,regroupe)'), ['Carte', 'Floraison du moment']);
   assert.deepEqual(chips('map(layers=znieff+n2000)'), ['Carte', 'ZNIEFF (types I et II) + Natura 2000']);
@@ -75,6 +76,9 @@ test('le contrôle de chaque sorte de réglage', () => {
     for (const w of dates(base).slice(2)) assert.match(setParam(/** @type {any} */ (cellOf(base ? `map(base=${base})` : 'map')), 'annee', w), new RegExp(`annee=${w}\\)$`), `${base} ${w}`);
   }
   assert.deepEqual(optionsOf(m['3d']).map(o => o.value), [null, true, false]);
+  // The names over the photos and SPOT's: as the common settings say, yes, no.
+  assert.equal(controlOf(m.noms), 'segmented');
+  assert.deepEqual(optionsOf(m.noms).map(o => [o.value, o.label]), [[null, 'Par défaut'], [true, 'Oui'], [false, 'Non']]);
   assert.equal(cleanWords(' Mirabel, (Ménétrol) = 63 '), 'Mirabel Ménétrol 63');
 });
 
@@ -88,8 +92,10 @@ test('changer un réglage, une intention, un composant : le texte canonique de l
   // Its year (named: never a bare value), after its background; SPOT's latest is SPOT without a year.
   assert.equal(setParam(/** @type {any} */ (cellOf(setParam(c, 'base', 'spot'))), 'annee', '2020'), 'map(floraison,r=2km,base=spot,annee=2020)');
   assert.equal(setParam(/** @type {any} */ (cellOf('map(base=spot,annee=2020)')), 'annee', '2025'), 'map(base=spot)');
-  // The plan has no year: the year left out.
+  // The plan has no year: the year left out. Its names are its own (noms= kept: found again on the photos).
   assert.equal(setParam(/** @type {any} */ (cellOf('map(base=spot,annee=2020)')), 'base', 'plan'), 'map(base=plan)');
+  assert.equal(setParam(/** @type {any} */ (cellOf('map(base=spot,noms=0)')), 'base', 'plan'), 'map(base=plan,noms=0)');
+  assert.equal(setParam(/** @type {any} */ (cellOf('map(base=photo,annee=2016;3d=0)')), 'noms', false), 'map(base=photo,annee=2016,noms=0;3d=0)');
   // What the intent gives: left out; against it: written.
   assert.equal(setParam(c, 'regroupe', true), 'map(floraison,r=2km)');
   assert.equal(setParam(c, 'when', 'toujours'), 'map(floraison,r=2km,when=toujours)');

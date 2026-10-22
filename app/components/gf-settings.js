@@ -505,15 +505,16 @@ export class GfSettings extends LitElement {
 
   /**
    * « Cartes »: the maps' common settings — 2D (Leaflet) or 3D (MapLibre, loaded only then) and the 3D options, the
-   * background (the plan, the photos of now or of a year, SPOT's), IGN's layers —: the same options as each map's
-   * panel ▦ (gf-map-options.js); changed here or there, every map that follows them follows at once.
+   * background (the plan, the photos of now or of a year, SPOT's; the names over the photos and SPOT's), IGN's layers
+   * —: the same options as each map's panel ▦ (gf-map-options.js); changed here or there, every map that follows them
+   * follows at once.
    */
   #maps() {
     return html`<h2 id="cartes">Cartes</h2>
       <div class="maps-card">
         <p class="muted">Réglages communs à toutes les cartes : la Carte, la carte de la fiche plante, Mes plantes, Parcours, Rencontres, le partage, les cartes des dispositions libres. Chaque carte les propose aussi dans son panneau ▦ (les mêmes réglages, changés pour toutes).
-          Le fond : le plan IGN, les photos aériennes — les plus récentes, ou celles d’une année, d’une période, les photos historiques — ou les images satellite SPOT d’une année.
-          Une carte qui a son propre fond le garde — une case de disposition libre dont l’adresse dit son fond (base=, annee=) ou ses couches (layers=), une carte de fiche réglée avant —, et son panneau ▦ propose de revenir aux réglages communs.</p>
+          Le fond : le plan IGN, les photos aériennes — les plus récentes, ou celles d’une année, d’une période, les photos historiques — ou les images satellite SPOT d’une année ; sur les photos et SPOT, les noms par-dessus (routes, cours d’eau, noms de lieux), affichés sauf si on les décoche — le plan a les siens.
+          Une carte qui a son propre fond le garde — une case de disposition libre dont l’adresse dit son fond (base=, annee=), ses noms (noms=) ou ses couches (layers=), une carte de fiche réglée avant —, et son panneau ▦ propose de revenir aux réglages communs.</p>
         <gf-map-options scope="defaults"></gf-map-options>
         <p class="muted">En 3D : glisser du clic droit, ou à deux doigts, pour tourner et incliner ; Maj + flèches au clavier ; la boussole revient au nord. La 3D se télécharge à sa première ouverture (environ 1,6 Mo), en ligne.
           L’étape « Jusqu’où part l’expédition ? » reste vue de dessus ; sur une fiche plante, les cartes ajoutées en plus de la carte principale restent en 2D ; pendant la modification des positions, la carte repasse en 2D le temps de l’édition.</p>

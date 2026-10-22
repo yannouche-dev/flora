@@ -1,13 +1,13 @@
 // app/core/backgrounds.js: the maps' backgrounds — the plan, the photos of now, of a year, of a period, the historical
-// ones, SPOT's images of a year —: each layer as the Géoplateforme's catalogue gives it (data/ign-catalog.json:
-// identifier, format, style, native zooms), the most recent photos greyed under a year's, no other key (never one an
-// object inherits), their names in French, a layout cell's address (base=, annee=) and back.
+// ones, SPOT's images of a year — and the names over them: each layer as the Géoplateforme's catalogue gives it
+// (data/ign-catalog.json: identifier, format, style, native zooms), the most recent photos greyed under a year's, no
+// other key (never one an object inherits), their names in French, a layout cell's address (base=, annee=) and back.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  ALL_WHENS, LATEST_SPOT, PHOTO_HISTORIC, PHOTO_PERIODS, PHOTO_YEARS, SPOT_YEARS, addressOf, baseKeyOf, baseKind, baseLabel, baseLayers,
-  everyBaseLayer, fillerNote, isBaseKey, parseBase, whenLabel
+  ALL_WHENS, LATEST_SPOT, NAMES, NAMES_LAYERS, PHOTO_HISTORIC, PHOTO_PERIODS, PHOTO_YEARS, SPOT_YEARS, addressOf, baseKeyOf, baseKind, baseLabel,
+  baseLayers, everyBaseLayer, fillerNote, isBaseKey, parseBase, takesNames, whenLabel
 } from '../../app/core/backgrounds.js';
 
 const catalog = JSON.parse(readFileSync(new URL('../../data/ign-catalog.json', import.meta.url), 'utf8'));
@@ -35,11 +35,33 @@ test('chaque fond proposé : ses couches telles que le catalogue de l’IGN les 
       assert.equal(l.maxNative ?? 19, c.maxNative, `${key} : dernier zoom de ${l.id}`);
     }
   }
-  // The tools check each against the service (tools/api-health.mjs, scripts/build-ign-catalog.mjs): each once.
+  // The tools check each against the service (tools/api-health.mjs, scripts/build-ign-catalog.mjs): each once — the
+  // names over them too.
   const every = everyBaseLayer().map(l => l.id);
   assert.equal(new Set(every).size, every.length);
-  assert.equal(every.length, 2 + 25 + 5 + 3 + 13);
+  assert.equal(every.length, 2 + 25 + 5 + 3 + 13 + 3);
   assert.ok(every.every(id => byId.has(id)));
+  assert.deepEqual(every.slice(-3), NAMES_LAYERS.map(l => l.id));
+});
+
+test('les noms par-dessus : routes, hydrographie, noms (dans cet ordre, les noms dessus), tels que le catalogue les donne ; sur les photos et SPOT, pas sur le plan', () => {
+  assert.deepEqual(NAMES_LAYERS.map(l => l.id), ['TRANSPORTNETWORKS.ROADS', 'HYDROGRAPHY.HYDROGRAPHY', 'GEOGRAPHICALNAMES.NAMES']);
+  for (const l of NAMES_LAYERS) {
+    const c = byId.get(l.id);
+    assert.ok(c, `${l.id} au catalogue`);
+    assert.equal(l.format, c.format, `format de ${l.id}`);
+    assert.equal(l.format, 'image/png');
+    assert.equal(l.style ?? 'normal', c.style, `style de ${l.id}`);
+    assert.equal(l.minNative ?? 0, c.minNative, `premier zoom de ${l.id}`);
+    assert.equal(l.maxNative ?? 19, c.maxNative, `dernier zoom de ${l.id}`);
+    assert.ok(Object.isFrozen(l));
+  }
+  assert.ok(Object.isFrozen(NAMES_LAYERS));
+  // Not a background (the look's `names`, never its `base`), nor one of the overlays' keys.
+  assert.equal(NAMES, 'names');
+  assert.equal(isBaseKey(NAMES), false);
+  for (const key of OFFERED) assert.equal(takesNames(key), key !== 'plan', key);
+  for (const key of ['names', 'constructor', 'photo:1999', null, undefined]) assert.equal(takesNames(key), false, String(key));
 });
 
 test('les séries du catalogue, toutes proposées, la plus récente d’abord : photos par année et par période, historiques, SPOT', () => {

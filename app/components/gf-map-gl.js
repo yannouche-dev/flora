@@ -5,8 +5,9 @@
 //   attachGl(host, leaflet) → the adapter of one gf-map (made in gf-map's firstUpdated); gf-map tells it of its
 //   changes (changed(props)), and when it leaves or comes back (disconnect(), connect()).
 // What is mirrored, from the Leaflet map to MapLibre, as it changes:
-//  - the tile layers (backgrounds, overlays, the catalogue's layers, GBIF's): raster sources in the same order
-//    (core/gl-style.js); Leaflet's own stop loading (their _update set aside) while the 3D map shows;
+//  - the tile layers (backgrounds, overlays, the catalogue's layers, the names over them, GBIF's): raster sources in the
+//    same order, each once (core/gl-style.js tileSpecs); Leaflet's own stop loading (their _update set aside) while the
+//    3D map shows;
 //  - the markers (places, plants, observations, groups, the point picked, my position…): their very elements, moved
 //    into MapLibre markers — each effect of map.css applies, and gf-map's code (its cards, the « kin » it lights) finds
 //    them where they are; a click, a hover or Enter on one is handed to its Leaflet marker;
@@ -34,7 +35,7 @@
 import * as L from 'leaflet';
 import { MAX_PITCH, lightMoment, mapSettings, mapSettingsEvents, sunPosition } from '../core/map-settings.js';
 import { moduleEvents, moduleOn } from '../core/modules.js';
-import { DEM_ATTRIBUTION, IGN_VECTOR_STYLE, buildStyle, circlePolygon, describeTileLayer, mergeVectorStyle, pathStyle } from '../core/gl-style.js';
+import { DEM_ATTRIBUTION, IGN_VECTOR_STYLE, buildStyle, circlePolygon, mergeVectorStyle, pathStyle, tileSpecs } from '../core/gl-style.js';
 import { LOCALE, MAPLIBRE_CSS, MAP_GL_CSS, hasWebGL2, linkCss, loadMapLibre, noWebGL2 } from '../core/maplibre.js';
 import { Obs3dLayer } from './gf-map-obs3d.js';
 
@@ -488,9 +489,7 @@ export class GlView {
 
   /** The tile layers of the 2D map, bottom first. */
   #tiles() {
-    const tiles = [...this.#mirrors.values()].filter(m => m.kind === 'tile').map(m => m.layer)
-      .sort((a, b) => (a.options.zIndex ?? 1) - (b.options.zIndex ?? 1) || L.Util.stamp(a) - L.Util.stamp(b));
-    return tiles.map((l, i) => describeTileLayer(l, i)).filter(Boolean);
+    return tileSpecs([...this.#mirrors.values()].filter(m => m.kind === 'tile').map(m => m.layer), l => L.Util.stamp(l));
   }
 
   #style() {
@@ -710,8 +709,9 @@ export class GlView {
     this.#mirrors.delete(layer);
     if (m.kind === 'tile') {
       if (layer.gfUpdate) { layer._update = layer.gfUpdate; delete layer.gfUpdate; }
-      // Still on the 2D map (the 3D map going): its tiles back.
-      if (layer._map) layer.redraw();
+      // Still on the 2D map (the 3D map going): its tiles back. Not one taken off it (its layerremove: Leaflet clears its
+      // _map only after), whose redraw would ask its tiles for nothing — at its first native zoom, whatever its minZoom.
+      if (layer._map?.hasLayer(layer)) layer.redraw();
       if (this.#map) this.#restyle();
     } else if (m.kind === 'marker') {
       layer.off('move', m.gl.gfMove);

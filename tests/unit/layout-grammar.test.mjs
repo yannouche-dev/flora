@@ -107,6 +107,10 @@ test('erreurs : jamais d’exception, la disposition lue au mieux et ce qui ne v
   assert.equal(G.serialize(digits), '[map(annee=2020;3d=1;20km,5)]');
   assert.deepEqual(G.parse(G.serialize(digits)).errors, []);
   assert.deepEqual(G.strip(G.parse(G.serialize(digits)).tree), G.strip(digits));
+  // A word between them (noms=0): « , » after the year, « ; » before the 3D.
+  const names = G.list([G.cell('map', null, [{ key: 'annee', value: '2020' }, { key: 'noms', value: '0' }, { key: '3d', value: '1' }])]);
+  assert.equal(G.serialize(names), '[map(annee=2020,noms=0;3d=1)]');
+  assert.deepEqual(G.strip(G.parse(G.serialize(names)).tree), G.strip(names));
 });
 
 test('composant inconnu : une case qui le dit et propose le plus proche ; paramètres et valeurs vérifiés', () => {

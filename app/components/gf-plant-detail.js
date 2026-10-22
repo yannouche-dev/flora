@@ -22,6 +22,8 @@ import './gf-lookalikes.js';
 import { emergency } from '../core/poison.js';
 import './gf-add-to.js';
 import './gf-sheet-map.js';
+import { ownWords } from './gf-map-options.js';
+import { lookFor } from '../core/map-settings.js';
 import { ONE_GL_PER_SHEET } from './map3d-options.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
@@ -2834,7 +2836,7 @@ export class GfPlantDetail extends LitElement {
         ${action('spot', 'Noter ici')}
         ${action('locate', 'Me localiser')}
       </fieldset>
-      <p class="look-note">Fond, couches IGN, 2D ou 3D : dans le panneau ▦ de la carte (${c.look ? 'cette carte a son propre fond ; le panneau propose de revenir aux réglages communs' : 'réglages communs à toutes les cartes'}).</p>
+      <p class="look-note">Fond, couches IGN, 2D ou 3D : dans le panneau ▦ de la carte (${c.look ? `cette carte a ${ownWords(c.look, lookFor(c.look).base)} ; le panneau propose de revenir aux réglages communs` : 'réglages communs à toutes les cartes'}).</p>
     </div>`;
   }
 

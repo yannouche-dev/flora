@@ -23,7 +23,7 @@ const [LON, LAT] = [4.8357, 45.764];
 
 /**
  * The WMTS layers of the app's maps — its overlays (app/core/ign-layers.js, read from its source), its backgrounds
- * (app/core/backgrounds.js: the plan, the photos of each year, SPOT's) —: each must still be in the catalogue.
+ * (app/core/backgrounds.js: the plan, the photos of each year, SPOT's, the names over them) —: each must still be in the catalogue.
  */
 const IGN_LAYERS = [...readFileSync(new URL('../app/core/ign-layers.js', import.meta.url), 'utf8')
   .matchAll(/\{ id: '([^']+)', format: 'image\//g)].map(m => m[1]).concat(everyBaseLayer().map(l => l.id));

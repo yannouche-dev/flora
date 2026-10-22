@@ -1,15 +1,16 @@
 // app/core/gl-style.js: the 3D maps' style made from what the 2D map shows — each IGN layer at the same zooms (every
-// background: the photos of a year over the most recent ones greyed, SPOT's), the cache-only tiles with the module off, the relief, its shading, the buildings, the vector plan, the sky, the globe,
+// background: the photos of a year over the most recent ones greyed, SPOT's; the names over them, on top of every
+// overlay, once each, in their order), the cache-only tiles with the module off, the relief, its shading, the buildings, the vector plan, the sky, the globe,
 // the sun's light, and the 2D map's lines and areas styled as map.css styles them.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { OVERLAYS, tileLayer, wmtsUrl } from '../../app/core/ign.js';
-import { PHOTO_HISTORIC, PHOTO_PERIODS, PHOTO_YEARS, SPOT_YEARS, baseLayers } from '../../app/core/backgrounds.js';
+import { NAMES_Z, OVERLAYS, addCatalogLayer, namesOver, tileLayer, wmtsUrl } from '../../app/core/ign.js';
+import { NAMES, NAMES_LAYERS, PHOTO_HISTORIC, PHOTO_PERIODS, PHOTO_YEARS, SPOT_YEARS, baseLayers } from '../../app/core/backgrounds.js';
 import { MAP_DEFAULTS } from '../../app/core/map-settings.js';
 import {
   BUILDINGS_LAYER, BUILDING_HEIGHT, CACHE_PROTOCOL, DEM_TILES, IGN_VECTOR_TILES, buildStyle, circlePolygon, describeTileLayer,
-  lightFor, mergeVectorStyle, pathStyle, skyFor, tileUrl
+  lightFor, mergeVectorStyle, pathStyle, skyFor, tileSpecs, tileUrl
 } from '../../app/core/gl-style.js';
 
 /**
@@ -140,6 +141,72 @@ test('core/ign.js : les photos d’une année dès un zoom avant leur premier (l
   // An overlay from its own first zoom (an underzoomed one would ask too many tiles): the contours from 6.
   assert.equal(OVERLAYS.contours.layers[0].minNative, 6);
   assert.equal(/** @type {any} */ (tileLayer('contours', 5)).options.minZoom, 6);
+});
+
+test('les noms par-dessus (core/ign.js) : routes, hydrographie, noms en PNG, opaques, dès leur premier zoom natif, au-dessus de toute surcouche', () => {
+  const names = /** @type {any} */ (tileLayer(NAMES, 5)).getLayers();
+  const layerOf = (/** @type {string} */ url) => /LAYER=([^&]+)/.exec(url)?.[1];
+  assert.deepEqual(names.map((/** @type {any} */ l) => layerOf(l._url)), ['TRANSPORTNETWORKS.ROADS', 'HYDROGRAPHY.HYDROGRAPHY', 'GEOGRAPHICALNAMES.NAMES']);
+  assert.deepEqual(names.map((/** @type {any} */ l) => l._url), NAMES_LAYERS.map(l => wmtsUrl(l)));
+  for (const [i, l] of names.entries()) {
+    assert.match(l._url, /&STYLE=normal&FORMAT=image%2Fpng$/);
+    assert.deepEqual([l.options.zIndex, l.options.opacity, l.options.className], [NAMES_Z + i, 1, 'gf-tiles-names'], 'l’un au-dessus de l’autre, opaques');
+    // Never before their first native zoom (6): a far one would ask too many tiles; a map going further out neither.
+    // One zoom past their last (19), not further: their words twice as big there, never eight times (zoom 21).
+    assert.deepEqual([l.options.minZoom, l.options.minNativeZoom, l.options.maxNativeZoom, l.options.maxZoom], [6, 6, 18, 19]);
+    assert.equal(/** @type {any} */ (tileLayer(NAMES, 1)).getLayers()[i].options.minZoom, 6);
+    const spec = /** @type {any} */ (describeTileLayer(l, i));
+    assert.deepEqual([spec.key, spec.base, spec.grey, spec.minzoom, spec.maxzoom, spec.nativeMin, spec.nativeMax], ['names', false, false, 5, 19, 6, 18], 'en 3D : pas un fond, dès le zoom 5 de MapLibre, jusqu’au 19 de Leaflet');
+  }
+  // Over every overlay (the last ones drawn at NAMES_Z - 1 at most: gf-map.js), under GBIF's distribution (20).
+  assert.ok(NAMES_Z + names.length - 1 < 20);
+});
+
+test('les noms par-dessus et une surcouche de la même couche WMTS (« Cours d’eau », « Hydrographie », « Routes », « Noms » du catalogue) : dessinée une fois, là où est la surcouche', () => {
+  const ids = NAMES_LAYERS.map(l => l.id);
+  assert.deepEqual(namesOver([]), ids);
+  assert.deepEqual(namesOver(['contours', 'cadastre', 'unknown']), ids, 'les autres couches n’y changent rien');
+  for (const l of NAMES_LAYERS) addCatalogLayer({ ...l, title: l.id, style: 'normal', minNative: l.minNative ?? 0, maxNative: l.maxNative ?? 19, cat: 'x', sub: 'y' });
+  assert.deepEqual(namesOver(['ign:HYDROGRAPHY.HYDROGRAPHY']), ['TRANSPORTNETWORKS.ROADS', 'GEOGRAPHICALNAMES.NAMES']);
+  assert.deepEqual(namesOver(['forets', 'ign:GEOGRAPHICALNAMES.NAMES', 'ign:TRANSPORTNETWORKS.ROADS']), ['HYDROGRAPHY.HYDROGRAPHY']);
+  assert.deepEqual(namesOver(ids.map(id => 'ign:' + id)), []);
+});
+
+test('les couches de la carte 2D en 3D (tileSpecs) : chacune une fois, par leur place — le fond, les surcouches, les noms dessus dans leur ordre, GBIF — ; dans le style, les noms en dernier des couches de l’IGN', () => {
+  const photo = leafletLike('photo', BASES.photo.layers[0], true);
+  const contours = { ...leafletLike('contours', OVERLAYS.contours.layers[0], false) };
+  contours.options = { ...contours.options, zIndex: 2 };
+  const cadastre = leafletLike('cadastre', OVERLAYS.cadastre.layers[0], false);
+  // The last overlay of many: at NAMES_Z - 1 (gf-map.js #restack), still under the names.
+  cadastre.options = { ...cadastre.options, zIndex: NAMES_Z - 1 };
+  const names = /** @type {any} */ (tileLayer(NAMES, 5)).getLayers();
+  const gbif = { _url: 'https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@1x.png?taxonKey=1', options: { className: 'gf-tiles-gbif', opacity: 0.85, zIndex: 20 } };
+  // The order they came in (Leaflet's stamp): the names before the overlays (a map that showed them first).
+  const came = new Map([names[0], names[1], names[2], gbif, photo, contours, cadastre].map((l, i) => [l, i]));
+  const orderOf = (/** @type {any} */ l) => /** @type {number} */ (came.get(l));
+  // Shuffled, some given twice (added again: the same layers): each once, in their place.
+  const specs = tileSpecs([gbif, names[2], contours, names[0], photo, names[1], names[2], cadastre, contours, names[0]], orderOf);
+  assert.deepEqual(specs.map(t => t.key), ['photo', 'contours', 'cadastre', 'names', 'names', 'names', 'gbif']);
+  assert.deepEqual(specs.map(t => t.id), specs.map((t, i) => 'gf-tiles-' + i), 'un identifiant chacune, jamais deux fois le même');
+  const s = style(specs);
+  const rasters = s.layers.filter((/** @type {any} */ l) => l.type === 'raster');
+  assert.deepEqual(rasters.map((/** @type {any} */ l) => l.metadata['gf:key']), ['photo', 'contours', 'cadastre', 'names', 'names', 'names', 'gbif']);
+  const ids = s.layers.map((/** @type {any} */ l) => l.id);
+  assert.equal(ids[ids.indexOf(specs[0].id) + 1], 'gf-hillshade', 'l’ombrage juste au-dessus du fond, sous les noms');
+  const named = rasters.filter((/** @type {any} */ l) => l.metadata['gf:key'] === 'names');
+  assert.equal(named.length, 3);
+  assert.deepEqual(named.map((/** @type {any} */ l) => /LAYER=([^&]+)/.exec(s.sources[l.source].tiles[0])?.[1]), ['TRANSPORTNETWORKS.ROADS', 'HYDROGRAPHY.HYDROGRAPHY', 'GEOGRAPHICALNAMES.NAMES']);
+  assert.deepEqual(named.map((/** @type {any} */ l) => [l.paint['raster-opacity'], l.minzoom, l.maxzoom, s.sources[l.source].minzoom, s.sources[l.source].maxzoom]), [[1, 5, 19, 6, 18], [1, 5, 19, 6, 18], [1, 5, 19, 6, 18]], 'hidden past their last zoom in 3D too, never enlarged');
+  // Not a background: never dimmed at night, nor drawn from afar on the globe.
+  const night = style(specs, { sun: { azimuth: 0, altitude: -20 }, settings: { globe: true } });
+  for (const l of night.layers.filter((/** @type {any} */ x) => x.metadata?.['gf:key'] === 'names')) {
+    assert.ok(!('raster-brightness-max' in l.paint));
+    assert.equal(l.minzoom, 5);
+  }
+  // Without them (the plan, or unticked): the same order, nothing over the overlays but GBIF's.
+  assert.deepEqual(tileSpecs([gbif, cadastre, photo, contours], orderOf).map(t => t.key), ['photo', 'contours', 'cadastre', 'gbif']);
+  // Not web tiles (a test's, a data: URL): left out.
+  assert.deepEqual(tileSpecs([{ _url: 'data:image/png;base64,AAA', options: {} }, photo], orderOf).map(t => t.key), ['photo']);
 });
 
 test('les modules et les options : relief, ombrage, ciel, globe, cache seul', () => {
