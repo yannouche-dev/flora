@@ -19,7 +19,8 @@
 //    One request per photo whoever asks, six at a time per host, the latest asked first (the map's points shown now
 //    before those gone), a CORS error answered by asking as the page did.
 //  - IGN map tiles: cache-first, capped — areas already viewed stay available offline (the 3D maps' vector tiles,
-//    their style, fonts and symbols too)
+//    their style, fonts and symbols too); the names over the photos (three tiles over each of theirs) counted apart,
+//    so they never push the photos of an area out
 //  - remote API JSON: not cached here (app/core/sources.js caches it in IndexedDB)
 
 // Written at deploy by tools/stamp-sw.mjs: never edited by hand.
@@ -32,6 +33,11 @@ const IMAGE_CACHE = 'geoflora-images';
 const IMAGE_LIMIT = 400;
 const TILE_CACHE = 'geoflora-tiles';
 const TILE_LIMIT = 3000;
+// The names over the aerial photos and SPOT's (app/core/backgrounds.js NAMES_LAYERS: roads, rivers, places' names), on
+// by default: three tiles over each photo's, most of them see-through, light. Kept apart, three for each of the others,
+// as many places as before they came — a photo of an area seen before is never dropped for the names over another.
+const NAMES_TILE = /[?&]LAYER=(?:TRANSPORTNETWORKS\.ROADS|HYDROGRAPHY\.HYDROGRAPHY|GEOGRAPHICALNAMES\.NAMES)(?:&|$)/;
+const NAMES_TILE_LIMIT = 3 * TILE_LIMIT;
 const TILE_HOST = 'data.geopf.fr';
 // 1×1 transparent PNG for tiles that are neither cached nor reachable.
 const EMPTY_TILE = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='), c => c.charCodeAt(0));
@@ -556,7 +562,7 @@ async function cacheFirstTile(event, empty = EMPTY_TILE) {
     const response = await fetch(request);
     // Readable answers only (the layers ask in CORS): an opaque one has no status, and weighs ~7 MB of quota.
     if (response.ok) {
-      event.waitUntil(cache.put(request, response.clone()).then(() => trimSometimes(TILE_CACHE, cache, TILE_LIMIT)).catch(() => {}));
+      event.waitUntil(cache.put(request, response.clone()).then(() => trimSometimes(TILE_CACHE, cache, TILE_LIMIT, { test: NAMES_TILE, limit: NAMES_TILE_LIMIT })).catch(() => {}));
     }
     return response;
   } catch {
@@ -568,12 +574,19 @@ async function cacheFirstTile(event, empty = EMPTY_TILE) {
 // Counting thousands of keys on every stored response is wasteful: trim roughly every 50 (per cache).
 /** @type {Map<string, number>} */
 const storedSinceTrim = new Map();
-/** @param {string} name @param {Cache} cache @param {number} limit */
-async function trimSometimes(name, cache, limit) {
+/**
+ * @param {string} name @param {Cache} cache @param {number} limit
+ * @param {{ test: RegExp, limit: number }} [apart] the entries whose address it matches, counted apart to their own limit
+ */
+async function trimSometimes(name, cache, limit, apart) {
   const count = (storedSinceTrim.get(name) || 0) + 1;
   storedSinceTrim.set(name, count < 50 ? count : 0);
   if (count < 50) return;
   // Oldest first: an entry refreshed (a photo seen again) moves to the end.
   const keys = await cache.keys();
-  for (const key of keys.slice(0, Math.max(0, keys.length - limit))) await cache.delete(key);
+  const away = apart ? keys.filter(key => apart.test.test(key.url)) : [];
+  const rest = apart ? keys.filter(key => !apart.test.test(key.url)) : keys;
+  for (const [some, max] of /** @type {[Request[], number][]} */ ([[rest, limit], [away, apart?.limit ?? 0]])) {
+    for (const key of some.slice(0, Math.max(0, some.length - max))) await cache.delete(key);
+  }
 }

@@ -1,9 +1,10 @@
 // @ts-check
 // The maps' backgrounds (« Fond », one at a time): the IGN plan, the aerial photos — the most recent, or those of one
-// year, of a period, the historical ones —, the SPOT satellite images of one year. Pure, without import: the start of
+// year, of a period, the historical ones —, the SPOT satellite images of one year; and the names drawn over the photos
+// and SPOT's images (the look's `names`: NAMES_LAYERS — the plan has its own). Pure, without import: the start of
 // the app checks a stored background with it (core/map-settings.js), the 2D maps draw it (core/ign.js), the 3D ones
 // know it in the 2D map's layers (core/gl-style.js), the panel ▦ offers it (components/gf-map-options.js), a free
-// layout's cell writes it (base=, annee=: layout/registry.js).
+// layout's cell writes it (base=, annee=, noms=: layout/registry.js).
 // Each layer's identifier, format, style and native zooms are the Géoplateforme catalogue's (data/ign-catalog.json:
 // tests/unit/backgrounds.test.mjs); tools/api-health.mjs and scripts/build-ign-catalog.mjs check them against the
 // service's GetCapabilities (everyBaseLayer()).
@@ -141,5 +142,23 @@ export function addressOf(key) {
 /** Every year or period a cell's annee= takes (SPOT's and the photos' years, then the periods, the historical ones), the most recent first. */
 export const ALL_WHENS = [...new Set([...SPOT, ...PHOTO_YEARS, ...PHOTO_PERIODS, ...PHOTO_HISTORIC])];
 
-/** Every WMTS layer of the backgrounds, once each (the tools check each is still served). @returns {BaseLayer[]} */
-export const everyBaseLayer = () => [...new Map([...ALL.values()].flatMap(b => b.layers).map(l => [l.id, l])).values()];
+/** The look's `names`: the key of the names drawn over the background (core/ign.js tileLayer, gf-map; never a background's). */
+export const NAMES = 'names';
+
+/**
+ * The names over the aerial photos and SPOT's images, bottom first: the roads, the rivers and lakes, the places' names
+ * (the catalogue's « Routes », « Hydrographie », « Noms »: PNG, laid over the pictures) — one pack,
+ * over the background and every overlay, never one of them. From their first native zoom (6), not before (core/ign.js:
+ * further out, too many tiles). @type {readonly BaseLayer[]}
+ */
+export const NAMES_LAYERS = Object.freeze([
+  { id: 'TRANSPORTNETWORKS.ROADS', format: 'image/png', minNative: 6, maxNative: 18 },
+  { id: 'HYDROGRAPHY.HYDROGRAPHY', format: 'image/png', minNative: 6, maxNative: 18 },
+  { id: 'GEOGRAPHICALNAMES.NAMES', format: 'image/png', minNative: 6, maxNative: 18 }
+].map(l => Object.freeze(l)));
+
+/** Whether the names are drawn over this background (when the look says so): the photos' and SPOT's; the plan has its own. @param {unknown} key */
+export const takesNames = key => { const kind = baseKind(key); return kind === 'photo' || kind === 'spot'; };
+
+/** Every WMTS layer of the backgrounds and of the names over them, once each (the tools check each is still served). @returns {BaseLayer[]} */
+export const everyBaseLayer = () => [...new Map([...[...ALL.values()].flatMap(b => b.layers), ...NAMES_LAYERS].map(l => [l.id, l])).values()];

@@ -528,7 +528,8 @@ export class DlMap extends LitElement {
 
   /**
    * The cell's own look (core/map-settings.js), as its address says it: its background (base=, and annee= the year or
-   * period of its photos, SPOT's year: core/backgrounds.js baseKeyOf; without it the most recent), its layers in their
+   * period of its photos, SPOT's year: core/backgrounds.js baseKeyOf; without it the most recent), the names over it
+   * (noms=1, noms=0: on the photos and SPOT's — the plan has its own, noms= kept there, of no effect), its layers in their
    * order (layers=znieff+n2000+ign:<id>: the catalogue's added to the maps first, core/ign.js — one of IGN's whole
    * catalogue not known on this device found in it, core/ign-catalog.js, then shown) and their opacity (opac=); what it
    * does not say follows the maps' common look (gf-map `look`) — layers=aucune says none of its own, not the common
@@ -538,7 +539,7 @@ export class DlMap extends LitElement {
   get #look() {
     const p = this.params ?? {};
     const names = /** @type {string[]} */ (p.layers ?? []);
-    const k = JSON.stringify([p.base ?? null, p.annee ?? null, p.layers ?? null, p.opac ?? null]);
+    const k = JSON.stringify([p.base ?? null, p.annee ?? null, p.noms ?? null, p.layers ?? null, p.opac ?? null]);
     if (this.#lookMemo?.k === k) return this.#lookMemo.value;
     for (const l of catalogLayers(names)) addCatalogLayer(/** @type {any} */ (l));
     const overlays = overlaysOf(names);
@@ -555,6 +556,7 @@ export class DlMap extends LitElement {
     // A year its kind has not (the registry says it, and leaves it out): the kind's most recent.
     const base = p.base || p.annee ? baseKeyOf(p.base, p.annee) ?? baseKeyOf(p.base, null) : null;
     if (base) own.base = base;
+    if (typeof p.noms === 'boolean') own.names = p.noms;
     // Its layers and their opacity go together (gf-map#editLook): either written, both its own.
     if (p.layers != null || p.opac) Object.assign(own, { overlays, opacities: opacitiesOf(p.opac) });
     const value = Object.keys(own).length ? own : null;
@@ -565,14 +567,15 @@ export class DlMap extends LitElement {
 
   /**
    * Its own look changed on the map (its panel ▦, its opacity card: gf-map `look-change`): kept in the layout (base=
-   * and annee=, layers= in their order, opac=); null — « Revenir aux réglages communs » —: all of them left out.
+   * and annee=, noms=, layers= in their order, opac=); null — « Revenir aux réglages communs » —: all of them left out.
    * @param {CustomEvent} e
    */
   #onLook(e) {
     const look = e.detail.look;
     /** @type {Record<string, unknown>} */
-    const values = look ? {} : { base: null, annee: null, layers: null, opac: null };
+    const values = look ? {} : { base: null, annee: null, noms: null, layers: null, opac: null };
     if (look?.base) Object.assign(values, addressOf(look.base));
+    if (typeof look?.names === 'boolean') values.noms = look.names;
     if (look?.overlays) Object.assign(values, { layers: layersOf(look.overlays), opac: opacText(look.opacities ?? {}, look.overlays, DEFAULT_OPACITY) });
     this.#set(values);
     // What the address says now, given back (an intent's background is not one to leave out: the map shows it again).
@@ -984,7 +987,7 @@ export class DlMap extends LitElement {
     // Its own look given by its intent alone (map(protege): its layers; map(terrain): the photos): said so, no way back
     // either. A part written by its address too (map(terrain,layers=parcs)): « Revenir » takes that part back.
     const p = this.params ?? {};
-    const written = Boolean(p.opac) || (p.base ?? null) !== (intended.base ?? null) || p.annee != null
+    const written = Boolean(p.opac) || (p.base ?? null) !== (intended.base ?? null) || p.annee != null || p.noms != null
       || (p.layers != null && p.layers.join('+') !== intended.layers);
     const lookWhy = ('base' in intended || 'layers' in intended) && !written ? intent + ' dans la disposition' : '';
     return html`${!s.live.at && this.#pressHint ? hintView(press, () => { this.#pressHint = false; this.requestUpdate(); }, 'press-hint') : nothing}

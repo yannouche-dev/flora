@@ -19,17 +19,17 @@ function read(text) {
 const params = text => read(text).cell.params;
 
 test('chaque réglage de la carte se lit : ses noms, ses valeurs, leurs autres graphies', () => {
-  const p = params('map(r=2km;lieu=Mirabel Ménétrol 63;autour=1;base=photo;3d=1;layers=znieff+n2000;src=inat+gbif;when=mois;pts=pastille;regroupe=1;suit=0;plante=seule;toucher=fiche;ui=nue)');
-  assert.deepEqual(p, { intent: 'explorer', portee: 'zone', r: 2000, lieu: 'Mirabel Ménétrol 63', autour: true, base: 'photo', annee: null, '3d': true, layers: ['znieff', 'n2000'], src: ['inat', 'gbif'],
+  const p = params('map(r=2km;lieu=Mirabel Ménétrol 63;autour=1;base=photo;noms=0;3d=1;layers=znieff+n2000;src=inat+gbif;when=mois;pts=pastille;regroupe=1;suit=0;plante=seule;toucher=fiche;ui=nue)');
+  assert.deepEqual(p, { intent: 'explorer', portee: 'zone', r: 2000, lieu: 'Mirabel Ménétrol 63', autour: true, base: 'photo', annee: null, noms: false, '3d': true, layers: ['znieff', 'n2000'], src: ['inat', 'gbif'],
     when: 'mois', pts: 'pastille', regroupe: true, suit: false, plante: 'seule', toucher: 'fiche', liste: 'vue', ui: 'nue', tete: 'oui', titre: null, actions: [], ctl: null,
     vue: null, opac: null, jumelles: null, jrayon: null, legende: false, etat: 'ouvert', groupe: 'a' });
   // In French, its other words, accents and case free.
-  const q = params('carte(rayon=500m;commune=Fontainebleau 77;moi=oui;fond=satellite;vue3d=non;couches=Natura+ZNIEFF1;sources=iNaturalist;période=Année;style=Pastilles;groupes=1;recherche=non;courante=only;tap=sheet;commandes=Compact)');
-  assert.deepEqual([q.r, q.lieu, q.autour, q.base, q['3d'], q.layers, q.src, q.when, q.pts, q.regroupe, q.suit, q.plante, q.toucher, q.ui],
-    [500, 'Fontainebleau 77', true, 'spot', false, ['n2000', 'znieff1'], ['inat'], 'annee', 'pastille', true, false, 'seule', 'fiche', 'compacte']);
+  const q = params('carte(rayon=500m;commune=Fontainebleau 77;moi=oui;fond=satellite;Étiquettes=avec;vue3d=non;couches=Natura+ZNIEFF1;sources=iNaturalist;période=Année;style=Pastilles;groupes=1;recherche=non;courante=only;tap=sheet;commandes=Compact)');
+  assert.deepEqual([q.r, q.lieu, q.autour, q.base, q.noms, q['3d'], q.layers, q.src, q.when, q.pts, q.regroupe, q.suit, q.plante, q.toucher, q.ui],
+    [500, 'Fontainebleau 77', true, 'spot', true, false, ['n2000', 'znieff1'], ['inat'], 'annee', 'pastille', true, false, 'seule', 'fiche', 'compacte']);
   // Defaults: the map as it always was — its background, its layers and its 2D or 3D, the maps' common ones (none written).
   const d = params('map');
-  assert.deepEqual(d, { intent: 'explorer', portee: 'zone', r: null, lieu: null, autour: false, base: null, annee: null, '3d': null, layers: null, src: null, when: 'toujours', pts: 'photo',
+  assert.deepEqual(d, { intent: 'explorer', portee: 'zone', r: null, lieu: null, autour: false, base: null, annee: null, noms: null, '3d': null, layers: null, src: null, when: 'toujours', pts: 'photo',
     regroupe: false, suit: true, plante: 'grand', toucher: 'plante', liste: 'vue', ui: 'auto', tete: 'oui', titre: null, actions: [], ctl: null,
     vue: null, opac: null, jumelles: null, jrayon: null, legende: false, etat: 'ouvert', groupe: 'a' });
   assert.equal(read('map').text, '[map]');
@@ -166,6 +166,47 @@ test('une année puis la 3D : l’adresse réécrite se relit telle quelle (jama
   assert.equal(written, '[map(base=spot,annee=2020;3d=1)]');
   assert.deepEqual(G.parse(written).errors, []);
   assert.deepEqual([read(written).cell.params.annee, read(written).cell.params['3d']], ['2020', true]);
+});
+
+test('les noms sur le fond (noms=) : 0 ou 1, sinon les réglages communs ; gardés sur le plan, sans effet ni marque ; écrits avant la 3D, « ; » entre deux chiffres', () => {
+  assert.deepEqual([params('map(noms=0)').noms, params('map(noms=1)').noms, params('map').noms], [false, true, null]);
+  // Its words, its values' other spellings; named alone, on (map(noms)).
+  for (const [typed, written] of [['map(noms=non)', '[map(noms=0)]'], ['carte(étiquettes=sans)', '[map(noms=0)]'], ['map(names=yes)', '[map(noms=1)]'],
+    ['map(Toponymes=1)', '[map(noms=1)]'], ['map(noms)', '[map(noms=1)]']]) {
+    assert.equal(read(typed).text, written, typed);
+    assert.deepEqual(read(typed).problems, [], typed);
+  }
+  assert.match(read('map(noms=peut-etre)').problems[0], /^Carte : « peut-etre » n’est pas une valeur de noms sur le fond \(attendu : oui ou non \(1, 0\)\)\.$/);
+  // In the order of its group, after the year: « ; » before 3d=1 (a comma between two digits would be a decimal one).
+  assert.equal(read('map(3d=1;noms=0;annee=2020)').text, '[map(annee=2020,noms=0;3d=1)]');
+  // Written by the cell (its panel ▦: withParam, then the layout shown in canonical order, as gf-layout does), beside
+  // its year and its 3D: read back whole.
+  const cell = /** @type {any} */ (G.parse('[map(r=2km,annee=2020;3d=1)]').tree.kids[0]);
+  const text = (/** @type {any} */ c) => G.serialize({ t: 'list', kids: [c], size: null });
+  const written = text(withParam(cell, 'noms', false));
+  assert.deepEqual(G.parse(written).errors, []);
+  const off = read(written).text;
+  assert.equal(off, '[map(r=2km,annee=2020,noms=0;3d=1)]');
+  assert.deepEqual(G.parse(off).errors, []);
+  assert.equal(read(off).text, off);
+  assert.deepEqual([read(off).cell.params.annee, read(off).cell.params.noms, read(off).cell.params['3d']], ['2020', false, true]);
+  const on = text(withParam(/** @type {any} */ (G.parse('[map(base=spot)]').tree.kids[0]), 'noms', true));
+  assert.equal(on, '[map(base=spot,noms=1)]');
+  assert.equal(read(on).text, on);
+  // null: back to the common choice (« Revenir aux réglages communs »).
+  assert.equal(text(withParam(/** @type {any} */ (G.parse(off).tree.kids[0]), 'noms', null)), '[map(r=2km,annee=2020;3d=1)]');
+  // The plan has its own names: noms= kept there (never dropped by a background changed, found again on the photos),
+  // without a word nor a mark in the cell's name.
+  const plan = read('map(base=plan,noms=0)');
+  assert.deepEqual([plan.text, plan.problems], ['[map(base=plan,noms=0)]', []]);
+  const name = (/** @type {string} */ t) => cellName(resolve(/** @type {any} */ (G.parse(t).tree.kids[0])));
+  const mark = (/** @type {string} */ t) => { const m = cellMark(resolve(G.parse(t).tree.kids[0])); return m && [m.short, m.label]; };
+  assert.equal(name('map(base=plan,noms=0)'), 'Carte (Plan IGN)');
+  assert.deepEqual(mark('map(base=plan,noms=0)'), ['Pl', 'Plan IGN']);
+  assert.equal(name('map(noms=0)'), 'Carte (sans noms sur le fond)');
+  assert.deepEqual(mark('map(noms=0)'), ['−N', 'sans noms sur le fond']);
+  assert.deepEqual(mark('map(noms=1)'), ['N', 'noms sur le fond']);
+  assert.equal(name('map(base=spot,annee=2020,noms=0)'), 'Carte (Images satellite SPOT de 2020, sans noms sur le fond)');
 });
 
 test('les intentions : un mot, un ensemble de réglages ; un réglage écrit à côté, avant ou après, l’emporte ; l’adresse reste courte', () => {

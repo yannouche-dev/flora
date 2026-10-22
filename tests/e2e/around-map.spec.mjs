@@ -226,6 +226,9 @@ test.describe('les photos des points', () => {
     // Each distance its own observations; every 7th without a photo.
     await answerPoints(page, { n: 60, delay: r => r === 1 ? 0 : 600, photo: (r, i) => i % 7 === 3 ? null : `http://127.0.0.1:${port}/photos/${Math.round(r * 10)}0${i}/square.jpg` });
     await toMap(app, page);
+    // The observations said once they come (their words the same at each distance here: not said again; a line said
+    // leaves the region after 20 s, so heard now, not after the distances — a map of several layers takes long here).
+    await expect(mapSaid(page.locator('ma-distance gf-map'))).toContainText('observations de plantes');
     const slider = page.locator('ma-distance input[type="range"]');
     await slider.focus();
     for (const key of ['ArrowRight', 'ArrowRight', 'ArrowLeft', 'ArrowRight', 'ArrowRight', 'ArrowRight']) {
@@ -234,7 +237,6 @@ test.describe('les photos des points', () => {
     }
     await expect(slider).toHaveAttribute('aria-valuetext', '20 kilomètres');
     await expect(page.locator('ma-distance .welcome')).toHaveAttribute('aria-busy', 'false', { timeout: 5000 });
-    await expect(mapSaid(page.locator('ma-distance gf-map'))).toContainText('observations de plantes');
     const dots = page.locator('ma-distance .leaflet-marker-pane .gf-obs-leaf:not(.gf-leave)');
     await expect(dots).toHaveCount(60);
     /** Of the points shown: those with a photo, those whose photo shows, those without any (a leaf each). */

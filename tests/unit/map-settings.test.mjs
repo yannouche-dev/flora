@@ -1,7 +1,7 @@
 // app/core/map-settings.js: Réglages › Cartes — 2D or 3D, and the 3D options: always valid, only what differs stored,
 // followed in the other tabs, counted as a setting by the first steps; the sun that lights the 3D maps; the maps'
-// common look (background, overlays, their opacity) under the keys of before, one `change` each time it changes, and a
-// map's own look over it.
+// common look (background, the names over it, overlays, their opacity) under the keys of before, one `change` each time
+// it changes, and a map's own look over it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -227,6 +227,47 @@ test('un fond d’une année, d’une période, historique, SPOT : gardé sous l
   assert.equal(lookFor({ base: 'photo:2000' }).base, 'photo:2000');
   mapLookEvents.removeEventListener('change', on);
   resetMapLook();
+});
+
+test('les noms par-dessus : gardés seulement éteints (geoflora.mapLayer, sa forme d’avant), relus au chargement et d’un autre onglet ; une carte a les siens', async () => {
+  /** @type {any[]} */
+  const seen = [];
+  const on = (/** @type {any} */ e) => seen.push(plain(e.detail));
+  mapLookEvents.addEventListener('change', on);
+  setMapLook({ base: 'spot:2020', names: false });
+  assert.equal(seen.length, 1, 'un seul « change »');
+  assert.deepEqual(seen[0], { base: 'spot:2020', names: false, overlays: [], opacities: {} });
+  assert.deepEqual(JSON.parse(localStorage.getItem(LAYER) || 'null'), { base: 'spot:2020', overlays: [], distribution: false, names: false });
+  // Read back as the app starts (the module loaded again, from what is stored): off.
+  const again = await import('../../app/core/map-settings.js?relu');
+  assert.deepEqual(plain(again.mapLook()), { base: 'spot:2020', names: false, overlays: [], opacities: {} });
+  // Another tab's: followed, a value that is not a yes or a no read as on (the default) — and not written back.
+  localStorage.setItem(LAYER, JSON.stringify({ base: 'photo', overlays: [], names: true }));
+  fromAnotherTab(LAYER);
+  assert.equal(mapLook().names, true);
+  localStorage.setItem(LAYER, JSON.stringify({ base: 'photo', overlays: [], names: false }));
+  fromAnotherTab(LAYER);
+  assert.equal(mapLook().names, false);
+  for (const names of ['non', 0, null, 'false']) {
+    localStorage.setItem(LAYER, JSON.stringify({ base: 'photo', overlays: [], names }));
+    fromAnotherTab(LAYER);
+    assert.equal(mapLook().names, true, String(names));
+    assert.equal(JSON.parse(localStorage.getItem(LAYER) || 'null').names, names, 'rien d’écrit à la lecture');
+  }
+  // On again: the key of before, as before (no names).
+  setMapLook({ names: false });
+  setMapLook({ names: true });
+  assert.deepEqual(JSON.parse(localStorage.getItem(LAYER) || 'null'), { base: 'photo', overlays: [], distribution: false });
+  // A map's own: its names over the common ones, the rest common.
+  assert.deepEqual(cleanOwnLook({ names: false }), { names: false });
+  assert.equal(cleanOwnLook({ names: 'non' }), null);
+  assert.deepEqual(lookFor({ names: false }), { base: 'photo', names: false, overlays: [], opacities: {} });
+  setMapLook({ names: false });
+  assert.equal(lookFor({ names: true }).names, true);
+  assert.equal(lookFor({ base: 'plan' }).names, false, 'le réglage commun, quand elle n’en dit rien');
+  mapLookEvents.removeEventListener('change', on);
+  resetMapLook();
+  assert.equal(mapLook().names, true);
 });
 
 test('un fond ou une couche : seulement les leurs, jamais une clé héritée d’un objet (« constructor », « toString »)', () => {

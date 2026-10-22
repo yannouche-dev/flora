@@ -37,7 +37,8 @@ import { MAP_CONTROL_ALIASES, MAP_CONTROLS, MAP_INTENT_ALIASES, MAP_INTENTS, MAP
  *   `offer`: the values the editor offers, in their order, as the others make them (annee: its background's years, the
  *   most recent first — never one `check` refuses), else all of `values`; `say`: its words in a cell's name (cellMark) as
  *   the others make them — undefined: its value's label; '': said by another one marked (`marked`): base= by annee=, which
- *   says the whole background (« Images satellite SPOT de 2020 », annee=1950-1965 alone « Photos aériennes historiques… »).
+ *   says the whole background (« Images satellite SPOT de 2020 », annee=1950-1965 alone « Photos aériennes historiques… »);
+ *   a yes-or-no's '': of no effect there, neither said nor marked (noms= on the plan).
  *   Kinds: `list` — several of its values joined by « + » (layers=znieff+n2000), each unknown one said and left out;
  *   `text` — free words (lieu=Mirabel Ménétrol 63: never a bare value); `intent` — one word for a bundle of the other
  *   parameters (`bundles`: each value's, as the address writes them), which a parameter written beside it overrides;
@@ -123,8 +124,8 @@ const MAP_PARAMS = {
   // framed on the zone.
   vue: { kind: 'text', label: 'Cadrage de départ', def: null, group: 'Où', own: true, named: true, max: 60, read: readView, words: ['view', 'cadrage', 'camera'] },
   // Fond: the maps' common look (core/map-settings.js) unless it says one (its own then, kept by the cell: base=, and
-  // annee= its photos' year or period, SPOT's year — core/backgrounds.js; without it the most recent), as 2D or 3D (3d=:
-  // unless written, the common choice).
+  // annee= its photos' year or period, SPOT's year — core/backgrounds.js; without it the most recent; noms= the names over
+  // the photos and SPOT's, shown or not), as 2D or 3D (3d=: unless written, the common choice).
   base: { kind: 'enum', label: 'Fond de carte', def: null, unset: 'le fond commun à toutes les cartes', group: 'Fond', values: { photo: 'Photos aériennes', plan: 'Plan IGN', spot: 'Satellite (SPOT)' },
     aliases: { photos: 'photo', ortho: 'photo', orthophoto: 'photo', ign: 'plan', carte: 'plan', satellite: 'spot', sat: 'spot' }, words: ['fond', 'layer'],
     say: (v, p, marked) => marked.has('annee') ? '' : undefined },
@@ -140,6 +141,10 @@ const MAP_PARAMS = {
     say: (v, p) => baseLabel(baseKeyOf(p.base, v)),
     words: ['an', 'millesime', 'year']
   },
+  // Kept with the plan, where it does nothing (the plan has its names): never dropped by a background changed (its
+  // thumbnail, its panel), the cell's choice found again on the photos. Not said in its name there.
+  noms: { kind: 'bool', label: 'Noms sur le fond', def: null, unset: 'selon les réglages communs (sur les photos et SPOT)', group: 'Fond',
+    say: (v, p) => p.base === 'plan' ? '' : undefined, words: ['names', 'etiquettes', 'toponymes', 'libelles', 'labels'] },
   '3d': { kind: 'bool', label: 'Vue 3D', def: null, group: 'Fond', mark: '3D', off: ['2d', 'plat', 'plate'], words: ['vue3d', 'relief3d', 'rendu'] },
   // Couches.
   // Any layer of IGN's catalogue too (ign:<id>), in the order drawn (the last on top); their opacity when not the usual.
@@ -701,6 +706,8 @@ export function cellMark(r) {
   const marked = new Set(shown.map(([k]) => k));
   const marks = shown.map(([k, p]) => {
     const letter = p.mark ?? p.label.charAt(0).toUpperCase();
+    // A yes-or-no its others make of no effect (noms= on the plan): neither said nor marked.
+    if (p.kind === 'bool' && p.say?.(r.params[k], r.params, marked) === '') return null;
     if (p.kind === 'bool') return r.params[k] ? { label: lower(p.label), short: letter } : { label: 'sans ' + lower(p.label), short: '−' + letter };
     // A list: its words after the parameter's (« couches : ZNIEFF (types I et II), Natura 2000 »), the parameter's letter.
     if (p.kind === 'list') {
@@ -712,7 +719,8 @@ export function cellMark(r) {
     const shared = all.some(l => l !== label && first(l) === first(label));
     return { label: p.say?.(r.params[k], r.params, marked) ?? label, short: label.charAt(0).toUpperCase() + (shared ? label.charAt(1) : '') };
   });
-  return marks.length ? { label: marks.map(m => m.label).filter(Boolean).join(', '), short: marks.map(m => m.short).join('') } : null;
+  const said = marks.filter(m => m !== null);
+  return said.length ? { label: said.map(m => m.label).filter(Boolean).join(', '), short: said.map(m => m.short).join('') } : null;
 }
 
 /**
