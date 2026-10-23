@@ -3,7 +3,7 @@
 
 import { config } from '../config.js';
 import { normalizeCollection } from './place-model.js';
-import { noteStorageError } from './quota.js';
+import { isQuotaError, noteStorageError } from './quota.js';
 
 /**
  * Stores:
@@ -70,10 +70,91 @@ const done = tx => new Promise((resolve, reject) => {
   tx.onabort = () => reject(tx.error || new Error('Transaction aborted'));
 });
 
+// ── Opening ──────────────────────────────────────────────────────────────
+// IndexedDB may not open: the browser's own store refused (Chromium's « Internal error opening backing store for
+// indexedDB.open. »: a store damaged by a crash or an update, a disk almost full, the profile held by a process that
+// lingers), a newer version of the app already there, no room, storage blocked. What can pass is tried again, a
+// moment later; then the failure is said in French (StorageError). Before any connection has opened in this page (the
+// app could not start: its banner says so) it is kept: every later call gets it at once, until the page is reloaded (or
+// reopenDb). Once one has opened, a later failure (the browser closed it, its store busy a moment) is not: the next
+// call tries again.
+
+/**
+ * Why IndexedDB did not open, from what the browser said (its error's name; for Chromium's blocked site data, its words):
+ *  - 'busy'    the browser's store did not open — UnknownError (Chromium's backing store, Firefox's profile, Safari's
+ *              IndexedDB process gone), AbortError (the upgrade cut short), or a name not known here. Often over a
+ *              moment later: UnknownError and AbortError are tried again (openDb). Erasing the base can mend it (deleteDb).
+ *  - 'newer'   VersionError: a newer GeoFlora already upgraded it — this page is older; reloading loads the new one.
+ *              Never erased: that would lose what the newer version keeps.
+ *  - 'full'    no room left (quota.js isQuotaError): freeing space mends it.
+ *  - 'blocked' the browser lets the site store nothing — SecurityError or Chromium's « The user denied permission… »
+ *              (site data blocked), InvalidStateError (private browsing, Firefox before 115), no IndexedDB at all.
+ * @typedef {'busy' | 'newer' | 'full' | 'blocked'} OpenProblem
+ * @param {unknown} error
+ * @returns {OpenProblem}
+ */
+export function openProblem(error) {
+  const e = /** @type {any} */ (error);
+  if (isQuotaError(e)) return 'full';
+  if (e?.name === 'VersionError') return 'newer';
+  if (['SecurityError', 'InvalidStateError', 'TypeError', 'ReferenceError'].includes(e?.name) || /denied permission/i.test(String(e?.message ?? ''))) return 'blocked';
+  return 'busy';
+}
+
+/** What an open failure says, by its cause (the banner, components/gf-storage-error.js, says what to try). */
+const OPEN_FAILED = {
+  busy: 'Le stockage de GeoFlora ne s’ouvre pas sur cet appareil : le navigateur n’arrive pas à ouvrir sa base locale.',
+  newer: 'Une version plus récente de GeoFlora a déjà ouvert vos données sur cet appareil : rechargez la page pour l’utiliser.',
+  full: 'Plus assez d’espace sur cet appareil : le stockage de GeoFlora ne s’ouvre pas.',
+  blocked: 'Le navigateur ne laisse pas GeoFlora enregistrer de données (navigation privée, ou données des sites bloquées).'
+};
+
+/**
+ * IndexedDB did not open (openDb gave up): said in French, by its cause (`kind`); the browser's own error is its
+ * `cause` (for support). Its name is the browser's (UnknownError, QuotaExceededError…): callers that tell a lack of
+ * room apart (quota.js isQuotaError) still do.
+ */
+export class StorageError extends Error {
+  /** @param {unknown} cause what the browser said (or its name and message, from the worker) @param {OpenProblem} [kind] */
+  constructor(cause, kind = openProblem(cause)) {
+    super(OPEN_FAILED[kind], { cause });
+    this.name = /** @type {any} */ (cause)?.name || 'UnknownError';
+    this.kind = kind;
+  }
+}
+
+/**
+ * The open failure behind an error: itself, or one of its causes (core/dataset.js wraps the errors it rethrows).
+ * @param {unknown} error @returns {StorageError | null}
+ */
+export function storageError(error) {
+  for (let e = /** @type {any} */ (error), depth = 0; e && depth < 5; e = e.cause, depth++) if (e instanceof StorageError) return e;
+  return null;
+}
+
+/** An open that failed this way may work a moment later: tried again after each of these delays (ms). */
+const RETRY_DELAYS = [250, 1000];
+/** @param {unknown} error */
+const passing = error => openProblem(error) === 'busy' && ['UnknownError', 'AbortError'].includes(/** @type {any} */ (error)?.name);
+
 /** @type {Promise<IDBDatabase> | null} */
 let opening = null;
 /** @type {IDBDatabase | null} */
 let current = null;
+/** Given up on at the start (or the base being erased: deleteDb): every call rejects with it at once. @type {Error | null} */
+let failure = null;
+/** A connection opened in this page (since it loaded, or since deleteDb): a failure after it is not kept. */
+let opened = false;
+/** The base was made at an open of this page: it had no store (see baseMade). */
+let made = false;
+
+/**
+ * Whether this page made the base: there was none — a first launch, or a base the browser emptied (its IndexedDB
+ * cleared, a damaged store made again, empty) or the app's repair erased. collections.js holdIfEmptied tells them apart
+ * by the backup copy. Under a page that had it open, the base made again is said at once (`geoflora-emptied`), before
+ * anything is written into it.
+ */
+export const baseMade = () => made;
 
 /** Forgets the connection so the next call opens a fresh one. @param {IDBDatabase} [db] */
 function drop(db) {
@@ -82,33 +163,113 @@ function drop(db) {
   opening = null;
 }
 
-/** @returns {Promise<IDBDatabase>} */
-export function openDb() {
-  opening ??= new Promise((resolve, reject) => {
+/** One indexedDB.open, the schema upgraded on the way. @returns {Promise<IDBDatabase>} */
+function openOnce() {
+  return new Promise((resolve, reject) => {
     // Only the page upgrades the schema. The search worker opens whatever version exists: during an app
     // update the page and the worker can briefly run different versions, and a worker-triggered upgrade
     // would break the page still running the previous one.
     const inWorker = typeof window === 'undefined';
-    const request = inWorker ? indexedDB.open(config.db.name) : indexedDB.open(config.db.name, config.db.version);
-    request.onupgradeneeded = event => upgrade(request.result, /** @type {IDBTransaction} */ (request.transaction), event.oldVersion);
+    /** @type {IDBOpenDBRequest} */
+    let request;
+    // Thrown at once (storage blocked: SecurityError; no IndexedDB at all): failed, as a request that fails.
+    try {
+      request = inWorker ? indexedDB.open(config.db.name) : indexedDB.open(config.db.name, config.db.version);
+    } catch (error) {
+      reject(error);
+      return;
+    }
+    request.onupgradeneeded = event => {
+      const db = request.result;
+      // No store: a new base. Once this page has had it open (at its version), any upgrade is one too: made again
+      // meanwhile — by the search worker perhaps, which creates a missing base as it opens it.
+      if (!db.objectStoreNames.length || opened) {
+        made = true;
+        if (opened) globalThis.dispatchEvent?.(new CustomEvent('geoflora-emptied'));
+      }
+      upgrade(db, /** @type {IDBTransaction} */ (request.transaction), event.oldVersion);
+    };
     request.onsuccess = () => {
       const db = current = request.result;
-      // A newer version of the app (another tab, or after an update) upgrades the schema:
-      // close so it can proceed, and tell the page — this code is now outdated.
-      db.onversionchange = () => {
+      // A newer version of the app (another tab, or after an update) upgrades the schema, or « Réparer le stockage »
+      // erases it (in another tab: newVersion null): close so it can proceed, and tell the page — this code, or this
+      // connection, is now outdated.
+      db.onversionchange = event => {
         db.close();
         drop(db);
-        globalThis.dispatchEvent?.(new Event('geoflora-outdated'));
+        globalThis.dispatchEvent?.(new CustomEvent('geoflora-outdated', { detail: { deleted: event.newVersion === null } }));
       };
       // The browser can also close a connection on its own (storage switched to persistent,
       // page frozen in the background, site data cleared…): only a `close` event tells us.
       db.onclose = () => drop(db);
       resolve(db);
     };
-    request.onerror = () => { opening = null; reject(request.error); };
+    request.onerror = () => reject(request.error);
     request.onblocked = () => console.warn('IndexedDB upgrade waiting for another GeoFlora tab to close.');
   });
+}
+
+/**
+ * The connection, opened once and shared by every caller (those that ask while it opens wait for the same one). An
+ * open that may pass is tried again, twice, a moment later; failing still, it rejects with a StorageError — kept until
+ * the reload when no connection has opened in this page yet, else the next call tries again. @returns {Promise<IDBDatabase>}
+ */
+export function openDb() {
+  if (failure) return Promise.reject(failure);
+  opening ??= (async () => {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const db = await openOnce();
+        opened = true;
+        return db;
+      } catch (error) {
+        if (!passing(error) || attempt >= RETRY_DELAYS.length) {
+          opening = null;
+          const given = new StorageError(error);
+          if (!opened) failure = given;
+          throw given;
+        }
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
+      }
+    }
+  })();
   return opening;
+}
+
+/** Opens again, the failure given up on forgotten: « Réparer le stockage » tries it first (opening now, nothing is erased). */
+export function reopenDb() {
+  failure = null;
+  return openDb();
+}
+
+/**
+ * Erases the database — « Réparer le stockage » (components/gf-storage-error.js), the page reloaded after it. This
+ * page's connection is closed first, and none opens after it: every call rejects until the reload, so nothing is
+ * written into the new, empty base meanwhile. The other connections are asked to close (versionchange: every GeoFlora
+ * tab does, and says so); one that does not holds the deletion back — `onBlocked` is told, and the deletion goes on by
+ * itself once it closes. Rejects when the browser cannot erase it either (Chromium opens the same store first): the
+ * base is then as it was. localStorage is never touched.
+ * @param {() => void} [onBlocked]
+ * @returns {Promise<void>}
+ */
+export function deleteDb(onBlocked) {
+  const before = failure;
+  failure = new Error('Stockage de GeoFlora en cours de réparation : la page va être rechargée.');
+  current?.close();
+  current = null;
+  opening = null;
+  return new Promise((resolve, reject) => {
+    const failed = (/** @type {unknown} */ error) => { failure = before; reject(error); };
+    try {
+      const request = indexedDB.deleteDatabase(config.db.name);
+      // The reload comes next: as at a launch, no connection opened yet.
+      request.onsuccess = () => { opened = false; resolve(); };
+      request.onerror = () => failed(request.error);
+      request.onblocked = () => onBlocked?.();
+    } catch (error) {
+      failed(error);
+    }
+  });
 }
 
 /**

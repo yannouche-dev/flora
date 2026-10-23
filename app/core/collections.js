@@ -9,7 +9,7 @@ import { config } from '../config.js';
 import * as db from './db.js';
 import { FAVORITES_ID, madeBy, mergeCollections, newEntryId, normalizeEntry, normalizeCollection, plantIdsOf, promoted, promotedEntry, rebase, sameContent, tagLegacy, userChange, withoutMadeBy } from './place-model.js';
 import { store } from './store.js';
-import { toPortable } from './portable.js';
+import { FORMAT_VERSION, toPortable } from './portable.js';
 import { encodePortable } from './share.js';
 import { publish, subscribe } from './sync.js';
 import { exportNotes, importNotes } from './sheet-blocks.js';
@@ -652,9 +652,11 @@ export function readBackup() {
 /**
  * Rewrites the backup from the database. Never replaces a backup holding collections with an empty
  * one unless the user just deleted something: an empty database is exactly what it must survive.
+ * Never while a repair waits to put it back (restorePending): the first ♥ in the new, empty base would replace it.
  * @returns {Promise<'saved' | 'kept' | 'too-large' | 'failed'>}
  */
 export async function writeBackup() {
+  if (restorePending()) return 'kept';
   const all = (await listCollections()).filter(c => c.properties.plants.length || c.properties.kind !== 'favorites');
   const previous = readBackup();
   // The plant sheet's notes too; not read yet, or none left (a wiped database, like the collections): the copy's kept.
@@ -692,6 +694,106 @@ export async function restoreBackup() {
 export async function discardMissingBackup() {
   allowEmptyBackup = true;
   await writeBackup();
+}
+
+// « Réparer le stockage » (components/gf-storage-error.js): the database erased and made again, what the backup copy
+// holds is put back by itself at the next launch (main.js), once the flora is stored (the names of the plants come
+// from it). Until then the copy is held: noted in localStorage before anything is erased, so a reload, a crash or
+// another tab never loses it. A base the browser emptied by itself is put back the same way (holdIfEmptied).
+
+/** Why the backup copy is put back: the app's repair erased the base, or the browser emptied it (holdIfEmptied). @typedef {'repair' | 'lost'} RestoreReason */
+
+/** A repair waits to put the backup copy back. */
+export function restorePending() {
+  return readText(config.storageKeys.restorePending) !== null;
+}
+
+/** Why it waits (a mark of before the reason was noted: the repair's). @returns {RestoreReason} */
+export function restoreReason() {
+  return readJSON(config.storageKeys.restorePending, null)?.reason === 'lost' ? 'lost' : 'repair';
+}
+
+/**
+ * Noted before the database is erased; false when it could not be (then nothing must be erased).
+ * @param {RestoreReason} [reason]
+ */
+export function markRestore(reason = 'repair') {
+  return writeJSON(config.storageKeys.restorePending, { at: new Date().toISOString(), backupAt: readBackup()?.savedAt ?? null, reason });
+}
+
+/**
+ * The base was made at this page's open (db.js baseMade) while the backup copy of this device holds something: the
+ * browser emptied it — its IndexedDB cleared, a damaged store made again, empty (Chromium does) —, as only a base that
+ * existed leaves a copy. Held at once, before anything is written into the new base (the first ♥ would replace it),
+ * and put back as after a repair (main.js restoreAfter). Returns whether a restore now waits.
+ */
+export function holdIfEmptied() {
+  if (!restorePending() && db.baseMade() && backupSummary()) markRestore('lost');
+  return restorePending();
+}
+
+/** Nothing was erased after all, or everything is back: no longer waiting. */
+export function cancelRestore() {
+  writeText(config.storageKeys.restorePending, null);
+}
+
+/**
+ * After the repair: everything the backup copy holds put back — merged, so what was added since (a ♥ meanwhile) stays —
+ * with the plant sheet's notes; then the copy, held until now, follows the database again. Resolves with what it held,
+ * now back (null: nothing), counted as the repair's dialog counted it. Rejects, the copy still held, when anything could
+ * not be put back (tried again at the next launch).
+ * @returns {Promise<BackupSummary | null>}
+ */
+export async function restoreAfterRepair() {
+  const backup = readBackup();
+  const summary = backupSummary();
+  await importNotes(backup?.sheetNotes);
+  await importFeatures(backup?.features ?? []);
+  cancelRestore();
+  await writeBackup();
+  return summary;
+}
+
+/** @typedef {{ savedAt: string, favorites: number, lists: number, places: number, notes: number }} BackupSummary */
+
+/**
+ * What the backup copy holds, said before a repair: read from localStorage only (IndexedDB may not open). null: no
+ * copy, or nothing in it.
+ * @returns {BackupSummary | null}
+ */
+export function backupSummary() {
+  const backup = readBackup();
+  if (!backup) return null;
+  const all = /** @type {Collection[]} */ (backup.features.map(normalizeCollection).filter(Boolean));
+  const kind = (/** @type {CollectionKind} */ k) => all.filter(c => c.properties.kind === k);
+  const favorites = kind('favorites').reduce((n, c) => n + c.properties.plants.length, 0);
+  const lists = kind('list').length, places = kind('place').length;
+  const notes = (backup.sheetNotes || []).reduce((n, b) => n + Object.keys(b?.texts || {}).length, 0);
+  return favorites || lists || places || notes ? { savedAt: backup.savedAt, favorites, lists, places, notes } : null;
+}
+
+/**
+ * What a backup copy holds, in words: « vos favoris (2 plantes), 1 collection, 3 lieux et 1 note de fiche » — the
+ * same before a repair (its dialog) and after it (what came back). @param {BackupSummary} s
+ */
+export function backupContents(s) {
+  const count = (/** @type {number} */ n, /** @type {string} */ one, many = one + 's') => `${n} ${n > 1 ? many : one}`;
+  const items = [s.favorites ? `vos favoris (${plantCount(s.favorites)})` : '', s.lists ? count(s.lists, 'collection') : '',
+    s.places ? count(s.places, 'lieu', 'lieux') : '', s.notes ? count(s.notes, 'note de fiche', 'notes de fiche') : ''].filter(Boolean);
+  return items.length > 1 ? `${items.slice(0, -1).join(', ')} et ${items.at(-1)}` : items[0] ?? '';
+}
+
+/**
+ * The backup copy as a GeoJSON file, without IndexedDB (Réglages › Mes plantes › « Importer un fichier… » reads it
+ * back): what to keep before the database is erased, or when it cannot be. False: no copy.
+ */
+export function downloadBackup() {
+  const backup = readBackup();
+  if (!backup) return false;
+  const file = { type: 'FeatureCollection', name: 'GeoFlora — copie de secours', generator: 'GeoFlora', formatVersion: FORMAT_VERSION,
+    exportedAt: backup.savedAt, features: backup.features, ...(backup.sheetNotes?.length ? { sheetNotes: backup.sheetNotes } : {}) };
+  download(new File([JSON.stringify(file)], `geoflora-copie-de-secours-${backup.savedAt.slice(0, 10)}.geojson`, { type: 'application/geo+json' }));
+  return true;
 }
 
 /**

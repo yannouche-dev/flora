@@ -32,6 +32,10 @@ import { onStorage } from './sync.js';
  * @property {boolean} [datasetDeferred]  a new flora was announced but could not be downloaded: the local copy stays, until the next launch
  * @property {boolean} [updateReady]  a new version of the app is installed: reloading shows it
  * @property {boolean} [storageFull]  a write was refused for lack of room (QuotaExceededError): a banner says what to do
+ * @property {StorageProblem} [storageError]  the launch failed because IndexedDB did not open (core/db.js StorageError): why, and
+ *   what the browser said — the banner says what to try (components/gf-storage-error.js)
+ * @property {RestoreOutcome} [restore]  after « Réparer le stockage » (or a base the browser emptied: reason 'lost'), the
+ *   backup copy put back (done: what it held), or not (error: what the browser said; tried again at the next launch)
  * @property {Query} query
  * @property {Results} results
  * @property {boolean} compact
@@ -64,6 +68,11 @@ export class Store extends EventTarget {
 }
 
 /** @typedef {import('./modes.js').Mode} Mode */
+/** @typedef {{ kind: import('./db.js').OpenProblem, name: string, message: string }} StorageProblem */
+/**
+ * @typedef {{ done: boolean, reason: import('./collections.js').RestoreReason, contents?: import('./collections.js').BackupSummary | null,
+ *   error?: { name: string, message: string }, closed?: boolean }} RestoreOutcome  `closed`: its banner dismissed
+ */
 /** @typedef {'auto' | 'on' | 'off'} ShowSteps */
 
 /** @param {any} v @returns {Mode | null} */

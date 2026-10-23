@@ -15,7 +15,7 @@
 //    from IndexedDB.
 
 import { config } from '../config.js';
-import { get, getAll, replacePlants } from '../core/db.js';
+import { get, getAll, replacePlants, StorageError } from '../core/db.js';
 import { indexPlants, mergeFlora, PACK_FORMAT } from './flora-pack.js';
 import { buildIndex, search, vocabularyOf } from './search-core.js';
 
@@ -160,6 +160,9 @@ self.addEventListener('message', async ({ data }) => {
     }
   } catch (error) {
     const e = /** @type {Error} */ (error);
-    self.postMessage({ requestId, error: e.message || e.name || 'erreur inconnue', name: e.name });
+    // IndexedDB that does not open: its cause too (what the browser said), so the page says it as its own (core/search.js).
+    const cause = /** @type {any} */ (e instanceof StorageError ? e.cause : null);
+    self.postMessage({ requestId, error: e.message || e.name || 'erreur inconnue', name: e.name,
+      ...(e instanceof StorageError ? { kind: e.kind, cause: { name: cause?.name, message: cause?.message } } : {}) });
   }
 });

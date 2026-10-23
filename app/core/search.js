@@ -2,6 +2,7 @@
 // Main-thread client for workers/search.worker.js (latest request wins).
 
 import { getMembership } from './collections.js';
+import { StorageError } from './db.js';
 import { store } from './store.js';
 
 const worker = new Worker(new URL('../workers/search.worker.js', import.meta.url), { type: 'module' });
@@ -24,8 +25,10 @@ function call(message, progress) {
   const requestId = ++lastRequest;
   return new Promise((resolve, reject) => {
     waiting.set(requestId, {
-      // The error's name kept (QuotaExceededError: core/dataset.js tells the lack of room apart).
-      resolve: data => data.error ? reject(Object.assign(new Error(data.error), data.name ? { name: data.name } : {})) : resolve(data),
+      // The error's name kept (QuotaExceededError: core/dataset.js tells the lack of room apart); IndexedDB that did not
+      // open in the worker, the same error as in the page (db.js StorageError: main.js says why, and what to do).
+      resolve: data => data.error ? reject(data.kind ? new StorageError(data.cause, data.kind)
+        : Object.assign(new Error(data.error), data.name ? { name: data.name } : {})) : resolve(data),
       progress
     });
     worker.postMessage({ ...message, requestId });

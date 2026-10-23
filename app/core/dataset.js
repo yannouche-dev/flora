@@ -97,8 +97,8 @@ function storageFull(free) {
   return error;
 }
 
-/** @param {unknown} error */
-const downloadFailed = error => new Error('Impossible de télécharger la flore : ' + /** @type {Error} */ (error).message, { cause: error });
+/** The flora's records not stored: the download's fault — not when IndexedDB did not open (db.js: said as it is). @param {unknown} error */
+const downloadFailed = error => db.storageError(error) ?? new Error('Impossible de télécharger la flore : ' + /** @type {Error} */ (error).message, { cause: error });
 
 /**
  * The flora to start on. With a complete local copy, at once: data/meta.json is checked in the background
