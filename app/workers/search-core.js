@@ -2,7 +2,7 @@
 // The search itself: index, ranking, typo tolerance, facets and sorting over the local flora. No DOM, no IndexedDB:
 // the worker (search.worker.js) feeds it the plants, and the unit tests (tests/unit) import it in Node.
 
-import { fold } from '../core/fold.js';
+import { fold, signed, unsigned } from '../core/fold.js';
 import { harvestRules } from '../core/regulation.js';
 
 /** Facets, in the order the filter panel shows them. Values within a facet are OR'ed, facets are AND'ed. */
@@ -26,7 +26,7 @@ const words = (/** @type {string} */ text) => text.split(' ').filter(Boolean);
  * @property {string} family
  * @property {string} haystack
  * @property {Record<string, string | string[]>} values   facet values (legal: several)
- * @property {{ fr: number, sci: number, family: number, genus: number, status: number, legal: number }} rank   precomputed sort positions
+ * @property {{ fr: number, sci: number, species: number, family: number, genus: number, status: number, legal: number }} rank   precomputed sort positions
  */
 
 /**
@@ -77,7 +77,7 @@ function toEntry(plant) {
       french: plant.vernacularNames?.length ? 'avec' : 'sans',
       legal
     },
-    rank: { fr: 0, sci: 0, family: 0, genus: 0, status: 0, legal: 0 }
+    rank: { fr: 0, sci: 0, species: 0, family: 0, genus: 0, status: 0, legal: 0 }
   };
 }
 
@@ -104,23 +104,32 @@ export function buildIndex(plants) {
   // Sort positions computed once, so sorting results is a cheap integer comparison. Each distinct name, family, genus
   // or status is collated once (collationPositions), then the plants sorted on integers.
   const collator = new Intl.Collator('fr', { sensitivity: 'base', numeric: true });
-  const label = (/** @type {Entry} */ e) => e.summary.vernacularName || e.summary.scientificName;
+  // Each plant's value read once (a name without its hybrid sign costs a little), not at each comparison.
   const position = (/** @type {(e: Entry) => string} */ value) => {
-    const positions = collationPositions(collator, entries.map(value));
-    return (/** @type {Entry} */ e) => /** @type {number} */ (positions.get(value(e)));
+    const values = entries.map(value);
+    const positions = collationPositions(collator, values);
+    const at = new Map(entries.map((e, i) => [e, /** @type {number} */ (positions.get(values[i]))]));
+    return (/** @type {Entry} */ e) => /** @type {number} */ (at.get(e));
   };
-  const assign = (/** @type {'fr' | 'sci' | 'family' | 'genus' | 'status' | 'legal'} */ key, compare) =>
+  const assign = (/** @type {keyof Entry['rank']} */ key, /** @type {(a: Entry, b: Entry) => number} */ compare) =>
     entries.slice().sort(compare).forEach((entry, i) => { entry.rank[key] = i; });
+  // A hybrid at its name, its sign set aside (core/fold.js unsigned: « Urtica x oblongata » among the Urtica at
+  // « oblongata », « x Dactylodenia » at D, not every one under « x »); one name written both ways, the hybrid after.
+  const hybrid = (/** @type {string} */ name) => signed(name) ? 1 : 0;
 
-  const sci = position(e => e.summary.scientificName);
-  assign('sci', (a, b) => sci(a) - sci(b));
-  // Species without a French name go last in the French sort.
-  const fr = position(label);
-  assign('fr', (a, b) => (a.summary.vernacularName ? 0 : 1) - (b.summary.vernacularName ? 0 : 1) || fr(a) - fr(b));
+  const sci = position(e => unsigned(e.summary.scientificName));
+  assign('sci', (a, b) => sci(a) - sci(b) || hybrid(a.summary.scientificName) - hybrid(b.summary.scientificName));
+  // Species without a French name go last in the French sort; those (and those sharing one) in scientific order.
+  const fr = position(e => e.summary.vernacularName || '');
+  assign('fr', (a, b) => (a.summary.vernacularName ? 0 : 1) - (b.summary.vernacularName ? 0 : 1) || fr(a) - fr(b) || a.rank.sci - b.rank.sci);
   const family = position(e => e.summary.family);
   assign('family', (a, b) => family(a) - family(b) || a.rank.sci - b.rank.sci);
-  const genus = position(e => e.summary.genus || '');
-  assign('genus', (a, b) => genus(a) - genus(b) || a.rank.sci - b.rank.sci);
+  const genus = position(e => unsigned(e.summary.genus));
+  assign('genus', (a, b) => genus(a) - genus(b) || hybrid(a.summary.genus) - hybrid(b.summary.genus) || a.rank.sci - b.rank.sci);
+  // « Espèce » (the epithet, as the results grid shows it): « × oblongata » at « oblongata », then by genus — the
+  // « alba » of Abies before those of Salix.
+  const species = position(e => unsigned(e.summary.species || e.summary.scientificName));
+  assign('species', (a, b) => species(a) - species(b) || a.rank.genus - b.rank.genus);
   // Status code order (P présent, E endémique…), plants without status last.
   const status = position(e => /** @type {string} */ (e.values.status));
   assign('status', (a, b) => (a.values.status ? 0 : 1) - (b.values.status ? 0 : 1) || status(a) - status(b) || a.rank.fr - b.rank.fr);
@@ -407,14 +416,14 @@ export function search(index, { q: query, filters, sort, membership: mine = {}, 
   }
 
   const wanted = sort || (q ? 'relevance' : 'fr');
-  const effectiveSort = /^-?obs$/.test(wanted) && !observed ? 'fr' : wanted;
   // "-family": the same order, reversed (column header clicked twice).
-  const desc = effectiveSort.startsWith('-');
-  const key = desc ? effectiveSort.slice(1) : effectiveSort;
+  const desc = wanted.startsWith('-');
+  const asked = desc ? wanted.slice(1) : wanted;
   const by = {
     relevance: (a, b) => /** @type {any} */ (matches).get(a).score - /** @type {any} */ (matches).get(b).score || entries[a].rank.fr - entries[b].rank.fr,
     fr: (a, b) => entries[a].rank.fr - entries[b].rank.fr,
     sci: (a, b) => entries[a].rank.sci - entries[b].rank.sci,
+    species: (a, b) => entries[a].rank.species - entries[b].rank.species,
     family: (a, b) => entries[a].rank.family - entries[b].rank.family,
     genus: (a, b) => entries[a].rank.genus - entries[b].rank.genus,
     status: (a, b) => entries[a].rank.status - entries[b].rank.status,
@@ -424,8 +433,12 @@ export function search(index, { q: query, filters, sort, membership: mine = {}, 
       entries[a].rank.fr - entries[b].rank.fr,
     obs: (a, b) => (observed?.[entries[b].summary.id] ?? 0) - (observed?.[entries[a].summary.id] ?? 0) || entries[a].rank.fr - entries[b].rank.fr
   };
-  const compare = by[key === 'relevance' && !matches ? 'fr' : key] || by.fr;
-  const order = desc ? (/** @type {number} */ a, /** @type {number} */ b) => compare(b, a) : compare;
+  // « Pertinence » with a text only, « Plus observées » with the zone's counts only, a sort it does not know (an address
+  // written by hand: sort=__proto__…) never: the French name's instead, and said so (`sort`).
+  const key = Object.hasOwn(by, asked) && (asked !== 'relevance' || matches) && (asked !== 'obs' || observed) ? asked : null;
+  const effectiveSort = key ? wanted : 'fr';
+  const compare = by[key || 'fr'];
+  const order = key && desc ? (/** @type {number} */ a, /** @type {number} */ b) => compare(b, a) : compare;
   hits.sort(order);
 
   return {

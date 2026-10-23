@@ -16,7 +16,7 @@ import './gf-map.js';
 import './gf-spot-editor.js';
 import './gf-thumb.js';
 import { icon } from '../core/icons.js';
-import { foldLetters as fold } from '../core/fold.js';
+import { foldLetters as fold, unsigned } from '../core/fold.js';
 import { getPlant, nameOf } from '../core/plants.js';
 import { gbifTaxon } from '../core/sources.js';
 import { context, setContext } from '../core/context.js';
@@ -485,8 +485,9 @@ export class GfMapPage extends LitElement {
     };
     const familyHits = tally(all.filter(sp => bySearch(sp) && byGenus(sp)), 'family');
     const genusHits = tally(all.filter(sp => bySearch(sp) && byFamily(sp)), 'genus');
-    // Fixed order (most species in the circle first): choosing a value never reorders the lists.
-    const ranked = (/** @type {Map<string, number>} */ totals) => [...totals].sort((x, y) => y[1] - x[1] || x[0].localeCompare(y[0], 'fr')).map(([v]) => v);
+    // Fixed order (most species in the circle first): choosing a value never reorders the lists. A hybrid genus
+    // (« × Dactylodenia ») among the others, at its name (core/fold.js).
+    const ranked = (/** @type {Map<string, number>} */ totals) => [...totals].sort((x, y) => y[1] - x[1] || unsigned(x[0]).localeCompare(unsigned(y[0]), 'fr')).map(([v]) => v);
     const familyOptions = ranked(tally(all, 'family')).map(f => ({ value: f, label: f, count: familyHits.get(f) || 0 }));
     // Genera of the chosen families only (as in the Flore filters).
     const genusOptions = ranked(tally(all.filter(byFamily), 'genus')).map(g => ({ value: g, label: g, count: genusHits.get(g) || 0 }));

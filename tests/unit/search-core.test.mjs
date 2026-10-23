@@ -4,6 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { FACETS, buildIndex, distance, legalValues, rank, search, sequence } from '../../app/workers/search-core.js';
+import { unsigned } from '../../app/core/fold.js';
 
 const plants = JSON.parse(await readFile(new URL('../fixtures/plants.json', import.meta.url), 'utf8'));
 const index = buildIndex(plants);
@@ -81,10 +82,100 @@ test('tri : français par défaut (sans nom français en dernier), scientifique,
   const firstWithout = fr.items.findIndex((/** @type {any} */ p) => !p.vernacularName);
   assert.ok(firstWithout > 0 && fr.items.slice(firstWithout).every((/** @type {any} */ p) => !p.vernacularName));
   const sci = names(find('', { sort: 'sci' }));
-  assert.deepEqual(sci, [...sci].sort((a, b) => a.localeCompare(b, 'fr', { sensitivity: 'base' })));
+  // A hybrid at its name, its sign set aside (« Allium x proliferum » among the Allium, at « proliferum »).
+  assert.deepEqual(sci, [...sci].sort((a, b) => unsigned(a).localeCompare(unsigned(b), 'fr', { sensitivity: 'base' })));
   assert.deepEqual(names(find('', { sort: '-sci' })), [...sci].reverse());
   assert.equal(find('ortie').sort, 'relevance');
   assert.equal(find('', { sort: 'relevance' }).items[0].id, fr.items[0].id, 'pertinence sans texte : ordre français');
+});
+
+test('le signe d’hybride à part : « x » ou « × » seul ôté pour ranger, jamais la lettre d’un nom (Xanthium, xylosteum)', () => {
+  assert.equal(unsigned('× Leontoroides'), 'Leontoroides');
+  assert.equal(unsigned('x Leontoroides hispidaster'), 'Leontoroides hispidaster');
+  assert.equal(unsigned('Alisma x rhicnocarpum'), 'Alisma rhicnocarpum');
+  assert.equal(unsigned('× rhicnocarpum'), 'rhicnocarpum');
+  assert.equal(unsigned('Arum italicum x Arum maculatum'), 'Arum italicum Arum maculatum');
+  for (const name of ['Xanthium strumarium', 'Xatartia scabra', 'xylosteum', 'Lonicera xylosteum', 'Rosa ×']) assert.equal(unsigned(name), name);
+  assert.equal(unsigned(undefined), '');
+  // Shown with it: the index keeps the names as they are.
+  const proliferum = find('', { sort: 'species' }).items.find((/** @type {any} */ p) => p.scientificName === 'Allium x proliferum');
+  assert.equal(proliferum.species, '× proliferum');
+  assert.equal(find('', { sort: 'genus' }).items.find((/** @type {any} */ p) => p.scientificName === 'x Dactylodenia st-quintinii').genus, '× Dactylodenia');
+});
+
+test('tri « Espèce » : par l’épithète, son signe d’hybride à part, puis le genre ; à l’envers, l’inverse exact', () => {
+  const species = find('', { sort: 'species' });
+  assert.equal(species.sort, 'species');
+  const collator = new Intl.Collator('fr', { sensitivity: 'base', numeric: true });
+  const epithets = species.items.map((/** @type {any} */ p) => unsigned(p.species));
+  assert.ok(epithets.every((e, i) => i === 0 || collator.compare(epithets[i - 1], e) <= 0), 'les épithètes dans l’ordre, pas les genres');
+  assert.notDeepEqual(names(species), names(find('', { sort: 'sci' })));
+  // « × oblongata » at « oblongata », not before every epithet.
+  assert.deepEqual(find('', { sort: 'species', filters: { genus: ['Urtica'] } }).items.map((/** @type {any} */ p) => p.species),
+    ['atrovirens', 'dioica', 'membranacea', '× oblongata', '× tremolsii', 'urens']);
+  const orchids = find('', { sort: 'species', filters: { family: ['Orchidaceae'] } });
+  assert.deepEqual(names(orchids), ['Dactylorhiza x ampolai', 'Ophrys x barbaricina', 'Dactylorhiza brennensis', 'Traunsteinera globosa',
+    'Ophrys holosericea', 'Ophrys x jarigei', 'Epipactis leptochila', 'x Serapicamptis mutata', 'Ophrys x souliei', 'Orchis x spuria',
+    'x Dactylodenia st-quintinii']);
+  const reversed = find('', { sort: '-species', filters: { family: ['Orchidaceae'] } });
+  assert.equal(reversed.sort, '-species');
+  assert.deepEqual(names(reversed), names(orchids).reverse());
+  assert.deepEqual(names(find('', { sort: '-species' })), names(species).reverse());
+  // One epithet, several genera: by genus.
+  const officinale = species.items.filter((/** @type {any} */ p) => p.species === 'officinale').map((/** @type {any} */ p) => p.genus);
+  assert.equal(officinale.length, 3);
+  assert.deepEqual(officinale, [...officinale].sort((a, b) => collator.compare(a, b)));
+});
+
+test('un hybride rangé à son nom dans les tris scientifique, genre et famille, et leurs inverses', () => {
+  const around = (/** @type {string[]} */ list, /** @type {string} */ name) => list.slice(list.indexOf(name) - 1, list.indexOf(name) + 2);
+  const sci = names(find('', { sort: 'sci' }));
+  assert.deepEqual(around(sci, 'x Dactylodenia st-quintinii'), ['Daboecia cantabrica', 'x Dactylodenia st-quintinii', 'Dactylorhiza x ampolai']);
+  assert.deepEqual(around(sci, 'x Serapicamptis mutata'), ['Senecio sarracenicus', 'x Serapicamptis mutata', 'Seseli annuum']);
+  assert.deepEqual(around(sci, 'Urtica x oblongata'), ['Urtica membranacea', 'Urtica x oblongata', 'Urtica x tremolsii']);
+  assert.deepEqual(around(names(find('', { sort: '-sci' })), 'x Dactylodenia st-quintinii'), ['Dactylorhiza x ampolai', 'x Dactylodenia st-quintinii', 'Daboecia cantabrica']);
+  const genus = find('', { sort: 'genus' }).items.map((/** @type {any} */ p) => p.genus);
+  assert.equal(genus[0], 'Acanthus', 'les genres hybrides ne passent pas devant');
+  assert.deepEqual(around(genus, '× Dactylodenia'), ['Daboecia', '× Dactylodenia', 'Dactylorhiza']);
+  assert.deepEqual(around(find('', { sort: '-genus' }).items.map((/** @type {any} */ p) => p.genus), '× Serapicamptis'), ['Seseli', '× Serapicamptis', 'Senecio']);
+  assert.deepEqual(names(find('', { sort: 'family', filters: { family: ['Orchidaceae'] } })), ['x Dactylodenia st-quintinii', 'Dactylorhiza x ampolai',
+    'Dactylorhiza brennensis', 'Epipactis leptochila', 'Ophrys x barbaricina', 'Ophrys holosericea', 'Ophrys x jarigei', 'Ophrys x souliei',
+    'Orchis x spuria', 'x Serapicamptis mutata', 'Traunsteinera globosa']);
+  // Without a French name, last in the French sort: in scientific order.
+  const fr = find('').items;
+  const tail = fr.slice(fr.findIndex((/** @type {any} */ p) => !p.vernacularName)).map((/** @type {any} */ p) => p.scientificName);
+  assert.deepEqual(tail, sci.filter(n => tail.includes(n)));
+});
+
+test('sans nom français, un hybride parmi ceux de son genre, à son épithète ; un même nom écrit des deux façons, l’hybride après', () => {
+  const plant = (/** @type {number} */ id, /** @type {string} */ scientificName, /** @type {string} */ genus, /** @type {string} */ species, more = {}) =>
+    ({ id, scientificName, genus, species, family: 'Rosaceae', ...more });
+  // Each hybrid before its look-alike here: the order below is the sort's, not the list's kept (a stable sort).
+  const small = buildIndex([
+    plant(1, 'Rosa canina', 'Rosa', 'canina'),
+    plant(2, 'Rosa x andegavensis', 'Rosa', '× andegavensis'),
+    plant(3, 'Rosa agrestis', 'Rosa', 'agrestis', { vernacularNames: ['Rosier des haies'] }),
+    plant(4, 'Mentha x piperita', 'Mentha', '× piperita', { family: 'Lamiaceae' }),
+    plant(5, 'Mentha piperita', 'Mentha', 'piperita', { family: 'Lamiaceae' }),
+    plant(6, 'x Pyronia veitchii', '× Pyronia', 'veitchii'),
+    plant(7, 'Pyronia zeta', 'Pyronia', 'zeta')
+  ]);
+  const ids = (/** @type {string} */ sort) => search(small, { q: '', filters: NONE, sort }).items.map((/** @type {any} */ p) => p.id);
+  // « Rosa x andegavensis » at « andegavensis », before « Rosa canina » (written so, it came after: « x » > « c »).
+  assert.deepEqual(ids('fr'), [3, 5, 4, 6, 7, 2, 1], 'the French name first, then in scientific order');
+  assert.deepEqual(ids('sci'), [5, 4, 6, 7, 3, 2, 1]);
+  // « × Pyronia » and « Pyronia »: two genera, not one — the hybrid after, its plants not among the other's.
+  assert.deepEqual(ids('genus'), [5, 4, 7, 6, 3, 2, 1]);
+  assert.deepEqual(ids('species'), [3, 2, 1, 5, 4, 6, 7]);
+});
+
+test('un tri inconnu (adresse écrite à la main) : l’ordre français, dit tel', () => {
+  const fr = find('').items.map((/** @type {any} */ p) => p.id);
+  for (const sort of ['__proto__', '-__proto__', 'constructor', 'hasOwnProperty', 'toString', 'n-importe-quoi']) {
+    const r = find('', { sort });
+    assert.equal(r.sort, 'fr', sort);
+    assert.deepEqual(r.items.map((/** @type {any} */ p) => p.id), fr, sort);
+  }
 });
 
 test('tri « Plus observées » : les observations de la zone d’abord, puis le nom français ; sans elles, le nom français, dit', () => {

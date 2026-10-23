@@ -48,7 +48,7 @@ test('la recherche sur l’index seul est celle de plants.json : mêmes fiches r
   const light = buildIndex(indexPlants(index)), full = buildIndex(plants);
   assert.deepEqual(light.entries.map(e => [e.summary, e.values, e.rank]), full.entries.map(e => [e.summary, e.values, e.rank]));
   for (const q of ['ortie', 'pisenlit', 'ail des ours', '']) {
-    for (const sort of ['', 'sci', 'family', 'status', 'legal']) {
+    for (const sort of ['', 'fr', 'sci', 'species', '-species', 'family', 'genus', 'status', 'legal']) {
       assert.deepEqual(search(light, { q, filters: NONE, sort }), search(full, { q, filters: NONE, sort }), `${q} / ${sort}`);
     }
   }
