@@ -250,6 +250,7 @@ const SHELL = [
   'app/components/gf-sortable-list.js',
   'app/components/gf-shared.js',
   'app/components/gf-spot-editor.js',
+  'app/components/gf-storage-error.js',
   'app/components/gf-status.js',
   'app/components/gf-thumb.js',
   'app/components/gf-map-panel.js',

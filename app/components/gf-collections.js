@@ -6,7 +6,8 @@ import { GeoController } from '../core/geo.js';
 import { href } from '../core/router.js';
 import {
   FAVORITES_ID, discardMissingBackup, distance, exportGeoJSON, formatDistance, inSeason, lastExportDate,
-  listCollections, missingFromBackup, placeTitle, plantCount, plantMarkers, restoreBackup, soon, spotEvents, findEntry } from '../core/collections.js';
+  listCollections, missingFromBackup, placeTitle, plantCount, plantMarkers, restoreBackup, restorePending, restoreReason, soon, spotEvents, findEntry,
+  downloadBackup, readBackup } from '../core/collections.js';
 import { config } from '../config.js';
 import { StoreController, whenReady } from '../core/store.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
@@ -244,7 +245,8 @@ export class GfCollections extends LitElement {
       }));
       this._thumbs = thumbs;
       this.#loadPlants();
-      this._missing = await missingFromBackup().catch(() => []);
+      // A repair puts the backup copy back by itself (main.js): not offered meanwhile.
+      this._missing = restorePending() ? [] : await missingFromBackup().catch(() => []);
       this._error = null;
     } catch (error) {
       console.error(error);
@@ -464,9 +466,25 @@ export class GfCollections extends LitElement {
     return !dismissed || dismissed < latest;
   }
 
-  /** At the top: collections found in this device's backup copy, to restore. */
+  /**
+   * At the top: collections found in this device's backup copy, to restore — or coming back after a repair (or a base
+   * the browser emptied: main.js restoreAfter), or that they could not, and how to try again.
+   */
   #restoreNotice() {
     const missing = this._missing;
+    if (restorePending()) {
+      if (this.#store.state.restore?.done === false) return html`<div class="notice card restore">
+        <p><strong>Vos collections et vos notes n’ont pas pu être remises</strong> depuis la copie de secours de cet appareil. Elles y restent,
+          gardées telles quelles : rechargez la page pour réessayer.</p>
+        <div class="row actions">
+          <button class="primary" type="button" @click=${() => location.reload()}>Recharger</button>
+          ${readBackup() ? html`<button class="link" type="button" @click=${() => downloadBackup()}>Télécharger la copie de secours</button>` : nothing}
+        </div>
+      </div>`;
+      return html`<div class="notice card restore" role="status"><p>${restoreReason() === 'lost'
+        ? 'Le navigateur avait vidé le stockage de GeoFlora'
+        : 'Stockage réparé'} : vos collections et vos notes reviennent de la copie de secours de cet appareil dès que la flore est enregistrée…</p></div>`;
+    }
     return html`
       ${missing.length ? html`
         <div class="notice card restore" role="alert">

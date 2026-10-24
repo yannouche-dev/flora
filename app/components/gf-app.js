@@ -4,7 +4,7 @@ import { tabHref } from '../core/context.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
 import { href, RouterController } from '../core/router.js';
 import { setKingMode, setMode, store, StoreController, whenReady } from '../core/store.js';
-import { exportGeoJSON } from '../core/collections.js';
+import { backupContents, downloadBackup, exportGeoJSON, readBackup, restorePending } from '../core/collections.js';
 import './gf-flora.js';
 import './gf-tabbar.js';
 import './gf-mode-switch.js';
@@ -44,6 +44,16 @@ whenReady().then(() => {
   if (typeof requestIdleCallback === 'function') requestIdleCallback(() => loadCapture(), { timeout: 3000 });
   else setTimeout(loadCapture, 500);
 });
+
+/**
+ * The banner of IndexedDB that does not open (what to try, « Réparer le stockage »), loaded only then: never part of the
+ * start. Until it has come (or if it cannot), the error's one line and « Recharger ».
+ * @type {Promise<unknown> | null}
+ */
+let storageModule = null;
+/** It could not be loaded: the one line is all there is (then announced). */
+let storageModuleFailed = false;
+const loadStorageError = () => (storageModule ??= import('./gf-storage-error.js').catch(error => { storageModuleFailed = true; console.error(error); }));
 
 /** The screens asked for, and those loaded. @type {Set<string>} */
 const asked = new Set(), loaded = new Set();
@@ -145,6 +155,7 @@ export class GfApp extends LitElement {
       background: var(--gf-accent-soft);
     }
     .banner.error { color: var(--gf-danger); }
+    .banner details { margin-top: 4px; color: var(--gf-text-muted); font-size: 0.8rem; overflow-wrap: anywhere; }
 
     /* « Mode King »: the crown, bottom centre, above the tab bar on a phone; touching it leaves the mode. */
     .king {
@@ -261,7 +272,7 @@ export class GfApp extends LitElement {
   render() {
     const route = this.#router.route;
     const tab = this.#tab(route);
-    const { status, statusText, offline, updateReady, datasetDeferred, storageFull } = this.#store.state;
+    const { status, statusText, offline, updateReady, datasetDeferred, storageFull, restore } = this.#store.state;
     const phone = this.#phone.matches;
     // A mini-app: alone on the screen (its box has its own bar, its one way out).
     const boxed = route.name === 'app';
@@ -274,8 +285,7 @@ export class GfApp extends LitElement {
         ${updateReady ? html`<div class="banner" role="status">Nouvelle version de GeoFlora disponible.
           <button class="link" type="button" @click=${() => location.reload()}>Recharger</button></div>` : nothing}
         ${status === 'loading' ? html`<div class="banner over" role="status">${statusText || 'Chargement…'}</div>` : nothing}
-        ${status === 'error' ? html`<div class="banner error" role="alert">${statusText}
-          <button class="link" type="button" @click=${() => location.reload()}>Recharger</button></div>` : nothing}
+        ${status === 'error' ? this.#errorBanner() : nothing}
         ${this.#outlet(route)}
       </main>
       ${this.#store.state.kingMode ? html`<button class="king" type="button" aria-pressed="true" aria-label="Quitter le mode King"
@@ -302,8 +312,8 @@ export class GfApp extends LitElement {
         ${updateReady ? html`<div class="banner" role="status">Nouvelle version de GeoFlora disponible.
           <button class="link" type="button" @click=${() => location.reload()}>Recharger</button></div>` : nothing}
         ${status === 'loading' ? html`<div class="banner" role="status">${statusText || 'Chargement…'}</div>` : nothing}
-        ${status === 'error' ? html`<div class="banner error" role="alert">${statusText}
-          <button class="link" type="button" @click=${() => location.reload()}>Recharger</button></div>` : nothing}
+        ${status === 'error' ? this.#errorBanner() : nothing}
+        ${restore && !restore.closed ? this.#restoreBanner(restore) : nothing}
         ${offline && status === 'ready' && route.name === 'search' ? html`<div class="banner">Hors ligne — recherche sur la copie locale.</div>`
           : datasetDeferred && status === 'ready' && route.name === 'search' ? html`<div class="banner" role="status">Mise à jour de la flore reportée — recherche sur la copie locale.</div>` : nothing}
         ${this.#outlet(route)}
@@ -336,6 +346,43 @@ export class GfApp extends LitElement {
 
   /** The tab of a view; the start page is « Découvrir » until Flore has come. @param {import('../core/router.js').Route} route */
   #tab(route) { return route.name === 'search' && !tabShown('flore') ? 'discover' : tabOf(route.name); }
+
+  /**
+   * The launch failed. IndexedDB that does not open: its own banner (gf-storage-error), once loaded; else, or until
+   * then, the error's line and « Recharger » — and, a repair waiting for the flora, that nothing of the user's is lost.
+   * While that banner loads, its line is no live region: the banner announces itself, once.
+   */
+  #errorBanner() {
+    const { statusText, storageError } = this.#store.state;
+    if (storageError && customElements.get('gf-storage-error')) return html`<gf-storage-error .problem=${storageError}></gf-storage-error>`;
+    if (storageError && !storageModuleFailed) loadStorageError().then(() => this.requestUpdate());
+    return html`<div class="banner error" role=${storageError && !storageModuleFailed ? nothing : 'alert'}>${statusText}
+      ${restorePending() ? ' Vos collections et vos notes sont gardées dans la copie de secours : elles reviendront dès que la flore aura pu être téléchargée.' : ''}
+      <button class="link" type="button" @click=${() => location.reload()}>Recharger</button></div>`;
+  }
+
+  /**
+   * After « Réparer le stockage » (or a base the browser emptied): what the backup copy gave back, in the words of the
+   * repair's dialog — or that it did not, what to do, and the browser's words folded away (main.js restoreAfter).
+   * @param {import('../core/store.js').RestoreOutcome} r
+   */
+  #restoreBanner(r) {
+    const close = html`<button class="link" type="button" @click=${() => store.set({ restore: { ...r, closed: true } })}>Fermer</button>`;
+    if (!r.done) {
+      return html`<div class="banner error">
+        <span role="alert">Vos collections et vos notes n’ont pas pu être remises depuis la copie de secours de cet appareil. Elles y restent,
+          gardées telles quelles : rechargez la page pour réessayer.</span>
+        <button class="link" type="button" @click=${() => location.reload()}>Recharger</button>
+        ${readBackup() ? html`<button class="link" type="button" @click=${() => downloadBackup()}>Télécharger la copie de secours</button>` : nothing}
+        ${close}
+        <details><summary>Détails techniques</summary><code>${r.error?.name || 'Erreur'}</code>${r.error?.message ? ` — ${r.error.message}` : ''}</details>
+      </div>`;
+    }
+    const what = r.reason === 'lost' ? 'Le navigateur avait vidé le stockage de GeoFlora' : 'Stockage réparé';
+    return html`<div class="banner" role="status">${r.contents
+      ? `${what} : la copie de secours de cet appareil a remis ${backupContents(r.contents)}.`
+      : `${what} : la copie de secours de cet appareil n’avait rien à remettre.`} ${close}</div>`;
+  }
 
   /** @param {keyof typeof UNLOCKS} key */
   #unlockedView(key) {

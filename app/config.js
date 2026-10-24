@@ -52,6 +52,8 @@ export const config = {
     harvestMode: 'geoflora.harvestMode',
     recentPlants: 'geoflora.recentPlants',
     backup: 'geoflora.backup',
+    // « Réparer le stockage » erased the database: the backup copy is held (never rewritten) until it is put back.
+    restorePending: 'geoflora.restorePending',
     backupReminder: 'geoflora.backupReminder',
     region: 'geoflora.region',
     floraLayout: 'geoflora.floraLayout',
