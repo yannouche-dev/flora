@@ -15,7 +15,7 @@ import { speciesAround, observationPointsAround } from '../../core/nearby.js';
 import { addressAt } from '../../core/geoservices.js';
 import { verdictOf } from '../../core/alerts.js';
 import { lookalikesOf } from '../../core/lookalikes.js';
-import { plantSeen } from '../../core/discover.js';
+import { discovering } from '../../core/discover.js';
 import { forgetFavoriteMadeBy, isFavorite, toggleFavorite } from '../../core/collections.js';
 import { thumbCredit } from '../../core/credit.js';
 import * as sources from '../../core/sources.js';
@@ -95,6 +95,13 @@ export class AroundSession extends EventTarget {
     this.pointsFor = '';
     /** The photos' pane hovered: the plant chosen lit on the map. */
     this.chosenGlow = false;
+    /**
+     * A game of Rencontres kept from before its way was its own (a place chosen, no `guided`): the way it was playing
+     * kept from now on (kit/around.js#guidedWay — never swapped when the tabs arrive); ma-guided then takes back the
+     * panes its steps had put in the layout of the mode.
+     */
+    this.keptFromBefore = 'guided' in app.m.context && Array.isArray(this.c.point) && this.c.guided === null;
+    if (this.keptFromBefore) app.set({ guided: discovering() });
     app.addEventListener('dispose', () => this.dispose(), { once: true });
   }
 
@@ -171,10 +178,12 @@ export class AroundSession extends EventTarget {
 
   /**
    * The place chosen (a position: its commune found, IGN): kept by the app; the cards of another place to search
-   * again. @param {[number, number]} point @param {string | null} place
+   * again. The first one of a game begins it: Rencontres' way is decided then, for the whole game (its `guided`:
+   * during the first steps of the app, its guided way — kit/around.js#guidedWay). @param {[number, number]} point
+   * @param {string | null} place
    */
   async setPoint(point, place) {
-    this.app.set({ point, place });
+    this.app.set({ point, place, ...(this.c.guided === null ? { guided: discovering() } : {}) });
     this.cards = null;
     this.loadedFor = '';
     this.changed();
@@ -368,7 +377,7 @@ export class AroundSession extends EventTarget {
     const choose = match && this.chooses;
     this.history = [...this.history, { id, liked: match, fav, ...(choose ? { was: this.c.focus } : {}) }].slice(-30);
     this.app.set(avoided ? avoid(this.c, id) : { ...swipe(this.c, id, match), ...(choose && this.c.focus !== id ? { focus: id, mediaAt: null } : {}) });
-    plantSeen(id);
+    this.app.seen(id);
     if (match) {
       // A favourite of this game (its origin): « Recommencer » takes it away again.
       if (fav) toggleFavorite(card.plant, { app: this.app.m.id }).catch(() => {});

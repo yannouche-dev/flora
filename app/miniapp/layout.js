@@ -1,8 +1,9 @@
 // @ts-check
 // A mini-app's screen, worked out from its manifest (pure, tested under Node):
-//  - layoutAt(m, path): what the steps walked so far have put on it — their components (« places »), folded step by
-//    step (added, given blocks, dropped), the columns that hold one (an empty column is gone, its separator too), the
-//    rows of each column, and what the last step brought (« newest »). Going back recomputes it from the shorter path;
+//  - layoutAt(m, path, c): what the steps walked so far have put on it — their components (« places »; one whose
+//    `when(c)` is false left out), folded step by step (added, given blocks, dropped), the columns that hold one (an
+//    empty column is gone, its separator too), the rows of each column, and what the last step brought (« newest »).
+//    Going back recomputes it from the shorter path;
 //  - fit(columns, W, saved): those columns in a box W px wide — the tier (phone, tablet, wide), the columns merged as
 //    tabs into another while their minimum widths do not fit (the lowest rank first, into its mergeInto), each one's
 //    width (the one the user left, else its base, kept between its min and max and shrunk if the box is narrower:
@@ -28,10 +29,10 @@ export const HANDLE = 7;
 export const tierOf = W => W < BP.phone ? 'phone' : W < BP.wide ? 'tablet' : 'wide';
 
 /**
- * The screen after the steps of `path` (step ids, the start first). Steps not in the manifest are skipped.
- * @param {Manifest} m @param {string[]} path @returns {Layout}
+ * The screen after the steps of `path` (step ids, the start first), the context being `c`. Steps not in the manifest
+ * are skipped. @param {Manifest} m @param {string[]} path @param {Record<string, any>} [c] @returns {Layout}
  */
-export function layoutAt(m, path) {
+export function layoutAt(m, path, c = {}) {
   const steps = new Map(m.steps.map(s => [s.id, s]));
   /** @type {Map<string, Place>} */
   const places = new Map();
@@ -44,7 +45,7 @@ export function layoutAt(m, path) {
     if (!step) continue;
     newest = [];
     for (const p of step.add ?? []) {
-      if (p.when && !p.when()) continue;
+      if (p.when && !p.when(c)) continue;
       const had = places.get(p.id);
       if (had) {
         // More blocks for a component already there (a plant sheet's): the same component, never a second one.

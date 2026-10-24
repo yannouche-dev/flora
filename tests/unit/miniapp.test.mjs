@@ -1,5 +1,6 @@
 // app/miniapp: a manifest checked (define.js), the screen it builds step by step and fits in a box (layout.js), its
-// context (context.js) and the runtime's path and « Rejouer » (runtime.js). Pure modules: no browser needed.
+// context (context.js) and the runtime's path, « Rejouer », its own steps bar and the plants seen in it (runtime.js);
+// the list of the mini-apps, whose launch changes nothing else (miniapps/index.js). Pure modules: no browser needed.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { defineMiniApp, kitProblems, paths, ManifestError } from '../../app/miniapp/define.js';
@@ -162,6 +163,8 @@ test('runtime : le chemin, can, l’avance par done, guided', () => {
   assert.deepEqual(pathTo(m, ['start'], 'cards', { point: [2, 48] }), ['start', 'map', 'cards']);
   assert.deepEqual(pathTo(m, ['start', 'map', 'cards'], 'map', { point: [2, 48] }), ['start', 'map']);
   assert.deepEqual([guided('auto', false), guided('auto', true), guided('on', true), guided('off', false)], [true, false, true, false]);
+  // Its own choice (its ⋯ menu) before the setting of all.
+  assert.deepEqual([guided('auto', false, 'off'), guided('off', true, 'on'), guided('on', true, null)], [false, true, true]);
   const app = new MiniApp(m, { saved: null });
   const said = [];
   app.addEventListener('navigate', e => said.push(/** @type {CustomEvent} */ (e).detail.step));
@@ -208,4 +211,73 @@ test('runtime : « Rejouer » vide ce que l’application possède, et seulement
   assert.deepEqual([again.c.point, again.savedPath, again.finished, again.resume()], [null, [], false, null]);
   again.dispose();
   app.dispose();
+});
+
+test('runtime : « Masquer / Afficher les étapes » du menu ⋯ vaut pour elle seule, gardé avec sa partie, oublié par « Rejouer »', async () => {
+  const m = defineMiniApp(meet({ id: 'meet-steps' }));
+  const app = new MiniApp(m, { saved: null, showSteps: 'auto' });
+  assert.equal(app.guided, true);
+  app.setOwnSteps(false);
+  assert.deepEqual([app.ownSteps, app.guided, app.pristine], ['off', false, false], 'a choice of its own: kept, even at its start');
+  app.flush();
+  assert.equal(JSON.parse(localStorage.getItem(storageKey('meet-steps', 'state')) || 'null')?.ownSteps, 'off');
+  const again = new MiniApp(m, { showSteps: 'auto' });
+  assert.deepEqual([again.ownSteps, again.guided], ['off', false], 'found again at the next visit');
+  // Another mini-app follows the setting of all.
+  const other = new MiniApp(defineMiniApp(meet({ id: 'meet-other' })), { saved: null, showSteps: 'auto' });
+  assert.equal(other.guided, true);
+  other.dispose();
+  // Back to what the setting of all gives: no choice of its own, nothing kept.
+  again.setOwnSteps(true);
+  assert.deepEqual([again.ownSteps, again.guided, again.pristine], [null, true, true]);
+  again.setOwnSteps(false);
+  await again.replay();
+  assert.deepEqual([again.ownSteps, again.guided], [null, true], '« Rejouer » forgets it');
+  again.flush();
+  assert.equal(localStorage.getItem(storageKey('meet-steps', 'state')), null);
+  again.dispose();
+  app.dispose();
+  // Read back only as 'on' or 'off'.
+  assert.equal(new MiniApp(m, { saved: { v: 1, path: ['start'], ctx: {}, finished: false, ownSteps: /** @type {any} */ ('auto') } }).ownSteps, null);
+});
+
+test('runtime : une plante vue (seen) — une carte, une plante notée, une nouvelle plante ouverte ou choisie (focus)', () => {
+  const m = defineMiniApp(meet({ id: 'meet-seen' }));
+  const app = new MiniApp(m, { saved: null });
+  /** @type {number[]} */
+  const seen = [];
+  app.addEventListener('seen', e => seen.push(/** @type {CustomEvent} */ (e).detail));
+  app.seen(4);
+  app.set({ focus: 7 });
+  app.set({ point: [2.35, 48.85] });
+  app.set({ focus: 7 });
+  app.set({ focus: null });
+  app.set({ focus: 7 });
+  app.set({ focus: 9 });
+  assert.deepEqual(seen, [4, 7, 9], 'the same plant again (closed, opened again): said once');
+  app.dispose();
+  // The plant kept with the game: already seen.
+  const kept = new MiniApp(defineMiniApp(meet({ id: 'meet-seen-kept', context: { ...meet().context, focus: { init: null, persist: true } } })),
+    { saved: { v: 1, path: ['start'], ctx: { focus: 7 }, finished: false } });
+  const later = /** @type {number[]} */ ([]);
+  kept.addEventListener('seen', e => later.push(/** @type {CustomEvent} */ (e).detail));
+  kept.set({ focus: 7 });
+  assert.deepEqual(later, []);
+  kept.dispose();
+});
+
+test('layoutAt : un composant présent selon le contexte (when)', () => {
+  const m = defineMiniApp(meet({ id: 'meet-when', steps: meet().steps.map((/** @type {any} */ s) => s.id === 'cards'
+    ? { ...s, add: [{ id: 'deck', use: 'deck', col: 'deck', when: (/** @type {any} */ c) => !c.guided }] } : s) }));
+  const path = ['start', 'map', 'cards'];
+  assert.deepEqual(layoutAt(m, path, { guided: false }).places.map(p => p.id), ['map', 'deck']);
+  assert.deepEqual(layoutAt(m, path, { guided: true }).places.map(p => p.id), ['map']);
+  assert.deepEqual(layoutAt(m, path).places.map(p => p.id), ['map', 'deck'], 'no context: shown');
+});
+
+test('MINIAPPS : jouer ne change rien d’autre dans l’application (aucun crochet play)', async () => {
+  const { MINIAPPS } = await import('../../app/miniapps/index.js');
+  for (const a of MINIAPPS) assert.deepEqual(Object.keys(a).sort(), ['icon', 'id', 'load', 'pitch', 'scene', 'title', 'underWay'], a.id);
+  const cueillette = /** @type {any} */ (MINIAPPS.find(a => a.id === 'cueillette'));
+  assert.doesNotMatch(cueillette.pitch, /mode cueillette/);
 });

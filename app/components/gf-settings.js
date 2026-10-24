@@ -2,7 +2,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { lastSearchHash } from '../core/query.js';
 import { href } from '../core/router.js';
-import { setHarvestMode, setKingMode, setMode, setShowSteps, StoreController } from '../core/store.js';
+import { harvestModeChosen, setHarvestMode, setKingMode, setMode, setShowSteps, StoreController } from '../core/store.js';
 import { MODE_ICON_CHOICES, modeLabel } from '../core/modes.js';
 import { createMode, deleteMode, editMode } from '../core/mode-admin.js';
 import './gf-mode-switch.js';
@@ -542,7 +542,8 @@ export class GfSettings extends LitElement {
       <legend>Afficher les étapes des mini-applications</legend>
       ${choices.map(([key, label, note]) => html`<label><input type="radio" name="show-steps" value=${key} .checked=${value === key}
         @change=${() => setShowSteps(key)} /> ${label}${note ? html` <small class="muted">(${note})</small>` : nothing}</label>`)}
-    </fieldset>`;
+    </fieldset>
+    <p class="muted">Le menu ⋯ d’une mini-application en décide pour elle seule, le temps de sa partie.</p>`;
   }
   /** « Disposition libre » (app/layout): the ready-made layouts, and one of one's own. */
   #layouts() {
@@ -620,7 +621,8 @@ export class GfSettings extends LitElement {
           <input type="checkbox" .checked=${this.#store.state.harvestMode} @change=${e => setHarvestMode(e.target.checked)} />
           <span>Journal de récolte, qualité, plantes « en saison » / « bientôt »</span>
         </label>
-        <p class="muted">Désactivé, vos lieux restent de simples « plantes vues ici » ; rien n’est effacé.</p>
+        <p class="muted">Désactivé, vos lieux restent de simples « plantes vues ici » ; rien n’est effacé.
+          ${harvestModeChosen() ? nothing : 'Automatique tant que vous ne l’avez pas réglé : allumé dès que l’appareil contient des récoltes (un import, un lien de transfert), éteint au lancement s’il n’en contient aucune.'}</p>
 
         <h2>Mes plantes : favoris, listes et lieux</h2>
         <p class="muted">

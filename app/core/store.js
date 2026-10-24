@@ -187,14 +187,21 @@ quotaEvents.addEventListener('full', () => store.set({ storageFull: true }));
 // The layout arranged in another tab: this one shows it too (and its next change starts from it).
 onStorage(config.storageKeys.sheetLayout, () => store.set({ sheetLayout: readLayout() }));
 
-/** Stored choice, or null when the user never chose (decided at startup from existing harvests). */
+/** Stored choice, or null when the user never chose (« auto »: it follows the harvests on the device, followHarvests). */
 function readHarvestMode() {
   const value = readText(config.storageKeys.harvestMode);
   return value === null ? null : value === '1';
 }
 
-/** @param {boolean} on */
+/** Chosen during this visit (its write may have been refused: storage full or off — it holds for the visit all the same). */
+let chosenNow = false;
+
+/** The user's own choice (Réglages, a button of the guided discovery's end): kept, never decided again by the app. */
+export const harvestModeChosen = () => chosenNow || readHarvestMode() !== null;
+
+/** The user's choice, kept (only a button that says so calls it). @param {boolean} on */
 export function setHarvestMode(on) {
+  chosenNow = true;
   writeText(config.storageKeys.harvestMode, on ? '1' : '0');
   store.set({ harvestMode: on });
 }
@@ -217,9 +224,14 @@ export function setKingMode(on) {
   store.set({ kingMode: on });
 }
 
-/** First launch with this setting: turn harvest mode on if the device already holds harvests. */
-export function initHarvestMode(/** @type {boolean} */ hasHarvests) {
-  if (readHarvestMode() === null) setHarvestMode(hasHarvests);
+/**
+ * « Auto » (never chosen): off at start, on as soon as the device holds harvests (a place's journal: an import, a
+ * transfer link, the backup copy put back) — followed as they arrive (main.js), never written: a choice stays. Never
+ * turned off during a visit: the last harvest deleted leaves the journal where it is (to note another one); the next
+ * start finds none. @param {boolean} hasHarvests
+ */
+export function followHarvests(hasHarvests) {
+  if (hasHarvests && !harvestModeChosen() && !store.state.harvestMode) store.set({ harvestMode: true });
 }
 
 /** @param {boolean} compact */

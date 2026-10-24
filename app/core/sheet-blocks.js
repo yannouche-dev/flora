@@ -405,16 +405,14 @@ function setTree(view, tree) {
 }
 
 /**
- * A block docked: on a side of a pane (or of the sheet, or of the whole frame: target 'root'), in a pane's
+ * A block docked by the user: on a side of a pane (or of the sheet, or of the whole frame: target 'root'), in a pane's
  * centre (a tab), or among its tabs. A block folded by hand comes back when the user moves it (its service stays as
- * it is: off, the block stays folded); `auto` (a layout the app makes itself, like Découvrir's steps) leaves out a
- * block whose module is off: it is left where it is, and false returned. False too when the layout would be too deep
- * (too many panes nested: pane-tree.js dock refuses what an export could not be imported back from): nothing moves.
+ * it is: off, the block stays folded). False when the layout would be too deep (too many panes nested: pane-tree.js
+ * dock refuses what an export could not be imported back from): nothing moves. (The app never docks into a mode's
+ * layout by itself: Rencontres' guided steps build panes of their own, kit/ma-guided.js.)
  * @param {Mode} view @param {string} key @param {string} target a node's id ('sheet', a pane's id, 'root') @param {Zone} zone
- * @param {{ auto?: boolean }} [options]
  */
-export function dockBlock(view, key, target, zone, { auto = false } = {}) {
-  if (auto && serviceOff(key)) return false;
+export function dockBlock(view, key, target, zone) {
   const before = treeOf(view), after = dock(before, key, target, zone);
   if (after === before) return false;
   if (foldedByHand(view, key)) setHidden(view, key, false);
@@ -431,6 +429,21 @@ export function toSheet(view, key, beforeKey = null) {
     const at = order.indexOf(beforeKey);
     if (at >= 0) { order.splice(at, 0, key); setBlockOrder(view, order); }
   }
+}
+
+/**
+ * Panes the app once docked by itself into a mode's layout (Rencontres' guided steps, before their panes were the
+ * game's: kit/ma-guided.js) back in the sheet: each group of blocks only while a pane holds nothing else, as the
+ * steps left it (a pane the user gave another block stays; a block folded stays folded).
+ * @param {Mode} view @param {string[][]} groups
+ */
+export function undockAlone(view, groups) {
+  let t = treeOf(view);
+  for (const keys of groups) {
+    const pane = keys.map(k => stackOf(t, k)).find(Boolean);
+    if (pane && pane.tabs.every(k => keys.includes(k))) for (const k of pane.tabs) t = undock(t, k);
+  }
+  if (t !== treeOf(view)) setTree(view, t);
 }
 
 /** New shares for a split's children. @param {Mode} view @param {string} id @param {number[]} sizes */

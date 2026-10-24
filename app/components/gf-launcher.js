@@ -37,7 +37,7 @@ function entries() {
     return { key: a.id, app: a, title: a.title, pitch: a.pitch, icon: a.icon, scene: a.scene, here, underWay: here || a.underWay(),
       // « Jouer » opens its start; « Continuer », the step it was left at (the box goes back to the start if that
       // step may no longer be entered).
-      run: () => { a.play?.(); if (!here) openView(href.app(a.id, a.underWay() ? leftAt(a.id) : null)); } };
+      run: () => { if (!here) openView(href.app(a.id, a.underWay() ? leftAt(a.id) : null)); } };
   });
 }
 
@@ -150,7 +150,6 @@ export class GfLauncher extends LitElement {
     } else {
       const { replayApp } = await import('../miniapp/runtime.js');
       await replayApp((await a.load()).default);
-      a.play?.();
       openView(href.app(a.id, 'start'));
     }
     dialog?.close();

@@ -3,7 +3,8 @@
 // each one renders the app's own elements from the context. The contract:
 //  - render(c, app, place) reads only `c` (the context and what is derived), and app.view (the display mode of a
 //    plant sheet, kept by the box in step with the app's);
-//  - it writes only through app.set, app.do or app.go: it never navigates, and listens to nothing global;
+//  - it writes only through app.set, app.do or app.go: it never navigates, and changes nothing global (no mode, no
+//    setting, no layout of the plant sheet) but by a button that says so;
 //  - `reads`: the context keys it reads, declared (checked against the manifest as it loads: define.js#unread);
 //  - `heavy`: a map in it (a separator beside it moves a guide line, not the map, until released);
 //  - `empty(c)`: nothing to show yet (a phone keeps such a sheet closed); `clear`: the patch that empties it.
@@ -16,7 +17,7 @@
 // (ma-faux-amis; its game faux-amis.js).
 
 import { html } from 'lit';
-import { discovering } from '../core/discover.js';
+import { guidedWay } from './kit/around.js';
 import './kit/ma-distance.js';
 import './kit/ma-around-list.js';
 import './kit/ma-guided.js';
@@ -55,14 +56,14 @@ const aroundList = {
 };
 
 /**
- * Rencontres' map: during the first steps, its guided way (map, cards and the plant's panes, one layout across the
- * steps « map » and « cards »); after them, the map and its distance, the list then beside it, as the others.
- * @type {Component}
+ * Rencontres' map: in a game begun during the first steps, its guided way (map, cards and the plant's panes, one
+ * layout across the steps « map » and « cards »: kit/around.js#guidedWay); else the map and its distance, the list then
+ * beside it, as the others. @type {Component}
  */
 const meet = {
-  reads: [...AROUND, 'media', 'sheet'],
+  reads: [...AROUND, 'media', 'sheet', 'guided', 'panes'],
   heavy: true,
-  render: (c, app, p) => discovering() ? html`<ma-guided .app=${app} .c=${c}></ma-guided>` : distance.render(c, app, p)
+  render: (c, app, p) => guidedWay(c) ? html`<ma-guided .app=${app} .c=${c}></ma-guided>` : distance.render(c, app, p)
 };
 
 /** The Parcours, walking: its card, its plants, its search under the thumb, its map (step « walk »). @type {Component} */

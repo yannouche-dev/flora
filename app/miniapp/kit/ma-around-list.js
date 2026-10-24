@@ -25,7 +25,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { icon } from '../../core/icons.js';
 import { hideImg, showImg } from '../../core/img.js';
 import { creditText } from '../../core/credit.js';
-import { discoverEvents, discoverState, discovering, firstMatchShown, plantSeen, PLANTS_BEFORE_FLORE } from '../../core/discover.js';
+import { discoverEvents, discoverState, discovering, firstMatchShown, PLANTS_BEFORE_FLORE } from '../../core/discover.js';
 import { UNREAD_LOOKALIKES } from '../../core/lookalikes.js';
 import { moduleEvents, moduleOn } from '../../core/modules.js';
 import { openModal } from '../../core/history.js';
@@ -247,7 +247,6 @@ export class MaAroundList extends LitElement {
     // The cards of the place and distance chosen (searched unless they are there).
     s.ensure(this.harvest);
     const open = this.#sheetId;
-    if (changed.has('c') && open != null && changed.get('c')?.focus !== this.c.focus) plantSeen(open);
     this.toggleAttribute('opened', open != null);
     // A phone, the photos full screen: on the plant chosen, whatever chose it.
     const chosen = s.chosenId;
