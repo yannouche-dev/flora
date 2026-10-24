@@ -438,26 +438,31 @@ export function observationPointsMany(point, radius, max, signal, periode = null
  * An iNaturalist observation as a point of the map: its plant's photo, never the observation's own (most are under
  * iNaturalist's default licence, CC BY-NC, never shown: the points were leaves but for the plant chosen's) — its
  * taxon's under a free licence, the one its card shows (speciesAround), else the flora's (withThumbs, after the cache).
- * One address a plant, shared by all its points. Its names, date, place and page.
+ * One address a plant, shared by all its points. Its names, date, place and page; how far its point may be from where
+ * the plant was (`obscured`: the observer or the taxon's status hides it, the point drawn at random in a cell of some
+ * 20 km; `accuracy`: the public one, in metres), when iNaturalist says it.
  * @param {any} o @returns {AroundPoint}
  */
 function aroundPoint(o) {
   const url = o.uri || `https://www.inaturalist.org/observations/${o.id}`;
   const taxon = o.taxon?.default_photo?.square_url && inatCredit(o.taxon.default_photo) ? o.taxon.default_photo : null;
   const common = o.taxon?.preferred_common_name || null, sci = o.taxon?.name || '';
+  const accuracy = Number(o.public_positional_accuracy);
   return {
     coordinates: /** @type {[number, number]} */ (o.geojson.coordinates),
     title: common || sci || 'Plante', common, sci, taxonId: o.taxon?.id ?? null,
     photo: taxon ? String(taxon.square_url).replace(/\/(square|thumb|small|medium)\./, '/square.') : null,
     credit: taxon ? inatCredit(taxon) : null,
     date: o.observed_on || null, place: o.place_guess || null,
-    url
+    url,
+    ...(o.obscured === true ? { obscured: true } : {}),
+    ...(accuracy > 0 ? { accuracy } : {})
   };
 }
 
 /**
  * @typedef {{ coordinates: [number, number], title: string, common: string | null, sci: string, taxonId: number | null, photo: string | null,
- *   credit: Credit | null, date: string | null, place: string | null, url: string }} AroundPoint
+ *   credit: Credit | null, date: string | null, place: string | null, url: string, obscured?: boolean, accuracy?: number }} AroundPoint
  */
 
 /** The radius chosen last (Carte → Autour). */

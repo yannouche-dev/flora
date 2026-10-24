@@ -1,13 +1,13 @@
 // @ts-check
 // The list of the ways to play, one card each: the mini-apps (app/miniapps: Rencontres, Parcours botanique, Cueillette
-// prudente, Mosaïque, Faux amis; each one opens alone on the screen, at #/app/<id>) — what each one does and « Jouer ». (Not
+// prudente, Mosaïque, Faux amis, Orchidées de Mirabel; each one opens alone on the screen, at #/app/<id>) — what each one does and « Jouer ». (Not
 // Scientifique: a mode, chosen in the header's switch or in Réglages, not a way to play.) A mini-app with a game under
 // way on this device offers two actions instead: « Continuer » (where it was left: its last step) and « Recommencer »
 // — asked first in a dialog, it empties what the mini-app owns, as its « Rejouer » does (runtime.js#replay, the other
 // tabs too), and opens it at its first step. One list, two places:
 //  - `page`: the Découvrir tab (#/discover, and the start page during the first steps), a page of its own — a title,
 //    each card with its picture (core/scenes.js); cards on a wide screen (at most four a row, as many on each row as
-//    can be: five, three and two — the shorter row centred; two a row on a medium one), a list on a phone; during the first steps, « Passer : montrer toute l'application »;
+//    can be: six, three and three; five, three and two — the shorter row centred; two a row on a medium one), a list on a phone; during the first steps, « Passer : montrer toute l'application »;
 //  - in the launcher's dialog (gf-scenarios, the film icon): compact, an icon each.
 // A card played fires `launched` (the dialog closes on it).
 

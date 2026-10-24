@@ -66,9 +66,14 @@ test('defineMiniApp : chaque règle refuse ce qu’elle doit, en le disant', () 
   assert.match(refused({ ...m, steps: m.steps.map(s => s.id === 'photos' ? { ...s, drop: ['launch'] } : s) }), /drops launch, not there/);
   assert.match(refused({ ...m, steps: m.steps.map(s => s.id === 'around' ? { ...s, next: 'map' } : s) }), /loop back/);
   assert.match(refused({ ...m, context: { ...m.context, focusId: { init: null } } }), /both in context and derive/);
-  // What it owns: storage keys of the app only.
+  // What it owns: storage keys of the app only; its session in words.
   assert.match(refused({ ...m, owns: { keys: ['favorites'] } }), /owns.keys/);
   assert.match(refused({ ...m, owns: { reset: 'all' } }), /owns.reset/);
+  assert.match(refused({ ...m, owns: { label: ' ' } }), /owns.label/);
+  // The plant over its start screen: simple or not, its ← in words.
+  assert.match(refused({ ...m, plantSheet: { simple: 'oui' } }), /plantSheet/);
+  assert.match(refused({ ...m, plantSheet: { back: '' } }), /plantSheet/);
+  assert.deepEqual(defineMiniApp({ ...m, plantSheet: { simple: true, back: 'Fermer la fiche' } }).plantSheet, { simple: true, back: 'Fermer la fiche' });
 });
 
 test('defineMiniApp : une application portée en entier (driven) dessine son départ par son composant', () => {

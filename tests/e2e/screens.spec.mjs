@@ -4,7 +4,7 @@ import { readdirSync } from 'node:fs';
 import { test, expect, plantId } from './fixtures.mjs';
 
 const ROUTES = ['#/', '#/?q=ortie', `#/plant/${plantId('Urtica dioica')}`, '#/discover', '#/discover?s=harvest', '#/discover?s=trail', '#/app/rencontres', '#/app/parcours', '#/app/cueillette', '#/app/mosaique', '#/app/faux-amis',
-  '#/map', '#/collections', '#/settings', '#/legal'];
+  '#/app/orchidees', '#/map', '#/collections', '#/settings', '#/legal'];
 
 test('chaque écran s’ouvre et montre quelque chose (visiteur habitué)', async ({ app, page }) => {
   await app.open('#/');

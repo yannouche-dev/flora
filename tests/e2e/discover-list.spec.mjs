@@ -7,7 +7,7 @@ import { test, expect, plantId, answerAround } from './fixtures.mjs';
 test.use({ reducedMotion: 'reduce' });
 test.beforeEach(({ context }) => answerAround(context));
 
-const ORDER = ['Rencontres', 'Parcours botanique', 'Cueillette prudente', 'Mosaïque', 'Faux amis'];
+const ORDER = ['Rencontres', 'Parcours botanique', 'Cueillette prudente', 'Mosaïque', 'Faux amis', 'Orchidées de Mirabel'];
 /** @param {import('@playwright/test').Page} page */
 const hash = page => page.evaluate(() => location.hash);
 /** The page's list (not the launcher's dialog). @param {import('@playwright/test').Page} page */
@@ -28,14 +28,15 @@ test('l’onglet Découvrir montre la liste ; « Jouer » ouvre Rencontres, « Q
   // Not Rencontres by itself: no start screen of a game here.
   await expect(page.getByRole('heading', { name: 'Rencontrez les plantes d’ici' })).toHaveCount(0);
   // Each card: its picture, its pitch, one action named after it.
-  await expect(list(page).locator('li .pic')).toHaveCount(5);
-  // Rows as even as can be, never a card alone: three and two on a desktop (the shorter row centred), one a row on a phone.
+  await expect(list(page).locator('li .pic')).toHaveCount(6);
+  // Rows as even as can be, never a card alone: three and three on a desktop (a shorter row centred), one a row on a phone.
   const boxes = await list(page).locator('ul > li').evaluateAll(els => els.map(el => { const r = el.getBoundingClientRect(); return { x: r.x, y: Math.round(r.y), w: r.width }; }));
   const rows = [...new Set(boxes.map(b => b.y))].map(y => boxes.filter(b => b.y === y));
-  if (app.phone) expect(rows.map(r => r.length)).toEqual([1, 1, 1, 1, 1]);
+  if (app.phone) expect(rows.map(r => r.length)).toEqual([1, 1, 1, 1, 1, 1]);
   else {
-    expect(rows.map(r => r.length)).toEqual([3, 2]);
-    const left = rows[0][0].x, right = rows[0][2].x + rows[0][2].w, l2 = rows[1][0].x, r2 = rows[1][1].x + rows[1][1].w;
+    expect(rows.map(r => r.length)).toEqual([3, 3]);
+    const last = rows[1][rows[1].length - 1];
+    const left = rows[0][0].x, right = rows[0][2].x + rows[0][2].w, l2 = rows[1][0].x, r2 = last.x + last.w;
     expect(Math.abs((l2 - left) - (right - r2))).toBeLessThan(2);
   }
   await expect(list(page).getByRole('button', { name: 'Jouer : Scientifique' })).toHaveCount(0);

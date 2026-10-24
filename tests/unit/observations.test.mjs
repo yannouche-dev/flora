@@ -97,10 +97,11 @@ const north = (c, m) => [c[0], c[1] + m / (6371008.8 * Math.PI / 180)];
  * The services of a zone answered: iNaturalist's observations (the ivy and the nettle, twice; taxa 60 and 50), GBIF's
  * occurrences as GBIF answers (`gbif`: its records, as GBIF writes them — none with limit=0, those of the datasets asked
  * only; its datasets counted when asked, iNaturalist's copy among them, unless `noFacets`), anything else 503 (`down`:
- * those hosts too). `asked`: the addresses.
- * @param {string[]} asked @param {{ gbif?: any[], count?: number, facets?: { name: string, count: number }[], noFacets?: boolean, down?: string[] }} [o]
+ * those hosts too). `inat`: more of iNaturalist's observations, by their id (obscured, their accuracy). `asked`: the addresses.
+ * @param {string[]} asked
+ * @param {{ gbif?: any[], count?: number, facets?: { name: string, count: number }[], noFacets?: boolean, down?: string[], inat?: Record<number, any> }} [o]
  */
-function answerZone(asked, { gbif = [], count = gbif.length, facets = [], noFacets = false, down = [] } = {}) {
+function answerZone(asked, { gbif = [], count = gbif.length, facets = [], noFacets = false, down = [], inat = {} } = {}) {
   const json = (/** @type {any} */ body) => new Response(JSON.stringify(body), { status: 200, headers: { 'content-type': 'application/json' } });
   return async (/** @type {string | URL | Request} */ input) => {
     const url = new URL(String(input instanceof Request ? input.url : input));
@@ -110,7 +111,7 @@ function answerZone(asked, { gbif = [], count = gbif.length, facets = [], noFace
       const c = /** @type {[number, number]} */ ([Number(url.searchParams.get('lng')), Number(url.searchParams.get('lat'))]);
       const IVY = { id: 60, name: 'Hedera helix', preferred_common_name: 'Lierre' }, NETTLE = { id: 50, name: 'Urtica dioica', preferred_common_name: 'Ortie dioïque' };
       const row = (/** @type {number} */ id, /** @type {any} */ taxon, /** @type {number} */ m, /** @type {string} */ date) =>
-        ({ id, uri: `https://www.inaturalist.org/observations/${id}`, geojson: { type: 'Point', coordinates: north(c, m) }, observed_on: date, place_guess: 'Royat', taxon });
+        ({ id, uri: `https://www.inaturalist.org/observations/${id}`, geojson: { type: 'Point', coordinates: north(c, m) }, observed_on: date, place_guess: 'Royat', taxon, ...inat[id] });
       return json({ total_results: 3, results: [row(901, IVY, 100, '2026-05-02'), row(902, NETTLE, 200, '2026-05-04'), row(903, NETTLE, 300, '2026-04-30')] });
     }
     if (url.host === 'api.gbif.org' && url.pathname === '/v1/occurrence/search') {
@@ -227,6 +228,53 @@ test('GBIF en deux temps : sans facette, une page comme avant (la copie écarté
   assert.deepEqual(head.getAll('datasetKey').sort(), [INAT_DATASET, 'cbn'].sort());
   assert.deepEqual(occ.getAll('datasetKey'), ['cbn']);
   assert.deepEqual([chosen.points.map(p => p.id), chosen.totals.gbif], [['g4'], 20]);
+});
+
+test('un groupe de plantes seul (une famille : les orchidées) : chaque source le reçoit dans ses numéros, sa réponse gardée à part de celle des plantes', async t => {
+  const fetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = fetch; });
+  /** @type {string[]} */ const asked = [];
+  const c = /** @type {[number, number]} */ ([3.111, 45.869]);
+  globalThis.fetch = /** @type {any} */ (answerZone(asked, { gbif: [occurrence(c, 1, 'Bellis perennis', 400)], count: 1, facets: [{ name: 'cbn', count: 1 }] }));
+  const f = filters({ sources: ['inat', 'gbif'], qualite: 'toutes' });
+  await zoneObservations(c, 500, { filters: f, taxon: { inat: 47217, gbif: 7689 } });
+  const inat = new URL(/** @type {string} */ (asked.find(u => u.includes('api.inaturalist.org/v1/observations?')))).searchParams;
+  assert.deepEqual([inat.get('taxon_id'), inat.get('iconic_taxa'), inat.get('quality_grade')], ['47217', 'Plantae', null]);
+  const gbif = asked.filter(u => u.includes('api.gbif.org')).map(u => new URL(u).searchParams.get('taxonKey'));
+  assert.ok(gbif.length === 2 && gbif.every(k => k === '7689'), 'ses deux requêtes');
+  // The same circle for every plant: asked anew (not the orchids' answer), taxonKey=6 as always.
+  asked.length = 0;
+  await zoneObservations(c, 500, { filters: f });
+  assert.equal(new URL(/** @type {string} */ (asked.find(u => u.includes('api.inaturalist.org/v1/observations?')))).searchParams.get('taxon_id'), null);
+  assert.deepEqual(asked.filter(u => u.includes('api.gbif.org')).map(u => new URL(u).searchParams.get('taxonKey')), ['6', '6']);
+});
+
+test('un lieu (un petit cercle) : seuls les points où était la plante, ceux masqués ou plus larges que le cercle comptés à part ; un genre ou une famille de GBIF nommés sans leur auteur', async t => {
+  const fetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = fetch; });
+  /** @type {string[]} */ const asked = [];
+  const c = /** @type {[number, number]} */ ([3.2, 45.7]);
+  const above = (/** @type {number} */ key, /** @type {string} */ rank, /** @type {string} */ sci, /** @type {number} */ m) =>
+    ({ ...occurrence(c, key, '', m, { taxonRank: rank, genus: 'Ophrys', family: 'Orchidaceae', scientificName: sci }), species: undefined });
+  globalThis.fetch = /** @type {any} */ (answerZone(asked, {
+    // The nettle 902 obscured (a point at random in its cell), the ivy 901 within 30 m; GBIF's daisy 2 within 5 km,
+    // its daisy 3 within 200 m, an Ophrys and an orchid named by their genus and their family only.
+    inat: { 902: { obscured: true, public_positional_accuracy: 28000 }, 901: { public_positional_accuracy: 30 } },
+    gbif: [occurrence(c, 1, 'Bellis perennis', 100), occurrence(c, 2, 'Bellis perennis', 150, { coordinateUncertaintyInMeters: 5000 }),
+      occurrence(c, 3, 'Bellis perennis', 120, { coordinateUncertaintyInMeters: 200 }), above(4, 'GENUS', 'Ophrys L.', 180), above(5, 'FAMILY', 'Orchidaceae Juss.', 190)],
+    facets: [{ name: 'cbn', count: 5 }]
+  }));
+  const f = filters({ sources: ['inat', 'gbif'], qualite: 'toutes' });
+  const site = await zoneObservations(c, 500, { filters: f, precise: true });
+  assert.deepEqual(site.points.map(p => p.id).sort(), ['g1', 'g3', 'g4', 'g5', 'i901', 'i903']);
+  assert.equal(site.vague, 2, 'the obscured nettle, the daisy within 5 km');
+  assert.deepEqual(['g4', 'g5'].map(id => site.points.find(p => p.id === id)?.sci), ['Ophrys', 'Orchidaceae']);
+  // Every point as before without it (the layouts' maps): none left out, none counted.
+  const all = await zoneObservations(c, 500, { filters: f });
+  assert.deepEqual([all.points.length, 'vague' in all], [8, false]);
+  // A circle wider than the daisy's 5 km: it is in it; the obscured nettle never.
+  const wide = await zoneObservations(c, 10000, { filters: f, precise: true });
+  assert.deepEqual([wide.points.some(p => p.id === 'g2'), wide.points.some(p => p.id === 'i902'), wide.vague], [true, false, 1]);
 });
 
 test('une source en panne : dite, les autres montrées ; toutes en panne : une erreur qui dit chacune ; un module coupé : dit comme tel', async t => {

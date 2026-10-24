@@ -114,9 +114,44 @@ const twins = () => svg`
   ${loose(272, 140, 'leaf', 'var(--leaf)', 18, 0.6, 20)}
   ${loose(268, 30, 'leaf-fill', 'var(--leaf2)', 15, 1.1, 25, 'fly')}`;
 
-const SCENES = { trail, meet, harvest, mosaic, twins };
+/**
+ * An orchid on a sticker (no icon draws one): its dorsal sepal up, the two lateral ones down the sides, two petals
+ * beside the column, and its lip below, in `lip`. @param {number} x @param {number} y @param {string} bg @param {string} lip
+ * @param {number} [r] @param {number} [d] @param {number} [tilt]
+ */
+const orchid = (x, y, bg, lip, r = 16, d = 0, tilt = 0) => svg`<g transform="translate(${x} ${y}) rotate(${tilt})">
+  <g class="pop" style="--d:${d}s"><g class="float" style="--f:${(x * 7 + y * 3) % 5 / 10 + 2.6}s">
+    <circle cx="2.2" cy="2.6" r=${r} fill="var(--shade)"/>
+    <circle r=${r} fill=${bg} stroke="var(--rim)" stroke-width="2.2"/>
+    <g transform="scale(${r / 16})">
+      ${[0, 128, 232].map(a => svg`<ellipse cy="-6.2" rx="2.6" ry="6" fill="#fff" transform="rotate(${a})"/>`)}
+      ${[-62, 62].map(a => svg`<ellipse cy="-4.6" rx="2.2" ry="4.6" fill="#fff" opacity="0.85" transform="rotate(${a})"/>`)}
+      <path d="M-3.6 0.6 C -6 6 -3.4 11 0 11 C 3.4 11 6 6 3.6 0.6 Z" fill=${lip} stroke="#fff" stroke-width="0.9"/>
+      <circle r="1.9" fill="#fff"/>
+    </g>
+  </g></g></g>`;
+
+/** A hill, its foot a little higher on the left: the colline de Mirabel. */
+const HILL = 'M0 164 C 52 160 88 98 160 86 C 226 96 270 150 320 156 L 320 190 L 0 190 Z';
+const UPHILL = 'M44 182 C 92 176 106 150 132 128 S 156 100 160 92';
+
+/** Les orchidées de la colline de Mirabel: a hill and its trail up to a pin, orchids in flower on its slopes, a sign by the trail. */
+const orchids = () => svg`
+  <path d=${HILL} fill="var(--ground)"/>
+  ${loose(44, 34, 'sun-fill', 'var(--sun)', 28, 0.1, 0, 'spin')}
+  ${loose(266, 30, 'cloud-fill', 'var(--cloud)', 32, 0.2)}
+  <path class="dots" d=${UPHILL}/>
+  ${sticker(160, 62, 'geo-alt-fill', 'var(--green)', 15, 0.25)}
+  ${orchid(100, 118, 'var(--violet)', 'var(--pink)', 17, 0.4, -8)}
+  ${orchid(218, 112, 'var(--pink)', 'var(--violet)', 16, 0.6, 8)}
+  ${orchid(262, 158, 'var(--violet)', 'var(--sun)', 12, 0.8, 4)}
+  ${sticker(56, 150, 'signpost-split-fill', 'var(--sun)', 13, 0.95, 'var(--ink-dark)', -6)}
+  ${loose(178, 150, 'leaf-fill', 'var(--leaf)', 16, 1.05, 20)}
+  ${loose(138, 172, 'leaf', 'var(--leaf2)', 14, 1.15, -25)}`;
+
+const SCENES = { trail, meet, harvest, mosaic, twins, orchids };
 const LABELS = { trail: 'Un chemin parmi les fleurs', meet: 'Des cartes de plantes et un cœur', harvest: 'Un panier et ce qui se cueille', mosaic: 'Une mosaïque de photos de plantes',
-  twins: 'Deux plantes qui se ressemblent et une ampoule' };
+  twins: 'Deux plantes qui se ressemblent et une ampoule', orchids: 'Une colline et son sentier, des orchidées en fleur' };
 
 /** The picture of a scenario (Rencontres for one without its own). @param {string} kind */
 export const scene = kind => {

@@ -9,9 +9,11 @@
 //   OBS_DEFAULTS, readObsFilters(params), obsParams(filters), obsKey(filters): the filters and the address (sources=,
 //     qualite=, taxon=, photos=, sauvages=, jeux=);
 //   inatQuery(f), gbifQuery(f, periode), gbifKeep(record, f), APPLIES: what each source does of each filter;
-//   zoneObservations(center, radius, { filters, periode, signal }) → { points, totals, failed, datasets } (every source
-//     failing: an ObsError, which says each one's failure) — GBIF asked in two requests, its datasets first, then their
-//     occurrences (never its copy of iNaturalist's); sourcesText(sources), failedText(failed), obsNotes(counts): in words.
+//   zoneObservations(center, radius, { filters, periode, taxon, precise, signal }) → { points, totals, failed, datasets }
+//     (every source failing: an ObsError, which says each one's failure) — GBIF asked in two requests, its datasets
+//     first, then their occurrences (never its copy of iNaturalist's); `taxon`: one group of plants only (a family:
+//     Orchidaceae), in each source's own numbers; `precise`: only the points that are where the plant was, at this
+//     radius (the others counted: `vague`); sourcesText(sources), failedText(failed), obsNotes(counts): in words.
 // The filters and their translation are pure, tested under Node (tests/unit/observations.test.mjs).
 
 import * as cache from './cache.js';
@@ -27,7 +29,10 @@ import { FREE_MEDIA } from '../../lib/plant-sources.mjs';
  * @typedef {{ sources: ObsSource[], qualite: ObsQuality, taxon: 'tous' | 'espece', photos: 'toutes' | 'avec' | 'libre', sauvages: boolean, jeux: string[] }} ObsFilters
  * @typedef {import('./around3d.js').Obs3d} Obs
  * @typedef {{ name: string, off: boolean }} ObsFailure  a source that did not answer (`off`: its module is)
- * @typedef {{ points: Obs[], totals: { inat: number | null, gbif: number | null }, failed: ObsFailure[], datasets: { key: string, count: number }[] }} ObsResult
+ * @typedef {{ points: Obs[], totals: { inat: number | null, gbif: number | null }, failed: ObsFailure[], datasets: { key: string, count: number }[],
+ *   vague?: number }} ObsResult   `vague` (asked `precise`): the points of the circle left out, their position hidden or too rough
+ * @typedef {{ inat: number, gbif: number }} ObsTaxon  a group of plants in each source's numbers: iNaturalist's taxon, GBIF's
+ *   Backbone key (Orchidaceae: 47217, 7689) — what is under it asked, nothing else
  */
 
 /** The sources, in their order, and their names. */
@@ -227,22 +232,32 @@ const clip = (v, max) => {
 const GBIF_DATASETS = 50;
 
 /**
+ * A record's name: its species' (GBIF's `species`, without its author), else a genus or a family by its own name
+ * (« Ophrys », not « Ophrys L. »: as iNaturalist names it, one group whichever source saw it), else GBIF's.
+ * @param {{ species?: string, genus?: string, family?: string, taxonRank?: string, scientificName?: string }} o
+ */
+const gbifName = o => o.species || (o.taxonRank === 'GENUS' && o.genus) || (o.taxonRank === 'FAMILY' && o.family) || o.scientificName || '';
+
+/**
  * GBIF's plant occurrences in the circle, as the filters say, cached a day — in two requests: the zone's count and its
  * datasets first (counted as if none were chosen), then the occurrences of the datasets chosen, else of every one of
  * the zone but GBIF's copy of iNaturalist's (never its records in GBIF's page of 300: they are iNaturalist's own, asked
  * of it). An answer without the facet (an older GBIF): one page as before, the copy left out after. What the filters
- * need of each record is kept (rank, media, establishment), the rest left.
+ * need of each record is kept (rank, media, establishment), and how far its point may be from where the plant was (its
+ * coordinate uncertainty), the rest left. `taxon`: the plants under GBIF's key only (else every plant: taxonKey=6).
  * @param {[number, number]} center @param {number} radius @param {ObsFilters} f @param {string | null} periode @param {AbortSignal} [signal]
+ * @param {ObsTaxon | null} [taxon]
  * @returns {Promise<{ points: Obs[], total: number, datasets: { key: string, count: number }[] }>}
  */
-async function gbifZone([lon, lat], radius, f, periode, signal) {
+async function gbifZone([lon, lat], radius, f, periode, signal, taxon = null) {
   if (!moduleOn('gbif')) throw new ModuleOffError('gbif');
   const where = `${lat.toFixed(4)},${lon.toFixed(4)},${(radius / 1000).toFixed(2)}km`;
   const query = gbifQuery(f, periode);
-  const base = 'https://api.gbif.org/v1/occurrence/search?taxonKey=6&hasCoordinate=true&hasGeospatialIssue=false&occurrenceStatus=PRESENT'
+  const base = `https://api.gbif.org/v1/occurrence/search?taxonKey=${taxon?.gbif ?? 6}&hasCoordinate=true&hasGeospatialIssue=false&occurrenceStatus=PRESENT`
     + `&geoDistance=${encodeURIComponent(where)}`;
-  // « around-zone… »: forgotten with the zone's other failures (layout/state.js retryScope); « gbif2 »: in two requests.
-  const found = await cache.cached(`around-zone-gbif2:${where}${query}`, async () => {
+  // « around-zone… »: forgotten with the zone's other failures (layout/state.js retryScope); « gbif2 »: in two requests;
+  // a group of plants, its key in it (the plants' answer kept apart).
+  const found = await cache.cached(`around-zone-gbif2:${where}${query}${taxon ? '|t' + taxon.gbif : ''}`, async () => {
     const head = await fetchJson(`${base}${query}&limit=0&facet=datasetKey&facetMultiselect=true&datasetKey.facetLimit=${GBIF_DATASETS}`,
       { signal, expect: d => typeof d.count === 'number' });
     const facet = (Array.isArray(head.facets) ? head.facets : []).find((/** @type {any} */ x) => /dataset/i.test(String(x?.field)));
@@ -258,7 +273,8 @@ async function gbifZone([lon, lat], radius, f, periode, signal) {
     for (const o of data.results) {
       if (typeof o.decimalLatitude !== 'number' || typeof o.decimalLongitude !== 'number' || o.datasetKey === INAT_DATASET) continue;
       records.push({
-        key: o.key, coordinates: [o.decimalLongitude, o.decimalLatitude], sci: clip(o.species || o.scientificName, 120), common: clip(o.vernacularName, 80) || null,
+        key: o.key, coordinates: [o.decimalLongitude, o.decimalLatitude], sci: clip(gbifName(o), 120), common: clip(o.vernacularName, 80) || null,
+        uncertainty: Number(o.coordinateUncertaintyInMeters) > 0 ? Number(o.coordinateUncertaintyInMeters) : null,
         taxonRank: o.taxonRank || null, establishmentMeans: o.establishmentMeans || null, degreeOfEstablishment: o.degreeOfEstablishment || null,
         media: (Array.isArray(o.media) ? o.media : []).slice(0, 6).map((/** @type {any} */ m) => ({ type: m?.type || null, license: m?.license || null })),
         date: o.eventDate ? String(o.eventDate).slice(0, 10) : null, place: clip(o.locality || o.municipality || o.county, 80) || null,
@@ -273,7 +289,8 @@ async function gbifZone([lon, lat], radius, f, periode, signal) {
   /** @type {Obs[]} */
   const points = found.records.filter(r => gbifKeep(/** @type {any} */ (r), f)).map(r => ({
     id: 'g' + r.key, kind: 'gbif', coordinates: /** @type {[number, number]} */ (r.coordinates), title: r.common || r.sci || 'Plante', common: r.common, sci: r.sci,
-    taxonId: null, photo: null, credit: null, date: r.date, place: r.place, source: r.source, url: r.key ? `https://www.gbif.org/occurrence/${r.key}` : null
+    taxonId: null, photo: null, credit: null, date: r.date, place: r.place, source: r.source, url: r.key ? `https://www.gbif.org/occurrence/${r.key}` : null,
+    ...(r.uncertainty ? { accuracy: r.uncertainty } : {})
   }));
   return { points, total: found.total, datasets: found.datasets };
 }
@@ -288,12 +305,16 @@ const SAME_SPOT = 25;
  * most recent, GBIF's (300) — its copy of iNaturalist's left out, and any of its records that is an iNaturalist
  * observation already (the same plant, the same day, within 25 m) —, GBIF's given the photo and name its plant has on
  * iNaturalist here (else the flora's), all in the circle, the most recent first. A source that fails is said
- * (`failed`); every one failing, an ObsError thrown (each one's failure).
+ * (`failed`); every one failing, an ObsError thrown (each one's failure). `taxon`: one group of plants only (an
+ * activity's: the orchids of a site), each source asked for it in its own numbers. `precise` (a small circle: a site):
+ * only the points that are where the plant was — iNaturalist's hidden ones (obscured: drawn at random in a cell of some
+ * 20 km, wherever the plant was) and any whose accuracy is wider than the circle left out, counted (`vague`); a point
+ * that says nothing of it kept.
  * @param {[number, number]} center @param {number} radius
- * @param {{ filters: ObsFilters, periode?: string | null, max?: number, signal?: AbortSignal }} o
+ * @param {{ filters: ObsFilters, periode?: string | null, max?: number, taxon?: ObsTaxon | null, precise?: boolean, signal?: AbortSignal }} o
  * @returns {Promise<ObsResult>}
  */
-export async function zoneObservations(center, radius, { filters: f, periode = null, max = 1000, signal }) {
+export async function zoneObservations(center, radius, { filters: f, periode = null, max = 1000, taxon = null, precise = false, signal }) {
   const useInat = f.sources.includes('inat'), useGbif = f.sources.includes('gbif');
   /** @type {ObsFailure[]} */ const failed = [];
   /** @type {unknown} */ let first;
@@ -304,8 +325,8 @@ export async function zoneObservations(center, radius, { filters: f, periode = n
     return null;
   };
   const [inat, gbif] = await Promise.all([
-    useInat ? observationPointsMany(center, radius, max, signal, periode, inatQuery(f)).catch(fail('inat')) : null,
-    useGbif ? gbifZone(center, radius, f, periode, signal).catch(fail('gbif')) : null
+    useInat ? observationPointsMany(center, radius, max, signal, periode, inatQuery(f) + (taxon ? '&taxon_id=' + taxon.inat : '')).catch(fail('inat')) : null,
+    useGbif ? gbifZone(center, radius, f, periode, signal, taxon).catch(fail('gbif')) : null
   ]);
   if (!inat && !gbif) throw new ObsError(failed, first);
   /** @type {Obs[]} */
@@ -324,10 +345,13 @@ export async function zoneObservations(center, radius, { filters: f, periode = n
     points.push(...await floraPhotos(shared, { names: true }));
   }
   points.sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? '')));
+  const all = inCircle(points, center, radius);
+  const kept = precise ? all.filter(p => !p.obscured && !((p.accuracy ?? 0) > radius)) : all;
   return {
-    points: inCircle(points, center, radius),
+    points: kept,
     totals: { inat: inat ? inat.total : null, gbif: gbif ? gbif.total : null },
     failed,
-    datasets: gbif?.datasets ?? []
+    datasets: gbif?.datasets ?? [],
+    ...(precise ? { vague: all.length - kept.length } : {})
   };
 }
