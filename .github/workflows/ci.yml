@@ -126,8 +126,8 @@ jobs:
     # end-to-end specs (@playwright/test, tests/e2e) on a phone (390 px) and a desktop (1280 px), on the reduced flora
     # of tests/fixtures, every outside service answered by the tests.
     runs-on: ubuntu-24.04
-    # Above its end-to-end step's own 25 minutes (the suite takes about 19 on a usual runner).
-    timeout-minutes: 30
+    # Above its end-to-end step's own 40 minutes (the suite takes about 27 on a usual runner, the 3D ones the longest).
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -152,7 +152,7 @@ jobs:
 
       # The specs start their own static server (python3 -m http.server, tests/e2e/playwright.config.mjs).
       - name: End-to-end tests (phone and desktop)
-        timeout-minutes: 25
+        timeout-minutes: 40
         run: npm run test:e2e
 
       # The traces of the tests that failed (a timeline, the DOM and the network at each step).
