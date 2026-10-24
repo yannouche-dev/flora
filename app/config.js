@@ -49,7 +49,9 @@ export const config = {
     appPrefix: 'geoflora.app.',
     lastExport: 'geoflora.lastExport',
     hasSpots: 'geoflora.hasSpots',
-    harvestMode: 'geoflora.harvestMode',
+    // The harvest mode as the user set it ('1', '0'; none: « auto », core/store.js). Its key before,
+    // geoflora.harvestMode, the app wrote by itself too (obsoleteKeys).
+    harvestMode: 'geoflora.harvestModeChoice',
     recentPlants: 'geoflora.recentPlants',
     backup: 'geoflora.backup',
     // « Réparer le stockage » erased the database: the backup copy is held (never rewritten) until it is put back.
@@ -97,9 +99,11 @@ export const config = {
 
   /**
    * Keys of settings the app no longer has, removed at start (core/prefs.js#forgetObsolete): the plant sheet's own
-   * mode (it follows the app's), the one-tap target of the Épuré sheet (never read).
+   * mode (it follows the app's), the one-tap target of the Épuré sheet (never read), the harvest mode as the app
+   * once wrote it by itself — at the first launch, or as Cueillette prudente began — never told from the user's own
+   * choice: « auto » again (storageKeys.harvestMode).
    */
-  obsoleteKeys: ['geoflora.plantView', 'geoflora.target'],
+  obsoleteKeys: ['geoflora.plantView', 'geoflora.target', 'geoflora.harvestMode'],
 
   /**
    * The keys of the panes' widths (core/panes.js), one per screen: the first steps (core/discover.js) never read

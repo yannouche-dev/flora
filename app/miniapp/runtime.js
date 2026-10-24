@@ -7,12 +7,14 @@
 //    added after it goes away), to one that follows the last goes on, to another one takes the shortest way there.
 //    A step whose can(c) is false is not entered.
 //  - With the steps bar (guided): a step whose done(c) comes true goes on to the next by itself. Without it, the
-//    start leads straight to m.full.
-//  - Kept under geoflora.app.<id>.state: { v, path, ctx (the persist keys), finished }, written 300 ms after a change.
-//    The start is always shown first; the path kept is offered as « Reprendre ».
+//    start leads straight to m.full. The bar is the setting of all (Réglages › Premiers pas), unless the mini-app's
+//    ⋯ menu chose for it alone (`ownSteps`, kept with its game).
+//  - Kept under geoflora.app.<id>.state: { v, path, ctx (the persist keys), finished, ownSteps? }, written 300 ms
+//    after a change. The start is always shown first; the path kept is offered as « Reprendre ».
 //  - Events: 'change' (anything to render again), 'navigate' (detail { step, replace? }: a step reached, for the
-//    address), 'exit' (the way out asked), 'scenarios' (the launcher asked for, over the app), 'dispose' (the box
-//    gone: a component's game stops its requests and timers).
+//    address), 'exit' (the way out asked), 'scenarios' (the launcher asked for, over the app), 'seen' (detail: a
+//    plant's id — a card swiped, a plant noted, a new plant opened or chosen, the context's `focus`: the box counts it
+//    for the first steps of the app), 'dispose' (the box gone: a component's game stops its requests and timers).
 
 import { config } from '../config.js';
 import { MODULES, moduleOn } from '../core/modules.js';
@@ -26,7 +28,8 @@ import { layoutAt } from './layout.js';
  * @typedef {import('./define.js').Manifest} Manifest
  * @typedef {import('./define.js').Step} Step
  * @typedef {import('../core/store.js').ShowSteps} ShowSteps
- * @typedef {{ v: number, path: string[], ctx: Record<string, unknown>, finished: boolean }} Saved
+ * @typedef {'on' | 'off'} OwnSteps   the steps bar, as this mini-app's ⋯ menu chose it
+ * @typedef {{ v: number, path: string[], ctx: Record<string, unknown>, finished: boolean, ownSteps?: OwnSteps }} Saved
  */
 
 /** Storage key of a mini-app's state, or of its layout. @param {string} id @param {'state' | 'layout'} part */
@@ -67,10 +70,11 @@ export async function replayApp(m) {
 }
 
 /**
- * The steps bar shown? 'on': always; 'off': never; 'auto': until the mini-app was finished once.
- * @param {ShowSteps} showSteps @param {boolean} finished
+ * The steps bar shown? The mini-app's own choice (`own`, its ⋯ menu), else the setting of all: 'on' always; 'off'
+ * never; 'auto' until the mini-app was finished once.
+ * @param {ShowSteps} showSteps @param {boolean} finished @param {OwnSteps | null} [own]
  */
-export const guided = (showSteps, finished) => showSteps === 'on' || (showSteps === 'auto' && !finished);
+export const guided = (showSteps, finished, own = null) => own ? own === 'on' : showSteps === 'on' || (showSteps === 'auto' && !finished);
 
 /**
  * The path that reaches `target` from `path`: back to it, one step on, or the shortest way from the start; null
@@ -112,6 +116,8 @@ export class MiniApp extends EventTarget {
     /** The path kept from the last visit, offered as « Reprendre ». @type {string[]} */
     this.savedPath = Array.isArray(saved?.path) ? saved.path.filter((/** @type {unknown} */ s) => typeof s === 'string') : [];
     this.finished = saved?.finished === true;
+    /** The steps bar as its ⋯ menu chose it, for it alone (null: the setting of all). @type {OwnSteps | null} */
+    this.ownSteps = saved?.ownSteps === 'on' || saved?.ownSteps === 'off' ? saved.ownSteps : null;
     /** @type {string[]} */
     this.path = [m.steps[0].id];
     /** The last action or data load that failed, said on screen. @type {string | null} */
@@ -127,6 +133,8 @@ export class MiniApp extends EventTarget {
     this.generation = 0;
     /** The display mode of a plant sheet in it (kept by the box in step with the app's). */
     this.view = 'standard';
+    /** The last plant opened or chosen (the context's `focus`) said `seen`: the one kept with the game already was. */
+    this.#focusSeen = this.c.focus ?? null;
     this.ctx.subscribe(() => this.#changed());
     this.#load();
   }
@@ -141,10 +149,24 @@ export class MiniApp extends EventTarget {
   }
 
   /** The steps bar shown. */
-  get guided() { return guided(this.showSteps, this.finished); }
+  get guided() { return guided(this.showSteps, this.finished, this.ownSteps); }
 
-  /** What the steps walked have put on the screen. */
-  get layout() { return layoutAt(this.m, this.path); }
+  /**
+   * « Afficher / Masquer les étapes » of its ⋯ menu: for this mini-app alone, kept with its game (« Rejouer » forgets
+   * it) — never the setting of all. The same as that setting gives: no choice of its own. @param {boolean} on
+   */
+  setOwnSteps(on) {
+    this.ownSteps = null;
+    if (this.guided !== on) this.ownSteps = on ? 'on' : 'off';
+    this.#save();
+    this.#emit('change');
+  }
+
+  /** A plant seen in it (a card swiped, a plant noted in a walk): told to the box. @param {number} id */
+  seen(id) { this.#emit('seen', id); }
+
+  /** What the steps walked have put on the screen (a place's `when` reads the context). */
+  get layout() { return layoutAt(this.m, this.path, this.c); }
 
   /** @param {Record<string, unknown>} patch */
   set(patch) { this.ctx.set(patch); }
@@ -241,6 +263,7 @@ export class MiniApp extends EventTarget {
     this.running.clear();
     this.savedPath = [];
     this.finished = false;
+    this.ownSteps = null;
     this.error = null;
     this.path = [this.m.steps[0].id];
     this.generation++;
@@ -295,16 +318,18 @@ export class MiniApp extends EventTarget {
     };
   }
 
-  /** What is kept: the path, the persist keys, finished once. @returns {Saved} */
-  saved() { return { v: this.m.version, path: this.path, ctx: this.ctx.persisted(), finished: this.finished }; }
+  /** What is kept: the path, the persist keys, finished once, the steps bar of its own. @returns {Saved} */
+  saved() {
+    return { v: this.m.version, path: this.path, ctx: this.ctx.persisted(), finished: this.finished, ...(this.ownSteps ? { ownSteps: this.ownSteps } : {}) };
+  }
 
   /**
-   * Nothing to keep: at its start, its context as it starts, never finished — as if never opened (no state written:
-   * after « Rejouer », the app leaves nothing behind).
+   * Nothing to keep: at its start, its context as it starts, never finished, no steps bar of its own — as if never
+   * opened (no state written: after « Rejouer », the app leaves nothing behind).
    */
   get pristine() {
     const ctx = this.ctx.persisted();
-    return this.path.length === 1 && !this.finished
+    return this.path.length === 1 && !this.finished && this.ownSteps === null
       && Object.entries(ctx).every(([k, v]) => JSON.stringify(v) === JSON.stringify(this.m.context[k].init));
   }
 
@@ -331,8 +356,13 @@ export class MiniApp extends EventTarget {
     this.#emit('change');
   }
 
+  /** @type {unknown} */ #focusSeen = null;
+
   #changed() {
     this.#load();
+    // A new plant opened or chosen (a sheet, a point of the map, a link's ?p=): seen.
+    const focus = this.c.focus;
+    if (typeof focus === 'number' && focus !== this.#focusSeen) { this.#focusSeen = focus; this.seen(focus); }
     // Guided: the step done goes on by itself (a plant touched opens its sheet).
     const s = this.step;
     const next = followers(this.m, s);

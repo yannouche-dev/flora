@@ -3,7 +3,8 @@
 // first match, the plant opens bare and the app shows itself step by step, each step offered by a banner with a
 // question (`step`): 1 its photos, 2 its encyclopedia, 3 a choice — picking (its uses, look-alikes, season) or
 // science (maps, distribution, climate, classification) — whose dashboard joins the plant (`branch`), 4 the
-// plants around, 5 the whole sheet and every tool (in the harvest or scientific way, as chosen).
+// plants around, 5 the whole sheet and every tool, the app as it is (the way chosen is offered for the whole app by a
+// button that says so: kit/ma-guided.js).
 // The tabs come when they become useful — and stay: Mes plantes with the first favourite, the Carte with the
 // first place noted, Flore after a few plants discovered. Someone who already used the app starts with everything.
 // The games around a place (Rencontres, Cueillette prudente, Mosaïque) keep their own place, distance and cards, each
@@ -114,7 +115,10 @@ export function chooseBranch(branch) {
 /** The first match celebrated (once): the next ones only get a heart. */
 export const firstMatchShown = () => save({ firstMatch: true });
 
-/** A plant discovered (its sheet opened). @param {number} id */
+/**
+ * A plant discovered, in any mini-app (a card swiped, a plant opened, chosen or noted in a parcours: the event `seen`
+ * of miniapp/runtime.js, counted by its box). @param {number} id
+ */
 export function plantSeen(id) {
   if (state.seen.includes(id)) return;
   save({ seen: [...state.seen, id].slice(-200) });

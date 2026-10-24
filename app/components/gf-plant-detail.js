@@ -29,7 +29,7 @@ import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 import {
   STYLES, SUBS, canBeEmpty, hidesEmpty, setHidesEmpty, isMap, isAddedMap, mapConfig, setMapConfig, createMap, deleteMap, blockModuleName, blockOrder, blockStyle, blockTitle, isTitleShown, setBlockStyle, setTitleShown, createNote, deleteNote, isHidden, isNote, isSubHidden, noteText, renameBlock,
-  foldedByHand, serviceOffNote, setBlockOrder, setHidden, setNoteText, setSubHidden, setSubOrder, shownSubs, subOrder, subTitle,
+  foldedByHand, serviceOff, serviceOffNote, setBlockOrder, setHidden, setNoteText, setSubHidden, setSubOrder, shownSubs, subOrder, subTitle,
   isOnEdge, placeOf, orderByCategory, treeOf, paneOf, dockBlock, toSheet, setPaneSizes, setStackState
 } from '../core/sheet-blocks.js';
 import { leaves as paneLeaves, stackOf, setSizes as treeSizes, patchStack, dock, undock } from '../core/pane-tree.js';
@@ -370,9 +370,11 @@ export class GfPlantDetail extends LitElement {
     /** Panes only: the blocks shown in them (Découvrir: those its steps added), the others left out. */
     paneKeys: { attribute: false },
     /**
-     * A tree of panes of the host's own (a mini-app's plant column), shown in place of the mode's: what is done to it
-     * (a grip dragged, a tab, a fold, a block moved) never touches the mode's layout (sheetLayout) — the tree changed
-     * comes back to the host as `pane-sizes` (detail: the new tree; not composed), for it to keep and hand back.
+     * A tree of panes of the host's own (Rencontres' guided way: the panes its steps built), shown in place of the
+     * mode's: what is done to it (a grip dragged, a tab, a fold, a block moved, a pane made bigger) never touches the
+     * mode's layout (sheetLayout), nor the pane the next sheet makes bigger — the tree changed comes back to the host as
+     * `pane-sizes` (detail: the new tree; not composed), for it to keep and hand back. A block it puts in a pane shows
+     * whatever the mode folds (its service off still folds it).
      */
     tree: { attribute: false },
     /** Épuré (photo and one-tap actions), standard (general public), scientific (every data). */
@@ -1152,7 +1154,8 @@ export class GfPlantDetail extends LitElement {
     if (!this.preview && !this.only) {
       if (changed.has('_subsOpen')) sheetSession.subsOpen = this._subsOpen;
       if (changed.has('_mapsOpen')) sheetSession.mapsOpen = this._mapsOpen;
-      if (changed.has('_maxEdge')) sheetSession.maxEdge = this._maxEdge;
+      // (A pane of a host's own tree made bigger is that host's: not the next sheet's.)
+      if (changed.has('_maxEdge') && !this.tree) sheetSession.maxEdge = this._maxEdge;
       if (changed.has('_spotsOpen')) sheetSession.spotsOpen = this._spotsOpen;
       // The themes of the article opened or closed (not the sections read whole, which are this plant's).
       if (changed.has('_wikiOpen')) sheetSession.wikiThemes = new Set([...this._wikiOpen].filter(k => /^(theme|closed):/.test(k)));
@@ -1583,9 +1586,11 @@ export class GfPlantDetail extends LitElement {
 
     const ctx = this.#context(plant);
     if (this.only) return this.#onlyBlock(this.only, ctx);
-    if (this.panesOnly) return this.#panesOnlyView(ctx);
+    // What a move did (Mode King: « Déplacer vers… », a drag), said — in the panes alone too (Découvrir).
+    const said = this._said ? html`<p class="said" aria-live="polite">${this._said}</p>` : nothing;
+    if (this.panesOnly) return html`${this.#panesOnlyView(ctx)}${said}`;
     const pane = this._paneDialog;
-    return html`${baseOf(this.view) === 'epure' ? this.#epure(ctx) : this.#full(ctx)}${this._said ? html`<p class="said" aria-live="polite">${this._said}</p>` : nothing}${pane ? html`
+    return html`${baseOf(this.view) === 'epure' ? this.#epure(ctx) : this.#full(ctx)}${said}${pane ? html`
       <dialog class="pane" aria-label=${blockTitle(pane.key)} @close=${() => { this._paneDialog = null; }}>
         <div class="pane-bar"><h2>${blockTitle(pane.key)} — <i>${plant.scientificName}</i></h2>
           <button class="icon-btn" type="button" aria-label="Fermer" title="Fermer" @click=${(/** @type {Event} */ e) => /** @type {HTMLElement} */ (e.currentTarget).closest('dialog')?.close()}>${icon('x-lg')}</button></div>
@@ -1711,7 +1716,7 @@ export class GfPlantDetail extends LitElement {
   /** The block that shows a theme of the article beside its own data, when it is in the sheet. @param {string} theme */
   #wikiHost(theme) {
     const host = WIKI_THEMES[theme]?.[1];
-    return host && !this.only && !isHidden(this.view, host) && !placeOf(this.view, host) ? host : null;
+    return host && !this.only && !this.#folded(host) && !this.#paneOf(host) ? host : null;
   }
 
   /** The article's sections of these themes. @param {string[]} themes */
@@ -1725,7 +1730,7 @@ export class GfPlantDetail extends LitElement {
   #wikiBits(themes, under = true) {
     const list = this.#wikiSections(themes);
     if (!list.length) return nothing;
-    const reader = !this.only && !isHidden(this.view, 'wikipedia') && !placeOf(this.view, 'wikipedia');
+    const reader = !this.only && !this.#folded('wikipedia') && !this.#paneOf('wikipedia');
     return html`<div class=${under ? 'wiki-bits' : 'wiki-in'}>${list.map((/** @type {any} */ x) => {
       const id = x.theme + ':' + x.title, whole = this._wikiOpen.has(id) || x.text.length <= WIKI_SHORT + 80;
       const text = whole ? x.text : x.text.slice(0, WIKI_SHORT).replace(/\s+\S*$/, '') + '…';
@@ -2032,8 +2037,14 @@ export class GfPlantDetail extends LitElement {
   #visible(k, ctx) {
     // « Page web » works in a pane only: elsewhere, Mode King alone shows it (to be placed).
     if (k === 'web') return this.#store.state.kingMode || Boolean(this.#paneOf('web'));
-    return this.#store.state.kingMode || (!isHidden(this.view, k) && !(hidesEmpty(this.view, k) && this.#emptyHere(k, ctx)));
+    return this.#store.state.kingMode || (!this.#folded(k) && !(hidesEmpty(this.view, k) && this.#emptyHere(k, ctx)));
   }
+
+  /**
+   * Folded: by hand in the mode, or its service off. A block a host's own tree puts in a pane (Rencontres' guided way)
+   * is the host's: only its service off folds it. @param {string} k
+   */
+  #folded(k) { return this.tree && stackOf(this.tree, k) ? serviceOff(k) : isHidden(this.view, k); }
 
   /** Does the sheet show a map (in the flow or pinned)? Its data can then be touched to show on it. */
   get #hasMap() {
@@ -2791,7 +2802,7 @@ export class GfPlantDetail extends LitElement {
   #map(key, { plant, details, inat }) {
     const config = mapConfig(key);
     // Pinned, or alone in a pane: the map fills the room.
-    const fill = isOnEdge(this.view, key) || this.only === key;
+    const fill = Boolean(this.#paneOf(key)) || this.only === key;
     if (this.preview) return html`<div class="map-placeholder ${fill ? 'fill' : ''}" style=${`height:${{ s: 180, m: 260, l: 380 }[config.height]}px`}></div>`;
     // One WebGL map per sheet: the main « Carte » block may show in 3D, the map blocks added stay in 2D (gf-map-gl.js).
     return html`<gf-sheet-map .plant=${plant} .gbifKey=${details?.identifiers?.gbif?.id ?? null} .inatId=${inat?.id ?? null}
@@ -2950,13 +2961,16 @@ export class GfPlantDetail extends LitElement {
     if (isMap(key)) return this.#map(key, ctx);
     switch (key) {
       case 'name': return this.#name(ctx);
-      case 'web': return html`<gf-web-pane ?inactive=${!paneOf(v, 'web')}></gf-web-pane>`;
-      case 'media':
-        return ctx.photosOff ? html`<p class="muted">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`
-          // In the sheet: compact; stuck to an edge: the full viewer, filling it (its keys only when it has the focus).
-          : html`<gf-media-viewer ?prefer-photos=${this.panesOnly} ?showcase=${this.panesOnly} ?bar-out=${isOnEdge(this.view, 'media')} ?compact=${!isOnEdge(this.view, 'media')} ?local=${isOnEdge(this.view, 'media')} plant-id=${plant.id} .index=${this.mediaAt ?? 0}
+      case 'web': return html`<gf-web-pane ?inactive=${!this.#paneOf('web')}></gf-web-pane>`;
+      case 'media': {
+        if (ctx.photosOff) return html`<p class="muted">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`;
+        // In the sheet: compact; in a pane (the mode's, or the host's own): the full viewer, filling it (its keys only
+        // when it has the focus).
+        const edged = Boolean(this.#paneOf('media'));
+        return html`<gf-media-viewer ?prefer-photos=${this.panesOnly} ?showcase=${this.panesOnly} ?bar-out=${edged} ?compact=${!edged} ?local=${edged} plant-id=${plant.id} .index=${this.mediaAt ?? 0}
             presentation=${blockStyle(this.view, 'media')} .label=${isTitleShown(this.view, 'media') ? null : blockTitle('media')}
             @open-pane=${(/** @type {CustomEvent} */ e) => { e.stopPropagation(); this.#openPane('media', e.detail.url); }}></gf-media-viewer>`;
+      }
       case 'photos': {
         if (baseOf(v) !== 'epure') return this.#gallery(ctx, baseOf(v) === 'standard' ? 6 : Infinity);
         const hero = ctx.images[0];

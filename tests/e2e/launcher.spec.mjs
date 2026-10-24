@@ -27,8 +27,9 @@ const footprint = page => page.evaluate(() => {
   for (let i = 0; i < localStorage.length; i++) {
     const k = /** @type {string} */ (localStorage.key(i));
     // (geoflora.cachePurgedAt: the shared cache of the online services, purged 30 s after the app starts — never a
-    // mini-app's; a slow run would see it come between two footprints.)
-    if (!k.startsWith('geoflora.') || ['geoflora.harvestMode', 'geoflora.backup', 'geoflora.hasSpots', 'geoflora.context', 'geoflora.showSteps', 'geoflora.cachePurgedAt'].includes(k)) continue;
+    // mini-app's; a slow run would see it come between two footprints. The settings a mini-app never writes — the
+    // harvest mode, « Afficher les étapes » — are compared too.)
+    if (!k.startsWith('geoflora.') || ['geoflora.backup', 'geoflora.hasSpots', 'geoflora.context', 'geoflora.cachePurgedAt'].includes(k)) continue;
     const v = JSON.parse(localStorage.getItem(k) || 'null');
     // The first steps of the app (the tabs that came, the plants seen) are the user's: only Rencontres' guided way.
     out[k] = k === 'geoflora.discover' ? { step: v.step, firstMatch: v.firstMatch, branch: v.branch } : v;

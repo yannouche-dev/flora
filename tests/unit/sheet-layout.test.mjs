@@ -69,6 +69,23 @@ test('resetAll retire les volets : la fiche seule', () => {
   assert.equal(SB.treeOf('standard').t, 'sheet');
 });
 
+test('undockAlone : les volets que les étapes guidées d’avant avaient posés retournent dans la fiche, ceux que l’utilisateur a changés restent', () => {
+  SB.resetAll();
+  // As the guided steps of before left them: the photos beside the sheet, the encyclopedia under them, the fork's tabs.
+  SB.dockBlock('standard', 'media', 'sheet', 'right');
+  SB.dockBlock('standard', 'wikipedia', /** @type {any} */ (SB.paneOf('standard', 'media')).id, 'bottom');
+  SB.dockBlock('standard', 'uses', 'root', 'right');
+  SB.dockBlock('standard', 'lookalikes', /** @type {any} */ (SB.paneOf('standard', 'uses')).id, 'center');
+  // … one the user then gave another block.
+  SB.dockBlock('standard', 'names', /** @type {any} */ (SB.paneOf('standard', 'wikipedia')).id, 'center');
+  SB.setHidden('standard', 'uses', true);
+  SB.undockAlone('standard', [['media'], ['wikipedia'], ['uses', 'lookalikes', 'calendar']]);
+  assert.deepEqual(['media', 'uses', 'lookalikes'].map(k => SB.isOnEdge('standard', k)), [false, false, false]);
+  assert.deepEqual(SB.paneOf('standard', 'wikipedia')?.tabs, ['wikipedia', 'names'], 'with a block of the user’s: kept');
+  assert.ok(SB.foldedByHand('standard', 'uses'), 'a block folded stays folded');
+  SB.resetAll();
+});
+
 test('le fichier de mise en page emporte Réglages › Cartes (2D / 3D et options), et les rend à l’import', async () => {
   const MS = await import('../../app/core/map-settings.js');
   SB.resetAll();
@@ -156,7 +173,6 @@ test('masquer ou réafficher un bloc ne coupe ni ne rallume jamais son service',
   SB.setHidden('standard', 'occurrences', false);
   SB.toSheet('standard', 'descriptions');
   assert.ok(SB.dockBlock('standard', 'literature', 'sheet', 'right'));
-  assert.equal(SB.dockBlock('standard', 'gbifProfile', 'sheet', 'left', { auto: true }), false, 'une mise en page faite par l’app laisse le bloc');
   assert.equal(M.moduleOn('gbif'), false, 'ni réafficher, ni ramener dans la fiche, ni mettre en panneau ne le rallume');
   assert.ok(SB.isHidden('standard', 'occurrences'));
   assert.equal(SB.serviceOffNote('occurrences'), 'service GBIF coupé pour tout l’appareil');

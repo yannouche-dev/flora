@@ -7,7 +7,8 @@
 // (geoflora.app.<id>.*) and what its manifest lists in `owns` — the storage keys of its session (`keys`), and
 // `reset()` for the rest of it (a deck's swipes kept by a core module); « Rejouer » empties exactly that, then starts
 // again at its first step. What it only USES is the user's, and it never clears it: `shared` names it (Mes plantes,
-// the favourites, the places, the settings), for the reader. Leaving a mini-app changes nothing in the app.
+// the favourites, the places, the settings), for the reader. Playing or leaving a mini-app changes nothing else in
+// the app: no mode, no setting, no layout of the plant sheet — only a button that says so, pressed by the user.
 //
 // An app ported whole from before the mini-apps (`driven`): one component draws every screen, the start too, and
 // says which step it is on (the event ma-step); the steps follow it rather than lead it. Its first step then adds
@@ -29,8 +30,8 @@ const KEYS = new Set(Object.values(config.storageKeys));
  * @typedef {{ id: string, base: number | 'fill', min: number, max?: number, rank: number, mergeInto?: string, heavy?: boolean, title?: string }} Column
  * @typedef {'top' | 'main' | 'tab' | 'sheet' | 'hide'} PhonePlace
  * @typedef {{ id: string, use?: string, col?: string, below?: string, tabWith?: string, blocks?: string[],
- *   phone?: PhonePlace, title?: string, props?: Record<string, unknown>, when?: () => boolean }} Place   `when`: on screen only while
- *   it says so (Rencontres' list, not during its guided first steps)
+ *   phone?: PhonePlace, title?: string, props?: Record<string, unknown>, when?: (c: any) => boolean }} Place   `when`: on screen
+ *   only while it says so, from the context (Rencontres' list, not in a game begun in its guided way)
  * @typedef {{ label: string, icon?: string, to: string }} Choice
  * @typedef {{ id: string, label: string, about?: string, kind?: 'start' | 'grid' | 'screen',
  *   start?: (c: any, app: any) => import('../components/start-screen.js').StartSpec,
