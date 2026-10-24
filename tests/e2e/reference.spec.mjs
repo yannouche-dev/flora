@@ -421,23 +421,63 @@ test.describe('en 3D', () => {
   /** A bearing's change, within ±180°. @param {number} a @param {number} b */
   const turned = (a, b) => ((b - a + 540) % 360) - 180;
 
-  /** The camera as MapLibre has it (its bearing unrounded), the reference on the screen. @param {Locator} map */
-  const cam = map => map.evaluate(m => { const g = /** @type {any} */ (m).gl; return { zoom: g.glMap.getZoom(), bearing: g.glMap.getBearing(), refAt: g.state().refAt }; });
+  /**
+   * The camera filmed from now on, by the page itself: each of MapLibre's frames — its time on the page's clock, its zoom
+   * and bearing (unrounded), the reference on the screen (and `point`'s, when given) —, read by framed() and later(); its
+   * first frame returned. Not asked by the test as it goes: software WebGL holds the page at each frame (its picture
+   * read back for the compositor, some 0.2–0.5 s on a loaded machine), each question of the test answered that much
+   * later — a 9 s turn seen only as it ends, or over.
+   * @param {Locator} map @param {number[] | null} [point] [lon, lat]
+   * @returns {Promise<{ t: number, zoom: number, bearing: number, refAt: number[] | null, at: number[] | null }>}
+   */
+  function film(map, point = null) {
+    return map.evaluate((m, p) => {
+      const h = /** @type {any} */ (m), gl = h.gl.glMap;
+      if (h.film) gl.off('move', h.film.shot);
+      /** @type {any[]} */ const frames = [];
+      const xy = (/** @type {number[] | null} */ c) => { const s = c ? gl.project(c) : null; return s ? [s.x, s.y] : null; };
+      const shot = () => { frames.push({ t: performance.now(), zoom: gl.getZoom(), bearing: gl.getBearing(), refAt: xy(h.reference), at: xy(p) }); };
+      shot();
+      gl.on('move', shot);
+      h.film = { frames, shot };
+      return frames[0];
+    }, point);
+  }
 
   /**
-   * Until the observations around have framed their circle and turn around it: the flight over (the zoom the same a
-   * moment apart), the slow turn under way (the bearing not). @param {Page} page @param {Locator} map
+   * Once the observations around have framed their circle and turn around it, as filmed since film(): the camera then —
+   * the flight over (the zoom unchanged for a moment, 300 ms: in every frame of it — a flight changes it in each one),
+   * the slow turn under way (the bearing not).
+   * @param {Locator} map @returns {Promise<{ t: number, zoom: number, bearing: number, refAt: number[] }>}
    */
-  async function framed(page, map) {
-    let was = await cam(map);
-    await expect.poll(async () => {
-      const before = was;
-      await page.waitForTimeout(300);
-      was = await cam(map);
-      return Math.abs(was.zoom - before.zoom) < 1e-6 && Math.abs(turned(before.bearing, was.bearing)) > 0.05;
-    }, SLOW).toBe(true);
-    return was;
+  async function framed(map) {
+    /** @type {any} */ let at = null;
+    await expect.poll(async () => (at = await map.evaluate(m => {
+      const f = /** @type {any} */ (m).film.frames;
+      for (let j = 1, i = -1; j < f.length; j++) {
+        while (f[i + 1].t <= f[j].t - 300) i++;
+        if (i < 0) continue;
+        if (f.slice(i, j).every((/** @type {any} */ s) => s.zoom === f[j].zoom) && Math.abs(((f[j].bearing - f[i].bearing + 540) % 360) - 180) > 0.05) return f[j];
+      }
+      return null;
+    })), SLOW).not.toBeNull();
+    return at;
   }
+
+  /**
+   * The camera `ms` after a moment filmed (its first frame since; at rest by then, the camera as it rests), waited for
+   * on the page's clock. @param {Locator} map @param {{ t: number }} from @param {number} ms
+   */
+  const later = (map, from, ms) => map.evaluate((m, [t, wait]) => new Promise(done => {
+    const h = /** @type {any} */ (m), f = h.film.frames;
+    const look = () => {
+      const shot = f.find((/** @type {any} */ s) => s.t >= t + wait);
+      if (shot) done(shot);
+      else if (performance.now() >= t + wait && !h.gl.glMap.isMoving()) done(f.at(-1));
+      else setTimeout(look, 50);
+    };
+    look();
+  }), [from.t, ms]);
 
   /** @param {number[]} a @param {number[]} b */
   const apart = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
@@ -626,20 +666,21 @@ test.describe('en 3D', () => {
     await page.keyboard.press('Shift+F10');
     await expect(map.locator('gf-point-card').getByRole('heading', { name: 'Poser un repère ici ?' })).toBeVisible();
     await page.keyboard.press('Enter');
+    await film(map);
     await expect(map.locator('.gf-gl-mk .gf-ref:not(.ghost)')).toHaveCount(1);
     await expect.poll(async () => (await gl()).obs3d.why).toBe('reference');
-    const a = await framed(page, map);
+    const a = await framed(map);
 
     // An address picked: the reference at once, the 2D map flying there (to the search's zoom, 15) — then, landed, the
     // circle framed the same way (not left at the search's zoom), and turned around.
     await map.locator('gf-map-search input[type="search"]').fill('Montaudoux');
     await map.locator('gf-map-search').getByRole('button', { name: /Puy de Montaudoux/ }).click();
+    await film(map);
     await expect.poll(async () => (await gl()).obs3d.center).toEqual([3.049, 45.752]);
-    const b = await framed(page, map);
+    const b = await framed(map);
     expect(b.zoom).toBeCloseTo(a.zoom, 2);
     expect(apart(b.refAt, a.refAt)).toBeLessThanOrEqual(2);
-    await page.waitForTimeout(2000);
-    const c = await cam(map);
+    const c = await later(map, b, 2000);
     expect(turned(b.bearing, c.bearing)).toBeGreaterThan(3);
     expect(apart(c.refAt, b.refAt)).toBeLessThanOrEqual(2);
     expect(problems).toEqual([]);
@@ -662,7 +703,9 @@ test.describe('en 3D', () => {
     const from = await settle();
 
     // A long press away from the middle, beyond their markers, confirmed: the circle there, framed (its centre a little
-    // above the middle) — never stopped half way as the page is laid out again —, then its slow turn around it.
+    // above the middle) — never stopped half way as the page is laid out again —, then its slow turn around it (filmed
+    // from the view at rest: the flight, its turn, as they were — not as late as a slow machine answers).
+    await film(map);
     await press(page, map, canvas, 0.06, 0.55);
     await expect(map.locator('gf-point-card').getByRole('heading', { name: 'Poser un repère ici ?' })).toBeVisible();
     await expect(hint).toBeVisible();
@@ -670,13 +713,12 @@ test.describe('en 3D', () => {
     await expect(map.locator('.gf-gl-mk .gf-ref:not(.ghost)')).toHaveCount(1);
     await expect(hint).toHaveCount(0);
     await expect.poll(async () => (await gl()).obs3d.why).toBe('reference');
-    const b = await framed(page, map);
+    const b = await framed(map);
     const [w, h] = await canvas.evaluate(c => [c.clientWidth, c.clientHeight]);
     expect(Math.abs(b.refAt[0] - w / 2)).toBeLessThanOrEqual(2);
     expect(h / 2 - b.refAt[1]).toBeGreaterThan(0);
     expect(h / 2 - b.refAt[1]).toBeLessThan(h / 8);
-    await page.waitForTimeout(2000);
-    const c = await cam(map);
+    const c = await later(map, b, 2000);
     expect(turned(b.bearing, c.bearing)).toBeGreaterThan(3);
     expect(apart(c.refAt, b.refAt)).toBeLessThanOrEqual(2);
 
@@ -704,14 +746,25 @@ test.describe('en 3D', () => {
     const from = await settle();
 
     // A long press at the view's centre confirmed: the circle's flight under way (turned a little, not all of its −20°),
-    // the page narrowed then — framed again for the new size, landing at the same bearing (not 20° from where it is).
+    // the map narrowed then — by the page itself, in that very frame (a slow machine's answers would come after the
+    // flight) —: framed again for the new size (a new flight), landing at the same bearing (not 20° from where it is).
+    await film(map);
     await canvas.focus();
     await page.keyboard.press('Shift+F10');
     await expect(map.locator('gf-point-card').getByRole('heading', { name: 'Poser un repère ici ?' })).toBeVisible();
+    await map.evaluate((m, from) => {
+      const h = /** @type {any} */ (m), gl = h.gl.glMap;
+      h.reframed = 0;
+      const look = () => {
+        if (((gl.getBearing() - from + 540) % 360) - 180 >= -2) { gl.once('move', look); return; }
+        gl.on('movestart', (/** @type {any} */ e) => { if (e.gfObs === 'fly') h.reframed++; });
+        h.style.width = '860px';
+      };
+      gl.once('move', look);
+    }, from.bearing);
     await page.keyboard.press('Enter');
-    await expect.poll(async () => turned(from.bearing, (await cam(map)).bearing), { timeout: 10_000, intervals: [30] }).toBeLessThan(-2);
-    await page.setViewportSize({ width: 860, height: 680 });
-    const b = await framed(page, map);
+    const b = await framed(map);
+    expect(await map.evaluate(m => /** @type {any} */ (m).reframed)).toBe(1);
     const w = await canvas.evaluate(c => c.clientWidth);
     expect(w).toBeLessThan(1000);
     expect(Math.abs(b.refAt[0] - w / 2)).toBeLessThanOrEqual(2);
@@ -859,17 +912,15 @@ test.describe('en 3D', () => {
     await map.locator('.gf-o3-chip').click();
     await settle();
     // The place selected (as the Carte does): its circle, a flight there, then the slow turn of 30° (9 s).
+    // (Filmed from then on, its centre on the screen with the camera.)
+    await film(map, [3.0890, 45.7790]);
     await map.evaluate((m, id) => { /** @type {any} */ (m).selectedId = id; }, placeId);
     await expect.poll(async () => (await gl()).obs3d.why).toBe('place');
-    const place = () => map.evaluate(m => { const p = /** @type {any} */ (m).gl.glMap.project([3.0890, 45.7790]); return { x: p.x, y: p.y }; });
     // Once flown there (1.8 s) and turning: the circle's centre stays near the middle — a turn about the reference,
     // some 500 px away, would carry it some 90 px in 3 s.
-    await page.waitForTimeout(3000);
-    const b0 = (await gl()).bearing, s0 = await place();
-    await page.waitForTimeout(3000);
-    const b1 = (await gl()).bearing, s1 = await place();
-    expect(turned(b0, b1)).toBeGreaterThan(4);
-    expect(Math.hypot(s1.x - s0.x, s1.y - s0.y)).toBeLessThan(20);
+    const s0 = await framed(map), s1 = await later(map, s0, 3000);
+    expect(turned(s0.bearing, s1.bearing)).toBeGreaterThan(4);
+    expect(apart(s1.at, s0.at)).toBeLessThan(20);
     expect(problems).toEqual([]);
   });
 });
