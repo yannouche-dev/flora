@@ -5,7 +5,7 @@
 // the steps start › map › cards (a place chosen: the map, its distance; then the cards).
 
 import { FIX_MAX_AGE, geoProblem, takeFix } from '../../core/geo.js';
-import { discovering, finishDiscover } from '../../core/discover.js';
+import { discoverState, discovering, finishDiscover, LAST_STEP } from '../../core/discover.js';
 import { href } from '../../core/router.js';
 import { distLabel } from './cards.js';
 import { sessionOf } from './session.js';
@@ -53,6 +53,27 @@ export const chosenContext = () => ({
   focus: { init: null, persist: true },
   sheet: { init: false },
   media: { init: null, persist: true }
+});
+
+/**
+ * Rencontres' guided way (kit/ma-guided.js): decided as its game begins (kit/session.js#setPoint: during the first
+ * steps of the app; a game kept from before this was decided, as its session starts), kept for the whole game — tabs
+ * that arrive never swap its view; « Rejouer » decides anew. Its steps over end it: « La flore complète », or the first
+ * steps ended elsewhere (« Passer », « Tout montrer »: their last step reached) — the game then goes on as the others.
+ * @param {any} c
+ */
+export const guidedWay = c => (c.guided ?? discovering()) && discoverState().step < LAST_STEP;
+
+/**
+ * Rencontres' own (its guided way): `guided`, the way of its game (above); `panes`, the plant's panes its steps
+ * built (a tree of panes, core/pane-tree.js: the game's, never the layout of the mode — kit/ma-guided.js); `leftOut`,
+ * the blocks its steps left out, their module off (docked as it is switched back on).
+ * @returns {Record<string, import('../define.js').ContextKey>}
+ */
+export const guidedContext = () => ({
+  guided: { init: null, persist: true },
+  panes: { init: null, persist: true },
+  leftOut: { init: null, persist: true }
 });
 
 /** A place chosen: the map and its distance, then the cards. @param {any} c */

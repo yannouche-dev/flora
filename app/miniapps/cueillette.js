@@ -4,7 +4,7 @@
 // before anything else; the list says, in red, never to pick without a certain identification, and whom to call. A
 // toxic look-alike is never a match nor a favourite: swiped right, it is recognised, to avoid (kit/session.js#swiped),
 // counted apart. Its start (« Autour de moi », a commune, « Reprendre »), how far to look over the map, then the
-// cards. Launched, the harvest mode comes on (app/miniapps/index.js).
+// cards. Playing it changes nothing else in the app: the harvest mode stays as the user set it (Réglages).
 // Built from the kit (app/miniapp/kit): ma-distance, then ma-around-list (harvest).
 // Owns — everything « Rejouer » / « Recommencer » empties, here and in the other tabs, as if never opened:
 //  - geoflora.app.cueillette.state: its place and name, distance, cards swiped right (this game's matches; its toxic
@@ -17,7 +17,7 @@
 //    that was a favourite before the match, nor one set elsewhere, nor one the user then put in a collection or
 //    gave a note (made their own: place-model.js#promoted).
 // Shares (never cleared, the user's whole app): Mes plantes but for those favourites, the places, the first
-// steps of the app, the harvest mode, the settings, the answers of the online services kept in cache.
+// steps of the app, the settings (read, never written), the answers of the online services kept in cache.
 
 import { forgetMadeBy } from '../core/collections.js';
 import { defineMiniApp } from '../miniapp/define.js';
@@ -29,11 +29,11 @@ export default defineMiniApp({
   title: 'Cueillette prudente',
   icon: 'leaf',
   scene: 'harvest',
-  pitch: 'Ce qui se cueille autour de vous… et ses sosies dangereux, les mortels d’abord. Le mode cueillette s’allume.',
+  pitch: 'Ce qui se cueille autour de vous… et ses sosies dangereux, les mortels d’abord.',
   uses: ['inaturalist'],
   exit: { label: 'Quitter la cueillette' },
   owns: { keys: ['geoflora.app.cueillette.sheet'], reset: () => { forgetGame('cueillette'); return forgetMadeBy('cueillette'); } },
-  shared: ['Mes plantes (sauf les favoris ajoutés par ses matchs)', 'lieux', 'mode cueillette', 'réglages'],
+  shared: ['Mes plantes (sauf les favoris ajoutés par ses matchs)', 'lieux', 'réglages'],
   // Its own: the toxic look-alikes recognised, to avoid (kit/cards.js#avoid) — never among the matches.
   context: { ...aroundContext(), avoided: { init: [], persist: true } },
   actions: { locate },

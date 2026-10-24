@@ -13,7 +13,7 @@ import { anyHarvest, hasSpots, holdIfEmptied, refreshMembership, requestPersiste
   writeBackup } from './core/collections.js';
 import { openDb, storageError } from './core/db.js';
 import { keptWalks, walkOn } from './miniapp/kit/trail-store.js';
-import { initHarvestMode, store } from './core/store.js';
+import { followHarvests, harvestModeChosen, store } from './core/store.js';
 import { loadNotes } from './core/sheet-notes.js';
 import { forgetObsolete } from './core/prefs.js';
 import { config } from './config.js';
@@ -44,8 +44,9 @@ async function start() {
     tagLegacyOrigins({ walks: keptWalks(), walk: walkOn() }).catch(error => console.error(error));
     // Collections saved before the backup existed get one now (an empty database never erases it), with the notes.
     notes.then(() => writeBackup()).catch(error => console.error(error));
-    // Not on a base waiting for its collections (a repair): their harvests are not back yet.
-    if (!restoring) initHarvestMode(await anyHarvest().catch(() => false));
+    // The harvest mode never chosen (« auto »): on with the harvests the device holds — and those that arrive (below:
+    // an import, a transfer link, the collections put back after a repair), never written.
+    followHarvests(await anyHarvest().catch(() => false));
     // Opened elsewhere than the list (a plant, the Carte, after a reload): the search left last comes back, so
     // the Flore tab and a plant's ‹ › find the same results.
     const saved = context().query;
@@ -160,8 +161,12 @@ addEventListener('geoflora-outdated', event => store.set({
     : 'GeoFlora vient d’être mis à jour : rechargez la page pour continuer.'
 }));
 
-// Favorites/collections changed: the "Mes plantes" facet and its counts must follow.
-spotEvents.addEventListener('change', () => { if (store.state.status === 'ready') runSearch(); });
+// Favorites/collections changed: the "Mes plantes" facet and its counts must follow; the harvest mode, while the user
+// never chose it, comes on with the harvests that arrive (core/store.js#followHarvests: never off during a visit).
+spotEvents.addEventListener('change', () => {
+  if (store.state.status === 'ready') runSearch();
+  if (!harvestModeChosen() && !store.state.harvestMode) anyHarvest().then(followHarvests, () => {});
+});
 
 addEventListener('online', () => store.set({ offline: false }));
 addEventListener('offline', () => store.set({ offline: true }));

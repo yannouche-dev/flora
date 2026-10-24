@@ -1,6 +1,6 @@
 // The Découvrir tab: the list of the ways to play (gf-launcher, the same as the launcher's dialog) as a page of its
-// own — the mini-apps, nothing else (Scientifique is a mode, not a way to play). « Jouer » opens one, « Quitter » comes
-// back to the list; the first launch lands on it, and a mini-app played there brings the tabs; the old addresses of
+// own — the mini-apps, nothing else (Scientifique is a mode, not a way to play). « Jouer » opens one (and changes
+// nothing else: Cueillette prudente leaves the harvest mode as it was), « Quitter » comes back to the list; the first launch lands on it, and a mini-app played there brings the tabs; the old addresses of
 // Découvrir lead to the mini-apps. Rencontres' services answered here.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 
@@ -62,11 +62,14 @@ test('une partie en cours se continue ; Cueillette prudente est une mini-applica
   await expect(list(page).getByRole('button', { name: 'Continuer : Rencontres' })).toBeVisible();
   await expect(list(page).getByRole('button', { name: 'Recommencer : Rencontres' })).toBeVisible();
   await expect(list(page).getByRole('button', { name: 'Jouer : Cueillette prudente' })).toBeVisible();
+  // Launched, it changes nothing else in the app: the harvest mode stays as it was (stored, and on screen).
+  const harvest = { on: await app.state('harvestMode'), kept: await page.evaluate(() => localStorage.getItem('geoflora.harvestModeChoice')) };
   await list(page).getByRole('button', { name: 'Jouer : Cueillette prudente' }).click();
   await expect.poll(() => hash(page)).toBe('#/app/cueillette/start');
-  // Launched, the harvest mode comes on.
-  await expect.poll(() => app.state('harvestMode')).toBe(true);
   await expect(list(page)).toHaveCount(0);
+  await page.getByRole('button', { name: 'Autour de moi' }).click();
+  await expect.poll(() => hash(page)).toBe('#/app/cueillette/map');
+  expect({ on: await app.state('harvestMode'), kept: await page.evaluate(() => localStorage.getItem('geoflora.harvestModeChoice')) }).toEqual(harvest);
 });
 
 test('les anciennes adresses de Découvrir mènent où elles menaient', async ({ app, page }) => {

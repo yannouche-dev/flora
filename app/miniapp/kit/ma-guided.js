@@ -6,8 +6,13 @@
 // around; the panes show it, never another —; on the first match its photos beside them (zoomed); then each step
 // adds its pane — its encyclopedia, a fork (picking: its uses, look-alikes and season; or science: maps, distribution,
 // climate, classification), the plants around under the map —, the last one leaves for the whole app on that plant,
-// the way chosen. The panes are the plant's sheet (gf-plant-detail panes-only), each block docked into the layout of
-// the mode, as Flore will show it; the image of its « Médias » is the address's &m=.
+// as it is. The panes are the plant's sheet (gf-plant-detail panes-only) in a tree of panes of the game's own (the
+// context's `panes`: a grip dragged, a tab, a fold, a block moved in Mode King stay in it, « Rejouer » forgets them) —
+// never the layout of the mode, which Flore keeps as the user made it; each step docks its own blocks there once, as it
+// is accepted (a module off: as it is switched back on, `leftOut`); the image of its « Médias » is the address's &m=.
+// Its end changes nothing by itself: at the last step, the way chosen at the fork is offered for the whole app, by a
+// button that says so (« Passer en mode Scientifique », « Allumer le mode cueillette »), or « Garder tel quel » — the
+// offer in focus as the step arrives.
 // The steps: a bar above the blocks, always in sight (its own: the box's is left out, manifest `ownBar`) — done, the
 // one shown, to come; « Précédent » and the next one. Its first two are the app's steps « map » and « cards » (the
 // address); the others are the first steps' (core/discover.js: step, branch). The widths of the map and the cards are
@@ -15,8 +20,9 @@
 
 import { LitElement, html, css, nothing } from 'lit';
 import { icon } from '../../core/icons.js';
-import { chooseBranch, discoverEvents, discoverState, firstMatchShown, LAST_STEP, plantSeen, setStep, stepBack } from '../../core/discover.js';
-import { dockBlock, modulesOffFor, paneOf, setStackState } from '../../core/sheet-blocks.js';
+import { chooseBranch, discoverEvents, discoverState, firstMatchShown, LAST_STEP, setStep, stepBack } from '../../core/discover.js';
+import { blockOf, modulesOffFor, serviceOff, undockAlone } from '../../core/sheet-blocks.js';
+import { dock, normalize, patchStack, SHEET, stackOf, undock } from '../../core/pane-tree.js';
 import { MODULES, moduleEvents } from '../../core/modules.js';
 import { PaneSizer } from '../../core/panes.js';
 import { href } from '../../core/router.js';
@@ -30,23 +36,101 @@ import './ma-around-map.js';
 import './ma-deck.js';
 import '../../components/gf-plant-detail.js';
 
-/** @typedef {import('./cards.js').Card} Card */
+/**
+ * @typedef {import('./cards.js').Card} Card
+ * @typedef {import('../../core/pane-tree.js').PaneNode} PaneNode
+ * @typedef {import('../../core/pane-tree.js').Side} Side
+ */
 
 /** The steps of the discovery, as the bar shows them. */
 const STAGES = ['Carte', 'Rencontres', 'Photos', 'Encyclopédie', 'Cueillette ou science', 'Voisines'];
 /** What each step brings, said on its button in the bar. */
 const STAGE_ABOUT = ['La carte : jusqu’où chercher', 'Les cartes des plantes d’ici, à côté de la carte', 'Les photos de la plante en vue',
   'Ce qu’en dit l’encyclopédie', 'La cueillette ou la science : à vous de choisir', 'Les plantes voisines, sous la carte'];
-/** The fork's pane: the blocks of the sheet that join the layout, picking or science (the first one shown). */
+/** The fork's pane: the blocks of the sheet that join the panes, picking or science (the first one shown). */
 const FORK_BLOCKS = { harvest: ['uses', 'lookalikes', 'calendar'], science: ['map', 'occurrences', 'climate', 'taxonomy'] };
+
+/**
+ * A block into the panes (once): a new pane beside another block's pane (or, if that one is in no pane, on the right
+ * of the sheet; `root`: across the whole plant pane). A module switched off stays off: its block is not added (the
+ * panes say why, #offNote). Too many panes nested: the tree as it was (pane-tree.js dock).
+ * @param {PaneNode} t @param {string} key @param {string | null} near @param {Side} side @param {boolean} [root] @returns {PaneNode}
+ */
+function dockOnce(t, key, near, side, root = false) {
+  if (serviceOff(key) || stackOf(t, key)) return t;
+  const p = near ? stackOf(t, near) : null;
+  return dock(t, key, root ? 'root' : p ? p.id : 'sheet', root || p ? side : 'right');
+}
+
+/**
+ * Several blocks as the tabs of one pane — those of `only` in no pane yet: with those already in one (its tab shown
+ * stays shown), else in a new pane across the plant pane (the first one shown).
+ * @param {PaneNode} t @param {string[]} keys @param {Side} side @param {string[]} [only] @returns {PaneNode}
+ */
+function dockTabs(t, keys, side, only = keys) {
+  // The blocks whose module is on: the first one to come opens the pane; the others join it as tabs.
+  const shown = keys.filter(k => !serviceOff(k));
+  const add = shown.filter(k => only.includes(k) && !stackOf(t, k));
+  if (!add.length) return t;
+  const had = shown.map(k => stackOf(t, k)).find(Boolean);
+  let next = had ? t : dockOnce(t, add[0], null, side, true);
+  const pane = had ?? stackOf(next, add[0]);
+  if (!pane) return next;
+  for (const k of add) if (!stackOf(next, k)) next = dock(next, k, pane.id, 'center');
+  const after = stackOf(next, add[0]);
+  return after ? patchStack(next, after.id, { active: had?.active ?? add[0] }) : next;
+}
+
+/**
+ * The blocks `only` of the steps reached docked into the panes (each once): the photos on the right of the sheet, the
+ * encyclopedia under them, the fork's blocks in a pane of their own. A block already in a pane stays where it is; the
+ * others (one the user moved back into the sheet among them) are left alone.
+ * @param {PaneNode} t @param {number} step @param {'harvest' | 'science' | null} branch @param {string[]} only @returns {PaneNode}
+ */
+function withSteps(t, step, branch, only) {
+  let next = t;
+  if (step >= 1 && only.includes('media')) next = dockOnce(next, 'media', null, 'right');
+  if (step >= 2 && only.includes('wikipedia')) next = dockOnce(next, 'wikipedia', 'media', 'bottom');
+  if (step >= 3 && branch) next = dockTabs(next, FORK_BLOCKS[branch], 'right', only);
+  return next;
+}
+
+/**
+ * What a step docks as it is accepted: the photos (1), the encyclopedia (2), the fork's tabs (3, the way chosen); the
+ * others, nothing. @param {number} step @param {'harvest' | 'science' | null} branch @returns {string[]}
+ */
+const stepBlocks = (step, branch) => step === 1 ? ['media'] : step === 2 ? ['wikipedia'] : step === 3 && branch ? FORK_BLOCKS[branch] : [];
+
+/**
+ * What the steps reached dock, pane by pane: the photos, the encyclopedia, the fork's tabs.
+ * @param {number} step @param {'harvest' | 'science' | null} branch @returns {string[][]}
+ */
+const stepPanes = (step, branch) => [1, 2, 3].filter(s => s <= step).map(s => stepBlocks(s, branch)).filter(keys => keys.length);
+
+/** The game's trees of panes, made sound once each (the stored one: its blocks known, its nodes well formed). @type {WeakMap<object, PaneNode>} */
+const trees = new WeakMap();
+
+/**
+ * The end of the guided way: the way chosen at the fork, offered for the whole app — what it does, its button (it does
+ * that only), and what is said once pressed. The offer is left out when it already applies.
+ */
+const END = {
+  science: { text: 'Vous avez choisi la science : le mode Scientifique montre toutes les données des fiches, dans toute l’application.',
+    label: 'Passer en mode Scientifique', done: 'Mode Scientifique activé pour toute l’application.' },
+  harvest: { text: 'Vous avez choisi la cueillette : le mode cueillette ajoute à vos lieux le journal de récolte, la qualité et les plantes de saison.',
+    label: 'Allumer le mode cueillette', done: 'Mode cueillette allumé pour toute l’application.' }
+};
 
 export class MaGuided extends LitElement {
   static properties = {
     app: { attribute: false },
     /** The app's context (the place, the distance, the swipes, the plant chosen). */
     c: { attribute: false },
-    /** What a swipe did, said to a screen reader (a match, a plant passed, the next card). */
-    _said: { state: true }
+    /** What a swipe did, said to a screen reader (a match, a plant passed, the next card); what the end's offer did. */
+    _said: { state: true },
+    /** The end's offer: put away (« Garder tel quel »), or taken (what it did, said in its place). */
+    _endKept: { state: true },
+    _endDone: { state: true }
   };
 
   static styles = [ui, css`
@@ -76,6 +160,14 @@ export class MaGuided extends LitElement {
     .g-steps .prev:disabled { opacity: 0.35; cursor: default; }
     .g-steps .next { flex: none; display: flex; gap: 6px; }
     .g-steps .next button { min-height: 34px; padding: 0 14px; display: inline-flex; align-items: center; gap: 4px; font-size: 0.88rem; white-space: nowrap; }
+    /* The end: the way chosen, offered for the whole app (under the steps, never over the blocks). */
+    .g-end { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 10px; background: var(--gf-accent-soft); border-bottom: 1px solid var(--gf-border); }
+    .g-end p { flex: 1 1 260px; min-width: 0; margin: 0; font-size: 0.86rem; color: var(--gf-text); }
+    .g-end .acts { display: flex; flex-wrap: wrap; gap: 8px; }
+    .g-end button { min-height: 40px; padding: 0 14px; font-size: 0.88rem; }
+    .g-end p .bi { color: var(--gf-accent); }
+    .g-end:focus { outline: none; }
+    .g-end:focus-visible { outline: 2px solid var(--gf-accent); outline-offset: -2px; }
     @media (max-width: 899px) {
       .g-steps { flex-wrap: wrap; gap: 6px 8px; padding: 6px 8px; }
       .g-steps .mid { order: -1; flex-basis: 100%; }
@@ -140,6 +232,9 @@ export class MaGuided extends LitElement {
     /** @type {Record<string, any> | null} */
     this.c = null;
     this._said = '';
+    this._endKept = false;
+    /** @type {string | null} */
+    this._endDone = null;
   }
 
   #onChange = () => this.requestUpdate();
@@ -180,8 +275,26 @@ export class MaGuided extends LitElement {
     }
     // The cards: there from the step « cards » on (a reload there, « Reprendre »).
     if (!this.#asking) s.ensure(false);
-    const open = this.c?.focus;
-    if (changed.has('c') && open != null && changed.get('c')?.focus !== open) plantSeen(open);
+    // The end's offer: made again each time the last step is reached.
+    if (this.#stage !== STAGES.length - 1) { this._endKept = false; this._endDone = null; }
+  }
+
+  updated() {
+    if (!this.app) return;
+    const { step, branch } = discoverState();
+    // A game kept from before its panes were its own (kit/session.js#keptFromBefore): the panes its steps had docked
+    // then into the layout of the mode taken back, once — as they left them (core/sheet-blocks.js#undockAlone) —, and
+    // docked into the game's own, as its steps do.
+    if (this.#s.keptFromBefore) {
+      this.#s.keptFromBefore = false;
+      undockAlone(this.#view, stepPanes(step, branch));
+      this.#dockSteps(this.#tree, this.#stepKeys, step, branch);
+      return;
+    }
+    // A module switched back on (Réglages, another tab): the blocks its steps had left out docked now. Nothing else is
+    // docked on an update: a block the user moved (Mode King: « Déplacer vers… », a drag) stays where it was put.
+    const back = /** @type {string[]} */ (this.app.c.leftOut ?? []).filter(k => this.#stepKeys.includes(k) && !serviceOff(k));
+    if (back.length) this.#dockSteps(this.#tree, back, step, branch);
   }
 
   get #s() { return /** @type {import('./session.js').AroundSession} */ (this.#session); }
@@ -189,8 +302,37 @@ export class MaGuided extends LitElement {
   /** The step « map »: the map alone, its distance. */
   get #asking() { return this.app?.step.id === 'map'; }
 
-  /** The mode whose layout the steps build (the one the plant sheet shows in Flore). */
+  /** The mode the plant's panes are drawn in (their blocks' styles; their tree is the game's own: #tree). */
   get #view() { return this.#store.state.mode; }
+
+  /** The panes the steps built, the game's (the context's `panes`), made sound; none yet: the sheet alone. @returns {PaneNode} */
+  get #tree() {
+    const raw = this.app?.c.panes;
+    if (!raw || typeof raw !== 'object') return SHEET;
+    let t = trees.get(raw);
+    if (!t) { t = normalize(raw, k => Boolean(blockOf(k))); trees.set(raw, t); }
+    return t;
+  }
+
+  /** The game's panes, kept with it (never the layout of the mode). @param {PaneNode} t */
+  #setPanes(t) {
+    if (t === this.#tree) return;
+    trees.set(t, t);
+    this.app?.set({ panes: t.t === 'sheet' ? null : t });
+  }
+
+  /**
+   * Blocks of the steps reached docked into the game's panes `t` — `keys`: their step accepted, their module switched
+   * back on, a game kept from before —, each once; never on a mere update (#updated), so that a block the user moved
+   * stays where it was put. Those whose module is off wait for it, kept with the game (the context's `leftOut`).
+   * @param {PaneNode} t @param {string[]} keys @param {number} step @param {'harvest' | 'science' | null} branch
+   */
+  #dockSteps(t, keys, step, branch) {
+    const was = /** @type {string[]} */ (this.app?.c.leftOut ?? []);
+    const left = [...was.filter(k => !keys.includes(k)), ...keys.filter(serviceOff)];
+    if (left.join() !== was.join()) this.app?.set({ leftOut: left.length ? left : null });
+    this.#setPanes(withSteps(t, step, branch, keys));
+  }
 
   /** The plant of the screen: the plant chosen, else (before any heart) the card on top — the map lights it, the panes show it. */
   get #focusId() { return this.#s.chosenId; }
@@ -238,53 +380,86 @@ export class MaGuided extends LitElement {
   #onUndo = () => { this.#s.rewind(); };
 
   /**
-   * A block into the layout (once): a new pane beside another block's pane (or, if that one is in no pane,
-   * on the right of the sheet; `root`: across the whole plant pane).
-   * @param {string} key @param {string | null} near @param {'left' | 'right' | 'top' | 'bottom'} side @param {boolean} [root]
+   * The fork: picking or science; its dashboard joins the plant (the other way's, chosen before « Précédent », leaves).
+   * @param {'harvest' | 'science'} branch
    */
-  #dockAt(key, near, side, root = false) {
-    const v = this.#view;
-    if (paneOf(v, key)) return;
-    const p = near ? paneOf(v, near) : null;
-    // A module switched off stays off: its block is not added (the panes say why, #offNote).
-    dockBlock(v, key, root ? 'root' : p ? p.id : 'sheet', root || p ? side : 'right', { auto: true });
-  }
-
-  /** Several blocks as the tabs of one new pane (the first one shown). @param {string[]} keys @param {'left' | 'right' | 'top' | 'bottom'} side */
-  #dockTabs(keys, side) {
-    const v = this.#view;
-    // The first block whose module is on opens the pane; the others join it as tabs.
-    const shown = keys.filter(k => !modulesOffFor(k).length);
-    if (!shown.length) return;
-    this.#dockAt(shown[0], null, side, true);
-    const pane = paneOf(v, shown[0]);
-    if (!pane) return;
-    for (const k of shown.slice(1)) if (!paneOf(v, k)) dockBlock(v, k, pane.id, 'center', { auto: true });
-    const after = paneOf(v, shown[0]);
-    if (after) setStackState(v, after.id, { active: shown[0] });
-  }
-
-  /** The fork: picking or science; its dashboard joins the plant. @param {'harvest' | 'science'} branch */
   #fork(branch) {
-    this.#dockTabs(FORK_BLOCKS[branch], 'right');
+    let t = this.#tree;
+    for (const k of FORK_BLOCKS[branch === 'harvest' ? 'science' : 'harvest']) if (stackOf(t, k)) t = undock(t, k);
+    this.#dockSteps(t, stepBlocks(3, branch), 3, branch);
     chooseBranch(branch);
     this.requestUpdate();
     this.#showNewBlock();
   }
 
-  /** A step accepted: its pane joins the layout; the last one leaves for the whole app, on this plant. @param {number} step */
+  /**
+   * A step accepted: its pane joins the game's panes — the photos beside the sheet, the encyclopedia under them (its
+   * own blocks only: those of the steps before stay where the user left them). The last one ends the first steps and
+   * opens Flore on this plant, as it is (the mode, the harvest mode: only the end's own buttons change them,
+   * #endOffer); this game then goes on as the others. @param {number} step
+   */
   #accept(step) {
     const id = this.#focusId;
-    // Each step adds its pane to the layout of the mode (Flore will show the same): the photos beside the sheet,
-    // the encyclopedia under them.
-    if (step === 1) this.#dockAt('media', null, 'right');
-    if (step === 2) this.#dockAt('wikipedia', 'media', 'bottom');
-    // The whole app, the way chosen at the fork.
-    if (step >= LAST_STEP) { if (discoverState().branch === 'science') setMode('scientific'); else if (discoverState().branch === 'harvest') setHarvestMode(true); }
+    const { branch } = discoverState();
+    if (step < LAST_STEP) this.#dockSteps(this.#tree, stepBlocks(step, branch), step, branch);
+    else this.app?.set({ guided: false });
     setStep(step);
     if (step >= LAST_STEP && id != null) openView(href.plant(id));
     this.requestUpdate();
     this.#showNewBlock();
+    if (step === LAST_STEP - 1) this.#offerFocus();
+  }
+
+  /**
+   * The last step reached: its offer, when there is one, takes the focus — read out by its name, the way chosen — so
+   * that the next Enter never leaves for Flore without it (« La flore complète », where the focus was, comes before
+   * it).
+   */
+  async #offerFocus() {
+    await this.updateComplete;
+    /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.g-end[role="group"]'))?.focus();
+  }
+
+  /**
+   * The end (the last step, a way chosen at the fork): that way offered for the whole app — its button does only what
+   * it says (the mode, or the harvest mode, for the whole app), « Garder tel quel » puts the offer away; nothing changes
+   * without one of them. Left out when it already applies.
+   */
+  #endOffer() {
+    const { branch } = discoverState();
+    if (this.#stage !== STAGES.length - 1 || !branch || this._endKept) return nothing;
+    const end = END[branch];
+    if (this._endDone) return html`<div class="g-end"><p>${icon('check-lg')} ${this._endDone}</p></div>`;
+    const state = this.#store.state;
+    if (branch === 'science' ? state.mode === 'scientific' : state.harvestMode) return nothing;
+    return html`<div class="g-end" role="group" aria-labelledby="g-end-text" tabindex="-1">
+      <p id="g-end-text">${end.text}</p>
+      <div class="acts">
+        <button type="button" class="primary" data-end="apply" @click=${() => this.#endApply(branch)}>${icon(branch === 'science' ? 'diagram-3' : 'basket')} ${end.label}</button>
+        <button type="button" data-end="keep" @click=${() => this.#endKeep()}>Garder tel quel</button>
+      </div>
+    </div>`;
+  }
+
+  /** The way chosen, for the whole app — that only. @param {'harvest' | 'science'} branch */
+  #endApply(branch) {
+    if (branch === 'science') setMode('scientific');
+    else setHarvestMode(true);
+    this._endDone = this._said = END[branch].done;
+    this.#endFocus();
+  }
+
+  /** « Garder tel quel »: the offer put away, nothing changed. */
+  #endKeep() {
+    this._endKept = true;
+    this._said = 'Rien n’a changé.';
+    this.#endFocus();
+  }
+
+  /** After the end's offer, the focus on what comes next: « La flore complète ». */
+  async #endFocus() {
+    await this.updateComplete;
+    /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('[data-step="flore"]'))?.focus();
   }
 
   /** A phone: the blocks one under the other — the new one scrolled into view. */
@@ -302,7 +477,7 @@ export class MaGuided extends LitElement {
   /** The blocks the steps reached would add, modules off or not. */
   get #stepKeys() {
     const { step, branch } = discoverState();
-    return [...(step >= 1 ? ['media'] : []), ...(step >= 2 ? ['wikipedia'] : []), ...(step >= 3 && branch ? FORK_BLOCKS[branch] : [])];
+    return stepPanes(step, branch).flat();
   }
 
   /** Why some steps added nothing: their modules are off (Réglages › Modules), and Découvrir leaves them so. */
@@ -411,6 +586,7 @@ export class MaGuided extends LitElement {
       style=${this.#widths(asking, panes)}>
       <h1 class="visually-hidden">Découvrir : étape ${stage + 1} sur ${STAGES.length}, ${STAGES[stage]}</h1>
       ${this.#steps()}
+      ${this.#endOffer()}
       <div class="g-scroll">
         <ma-around-map class="g-map" .app=${app} .c=${c} .session=${s} ?asking=${asking} ?quiet=${quiet} ?scopes=${stage >= 2} ?listed=${step >= 4}
           .card=${panelCard} .focusId=${id} @map-launch=${() => this.#toCards()}
@@ -421,7 +597,8 @@ export class MaGuided extends LitElement {
         ${panes ? this.#sizer.split('deck', 'left', () => this.#paneMax('deck')) : nothing}
         ${panes ? html`<div class="g-plant" aria-label=${card ? 'Panneaux : ' + nameOf(card.plant) : 'Panneaux'}>
           ${this.#offNote()}
-          ${id != null ? html`<gf-plant-detail embedded subheading panes-only plant-id=${id} view=${this.#view} .paneKeys=${this.#paneKeys} .mediaAt=${c.mediaAt ?? 0}
+          ${id != null ? html`<gf-plant-detail embedded subheading panes-only plant-id=${id} view=${this.#view} .tree=${this.#tree} .paneKeys=${this.#paneKeys} .mediaAt=${c.mediaAt ?? 0}
+            @pane-sizes=${(/** @type {CustomEvent} */ e) => this.#setPanes(e.detail)}
             @media-index=${(/** @type {CustomEvent} */ e) => { e.stopPropagation(); const at = Number(e.detail?.index) || null; if (c.mediaAt !== at) app.set({ mediaAt: at }); }}>
             <div class="g-empty">${icon('binoculars')}<p>Ses photos, son histoire, ses secrets viendront s’installer ici.</p></div>
           </gf-plant-detail>` : nothing}

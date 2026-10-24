@@ -216,6 +216,8 @@ export class TrailSession extends EventTarget {
     if (!next) return false;
     const added = /** @type {any} */ (lastEntry(next)).id;
     this.fresh = added;
+    // A plant noted: seen, for the first steps of the app (the box counts it).
+    this.app.seen(plant.id);
     const name = hit.vernacularName || hit.scientificName;
     const n = entriesOf(next, plant.id).length;
     this.say(`${name} ajoutée au parcours${n > 1 ? ` (${n}e fois)` : ''}${position ? ', ici' : ''}`, () => { this.update(trail.id, current => withoutPlant(current, added)); });

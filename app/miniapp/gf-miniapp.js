@@ -1,7 +1,8 @@
 // @ts-check
 // The box of a mini-app (#/app/<id>[/<step>][?p=<plant>&v=<view>&m=<image>&fiche=1]): the app alone on the screen — no header, no tab bar
 // (gf-app) —, under a bar of 48 px: « × Quitter … » (the one way out), its title, its steps (ma-steps, when
-// « Afficher les étapes » says so), and ⋯: show or hide the steps, the layout back to its own, « Rejouer ».
+// « Afficher les étapes » says so), and ⋯: show or hide its steps (for this mini-app alone: runtime.js#setOwnSteps;
+// not while it draws a steps bar of its own), the layout back to its own, « Rejouer ».
 //  - Its manifest is loaded when it opens (app/miniapps/index.js), checked against the kit, and run (runtime.js).
 //  - The address is the whole screen, and the screen follows the address (a link, a reload, Back, Forward): the step,
 //    and the context's keys the app has — ?p= its `focus`, &v= its `view`, &m= its `mediaAt`, &fiche=1 its `sheet`
@@ -15,14 +16,17 @@
 //    its sheet), or closed — back to the entry it was opened from. Over a start screen, the plant of a link (?p=)
 //    shows in a sheet of its own (ma-plant-sheet).
 //  - The way out: exit.confirm(c) asks first if it says something; then back to where it was opened from (else the
-//    start page). Leaving changes nothing in the app (no mode, no setting).
+//    start page). Playing or leaving changes nothing else in the app (no mode, no setting, no layout of the sheet).
+//  - The plants seen in it (the event `seen` of the runtime: a card swiped, a plant opened, chosen or noted), in any
+//    mini-app: counted for the first steps of the app (core/discover.js#plantSeen: Flore comes after a few).
 //  - « Rejouer » asks first, in a dialog; then what the app owns is emptied (runtime.js#replay), here and in the
 //    other tabs (core/sync.js), and it starts again at its first step.
 
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { backTo, depth, entryValue, markEntry, openModal, pushHash, replaceHash } from '../core/history.js';
 import { href } from '../core/router.js';
-import { setShowSteps, StoreController } from '../core/store.js';
+import { StoreController } from '../core/store.js';
+import { plantSeen } from '../core/discover.js';
 import { subscribe } from '../core/sync.js';
 import { icon } from '../core/icons.js';
 import { ui } from '../styles/ui.js';
@@ -70,6 +74,9 @@ export class GfMiniapp extends LitElement {
       background: var(--gf-surface); border: 1px solid var(--gf-border); box-shadow: var(--gf-shadow-float); }
     .menu button { justify-content: flex-start; gap: 10px; min-height: 40px; border: 0; background: none; box-shadow: none; font-weight: 500; text-align: left; }
     .menu button:hover { background: var(--gf-surface-2); }
+    /* Its scope said on screen (a touch screen shows no tooltip): under its label. */
+    .menu .own span { display: grid; }
+    .menu .own small { font-size: 0.78rem; font-weight: 400; color: var(--gf-text-muted); }
     gf-scenarios { flex: none; }
     .body { position: relative; min-height: 0; overflow: hidden; container-type: inline-size; }
     .body > ma-grid { height: 100%; }
@@ -196,6 +203,7 @@ export class GfMiniapp extends LitElement {
       app.addEventListener('navigate', this.#onNavigate);
       app.addEventListener('exit', this.#onExit);
       app.addEventListener('scenarios', this.#scenarios);
+      app.addEventListener('seen', this.#onSeen);
       // Where it was opened from: kept in the entry (a reload, Back and Forward find it again).
       const kept = entryValue('gfAppFrom');
       this.#from = typeof kept === 'number' ? kept : depth() > 0 ? depth() - 1 : null;
@@ -218,6 +226,7 @@ export class GfMiniapp extends LitElement {
     app.removeEventListener('navigate', this.#onNavigate);
     app.removeEventListener('exit', this.#onExit);
     app.removeEventListener('scenarios', this.#scenarios);
+    app.removeEventListener('seen', this.#onSeen);
     app.dispose();
     this._app = null;
   }
@@ -293,6 +302,9 @@ export class GfMiniapp extends LitElement {
     this.requestUpdate();
   };
 
+  /** A plant seen in the mini-app: one more for the first steps of the app. @param {Event} e */
+  #onSeen = e => { plantSeen(/** @type {CustomEvent} */ (e).detail); };
+
   #onNavigate = (/** @type {Event} */ e) => {
     const app = this._app;
     if (!app) return;
@@ -353,7 +365,9 @@ export class GfMiniapp extends LitElement {
     const c = app.c;
     const kind = step.kind ?? 'grid';
     const drawn = kind !== 'grid' && !(m.driven && kind === 'start');
-    const bar = app.guided && !this._ownBar && !m.ownBar?.(c, app);
+    // Its own steps bar (Rencontres' guided way): the box's, and the ⋯ item that shows or hides it, left out.
+    const own = this._ownBar || Boolean(m.ownBar?.(c, app));
+    const bar = app.guided && !own;
     // Over a start screen, the plant of a link in a sheet of its own (Rencontres: when the address opens its sheet,
     // &fiche=1 — never the plant kept with the game).
     const focus = drawn && (!('sheet' in m.context) || c.sheet) && 'focus' in m.context && typeof c.focus === 'number' ? c.focus : null;
@@ -366,7 +380,8 @@ export class GfMiniapp extends LitElement {
         <details class="more" @keydown=${(/** @type {KeyboardEvent} */ e) => { if (e.key === 'Escape') /** @type {HTMLDetailsElement} */ (e.currentTarget).removeAttribute('open'); }}>
           <summary aria-label="Plus d’options" title="Plus d’options">${icon('three-dots')}</summary>
           <div class="menu" role="group" aria-label="Options de ${fr(m.title)}">
-            <button type="button" @click=${(/** @type {Event} */ e) => { this.#closeMenu(e); setShowSteps(bar ? 'off' : 'on'); }}>${icon(bar ? 'eye-slash' : 'list-ul')} ${bar ? 'Masquer les étapes' : 'Afficher les étapes'}</button>
+            ${own ? nothing : html`<button type="button" class="own" @click=${(/** @type {Event} */ e) => { this.#closeMenu(e); app.setOwnSteps(!bar); }}>${icon(bar ? 'eye-slash' : 'list-ul')}
+              <span>${bar ? 'Masquer les étapes' : 'Afficher les étapes'} <small>Pour cette mini-application seulement</small></span></button>`}
             <button type="button" @click=${(/** @type {Event} */ e) => { this.#closeMenu(e); /** @type {any} */ (this.renderRoot.querySelector('ma-grid'))?.resetLayout?.(); }}>${icon('arrows-collapse')} Remettre la mise en page</button>
             <button type="button" class="replay" @click=${(/** @type {Event} */ e) => { this.#closeMenu(e); this.#replay(); }}>${icon('arrow-counterclockwise')} Rejouer</button>
           </div>
