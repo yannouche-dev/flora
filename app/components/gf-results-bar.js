@@ -1,23 +1,22 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { SORTS } from '../config.js';
-import { activeFilterCount, applySuggestion, heldSuggestions, setQuery, toHash } from '../core/query.js';
-import { share } from '../core/share.js';
+import { activeFilterCount, applySuggestion, heldSuggestions, setQuery } from '../core/query.js';
 import { gridViewOf, setCompact, setGridView } from '../core/store.js';
 import { SearchController } from '../core/search-channel.js';
+import { genusFamily } from '../core/search.js';
 import './gf-mode-switch.js';
 import './gf-active-filters.js';
 import './gf-plant-search.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
-import { href } from '../core/router.js';
 
 /**
  * Above the list: filters button (mobile), result count, sort, density, active filter chips,
  * family/genus suggestions and the "approximate results" note.
  * Fires `open-filters` when the mobile filter button is pressed.
  */
-const COLUMN_LABELS = { fr: 'Nom français', sci: 'Nom scientifique', family: 'Famille', genus: 'Genre', status: 'Statut', legal: 'Protection', photo: 'Photo', obs: 'Observations' };
+const COLUMN_LABELS = { fr: 'Nom français', sci: 'Nom scientifique', species: 'Espèce', family: 'Famille', genus: 'Genre', status: 'Statut', legal: 'Protection', photo: 'Photo', obs: 'Observations' };
 /** Sort chosen in the grid (e.g. "-family") shown in the card view's menu. @param {string} sort */
 const columnSortLabel = sort => (COLUMN_LABELS[sort.replace(/^-/, '')] || sort) + (sort.startsWith('-') ? ' (inverse)' : '');
 
@@ -29,8 +28,7 @@ export class GfResultsBar extends LitElement {
     /** The count is shown just above the bar, by its host (a free layout's cell head: « Recherche · 66 espèces »). */
     countAbove: { type: Boolean, attribute: 'count-above' },
     /** The search it shows and changes (core/search-channel.js: a free layout's group); none: the app's. */
-    channel: { attribute: false },
-    _copied: { state: true }
+    channel: { attribute: false }
   };
 
   static styles = [ui, css`
@@ -64,7 +62,7 @@ export class GfResultsBar extends LitElement {
       :host([count-above]) .row { flex-wrap: nowrap; }
       :host([count-above]) .row select { order: 0; flex: 0 1 auto; }
     }
-    /* Icon-only toggles and actions of the row (compact, share): round, same height as the other controls. */
+    /* The row's icon-only toggle (compact): round, same height as the other controls. */
     .tool { flex: none; width: 34px; height: 34px; min-height: 0; padding: 0; display: inline-grid; place-items: center; font-size: 1rem; }
     .search { display: flex; gap: 8px; align-items: center; }
     .search gf-plant-search { flex: 1; min-width: 0; }
@@ -86,20 +84,6 @@ export class GfResultsBar extends LitElement {
 
   #store = new SearchController(this);
 
-  /** Shares the current search: text, filters (families, statuses…) and sort are all in the URL. */
-  async #share() {
-    const { query, results } = this.#store.state;
-    const families = query.filters.family;
-    const title = families.length === 1 && !query.q
-      ? `${families[0]} — GeoFlora`
-      : query.q ? `« ${query.q} » — GeoFlora` : 'Recherche GeoFlora';
-    const result = await share({ title, text: `${results.total.toLocaleString('fr-FR')} espèces`, url: toHash(query) });
-    if (result === 'copied') {
-      this._copied = true;
-      setTimeout(() => { this._copied = false; }, 2000);
-    }
-  }
-
   constructor() {
     super();
     this.wide = true;
@@ -107,7 +91,23 @@ export class GfResultsBar extends LitElement {
     this.countAbove = false;
     /** @type {import('../core/search-channel.js').Channel | null} */
     this.channel = null;
-    this._copied = false;
+  }
+
+  /** The sort the menu was last put on (updated), while it is drawn. @type {string | null} */
+  #synced = null;
+
+  /**
+   * The sort menu on the sort applied, once its options are drawn: a sort out of the menu (a column's, « Genre »)
+   * gets an option of its own, drawn after the menu's value was set — from one such sort to another, none was
+   * chosen any more; and an option once picked no longer follows its `selected`. Only when the sort applied
+   * changes: one just picked, not applied yet (its search under way), stays shown.
+   */
+  updated() {
+    const select = /** @type {HTMLSelectElement | null} */ (this.renderRoot.querySelector('select'));
+    const sort = select ? this.#store.state.results.sort : null;
+    if (sort === this.#synced) return;
+    this.#synced = sort;
+    if (select && sort !== null && select.value !== sort) select.value = sort;
   }
 
   /** @param {import('../core/store.js').Suggestion} suggestion */
@@ -120,7 +120,10 @@ export class GfResultsBar extends LitElement {
    * on, touched again: off). @param {any} query
    */
   #suggestions(query) {
-    const list = (!query.q && !this.channel && heldSuggestions()) || this.#store.state.results.suggestions;
+    // A genus outside the families chosen: none of its plants left (the Genre filter does not list it either).
+    const families = query.filters.family;
+    const list = ((!query.q && !this.channel && heldSuggestions()) || this.#store.state.results.suggestions)
+      .filter((/** @type {any} */ s) => s.type !== 'genus' || !families.length || families.includes(genusFamily.get(s.name) || ''));
     if (!list.length) return nothing;
     return html`<div class="suggestions">
       Filtrer par :
@@ -151,7 +154,7 @@ export class GfResultsBar extends LitElement {
         <gf-plant-search .channel=${this.channel}></gf-plant-search>
       </div>
       <div class="row">
-        <span class="count" aria-live="polite">
+        <span class="count" aria-live="polite" tabindex="-1">
           ${status === 'ready' ? html`${results.total.toLocaleString('fr-FR')} espèce${results.total > 1 ? 's' : ''}` : nothing}
           ${status === 'ready' && this.#store.state.floraStoring ? html`<small class="storing"
             title="La flore s’enregistre sur cet appareil : bientôt disponible hors ligne">· mise hors ligne…</small>` : nothing}
@@ -160,7 +163,7 @@ export class GfResultsBar extends LitElement {
           ${results.sort === 'relevance' || !query.q ? nothing : html`<button type="button" title="Trier par pertinence" @click=${() => setQuery({ sort: '' }, { channel: this.#store.channel })}>Pertinence</button>`}
           <gf-mode-switch class="views" scope="la grille" value=${view} ?overridden=${gridView !== null}
             @mode-change=${e => setGridView(e.detail.mode)}></gf-mode-switch>` : html`
-          <select aria-label="Trier par" .value=${results.sort}
+          <select aria-label="Trier par"
             @change=${e => setQuery({ sort: e.target.value }, { channel: this.#store.channel })}>
             ${sorts.map(s => html`<option value=${s.value} ?selected=${s.value === results.sort}>${s.label}</option>`)}
             ${sorts.some(s => s.value === results.sort) ? nothing : html`<option value=${results.sort} selected>${columnSortLabel(results.sort)}</option>`}
@@ -168,13 +171,11 @@ export class GfResultsBar extends LitElement {
           <button class="tool" type="button" aria-pressed=${compact ? 'true' : 'false'}
             title="Affichage compact (sans vignettes)" aria-label="Affichage compact (sans vignettes)"
             @click=${() => setCompact(!compact)}>${icon('arrows-collapse')}</button>`}
-        ${this.#store.state.placed.size ? html`<a class="tool button" href=${href.map({ flore: true })} title="Sur la Carte : mes lieux qui ont une plante de ces résultats"
-          aria-label="Sur la Carte : mes lieux qui ont une plante de ces résultats">${icon('map')}</a>` : nothing}
-        <button class="tool" type="button" title=${this._copied ? 'Lien copié' : 'Partager cette recherche (filtres compris)'}
-          aria-label=${this._copied ? 'Lien copié' : 'Partager cette recherche (filtres compris)'} @click=${this.#share}>${icon(this._copied ? 'check-lg' : 'share')}</button>
       </div>
 
-      <gf-active-filters .channel=${this.channel}></gf-active-filters>
+      <!-- The last chip gone with the focus: to the count, which says the list it leaves. -->
+      <gf-active-filters .channel=${this.channel}
+        @chips-gone=${() => /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.count'))?.focus()}></gf-active-filters>
 
       ${this.#suggestions(query)}
 

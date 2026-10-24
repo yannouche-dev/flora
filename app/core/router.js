@@ -5,7 +5,7 @@ import './history.js';
 
 /**
  * @typedef {{ name: 'search' } | { name: 'plant', id: number, pane: string | null, at: number | null } | { name: 'settings' } | { name: 'legal' } | { name: 'collections', open: string | null, plant: number | null }
- *   | { name: 'map', spot: string | null, plant: number | null, focus: string | null, season: boolean, add: number | null, pick: boolean, flore: boolean }
+ *   | { name: 'map', spot: string | null, plant: number | null, focus: string | null, season: boolean, add: number | null, pick: boolean }
  *   | { name: 'spot-new', plant: number | null, kind: 'list' | 'place', at: [number, number] | null }
  *   | { name: 'spot', id: string, add: number | null, pick: boolean }
  *   | { name: 'shared', data: string } | { name: 'discover' }
@@ -46,7 +46,7 @@ export function parse(hash) {
   if (path === 'map') {
     return {
       name: 'map', spot: params.get('spot'), plant: number('plant'), focus: focusParam(params.get('focus')), season: params.get('season') === '1',
-      add: number('add'), pick: params.get('pick') === '1', flore: params.get('from') === 'flore'
+      add: number('add'), pick: params.get('pick') === '1'
     };
   }
   if (path === 'collections') return { name: 'collections', open: params.get('c'), plant: number('plant') };
@@ -120,7 +120,7 @@ export const href = {
    * `focus`: a plant of the selected place (its marker highlighted, its details open); `add` pre-adds a plant
    * to the selected place, `pick` opens its plant picker.
    */
-  map: (/** @type {{ spot?: string, plant?: number, focus?: string | number, season?: boolean, add?: number, pick?: boolean, flore?: boolean }} */ options = {}) => {
+  map: (/** @type {{ spot?: string, plant?: number, focus?: string | number, season?: boolean, add?: number, pick?: boolean }} */ options = {}) => {
     const params = new URLSearchParams();
     if (options.spot) params.set('spot', options.spot);
     if (options.spot && options.add) params.set('add', String(options.add));
@@ -128,8 +128,6 @@ export const href = {
     if (options.focus) params.set('focus', String(options.focus));
     if (options.plant) params.set('plant', String(options.plant));
     if (options.season) params.set('season', '1');
-    // The places holding plants of the current Flore search.
-    if (options.flore) params.set('from', 'flore');
     const search = params.toString();
     return '#/map' + (search ? '?' + search : '');
   },

@@ -15,7 +15,10 @@ if (typeof state().gfDepth !== 'number') history.replaceState({ ...state(), gfDe
 
 // A link or `location.hash =` pushed an entry with no state: it is one step deeper than the one we were on.
 addEventListener('hashchange', () => {
-  if (typeof state().gfDepth !== 'number') history.replaceState({ ...state(), gfDepth: last + 1 }, '');
+  if (typeof state().gfDepth !== 'number') {
+    forget(last + 1);
+    history.replaceState({ ...state(), gfDepth: last + 1, ...kept() }, '');
+  }
   last = depth();
 });
 
@@ -37,7 +40,8 @@ const moved = () => dispatchEvent(new Event('gf-location'));
  * @param {string} hash @param {Record<string, unknown>} [extra] kept in the entry's state @param {boolean} [notify]
  */
 export function pushHash(hash, extra = {}, notify = true) {
-  history.pushState({ ...extra, gfDepth: depth() + 1 }, '', hash);
+  forget(depth() + 1);
+  history.pushState({ ...extra, gfDepth: depth() + 1, ...kept() }, '', hash);
   last = depth();
   if (notify) dispatchEvent(new HashChangeEvent('hashchange'));
   else moved();
@@ -62,7 +66,53 @@ export function openView(hash) {
 
 /** The current view replaced by the one at `hash` (no new entry: Back skips it); the router follows it. @param {string} hash */
 export function replaceView(hash) {
+  const at = depth();
   location.replace(hash);
+  // location.replace leaves the entry no state, as a link's new one (the hashchange would count it a step deeper and
+  // forget the views ahead): it keeps its depth and the URLs kept for the others, not what the view replaced kept in it.
+  history.replaceState({ gfDepth: at, ...kept() }, '');
+}
+
+/** This page is a reload of its entry: the entry's state was written by the page just on it (not by one long ago). */
+const reloaded = () => /** @type {PerformanceNavigationTiming | undefined} */ (performance.getEntriesByType('navigation')[0])?.type === 'reload';
+
+/**
+ * URLs the views of this visit were given after they were left (the list a plant was opened from, its filters
+ * changed beside the plant), by depth: going back to one — or Forward to it, after going back past it at once — it
+ * takes its URL. Kept until a new view takes its place (forget). In the current entry's state too (gfBehind: written
+ * as it changes, carried to each new entry), so a reload, then Back or Forward, still finds them. A page gone back or
+ * forward to from another page keeps only those behind its entry: the state it reads may hold some ahead that a view
+ * made since in their place, by a link, forgot (they go from it too).
+ * @type {Map<number, string>}
+ */
+const behind = new Map((Array.isArray(state().gfBehind) ? state().gfBehind : [])
+  .filter((/** @type {any} */ e) => Array.isArray(e) && Number.isInteger(e[0]) && e[0] >= 0 && typeof e[1] === 'string'
+    && (e[0] < depth() || (e[0] > depth() && reloaded()))));
+keepBehind();
+
+/** `behind` as a new entry's state carries it (none: nothing). */
+function kept() { return behind.size ? { gfBehind: [...behind] } : {}; }
+
+/** A new view at `at` depth: the URLs kept for the views it replaces (there and beyond) go with them. @param {number} at */
+function forget(at) {
+  for (const d of behind.keys()) if (d >= at) behind.delete(d);
+}
+
+/** `behind` into the current entry's state (a reload reads it back), its URL `href` when given. @param {string} [href] */
+function keepBehind(href) {
+  const { gfBehind, ...rest } = state();
+  if (behind.size || gfBehind || href) history.replaceState({ ...rest, ...kept() }, '', href);
+}
+
+/**
+ * The view at `target` depth, behind this one, gets `href` when it is gone back to (Back, backTo; Forward, gone back
+ * past it): its URL would otherwise undo what changed since it was left (the store follows the URL).
+ * @param {number} target @param {string} href
+ */
+export function renewBehind(target, href) {
+  if (target < 0 || target >= depth() || behind.get(target) === href) return;
+  behind.set(target, href);
+  keepBehind();
 }
 
 /** Back to the entry at `target` depth when it is behind this one, else a new view at `fallback`. @param {number | null} target @param {string} fallback */
@@ -114,7 +164,16 @@ export function openModal(dialog) {
 
 addEventListener('popstate', () => {
   // A link fires popstate too, on its new entry not stamped yet (hashchange stamps it from `last`).
-  if (typeof state().gfDepth === 'number') last = depth();
+  if (typeof state().gfDepth === 'number') {
+    last = depth();
+    // Back (or Forward) to a view given a URL since it was left (renewBehind): it takes it before the hashchange of
+    // this move reads it. Those of the other views stay — gone back past at once (history.go(-2), the long-pressed
+    // Back's menu), one is still given its URL on Forward; a new view in its place forgets it (pushHash, a link's
+    // entry). This entry's state is told.
+    const href = behind.get(depth());
+    behind.delete(depth());
+    keepBehind(href && href !== location.hash ? href : undefined);
+  }
   // Back from a dialog's step to the view it covered (same depth): that view takes the URL the step was given,
   // before the hashchange of this move reads it (the store follows the URL: the filters would be undone).
   for (const [id, step] of stepUrls) {

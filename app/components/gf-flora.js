@@ -4,7 +4,8 @@ import { config } from '../config.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
 import { activeFilterCount, clearFilters, lastSearchHash } from '../core/query.js';
 import { href } from '../core/router.js';
-import { backTo, depth, openModal, openView, replaceView } from '../core/history.js';
+import { backTo, depth, entryValue, markEntry, openModal, openView, renewBehind, replaceView } from '../core/history.js';
+import { setContext } from '../core/context.js';
 import { StoreController, whenReady } from '../core/store.js';
 import { PaneSizer, splitStyles } from '../core/panes.js';
 import { ui } from '../styles/ui.js';
@@ -110,6 +111,7 @@ export class GfFlora extends LitElement {
     /* A pane's name: a heading under the view's h1 (Flore); a plant open, a label only (its name is the h1). */
     .pane-head :is(h2, .title) { margin: 0; font-weight: 700; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gf-text-muted); flex: 1; display: flex; gap: 8px; align-items: center; min-width: 0; }
     .pane-head .icon-btn { width: 32px; height: 32px; font-size: 1rem; }
+    .pane-head .link { flex: none; white-space: nowrap; }
     /* Each pane lays out on its own: resizing one does not re-lay out the content of the others. */
     .pane-body { flex: 1; min-height: 0; overflow-y: auto; contain: strict; }
     /* No bottom padding: the headers still to come sit right on the bottom edge (gf-facet); the room is the panel's. */
@@ -206,8 +208,9 @@ export class GfFlora extends LitElement {
     dialog.drawer { --drawer-w: 640px; --drawer-h: 88dvh; }
     .sheet-head { padding: 4px 16px 0; border-bottom: 1px solid var(--gf-border); }
     .sheet-head::before { content: ''; display: block; width: 36px; height: 4px; margin: 6px auto 0; border-radius: 2px; background: var(--gf-border); }
-    .sheet-head h2 { font-size: 1rem; margin: 12px 0 8px; display: flex; align-items: center; }
-    .sheet-head h2 .link { margin-left: auto; }
+    /* « Tout effacer » beside the title, not in it (the heading's name would be « Filtres Tout effacer »). */
+    .sheet-title { display: flex; align-items: center; gap: 8px; margin: 12px 0 8px; }
+    .sheet-title h2 { font-size: 1rem; margin: 0; flex: 1; }
     .sheet-body { overflow-y: auto; padding: 0 16px; flex: 1; }
     .sheet-foot { padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--gf-border); }
     .sheet-foot button { width: 100%; }
@@ -222,6 +225,8 @@ export class GfFlora extends LitElement {
   });
   /** Depth in history of the list the plant was opened from (null: opened from elsewhere). @type {number | null} */
   #listDepth = null;
+  /** The list's address as the plant found it, then as its filters and sort change beside the plant. */
+  #listHash = '';
 
   constructor() {
     super();
@@ -399,8 +404,15 @@ export class GfFlora extends LitElement {
   willUpdate(changed) {
     if (changed.has('route')) {
       const before = changed.get('route');
-      // The list's place in history: from the search to a plant, kept while stepping plant to plant.
-      if (this.route.name === 'plant') this.#listDepth = before?.name === 'search' ? depth() - 1 : before?.name === 'plant' ? this.#listDepth : null;
+      // The list's place in history: from the search to a plant, kept while stepping plant to plant, and in the
+      // plant's entry (gfList) for this view made again on it (a reload, Back from another tab).
+      if (this.route.name === 'plant') {
+        const kept = entryValue('gfList');
+        this.#listDepth = before?.name === 'search' ? depth() - 1 : before?.name === 'plant' ? this.#listDepth
+          : !before && Number.isInteger(kept) && kept >= 0 && kept < depth() ? kept : null;
+        if (this.#listDepth !== null) markEntry({ gfList: this.#listDepth });
+      }
+      if (this.route.name === 'plant' && before?.name !== 'plant') this.#listHash = lastSearchHash();
       // A plant opened from the list: the search field lets go of the keys (← → then go from plant to plant).
       if (this.route.name === 'plant' && before?.name !== 'plant') {
         let el = document.activeElement;
@@ -426,6 +438,15 @@ export class GfFlora extends LitElement {
         if (this.route.name === 'plant' && before?.name !== 'plant') this.#focusSheet = true;
         if (before?.name === 'plant' && this.route.name !== 'plant') this.#focusRow = before.id;
       }
+    }
+    // A plant open beside the list (desktop, tablet): the filters and the sort changed there (the Filtres pane, the
+    // drawer) are the list's, not written in the plant's address — closing the plant, Back, the Flore tab or a reload
+    // come back to them, not to the list as the plant found it.
+    const list = this.route.name === 'plant' ? lastSearchHash() : this.#listHash;
+    if (list !== this.#listHash) {
+      this.#listHash = list;
+      setContext({ query: list });
+      if (this.#listDepth !== null) renewBehind(this.#listDepth, list);
     }
   }
 
@@ -617,10 +638,26 @@ export class GfFlora extends LitElement {
     setTimeout(() => el.classList.remove('flash'), 1200);
   }
 
-  #filtersTitle() {
-    const active = activeFilterCount(this.#store.state.query);
-    return html`Filtres ${active ? html`<button class="link" type="button" @click=${clearFilters}>Tout effacer</button>` : nothing}`;
+  /** « Tout effacer » beside the Filtres title (the pane's, the sheet's), with a filter on: outside the heading. */
+  #clearAll() {
+    if (!activeFilterCount(this.#store.state.query)) return nothing;
+    return html`<button class="link" type="button" @click=${this.#onClearAll}>Tout effacer</button>`;
   }
+
+  /**
+   * Every filter off: clearFilters called with nothing (given the click as its argument, it would take the event for
+   * the search to clear). Its button goes with them: the focus it had to the sheet's « Voir N espèces » (said again
+   * as its count changes), or the pane's first filter — not to the page. @param {Event} e
+   */
+  #onClearAll = (/** @type {Event} */ e) => {
+    const button = /** @type {HTMLElement} */ (e.currentTarget);
+    const focused = /** @type {ShadowRoot} */ (this.renderRoot).activeElement === button;
+    const sheet = button.closest('dialog');
+    clearFilters();
+    if (!focused) return;
+    if (sheet) /** @type {HTMLElement | null} */ (sheet.querySelector('.sheet-foot button'))?.focus();
+    else /** @type {any} */ (this.renderRoot.querySelector('.pane.filters gf-filter-panel'))?.renderRoot.querySelector('gf-facet')?.focusHead();
+  };
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
@@ -675,7 +712,7 @@ export class GfFlora extends LitElement {
       <div class="panes">
         ${wide ? (folded.filters || media ? this.#rail('filters') : html`
           <section class="pane filters" id="flore-filters" aria-label="Filtres" style="width:${Math.min(this.#width('filters'), this.#max('filters'))}px">
-            ${this.#head('filters', this.#filtersTitle())}
+            ${this.#head('filters', 'Filtres', this.#clearAll())}
             <div class="pane-body"><gf-filter-panel></gf-filter-panel></div>
           </section>
           ${this.#split('filters')}`) : nothing}
@@ -715,9 +752,10 @@ export class GfFlora extends LitElement {
 
       ${wide ? nothing : html`
         <dialog class="drawer rises" aria-label="Filtres" @click=${e => { if (e.target === e.currentTarget) this.#dialog?.close(); }}>
-          <div class="sheet-head"><h2>${this.#filtersTitle()}</h2></div>
+          <div class="sheet-head"><div class="sheet-title"><h2>Filtres</h2>${this.#clearAll()}</div></div>
           <div class="sheet-body"><gf-filter-panel></gf-filter-panel></div>
-          <div class="sheet-foot">
+          <!-- « Voir N espèces » said as a filter changes: the results bar's count is out of reach while the sheet is open. -->
+          <div class="sheet-foot" aria-live="polite" aria-atomic="true">
             <button class="primary large" type="button" @click=${() => this.#dialog?.close()}>
               Voir ${total.toLocaleString('fr-FR')} espèce${total > 1 ? 's' : ''}
             </button>

@@ -26,7 +26,8 @@ export const COLUMNS = [
   { key: 'fr', label: 'Nom français', sort: 'fr', facet: 'french', width: 'minmax(120px, 1.4fr)' },
   { key: 'family', label: 'Famille', sort: 'family', facet: 'family', width: 'minmax(90px, 1fr)' },
   { key: 'genus', label: 'Genre', sort: 'genus', facet: 'genus', width: 'minmax(80px, 0.9fr)' },
-  { key: 'species', label: 'Espèce', sort: 'sci', width: 'minmax(80px, 1fr)' },
+  // Its epithet, as shown (« × oblongata » at « oblongata »: workers/search-core.js), then its genus.
+  { key: 'species', label: 'Espèce', sort: 'species', width: 'minmax(80px, 1fr)' },
   { key: 'status', label: 'Statut', sort: 'status', facet: 'status', width: 'minmax(80px, 0.8fr)' },
   { key: 'legal', label: 'Protection', sort: 'legal', facet: 'legal', width: 'minmax(96px, 1.1fr)' },
   // A free layout's zone only (its plants' observations given: `obs`), before ♥ and 📍 (the row's link spans those before).

@@ -5,7 +5,9 @@ import { icon } from '../core/icons.js';
 import { foldLetters as fold } from '../core/fold.js';
 
 /**
- * @typedef {{ value: string, label: string, count: number, title?: string, icon?: import('../core/icons.js').IconName }} FacetOption
+ * @typedef {{ value: string, label: string, count: number, title?: string, icon?: import('../core/icons.js').IconName, order?: string }} FacetOption
+ *   `order`: what it is ordered by among those of the same count, when not its label (a hybrid genus, « × Dactylodenia »,
+ *   among the D: core/fold.js unsigned)
  */
 
 /**
@@ -113,7 +115,7 @@ export const facetStyles = css`
 /**
  * One multi-select filter group: checkboxes with live counts (selecting never reorders the list),
  * optional inner search and "voir plus" for long lists.
- * Fires `facet-change` with `{ name, values }`.
+ * Fires `facet-change` with `{ name, values, erase }` (`erase`: its « effacer », every value removed at once).
  */
 export class GfFacet extends LitElement {
   static properties = {
@@ -211,13 +213,28 @@ export class GfFacet extends LitElement {
   }
 
 
-  /** @param {string[]} values */
-  #emit(values) {
+  /** @param {string[]} values @param {boolean} [erase] */
+  #emit(values, erase = false) {
     this.dispatchEvent(new CustomEvent('facet-change', {
-      detail: { name: this.name, values },
+      detail: { name: this.name, values, erase },
       bubbles: true,
       composed: true
     }));
+  }
+
+  /** Its header (the group's name) takes the focus. */
+  focusHead() {
+    /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.toggle'))?.focus();
+  }
+
+  /**
+   * « effacer »: every value removed, and the list it was looked for in (its filter) whole again. Its button goes with
+   * them: the focus it had to the group's header, not to the page.
+   */
+  #erase() {
+    if (/** @type {ShadowRoot} */ (this.renderRoot).activeElement?.classList.contains('clear')) this.focusHead();
+    this._filter = '';
+    this.#emit([], true);
   }
 
   /** @param {string} value @param {Event} event */
@@ -234,7 +251,7 @@ export class GfFacet extends LitElement {
     let options = this.options
       .filter(o => selected.has(o.value) || !this.hideEmpty || o.count > 0)
       .filter(o => !filter || fold(o.label).includes(filter));
-    if (this.limit && !this.ordered) options = options.sort((a, b) => b.count - a.count || a.label.localeCompare(b.label, 'fr'));
+    if (this.limit && !this.ordered) options = options.sort((a, b) => b.count - a.count || (a.order ?? a.label).localeCompare(b.order ?? b.label, 'fr'));
     const limit = this.limit && !this._expanded && !filter ? this.limit : Infinity;
     const shown = options.filter((o, i) => i < limit || selected.has(o.value));
     const hidden = options.length - shown.length;
@@ -246,7 +263,7 @@ export class GfFacet extends LitElement {
           ${this.label}
           ${selected.size ? html`<span class="badge">${selected.size}</span>` : nothing}
         </button>
-        ${selected.size ? html`<button class="link clear" type="button" @click=${() => this.#emit([])}>effacer</button>` : nothing}
+        ${selected.size ? html`<button class="link clear" type="button" aria-label=${'Effacer le filtre ' + this.label} @click=${() => this.#erase()}>effacer</button>` : nothing}
       </div>
       ${this.open ? html`<div class="body ${this.searchable ? 'filtered' : ''}" id="body">
         ${this.searchable ? html`

@@ -76,8 +76,22 @@ export function setQuery(patch, { debounce = 0, channel = APP } = {}) {
  */
 let held = null;
 
+/**
+ * The suggestions kept from the text (see `held`) while a filter they made is on: the search emptied or replaced
+ * from elsewhere (« Tout effacer », an address), they are let go — never shown, nor their text given back, after.
+ */
+const kept = () => held?.list.some(x => store.state.query.filters[x.type]?.includes(x.name)) ? held : null;
+
 /** The suggestions kept from the text (see `held`), or null. */
-export const heldSuggestions = () => held?.list || null;
+export const heldSuggestions = () => kept()?.list || null;
+
+/**
+ * Genera only make sense inside the selected families: those of other families let go (a family chosen in its
+ * filter, or by « Filtrer par »). @param {import('./store.js').Filters} filters
+ */
+const inFamilies = filters => filters.family.length
+  ? { ...filters, genus: filters.genus.filter(genus => filters.family.includes(genusFamily.get(genus) || '')) }
+  : filters;
 
 /**
  * « Filtrer par : Urtica · genre »: the typed text becomes a filter (again: another one, or off).
@@ -87,22 +101,26 @@ export function applySuggestion(facet, value, channel = APP) {
   const { q, filters } = channel.query;
   if (q && channel === APP) held = { q, list: /** @type {any} */ (store.state.results.suggestions) };
   if (filters[facet].includes(value)) return setFacet(facet, filters[facet].filter(v => v !== value), channel);
-  setQuery({ q: '', filters: { ...filters, [facet]: [...filters[facet], value] } }, { channel });
+  setQuery({ q: '', filters: inFamilies({ ...filters, [facet]: [...filters[facet], value] }) }, { channel });
 }
 
-/** @param {Facet} facet @param {string[]} values @param {Channel} [channel] */
-export function setFacet(facet, values, channel = APP) {
-  const filters = { ...channel.query.filters, [facet]: values };
-  // Genera only make sense inside the selected families.
-  if (facet === 'family' && values.length) {
-    filters.genus = filters.genus.filter(genus => values.includes(genusFamily.get(genus) || ''));
-  }
-  // Every filter the « Filtrer par » suggestions made from the search text is removed: the text comes back
-  // (unless something else was typed since).
-  const made = channel === APP ? held : null;
+/**
+ * @param {Facet} facet @param {string[]} values @param {Channel} [channel]
+ * @param {{ erase?: boolean }} [options] `erase`: its « effacer » — emptied for good, the text a « Filtrer par »
+ *   suggestion made it from not given back
+ */
+export function setFacet(facet, values, channel = APP, { erase = false } = {}) {
+  const before = channel.query.filters[facet];
+  const filters = facet === 'family' ? inFamilies({ ...channel.query.filters, family: values }) : { ...channel.query.filters, [facet]: values };
+  // Every filter the « Filtrer par » suggestions made from the search text gone: they are let go. The text comes back
+  // when the last of them was taken off by hand (unticked, its ✕, the suggestion touched again) — not when the facet
+  // was erased, nor when a value chosen put it out (a family not its genus's), nor if something else was typed since.
+  const made = channel === APP ? kept() : null;
   if (made && !made.list.some(x => filters[x.type]?.includes(x.name))) {
     held = null;
-    if (!store.state.query.q) return setQuery({ q: made.q, filters });
+    const removed = made.list.some(x => x.type === facet && before.includes(x.name) && !values.includes(x.name));
+    const added = values.some(v => !before.includes(v));
+    if (removed && !added && !erase && !store.state.query.q) return setQuery({ q: made.q, filters });
   }
   setQuery({ filters }, { channel });
 }
@@ -113,8 +131,12 @@ export function toggleValue(facet, value, channel = APP) {
   setFacet(facet, current.includes(value) ? current.filter(v => v !== value) : [...current, value], channel);
 }
 
-/** @param {Channel} [channel] */
+/**
+ * « Tout effacer »: every filter, for good — the text the « Filtrer par » suggestions were made from not given back.
+ * A click's handler calls it with no argument (its event is not a channel). @param {Channel} [channel]
+ */
 export function clearFilters(channel = APP) {
+  if (channel === APP) held = null;
   setQuery({ filters: emptyFilters() }, { channel });
 }
 
@@ -124,6 +146,8 @@ export function startUrlSync() {
     if (parse(location.hash).name !== 'search') return;
     const query = fromHash(location.hash);
     if (toHash(query) === toHash(store.state.query)) return;
+    // Another search: the suggestions kept from the text of this one go with it.
+    held = null;
     store.set({ query });
     if (store.state.status === 'ready') runSearch();
   };

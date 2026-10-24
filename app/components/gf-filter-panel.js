@@ -3,6 +3,7 @@ import { LitElement, html, css } from 'lit';
 import { STATUS_LABELS, STATUS_SHORT } from '../config.js';
 import { setFacet } from '../core/query.js';
 import { genusFamily } from '../core/search.js';
+import { unsigned } from '../core/fold.js';
 import { SearchController } from '../core/search-channel.js';
 import './gf-facet.js';
 
@@ -40,16 +41,31 @@ export class GfFilterPanel extends LitElement {
     this.channel = null;
     this.lead = 0;
     this.addEventListener('facet-change', event => {
-      const { name, values } = /** @type {CustomEvent} */ (event).detail;
-      setFacet(name, values, this.#store.channel);
+      const { name, values, erase } = /** @type {CustomEvent} */ (event).detail;
+      setFacet(name, values, this.#store.channel, { erase });
+    });
+    // A group folded at first (Statut, Protection) and opened since — by hand, or by a value chosen — stays open:
+    // its « effacer » (or a chip's ✕) empties it under the click, it does not fold it away.
+    this.addEventListener('facet-toggle', event => {
+      const { name, open } = /** @type {CustomEvent} */ (event).detail;
+      if (open) this.#opened.add(name);
+      else this.#opened.delete(name);
     });
   }
+
+  /** The groups folded at first that are open (see `facet-toggle` above). @type {Set<string>} */
+  #opened = new Set();
 
   /** Its scrolling box, followed: its height says whether the headers stack. @type {Element | null} */
   #box = null;
   #resize = new ResizeObserver(() => this.#fit());
 
   connectedCallback() { super.connectedCallback(); this.updateComplete.then(() => this.#follow()); }
+  /** A value chosen in a group folded at first (by a chip, a link, the address) opens it, for good (#opened). */
+  willUpdate() {
+    const { filters } = this.#store.state.query;
+    for (const facet of /** @type {const} */ (['status', 'legal'])) if (filters[facet].length) this.#opened.add(facet);
+  }
   disconnectedCallback() { super.disconnectedCallback(); this.#resize.disconnect(); this.#box = null; }
   updated() { this.#fit(); }
 
@@ -78,8 +94,9 @@ export class GfFilterPanel extends LitElement {
     const count = (/** @type {string} */ facet, /** @type {string} */ value) => facets[facet]?.[value] || 0;
 
     const families = [...new Set(genusFamily.values())];
+    // The genera of the families chosen; one chosen outside them (an address written so) too, ticked, to be unticked.
     const genera = [...genusFamily.keys()]
-      .filter(genus => !filters.family.length || filters.family.includes(genusFamily.get(genus) || ''));
+      .filter(genus => !filters.family.length || filters.family.includes(genusFamily.get(genus) || '') || filters.genus.includes(genus));
 
     const mine = [
       ...collections.filter(c => c.kind === 'favorites').map(c => ({ value: c.id, label: 'Favoris', icon: 'heart-fill', count: count('mine', c.id) })),
@@ -98,12 +115,12 @@ export class GfFilterPanel extends LitElement {
       ></gf-facet>
       <gf-facet name="genus" stack=${lead + 1} label="Genre" searchable limit="8" hide-empty
         .selected=${filters.genus}
-        .options=${genera.map(name => ({ value: name, label: name, count: count('genus', name) }))}
+        .options=${genera.map(name => ({ value: name, label: name, order: unsigned(name), count: count('genus', name) }))}
       ></gf-facet>
-      <gf-facet name="status" stack=${lead + 2} label="Statut en France" .open=${filters.status.length > 0} .selected=${filters.status}
+      <gf-facet name="status" stack=${lead + 2} label="Statut en France" .open=${this.#opened.has('status')} .selected=${filters.status}
         .options=${STATUS_ORDER.map(code => ({ value: code, label: STATUS_SHORT[code], title: STATUS_LABELS[code] + ' (TAXREF ' + code + ')', count: count('status', code) }))}
       ></gf-facet>
-      <gf-facet name="legal" stack=${lead + 3} label="Protection et menace" .open=${filters.legal.length > 0} .selected=${filters.legal}
+      <gf-facet name="legal" stack=${lead + 3} label="Protection et menace" .open=${this.#opened.has('legal')} .selected=${filters.legal}
         .options=${[
           { value: 'nationale', label: 'Protégée en France', title: 'Protection nationale (INPN)', count: count('legal', 'nationale') },
           { value: 'protegee', label: 'Protégée (France, région ou département)', title: 'Protection nationale, régionale ou départementale (INPN)', count: count('legal', 'protegee') },
