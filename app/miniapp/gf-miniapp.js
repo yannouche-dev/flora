@@ -369,7 +369,8 @@ export class GfMiniapp extends LitElement {
     const own = this._ownBar || Boolean(m.ownBar?.(c, app));
     const bar = app.guided && !own;
     // Over a start screen, the plant of a link in a sheet of its own (Rencontres: when the address opens its sheet,
-    // &fiche=1 — never the plant kept with the game).
+    // &fiche=1 — never the plant kept with the game), as the manifest shows a plant (plantSheet: Orchidées de
+    // Mirabel's simple sheet).
     const focus = drawn && (!('sheet' in m.context) || c.sheet) && 'focus' in m.context && typeof c.focus === 'number' ? c.focus : null;
     const asking = this._asking;
     return html`<div class="bar">
@@ -391,7 +392,7 @@ export class GfMiniapp extends LitElement {
       <div class="body">${repeat([app.generation], g => g, () => drawn
         ? html`<div class="start-host">${startScreen(app.startSpec(step))}</div>`
         : html`<ma-grid .app=${app} .c=${c} .path=${app.path}></ma-grid>`)}
-        ${focus != null ? html`<ma-plant-sheet .open=${focus} scoped></ma-plant-sheet>` : nothing}</div>
+        ${focus != null ? html`<ma-plant-sheet .open=${focus} scoped ?simple=${m.plantSheet?.simple ?? false} back=${m.plantSheet?.back ?? nothing}></ma-plant-sheet>` : nothing}</div>
       <dialog class="ask" aria-labelledby="ask-title" aria-describedby="ask-text">
         <form method="dialog">
           ${asking?.kind === 'leave'

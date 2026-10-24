@@ -2,10 +2,11 @@
 // The mini-apps: what the list of the ways to play offers first (gf-launcher: the Découvrir tab, and the launcher's
 // dialog behind the film icon), each opened alone on the screen at #/app/<id> (gf-miniapp). Its manifest
 // (app/miniapps/<id>.js) is loaded when it opens. Every file is in sw.js's SHELL.
-// `underWay`: a game under way, kept on this device (the list offers « Continuer » and « Recommencer »). Launching one
-// changes nothing else in the app (miniapp/define.js): no mode, no setting.
+// `underWay`: a game under way, kept on this device (the list offers « Continuer » and « Recommencer »; Orchidées de
+// Mirabel: a visit that left its state, the circle or the filters). Launching one changes nothing else in the app
+// (miniapp/define.js): no mode, no setting.
 
-import { aroundUnderWay, keptCtx } from '../core/around-sessions.js';
+import { aroundUnderWay, keptCtx, leftAt } from '../core/around-sessions.js';
 import { underWay } from '../miniapp/kit/faux-amis-store.js';
 import { walkUnderWay } from '../miniapp/kit/trail-store.js';
 
@@ -35,7 +36,11 @@ export const MINIAPPS = [
   { id: 'faux-amis', title: 'Faux amis', icon: 'lightbulb', scene: 'twins',
     pitch: 'Six paires de plantes qu’on confond : à qui est chaque indice ? Sans indice sûr, on ne cueille pas.',
     underWay: () => underWay(/** @type {any} */ (keptCtx('faux-amis').game)),
-    load: () => import('./faux-amis.js') }
+    load: () => import('./faux-amis.js') },
+  { id: 'orchidees', title: 'Orchidées de Mirabel', icon: 'flower2', scene: 'orchids',
+    pitch: 'Les orchidées observées sur la colline de Mirabel, à Ménétrol : sur la carte, et la fiche de chacune d’un toucher.',
+    underWay: () => leftAt('orchidees') !== null,
+    load: () => import('./orchidees.js') }
 ];
 
 /** A mini-app of the launcher, by id (null: none). @param {string} id */

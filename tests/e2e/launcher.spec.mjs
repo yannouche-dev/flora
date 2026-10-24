@@ -3,14 +3,16 @@
 // deleted, with its counts —, else « Jouer ». « Recommencer » (and « Rejouer » in the app's ⋯) empties everything the
 // mini-app owns and made — its game, its favourites, its parcours in Mes plantes —, nothing else, and opens it at its
 // first screen: the app's storage as if it had never been opened. Rencontres' services answered here.
-import { test, expect, plantId, answerAround } from './fixtures.mjs';
+import { test, expect, plantId, answerAround, answerOrchids } from './fixtures.mjs';
 
 test.use({ reducedMotion: 'reduce' });
-test.beforeEach(({ context }) => answerAround(context));
+test.beforeEach(async ({ context }) => { await answerAround(context); await answerOrchids(context); });
 
-const TITLES = { rencontres: 'Rencontres', parcours: 'Parcours botanique', cueillette: 'Cueillette prudente', mosaique: 'Mosaïque', 'faux-amis': 'Faux amis' };
+const TITLES = { rencontres: 'Rencontres', parcours: 'Parcours botanique', cueillette: 'Cueillette prudente', mosaique: 'Mosaïque', 'faux-amis': 'Faux amis',
+  orchidees: 'Orchidées de Mirabel' };
 /** The first screen of each, as its start screen says it. */
-const START = { rencontres: 'Rencontrez les plantes d’ici', parcours: null, cueillette: 'Cueillette prudente', mosaique: 'La mosaïque du coin', 'faux-amis': 'Faux amis' };
+const START = { rencontres: 'Rencontrez les plantes d’ici', parcours: null, cueillette: 'Cueillette prudente', mosaique: 'La mosaïque du coin', 'faux-amis': 'Faux amis',
+  orchidees: 'Les orchidées de la colline de Mirabel' };
 
 /** @param {import('@playwright/test').Page} page */
 const hash = page => page.evaluate(() => location.hash);
@@ -44,10 +46,17 @@ const favourites = page => page.evaluate(async () => {
 });
 
 /**
- * A game played in a mini-app, from its start: to its cards (a heart on the first), a walk with a plant, or Faux amis'
- * first card answered. @param {import('@playwright/test').Page} page @param {string} id
+ * A game played in a mini-app, from its start: to its cards (a heart on the first), a walk with a plant, Faux amis'
+ * first card answered, or the orchids' map and a genus chosen. @param {import('@playwright/test').Page} page @param {string} id
  */
 async function play(page, id) {
+  if (id === 'orchidees') {
+    await page.locator('gf-miniapp .start .go').click();
+    await expect.poll(() => hash(page)).toBe('#/app/orchidees/map');
+    await page.locator('ma-orchids .chips button').filter({ hasText: 'Ophrys' }).click();
+    await expect(page.locator('ma-orchids .chips button').filter({ hasText: 'Ophrys' })).toHaveAttribute('aria-pressed', 'true');
+    return 'map';
+  }
   if (id === 'faux-amis') {
     await page.locator('gf-miniapp .start .go').click();
     await expect.poll(() => hash(page)).toBe('#/app/faux-amis/play');
@@ -107,6 +116,7 @@ for (const id of /** @type {(keyof typeof TITLES)[]} */ (Object.keys(TITLES))) {
     await expect.poll(() => hash(page)).toBe(`#/app/${id}/${step}${id === 'rencontres' ? '?p=' + plantId('Allium ursinum') : ''}`);
     if (id === 'parcours') await expect(page.locator('gf-miniapp .mine > li')).toHaveCount(1);
     else if (id === 'faux-amis') await expect(page.locator('ma-faux-amis .count')).toHaveText('Carte 2 sur 6');
+    else if (id === 'orchidees') await expect(page.locator('ma-orchids .chips button').filter({ hasText: 'Ophrys' })).toHaveAttribute('aria-pressed', 'true');
     else await expect(page.locator('ma-around-list .head')).toBeVisible();
     await page.locator('gf-miniapp .quit').click();
     await expect.poll(() => hash(page)).toBe('#/discover');
@@ -122,6 +132,8 @@ for (const id of /** @type {(keyof typeof TITLES)[]} */ (Object.keys(TITLES))) {
     await expect(dialog).toContainText(id === 'parcours'
       ? 'Seront supprimés : le parcours en cours « Chemin du lavoir » (1 plante), la partie en cours. Cette action est définitive.'
       : id === 'faux-amis' ? 'Seront supprimés : la partie en cours. Cette action est définitive.'
+      // No game: its circle and its filters, as it says them (its manifest's owns.label).
+      : id === 'orchidees' ? 'Seront supprimés : le cercle et les filtres choisis. Cette action est définitive.'
       : `Seront supprimés : 1 favori ajouté par ${TITLES[id]}, la partie en cours. Cette action est définitive.`);
     await dialog.getByRole('button', { name: 'Annuler' }).click();
     await expect(dialog).toBeHidden();

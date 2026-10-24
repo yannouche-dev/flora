@@ -288,6 +288,9 @@ test('Recommencer : ce que la mini-application a fait et qui est encore le sien,
   const meet = defineMiniApp({ ...parcours, id: 'rencontres', title: 'Rencontres', owns: {} });
   assert.deepEqual(replayItems(meet, { favorites: [fav.properties.plants[0], fav.properties.plants[0]], collections: [], kept: { favorites: 0, collections: 0 } }),
     { gone: ['2 favoris ajoutés par Rencontres', 'la partie en cours'], kept: [] });
+  // No game: its session as it says it (Orchidées de Mirabel: its circle and its filters).
+  const site = defineMiniApp({ ...parcours, id: 'orchidees', title: 'Orchidées', owns: { label: 'le cercle et les filtres choisis' } });
+  assert.deepEqual(replayItems(site, { favorites: [], collections: [], kept: { favorites: 0, collections: 0 } }), { gone: ['le cercle et les filtres choisis'], kept: [] });
 });
 
 test('avant les origines : le parcours en cours et les vides tagués ; les parcours terminés et tous les favoris, déjà à soi', () => {

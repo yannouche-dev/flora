@@ -102,7 +102,7 @@ const fadeIn = e => { /** @type {HTMLElement} */ (e.target).classList.add('in');
 export class GfMediaViewer extends LitElement {
   static properties = {
     plantId: { type: Number, attribute: 'plant-id' },
-    /** The block's title (compact). */
+    /** The block's title (compact; or a block of its own in a sheet, local: Orchidées de Mirabel's « Médias »). */
     label: {},
     /** Open at this item (the URL's ?i=n), applied once the media are loaded. */
     index: { type: Number },
@@ -1093,7 +1093,7 @@ export class GfMediaViewer extends LitElement {
     const kinds = KINDS.filter(([k]) => k === 'all' || this.#alive.some(i => i.kind === k));
     return html`
       ${this.barOut ? nothing : html`<div class="bar">
-        ${this.compact ? html`${icon('images')}<h2>${this.label || 'Médias'}</h2>` : html`<h2></h2>`}
+        ${this.compact || (this.local && this.label) ? html`${icon('images')}<h2>${this.label || 'Médias'}</h2>` : html`<h2></h2>`}
         ${this.#controls(kinds, item, shown, at)}
         ${this.compact ? html`<button class="icon-btn" type="button" title="Ouvrir en grand, à côté de la fiche" aria-label="Ouvrir les médias en panneau"
           @click=${() => this.#toPane()}>${icon('arrows-angle-expand')}</button>` : nothing}

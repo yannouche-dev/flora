@@ -229,6 +229,74 @@ export async function answerPlantNear(page, { inat = 6, gbif = 6, area = 12, see
   });
 }
 
+/** iNaturalist's taxon and GBIF's key of the orchids (app/miniapp/kit/orchids.js ORCHIDACEAE). */
+export const ORCHIDS = { inat: 47217, gbif: 7689 };
+
+/** The orchids observed (iNaturalist's: [scientific name, French name, taxon, how many]; GBIF's: [species or null, scientific name, how many]). */
+const ORCHIDS_INAT = [['Traunsteinera globosa', 'Traunsteinère globuleuse', 7001, 3], ['Ophrys holosericea', 'Ophrys bourdon', 7002, 2],
+  ['Epipactis leptochila', 'Épipactide à labelle étroit', 7003, 1], ['Orchidaceae', 'Orchidées', ORCHIDS.inat, 1]];
+const ORCHIDS_GBIF = [['Dactylorhiza brennensis', 'Dactylorhiza brennensis (E.Nelson) Soó', 1], ['Ophrys holosericea', 'Ophrys holosericea (Burm.f.) Greuter', 1], [null, 'Ophrys L.', 1]];
+
+/**
+ * Les orchidées de la colline de Mirabel (app/miniapps/orchidees.js): the orchids observed around the point asked —
+ * iNaturalist's when asked for its taxon of the orchids alone (Traunsteinère globuleuse three times, its taxon's photo
+ * under CC BY; Ophrys bourdon twice; Épipactide à labelle étroit; one named by its family only), GBIF's when asked for
+ * its key of the orchids (Dactylorhize de la Brenne, Ophrys bourdon, an Ophrys named by its genus, « Ophrys L. », as
+ * GBIF writes it) —, spread in the circle, one of each source just beyond it, and one of each in it whose point is not
+ * where the plant was (a Traunsteinère obscured, a Dactylorhize within 2 km); any other question of theirs left to the
+ * routes before. `inat`, `gbif`: false, that source does not answer (503); `none`: both answer, nothing observed;
+ * `totals`: how many each says it has (more than it gives). `seen`: the addresses asked.
+ * @param {import('@playwright/test').Page | import('@playwright/test').BrowserContext} page
+ * @param {{ inat?: boolean, gbif?: boolean, none?: boolean, totals?: { inat?: number, gbif?: number }, seen?: string[] }} [o]
+ */
+export async function answerOrchids(page, { inat = true, gbif = true, none = false, totals = {}, seen } = {}) {
+  const json = (/** @type {import('@playwright/test').Route} */ route, /** @type {any} */ body) =>
+    route.fulfill({ contentType: 'application/json', body: JSON.stringify(body), headers: { 'access-control-allow-origin': '*' } });
+  /** Point `i` of `n` in a circle of `km` around a centre (a sunflower's spiral), past its edge when `out`. @param {number} lat @param {number} lng @param {number} km @param {number} i @param {number} n @param {boolean} [out] */
+  const at = (lat, lng, km, i, n, out = false) => {
+    const r = out ? km * 1.3 : km * 0.85 * Math.sqrt((i + 0.5) / n), a = i * 2.39996 + (out ? 1 : 0);
+    return [lng + (r * Math.sin(a)) / (111.32 * Math.cos(lat * Math.PI / 180)), lat + (r * Math.cos(a)) / 110.54];
+  };
+  await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?/, route => {
+    const q = new URL(route.request().url()).searchParams;
+    if (!(q.get('taxon_id') || '').split(',').includes(String(ORCHIDS.inat))) return route.fallback();
+    seen?.push(route.request().url());
+    if (!inat) return route.fulfill({ status: 503, body: '' });
+    /** @type {{ name: unknown, common: unknown, id: unknown, more?: object }[]} */
+    const rows = none ? [] : ORCHIDS_INAT.flatMap(([name, common, id, n]) => Array.from({ length: Number(n) }, () => ({ name, common, id })));
+    // Beyond the circle; obscured (its point at random in its cell: here in the circle).
+    const more = none ? [] : [rows[0], { ...rows[0], more: { obscured: true, public_positional_accuracy: 27000 } }];
+    const [lat, lng, km] = [Number(q.get('lat')), Number(q.get('lng')), Number(q.get('radius'))];
+    const results = q.get('page') && q.get('page') !== '1' ? [] : [...rows, ...more].map((t, i) => ({
+      id: 6100 + i, uri: `https://www.inaturalist.org/observations/${6100 + i}`,
+      geojson: { type: 'Point', coordinates: i > rows.length ? at(lat, lng, km, 0.4, rows.length) : at(lat, lng, km, i, rows.length, i === rows.length) },
+      observed_on: '2026-05-' + String(10 + i).padStart(2, '0'), place_guess: 'Ménétrol',
+      taxon: { id: t.id, name: t.name, preferred_common_name: t.common,
+        ...(t.id === 7001 ? { default_photo: { id: 610, license_code: 'cc-by', attribution: '(c) Camille, some rights reserved (CC BY)', square_url: 'https://inaturalist-open-data.s3.amazonaws.com/photos/610/square.jpg' } } : {}) },
+      ...t.more
+    }));
+    return json(route, { total_results: totals.inat ?? results.length, results });
+  });
+  await page.route(/^https:\/\/api\.gbif\.org\/v1\/occurrence\/search\?/, route => {
+    const q = new URL(route.request().url()).searchParams;
+    if (q.get('taxonKey') !== String(ORCHIDS.gbif)) return route.fallback();
+    seen?.push(route.request().url());
+    if (!gbif) return route.fulfill({ status: 503, body: '' });
+    const [lat, lng, km] = (q.get('geoDistance') || '0,0,1km').replace('km', '').split(',').map(Number);
+    /** @type {{ species: unknown, sci: unknown, more?: object }[]} */
+    const rows = none ? [] : ORCHIDS_GBIF.flatMap(([species, sci, n]) => Array.from({ length: Number(n) }, () => ({ species, sci })));
+    // Beyond the circle; placed within 2 km (a square of a grid: here in the circle).
+    const more = none ? [] : [rows[0], { ...rows[0], more: { coordinateUncertaintyInMeters: 2000 } }];
+    const results = [...rows, ...more].map((r, i) => {
+      const [x, y] = i > rows.length ? at(lat, lng, km, 1.6, rows.length) : at(lat, lng, km, i + 0.5, rows.length, i === rows.length);
+      return { key: 6200 + i, decimalLatitude: y, decimalLongitude: x, ...(r.species ? { species: r.species } : {}), scientificName: r.sci,
+        taxonRank: r.species ? 'SPECIES' : 'GENUS', genus: String(r.species || r.sci).split(' ')[0], family: 'Orchidaceae',
+        eventDate: '2024-06-1' + i, datasetKey: 'cbn-mc', datasetName: 'Conservatoire botanique national du Massif central', ...r.more };
+    });
+    return json(route, { count: totals.gbif ?? results.length, results });
+  });
+}
+
 /**
  * @typedef {{ realData: boolean, firstVisit: boolean, offlineData: boolean }} Options
  * @typedef {{ pageErrors: string[], app: import('./app.mjs').App, newDevice: () => Promise<{ page: import('@playwright/test').Page, app: import('./app.mjs').App }> }} Fixtures

@@ -20,7 +20,7 @@ const UPDATE = args.includes('--update');
 const BASE = new URL(args.find(a => !a.startsWith('--')) || 'http://localhost:8000/').href;
 const ORIGIN = new URL(BASE).origin;
 const BASELINE = join(dirname(fileURLToPath(import.meta.url)), 'axe-baseline.json');
-const SCREENS = ['#/?q=ortie', '#/plant/128268', '#/discover', '#/app/rencontres', '#/app/parcours', '#/app/cueillette', '#/app/mosaique', '#/app/faux-amis', '#/map', '#/collections', '#/settings', '#/builder/tableau'];
+const SCREENS = ['#/?q=ortie', '#/plant/128268', '#/discover', '#/app/rencontres', '#/app/parcours', '#/app/cueillette', '#/app/mosaique', '#/app/faux-amis', '#/app/orchidees', '#/map', '#/collections', '#/settings', '#/builder/tableau'];
 const DEVICES = {
   phone: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
   desktop: { viewport: { width: 1280, height: 900 } }

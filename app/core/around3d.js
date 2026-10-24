@@ -82,10 +82,13 @@ export function setAround3dPrefs(scope, patch) {
 
 /**
  * A point of the 3D map: an observation (iNaturalist), an occurrence (GBIF), or a plant of the user's places. `source`:
- * where the record comes from, as its card says it (« iNaturalist », « GBIF · <its dataset> »).
+ * where the record comes from, as its card says it (« iNaturalist », « GBIF · <its dataset> »); `obscured`, `accuracy`:
+ * how far the point may be from where the plant was, when the source says it (core/nearby.js aroundPoint; GBIF's
+ * coordinate uncertainty, in metres).
  * @typedef {{ id: string, kind: 'inat' | 'gbif' | 'mine', coordinates: [number, number], title: string, common: string | null,
  *   sci: string, taxonId: number | null, photo: string | null, credit: import('./credit.js').Credit | null, date: string | null,
- *   place: string | null, source?: string | null, url: string | null, plant?: { placeId: string, entryId?: string, plantId: number | null } }} Obs3d
+ *   place: string | null, source?: string | null, url: string | null, plant?: { placeId: string, entryId?: string, plantId: number | null },
+ *   obscured?: boolean, accuracy?: number }} Obs3d
  * @typedef {{ points: Obs3d[], totals: { inat: number | null, gbif: number | null }, failed: string[] }} Obs3dResult
  */
 

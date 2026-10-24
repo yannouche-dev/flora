@@ -37,7 +37,8 @@ export const storageKey = (id, part) => config.storageKeys.appPrefix + id + '.' 
 
 /**
  * What « Rejouer » / « Recommencer » will delete, said in its confirmation — the favourites its matches added, each
- * collection it made in Mes plantes still its own (« le parcours en cours (4 plantes) »), the game — and what it keeps
+ * collection it made in Mes plantes still its own (« le parcours en cours (4 plantes) »), its session (as the manifest
+ * says it, owns.label: Orchidées de Mirabel's circle and filters; else « la partie en cours ») — and what it keeps
  * of what came from it (the user's own: a parcours finished, a favourite put in a collection). Pure.
  * @param {Manifest} m @param {import('../core/place-model.js').Made} made @returns {{ gone: string[], kept: string[] }}
  */
@@ -50,7 +51,7 @@ export function replayItems(m, made) {
     gone: [
       ...(n ? [`${n} favori${s(n)} ajouté${s(n)} par ${m.title}`] : []),
       ...made.collections.map(c => `${label}${c.name ? ` « ${c.name} »` : ''} (${c.plants} plante${s(c.plants)})`),
-      'la partie en cours'
+      m.owns.label ?? 'la partie en cours'
     ],
     kept: [
       ...(made.kept.collections && m.owns.made ? [count(m.owns.made.kept, made.kept.collections)] : []),

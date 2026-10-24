@@ -62,9 +62,12 @@ const KEYS = new Set(Object.values(config.storageKeys));
  * @property {boolean} [driven]                                   its component leads its steps (see above)
  * @property {(c: any, app: any) => boolean} [ownBar]             its component shows a steps bar of its own now: the box's is left out
  * @property {(c: any) => string | null} [resumeAt]              the step its address opens when it names none (a game under way), else the start
- * @property {{ keys?: string[], reset?: () => unknown, made?: { label: string, kept: [string, string] } }} owns     the session data it owns,
- *   emptied by « Rejouer »; `made`: what it calls a collection it makes in Mes plantes, still its own (« le parcours en
- *   cours »), and those the user made their own, kept (one, many — {n} the count)
+ * @property {{ simple?: boolean, back?: string }} [plantSheet]   the plant of its address over a start screen, as the box shows it
+ *   (kit/ma-plant-sheet.js): `simple`, its « Médias » and « L'essentiel » only; `back`, what its ← says
+ * @property {{ keys?: string[], reset?: () => unknown, made?: { label: string, kept: [string, string] }, label?: string }} owns     the session
+ *   data it owns, emptied by « Rejouer »; `made`: what it calls a collection it makes in Mes plantes, still its own
+ *   (« le parcours en cours »), and those the user made their own, kept (one, many — {n} the count); `label`: its
+ *   session in words, as « Recommencer » says it goes (« la partie en cours » if none: a game)
  * @property {string[]} shared                                    the user's data it uses and never clears (said, not enforced)
  * @property {(data: any, from: number) => any} [migrate]
  */
@@ -148,6 +151,9 @@ export function defineMiniApp(spec) {
   if (m.owns.keys !== undefined && (!Array.isArray(m.owns.keys) || !m.owns.keys.every(appKey))) fail('owns.keys: storage keys of the app (config.storageKeys, or geoflora.app.…)');
   if (m.owns.reset !== undefined && !isFn(m.owns.reset)) fail('owns.reset must be a function');
   if (m.owns.made !== undefined && (typeof m.owns.made?.label !== 'string' || !Array.isArray(m.owns.made.kept) || m.owns.made.kept.length !== 2)) fail('owns.made: { label, kept: [one, many] }');
+  if (m.owns.label !== undefined && (typeof m.owns.label !== 'string' || !m.owns.label.trim())) fail('owns.label: its session in words (« la partie en cours »)');
+  if (m.plantSheet !== undefined && (!isObj(m.plantSheet) || (m.plantSheet.simple !== undefined && typeof m.plantSheet.simple !== 'boolean')
+    || (m.plantSheet.back !== undefined && (typeof m.plantSheet.back !== 'string' || !m.plantSheet.back)))) fail('plantSheet: { simple?: boolean, back?: its ← in words }');
   if (!Array.isArray(m.shared) || m.shared.some(x => typeof x !== 'string')) fail('shared must be a list of what it uses of the user\'s');
 
   // The context and what is derived from it: one name each.

@@ -14,7 +14,8 @@
 // first steps (ma-guided: the map ma-around-map, the deck, the plant's panes, its own steps bar). The Parcours
 // composes its own (app/miniapp/kit/: its game trail-session.js, its start screen trail-start.js): the walk (ma-walk:
 // its card, its plants, its search, its map) and the recap (ma-trail-recap). Faux amis, its cards and recap
-// (ma-faux-amis; its game faux-amis.js).
+// (ma-faux-amis; its game faux-amis.js). Les orchidées de la colline de Mirabel, its map, light filters and list, and an
+// orchid's simple sheet (ma-orchids; what is pure about them: orchids.js).
 
 import { html } from 'lit';
 import { guidedWay } from './kit/around.js';
@@ -24,6 +25,7 @@ import './kit/ma-guided.js';
 import './kit/ma-walk.js';
 import './kit/ma-trail-recap.js';
 import './kit/ma-faux-amis.js';
+import './kit/ma-orchids.js';
 
 /**
  * @typedef {import('./define.js').Place} Place
@@ -89,5 +91,15 @@ const fauxAmis = {
   render: (c, app) => html`<ma-faux-amis .app=${app} .c=${c}></ma-faux-amis>`
 };
 
+/**
+ * Les orchidées de la colline de Mirabel: the circle's map and its observations, the light filters, the orchids found
+ * (step « map »); an orchid's simple sheet (« Médias », « L'essentiel ») beside the map. @type {Component}
+ */
+const orchids = {
+  reads: ['point', 'radius', 'genera', 'marks', 'query', 'retry', 'obs', 'shown', 'focus', 'mediaAt'],
+  heavy: true,
+  render: (c, app) => html`<ma-orchids .app=${app} .c=${c}></ma-orchids>`
+};
+
 /** The components, by their `use` name. @type {Record<string, Component>} */
-export const kit = { distance, aroundList, meet, walk, recap, fauxAmis };
+export const kit = { distance, aroundList, meet, walk, recap, fauxAmis, orchids };

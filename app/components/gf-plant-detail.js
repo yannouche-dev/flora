@@ -393,6 +393,11 @@ export class GfPlantDetail extends LitElement {
      * Only its data is loaded.
      */
     only: {},
+    /**
+     * `only`, a block among others (Orchidées de Mirabel's simple sheet, kit/ma-plant-sheet.js): as the sheet reads it
+     * — its title when the view shows it (an h3, under the rubric's), left out when the view leaves it out empty.
+     */
+    titled: { type: Boolean },
     /** In a pane (`only` media): the image to open at, by URL (a photo touched) or by place (the address). */
     paneStart: { attribute: false },
     paneAt: { attribute: false },
@@ -446,7 +451,8 @@ export class GfPlantDetail extends LitElement {
     :host([embedded]) .back { display: none; }
     :host([embedded]) :is(h1, h2.h1) { margin-top: 4px; }
     .back { font-size: 0.9rem; }
-    :is(h1, h2.h1) { margin: 8px 0 0; font-size: 1.6rem; line-height: 1.2; }
+    /* The name, an h1, or an h2 under a screen's own title that looks the same (not as a block's title). */
+    :is(h1, h2.h1) { margin: 8px 0 0; font-size: 1.6rem; line-height: 1.2; font-weight: 700; text-transform: none; letter-spacing: normal; color: var(--gf-text); }
     .sci { font-family: var(--gf-font-serif); font-size: 1.2rem; }
     .sci i { font-style: italic; }
     .author { color: var(--gf-text-muted); font-size: 0.9em; }
@@ -649,6 +655,8 @@ export class GfPlantDetail extends LitElement {
     :host([only]) gf-media-viewer { flex: 1; min-height: 0; }
     .only-pad { padding: 12px 16px; }
     .block.only { margin: 0; }
+    /* Titled (a block among others): its title as the sheet's (an h3 there). */
+    .block.only > h3.block-title { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--gf-text-muted); font-weight: 600; }
     .only-pad.fill, .only-pad.fill > .block, .only-pad.fill > .block > .content { flex: 1; display: flex; flex-direction: column; min-height: 0; }
     /* ⤢: a block in the pane beside the sheet. */
     .block { position: relative; }
@@ -1009,6 +1017,7 @@ export class GfPlantDetail extends LitElement {
     this._verdict = null;
     this.panesOnly = false;
     this.subheading = false;
+    this.titled = false;
     /** @type {string[] | null} */
     this.paneKeys = null;
     /** @type {import('../core/pane-tree.js').PaneNode | null} */
@@ -1622,13 +1631,19 @@ export class GfPlantDetail extends LitElement {
     return html`<div class="frame edged panes-only" data-drop-node="root">${this.#node(ctx, tree, nothing)}</div>`;
   }
 
-  /** One block at full size (a pane): the media viewer fills it, any other block scrolls in it. @param {string} key @param {any} ctx */
+  /**
+   * One block at full size (a pane): the media viewer fills it, any other block scrolls in it. Titled (a block among
+   * others): its title as the view shows it, nothing when the view leaves it out empty. @param {string} key @param {any} ctx
+   */
   #onlyBlock(key, ctx) {
     if (key === 'media') {
       return ctx.photosOff ? html`<p class="muted only-pad">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`
         : html`<gf-media-viewer plant-id=${ctx.plant.id} presentation=${blockStyle(this.view, 'media')} .index=${this.paneAt ?? 0} .startUrl=${this.paneStart ?? null}></gf-media-viewer>`;
     }
-    return html`<div class="only-pad ${isMap(key) ? 'fill' : ''}"><section class="block only ${isMap(key) ? 'map-block' : ''}" data-key=${key}><div class="content">${this.#content(key, ctx)}</div></section></div>`;
+    const empty = this.titled && hidesEmpty(this.view, key);
+    if (empty && this.#emptyHere(key, ctx)) return nothing;
+    const title = this.titled && isTitleShown(this.view, key) ? html`<h3 class="block-title"><span class="name">${blockTitle(key)}</span></h3>` : nothing;
+    return html`<div class="only-pad ${isMap(key) ? 'fill' : ''}"><section class="block only ${empty ? 'hide-empty' : ''} ${isMap(key) ? 'map-block' : ''}" data-key=${key}>${title}<div class="content">${this.#content(key, ctx)}</div></section></div>`;
   }
 
   /**
