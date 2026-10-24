@@ -18,6 +18,18 @@ export async function swipe(page, from, to, { steps = 10 } = {}) {
   await cdp.detach();
 }
 
+/**
+ * A finger held still on the screen (a long press: Leaflet's, held 600 ms; the 3D map's, 550 ms), then lifted.
+ * @param {import('@playwright/test').Page} page @param {number} x @param {number} y
+ */
+export async function longPress(page, x, y) {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+  await page.waitForTimeout(900);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await cdp.detach();
+}
+
 /** The centre of an element on the page. @param {import('@playwright/test').Locator} locator */
 export async function centre(locator) {
   const box = await locator.boundingBox();

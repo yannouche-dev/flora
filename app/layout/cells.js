@@ -696,12 +696,17 @@ export class DlMap extends LitElement {
   }
 
   /**
-   * A long press on the map, a place picked in its address search: the scope moves there — named as the search named
-   * it, else its place's name found after. @param {CustomEvent} e
+   * A long press on the map once « Chercher autour d’ici ? » is confirmed (gf-map press="zone"), a place picked in its
+   * address search: the scope moves there — named as the search named it, else its place's name found after. Its
+   * reference's card opened again (the reference is the zone's centre): the zone there already, kept — its name too.
+   * @param {CustomEvent} e
    */
   #onPress(e) {
     const s = /** @type {LayoutState} */ (this.state);
     const at = /** @type {[number, number]} */ (e.detail.coordinates);
+    // (Within the 5 decimals of its address.)
+    const was = s.live.at;
+    if (was && Math.abs(was[0] - at[0]) < 1e-5 && Math.abs(was[1] - at[1]) < 1e-5) return;
     const label = typeof e.detail.label === 'string' && e.detail.label.trim() ? e.detail.label.trim() : null;
     s.setScope(at, label);
     if (!label) nameScope(s, /** @type {[number, number]} */ (s.live.at));
@@ -971,7 +976,7 @@ export class DlMap extends LitElement {
     const P = this.#p, d3 = this.#d3, ctl = this.#ctl, on = ctl.on;
     // France, the world (portee=): their plants' observations in tiles; the zone's circle (where it is), never framed.
     const wide = P.portee !== 'zone';
-    const press = 'Appui long sur la carte : la zone s’y centre.';
+    const press = 'Appui long sur la carte, puis « Confirmer » : la zone s’y centre.';
     const hl = P.plante === 'non' ? null : this.#highlight;
     // regroupe: the current plant's observations grouped by where they fall at the zoom shown (gf-map `cluster`).
     const grouped = Boolean(this.params?.regroupe);
@@ -991,7 +996,7 @@ export class DlMap extends LitElement {
       || (p.layers != null && p.layers.join('+') !== intended.layers);
     const lookWhy = ('base' in intended || 'layers' in intended) && !written ? intent + ' dans la disposition' : '';
     return html`${!s.live.at && this.#pressHint ? hintView(press, () => { this.#pressHint = false; this.requestUpdate(); }, 'press-hint') : nothing}
-      <div class="stage"><gf-map no-create point-click=${P.toucher === 'rien' ? 'none' : 'pick'} map-3d=${d3 === null ? nothing : d3 ? 'on' : 'off'}
+      <div class="stage"><gf-map no-create press="zone" point-click=${P.toucher === 'rien' ? 'none' : 'pick'} map-3d=${d3 === null ? nothing : d3 ? 'on' : 'off'}
         map-3d-why=${why3d} .own3d=${own3d}
         .look=${this.#look} .lookWhy=${lookWhy} .around3d=${this.#around3d} .view=${this.#view}
         .area=${area} .highlight=${wide || grouped ? null : hl} .cluster=${!wide && grouped ? hl : null}

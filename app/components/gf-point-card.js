@@ -10,6 +10,10 @@ import { icon } from '../core/icons.js';
 /**
  * A point of the map (long press, search result): nearest address, altitude, coordinates (copy),
  * "Créer un endroit ici", directions. Event: close.
+ * Asking (`ask`: gf-map's question for the point — « Poser un repère ici ? », « Déplacer le lieu ici ? », « Chercher
+ * autour d'ici ? »): the question, where the point is, « Confirmer » and « Annuler » only (events confirm, cancel).
+ * The map's reference (`removable`): « Retirer le repère » too (event remove). Its keys are the map's (gf-map: Entrée
+ * confirms, Échap cancels or closes); focusAction() puts the focus on its first action.
  */
 export class GfPointCard extends LitElement {
   static properties = {
@@ -18,6 +22,10 @@ export class GfPointCard extends LitElement {
     create: { type: Boolean },
     /** A plant to put in the place created here. */
     plant: { attribute: false },
+    /** The question asked of the point (gf-map's proposal), or '': the point's card. */
+    ask: { type: String },
+    /** The point is the map's reference: « Retirer le repère ». */
+    removable: { type: Boolean },
     _address: { state: true },
     _altitude: { state: true },
     _copied: { state: true },
@@ -36,11 +44,14 @@ export class GfPointCard extends LitElement {
       display: grid;
       gap: 6px;
     }
+    .card:focus { outline: none; }
+    .card:focus-visible { box-shadow: var(--gf-focus); }
     h2 { margin: 0; font-size: 1rem; padding-right: 40px; }
     .close { position: absolute; top: 2px; right: 2px; }
     .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 0.85rem; color: var(--gf-text-muted); }
     .coords { font-variant-numeric: tabular-nums; }
-    .actions { margin-top: 4px; }
+    .actions { margin-top: 4px; display: flex; flex-wrap: wrap; gap: 6px; }
+    .ask h2 { padding-right: 0; }
     details.insights summary { cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--gf-accent); }
     details.insights[open] summary { margin-bottom: 8px; }
     details.insights gf-place-insights { max-height: 42vh; overflow-y: auto; }
@@ -62,6 +73,8 @@ export class GfPointCard extends LitElement {
     this.create = true;
     /** @type {number | null} */
     this.plant = null;
+    this.ask = '';
+    this.removable = false;
     /** @type {string | null | undefined} undefined while loading */
     this._address = undefined;
     /** @type {number | null | undefined} */
@@ -91,6 +104,18 @@ export class GfPointCard extends LitElement {
     } catch { /* clipboard unavailable: the coordinates stay readable */ }
   }
 
+  /** @param {string} type */
+  #say(type) { this.dispatchEvent(new CustomEvent(type, { bubbles: true, composed: true })); }
+
+  /**
+   * The focus on its first action: « Confirmer » while it asks, else « Créer un endroit ici » — else (no-create) the
+   * card itself, read whole: never « Retirer le repère », which a second Entrée would take.
+   */
+  async focusAction() {
+    await this.updateComplete;
+    /** @type {HTMLElement | null | undefined} */ (this.renderRoot.querySelector('.actions .primary') || this.renderRoot.querySelector('.card'))?.focus({ preventScroll: true });
+  }
+
   render() {
     const p = this.point;
     if (!p) return nothing;
@@ -98,19 +123,32 @@ export class GfPointCard extends LitElement {
     const coming = (/** @type {string} */ words, /** @type {string} */ cls = '') => html`<span class="ph ${cls}" aria-hidden="true"></span><span class="visually-hidden">${words}</span>`;
     const title = this.label || (this._address === undefined ? coming('Recherche de l’adresse') : this._address || 'Point sur la carte');
     const loading = !this.label && this._address === undefined || this._altitude === undefined;
-    return html`<section class="card" aria-label="Point sur la carte" aria-busy=${loading ? 'true' : 'false'}>
-      <button class="close icon-btn" type="button" aria-label="Fermer"
-        @click=${() => this.dispatchEvent(new CustomEvent('close', { bubbles: true, composed: true }))}>${icon('x-lg')}</button>
+    const altitude = html`<span>${icon('triangle')} ${this._altitude === undefined ? coming('Altitude', 'short') : this._altitude === null ? 'altitude inconnue' : this._altitude + ' m'}</span>`;
+    // Asking: the question, where the point is, its two answers — nothing else to do with it before it is confirmed.
+    if (this.ask) {
+      return html`<section class="card ask" aria-label=${this.ask} aria-busy=${loading ? 'true' : 'false'}>
+        <h2>${this.ask}</h2>
+        <div class="meta">${this.label || (this._address === undefined ? coming('Recherche de l’adresse') : this._address || 'Point sur la carte')}</div>
+        <div class="meta">${altitude}<span class="coords">${formatCoordinates(p)}</span></div>
+        <div class="actions">
+          <button type="button" class="primary small confirm" @click=${() => this.#say('confirm')}>${icon('check-lg')} Confirmer</button>
+          <button type="button" class="small cancel" @click=${() => this.#say('cancel')}>Annuler</button>
+        </div>
+      </section>`;
+    }
+    return html`<section class="card" tabindex="-1" aria-label=${this.removable ? 'Repère sur la carte' : 'Point sur la carte'} aria-busy=${loading ? 'true' : 'false'}>
+      <button class="close icon-btn" type="button" aria-label="Fermer" @click=${() => this.#say('close')}>${icon('x-lg')}</button>
       <h2>${title}</h2>
       ${this.label && this._address ? html`<div class="meta">${this._address}</div>` : nothing}
       <div class="meta">
-        <span>${icon('triangle')} ${this._altitude === undefined ? coming('Altitude', 'short') : this._altitude === null ? 'altitude inconnue' : this._altitude + ' m'}</span>
+        ${altitude}
         <span class="coords">${formatCoordinates(p)}</span>
         <button class="link" type="button" @click=${this.#copy}>${this._copied ? html`Copié ${icon('check-lg')}` : 'Copier'}</button>
       </div>
       <div class="actions">
         ${this.create ? html`<a class="primary small" href=${href.newSpot(this.plant ?? null, p)}>${icon('geo-alt-fill')} Créer un endroit ici</a>` : nothing}
         <a class="button small" href=${directionsUrl({ geometry: { type: 'Point', coordinates: p } })} target="_blank" rel="noopener">Itinéraire</a>
+        ${this.removable ? html`<button type="button" class="small remove" @click=${() => this.#say('remove')}>Retirer le repère</button>` : nothing}
       </div>
       <details class="insights" ?open=${this._insights} @toggle=${(/** @type {Event} */ e) => { this._insights = /** @type {HTMLDetailsElement} */ (e.target).open; }}>
         <summary>Ici : zones naturelles, plantes vues, pollens</summary>

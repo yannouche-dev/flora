@@ -198,13 +198,57 @@ const editIcon = placeIconOf('#16a34a', 0, 'selected editing');
 /** The same place point when positions are locked (read-only map). */
 const lockedIcon = placeIconOf('#16a34a', 0, 'selected');
 
-/** A point picked on the map (long press, search result). */
-const pointIcon = L.divIcon({
-  className: 'gf-point',
-  iconSize: [26, 36],
-  iconAnchor: [13, 35],
-  html: '<svg width="26" height="36" viewBox="0 0 26 36" aria-hidden="true"><path d="M13 35C13 35 2 21 2 13a11 11 0 0 1 22 0c0 8-11 22-11 22Z" fill="#dc2626" stroke="#fff" stroke-width="2"/><circle cx="13" cy="13" r="4" fill="#fff"/></svg>'
-});
+/**
+ * The map's reference (« repère »: a point confirmed, gf-map `reference`): a sight in violet — neither a place (a
+ * rounded square on a stem) nor a plant (a ringed circle) —, centred on its point (in 3D the view turns around it).
+ * Its ghost: the point proposed, dashed, while its question waits for an answer (#propose).
+ * @param {boolean} ghost
+ */
+function refIconOf(ghost) {
+  return L.divIcon({
+    className: 'gf-ref' + (ghost ? ' ghost' : ''),
+    iconSize: [32, 32],
+    iconAnchor: [16, 16],
+    html: `<svg width="32" height="32" viewBox="0 0 32 32" aria-hidden="true">
+      <circle cx="16" cy="16" r="11.5" fill="#7c3aed" fill-opacity="${ghost ? 0.12 : 0.25}" stroke="#fff" stroke-width="3.5"/>
+      <circle cx="16" cy="16" r="11.5" fill="none" stroke="#7c3aed" stroke-width="2"${ghost ? ' stroke-dasharray="4 3"' : ''}/>
+      <path d="M16 1.5v7M16 23.5v7M1.5 16h7M23.5 16h7" stroke="#fff" stroke-width="4" stroke-linecap="round"/>
+      <path d="M16 1.5v7M16 23.5v7M1.5 16h7M23.5 16h7" stroke="#7c3aed" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="16" cy="16" r="3.5" fill="#7c3aed" stroke="#fff" stroke-width="1.5"/>
+    </svg>`
+  });
+}
+const refIcon = refIconOf(false);
+const ghostIcon = refIconOf(true);
+
+/**
+ * What a point proposed asks (#propose), by what it is for: the map's reference (a long press, the reference dragged),
+ * a place moved (positions being edited: the place editor's, the place selected), a free layout's zone.
+ * @typedef {'reference' | 'place' | 'zone'} ProposalKind
+ */
+const ASK = { reference: 'Poser un repère ici ?', place: 'Déplacer le lieu ici ?', zone: 'Chercher autour d’ici ?' };
+/** Said once it is answered. */
+const CONFIRMED = { reference: 'Repère posé.', place: 'Lieu déplacé.', zone: 'Repère posé : la zone s’y centre.' };
+const CANCELLED = { reference: 'Repère non posé.', place: 'Le lieu reste à sa place.', zone: 'La zone reste où elle est.' };
+
+/**
+ * A point proposed, waiting for its answer: what it asks, the marker dragged there and where it was before (back there
+ * if cancelled), the place it moves, and what had the focus before the question.
+ * @typedef {{ point: [number, number], kind: ProposalKind, marker: L.Marker | null, from: L.LatLng | null, place: string | null, back: HTMLElement | null }} Proposal
+ */
+
+/**
+ * The same point within a metre or so (a free layout's zone keeps 5 decimals in its address).
+ * @param {unknown} a @param {[number, number]} b
+ */
+const sameSpot = (a, b) => Array.isArray(a) && Math.abs(a[0] - b[0]) < 1e-5 && Math.abs(a[1] - b[1]) < 1e-5;
+
+/** What has the focus, through the shadow roots. */
+function focused() {
+  let a = document.activeElement;
+  while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement;
+  return a instanceof HTMLElement ? a : null;
+}
 
 /**
  * @typedef {{ pin: [number, number] | null, places: Map<string, [number, number]>, plants: Map<string, [number, number]> }} Moves
@@ -217,12 +261,16 @@ const movesCount = (/** @type {Moves} */ m) => (m.pin ? 1 : 0) + m.places.size +
  * Properties:
  *  - spots: places (GeoJSON features) to show as place markers
  *  - selectedId: highlighted place
- *  - pin: [lon, lat] of an editable, draggable place pin (place editor), or null
+ *  - pin: [lon, lat] of the place editor's place, or null (moved while `editing`)
  *  - plants: plant markers (each plant of a place has its own position)
  *  - plantZoom: minimum zoom to show plant markers (0 = always)
  *  - selectedPlant: highlighted plant marker key — or keys (an array: a plant's occurrences; the other plants unchanged)
- *  - draggablePlants: plant markers can be dragged (place editor)
- *  - pinDraggable: the place pin can be dragged and long-press emits map-longpress (default true)
+ *  - reference: [lon, lat] of the map's reference (« repère »), or null — a point confirmed on it, drawn as its own
+ *    marker (a violet sight), kept by the map and told (`reference-change`), or given. In 3D the view centres on it
+ *    when it is confirmed and turns around it (gf-map-gl.js), its « Observations autour » are around it
+ *    (gf-map-obs3d.js)
+ *  - press: what a long press asks — 'reference' (the default: « Poser un repère ici ? ») or 'zone' (a free layout's
+ *    map: « Chercher autour d’ici ? », its zone centred there once confirmed)
  *  - track: show the live GPS position
  *  - fit: zoom to the content on first data
  *  - area: {center, radius, points?, fit?, photo?} — a circle (metres) and observation dots inside it ("Autour"); `fit`: the
@@ -244,11 +292,19 @@ const movesCount = (/** @type {Moves} */ m) => (m.pin ? 1 : 0) + m.places.size +
  *    the map having its own — its own, told by `look-change`.
  *  - no-create: the point card (long press) has no "Créer un endroit ici"
  *  - editable: the ✎ control (always shown) switches position editing on. While `editing`, every marker
- *    (places, plants, the pin) is dragged freely; each drop (or long press: place the pin / selected place)
- *    emits positions-save with that one move, for the caller to store at once. « Terminé » or ✎ ends it.
- * Events: spot-select {id}, plant-select {placeId, entryId, plantId}, pin-move {coordinates},
- *         plant-move {placeId, entryId, plantId, coordinates}, map-longpress {coordinates} (while the pin can be placed),
- *         point-info {coordinates, label?} (long press elsewhere, a place picked in its search: the point card opens), point-close,
+ *    (places, plants, the pin) is dragged freely; a plant dropped emits positions-save with that one move at once, for
+ *    the caller to store; a place dropped (or placed by a long press: the pin, the selected place) asks first
+ *    (« Déplacer le lieu ici ? ») and is saved — one positions-save — only once confirmed. « Terminé » or ✎ ends it.
+ * A point proposed (#propose: a long press — a right click, the menu key or Maj + F10 at the view's centre —, a place
+ * or the reference dragged there): a ghost there, and the point's card asking — by what it is for, « Poser un repère
+ * ici ? », « Déplacer le lieu ici ? », « Chercher autour d’ici ? » — « Confirmer » (Entrée) or « Annuler » (Échap: a
+ * marker dragged there goes back); said by its live region, nothing changed before the answer. Confirmed: what it is
+ * for (the place moved and saved, the reference's card open: point-info), and the point is the map's reference
+ * (`reference-change`), its card offering « Créer un endroit ici » next, and « Retirer le repère ». An address picked
+ * in its search is the reference at once (a choice already made). Plants dropped ask nothing.
+ * Events: spot-select {id}, plant-select {placeId, entryId, plantId},
+ *         point-info {coordinates, label?} (a point confirmed — long press —, a place picked in its search, the
+ *         reference's sight touched: the reference's card opens), point-close, reference-change {coordinates | null},
  *         view-change {lat, lon, zoom, pitch, bearing, bounds} (the map moved by hand: its centre, zoom, in 3D its tilt and
  *         turn, and what it shows: bounds()), view-framed {bounds} (framed by itself: on its area — bounds null — or on
  *         the view given),
@@ -293,8 +349,10 @@ export class GfMap extends LitElement {
     plants: { attribute: false },
     plantZoom: { type: Number, attribute: 'plant-zoom' },
     selectedPlant: { attribute: false },
-    draggablePlants: { type: Boolean, attribute: 'draggable-plants' },
-    pinDraggable: { attribute: false },
+    /** The map's reference ([lon, lat] | null): a point confirmed on it (see the class's comment). */
+    reference: { attribute: false },
+    /** What a long press asks: 'reference' (« Poser un repère ici ? ») or 'zone' (« Chercher autour d’ici ? »). */
+    press: { type: String },
     track: { type: Boolean },
     fit: { type: Boolean },
     frame: { attribute: false },
@@ -387,8 +445,10 @@ export class GfMap extends LitElement {
     this.plantZoom = PLANT_ZOOM;
     /** @type {string | null} */
     this.selectedPlant = null;
-    this.draggablePlants = false;
-    this.pinDraggable = true;
+    /** @type {[number, number] | null} */
+    this.reference = null;
+    /** @type {'reference' | 'zone'} */
+    this.press = 'reference';
     this.track = false;
     this.fit = false;
     /** @type {{ key: string, points: [number, number][], bottom?: number } | null} */
@@ -457,9 +517,9 @@ export class GfMap extends LitElement {
 
   /** How positions are moved here, by what the map holds: the editing bar's first-use hint, said as editing starts. */
   get #editWords() {
-    return (this.pin || this.selectedId ? 'Glissez le lieu ou ses plantes · appui long : placer le lieu'
-      : this.spots.length ? 'Glissez les lieux et les plantes (en zoomant)' : 'Glissez les plantes')
-      + ' — enregistré dès que vous lâchez';
+    if (this.pin || this.selectedId) return 'Glissez le lieu ou ses plantes · appui long : placer le lieu — enregistré : le lieu une fois confirmé, une plante dès que vous la lâchez';
+    if (this.spots.length) return 'Glissez les lieux et les plantes (en zoomant) — enregistré : un lieu une fois confirmé, une plante dès que vous la lâchez';
+    return 'Glissez les plantes — enregistré dès que vous lâchez';
   }
 
   /** The editing bar's hint shows: the first time ever positions are edited on this device (core/hints.js), until its ✕. */
@@ -670,17 +730,14 @@ export class GfMap extends LitElement {
 
   // ── Position editing ───────────────────────────────────────────────────────────────────────────
 
-  /** The pin moves: while editing (editable maps), else when the caller says so. */
-  get #pinMovable() { return this.editable ? this.editing : this.pinDraggable; }
+  /** The pin moves while editing. */
+  get #pinMovable() { return this.editing; }
 
   /** While editing, every marker moves freely. @param {string} id */
   #placeMovable(id) { return this.editing && !this.pin && Boolean(id); }
 
   /** @param {PlantMarker} plant */
-  #plantMovable(plant) {
-    if (!this.editable) return this.draggablePlants;
-    return this.editing && Boolean(plant);
-  }
+  #plantMovable(plant) { return this.editing && Boolean(plant); }
 
   /** Where a place is drawn: moved in the working copy, else its saved point. @param {any} spot @returns {[number, number]} */
   #spotAt(spot) { return this._moves.places.get(spot.id) || spot.geometry.coordinates; }
@@ -699,14 +756,15 @@ export class GfMap extends LitElement {
   /** @param {boolean} on */
   #setEditing(on) {
     if (on === this.editing) return;
+    // A question pending is let go (a place dragged goes back), the point's card closed as editing starts.
+    if (on) this.hidePoint(); else this.#cancel();
     this.editing = on;
-    if (on) this.hidePoint();
     this.#emit('edit-change', { editing: on });
   }
 
   /**
-   * A marker was dropped (or placed by long press): shown there at once, and saved right away by the
-   * caller (positions-save with that one move). The working copy keeps it until the data passed back
+   * A marker was dropped (a plant), or its move confirmed (a place: #confirm): shown there at once, and saved right
+   * away by the caller (positions-save with that one move). The working copy keeps it until the data passed back
    * has it, so a re-render with the old positions (GPS, a toast…) never sends it back.
    * @param {(m: Moves) => void} change
    * @param {{ pin?: [number, number], place?: { id: string, coordinates: [number, number] }, plant?: { key: string, coordinates: [number, number] } }} what
@@ -749,12 +807,17 @@ export class GfMap extends LitElement {
     if (movesCount(keep) !== movesCount(this._moves)) this._moves = keep;
   }
 
-  /** Markers being dragged right now: never moved or redrawn under the finger. @type {Set<L.Marker>} */
+  /**
+   * Markers being dragged right now, or dropped where their question waits (#propose): never moved or redrawn under
+   * the finger, nor before the answer. @type {Set<L.Marker>}
+   */
   #dragging = new Set();
+  /** Where each marker was when its drag began (back there if its move is cancelled). @type {WeakMap<L.Marker, L.LatLng>} */
+  #dragFrom = new WeakMap();
 
   /** @param {L.Marker} marker */
   #trackDrag(marker) {
-    marker.on('dragstart', () => this.#dragging.add(marker));
+    marker.on('dragstart', () => { this.#dragging.add(marker); this.#dragFrom.set(marker, marker.getLatLng().clone()); });
     marker.on('dragend', () => this.#dragging.delete(marker));
     return marker;
   }
@@ -884,8 +947,12 @@ export class GfMap extends LitElement {
   /** @type {L.TileLayer | null} */ #compareLayer = null;
   /** @type {L.LayerGroup | null} */ #focusLayer = null;
   /** @type {any} */ #panel = null;
-  /** @type {L.Marker | null} */ #pointMarker = null;
   /** @type {any} */ #pointCard = null;
+  /** The marker of the map's reference, the ghost of a point proposed. @type {L.Marker | null} */ #refMarker = null;
+  /** @type {L.Marker | null} */ #ghost = null;
+  /** @type {Proposal | null} */ #proposal = null;
+  /** When the menu key last proposed the view's centre: the context menu that follows it is not a long press. */
+  #keyedAt = -Infinity;
   /** @type {L.LayerGroup | null} */ #spotLayer = null;
   /** @type {Map<string, L.Marker>} */ #markers = new Map();
   /** @type {L.LayerGroup | null} */ #plantLayer = null;
@@ -1001,20 +1068,16 @@ export class GfMap extends LitElement {
       writeJSON(config.storageKeys.mapView, { lat: center.lat, lng: center.lng, zoom: map.getZoom() });
     });
     map.on('dragstart', () => { this.#setFollow(false); cancelAnimationFrame(this.#tween); this.#tween = 0; });
+    // A long press (a touch held, a right click; in 3D, gf-map-gl.js hands it here): its point proposed.
     map.on('contextmenu', event => {
+      if (performance.now() - this.#keyedAt < 1000) return;
       const { lat, lng } = /** @type {L.LeafletMouseEvent} */ (event).latlng;
-      // Editing: the long press places the pin, or the selected place.
-      if (this.editing) {
-        if (this.pin) this.#drop(m => { m.pin = [lng, lat]; }, { pin: [lng, lat] });
-        else if (this.selectedId) {
-          const id = this.selectedId;
-          this.#drop(m => m.places.set(id, [lng, lat]), { place: { id, coordinates: [lng, lat] } });
-        }
-        return;
-      }
-      if (this.pin && this.pinDraggable && !this.editable) this.#emit('map-longpress', { coordinates: [lng, lat] });
-      else this.showPoint([lng, lat]);
+      this.#press([lng, lat]);
     });
+    // The keys of a question pending (Entrée, Échap), of the reference's card (Échap), the long press's own (the menu
+    // key, Maj + F10: the view's centre) — before the page's (a cell maximised, a dialog: they never see these).
+    root.addEventListener('keydown', e => this.#onKey(e));
+    map.getContainer().setAttribute('aria-keyshortcuts', 'ContextMenu Shift+F10');
 
     this.#buildButtons();
     this.toggleAttribute('search', this.#hasSearch);
@@ -1086,6 +1149,9 @@ export class GfMap extends LitElement {
       this.#syncState();
     }
     if (!this.#map) return;
+    // A free layout's reference is its zone's centre: the zone moved some other way (« Autour de moi », Back, another
+    // cell) or gone, the reference goes with it (the 3D view no longer turns around a point left behind).
+    if (changed.has('area') && this.press === 'zone' && this.reference && !sameSpot(/** @type {any} */ (this.area)?.center, this.reference)) this.#dropReference();
     this.#gl?.changed(changed);
     // Its address search given or taken back (a free layout's map, by its width): its buttons made again with it.
     if ((['search', 'noSearch'].some(k => changed.has(k) && changed.get(k) !== undefined) && this.hasAttribute('search') !== this.#hasSearch)
@@ -1119,6 +1185,9 @@ export class GfMap extends LitElement {
     // Dropped markers stay where they were dropped until the caller passes back data that has them.
     if (movesCount(this._moves) && (changed.has('spots') || changed.has('plants') || changed.has('pin'))) this.#pruneMoves();
     if (changed.has('editing') && changed.get('editing') !== undefined) {
+      // A question pending is let go (its marker is made again); editing started — by ✎ or by the page (its
+      // « Déplacer ») —, the reference's card closed too: the editing bar in its place.
+      if (this.editing) this.hidePoint(); else this.#cancel();
       // Draggability is set when a marker is created: rebuild them.
       this.#spotLayer?.clearLayers();
       this.#markers.clear();
@@ -1133,12 +1202,11 @@ export class GfMap extends LitElement {
       this.#syncPlants();
     }
     if (changed.has('spots') || changed.has('selectedId')) this.#syncSpots();
-    // Switching position editing on or off: rebuild the markers rather than toggling Leaflet's drag handlers.
-    if (changed.has('pinDraggable') && changed.get('pinDraggable') !== undefined) this.#clearPin();
     if (changed.has('spots') || changed.has('plants') || changed.has('pin') || changed.has('editable') || changed.has('noLocate')) this.#syncButtons();
-    if (changed.has('draggablePlants') && changed.get('draggablePlants') !== undefined) this.#clearPlants();
-    if (changed.has('pin') || changed.has('pinDraggable')) this.#syncPin();
-    if (changed.has('plants') || changed.has('selectedPlant') || changed.has('draggablePlants')) this.#syncPlants();
+    if (changed.has('pin')) this.#syncPin();
+    if (changed.has('plants') || changed.has('selectedPlant')) this.#syncPlants();
+    // The reference given, kept, let go — or editing started or ended: dragged only when positions are not edited.
+    if (changed.has('reference') || changed.has('editing')) this.#syncReference();
     if (changed.has('plantZoom')) this.#syncPlantVisibility();
     if (changed.has('track')) this.#syncTracking();
     if (changed.has('area')) this.#syncArea();
@@ -1194,6 +1262,7 @@ export class GfMap extends LitElement {
     this.#syncSpots();
     this.#syncPin();
     this.#syncPlants();
+    this.#syncReference();
     this.#syncTracking();
     this.#syncArea();
     this.#syncHighlight();
@@ -1240,11 +1309,13 @@ export class GfMap extends LitElement {
           .on('click', () => { if (!this.editing) this.#emit('spot-select', { id: spot.id }); });
         /** @type {any} */ (marker).gfLook = look;
         const id = spot.id;
-        marker.on('dragend', () => {
-          const { lat: y, lng: x } = /** @type {L.Marker} */ (this.#markers.get(id)).getLatLng();
-          this.#drop(m => m.places.set(id, [x, y]), { place: { id, coordinates: [x, y] } });
+        // Dropped: « Déplacer le lieu ici ? » — moved and saved once confirmed, back where it was if not.
+        this.#trackDrag(marker).on('dragend', () => {
+          const m = /** @type {L.Marker} */ (this.#markers.get(id));
+          const { lat: y, lng: x } = m.getLatLng();
+          this.#propose([x, y], 'place', { marker: m, from: this.#dragFrom.get(m), place: id });
         });
-        this.#trackDrag(marker).addTo(layer);
+        marker.addTo(layer);
         this.#markers.set(spot.id, marker);
       } else if (!this.#dragging.has(marker)) {
         marker.setLatLng([lat, lon]);
@@ -1288,10 +1359,10 @@ export class GfMap extends LitElement {
         });
         const current = plant;
         marker.on('click', () => { if (!this.editing) this.#emit('plant-select', { placeId: current.placeId, entryId: current.entryId, plantId: current.plantId }); });
+        // Dropped: saved at once (a plant asks nothing).
         marker.on('dragend', () => {
           const { lat: y, lng: x } = /** @type {L.Marker} */ (this.#plantMarkers.get(current.key)).getLatLng();
-          if (this.editable) this.#drop(m => m.plants.set(current.key, [x, y]), { plant: { key: current.key, coordinates: [x, y] } });
-          else this.#emit('plant-move', { placeId: current.placeId, entryId: current.entryId, plantId: current.plantId, coordinates: [x, y] });
+          this.#drop(m => m.plants.set(current.key, [x, y]), { plant: { key: current.key, coordinates: [x, y] } });
         });
         // Hovered (touched): the other markers of the same plant are lit with it (and its observations around).
         this.#kin(marker, speciesKey(plant) || (plant.plantId != null ? 'p:' + plant.plantId : null));
@@ -1370,13 +1441,12 @@ export class GfMap extends LitElement {
     const [lon, lat] = this._moves.pin || this.pin;
     if (!this.#editMarker) {
       const movable = this.#pinMovable;
-      this.#editMarker = this.#trackDrag(L.marker([lat, lon], { icon: movable ? editIcon : lockedIcon, draggable: movable, autoPan: true, zIndexOffset: 100 }))
-        .on('dragend', () => {
-          const { lat: y, lng: x } = /** @type {L.Marker} */ (this.#editMarker).getLatLng();
-          if (this.editable) this.#drop(m => { m.pin = [x, y]; }, { pin: [x, y] });
-          else this.#emit('pin-move', { coordinates: [x, y] });
-        })
-        .addTo(map);
+      const pin = this.#editMarker = this.#trackDrag(L.marker([lat, lon], { icon: movable ? editIcon : lockedIcon, draggable: movable, autoPan: true, zIndexOffset: 100 }));
+      // Dropped: « Déplacer le lieu ici ? » (the GPS no longer moves it meanwhile: #dragging).
+      pin.on('dragend', () => {
+        const { lat: y, lng: x } = pin.getLatLng();
+        this.#propose([x, y], 'place', { marker: pin, from: this.#dragFrom.get(pin) });
+      }).addTo(map);
     } else if (!this.#dragging.has(this.#editMarker)) {
       this.#editMarker.setLatLng([lat, lon]);
     }
@@ -2542,6 +2612,7 @@ export class GfMap extends LitElement {
       this.#setFollow(false);
       this.#selfMove();
       this.#map?.flyTo([lat, lon], Math.max(this.#map.getZoom(), 15), { duration: 0.6 });
+      // An address picked is a choice made already: the map's reference at once, no question.
       this.showPoint(e.detail.coordinates, e.detail.label);
     });
     L.DomEvent.disableClickPropagation(search);
@@ -2578,32 +2649,276 @@ export class GfMap extends LitElement {
     this.#panel.updateComplete.then(() => this.#panel.open());
   }
 
-  /** Point card (long press or search result): address, altitude, coordinates. @param {[number, number]} point @param {string} [label] */
+  // ── A point proposed, the map's reference ──────────────────────────────────────────────────────
+
+  /**
+   * The point there as the map's reference, its card open — address, altitude, coordinates, « Créer un endroit ici »,
+   * « Itinéraire », « Retirer le repère »: a long press confirmed, an address picked in its search. `reference-change`,
+   * then `point-info` {coordinates, label} (the Carte, a free layout's zone, follow it).
+   * @param {[number, number]} point @param {string} [label]
+   */
   showPoint(point, label = '') {
-    const map = /** @type {L.Map} */ (this.#map);
-    const [lon, lat] = point;
-    if (!this.#pointMarker) {
-      this.#pointMarker = L.marker([lat, lon], { icon: pointIcon, interactive: false, keyboard: false, zIndexOffset: 1400 }).addTo(map);
-    } else {
-      this.#pointMarker.setLatLng([lat, lon]);
-    }
-    if (!this.#pointCard) {
-      const card = this.#pointCard = Object.assign(document.createElement('gf-point-card'), { className: 'gf-point-card' });
-      card.addEventListener('close', () => this.hidePoint());
-      L.DomEvent.disableClickPropagation(card);
-      this.#root.append(card);
-    }
-    Object.assign(this.#pointCard, { point, label, create: !this.noCreate, plant: this.createPlant });
+    if (!this.#map) return;
+    if (this.#proposal) this.#settle(this.#proposal, true);
+    this.#keepReference(point);
+    this.#card(point, { label, removable: true });
     this.#emit('point-info', { coordinates: point, label });
   }
 
+  /** The point's card closed (its ✕, Échap, its page): a question pending is cancelled; the reference stays. */
   hidePoint() {
+    if (this.#proposal) this.#cancel();
+    else this.#closeCard();
+  }
+
+  /** « Retirer le repère »: the map without reference — its marker and its card gone; `reference-change` {coordinates: null}. */
+  removeReference() {
+    if (!this.reference) return;
+    this.#dropReference();
+    this.announce('Repère retiré.', { force: true });
+    this.#refocus();
+  }
+
+  /** The reference let go (removed, its zone gone elsewhere): its marker and its card gone, told. */
+  #dropReference() {
+    this.reference = null;
+    this.#syncReference();
+    if (!this.#proposal) this.#closeCard();
+    this.#emit('reference-change', { coordinates: null });
+  }
+
+  /** What a long press asks here when positions are not being edited. @returns {ProposalKind} */
+  get #pressKind() { return this.press === 'zone' ? 'zone' : 'reference'; }
+
+  /**
+   * A long press at a point (a touch held, a right click, the menu key): while positions are edited, « Déplacer le lieu
+   * ici ? » for the place editor's place or the place selected (else nothing to place); otherwise what the map asks of
+   * a point (`press`). @param {[number, number]} point
+   */
+  #press(point) {
+    if (this.editing) {
+      if (this.pin) this.#propose(point, 'place');
+      else if (this.selectedId) this.#propose(point, 'place', { place: this.selectedId });
+      return;
+    }
+    this.#propose(point, this.#pressKind);
+  }
+
+  /**
+   * A point proposed: a ghost there, and the point's card asking — by kind, « Poser un repère ici ? », « Déplacer le
+   * lieu ici ? », « Chercher autour d’ici ? » —, its « Confirmer » focused, the question said (the map's live region).
+   * Nothing changes before its answer: « Confirmer » or Entrée (#confirm), « Annuler » or Échap (#cancel: a marker
+   * dragged there back where it was). One question at a time: another one lets the first go.
+   * @param {[number, number]} point @param {ProposalKind} kind
+   * @param {{ marker?: L.Marker | null, from?: L.LatLng | null, place?: string | null }} [o] the marker dropped there, where it was, the place it is
+   */
+  #propose(point, kind, { marker = null, from = null, place = null } = {}) {
+    const map = this.#map;
+    if (!map) return;
+    const was = this.#proposal;
+    // The same marker dragged again before its answer: back, if cancelled, where it was before the first question.
+    if (was && marker && was.marker === marker) from = was.from;
+    const back = was ? was.back : focused();
+    if (was) this.#settle(was, was.marker !== marker);
+    // A marker dropped there stays there until the answer: no render (the GPS, the data) moves it meanwhile.
+    if (marker) this.#dragging.add(marker);
+    this.#proposal = { point, kind, marker, from: from || null, place, back };
+    const [lon, lat] = point;
+    if (this.#ghost) this.#ghost.setLatLng([lat, lon]);
+    else this.#ghost = L.marker([lat, lon], { icon: ghostIcon, interactive: false, keyboard: false, zIndexOffset: 1400 }).addTo(map);
+    // Named for screen readers (not a control: its card answers): the point proposed, and its question.
+    const ghost = this.#ghost.getElement();
+    ghost?.setAttribute('role', 'img');
+    ghost?.setAttribute('aria-label', `Point proposé : ${ASK[kind]}`);
+    this.#card(point, { ask: ASK[kind] });
+    this.announce(`${ASK[kind]} Entrée pour confirmer, Échap pour annuler.`, { force: true });
+    this.#pointCard?.focusAction();
+  }
+
+  /**
+   * The question answered yes: what it was for — the place moved and saved (one positions-save), else the reference's
+   * card open (point-info: a free layout's zone centred there) —, and the point is the map's reference.
+   */
+  #confirm() {
+    const p = this.#proposal;
+    if (!p) return;
+    this.#settle(p, false);
+    const { point, kind } = p;
+    if (kind === 'place') {
+      const id = p.place;
+      if (id) this.#drop(m => m.places.set(id, point), { place: { id, coordinates: point } });
+      else if (this.pin) this.#drop(m => { m.pin = point; }, { pin: point });
+      this.#keepReference(point);
+      this.#closeCard();
+      this.announce(CONFIRMED.place, { force: true });
+      this.#refocus(p.back);
+      return;
+    }
+    this.showPoint(point);
+    this.announce(CONFIRMED[kind], { force: true });
+    // Its next action: « Créer un endroit ici » (where there is none, the card itself).
+    this.#pointCard?.focusAction();
+  }
+
+  /** The question answered no (« Annuler », Échap, another question, editing starting or ending): nothing kept. */
+  #cancel() {
+    const p = this.#proposal;
+    if (!p) return;
+    this.#settle(p, true);
+    this.#closeCard();
+    this.announce(CANCELLED[p.kind], { force: true });
+    this.#refocus(p.back);
+  }
+
+  /**
+   * A question let go: its ghost gone, its marker free again — and back (`restore`) where its point is now (moved
+   * meanwhile — a GPS fix for a new place's pin —: there, not where the drag began), else where it was.
+   * @param {Proposal} p @param {boolean} restore
+   */
+  #settle(p, restore) {
+    if (this.#proposal === p) this.#proposal = null;
+    this.#ghost?.remove();
+    this.#ghost = null;
+    if (!p.marker) return;
+    this.#dragging.delete(p.marker);
+    if (!restore) return;
+    if (p.from) p.marker.setLatLng(p.from);
+    if (p.marker === this.#editMarker) this.#syncPin();
+    else if (p.marker === this.#refMarker) this.#syncReference();
+    else if (p.place) this.#syncSpots();
+  }
+
+  /**
+   * The point kept as the map's reference: drawn, told (`reference-change`). In 3D the view centres on it: no longer
+   * following the GPS (its next fix would take the view back to the user, away from the reference).
+   * @param {[number, number]} point
+   */
+  #keepReference(point) {
+    if (this.dataset.renderer === '3d') this.#setFollow(false);
+    this.reference = [point[0], point[1]];
+    this.#syncReference();
+    this.#emit('reference-change', { coordinates: this.reference });
+  }
+
+  /**
+   * The reference's marker where the reference is (none without one): a violet sight, named for screen readers;
+   * touched (Entrée), its card; dragged — positions not being edited, in 2D (gf-map-gl.js keeps it still in 3D) —, its
+   * new point proposed (« Poser un repère ici ? », or the zone's question).
+   */
+  #syncReference() {
+    const map = this.#map, ref = this.reference;
+    if (!map) return;
+    const draggable = !this.editing;
+    if (this.#refMarker && (!ref || this.#refMarker.options.draggable !== draggable)) {
+      this.#dragging.delete(this.#refMarker);
+      this.#refMarker.remove();
+      this.#refMarker = null;
+    }
+    if (!ref) return;
+    const [lon, lat] = ref;
+    if (this.#refMarker) { if (!this.#dragging.has(this.#refMarker)) this.#refMarker.setLatLng([lat, lon]); return; }
+    const marker = this.#refMarker = this.#trackDrag(L.marker([lat, lon], /** @type {any} */ ({
+      icon: refIcon, title: 'Repère', keyboard: true, draggable, autoPan: draggable, zIndexOffset: -100, gfReference: true
+    })));
+    marker.on('add', () => marker.getElement()?.setAttribute('aria-label', 'Repère : ouvrir sa fiche'));
+    /**
+     * Its card, told as when it was set (point-info: the Carte closes a place's sheet, and its hint about an empty map);
+     * from the keyboard, the focus on it. @param {boolean} keyed
+     */
+    const open = keyed => {
+      if (this.editing || this.#proposal || !this.reference) return;
+      const card = this.#card(this.reference, { label: '', removable: true });
+      this.#emit('point-info', { coordinates: this.reference, label: '' });
+      if (keyed) card.focusAction();
+    };
+    // (In 3D, gf-map-gl.js makes a click of Entrée on it.)
+    marker.on('click', e => open(/** @type {any} */ (e).originalEvent instanceof KeyboardEvent));
+    // Entrée or Espace on it, in 2D: Leaflet makes no click of them.
+    marker.on('keydown', e => {
+      const k = /** @type {KeyboardEvent} */ (/** @type {any} */ (e).originalEvent);
+      if (k.key !== 'Enter' && k.key !== ' ') return;
+      k.preventDefault();
+      open(true);
+    });
+    marker.on('dragend', () => {
+      const { lat: y, lng: x } = marker.getLatLng();
+      this.#propose([x, y], this.#pressKind, { marker, from: this.#dragFrom.get(marker) });
+    });
+    marker.addTo(map);
+  }
+
+  /**
+   * The point's card (one at a time, at the bottom of the map), asking (`ask`: a question) or the reference's.
+   * @param {[number, number]} point @param {{ ask?: string, label?: string, removable?: boolean }} o
+   */
+  #card(point, { ask = '', label = '', removable = false }) {
+    if (!this.#pointCard) {
+      const card = this.#pointCard = Object.assign(document.createElement('gf-point-card'), { className: 'gf-point-card' });
+      // Its ✕ (the reference's card: no question pending): as Échap, the focus back on the reference's marker.
+      card.addEventListener('close', () => { if (this.#proposal) this.hidePoint(); else this.#closeToReference(); });
+      const on = (/** @type {string} */ type, /** @type {() => void} */ fn) => card.addEventListener(type, e => { e.stopPropagation(); fn(); });
+      on('confirm', () => this.#confirm());
+      on('cancel', () => this.#cancel());
+      on('remove', () => this.removeReference());
+      L.DomEvent.disableClickPropagation(card);
+      this.#root.append(card);
+    }
+    Object.assign(this.#pointCard, { point, label, ask, removable, create: !ask && !this.noCreate, plant: this.createPlant });
+    return this.#pointCard;
+  }
+
+  #closeCard() {
     if (!this.#pointCard) return;
-    this.#pointMarker?.remove();
-    this.#pointMarker = null;
     this.#pointCard.remove();
     this.#pointCard = null;
     this.#emit('point-close', {});
+  }
+
+  /** The reference's card closed by hand (Échap, its ✕): the focus back on the reference's marker (else the map). */
+  #closeToReference() {
+    this.#closeCard();
+    this.#refocus(/** @type {HTMLElement | null} */ (this.#refMarker?.getElement() ?? null));
+  }
+
+  /** What the keys move on the map: MapLibre's canvas in 3D, else Leaflet's container. @returns {HTMLElement | null} */
+  #surface() {
+    return /** @type {HTMLElement | null} */ (this.#gl?.on ? this.querySelector('canvas.maplibregl-canvas') : null) || this.#map?.getContainer() || null;
+  }
+
+  /** The focus back on the map once a question is answered: where it was before (on the map), else the map itself. @param {HTMLElement | null} [to] */
+  #refocus(to = null) {
+    const at = to?.isConnected && this.contains(to) && to.checkVisibility?.() !== false ? to : this.#surface();
+    at?.focus({ preventScroll: true });
+  }
+
+  /** @param {KeyboardEvent} e */
+  #onKey(e) {
+    const path = e.composedPath(), t = path[0] instanceof Element ? path[0] : null;
+    // (Through the shadow roots: the search pill's field, the panel ▦ — a modal, its own Échap —, the cards' own.)
+    const within = (/** @type {string} */ sel) => path.some(n => n instanceof Element && n.matches(sel));
+    if (within('gf-map-search, gf-map-panel, .gf-opacity, .gf-o3-bar, input, textarea, select')) return;
+    const stop = () => { e.preventDefault(); e.stopPropagation(); };
+    if (this.#proposal) {
+      if (e.key === 'Escape') { stop(); this.#cancel(); }
+      // Entrée on the map itself; on anything else (« Annuler », a marker, a slider's handle — handled there or not),
+      // it is that one's.
+      else if (e.key === 'Enter' && !e.defaultPrevented && t?.matches('.leaflet-container, canvas.maplibregl-canvas')) { stop(); this.#confirm(); }
+      return;
+    }
+    // The reference's card open (the focus in it, on its marker, on the map): Échap closes it, the focus back on the
+    // reference's marker.
+    if (e.key === 'Escape' && this.#pointCard) {
+      stop();
+      this.#closeToReference();
+      return;
+    }
+    // The long press of the keyboard: the menu key or Maj + F10 on the map itself, at the view's centre.
+    if ((e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) && t && t === this.#surface()) {
+      stop();
+      this.#keyedAt = performance.now();
+      const c = this.center();
+      if (c) this.#press(c);
+    }
   }
 
   /** @param {string} key */

@@ -234,7 +234,7 @@ test.describe('la Carte', () => {
     await quiet(page, ['.sheet.around']);
   });
 
-  test('modifier les positions : « Terminé » seul après la première fois ; « Position enregistrée » dit, jamais écrit', async ({ app, page }) => {
+  test('modifier les positions : « Terminé » seul après la première fois ; un lieu lâché demande « Déplacer le lieu ici ? » ; « Position enregistrée » dit, jamais écrit', async ({ app, page }) => {
     await app.open('#/collections');
     const spot = await seedParis(page);
     await app.go(`#/map?spot=${spot}`);
@@ -243,7 +243,7 @@ test.describe('la Carte', () => {
     await map.getByRole('button', { name: 'Modifier les positions' }).click();
     const bar = map.locator('.gf-map-editbar');
     // The first time ever: how it works (a hint, refermable), said.
-    await expect(bar.locator('.hint')).toContainText('enregistré dès que vous lâchez');
+    await expect(bar.locator('.hint')).toContainText('le lieu une fois confirmé, une plante dès que vous la lâchez');
     await expect(mapSaid(map)).toContainText('Modification des positions');
     // A place in sight (the map has gone full screen), dragged a little.
     const vp = /** @type {{ width: number, height: number }} */ (page.viewportSize());
@@ -254,6 +254,13 @@ test.describe('la Carte', () => {
     await page.mouse.down();
     await page.mouse.move(b.x + b.width / 2 + 40, b.y + 40, { steps: 8 });
     await page.mouse.up();
+    // A place asks first (its card in the place of « Terminé »), said; saved once confirmed.
+    const card = map.locator('gf-point-card');
+    await expect(card.getByRole('heading', { name: 'Déplacer le lieu ici ?' })).toBeVisible();
+    await expect(mapSaid(map)).toContainText('Déplacer le lieu ici ?');
+    await expect(bar).toBeHidden();
+    await quiet(page, ['.panel']);
+    await card.getByRole('button', { name: 'Confirmer' }).click();
     await expect(mapSaid(map)).toContainText('Position enregistrée');
     await expect(page.locator('gf-map-page .toast')).toHaveCount(0);
     await expect(brief(page)).toHaveCount(0);
@@ -262,7 +269,7 @@ test.describe('la Carte', () => {
     // Again: « Terminé » alone (its title says how).
     await map.getByRole('button', { name: 'Modifier les positions' }).click();
     await expect(bar.locator('.hint')).toHaveCount(0);
-    await expect(bar.getByRole('button', { name: 'Terminé' })).toHaveAttribute('title', /enregistré dès que vous lâchez/);
+    await expect(bar.getByRole('button', { name: 'Terminé' })).toHaveAttribute('title', /une plante dès que vous la lâchez/);
     await bar.getByRole('button', { name: 'Terminé' }).click();
     await quiet(page, ['.panel']);
   });
@@ -335,8 +342,8 @@ test.describe('la Disposition libre', () => {
     const cell = page.locator('dl-map');
     const map = cell.locator('gf-map');
     await expect(map.locator('.leaflet-container')).toBeVisible();
-    await expect(cell.locator('.hint-once')).toContainText('Appui long sur la carte : la zone s’y centre.');
-    await expect(map).toHaveAttribute('aria-description', 'Appui long sur la carte : la zone s’y centre.');
+    await expect(cell.locator('.hint-once')).toContainText('Appui long sur la carte, puis « Confirmer » : la zone s’y centre.');
+    await expect(map).toHaveAttribute('aria-description', 'Appui long sur la carte, puis « Confirmer » : la zone s’y centre.');
     // Above the map (not in its zone panel, which it made taller over the map's controls).
     expect(await coveredControls(page)).toEqual([]);
     await cell.locator('.hint-once').getByRole('button', { name: 'Masquer l’astuce' }).click();
@@ -454,7 +461,7 @@ test.describe('une carte en 3D', () => {
     await app.go('#/layout/[map,search]');
     const cell = page.locator('dl-map').first();
     await expect(cell.locator('gf-map')).toHaveAttribute('data-renderer', '3d', { timeout: 60_000 });
-    await expect(cell.locator('.hint-once')).toContainText('Appui long sur la carte : la zone s’y centre.');
+    await expect(cell.locator('.hint-once')).toContainText('Appui long sur la carte, puis « Confirmer » : la zone s’y centre.');
     await expect(cell.locator('.maplibregl-ctrl-fullscreen')).toBeVisible();
     expect(await coveredControls(page)).toEqual([]);
   });

@@ -14,7 +14,14 @@
 //  - the small circles (points): discs; the lines and areas (the circle « Autour », an outline, a group's threads, my
 //    position's accuracy): one GeoJSON source, draped on the relief;
 //  - the camera: the 3D map follows the mirror's moves (gf-map's flights, frames, « me localiser »), and gives it its
-//    own (pan, zoom) once they end. Tilt and rotation are the 3D map's alone. MapLibre's zoom is Leaflet's minus one.
+//    own (pan, zoom) once they end — those it makes by itself (the observations' flights and turns, « Tourner ») never
+//    stopped by the mirror resized meanwhile (its page laid out again). Tilt and rotation are the 3D map's alone.
+//    MapLibre's zoom is Leaflet's minus one.
+// The map's reference (gf-map `reference`, « repère »: a point confirmed): the view centres on it as it is confirmed,
+// and every turn turns around it, not around the middle of the screen — the wheel pressed (or the right button, Ctrl),
+// two fingers, Maj + ← →, the compass, the observations' slow turn, and « Tourner autour du repère » (45° each press,
+// among the map's buttons while there is one): it keeps its point on the screen (core/orbit.js rotateAround, applied to
+// every camera change: #pivot). In 3D it is not dragged (a long press places it again).
 // When the map shows in 3D: the maps' one choice « 3D » (core/map-settings.js), made in Réglages › Cartes or in the
 // panel ▦ of any map (« Affichage », gf-map-options.js: the panel is told how this map is drawn, and why it cannot
 // change when it cannot). Its look (background, overlays, their opacity) is its 2D map's, mirrored: it follows the
@@ -37,6 +44,8 @@ import { MAX_PITCH, lightMoment, mapSettings, mapSettingsEvents, sunPosition } f
 import { moduleEvents, moduleOn } from '../core/modules.js';
 import { DEM_ATTRIBUTION, IGN_VECTOR_STYLE, buildStyle, circlePolygon, mergeVectorStyle, pathStyle, tileSpecs } from '../core/gl-style.js';
 import { LOCALE, MAPLIBRE_CSS, MAP_GL_CSS, hasWebGL2, linkCss, loadMapLibre, noWebGL2 } from '../core/maplibre.js';
+import { rotateAround } from '../core/orbit.js';
+import { iconMarkup } from '../core/icons.js';
 import { Obs3dLayer } from './gf-map-obs3d.js';
 
 /** WebGL maps at once (each holds a context; browsers allow some 16, phones fewer, and each costs memory). */
@@ -59,6 +68,12 @@ const NOTES = {
 };
 /** Said once the 3D takes more than a moment to come (the map's thin loading line meanwhile). */
 const LOADING = 'Chargement de la 3D';
+/** Degrees to radians; the Earth's circumference at the equator (m), MapLibre's (its radius 6 371 008.8 m). */
+const RAD = Math.PI / 180;
+const EARTH = 2 * Math.PI * 6371008.8;
+/** The button that turns the view around the map's reference, and how far each press turns it (degrees). */
+const TURN = 'Tourner autour du repère';
+const TURN_STEP = 45;
 
 /**
  * The page's markers over the observations around (gf-map-obs3d.js: theirs up to some 100 000 + the screen's height):
@@ -235,9 +250,9 @@ export class GlView {
     if (this.#failed) return this.#failed;
     if (this.host.editing) return 'editing';
     // A marker that can be dragged (an editor, positions being moved): MapLibre's markers cannot be dragged on a tilted
-    // relief reliably — the map shows in 2D while there is one.
+    // relief reliably — the map shows in 2D while there is one. Not the reference's: still in 3D (#mirrorMarker).
     let drag = false;
-    this.lf.eachLayer((/** @type {any} */ l) => { if (!drag && l instanceof L.Marker && l.options.draggable) drag = true; });
+    this.lf.eachLayer((/** @type {any} */ l) => { if (!drag && l instanceof L.Marker && l.options.draggable && !/** @type {any} */ (l.options).gfReference) drag = true; });
     if (drag) return 'editing';
     if (!hasWebGL2()) return 'webgl';
     if (!live.has(this) && live.size >= MAX_GL) return 'many';
@@ -268,6 +283,7 @@ export class GlView {
     if (this.#state === 'off') delete this.host.dataset.gl; else this.host.dataset.gl = this.#state;
     this.#syncStatus();
     this.#syncPanel();
+    this.#syncTurnButton();
   }
 
   /** The view its page gives it (gf-map `view`), shown in 3D too: its centre and zoom, its tilt and turn when it has them. */
@@ -275,13 +291,20 @@ export class GlView {
     const map = this.#map, v = this.host.view;
     if (!map || !v) return;
     const tilted = Boolean(v.pitch || v.bearing);
+    // Its own centre and turn: not turned around the reference (#pivot).
+    this.#turn.hold = true;
     map.jumpTo({ center: [v.lon, v.lat], zoom: Math.max(0, v.zoom - 1), ...(tilted ? { pitch: v.pitch, bearing: v.bearing } : {}) }, { gfMirror: true });
+    this.#turn.hold = false;
     this.#syncPitchAttr();
   }
 
-  /** gf-map's properties changed: editing starts or ends, markers become draggable. @param {Map<string, any>} changed */
+  /**
+   * gf-map's properties changed: editing starts or ends, markers become draggable; the reference confirmed or let go.
+   * @param {Map<string, any>} changed
+   */
   changed(changed) {
-    if (['editing', 'editable', 'draggablePlants', 'pin', 'pinDraggable', 'area'].some(k => changed.has(k))) queueMicrotask(() => this.sync());
+    if (['editing', 'editable', 'pin', 'area'].some(k => changed.has(k))) queueMicrotask(() => this.sync());
+    if (changed.has('reference')) this.#onReference();
     this.#obs?.changed(changed);
   }
 
@@ -323,8 +346,9 @@ export class GlView {
     let queued = false;
     const later = () => { if (!queued) { queued = true; requestAnimationFrame(() => { queued = false; if (this.wanted) this.sync(); }); } };
     this.lf.on('layeradd layerremove', (/** @type {any} */ e) => { if (e.layer instanceof L.Marker) later(); });
-    // The panel « Carte » opened: its 3D part.
-    new MutationObserver(() => this.#syncPanel()).observe(this.root, { childList: true });
+    // The panel « Carte » opened: its 3D part. Its buttons made again (gf-map's search given or taken back): « Tourner
+    // autour du repère » back among them.
+    new MutationObserver(() => { this.#syncPanel(); this.#syncTurnButton(); }).observe(this.root, { childList: true });
   }
 
   // ── Start and stop ──────────────────────────────────────────────────────────────────────────────
@@ -407,6 +431,8 @@ export class GlView {
     // the compass (north again, the tilt shown; the 2D map has the same one, gf-map).
     map.addControl(new ml.NavigationControl({ visualizePitch: true }), 'bottom-left');
     orbitWithMiddleButton(map);
+    // The long press of the keyboard (gf-map: the menu key, Maj + F10 — a point proposed at the view's centre).
+    map.getCanvas().setAttribute('aria-keyshortcuts', 'ContextMenu Shift+F10');
     map.addControl(new ml.ScaleControl({ unit: 'metric', maxWidth: 90 }), 'bottom-left');
     const frame = this.host.querySelector('.gf-map-frame');
     map.addControl(new ml.FullscreenControl(frame ? { container: frame } : {}), 'bottom-left');
@@ -422,7 +448,9 @@ export class GlView {
     });
     this.#watchIcons();
     this.#credit();
-    this.#obs = new Obs3dLayer({ host: this.host, lf, ml, map, box, root: this.root, restyle: () => this.#restyle() });
+    this.#obs = new Obs3dLayer({ host: this.host, lf, ml, map, box, root: this.root, restyle: () => this.#restyle(), flying: () => this.#flying });
+    // A reference already there: turned around from now on (the view stays where it is).
+    this.#syncPivot();
 
     const ready = () => {
       if (this.#map !== map) return;
@@ -444,6 +472,8 @@ export class GlView {
     this.#iconWatch = null;
     this.#obs?.destroy();
     this.#obs = null;
+    this.#pivotOn = false;
+    this.#turnTo = null;
     this.#unlistenLeaflet();
     for (const layer of [...this.#mirrors.keys()]) this.#unmirror(layer);
     this.#credit(true);
@@ -563,9 +593,24 @@ export class GlView {
     // Its own moves (pan, zoom), once they end: the 2D map goes there too (its groups, plants by zoom, protected areas).
     // Moved by hand: told to the map (gf-map view-change: a tilt or a turn alone moves no 2D map).
     map.on('moveend', (/** @type {any} */ e) => {
-      if (!e.gfMirror) { this.#toLeaflet(); this.root.dispatchEvent(new Event('gl-moveend')); }
+      this.#own = false;
+      // The next move turns (#pivot) from where this one left the camera; « Tourner » from its bearing.
+      const turned = this.#turn.turning;
+      this.#restTurn(map);
+      this.#turnTo = null;
+      // A turn: its centre on the ground first — the 2D map given the view once, as it rests.
+      if (turned) this.#reground(map);
+      // (Centred on the reference: the 2D map is there already — stopped short, not sent back half way. The 2D map
+      // flying: it leads, its steps followed — a resize meanwhile, its page laid out again, would stop it short.)
+      if (!e.gfMirror && !e.gfRef && !this.#flying) { this.#toLeaflet(); this.root.dispatchEvent(new Event('gl-moveend')); }
       this.#syncPitchAttr();
     });
+    // A flight with its own centre and bearing (the observations around framing their circle), or a turn about another
+    // centre (their slow turn about a circle that is not around the reference: gfHold): not turned around the reference.
+    map.on('movestart', (/** @type {any} */ e) => { if (e.gfObs === 'fly' || e.gfHold) this.#turn.hold = true; });
+    // The moves it makes by itself (#own): a resize of the 2D map meanwhile never stops them.
+    this.#own = false;
+    map.on('movestart', (/** @type {any} */ e) => { this.#own = Boolean(e.gfObs || e.gfTurn); });
     map.on('movestart', (/** @type {any} */ e) => { if (e.originalEvent) lf.fire('movestart'); });
     map.on('dragstart', () => lf.fire('dragstart'));
     map.on('click', (/** @type {any} */ e) => {
@@ -635,6 +680,157 @@ export class GlView {
     return b ? L.latLngBounds([b.getSouth(), b.getWest()], [b.getNorth(), b.getEast()]) : null;
   }
 
+  // ── The reference: the view centred on it, turned around it ────────────────────────────────────
+
+  /**
+   * The camera as the move under way began (its bearing, its centre, the height it looks at), whether it has turned
+   * since, and whether this move keeps its own centre (`hold`: a page's view, a flight). Set again at each move's end.
+   */
+  #turn = { bearing: 0, center: /** @type {[number, number]} */ ([0, 0]), elevation: 0, turning: false, hold: false };
+  /** The pivot is MapLibre's (setTransformCameraUpdate). */
+  #pivotOn = false;
+
+  /** @param {any} map */
+  #restTurn(map) {
+    const c = map.getCenter();
+    this.#turn = { bearing: map.getBearing(), center: [c.lng, c.lat], elevation: map.getCenterElevation(), turning: false, hold: false };
+  }
+
+  /**
+   * Every change of MapLibre's camera while there is a reference (a gesture and its inertia, the keys, the compass, an
+   * ease, a jump): as asked while the bearing has not changed since the move began (a pan, a zoom); once it turns, the
+   * centre that keeps the reference on its point of the screen (rotateAround: the move's own pan, and its zoom around
+   * the fingers, set aside until it ends). The camera's height is kept: a turn about the vertical through the reference
+   * — and so the height its centre is looked at, as the move began (over the relief MapLibre would set it on the ground
+   * under each new centre, lifting or lowering the camera: the reference sliding on the screen). A turn moves the
+   * centre by hand: the 2D map stops following the GPS, as for a drag (gf-map).
+   * @param {any} next the camera asked (MapLibre's transform)
+   */
+  #pivot = (/** @type {any} */ next) => {
+    const ref = this.host.reference, t = this.#turn;
+    if (!ref || t.hold || !this.#ml) return {};
+    if (!t.turning) {
+      if (next.bearing === t.bearing) { t.center = [next.center.lng, next.center.lat]; t.elevation = next.elevation; return {}; }
+      t.turning = true;
+      this.lf.fire('dragstart');
+    }
+    return { center: new this.#ml.LngLat(...rotateAround(t.center, ref, next.bearing - t.bearing)), elevation: t.elevation };
+  };
+
+  /**
+   * A turn around the reference ended over the relief: its centre, looked at from the height the turn kept, set back on
+   * the ground under the middle of the screen — the camera where it is (zoom and centre moved along its line of sight,
+   * as MapLibre does after its own gestures). Left floating, MapLibre would ground it at the next tile loaded, the
+   * camera moving: the reference sliding on the screen. Within the turn's end (moveend): never a move of its own (no
+   * second view given to the 2D map, no second gl-moveend). @param {any} map
+   */
+  #reground(map) {
+    if (!map.getTerrain() || !this.host.reference) return;
+    const canvas = map.getCanvas(), h = canvas.clientHeight;
+    const ground = map.unproject([canvas.clientWidth / 2, h / 2]);
+    const to = map.queryTerrainElevation(ground), from = map.getCenterElevation(), pitch = map.getPitch() * RAD;
+    if (to == null || Math.abs(to - from) < 0.5 || pitch > 1.5) return;
+    // The camera's distance to its centre (m, MapLibre's: its 512 px tiles, its Earth), then to the ground along the
+    // same line — the zoom that keeps it there.
+    const toward = h / 2 / Math.tan(map.getVerticalFieldOfView() * RAD / 2);
+    const metres = toward * EARTH * Math.cos(map.getCenter().lat * RAD) / (512 * 2 ** map.getZoom());
+    const zoom = Math.log2(toward * EARTH * Math.cos(ground.lat * RAD) / (512 * (metres + (from - to) / Math.cos(pitch))));
+    map.jumpTo({ center: ground, zoom, elevation: to }, { gfMirror: true });
+  }
+
+  /**
+   * Turned around the reference while there is one (MapLibre's camera hook), as the camera is now. Let go during a
+   * move (a turn eased, its inertia): the move stopped where it is — its own camera, never turned, would take the view
+   * back to its centre at the next frame.
+   */
+  #syncPivot() {
+    const map = this.#map, on = Boolean(map && this.host.reference);
+    if (on === this.#pivotOn) return;
+    this.#pivotOn = on;
+    if (!map) return;
+    if (!on && map.isMoving()) map.stop();
+    this.#restTurn(map);
+    map.setTransformCameraUpdate(on ? this.#pivot : null);
+  }
+
+  /** The reference confirmed (the view centres on it), moved or let go: the pivot, « Tourner autour du repère ». */
+  #onReference() {
+    this.#syncPivot();
+    this.#syncTurnButton();
+    this.#centre();
+  }
+
+  /**
+   * The 2D map flying (Leaflet's flyTo: an address picked, « Me localiser »…), its steps followed (#listenLeaflet);
+   * over, the observations around frame their circle (they wait for it: each step would stop their flight).
+   */
+  #flying = false;
+
+  /**
+   * The 3D map moving by itself towards a view of its own, which its end gives to the 2D map (the observations around
+   * framing their circle or turning, « Tourner »): its 'movestart' says so, any 'moveend' ends it. A resize of the 2D
+   * map meanwhile is not followed (#listenLeaflet). Not when centred on the reference (#centre): the 2D map is there.
+   */
+  #own = false;
+
+  /** The reference set while the 2D map seemed to fly, its centre waiting: done once the flight is known over (#listenLeaflet). */
+  #centreLate = false;
+
+  /**
+   * Centred on the reference: the 3D map eased there, the 2D map there at once (silently) — a resize meanwhile (its page
+   * laid out again: a sheet closing, a hint going) sends the 3D map where the 2D one is: there too, never back (the
+   * ease would land it where the old size had the middle). The observations around shown, their flight to the circle
+   * takes over at once: a resize then lets it go on (#listenLeaflet), framed again for the new size (gf-map-obs3d.js).
+   * Set while the 2D map flies, it is that flight's end (an address picked in its search, flown to at the zoom the
+   * search asks): the flight never stopped at its first step — the 3D map follows it there; set as it ends (a move's
+   * end alone, the frame before: its next step perhaps to come), once that is known.
+   */
+  #centre() {
+    const map = this.#map, ref = this.host.reference;
+    this.#centreLate = false;
+    if (!map || !ref || this.#state !== 'ready') return;
+    if (this.#flying) { this.#centreLate = true; return; }
+    this.#fromGl = true;
+    try { this.lf.setView([ref[1], ref[0]], this.lf.getZoom(), { animate: false }); } finally { this.#fromGl = false; }
+    map.easeTo({ center: ref, duration: reduceMotion() ? 0 : 600 }, { gfRef: true });
+  }
+
+  /** @type {HTMLButtonElement | null} */ #turnButton = null;
+  /** The bearing « Tourner » is easing to (more presses add to it), or null. @type {number | null} */ #turnTo = null;
+
+  /** « Tourner autour du repère »: among the map's buttons, in 3D while there is a reference. */
+  #syncTurnButton() {
+    const show = this.#state === 'ready' && Boolean(this.host.reference);
+    if (!show && !this.#turnButton) return;
+    if (!this.#turnButton) {
+      const b = this.#turnButton = Object.assign(document.createElement('button'), { type: 'button', className: 'turn-ref', title: `${TURN} (${TURN_STEP}° à chaque appui)` });
+      b.setAttribute('aria-label', TURN);
+      // eslint-disable-next-line no-unsanitized/property -- a bundled icon, no data in it
+      b.innerHTML = iconMarkup('arrow-clockwise');
+      b.addEventListener('click', () => this.#turnStep());
+    }
+    // (Its buttons made again — gf-map's search given or taken back —: put back among them.)
+    if (!this.#turnButton.isConnected) (this.root.querySelector('.gf-map-buttons') || this.root).append(this.#turnButton);
+    this.#turnButton.hidden = !show;
+  }
+
+  /**
+   * One press: the view turned 45° more around the reference (#pivot keeps it on its point), eased — at once with
+   * « reduced motion » —, presses in a row adding up; the heading said (the map's live region). Never half a turn or
+   * more ahead of the view (MapLibre would take the short way, turning back): a press beyond waits, unsaid.
+   */
+  #turnStep() {
+    const map = this.#map;
+    if (!map || !this.host.reference) return;
+    const now = map.getBearing(), from = this.#turnTo ?? now;
+    // (The bearing eased to grows past 180°; the view's is MapLibre's, within ±180°: how far ahead, in whole turns.)
+    if (from + TURN_STEP - (now + 360 * Math.round((from - now) / 360)) >= 180) return;
+    this.#turnTo = from + TURN_STEP;
+    const heading = ((Math.round(this.#turnTo) % 360) + 360) % 360;
+    map.easeTo({ bearing: this.#turnTo, duration: reduceMotion() ? 0 : 800, easeId: 'gf-turn' }, { gfTurn: true });
+    this.host.announce?.(`Vue tournée autour du repère : cap ${heading}°.`, { force: true });
+  }
+
   /** The 3D map's view given to the 2D map (silently: never sent back). */
   #toLeaflet() {
     const map = this.#map;
@@ -648,16 +844,44 @@ export class GlView {
   #lfHandlers = {};
 
   #listenLeaflet() {
-    const lf = this.lf;
+    const lf = this.lf, run = this.#run;
+    /** The 2D map's move begun (movestart) — not a resize (invalidateSize: a move and its end alone), nor a view already there (a move's end alone). */
+    let begun = false;
     const follow = (/** @type {boolean} */ end) => {
       const map = this.#map;
       if (!map || this.#fromGl || (!end && reduceMotion())) return;
+      // A resize (its page laid out again: a sheet closing, a hint going; the centre kept) while the 3D map moves by
+      // itself and the 2D map does not fly: that move goes on — a jump would stop it half way, the observations' circle
+      // never framed, their turn never begun —, its end gives the view to the 2D map.
+      if (!begun && this.#own && !this.#flying) return;
       const c = lf.getCenter();
       map.jumpTo({ center: [c.lng, c.lat], zoom: Math.max(0, lf.getZoom() - 1) }, { gfMirror: true });
     };
+    // A flight: its steps say so; it lands (zoomend), a new view takes over (a jump, a pan, a drag, a zoom, another
+    // flight: movestart, zoomstart), or it stops where it is (lf.stop(), a view already there: a move's end alone) —
+    // not at a resize (a move's end too, but its next step comes). Over, the observations around are told (landed).
+    this.#flying = false;
+    let steps = 0;
+    /** Over, unless the flight's next step comes first (Leaflet's: asked for before this frame). */
+    const land = () => {
+      const at = steps;
+      requestAnimationFrame(() => {
+        if (steps !== at || run !== this.#run) return;
+        this.#flying = false;
+        // The reference set meanwhile, its centre waiting (#centre): there now — before the observations frame it.
+        if (this.#centreLate) this.#centre();
+        this.#obs?.landed();
+      });
+    };
+    const over = () => { if (this.#flying) { this.#flying = false; land(); } };
     this.#lfHandlers = {
-      move: () => follow(false),
-      moveend: () => follow(true),
+      // (A next step: the flight goes on — its end the reference's centre, not waiting.)
+      move: (/** @type {any} */ e) => { if (e.flyTo) { steps++; this.#flying = true; this.#centreLate = false; } follow(false); },
+      moveend: () => { follow(true); begun = false; if (this.#flying) land(); },
+      // (A new view: it takes over — from the flight, from a centre waiting.)
+      movestart: () => { begun = true; this.#centreLate = false; over(); },
+      zoomstart: over,
+      zoomend: over,
       // A zoom animated in 2D (fitBounds, setView): eased in 3D too.
       zoomanim: (/** @type {any} */ e) => {
         if (!this.#map || this.#fromGl) return;
@@ -716,8 +940,8 @@ export class GlView {
     } else if (m.kind === 'marker') {
       layer.off('move', m.gl.gfMove);
       const icon = layer._icon;
-      // Still on the 2D map: its element back in its pane, placed by Leaflet again.
-      if (icon && layer._map) { layer.getPane()?.appendChild(icon); layer.update(); }
+      // Still on the 2D map: its element back in its pane, placed by Leaflet again (the reference dragged again).
+      if (icon && layer._map) { layer.getPane()?.appendChild(icon); layer.update(); if (layer.options.gfReference && layer.options.draggable) layer.dragging?.enable(); }
       m.gl.remove();
     } else if (m.kind === 'dot') {
       layer.off('move', m.gl.gfMove);
@@ -759,6 +983,9 @@ export class GlView {
     gl.gfMove = () => { const p = layer.getLatLng(); gl.setLngLat([p.lng, p.lat]); };
     layer.on('move', gl.gfMove);
     if (layer.options.interactive !== false) this.#forward(wrap, layer);
+    // The reference's marker: not dragged in 3D (Leaflet would move its element inside MapLibre's) — a long press places
+    // it again.
+    if (layer.options.gfReference) layer.dragging?.disable();
     /** @type {MarkerMirror} */
     const m = { kind: 'marker', layer, wrap, gl };
     this.#mirrors.set(layer, m);
@@ -860,6 +1087,7 @@ export class GlView {
   state() {
     const map = this.#map;
     const style = map?.getStyle();
+    const ref = this.host.reference ?? null, at = map && ref ? map.project(ref) : null;
     return {
       renderer: this.#state === 'ready' ? '3d' : '2d', state: this.#state, blocked: this.#blocked, wanted: this.wanted, allowed: this.allowed,
       demFailed: this.#demFailed, vectorFailed: this.#vectorFailed,
@@ -872,6 +1100,10 @@ export class GlView {
         sky: Boolean(style.sky),
         projection: map.getProjection?.()?.type ?? 'mercator',
         pitch: Math.round(map.getPitch()), bearing: Math.round(map.getBearing()), zoom: map.getZoom(),
+        center: map.getCenter().toArray(),
+        // The reference, where it is on the screen (px from the map's top left corner), turned around or not.
+        reference: ref, refAt: at ? [at.x, at.y] : null,
+        pivot: this.#pivotOn, turnShown: Boolean(this.#turnButton && !this.#turnButton.hidden && this.#turnButton.isConnected),
         markers: [...this.#mirrors.values()].filter(m => m.kind === 'marker' || m.kind === 'dot').length,
         paths: this.#paths.features.length,
         light: map.getLight?.() ?? null,

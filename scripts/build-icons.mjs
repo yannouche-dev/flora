@@ -21,7 +21,9 @@ const NAMES = [
   // « Créer une app » (app/layout/gf-builder.js): its grids, the one chosen, the desktop.
   'layout-text-window', 'layout-three-columns', 'grid-1x2', 'check-circle-fill', 'window-desktop', 'tools', 'arrow-up', 'arrow-down',
   // « Créer une app » (app/layout/gf-builder.js, gf-block-picker.js): a cell's content, the phone preview.
-  'sliders', 'phone'
+  'sliders', 'phone',
+  // « Tourner autour du repère » (app/components/gf-map-gl.js).
+  'arrow-clockwise'
 ];
 
 // Drawn for the app, in the same 16 × 16 grid, where Bootstrap Icons has none.
