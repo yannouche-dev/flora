@@ -2,8 +2,10 @@
 // on a phone), the chips (one ✕, or « Tout effacer »), a group's « effacer » — the list, its count and its address
 // following each, the focus kept on the page (never dropped to it); the « Filtrer par » text not coming back once
 // cleared, nor when a family put its genus out; genera kept to the families chosen; filters cleared beside an open plant
-// staying cleared when it closes, after a reload and Back too; the « Espèce » column, a hybrid (« × ampolai ») at its
-// epithet, not under its sign, and the Genre filters (Flore, Carte › Autour) so; the cards' sort menu on the sort chosen.
+// staying cleared when it closes, after a reload and Back too, Forward after going back past the list at once (the page
+// reloaded there, or its view replaced in place, in between) and « Fermer la fiche » after a block's pane replaced by
+// another; the « Espèce » column, a hybrid (« × ampolai ») at its epithet, not under its sign, and the Genre filters
+// (Flore, Carte › Autour) so; the cards' sort menu on the sort chosen.
 import { test, expect, fixturePlants, answerAround } from './fixtures.mjs';
 
 const count = (/** @type {(p: any) => boolean} */ keep) => fixturePlants.filter(keep).length;
@@ -198,6 +200,121 @@ test('une plante ouverte à côté de la liste : les filtres effacés à côté 
   expect(await page.evaluate(() => history.length)).toBe(entries);
   await expect.poll(() => app.state('query.filters')).toEqual(NONE);
   await said(page, fixturePlants.length);
+});
+
+test('les filtres effacés à côté d’une plante, puis Retour d’un coup avant la liste : Suivant rend la liste effacée ; une autre vue à sa place ne la prend pas', async ({ app, page }) => {
+  test.skip(app.phone, 'sur un téléphone, la fiche couvre la liste et ses filtres');
+  // A view before the list (0), the list (1), a plant beside it (2), the family cleared there.
+  await app.open('#/settings');
+  await app.go('#/?family=Rosaceae&photo=avec');
+  await said(page, count(p => p.family === 'Rosaceae' && p.thumbnail?.url));
+  await page.locator('gf-flora gf-plant-list gf-plant-card a.row').first().click();
+  await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+$/);
+  await page.locator('gf-flora .pane.filters gf-facet[name="family"]').getByRole('button', { name: 'effacer' }).click();
+  await expect.poll(() => app.state('context.query')).toBe('#/?photo=avec');
+  // Back past the list at once (history.go(-2), as the long-pressed Back's menu does), then Forward: the list as
+  // left beside the plant, not as the plant found it.
+  await page.evaluate(() => history.go(-2));
+  await expect.poll(() => hash(page)).toBe('#/settings');
+  await page.goForward();
+  await expect.poll(() => hash(page)).toBe('#/?photo=avec');
+  await expect.poll(() => app.state('query.filters.family')).toEqual([]);
+  await said(page, count(p => p.thumbnail?.url));
+  // On to the plant, and Back: still so.
+  await page.goForward();
+  await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+$/);
+  await page.goBack();
+  await expect.poll(() => hash(page)).toBe('#/?photo=avec');
+  // The plant again, the photo cleared beside it; Back before the list at once, the page reloaded there: Forward
+  // still gives the list as left.
+  await page.goForward();
+  await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+$/);
+  await page.locator('gf-flora .pane.filters gf-facet[name="photo"]').getByRole('button', { name: 'Effacer le filtre Photo' }).click();
+  await expect.poll(() => app.state('context.query')).toBe('#/');
+  await page.evaluate(() => history.go(-2));
+  await expect.poll(() => hash(page)).toBe('#/settings');
+  await page.reload();
+  await app.ready();
+  await page.goForward();
+  await expect.poll(() => hash(page)).toBe('#/');
+  await expect.poll(() => app.state('query.filters')).toEqual(NONE);
+  await said(page, fixturePlants.length);
+  // The plant again, « Sans photo » chosen beside it; Back before the list at once, then another view in its place (a
+  // new entry): Back, Forward give that one, as it was — not the URL the list was given.
+  await page.goForward();
+  await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+$/);
+  await page.locator('gf-flora .pane.filters gf-facet[name="photo"] label', { hasText: 'Sans photo' }).click();
+  await expect.poll(() => app.state('context.query')).toBe('#/?photo=sans');
+  await page.evaluate(() => history.go(-2));
+  await expect.poll(() => hash(page)).toBe('#/settings');
+  await app.go('#/?family=Urticaceae');
+  await said(page, count(p => p.family === 'Urticaceae'));
+  await page.goBack();
+  await expect.poll(() => hash(page)).toBe('#/settings');
+  await page.goForward();
+  await expect.poll(() => hash(page)).toBe('#/?family=Urticaceae');
+  await said(page, count(p => p.family === 'Urticaceae'));
+});
+
+test('Retour d’un coup avant la liste, la fiche fermée dans Mes plantes (sur place), puis Suivant : la liste effacée ; Mes plantes reste Mes plantes', async ({ app, page }) => {
+  test.skip(app.phone, 'sur un téléphone, la fiche couvre la liste et ses filtres');
+  // Mes plantes, a plant beside (0), the list (1), a plant beside it (2), the family cleared there.
+  const mine = `#/collections?plant=${fixturePlants[0].id}`;
+  await app.open(mine);
+  const closeMine = page.locator('gf-collections').getByRole('button', { name: 'Fermer la fiche' });
+  await expect(closeMine).toBeVisible();
+  await app.go('#/?family=Rosaceae&photo=avec');
+  await said(page, count(p => p.family === 'Rosaceae' && p.thumbnail?.url));
+  await page.locator('gf-flora gf-plant-list gf-plant-card a.row').first().click();
+  await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+$/);
+  await page.locator('gf-flora .pane.filters gf-facet[name="family"]').getByRole('button', { name: 'effacer' }).click();
+  await expect.poll(() => app.state('context.query')).toBe('#/?photo=avec');
+  // Back to Mes plantes at once, its plant closed there (its entry replaced, at its place): Forward gives the list
+  // as left beside the plant — no new view took its place.
+  await page.evaluate(() => history.go(-2));
+  await expect.poll(() => hash(page)).toBe(mine);
+  await closeMine.click();
+  await expect.poll(() => hash(page)).toBe('#/collections');
+  await page.goForward();
+  await expect.poll(() => hash(page)).toBe('#/?photo=avec');
+  await expect.poll(() => app.state('query.filters.family')).toEqual([]);
+  await said(page, count(p => p.thumbnail?.url));
+  // The plant again, the photo cleared beside it, Back to Mes plantes at once: Mes plantes, not the list's URL.
+  await page.goForward();
+  await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+$/);
+  await page.locator('gf-flora .pane.filters gf-facet[name="photo"]').getByRole('button', { name: 'Effacer le filtre Photo' }).click();
+  await expect.poll(() => app.state('context.query')).toBe('#/');
+  await page.evaluate(() => history.go(-2));
+  await expect.poll(() => hash(page)).toBe('#/collections');
+  await expect(page.locator('gf-collections')).toBeVisible();
+  await page.goForward();
+  await expect.poll(() => hash(page)).toBe('#/');
+  await expect.poll(() => app.state('query.filters')).toEqual(NONE);
+});
+
+test('un bloc en panneau, puis un autre à sa place : « Fermer la fiche » revient à la liste, effacée à côté de la plante', async ({ app, page }) => {
+  test.skip(app.phone, 'sur un téléphone, la fiche couvre la liste et ses filtres');
+  // A view before the list (0), the list (1), a plant beside it (2), the family cleared there, a block in the pane (3).
+  await app.open('#/settings');
+  await app.go('#/?family=Rosaceae&photo=avec');
+  await said(page, count(p => p.family === 'Rosaceae' && p.thumbnail?.url));
+  await page.locator('gf-flora gf-plant-list gf-plant-card a.row').first().click();
+  await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+$/);
+  await page.locator('gf-flora .pane.filters gf-facet[name="family"]').getByRole('button', { name: 'effacer' }).click();
+  await expect.poll(() => app.state('context.query')).toBe('#/?photo=avec');
+  const toPane = page.locator('gf-flora #flore-plant gf-plant-detail:not([preview]) button.to-pane');
+  await toPane.first().click();
+  await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+\?pane=/);
+  const first = await hash(page);
+  // Another block in the pane: in place (no new entry).
+  const entries = await page.evaluate(() => history.length);
+  await toPane.nth(1).click();
+  await expect.poll(() => hash(page)).not.toBe(first);
+  expect(await page.evaluate(() => history.length)).toBe(entries);
+  await page.getByRole('button', { name: 'Fermer la fiche' }).click();
+  await expect.poll(() => hash(page)).toBe('#/?photo=avec');
+  await expect.poll(() => app.state('query.filters.family')).toEqual([]);
+  await said(page, count(p => p.thumbnail?.url));
 });
 
 test('un genre de « Filtrer par », puis une famille cochée qui l’écarte : cette famille seule, le texte ne revient pas', async ({ app, page }) => {

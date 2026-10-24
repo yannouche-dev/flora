@@ -85,12 +85,10 @@ test('la Carte : 2D / 3D dans son panneau, la même chose que Réglages › Cart
   await expect(page.locator('gf-settings').getByRole('group', { name: 'Affichage des cartes' }).getByRole('radio', { name: /^3D/ })).toBeChecked();
 });
 
-test('la Carte venue de Flore et la carte d’un lieu de Mes plantes', async ({ app, page }) => {
+test('la carte d’un lieu de Mes plantes', async ({ app, page }) => {
   test.slow();
   await app.open('#/collections');
   const id = await seedPlace(page);
-  await app.go('#/map?from=flore');
-  await switchFromPanel(page, page.locator('gf-map-page gf-map'));
   await app.go(`#/collections?c=${id}`);
   await switchFromPanel(page, page.locator('gf-collections gf-map'));
 });

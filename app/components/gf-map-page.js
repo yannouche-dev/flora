@@ -52,8 +52,7 @@ export class GfMapPage extends LitElement {
     _editing: { state: true },
     _panelFull: { state: true },
     _point: { state: true },
-    _distribution: { state: true },
-    _flore: { state: true }
+    _distribution: { state: true }
   };
 
   static styles = [ui, paneStyles, css`
@@ -242,8 +241,6 @@ export class GfMapPage extends LitElement {
     /** @type {number[]} */
     // The plant filter as left (context.js), unless the page is opened on a plant or a place.
     this._plants = [...context().mapPlants];
-    /** « Sur la Carte » from Flore: the plants of that search (only the places holding one show). @type {Set<number> | null} */
-    this._flore = null;
     /** One plant filtered: its GBIF distribution, offered in the Carte panel. @type {{ key: number, label: string } | null} */
     this._distribution = null;
     /** The places read once (before: no « no place yet » hint). */
@@ -589,11 +586,6 @@ export class GfMapPage extends LitElement {
       this.#parentRoute = this.route;
       this.#ownRoute = null;
     }
-    // From Flore's results: their plants, as they are now.
-    if (changed.has('route')) {
-      if (!this.route.flore) this._flore = null;
-      else if (!this._flore) this._flore = new Set(this.#store.state.results.items.map(p => p.id));
-    }
     if (changed.has('route') && this.route.plant && !this._plants.includes(this.route.plant)) {
       this._plants = [this.route.plant];
     }
@@ -677,8 +669,7 @@ export class GfMapPage extends LitElement {
       spot: next.spot || undefined,
       focus: next.spot && next.focus ? next.focus : undefined,
       season: next.season,
-      plant: this._plants.length === 1 ? this._plants[0] : undefined,
-      flore: Boolean(next.flore)
+      plant: this._plants.length === 1 ? this._plants[0] : undefined
     });
     const opened = (next.spot || null) !== (this.route.spot || null);
     // The map's entry before the first place opened: closing a place goes back there.
@@ -697,7 +688,6 @@ export class GfMapPage extends LitElement {
     const plants = new Set(this._plants);
     return this._spots.filter(place =>
       (!plants.size || place.properties.plantIds.some(id => plants.has(id))) &&
-      (!this._flore || place.properties.plantIds.some(id => this._flore?.has(id))) &&
       (!this.route.season || !this.#harvest || inSeason(place)));
   }
 
@@ -731,8 +721,6 @@ export class GfMapPage extends LitElement {
         ${this._error ? html`<span class="count error" title=${this._error}>${icon('exclamation-triangle-fill')} Lieux illisibles
           <button type="button" class="link" @click=${() => this.#load()}>Réessayer</button></span>`
           : html`<span class="count">${spots.length} lieu${spots.length > 1 ? 'x' : ''}</span>`}
-        ${this._flore ? html`<button type="button" class="flore-chip" aria-pressed="true" title="Seulement les lieux qui ont une plante de la recherche Flore"
-          @click=${() => this.#navigate({ flore: false })}>${icon('leaf')} Recherche Flore (${this._flore.size.toLocaleString('fr-FR')}) ${icon('x')}</button>` : nothing}
         ${this.#harvest ? html`<button type="button" aria-pressed=${this.route.season ? 'true' : 'false'}
           @click=${() => this.#navigate({ season: !this.route.season, spot: null })}>En saison · ${seasonCount}</button>` : nothing}
         <button type="button" aria-expanded=${this._plantMenu ? 'true' : 'false'} aria-pressed=${this._plants.length ? 'true' : 'false'}
@@ -803,8 +791,7 @@ export class GfMapPage extends LitElement {
   /** @param {import('../core/collections.js').Place[]} places */
   #plantMarkers(places) {
     const filter = new Set(this._plants);
-    const flore = this._flore;
-    return plantMarkers(places, e => (!filter.size || filter.has(/** @type {number} */ (e.plantId))) && (!flore || flore.has(/** @type {number} */ (e.plantId))), this.#harvest);
+    return plantMarkers(places, e => !filter.size || filter.has(/** @type {number} */ (e.plantId)), this.#harvest);
   }
 
   /** The selected place, in full: header (distance, route, close), then its editor. @param {import('../core/collections.js').Place} place */

@@ -1,13 +1,13 @@
 {
   "typescript": "7.0.2",
-  "total": 80,
+  "total": 79,
   "errors": {
     "app/components/gf-lookalikes.js": {
       "TS2339": 2
     },
     "app/components/gf-map-page.js": {
       "TS2339": 3,
-      "TS2353": 4
+      "TS2353": 3
     },
     "app/components/gf-map.js": {
       "TS2551": 3

@@ -55,7 +55,9 @@ test('parse : chaque écran de l’app et ses paramètres', () => {
   assert.deepEqual(parse('#/discover?s=../x'), { name: 'discover' });
   assert.deepEqual(parse('#/collection/new?kind=list'), { name: 'spot-new', plant: null, kind: 'list', at: null });
   assert.deepEqual(parse('#/spot/new?at=48.85,2.35').at, [2.35, 48.85], 'ancien lien spot/');
-  assert.equal(parse('#/map?plant=12&season=1&from=flore').flore, true);
+  assert.deepEqual(parse('#/map?plant=12&season=1'), { name: 'map', spot: null, plant: 12, focus: null, season: true, add: null, pick: false });
+  // An older link of Flore's results (« from=flore »): the Carte, on what else it says.
+  assert.deepEqual(parse('#/map?plant=12&from=flore'), parse('#/map?plant=12'));
   assert.equal(parse('#/map?plant=x').plant, null);
   assert.deepEqual(parse('#/shared?d=zABC'), { name: 'shared', data: 'zABC' });
   assert.equal(parse('#/nope').name, 'not-found');
