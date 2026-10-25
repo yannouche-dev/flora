@@ -47,13 +47,13 @@ import { DISTANCES, distanceAt, distanceEvents, distanceKey } from '../miniapp/k
 import { pushHash } from '../core/history.js';
 import { addCatalogLayer, DEFAULT_OPACITY, isOverlay } from '../core/ign.js';
 import { mapLook } from '../core/map-settings.js';
-import { addressOf, baseKeyOf, baseKind } from '../core/backgrounds.js';
-import { LANDMARK_DEFAULTS } from '../core/map-layers.js';
+import { addressOf, baseKeyOf, baseKind, takesLandmarks } from '../core/backgrounds.js';
+import { cleanLandmarks } from '../core/map-layers.js';
 import { loadCatalog } from '../core/ign-catalog.js';
 import { RADII_3D } from '../core/around3d.js';
 import { nearestStop } from '../core/distance.js';
 import { cellIcon, distanceLabel } from './registry.js';
-import { COMPACT_WIDTH, MAP_INTENTS, MAP_LAYERS, WIDE_FRAMES, catalogLayers, inatTiles, inWhen, layersOf, mapControls, opacitiesOf, opacText, overlaysOf, snapRadius, uiMode, viewOf, viewText } from './map-options.js';
+import { COMPACT_WIDTH, MAP_INTENTS, MAP_LANDMARKS, MAP_LAYERS, WIDE_FRAMES, catalogLayers, inatTiles, inWhen, layersOf, mapControls, opacitiesOf, opacText, overlaysOf, snapRadius, uiMode, viewOf, viewText } from './map-options.js';
 import { periodQuery, plantOfPoint, taxonIdOf } from '../core/nearby.js';
 import { SOURCE_NAMES, failedText, obsNotes, sourcesText } from '../core/observations.js';
 import { obsId } from './state.js';
@@ -312,6 +312,7 @@ export class DlMap extends LitElement {
     .legend i.obs { border: 0; background: radial-gradient(circle at 35% 30%, #ff6f9c, var(--gf-kin) 75%); box-shadow: 0 0 0 1.5px var(--gf-highlight); }
     .legend i.outline { background: transparent; border: 2px solid #a3e68a; box-shadow: 0 1px 0 rgb(0 0 0 / 30%); }
     .legend i.area { border-radius: 3px; background: color-mix(in srgb, #7c3aed 35%, transparent); border-color: #7c3aed; }
+    .legend i.lines { height: 4px; border-radius: 2px; background: #fff; border: 0; box-shadow: 0 0 0 1px rgb(0 0 0 / 45%); }
     /* The period: three chips in one. */
     .period { display: flex; border-radius: var(--gf-radius-pill); overflow: hidden; box-shadow: var(--gf-shadow); background: color-mix(in srgb, var(--gf-surface) 95%, transparent); }
     .period button { min-height: 32px; padding: 2px 10px; border: 0; border-radius: 0; background: none; font-size: 0.78rem; white-space: nowrap; }
@@ -529,13 +530,13 @@ export class DlMap extends LitElement {
 
   /**
    * The cell's own look (core/map-settings.js), as its address says it: its background (base=, and annee= the year or
-   * period of its photos, SPOT's year: core/backgrounds.js baseKeyOf; without it the most recent), the names over it
-   * (noms=1: the usual « Noms et réseaux », core/map-layers.js LANDMARK_DEFAULTS; noms=0: none — on the photos and SPOT's;
-   * the plan has its own, noms= kept there, of no effect), its layers in their order (layers=znieff+n2000+ign:<id>: the
-   * catalogue's added to the maps first, core/ign.js — one of IGN's whole catalogue not known on this device found in
-   * it, core/ign-catalog.js, then shown) and their opacity (opac=); what it does not say follows the maps' common look
-   * (gf-map `look`) — layers=aucune says none of its own, not the common ones. null: it says none. The same object
-   * while the same.
+   * period of its photos, SPOT's year: core/backgrounds.js baseKeyOf; without it the most recent), its « Noms et
+   * réseaux » over it (noms=lieux+rail: those, core/map-layers.js LANDMARKS; noms=1 the usual ones, noms=0 none — on
+   * the photos and SPOT's; the plan has its own, noms= kept there, of no effect), its layers in their order
+   * (layers=znieff+n2000+ign:<id>: the catalogue's added to the maps first, core/ign.js — one of IGN's whole catalogue
+   * not known on this device found in it, core/ign-catalog.js, then shown) and their opacity (opac=); what it does not
+   * say follows the maps' common look (gf-map `look`) — layers=aucune says none of its own, not the common ones. null:
+   * it says none. The same object while the same.
    * @returns {Partial<import('../core/map-settings.js').MapLook> | null}
    */
   get #look() {
@@ -558,7 +559,7 @@ export class DlMap extends LitElement {
     // A year its kind has not (the registry says it, and leaves it out): the kind's most recent.
     const base = p.base || p.annee ? baseKeyOf(p.base, p.annee) ?? baseKeyOf(p.base, null) : null;
     if (base) own.base = base;
-    if (typeof p.noms === 'boolean') own.landmarks = p.noms ? [...LANDMARK_DEFAULTS] : [];
+    if (Array.isArray(p.noms)) own.landmarks = cleanLandmarks(p.noms);
     // Its layers and their opacity go together (gf-map#editLook): either written, both its own.
     if (p.layers != null || p.opac) Object.assign(own, { overlays, opacities: opacitiesOf(p.opac) });
     const value = Object.keys(own).length ? own : null;
@@ -577,8 +578,8 @@ export class DlMap extends LitElement {
     /** @type {Record<string, unknown>} */
     const values = look ? {} : { base: null, annee: null, noms: null, layers: null, opac: null };
     if (look?.base) Object.assign(values, addressOf(look.base));
-    // noms=1 for any of « Noms et réseaux » (what its panel ticks: the usual ones), noms=0 for none.
-    if (Array.isArray(look?.landmarks)) values.noms = look.landmarks.length > 0;
+    // Those ticked (noms=1 when the usual ones, noms=0 none: registry.js).
+    if (Array.isArray(look?.landmarks)) values.noms = cleanLandmarks(look.landmarks);
     if (look?.overlays) Object.assign(values, { layers: layersOf(look.overlays), opac: opacText(look.opacities ?? {}, look.overlays, DEFAULT_OPACITY) });
     this.#set(values);
     // What the address says now, given back (an intent's background is not one to leave out: the map shows it again).
@@ -934,9 +935,15 @@ export class DlMap extends LitElement {
     </div>`;
   }
 
-  /** The legend: what the map's marks and the cell's layers are, its lines once opened. @param {LayoutState} s */
+  /**
+   * The legend: what the map's marks and the cell's layers are — its « Noms et réseaux » too when it says its own
+   * (noms=), where they show (not on the plan) —, its lines once opened. @param {LayoutState} s
+   */
   #legendView(s) {
     const layers = /** @type {string[]} */ (this.params?.layers ?? []);
+    const marks = /** @type {string[] | null} */ (this.params?.noms ?? null);
+    const landmarks = marks?.length && takesLandmarks(this.#map?.baseShown ?? this.#look?.base ?? mapLook().base)
+      ? 'Noms et réseaux : ' + marks.map(k => MAP_LANDMARKS[k] ?? k).join(', ') : null;
     const plant = s.live.plant != null && s.plantInfo?.id === s.live.plant && this.#p.plante !== 'non' ? s.plantInfo.name : null;
     const open = this.params?.legende === true;
     return html`<div class="legend">
@@ -946,6 +953,7 @@ export class DlMap extends LitElement {
         <li><i></i>Observations des plantes trouvées</li>
         ${plant ? html`<li><i class="obs"></i>${plant} : ses observations</li>` : nothing}
         ${layers.map(l => html`<li><i class="area"></i>${MAP_LAYERS[l]?.label ?? l}</li>`)}
+        ${landmarks ? html`<li><i class="lines"></i>${landmarks}</li>` : nothing}
       </ul>` : nothing}
     </div>`;
   }

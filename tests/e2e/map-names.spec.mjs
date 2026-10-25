@@ -4,9 +4,10 @@
 // noms : villes, routes, rivières, forêts », gf-map-options.js), kept as the maps' common look (geoflora.mapLayer: names
 // only when off) and found again after a reload. Not on the plan, which has its own: no checkbox there, nothing asked.
 // In 3D, MapLibre's style has the three sources on top of the IGN's, once each, whatever was toggled. A free layout's
-// cell says its own (noms=0, noms=1: its panel ▦ writes it, « Revenir aux réglages communs » takes it back; kept on the
-// plan), the editor offers it (« Noms sur le fond »), written before the 3D with « ; » (annee=2016,noms=0;3d=0). Every
-// tile made here (tiles.mjs: see-through but for their lines), real WebGL for 3D.
+// cell says its own (noms=0, noms=1, a list — noms=lieux+rail: those alone —: its panel ▦ writes it, « Revenir aux
+// réglages communs » takes it back; kept on the plan), the editor offers it (« Noms et réseaux »: a chip each), written
+// before the 3D with « ; » after a digit (annee=2016,noms=0;3d=0). Every tile made here (tiles.mjs: see-through but
+// for their lines), real WebGL for 3D.
 import { test, expect, answerAround, plantId } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
 
@@ -359,22 +360,70 @@ test('fiche plante : un bloc Carte qui n’a que ses noms à lui le dit, dans so
   await expect(panel.locator('.scope')).toContainText('Cette carte a son propre choix des noms');
 });
 
-test('« Créer une app » : « Noms sur le fond » dans Fond, Non écrit noms=0 avant la 3D (« ; » entre deux chiffres), Par défaut le retire', async ({ app, page, isMobile }) => {
+test('une case de disposition : noms= une liste (ceux-là seuls, chacun à sa place, l’un au-dessus de l’autre), ses autres noms réécrits ; 1 et une de plus ; dits dans sa légende ; sur le plan, rien', async ({ app, page }) => {
+  // Their other names, in any order: written canonical (the panel's order); the railways under the places' names.
+  await app.open(`#/layout/[map(r=1km;noms=train+villes)]?${AT}`);
+  await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,noms=lieux+rail)]');
+  const map = page.locator('dl-map gf-map');
+  await expect.poll(() => lookOf(map)).toEqual({ base: 'photo', landmarks: ['rail', 'lieux'] });
+  /** Those drawn, the lowest first. @param {Locator} m */
+  const byZ = async m => (await names2d(m)).sort((x, y) => x.z - y.z).map(n => n.layer);
+  await expect.poll(() => byZ(map)).toEqual(['TRANSPORTNETWORKS.RAILWAYS', 'GEOGRAPHICALNAMES.NAMES']);
+  for (const id of ['TRANSPORTNETWORKS.RAILWAYS', 'GEOGRAPHICALNAMES.NAMES']) expect(seen.some(u => u.includes(`LAYER=${id}&STYLE=normal&FORMAT=image%2Fpng`)), id).toBe(true);
+  expect(asked().filter(l => ['TRANSPORTNETWORKS.ROADS', 'HYDROGRAPHY.HYDROGRAPHY', 'BUILDINGS.BUILDINGS', 'LIMITES_ADMINISTRATIVES_EXPRESS.LATEST'].includes(/** @type {string} */ (l)))).toEqual([]);
+  // The usual three and the buildings (noms=1+bati): four, the buildings at the bottom.
+  await app.go(`#/layout/[map(r=1km;noms=1+bâtiments)]?${AT}`);
+  await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,noms=lieux+routes+eau+bati)]');
+  await expect.poll(() => lookOf(page.locator('dl-map gf-map'))).toEqual({ base: 'photo', landmarks: ['bati', ...KEYS] });
+  await expect.poll(() => byZ(page.locator('dl-map gf-map'))).toEqual(['BUILDINGS.BUILDINGS', ...NAMES]);
+  // Its legend: its own ones said, after its layers.
+  await app.go(`#/layout/[map(r=1km;noms=rail+lieux;layers=haies;ctl=legende;legende=1)]?${AT}`);
+  const legend = page.locator('dl-map').getByRole('list', { name: 'Légende de la carte' });
+  await expect(legend.locator('li').filter({ hasText: /Haies|Noms et réseaux/ })).toHaveText(['Haies', 'Noms et réseaux : Noms de lieux, Voies ferrées']);
+  // On the plan: kept, none drawn nor asked, nor in its legend.
+  seen.length = 0;
+  await app.go(`#/layout/[map(r=1km;base=plan;noms=rail+lieux;ctl=legende;legende=1)]?${AT}`);
+  await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,base=plan,noms=lieux+rail,legende=1,ctl=legende)]');
+  const plan = page.locator('dl-map gf-map');
+  await expect.poll(() => lookOf(plan)).toEqual({ base: 'plan', landmarks: ['rail', 'lieux'] });
+  await expect.poll(async () => (await tileLayers(plan)).map(l => l.key)).toEqual(['plan']);
+  expect(asked().filter(l => /RAILWAYS|GEOGRAPHICALNAMES/.test(String(l)))).toEqual([]);
+  await expect(legend).toContainText('La zone');
+  await expect(legend).not.toContainText('Noms et réseaux');
+});
+
+test('« Créer une app » : « Noms et réseaux » dans Fond, une pastille par couche ; aucune écrit noms=0 avant la 3D (« ; » entre deux chiffres), les trois habituelles noms=1, Par défaut le retire', async ({ app, page, isMobile }) => {
   test.skip(isMobile, 'the picker docked: a wide screen');
   await app.open(`#/builder?g=${encodeURIComponent('[map(r=1km,base=photo,annee=2016;3d=0)]')}&${AT}`);
   await page.locator('gf-builder gf-layout section.cell[data-cell="0"] .cell-head .pick').click();
   const p = page.locator('gf-block-picker:not([inline])');
   await p.locator('.row[data-group="Fond"]').click();
   const noms = p.locator('[data-param="noms"]');
-  await expect(noms).toContainText('Noms sur le fond');
-  await expect(noms).toContainText('par défaut : selon les réglages communs (sur les photos et SPOT)');
-  await expect(noms.locator('button')).toHaveText(['Par défaut', 'Oui', 'Non']);
+  await expect(noms).toContainText('Noms et réseaux');
+  await expect(noms).toContainText('aucune choisie : selon les réglages communs (sur les photos et SPOT)');
+  await expect(noms.locator('button.chip')).toHaveText(['Noms de lieux', 'Routes', 'Cours d’eau', 'Voies ferrées', 'Bâtiments', 'Limites administratives']);
+  await expect(noms.locator('[data-act="default"]')).toHaveCount(0);
   const grid = () => page.evaluate(() => new URLSearchParams(location.hash.split('?')[1] || '').get('g'));
-  await noms.locator('button[data-value="false"]').click();
+  const look = () => lookOf(page.locator('gf-builder dl-map gf-map'));
+  // One chosen: that one alone, written.
+  await noms.locator('button[data-value="rail"]').click();
+  await expect.poll(grid).toBe('[map(r=1km,base=photo,annee=2016,noms=rail,3d=0)]');
+  await expect(noms.locator('button[data-value="rail"]')).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(look).toEqual({ base: 'photo:2016', landmarks: ['rail'] });
+  // Unchosen: none (noms=0, « ; » before the 3D).
+  await noms.locator('button[data-value="rail"]').click();
   await expect.poll(grid).toBe('[map(r=1km,base=photo,annee=2016,noms=0;3d=0)]');
-  await expect(noms.locator('button[data-value="false"]')).toHaveAttribute('aria-pressed', 'true');
-  await expect.poll(() => lookOf(page.locator('gf-builder dl-map gf-map'))).toEqual({ base: 'photo:2016', landmarks: [] });
-  await noms.locator('button[data-value="null"]').click();
+  await expect.poll(look).toEqual({ base: 'photo:2016', landmarks: [] });
+  // The usual three, one at a time: noms=1.
+  for (const [v, written] of [['lieux', 'noms=lieux,3d=0'], ['routes', 'noms=lieux+routes,3d=0'], ['eau', 'noms=1;3d=0']]) {
+    await noms.locator(`button[data-value="${v}"]`).click();
+    await expect.poll(grid).toBe(`[map(r=1km,base=photo,annee=2016,${written})]`);
+  }
+  await expect.poll(look).toEqual({ base: 'photo:2016', landmarks: KEYS });
+  // « Par défaut »: noms= gone, the common choice.
+  await noms.locator('[data-act="default"]').click();
   await expect.poll(grid).toBe('[map(r=1km,base=photo,annee=2016;3d=0)]');
-  await expect.poll(() => lookOf(page.locator('gf-builder dl-map gf-map'))).toEqual({ base: 'photo:2016', landmarks: KEYS });
+  await expect(noms.locator('[data-act="default"]')).toHaveCount(0);
+  await expect.poll(look).toEqual({ base: 'photo:2016', landmarks: KEYS });
 });
+

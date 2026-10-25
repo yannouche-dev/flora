@@ -1,10 +1,10 @@
 // @ts-check
 // The map cell's settings (« Disposition libre », registry.js `map`) that need words of their own: its IGN layers by
-// short names (layers=znieff+n2000), its intents (one word, a bundle of settings: map(terrain)), the dates its points
-// keep (when=mois), its controls by the cell's width (ui=auto). Pure (no DOM, no Leaflet), tested under Node; the
-// rendering is cells.js' (dl-map).
+// short names (layers=znieff+n2000), its « Noms et réseaux » (noms=lieux+routes), its intents (one word, a bundle of
+// settings: map(terrain)), the dates its points keep (when=mois), its controls by the cell's width (ui=auto). Pure (no
+// DOM, no Leaflet), tested under Node; the rendering is cells.js' (dl-map).
 
-import { CATALOG_ROWS } from '../core/map-layers.js';
+import { CATALOG_ROWS, LANDMARKS, LANDMARK_DEFAULTS } from '../core/map-layers.js';
 
 /**
  * A layer of the Géoplateforme's catalogue (data/ign-catalog.json) the map adds as an overlay (core/ign.js
@@ -15,16 +15,24 @@ import { CATALOG_ROWS } from '../core/map-layers.js';
  *   `keys`: the overlays of gf-map it shows (core/ign.js OVERLAYS' own keys, or « ign:<id> » for a catalogue's layer)
  */
 
-const { znieff1: ZNIEFF1, znieff2: ZNIEFF2, habitats: SIC, oiseaux: ZPS, pnr: PNR, cen: CEN, ombrage: SHADOW } = CATALOG_ROWS;
+const {
+  znieff1: ZNIEFF1, znieff2: ZNIEFF2, habitats: SIC, oiseaux: ZPS, pnr: PNR, cen: CEN, rbio: RB, ombrage: SHADOW,
+  pentes: SLOPES, bdforet: FOREST_TYPES, anciennes: OLD_FORESTS, haies: HEDGES, humides: WETLANDS
+} = CATALOG_ROWS;
 /** The rivers, the lakes (« Cours d’eau » of « Noms et réseaux » too: core/map-layers.js LANDMARKS — drawn once, core/ign.js landmarksShown). @type {MapCatalogLayer} */
 const HYDRO = { id: 'HYDROGRAPHY.HYDROGRAPHY', title: 'Hydrographie', format: 'image/png', style: 'normal', minNative: 6, maxNative: 18 };
 
 /** A catalogue layer's overlay key (core/ign.js IGN_PREFIX). @param {MapCatalogLayer} l */
 const ign = l => 'ign:' + l.id;
 
+/** A layer of the catalogue alone, by its row of the panel's themes (its title the panel's). @param {MapCatalogLayer} l @returns {MapLayer} */
+const row = l => ({ label: l.title, keys: [ign(l)], catalog: [l] });
+
 /**
  * The layers a map cell names (layers=znieff+n2000), in the order the address writes them: protected areas first,
- * then the land. Each its overlays (gf-map `overlays`): the app's own (core/ign.js OVERLAYS) or the catalogue's.
+ * then the land. Each its overlays (gf-map `overlays`): the app's own (core/ign.js OVERLAYS) or the catalogue's — those
+ * of the panel's themes by their own short name (pentes, haies…: core/map-layers.js CATALOG_ROWS), the same overlay
+ * whichever ticks it, the panel or the address.
  * @type {Record<string, MapLayer>}
  */
 export const MAP_LAYERS = {
@@ -32,25 +40,67 @@ export const MAP_LAYERS = {
   znieff1: { label: 'ZNIEFF de type I', keys: [ign(ZNIEFF1)], catalog: [ZNIEFF1] },
   znieff2: { label: 'ZNIEFF de type II', keys: [ign(ZNIEFF2)], catalog: [ZNIEFF2] },
   n2000: { label: 'Natura 2000', keys: [ign(SIC), ign(ZPS)], catalog: [SIC, ZPS] },
+  habitats: row(SIC),
+  oiseaux: row(ZPS),
   parcs: { label: 'Parcs nationaux', keys: ['parcs'] },
   pnr: { label: 'Parcs naturels régionaux', keys: [ign(PNR)], catalog: [PNR] },
   reserves: { label: 'Réserves naturelles', keys: ['reserves'] },
   biotopes: { label: 'Protection de biotope', keys: ['biotopes'] },
+  rbio: row(RB),
   cen: { label: 'Conservatoires d’espaces naturels', keys: [ign(CEN)], catalog: [CEN] },
   forets: { label: 'Forêts publiques', keys: ['forets'] },
   cadastre: { label: 'Parcelles cadastrales', keys: ['cadastre'] },
   courbes: { label: 'Courbes de niveau', keys: ['contours'] },
   estompage: { label: 'Estompage (relief)', keys: [ign(SHADOW)], catalog: [SHADOW] },
+  pentes: row(SLOPES),
+  bdforet: row(FOREST_TYPES),
+  anciennes: row(OLD_FORESTS),
+  haies: row(HEDGES),
+  humides: row(WETLANDS),
   hydro: { label: 'Cours d’eau', keys: [ign(HYDRO)], catalog: [HYDRO] }
 };
 
-/** Other names of the layers (folded, no spaces) → their name. */
+/**
+ * Other names of the layers (folded, no spaces) → their name. One directive of Natura 2000 (sic, zps, zsc) is still
+ * n2000, both; habitats and oiseaux, one each.
+ */
 export const MAP_LAYER_ALIASES = {
   natura: 'n2000', natura2000: 'n2000', sic: 'n2000', zps: 'n2000', zsc: 'n2000',
+  directivehabitats: 'habitats', directiveoiseaux: 'oiseaux',
   parc: 'parcs', parcsnationaux: 'parcs', pn: 'parcs', parcsregionaux: 'pnr', reserve: 'reserves', reservesnaturelles: 'reserves', rn: 'reserves',
-  biotope: 'biotopes', appb: 'biotopes', conservatoires: 'cen', foret: 'forets', onf: 'forets', parcelles: 'cadastre',
-  contours: 'courbes', niveaux: 'courbes', relief: 'estompage', ombrage: 'estompage', eau: 'hydro', rivieres: 'hydro', coursdeau: 'hydro'
+  biotope: 'biotopes', appb: 'biotopes', reservesbiologiques: 'rbio', reservebiologique: 'rbio', conservatoires: 'cen', foret: 'forets', onf: 'forets', parcelles: 'cadastre',
+  contours: 'courbes', niveaux: 'courbes', relief: 'estompage', ombrage: 'estompage', pente: 'pentes', fortespentes: 'pentes',
+  peuplements: 'bdforet', typesdeforets: 'bdforet', foretsanciennes: 'anciennes', haie: 'haies', bocage: 'haies',
+  zoneshumides: 'humides', tourbieres: 'humides', eau: 'hydro', rivieres: 'hydro', coursdeau: 'hydro'
 };
+
+// ── Noms et réseaux (noms=) ─────────────────────────────────────────────────
+
+/**
+ * « Noms et réseaux » as a map cell names them (noms=lieux+routes: core/map-layers.js LANDMARKS' keys), in the order
+ * the address writes them and the panel ▦ lists them: the usual three first (the places' names, the roads, the
+ * rivers), then the railways, the buildings, the boundaries.
+ * @type {Record<string, string>}
+ */
+export const MAP_LANDMARKS = Object.fromEntries(['lieux', 'routes', 'eau', 'rail', 'bati', 'limites']
+  .map(k => [k, /** @type {import('../core/map-layers.js').Landmark} */ (LANDMARKS.find(l => l.key === k)).label]));
+
+/** Other names of « Noms et réseaux » (folded, no spaces) → their name. */
+export const MAP_LANDMARK_ALIASES = {
+  villes: 'lieux', villages: 'lieux', toponymes: 'lieux', nomsdelieux: 'lieux', lieuxdits: 'lieux', route: 'routes',
+  hydro: 'eau', rivieres: 'eau', coursdeau: 'eau', hydrographie: 'eau', train: 'rail', fer: 'rail', voiesferrees: 'rail',
+  batiments: 'bati', constructions: 'bati', communes: 'limites', admin: 'limites', limitesadministratives: 'limites'
+};
+
+/**
+ * noms= as the address writes them: 1 the usual ones (core/map-layers.js LANDMARK_DEFAULTS: what noms=1 always
+ * said), 0 none, else their names in their order (MAP_LANDMARKS). @param {string[]} keys @returns {string}
+ */
+export function landmarksText(keys) {
+  const on = Object.keys(MAP_LANDMARKS).filter(k => keys.includes(k));
+  if (!on.length) return '0';
+  return on.length === LANDMARK_DEFAULTS.length && LANDMARK_DEFAULTS.every(k => on.includes(k)) ? '1' : on.join('+');
+}
 
 /** The catalogue's layers these layers need added to the maps (core/ign.js addCatalogLayer) before they show. @param {string[]} names */
 export const catalogLayers = names => names.flatMap(n => MAP_LAYERS[n]?.catalog ?? []);

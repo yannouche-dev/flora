@@ -111,6 +111,11 @@ test('erreurs : jamais d’exception, la disposition lue au mieux et ce qui ne v
   const names = G.list([G.cell('map', null, [{ key: 'annee', value: '2020' }, { key: 'noms', value: '0' }, { key: '3d', value: '1' }])]);
   assert.equal(G.serialize(names), '[map(annee=2020,noms=0;3d=1)]');
   assert.deepEqual(G.strip(G.parse(G.serialize(names)).tree), G.strip(names));
+  // A list of them (noms=lieux+rail): « , » on both sides, read back whole.
+  const list = G.list([G.cell('map', null, [{ key: 'annee', value: '2020' }, { key: 'noms', value: 'lieux+rail' }, { key: '3d', value: '1' }])]);
+  assert.equal(G.serialize(list), '[map(annee=2020,noms=lieux+rail,3d=1)]');
+  assert.deepEqual(G.strip(G.parse(G.serialize(list)).tree), G.strip(list));
+  assert.equal(read(G.serialize(list)).text, '[map(annee=2020,noms=lieux+rail,3d=1)]');
 });
 
 test('composant inconnu : une case qui le dit et propose le plus proche ; paramètres et valeurs vérifiés', () => {
@@ -234,7 +239,11 @@ function randomNode(rnd, depth) {
   }
   const all = names();
   const [name, view] = all[rnd(all.length)].split('.');
-  const params = name === 'map' && rnd(2) ? [{ key: 'r', value: ['500m', '2km', '10km'][rnd(3)] }] : name === 'results' && rnd(2) ? [{ key: 'view', value: 'grid' }] : [];
+  // A map: its radius, its « Noms et réseaux » (a list, or 1 / 0: canonical, registry.js), each or not.
+  const params = name === 'map' ? [
+    ...rnd(2) ? [{ key: 'r', value: ['500m', '2km', '10km'][rnd(3)] }] : [],
+    ...rnd(3) === 0 ? [{ key: 'noms', value: ['1', '0', 'lieux+rail', 'routes+eau+bati+limites'][rnd(4)] }] : []
+  ] : name === 'results' && rnd(2) ? [{ key: 'view', value: 'grid' }] : [];
   return G.cell(name, view ?? null, params, rnd(4) === 0 ? 5 + rnd(50) : null);
 }
 

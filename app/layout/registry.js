@@ -17,7 +17,9 @@ import { fold } from '../core/fold.js';
 import { ALL_WHENS, LATEST_SPOT, PHOTO_HISTORIC, PHOTO_PERIODS, PHOTO_YEARS, SPOT_YEARS, baseKeyOf, baseLabel, whenLabel } from '../core/backgrounds.js';
 import { BLOCKS } from '../core/sheet-blocks.js';
 import { blockCategory, categoryOf } from '../core/categories.js';
-import { MAP_CONTROL_ALIASES, MAP_CONTROLS, MAP_INTENT_ALIASES, MAP_INTENTS, MAP_LAYER_ALIASES, MAP_LAYERS, defaultControls, layerWord, readOpacities, readView } from './map-options.js';
+import { LANDMARK_DEFAULTS } from '../core/map-layers.js';
+import { MAP_CONTROL_ALIASES, MAP_CONTROLS, MAP_INTENT_ALIASES, MAP_INTENTS, MAP_LANDMARK_ALIASES, MAP_LANDMARKS, MAP_LAYER_ALIASES, MAP_LAYERS, defaultControls, landmarksText, layerWord,
+  readOpacities, readView } from './map-options.js';
 
 /**
  * @typedef {'distance' | 'enum' | 'bool' | 'list' | 'text' | 'intent' | 'id'} ParamKind
@@ -25,7 +27,8 @@ import { MAP_CONTROL_ALIASES, MAP_CONTROLS, MAP_INTENT_ALIASES, MAP_INTENTS, MAP
  *   off?: string[], group?: string, mark?: string, bundles?: Record<string, Record<string, string>>, defOf?: (params: Record<string, any>) => unknown,
  *   named?: boolean, max?: number, frame?: boolean, own?: boolean, more?: (word: string) => string | undefined, ordered?: boolean,
  *   read?: (text: string) => string | undefined, unset?: string, expects?: string, check?: (v: any, params: Record<string, any>) => string | undefined,
- *   offer?: (params: Record<string, any>) => string[], say?: (v: any, params: Record<string, any>, marked: Set<string>) => string | undefined }} ParamSpec
+ *   offer?: (params: Record<string, any>) => string[], say?: (v: any, params: Record<string, any>, marked: Set<string>) => string | undefined,
+ *   sets?: Record<string, string[]>, alone?: string[], write?: (v: any) => string, none?: string }} ParamSpec
  *   `values`: an enum's (a list's, an intent's) canonical values and their French labels; `aliases`: other spellings of
  *   a value → canonical; `words`: other names of the parameter; `off`: words that, alone, set a yes-or-no one to no
  *   (map(2d)); `group`: its heading in the editor and the README (Où, Fond…); `mark`: its mark in a menu (cellMark),
@@ -38,7 +41,7 @@ import { MAP_CONTROL_ALIASES, MAP_CONTROLS, MAP_INTENT_ALIASES, MAP_INTENTS, MAP
  *   most recent first — never one `check` refuses), else all of `values`; `say`: its words in a cell's name (cellMark) as
  *   the others make them — undefined: its value's label; '': said by another one marked (`marked`): base= by annee=, which
  *   says the whole background (« Images satellite SPOT de 2020 », annee=1950-1965 alone « Photos aériennes historiques… »);
- *   a yes-or-no's '': of no effect there, neither said nor marked (noms= on the plan).
+ *   a yes-or-no's or a list's '': of no effect there, neither said nor marked (noms= on the plan).
  *   Kinds: `list` — several of its values joined by « + » (layers=znieff+n2000), each unknown one said and left out;
  *   `text` — free words (lieu=Mirabel Ménétrol 63: never a bare value); `intent` — one word for a bundle of the other
  *   parameters (`bundles`: each value's, as the address writes them), which a parameter written beside it overrides;
@@ -48,7 +51,11 @@ import { MAP_CONTROL_ALIASES, MAP_CONTROLS, MAP_INTENT_ALIASES, MAP_INTENTS, MAP
  *   « Affiner » nor a mark — the address keeps what was done in the cell. A list's `more`: a word beyond its values that
  *   it takes all the same, canonical (layers: a layer of IGN's catalogue « ign:<id> »), else undefined; `ordered`: its
  *   values in the order written (layers: the last drawn on top), not the parameter's. A text's `read`: its words
- *   checked, canonical (vue: « 45.77/3.08/13 »), else undefined.
+ *   checked, canonical (vue: « 45.77/3.08/13 »), else undefined. A list's `sets`: words each standing for several of
+ *   its values, or none (noms=1: the usual ones; noms=off: none); `alone`: its value when named alone (map(noms)), as
+ *   a yes-or-no named alone is on; `write`: its value as the address writes it (noms=1 for the usual ones, 0 for none),
+ *   else its values joined by « + », « aucune » for none; `none`: its words for none (« sans noms ni réseaux »), else
+ *   « ‹label› : aucune ».
  * @typedef {'scope' | 'query' | 'results' | 'plant' | 'obs'} StateKey
  * @typedef {{ key: string, title: string }} ViewSpec
  * @typedef {object} ComponentSpec
@@ -99,6 +106,9 @@ const RADIUS = { kind: 'distance', label: 'Rayon de la zone', def: null, words: 
 /** A value of a list, its words: each name's label. @param {Record<string, { label: string }>} o */
 const labels = o => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, v.label]));
 
+/** The usual « Noms et réseaux » (core/map-layers.js LANDMARK_DEFAULTS), in noms='s order: noms=1, map(noms). */
+const USUAL = Object.keys(MAP_LANDMARKS).filter(k => LANDMARK_DEFAULTS.includes(k));
+
 /**
  * The map's settings, by group (the editor's headings, the README's): Où, Fond, Couches, Points, Liens, Interface —
  * and first, its intent (one word, a bundle of them: map-options.js). Their defaults: the map as it always was.
@@ -124,8 +134,8 @@ const MAP_PARAMS = {
   // framed on the zone.
   vue: { kind: 'text', label: 'Cadrage de départ', def: null, group: 'Où', own: true, named: true, max: 60, read: readView, words: ['view', 'cadrage', 'camera'] },
   // Fond: the maps' common look (core/map-settings.js) unless it says one (its own then, kept by the cell: base=, and
-  // annee= its photos' year or period, SPOT's year — core/backgrounds.js; without it the most recent; noms= the names over
-  // the photos and SPOT's, shown or not), as 2D or 3D (3d=: unless written, the common choice).
+  // annee= its photos' year or period, SPOT's year — core/backgrounds.js; without it the most recent; noms= « Noms et
+  // réseaux » over the photos and SPOT's, which of them), as 2D or 3D (3d=: unless written, the common choice).
   base: { kind: 'enum', label: 'Fond de carte', def: null, unset: 'le fond commun à toutes les cartes', group: 'Fond', values: { photo: 'Photos aériennes', plan: 'Plan IGN', spot: 'Satellite (SPOT)' },
     aliases: { photos: 'photo', ortho: 'photo', orthophoto: 'photo', ign: 'plan', carte: 'plan', satellite: 'spot', sat: 'spot' }, words: ['fond', 'layer'],
     say: (v, p, marked) => marked.has('annee') ? '' : undefined },
@@ -141,10 +151,19 @@ const MAP_PARAMS = {
     say: (v, p) => baseLabel(baseKeyOf(p.base, v)),
     words: ['an', 'millesime', 'year']
   },
-  // Kept with the plan, where it does nothing (the plan has its names): never dropped by a background changed (its
-  // thumbnail, its panel), the cell's choice found again on the photos. Not said in its name there.
-  noms: { kind: 'bool', label: 'Noms sur le fond', def: null, unset: 'selon les réglages communs (sur les photos et SPOT)', group: 'Fond',
-    say: (v, p) => p.base === 'plan' ? '' : undefined, words: ['names', 'etiquettes', 'toponymes', 'libelles', 'labels'] },
+  // « Noms et réseaux » (core/map-layers.js LANDMARKS: the places' names, the roads, the rivers, the railways, the
+  // buildings, the boundaries), in the panel's order (map-options.js MAP_LANDMARKS): the cell's own, whatever the
+  // common ones. Its yes-or-no of before still read (noms=1: the usual three — what it always showed —, noms=0: none;
+  // map(noms) alone, the usual ones), and written so: 1, 0, else the list. Never a bare value (map(eau) is the layer
+  // hydro). Kept with the plan, where it does nothing (the plan has its names): never dropped by a background changed
+  // (its thumbnail, its panel), the cell's choice found again on the photos. Not said in its name there.
+  noms: {
+    kind: 'list', label: 'Noms et réseaux', def: null, unset: 'selon les réglages communs (sur les photos et SPOT)', group: 'Fond', named: true,
+    values: MAP_LANDMARKS, aliases: MAP_LANDMARK_ALIASES, alone: USUAL, write: landmarksText, none: 'sans noms ni réseaux',
+    sets: Object.fromEntries(Object.entries(BOOL).map(([w, b]) => [w, b === 'true' ? USUAL : []])),
+    expects: `${Object.keys(MAP_LANDMARKS).join(', ')}, joints par « + » (1 : ${USUAL.join('+')} ; 0 : aucun)`,
+    say: (v, p) => p.base === 'plan' ? '' : undefined, words: ['names', 'etiquettes', 'toponymes', 'libelles', 'labels', 'reseaux']
+  },
   '3d': { kind: 'bool', label: 'Vue 3D', def: null, group: 'Fond', mark: '3D', off: ['2d', 'plat', 'plate'], words: ['vue3d', 'relief3d', 'rendu'] },
   // Couches.
   // Any layer of IGN's catalogue too (ign:<id>), in the order drawn (the last on top); their opacity when not the usual.
@@ -395,8 +414,8 @@ function paramOf(spec, word) {
 /**
  * The parameter a bare value sets: the main one when the value is one of its own, else the first that reads it
  * (map(plan): its background; map(terrain): its intent; map(znieff+n2000): its layers) — never a text one (any words
- * would do) —, else a yes-or-no one it names, or one of its words for no (search(filtres), map(3d), map(2d)), else the
- * main one (to say why not).
+ * would do) —, else a yes-or-no one it names, or one of its words for no (search(filtres), map(3d), map(2d)), or a
+ * list that has a value alone (map(noms)), else the main one (to say why not).
  * @param {ComponentSpec} spec @param {string} value @returns {string | null}
  */
 function bareParam(spec, value) {
@@ -409,7 +428,7 @@ function bareParam(spec, value) {
   const other = Object.keys(spec.params).find(fits);
   if (other) return other;
   const named = paramOf(spec, value) ?? offOf(spec, value);
-  if (named && spec.params[named].kind === 'bool') return named;
+  if (named && (spec.params[named].kind === 'bool' || spec.params[named].alone)) return named;
   // Some of a list's words among others (map(znieff+foo)): that list, the others said.
   return Object.keys(spec.params).find(k => spec.params[k].kind === 'list' && !spec.params[k].named && readList(spec.params[k], value).values.length) ?? spec.main ?? null;
 }
@@ -465,9 +484,10 @@ export function readList(p, text) {
   /** @type {string[]} */ const found = [];
   /** @type {string[]} */ const unknown = [];
   for (const w of words) {
-    const v = oneValue(p, key(w)) ?? p.more?.(w);
+    // A word for several of them (noms=1: the usual ones), or none (noms=off).
+    const v = oneValue(p, key(w)) ?? p.sets?.[key(w)] ?? p.more?.(w);
     if (v === undefined) unknown.push(w);
-    else if (!found.includes(v)) found.push(v);
+    else for (const x of [v].flat()) if (!found.includes(x)) found.push(x);
   }
   // In the parameter's order (those it takes beyond its values after them), or as written (`ordered`).
   const values = p.ordered ? found : [...Object.keys(p.values ?? {}).filter(v => found.includes(v)), ...found.filter(v => !(v in (p.values ?? {})))];
@@ -488,15 +508,16 @@ export function readValue(p, text) {
   if (p.kind === 'id') return /^\s*\d{1,9}\s*$/.test(text) && Number(text) > 0 ? Number(text) : undefined;
   if (p.kind === 'list') {
     const l = readList(p, text);
-    return l.unknown.length || (!l.values.length && !NONE.has(key(text))) ? undefined : l.values;
+    const none = NONE.has(key(text)) || p.sets?.[key(text)]?.length === 0;
+    return l.unknown.length || (!l.values.length && !none) ? undefined : l.values;
   }
   const k = key(text);
   if (p.kind === 'bool') return k in BOOL ? BOOL[/** @type {keyof typeof BOOL} */ (k)] === 'true' : undefined;
   return oneValue(p, k);
 }
 
-/** A value as the address writes it. @param {ParamSpec} p @param {unknown} v */
-export const valueText = (p, v) => p.kind === 'distance' ? distanceText(/** @type {number} */ (v)) : p.kind === 'bool' ? (v ? '1' : '0')
+/** A value as the address writes it (its own way: `write`). @param {ParamSpec} p @param {unknown} v */
+export const valueText = (p, v) => p.write ? p.write(v) : p.kind === 'distance' ? distanceText(/** @type {number} */ (v)) : p.kind === 'bool' ? (v ? '1' : '0')
   : p.kind === 'list' ? (/** @type {string[]} */ (v).length ? /** @type {string[]} */ (v).join('+') : 'aucune') : String(v);
 
 /** Two values the same (lists: the same values, in the same order). @param {unknown} a @param {unknown} b */
@@ -555,9 +576,11 @@ export function resolve(cell) {
       continue;
     }
     const ps = spec.params[name];
-    // « search(filtres) », « map(3d) »: a yes-or-no parameter named alone is on; « map(2d) »: one of its words for no.
+    // « search(filtres) », « map(3d) »: a yes-or-no parameter named alone is on; « map(2d) »: one of its words for no;
+    // « map(noms) »: a list named alone, its value alone.
     let v = p.key === null && ps.kind === 'bool' && paramOf(spec, p.value) === name ? true
-      : p.key === null && ps.kind === 'bool' && offOf(spec, p.value) === name ? false : readValue(ps, p.value);
+      : p.key === null && ps.kind === 'bool' && offOf(spec, p.value) === name ? false
+      : p.key === null && ps.alone && paramOf(spec, p.value) === name ? [...ps.alone] : readValue(ps, p.value);
     if (v === undefined && ps.kind === 'list') {
       // A list: each word it does not know said and left out, the others kept.
       const l = readList(ps, p.value);
@@ -706,12 +729,14 @@ export function cellMark(r) {
   const marked = new Set(shown.map(([k]) => k));
   const marks = shown.map(([k, p]) => {
     const letter = p.mark ?? p.label.charAt(0).toUpperCase();
-    // A yes-or-no its others make of no effect (noms= on the plan): neither said nor marked.
-    if (p.kind === 'bool' && p.say?.(r.params[k], r.params, marked) === '') return null;
+    // A yes-or-no or a list its others make of no effect (noms= on the plan): neither said nor marked.
+    if ((p.kind === 'bool' || p.kind === 'list') && p.say?.(r.params[k], r.params, marked) === '') return null;
     if (p.kind === 'bool') return r.params[k] ? { label: lower(p.label), short: letter } : { label: 'sans ' + lower(p.label), short: '−' + letter };
-    // A list: its words after the parameter's (« couches : ZNIEFF (types I et II), Natura 2000 »), the parameter's letter.
+    // A list: its words after the parameter's (« couches : ZNIEFF (types I et II), Natura 2000 »), the parameter's letter;
+    // none, its own words for none, as a no (« sans noms ni réseaux », −N).
     if (p.kind === 'list') {
       const chosen = /** @type {string[]} */ (r.params[k]).map(v => p.values?.[v] ?? v);
+      if (!chosen.length && p.none) return { label: p.none, short: '−' + letter };
       return { label: `${lower(p.label)} : ${chosen.length ? chosen.join(', ') : 'aucune'}`, short: letter };
     }
     const all = Object.values(p.values ?? {});
