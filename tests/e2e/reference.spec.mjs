@@ -3,7 +3,7 @@
 // editor, « Chercher autour d’ici ? » in a free layout's map cell), said by the map's one live region —; Échap or
 // « Annuler » keep nothing (a marker dragged there goes back), Entrée or « Confirmer » do what it is for (the place moved
 // and saved once, the zone centred) and keep the point as the reference: its violet sight, told once
-// (`reference-change`), its card with « Créer un endroit ici » next and « Retirer le repère », reached from its sight
+// (`reference-change`), its card with « Créer un lieu ici » next and « Retirer le repère », reached from its sight
 // by the keyboard too; a free layout's reference goes with its zone. The keyboard's long press: Maj + F10 on the map.
 // In 3D (gf-map-gl.js, the desktop only: software WebGL), the view centres on the reference and turns around it — the
 // wheel pressed, Maj + →, « Tourner autour du repère » — the reference kept on its point of the screen (core/orbit.js;
@@ -99,7 +99,7 @@ test('la Carte : l’appui long propose un repère — Échap n’en garde rien,
   expect(await told()).toEqual({ 'reference-change': [], 'point-info': [], 'positions-save': [] });
   expect(await map.evaluate(m => /** @type {any} */ (m).reference)).toBeNull();
 
-  // Asked again, Entrée: the reference, told once; its sight (named), its card — « Créer un endroit ici » next.
+  // Asked again, Entrée: the reference, told once; its sight (named), its card — « Créer un lieu ici » next.
   const pressed = await press(page, map, leaflet, 0.55, 0.45);
   await expect(card.getByRole('heading', { name: 'Poser un repère ici ?' })).toBeVisible();
   await page.keyboard.press('Enter');
@@ -112,7 +112,7 @@ test('la Carte : l’appui long propose un repère — Échap n’en garde rien,
   expect(events['point-info']).toHaveLength(1);
   expect(events['point-info'][0].coordinates).toEqual(events['reference-change'][0].coordinates);
   expect(events['positions-save']).toEqual([]);
-  await expect(card.getByRole('link', { name: 'Créer un endroit ici' })).toBeFocused();
+  await expect(card.getByRole('link', { name: 'Créer un lieu ici' })).toBeFocused();
   await expect(card.getByRole('button', { name: 'Retirer le repère' })).toBeVisible();
   await expect(mapSaid(map)).toContainText('Repère posé.');
   const reference = await map.evaluate(m => /** @type {any} */ (m).reference);
@@ -128,7 +128,7 @@ test('la Carte : l’appui long propose un repère — Échap n’en garde rien,
   await expect(hint).toBeVisible();
   await page.keyboard.press('Enter');
   await expect(card.getByRole('button', { name: 'Retirer le repère' })).toBeVisible();
-  await expect(card.getByRole('link', { name: 'Créer un endroit ici' })).toBeFocused();
+  await expect(card.getByRole('link', { name: 'Créer un lieu ici' })).toBeFocused();
   expect((await told())['point-info']).toEqual([events['point-info'][0], { coordinates: reference, label: '' }]);
   await expect(hint).toHaveCount(0);
   await card.getByRole('button', { name: 'Fermer' }).focus();
@@ -136,7 +136,7 @@ test('la Carte : l’appui long propose un repère — Échap n’en garde rien,
   await expect(card).toHaveCount(0);
   await expect(ref).toBeFocused();
   await page.keyboard.press('Space');
-  await expect(card.getByRole('link', { name: 'Créer un endroit ici' })).toBeFocused();
+  await expect(card.getByRole('link', { name: 'Créer un lieu ici' })).toBeFocused();
 
   // Editing started by the page (the Carte's « Déplacer » on a plant of its panel sets it): the reference's card closed,
   // « Terminé » shown in its place.
@@ -314,7 +314,7 @@ test('une case de disposition : « Chercher autour d’ici ? » — sa zone ne s
 
   await press(page, map, leaflet, 0.3, 0.3);
   await expect(card.getByRole('heading', { name: 'Chercher autour d’ici ?' })).toBeVisible();
-  await expect(card.getByRole('link', { name: 'Créer un endroit ici' })).toHaveCount(0);
+  await expect(card.getByRole('link', { name: 'Créer un lieu ici' })).toHaveCount(0);
   await page.waitForTimeout(300);
   expect(await zone()).toEqual(before);
   await page.keyboard.press('Escape');
@@ -325,7 +325,7 @@ test('une case de disposition : « Chercher autour d’ici ? » — sa zone ne s
   const told = await listen(map, ['reference-change']);
   const pressed = await press(page, map, leaflet, 0.35, 0.3);
   await expect(card.getByRole('heading', { name: 'Chercher autour d’ici ?' })).toBeVisible();
-  // Entrée (« Confirmer » focused): the focus then on the card itself — no « Créer un endroit ici » here, and never on
+  // Entrée (« Confirmer » focused): the focus then on the card itself — no « Créer un lieu ici » here, and never on
   // « Retirer le repère » (Entrée again would take the reference just set).
   await expect(card.getByRole('button', { name: 'Confirmer' })).toBeFocused();
   await page.keyboard.press('Enter');

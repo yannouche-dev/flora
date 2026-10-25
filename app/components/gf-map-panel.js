@@ -188,7 +188,7 @@ export class GfMapPanel extends LitElement {
                 style=${l.swatch === 'obs' || l.swatch === 'outline' ? '' : `--c:${l.swatch}`}></i>` : nothing}${l.text}</span>`)}
             </div>` : nothing}
             ${this.legend ? html`<div class="legend">
-              <span><i class="square"></i>Endroit</span>
+              <span><i class="square"></i>Lieu</span>
               <span><i class="round"></i>Plante (en zoomant)</span>
               <span><i class="round" style="--c:${PIN_COLORS.rare}"></i>Rare</span>
               <span><i class="round" style="--c:${PIN_COLORS.moyen}"></i>Moyen</span>

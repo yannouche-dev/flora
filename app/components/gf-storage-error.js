@@ -30,7 +30,7 @@ import { askStyles } from './ui-kit.js';
 const ADVICE = {
   busy: {
     title: 'Le stockage de GeoFlora ne s’ouvre pas sur cet appareil.',
-    text: 'Le navigateur n’arrive pas à ouvrir la base locale où sont gardées la flore, vos collections et vos notes. GeoFlora n’a rien effacé.',
+    text: 'Le navigateur n’arrive pas à ouvrir la base locale où sont gardées la flore, vos plantes et vos notes. GeoFlora n’a rien effacé.',
     tries: ['fermez les autres onglets et fenêtres de GeoFlora, et l’application installée, puis Réessayer ;',
       'fermez complètement le navigateur et rouvrez-le (ou redémarrez l’appareil) ;',
       'vérifiez qu’il reste de la place sur l’appareil.'],
@@ -207,15 +207,15 @@ export class GfStorageError extends LitElement {
         <ul id="repair-what">
           ${summary ? html`<li>Reviennent de la copie de secours de cet appareil, du ${when(summary.savedAt)} : ${backupContents(summary)}.
             Ce qui aurait été modifié après cette date ne reviendrait pas.</li>`
-          : html`<li class="lost">Aucune copie de secours sur cet appareil : vos favoris, collections, lieux et notes de fiche, s’il y en a,
+          : html`<li class="lost">Aucune copie de secours sur cet appareil : vos favoris, listes, lieux et notes de fiche, s’il y en a,
             seraient perdus.${exported ? ` Votre dernier export date du ${when(exported)} : après la réparation, importez ce fichier avec ${IMPORT_AT}.` : ''}
-            ${hasSpots() ? 'Cet appareil a déjà eu des collections : redémarrez d’abord le navigateur, la base s’ouvrira peut-être de nouveau.' : ''}</li>`}
+            ${hasSpots() ? 'Cet appareil a déjà eu des listes ou des lieux : redémarrez d’abord le navigateur, la base s’ouvrira peut-être de nouveau.' : ''}</li>`}
           <li>Téléchargées de nouveau : la flore (une connexion est nécessaire) et les réponses des services en ligne gardées sur cet appareil,
             redemandées quand vous en aurez besoin.</li>
           <li>Restent : vos réglages, vos modes et mises en page, les activités en cours, les images et les cartes déjà vues.</li>
         </ul>`;
       buttons = html`${download}<button type="button" autofocus @click=${close}>Annuler</button>
-        <button class="danger" type="button" @click=${this.#repair}>${summary ? 'Réparer le stockage' : 'Réparer et perdre mes collections et notes'}</button>`;
+        <button class="danger" type="button" @click=${this.#repair}>${summary ? 'Réparer le stockage' : 'Réparer et perdre mes plantes et mes notes'}</button>`;
     }
     // What comes back and what is lost is part of the question (aria-describedby), not only what follows it.
     return html`<dialog class="ask" aria-labelledby="repair-title" aria-describedby="repair-text repair-what"

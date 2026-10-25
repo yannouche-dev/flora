@@ -368,7 +368,7 @@ export class GfSpotEditor extends LitElement {
   #base = null;
 
   #goneText() {
-    return `${this.#isPlace ? 'Cet endroit a été supprimé' : 'Cette collection a été supprimée'} entre-temps (dans un autre onglet ?) : vos dernières modifications n’ont pas été enregistrées.`;
+    return `${this.#isPlace ? 'Ce lieu a été supprimé' : 'Cette liste a été supprimée'} entre-temps (dans un autre onglet ?) : vos dernières modifications n’ont pas été enregistrées.`;
   }
 
   /**
@@ -515,9 +515,9 @@ export class GfSpotEditor extends LitElement {
       else this._picker = true;
       this._place = list;
       this._manual = true;
-      document.title = 'Nouvelle collection — GeoFlora';
+      document.title = 'Nouvelle liste — GeoFlora';
     } else {
-      // A point picked on the map ("Créer un endroit ici") wins over the GPS. A new place noted here (« Noter
+      // A point picked on the map (« Créer un lieu ici ») wins over the GPS. A new place noted here (« Noter
       // ici », « Nouveau lieu »: the user's gesture) asks for the position; any other place only shows it once granted.
       if (!this.at) this.#geo.start();
       const fix = this.at ? null : this.#geo.state.fix;
@@ -620,7 +620,7 @@ export class GfSpotEditor extends LitElement {
   }
 
   #removeLocation() {
-    if (!this._place || !confirm('Retirer la position ? L’endroit redevient une simple collection de plantes.')) return;
+    if (!this._place || !confirm('Retirer la position ? Le lieu redevient une simple liste de plantes.')) return;
     this._place = withLocation(this._place, null);
     this._editPos = false;
     this.#changed();
@@ -737,7 +737,7 @@ export class GfSpotEditor extends LitElement {
           target = withEntry(target, /** @type {any} */ (lastEntry(target)).id, { abundance: e.abundance, rating: e.rating, notes: e.notes, harvests: e.harvests });
         }
         return target;
-      }).catch(error => { throw error.name === 'GoneError' ? new Error('Collection introuvable.', { cause: error }) : error; });
+      }).catch(error => { throw error.name === 'GoneError' ? new Error('Liste ou lieu introuvable.', { cause: error }) : error; });
       if (this.#persisted && this.#createdHere) await deletePlace(draft.id);
       this.#persisted = false;
       // In place of this draft: Back does not return to it.
@@ -791,7 +791,7 @@ export class GfSpotEditor extends LitElement {
   async #delete() {
     if (!this._place || this._place.properties.kind === 'favorites') return;
     const n = this._place.properties.plants.length;
-    const what = this.#isPlace ? 'cet endroit' : 'cette collection';
+    const what = this.#isPlace ? 'ce lieu' : 'cette liste';
     if (!confirm(`Supprimer ${what}${n ? ` (${plantCount(n)})` : ''}${this.#isPlace ? ', avec le journal de récolte' : ''} ?`)) return;
     clearTimeout(this.#saveTimer);
     this.#dirty = false;
@@ -843,12 +843,12 @@ export class GfSpotEditor extends LitElement {
   #gpsStatus() {
     const { fix, error } = this.#geo.state;
     if (this._manual) {
-      return html`<div class="gps card"><span class="dot good"></span> Point de l’endroit ${this.#isNew ? 'placé à la main' : 'enregistré'}
+      return html`<div class="gps card"><span class="dot good"></span> Point du lieu ${this.#isNew ? 'placé à la main' : 'enregistré'}
         ${fix && this.#editing ? html`<button type="button" @click=${this.#useGps}>Utiliser le GPS</button>` : nothing}
         ${this.#whereLine()}
         ${this.#gesture(this.#editing
-          ? 'Le carré vert est le point de l’endroit, les ronds sont les plantes : faites-les glisser pour les ajuster.'
-          : html`Le carré vert est le point de l’endroit, les ronds sont les plantes. ${icon('pencil')} sur la carte pour les déplacer.`)}</div>`;
+          ? 'Le carré vert est le point du lieu, les ronds sont les plantes : faites-les glisser pour les ajuster.'
+          : html`Le carré vert est le point du lieu, les ronds sont les plantes. ${icon('pencil')} sur la carte pour les déplacer.`)}</div>`;
     }
     if (!fix) {
       return html`<div class="gps card"><span class="dot ${error ? 'none' : ''}"></span>
@@ -890,7 +890,7 @@ export class GfSpotEditor extends LitElement {
     const away = own && place.geometry ? distance(own, place.geometry.coordinates) : 0;
     const fix = this.#geo.state.fix;
     return html`<div class="plant-pos">
-      <span>${icon('geo-alt-fill')} ${away < 3 ? 'Au point de l’endroit' : `À ${formatDistance(away)} du point de l’endroit`}${entry.accuracy ? ` · ± ${entry.accuracy} m` : ''}</span>
+      <span>${icon('geo-alt-fill')} ${away < 3 ? 'Au point du lieu' : `À ${formatDistance(away)} du point du lieu`}${entry.accuracy ? ` · ± ${entry.accuracy} m` : ''}</span>
       <button type="button" @click=${() => this.#showOnMap(own)}>Voir sur la carte</button>
       ${this.#editing ? html`
         <button type="button" ?disabled=${!fix} @click=${() => this.#plantHere(entry.id)}>Ici (GPS)</button>
@@ -1017,7 +1017,7 @@ export class GfSpotEditor extends LitElement {
 
             ${this.#isPlace ? this.#plantPosition(entry) : nothing}
             ${id ? html`<a class="button" href=${href.plant(id)}>Fiche de la plante</a>` : nothing}
-            <button class="link danger" type="button" @click=${() => this.#removePlant(key)}>${this.#isPlace ? (nth ? 'Retirer cette occurrence de l’endroit' : 'Retirer cette plante de l’endroit') : 'Retirer de la collection'}</button>
+            <button class="link danger" type="button" @click=${() => this.#removePlant(key)}>${this.#isPlace ? (nth ? `Retirer le n° ${nth} du lieu` : 'Retirer cette plante du lieu') : 'Retirer de la liste'}</button>
           </div>` : nothing}
       </li>`;
   }
@@ -1034,7 +1034,7 @@ export class GfSpotEditor extends LitElement {
         </label>
         <gf-plant-pick-list .query=${this._pickerQuery}
           .taken=${this.#isPlace ? new Set() : new Set((place?.properties.plants || []).map(e => e.plantId))}
-          taken-label="déjà dans la collection"
+          taken-label="déjà dans la liste"
           @plant-pick=${e => this.#pickPlant(e.detail.plant)}></gf-plant-pick-list>
       </div>`;
   }
@@ -1051,11 +1051,11 @@ export class GfSpotEditor extends LitElement {
     const plants = this._place?.properties.plants.length || 0;
     // An existing collection being renamed: only warn about a twin name, never merge on its behalf.
     if (!this.#createdHere) {
-      return exact ? html`<p class="name-hint">Une autre collection s’appelle déjà « ${exact.name} ».</p>` : nothing;
+      return exact ? html`<p class="name-hint">Une autre liste ou un autre lieu s’appelle déjà « ${exact.name} ».</p>` : nothing;
     }
     return html`
-      <div class="name-suggest" role="group" aria-label="Collections existantes">
-        <span>${plants ? 'Ajouter plutôt à une collection existante :' : 'Ouvrir une collection existante :'}</span>
+      <div class="name-suggest" role="group" aria-label="Listes et lieux existants">
+        <span>${plants ? 'Ajouter plutôt à une liste ou un lieu existant :' : 'Ouvrir une liste ou un lieu existant :'}</span>
         ${matches.map(c => html`
           <button class="chip" type="button" @click=${() => this.#mergeInto(c.id)}>${kindIcon(c.kind)} ${c.name}
             <small>${plantCount(c.count)}</small></button>`)}
@@ -1078,7 +1078,7 @@ export class GfSpotEditor extends LitElement {
     if (place === undefined) return html`<form><p>Chargement…</p></form>`;
     if (place === null) {
       return html`<form>
-        <p>${this._error || 'Cette collection n’existe plus.'}</p>
+        <p>${this._error || 'Cette liste ou ce lieu n’existe plus.'}</p>
         ${this._error ? html`<button type="button" @click=${() => this.#load()}>Réessayer</button>` : nothing}
         <a href=${href.collections()}>Voir Mes plantes</a>
       </form>`;
@@ -1116,21 +1116,21 @@ export class GfSpotEditor extends LitElement {
 
         ${isFavorites
           ? html`<div class="title"><span class="kind" aria-hidden="true">${icon('heart-fill')}</span><h1>Favoris</h1></div>`
-          : html`<label class="field">${isPlace ? 'Nom de l’endroit' : 'Nom de la collection'}
+          : html`<label class="field">${isPlace ? 'Nom du lieu' : 'Nom de la liste'}
               <input type="text" .value=${p.name} placeholder=${isPlace ? 'ex. Lisière nord du bois' : 'ex. Plantes mellifères'}
                 @input=${e => this.#patch({ name: e.target.value })} />
             </label>
             ${this.#nameSuggestions()}`}
 
         ${!place.geometry && !isFavorites ? html`
-          <button class="add add-location" type="button" @click=${this.#addLocation}>${icon('geo-alt-fill')} Ajouter des coordonnées GPS (la collection devient un endroit)</button>` : nothing}
+          <button class="add add-location" type="button" @click=${this.#addLocation}>${icon('geo-alt-fill')} Ajouter des coordonnées GPS (la liste devient un lieu)</button>` : nothing}
 
         <h2>Plantes <span class="count">${p.plants.length}</span></h2>
         ${p.plants.length ? html`<ul class="entries">${repeat(p.plants, e => e.id, entry => this.#entry(entry))}</ul>` : nothing}
         ${this.#pickerView()}
 
         ${isFavorites ? nothing : html`<label class="field">${isPlace ? 'Notes sur le lieu' : 'Notes'}
-          <textarea .value=${p.notes} placeholder=${isPlace ? 'Accès, stationnement, propriétaire, exposition…' : 'À quoi sert cette collection…'}
+          <textarea .value=${p.notes} placeholder=${isPlace ? 'Accès, stationnement, propriétaire, exposition…' : 'À quoi sert cette liste…'}
             @input=${e => this.#patch({ notes: e.target.value })}></textarea>
         </label>`}
 

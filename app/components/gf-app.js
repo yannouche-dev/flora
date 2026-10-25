@@ -357,7 +357,7 @@ export class GfApp extends LitElement {
     if (storageError && customElements.get('gf-storage-error')) return html`<gf-storage-error .problem=${storageError}></gf-storage-error>`;
     if (storageError && !storageModuleFailed) loadStorageError().then(() => this.requestUpdate());
     return html`<div class="banner error" role=${storageError && !storageModuleFailed ? nothing : 'alert'}>${statusText}
-      ${restorePending() ? ' Vos collections et vos notes sont gardées dans la copie de secours : elles reviendront dès que la flore aura pu être téléchargée.' : ''}
+      ${restorePending() ? ' Vos plantes et vos notes sont gardées dans la copie de secours : elles reviendront dès que la flore aura pu être téléchargée.' : ''}
       <button class="link" type="button" @click=${() => location.reload()}>Recharger</button></div>`;
   }
 
@@ -370,7 +370,7 @@ export class GfApp extends LitElement {
     const close = html`<button class="link" type="button" @click=${() => store.set({ restore: { ...r, closed: true } })}>Fermer</button>`;
     if (!r.done) {
       return html`<div class="banner error">
-        <span role="alert">Vos collections et vos notes n’ont pas pu être remises depuis la copie de secours de cet appareil. Elles y restent,
+        <span role="alert">Vos plantes et vos notes n’ont pas pu être remises depuis la copie de secours de cet appareil. Elles y restent,
           gardées telles quelles : rechargez la page pour réessayer.</span>
         <button class="link" type="button" @click=${() => location.reload()}>Recharger</button>
         ${readBackup() ? html`<button class="link" type="button" @click=${() => downloadBackup()}>Télécharger la copie de secours</button>` : nothing}

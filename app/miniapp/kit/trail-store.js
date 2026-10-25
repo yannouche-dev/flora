@@ -27,13 +27,13 @@ export const keptWalks = () => [...(/** @type {string[]} */ (readJSON(LIST, []))
 export const NAMED = 'Mon parcours botanique';
 
 /**
- * « 12 observations · 9 plantes » (a plant met several times counts once among the plants).
+ * « 9 plantes, notées 12 fois » (a plant met several times counts once among the plants).
  * @param {{ properties: { plants: { plantId: number | null }[] } }} t
  */
 export function countOf(t) {
   const n = t.properties.plants.length, species = new Set(t.properties.plants.map(e => e.plantId)).size;
   if (!n) return 'Aucune plante encore';
-  return n > species ? `${n} observations · ${species} plante${species > 1 ? 's' : ''}` : `${n} plante${n > 1 ? 's' : ''}`;
+  return n > species ? `${species} plante${species > 1 ? 's' : ''}, notée${species > 1 ? 's' : ''} ${n} fois` : `${n} plante${n > 1 ? 's' : ''}`;
 }
 
 /**

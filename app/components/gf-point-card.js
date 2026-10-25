@@ -9,7 +9,7 @@ import { icon } from '../core/icons.js';
 
 /**
  * A point of the map (long press, search result): nearest address, altitude, coordinates (copy),
- * "Créer un endroit ici", directions. Event: close.
+ * « Créer un lieu ici », directions. Event: close.
  * Asking (`ask`: gf-map's question for the point — « Poser un repère ici ? », « Déplacer le lieu ici ? », « Chercher
  * autour d'ici ? »): the question, where the point is, « Confirmer » and « Annuler » only (events confirm, cancel).
  * The map's reference (`removable`): « Retirer le repère » too (event remove). Its keys are the map's (gf-map: Entrée
@@ -108,7 +108,7 @@ export class GfPointCard extends LitElement {
   #say(type) { this.dispatchEvent(new CustomEvent(type, { bubbles: true, composed: true })); }
 
   /**
-   * The focus on its first action: « Confirmer » while it asks, else « Créer un endroit ici » — else (no-create) the
+   * The focus on its first action: « Confirmer » while it asks, else « Créer un lieu ici » — else (no-create) the
    * card itself, read whole: never « Retirer le repère », which a second Entrée would take.
    */
   async focusAction() {
@@ -146,7 +146,7 @@ export class GfPointCard extends LitElement {
         <button class="link" type="button" @click=${this.#copy}>${this._copied ? html`Copié ${icon('check-lg')}` : 'Copier'}</button>
       </div>
       <div class="actions">
-        ${this.create ? html`<a class="primary small" href=${href.newSpot(this.plant ?? null, p)}>${icon('geo-alt-fill')} Créer un endroit ici</a>` : nothing}
+        ${this.create ? html`<a class="primary small" href=${href.newSpot(this.plant ?? null, p)}>${icon('geo-alt-fill')} Créer un lieu ici</a>` : nothing}
         <a class="button small" href=${directionsUrl({ geometry: { type: 'Point', coordinates: p } })} target="_blank" rel="noopener">Itinéraire</a>
         ${this.removable ? html`<button type="button" class="small remove" @click=${() => this.#say('remove')}>Retirer le repère</button>` : nothing}
       </div>

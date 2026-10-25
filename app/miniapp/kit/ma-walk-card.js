@@ -108,7 +108,7 @@ export class MaWalkCard extends LitElement {
     return html`<div class="picked">
       <gf-thumb plant-id=${e.plantId} size="30" round></gf-thumb>
       <b>${name}${entries.length > 1 ? html` <span class="n">× ${entries.length}</span>` : nothing}</b>
-      <button class="primary here" type="button" ?disabled=${!s.fix} title=${s.fix ? 'Une occurrence de plus, là où vous êtes' : 'Position introuvable'}
+      <button class="primary here" type="button" ?disabled=${!s.fix} title=${s.fix ? 'Notée une fois de plus, là où vous êtes' : 'Position introuvable'}
         aria-label=${'Ajouter ' + name + ' ici'} @click=${() => s.add({ id: e.plantId, scientificName: e.scientificName, vernacularName: e.vernacularName })}>${addPin}</button>
       <button class="icon-btn drop" type="button" aria-label=${'Retirer ' + name + which + ' du parcours'} title=${'Retirer du parcours' + which} @click=${() => s.remove(e.id)}>${icon('x-lg')}</button>
     </div>`;

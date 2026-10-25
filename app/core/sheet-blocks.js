@@ -31,7 +31,7 @@ export const BLOCKS = [
   { key: 'lookalikes', title: 'Plantes à confondre' },
   { key: 'uses', title: 'Usages et cuisine sauvage' },
   { key: 'taxonomy', title: 'Classification' },
-  { key: 'mine', title: 'Mes collections' },
+  { key: 'mine', title: 'Mes plantes' },
   { key: 'calendar', title: 'Calendrier' },
   { key: 'wikipedia', title: 'Wikipédia', module: 'wikipedia' },
   { key: 'descriptions', title: 'Descriptions', module: 'gbif' },
@@ -53,7 +53,7 @@ export const BLOCKS = [
 /** The parts of a block that can be moved and hidden inside it, in their default order. @type {Record<string, SubBlock[]>} */
 export const SUBS = {
   actions: [
-    { key: 'fav', title: 'Favori' }, { key: 'addTo', title: 'Ajouter à…' }, { key: 'addCurrent', title: 'Ajouter à la collection courante' },
+    { key: 'fav', title: 'Favori' }, { key: 'addTo', title: 'Ajouter à…' }, { key: 'addCurrent', title: 'Ajouter à la liste ou au lieu en cours' },
     { key: 'share', title: 'Partager' }, { key: 'map', title: 'Sur la Carte' }, { key: 'spot', title: 'Noter ici' }
   ],
   taxonomy: [

@@ -304,7 +304,7 @@ export class MaDeck extends LitElement {
       return html`<div class="deck-end">
         <p class="big">${icon('flower3')}</p>
         <p><b>Vous avez rencontré toutes les plantes du coin !</b></p>
-        <p class="muted">${matches ? `${matches} match${matches > 1 ? 's' : ''} dans votre herbier — à retrouver dans « Matchs ».` : 'Aucun coup de cœur ? Le prochain se cache peut-être un peu plus loin, derrière la haie.'}</p>
+        <p class="muted">${matches ? `${matches} match${matches > 1 ? 's' : ''} dans vos favoris — à retrouver dans « Matchs ».` : 'Aucun coup de cœur ? Le prochain se cache peut-être un peu plus loin, derrière la haie.'}</p>
         ${avoided ? html`<p class="avoided">${icon('exclamation-octagon-fill')}${avoided} plante${avoided > 1 ? 's' : ''} reconnue${avoided > 1 ? 's' : ''} à ne pas cueillir.</p>` : nothing}
         <div class="row">${next ? html`<button class="primary" type="button" @click=${() => s.widen(next)}>Chercher jusqu’à ${distLabel(next)}</button>` : nothing}
           ${c.passed.length || c.avoided?.length ? html`<button class="secondary" type="button" @click=${() => s.resetPassed()}>Revoir les plantes passées</button>` : nothing}</div>

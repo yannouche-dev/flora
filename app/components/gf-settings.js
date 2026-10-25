@@ -11,7 +11,7 @@ import { MODULES, setModule } from '../core/modules.js';
 import { CATEGORIES, blockCategory, categoryOf } from '../core/categories.js';
 import { icon, modeIcon } from '../core/icons.js';
 import { pressDock } from '../core/dock-drag.js';
-import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
+import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, listsAndPlaces, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
 import {
@@ -173,19 +173,19 @@ export class GfSettings extends LitElement {
       <details>
         <summary class="muted">Diagnostic du stockage</summary>
         <dl class="diag">
-          <dt>Base locale</dt><dd>version ${r.dbVersion ?? '?'} · ${r.collections} collection${r.collections > 1 ? 's' : ''}</dd>
+          <dt>Base locale</dt><dd>version ${r.dbVersion ?? '?'} · ${listsAndPlaces(r.collections)}</dd>
           <dt>Protégée</dt><dd>${r.persisted === null ? 'inconnu' : r.persisted ? 'oui' : 'non'}</dd>
           <dt>Espace utilisé</dt><dd>${mb(r.usage)} sur ${mb(r.quota)}</dd>
-          <dt>Copie de secours</dt><dd>${r.backupCount} collection${r.backupCount > 1 ? 's' : ''} · ${date(r.backupAt)}</dd>
+          <dt>Copie de secours</dt><dd>${listsAndPlaces(r.backupCount)} · ${date(r.backupAt)}</dd>
           <dt>Dernier export</dt><dd>${date(r.lastExport)}</dd>
-          <dt>Collections déjà créées ici</dt><dd>${r.markedHasSpots ? 'oui' : 'non'}</dd>
+          <dt>Listes ou lieux déjà créés ici</dt><dd>${r.markedHasSpots ? 'oui' : 'non'}</dd>
         </dl>
       </details>`;
   }
 
   async #export() {
     const { count, cancelled } = await exportGeoJSON();
-    if (!cancelled) this._spotMessage = `${count} lieu${count > 1 ? 'x' : ''} exporté${count > 1 ? 's' : ''}.`;
+    if (!cancelled) this._spotMessage = `${listsAndPlaces(count)} exporté${count > 1 ? 's' : ''}.`;
   }
 
   /** @param {Event} event */
@@ -251,7 +251,7 @@ export class GfSettings extends LitElement {
     try {
       const { url, count } = await transferLink({ personal: this._personal });
       const absolute = new URL(url, location.href).href;
-      const result = await share({ title: 'Mes plantes GeoFlora', text: `${count} collection${count > 1 ? 's' : ''} GeoFlora`, url });
+      const result = await share({ title: 'Mes plantes GeoFlora', text: `${listsAndPlaces(count)} GeoFlora`, url });
       this._transfer = (result === 'copied' ? 'Lien copié' : result === 'shared' ? 'Lien partagé' : result === 'cancelled' ? 'Partage annulé' : 'Lien prêt')
         + ` (${absolute.length.toLocaleString('fr-FR')} caractères). Ouvrez-le sur l’autre appareil puis touchez « Importer ».`
         + (absolute.length > GfSettings.LONG_LINK ? ' Lien long : certaines messageries le coupent, préférez le fichier.' : '');
@@ -596,7 +596,7 @@ export class GfSettings extends LitElement {
 
         <h2>Ma région</h2>
         <p class="muted">Pour savoir si une plante est protégée ou si sa cueillette est réglementée chez vous (statuts INPN).
-          Dans un endroit, c’est sa position GPS qui compte.</p>
+          Dans un lieu, c’est sa position GPS qui compte.</p>
         <div class="row">
           <select aria-label="Ma région" .value=${this._region || ''} @change=${e => this.#setRegion(e.target.value || null)}>
             <option value="">— Non précisée —</option>
@@ -612,7 +612,7 @@ export class GfSettings extends LitElement {
             @mode-change=${e => setMode(e.detail.mode || 'standard')}></gf-mode-switch>
           <strong>${modeLabel(this.#store.state.mode)}</strong>
         </p>
-        <p class="muted">Épuré : grandes photos et actions rapides (ajouter d’un geste à la collection courante). Standard : l’essentiel pour tous.
+        <p class="muted">Épuré : grandes photos et actions rapides (ajouter d’un geste à la liste ou au lieu en cours). Standard : l’essentiel pour tous.
           Scientifique : toutes les données, locales et distantes. La grille et la fiche plante ont aussi leur propre choix, qui revient au mode de l’application quand celui-ci change.</p>
         ${this.#modes()}
 
@@ -630,9 +630,9 @@ export class GfSettings extends LitElement {
 
         <h2>Mes plantes : favoris, listes et lieux</h2>
         <p class="muted">
-          ${this._spotCount} collection${this._spotCount > 1 ? 's' : ''} enregistrée${this._spotCount > 1 ? 's' : ''} sur cet appareil uniquement.
+          ${listsAndPlaces(this._spotCount)} enregistré${this._spotCount > 1 ? 's' : ''} sur cet appareil uniquement.
           ${(() => { const d = lastExportDate(); return d ? `Dernière sauvegarde : ${new Date(d).toLocaleDateString('fr-FR')}.` : 'Aucune sauvegarde pour l’instant.'; })()}
-          Exportez régulièrement : effacer les données du navigateur efface aussi vos collections.
+          Exportez régulièrement : effacer les données du navigateur efface aussi vos plantes.
         </p>
         <div class="row">
           <button class="primary" type="button" @click=${this.#export} ?disabled=${!this._spotCount}>Exporter (fichier GeoJSON)</button>
@@ -643,7 +643,7 @@ export class GfSettings extends LitElement {
         ${this._spotMessage ? html`<p class="muted" role="status">${this._spotMessage}</p>` : nothing}
 
         <h2>Transférer vers un autre appareil</h2>
-        <p class="muted">Un lien contient toutes vos collections (compressées, sans passer par un serveur). Ouvrez-le sur l’autre téléphone ou ordinateur : elles y sont ajoutées ou mises à jour. Gardé dans un e-mail ou une note, il sert aussi de sauvegarde.</p>
+        <p class="muted">Un lien contient toutes vos plantes (compressées, sans passer par un serveur). Ouvrez-le sur l’autre téléphone ou ordinateur : elles y sont ajoutées ou mises à jour. Gardé dans un e-mail ou une note, il sert aussi de sauvegarde.</p>
         <label class="switch">
           <input type="checkbox" .checked=${this._personal} @change=${e => { this._personal = e.target.checked; }} />
           <span>Inclure mes notes et journaux de récolte</span>

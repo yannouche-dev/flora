@@ -82,7 +82,7 @@ export class GfLegal extends LitElement {
 
   /** The answers of the online services kept on the device (some hold the coordinates searched), and their images and map tiles. */
   async #clearCache() {
-    if (!confirm('Effacer les réponses des services en ligne gardées sur cet appareil, avec les images et les cartes déjà vues ? Vos lieux, collections et réglages restent.')) return;
+    if (!confirm('Effacer les réponses des services en ligne gardées sur cet appareil, avec les images et les cartes déjà vues ? Vos favoris, listes, lieux et réglages restent.')) return;
     await db.clear('plantDetails').catch(() => {});
     forgetFailures();
     try {
@@ -114,7 +114,7 @@ export class GfLegal extends LitElement {
       <h2>Ce qui reste sur cet appareil</h2>
       <ul>
         <li>La flore (espèces, noms, statuts, données de toxicité), pour fonctionner hors ligne.</li>
-        <li>Vos lieux, collections, favoris, parcours, récoltes et notes, avec leur position GPS, et leur copie de secours. Ils ne quittent l’appareil que si vous les exportez ou les partagez (un lien de partage porte les données dans l’adresse après « # », que le serveur ne reçoit pas).</li>
+        <li>Vos lieux, listes, favoris, parcours, récoltes et notes, avec leur position GPS, et leur copie de secours. Ils ne quittent l’appareil que si vous les exportez ou les partagez (un lien de partage porte les données dans l’adresse après « # », que le serveur ne reçoit pas).</li>
         <li>Vos réglages : modes d’affichage, modules, mise en page des fiches, région, recherches récentes, jeton Trefle si vous en avez saisi un.</li>
         <li>Le dernier lieu de Découvrir (votre position, ou la commune choisie, dans Rencontres, la Cueillette prudente et la Mosaïque), pour continuer de là à la prochaine visite${kept ? '' : ' (aucun pour le moment)'}.</li>
         <li>Les réponses des services en ligne, de 7 jours à un an pour les altitudes (certaines portent les coordonnées cherchées), et les images et cartes déjà vues, pour les revoir hors ligne.</li>
@@ -124,7 +124,7 @@ export class GfLegal extends LitElement {
         <button class="secondary" type="button" @click=${this.#clearCache}>${icon('trash3')} Effacer le cache des services en ligne</button>
       </div>
       ${this._done ? html`<p class="done" role="status">${this._done}</p>` : nothing}
-      <p>Pour tout effacer, y compris vos lieux : effacez les données du site dans les réglages du navigateur (exportez d’abord vos lieux depuis <a href=${href.settings()}>Réglages</a> pour les garder).</p>
+      <p>Pour tout effacer, y compris vos plantes : effacez les données du site dans les réglages du navigateur (exportez d’abord vos plantes depuis <a href=${href.settings()}>Réglages</a> pour les garder).</p>
 
       <h2>Votre position</h2>
       <p>Le navigateur ne demande votre position qu’après un geste de votre part : « Autour de moi », « Me localiser », « Commencer ici », « Noter ici », « Près d’ici »… Une fois l’autorisation accordée, les cartes et les listes de lieux s’en servent aussi (distances, votre point sur la carte) ; vous pouvez la retirer à tout moment dans les réglages du navigateur. Avant chaque envoi, l’écran dit à quel service elle part. Elle n’est jamais envoyée à l’éditeur.</p>

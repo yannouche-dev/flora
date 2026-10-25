@@ -46,7 +46,7 @@ export const storageKey = (id, part) => config.storageKeys.appPrefix + id + '.' 
 export function replayItems(m, made) {
   const s = (/** @type {number} */ n) => n > 1 ? 's' : '';
   const n = made.favorites.length;
-  const label = m.owns.made?.label ?? 'la collection';
+  const label = m.owns.made?.label ?? 'la liste';
   const count = (/** @type {[string, string]} */ [one, many], /** @type {number} */ k) => (k > 1 ? many : one).replace('{n}', String(k));
   return {
     gone: [

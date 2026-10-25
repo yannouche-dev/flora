@@ -16,7 +16,7 @@ const entry = (plantId, at, coordinates) => ({ id: 'e' + plantId + at, plantId, 
 test('les plantes du parcours : chacune une fois, la dernière rencontrée d’abord ; comptées', () => {
   const t = walk([entry(1, '2026-10-13T09:10:00.000Z', [2.351, 48.85]), entry(2, '2026-10-13T09:20:00.000Z', [2.352, 48.85]), entry(1, '2026-10-13T09:30:00.000Z', [2.353, 48.85])]);
   assert.deepEqual(groupsOf(t).map(g => [g.plantId, g.entries.length]), [[1, 2], [2, 1]]);
-  assert.equal(countOf(t), '3 observations · 2 plantes');
+  assert.equal(countOf(t), '2 plantes, notées 3 fois');
   assert.equal(countOf(walk([entry(1, '2026-10-13T09:10:00.000Z', [2.351, 48.85])])), '1 plante');
   assert.equal(countOf(walk([])), 'Aucune plante encore');
   assert.equal(shortName('Mon parcours botanique en forêt de Fontainebleau'), 'En forêt de Fontainebleau');

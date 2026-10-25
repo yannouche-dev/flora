@@ -479,7 +479,7 @@ export async function setInCollection(collectionId, plant, on) {
     return await updatePlace(collectionId, current =>
       Boolean(findEntry(current, plant.id)) === on ? current : on ? withPlant(current, plant) : withoutPlant(current, plant.id));
   } catch (error) {
-    if (error instanceof GoneError) throw new Error('Collection introuvable.', { cause: error });
+    if (error instanceof GoneError) throw new Error('Liste ou lieu introuvable.', { cause: error });
     throw error;
   }
 }
@@ -604,6 +604,9 @@ export function placeTitle(place) {
 
 /** @param {number} n */
 export const plantCount = n => `${n} plante${n > 1 ? 's' : ''}`;
+
+/** « 1 liste ou lieu », « 3 listes et lieux ». @param {number} n */
+export const listsAndPlaces = n => n > 1 ? `${n} listes et lieux` : `${n} liste ou lieu`;
 
 // The great-circle distance in metres, and a distance said (« 1,5 km »): core/distance.js's, offered here too (screens
 // import them from this module; `distance` is read here as well).
@@ -773,12 +776,12 @@ export function backupSummary() {
 }
 
 /**
- * What a backup copy holds, in words: « vos favoris (2 plantes), 1 collection, 3 lieux et 1 note de fiche » — the
+ * What a backup copy holds, in words: « vos favoris (2 plantes), 1 liste, 3 lieux et 1 note de fiche » — the
  * same before a repair (its dialog) and after it (what came back). @param {BackupSummary} s
  */
 export function backupContents(s) {
   const count = (/** @type {number} */ n, /** @type {string} */ one, many = one + 's') => `${n} ${n > 1 ? many : one}`;
-  const items = [s.favorites ? `vos favoris (${plantCount(s.favorites)})` : '', s.lists ? count(s.lists, 'collection') : '',
+  const items = [s.favorites ? `vos favoris (${plantCount(s.favorites)})` : '', s.lists ? count(s.lists, 'liste') : '',
     s.places ? count(s.places, 'lieu', 'lieux') : '', s.notes ? count(s.notes, 'note de fiche', 'notes de fiche') : ''].filter(Boolean);
   return items.length > 1 ? `${items.slice(0, -1).join(', ')} et ${items.at(-1)}` : items[0] ?? '';
 }

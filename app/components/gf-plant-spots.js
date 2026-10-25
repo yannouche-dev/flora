@@ -116,7 +116,7 @@ export class GfPlantSpots extends LitElement {
     const lists = this._lists;
     return html`
       <div class="head">
-        ${this.notitle ? nothing : html`<h2 class="kicker" style="margin:0">Dans mes collections${spots.length + lists.length ? ` (${spots.length + lists.length})` : ''}</h2>`}
+        ${this.notitle ? nothing : html`<h2 class="kicker" style="margin:0">Dans mes listes et lieux${spots.length + lists.length ? ` (${spots.length + lists.length})` : ''}</h2>`}
         <a class="primary add" href=${href.newSpot(this.plantId)}>${icon('geo-alt-fill')} Ajouter un lieu</a>
       </div>
       ${lists.length ? html`<div class="chips">${lists.map(c => html`

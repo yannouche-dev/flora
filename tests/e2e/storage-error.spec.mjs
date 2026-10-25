@@ -77,7 +77,7 @@ async function seedBackup(context) {
 }
 
 /** What the repair puts back, in the dialog's words and in the banner's after it. */
-const CONTENTS = 'vos favoris (1 plante), 1 collection, 1 lieu et 1 note de fiche';
+const CONTENTS = 'vos favoris (1 plante), 1 liste, 1 lieu et 1 note de fiche';
 
 /** @param {import('@playwright/test').Page} page @param {string} key */
 const counted = (page, key) => page.evaluate(k => Number(sessionStorage.getItem(k) || 0), key);
@@ -186,17 +186,17 @@ test('la restauration après la réparation échoue : dit en français, la copie
   await expect(page).toHaveURL(/#\/collections$/);
   await app.ready();
   const failed = page.locator('gf-app .banner.error').filter({ hasText: 'copie de secours' });
-  await expect(failed.getByRole('alert')).toHaveText(/^Vos collections et vos notes n’ont pas pu être remises depuis la copie de secours de cet appareil\. Elles y restent,\s+gardées telles quelles : rechargez la page pour réessayer\.$/);
+  await expect(failed.getByRole('alert')).toHaveText(/^Vos plantes et vos notes n’ont pas pu être remises depuis la copie de secours de cet appareil\. Elles y restent,\s+gardées telles quelles : rechargez la page pour réessayer\.$/);
   // The browser's words folded away, never in the sentence.
   await expect(failed.locator('details')).toContainText('UnknownError — The operation failed');
   await expect(failed.locator('details')).not.toHaveAttribute('open', '');
   // Mes plantes says the same, not that they are on their way; dismissed, the banner leaves it there.
   const mine = page.locator('gf-collections');
-  await expect(mine).toContainText('Vos collections et vos notes n’ont pas pu être remises');
+  await expect(mine).toContainText('Vos plantes et vos notes n’ont pas pu être remises');
   await expect(mine).not.toContainText('reviennent de la copie de secours');
   await failed.getByRole('button', { name: 'Fermer' }).click();
   await expect(failed).toHaveCount(0);
-  await expect(mine).toContainText('Vos collections et vos notes n’ont pas pu être remises');
+  await expect(mine).toContainText('Vos plantes et vos notes n’ont pas pu être remises');
   expect(await page.evaluate(() => Boolean(localStorage.getItem('geoflora.restorePending')))).toBe(true);
   // The store mended: reloaded from Mes plantes, everything comes back.
   await page.evaluate(() => sessionStorage.removeItem('idb.putFails'));

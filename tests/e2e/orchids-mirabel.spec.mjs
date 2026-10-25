@@ -327,7 +327,7 @@ test('le rayon d’arrêt en arrêt ; un appui long recentre le cercle, « Reven
   else await page.mouse.click(x, y, { button: 'right' });
   const card = map.locator('gf-point-card');
   await expect(card.getByRole('heading', { name: 'Chercher autour d’ici ?' })).toBeVisible();
-  await expect(card.getByRole('link', { name: 'Créer un endroit ici' })).toHaveCount(0);
+  await expect(card.getByRole('link', { name: 'Créer un lieu ici' })).toHaveCount(0);
   await page.keyboard.press('Enter');
   await expect(mapSaid(map)).toContainText('Repère posé : la zone s’y centre.');
   await expect(screen(page).locator('.where')).toContainText('Autour du point choisi sur la carte');

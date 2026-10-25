@@ -569,7 +569,7 @@ export class MaAroundList extends LitElement {
       <p class="title" id="match-title">C’est un match !</p>
       ${photo ? html`<img src=${photo} alt="" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} />` : nothing}
       ${photo && c.credit ? html`<p class="credit">Photo : ${creditText(c.credit)}</p>` : nothing}
-      <p id="match-text">Coup de cœur pour <b>${name}</b> ! Direction votre herbier (♥ favoris) — et ce n’est que le début de l’exploration.</p>
+      <p id="match-text">Coup de cœur pour <b>${name}</b> ! Direction vos favoris (♥) — et ce n’est que le début de l’exploration.</p>
       <div class="row">
         <button class="primary" type="button" autofocus @click=${(/** @type {any} */ e) => e.currentTarget.closest('dialog')?.close()}>Découvrir cette plante</button>
       </div>

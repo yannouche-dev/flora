@@ -290,7 +290,7 @@ const movesCount = (/** @type {Moves} */ m) => (m.pin ? 1 : 0) + m.places.size +
  *    opacity), kept by its owner; null (the default): the maps' common look, followed as it changes (here, on another
  *    map, in Réglages, in another tab). Each field given is its own, the others the common ones. Its panel ▦ changes the common look, or —
  *    the map having its own — its own, told by `look-change`.
- *  - no-create: the point card (long press) has no "Créer un endroit ici"
+ *  - no-create: the point card (long press) has no « Créer un lieu ici »
  *  - editable: the ✎ control (always shown) switches position editing on. While `editing`, every marker
  *    (places, plants, the pin) is dragged freely; a plant dropped emits positions-save with that one move at once, for
  *    the caller to store; a place dropped (or placed by a long press: the pin, the selected place) asks first
@@ -300,7 +300,7 @@ const movesCount = (/** @type {Moves} */ m) => (m.pin ? 1 : 0) + m.places.size +
  * ici ? », « Déplacer le lieu ici ? », « Chercher autour d’ici ? » — « Confirmer » (Entrée) or « Annuler » (Échap: a
  * marker dragged there goes back); said by its live region, nothing changed before the answer. Confirmed: what it is
  * for (the place moved and saved, the reference's card open: point-info), and the point is the map's reference
- * (`reference-change`), its card offering « Créer un endroit ici » next, and « Retirer le repère ». An address picked
+ * (`reference-change`), its card offering « Créer un lieu ici » next, and « Retirer le repère ». An address picked
  * in its search is the reference at once (a choice already made). Plants dropped ask nothing.
  * Events: spot-select {id}, plant-select {placeId, entryId, plantId},
  *         point-info {coordinates, label?} (a point confirmed — long press —, a place picked in its search, the
@@ -410,7 +410,7 @@ export class GfMap extends LitElement {
     tiles: { attribute: false },
     /** Points drawn as small circles: [{ coordinates, title, url?, kind? }] (kind 'start': a walk's start, dark). Never an observation: those are the plants' markers (area, highlight, cluster). */
     points: { attribute: false },
-    /** The point card's « Créer un endroit ici » makes a place with this plant already in it. */
+    /** The point card's « Créer un lieu ici » makes a place with this plant already in it. */
     createPlant: { type: Number, attribute: 'create-plant' },
     /** How far out the map can go (5: France; 1: the world). */
     minZoom: { type: Number, attribute: 'min-zoom' },
@@ -2652,7 +2652,7 @@ export class GfMap extends LitElement {
   // ── A point proposed, the map's reference ──────────────────────────────────────────────────────
 
   /**
-   * The point there as the map's reference, its card open — address, altitude, coordinates, « Créer un endroit ici »,
+   * The point there as the map's reference, its card open — address, altitude, coordinates, « Créer un lieu ici »,
    * « Itinéraire », « Retirer le repère »: a long press confirmed, an address picked in its search. `reference-change`,
    * then `point-info` {coordinates, label} (the Carte, a free layout's zone, follow it).
    * @param {[number, number]} point @param {string} [label]
@@ -2756,7 +2756,7 @@ export class GfMap extends LitElement {
     }
     this.showPoint(point);
     this.announce(CONFIRMED[kind], { force: true });
-    // Its next action: « Créer un endroit ici » (where there is none, the card itself).
+    // Its next action: « Créer un lieu ici » (where there is none, the card itself).
     this.#pointCard?.focusAction();
   }
 

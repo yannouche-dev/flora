@@ -73,7 +73,7 @@ test('lien de transfert : l’autre appareil importe tout, notes et récoltes co
   expect(await dump(other.page)).toEqual(before);
 });
 
-test('lien de partage d’un lieu : aperçu puis « Enregistrer dans mes plantes »', async ({ app, page, newDevice }) => {
+test('lien de partage d’un lieu : aperçu puis « Enregistrer dans Mes plantes »', async ({ app, page, newDevice }) => {
   await app.open('#/');
   await seed(page);
   const link = await page.evaluate(async () => {
@@ -85,7 +85,7 @@ test('lien de partage d’un lieu : aperçu puis « Enregistrer dans mes plantes
   const other = await newDevice();
   await other.app.open(link);
   await expect(other.page.locator('gf-shared h1')).toContainText('Lisière nord');
-  await other.page.locator('gf-shared').getByRole('button', { name: 'Enregistrer dans mes plantes' }).click();
+  await other.page.locator('gf-shared').getByRole('button', { name: 'Enregistrer dans Mes plantes' }).click();
   await expect.poll(async () => (await dump(other.page)).map((/** @type {any} */ c) => [c.name, c.kind, c.at, c.plants.map((/** @type {any} */ e) => e[0])]))
     .toEqual([['Lisière nord', 'place', [4.8357, 45.7641], [plantId('Allium ursinum'), plantId('Urtica dioica')]]]);
 });

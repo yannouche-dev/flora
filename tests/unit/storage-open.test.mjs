@@ -245,7 +245,7 @@ test('réparation : la copie de secours, gardée telle quelle jusqu’à sa rest
   // What came back is said as the repair's dialog said what would: the same counts, the same words.
   const restored = await C.restoreAfterRepair();
   assert.deepEqual({ ...restored, savedAt: '' }, { savedAt: '', favorites: 1, lists: 1, places: 1, notes: 1 });
-  assert.equal(C.backupContents(/** @type {any} */ (restored)), 'vos favoris (1 plante), 1 collection, 1 lieu et 1 note de fiche');
+  assert.equal(C.backupContents(/** @type {any} */ (restored)), 'vos favoris (1 plante), 1 liste, 1 lieu et 1 note de fiche');
   const all = await C.listCollections();
   assert.deepEqual(all.map(c => c.properties.name).sort(), ['Bois', 'Comestibles', 'Favoris']);
   assert.deepEqual((await C.getPlace(C.FAVORITES_ID))?.properties.plantIds.sort(), [1, 4], 'le ♥ d’entre-temps gardé');
@@ -308,8 +308,8 @@ test('base vidée au lancement (faite à cette ouverture, une copie de secours p
 
 test('copie de secours : ce qu’elle tient, dit avec les mots du dialogue de réparation', () => {
   assert.equal(C.backupContents({ savedAt: '', favorites: 1, lists: 0, places: 0, notes: 0 }), 'vos favoris (1 plante)');
-  assert.equal(C.backupContents({ savedAt: '', favorites: 0, lists: 2, places: 0, notes: 3 }), '2 collections et 3 notes de fiche');
-  assert.equal(C.backupContents({ savedAt: '', favorites: 4, lists: 1, places: 2, notes: 0 }), 'vos favoris (4 plantes), 1 collection et 2 lieux');
+  assert.equal(C.backupContents({ savedAt: '', favorites: 0, lists: 2, places: 0, notes: 3 }), '2 listes et 3 notes de fiche');
+  assert.equal(C.backupContents({ savedAt: '', favorites: 4, lists: 1, places: 2, notes: 0 }), 'vos favoris (4 plantes), 1 liste et 2 lieux');
 });
 
 test('copie de secours : aucune, ou vide — rien à annoncer', () => {

@@ -300,7 +300,7 @@ export const COMPONENTS = [
   },
   {
     id: 'filters', title: 'Filtres', icon: 'funnel', aliases: ['filtres', 'facettes'],
-    about: 'Les filtres de la recherche seuls : familles, genres, statuts, protection, photo, nom français, mes plantes.',
+    about: 'Les filtres de la recherche seuls : familles, genres, statuts, protection, photo, nom français, Mes plantes.',
     params: {}, reads: ['query', 'results'], writes: ['query'], min: { w: 220, h: 160 }
   },
   {

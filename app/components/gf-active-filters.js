@@ -10,7 +10,7 @@ import { icon } from '../core/icons.js';
 /** Each filter value's name, as words (the chip's, and what its button says it removes). */
 const NAMES = {
   mine: (/** @type {string} */ v) => v === 'place' ? 'Dans un lieu' : v === 'favorites' ? 'Favoris'
-    : store.state.collections.find(c => c.id === v)?.name || 'Collection',
+    : store.state.collections.find(c => c.id === v)?.name || 'Liste',
   status: (/** @type {string} */ v) => STATUS_SHORT[v] || v,
   family: (/** @type {string} */ v) => v,
   genus: (/** @type {string} */ v) => v,
