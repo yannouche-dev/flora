@@ -10,7 +10,7 @@
 import { readJSON, writeJSON } from './prefs.js';
 import { onStorage } from './sync.js';
 import { config } from '../config.js';
-import { OVERLAYS } from './map-layers.js';
+import { OVERLAYS, catalogRowOf } from './map-layers.js';
 
 export { OVERLAYS };
 
@@ -76,3 +76,10 @@ export function builtinKeyOf(id) {
  * (core/map-settings.js: the common one under overlayOpacity, a map's own with its owner).
  */
 export const DEFAULT_OPACITY = 0.8;
+
+/**
+ * This overlay's opacity unless chosen: the usual one, or its own for a layer of the panel's themes that has one
+ * (core/map-layers.js CATALOG_ROWS: the shading, the photos seen through it) — whichever adds it (the panel, the
+ * catalogue, a free layout's layers=), on every map, 2D and 3D; never written down (a look, opac=). @param {string} key
+ */
+export const defaultOpacity = key => (key.startsWith(IGN_PREFIX) ? catalogRowOf(key.slice(IGN_PREFIX.length))?.opacity : undefined) ?? DEFAULT_OPACITY;

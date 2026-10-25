@@ -59,7 +59,9 @@ const keyOf = l => builtinKeyOf(l.id) || IGN_PREFIX + l.id;
  * town…) is one row with a selector. Each row opens on its full description, zooms, source, legend and one preview
  * tile (asked only then, and never with the module « IGN – fonds de carte » off). A row ticked as the panel's own
  * lists tick it: one of the app's overlays (« Forêts publiques »), of the panel's themes (« ign:<id> », the same), or
- * of « Noms et réseaux » (core/map-layers.js LANDMARKS: « Routes », « Hydrographie », « Noms »… — that one chosen).
+ * of « Noms et réseaux » (core/map-layers.js LANDMARKS: « Routes », « Hydrographie », « Noms »… — that one chosen; on
+ * a map whose plan draws its own, `plan`, disabled as the panel's own checkboxes are, said under it, the choice kept for
+ * the photos and SPOT — but one an overlay draws, a cell's layers=hydro, which it unticks).
  * Events (for gf-map-options.js, which makes them changes of the look): overlay-toggle {key, on, layer?, replace?}
  * (`layer`: a catalogue layer to add; `replace`: the overlay it takes the place of, another variant of its series),
  * landmark-toggle {key, on} (one of « Noms et réseaux », by its key).
@@ -70,6 +72,8 @@ export class GfIgnLayers extends LitElement {
     overlays: { attribute: false },
     /** « Noms et réseaux » chosen (the look's `landmarks`: core/map-settings.js). */
     landmarks: { attribute: false },
+    /** A map on the plan, which draws its own « Noms et réseaux »: their rows disabled (gf-map-options.js #landmarks). */
+    plan: { type: Boolean },
     _catalog: { state: true },
     _open: { state: true },
     _q: { state: true },
@@ -112,6 +116,8 @@ export class GfIgnLayers extends LitElement {
     .text label { font-size: 0.92rem; line-height: 1.25; cursor: pointer; }
     .text small { color: var(--gf-text-muted); font-size: 0.78rem; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
     .text .where { -webkit-line-clamp: 1; font-style: italic; }
+    .text .held { -webkit-line-clamp: unset; }
+    .line:has(input:disabled) label { cursor: default; color: var(--gf-text-muted); }
     .reco-mark { display: inline-flex; vertical-align: -0.1em; margin-left: 4px; color: var(--gf-accent); font-size: 0.85em; }
     .line .icon-btn { width: 40px; height: 40px; font-size: 1rem; flex: none; }
     .line .icon-btn[aria-expanded='true'] .bi { transform: rotate(180deg); }
@@ -136,6 +142,7 @@ export class GfIgnLayers extends LitElement {
     this.overlays = [];
     /** @type {string[]} */
     this.landmarks = [];
+    this.plan = false;
     /** The catalogue, as core/ign-catalog.js has it. @type {import('../core/ign-catalog.js').CatalogState | null} */
     this._catalog = null;
     /** « Parcourir… » touched: the catalogue is shown (and asked, the first time). */
@@ -228,6 +235,12 @@ export class GfIgnLayers extends LitElement {
     return this.overlays.includes(keyOf(l)) || (mark !== null && this.landmarks.includes(mark));
   }
 
+  /**
+   * One of « Noms et réseaux » on the plan, which draws its own: not chosen here (one an overlay draws, a cell's
+   * layers=hydro, is unticked as that overlay). @param {CatalogLayer} l
+   */
+  #held(l) { return this.plan && landmarkOf(l.id) !== null && !this.overlays.includes(keyOf(l)); }
+
   /** The layer a row stands for now: its series' variant shown, else the one chosen, else its first. @param {Entry} e */
   #current(e) {
     if (e.layers.length === 1) return e.layers[0];
@@ -296,18 +309,21 @@ export class GfIgnLayers extends LitElement {
     const open = this._details.has(e.key);
     const kind = e.layers.length > 1 ? this.#variantKind(e) : '';
     const desc = (l.about || e.about || '').replace(/\s+/g, ' ');
+    const held = this.#held(l);
     return html`<li class="row">
       <div class="line">
-        <input type="checkbox" id=${id} .checked=${on} aria-describedby=${id + '-d'} @change=${(/** @type {any} */ ev) => this.#toggle(e, ev.target.checked)} />
+        <input type="checkbox" id=${id} .checked=${on} ?disabled=${held} aria-describedby=${id + '-d' + (held ? ` ${id}-plan` : '')}
+          @change=${(/** @type {any} */ ev) => this.#toggle(e, ev.target.checked)} />
         <span class="text">
           <label for=${id}>${e.title}${e.botany === 1 ? html`<span class="reco-mark" title="Recommandée pour la botanique">${icon('leaf-fill')}<span class="visually-hidden"> (recommandée pour la botanique)</span></span>` : nothing}</label>
           ${where ? html`<small class="where">${placeLabel(e.cat, e.sub)}</small>` : nothing}
           <small id=${id + '-d'}>${e.layers.length > 1 ? `${e.layers.length} versions` : ''}${e.layers.length > 1 && (!open || !desc) ? ' · ' : ''}${open && desc ? '' : desc || l.id}</small>
+          ${held ? html`<small class="held" id=${id + '-plan'}>Noms et réseaux : le plan IGN dessine déjà les siens, ce choix vaut pour les photos et SPOT.</small>` : nothing}
         </span>
         <button class="icon-btn" type="button" aria-expanded=${open ? 'true' : 'false'} aria-controls=${id + '-x'} aria-label=${'Détails : ' + e.title} @click=${() => this.#toggleDetails(e.key)}>${icon('chevron-down')}</button>
       </div>
       ${e.layers.length > 1 ? html`<label class="variant">${kind}
-        <select aria-label=${kind + ' de ' + e.title} @change=${(/** @type {Event} */ ev) => this.#choose(e, ev)}>
+        <select aria-label=${kind + ' de ' + e.title} ?disabled=${held} @change=${(/** @type {Event} */ ev) => this.#choose(e, ev)}>
           ${e.layers.map(v => html`<option value=${v.id} ?selected=${v === l}>${v.variant || v.title}</option>`)}
         </select></label>` : nothing}
       ${open ? this.#details(l, id + '-x') : nothing}

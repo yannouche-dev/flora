@@ -564,7 +564,7 @@ export class GfMapPage extends LitElement {
     if (d && moduleOn('gbif')) rows.push({ key: 'distribution', kind: 'check', label: 'Répartition GBIF : ' + d.label, hint: 'densité des occurrences connues', value: mapDistribution() });
     rows.push({ key: 'places', kind: 'check', label: 'Mes lieux', hint: count ? `${count} lieu${count > 1 ? 'x' : ''}, et leurs plantes` : 'aucun lieu', value: placesPref.get() });
     rows.push({ key: 'around', kind: 'check', label: 'Plantes observées autour',
-      hint: 'iNaturalist : le lieu choisi, sinon votre position, sinon le centre de la carte lui est envoyé', value: Boolean(this._around),
+      hint: 'envoyé à iNaturalist : le lieu choisi, sinon votre position, sinon le centre de la carte', value: Boolean(this._around),
       disabled: this._editing, why: 'Pas pendant le déplacement des lieux (✎).' });
     const key = JSON.stringify(rows);
     if (this.#rowsMemo?.key !== key) this.#rowsMemo = { key, rows };
@@ -590,10 +590,11 @@ export class GfMapPage extends LitElement {
       setContext({ mapPlants: [...this._plants] });
     }
     // What the map says (the quiet-map rule): Autour's plants or points coming — its thin line past 400 ms; the places
-    // unreadable — its state (and the bar's « Réessayer »).
+    // unreadable — its state (and the bar's « Réessayer »); my places hidden — its state too.
     const map = this.#map, a = this._around;
     map?.busy('around', Boolean(a && (a.status === 'loading' || (a.species && a.obs === null))), 'Recherche des observations autour');
     map?.setStatus('places', this._error, { level: 'error' });
+    map?.setStatus('places-hidden', placesPref.get() ? '' : 'Mes lieux masqués : seul le lieu ouvert est sur la carte (▦ › Sur cette carte).', { once: true });
   }
 
   /** Exactly one plant filtered: look up its GBIF taxon, for the distribution layer. */
@@ -757,8 +758,9 @@ export class GfMapPage extends LitElement {
     const spots = this.#filtered;
     const selected = this._spots.find(s => s.id === this.route.spot) || null;
     const seasonCount = this._spots.filter(s => inSeason(s)).length;
-    // « Mes lieux » hidden (« Sur cette carte »): none on the map — the list and the bar's count keep them.
-    const places = placesPref.get();
+    // « Mes lieux » hidden (« Sur cette carte »): on the map, only the place opened (framed, its sheet beside it, moved
+    // by ✎) — the list and the bar's count keep them all, the panel's « État » says so; ✎ only with a place to move.
+    const drawn = placesPref.get() ? spots : spots.filter(s => s.id === this.route.spot);
 
     return html`
       <h1 class="visually-hidden">Carte des lieux</h1>
@@ -787,15 +789,15 @@ export class GfMapPage extends LitElement {
         ${this._view === 'map' ? html`
           ${this.#empty()}
           <gf-map
-            .spots=${places ? spots : []}
+            .spots=${drawn}
             .selectedId=${this.route.spot}
-            .plants=${places ? this.#plantMarkers(spots) : []}
+            .plants=${this.#plantMarkers(drawn)}
             .distribution=${this._distribution}
             .distributionOn=${mapDistribution()}
             .data=${this.#dataRows(spots.length)}
             @data-change=${e => this.#onData(e.detail)}
             plant-zoom="16"
-            editable
+            ?editable=${drawn.length > 0 || placesPref.get() || this._editing}
             ?editing=${this._editing}
             @edit-change=${e => {
               this._editing = e.detail.editing;

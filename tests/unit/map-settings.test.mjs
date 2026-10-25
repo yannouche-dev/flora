@@ -204,6 +204,18 @@ test('une carte à son propre fond : ses champs à elle, les autres communs, et 
   resetMapLook();
 });
 
+test('l’ombrage du relief : son opacité à lui (40 %) n’est jamais écrite, une autre l’est — 80 % aussi, gardé quand il est décoché puis recoché', () => {
+  const SHADOW = 'ign:ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW';
+  assert.deepEqual(cleanOwnLook({ opacities: { [SHADOW]: 0.4, cadastre: 0.8 } }), { opacities: {} });
+  assert.deepEqual(cleanOwnLook({ opacities: { [SHADOW]: 0.8, cadastre: 0.4 } }), { opacities: { [SHADOW]: 0.8, cadastre: 0.4 } });
+  setMapLook({ opacities: { [SHADOW]: 0.4 } });
+  assert.equal(localStorage.getItem(OPACITY), null);
+  setMapLook({ opacities: { [SHADOW]: 0.8 } });
+  assert.deepEqual(JSON.parse(localStorage.getItem(OPACITY) || 'null'), { [SHADOW]: 0.8 });
+  assert.deepEqual(plain(mapLook().opacities), { [SHADOW]: 0.8 });
+  resetMapLook();
+});
+
 test('un fond d’une année, d’une période, historique, SPOT : gardé sous la même clé, une chaîne, relu ; une clé inconnue revient aux photos', () => {
   /** @type {any[]} */
   const seen = [];

@@ -13,8 +13,8 @@
 //  5. « Couches affichées »: what is drawn over the background, from the top (gf-layer-stack.js: « Noms et réseaux »,
 //     the overlays with their order and opacity, the background last);
 //  6. « Noms et réseaux » (core/map-layers.js LANDMARKS: the places' names, the roads, the rivers by default; the
-//     railways, the buildings, the boundaries), a checkbox each — over the photos and SPOT's; on the plan, which has its
-//     own, disabled, kept;
+//     railways, the buildings, the boundaries), a checkbox each — over the photos and SPOT's; on a map's plan, which has
+//     its own, disabled, kept (in Réglages, still chosen: the maps with their own photos or SPOT follow them);
 //  7-9. IGN's layers by theme (core/map-layers.js PANEL: « Relief », « Forêts, haies et zones humides », « Espaces
 //     protégés et propriété » — the protected areas in view and the rules of picking there —), each folded, opened by
 //     itself once one of its layers is ticked (or, the last, an area in view), its count in its title;
@@ -205,6 +205,24 @@ export class GfMapOptions extends LitElement {
 
   #redraw = () => this.requestUpdate();
 
+  /** A row of « Sur cette carte » just changed: its place there. @type {number | null} */
+  #changed = null;
+
+  /**
+   * A row of « Sur cette carte » changed and taken away by its page (the look-alike let go: no row for none), the focus
+   * gone with it: on the row now in its place, else the one above it, else « Couches affichées » (the row's control kept,
+   * now the next one's: left there). @param {Map<string, any>} changed
+   */
+  updated(changed) {
+    if (!changed.has('data') || this.#changed === null) return;
+    const at = this.#changed;
+    this.#changed = null;
+    const root = /** @type {ShadowRoot} */ (this.renderRoot);
+    if (root.activeElement || document.activeElement !== document.body) return;
+    const here = [...root.querySelectorAll('.data input, .data select')];
+    /** @type {HTMLElement | null | undefined} */ (here[Math.min(at, here.length - 1)] ?? root.querySelector('#layers-shown'))?.focus();
+  }
+
   /** The catalogue shown before: asked again (online again, a month gone, the module switched…). */
   reopen() { /** @type {any} */ (this.renderRoot.querySelector('gf-ign-layers'))?.reopen(); }
 
@@ -230,19 +248,14 @@ export class GfMapOptions extends LitElement {
   /**
    * An overlay on (on top, or in the place of the one it replaces: another variant of its series) or off — a layer of
    * IGN's whole catalogue made known first (kept, for every map): one of the panel's themes named as there, whichever
-   * list ticks it, and first ticked at its row's opacity (the shading: the photos seen through it) unless one is chosen.
+   * list ticks it (at its own opacity unless one is chosen: the shading's, core/ign-layers.js defaultOpacity).
    * @param {string} key @param {boolean} on @param {any} [layer] @param {string} [replace]
    */
   #toggle(key, on, layer, replace) {
-    const row = layer ? catalogRowOf(layer.id) : null;
-    const k = layer ? addCatalogLayer(/** @type {any} */ (row ?? layer)) : key;
-    const look = this.#look;
-    const now = look.overlays.filter(o => o !== k);
+    const k = layer ? addCatalogLayer(/** @type {any} */ (catalogRowOf(layer.id) ?? layer)) : key;
+    const now = this.#look.overlays.filter(o => o !== k);
     const at = replace ? now.indexOf(replace) : -1;
-    if (!on) { this.#edit({ overlays: now }); return; }
-    const overlays = at >= 0 ? now.map(o => o === replace ? k : o) : [...now, k];
-    const opacity = row?.opacity;
-    this.#edit(opacity != null && !(k in look.opacities) ? { overlays, opacities: { ...look.opacities, [k]: opacity } } : { overlays });
+    this.#edit({ overlays: !on ? now : at >= 0 ? now.map(o => o === replace ? k : o) : [...now, k] });
   }
 
   /** One of « Noms et réseaux » chosen or not (by its key). @param {string} key @param {boolean} on */
@@ -358,19 +371,29 @@ export class GfMapOptions extends LitElement {
   }
 
   /**
+   * A map on the plan, which draws its own « Noms et réseaux » (not Réglages: the common choice is also every map's
+   * with its own photos or SPOT — a free layout's cell, a plant sheet's map block). @param {MapLook} look
+   */
+  #onPlan(look) { return !this.#defaults && !takesLandmarks(look.base); }
+
+  /**
    * « Noms et réseaux »: a checkbox each, in their order (core/map-layers.js LANDMARKS_LISTED), over the photos and
-   * SPOT's, above every layer; on the plan, which draws its own, disabled — the choice kept for the photos and SPOT,
-   * said by a note each checkbox is described by. @param {MapLook} look
+   * SPOT's, above every layer; on a map's plan, which draws its own, disabled — the choice kept for the photos and SPOT,
+   * said by a note each checkbox is described by (in Réglages, the common plan: said, still chosen there for the maps
+   * with their own photos or SPOT). @param {MapLook} look
    */
   #landmarks(look) {
-    const plan = !takesLandmarks(look.base);
+    const plan = this.#onPlan(look), over = takesLandmarks(look.base);
     const id = (this.#defaults ? 'settings' : 'panel') + '-marks';
+    const note = plan ? 'Le plan IGN dessine déjà les siens : ces choix valent pour les photos et SPOT.'
+      : over ? 'Par-dessus les photos et les images SPOT, au-dessus de toutes les couches.'
+      : 'Sans effet sur le plan IGN, qui a les siens : ces choix valent pour les cartes en photos ou SPOT.';
     return html`<h3 class="kicker" id=${id}>Noms et réseaux</h3>
-      <p class="note" id=${id + '-note'}>${plan ? 'Le plan IGN dessine déjà les siens : ces choix valent pour les photos et SPOT.' : 'Par-dessus les photos et les images SPOT, au-dessus de toutes les couches.'}</p>
+      <p class="note" id=${id + '-note'}>${note}</p>
       <div class="marks" role="group" aria-labelledby=${id}>${LANDMARKS_LISTED.map(key => {
         const m = /** @type {import('../core/map-layers.js').Landmark} */ (LANDMARKS.find(l => l.key === key));
         return html`<label class="layer">
-          <input type="checkbox" .checked=${look.landmarks.includes(key)} ?disabled=${plan} aria-describedby=${plan ? id + '-note' : nothing}
+          <input type="checkbox" .checked=${look.landmarks.includes(key)} ?disabled=${plan} aria-describedby=${over ? nothing : id + '-note'}
             @change=${(/** @type {any} */ e) => this.#mark(key, e.target.checked)} />
           <span>${m.label}${m.hint ? html`<small>${m.hint}</small>` : nothing}</span>
         </label>`;
@@ -385,7 +408,10 @@ export class GfMapOptions extends LitElement {
   #data() {
     const rows = this.#defaults ? [] : this.data ?? [];
     if (!rows.length) return nothing;
-    const change = (/** @type {DataRow} */ r, /** @type {boolean | string} */ value) => this.#emit('data-change', { key: r.key, value });
+    const change = (/** @type {DataRow} */ r, /** @type {boolean | string} */ value) => {
+      this.#changed = rows.indexOf(r);
+      this.#emit('data-change', { key: r.key, value });
+    };
     return html`<h3 class="kicker" id="panel-data">Sur cette carte</h3>
       <div class="data" role="group" aria-labelledby="panel-data">${rows.map(r => {
         const id = 'panel-data-' + r.key;
@@ -446,7 +472,7 @@ export class GfMapOptions extends LitElement {
       ${this.#bases(look)}
       ${this.#data()}
 
-      <h3 class="kicker">Couches affichées</h3>
+      <h3 class="kicker" id="layers-shown" tabindex="-1">Couches affichées</h3>
       <gf-layer-stack .base=${look.base} .landmarks=${look.landmarks} .overlays=${look.overlays} .opacities=${look.opacities}
         @overlay-toggle=${this.#onLayers} @overlay-order=${this.#onLayers} @overlay-opacity=${this.#onLayers} @landmark-toggle=${this.#onLayers}></gf-layer-stack>
 
@@ -455,7 +481,7 @@ export class GfMapOptions extends LitElement {
 
       <h3 class="kicker">Toutes les couches de l’IGN</h3>
       <p class="note">Tout le catalogue de la Géoplateforme, rangé par thème : photos anciennes, forêts, espaces protégés, sols, relief, cartes anciennes… Les couches cochées plus haut s’y retrouvent cochées.</p>
-      <gf-ign-layers .overlays=${look.overlays} .landmarks=${look.landmarks}
+      <gf-ign-layers .overlays=${look.overlays} .landmarks=${look.landmarks} ?plan=${this.#onPlan(look)}
         @overlay-toggle=${this.#onLayers} @landmark-toggle=${this.#onLayers}></gf-ign-layers>`;
   }
 }

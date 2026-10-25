@@ -8,7 +8,8 @@
 // opacity reaches every map, MapLibre too, a layer of several (the nature reserves) as well. The panel's parts in their
 // order — « Sur cette carte » after the background, « Couches affichées » from the top, « Noms et réseaux », the themes
 // folded (opened by themselves once one of their layers is ticked, here or in the catalogue; never folded under the
-// finger), the whole catalogue —; the shading first ticked at 40 %. The plant sheet's map ⚙ no longer has the
+// finger), each its parts, notes and rows in order, the whole catalogue —; the shading at 40 % unless another opacity
+// is chosen (kept when unticked, never written down: a cell's layers=estompage too). The plant sheet's map ⚙ no longer has the
 // background, the layers nor 2D / 3D. Every tile made here (tiles.mjs), real WebGL for 3D.
 import { test, expect, answerAround, plantId } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
@@ -274,7 +275,7 @@ test('Réglages › Cartes : les mêmes options que le panneau ▦ de chaque car
   await expect(panel.getByRole('checkbox', { name: /Forêts publiques/ })).toBeChecked();
 });
 
-test('le panneau ▦ : ses parties dans l’ordre, « Couches affichées » du haut vers le bas ; un thème s’ouvre seul quand une de ses couches est cochée (ici ou dans le catalogue, nommée comme dans son thème), son nombre dans son titre, jamais replié sous le doigt ; l’ombrage à 40 %', async ({ app, page }) => {
+test('le panneau ▦ : ses parties dans l’ordre, « Couches affichées » du haut vers le bas ; un thème s’ouvre seul quand une de ses couches est cochée (ici ou dans le catalogue, nommée comme dans son thème), son nombre dans son titre, jamais replié sous le doigt ; l’ombrage à 40 % sauf choix', async ({ app, page }) => {
   await app.open(`#/layout/[map(r=1km)]?${AT}`);
   const map = maps(page).nth(0);
   const panel = await openPanel(map);
@@ -299,17 +300,43 @@ test('le panneau ▦ : ses parties dans l’ordre, « Couches affichées » du h
   await expect.poll(() => stored(page)).toEqual({ base: 'photo', overlays: [], distribution: false, landmarks: ['routes', 'lieux'] });
   await expect(stack.locator('ul.marks li')).toHaveText(['Noms de lieux', 'Routes']);
   await expect(panel.getByRole('group', { name: 'Noms et réseaux' }).getByRole('checkbox', { name: /^Cours d’eau/ })).not.toBeChecked();
+  // By the keyboard, the bottom line hidden: the focus on the line above it, then on the background (never lost).
+  await stack.getByRole('button', { name: 'Masquer Routes' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(stack.locator('ul.marks li')).toHaveText(['Noms de lieux']);
+  await expect(stack.getByRole('button', { name: 'Masquer Noms de lieux' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(stack.locator('ul.marks')).toHaveCount(0);
+  await expect(stack.locator('.base')).toBeFocused();
+  await panel.getByRole('group', { name: 'Noms et réseaux' }).getByRole('checkbox', { name: /^Routes/ }).check();
+  await panel.getByRole('group', { name: 'Noms et réseaux' }).getByRole('checkbox', { name: /^Noms de lieux/ }).check();
+  await expect.poll(() => stored(page)).toEqual({ base: 'photo', overlays: [], distribution: false, landmarks: ['routes', 'lieux'] });
 
-  // The shading: first ticked at 40 % (the photos seen through it), its theme counting it.
+  // The shading: at 40 % (the photos seen through it: its own, never written down), its theme counting it.
   const SHADOW = 'ign:ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW';
+  const keptOpacity = () => page.evaluate(() => JSON.parse(localStorage.getItem('geoflora.overlayOpacity') || 'null'));
+  const shading = () => map.evaluate((m, k) => [...m.querySelectorAll('.leaflet-layer')].filter(e => e.classList.contains('gf-tiles-' + k))
+    .map(e => getComputedStyle(e).opacity), SHADOW);
   await unfold(panel, 'relief');
-  await panel.getByRole('checkbox', { name: /Ombrage du relief/ }).check();
+  const relief = panel.getByRole('checkbox', { name: /Ombrage du relief/ });
+  await relief.check();
   await expect.poll(() => stored(page).then(s => s.overlays)).toEqual([SHADOW]);
-  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('geoflora.overlayOpacity') || 'null'))).toEqual({ [SHADOW]: 0.4 });
-  await expect(panel.getByRole('slider', { name: 'Opacité de Ombrage du relief' })).toHaveValue('40');
-  await expect.poll(() => map.evaluate((m, k) => [...m.querySelectorAll('.leaflet-layer')].filter(e => e.classList.contains('gf-tiles-' + k))
-    .map(e => getComputedStyle(e).opacity), SHADOW)).toEqual(['0.4']);
+  expect(await keptOpacity()).toBe(null);
+  const slider = panel.getByRole('slider', { name: 'Opacité de Ombrage du relief' });
+  await expect(slider).toHaveValue('40');
+  await expect.poll(shading).toEqual(['0.4']);
   await expect(panel.locator('details.theme[data-group="relief"] .count')).toHaveText('1 cochée');
+  // Another opacity chosen, 80 % (the others' usual one): kept, and kept again once unticked and ticked.
+  await slider.fill('80');
+  await expect.poll(keptOpacity).toEqual({ [SHADOW]: 0.8 });
+  await expect.poll(shading).toEqual(['0.8']);
+  await relief.uncheck();
+  await relief.check();
+  await expect(slider).toHaveValue('80');
+  await expect.poll(shading).toEqual(['0.8']);
+  await slider.fill('40');
+  await expect.poll(keptOpacity).toBe(null);
+  await relief.uncheck();
 
   // A layer of a theme ticked in the catalogue: its theme opens by itself, its row ticked, named as there.
   await panel.getByRole('button', { name: /Parcourir les couches de l’IGN/ }).click();
@@ -334,6 +361,49 @@ test('le panneau ▦ : ses parties dans l’ordre, « Couches affichées » du h
   await expect(milieux).not.toHaveAttribute('open', '');
   // Never wider than the screen.
   expect(await panel.locator('.body').evaluate(b => b.scrollWidth - b.clientWidth)).toBe(0);
+});
+
+test('une case qui dit l’ombrage (layers=ombrage) : à 40 %, le sien, comme coché dans le panneau, sans opac= ; une autre opacité écrite, la sienne retirée', async ({ app, page }) => {
+  await app.open(`#/layout/[map(r=1km,layers=ombrage)]?${AT}`);
+  const map = maps(page).nth(0);
+  const SHADOW = 'ign:ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW';
+  const shading = () => map.evaluate((m, k) => [...m.querySelectorAll('.leaflet-layer')].filter(e => e.classList.contains('gf-tiles-' + k))
+    .map(e => getComputedStyle(e).opacity), SHADOW);
+  await expect.poll(shading).toEqual(['0.4']);
+  await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,layers=estompage)]');
+  const panel = await openPanel(map);
+  const slider = panel.getByRole('slider', { name: 'Opacité de Ombrage du relief' });
+  await expect(slider).toHaveValue('40');
+  await slider.fill('70');
+  await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,layers=estompage,opac=estompage.70)]');
+  await expect.poll(shading).toEqual(['0.7']);
+  await slider.fill('40');
+  await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,layers=estompage)]');
+  await expect.poll(shading).toEqual(['0.4']);
+});
+
+test('les thèmes du panneau ▦ en détail : chacun ses parties, leurs titres, leurs notes et leurs couches, dans l’ordre ; avant de cueillir, les règles du lieu', async ({ app, page }) => {
+  await app.open(`#/layout/[map(r=1km)]?${AT}`);
+  const panel = await openPanel(maps(page).nth(0));
+  const theme = (/** @type {string} */ key) => panel.locator(`details.theme[data-group="${key}"]`);
+  await unfold(panel, 'relief');
+  await expect(theme('relief').locator('h4')).toHaveCount(0);
+  await expect(theme('relief').locator('label.layer > span')).toHaveText([/^Courbes de niveau/, /^Ombrage du relief\s*relief ombré, opacité de 40 % par défaut$/, /^Fortes pentes\s*plus de 30°$/]);
+  await unfold(panel, 'milieux');
+  await expect(theme('milieux').locator('label.layer > span')).toHaveText([/^Types de forêts/, /^Forêts anciennes/, /^Haies/, /^Zones humides et tourbières/]);
+  await unfold(panel, 'espaces');
+  const espaces = theme('espaces');
+  await expect(espaces.locator('h4')).toHaveText(['Protection réglementaire', 'Gestion contractuelle', 'Inventaires', 'Propriété']);
+  await expect(espaces.locator('label.layer > span')).toHaveText([/^Parcs nationaux/, /^Réserves naturelles/, /^Protection de biotope/, /^Réserves biologiques/,
+    /^Natura 2000 — habitats/, /^Natura 2000 — oiseaux/, /^Parcs naturels régionaux/, /^Conservatoires/,
+    /^ZNIEFF de type I$/, /^ZNIEFF de type II$/, /^Forêts publiques/, /^Parcelles cadastrales/]);
+  // What to know before picking first; then each part's title, its note (the ZNIEFF: no rules of their own), its rows
+  // — laid out so, one under the other.
+  const parts = await espaces.evaluate(d => [...d.querySelectorAll('h4, label.layer, p.note')]
+    .map(e => /** @type {[string, number]} */ ([e.tagName, e.getBoundingClientRect().top])));
+  expect(parts.map(([tag]) => tag).join(' ')).toBe('P H4 LABEL LABEL LABEL LABEL H4 LABEL LABEL LABEL LABEL H4 P LABEL LABEL H4 LABEL LABEL');
+  expect(parts.every(([, top], i) => i === 0 || top > parts[i - 1][1])).toBe(true);
+  await expect(espaces.locator('p.note')).toHaveText([/^Avant de cueillir : les règles du lieu et l’accord du propriétaire\./, /^Sans règle propre : /]);
 });
 
 test('fiche plante : son ⚙ n’a plus ni fond, ni couches IGN, ni 2D / 3D ; un bloc à son propre fond le dit, et son panneau ▦ le rend aux réglages communs', async ({ app, page }) => {

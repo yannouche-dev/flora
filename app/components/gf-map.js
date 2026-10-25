@@ -5,7 +5,7 @@ import { LitElement, html, nothing, render } from 'lit';
 import * as L from 'leaflet';
 import { config } from '../config.js';
 import { geoProblem, watchLocation, whenGranted } from '../core/geo.js';
-import { DEFAULT_OPACITY, FRANCE_BOUNDS, LANDMARK_Z, isOverlay, landmarksShown, overlayDef, tileLayer } from '../core/ign.js';
+import { FRANCE_BOUNDS, LANDMARK_Z, defaultOpacity, isOverlay, landmarksShown, overlayDef, tileLayer } from '../core/ign.js';
 import { isBaseKey } from '../core/backgrounds.js';
 import { lookFor, mapLookEvents, setMapLook } from '../core/map-settings.js';
 import { inSeason, placeAbundance, placeTitle } from '../core/collections.js';
@@ -2931,8 +2931,8 @@ export class GfMap extends LitElement {
     return this.#layers[key];
   }
 
-  /** An overlay's opacity on this map (its look's; the usual one when it says none). @param {string} key */
-  #opacityOf(key) { return this.#opacities[key] ?? DEFAULT_OPACITY; }
+  /** An overlay's opacity on this map (its look's; its usual one when it says none: the shading's 40 %). @param {string} key */
+  #opacityOf(key) { return this.#opacities[key] ?? defaultOpacity(key); }
 
   /** The look it shows: its own over the common one (core/map-settings.js lookFor). */
   get lookShown() { return lookFor(this.#own); }
@@ -2962,7 +2962,7 @@ export class GfMap extends LitElement {
       const layer = /** @type {any} */ (this.#layers[key]);
       const at = (layer?.getLayers?.()[0] ?? layer)?.options?.opacity;
       const now = this.#opacityOf(key);
-      if (Math.abs((at ?? -1) - now) > 0.001 || Math.abs((before[key] ?? DEFAULT_OPACITY) - now) > 0.001) this.#setOpacity(key, now, true, true);
+      if (Math.abs((at ?? -1) - now) > 0.001 || Math.abs((before[key] ?? defaultOpacity(key)) - now) > 0.001) this.#setOpacity(key, now, true, true);
     }
     if (this.#panel) Object.assign(this.#panel, this.#lookInfo());
     this.#syncOpacity();

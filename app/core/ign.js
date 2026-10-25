@@ -5,11 +5,11 @@
 
 import * as L from 'leaflet';
 import { moduleOn } from './modules.js';
-import { DEFAULT_OPACITY, overlayDef, wmtsUrl } from './ign-layers.js';
+import { defaultOpacity, overlayDef, wmtsUrl } from './ign-layers.js';
 import { parseBase, takesLandmarks } from './backgrounds.js';
 import { LANDMARKS, LANDMARK_MAX_ZOOM } from './map-layers.js';
 
-export { OVERLAYS, wmtsUrl, isOverlay, overlayDef, addCatalogLayer, DEFAULT_OPACITY } from './ign-layers.js';
+export { OVERLAYS, wmtsUrl, isOverlay, overlayDef, addCatalogLayer, defaultOpacity } from './ign-layers.js';
 
 /** @typedef {import('./ign-layers.js').WmtsLayer} WmtsLayer @typedef {import('./ign-layers.js').LayerDef} LayerDef */
 
@@ -94,7 +94,7 @@ export function landmarksShown(landmarks, overlays, base) {
  * first); `opacity`: an overlay's (the map's look), a background and « Noms et réseaux » always opaque.
  * @param {string} key @param {number} [minZoom] @param {number} [opacity]
  */
-export function tileLayer(key, minZoom, opacity = DEFAULT_OPACITY) {
+export function tileLayer(key, minZoom, opacity = defaultOpacity(key)) {
   const mark = LANDMARKS.findIndex(l => l.key === key);
   if (mark >= 0) return wmts(LANDMARKS[mark].layer, key, 1, minZoom, 0, { zIndex: LANDMARK_Z + mark, maxZoom: LANDMARK_MAX_ZOOM });
   const background = parseBase(key);

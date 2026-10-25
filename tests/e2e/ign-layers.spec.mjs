@@ -3,8 +3,8 @@
 // « Recommandées pour la botanique », the search (accents aside), a row's details (description, zooms, source, one
 // preview tile); a layer checked asks its tiles, joins « Couches affichées » (gf-layer-stack.js) with its opacity and its
 // place in the stack, and all of it is still there after a reload; a layer of « Noms et réseaux » there (« Voie ferrée »,
-// the roads' series) is that choice, not one more layer. The service's GetCapabilities is never answered: the shipped
-// copy only.
+// the roads' series) is that choice, not one more layer — on the plan, which has its own, disabled and said, as the
+// panel's own checkboxes. The service's GetCapabilities is never answered: the shipped copy only.
 import { test, expect } from './fixtures.mjs';
 import { PHOTO } from './tiles.mjs';
 
@@ -171,4 +171,28 @@ test('noms et réseaux dans le catalogue (« Voie ferrée », la série « Route
   await expect.poll(async () => (await savedLook(page)).landmarks).toEqual(['eau', 'lieux']);
   await expect(marks.getByRole('checkbox', { name: /^Routes/ })).not.toBeChecked();
   expect((await savedLook(page)).overlays).toEqual([]);
+
+  // On the plan, which draws its own: their rows disabled, as chosen, said why (a ticked box and an unchanged map,
+  // never); a series' version kept.
+  await marks.getByRole('checkbox', { name: /^Routes/ }).check();
+  await panel.getByRole('button', { name: /Plan IGN/ }).click();
+  await expect.poll(async () => (await savedLook(page)).base).toBe('plan');
+  const why = 'Noms et réseaux : le plan IGN dessine déjà les siens, ce choix vaut pour les photos et SPOT.';
+  await expect(roads.getByRole('checkbox')).toBeDisabled();
+  await expect(roads.getByRole('checkbox')).toBeChecked();
+  await expect(roads.getByRole('combobox')).toBeDisabled();
+  await expect(roads.getByRole('combobox')).toHaveValue('TRANSPORTNETWORKS.ROADS');
+  await expect(roads).toContainText(why);
+  await search.fill('limites administratives');
+  const limits = panel.locator('li.row', { hasText: 'Limites administratives mises à jour en continu' }).first();
+  await expect(limits.getByRole('checkbox')).toBeDisabled();
+  await expect(limits.getByRole('checkbox')).toHaveAccessibleDescription(new RegExp(why.replace(/[.()]/g, '\\$&') + '$'));
+  await search.fill('hydrographie');
+  const water = panel.locator('li.row', { hasText: 'Hydrographie' }).first();
+  await expect(water.getByRole('checkbox')).toBeDisabled();
+  await expect(water.getByRole('checkbox')).toBeChecked();
+  // Back on the photos: theirs again.
+  await panel.getByRole('button', { name: /Photos aériennes/ }).click();
+  await expect(water.getByRole('checkbox')).toBeEnabled();
+  await expect(water).not.toContainText(why);
 });

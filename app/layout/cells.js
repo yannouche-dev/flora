@@ -46,7 +46,7 @@ import { isFavorite, toggleFavorite } from '../core/collections.js';
 import { ui } from '../styles/ui.js';
 import { DISTANCES, distanceAt, distanceEvents, distanceKey } from '../miniapp/kit/cards.js';
 import { pushHash } from '../core/history.js';
-import { addCatalogLayer, DEFAULT_OPACITY, isOverlay } from '../core/ign.js';
+import { addCatalogLayer, defaultOpacity, isOverlay } from '../core/ign.js';
 import { mapLook } from '../core/map-settings.js';
 import { addressOf, baseKeyOf, baseKind, takesLandmarks } from '../core/backgrounds.js';
 import { cleanLandmarks } from '../core/map-layers.js';
@@ -581,7 +581,7 @@ export class DlMap extends LitElement {
     if (look?.base) Object.assign(values, addressOf(look.base));
     // Those ticked (noms=1 when the usual ones, noms=0 none: registry.js).
     if (Array.isArray(look?.landmarks)) values.noms = cleanLandmarks(look.landmarks);
-    if (look?.overlays) Object.assign(values, { layers: layersOf(look.overlays), opac: opacText(look.opacities ?? {}, look.overlays, DEFAULT_OPACITY) });
+    if (look?.overlays) Object.assign(values, { layers: layersOf(look.overlays), opac: opacText(look.opacities ?? {}, look.overlays, defaultOpacity) });
     this.#set(values);
     // What the address says now, given back (an intent's background is not one to leave out: the map shows it again).
     this.#lookMemo = null;

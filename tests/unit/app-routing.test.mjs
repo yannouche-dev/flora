@@ -82,8 +82,9 @@ test('l’opacité des couches (opac=) : par couche, en %, seulement celles qui 
   assert.equal(read('map(opac=lune.3)').problems.length, 1);
   assert.deepEqual(opacitiesOf('znieff.60+parcs.100'), { 'ign:Patrinat_ZNIEFF1': 0.6, 'ign:Patrinat_ZNIEFF2': 0.6, parcs: 1 });
   const keys = ['ign:Patrinat_ZNIEFF1', 'ign:Patrinat_ZNIEFF2', 'parcs', 'ign:A.B'];
-  assert.equal(opacText({ 'ign:Patrinat_ZNIEFF1': 0.6, 'ign:Patrinat_ZNIEFF2': 0.6, parcs: 0.8, 'ign:A.B': 0.35 }, keys, 0.8), 'znieff.60+ign:A.B.35');
-  assert.equal(opacText({ parcs: 0.8 }, keys, 0.8), null);
+  const usual = () => 0.8;
+  assert.equal(opacText({ 'ign:Patrinat_ZNIEFF1': 0.6, 'ign:Patrinat_ZNIEFF2': 0.6, parcs: 0.8, 'ign:A.B': 0.35 }, keys, usual), 'znieff.60+ign:A.B.35');
+  assert.equal(opacText({ parcs: 0.8 }, keys, usual), null);
 });
 
 test('les jumelles (jumelles=, jrayon=) : absentes, éteintes ; aucune source, allumées sans source', () => {

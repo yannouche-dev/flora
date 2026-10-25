@@ -6,11 +6,13 @@
 //    overlay's (core/ign.js landmarksShown). On the plan, which has its own: said, nothing listed;
 //  - the overlays (`ul.active`, the top one first), each with its opacity, « Monter », « Descendre », « Masquer »;
 //  - the background, last.
+// The focus kept by the keyboard: on the button of a layer moved; a line hidden, on the « Masquer » of the line now in
+// its place, else of the one above it, else of the other list, else on the background.
 // Events (bubbling, composed; gf-map-options.js makes them changes of the look): overlay-toggle {key, on: false},
 // overlay-opacity {key, opacity, commit}, overlay-order {keys} (bottom first), landmark-toggle {key, on: false}.
 
 import { LitElement, html, css, nothing } from 'lit';
-import { DEFAULT_OPACITY, IGN_PREFIX, overlayDef } from '../core/ign-layers.js';
+import { IGN_PREFIX, defaultOpacity, overlayDef } from '../core/ign-layers.js';
 import { LANDMARKS } from '../core/map-layers.js';
 import { baseLabel, takesLandmarks } from '../core/backgrounds.js';
 import { icon } from '../core/icons.js';
@@ -24,7 +26,7 @@ export class GfLayerStack extends LitElement {
     landmarks: { attribute: false },
     /** The overlays shown, bottom first. */
     overlays: { attribute: false },
-    /** The overlays' opacity (key → 0…1; the usual one when it says none). */
+    /** The overlays' opacity (key → 0…1; its usual one when it says none: core/ign-layers.js defaultOpacity). */
     opacities: { attribute: false },
     _opacity: { state: true }
   };
@@ -82,8 +84,31 @@ export class GfLayerStack extends LitElement {
   /** The overlay just moved, whose button gets the focus back. @type {{ key: string, step: number } | null} */
   #refocus = null;
 
+  /** A line just hidden: its list (« marks », « active ») and its place there, top first. @type {{ list: string, at: number } | null} */
+  #hidden = null;
+
+  /**
+   * A line hidden (its « Masquer »): the focus, lost with its line, goes on next door (updated()).
+   * @param {string} list @param {number} at @param {string} name @param {any} detail
+   */
+  #hide(list, at, name, detail) {
+    this.#hidden = { list, at };
+    this.#emit(name, detail);
+  }
+
   /** @param {Map<string, any>} changed */
   updated(changed) {
+    if (!changed.has('overlays') && !changed.has('landmarks')) return;
+    const root = /** @type {ShadowRoot} */ (this.renderRoot);
+    if (this.#hidden) {
+      const { list, at } = this.#hidden;
+      this.#hidden = null;
+      // Its line gone, the focus with it (the line's button kept, now the next one's: left there).
+      if (!root.activeElement && document.activeElement === document.body) {
+        const here = [...root.querySelectorAll(`ul.${list} [data-hide]`)];
+        /** @type {HTMLElement | null | undefined} */ (here[Math.min(at, here.length - 1)] ?? root.querySelector('[data-hide]') ?? root.querySelector('.base'))?.focus();
+      }
+    }
     if (!changed.has('overlays') || !this.#refocus) return;
     const { key, step } = this.#refocus;
     this.#refocus = null;
@@ -110,10 +135,10 @@ export class GfLayerStack extends LitElement {
     const marks = LANDMARKS.filter(l => this.landmarks.includes(l.key) && !drawn.has(l.layer.id)).reverse();
     if (!marks.length) return nothing;
     return html`<p class="band" id="marks-title">Noms et réseaux, au-dessus de tout</p>
-      <ul class="marks" aria-labelledby="marks-title">${marks.map(m => html`<li>
+      <ul class="marks" aria-labelledby="marks-title">${marks.map((m, i) => html`<li>
         <span class="name">${m.label}</span>
-        <span class="tools"><button class="icon-btn" type="button" aria-label=${'Masquer ' + m.label}
-          @click=${() => this.#emit('landmark-toggle', { key: m.key, on: false })}>${icon('x-lg')}</button></span>
+        <span class="tools"><button class="icon-btn" type="button" data-hide aria-label=${'Masquer ' + m.label}
+          @click=${() => this.#hide('marks', i, 'landmark-toggle', { key: m.key, on: false })}>${icon('x-lg')}</button></span>
       </li>`)}</ul>`;
   }
 
@@ -124,14 +149,14 @@ export class GfLayerStack extends LitElement {
     if (!keys.length) return html`<p class="note">Aucune autre couche par-dessus le fond : cochez-en une ci-dessous.</p>`;
     return html`<ul class="active" aria-label="Couches par-dessus le fond, de la plus haute à la plus basse">${keys.map((key, i) => {
       const name = this.#name(key);
-      const pct = Math.round((this._opacity.get(key) ?? this.opacities?.[key] ?? DEFAULT_OPACITY) * 100);
+      const pct = Math.round((this._opacity.get(key) ?? this.opacities?.[key] ?? defaultOpacity(key)) * 100);
       return html`<li>
         <span class="name">${name}${keys.length > 1 ? html`<small>${i === 0 ? 'au-dessus' : i === keys.length - 1 ? 'au-dessous' : `${i + 1}ᵉ`}</small>` : nothing}</span>
         <span class="tools">
           ${keys.length > 1 ? html`
             <button class="icon-btn" type="button" data-key=${key} data-step="1" aria-label=${'Monter ' + name} ?disabled=${i === 0} @click=${() => this.#move(key, 1)}>${icon('caret-up-fill')}</button>
             <button class="icon-btn" type="button" data-key=${key} data-step="-1" aria-label=${'Descendre ' + name} ?disabled=${i === keys.length - 1} @click=${() => this.#move(key, -1)}>${icon('caret-down-fill')}</button>` : nothing}
-          <button class="icon-btn" type="button" aria-label=${'Masquer ' + name} @click=${() => this.#emit('overlay-toggle', { key, on: false })}>${icon('x-lg')}</button>
+          <button class="icon-btn" type="button" data-hide aria-label=${'Masquer ' + name} @click=${() => this.#hide('active', i, 'overlay-toggle', { key, on: false })}>${icon('x-lg')}</button>
         </span>
         <label class="opacity">Opacité
           <input type="range" min="0" max="100" step="5" .value=${String(pct)} aria-label=${'Opacité de ' + name} aria-valuetext=${pct + ' %'}
@@ -143,7 +168,7 @@ export class GfLayerStack extends LitElement {
   }
 
   render() {
-    return html`${this.#marks()}${this.#overlays()}<p class="base">Fond : <b>${baseLabel(this.base)}</b></p>`;
+    return html`${this.#marks()}${this.#overlays()}<p class="base" tabindex="-1">Fond : <b>${baseLabel(this.base)}</b></p>`;
   }
 }
 

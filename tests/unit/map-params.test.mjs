@@ -8,8 +8,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as G from '../../app/layout/grammar.js';
 import { cellMark, cellName, resolve, resolveTree, withParam } from '../../app/layout/registry.js';
-import { MAP_CONTROLS, MAP_INTENTS, MAP_LANDMARKS, MAP_LAYERS, catalogLayers, defaultControls, inWhen, landmarksText, layersOf, mapControls, overlaysOf, snapRadius, uiMode } from '../../app/layout/map-options.js';
+import { MAP_CONTROLS, MAP_INTENTS, MAP_LANDMARKS, MAP_LAYERS, catalogLayers, defaultControls, inWhen, landmarksText, layersOf, mapControls, opacText, opacitiesOf, overlaysOf, snapRadius, uiMode } from '../../app/layout/map-options.js';
 import { CATALOG_ROWS, LANDMARKS } from '../../app/core/map-layers.js';
+import { DEFAULT_OPACITY, defaultOpacity } from '../../app/core/ign-layers.js';
 
 /** A layout typed → its canonical text and what was wrong. @param {string} text */
 function read(text) {
@@ -263,6 +264,21 @@ test('les couches des thèmes du panneau ▦ par leur nom court (layers=pentes+h
   assert.equal(mark('map(layers=humides+oiseaux)'), 'couches : Zones humides et tourbières, Natura 2000 — oiseaux (ZPS)');
   // No layer's word one of « Noms et réseaux »' (two settings, never the same word for two things).
   for (const k of Object.keys(MAP_LANDMARKS)) assert.ok(!(k in MAP_LAYERS), k);
+});
+
+test('opac= : chaque couche à son opacité habituelle n’est pas écrite — l’ombrage à 40 %, la sienne, les autres à 80 % — ; une autre l’est, 80 % pour l’ombrage aussi', () => {
+  const SHADOW = 'ign:' + CATALOG_ROWS.ombrage.id;
+  assert.equal(defaultOpacity(SHADOW), 0.4);
+  assert.equal(defaultOpacity('cadastre'), DEFAULT_OPACITY);
+  assert.equal(defaultOpacity('ign:' + CATALOG_ROWS.haies.id), DEFAULT_OPACITY, 'une couche des thèmes sans opacité à elle : l’habituelle');
+  assert.equal(defaultOpacity('ign:CORINE.LANDCOVER'), DEFAULT_OPACITY);
+  assert.equal(opacText({ [SHADOW]: 0.4, cadastre: 0.8 }, ['cadastre', SHADOW], defaultOpacity), null);
+  assert.equal(opacText({}, [SHADOW], defaultOpacity), null);
+  assert.equal(opacText({ [SHADOW]: 0.8, cadastre: 0.4 }, ['cadastre', SHADOW], defaultOpacity), 'cadastre.40+estompage.80');
+  assert.deepEqual(opacitiesOf('estompage.80'), { [SHADOW]: 0.8 });
+  // The shading without opac=: none said (its own, 40 %, drawn: core/ign-layers.js defaultOpacity).
+  assert.equal(read('map(layers=ombrage)').text, '[map(layers=estompage)]');
+  assert.equal(params('map(layers=ombrage)').opac, null);
 });
 
 test('les intentions : un mot, un ensemble de réglages ; un réglage écrit à côté, avant ou après, l’emporte ; l’adresse reste courte', () => {

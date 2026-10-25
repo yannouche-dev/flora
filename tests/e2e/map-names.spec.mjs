@@ -5,7 +5,8 @@
 // every overlay, never one of them. Chosen in the panel ▦ of a map or in Réglages › Cartes (« Noms et réseaux », a
 // checkbox each, gf-map-options.js; « Masquer » in « Couches affichées », gf-layer-stack.js), kept as the maps' common
 // look (geoflora.mapLayer: nothing for the usual three, names: false for none, else landmarks: […]) and found again
-// after a reload. Not on the plan, which has its own: the checkboxes disabled there, the choice kept, nothing asked. In
+// after a reload. Not on the plan, which has its own: a map's checkboxes disabled there, the choice kept, nothing asked
+// (in Réglages, on the common plan, still chosen: the maps with their own photos or SPOT follow them). In
 // 3D, MapLibre's style has them on top of the IGN's, once each, whatever was toggled. A layer that is one of them
 // (layers=hydro) is drawn once, as that overlay. A free layout's cell says its own (noms=0, noms=1, a list —
 // noms=lieux+rail: those alone —: its panel ▦ writes it, « Revenir aux réglages communs » takes it back; kept on the
@@ -187,7 +188,7 @@ test('sur les photos : les trois habituelles demandées (PNG, du zoom 6 au 19), 
   await expect.poll(() => stored(page)).toEqual({ base: 'photo', overlays: ['contours'], distribution: false });
 });
 
-test('le plan : les six cases désactivées, leur choix gardé, la note les décrit ; rien de demandé, « Couches affichées » le dit ; SPOT : les noms ; Réglages › Cartes, les mêmes cases', async ({ app, page }) => {
+test('le plan : les six cases désactivées, leur choix gardé, la note les décrit ; rien de demandé, « Couches affichées » le dit ; SPOT : les noms ; Réglages › Cartes, les mêmes cases, toujours à cocher sur le plan commun', async ({ app, page }) => {
   await app.open(`#/layout/[map(r=1km)]?${AT}`);
   const map = page.locator('dl-map gf-map');
   const panel = await openPanel(map);
@@ -237,7 +238,8 @@ test('le plan : les six cases désactivées, leur choix gardé, la note les déc
   expect(await ticked(panel)).toEqual(['lieux', 'eau']);
   await expect.poll(() => stored(page)).toEqual({ base: 'photo', overlays: [], distribution: false, landmarks: ['eau', 'lieux'] });
 
-  // Réglages › Cartes: its words, the same checkboxes — ticked there, the Carte follows; disabled there on the plan too.
+  // Réglages › Cartes: its words, the same checkboxes — ticked there, the Carte follows; on the common plan, still
+  // chosen there (said): the maps with their own photos or SPOT follow them.
   await app.go('#/settings');
   const card = page.locator('gf-settings .maps-card');
   await expect(card).toContainText('sur les photos et SPOT, les noms et réseaux par-dessus toutes les couches');
@@ -248,10 +250,16 @@ test('le plan : les six cases désactivées, leur choix gardé, la note les déc
   await expect.poll(() => stored(page)).toEqual({ base: 'photo', overlays: [], distribution: false });
   const settingsFond = options.getByRole('group', { name: 'Fond de carte' });
   await settingsFond.getByRole('button', { name: /Plan IGN/ }).click();
-  await expect(box(options, 'routes')).toBeDisabled();
+  await expect(box(options, 'routes')).toBeEnabled();
   await expect(box(options, 'routes')).toBeChecked();
+  await expect(box(options, 'routes')).toHaveAccessibleDescription('Sans effet sur le plan IGN, qui a les siens : ces choix valent pour les cartes en photos ou SPOT.');
+  await box(options, 'rail').check();
+  await expect.poll(() => stored(page)).toEqual({ base: 'plan', overlays: [], distribution: false, landmarks: ['rail', 'routes', 'eau', 'lieux'] });
+  expect(await page.evaluate(async () => (await import('/app/core/map-settings.js')).lookFor({ base: 'photo' }).landmarks)).toEqual(['rail', 'routes', 'eau', 'lieux']);
+  await box(options, 'rail').uncheck();
   await settingsFond.getByRole('button', { name: /Photos aériennes/ }).click();
   await expect(box(options, 'routes')).toBeEnabled();
+  await expect(box(options, 'routes')).not.toHaveAttribute('aria-describedby');
   await app.go('#/map');
   await expect.poll(() => lookOf(page.locator('gf-map-page gf-map'))).toEqual({ base: 'photo', landmarks: KEYS });
 });

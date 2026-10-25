@@ -98,8 +98,8 @@ export const cleanLandmarks = list => Array.isArray(list) ? LANDMARKS.map(l => l
 
 /**
  * A layer of IGN's catalogue the panel ▦ offers in one of its themes, as core/ign-layers.js addCatalogLayer takes it:
- * named `title` there and among the layers shown; `hint`: what it shows, under its name; `opacity`: its own when first
- * ticked (the shading: the photos seen through it).
+ * named `title` there and among the layers shown; `hint`: what it shows, under its name; `opacity`: its own unless one
+ * is chosen (the shading: the photos seen through it; core/ign-layers.js defaultOpacity).
  * @typedef {{ id: string, title: string, format: string, style: string, minNative: number, maxNative: number, hint?: string, opacity?: number }} CatalogRow
  */
 
@@ -111,7 +111,7 @@ const patrinat = (id, title, hint) => ({ id: 'Patrinat_' + id, title, format: 'i
  * list ticks them (catalogRowOf). @type {Readonly<Record<string, CatalogRow>>}
  */
 export const CATALOG_ROWS = Object.freeze({
-  ombrage: { id: 'ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW', title: 'Ombrage du relief', hint: 'relief ombré, à 40 %', format: 'image/png', style: 'estompage_grayscale', minNative: 0, maxNative: 15, opacity: 0.4 },
+  ombrage: { id: 'ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW', title: 'Ombrage du relief', hint: 'relief ombré, opacité de 40 % par défaut', format: 'image/png', style: 'estompage_grayscale', minNative: 0, maxNative: 15, opacity: 0.4 },
   pentes: { id: 'GEOGRAPHICALGRIDSYSTEMS.SLOPES.MOUNTAIN', title: 'Fortes pentes', hint: 'plus de 30°', format: 'image/png', style: 'normal', minNative: 0, maxNative: 17 },
   bdforet: { id: 'LANDCOVER.FORESTINVENTORY.V2', title: 'Types de forêts', hint: 'BD Forêt : feuillus, conifères, landes', format: 'image/png', style: 'normal', minNative: 6, maxNative: 16 },
   anciennes: { id: 'IGNF_FORETS-ANCIENNES', title: 'Forêts anciennes', hint: 'déjà boisées au XIXᵉ siècle', format: 'image/png', style: 'normal', minNative: 6, maxNative: 16 },

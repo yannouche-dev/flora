@@ -327,13 +327,14 @@ export function opacitiesOf(text) {
 
 /**
  * opac= for these overlays' opacities (0…1): by layer, as layers= names them (a layer of several overlays, its first's),
- * only those not at `def`; null: none. @param {Record<string, number>} opacities @param {string[]} keys the overlays shown @param {number} def
- * @returns {string | null}
+ * only those not at their usual one (`def`: core/ign-layers.js defaultOpacity — the shading's 40 % left unsaid); null:
+ * none. @param {Record<string, number>} opacities @param {string[]} keys the overlays shown
+ * @param {(key: string) => number} def an overlay's opacity unless said @returns {string | null}
  */
 export function opacText(opacities, keys, def) {
   const parts = layersOf(keys).map(name => {
-    const v = opacities[overlaysOf([name])[0]];
-    return v === undefined || Math.abs(v - def) < 0.001 ? null : `${name}.${Math.round(v * 100)}`;
+    const key = overlaysOf([name])[0], v = opacities[key];
+    return v === undefined || Math.abs(v - def(key)) < 0.001 ? null : `${name}.${Math.round(v * 100)}`;
   }).filter(Boolean);
   return parts.length ? parts.join('+') : null;
 }

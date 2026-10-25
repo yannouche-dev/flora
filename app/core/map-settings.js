@@ -22,11 +22,12 @@
 //    Stored under the keys of before (config.storageKeys.mapLayer: { base, overlays, distribution } — base the
 //    background's key, a string: 'plan' and 'photo' as before, 'photo:2016-2020', 'spot:2020' —; « Noms et réseaux »
 //    only when not the usual ones: none as before (names: false, which a version of before reads too), others as
-//    landmarks: […]; overlayOpacity: key → 0…1, only those not at DEFAULT_OPACITY; the catalogue's layers added stay
+//    landmarks: […]; overlayOpacity: key → 0…1, only those not at their usual one (core/ign-layers.js defaultOpacity:
+//    DEFAULT_OPACITY, the shading's 40 %); the catalogue's layers added stay
 //    core/ign-layers.js's, under ignLayers) — nothing written by merely reading them.
 
 import { config } from '../config.js';
-import { DEFAULT_OPACITY, isOverlay } from './ign-layers.js';
+import { defaultOpacity, isOverlay } from './ign-layers.js';
 import { isBaseKey } from './backgrounds.js';
 import { LANDMARK_DEFAULTS, cleanLandmarks } from './map-layers.js';
 import { definePref } from './prefs.js';
@@ -134,7 +135,7 @@ export function resetMapSettings() { pref.reset(); }
  * @property {BaseKey} base                       the background (core/backgrounds.js: 'plan', 'photo', 'photo:2016-2020', 'spot:2020'…)
  * @property {string[]} landmarks                « Noms et réseaux » over the photos and SPOT's images, bottom first (core/map-layers.js LANDMARKS' keys; the plan has its own)
  * @property {string[]} overlays                  IGN overlays, bottom first: the app's own and the catalogue's added (core/ign-layers.js)
- * @property {Record<string, number>} opacities   each overlay's opacity (0…1, by 0.05) when not the usual (DEFAULT_OPACITY)
+ * @property {Record<string, number>} opacities   each overlay's opacity (0…1, by 0.05) when not its usual one (core/ign-layers.js defaultOpacity)
  */
 
 /** @type {Readonly<MapLook>} */
@@ -149,7 +150,8 @@ const objectOf = v => /** @type {Record<string, any>} */ (v && typeof v === 'obj
 const cleanOverlays = list => Array.isArray(list) ? [...new Set(list.filter(k => typeof k === 'string' && isOverlay(k)))] : [];
 
 /**
- * Opacities within 0…1 (another value dropped, as before), by 0.05; the usual one left out (it is what none means).
+ * Opacities within 0…1 (another value dropped, as before), by 0.05; each overlay's usual one left out (it is what none
+ * means: core/ign-layers.js defaultOpacity).
  * @param {unknown} value @returns {Record<string, number>}
  */
 function cleanOpacities(value) {
@@ -158,7 +160,7 @@ function cleanOpacities(value) {
   for (const [k, v] of Object.entries(objectOf(value))) {
     if (typeof v !== 'number' || !(v >= 0 && v <= 1)) continue;
     const r = Math.round(v * 20) / 20;
-    if (r !== DEFAULT_OPACITY) out[k] = r;
+    if (r !== defaultOpacity(k)) out[k] = r;
   }
   return out;
 }
