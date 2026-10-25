@@ -16,7 +16,7 @@ import { sessionOf } from './session.js';
 export const WORDS = {
   meet: { title: 'Rencontrez les plantes d’ici',
     lead: 'Une carte par plante observée autour de vous. Un coup de cœur à droite, au suivant à gauche. Vos coups de cœur rejoignent vos favoris.' },
-  harvest: { title: 'Cueillette prudente', lead: 'Ce qui se cueille autour de vous, et ses sosies dangereux. Les plus toxiques passent en premier.',
+  harvest: { title: 'Cueillette prudente', lead: 'Ce qui se cueille autour de vous, et ses sosies toxiques. Les plus toxiques passent en premier.',
     caution: { text: 'Ne cueillez jamais une plante sans être sûr de vous.' } },
   mosaic: { title: 'La mosaïque du coin', lead: 'Les photos des plantes observées près d’ici, en grand. Touchez une image pour voir toutes celles de la plante.' }
 };
@@ -142,7 +142,7 @@ export const aroundColumns = title => ({
 /** The last step's name in the steps bar, and what it shows. */
 const CARDS = {
   meet: { label: 'Rencontres', about: 'Une carte à la fois' },
-  harvest: { label: 'Cueillette', about: 'Ce qui se cueille, et ses sosies dangereux' },
+  harvest: { label: 'Cueillette', about: 'Ce qui se cueille, et ses sosies toxiques' },
   mosaic: { label: 'Mosaïque', about: 'Les photos des plantes d’ici' }
 };
 

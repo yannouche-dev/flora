@@ -26,7 +26,7 @@ export const MINIAPPS = [
     underWay: walkUnderWay,
     load: () => import('./parcours.js') },
   { id: 'cueillette', title: 'Cueillette prudente', icon: 'leaf', scene: 'harvest',
-    pitch: 'Ce qui se cueille autour de vous… et ses sosies dangereux, les mortels d’abord.',
+    pitch: 'Ce qui se cueille autour de vous… et ses sosies toxiques, les mortels d’abord.',
     underWay: () => aroundUnderWay('cueillette'),
     load: () => import('./cueillette.js') },
   { id: 'mosaique', title: 'Mosaïque', icon: 'images', scene: 'mosaic',

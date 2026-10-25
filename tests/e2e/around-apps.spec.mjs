@@ -43,7 +43,7 @@ test('Cueillette prudente : ses avertissements de sécurité, tels qu’avant ; 
   await expect(list.locator('.head h1')).toHaveText('Cueillette prudente · Autour de vous');
   // Never without a certain identification, each plant here has a dangerous look-alike, whom to call.
   const banner = list.locator('.banner-warn[role="note"]');
-  await expect(banner).toContainText('Ne cueillez jamais une plante sans identification certaine : chacune de ces plantes a un sosie dangereux (liste de l’Anses et des Centres antipoison).');
+  await expect(banner).toContainText('Ne cueillez jamais une plante sans identification certaine : chacune de ces plantes a un sosie toxique (liste de l’Anses et des Centres antipoison).');
   await expect(banner).toContainText('Centre antipoison : centres-antipoison.net (liste officielle) · 15 ou 112 en cas de détresse vitale.');
   // Only the plants of a dangerous confusion (2 of the 12 around), the deadliest look-alike first.
   await expect(list.locator('.head .where')).toHaveText('2 plantes à moins de 1 km');
@@ -51,7 +51,7 @@ test('Cueillette prudente : ses avertissements de sécurité, tels qu’avant ; 
   await expect(top).toHaveAttribute('data-id', String(plantId('Allium ursinum')));
   await expect(top.locator('.bio li').first()).toHaveText('⚠️ Ne me confondez pas avec Colchique (mortel). Partie : feuilles.');
   await expect(top.locator('.bio li').nth(1)).toHaveText('⚠️ Ne me confondez pas avec Muguet (très toxique). Partie : feuilles.');
-  await expect(top.locator('.bio')).toContainText('🍽️ Partie consommée selon l’Anses : feuilles. J’ai des sosies dangereux (2) : lisez ma fiche avant de passer à table.');
+  await expect(top.locator('.bio')).toContainText('🍽️ Partie consommée selon l’Anses : feuilles. J’ai des sosies toxiques (2) : lisez ma fiche avant de passer à table.');
   await page.keyboard.press('ArrowLeft');
   await expect(top).toHaveAttribute('data-id', String(plantId('Conium maculatum')));
   await expect(top.locator('.bio li').first()).toHaveText('☠️ Je suis le sosie très toxique de Persil plat.');
@@ -125,7 +125,7 @@ test('Cueillette prudente : la colchique vue une fois, derrière plus de 120 pla
   await expect.poll(async () => (await kept(page, 'cueillette'))?.avoided).toEqual([]);
 });
 
-test('Cueillette prudente : aucune plante à sosie dangereux observée — un seul message (pas observée ne veut pas dire absente), et plus loin', async ({ app, page }) => {
+test('Cueillette prudente : aucune plante à sosie toxique observée — un seul message (pas observée ne veut pas dire absente), et plus loin', async ({ app, page }) => {
   await answerSpecies(page, { more: 12 });
   await app.open('#/app/cueillette');
   await toCards(page, 'cueillette');

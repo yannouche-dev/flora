@@ -511,7 +511,7 @@ export class MaAroundList extends LitElement {
         <button class="link" type="button" @click=${() => app.go('start')}>Changer de lieu</button>
       </div>
       ${this.harvest ? html`<p class="banner-warn" role="note">${icon('exclamation-triangle-fill')}<span>Ne cueillez jamais une plante sans identification certaine${s.unread ? ''
-        : ' : chacune de ces plantes a un sosie dangereux (liste de l’Anses et des Centres antipoison)'}.
+        : ' : chacune de ces plantes a un sosie toxique (liste de l’Anses et des Centres antipoison)'}.
         <span class="sos-line">${emergency()}.</span></span></p>` : nothing}
       ${this.harvest && s.unread && !s.loading ? html`<p class="banner-warn" role="alert">${icon('exclamation-octagon-fill')}<span><b>${UNREAD_LOOKALIKES}</b>
         <button class="link" type="button" @click=${() => s.load()}>Réessayer</button></span></p>` : nothing}

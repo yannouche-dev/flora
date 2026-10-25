@@ -192,8 +192,8 @@ export function bio(c, months) {
     // toxic (TPPT 2 or more, ANSM), protected or regulated, whose toxicity could not be read, or reached by its genus.
     const kept = reasons.some(r => r.kind === 'protected' || r.kind === 'protected-elsewhere' || r.kind === 'regulated');
     out.push(!v.toxic && !kept && !v.unread && v.eaten.length
-      ? `🍽️ Partie consommée selon l’Anses : ${v.eaten.join(', ')}. J’ai des sosies dangereux (${n}) : lisez ma fiche avant de passer à table.`
-      : `⚠️ J’ai des sosies dangereux (${n}). Lisez ma fiche avant toute cueillette.`);
+      ? `🍽️ Partie consommée selon l’Anses : ${v.eaten.join(', ')}. J’ai des sosies toxiques (${n}) : lisez ma fiche avant de passer à table.`
+      : `⚠️ J’ai des sosies toxiques (${n}). Lisez ma fiche avant toute cueillette.`);
   }
   if (c.blooming) out.push('🌼 En fleur en ce moment : c’est le jour de la photo.');
   else if (months.size) out.push(`🗓️ Je fleuris de ${MONTH[[...months][0]]} à ${MONTH[[...months][months.size - 1]]}. Repassez me voir.`);

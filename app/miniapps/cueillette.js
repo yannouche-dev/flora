@@ -29,7 +29,7 @@ export default defineMiniApp({
   title: 'Cueillette prudente',
   icon: 'leaf',
   scene: 'harvest',
-  pitch: 'Ce qui se cueille autour de vous… et ses sosies dangereux, les mortels d’abord.',
+  pitch: 'Ce qui se cueille autour de vous… et ses sosies toxiques, les mortels d’abord.',
   uses: ['inaturalist'],
   exit: { label: 'Quitter l’activité' },
   owns: { keys: ['geoflora.app.cueillette.sheet'], reset: () => { forgetGame('cueillette'); return forgetMadeBy('cueillette'); } },
