@@ -1,6 +1,6 @@
 # Lexique de l'interface
 
-Les mots de l'interface de GeoFlora, chacun avec sa définition et son nom dans le code. L'interface dit toujours le mot de gauche ; le code garde le sien. Le code garde ses noms : identifiants, fichiers, clés de stockage et messages de la console (`mini-app <id>: …`).
+Les mots de l'interface de GeoFlora, chacun avec sa définition et son nom dans le code. L'interface dit toujours le mot de gauche ; le code garde le sien. Le code garde ses noms : identifiants, fichiers, clés de stockage et messages de la console (`mini-app <id>: …`). Un test le vérifie : `tests/unit/lexicon.test.mjs` lit chaque texte de `app/` et refuse les mots remplacés.
 
 | Terme | Définition | Dans le code |
 | --- | --- | --- |
