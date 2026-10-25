@@ -1,12 +1,13 @@
 // @ts-check
 // IGN Géoplateforme (free, no API key): its WMTS layers as Leaflet tile layers. The layers themselves (overlays, the
-// catalogue's added, opacities) are core/ign-layers.js's, without Leaflet: re-exported here; the backgrounds, and the
-// names over the photos and SPOT's images, are core/backgrounds.js's.
+// catalogue's added, opacities) are core/ign-layers.js's, without Leaflet: re-exported here; « Noms et réseaux » over
+// the photos and SPOT's images core/map-layers.js's; the backgrounds core/backgrounds.js's.
 
 import * as L from 'leaflet';
 import { moduleOn } from './modules.js';
 import { DEFAULT_OPACITY, overlayDef, wmtsUrl } from './ign-layers.js';
-import { NAMES, NAMES_LAYERS, parseBase } from './backgrounds.js';
+import { parseBase, takesLandmarks } from './backgrounds.js';
+import { LANDMARKS, LANDMARK_MAX_ZOOM } from './map-layers.js';
 
 export { OVERLAYS, wmtsUrl, isOverlay, overlayDef, addCatalogLayer, DEFAULT_OPACITY } from './ign-layers.js';
 
@@ -45,7 +46,8 @@ const CachedTileLayer = L.TileLayer.extend({
  * @param {number} [under] zooms before its first native one it still shows, its tiles made smaller (a background's: 1 —
  *   the photos of a year from zoom 5, France whole on a phone; an overlay's never, a far one would ask too many tiles)
  * @param {{ zIndex?: number, maxZoom?: number }} [fixed] its place among the map's tile layers, how far in it shows,
- *   when fixed (the names: over every overlay, not past one zoom after their last native one)
+ *   when fixed (« Noms et réseaux »: over every overlay, not past LANDMARK_MAX_ZOOM — class gf-capped: the 3D map hides
+ *   it past that zoom too, core/gl-style.js)
  */
 function wmts(def, key, opacity, minZoom = 5, under = 0, fixed = {}) {
   const Layer = moduleOn('ignMaps') ? L.TileLayer : CachedTileLayer;
@@ -58,40 +60,43 @@ function wmts(def, key, opacity, minZoom = 5, under = 0, fixed = {}) {
     // CORS requests give the service worker readable responses (opaque ones cost ~7 MB of quota each).
     crossOrigin: 'anonymous',
     opacity,
-    className: 'gf-tiles-' + key + (def.grey ? ' gf-grey' : ''),
+    className: 'gf-tiles-' + key + (def.grey ? ' gf-grey' : '') + (fixed.maxZoom ? ' gf-capped' : ''),
     ...fixed
   });
 }
 
 /**
- * The names' place among the map's tile layers (Leaflet's z-index, the 3D map's order: gf-map-gl.js), their roads,
- * rivers and names one above the other from it: over the background (1, or under) and every overlay (2 … NAMES_Z - 1,
- * gf-map.js), under GBIF's distribution (20, 21) and the observations' tiles (23 on).
+ * The place of « Noms et réseaux » among the map's tile layers (Leaflet's z-index, the 3D map's order: gf-map-gl.js),
+ * one above the other from it in core/map-layers.js LANDMARKS' order (the boundaries 14 … the places' names 19; the
+ * roads, the rivers and the names where they were before the others came): over the background (1, or under) and every
+ * overlay (2 … LANDMARK_Z - 1, gf-map.js), under GBIF's distribution (20, 21) and the observations' tiles (23 on).
  */
-export const NAMES_Z = 17;
+export const LANDMARK_Z = 14;
 
 /**
- * The names' layers drawn over these overlays (core/backgrounds.js NAMES_LAYERS' identifiers, bottom first): all but
- * one an overlay already shows (« Cours d'eau », the catalogue's « Hydrographie », « Routes », « Noms »: the same WMTS
- * layer) — drawn there only, at its place and its opacity, never twice. @param {string[]} overlays @returns {string[]}
+ * « Noms et réseaux » drawn over this background and these overlays: those the look says (`landmarks`), bottom first —
+ * none on the plan, which has its own (core/backgrounds.js takesLandmarks), nor one an overlay already shows (« Cours
+ * d'eau » of a cell's layers=hydro, the catalogue's « Hydrographie », « Routes », « Noms »: the same WMTS layer), drawn
+ * there only, at its place and its opacity, never twice. @param {readonly string[]} landmarks @param {readonly string[]} overlays
+ * @param {unknown} base @returns {string[]} their keys
  */
-export function namesOver(overlays) {
+export function landmarksShown(landmarks, overlays, base) {
+  if (!takesLandmarks(base)) return [];
   const shown = new Set(overlays.flatMap(key => overlayDef(key)?.layers.map(l => l.id) ?? []));
-  return NAMES_LAYERS.map(l => l.id).filter(id => !shown.has(id));
+  return LANDMARKS.filter(l => landmarks.includes(l.key) && !shown.has(l.layer.id)).map(l => l.key);
 }
 
 /**
  * A background map (core/backgrounds.js: one of a year, the greyed photos under it, is a group of both, bottom first),
- * the names over it (NAMES: a group of three, at NAMES_Z and above, in NAMES_LAYERS' order) or an overlay as one
- * Leaflet layer. `minZoom`: from how far out it shows (the IGN plan and photos cover the whole world at small scales; 5
- * frames France; a year's photos from one zoom before their own first, an overlay and the names from their own first);
- * `opacity`: an overlay's (the map's look), a background and the names always opaque.
+ * one of « Noms et réseaux » (core/map-layers.js LANDMARKS: at its place from LANDMARK_Z) or an overlay as one Leaflet
+ * layer. `minZoom`: from how far out it shows (the IGN plan and photos cover the whole world at small scales; 5 frames
+ * France; a year's photos from one zoom before their own first, an overlay and « Noms et réseaux » from their own
+ * first); `opacity`: an overlay's (the map's look), a background and « Noms et réseaux » always opaque.
  * @param {string} key @param {number} [minZoom] @param {number} [opacity]
  */
 export function tileLayer(key, minZoom, opacity = DEFAULT_OPACITY) {
-  // The names one zoom past their last native one, not further: their words twice as big there, never eight times
-  // (zoom 21, a plant's).
-  if (key === NAMES) return L.layerGroup(NAMES_LAYERS.map((l, i) => wmts(l, key, 1, minZoom, 0, { zIndex: NAMES_Z + i, maxZoom: (l.maxNative ?? 19) + 1 })));
+  const mark = LANDMARKS.findIndex(l => l.key === key);
+  if (mark >= 0) return wmts(LANDMARKS[mark].layer, key, 1, minZoom, 0, { zIndex: LANDMARK_Z + mark, maxZoom: LANDMARK_MAX_ZOOM });
   const background = parseBase(key);
   const layers = background ? background.layers.map(l => wmts(l, key, 1, minZoom, 1))
     : /** @type {LayerDef} */ (overlayDef(key)).layers.map(l => wmts(l, key, opacity, minZoom));

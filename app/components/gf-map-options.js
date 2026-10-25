@@ -2,8 +2,9 @@
 // The maps' options, one UI wherever they are changed: the panel ▦ of every map (gf-map-panel.js, scope="map") and
 // Réglages › Cartes (gf-settings.js, scope="defaults") — « Affichage » (2D or 3D, the 3D options folded:
 // map3d-options.js), « Fond » (the plan, the aerial photos — the most recent, of a year, of a period, historical —, SPOT's
-// satellite images of a year: core/backgrounds.js; over the photos and SPOT's, the names — roads, rivers, places —, a
-// checkbox), and IGN's layers (terrain, the whole catalogue: gf-ign-layers.js, the rules of picking).
+// satellite images of a year: core/backgrounds.js; over the photos and SPOT's, the names — roads, rivers, places: the
+// usual « Noms et réseaux » of core/map-layers.js —, a checkbox), and IGN's layers (terrain, the whole catalogue:
+// gf-ign-layers.js, the rules of picking).
 // Every option is the maps' common setting (core/map-settings.js), unless the map shown has its own look (`own`: a free
 // layout's cell, a plant sheet's map block): then it says so, its changes are its own, and « Revenir aux réglages
 // communs » lets it go. 2D / 3D and the 3D options are always common (a map always drawn one way says why).
@@ -17,7 +18,8 @@
 
 import { LitElement, html, css, nothing } from 'lit';
 import { OVERLAYS, addCatalogLayer, overlayDef } from '../core/ign-layers.js';
-import { LATEST_SPOT, PHOTO_HISTORIC, PHOTO_PERIODS, PHOTO_YEARS, SPOT_YEARS, fillerNote, parseBase, takesNames, whenLabel } from '../core/backgrounds.js';
+import { LATEST_SPOT, PHOTO_HISTORIC, PHOTO_PERIODS, PHOTO_YEARS, SPOT_YEARS, fillerNote, parseBase, takesLandmarks, whenLabel } from '../core/backgrounds.js';
+import { LANDMARK_DEFAULTS } from '../core/map-layers.js';
 import { mapLook, mapLookEvents, mapSettings, mapSettingsEvents, setMapLook, setMapSettings } from '../core/map-settings.js';
 import { moduleEvents, moduleOn } from '../core/modules.js';
 import { hasWebGL2 } from '../core/maplibre.js';
@@ -46,8 +48,8 @@ const KINDS = [
  * (gf-plant-detail.js). @param {Partial<MapLook>} own @param {string} base the background it shows
  */
 export function ownWords(own, base) {
-  const names = takesNames(base) ? 'son propre choix des noms' : 'son propre choix des noms, sans effet sur le plan IGN';
-  const fond = 'base' in own ? 'son propre fond' : 'names' in own ? names : '';
+  const names = takesLandmarks(base) ? 'son propre choix des noms' : 'son propre choix des noms, sans effet sur le plan IGN';
+  const fond = 'base' in own ? 'son propre fond' : 'landmarks' in own ? names : '';
   const layers = 'overlays' in own || 'opacities' in own ? 'ses propres couches' : '';
   return [fond, layers].filter(Boolean).join(' et ');
 }
@@ -147,7 +149,7 @@ export class GfMapOptions extends LitElement {
     const l = this.#defaults ? null : this.look;
     if (l) return l;
     const c = mapLook();
-    return { base: c.base, names: c.names, overlays: [...c.overlays], opacities: { ...c.opacities } };
+    return { base: c.base, landmarks: [...c.landmarks], overlays: [...c.overlays], opacities: { ...c.opacities } };
   }
 
   /** @param {string} name @param {any} [detail] */
@@ -236,8 +238,9 @@ export class GfMapOptions extends LitElement {
    * photos their date (the most recent, a year, a period, historical ones), under SPOT its year, each a list; under the
    * photos of a year or a period, where they are missing (the most recent ones, greyed): the list's description, said
    * when a date brings it — on a map, by its panel's one live region (`options-say`: the panel is a modal, one region
-   * says all); in Réglages, by its own polite region. Over the photos and SPOT's, the names (a checkbox, on by default) —
-   * not on the plan, which has its own: no checkbox there, as no date. @param {MapLook} look
+   * says all); in Réglages, by its own polite region. Over the photos and SPOT's, the names (a checkbox, on by default:
+   * ticked, the usual « Noms et réseaux », core/map-layers.js LANDMARK_DEFAULTS; unticked, none) — not on the plan, which
+   * has its own: no checkbox there, as no date. @param {MapLook} look
    */
   #bases(look) {
     const kind = parseBase(look.base)?.kind ?? 'photo';
@@ -269,8 +272,9 @@ export class GfMapOptions extends LitElement {
       : kind === 'spot' ? html`<div class="when"><label for=${id}>Année des images</label>
         <select id=${id} @change=${choose}>${SPOT_YEARS.map(y => option('spot:' + y, y))}</select></div>` : nothing}
       ${this.#defaults ? html`<div aria-live="polite">${noteView}</div>` : noteView}
-      ${takesNames(look.base) ? html`<label class="layer">
-        <input type="checkbox" .checked=${look.names} @change=${(/** @type {any} */ e) => this.#edit({ names: e.target.checked })} />
+      ${takesLandmarks(look.base) ? html`<label class="layer">
+        <input type="checkbox" .checked=${look.landmarks.length > 0}
+          @change=${(/** @type {any} */ e) => this.#edit({ landmarks: e.target.checked ? [...LANDMARK_DEFAULTS] : [] })} />
         <span>Afficher les noms : villes, routes, rivières, forêts</span>
       </label>` : nothing}`;
   }

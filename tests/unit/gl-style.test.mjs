@@ -1,12 +1,13 @@
 // app/core/gl-style.js: the 3D maps' style made from what the 2D map shows — each IGN layer at the same zooms (every
-// background: the photos of a year over the most recent ones greyed, SPOT's; the names over them, on top of every
-// overlay, once each, in their order), the cache-only tiles with the module off, the relief, its shading, the buildings, the vector plan, the sky, the globe,
+// background: the photos of a year over the most recent ones greyed, SPOT's; « Noms et réseaux » over them, on top of
+// every overlay, once each, in their order), the cache-only tiles with the module off, the relief, its shading, the buildings, the vector plan, the sky, the globe,
 // the sun's light, and the 2D map's lines and areas styled as map.css styles them.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { NAMES_Z, OVERLAYS, addCatalogLayer, namesOver, tileLayer, wmtsUrl } from '../../app/core/ign.js';
-import { NAMES, NAMES_LAYERS, PHOTO_HISTORIC, PHOTO_PERIODS, PHOTO_YEARS, SPOT_YEARS, baseLayers } from '../../app/core/backgrounds.js';
+import { LANDMARK_Z, OVERLAYS, addCatalogLayer, landmarksShown, tileLayer, wmtsUrl } from '../../app/core/ign.js';
+import { PHOTO_HISTORIC, PHOTO_PERIODS, PHOTO_YEARS, SPOT_YEARS, baseLayers } from '../../app/core/backgrounds.js';
+import { LANDMARKS, LANDMARK_DEFAULTS } from '../../app/core/map-layers.js';
 import { MAP_DEFAULTS } from '../../app/core/map-settings.js';
 import {
   BUILDINGS_LAYER, BUILDING_HEIGHT, CACHE_PROTOCOL, DEM_TILES, IGN_VECTOR_TILES, buildStyle, circlePolygon, describeTileLayer,
@@ -143,63 +144,88 @@ test('core/ign.js : les photos d’une année dès un zoom avant leur premier (l
   assert.equal(/** @type {any} */ (tileLayer('contours', 5)).options.minZoom, 6);
 });
 
-test('les noms par-dessus (core/ign.js) : routes, hydrographie, noms en PNG, opaques, dès leur premier zoom natif, au-dessus de toute surcouche', () => {
-  const names = /** @type {any} */ (tileLayer(NAMES, 5)).getLayers();
+test('noms et réseaux (core/ign.js) : six couches PNG, opaques, une chacune, l’une au-dessus de l’autre au-dessus de toute surcouche, de leur premier zoom natif au 19', () => {
+  const marks = LANDMARKS.map(m => /** @type {any} */ (tileLayer(m.key, 5)));
   const layerOf = (/** @type {string} */ url) => /LAYER=([^&]+)/.exec(url)?.[1];
-  assert.deepEqual(names.map((/** @type {any} */ l) => layerOf(l._url)), ['TRANSPORTNETWORKS.ROADS', 'HYDROGRAPHY.HYDROGRAPHY', 'GEOGRAPHICALNAMES.NAMES']);
-  assert.deepEqual(names.map((/** @type {any} */ l) => l._url), NAMES_LAYERS.map(l => wmtsUrl(l)));
-  for (const [i, l] of names.entries()) {
+  assert.deepEqual(marks.map(l => layerOf(l._url)), [
+    'LIMITES_ADMINISTRATIVES_EXPRESS.LATEST', 'BUILDINGS.BUILDINGS', 'TRANSPORTNETWORKS.RAILWAYS', 'TRANSPORTNETWORKS.ROADS', 'HYDROGRAPHY.HYDROGRAPHY', 'GEOGRAPHICALNAMES.NAMES'
+  ]);
+  assert.deepEqual(marks.map(l => l._url), LANDMARKS.map(m => wmtsUrl(m.layer)));
+  for (const [i, l] of marks.entries()) {
+    const { key, layer } = LANDMARKS[i];
+    assert.equal(l.getLayers, undefined, key + ' : une couche à elle, jamais un groupe');
     assert.match(l._url, /&STYLE=normal&FORMAT=image%2Fpng$/);
-    assert.deepEqual([l.options.zIndex, l.options.opacity, l.options.className], [NAMES_Z + i, 1, 'gf-tiles-names'], 'l’un au-dessus de l’autre, opaques');
+    assert.deepEqual([l.options.zIndex, l.options.opacity, l.options.className], [LANDMARK_Z + i, 1, `gf-tiles-${key} gf-capped`], 'l’une au-dessus de l’autre, opaques');
     // Never before their first native zoom (6): a far one would ask too many tiles; a map going further out neither.
-    // One zoom past their last (19), not further: their words twice as big there, never eight times (zoom 21).
-    assert.deepEqual([l.options.minZoom, l.options.minNativeZoom, l.options.maxNativeZoom, l.options.maxZoom], [6, 6, 18, 19]);
-    assert.equal(/** @type {any} */ (tileLayer(NAMES, 1)).getLayers()[i].options.minZoom, 6);
+    // To 19, not further: the words of most (native 18) twice as big there, never eight times (zoom 21).
+    assert.deepEqual([l.options.minZoom, l.options.minNativeZoom, l.options.maxNativeZoom, l.options.maxZoom], [6, 6, layer.maxNative, 19], key);
+    assert.equal(/** @type {any} */ (tileLayer(key, 1)).options.minZoom, 6);
     const spec = /** @type {any} */ (describeTileLayer(l, i));
-    assert.deepEqual([spec.key, spec.base, spec.grey, spec.minzoom, spec.maxzoom, spec.nativeMin, spec.nativeMax], ['names', false, false, 5, 19, 6, 18], 'en 3D : pas un fond, dès le zoom 5 de MapLibre, jusqu’au 19 de Leaflet');
+    assert.deepEqual([spec.key, spec.base, spec.grey, spec.capped, spec.minzoom, spec.maxzoom, spec.nativeMin, spec.nativeMax], [key, false, false, true, 5, 19, 6, layer.maxNative],
+      'en 3D : pas un fond, dès le zoom 5 de MapLibre, jusqu’au 19 de Leaflet');
   }
-  // Over every overlay (the last ones drawn at NAMES_Z - 1 at most: gf-map.js), under GBIF's distribution (20).
-  assert.ok(NAMES_Z + names.length - 1 < 20);
+  // The usual ones where the names were before the others came (17, 18, 19): the overlays under them as before.
+  assert.deepEqual(LANDMARK_DEFAULTS.map(k => /** @type {any} */ (tileLayer(k, 5)).options.zIndex), [17, 18, 19]);
+  // Over every overlay (the last ones drawn at LANDMARK_Z - 1 at most: gf-map.js), under GBIF's distribution (20).
+  assert.ok(LANDMARK_Z + LANDMARKS.length - 1 < 20);
+  // Only theirs is capped: an overlay, a background shown to the map's last zoom.
+  for (const key of ['contours', 'photo', 'plan']) {
+    const l = /** @type {any} */ (tileLayer(key, 5));
+    assert.ok(!/gf-capped/.test(l.options.className), key);
+    assert.equal(/** @type {any} */ (describeTileLayer(l, 0)).capped, false, key);
+  }
 });
 
-test('les noms par-dessus et une surcouche de la même couche WMTS (« Cours d’eau », « Hydrographie », « Routes », « Noms » du catalogue) : dessinée une fois, là où est la surcouche', () => {
-  const ids = NAMES_LAYERS.map(l => l.id);
-  assert.deepEqual(namesOver([]), ids);
-  assert.deepEqual(namesOver(['contours', 'cadastre', 'unknown']), ids, 'les autres couches n’y changent rien');
-  for (const l of NAMES_LAYERS) addCatalogLayer({ ...l, title: l.id, style: 'normal', minNative: l.minNative ?? 0, maxNative: l.maxNative ?? 19, cat: 'x', sub: 'y' });
-  assert.deepEqual(namesOver(['ign:HYDROGRAPHY.HYDROGRAPHY']), ['TRANSPORTNETWORKS.ROADS', 'GEOGRAPHICALNAMES.NAMES']);
-  assert.deepEqual(namesOver(['forets', 'ign:GEOGRAPHICALNAMES.NAMES', 'ign:TRANSPORTNETWORKS.ROADS']), ['HYDROGRAPHY.HYDROGRAPHY']);
-  assert.deepEqual(namesOver(ids.map(id => 'ign:' + id)), []);
+test('noms et réseaux dessinés (landmarksShown) : ceux du look, rien sur le plan, et une surcouche de la même couche WMTS (« Cours d’eau », « Hydrographie », « Routes », « Noms » du catalogue) dessinée une fois, là où est la surcouche', () => {
+  const all = LANDMARKS.map(m => m.key);
+  assert.deepEqual(landmarksShown(LANDMARK_DEFAULTS, [], 'photo'), ['routes', 'eau', 'lieux']);
+  assert.deepEqual(landmarksShown(['lieux', 'limites', 'lune'], [], 'spot:2020'), ['limites', 'lieux'], 'dans leur ordre, les leurs seulement');
+  assert.deepEqual(landmarksShown(all, [], 'photo:2016-2020'), all);
+  assert.deepEqual(landmarksShown([], ['contours'], 'photo'), []);
+  // The plan has its own; nothing for a background unknown.
+  for (const base of ['plan', 'names', 'photo:1999', null]) assert.deepEqual(landmarksShown(all, [], base), [], String(base));
+  assert.deepEqual(landmarksShown(all, ['contours', 'cadastre', 'unknown'], 'photo'), all, 'les autres couches n’y changent rien');
+  for (const m of LANDMARKS) addCatalogLayer({ ...m.layer, title: m.layer.id, about: '', style: 'normal', minNative: m.layer.minNative ?? 0, maxNative: m.layer.maxNative ?? 19, cat: 'x', sub: 'y' });
+  assert.deepEqual(landmarksShown(LANDMARK_DEFAULTS, ['ign:HYDROGRAPHY.HYDROGRAPHY'], 'photo'), ['routes', 'lieux']);
+  assert.deepEqual(landmarksShown(LANDMARK_DEFAULTS, ['forets', 'ign:GEOGRAPHICALNAMES.NAMES', 'ign:TRANSPORTNETWORKS.ROADS'], 'photo'), ['eau']);
+  assert.deepEqual(landmarksShown(all, ['ign:BUILDINGS.BUILDINGS', 'ign:LIMITES_ADMINISTRATIVES_EXPRESS.LATEST'], 'photo'), ['rail', 'routes', 'eau', 'lieux']);
+  assert.deepEqual(landmarksShown(all, LANDMARKS.map(m => 'ign:' + m.layer.id), 'photo'), []);
 });
 
-test('les couches de la carte 2D en 3D (tileSpecs) : chacune une fois, par leur place — le fond, les surcouches, les noms dessus dans leur ordre, GBIF — ; dans le style, les noms en dernier des couches de l’IGN', () => {
+test('les couches de la carte 2D en 3D (tileSpecs) : chacune une fois, par leur place — le fond, les surcouches, noms et réseaux dessus dans leur ordre, GBIF — ; dans le style, eux en dernier des couches de l’IGN', () => {
   const photo = leafletLike('photo', BASES.photo.layers[0], true);
   const contours = { ...leafletLike('contours', OVERLAYS.contours.layers[0], false) };
   contours.options = { ...contours.options, zIndex: 2 };
   const cadastre = leafletLike('cadastre', OVERLAYS.cadastre.layers[0], false);
-  // The last overlay of many: at NAMES_Z - 1 (gf-map.js #restack), still under the names.
-  cadastre.options = { ...cadastre.options, zIndex: NAMES_Z - 1 };
-  const names = /** @type {any} */ (tileLayer(NAMES, 5)).getLayers();
+  // The last overlay of many: at LANDMARK_Z - 1 (gf-map.js #restack), still under the landmarks.
+  cadastre.options = { ...cadastre.options, zIndex: LANDMARK_Z - 1 };
+  const [rail, routes, eau, lieux] = ['rail', 'routes', 'eau', 'lieux'].map(k => /** @type {any} */ (tileLayer(k, 5)));
   const gbif = { _url: 'https://api.gbif.org/v2/map/occurrence/density/{z}/{x}/{y}@1x.png?taxonKey=1', options: { className: 'gf-tiles-gbif', opacity: 0.85, zIndex: 20 } };
-  // The order they came in (Leaflet's stamp): the names before the overlays (a map that showed them first).
-  const came = new Map([names[0], names[1], names[2], gbif, photo, contours, cadastre].map((l, i) => [l, i]));
+  // iNaturalist's grid, shown to zoom 9 only: hidden in 3D by the map's own zooms, never capped like the landmarks.
+  const grid = { _url: 'https://api.inaturalist.org/v1/grid/{z}/{x}/{y}.png?taxon_id=1', options: { className: 'gf-tiles-obs gf-tiles-obs-grid', opacity: 0.75, zIndex: 23, maxZoom: 9 } };
+  // The order they came in (Leaflet's stamp): the landmarks before the overlays (a map that showed them first).
+  const came = new Map([routes, eau, lieux, rail, gbif, grid, photo, contours, cadastre].map((l, i) => [l, i]));
   const orderOf = (/** @type {any} */ l) => /** @type {number} */ (came.get(l));
   // Shuffled, some given twice (added again: the same layers): each once, in their place.
-  const specs = tileSpecs([gbif, names[2], contours, names[0], photo, names[1], names[2], cadastre, contours, names[0]], orderOf);
-  assert.deepEqual(specs.map(t => t.key), ['photo', 'contours', 'cadastre', 'names', 'names', 'names', 'gbif']);
+  const specs = tileSpecs([gbif, lieux, contours, routes, grid, photo, eau, lieux, cadastre, rail, contours, routes], orderOf);
+  assert.deepEqual(specs.map(t => t.key), ['photo', 'contours', 'cadastre', 'rail', 'routes', 'eau', 'lieux', 'gbif', 'obs']);
   assert.deepEqual(specs.map(t => t.id), specs.map((t, i) => 'gf-tiles-' + i), 'un identifiant chacune, jamais deux fois le même');
   const s = style(specs);
   const rasters = s.layers.filter((/** @type {any} */ l) => l.type === 'raster');
-  assert.deepEqual(rasters.map((/** @type {any} */ l) => l.metadata['gf:key']), ['photo', 'contours', 'cadastre', 'names', 'names', 'names', 'gbif']);
+  assert.deepEqual(rasters.map((/** @type {any} */ l) => l.metadata['gf:key']), ['photo', 'contours', 'cadastre', 'rail', 'routes', 'eau', 'lieux', 'gbif', 'obs']);
   const ids = s.layers.map((/** @type {any} */ l) => l.id);
   assert.equal(ids[ids.indexOf(specs[0].id) + 1], 'gf-hillshade', 'l’ombrage juste au-dessus du fond, sous les noms');
-  const named = rasters.filter((/** @type {any} */ l) => l.metadata['gf:key'] === 'names');
-  assert.equal(named.length, 3);
-  assert.deepEqual(named.map((/** @type {any} */ l) => /LAYER=([^&]+)/.exec(s.sources[l.source].tiles[0])?.[1]), ['TRANSPORTNETWORKS.ROADS', 'HYDROGRAPHY.HYDROGRAPHY', 'GEOGRAPHICALNAMES.NAMES']);
-  assert.deepEqual(named.map((/** @type {any} */ l) => [l.paint['raster-opacity'], l.minzoom, l.maxzoom, s.sources[l.source].minzoom, s.sources[l.source].maxzoom]), [[1, 5, 19, 6, 18], [1, 5, 19, 6, 18], [1, 5, 19, 6, 18]], 'hidden past their last zoom in 3D too, never enlarged');
+  const MARKS = ['rail', 'routes', 'eau', 'lieux'];
+  const named = rasters.filter((/** @type {any} */ l) => MARKS.includes(l.metadata['gf:key']));
+  assert.deepEqual(named.map((/** @type {any} */ l) => /LAYER=([^&]+)/.exec(s.sources[l.source].tiles[0])?.[1]),
+    ['TRANSPORTNETWORKS.RAILWAYS', 'TRANSPORTNETWORKS.ROADS', 'HYDROGRAPHY.HYDROGRAPHY', 'GEOGRAPHICALNAMES.NAMES']);
+  assert.deepEqual(named.map((/** @type {any} */ l) => [l.paint['raster-opacity'], l.minzoom, l.maxzoom, s.sources[l.source].minzoom, s.sources[l.source].maxzoom]),
+    MARKS.map(() => [1, 5, 19, 6, 18]), 'hidden past their last zoom in 3D too, never enlarged');
+  // Only theirs: the others to the map's last zoom (the grid's own zooms are its source's business).
+  for (const l of rasters.filter((/** @type {any} */ x) => !MARKS.includes(x.metadata['gf:key']))) assert.ok(!('maxzoom' in l), l.metadata['gf:key']);
   // Not a background: never dimmed at night, nor drawn from afar on the globe.
   const night = style(specs, { sun: { azimuth: 0, altitude: -20 }, settings: { globe: true } });
-  for (const l of night.layers.filter((/** @type {any} */ x) => x.metadata?.['gf:key'] === 'names')) {
+  for (const l of night.layers.filter((/** @type {any} */ x) => MARKS.includes(x.metadata?.['gf:key']))) {
     assert.ok(!('raster-brightness-max' in l.paint));
     assert.equal(l.minzoom, 5);
   }

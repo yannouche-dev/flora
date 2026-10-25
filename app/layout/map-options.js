@@ -4,26 +4,19 @@
 // keep (when=mois), its controls by the cell's width (ui=auto). Pure (no DOM, no Leaflet), tested under Node; the
 // rendering is cells.js' (dl-map).
 
+import { CATALOG_ROWS } from '../core/map-layers.js';
+
 /**
  * A layer of the Géoplateforme's catalogue (data/ign-catalog.json) the map adds as an overlay (core/ign.js
- * addCatalogLayer: its key « ign:<id> »).
+ * addCatalogLayer: its key « ign:<id> »): those of the panel's themes (core/map-layers.js CATALOG_ROWS), the same
+ * whichever adds it.
  * @typedef {{ id: string, title: string, format: string, style: string, minNative: number, maxNative: number }} MapCatalogLayer
  * @typedef {{ label: string, keys: string[], catalog?: MapCatalogLayer[] }} MapLayer
  *   `keys`: the overlays of gf-map it shows (core/ign.js OVERLAYS' own keys, or « ign:<id> » for a catalogue's layer)
  */
 
-/** A protected area of INPN / PatriNat served by the Géoplateforme (the catalogue's « Patrinat_* »). @param {string} id @param {string} title @returns {MapCatalogLayer} */
-const patrinat = (id, title) => ({ id: 'Patrinat_' + id, title, format: 'image/png', style: 'normal', minNative: 6, maxNative: 16 });
-
-const ZNIEFF1 = patrinat('ZNIEFF1', 'ZNIEFF de type I');
-const ZNIEFF2 = patrinat('ZNIEFF2', 'ZNIEFF de type II');
-const SIC = patrinat('SIC', 'Natura 2000 — directive Habitats (SIC, ZSC)');
-const ZPS = patrinat('ZPS', 'Natura 2000 — directive Oiseaux (ZPS)');
-const PNR = patrinat('PNR', 'Parcs naturels régionaux');
-const CEN = patrinat('CEN', 'Conservatoires d’espaces naturels');
-/** @type {MapCatalogLayer} */
-const SHADOW = { id: 'ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW', title: 'Estompage (relief ombré)', format: 'image/png', style: 'estompage_grayscale', minNative: 0, maxNative: 15 };
-/** @type {MapCatalogLayer} */
+const { znieff1: ZNIEFF1, znieff2: ZNIEFF2, habitats: SIC, oiseaux: ZPS, pnr: PNR, cen: CEN, ombrage: SHADOW } = CATALOG_ROWS;
+/** The rivers, the lakes (« Cours d’eau » of « Noms et réseaux » too: core/map-layers.js LANDMARKS — drawn once, core/ign.js landmarksShown). @type {MapCatalogLayer} */
 const HYDRO = { id: 'HYDROGRAPHY.HYDROGRAPHY', title: 'Hydrographie', format: 'image/png', style: 'normal', minNative: 6, maxNative: 18 };
 
 /** A catalogue layer's overlay key (core/ign.js IGN_PREFIX). @param {MapCatalogLayer} l */

@@ -1,14 +1,15 @@
 // app/core/backgrounds.js: the maps' backgrounds — the plan, the photos of now, of a year, of a period, the historical
-// ones, SPOT's images of a year — and the names over them: each layer as the Géoplateforme's catalogue gives it
+// ones, SPOT's images of a year — and whether « Noms et réseaux » go over them: each layer as the Géoplateforme's catalogue gives it
 // (data/ign-catalog.json: identifier, format, style, native zooms), the most recent photos greyed under a year's, no
 // other key (never one an object inherits), their names in French, a layout cell's address (base=, annee=) and back.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  ALL_WHENS, LATEST_SPOT, NAMES, NAMES_LAYERS, PHOTO_HISTORIC, PHOTO_PERIODS, PHOTO_YEARS, SPOT_YEARS, addressOf, baseKeyOf, baseKind, baseLabel,
-  baseLayers, everyBaseLayer, fillerNote, isBaseKey, parseBase, takesNames, whenLabel
+  ALL_WHENS, LATEST_SPOT, PHOTO_HISTORIC, PHOTO_PERIODS, PHOTO_YEARS, SPOT_YEARS, addressOf, baseKeyOf, baseKind, baseLabel,
+  baseLayers, everyBaseLayer, fillerNote, isBaseKey, parseBase, takesLandmarks, whenLabel
 } from '../../app/core/backgrounds.js';
+import { LANDMARKS } from '../../app/core/map-layers.js';
 
 const catalog = JSON.parse(readFileSync(new URL('../../data/ign-catalog.json', import.meta.url), 'utf8'));
 /** @type {Map<string, any>} */
@@ -35,33 +36,22 @@ test('chaque fond proposé : ses couches telles que le catalogue de l’IGN les 
       assert.equal(l.maxNative ?? 19, c.maxNative, `${key} : dernier zoom de ${l.id}`);
     }
   }
-  // The tools check each against the service (tools/api-health.mjs, scripts/build-ign-catalog.mjs): each once — the
-  // names over them too.
+  // The tools check each against the service (tools/api-health.mjs, scripts/build-ign-catalog.mjs): each once.
   const every = everyBaseLayer().map(l => l.id);
   assert.equal(new Set(every).size, every.length);
-  assert.equal(every.length, 2 + 25 + 5 + 3 + 13 + 3);
+  assert.equal(every.length, 2 + 25 + 5 + 3 + 13);
   assert.ok(every.every(id => byId.has(id)));
-  assert.deepEqual(every.slice(-3), NAMES_LAYERS.map(l => l.id));
 });
 
-test('les noms par-dessus : routes, hydrographie, noms (dans cet ordre, les noms dessus), tels que le catalogue les donne ; sur les photos et SPOT, pas sur le plan', () => {
-  assert.deepEqual(NAMES_LAYERS.map(l => l.id), ['TRANSPORTNETWORKS.ROADS', 'HYDROGRAPHY.HYDROGRAPHY', 'GEOGRAPHICALNAMES.NAMES']);
-  for (const l of NAMES_LAYERS) {
-    const c = byId.get(l.id);
-    assert.ok(c, `${l.id} au catalogue`);
-    assert.equal(l.format, c.format, `format de ${l.id}`);
-    assert.equal(l.format, 'image/png');
-    assert.equal(l.style ?? 'normal', c.style, `style de ${l.id}`);
-    assert.equal(l.minNative ?? 0, c.minNative, `premier zoom de ${l.id}`);
-    assert.equal(l.maxNative ?? 19, c.maxNative, `dernier zoom de ${l.id}`);
-    assert.ok(Object.isFrozen(l));
+test('« Noms et réseaux » sur les photos et SPOT, pas sur le plan (il a les siens) ; jamais un fond', () => {
+  for (const key of OFFERED) assert.equal(takesLandmarks(key), key !== 'plan', key);
+  for (const key of ['names', 'routes', 'constructor', 'photo:1999', null, undefined]) assert.equal(takesLandmarks(key), false, String(key));
+  // Their keys never a background's (the look's `landmarks`, never its `base`), nor their layers one of the backgrounds'.
+  const bases = new Set(everyBaseLayer().map(l => l.id));
+  for (const m of LANDMARKS) {
+    assert.equal(isBaseKey(m.key), false, m.key);
+    assert.ok(!bases.has(m.layer.id), m.layer.id);
   }
-  assert.ok(Object.isFrozen(NAMES_LAYERS));
-  // Not a background (the look's `names`, never its `base`), nor one of the overlays' keys.
-  assert.equal(NAMES, 'names');
-  assert.equal(isBaseKey(NAMES), false);
-  for (const key of OFFERED) assert.equal(takesNames(key), key !== 'plan', key);
-  for (const key of ['names', 'constructor', 'photo:1999', null, undefined]) assert.equal(takesNames(key), false, String(key));
 });
 
 test('les séries du catalogue, toutes proposées, la plus récente d’abord : photos par année et par période, historiques, SPOT', () => {

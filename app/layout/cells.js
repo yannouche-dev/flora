@@ -48,6 +48,7 @@ import { pushHash } from '../core/history.js';
 import { addCatalogLayer, DEFAULT_OPACITY, isOverlay } from '../core/ign.js';
 import { mapLook } from '../core/map-settings.js';
 import { addressOf, baseKeyOf, baseKind } from '../core/backgrounds.js';
+import { LANDMARK_DEFAULTS } from '../core/map-layers.js';
 import { loadCatalog } from '../core/ign-catalog.js';
 import { RADII_3D } from '../core/around3d.js';
 import { nearestStop } from '../core/distance.js';
@@ -529,11 +530,12 @@ export class DlMap extends LitElement {
   /**
    * The cell's own look (core/map-settings.js), as its address says it: its background (base=, and annee= the year or
    * period of its photos, SPOT's year: core/backgrounds.js baseKeyOf; without it the most recent), the names over it
-   * (noms=1, noms=0: on the photos and SPOT's — the plan has its own, noms= kept there, of no effect), its layers in their
-   * order (layers=znieff+n2000+ign:<id>: the catalogue's added to the maps first, core/ign.js — one of IGN's whole
-   * catalogue not known on this device found in it, core/ign-catalog.js, then shown) and their opacity (opac=); what it
-   * does not say follows the maps' common look (gf-map `look`) — layers=aucune says none of its own, not the common
-   * ones. null: it says none. The same object while the same.
+   * (noms=1: the usual « Noms et réseaux », core/map-layers.js LANDMARK_DEFAULTS; noms=0: none — on the photos and SPOT's;
+   * the plan has its own, noms= kept there, of no effect), its layers in their order (layers=znieff+n2000+ign:<id>: the
+   * catalogue's added to the maps first, core/ign.js — one of IGN's whole catalogue not known on this device found in
+   * it, core/ign-catalog.js, then shown) and their opacity (opac=); what it does not say follows the maps' common look
+   * (gf-map `look`) — layers=aucune says none of its own, not the common ones. null: it says none. The same object
+   * while the same.
    * @returns {Partial<import('../core/map-settings.js').MapLook> | null}
    */
   get #look() {
@@ -556,7 +558,7 @@ export class DlMap extends LitElement {
     // A year its kind has not (the registry says it, and leaves it out): the kind's most recent.
     const base = p.base || p.annee ? baseKeyOf(p.base, p.annee) ?? baseKeyOf(p.base, null) : null;
     if (base) own.base = base;
-    if (typeof p.noms === 'boolean') own.names = p.noms;
+    if (typeof p.noms === 'boolean') own.landmarks = p.noms ? [...LANDMARK_DEFAULTS] : [];
     // Its layers and their opacity go together (gf-map#editLook): either written, both its own.
     if (p.layers != null || p.opac) Object.assign(own, { overlays, opacities: opacitiesOf(p.opac) });
     const value = Object.keys(own).length ? own : null;
@@ -575,7 +577,8 @@ export class DlMap extends LitElement {
     /** @type {Record<string, unknown>} */
     const values = look ? {} : { base: null, annee: null, noms: null, layers: null, opac: null };
     if (look?.base) Object.assign(values, addressOf(look.base));
-    if (typeof look?.names === 'boolean') values.noms = look.names;
+    // noms=1 for any of « Noms et réseaux » (what its panel ticks: the usual ones), noms=0 for none.
+    if (Array.isArray(look?.landmarks)) values.noms = look.landmarks.length > 0;
     if (look?.overlays) Object.assign(values, { layers: layersOf(look.overlays), opac: opacText(look.opacities ?? {}, look.overlays, DEFAULT_OPACITY) });
     this.#set(values);
     // What the address says now, given back (an intent's background is not one to leave out: the map shows it again).

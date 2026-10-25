@@ -5,8 +5,8 @@ import { LitElement, html, nothing, render } from 'lit';
 import * as L from 'leaflet';
 import { config } from '../config.js';
 import { geoProblem, watchLocation, whenGranted } from '../core/geo.js';
-import { DEFAULT_OPACITY, FRANCE_BOUNDS, NAMES_Z, isOverlay, namesOver, overlayDef, tileLayer } from '../core/ign.js';
-import { NAMES, NAMES_LAYERS, isBaseKey, takesNames } from '../core/backgrounds.js';
+import { DEFAULT_OPACITY, FRANCE_BOUNDS, LANDMARK_Z, isOverlay, landmarksShown, overlayDef, tileLayer } from '../core/ign.js';
+import { isBaseKey } from '../core/backgrounds.js';
 import { lookFor, mapDistribution, mapLookEvents, setMapDistribution, setMapLook } from '../core/map-settings.js';
 import { inSeason, placeAbundance, placeTitle } from '../core/collections.js';
 import { store as appStore } from '../core/store.js';
@@ -44,7 +44,7 @@ export const PROTECTED_ZOOM = 11;
 /**
  * A background put under every other tile layer: its layers at 1 and under, bottom first (the most recent photos
  * greyed, then a year's over them) — never one less than the lowest other one, as Leaflet's bringToBack would (under
- * the names alone, 17: 16, over the overlays added next).
+ * « Noms et réseaux » alone, from 14: 13, over the overlays added next).
  * @param {L.Layer} layer
  */
 function toBack(layer) {
@@ -285,8 +285,8 @@ const movesCount = (/** @type {Moves} */ m) => (m.pin ? 1 : 0) + m.places.size +
  *  - search (default on; `no-search` removes it): address search pill on top, with the ▦ "Carte" panel button;
  *    legend (default on): legend in the panel
  *  - look: its own look (a Partial<MapLook> of core/map-settings.js: background — core/backgrounds.js: the plan, the
- *    photos, those of a year or a period over the most recent ones greyed, SPOT's images of a year —, the names over the
- *    photos and SPOT's — the roads, the rivers, the places' names, over every overlay —, overlays, their
+ *    photos, those of a year or a period over the most recent ones greyed, SPOT's images of a year —, « Noms et réseaux »
+ *    over the photos and SPOT's — the places' names, the roads, the rivers…, over every overlay —, overlays, their
  *    opacity), kept by its owner; null (the default): the maps' common look, followed as it changes (here, on another
  *    map, in Réglages, in another tab). Each field given is its own, the others the common ones. Its panel ▦ changes the common look, or —
  *    the map having its own — its own, told by `look-change`.
@@ -835,14 +835,14 @@ export class GfMap extends LitElement {
     this.#scheduleAreas();
     const map = this.#map;
     if (!map) return;
-    // The names' layers are on the map one by one (#showNames): taken off, then drawn anew.
-    const names = this.#names.length > 0;
-    this.#showNames(false);
+    // « Noms et réseaux » drawn anew too (#showLandmarks: those shown forgotten, then shown again).
+    const marks = this.#landmarks;
+    this.#showLandmarks([]);
     for (const layer of Object.values(this.#layers)) layer.remove();
     this.#layers = {};
     toBack(this.#layer(this.#base).addTo(map));
     for (const key of this.#overlays) this.#layer(key).addTo(map);
-    this.#showNames(names);
+    this.#showLandmarks(marks);
     this.#restack();
     this.#syncDistribution();
   };
@@ -938,10 +938,10 @@ export class GfMap extends LitElement {
   /** @type {string[]} */ #overlays = [];
   /** @type {Record<string, number>} */ #opacities = {};
   /**
-   * The names' layers drawn over the background, by their identifier (its look's `names`, on the photos and SPOT's:
-   * core/backgrounds.js takesNames; those an overlay shows left to it: core/ign.js namesOver). @type {string[]}
+   * « Noms et réseaux » drawn over the background, by key, bottom first (its look's `landmarks`, on the photos and SPOT's;
+   * one an overlay shows left to it: core/ign.js landmarksShown). @type {string[]}
    */
-  #names = [];
+  #landmarks = [];
   #distributionOn = mapDistribution();
   /** @type {L.TileLayer | null} */ #distributionLayer = null;
   /** @type {L.TileLayer | null} */ #compareLayer = null;
@@ -1015,7 +1015,7 @@ export class GfMap extends LitElement {
     this.#opacities = look.opacities;
     this.#layer(this.#base).addTo(map);
     for (const key of this.#overlays) this.#layer(key).addTo(map);
-    this.#showNames(look.names && takesNames(look.base));
+    this.#showLandmarks(landmarksShown(look.landmarks, this.#overlays, look.base));
     this.#restack();
 
     this.#areaLayer = L.layerGroup().addTo(map);
@@ -2940,8 +2940,8 @@ export class GfMap extends LitElement {
   #onCommonLook = () => { if (this.#map) this.#showLook(); };
 
   /**
-   * Shows its look now (its own over the common one): the background, the overlays in their order, the names over them
-   * (on the photos and SPOT's), the overlays' opacity — only what differs. Never told back.
+   * Shows its look now (its own over the common one): the background, the overlays in their order, « Noms et réseaux »
+   * over them (on the photos and SPOT's), the overlays' opacity — only what differs. Never told back.
    */
   #showLook() {
     const map = this.#map;
@@ -2951,7 +2951,7 @@ export class GfMap extends LitElement {
     const before = this.#opacities;
     this.#opacities = look.opacities;
     this.#showOverlays(look.overlays.filter(isOverlay));
-    this.#showNames(look.names && takesNames(look.base));
+    this.#showLandmarks(landmarksShown(look.landmarks, this.#overlays, look.base));
     for (const key of this.#overlays) {
       // A layer of several (reserves: a group) has its opacity on each of them. Its look's changed: set, and in 3D
       // drawn again — even when its slider here already gave it to the 2D layer (the 3D map draws only what is added).
@@ -2976,7 +2976,7 @@ export class GfMap extends LitElement {
     /** @type {Partial<import('../core/map-settings.js').MapLook>} */
     const own = { ...this.#own };
     if (patch.base) own.base = patch.base;
-    if (typeof patch.names === 'boolean') own.names = patch.names;
+    if (Array.isArray(patch.landmarks)) own.landmarks = [...patch.landmarks];
     if (patch.overlays || patch.opacities) {
       own.overlays = [...(patch.overlays ?? now.overlays)];
       own.opacities = { ...(patch.opacities ?? now.opacities) };
@@ -3024,23 +3024,20 @@ export class GfMap extends LitElement {
   }
 
   /**
-   * The names over the background (the roads, the rivers, the places' names: core/backgrounds.js NAMES_LAYERS) drawn or
-   * not: one pack, at its own place over every overlay (core/ign.js NAMES_Z) — but for a layer of it an overlay shows
-   * already (« Cours d'eau »: ign:HYDROGRAPHY.HYDROGRAPHY), drawn there only, at its place and its opacity, never twice
-   * (core/ign.js namesOver; that overlay gone, the names draw it again). Its layers put on the map one by one (their
-   * group never is: it keeps the three); in 3D, mirrored there once (the same layers, added again only after they went).
-   * @param {boolean} on
+   * « Noms et réseaux » over the background drawn (their keys, bottom first: core/ign.js landmarksShown), each its own
+   * layer at its own place over every overlay (core/ign.js LANDMARK_Z and up): those no longer shown taken off, the
+   * others put on; in 3D, mirrored there once (the same layers, added again only after they went).
+   * @param {string[]} keys
    */
-  #showNames(on) {
+  #showLandmarks(keys) {
     const map = /** @type {L.Map} */ (this.#map);
-    const ids = on ? namesOver(this.#overlays) : [];
-    if (ids.join('\n') === this.#names.join('\n')) return;
-    this.#names = ids;
-    const pack = /** @type {L.LayerGroup} */ (this.#layer(NAMES)).getLayers();
-    NAMES_LAYERS.forEach((l, i) => {
-      if (!ids.includes(l.id)) pack[i].remove();
-      else if (!map.hasLayer(pack[i])) pack[i].addTo(map);
-    });
+    if (keys.join('\n') === this.#landmarks.join('\n')) return;
+    for (const k of this.#landmarks) if (!keys.includes(k)) this.#layer(k).remove();
+    this.#landmarks = [...keys];
+    for (const k of keys) {
+      const l = this.#layer(k);
+      if (!map.hasLayer(l)) l.addTo(map);
+    }
   }
 
   /** The background shown now (core/backgrounds.js: 'plan', 'photo', 'photo:2016-2020', 'spot:2020'…). */
@@ -3053,14 +3050,14 @@ export class GfMap extends LitElement {
   setBase(key) { if (this.#map && isBaseKey(key) && key !== this.#base) this.#editLook({ base: key }); }
 
   /**
-   * The overlays drawn in their order (the last on top), over the background and under the names over them (NAMES_Z:
-   * core/ign.js), themselves under GBIF's layers (20, 21).
+   * The overlays drawn in their order (the last on top), over the background and under « Noms et réseaux » (LANDMARK_Z
+   * and up: core/ign.js), themselves under GBIF's layers (20, 21); past LANDMARK_Z - 1, the last ones at that place.
    */
   #restack() {
     this.#overlays.forEach((key, i) => {
       const layer = /** @type {any} */ (this.#layers[key]);
       if (!layer) return;
-      for (const l of layer.eachLayer ? layer.getLayers() : [layer]) l.setZIndex?.(Math.min(NAMES_Z - 1, 2 + i));
+      for (const l of layer.eachLayer ? layer.getLayers() : [layer]) l.setZIndex?.(Math.min(LANDMARK_Z - 1, 2 + i));
     });
   }
 

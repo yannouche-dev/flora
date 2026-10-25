@@ -1,6 +1,6 @@
 // « Les noms par-dessus » : over the aerial photos and SPOT's satellite images, the roads, the rivers and the places'
-// names (core/backgrounds.js NAMES_LAYERS: three WMTS layers of the IGN, PNG) — one pack, over the background and every
-// overlay, never one of them; on by default, unticked in the panel ▦ of a map or in Réglages › Cartes (« Afficher les
+// names (the usual « Noms et réseaux », core/map-layers.js LANDMARKS: three WMTS layers of the IGN, PNG, each its own
+// layer) — over the background and every overlay, never one of them; on by default, unticked in the panel ▦ of a map or in Réglages › Cartes (« Afficher les
 // noms : villes, routes, rivières, forêts », gf-map-options.js), kept as the maps' common look (geoflora.mapLayer: names
 // only when off) and found again after a reload. Not on the plan, which has its own: no checkbox there, nothing asked.
 // In 3D, MapLibre's style has the three sources on top of the IGN's, once each, whatever was toggled. A free layout's
@@ -24,8 +24,11 @@ test.beforeEach(async ({ context, page }) => {
 
 const AT = 'at=48.85,2.35';
 const SLOW = { timeout: 30_000 };
-/** The names' layers, bottom first (the names on top). */
+/** The names' layers, bottom first (the names on top): their keys (core/map-layers.js LANDMARK_DEFAULTS), their WMTS layers. */
+const KEYS = ['routes', 'eau', 'lieux'];
 const NAMES = ['TRANSPORTNETWORKS.ROADS', 'HYDROGRAPHY.HYDROGRAPHY', 'GEOGRAPHICALNAMES.NAMES'];
+/** Each one drawn: its key, its WMTS layer. */
+const MARKS = KEYS.map((k, i) => [k, NAMES[i]]);
 const CHECKBOX = 'Afficher les noms : villes, routes, rivières, forêts';
 
 /** The WMTS layers asked so far, once each. */
@@ -35,17 +38,17 @@ const namesAsked = () => asked().filter(l => NAMES.includes(/** @type {string} *
 /** The layout of the address, decoded. @param {Page} page */
 const layoutOf = page => page.evaluate(() => decodeURIComponent(location.hash.split('?')[0].replace(/^#\/layout\//, '')));
 /** What a map shows of its look (its own over the common one). @param {Locator} map */
-const lookOf = map => map.evaluate(m => { const l = /** @type {any} */ (m).lookShown; return { base: l.base, names: l.names }; });
+const lookOf = map => map.evaluate(m => { const l = /** @type {any} */ (m).lookShown; return { base: l.base, landmarks: l.landmarks }; });
 /** The common look as kept (the key of before). @param {Page} page */
 const stored = page => page.evaluate(() => JSON.parse(localStorage.getItem('geoflora.mapLayer') || 'null'));
 /** A map's tile layers in 2D, bottom of the DOM first: each one's key (its gf-tiles- class) and z-index. @param {Locator} map */
 const tileLayers = map => map.evaluate(m => [...m.querySelectorAll('.leaflet-tile-pane > .leaflet-layer')]
   .map(e => ({ key: /gf-tiles-(\S+)/.exec(e.className)?.[1] ?? '', z: Number(getComputedStyle(e).zIndex) })));
 /** The names' layers drawn in 2D: their z-index, and the LAYER of the tiles each one shows. @param {Locator} map */
-const names2d = map => map.evaluate(m => [...m.querySelectorAll('.leaflet-tile-pane > .leaflet-layer.gf-tiles-names')]
+const names2d = map => map.evaluate(m => [...m.querySelectorAll('.leaflet-tile-pane > .leaflet-layer.gf-capped')]
   .map(e => ({ z: Number(getComputedStyle(e).zIndex), layer: new URL(/** @type {HTMLImageElement} */ (e.querySelector('img.leaflet-tile'))?.src || 'https://x/').searchParams.get('LAYER') })));
 /** The tiles of the names drawn in 2D now. @param {Locator} map */
-const namesTiles = map => map.evaluate(m => m.querySelectorAll('.leaflet-tile-pane > .leaflet-layer.gf-tiles-names img.leaflet-tile').length);
+const namesTiles = map => map.evaluate(m => m.querySelectorAll('.leaflet-tile-pane > .leaflet-layer.gf-capped img.leaflet-tile').length);
 /** Whether the photos were asked at this zoom. @param {number} z */
 const photoAt = z => seen.some(u => u.includes('LAYER=ORTHOIMAGERY.ORTHOPHOTOS&') && new URL(u).searchParams.get('TILEMATRIX') === String(z));
 /**
@@ -78,7 +81,7 @@ async function openPanel(map) {
 test('sur les photos : les trois couches demandées (PNG, du zoom 6 au 19), dessinées au-dessus d’une surcouche ; décochées, plus demandées, gardé au rechargement', async ({ app, page }) => {
   await app.open(`#/layout/[map(r=1km)]?${AT}`);
   const map = page.locator('dl-map gf-map');
-  await expect.poll(() => lookOf(map)).toEqual({ base: 'photo', names: true });
+  await expect.poll(() => lookOf(map)).toEqual({ base: 'photo', landmarks: KEYS });
   // Each asked by its identifier, its style, as PNG.
   await expect.poll(namesAsked).toEqual(expect.arrayContaining(NAMES));
   for (const id of NAMES) expect(seen.some(u => u.includes(`LAYER=${id}&STYLE=normal&FORMAT=image%2Fpng`)), id).toBe(true);
@@ -100,7 +103,7 @@ test('sur les photos : les trois couches demandées (PNG, du zoom 6 au 19), dess
   const box = panel.getByRole('checkbox', { name: CHECKBOX });
   await expect(box).toBeChecked();
   await panel.getByRole('checkbox', { name: /Courbes de niveau/ }).check();
-  await expect.poll(async () => (await tileLayers(map)).map(l => l.key)).toEqual(expect.arrayContaining(['photo', 'contours', 'names']));
+  await expect.poll(async () => (await tileLayers(map)).map(l => l.key)).toEqual(expect.arrayContaining(['photo', 'contours', ...KEYS]));
   const layers = await tileLayers(map);
   const contours = /** @type {any} */ (layers.find(l => l.key === 'contours')).z;
   const photo = /** @type {any} */ (layers.find(l => l.key === 'photo')).z;
@@ -114,7 +117,7 @@ test('sur les photos : les trois couches demandées (PNG, du zoom 6 au 19), dess
   // Unticked: the common look's (every map's), kept only when off; their layers gone, never asked again.
   await box.uncheck();
   await expect.poll(() => stored(page)).toEqual({ base: 'photo', overlays: ['contours'], distribution: false, names: false });
-  await expect.poll(async () => (await tileLayers(map)).filter(l => l.key === 'names').length).toBe(0);
+  await expect.poll(async () => (await tileLayers(map)).filter(l => KEYS.includes(l.key)).length).toBe(0);
   seen.length = 0;
   await map.evaluate(m => /** @type {any} */ (m).flyTo([2.37, 48.86], 15));
   await expect.poll(() => asked().includes('ORTHOIMAGERY.ORTHOPHOTOS')).toBe(true);
@@ -125,7 +128,7 @@ test('sur les photos : les trois couches demandées (PNG, du zoom 6 au 19), dess
   await page.reload();
   await app.ready();
   const again = page.locator('dl-map gf-map');
-  await expect.poll(() => lookOf(again)).toEqual({ base: 'photo', names: false });
+  await expect.poll(() => lookOf(again)).toEqual({ base: 'photo', landmarks: [] });
   await expect.poll(() => asked().includes('ORTHOIMAGERY.ORTHOPHOTOS')).toBe(true);
   expect(namesAsked()).toEqual([]);
   const panel2 = await openPanel(again);
@@ -188,7 +191,7 @@ test('le plan : pas de case, rien de demandé (ses noms sont les siens) ; SPOT :
   await expect(options.getByRole('checkbox', { name: CHECKBOX })).toHaveCount(0);
   await options.getByRole('group', { name: 'Fond de carte' }).getByRole('button', { name: /Photos aériennes/ }).click();
   await app.go('#/map');
-  await expect.poll(() => lookOf(page.locator('gf-map-page gf-map'))).toEqual({ base: 'photo', names: true });
+  await expect.poll(() => lookOf(page.locator('gf-map-page gf-map'))).toEqual({ base: 'photo', landmarks: KEYS });
 });
 
 test('en 3D : les trois sources de MapLibre au-dessus des autres couches de l’IGN, une fois chacune, dans leur ordre — décochées puis cochées, le plan puis les photos', async ({ app, page }, info) => {
@@ -207,7 +210,7 @@ test('en 3D : les trois sources de MapLibre au-dessus des autres couches de l’
     return style.layers.filter((/** @type {any} */ l) => l.type === 'raster')
       .map((/** @type {any} */ l) => [l.metadata?.['gf:key'], new URL(style.sources[l.source].tiles[0].replace(/^gfcache:\/\//, '')).searchParams.get('LAYER')]);
   });
-  const WITH = [['photo', 'ORTHOIMAGERY.ORTHOPHOTOS'], ['contours', 'ELEVATION.CONTOUR.LINE'], ...NAMES.map(id => ['names', id])];
+  const WITH = [['photo', 'ORTHOIMAGERY.ORTHOPHOTOS'], ['contours', 'ELEVATION.CONTOUR.LINE'], ...MARKS];
   const WITHOUT = WITH.slice(0, 2);
   await expect.poll(rasters, SLOW).toEqual(WITH);
   // MapLibre asks them itself.
@@ -235,7 +238,7 @@ test('en 3D : les trois sources de MapLibre au-dessus des autres couches de l’
   }
   // An overlay added on top of the others: under the names still.
   await panel.getByRole('checkbox', { name: /Parcelles cadastrales/ }).check();
-  await expect.poll(rasters, SLOW).toEqual([...WITHOUT, ['cadastre', 'CADASTRALPARCELS.PARCELLAIRE_EXPRESS'], ...NAMES.map(id => ['names', id])]);
+  await expect.poll(rasters, SLOW).toEqual([...WITHOUT, ['cadastre', 'CADASTRALPARCELS.PARCELLAIRE_EXPRESS'], ...MARKS]);
   await panel.getByRole('checkbox', { name: /Parcelles cadastrales/ }).uncheck();
   // The plan (its names its own), then the photos: the three back, once each.
   const fond = panel.getByRole('group', { name: 'Fond de carte' });
@@ -255,17 +258,17 @@ test('en 3D : les trois sources de MapLibre au-dessus des autres couches de l’
       .map((/** @type {any} */ l) => [l.metadata?.['gf:key'], new URL(style.sources[l.source].tiles[0].replace(/^gfcache:\/\//, '')).searchParams.get('LAYER')]);
   });
   await expect.poll(rastersOf, SLOW).toEqual([['photo', 'ORTHOIMAGERY.ORTHOPHOTOS'], ['ign:HYDROGRAPHY.HYDROGRAPHY', 'HYDROGRAPHY.HYDROGRAPHY'],
-    ['names', 'TRANSPORTNETWORKS.ROADS'], ['names', 'GEOGRAPHICALNAMES.NAMES']]);
+    ['routes', 'TRANSPORTNETWORKS.ROADS'], ['lieux', 'GEOGRAPHICALNAMES.NAMES']]);
 });
 
 test('une couche qui est l’une des trois (« Cours d’eau », layers=hydro) : dessinée une fois, à sa place et à son opacité ; masquée, les noms la redessinent par-dessus', async ({ app, page }) => {
   await app.open(`#/layout/[map(r=1km;layers=hydro+forets;opac=hydro.30)]?${AT}`);
   const map = page.locator('dl-map gf-map');
   const HYDRO = 'ign:HYDROGRAPHY.HYDROGRAPHY';
-  // The rivers once: the overlay's, under the public forests as written, at its opacity; the names' pack without them.
+  // The rivers once: the overlay's, under the public forests as written, at its opacity; the names' layers without them.
   await expect.poll(async () => (await drawn(map)).filter(l => l.layer).map(l => [l.key, l.layer])).toEqual([
     ['photo', 'ORTHOIMAGERY.ORTHOPHOTOS'], [HYDRO, 'HYDROGRAPHY.HYDROGRAPHY'], ['forets', 'FORETS.PUBLIQUES'],
-    ['names', 'TRANSPORTNETWORKS.ROADS'], ['names', 'GEOGRAPHICALNAMES.NAMES']]);
+    ['routes', 'TRANSPORTNETWORKS.ROADS'], ['lieux', 'GEOGRAPHICALNAMES.NAMES']]);
   expect((await drawn(map)).filter(l => l.key === HYDRO).map(l => l.opacity)).toEqual([0.3]);
   // Its opacity changed: seen (nothing opaque over it).
   const panel = await openPanel(map);
@@ -276,17 +279,17 @@ test('une couche qui est l’une des trois (« Cours d’eau », layers=hydro) :
   await panel.getByRole('button', { name: /^Masquer Hydrographie/ }).click();
   await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,layers=forets)]');
   await expect.poll(async () => (await drawn(map)).filter(l => l.layer).map(l => [l.key, l.layer])).toEqual([
-    ['photo', 'ORTHOIMAGERY.ORTHOPHOTOS'], ['forets', 'FORETS.PUBLIQUES'], ...NAMES.map(id => ['names', id])]);
+    ['photo', 'ORTHOIMAGERY.ORTHOPHOTOS'], ['forets', 'FORETS.PUBLIQUES'], ...MARKS]);
   // The names unticked, the rivers ticked again: the overlay alone.
   await panel.getByRole('checkbox', { name: CHECKBOX }).uncheck();
   await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,noms=0,layers=forets)]');
-  await expect.poll(async () => (await drawn(map)).filter(l => l.key === 'names').length).toBe(0);
+  await expect.poll(async () => (await drawn(map)).filter(l => KEYS.includes(l.key)).length).toBe(0);
 });
 
 test('une case de disposition : noms=0 les cache, son panneau ▦ les montre (noms=1) ; « Revenir aux réglages communs » retire noms= ; gardé sur le plan de sa vignette', async ({ app, page }) => {
   await app.open(`#/layout/[map(r=1km;noms=0)]?${AT}`);
   const map = page.locator('dl-map gf-map');
-  await expect.poll(() => lookOf(map)).toEqual({ base: 'photo', names: false });
+  await expect.poll(() => lookOf(map)).toEqual({ base: 'photo', landmarks: [] });
   await expect.poll(() => asked().includes('ORTHOIMAGERY.ORTHOPHOTOS')).toBe(true);
   expect(namesAsked()).toEqual([]);
   // Its panel: its own choice, said; ticked there, written in its address — the common look untouched.
@@ -301,31 +304,31 @@ test('une case de disposition : noms=0 les cache, son panneau ▦ les montre (no
   // « Revenir aux réglages communs »: noms= gone, the common choice (on) followed.
   await panel.getByRole('button', { name: 'Revenir aux réglages communs' }).click();
   await expect.poll(() => layoutOf(page)).toBe('[map(r=1km)]');
-  await expect.poll(() => lookOf(map)).toEqual({ base: 'photo', names: true });
+  await expect.poll(() => lookOf(map)).toEqual({ base: 'photo', landmarks: KEYS });
   await closePanel(page, panel);
 
   // Its own background (SPOT of a year): unticked in its panel, noms=0 beside base= and annee= (« , » between them).
   await app.go(`#/layout/[map(r=1km;base=spot;annee=2020;ctl=fond)]?${AT}`);
   const cell = page.locator('dl-map');
-  await expect.poll(() => lookOf(cell.locator('gf-map'))).toEqual({ base: 'spot:2020', names: true });
+  await expect.poll(() => lookOf(cell.locator('gf-map'))).toEqual({ base: 'spot:2020', landmarks: KEYS });
   const panel2 = await openPanel(cell.locator('gf-map'));
   await expect(panel2.locator('.scope')).toContainText('Cette carte a son propre fond');
   await panel2.getByRole('checkbox', { name: CHECKBOX }).uncheck();
   await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,base=spot,annee=2020,noms=0,ctl=fond)]');
-  await expect.poll(() => lookOf(cell.locator('gf-map'))).toEqual({ base: 'spot:2020', names: false });
+  await expect.poll(() => lookOf(cell.locator('gf-map'))).toEqual({ base: 'spot:2020', landmarks: [] });
   await closePanel(page, panel2);
   seen.length = 0;
   // Its thumbnail: first the common background (the photos: base= and annee= let go), noms= kept; then the plan, noms=
   // kept (of no effect there: nothing asked), found again on the photos.
   await cell.locator('button.base').click();
   await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,noms=0,ctl=fond)]');
-  await expect.poll(() => lookOf(cell.locator('gf-map'))).toEqual({ base: 'photo', names: false });
+  await expect.poll(() => lookOf(cell.locator('gf-map'))).toEqual({ base: 'photo', landmarks: [] });
   await cell.locator('button.base').click();
   await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,base=plan,noms=0,ctl=fond)]');
   await expect.poll(async () => (await tileLayers(cell.locator('gf-map'))).map(l => l.key)).toEqual(['plan']);
   await cell.locator('button.base').click();
   await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,noms=0,ctl=fond)]');
-  await expect.poll(() => lookOf(cell.locator('gf-map'))).toEqual({ base: 'photo', names: false });
+  await expect.poll(() => lookOf(cell.locator('gf-map'))).toEqual({ base: 'photo', landmarks: [] });
   await expect.poll(() => asked().includes('ORTHOIMAGERY.ORTHOPHOTOS')).toBe(true);
   expect(namesAsked()).toEqual([]);
 
@@ -333,7 +336,7 @@ test('une case de disposition : noms=0 les cache, son panneau ▦ les montre (no
   await page.evaluate(async () => { (await import('/app/core/map-settings.js')).setMapLook({ base: 'plan' }); });
   await app.go(`#/layout/[map(r=1km;noms=0)]?${AT}`);
   const onPlan = page.locator('dl-map gf-map');
-  await expect.poll(() => lookOf(onPlan)).toEqual({ base: 'plan', names: false });
+  await expect.poll(() => lookOf(onPlan)).toEqual({ base: 'plan', landmarks: [] });
   const panel3 = await openPanel(onPlan);
   await expect(panel3.locator('.scope')).toContainText('Cette carte a son propre choix des noms, sans effet sur le plan IGN');
   await expect(panel3.getByRole('checkbox', { name: CHECKBOX })).toHaveCount(0);
@@ -347,7 +350,7 @@ test('fiche plante : un bloc Carte qui n’a que ses noms à lui le dit, dans so
   await app.go(`#/plant/${plantId('Urtica dioica')}`);
   const map = page.locator('gf-sheet-map gf-map').first();
   await map.scrollIntoViewIfNeeded();
-  await expect.poll(() => lookOf(map), { timeout: 20_000 }).toEqual({ base: 'photo', names: false });
+  await expect.poll(() => lookOf(map), { timeout: 20_000 }).toEqual({ base: 'photo', landmarks: [] });
   await page.evaluate(async () => { (await import('/app/core/store.js')).setKingMode(true); });
   await page.getByRole('button', { name: 'Configurer la carte « Carte »' }).click();
   const form = page.locator('gf-plant-detail .map-form').first();
@@ -370,8 +373,8 @@ test('« Créer une app » : « Noms sur le fond » dans Fond, Non écrit noms=0
   await noms.locator('button[data-value="false"]').click();
   await expect.poll(grid).toBe('[map(r=1km,base=photo,annee=2016,noms=0;3d=0)]');
   await expect(noms.locator('button[data-value="false"]')).toHaveAttribute('aria-pressed', 'true');
-  await expect.poll(() => lookOf(page.locator('gf-builder dl-map gf-map'))).toEqual({ base: 'photo:2016', names: false });
+  await expect.poll(() => lookOf(page.locator('gf-builder dl-map gf-map'))).toEqual({ base: 'photo:2016', landmarks: [] });
   await noms.locator('button[data-value="null"]').click();
   await expect.poll(grid).toBe('[map(r=1km,base=photo,annee=2016;3d=0)]');
-  await expect.poll(() => lookOf(page.locator('gf-builder dl-map gf-map'))).toEqual({ base: 'photo:2016', names: true });
+  await expect.poll(() => lookOf(page.locator('gf-builder dl-map gf-map'))).toEqual({ base: 'photo:2016', landmarks: KEYS });
 });
