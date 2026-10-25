@@ -9,16 +9,17 @@
 //    each card with its picture (core/scenes.js); cards on a wide screen (at most four a row, as many on each row as
 //    can be: six, three and three; five, three and two — the shorter row centred; two a row on a medium one), a list on a phone; during the first steps, « Passer : montrer toute l'application »;
 //  - in Découvrir's dialog (gf-scenarios, the film icon): compact, an icon each.
-// A card started fires `launched` (the dialog closes on it).
+// A card started fires `launched` (the dialog closes on it), then opens its activity as a new view once every dialog's
+// step has left history (launch): opened over an activity (the film icon of its bar, « Autres activités »), it takes
+// that one's starting point — « Quitter l’activité » leaves both; Back still returns to the first one.
 
 import { LitElement, html, css, nothing } from 'lit';
 import { icon } from '../core/icons.js';
-import { openView } from '../core/history.js';
+import { afterDialogSteps, entryValue, openModal, pushHash } from '../core/history.js';
 import { href, parse } from '../core/router.js';
 import { scene, sceneStyles } from '../core/scenes.js';
 import { leftAt } from '../core/around-sessions.js';
 import { discoverEvents, discovering, finishDiscover } from '../core/discover.js';
-import { openModal } from '../core/history.js';
 import { MINIAPPS } from '../miniapps/index.js';
 import { madeByApp } from '../core/collections.js';
 import { ui } from '../styles/ui.js';
@@ -26,7 +27,7 @@ import { askStyles, replayQuestion } from './ui-kit.js';
 
 /**
  * @typedef {{ key: string, app: import('../miniapps/index.js').MiniAppEntry, title: string, pitch: string, icon: import('../core/icons.js').IconName,
- *   scene: string, here: boolean, underWay: boolean, run: () => void }} Entry
+ *   scene: string, here: boolean, underWay: boolean, hash: string | null }} Entry
  */
 
 /** The entries, in the list's order, as they are now (the address, the activities under way). @returns {Entry[]} */
@@ -36,9 +37,23 @@ function entries() {
     const here = r.name === 'app' && r.id === a.id;
     return { key: a.id, app: a, title: a.title, pitch: a.pitch, icon: a.icon, scene: a.scene, here, underWay: here || a.underWay(),
       // « Commencer » opens its start; « Continuer », the step it was left at (the box goes back to the start if that
-      // step may no longer be entered).
-      run: () => { if (!here) openView(href.app(a.id, a.underWay() ? leftAt(a.id) : null)); } };
+      // step may no longer be entered). The one on screen: nothing to open.
+      hash: here ? null : href.app(a.id, a.underWay() ? leftAt(a.id) : null) };
   });
+}
+
+/**
+ * An activity opened from the list, once every dialog's step has left history (Découvrir's dialog, closed by
+ * `launched`; « Recommencer »'s question): a new view. Over an activity (the film icon of its bar, « Autres
+ * activités »), it takes that one's starting point — « Quitter » leaves both; Back still returns to it.
+ * @param {string} id @param {string} hash
+ */
+async function launch(id, hash) {
+  await afterDialogSteps();
+  const r = parse(location.hash);
+  if (r.name === 'app' && r.id === id) return; // already open (a second click)
+  const from = r.name === 'app' ? entryValue('gfAppFrom') : undefined;
+  pushHash(hash, from === null || typeof from === 'number' ? { gfAppFrom: from } : {});
 }
 
 export class GfLauncher extends LitElement {
@@ -120,10 +135,10 @@ export class GfLauncher extends LitElement {
   }
 
   /** @param {Entry} e */
-  #play(e) {
-    e.run();
+  async #play(e) {
     this.dispatchEvent(new CustomEvent('launched', { detail: e.key, bubbles: true, composed: true }));
     this.requestUpdate();
+    if (e.hash) await launch(e.key, e.hash);
   }
 
   /** « Recommencer »: asked first, in a dialog (Annuler, Échap: nothing changes). @param {Entry} e */
@@ -138,7 +153,8 @@ export class GfLauncher extends LitElement {
 
   /**
    * « Recommencer » confirmed: what the activity owns emptied (as its ⋯ « Recommencer »: here, in the box if it is the
-   * one on screen, and in the other tabs), then the activity at its first step.
+   * one on screen, and in the other tabs), then the activity at its first step — once the question and Découvrir's
+   * dialog, two steps, have left history (launch).
    */
   async #restart() {
     const e = this._asking, a = e?.app;
@@ -150,12 +166,12 @@ export class GfLauncher extends LitElement {
     } else {
       const { replayApp } = await import('../miniapp/runtime.js');
       await replayApp((await a.load()).default);
-      openView(href.app(a.id, 'start'));
     }
     dialog?.close();
     this._asking = null;
     this.dispatchEvent(new CustomEvent('launched', { detail: e.key, bubbles: true, composed: true }));
     this.requestUpdate();
+    if (!e.here) await launch(a.id, href.app(a.id, 'start'));
   }
 
   /** @param {Entry} e */

@@ -17,7 +17,9 @@
 //    its sheet), or closed — back to the entry it was opened from. Over a start screen, the plant of a link (?p=)
 //    shows in a sheet of its own (ma-plant-sheet).
 //  - The way out: exit.confirm(c) asks first if it says something; then back to where it was opened from (else the
-//    start page). Doing or leaving it changes nothing else in the app (no mode, no setting, no layout of the sheet).
+//    start page). An activity launched from another (Découvrir over its box: its film icon, « Autres activités »)
+//    takes that one's starting point, so « Quitter » leaves both; Back still returns to it. Doing or leaving it
+//    changes nothing else in the app (no mode, no setting, no layout of the sheet).
 //  - The plants seen in it (the event `seen` of the runtime: a card swiped, a plant opened, chosen or noted), in any
 //    activity: counted for the first steps of the app (core/discover.js#plantSeen: Flore comes after a few).
 //  - « Recommencer » asks first, in a dialog; then what the app owns is emptied (runtime.js#replay), here and in the
@@ -157,7 +159,11 @@ export class GfMiniapp extends LitElement {
     app.set({ focus: id, ...(app.c.focus !== id ? { mediaAt: null } : {}), ...(chooses ? { sheet: true } : {}) });
   }
 
-  /** The depth of the entry it was opened from (Quitter goes back to it). @type {number | null} */ #from = null;
+  /**
+   * The depth of the entry it was opened from, or the one the activity it was launched from had (Quitter goes back to
+   * it); null: nothing behind (the start page then). @type {number | null}
+   */
+  #from = null;
   /** @type {(() => void) | null} */ #unsync = null;
   #loading = '';
 
@@ -205,9 +211,10 @@ export class GfMiniapp extends LitElement {
       app.addEventListener('exit', this.#onExit);
       app.addEventListener('scenarios', this.#scenarios);
       app.addEventListener('seen', this.#onSeen);
-      // Where it was opened from: kept in the entry (a reload, Back and Forward find it again).
+      // Where it was opened from: kept in the entry (a reload, Back and Forward find it again), or handed on by the
+      // activity it was launched from (gf-launcher; null too: that one had nothing behind it).
       const kept = entryValue('gfAppFrom');
-      this.#from = typeof kept === 'number' ? kept : depth() > 0 ? depth() - 1 : null;
+      this.#from = kept === null || typeof kept === 'number' ? kept : depth() > 0 ? depth() - 1 : null;
       markEntry({ gfAppFrom: this.#from });
       this._app = app;
       document.title = m.title + ' — GeoFlora';
