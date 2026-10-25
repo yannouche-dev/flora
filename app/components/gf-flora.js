@@ -563,7 +563,7 @@ export class GfFlora extends LitElement {
       <div class="pane-head">
         ${phone ? html`<button class="link back" type="button" @click=${this.#closePane}>${icon('arrow-left')} Fiche</button>` : nothing}
         <div class="title">${blockTitle(key)} <span class="pane-plant">${this.#paneName}</span></div>
-        ${phone ? nothing : html`<button class="icon-btn" type="button" aria-pressed=${String(this._paneFull)} title=${this._paneFull ? 'Quitter le plein écran' : 'Plein écran'}
+        ${phone ? nothing : html`<button class="icon-btn" type="button" aria-pressed=${String(this._paneFull)} title=${this._paneFull ? 'Sortir du plein écran' : 'Plein écran'}
           aria-label="Plein écran" @click=${() => { this._paneFull = !this._paneFull; }}>${icon(this._paneFull ? 'fullscreen-exit' : 'arrows-fullscreen')}</button>`}
         <button class="icon-btn" type="button" title="Fermer le panneau" aria-label="Fermer le panneau" @click=${this.#closePane}>${icon('x-lg')}</button>
       </div>

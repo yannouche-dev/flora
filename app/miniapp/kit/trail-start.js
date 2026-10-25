@@ -1,7 +1,7 @@
 // @ts-check
 // The Parcours' first screen (the start screens' template, drawn by the box): one action, « Commencer ici » (the
-// app's action `locate`); smaller, a commune, a walk to take up again (the one under way first, when Back brought
-// here); the way out, the launcher. Its words, as before.
+// app's action `locate`); smaller, a commune, a walk to continue (the one under way first, when Back brought here);
+// the link at the bottom, the other activities (Découvrir over it).
 
 import { shortName } from './trail-store.js';
 import { trailSessionOf } from './trail-session.js';
@@ -30,8 +30,8 @@ export function trailStart(c, app) {
     note: 'Votre position est envoyée à l’IGN pour nommer le lieu ; le parcours reste sur cet appareil, dans Mes plantes.',
     alternatives: [
       { kind: 'place', label: 'ou partir d’une commune', field: 'Partir d’une commune', pick: p => { stop(); s.create(p.coordinates, p.label); } },
-      { kind: 'choices', label: 'Reprendre un parcours', items: all.map(p => ({ key: p.id, icon: 'flag-fill', label: shortName(p.properties.name), meta: plants(p), run: () => { stop(); s.resume(p); } })) }
+      { kind: 'choices', label: 'Continuer un parcours', items: all.map(p => ({ key: p.id, icon: 'flag-fill', label: shortName(p.properties.name), meta: plants(p), run: () => { stop(); s.resume(p); } })) }
     ],
-    exit: { icon: 'camera-reels', label: 'Quitter le parcours : autres scénarios', run: () => { stop(); app.scenarios(); } }
+    exit: { icon: 'camera-reels', label: 'Autres activités', run: () => { stop(); app.scenarios(); } }
   };
 }

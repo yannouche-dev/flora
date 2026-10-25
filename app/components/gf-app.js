@@ -334,8 +334,8 @@ export class GfApp extends LitElement {
   willUpdate() {
     const route = this.#router.route;
     this.toggleAttribute('boxed', route.name === 'app');
-    // The start page during the first steps is Découvrir's list: at its own address, so that a mini-app left
-    // (« Quitter », back to here) finds the list again, even once Flore — the start page then — has come.
+    // The start page during the first steps is Découvrir's list: at its own address, so that an activity left
+    // (« Quitter l’activité », back to here) finds the list again, even once Flore — the start page then — has come.
     if (route.name === 'search' && !tabShown('flore') && /^#?\/?$/.test(location.hash)) replaceView(href.discover());
   }
 
@@ -394,7 +394,7 @@ export class GfApp extends LitElement {
       <button type="button" aria-label="Fermer" @click=${() => { this._unlocked = null; this.requestUpdate(); }}>${icon('x-lg')}</button></div>`;
   }
 
-  /** Découvrir: the list of the ways to play — the mini-apps, then the scenarios (gf-launcher, as in the launcher's dialog). */
+  /** Découvrir: the list of the activities (gf-launcher, as in Découvrir's dialog under the film icon). */
   #discover() { return html`<gf-launcher page></gf-launcher>`; }
 
   /** @param {import('../core/router.js').Route} route */
@@ -437,7 +437,7 @@ export class GfApp extends LitElement {
         // « Disposition libre » (app/layout): its layout and its state in the address.
         return html`<gf-layout .route=${route}></gf-layout>`;
       default:
-        return html`<div class="banner">Page introuvable. <a href=${href.search()}>Retour à la recherche</a></div>`;
+        return html`<div class="banner">Page introuvable. <a href=${href.search()}>Aller à la recherche</a></div>`;
     }
   }
 }

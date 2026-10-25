@@ -2,7 +2,7 @@
 // A plant open over the cards of a mini-app around a place (the address's ?p=): its sheet, over the list on a phone,
 // beside it on a wide screen (its width the user's: a separator, core/panes.js, kept in the mini-app's own storage,
 // `layout-key`, which « Recommencer » forgets); « ‹ Préc. » and « Suivante › » through the cards it was opened from, a quick sideways
-// swipe or ← → too; Échap or ← (the head's arrow) closes it. Over a start screen (a link with a plant), the sheet
+// swipe or ← → too; Échap or its × (« Fermer la fiche ») closes it. Over a start screen (a link with a plant), the sheet
 // alone. It never navigates: the event `ma-plant` (detail.id: the plant to show, null: closed) goes up to the box,
 // which keeps the address (another plant: a new entry, Back returns to it). It keeps no plant of its own: the one it
 // shows is `open`, the pager's place is that plant's among the cards. Its « Médias » open at `mediaAt` (&m=), and say
@@ -35,12 +35,10 @@ export class MaPlantSheet extends LitElement {
     mediaAt: { type: Number },
     /** The cards it steps through (none: no pager). */
     cards: { attribute: false },
-    /** In a mini-app's box (always): the sheet keeps to it (gf-plant-detail `scoped`). */
+    /** In an activity's box (always): the sheet keeps to it (gf-plant-detail `scoped`). */
     scoped: { type: Boolean },
     /** Where the sheet's width is kept (wide screens; none: not resizable). */
     layoutKey: { type: String, attribute: 'layout-key' },
-    /** What its ← (and Échap) goes back to, said (Faux amis: « Retour au bilan »). */
-    back: { type: String },
     /** Only its « Médias » and its rubric « L'essentiel » (see above). */
     simple: { type: Boolean },
     /** The plant's name when it is not among the cards (a link; filtered out since): read from the flora. */
@@ -85,7 +83,6 @@ export class MaPlantSheet extends LitElement {
     this.scoped = false;
     /** @type {string | null} */
     this.layoutKey = null;
-    this.back = 'Retour aux plantes autour';
     this.simple = false;
     /** @type {string | null} */
     this._name = null;
@@ -121,7 +118,7 @@ export class MaPlantSheet extends LitElement {
   }
 
   /**
-   * The focus into the sheet, once drawn: simple, its content (named after the plant); else its ← — for a plant touched
+   * The focus into the sheet, once drawn: simple, its content (named after the plant); else its × — for a plant touched
    * (its row, its point), not one a link or a reload opened.
    */
   async takeFocus() {
@@ -190,7 +187,7 @@ export class MaPlantSheet extends LitElement {
       ${z ? z.split('sheet', 'right', () => this.#max, 'ma-sheet-body') : nothing}
       <div class="body" id="ma-sheet-body" style=${w != null && z ? `--w-sheet: ${Math.max(360, Math.min(w, this.#max))}px` : ''}>
       <div class="sheet-head">
-        <button class="icon-btn" type="button" aria-label=${this.back} title="Retour (Échap)" @click=${() => this.#show(null)}>${icon('arrow-left')}</button>
+        <button class="icon-btn" type="button" aria-label="Fermer la fiche" title="Fermer (Échap)" @click=${() => this.#show(null)}>${icon('x-lg')}</button>
         ${this.simple && !matchMedia('(min-width: 900px)').matches ? html`<h1 class="name">${title}</h1>` : title}
       </div>
       ${this.simple ? this.#simple(name) : html`<gf-plant-detail embedded subheading plant-id=${this.open} view="epure" ?scoped=${this.scoped} .mediaAt=${this.mediaAt}></gf-plant-detail>`}

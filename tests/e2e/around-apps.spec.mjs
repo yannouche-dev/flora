@@ -1,9 +1,9 @@
-// The games around a place as mini-apps — Cueillette prudente and Mosaïque beside Rencontres —, each with its own
-// game: its start, its map and distance, its cards (#/app/<id>/<step>); Cueillette prudente's safety warnings exactly
+// The activities around a place — Cueillette prudente and Mosaïque beside Rencontres —, each with its own
+// session: its start, its map and distance, its cards (#/app/<id>/<step>); Cueillette prudente's safety warnings exactly
 // as before (never pick without a certain identification, the look-alikes, the deadliest first, toxicity) — a deadly
 // plant seen once among more than 120 is in its deck, a toxic look-alike is never a match nor a favourite (« à ne pas
 // cueillir »), an empty list says one thing; Mosaïque's photo grid; the old addresses of Découvrir; the session the
-// three shared before handed over to each; « Rejouer » in one leaving the others as they were. Rencontres' services
+// three shared before handed over to each; « Recommencer » in one leaving the others as they were. Rencontres' services
 // answered here.
 import { readFileSync } from 'node:fs';
 import { test, expect, plantId, answerAround, fixturePlants } from './fixtures.mjs';
@@ -24,14 +24,14 @@ async function toCards(page, id) {
   await expect.poll(() => hash(page)).toBe(`#/app/${id}/cards`);
 }
 
-/** « Rejouer » from the box's ⋯, confirmed. @param {import('@playwright/test').Page} page */
+/** « Recommencer » from the box's ⋯, confirmed. @param {import('@playwright/test').Page} page */
 async function replay(page) {
   const box = page.locator('gf-miniapp');
   await box.locator('.more summary').click();
-  await box.locator('.menu').getByRole('button', { name: 'Rejouer' }).click();
+  await box.locator('.menu').getByRole('button', { name: 'Recommencer' }).click();
   const dialog = box.getByRole('dialog');
   await expect(dialog).toContainText('Recommencer : tout effacer ?');
-  await dialog.getByRole('button', { name: 'Rejouer' }).click();
+  await dialog.getByRole('button', { name: 'Recommencer' }).click();
   await expect(dialog).toBeHidden();
 }
 
@@ -158,7 +158,7 @@ test('Mosaïque : la grille des photos, « En fleur maintenant », une image tou
   await expect(page.locator('ma-plant-sheet')).toHaveCount(0);
 });
 
-test('chacune sa partie : « Rejouer » la Cueillette ne touche ni Rencontres ni la Mosaïque ; vide après rechargement', async ({ app, page }) => {
+test('chacune la sienne : « Recommencer » la Cueillette ne touche ni Rencontres ni la Mosaïque ; vide après rechargement', async ({ app, page }) => {
   await app.open('#/discover');
   for (const id of ['rencontres', 'mosaique', 'cueillette']) {
     await app.go(`#/app/${id}`);
@@ -171,8 +171,8 @@ test('chacune sa partie : « Rejouer » la Cueillette ne touche ni Rencontres ni
   await replay(page);
   await expect.poll(() => hash(page)).toBe('#/app/cueillette/start');
   await expect(page.getByRole('heading', { name: 'Cueillette prudente' })).toBeVisible();
-  // No « Reprendre » here any more; the others as they were.
-  await expect(page.getByRole('group', { name: 'Reprendre' })).toHaveCount(0);
+  // No « Continuer » here any more; the others as they were.
+  await expect(page.getByRole('group', { name: 'Continuer' })).toHaveCount(0);
   expect(await kept(page, 'rencontres')).toEqual(others.rencontres);
   expect(await kept(page, 'mosaique')).toEqual(others.mosaique);
   await page.reload();
@@ -180,9 +180,9 @@ test('chacune sa partie : « Rejouer » la Cueillette ne touche ni Rencontres ni
   await expect.poll(() => hash(page)).toBe('#/app/cueillette/start');
   await expect(page.getByRole('button', { name: 'Autour de moi' })).toBeVisible();
   expect(await kept(page, 'cueillette')).toBe(null);
-  // Rencontres still offers to take up its place.
+  // Rencontres still offers to continue at its place.
   await app.go('#/app/rencontres');
-  await expect(page.getByRole('group', { name: 'Reprendre' })).toContainText('Au dernier lieu choisi');
+  await expect(page.getByRole('group', { name: 'Continuer' })).toContainText('Au dernier lieu choisi');
 });
 
 /** To the cards of any of the three (Rencontres too: a returning visitor, no guided way). @param {import('@playwright/test').Page} page @param {string} id */
@@ -192,7 +192,7 @@ async function toCardsAny(page, id) {
   await expect(page.locator('ma-around-list .head')).toBeVisible();
 }
 
-test('les anciennes adresses : Cueillette prudente et Mosaïque ouvrent leur mini-application', async ({ app, page }) => {
+test('les anciennes adresses : Cueillette prudente et Mosaïque ouvrent leur activité', async ({ app, page }) => {
   await app.open('#/discover?s=harvest');
   await expect.poll(() => hash(page)).toBe('#/app/cueillette/start');
   await expect(page.getByRole('heading', { name: 'Cueillette prudente' })).toBeVisible();
@@ -222,7 +222,7 @@ test.describe('la partie partagée d’avant', () => {
     expect(discover.point).toBeUndefined();
     expect(discover.done).toBe(true);
     const launcher = page.locator('gf-launcher[page]');
-    await expect(launcher.getByRole('button', { name: 'Jouer : Mosaïque' })).toBeVisible();
+    await expect(launcher.getByRole('button', { name: 'Commencer : Mosaïque' })).toBeVisible();
     await expect(launcher.getByRole('button', { name: 'Continuer : Cueillette prudente' })).toHaveCount(0);
     // A favourite of before (its match then): the user's, never tagged — Recommencer Rencontres keeps it.
     await page.evaluate(async id => {
@@ -256,6 +256,6 @@ test.describe('la partie partagée d’avant', () => {
     await expect.poll(() => hash(page)).toBe('#/app/cueillette/start');
     expect((await kept(page, 'cueillette'))?.passed).toEqual([3]);
     expect(await kept(page, 'rencontres')).toBe(null);
-    await expect(page.getByRole('group', { name: 'Reprendre' })).toContainText('Autour de Paris');
+    await expect(page.getByRole('group', { name: 'Continuer' })).toContainText('Autour de Paris');
   });
 });

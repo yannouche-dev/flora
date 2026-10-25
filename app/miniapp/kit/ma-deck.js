@@ -7,7 +7,7 @@
 // `active` (no plant open, no match on screen). Cueillette prudente's toxic look-alikes (kit/session.js#avoids) are never
 // loved: their right says « Je la reconnais : à ne pas cueillir » (stamp À ÉVITER, ⛔ for ♥, a tag on the card).
 // The first time, the top card leans right then left: it can be swiped.
-// The hint once per app open (and again after « Rejouer »: kit/session.js#forgetGame). No more cards: further (« Chercher jusqu’à … »), or the ones passed again
+// The hint once per app open (and again after « Recommencer »: kit/session.js#forgetGame). No more cards: further (« Chercher jusqu’à … »), or the ones passed again
 // (and those recognised to avoid, counted apart from the matches).
 // It decides nothing itself: the card flown off, the event `deck-decide` (detail { card, liked }); `deck-open`
 // (detail { id }), `deck-undo`, `deck-photos` (detail { id }). The session (kit/session.js) gives the rest.

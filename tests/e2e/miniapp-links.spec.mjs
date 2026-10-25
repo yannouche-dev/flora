@@ -131,7 +131,7 @@ async function onlyCredits(page, where) {
   return links;
 }
 
-test('dans les mini-applications, seuls les crédits mènent ailleurs ; hors d’elles, la fiche garde ses sources', async ({ app, page }) => {
+test('dans les activités, seuls les crédits mènent ailleurs ; hors d’elles, la fiche garde ses sources', async ({ app, page }) => {
   await toMap(app, page);
   await onlyCredits(page, 'Rencontres, carte');
   await page.locator('ma-distance').getByRole('button', { name: 'Qui pousse par ici ?' }).click();

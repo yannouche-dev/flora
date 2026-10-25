@@ -126,7 +126,7 @@ export function plantSeen(id) {
 }
 
 /**
- * Rencontres played again (« Rejouer » of the mini-app, which empties its own place, distance and cards): the steps
+ * Rencontres started again (its « Recommencer », which empties its own place, distance and cards): the steps
  * of its guided way and the fork forgotten. Not the first steps of the app (the tabs that came, the tips, the plants
  * seen), nor the favourites: they are the user's.
  */
@@ -136,8 +136,8 @@ export const replayMeet = () => save({ step: 0, firstMatch: false, branch: null 
 export function finishDiscover() { save({ done: true, step: LAST_STEP }); }
 
 /**
- * The first steps again (Réglages › « Recommencer la découverte »): every choice and all progress forgotten — the
- * steps and the fork, the tabs that had come, and the games around a place (Rencontres, Cueillette prudente,
+ * The first steps again (Réglages › « Revoir les premiers pas »): every choice and all progress forgotten — the
+ * steps and the fork, the tabs that had come, and the activities around a place (Rencontres, Cueillette prudente,
  * Mosaïque: their place, distance, cards and matches). (The favourites stay: they are the user's.) The maps' first-use
  * hints are forgotten by its caller (gf-settings.js: core/hints.js, not at the start of the app).
  */

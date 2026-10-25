@@ -212,7 +212,7 @@ export class GfStorageError extends LitElement {
             ${hasSpots() ? 'Cet appareil a déjà eu des collections : redémarrez d’abord le navigateur, la base s’ouvrira peut-être de nouveau.' : ''}</li>`}
           <li>Téléchargées de nouveau : la flore (une connexion est nécessaire) et les réponses des services en ligne gardées sur cet appareil,
             redemandées quand vous en aurez besoin.</li>
-          <li>Restent : vos réglages, vos modes et mises en page, les parties en cours, les images et les cartes déjà vues.</li>
+          <li>Restent : vos réglages, vos modes et mises en page, les activités en cours, les images et les cartes déjà vues.</li>
         </ul>`;
       buttons = html`${download}<button type="button" autofocus @click=${close}>Annuler</button>
         <button class="danger" type="button" @click=${this.#repair}>${summary ? 'Réparer le stockage' : 'Réparer et perdre mes collections et notes'}</button>`;

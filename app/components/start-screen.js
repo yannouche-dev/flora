@@ -1,8 +1,8 @@
 // @ts-check
-// The first screen of a scenario (a mini-app), one template for all, on the Parcours' model: an illustration, a
-// title, a description, one large action; then, smaller, the other ways in (a commune, a name, one to take up
-// again, a link); last, the one way out. Large on top, small below: the eye goes to the action.
-// The template only lays out: the state (busy, error, the list to take up again) stays with the caller; the place
+// The first screen of an activity, one template for all, on the Parcours' model: an illustration, a title, a
+// description, one large action; then, smaller, the other ways in (a commune, a name, one to continue, a link); last,
+// the link at the bottom (« Autres activités »). Large on top, small below: the eye goes to the action.
+// The template only lays out: the state (busy, error, the list to continue) stays with the caller; the place
 // search is its own element (its request, its states). Its DOM sits in the caller's shadow root, so the caller's
 // code and the tests keep reaching `.go` and `.leave`. Every rule is scoped under `.start` and the template only
 // uses the class names listed in START_CLASSES: a host must not style them.
@@ -40,9 +40,9 @@ import './gf-place-search.js';
  * @typedef {{ label: string, icon?: IconName, run?: () => void, href?: string }} StartExit
  *
  * @typedef {object} StartSpec
- * @property {string} id                     the scenario key (data-start)
+ * @property {string} id                     the activity's key (data-start)
  * @property {string | import('lit').TemplateResult} art   a scene of core/scenes.js, or a picture of its own
- * @property {string} [kicker]               a small line above the title (Herbier: « La plante du lundi 12 octobre »)
+ * @property {string} [kicker]               a small line above the title (Parcours: « Mardi 12 octobre »)
  * @property {string} title
  * @property {Text} lead                     two or three short sentences
  * @property {{ text: string, icon?: IconName }} [caution]   a warning as readable as the description (Cueillette)
@@ -50,7 +50,8 @@ import './gf-place-search.js';
  * @property {string | StartError | null} [error]   the action failed: in the danger colour, next to it
  * @property {string} [note]                 one small line under the action
  * @property {(StartAlternative | false | null | undefined)[]} [alternatives]
- * @property {StartExit} exit                the one way out
+ * @property {StartExit} exit                the link at the bottom: « Autres activités » (Découvrir over the activity),
+ *   « Passer » during the first steps — not the way out (that is the bar's « Quitter l’activité »)
  */
 
 /** @param {StartChoice} c */
@@ -90,7 +91,7 @@ const exitLink = x => x.href
   ? html`<a class="leave link muted" href=${x.href} @click=${() => x.run?.()}>${x.icon ? icon(x.icon) : nothing}${fr(x.label)}</a>`
   : html`<button class="leave link muted" type="button" @click=${() => x.run?.()}>${x.icon ? icon(x.icon) : nothing}${fr(x.label)}</button>`;
 
-/** A scenario's first screen. @param {StartSpec} o */
+/** An activity's first screen. @param {StartSpec} o */
 export function startScreen(o) {
   const p = o.primary;
   const alts = /** @type {StartAlternative[]} */ ((o.alternatives || []).filter(Boolean));

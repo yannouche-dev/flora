@@ -46,7 +46,7 @@ test.describe('premier lancement', () => {
   test('Découvrir accueille, les autres onglets viennent ensuite', async ({ app, page }) => {
     await app.open('#/');
     await expect(page.getByRole('heading', { level: 1, name: 'Découvrir' })).toBeVisible();
-    await expect(page.locator('gf-launcher li[data-app="rencontres"]').getByRole('button', { name: 'Jouer' })).toBeVisible();
+    await expect(page.locator('gf-launcher li[data-app="rencontres"]').getByRole('button', { name: 'Commencer : Rencontres' })).toBeVisible();
     expect(await app.tabs()).toContain('Découvrir');
     expect(await app.tabs()).not.toContain('Flore');
     // An address of the flora still opens it (a shared link): the discovery never locks one out.

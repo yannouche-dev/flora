@@ -2,7 +2,7 @@
 // its plants, the cards dealt (four criteria to attribute, two pairs without any criterion — as the plant sheet says
 // it —, every plant of a pair in turn), the answers and the score, a game kept then read again from a file that changed
 // since (stale), the plant of the flora a card shows for a taxon — and never a word that a plant can be eaten. The
-// mini-app's « Jouer » left before the file came deals nothing (app/miniapps/faux-amis.js).
+// activity's « Commencer » left before the file came deals nothing (app/miniapps/faux-amis.js).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -171,7 +171,7 @@ test('pickPlant : l’espèce elle-même, celle qu’on montre pour un genre, si
   assert.equal(pickPlant('Plantus', []), null);
 });
 
-test('Faux amis : « Jouer » quitté avant que la liste arrive ne distribue rien, ni ne garde une partie', async () => {
+test('Faux amis : « Commencer » quitté avant que la liste arrive ne distribue rien, ni ne garde une partie', async () => {
   const m = (await import('../../app/miniapps/faux-amis.js')).default;
   const real = globalThis.fetch;
   /** @type {() => void} */

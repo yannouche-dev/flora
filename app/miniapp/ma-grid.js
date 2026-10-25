@@ -127,7 +127,7 @@ export class MaGrid extends LitElement {
       const comp = kit[/** @type {string} */ (p.use)];
       const title = p.title || app.m.columns.find(c => c.id === p.col)?.title || p.id;
       return html`<section class="cell ${it.tabbed ? 'tabbed' : ''} ${it.sheet ? 'sheet' : ''}" data-place=${p.id} aria-label=${title} style=${it.sheet ? '' : it.area} ?hidden=${it.hidden}>
-        ${it.sheet ? html`<div class="sheet-bar"><button class="link" type="button" @click=${() => app.set(comp.clear ?? {})}>${icon('arrow-left')} Fermer</button></div>` : nothing}
+        ${it.sheet ? html`<div class="sheet-bar"><button class="link" type="button" @click=${() => app.set(comp.clear ?? {})}>${icon('x-lg')} Fermer</button></div>` : nothing}
         ${comp ? comp.render(this.c ?? app.c, app, p) : nothing}</section>`;
     })}</div>`;
   }

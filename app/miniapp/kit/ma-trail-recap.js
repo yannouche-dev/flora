@@ -114,11 +114,11 @@ export class MaTrailRecap extends LitElement {
       note: 'Il reste dans Mes plantes.',
       alternatives: [
         { kind: 'link', icon: 'collection', label: 'Le voir dans Mes plantes', href: href.collections({ open: t.id }) },
-        { kind: 'link', icon: 'arrow-counterclockwise', label: 'Le reprendre', run: () => s.resume(t) },
+        { kind: 'link', icon: 'arrow-right', label: 'Le continuer', run: () => s.resume(t) },
         plants.length > 0 && { kind: 'link', icon: 'geo-alt-fill', label: 'Un nouveau parcours', run: () => s.another() }
       ],
-      // The recap stays until another scenario is chosen (the list closed without a choice: still here).
-      exit: { icon: 'camera-reels', label: 'Quitter le parcours : autres scénarios', run: () => this.app?.scenarios() }
+      // The recap stays until another activity is chosen (Découvrir closed without a choice: still here).
+      exit: { icon: 'camera-reels', label: 'Autres activités', run: () => this.app?.scenarios() }
     })}
     <div class="toast-dock">${s.toast ? html`<div class="toast" role="status">${icon('check-lg')} <span>${s.toast.text}</span></div>` : nothing}</div></div>`;
   }

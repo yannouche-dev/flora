@@ -510,7 +510,7 @@ export class MaAroundMap extends LitElement {
     const species = new Map();
     for (const o of s.obs) if (o.sci && !species.has(o.sci)) species.set(o.sci, o);
     const faces = [...species.values()].filter(o => this.#photo(o.photo)).slice(0, 6);
-    return html`<section class="g-launch" aria-label="Lancer la découverte">
+    return html`<section class="g-launch" aria-label="Jusqu’où chercher">
       <h2>${icon('binoculars')} Jusqu’où part l’expédition ?</h2>
       <p class="where">Autour ${c.place ? 'de ' + c.place : 'de vous'} · <button class="link" type="button" @click=${() => this.app?.go('start')}>changer de lieu</button></p>
       <label class="g-dist"><span class="d">${distLabel(c.radius)}</span><span class="mood">${distMood(c.radius)}</span>

@@ -1,14 +1,15 @@
 // @ts-check
-// A mini-app's manifest (app/miniapps/<id>.js): what it is, the context it keeps, its columns, and the steps that
-// build its screen one component at a time. defineMiniApp() checks it once, as it loads: a mistake in a manifest
-// fails there, with its name and the step at fault, not later on a screen. Pure: tested under Node.
+// An activity's manifest (a mini-app, in the code: app/miniapps/<id>.js): what it is, the context it keeps, its
+// columns, and the steps that build its screen one component at a time. defineMiniApp() checks it once, as it loads:
+// a mistake in a manifest fails there, with its name and the step at fault, not later on a screen. Pure: tested under
+// Node.
 //
-// What is whose (« Rejouer », see runtime.js#replay): a mini-app OWNS its context, its own state and layout
+// What is whose (« Recommencer », see runtime.js#replay): an activity OWNS its context, its own state and layout
 // (geoflora.app.<id>.*) and what its manifest lists in `owns` — the storage keys of its session (`keys`), and
-// `reset()` for the rest of it (a deck's swipes kept by a core module); « Rejouer » empties exactly that, then starts
-// again at its first step. What it only USES is the user's, and it never clears it: `shared` names it (Mes plantes,
-// the favourites, the places, the settings), for the reader. Playing or leaving a mini-app changes nothing else in
-// the app: no mode, no setting, no layout of the plant sheet — only a button that says so, pressed by the user.
+// `reset()` for the rest of it (a deck's swipes kept by a core module); « Recommencer » empties exactly that, then
+// starts again at its first step. What it only USES is the user's, and it never clears it: `shared` names it (Mes
+// plantes, the favourites, the places, the settings), for the reader. Doing or leaving an activity changes nothing
+// else in the app: no mode, no setting, no layout of the plant sheet — only a button that says so, pressed by the user.
 //
 // An app ported whole from before the mini-apps (`driven`): one component draws every screen, the start too, and
 // says which step it is on (the event ma-step); the steps follow it rather than lead it. Its first step then adds
@@ -62,17 +63,17 @@ const KEYS = new Set(Object.values(config.storageKeys));
  * @property {boolean} [driven]                                   its component leads its steps (see above)
  * @property {(c: any, app: any) => boolean} [ownBar]             its component shows a steps bar of its own now: the box's is left out
  * @property {(c: any) => string | null} [resumeAt]              the step its address opens when it names none (a game under way), else the start
- * @property {{ simple?: boolean, back?: string }} [plantSheet]   the plant of its address over a start screen, as the box shows it
- *   (kit/ma-plant-sheet.js): `simple`, its « Médias » and « L'essentiel » only; `back`, what its ← says
+ * @property {{ simple?: boolean }} [plantSheet]   the plant of its address over a start screen, as the box shows it
+ *   (kit/ma-plant-sheet.js): `simple`, its « Médias » and « L'essentiel » only
  * @property {{ keys?: string[], reset?: () => unknown, made?: { label: string, kept: [string, string] }, label?: string }} owns     the session
- *   data it owns, emptied by « Rejouer »; `made`: what it calls a collection it makes in Mes plantes, still its own
+ *   data it owns, emptied by « Recommencer »; `made`: what it calls a collection it makes in Mes plantes, still its own
  *   (« le parcours en cours »), and those the user made their own, kept (one, many — {n} the count); `label`: its
- *   session in words, as « Recommencer » says it goes (« la partie en cours » if none: a game)
+ *   session in words, as « Recommencer » says it goes (a game: « la partie en cours »; none: « l’activité en cours »)
  * @property {string[]} shared                                    the user's data it uses and never clears (said, not enforced)
  * @property {(data: any, from: number) => any} [migrate]
  */
 
-/** Ids of mini-apps, steps, columns and components: what an address carries (router.js). */
+/** Ids of activities, steps, columns and components: what an address carries (router.js). */
 export const ID = /^[a-z][a-z0-9-]{1,23}$/;
 const PHONE = ['top', 'main', 'tab', 'sheet', 'hide'];
 const KINDS = ['start', 'grid', 'screen'];
@@ -152,8 +153,7 @@ export function defineMiniApp(spec) {
   if (m.owns.reset !== undefined && !isFn(m.owns.reset)) fail('owns.reset must be a function');
   if (m.owns.made !== undefined && (typeof m.owns.made?.label !== 'string' || !Array.isArray(m.owns.made.kept) || m.owns.made.kept.length !== 2)) fail('owns.made: { label, kept: [one, many] }');
   if (m.owns.label !== undefined && (typeof m.owns.label !== 'string' || !m.owns.label.trim())) fail('owns.label: its session in words (« la partie en cours »)');
-  if (m.plantSheet !== undefined && (!isObj(m.plantSheet) || (m.plantSheet.simple !== undefined && typeof m.plantSheet.simple !== 'boolean')
-    || (m.plantSheet.back !== undefined && (typeof m.plantSheet.back !== 'string' || !m.plantSheet.back)))) fail('plantSheet: { simple?: boolean, back?: its ← in words }');
+  if (m.plantSheet !== undefined && (!isObj(m.plantSheet) || (m.plantSheet.simple !== undefined && typeof m.plantSheet.simple !== 'boolean'))) fail('plantSheet: { simple?: boolean }');
   if (!Array.isArray(m.shared) || m.shared.some(x => typeof x !== 'string')) fail('shared must be a list of what it uses of the user\'s');
 
   // The context and what is derived from it: one name each.

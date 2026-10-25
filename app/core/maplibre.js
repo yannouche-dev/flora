@@ -22,7 +22,7 @@ export const LOCALE = {
   'NavigationControl.ZoomIn': 'Zoomer',
   'NavigationControl.ZoomOut': 'Dézoomer',
   'FullscreenControl.Enter': 'Plein écran',
-  'FullscreenControl.Exit': 'Quitter le plein écran',
+  'FullscreenControl.Exit': 'Sortir du plein écran',
   'GeolocateControl.FindMyLocation': 'Me localiser',
   'GeolocateControl.LocationNotAvailable': 'Position indisponible',
   'GlobeControl.Enable': 'Afficher le globe',

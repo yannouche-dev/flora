@@ -137,7 +137,7 @@ test.describe('un grand écran', () => {
     await expect(pane).toHaveCount(0);
     await page.locator('ma-deck').getByRole('button', { name: /Ses photos/ }).click();
     await expect(pane.locator('gf-media-viewer')).toHaveAttribute('plant-id', String(plantId(AIL)));
-    // Kept with the game: after a reload, « Reprendre » finds it.
+    // Kept with the game: after a reload, « Continuer » finds it.
     await expect.poll(async () => (await kept(page)).media).toEqual({ by: plantId(AIL), closed: false });
     await page.reload();
     await app.ready();

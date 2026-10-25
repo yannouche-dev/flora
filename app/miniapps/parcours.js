@@ -1,14 +1,14 @@
 // @ts-check
 // Parcours botanique: a walk; the plants met named (typed or said), each where it was met, on the map of the walk;
 // « Terminer » gives its recap. Built from the kit (app/miniapp/kit): its first screen (trail-start.js, drawn by the
-// box: « Commencer ici », a commune, a walk to take up again), the walk (ma-walk: its card, its plants, its search
+// box: « Commencer ici », a commune, a walk to continue), the walk (ma-walk: its card, its plants, its search
 // under the thumb, its map) and the recap (ma-trail-recap: its map and « Vue 3D », its profile, « Partager »); its
-// game (trail-session.js) leads the steps — Départ › En marche › Bilan —, each one an address (#/app/parcours/walk),
+// session (trail-session.js) leads the steps — Départ › En marche › Bilan —, each one an address (#/app/parcours/walk),
 // Back the one before. Opened with no step named, the walk under way (or its recap) comes back at once (resumeAt).
-// Owns — everything « Rejouer » / « Recommencer » empties, here and in the other tabs, as if never opened: the walk
-// under way (geoflora.trail), the list of walks to take up again (geoflora.trails), the recap shown
+// Owns — everything « Recommencer » empties, here and in the other tabs, as if never opened: the walk
+// under way (geoflora.trail), the list of walks to continue (geoflora.trails), the recap shown
 // (geoflora.trailDone), the width of its side column (geoflora.trailLayout), its state and layout
-// (geoflora.app.parcours.*: runtime.js#replay); in memory, its game (a new one: trail-session.js#trailSessionOf); in
+// (geoflora.app.parcours.*: runtime.js#replay); in memory, its session (a new one: trail-session.js#trailSessionOf); in
 // Mes plantes, the walk under way, or one left empty — places with its origin — with every plant in it
 // (core/collections.js#forgetMadeBy).
 // Shares (never cleared, the user's whole app): the walks made the user's own — finished with plants, or renamed,
@@ -28,7 +28,7 @@ export default defineMiniApp({
   icon: 'geo-alt-fill',
   scene: 'trail',
   pitch: 'Marchez, nommez les plantes que vous croisez : chacune prend sa place sur la carte de votre parcours.',
-  exit: { label: 'Quitter le parcours' },
+  exit: { label: 'Quitter l’activité' },
   owns: { keys: [config.storageKeys.trail, config.storageKeys.trails, config.storageKeys.trailDone, config.storageKeys.trailLayout], reset: () => forgetMadeBy('parcours'),
     made: { label: 'le parcours en cours', kept: ['Votre parcours enregistré dans Mes plantes est conservé.', 'Vos {n} parcours enregistrés dans Mes plantes sont conservés.'] } },
   shared: ['Mes plantes (sauf les parcours qu’il y a enregistrés)', 'favoris', 'réglages'],

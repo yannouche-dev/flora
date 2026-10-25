@@ -276,7 +276,7 @@ export class GfSettings extends LitElement {
       <h2 id="modules">Modules : services en ligne</h2>
       <p class="muted">Tout fonctionne hors ligne avec la flore locale ; chaque module ajoute des données d’un service en ligne.
         Le choix vaut pour tout l’appareil, quel que soit le mode d’affichage : décoché, le service n’est jamais appelé et ses données
-        ne s’affichent nulle part (fiche plante, grille, cartes, mini-applications). Masquer un bloc de la fiche en mode King ne coupe pas son service.
+        ne s’affichent nulle part (fiche plante, grille, cartes, activités). Masquer un bloc de la fiche en mode King ne coupe pas son service.
         Ce que chacun reçoit, votre position surtout : <a href=${href.legal()}>Mentions légales et confidentialité</a>.</p>
       ${CATEGORIES.filter(c => MODULES.some(m => m.category === c.key)).map(c => html`
       <h3 class="category">${icon(c.icon)} ${c.label} <small>${c.question}</small></h3>
@@ -523,27 +523,31 @@ export class GfSettings extends LitElement {
       </div>`;
   }
 
-  /** « Premiers pas »: the guided start (Découvrir), on or over. */
+  /**
+   * « Premiers pas »: the guided start (Découvrir), on or over; « Revoir les premiers pas » empties the three
+   * activities around a place too (core/discover.js#restartDiscover), said under it.
+   */
   #firstSteps() {
     const on = discovering();
     return html`<h2 id="first-steps">Premiers pas</h2>
-      <p class="muted">${on ? 'La découverte guidée est en cours : les onglets arrivent à mesure qu’ils servent, avec une astuce à la fois.'
-        : 'Tous les outils sont là. La découverte guidée (Découvrir, une astuce à la fois, les onglets qui arrivent un à un) peut être refaite.'}</p>
+      <p class="muted">${on ? 'Les premiers pas sont en cours : les onglets arrivent à mesure qu’ils servent, avec une astuce à la fois.'
+        : 'Tous les outils sont là. Les premiers pas (Découvrir, une astuce à la fois, les onglets qui arrivent un à un) peuvent être revus.'}</p>
       <p>${on ? html`<button class="secondary" type="button" @click=${() => finishDiscover()}>Tout montrer maintenant</button>`
-        : html`<button class="secondary" type="button" @click=${() => { restartDiscover(); forgetHints(); openView('#/discover'); }}>Recommencer la découverte</button>`}</p>
+        : html`<button class="secondary" type="button" @click=${() => { restartDiscover(); forgetHints(); openView('#/discover'); }}>Revoir les premiers pas</button>`}</p>
+      ${on ? nothing : html`<p class="muted">Rencontres, Cueillette prudente et Mosaïque repartent alors de zéro ; vos favoris restent.</p>`}
       ${this.#showSteps()}`;
   }
 
-  /** « Afficher les étapes » of the mini-apps (Rencontres, Parcours…): while discovering one, always, never. */
+  /** « Afficher les étapes » of the activities (Rencontres, Parcours…): the first time each one is done, always, never. */
   #showSteps() {
     const value = this.#store.state.showSteps;
-    const choices = /** @type {const} */ ([['auto', 'Pendant la découverte', 'jusqu’à la fin d’une première partie'], ['on', 'Toujours', ''], ['off', 'Jamais', 'chaque mini-application s’ouvre en entier']]);
+    const choices = /** @type {const} */ ([['auto', 'La première fois', 'pour chaque activité, jusqu’à ce qu’on l’ait menée une fois à son terme'], ['on', 'Toujours', ''], ['off', 'Jamais', 'chaque activité s’ouvre en entier']]);
     return html`<fieldset class="steps-choice">
-      <legend>Afficher les étapes des mini-applications</legend>
+      <legend>Afficher les étapes des activités</legend>
       ${choices.map(([key, label, note]) => html`<label><input type="radio" name="show-steps" value=${key} .checked=${value === key}
         @change=${() => setShowSteps(key)} /> ${label}${note ? html` <small class="muted">(${note})</small>` : nothing}</label>`)}
     </fieldset>
-    <p class="muted">Le menu ⋯ d’une mini-application en décide pour elle seule, le temps de sa partie.</p>`;
+    <p class="muted">Le menu ⋯ d’une activité en décide pour elle seule, jusqu’à ce qu’on la recommence.</p>`;
   }
   /** « Disposition libre » (app/layout): the ready-made layouts, and one of one's own. */
   #layouts() {

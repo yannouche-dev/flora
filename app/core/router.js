@@ -77,7 +77,7 @@ export function parse(hash) {
   const was = path === 'discover' ? { meet: 'rencontres', trail: 'parcours', harvest: 'cueillette', mosaic: 'mosaique' }[params.get('s') || (params.has('p') ? 'meet' : '')] : undefined;
   // (Rencontres: the plant in its sheet, &fiche=1, as it was then.)
   if (was) return { name: 'app', id: was, step: was !== 'parcours' && params.has('p') ? 'cards' : null, plant: number('p'), view: null, media: null, sheet: was === 'rencontres' && params.has('p') };
-  // « Découvrir »: the list of the ways to play (any other scenario, Scientifique's old ?s=science among them: the list too).
+  // « Découvrir »: the list of the activities (any other old ?s=, Scientifique's ?s=science among them: the list too).
   if (path === 'discover') return { name: 'discover' };
   // « Disposition libre » (app/layout): #/layout/<layout>?<state> — the layout as written (app/layout/grammar.js),
   // its live state (plant, scope, search) read by the layout itself (app/layout/state.js).
@@ -106,7 +106,7 @@ export const href = {
   settings: () => '#/settings',
   /** Mentions légales et confidentialité (from Réglages). */
   legal: () => '#/legal',
-  /** « Découvrir »: the list of the ways to play. */
+  /** « Découvrir »: the list of the activities. */
   discover: () => '#/discover',
   /** Mes plantes; `open`: the collection shown (a place: its map too), `plant`: the plant sheet beside. */
   collections: (/** @type {{ open?: string | null, plant?: number | null }} */ options = {}) => {

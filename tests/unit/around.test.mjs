@@ -249,7 +249,7 @@ test('provenance : l’origine d’une entrée ou d’un lieu gardée, relue d�
   assert.deepEqual(back[1].properties.origin, { app: 'parcours' });
 });
 
-test('Recommencer : ce que la mini-application a fait et qui est encore le sien, et seulement cela', () => {
+test('Recommencer : ce que l’activité a fait et qui est encore le sien, et seulement cela', () => {
   const fav = col({ type: 'Feature', id: 'favorites', geometry: null, properties: { plants: [
     { plantId: 1, scientificName: 'A', origin: { app: 'rencontres' } }, { plantId: 2, scientificName: 'B' }, { plantId: 3, scientificName: 'C', origin: { app: 'cueillette' } },
     { plantId: 7, scientificName: 'G', from: { app: 'rencontres' } }] } });
@@ -282,13 +282,14 @@ test('Recommencer : ce que la mini-application a fait et qui est encore le sien,
   const parcours = defineMiniApp({ id: 'parcours', title: 'Parcours botanique', icon: 'geo-alt', exit: { label: 'Quitter' }, columns: [{ id: 'main', base: 'fill', min: 300, rank: 1 }],
     owns: { made: { label: 'le parcours en cours', kept: ['Votre parcours enregistré dans Mes plantes est conservé.', 'Vos {n} parcours enregistrés dans Mes plantes sont conservés.'] } },
     steps: [{ id: 'start', kind: 'start', label: 'Départ', start: () => ({}) }] });
-  assert.deepEqual(replayItems(parcours, M.madeBy(all, 'parcours')), { gone: ['le parcours en cours « Chemin » (2 plantes)', 'la partie en cours'],
+  assert.deepEqual(replayItems(parcours, M.madeBy(all, 'parcours')), { gone: ['le parcours en cours « Chemin » (2 plantes)', 'l’activité en cours'],
     kept: ['Votre parcours enregistré dans Mes plantes est conservé.'] });
   assert.deepEqual(replayItems(parcours, { favorites: [], collections: [], kept: { favorites: 0, collections: 3 } }).kept, ['Vos 3 parcours enregistrés dans Mes plantes sont conservés.']);
-  const meet = defineMiniApp({ ...parcours, id: 'rencontres', title: 'Rencontres', owns: {} });
+  // A game says « la partie en cours » (its owns.label); an activity that says nothing, « l’activité en cours ».
+  const meet = defineMiniApp({ ...parcours, id: 'rencontres', title: 'Rencontres', owns: { label: 'la partie en cours' } });
   assert.deepEqual(replayItems(meet, { favorites: [fav.properties.plants[0], fav.properties.plants[0]], collections: [], kept: { favorites: 0, collections: 0 } }),
     { gone: ['2 favoris ajoutés par Rencontres', 'la partie en cours'], kept: [] });
-  // No game: its session as it says it (Orchidées de Mirabel: its circle and its filters).
+  // Its session as it says it (Orchidées de Mirabel: its circle and its filters).
   const site = defineMiniApp({ ...parcours, id: 'orchidees', title: 'Orchidées', owns: { label: 'le cercle et les filtres choisis' } });
   assert.deepEqual(replayItems(site, { favorites: [], collections: [], kept: { favorites: 0, collections: 0 } }), { gone: ['le cercle et les filtres choisis'], kept: [] });
 });
@@ -308,7 +309,7 @@ test('avant les origines : le parcours en cours et les vides tagués ; les parco
   assert.equal(by.m, undefined, 'un lieu à soi n’est pas tagué');
 });
 
-test('runtime : « Rejouer » ne laisse rien derrière lui, comme jamais ouverte', async () => {
+test('runtime : « Recommencer » ne laisse rien derrière lui, comme jamais ouverte', async () => {
   localStorage.clear();
   const m = defineMiniApp({ id: 'cueillette-t', title: 'Cueillette', icon: 'leaf', exit: { label: 'Quitter' }, columns: [{ id: 'main', base: 'fill', min: 300, rank: 1 }],
     context: { point: { init: null, persist: true }, matches: { init: [], persist: true } },

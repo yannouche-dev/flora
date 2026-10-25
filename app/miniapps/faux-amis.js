@@ -6,9 +6,9 @@
 // Built from the kit: its game (kit/faux-amis.js; where a kept game stands: kit/faux-amis-store.js), its start screen
 // (below, drawn by the box), the cards and the recap (ma-faux-amis). Départ › Partie, each one an address
 // (#/app/faux-amis/play); opened with no step named, a game under way comes back at once (resumeAt).
-// A game under way is never thrown away without being asked: on the start screen, « Reprendre la partie » is the big
-// action, « Nouvelle partie » a small one that says so; « Rejouer » asks first.
-// Owns — everything « Rejouer » / « Recommencer » empties: its state (geoflora.app.faux-amis.state: the game dealt and
+// A game under way is never thrown away without being asked: on the start screen, « Continuer la partie » is the big
+// action, « Nouvelle partie » a small one that says so; « Recommencer » asks first.
+// Owns — everything « Recommencer » empties: its state (geoflora.app.faux-amis.state: the game dealt and
 // its answers) and layout (runtime.js#replay), the width of a plant's sheet beside the recap
 // (geoflora.app.faux-amis.sheet). Shares: nothing of the user's but the settings (« Photos en ligne »).
 
@@ -22,7 +22,7 @@ const UNREAD = Object.freeze({ unread: true });
 
 /**
  * A new game, from the file; unreadable, said (app.error, on the start screen) and no game. Stopped (« Quitter »,
- * « Rejouer » while the file is read): nothing dealt. @param {import('../miniapp/runtime.js').MiniApp} app
+ * « Recommencer » while the file is read): nothing dealt. @param {import('../miniapp/runtime.js').MiniApp} app
  */
 async function deal(app) {
   const signal = app.signal('deal');
@@ -43,8 +43,8 @@ function resume(c, app) {
 }
 
 /**
- * The first screen: « Jouer »; a game under way, « Reprendre la partie » (where it was left) in its place, and a new
- * game, smaller, saying it replaces it. The way out, the other scenarios.
+ * The first screen: « Commencer »; a game under way, « Continuer la partie » (where it was left) in its place, and a
+ * new game, smaller, saying it replaces it. The link at the bottom: the other activities (Découvrir over it).
  * @param {any} c @param {import('../miniapp/runtime.js').MiniApp} app @returns {import('../components/start-screen.js').StartSpec}
  */
 function start(c, app) {
@@ -56,11 +56,11 @@ function start(c, app) {
     lead: 'Six paires de plantes qu’on confond : la plante cherchée et son sosie toxique. À qui est chaque indice des sources ?',
     caution: { text: 'Un jeu pour apprendre, pas pour reconnaître : ne cueillez jamais une plante sur la foi d’un indice ou d’une photo.' },
     primary: kept
-      ? { icon: 'arrow-right', label: 'Reprendre la partie', run: () => resume(c, app) }
-      : { icon: 'lightbulb', label: 'Jouer', busyLabel: 'Les cartes…', busy: app.busy('deal'), run: () => { app.do('deal'); } },
+      ? { icon: 'arrow-right', label: 'Continuer la partie', run: () => resume(c, app) }
+      : { icon: 'lightbulb', label: 'Commencer', busyLabel: 'Les cartes…', busy: app.busy('deal'), run: () => { app.do('deal'); } },
     note: kept ? `Carte ${nextCard(kept) + 1} sur ${kept.cards.length}.` : 'Indices et sources : Anses et Centres antipoison ; gravité, aussi la base TPPT (Agroscope).',
     alternatives: [kept && { kind: 'link', icon: 'arrow-counterclockwise', label: 'Nouvelle partie : celle en cours sera effacée', run: () => { app.do('deal'); } }],
-    exit: { icon: 'camera-reels', label: 'Quitter Faux amis : autres scénarios', run: () => { app.scenarios(); } }
+    exit: { icon: 'camera-reels', label: 'Autres activités', run: () => { app.scenarios(); } }
   };
 }
 
@@ -70,8 +70,8 @@ export default defineMiniApp({
   icon: 'lightbulb',
   scene: 'twins',
   pitch: 'Six paires de plantes qu’on confond : à qui est chaque indice ? Sans indice sûr, on ne cueille pas.',
-  exit: { label: 'Quitter Faux amis' },
-  owns: { keys: ['geoflora.app.faux-amis.sheet'] },
+  exit: { label: 'Quitter l’activité' },
+  owns: { keys: ['geoflora.app.faux-amis.sheet'], label: 'la partie en cours' },
   shared: ['réglages'],
   context: {
     // The game dealt and its answers (kit/faux-amis.js Game), kept on this device.

@@ -1080,7 +1080,7 @@ export class GfSpotEditor extends LitElement {
       return html`<form>
         <p>${this._error || 'Cette collection n’existe plus.'}</p>
         ${this._error ? html`<button type="button" @click=${() => this.#load()}>Réessayer</button>` : nothing}
-        <a href=${href.collections()}>Retour à mes plantes</a>
+        <a href=${href.collections()}>Voir Mes plantes</a>
       </form>`;
     }
 

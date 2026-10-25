@@ -14,7 +14,7 @@ import { readJSON } from '../../core/prefs.js';
  */
 export const KEY = config.storageKeys.trail, LIST = config.storageKeys.trails, DONE = config.storageKeys.trailDone;
 
-/** A parcours under way on this device (the list of the ways to play says « Continuer »). */
+/** A parcours under way on this device (the list of Découvrir says « Continuer »). */
 export const walkUnderWay = () => Boolean(readJSON(KEY, null));
 /** The parcours under way (its place id), if any. @returns {string | null} */
 export const walkOn = () => readJSON(KEY, null);

@@ -1,8 +1,8 @@
 // @ts-check
-// The mini-apps: what the list of the ways to play offers first (gf-launcher: the Découvrir tab, and the launcher's
-// dialog behind the film icon), each opened alone on the screen at #/app/<id> (gf-miniapp). Its manifest
+// The activities (mini-apps, in the code): what the list of Découvrir offers (gf-launcher: the Découvrir tab, and its
+// dialog behind the film icon, gf-scenarios), each opened alone on the screen at #/app/<id> (gf-miniapp). Its manifest
 // (app/miniapps/<id>.js) is loaded when it opens. Every file is in sw.js's SHELL.
-// `underWay`: a game under way, kept on this device (the list offers « Continuer » and « Recommencer »; Orchidées de
+// `underWay`: an activity under way, kept on this device (the list offers « Continuer » and « Recommencer »; Orchidées de
 // Mirabel: a visit that left its state, the circle or the filters). Launching one changes nothing else in the app
 // (miniapp/define.js): no mode, no setting.
 
@@ -43,5 +43,5 @@ export const MINIAPPS = [
     load: () => import('./orchidees.js') }
 ];
 
-/** A mini-app of the launcher, by id (null: none). @param {string} id */
+/** An activity of the list, by id (null: none). @param {string} id */
 export const miniApp = id => MINIAPPS.find(a => a.id === id) ?? null;

@@ -1,4 +1,4 @@
-// Découvrir on a first launch: the list of the ways to play, then « Rencontres » (the mini-app): around me, a map of
+// Découvrir on a first launch: the list of the activities, then « Rencontres » (the activity): around me, a map of
 // the observations, cards of the plants seen around (the most observed first), a heart keeps one (favourites), and the
 // steps lead to the whole app. iNaturalist, Wikidata and Wikipédia answered here. Migrated from discover2.cjs,
 // discoverscope.cjs, meetstart.cjs, meetmatch.cjs.
@@ -11,7 +11,7 @@ test.beforeEach(({ context }) => answerAround(context));
 
 test('autour de moi : la carte des observations, puis les cartes, la plus observée d’abord', async ({ app, page }) => {
   await app.open('#/');
-  await page.locator('gf-launcher li[data-app="rencontres"]').getByRole('button', { name: 'Jouer' }).click();
+  await page.locator('gf-launcher li[data-app="rencontres"]').getByRole('button', { name: 'Commencer : Rencontres' }).click();
   await page.getByRole('button', { name: 'Autour de moi' }).click();
   const discover = page.locator('ma-guided');
   await expect(discover.locator('.g-steps li.on .l')).toHaveText('Carte');
@@ -44,14 +44,16 @@ test('un cœur (→) garde la plante dans les favoris, un passage (←) montre l
   await expect(discover.locator('.match')).toHaveCount(0);
 });
 
-test('« Passer » montre toute l’application ; « Recommencer la découverte » la cache de nouveau', async ({ app, page }) => {
+test('« Passer » montre toute l’application ; « Revoir les premiers pas » la cache de nouveau', async ({ app, page }) => {
   await app.open('#/');
   await page.getByRole('link', { name: 'Passer : montrer toute l’application' }).click();
   await expect.poll(() => app.tabs()).toEqual(expect.arrayContaining(['Flore', 'Carte', 'Mes plantes']));
   expect(await page.evaluate(async () => (await import('/app/core/discover.js')).discoverState().done)).toBe(true);
   await app.go('#/settings');
-  await page.getByRole('button', { name: 'Recommencer la découverte' }).click();
-  // Découvrir again: the list of the ways to play, not Rencontres.
+  // What it empties too, said under it.
+  await expect(page.getByText('Rencontres, Cueillette prudente et Mosaïque repartent alors de zéro ; vos favoris restent.')).toBeVisible();
+  await page.getByRole('button', { name: 'Revoir les premiers pas' }).click();
+  // Découvrir again: the list of the activities, not Rencontres.
   await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/discover');
   await expect(page.getByRole('heading', { level: 1, name: 'Découvrir' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Rencontrez les plantes d’ici' })).toHaveCount(0);

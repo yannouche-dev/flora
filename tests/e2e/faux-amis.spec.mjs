@@ -31,7 +31,7 @@ const words = page => game(page).evaluate(el => {
   return out;
 });
 
-/** « Jouer » from the start screen: the six cards dealt and kept. @param {import('@playwright/test').Page} page */
+/** « Commencer » from the start screen: the six cards dealt and kept. @param {import('@playwright/test').Page} page */
 async function deal(page) {
   await page.locator('gf-miniapp .start .go').click();
   await expect.poll(() => hash(page)).toBe('#/app/faux-amis/play');
@@ -120,7 +120,7 @@ test('une partie : quatre indices à attribuer, deux paires sans critère ; le b
   await game(page).locator('button.plant-link').first().click();
   await expect.poll(() => hash(page)).toMatch(/^#\/app\/faux-amis\/play\?p=\d+$/);
   await expect(page.locator('ma-plant-sheet .sheet')).toBeVisible();
-  await expect(page.locator('ma-plant-sheet .sheet-head button')).toHaveAttribute('aria-label', 'Retour au bilan');
+  await expect(page.locator('ma-plant-sheet .sheet-head button')).toHaveAttribute('aria-label', 'Fermer la fiche');
   await page.keyboard.press('Escape');
   await expect(page.locator('ma-plant-sheet .sheet')).toHaveCount(0);
   await expect.poll(() => hash(page)).toBe('#/app/faux-amis/play');
@@ -166,7 +166,7 @@ test('une partie en cours revient après un rechargement, et d’abord sur l’�
   // Its start screen (Back): the game first, in big; a new one in small, saying it replaces it.
   await page.goBack();
   await expect.poll(() => hash(page)).toBe('#/app/faux-amis/start');
-  await expect(page.locator('gf-miniapp .start .go')).toHaveText('Reprendre la partie');
+  await expect(page.locator('gf-miniapp .start .go')).toHaveText('Continuer la partie');
   await expect(page.locator('gf-miniapp .start .note')).toHaveText('Carte 3 sur 6.');
   await expect(page.locator('gf-miniapp .start .alt')).toHaveText('Nouvelle partie : celle en cours sera effacée');
   await page.locator('gf-miniapp .start .go').click();
@@ -235,7 +235,7 @@ test('la liste des confusions illisible : dit sur l’écran de départ, aucune 
   await app.open('#/app/faux-amis');
   await page.locator('gf-miniapp .start .go').click();
   await expect(page.locator('gf-miniapp .start .alert')).toContainText('Liste des confusions indisponible pour le moment');
-  await expect(page.locator('gf-miniapp .start .go')).toHaveText('Jouer');
+  await expect(page.locator('gf-miniapp .start .go')).toHaveText('Commencer');
   expect(await hash(page)).toBe('#/app/faux-amis/start');
   // Left (its state written at once): nothing kept.
   await page.locator('gf-miniapp .quit').click();
