@@ -6,10 +6,10 @@
 // (« Revenir aux réglages communs »); a cell's 3d= is shown fixed, with « Suivre le réglage commun » — neither way back
 // when the cell's intent gives them (map(relief), map(protege)); layers=aucune: none, not the common ones. An overlay's
 // opacity reaches every map, MapLibre too, a layer of several (the nature reserves) as well. The panel's parts in their
-// order — « Couches affichées » from the top, « Noms et réseaux », the themes folded (opened by themselves once one of
-// their layers is ticked, here or in the catalogue; never folded under the finger), the whole catalogue —; the shading
-// first ticked at 40 %. The plant sheet's map ⚙ no longer has the background, the layers nor 2D / 3D. Every tile made
-// here (tiles.mjs), real WebGL for 3D.
+// order — « Sur cette carte » after the background, « Couches affichées » from the top, « Noms et réseaux », the themes
+// folded (opened by themselves once one of their layers is ticked, here or in the catalogue; never folded under the
+// finger), the whole catalogue —; the shading first ticked at 40 %. The plant sheet's map ⚙ no longer has the
+// background, the layers nor 2D / 3D. Every tile made here (tiles.mjs), real WebGL for 3D.
 import { test, expect, answerAround, plantId } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
 
@@ -278,10 +278,11 @@ test('le panneau ▦ : ses parties dans l’ordre, « Couches affichées » du h
   await app.open(`#/layout/[map(r=1km)]?${AT}`);
   const map = maps(page).nth(0);
   const panel = await openPanel(map);
-  // Top first: the options, then what is this map's own (its sources last).
+  // Top first: the options — « Sur cette carte », its points (map-data-layers.spec.mjs), after the background —, then
+  // what is this map's own (its sources last).
   const order = await headings(panel);
-  expect(order.slice(0, 9)).toEqual(['Carte', 'Affichage', 'Fond', 'Couches affichées', 'Noms et réseaux', 'Relief', 'Forêts, haies et zones humides',
-    'Espaces protégés et propriété', 'Toutes les couches de l’IGN']);
+  expect(order.slice(0, 10)).toEqual(['Carte', 'Affichage', 'Fond', 'Sur cette carte', 'Couches affichées', 'Noms et réseaux', 'Relief',
+    'Forêts, haies et zones humides', 'Espaces protégés et propriété', 'Toutes les couches de l’IGN']);
   expect(order.at(-1)).toBe('Sources');
   // The themes folded, none ticked.
   const themes = panel.locator('details.theme');

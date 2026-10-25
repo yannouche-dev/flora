@@ -56,6 +56,9 @@ async function placeOutline(params, label) {
 /** Heights of a map block. */
 const HEIGHTS = { s: 180, m: 260, l: 380 };
 
+/** The observations near me (MapConfig.near) from GBIF's and iNaturalist's chosen. @param {boolean} gbif @param {boolean} inat */
+const nearOf = (gbif, inat) => gbif && inat ? 'both' : gbif ? 'gbif' : inat ? 'inat' : 'off';
+
 /** « Observations proches » asked once in this visit: later maps look around without asking again. */
 let nearAllowed = false;
 
@@ -466,6 +469,8 @@ export class GfSheetMap extends LitElement {
           .zone=${this.#aboutPlant && this._bounds?.zone ? { key: this._bounds.id, feature: this._bounds.zone } : null}
           .cluster=${this.#occurrences()}
           ?distribution-on=${Boolean(gbifOn)}
+          .data=${this.#dataRows(gbifReady, f)}
+          @data-change=${(/** @type {CustomEvent} */ e) => this.#onData(e.detail)}
           .look=${c.look}
           no-search
           ?no-create=${!c.actions.create}
@@ -632,7 +637,6 @@ export class GfSheetMap extends LitElement {
       title=${title || ''} data-frame=${value} @click=${act || (() => this.#set({ frame: value }))}>${label}</button>`;
     const inatReady = Boolean(this.inatId) && moduleOn('inaturalist');
     const gbifNear = c.near === 'gbif' || c.near === 'both', inatNear = c.near === 'inat' || c.near === 'both';
-    const nearOf = (/** @type {boolean} */ g, /** @type {boolean} */ i) => g && i ? 'both' : g ? 'gbif' : i ? 'inat' : 'off';
     const r = near?.radius || savedRadius();
     const showRadius = c.frame === 'me' || c.near !== 'off';
     const about = this.#aboutPlant;
@@ -671,6 +675,51 @@ export class GfSheetMap extends LitElement {
         ${gbifReady ? html`<button type="button" data-layer="gbif-near" aria-pressed=${String(gbifNear)} title="Occurrences GBIF autour de moi" @click=${() => this.#set({ near: nearOf(!gbifNear, inatNear) })}><i class="obs"></i>GBIF autour${near?.state === 'done' && near.gbifOn ? html` <small>${(near.gbifTotal ?? 0).toLocaleString('fr-FR')}</small>` : nothing}</button>` : nothing}
       </div>
     </div>`;
+  }
+
+  /**
+   * « Sur cette carte » of the map's panel ▦: the same data as its scope bar's « Données » and its ⚙ form (MapConfig),
+   * each as they say it — the GBIF distribution (France, the world, none), my places, the observations near me from
+   * iNaturalist and GBIF (my position sent to it: asked as by its chip), the look-alike compared beside it (its chip's
+   * ✕ when unticked). The same array while the same. @param {boolean} gbifReady
+   * @param {import('../core/map-focus.js').SheetFocus} f @returns {import('./gf-map-options.js').DataRow[]}
+   */
+  #dataRows(gbifReady, f) {
+    const c = this.config, about = this.#aboutPlant, n = this._spots.length;
+    /** @type {import('./gf-map-options.js').DataRow[]} */
+    const rows = [];
+    if (gbifReady) rows.push({ key: 'gbif', kind: 'select', label: 'Répartition GBIF', hint: 'densité des occurrences connues', value: c.gbif,
+      options: [{ value: 'fr', label: 'France' }, { value: 'world', label: 'Monde' }, { value: 'off', label: 'Non' }] });
+    if (n || !about) {
+      const which = c.subject === 'results' ? 'avec des plantes des résultats' : c.subject === 'collection' ? 'de la collection' : 'avec cette plante, et chaque plant';
+      rows.push({ key: 'places', kind: 'check', label: 'Mes lieux', hint: `${n} lieu${n > 1 ? 'x' : ''} ${which}`, value: c.places });
+    }
+    const near = (/** @type {string} */ source) => `autour de vous : votre position précise est envoyée à ${source}`;
+    if (about && this.inatId && moduleOn('inaturalist')) rows.push({ key: 'inat', kind: 'check', label: 'Observations proches : iNaturalist', hint: near('iNaturalist'), value: c.near === 'inat' || c.near === 'both' });
+    if (gbifReady) rows.push({ key: 'gbif-near', kind: 'check', label: 'Observations proches : GBIF', hint: near('GBIF'), value: c.near === 'gbif' || c.near === 'both' });
+    if (f.compare) {
+      const absent = this._compare?.key === null;
+      rows.push({ key: 'compare', kind: 'check', label: 'Sosie : ' + f.compare.label, hint: absent ? 'absente de GBIF : rien à comparer' : 'sa répartition GBIF à côté, en violet', value: true });
+    }
+    const key = JSON.stringify(rows);
+    if (this.#rowsMemo?.key !== key) this.#rowsMemo = { key, rows };
+    return this.#rowsMemo.rows;
+  }
+  /** @type {{ key: string, rows: import('./gf-map-options.js').DataRow[] } | null} */ #rowsMemo = null;
+
+  /**
+   * A row of « Sur cette carte » changed (the map's panel ▦): as its scope bar's chip does — kept for this map (its
+   * observations near me looked for at once: asked by this touch), the look-alike let go as by its chip's ✕.
+   * @param {{ key: string, value: unknown }} d
+   */
+  #onData({ key, value }) {
+    const c = this.config, on = Boolean(value);
+    const gbifNear = c.near === 'gbif' || c.near === 'both', inatNear = c.near === 'inat' || c.near === 'both';
+    if (key === 'gbif' && (value === 'fr' || value === 'world' || value === 'off')) this.#set({ gbif: value });
+    else if (key === 'places') this.#set({ places: on });
+    else if (key === 'inat') this.#set({ near: nearOf(gbifNear, on) });
+    else if (key === 'gbif-near') this.#set({ near: nearOf(on, inatNear) });
+    else if (key === 'compare' && !on) this.dispatchEvent(new CustomEvent('focus-clear', { detail: { kind: 'compare' }, bubbles: true, composed: true }));
   }
 
   /**

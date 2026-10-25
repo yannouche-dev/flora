@@ -19,6 +19,9 @@ import { icon } from '../core/icons.js';
 import { foldLetters as fold, unsigned } from '../core/fold.js';
 import { getPlant, nameOf } from '../core/plants.js';
 import { gbifTaxon } from '../core/sources.js';
+import { mapDistribution, setMapDistribution } from '../core/map-settings.js';
+import { moduleOn } from '../core/modules.js';
+import { definePref } from '../core/prefs.js';
 import { context, setContext } from '../core/context.js';
 import { MediaController } from '../core/media.js';
 import { PaneSizer, paneStyles } from '../core/panes.js';
@@ -33,6 +36,9 @@ const shortDate = (/** @type {string} */ iso) =>
 const round = (/** @type {[number, number]} */ [x, y]) => /** @type {[number, number]} */ ([Math.round(x * 1e7) / 1e7, Math.round(y * 1e7) / 1e7]);
 
 const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
+
+/** The Carte's « Mes lieux » shown (« Sur cette carte » of its panel ▦): kept only when hidden. */
+const placesPref = definePref({ key: config.storageKeys.mapPlaces, clean: v => v !== false, store: v => v ? null : false });
 
 /**
  * Harvest places: IGN map or list sorted by distance, filters. A selected place opens in full beside the map
@@ -227,6 +233,8 @@ export class GfMapPage extends LitElement {
   #store = new StoreController(this);
   get #harvest() { return this.#store.state.harvestMode; }
   #onSpotsChange = () => this.#load();
+  /** « Mes lieux » shown or hidden in another tab. */
+  #redraw = () => this.requestUpdate();
 
   constructor() {
     super();
@@ -532,12 +540,47 @@ export class GfMapPage extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     spotEvents.addEventListener('change', this.#onSpotsChange);
+    placesPref.events.addEventListener('change', this.#redraw);
     this.#load();
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     spotEvents.removeEventListener('change', this.#onSpotsChange);
+    placesPref.events.removeEventListener('change', this.#redraw);
+  }
+
+  /**
+   * « Sur cette carte » of the map's panel ▦: what the Carte draws on it, as its own controls say — the GBIF
+   * distribution of the one plant filtered (kept: core/map-settings.js mapDistribution), my places (kept: placesPref),
+   * the plants observed around (« Autour », the bar's button: off while the places are moved). The same array while
+   * the same. @param {number} count the places the filters keep
+   * @returns {import('./gf-map-options.js').DataRow[]}
+   */
+  #dataRows(count) {
+    /** @type {import('./gf-map-options.js').DataRow[]} */
+    const rows = [];
+    const d = this._distribution;
+    if (d && moduleOn('gbif')) rows.push({ key: 'distribution', kind: 'check', label: 'Répartition GBIF : ' + d.label, hint: 'densité des occurrences connues', value: mapDistribution() });
+    rows.push({ key: 'places', kind: 'check', label: 'Mes lieux', hint: count ? `${count} lieu${count > 1 ? 'x' : ''}, et leurs plantes` : 'aucun lieu', value: placesPref.get() });
+    rows.push({ key: 'around', kind: 'check', label: 'Plantes observées autour',
+      hint: 'iNaturalist : le lieu choisi, sinon votre position, sinon le centre de la carte lui est envoyé', value: Boolean(this._around),
+      disabled: this._editing, why: 'Pas pendant le déplacement des lieux (✎).' });
+    const key = JSON.stringify(rows);
+    if (this.#rowsMemo?.key !== key) this.#rowsMemo = { key, rows };
+    return this.#rowsMemo.rows;
+  }
+  /** @type {{ key: string, rows: import('./gf-map-options.js').DataRow[] } | null} */ #rowsMemo = null;
+
+  /**
+   * A row of « Sur cette carte » changed (the map's panel ▦): as its own control does — kept, or « Autour » opened or
+   * closed as by the bar's button. @param {{ key: string, value: unknown }} d
+   */
+  #onData({ key, value }) {
+    if (key === 'distribution') setMapDistribution(Boolean(value));
+    else if (key === 'places') placesPref.set(Boolean(value));
+    else if (key === 'around' && Boolean(value) !== Boolean(this._around)) this.#toggleAround();
+    this.requestUpdate();
   }
 
   /** @param {Map<string, any>} changed */
@@ -714,6 +757,8 @@ export class GfMapPage extends LitElement {
     const spots = this.#filtered;
     const selected = this._spots.find(s => s.id === this.route.spot) || null;
     const seasonCount = this._spots.filter(s => inSeason(s)).length;
+    // « Mes lieux » hidden (« Sur cette carte »): none on the map — the list and the bar's count keep them.
+    const places = placesPref.get();
 
     return html`
       <h1 class="visually-hidden">Carte des lieux</h1>
@@ -742,10 +787,13 @@ export class GfMapPage extends LitElement {
         ${this._view === 'map' ? html`
           ${this.#empty()}
           <gf-map
-            .spots=${spots}
+            .spots=${places ? spots : []}
             .selectedId=${this.route.spot}
-            .plants=${this.#plantMarkers(spots)}
+            .plants=${places ? this.#plantMarkers(spots) : []}
             .distribution=${this._distribution}
+            .distributionOn=${mapDistribution()}
+            .data=${this.#dataRows(spots.length)}
+            @data-change=${e => this.#onData(e.detail)}
             plant-zoom="16"
             editable
             ?editing=${this._editing}

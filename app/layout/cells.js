@@ -20,8 +20,9 @@
 //    plant; a heart: a favourite.
 // What is done in a cell with its own controls is kept in the layout (`cell-param` {key: value…}, gf-layout.js: the
 // address is the app, sent as it is): a map's 3D, background, layers (their order, IGN's catalogue, their opacity),
-// period, « Seule », legend, binoculars (« Observations autour » in 3D), and, in « Créer une app », its view; the
-// search's filters opened; the results as a list or a grid.
+// period, « Seule », legend, binoculars (« Observations autour » in 3D), its points' sources and the current plant's
+// (« Sur cette carte » of its panel ▦), and, in « Créer une app », its view; the search's filters opened; the results
+// as a list or a grid.
 // A link to a plant's sheet anywhere in a cell (a result, a look-alike) makes it the current plant (gf-layout.js).
 // The frame every cell shares (registry.js#FRAME: its head, its actions, its empty state) is gf-layout.js'; its links
 // are honoured here: a plant of its own (plante=: renderCell), the whole flora instead of the zone (results zone=0:
@@ -55,7 +56,7 @@ import { nearestStop } from '../core/distance.js';
 import { cellIcon, distanceLabel } from './registry.js';
 import { COMPACT_WIDTH, MAP_INTENTS, MAP_LANDMARKS, MAP_LAYERS, WIDE_FRAMES, catalogLayers, inatTiles, inWhen, layersOf, mapControls, opacitiesOf, opacText, overlaysOf, snapRadius, uiMode, viewOf, viewText } from './map-options.js';
 import { periodQuery, plantOfPoint, taxonIdOf } from '../core/nearby.js';
-import { SOURCE_NAMES, failedText, obsNotes, sourcesText } from '../core/observations.js';
+import { SOURCES, SOURCE_NAMES, failedText, obsNotes, sourcesText } from '../core/observations.js';
 import { obsId } from './state.js';
 import { speciesKey } from '../components/map-style.js';
 import '../components/gf-map.js';
@@ -614,6 +615,47 @@ export class DlMap extends LitElement {
     });
   }
 
+  /**
+   * « Sur cette carte » of its panel ▦: its points, as its address says them (its settings' form says the same) — their
+   * sources (src=: those of the zone's observations it draws, given to its group too; one the address' sources= leaves
+   * out, disabled, why said), the current plant's points (plante=: in large, alone, or not shown). A map of France or
+   * of the world: the current plant's alone (the others are tiles of every source). The same array while the same.
+   * @param {LayoutState} s @returns {import('../components/gf-map-options.js').DataRow[]}
+   */
+  #dataRows(s) {
+    const P = this.#p;
+    /** @type {import('../components/gf-map-options.js').DataRow[]} */
+    const rows = [];
+    // The group's sources the address says (sources=): whatever its maps say, the only ones asked.
+    const said = s.live.filtres?.sources ?? null;
+    if (P.portee === 'zone') {
+      for (const x of SOURCES) {
+        const name = SOURCE_NAMES[x];
+        rows.push({ key: 'src:' + x, kind: 'check', label: name, value: P.src.includes(x),
+          hint: x === 'inat' ? 'ses observations dans la zone' : 'ses occurrences dans la zone : herbiers, inventaires, Pl@ntNet…',
+          ...(!said || said.includes(x) ? {} : { disabled: true, why: `Les observations de la zone ne viennent pas de ${name} : à cocher dans les filtres, « Observations de la zone ».` }) });
+      }
+    }
+    const plant = s.live.plant != null && s.plantInfo?.id === s.live.plant ? s.plantInfo.name : null;
+    rows.push({ key: 'plante', kind: 'check', label: 'Points de la plante choisie', value: P.plante !== 'non',
+      hint: plant ? `${plant} : ${P.plante === 'seule' ? 'seule sur la carte' : 'en grand'}` : 'aucune choisie pour l’instant' });
+    const key = JSON.stringify(rows);
+    if (this.#rowsMemo?.key !== key) this.#rowsMemo = { key, rows };
+    return this.#rowsMemo.rows;
+  }
+  /** @type {{ key: string, rows: import('../components/gf-map-options.js').DataRow[] } | null} */ #rowsMemo = null;
+
+  /**
+   * A row of « Sur cette carte » changed (its panel ▦): kept in the layout, as its settings' form writes it — src= the
+   * sources ticked (its group asking them too, unless the address says its own), plante=non or not written.
+   * @param {{ key: string, value: unknown }} d
+   */
+  #onData({ key, value }) {
+    const P = this.#p;
+    if (key.startsWith('src:')) this.#set({ src: SOURCES.filter(x => 'src:' + x === key ? Boolean(value) : P.src.includes(x)) });
+    else if (key === 'plante') this.#set({ plante: !value ? 'non' : P.plante === 'non' ? null : P.plante });
+  }
+
   /** The view it starts on (vue=), read; the same object while it is the same. */
   get #view() {
     const text = this.params?.vue ?? '';
@@ -1021,6 +1063,7 @@ export class DlMap extends LitElement {
         @radius-change=${(/** @type {CustomEvent} */ e) => s.set({ r: e.detail.radius }, 'replace')}
         @look-change=${(/** @type {CustomEvent} */ e) => this.#onLook(e)} @renderer-follow=${() => this.#set({ '3d': null })}
         @around3d-change=${(/** @type {CustomEvent} */ e) => this.#onAround(e)}
+        .data=${this.#dataRows(s)} @data-change=${(/** @type {CustomEvent} */ e) => this.#onData(e.detail)}
         @view-change=${(/** @type {CustomEvent} */ e) => this.#onView(e)} @view-framed=${(/** @type {CustomEvent} */ e) => this.#onFramed(e)}
         @base-shown=${() => this.requestUpdate()}></gf-map>
       ${!wide && on.has('rayon') ? this.#zoneView(s, ctl) : nothing}

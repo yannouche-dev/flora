@@ -82,6 +82,8 @@ export const config = {
     discover: 'geoflora.discover',
     // The radius chosen last on the Carte's « Autour » (core/nearby.js), metres.
     aroundRadius: 'geoflora.aroundRadius',
+    // The Carte's « Mes lieux » (« Sur cette carte » of its panel ▦): false when hidden; none, shown.
+    mapPlaces: 'geoflora.mapPlaces',
     // The media viewer in the sheet: the image's height as a proportion of its width (its grip).
     mediaRatio: 'geoflora.mediaRatio',
     // When the sources' cache was last purged (core/cache.js), ms.

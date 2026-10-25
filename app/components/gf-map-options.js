@@ -5,7 +5,11 @@
 //  2. « Affichage » (2D or 3D, the 3D options folded: map3d-options.js);
 //  3. « Fond » (the plan, the aerial photos — the most recent, of a year, of a period, historical —, SPOT's satellite
 //     images of a year: core/backgrounds.js);
-//  4. what only this map shows (slot `extra`: the GBIF distribution of the Carte's plant);
+//  4. « Sur cette carte » (scope="map", when its map has some: `data`): the data its page draws on it — the Carte's
+//     GBIF distribution, my places, the plants observed around; a plant sheet's map block's distribution, my places,
+//     the observations near me, its look-alike; a free layout's map's sources and the current plant's points —, a
+//     checkbox or a list each, its page's own setting (`data-change` {key, value}: the page changes it, as its other
+//     controls do, and gives the rows back);
 //  5. « Couches affichées »: what is drawn over the background, from the top (gf-layer-stack.js: « Noms et réseaux »,
 //     the overlays with their order and opacity, the background last);
 //  6. « Noms et réseaux » (core/map-layers.js LANDMARKS: the places' names, the roads, the rivers by default; the
@@ -22,10 +26,10 @@
 //  scope="map": shows its map's look (`look`, `own`, `lookWhy`, `gl`, `own3d`: gf-map gives them through its panel)
 //  and asks its map for each change, by events (bubbling, composed): look-edit {patch} (committed), look-preview {key,
 //  opacity} (an opacity while its slider moves), look-common (« Revenir aux réglages communs »), renderer-follow
-//  (« Suivre le réglage commun »: the 2D or 3D its owner fixed, let go).
-// Slots, for what only a map has (scope="map"): `state` (its « État », first in « Affichage »), `extra` (after « Fond »:
-// the GBIF distribution of the Carte's plant), `rules` (first in « Espaces protégés et propriété »: the protected areas
-// in view).
+//  (« Suivre le réglage commun »: the 2D or 3D its owner fixed, let go), data-change {key, value} (a row of « Sur cette
+//  carte », for its page).
+// Slots, for what only a map has (scope="map"): `state` (its « État », first in « Affichage »), `rules` (first in
+// « Espaces protégés et propriété »: the protected areas in view).
 
 import { LitElement, html, css, nothing } from 'lit';
 import { IGN_PREFIX, addCatalogLayer, overlayDef } from '../core/ign-layers.js';
@@ -44,6 +48,14 @@ import './gf-ign-layers.js';
 /**
  * @typedef {import('../core/map-settings.js').MapLook} MapLook @typedef {import('../core/backgrounds.js').BaseKey} BaseKey
  * @typedef {import('../core/map-layers.js').PanelGroup} PanelGroup
+ */
+
+/**
+ * A row of « Sur cette carte »: a layer of data its page draws on the map, as its page's own setting says it — a
+ * checkbox (`value` a boolean) or a list (`value` one of `options`' values); `disabled` with `why` (said under it, and
+ * describing it): why it cannot change here.
+ * @typedef {{ key: string, label: string, hint?: string, kind: 'check' | 'select', value: boolean | string,
+ *   options?: { value: string, label: string }[], disabled?: boolean, why?: string }} DataRow
  */
 
 /**
@@ -89,6 +101,8 @@ export class GfMapOptions extends LitElement {
     own3d: { type: Boolean, attribute: false },
     /** Why its own look is its owner's to keep (a free layout's intent): said, without « Revenir aux réglages communs ». */
     lookWhy: { type: String, attribute: false },
+    /** « Sur cette carte » (scope="map"): its page's layers of data on it (DataRow[]); none: no such section. */
+    data: { attribute: false },
     /** The themes folded or open as last seen (a theme's key → open), else as its layers say (#auto). */
     _open: { state: true },
     /** Protected areas in view (slot `rules` filled): « Espaces protégés et propriété » opens by itself. */
@@ -130,6 +144,13 @@ export class GfMapOptions extends LitElement {
     label.layer:has(input:disabled) { cursor: default; color: var(--gf-text-muted); }
     label.layer:has(input:disabled):hover { background: none; }
     .note { margin: 2px 4px 4px; font-size: 0.8rem; color: var(--gf-text-muted); }
+    /* « Sur cette carte »: a list's row, its words then its list; why a row cannot change, under its words. */
+    .data .pick { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 4px; }
+    .data .pick label { flex: 1 1 10em; display: grid; min-width: 0; overflow-wrap: anywhere; }
+    .data .pick small { color: var(--gf-text-muted); font-size: 0.8rem; }
+    .data .pick select { flex: 0 1 auto; max-width: 100%; }
+    .data .pick:has(select:disabled) { color: var(--gf-text-muted); }
+    .data .why { margin-top: -6px; padding-left: 36px; }
     /* A theme: folded under its title (a heading), its count of layers ticked beside it. */
     details.theme { min-width: 0; border-top: 1px solid var(--gf-border); }
     details.theme:last-of-type { border-bottom: 1px solid var(--gf-border); }
@@ -159,6 +180,8 @@ export class GfMapOptions extends LitElement {
     this.gl = null;
     this.own3d = false;
     this.lookWhy = '';
+    /** @type {DataRow[]} */
+    this.data = [];
     /** @type {Map<string, boolean>} */
     this._open = new Map();
     this._inView = false;
@@ -354,6 +377,34 @@ export class GfMapOptions extends LitElement {
       })}</div>`;
   }
 
+  /**
+   * « Sur cette carte » (a map's panel, its page drawing data on it): each layer of data, a checkbox or a list, as its
+   * page's own setting says it — changed by its page (`data-change` {key, value}), which gives the rows back; one that
+   * cannot change here disabled, why said under it (and describing it). None: no section (Réglages, a map without data).
+   */
+  #data() {
+    const rows = this.#defaults ? [] : this.data ?? [];
+    if (!rows.length) return nothing;
+    const change = (/** @type {DataRow} */ r, /** @type {boolean | string} */ value) => this.#emit('data-change', { key: r.key, value });
+    return html`<h3 class="kicker" id="panel-data">Sur cette carte</h3>
+      <div class="data" role="group" aria-labelledby="panel-data">${rows.map(r => {
+        const id = 'panel-data-' + r.key;
+        const why = r.disabled && r.why ? id + '-why' : null;
+        const text = html`${r.label}${r.hint ? html`<small>${r.hint}</small>` : nothing}`;
+        return html`${r.kind === 'select'
+          ? html`<div class="layer pick" data-key=${r.key}><label for=${id}>${text}</label>
+              <select id=${id} ?disabled=${Boolean(r.disabled)} aria-describedby=${why ?? nothing} @change=${(/** @type {any} */ e) => change(r, e.target.value)}>
+                ${(r.options ?? []).map(o => html`<option value=${o.value} .selected=${o.value === r.value}>${o.label}</option>`)}
+              </select></div>`
+          : html`<label class="layer" data-key=${r.key}>
+              <input type="checkbox" .checked=${Boolean(r.value)} ?disabled=${Boolean(r.disabled)} aria-describedby=${why ?? nothing}
+                @change=${(/** @type {any} */ e) => change(r, e.target.checked)} />
+              <span>${text}</span>
+            </label>`}
+          ${why ? html`<p class="note why" id=${why}>${r.why}</p>` : nothing}`;
+      })}</div>`;
+  }
+
   /** Its layers ticked: how many. @param {PanelGroup} g @param {MapLook} look */
   #ticked(g, look) { return g.parts.flatMap(p => p.rows).filter(r => look.overlays.includes(rowKey(r))).length; }
 
@@ -393,7 +444,7 @@ export class GfMapOptions extends LitElement {
       ${this.#scope()}
       ${this.#display()}
       ${this.#bases(look)}
-      <slot name="extra"></slot>
+      ${this.#data()}
 
       <h3 class="kicker">Couches affichées</h3>
       <gf-layer-stack .base=${look.base} .landmarks=${look.landmarks} .overlays=${look.overlays} .opacities=${look.opacities}

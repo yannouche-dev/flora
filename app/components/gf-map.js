@@ -7,7 +7,7 @@ import { config } from '../config.js';
 import { geoProblem, watchLocation, whenGranted } from '../core/geo.js';
 import { DEFAULT_OPACITY, FRANCE_BOUNDS, LANDMARK_Z, isOverlay, landmarksShown, overlayDef, tileLayer } from '../core/ign.js';
 import { isBaseKey } from '../core/backgrounds.js';
-import { lookFor, mapDistribution, mapLookEvents, setMapDistribution, setMapLook } from '../core/map-settings.js';
+import { lookFor, mapLookEvents, setMapLook } from '../core/map-settings.js';
 import { inSeason, placeAbundance, placeTitle } from '../core/collections.js';
 import { store as appStore } from '../core/store.js';
 import { cachedThumb, thumbUrl } from '../core/thumb.js';
@@ -290,6 +290,10 @@ const movesCount = (/** @type {Moves} */ m) => (m.pin ? 1 : 0) + m.places.size +
  *    opacity), kept by its owner; null (the default): the maps' common look, followed as it changes (here, on another
  *    map, in Réglages, in another tab). Each field given is its own, the others the common ones. Its panel ▦ changes the common look, or —
  *    the map having its own — its own, told by `look-change`.
+ *  - data: « Sur cette carte » of its panel ▦ (gf-map-options.js DataRow[]): the layers of data its page draws on it, as
+ *    the page's own settings say them (the Carte's GBIF distribution, my places, the plants observed around; a plant
+ *    sheet's map block's; a free layout's map's sources and current plant) — a row changed: `data-change` {key, value},
+ *    for the page to change it as its other controls do, and give the rows back; none (the default): no such section
  *  - no-create: the point card (long press) has no « Créer un lieu ici »
  *  - editable: the ✎ control (always shown) switches position editing on. While `editing`, every marker
  *    (places, plants, the pin) is dragged freely; a plant dropped emits positions-save with that one move at once, for
@@ -312,7 +316,7 @@ const movesCount = (/** @type {Moves} */ m) => (m.pin ? 1 : 0) + m.places.size +
  *         edit-change {editing}, positions-save {pin, places: [{id, coordinates}], plants: [{placeId, entryId, plantId, coordinates}]},
  *         look-change {look} (its own look changed on it, its panel's or its opacity card's: for its owner to keep and give
  *         back; null: « Revenir aux réglages communs »), renderer-follow (« Suivre le réglage commun »: the 2D or 3D its
- *         owner fixed — own3d — let go), base-shown {base}
+ *         owner fixed — own3d — let go), base-shown {base}, data-change {key, value} (a row of « Sur cette carte »)
  *
  * What a map says — the quiet-map rule, for every map of the app (this one, its 3D mirror gf-map-gl.js and its
  * « Observations autour » gf-map-obs3d.js, and every page around a map): nothing persistent is written over the map
@@ -376,9 +380,12 @@ export class GfMap extends LitElement {
     noSearch: { type: Boolean, attribute: 'no-search' },
     editable: { type: Boolean },
     editing: { type: Boolean, reflect: true },
-    /** A plant whose GBIF distribution the Carte panel offers as a layer: { key (GBIF taxon), label }. */
+    /** A plant whose GBIF distribution it can show: { key (GBIF taxon), label, country?, filter? (GBIF filter params) }. */
     distribution: { attribute: false },
-    /** Shows the `distribution` layer without the panel (a map block configured to). `distribution.filter`: GBIF filter params. */
+    /**
+     * Shows the `distribution` layer — its page's choice (the Carte's « Répartition GBIF » in « Sur cette carte », a map
+     * block set to).
+     */
     distributionOn: { type: Boolean, attribute: 'distribution-on' },
     /** A second plant's GBIF occurrences, in another colour: { key, label, country? }. */
     compare: { attribute: false },
@@ -429,6 +436,8 @@ export class GfMap extends LitElement {
     noAreas: { type: Boolean, attribute: 'no-areas' },
     /** A walk to draw ({ key, coordinates: [lon, lat][] }): a line on a white casing (the « Vue 3D » of a parcours). */
     line: { attribute: false },
+    /** « Sur cette carte » of its panel: its page's layers of data on it (gf-map-options.js DataRow[]; see the class's comment). */
+    data: { attribute: false },
     _moves: { state: true }
   };
 
@@ -497,6 +506,8 @@ export class GfMap extends LitElement {
     this.noAreas = false;
     /** @type {{ key: string, coordinates: [number, number][] } | null} */
     this.line = null;
+    /** @type {import('./gf-map-options.js').DataRow[]} */
+    this.data = [];
     this.minZoom = 5;
     this.noSearch = false;
     this.editable = false;
@@ -848,12 +859,12 @@ export class GfMap extends LitElement {
   };
 
   /**
-   * The GBIF distribution layer of the plant given, when switched on in the panel (and GBIF is on), filtered
-   * when asked; and the compared plant's, in purple.
+   * The GBIF distribution layer of the plant given, when its page shows it (and GBIF is on), filtered when asked; and
+   * the compared plant's, in purple.
    */
   #syncDistribution() {
     const d = this.distribution;
-    const on = d && (this.#distributionOn || this.distributionOn) && moduleOn('gbif');
+    const on = d && this.distributionOn && moduleOn('gbif');
     this.#distributionLayer = this.#syncGbifLayer(this.#distributionLayer, on ? /** @type {any} */ (d) : null, 'classic.point', 20);
     const c = this.compare;
     this.#compareLayer = this.#syncGbifLayer(this.#compareLayer, c && moduleOn('gbif') ? { key: c.key, country: c.country, filter: null } : null, 'purpleYellow.point', 21);
@@ -942,7 +953,6 @@ export class GfMap extends LitElement {
    * one an overlay shows left to it: core/ign.js landmarksShown). @type {string[]}
    */
   #landmarks = [];
-  #distributionOn = mapDistribution();
   /** @type {L.TileLayer | null} */ #distributionLayer = null;
   /** @type {L.TileLayer | null} */ #compareLayer = null;
   /** @type {L.LayerGroup | null} */ #focusLayer = null;
@@ -1178,10 +1188,8 @@ export class GfMap extends LitElement {
     }
     if (changed.has('focusPoint')) this.#syncFocusPoint();
     if (changed.has('tiles')) this.#syncTiles();
-    if (changed.has('distribution') || changed.has('distributionOn') || changed.has('compare')) {
-      this.#syncDistribution();
-      if (this.#panel) Object.assign(this.#panel, this.#distributionInfo());
-    }
+    if (changed.has('distribution') || changed.has('distributionOn') || changed.has('compare')) this.#syncDistribution();
+    if (this.#panel && ['data', 'distribution', 'compare'].some(k => changed.has(k))) Object.assign(this.#panel, this.#dataInfo());
     // Dropped markers stay where they were dropped until the caller passes back data that has them.
     if (movesCount(this._moves) && (changed.has('spots') || changed.has('plants') || changed.has('pin'))) this.#pruneMoves();
     if (changed.has('editing') && changed.get('editing') !== undefined) {
@@ -2624,8 +2632,8 @@ export class GfMap extends LitElement {
   /**
    * The panel ▦ « Carte » (gf-map-panel.js), the home of the maps' look: its options (gf-map-options.js: 2D / 3D and the
    * 3D options — gf-map-gl.js tells the panel how this map is drawn —, the background, IGN's layers: the common look,
-   * or this map's own), its state, legend, sources. Every map has its button: round among the map's buttons, or at
-   * the end of the search pill.
+   * or this map's own), its state, « Sur cette carte » (its page's data on it), legend, sources. Every map has its
+   * button: round among the map's buttons, or at the end of the search pill.
    */
   openPanel() {
     if (!this.#panel) {
@@ -2636,15 +2644,11 @@ export class GfMap extends LitElement {
       on('look-preview', d => this.#setOpacity(d.key, d.opacity, false));
       on('look-common', () => this.#commonLook());
       on('renderer-follow', () => this.#emit('renderer-follow', {}));
-      on('distribution-toggle', d => {
-        this.#distributionOn = d.on;
-        setMapDistribution(d.on);
-        this.#syncDistribution();
-        if (this.#panel) Object.assign(this.#panel, this.#distributionInfo());
-      });
+      // « Sur cette carte »: for its page, which changes it and gives the rows back (`data`).
+      on('data-change', d => this.#emit('data-change', { key: d.key, value: d.value }));
       this.#root.append(panel);
     }
-    Object.assign(this.#panel, { ...this.#lookInfo(), own3d: this.own3d, legend: this.legend, legendLines: this.#legendLines, ...this.#distributionInfo() });
+    Object.assign(this.#panel, { ...this.#lookInfo(), own3d: this.own3d, legend: this.legend, legendLines: this.#legendLines, ...this.#dataInfo() });
     this.#syncState();
     this.#panel.updateComplete.then(() => this.#panel.open());
   }
@@ -3080,11 +3084,9 @@ export class GfMap extends LitElement {
     }
   }
 
-  /** What the panel says of the GBIF layer: nothing without a plant (or with GBIF off). */
-  #distributionInfo() {
-    // Set by its owner (map block): not a panel choice.
-    if (this.distributionOn) return { distribution: null, distributionOn: false };
-    return { distribution: this.distribution && moduleOn('gbif') ? this.distribution.label : null, distributionOn: this.#distributionOn };
+  /** What its panel has of its page's: « Sur cette carte », and whether GBIF's distributions are among its sources. */
+  #dataInfo() {
+    return { data: this.data ?? [], gbif: Boolean((this.distribution || this.compare) && moduleOn('gbif')) };
   }
 }
 

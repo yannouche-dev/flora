@@ -283,7 +283,7 @@ export function lookFor(own, common = look) {
   };
 }
 
-/** The GBIF distribution layer of the Carte's panel, shown (kept with the look, not a part of it). */
+/** The Carte's GBIF distribution layer, shown (« Sur cette carte » of its panel ▦; kept with the look, not a part of it). */
 export const mapDistribution = () => layersPref.get().distribution;
 
 /** @param {boolean} on */
