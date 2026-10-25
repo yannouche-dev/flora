@@ -312,6 +312,17 @@ test('copie de secours : ce qu’elle tient, dit avec les mots du dialogue de r�
   assert.equal(C.backupContents({ savedAt: '', favorites: 4, lists: 1, places: 2, notes: 0 }), 'vos favoris (4 plantes), 1 liste et 2 lieux');
 });
 
+test('favoris, listes et lieux comptés (Réglages, export, transfert) : les favoris à part — ni liste ni lieu —, vidés pas du tout', () => {
+  const favorites = (/** @type {number} */ n) => ({ id: C.FAVORITES_ID, geometry: null, properties: { plants: Array(n).fill({}) } });
+  const list = { id: 'l', geometry: null, properties: { plants: [] } };
+  const place = (/** @type {string} */ id) => ({ id, geometry: { type: 'Point', coordinates: [3.1, 45.8] }, properties: { plants: [{}] } });
+  assert.equal(C.keptContents([favorites(2)]), 'vos favoris (2 plantes)', 'seulement des favoris : pas « 1 liste ou lieu »');
+  assert.equal(C.keptContents([favorites(0)]), '', 'des favoris vidés : rien');
+  assert.equal(C.keptContents([favorites(0), list]), '1 liste');
+  assert.equal(C.keptContents([list, place('a'), favorites(1), place('b')]), 'vos favoris (1 plante), 1 liste et 2 lieux');
+  assert.equal(C.keptContents([]), '');
+});
+
 test('copie de secours : aucune, ou vide — rien à annoncer', () => {
   localStorage.removeItem(config.storageKeys.backup);
   assert.equal(C.backupSummary(), null);

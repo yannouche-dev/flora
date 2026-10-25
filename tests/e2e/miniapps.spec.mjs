@@ -2,7 +2,7 @@
 // the old addresses of Découvrir leading to them, their steps in the address, « Recommencer » (confirmed) emptying
 // what each owns and only that, back at its first step — and still empty after a reload. Rencontres' services
 // answered here.
-import { test, expect, plantId, answerAround } from './fixtures.mjs';
+import { test, expect, plantId, answerAround, answerOrchids } from './fixtures.mjs';
 
 test.use({ reducedMotion: 'reduce' });
 test.beforeEach(({ context }) => answerAround(context));
@@ -29,7 +29,7 @@ async function replay(page, session) {
 test('Découvrir (l’icône film) ouvre une activité seule à l’écran ; « Quitter l’activité » ramène d’où l’on venait', async ({ app, page }) => {
   await app.open('#/collections');
   await page.getByRole('button', { name: 'Découvrir', exact: true }).locator('visible=true').first().click();
-  await page.getByRole('dialog', { name: 'Découvrir' }).locator('li[data-app="parcours"]').getByRole('button', { name: 'Commencer : Parcours botanique' }).click();
+  await page.getByRole('dialog', { name: 'Découvrir' }).locator('li[data-app="parcours"]').getByRole('button', { name: 'Commencer : Parcours botanique', exact: true }).click();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/app/parcours/start');
   await expect(page.locator('gf-miniapp .go')).toBeVisible();
   // Alone: no header, no tab bar.
@@ -46,7 +46,7 @@ test('une activité lancée depuis une autre en prend le point de départ : « Q
   const hash = () => page.evaluate(() => location.hash);
   await app.open('#/collections');
   await page.getByRole('button', { name: 'Découvrir', exact: true }).locator('visible=true').first().click();
-  await page.getByRole('dialog', { name: 'Découvrir' }).locator('li[data-app="parcours"]').getByRole('button', { name: 'Commencer : Parcours botanique' }).click();
+  await page.getByRole('dialog', { name: 'Découvrir' }).locator('li[data-app="parcours"]').getByRole('button', { name: 'Commencer : Parcours botanique', exact: true }).click();
   await expect.poll(hash).toBe('#/app/parcours/start');
   const box = page.locator('gf-miniapp');
   await expect(box.locator('.start .go')).toBeVisible();
@@ -54,7 +54,7 @@ test('une activité lancée depuis une autre en prend le point de départ : « Q
   expect(typeof from).toBe('number');
   // The film icon of its bar: Découvrir over it, another activity.
   await box.locator('gf-scenarios').getByRole('button', { name: 'Découvrir', exact: true }).click();
-  await box.locator('gf-scenarios').getByRole('dialog').locator('li[data-app="mosaique"]').getByRole('button', { name: 'Commencer : Mosaïque' }).click();
+  await box.locator('gf-scenarios').getByRole('dialog').locator('li[data-app="mosaique"]').getByRole('button', { name: 'Commencer : Mosaïque', exact: true }).click();
   await expect.poll(hash).toBe('#/app/mosaique/start');
   await expect(box.locator('.start .go')).toBeVisible();
   // The dialog's step gone, not left behind: one entry more, the first one's starting point handed on.
@@ -71,11 +71,11 @@ test('« Autres activités » (l’écran de départ) : la suivante garde ce poi
   const hash = () => page.evaluate(() => location.hash);
   await app.open('#/collections');
   await page.getByRole('button', { name: 'Découvrir', exact: true }).locator('visible=true').first().click();
-  await page.getByRole('dialog', { name: 'Découvrir' }).locator('li[data-app="parcours"]').getByRole('button', { name: 'Commencer : Parcours botanique' }).click();
+  await page.getByRole('dialog', { name: 'Découvrir' }).locator('li[data-app="parcours"]').getByRole('button', { name: 'Commencer : Parcours botanique', exact: true }).click();
   const box = page.locator('gf-miniapp');
   await expect(box.locator('.start .leave')).toHaveText('Autres activités');
   await box.locator('.start .leave').click();
-  await box.locator('gf-scenarios').getByRole('dialog').locator('li[data-app="rencontres"]').getByRole('button', { name: 'Commencer : Rencontres' }).click();
+  await box.locator('gf-scenarios').getByRole('dialog').locator('li[data-app="rencontres"]').getByRole('button', { name: 'Commencer : Rencontres', exact: true }).click();
   await expect.poll(hash).toBe('#/app/rencontres/start');
   await page.reload();
   await app.ready();
@@ -94,7 +94,7 @@ test('« Recommencer » dans Découvrir par-dessus une activité : la question e
   });
   await app.open('#/collections');
   await page.getByRole('button', { name: 'Découvrir', exact: true }).locator('visible=true').first().click();
-  await page.getByRole('dialog', { name: 'Découvrir' }).locator('li[data-app="parcours"]').getByRole('button', { name: 'Commencer : Parcours botanique' }).click();
+  await page.getByRole('dialog', { name: 'Découvrir' }).locator('li[data-app="parcours"]').getByRole('button', { name: 'Commencer : Parcours botanique', exact: true }).click();
   const box = page.locator('gf-miniapp');
   await expect(box.locator('.start .go')).toBeVisible();
   const [entries, from] = await page.evaluate(() => [history.length, history.state.gfAppFrom]);
@@ -110,12 +110,36 @@ test('« Recommencer » dans Découvrir par-dessus une activité : la question e
   await expect.poll(hash).toBe('#/collections');
 });
 
+test('« Recommencer » dans Découvrir de l’activité à l’écran : son premier écran, la question et le dialogue partis', async ({ app, page }) => {
+  const hash = () => page.evaluate(() => location.hash);
+  await answerOrchids(page);
+  await app.open('#/collections');
+  await page.getByRole('button', { name: 'Découvrir', exact: true }).locator('visible=true').first().click();
+  await page.getByRole('dialog', { name: 'Découvrir' }).locator('li[data-app="orchidees"]').getByRole('button', { name: 'Commencer : Orchidées de Mirabel', exact: true }).click();
+  const box = page.locator('gf-miniapp');
+  await box.locator('.start .go').click();
+  await expect.poll(hash).toBe('#/app/orchidees/map');
+  const from = await page.evaluate(() => history.state.gfAppFrom);
+  // Its map may still be entered after « Recommencer »: the address must not go back to it.
+  await box.locator('gf-scenarios').getByRole('button', { name: 'Découvrir', exact: true }).click();
+  await box.locator('gf-scenarios li[data-app="orchidees"]').getByRole('button', { name: 'Recommencer : Orchidées de Mirabel', exact: true }).click();
+  await box.locator('gf-scenarios dialog.ask').getByRole('button', { name: 'Recommencer' }).click();
+  await expect.poll(hash).toBe('#/app/orchidees/start');
+  await expect(box.locator('.start .go')).toBeVisible();
+  // Still there once history has settled: on its own entry, the two dialog steps gone.
+  await page.waitForTimeout(500);
+  expect(await hash()).toBe('#/app/orchidees/start');
+  expect(await page.evaluate(() => [history.state.gfAppFrom, history.state.gfModal ?? null])).toEqual([from, null]);
+  await box.locator('.quit').click();
+  await expect.poll(hash).toBe('#/collections');
+});
+
 test('ouverte sans rien derrière, une activité, et celle lancée depuis elle, ramènent à l’accueil', async ({ app, page }) => {
   const hash = () => page.evaluate(() => location.hash);
   await app.open('#/app/parcours');
   const box = page.locator('gf-miniapp');
   await box.locator('gf-scenarios').getByRole('button', { name: 'Découvrir', exact: true }).click();
-  await box.locator('gf-scenarios').getByRole('dialog').locator('li[data-app="mosaique"]').getByRole('button', { name: 'Commencer : Mosaïque' }).click();
+  await box.locator('gf-scenarios').getByRole('dialog').locator('li[data-app="mosaique"]').getByRole('button', { name: 'Commencer : Mosaïque', exact: true }).click();
   await expect.poll(hash).toBe('#/app/mosaique/start');
   await box.locator('.quit').click();
   await expect.poll(hash).toBe('#/');

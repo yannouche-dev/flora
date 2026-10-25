@@ -11,7 +11,7 @@ test.beforeEach(({ context }) => answerAround(context));
 
 test('autour de moi : la carte des observations, puis les cartes, la plus observée d’abord', async ({ app, page }) => {
   await app.open('#/');
-  await page.locator('gf-launcher li[data-app="rencontres"]').getByRole('button', { name: 'Commencer : Rencontres' }).click();
+  await page.locator('gf-launcher li[data-app="rencontres"]').getByRole('button', { name: 'Commencer : Rencontres', exact: true }).click();
   await page.getByRole('button', { name: 'Autour de moi' }).click();
   const discover = page.locator('ma-guided');
   await expect(discover.locator('.g-steps li.on .l')).toHaveText('Carte');

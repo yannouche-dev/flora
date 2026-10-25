@@ -2,7 +2,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { getPlants, nameOf } from '../core/plants.js';
 import { href } from '../core/router.js';
-import { importPortable, lastEntry, listsAndPlaces, newCollection, newPlace, plantCount, saveCollection, withEntry, withPlant } from '../core/collections.js';
+import { importPortable, keptContents, lastEntry, newCollection, newPlace, plantCount, saveCollection, withEntry, withPlant } from '../core/collections.js';
 import { FAVORITES_ID } from '../core/place-model.js';
 import { hasPersonal } from '../core/portable.js';
 import { decodeCollection, decodePortable, isPortableLink } from '../core/share.js';
@@ -135,8 +135,9 @@ export class GfShared extends LitElement {
     try {
       await whenReady();
       const r = await importPortable(this._portable);
-      this._done = `${r.added} ajoutée${r.added > 1 ? 's' : ''}, ${r.updated} mise${r.updated > 1 ? 's' : ''} à jour, ${r.unchanged} déjà à jour`
-        + (r.skipped ? `, ${r.skipped} ignorée${r.skipped > 1 ? 's' : ''}` : '')
+      // Favourites, lists and places together: masculine, as the file import of Réglages says them.
+      this._done = `${r.added} ajouté${r.added > 1 ? 's' : ''}, ${r.updated} mis à jour, ${r.unchanged} déjà à jour`
+        + (r.skipped ? `, ${r.skipped} ignoré${r.skipped > 1 ? 's' : ''}` : '')
         + (r.notes ? `, ${r.notes} note${r.notes > 1 ? 's' : ''} de fiche` : '') + '.';
     } catch (error) {
       this._error = 'Import impossible : ' + /** @type {Error} */ (error).message;
@@ -148,15 +149,15 @@ export class GfShared extends LitElement {
   #portableView() {
     const features = this._portable.features;
     const kindOf = (/** @type {any} */ f) => f.id === FAVORITES_ID ? 'favorites' : f.geometry ? 'place' : 'list';
-    const places = features.filter(f => kindOf(f) === 'place').length;
-    const lists = features.filter(f => kindOf(f) === 'list').length;
+    // The favourites named apart (neither a list nor a place): « Vos favoris (2 plantes), 1 liste et 3 lieux ».
+    const kept = keptContents(features);
     const plants = features.reduce((n, f) => n + (f.properties?.plants?.length || 0), 0);
     const label = (/** @type {any} */ f) => html`${kindIcon(kindOf(f))} ${kindOf(f) === 'favorites' ? 'Favoris' : f.properties?.name || 'Sans nom'}`;
     return html`
       <div class="wrap">
         <span class="kicker">Transfert de Mes plantes</span>
-        <h1>${listsAndPlaces(features.length)}</h1>
-        <p class="muted">${lists} liste${lists > 1 ? 's' : ''}, ${places} lieu${places > 1 ? 'x' : ''}, ${plantCount(plants)}${hasPersonal(this._portable) ? ' · avec notes et récoltes' : ' · sans notes ni récoltes'}${this._portable.exportedAt ? ` · créé le ${new Date(this._portable.exportedAt).toLocaleDateString('fr-FR')}` : ''}.</p>
+        <h1>${kept ? kept[0].toUpperCase() + kept.slice(1) : 'Rien à importer'}</h1>
+        <p class="muted">${plantCount(plants)}${hasPersonal(this._portable) ? ' · avec notes et récoltes' : ' · sans notes ni récoltes'}${this._portable.exportedAt ? ` · créé le ${new Date(this._portable.exportedAt).toLocaleDateString('fr-FR')}` : ''}.</p>
         <ul class="names">${features.map(f => html`<li>${label(f)} <span class="muted">${f.properties?.plants?.length || 0}</span></li>`)}</ul>
         ${this._done ? html`
           <p role="status"><strong>Importé :</strong> ${this._done}</p>
@@ -165,7 +166,7 @@ export class GfShared extends LitElement {
             <button class="primary large" type="button" ?disabled=${this._busy} @click=${this.#importPortable}>Importer</button>
             <a class="link muted" href=${href.collections()}>Ignorer</a>
           </div>
-          <p class="muted">Les listes et lieux déjà présents sur cet appareil sont mis à jour (la version la plus récente l’emporte), sans doublon ; rien n’est envoyé sur Internet.</p>`}
+          <p class="muted">Vos favoris, listes et lieux déjà présents sur cet appareil sont mis à jour (la version la plus récente l’emporte), sans doublon ; rien n’est envoyé sur Internet.</p>`}
       </div>`;
   }
 

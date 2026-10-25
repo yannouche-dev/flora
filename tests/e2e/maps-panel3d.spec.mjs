@@ -165,7 +165,7 @@ test.describe('Rencontres, première fois', () => {
   test('la carte des premiers pas', async ({ app, page }) => {
     test.slow();
     await app.open('#/');
-    await page.locator('gf-launcher li[data-app="rencontres"]').getByRole('button', { name: 'Commencer : Rencontres' }).click();
+    await page.locator('gf-launcher li[data-app="rencontres"]').getByRole('button', { name: 'Commencer : Rencontres', exact: true }).click();
     await page.getByRole('button', { name: 'Autour de moi' }).click();
     const map = page.locator('ma-guided .g-mapbox gf-map');
     await expect(map.locator('path.gf-area')).toHaveCount(1);

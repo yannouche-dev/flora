@@ -103,9 +103,9 @@ for (const id of /** @type {(keyof typeof TITLES)[]} */ (Object.keys(TITLES))) {
   test(`${TITLES[id]} : « Continuer » reprend où on l’avait laissée ; « Recommencer » efface tout, le départ, comme jamais ouverte`, async ({ app, page }) => {
     await app.open('#/discover');
     const never = await footprint(page);
-    await expect(list(page).getByRole('button', { name: `Commencer : ${TITLES[id]}` })).toBeVisible();
+    await expect(list(page).getByRole('button', { name: `Commencer : ${TITLES[id]}`, exact: true })).toBeVisible();
     await expect(list(page).getByRole('button', { name: `Continuer : ${TITLES[id]}` })).toHaveCount(0);
-    await list(page).getByRole('button', { name: `Commencer : ${TITLES[id]}` }).click();
+    await list(page).getByRole('button', { name: `Commencer : ${TITLES[id]}`, exact: true }).click();
     await atStart(page, id);
     const step = await play(page, id);
     await page.locator('gf-miniapp .quit').click();
@@ -155,7 +155,7 @@ for (const id of /** @type {(keyof typeof TITLES)[]} */ (Object.keys(TITLES))) {
     await atStart(page, id);
     expect(await footprint(page)).toEqual(never);
     await page.locator('gf-miniapp .quit').click();
-    await expect(list(page).getByRole('button', { name: `Commencer : ${TITLES[id]}` })).toBeVisible();
+    await expect(list(page).getByRole('button', { name: `Commencer : ${TITLES[id]}`, exact: true })).toBeVisible();
   });
 }
 
@@ -199,13 +199,13 @@ test('Recommencer une partie ne touche pas les autres, ni un favori venu d’ail
 
 test('la liste avec une activité en cours (captures)', async ({ app, page }, info) => {
   await app.open('#/discover');
-  await list(page).getByRole('button', { name: 'Commencer : Cueillette prudente' }).click();
+  await list(page).getByRole('button', { name: 'Commencer : Cueillette prudente', exact: true }).click();
   await play(page, 'cueillette');
   await page.locator('gf-miniapp .quit').click();
   await expect(list(page).getByRole('button', { name: 'Continuer : Cueillette prudente' })).toBeVisible();
-  await expect(list(page).getByRole('button', { name: 'Commencer : Rencontres' })).toBeVisible();
-  await expect(list(page).getByRole('button', { name: 'Commencer : Mosaïque' })).toBeVisible();
-  await expect(list(page).getByRole('button', { name: 'Commencer : Scientifique' })).toHaveCount(0);
+  await expect(list(page).getByRole('button', { name: 'Commencer : Rencontres', exact: true })).toBeVisible();
+  await expect(list(page).getByRole('button', { name: 'Commencer : Mosaïque', exact: true })).toBeVisible();
+  await expect(list(page).getByRole('button', { name: 'Commencer : Scientifique', exact: true })).toHaveCount(0);
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/launcher-underway-${info.project.name}.png`, fullPage: false });
 });
 
@@ -215,7 +215,7 @@ const walksNamed = (page, name) => page.evaluate(async n => (await (await import
 
 test('Parcours : un parcours terminé avec ses plantes reste dans Mes plantes, le sien désormais', async ({ app, page }) => {
   await app.open('#/discover');
-  await list(page).getByRole('button', { name: 'Commencer : Parcours botanique' }).click();
+  await list(page).getByRole('button', { name: 'Commencer : Parcours botanique', exact: true }).click();
   await play(page, 'parcours');
   expect(await walksNamed(page, 'Chemin du lavoir')).toEqual([{ origin: { app: 'parcours' }, from: null }]);
   // A plant touched first (its occurrences lit), then « Terminer »: the recap, and it stays.
@@ -238,7 +238,7 @@ test('Parcours : un parcours terminé avec ses plantes reste dans Mes plantes, l
 
 test('Parcours : un parcours en cours renommé depuis Mes plantes est gardé ; Annuler ne supprime rien', async ({ app, page }) => {
   await app.open('#/discover');
-  await list(page).getByRole('button', { name: 'Commencer : Parcours botanique' }).click();
+  await list(page).getByRole('button', { name: 'Commencer : Parcours botanique', exact: true }).click();
   await play(page, 'parcours');
   await page.locator('gf-miniapp .quit').click();
   const id = await page.evaluate(async () => (await (await import('/app/core/collections.js')).listCollections()).find((/** @type {any} */ c) => c.properties.name === 'Chemin du lavoir')?.id);
@@ -257,7 +257,7 @@ test('Parcours : un parcours en cours renommé depuis Mes plantes est gardé ; A
 
 test('Rencontres : un favori de match rangé dans une liste est gardé, un favori de match simple supprimé', async ({ app, page }) => {
   await app.open('#/discover');
-  await list(page).getByRole('button', { name: 'Commencer : Rencontres' }).click();
+  await list(page).getByRole('button', { name: 'Commencer : Rencontres', exact: true }).click();
   await play(page, 'rencontres');
   await expect(page.locator('ma-deck .swipe-card.top')).toHaveAttribute('data-id', String(plantId('Taraxacum officinale')));
   await page.locator('ma-deck .round.like').click();

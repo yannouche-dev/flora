@@ -605,9 +605,6 @@ export function placeTitle(place) {
 /** @param {number} n */
 export const plantCount = n => `${n} plante${n > 1 ? 's' : ''}`;
 
-/** « 1 liste ou lieu », « 3 listes et lieux ». @param {number} n */
-export const listsAndPlaces = n => n > 1 ? `${n} listes et lieux` : `${n} liste ou lieu`;
-
 // The great-circle distance in metres, and a distance said (« 1,5 km »): core/distance.js's, offered here too (screens
 // import them from this module; `distance` is read here as well).
 export { distance };
@@ -684,13 +681,17 @@ export async function missingFromBackup() {
   return missing;
 }
 
-/** Puts the missing collections back, and the plant sheet's notes this device lost. @returns {Promise<number>} how many collections were restored */
+/**
+ * Puts the missing collections back, and the plant sheet's notes this device lost.
+ * @returns {Promise<{ count: number, kept: string }>} how many collections were restored, and what they hold in words
+ *   (keptContents)
+ */
 export async function restoreBackup() {
   await importNotes(readBackup()?.sheetNotes).catch(error => console.error(error));
   const missing = await missingFromBackup();
-  if (!missing.length) return 0;
+  if (!missing.length) return { count: 0, kept: '' };
   const { added, updated } = await importFeatures(missing);
-  return added + updated;
+  return { count: added + updated, kept: keptContents(missing) };
 }
 
 /** Forgets collections the user chose not to restore (the backup then follows the database). */
@@ -777,13 +778,26 @@ export function backupSummary() {
 
 /**
  * What a backup copy holds, in words: « vos favoris (2 plantes), 1 liste, 3 lieux et 1 note de fiche » — the
- * same before a repair (its dialog) and after it (what came back). @param {BackupSummary} s
+ * same before a repair (its dialog) and after it (what came back). @param {Omit<BackupSummary, 'savedAt'>} s
  */
 export function backupContents(s) {
   const count = (/** @type {number} */ n, /** @type {string} */ one, many = one + 's') => `${n} ${n > 1 ? many : one}`;
   const items = [s.favorites ? `vos favoris (${plantCount(s.favorites)})` : '', s.lists ? count(s.lists, 'liste') : '',
     s.places ? count(s.places, 'lieu', 'lieux') : '', s.notes ? count(s.notes, 'note de fiche', 'notes de fiche') : ''].filter(Boolean);
   return items.length > 1 ? `${items.slice(0, -1).join(', ')} et ${items.at(-1)}` : items[0] ?? '';
+}
+
+/**
+ * Favourites, lists and places counted in the same words: « vos favoris (2 plantes), 1 liste et 3 lieux » — the
+ * favourites named apart, being neither a list nor a place (docs/LEXIQUE.md), and not at all once emptied. '': nothing.
+ * @param {Array<{ id?: unknown, geometry?: unknown, properties?: { plants?: unknown[] } }>} all collections, or the
+ *   features of a portable file (an export, a transfer link, the backup copy)
+ */
+export function keptContents(all) {
+  const others = all.filter(c => c.id !== FAVORITES_ID);
+  const places = others.filter(c => c.geometry).length;
+  const favorites = all.reduce((n, c) => n + (c.id === FAVORITES_ID ? c.properties?.plants?.length ?? 0 : 0), 0);
+  return backupContents({ favorites, lists: others.length - places, places, notes: 0 });
 }
 
 /**
@@ -801,9 +815,10 @@ export function downloadBackup() {
 
 /**
  * Storage health, for the diagnostic in Réglages.
- * @returns {Promise<{ dbVersion: number | null, collections: number, persisted: boolean | null,
- *   usage: number | null, quota: number | null, backupAt: string | null, backupCount: number,
- *   markedHasSpots: boolean, lastExport: string | null }>}
+ * @returns {Promise<{ dbVersion: number | null, kept: string, persisted: boolean | null,
+ *   usage: number | null, quota: number | null, backupAt: string | null, backupKept: string,
+ *   markedHasSpots: boolean, lastExport: string | null }>} kept, backupKept: what the base and the backup copy hold
+ *   (keptContents)
  */
 export async function storageReport() {
   const [conn, all, persisted, estimate] = await Promise.all([
@@ -815,12 +830,12 @@ export async function storageReport() {
   const backup = readBackup();
   return {
     dbVersion: conn?.version ?? null,
-    collections: all.length,
+    kept: keptContents(all),
     persisted: persisted ?? null,
     usage: estimate?.usage ?? null,
     quota: estimate?.quota ?? null,
     backupAt: backup?.savedAt ?? null,
-    backupCount: backup?.features.length ?? 0,
+    backupKept: keptContents(backup?.features ?? []),
     markedHasSpots: hasSpots(),
     lastExport: lastExportDate()
   };
@@ -857,13 +872,13 @@ export async function exportGeoJSON(only) {
       download(file);
     }
   } catch (error) {
-    if (/** @type {Error} */ (error).name === 'AbortError') return { count: features.length, cancelled: true };
+    if (/** @type {Error} */ (error).name === 'AbortError') return { count: features.length, kept: keptContents(features), cancelled: true };
     download(file);
   }
   if (!only) {
     writeText(config.storageKeys.lastExport, new Date().toISOString());
   }
-  return { count: features.length, cancelled: false };
+  return { count: features.length, kept: keptContents(features), cancelled: false };
 }
 
 /** @param {File} file */
@@ -890,12 +905,12 @@ export async function importPortable(featureCollection) {
 /**
  * Link carrying every collection, to open on another device (#/shared?d=g…).
  * @param {{ personal: boolean }} options personal: include notes and harvest logs
- * @returns {Promise<{ url: string, count: number }>}
+ * @returns {Promise<{ url: string, count: number, kept: string }>} kept: what it carries, in words (keptContents)
  */
 export async function transferLink({ personal }) {
   const all = (await listCollections()).filter(c => c.properties.plants.length || c.properties.kind !== 'favorites');
   const data = await encodePortable(toPortable(all, { personal, sheetNotes: personal ? exportNotes() : undefined }));
-  return { url: '#/shared?d=' + data, count: all.length };
+  return { url: '#/shared?d=' + data, count: all.length, kept: keptContents(all) };
 }
 
 /**

@@ -6,7 +6,7 @@ import { GeoController } from '../core/geo.js';
 import { href } from '../core/router.js';
 import {
   FAVORITES_ID, discardMissingBackup, distance, exportGeoJSON, formatDistance, inSeason, lastExportDate,
-  listCollections, listsAndPlaces, missingFromBackup, placeTitle, plantCount, plantMarkers, restoreBackup, restorePending, restoreReason, soon, spotEvents, findEntry,
+  keptContents, listCollections, missingFromBackup, placeTitle, plantCount, plantMarkers, restoreBackup, restorePending, restoreReason, soon, spotEvents, findEntry,
   downloadBackup, readBackup } from '../core/collections.js';
 import { config } from '../config.js';
 import { StoreController, whenReady } from '../core/store.js';
@@ -428,8 +428,8 @@ export class GfCollections extends LitElement {
   async #restore() {
     this._busy = true;
     try {
-      const n = await restoreBackup();
-      this._restoreNote = `${listsAndPlaces(n)} restauré${n > 1 ? 's' : ''}.`;
+      const { count, kept } = await restoreBackup();
+      this._restoreNote = count ? `Restauré : ${kept}.` : 'Rien à restaurer : tout est déjà là.';
     } catch (error) {
       this._restoreNote = 'Restauration impossible : ' + /** @type {Error} */ (error).message;
     } finally {
@@ -472,6 +472,8 @@ export class GfCollections extends LitElement {
    */
   #restoreNotice() {
     const missing = this._missing;
+    // Named after what they hold (keptContents: the favourites apart), then the lists and places by their names.
+    const named = missing.filter(c => c.id !== FAVORITES_ID);
     if (restorePending()) {
       if (this.#store.state.restore?.done === false) return html`<div class="notice card restore">
         <p><strong>Vos plantes et vos notes n’ont pas pu être remises</strong> depuis la copie de secours de cet appareil. Elles y restent,
@@ -488,8 +490,8 @@ export class GfCollections extends LitElement {
     return html`
       ${missing.length ? html`
         <div class="notice card restore" role="alert">
-          <p><strong>${listsAndPlaces(missing.length)} retrouvé${missing.length > 1 ? 's' : ''} dans la copie de secours</strong>
-            de cet appareil : ${missing.slice(0, 4).map(c => placeTitle(c)).join(', ')}${missing.length > 4 ? '…' : ''}.</p>
+          <p><strong>Dans la copie de secours de cet appareil, mais plus ici :</strong> ${keptContents(missing)}${named.length
+            ? ` (${named.slice(0, 4).map(c => placeTitle(c)).join(', ')}${named.length > 4 ? '…' : ''})` : ''}.</p>
           <div class="row actions">
             <button class="primary" type="button" ?disabled=${this._busy} @click=${this.#restore}>Restaurer</button>
             <button class="link muted" type="button" @click=${this.#discard}>Oublier</button>

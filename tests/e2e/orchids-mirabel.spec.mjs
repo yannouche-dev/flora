@@ -87,7 +87,7 @@ test('le départ, puis la carte : la colline de Mirabel à 500 m, seules les orc
   await app.open('#/discover');
   const before = await footprint(page);
   const [mode, harvest] = [await app.state('mode'), await app.state('harvestMode')];
-  await page.locator('gf-launcher[page]').getByRole('button', { name: 'Commencer : Orchidées de Mirabel' }).click();
+  await page.locator('gf-launcher[page]').getByRole('button', { name: 'Commencer : Orchidées de Mirabel', exact: true }).click();
   await expect.poll(() => hash(page)).toBe('#/app/orchidees/start');
   await expect(page.getByRole('heading', { level: 1, name: 'Les orchidées de la colline de Mirabel' })).toBeVisible();
   await expect(page.locator('gf-miniapp .start .lead')).toHaveText('À Ménétrol (Puy-de-Dôme), toutes les orchidées observées, sur la carte ; touchez-en une : ses photos et l’essentiel.');

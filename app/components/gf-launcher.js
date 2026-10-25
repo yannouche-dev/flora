@@ -154,16 +154,14 @@ export class GfLauncher extends LitElement {
   /**
    * « Recommencer » confirmed: what the activity owns emptied (as its ⋯ « Recommencer »: here, in the box if it is the
    * one on screen, and in the other tabs), then the activity at its first step — once the question and Découvrir's
-   * dialog, two steps, have left history (launch).
+   * dialog, two steps, have left history (launch; the one on screen too: its first step's address goes on its own
+   * entry, not on a step that Back then drops, which would take it back to the step it was at).
    */
   async #restart() {
     const e = this._asking, a = e?.app;
     const dialog = /** @type {HTMLDialogElement | null} */ (this.renderRoot.querySelector('dialog.ask'));
     if (!e || !a) return;
-    if (e.here) {
-      // The one on screen: its box starts it again (event ma-replay, up to gf-miniapp).
-      this.dispatchEvent(new CustomEvent('ma-replay', { detail: { id: a.id }, bubbles: true, composed: true }));
-    } else {
+    if (!e.here) {
       const { replayApp } = await import('../miniapp/runtime.js');
       await replayApp((await a.load()).default);
     }
@@ -171,7 +169,13 @@ export class GfLauncher extends LitElement {
     this._asking = null;
     this.dispatchEvent(new CustomEvent('launched', { detail: e.key, bubbles: true, composed: true }));
     this.requestUpdate();
-    if (!e.here) await launch(a.id, href.app(a.id, 'start'));
+    if (!e.here) {
+      await launch(a.id, href.app(a.id, 'start'));
+      return;
+    }
+    // The one on screen: its box starts it again (event ma-replay, up to gf-miniapp).
+    await afterDialogSteps();
+    this.dispatchEvent(new CustomEvent('ma-replay', { detail: { id: a.id }, bubbles: true, composed: true }));
   }
 
   /** @param {Entry} e */

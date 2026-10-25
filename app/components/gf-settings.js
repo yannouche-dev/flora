@@ -11,7 +11,7 @@ import { MODULES, setModule } from '../core/modules.js';
 import { CATEGORIES, blockCategory, categoryOf } from '../core/categories.js';
 import { icon, modeIcon } from '../core/icons.js';
 import { pressDock } from '../core/dock-drag.js';
-import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, listsAndPlaces, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
+import { exportGeoJSON, importGeoJSON, keptContents, lastExportDate, listCollections, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
 import {
@@ -34,6 +34,7 @@ export class GfSettings extends LitElement {
   static properties = {
     _saved: { state: true },
     _spotCount: { state: true },
+    _kept: { state: true },
     _spotMessage: { state: true },
     _report: { state: true },
     _personal: { state: true },
@@ -150,7 +151,9 @@ export class GfSettings extends LitElement {
   }
 
   async #countSpots() {
-    this._spotCount = (await listCollections().catch(() => [])).length;
+    const all = await listCollections().catch(() => []);
+    this._spotCount = all.length;
+    this._kept = keptContents(all);
     this._report = await storageReport().catch(() => null);
   }
 
@@ -173,10 +176,10 @@ export class GfSettings extends LitElement {
       <details>
         <summary class="muted">Diagnostic du stockage</summary>
         <dl class="diag">
-          <dt>Base locale</dt><dd>version ${r.dbVersion ?? '?'} · ${listsAndPlaces(r.collections)}</dd>
+          <dt>Base locale</dt><dd>version ${r.dbVersion ?? '?'} · ${r.kept || 'vide'}</dd>
           <dt>Protégée</dt><dd>${r.persisted === null ? 'inconnu' : r.persisted ? 'oui' : 'non'}</dd>
           <dt>Espace utilisé</dt><dd>${mb(r.usage)} sur ${mb(r.quota)}</dd>
-          <dt>Copie de secours</dt><dd>${listsAndPlaces(r.backupCount)} · ${date(r.backupAt)}</dd>
+          <dt>Copie de secours</dt><dd>${r.backupKept || 'vide'} · ${date(r.backupAt)}</dd>
           <dt>Dernier export</dt><dd>${date(r.lastExport)}</dd>
           <dt>Listes ou lieux déjà créés ici</dt><dd>${r.markedHasSpots ? 'oui' : 'non'}</dd>
         </dl>
@@ -184,8 +187,8 @@ export class GfSettings extends LitElement {
   }
 
   async #export() {
-    const { count, cancelled } = await exportGeoJSON();
-    if (!cancelled) this._spotMessage = `${listsAndPlaces(count)} exporté${count > 1 ? 's' : ''}.`;
+    const { kept, cancelled } = await exportGeoJSON();
+    if (!cancelled) this._spotMessage = kept ? `Exporté : ${kept}.` : 'Fichier exporté.';
   }
 
   /** @param {Event} event */
@@ -212,6 +215,8 @@ export class GfSettings extends LitElement {
     /** What the last export / import / reset did. @type {string | null} */
     this._layoutNote = null;
     this._spotCount = 0;
+    /** What Mes plantes holds, in words (keptContents). */
+    this._kept = '';
     /** @type {string | null} */
     this._spotMessage = null;
     /** @type {Awaited<ReturnType<typeof storageReport>> | null} */
@@ -249,9 +254,9 @@ export class GfSettings extends LitElement {
 
   async #transfer() {
     try {
-      const { url, count } = await transferLink({ personal: this._personal });
+      const { url, kept } = await transferLink({ personal: this._personal });
       const absolute = new URL(url, location.href).href;
-      const result = await share({ title: 'Mes plantes GeoFlora', text: `${listsAndPlaces(count)} GeoFlora`, url });
+      const result = await share({ title: 'Mes plantes GeoFlora', text: kept ? `GeoFlora : ${kept}` : 'GeoFlora', url });
       this._transfer = (result === 'copied' ? 'Lien copié' : result === 'shared' ? 'Lien partagé' : result === 'cancelled' ? 'Partage annulé' : 'Lien prêt')
         + ` (${absolute.length.toLocaleString('fr-FR')} caractères). Ouvrez-le sur l’autre appareil puis touchez « Importer ».`
         + (absolute.length > GfSettings.LONG_LINK ? ' Lien long : certaines messageries le coupent, préférez le fichier.' : '');
@@ -630,7 +635,7 @@ export class GfSettings extends LitElement {
 
         <h2>Mes plantes : favoris, listes et lieux</h2>
         <p class="muted">
-          ${listsAndPlaces(this._spotCount)} enregistré${this._spotCount > 1 ? 's' : ''} sur cet appareil uniquement.
+          ${this._kept ? `Sur cet appareil uniquement : ${this._kept}.` : 'Rien d’enregistré sur cet appareil.'}
           ${(() => { const d = lastExportDate(); return d ? `Dernière sauvegarde : ${new Date(d).toLocaleDateString('fr-FR')}.` : 'Aucune sauvegarde pour l’instant.'; })()}
           Exportez régulièrement : effacer les données du navigateur efface aussi vos plantes.
         </p>

@@ -222,7 +222,7 @@ test.describe('la partie partagée d’avant', () => {
     expect(discover.point).toBeUndefined();
     expect(discover.done).toBe(true);
     const launcher = page.locator('gf-launcher[page]');
-    await expect(launcher.getByRole('button', { name: 'Commencer : Mosaïque' })).toBeVisible();
+    await expect(launcher.getByRole('button', { name: 'Commencer : Mosaïque', exact: true })).toBeVisible();
     await expect(launcher.getByRole('button', { name: 'Continuer : Cueillette prudente' })).toHaveCount(0);
     // A favourite of before (its match then): the user's, never tagged — Recommencer Rencontres keeps it.
     await page.evaluate(async id => {
