@@ -152,8 +152,9 @@ export class GfSettings extends LitElement {
 
   async #countSpots() {
     const all = await listCollections().catch(() => []);
-    this._spotCount = all.length;
     this._kept = keptContents(all);
+    // An empty favourites list alone is nothing to export or transfer.
+    this._spotCount = this._kept ? all.length : 0;
     this._report = await storageReport().catch(() => null);
   }
 

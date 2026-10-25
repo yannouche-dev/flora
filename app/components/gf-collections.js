@@ -439,7 +439,7 @@ export class GfCollections extends LitElement {
   }
 
   async #discard() {
-    if (!confirm('Oublier ces listes et lieux ? La copie de secours ne les gardera plus.')) return;
+    if (!confirm('Oublier ce qui manque ici ? La copie de secours ne le gardera plus.')) return;
     await discardMissingBackup();
     this._missing = [];
   }
