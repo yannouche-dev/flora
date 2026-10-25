@@ -188,6 +188,8 @@ test('en 3D, le panneau « Carte » : les mêmes couches qu’en 2D ; les option
   const panel = map.locator('gf-map-panel dialog');
   await expect(panel).toBeVisible();
   await expect(panel.getByRole('button', { name: /Photos aériennes/ })).toHaveAttribute('aria-pressed', 'true');
+  // IGN's layers by theme, each folded until opened.
+  for (const key of ['relief', 'espaces']) await panel.locator(`details.theme[data-group="${key}"] > summary`).click();
   for (const name of ['Parcelles cadastrales', 'Courbes de niveau', 'Forêts publiques', 'Parcs nationaux', 'Réserves naturelles', 'Protection de biotope']) {
     await expect(panel.getByRole('checkbox', { name: new RegExp(name) })).toBeVisible();
   }

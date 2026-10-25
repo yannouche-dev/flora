@@ -39,10 +39,13 @@ test('la copie livrée s’affiche aussitôt, GetCapabilities bloqué : jamais �
   await searchbox(panel).fill('foret publique');
   const row = panel.locator('li.row', { hasText: 'Forêts publiques' }).first();
   await expect(row).toBeVisible();
-  // The app's own overlay (« Forêts publiques », in Règles de cueillette): the same one, checked in both lists.
+  // The app's own overlay (« Forêts publiques », in « Espaces protégés et propriété »): the same one, checked in both
+  // lists, its theme open by itself.
   await row.getByRole('checkbox').check();
   await expect(panel.locator('ul.active li', { hasText: 'Forêts publiques' })).toBeVisible();
-  await expect(panel.locator('label.layer', { hasText: 'Forêts publiques' }).locator('input')).toBeChecked();
+  const theme = panel.locator('details.theme[data-group="espaces"]');
+  await expect(theme).toHaveAttribute('open', '');
+  await expect(theme.getByRole('checkbox', { name: /^Forêts publiques/ })).toBeChecked();
 });
 
 test('une mise à jour lente (40 s, sans arrêt) va au bout et remplace la liste', async ({ page, app }) => {

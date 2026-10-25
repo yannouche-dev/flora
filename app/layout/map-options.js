@@ -4,7 +4,7 @@
 // settings: map(terrain)), the dates its points keep (when=mois), its controls by the cell's width (ui=auto). Pure (no
 // DOM, no Leaflet), tested under Node; the rendering is cells.js' (dl-map).
 
-import { CATALOG_ROWS, LANDMARKS, LANDMARK_DEFAULTS } from '../core/map-layers.js';
+import { CATALOG_ROWS, LANDMARKS, LANDMARKS_LISTED, LANDMARK_DEFAULTS } from '../core/map-layers.js';
 
 /**
  * A layer of the Géoplateforme's catalogue (data/ign-catalog.json) the map adds as an overlay (core/ign.js
@@ -51,7 +51,7 @@ export const MAP_LAYERS = {
   forets: { label: 'Forêts publiques', keys: ['forets'] },
   cadastre: { label: 'Parcelles cadastrales', keys: ['cadastre'] },
   courbes: { label: 'Courbes de niveau', keys: ['contours'] },
-  estompage: { label: 'Estompage (relief)', keys: [ign(SHADOW)], catalog: [SHADOW] },
+  estompage: row(SHADOW),
   pentes: row(SLOPES),
   bdforet: row(FOREST_TYPES),
   anciennes: row(OLD_FORESTS),
@@ -78,11 +78,11 @@ export const MAP_LAYER_ALIASES = {
 
 /**
  * « Noms et réseaux » as a map cell names them (noms=lieux+routes: core/map-layers.js LANDMARKS' keys), in the order
- * the address writes them and the panel ▦ lists them: the usual three first (the places' names, the roads, the
- * rivers), then the railways, the buildings, the boundaries.
+ * the address writes them and the panel ▦ lists them (core/map-layers.js LANDMARKS_LISTED): the usual three first (the
+ * places' names, the roads, the rivers), then the railways, the buildings, the boundaries.
  * @type {Record<string, string>}
  */
-export const MAP_LANDMARKS = Object.fromEntries(['lieux', 'routes', 'eau', 'rail', 'bati', 'limites']
+export const MAP_LANDMARKS = Object.fromEntries(LANDMARKS_LISTED
   .map(k => [k, /** @type {import('../core/map-layers.js').Landmark} */ (LANDMARKS.find(l => l.key === k)).label]));
 
 /** Other names of « Noms et réseaux » (folded, no spaces) → their name. */

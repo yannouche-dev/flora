@@ -1,6 +1,7 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
-import { DEFAULT_OPACITY, IGN_PREFIX, builtinKeyOf, overlayDef, wmtsUrl } from '../core/ign-layers.js';
+import { IGN_PREFIX, builtinKeyOf, wmtsUrl } from '../core/ign-layers.js';
+import { landmarkOf } from '../core/map-layers.js';
 import { loadCatalog, onCatalog } from '../core/ign-catalog.js';
 import { moduleOn } from '../core/modules.js';
 import { href } from '../core/router.js';
@@ -49,51 +50,41 @@ const count = (n, word) => `${n} ${word}${n > 1 ? 's' : ''}`;
 const keyOf = l => builtinKeyOf(l.id) || IGN_PREFIX + l.id;
 
 /**
- * IGN's layers in the maps' options (gf-map-options.js: each map's panel ▦, Réglages › Cartes): the overlays shown
- * (« Affichées », top first: opacity, order, off), then the whole catalogue of the Géoplateforme (~700 layers,
- * app/core/ign-catalog.js) to browse —
+ * « Toutes les couches de l’IGN » in the maps' options (gf-map-options.js: each map's panel ▦, Réglages › Cartes): the
+ * whole catalogue of the Géoplateforme (~700 layers, app/core/ign-catalog.js) to browse — the layers shown are
+ * gf-layer-stack.js' —:
  * a search (accents ignored: title, description, keywords, category), « Recommandées pour la botanique », and the
  * taxonomy of lib/ign-classify.mjs as a tree of categories and sub-categories, each with its count, folded: a
  * sub-category's rows are only made when it is opened, 40 at a time. A series (one layer by year, département,
  * town…) is one row with a selector. Each row opens on its full description, zooms, source, legend and one preview
- * tile (asked only then, and never with the module « IGN – fonds de carte » off).
+ * tile (asked only then, and never with the module « IGN – fonds de carte » off). A row ticked as the panel's own
+ * lists tick it: one of the app's overlays (« Forêts publiques »), of the panel's themes (« ign:<id> », the same), or
+ * of « Noms et réseaux » (core/map-layers.js LANDMARKS: « Routes », « Hydrographie », « Noms »… — that one chosen).
  * Events (for gf-map-options.js, which makes them changes of the look): overlay-toggle {key, on, layer?, replace?}
  * (`layer`: a catalogue layer to add; `replace`: the overlay it takes the place of, another variant of its series),
- * overlay-opacity {key, opacity, commit}, overlay-order {keys} (bottom first).
+ * landmark-toggle {key, on} (one of « Noms et réseaux », by its key).
  */
 export class GfIgnLayers extends LitElement {
   static properties = {
     /** The overlays shown, bottom first. */
     overlays: { attribute: false },
-    /** The overlays' opacity (key → 0…1; the usual one when it says none): the look shown (core/map-settings.js). */
-    opacities: { attribute: false },
+    /** « Noms et réseaux » chosen (the look's `landmarks`: core/map-settings.js). */
+    landmarks: { attribute: false },
     _catalog: { state: true },
     _open: { state: true },
     _q: { state: true },
     _nodes: { state: true },
     _details: { state: true },
     _variant: { state: true },
-    _more: { state: true },
-    _opacity: { state: true }
+    _more: { state: true }
   };
 
   static styles = [ui, css`
     /* A grid item of the panel: never wider than it (a long option, an identifier). */
     :host { display: block; min-width: 0; }
     .catalog { display: grid; gap: 6px; }
-    h4 { margin: 6px 0 2px; font-size: 0.8rem; font-weight: 600; color: var(--gf-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
     .note { margin: 2px 4px 4px; font-size: 0.8rem; color: var(--gf-text-muted); }
     ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
-
-    /* Shown overlays. */
-    .active li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 2px 6px; padding: 6px 4px; border-radius: var(--gf-radius-sm); background: var(--gf-surface-2); }
-    .active .name { display: grid; min-width: 0; font-size: 0.9rem; }
-    .active .name small { color: var(--gf-text-muted); font-size: 0.75rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .active .tools { display: flex; align-items: center; }
-    .active .tools .icon-btn { width: 36px; height: 36px; font-size: 1rem; }
-    .active .opacity { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; font-size: 0.8rem; color: var(--gf-text-muted); }
-    .active .opacity input { flex: 1; min-width: 0; accent-color: var(--gf-accent); }
-    .active .opacity output { min-width: 3.2em; text-align: right; font-variant-numeric: tabular-nums; }
 
     /* The catalogue. */
     .state { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 2px 4px 4px; }
@@ -143,6 +134,8 @@ export class GfIgnLayers extends LitElement {
     super();
     /** @type {string[]} */
     this.overlays = [];
+    /** @type {string[]} */
+    this.landmarks = [];
     /** The catalogue, as core/ign-catalog.js has it. @type {import('../core/ign-catalog.js').CatalogState | null} */
     this._catalog = null;
     /** « Parcourir… » touched: the catalogue is shown (and asked, the first time). */
@@ -156,10 +149,6 @@ export class GfIgnLayers extends LitElement {
     this._variant = new Map();
     /** How many rows each list shows beyond the first page. @type {Map<string, number>} */
     this._more = new Map();
-    /** Opacities while a slider moves (key → 0…1). @type {Map<string, number>} */
-    this._opacity = new Map();
-    /** @type {Record<string, number>} */
-    this.opacities = {};
     /** @type {(() => void) | null} */
     this._unsubscribe = null;
   }
@@ -200,72 +189,6 @@ export class GfIgnLayers extends LitElement {
   /** @param {string} name @param {any} detail */
   #emit(name, detail) { this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true })); }
 
-  // ── Shown overlays ─────────────────────────────────────────────────────────
-
-  /** The overlay's name (its catalogue layer's, else the app's). @param {string} key */
-  #name(key) {
-    const def = overlayDef(key);
-    return def?.label || key.replace(IGN_PREFIX, '');
-  }
-
-  /** Moves a shown overlay up (toward the top) or down. @param {string} key @param {1 | -1} step */
-  #move(key, step) {
-    const keys = [...this.overlays];
-    const i = keys.indexOf(key);
-    const j = i + step;
-    if (i < 0 || j < 0 || j >= keys.length) return;
-    [keys[i], keys[j]] = [keys[j], keys[i]];
-    // The focus follows the overlay moved, once the map has the new order and its row is drawn elsewhere (updated()).
-    this.#refocus = { key, step };
-    this.#emit('overlay-order', { keys });
-  }
-
-  /** The overlay just moved, whose button gets the focus back. @type {{ key: string, step: number } | null} */
-  #refocus = null;
-
-  /** @param {Map<string, any>} changed */
-  updated(changed) {
-    if (!changed.has('overlays') || !this.#refocus) return;
-    const { key, step } = this.#refocus;
-    this.#refocus = null;
-    const button = /** @type {HTMLButtonElement | null} */ (this.renderRoot.querySelector(`[data-key="${CSS.escape(key)}"][data-step="${step}"]`));
-    const other = /** @type {HTMLButtonElement | null} */ (this.renderRoot.querySelector(`[data-key="${CSS.escape(key)}"][data-step]:not([disabled])`));
-    (button && !button.disabled ? button : other)?.focus();
-  }
-
-  /** @param {string} key @param {Event} e @param {boolean} commit */
-  #opacityInput(key, e, commit) {
-    const value = Number(/** @type {HTMLInputElement} */ (e.target).value) / 100;
-    this._opacity = new Map(this._opacity).set(key, value);
-    this.#emit('overlay-opacity', { key, opacity: value, commit });
-    if (commit) { const next = new Map(this._opacity); next.delete(key); this._opacity = next; }
-  }
-
-  #active() {
-    // Top first: the order they are drawn in, read from above.
-    const keys = [...this.overlays].reverse();
-    return html`<h4 id="active-title">Affichées${keys.length ? ` (${keys.length})` : ''}</h4>
-      ${!keys.length ? html`<p class="note">Aucune couche par-dessus le fond : cochez-en une ci-dessous ou dans le catalogue.</p>`
-        : html`<ul class="active" aria-labelledby="active-title">${keys.map((key, i) => {
-          const name = this.#name(key);
-          const pct = Math.round((this._opacity.get(key) ?? this.opacities?.[key] ?? DEFAULT_OPACITY) * 100);
-          return html`<li>
-            <span class="name">${name}${keys.length > 1 ? html`<small>${i === 0 ? 'au-dessus' : i === keys.length - 1 ? 'au-dessous' : `${i + 1}ᵉ`}</small>` : nothing}</span>
-            <span class="tools">
-              ${keys.length > 1 ? html`
-                <button class="icon-btn" type="button" data-key=${key} data-step="1" aria-label=${'Monter ' + name} ?disabled=${i === 0} @click=${() => this.#move(key, 1)}>${icon('caret-up-fill')}</button>
-                <button class="icon-btn" type="button" data-key=${key} data-step="-1" aria-label=${'Descendre ' + name} ?disabled=${i === keys.length - 1} @click=${() => this.#move(key, -1)}>${icon('caret-down-fill')}</button>` : nothing}
-              <button class="icon-btn" type="button" aria-label=${'Masquer ' + name} @click=${() => this.#emit('overlay-toggle', { key, on: false })}>${icon('x-lg')}</button>
-            </span>
-            <label class="opacity">Opacité
-              <input type="range" min="0" max="100" step="5" .value=${String(pct)} aria-label=${'Opacité de ' + name} aria-valuetext=${pct + ' %'}
-                @input=${(/** @type {Event} */ e) => this.#opacityInput(key, e, false)} @change=${(/** @type {Event} */ e) => this.#opacityInput(key, e, true)} />
-              <output>${pct} %</output>
-            </label>
-          </li>`;
-        })}</ul>`}`;
-  }
-
   // ── The catalogue ──────────────────────────────────────────────────────────
 
   /** @param {import('../core/ign-catalog.js').CatalogState} c */
@@ -296,21 +219,37 @@ export class GfIgnLayers extends LitElement {
     this._nodes = next;
   }
 
+  /**
+   * A layer shown: an overlay of the look, or one of « Noms et réseaux » chosen (whatever the background: the choice).
+   * @param {CatalogLayer} l
+   */
+  #on(l) {
+    const mark = landmarkOf(l.id);
+    return this.overlays.includes(keyOf(l)) || (mark !== null && this.landmarks.includes(mark));
+  }
+
   /** The layer a row stands for now: its series' variant shown, else the one chosen, else its first. @param {Entry} e */
   #current(e) {
     if (e.layers.length === 1) return e.layers[0];
-    const on = e.layers.find(l => this.overlays.includes(keyOf(l)));
+    const on = e.layers.find(l => this.#on(l));
     if (on) return on;
     const chosen = this._variant.get(e.key);
     return e.layers.find(l => l.id === chosen) || e.layers[0];
   }
 
-  /** @param {Entry} e @param {boolean} on */
-  #toggle(e, on) {
-    const l = this.#current(e);
+  /**
+   * A layer ticked or unticked: an overlay (the catalogue's added first), or one of « Noms et réseaux » chosen or not —
+   * unticked, an overlay of that same layer (a cell's layers=hydro) taken off too. @param {CatalogLayer} l @param {boolean} on
+   */
+  #set(l, on) {
     const key = keyOf(l);
-    this.#emit('overlay-toggle', key.startsWith(IGN_PREFIX) ? { key, on, layer: l } : { key, on });
+    const mark = landmarkOf(l.id);
+    if (mark === null || (!on && this.overlays.includes(key))) this.#emit('overlay-toggle', key.startsWith(IGN_PREFIX) ? { key, on, layer: l } : { key, on });
+    if (mark !== null && (on || this.landmarks.includes(mark))) this.#emit('landmark-toggle', { key: mark, on });
   }
+
+  /** @param {Entry} e @param {boolean} on */
+  #toggle(e, on) { this.#set(this.#current(e), on); }
 
   /** Another variant of a series: shown in place of the one shown, if any. @param {Entry} e @param {Event} ev */
   #choose(e, ev) {
@@ -318,11 +257,15 @@ export class GfIgnLayers extends LitElement {
     const before = this.#current(e);
     this._variant = new Map(this._variant).set(e.key, id);
     const next = e.layers.find(l => l.id === id);
-    if (!next || next === before) return;
-    if (this.overlays.includes(keyOf(before))) {
+    if (!next || next === before || !this.#on(before)) return;
+    if (landmarkOf(before.id) === null && landmarkOf(next.id) === null) {
       // One change (the variant in the other's place): two in a row would each start from the look of before.
       const key = keyOf(next);
       this.#emit('overlay-toggle', { ...(key.startsWith(IGN_PREFIX) ? { key, on: true, layer: next } : { key, on: true }), replace: keyOf(before) });
+    } else {
+      // One of « Noms et réseaux » for an overlay, or the other way: two changes, of two parts of the look.
+      this.#set(before, false);
+      this.#set(next, true);
     }
   }
 
@@ -348,7 +291,7 @@ export class GfIgnLayers extends LitElement {
    */
   #row(e, list, where = false) {
     const l = this.#current(e);
-    const on = this.overlays.includes(keyOf(l));
+    const on = this.#on(l);
     const id = `r-${list}-${e.key}`.replace(/[^A-Za-z0-9_-]/g, '_');
     const open = this._details.has(e.key);
     const kind = e.layers.length > 1 ? this.#variantKind(e) : '';
@@ -442,7 +385,7 @@ export class GfIgnLayers extends LitElement {
   }
 
   render() {
-    return html`<div class="catalog">${this.#active()}<h4>Catalogue de la Géoplateforme</h4>${this.#catalog()}</div>`;
+    return html`<div class="catalog">${this.#catalog()}</div>`;
   }
 }
 

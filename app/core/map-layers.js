@@ -17,23 +17,31 @@
 /**
  * A WMTS layer of the Géoplateforme: its identifier, format, style (none: « normal »), native zooms (none: 0 and 19).
  * @typedef {{ id: string, format: string, style?: string, minNative?: number, maxNative?: number }} WmtsLayer
+ * An overlay: its name, its layers, what it shows (under its name in the panel ▦; a catalogue's layer added: its
+ * identifier, core/ign-layers.js).
  * @typedef {{ label: string, layers: WmtsLayer[], hint?: string, group?: string }} LayerDef
  */
 
-/** Overlays, toggled on top. Protected areas: INPN / PatriNat data served by the Géoplateforme. @type {Record<string, LayerDef>} */
+/**
+ * Overlays, toggled on top (the panel ▦ names each in its theme: PANEL). Protected areas: INPN / PatriNat data served
+ * by the Géoplateforme. @type {Record<string, LayerDef>}
+ */
 export const OVERLAYS = {
-  cadastre: { label: 'Parcelles cadastrales', group: 'terrain', layers: [{ id: 'CADASTRALPARCELS.PARCELLAIRE_EXPRESS', format: 'image/png', maxNative: 19 }] },
-  contours: { label: 'Courbes de niveau', group: 'terrain', layers: [{ id: 'ELEVATION.CONTOUR.LINE', format: 'image/png', minNative: 6, maxNative: 18 }] },
+  cadastre: {
+    label: 'Parcelles cadastrales', hint: 'le propriétaire décide de la cueillette',
+    layers: [{ id: 'CADASTRALPARCELS.PARCELLAIRE_EXPRESS', format: 'image/png', maxNative: 19 }]
+  },
+  contours: { label: 'Courbes de niveau', layers: [{ id: 'ELEVATION.CONTOUR.LINE', format: 'image/png', minNative: 6, maxNative: 18 }] },
   forets: {
-    label: 'Forêts publiques', group: 'rules', hint: 'ONF : domaniales et communales',
+    label: 'Forêts publiques', hint: 'ONF : domaniales et communales',
     layers: [{ id: 'FORETS.PUBLIQUES', format: 'image/png', style: 'FORETS PUBLIQUES ONF', minNative: 3, maxNative: 16 }]
   },
-  parcs: { label: 'Parcs nationaux', group: 'rules', layers: [{ id: 'Patrinat_PN', format: 'image/png', minNative: 6, maxNative: 16 }] },
+  parcs: { label: 'Parcs nationaux', layers: [{ id: 'Patrinat_PN', format: 'image/png', minNative: 6, maxNative: 16 }] },
   reserves: {
-    label: 'Réserves naturelles', group: 'rules', hint: 'nationales et régionales',
+    label: 'Réserves naturelles', hint: 'nationales et régionales',
     layers: [{ id: 'Patrinat_RNN', format: 'image/png', minNative: 6, maxNative: 16 }, { id: 'Patrinat_RNR', format: 'image/png', minNative: 6, maxNative: 16 }]
   },
-  biotopes: { label: 'Protection de biotope', group: 'rules', hint: 'arrêtés préfectoraux (APPB)', layers: [{ id: 'Patrinat_APB', format: 'image/png', minNative: 6, maxNative: 16 }] }
+  biotopes: { label: 'Protection de biotope', hint: 'arrêtés préfectoraux (APPB)', layers: [{ id: 'Patrinat_APB', format: 'image/png', minNative: 6, maxNative: 16 }] }
 };
 
 // ── Noms et réseaux ─────────────────────────────────────────────────────────
@@ -66,6 +74,15 @@ export const LANDMARKS = Object.freeze([
 export const LANDMARK_DEFAULTS = Object.freeze(['routes', 'eau', 'lieux']);
 
 /**
+ * Their keys in the order the panel ▦ lists them and a free layout's noms= writes them: the usual three first (the
+ * places' names, the roads, the rivers), then the railways, the buildings, the boundaries.
+ */
+export const LANDMARKS_LISTED = Object.freeze(['lieux', 'routes', 'eau', 'rail', 'bati', 'limites']);
+
+/** The one of « Noms et réseaux » a WMTS layer is (its key), null for none (the catalogue's list toggles it). @param {string} id */
+export const landmarkOf = id => LANDMARKS.find(l => l.layer.id === id)?.key ?? null;
+
+/**
  * How far in they show (Leaflet's zoom): one past the last native zoom of most (18), their words twice as big there,
  * never eight times (21, a plant's); the boundaries as far, a line thickened.
  */
@@ -89,7 +106,10 @@ export const cleanLandmarks = list => Array.isArray(list) ? LANDMARKS.map(l => l
 /** A protected area of INPN / PatriNat (the catalogue's « Patrinat_* »). @param {string} id @param {string} title @param {string} [hint] @returns {CatalogRow} */
 const patrinat = (id, title, hint) => ({ id: 'Patrinat_' + id, title, format: 'image/png', style: 'normal', minNative: 6, maxNative: 16, ...(hint ? { hint } : {}) });
 
-/** The catalogue's layers of the panel's themes, by key (none an overlay's: PANEL names both). @type {Readonly<Record<string, CatalogRow>>} */
+/**
+ * The catalogue's layers of the panel's themes, by key (none an overlay's: PANEL names both), named as there whichever
+ * list ticks them (catalogRowOf). @type {Readonly<Record<string, CatalogRow>>}
+ */
 export const CATALOG_ROWS = Object.freeze({
   ombrage: { id: 'ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW', title: 'Ombrage du relief', hint: 'relief ombré, à 40 %', format: 'image/png', style: 'estompage_grayscale', minNative: 0, maxNative: 15, opacity: 0.4 },
   pentes: { id: 'GEOGRAPHICALGRIDSYSTEMS.SLOPES.MOUNTAIN', title: 'Fortes pentes', hint: 'plus de 30°', format: 'image/png', style: 'normal', minNative: 0, maxNative: 17 },
@@ -105,6 +125,9 @@ export const CATALOG_ROWS = Object.freeze({
   znieff1: patrinat('ZNIEFF1', 'ZNIEFF de type I'),
   znieff2: patrinat('ZNIEFF2', 'ZNIEFF de type II')
 });
+
+/** The row of the panel's themes a catalogue's layer is (by its identifier), null for none. @param {string} id @returns {CatalogRow | null} */
+export const catalogRowOf = id => Object.values(CATALOG_ROWS).find(r => r.id === id) ?? null;
 
 /**
  * The panel's themes over the background, in their order (« Noms et réseaux », LANDMARKS, come before them): each its

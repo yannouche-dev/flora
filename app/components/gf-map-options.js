@@ -1,10 +1,20 @@
 // @ts-check
 // The maps' options, one UI wherever they are changed: the panel ▦ of every map (gf-map-panel.js, scope="map") and
-// Réglages › Cartes (gf-settings.js, scope="defaults") — « Affichage » (2D or 3D, the 3D options folded:
-// map3d-options.js), « Fond » (the plan, the aerial photos — the most recent, of a year, of a period, historical —, SPOT's
-// satellite images of a year: core/backgrounds.js; over the photos and SPOT's, the names — roads, rivers, places: the
-// usual « Noms et réseaux » of core/map-layers.js —, a checkbox), and IGN's layers (terrain, the whole catalogue:
-// gf-ign-layers.js, the rules of picking).
+// Réglages › Cartes (gf-settings.js, scope="defaults"), in this order —
+//  1. whose options they are (every map's, or this map's own look and the way back);
+//  2. « Affichage » (2D or 3D, the 3D options folded: map3d-options.js);
+//  3. « Fond » (the plan, the aerial photos — the most recent, of a year, of a period, historical —, SPOT's satellite
+//     images of a year: core/backgrounds.js);
+//  4. what only this map shows (slot `extra`: the GBIF distribution of the Carte's plant);
+//  5. « Couches affichées »: what is drawn over the background, from the top (gf-layer-stack.js: « Noms et réseaux »,
+//     the overlays with their order and opacity, the background last);
+//  6. « Noms et réseaux » (core/map-layers.js LANDMARKS: the places' names, the roads, the rivers by default; the
+//     railways, the buildings, the boundaries), a checkbox each — over the photos and SPOT's; on the plan, which has its
+//     own, disabled, kept;
+//  7-9. IGN's layers by theme (core/map-layers.js PANEL: « Relief », « Forêts, haies et zones humides », « Espaces
+//     protégés et propriété » — the protected areas in view and the rules of picking there —), each folded, opened by
+//     itself once one of its layers is ticked (or, the last, an area in view), its count in its title;
+//  10. « Toutes les couches de l’IGN » (the whole catalogue: gf-ign-layers.js), the layers ticked above ticked there too.
 // Every option is the maps' common setting (core/map-settings.js), unless the map shown has its own look (`own`: a free
 // layout's cell, a plant sheet's map block): then it says so, its changes are its own, and « Revenir aux réglages
 // communs » lets it go. 2D / 3D and the 3D options are always common (a map always drawn one way says why).
@@ -14,12 +24,13 @@
 //  opacity} (an opacity while its slider moves), look-common (« Revenir aux réglages communs »), renderer-follow
 //  (« Suivre le réglage commun »: the 2D or 3D its owner fixed, let go).
 // Slots, for what only a map has (scope="map"): `state` (its « État », first in « Affichage »), `extra` (after « Fond »:
-// the GBIF distribution of the Carte's plant), `rules` (before the rules' layers: the protected areas in view).
+// the GBIF distribution of the Carte's plant), `rules` (first in « Espaces protégés et propriété »: the protected areas
+// in view).
 
 import { LitElement, html, css, nothing } from 'lit';
-import { OVERLAYS, addCatalogLayer, overlayDef } from '../core/ign-layers.js';
+import { IGN_PREFIX, addCatalogLayer, overlayDef } from '../core/ign-layers.js';
 import { LATEST_SPOT, PHOTO_HISTORIC, PHOTO_PERIODS, PHOTO_YEARS, SPOT_YEARS, fillerNote, parseBase, takesLandmarks, whenLabel } from '../core/backgrounds.js';
-import { LANDMARK_DEFAULTS } from '../core/map-layers.js';
+import { CATALOG_ROWS, LANDMARKS, LANDMARKS_LISTED, PANEL, catalogRowOf, cleanLandmarks } from '../core/map-layers.js';
 import { mapLook, mapLookEvents, mapSettings, mapSettingsEvents, setMapLook, setMapSettings } from '../core/map-settings.js';
 import { moduleEvents, moduleOn } from '../core/modules.js';
 import { hasWebGL2 } from '../core/maplibre.js';
@@ -27,9 +38,13 @@ import { href } from '../core/router.js';
 import { icon } from '../core/icons.js';
 import { ui } from '../styles/ui.js';
 import { map3dOptions, map3dOptionsCss, mapRendererChoice } from './map3d-options.js';
+import './gf-layer-stack.js';
 import './gf-ign-layers.js';
 
-/** @typedef {import('../core/map-settings.js').MapLook} MapLook @typedef {import('../core/backgrounds.js').BaseKey} BaseKey */
+/**
+ * @typedef {import('../core/map-settings.js').MapLook} MapLook @typedef {import('../core/backgrounds.js').BaseKey} BaseKey
+ * @typedef {import('../core/map-layers.js').PanelGroup} PanelGroup
+ */
 
 /**
  * The kinds of background, one button each: [kind, its name, its icon, the background it shows when chosen (the most
@@ -42,13 +57,19 @@ const KINDS = [
   ['spot', 'Satellite (SPOT)', 'globe-europe-africa', `spot:${LATEST_SPOT}`]
 ];
 
+/** Before picking, said first in « Espaces protégés et propriété ». */
+const BEFORE_PICKING = 'Avant de cueillir : les règles du lieu et l’accord du propriétaire. Dans un espace protégé, la cueillette est souvent interdite ou réglementée.';
+
+/** The overlay key of a row of the panel's themes: an overlay's own, or a catalogue's layer's (« ign:<id> »). @param {string} row */
+const rowKey = row => CATALOG_ROWS[row] ? IGN_PREFIX + CATALOG_ROWS[row].id : row;
+
 /**
- * What of the look a map has of its own, in words (its names with its background: its own background says both; its
- * names alone on the plan, which has its own, said of no effect there) — its panel's, a plant sheet's map block form's
- * (gf-plant-detail.js). @param {Partial<MapLook>} own @param {string} base the background it shows
+ * What of the look a map has of its own, in words (its « Noms et réseaux » with its background: its own background
+ * says both; them alone on the plan, which has its own, said of no effect there) — its panel's, a plant sheet's map
+ * block form's (gf-plant-detail.js). @param {Partial<MapLook>} own @param {string} base the background it shows
  */
 export function ownWords(own, base) {
-  const names = takesLandmarks(base) ? 'son propre choix des noms' : 'son propre choix des noms, sans effet sur le plan IGN';
+  const names = takesLandmarks(base) ? 'son propre choix des noms et réseaux' : 'son propre choix des noms et réseaux, sans effet sur le plan IGN';
   const fond = 'base' in own ? 'son propre fond' : 'landmarks' in own ? names : '';
   const layers = 'overlays' in own || 'opacities' in own ? 'ses propres couches' : '';
   return [fond, layers].filter(Boolean).join(' et ');
@@ -67,7 +88,11 @@ export class GfMapOptions extends LitElement {
     /** Its 2D or 3D fixed by its owner (a free layout's 3d=), which « Suivre le réglage commun » lets go. */
     own3d: { type: Boolean, attribute: false },
     /** Why its own look is its owner's to keep (a free layout's intent): said, without « Revenir aux réglages communs ». */
-    lookWhy: { type: String, attribute: false }
+    lookWhy: { type: String, attribute: false },
+    /** The themes folded or open as last seen (a theme's key → open), else as its layers say (#auto). */
+    _open: { state: true },
+    /** Protected areas in view (slot `rules` filled): « Espaces protégés et propriété » opens by itself. */
+    _inView: { state: true }
   };
 
   static styles = [ui, map3dOptionsCss, css`
@@ -99,9 +124,24 @@ export class GfMapOptions extends LitElement {
     .bases button[aria-pressed='true'] { background: var(--gf-accent-soft); border-color: var(--gf-accent); border-width: 2px; font-weight: 600; }
     label.layer { display: flex; align-items: center; gap: 12px; padding: 8px 4px; border-radius: var(--gf-radius-sm); cursor: pointer; }
     label.layer:hover { background: var(--gf-surface-2); }
-    label.layer span { display: grid; }
+    label.layer input { flex: none; }
+    label.layer span { display: grid; min-width: 0; overflow-wrap: anywhere; }
     label.layer small { color: var(--gf-text-muted); font-size: 0.8rem; }
+    label.layer:has(input:disabled) { cursor: default; color: var(--gf-text-muted); }
+    label.layer:has(input:disabled):hover { background: none; }
     .note { margin: 2px 4px 4px; font-size: 0.8rem; color: var(--gf-text-muted); }
+    /* A theme: folded under its title (a heading), its count of layers ticked beside it. */
+    details.theme { min-width: 0; border-top: 1px solid var(--gf-border); }
+    details.theme:last-of-type { border-bottom: 1px solid var(--gf-border); }
+    details.theme > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 2px 4px; cursor: pointer; list-style: none; border-radius: var(--gf-radius-sm); }
+    details.theme > summary::-webkit-details-marker { display: none; }
+    details.theme > summary::before { content: ''; flex: none; width: 0.5em; height: 0.5em; border: solid currentColor; border-width: 0 2px 2px 0; transform: rotate(-45deg); transition: transform 0.15s; margin: 0 4px; opacity: 0.6; }
+    details.theme[open] > summary::before { transform: rotate(45deg); }
+    details.theme > summary:hover { background: var(--gf-surface-2); }
+    details.theme > summary h3 { margin: 0; flex: 1; min-width: 0; }
+    details.theme > summary .count { flex: none; font-size: 0.8rem; color: var(--gf-text-muted); background: var(--gf-surface-2); border-radius: var(--gf-radius-pill); padding: 1px 8px; }
+    details.theme[open] { padding-bottom: 8px; }
+    details.theme h4 { margin: 10px 4px 2px; font-size: 0.8rem; font-weight: 600; color: var(--gf-text-muted); }
     .when { display: grid; gap: 4px; margin: 10px 0 2px; min-width: 0; }
     .when label { font-size: 0.85rem; color: var(--gf-text-muted); }
     .when select { width: 100%; max-width: 100%; }
@@ -119,6 +159,9 @@ export class GfMapOptions extends LitElement {
     this.gl = null;
     this.own3d = false;
     this.lookWhy = '';
+    /** @type {Map<string, boolean>} */
+    this._open = new Map();
+    this._inView = false;
   }
 
   connectedCallback() {
@@ -163,35 +206,54 @@ export class GfMapOptions extends LitElement {
 
   /**
    * An overlay on (on top, or in the place of the one it replaces: another variant of its series) or off — a layer of
-   * IGN's whole catalogue made known first (kept, for every map).
+   * IGN's whole catalogue made known first (kept, for every map): one of the panel's themes named as there, whichever
+   * list ticks it, and first ticked at its row's opacity (the shading: the photos seen through it) unless one is chosen.
    * @param {string} key @param {boolean} on @param {any} [layer] @param {string} [replace]
    */
   #toggle(key, on, layer, replace) {
-    const k = layer ? addCatalogLayer(layer) : key;
-    const now = this.#look.overlays.filter(o => o !== k);
+    const row = layer ? catalogRowOf(layer.id) : null;
+    const k = layer ? addCatalogLayer(/** @type {any} */ (row ?? layer)) : key;
+    const look = this.#look;
+    const now = look.overlays.filter(o => o !== k);
     const at = replace ? now.indexOf(replace) : -1;
-    if (!on) this.#edit({ overlays: now });
-    else if (at >= 0) this.#edit({ overlays: now.map(o => o === replace ? k : o) });
-    else this.#edit({ overlays: [...now, k] });
+    if (!on) { this.#edit({ overlays: now }); return; }
+    const overlays = at >= 0 ? now.map(o => o === replace ? k : o) : [...now, k];
+    const opacity = row?.opacity;
+    this.#edit(opacity != null && !(k in look.opacities) ? { overlays, opacities: { ...look.opacities, [k]: opacity } } : { overlays });
   }
 
-  /** gf-ign-layers' events (its « Affichées » list, its catalogue), as changes of the look; not past this element. @param {Event} e */
+  /** One of « Noms et réseaux » chosen or not (by its key). @param {string} key @param {boolean} on */
+  #mark(key, on) {
+    const now = this.#look.landmarks.filter(k => k !== key);
+    this.#edit({ landmarks: cleanLandmarks(on ? [...now, key] : now) });
+  }
+
+  /**
+   * gf-layer-stack's and gf-ign-layers' events (the layers shown, the catalogue), as changes of the look; not past this
+   * element. @param {Event} e
+   */
   #onLayers = e => {
     const d = /** @type {CustomEvent} */ (e).detail;
     e.stopPropagation();
     if (e.type === 'overlay-toggle') this.#toggle(d.key, d.on, d.layer, d.replace);
+    else if (e.type === 'landmark-toggle') this.#mark(d.key, d.on);
     else if (e.type === 'overlay-order') this.#edit({ overlays: d.keys });
     else if (!d.commit) { if (!this.#defaults) this.#emit('look-preview', { key: d.key, opacity: d.opacity }); }
     else this.#edit({ opacities: { ...this.#look.opacities, [d.key]: Math.round(Math.min(1, Math.max(0, Number(d.opacity) || 0)) * 20) / 20 } });
   };
 
-  /** @param {string} key */
-  #layer(key) {
-    const def = overlayDef(key);
+  /**
+   * A row of the panel's themes: an overlay of the app's (its name, what it shows) or a catalogue's layer (its row's
+   * title and hint), ticked when shown. @param {string} row @param {MapLook} look
+   */
+  #layer(row, look) {
+    const cat = CATALOG_ROWS[row];
+    const def = cat ? { label: cat.title, hint: cat.hint } : overlayDef(row);
     if (!def) return nothing;
+    const key = rowKey(row);
     return html`<label class="layer">
-      <input type="checkbox" .checked=${this.#look.overlays.includes(key)}
-        @change=${(/** @type {any} */ e) => this.#toggle(key, e.target.checked)} />
+      <input type="checkbox" .checked=${look.overlays.includes(key)}
+        @change=${(/** @type {any} */ e) => cat ? this.#toggle(key, e.target.checked, cat) : this.#toggle(key, e.target.checked)} />
       <span>${def.label}${def.hint ? html`<small>${def.hint}</small>` : nothing}</span>
     </label>`;
   }
@@ -238,9 +300,7 @@ export class GfMapOptions extends LitElement {
    * photos their date (the most recent, a year, a period, historical ones), under SPOT its year, each a list; under the
    * photos of a year or a period, where they are missing (the most recent ones, greyed): the list's description, said
    * when a date brings it — on a map, by its panel's one live region (`options-say`: the panel is a modal, one region
-   * says all); in Réglages, by its own polite region. Over the photos and SPOT's, the names (a checkbox, on by default:
-   * ticked, the usual « Noms et réseaux », core/map-layers.js LANDMARK_DEFAULTS; unticked, none) — not on the plan, which
-   * has its own: no checkbox there, as no date. @param {MapLook} look
+   * says all); in Réglages, by its own polite region (« Noms et réseaux » over them: #landmarks). @param {MapLook} look
    */
   #bases(look) {
     const kind = parseBase(look.base)?.kind ?? 'photo';
@@ -271,35 +331,81 @@ export class GfMapOptions extends LitElement {
         </select></div>`
       : kind === 'spot' ? html`<div class="when"><label for=${id}>Année des images</label>
         <select id=${id} @change=${choose}>${SPOT_YEARS.map(y => option('spot:' + y, y))}</select></div>` : nothing}
-      ${this.#defaults ? html`<div aria-live="polite">${noteView}</div>` : noteView}
-      ${takesLandmarks(look.base) ? html`<label class="layer">
-        <input type="checkbox" .checked=${look.landmarks.length > 0}
-          @change=${(/** @type {any} */ e) => this.#edit({ landmarks: e.target.checked ? [...LANDMARK_DEFAULTS] : [] })} />
-        <span>Afficher les noms : villes, routes, rivières, forêts</span>
-      </label>` : nothing}`;
+      ${this.#defaults ? html`<div aria-live="polite">${noteView}</div>` : noteView}`;
+  }
+
+  /**
+   * « Noms et réseaux »: a checkbox each, in their order (core/map-layers.js LANDMARKS_LISTED), over the photos and
+   * SPOT's, above every layer; on the plan, which draws its own, disabled — the choice kept for the photos and SPOT,
+   * said by a note each checkbox is described by. @param {MapLook} look
+   */
+  #landmarks(look) {
+    const plan = !takesLandmarks(look.base);
+    const id = (this.#defaults ? 'settings' : 'panel') + '-marks';
+    return html`<h3 class="kicker" id=${id}>Noms et réseaux</h3>
+      <p class="note" id=${id + '-note'}>${plan ? 'Le plan IGN dessine déjà les siens : ces choix valent pour les photos et SPOT.' : 'Par-dessus les photos et les images SPOT, au-dessus de toutes les couches.'}</p>
+      <div class="marks" role="group" aria-labelledby=${id}>${LANDMARKS_LISTED.map(key => {
+        const m = /** @type {import('../core/map-layers.js').Landmark} */ (LANDMARKS.find(l => l.key === key));
+        return html`<label class="layer">
+          <input type="checkbox" .checked=${look.landmarks.includes(key)} ?disabled=${plan} aria-describedby=${plan ? id + '-note' : nothing}
+            @change=${(/** @type {any} */ e) => this.#mark(key, e.target.checked)} />
+          <span>${m.label}${m.hint ? html`<small>${m.hint}</small>` : nothing}</span>
+        </label>`;
+      })}</div>`;
+  }
+
+  /** Its layers ticked: how many. @param {PanelGroup} g @param {MapLook} look */
+  #ticked(g, look) { return g.parts.flatMap(p => p.rows).filter(r => look.overlays.includes(rowKey(r))).length; }
+
+  /** Open by itself: one of its layers ticked; « Espaces protégés et propriété », an area in view too. @param {PanelGroup} g @param {MapLook} look */
+  #auto(g, look) { return this.#ticked(g, look) > 0 || (g.key === 'espaces' && this._inView); }
+
+  /**
+   * A theme folded or opened (by a touch, or by itself: the details' toggle either way): kept so — a layer unticked
+   * there never folds it under the finger, a theme folded stays so. @param {PanelGroup} g @param {Event} e
+   */
+  #fold(g, e) {
+    const open = /** @type {HTMLDetailsElement} */ (e.currentTarget).open;
+    if (this._open.get(g.key) !== open) this._open = new Map(this._open).set(g.key, open);
+  }
+
+  /**
+   * A theme of IGN's layers (core/map-layers.js PANEL), folded under its title and its count of layers ticked: its
+   * parts, each its title, its note, its rows; « Espaces protégés et propriété » first the protected areas in view (slot
+   * `rules`) and what to know before picking. @param {PanelGroup} g @param {MapLook} look
+   */
+  #group(g, look) {
+    const n = this.#ticked(g, look);
+    const open = this._open.get(g.key) ?? this.#auto(g, look);
+    const rules = g.key === 'espaces';
+    return html`<details class="theme" data-group=${g.key} ?open=${open} @toggle=${(/** @type {Event} */ e) => this.#fold(g, e)}>
+      <summary><h3 class="kicker">${g.title}</h3>${n ? html`<span class="count">${n} cochée${n > 1 ? 's' : ''}</span>` : nothing}</summary>
+      ${rules ? html`<slot name="rules" @slotchange=${(/** @type {Event} */ e) => { this._inView = /** @type {HTMLSlotElement} */ (e.target).assignedElements().length > 0; }}></slot>
+        <p class="note">${BEFORE_PICKING}</p>` : nothing}
+      ${g.parts.map(p => html`${p.title ? html`<h4>${p.title}</h4>` : nothing}${p.note ? html`<p class="note">${p.note}</p>` : nothing}
+        ${p.rows.map(r => this.#layer(r, look))}`)}
+    </details>`;
   }
 
   render() {
     const look = this.#look;
-    const group = (/** @type {string} */ g) => Object.keys(OVERLAYS).filter(k => OVERLAYS[k].group === g);
     return html`
       ${this.#scope()}
       ${this.#display()}
       ${this.#bases(look)}
       <slot name="extra"></slot>
 
-      <h3 class="kicker">Terrain</h3>
-      ${group('terrain').map(k => this.#layer(k))}
+      <h3 class="kicker">Couches affichées</h3>
+      <gf-layer-stack .base=${look.base} .landmarks=${look.landmarks} .overlays=${look.overlays} .opacities=${look.opacities}
+        @overlay-toggle=${this.#onLayers} @overlay-order=${this.#onLayers} @overlay-opacity=${this.#onLayers} @landmark-toggle=${this.#onLayers}></gf-layer-stack>
+
+      ${this.#landmarks(look)}
+      <div class="themes">${PANEL.map(g => this.#group(g, look))}</div>
 
       <h3 class="kicker">Toutes les couches de l’IGN</h3>
-      <p class="note">Tout le catalogue de la Géoplateforme, rangé par thème : photos anciennes, forêts, espaces protégés, sols, relief, cartes anciennes…</p>
-      <gf-ign-layers .overlays=${look.overlays} .opacities=${look.opacities}
-        @overlay-toggle=${this.#onLayers} @overlay-order=${this.#onLayers} @overlay-opacity=${this.#onLayers}></gf-ign-layers>
-
-      <h3 class="kicker">Règles de cueillette</h3>
-      <slot name="rules"></slot>
-      <p class="note">Dans ces zones, la cueillette a souvent des règles propres : vérifiez-les avant de cueillir.</p>
-      ${group('rules').map(k => this.#layer(k))}`;
+      <p class="note">Tout le catalogue de la Géoplateforme, rangé par thème : photos anciennes, forêts, espaces protégés, sols, relief, cartes anciennes… Les couches cochées plus haut s’y retrouvent cochées.</p>
+      <gf-ign-layers .overlays=${look.overlays} .landmarks=${look.landmarks}
+        @overlay-toggle=${this.#onLayers} @landmark-toggle=${this.#onLayers}></gf-ign-layers>`;
   }
 }
 

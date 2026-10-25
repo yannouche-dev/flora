@@ -667,7 +667,7 @@ export class GfMap extends LitElement {
 
   // ── Protected areas ────────────────────────────────────────────────────────────────────────────
 
-  /** Protected areas in view (« IGN – espaces protégés »): listed in the panel (« Règles de cueillette »). @type {import('../core/protected.js').ProtectedArea[]} */
+  /** Protected areas in view (« IGN – espaces protégés »): listed in the panel (« Espaces protégés et propriété »). @type {import('../core/protected.js').ProtectedArea[]} */
   #areas = [];
 
   /** @param {import('../core/protected.js').ProtectedArea[]} areas */
@@ -678,7 +678,7 @@ export class GfMap extends LitElement {
     // One État line, said once per new set (none while positions are edited: #checkAreas).
     const names = areas.slice(0, 2).map(a => a.name).join(', ') + (areas.length > 2 ? ` et ${areas.length - 2} autre${areas.length > 3 ? 's' : ''}` : '');
     this.setStatus('areas', areas.length
-      ? `${areas.length > 1 ? 'Espaces protégés' : 'Espace protégé'} en vue : ${names} — la cueillette y est souvent interdite ou réglementée (voir Règles de cueillette).`
+      ? `${areas.length > 1 ? 'Espaces protégés' : 'Espace protégé'} en vue : ${names} — la cueillette y est souvent interdite ou réglementée (voir Espaces protégés et propriété).`
       : '', { level: 'warn' });
     this.#syncState();
   }

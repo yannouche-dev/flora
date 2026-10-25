@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { CATALOG_ROWS, LANDMARKS, LANDMARK_DEFAULTS, OVERLAYS, PANEL, cleanLandmarks, everyAppLayer } from '../../app/core/map-layers.js';
+import { CATALOG_ROWS, LANDMARKS, LANDMARKS_LISTED, LANDMARK_DEFAULTS, OVERLAYS, PANEL, catalogRowOf, cleanLandmarks, everyAppLayer, landmarkOf } from '../../app/core/map-layers.js';
 import { MAP_LAYERS } from '../../app/layout/map-options.js';
 import { everyBaseLayer } from '../../app/core/backgrounds.js';
 
@@ -60,6 +60,14 @@ test('noms et réseaux : six couches PNG, du bas vers le haut, jamais aussi une 
   assert.deepEqual(cleanLandmarks(['lieux', 'rail', 'lune', 'lieux', 'limites']), ['limites', 'rail', 'lieux']);
   for (const v of [null, undefined, 'routes', { routes: true }, 3]) assert.deepEqual(cleanLandmarks(v), [], String(v));
   assert.deepEqual(cleanLandmarks(['constructor', 'toString', 7]), []);
+  // As the panel ▦ lists them (and noms= writes them): the usual three first, every one once.
+  assert.deepEqual(LANDMARKS_LISTED, ['lieux', 'routes', 'eau', 'rail', 'bati', 'limites']);
+  assert.deepEqual([...LANDMARKS_LISTED].sort(), LANDMARKS.map(m => m.key).sort());
+  assert.deepEqual(LANDMARKS_LISTED.slice(0, 3).sort(), [...LANDMARK_DEFAULTS].sort());
+  assert.ok(Object.isFrozen(LANDMARKS_LISTED));
+  // A catalogue's layer that is one of them (its row there toggles it): by its identifier.
+  for (const m of LANDMARKS) assert.equal(landmarkOf(m.layer.id), m.key);
+  for (const id of ['TN.RoadTransportNetwork.RoadLink', 'FORETS.PUBLIQUES', 'Patrinat_SIC', '']) assert.equal(landmarkOf(id), null, id);
 });
 
 test('les thèmes du panneau ▦ : chaque ligne une surcouche ou une couche du catalogue, une seule fois ; les clés jamais deux fois', () => {
@@ -78,6 +86,9 @@ test('les thèmes du panneau ▦ : chaque ligne une surcouche ou une couche du c
   assert.deepEqual(PANEL.at(-1)?.parts.map(p => p.title), ['Protection réglementaire', 'Gestion contractuelle', 'Inventaires', 'Propriété']);
   // The shading: see-through when first ticked.
   assert.equal(CATALOG_ROWS.ombrage.opacity, 0.4);
+  // A catalogue's layer that is a row (ticked in the catalogue: named as in its theme), by its identifier.
+  for (const row of Object.values(CATALOG_ROWS)) assert.equal(catalogRowOf(row.id), row);
+  for (const id of ['FORETS.PUBLIQUES', 'GEOGRAPHICALNAMES.NAMES', 'LANDCOVER.CLC18']) assert.equal(catalogRowOf(id), null, id);
 });
 
 test('les couches que vérifient les outils (tools/api-health.mjs, scripts/build-ign-catalog.mjs) : toutes, une fois chacune, au catalogue', () => {
