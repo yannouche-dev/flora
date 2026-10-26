@@ -16,7 +16,8 @@
 //     first, then their occurrences (never its copy of iNaturalist's, nor the datasets left out); `taxon`: one group of
 //     plants only (a family:
 //     Orchidaceae), in each source's own numbers; `precise`: only the points that are where the plant was, at this
-//     radius (the others counted: `vague`); sourcesText(sources), failedText(failed), obsNotes(counts): in words.
+//     radius (vagueAt(point, radius): the others, counted: `vague`); sourcesText(sources), failedText(failed),
+//     obsNotes(counts): in words.
 // The filters and their translation are pure, tested under Node (tests/unit/observations.test.mjs).
 
 import * as cache from './cache.js';
@@ -350,6 +351,13 @@ async function gbifZone([lon, lat], radius, f, periode, signal, taxon = null) {
 const SAME_SPOT = 25;
 
 /**
+ * A point that may not be where the plant was, in a circle of `radius` metres (a site): iNaturalist's hidden one
+ * (obscured: drawn at random in a cell of some 20 km) or one whose accuracy is wider than the circle; one that says
+ * nothing of it is not. @param {{ obscured?: boolean, accuracy?: number }} p @param {number} radius
+ */
+export const vagueAt = (p, radius) => Boolean(p.obscured) || (p.accuracy ?? 0) > radius;
+
+/**
  * The zone's observations from the sources the filters keep (each with its module on), merged: iNaturalist's `max`
  * most recent, GBIF's (300) — its copy of iNaturalist's left out, and any of its records that is an iNaturalist
  * observation already (the same plant, the same day, within 25 m) —, GBIF's given the photo and name its plant has on
@@ -357,8 +365,8 @@ const SAME_SPOT = 25;
  * (`failed`); every one failing, an ObsError thrown (each one's failure). `taxon`: one group of plants only (an
  * activity's: the orchids of a site), each source asked for it in its own numbers. `precise` (a small circle: a site):
  * only the points that are where the plant was — iNaturalist's hidden ones (obscured: drawn at random in a cell of some
- * 20 km, wherever the plant was) and any whose accuracy is wider than the circle left out, counted (`vague`); a point
- * that says nothing of it kept.
+ * 20 km, wherever the plant was) and any whose accuracy is wider than the circle left out (vagueAt), counted (`vague`);
+ * a point that says nothing of it kept.
  * @param {[number, number]} center @param {number} radius
  * @param {{ filters: ObsFilters, periode?: string | null, max?: number, taxon?: ObsTaxon | null, precise?: boolean, signal?: AbortSignal }} o
  * @returns {Promise<ObsResult>}
@@ -398,7 +406,7 @@ export async function zoneObservations(center, radius, { filters: f, periode = n
   }
   points.sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? '')));
   const all = inCircle(points, center, radius);
-  const kept = precise ? all.filter(p => !p.obscured && !((p.accuracy ?? 0) > radius)) : all;
+  const kept = precise ? all.filter(p => !vagueAt(p, radius)) : all;
   return {
     points: kept,
     totals: { inat: inat ? inat.total : null, gbif: gbif ? gbif.total : null },

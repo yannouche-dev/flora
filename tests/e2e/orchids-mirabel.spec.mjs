@@ -1,7 +1,9 @@
 // Les orchidées de la colline de Mirabel (#/app/orchidees): its start screen (« Commencer »), then the map — the hill at
 // Ménétrol, 500 m around, only the orchids asked of iNaturalist (its taxon 47217) and of GBIF (its key 7689), every
-// observation of them in the circle whose point is where the plant was on the map and in the list, by orchid (one
-// named to the genus only, or above it, said so) —; the light filters (genus, protection and statuses, a name)
+// observation of them in the circle on the map and in the list, by orchid (one named to the genus only, or above it,
+// said so), those whose point may not be where the plant was drawn apart with their margin —; « Sur cette carte » of
+// its panel ▦ (iNaturalist, GBIF — one at least —, the plants grown, the approximate positions: all ticked, each
+// asked again, kept after a reload; the approximate ones unticked, hidden and counted); the light filters (genus, protection and statuses, a name)
 // narrowing the map and the list together, kept after a reload; an observation touched (its row, its point) opening
 // the simple sheet, the focus in it — « Médias » (its image, in the address) and the rubric « L'essentiel » only, as
 // the Épuré sheet orders and titles it —, beside the map on a wide screen (its plant still named when the filters
@@ -38,9 +40,13 @@ const chip = (page, label) => screen(page).locator('.chips button').filter({ has
 /** An orchid of the list, by its name as shown (exactly). @param {Page} page @param {string} name */
 const row = (page, name) => screen(page).locator('ul > li').filter({ has: page.locator('.names b').getByText(name, { exact: true }) });
 /** How many observations and orchids, said. */
-const ALL = '10 observations · 4 orchidées et 2 non identifiées à l’espèce';
-/** The observations left out for their point (an iNaturalist one obscured, a GBIF one within 2 km). */
-const VAGUE = '2 observations à la position masquée ou plus large que le cercle : pas sur la carte.';
+const ALL = '12 observations · 4 orchidées et 2 non identifiées à l’espèce';
+/** The observations whose position is approximate (an iNaturalist one obscured, a GBIF one within 2 km), on the map. */
+const VAGUE = '2 observations à la position approximative (masquée par l’observateur, ou plus large que le cercle) : leur marge en pointillés sur la carte.';
+/** Their markers, set apart, and their margins (dashed circles). @param {Page} page */
+const vague = page => screen(page).locator('gf-map .leaflet-marker-pane .gf-obs-leaf.gf-obs-approx');
+/** @param {Page} page */
+const margins = page => screen(page).locator('gf-map path.gf-obs-margin');
 
 /**
  * What the app keeps on the device but this activity's own keys (and the shared cache's purge date; of the backup of
@@ -97,21 +103,24 @@ test('le départ, puis la carte : la colline de Mirabel à 500 m, seules les orc
   await expect(page.locator('gf-miniapp .quit')).toHaveAttribute('aria-label', 'Quitter l’activité');
   await begin(page);
 
-  // The screen's title in focus; how many, said; the circle and its ten observations (two beyond it left out, and two
-  // in it whose point is not where the plant was: said).
+  // The screen's title in focus; how many, said; the circle and its twelve observations (two beyond it left out; two
+  // in it whose point may not be where the plant was set apart, their margin drawn: said).
   await expect(screen(page).getByRole('heading', { level: 1, name: 'Les orchidées de la colline de Mirabel' })).toBeFocused();
   await expect(screen(page).locator('.count')).toHaveText(ALL);
   await expect(screen(page).locator('.note')).toHaveText(VAGUE);
   await expect(screen(page).locator('.where')).toContainText('Colline de Mirabel, Ménétrol (Puy-de-Dôme)');
   await expect(screen(page).locator('.radius b')).toHaveText('500 m');
-  expect(await area(page)).toEqual({ center: [3.111, 45.869], radius: 500, n: 10,
+  expect(await area(page)).toEqual({ center: [3.111, 45.869], radius: 500, n: 12,
     sci: ['Dactylorhiza brennensis', 'Epipactis leptochila', 'Ophrys', 'Ophrys holosericea', 'Orchidaceae', 'Traunsteinera globosa'] });
-  await expect(dots(page)).toHaveCount(10);
-  // Only the orchids, of both sources, around the hill: never a question for every plant.
+  await expect(dots(page)).toHaveCount(12);
+  await expect(vague(page)).toHaveCount(2);
+  await expect(margins(page)).toHaveCount(2);
+  // Every observation of the orchids, of both sources, around the hill: any quality, the plants grown too; never a
+  // question for every plant.
   expect(urls.length).toBeGreaterThanOrEqual(3);
   for (const u of urls.filter(x => x.host === 'api.inaturalist.org')) {
-    expect([u.searchParams.get('taxon_id'), u.searchParams.get('lat'), u.searchParams.get('lng'), u.searchParams.get('radius'), u.searchParams.get('quality_grade')])
-      .toEqual(['47217', '45.86900', '3.11100', '0.50', null]);
+    expect([u.searchParams.get('taxon_id'), u.searchParams.get('lat'), u.searchParams.get('lng'), u.searchParams.get('radius'), u.searchParams.get('quality_grade'), u.searchParams.get('captive')])
+      .toEqual(['47217', '45.86900', '3.11100', '0.50', null, null]);
   }
   const gbif = urls.filter(x => x.host === 'api.gbif.org');
   expect(gbif.length).toBeGreaterThan(0);
@@ -119,9 +128,10 @@ test('le départ, puis la carte : la colline de Mirabel à 500 m, seules les orc
 
   // The orchids, the most observed first; each its observations, what protects it here; one named to the genus only
   // (« Ophrys L. » for GBIF: its name without its author), one to the family only: no sheet, said why.
-  expect(await names(page)).toEqual(['Ophrys bourdon', 'Traunsteinère globuleuse', 'Dactylorhize de la Brenne', 'Épipactide à labelle étroit', 'Ophrys', 'Orchidées']);
+  expect(await names(page)).toEqual(['Traunsteinère globuleuse', 'Ophrys bourdon', 'Dactylorhize de la Brenne', 'Épipactide à labelle étroit', 'Ophrys', 'Orchidées']);
   const traun = row(page, 'Traunsteinère globuleuse');
-  await expect(traun).toContainText('3 obs. iNat.');
+  await expect(traun).toContainText('4 obs. iNat.');
+  await expect(row(page, 'Dactylorhize de la Brenne')).toContainText('2 obs. GBIF');
   await expect(traun.locator('.tag')).toHaveText(['Protégée (Auvergne)', 'Liste rouge : vulnérable (Auvergne)']);
   await expect(row(page, 'Ophrys bourdon')).toContainText('3 obs. (2 iNat., 1 GBIF)');
   await expect(row(page, 'Ophrys').locator('button')).toHaveCount(0);
@@ -143,22 +153,22 @@ test('les filtres légers : un genre, une protection, un statut, un nom — la c
   await expect(screen(page).locator('.count')).toHaveText(ALL);
   // The genera, counted in observations, the most observed first; « Genre non précisé » last.
   expect((await screen(page).locator('.facet').first().locator('button').allTextContents()).map(t => t.replace(/\s+/g, ' ').trim()))
-    .toEqual(['Ophrys 4', 'Traunsteinera 3', 'Dactylorhiza 1', 'Epipactis 1', 'Genre non précisé 1']);
+    .toEqual(['Ophrys 4', 'Traunsteinera 4', 'Dactylorhiza 2', 'Epipactis 1', 'Genre non précisé 1']);
   await expect(chip(page, 'Ophrys')).toHaveAttribute('aria-label', 'Ophrys, 4 observations');
 
   await chip(page, 'Ophrys').click();
   await expect(chip(page, 'Ophrys')).toHaveAttribute('aria-pressed', 'true');
-  await expect(screen(page).locator('.count')).toHaveText('4 observations sur 10 · 1 orchidée et 1 non identifiée à l’espèce');
+  await expect(screen(page).locator('.count')).toHaveText('4 observations sur 12 · 1 orchidée et 1 non identifiée à l’espèce');
   expect(await names(page)).toEqual(['Ophrys bourdon', 'Ophrys']);
   await expect.poll(async () => (await area(page)).sci).toEqual(['Ophrys', 'Ophrys holosericea']);
   await expect(dots(page)).toHaveCount(4);
   await chip(page, 'Ophrys').click();
 
-  // « Protégée ici »: Traunsteinère alone (protected in Auvergne), its three points; the genera counted among them.
+  // « Protégée ici »: Traunsteinère alone (protected in Auvergne), its four points; the genera counted among them.
   await chip(page, 'Protégée ici').click();
   expect(await names(page)).toEqual(['Traunsteinère globuleuse']);
-  await expect(dots(page)).toHaveCount(3);
-  expect((await screen(page).locator('.facet').first().locator('button').allTextContents()).map(t => t.replace(/\s+/g, ' ').trim())).toEqual(['Traunsteinera 3']);
+  await expect(dots(page)).toHaveCount(4);
+  expect((await screen(page).locator('.facet').first().locator('button').allTextContents()).map(t => t.replace(/\s+/g, ' ').trim())).toEqual(['Traunsteinera 4']);
   await chip(page, 'Protégée ici').click();
   await chip(page, 'Liste rouge').click();
   expect(await names(page)).toEqual(['Traunsteinère globuleuse', 'Dactylorhize de la Brenne']);
@@ -191,6 +201,96 @@ test('les filtres légers : un genre, une protection, un statut, un nom — la c
   await app.ready();
   await expect(chip(page, 'Traunsteinera')).toHaveAttribute('aria-pressed', 'true');
   expect(await names(page)).toEqual(['Traunsteinère globuleuse']);
+  expect(await footprint(page)).toEqual(before);
+});
+
+/** The map's panel ▦, open: its section « Sur cette carte ». @param {Page} page */
+async function onThisMap(page) {
+  const map = screen(page).locator('gf-map');
+  await map.evaluate(m => /** @type {any} */ (m).openPanel());
+  const panel = map.locator('gf-map-panel dialog');
+  await expect(panel).toBeVisible();
+  return { panel, data: panel.getByRole('group', { name: 'Sur cette carte' }) };
+}
+
+test('« Sur cette carte » : iNaturalist, GBIF, les cultivées, les positions approximatives — toutes cochées, chacune demandée à nouveau, gardées ; les approximatives dessinées avec leur marge, décochées cachées et comptées', async ({ app, page }) => {
+  await answerOrchids(page);
+  const urls = asked(page);
+  await app.open('#/app/orchidees');
+  const before = await footprint(page);
+  await begin(page);
+  await expect(screen(page).locator('.count')).toHaveText(ALL);
+
+  // The approximate ones: set apart, their margin drawn (± 27 km, ± 2 km), their card says it (a pointer: hovered).
+  await expect(vague(page)).toHaveCount(2);
+  expect((await margins(page).evaluateAll(ps => ps.map(p => p.getAttribute('stroke-dasharray')))).every(d => d === '5 5')).toBe(true);
+  if (!app.phone) {
+    const card = screen(page).locator('gf-map .gf-float-tip.on .gf-obs-card');
+    const said = [];
+    for (let i = 0; i < 2; i++) {
+      await vague(page).nth(i).dispatchEvent('mouseover');
+      await expect(card.locator('.approx')).toBeVisible();
+      said.push(await card.locator('.approx').textContent());
+      await vague(page).nth(i).dispatchEvent('mouseout');
+    }
+    expect(said.sort()).toEqual(['Position approximative (± 2 km)', 'Position approximative (± 27 km)']);
+  }
+
+  // The panel ▦: its four rows, all ticked.
+  let { panel, data } = await onThisMap(page);
+  const box = (/** @type {RegExp} */ name) => data.getByRole('checkbox', { name });
+  await expect(data.getByRole('checkbox')).toHaveCount(4);
+  for (const name of [/^iNaturalist/, /^GBIF/, /^Cultivées ou plantées/, /^Positions approximatives/]) await expect(box(name)).toBeChecked();
+
+  // « Positions approximatives » unticked: those two hidden, their margins gone; the count says how many.
+  await box(/^Positions approximatives/).uncheck();
+  await expect(screen(page).locator('.count')).toHaveText('10 observations (2 autres cachées : position approximative) · 4 orchidées et 2 non identifiées à l’espèce');
+  await expect(dots(page)).toHaveCount(10);
+  await expect(vague(page)).toHaveCount(0);
+  await expect(margins(page)).toHaveCount(0);
+  // (The panel's own notes aside: the screen's.)
+  await expect(screen(page).locator('section.panel > .note')).toHaveCount(0);
+  expect(await names(page)).toEqual(['Ophrys bourdon', 'Traunsteinère globuleuse', 'Dactylorhize de la Brenne', 'Épipactide à labelle étroit', 'Ophrys', 'Orchidées']);
+
+  // « Cultivées ou plantées » unticked: the wild ones only (iNaturalist told; GBIF's records checked by the app).
+  urls.length = 0;
+  await box(/^Cultivées ou plantées/).uncheck();
+  await expect.poll(() => urls.some(u => u.host === 'api.inaturalist.org' && u.searchParams.get('captive') === 'false')).toBe(true);
+  await expect(screen(page).locator('.count')).toHaveText('10 observations (2 autres cachées : position approximative) · 4 orchidées et 2 non identifiées à l’espèce');
+
+  // GBIF unticked: never asked; iNaturalist's alone; its row the last one, kept (why said).
+  urls.length = 0;
+  await box(/^GBIF/).uncheck();
+  await expect(screen(page).locator('.count')).toHaveText('7 observations (1 autre cachée : position approximative) · 3 orchidées et 1 non identifiée à l’espèce');
+  expect(urls.some(u => u.host === 'api.gbif.org')).toBe(false);
+  await expect(box(/^iNaturalist/)).toBeDisabled();
+  await expect(box(/^iNaturalist/)).toHaveAccessibleDescription('Une source au moins : cochez GBIF pour décocher celle-ci.');
+  await expect(row(page, 'Ophrys bourdon')).toContainText('2 obs.');
+  await expect(row(page, 'Ophrys bourdon')).not.toContainText('iNat.');
+  await panel.getByRole('button', { name: 'Fermer', exact: true }).click();
+  await expect(panel).toBeHidden();
+
+  // Kept on the device, with the activity: after a reload, as left.
+  await expect.poll(() => page.evaluate(() => {
+    const ctx = JSON.parse(localStorage.getItem('geoflora.app.orchidees.state') || 'null')?.ctx;
+    return ctx && [ctx.sources, ctx.cultivated, ctx.approximate];
+  })).toEqual([['inat'], false, false]);
+  await page.reload();
+  await app.ready();
+  await expect(screen(page).locator('.count')).toHaveText('7 observations (1 autre cachée : position approximative) · 3 orchidées et 1 non identifiée à l’espèce');
+  ({ data } = await onThisMap(page));
+  await expect(box(/^iNaturalist/)).toBeChecked();
+  await expect(box(/^GBIF/)).not.toBeChecked();
+  await expect(box(/^Cultivées ou plantées/)).not.toBeChecked();
+  await expect(box(/^Positions approximatives/)).not.toBeChecked();
+  // All ticked again: every observation, as at first.
+  await box(/^GBIF/).check();
+  await expect(box(/^iNaturalist/)).toBeEnabled();
+  await box(/^Cultivées ou plantées/).check();
+  await box(/^Positions approximatives/).check();
+  await expect(screen(page).locator('.count')).toHaveText(ALL);
+  await expect(margins(page)).toHaveCount(2);
+  // Nothing of the app changed: its own key alone.
   expect(await footprint(page)).toEqual(before);
 });
 
@@ -230,7 +330,7 @@ test('une observation touchée : sa fiche simple, le focus dedans — « Médias
   await expect(sheet.locator('gf-media-viewer')).toHaveCount(1);
   await expect(sheet.locator('gf-add-to')).toHaveCount(0);
   // ‹ Préc. / Suivante ›: the orchids of the list that have a sheet.
-  await expect(sheet.locator('.pager span')).toHaveText('2 / 4');
+  await expect(sheet.locator('.pager span')).toHaveText('1 / 4');
   if (!app.phone) {
     // Beside the map: the map keeps clear of it.
     await expect(screen(page)).toHaveAttribute('sheet', '');
@@ -238,11 +338,11 @@ test('une observation touchée : sa fiche simple, le focus dedans — « Médias
     expect(/** @type {any} */ (m).x + /** @type {any} */ (m).width).toBeLessThanOrEqual(/** @type {any} */ (s).x + 2);
     // A filter beside it that leaves its plant out: the sheet still names it, still among the plants it steps through.
     await chip(page, 'Ophrys').click();
-    await expect(screen(page).locator('.panel .count')).toHaveText('4 observations sur 10 · 1 orchidée et 1 non identifiée à l’espèce');
+    await expect(screen(page).locator('.panel .count')).toHaveText('4 observations sur 12 · 1 orchidée et 1 non identifiée à l’espèce');
     await expect(sheet.locator('.sheet-head strong')).toHaveText('Traunsteinère globuleuse');
-    await expect(sheet.locator('.pager span')).toHaveText('2 / 2');
+    await expect(sheet.locator('.pager span')).toHaveText('1 / 2');
     await chip(page, 'Ophrys').click();
-    await expect(sheet.locator('.pager span')).toHaveText('2 / 4');
+    await expect(sheet.locator('.pager span')).toHaveText('1 / 4');
   }
   await page.keyboard.press('Escape');
   await expect(sheet).toHaveCount(0);
@@ -251,7 +351,7 @@ test('une observation touchée : sa fiche simple, le focus dedans — « Médias
 
   // A point of the map touched: its plant's sheet too; the viewer touched (its heading), Échap still closes it.
   await chip(page, 'Traunsteinera').click();
-  await expect(dots(page)).toHaveCount(3);
+  await expect(dots(page)).toHaveCount(4);
   await dots(page).first().click();
   await expect.poll(() => hash(page)).toBe(`#/app/orchidees/map?p=${id}`);
   await expect(sheet.locator('.sheet-head strong')).toHaveText('Traunsteinère globuleuse');
@@ -364,9 +464,9 @@ test('une source en panne, toutes, hors ligne, rien d’observé : dit, et « R�
   // The connection back (GBIF down meanwhile): asked again at once, no « Réessayer » needed; iNaturalist's alone, said.
   await answerOrchids(page, { gbif: false });
   await page.context().setOffline(false);
-  await expect(screen(page).locator('.count')).toHaveText('7 observations · 3 orchidées et 1 non identifiée à l’espèce');
+  await expect(screen(page).locator('.count')).toHaveText('8 observations · 3 orchidées et 1 non identifiée à l’espèce');
   await expect(screen(page).locator('.note')).toHaveText(['GBIF ne répond pas : les observations d’iNaturalist seules.',
-    '1 observation à la position masquée ou plus large que le cercle : pas sur la carte.']);
+    '1 observation à la position approximative (masquée par l’observateur, ou plus large que le cercle) : sa marge en pointillés sur la carte.']);
   // Nothing observed in the circle: said, and how to look further.
   await answerOrchids(page, { none: true });
   await screen(page).getByRole('slider', { name: 'Rayon du cercle' }).focus();

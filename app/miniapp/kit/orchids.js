@@ -1,14 +1,16 @@
 // @ts-check
 // Les orchidées de la colline de Mirabel (app/miniapps/orchidees.js): what is pure about them — the site, the orchids
-// asked of the sources (Orchidaceae, in iNaturalist's and GBIF's numbers; every observation they give but plants
-// grown, and those whose point is not where the plant was), each observation's orchid (the flora's plant, else its
-// name without its author, however far it was named: the species, the genus only, above it), its genus, what protects
-// it where the circle is (INPN: protected here, a red list, endemic), and the light filters — genus, protection and
-// statuses, a name — applied to the map and the list together, each choice counted in observations. No DOM, no
-// network: tested under Node (tests/unit/orchids.test.mjs).
+// asked of the sources (Orchidaceae, in iNaturalist's and GBIF's numbers; every observation they give by default: both
+// sources, the plants grown, those whose point may not be where the plant was — each a choice of « Sur cette carte »,
+// kept), the approximate ones marked, each observation's orchid (the flora's plant, else its name without its author,
+// however far it was named: the species, the genus only, above it), its genus, what protects it where the circle is
+// (INPN: protected here, a red list, endemic), and the light filters — genus, protection and statuses, a name —
+// applied to the map and the list together, each choice counted in observations. No DOM, no network: tested under
+// Node (tests/unit/orchids.test.mjs).
 
 import { fold } from '../../core/fold.js';
 import { fullName, plantOfPoint } from '../../core/nearby.js';
+import { GRADES, SOURCES, vagueAt } from '../../core/observations.js';
 import { appliesIn, isNational } from '../../core/territory.js';
 
 /**
@@ -24,16 +26,22 @@ import { appliesIn, isNational } from '../../core/territory.js';
  * @typedef {{ key: string, plant: any, name: string, common: string | null, genus: string | null, rank: Rank, inat: number, gbif: number,
  *   facts: Facts | null, words: string }} Orchid   `plant`: the flora's record (null: not in it, no sheet); `words`: its
  *   names folded, for the search
- * @typedef {Obs & { orchid: string }} OrchidPoint   an observation and its orchid's key
+ * @typedef {Obs & { orchid: string, approx?: boolean }} OrchidPoint   an observation and its orchid's key; `approx`: its
+ *   point may not be where the plant was (vagueAt), drawn with its margin (gf-map: its `accuracy`)
  * @typedef {{ points: OrchidPoint[], orchids: Orchid[] }} Orchids
  * @typedef {{ genera?: string[], marks?: string[], query?: string }} OrchidFilters
  * @typedef {{ value: string, label: string, count: number, title?: string }} Choice
  * @typedef {{ points: OrchidPoint[], orchids: Orchid[], genera: Choice[], marks: Choice[] }} Shown
  * @typedef {Orchids & { key: string, failed: import('../../core/observations.js').ObsFailure[], totals: { inat: number | null, gbif: number | null },
- *   vague: number, error: { text: string, retry: boolean, offline?: boolean } | null }} Found   what the sources gave for a
- *   circle (the manifest's data): `key` the circle and the attempt it answers (askedKey: the screen knows what is still
- *   coming), `vague` the observations of the circle left out (their point hidden, or rougher than the circle), `error`
- *   no source answered (`offline`: the device was, it is asked again when it is back)
+ *   vague: number, hidden: number, error: { text: string, retry: boolean, offline?: boolean } | null }} Found   what the
+ *   sources gave for a circle (the manifest's data): `key` what it answers (askedKey: the screen knows what is still
+ *   coming), `totals` each source's count (null: not asked, or not answering), `vague` the observations of the circle
+ *   whose position is approximate (their point hidden, or rougher than the circle) on the map, `hidden` those left out
+ *   (« Positions approximatives » unticked), `error` no source answered (`offline`: the device was, it is asked again
+ *   when it is back)
+ * @typedef {{ sources?: unknown, cultivated?: unknown, approximate?: unknown }} Choices   what « Sur cette carte » of its
+ *   map chooses, kept in the activity's context: the sources asked, the plants grown shown, the approximate positions
+ *   shown (every one by default)
  */
 
 /** The colline de Mirabel, at Ménétrol (Puy-de-Dôme), [lon, lat]: the circle's centre as it starts. */
@@ -43,15 +51,41 @@ export const RADIUS = 500;
 /** The orchids in each source's numbers: iNaturalist's taxon, GBIF Backbone's key (core/observations.js ObsTaxon). */
 export const ORCHIDACEAE = Object.freeze({ inat: 47217, gbif: 7689 });
 /**
- * What is asked of the sources: every observation they give (any quality grade, any rank, with a photo or not) of both,
- * but the plants grown (iNaturalist's captive ones, GBIF's managed, cultivated, planted): wild orchids only. Their
- * points where the plants were only (core/observations.js `precise`): at 500 m, a hidden or rough one would be drawn
- * on the hill though seen elsewhere.
+ * What is asked of the sources by default: every observation they give of both — any quality grade, any rank, with a
+ * photo or not, the plants grown too (iNaturalist's captive ones, GBIF's managed, cultivated, planted). The choices of
+ * « Sur cette carte » change the sources and the plants grown (orchidFilters).
  */
-export const ORCHID_FILTERS = /** @type {ObsFilters} */ (Object.freeze({ sources: ['inat', 'gbif'], qualite: ['recherche', 'aidentifier', 'occasionnelles'], taxon: 'tous', photos: 'toutes', sauvages: true, jeux: [], sansjeux: [] }));
+export const ORCHID_FILTERS = /** @type {ObsFilters} */ (Object.freeze({ sources: [...SOURCES], qualite: [...GRADES], taxon: 'tous', photos: 'toutes', sauvages: false, jeux: [], sansjeux: [] }));
 
-/** What is asked of the sources, as one key: the circle and the attempt (« Réessayer »). @param {{ point: unknown, radius: unknown, retry: unknown }} c */
-export const askedKey = c => JSON.stringify([c.point, c.radius, c.retry]);
+/** The sources chosen, in their order; none (a choice kept wrong): both. @param {Choices} c @returns {import('../../core/observations.js').ObsSource[]} */
+export function sourcesOf(c) {
+  const chosen = Array.isArray(c.sources) ? SOURCES.filter(s => /** @type {unknown[]} */ (c.sources).includes(s)) : [];
+  return chosen.length ? chosen : [...SOURCES];
+}
+
+/**
+ * What is asked of the sources, in its order: the circle (its centre, its radius), the attempt (« Réessayer »), the
+ * sources, the plants grown shown, the approximate positions shown — the manifest's data key.
+ * @param {Choices & { point?: unknown, radius?: unknown, retry?: unknown }} c
+ * @returns {[[number, number], number, number, import('../../core/observations.js').ObsSource[], boolean, boolean]}
+ */
+export const asked = c => [/** @type {[number, number]} */ (c.point), Number(c.radius), Number(c.retry ?? 0), sourcesOf(c), c.cultivated !== false, c.approximate !== false];
+
+/** What is asked of the sources, as one key (asked). @param {Choices & { point?: unknown, radius?: unknown, retry?: unknown }} c */
+export const askedKey = c => JSON.stringify(asked(c));
+
+/**
+ * The filters asked of the sources: ORCHID_FILTERS, the sources chosen, the plants grown left out when unticked
+ * (`sauvages`). @param {import('../../core/observations.js').ObsSource[]} sources @param {boolean} cultivated @returns {ObsFilters}
+ */
+export const orchidFilters = (sources, cultivated) => ({ ...ORCHID_FILTERS, sources, sauvages: !cultivated });
+
+/**
+ * The points of a circle of `radius` metres whose position is approximate (core/observations.js vagueAt: hidden by the
+ * observer or for the plant's sake, or rougher than the circle) marked `approx`: the map draws them with their margin.
+ * @template {Obs} T @param {T[]} points @param {number} radius @returns {(T & { approx?: boolean })[]}
+ */
+export const markVague = (points, radius) => points.map(p => vagueAt(p, radius) ? { ...p, approx: true } : p);
 
 /** The genus chip of the observations named above it (a family, a subfamily, a tribe: « Orchidaceae »). */
 export const NO_GENUS = '?';

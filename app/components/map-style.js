@@ -1,9 +1,10 @@
 // @ts-check
 // The look of the app's maps, whatever draws them (components/gf-map.js with Leaflet; a MapLibre renderer later): one
 // style for every map — the observations' markers (a leaf, or the plant's photo over its leaf; the plant chosen
-// large in its pink and gold ring; many of them as one disc with their count) — whatever their source: a GBIF
-// occurrence is drawn as an iNaturalist observation is —, the small card of a point (its photo and credit, its names,
-// when and where, its source), the kin of a point (its species), the states a page lights (the card on
+// large in its pink and gold ring; many of them as one disc with their count; one whose position is approximate set
+// apart, gf-obs-approx) — whatever their source: a GBIF occurrence is drawn as an iNaturalist observation is —, the
+// small card of a point (its photo and credit, its names, when and where, its source, its approximate position), the
+// kin of a point (its species), the states a page lights (the card on
 // top, the matches, the plants passed), and the circle still on the screen of the games' step « map » (its place
 // and size, its SVG). Data in, descriptors and DOM out: a renderer wraps a MarkerSpec in its own marker (Leaflet's
 // divIcon) and places the ring's SVG over its map; the CSS is styles/map.css. No renderer imported here.
@@ -14,6 +15,7 @@
 import { iconMarkup } from '../core/icons.js';
 import { moduleOn } from '../core/modules.js';
 import { creditText } from '../core/credit.js';
+import { formatDistance } from '../core/distance.js';
 
 /**
  * A marker as any renderer draws it: its element, its classes, its size (px; anchored at its middle).
@@ -112,26 +114,36 @@ export function leafGlyph() {
   return glyph;
 }
 
-/** An observation without a photo: a small leaf in a disc, popping in after `delay` ms. @param {number} delay @returns {MarkerSpec} */
-export function leafMarker(delay) {
+/**
+ * An observation without a photo: a small leaf in a disc, popping in after `delay` ms. @param {number} delay
+ * @param {string} [extra] more classes (gf-obs-approx: its position approximate) @returns {MarkerSpec}
+ */
+export function leafMarker(delay, extra = '') {
   const pop = elem('span', 'pop');
   pop.style.animationDelay = delay + 'ms';
   // eslint-disable-next-line no-unsanitized/property -- the markup of a bundled icon, no data in it
   pop.innerHTML = iconMarkup('leaf-fill');
-  return { className: 'gf-obs-leaf', size: [22, 22], html: pop };
+  return { className: `gf-obs-leaf ${extra}`.trim(), size: [22, 22], html: pop };
 }
 
 /**
  * An observation with its photo: popping in after `delay` ms, its leaf first, then the plant's thumbnail in a ring
- * once it has loaded. @param {string} photo @param {number} delay @returns {MarkerSpec}
+ * once it has loaded. @param {string} photo @param {number} delay @param {string} [extra] more classes @returns {MarkerSpec}
  */
-export function photoMarker(photo, delay) {
+export function photoMarker(photo, delay, extra = '') {
   const pop = elem('span', 'pop');
   pop.style.animationDelay = delay + 'ms';
   // Not lazy: a small square; a lazy image in a marker pane (moved, scaled from 0, a map shown later) may wait for good.
   pop.append(leafGlyph(), fadeImg(photo, { decoding: 'async' }));
-  return { className: 'gf-obs-leaf gf-obs-photo', size: [30, 30], html: pop };
+  return { className: `gf-obs-leaf gf-obs-photo ${extra}`.trim(), size: [30, 30], html: pop };
 }
+
+/**
+ * An observation whose point may not be where the plant was (`approx`: hidden by its observer, or rougher than the
+ * circle shown), in words, with its margin when known (`accuracy`, metres): « position approximative (± 27 km) ».
+ * @param {{ approx?: boolean, accuracy?: number | null }} p @returns {string}
+ */
+const approxText = p => p.approx ? `position approximative${p.accuracy ? ` (± ${formatDistance(p.accuracy)})` : ''}` : '';
 
 /**
  * The plant chosen (Découvrir's plant in view, the species picked « Autour », a value touched in a plant's sheet, the
@@ -175,12 +187,12 @@ export const speciesKey = p => {
 
 /**
  * The small plant card shown over an observation: its photo and its credit (author, licence, source — as text), its
- * names, when and where, and where the record comes from (`source`: « iNaturalist », « GBIF · <its dataset> » — the
- * one thing that tells a GBIF occurrence from an iNaturalist observation, drawn alike). Built as nodes, the texts as
- * text: names and places come from iNaturalist / GBIF, never parsed as HTML. No link: a point's card leads nowhere
- * (the mini-apps lead nowhere outside).
+ * names, when and where (its position approximate, said: approxText), and where the record comes from (`source`:
+ * « iNaturalist », « GBIF · <its dataset> » — the one thing that tells a GBIF occurrence from an iNaturalist
+ * observation, drawn alike). Built as nodes, the texts as text: names and places come from iNaturalist / GBIF, never
+ * parsed as HTML. No link: a point's card leads nowhere (the mini-apps lead nowhere outside).
  * @param {{ title: string, common?: string | null, sci?: string, photo?: string | null, credit?: import('../core/credit.js').Credit | null,
- *   date?: string | null, place?: string | null, source?: string | null }} p
+ *   date?: string | null, place?: string | null, source?: string | null, approx?: boolean, accuracy?: number | null }} p
  */
 export function obsCard(p) {
   const big = p.photo ? p.photo.replace('/square.', '/small.') : null;
@@ -190,6 +202,8 @@ export function obsCard(p) {
   t.append(elem('b', '', p.common || p.sci || p.title));
   if (p.common && p.sci) t.append(elem('i', '', p.sci));
   if (when || p.place) t.append(elem('small', '', [when, p.place].filter(Boolean).join(' · ')));
+  const approx = approxText(p);
+  if (approx) t.append(elem('small', 'approx', approx[0].toUpperCase() + approx.slice(1)));
   if (p.source) t.append(elem('small', 'source', 'Observation : ' + p.source));
   if (big && p.credit && moduleOn('photos')) t.append(elem('small', 'credit', 'Photo : ' + creditText(p.credit)));
   card.append(t);

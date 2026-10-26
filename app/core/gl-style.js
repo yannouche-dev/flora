@@ -10,7 +10,8 @@
 //  - the relief (AWS Terrain Tiles, Terrarium) and its shading, the IGN buildings extruded (PLAN.IGN vector tiles), the
 //    IGN plan as vector tiles (the Géoplateforme's own style, merged in), the sky, the globe, the sun's light;
 //  - the lines and areas of the 2D map (the « Autour » circle, an outline, the threads of a group spread, the accuracy
-//    of my position) as one GeoJSON source, styled like map.css styles them in 2D.
+//    of my position, the margin of an observation placed roughly) as one GeoJSON source, styled like map.css styles
+//    them in 2D.
 
 import { isBaseKey } from './backgrounds.js';
 

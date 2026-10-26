@@ -4,7 +4,10 @@
 // slider of the app's distances; the circle's handle on the map too), how many observations, the search by name, the
 // light filters (genus, protection and statuses: chips with their counts, in observations), the orchids found (the
 // most observed first; those named to the genus only, or above it, apart in the count) — and the map: the circle and
-// every observation the filters keep, each its plant's photo (a leaf without one), its card on hover. An orchid's row
+// every observation the filters keep, each its plant's photo (a leaf without one), its card on hover; one whose
+// position is approximate drawn apart, with its margin (« position approximative (± 27 km) »). Its panel ▦, « Sur
+// cette carte »: iNaturalist, GBIF (one at least), « Cultivées ou plantées », « Positions approximatives », all ticked
+// at first, kept in the activity's context (unticked, the approximate ones hidden: the count says how many). An orchid's row
 // hovered or focused lights its points; a point under the mouse lights its row. A point or a row touched: its plant's
 // simple sheet (ma-plant-sheet `simple`: « Médias » and « L'essentiel »; the event ma-plant, the box keeps ?p=), the
 // focus in it, beside the map on a wide screen (over it on a phone: the screen under it out of reach), Back or Échap
@@ -25,7 +28,7 @@ import { SOURCES, SOURCE_NAMES, failedText, obsNotes } from '../../core/observat
 import { speciesKey } from '../../components/map-style.js';
 import { ui } from '../../styles/ui.js';
 import { DISTANCES, distanceAt, distanceEvents, distanceKey, distLabel, distWords } from './cards.js';
-import { NO_GENUS, SITE, askedKey, filtering, sameSpot } from './orchids.js';
+import { NO_GENUS, SITE, askedKey, filtering, sameSpot, sourcesOf } from './orchids.js';
 import './ma-plant-sheet.js';
 import '../../components/gf-map.js';
 import '../../components/gf-thumb.js';
@@ -45,6 +48,8 @@ const PRESS = 'Appui long sur la carte, puis « Confirmer » : le cercle s’y c
 const HANDLE = { snap: (/** @type {number} */ m) => nearestStop(m), step: distanceKey, label: distLabel };
 /** iNaturalist's observations asked at most, GBIF's page (core/observations.js): more in the circle, said. */
 const INAT_MAX = 1000, GBIF_MAX = 300;
+/** Each source's row of « Sur cette carte »: what it gives. */
+const SOURCE_HINTS = { inat: 'ses observations dans le cercle', gbif: 'ses occurrences dans le cercle : herbiers, inventaires, Pl@ntNet…' };
 
 /** « d’iNaturalist », « de GBIF ». @param {string} name */
 const of = name => /^[aeiouyh]/i.test(name) ? 'd’' + name : 'de ' + name;
@@ -280,6 +285,40 @@ export class MaOrchids extends LitElement {
     if (this.c && this.c.mediaAt !== at) this.app?.set({ mediaAt: at });
   };
 
+  /**
+   * « Sur cette carte » of the map's panel ▦: the sources (one at least: the last one ticked cannot be unticked, said
+   * why), the plants grown, the approximate positions — the activity's choices, kept. The same array while the same.
+   * @returns {import('../../components/gf-map-options.js').DataRow[]}
+   */
+  #dataRows() {
+    const c = /** @type {Record<string, any>} */ (this.c), sources = sourcesOf(c);
+    /** @type {import('../../components/gf-map-options.js').DataRow[]} */
+    const rows = SOURCES.map(s => {
+      const alone = sources.length === 1 && sources[0] === s, other = SOURCE_NAMES[SOURCES.find(x => x !== s) ?? s];
+      return { key: 'src:' + s, kind: /** @type {const} */ ('check'), label: SOURCE_NAMES[s], hint: SOURCE_HINTS[s], value: sources.includes(s),
+        ...(alone ? { disabled: true, why: `Une source au moins : cochez ${other} pour décocher celle-ci.` } : {}) };
+    });
+    rows.push({ key: 'cultivated', kind: 'check', label: 'Cultivées ou plantées', value: c.cultivated !== false,
+      hint: 'cultivées ou captives (iNaturalist) ; gérées, cultivées, captives ou relâchées (GBIF) — décochées : les sauvages seulement' });
+    rows.push({ key: 'approximate', kind: 'check', label: 'Positions approximatives', value: c.approximate !== false,
+      hint: 'masquées par l’observateur, ou plus larges que le cercle : dessinées avec leur marge' });
+    const key = JSON.stringify(rows);
+    if (this.#rowsMemo?.key !== key) this.#rowsMemo = { key, rows };
+    return this.#rowsMemo.rows;
+  }
+  /** @type {{ key: string, rows: import('../../components/gf-map-options.js').DataRow[] } | null} */ #rowsMemo = null;
+
+  /** A row of « Sur cette carte » changed: the activity's choice (the circle asked again). @param {CustomEvent} e */
+  #onData = e => {
+    const { key, value } = e.detail ?? {};
+    const c = /** @type {Record<string, any>} */ (this.c);
+    if (typeof key !== 'string' || !c) return;
+    if (key.startsWith('src:')) {
+      const now = sourcesOf(c), next = SOURCES.filter(s => 'src:' + s === key ? Boolean(value) : now.includes(s));
+      if (next.length) this.app?.set({ sources: next });
+    } else if (key === 'cultivated' || key === 'approximate') this.app?.set({ [key]: Boolean(value) });
+  };
+
   /** The circle and the observations the filters keep, the same object while they do not change (the map keeps its points). */
   #area() {
     const c = /** @type {Record<string, any>} */ (this.c), points = c.shown?.points ?? [];
@@ -336,8 +375,8 @@ export class MaOrchids extends LitElement {
         <p class="credit">${fr('Observations : iNaturalist et GBIF ; protection et statuts : INPN.')}</p>
       </section>
       <div class="map"><gf-map no-create no-search no-areas press="zone" point-click="pick" aria-description=${PRESS}
-        .area=${this.#area()} .litKeys=${this.#litKeys()} .radiusHandle=${HANDLE}
-        @point-pick=${this.#onPick} @point-hover=${this.#onHover} @point-info=${this.#onPress}
+        .area=${this.#area()} .litKeys=${this.#litKeys()} .radiusHandle=${HANDLE} .data=${this.#dataRows()}
+        @point-pick=${this.#onPick} @point-hover=${this.#onHover} @point-info=${this.#onPress} @data-change=${this.#onData}
         @radius-change=${(/** @type {CustomEvent} */ e) => app.set({ radius: e.detail.radius })}></gf-map></div>
     </div>${sheet}`;
   }
@@ -361,9 +400,10 @@ export class MaOrchids extends LitElement {
   }
 
   /**
-   * What the panel says of the observations, its status line read aloud: coming, how many (of how many when filtered),
-   * none here; a source that did not answer, the other's alone; more than the map holds; those left out for their
-   * position; no source at all, an alert (« Réessayer » unless switched off). @param {Found | null} found @param {Shown | null} shown
+   * What the panel says of the observations, its status line read aloud: coming, how many (of how many when filtered;
+   * those hidden for their approximate position, « Positions approximatives » unticked), none here; a source that did
+   * not answer, the other's alone; more than the map holds; those on the map with their margin; no source at all, an
+   * alert (« Réessayer » unless switched off). @param {Found | null} found @param {Shown | null} shown
    */
   #said(found, shown) {
     const loading = this.#loading;
@@ -371,18 +411,20 @@ export class MaOrchids extends LitElement {
       return html`<p class="count" role="status"></p><div class="alert" role="alert">${icon('exclamation-triangle-fill')}<span>${fr(found.error.text)}</span>
         ${found.error.retry ? html`<button class="small retry" type="button" @click=${() => this.#retry()}>${icon('arrow-clockwise')} Réessayer</button>` : nothing}</div>`;
     }
-    const total = found && !found.error ? found.points.length : 0;
+    const total = found && !found.error ? found.points.length : 0, hidden = found && !found.error ? found.hidden ?? 0 : 0;
+    const few = hidden.toLocaleString('fr-FR');
     const status = loading || !found || found.error ? 'Les orchidées observées arrivent…'
-      : !total ? 'Aucune orchidée observée dans ce cercle.'
+      : !total ? `Aucune orchidée observée dans ce cercle${hidden ? `, sauf ${few} ${hidden > 1 ? 'cachées' : 'cachée'} : position approximative` : ''}.`
       : `${shown && shown.points.length !== total ? `${counted(shown.points.length, 'observation')} sur ${total.toLocaleString('fr-FR')}` : counted(total, 'observation')}`
-        + ` · ${orchidsText(shown?.orchids ?? found.orchids)}`;
+        + `${hidden ? ` (${few} ${hidden > 1 ? 'autres cachées' : 'autre cachée'} : position approximative)` : ''} · ${orchidsText(shown?.orchids ?? found.orchids)}`;
     const notes = [];
     if (found && !found.error) {
-      const failed = found.failed, answered = SOURCES.filter(s => !failed.some(f => f.name === SOURCE_NAMES[s])).map(s => SOURCE_NAMES[s]);
+      const failed = found.failed, answered = SOURCES.filter(s => found.totals[s] != null).map(s => SOURCE_NAMES[s]);
       if (failed.length && answered.length) notes.push(`${failedText(failed)} : les observations ${of(answered[0])} seules.`);
       if ((found.totals.inat ?? 0) > INAT_MAX) notes.push(`iNaturalist en compte ${found.totals.inat?.toLocaleString('fr-FR')} : les ${INAT_MAX.toLocaleString('fr-FR')} plus récentes sont sur la carte.`);
       if ((found.totals.gbif ?? 0) > GBIF_MAX) notes.push(`GBIF en compte ${found.totals.gbif?.toLocaleString('fr-FR')} : ${GBIF_MAX} sont sur la carte.`);
-      if (found.vague) notes.push(`${counted(found.vague, 'observation')} à la position masquée ou plus large que le cercle : pas sur la carte.`);
+      if (found.vague) notes.push(`${counted(found.vague, 'observation')} à la position approximative (masquée par l’observateur, ou plus large que le cercle) : `
+        + `${found.vague > 1 ? 'leur' : 'sa'} marge en pointillés sur la carte.`);
     }
     return html`<p class="count" role="status">${fr(status)}</p>
       ${notes.map(n => html`<p class="note">${fr(n)}</p>`)}
@@ -426,7 +468,8 @@ export class MaOrchids extends LitElement {
       return html`<p class="empty">${fr('Aucune orchidée ne répond à ces filtres.')}
         <button class="link" type="button" @click=${() => this.#clear()}>Effacer les filtres</button></p>`;
     }
-    const sources = SOURCES.filter(s => !found.failed.some(f => f.name === SOURCE_NAMES[s]));
+    // The sources that answered (those not asked, or not answering, have no count).
+    const sources = SOURCES.filter(s => found.totals[s] != null);
     const notes = obsNotes(new Map(shown.orchids.map((o, i) => [i, o])), sources);
     return html`<div><h2 id="or-list">Orchidées observées</h2>
       <ul aria-labelledby="or-list" aria-busy=${String(this.#loading)}>${shown.orchids.map((o, i) => this.#row(o, notes.get(i)))}</ul></div>`;

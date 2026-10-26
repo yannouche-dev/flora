@@ -13,7 +13,7 @@ import assert from 'node:assert/strict';
 
 const {
   APPLIES, GRADES, OBS_DEFAULTS, ObsError, failedText, gbifKeep, gbifQuery, inatGrades, inatQuery, obsChanges, obsKey, obsNotes, obsParams, qualityWord, readObsFilters,
-  sourcesText, zoneObservations
+  sourcesText, vagueAt, zoneObservations
 } = await import('../../app/core/observations.js');
 const { INAT_DATASET } = await import('../../app/core/around3d.js');
 const { observationsAround, plantCounts, plantOfPoint, plantsIn, speciesOf } = await import('../../app/core/nearby.js');
@@ -388,6 +388,8 @@ test('un lieu (un petit cercle) : seuls les points où était la plante, ceux ma
   // A circle wider than the daisy's 5 km: it is in it; the obscured nettle never.
   const wide = await zoneObservations(c, 10000, { filters: f, precise: true });
   assert.deepEqual([wide.points.some(p => p.id === 'g2'), wide.points.some(p => p.id === 'i902'), wide.vague], [true, false, 1]);
+  // Approximate at a radius (vagueAt): hidden, or rougher than the circle; within it, or saying nothing, not.
+  assert.deepEqual([vagueAt({ obscured: true }, 50000), vagueAt({ accuracy: 600 }, 500), vagueAt({ accuracy: 500 }, 500), vagueAt({}, 500)], [true, true, false, false]);
 });
 
 test('une source en panne : dite, les autres montrées ; toutes en panne : une erreur qui dit chacune ; un module coupé : dit comme tel', async t => {
