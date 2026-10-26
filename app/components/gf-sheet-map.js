@@ -691,7 +691,9 @@ export class GfSheetMap extends LitElement {
     if (gbifReady) rows.push({ key: 'gbif', kind: 'select', label: 'Répartition GBIF', hint: 'densité des occurrences connues', value: c.gbif,
       options: [{ value: 'fr', label: 'France' }, { value: 'world', label: 'Monde' }, { value: 'off', label: 'Non' }] });
     if (n || !about) {
-      const which = c.subject === 'results' ? 'avec des plantes des résultats' : c.subject === 'collection' ? 'de la collection' : 'avec cette plante, et chaque plant';
+      const chosen = c.subject === 'collection' ? this._collections?.find((/** @type {any} */ x) => x.id === c.collection) : null;
+      const which = c.subject === 'results' ? 'avec des plantes des résultats' : c.subject !== 'collection' ? 'avec cette plante, et chaque plant'
+        : chosen?.kind === 'place' ? 'choisi' : 'de la liste';
       rows.push({ key: 'places', kind: 'check', label: 'Mes lieux', hint: `${n} lieu${n > 1 ? 'x' : ''} ${which}`, value: c.places });
     }
     const near = (/** @type {string} */ source) => `autour de vous : votre position précise est envoyée à ${source}`;
