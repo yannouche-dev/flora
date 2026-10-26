@@ -30,7 +30,7 @@ const REPLACED = [
   [word('sosies? dangereux'), '« sosie toxique »'],
   [word('quitter le plein écran'), '« Sortir du plein écran »'],
   [word('mode (?:de )?modification|mode d[’\']édition'), '« la modification » (« Terminé » la termine)'],
-  [word('mode king'), '« Personnaliser la fiche » (« King » : un nom de code)']
+  [word('mode king'), '« Personnaliser la fiche » (« King » n’est qu’un nom de code)']
 ];
 /** The console's prefix, never shown: `mini-app ${id}: …` (define.js, gf-miniapp.js, runtime.js). */
 const DEVELOPER = new Set(['mini-app ']);
@@ -76,5 +76,5 @@ test('le lexique reconnaît les mots qu’il remplace, pas leurs voisins', () =>
     'Quitter le plein écran', 'En mode modification', 'Quitter le mode King', 'Entrer en mode King', 'Titre caché hors mode King']) assert.equal(caught(text).length, 1, text);
   for (const text of ['Commencer : Rencontres', 'déjouer le piège', 'il reprend sa place', 'Planche d’herbier', 'Spécimens d’herbier',
     'Créer un lieu ici', 'J’ai des sosies toxiques (2)', 'Sortir du plein écran', 'Personnaliser la fiche', 'Mise en page de la fiche',
-    'geoflora.app.rencontres.state', 'gf-scenarios', 'open-scenarios', 'openKing']) assert.deepEqual(caught(text), [], text);
+    'geoflora.app.rencontres.state', 'gf-scenarios', 'open-scenarios', 'openKing', 'king-bar', 'geoflora.kingMode']) assert.deepEqual(caught(text), [], text);
 });

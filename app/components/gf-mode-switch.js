@@ -6,8 +6,9 @@ import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 
 /**
- * One icon button per display mode: Épuré · Standard · Scientifique, then the modes made from them. For the app-wide mode, or for one surface (grid,
- * plant sheet) that may override it: then a dot marks the override and ↺ goes back to the app mode.
+ * One icon button per display mode: Épuré · Standard · Scientifique, then the modes made from them. For the app-wide mode, or for what may
+ * differ from it (the results grid; the mode arranged in the sheet's bar « Mise en page de la fiche », King): then a dot marks the
+ * difference and ↺ goes back to the app mode.
  * Fires `mode-change` with `{ mode }` (null: follow the app mode).
  */
 export class GfModeSwitch extends LitElement {
@@ -15,7 +16,7 @@ export class GfModeSwitch extends LitElement {
     value: {},
     /** Set for a surface overriding the app mode. */
     overridden: { type: Boolean },
-    /** What the switch applies to, for the labels (« la grille », « la fiche »). */
+    /** What the switch applies to, for the labels (« la grille », « la mise en page »). */
     scope: {},
     /** Finger-sized buttons (the sheet's bar « Mise en page de la fiche »). */
     large: { type: Boolean, reflect: true }

@@ -1,7 +1,7 @@
 // Réglages › Modules: each online service is a permission of the device, one switch whatever the display mode
 // (core/modules.js). Switched off there, its data leaves the plant sheet in every mode and nothing is asked of it;
-// hiding a block in mode King never switches its service (core/sheet-blocks.js setHidden), and a block whose service
-// is off says so, with the way to Réglages › Modules instead of « Réafficher ».
+// hiding a block while personalising the sheet (King) never switches its service (core/sheet-blocks.js setHidden),
+// and a block whose service is off says so, with the way to Réglages › Modules instead of « Réafficher ».
 import { test, expect, plantId } from './fixtures.mjs';
 
 const GBIF = /api\.gbif\.org\//;

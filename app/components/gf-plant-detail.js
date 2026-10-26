@@ -418,7 +418,7 @@ export class GfPlantDetail extends LitElement {
     /** The sheet is wide enough for its panes beside it (else bands above and under it). */
     /** The edge shown over the whole plant pane for now (Échap or its button puts it back). */
     _maxEdge: { state: true },
-    /** Said to screen readers: the last move of a block (Mode King). */
+    /** Said to screen readers: the last move of a block (King). */
     _said: { state: true },
     /** The safety block whose padlock was touched: why it is always shown, written under its title. */
     _lockTip: { state: true },
@@ -486,7 +486,7 @@ export class GfPlantDetail extends LitElement {
     .king .block-title .place-pick { position: static; }
     .block-title .name { flex: 1; min-width: 0; }
     .king .block-title .name { min-width: min(11em, calc(100% - 52px)); }
-    /* Mode King: the block's category (what the data says about the plant). */
+    /* King: the block's category (what the data says about the plant). */
     .block-title .cat { flex: none; padding: 0 8px; border-radius: var(--gf-radius-pill); background: var(--gf-surface-2); color: var(--gf-text-muted); font-size: 0.66rem; font-weight: 600; text-transform: none; letter-spacing: 0; margin-right: 2px; }
     @container (max-width: 420px) { .block-title .cat { display: none; } }
     .off-note { flex: none; font-size: 0.7rem; text-transform: none; letter-spacing: 0; font-weight: 400; }
@@ -549,7 +549,7 @@ export class GfPlantDetail extends LitElement {
     .action-bar .act > button:hover, .action-bar .act > a.button:hover { background: var(--gf-surface-2); }
     .action-bar .fav[aria-pressed='true'] { color: var(--gf-fav); }
     .action-bar .share-note { position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); margin: 0; padding: 4px 10px; border-radius: var(--gf-radius-pill); background: var(--gf-text); color: var(--gf-surface); white-space: nowrap; }
-    /* Mode King: every action, each with its ☑; an action hidden in this view is faded and does nothing. */
+    /* King: every action, each with its ☑; an action hidden in this view is faded and does nothing. */
     .action-bar .act-toggle { position: absolute; top: 0; right: 2px; display: grid; place-items: center; width: 22px; height: 22px; cursor: pointer; }
     .action-bar .act-toggle input { margin: 0; width: 16px; height: 16px; }
     .action-bar .act.off > button, .action-bar .act.off > a.button { opacity: 0.4; text-decoration: line-through; pointer-events: none; }
@@ -569,7 +569,7 @@ export class GfPlantDetail extends LitElement {
     .king-actions { flex: 1 1 100%; max-height: min(45vh, 360px); overflow-y: auto; overscroll-behavior: contain; padding: 6px 8px; border: 1px dashed var(--gf-border);
       border-radius: var(--gf-radius); background: var(--gf-surface); }
     .king-actions p { margin: 0 0 6px; color: var(--gf-text-muted); font-size: 0.8rem; }
-    /* The name and the actions read without a title (Mode King titles them, to move them like the others). */
+    /* The name and the actions read without a title (King titles them, to move them like the others). */
     .block.headless { margin-top: 8px; }
     .block.headless:first-child { margin-top: 0; }
     .block[data-key='name'] :is(h1, h2.h1) { margin-top: 4px; }
@@ -579,7 +579,7 @@ export class GfPlantDetail extends LitElement {
     .names-list .sep, .names .sep { font-style: normal; opacity: 0.5; padding: 0 0.3em; }
     .block-title input.rename { flex: 1; min-width: 0; font: inherit; text-transform: none; letter-spacing: 0; padding: 2px 6px; border: 1px solid var(--gf-accent); border-radius: var(--gf-radius-sm); background: var(--gf-surface); color: var(--gf-text); }
     .block-title .tool[aria-expanded='true'], .block-title .tool[aria-pressed='true'] { opacity: 1; color: var(--gf-accent); }
-    /* Mode King: a title hidden outside the mode reads faded and struck. */
+    /* King: a title hidden when read is drawn faded and struck. */
     .block.untitled > .block-title .name { opacity: 0.55; text-decoration: line-through; }
     .block-title .styles { display: inline-flex; flex: none; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill); overflow: hidden; margin-right: 4px; }
     .block-title .styles button { min-height: 0; padding: 2px 8px; border: 0; border-radius: 0; background: var(--gf-surface); color: var(--gf-text-muted); font-size: 0.7rem; text-transform: none; letter-spacing: 0; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
@@ -833,8 +833,8 @@ export class GfPlantDetail extends LitElement {
     .focus-hint { font-size: 0.75rem; color: var(--gf-text-muted); margin: 6px 0 0; }
 
     /*
-     * Edges of the plant pane (Mode King › Position): blocks stuck to the top, left, right or bottom; the
-     * sheet scrolls between them. Bands S / M / L high (or dragged), columns S / M / L wide.
+     * The plant pane's tree of panes (King: « Déplacer vers… », a drag): panes on the top, left, right or bottom
+     * of the sheet, which scrolls between them. Bands S / M / L high (or dragged), columns S / M / L wide.
      */
     :host { container-type: inline-size; }
     :host([edged]) { overflow: hidden; display: flex; flex-direction: column; padding: 0; }
@@ -902,7 +902,7 @@ export class GfPlantDetail extends LitElement {
     .edge-body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; padding: 4px 12px 10px; overscroll-behavior: contain; }
     .edge.bare .edge-body { padding: 0; }
     .edge.bare .edge-body > .block { margin: 0; }
-    /* The bar names the edge's blocks: no second title (Mode King shows the block's tools). */
+    /* The bar names the edge's blocks: no second title (King shows the block's tools). */
     .edge:not(.king) .edge-body > .block > h2.block-title, .edge:not(.king) .edge-body > .block > .to-pane { display: none; }
     .edge-body > .block { margin-top: 0; }
     .edge-body > .block.map-block, .edge-body > .block[data-key='media'] { flex: 1 0 200px; display: flex; flex-direction: column; min-height: 0; }
@@ -924,7 +924,7 @@ export class GfPlantDetail extends LitElement {
     /* Without title or frame: the block fills the edge; its tabs and « agrandir » float over it. */
     .edge-float { position: absolute; top: 6px; left: 6px; z-index: 3; display: flex; gap: 4px; padding: 2px; border-radius: var(--gf-radius-sm); background: color-mix(in srgb, var(--gf-surface) 85%, transparent); box-shadow: var(--gf-shadow); }
     .edge-float .tab-name { display: none; }
-    /* Mode King: « Déplacer vers… » a block — the sheet, a new pane on a side, a tab of a pane. */
+    /* King: « Déplacer vers… » a block — the sheet, a new pane on a side, a tab of a pane. */
     .place-pick { position: relative; flex: none; }
     .place-pick > summary { list-style: none; display: inline-grid; place-items: center; cursor: pointer; }
     .place-pick > summary::-webkit-details-marker { display: none; }
@@ -935,7 +935,7 @@ export class GfPlantDetail extends LitElement {
     .move-menu button:hover:not(:disabled), .move-menu button:focus-visible { background: var(--gf-accent-soft); outline: none; }
     .move-menu button:disabled { opacity: 0.45; cursor: default; }
     .said { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-    /* Mode King: the blocks to add, as chips to drag. */
+    /* King: the blocks to add, as chips to drag. */
     .palette { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 10px; padding: 8px 10px; border: 1px dashed var(--gf-border); border-radius: var(--gf-radius); }
     .palette .pal-title { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gf-text-muted); display: inline-flex; gap: 4px; align-items: center; }
     .palette .chip { display: inline-flex; gap: 5px; align-items: center; min-height: 28px; padding: 2px 10px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill);
@@ -988,7 +988,7 @@ export class GfPlantDetail extends LitElement {
     :host([stack='full']) .blocks.rubrics { --room-stack: calc(var(--count, 1) * var(--rub-h)); --room-gap: 120px; }
     :host(:not([edged])) .blocks.rubrics::after, .frame.edged .main[data-drop-node='sheet'] .blocks.rubrics::after { content: ''; display: block; flex: none;
       height: max(0px, calc(var(--sheet-h, 100vh) - var(--room-stack) - var(--bar-h, 0px) - var(--room-gap))); }
-    /* Mode King: the plain list — any block can come under the top (room after the last one). */
+    /* King: the plain list — any block can come under the top (room after the last one). */
     .frame.edged .main[data-drop-node='sheet']:has(.blocks.king)::after { content: ''; display: block; height: max(0px, calc(100% - 160px)); }
     /* The table of contents: over everything (the top layer), under the header touched. */
     .toc { position: fixed; inset: auto; margin: 0; width: min(300px, calc(100vw - 16px)); max-height: min(70vh, 560px); overflow-y: auto; padding: 8px; box-sizing: border-box;
@@ -1060,12 +1060,12 @@ export class GfPlantDetail extends LitElement {
     /** @type {string[] | null} */
     this._dragOrder = null;
     this._dragY = 0;
-    /** King mode: the block being renamed, the blocks showing their sub-blocks list, naming a new note block. @type {string | null} */
+    /** King: the block being renamed, the blocks showing their sub-blocks list, naming a new note block. @type {string | null} */
     this._renaming = null;
     // Panels opened on the previous plant stay open on this one (sheet-session.js).
     /** @type {Set<string>} */
     this._subsOpen = sheetSession.subsOpen;
-    /** King mode: the map blocks showing their settings. @type {Set<string>} */
+    /** King: the map blocks showing their settings. @type {Set<string>} */
     this._mapsOpen = sheetSession.mapsOpen;
     /** @type {string | null} */
     this._maxEdge = sheetSession.maxEdge;
@@ -1570,7 +1570,7 @@ export class GfPlantDetail extends LitElement {
   get #view() { return this.#kingHere ? arrangedMode(/** @type {string} */ (this.sheet), this.view) : this.view; }
 
   /**
-   * The parts of a block this view shows, in the order chosen for it (Mode King › Sous-blocs). `parts`: sub-block
+   * The parts of a block this view shows, in the order chosen for it (King › Sous-blocs). `parts`: sub-block
    * key → its markup, or nothing when this view or this plant has none.
    * @param {string} block @param {Record<string, () => unknown>} parts
    */
@@ -1580,7 +1580,7 @@ export class GfPlantDetail extends LitElement {
 
   /**
    * The action bar, docked at the bottom of the sheet (above the tab bar on a phone): the actions this view
-   * shows, in its order. Mode King shows them all, each with its ☑ (shown or not in this view).
+   * shows, in its order. King shows them all, each with its ☑ (shown or not in this view).
    * @param {any} plant
    */
   #actionBar(plant) {
@@ -1668,7 +1668,7 @@ export class GfPlantDetail extends LitElement {
 
     const ctx = this.#context(plant);
     if (this.only) return this.#onlyBlock(this.only, ctx);
-    // What a move did (Mode King: « Déplacer vers… », a drag), said — in the panes alone too (Découvrir).
+    // What a move did (King: « Déplacer vers… », a drag), said — in the panes alone too (Découvrir).
     const said = this._said ? html`<p class="said" aria-live="polite">${this._said}</p>` : nothing;
     if (this.panesOnly) return html`${this.#panesOnlyView(ctx)}${said}`;
     const pane = this._paneDialog;
@@ -1908,7 +1908,7 @@ export class GfPlantDetail extends LitElement {
   /** @param {any} ctx */
   #blocks(ctx) {
     // Blocks stuck to an edge are there, not in the flow.
-    // Outside « Mode King », folded blocks are not there at all.
+    // Outside King, folded blocks are not there at all.
     // Outside it too, a block with nothing for this plant (no other name, no Wikipédia article).
     if (this.#kingHere) {
       // King arranges the blocks one by one: their plain list, each with its handle.
@@ -2121,9 +2121,9 @@ export class GfPlantDetail extends LitElement {
     this.#appFocus = false;
   }
 
-  /** Shown here: everything in Mode King; outside it, not folded, not left out for being empty. @param {string} k @param {any} ctx */
+  /** Shown here: everything in King; outside it, not folded, not left out for being empty. @param {string} k @param {any} ctx */
   #visible(k, ctx) {
-    // « Page web » works in a pane only: elsewhere, Mode King alone shows it (to be placed).
+    // « Page web » works in a pane only: elsewhere, King alone shows it (to be placed).
     if (k === 'web') return this.#kingHere || Boolean(this.#paneOf('web'));
     return this.#kingHere || (!this.#folded(k) && !(hidesEmpty(this.#view, k) && this.#emptyHere(k, ctx)));
   }
@@ -2140,7 +2140,7 @@ export class GfPlantDetail extends LitElement {
   }
 
   /**
-   * Mode King, keyboard and touch way to arrange the panes: « Déplacer vers… » — back in the sheet, a new pane on
+   * King, keyboard and touch way to arrange the panes: « Déplacer vers… » — back in the sheet, a new pane on
    * a side of the sheet, or a tab of a pane already there. (Dragging does the same with the pointer.)
    * @param {string} key
    */
@@ -2305,7 +2305,7 @@ export class GfPlantDetail extends LitElement {
   }
 
   /**
-   * The blocks a pane shows here (Mode King: all; else not folded, not empty for this plant); a pane with none
+   * The blocks a pane shows here (King: all; else not folded, not empty for this plant); a pane with none
    * is left out (its split closes over it). @param {any} ctx @param {import('../core/pane-tree.js').PaneNode} node
    * @returns {import('../core/pane-tree.js').PaneNode | null}
    */
@@ -2422,7 +2422,7 @@ export class GfPlantDetail extends LitElement {
       if (first && this.#paneOf(first) && !mark.parentElement?.querySelector(':scope > .block')) this.#goTo(first);
       return;
     }
-    // Mode King (no rubrics): its first block.
+    // King (no rubrics): its first block.
     if (first) this.#goTo(first);
   }
 
@@ -2681,7 +2681,7 @@ export class GfPlantDetail extends LitElement {
     const past = (/** @type {Element} */ el) => this.#offset(el, scroller) <= 2;
     /** @type {HTMLElement | null} */ let mark = null;
     for (const m of /** @type {NodeListOf<HTMLElement>} */ (this.renderRoot.querySelectorAll('.blocks .rub-mark'))) { if (past(m)) mark = m; else break; }
-    // Mode King has no rubrics: the block at the top.
+    // King has no rubrics: the block at the top.
     const blocks = /** @type {HTMLElement[]} */ ([...(mark ? mark.parentElement?.querySelectorAll(':scope > .block') || [] : this.renderRoot.querySelectorAll('.blocks > .block'))]);
     /** @type {HTMLElement | null} */ let block = null;
     for (const b of blocks) { if (past(b)) block = b; else break; }
@@ -2712,7 +2712,7 @@ export class GfPlantDetail extends LitElement {
   }
 
   /**
-   * The view or Mode King changed the sheet's order: the place read before is reached again, quietly (its block,
+   * The view or King changed the sheet's order: the place read before is reached again, quietly (its block,
    * its theme, else its rubric). @param {{ cat: string | null, block: string | null, wiki: string | null }} p
    */
   #placeAgain(p) {
@@ -2722,7 +2722,7 @@ export class GfPlantDetail extends LitElement {
         || /** @type {HTMLElement | undefined} */ ([...this.renderRoot.querySelectorAll('.blocks > .block')].find(b => blockCategory(/** @type {HTMLElement} */ (b).dataset.key || '') === p.cat)))) || null;
     if (el) this.#arrive(el, { quiet: true });
   }
-  /** The place read when the view or Mode King changes, to reach again once drawn. @type {{ cat: string | null, block: string | null, wiki: string | null } | null} */
+  /** The place read when the view or King changes, to reach again once drawn. @type {{ cat: string | null, block: string | null, wiki: string | null } | null} */
   #rePlace = null;
   /** King open here at the last update. */
   #king = false;
@@ -2734,7 +2734,7 @@ export class GfPlantDetail extends LitElement {
   #promoted = false;
 
   /**
-   * The sheet in its tree of panes (Mode King arranges it): splits in rows and columns, panes of tabs, the sheet
+   * The sheet in its tree of panes (King arranges it): splits in rows and columns, panes of tabs, the sheet
    * alone scrolling among them. On a narrow sheet the panes are bands above and under the sheet, in the tree's
    * order (the tree itself does not change).
    * @param {any} ctx @param {unknown} article
@@ -2871,10 +2871,10 @@ export class GfPlantDetail extends LitElement {
     if (was && !this.#handAt && place?.el.isConnected && !this.#keeper) requestAnimationFrame(() => { if (place.el.isConnected && !this.#handAt) this.#arrive(place.el, { quiet: true, prefer: place.prefer }); });
   }
 
-  /** A block read without its title (Mode King › title on/off, per view). @param {string} key */
+  /** A block read without its title (King › title on/off, per view). @param {string} key */
   #headless = key => !isTitleShown(this.#view, key);
 
-  /** A block as read outside « Mode King »: its title, its content. @param {string} key @param {any} ctx */
+  /** A block as read outside King: its title, its content. @param {string} key @param {any} ctx */
   #plainBlock(key, ctx) {
     // A component that hides itself when it has nothing (protection, look-alikes, calendar): the block goes with it (CSS).
     const headless = this.#headless(key);
@@ -3001,7 +3001,7 @@ export class GfPlantDetail extends LitElement {
     renameBlock(key, title);
   }
 
-  /** King mode, after the blocks: a new « Note » block. */
+  /** King, after the blocks: a new « Note » block. */
   #newNote() {
     return this._newNote
       ? html`<form class="new-note" @submit=${e => {
@@ -3044,7 +3044,7 @@ export class GfPlantDetail extends LitElement {
   }
 
   /**
-   * Mode King: what a map block shows and lets do (the same in every mode). Its background, IGN's layers and 2D / 3D:
+   * King: what a map block shows and lets do (the same in every mode). Its background, IGN's layers and 2D / 3D:
    * its panel ▦, as on every map (gf-map-options.js) — said here.
    * @param {string} key
    */
@@ -3124,7 +3124,7 @@ export class GfPlantDetail extends LitElement {
   }
 
   /**
-   * A block with nothing to show for this plant, left out outside Mode King: Noms with no other name, Wikipédia
+   * A block with nothing to show for this plant, left out outside King: Noms with no other name, Wikipédia
    * with no article (or not yet: it appears when the summary arrives).
    * @param {string} key @param {any} ctx
    */
@@ -3835,7 +3835,7 @@ export class GfPlantDetail extends LitElement {
   }
 
   /**
-   * Mode King: dragging a block (its title, its tab, a chip of the palette) arranges the tree of panes —
+   * King: dragging a block (its title, its tab, a chip of the palette) arranges the tree of panes —
    * dock-drag.js shows where it lands: a new pane on a side, a tab, back in the sheet between two blocks.
    * @param {PointerEvent} e @param {string} key @param {(() => string) | null} [make] a new block made on the drop (palette « Nouvelle carte »)
    */
@@ -3860,7 +3860,7 @@ export class GfPlantDetail extends LitElement {
   }
 
   /**
-   * Mode King: the blocks to add — those folded in this mode (not those folded only because their service is off:
+   * King: the blocks to add — those folded in this mode (not those folded only because their service is off:
    * Réglages › Modules brings them back), and new map and note blocks; dragged to a place (or touched: back in the sheet).
    */
   #palette() {

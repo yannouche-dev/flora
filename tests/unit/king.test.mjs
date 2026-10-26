@@ -1,6 +1,6 @@
 // app/core/store.js: « Personnaliser la fiche » (code name: King) — open on one host's sheet, for the visit only (never
-// written: the key of the « Mode King » of before is forgotten at start), arranging the app's mode or another one picked
-// in the sheet's bar, never changing the app's.
+// written: the key that kept King before, geoflora.kingMode, is forgotten at start), arranging the app's mode or
+// another one picked in the sheet's bar, never changing the app's.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { config } from '../../app/config.js';
@@ -41,7 +41,7 @@ test('le mode arrangé supprimé : la fiche arrange de nouveau celui de l’appl
   closeKing();
 });
 
-test('jamais écrite : la clé du « Mode King » d’avant est oubliée au lancement', () => {
+test('jamais écrite : la clé `geoflora.kingMode` d’avant est oubliée au lancement', () => {
   assert.ok(config.obsoleteKeys.includes('geoflora.kingMode'));
   assert.ok(!Object.values(config.storageKeys).includes('geoflora.kingMode'));
   localStorage.setItem('geoflora.kingMode', '1');

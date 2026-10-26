@@ -38,7 +38,7 @@ test('GloBI en panne : « Source indisponible », puis « Réessayer » affiche 
 test('GloBI joignable sans interaction : « Aucune interaction connue », pas « indisponible »', async ({ app, page, context }) => {
   await context.route(GLOBI, route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ columns: INTERACTIONS.columns, data: [] }) }));
   await app.open(`#/plant/${plantId('Allium ursinum')}`);
-  // Empty blocks may be left out outside Mode King: shown, it says « none »; never « unavailable ».
+  // Empty blocks may be left out when read (outside King): shown, it says « none »; never « unavailable ».
   await expect.poll(() => page.locator('gf-plant-detail .source-down').filter({ hasText: 'GloBI' }).count()).toBe(0);
   const block = interactionsBlock(page);
   if (await block.count()) await expect(block.getByText('Aucune interaction connue de GloBI pour cette espèce.')).toBeVisible();

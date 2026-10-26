@@ -2,7 +2,7 @@
 // Display modes: the three of the app (Épuré, Standard, Scientifique) and the ones made from them.
 // A mode made here starts as a copy of another (its blocks, layout, panes, results grid) and keeps
 // the way its model draws things (`base`: compact like Épuré, general like Standard, complete like
-// Scientifique); then it is arranged on its own, in Mode King and Réglages. No dependency on the store.
+// Scientifique); then it is personalised on its own, on the sheet (King: the bar's mode switch). No dependency on the store.
 
 import { config } from '../config.js';
 import { definePref } from './prefs.js';

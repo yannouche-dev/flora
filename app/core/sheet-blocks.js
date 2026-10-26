@@ -1,13 +1,14 @@
 // @ts-check
 // The plant sheet is made of titled blocks, the same ones in every display mode (each mode shows them its own
-// way: compact in Épuré, complete in Scientifique), some made of sub-blocks (buttons, fact rows, links). In
-// « Mode King » each mode gets its own order of blocks and sub-blocks and its own folded ones; blocks can be
-// renamed, and « Note » blocks created (free text per plant) and deleted. A block that shows a service is folded
+// way: compact in Épuré, complete in Scientifique), some made of sub-blocks (buttons, fact rows, links). It is
+// personalised on the sheet itself (« Personnaliser la fiche », King in the code): each mode gets its own order of
+// blocks and sub-blocks, its own folded ones, styles, titles and tree of panes; blocks can be renamed, and « Note »
+// blocks (free text per plant) and « Carte » blocks created and deleted. A block that shows a service is folded
 // while that module is off (Réglages › Modules, a choice for the whole device, whatever the mode): there is nothing
-// to show. Folding or showing a block never switches a module. Plantes à confondre and Usages (its Prudence) are
-// safety: never folded, in any mode (LOCKED).
-// The layout can be exported to a file and imported back: the layout and the modes made here, not the Note blocks'
-// texts (they travel with Mes plantes: GeoJSON export, transfer link, backup copy).
+// to show. Folding or showing a block never switches a module. Plantes à confondre and Usages (its Prudence first)
+// are safety: never folded, in any mode, whatever a stored or imported layout says (LOCKED).
+// The layout can be exported to a file and imported back: the layout and the modes made here, never the Note blocks'
+// texts (they travel with Mes plantes: GeoJSON export, transfer link, backup copy) nor this device's settings.
 
 import { config } from '../config.js';
 import { MODULES, moduleOn } from './modules.js';
@@ -94,7 +95,7 @@ export const SUBS = {
 
 const TABLE_LIST = [{ key: 'table', title: 'Tableau' }, { key: 'list', title: 'Liste' }];
 /**
- * Blocks shown in more than one style, chosen per mode in Mode King: the first style is the default, except
+ * Blocks shown in more than one style, chosen per mode (King): the first style is the default, except
  * where the mode's own default is given.
  * @type {Record<string, { styles: { key: string, title: string }[], defaults?: Partial<Record<Mode, string>> }>}
  */
@@ -120,7 +121,7 @@ const DEFAULTS = {
 };
 
 /**
- * Blocks a mode leaves folded until shown (Mode King), its list once changed being kept whole: « Médias »
+ * Blocks a mode leaves folded until shown (King), its list once changed being kept whole: « Médias »
  * (every image, in a viewer) takes the place of « Photos » and « Médias GBIF » in Standard and Scientifique;
  * Épuré keeps its large photo (touching it opens the viewer).
  * @type {Record<Mode, string[]>}
@@ -143,8 +144,9 @@ export const isSubLocked = (block, key) => Boolean(LOCKED_SUBS[block]?.includes(
 const hiddenList = view => (layout().hidden[view] ?? DEFAULT_HIDDEN[baseOf(view)] ?? []).filter(k => !isLocked(k));
 
 /**
- * Folded by hand (or by default) in this view, whatever its service: the block's own choice, which Mode King's
- * « Réafficher » and Réglages' block lists change. @param {Mode} view @param {string} key
+ * Folded by hand (or by default) in this view, whatever its service: the block's own choice, which the sheet's
+ * trash and ↺ change (King), and « Garder « X » masqué dans ce mode » for a block whose service is off.
+ * @param {Mode} view @param {string} key
  */
 export const foldedByHand = (view, key) => hiddenList(view).includes(key);
 
@@ -270,7 +272,7 @@ export function modulesOffFor(key) {
 export const serviceOff = key => modulesOffFor(key).length > 0;
 
 /**
- * What a block folded for its service says (Mode King, Réglages): « service GBIF coupé pour tout l’appareil »; null
+ * What a block folded for its service says (King: beside the block's title): « service GBIF coupé pour tout l’appareil »; null
  * when its services are on. @param {string} key
  */
 export function serviceOffNote(key) {
@@ -311,7 +313,7 @@ export function subOrder(view, block) {
 }
 
 /**
- * Sub-blocks a mode leaves out until shown in Mode King (a block's list, once changed, is kept whole).
+ * Sub-blocks a mode leaves out until shown again (King; a block's list, once changed, is kept whole).
  * @type {Record<Mode, Record<string, string[]>>}
  */
 const SUB_HIDDEN = {
@@ -378,7 +380,7 @@ export function setBlockStyle(view, block, style) {
 /** Blocks read without a title unless asked: the name, the actions, the photos, the Wikipédia summary (its source line names it). */
 const UNTITLED = ['name', 'actions', 'media', 'photos', 'wikipedia'];
 
-/** Does this block show its title in this view (outside Mode King)? @param {Mode} view @param {string} key */
+/** Does this block show its title in this view, when read (outside King)? @param {Mode} view @param {string} key */
 export function isTitleShown(view, key) {
   const chosen = layout().titleShown?.[view]?.[key];
   return typeof chosen === 'boolean' ? chosen : !UNTITLED.includes(key);
@@ -497,7 +499,7 @@ const EMPTY_HIDDEN = ['wikipedia', 'names', 'gbifProfile', 'literature'];
 /** Can this block be left out when empty? (note blocks too: no text for this plant) @param {string} key */
 export const canBeEmpty = key => CAN_BE_EMPTY.includes(key) || isNote(key);
 
-/** Is this block left out of this view when it has nothing for the plant (outside Mode King)? @param {Mode} view @param {string} key */
+/** Is this block left out of this view when it has nothing for the plant, when read (outside King)? @param {Mode} view @param {string} key */
 export function hidesEmpty(view, key) {
   if (!canBeEmpty(key)) return false;
   const chosen = layout().hideEmpty?.[view]?.[key];

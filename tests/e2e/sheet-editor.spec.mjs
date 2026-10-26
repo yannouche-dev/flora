@@ -35,7 +35,7 @@ const order = sheet => sheet.locator('.blocks.king > .block').evaluateAll(els =>
 const hidden = (page, mode, key) => page.evaluate(async ([m, k]) => (await import('/app/core/sheet-blocks.js')).isHidden(m, k), [mode, key]);
 
 test('la couronne ouvre la mise en page sur sa fiche seulement, pour la visite', async ({ app, page }) => {
-  // A « Mode King » kept by a version of before: forgotten at start, never on.
+  // King kept by a version of before (geoflora.kingMode): forgotten at start, never on.
   await page.addInitScript(() => localStorage.setItem('geoflora.kingMode', '1'));
   await app.open(`#/plant/${ORTIE}`);
   const sheet = flore(page);

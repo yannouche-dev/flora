@@ -102,8 +102,8 @@ export const config = {
    * Keys of settings the app no longer has, removed at start (core/prefs.js#forgetObsolete): the plant sheet's own
    * mode (it follows the app's), the one-tap target of the Épuré sheet (never read), the harvest mode as the app
    * once wrote it by itself — at the first launch, or as Cueillette prudente began — never told from the user's own
-   * choice: « auto » again (storageKeys.harvestMode), the « Mode King » kept until left (« Personnaliser la fiche »
-   * now lasts for the visit, core/store.js KingState).
+   * choice: « auto » again (storageKeys.harvestMode), King (« Personnaliser la fiche ») kept until left: it
+   * now lasts for the visit (core/store.js KingState).
    */
   obsoleteKeys: ['geoflora.plantView', 'geoflora.target', 'geoflora.harvestMode', 'geoflora.kingMode'],
 

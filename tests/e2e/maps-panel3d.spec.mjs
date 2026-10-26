@@ -4,7 +4,7 @@
 // « 3D » chosen there swaps that map to MapLibre and is stored for every map (Réglages › Cartes show it); « 2D » there
 // brings it back. The maps that always stay one way show the choice disabled, with why: « Jusqu’où part
 // l’expédition ? » (from above), a second map of a plant sheet (one WebGL map per sheet). The map block's form of the
-// plant sheet (mode King, ⚙) no longer has it, nor the background and IGN's layers: its panel ▦ does. Real WebGL
+// plant sheet (personalised: King, ⚙) no longer has it, nor the background and IGN's layers: its panel ▦ does. Real WebGL
 // (SwiftShader), every tile made here (tiles.mjs).
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';

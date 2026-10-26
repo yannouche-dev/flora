@@ -1,8 +1,9 @@
 // @ts-check
-// Mode King: dragging a block to arrange the tree of panes (pane-tree.js). Over a pane or the sheet, near a
+// King: dragging a block to arrange the tree of panes (pane-tree.js). Over a pane or the sheet, near a
 // side: a new pane there (the half it would take is shaded); in a pane's middle: one of its tabs; in the
 // sheet's middle: back in the sheet, at the line shown between two blocks; on the frame's outer border: a band
-// or a column across the whole plant pane. Escape cancels. One controller for the sheet and for Réglages.
+// or a column across the whole plant pane. Escape cancels. Used by the sheet alone (gf-plant-detail.js: block
+// titles, tabs, palette chips).
 
 /**
  * @typedef {{ key: string, target: string, zone: import('./pane-tree.js').Zone | 'sheet', beforeKey: string | null }} DockDrop
