@@ -209,7 +209,7 @@ export const APPLIES = Object.freeze({
 
 /**
  * The quality grades in iNaturalist's words: none when every one is shown (or none said), else their list
- * (« &quality_grade=research,casual »): its tiles take it too (layout/map-options.js inatTiles).
+ * (« &quality_grade=research,casual »).
  * @param {readonly ObsGrade[]} qualite @returns {string}
  */
 export function inatGrades(qualite) {
@@ -220,7 +220,8 @@ export function inatGrades(qualite) {
 /**
  * The filters in iNaturalist's words (API v1 /observations), after the circle and `iconic_taxa=Plantae`: its quality
  * grades (inatGrades: every one, none said), the rank (species or lower: `hrank`), a photo (any; under a free licence:
- * CC0, CC BY, CC BY-SA), wild only (`captive=false` — research grade is wild already).
+ * CC0, CC BY, CC BY-SA), wild only (`captive=false` — research grade is wild already). The current plant's points and
+ * the tiles of a map of France or of the world take them too (layout/state.js, layout/map-options.js inatTiles).
  * @param {ObsFilters} f @returns {string}
  */
 export function inatQuery(f) {
@@ -304,12 +305,20 @@ async function gbifZone([lon, lat], radius, f, periode, signal, taxon = null) {
   const left = new Set(f.sansjeux), asked = (/** @type {string} */ k) => !f.jeux.length || f.jeux.includes(k);
   // « around-zone… »: forgotten with the zone's other failures (layout/state.js retryScope); « gbif2 »: in two requests;
   // a group of plants, its key in it (the plants' answer kept apart); the datasets left out, theirs.
-  const found = await cache.cached(`around-zone-gbif2:${where}${query}${taxon ? '|t' + taxon.gbif : ''}${left.size ? '|sans=' + f.sansjeux.join(',') : ''}`, async () => {
-    const head = await fetchJson(`${base}${query}&limit=0&facet=datasetKey&facetMultiselect=true&datasetKey.facetLimit=${GBIF_DATASETS}`,
-      { signal, expect: d => typeof d.count === 'number' });
-    const facet = (Array.isArray(head.facets) ? head.facets : []).find((/** @type {any} */ x) => /dataset/i.test(String(x?.field)));
-    const counts = (facet?.counts || []).filter((/** @type {any} */ c) => DATASET.test(String(c?.name)))
-      .map((/** @type {any} */ c) => ({ key: String(c.name), count: Number(c.count) || 0 }));
+  const zone = `${where}${query}${taxon ? '|t' + taxon.gbif : ''}`;
+  const found = await cache.cached(`around-zone-gbif2:${zone}${left.size ? '|sans=' + f.sansjeux.join(',') : ''}`, async () => {
+    // The zone's count and datasets kept apart: the same whichever are left out (one ticked or not: only the
+    // occurrences asked again). `facet`: GBIF counted them (an older one does not).
+    const head = await cache.cached(`around-zone-gbif2-head:${zone}`, async () => {
+      const d = await fetchJson(`${base}${query}&limit=0&facet=datasetKey&facetMultiselect=true&datasetKey.facetLimit=${GBIF_DATASETS}`,
+        { signal, expect: x => typeof x.count === 'number' });
+      const facet = (Array.isArray(d.facets) ? d.facets : []).find((/** @type {any} */ x) => /dataset/i.test(String(x?.field)));
+      /** @type {{ key: string, count: number }[]} */
+      const counts = (facet?.counts || []).filter((/** @type {any} */ c) => DATASET.test(String(c?.name)))
+        .map((/** @type {any} */ c) => ({ key: String(c.name), count: Number(c.count) || 0 }));
+      return { count: /** @type {number} */ (d.count), facet: Boolean(facet), counts };
+    }, { ttl: 24 * 3600 * 1000, signal });
+    const { facet, counts } = head;
     const datasets = counts.filter(c => c.key !== INAT_DATASET);
     // The datasets whose occurrences are asked: those chosen, else the zone's — never GBIF's copy of iNaturalist's,
     // nor one left out.

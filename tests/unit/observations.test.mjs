@@ -6,7 +6,8 @@
 // same spot on the same day once, the most recent first), a source that fails said and the others shown; their plants
 // (core/nearby.js speciesOf: one plant once, whichever source saw it — the flora's, from an IndexedDB in memory; the
 // services answered by a fetch of this file's); the current plant's own points and a map of France's tiles as the
-// quality grades say (core/nearby.js observationsAround, layout/map-options.js inatTiles).
+// zone's filters say (core/nearby.js observationsAround, layout/map-options.js inatTiles); the zone's GBIF count and
+// datasets asked once, whichever are left out.
 import 'fake-indexeddb/auto';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -264,11 +265,17 @@ test('les jeux GBIF laissés (sansjeux=) : jamais demandés, leurs occurrences r
   // Its records not counted, nor the copy of iNaturalist's: 130 − 90 − 5.
   assert.equal(left.totals.gbif, 35);
   assert.deepEqual(left.datasets.map(d => d.key), ['cbn', 'plantnet', 'obsorg'], 'every dataset of the zone still listed (to tick it again)');
-  // Two left out: asked anew (not the answer kept for one), neither asked.
+  // Two left out: asked anew (not the answer kept for one), neither asked — the zone's count and datasets, the same
+  // whichever are left out, not asked again: its occurrences alone.
   asked.length = 0;
   const two = await zoneObservations(c, 2000, { filters: filters({ sources: ['gbif'], sansjeux: ['obsorg', 'plantnet'] }) });
-  assert.deepEqual(gbifAsked()[1].getAll('datasetKey'), ['cbn']);
+  assert.deepEqual(gbifAsked().map(q => [q.get('limit'), q.getAll('datasetKey')]), [['300', ['cbn']]]);
   assert.deepEqual([two.points.map(p => p.id), two.totals.gbif], [['g1'], 25]);
+  assert.deepEqual(two.datasets.map(d => d.key), ['cbn', 'plantnet', 'obsorg']);
+  // Every one ticked again: their occurrences alone asked (the zone's count and datasets kept), every one counted.
+  asked.length = 0;
+  const every = await zoneObservations(c, 2000, { filters: filters({ sources: ['gbif'] }) });
+  assert.deepEqual([gbifAsked().map(q => q.get('limit')), every.points.map(p => p.id).sort(), every.totals.gbif], [['300'], ['g1', 'g2', 'g3'], 40]);
   // Those asked alone (jeux=) and one of them left out: the others of them only, as counted for them.
   asked.length = 0;
   const c2 = /** @type {[number, number]} */ ([4.2, 46.8]);
@@ -303,10 +310,14 @@ test('les points de la plante choisie et les cartes de France : la qualité dite
   // Each kept a day: asked once.
   await observationsAround(50, c, 1000, undefined, '');
   assert.equal(asked.length, 3);
-  // A map of France: iNaturalist's tiles of the grades shown (every one: none said).
-  const tiles = (/** @type {string} */ grades) => inatTiles([1000], '&year=2026', 1001, grades).map(l => new URL(l.url.replace(/\{[xyz]\}/g, '0')).searchParams);
-  assert.deepEqual(tiles('').map(q => [q.get('taxon_id'), q.get('quality_grade'), q.get('year')]), [['1000', null, '2026'], ['1000', null, '2026'], ['1001', null, '2026']]);
-  assert.deepEqual(tiles(inatGrades(['recherche'])).map(q => q.get('quality_grade')), ['research', 'research', 'research']);
+  // A map of France: iNaturalist's tiles as the zone's filters say (every grade: none said; the cultivated plants left
+  // out: captive=false) — the grid, the points, the current plant's.
+  const tiles = (/** @type {string} */ query) => inatTiles([1000], '&year=2026', 1001, query).map(l => new URL(l.url.replace(/\{[xyz]\}/g, '0')).searchParams);
+  assert.deepEqual(tiles(inatQuery(filters())).map(q => [q.get('taxon_id'), q.get('quality_grade'), q.get('captive'), q.get('year')]),
+    [['1000', null, null, '2026'], ['1000', null, null, '2026'], ['1001', null, null, '2026']]);
+  assert.deepEqual(tiles(inatQuery(filters({ qualite: ['recherche'] }))).map(q => q.get('quality_grade')), ['research', 'research', 'research']);
+  assert.deepEqual(tiles(inatQuery(filters({ sauvages: true }))).map(q => [q.get('quality_grade'), q.get('captive')]), [[null, 'false'], [null, 'false'], [null, 'false']]);
+  assert.equal(inatGrades(['recherche', 'occasionnelles']), '&quality_grade=research,casual');
 });
 
 test('GBIF en deux temps : sans facette, une page comme avant (la copie écartée) ; la copie seule, rien de plus demandé ; choisie, jamais demandée', async t => {

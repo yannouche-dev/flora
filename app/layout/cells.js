@@ -56,7 +56,7 @@ import { nearestStop } from '../core/distance.js';
 import { cellIcon, distanceLabel } from './registry.js';
 import { COMPACT_WIDTH, MAP_INTENTS, MAP_LANDMARKS, MAP_LAYERS, WIDE_FRAMES, catalogLayers, inatTiles, inWhen, layersOf, mapControls, opacitiesOf, opacText, overlaysOf, snapRadius, uiMode, viewOf, viewText } from './map-options.js';
 import { periodQuery, plantOfPoint, taxonIdOf } from '../core/nearby.js';
-import { OBS_DEFAULTS, SOURCES, SOURCE_NAMES, failedText, inatGrades, obsNotes, sourcesText } from '../core/observations.js';
+import { OBS_DEFAULTS, SOURCES, SOURCE_NAMES, failedText, inatQuery, obsNotes, sourcesText } from '../core/observations.js';
 import { obsId } from './state.js';
 import { speciesKey } from '../components/map-style.js';
 import '../components/gf-map.js';
@@ -501,18 +501,19 @@ export class DlMap extends LitElement {
   /** @type {{ sci: string, id: number | null } | null} */ #plantNamed = null;
 
   /**
-   * The tiles of a map of France or the world: its plants' observations, of the quality grades its group shows, the
-   * current plant's on top (the same array while the same).
+   * The tiles of a map of France or the world: its plants' observations, as its group's filters say (the quality
+   * grades, the cultivated plants left out or not…: inatQuery, as the zone's points), the current plant's on top (the
+   * same array while the same).
    */
   get #wideTiles() {
     const taxa = this.#wideTaxa();
     const when = periodQuery(this.state?.periode);
     const plant = this.#plantTaxon;
-    const grades = inatGrades(this.state?.filters.qualite ?? OBS_DEFAULTS.qualite);
-    const key = JSON.stringify([taxa, when, plant, grades]);
+    const filters = inatQuery(this.state?.filters ?? OBS_DEFAULTS);
+    const key = JSON.stringify([taxa, when, plant, filters]);
     if (this.#tilesMemo?.key !== key) {
       // Still finding their taxa: none yet (never all plants for a moment); none found: the current plant's alone.
-      const value = taxa === undefined ? [] : taxa !== null && !taxa.length ? inatTiles([], when, plant, grades).filter(t => t.key === 'plant') : inatTiles(taxa, when, plant, grades);
+      const value = taxa === undefined ? [] : taxa !== null && !taxa.length ? inatTiles([], when, plant, filters).filter(t => t.key === 'plant') : inatTiles(taxa, when, plant, filters);
       this.#tilesMemo = { key, value };
     }
     return this.#tilesMemo.value;
@@ -1457,22 +1458,32 @@ export class DlDeck extends LitElement {
     const ses = this.#session;
     if (s.speciesState === 'error') return this.#failed(s);
     if (this._loading && !ses.cards.length) return html`<p class="empty" role="status">Les cartes arrivent…</p>`;
+    // A source failing, the others' plants none (GBIF's own, often none where iNaturalist's are): said as a failure,
+    // never the deck's end (« toutes les plantes du coin »).
+    if (s.speciesState === 'ready' && s.failed.length && !ses.cards.length) return this.#failed(s);
     return html`<ma-deck active .session=${ses} .cards=${ses.deck} .c=${ses.c}></ma-deck>`;
   }
 
   /**
-   * The scope's plants could not be had (its sources down, offline, their modules off): no cards — said, with what to
-   * do (« Réessayer », or the module turned on), instead of cards of another scope or a wait without end.
+   * The scope's plants could not be had (its sources down, offline, their modules off) — or only some of its sources
+   * answered, with no plant (`ready`: those that failed named, the others said to have none): no cards — said, with
+   * what to do (« Réessayer », or the module turned on), instead of cards of another scope or a wait without end.
    * @param {LayoutState} s
    */
   #failed(s) {
-    const off = s.speciesFailure === 'off';
-    // The zone's sources (core/observations.js): « iNaturalist », « iNaturalist et GBIF ».
-    const names = sourcesText(s.filters.sources), many = s.filters.sources.length > 1;
+    const partial = s.speciesState === 'ready';
+    const off = partial ? s.failed.every(f => f.off) : s.speciesFailure === 'off';
+    // The zone's sources (core/observations.js): « iNaturalist », « iNaturalist et GBIF » — those that failed, when
+    // the others answered.
+    const failing = partial ? s.failed.map(f => f.name) : s.filters.sources.map(x => SOURCE_NAMES[x]);
+    const names = failing.join(' et '), many = failing.length > 1;
+    const others = s.filters.sources.filter(x => !failing.includes(SOURCE_NAMES[x]));
     const why = s.speciesFailure === 'offline' ? `Hors ligne : ${names} ${many ? 'sont injoignables' : 'est injoignable'}.` : `${failedText(s.failed)}.`;
     const seen = `${/^[aeiouy]/i.test(names) ? 'qu’' : 'que '}${names} ${many ? 'ont vues dans la zone : sans eux' : 'a vues dans la zone : sans lui'}`;
+    const later = off ? '' : ' pour l’instant';
     return html`<div class="empty" role="status"><p class="big warn">${icon('exclamation-triangle-fill')}</p><p><b>${why}</b></p>
-      <p>Les cartes sont les plantes ${seen}, pas de cartes${off ? '' : ' pour l’instant'}.</p>
+      <p>${partial ? `${sourcesText(others)} ${others.length > 1 ? 'n’ont' : 'n’a'} vu aucune plante dans la zone ; sans ${names}, pas de cartes${later}.`
+        : `Les cartes sont les plantes ${seen}, pas de cartes${later}.`}</p>
       ${off ? html`<p><a href=${href.settings()}>Réglages › Modules</a></p>`
         : html`<button class="primary" type="button" @click=${() => s.retryScope()}>${icon('arrow-counterclockwise')} Réessayer</button>`}</div>`;
   }

@@ -119,6 +119,10 @@ test('fiche plante : autour de moi, les occurrences GBIF comme les observations 
   // 6 of iNaturalist's, 7 of GBIF's less its copy of an iNaturalist observation (shown by iNaturalist itself).
   await allPhotos(map, 12, 'iNaturalist and GBIF');
   expect(asked.some(u => u.includes('api.inaturalist.org') && u.includes('taxon_id=48460'))).toBe(true);
+  // iNaturalist's of every quality grade (none said), as GBIF's: all that is there.
+  const near = asked.filter(u => u.includes('api.inaturalist.org') && u.includes('taxon_id=48460') && u.includes('radius='));
+  expect(near.length).toBeGreaterThan(0);
+  expect(near.map(u => new URL(u).searchParams.get('quality_grade'))).toEqual(near.map(() => null));
   expect(asked.some(u => u.includes('api.gbif.org') && u.includes('geoDistance='))).toBe(true);
   // The legend (the map's panel; nothing written by the map) and the buttons: the plant's marker for both sources,
   // never a source's colour; its counts said once.

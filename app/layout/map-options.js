@@ -146,15 +146,16 @@ export const WIDE_FRAMES = { france: [[-5.14, 41.33], [9.56, 51.09]], monde: [[-
 
 /**
  * A map of France or of the world (portee=): where these plants were observed, iNaturalist's tiles — squares far out
- * (grid, to zoom 9), points closer —, of a period (`when`: core/nearby.js periodQuery), of the quality grades shown
- * (`grades`: core/observations.js inatGrades — '' every one). `taxa`: their iNaturalist taxa (null: all plants), the
- * current plant's in its colour on top. Each tile layer: its key, its address, its zooms.
- * @param {number[] | null} taxa @param {string} when @param {number | null} [plant] the current plant's taxon @param {string} [grades]
+ * (grid, to zoom 9), points closer —, of a period (`when`: core/nearby.js periodQuery), as the zone's filters say
+ * (`filters`: core/observations.js inatQuery — the quality grades, the cultivated plants left out…; '' every
+ * observation). `taxa`: their iNaturalist taxa (null: all plants), the current plant's in its colour on top. Each tile
+ * layer: its key, its address, its zooms.
+ * @param {number[] | null} taxa @param {string} when @param {number | null} [plant] the current plant's taxon @param {string} [filters]
  * @returns {{ key: string, url: string, minZoom?: number, maxZoom?: number, opacity: number }[]}
  */
-export function inatTiles(taxa, when, plant = null, grades = '') {
+export function inatTiles(taxa, when, plant = null, filters = '') {
   const api = 'https://api.inaturalist.org/v1';
-  const of = (/** @type {number[]} */ ids, /** @type {string} */ color) => `taxon_id=${ids.join(',')}${grades}${when}&color=${encodeURIComponent(color)}`;
+  const of = (/** @type {number[]} */ ids, /** @type {string} */ color) => `taxon_id=${ids.join(',')}${filters}${when}&color=${encodeURIComponent(color)}`;
   const all = of(taxa ?? [PLANTAE], '#5c8a00');
   /** @type {{ key: string, url: string, minZoom?: number, maxZoom?: number, opacity: number }[]} */
   const layers = [

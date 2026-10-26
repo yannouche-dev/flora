@@ -14,8 +14,9 @@
 // closing it (the focus back on the row); an orchid the flora does not know, or named above the species, has none
 // (said why). A long press on the map, confirmed (« Chercher autour d'ici ? »): the circle there; « Revenir à la
 // colline » brings it back. Loading, nothing observed, nothing the filters keep, a source down or switched off,
-// offline (asked again as the connection comes back), observations left out for their rough position: said in the
-// panel (its status line read aloud), with « Réessayer » when it may help; a button that goes as it is pressed leaves
+// offline (asked again as the connection comes back), observations left out for their rough position (none but
+// those: « Les montrer »): said in the panel (its status line read aloud), with « Réessayer » when it may help; a source
+// unticked, its credit line says so (a choice kept); a button that goes as it is pressed leaves
 // the focus on what follows it. It writes only the activity's context (app.set): no mode, no sheet layout.
 
 import { LitElement, html, css, nothing } from 'lit';
@@ -372,13 +373,30 @@ export class MaOrchids extends LitElement {
         ${this.#radius()}
         ${this.#said(found, shown)}
         ${ok && found.orchids.length ? html`${this.#search()}${shown ? this.#filters(shown) : nothing}${shown ? this.#list(found, shown) : nothing}` : nothing}
-        <p class="credit">${fr('Observations : iNaturalist et GBIF ; protection et statuts : INPN.')}</p>
+        <p class="credit">${fr(`Observations : ${this.#sourcesWords()} ; protection et statuts : INPN.`)}</p>
       </section>
       <div class="map"><gf-map no-create no-search no-areas press="zone" point-click="pick" aria-description=${PRESS}
         .area=${this.#area()} .litKeys=${this.#litKeys()} .radiusHandle=${HANDLE} .data=${this.#dataRows()}
         @point-pick=${this.#onPick} @point-hover=${this.#onHover} @point-info=${this.#onPress} @data-change=${this.#onData}
         @radius-change=${(/** @type {CustomEvent} */ e) => app.set({ radius: e.detail.radius })}></gf-map></div>
     </div>${sheet}`;
+  }
+
+  /**
+   * The sources asked, in words: both (« iNaturalist et GBIF »), or the one ticked alone, the other said unticked and
+   * where (a choice kept: a visit after, nothing else would say why one is missing).
+   */
+  #sourcesWords() {
+    const sources = sourcesOf(/** @type {Record<string, any>} */ (this.c));
+    if (sources.length === SOURCES.length) return SOURCES.map(s => SOURCE_NAMES[s]).join(' et ');
+    const off = SOURCES.filter(s => !sources.includes(s)).map(s => SOURCE_NAMES[s]).join(' et ');
+    return `${sources.map(s => SOURCE_NAMES[s]).join(' et ')} seulement (${off} décoché : ▦ › Sur cette carte)`;
+  }
+
+  /** « Positions approximatives » ticked again (none on the map but those): the focus on the screen's title. */
+  #showApprox() {
+    this.#then = '#or-title';
+    this.app?.set({ approximate: true });
   }
 
   /** Where the circle is: the hill, or the point a long press chose (« Revenir à la colline »); how to move it. */
@@ -401,9 +419,10 @@ export class MaOrchids extends LitElement {
 
   /**
    * What the panel says of the observations, its status line read aloud: coming, how many (of how many when filtered;
-   * those hidden for their approximate position, « Positions approximatives » unticked), none here; a source that did
-   * not answer, the other's alone; more than the map holds; those on the map with their margin; no source at all, an
-   * alert (« Réessayer » unless switched off). @param {Found | null} found @param {Shown | null} shown
+   * those hidden for their approximate position, « Positions approximatives » unticked), none here (those hidden
+   * only: « Les montrer »); a source that did not answer, the other's alone; more than the map holds; those the map
+   * shows apart (approximate: as they look on it); no source at all, an alert (« Réessayer » unless switched off).
+   * @param {Found | null} found @param {Shown | null} shown
    */
   #said(found, shown) {
     const loading = this.#loading;
@@ -423,12 +442,17 @@ export class MaOrchids extends LitElement {
       if (failed.length && answered.length) notes.push(`${failedText(failed)} : les observations ${of(answered[0])} seules.`);
       if ((found.totals.inat ?? 0) > INAT_MAX) notes.push(`iNaturalist en compte ${found.totals.inat?.toLocaleString('fr-FR')} : les ${INAT_MAX.toLocaleString('fr-FR')} plus récentes sont sur la carte.`);
       if ((found.totals.gbif ?? 0) > GBIF_MAX) notes.push(`GBIF en compte ${found.totals.gbif?.toLocaleString('fr-FR')} : ${GBIF_MAX} sont sur la carte.`);
-      if (found.vague) notes.push(`${counted(found.vague, 'observation')} à la position approximative (masquée par l’observateur, ou plus large que le cercle) : `
-        + `${found.vague > 1 ? 'leur' : 'sa'} marge en pointillés sur la carte.`);
+      // Those on the map (the filters keep), as they look there: their margin, wider than the circle, past the view.
+      const vague = (shown?.points ?? found.points).filter(p => p.approx).length, many = vague > 1;
+      if (vague) notes.push(`${counted(vague, 'observation')} à la position approximative (masquée par l’observateur, ou plus large que le cercle) : `
+        + `${many ? 'cerclées' : 'cerclée'} de pointillés orange sur la carte ; ${many ? 'leur' : 'sa'} marge, en pointillés aussi, se voit en dézoomant.`);
     }
+    const none = found && !found.error && !total && !loading;
     return html`<p class="count" role="status">${fr(status)}</p>
       ${notes.map(n => html`<p class="note">${fr(n)}</p>`)}
-      ${found && !found.error && !total && !loading ? html`<p class="empty">${fr('Agrandissez le cercle, ou centrez-le ailleurs : appui long sur la carte.')}</p>` : nothing}`;
+      ${none && hidden ? html`<p class="empty">${fr('Cochez « Positions approximatives » (▦ › Sur cette carte) pour les voir.')}
+        <button class="link" type="button" @click=${() => this.#showApprox()}>Les montrer</button></p>`
+      : none ? html`<p class="empty">${fr('Agrandissez le cercle, ou centrez-le ailleurs : appui long sur la carte.')}</p>` : nothing}`;
   }
 
   /** The search by name: French or scientific, any of its words, case and accents aside. */

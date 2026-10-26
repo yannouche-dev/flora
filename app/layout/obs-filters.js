@@ -5,12 +5,13 @@
 // core/observations.js):
 //  - the sources: iNaturalist, GBIF — each one's count in the zone, or why it failed; one at least;
 //  - GBIF's datasets in the zone (Pl@ntNet, Observation.org, the botanical conservatories…), their titles and counts:
-//    every one ticked, one at least, « Tout cocher » when some are not (those left out: sansjeux=; an address that
-//    names those asked alone, jeux=: those);
+//    every one ticked, one at least, « Tout cocher » when some are not (the focus then on the first one; those left
+//    out: sansjeux=; an address that names those asked alone, jeux=: those);
 //  - the rank (any; the species or below), the quality grades (verified, to identify, casual — every one ticked, one
 //    at least; iNaturalist's alone: GBIF has none), a photo (any; one; one under a free licence), the cultivated or
-//    captive plants (ticked: shown — sauvages=1 when not) — what a source does not filter itself said under it
-//    (core/observations.js APPLIES);
+//    captive plants (ticked: shown — sauvages=1 when not; iNaturalist's are among its casual ones, said when those
+//    are not) — what a source does not filter itself said under it (core/observations.js APPLIES);
+//  - a list down to one box: that box off, and why said (its description);
 //  - the plants' origin: the flora's « Statut en France », below (every source alike).
 // Everything ticked by default: every observation available (core/observations.js OBS_DEFAULTS). A change: the group's
 // state (state.set({ filtres })), the address after it — only what differs from the layout's defaults (sources=,
@@ -152,6 +153,19 @@ export class DlObsFilters extends LitElement {
   }
   /** @type {Set<string>} */ #asked = new Set();
 
+  /** « Tout cocher »: every dataset ticked — the button gone with it, the focus on the first one (not lost). */
+  #allDatasets() {
+    this.#refocus = true;
+    this.#set({ jeux: [], sansjeux: [] });
+  }
+  #refocus = false;
+
+  updated() {
+    if (!this.#refocus || this.renderRoot.querySelector('#obs-all')) return;
+    this.#refocus = false;
+    if (!/** @type {ShadowRoot} */ (this.renderRoot).activeElement) /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('#obs-jeux input'))?.focus();
+  }
+
   /** The plants' origin: the flora's « Statut en France », below — opened and scrolled to. */
   #toOrigin() {
     const facet = /** @type {any} */ (this.parentElement?.shadowRoot?.querySelector('gf-facet[name="status"]'));
@@ -186,6 +200,8 @@ export class DlObsFilters extends LitElement {
     const f = s.filters;
     const changed = Object.keys(obsChanges(f, this.#defaults) ?? {}).length;
     const gbif = f.sources.includes('gbif'), inat = f.sources.includes('inat');
+    // The cultivated plants shown, iNaturalist's casual ones not (where it puts its cultivated or captive ones): said.
+    const grown = inat && !f.sauvages && !f.qualite.includes('occasionnelles');
     return html`
       <div class="head">
         <button class="toggle" type="button" aria-expanded=${String(this.open)} aria-controls="obs-body" @click=${() => { this.open = !this.open; }}>
@@ -196,11 +212,15 @@ export class DlObsFilters extends LitElement {
       </div>
       ${this.open ? html`<div class="body" id="obs-body">
         <ul role="group" aria-label="Sources des observations">
-          ${SOURCES.map(x => html`<li><label title=${x === 'inat' ? 'Les observations d’iNaturalist (les 1 000 plus récentes)' : 'Les occurrences de GBIF : herbiers, inventaires, Pl@ntNet, Observation.org… (300 au plus ; sa copie d’iNaturalist laissée)'}>
-            <input type="checkbox" .checked=${f.sources.includes(x)} ?disabled=${f.sources.length === 1 && f.sources.includes(x)}
+          ${SOURCES.map(x => {
+            const last = f.sources.length === 1 && f.sources.includes(x);
+            return html`<li><label title=${x === 'inat' ? 'Les observations d’iNaturalist (les 1 000 plus récentes)' : 'Les occurrences de GBIF : herbiers, inventaires, Pl@ntNet, Observation.org… (300 au plus ; sa copie d’iNaturalist laissée)'}>
+            <input type="checkbox" .checked=${f.sources.includes(x)} ?disabled=${last} aria-describedby=${last ? 'obs-one-source' : nothing}
               @change=${(/** @type {Event} */ e) => this.#source(x, /** @type {HTMLInputElement} */ (e.target).checked)} />
-            <span class="name">${SOURCE_NAMES[x]}</span>${this.#count(s, x)}</label></li>`)}
+            <span class="name">${SOURCE_NAMES[x]}</span>${this.#count(s, x)}</label></li>`;
+          })}
         </ul>
+        ${f.sources.length === 1 ? html`<p class="note" id="obs-one-source">Une source au moins : cochez ${SOURCE_NAMES[SOURCES.find(x => !f.sources.includes(x)) ?? 'gbif']} pour décocher celle-ci.</p>` : nothing}
         ${gbif ? this.#datasets(s, f) : nothing}
         <div class="group"><span class="label">Taxon</span>${this.#choices('taxon', 'Taxon', f.taxon)}
           ${gbif && f.taxon !== 'tous' ? html`<p class="note">${APPLIES.taxon.why}.</p>` : nothing}</div>
@@ -210,9 +230,11 @@ export class DlObsFilters extends LitElement {
           ${gbif && f.photos === 'libre' ? html`<p class="note">${APPLIES.photos.why}.</p>` : nothing}</div>
         <ul class="group">
           <li><label title="Cultivées ou captives (iNaturalist) ; gérées, cultivées, captives ou relâchées (GBIF). Décochées : les plantes sauvages seulement">
-            <input type="checkbox" .checked=${!f.sauvages} @change=${(/** @type {Event} */ e) => this.#set({ sauvages: !(/** @type {HTMLInputElement} */ (e.target).checked) })} />
+            <input type="checkbox" .checked=${!f.sauvages} aria-describedby=${grown ? 'obs-grown' : nothing}
+              @change=${(/** @type {Event} */ e) => this.#set({ sauvages: !(/** @type {HTMLInputElement} */ (e.target).checked) })} />
             <span class="name wrap">Plantes cultivées ou captives</span></label></li>
         </ul>
+        ${grown ? html`<p class="note" id="obs-grown">iNaturalist range ses plantes cultivées ou captives parmi les « Occasionnelles » : cochez-les pour voir les siennes.</p>` : nothing}
         ${gbif && f.sauvages ? html`<p class="note">${APPLIES.sauvages.why}.</p>` : nothing}
         <p class="origin">${icon('globe-europe-africa')} L’origine des plantes (indigène, naturalisée, introduite…) : <button class="link" type="button" @click=${() => this.#toOrigin()}>Statut en France</button>, plus bas, pour toutes les sources.</p>
       </div>` : nothing}
@@ -224,12 +246,15 @@ export class DlObsFilters extends LitElement {
    * (GBIF has none). @param {Readonly<ObsFilters>} f @param {boolean} off
    */
   #grades(f, off) {
+    const one = !off && f.qualite.length === 1;
     return html`<ul role="group" aria-label="Qualité" aria-disabled=${off ? 'true' : nothing}>${GRADES.map(g => {
-      const [name, more, title] = GRADE_WORDS[g], on = f.qualite.includes(g);
+      const [name, more, title] = GRADE_WORDS[g], on = f.qualite.includes(g), last = one && on;
       return html`<li><label title=${title}>
-        <input type="checkbox" .checked=${on} ?disabled=${off || (on && f.qualite.length === 1)} @change=${(/** @type {Event} */ e) => this.#grade(g, /** @type {HTMLInputElement} */ (e.target).checked)} />
+        <input type="checkbox" .checked=${on} ?disabled=${off || last} aria-describedby=${last ? 'obs-one-grade' : nothing}
+          @change=${(/** @type {Event} */ e) => this.#grade(g, /** @type {HTMLInputElement} */ (e.target).checked)} />
         <span class="name wrap">${name}${more ? html`<span class="hint">${more}</span>` : nothing}</span></label></li>`;
-    })}</ul>`;
+    })}</ul>
+    ${one ? html`<p class="note" id="obs-one-grade">Une qualité au moins : cochez-en une autre pour décocher celle-ci.</p>` : nothing}`;
   }
 
   /**
@@ -246,17 +271,20 @@ export class DlObsFilters extends LitElement {
     const shown = this._all ? all : all.filter((d, i) => i < SHOWN || named.includes(d.key));
     const missing = shown.map(d => d.key).filter(k => !this._titles.has(k) && !this.#asked.has(k));
     if (missing.length) this.#findTitles(missing);
-    return html`<div class="group" role="group" aria-label="Jeux de données GBIF">
-      <span class="label">Jeux de données GBIF${kept < all.length ? html`<button class="link" type="button" @click=${() => this.#set({ jeux: [], sansjeux: [] })}>Tout cocher</button>` : nothing}</span>
+    return html`<div class="group" role="group" aria-label="Jeux de données GBIF" id="obs-jeux">
+      <span class="label">Jeux de données GBIF${kept < all.length ? html`<button class="link" type="button" id="obs-all" @click=${() => this.#allDatasets()}>Tout cocher</button>` : nothing}</span>
       ${!all.length ? html`<p class="note">${s.speciesState === 'loading' ? 'Jeux de la zone : recherche…' : 'Aucun jeu de données GBIF dans la zone.'}</p>` : html`<ul>
         ${shown.map(d => {
-          const title = this._titles.get(d.key), on = ticked(d.key);
+          const title = this._titles.get(d.key), on = ticked(d.key), last = on && kept === 1;
           return html`<li class=${d.count || named.includes(d.key) ? '' : 'empty'}><label title=${title ?? d.key}>
-            <input type="checkbox" .checked=${on} ?disabled=${on && kept === 1} @change=${(/** @type {Event} */ e) => this.#dataset(d.key, /** @type {HTMLInputElement} */ (e.target).checked)} />
+            <input type="checkbox" .checked=${on} ?disabled=${last} aria-describedby=${last ? 'obs-one-set' : nothing}
+              @change=${(/** @type {Event} */ e) => this.#dataset(d.key, /** @type {HTMLInputElement} */ (e.target).checked)} />
             <span class="name">${title ?? html`<span class="key">${d.key.slice(0, 8)}…</span>`}</span>
             <span class="count">${d.count.toLocaleString('fr-FR')}</span></label></li>`;
         })}
       </ul>
+      ${kept === 1 ? html`<p class="note" id="obs-one-set">${all.length > 1 ? 'Un jeu au moins : cochez-en un autre pour décocher celui-ci.'
+        : 'Un jeu au moins : décochez GBIF, plus haut, pour ne pas le voir.'}</p>` : nothing}
       ${all.length > shown.length ? html`<button class="link more" type="button" @click=${() => { this._all = true; }}>Voir plus (${all.length - shown.length})</button>` : nothing}
       ${this._all && all.length > SHOWN ? html`<button class="link more" type="button" @click=${() => { this._all = false; }}>Voir moins</button>` : nothing}`}
     </div>`;

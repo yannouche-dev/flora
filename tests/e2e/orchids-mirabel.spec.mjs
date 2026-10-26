@@ -10,7 +10,8 @@
 // leave it out), over it on a phone (the screen under it out of reach), Échap closing it even from the viewer (the
 // focus back on its row); over the start screen, the same simple sheet; the radius from stop to stop, the circle
 // moved by a long press and brought back; a source down, none, offline (asked again when back), nothing observed,
-// more than the map holds, both modules off, photos off: said, « Réessayer » when it may help, the focus kept on the
+// nothing but approximate positions hidden (« Les montrer »), more than the map holds, both modules off, the source
+// kept alone switched off (the other to tick, said), photos off: said, « Réessayer » when it may help, the focus kept on the
 // screen; « Quitter » back to the list, and nothing of the app changed at any point (mode, harvest mode, sheet layout,
 // any key but its own). No violation (axe).
 import { test, expect, plantId, answerOrchids } from './fixtures.mjs';
@@ -42,7 +43,10 @@ const row = (page, name) => screen(page).locator('ul > li').filter({ has: page.l
 /** How many observations and orchids, said. */
 const ALL = '12 observations · 4 orchidées et 2 non identifiées à l’espèce';
 /** The observations whose position is approximate (an iNaturalist one obscured, a GBIF one within 2 km), on the map. */
-const VAGUE = '2 observations à la position approximative (masquée par l’observateur, ou plus large que le cercle) : leur marge en pointillés sur la carte.';
+const VAGUE = '2 observations à la position approximative (masquée par l’observateur, ou plus large que le cercle) : cerclées de pointillés orange sur la carte ; '
+  + 'leur marge, en pointillés aussi, se voit en dézoomant.';
+/** The credit line, both sources asked. */
+const CREDIT = 'Observations : iNaturalist et GBIF ; protection et statuts : INPN.';
 /** Their markers, set apart, and their margins (dashed circles). @param {Page} page */
 const vague = page => screen(page).locator('gf-map .leaflet-marker-pane .gf-obs-leaf.gf-obs-approx');
 /** @param {Page} page */
@@ -115,6 +119,12 @@ test('le départ, puis la carte : la colline de Mirabel à 500 m, seules les orc
   await expect(dots(page)).toHaveCount(12);
   await expect(vague(page)).toHaveCount(2);
   await expect(margins(page)).toHaveCount(2);
+  await expect(screen(page).locator('section.panel > p.credit')).toHaveText(CREDIT);
+  // Their dashed rings, what the note says: in the map's box (their margins, wider than the circle, past it).
+  const frame = /** @type {{ x: number, y: number, width: number, height: number }} */ (await screen(page).locator('gf-map .leaflet-container').boundingBox());
+  for (const b of await vague(page).evaluateAll(els => els.map(e => e.getBoundingClientRect().toJSON()))) {
+    expect(b.left >= frame.x && b.right <= frame.x + frame.width && b.top >= frame.y && b.bottom <= frame.y + frame.height, JSON.stringify(b)).toBe(true);
+  }
   // Every observation of the orchids, of both sources, around the hill: any quality, the plants grown too; never a
   // question for every plant.
   expect(urls.length).toBeGreaterThanOrEqual(3);
@@ -159,6 +169,8 @@ test('les filtres légers : un genre, une protection, un statut, un nom — la c
   await chip(page, 'Ophrys').click();
   await expect(chip(page, 'Ophrys')).toHaveAttribute('aria-pressed', 'true');
   await expect(screen(page).locator('.count')).toHaveText('4 observations sur 12 · 1 orchidée et 1 non identifiée à l’espèce');
+  // None of them placed roughly: no word of it (the note counts what the map shows).
+  await expect(screen(page).locator('.note')).toHaveCount(0);
   expect(await names(page)).toEqual(['Ophrys bourdon', 'Ophrys']);
   await expect.poll(async () => (await area(page)).sci).toEqual(['Ophrys', 'Ophrys holosericea']);
   await expect(dots(page)).toHaveCount(4);
@@ -221,9 +233,20 @@ test('« Sur cette carte » : iNaturalist, GBIF, les cultivées, les positions a
   await begin(page);
   await expect(screen(page).locator('.count')).toHaveText(ALL);
 
-  // The approximate ones: set apart, their margin drawn (± 27 km, ± 2 km), their card says it (a pointer: hovered).
+  // The approximate ones: set apart, their margin drawn (± 27 km, ± 2 km: dashed, unfilled — many would hide the
+  // map), their card says it (a pointer: hovered).
   await expect(vague(page)).toHaveCount(2);
-  expect((await margins(page).evaluateAll(ps => ps.map(p => p.getAttribute('stroke-dasharray')))).every(d => d === '5 5')).toBe(true);
+  expect(await margins(page).evaluateAll(ps => ps.map(p => [p.getAttribute('stroke-dasharray'), p.getAttribute('fill')]))).toEqual([['5 5', 'none'], ['5 5', 'none']]);
+  // Points sharing a position and its accuracy (a grid's centre): one margin for them all.
+  await screen(page).locator('gf-map').evaluate(m => {
+    const map = /** @type {any} */ (m), a = map.area, p = a.points.find((/** @type {any} */ x) => x.approx && x.accuracy === 2000);
+    map.gfWas = a;
+    map.area = { ...a, points: [...a.points, { ...p, id: p.id + 'b', date: '2020-01-01' }, { ...p, id: p.id + 'c', date: '2021-01-01' }] };
+  });
+  await expect(vague(page)).toHaveCount(4);
+  await expect(margins(page)).toHaveCount(2);
+  await screen(page).locator('gf-map').evaluate(m => { /** @type {any} */ (m).area = /** @type {any} */ (m).gfWas; });
+  await expect(vague(page)).toHaveCount(2);
   if (!app.phone) {
     const card = screen(page).locator('gf-map .gf-float-tip.on .gf-obs-card');
     const said = [];
@@ -265,6 +288,8 @@ test('« Sur cette carte » : iNaturalist, GBIF, les cultivées, les positions a
   expect(urls.some(u => u.host === 'api.gbif.org')).toBe(false);
   await expect(box(/^iNaturalist/)).toBeDisabled();
   await expect(box(/^iNaturalist/)).toHaveAccessibleDescription('Une source au moins : cochez GBIF pour décocher celle-ci.');
+  // Outside the panel too: the credit line names the source asked, the other unticked (a choice kept).
+  await expect(screen(page).locator('section.panel > p.credit')).toHaveText('Observations : iNaturalist seulement (GBIF décoché : ▦ › Sur cette carte) ; protection et statuts : INPN.');
   await expect(row(page, 'Ophrys bourdon')).toContainText('2 obs.');
   await expect(row(page, 'Ophrys bourdon')).not.toContainText('iNat.');
   await panel.getByRole('button', { name: 'Fermer', exact: true }).click();
@@ -278,6 +303,7 @@ test('« Sur cette carte » : iNaturalist, GBIF, les cultivées, les positions a
   await page.reload();
   await app.ready();
   await expect(screen(page).locator('.count')).toHaveText('7 observations (1 autre cachée : position approximative) · 3 orchidées et 1 non identifiée à l’espèce');
+  await expect(screen(page).locator('section.panel > p.credit')).toContainText('iNaturalist seulement (GBIF décoché');
   ({ data } = await onThisMap(page));
   await expect(box(/^iNaturalist/)).toBeChecked();
   await expect(box(/^GBIF/)).not.toBeChecked();
@@ -290,6 +316,7 @@ test('« Sur cette carte » : iNaturalist, GBIF, les cultivées, les positions a
   await box(/^Positions approximatives/).check();
   await expect(screen(page).locator('.count')).toHaveText(ALL);
   await expect(margins(page)).toHaveCount(2);
+  await expect(screen(page).locator('section.panel > p.credit')).toHaveText(CREDIT);
   // Nothing of the app changed: its own key alone.
   expect(await footprint(page)).toEqual(before);
 });
@@ -466,7 +493,8 @@ test('une source en panne, toutes, hors ligne, rien d’observé : dit, et « R�
   await page.context().setOffline(false);
   await expect(screen(page).locator('.count')).toHaveText('8 observations · 3 orchidées et 1 non identifiée à l’espèce');
   await expect(screen(page).locator('.note')).toHaveText(['GBIF ne répond pas : les observations d’iNaturalist seules.',
-    '1 observation à la position approximative (masquée par l’observateur, ou plus large que le cercle) : sa marge en pointillés sur la carte.']);
+    '1 observation à la position approximative (masquée par l’observateur, ou plus large que le cercle) : cerclée de pointillés orange sur la carte ; '
+      + 'sa marge, en pointillés aussi, se voit en dézoomant.']);
   // Nothing observed in the circle: said, and how to look further.
   await answerOrchids(page, { none: true });
   await screen(page).getByRole('slider', { name: 'Rayon du cercle' }).focus();
@@ -474,6 +502,64 @@ test('une source en panne, toutes, hors ligne, rien d’observé : dit, et « R�
   await expect(screen(page).locator('.count')).toHaveText('Aucune orchidée observée dans ce cercle.');
   await expect(screen(page).locator('.empty')).toHaveText('Agrandissez le cercle, ou centrez-le ailleurs : appui long sur la carte.');
   await expect(dots(page)).toHaveCount(0);
+});
+
+test('seules des positions approximatives, cachées : dit, et « Les montrer » les remet (le focus sur le titre)', async ({ app, page }) => {
+  // In the circle, an iNaturalist observation obscured and a GBIF record within 2 km: nothing else.
+  const [lng, lat] = [3.1112, 45.8692];
+  await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?/, route => {
+    const q = new URL(route.request().url()).searchParams;
+    if (!(q.get('taxon_id') || '').split(',').includes('47217')) return route.fallback();
+    const results = q.get('page') && q.get('page') !== '1' ? [] : [{ id: 6900, uri: 'https://www.inaturalist.org/observations/6900', geojson: { type: 'Point', coordinates: [lng, lat] },
+      observed_on: '2026-05-10', place_guess: 'Ménétrol', taxon: { id: 7001, name: 'Traunsteinera globosa', preferred_common_name: 'Traunsteinère globuleuse' },
+      obscured: true, public_positional_accuracy: 27000 }];
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ total_results: 1, results }) });
+  });
+  await page.route(/^https:\/\/api\.gbif\.org\/v1\/occurrence\/search\?/, route => {
+    if (new URL(route.request().url()).searchParams.get('taxonKey') !== '7689') return route.fallback();
+    return route.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify({ count: 1, results: [{
+      key: 6950, decimalLatitude: lat - 0.001, decimalLongitude: lng, species: 'Dactylorhiza brennensis', scientificName: 'Dactylorhiza brennensis (E.Nelson) Soó',
+      taxonRank: 'SPECIES', genus: 'Dactylorhiza', family: 'Orchidaceae', eventDate: '2024-06-10', datasetKey: 'cbn-mc', datasetName: 'Conservatoire botanique national du Massif central',
+      coordinateUncertaintyInMeters: 2000 }] }) });
+  });
+  await app.open('#/app/orchidees/map');
+  await expect(screen(page).locator('.count')).toHaveText('2 observations · 2 orchidées');
+  await expect(vague(page)).toHaveCount(2);
+  const { panel, data } = await onThisMap(page);
+  await data.getByRole('checkbox', { name: /^Positions approximatives/ }).uncheck();
+  await panel.getByRole('button', { name: 'Fermer', exact: true }).click();
+  // None left: said, and where they went — not « Agrandissez le cercle » (a wider one never brings them back).
+  await expect(screen(page).locator('.count')).toHaveText('Aucune orchidée observée dans ce cercle, sauf 2 cachées : position approximative.');
+  await expect(screen(page).locator('.empty')).toContainText('Cochez « Positions approximatives » (▦ › Sur cette carte) pour les voir.');
+  await expect(screen(page).locator('.empty')).not.toContainText('Agrandissez');
+  // « Les montrer », gone as it is pressed: both back, the focus on the screen's title.
+  await screen(page).locator('.empty').getByRole('button', { name: 'Les montrer' }).press('Enter');
+  await expect(screen(page).locator('.count')).toHaveText('2 observations · 2 orchidées');
+  await expect(vague(page)).toHaveCount(2);
+  await expect(screen(page).locator('#or-title')).toBeFocused();
+});
+
+test('GBIF seul gardé, son module coupé : la carte dit de cocher iNaturalist dans « Sur cette carte » ; coché, ses observations', async ({ app, page }) => {
+  await answerOrchids(page);
+  await app.open('#/app/orchidees/map');
+  await expect(screen(page).locator('.count')).toHaveText(ALL);
+  let { panel, data } = await onThisMap(page);
+  await data.getByRole('checkbox', { name: /^iNaturalist/ }).uncheck();
+  await panel.getByRole('button', { name: 'Fermer', exact: true }).click();
+  await expect(screen(page).locator('section.panel > p.credit')).toHaveText('Observations : GBIF seulement (iNaturalist décoché : ▦ › Sur cette carte) ; protection et statuts : INPN.');
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('geoflora.app.orchidees.state') || 'null')?.ctx?.sources)).toEqual(['gbif']);
+  // GBIF switched off (Réglages › Modules), a visit after: what to do, not only « aucune observation ».
+  await page.evaluate(() => localStorage.setItem('geoflora.modules', JSON.stringify({ gbif: false })));
+  await page.reload();
+  await app.ready();
+  const alert = screen(page).locator('.alert');
+  await expect(alert).toHaveText('Le module GBIF est désactivé (Réglages › Modules) : cochez iNaturalist (▦ › Sur cette carte) pour voir ses observations.');
+  await expect(alert.getByRole('button', { name: 'Réessayer' })).toHaveCount(0);
+  ({ panel, data } = await onThisMap(page));
+  await data.getByRole('checkbox', { name: /^iNaturalist/ }).check();
+  await panel.getByRole('button', { name: 'Fermer', exact: true }).click();
+  await expect(screen(page).locator('.count')).toHaveText('8 observations · 3 orchidées et 1 non identifiée à l’espèce');
+  await expect(screen(page).locator('.note').first()).toHaveText('Le module GBIF est désactivé : les observations d’iNaturalist seules.');
 });
 
 test('plus d’observations que la carte n’en montre : dit, pour chaque source', async ({ app, page }) => {

@@ -8,7 +8,7 @@
 // map cell (its zone unreachable, a point outside the flora, its long press), the mini-apps' distance step and the
 // guided Découvrir (their counts said), the Parcours (its word docked beside the map), and a map in 3D (loading,
 // the relief unreachable, editing, the observations around).
-import { test, expect, plantId, answerAround, answerPlantNear, answerObservations } from './fixtures.mjs';
+import { test, expect, plantId, answerAround, answerPlantNear, answerObservations, answerZoneGbif } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
 import { brief, coveredControls, mapSaid, mapState, openPanel, overMap } from './quiet.mjs';
 
@@ -352,7 +352,8 @@ test.describe('la Disposition libre', () => {
     await expect(cell.locator('.hint-once, .note')).toHaveCount(0);
 
     // A zone whose observations neither source can give (iNaturalist late and failing, GBIF failing; both asked by
-    // default): no « recherche… », no error line over the map — its state, the sources in their order.
+    // default): no « recherche… », no error line over the map — its state, the sources in their order; then one of
+    // them (iNaturalist), the other answering.
     let down = true;
     await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?/, async route => {
       if (down) { await new Promise(r => setTimeout(r, 1200)); return route.fulfill({ status: 503, body: '' }); }
@@ -367,6 +368,15 @@ test.describe('la Disposition libre', () => {
     await expect(mapSaid(map)).toContainText('iNaturalist et GBIF ne répondent pas : la zone ne filtre pas les plantes pour l’instant.');
     await quiet(page, ['.panel']);
 
+    // GBIF back (nothing of its own here), iNaturalist still failing: what is missing, in the state alone.
+    await answerZoneGbif(page, 0);
+    await app.go('#/layout/[map(r=500m),search]?at=48.85,2.35');
+    await expect.poll(() => mapState(map), { timeout: 10_000 }).toContain('iNaturalist ne répond pas : ses observations manquent sur la carte et dans la liste.');
+    expect(await mapState(map)).not.toContain('iNaturalist et GBIF ne répondent pas : la zone ne filtre pas les plantes pour l’instant.');
+    await expect(mapSaid(map)).toContainText('iNaturalist ne répond pas : ses observations manquent sur la carte et dans la liste.');
+    await expect(cell.locator('.note')).toHaveCount(0);
+    await quiet(page, ['.panel']);
+
     // A point of a plant outside the flora (a map showing every observation of the zone: suit=0), touched: one brief toast.
     down = false;
     await app.go('#/layout/[map(r=2km,suit=0),search]?at=48.85,2.35');
@@ -376,6 +386,7 @@ test.describe('la Disposition libre', () => {
     if (app.phone) await leaf.tap({ force: true });
     await briefly(page, 'Lampourde imaginaire : pas dans la flore de France de GeoFlora.');
     await expect(cell.locator('.note')).toHaveCount(0);
+    expect((await mapState(map)).filter(t => /ne répond/.test(t))).toEqual([]);
   });
 });
 

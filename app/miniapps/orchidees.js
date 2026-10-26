@@ -22,7 +22,7 @@
 
 import { moduleOn } from '../core/modules.js';
 import { speciesOf } from '../core/nearby.js';
-import { SOURCE_NAMES, failedText, zoneObservations } from '../core/observations.js';
+import { SOURCES, SOURCE_NAMES, failedText, zoneObservations } from '../core/observations.js';
 import { getPlants } from '../core/plants.js';
 import { whenReady } from '../core/store.js';
 import { territoryAt } from '../core/territory.js';
@@ -31,6 +31,8 @@ import { ORCHIDACEAE, RADIUS, SITE, asked, filterOrchids, gatherOrchids, markVag
 
 /** iNaturalist's observations asked at most (five pages of 200), GBIF giving its page of 300. */
 const MAX = 1000;
+/** Each source's module (Réglages › Modules). */
+const MODULES = /** @type {const} */ ({ inat: 'inaturalist', gbif: 'gbif' });
 
 /**
  * The orchids observed in the circle: the observations of the sources chosen (core/observations.js, the family alone;
@@ -59,7 +61,9 @@ async function orchidsAround(app, what, signal) {
     /** @type {import('../core/observations.js').ObsFailure[]} */
     const failed = /** @type {any} */ (error)?.failed ?? sources.map(s => ({ name: SOURCE_NAMES[s], off: false }));
     const off = failed.every(f => f.off), offline = !off && !navigator.onLine;
-    const text = off ? `${failedText(failed)} (Réglages › Modules) : aucune observation à montrer.`
+    // The sources chosen switched off, another one on but unticked (« Sur cette carte », kept): said where to tick it.
+    const other = SOURCES.filter(s => !sources.includes(s) && moduleOn(MODULES[s])).map(s => SOURCE_NAMES[s]);
+    const text = off ? `${failedText(failed)} (Réglages › Modules) : ${other.length ? `cochez ${other.join(' et ')} (▦ › Sur cette carte) pour voir ses observations` : 'aucune observation à montrer'}.`
       : offline ? `Hors ligne : les observations ${sources.map(x => x === 'inat' ? 'd’iNaturalist' : 'de GBIF').join(' et ')} viendront avec la connexion.`
       : `${failedText(failed)} : les observations ne sont pas disponibles pour le moment.`;
     return { key, points: [], orchids: [], failed, totals: { inat: null, gbif: null }, vague: 0, hidden: 0, error: { text, retry: !off, offline } };
