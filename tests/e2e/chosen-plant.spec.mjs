@@ -158,7 +158,7 @@ test.describe('un grand écran', () => {
     await onPlant(page, RENONCULE, { sheet: true });
 
     // The sheet closed: the plant stays chosen; back to the deck: its photos beside it, on that plant.
-    await page.locator('ma-plant-sheet').getByRole('button', { name: 'Retour aux plantes autour' }).click();
+    await page.locator('ma-plant-sheet').getByRole('button', { name: 'Fermer la fiche' }).click();
     await expect.poll(() => hash(page)).toBe(`#/app/rencontres/cards?p=${plantId(RENONCULE)}&v=toutes`);
     await page.locator('ma-around-list').getByRole('tab', { name: 'Rencontres' }).click();
     await expect.poll(() => hash(page)).toBe(`#/app/rencontres/cards?p=${plantId(RENONCULE)}`);
@@ -202,7 +202,7 @@ test.describe('un grand écran', () => {
     await expect(page.locator('ma-around-list').getByRole('tab', { name: /Matchs/ })).toHaveAttribute('aria-selected', 'true');
     // Its sheet closed (no new entry); back to the deck: its photos beside it.
     const entries = await page.evaluate(() => history.length);
-    await page.locator('ma-plant-sheet').getByRole('button', { name: 'Retour aux plantes autour' }).click();
+    await page.locator('ma-plant-sheet').getByRole('button', { name: 'Fermer la fiche' }).click();
     await page.locator('ma-around-list').getByRole('tab', { name: 'Rencontres' }).click();
     await expect.poll(() => hash(page)).toBe(`#/app/rencontres/cards?p=${lierre}`);
     await onPlant(page, LIERRE, { media: true });

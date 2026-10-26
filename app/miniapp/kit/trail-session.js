@@ -1,6 +1,6 @@
 // @ts-check
 // The game of the Parcours botanique, shared by its kit (the start, ma-walk and its parts, ma-trail-recap): one per
-// mini-app open, a new one after « Rejouer » (trailSessionOf). The walk under way, those to take up again and the one
+// activity open, a new one after « Recommencer » (trailSessionOf). The walk under way, those to continue and the one
 // just ended (read from the device: kit/trail-store.js, and Mes plantes), where I am (followed while walking), the
 // plant touched, the word said after an action (« Annuler »). Its actions: start here (the app's action `locate`) or
 // from a commune, take one up again, add a plant where I stand, take one out, rename, share, end (its recap), start
@@ -25,9 +25,9 @@ export class TrailSession extends EventTarget {
   constructor(app) {
     super();
     this.app = app;
-    /** The emptying of the app it belongs to (« Rejouer »: another session). */
+    /** The emptying of the app it belongs to (« Recommencer »: another session). */
     this.generation = app.generation;
-    /** The walk under way (its place), the one just ended (its recap), those to take up again. @type {any} */
+    /** The walk under way (its place), the one just ended (its recap), those to continue. @type {any} */
     this.trail = null;
     /** @type {any} */
     this.done = null;
@@ -176,7 +176,7 @@ export class TrailSession extends EventTarget {
     }
   }
 
-  /** A walk taken up again (« Reprendre », « Le reprendre »): on to it. @param {any} place */
+  /** A walk continued (« Continuer un parcours », « Le continuer »): on to it. @param {any} place */
   resume(place) {
     this.app.cancel('locate');
     this.leaveRecap();

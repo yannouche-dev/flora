@@ -22,7 +22,7 @@ const plant = (/** @type {string} */ name) => plants.find((/** @type {any} */ x)
 /** A card of the deck. @param {string} name @param {Partial<import('../../app/miniapp/kit/cards.js').Card>} [more] */
 const card = (name, more = {}) => ({ plant: plant(name), count: 10, photo: null, credit: null, blooming: false, verdict: null, ...more });
 
-test('Cueillette prudente : seulement les plantes à sosie dangereux, la mortelle d’abord ; liste illisible : toutes gardées', async () => {
+test('Cueillette prudente : seulement les plantes à sosie toxique, la mortelle d’abord ; liste illisible : toutes gardées', async () => {
   const cards = await Promise.all(['Urtica dioica', 'Conium maculatum', 'Allium ursinum'].map(async n => {
     const c = card(n, { count: n === 'Conium maculatum' ? 5 : 80 });
     c.confusions = await lookalikesOf(c.plant);
@@ -42,7 +42,7 @@ test('bio : la sécurité d’abord — confusions, toxicité illisible, toxique
   const lines = bio(ail, new Set());
   assert.match(lines[0], /^⚠️ Ne me confondez pas avec Colchique \(mortel\)\. Partie : feuilles\.$/);
   // The species the Anses names: the part it says is picked, « à table » (never « comestible »).
-  assert.ok(lines.includes('🍽️ Partie consommée selon l’Anses : feuilles. J’ai des sosies dangereux (2) : lisez ma fiche avant de passer à table.'), lines.join('\n'));
+  assert.ok(lines.includes('🍽️ Partie consommée selon l’Anses : feuilles. J’ai des sosies toxiques (2) : lisez ma fiche avant de passer à table.'), lines.join('\n'));
   const cigue = card('Conium maculatum');
   cigue.confusions = await lookalikesOf(cigue.plant);
   cigue.verdict = dangerLevel({ statuses: cigue.plant.statuses, safety: { ansm: [{ list: 'B', parts: 'fruit' }] }, confusions: cigue.confusions });
@@ -53,7 +53,7 @@ test('bio : la sécurité d’abord — confusions, toxicité illisible, toxique
   assert.equal(unread[0], '⚠️ ' + UNREAD + '.', 'données illisibles : dites en premier');
   // The species named, but toxic by the ANSM (list B): never « à table ».
   const toxicEdible = bio(card('Allium ursinum', { verdict: dangerLevel({ safety: { ansm: [{ list: 'B' }] }, confusions: ail.confusions }) }), new Set());
-  assert.ok(toxicEdible.some(l => l === '⚠️ J’ai des sosies dangereux (2). Lisez ma fiche avant toute cueillette.'));
+  assert.ok(toxicEdible.some(l => l === '⚠️ J’ai des sosies toxiques (2). Lisez ma fiche avant toute cueillette.'));
   assert.ok(!toxicEdible.some(l => /à table|consommée/.test(l)));
   assert.ok(bio(card('Urtica dioica'), new Set()).length <= 4, 'quatre lignes au plus');
 });
@@ -90,7 +90,7 @@ test('bio : toute la flore — aucune plante toxique (danger ou mortelle) sans s
     for (const c of [{ plant: p, verdict: v }, { plant: p, verdict: v, confusions }].map(more => card(p.scientificName, more))) {
       const lines = bio(c, new Set());
       const where = `${p.scientificName} (${c.confusions ? 'avec' : 'sans'} ses confusions) :\n${lines.join('\n')}`;
-      assert.match(lines[0], /^(☠️|⚠️|🛡️|🍽️ .*sosies dangereux)/, where);
+      assert.match(lines[0], /^(☠️|⚠️|🛡️|🍽️ .*sosies toxiques)/, where);
       if (!own.length) continue;
       // Among the first three: what a card shows under its Wikipédia sentence (ma-deck.js).
       assert.ok(lines.slice(0, 3).some(l => l.startsWith('☠️')), where);
@@ -249,7 +249,7 @@ test('provenance : l’origine d’une entrée ou d’un lieu gardée, relue d�
   assert.deepEqual(back[1].properties.origin, { app: 'parcours' });
 });
 
-test('Recommencer : ce que la mini-application a fait et qui est encore le sien, et seulement cela', () => {
+test('Recommencer : ce que l’activité a fait et qui est encore le sien, et seulement cela', () => {
   const fav = col({ type: 'Feature', id: 'favorites', geometry: null, properties: { plants: [
     { plantId: 1, scientificName: 'A', origin: { app: 'rencontres' } }, { plantId: 2, scientificName: 'B' }, { plantId: 3, scientificName: 'C', origin: { app: 'cueillette' } },
     { plantId: 7, scientificName: 'G', from: { app: 'rencontres' } }] } });
@@ -282,13 +282,14 @@ test('Recommencer : ce que la mini-application a fait et qui est encore le sien,
   const parcours = defineMiniApp({ id: 'parcours', title: 'Parcours botanique', icon: 'geo-alt', exit: { label: 'Quitter' }, columns: [{ id: 'main', base: 'fill', min: 300, rank: 1 }],
     owns: { made: { label: 'le parcours en cours', kept: ['Votre parcours enregistré dans Mes plantes est conservé.', 'Vos {n} parcours enregistrés dans Mes plantes sont conservés.'] } },
     steps: [{ id: 'start', kind: 'start', label: 'Départ', start: () => ({}) }] });
-  assert.deepEqual(replayItems(parcours, M.madeBy(all, 'parcours')), { gone: ['le parcours en cours « Chemin » (2 plantes)', 'la partie en cours'],
+  assert.deepEqual(replayItems(parcours, M.madeBy(all, 'parcours')), { gone: ['le parcours en cours « Chemin » (2 plantes)', 'l’activité en cours'],
     kept: ['Votre parcours enregistré dans Mes plantes est conservé.'] });
   assert.deepEqual(replayItems(parcours, { favorites: [], collections: [], kept: { favorites: 0, collections: 3 } }).kept, ['Vos 3 parcours enregistrés dans Mes plantes sont conservés.']);
-  const meet = defineMiniApp({ ...parcours, id: 'rencontres', title: 'Rencontres', owns: {} });
+  // A game says « la partie en cours » (its owns.label); an activity that says nothing, « l’activité en cours ».
+  const meet = defineMiniApp({ ...parcours, id: 'rencontres', title: 'Rencontres', owns: { label: 'la partie en cours' } });
   assert.deepEqual(replayItems(meet, { favorites: [fav.properties.plants[0], fav.properties.plants[0]], collections: [], kept: { favorites: 0, collections: 0 } }),
     { gone: ['2 favoris ajoutés par Rencontres', 'la partie en cours'], kept: [] });
-  // No game: its session as it says it (Orchidées de Mirabel: its circle and its filters).
+  // Its session as it says it (Orchidées de Mirabel: its circle and its filters).
   const site = defineMiniApp({ ...parcours, id: 'orchidees', title: 'Orchidées', owns: { label: 'le cercle et les filtres choisis' } });
   assert.deepEqual(replayItems(site, { favorites: [], collections: [], kept: { favorites: 0, collections: 0 } }), { gone: ['le cercle et les filtres choisis'], kept: [] });
 });
@@ -308,7 +309,7 @@ test('avant les origines : le parcours en cours et les vides tagués ; les parco
   assert.equal(by.m, undefined, 'un lieu à soi n’est pas tagué');
 });
 
-test('runtime : « Rejouer » ne laisse rien derrière lui, comme jamais ouverte', async () => {
+test('runtime : « Recommencer » ne laisse rien derrière lui, comme jamais ouverte', async () => {
   localStorage.clear();
   const m = defineMiniApp({ id: 'cueillette-t', title: 'Cueillette', icon: 'leaf', exit: { label: 'Quitter' }, columns: [{ id: 'main', base: 'fill', min: 300, rank: 1 }],
     context: { point: { init: null, persist: true }, matches: { init: [], persist: true } },

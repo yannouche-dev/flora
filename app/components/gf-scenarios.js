@@ -1,6 +1,6 @@
 // @ts-check
-// The film icon of the header (and of a mini-app's bar): the launcher. Its dialog holds the list of the ways to play
-// (gf-launcher, the same list as the Découvrir tab's page): the mini-apps. A mini-app is played again from its own ⋯.
+// The film icon of the header (and of an activity's bar): Découvrir in a dialog — the same list as the Découvrir tab
+// (gf-launcher), the activities. An activity is started again from its own ⋯ (« Recommencer »).
 
 import { LitElement, html, css } from 'lit';
 import { icon } from '../core/icons.js';
@@ -26,7 +26,7 @@ export class GfScenarios extends LitElement {
 
   get #dialog() { return /** @type {HTMLDialogElement | null} */ (this.renderRoot.querySelector('dialog')); }
 
-  /** The scenarios, shown (also from elsewhere: « Quitter … : autres scénarios »), as they are now. */
+  /** Découvrir, shown (also from elsewhere: « Autres activités »), as it is now. */
   async open() {
     const list = /** @type {import('./gf-launcher.js').GfLauncher | null} */ (this.renderRoot.querySelector('gf-launcher'));
     list?.requestUpdate();
@@ -35,12 +35,12 @@ export class GfScenarios extends LitElement {
   }
 
   render() {
-    return html`<button class="open" type="button" title="Scénarios : des façons de découvrir la flore" aria-label="Scénarios"
+    return html`<button class="open" type="button" title="Découvrir : toutes les activités" aria-label="Découvrir"
         @click=${() => this.open()}>${icon('camera-reels')}</button>
-      <dialog aria-label="Scénarios" @click=${(/** @type {Event} */ e) => { if (e.target === e.currentTarget) this.#dialog?.close(); }}>
-        <div class="head">${icon('camera-reels')}<h2>Scénarios</h2>
+      <dialog aria-label="Découvrir" @click=${(/** @type {Event} */ e) => { if (e.target === e.currentTarget) this.#dialog?.close(); }}>
+        <div class="head">${icon('camera-reels')}<h2>Découvrir</h2>
           <button class="icon-btn" type="button" aria-label="Fermer" @click=${() => this.#dialog?.close()}>${icon('x-lg')}</button></div>
-        <p class="intro">Des façons de découvrir la flore, chacune avec les outils qu’il lui faut. On peut en changer quand on veut.</p>
+        <p class="intro">Des activités pour découvrir la flore, chacune avec les outils qu’il lui faut. On peut en changer quand on veut.</p>
         <gf-launcher @launched=${() => this.#dialog?.close()}></gf-launcher>
       </dialog>`;
   }

@@ -64,7 +64,7 @@ async function toTheEnd(page, way) {
 test.describe('premier lancement', () => {
   test.use({ firstVisit: true });
 
-  test('fin de la découverte, la science : rien ne change sans un bouton ; « Passer en mode Scientifique » ne change que le mode', async ({ app, page }) => {
+  test('fin des premiers pas, la science : rien ne change sans un bouton ; « Passer en mode Scientifique » ne change que le mode', async ({ app, page }) => {
     await app.open('#/app/rencontres');
     // Épuré, whose sheet folds « Médias » by default: the guided panes show it all the same, the mode's layout untouched.
     await page.evaluate(async () => (await import('/app/core/store.js')).setMode('epure'));
@@ -107,7 +107,7 @@ test.describe('premier lancement', () => {
     await expect.poll(async () => (await kept(page, 'rencontres'))?.ctx.guided).toBe(false);
   });
 
-  test('fin de la découverte, la cueillette : « Garder tel quel » ne change rien ; « Allumer le mode cueillette » ne change que lui', async ({ app, page }) => {
+  test('fin des premiers pas, la cueillette : « Garder tel quel » ne change rien ; « Allumer le mode cueillette » ne change que lui', async ({ app, page }) => {
     await app.open('#/app/rencontres');
     const before = await whole(app);
     const g = await toTheEnd(page, 'harvest');
@@ -141,7 +141,7 @@ test.describe('premier lancement', () => {
   });
 
   for (const way of /** @type {const} */ (['science', 'harvest'])) {
-    test(`fin de la découverte au clavier (${way}) : la proposition prend le focus ; « La flore complète » sans y toucher ne change rien`, async ({ app, page }) => {
+    test(`fin des premiers pas au clavier (${way}) : la proposition prend le focus ; « La flore complète » sans y toucher ne change rien`, async ({ app, page }) => {
       await app.open('#/app/rencontres');
       const before = await whole(app);
       const g = await toTheFork(page, way);
@@ -230,7 +230,7 @@ test.describe('premier lancement', () => {
     await expect.poll(async () => (await kept(page, 'rencontres'))?.ctx.leftOut).toBe(null);
   });
 
-  test('Rencontres guidée ou non : décidé au début de la partie, gardé jusqu’à « Rejouer »', async ({ app, page }) => {
+  test('Rencontres guidée ou non : décidé au début de la partie, gardé jusqu’à « Recommencer »', async ({ app, page }) => {
     await app.open('#/app/rencontres');
     await page.getByRole('button', { name: 'Autour de moi' }).click();
     await expect.poll(() => hash(page)).toBe('#/app/rencontres/map');
@@ -253,10 +253,10 @@ test.describe('premier lancement', () => {
     await expect(page.locator('ma-guided')).toHaveCount(1);
     await expect(page.locator('ma-around-list')).toHaveCount(0);
 
-    // « Rejouer »: decided anew — the first steps over, the game is no longer guided.
+    // « Recommencer »: decided anew — the first steps over, the game is no longer guided.
     await box.locator('.more summary').click();
-    await box.locator('.menu').getByRole('button', { name: 'Rejouer' }).click();
-    await box.getByRole('dialog').getByRole('button', { name: 'Rejouer' }).click();
+    await box.locator('.menu').getByRole('button', { name: 'Recommencer' }).click();
+    await box.getByRole('dialog').getByRole('button', { name: 'Recommencer' }).click();
     await expect.poll(() => hash(page)).toBe('#/app/rencontres/start');
     await page.getByRole('button', { name: 'Autour de moi' }).click();
     await expect(page.locator('ma-distance')).toHaveCount(1);
@@ -273,9 +273,9 @@ test.describe('premier lancement', () => {
     await page.getByRole('button', { name: 'Tout montrer maintenant' }).click();
     expect((await discover(page)).done).toBe(true);
 
-    // « Reprendre »: the map and its distance, then the list — the guided way ended with the first steps.
+    // « Continuer »: the map and its distance, then the list — the guided way ended with the first steps.
     await app.go('#/app/rencontres');
-    await page.getByRole('group', { name: 'Reprendre' }).getByRole('button').click();
+    await page.getByRole('group', { name: 'Continuer' }).getByRole('button').click();
     await expect.poll(() => hash(page)).toBe('#/app/rencontres/map');
     await expect(page.locator('ma-distance')).toHaveCount(1);
     await expect(page.locator('ma-guided')).toHaveCount(0);
@@ -312,7 +312,7 @@ test.describe('premier lancement', () => {
     await expect(page.locator('ma-around-list')).toHaveCount(0);
   });
 
-  test('les plantes vues comptent dans toutes les mini-applications : un parcours noté, une fiche ouverte de Faux amis', async ({ app, page }) => {
+  test('les plantes vues comptent dans toutes les activités : un parcours noté, une fiche ouverte de Faux amis', async ({ app, page }) => {
     await app.open('#/app/parcours');
     const trail = page.locator('gf-miniapp');
     await trail.locator('.go').click();
@@ -327,7 +327,7 @@ test.describe('premier lancement', () => {
   });
 });
 
-test('⋯ « Masquer les étapes » : pour cette mini-application seulement, le réglage de toutes inchangé ; « Rejouer » l’oublie', async ({ app, page }) => {
+test('⋯ « Masquer les étapes » : pour cette activité seulement, le réglage de toutes inchangé ; « Recommencer » l’oublie', async ({ app, page }) => {
   await app.open('#/app/cueillette');
   const box = page.locator('gf-miniapp');
   await expect(box.locator('ma-steps')).toHaveCount(1);
@@ -335,7 +335,7 @@ test('⋯ « Masquer les étapes » : pour cette mini-application seulement, le 
   const item = box.locator('.menu').getByRole('button', { name: /^Masquer les étapes/ });
   // Its scope said on screen, under its label (a touch screen shows no tooltip).
   await expect(item.locator('small')).toBeVisible();
-  await expect(item.locator('small')).toHaveText('Pour cette mini-application seulement');
+  await expect(item.locator('small')).toHaveText('Pour cette activité seulement');
   await item.click();
   await expect(box.locator('ma-steps')).toHaveCount(0);
   expect(await stored(page, 'geoflora.showSteps')).toBe(null);
@@ -346,16 +346,16 @@ test('⋯ « Masquer les étapes » : pour cette mini-application seulement, le 
   await app.go('#/app/mosaique');
   await expect(box.locator('ma-steps')).toHaveCount(1);
   await app.go('#/settings');
-  await expect(page.getByRole('radio', { name: /Pendant la découverte/ })).toBeChecked();
-  await expect(page.getByText('Le menu ⋯ d’une mini-application en décide pour elle seule, le temps de sa partie.')).toBeVisible();
+  await expect(page.getByRole('radio', { name: /La première fois/ })).toBeChecked();
+  await expect(page.getByText('Le menu ⋯ d’une activité en décide pour elle seule, jusqu’à ce qu’on la recommence.')).toBeVisible();
   await app.go('#/app/cueillette');
   await expect(box.locator('.start')).toBeVisible();
   await expect(box.locator('ma-steps')).toHaveCount(0);
 
-  // « Rejouer »: forgotten with the game.
+  // « Recommencer »: forgotten with the rest of it.
   await box.locator('.more summary').click();
-  await box.locator('.menu').getByRole('button', { name: 'Rejouer' }).click();
-  await box.getByRole('dialog').getByRole('button', { name: 'Rejouer' }).click();
+  await box.locator('.menu').getByRole('button', { name: 'Recommencer' }).click();
+  await box.getByRole('dialog').getByRole('button', { name: 'Recommencer' }).click();
   await expect(box.locator('ma-steps')).toHaveCount(1);
   await expect.poll(() => kept(page, 'cueillette')).toBe(null);
   expect(await stored(page, 'geoflora.showSteps')).toBe(null);

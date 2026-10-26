@@ -507,8 +507,8 @@ export class GfSheetMap extends LitElement {
   get #gestures() {
     const c = this.config;
     if (!c.actions.create && !(c.actions.edit && this._spots.length)) return '';
-    return [c.actions.create ? 'Appui long sur la carte : un repère à confirmer, son adresse, son altitude, créer un endroit avec cette plante' : '',
-      c.actions.edit && c.places && this._spots.length ? '✎ : déplacer mes plants' : '',
+    return [c.actions.create ? 'Appui long sur la carte : un repère à confirmer, son adresse, son altitude, créer un lieu avec cette plante' : '',
+      c.actions.edit && c.places && this._spots.length ? '✎ : déplacer mes plantes notées' : '',
       'les couches : fond et couches IGN de cette carte'].filter(Boolean).join(' · ');
   }
 
@@ -644,9 +644,9 @@ export class GfSheetMap extends LitElement {
           @click=${() => this.#set({ subject: 'plant' })}>${icon('flower1')} Cette plante</button>
         <button type="button" data-subject="results" aria-pressed=${String(c.subject === 'results')} title="Les plantes des résultats (la recherche et ses filtres) : mes lieux où elles sont"
           @click=${() => this.#set({ subject: 'results' })}>${icon('funnel')} Les résultats <small>${count}</small></button>
-        ${places.length ? html`<select aria-label="Une collection" data-subject="collection" class=${c.subject === 'collection' ? 'on' : ''}
+        ${places.length ? html`<select aria-label="Une liste ou un lieu" data-subject="collection" class=${c.subject === 'collection' ? 'on' : ''}
           @change=${(/** @type {any} */ e) => e.target.value && this.#set({ subject: 'collection', collection: e.target.value })}>
-          <option value="" ?selected=${c.subject !== 'collection'}>Une collection…</option>
+          <option value="" ?selected=${c.subject !== 'collection'}>Une liste ou un lieu…</option>
           ${places.map((/** @type {any} */ x) => html`<option value=${x.id} ?selected=${c.subject === 'collection' && c.collection === x.id}>${x.kind === 'place' ? '📍 ' : ''}${x.name} (${x.count})</option>`)}
         </select>` : nothing}
       </div>
@@ -699,7 +699,7 @@ export class GfSheetMap extends LitElement {
     if (c.places && (this._spots.length || !this.#aboutPlant)) {
       const chosen = this._collections?.find((/** @type {any} */ x) => x.id === c.collection);
       lines.push({ text: c.subject === 'results' ? `Mes lieux avec des plantes des résultats (${this._spots.length})`
-        : c.subject === 'collection' ? `${chosen?.kind === 'place' ? 'Le lieu' : 'Mes lieux de la collection'} « ${chosen?.name || '…'} » (${this._spots.length})`
+        : c.subject === 'collection' ? `${chosen?.kind === 'place' ? 'Le lieu' : 'Mes lieux de la liste'} « ${chosen?.name || '…'} » (${this._spots.length})`
         : `Mes lieux (${this._spots.length})` });
     }
     // Its observations around me, drawn alike whatever their source (while shown: #occurrences).

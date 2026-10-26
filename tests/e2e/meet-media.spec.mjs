@@ -2,7 +2,7 @@
 // the viewer of the sheet's « Médias » (kit/ma-meet-media.js) — with a line on how it works: beside the deck on a wide
 // screen (a pane, its separator), full screen over it on a phone (Échap closes it, the focus back on the deck). The
 // plant shown is the one chosen: each later heart chooses its own (a phone: no screen over the deck again, « Ses
-// photos » shows it); passes change nothing. The match undone (↺): closed, and brought by the next one; « Rejouer »:
+// photos » shows it); passes change nothing. The match undone (↺): closed, and brought by the next one; « Recommencer »:
 // brought again, the pane's width forgotten. The « Photos en ligne » module off, or a plant without photos: nothing.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 
@@ -133,7 +133,7 @@ test('↺ sur le premier match ferme ses photos ; le match suivant les présente
   await introduced(page, phone, PISSENLIT);
 });
 
-test('« Rejouer » : le premier match présente de nouveau ses photos, la largeur du volet oubliée', async ({ app, page, isMobile }) => {
+test('« Recommencer » : le premier match présente de nouveau ses photos, la largeur du volet oubliée', async ({ app, page, isMobile }) => {
   const phone = Boolean(isMobile);
   await app.open('#/app/rencontres');
   await toCards(page);
@@ -148,8 +148,8 @@ test('« Rejouer » : le premier match présente de nouveau ses photos, la large
   }
   const box = page.locator('gf-miniapp');
   await box.locator('.more summary').click();
-  await box.locator('.menu').getByRole('button', { name: 'Rejouer' }).click();
-  await box.getByRole('dialog').getByRole('button', { name: 'Rejouer' }).click();
+  await box.locator('.menu').getByRole('button', { name: 'Recommencer' }).click();
+  await box.getByRole('dialog').getByRole('button', { name: 'Recommencer' }).click();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/app/rencontres/start');
   expect(await page.evaluate(() => localStorage.getItem('geoflora.app.rencontres.media'))).toBe(null);
   await toCards(page);

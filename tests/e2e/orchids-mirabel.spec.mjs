@@ -87,14 +87,14 @@ test('le départ, puis la carte : la colline de Mirabel à 500 m, seules les orc
   await app.open('#/discover');
   const before = await footprint(page);
   const [mode, harvest] = [await app.state('mode'), await app.state('harvestMode')];
-  await page.locator('gf-launcher[page]').getByRole('button', { name: 'Jouer : Orchidées de Mirabel' }).click();
+  await page.locator('gf-launcher[page]').getByRole('button', { name: 'Commencer : Orchidées de Mirabel', exact: true }).click();
   await expect.poll(() => hash(page)).toBe('#/app/orchidees/start');
   await expect(page.getByRole('heading', { level: 1, name: 'Les orchidées de la colline de Mirabel' })).toBeVisible();
   await expect(page.locator('gf-miniapp .start .lead')).toHaveText('À Ménétrol (Puy-de-Dôme), toutes les orchidées observées, sur la carte ; touchez-en une : ses photos et l’essentiel.');
   await expect(page.locator('gf-miniapp .start .note')).toHaveText('Observations d’iNaturalist et de GBIF ; votre position n’est pas demandée.');
   await expect(page.locator('gf-miniapp .start .go')).toHaveText('Commencer');
-  await expect(page.locator('gf-miniapp .start .leave')).toHaveText('Quitter les orchidées : autres scénarios');
-  await expect(page.locator('gf-miniapp .quit')).toHaveAttribute('aria-label', 'Quitter les orchidées');
+  await expect(page.locator('gf-miniapp .start .leave')).toHaveText('Autres activités');
+  await expect(page.locator('gf-miniapp .quit')).toHaveAttribute('aria-label', 'Quitter l’activité');
   await begin(page);
 
   // The screen's title in focus; how many, said; the circle and its ten observations (two beyond it left out, and two
@@ -206,7 +206,7 @@ test('une observation touchée : sa fiche simple, le focus dedans — « Médias
   const sheet = page.locator('ma-orchids ma-plant-sheet .sheet');
   await expect(sheet).toBeVisible();
   await expect(sheet.locator('.sheet-head strong')).toHaveText('Traunsteinère globuleuse');
-  await expect(sheet.locator('.sheet-head button')).toHaveAttribute('aria-label', 'Retour à la carte');
+  await expect(sheet.locator('.sheet-head button')).toHaveAttribute('aria-label', 'Fermer la fiche');
   // The focus in it, on what it shows (named after its plant); on a phone, the screen under it out of reach.
   await expect(sheet.locator('.simple')).toBeFocused();
   await expect(sheet.locator('.simple')).toHaveAttribute('aria-label', 'Traunsteinère globuleuse : médias et l’essentiel');
@@ -327,7 +327,7 @@ test('le rayon d’arrêt en arrêt ; un appui long recentre le cercle, « Reven
   else await page.mouse.click(x, y, { button: 'right' });
   const card = map.locator('gf-point-card');
   await expect(card.getByRole('heading', { name: 'Chercher autour d’ici ?' })).toBeVisible();
-  await expect(card.getByRole('link', { name: 'Créer un endroit ici' })).toHaveCount(0);
+  await expect(card.getByRole('link', { name: 'Créer un lieu ici' })).toHaveCount(0);
   await page.keyboard.press('Enter');
   await expect(mapSaid(map)).toContainText('Repère posé : la zone s’y centre.');
   await expect(screen(page).locator('.where')).toContainText('Autour du point choisi sur la carte');

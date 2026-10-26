@@ -1,6 +1,6 @@
 // @ts-check
-// Faux amis: where a game kept on this device stands — the card to answer, a game under way —, for the list of the
-// ways to play (app/miniapps/index.js, at every launch) as for the game itself; the rest of the game is in
+// Faux amis: where a game kept on this device stands — the card to answer, a game under way —, for the list of
+// Découvrir (app/miniapps/index.js, at every launch) as for the game itself; the rest of the game is in
 // faux-amis.js, loaded with the mini-app. Pure: tested under Node (tests/unit/faux-amis.test.mjs).
 
 /** @typedef {{ cards?: ({ answer?: string | null } | null)[] }} KeptGame */

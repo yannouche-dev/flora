@@ -64,7 +64,7 @@ test('parse : chaque écran de l’app et ses paramètres', () => {
   assert.equal(parse('#/plant/abc').name, 'not-found');
 });
 
-test('une mini-application : l’adresse dit tout l’écran (la plante, la vue, l’image, la fiche), dans un ordre', () => {
+test('une activité : l’adresse dit tout l’écran (la plante, la vue, l’image, la fiche), dans un ordre', () => {
   // The whole screen of Rencontres: the plant chosen, the view of its list, the image shown, its sheet open.
   assert.deepEqual(parse('#/app/rencontres/cards?p=125677&v=matchs&m=14&fiche=1'),
     { name: 'app', id: 'rencontres', step: 'cards', plant: 125677, view: 'matchs', media: 14, sheet: true });

@@ -8,7 +8,7 @@ const ROUTES = ['#/', '#/?q=ortie', `#/plant/${plantId('Urtica dioica')}`, '#/di
 
 test('chaque écran s’ouvre et montre quelque chose (visiteur habitué)', async ({ app, page }) => {
   await app.open('#/');
-  expect(await app.tabs()).toEqual(expect.arrayContaining(['Découvrir', 'Flore', 'Mes plantes', 'Carte']));
+  expect(await app.tabs()).toEqual(app.phone ? ['Découvrir', 'Flore', 'Carte', 'Mes plantes', 'Réglages'] : ['Découvrir', 'Flore', 'Carte', 'Mes plantes']);
   for (const route of ROUTES) {
     await app.go(route);
     await expect.poll(() => page.evaluate(() => {
@@ -40,13 +40,28 @@ test('aucun composant ne masque focus(), blur() ni click()', async ({ app, page 
   expect(broken).toEqual([]);
 });
 
+test('les onglets, dans le même ordre sur téléphone et sur ordinateur : Découvrir · Flore · Carte · Mes plantes', async ({ app }) => {
+  await app.open('#/');
+  expect(await app.tabs()).toEqual(['Découvrir', 'Flore', 'Carte', 'Mes plantes', ...(app.phone ? ['Réglages'] : [])]);
+});
+
+test.describe('premiers pas : les onglets venus, dans l’ordre', () => {
+  test.use({ firstVisit: true });
+  test.beforeEach(({ context }) => context.addInitScript(() => localStorage.setItem('geoflora.discover', JSON.stringify({ done: false, unlocked: ['mine', 'map'] }))));
+
+  test('Mes plantes venue avant la Carte : Découvrir · Carte · Mes plantes', async ({ app }) => {
+    await app.open('#/');
+    expect(await app.tabs()).toEqual(['Découvrir', 'Carte', 'Mes plantes', ...(app.phone ? ['Réglages'] : [])]);
+  });
+});
+
 test.describe('premier lancement', () => {
   test.use({ firstVisit: true });
 
   test('Découvrir accueille, les autres onglets viennent ensuite', async ({ app, page }) => {
     await app.open('#/');
     await expect(page.getByRole('heading', { level: 1, name: 'Découvrir' })).toBeVisible();
-    await expect(page.locator('gf-launcher li[data-app="rencontres"]').getByRole('button', { name: 'Jouer' })).toBeVisible();
+    await expect(page.locator('gf-launcher li[data-app="rencontres"]').getByRole('button', { name: 'Commencer : Rencontres', exact: true })).toBeVisible();
     expect(await app.tabs()).toContain('Découvrir');
     expect(await app.tabs()).not.toContain('Flore');
     // An address of the flora still opens it (a shared link): the discovery never locks one out.

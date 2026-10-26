@@ -1,13 +1,13 @@
 // @ts-check
 // Rencontres: the plants observed around you, one card at a time — right if it pleases you, left if not. Its start
-// (« Autour de moi », a commune, « Reprendre » the place kept), how far to look over the map, then the cards, the
+// (« Autour de moi », a commune, « Continuer » at the place kept), how far to look over the map, then the cards, the
 // matches and all of them. One plant on the screen, the plant chosen (?p=): the map, its photos and its sheet show
 // it (kit/around.js#chosenContext), the address says the whole screen (router.js). A game begun during the first steps
 // of the app plays its guided way: the map, the cards and the plant's panes in one layout transformed step by step,
 // under a steps bar of its own (ownBar) — decided as the game begins, kept until its steps end (« La flore complète »,
-// or the first steps ended elsewhere) or « Rejouer » (kit/around.js#guidedWay).
+// or the first steps ended elsewhere) or « Recommencer » (kit/around.js#guidedWay).
 // Built from the kit (app/miniapp/kit): ma-guided in its guided way, else ma-distance then ma-around-list.
-// Owns — everything « Rejouer » / « Recommencer » empties, here and in the other tabs, as if never opened:
+// Owns — everything « Recommencer » empties, here and in the other tabs, as if never opened:
 //  - geoflora.app.rencontres.state: its place and name, distance, cards swiped right (this game's matches) and left,
 //    the step it was left at, the plant chosen, the photos its first match brought (the pane closed: kit/around.js),
 //    its way (guided or not), the plant's panes its guided steps built and the blocks they left out, a module off
@@ -41,8 +41,9 @@ export default defineMiniApp({
   scene: 'meet',
   pitch: 'Les plantes observées autour de vous, une carte à la fois : à droite si elle vous plaît, à gauche sinon.',
   uses: ['inaturalist'],
-  exit: { label: 'Quitter Rencontres' },
-  owns: { keys: [config.storageKeys.discoverLayout, 'geoflora.app.rencontres.media', 'geoflora.app.rencontres.sheet'], reset: () => { replayMeet(); forgetGame('rencontres'); return forgetMadeBy('rencontres'); } },
+  exit: { label: 'Quitter l’activité' },
+  owns: { keys: [config.storageKeys.discoverLayout, 'geoflora.app.rencontres.media', 'geoflora.app.rencontres.sheet'], reset: () => { replayMeet(); forgetGame('rencontres'); return forgetMadeBy('rencontres'); },
+    label: 'la partie en cours' },
   shared: ['Mes plantes (sauf les favoris ajoutés par ses matchs)', 'lieux', 'premiers pas de l’application', 'réglages'],
   // One plant on the screen, the plant chosen (?p=): the map, the photos its first match brought and the sheet show it
   // (kit/around.js#chosenContext); its way, and the panes of its guided way (guidedContext).

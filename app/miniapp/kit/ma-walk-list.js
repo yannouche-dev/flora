@@ -76,7 +76,7 @@ export class MaWalkList extends LitElement {
         aria-label=${`${name}${n > 1 ? `, ${n} fois` : ''} : ${sel ? 'ne plus la montrer' : 'la montrer sur la carte'}`} @click=${() => s.select(sel ? null : g.plantId)}>
         <gf-thumb plant-id=${g.plantId} size="44"></gf-thumb>
         <span class="t"><b>${name}</b>${e.vernacularName ? html`<i>${e.scientificName}</i>` : nothing}</span>
-        ${n > 1 ? html`<span class="n" title=${n + ' occurrences dans le parcours'}>× ${n}</span>` : nothing}
+        ${n > 1 ? html`<span class="n" title=${`Notée ${n} fois dans le parcours`}>× ${n}</span>` : nothing}
       </button>
     </li>`;
   }

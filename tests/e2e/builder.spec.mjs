@@ -51,6 +51,19 @@ test.describe('un grand écran', () => {
     await expect(cellAt(page, '0').locator('gf-map')).toHaveCount(1);
   });
 
+  test('« Changer de modèle » ramène au départ ; Retour rend la grille', async ({ app, page }) => {
+    await app.open(builder('[map,results]'));
+    const before = await grid(page);
+    const link = page.locator('gf-builder .top').getByRole('link', { name: 'Changer de modèle' });
+    await expect(link).toHaveAttribute('title', 'Partir d’une autre grille ou d’un autre modèle');
+    await expect(page.locator('gf-builder .top').getByRole('link', { name: 'Recommencer' })).toHaveCount(0);
+    await link.click();
+    await expect.poll(() => hash(page)).toBe('#/builder');
+    await expect(page.locator('gf-builder a[data-grid]')).toHaveCount(3);
+    await page.goBack();
+    await expect.poll(() => grid(page)).toBe(before);
+  });
+
   test('les anciens liens et la carte de Réglages', async ({ app, page }) => {
     await app.open('#/builder/trois');
     await expect.poll(() => hash(page)).toBe('#/builder?g=[slot@30,slot@35,slot]');

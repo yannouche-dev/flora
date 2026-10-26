@@ -53,7 +53,7 @@ function plantFor(taxon) {
 
 /** « Titre — Anses et Centres antipoison, 2025 »: what it is, who said it, and when. @param {import('../../core/lookalikes.js').Source} s */
 const sourceLine = s => `${s.title} — ${s.publisher}, ${String(s.date).slice(0, 4)}`;
-/** Where the width of a plant's sheet beside the recap is kept (the manifest's owns.keys: « Rejouer » forgets it). */
+/** Where the width of a plant's sheet beside the recap is kept (the manifest's owns.keys: « Recommencer » forgets it). */
 const SHEET_KEY = config.storageKeys.appPrefix + 'faux-amis.sheet';
 
 export class MaFauxAmis extends LitElement {
@@ -269,7 +269,7 @@ export class MaFauxAmis extends LitElement {
   render() {
     const c = this.c;
     if (!c || !this.app || !c.game) return nothing;
-    const sheet = typeof c.focus === 'number' ? html`<ma-plant-sheet .open=${c.focus} scoped layout-key=${SHEET_KEY} back="Retour au bilan"></ma-plant-sheet>` : nothing;
+    const sheet = typeof c.focus === 'number' ? html`<ma-plant-sheet .open=${c.focus} scoped layout-key=${SHEET_KEY}></ma-plant-sheet>` : nothing;
     // The file being read, or unreadable (said, never « nothing to fear »; « Réessayer » reads it again, the game kept).
     if (!c.lookalikes) return html`<div class="wrap"><h1 class="visually-hidden">Faux amis</h1><p class="state" role="status">Les cartes…</p></div>`;
     if (c.lookalikes.unread) return html`<div class="wrap"><section class="card-view">
@@ -361,7 +361,7 @@ export class MaFauxAmis extends LitElement {
       <p class="sos-line">${icon('exclamation-triangle-fill')}<span>${fr('Une plante avalée par erreur ?')} ${emergency()}.</span></p>
       <div class="acts">
         ${this.#againButton()}
-        <button class="link muted" type="button" @click=${() => this.app?.scenarios()}>${icon('camera-reels')} ${fr('Autres scénarios')}</button>
+        <button class="link muted" type="button" @click=${() => this.app?.scenarios()}>${icon('camera-reels')} ${fr('Autres activités')}</button>
       </div>
     </section>`;
   }

@@ -297,8 +297,8 @@ export class GfApp extends LitElement {
         <div class="side">${phone ? nothing : html`<nav class="tabs segmented" aria-label="Sections">
           <a href=${href.discover()} aria-current=${tab === 'discover' ? 'page' : 'false'}>Découvrir</a>
           ${tabShown('flore') ? html`<a href=${tabHref('flore', tab === 'flore')} aria-current=${route.name === 'search' || route.name === 'plant' ? 'page' : 'false'}>Flore</a>` : nothing}
-          ${tabShown('mine') ? html`<a href=${tabHref('mine', tab === 'mine')} aria-current=${['collections', 'spot', 'spot-new', 'shared'].includes(route.name) ? 'page' : 'false'}>Mes plantes</a>` : nothing}
           ${tabShown('map') ? html`<a href=${tabHref('map', tab === 'map')} aria-current=${route.name === 'map' ? 'page' : 'false'}>Carte</a>` : nothing}
+          ${tabShown('mine') ? html`<a href=${tabHref('mine', tab === 'mine')} aria-current=${['collections', 'spot', 'spot-new', 'shared'].includes(route.name) ? 'page' : 'false'}>Mes plantes</a>` : nothing}
         </nav>`}</div>
         <a class="brand" href=${href.search()} aria-label="GeoFlora — accueil">${brand}</a>
         <div class="side end">${phone ? html`<gf-scenarios class="phone-scenarios"></gf-scenarios>` : html`
@@ -334,8 +334,8 @@ export class GfApp extends LitElement {
   willUpdate() {
     const route = this.#router.route;
     this.toggleAttribute('boxed', route.name === 'app');
-    // The start page during the first steps is Découvrir's list: at its own address, so that a mini-app left
-    // (« Quitter », back to here) finds the list again, even once Flore — the start page then — has come.
+    // The start page during the first steps is Découvrir's list: at its own address, so that an activity left
+    // (« Quitter l’activité », back to here) finds the list again, even once Flore — the start page then — has come.
     if (route.name === 'search' && !tabShown('flore') && /^#?\/?$/.test(location.hash)) replaceView(href.discover());
   }
 
@@ -357,7 +357,7 @@ export class GfApp extends LitElement {
     if (storageError && customElements.get('gf-storage-error')) return html`<gf-storage-error .problem=${storageError}></gf-storage-error>`;
     if (storageError && !storageModuleFailed) loadStorageError().then(() => this.requestUpdate());
     return html`<div class="banner error" role=${storageError && !storageModuleFailed ? nothing : 'alert'}>${statusText}
-      ${restorePending() ? ' Vos collections et vos notes sont gardées dans la copie de secours : elles reviendront dès que la flore aura pu être téléchargée.' : ''}
+      ${restorePending() ? ' Vos plantes et vos notes sont gardées dans la copie de secours : elles reviendront dès que la flore aura pu être téléchargée.' : ''}
       <button class="link" type="button" @click=${() => location.reload()}>Recharger</button></div>`;
   }
 
@@ -370,7 +370,7 @@ export class GfApp extends LitElement {
     const close = html`<button class="link" type="button" @click=${() => store.set({ restore: { ...r, closed: true } })}>Fermer</button>`;
     if (!r.done) {
       return html`<div class="banner error">
-        <span role="alert">Vos collections et vos notes n’ont pas pu être remises depuis la copie de secours de cet appareil. Elles y restent,
+        <span role="alert">Vos plantes et vos notes n’ont pas pu être remises depuis la copie de secours de cet appareil. Elles y restent,
           gardées telles quelles : rechargez la page pour réessayer.</span>
         <button class="link" type="button" @click=${() => location.reload()}>Recharger</button>
         ${readBackup() ? html`<button class="link" type="button" @click=${() => downloadBackup()}>Télécharger la copie de secours</button>` : nothing}
@@ -394,7 +394,7 @@ export class GfApp extends LitElement {
       <button type="button" aria-label="Fermer" @click=${() => { this._unlocked = null; this.requestUpdate(); }}>${icon('x-lg')}</button></div>`;
   }
 
-  /** Découvrir: the list of the ways to play — the mini-apps, then the scenarios (gf-launcher, as in the launcher's dialog). */
+  /** Découvrir: the list of the activities (gf-launcher, as in Découvrir's dialog under the film icon). */
   #discover() { return html`<gf-launcher page></gf-launcher>`; }
 
   /** @param {import('../core/router.js').Route} route */
@@ -437,7 +437,7 @@ export class GfApp extends LitElement {
         // « Disposition libre » (app/layout): its layout and its state in the address.
         return html`<gf-layout .route=${route}></gf-layout>`;
       default:
-        return html`<div class="banner">Page introuvable. <a href=${href.search()}>Retour à la recherche</a></div>`;
+        return html`<div class="banner">Page introuvable. <a href=${href.search()}>Aller à la recherche</a></div>`;
     }
   }
 }

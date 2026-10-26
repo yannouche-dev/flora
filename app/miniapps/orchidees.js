@@ -12,7 +12,7 @@
 // list (ma-orchids; what is pure about them: kit/orchids.js). Départ › Carte, each one an address
 // (#/app/orchidees/map?p=<plant>&m=<image>); an address with a plant and no step opens the map, its sheet over it;
 // with the start named, the start screen, the same simple sheet over it (plantSheet).
-// Owns — everything « Rejouer » / « Recommencer » empties: its state (geoflora.app.orchidees.state: the circle's centre
+// Owns — everything « Recommencer » empties: its state (geoflora.app.orchidees.state: the circle's centre
 // and radius, the filters chosen, the step it was left at) and layout (runtime.js#replay), the width of a plant's
 // sheet beside the map (geoflora.app.orchidees.sheet). Shares: nothing of the user's but the settings (its modules,
 // « Photos en ligne »); the answers of the online services kept in cache.
@@ -62,7 +62,7 @@ async function orchidsAround(app, [point, radius, retry], signal) {
 
 /**
  * The first screen: « Commencer », to the map; both sources switched off, said in place of an error, the action off.
- * The way out, the other scenarios.
+ * The link at the bottom: the other activities (Découvrir over it).
  * @param {any} c @param {import('../miniapp/runtime.js').MiniApp} app @returns {import('../components/start-screen.js').StartSpec}
  */
 function start(c, app) {
@@ -75,7 +75,7 @@ function start(c, app) {
     primary: { icon: 'flower2', label: 'Commencer', disabled: off, run: () => { app.go('map'); } },
     error: off ? '« iNaturalist » et « GBIF » sont désactivés dans Réglages › Modules : Orchidées de Mirabel en a besoin.' : null,
     note: 'Observations d’iNaturalist et de GBIF ; votre position n’est pas demandée.',
-    exit: { icon: 'camera-reels', label: 'Quitter les orchidées : autres scénarios', run: () => { app.scenarios(); } }
+    exit: { icon: 'camera-reels', label: 'Autres activités', run: () => { app.scenarios(); } }
   };
 }
 
@@ -85,7 +85,7 @@ export default defineMiniApp({
   icon: 'flower2',
   scene: 'orchids',
   pitch: 'Les orchidées observées sur la colline de Mirabel, à Ménétrol : sur la carte, et la fiche de chacune d’un toucher.',
-  exit: { label: 'Quitter les orchidées' },
+  exit: { label: 'Quitter l’activité' },
   owns: { keys: ['geoflora.app.orchidees.sheet'], label: 'le cercle et les filtres choisis' },
   shared: ['réglages'],
   context: {
@@ -108,7 +108,7 @@ export default defineMiniApp({
   // A link to a plant (?p=, no step): the map and its simple sheet, not the start screen.
   resumeAt: c => typeof c.focus === 'number' ? 'map' : null,
   // A plant over the start screen (« Départ » with its sheet open, a link naming the start): its simple sheet too.
-  plantSheet: { simple: true, back: 'Fermer la fiche' },
+  plantSheet: { simple: true },
   data: { obs: { key: c => [c.point, c.radius, c.retry], load: orchidsAround, debounce: 250, into: 'obs' } },
   columns: [{ id: 'main', base: 'fill', min: 300, rank: 1, heavy: true, title: 'Orchidées' }],
   phone: { rows: [['main', '1fr']] },

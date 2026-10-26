@@ -191,7 +191,7 @@ export class GfBuilder extends LitElement {
     return html`<div class="wrap building">
       <div class="top">
         <h1>${icon('window-desktop')} Créer une app</h1>
-        <a class="btn" href=${href.builder()} title="Partir d’une autre grille ou d’un autre modèle">${icon('arrow-counterclockwise')} Recommencer</a>
+        <a class="btn" href=${href.builder()} title="Partir d’une autre grille ou d’un autre modèle">${icon('arrow-counterclockwise')} Changer de modèle</a>
         <span class="spacer"></span>
         <div class="segmented" role="group" aria-label="Aperçu">
           <button type="button" data-preview="computer" aria-pressed=${this._phone ? 'false' : 'true'} @click=${() => { this._phone = false; }}>${icon('window-desktop')} Ordinateur</button>

@@ -376,7 +376,7 @@ test.describe('la Disposition libre', () => {
   });
 });
 
-test.describe('les mini-applications', () => {
+test.describe('les activités', () => {
   test('l’étape « Jusqu’où part l’expédition ? » : le nombre d’observations dit, pas écrit ; la carte compacte', async ({ app, page, context }) => {
     await answerAround(context);
     await app.open('#/app/rencontres');
@@ -391,7 +391,7 @@ test.describe('les mini-applications', () => {
 
   test.describe('première visite', () => {
     test.use({ firstVisit: true });
-    test('Découvrir guidé : le panneau de lancement sans compte écrit (dit), puis le périmètre sans légende', async ({ app, page, context }) => {
+    test('les premiers pas de Rencontres : le panneau « Jusqu’où chercher » sans compte écrit (dit), puis le périmètre sans légende', async ({ app, page, context }) => {
       await answerAround(context);
       await app.open('#/app/rencontres');
       await page.getByRole('button', { name: 'Autour de moi' }).click();

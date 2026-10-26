@@ -11,7 +11,7 @@ import { MODULES, setModule } from '../core/modules.js';
 import { CATEGORIES, blockCategory, categoryOf } from '../core/categories.js';
 import { icon, modeIcon } from '../core/icons.js';
 import { pressDock } from '../core/dock-drag.js';
-import { exportGeoJSON, importGeoJSON, lastExportDate, listCollections, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
+import { exportGeoJSON, importGeoJSON, keptContents, lastExportDate, listCollections, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
 import {
@@ -34,6 +34,7 @@ export class GfSettings extends LitElement {
   static properties = {
     _saved: { state: true },
     _spotCount: { state: true },
+    _kept: { state: true },
     _spotMessage: { state: true },
     _report: { state: true },
     _personal: { state: true },
@@ -150,7 +151,10 @@ export class GfSettings extends LitElement {
   }
 
   async #countSpots() {
-    this._spotCount = (await listCollections().catch(() => [])).length;
+    const all = await listCollections().catch(() => []);
+    this._kept = keptContents(all);
+    // An empty favourites list alone is nothing to export or transfer.
+    this._spotCount = this._kept ? all.length : 0;
     this._report = await storageReport().catch(() => null);
   }
 
@@ -173,19 +177,19 @@ export class GfSettings extends LitElement {
       <details>
         <summary class="muted">Diagnostic du stockage</summary>
         <dl class="diag">
-          <dt>Base locale</dt><dd>version ${r.dbVersion ?? '?'} · ${r.collections} collection${r.collections > 1 ? 's' : ''}</dd>
+          <dt>Base locale</dt><dd>version ${r.dbVersion ?? '?'} · ${r.kept || 'vide'}</dd>
           <dt>Protégée</dt><dd>${r.persisted === null ? 'inconnu' : r.persisted ? 'oui' : 'non'}</dd>
           <dt>Espace utilisé</dt><dd>${mb(r.usage)} sur ${mb(r.quota)}</dd>
-          <dt>Copie de secours</dt><dd>${r.backupCount} collection${r.backupCount > 1 ? 's' : ''} · ${date(r.backupAt)}</dd>
+          <dt>Copie de secours</dt><dd>${r.backupKept || 'vide'} · ${date(r.backupAt)}</dd>
           <dt>Dernier export</dt><dd>${date(r.lastExport)}</dd>
-          <dt>Collections déjà créées ici</dt><dd>${r.markedHasSpots ? 'oui' : 'non'}</dd>
+          <dt>Listes ou lieux déjà créés ici</dt><dd>${r.markedHasSpots ? 'oui' : 'non'}</dd>
         </dl>
       </details>`;
   }
 
   async #export() {
-    const { count, cancelled } = await exportGeoJSON();
-    if (!cancelled) this._spotMessage = `${count} lieu${count > 1 ? 'x' : ''} exporté${count > 1 ? 's' : ''}.`;
+    const { kept, cancelled } = await exportGeoJSON();
+    if (!cancelled) this._spotMessage = kept ? `Exporté : ${kept}.` : 'Fichier exporté.';
   }
 
   /** @param {Event} event */
@@ -212,6 +216,8 @@ export class GfSettings extends LitElement {
     /** What the last export / import / reset did. @type {string | null} */
     this._layoutNote = null;
     this._spotCount = 0;
+    /** What Mes plantes holds, in words (keptContents). */
+    this._kept = '';
     /** @type {string | null} */
     this._spotMessage = null;
     /** @type {Awaited<ReturnType<typeof storageReport>> | null} */
@@ -249,9 +255,9 @@ export class GfSettings extends LitElement {
 
   async #transfer() {
     try {
-      const { url, count } = await transferLink({ personal: this._personal });
+      const { url, kept } = await transferLink({ personal: this._personal });
       const absolute = new URL(url, location.href).href;
-      const result = await share({ title: 'Mes plantes GeoFlora', text: `${count} collection${count > 1 ? 's' : ''} GeoFlora`, url });
+      const result = await share({ title: 'Mes plantes GeoFlora', text: kept ? `GeoFlora : ${kept}` : 'GeoFlora', url });
       this._transfer = (result === 'copied' ? 'Lien copié' : result === 'shared' ? 'Lien partagé' : result === 'cancelled' ? 'Partage annulé' : 'Lien prêt')
         + ` (${absolute.length.toLocaleString('fr-FR')} caractères). Ouvrez-le sur l’autre appareil puis touchez « Importer ».`
         + (absolute.length > GfSettings.LONG_LINK ? ' Lien long : certaines messageries le coupent, préférez le fichier.' : '');
@@ -276,7 +282,7 @@ export class GfSettings extends LitElement {
       <h2 id="modules">Modules : services en ligne</h2>
       <p class="muted">Tout fonctionne hors ligne avec la flore locale ; chaque module ajoute des données d’un service en ligne.
         Le choix vaut pour tout l’appareil, quel que soit le mode d’affichage : décoché, le service n’est jamais appelé et ses données
-        ne s’affichent nulle part (fiche plante, grille, cartes, mini-applications). Masquer un bloc de la fiche en mode King ne coupe pas son service.
+        ne s’affichent nulle part (fiche plante, grille, cartes, activités). Masquer un bloc de la fiche en mode King ne coupe pas son service.
         Ce que chacun reçoit, votre position surtout : <a href=${href.legal()}>Mentions légales et confidentialité</a>.</p>
       ${CATEGORIES.filter(c => MODULES.some(m => m.category === c.key)).map(c => html`
       <h3 class="category">${icon(c.icon)} ${c.label} <small>${c.question}</small></h3>
@@ -523,27 +529,31 @@ export class GfSettings extends LitElement {
       </div>`;
   }
 
-  /** « Premiers pas »: the guided start (Découvrir), on or over. */
+  /**
+   * « Premiers pas »: the guided start (Découvrir), on or over; « Revoir les premiers pas » empties the three
+   * activities around a place too (core/discover.js#restartDiscover), said under it.
+   */
   #firstSteps() {
     const on = discovering();
     return html`<h2 id="first-steps">Premiers pas</h2>
-      <p class="muted">${on ? 'La découverte guidée est en cours : les onglets arrivent à mesure qu’ils servent, avec une astuce à la fois.'
-        : 'Tous les outils sont là. La découverte guidée (Découvrir, une astuce à la fois, les onglets qui arrivent un à un) peut être refaite.'}</p>
+      <p class="muted">${on ? 'Les premiers pas sont en cours : les onglets arrivent à mesure qu’ils servent, avec une astuce à la fois.'
+        : 'Tous les outils sont là. Les premiers pas (Découvrir, une astuce à la fois, les onglets qui arrivent un à un) peuvent être revus.'}</p>
       <p>${on ? html`<button class="secondary" type="button" @click=${() => finishDiscover()}>Tout montrer maintenant</button>`
-        : html`<button class="secondary" type="button" @click=${() => { restartDiscover(); forgetHints(); openView('#/discover'); }}>Recommencer la découverte</button>`}</p>
+        : html`<button class="secondary" type="button" @click=${() => { restartDiscover(); forgetHints(); openView('#/discover'); }}>Revoir les premiers pas</button>`}</p>
+      ${on ? nothing : html`<p class="muted">Rencontres, Cueillette prudente et Mosaïque repartent alors de zéro ; vos favoris restent.</p>`}
       ${this.#showSteps()}`;
   }
 
-  /** « Afficher les étapes » of the mini-apps (Rencontres, Parcours…): while discovering one, always, never. */
+  /** « Afficher les étapes » of the activities (Rencontres, Parcours…): the first time each one is done, always, never. */
   #showSteps() {
     const value = this.#store.state.showSteps;
-    const choices = /** @type {const} */ ([['auto', 'Pendant la découverte', 'jusqu’à la fin d’une première partie'], ['on', 'Toujours', ''], ['off', 'Jamais', 'chaque mini-application s’ouvre en entier']]);
+    const choices = /** @type {const} */ ([['auto', 'La première fois', 'pour chaque activité, jusqu’à ce qu’on l’ait menée une fois à son terme'], ['on', 'Toujours', ''], ['off', 'Jamais', 'chaque activité s’ouvre en entier']]);
     return html`<fieldset class="steps-choice">
-      <legend>Afficher les étapes des mini-applications</legend>
+      <legend>Afficher les étapes des activités</legend>
       ${choices.map(([key, label, note]) => html`<label><input type="radio" name="show-steps" value=${key} .checked=${value === key}
         @change=${() => setShowSteps(key)} /> ${label}${note ? html` <small class="muted">(${note})</small>` : nothing}</label>`)}
     </fieldset>
-    <p class="muted">Le menu ⋯ d’une mini-application en décide pour elle seule, le temps de sa partie.</p>`;
+    <p class="muted">Le menu ⋯ d’une activité en décide pour elle seule, jusqu’à ce qu’on la recommence.</p>`;
   }
   /** « Disposition libre » (app/layout): the ready-made layouts, and one of one's own. */
   #layouts() {
@@ -592,7 +602,7 @@ export class GfSettings extends LitElement {
 
         <h2>Ma région</h2>
         <p class="muted">Pour savoir si une plante est protégée ou si sa cueillette est réglementée chez vous (statuts INPN).
-          Dans un endroit, c’est sa position GPS qui compte.</p>
+          Dans un lieu, c’est sa position GPS qui compte.</p>
         <div class="row">
           <select aria-label="Ma région" .value=${this._region || ''} @change=${e => this.#setRegion(e.target.value || null)}>
             <option value="">— Non précisée —</option>
@@ -608,7 +618,7 @@ export class GfSettings extends LitElement {
             @mode-change=${e => setMode(e.detail.mode || 'standard')}></gf-mode-switch>
           <strong>${modeLabel(this.#store.state.mode)}</strong>
         </p>
-        <p class="muted">Épuré : grandes photos et actions rapides (ajouter d’un geste à la collection courante). Standard : l’essentiel pour tous.
+        <p class="muted">Épuré : grandes photos et actions rapides (ajouter d’un geste à la liste ou au lieu en cours). Standard : l’essentiel pour tous.
           Scientifique : toutes les données, locales et distantes. La grille et la fiche plante ont aussi leur propre choix, qui revient au mode de l’application quand celui-ci change.</p>
         ${this.#modes()}
 
@@ -626,9 +636,9 @@ export class GfSettings extends LitElement {
 
         <h2>Mes plantes : favoris, listes et lieux</h2>
         <p class="muted">
-          ${this._spotCount} collection${this._spotCount > 1 ? 's' : ''} enregistrée${this._spotCount > 1 ? 's' : ''} sur cet appareil uniquement.
+          ${this._kept ? `Sur cet appareil uniquement : ${this._kept}.` : 'Rien d’enregistré sur cet appareil.'}
           ${(() => { const d = lastExportDate(); return d ? `Dernière sauvegarde : ${new Date(d).toLocaleDateString('fr-FR')}.` : 'Aucune sauvegarde pour l’instant.'; })()}
-          Exportez régulièrement : effacer les données du navigateur efface aussi vos collections.
+          Exportez régulièrement : effacer les données du navigateur efface aussi vos plantes.
         </p>
         <div class="row">
           <button class="primary" type="button" @click=${this.#export} ?disabled=${!this._spotCount}>Exporter (fichier GeoJSON)</button>
@@ -639,7 +649,7 @@ export class GfSettings extends LitElement {
         ${this._spotMessage ? html`<p class="muted" role="status">${this._spotMessage}</p>` : nothing}
 
         <h2>Transférer vers un autre appareil</h2>
-        <p class="muted">Un lien contient toutes vos collections (compressées, sans passer par un serveur). Ouvrez-le sur l’autre téléphone ou ordinateur : elles y sont ajoutées ou mises à jour. Gardé dans un e-mail ou une note, il sert aussi de sauvegarde.</p>
+        <p class="muted">Un lien contient toutes vos plantes (compressées, sans passer par un serveur). Ouvrez-le sur l’autre téléphone ou ordinateur : elles y sont ajoutées ou mises à jour. Gardé dans un e-mail ou une note, il sert aussi de sauvegarde.</p>
         <label class="switch">
           <input type="checkbox" .checked=${this._personal} @change=${e => { this._personal = e.target.checked; }} />
           <span>Inclure mes notes et journaux de récolte</span>

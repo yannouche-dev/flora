@@ -6,7 +6,7 @@ import { GeoController } from '../core/geo.js';
 import { href } from '../core/router.js';
 import {
   FAVORITES_ID, discardMissingBackup, distance, exportGeoJSON, formatDistance, inSeason, lastExportDate,
-  listCollections, missingFromBackup, placeTitle, plantCount, plantMarkers, restoreBackup, restorePending, restoreReason, soon, spotEvents, findEntry,
+  keptContents, listCollections, missingFromBackup, placeTitle, plantCount, plantMarkers, restoreBackup, restorePending, restoreReason, soon, spotEvents, findEntry,
   downloadBackup, readBackup } from '../core/collections.js';
 import { config } from '../config.js';
 import { StoreController, whenReady } from '../core/store.js';
@@ -250,7 +250,7 @@ export class GfCollections extends LitElement {
       this._error = null;
     } catch (error) {
       console.error(error);
-      this._error = 'Collections illisibles pour le moment : ' + /** @type {Error} */ (error).message;
+      this._error = 'Listes et lieux illisibles pour le moment : ' + /** @type {Error} */ (error).message;
     }
   }
 
@@ -289,7 +289,7 @@ export class GfCollections extends LitElement {
           ${has ? html`<span class="tools">
             <button class="icon-btn share" type="button" title="Partager" aria-label=${'Partager « ' + title + ' »'} @click=${() => this.#share(c)}>${icon('share')}</button>
             <a class="icon-btn flore" href=${href.inFlore(c.id)} title="Voir ses plantes dans Flore" aria-label=${'Voir les plantes de « ' + title + ' » dans Flore'}>${icon('leaf')}</a>
-            <a class="icon-btn open" href=${editor} title=${isPlace ? 'Ouvrir sur la Carte' : 'Ouvrir la collection'}
+            <a class="icon-btn open" href=${editor} title=${isPlace ? 'Ouvrir sur la Carte' : 'Ouvrir la liste'}
               aria-label=${(isPlace ? 'Ouvrir sur la Carte « ' : 'Ouvrir « ') + title + ' »'}>${icon(isPlace ? 'map' : 'pencil')}</a>
           </span>` : nothing}
         </div>
@@ -428,8 +428,8 @@ export class GfCollections extends LitElement {
   async #restore() {
     this._busy = true;
     try {
-      const n = await restoreBackup();
-      this._restoreNote = `${n} collection${n > 1 ? 's' : ''} restaurée${n > 1 ? 's' : ''}.`;
+      const { count, kept } = await restoreBackup();
+      this._restoreNote = count ? `Restauré : ${kept}.` : 'Rien à restaurer : tout est déjà là.';
     } catch (error) {
       this._restoreNote = 'Restauration impossible : ' + /** @type {Error} */ (error).message;
     } finally {
@@ -439,14 +439,14 @@ export class GfCollections extends LitElement {
   }
 
   async #discard() {
-    if (!confirm('Oublier ces collections ? La copie de secours ne les gardera plus.')) return;
+    if (!confirm('Oublier ce qui manque ici ? La copie de secours ne le gardera plus.')) return;
     await discardMissingBackup();
     this._missing = [];
   }
 
   async #export() {
     const { cancelled } = await exportGeoJSON();
-    if (!cancelled) this._note = 'Sauvegarde exportée. Gardez le fichier (Drive, e-mail…) : il permet de restaurer vos collections et les notes de vos fiches.';
+    if (!cancelled) this._note = 'Sauvegarde exportée. Gardez le fichier (Drive, e-mail…) : il permet de restaurer vos plantes et les notes de vos fiches.';
     this.requestUpdate();
   }
 
@@ -472,9 +472,11 @@ export class GfCollections extends LitElement {
    */
   #restoreNotice() {
     const missing = this._missing;
+    // Named after what they hold (keptContents: the favourites apart), then the lists and places by their names.
+    const named = missing.filter(c => c.id !== FAVORITES_ID);
     if (restorePending()) {
       if (this.#store.state.restore?.done === false) return html`<div class="notice card restore">
-        <p><strong>Vos collections et vos notes n’ont pas pu être remises</strong> depuis la copie de secours de cet appareil. Elles y restent,
+        <p><strong>Vos plantes et vos notes n’ont pas pu être remises</strong> depuis la copie de secours de cet appareil. Elles y restent,
           gardées telles quelles : rechargez la page pour réessayer.</p>
         <div class="row actions">
           <button class="primary" type="button" @click=${() => location.reload()}>Recharger</button>
@@ -483,13 +485,13 @@ export class GfCollections extends LitElement {
       </div>`;
       return html`<div class="notice card restore" role="status"><p>${restoreReason() === 'lost'
         ? 'Le navigateur avait vidé le stockage de GeoFlora'
-        : 'Stockage réparé'} : vos collections et vos notes reviennent de la copie de secours de cet appareil dès que la flore est enregistrée…</p></div>`;
+        : 'Stockage réparé'} : vos plantes et vos notes reviennent de la copie de secours de cet appareil dès que la flore est enregistrée…</p></div>`;
     }
     return html`
       ${missing.length ? html`
         <div class="notice card restore" role="alert">
-          <p><strong>${missing.length} collection${missing.length > 1 ? 's' : ''} retrouvée${missing.length > 1 ? 's' : ''} dans la copie de secours</strong>
-            de cet appareil : ${missing.slice(0, 4).map(c => placeTitle(c)).join(', ')}${missing.length > 4 ? '…' : ''}.</p>
+          <p><strong>Dans la copie de secours de cet appareil, mais plus ici :</strong> ${keptContents(missing)}${named.length
+            ? ` (${named.slice(0, 4).map(c => placeTitle(c)).join(', ')}${named.length > 4 ? '…' : ''})` : ''}.</p>
           <div class="row actions">
             <button class="primary" type="button" ?disabled=${this._busy} @click=${this.#restore}>Restaurer</button>
             <button class="link muted" type="button" @click=${this.#discard}>Oublier</button>
@@ -503,7 +505,7 @@ export class GfCollections extends LitElement {
     return html`
       ${!this._missing.length && this.#reminderDue() ? html`
         <div class="notice card backup">
-          <p><strong>Sauvegardez vos collections.</strong> Elles ne sont que sur cet appareil : le navigateur peut les effacer.
+          <p><strong>Sauvegardez vos plantes.</strong> Elles ne sont que sur cet appareil : le navigateur peut les effacer.
             ${lastExportDate() ? `Dernière sauvegarde le ${new Date(/** @type {string} */ (lastExportDate())).toLocaleDateString('fr-FR')}.` : 'Aucune sauvegarde pour l’instant.'}</p>
           <div class="row actions">
             <button class="primary" type="button" @click=${this.#export}>Exporter</button>
@@ -552,9 +554,9 @@ export class GfCollections extends LitElement {
       .sort((a, b) => a.d !== null && b.d !== null ? a.d - b.d : b.c.properties.updatedAt.localeCompare(a.c.properties.updatedAt));
     return html`<div class="wrap">
         ${phone ? html`<h1>Mes plantes</h1>` : nothing}
-        <p class="lead">Vos collections de plantes. Touchez une collection pour voir ses plantes, une plante pour sa fiche ; un endroit (une collection avec des coordonnées GPS) montre aussi sa carte. Tout reste sur cet appareil.</p>
+        <p class="lead">Vos favoris, listes et lieux. Touchez une liste pour voir ses plantes, une plante pour sa fiche ; un lieu (une liste avec des coordonnées GPS) montre aussi sa carte. Tout reste sur cet appareil.</p>
         <div class="new">
-          <a class="button" href=${href.newList()}>${icon('list-ul')} Nouvelle collection</a>
+          <a class="button" href=${href.newList()}>${icon('list-ul')} Nouvelle liste</a>
           <a class="button" href=${href.newSpot()} @click=${e => { e.preventDefault(); this.dispatchEvent(new CustomEvent('open-capture', { bubbles: true, composed: true })); }}>${icon('geo-alt-fill')} Noter une plante ici</a>
         </div>
         ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : nothing}
@@ -568,13 +570,13 @@ export class GfCollections extends LitElement {
             </a></div></li>`}
         </ul>
 
-        <h2 class="kicker">Collections</h2>
+        <h2 class="kicker">Listes</h2>
         ${lists.length ? html`<ul>${lists.map(c => this.#row(c, null))}</ul>`
-          : html`<p class="empty">Regroupez des plantes : « Mellifères », « À chercher cet été »… Ajoutez-y des coordonnées GPS pour en faire un endroit.</p>`}
+          : html`<p class="empty">Regroupez des plantes : « Mellifères », « À chercher cet été »… Ajoutez-y des coordonnées GPS pour en faire un lieu.</p>`}
 
-        <h2 class="kicker">Endroits${fix ? ' · par distance' : ''}</h2>
+        <h2 class="kicker">Lieux${fix ? ' · par distance' : ''}</h2>
         ${places.length ? html`<ul>${places.map(({ c, d }) => this.#row(c, d !== null ? formatDistance(d) : null))}</ul>`
-          : html`<p class="empty">Un endroit est une collection qui a des coordonnées GPS ; chacune de ses plantes a aussi sa position.</p>`}
+          : html`<p class="empty">Un lieu est une liste qui a des coordonnées GPS ; chaque plante notée y a aussi sa position.</p>`}
 
         ${this.#backupNotice()}
       </div>`;
@@ -619,7 +621,7 @@ export class GfCollections extends LitElement {
         <div class="side-panes">
           ${!place && !plantId ? html`<section class="pane empty-pane" aria-label="Aperçu">
             <div class="pane-head"><h2>Aperçu</h2></div>
-            <div class="pane-body"><p class="hint">${icon('collection')} Touchez un endroit pour voir sa carte, une plante pour sa fiche : elles s’ouvrent ici.</p></div>
+            <div class="pane-body"><p class="hint">${icon('collection')} Touchez un lieu pour voir sa carte, une plante pour sa fiche : elles s’ouvrent ici.</p></div>
           </section>` : nothing}
           ${place ? (mapFolded ? p.rail('map') : html`<section class="pane map-pane" aria-label="Carte du lieu">
             ${p.head('map', placeTitle(place), html`

@@ -138,6 +138,20 @@ const open = new Map();
  * @type {Map<number, { depth: number, href: string }>}
  */
 const stepUrls = new Map();
+/**
+ * The dialogs whose step is being taken out (a Back on its way), until it is left: each step goes back once, whoever
+ * asks first — its dialog closed (openModal), or Back landing on it once its dialog is gone (popstate). Two dialogs
+ * closed together (« Recommencer »'s question over Découvrir's) would otherwise go back twice from the second step.
+ * @type {Set<number>}
+ */
+const leaving = new Set();
+
+/** The step of dialog `id` taken out of history, once. @param {number} id */
+function leave(id) {
+  if (leaving.has(id)) return;
+  leaving.add(id);
+  history.back();
+}
 
 /**
  * Shows a modal dialog as a step in history: Back closes it; closing it otherwise (✕, Esc, a choice) takes the
@@ -156,13 +170,32 @@ export function openModal(dialog) {
     // Closed by the app or the user, not by Back: remove the step it added — after the click that closed it,
     // so a link in the dialog navigates first (its view then stays, and the step behind is skipped on Back).
     setTimeout(() => {
-      if (state().gfModal === id) history.back();
+      if (state().gfModal === id) leave(id);
       else stepUrls.delete(id);
     });
   }, { once: true });
 }
 
+/**
+ * Resolves once the current entry is no dialog's step: each dialog closed has taken its step back out (openModal), or
+ * Back has skipped it — at once when there is none. A view opened from a dialog waits for it, so its entry takes the
+ * step's place instead of piling on it: the depths then count the views behind (backTo, gfAppFrom).
+ * @returns {Promise<void>}
+ */
+export function afterDialogSteps() {
+  if (!state().gfModal) return Promise.resolve();
+  return new Promise(resolve => {
+    const done = () => { removeEventListener('popstate', check); clearTimeout(timer); resolve(); };
+    const check = () => { if (!state().gfModal) done(); };
+    addEventListener('popstate', check);
+    // A dialog left open (it should not be) does not hold the view back: opened over its step, as before.
+    const timer = setTimeout(done, 1000);
+  });
+}
+
 addEventListener('popstate', () => {
+  // The steps left: one may be taken out again (Forward back onto it).
+  for (const id of leaving) if (state().gfModal !== id) leaving.delete(id);
   // A link fires popstate too, on its new entry not stamped yet (hashchange stamps it from `last`).
   if (typeof state().gfDepth === 'number') {
     last = depth();
@@ -189,7 +222,8 @@ addEventListener('popstate', () => {
   for (const [id, dialog] of open) if (!dialog.isConnected) open.delete(id);
   // Back from a dialog's step: close it.
   for (const [id, dialog] of open) if (state().gfModal !== id && dialog.open) dialog.close();
-  // Landed on the step of a dialog that is no longer open (a link inside it navigated away): skip it.
+  // Landed on the step of a dialog that is no longer open (a link inside it navigated away, or it was closed with
+  // another one): skip it.
   const modal = state().gfModal;
-  if (modal && !open.has(modal)) history.back();
+  if (modal && !open.has(modal)) leave(modal);
 });

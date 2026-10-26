@@ -1,5 +1,5 @@
 // app/miniapp: a manifest checked (define.js), the screen it builds step by step and fits in a box (layout.js), its
-// context (context.js) and the runtime's path, « Rejouer », its own steps bar and the plants seen in it (runtime.js);
+// context (context.js) and the runtime's path, « Recommencer », its own steps bar and the plants seen in it (runtime.js);
 // the list of the mini-apps, whose launch changes nothing else (miniapps/index.js). Pure modules: no browser needed.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -70,10 +70,9 @@ test('defineMiniApp : chaque règle refuse ce qu’elle doit, en le disant', () 
   assert.match(refused({ ...m, owns: { keys: ['favorites'] } }), /owns.keys/);
   assert.match(refused({ ...m, owns: { reset: 'all' } }), /owns.reset/);
   assert.match(refused({ ...m, owns: { label: ' ' } }), /owns.label/);
-  // The plant over its start screen: simple or not, its ← in words.
+  // The plant over its start screen: simple or not (its × always « Fermer la fiche »).
   assert.match(refused({ ...m, plantSheet: { simple: 'oui' } }), /plantSheet/);
-  assert.match(refused({ ...m, plantSheet: { back: '' } }), /plantSheet/);
-  assert.deepEqual(defineMiniApp({ ...m, plantSheet: { simple: true, back: 'Fermer la fiche' } }).plantSheet, { simple: true, back: 'Fermer la fiche' });
+  assert.deepEqual(defineMiniApp({ ...m, plantSheet: { simple: true } }).plantSheet, { simple: true });
 });
 
 test('defineMiniApp : une application portée en entier (driven) dessine son départ par son composant', () => {
@@ -184,7 +183,7 @@ test('runtime : le chemin, can, l’avance par done, guided', () => {
   app.dispose();
 });
 
-test('runtime : « Rejouer » vide ce que l’application possède, et seulement cela, puis revient au départ', async () => {
+test('runtime : « Recommencer » vide ce que l’application possède, et seulement cela, puis revient au départ', async () => {
   localStorage.setItem('geoflora.app.meet-replay.session', '"walk"');
   localStorage.setItem('geoflora.favorites-of-the-user', '"kept"');
   let resets = 0;
@@ -218,7 +217,7 @@ test('runtime : « Rejouer » vide ce que l’application possède, et seulement
   app.dispose();
 });
 
-test('runtime : « Masquer / Afficher les étapes » du menu ⋯ vaut pour elle seule, gardé avec sa partie, oublié par « Rejouer »', async () => {
+test('runtime : « Masquer / Afficher les étapes » du menu ⋯ vaut pour elle seule, gardé avec son état, oublié par « Recommencer »', async () => {
   const m = defineMiniApp(meet({ id: 'meet-steps' }));
   const app = new MiniApp(m, { saved: null, showSteps: 'auto' });
   assert.equal(app.guided, true);
@@ -237,7 +236,7 @@ test('runtime : « Masquer / Afficher les étapes » du menu ⋯ vaut pour elle 
   assert.deepEqual([again.ownSteps, again.guided, again.pristine], [null, true, true]);
   again.setOwnSteps(false);
   await again.replay();
-  assert.deepEqual([again.ownSteps, again.guided], [null, true], '« Rejouer » forgets it');
+  assert.deepEqual([again.ownSteps, again.guided], [null, true], '« Recommencer » forgets it');
   again.flush();
   assert.equal(localStorage.getItem(storageKey('meet-steps', 'state')), null);
   again.dispose();

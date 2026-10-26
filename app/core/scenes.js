@@ -1,5 +1,5 @@
 // @ts-check
-// The scenarios' pictures, made of the app's own icons: round coloured stickers (an icon on a disc, a darker
+// The activities' pictures, made of the app's own icons: round coloured stickers (an icon on a disc, a darker
 // disc offset beneath), loose icons around, a ground — flat and stylized, a little funky. Each sticker pops up
 // in turn, then floats; the Parcours draws its dotted path. Still with prefers-reduced-motion.
 // Usage: ${scene('trail')} in a component that includes `sceneStyles` in its styles.
@@ -153,7 +153,7 @@ const SCENES = { trail, meet, harvest, mosaic, twins, orchids };
 const LABELS = { trail: 'Un chemin parmi les fleurs', meet: 'Des cartes de plantes et un cœur', harvest: 'Un panier et ce qui se cueille', mosaic: 'Une mosaïque de photos de plantes',
   twins: 'Deux plantes qui se ressemblent et une ampoule', orchids: 'Une colline et son sentier, des orchidées en fleur' };
 
-/** The picture of a scenario (Rencontres for one without its own). @param {string} kind */
+/** The picture of an activity (Rencontres for one without its own). @param {string} kind */
 export const scene = kind => {
   const key = /** @type {keyof typeof SCENES} */ (kind in SCENES ? kind : 'meet');
   return html`<svg class="scene" viewBox="0 0 320 190" role="img" aria-label=${LABELS[key]}>${SCENES[key]()}</svg>`;

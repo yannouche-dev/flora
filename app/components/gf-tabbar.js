@@ -7,10 +7,9 @@ import { icon } from '../core/icons.js';
 import { discoverEvents, tabShown } from '../core/discover.js';
 
 /**
- * Mobile bottom navigation: Découvrir · Flore · Carte · Mes collections · Réglages — during the first steps,
- * only the tabs already met (discover.js). Noting a plant here lives in Mes
- * collections, on the map (+) and in a plant's Actions. (A mini-app — #/app/… — has none: it is alone on the
- * screen.)
+ * Mobile bottom navigation: Découvrir · Flore · Carte · Mes plantes · Réglages — the header's sections on a computer,
+ * in the same order; during the first steps, only the tabs already met (discover.js). Noting a plant here lives in
+ * Mes plantes, on the map (+) and in a plant's Actions. (An activity — #/app/… — has none: it is alone on the screen.)
  */
 export class GfTabbar extends LitElement {
   static properties = {

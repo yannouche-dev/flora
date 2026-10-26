@@ -31,7 +31,7 @@ export function takeHint(id) {
   return true;
 }
 
-/** Every hint shown again (Réglages › « Recommencer la découverte »). */
+/** Every hint shown again (Réglages › « Revoir les premiers pas »). */
 export function forgetHints() {
   seen = new Set();
   write();

@@ -1,10 +1,10 @@
 // @ts-check
 // The games around a place — Rencontres, Cueillette prudente, Mosaïque —, each its own: the place chosen, the
 // distance, the cards swiped and the matches are kept by each mini-app with its state (geoflora.app.<id>.state, the
-// `ctx` of runtime.js), so that « Rejouer » in one leaves the others as they were, and « Reprendre » is each one's.
+// `ctx` of runtime.js), so that « Recommencer » in one leaves the others as they were, and « Continuer » is each one's.
 // Before, the three shared one session, in geoflora.discover: core/discover.js hands it over once (migrate) to the one
 // played last (else Rencontres) — nothing is lost, and from then on each goes its own way.
-// Read here for what is not a mini-app: the launcher (« Reprendre »), the place the sheet's map starts from, the
+// Read here for what is not a mini-app: the list of Découvrir (« Continuer »), the place the sheet's map starts from, the
 // privacy page (« Oublier ma dernière position »), the first steps started again (Réglages).
 
 import { config } from '../config.js';

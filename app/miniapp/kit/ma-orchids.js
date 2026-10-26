@@ -323,7 +323,7 @@ export class MaOrchids extends LitElement {
     const ok = found && !found.error;
     const sheet = typeof c.focus === 'number'
       ? html`<ma-plant-sheet .open=${c.focus} .mediaAt=${c.mediaAt ?? 0} .cards=${this.#cards()} scoped simple layout-key=${SHEET_KEY}
-          back="Retour à la carte" @media-index=${this.#onMediaIndex}></ma-plant-sheet>` : nothing;
+          @media-index=${this.#onMediaIndex}></ma-plant-sheet>` : nothing;
     // The panel first: the keyboard reaches the filters and the list before the map's points.
     // A phone: the sheet over everything, what is under it out of reach until it closes.
     return html`<div class="wrap" ?inert=${sheet !== nothing && !this.#wide.matches}>

@@ -7,7 +7,7 @@
 // adds its pane — its encyclopedia, a fork (picking: its uses, look-alikes and season; or science: maps, distribution,
 // climate, classification), the plants around under the map —, the last one leaves for the whole app on that plant,
 // as it is. The panes are the plant's sheet (gf-plant-detail panes-only) in a tree of panes of the game's own (the
-// context's `panes`: a grip dragged, a tab, a fold, a block moved in Mode King stay in it, « Rejouer » forgets them) —
+// context's `panes`: a grip dragged, a tab, a fold, a block moved in Mode King stay in it, « Recommencer » forgets them) —
 // never the layout of the mode, which Flore keeps as the user made it; each step docks its own blocks there once, as it
 // is accepted (a module off: as it is switched back on, `leftOut`); the image of its « Médias » is the address's &m=.
 // Its end changes nothing by itself: at the last step, the way chosen at the fork is offered for the whole app, by a
@@ -273,7 +273,7 @@ export class MaGuided extends LitElement {
       this.#session = s;
       s.addEventListener('change', this.#onChange);
     }
-    // The cards: there from the step « cards » on (a reload there, « Reprendre »).
+    // The cards: there from the step « cards » on (a reload there, « Continuer »).
     if (!this.#asking) s.ensure(false);
     // The end's offer: made again each time the last step is reached.
     if (this.#stage !== STAGES.length - 1) { this._endKept = false; this._endDone = null; }
@@ -525,7 +525,7 @@ export class MaGuided extends LitElement {
       'Ses photos, zoomables. Ensuite : ce qu’en dit l’encyclopédie.', 'Et vous, qu’aimeriez-vous savoir des plantes ?',
       branch === 'science' ? 'Cartes et données de la science. Ensuite : les plantes autour.' : 'Ce qui se cueille, et ce qu’il ne faut pas confondre. Ensuite : les plantes autour.',
       'Les voisines, sous la carte. Ensuite : toute la flore.'][stage];
-    return html`<nav class="g-steps" aria-label="Étapes de la découverte">
+    return html`<nav class="g-steps" aria-label="Étapes des premiers pas">
       <button type="button" class="prev" data-step="prev" ?disabled=${stage === 0} @click=${() => this.#prev()} aria-label="Étape précédente">${icon('chevron-left')}<span>Précédent</span></button>
       <div class="mid">
         <ol>${STAGES.map((label, i) => {
@@ -582,9 +582,9 @@ export class MaGuided extends LitElement {
     const stage = this.#stage;
     // Rencontres: the map, the place (distance) and the cards — no legend, no « Où pousse-t-elle encore ? ».
     const quiet = stage === 1;
-    return html`<section class="guided ${asking ? 'asking' : ''} ${panes ? 'with-panes' : ''} ${step >= 4 && !asking ? 'listed' : ''}" aria-label="Découverte"
+    return html`<section class="guided ${asking ? 'asking' : ''} ${panes ? 'with-panes' : ''} ${step >= 4 && !asking ? 'listed' : ''}" aria-label="Premiers pas"
       style=${this.#widths(asking, panes)}>
-      <h1 class="visually-hidden">Découvrir : étape ${stage + 1} sur ${STAGES.length}, ${STAGES[stage]}</h1>
+      <h1 class="visually-hidden">Premiers pas : étape ${stage + 1} sur ${STAGES.length}, ${STAGES[stage]}</h1>
       ${this.#steps()}
       ${this.#endOffer()}
       <div class="g-scroll">

@@ -174,7 +174,7 @@ test('le menu des colonnes (téléphone) : l’icône de chaque case, chaque blo
   assert.deepEqual(look('plant.literature'), ['journal-text', null, 'Publications (GBIF)']);
   assert.deepEqual(look('plant.status'), ['shield', null, 'Protection et statuts']);
   assert.deepEqual(look('plant.lookalikes'), ['exclamation-triangle-fill', null, 'Plantes à confondre']);
-  assert.deepEqual(look('plant.mine'), ['collection', null, 'Mes collections']);
+  assert.deepEqual(look('plant.mine'), ['collection', null, 'Mes plantes']);
   // A block named as a component is: said as the sheet's.
   assert.deepEqual(look('plant.map'), ['pin-map', null, 'Fiche › Carte']);
   assert.deepEqual(look('plant.photos'), ['image', null, 'Fiche › Photos']);

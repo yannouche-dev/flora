@@ -1528,7 +1528,7 @@ export class GfPlantDetail extends LitElement {
       // In one tap, into the collection or place last opened (context.js), when it is not there yet.
       addCurrent: () => {
         const current = this.#currentCollection(plant);
-        if (!current) return king ? html`<button type="button" disabled title="Ouvrez une collection ou un lieu : il devient la collection courante">${icon('plus-lg')}<span>Collection courante</span></button>` : nothing;
+        if (!current) return king ? html`<button type="button" disabled title="Ouvrez une liste ou un lieu : vous y ajouterez d’un geste">${icon('plus-lg')}<span>Liste ou lieu en cours</span></button>` : nothing;
         return html`<button type="button" title=${'Ajouter à « ' + current.name + ' »'} @click=${() => this.#addCurrent(plant, current)}>
           ${icon(current.kind === 'place' ? 'geo-alt-fill' : 'plus-lg')}<span class="short">${current.name}</span></button>`;
       },
@@ -1921,7 +1921,7 @@ export class GfPlantDetail extends LitElement {
     return html`<div class="toc" id="toc" popover tabindex="-1" role="dialog" aria-label="Sommaire de la fiche" @beforetoggle=${this.#onTocToggle} @keydown=${this.#onTocKey}>
       <div class="toc-head">${this.#entity ? html`<span class="entity">${this.#entity}</span>` : nothing}<b>Sommaire</b>
         <button type="button" class="icon-btn toc-lock" aria-pressed=${String(lock)}
-          title=${lock ? 'Ancre verrouillée : chaque plante s’ouvre à l’endroit lu — toucher pour déverrouiller' : 'Verrouiller l’ancre : chaque plante s’ouvrira à l’endroit lu maintenant'}
+          title=${lock ? 'Ancre verrouillée : chaque plante s’ouvre à la place lue — toucher pour déverrouiller' : 'Verrouiller l’ancre : chaque plante s’ouvrira à la place lue maintenant'}
           aria-label=${lock ? 'Déverrouiller l’ancre' : 'Verrouiller l’ancre'} @click=${() => { setAnchorLock(!lock); if (!lock) this.#noteRead(true); this.requestUpdate(); }}>${icon(lock ? 'lock-fill' : 'unlock')}</button></div>
       <ul>${items.map(c => html`<li>
         <button type="button" class="toc-rub" data-key=${'rub:' + c.key} @click=${() => this.#tocGo('rub:' + c.key)}>${icon(/** @type {any} */ (c.icon))}<span>${c.label}</span>${c.badge
@@ -2844,7 +2844,7 @@ export class GfPlantDetail extends LitElement {
     const action = (/** @type {keyof typeof c.actions} */ a, /** @type {string} */ label) => check(label, c.actions[a], on => set({ actions: { [a]: on } }));
     return html`<div class="map-form" role="group" aria-label="Réglages de la carte">
       <fieldset><legend>Sujet</legend>
-        ${select('La carte montre', 'subject', [['plant', 'Cette plante'], ['results', 'Les résultats (recherche et filtres)'], ...(c.subject === 'collection' ? [['collection', 'Une collection (choisie sous la carte)']] : [])])}
+        ${select('La carte montre', 'subject', [['plant', 'Cette plante'], ['results', 'Les résultats (recherche et filtres)'], ...(c.subject === 'collection' ? [['collection', 'Une liste ou un lieu (choisi sous la carte)']] : [])])}
       </fieldset>
       <fieldset><legend>Couches</legend>
         ${select('Répartition GBIF', 'gbif', [['fr', 'France'], ['world', 'Monde'], ['off', 'Non']])}
@@ -2857,8 +2857,8 @@ export class GfPlantDetail extends LitElement {
       </fieldset>
       <fieldset><legend>Actions</legend>
         ${action('open', 'Ouvrir dans la Carte')}
-        ${action('create', 'Créer un endroit ici (appui long)')}
-        ${action('edit', 'Déplacer mes plants (✎)')}
+        ${action('create', 'Créer un lieu ici (appui long)')}
+        ${action('edit', 'Déplacer mes plantes notées (✎)')}
         ${action('spot', 'Noter ici')}
         ${action('locate', 'Me localiser')}
       </fieldset>
@@ -3008,7 +3008,7 @@ export class GfPlantDetail extends LitElement {
         const count = (getMembership().byPlant.get(plant.id) || []).length;
         return html`
           <div class="mine">
-            <span>${count ? `Dans ${count} de mes collections` : 'Dans aucune de mes collections'}</span>
+            <span>${count ? `Dans ${count} de mes listes et lieux` : 'Dans aucune liste ni aucun lieu'}</span>
             <button class="link" type="button" aria-expanded=${this._spotsOpen ? 'true' : 'false'}
               @click=${() => { this._spotsOpen = !this._spotsOpen; }}>${this._spotsOpen ? 'Masquer' : count ? 'Voir' : 'Lieux'}</button>
           </div>

@@ -1,7 +1,8 @@
-// The mini-apps (app/miniapps), each alone on the screen at #/app/<id>/<step>: opened from the launcher, the old
-// addresses of Découvrir leading to them, their steps in the address, « Rejouer » (confirmed) emptying what each owns
-// and only that, back at its first step — and still empty after a reload. Rencontres' services answered here.
-import { test, expect, plantId, answerAround } from './fixtures.mjs';
+// The activities (app/miniapps), each alone on the screen at #/app/<id>/<step>: opened from Découvrir (the film icon),
+// the old addresses of Découvrir leading to them, their steps in the address, « Recommencer » (confirmed) emptying
+// what each owns and only that, back at its first step — and still empty after a reload. Rencontres' services
+// answered here.
+import { test, expect, plantId, answerAround, answerOrchids } from './fixtures.mjs';
 
 test.use({ reducedMotion: 'reduce' });
 test.beforeEach(({ context }) => answerAround(context));
@@ -9,33 +10,142 @@ test.beforeEach(({ context }) => answerAround(context));
 /** The step of the address (#/app/<id>/<step>). @param {import('@playwright/test').Page} page */
 const step = page => page.evaluate(() => /^#\/app\/[^/]+\/([^?]+)/.exec(location.hash)?.[1] ?? null);
 
-/** « Rejouer » from the box's ⋯, confirmed in its dialog. @param {import('@playwright/test').Page} page */
-async function replay(page) {
+/**
+ * « Recommencer » from the box's ⋯, confirmed in its dialog: it says what goes, its session last (« la partie en
+ * cours » of a game, « l’activité en cours » of the others). @param {import('@playwright/test').Page} page @param {string} session
+ */
+async function replay(page, session) {
   const box = page.locator('gf-miniapp');
   await box.locator('.more summary').click();
-  await box.locator('.menu').getByRole('button', { name: 'Rejouer' }).click();
+  await box.locator('.menu').getByRole('button', { name: 'Recommencer' }).click();
   const dialog = box.getByRole('dialog');
   await expect(dialog).toContainText('Recommencer : tout effacer ?');
-  await expect(dialog).toContainText('la partie en cours. Cette action est définitive.');
+  await expect(dialog).toContainText(`${session}. Cette action est définitive.`);
   await expect(dialog.getByRole('button', { name: 'Annuler' })).toBeFocused();
-  await dialog.getByRole('button', { name: 'Rejouer' }).click();
+  await dialog.getByRole('button', { name: 'Recommencer' }).click();
   await expect(dialog).toBeHidden();
 }
 
-test('le lanceur ouvre une mini-application seule à l’écran ; « Quitter » ramène d’où l’on venait', async ({ app, page }) => {
+test('Découvrir (l’icône film) ouvre une activité seule à l’écran ; « Quitter l’activité » ramène d’où l’on venait', async ({ app, page }) => {
   await app.open('#/collections');
-  await page.getByRole('button', { name: 'Scénarios' }).locator('visible=true').first().click();
-  await page.getByRole('dialog').locator('li[data-app="parcours"]').getByRole('button', { name: 'Jouer' }).click();
+  await page.getByRole('button', { name: 'Découvrir', exact: true }).locator('visible=true').first().click();
+  await page.getByRole('dialog', { name: 'Découvrir' }).locator('li[data-app="parcours"]').getByRole('button', { name: 'Commencer : Parcours botanique', exact: true }).click();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/app/parcours/start');
   await expect(page.locator('gf-miniapp .go')).toBeVisible();
   // Alone: no header, no tab bar.
   await expect(page.locator('gf-app header')).toHaveCount(0);
   await expect(page.locator('gf-tabbar')).toHaveCount(0);
+  // The one way out, named on a phone too (its word hidden there).
+  await expect(page.locator('gf-miniapp .quit')).toHaveAccessibleName('Quitter l’activité');
+  await expect(page.locator('gf-miniapp .start .leave')).toHaveText('Autres activités');
   await page.locator('gf-miniapp .quit').click();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/collections');
 });
 
-test('les anciennes adresses de Découvrir ouvrent les mini-applications', async ({ app, page }) => {
+test('une activité lancée depuis une autre en prend le point de départ : « Quitter » sort des deux ; Retour revient à la première', async ({ app, page }) => {
+  const hash = () => page.evaluate(() => location.hash);
+  await app.open('#/collections');
+  await page.getByRole('button', { name: 'Découvrir', exact: true }).locator('visible=true').first().click();
+  await page.getByRole('dialog', { name: 'Découvrir' }).locator('li[data-app="parcours"]').getByRole('button', { name: 'Commencer : Parcours botanique', exact: true }).click();
+  await expect.poll(hash).toBe('#/app/parcours/start');
+  const box = page.locator('gf-miniapp');
+  await expect(box.locator('.start .go')).toBeVisible();
+  const [entries, from] = await page.evaluate(() => [history.length, history.state.gfAppFrom]);
+  expect(typeof from).toBe('number');
+  // The film icon of its bar: Découvrir over it, another activity.
+  await box.locator('gf-scenarios').getByRole('button', { name: 'Découvrir', exact: true }).click();
+  await box.locator('gf-scenarios').getByRole('dialog').locator('li[data-app="mosaique"]').getByRole('button', { name: 'Commencer : Mosaïque', exact: true }).click();
+  await expect.poll(hash).toBe('#/app/mosaique/start');
+  await expect(box.locator('.start .go')).toBeVisible();
+  // The dialog's step gone, not left behind: one entry more, the first one's starting point handed on.
+  expect(await page.evaluate(() => [history.length, history.state.gfAppFrom, history.state.gfModal ?? null])).toEqual([entries + 1, from, null]);
+  await page.goBack();
+  await expect.poll(hash).toBe('#/app/parcours/start');
+  await page.goForward();
+  await expect.poll(hash).toBe('#/app/mosaique/start');
+  await box.locator('.quit').click();
+  await expect.poll(hash).toBe('#/collections');
+});
+
+test('« Autres activités » (l’écran de départ) : la suivante garde ce point de départ, même rechargée', async ({ app, page }) => {
+  const hash = () => page.evaluate(() => location.hash);
+  await app.open('#/collections');
+  await page.getByRole('button', { name: 'Découvrir', exact: true }).locator('visible=true').first().click();
+  await page.getByRole('dialog', { name: 'Découvrir' }).locator('li[data-app="parcours"]').getByRole('button', { name: 'Commencer : Parcours botanique', exact: true }).click();
+  const box = page.locator('gf-miniapp');
+  await expect(box.locator('.start .leave')).toHaveText('Autres activités');
+  await box.locator('.start .leave').click();
+  await box.locator('gf-scenarios').getByRole('dialog').locator('li[data-app="rencontres"]').getByRole('button', { name: 'Commencer : Rencontres', exact: true }).click();
+  await expect.poll(hash).toBe('#/app/rencontres/start');
+  await page.reload();
+  await app.ready();
+  await expect(page.getByRole('heading', { name: 'Rencontrez les plantes d’ici' })).toBeVisible();
+  await box.locator('.quit').click();
+  await expect.poll(hash).toBe('#/collections');
+});
+
+test('« Recommencer » dans Découvrir par-dessus une activité : la question et le dialogue partis, la suivante prend ce point de départ', async ({ app, page }) => {
+  const hash = () => page.evaluate(() => location.hash);
+  // Mosaïque under way (a place kept): the list offers « Continuer » and « Recommencer ».
+  await page.addInitScript(() => {
+    if (sessionStorage.getItem('seeded')) return;
+    sessionStorage.setItem('seeded', '1');
+    localStorage.setItem('geoflora.app.mosaique.state', JSON.stringify({ v: 1, path: ['start', 'map', 'cards'], ctx: { point: [2.35, 48.85], place: 'Paris' }, finished: false }));
+  });
+  await app.open('#/collections');
+  await page.getByRole('button', { name: 'Découvrir', exact: true }).locator('visible=true').first().click();
+  await page.getByRole('dialog', { name: 'Découvrir' }).locator('li[data-app="parcours"]').getByRole('button', { name: 'Commencer : Parcours botanique', exact: true }).click();
+  const box = page.locator('gf-miniapp');
+  await expect(box.locator('.start .go')).toBeVisible();
+  const [entries, from] = await page.evaluate(() => [history.length, history.state.gfAppFrom]);
+  await box.locator('gf-scenarios').getByRole('button', { name: 'Découvrir', exact: true }).click();
+  await box.locator('gf-scenarios li[data-app="mosaique"]').getByRole('button', { name: 'Recommencer : Mosaïque' }).click();
+  const ask = box.locator('gf-scenarios dialog.ask');
+  await ask.getByRole('button', { name: 'Recommencer' }).click();
+  await expect.poll(hash).toBe('#/app/mosaique/start');
+  await expect(page.getByRole('heading', { name: 'La mosaïque du coin' })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('geoflora.app.mosaique.state'))).toBe(null);
+  expect(await page.evaluate(() => [history.length, history.state.gfAppFrom, history.state.gfModal ?? null])).toEqual([entries + 1, from, null]);
+  await box.locator('.quit').click();
+  await expect.poll(hash).toBe('#/collections');
+});
+
+test('« Recommencer » dans Découvrir de l’activité à l’écran : son premier écran, la question et le dialogue partis', async ({ app, page }) => {
+  const hash = () => page.evaluate(() => location.hash);
+  await answerOrchids(page);
+  await app.open('#/collections');
+  await page.getByRole('button', { name: 'Découvrir', exact: true }).locator('visible=true').first().click();
+  await page.getByRole('dialog', { name: 'Découvrir' }).locator('li[data-app="orchidees"]').getByRole('button', { name: 'Commencer : Orchidées de Mirabel', exact: true }).click();
+  const box = page.locator('gf-miniapp');
+  await box.locator('.start .go').click();
+  await expect.poll(hash).toBe('#/app/orchidees/map');
+  const from = await page.evaluate(() => history.state.gfAppFrom);
+  // Its map may still be entered after « Recommencer »: the address must not go back to it.
+  await box.locator('gf-scenarios').getByRole('button', { name: 'Découvrir', exact: true }).click();
+  await box.locator('gf-scenarios li[data-app="orchidees"]').getByRole('button', { name: 'Recommencer : Orchidées de Mirabel', exact: true }).click();
+  await box.locator('gf-scenarios dialog.ask').getByRole('button', { name: 'Recommencer' }).click();
+  await expect.poll(hash).toBe('#/app/orchidees/start');
+  await expect(box.locator('.start .go')).toBeVisible();
+  // Still there once history has settled: on its own entry, the two dialog steps gone.
+  await page.waitForTimeout(500);
+  expect(await hash()).toBe('#/app/orchidees/start');
+  expect(await page.evaluate(() => [history.state.gfAppFrom, history.state.gfModal ?? null])).toEqual([from, null]);
+  await box.locator('.quit').click();
+  await expect.poll(hash).toBe('#/collections');
+});
+
+test('ouverte sans rien derrière, une activité, et celle lancée depuis elle, ramènent à l’accueil', async ({ app, page }) => {
+  const hash = () => page.evaluate(() => location.hash);
+  await app.open('#/app/parcours');
+  const box = page.locator('gf-miniapp');
+  await box.locator('gf-scenarios').getByRole('button', { name: 'Découvrir', exact: true }).click();
+  await box.locator('gf-scenarios').getByRole('dialog').locator('li[data-app="mosaique"]').getByRole('button', { name: 'Commencer : Mosaïque', exact: true }).click();
+  await expect.poll(hash).toBe('#/app/mosaique/start');
+  await box.locator('.quit').click();
+  await expect.poll(hash).toBe('#/');
+});
+
+test('les anciennes adresses de Découvrir ouvrent les activités', async ({ app, page }) => {
   await app.open('#/discover?s=trail');
   await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/app/parcours/start');
   await app.go('#/discover?s=meet');
@@ -43,7 +153,7 @@ test('les anciennes adresses de Découvrir ouvrent les mini-applications', async
   await expect(page.getByRole('heading', { name: 'Rencontrez les plantes d’ici' })).toBeVisible();
 });
 
-test('Rencontres : départ, carte, cartes ; « Rejouer » vide la partie et ses favoris, pas ceux d’ailleurs', async ({ app, page }) => {
+test('Rencontres : départ, carte, cartes ; « Recommencer » vide la partie et ses favoris, pas ceux d’ailleurs', async ({ app, page }) => {
   await app.open('#/app/rencontres');
   await page.getByRole('button', { name: 'Autour de moi' }).click();
   await expect.poll(() => step(page)).toBe('map');
@@ -71,7 +181,7 @@ test('Rencontres : départ, carte, cartes ; « Rejouer » vide la partie et ses 
   const ortie = plantId('Urtica dioica');
   await page.evaluate(async id => { const db = await import('/app/core/db.js'); await (await import('/app/core/collections.js')).toggleFavorite(await db.get('plants', id)); }, ortie);
 
-  await replay(page);
+  await replay(page, 'la partie en cours');
   await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/app/rencontres/start');
   await expect(page.getByRole('heading', { name: 'Rencontrez les plantes d’ici' })).toBeVisible();
   // Nothing kept: the game, and the favourite its match added, gone; the one from Flore stays.
@@ -85,7 +195,7 @@ test('Rencontres : départ, carte, cartes ; « Rejouer » vide la partie et ses 
   expect(await step(page)).toBe('start');
 });
 
-test('Parcours : en marche puis « Rejouer » ; le parcours enregistré quitte Mes plantes', async ({ app, page }) => {
+test('Parcours : en marche puis « Recommencer » ; le parcours enregistré quitte Mes plantes', async ({ app, page }) => {
   await app.open('#/app/parcours');
   const trail = page.locator('gf-miniapp');
   await trail.locator('.go').click();
@@ -99,7 +209,7 @@ test('Parcours : en marche puis « Rejouer » ; le parcours enregistré quitte M
     .find((/** @type {any} */ c) => c.properties.name === 'Chemin du lavoir')?.properties.plants.length ?? null);
   await expect.poll(kept).toBe(1);
 
-  await replay(page);
+  await replay(page, 'l’activité en cours');
   await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/app/parcours/start');
   await expect(page.locator('gf-miniapp .go')).toBeVisible();
   const owned = () => page.evaluate(() => ['geoflora.trail', 'geoflora.trails', 'geoflora.trailDone'].map(k => localStorage.getItem(k)));
@@ -123,10 +233,10 @@ test('Parcours : ses étapes (Départ › En marche › Bilan), Retour étape pa
   await box.locator('.search input').fill('ortie dioique');
   await box.locator('.hit').filter({ hasText: 'Urtica dioica' }).locator('.add').click();
   await expect(box.locator('.mine > li')).toHaveCount(1);
-  // Back: the start, the walk under way offered first to take up; Forward: the walk again.
+  // Back: the start, the walk under way offered first to continue; Forward: the walk again.
   await page.goBack();
   await expect.poll(() => step(page)).toBe('start');
-  await expect(page.getByRole('group', { name: 'Reprendre un parcours' })).toContainText('1 plante');
+  await expect(page.getByRole('group', { name: 'Continuer un parcours' })).toContainText('1 plante');
   await page.goForward();
   await expect.poll(() => step(page)).toBe('walk');
   // The address with no step: the walk under way, at once.

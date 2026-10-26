@@ -1,10 +1,10 @@
 // @ts-check
 // Mosaïque: the photos of the plants observed near here, large — a mosaic; « En fleur maintenant » keeps those in
-// flower; a touch opens the plant at its images. Its start (« Autour de moi », a commune, « Reprendre »), how far to
-// look over the map, then the mosaic (the deck and the matches too, as the other games around a place).
+// flower; a touch opens the plant at its images. Its start (« Autour de moi », a commune, « Continuer »), how far to
+// look over the map, then the mosaic (the deck and the matches too, as the other activities around a place).
 // Built from the kit (app/miniapp/kit): ma-distance, then ma-around-list (mosaic).
-// Owns — everything « Rejouer » / « Recommencer » empties, here and in the other tabs, as if never opened:
-//  - geoflora.app.mosaique.state: its place and name, distance, cards swiped right (this game's matches) and left, the
+// Owns — everything « Recommencer » empties, here and in the other tabs, as if never opened:
+//  - geoflora.app.mosaique.state: its place and name, distance, cards swiped right (its matches) and left, the
 //    step it was left at; geoflora.app.mosaique.layout: its columns' widths (runtime.js#replay);
 //    geoflora.app.mosaique.sheet: the width of a plant's sheet beside the cards;
 //  - in memory: the cards found, the observations, what Wikipédia says, the undo stack, the deck's order, the view
@@ -27,7 +27,7 @@ export default defineMiniApp({
   scene: 'mosaic',
   pitch: 'Toutes les photos des plantes du coin, en grand. Une image touchée : toutes celles de la plante.',
   uses: ['inaturalist'],
-  exit: { label: 'Quitter la mosaïque' },
+  exit: { label: 'Quitter l’activité' },
   owns: { keys: ['geoflora.app.mosaique.sheet'], reset: () => { forgetGame('mosaique'); return forgetMadeBy('mosaique'); } },
   shared: ['Mes plantes (sauf les favoris ajoutés par ses matchs)', 'lieux', 'réglages'],
   context: aroundContext(),

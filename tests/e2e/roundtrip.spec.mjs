@@ -30,7 +30,10 @@ test('fichier GeoJSON : exporté, collections effacées, réimporté à l’iden
   await seed(page);
   const before = await dump(page);
   await app.go('#/settings');
+  // Counted with the favourites apart: neither a list nor a place.
+  await expect(page.locator('gf-settings')).toContainText('Sur cet appareil uniquement : vos favoris (1 plante), 1 liste et 1 lieu.');
   const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Exporter (fichier GeoJSON)' }).click()]);
+  await expect(page.locator('gf-settings p[role=status]').first()).toHaveText('Exporté : vos favoris (1 plante), 1 liste et 1 lieu.');
   const file = /** @type {string} */ (await download.path());
   const text = readFileSync(file, 'utf8');
   const fc = JSON.parse(text);
@@ -59,10 +62,10 @@ test('lien de transfert : l’autre appareil importe tout, notes et récoltes co
 
   const other = await newDevice();
   await other.app.open(url);
-  await expect(other.page.locator('gf-shared h1')).toBeVisible();
+  await expect(other.page.locator('gf-shared h1')).toHaveText('Vos favoris (1 plante), 1 liste et 1 lieu');
   expect(await dump(other.page)).toEqual([]);
   await other.page.locator('gf-shared').getByRole('button', { name: 'Importer' }).click();
-  await expect(other.page.locator('gf-shared p[role=status]')).toContainText('Importé');
+  await expect(other.page.locator('gf-shared p[role=status]')).toHaveText('Importé : 3 ajoutés, 0 mis à jour, 0 déjà à jour.');
   expect(await dump(other.page)).toEqual(before);
 
   // The same link again: updated in place, nothing doubled.
@@ -73,7 +76,26 @@ test('lien de transfert : l’autre appareil importe tout, notes et récoltes co
   expect(await dump(other.page)).toEqual(before);
 });
 
-test('lien de partage d’un lieu : aperçu puis « Enregistrer dans mes plantes »', async ({ app, page, newDevice }) => {
+test('copie de secours : ce qui manque à la base, dit — les favoris à part —, puis restauré à l’identique', async ({ app, page }) => {
+  await app.open('#/');
+  await seed(page);
+  const before = await dump(page);
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('geoflora.backup') || 'null')?.features.length)).toBe(3);
+  await page.evaluate(async () => {
+    const db = await import('/app/core/db.js');
+    for (const c of await db.getAll('spots')) await db.remove('spots', c.id);
+  });
+  await app.go('#/collections');
+  const notice = page.locator('gf-collections .notice.restore');
+  await expect(notice).toContainText('Dans la copie de secours de cet appareil, mais plus ici : vos favoris (1 plante), 1 liste et 1 lieu (');
+  await expect(notice).toContainText('Mellifères');
+  await expect(notice).toContainText('Lisière nord');
+  await notice.getByRole('button', { name: 'Restaurer' }).click();
+  await expect(page.locator('gf-collections p[role=status]').filter({ hasText: 'Restauré' })).toHaveText('Restauré : vos favoris (1 plante), 1 liste et 1 lieu.');
+  expect(await dump(page)).toEqual(before);
+});
+
+test('lien de partage d’un lieu : aperçu puis « Enregistrer dans Mes plantes »', async ({ app, page, newDevice }) => {
   await app.open('#/');
   await seed(page);
   const link = await page.evaluate(async () => {
@@ -85,7 +107,7 @@ test('lien de partage d’un lieu : aperçu puis « Enregistrer dans mes plantes
   const other = await newDevice();
   await other.app.open(link);
   await expect(other.page.locator('gf-shared h1')).toContainText('Lisière nord');
-  await other.page.locator('gf-shared').getByRole('button', { name: 'Enregistrer dans mes plantes' }).click();
+  await other.page.locator('gf-shared').getByRole('button', { name: 'Enregistrer dans Mes plantes' }).click();
   await expect.poll(async () => (await dump(other.page)).map((/** @type {any} */ c) => [c.name, c.kind, c.at, c.plants.map((/** @type {any} */ e) => e[0])]))
     .toEqual([['Lisière nord', 'place', [4.8357, 45.7641], [plantId('Allium ursinum'), plantId('Urtica dioica')]]]);
 });

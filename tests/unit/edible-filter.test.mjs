@@ -47,11 +47,11 @@ test('le genre ne nomme aucune espèce : Symphytum tuberosum n’a que la confus
 test('les cartes : par le genre, la confusion seule, « avant toute cueillette » ; l’espèce nommée, sa partie et « à table »', async () => {
   const card = (/** @type {any} */ p, /** @type {any} */ confusions) => ({ plant: p, count: 10, photo: null, credit: null, blooming: false, verdict: dangerLevel({ statuses: p.statuses, confusions }) });
   const tub = bio(card(tuberosum, await lookalikesOf(tuberosum)), new Set());
-  assert.ok(tub.includes('⚠️ J’ai des sosies dangereux (1). Lisez ma fiche avant toute cueillette.'), tub.join('\n'));
+  assert.ok(tub.includes('⚠️ J’ai des sosies toxiques (1). Lisez ma fiche avant toute cueillette.'), tub.join('\n'));
   assert.ok(!tub.some(l => /consommée|à table/.test(l)));
   // Officinale with no toxicity data here (the pure verdict): the part the source names, « à table ».
   const off = bio(card({ ...officinale, statuses: [] }, await lookalikesOf(officinale)), new Set());
-  assert.ok(off.includes('🍽️ Partie consommée selon l’Anses : feuilles. J’ai des sosies dangereux (2) : lisez ma fiche avant de passer à table.'), off.join('\n'));
+  assert.ok(off.includes('🍽️ Partie consommée selon l’Anses : feuilles. J’ai des sosies toxiques (2) : lisez ma fiche avant de passer à table.'), off.join('\n'));
 });
 
 test('un seul filtre des critères : la fiche et Faux amis taisent « … est comestible »', () => {

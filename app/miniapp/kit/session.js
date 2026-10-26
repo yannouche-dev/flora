@@ -1,6 +1,6 @@
 // @ts-check
 // The game of a mini-app around a place (Rencontres, Cueillette prudente, Mosaïque), shared by its components (kit:
-// ma-distance, ma-around-list, ma-deck, ma-guided, ma-around-map) — one per mini-app open, a new one after « Rejouer »
+// ma-distance, ma-around-list, ma-deck, ma-guided, ma-around-map) — one per mini-app open, a new one after « Recommencer »
 // (sessionOf). What is kept on the device is the app's context (app.c: point, place, radius, matches, passed;
 // Cueillette prudente: avoided — persist keys of the manifest, under geoflora.app.<id>.state), written only through
 // app.set. The rest lives while the app is open: the cards found (iNaturalist, matched to the flora; Cueillette
@@ -44,7 +44,7 @@ const VIEW_WORDS = /** @type {const} */ ({ swipe: 'rencontres', matches: 'matchs
 const viewOfWord = word => Object.entries(VIEW_WORDS).find(([, w]) => w === word)?.[0] ?? null;
 
 /**
- * What a mini-app around a place keeps in memory forgotten (« Rejouer », « Recommencer »: its manifest's
+ * What a mini-app around a place keeps in memory forgotten (« Recommencer », in its ⋯ or in Découvrir: its manifest's
  * owns.reset; another tab's, by core/sync.js): the swipe hint shown — it comes again.
  * @param {string} id
  */
@@ -58,7 +58,7 @@ export class AroundSession extends EventTarget {
   constructor(app) {
     super();
     this.app = app;
-    /** The emptying of the app it belongs to (« Rejouer »: another session). */
+    /** The emptying of the app it belongs to (« Recommencer »: another session). */
     this.generation = app.generation;
     /** @type {Card[] | null} */
     this.cards = null;

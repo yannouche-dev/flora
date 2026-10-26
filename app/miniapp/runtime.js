@@ -1,18 +1,18 @@
 // @ts-check
-// A mini-app running: its context, the path of steps walked, its actions and data, and what it keeps on this
-// device. The box (gf-miniapp.js) renders it and keeps the address in step; the components (kit.js) get it as `app`
-// and only write through it: app.set(patch), app.do(action, …args), app.go(step), app.exit(). Nothing here renders
-// or navigates: pure enough to be tested under Node.
+// An activity running (a mini-app, in the code): its context, the path of steps walked, its actions and data, and
+// what it keeps on this device. The box (gf-miniapp.js) renders it and keeps the address in step; the components
+// (kit.js) get it as `app` and only write through it: app.set(patch), app.do(action, …args), app.go(step),
+// app.exit(). Nothing here renders or navigates: pure enough to be tested under Node.
 //  - The path: the start first, then each step reached; going to a step already on it goes back to it (what was
 //    added after it goes away), to one that follows the last goes on, to another one takes the shortest way there.
 //    A step whose can(c) is false is not entered.
 //  - With the steps bar (guided): a step whose done(c) comes true goes on to the next by itself. Without it, the
-//    start leads straight to m.full. The bar is the setting of all (Réglages › Premiers pas), unless the mini-app's
-//    ⋯ menu chose for it alone (`ownSteps`, kept with its game).
+//    start leads straight to m.full. The bar is the setting of all (Réglages › Premiers pas), unless the activity's
+//    ⋯ menu chose for it alone (`ownSteps`, kept with its state).
 //  - Kept under geoflora.app.<id>.state: { v, path, ctx (the persist keys), finished, ownSteps? }, written 300 ms
-//    after a change. The start is always shown first; the path kept is offered as « Reprendre ».
+//    after a change. The start is always shown first; the path kept is offered as « Continuer ».
 //  - Events: 'change' (anything to render again), 'navigate' (detail { step, replace? }: a step reached, for the
-//    address), 'exit' (the way out asked), 'scenarios' (the launcher asked for, over the app), 'seen' (detail: a
+//    address), 'exit' (the way out asked), 'scenarios' (Découvrir asked for, over the app), 'seen' (detail: a
 //    plant's id — a card swiped, a plant noted, a new plant opened or chosen, the context's `focus`: the box counts it
 //    for the first steps of the app), 'dispose' (the box gone: a component's game stops its requests and timers).
 
@@ -36,33 +36,34 @@ import { layoutAt } from './layout.js';
 export const storageKey = (id, part) => config.storageKeys.appPrefix + id + '.' + part;
 
 /**
- * What « Rejouer » / « Recommencer » will delete, said in its confirmation — the favourites its matches added, each
- * collection it made in Mes plantes still its own (« le parcours en cours (4 plantes) »), its session (as the manifest
- * says it, owns.label: Orchidées de Mirabel's circle and filters; else « la partie en cours ») — and what it keeps
- * of what came from it (the user's own: a parcours finished, a favourite put in a collection). Pure.
+ * What « Recommencer » will delete, said in its confirmation — the favourites its matches added, each collection it
+ * made in Mes plantes still its own (« le parcours en cours (4 plantes) »), its session (as the manifest says it,
+ * owns.label: « la partie en cours » of a game, Orchidées de Mirabel's circle and filters; else « l’activité en
+ * cours ») — and what it keeps of what came from it (the user's own: a parcours finished, a favourite put in a
+ * collection). Pure.
  * @param {Manifest} m @param {import('../core/place-model.js').Made} made @returns {{ gone: string[], kept: string[] }}
  */
 export function replayItems(m, made) {
   const s = (/** @type {number} */ n) => n > 1 ? 's' : '';
   const n = made.favorites.length;
-  const label = m.owns.made?.label ?? 'la collection';
+  const label = m.owns.made?.label ?? 'la liste';
   const count = (/** @type {[string, string]} */ [one, many], /** @type {number} */ k) => (k > 1 ? many : one).replace('{n}', String(k));
   return {
     gone: [
       ...(n ? [`${n} favori${s(n)} ajouté${s(n)} par ${m.title}`] : []),
       ...made.collections.map(c => `${label}${c.name ? ` « ${c.name} »` : ''} (${c.plants} plante${s(c.plants)})`),
-      m.owns.label ?? 'la partie en cours'
+      m.owns.label ?? 'l’activité en cours'
     ],
     kept: [
       ...(made.kept.collections && m.owns.made ? [count(m.owns.made.kept, made.kept.collections)] : []),
-      ...(made.kept.favorites ? [count(['Votre favori venu de cette partie, rangé ou annoté depuis, est conservé.', 'Vos {n} favoris venus de cette partie, rangés ou annotés depuis, sont conservés.'], made.kept.favorites)] : [])
+      ...(made.kept.favorites ? [count(['Votre favori venu de cette activité, rangé ou annoté depuis, est conservé.', 'Vos {n} favoris venus de cette activité, rangés ou annotés depuis, sont conservés.'], made.kept.favorites)] : [])
     ]
   };
 }
 
 /**
- * « Recommencer » from the list of the ways to play, the mini-app not on screen: what it owns emptied as its
- * « Rejouer » does (here and in the other tabs), nothing left behind. @param {Manifest} m
+ * « Recommencer » from the list of Découvrir, the activity not on screen: what it owns emptied as its ⋯
+ * « Recommencer » does (here and in the other tabs), nothing left behind. @param {Manifest} m
  */
 export async function replayApp(m) {
   const app = new MiniApp(m);
@@ -71,8 +72,8 @@ export async function replayApp(m) {
 }
 
 /**
- * The steps bar shown? The mini-app's own choice (`own`, its ⋯ menu), else the setting of all: 'on' always; 'off'
- * never; 'auto' until the mini-app was finished once.
+ * The steps bar shown? The activity's own choice (`own`, its ⋯ menu), else the setting of all: 'on' always; 'off'
+ * never; 'auto' until the activity was finished once.
  * @param {ShowSteps} showSteps @param {boolean} finished @param {OwnSteps | null} [own]
  */
 export const guided = (showSteps, finished, own = null) => own ? own === 'on' : showSteps === 'on' || (showSteps === 'auto' && !finished);
@@ -114,7 +115,7 @@ export class MiniApp extends EventTarget {
     this.showSteps = opts.showSteps ?? 'auto';
     let saved = opts.saved === undefined ? readJSON(storageKey(m.id, 'state'), null) : opts.saved;
     if (saved && saved.v !== m.version) saved = m.migrate ? m.migrate(saved, saved.v) : null;
-    /** The path kept from the last visit, offered as « Reprendre ». @type {string[]} */
+    /** The path kept from the last visit, offered as « Continuer ». @type {string[]} */
     this.savedPath = Array.isArray(saved?.path) ? saved.path.filter((/** @type {unknown} */ s) => typeof s === 'string') : [];
     this.finished = saved?.finished === true;
     /** The steps bar as its ⋯ menu chose it, for it alone (null: the setting of all). @type {OwnSteps | null} */
@@ -130,7 +131,7 @@ export class MiniApp extends EventTarget {
     this.loads = new Map();
     /** @type {any} */
     this.saveTimer = 0;
-    /** How many times it was emptied (« Rejouer »): the box draws its components anew each time. */
+    /** How many times it was emptied (« Recommencer »): the box draws its components anew each time. */
     this.generation = 0;
     /** The display mode of a plant sheet in it (kept by the box in step with the app's). */
     this.view = 'standard';
@@ -153,8 +154,8 @@ export class MiniApp extends EventTarget {
   get guided() { return guided(this.showSteps, this.finished, this.ownSteps); }
 
   /**
-   * « Afficher / Masquer les étapes » of its ⋯ menu: for this mini-app alone, kept with its game (« Rejouer » forgets
-   * it) — never the setting of all. The same as that setting gives: no choice of its own. @param {boolean} on
+   * « Afficher / Masquer les étapes » of its ⋯ menu: for this activity alone, kept with its state (« Recommencer »
+   * forgets it) — never the setting of all. The same as that setting gives: no choice of its own. @param {boolean} on
    */
   setOwnSteps(on) {
     this.ownSteps = null;
@@ -230,18 +231,18 @@ export class MiniApp extends EventTarget {
     return true;
   }
 
-  /** « Reprendre »: the path of the last visit, when it may still be walked. @returns {{ label: string, run: () => void } | null} */
+  /** « Continuer »: the path of the last visit, when it may still be walked. @returns {{ label: string, run: () => void } | null} */
   resume() {
     const last = this.savedPath[this.savedPath.length - 1];
     if (this.savedPath.length < 2 || !pathTo(this.m, [this.m.steps[0].id], last, this.c)) return null;
     const step = this.m.steps.find(s => s.id === last);
-    return { label: 'Reprendre : ' + (step?.label ?? last), run: () => { this.go(last); } };
+    return { label: 'Continuer : ' + (step?.label ?? last), run: () => { this.go(last); } };
   }
 
   /**
-   * « Rejouer » (confirmed by the box): what the mini-app owns emptied — its own state, the keys listed in owns.keys,
-   * owns.reset() for the rest — and back to its first step. Never what it only uses (manifest `shared`). The other
-   * tabs are told (core/sync.js): theirs is emptied too.
+   * « Recommencer » (confirmed by the box): what the activity owns emptied — its own state, the keys listed in
+   * owns.keys, owns.reset() for the rest — and back to its first step. Never what it only uses (manifest `shared`).
+   * The other tabs are told (core/sync.js): theirs is emptied too.
    */
   async replay(remote = false) {
     await this.m.owns.reset?.();
@@ -254,8 +255,8 @@ export class MiniApp extends EventTarget {
   }
 
   /**
-   * Emptied in memory (« Rejouer » here or in another tab): the first step, the context as it starts, nothing to
-   * take up again; `generation` counts it (the box draws its components anew, from what is stored now).
+   * Emptied in memory (« Recommencer » here or in another tab): the first step, the context as it starts, nothing to
+   * continue; `generation` counts it (the box draws its components anew, from what is stored now).
    */
   cleared() {
     for (const l of this.loads.values()) { clearTimeout(l.timer); l.abort?.abort(); }
@@ -293,7 +294,7 @@ export class MiniApp extends EventTarget {
   /** Something it shows changed outside its context (a component's game): drawn again (the box, its start screen). */
   refresh() { this.#emit('change'); }
 
-  /** The launcher asked for (« Quitter … : autres scénarios »): the box opens it over the app. */
+  /** Découvrir asked for (« Autres activités »): the box opens it over the app. */
   scenarios() { this.#emit('scenarios'); }
 
   /** A module it needs switched off (its name), else null: checked at the start. */
@@ -304,8 +305,8 @@ export class MiniApp extends EventTarget {
 
   /**
    * The screen of a start or screen step, from its manifest: with the exit of the manifest unless the step gives its
-   * own (« Quitter … : autres scénarios »), and, a module it needs switched off, that said in place of an error, the
-   * action disabled.
+   * own link (« Autres activités »), and, a module it needs switched off, that said in place of an error, the action
+   * disabled.
    * @param {Step} step @returns {import('../components/start-screen.js').StartSpec}
    */
   startSpec(step) {
@@ -326,7 +327,7 @@ export class MiniApp extends EventTarget {
 
   /**
    * Nothing to keep: at its start, its context as it starts, never finished, no steps bar of its own — as if never
-   * opened (no state written: after « Rejouer », the app leaves nothing behind).
+   * opened (no state written: after « Recommencer », the app leaves nothing behind).
    */
   get pristine() {
     const ctx = this.ctx.persisted();

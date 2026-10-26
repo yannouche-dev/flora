@@ -511,7 +511,7 @@ export class MaAroundList extends LitElement {
         <button class="link" type="button" @click=${() => app.go('start')}>Changer de lieu</button>
       </div>
       ${this.harvest ? html`<p class="banner-warn" role="note">${icon('exclamation-triangle-fill')}<span>Ne cueillez jamais une plante sans identification certaine${s.unread ? ''
-        : ' : chacune de ces plantes a un sosie dangereux (liste de l’Anses et des Centres antipoison)'}.
+        : ' : chacune de ces plantes a un sosie toxique (liste de l’Anses et des Centres antipoison)'}.
         <span class="sos-line">${emergency()}.</span></span></p>` : nothing}
       ${this.harvest && s.unread && !s.loading ? html`<p class="banner-warn" role="alert">${icon('exclamation-octagon-fill')}<span><b>${UNREAD_LOOKALIKES}</b>
         <button class="link" type="button" @click=${() => s.load()}>Réessayer</button></span></p>` : nothing}
@@ -569,7 +569,7 @@ export class MaAroundList extends LitElement {
       <p class="title" id="match-title">C’est un match !</p>
       ${photo ? html`<img src=${photo} alt="" decoding="async" referrerpolicy="no-referrer" @error=${hideImg} />` : nothing}
       ${photo && c.credit ? html`<p class="credit">Photo : ${creditText(c.credit)}</p>` : nothing}
-      <p id="match-text">Coup de cœur pour <b>${name}</b> ! Direction votre herbier (♥ favoris) — et ce n’est que le début de l’exploration.</p>
+      <p id="match-text">Coup de cœur pour <b>${name}</b> ! Direction vos favoris (♥) — et ce n’est que le début de l’exploration.</p>
       <div class="row">
         <button class="primary" type="button" autofocus @click=${(/** @type {any} */ e) => e.currentTarget.closest('dialog')?.close()}>Découvrir cette plante</button>
       </div>

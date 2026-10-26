@@ -1,8 +1,8 @@
 // @ts-check
-// What the three mini-apps around a place share in their manifests (Rencontres, Cueillette prudente, Mosaïque): the
+// What the three activities around a place share in their manifests (Rencontres, Cueillette prudente, Mosaïque): the
 // context their components read (the place, the distance, the swipes, kept; the plant open, the start's error), the
-// first screen (« Autour de moi », a commune, « Reprendre » the place kept), the action that finds where you are, and
-// the steps start › map › cards (a place chosen: the map, its distance; then the cards).
+// first screen (« Autour de moi », a commune, « Continuer » at the place kept), the action that finds where you are,
+// and the steps start › map › cards (a place chosen: the map, its distance; then the cards).
 
 import { FIX_MAX_AGE, geoProblem, takeFix } from '../../core/geo.js';
 import { discoverState, discovering, finishDiscover, LAST_STEP } from '../../core/discover.js';
@@ -12,17 +12,17 @@ import { sessionOf } from './session.js';
 
 /** @typedef {'meet' | 'harvest' | 'mosaic'} AroundKind */
 
-/** The words of each one's first screen (`name`: in « Quitter … : autres scénarios »). */
+/** The words of each one's first screen. */
 export const WORDS = {
-  meet: { name: 'les rencontres', title: 'Rencontrez les plantes d’ici',
+  meet: { title: 'Rencontrez les plantes d’ici',
     lead: 'Une carte par plante observée autour de vous. Un coup de cœur à droite, au suivant à gauche. Vos coups de cœur rejoignent vos favoris.' },
-  harvest: { name: 'la cueillette', title: 'Cueillette prudente', lead: 'Ce qui se cueille autour de vous, et ses sosies dangereux. Les plus toxiques passent en premier.',
+  harvest: { title: 'Cueillette prudente', lead: 'Ce qui se cueille autour de vous, et ses sosies toxiques. Les plus toxiques passent en premier.',
     caution: { text: 'Ne cueillez jamais une plante sans être sûr de vous.' } },
-  mosaic: { name: 'la mosaïque', title: 'La mosaïque du coin', lead: 'Les photos des plantes observées près d’ici, en grand. Touchez une image pour voir toutes celles de la plante.' }
+  mosaic: { title: 'La mosaïque du coin', lead: 'Les photos des plantes observées près d’ici, en grand. Touchez une image pour voir toutes celles de la plante.' }
 };
 
 /**
- * The context of a mini-app around a place: kept (persist) — the place chosen and its name, the distance, the cards
+ * The context of an activity around a place: kept (persist) — the place chosen and its name, the distance, the cards
  * swiped right (matches) and left (passed); for the visit, each in the address (router.js, AppRoute) — the plant open
  * (?p=), the view of the list (&v=: « matchs », « toutes »; null: its own), the image shown (&m=: its place among the
  * plant's media; null: the first) —, why « Autour de moi » failed. Rencontres adds the plant chosen (chosenContext).
@@ -58,8 +58,9 @@ export const chosenContext = () => ({
 /**
  * Rencontres' guided way (kit/ma-guided.js): decided as its game begins (kit/session.js#setPoint: during the first
  * steps of the app; a game kept from before this was decided, as its session starts), kept for the whole game — tabs
- * that arrive never swap its view; « Rejouer » decides anew. Its steps over end it: « La flore complète », or the first
- * steps ended elsewhere (« Passer », « Tout montrer »: their last step reached) — the game then goes on as the others.
+ * that arrive never swap its view; « Recommencer » decides anew. Its steps over end it: « La flore complète », or the
+ * first steps ended elsewhere (« Passer », « Tout montrer »: their last step reached) — the game then goes on as the
+ * others.
  * @param {any} c
  */
 export const guidedWay = c => (c.guided ?? discovering()) && discoverState().step < LAST_STEP;
@@ -99,12 +100,13 @@ export const locate = {
 
 /**
  * The first screen (start-screen.js's template): its picture and words, « Autour de moi »; smaller, a commune, the
- * place kept (« Reprendre »); the way out — « Passer » during the first steps (Rencontres), else the launcher.
+ * place kept (« Continuer »); the link at the bottom — « Passer » during the first steps (Rencontres), else the other
+ * activities (« Autres activités »: Découvrir over it; the way out is the bar's « Quitter l’activité »).
  * @param {any} c @param {import('../runtime.js').MiniApp} app @param {AroundKind} kind
  * @returns {import('../../components/start-screen.js').StartSpec}
  */
 export function aroundStart(c, app, kind) {
-  const w = /** @type {{ name: string, title: string, lead: string, caution?: { text: string } }} */ (WORDS[kind]);
+  const w = /** @type {{ title: string, lead: string, caution?: { text: string } }} */ (WORDS[kind]);
   const stop = () => { app.cancel('locate'); app.set({ startError: null }); };
   return {
     id: kind, art: kind, title: w.title, lead: w.lead, caution: w.caution,
@@ -113,20 +115,20 @@ export function aroundStart(c, app, kind) {
     note: 'Votre position est envoyée à iNaturalist et à l’IGN pour chercher autour de vous ; elle n’est gardée que sur cet appareil.',
     alternatives: [
       { kind: 'place', label: 'ou choisir une commune', field: 'Choisir une commune', pick: p => { stop(); sessionOf(app).setPoint(p.coordinates, p.label); app.go('map'); } },
-      placed(c) && { kind: 'choices', label: 'Reprendre', items: [{ key: 'kept', icon: 'geo-alt', label: c.place ? `Autour de ${c.place}` : 'Au dernier lieu choisi',
+      placed(c) && { kind: 'choices', label: 'Continuer', items: [{ key: 'kept', icon: 'geo-alt', label: c.place ? `Autour de ${c.place}` : 'Au dernier lieu choisi',
         meta: distLabel(c.radius || 1000), run: () => { stop(); app.go('map'); } }] }
     ],
     exit: kind === 'meet' && discovering()
       ? { label: 'Passer : montrer toute l’application', href: href.search(), run: () => finishDiscover() }
-      : { icon: 'camera-reels', label: `Quitter ${w.name} : autres scénarios`, run: () => { stop(); app.scenarios(); } }
+      : { icon: 'camera-reels', label: 'Autres activités', run: () => { stop(); app.scenarios(); } }
   };
 }
 
 /**
- * The columns of the three games: the map (its step « map », then beside the cards; its width the user's — kept per
- * tier with the layout, forgotten by « Recommencer »), the cards filling the rest (and the photos, Rencontres: their
- * pane inside it while there is room for the deck and them, else full screen). A phone: the map a band on top, the
- * cards under it. @param {string} title the cards' column
+ * The columns of the three activities: the map (its step « map », then beside the cards; its width the user's — kept
+ * per tier with the layout, forgotten by « Recommencer »), the cards filling the rest (and the photos, Rencontres:
+ * their pane inside it while there is room for the deck and them, else full screen). A phone: the map a band on top,
+ * the cards under it. @param {string} title the cards' column
  * @returns {{ columns: import('../define.js').Column[], phone: { rows: [string, string][] } }}
  */
 export const aroundColumns = title => ({
@@ -140,7 +142,7 @@ export const aroundColumns = title => ({
 /** The last step's name in the steps bar, and what it shows. */
 const CARDS = {
   meet: { label: 'Rencontres', about: 'Une carte à la fois' },
-  harvest: { label: 'Cueillette', about: 'Ce qui se cueille, et ses sosies dangereux' },
+  harvest: { label: 'Cueillette', about: 'Ce qui se cueille, et ses sosies toxiques' },
   mosaic: { label: 'Mosaïque', about: 'Les photos des plantes d’ici' }
 };
 

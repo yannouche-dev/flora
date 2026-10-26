@@ -515,7 +515,7 @@ export class Obs3dLayer {
         const [lon, lat] = pl.coordinates || [];
         if (typeof lon !== 'number' || metres(c, [lon, lat]) > r) continue;
         mine.push({ id: 'm' + pl.key, kind: 'mine', coordinates: [lon, lat], title: pl.label || pl.sci || 'Plante', common: pl.label || null, sci: pl.sci || '',
-          taxonId: null, photo: pl.plantId ? cachedThumb(pl.plantId) || null : null, credit: null, date: null, place: 'Vos endroits', url: null,
+          taxonId: null, photo: pl.plantId ? cachedThumb(pl.plantId) || null : null, credit: null, date: null, place: 'Vos lieux', url: null,
           plant: { placeId: pl.placeId, entryId: pl.entryId, plantId: pl.plantId } });
       }
     }

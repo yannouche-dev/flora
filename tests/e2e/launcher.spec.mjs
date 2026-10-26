@@ -1,8 +1,8 @@
-// The list of the ways to play (gf-launcher: the Découvrir tab's page, the film icon's dialog): a mini-app with a game
-// under way offers « Continuer » (where it was left) and « Recommencer » — confirmed in a dialog that says what will be
-// deleted, with its counts —, else « Jouer ». « Recommencer » (and « Rejouer » in the app's ⋯) empties everything the
-// mini-app owns and made — its game, its favourites, its parcours in Mes plantes —, nothing else, and opens it at its
-// first screen: the app's storage as if it had never been opened. Rencontres' services answered here.
+// The list of the activities (gf-launcher: the Découvrir tab's page, the film icon's dialog): an activity under way
+// offers « Continuer » (where it was left) and « Recommencer » — confirmed in a dialog that says what will be deleted,
+// with its counts —, else « Commencer ». « Recommencer » (in the list, or in the activity's ⋯) empties everything the
+// activity owns and made — its session, its favourites, its parcours in Mes plantes —, nothing else, and opens it at
+// its first screen: the app's storage as if it had never been opened. Rencontres' services answered here.
 import { test, expect, plantId, answerAround, answerOrchids } from './fixtures.mjs';
 
 test.use({ reducedMotion: 'reduce' });
@@ -103,9 +103,9 @@ for (const id of /** @type {(keyof typeof TITLES)[]} */ (Object.keys(TITLES))) {
   test(`${TITLES[id]} : « Continuer » reprend où on l’avait laissée ; « Recommencer » efface tout, le départ, comme jamais ouverte`, async ({ app, page }) => {
     await app.open('#/discover');
     const never = await footprint(page);
-    await expect(list(page).getByRole('button', { name: `Jouer : ${TITLES[id]}` })).toBeVisible();
+    await expect(list(page).getByRole('button', { name: `Commencer : ${TITLES[id]}`, exact: true })).toBeVisible();
     await expect(list(page).getByRole('button', { name: `Continuer : ${TITLES[id]}` })).toHaveCount(0);
-    await list(page).getByRole('button', { name: `Jouer : ${TITLES[id]}` }).click();
+    await list(page).getByRole('button', { name: `Commencer : ${TITLES[id]}`, exact: true }).click();
     await atStart(page, id);
     const step = await play(page, id);
     await page.locator('gf-miniapp .quit').click();
@@ -130,11 +130,12 @@ for (const id of /** @type {(keyof typeof TITLES)[]} */ (Object.keys(TITLES))) {
     await expect(dialog.getByRole('button', { name: 'Annuler' })).toBeFocused();
     await expect(dialog).toContainText('Recommencer : tout effacer ?');
     await expect(dialog).toContainText(id === 'parcours'
-      ? 'Seront supprimés : le parcours en cours « Chemin du lavoir » (1 plante), la partie en cours. Cette action est définitive.'
+      ? 'Seront supprimés : le parcours en cours « Chemin du lavoir » (1 plante), l’activité en cours. Cette action est définitive.'
       : id === 'faux-amis' ? 'Seront supprimés : la partie en cours. Cette action est définitive.'
-      // No game: its circle and its filters, as it says them (its manifest's owns.label).
+      // Its circle and its filters, as it says them (its manifest's owns.label).
       : id === 'orchidees' ? 'Seront supprimés : le cercle et les filtres choisis. Cette action est définitive.'
-      : `Seront supprimés : 1 favori ajouté par ${TITLES[id]}, la partie en cours. Cette action est définitive.`);
+      // A game's session is « la partie en cours » (Rencontres, Faux amis); the others', « l’activité en cours ».
+      : `Seront supprimés : 1 favori ajouté par ${TITLES[id]}, ${id === 'rencontres' ? 'la partie' : 'l’activité'} en cours. Cette action est définitive.`);
     await dialog.getByRole('button', { name: 'Annuler' }).click();
     await expect(dialog).toBeHidden();
     expect(await footprint(page)).toEqual(before);
@@ -154,7 +155,7 @@ for (const id of /** @type {(keyof typeof TITLES)[]} */ (Object.keys(TITLES))) {
     await atStart(page, id);
     expect(await footprint(page)).toEqual(never);
     await page.locator('gf-miniapp .quit').click();
-    await expect(list(page).getByRole('button', { name: `Jouer : ${TITLES[id]}` })).toBeVisible();
+    await expect(list(page).getByRole('button', { name: `Commencer : ${TITLES[id]}`, exact: true })).toBeVisible();
   });
 }
 
@@ -181,13 +182,13 @@ test('Recommencer une partie ne touche pas les autres, ni un favori venu d’ail
   const fav = await favourites(page);
   expect(fav).toEqual({ [plantId('Taraxacum officinale')]: null, [plantId('Allium ursinum')]: 'rencontres' });
   const cueillette = await page.evaluate(() => localStorage.getItem('geoflora.app.cueillette.state'));
-  // « Rejouer » from Rencontres' ⋯.
+  // « Recommencer » from Rencontres' ⋯.
   await app.go('#/app/rencontres/cards');
   const box = page.locator('gf-miniapp');
   await box.locator('.more summary').click();
-  await box.locator('.menu').getByRole('button', { name: 'Rejouer' }).click();
+  await box.locator('.menu').getByRole('button', { name: 'Recommencer' }).click();
   await expect(box.getByRole('dialog')).toContainText('Seront supprimés : 1 favori ajouté par Rencontres, la partie en cours.');
-  await box.getByRole('dialog').getByRole('button', { name: 'Rejouer' }).click();
+  await box.getByRole('dialog').getByRole('button', { name: 'Recommencer' }).click();
   await atStart(page, 'rencontres');
   expect(await favourites(page)).toEqual({ [plantId('Taraxacum officinale')]: null });
   expect(await page.evaluate(() => localStorage.getItem('geoflora.app.cueillette.state'))).toBe(cueillette);
@@ -196,15 +197,15 @@ test('Recommencer une partie ne touche pas les autres, ni un favori venu d’ail
   await atStart(page, 'rencontres');
 });
 
-test('la liste avec une partie en cours (captures)', async ({ app, page }, info) => {
+test('la liste avec une activité en cours (captures)', async ({ app, page }, info) => {
   await app.open('#/discover');
-  await list(page).getByRole('button', { name: 'Jouer : Cueillette prudente' }).click();
+  await list(page).getByRole('button', { name: 'Commencer : Cueillette prudente', exact: true }).click();
   await play(page, 'cueillette');
   await page.locator('gf-miniapp .quit').click();
   await expect(list(page).getByRole('button', { name: 'Continuer : Cueillette prudente' })).toBeVisible();
-  await expect(list(page).getByRole('button', { name: 'Jouer : Rencontres' })).toBeVisible();
-  await expect(list(page).getByRole('button', { name: 'Jouer : Mosaïque' })).toBeVisible();
-  await expect(list(page).getByRole('button', { name: 'Jouer : Scientifique' })).toHaveCount(0);
+  await expect(list(page).getByRole('button', { name: 'Commencer : Rencontres', exact: true })).toBeVisible();
+  await expect(list(page).getByRole('button', { name: 'Commencer : Mosaïque', exact: true })).toBeVisible();
+  await expect(list(page).getByRole('button', { name: 'Commencer : Scientifique', exact: true })).toHaveCount(0);
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/launcher-underway-${info.project.name}.png`, fullPage: false });
 });
 
@@ -214,7 +215,7 @@ const walksNamed = (page, name) => page.evaluate(async n => (await (await import
 
 test('Parcours : un parcours terminé avec ses plantes reste dans Mes plantes, le sien désormais', async ({ app, page }) => {
   await app.open('#/discover');
-  await list(page).getByRole('button', { name: 'Jouer : Parcours botanique' }).click();
+  await list(page).getByRole('button', { name: 'Commencer : Parcours botanique', exact: true }).click();
   await play(page, 'parcours');
   expect(await walksNamed(page, 'Chemin du lavoir')).toEqual([{ origin: { app: 'parcours' }, from: null }]);
   // A plant touched first (its occurrences lit), then « Terminer »: the recap, and it stays.
@@ -227,17 +228,17 @@ test('Parcours : un parcours terminé avec ses plantes reste dans Mes plantes, l
   await expect(page.getByRole('heading', { level: 1, name: 'Parcours terminé' })).toBeVisible();
   const box = page.locator('gf-miniapp');
   await box.locator('.more summary').click();
-  await box.locator('.menu').getByRole('button', { name: 'Rejouer' }).click();
+  await box.locator('.menu').getByRole('button', { name: 'Recommencer' }).click();
   const dialog = box.getByRole('dialog');
-  await expect(dialog).toContainText('Seront supprimés : la partie en cours. Cette action est définitive. Votre parcours enregistré dans Mes plantes est conservé.');
-  await dialog.getByRole('button', { name: 'Rejouer' }).click();
+  await expect(dialog).toContainText('Seront supprimés : l’activité en cours. Cette action est définitive. Votre parcours enregistré dans Mes plantes est conservé.');
+  await dialog.getByRole('button', { name: 'Recommencer' }).click();
   await atStart(page, 'parcours');
   expect(await walksNamed(page, 'Chemin du lavoir')).toEqual([{ origin: null, from: { app: 'parcours' } }]);
 });
 
 test('Parcours : un parcours en cours renommé depuis Mes plantes est gardé ; Annuler ne supprime rien', async ({ app, page }) => {
   await app.open('#/discover');
-  await list(page).getByRole('button', { name: 'Jouer : Parcours botanique' }).click();
+  await list(page).getByRole('button', { name: 'Commencer : Parcours botanique', exact: true }).click();
   await play(page, 'parcours');
   await page.locator('gf-miniapp .quit').click();
   const id = await page.evaluate(async () => (await (await import('/app/core/collections.js')).listCollections()).find((/** @type {any} */ c) => c.properties.name === 'Chemin du lavoir')?.id);
@@ -248,7 +249,7 @@ test('Parcours : un parcours en cours renommé depuis Mes plantes est gardé ; A
   await app.go('#/discover');
   await list(page).getByRole('button', { name: 'Recommencer : Parcours botanique' }).click();
   const dialog = list(page).locator('dialog.ask');
-  await expect(dialog).toContainText('Seront supprimés : la partie en cours. Cette action est définitive. Votre parcours enregistré dans Mes plantes est conservé.');
+  await expect(dialog).toContainText('Seront supprimés : l’activité en cours. Cette action est définitive. Votre parcours enregistré dans Mes plantes est conservé.');
   await dialog.getByRole('button', { name: 'Recommencer' }).click();
   await atStart(page, 'parcours');
   expect(await walksNamed(page, 'Le lavoir, à moi')).toEqual([{ origin: null, from: { app: 'parcours' } }]);
@@ -256,7 +257,7 @@ test('Parcours : un parcours en cours renommé depuis Mes plantes est gardé ; A
 
 test('Rencontres : un favori de match rangé dans une liste est gardé, un favori de match simple supprimé', async ({ app, page }) => {
   await app.open('#/discover');
-  await list(page).getByRole('button', { name: 'Jouer : Rencontres' }).click();
+  await list(page).getByRole('button', { name: 'Commencer : Rencontres', exact: true }).click();
   await play(page, 'rencontres');
   await expect(page.locator('ma-deck .swipe-card.top')).toHaveAttribute('data-id', String(plantId('Taraxacum officinale')));
   await page.locator('ma-deck .round.like').click();
@@ -273,7 +274,7 @@ test('Rencontres : un favori de match rangé dans une liste est gardé, un favor
   await page.locator('gf-miniapp .quit').click();
   await list(page).getByRole('button', { name: 'Recommencer : Rencontres' }).click();
   const dialog = list(page).locator('dialog.ask');
-  await expect(dialog).toContainText('Seront supprimés : 1 favori ajouté par Rencontres, la partie en cours. Cette action est définitive. Votre favori venu de cette partie, rangé ou annoté depuis, est conservé.');
+  await expect(dialog).toContainText('Seront supprimés : 1 favori ajouté par Rencontres, la partie en cours. Cette action est définitive. Votre favori venu de cette activité, rangé ou annoté depuis, est conservé.');
   await dialog.getByRole('button', { name: 'Recommencer' }).click();
   await atStart(page, 'rencontres');
   expect(await favourites(page)).toEqual({ [plantId('Allium ursinum')]: null });

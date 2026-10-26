@@ -10,7 +10,7 @@ import { sheetStyles } from './ui-kit.js';
 import { icon, kindIcon } from '../core/icons.js';
 
 /**
- * "Ajouter à…" sheet: check the collections a plant belongs to, create a list on the fly,
+ * "Ajouter à…" sheet: check the lists and places a plant belongs to, create a list on the fly,
  * or start a new place here. Call `open()`; the plant comes from the `plant` property.
  */
 
@@ -131,33 +131,33 @@ export class GfAddTo extends LitElement {
       </label></li>`;
 
     return html`
-      <dialog class="drawer centered" aria-label="Ajouter à une collection" @click=${e => { if (e.target === e.currentTarget) this.#close(); }}>
+      <dialog class="drawer centered" aria-label="Ajouter à une liste ou un lieu" @click=${e => { if (e.target === e.currentTarget) this.#close(); }}>
         <header>
           <h2>Ajouter à…</h2>
           <p>${name}</p>
         </header>
         <ul>
           ${row(favorites, 'favorites')}
-          ${lists.length ? html`<li class="section kicker">Collections</li>${lists.map(c => row(c, 'list'))}` : nothing}
-          ${places.length ? html`<li class="section kicker">Endroits</li>${places.map(c => row(c, 'place'))}` : nothing}
+          ${lists.length ? html`<li class="section kicker">Listes</li>${lists.map(c => row(c, 'list'))}` : nothing}
+          ${places.length ? html`<li class="section kicker">Lieux</li>${places.map(c => row(c, 'place'))}` : nothing}
         </ul>
         <footer>
           ${this._creating ? html`
             ${suggestions.matches.length ? html`
-              <div class="suggest" role="group" aria-label="Collections existantes">
+              <div class="suggest" role="group" aria-label="Listes et lieux existants">
                 Déjà :
                 ${suggestions.matches.map(c => html`
                   <button type="button" aria-pressed=${inIds.has(c.id) ? 'true' : 'false'} ?disabled=${this._busy || inIds.has(c.id)}
                     @click=${() => this.#addToExisting(c.id)}>${kindIcon(c.kind)} ${c.name}${inIds.has(c.id) ? html` ${icon('check-lg')}` : ''}</button>`)}
               </div>` : nothing}
             <form @submit=${this.#createList}>
-              <input type="text" placeholder="Nom de la collection (ex. Mellifères)" aria-label="Nom de la nouvelle collection" autofocus
+              <input type="text" placeholder="Nom de la liste (ex. Mellifères)" aria-label="Nom de la nouvelle liste" autofocus
                 .value=${this._query} @input=${e => { this._query = e.target.value; }} />
               <button class="primary" type="submit" ?disabled=${this._busy}>${suggestions.exact ? 'Ajouter' : 'Créer'}</button>
             </form>` : html`
             <div class="row">
-              <button type="button" @click=${() => { this._creating = true; }}>${icon('plus-lg')} Nouvelle collection</button>
-              <a class="button" href=${href.newSpot(plant?.id)} @click=${() => this.#close()}>${icon('geo-alt-fill')} Nouvel endroit ici</a>
+              <button type="button" @click=${() => { this._creating = true; }}>${icon('plus-lg')} Nouvelle liste</button>
+              <a class="button" href=${href.newSpot(plant?.id)} @click=${() => this.#close()}>${icon('geo-alt-fill')} Nouveau lieu ici</a>
             </div>`}
           <button class="primary" type="button" @click=${() => this.#close()}>Terminé</button>
         </footer>
