@@ -130,9 +130,9 @@ test('fiche plante : sa carte en 3D depuis son panneau ; une carte ajoutée rest
   await expect(panel).toContainText('Une seule carte en 3D par fiche plante');
   await panel.getByRole('button', { name: 'Fermer' }).click();
 
-  // Mode King: the map block's form (⚙) keeps its subject, its layers, its framing, its height and its actions; its
+  // The sheet personalised: the map block's form (⚙) keeps its subject, its layers, its framing, its height and its actions; its
   // background, IGN's layers and 2D / 3D are its panel ▦'s — said.
-  await page.evaluate(async () => { (await import('/app/core/store.js')).setKingMode(true); });
+  await app.king();
   await page.getByRole('button', { name: 'Configurer la carte « Carte »' }).click();
   const form = page.locator('gf-plant-detail .map-form').first();
   await expect(form.getByRole('combobox', { name: 'La carte montre' })).toBeVisible();

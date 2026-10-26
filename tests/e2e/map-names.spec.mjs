@@ -437,7 +437,7 @@ test('fiche plante : un bloc Carte qui n’a que ses noms et réseaux à lui le 
   const map = page.locator('gf-sheet-map gf-map').first();
   await map.scrollIntoViewIfNeeded();
   await expect.poll(() => lookOf(map), { timeout: 20_000 }).toEqual({ base: 'photo', landmarks: [] });
-  await page.evaluate(async () => { (await import('/app/core/store.js')).setKingMode(true); });
+  await app.king();
   await page.getByRole('button', { name: 'Configurer la carte « Carte »' }).click();
   const form = page.locator('gf-plant-detail .map-form').first();
   await expect(form).toContainText('dans le panneau ▦ de la carte (cette carte a son propre choix des noms et réseaux ; le panneau propose de revenir aux réglages communs)');

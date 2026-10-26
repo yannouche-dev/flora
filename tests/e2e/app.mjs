@@ -48,6 +48,16 @@ export class App {
     }, path);
   }
 
+  /**
+   * « Personnaliser la fiche » on the plant sheet shown (Flore, Mes plantes): its crown, at the end of the action bar;
+   * resolves once the sheet's bar « Mise en page de la fiche » is there.
+   */
+  async king() {
+    const sheet = this.page.locator('gf-plant-detail[sheet]:not([preview])').first();
+    await sheet.locator('.action-bar').getByRole('button', { name: 'Personnaliser la fiche', exact: true }).click();
+    await expect(sheet.getByRole('region', { name: 'Mise en page de la fiche' })).toBeVisible();
+  }
+
   /** The labels of the main tabs (tab bar on a phone, header on a desktop). */
   async tabs() {
     const links = this.phone ? this.page.locator('gf-tabbar nav a') : this.page.locator('gf-app nav.tabs a');

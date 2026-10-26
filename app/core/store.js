@@ -43,11 +43,11 @@ import { onStorage } from './sync.js';
  * @property {Map<number, string>} placed  plant id → one of my places where it is noted
  * @property {Mode} mode                  display mode of the app: épuré (actions, big photos), standard, scientifique
  * @property {Mode | null} gridView      results grid override of the mode (null: follow the mode)
- * @property {SheetLayout} sheetLayout  the plant sheet as arranged in « Mode King » (see sheet-blocks.js)
+ * @property {SheetLayout} sheetLayout  the plant sheet as arranged on the sheet, « Personnaliser la fiche » (see sheet-blocks.js)
  * @property {import('./context.js').Context} [context]  where the user is in each part (see context.js)
  * @property {Record<import('./modules.js').ModuleKey, boolean>} modules  online services used on this device (Réglages › Modules)
  * @property {import('./modes.js').ModeInfo[]} modes  the display modes: the app's three and the ones made from them
- * @property {boolean} kingMode         « Mode King »: the plant sheet blocks can be moved, folded and revived (left with the crown)
+ * @property {KingState | null} king    « Personnaliser la fiche » (code name: King) open on one sheet, for the visit (see KingState)
  * @property {boolean} harvestMode      "Mode cueillette": harvest log, quality, seasons (look-alike warnings show without it)
  * @property {ShowSteps} showSteps       mini-apps: their steps bar shown until one is finished once (auto), always (on), never (off)
  * @property {import('./collections.js').CollectionSummary[]} collections
@@ -74,6 +74,13 @@ export class Store extends EventTarget {
  *   error?: { name: string, message: string }, closed?: boolean }} RestoreOutcome  `closed`: its banner dismissed
  */
 /** @typedef {'auto' | 'on' | 'off'} ShowSteps */
+/**
+ * « Personnaliser la fiche » (code name: King), open on one host's sheet (`sheet`: 'flore', 'collections'; its crown,
+ * at the end of the action bar): the blocks there can be moved, folded and shown again. `mode`: the mode arranged —
+ * null, the app's (it follows the app's mode); another, picked in the sheet's bar, without changing the app's.
+ * In memory only: for the visit (across plants and screens), never after a reload, nor in another tab.
+ * @typedef {{ sheet: string, mode: Mode | null }} KingState
+ */
 
 /** @param {any} v @returns {Mode | null} */
 const asMode = v => isMode(v) ? v : v === 'illustrated' ? 'epure' : null;
@@ -168,7 +175,7 @@ export const store = new Store({
   modules: modulesState(),
   modes: modeList(),
   collections: [],
-  kingMode: readText(config.storageKeys.kingMode) === '1',
+  king: null,
   harvestMode: readHarvestMode() ?? false,
   showSteps: readShowSteps()
 });
@@ -176,10 +183,12 @@ export const store = new Store({
 moduleEvents.addEventListener('change', () => store.set({ modules: modulesState() }));
 // A mode made or deleted: the switches list it; a deleted one in use gives way to its model.
 modeEvents.addEventListener('change', () => {
-  const { mode, gridView } = store.state;
+  const { mode, gridView, king } = store.state;
   const fallback = (/** @type {Mode} */ m) => isMode(m) ? m : 'standard';
   if (!isMode(mode)) setMode(fallback(baseOf(mode)));
   if (gridView && !isMode(gridView)) setGridView(null);
+  // The mode arranged on the sheet deleted: the sheet arranges the app's again.
+  if (king?.mode && !isMode(king.mode)) store.set({ king: { ...king, mode: null } });
   store.set({ modes: modeList() });
 });
 // Storage full: said once, in a banner (gf-app), until closed.
@@ -218,11 +227,26 @@ export function setShowSteps(value) {
   store.set({ showSteps: value });
 }
 
-/** Enter or leave « Mode King » (editing the plant sheet blocks); kept until left. @param {boolean} on */
-export function setKingMode(on) {
-  writeText(config.storageKeys.kingMode, on ? '1' : null);
-  store.set({ kingMode: on });
+/** « Personnaliser la fiche » opened on a host's sheet (its crown), arranging the app's mode. @param {string} sheet */
+export const openKing = sheet => store.set({ king: { sheet, mode: null } });
+
+/**
+ * The mode arranged on the open sheet (its bar's switch): never the app's mode, which stays as it is. The sheet's own
+ * view (`view`), or none, arranges it again. @param {Mode | null} mode @param {Mode} view
+ */
+export function arrange(mode, view) {
+  const king = store.state.king;
+  if (king) store.set({ king: { ...king, mode: mode && mode !== view ? mode : null } });
 }
+
+/** « Terminé »: the sheet read again. */
+export const closeKing = () => store.set({ king: null });
+
+/** The mode a host's sheet shows: the one arranged there, else its own view. @param {string} sheet @param {Mode} view @returns {Mode} */
+export const arrangedMode = (sheet, view) => {
+  const king = store.state.king;
+  return king?.sheet === sheet && king.mode ? king.mode : view;
+};
 
 /**
  * « Auto » (never chosen): off at start, on as soon as the device holds harvests (a place's journal: an import, a

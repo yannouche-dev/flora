@@ -1,6 +1,6 @@
 {
   "typescript": "7.0.2",
-  "total": 73,
+  "total": 44,
   "errors": {
     "app/components/gf-lookalikes.js": {
       "TS2339": 2
@@ -17,7 +17,7 @@
       "TS2551": 2
     },
     "app/components/gf-plant-detail.js": {
-      "TS2339": 35,
+      "TS2339": 6,
       "TS2345": 2
     },
     "app/components/gf-plant-spots.js": {

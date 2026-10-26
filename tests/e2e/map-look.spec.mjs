@@ -415,8 +415,8 @@ test('fiche plante : son ⚙ n’a plus ni fond, ni couches IGN, ni 2D / 3D ; un
   const map = page.locator('gf-sheet-map gf-map').first();
   await map.scrollIntoViewIfNeeded();
   await expect.poll(() => shown(map), { timeout: 20_000 }).toEqual({ base: 'plan', overlays: ['cadastre'] });
-  // Mode King, its ⚙: what it shows and lets do — not how it looks (said: its panel ▦).
-  await page.evaluate(async () => { (await import('/app/core/store.js')).setKingMode(true); });
+  // The sheet personalised (its crown), its ⚙: what it shows and lets do — not how it looks (said: its panel ▦).
+  await app.king();
   await page.getByRole('button', { name: 'Configurer la carte « Carte »' }).click();
   const form = page.locator('gf-plant-detail .map-form').first();
   await expect(form.getByRole('combobox', { name: 'Cadrage' })).toBeVisible();

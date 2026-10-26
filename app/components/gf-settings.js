@@ -2,7 +2,8 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { lastSearchHash } from '../core/query.js';
 import { href } from '../core/router.js';
-import { harvestModeChosen, setHarvestMode, setKingMode, setMode, setShowSteps, StoreController } from '../core/store.js';
+import { harvestModeChosen, openKing, setHarvestMode, setMode, setShowSteps, StoreController } from '../core/store.js';
+import { context } from '../core/context.js';
 import { MODE_ICON_CHOICES, modeLabel } from '../core/modes.js';
 import { createMode, deleteMode, editMode } from '../core/mode-admin.js';
 import './gf-mode-switch.js';
@@ -106,9 +107,6 @@ export class GfSettings extends LitElement {
     .module form { margin-top: 8px; }
     .module .use { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 0.85rem; cursor: pointer; }
     .king-card { margin: 12px 0 20px; border: 2px solid color-mix(in srgb, #d4a017 40%, var(--gf-border)); }
-    /* Mode King: room at the end of the page so the floating crown never covers the last rows. */
-    :host([king]) article { padding-bottom: 96px; }
-    .king-card.on { border-color: #d4a017; background: color-mix(in srgb, #f5c518 8%, var(--gf-surface)); }
     .king-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .king-head h2 { margin: 0; flex: 1; }
     .king-card .crown { font-size: 1.6rem; color: #b8860b; display: inline-flex; }
@@ -287,7 +285,7 @@ export class GfSettings extends LitElement {
       <h2 id="modules">Modules : services en ligne</h2>
       <p class="muted">Tout fonctionne hors ligne avec la flore locale ; chaque module ajoute des données d’un service en ligne.
         Le choix vaut pour tout l’appareil, quel que soit le mode d’affichage : décoché, le service n’est jamais appelé et ses données
-        ne s’affichent nulle part (fiche plante, grille, cartes, activités). Masquer un bloc de la fiche en mode King ne coupe pas son service.
+        ne s’affichent nulle part (fiche plante, grille, cartes, activités). Masquer un bloc de la fiche ne coupe pas son service.
         Ce que chacun reçoit, votre position surtout : <a href=${href.legal()}>Mentions légales et confidentialité</a>.</p>
       ${CATEGORIES.filter(c => MODULES.some(m => m.category === c.key)).map(c => html`
       <h3 class="category">${icon(c.icon)} ${c.label} <small>${c.question}</small></h3>
@@ -319,21 +317,39 @@ export class GfSettings extends LitElement {
       </ul>`)}`;
   }
 
-  /** « Mode King »: editing the plant sheet blocks, left with the crown at the bottom of the screen. */
+  /** The plant sheet to personalise from here: Flore's last one read, else the first result (null: none yet). */
+  get #sheetToCustomize() {
+    const last = context().flore;
+    if (last && /^#\/plant\/\d+/.test(last)) return last;
+    const first = this.#store.state.results.items[0];
+    return first ? href.plant(first.id) : null;
+  }
+
+  /** « Personnaliser la fiche »: that sheet, in Flore, its customisation open. */
+  #customize() {
+    const to = this.#sheetToCustomize;
+    if (!to) return;
+    openKing('flore');
+    openView(to);
+  }
+
+  /** « Mise en page de la fiche »: personalised on the sheet itself (its crown); the file, « Tout rétablir ». */
   #king() {
-    const on = this.#store.state.kingMode;
+    const to = this.#sheetToCustomize;
     return html`
-      <section class="card king-card ${on ? 'on' : ''}" aria-labelledby="king">
+      <section class="card king-card" aria-labelledby="king">
         <div class="king-head">
           <span class="crown">${icon('crown')}</span>
-          <h2 id="king">Mode King</h2>
-          <button type="button" class=${on ? '' : 'primary'} aria-pressed=${on ? 'true' : 'false'}
-            @click=${() => setKingMode(!on)}>${on ? 'Quitter le mode King' : 'Entrer en mode King'}</button>
+          <h2 id="king">Mise en page de la fiche</h2>
+          <button type="button" class="primary" ?disabled=${!to} @click=${() => this.#customize()}>${icon('crown')} Personnaliser la fiche</button>
         </div>
-        <p class="muted">Personnalisez la fiche plante : glissez les blocs par leur titre (ou ci-dessous, par leur poignée ${icon('grip-vertical')}), masquez-les avec la corbeille ${icon('trash3')},
-          réaffichez-les avec ${icon('arrow-counterclockwise')}. Tout est enregistré automatiquement, pour chaque mode d’affichage.
+        ${to ? nothing : html`<p class="muted">Ouvrez une plante dans Flore : elle se personnalise là.</p>`}
+        <p class="muted">La fiche se personnalise sur la fiche elle-même : la couronne ${icon('crown')}, au bout de sa barre d’actions (Flore, Mes plantes), ouvre
+          la barre « Mise en page de la fiche », qui dit et change le mode arrangé — sans changer celui de l’application. Glissez les blocs par leur titre
+          ou leur poignée ${icon('grip-vertical')}, masquez-les avec la corbeille ${icon('trash3')}, réaffichez-les avec ${icon('arrow-counterclockwise')}.
+          Tout est enregistré automatiquement, pour chaque mode d’affichage. Plantes à confondre et Usages (sa Prudence) restent toujours affichés.
           Masquer un bloc ne coupe pas son service : les services en ligne se choisissent pour tout l’appareil, dans « Modules », plus bas ;
-          un bloc dont le service y est coupé reste masqué. Quittez en touchant la couronne en bas de l’écran.
+          un bloc dont le service y est coupé reste masqué.
           La mise en page s’exporte en fichier JSON, avec vos modes (pour la sauvegarder ou la copier sur un autre appareil) ;
           les textes des blocs Note voyagent avec vos plantes (Exporter, lien de transfert).</p>
         <div class="row layout-file">
@@ -343,7 +359,7 @@ export class GfSettings extends LitElement {
           <button type="button" @click=${() => { if (confirm('Tout rétablir ? Ordre, blocs masqués, sous-blocs, styles, titres, panneaux et blocs Carte ajoutés reviennent par défaut, dans tous les modes. Vos blocs Note et leurs textes restent.')) { resetAll(); this._layoutNote = 'Mise en page rétablie.'; } }}>Tout rétablir</button>
         </div>
         ${this._layoutNote ? html`<p class="muted" role="status">${this._layoutNote}</p>` : nothing}
-        ${on ? this.#blockOrders() : nothing}
+        ${this.#store.state.king ? this.#blockOrders() : nothing}
       </section>`;
   }
 
@@ -484,8 +500,6 @@ export class GfSettings extends LitElement {
     }
   }
 
-  updated() { this.toggleAttribute('king', this.#store.state.kingMode); }
-
   /** Every mode's key (the app's three, then the ones made here). */
   get #modeKeys() { return this.#store.state.modes.map(m => m.key); }
 
@@ -494,8 +508,8 @@ export class GfSettings extends LitElement {
     const modes = this.#store.state.modes;
     return html`<h3 id="modes">Modes d’affichage</h3>
       <p class="muted">Créez vos modes à partir d’un autre (ses blocs, sa disposition, ses panneaux et sa grille sont copiés) :
-        par exemple une visionneuse de médias toute simple, ou un poste scientifique qui croise toutes les données. Chacun s’arrange ensuite
-        en mode King ; il s’affiche à la manière de son modèle (Épuré, Standard ou Scientifique). Les services en ligne, eux, valent pour tous les modes (Modules).</p>
+        par exemple une visionneuse de médias toute simple, ou un poste scientifique qui croise toutes les données. Chacun se personnalise ensuite
+        sur la fiche (la couronne, puis ce mode dans la barre de mise en page) ; il s’affiche à la manière de son modèle (Épuré, Standard ou Scientifique). Les services en ligne, eux, valent pour tous les modes (Modules).</p>
       <ul class="mode-list">
         ${modes.map(m => html`<li class="mode-item">
           <span class="mode-icon">${modeIcon(m.key)}</span>
@@ -506,7 +520,7 @@ export class GfSettings extends LitElement {
             ${MODE_ICON_CHOICES.map(i => html`<option value=${i} ?selected=${i === m.icon}>${ICON_NAMES[i] || i}</option>`)}</select>`}
           <span class="mode-actions">
             <button type="button" class="small" title=${'Nouveau mode à partir de « ' + m.label + ' »'}
-              @click=${() => { const key = createMode(m.label + ' (copie)', m.key); this._modeNote = `Mode « ${modeLabel(key)} » créé : choisissez-le dans les sélecteurs d’affichage, puis arrangez-le en mode King.`; }}>${icon('plus-lg')} Dupliquer</button>
+              @click=${() => { const key = createMode(m.label + ' (copie)', m.key); this._modeNote = `Mode « ${modeLabel(key)} » créé : choisissez-le dans les sélecteurs d’affichage, puis personnalisez-le sur la fiche (couronne, puis ce mode dans la barre de mise en page).`; }}>${icon('plus-lg')} Dupliquer</button>
             ${m.builtIn ? nothing : html`<button type="button" class="small" aria-label=${'Supprimer le mode ' + m.label}
               @click=${() => { if (confirm(`Supprimer le mode « ${m.label} » et sa mise en page ?`)) deleteMode(m.key); }}>${icon('trash3')} Supprimer</button>`}
           </span>

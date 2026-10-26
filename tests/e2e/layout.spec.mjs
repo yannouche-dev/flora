@@ -1,14 +1,13 @@
-// The plant sheet's panes in mode King (« Déplacer vers… »), and the bound of TEST-6 / GAP3-10: a layout too deep
+// The plant sheet's panes, personalised on the sheet (« Déplacer vers… »), and the bound of TEST-6 / GAP3-10: a layout too deep
 // for the import is never built — the move is refused, and said. Migrated from tree1.cjs, panes.cjs, dock.cjs,
 // settingstree.cjs, audit/gap3 replay2.cjs.
 import { test, expect, plantId } from './fixtures.mjs';
 
-/** Mode King on, then the sheet of a plant. @param {import('./app.mjs').App} app */
+/** The sheet of a plant, personalised (its crown). @param {import('./app.mjs').App} app */
 async function kingSheet(app) {
-  await app.open('#/settings');
-  await app.page.getByRole('button', { name: 'Entrer en mode King' }).click();
-  await app.go(`#/plant/${plantId('Urtica dioica')}`);
+  await app.open(`#/plant/${plantId('Urtica dioica')}`);
   await expect(app.page.getByRole('heading', { level: 1, name: 'Ortie dioïque' })).toBeVisible();
+  await app.king();
 }
 
 /** Opens « Déplacer « title » vers… » and picks an item. @param {import('@playwright/test').Page} page @param {string} title @param {string} item */
@@ -24,7 +23,7 @@ const where = (/** @type {import('@playwright/test').Page} */ page, /** @type {s
   return sb.isOnEdge(store.state.mode, k);
 }, key);
 
-test('mode King : « Déplacer vers… » un nouveau volet, puis de retour dans la fiche', async ({ app, page }) => {
+test('Personnaliser la fiche : « Déplacer vers… » un nouveau volet, puis de retour dans la fiche', async ({ app, page }) => {
   await kingSheet(app);
   await moveTo(page, 'Classification', 'Nouveau panneau à droite');
   await expect.poll(() => where(page, 'taxonomy')).toBe(true);
