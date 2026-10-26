@@ -124,6 +124,8 @@ test('mise en page de la fiche : exportée puis réimportée depuis Réglages', 
   const file = /** @type {string} */ (await download.path());
   const exported = JSON.parse(readFileSync(file, 'utf8'));
   expect(exported.kind).toBe('sheet-layout');
+  // The layout and the modes only: the Note blocks' texts travel with Mes plantes, Réglages › Cartes stay this device's.
+  expect(Object.keys(exported)).toEqual(['app', 'kind', 'version', 'layout', 'modes']);
   await page.evaluate(async () => (await import('/app/core/sheet-blocks.js')).resetAll());
   await page.locator('gf-settings input[type=file][accept^="application/json"]').setInputFiles(file);
   await expect(page.locator('gf-settings p[role=status]').filter({ hasText: /import/i })).toBeVisible();

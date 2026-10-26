@@ -15,7 +15,7 @@ import { exportGeoJSON, importGeoJSON, keptContents, lastExportDate, listCollect
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
 import {
-  STYLES, SUBS, orderByCategory, canBeEmpty, hidesEmpty, setHidesEmpty, placeOf, setPlace, treeOf, paneOf, dockBlock, toSheet, blockModuleName, blockStyle, isTitleShown, setBlockStyle, setTitleShown, blockOrder, blockTitle, createNote, deleteNote, createMap, deleteMap, isAddedMap, exportLayout, importLayout, isCustom, isHidden, isNote,
+  STYLES, SUBS, orderByCategory, canBeEmpty, hidesEmpty, setHidesEmpty, placeOf, treeOf, paneOf, dockBlock, toSheet, blockModuleName, blockStyle, isTitleShown, setBlockStyle, setTitleShown, blockOrder, blockTitle, createNote, deleteNote, createMap, deleteMap, isAddedMap, exportLayout, importLayout, isCustom, isHidden, isNote,
   isSubHidden, renameBlock, resetAll, resetBlocks, setBlockOrder, setHidden, setSubHidden, setSubOrder, subOrder, subTitle, foldedByHand, serviceOffNote
 } from '../core/sheet-blocks.js';
 import './gf-sortable-list.js';
@@ -24,6 +24,7 @@ import { discoverEvents, discovering, finishDiscover, restartDiscover } from '..
 import { forgetHints } from '../core/hints.js';
 import { openView } from '../core/history.js';
 import { resetMapLook, resetMapSettings } from '../core/map-settings.js';
+import { notesEvents, notesWithText } from '../core/sheet-notes.js';
 import './gf-map-options.js';
 import { PRESETS } from '../layout/presets.js';
 
@@ -136,11 +137,14 @@ export class GfSettings extends LitElement {
   #store = new StoreController(this);
   #onSpots = () => this.#countSpots();
   #onDiscover = () => this.requestUpdate();
+  /** The Note blocks' texts read or changed: they too are exported and transferred (with Mes plantes). */
+  #onNotes = () => this.requestUpdate();
 
   connectedCallback() {
     super.connectedCallback();
     spotEvents.addEventListener('change', this.#onSpots);
     discoverEvents.addEventListener('change', this.#onDiscover);
+    notesEvents.addEventListener('change', this.#onNotes);
     this.#countSpots();
   }
 
@@ -148,6 +152,7 @@ export class GfSettings extends LitElement {
     super.disconnectedCallback();
     spotEvents.removeEventListener('change', this.#onSpots);
     discoverEvents.removeEventListener('change', this.#onDiscover);
+    notesEvents.removeEventListener('change', this.#onNotes);
   }
 
   async #countSpots() {
@@ -329,12 +334,13 @@ export class GfSettings extends LitElement {
           réaffichez-les avec ${icon('arrow-counterclockwise')}. Tout est enregistré automatiquement, pour chaque mode d’affichage.
           Masquer un bloc ne coupe pas son service : les services en ligne se choisissent pour tout l’appareil, dans « Modules », plus bas ;
           un bloc dont le service y est coupé reste masqué. Quittez en touchant la couronne en bas de l’écran.
-          La mise en page s’exporte en fichier JSON, avec les réglages des cartes (pour la sauvegarder ou la copier sur un autre appareil).</p>
+          La mise en page s’exporte en fichier JSON, avec vos modes (pour la sauvegarder ou la copier sur un autre appareil) ;
+          les textes des blocs Note voyagent avec vos plantes (Exporter, lien de transfert).</p>
         <div class="row layout-file">
           <button type="button" @click=${this.#exportLayout}>${icon('download')} Exporter la mise en page</button>
           <label class="button file">${icon('upload')} Importer…
             <input type="file" accept="application/json,.json" @change=${this.#importLayout} /></label>
-          <button type="button" @click=${() => { if (confirm('Tout réinitialiser ? Ordre, blocs masqués, sous-blocs, titres et blocs Note (avec leur texte) reviennent par défaut.')) { resetAll(); this._layoutNote = 'Mise en page réinitialisée.'; } }}>Tout réinitialiser</button>
+          <button type="button" @click=${() => { if (confirm('Tout rétablir ? Ordre, blocs masqués, sous-blocs, styles, titres, panneaux et blocs Carte ajoutés reviennent par défaut, dans tous les modes. Vos blocs Note et leurs textes restent.')) { resetAll(); this._layoutNote = 'Mise en page rétablie.'; } }}>Tout rétablir</button>
         </div>
         ${this._layoutNote ? html`<p class="muted" role="status">${this._layoutNote}</p>` : nothing}
         ${on ? this.#blockOrders() : nothing}
@@ -387,7 +393,7 @@ export class GfSettings extends LitElement {
               @choose=${e => setBlockStyle(mode, e.detail.key, e.detail.value)}
               @titled=${e => setTitleShown(mode, e.detail.key, e.detail.shown)}
               @empty=${e => setHidesEmpty(mode, e.detail.key, e.detail.hidden)}
-              @place=${e => { if (e.detail.place !== 'pane') setPlace(mode, e.detail.key, e.detail.place || null); }}
+              @place=${e => { const { key, place } = e.detail; if (place === 'pane') return; if (place) dockBlock(mode, key, 'sheet', place); else toSheet(mode, key); }}
               @remove=${e => this.#removeNote(e.detail.key)}></gf-sortable-list>
           </div>`)}
       </div>
@@ -641,7 +647,7 @@ export class GfSettings extends LitElement {
           Exportez régulièrement : effacer les données du navigateur efface aussi vos plantes.
         </p>
         <div class="row">
-          <button class="primary" type="button" @click=${this.#export} ?disabled=${!this._spotCount}>Exporter (fichier GeoJSON)</button>
+          <button class="primary" type="button" @click=${this.#export} ?disabled=${!this._spotCount && !notesWithText().length}>Exporter (fichier GeoJSON)</button>
           <label class="file button">Importer un fichier…
             <input type="file" accept=".geojson,.json,application/geo+json,application/json" @change=${this.#import} />
           </label>
@@ -654,7 +660,7 @@ export class GfSettings extends LitElement {
           <input type="checkbox" .checked=${this._personal} @change=${e => { this._personal = e.target.checked; }} />
           <span>Inclure mes notes et journaux de récolte</span>
         </label>
-        <div class="row"><button class="primary" type="button" @click=${this.#transfer} ?disabled=${!this._spotCount}>Créer le lien de transfert</button></div>
+        <div class="row"><button class="primary" type="button" @click=${this.#transfer} ?disabled=${!this._spotCount && !(this._personal && notesWithText().length)}>Créer le lien de transfert</button></div>
         ${this._transfer ? html`<p class="muted" role="status">${this._transfer}</p>` : nothing}
         ${this.#diagnostic()}
 

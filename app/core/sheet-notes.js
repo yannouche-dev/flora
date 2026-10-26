@@ -122,11 +122,6 @@ export async function deleteNoteTexts(note) {
   publish('notes');
 }
 
-/** The texts, by note block and plant (the layout file's form). @returns {Record<string, Record<string, string>>} */
-export function allNoteTexts() {
-  return Object.fromEntries([...cache].map(([note, byPlant]) => [note, Object.fromEntries([...byPlant].map(([id, r]) => [id, r.text]))]));
-}
-
 /** The note blocks that hold a text. */
 export const notesWithText = () => [...cache.keys()];
 

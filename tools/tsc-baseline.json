@@ -1,6 +1,6 @@
 {
   "typescript": "7.0.2",
-  "total": 78,
+  "total": 73,
   "errors": {
     "app/components/gf-lookalikes.js": {
       "TS2339": 2
@@ -47,8 +47,7 @@
       "TS2322": 1
     },
     "app/core/sheet-blocks.js": {
-      "TS2339": 3,
-      "TS2353": 3
+      "TS2339": 1
     },
     "app/core/territory.js": {
       "TS2345": 1
