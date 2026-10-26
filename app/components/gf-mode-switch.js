@@ -16,7 +16,9 @@ export class GfModeSwitch extends LitElement {
     /** Set for a surface overriding the app mode. */
     overridden: { type: Boolean },
     /** What the switch applies to, for the labels (« la grille », « la fiche »). */
-    scope: {}
+    scope: {},
+    /** Finger-sized buttons (the sheet's bar « Mise en page de la fiche »). */
+    large: { type: Boolean, reflect: true }
   };
 
   static styles = [ui, css`
@@ -34,6 +36,10 @@ export class GfModeSwitch extends LitElement {
       height: 6px;
       border-radius: 50%;
       background: var(--gf-accent);
+    }
+    @media (pointer: coarse) {
+      :host([large]) .segmented > button { min-height: 44px; min-width: 44px; }
+      :host([large]) .reset { width: 44px; height: 44px; }
     }
   `];
 

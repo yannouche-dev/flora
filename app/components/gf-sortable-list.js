@@ -3,7 +3,8 @@ import { LitElement, html, css, nothing, repeat } from 'lit';
 import { icon } from '../core/icons.js';
 
 /**
- * @typedef {{ key: string, label: string, note?: string, checked: boolean, renamable?: boolean, removable?: boolean, nested?: boolean,
+ * `locked`: always shown and first (safety: Prudence in Usages) — no grip, its box ticked and greyed, nothing passes it.
+ * @typedef {{ key: string, label: string, note?: string, checked: boolean, locked?: boolean, renamable?: boolean, removable?: boolean, nested?: boolean,
  *   choices?: { key: string, label: string }[], choice?: string, titled?: boolean, emptyHidden?: boolean, place?: string, tag?: string }} SortItem
  */
 
@@ -11,6 +12,7 @@ import { icon } from '../core/icons.js';
  * An ordered list to rearrange: drag a row (mouse: the whole row; finger: its grip ⠿, the rest scrolls the page;
  * keyboard: ↑ ↓ on the grip), tick it on or off, rename it ✎, remove it ✕, open what it holds (« Sous-blocs »,
  * from `renderNested(key)`). Rows only change their CSS order while dragging (the pressed node stays put).
+ * A locked row has a padlock instead of its grip: touched, it says why (written under the row, and read out).
  * A row may offer a choice (a block's style). Events (not bubbling, so a list inside another stays its own):
  * reorder {keys}, toggle {key, on}, rename {key, title}, remove {key}, choose {key, value}, titled {key, shown},
  * empty {key, hidden}, pin {key, on} (a row with `titled` defined gets a « title shown » switch; with `emptyHidden`, a « left out when empty »
@@ -26,7 +28,9 @@ export class GfSortableList extends LitElement {
     renderNested: { attribute: false },
     _sort: { state: true },
     _open: { state: true },
-    _editing: { state: true }
+    _editing: { state: true },
+    /** The locked row whose padlock was touched: why it is locked, written under it. */
+    _why: { state: true }
   };
 
   static styles = css`
@@ -48,8 +52,13 @@ export class GfSortableList extends LitElement {
     button.icon[aria-expanded='true'], button.icon[aria-pressed='true'] { color: var(--gf-accent); }
     button.icon[aria-pressed='false'] { opacity: 0.45; }
     .grip { cursor: grab; touch-action: none; }
-    /* By finger the page scrolls through the list: drag by the grip, made bigger. */
-    @media (pointer: coarse) { .grip { width: 34px; height: 34px; font-size: 1.05rem; } }
+    /* A locked row: its padlock where the grip is (touched: why), nothing to drag. */
+    button.icon.lock { cursor: help; opacity: 0.75; font-size: 0.85rem; }
+    li.locked .row { cursor: default; }
+    .why { margin: 0 0 4px 28px; font-size: 0.8rem; color: var(--gf-text-muted); }
+    .why:empty { display: none; }
+    /* By finger the page scrolls through the list: drag by the grip, made a finger's size. */
+    @media (pointer: coarse) { button.icon.grip, button.icon.lock { width: 44px; height: 44px; font-size: 1.05rem; } .why { margin-left: 48px; } }
     label { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
     label input { flex: none; margin: 0; }
     .muted { color: var(--gf-text-muted); font-size: 0.8em; }
@@ -71,15 +80,20 @@ export class GfSortableList extends LitElement {
     this._open = new Set();
     /** @type {string | null} */
     this._editing = null;
+    /** @type {string | null} */
+    this._why = null;
   }
 
   /** @param {string} type @param {object} detail */
   #emit(type, detail) { this.dispatchEvent(new CustomEvent(type, { detail })); }
 
-  /** @param {string[]} order @param {string} key @param {-1 | 1} delta */
+  /** @param {string} key */
+  #locked(key) { return Boolean(this.items.find(i => i.key === key)?.locked); }
+
+  /** One place up or down; null at an end, or past a locked row (nothing passes it, by keyboard or drag). @param {string[]} order @param {string} key @param {-1 | 1} delta */
   #swap(order, key, delta) {
     const i = order.indexOf(key), j = i + delta;
-    if (i < 0 || j < 0 || j >= order.length) return null;
+    if (i < 0 || j < 0 || j >= order.length || this.#locked(key) || this.#locked(order[j])) return null;
     const next = [...order];
     [next[i], next[j]] = [next[j], next[i]];
     return next;
@@ -104,7 +118,7 @@ export class GfSortableList extends LitElement {
   /** @param {PointerEvent} e @param {string} key */
   #press(e, key) {
     const target = /** @type {Element} */ (e.target);
-    if (e.button !== 0 || this._editing || target.closest('input, select, button:not(.grip)')) return;
+    if (e.button !== 0 || this._editing || this.#locked(key) || target.closest('input, select, button:not(.grip)')) return;
     // By finger, only the grip: elsewhere the touch scrolls the page.
     if (e.pointerType === 'touch' && !target.closest('.grip')) return;
     this.#drag = { key, y0: e.clientY, started: false };
@@ -191,11 +205,17 @@ export class GfSortableList extends LitElement {
     const dragging = sort?.key === key;
     const open = this._open.has(key);
     const editing = this._editing === key;
-    return html`<li data-key=${key} class=${dragging ? 'dragging' : ''}
+    const locked = Boolean(item.locked);
+    // Locked: the padlock says why when touched (a title alone is never read on a touch screen).
+    const why = `« ${item.label} » reste affiché et en tête : sécurité`;
+    return html`<li data-key=${key} class="${dragging ? 'dragging' : ''} ${locked ? 'locked' : ''}"
       style=${sort ? `order:${slot}${dragging ? `;transform:translateY(${sort.dy}px)` : ''}` : ''}>
       <div class="row" @pointerdown=${(/** @type {PointerEvent} */ e) => this.#press(e, key)}>
-        <button class="icon grip" type="button" aria-label="Déplacer « ${item.label} »" title="Glisser pour déplacer (↑ ↓ au clavier)"
-          @keydown=${(/** @type {KeyboardEvent} */ e) => this.#gripKey(e, key)}>${icon('grip-vertical')}</button>
+        ${locked
+          ? html`<button class="icon lock" type="button" aria-label=${why} title="Reste affiché et en tête : sécurité"
+              @click=${() => { this._why = this._why === key ? null : key; }}>${icon('lock-fill')}</button>`
+          : html`<button class="icon grip" type="button" aria-label="Déplacer « ${item.label} »" title="Glisser pour déplacer (↑ ↓ au clavier)"
+              @keydown=${(/** @type {KeyboardEvent} */ e) => this.#gripKey(e, key)}>${icon('grip-vertical')}</button>`}
         <span class="n">${slot + 1}.</span>
         ${editing ? html`<input class="edit" aria-label="Nouveau nom de « ${item.label} »" .value=${item.label} maxlength="60"
             @keydown=${(/** @type {KeyboardEvent} */ e) => {
@@ -204,7 +224,8 @@ export class GfSortableList extends LitElement {
             }}
             @blur=${(/** @type {FocusEvent} */ e) => this.#finishEdit(key, /** @type {HTMLInputElement} */ (e.target), true)} />`
           : html`<label>
-            <input type="checkbox" .checked=${item.checked} @change=${(/** @type {Event} */ e) => this.#emit('toggle', { key, on: /** @type {HTMLInputElement} */ (e.target).checked })} />
+            <input type="checkbox" .checked=${item.checked || locked} ?disabled=${locked}
+              @change=${(/** @type {Event} */ e) => this.#emit('toggle', { key, on: /** @type {HTMLInputElement} */ (e.target).checked })} />
             <span>${item.label}${item.tag ? html` <span class="tag">${item.tag}</span>` : nothing}${item.note ? html` <span class="muted">${item.note}</span>` : nothing}</span>
           </label>`}
         ${item.choices ? html`<select class="choice" aria-label="Style de « ${item.label} »" title="Style"
@@ -228,6 +249,7 @@ export class GfSortableList extends LitElement {
         ${item.removable ? html`<button class="icon" type="button" aria-label="Supprimer « ${item.label} »" title="Supprimer"
           @click=${() => this.#emit('remove', { key })}>${icon('x-lg')}</button>` : nothing}
       </div>
+      ${locked ? html`<p class="why" role="status">${this._why === key ? why : nothing}</p>` : nothing}
       ${item.nested && open && this.renderNested ? html`<div class="nested">${this.renderNested(key)}</div>` : nothing}
     </li>`;
   }

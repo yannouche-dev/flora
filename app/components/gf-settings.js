@@ -17,7 +17,7 @@ import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
 import {
   STYLES, SUBS, orderByCategory, canBeEmpty, hidesEmpty, setHidesEmpty, placeOf, treeOf, paneOf, dockBlock, toSheet, blockModuleName, blockStyle, isTitleShown, setBlockStyle, setTitleShown, blockOrder, blockTitle, createNote, deleteNote, createMap, deleteMap, isAddedMap, exportLayout, importLayout, isCustom, isHidden, isNote,
-  isSubHidden, renameBlock, resetAll, resetBlocks, setBlockOrder, setHidden, setSubHidden, setSubOrder, subOrder, subTitle, foldedByHand, serviceOffNote
+  isSubHidden, isSubLocked, renameBlock, resetAll, resetBlocks, setBlockOrder, setHidden, setSubHidden, setSubOrder, subOrder, subTitle, foldedByHand, serviceOffNote
 } from '../core/sheet-blocks.js';
 import './gf-sortable-list.js';
 import { ui } from '../styles/ui.js';
@@ -453,7 +453,7 @@ export class GfSettings extends LitElement {
   /** A block's sub-blocks in a mode. @param {any} mode @param {string} block */
   #subList(mode, block) {
     return html`<gf-sortable-list label=${'Sous-blocs de ' + blockTitle(block)}
-      .items=${subOrder(mode, block).map(k => ({ key: k, label: subTitle(block, k), checked: !isSubHidden(mode, block, k) }))}
+      .items=${subOrder(mode, block).map(k => ({ key: k, label: subTitle(block, k), checked: !isSubHidden(mode, block, k), locked: isSubLocked(block, k) }))}
       @reorder=${e => setSubOrder(mode, block, e.detail.keys)}
       @toggle=${e => setSubHidden(mode, block, e.detail.key, !e.detail.on)}></gf-sortable-list>`;
   }
