@@ -1,10 +1,12 @@
 // « Disposition libre » : the zone's observations, one layer over iNaturalist and GBIF (core/observations.js), and their
 // filters first in the list's (layout/obs-filters.js « Observations de la zone », slotted in gf-filter-panel): shown
-// once the group has a zone; each setting written in the address (sources=, jeux=, taxon=, qualite=, photos=,
-// sauvages=) and asked of each source in its own words (iNaturalist: quality_grade, hrank, photo_license, captive;
-// GBIF: mediaType, datasetKey, its datasets counted); GBIF's datasets in the zone with their titles and counts
-// (iNaturalist's copy left out); a plant seen by GBIF alone in the list and on the map; reloaded, the same; « effacer »:
-// the layout's own again; the plants' origin, the « Statut en France » below; a source that fails said, the other shown.
+// once the group has a zone; every one ticked by default (both sources, every quality grade, every dataset, the
+// cultivated plants), one at least kept of each list; each setting written in the address (sources=, sansjeux=,
+// taxon=, qualite=, photos=, sauvages=) and asked of each source in its own words (iNaturalist: quality_grade, hrank,
+// photo_license, captive; GBIF: mediaType, datasetKey, its datasets counted); GBIF's datasets in the zone with their
+// titles and counts (iNaturalist's copy left out), « Tout cocher »; a plant seen by GBIF alone in the list and on the
+// map; reloaded, the same; « effacer »: the layout's own again; the plants' origin, the « Statut en France » below; a
+// source that fails said, the other shown.
 // iNaturalist answered here: 24 observations of the 12 plants of the zone (fixtures answerZone); GBIF: the elder
 // (Sambucus nigra, which iNaturalist did not see) twice, in two datasets, and a copy of iNaturalist's.
 import { test, expect, answerAround, answerZone, plantId } from './fixtures.mjs';
@@ -23,15 +25,13 @@ const TITLES = { 'cbn-mc': 'Inventaire du CBN Massif central', plantnet: 'Pl@ntN
 
 /**
  * GBIF answered as it does (its occurrences around the point asked, the datasets chosen only — none with limit=0; its
- * datasets counted as if none were, when asked; their titles), unless `down`. `seen`: the addresses of its occurrences
- * asked.
- * @param {Page} page @param {{ seen?: string[], down?: boolean }} [o]
+ * datasets counted as if none were, when asked; their titles). `seen`: the addresses of its occurrences asked.
+ * @param {Page} page @param {{ seen?: string[] }} [o]
  */
-async function answerGbif(page, { seen, down = false } = {}) {
+async function answerGbif(page, { seen } = {}) {
   await page.route(/^https:\/\/api\.gbif\.org\/v1\/occurrence\/search\?/, route => {
     const url = new URL(route.request().url());
     seen?.push(url.href);
-    if (down) return route.fulfill({ status: 503, body: '' });
     const [lat, lng] = (url.searchParams.get('geoDistance') || '0,0,1km').split(',').map(Number);
     const media = [{ type: 'StillImage', license: 'http://creativecommons.org/licenses/by/4.0/' }];
     const row = (/** @type {number} */ key, /** @type {string} */ species, /** @type {string} */ datasetKey, /** @type {number} */ d) => ({ key, decimalLatitude: lat + d, decimalLongitude: lng + d,
@@ -80,66 +80,108 @@ test('la section de la liste : avec la zone seulement ; ses sources comptées ; 
   await app.open(LAYOUT);
   await expect(page.locator('dl-search gf-filter-panel')).toBeVisible();
   await expect(section(page)).toHaveCount(0);
-  // A zone: the section first, iNaturalist's research grade as always, GBIF not asked.
+  // A zone: the section first, every observation — both sources, iNaturalist without a quality grade, GBIF in two
+  // requests: the zone's count and datasets first, then the occurrences of its datasets but iNaturalist's copy.
   await app.go(`${LAYOUT}?${AT}`);
   await expect(section(page).getByRole('button', { name: 'Observations de la zone' })).toBeVisible();
+  await expect(section(page).locator('.badge')).toHaveCount(0);
   const sources = section(page).getByRole('group', { name: 'Sources des observations' });
-  await expect(sources.getByRole('checkbox', { name: /iNaturalist/ })).toBeChecked();
-  await expect(sources.getByRole('checkbox', { name: /iNaturalist/ })).toBeDisabled();
-  await expect(sources.getByRole('checkbox', { name: /GBIF/ })).not.toBeChecked();
+  for (const name of [/iNaturalist/, /GBIF/]) {
+    await expect(sources.getByRole('checkbox', { name })).toBeChecked();
+    await expect(sources.getByRole('checkbox', { name })).toBeEnabled();
+  }
   await expect(sources.locator('li').first()).toContainText('24');
   await expect.poll(() => inat.length).toBeGreaterThan(0);
-  expect(lastAsked(inat).get('quality_grade')).toBe('research');
-  expect(gbif).toEqual([]);
-  await expect.poll(async () => (await names(page)).length).toBe(12);
-
-  // GBIF too: written, asked (its datasets counted), its count without its copy of iNaturalist's.
-  await sources.getByRole('checkbox', { name: /GBIF/ }).check();
-  await expect.poll(() => param(page, 'sources')).toBe('inat,gbif');
+  expect(lastAsked(inat).has('quality_grade')).toBe(false);
   await expect.poll(() => gbif.length).toBeGreaterThan(1);
-  // In two requests: the zone's count and datasets first, then the occurrences of its datasets but iNaturalist's copy.
   const head = gbifAsked(gbif, '0');
-  expect([head.get('taxonKey'), head.get('facet'), head.get('facetMultiselect'), head.get('datasetKey.facetLimit')]).toEqual(['6', 'datasetKey', 'true', '50']);
+  expect([head.get('taxonKey'), head.get('facet'), head.get('facetMultiselect'), head.get('datasetKey.facetLimit'), head.getAll('datasetKey')])
+    .toEqual(['6', 'datasetKey', 'true', '50', []]);
   await expect.poll(() => { const q = gbifAsked(gbif, '300'); return [q.getAll('datasetKey'), q.get('facet')]; }).toEqual([['cbn-mc', 'plantnet'], null]);
+  // GBIF's count without its copy of iNaturalist's; the elder, seen by GBIF alone, among the plants.
   await expect(sources.locator('li').nth(1)).toContainText('42');
-  // Its datasets in the zone: their titles and counts, iNaturalist's copy not among them; one chosen: written, asked.
+  await expect.poll(async () => (await names(page)).length).toBe(13);
+
+  // GBIF left: written; iNaturalist then kept (one source at least); ticked again: the layout's own, nothing written.
+  await sources.getByRole('checkbox', { name: /GBIF/ }).uncheck();
+  await expect.poll(() => param(page, 'sources')).toBe('inat');
+  await expect(sources.getByRole('checkbox', { name: /iNaturalist/ })).toBeDisabled();
+  await expect(section(page).getByRole('group', { name: 'Jeux de données GBIF' })).toHaveCount(0);
+  await expect.poll(async () => (await names(page)).length).toBe(12);
+  await sources.getByRole('checkbox', { name: /GBIF/ }).check();
+  await expect.poll(() => param(page, 'sources')).toBe(null);
+  // iNaturalist left: its quality grades said not to apply (GBIF has none), their boxes off.
+  await sources.getByRole('checkbox', { name: /iNaturalist/ }).uncheck();
+  await expect.poll(() => param(page, 'sources')).toBe('gbif');
+  await expect(section(page).getByRole('group', { name: 'Qualité' }).getByRole('checkbox')).toHaveCount(3);
+  for (const box of await section(page).getByRole('group', { name: 'Qualité' }).getByRole('checkbox').all()) await expect(box).toBeDisabled();
+  await sources.getByRole('checkbox', { name: /iNaturalist/ }).check();
+  await expect.poll(() => param(page, 'sources')).toBe(null);
+
+  // Its datasets in the zone: their titles and counts, iNaturalist's copy not among them, every one ticked; one left
+  // out: written, never asked, its records not counted; the other kept (one at least); « Tout cocher » then.
   const datasets = section(page).getByRole('group', { name: 'Jeux de données GBIF' });
   await expect(datasets.getByRole('checkbox')).toHaveCount(2);
   await expect(datasets.locator('li').first()).toContainText(TITLES['cbn-mc']);
   await expect(datasets.locator('li').first()).toContainText('30');
   await expect(datasets.locator('li').nth(1)).toContainText(TITLES.plantnet);
-  await datasets.getByRole('checkbox', { name: new RegExp(TITLES.plantnet.replace(/[.@]/g, '.')) }).check();
-  await expect.poll(() => param(page, 'jeux')).toBe('plantnet');
-  await expect.poll(() => gbifAsked(gbif, '300').getAll('datasetKey')).toEqual(['plantnet']);
-  await expect(datasets.getByRole('checkbox'), 'the others still there to choose').toHaveCount(2);
+  for (const box of await datasets.getByRole('checkbox').all()) await expect(box).toBeChecked();
+  await expect(datasets.getByRole('button', { name: 'Tout cocher' })).toHaveCount(0);
+  const plantnet = datasets.getByRole('checkbox', { name: new RegExp(TITLES.plantnet.replace(/[.@]/g, '.')) });
+  await plantnet.uncheck();
+  await expect.poll(() => param(page, 'sansjeux')).toBe('plantnet');
+  await expect.poll(() => gbifAsked(gbif, '300').getAll('datasetKey')).toEqual(['cbn-mc']);
+  await expect(sources.locator('li').nth(1)).toContainText('30');
+  await expect(datasets.getByRole('checkbox', { name: new RegExp(TITLES['cbn-mc']) })).toBeDisabled();
+  await expect(datasets.getByRole('checkbox'), 'the one left out still there to tick').toHaveCount(2);
+  await expect(datasets.getByRole('button', { name: 'Tout cocher' })).toBeVisible();
 
-  // The rank, the quality, a free photo, wild plants: each written, each asked in each source's words.
+  // The rank, the quality grades, a free photo, the cultivated plants: each written, each asked in each source's words.
   await section(page).getByRole('group', { name: 'Taxon' }).getByRole('button', { name: 'À l’espèce' }).click();
   await expect.poll(() => param(page, 'taxon')).toBe('espece');
-  await section(page).getByRole('group', { name: 'Qualité' }).getByRole('button', { name: 'Toutes' }).click();
-  await expect.poll(() => param(page, 'qualite')).toBe('toutes');
+  const quality = section(page).getByRole('group', { name: 'Qualité' });
+  for (const box of await quality.getByRole('checkbox').all()) await expect(box).toBeChecked();
+  await quality.getByRole('checkbox', { name: 'Occasionnelles : cultivées ou captives, sans photo, date ou lieu précis' }).uncheck();
+  await expect.poll(() => param(page, 'qualite')).toBe('verifiables');
+  await expect.poll(() => lastAsked(inat).get('quality_grade')).toBe('research,needs_id');
   await expect(section(page)).toContainText('GBIF n’a pas de note de qualité');
+  await quality.getByRole('checkbox', { name: 'Vérifiées' }).uncheck();
+  await expect.poll(() => param(page, 'qualite')).toBe('aidentifier');
+  await expect(quality.getByRole('checkbox', { name: 'À identifier' }), 'one grade at least').toBeDisabled();
   await section(page).getByRole('group', { name: 'Photo' }).getByRole('button', { name: 'Photo libre' }).click();
   await expect.poll(() => param(page, 'photos')).toBe('libre');
-  await section(page).getByRole('checkbox', { name: 'Sauvages seulement' }).check();
+  const grown = section(page).getByRole('checkbox', { name: 'Plantes cultivées ou captives' });
+  await expect(grown).toBeChecked();
+  await grown.uncheck();
   await expect.poll(() => param(page, 'sauvages')).toBe('1');
   await expect.poll(() => { const q = lastAsked(inat); return [q.get('hrank'), q.get('quality_grade'), q.get('photo_license'), q.get('captive')]; })
-    .toEqual(['species', null, 'cc0,cc-by,cc-by-sa', 'false']);
+    .toEqual(['species', 'needs_id', 'cc0,cc-by,cc-by-sa', 'false']);
   await expect.poll(() => [gbifAsked(gbif, '0').get('mediaType'), gbifAsked(gbif, '300').get('mediaType')]).toEqual(['StillImage', 'StillImage']);
-  await expect(section(page).locator('.badge')).toHaveText('6');
+  await expect(section(page).locator('.badge')).toHaveText('5');
 
   // Reloaded: the same settings shown.
   await page.reload();
   await app.ready();
   await expect(section(page).getByRole('group', { name: 'Taxon' }).getByRole('button', { name: 'À l’espèce' })).toHaveAttribute('aria-pressed', 'true');
   await expect(section(page).getByRole('group', { name: 'Photo' }).getByRole('button', { name: 'Photo libre' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(section(page).getByRole('checkbox', { name: 'Sauvages seulement' })).toBeChecked();
-  await expect(section(page).getByRole('group', { name: 'Jeux de données GBIF' }).getByRole('checkbox', { name: /Pl@ntNet/ })).toBeChecked();
+  await expect(section(page).getByRole('checkbox', { name: 'Plantes cultivées ou captives' })).not.toBeChecked();
+  await expect(quality.getByRole('checkbox', { name: 'Vérifiées' })).not.toBeChecked();
+  await expect(quality.getByRole('checkbox', { name: 'À identifier' })).toBeChecked();
+  await expect(datasets.getByRole('checkbox', { name: /Pl@ntNet/ })).not.toBeChecked();
+  await expect(datasets.getByRole('checkbox', { name: new RegExp(TITLES['cbn-mc']) })).toBeChecked();
 
-  // « effacer »: the layout's own again — none of these keys in the address.
+  // « Tout cocher »: every dataset again, nothing written for them.
+  await datasets.getByRole('button', { name: 'Tout cocher' }).click();
+  await expect.poll(() => param(page, 'sansjeux')).toBe(null);
+  await expect(datasets.getByRole('checkbox', { name: /Pl@ntNet/ })).toBeChecked();
+  await expect.poll(() => gbifAsked(gbif, '300').getAll('datasetKey')).toEqual(['cbn-mc', 'plantnet']);
+
+  // « effacer »: the layout's own again — none of these keys in the address, every box ticked.
   await section(page).getByRole('button', { name: 'effacer' }).click();
   await expect.poll(() => page.evaluate(() => location.hash.split('?')[1])).toBe('at=48.85000,2.35000&r=1km');
-  await expect(section(page).getByRole('group', { name: 'Sources des observations' }).getByRole('checkbox', { name: /GBIF/ })).not.toBeChecked();
+  await expect(section(page).getByRole('group', { name: 'Sources des observations' }).getByRole('checkbox', { name: /GBIF/ })).toBeChecked();
+  for (const box of await quality.getByRole('checkbox').all()) await expect(box).toBeChecked();
+  await expect(section(page).getByRole('checkbox', { name: 'Plantes cultivées ou captives' })).toBeChecked();
 
   // The plants' origin: the flora's « Statut en France », below, opened.
   await section(page).getByRole('button', { name: 'Statut en France' }).click();
@@ -149,7 +191,7 @@ test('la section de la liste : avec la zone seulement ; ses sources comptées ; 
 test('fusionnées : une plante vue par GBIF seul dans la liste et sur la carte, la copie d’iNaturalist laissée ; la note dit les deux sources', async ({ app, page }) => {
   await answerZone(page);
   await answerGbif(page);
-  await app.open(`${LAYOUT}?${AT}&sources=inat,gbif`);
+  await app.open(`${LAYOUT}?${AT}`);
   await expect.poll(async () => (await names(page)).length).toBe(13);
   expect(await names(page)).toContain('Sambucus nigra');
   await expect.poll(async () => (await mapPoints(page)).filter(p => p.kind === 'gbif').map(p => p.sci)).toEqual(['Sambucus nigra', 'Sambucus nigra']);
@@ -160,14 +202,13 @@ test('fusionnées : une plante vue par GBIF seul dans la liste et sur la carte, 
   await expect.poll(async () => (await mapPoints(page)).every(p => p.kind === 'inat') && (await mapPoints(page)).length === 24).toBe(true);
   expect(await names(page)).toContain('Sambucus nigra');
   // The elder touched on the map: its plant chosen.
-  await app.go(`${LAYOUT}?${AT}&sources=inat,gbif&p=${plantId('Sambucus nigra')}`);
+  await app.go(`${LAYOUT}?${AT}&p=${plantId('Sambucus nigra')}`);
   await expect.poll(() => param(page, 'p')).toBe(String(plantId('Sambucus nigra')));
 });
 
 test('une source en panne : dite dans la section et sur la carte, l’autre montrée', async ({ app, page }) => {
-  await answerZone(page);
-  await answerGbif(page, { down: true });
-  await app.open(`${LAYOUT}?${AT}&sources=inat,gbif`);
+  await answerZone(page, { gbif: false });
+  await app.open(`${LAYOUT}?${AT}`);
   const map = page.locator('dl-map gf-map');
   await expect.poll(() => mapState(map)).toContain('GBIF ne répond pas : ses observations manquent sur la carte et dans la liste.');
   await expect(section(page).getByRole('group', { name: 'Sources des observations' }).locator('li').nth(1)).toContainText('ne répond pas');

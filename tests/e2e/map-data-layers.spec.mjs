@@ -6,7 +6,7 @@
 // chips), the look-alike compared (its chip's ✕; its row gone, the focus on the one above); a free layout's map: its
 // points' sources (src=: GBIF's fetched for the whole group) and the current plant's (plante=), written in the address
 // and read from it. Réglages › Cartes has none. Every service answered here (fixtures.mjs, tiles.mjs).
-import { test, expect, answerAround, answerObservations, answerPlantNear, plantId } from './fixtures.mjs';
+import { test, expect, answerAround, answerPlantNear, answerZoneGbif, plantId } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page @typedef {import('@playwright/test').Locator} Locator */
@@ -244,23 +244,33 @@ test('la carte d’une fiche : « Sur cette carte » — la répartition (France
 });
 
 test('une carte de disposition : « Sur cette carte » — les sources de ses points (src=) et les points de la plante choisie (plante=), écrits dans l’adresse et relus', async ({ app, page }) => {
+  // GBIF asked by default beside iNaturalist (its 30 points): three occurrences of the zone.
+  /** @type {string[]} */ const seen = [];
+  await answerZoneGbif(page, 3, { seen });
   await app.open(`#/layout/[map(r=1km)]?${AT}`);
   const map = page.locator('dl-map gf-map');
   const points = () => map.evaluate(m => /** @type {any} */ (m).area?.points?.length ?? 0);
-  await expect.poll(points).toBe(30);
+  const kinds = () => map.evaluate(m => [...new Set((/** @type {any} */ (m).area?.points ?? []).map((/** @type {any} */ p) => p.kind))].sort());
+  await expect.poll(points).toBe(33);
+  expect(seen.length).toBeGreaterThan(0);
 
   let panel = await openPanel(map);
   expect((await headings(panel)).slice(0, 5)).toEqual(['Carte', 'Affichage', 'Fond', 'Sur cette carte', 'Couches affichées']);
   let data = onThisMap(panel);
   const inat = data.getByRole('checkbox', { name: /^iNaturalist/ });
+  const gbif = data.getByRole('checkbox', { name: /^GBIF/ });
   const plant = data.getByRole('checkbox', { name: /^Points de la plante choisie/ });
+  // Both sources by default (every observation).
   await expect(inat).toBeChecked();
-  await expect(data.getByRole('checkbox', { name: /^GBIF/ })).not.toBeChecked();
-  await expect(data.getByRole('checkbox', { name: /^GBIF/ })).toBeEnabled();
+  await expect(gbif).toBeChecked();
+  await expect(gbif).toBeEnabled();
   await expect(plant).toBeChecked();
   await expect(plant).toHaveAccessibleName(/aucune choisie pour l’instant/);
 
-  // iNaturalist's let go: src=aucune, no point; back: src=inat, every point.
+  // GBIF's let go: src=inat; iNaturalist's too: src=aucune, no point; back: src=inat, every point.
+  await gbif.uncheck();
+  await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,src=inat)]');
+  await expect.poll(points).toBe(30);
   await inat.uncheck();
   await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,src=aucune)]');
   await expect.poll(points).toBe(0);
@@ -272,15 +282,11 @@ test('une carte de disposition : « Sur cette carte » — les sources de ses po
   await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,src=inat,plante=non)]');
   await plant.check();
   await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,src=inat)]');
-  // GBIF's added: src=inat+gbif — the whole group asks GBIF too, its points on the map; let go: iNaturalist's alone.
-  /** @type {string[]} */ const seen = [];
-  await answerObservations(page, { seen });
-  const kinds = () => map.evaluate(m => [...new Set((/** @type {any} */ (m).area?.points ?? []).map((/** @type {any} */ p) => p.kind))].sort());
-  const gbif = data.getByRole('checkbox', { name: /^GBIF/ });
+  // GBIF's again: src=inat+gbif — the whole group asks GBIF too, its points on the map; let go: iNaturalist's alone.
   await gbif.check();
   await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,src=inat+gbif)]');
-  await expect.poll(() => seen.some(u => u.startsWith('https://api.gbif.org/v1/occurrence/search?'))).toBe(true);
-  await expect.poll(kinds).toContain('gbif');
+  await expect.poll(kinds).toEqual(['gbif', 'inat']);
+  await expect.poll(points).toBe(33);
   await expect(gbif).toBeChecked();
   await expect(inat).toBeChecked();
   await gbif.uncheck();

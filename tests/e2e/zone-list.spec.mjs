@@ -65,9 +65,10 @@ test('chaque ligne dit les observations de sa plante dans la zone ; « Plus obse
   await expect.poll(async () => (await names(page)).length).toBe(12);
   // The default order stays the French name's; each row says its plant's observations.
   expect(await param(page, 'sort')).toBe(null);
-  await expect(page.locator('dl-results gf-plant-card').first().locator('.meta .obs')).toHaveText(/^\d+ obs\.$/);
+  // Both sources asked (the defaults): iNaturalist's part said, GBIF having none here.
+  await expect(page.locator('dl-results gf-plant-card').first().locator('.meta .obs')).toHaveText(/^\d+ obs\. iNat\.$/);
   const ail = page.locator('dl-results gf-plant-card').filter({ hasText: 'Ail des ours' });
-  await expect(ail.locator('.meta .obs')).toHaveText('9 obs.');
+  await expect(ail.locator('.meta .obs')).toHaveText('9 obs. iNat.');
   await expect(ail.locator('.meta .obs')).toHaveAttribute('title', '9 observations dans la zone : 9 iNaturalist');
   // « Plus observées »: one more choice of the sort menu, written in the address.
   const sort = page.locator('dl-search gf-results-bar select');

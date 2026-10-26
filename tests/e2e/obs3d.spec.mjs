@@ -82,7 +82,10 @@ test('en 3D, « Observations autour » : iNaturalist et GBIF dans le cercle seul
   expect(st.kinds).toEqual({ inat: 60, gbif: 23, mine: 1 });
   expect(st.farthest).toBeLessThanOrEqual(2000);
   expect(st.failed).toEqual([]);
-  expect(asked.some(u => /api\.inaturalist\.org\/v1\/observations\?lat=45\.777\d+&lng=3\.08\d+&radius=2\.00&iconic_taxa=Plantae&quality_grade=research/.test(u))).toBe(true);
+  // iNaturalist's of every quality grade (none asked).
+  const inat = asked.filter(u => /api\.inaturalist\.org\/v1\/observations\?lat=45\.777\d+&lng=3\.08\d+&radius=2\.00&iconic_taxa=Plantae&/.test(u));
+  expect(inat.length).toBeGreaterThan(0);
+  expect(inat.every(u => !new URL(u).searchParams.has('quality_grade'))).toBe(true);
   expect(asked.some(u => /api\.gbif\.org\/v1\/occurrence\/search\?taxonKey=6&.*geoDistance=45\.777\d%2C3\.08\d+%2C2\.00km/.test(u))).toBe(true);
   // Its circle, its wall and its seeds in the 3D map's style; the nearest points as markers (the 2D markers, standing).
   const layers = await map.evaluate(m => /** @type {any} */ (m).gl.state().layers);

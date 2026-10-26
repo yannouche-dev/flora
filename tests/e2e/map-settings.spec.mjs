@@ -3,9 +3,9 @@
 // me), the address' always winning. Fond: the background, the 3D (map-3d on the map, its 3D adapter told) — written,
 // the cell's own (gf-map `look`), else the maps' common ones. Couches: the
 // IGN layers by their short names, given to the map as its own overlays (the catalogue's added), their tiles asked, an
-// unknown name said and left out. Points: GBIF's beside iNaturalist's, a period (this month: dates kept), dots instead of
-// photos. Liens: every plant of the scope (suit=0), the current plant alone (plante=seule), a point touched opening
-// its sheet (toucher=fiche). Interface: none (no search, no buttons, no zone panel), compact by the cell's width. Intents:
+// unknown name said and left out. Points: GBIF's beside iNaturalist's by default (src=inat: iNaturalist's alone), a
+// period (this month: dates kept), dots instead of photos. Liens: every plant of the scope (suit=0), the current plant
+// alone (plante=seule), a point touched opening its sheet (toucher=fiche). Interface: none (no search, no buttons, no zone panel), compact by the cell's width. Intents:
 // one word for a bundle (terrain, protege, repartition), a setting written beside it winning. The editor: the map's
 // settings by group, a change written in the address. iNaturalist answered here: 12 plants around, 24 observations of
 // three dates (this month, May of this year, this month two years ago); GBIF: 8 occurrences.
@@ -87,25 +87,27 @@ test('fond, 3D et couches : photo, la 3D voulue puis à plat, les couches IGN pa
   expect((await given(page)).overlays).toBe(null);
 });
 
-test('points : une période (ce mois-ci, toutes années : la floraison du moment ; cette année), en pastilles, GBIF à côté d’iNaturalist', async ({ app, page }) => {
+test('points : GBIF à côté d’iNaturalist par défaut, iNaturalist seul ; une période (ce mois-ci, toutes années : la floraison du moment ; cette année), en pastilles', async ({ app, page }) => {
+  // Every observation by default: GBIF's occurrences of the plants of the scope beside iNaturalist's.
   await app.open(`#/layout/[map(r=1km),plant]?${AT}`);
-  const all = await points(page);
-  expect(all).toHaveLength(24);
+  await expect.poll(async () => ((await given(page)).points ?? []).length).toBe(32);
+  expect((/** @type {any[]} */ ((await given(page)).points)).filter(p => p.kind === 'gbif')).toHaveLength(8);
   expect((await given(page)).leaves).toBe(true);
-  await app.go(`#/layout/[map(r=1km;mois;pastille),plant]?${AT}`);
+  // iNaturalist's alone (src=inat).
+  await app.go(`#/layout/[map(r=1km;src=inat),plant]?${AT}`);
+  await expect.poll(async () => ((await given(page)).points ?? []).length).toBe(24);
+  expect((/** @type {any[]} */ ((await given(page)).points)).every(p => p.kind === 'inat')).toBe(true);
+  // A period (iNaturalist's dates).
+  await app.go(`#/layout/[map(r=1km;src=inat;mois;pastille),plant]?${AT}`);
   await expect.poll(async () => (await given(page)).points?.length).toBe(16);
   const month = THIS_MONTH.slice(5, 7);
   expect((/** @type {any[]} */ ((await given(page)).points)).every(p => p.date.slice(5, 7) === month)).toBe(true);
   // Dots: the map's plain circles, no photo marker.
   expect((await given(page)).leaves).toBe(false);
   await expect(page.locator('dl-map path.gf-obs')).toHaveCount(16);
-  await app.go(`#/layout/[map(r=1km;when=annee),plant]?${AT}`);
+  await app.go(`#/layout/[map(r=1km;src=inat;when=annee),plant]?${AT}`);
   await expect.poll(async () => (await given(page)).points?.length).toBe(16);
   expect((/** @type {any[]} */ ((await given(page)).points)).every(p => p.date.startsWith(String(now.getFullYear())))).toBe(true);
-  // GBIF's too: its occurrences of the plants of the scope, beside iNaturalist's.
-  await app.go(`#/layout/[map(r=1km;src=inat+gbif),plant]?${AT}`);
-  await expect.poll(async () => ((await given(page)).points ?? []).length).toBe(32);
-  expect((/** @type {any[]} */ ((await given(page)).points)).filter(p => p.kind === 'gbif')).toHaveLength(8);
 });
 
 test('liens : toutes les plantes de la zone (suit=0), la plante courante seule ou pas montrée, un point touché ouvre sa fiche', async ({ app, page }) => {
@@ -115,11 +117,13 @@ test('liens : toutes les plantes de la zone (suit=0), la plante courante seule o
   await expect.poll(async () => (await given(page)).points?.length ?? 0).toBeGreaterThan(0);
   await expect.poll(async () => (await given(page)).points?.length).toBeLessThan(12);
   await app.go(`#/layout/[map(r=1km;suit=0),search]?${AT}&q=${encodeURIComponent('Urtica dioica')}`);
-  await expect.poll(async () => (await given(page)).points?.length).toBe(24);
-  // The current plant alone: its points only, and its own observations, large.
+  await expect.poll(async () => (await given(page)).points?.length).toBe(32);
+  // The current plant alone: its points only — iNaturalist's two, GBIF's four (given its taxon there) —, and its own
+  // observations, large.
   await app.go(`#/layout/[map(r=1km;plante=seule),plant]?${AT}&p=${ortie}`);
   await expect.poll(async () => (await given(page)).highlight).toBe(3);
-  await expect.poll(async () => ((await given(page)).points ?? []).map(p => p.taxonId)).toEqual([1000, 1000]);
+  await expect.poll(async () => ((await given(page)).points ?? []).map(p => `${p.kind}:${p.taxonId}`).sort())
+    .toEqual(['gbif:1000', 'gbif:1000', 'gbif:1000', 'gbif:1000', 'inat:1000', 'inat:1000']);
   // Not shown: no large points.
   await app.go(`#/layout/[map(r=1km;plante=non),plant]?${AT}&p=${ortie}`);
   await expect.poll(async () => (await given(page)).highlight).toBe(null);

@@ -247,7 +247,8 @@ test.describe('un grand écran', () => {
   test('les cartes de Rencontres quand iNaturalist ne répond pas : elles le disent, « Réessayer » les fait venir', async ({ app, page }) => {
     let down = true;
     await page.route(/^https:\/\/api\.inaturalist\.org\//, route => down ? route.fulfill({ status: 503, body: '' }) : route.fallback());
-    await app.open(`#/layout/[map(r=500m),deck,plant.status]?${AT}`);
+    // A map that shows iNaturalist's alone (src=inat): the zone's only source (GBIF, asked by default, would answer).
+    await app.open(`#/layout/[map(r=500m,src=inat),deck,plant.status]?${AT}`);
     const said = page.locator('dl-deck .empty');
     // Said, with what to do — never « Les cartes arrivent… » for cards that will not come.
     await expect(said).toContainText('iNaturalist ne répond pas');

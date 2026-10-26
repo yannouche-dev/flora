@@ -351,7 +351,8 @@ test.describe('la Disposition libre', () => {
     await cell.locator('.hint-once').getByRole('button', { name: 'Masquer l’astuce' }).click();
     await expect(cell.locator('.hint-once, .note')).toHaveCount(0);
 
-    // A zone whose observations iNaturalist cannot give: no « recherche… », no error line over the map — its state.
+    // A zone whose observations neither source can give (iNaturalist late and failing, GBIF failing; both asked by
+    // default): no « recherche… », no error line over the map — its state, the sources in their order.
     let down = true;
     await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?/, async route => {
       if (down) { await new Promise(r => setTimeout(r, 1200)); return route.fulfill({ status: 503, body: '' }); }
@@ -362,8 +363,8 @@ test.describe('la Disposition libre', () => {
     await app.go('#/layout/[map(r=1km),search]?at=48.85,2.35');
     await expect(map).toHaveAttribute('busy', '', { timeout: 3000 });
     await expect(cell.locator('.note')).toHaveCount(0);
-    await expect.poll(() => mapState(map), { timeout: 10_000 }).toContain('iNaturalist ne répond pas : la zone ne filtre pas les plantes pour l’instant.');
-    await expect(mapSaid(map)).toContainText('iNaturalist ne répond pas : la zone ne filtre pas les plantes pour l’instant.');
+    await expect.poll(() => mapState(map), { timeout: 10_000 }).toContain('iNaturalist et GBIF ne répondent pas : la zone ne filtre pas les plantes pour l’instant.');
+    await expect(mapSaid(map)).toContainText('iNaturalist et GBIF ne répondent pas : la zone ne filtre pas les plantes pour l’instant.');
     await quiet(page, ['.panel']);
 
     // A point of a plant outside the flora (a map showing every observation of the zone: suit=0), touched: one brief toast.
