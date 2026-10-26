@@ -223,6 +223,13 @@ test('« Barre d’actions », dans la barre : ses actions cochées et ordonnée
   await onBar.check();
   await expect(list.getByRole('checkbox', { name: 'Noter ici' })).toBeChecked();
   expect(await sb(page, 'isSubHidden', 'standard', 'actions', 'spot')).toBe(false);
+
+  // The ☑ is the one target on each action (none under it): the actions inert until « Terminé ».
+  const share = sheet.locator('.action-bar .act[data-key="share"] > button');
+  await expect(share).toHaveAttribute('inert', '');
+  await bar(sheet).getByRole('button', { name: 'Terminé' }).click();
+  await expect(share).not.toHaveAttribute('inert');
+  await expect(sheet.locator('.action-bar .act-toggle')).toHaveCount(0);
 });
 
 test('la couronne reste au bout de la barre d’actions, toutes ses actions décochées', async ({ app, page }) => {

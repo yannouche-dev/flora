@@ -549,7 +549,8 @@ export class GfPlantDetail extends LitElement {
     .action-bar .act > button:hover, .action-bar .act > a.button:hover { background: var(--gf-surface-2); }
     .action-bar .fav[aria-pressed='true'] { color: var(--gf-fav); }
     .action-bar .share-note { position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); margin: 0; padding: 4px 10px; border-radius: var(--gf-radius-pill); background: var(--gf-text); color: var(--gf-surface); white-space: nowrap; }
-    /* King: every action, each with its ☑; an action hidden in this view is faded and does nothing. */
+    /* King: every action, each with its ☑ — the one target there, the action inert under it until « Terminé » (no two
+       targets on top of each other: WCAG 2.5.8); an action hidden in this view is faded too. */
     .action-bar .act-toggle { position: absolute; top: 0; right: 2px; display: grid; place-items: center; width: 22px; height: 22px; cursor: pointer; }
     .action-bar .act-toggle input { margin: 0; width: 16px; height: 16px; }
     .action-bar .act.off > button, .action-bar .act.off > a.button { opacity: 0.4; text-decoration: line-through; pointer-events: none; }
@@ -581,8 +582,8 @@ export class GfPlantDetail extends LitElement {
     .names-list .sep, .names .sep { font-style: normal; opacity: 0.5; padding: 0 0.3em; }
     .block-title input.rename { flex: 1; min-width: 0; font: inherit; text-transform: none; letter-spacing: 0; padding: 2px 6px; border: 1px solid var(--gf-accent); border-radius: var(--gf-radius-sm); background: var(--gf-surface); color: var(--gf-text); }
     .block-title .tool[aria-expanded='true'], .block-title .tool[aria-pressed='true'] { opacity: 1; color: var(--gf-accent); }
-    /* King: a title hidden when read is drawn faded and struck. */
-    .block.untitled > .block-title .name { opacity: 0.55; text-decoration: line-through; }
+    /* King: a title hidden when read is drawn struck and slanted (not faded: its contrast kept). */
+    .block.untitled > .block-title .name { font-style: italic; text-decoration: line-through; }
     .block-title .styles { display: inline-flex; flex: none; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill); overflow: hidden; margin-right: 4px; }
     .block-title .styles button { min-height: 0; padding: 2px 8px; border: 0; border-radius: 0; background: var(--gf-surface); color: var(--gf-text-muted); font-size: 0.7rem; text-transform: none; letter-spacing: 0; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
     .block-title .styles button[aria-pressed='true'] { background: var(--gf-accent-soft); color: var(--gf-accent); }
@@ -1593,7 +1594,7 @@ export class GfPlantDetail extends LitElement {
 
   /**
    * The action bar, docked at the bottom of the sheet (above the tab bar on a phone): the actions this view
-   * shows, in its order. King shows them all, each with its ☑ (shown or not in this view).
+   * shows, in its order. King shows them all, each with its ☑ (shown or not in this view), the actions inert meanwhile.
    * @param {any} plant
    */
   #actionBar(plant) {
@@ -1603,20 +1604,20 @@ export class GfPlantDetail extends LitElement {
     const name = nameOf(plant);
     /** @type {Record<string, () => unknown>} */
     const buttons = {
-      fav: () => html`<button type="button" class="fav" aria-pressed=${fav ? 'true' : 'false'} @click=${() => toggleFavorite(plant)}>
+      fav: () => html`<button type="button" class="fav" ?inert=${king} aria-pressed=${fav ? 'true' : 'false'} @click=${() => toggleFavorite(plant)}>
         ${icon(fav ? 'heart-fill' : 'heart')}<span>Favori</span></button>`,
-      addTo: () => html`<button type="button" @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-add-to'))?.open()}>${icon('plus-lg')}<span>Ajouter à…</span></button>`,
-      share: () => html`<button type="button" @click=${() => this.#share(plant, name)}>${icon('share')}<span>Partager</span></button>`,
+      addTo: () => html`<button type="button" ?inert=${king} @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-add-to'))?.open()}>${icon('plus-lg')}<span>Ajouter à…</span></button>`,
+      share: () => html`<button type="button" ?inert=${king} @click=${() => this.#share(plant, name)}>${icon('share')}<span>Partager</span></button>`,
       // The Carte filtered on this plant (its places, its GBIF distribution).
-      map: () => html`<a class="button" href=${href.map({ plant: plant.id })}>${icon('map')}<span>Carte</span></a>`,
+      map: () => html`<a class="button" ?inert=${king} href=${href.map({ plant: plant.id })}>${icon('map')}<span>Carte</span></a>`,
       // In one tap, into the collection or place last opened (context.js), when it is not there yet.
       addCurrent: () => {
         const current = this.#currentCollection(plant);
         if (!current) return king ? html`<button type="button" disabled title="Ouvrez une liste ou un lieu : vous y ajouterez d’un geste">${icon('plus-lg')}<span>Liste ou lieu en cours</span></button>` : nothing;
-        return html`<button type="button" title=${'Ajouter à « ' + current.name + ' »'} @click=${() => this.#addCurrent(plant, current)}>
+        return html`<button type="button" ?inert=${king} title=${'Ajouter à « ' + current.name + ' »'} @click=${() => this.#addCurrent(plant, current)}>
           ${icon(current.kind === 'place' ? 'geo-alt-fill' : 'plus-lg')}<span class="short">${current.name}</span></button>`;
       },
-      spot: () => html`<a class="button" href=${href.newSpot(plant.id)}>${icon('geo-alt-fill')}<span>Noter ici</span></a>`
+      spot: () => html`<a class="button" ?inert=${king} href=${href.newSpot(plant.id)}>${icon('geo-alt-fill')}<span>Noter ici</span></a>`
     };
     const keys = subOrder(v, 'actions').filter(k => buttons[k] && !(this.scoped && (k === 'map' || k === 'spot'))
       && (king || (!isSubHidden(v, 'actions', k) && (k !== 'addCurrent' || this.#currentCollection(plant)))));
