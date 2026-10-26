@@ -330,8 +330,9 @@ export class GfSettings extends LitElement {
           Masquer un bloc ne coupe pas son service (Modules, plus bas).</p>
         <p class="muted">Le fichier de mise en page (JSON) emporte l’ordre et la présence des blocs, leurs styles, titres et panneaux, vos blocs Note
           et Carte et vos modes : pour la sauvegarder ou la copier sur un autre appareil. Les textes des blocs Note n’y sont pas : ils voyagent avec
-          vos plantes (« Exporter (fichier GeoJSON) », lien de transfert, plus bas). « Tout rétablir » remet tout par défaut, sauf vos modes,
-          vos blocs Note et leurs textes.</p>
+          vos plantes (« Exporter (fichier GeoJSON) », lien de transfert, plus bas). « Tout rétablir » remet tout par défaut : la mise en page
+          et la barre d’actions de chaque mode — vos modes gardent leur nom et leur icône, avec la mise en page de leur modèle —, les noms donnés
+          aux blocs, les réglages ⚙ du bloc Carte ; vos blocs Note et leurs textes restent.</p>
         <div class="row layout-file">
           <button type="button" @click=${this.#exportLayout}>${icon('download')} Exporter la mise en page</button>
           <label class="button file">${icon('upload')} Importer…
@@ -342,9 +343,12 @@ export class GfSettings extends LitElement {
       </section>`;
   }
 
-  /** « Tout rétablir », confirmed: every mode back to its defaults; the modes, the Note blocks and their texts stay. */
+  /**
+   * « Tout rétablir », confirmed: every mode back to its defaults (its action bar too; an own mode keeps its name and
+   * icon, with its model's layout), the names and the built-in Carte's settings too; the Note blocks and their texts stay.
+   */
   #resetLayout() {
-    if (!confirm('Tout rétablir ? Dans tous les modes, ordre, blocs et sous-blocs masqués, styles, titres affichés ou cachés, « masqué si vide » et panneaux reviennent par défaut, les noms donnés aux blocs aussi, et les blocs Carte ajoutés sont supprimés. Vos modes, vos blocs Note et leurs textes restent.')) return;
+    if (!confirm('Tout rétablir ? Dans tous les modes, ordre, blocs et sous-blocs masqués, styles, titres affichés ou cachés, « masqué si vide », panneaux et barre d’actions reviennent par défaut, les noms donnés aux blocs et les réglages ⚙ du bloc Carte aussi, et les blocs Carte ajoutés sont supprimés. Vos modes gardent leur nom et leur icône, avec la mise en page de leur modèle. Vos blocs Note et leurs textes restent.')) return;
     resetAll();
     this._layoutNote = 'Mise en page rétablie.';
   }

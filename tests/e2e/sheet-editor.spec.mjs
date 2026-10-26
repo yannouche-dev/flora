@@ -1,12 +1,15 @@
 // « Personnaliser la fiche » (code name: King), on the sheet itself: its crown, at the end of the action bar of Flore's
 // and Mes plantes' sheets, opens the bar « Mise en page de la fiche » there only — not on a block alone, a free
 // layout's cell, the other host's sheet —, for the visit (never stored); the bar names and switches the mode arranged
-// without changing the app's (core/store.js king, arrange, arrangedMode). Everything Réglages' lists did is done on the
-// sheet (« Par défaut », « Barre d’actions », blocks, sub-blocks, styles, titles, Note and Carte blocks, Page web by
-// keyboard, a block whose service is off, folded panes); Plantes à confondre, Usages and its Prudence never hide; on a
-// phone nothing overflows, every target is 44 px and a finger on a title scrolls. Réglages › Mise en page de la fiche
-// is one card: its button opens the last plant read (else the first result) personalised, the file carries the layout
-// and the modes (never the Note blocks' texts), « Tout rétablir » keeps the modes, the Note blocks and their texts.
+// without changing the app's (core/store.js king, arrange, arrangedMode), Flore's next plant too, its data with it; the
+// crown stays when every action is unticked; the keyboard's focus stays where one acts; the bar, stuck over the sheet,
+// hides neither the block read nor a grip moved. Everything Réglages' lists did is done on the sheet (« Par défaut »,
+// « Barre d’actions », blocks, sub-blocks, styles, titles, Note and Carte blocks, Page web by keyboard, a block whose
+// service is off, folded panes); Plantes à confondre, Usages and its Prudence never hide; on a phone nothing overflows
+// (eight modes either), every target is 44 px and a finger on a title scrolls. Réglages › Mise en page de la fiche is
+// one card: its button opens the last plant read (else the first result) personalised, the file carries the layout and
+// the modes (never the Note blocks' texts), « Tout rétablir » keeps the modes (their layout reset), the Note blocks and
+// their texts.
 import { readFileSync } from 'node:fs';
 import { test, expect, plantId } from './fixtures.mjs';
 import { swipe, centre } from './touch.mjs';
@@ -136,6 +139,28 @@ test('la barre arrange un autre mode sans changer celui de l’application', asy
   }
 });
 
+test('la plante suivante des résultats s’ouvre dans le mode arrangé, avec ses données, celui de l’application inchangé', async ({ app, page }) => {
+  await app.open('#/?q=ortie');
+  await expect.poll(() => app.state('results.total')).toBeGreaterThan(1);
+  const items = /** @type {any[]} */ (await app.state('results.items'));
+  await app.go(`#/plant/${items[0].id}`);
+  const sheet = flore(page);
+  await expect(sheet.getByRole('heading', { level: 1 })).toBeVisible();
+  await app.king();
+  await bar(sheet).getByRole('button', { name: 'Scientifique — la mise en page' }).click();
+  await expect(bar(sheet)).toContainText('Mise en page : Scientifique');
+
+  // « Plante suivante »: the card underneath, come on top, is the sheet in Scientifique — what Scientifique alone
+  // shows (GBIF's synonyms, the IUCN status) asked for it, not left « chargement… ».
+  await page.locator('gf-pager').getByRole('button', { name: /^Plante suivante/ }).first().click();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe(`#/plant/${items[1].id}`);
+  await expect.poll(() => sheet.evaluate(el => /** @type {any} */ (el).plantId)).toBe(items[1].id);
+  await expect(bar(sheet)).toContainText('Mise en page : Scientifique');
+  await expect(sheet.locator('article.science')).toHaveCount(1);
+  await expect.poll(() => sheet.evaluate(el => { const g = /** @type {any} */ (el)._gbif; return g.iucn !== undefined && g.synonyms !== undefined; })).toBe(true);
+  expect(await app.state('mode')).toBe('standard');
+});
+
 /** Ortie's sheet in Flore, personalised (its crown). @param {import('./app.mjs').App} app @param {Page} page @param {number} [id] */
 async function kingSheet(app, page, id = ORTIE) {
   await app.open(`#/plant/${id}`);
@@ -165,7 +190,7 @@ test('« Par défaut », dans la barre : le mode arrangé revient à sa mise en 
   let message = '';
   page.once('dialog', dialog => { message = dialog.message(); dialog.accept(); });
   await reset.click();
-  expect(message).toMatch(/^Remettre « Standard » par défaut \? Ordre, blocs et sous-blocs masqués, styles, titres affichés ou cachés, « masqué si vide » et panneaux de ce mode reviennent par défaut ; les noms donnés aux blocs, les blocs Note et Carte restent\.$/);
+  expect(message).toBe('Remettre « Standard » par défaut ? Ordre, blocs et sous-blocs masqués, styles, titres affichés ou cachés, « masqué si vide », panneaux et barre d’actions de ce mode reviennent par défaut ; les noms donnés aux blocs, les blocs Note et Carte restent.');
   await expect(sheet.locator('[data-pane]')).toHaveCount(0);
   expect(await sb(page, 'isCustom', 'standard')).toBe(false);
   expect(await hidden(page, 'standard', 'calendar')).toBe(false);
@@ -198,6 +223,124 @@ test('« Barre d’actions », dans la barre : ses actions cochées et ordonnée
   await onBar.check();
   await expect(list.getByRole('checkbox', { name: 'Noter ici' })).toBeChecked();
   expect(await sb(page, 'isSubHidden', 'standard', 'actions', 'spot')).toBe(false);
+});
+
+test('la couronne reste au bout de la barre d’actions, toutes ses actions décochées', async ({ app, page }) => {
+  const sheet = await kingSheet(app, page);
+  for (const k of /** @type {string[]} */ (await sb(page, 'subOrder', 'standard', 'actions'))) await sb(page, 'setSubHidden', 'standard', 'actions', k, true);
+  await bar(sheet).getByRole('button', { name: 'Terminé' }).click();
+  await expect(bar(sheet)).toHaveCount(0);
+  await expect(sheet.locator('.action-bar .act')).toHaveCount(1);
+  await expect(sheet.locator('.action-bar .act').first()).toHaveClass(/\bcrown\b/);
+  await expect(crown(sheet)).toBeVisible();
+  await expect(crown(sheet)).toHaveAttribute('aria-pressed', 'false');
+  await crown(sheet).click();
+  await expect(bar(sheet)).toBeVisible();
+});
+
+test('au clavier, le focus reste où l’on agit : masquer, réafficher, renommer, « Déplacer vers… » quitté par Tab, le mode de la barre et ↺', async ({ app, page }) => {
+  const sheet = await kingSheet(app, page);
+  // The trash, then ↺: each gives the focus to the other.
+  const hide = sheet.getByRole('button', { name: 'Masquer le bloc « Classification »' });
+  const show = sheet.getByRole('button', { name: 'Réafficher le bloc « Classification »' });
+  await hide.focus();
+  await page.keyboard.press('Enter');
+  await expect(show).toBeFocused();
+  expect(await hidden(page, 'standard', 'taxonomy')).toBe(true);
+  await page.keyboard.press('Enter');
+  await expect(hide).toBeFocused();
+  expect(await hidden(page, 'standard', 'taxonomy')).toBe(false);
+
+  // ✎, a name, Entrée: the focus back on ✎ (renamed); again, Échap: back on it, the name kept.
+  await sheet.getByRole('button', { name: 'Renommer le bloc « Classification »' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(sheet.getByRole('textbox', { name: 'Nouveau nom du bloc « Classification »' })).toBeFocused();
+  await page.keyboard.type('Systématique');
+  await page.keyboard.press('Enter');
+  const rename = sheet.getByRole('button', { name: 'Renommer le bloc « Systématique »' });
+  await expect(rename).toBeFocused();
+  await page.keyboard.press('Enter');
+  await page.keyboard.press('Escape');
+  await expect(rename).toBeFocused();
+
+  // « Déplacer vers… » opened, then Tab: closed, the focus on the next tool, seen (nothing over it).
+  const picker = sheet.locator('summary[aria-label="Déplacer « Calendrier » vers…"]');
+  const menu = sheet.getByRole('menu', { name: 'Déplacer « Calendrier » vers' });
+  await picker.focus();
+  await page.keyboard.press('Enter');
+  await expect(menu.getByRole('menuitem', { name: 'Nouveau panneau à droite' })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(menu).toBeHidden();
+  const next = sheet.getByRole('button', { name: 'Renommer le bloc « Calendrier »' });
+  await expect(next).toBeFocused();
+  expect(await next.evaluate(el => { const r = el.getBoundingClientRect(); const at = /** @type {ShadowRoot} */ (el.getRootNode()).elementFromPoint(r.x + r.width / 2, r.y + r.height / 2); return Boolean(at && el.contains(at)); })).toBe(true);
+
+  // The bar's mode by the keyboard: the focus stays on it; ↺ (gone once used): on the app's mode.
+  const modes = bar(sheet).locator('gf-mode-switch');
+  await modes.getByRole('button', { name: 'Épuré — la mise en page' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(bar(sheet)).toContainText('Mise en page : Épuré');
+  await expect(modes.getByRole('button', { name: 'Épuré — la mise en page' })).toBeFocused();
+  await modes.getByRole('button', { name: 'Revenir au mode de l’application' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(bar(sheet)).toContainText('Mise en page : Standard');
+  await expect(modes.getByRole('button', { name: 'Standard — la mise en page' })).toBeFocused();
+
+  // A mode whose layout has panes: drawn in its frame, the bar and its focus kept.
+  await sb(page, 'dockBlock', 'scientific', 'taxonomy', 'sheet', 'right');
+  await modes.getByRole('button', { name: 'Scientifique — la mise en page' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(sheet.locator('[data-pane]').first()).toBeVisible();
+  await expect(modes.getByRole('button', { name: 'Scientifique — la mise en page' })).toBeFocused();
+});
+
+test('la barre de mise en page, collée en haut de la fiche, ne cache ni la poignée déplacée ni le bloc lu', async ({ app, page }) => {
+  const sheet = await kingSheet(app, page);
+  /** The sheet scrolled so that a block's top is `dy` px under the bar's bottom. @param {string} k @param {number} dy */
+  const scrollTo = (k, dy) => sheet.evaluate((el, [key, d]) => {
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+    const block = /** @type {HTMLElement} */ (root.querySelector(`.blocks.king .block[data-key="${key}"]`));
+    el.scrollTop += block.getBoundingClientRect().top - /** @type {HTMLElement} */ (root.querySelector('.king-bar')).getBoundingClientRect().bottom - /** @type {number} */ (d);
+  }, /** @type {const} */ ([k, dy]));
+  /** Is this element what is seen at its centre (nothing stuck over it)? @param {Locator} target */
+  const seen = target => target.evaluate(el => {
+    const r = el.getBoundingClientRect(), at = /** @type {ShadowRoot} */ (el.getRootNode()).elementFromPoint(r.x + Math.min(30, r.width / 2), r.y + r.height / 2);
+    return Boolean(at && el.contains(at));
+  });
+
+  // A grip just under the bar, moved up by the keyboard: in view, never under the bar.
+  const key = (await order(sheet))[6];
+  await scrollTo(key, 2);
+  const grip = sheet.locator(`.blocks.king .block[data-key="${key}"] .grip`);
+  await grip.focus();
+  await page.keyboard.press('ArrowUp');
+  await expect.poll(async () => (await order(sheet)).indexOf(key)).toBe(5);
+  await expect(grip).toBeFocused();
+  await expect.poll(() => seen(grip)).toBe(true);
+
+  // The first block seen under the bar is the one read: « Terminé » opens the reading there… (By the keyboard: a
+  // click of Playwright would first scroll the stuck bar « into view » itself.)
+  await scrollTo('occurrences', -8);
+  await bar(sheet).getByRole('button', { name: 'Terminé' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(bar(sheet)).toHaveCount(0);
+  await expect.poll(() => sheet.evaluate(el => {
+    const r = /** @type {HTMLElement} */ (/** @type {ShadowRoot} */ (el.shadowRoot).querySelector('.blocks .block[data-key="occurrences"]')).getBoundingClientRect();
+    const box = el.getBoundingClientRect();
+    return r.top < box.top + box.height / 2 && r.bottom > box.top;
+  })).toBe(true);
+
+  // … and the crown again: right under the bar, not under it.
+  await crown(sheet).focus();
+  await page.keyboard.press('Enter');
+  await expect(bar(sheet)).toBeVisible();
+  const title = sheet.locator('.blocks.king .block[data-key="occurrences"] .block-title');
+  await expect.poll(() => seen(title)).toBe(true);
+  expect(await sheet.evaluate(el => {
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+    const block = /** @type {HTMLElement} */ (root.querySelector('.blocks.king .block[data-key="occurrences"]'));
+    return Math.round(block.getBoundingClientRect().top - /** @type {HTMLElement} */ (root.querySelector('.king-bar')).getBoundingClientRect().bottom);
+  })).toBeGreaterThanOrEqual(-1);
 });
 
 test('les blocs sur la fiche : ordre, masquer et réafficher, sous-blocs et style d’un bloc masqué, titres, « masqué si vide »', async ({ app, page }) => {
@@ -491,6 +634,26 @@ test('téléphone 390 : rien ne déborde, des cibles de 44 px, la barre ne couvr
   await expect(sheet).not.toHaveAttribute('docking', '');
 });
 
+test('téléphone 390 : huit modes, le sélecteur de la barre passe à la ligne sans rien faire déborder', async ({ app, page, isMobile }) => {
+  test.skip(!isMobile, 'téléphone seulement');
+  await app.open(`#/plant/${ORTIE}`);
+  const sheet = flore(page);
+  await expect(sheet.getByRole('heading', { level: 1, name: 'Ortie dioïque' })).toBeVisible();
+  await page.evaluate(async () => {
+    const { createMode } = await import('/app/core/mode-admin.js');
+    for (const name of ['Visionneuse', 'Terrain', 'Poste', 'Cueillette', 'Herbier']) createMode(name, 'standard');
+  });
+  await app.king();
+  await bar(sheet).getByRole('button', { name: 'Scientifique — la mise en page' }).click();
+  const modes = bar(sheet).locator('gf-mode-switch');
+  await expect(modes.locator('.segmented > button')).toHaveCount(8);
+  await expect(modes.getByRole('button', { name: 'Revenir au mode de l’application' })).toBeVisible();
+  expect(await sheet.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+  const box = await modes.boundingBox();
+  expect(box && box.x >= 0 && box.x + box.width <= 390).toBe(true);
+  expect(await modes.locator('.segmented > button, .reset').evaluateAll(els => els.every(el => { const r = el.getBoundingClientRect(); return r.right <= innerWidth && r.width >= 44 && r.height >= 44; }))).toBe(true);
+});
+
 /** Réglages › Mise en page de la fiche. @param {Page} page */
 const card = page => page.locator('gf-settings').getByRole('region', { name: 'Mise en page de la fiche' });
 
@@ -559,6 +722,7 @@ test('Réglages › « Tout rétablir » : tout revient par défaut, dans tous l
     sb.renameBlock('taxonomy', 'Systématique');
     sb.setHidden('epure', 'names', true);
     sb.dockBlock('standard', 'status', 'sheet', 'right');
+    sb.setSubHidden('standard', 'actions', 'share', true);
     sb.createMap('Carte des lieux');
     return { note: key, mode: createMode('Terrain', 'standard') };
   }, ORTIE);
@@ -571,7 +735,7 @@ test('Réglages › « Tout rétablir » : tout revient par défaut, dans tous l
   let message = '';
   page.once('dialog', dialog => { message = dialog.message(); dialog.dismiss(); });
   await reset.click();
-  expect(message).toBe('Tout rétablir ? Dans tous les modes, ordre, blocs et sous-blocs masqués, styles, titres affichés ou cachés, « masqué si vide » et panneaux reviennent par défaut, les noms donnés aux blocs aussi, et les blocs Carte ajoutés sont supprimés. Vos modes, vos blocs Note et leurs textes restent.');
+  expect(message).toBe('Tout rétablir ? Dans tous les modes, ordre, blocs et sous-blocs masqués, styles, titres affichés ou cachés, « masqué si vide », panneaux et barre d’actions reviennent par défaut, les noms donnés aux blocs et les réglages ⚙ du bloc Carte aussi, et les blocs Carte ajoutés sont supprimés. Vos modes gardent leur nom et leur icône, avec la mise en page de leur modèle. Vos blocs Note et leurs textes restent.');
   expect(await layout()).toBe(saved);
 
   // Confirmed: said; every mode as it was at first, the Carte block gone; the mode, the Note block (last, shown) and its
@@ -588,10 +752,10 @@ test('Réglages › « Tout rétablir » : tout revient par défaut, dans tous l
       taxonomy: sb.blockTitle('taxonomy'), names: sb.foldedByHand('epure', 'names'), tree: sb.treeOf('standard').t,
       mapBlocks: store.state.sheetLayout.mapBlocks, added: sb.allBlocks().filter(b => b.key.startsWith('map:')).length,
       last: sb.blockOrder('standard').at(-1) === k, hidden: sb.isHidden('standard', k), text: sb.noteText(k, /** @type {number} */ (ortie)),
-      custom: sb.isCustom('standard'), mode: modeLabel(/** @type {any} */ (made))
+      custom: sb.isCustom('standard'), mode: modeLabel(/** @type {any} */ (made)), share: sb.isSubHidden('standard', 'actions', 'share')
     };
   }, [note, ORTIE, mode])).toEqual({ taxonomy: 'Classification', names: false, tree: 'sheet', mapBlocks: [], added: 0, last: true, hidden: false,
-    text: 'Soupe au printemps', custom: false, mode: 'Terrain' });
+    text: 'Soupe au printemps', custom: false, mode: 'Terrain', share: false });
 
   // On the sheet: the note and its text, no pane.
   await app.go(`#/plant/${ORTIE}`);

@@ -149,8 +149,10 @@ export class GfShared extends LitElement {
   #portableView() {
     const features = this._portable.features;
     const kindOf = (/** @type {any} */ f) => f.id === FAVORITES_ID ? 'favorites' : f.geometry ? 'place' : 'list';
-    // The favourites named apart (neither a list nor a place): « Vos favoris (2 plantes), 1 liste et 3 lieux ».
-    const kept = keptContents(features);
+    // The favourites named apart (neither a list nor a place), the sheet's notes last: « Vos favoris (2 plantes), 1 liste,
+    // 3 lieux et 1 note de fiche » — a link of notes alone too.
+    const notes = (this._portable.sheetNotes || []).reduce((/** @type {number} */ n, /** @type {any} */ b) => n + Object.keys(b?.texts || {}).length, 0);
+    const kept = keptContents(features, notes);
     const plants = features.reduce((n, f) => n + (f.properties?.plants?.length || 0), 0);
     const label = (/** @type {any} */ f) => html`${kindIcon(kindOf(f))} ${kindOf(f) === 'favorites' ? 'Favoris' : f.properties?.name || 'Sans nom'}`;
     return html`

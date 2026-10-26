@@ -792,12 +792,13 @@ export function backupContents(s) {
  * favourites named apart, being neither a list nor a place (docs/LEXIQUE.md), and not at all once emptied. '': nothing.
  * @param {Array<{ id?: unknown, geometry?: unknown, properties?: { plants?: unknown[] } }>} all collections, or the
  *   features of a portable file (an export, a transfer link, the backup copy)
+ * @param {number} [notes] the texts of the sheet's Note blocks that go along (a transfer link), counted last
  */
-export function keptContents(all) {
+export function keptContents(all, notes = 0) {
   const others = all.filter(c => c.id !== FAVORITES_ID);
   const places = others.filter(c => c.geometry).length;
   const favorites = all.reduce((n, c) => n + (c.id === FAVORITES_ID ? c.properties?.plants?.length ?? 0 : 0), 0);
-  return backupContents({ favorites, lists: others.length - places, places, notes: 0 });
+  return backupContents({ favorites, lists: others.length - places, places, notes });
 }
 
 /**

@@ -38,7 +38,11 @@ export class GfModeSwitch extends LitElement {
       border-radius: 50%;
       background: var(--gf-accent);
     }
+    /* Large (a bar that wraps): many modes go on another line rather than past the edge; ↺ too. */
+    :host([large]) { flex-wrap: wrap; max-width: 100%; }
+    :host([large]) .segmented { flex-wrap: wrap; max-width: 100%; }
     @media (pointer: coarse) {
+      :host([large]) .segmented { border-radius: 22px; }
       :host([large]) .segmented > button { min-height: 44px; min-width: 44px; }
       :host([large]) .reset { width: 44px; height: 44px; }
     }

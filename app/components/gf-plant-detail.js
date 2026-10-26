@@ -556,12 +556,14 @@ export class GfPlantDetail extends LitElement {
     /* « Personnaliser la fiche »: the crown, last, an icon at a finger's size; gold while open. */
     .action-bar .act.crown { flex: none; width: 44px; }
     .action-bar .act.crown > button { min-height: 44px; place-content: center; color: var(--gf-text-muted); }
-    .action-bar .act.crown > button[aria-pressed='true'] { color: #b8860b; background: color-mix(in srgb, #f5c518 18%, var(--gf-surface)); }
+    .action-bar .act.crown > button[aria-pressed='true'] { color: var(--gf-crown); background: color-mix(in srgb, #f5c518 18%, var(--gf-surface)); }
     /* « Mise en page de la fiche »: the mode arranged and its tools, stuck at the top (above the panes when there are). */
     .king-bar { position: sticky; top: 0; z-index: 8; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 -16px; padding: 6px 16px;
       border-bottom: 2px solid #d4a017; background: color-mix(in srgb, #f5c518 10%, var(--gf-surface)); font-size: 0.85rem; }
     :host([embedded]) .king-bar { margin: 0 -14px; padding: 6px 14px; }
     :host([edged]) .king-bar { position: static; flex: none; margin: 0; }
+    /* Stuck over a sheet without panes: a block reached, or read, is the one right below it (#offset), never beneath it. */
+    :host(:not([edged])) .blocks.king > .block { scroll-margin-top: var(--kb-h, 0px); }
     .king-bar .kb-mode { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
     .king-bar .kb-mode > svg:first-child { color: #b8860b; font-size: 1.1rem; }
     .king-bar .kb-tools { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
@@ -1237,13 +1239,14 @@ export class GfPlantDetail extends LitElement {
     const hiddenChanged = hidden !== this.#hidden;
     this.#signature = signature;
     this.#hidden = hidden;
-    if (changed.has('plantId')) this.#load(this.plantId);
+    if (changed.has('plantId')) { this.#load(this.plantId); return; }
     // The card underneath became the sheet.
-    else if (changed.has('preview') && !this.preview) this.#title();
+    if (changed.has('preview') && !this.preview) this.#title();
     // A module switched on or off (Réglages › Modules): its data comes or goes.
-    else if (modulesChanged) this.#refresh();
-    else if (hiddenChanged && this._plant && this._details !== undefined) this.#loadExtras(this._plant, this._details, this.#abort?.signal);
-    else if (viewChanged && this._plant && this._details !== undefined) this.#loadExtras(this._plant, this._details, this.#abort?.signal);
+    if (modulesChanged) this.#refresh();
+    // Blocks folded or shown, another view (the card underneath come on top in the mode arranged here too): what it
+    // shows now (each load once per plant).
+    else if ((hiddenChanged || viewChanged) && this._plant && this._details !== undefined) this.#loadExtras(this._plant, this._details, this.#abort?.signal);
   }
 
   disconnectedCallback() {
@@ -1253,6 +1256,8 @@ export class GfPlantDetail extends LitElement {
     this.#touching = this.#buttonDown = false;
     unregisterWebPane(this);
     this.#resize.disconnect();
+    this.#barSize.disconnect();
+    this.#barSeen = null;
     this.#abort?.abort();
     this.#letGo();
     clearTimeout(this.#readTimer);
@@ -1566,8 +1571,16 @@ export class GfPlantDetail extends LitElement {
   /** « Personnaliser la fiche » (code name: King) open on this sheet. */
   get #kingHere() { return this.#crownable && this.#store.state.king?.sheet === this.sheet; }
 
-  /** The mode shown: the one arranged here while King is open (its bar), else the host's view. @returns {string} */
-  get #view() { return this.#kingHere ? arrangedMode(/** @type {string} */ (this.sheet), this.view) : this.view; }
+  /**
+   * The mode shown: the one arranged here while King is open (its bar), else the host's view. The card underneath
+   * (Flore's next plant) is drawn and loaded in the mode arranged on its sheet too, without King's tools: on top, it
+   * stays as it is. @returns {string}
+   */
+  get #view() {
+    const arranged = this.#kingHere || (this.preview && this.#store.state.king?.sheet === this.sheet && Boolean(this.sheet)
+      && !this.only && !this.panesOnly && !this.tree && !this.scoped);
+    return arranged ? arrangedMode(/** @type {string} */ (this.sheet), this.view) : this.view;
+  }
 
   /**
    * The parts of a block this view shows, in the order chosen for it (King › Sous-blocs). `parts`: sub-block
@@ -1668,8 +1681,9 @@ export class GfPlantDetail extends LitElement {
 
     const ctx = this.#context(plant);
     if (this.only) return this.#onlyBlock(this.only, ctx);
-    // What a move did (King: « Déplacer vers… », a drag), said — in the panes alone too (Découvrir).
-    const said = this._said ? html`<p class="said" aria-live="polite">${this._said}</p>` : nothing;
+    // What a move did (King: « Déplacer vers… », a drag, « Par défaut »), said — in the panes alone too (Découvrir). The
+    // region is there before its first message (one born with its text is seldom read out).
+    const said = html`<p class="said" aria-live="polite">${this._said}</p>`;
     if (this.panesOnly) return html`${this.#panesOnlyView(ctx)}${said}`;
     const pane = this._paneDialog;
     return html`${baseOf(this.#view) === 'epure' ? this.#epure(ctx) : this.#full(ctx)}${said}${pane ? html`
@@ -2155,21 +2169,25 @@ export class GfPlantDetail extends LitElement {
     };
     const panes = /** @type {import('../core/pane-tree.js').StackNode[]} */ (paneLeaves(tree).filter(n => n.t === 'stack' && n !== here));
     const sides = /** @type {const} */ ([['right', 'à droite', 'chevron-bar-right'], ['left', 'à gauche', 'chevron-bar-left'], ['top', 'en haut', 'chevron-up'], ['bottom', 'en bas', 'chevron-down']]);
-    // Opened: the focus on its first choice (↑ ↓ Début Fin among them, #menuKey); Échap closes it, back on its button.
-    // « Page web » works in a pane only: no « Dans la fiche » (its trash takes it out).
+    // Opened: the focus on its first choice (↑ ↓ Début Fin among them, #menuKey; Tab leaves them all at once); Échap
+    // closes it, back on its button; the focus gone elsewhere (Tab) closes it too: nothing is left open over the tools
+    // the focus reaches. « Page web » works in a pane only: no « Dans la fiche » (its trash takes it out).
     return html`<details class="place-pick" @toggle=${this.#onPickToggle} @keydown=${(/** @type {KeyboardEvent} */ e) => {
         if (e.key !== 'Escape') return;
         e.stopPropagation();
         const d = /** @type {HTMLDetailsElement} */ (e.currentTarget);
         d.removeAttribute('open');
         /** @type {HTMLElement | null} */ (d.querySelector('summary'))?.focus();
+      }} @focusout=${(/** @type {FocusEvent} */ e) => {
+        const d = /** @type {HTMLDetailsElement} */ (e.currentTarget), to = /** @type {Node | null} */ (e.relatedTarget);
+        if (to && !d.contains(to)) d.removeAttribute('open');
       }}>
       <summary class="tool" title="Déplacer vers…" aria-label=${`Déplacer « ${title} » vers…`}>${icon('arrows-angle-expand')}</summary>
       <div class="move-menu" role="menu" aria-label=${'Déplacer « ' + title + ' » vers'} @keydown=${this.#menuKey}>
         ${key === 'web' ? nothing
-          : html`<button type="button" role="menuitem" ?disabled=${!here} @click=${(/** @type {Event} */ e) => move(e, () => this.#toSheet(key), 'dans la fiche')}>${icon('list-ul')} Dans la fiche</button>`}
-        ${sides.map(([side, label, ic]) => html`<button type="button" role="menuitem" @click=${(/** @type {Event} */ e) => move(e, () => this.#dock(key, 'sheet', side), 'nouveau panneau ' + label + ' de la fiche')}>${icon(ic)} Nouveau panneau ${label}</button>`)}
-        ${panes.map(p => html`<button type="button" role="menuitem" @click=${(/** @type {Event} */ e) => move(e, () => this.#dock(key, p.id, 'center'), 'onglet de « ' + blockTitle(/** @type {string} */ (p.active)) + ' »')}>
+          : html`<button type="button" role="menuitem" tabindex="-1" ?disabled=${!here} @click=${(/** @type {Event} */ e) => move(e, () => this.#toSheet(key), 'dans la fiche')}>${icon('list-ul')} Dans la fiche</button>`}
+        ${sides.map(([side, label, ic]) => html`<button type="button" role="menuitem" tabindex="-1" @click=${(/** @type {Event} */ e) => move(e, () => this.#dock(key, 'sheet', side), 'nouveau panneau ' + label + ' de la fiche')}>${icon(ic)} Nouveau panneau ${label}</button>`)}
+        ${panes.map(p => html`<button type="button" role="menuitem" tabindex="-1" @click=${(/** @type {Event} */ e) => move(e, () => this.#dock(key, p.id, 'center'), 'onglet de « ' + blockTitle(/** @type {string} */ (p.active)) + ' »')}>
           ${icon('collection')} Onglet de « ${blockTitle(/** @type {string} */ (p.active))} »</button>`)}
       </div>
     </details>`;
@@ -2562,7 +2580,8 @@ export class GfPlantDetail extends LitElement {
   #padTo(el) {
     let top = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
     if (el.classList.contains('rub-mark')) top += this.#rubH();
-    else if (el.classList.contains('block') && !el.classList.contains('headless')) top += this.#titleH();
+    // (A block's title sticks in its rubric only: personalising, it scrolls with the block.)
+    else if (el.matches('.rubric > .block:not(.headless)')) top += this.#titleH();
     else if (el.matches('.wiki-theme[open]')) top += el.querySelector(':scope > summary')?.getBoundingClientRect().height || 0;
     const full = this.getAttribute('stack') === 'full';
     const stack = parseFloat(getComputedStyle(el).getPropertyValue('--stack')) || 0;
@@ -2594,16 +2613,18 @@ export class GfPlantDetail extends LitElement {
     this.#pad(0, (full ? this.#rubCount() * this.#rubH() : 0) + this.#barH());
   }
 
-  /** @param {number} top @param {number} bottom */
+  /** @param {number} top @param {number} bottom (personalising, the bar « Mise en page de la fiche » stuck above, at least) */
   #pad(top, bottom) {
     const s = this.#sheetScroller.style;
-    const t = Math.max(0, Math.round(top)) + 'px', b = Math.max(0, Math.round(bottom)) + 'px';
+    const t = Math.max(0, Math.round(top), this.#kingBarH()) + 'px', b = Math.max(0, Math.round(bottom)) + 'px';
     if (s.scrollPaddingTop !== t) s.scrollPaddingTop = t;
     if (s.scrollPaddingBottom !== b) s.scrollPaddingBottom = b;
   }
 
   #rubH() { return parseFloat(getComputedStyle(this).getPropertyValue('--rub-h')) || 30; }
   #barH() { return parseFloat(this.style.getPropertyValue('--bar-h')) || 0; }
+  /** The bar « Mise en page de la fiche » stuck over the sheet (none with panes: it stands above them). */
+  #kingBarH() { return this.hasAttribute('edged') ? 0 : Math.round(parseFloat(this.style.getPropertyValue('--kb-h')) || 0); }
   #titleH() { return parseFloat(this.style.getPropertyValue('--title-h')) || 38; }
   #rubCount() { return this.renderRoot.querySelectorAll('.blocks > .rubric').length; }
 
@@ -2732,6 +2753,24 @@ export class GfPlantDetail extends LitElement {
   #placed = false;
   /** The card underneath just came on top. */
   #promoted = false;
+  /** The bar « Mise en page de la fiche » stuck over the sheet, as the sheet's padding last counted it (#kingBarH). */
+  #padKing = 0;
+  /** The bar « Mise en page de la fiche » drawn, its size followed (its mode switch draws its buttons after it). */
+  #barSize = new ResizeObserver(() => { this.#kingBarSized(); this.#keepFix?.(); });
+  /** @type {Element | null} */ #barSeen = null;
+
+  /**
+   * The bar « Mise en page de la fiche », personalising, above the frame: its height (--kb-h), for the bands of a
+   * narrow sheet to share what is left. Stuck over a sheet without panes, the blocks are reached and read under it
+   * (their scroll margin) and the keyboard's focus never lands under it (the sheet's padding, #pad).
+   */
+  #kingBarSized() {
+    const kb = /** @type {HTMLElement | null} */ (this.#barSeen)?.offsetHeight || 0;
+    if (this.style.getPropertyValue('--kb-h') === kb + 'px' && this.#padKing === this.#kingBarH()) return;
+    this.style.setProperty('--kb-h', kb + 'px');
+    this.#padKing = this.#kingBarH();
+    if (this._plant && !this.only && !this.panesOnly) { const read = this.#readPlace().el; if (read) this.#padTo(read); else this.#padBase(); }
+  }
 
   /**
    * The sheet in its tree of panes (King arranges it): splits in rows and columns, panes of tabs, the sheet
@@ -2741,19 +2780,25 @@ export class GfPlantDetail extends LitElement {
    */
   #docked(ctx, article) {
     const sheet = html`${article}${this.#actionBar(ctx.plant)}`;
-    // King open here: its bar above the sheet and its panes (stuck at the top of a sheet without panes).
+    // King open here: its bar above the sheet and its panes (stuck at the top of a sheet without panes) — the same
+    // node whatever the tree below it: a mode with panes chosen in it keeps the focus there.
     const bar = this.#kingHere ? this.#kingBar() : nothing;
+    return html`${bar}${this.#frame(ctx, sheet)}`;
+  }
+
+  /** The sheet alone, or in its frame of panes (#docked). @param {any} ctx @param {unknown} sheet */
+  #frame(ctx, sheet) {
     const tree = this.#shownNode(ctx, this.#tree()) || { t: 'sheet', id: 'sheet' };
-    if (tree.t === 'sheet') return html`${bar}${sheet}`;
+    if (tree.t === 'sheet') return sheet;
     const wide = this._wideSheet !== false;
     if (!wide) {
       const list = paneLeaves(tree);
       const bands = list.filter(n => n.t === 'stack' && !this.#foldedNow(n)).length || 1;
-      return html`${bar}<div class="frame edged narrow ${this._maxEdge ? 'maxed' : ''}" style=${`--bands:${bands}`}>${repeat(list, n => n.id, n => n.t === 'sheet'
+      return html`<div class="frame edged narrow ${this._maxEdge ? 'maxed' : ''}" style=${`--bands:${bands}`}>${repeat(list, n => n.id, n => n.t === 'sheet'
         ? html`<div class="main" data-drop-node="sheet">${sheet}</div>`
         : html`<div class="cell band-cell ${this.#foldedNow(/** @type {any} */ (n)) ? 'folded' : ''}">${this.#pane(ctx, /** @type {any} */ (n), /** @type {any} */ (n).tabs, 'col')}</div>`)}</div>`;
     }
-    return html`${bar}<div class="frame edged ${this._maxEdge ? 'maxed' : ''}" data-drop-node="root">${this.#node(ctx, tree, sheet)}</div>`;
+    return html`<div class="frame edged ${this._maxEdge ? 'maxed' : ''}" data-drop-node="root">${this.#node(ctx, tree, sheet)}</div>`;
   }
 
   /**
@@ -2770,7 +2815,7 @@ export class GfPlantDetail extends LitElement {
     return html`<section class="king-bar" aria-label="Mise en page de la fiche">
       <span class="kb-mode">${icon('crown')} Mise en page : ${modeIcon(m)} <b>${label}</b></span>
       <gf-mode-switch large .value=${m} ?overridden=${m !== this.view} scope="la mise en page"
-        @mode-change=${(/** @type {CustomEvent} */ e) => { e.stopPropagation(); arrange(e.detail.mode, this.view); }}></gf-mode-switch>
+        @mode-change=${(/** @type {CustomEvent} */ e) => { e.stopPropagation(); arrange(e.detail.mode, this.view); this.#modeFocus(); }}></gf-mode-switch>
       <span class="kb-tools">
         <button type="button" class="small kb-actions" aria-expanded=${actionsOpen ? 'true' : 'false'} aria-controls="king-actions"
           title="Les actions de la barre du bas dans ce mode : les cocher, les ordonner"
@@ -2793,17 +2838,25 @@ export class GfPlantDetail extends LitElement {
 
   /**
    * « Par défaut »: the mode arranged back to its own layout — order, hidden blocks and sub-blocks, styles, titles
-   * shown or not, « masqué si vide », panes —, once confirmed; the names given to blocks, the Note and Carte blocks
-   * stay. The focus goes to « Barre d’actions » (the button pressed is now greyed). @param {string} m
+   * shown or not, « masqué si vide », panes, its action bar —, once confirmed; the names given to blocks, the Note and
+   * Carte blocks stay. The focus goes to « Barre d’actions » (the button pressed is now greyed). @param {string} m
    */
   async #resetMode(m) {
     const label = modeLabel(m);
-    if (!confirm(`Remettre « ${label} » par défaut ? Ordre, blocs et sous-blocs masqués, styles, titres affichés ou cachés, « masqué si vide » et panneaux de ce mode reviennent par défaut ; les noms donnés aux blocs, les blocs Note et Carte restent.`)) return;
+    if (!confirm(`Remettre « ${label} » par défaut ? Ordre, blocs et sous-blocs masqués, styles, titres affichés ou cachés, « masqué si vide », panneaux et barre d’actions de ce mode reviennent par défaut ; les noms donnés aux blocs, les blocs Note et Carte restent.`)) return;
     resetBlocks(m);
     this._maxEdge = null;
     this._said = `« ${label} » : mise en page par défaut`;
     await this.updateComplete;
     /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.king-bar .kb-actions'))?.focus();
+  }
+
+  /** A mode chosen in the bar: the focus, if it went with the button pressed (↺, gone once back), on the mode now arranged. */
+  async #modeFocus() {
+    await this.updateComplete;
+    const modes = /** @type {any} */ (this.renderRoot.querySelector('.king-bar gf-mode-switch'));
+    await modes?.updateComplete;
+    if (modes && !modes.shadowRoot.activeElement) /** @type {HTMLElement | null} */ (modes.shadowRoot.querySelector('.segmented > [aria-pressed="true"]'))?.focus();
   }
 
   /** « Terminé »: King closed, the focus back on the crown that opened it. */
@@ -2827,9 +2880,14 @@ export class GfPlantDetail extends LitElement {
     // The action bar's height: the rubrics stacked at the bottom wait above it.
     const bar = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.action-bar'))?.offsetHeight || 0;
     if (this.style.getPropertyValue('--bar-h') !== bar + 'px') this.style.setProperty('--bar-h', bar + 'px');
-    // The bar « Mise en page de la fiche » (personalising) above the frame: the bands of a narrow sheet share what is left.
-    const kb = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.king-bar'))?.offsetHeight || 0;
-    if (this.style.getPropertyValue('--kb-h') !== kb + 'px') this.style.setProperty('--kb-h', kb + 'px');
+    // The bar « Mise en page de la fiche » (personalising): measured now, and again as it grows (#barSize).
+    const kingBar = this.renderRoot.querySelector('.king-bar');
+    if (kingBar !== this.#barSeen) {
+      if (this.#barSeen) this.#barSize.unobserve(this.#barSeen);
+      if (kingBar) this.#barSize.observe(kingBar);
+      this.#barSeen = kingBar;
+    }
+    this.#kingBarSized();
     // A block's title, stuck under the rubrics: the article's theme read sticks under it.
     const title = this.renderRoot.querySelector('.rubric > .block:not(.headless) > .block-title');
     const th = title ? Math.round(title.getBoundingClientRect().height) : 0;
@@ -2918,7 +2976,14 @@ export class GfPlantDetail extends LitElement {
           @keydown=${e => this.#gripKey(e, key)}>${icon('grip-vertical')}</button>
         ${this._renaming === key
           ? html`<input class="rename" aria-label="Nouveau nom du bloc « ${title} »" .value=${title} maxlength="60"
-              @keydown=${e => { if (e.key === 'Enter') this.#rename(key, e.target.value); else if (e.key === 'Escape') this._renaming = null; }}
+              @keydown=${e => {
+                if (e.key !== 'Enter' && e.key !== 'Escape') return;
+                // (No keypress left: « Renommer », focused by then, would take this Entrée and open the field again.)
+                e.preventDefault();
+                if (e.key === 'Enter') this.#rename(key, e.target.value); else this._renaming = null;
+                // Ended at the keyboard: the focus back on « Renommer » (a click elsewhere keeps it where it went).
+                this.#toolFocus(key, 'rename');
+              }}
               @blur=${e => this.#rename(key, e.target.value)} />`
           : html`<span class="name">${title}</span>`}
         <span class="cat" title=${categoryOf(blockCategory(key)).question}>${categoryOf(blockCategory(key)).label}</span>
@@ -2931,7 +2996,7 @@ export class GfPlantDetail extends LitElement {
           title=${hidesEmpty(this.#view, key) ? 'Masqué quand il est vide (toucher pour l’afficher quand même)' : 'Affiché même vide (toucher pour le masquer quand il est vide)'}
           @click=${() => setHidesEmpty(this.#view, key, !hidesEmpty(this.#view, key))}>${icon('eye-slash')}</button>` : nothing}
         ${['name', 'actions'].includes(key) ? nothing : this.#placePicker(key)}
-        ${this._renaming === key ? nothing : html`<button class="tool" type="button" aria-label="Renommer le bloc « ${title} »" title=${isNote(key) ? 'Renommer' : 'Renommer (vide : nom d’origine)'}
+        ${this._renaming === key ? nothing : html`<button class="tool" type="button" data-tool="rename" aria-label="Renommer le bloc « ${title} »" title=${isNote(key) ? 'Renommer' : 'Renommer (vide : nom d’origine)'}
           @click=${() => this.#startRename(key)}>${icon('pencil')}</button>`}
         ${STYLES[key] ? html`<span class="styles" role="group" aria-label="Style du bloc « ${title} »">${STYLES[key].styles.map(st => html`
           <button type="button" aria-pressed=${blockStyle(this.#view, key) === st.key ? 'true' : 'false'} title=${'Style : ' + st.title}
@@ -2942,11 +3007,12 @@ export class GfPlantDetail extends LitElement {
           : isLocked(key)
           ? html`<button class="tool lock" type="button" aria-label=${lockWhy} title="Ne se masque dans aucun mode : sécurité"
               @click=${() => { this._lockTip = this._lockTip === key ? null : key; }}>${icon('lock-fill')}</button>`
+          // Each swapped for the other: the focus goes to it.
           : off
-          ? html`<button class="tool" type="button" aria-label="Réafficher le bloc « ${title} »" title="Réafficher"
-              @click=${() => setHidden(this.#view, key, false)}>${icon('arrow-counterclockwise')}</button>`
-          : html`<button class="tool" type="button" aria-label="Masquer le bloc « ${title} »" title=${module ? `Masquer dans ce mode (le service ${module} reste utilisé)` : 'Masquer'}
-              @click=${() => { if (key === 'web' && this.#paneOf('web')) this.#putAwayWeb(); else setHidden(this.#view, key, true); }}>${icon('trash3')}</button>`}
+          ? html`<button class="tool" type="button" data-tool="show" aria-label="Réafficher le bloc « ${title} »" title="Réafficher"
+              @click=${() => { setHidden(this.#view, key, false); this.#toolFocus(key, 'hide'); }}>${icon('arrow-counterclockwise')}</button>`
+          : html`<button class="tool" type="button" data-tool="hide" aria-label="Masquer le bloc « ${title} »" title=${module ? `Masquer dans ce mode (le service ${module} reste utilisé)` : 'Masquer'}
+              @click=${() => { if (key === 'web' && this.#paneOf('web')) this.#putAwayWeb(); else setHidden(this.#view, key, true); this.#toolFocus(key, 'show'); }}>${icon('trash3')}</button>`}
         ${isMap(key) && !off ? html`<button class="tool" type="button" aria-expanded=${this._mapsOpen.has(key) ? 'true' : 'false'} aria-label="Configurer la carte « ${title} »" title="Ce que la carte montre et permet"
           @click=${() => { const open = new Set(this._mapsOpen); if (open.has(key)) open.delete(key); else open.add(key); this._mapsOpen = open; }}>${icon('gear')}</button>` : nothing}
         ${isNote(key) ? html`<button class="tool" type="button" aria-label="Supprimer le bloc « ${title} »" title="Supprimer le bloc et ses textes"
@@ -2983,6 +3049,15 @@ export class GfPlantDetail extends LitElement {
   #putAwayWeb() {
     this.#toSheet('web');
     setHidden(this.#view, 'web', true);
+  }
+
+  /**
+   * A block's tool swapped for another (Masquer ↔ Réafficher, the name field back to « Renommer »): the focus on that
+   * one, once drawn — in the sheet (a block put away from its pane comes back there). @param {string} key @param {string} tool
+   */
+  async #toolFocus(key, tool) {
+    await this.updateComplete;
+    /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(`.block[data-key="${CSS.escape(key)}"] .block-title [data-tool="${tool}"]`))?.focus();
   }
 
   /** @param {string} key */
@@ -3823,7 +3898,10 @@ export class GfPlantDetail extends LitElement {
     return next;
   }
 
-  /** ↑ ↓ on a focused grip: one place up or down, saved; the grip keeps the focus. @param {KeyboardEvent} e @param {string} key */
+  /**
+   * ↑ ↓ on a focused grip: one place up or down, saved; the grip keeps the focus, in view (never under the bar stuck
+   * above: the sheet's scroll padding, #pad). @param {KeyboardEvent} e @param {string} key
+   */
   async #gripKey(e, key) {
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
     e.preventDefault();
@@ -3831,7 +3909,9 @@ export class GfPlantDetail extends LitElement {
     if (!order) return;
     setBlockOrder(this.#view, this.#withPinned(this.#view, order));
     await this.updateComplete;
-    /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(`.block[data-key="${key}"] .grip`))?.focus();
+    const grip = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(`.block[data-key="${key}"] .grip`));
+    grip?.focus();
+    grip?.scrollIntoView({ block: 'nearest' });
   }
 
   /**
