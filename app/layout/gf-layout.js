@@ -689,7 +689,7 @@ export class GfLayout extends LitElement {
       const first = cells.find(r => r.known && r.params.r != null);
       const when = cells.find(r => r.known && r.spec.id === 'map' && r.params.when && r.params.when !== 'toujours');
       const radius = first?.known ? first.params.r : 2000, periode = when?.known ? when.params.when : 'toujours';
-      // The sources its maps say (src=, or their intent: répartition), all of them; none says: iNaturalist
+      // The sources its maps say (src=, or their intent: répartition), all of them; none says: iNaturalist and GBIF
       // (core/observations.js OBS_DEFAULTS).
       const said = cells.flatMap(r => r.known && r.spec.id === 'map' && Array.isArray(r.params.src) ? /** @type {string[]} */ (r.params.src) : []);
       const sources = /** @type {('inat' | 'gbif')[]} */ (SOURCES.filter(x => said.includes(x)));

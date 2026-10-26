@@ -48,7 +48,7 @@ export const ORCHIDACEAE = Object.freeze({ inat: 47217, gbif: 7689 });
  * points where the plants were only (core/observations.js `precise`): at 500 m, a hidden or rough one would be drawn
  * on the hill though seen elsewhere.
  */
-export const ORCHID_FILTERS = /** @type {ObsFilters} */ (Object.freeze({ sources: ['inat', 'gbif'], qualite: 'toutes', taxon: 'tous', photos: 'toutes', sauvages: true, jeux: [] }));
+export const ORCHID_FILTERS = /** @type {ObsFilters} */ (Object.freeze({ sources: ['inat', 'gbif'], qualite: ['recherche', 'aidentifier', 'occasionnelles'], taxon: 'tous', photos: 'toutes', sauvages: true, jeux: [], sansjeux: [] }));
 
 /** What is asked of the sources, as one key: the circle and the attempt (« Réessayer »). @param {{ point: unknown, radius: unknown, retry: unknown }} c */
 export const askedKey = c => JSON.stringify([c.point, c.radius, c.retry]);

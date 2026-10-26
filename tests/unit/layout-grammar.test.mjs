@@ -294,11 +294,16 @@ test('l’état dans l’adresse : plante, zone, observation, recherche — lus 
   assert.deepEqual(readLive('p=0&at=48.8'), none);
   // The zone's observations: their sources and filters (core/observations.js), read and written after the period;
   // wrong values left out; a group's after its letter.
-  const obs = readLive('at=48.85,2.35&r=1km&periode=annee&sources=gbif,inat&qualite=toutes&taxon=espece&photos=libre&sauvages=1&jeux=cbn-mc,abc');
-  assert.deepEqual(obs.filtres, { sources: ['inat', 'gbif'], qualite: 'toutes', taxon: 'espece', photos: 'libre', sauvages: true, jeux: ['abc', 'cbn-mc'] });
-  assert.equal(liveSearch(obs, fromHash('#/')), 'at=48.85000,2.35000&r=1km&periode=annee&sources=inat,gbif&qualite=toutes&taxon=espece&photos=libre&sauvages=1&jeux=abc,cbn-mc');
+  const obs = readLive('at=48.85,2.35&r=1km&periode=annee&sources=gbif,inat&qualite=toutes&taxon=espece&photos=libre&sauvages=1&jeux=cbn-mc,abc&sansjeux=xyz');
+  assert.deepEqual(obs.filtres, { sources: ['inat', 'gbif'], qualite: ['recherche', 'aidentifier', 'occasionnelles'], taxon: 'espece', photos: 'libre', sauvages: true,
+    jeux: ['abc', 'cbn-mc'], sansjeux: ['xyz'] });
+  assert.equal(liveSearch(obs, fromHash('#/')), 'at=48.85000,2.35000&r=1km&periode=annee&sources=inat,gbif&qualite=toutes&taxon=espece&photos=libre&sauvages=1&jeux=abc,cbn-mc&sansjeux=xyz');
   assert.deepEqual(readLive(liveSearch(obs, fromHash('#/?photo=avec'))), obs, 'Flore’s photo= is not photos=');
-  assert.equal(readLive('sources=x&qualite=bof&taxon=genre&photos=peut-etre&sauvages=oui&jeux=<x>').filtres, null);
+  // The quality grades: a list (its commas kept as they are), the words of before when they are theirs.
+  const grades = readLive('at=48.85,2.35&r=1km&qualite=occasionnelles,recherche');
+  assert.deepEqual(grades.filtres, { qualite: ['recherche', 'occasionnelles'] });
+  assert.equal(liveSearch(grades, fromHash('#/')), 'at=48.85000,2.35000&r=1km&qualite=recherche,occasionnelles');
+  assert.equal(readLive('sources=x&qualite=bof&taxon=genre&photos=peut-etre&sauvages=oui&jeux=<x>&sansjeux=<x>').filtres, null);
   assert.equal(liveSearch({ ...none, at: [2, 48], filtres: { photos: 'avec' } }, fromHash('#/'), 500, 'b.'), 'b.at=48.00000,2.00000&b.r=500m&b.photos=avec');
   assert.deepEqual(readLive('b.at=48,2&b.photos=avec&photos=libre', 'b.').filtres, { photos: 'avec' });
 });

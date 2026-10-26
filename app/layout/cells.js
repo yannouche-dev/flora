@@ -56,7 +56,7 @@ import { nearestStop } from '../core/distance.js';
 import { cellIcon, distanceLabel } from './registry.js';
 import { COMPACT_WIDTH, MAP_INTENTS, MAP_LANDMARKS, MAP_LAYERS, WIDE_FRAMES, catalogLayers, inatTiles, inWhen, layersOf, mapControls, opacitiesOf, opacText, overlaysOf, snapRadius, uiMode, viewOf, viewText } from './map-options.js';
 import { periodQuery, plantOfPoint, taxonIdOf } from '../core/nearby.js';
-import { SOURCES, SOURCE_NAMES, failedText, obsNotes, sourcesText } from '../core/observations.js';
+import { OBS_DEFAULTS, SOURCES, SOURCE_NAMES, failedText, inatGrades, obsNotes, sourcesText } from '../core/observations.js';
 import { obsId } from './state.js';
 import { speciesKey } from '../components/map-style.js';
 import '../components/gf-map.js';
@@ -362,7 +362,7 @@ export class DlMap extends LitElement {
     return {
       // The period: the layout's, shared by every cell (the address' periode=, else a map's when=: state.js). The
       // sources of its points: those it says among its group's (core/observations.js), else all of them.
-      src: /** @type {string[]} */ (p.src ?? this.state?.filters.sources ?? ['inat']), when: /** @type {string} */ (this.state?.periode ?? p.when ?? 'toujours'), suit: p.suit !== false,
+      src: /** @type {string[]} */ (p.src ?? this.state?.filters.sources ?? OBS_DEFAULTS.sources), when: /** @type {string} */ (this.state?.periode ?? p.when ?? 'toujours'), suit: p.suit !== false,
       plante: /** @type {string} */ (p.plante ?? 'grand'),
       toucher: /** @type {string} */ (p.toucher ?? 'plante'), pts: /** @type {string} */ (p.pts ?? 'photo'),
       portee: /** @type {'zone' | 'france' | 'monde'} */ (p.portee ?? 'zone'),
@@ -500,15 +500,19 @@ export class DlMap extends LitElement {
   }
   /** @type {{ sci: string, id: number | null } | null} */ #plantNamed = null;
 
-  /** The tiles of a map of France or the world: its plants' observations, the current plant's on top (the same array while the same). */
+  /**
+   * The tiles of a map of France or the world: its plants' observations, of the quality grades its group shows, the
+   * current plant's on top (the same array while the same).
+   */
   get #wideTiles() {
     const taxa = this.#wideTaxa();
     const when = periodQuery(this.state?.periode);
     const plant = this.#plantTaxon;
-    const key = JSON.stringify([taxa, when, plant]);
+    const grades = inatGrades(this.state?.filters.qualite ?? OBS_DEFAULTS.qualite);
+    const key = JSON.stringify([taxa, when, plant, grades]);
     if (this.#tilesMemo?.key !== key) {
       // Still finding their taxa: none yet (never all plants for a moment); none found: the current plant's alone.
-      const value = taxa === undefined ? [] : taxa !== null && !taxa.length ? inatTiles([], when, plant).filter(t => t.key === 'plant') : inatTiles(taxa, when, plant);
+      const value = taxa === undefined ? [] : taxa !== null && !taxa.length ? inatTiles([], when, plant, grades).filter(t => t.key === 'plant') : inatTiles(taxa, when, plant, grades);
       this.#tilesMemo = { key, value };
     }
     return this.#tilesMemo.value;
