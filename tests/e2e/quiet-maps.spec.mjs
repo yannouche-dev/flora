@@ -125,8 +125,10 @@ test.describe('la Carte', () => {
     // A discreet dot on the panel's button, said in its name.
     const button = map.locator('gf-map-search').getByRole('button', { name: 'Carte : fond, couches, légende — espaces protégés en vue' });
     await expect(button.locator('.dot')).toHaveCount(1);
-    // The panel: its « État » (with the way to the setting), the areas under « Règles de cueillette » with their page.
+    // The panel: its « État » (with the way to the setting), the areas under « Espaces protégés et propriété » (open by
+    // itself: areas in view) with their page.
     const panel = await openPanel(map);
+    await expect(panel.locator('details.theme[data-group="espaces"]')).toHaveAttribute('open', '');
     const state = panel.locator('.state');
     await expect(state).toContainText('Fonds IGN désactivés : seules les zones déjà vues s’affichent.');
     await expect(state.getByRole('link', { name: 'Réglages › Modules' })).toHaveAttribute('href', /settings/);

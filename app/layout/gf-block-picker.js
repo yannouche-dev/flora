@@ -11,7 +11,8 @@
 //  - « Affiner »: a row per group of settings (Où, Fond, Couches…, « Réglages », Cadre, Liens), each with a line of
 //    its values (« Plan IGN · 2D ») and a dot ● when written beside the intent; a row opens its controls, made from
 //    each setting's kind: a few choices a row of buttons, more a menu, a yes or no a switch, a distance a slider on the
-//    radii's stops, a list chips, words a field. « Revenir à l'intention ».
+//    radii's stops, a list chips (and « Par défaut » once written, when its default is none of them: layers=, noms=),
+//    words a field. « Revenir à l'intention ».
 // Inline (`inline`: an « Emplacement », slot, of a layout — built or in the app): its first level drawn in the place
 // itself, sized to it (compact tiles of an icon and a name when it is small, with their sentence when it is large):
 // one tap builds the component there — a component with intents, its intent cards first, in the place too.
@@ -413,8 +414,11 @@ export class GfBlockPicker extends LitElement {
         ${r.given.has(key) ? html`<div class="seg"><button type="button" data-act="default" @click=${() => set(null)}>Par défaut</button></div>` : nothing}`;
     } else if (kind === 'chips') {
       const on = /** @type {string[]} */ (valueOf(r, key) ?? []);
+      // Written, a list whose default is none of them (layers=: the maps' common layers; noms=: the common choice):
+      // « Par défaut » goes back to it.
       body = html`<div class="chipset" role="group" aria-labelledby=${id}>${Object.entries(ps.values ?? {}).map(([x, label]) => html`<button type="button" class="chip" data-value=${x}
-        aria-pressed=${on.includes(x) ? 'true' : 'false'} @click=${() => set(Object.keys(ps.values ?? {}).filter(y => y === x ? !on.includes(x) : on.includes(y)))}>${label}</button>`)}</div>`;
+        aria-pressed=${on.includes(x) ? 'true' : 'false'} @click=${() => set(Object.keys(ps.values ?? {}).filter(y => y === x ? !on.includes(x) : on.includes(y)))}>${label}</button>`)}</div>
+        ${ps.def === null && r.given.has(key) ? html`<div class="seg"><button type="button" data-act="default" @click=${() => set(null)}>Par défaut</button></div>` : nothing}`;
     } else if (kind === 'text') {
       body = html`<input type="text" aria-labelledby=${id} maxlength=${ps.max ?? 80} .value=${v == null ? '' : String(v)}
         placeholder=${ps.frame ? 'par exemple : Ce qui fleurit' : 'par exemple : Fontainebleau 77'}

@@ -99,8 +99,8 @@ test('Réglages › Cartes « 3D » : la Carte en MapLibre — relief, bâtiment
   expect(st.layers).toContain('gf-buildings');
   expect(st.layers).toContain('gf-hillshade');
   expect(st.sources).toContain('gf-bati');
-  // The photos, the names over them (the roads, the rivers, the names: core/backgrounds.js NAMES_LAYERS).
-  expect(st.tiles.map((/** @type {any} */ t) => t.key)).toEqual(['photo', 'names', 'names', 'names']);
+  // The photos, the names over them (the roads, the rivers, the places' names: core/map-layers.js LANDMARK_DEFAULTS).
+  expect(st.tiles.map((/** @type {any} */ t) => t.key)).toEqual(['photo', 'routes', 'eau', 'lieux']);
   // The relief from AWS, the buildings from the IGN's vector tiles, the photos from its WMTS.
   await expect.poll(() => seen.tiles.some(u => u.includes('elevation-tiles-prod'))).toBe(true);
   await expect.poll(() => seen.tiles.some(u => /tms\/1\.0\.0\/PLAN\.IGN\/\d+/.test(u))).toBe(true);
@@ -188,6 +188,8 @@ test('en 3D, le panneau « Carte » : les mêmes couches qu’en 2D ; les option
   const panel = map.locator('gf-map-panel dialog');
   await expect(panel).toBeVisible();
   await expect(panel.getByRole('button', { name: /Photos aériennes/ })).toHaveAttribute('aria-pressed', 'true');
+  // IGN's layers by theme, each folded until opened.
+  for (const key of ['relief', 'espaces']) await panel.locator(`details.theme[data-group="${key}"] > summary`).click();
   for (const name of ['Parcelles cadastrales', 'Courbes de niveau', 'Forêts publiques', 'Parcs nationaux', 'Réserves naturelles', 'Protection de biotope']) {
     await expect(panel.getByRole('checkbox', { name: new RegExp(name) })).toBeVisible();
   }
@@ -199,7 +201,7 @@ test('en 3D, le panneau « Carte » : les mêmes couches qu’en 2D ; les option
   await expect(panel.getByRole('link', { name: 'Réglages › Cartes' })).toHaveAttribute('href', '#/settings');
   await expect(panel.getByRole('button', { name: /^(2D|3D)$/ })).toHaveCount(0);
   await panel.getByRole('checkbox', { name: /Courbes de niveau/ }).check();
-  await expect.poll(async () => (await glState(map)).tiles.map((/** @type {any} */ t) => t.key), SLOW).toEqual(['photo', 'contours', 'names', 'names', 'names']);
+  await expect.poll(async () => (await glState(map)).tiles.map((/** @type {any} */ t) => t.key), SLOW).toEqual(['photo', 'contours', 'routes', 'eau', 'lieux']);
   // The plan: its own names, none over it.
   await panel.getByRole('button', { name: /Plan IGN/ }).click();
   await expect.poll(async () => (await glState(map)).tiles.map((/** @type {any} */ t) => t.key), SLOW).toEqual(['plan', 'contours']);

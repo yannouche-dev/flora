@@ -18,7 +18,8 @@ const lower = s => s.charAt(0).toLowerCase() + s.slice(1);
 /**
  * A value of a parameter in French, as short as it can be said: a distance « 2 km »; a choice its label; a yes « Vue
  * 3D », a no « sans vue 3D », or the parameter's first word for no (off: « 2D », « France »); a list its labels joined
- * by « + » (« aucune » when empty); words as written; a plant's number « plante n° 128268 ». null: as by default.
+ * by « + » (« aucune » when empty, or its own words for none: « sans noms ni réseaux »); words as written; a plant's
+ * number « plante n° 128268 ». null: as by default.
  * @param {ParamSpec} ps @param {unknown} v @returns {string | null}
  */
 export function valueLabel(ps, v) {
@@ -32,7 +33,7 @@ export function valueLabel(ps, v) {
     }
     case 'list': {
       const vs = /** @type {string[]} */ (v);
-      return vs.length ? vs.map(x => ps.values?.[x] ?? x).join(' + ') : `${ps.label} : aucune`;
+      return vs.length ? vs.map(x => ps.values?.[x] ?? x).join(' + ') : ps.none ?? `${ps.label} : aucune`;
     }
     case 'id': return 'plante n° ' + v;
     case 'text': return String(v);

@@ -1,7 +1,7 @@
 // Map tiles made here, for the specs that draw maps with MapLibre (map3d.spec.mjs, maps3d.spec.mjs), a background of a
-// year (map-years.spec.mjs) or the names over it (map-names.spec.mjs): PNG pictures (the IGN's photos — the most recent,
-// those of a year or a period, the historical ones —, SPOT's satellite images, the roads, rivers and names over them —
-// transparent but for their lines —, the relief in Terrarium encoding) and a Mapbox Vector Tile of buildings (PLAN.IGN's
+// year (map-years.spec.mjs) or « Noms et réseaux » over it (map-names.spec.mjs): PNG pictures (the IGN's photos — the
+// most recent, those of a year or a period, the historical ones —, SPOT's satellite images, the boundaries, buildings,
+// railways, roads, rivers and names over them — transparent but for their lines —, the relief in Terrarium encoding) and a Mapbox Vector Tile of buildings (PLAN.IGN's
 // `bati_surf` layer, each with its `hauteur`) — no network, ever.
 import { deflateSync } from 'node:zlib';
 
@@ -45,13 +45,23 @@ export const PLAN = png((x, y) => (x % 85 < 4 || y % 85 < 4 ? [200, 205, 215] : 
 export const SATELLITE = png((x, y) => ((x >> 5) + (y >> 5)) % 2 ? [74, 104, 112] : [96, 128, 104]);
 /** The photos of a year, of a period, the historical ones: sepia, a darker grid. */
 export const OLD_PHOTO = png((x, y) => (x % 48 < 3 || y % 48 < 3 ? [92, 76, 58] : [170 + (x >> 4), 150 + (y >> 4), 112]));
-/** The names over the photos and SPOT's (core/backgrounds.js NAMES_LAYERS), see-through but for their lines: a road (orange, across), a river (blue, down), a name (a dark block). */
+/**
+ * « Noms et réseaux » over the photos and SPOT's (core/map-layers.js LANDMARKS), see-through but for their lines: a
+ * boundary (purple dashes, down), buildings (brown blocks), a railway (dark, across), a road (orange, across), a river
+ * (blue, down), a name (a dark block).
+ */
 const CLEAR = [0, 0, 0, 0];
+const LIMITS = pngAlpha((x, y) => (Math.abs(x - 200) < 2 && y % 12 < 7 ? [140, 60, 160, 255] : CLEAR));
+const BATI = pngAlpha((x, y) => (x % 64 >= 20 && x % 64 < 32 && y % 64 >= 20 && y % 64 < 30 ? [150, 120, 110, 255] : CLEAR));
+const RAILWAYS = pngAlpha((x, y) => (Math.abs(y - 200) < 2 ? [60, 60, 60, 255] : CLEAR));
 const ROADS = pngAlpha((x, y) => (Math.abs(y - 128) < 4 ? [240, 190, 70, 255] : CLEAR));
 const RIVERS = pngAlpha((x, y) => (Math.abs(x - 64) < 3 ? [70, 130, 220, 255] : CLEAR));
 const NAMES = pngAlpha((x, y) => (x >= 100 && x < 172 && y >= 40 && y < 54 ? [30, 30, 30, 255] : CLEAR));
-/** Each names layer's tile, by its identifier. @type {Map<string, Buffer>} */
-const NAMES_TILES = new Map([['TRANSPORTNETWORKS.ROADS', ROADS], ['HYDROGRAPHY.HYDROGRAPHY', RIVERS], ['GEOGRAPHICALNAMES.NAMES', NAMES]]);
+/** Each one's tile, by its identifier. @type {Map<string, Buffer>} */
+const LANDMARK_TILES = new Map([
+  ['LIMITES_ADMINISTRATIVES_EXPRESS.LATEST', LIMITS], ['BUILDINGS.BUILDINGS', BATI], ['TRANSPORTNETWORKS.RAILWAYS', RAILWAYS],
+  ['TRANSPORTNETWORKS.ROADS', ROADS], ['HYDROGRAPHY.HYDROGRAPHY', RIVERS], ['GEOGRAPHICALNAMES.NAMES', NAMES]
+]);
 /** Terrarium: height = R × 256 + G + B / 256 − 32768; a slope from 1 500 m to some 2 300 m across each tile. */
 export const TERRARIUM = png((x, y) => { const h = 1500 + x * 2 + y + 32768; return [h >> 8, h & 255, 0]; });
 
@@ -173,9 +183,9 @@ export async function answerTiles(page, { dem = 'ok', seen } = {}) {
     const url = route.request().url();
     const layer = new URL(url).searchParams.get('LAYER') || '';
     const [z, row, col] = ['TILEMATRIX', 'TILEROW', 'TILECOL'].map(k => Number(new URL(url).searchParams.get(k)));
-    // The plan; the names over the photos; SPOT's images of a year; the photos of a year, a period, historical ones; the
-    // most recent photos.
-    const body = /PLANIGNV2/.test(layer) ? PLAN : NAMES_TILES.get(layer) ?? (/^ORTHOIMAGERY\.ORTHO-SAT\.SPOT\.\d{4}$/.test(layer) ? SATELLITE
+    // The plan; « Noms et réseaux » over the photos; SPOT's images of a year; the photos of a year, a period, historical
+    // ones; the most recent photos.
+    const body = /PLANIGNV2/.test(layer) ? PLAN : LANDMARK_TILES.get(layer) ?? (/^ORTHOIMAGERY\.ORTHO-SAT\.SPOT\.\d{4}$/.test(layer) ? SATELLITE
       : /^ORTHOIMAGERY\.ORTHOPHOTOS\.?\d{4}(-\d{4})?$/.test(layer) ? OLD_PHOTO
       : /ORTHOPHOTOS/.test(layer) && Number.isFinite(z) ? photoTile(z, col, row) : PHOTO);
     return route.fulfill({ contentType: 'image/png', body, headers: cors });

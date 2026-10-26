@@ -1,39 +1,23 @@
 // @ts-check
 // The IGN Géoplateforme layers of the maps, without Leaflet (the start of the app needs them for the maps' look,
-// core/map-settings.js; the tiles themselves are core/ign.js's): the overlays, the tile address of any layer, the
-// layers of the catalogue added to the maps (read again when another tab adds one). The backgrounds — the plan, the
-// photos of each year, SPOT's — are core/backgrounds.js's. Which of them a map shows, and how opaque: the maps' look
-// (core/map-settings.js).
+// core/map-settings.js; the tiles themselves are core/ign.js's): the overlays — the app's own (core/map-layers.js, pure,
+// with « Noms et réseaux » and the panel's themes) and the catalogue's layers added (read again when another tab adds
+// one) —, the tile address of any layer. The backgrounds — the plan, the photos of each year, SPOT's — are
+// core/backgrounds.js's. Which of them a map shows, and how opaque: the maps' look (core/map-settings.js).
 // Layer identifiers and styles checked against the service's GetCapabilities (tools/api-health.mjs,
-// scripts/build-ign-catalog.mjs read them from this file, and the backgrounds' from core/backgrounds.js).
+// scripts/build-ign-catalog.mjs: core/map-layers.js everyAppLayer, core/backgrounds.js everyBaseLayer).
 
 import { readJSON, writeJSON } from './prefs.js';
 import { onStorage } from './sync.js';
 import { config } from '../config.js';
+import { OVERLAYS, catalogRowOf } from './map-layers.js';
+
+export { OVERLAYS };
 
 const WMTS = 'https://data.geopf.fr/wmts?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&TILEMATRIXSET=PM'
   + '&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}';
 
-/**
- * @typedef {{ id: string, format: string, style?: string, minNative?: number, maxNative?: number }} WmtsLayer
- * @typedef {{ label: string, layers: WmtsLayer[], hint?: string, group?: string }} LayerDef
- */
-
-/** Overlays, toggled on top. Protected areas: INPN / PatriNat data served by the Géoplateforme. @type {Record<string, LayerDef>} */
-export const OVERLAYS = {
-  cadastre: { label: 'Parcelles cadastrales', group: 'terrain', layers: [{ id: 'CADASTRALPARCELS.PARCELLAIRE_EXPRESS', format: 'image/png', maxNative: 19 }] },
-  contours: { label: 'Courbes de niveau', group: 'terrain', layers: [{ id: 'ELEVATION.CONTOUR.LINE', format: 'image/png', minNative: 6, maxNative: 18 }] },
-  forets: {
-    label: 'Forêts publiques', group: 'rules', hint: 'ONF : domaniales et communales',
-    layers: [{ id: 'FORETS.PUBLIQUES', format: 'image/png', style: 'FORETS PUBLIQUES ONF', minNative: 3, maxNative: 16 }]
-  },
-  parcs: { label: 'Parcs nationaux', group: 'rules', layers: [{ id: 'Patrinat_PN', format: 'image/png', minNative: 6, maxNative: 16 }] },
-  reserves: {
-    label: 'Réserves naturelles', group: 'rules', hint: 'nationales et régionales',
-    layers: [{ id: 'Patrinat_RNN', format: 'image/png', minNative: 6, maxNative: 16 }, { id: 'Patrinat_RNR', format: 'image/png', minNative: 6, maxNative: 16 }]
-  },
-  biotopes: { label: 'Protection de biotope', group: 'rules', hint: 'arrêtés préfectoraux (APPB)', layers: [{ id: 'Patrinat_APB', format: 'image/png', minNative: 6, maxNative: 16 }] }
-};
+/** @typedef {import('./map-layers.js').WmtsLayer} WmtsLayer @typedef {import('./map-layers.js').LayerDef} LayerDef */
 
 /** A WMTS layer's tile address ({z}/{x}/{y} to fill): the same for Leaflet and MapLibre (gl-style.js). @param {WmtsLayer} def */
 export const wmtsUrl = def => `${WMTS}&LAYER=${def.id}&STYLE=${encodeURIComponent(def.style || 'normal')}&FORMAT=${encodeURIComponent(def.format)}`;
@@ -92,3 +76,10 @@ export function builtinKeyOf(id) {
  * (core/map-settings.js: the common one under overlayOpacity, a map's own with its owner).
  */
 export const DEFAULT_OPACITY = 0.8;
+
+/**
+ * This overlay's opacity unless chosen: the usual one, or its own for a layer of the panel's themes that has one
+ * (core/map-layers.js CATALOG_ROWS: the shading, the photos seen through it) — whichever adds it (the panel, the
+ * catalogue, a free layout's layers=), on every map, 2D and 3D; never written down (a look, opac=). @param {string} key
+ */
+export const defaultOpacity = key => (key.startsWith(IGN_PREFIX) ? catalogRowOf(key.slice(IGN_PREFIX.length))?.opacity : undefined) ?? DEFAULT_OPACITY;

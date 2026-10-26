@@ -8,7 +8,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as G from '../../app/layout/grammar.js';
 import { cellMark, cellName, resolve, resolveTree, withParam } from '../../app/layout/registry.js';
-import { MAP_CONTROLS, MAP_INTENTS, MAP_LAYERS, catalogLayers, defaultControls, inWhen, mapControls, overlaysOf, snapRadius, uiMode } from '../../app/layout/map-options.js';
+import { MAP_CONTROLS, MAP_INTENTS, MAP_LANDMARKS, MAP_LAYERS, catalogLayers, defaultControls, inWhen, landmarksText, layersOf, mapControls, opacText, opacitiesOf, overlaysOf, snapRadius, uiMode } from '../../app/layout/map-options.js';
+import { CATALOG_ROWS, LANDMARKS } from '../../app/core/map-layers.js';
+import { DEFAULT_OPACITY, defaultOpacity } from '../../app/core/ign-layers.js';
 
 /** A layout typed → its canonical text and what was wrong. @param {string} text */
 function read(text) {
@@ -20,13 +22,13 @@ const params = text => read(text).cell.params;
 
 test('chaque réglage de la carte se lit : ses noms, ses valeurs, leurs autres graphies', () => {
   const p = params('map(r=2km;lieu=Mirabel Ménétrol 63;autour=1;base=photo;noms=0;3d=1;layers=znieff+n2000;src=inat+gbif;when=mois;pts=pastille;regroupe=1;suit=0;plante=seule;toucher=fiche;ui=nue)');
-  assert.deepEqual(p, { intent: 'explorer', portee: 'zone', r: 2000, lieu: 'Mirabel Ménétrol 63', autour: true, base: 'photo', annee: null, noms: false, '3d': true, layers: ['znieff', 'n2000'], src: ['inat', 'gbif'],
+  assert.deepEqual(p, { intent: 'explorer', portee: 'zone', r: 2000, lieu: 'Mirabel Ménétrol 63', autour: true, base: 'photo', annee: null, noms: [], '3d': true, layers: ['znieff', 'n2000'], src: ['inat', 'gbif'],
     when: 'mois', pts: 'pastille', regroupe: true, suit: false, plante: 'seule', toucher: 'fiche', liste: 'vue', ui: 'nue', tete: 'oui', titre: null, actions: [], ctl: null,
     vue: null, opac: null, jumelles: null, jrayon: null, legende: false, etat: 'ouvert', groupe: 'a' });
   // In French, its other words, accents and case free.
   const q = params('carte(rayon=500m;commune=Fontainebleau 77;moi=oui;fond=satellite;Étiquettes=avec;vue3d=non;couches=Natura+ZNIEFF1;sources=iNaturalist;période=Année;style=Pastilles;groupes=1;recherche=non;courante=only;tap=sheet;commandes=Compact)');
   assert.deepEqual([q.r, q.lieu, q.autour, q.base, q.noms, q['3d'], q.layers, q.src, q.when, q.pts, q.regroupe, q.suit, q.plante, q.toucher, q.ui],
-    [500, 'Fontainebleau 77', true, 'spot', true, false, ['n2000', 'znieff1'], ['inat'], 'annee', 'pastille', true, false, 'seule', 'fiche', 'compacte']);
+    [500, 'Fontainebleau 77', true, 'spot', ['lieux', 'routes', 'eau'], false, ['n2000', 'znieff1'], ['inat'], 'annee', 'pastille', true, false, 'seule', 'fiche', 'compacte']);
   // Defaults: the map as it always was — its background, its layers and its 2D or 3D, the maps' common ones (none written).
   const d = params('map');
   assert.deepEqual(d, { intent: 'explorer', portee: 'zone', r: null, lieu: null, autour: false, base: null, annee: null, noms: null, '3d': null, layers: null, src: null, when: 'toujours', pts: 'photo',
@@ -168,31 +170,56 @@ test('une année puis la 3D : l’adresse réécrite se relit telle quelle (jama
   assert.deepEqual([read(written).cell.params.annee, read(written).cell.params['3d']], ['2020', true]);
 });
 
-test('les noms sur le fond (noms=) : 0 ou 1, sinon les réglages communs ; gardés sur le plan, sans effet ni marque ; écrits avant la 3D, « ; » entre deux chiffres', () => {
-  assert.deepEqual([params('map(noms=0)').noms, params('map(noms=1)').noms, params('map').noms], [false, true, null]);
-  // Its words, its values' other spellings; named alone, on (map(noms)).
-  for (const [typed, written] of [['map(noms=non)', '[map(noms=0)]'], ['carte(étiquettes=sans)', '[map(noms=0)]'], ['map(names=yes)', '[map(noms=1)]'],
-    ['map(Toponymes=1)', '[map(noms=1)]'], ['map(noms)', '[map(noms=1)]']]) {
+test('noms et réseaux (noms=) : une liste, dans l’ordre du panneau ; 1 les habituels, 0 aucun, sinon les réglages communs ; gardés sur le plan, sans effet ni marque ; écrits avant la 3D, « ; » entre deux chiffres', () => {
+  const USUAL = ['lieux', 'routes', 'eau'];
+  assert.deepEqual([params('map(noms=0)').noms, params('map(noms=1)').noms, params('map').noms], [[], USUAL, null]);
+  // Each one of core/map-layers.js LANDMARKS, in the panel's order (the usual three first), whatever the order written.
+  assert.deepEqual(Object.keys(MAP_LANDMARKS), ['lieux', 'routes', 'eau', 'rail', 'bati', 'limites']);
+  assert.deepEqual(Object.keys(MAP_LANDMARKS).sort(), LANDMARKS.map(l => l.key).sort());
+  assert.deepEqual(Object.values(MAP_LANDMARKS), ['Noms de lieux', 'Routes', 'Cours d’eau', 'Voies ferrées', 'Bâtiments', 'Limites administratives']);
+  assert.deepEqual(params('map(noms=limites+rail+lieux)').noms, ['lieux', 'rail', 'limites']);
+  // Written 1 for the usual three, 0 for none, else the list; their other names; its yes-or-no of before read the
+  // same (1, oui, avec…: the usual three; 0, non, sans, off…: none); named alone, the usual ones (map(noms)).
+  for (const [typed, written] of [['map(noms=limites+rail+lieux)', '[map(noms=lieux+rail+limites)]'], ['map(noms=villes+train)', '[map(noms=lieux+rail)]'],
+    ['map(noms=Toponymes+Rivières+fer)', '[map(noms=lieux+eau+rail)]'], ['map(noms=bâtiments+communes)', '[map(noms=bati+limites)]'], ['map(noms=hydro+admin)', '[map(noms=eau+limites)]'],
+    ['map(noms=eau+routes+lieux)', '[map(noms=1)]'], ['map(noms=1+rail)', '[map(noms=lieux+routes+eau+rail)]'], ['map(noms=aucune)', '[map(noms=0)]'],
+    ['map(noms=non)', '[map(noms=0)]'], ['map(noms=off)', '[map(noms=0)]'], ['carte(étiquettes=sans)', '[map(noms=0)]'], ['map(names=yes)', '[map(noms=1)]'],
+    ['map(noms=oui)', '[map(noms=1)]'], ['map(Toponymes=1)', '[map(noms=1)]'], ['map(réseaux=avec)', '[map(noms=1)]'], ['map(noms)', '[map(noms=1)]'], ['map(toponymes)', '[map(noms=1)]']]) {
     assert.equal(read(typed).text, written, typed);
     assert.deepEqual(read(typed).problems, [], typed);
+    assert.equal(read(written).text, written, 'relu : ' + written);
   }
-  assert.match(read('map(noms=peut-etre)').problems[0], /^Carte : « peut-etre » n’est pas une valeur de noms sur le fond \(attendu : oui ou non \(1, 0\)\)\.$/);
-  // In the order of its group, after the year: « ; » before 3d=1 (a comma between two digits would be a decimal one).
+  assert.deepEqual([landmarksText(['routes', 'eau', 'lieux']), landmarksText([]), landmarksText(['rail', 'lieux'])], ['1', '0', 'lieux+rail']);
+  // Never a bare value (map(eau) is the layer hydro), but itself (map(noms)).
+  assert.equal(read('map(eau)').text, '[map(layers=hydro)]');
+  assert.equal(read('map(lieux)').text, '[map]');
+  // A word it does not know: said, the others kept; none known, the common choice.
+  const bad = read('map(noms=lieux+lune)');
+  assert.equal(bad.text, '[map(noms=lieux)]');
+  assert.deepEqual(bad.problems, ['Carte : « lune » n’est pas une valeur de noms et réseaux (attendu : lieux, routes, eau, rail, bati, limites, joints par « + » (1 : lieux+routes+eau ; 0 : aucun)).']);
+  assert.equal(read('map(noms=peut-etre)').text, '[map]');
+  assert.match(read('map(noms=peut-etre)').problems[0], /^Carte : « peut-etre » n’est pas une valeur de noms et réseaux/);
+  // In the order of its group, after the year: « ; » before 3d=1 (a comma between two digits would be a decimal one);
+  // a list of names, a comma.
   assert.equal(read('map(3d=1;noms=0;annee=2020)').text, '[map(annee=2020,noms=0;3d=1)]');
-  // Written by the cell (its panel ▦: withParam, then the layout shown in canonical order, as gf-layout does), beside
-  // its year and its 3D: read back whole.
+  assert.equal(read('map(3d=1;noms=rail+lieux;annee=2020)').text, '[map(annee=2020,noms=lieux+rail,3d=1)]');
+  assert.equal(read('[map(annee=2020,noms=lieux+rail,3d=1)]').text, '[map(annee=2020,noms=lieux+rail,3d=1)]');
+  // Written by the cell (its panel ▦: withParam with the map's landmarks, bottom first, then the layout shown in
+  // canonical order, as gf-layout does), beside its year and its 3D: read back whole.
   const cell = /** @type {any} */ (G.parse('[map(r=2km,annee=2020;3d=1)]').tree.kids[0]);
   const text = (/** @type {any} */ c) => G.serialize({ t: 'list', kids: [c], size: null });
-  const written = text(withParam(cell, 'noms', false));
+  const written = text(withParam(cell, 'noms', []));
   assert.deepEqual(G.parse(written).errors, []);
   const off = read(written).text;
   assert.equal(off, '[map(r=2km,annee=2020,noms=0;3d=1)]');
   assert.deepEqual(G.parse(off).errors, []);
   assert.equal(read(off).text, off);
-  assert.deepEqual([read(off).cell.params.annee, read(off).cell.params.noms, read(off).cell.params['3d']], ['2020', false, true]);
-  const on = text(withParam(/** @type {any} */ (G.parse('[map(base=spot)]').tree.kids[0]), 'noms', true));
+  assert.deepEqual([read(off).cell.params.annee, read(off).cell.params.noms, read(off).cell.params['3d']], ['2020', [], true]);
+  const spot = /** @type {any} */ (G.parse('[map(base=spot)]').tree.kids[0]);
+  const on = text(withParam(spot, 'noms', ['routes', 'eau', 'lieux']));
   assert.equal(on, '[map(base=spot,noms=1)]');
   assert.equal(read(on).text, on);
+  assert.equal(text(withParam(spot, 'noms', ['rail', 'routes', 'lieux'])), '[map(base=spot,noms=lieux+routes+rail)]', 'dans l’ordre de l’adresse, quel que soit celui donné');
   // null: back to the common choice (« Revenir aux réglages communs »).
   assert.equal(text(withParam(/** @type {any} */ (G.parse(off).tree.kids[0]), 'noms', null)), '[map(r=2km,annee=2020;3d=1)]');
   // The plan has its own names: noms= kept there (never dropped by a background changed, found again on the photos),
@@ -203,10 +230,55 @@ test('les noms sur le fond (noms=) : 0 ou 1, sinon les réglages communs ; gard�
   const mark = (/** @type {string} */ t) => { const m = cellMark(resolve(G.parse(t).tree.kids[0])); return m && [m.short, m.label]; };
   assert.equal(name('map(base=plan,noms=0)'), 'Carte (Plan IGN)');
   assert.deepEqual(mark('map(base=plan,noms=0)'), ['Pl', 'Plan IGN']);
-  assert.equal(name('map(noms=0)'), 'Carte (sans noms sur le fond)');
-  assert.deepEqual(mark('map(noms=0)'), ['−N', 'sans noms sur le fond']);
-  assert.deepEqual(mark('map(noms=1)'), ['N', 'noms sur le fond']);
-  assert.equal(name('map(base=spot,annee=2020,noms=0)'), 'Carte (Images satellite SPOT de 2020, sans noms sur le fond)');
+  assert.equal(name('map(base=plan,noms=lieux+rail)'), 'Carte (Plan IGN)');
+  assert.equal(name('map(noms=0)'), 'Carte (sans noms ni réseaux)');
+  assert.deepEqual(mark('map(noms=0)'), ['−N', 'sans noms ni réseaux']);
+  assert.deepEqual(mark('map(noms=1)'), ['N', 'noms et réseaux : Noms de lieux, Routes, Cours d’eau']);
+  assert.deepEqual(mark('map(noms=rail+lieux)'), ['N', 'noms et réseaux : Noms de lieux, Voies ferrées']);
+  assert.equal(name('map(base=spot,annee=2020,noms=0)'), 'Carte (Images satellite SPOT de 2020, sans noms ni réseaux)');
+});
+
+test('les couches des thèmes du panneau ▦ par leur nom court (layers=pentes+haies…) : la couche du catalogue que le panneau coche, écrite sous ce nom ; n2000 garde ses deux directives', () => {
+  const all = '[map(layers=habitats+oiseaux+rbio+pentes+bdforet+anciennes+haies+humides)]';
+  assert.equal(read(all).text, all);
+  assert.deepEqual(read(all).problems, []);
+  // Their other names; sic, zps and zsc still Natura 2000 whole.
+  assert.equal(read('map(layers=directiveHabitats+directiveOiseaux+réservesBiologiques+fortesPentes+peuplements+forêtsAnciennes+bocage+zonesHumides)').text, all);
+  assert.equal(read('map(layers=tourbières+haie+pente)').text, '[map(layers=humides+haies+pentes)]');
+  for (const w of ['sic', 'zps', 'zsc', 'natura2000']) assert.equal(read(`map(layers=${w})`).text, '[map(layers=n2000)]', w);
+  // Each one, the panel's row (core/map-layers.js CATALOG_ROWS): its overlay, its title, added before it shows.
+  const rows = { habitats: 'habitats', oiseaux: 'oiseaux', rbio: 'rbio', pentes: 'pentes', bdforet: 'bdforet', anciennes: 'anciennes', haies: 'haies', humides: 'humides' };
+  for (const [name, key] of Object.entries(rows)) {
+    const row = CATALOG_ROWS[key];
+    assert.deepEqual(overlaysOf([name]), ['ign:' + row.id], name);
+    assert.equal(MAP_LAYERS[name].label, row.title, name);
+    assert.deepEqual(catalogLayers([name]), [row], name);
+    // Ticked in the panel (its « ign:<id> »): written by its name.
+    assert.deepEqual(layersOf(['ign:' + row.id]), [name], name);
+    assert.equal(read(`map(layers=ign:${row.id})`).text, `[map(layers=${name})]`, name);
+  }
+  assert.deepEqual(layersOf(['ign:Patrinat_SIC', 'ign:Patrinat_ZPS']), ['n2000'], 'les deux directives : n2000');
+  // A bare one: the layers; in the legend and the cell's mark, its title.
+  assert.equal(read('map(haies)').text, '[map(layers=haies)]');
+  const mark = (/** @type {string} */ t) => cellMark(resolve(G.parse(t).tree.kids[0]))?.label;
+  assert.equal(mark('map(layers=humides+oiseaux)'), 'couches : Zones humides et tourbières, Natura 2000 — oiseaux (ZPS)');
+  // No layer's word one of « Noms et réseaux »' (two settings, never the same word for two things).
+  for (const k of Object.keys(MAP_LANDMARKS)) assert.ok(!(k in MAP_LAYERS), k);
+});
+
+test('opac= : chaque couche à son opacité habituelle n’est pas écrite — l’ombrage à 40 %, la sienne, les autres à 80 % — ; une autre l’est, 80 % pour l’ombrage aussi', () => {
+  const SHADOW = 'ign:' + CATALOG_ROWS.ombrage.id;
+  assert.equal(defaultOpacity(SHADOW), 0.4);
+  assert.equal(defaultOpacity('cadastre'), DEFAULT_OPACITY);
+  assert.equal(defaultOpacity('ign:' + CATALOG_ROWS.haies.id), DEFAULT_OPACITY, 'une couche des thèmes sans opacité à elle : l’habituelle');
+  assert.equal(defaultOpacity('ign:CORINE.LANDCOVER'), DEFAULT_OPACITY);
+  assert.equal(opacText({ [SHADOW]: 0.4, cadastre: 0.8 }, ['cadastre', SHADOW], defaultOpacity), null);
+  assert.equal(opacText({}, [SHADOW], defaultOpacity), null);
+  assert.equal(opacText({ [SHADOW]: 0.8, cadastre: 0.4 }, ['cadastre', SHADOW], defaultOpacity), 'cadastre.40+estompage.80');
+  assert.deepEqual(opacitiesOf('estompage.80'), { [SHADOW]: 0.8 });
+  // The shading without opac=: none said (its own, 40 %, drawn: core/ign-layers.js defaultOpacity).
+  assert.equal(read('map(layers=ombrage)').text, '[map(layers=estompage)]');
+  assert.equal(params('map(layers=ombrage)').opac, null);
 });
 
 test('les intentions : un mot, un ensemble de réglages ; un réglage écrit à côté, avant ou après, l’emporte ; l’adresse reste courte', () => {

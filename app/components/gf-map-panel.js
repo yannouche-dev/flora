@@ -12,15 +12,15 @@ const PIN_COLORS = { rare: '#fb7185', moyen: '#fbbf24', abondant: '#38bdf8' };
 
 /**
  * The panel ▦ « Carte » of every map (gf-map: its round button, or the end of its search pill), in one bottom sheet:
- * the home of the maps' look — gf-map-options.js (scope="map": 2D or 3D and the 3D options, the background, IGN's
- * layers; the common settings, the same as Réglages › Cartes, or this map's own look, and the way back) —, and what only
- * this map has: its state, the GBIF distribution of the Carte's plant, the protected areas in view, its legend, its
- * sources. It is where a map's state is read (the quiet-map rule, gf-map.js): the « État » lines of « Affichage » (why
- * it is in 2D or flat, the IGN backgrounds off, a source unreachable, the protected areas in view), the protected areas
- * in view with their INPN pages under « Règles de cueillette », a page's own legend (a plant sheet's sources and
- * counts) — said by the map's own live region, or while the panel is open (a modal: that region inert) by the panel's
- * own (say). Events: distribution-toggle {on}, and gf-map-options' (look-edit, look-preview, look-common,
- * renderer-follow), for its map.
+ * the home of the maps' look — gf-map-options.js (scope="map": 2D or 3D and the 3D options, the background, the layers
+ * shown, « Noms et réseaux », IGN's layers by theme and its whole catalogue; the common settings, the same as Réglages ›
+ * Cartes, or this map's own look, and the way back) —, and what only this map has: its state, « Sur cette carte » (the
+ * data its page draws on it: `data`, gf-map-options.js), the protected areas in view, its legend, its sources. It is
+ * where a map's state is read (the quiet-map rule, gf-map.js): the « État » lines of « Affichage » (why it is in 2D or
+ * flat, the IGN backgrounds off, a source unreachable, the protected areas in view), the protected areas in view with
+ * their INPN pages under « Espaces protégés et propriété », a page's own legend (a plant sheet's sources and counts) —
+ * said by the map's own live region, or while the panel is open (a modal: that region inert) by the panel's own (say).
+ * Events: gf-map-options' (look-edit, look-preview, look-common, renderer-follow, data-change), for its map.
  */
 export class GfMapPanel extends LitElement {
   static properties = {
@@ -31,9 +31,10 @@ export class GfMapPanel extends LitElement {
     own3d: { attribute: false },
     /** Why its own look is its owner's to keep, said instead of the way back (gf-map lookWhy). */
     lookWhy: { attribute: false },
-    /** Name of the plant whose GBIF distribution can be shown (null: none offered). */
-    distribution: { attribute: false },
-    distributionOn: { attribute: false },
+    /** « Sur cette carte »: the layers of data its page draws on it (gf-map-options.js DataRow[]; none: no section). */
+    data: { attribute: false },
+    /** It draws or offers a plant's GBIF distribution (its sources say so). */
+    gbif: { attribute: false },
     legend: { type: Boolean },
     /** What the colours of the page's own layers mean (gf-map setLegend: a plant sheet's map): { text, swatch? }[]. */
     legendLines: { attribute: false },
@@ -47,7 +48,7 @@ export class GfMapPanel extends LitElement {
      * protected areas in view…): the « État » lines of « Affichage » — what the map never writes over itself.
      */
     state: { attribute: false },
-    /** The protected areas in view (gf-map): under « Règles de cueillette », each with its INPN page. */
+    /** The protected areas in view (gf-map): under « Espaces protégés et propriété », each with its INPN page. */
     areas: { attribute: false }
   };
 
@@ -57,10 +58,6 @@ export class GfMapPanel extends LitElement {
     header h2 { margin: 0; font-size: 1.1rem; flex: 1; }
     .body { overflow-y: auto; padding: 4px 16px calc(16px + env(safe-area-inset-bottom)); display: grid; gap: 4px; }
     h3 { margin: 14px 0 6px; }
-    label.layer { display: flex; align-items: center; gap: 12px; padding: 8px 4px; border-radius: var(--gf-radius-sm); cursor: pointer; }
-    label.layer:hover { background: var(--gf-surface-2); }
-    label.layer span { display: grid; }
-    label.layer small { color: var(--gf-text-muted); font-size: 0.8rem; }
     .note { margin: 2px 4px 4px; font-size: 0.8rem; color: var(--gf-text-muted); }
     .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.85rem; padding: 0 4px; }
     .legend i { display: inline-block; vertical-align: -1px; margin-right: 6px; width: 11px; height: 11px; background: var(--c, var(--gf-text-muted)); border: 1px solid #fff; box-shadow: 0 0 0 1px rgb(0 0 0 / 20%); }
@@ -95,9 +92,9 @@ export class GfMapPanel extends LitElement {
     this.own3d = false;
     this.lookWhy = '';
     this.legend = false;
-    /** @type {string | null} */
-    this.distribution = null;
-    this.distributionOn = false;
+    /** @type {import('./gf-map-options.js').DataRow[]} */
+    this.data = [];
+    this.gbif = false;
     /** @type {any} */
     this.gl = null;
     /** @type {{ key: string, text: string, level: string, link: { href: string, label: string } | null }[]} */
@@ -128,9 +125,6 @@ export class GfMapPanel extends LitElement {
     sayIn(live, text);
     return true;
   }
-
-  /** @param {string} name @param {any} detail */
-  #emit(name, detail) { this.dispatchEvent(new CustomEvent(name, { detail, bubbles: true, composed: true })); }
 
   /**
    * « État »: the map's state, one short line each (why it is in 2D or flat, the IGN backgrounds off, the protected
@@ -169,15 +163,9 @@ export class GfMapPanel extends LitElement {
         <div class="said visually-hidden" aria-live="polite" aria-relevant="additions"></div>
         <div class="body">
           <gf-map-options scope="map" .look=${this.look} .own=${this.own} .gl=${this.gl} .own3d=${Boolean(this.own3d)} .lookWhy=${this.lookWhy}
+            .data=${this.data || []}
             @options-say=${(/** @type {CustomEvent} */ e) => { e.stopPropagation(); this.say(e.detail.text); }}>
             ${this.#state()}
-            ${this.distribution ? html`<div slot="extra">
-              <h3 class="kicker">Répartition</h3>
-              <label class="layer">
-                <input type="checkbox" .checked=${this.distributionOn}
-                  @change=${(/** @type {any} */ e) => this.#emit('distribution-toggle', { on: e.target.checked })} />
-                <span>Répartition GBIF : ${this.distribution}<small>densité des occurrences connues</small></span>
-              </label></div>` : nothing}
             ${this.#areas()}
           </gf-map-options>
 
@@ -197,10 +185,10 @@ export class GfMapPanel extends LitElement {
 
           <h3 class="kicker">Sources</h3>
           <p class="sources">
-            Fonds, cadastre, courbes de niveau, adresses et altitudes : <a href="https://geoservices.ign.fr/" target="_blank" rel="noopener">IGN – Géoplateforme</a>.
+            Fonds, noms et réseaux, cadastre, relief (courbes de niveau, ombrage, pentes), forêts et haies (BD Forêt, forêts anciennes, BD Haie), zones humides et tourbières (BCAE), adresses et altitudes : <a href="https://geoservices.ign.fr/" target="_blank" rel="noopener">IGN – Géoplateforme</a>.
             ${this.gl?.on ? html`Bâtiments et plan vectoriel : IGN (BD TOPO). Relief 3D : <a href="https://registry.opendata.aws/terrain-tiles/" target="_blank" rel="noopener">AWS Terrain Tiles</a> (Mapzen, EU-DEM © Copernicus).` : nothing}
-            Forêts publiques : ONF. Espaces protégés : <a href="https://inpn.mnhn.fr/" target="_blank" rel="noopener">INPN – PatriNat</a>.
-            ${this.distribution ? html`Répartition : <a href="https://www.gbif.org/" target="_blank" rel="noopener">GBIF.org</a>.` : nothing}
+            Forêts publiques : ONF. Espaces protégés, Natura 2000, parcs naturels régionaux, conservatoires d’espaces naturels, ZNIEFF : <a href="https://inpn.mnhn.fr/" target="_blank" rel="noopener">INPN – PatriNat</a>.
+            ${this.gbif ? html`Répartition : <a href="https://www.gbif.org/" target="_blank" rel="noopener">GBIF.org</a>.` : nothing}
           </p>
         </div>
       </dialog>

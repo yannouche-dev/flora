@@ -19,8 +19,8 @@
 //    One request per photo whoever asks, six at a time per host, the latest asked first (the map's points shown now
 //    before those gone), a CORS error answered by asking as the page did.
 //  - IGN map tiles: cache-first, capped — areas already viewed stay available offline (the 3D maps' vector tiles,
-//    their style, fonts and symbols too); the names over the photos (three tiles over each of theirs) counted apart,
-//    so they never push the photos of an area out
+//    their style, fonts and symbols too); « Noms et réseaux » over the photos (a tile over each of theirs for each layer
+//    drawn) counted apart, each layer to its own cap, so they never push the photos of an area out
 //  - remote API JSON: not cached here (app/core/sources.js caches it in IndexedDB)
 
 // Written at deploy by tools/stamp-sw.mjs: never edited by hand.
@@ -33,11 +33,12 @@ const IMAGE_CACHE = 'geoflora-images';
 const IMAGE_LIMIT = 400;
 const TILE_CACHE = 'geoflora-tiles';
 const TILE_LIMIT = 3000;
-// The names over the aerial photos and SPOT's (app/core/backgrounds.js NAMES_LAYERS: roads, rivers, places' names), on
-// by default: three tiles over each photo's, most of them see-through, light. Kept apart, three for each of the others,
-// as many places as before they came — a photo of an area seen before is never dropped for the names over another.
-const NAMES_TILE = /[?&]LAYER=(?:TRANSPORTNETWORKS\.ROADS|HYDROGRAPHY\.HYDROGRAPHY|GEOGRAPHICALNAMES\.NAMES)(?:&|$)/;
-const NAMES_TILE_LIMIT = 3 * TILE_LIMIT;
+// « Noms et réseaux » over the aerial photos and SPOT's (app/core/map-layers.js LANDMARKS: the places' names, the roads,
+// the rivers on by default; the railways, the buildings, the boundaries), most of their tiles see-through, light: a
+// tile over each photo's for each layer drawn. Each layer kept apart (its identifier, captured), as many as the others —
+// as many places as before they came: a photo of an area seen before is never dropped for the names over another, and
+// a layer never drawn takes nothing from them.
+const LANDMARK_TILE = /[?&]LAYER=(LIMITES_ADMINISTRATIVES_EXPRESS\.LATEST|BUILDINGS\.BUILDINGS|TRANSPORTNETWORKS\.RAILWAYS|TRANSPORTNETWORKS\.ROADS|HYDROGRAPHY\.HYDROGRAPHY|GEOGRAPHICALNAMES\.NAMES)(?:&|$)/;
 const TILE_HOST = 'data.geopf.fr';
 // 1×1 transparent PNG for tiles that are neither cached nor reachable.
 const EMPTY_TILE = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='), c => c.charCodeAt(0));
@@ -117,6 +118,7 @@ const SHELL = [
   'app/core/ign.js',
   'app/core/ign-layers.js',
   'app/core/backgrounds.js',
+  'app/core/map-layers.js',
   'app/core/ign-catalog.js',
   'app/core/place-model.js',
   'app/core/portable.js',
@@ -259,6 +261,7 @@ const SHELL = [
   'app/components/gf-map-panel.js',
   'app/components/gf-map-options.js',
   'app/components/gf-ign-layers.js',
+  'app/components/gf-layer-stack.js',
   'app/components/gf-map-search.js',
   'app/components/gf-point-card.js',
   'app/components/gf-tabbar.js'
@@ -567,7 +570,7 @@ async function cacheFirstTile(event, empty = EMPTY_TILE) {
     const response = await fetch(request);
     // Readable answers only (the layers ask in CORS): an opaque one has no status, and weighs ~7 MB of quota.
     if (response.ok) {
-      event.waitUntil(cache.put(request, response.clone()).then(() => trimSometimes(TILE_CACHE, cache, TILE_LIMIT, { test: NAMES_TILE, limit: NAMES_TILE_LIMIT })).catch(() => {}));
+      event.waitUntil(cache.put(request, response.clone()).then(() => trimSometimes(TILE_CACHE, cache, TILE_LIMIT, LANDMARK_TILE)).catch(() => {}));
     }
     return response;
   } catch {
@@ -581,7 +584,8 @@ async function cacheFirstTile(event, empty = EMPTY_TILE) {
 const storedSinceTrim = new Map();
 /**
  * @param {string} name @param {Cache} cache @param {number} limit
- * @param {{ test: RegExp, limit: number }} [apart] the entries whose address it matches, counted apart to their own limit
+ * @param {RegExp} [apart] the entries whose address it matches counted apart, by what it captures (a layer), each such
+ *   group to `limit` too
  */
 async function trimSometimes(name, cache, limit, apart) {
   const count = (storedSinceTrim.get(name) || 0) + 1;
@@ -589,9 +593,15 @@ async function trimSometimes(name, cache, limit, apart) {
   if (count < 50) return;
   // Oldest first: an entry refreshed (a photo seen again) moves to the end.
   const keys = await cache.keys();
-  const away = apart ? keys.filter(key => apart.test.test(key.url)) : [];
-  const rest = apart ? keys.filter(key => !apart.test.test(key.url)) : keys;
-  for (const [some, max] of /** @type {[Request[], number][]} */ ([[rest, limit], [away, apart?.limit ?? 0]])) {
-    for (const key of some.slice(0, Math.max(0, some.length - max))) await cache.delete(key);
+  /** @type {Map<string, Request[]>} */
+  const groups = new Map();
+  for (const key of keys) {
+    const group = apart?.exec(key.url)?.[1] ?? '';
+    const some = groups.get(group);
+    if (some) some.push(key);
+    else groups.set(group, [key]);
+  }
+  for (const some of groups.values()) {
+    for (const key of some.slice(0, Math.max(0, some.length - limit))) await cache.delete(key);
   }
 }

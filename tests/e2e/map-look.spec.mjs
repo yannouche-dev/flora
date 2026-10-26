@@ -5,8 +5,12 @@
 // address; a plant sheet's map block: MapConfig.look) keeps it, its panel says so and gives the common settings back
 // (« Revenir aux réglages communs »); a cell's 3d= is shown fixed, with « Suivre le réglage commun » — neither way back
 // when the cell's intent gives them (map(relief), map(protege)); layers=aucune: none, not the common ones. An overlay's
-// opacity reaches every map, MapLibre too, a layer of several (the nature reserves) as well. The plant sheet's map ⚙ no
-// longer has the background, the layers nor 2D / 3D. Every tile made here (tiles.mjs), real WebGL for 3D.
+// opacity reaches every map, MapLibre too, a layer of several (the nature reserves) as well. The panel's parts in their
+// order — « Sur cette carte » after the background, « Couches affichées » from the top, « Noms et réseaux », the themes
+// folded (opened by themselves once one of their layers is ticked, here or in the catalogue; never folded under the
+// finger), each its parts, notes and rows in order, the whole catalogue —; the shading at 40 % unless another opacity
+// is chosen (kept when unticked, never written down: a cell's layers=estompage too). The plant sheet's map ⚙ no longer has the
+// background, the layers nor 2D / 3D. Every tile made here (tiles.mjs), real WebGL for 3D.
 import { test, expect, answerAround, plantId } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
 
@@ -46,6 +50,20 @@ async function openPanel(map) {
   return panel;
 }
 
+/**
+ * A theme of the panel unfolded (folded while none of its layers is ticked): « relief », « milieux » (Forêts, haies et
+ * zones humides), « espaces » (Espaces protégés et propriété). @param {Locator} panel @param {string} key
+ */
+async function unfold(panel, key) {
+  const theme = panel.locator(`details.theme[data-group="${key}"]`);
+  if (!(await theme.evaluate(d => /** @type {HTMLDetailsElement} */ (d).open))) await theme.locator('summary').click();
+  await expect(theme).toHaveAttribute('open', '');
+}
+
+/** The headings shown in a panel, top first (as laid out: across the shadow roots of its parts). @param {Locator} panel */
+const headings = panel => panel.getByRole('heading').evaluateAll(hs => hs.map(h => /** @type {[number, string]} */ ([h.getBoundingClientRect().top, (h.textContent || '').trim()]))
+  .sort((a, b) => a[0] - b[0]).map(([, text]) => text));
+
 test('un réglage commun changé dans le panneau ▦ d’une carte : toutes les cartes ouvertes le suivent, en 2D comme en 3D ; une 3D fixée par l’adresse rendue au réglage commun', async ({ app, page }, info) => {
   test.skip(info.project.name !== 'desktop-1280', 'two maps side by side, software WebGL: one project');
   test.slow();
@@ -59,6 +77,7 @@ test('un réglage commun changé dans le panneau ▦ d’une carte : toutes les 
   const panel = await openPanel(in2d);
   await expect(panel.locator('.scope')).toContainText('Réglages communs à toutes les cartes');
   await panel.getByRole('button', { name: /Plan IGN/ }).click();
+  await unfold(panel, 'relief');
   await panel.getByRole('checkbox', { name: /Courbes de niveau/ }).check();
   // Both maps follow at once; the 3D one draws them (its tiles are its 2D map's, mirrored).
   await expect.poll(() => shown(in2d)).toEqual({ base: 'plan', overlays: ['contours'] });
@@ -127,8 +146,11 @@ test('une case qui décoche sa dernière couche n’en montre aucune (layers=auc
   await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,layers=aucune)]');
   await expect.poll(() => shown(map)).toEqual({ base: 'photo', overlays: [] });
   await expect(panel.locator('.scope')).toContainText('Cette carte a ses propres couches');
+  // Its theme still open (never folded under the finger), the public forests there unticked.
+  await expect(panel.locator('details.theme[data-group="espaces"]')).toHaveAttribute('open', '');
   await expect(panel.getByRole('checkbox', { name: /Forêts publiques/ })).not.toBeChecked();
   // Its own still: a layer ticked now is its own, not every map's.
+  await unfold(panel, 'relief');
   await panel.getByRole('checkbox', { name: /Courbes de niveau/ }).check();
   await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,layers=courbes)]');
   expect(await stored(page)).toEqual({ base: 'photo', overlays: ['forets'], distribution: false });
@@ -188,6 +210,7 @@ test.describe('un grand écran', () => {
     // The common settings changed in the other map's panel: the plan, the national parks.
     let panel = await openPanel(common);
     await panel.getByRole('button', { name: /Plan IGN/ }).click();
+    await unfold(panel, 'espaces');
     await panel.getByRole('checkbox', { name: /Parcs nationaux/ }).check();
     await expect.poll(() => shown(common)).toEqual({ base: 'plan', overlays: ['parcs'] });
     // The map with its own background keeps it; its layers, not its own, follow.
@@ -223,9 +246,14 @@ test('Réglages › Cartes : les mêmes options que le panneau ▦ de chaque car
   await app.open('#/settings');
   const options = page.locator('gf-settings gf-map-options[scope="defaults"]');
   await expect(options).toBeVisible();
-  // The same parts: 2D or 3D, the background, IGN's layers (terrain, the whole catalogue, the rules of picking).
+  // The same parts: 2D or 3D, the background, the layers shown, « Noms et réseaux », IGN's layers by theme, the whole
+  // catalogue.
   await expect(options.getByRole('group', { name: 'Affichage des cartes' })).toBeVisible();
   await expect(options.getByRole('group', { name: 'Fond de carte' }).getByRole('button', { name: /Photos aériennes/ })).toHaveAttribute('aria-pressed', 'true');
+  expect(await headings(options)).toEqual(['Affichage', 'Fond', 'Couches affichées', 'Noms et réseaux', 'Relief', 'Forêts, haies et zones humides',
+    'Espaces protégés et propriété', 'Toutes les couches de l’IGN']);
+  await unfold(options, 'relief');
+  await unfold(options, 'espaces');
   for (const name of ['Parcelles cadastrales', 'Courbes de niveau', 'Forêts publiques', 'Parcs nationaux', 'Réserves naturelles', 'Protection de biotope']) {
     await expect(options.getByRole('checkbox', { name: new RegExp(name) })).toBeVisible();
   }
@@ -245,6 +273,137 @@ test('Réglages › Cartes : les mêmes options que le panneau ▦ de chaque car
   await expect(panel.getByRole('link', { name: 'Réglages › Cartes' })).toHaveAttribute('href', '#/settings');
   await expect(panel.getByRole('button', { name: /Plan IGN/ })).toHaveAttribute('aria-pressed', 'true');
   await expect(panel.getByRole('checkbox', { name: /Forêts publiques/ })).toBeChecked();
+});
+
+test('le panneau ▦ : ses parties dans l’ordre, « Couches affichées » du haut vers le bas ; un thème s’ouvre seul quand une de ses couches est cochée (ici ou dans le catalogue, nommée comme dans son thème), son nombre dans son titre, jamais replié sous le doigt ; l’ombrage à 40 % sauf choix', async ({ app, page }) => {
+  await app.open(`#/layout/[map(r=1km)]?${AT}`);
+  const map = maps(page).nth(0);
+  const panel = await openPanel(map);
+  // Top first: the options — « Sur cette carte », its points (map-data-layers.spec.mjs), after the background —, then
+  // what is this map's own (its sources last).
+  const order = await headings(panel);
+  expect(order.slice(0, 10)).toEqual(['Carte', 'Affichage', 'Fond', 'Sur cette carte', 'Couches affichées', 'Noms et réseaux', 'Relief',
+    'Forêts, haies et zones humides', 'Espaces protégés et propriété', 'Toutes les couches de l’IGN']);
+  expect(order.at(-1)).toBe('Sources');
+  // The themes folded, none ticked.
+  const themes = panel.locator('details.theme');
+  await expect(themes).toHaveCount(3);
+  for (const theme of await themes.all()) await expect(theme).not.toHaveAttribute('open', '');
+  await expect(themes.locator('.count')).toHaveCount(0);
+  // What is drawn, from the top: « Noms et réseaux » (the places' names on top), no other layer, the background.
+  const stack = panel.locator('gf-layer-stack');
+  await expect(stack.locator('ul.marks li')).toHaveText(['Noms de lieux', 'Cours d’eau', 'Routes']);
+  await expect(stack).toContainText('Aucune autre couche par-dessus le fond : cochez-en une ci-dessous.');
+  await expect(stack.locator('.base')).toHaveText('Fond : Photos aériennes');
+  // One hidden there: unticked in « Noms et réseaux » (every map's choice).
+  await stack.getByRole('button', { name: 'Masquer Cours d’eau' }).click();
+  await expect.poll(() => stored(page)).toEqual({ base: 'photo', overlays: [], distribution: false, landmarks: ['routes', 'lieux'] });
+  await expect(stack.locator('ul.marks li')).toHaveText(['Noms de lieux', 'Routes']);
+  await expect(panel.getByRole('group', { name: 'Noms et réseaux' }).getByRole('checkbox', { name: /^Cours d’eau/ })).not.toBeChecked();
+  // By the keyboard, the bottom line hidden: the focus on the line above it, then on the background (never lost).
+  await stack.getByRole('button', { name: 'Masquer Routes' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(stack.locator('ul.marks li')).toHaveText(['Noms de lieux']);
+  await expect(stack.getByRole('button', { name: 'Masquer Noms de lieux' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(stack.locator('ul.marks')).toHaveCount(0);
+  await expect(stack.locator('.base')).toBeFocused();
+  await panel.getByRole('group', { name: 'Noms et réseaux' }).getByRole('checkbox', { name: /^Routes/ }).check();
+  await panel.getByRole('group', { name: 'Noms et réseaux' }).getByRole('checkbox', { name: /^Noms de lieux/ }).check();
+  await expect.poll(() => stored(page)).toEqual({ base: 'photo', overlays: [], distribution: false, landmarks: ['routes', 'lieux'] });
+
+  // The shading: at 40 % (the photos seen through it: its own, never written down), its theme counting it.
+  const SHADOW = 'ign:ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW';
+  const keptOpacity = () => page.evaluate(() => JSON.parse(localStorage.getItem('geoflora.overlayOpacity') || 'null'));
+  const shading = () => map.evaluate((m, k) => [...m.querySelectorAll('.leaflet-layer')].filter(e => e.classList.contains('gf-tiles-' + k))
+    .map(e => getComputedStyle(e).opacity), SHADOW);
+  await unfold(panel, 'relief');
+  const relief = panel.getByRole('checkbox', { name: /Ombrage du relief/ });
+  await relief.check();
+  await expect.poll(() => stored(page).then(s => s.overlays)).toEqual([SHADOW]);
+  expect(await keptOpacity()).toBe(null);
+  const slider = panel.getByRole('slider', { name: 'Opacité de Ombrage du relief' });
+  await expect(slider).toHaveValue('40');
+  await expect.poll(shading).toEqual(['0.4']);
+  await expect(panel.locator('details.theme[data-group="relief"] .count')).toHaveText('1 cochée');
+  // Another opacity chosen, 80 % (the others' usual one): kept, and kept again once unticked and ticked.
+  await slider.fill('80');
+  await expect.poll(keptOpacity).toEqual({ [SHADOW]: 0.8 });
+  await expect.poll(shading).toEqual(['0.8']);
+  await relief.uncheck();
+  await relief.check();
+  await expect(slider).toHaveValue('80');
+  await expect.poll(shading).toEqual(['0.8']);
+  await slider.fill('40');
+  await expect.poll(keptOpacity).toBe(null);
+  await relief.uncheck();
+
+  // A layer of a theme ticked in the catalogue: its theme opens by itself, its row ticked, named as there.
+  await panel.getByRole('button', { name: /Parcourir les couches de l’IGN/ }).click();
+  await panel.getByRole('searchbox', { name: 'Chercher une couche de l’IGN' }).fill('haie');
+  const row = panel.locator('li.row', { hasText: 'BD HAIE 2020' }).first();
+  await row.getByRole('checkbox').check();
+  const milieux = panel.locator('details.theme[data-group="milieux"]');
+  await expect(milieux).toHaveAttribute('open', '');
+  await expect(milieux.locator('.count')).toHaveText('1 cochée');
+  await expect(milieux.getByRole('checkbox', { name: /^Haies/ })).toBeChecked();
+  await expect(stack.locator('ul.active li .name').first()).toHaveText(/^Haies/);
+  // Unticked in its theme: the theme stays open, the catalogue's row unticked.
+  await milieux.getByRole('checkbox', { name: /^Haies/ }).uncheck();
+  await expect(milieux.locator('.count')).toHaveCount(0);
+  await expect(milieux).toHaveAttribute('open', '');
+  await expect(row.getByRole('checkbox')).not.toBeChecked();
+  // Folded by hand: so it stays, a layer of it ticked in the catalogue counted in its title.
+  await milieux.locator('summary').click();
+  await expect(milieux).not.toHaveAttribute('open', '');
+  await row.getByRole('checkbox').check();
+  await expect(milieux.locator('.count')).toHaveText('1 cochée');
+  await expect(milieux).not.toHaveAttribute('open', '');
+  // Never wider than the screen.
+  expect(await panel.locator('.body').evaluate(b => b.scrollWidth - b.clientWidth)).toBe(0);
+});
+
+test('une case qui dit l’ombrage (layers=ombrage) : à 40 %, le sien, comme coché dans le panneau, sans opac= ; une autre opacité écrite, la sienne retirée', async ({ app, page }) => {
+  await app.open(`#/layout/[map(r=1km,layers=ombrage)]?${AT}`);
+  const map = maps(page).nth(0);
+  const SHADOW = 'ign:ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW';
+  const shading = () => map.evaluate((m, k) => [...m.querySelectorAll('.leaflet-layer')].filter(e => e.classList.contains('gf-tiles-' + k))
+    .map(e => getComputedStyle(e).opacity), SHADOW);
+  await expect.poll(shading).toEqual(['0.4']);
+  await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,layers=estompage)]');
+  const panel = await openPanel(map);
+  const slider = panel.getByRole('slider', { name: 'Opacité de Ombrage du relief' });
+  await expect(slider).toHaveValue('40');
+  await slider.fill('70');
+  await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,layers=estompage,opac=estompage.70)]');
+  await expect.poll(shading).toEqual(['0.7']);
+  await slider.fill('40');
+  await expect.poll(() => layoutOf(page)).toBe('[map(r=1km,layers=estompage)]');
+  await expect.poll(shading).toEqual(['0.4']);
+});
+
+test('les thèmes du panneau ▦ en détail : chacun ses parties, leurs titres, leurs notes et leurs couches, dans l’ordre ; avant de cueillir, les règles du lieu', async ({ app, page }) => {
+  await app.open(`#/layout/[map(r=1km)]?${AT}`);
+  const panel = await openPanel(maps(page).nth(0));
+  const theme = (/** @type {string} */ key) => panel.locator(`details.theme[data-group="${key}"]`);
+  await unfold(panel, 'relief');
+  await expect(theme('relief').locator('h4')).toHaveCount(0);
+  await expect(theme('relief').locator('label.layer > span')).toHaveText([/^Courbes de niveau/, /^Ombrage du relief\s*relief ombré, opacité de 40 % par défaut$/, /^Fortes pentes\s*plus de 30°$/]);
+  await unfold(panel, 'milieux');
+  await expect(theme('milieux').locator('label.layer > span')).toHaveText([/^Types de forêts/, /^Forêts anciennes/, /^Haies/, /^Zones humides et tourbières/]);
+  await unfold(panel, 'espaces');
+  const espaces = theme('espaces');
+  await expect(espaces.locator('h4')).toHaveText(['Protection réglementaire', 'Gestion contractuelle', 'Inventaires', 'Propriété']);
+  await expect(espaces.locator('label.layer > span')).toHaveText([/^Parcs nationaux/, /^Réserves naturelles/, /^Protection de biotope/, /^Réserves biologiques/,
+    /^Natura 2000 — habitats/, /^Natura 2000 — oiseaux/, /^Parcs naturels régionaux/, /^Conservatoires/,
+    /^ZNIEFF de type I$/, /^ZNIEFF de type II$/, /^Forêts publiques/, /^Parcelles cadastrales/]);
+  // What to know before picking first; then each part's title, its note (the ZNIEFF: no rules of their own), its rows
+  // — laid out so, one under the other.
+  const parts = await espaces.evaluate(d => [...d.querySelectorAll('h4, label.layer, p.note')]
+    .map(e => /** @type {[string, number]} */ ([e.tagName, e.getBoundingClientRect().top])));
+  expect(parts.map(([tag]) => tag).join(' ')).toBe('P H4 LABEL LABEL LABEL LABEL H4 LABEL LABEL LABEL LABEL H4 P LABEL LABEL H4 LABEL LABEL');
+  expect(parts.every(([, top], i) => i === 0 || top > parts[i - 1][1])).toBe(true);
+  await expect(espaces.locator('p.note')).toHaveText([/^Avant de cueillir : les règles du lieu et l’accord du propriétaire\./, /^Sans règle propre : /]);
 });
 
 test('fiche plante : son ⚙ n’a plus ni fond, ni couches IGN, ni 2D / 3D ; un bloc à son propre fond le dit, et son panneau ▦ le rend aux réglages communs', async ({ app, page }) => {

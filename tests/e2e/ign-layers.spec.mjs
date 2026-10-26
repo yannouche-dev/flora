@@ -1,8 +1,10 @@
 // Browsing IGN's ~660 layers in the Carte panel (gf-ign-layers.js, on the catalogue shipped with the app): the
 // taxonomy as a tree of categories and sub-categories with their counts, a series as one row with its selector,
 // « Recommandées pour la botanique », the search (accents aside), a row's details (description, zooms, source, one
-// preview tile); a layer checked asks its tiles, joins « Affichées » with its opacity and its place in the stack,
-// and all of it is still there after a reload. The service's GetCapabilities is never answered: the shipped copy only.
+// preview tile); a layer checked asks its tiles, joins « Couches affichées » (gf-layer-stack.js) with its opacity and its
+// place in the stack, and all of it is still there after a reload; a layer of « Noms et réseaux » there (« Voie ferrée »,
+// the roads' series) is that choice, not one more layer — on the plan, which has its own, disabled and said, as the
+// panel's own checkboxes. The service's GetCapabilities is never answered: the shipped copy only.
 import { test, expect } from './fixtures.mjs';
 import { PHOTO } from './tiles.mjs';
 
@@ -133,8 +135,64 @@ test('cocher une couche demande ses tuiles ; ordre, opacité et choix gardés d�
   panel = page.locator('gf-map-panel');
   await expect(active.first()).toContainText('CORINE Land Cover — 2006');
   await expect(panel.getByRole('slider', { name: 'Opacité de CORINE Land Cover — 2006' })).toHaveValue('40');
-  // Hidden from « Affichées »: off the map, off the list.
+  // Hidden from « Couches affichées »: off the map, off the list.
   await panel.getByRole('button', { name: 'Masquer CORINE Land Cover — 2006' }).click();
   await expect(active).toHaveCount(1);
   await expect.poll(async () => (await savedLook(page)).overlays).toEqual(['forets']);
+});
+
+test('noms et réseaux dans le catalogue (« Voie ferrée », la série « Routes ») : cochés, c’est le choix de « Noms et réseaux », au-dessus de tout, jamais une couche de plus', async ({ page, app }) => {
+  const tiles = await openMap(page, app);
+  const panel = await browse(page);
+  const search = panel.getByRole('searchbox', { name: 'Chercher une couche de l’IGN' });
+  const marks = panel.getByRole('group', { name: 'Noms et réseaux' });
+  // Close enough for « Noms et réseaux » (from their zoom 6).
+  await page.locator('gf-map').first().evaluate(map => /** @type {any} */ (map).flyTo([2.35, 48.85], 12));
+  // The railways: ticked there, one of « Noms et réseaux » (under the usual three), asked; no overlay.
+  await search.fill('voie ferree');
+  const rail = panel.locator('li.row', { hasText: 'Voie ferrée' }).first();
+  await expect(rail.getByRole('checkbox')).not.toBeChecked();
+  await rail.getByRole('checkbox').check();
+  await expect.poll(async () => (await savedLook(page)).landmarks).toEqual(['rail', 'routes', 'eau', 'lieux']);
+  expect((await savedLook(page)).overlays).toEqual([]);
+  await expect.poll(() => tiles.includes('TRANSPORTNETWORKS.RAILWAYS')).toBe(true);
+  await expect(marks.getByRole('checkbox', { name: /^Voies ferrées/ })).toBeChecked();
+  await expect(panel.locator('gf-layer-stack ul.marks li')).toHaveText(['Noms de lieux', 'Cours d’eau', 'Routes', 'Voies ferrées']);
+  await expect(panel.locator('ul.active')).toHaveCount(0);
+  // Unticked in « Noms et réseaux »: unticked in the catalogue too.
+  await marks.getByRole('checkbox', { name: /^Voies ferrées/ }).uncheck();
+  await expect(rail.getByRole('checkbox')).not.toBeChecked();
+  // The roads, a series: their usual version shown, ticked; unticked there, gone from « Noms et réseaux ».
+  await search.fill('routes');
+  const roads = panel.locator('li.row').filter({ has: page.getByRole('combobox', { name: 'Version de Routes' }) }).first();
+  await expect(roads.getByRole('combobox')).toHaveValue('TRANSPORTNETWORKS.ROADS');
+  await expect(roads.getByRole('checkbox')).toBeChecked();
+  await roads.getByRole('checkbox').uncheck();
+  await expect.poll(async () => (await savedLook(page)).landmarks).toEqual(['eau', 'lieux']);
+  await expect(marks.getByRole('checkbox', { name: /^Routes/ })).not.toBeChecked();
+  expect((await savedLook(page)).overlays).toEqual([]);
+
+  // On the plan, which draws its own: their rows disabled, as chosen, said why (a ticked box and an unchanged map,
+  // never); a series' version kept.
+  await marks.getByRole('checkbox', { name: /^Routes/ }).check();
+  await panel.getByRole('button', { name: /Plan IGN/ }).click();
+  await expect.poll(async () => (await savedLook(page)).base).toBe('plan');
+  const why = 'Noms et réseaux : le plan IGN dessine déjà les siens, ce choix vaut pour les photos et SPOT.';
+  await expect(roads.getByRole('checkbox')).toBeDisabled();
+  await expect(roads.getByRole('checkbox')).toBeChecked();
+  await expect(roads.getByRole('combobox')).toBeDisabled();
+  await expect(roads.getByRole('combobox')).toHaveValue('TRANSPORTNETWORKS.ROADS');
+  await expect(roads).toContainText(why);
+  await search.fill('limites administratives');
+  const limits = panel.locator('li.row', { hasText: 'Limites administratives mises à jour en continu' }).first();
+  await expect(limits.getByRole('checkbox')).toBeDisabled();
+  await expect(limits.getByRole('checkbox')).toHaveAccessibleDescription(new RegExp(why.replace(/[.()]/g, '\\$&') + '$'));
+  await search.fill('hydrographie');
+  const water = panel.locator('li.row', { hasText: 'Hydrographie' }).first();
+  await expect(water.getByRole('checkbox')).toBeDisabled();
+  await expect(water.getByRole('checkbox')).toBeChecked();
+  // Back on the photos: theirs again.
+  await panel.getByRole('button', { name: /Photos aériennes/ }).click();
+  await expect(water.getByRole('checkbox')).toBeEnabled();
+  await expect(water).not.toContainText(why);
 });

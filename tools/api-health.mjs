@@ -9,11 +9,12 @@
 // Prints a table (and appends it to $GITHUB_STEP_SUMMARY when set); exits 1 when any service is broken.
 // From a machine behind a proxy, Node 22 needs NODE_USE_ENV_PROXY=1 to use HTTPS_PROXY.
 
-import { appendFileSync, readFileSync } from 'node:fs';
+import { appendFileSync } from 'node:fs';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { WIKIMEDIA_AGENT } from '../lib/plant-sources.mjs';
 import { parseCapabilities } from '../lib/ign-catalog.mjs';
 import { everyBaseLayer } from '../app/core/backgrounds.js';
+import { everyAppLayer } from '../app/core/map-layers.js';
 
 const ORIGIN = 'https://yannouche-dev.github.io';
 const AGENT = 'GeoFlora api-health (https://github.com/yannouche-dev/flora; daily check, one request per service)';
@@ -22,11 +23,10 @@ const TAXON = 'Urtica dioica';
 const [LON, LAT] = [4.8357, 45.764];
 
 /**
- * The WMTS layers of the app's maps — its overlays (app/core/ign-layers.js, read from its source), its backgrounds
- * (app/core/backgrounds.js: the plan, the photos of each year, SPOT's, the names over them) —: each must still be in the catalogue.
+ * The WMTS layers of the app's maps — its overlays, « Noms et réseaux », the panel's themes (app/core/map-layers.js), its
+ * backgrounds (app/core/backgrounds.js: the plan, the photos of each year, SPOT's) —: each must still be in the catalogue.
  */
-const IGN_LAYERS = [...readFileSync(new URL('../app/core/ign-layers.js', import.meta.url), 'utf8')
-  .matchAll(/\{ id: '([^']+)', format: 'image\//g)].map(m => m[1]).concat(everyBaseLayer().map(l => l.id));
+const IGN_LAYERS = [...everyAppLayer(), ...everyBaseLayer()].map(l => l.id);
 
 /** @param {Record<string, string | number>} p */
 const qs = p => new URLSearchParams(Object.entries(p).map(([k, v]) => [k, String(v)])).toString();

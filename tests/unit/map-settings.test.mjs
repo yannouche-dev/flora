@@ -1,6 +1,6 @@
 // app/core/map-settings.js: Réglages › Cartes — 2D or 3D, and the 3D options: always valid, only what differs stored,
 // followed in the other tabs, counted as a setting by the first steps; the sun that lights the 3D maps; the maps'
-// common look (background, the names over it, overlays, their opacity) under the keys of before, one `change` each time
+// common look (background, « Noms et réseaux » over it, overlays, their opacity) under the keys of before, one `change` each time
 // it changes, and a map's own look over it.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -116,6 +116,8 @@ test('l’heure de l’éclairage : fixe, maintenant, ou aujourd’hui à l’he
 
 const { LOOK_DEFAULTS, cleanOwnLook, lookFor, mapDistribution, mapLook, mapLookEvents, resetMapLook, setMapDistribution, setMapLook } = await import('../../app/core/map-settings.js');
 const LAYER = config.storageKeys.mapLayer, OPACITY = config.storageKeys.overlayOpacity;
+/** « Noms et réseaux » shown unless chosen otherwise (core/map-layers.js LANDMARK_DEFAULTS). */
+const MARKS = ['routes', 'eau', 'lieux'];
 /** The look as plain data (it is frozen). @param {any} l */
 const plain = l => JSON.parse(JSON.stringify(l));
 /** The `storage` event another tab's write fires here. @param {string} key */
@@ -124,9 +126,9 @@ const fromAnotherTab = key => dispatchEvent(Object.assign(new Event('storage'), 
 test('le fond et les couches : par défaut les photos, sans couche ; rien d’écrit à la lecture', () => {
   assert.equal(LAYER, 'geoflora.mapLayer');
   assert.equal(OPACITY, 'geoflora.overlayOpacity');
-  assert.deepEqual(plain(mapLook()), { base: 'photo', names: true, overlays: [], opacities: {} });
+  assert.deepEqual(plain(mapLook()), { base: 'photo', landmarks: MARKS, overlays: [], opacities: {} });
   assert.deepEqual(plain(mapLook()), plain(LOOK_DEFAULTS));
-  assert.ok(Object.isFrozen(mapLook()) && Object.isFrozen(mapLook().overlays), 'un seul objet partagé, jamais modifié');
+  assert.ok(Object.isFrozen(mapLook()) && Object.isFrozen(mapLook().overlays) && Object.isFrozen(mapLook().landmarks), 'un seul objet partagé, jamais modifié');
   assert.equal(mapLook(), mapLook(), 'le même objet tant qu’il ne change pas');
   assert.equal(localStorage.getItem(LAYER), null);
   assert.equal(localStorage.getItem(OPACITY), null);
@@ -141,7 +143,7 @@ test('les clés d’avant, lues telles quelles (cadastre: true d’une version a
   localStorage.setItem(OPACITY, JSON.stringify({ cadastre: 0.4, forets: 0.8, contours: 7, parcs: 'x' }));
   fromAnotherTab(LAYER);
   fromAnotherTab(OPACITY);
-  assert.deepEqual(plain(mapLook()), { base: 'plan', names: true, overlays: ['cadastre'], opacities: { cadastre: 0.4 } });
+  assert.deepEqual(plain(mapLook()), { base: 'plan', landmarks: MARKS, overlays: ['cadastre'], opacities: { cadastre: 0.4 } });
   assert.equal(mapDistribution(), true, 'la répartition GBIF du panneau, gardée à côté');
   assert.equal(seen.length, 2, 'chaque clé changée dans un autre onglet : la carte suit');
   mapLookEvents.removeEventListener('change', on);
@@ -158,7 +160,7 @@ test('changé ici : les mêmes clés, les mêmes formes ; un seul « change » p
   mapLookEvents.addEventListener('change', on);
   setMapLook({ base: 'photo', overlays: ['cadastre', 'forets', 'inconnue', 'cadastre'], opacities: { cadastre: 0.42, forets: 0.8 } });
   assert.equal(seen.length, 1);
-  assert.deepEqual(seen[0], { base: 'photo', names: true, overlays: ['cadastre', 'forets'], opacities: { cadastre: 0.4 } });
+  assert.deepEqual(seen[0], { base: 'photo', landmarks: MARKS, overlays: ['cadastre', 'forets'], opacities: { cadastre: 0.4 } });
   assert.deepEqual(JSON.parse(localStorage.getItem(LAYER) || 'null'), { base: 'photo', overlays: ['cadastre', 'forets'], distribution: true });
   assert.deepEqual(JSON.parse(localStorage.getItem(OPACITY) || 'null'), { cadastre: 0.4 });
   setMapLook({ base: 'photo' });
@@ -168,11 +170,11 @@ test('changé ici : les mêmes clés, les mêmes formes ; un seul « change » p
   // From what is stored now: a background chosen in another tab since is kept.
   localStorage.setItem(LAYER, JSON.stringify({ base: 'plan', overlays: ['cadastre', 'forets'], distribution: false }));
   setMapLook({ overlays: ['forets'] });
-  assert.deepEqual(plain(mapLook()), { base: 'plan', names: true, overlays: ['forets'], opacities: { cadastre: 0.4 } });
-  // The names over the background: written only when off.
-  setMapLook({ names: false });
+  assert.deepEqual(plain(mapLook()), { base: 'plan', landmarks: MARKS, overlays: ['forets'], opacities: { cadastre: 0.4 } });
+  // « Noms et réseaux »: written only when not the usual ones.
+  setMapLook({ landmarks: [] });
   assert.equal(JSON.parse(localStorage.getItem(LAYER) || 'null').names, false);
-  setMapLook({ names: true });
+  setMapLook({ landmarks: MARKS });
   assert.ok(!('names' in JSON.parse(localStorage.getItem(LAYER) || 'null')));
   // Back to the defaults: the photos, no overlay; the opacities' key gone (none left).
   resetMapLook();
@@ -185,18 +187,32 @@ test('changé ici : les mêmes clés, les mêmes formes ; un seul « change » p
 
 test('une carte à son propre fond : ses champs à elle, les autres communs, et toujours valides', () => {
   setMapLook({ base: 'plan', overlays: ['parcs'], opacities: { parcs: 0.5 } });
-  assert.deepEqual(lookFor(null), { base: 'plan', names: true, overlays: ['parcs'], opacities: { parcs: 0.5 } });
-  assert.deepEqual(lookFor({ base: 'photo' }), { base: 'photo', names: true, overlays: ['parcs'], opacities: { parcs: 0.5 } });
+  assert.deepEqual(lookFor(null), { base: 'plan', landmarks: MARKS, overlays: ['parcs'], opacities: { parcs: 0.5 } });
+  assert.deepEqual(lookFor({ base: 'photo' }), { base: 'photo', landmarks: MARKS, overlays: ['parcs'], opacities: { parcs: 0.5 } });
   // Its layers and their opacity, its own: the common ones not mixed in.
-  assert.deepEqual(lookFor({ overlays: ['cadastre'], opacities: {} }), { base: 'plan', names: true, overlays: ['cadastre'], opacities: {} });
+  assert.deepEqual(lookFor({ overlays: ['cadastre'], opacities: {} }), { base: 'plan', landmarks: MARKS, overlays: ['cadastre'], opacities: {} });
   // A copy each time: a map changing it changes nothing else.
   const a = lookFor(null);
   a.overlays.push('forets');
+  a.landmarks.push('rail');
   assert.deepEqual(mapLook().overlays, ['parcs']);
+  assert.deepEqual(mapLook().landmarks, MARKS);
   assert.equal(cleanOwnLook(null), null);
   assert.equal(cleanOwnLook({ base: 'nuit', extra: 1 }), null);
-  assert.deepEqual(cleanOwnLook({ base: 'photo', names: false, overlays: ['parcs', 'lune', 'parcs'], opacities: { parcs: 0.42, reserves: 2 } }),
-    { base: 'photo', names: false, overlays: ['parcs'], opacities: { parcs: 0.4 } });
+  assert.deepEqual(cleanOwnLook({ base: 'photo', landmarks: ['lieux', 'lune', 'rail'], overlays: ['parcs', 'lune', 'parcs'], opacities: { parcs: 0.42, reserves: 2 } }),
+    { base: 'photo', landmarks: ['rail', 'lieux'], overlays: ['parcs'], opacities: { parcs: 0.4 } });
+  resetMapLook();
+});
+
+test('l’ombrage du relief : son opacité à lui (40 %) n’est jamais écrite, une autre l’est — 80 % aussi, gardé quand il est décoché puis recoché', () => {
+  const SHADOW = 'ign:ELEVATION.ELEVATIONGRIDCOVERAGE.SHADOW';
+  assert.deepEqual(cleanOwnLook({ opacities: { [SHADOW]: 0.4, cadastre: 0.8 } }), { opacities: {} });
+  assert.deepEqual(cleanOwnLook({ opacities: { [SHADOW]: 0.8, cadastre: 0.4 } }), { opacities: { [SHADOW]: 0.8, cadastre: 0.4 } });
+  setMapLook({ opacities: { [SHADOW]: 0.4 } });
+  assert.equal(localStorage.getItem(OPACITY), null);
+  setMapLook({ opacities: { [SHADOW]: 0.8 } });
+  assert.deepEqual(JSON.parse(localStorage.getItem(OPACITY) || 'null'), { [SHADOW]: 0.8 });
+  assert.deepEqual(plain(mapLook().opacities), { [SHADOW]: 0.8 });
   resetMapLook();
 });
 
@@ -214,7 +230,7 @@ test('un fond d’une année, d’une période, historique, SPOT : gardé sous l
   // Another tab's: read as it is (a historical one too).
   localStorage.setItem(LAYER, JSON.stringify({ base: 'photo:1950-1965', overlays: ['forets'] }));
   fromAnotherTab(LAYER);
-  assert.deepEqual(plain(mapLook()), { base: 'photo:1950-1965', names: true, overlays: ['forets'], opacities: {} });
+  assert.deepEqual(plain(mapLook()), { base: 'photo:1950-1965', landmarks: MARKS, overlays: ['forets'], opacities: {} });
   // A year no version has, a kind without a year, a key of a later version: the photos.
   for (const base of ['photo:1999', 'spot:2030', 'spot', 'photo:', 'photo:toString', 'satellite', 'PHOTO']) {
     localStorage.setItem(LAYER, JSON.stringify({ base, overlays: [] }));
@@ -229,45 +245,62 @@ test('un fond d’une année, d’une période, historique, SPOT : gardé sous l
   resetMapLook();
 });
 
-test('les noms par-dessus : gardés seulement éteints (geoflora.mapLayer, sa forme d’avant), relus au chargement et d’un autre onglet ; une carte a les siens', async () => {
+test('« Noms et réseaux » : gardés seulement quand ce ne sont pas les habituels — aucun comme avant (names: false), d’autres en liste —, relus au chargement et d’un autre onglet', async () => {
   /** @type {any[]} */
   const seen = [];
   const on = (/** @type {any} */ e) => seen.push(plain(e.detail));
   mapLookEvents.addEventListener('change', on);
-  setMapLook({ base: 'spot:2020', names: false });
+  // None: the key of before, its shape of before (a version of before reads it as off).
+  setMapLook({ base: 'spot:2020', landmarks: [] });
   assert.equal(seen.length, 1, 'un seul « change »');
-  assert.deepEqual(seen[0], { base: 'spot:2020', names: false, overlays: [], opacities: {} });
+  assert.deepEqual(seen[0], { base: 'spot:2020', landmarks: [], overlays: [], opacities: {} });
   assert.deepEqual(JSON.parse(localStorage.getItem(LAYER) || 'null'), { base: 'spot:2020', overlays: [], distribution: false, names: false });
-  // Read back as the app starts (the module loaded again, from what is stored): off.
+  // Read back as the app starts (the module loaded again, from what is stored): none.
   const again = await import('../../app/core/map-settings.js?relu');
-  assert.deepEqual(plain(again.mapLook()), { base: 'spot:2020', names: false, overlays: [], opacities: {} });
-  // Another tab's: followed, a value that is not a yes or a no read as on (the default) — and not written back.
-  localStorage.setItem(LAYER, JSON.stringify({ base: 'photo', overlays: [], names: true }));
-  fromAnotherTab(LAYER);
-  assert.equal(mapLook().names, true);
-  localStorage.setItem(LAYER, JSON.stringify({ base: 'photo', overlays: [], names: false }));
-  fromAnotherTab(LAYER);
-  assert.equal(mapLook().names, false);
-  for (const names of ['non', 0, null, 'false']) {
-    localStorage.setItem(LAYER, JSON.stringify({ base: 'photo', overlays: [], names }));
+  assert.deepEqual(plain(again.mapLook()), { base: 'spot:2020', landmarks: [], overlays: [], opacities: {} });
+  // Others: their list, bottom first, each once, only theirs.
+  setMapLook({ landmarks: ['lieux', 'rail', 'lune', 'rail'] });
+  assert.deepEqual(mapLook().landmarks, ['rail', 'lieux']);
+  assert.deepEqual(JSON.parse(localStorage.getItem(LAYER) || 'null'), { base: 'spot:2020', overlays: [], distribution: false, landmarks: ['rail', 'lieux'] });
+  // The usual ones (in any order): nothing written for them.
+  setMapLook({ landmarks: ['lieux', 'eau', 'routes'] });
+  assert.deepEqual(JSON.parse(localStorage.getItem(LAYER) || 'null'), { base: 'spot:2020', overlays: [], distribution: false });
+  assert.deepEqual(mapLook().landmarks, MARKS);
+  // Another tab's: followed — names: true or anything not a no, the usual ones; a list over names; nothing written back.
+  for (const [stored, landmarks] of /** @type {[any, string[]][]} */ ([
+    [{ names: false }, []], [{ names: true }, MARKS], [{ names: 'non' }, MARKS], [{ names: 0 }, MARKS], [{ names: null }, MARKS],
+    [{ landmarks: ['bati', 'limites'] }, ['limites', 'bati']], [{ landmarks: [], names: true }, []], [{ landmarks: ['routes'], names: false }, ['routes']],
+    [{ landmarks: 'routes' }, MARKS], [{ landmarks: ['lune'] }, []]
+  ])) {
+    const value = { base: 'photo', overlays: [], ...stored };
+    localStorage.setItem(LAYER, JSON.stringify(value));
     fromAnotherTab(LAYER);
-    assert.equal(mapLook().names, true, String(names));
-    assert.equal(JSON.parse(localStorage.getItem(LAYER) || 'null').names, names, 'rien d’écrit à la lecture');
+    assert.deepEqual(mapLook().landmarks, landmarks, JSON.stringify(stored));
+    assert.deepEqual(JSON.parse(localStorage.getItem(LAYER) || 'null'), value, 'rien d’écrit à la lecture');
   }
-  // On again: the key of before, as before (no names).
-  setMapLook({ names: false });
-  setMapLook({ names: true });
+  // Back to the usual ones: the key of before, as before.
+  setMapLook({ landmarks: [] });
+  setMapLook({ landmarks: MARKS });
   assert.deepEqual(JSON.parse(localStorage.getItem(LAYER) || 'null'), { base: 'photo', overlays: [], distribution: false });
-  // A map's own: its names over the common ones, the rest common.
-  assert.deepEqual(cleanOwnLook({ names: false }), { names: false });
-  assert.equal(cleanOwnLook({ names: 'non' }), null);
-  assert.deepEqual(lookFor({ names: false }), { base: 'photo', names: false, overlays: [], opacities: {} });
-  setMapLook({ names: false });
-  assert.equal(lookFor({ names: true }).names, true);
-  assert.equal(lookFor({ base: 'plan' }).names, false, 'le réglage commun, quand elle n’en dit rien');
   mapLookEvents.removeEventListener('change', on);
   resetMapLook();
-  assert.equal(mapLook().names, true);
+  assert.deepEqual(mapLook().landmarks, MARKS);
+});
+
+test('une carte a les siens : sa liste au-dessus de la commune, champ par champ ; un look d’avant (names) lu en noms et réseaux', () => {
+  assert.deepEqual(cleanOwnLook({ landmarks: [] }), { landmarks: [] });
+  assert.deepEqual(cleanOwnLook({ landmarks: ['lieux', 'bati'] }), { landmarks: ['bati', 'lieux'] });
+  // A map block's look of before (MapConfig.look): its names off, none; on, the usual ones; anything else, nothing of its own.
+  assert.deepEqual(cleanOwnLook({ names: false }), { landmarks: [] });
+  assert.deepEqual(cleanOwnLook({ names: true }), { landmarks: MARKS });
+  assert.equal(cleanOwnLook({ names: 'non' }), null);
+  assert.deepEqual(cleanOwnLook({ landmarks: ['rail'], names: false }), { landmarks: ['rail'] }, 'la liste d’abord');
+  assert.deepEqual(lookFor({ landmarks: [] }), { base: 'photo', landmarks: [], overlays: [], opacities: {} });
+  setMapLook({ landmarks: ['limites'] });
+  assert.deepEqual(lookFor({ landmarks: ['rail'] }).landmarks, ['rail']);
+  assert.deepEqual(lookFor({ base: 'plan' }).landmarks, ['limites'], 'le réglage commun, quand elle n’en dit rien');
+  assert.deepEqual(lookFor({ landmarks: [], overlays: ['parcs'] }), { base: 'photo', landmarks: [], overlays: ['parcs'], opacities: {} }, 'ses couches ni ses noms ne se mêlent');
+  resetMapLook();
 });
 
 test('un fond ou une couche : seulement les leurs, jamais une clé héritée d’un objet (« constructor », « toString »)', () => {
@@ -278,6 +311,6 @@ test('un fond ou une couche : seulement les leurs, jamais une clé héritée d�
   assert.deepEqual(plain(mapLook()), plain(LOOK_DEFAULTS));
   localStorage.setItem(LAYER, JSON.stringify({ base: 'toString', overlays: ['constructor', 'forets'] }));
   fromAnotherTab(LAYER);
-  assert.deepEqual(plain(mapLook()), { base: 'photo', names: true, overlays: ['forets'], opacities: {} });
+  assert.deepEqual(plain(mapLook()), { base: 'photo', landmarks: MARKS, overlays: ['forets'], opacities: {} });
   resetMapLook();
 });

@@ -20,8 +20,9 @@
 //    plant; a heart: a favourite.
 // What is done in a cell with its own controls is kept in the layout (`cell-param` {key: value…}, gf-layout.js: the
 // address is the app, sent as it is): a map's 3D, background, layers (their order, IGN's catalogue, their opacity),
-// period, « Seule », legend, binoculars (« Observations autour » in 3D), and, in « Créer une app », its view; the
-// search's filters opened; the results as a list or a grid.
+// period, « Seule », legend, binoculars (« Observations autour » in 3D), its points' sources and the current plant's
+// (« Sur cette carte » of its panel ▦), and, in « Créer une app », its view; the search's filters opened; the results
+// as a list or a grid.
 // A link to a plant's sheet anywhere in a cell (a result, a look-alike) makes it the current plant (gf-layout.js).
 // The frame every cell shares (registry.js#FRAME: its head, its actions, its empty state) is gf-layout.js'; its links
 // are honoured here: a plant of its own (plante=: renderCell), the whole flora instead of the zone (results zone=0:
@@ -45,16 +46,17 @@ import { isFavorite, toggleFavorite } from '../core/collections.js';
 import { ui } from '../styles/ui.js';
 import { DISTANCES, distanceAt, distanceEvents, distanceKey } from '../miniapp/kit/cards.js';
 import { pushHash } from '../core/history.js';
-import { addCatalogLayer, DEFAULT_OPACITY, isOverlay } from '../core/ign.js';
+import { addCatalogLayer, defaultOpacity, isOverlay } from '../core/ign.js';
 import { mapLook } from '../core/map-settings.js';
-import { addressOf, baseKeyOf, baseKind } from '../core/backgrounds.js';
+import { addressOf, baseKeyOf, baseKind, takesLandmarks } from '../core/backgrounds.js';
+import { cleanLandmarks } from '../core/map-layers.js';
 import { loadCatalog } from '../core/ign-catalog.js';
 import { RADII_3D } from '../core/around3d.js';
 import { nearestStop } from '../core/distance.js';
 import { cellIcon, distanceLabel } from './registry.js';
-import { COMPACT_WIDTH, MAP_INTENTS, MAP_LAYERS, WIDE_FRAMES, catalogLayers, inatTiles, inWhen, layersOf, mapControls, opacitiesOf, opacText, overlaysOf, snapRadius, uiMode, viewOf, viewText } from './map-options.js';
+import { COMPACT_WIDTH, MAP_INTENTS, MAP_LANDMARKS, MAP_LAYERS, WIDE_FRAMES, catalogLayers, inatTiles, inWhen, layersOf, mapControls, opacitiesOf, opacText, overlaysOf, snapRadius, uiMode, viewOf, viewText } from './map-options.js';
 import { periodQuery, plantOfPoint, taxonIdOf } from '../core/nearby.js';
-import { SOURCE_NAMES, failedText, obsNotes, sourcesText } from '../core/observations.js';
+import { SOURCES, SOURCE_NAMES, failedText, obsNotes, sourcesText } from '../core/observations.js';
 import { obsId } from './state.js';
 import { speciesKey } from '../components/map-style.js';
 import '../components/gf-map.js';
@@ -311,6 +313,7 @@ export class DlMap extends LitElement {
     .legend i.obs { border: 0; background: radial-gradient(circle at 35% 30%, #ff6f9c, var(--gf-kin) 75%); box-shadow: 0 0 0 1.5px var(--gf-highlight); }
     .legend i.outline { background: transparent; border: 2px solid #a3e68a; box-shadow: 0 1px 0 rgb(0 0 0 / 30%); }
     .legend i.area { border-radius: 3px; background: color-mix(in srgb, #7c3aed 35%, transparent); border-color: #7c3aed; }
+    .legend i.lines { height: 4px; border-radius: 2px; background: #fff; border: 0; box-shadow: 0 0 0 1px rgb(0 0 0 / 45%); }
     /* The period: three chips in one. */
     .period { display: flex; border-radius: var(--gf-radius-pill); overflow: hidden; box-shadow: var(--gf-shadow); background: color-mix(in srgb, var(--gf-surface) 95%, transparent); }
     .period button { min-height: 32px; padding: 2px 10px; border: 0; border-radius: 0; background: none; font-size: 0.78rem; white-space: nowrap; }
@@ -528,12 +531,13 @@ export class DlMap extends LitElement {
 
   /**
    * The cell's own look (core/map-settings.js), as its address says it: its background (base=, and annee= the year or
-   * period of its photos, SPOT's year: core/backgrounds.js baseKeyOf; without it the most recent), the names over it
-   * (noms=1, noms=0: on the photos and SPOT's — the plan has its own, noms= kept there, of no effect), its layers in their
-   * order (layers=znieff+n2000+ign:<id>: the catalogue's added to the maps first, core/ign.js — one of IGN's whole
-   * catalogue not known on this device found in it, core/ign-catalog.js, then shown) and their opacity (opac=); what it
-   * does not say follows the maps' common look (gf-map `look`) — layers=aucune says none of its own, not the common
-   * ones. null: it says none. The same object while the same.
+   * period of its photos, SPOT's year: core/backgrounds.js baseKeyOf; without it the most recent), its « Noms et
+   * réseaux » over it (noms=lieux+rail: those, core/map-layers.js LANDMARKS; noms=1 the usual ones, noms=0 none — on
+   * the photos and SPOT's; the plan has its own, noms= kept there, of no effect), its layers in their order
+   * (layers=znieff+n2000+ign:<id>: the catalogue's added to the maps first, core/ign.js — one of IGN's whole catalogue
+   * not known on this device found in it, core/ign-catalog.js, then shown) and their opacity (opac=); what it does not
+   * say follows the maps' common look (gf-map `look`) — layers=aucune says none of its own, not the common ones. null:
+   * it says none. The same object while the same.
    * @returns {Partial<import('../core/map-settings.js').MapLook> | null}
    */
   get #look() {
@@ -556,7 +560,7 @@ export class DlMap extends LitElement {
     // A year its kind has not (the registry says it, and leaves it out): the kind's most recent.
     const base = p.base || p.annee ? baseKeyOf(p.base, p.annee) ?? baseKeyOf(p.base, null) : null;
     if (base) own.base = base;
-    if (typeof p.noms === 'boolean') own.names = p.noms;
+    if (Array.isArray(p.noms)) own.landmarks = cleanLandmarks(p.noms);
     // Its layers and their opacity go together (gf-map#editLook): either written, both its own.
     if (p.layers != null || p.opac) Object.assign(own, { overlays, opacities: opacitiesOf(p.opac) });
     const value = Object.keys(own).length ? own : null;
@@ -575,8 +579,9 @@ export class DlMap extends LitElement {
     /** @type {Record<string, unknown>} */
     const values = look ? {} : { base: null, annee: null, noms: null, layers: null, opac: null };
     if (look?.base) Object.assign(values, addressOf(look.base));
-    if (typeof look?.names === 'boolean') values.noms = look.names;
-    if (look?.overlays) Object.assign(values, { layers: layersOf(look.overlays), opac: opacText(look.opacities ?? {}, look.overlays, DEFAULT_OPACITY) });
+    // Those ticked (noms=1 when the usual ones, noms=0 none: registry.js).
+    if (Array.isArray(look?.landmarks)) values.noms = cleanLandmarks(look.landmarks);
+    if (look?.overlays) Object.assign(values, { layers: layersOf(look.overlays), opac: opacText(look.opacities ?? {}, look.overlays, defaultOpacity) });
     this.#set(values);
     // What the address says now, given back (an intent's background is not one to leave out: the map shows it again).
     this.#lookMemo = null;
@@ -608,6 +613,47 @@ export class DlMap extends LitElement {
       jumelles: p.on ? [p.inat && 'inat', p.gbif && 'gbif', p.density && 'densite'].filter(Boolean) : null,
       jrayon: p.on && !this.state?.live.at && p.radius !== zone ? p.radius : null
     });
+  }
+
+  /**
+   * « Sur cette carte » of its panel ▦: its points, as its address says them (its settings' form says the same) — their
+   * sources (src=: those of the zone's observations it draws, given to its group too; one the address' sources= leaves
+   * out, disabled, why said), the current plant's points (plante=: in large, alone, or not shown). A map of France or
+   * of the world: the current plant's alone (the others are tiles of every source). The same array while the same.
+   * @param {LayoutState} s @returns {import('../components/gf-map-options.js').DataRow[]}
+   */
+  #dataRows(s) {
+    const P = this.#p;
+    /** @type {import('../components/gf-map-options.js').DataRow[]} */
+    const rows = [];
+    // The group's sources the address says (sources=): whatever its maps say, the only ones asked.
+    const said = s.live.filtres?.sources ?? null;
+    if (P.portee === 'zone') {
+      for (const x of SOURCES) {
+        const name = SOURCE_NAMES[x];
+        rows.push({ key: 'src:' + x, kind: 'check', label: name, value: P.src.includes(x),
+          hint: x === 'inat' ? 'ses observations dans la zone' : 'ses occurrences dans la zone : herbiers, inventaires, Pl@ntNet…',
+          ...(!said || said.includes(x) ? {} : { disabled: true, why: `Les observations de la zone ne viennent pas de ${name} : à cocher dans les filtres, « Observations de la zone ».` }) });
+      }
+    }
+    const plant = s.live.plant != null && s.plantInfo?.id === s.live.plant ? s.plantInfo.name : null;
+    rows.push({ key: 'plante', kind: 'check', label: 'Points de la plante choisie', value: P.plante !== 'non',
+      hint: plant ? `${plant} : ${P.plante === 'seule' ? 'seule sur la carte' : 'en grand'}` : 'aucune choisie pour l’instant' });
+    const key = JSON.stringify(rows);
+    if (this.#rowsMemo?.key !== key) this.#rowsMemo = { key, rows };
+    return this.#rowsMemo.rows;
+  }
+  /** @type {{ key: string, rows: import('../components/gf-map-options.js').DataRow[] } | null} */ #rowsMemo = null;
+
+  /**
+   * A row of « Sur cette carte » changed (its panel ▦): kept in the layout, as its settings' form writes it — src= the
+   * sources ticked (its group asking them too, unless the address says its own), plante=non or not written.
+   * @param {{ key: string, value: unknown }} d
+   */
+  #onData({ key, value }) {
+    const P = this.#p;
+    if (key.startsWith('src:')) this.#set({ src: SOURCES.filter(x => 'src:' + x === key ? Boolean(value) : P.src.includes(x)) });
+    else if (key === 'plante') this.#set({ plante: !value ? 'non' : P.plante === 'non' ? null : P.plante });
   }
 
   /** The view it starts on (vue=), read; the same object while it is the same. */
@@ -931,9 +977,15 @@ export class DlMap extends LitElement {
     </div>`;
   }
 
-  /** The legend: what the map's marks and the cell's layers are, its lines once opened. @param {LayoutState} s */
+  /**
+   * The legend: what the map's marks and the cell's layers are — its « Noms et réseaux » too when it says its own
+   * (noms=), where they show (not on the plan) —, its lines once opened. @param {LayoutState} s
+   */
   #legendView(s) {
     const layers = /** @type {string[]} */ (this.params?.layers ?? []);
+    const marks = /** @type {string[] | null} */ (this.params?.noms ?? null);
+    const landmarks = marks?.length && takesLandmarks(this.#map?.baseShown ?? this.#look?.base ?? mapLook().base)
+      ? 'Noms et réseaux : ' + marks.map(k => MAP_LANDMARKS[k] ?? k).join(', ') : null;
     const plant = s.live.plant != null && s.plantInfo?.id === s.live.plant && this.#p.plante !== 'non' ? s.plantInfo.name : null;
     const open = this.params?.legende === true;
     return html`<div class="legend">
@@ -943,6 +995,7 @@ export class DlMap extends LitElement {
         <li><i></i>Observations des plantes trouvées</li>
         ${plant ? html`<li><i class="obs"></i>${plant} : ses observations</li>` : nothing}
         ${layers.map(l => html`<li><i class="area"></i>${MAP_LAYERS[l]?.label ?? l}</li>`)}
+        ${landmarks ? html`<li><i class="lines"></i>${landmarks}</li>` : nothing}
       </ul>` : nothing}
     </div>`;
   }
@@ -1010,6 +1063,7 @@ export class DlMap extends LitElement {
         @radius-change=${(/** @type {CustomEvent} */ e) => s.set({ r: e.detail.radius }, 'replace')}
         @look-change=${(/** @type {CustomEvent} */ e) => this.#onLook(e)} @renderer-follow=${() => this.#set({ '3d': null })}
         @around3d-change=${(/** @type {CustomEvent} */ e) => this.#onAround(e)}
+        .data=${this.#dataRows(s)} @data-change=${(/** @type {CustomEvent} */ e) => this.#onData(e.detail)}
         @view-change=${(/** @type {CustomEvent} */ e) => this.#onView(e)} @view-framed=${(/** @type {CustomEvent} */ e) => this.#onFramed(e)}
         @base-shown=${() => this.requestUpdate()}></gf-map>
       ${!wide && on.has('rayon') ? this.#zoneView(s, ctl) : nothing}

@@ -56,8 +56,10 @@ test('les couches de la case : absentes, les communes à toutes les cartes ; sa 
 
 test('les couches : dans l’ordre dessiné, toute couche du catalogue de l’IGN (ign:<id>), une seule nommée par son nom court', () => {
   assert.equal(read('map(layers=hydro+znieff)').text, '[map(layers=hydro+znieff)]');
-  assert.equal(read('map(layers=ign:LANDCOVER.FORESTINVENTORY.V2+znieff)').text, '[map(layers=ign:LANDCOVER.FORESTINVENTORY.V2+znieff)]');
+  assert.equal(read('map(layers=ign:INRA.CARTE.SOLS+znieff)').text, '[map(layers=ign:INRA.CARTE.SOLS+znieff)]');
   assert.equal(read('map(layers=ign:Patrinat_PNR)').text, '[map(layers=pnr)]');
+  // A layer of the panel's themes ticked there (its « ign:<id> »): its short name.
+  assert.equal(read('map(layers=ign:LANDCOVER.FORESTINVENTORY.V2+znieff)').text, '[map(layers=bdforet+znieff)]');
   assert.equal(read('map(layers=ign:bad!id)').problems.length, 1);
   assert.equal(layerWord('ign:A.B_C-1'), 'ign:A.B_C-1');
   assert.equal(layerWord('ign:'), undefined);
@@ -65,6 +67,9 @@ test('les couches : dans l’ordre dessiné, toute couche du catalogue de l’IG
   // gf-map's overlays → names: a layer of several when all are there, in the order drawn.
   assert.deepEqual(layersOf(['ign:Patrinat_ZNIEFF1', 'contours', 'ign:Patrinat_ZNIEFF2', 'ign:X.Y']), ['znieff', 'courbes', 'ign:X.Y']);
   assert.deepEqual(layersOf(['ign:Patrinat_ZNIEFF2']), ['znieff2']);
+  // Natura 2000: both directives n2000, one alone its own.
+  assert.deepEqual(layersOf(['ign:Patrinat_ZPS', 'ign:Patrinat_SIC']), ['n2000']);
+  assert.deepEqual(layersOf(['ign:Patrinat_ZPS', 'parcs']), ['oiseaux', 'parcs']);
   assert.deepEqual(overlaysOf(['znieff', 'ign:X.Y', 'parcs']), ['ign:Patrinat_ZNIEFF1', 'ign:Patrinat_ZNIEFF2', 'ign:X.Y', 'parcs']);
 });
 
@@ -77,8 +82,9 @@ test('l’opacité des couches (opac=) : par couche, en %, seulement celles qui 
   assert.equal(read('map(opac=lune.3)').problems.length, 1);
   assert.deepEqual(opacitiesOf('znieff.60+parcs.100'), { 'ign:Patrinat_ZNIEFF1': 0.6, 'ign:Patrinat_ZNIEFF2': 0.6, parcs: 1 });
   const keys = ['ign:Patrinat_ZNIEFF1', 'ign:Patrinat_ZNIEFF2', 'parcs', 'ign:A.B'];
-  assert.equal(opacText({ 'ign:Patrinat_ZNIEFF1': 0.6, 'ign:Patrinat_ZNIEFF2': 0.6, parcs: 0.8, 'ign:A.B': 0.35 }, keys, 0.8), 'znieff.60+ign:A.B.35');
-  assert.equal(opacText({ parcs: 0.8 }, keys, 0.8), null);
+  const usual = () => 0.8;
+  assert.equal(opacText({ 'ign:Patrinat_ZNIEFF1': 0.6, 'ign:Patrinat_ZNIEFF2': 0.6, parcs: 0.8, 'ign:A.B': 0.35 }, keys, usual), 'znieff.60+ign:A.B.35');
+  assert.equal(opacText({ parcs: 0.8 }, keys, usual), null);
 });
 
 test('les jumelles (jumelles=, jrayon=) : absentes, éteintes ; aucune source, allumées sans source', () => {

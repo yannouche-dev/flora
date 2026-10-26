@@ -11,20 +11,25 @@
 //    Stored in localStorage (config.storageKeys.maps3d), only what differs from the defaults, and only when the user
 //    changes something: a real setting, so the first steps (core/discover.js) count it as « used before » like the others.
 //  - MapLook: what they show — the background (core/backgrounds.js: the plan, the photos — the most recent, of a year, of
-//    a period, historical —, SPOT's images of a year), the names over the photos and SPOT's (the roads, the rivers, the
-//    places' names: on by default), the IGN overlays (bottom first), each overlay's opacity. The common look
+//    a period, historical —, SPOT's images of a year), « Noms et réseaux » over the photos and SPOT's (core/map-layers.js
+//    LANDMARKS: the places' names, the roads, the rivers by default; the railways, the buildings, the boundaries), the
+//    IGN overlays (bottom first), each overlay's opacity. The common look
 //    (« réglages communs à toutes les cartes »): every open map follows it, 2D and 3D, at once (mapLookEvents).
 //      mapLook() → the look now; setMapLook(patch); resetMapLook(); mapLookEvents fires `change` (here or in another tab).
 //    A map may have its own look, which its owner keeps (a free layout's cell: base=, annee=, noms=, layers=, opac= in its address; a
 //    map block of the plant sheet: MapConfig.look): a Partial<MapLook>, each field given replacing the common one
 //    (lookFor), the others following it; « Revenir aux réglages communs » lets it go (gf-map `look-change` null).
 //    Stored under the keys of before (config.storageKeys.mapLayer: { base, overlays, distribution } — base the
-//    background's key, a string: 'plan' and 'photo' as before, 'photo:2016-2020', 'spot:2020' —, and names only when off; overlayOpacity: key → 0…1, only those not at DEFAULT_OPACITY; the catalogue's layers added stay
+//    background's key, a string: 'plan' and 'photo' as before, 'photo:2016-2020', 'spot:2020' —; « Noms et réseaux »
+//    only when not the usual ones: none as before (names: false, which a version of before reads too), others as
+//    landmarks: […]; overlayOpacity: key → 0…1, only those not at their usual one (core/ign-layers.js defaultOpacity:
+//    DEFAULT_OPACITY, the shading's 40 %); the catalogue's layers added stay
 //    core/ign-layers.js's, under ignLayers) — nothing written by merely reading them.
 
 import { config } from '../config.js';
-import { DEFAULT_OPACITY, isOverlay } from './ign-layers.js';
+import { defaultOpacity, isOverlay } from './ign-layers.js';
 import { isBaseKey } from './backgrounds.js';
+import { LANDMARK_DEFAULTS, cleanLandmarks } from './map-layers.js';
 import { definePref } from './prefs.js';
 
 /**
@@ -121,20 +126,22 @@ export function setMapSettings(patch) {
 /** Back to the defaults (the key removed). */
 export function resetMapSettings() { pref.reset(); }
 
-// ── The look: background, overlays, opacities ─────────────────────────────
+// ── The look: background, « Noms et réseaux », overlays, opacities ─────────
 
 /** @typedef {import('./backgrounds.js').BaseKey} BaseKey */
 
 /**
  * @typedef {object} MapLook
  * @property {BaseKey} base                       the background (core/backgrounds.js: 'plan', 'photo', 'photo:2016-2020', 'spot:2020'…)
- * @property {boolean} names                      the names over the photos and SPOT's images (core/backgrounds.js NAMES_LAYERS: the roads, the rivers, the places' names; the plan has its own)
+ * @property {string[]} landmarks                « Noms et réseaux » over the photos and SPOT's images, bottom first (core/map-layers.js LANDMARKS' keys; the plan has its own)
  * @property {string[]} overlays                  IGN overlays, bottom first: the app's own and the catalogue's added (core/ign-layers.js)
- * @property {Record<string, number>} opacities   each overlay's opacity (0…1, by 0.05) when not the usual (DEFAULT_OPACITY)
+ * @property {Record<string, number>} opacities   each overlay's opacity (0…1, by 0.05) when not its usual one (core/ign-layers.js defaultOpacity)
  */
 
 /** @type {Readonly<MapLook>} */
-export const LOOK_DEFAULTS = Object.freeze({ base: 'photo', names: true, overlays: /** @type {string[]} */ (Object.freeze([])), opacities: Object.freeze({}) });
+export const LOOK_DEFAULTS = Object.freeze({
+  base: 'photo', landmarks: /** @type {string[]} */ (LANDMARK_DEFAULTS), overlays: /** @type {string[]} */ (Object.freeze([])), opacities: Object.freeze({})
+});
 
 /** @param {unknown} v @returns {Record<string, any>} */
 const objectOf = v => /** @type {Record<string, any>} */ (v && typeof v === 'object' && !Array.isArray(v) ? v : {});
@@ -143,7 +150,8 @@ const objectOf = v => /** @type {Record<string, any>} */ (v && typeof v === 'obj
 const cleanOverlays = list => Array.isArray(list) ? [...new Set(list.filter(k => typeof k === 'string' && isOverlay(k)))] : [];
 
 /**
- * Opacities within 0…1 (another value dropped, as before), by 0.05; the usual one left out (it is what none means).
+ * Opacities within 0…1 (another value dropped, as before), by 0.05; each overlay's usual one left out (it is what none
+ * means: core/ign-layers.js defaultOpacity).
  * @param {unknown} value @returns {Record<string, number>}
  */
 function cleanOpacities(value) {
@@ -152,7 +160,7 @@ function cleanOpacities(value) {
   for (const [k, v] of Object.entries(objectOf(value))) {
     if (typeof v !== 'number' || !(v >= 0 && v <= 1)) continue;
     const r = Math.round(v * 20) / 20;
-    if (r !== DEFAULT_OPACITY) out[k] = r;
+    if (r !== defaultOpacity(k)) out[k] = r;
   }
   return out;
 }
@@ -167,34 +175,44 @@ export function cleanOwnLook(value) {
   const out = {};
   // A background exactly (core/backgrounds.js): never a key of another version, nor one an object inherits (« constructor »).
   if (isBaseKey(v.base)) out.base = v.base;
-  if (typeof v.names === 'boolean') out.names = v.names;
+  // « Noms et réseaux »; a look of before, its names on or off (the usual ones, or none).
+  if (Array.isArray(v.landmarks)) out.landmarks = cleanLandmarks(v.landmarks);
+  else if (typeof v.names === 'boolean') out.landmarks = v.names ? [...LANDMARK_DEFAULTS] : [];
   if (Array.isArray(v.overlays)) out.overlays = cleanOverlays(v.overlays);
   if (v.opacities && typeof v.opacities === 'object' && !Array.isArray(v.opacities)) out.opacities = cleanOpacities(v.opacities);
   return Object.keys(out).length ? out : null;
 }
 
 /**
- * mapLayer as kept: the background, the overlays, the names, and the GBIF distribution layer of the Carte's panel (not
- * a look: kept beside it, as before). `cadastre: true` from earlier versions becomes an overlay.
- * @typedef {{ base: BaseKey, names: boolean, overlays: string[], distribution: boolean }} StoredLayers
+ * mapLayer as kept: the background, « Noms et réseaux », the overlays, and the GBIF distribution layer of the Carte's
+ * panel (not a look: kept beside it, as before). `cadastre: true` from earlier versions becomes an overlay; `names:
+ * false`, none of « Noms et réseaux » (anything else there, the usual ones).
+ * @typedef {{ base: BaseKey, landmarks: string[], overlays: string[], distribution: boolean }} StoredLayers
  * @param {unknown} value @returns {StoredLayers}
  */
 function cleanLayers(value) {
   const v = objectOf(value);
   return {
     base: isBaseKey(v.base) ? v.base : LOOK_DEFAULTS.base,
-    names: bool(v.names, LOOK_DEFAULTS.names),
+    landmarks: Array.isArray(v.landmarks) ? cleanLandmarks(v.landmarks) : v.names === false ? [] : [...LANDMARK_DEFAULTS],
     overlays: cleanOverlays(Array.isArray(v.overlays) ? v.overlays : v.cadastre === true ? ['cadastre'] : []),
     distribution: v.distribution === true
   };
 }
+
+/**
+ * « Noms et réseaux » as mapLayer keeps them: nothing for the usual ones, `names: false` for none (as before: a version
+ * of before reads it), else the list. @param {string[]} landmarks
+ */
+const landmarksKept = landmarks => !landmarks.length ? { names: false }
+  : landmarks.join() === LANDMARK_DEFAULTS.join() ? {} : { landmarks };
 
 // Their keys of before, their shapes of before; followed when another tab changes them.
 const layersPref = definePref({
   key: config.storageKeys.mapLayer,
   fallback: {},
   clean: cleanLayers,
-  store: s => ({ base: s.base, overlays: s.overlays, distribution: s.distribution, ...(s.names ? {} : { names: false }) })
+  store: s => ({ base: s.base, overlays: s.overlays, distribution: s.distribution, ...landmarksKept(s.landmarks) })
 });
 const opacityPref = definePref({
   key: config.storageKeys.overlayOpacity,
@@ -207,7 +225,10 @@ const opacityPref = definePref({
 function buildLook() {
   const l = layersPref.get();
   // Frozen: one object shared by every map until it changes (never written to by one of them).
-  return Object.freeze({ base: l.base, names: l.names, overlays: /** @type {string[]} */ (Object.freeze([...l.overlays])), opacities: Object.freeze({ ...opacityPref.get() }) });
+  return Object.freeze({
+    base: l.base, landmarks: /** @type {string[]} */ (Object.freeze([...l.landmarks])), overlays: /** @type {string[]} */ (Object.freeze([...l.overlays])),
+    opacities: Object.freeze({ ...opacityPref.get() })
+  });
 }
 
 let look = buildLook();
@@ -242,13 +263,13 @@ export function setMapLook(patch) {
   if (!own) return;
   holding = true;
   try {
-    if ('base' in own || 'names' in own || 'overlays' in own) layersPref.set(cleanLayers({ ...layersPref.fresh(), ...own }));
+    if ('base' in own || 'landmarks' in own || 'overlays' in own) layersPref.set(cleanLayers({ ...layersPref.fresh(), ...own }));
     if (own.opacities) opacityPref.set(own.opacities);
   } finally { holding = false; }
   relook();
 }
 
-/** The common look back to the defaults (the photos, their names, no overlay, the usual opacities). */
+/** The common look back to the defaults (the photos, the usual « Noms et réseaux », no overlay, the usual opacities). */
 export const resetMapLook = () => setMapLook(LOOK_DEFAULTS);
 
 /**
@@ -258,13 +279,13 @@ export const resetMapLook = () => setMapLook(LOOK_DEFAULTS);
 export function lookFor(own, common = look) {
   return {
     base: own?.base ?? common.base,
-    names: own?.names ?? common.names,
+    landmarks: [...(own?.landmarks ?? common.landmarks)],
     overlays: [...(own?.overlays ?? common.overlays)],
     opacities: { ...(own?.opacities ?? common.opacities) }
   };
 }
 
-/** The GBIF distribution layer of the Carte's panel, shown (kept with the look, not a part of it). */
+/** The Carte's GBIF distribution layer, shown (« Sur cette carte » of its panel ▦; kept with the look, not a part of it). */
 export const mapDistribution = () => layersPref.get().distribution;
 
 /** @param {boolean} on */
