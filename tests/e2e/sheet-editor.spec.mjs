@@ -4,7 +4,10 @@
 // without changing the app's (core/store.js king, arrange, arrangedMode). Everything Réglages' lists did is done on the
 // sheet (« Par défaut », « Barre d’actions », blocks, sub-blocks, styles, titles, Note and Carte blocks, Page web by
 // keyboard, a block whose service is off, folded panes); Plantes à confondre, Usages and its Prudence never hide; on a
-// phone nothing overflows, every target is 44 px and a finger on a title scrolls.
+// phone nothing overflows, every target is 44 px and a finger on a title scrolls. Réglages › Mise en page de la fiche
+// is one card: its button opens the last plant read (else the first result) personalised, the file carries the layout
+// and the modes (never the Note blocks' texts), « Tout rétablir » keeps the modes, the Note blocks and their texts.
+import { readFileSync } from 'node:fs';
 import { test, expect, plantId } from './fixtures.mjs';
 import { swipe, centre } from './touch.mjs';
 
@@ -486,4 +489,154 @@ test('téléphone 390 : rien ne déborde, des cibles de 44 px, la barre ne couvr
   await expect.poll(() => sheet.evaluate(el => el.scrollTop)).toBeGreaterThan(top0 + 100);
   expect(await order(sheet)).toEqual(before);
   await expect(sheet).not.toHaveAttribute('docking', '');
+});
+
+/** Réglages › Mise en page de la fiche. @param {Page} page */
+const card = page => page.locator('gf-settings').getByRole('region', { name: 'Mise en page de la fiche' });
+
+test('Réglages : la mise en page et vos modes font l’aller-retour par un fichier ; les textes des blocs Note restent sur l’appareil', async ({ app, page, newDevice }) => {
+  await app.open('#/');
+  const { note, mode, before } = await page.evaluate(async ortie => {
+    const sb = await import('/app/core/sheet-blocks.js');
+    const { createMode } = await import('/app/core/mode-admin.js');
+    sb.dockBlock('standard', 'calendar', 'sheet', 'right');
+    sb.setHidden('standard', 'taxonomy', true);
+    sb.renameBlock('names', 'Tous les noms');
+    const made = createMode('Terrain', 'standard');
+    sb.setHidden(made, 'wikipedia', true);
+    const key = sb.createNote('Récolte');
+    await sb.setNoteText(key, ortie, 'Feuilles jeunes, en avril');
+    return { note: key, mode: made, before: JSON.parse(sb.exportLayout()) };
+  }, ORTIE);
+
+  // Exported from Réglages: the layout and the modes, nothing else — the Note block by its name, never its text.
+  await app.go('#/settings');
+  const [download] = await Promise.all([page.waitForEvent('download'), card(page).getByRole('button', { name: 'Exporter la mise en page' }).click()]);
+  const path = /** @type {string} */ (await download.path());
+  const text = readFileSync(path, 'utf8');
+  const file = JSON.parse(text);
+  expect(Object.keys(file)).toEqual(['app', 'kind', 'version', 'layout', 'modes']);
+  expect(file).toEqual(before);
+  expect(file.layout.notes).toEqual([{ id: note.slice('note:'.length), title: 'Récolte' }]);
+  expect(file.modes.map((/** @type {any} */ m) => m.label)).toContain('Terrain');
+  expect(text).not.toContain('Feuilles jeunes');
+
+  // Everything back to the defaults, then the file imported: the same layout, the note's text still here.
+  await page.evaluate(async () => (await import('/app/core/sheet-blocks.js')).resetAll());
+  expect(await page.evaluate(async () => (await import('/app/core/sheet-blocks.js')).treeOf('standard').t)).toBe('sheet');
+  await page.locator('gf-settings input[type=file][accept^="application/json"]').setInputFiles(path);
+  await expect(card(page).locator('p[role=status]')).toHaveText('Mise en page importée.');
+  expect(await page.evaluate(async ([key, ortie, made]) => {
+    const sb = await import('/app/core/sheet-blocks.js');
+    return { file: JSON.parse(sb.exportLayout()), text: sb.noteText(/** @type {string} */ (key), /** @type {number} */ (ortie)), docked: sb.isOnEdge('standard', 'calendar'),
+      title: sb.blockTitle('names'), hidden: sb.isHidden(/** @type {any} */ (made), 'wikipedia') };
+  }, [note, ORTIE, mode])).toEqual({ file: before, text: 'Feuilles jeunes, en avril', docked: true, title: 'Tous les noms', hidden: true });
+
+  // Another device: the mode and the Note block arrive, not the text.
+  const other = await newDevice();
+  await other.app.open('#/settings');
+  await other.page.locator('gf-settings input[type=file][accept^="application/json"]').setInputFiles(path);
+  await expect(card(other.page).locator('p[role=status]')).toHaveText('Mise en page importée.');
+  expect(await other.page.evaluate(async ([key, ortie, made]) => {
+    const sb = await import('/app/core/sheet-blocks.js');
+    const { modeLabel } = await import('/app/core/modes.js');
+    const { store } = await import('/app/core/store.js');
+    return { label: modeLabel(/** @type {any} */ (made)), notes: store.state.sheetLayout.notes, text: sb.noteText(/** @type {string} */ (key), /** @type {number} */ (ortie)) };
+  }, [note, ORTIE, mode])).toEqual({ label: 'Terrain', notes: [{ id: note.slice('note:'.length), title: 'Récolte' }], text: '' });
+});
+
+test('Réglages › « Tout rétablir » : tout revient par défaut, dans tous les modes, sauf vos modes, les blocs Note et leurs textes', async ({ app, page }) => {
+  await app.open(`#/plant/${ORTIE}`);
+  const sheet = flore(page);
+  await expect(sheet.getByRole('heading', { level: 1, name: 'Ortie dioïque' })).toBeVisible();
+  const { note, mode } = await page.evaluate(async ortie => {
+    const sb = await import('/app/core/sheet-blocks.js');
+    const { createMode } = await import('/app/core/mode-admin.js');
+    const key = sb.createNote('Récolte');
+    await sb.setNoteText(key, ortie, 'Soupe au printemps');
+    sb.setBlockOrder('standard', [key, ...sb.blockOrder('standard').filter(k => k !== key)]);
+    sb.setHidden('standard', key, true);
+    sb.renameBlock('taxonomy', 'Systématique');
+    sb.setHidden('epure', 'names', true);
+    sb.dockBlock('standard', 'status', 'sheet', 'right');
+    sb.createMap('Carte des lieux');
+    return { note: key, mode: createMode('Terrain', 'standard') };
+  }, ORTIE);
+  const layout = () => page.evaluate(async () => (await import('/app/core/sheet-blocks.js')).exportLayout());
+  const saved = await layout();
+
+  // Not confirmed: nothing changes.
+  await app.go('#/settings');
+  const reset = card(page).getByRole('button', { name: 'Tout rétablir' });
+  let message = '';
+  page.once('dialog', dialog => { message = dialog.message(); dialog.dismiss(); });
+  await reset.click();
+  expect(message).toBe('Tout rétablir ? Dans tous les modes, ordre, blocs et sous-blocs masqués, styles, titres affichés ou cachés, « masqué si vide » et panneaux reviennent par défaut, les noms donnés aux blocs aussi, et les blocs Carte ajoutés sont supprimés. Vos modes, vos blocs Note et leurs textes restent.');
+  expect(await layout()).toBe(saved);
+
+  // Confirmed: said; every mode as it was at first, the Carte block gone; the mode, the Note block (last, shown) and its
+  // text kept.
+  page.once('dialog', dialog => dialog.accept());
+  await reset.click();
+  await expect(card(page).locator('p[role=status]')).toHaveText('Mise en page rétablie.');
+  expect(await page.evaluate(async ([key, ortie, made]) => {
+    const sb = await import('/app/core/sheet-blocks.js');
+    const { modeLabel } = await import('/app/core/modes.js');
+    const { store } = await import('/app/core/store.js');
+    const k = /** @type {string} */ (key);
+    return {
+      taxonomy: sb.blockTitle('taxonomy'), names: sb.foldedByHand('epure', 'names'), tree: sb.treeOf('standard').t,
+      mapBlocks: store.state.sheetLayout.mapBlocks, added: sb.allBlocks().filter(b => b.key.startsWith('map:')).length,
+      last: sb.blockOrder('standard').at(-1) === k, hidden: sb.isHidden('standard', k), text: sb.noteText(k, /** @type {number} */ (ortie)),
+      custom: sb.isCustom('standard'), mode: modeLabel(/** @type {any} */ (made))
+    };
+  }, [note, ORTIE, mode])).toEqual({ taxonomy: 'Classification', names: false, tree: 'sheet', mapBlocks: [], added: 0, last: true, hidden: false,
+    text: 'Soupe au printemps', custom: false, mode: 'Terrain' });
+
+  // On the sheet: the note and its text, no pane.
+  await app.go(`#/plant/${ORTIE}`);
+  await expect(sheet.locator(`.block[data-key="${note}"] textarea.note-text`)).toHaveValue('Soupe au printemps');
+  await expect(sheet.locator('[data-pane]')).toHaveCount(0);
+});
+
+test('Réglages › Mise en page de la fiche : le bouton, le fichier, « Tout rétablir », rien d’autre ; « Personnaliser la fiche » ouvre la dernière plante lue, la couronne allumée', async ({ app, page }) => {
+  // The last plant read with a block alone beside it (?pane=): the sheet itself is opened.
+  await app.open(`#/plant/${ORTIE}?pane=map`);
+  await expect(page.locator('gf-plant-detail[only]')).toHaveCount(1);
+  await app.go('#/settings');
+  const box = card(page);
+  await expect(box.locator('button')).toHaveText([/Personnaliser la fiche/, /Exporter la mise en page/, /Tout rétablir/]);
+  await expect(box.locator('label.file')).toHaveText(/Importer…/);
+  await expect(page.locator('gf-settings :is(gf-sortable-list, .mini-tree, .block-orders)')).toHaveCount(0);
+  await expect(box.getByRole('button', { name: 'Personnaliser la fiche' })).toBeEnabled();
+
+  await box.getByRole('button', { name: 'Personnaliser la fiche' }).click();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe(`#/plant/${ORTIE}`);
+  expect(await app.state('king')).toEqual({ sheet: 'flore', mode: null });
+  const sheet = flore(page);
+  await expect(crown(sheet)).toHaveAttribute('aria-pressed', 'true');
+  await expect(bar(sheet)).toContainText('Mise en page : ');
+
+  // Réglages again, the sheet still personalised: still no list.
+  await app.go('#/settings');
+  await expect(card(page)).toBeVisible();
+  expect(await app.state('king')).toEqual({ sheet: 'flore', mode: null });
+  await expect(page.locator('gf-settings gf-sortable-list')).toHaveCount(0);
+});
+
+test('« Personnaliser la fiche » : sinon la première plante des résultats ; sans plante ni résultat, grisé, il dit pourquoi', async ({ app, page }) => {
+  await app.open('#/?q=ortie');
+  await expect.poll(() => app.state('results.total')).toBeGreaterThan(0);
+  const first = (await app.state('results.items'))[0].id;
+  await app.go('#/settings');
+  await card(page).getByRole('button', { name: 'Personnaliser la fiche' }).click();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe(`#/plant/${first}`);
+
+  // A search that finds nothing, read last: no plant to open.
+  await app.go('#/?q=xqzwv');
+  await expect.poll(() => app.state('results.total')).toBe(0);
+  await app.go('#/settings');
+  const button = card(page).getByRole('button', { name: 'Personnaliser la fiche' });
+  await expect(button).toBeDisabled();
+  await expect(button).toHaveAccessibleDescription('Ouvrez une plante dans Flore.');
 });

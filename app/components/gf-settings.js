@@ -1,7 +1,7 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
 import { lastSearchHash } from '../core/query.js';
-import { href } from '../core/router.js';
+import { href, parse } from '../core/router.js';
 import { harvestModeChosen, openKing, setHarvestMode, setMode, setShowSteps, StoreController } from '../core/store.js';
 import { context } from '../core/context.js';
 import { MODE_ICON_CHOICES, modeLabel } from '../core/modes.js';
@@ -9,17 +9,12 @@ import { createMode, deleteMode, editMode } from '../core/mode-admin.js';
 import './gf-mode-switch.js';
 import { getTrefleToken, setTrefleToken } from '../core/sources.js';
 import { MODULES, setModule } from '../core/modules.js';
-import { CATEGORIES, blockCategory, categoryOf } from '../core/categories.js';
+import { CATEGORIES, categoryOf } from '../core/categories.js';
 import { icon, modeIcon } from '../core/icons.js';
-import { pressDock } from '../core/dock-drag.js';
 import { exportGeoJSON, importGeoJSON, keptContents, lastExportDate, listCollections, protectStorage, spotEvents, storageReport, transferLink } from '../core/collections.js';
 import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
-import {
-  STYLES, SUBS, orderByCategory, canBeEmpty, hidesEmpty, setHidesEmpty, placeOf, treeOf, paneOf, dockBlock, toSheet, blockModuleName, blockStyle, isTitleShown, setBlockStyle, setTitleShown, blockOrder, blockTitle, createNote, deleteNote, createMap, deleteMap, isAddedMap, exportLayout, importLayout, isCustom, isHidden, isNote,
-  isSubHidden, isSubLocked, renameBlock, resetAll, resetBlocks, setBlockOrder, setHidden, setSubHidden, setSubOrder, subOrder, subTitle, foldedByHand, serviceOffNote
-} from '../core/sheet-blocks.js';
-import './gf-sortable-list.js';
+import { exportLayout, importLayout, resetAll } from '../core/sheet-blocks.js';
 import { ui } from '../styles/ui.js';
 import { discoverEvents, discovering, finishDiscover, restartDiscover } from '../core/discover.js';
 import { forgetHints } from '../core/hints.js';
@@ -44,7 +39,6 @@ export class GfSettings extends LitElement {
     _region: { state: true },
     _regionNote: { state: true },
     _transfer: { state: true },
-    _newNote: { state: true },
     _layoutNote: { state: true },
     _modeNote: { state: true }
   };
@@ -106,29 +100,11 @@ export class GfSettings extends LitElement {
     .module .state { margin-left: 6px; color: var(--gf-text-muted); font-style: italic; }
     .module form { margin-top: 8px; }
     .module .use { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 0.85rem; cursor: pointer; }
+    /* « Mise en page de la fiche » (King, its code name): one card — the button, the file, « Tout rétablir ». */
     .king-card { margin: 12px 0 20px; border: 2px solid color-mix(in srgb, #d4a017 40%, var(--gf-border)); }
     .king-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
     .king-head h2 { margin: 0; flex: 1; }
-    .king-card .crown { font-size: 1.6rem; color: #b8860b; display: inline-flex; }
-    .block-orders { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 10px; margin: 8px 0 16px; }
-    .block-order { padding: 10px 12px; }
-    /* The plant pane in miniature (the tree of panes), chips to drag. */
-    .mini-tree { display: flex; height: 190px; margin: 6px 0 10px; padding: 4px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-sm); background: var(--gf-surface-2); }
-    .mini-tree > * { flex: 1; min-width: 0; }
-    .mt-split { display: flex; gap: 4px; min-width: 0; min-height: 0; }
-    .mt-split.row { flex-direction: row; } .mt-split.col { flex-direction: column; }
-    .mt-cell { display: flex; min-width: 0; min-height: 0; } .mt-cell > * { flex: 1; min-width: 0; min-height: 0; }
-    .mt-sheet, .mt-pane { overflow: auto; padding: 4px; border-radius: 4px; background: var(--gf-surface); border: 1px solid var(--gf-border); font-size: 0.7rem; }
-    .mt-sheet b { display: block; margin-bottom: 2px; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gf-text-muted); }
-    .mt-pane { border-color: var(--gf-accent); background: var(--gf-accent-soft); }
-    .mt-pane.folded { opacity: 0.7; }
-    .mt-chips { display: flex; flex-wrap: wrap; gap: 3px; }
-    .mt-chip { min-height: 0; padding: 1px 6px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill); background: var(--gf-surface); font: inherit; font-size: 0.68rem; cursor: grab; touch-action: none; white-space: nowrap; }
-    .mt-chip.off { opacity: 0.5; text-decoration: line-through; }
-    .block-order .head { display: flex; align-items: center; gap: 8px; }
-    .block-order .head button { margin-left: auto; }
-    .layout-tools, .layout-file { margin-top: 8px; gap: 8px; }
-    .layout-tools form { gap: 6px; }
+    .layout-file { margin-top: 8px; gap: 8px; }
     .module .use input { width: 18px; height: 18px; margin: 0; }
   `];
 
@@ -214,8 +190,6 @@ export class GfSettings extends LitElement {
   constructor() {
     super();
     this._saved = false;
-    /** Naming a new note block. */
-    this._newNote = false;
     /** What the last export / import / reset did. @type {string | null} */
     this._layoutNote = null;
     this._spotCount = 0;
@@ -317,160 +291,62 @@ export class GfSettings extends LitElement {
       </ul>`)}`;
   }
 
-  /** The plant sheet to personalise from here: Flore's last one read, else the first result (null: none yet). */
-  get #sheetToCustomize() {
-    const last = context().flore;
-    if (last && /^#\/plant\/\d+/.test(last)) return last;
-    const first = this.#store.state.results.items[0];
-    return first ? href.plant(first.id) : null;
+  /**
+   * The plant « Personnaliser la fiche » opens: the last one read in Flore (its plain address: a `?pane=` would open a
+   * block alone, where the sheet is not personalised), else the first result; null: none yet.
+   * @returns {number | null}
+   */
+  get #plantToCustomize() {
+    const last = context().flore ? parse(context().flore) : null;
+    if (last?.name === 'plant') return last.id;
+    return this.#store.state.results.items[0]?.id ?? null;
   }
 
-  /** « Personnaliser la fiche »: that sheet, in Flore, its customisation open. */
-  #customize() {
-    const to = this.#sheetToCustomize;
-    if (!to) return;
+  /** « Personnaliser la fiche »: that plant in Flore, its sheet being personalised (King). @param {number} id */
+  #customize(id) {
     openKing('flore');
-    openView(to);
+    openView(href.plant(id));
   }
 
-  /** « Mise en page de la fiche »: personalised on the sheet itself (its crown); the file, « Tout rétablir ». */
-  #king() {
-    const to = this.#sheetToCustomize;
+  /**
+   * « Mise en page de la fiche »: one card, no list — the sheet is personalised on itself (its crown). Here: the button
+   * that opens it, the file (the layout and the modes, never the Note blocks' texts), « Tout rétablir ».
+   */
+  #sheetLayout() {
+    const id = this.#plantToCustomize;
     return html`
-      <section class="card king-card" aria-labelledby="king">
+      <section class="card king-card" aria-labelledby="sheet-layout">
         <div class="king-head">
-          <span class="crown">${icon('crown')}</span>
-          <h2 id="king">Mise en page de la fiche</h2>
-          <button type="button" class="primary" ?disabled=${!to} @click=${() => this.#customize()}>${icon('crown')} Personnaliser la fiche</button>
+          <h2 id="sheet-layout">Mise en page de la fiche</h2>
+          <button type="button" class="primary" ?disabled=${id === null} aria-describedby=${id === null ? 'customize-why' : nothing}
+            @click=${() => { if (id !== null) this.#customize(id); }}>${icon('crown')} Personnaliser la fiche</button>
         </div>
-        ${to ? nothing : html`<p class="muted">Ouvrez une plante dans Flore : elle se personnalise là.</p>`}
-        <p class="muted">La fiche se personnalise sur la fiche elle-même : la couronne ${icon('crown')}, au bout de sa barre d’actions (Flore, Mes plantes), ouvre
-          la barre « Mise en page de la fiche », qui dit et change le mode arrangé — sans changer celui de l’application. Glissez les blocs par leur titre
-          ou leur poignée ${icon('grip-vertical')}, masquez-les avec la corbeille ${icon('trash3')}, réaffichez-les avec ${icon('arrow-counterclockwise')}.
-          Tout est enregistré automatiquement, pour chaque mode d’affichage. Plantes à confondre et Usages (sa Prudence) restent toujours affichés.
-          Masquer un bloc ne coupe pas son service : les services en ligne se choisissent pour tout l’appareil, dans « Modules », plus bas ;
-          un bloc dont le service y est coupé reste masqué.
-          La mise en page s’exporte en fichier JSON, avec vos modes (pour la sauvegarder ou la copier sur un autre appareil) ;
-          les textes des blocs Note voyagent avec vos plantes (Exporter, lien de transfert).</p>
+        ${id === null ? html`<p class="muted" id="customize-why">Ouvrez une plante dans Flore.</p>` : nothing}
+        <p class="muted">Personnalisez la fiche sur elle-même : touchez la couronne ${icon('crown')} au bout de sa barre d’actions, dans Flore ou Mes plantes.
+          Sa barre « Mise en page de la fiche » dit le mode arrangé, et en arrange un autre sans changer celui de l’application ; « Terminé » la referme.
+          Glissez les blocs par leur poignée ${icon('grip-vertical')} (à la souris, par leur titre aussi ; au clavier, ↑ ↓ sur la poignée),
+          masquez-les avec la corbeille ${icon('trash3')}, rangez-les dans des panneaux (« Déplacer vers… ») : tout est enregistré aussitôt,
+          pour chaque mode d’affichage. Plantes à confondre et Usages et cuisine sauvage, avec sa Prudence, restent toujours affichés.
+          Masquer un bloc ne coupe pas son service (Modules, plus bas).</p>
+        <p class="muted">Le fichier de mise en page (JSON) emporte l’ordre et la présence des blocs, leurs styles, titres et panneaux, vos blocs Note
+          et Carte et vos modes : pour la sauvegarder ou la copier sur un autre appareil. Les textes des blocs Note n’y sont pas : ils voyagent avec
+          vos plantes (« Exporter (fichier GeoJSON) », lien de transfert, plus bas). « Tout rétablir » remet tout par défaut, sauf vos modes,
+          vos blocs Note et leurs textes.</p>
         <div class="row layout-file">
           <button type="button" @click=${this.#exportLayout}>${icon('download')} Exporter la mise en page</button>
           <label class="button file">${icon('upload')} Importer…
             <input type="file" accept="application/json,.json" @change=${this.#importLayout} /></label>
-          <button type="button" @click=${() => { if (confirm('Tout rétablir ? Ordre, blocs masqués, sous-blocs, styles, titres, panneaux et blocs Carte ajoutés reviennent par défaut, dans tous les modes. Vos blocs Note et leurs textes restent.')) { resetAll(); this._layoutNote = 'Mise en page rétablie.'; } }}>Tout rétablir</button>
+          <button type="button" @click=${this.#resetLayout}>Tout rétablir</button>
         </div>
         ${this._layoutNote ? html`<p class="muted" role="status">${this._layoutNote}</p>` : nothing}
-        ${this.#store.state.king ? this.#blockOrders() : nothing}
       </section>`;
   }
 
-  /** « Blocs de la fiche »: each mode's blocks and sub-blocks (the same switches as the sheet), notes, file. */
-  #blockOrders() {
-    void this.#store.state.sheetLayout;
-    void this.#store.state.modules;
-    return html`
-      <h3>Barre d’actions</h3>
-      <p class="muted">En bas de la fiche, au-dessus du menu : cochez les actions de chaque mode, glissez-les pour les ordonner.</p>
-      <div class="block-orders">
-        ${this.#modeKeys.map(mode => html`
-          <div class="card block-order action-order">
-            <div class="head">${modeIcon(mode)}<strong>${modeLabel(mode)}</strong></div>
-            <gf-sortable-list label=${'Barre d’actions, ' + modeLabel(mode)}
-              .items=${subOrder(mode, 'actions').map(k => ({ key: k, label: subTitle('actions', k), checked: !isSubHidden(mode, 'actions', k) }))}
-              @reorder=${e => setSubOrder(mode, 'actions', e.detail.keys)}
-              @toggle=${e => setSubHidden(mode, 'actions', e.detail.key, !e.detail.on)}></gf-sortable-list>
-          </div>`)}
-      </div>
-      <h3>Blocs de la fiche</h3>
-      <div class="block-orders">
-        ${this.#modeKeys.map(mode => html`
-          <div class="card block-order">
-            <div class="head">${modeIcon(mode)}<strong>${modeLabel(mode)}</strong>
-              <button type="button" class="small" ?disabled=${!isCustom(mode)}
-                @click=${() => resetBlocks(mode)}>Par défaut</button>
-              <button type="button" class="small" title="Les blocs d’une même catégorie ensemble (Noms, Images, Savoirs…), chacun gardant sa place parmi les siens"
-                @click=${() => orderByCategory(mode, k => CATEGORIES.findIndex(c => c.key === blockCategory(k)))}>Ranger par catégorie</button>
-            </div>
-            ${this.#miniTree(mode)}
-            <gf-sortable-list label=${'Blocs de la fiche, ' + modeLabel(mode)}
-              .items=${blockOrder(mode).map(k => ({
-                key: k, label: blockTitle(k), checked: !foldedByHand(mode, k), renamable: true, removable: isNote(k) || isAddedMap(k), nested: Boolean(SUBS[k]),
-                titled: isTitleShown(mode, k),
-                emptyHidden: canBeEmpty(k) ? hidesEmpty(mode, k) : undefined,
-                place: ['name', 'actions'].includes(k) ? undefined : placeOf(mode, k) || '',
-                tag: categoryOf(blockCategory(k)).label,
-                choices: STYLES[k]?.styles.map(st => ({ key: st.key, label: st.title })), choice: blockStyle(mode, k) ?? undefined,
-                // Its service off: the block stays folded whatever it is ticked here (Modules, below).
-                note: serviceOffNote(k) ? `(${serviceOffNote(k)})` : blockModuleName(k) ? `(module ${blockModuleName(k)})` : isNote(k) ? '(note)' : isAddedMap(k) || k === 'map' ? '(carte, réglée sur la fiche)' : ''
-              }))}
-              .renderNested=${(/** @type {string} */ k) => this.#subList(mode, k)}
-              @reorder=${e => setBlockOrder(mode, e.detail.keys)}
-              @toggle=${e => setHidden(mode, e.detail.key, !e.detail.on)}
-              @rename=${e => renameBlock(e.detail.key, e.detail.title)}
-              @choose=${e => setBlockStyle(mode, e.detail.key, e.detail.value)}
-              @titled=${e => setTitleShown(mode, e.detail.key, e.detail.shown)}
-              @empty=${e => setHidesEmpty(mode, e.detail.key, e.detail.hidden)}
-              @place=${e => { const { key, place } = e.detail; if (place === 'pane') return; if (place) dockBlock(mode, key, 'sheet', place); else toSheet(mode, key); }}
-              @remove=${e => this.#removeNote(e.detail.key)}></gf-sortable-list>
-          </div>`)}
-      </div>
-      <div class="row layout-tools">
-        ${this._newNote ? html`<form class="row" @submit=${this.#addNote}>
-            <input name="title" aria-label="Nom du bloc Note" placeholder="Nom du bloc (ex. Récolte)" maxlength="60" required />
-            <button class="primary" type="submit">Créer</button>
-            <button type="button" @click=${() => { this._newNote = false; }}>Annuler</button>
-          </form>`
-          : html`<button type="button" @click=${async () => { this._newNote = true; await this.updateComplete; /** @type {HTMLInputElement | null} */ (this.renderRoot.querySelector('.layout-tools input'))?.focus(); }}>${icon('plus-lg')} Nouveau bloc Note</button>`}
-        <button type="button" @click=${() => { createMap('Carte'); this._layoutNote = 'Bloc Carte créé : il est en fin de fiche dans chaque mode ; réglez-le sur la fiche (⚙).'; }}>${icon('plus-lg')} Nouveau bloc Carte</button>
-      </div>`;
-  }
-
-  /**
-   * The plant pane of a mode in miniature — the same tree of panes as on the sheet (Mode King): the sheet and
-   * its blocks, the panes and their tabs. Drag a chip to a side of a box (a new pane), in its middle (a tab),
-   * or into the sheet; the sheet changes with it.
-   * @param {any} mode
-   */
-  #miniTree(mode) {
-    const tree = treeOf(mode);
-    const press = (/** @type {PointerEvent} */ e, /** @type {string} */ key) => {
-      const scope = /** @type {HTMLElement} */ (/** @type {HTMLElement} */ (e.currentTarget).closest('.mini-tree'));
-      pressDock(e, { root: scope, key, label: blockTitle(key),
-        onDrop: ({ target, zone }) => { if (zone === 'sheet') toSheet(mode, key); else dockBlock(mode, key, target, zone); } });
-    };
-    const chip = (/** @type {string} */ k) => html`<button type="button" class="mt-chip ${isHidden(mode, k) ? 'off' : ''}" data-drag-key=${k} title=${'Glisser « ' + blockTitle(k) + ' » vers un panneau'}
-      @pointerdown=${(/** @type {PointerEvent} */ e) => press(e, k)}>${blockTitle(k)}</button>`;
-    /** @param {any} n @returns {unknown} */
-    const node = n => {
-      if (n.t === 'sheet') return html`<div class="mt-sheet" data-drop-node="sheet"><b>Fiche</b>
-        <span class="mt-chips">${blockOrder(mode).filter(k => !paneOf(mode, k) && !isHidden(mode, k) && !['name', 'actions'].includes(k)).map(chip)}</span></div>`;
-      if (n.t === 'stack') return html`<div class="mt-pane ${n.folded ? 'folded' : ''}" data-drop-node=${n.id}><span class="edge-tabs mt-chips">${n.tabs.map(chip)}</span></div>`;
-      const total = n.sizes.reduce((/** @type {number} */ a, /** @type {number} */ b) => a + b, 0);
-      return html`<div class="mt-split ${n.dir}">${n.kids.map((/** @type {any} */ k, /** @type {number} */ i) => html`<div class="mt-cell" style=${`flex:${n.sizes[i] / total} 1 0`}>${node(k)}</div>`)}</div>`;
-    };
-    return html`<div class="mini-tree" data-drop-node="root" aria-label=${'Panneaux de la fiche Plante, ' + modeLabel(mode) + ' : glisser un bloc vers un bord (nouveau panneau), au centre d’un panneau (onglet) ou dans la fiche'}>${node(tree)}</div>`;
-  }
-
-  /** A block's sub-blocks in a mode. @param {any} mode @param {string} block */
-  #subList(mode, block) {
-    return html`<gf-sortable-list label=${'Sous-blocs de ' + blockTitle(block)}
-      .items=${subOrder(mode, block).map(k => ({ key: k, label: subTitle(block, k), checked: !isSubHidden(mode, block, k), locked: isSubLocked(block, k) }))}
-      @reorder=${e => setSubOrder(mode, block, e.detail.keys)}
-      @toggle=${e => setSubHidden(mode, block, e.detail.key, !e.detail.on)}></gf-sortable-list>`;
-  }
-
-  /** @param {SubmitEvent} e */
-  #addNote(e) {
-    e.preventDefault();
-    const input = /** @type {HTMLFormElement} */ (e.target).elements.namedItem('title');
-    createNote(/** @type {HTMLInputElement} */ (input).value);
-    this._newNote = false;
-    this._layoutNote = 'Bloc Note créé : il est en fin de fiche dans chaque mode.';
-  }
-
-  /** @param {string} key */
-  #removeNote(key) {
-    if (isAddedMap(key)) { if (confirm(`Supprimer la carte « ${blockTitle(key)} » ?`)) deleteMap(key); return; }
-    if (confirm(`Supprimer le bloc « ${blockTitle(key)} » et tout ce qui y est écrit ?`)) deleteNote(key);
+  /** « Tout rétablir », confirmed: every mode back to its defaults; the modes, the Note blocks and their texts stay. */
+  #resetLayout() {
+    if (!confirm('Tout rétablir ? Dans tous les modes, ordre, blocs et sous-blocs masqués, styles, titres affichés ou cachés, « masqué si vide » et panneaux reviennent par défaut, les noms donnés aux blocs aussi, et les blocs Carte ajoutés sont supprimés. Vos modes, vos blocs Note et leurs textes restent.')) return;
+    resetAll();
+    this._layoutNote = 'Mise en page rétablie.';
   }
 
   async #exportLayout() {
@@ -493,15 +369,12 @@ export class GfSettings extends LitElement {
     if (!file) return;
     try {
       const added = await importLayout(await file.text());
-      // Its notes are added to this device's, never written over them.
+      // A file of before carries note texts: added to this device's, never written over them.
       this._layoutNote = 'Mise en page importée' + (added ? ` (${added} note${added > 1 ? 's' : ''} ajoutée${added > 1 ? 's' : ''}).` : '.');
     } catch (error) {
       this._layoutNote = 'Import impossible : ' + /** @type {Error} */ (error).message;
     }
   }
-
-  /** Every mode's key (the app's three, then the ones made here). */
-  get #modeKeys() { return this.#store.state.modes.map(m => m.key); }
 
   /** « Modes d'affichage »: make a mode from another, rename it, change its icon, delete it. */
   #modes() {
@@ -596,7 +469,7 @@ export class GfSettings extends LitElement {
           <small>Une grille à diviser à volonté, puis un bloc dans chaque emplacement (carte, recherche, fiche…) : votre écran, partageable par un lien.</small></span>${icon('chevron-right')}</a>
         ${this.#firstSteps()}
         ${this.#layouts()}
-        ${this.#king()}
+        ${this.#sheetLayout()}
 
         <h2>Données</h2>
         ${meta ? html`
@@ -639,7 +512,7 @@ export class GfSettings extends LitElement {
           <strong>${modeLabel(this.#store.state.mode)}</strong>
         </p>
         <p class="muted">Épuré : grandes photos et actions rapides (ajouter d’un geste à la liste ou au lieu en cours). Standard : l’essentiel pour tous.
-          Scientifique : toutes les données, locales et distantes. La grille et la fiche plante ont aussi leur propre choix, qui revient au mode de l’application quand celui-ci change.</p>
+          Scientifique : toutes les données, locales et distantes. La grille des résultats a aussi son propre choix, qui revient au mode de l’application quand celui-ci change.</p>
         ${this.#modes()}
 
         ${this.#maps()}

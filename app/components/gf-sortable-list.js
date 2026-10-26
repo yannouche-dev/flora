@@ -4,38 +4,29 @@ import { icon } from '../core/icons.js';
 
 /**
  * `locked`: always shown and first (safety: Prudence in Usages) — no grip, its box ticked and greyed, nothing passes it.
- * @typedef {{ key: string, label: string, note?: string, checked: boolean, locked?: boolean, renamable?: boolean, removable?: boolean, nested?: boolean,
- *   choices?: { key: string, label: string }[], choice?: string, titled?: boolean, emptyHidden?: boolean, place?: string, tag?: string }} SortItem
+ * @typedef {{ key: string, label: string, checked: boolean, locked?: boolean }} SortItem
  */
 
 /**
  * An ordered list to rearrange: drag a row (mouse: the whole row; finger: its grip ⠿, the rest scrolls the page;
- * keyboard: ↑ ↓ on the grip), tick it on or off, rename it ✎, remove it ✕, open what it holds (« Sous-blocs »,
- * from `renderNested(key)`). Rows only change their CSS order while dragging (the pressed node stays put).
- * A locked row has a padlock instead of its grip: touched, it says why (written under the row, and read out).
- * A row may offer a choice (a block's style). Events (not bubbling, so a list inside another stays its own):
- * reorder {keys}, toggle {key, on}, rename {key, title}, remove {key}, choose {key, value}, titled {key, shown},
- * empty {key, hidden}, pin {key, on} (a row with `titled` defined gets a « title shown » switch; with `emptyHidden`, a « left out when empty »
- * one; with `place`, where the block sits: in the sheet, on an edge of the plant pane, or beside it).
+ * keyboard: ↑ ↓ on the grip) and tick it on or off. Rows only change their CSS order while dragging (the pressed
+ * node stays put). A locked row (Prudence) is ticked and first: a padlock instead of its grip — touched, it says why
+ * (written under the row, and read out) — and nothing passes it. Events (not bubbling, so a list inside another
+ * stays its own): reorder {keys}, toggle {key, on}. Used by gf-plant-detail.js, personalising the sheet: a block's
+ * sub-blocks, and « Barre d’actions ».
  */
-/** Where a block sits (sheet-blocks.js › tree of panes): the sheet, a pane, or a new pane on a side of the sheet. */
-const PLACE_OPTIONS = [['', 'Dans la fiche'], ['pane', 'Dans un panneau'], ['right', 'Nouveau panneau à droite'], ['left', 'Nouveau panneau à gauche'], ['top', 'Nouveau panneau en haut'], ['bottom', 'Nouveau panneau en bas']];
 
 export class GfSortableList extends LitElement {
   static properties = {
     items: { attribute: false },
     label: {},
-    renderNested: { attribute: false },
     _sort: { state: true },
-    _open: { state: true },
-    _editing: { state: true },
     /** The locked row whose padlock was touched: why it is locked, written under it. */
     _why: { state: true }
   };
 
   static styles = css`
     :host { display: block; }
-    .tag { display: inline-block; margin-left: 4px; padding: 0 7px; border-radius: var(--gf-radius-pill); background: var(--gf-surface-2); color: var(--gf-text-muted); font-size: 0.7rem; font-weight: 600; white-space: nowrap; }
     ol { margin: 0; padding: 0; list-style: none; font-size: 0.88rem; display: flex; flex-direction: column; gap: 2px; }
     li { border-radius: var(--gf-radius-sm); background: var(--gf-surface); }
     .row { display: flex; align-items: center; gap: 4px; padding: 2px 4px 2px 0; border-radius: var(--gf-radius-sm); cursor: grab; user-select: none; -webkit-user-select: none; }
@@ -49,8 +40,6 @@ export class GfSortableList extends LitElement {
     }
     button.icon:hover { color: var(--gf-text); background: var(--gf-surface-2); }
     button.icon:focus-visible, input:focus-visible { outline: none; box-shadow: var(--gf-focus); }
-    button.icon[aria-expanded='true'], button.icon[aria-pressed='true'] { color: var(--gf-accent); }
-    button.icon[aria-pressed='false'] { opacity: 0.45; }
     .grip { cursor: grab; touch-action: none; }
     /* A locked row: its padlock where the grip is (touched: why), nothing to drag. */
     button.icon.lock { cursor: help; opacity: 0.75; font-size: 0.85rem; }
@@ -61,10 +50,6 @@ export class GfSortableList extends LitElement {
     @media (pointer: coarse) { button.icon.grip, button.icon.lock { width: 44px; height: 44px; font-size: 1.05rem; } .why { margin-left: 48px; } }
     label { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
     label input { flex: none; margin: 0; }
-    .muted { color: var(--gf-text-muted); font-size: 0.8em; }
-    .edit { flex: 1; min-width: 0; font: inherit; padding: 2px 6px; border: 1px solid var(--gf-accent); border-radius: var(--gf-radius-sm); background: var(--gf-surface); color: var(--gf-text); }
-    select.choice, select.place { flex: none; min-height: 0; font: inherit; font-size: 0.8rem; padding: 1px 4px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-sm); background: var(--gf-surface); color: var(--gf-text); }
-    .nested { margin: 2px 0 6px 30px; padding-left: 8px; border-left: 2px solid var(--gf-border); }
   `;
 
   constructor() {
@@ -72,14 +57,8 @@ export class GfSortableList extends LitElement {
     /** @type {SortItem[]} */
     this.items = [];
     this.label = '';
-    /** @type {((key: string) => unknown) | null} */
-    this.renderNested = null;
     /** @type {{ key: string, order: string[], dy: number } | null} */
     this._sort = null;
-    /** @type {Set<string>} */
-    this._open = new Set();
-    /** @type {string | null} */
-    this._editing = null;
     /** @type {string | null} */
     this._why = null;
   }
@@ -118,7 +97,7 @@ export class GfSortableList extends LitElement {
   /** @param {PointerEvent} e @param {string} key */
   #press(e, key) {
     const target = /** @type {Element} */ (e.target);
-    if (e.button !== 0 || this._editing || this.#locked(key) || target.closest('input, select, button:not(.grip)')) return;
+    if (e.button !== 0 || this.#locked(key) || target.closest('input, button:not(.grip)')) return;
     // By finger, only the grip: elsewhere the touch scrolls the page.
     if (e.pointerType === 'touch' && !target.closest('.grip')) return;
     this.#drag = { key, y0: e.clientY, started: false };
@@ -184,27 +163,11 @@ export class GfSortableList extends LitElement {
     removeEventListener('pointercancel', this.#release);
   }
 
-  /** @param {string} key */
-  #toggleOpen(key) {
-    const open = new Set(this._open);
-    if (open.has(key)) open.delete(key); else open.add(key);
-    this._open = open;
-  }
-
-  /** @param {string} key @param {HTMLInputElement} input @param {boolean} keep */
-  #finishEdit(key, input, keep) {
-    if (this._editing !== key) return;
-    this._editing = null;
-    if (keep) this.#emit('rename', { key, title: input.value });
-  }
-
   /** @param {SortItem} item @param {number} slot */
   #row(item, slot) {
     const { key } = item;
     const sort = this._sort;
     const dragging = sort?.key === key;
-    const open = this._open.has(key);
-    const editing = this._editing === key;
     const locked = Boolean(item.locked);
     // Locked: the padlock says why when touched (a title alone is never read on a touch screen).
     const why = `« ${item.label} » reste affiché et en tête : sécurité`;
@@ -217,40 +180,13 @@ export class GfSortableList extends LitElement {
           : html`<button class="icon grip" type="button" aria-label="Déplacer « ${item.label} »" title="Glisser pour déplacer (↑ ↓ au clavier)"
               @keydown=${(/** @type {KeyboardEvent} */ e) => this.#gripKey(e, key)}>${icon('grip-vertical')}</button>`}
         <span class="n">${slot + 1}.</span>
-        ${editing ? html`<input class="edit" aria-label="Nouveau nom de « ${item.label} »" .value=${item.label} maxlength="60"
-            @keydown=${(/** @type {KeyboardEvent} */ e) => {
-              if (e.key === 'Enter') this.#finishEdit(key, /** @type {HTMLInputElement} */ (e.target), true);
-              else if (e.key === 'Escape') this.#finishEdit(key, /** @type {HTMLInputElement} */ (e.target), false);
-            }}
-            @blur=${(/** @type {FocusEvent} */ e) => this.#finishEdit(key, /** @type {HTMLInputElement} */ (e.target), true)} />`
-          : html`<label>
-            <input type="checkbox" .checked=${item.checked || locked} ?disabled=${locked}
-              @change=${(/** @type {Event} */ e) => this.#emit('toggle', { key, on: /** @type {HTMLInputElement} */ (e.target).checked })} />
-            <span>${item.label}${item.tag ? html` <span class="tag">${item.tag}</span>` : nothing}${item.note ? html` <span class="muted">${item.note}</span>` : nothing}</span>
-          </label>`}
-        ${item.choices ? html`<select class="choice" aria-label="Style de « ${item.label} »" title="Style"
-          @change=${(/** @type {Event} */ e) => this.#emit('choose', { key, value: /** @type {HTMLSelectElement} */ (e.target).value })}>
-          ${item.choices.map(c => html`<option value=${c.key} ?selected=${c.key === item.choice}>${c.label}</option>`)}
-        </select>` : nothing}
-        ${item.titled !== undefined ? html`<button class="icon" type="button" aria-pressed=${item.titled ? 'true' : 'false'}
-          aria-label=${(item.titled ? 'Masquer' : 'Montrer') + ` le titre « ${item.label} »`} title=${item.titled ? 'Titre affiché' : 'Titre caché'}
-          @click=${() => this.#emit('titled', { key, shown: !item.titled })}>${icon('type-h2')}</button>` : nothing}
-        ${item.emptyHidden !== undefined ? html`<button class="icon" type="button" aria-pressed=${item.emptyHidden ? 'true' : 'false'}
-          aria-label=${item.emptyHidden ? `Afficher « ${item.label} » même vide` : `Ne pas afficher « ${item.label} » s’il est vide`}
-          title=${item.emptyHidden ? 'Masqué quand il est vide' : 'Affiché même vide'}
-          @click=${() => this.#emit('empty', { key, hidden: !item.emptyHidden })}>${icon('eye-slash')}</button>` : nothing}
-        ${item.place !== undefined ? html`<select class="place" aria-label=${'Position de « ' + item.label + ' »'} title="Position dans le panneau Plante"
-          @change=${(/** @type {any} */ e) => this.#emit('place', { key, place: e.target.value })}>
-          ${PLACE_OPTIONS.map(([v, l]) => html`<option value=${v} ?selected=${item.place === v} ?disabled=${v === 'pane' && item.place !== 'pane'}>${l}</option>`)}</select>` : nothing}
-        ${item.nested ? html`<button class="icon" type="button" aria-expanded=${open ? 'true' : 'false'} aria-label="Sous-blocs de « ${item.label} »" title="Sous-blocs"
-          @click=${() => this.#toggleOpen(key)}>${icon('list-nested')}</button>` : nothing}
-        ${item.renamable && !editing ? html`<button class="icon" type="button" aria-label="Renommer « ${item.label} »" title="Renommer"
-          @click=${async () => { this._editing = key; await this.updateComplete; const input = /** @type {HTMLInputElement | null} */ (this.renderRoot.querySelector('input.edit')); input?.focus(); input?.select(); }}>${icon('pencil')}</button>` : nothing}
-        ${item.removable ? html`<button class="icon" type="button" aria-label="Supprimer « ${item.label} »" title="Supprimer"
-          @click=${() => this.#emit('remove', { key })}>${icon('x-lg')}</button>` : nothing}
+        <label>
+          <input type="checkbox" .checked=${item.checked || locked} ?disabled=${locked}
+            @change=${(/** @type {Event} */ e) => this.#emit('toggle', { key, on: /** @type {HTMLInputElement} */ (e.target).checked })} />
+          <span>${item.label}</span>
+        </label>
       </div>
       ${locked ? html`<p class="why" role="status">${this._why === key ? why : nothing}</p>` : nothing}
-      ${item.nested && open && this.renderNested ? html`<div class="nested">${this.renderNested(key)}</div>` : nothing}
     </li>`;
   }
 
