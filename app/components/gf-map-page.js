@@ -819,7 +819,7 @@ export class GfMapPage extends LitElement {
         ` : html`${this.#list(spots)}${this.#empty()}`}
 
         ${(selected || this._editing) && this._view === 'map' ? nothing : html`
-          <button class="fab" type="button" aria-label="Noter une plante ici" title="Noter une plante ici : sur place, un lieu créé à votre position"
+          <button class="fab" type="button" aria-label="Noter une plante ici" title="Noter une plante ici : dans un lieu proche ou un nouveau lieu"
             @click=${() => this.dispatchEvent(new CustomEvent('open-capture', { bubbles: true, composed: true }))}>+</button>`}
       </div>
     `;

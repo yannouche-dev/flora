@@ -488,7 +488,7 @@ export class GfSheetMap extends LitElement {
       <div class="actions">
         ${c.near !== 'off' && near?.state !== 'done' ? this.#nearButton(near) : nothing}
         ${c.actions.open ? html`<a class="button" href=${href.map({ plant: plant.id })}>${icon('map')} Ouvrir dans la Carte</a>` : nothing}
-        ${c.actions.spot ? html`<a class="button" href=${href.newSpot(plant.id)}>${icon('geo-alt-fill')} Noter ici</a>` : nothing}
+        ${c.actions.spot ? html`<button type="button" @click=${() => this.dispatchEvent(new CustomEvent('open-capture', { bubbles: true, composed: true, detail: { plant } }))}>${icon('geo-alt-fill')} Noter ici</button>` : nothing}
       </div>
       ${gestures && this.#gestureHint ? hintView(gestures + '.', () => { this.#gestureHint = false; this.requestUpdate(); }, 'gestures') : nothing}`;
   }

@@ -37,7 +37,9 @@ const today = () => {
  * "Noter ici": one tap on a plant records it at the current GPS position. A lieu within NEAR_PLACE is offered first
  * (gf-nearby-places, the same offer as a new lieu's editor: collections.js placesNear, never a parcours) — « Y ajouter »
  * one of them, or « Nouveau lieu ici »; none near, a new lieu at once. Suggestions first: plants around you, favorites,
- * recent. Opened with `open()`; shows an undo toast afterwards.
+ * recent. Opened with `open()`, or `open({ plant })` with the plant chosen already (its sheet, its map, a plant card, an
+ * activity's sheet: one « Noter ici » everywhere) — « Noter ici », or « Autre plante » back to the list; the warning,
+ * the offer and the toast are the same. Shows an undo toast afterwards.
  */
 
 /** Within this distance (m), the plant noted again is the same occurrence; farther, another one. */
@@ -51,6 +53,7 @@ export class GfCapture extends LitElement {
     _harvestToday: { state: true },
     _confirm: { state: true },
     _where: { state: true },
+    _chosen: { state: true },
     _error: { state: true },
     _busy: { state: true },
     _toast: { state: true }
@@ -109,6 +112,8 @@ export class GfCapture extends LitElement {
     footer label { display: flex; align-items: center; gap: 8px; flex: 1; font-size: 0.9rem; }
     p.muted { font-size: 0.9rem; }
     p.error { color: var(--gf-danger); font-size: 0.9rem; margin: 8px 0; }
+    .chosen { display: flex; align-items: center; gap: 12px; margin: 8px 0; }
+    .chosen i { color: var(--gf-text-muted); font-size: 0.9rem; }
     .where { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
     .toast {
       position: fixed;
@@ -150,6 +155,8 @@ export class GfCapture extends LitElement {
      * from: the one saved). @type {{ plant: any, harvest: boolean, near: { place: import('../core/collections.js').Place, distance: number }[], fix: import('../core/geo.js').Fix } | null}
      */
     this._where = null;
+    /** The plant chosen before the sheet opened (open({ plant })): no list, its « Noter ici ». @type {any} */
+    this._chosen = null;
     /** Why the last note could not be saved (said in the sheet, until the next try). @type {string | null} */
     this._error = null;
     this._busy = false;
@@ -159,11 +166,20 @@ export class GfCapture extends LitElement {
 
   get #dialog() { return /** @type {HTMLDialogElement} */ (this.renderRoot.querySelector('dialog')); }
 
-  open() {
+  /**
+   * Opens the sheet; `plant` (a record or a search summary): chosen already — a summary is replaced by its record once
+   * read (its names, its photo).
+   * @param {{ plant?: any }} [options]
+   */
+  open({ plant } = {}) {
     this._query = '';
     this._confirm = null;
     this._where = null;
     this._error = null;
+    this._chosen = plant ?? null;
+    if (plant && !plant.vernacularNames) {
+      db.get('plants', plant.id).then(record => { if (record && this._chosen === plant) this._chosen = record; }).catch(() => {});
+    }
     // Unticked at each opening: a harvest asked for one plant is never carried over to the next one noted.
     this._harvestToday = false;
     openModal(this.#dialog);
@@ -408,6 +424,28 @@ export class GfCapture extends LitElement {
       </div>`;
   }
 
+  /** The plant chosen (open({ plant })): its photo and names, and « Noter ici » — or « Autre plante », the list. */
+  #chosenView() {
+    const p = this._chosen;
+    const name = p.vernacularNames?.[0] ?? p.vernacularName ?? p.scientificName;
+    return html`<div class="chosen">
+        <gf-thumb .plant=${p} size="48" round></gf-thumb>
+        <span><strong>${name}</strong>${name !== p.scientificName ? html`<br /><i>${p.scientificName}</i>` : nothing}</span>
+      </div>
+      <p class="muted">Elle sera notée à votre position : dans un lieu à moins de ${NEAR_PLACE} m si vous le choisissez, sinon dans un nouveau lieu.</p>
+      <div class="where">
+        <button class="primary" type="button" ?disabled=${!this._fix || this._busy} @click=${() => this.#capture(p)}>Noter ici</button>
+        <button type="button" ?disabled=${this._busy} @click=${this.#otherPlant}>Autre plante</button>
+      </div>`;
+  }
+
+  /** « Autre plante »: the list, the search field focused. */
+  async #otherPlant() {
+    this._chosen = null;
+    await this.updateComplete;
+    /** @type {HTMLInputElement | null} */ (this.renderRoot.querySelector('.ask input'))?.focus();
+  }
+
   #gps() {
     const fix = this._fix;
     if (!fix) return html`<span class="dot ${this._gpsError ? 'none' : ''}"></span>${this._gpsError || 'Recherche de la position GPS…'}`;
@@ -425,7 +463,7 @@ export class GfCapture extends LitElement {
         <header>
           <h2>Noter ici</h2>
           <div class="gps" role="status">${this.#gps()}</div>
-          <div class="ask">
+          ${this._chosen ? nothing : html`<div class="ask">
             <input type="search" placeholder="Quelle plante ?" aria-label="Chercher une plante" autocomplete="off"
               style="padding-right:${12 + 34 * (Number(Boolean(this._query)) + Number(voiceAvailable()))}px"
               .value=${this._query} @input=${this.#search} />
@@ -434,11 +472,11 @@ export class GfCapture extends LitElement {
                 @mousedown=${e => e.preventDefault()} @click=${this.#clear}>${icon('x-lg')}</button>` : nothing}
               <gf-voice-button @voice-text=${e => this.#find(e.detail.text)}></gf-voice-button>
             </span>
-          </div>
+          </div>`}
         </header>
         <div class="body">
           ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : nothing}
-          ${this._confirm ? this.#warning() : this._where ? this.#whereView() : this._query.trim().length >= 2 ? html`<gf-plant-pick-list .query=${this._query} ?disabled=${!this._fix || this._busy}
+          ${this._confirm ? this.#warning() : this._where ? this.#whereView() : this._chosen ? this.#chosenView() : this._query.trim().length >= 2 ? html`<gf-plant-pick-list .query=${this._query} ?disabled=${!this._fix || this._busy}
               @plant-pick=${e => this.#capture(e.detail.plant)}></gf-plant-pick-list>`
             : html`
               ${this.#chips('Autour de vous', around)}

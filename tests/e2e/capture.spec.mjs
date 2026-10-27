@@ -3,7 +3,9 @@
 // (gf-harvest-warning, the place editor's too, never the browser's confirm()) — noted without the harvest by default
 // (in the place editor, the plant noted already: « Annuler » first, nothing to note without it), with it only once the
 // user ticked « J’ai lu cet avertissement ». A plant without toxicity data is noted at once. The
-// confusion reminders (« Noter ici », the place editor) show whatever the mode.
+// confusion reminders (« Noter ici », the place editor) show whatever the mode. « Noter ici » is one dialog everywhere
+// (the header, a plant's sheet, an activity's sheet: that plant chosen) and offers the lieux within 100 m before it
+// saves (never a parcours), as a new lieu's editor does; its « Annuler » takes away the note only.
 import { test, expect, plantId } from './fixtures.mjs';
 
 /**
@@ -197,6 +199,69 @@ test('Noter ici, « Annuler » : la note retirée, et le nouveau lieu avec elle 
   });
   await toast.getByRole('button', { name: 'Annuler' }).click();
   await expect.poll(places).toEqual([['Mon coin', 0]]);
+});
+
+test('Noter ici : la même offre partout — l’en-tête, la fiche, un nouveau lieu, la fiche d’une activité', async ({ app, page }) => {
+  const ortie = plantId('Urtica dioica');
+  await app.open('#/');
+  // Around the fixture's position: « Pré » 60 m away, « Loin » 150 m, a parcours 30 m (its point only its start).
+  await page.evaluate(async pissenlit => {
+    const c = await import('/app/core/collections.js');
+    const db = await import('/app/core/db.js');
+    const north = (/** @type {number} */ m) => /** @type {[number, number]} */ ([2.35, 48.85 + m / 111195]);
+    await c.savePlace(c.withPlant(c.newPlace(north(60), { name: 'Pré' }), await db.get('plants', pissenlit)));
+    await c.savePlace(c.newPlace(north(150), { name: 'Loin' }));
+    await c.savePlace(c.newPlace(north(30), { name: 'Parcours du matin', origin: { app: 'parcours' } }));
+  }, plantId('Taraxacum officinale'));
+  const names = () => page.evaluate(async () => (await (await import('/app/core/collections.js')).listPlaces())
+    .map((/** @type {any} */ p) => [p.properties.name, p.properties.plantIds.length]).sort());
+  const toast = page.locator('gf-capture .toast');
+
+  // The header's (the Carte's +, Mes plantes'): the plant picked, then the lieux within 100 m — « Pré » only.
+  let dialog = await openCapture(page, app, false);
+  await pick(dialog, 'Pâquerette', 'Pâquerette');
+  let offer = dialog.getByRole('region', { name: 'Lieux à proximité' });
+  await expect(offer.getByRole('listitem')).toHaveText(['Pré · 60 m · 1 plante Y ajouter Pâquerette vivace']);
+  await expect(offer.getByRole('button', { name: 'Y ajouter Pâquerette vivace' })).toBeFocused();
+  await offer.getByRole('button', { name: 'Y ajouter Pâquerette vivace' }).click();
+  await expect(toast).toContainText('Pâquerette vivace ajouté au lieu « Pré »');
+
+  // A plant's sheet: the same dialog, the plant chosen (no list to choose from), the same offer.
+  await app.go(`#/plant/${ortie}`);
+  await page.locator('.action-bar .act[data-key="spot"] > button').first().click();
+  dialog = page.locator('gf-capture dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('.chosen')).toContainText('Ortie dioïque');
+  await expect(dialog.getByRole('searchbox', { name: 'Chercher une plante' })).toHaveCount(0);
+  await dialog.getByRole('button', { name: 'Noter ici', exact: true }).click();
+  offer = dialog.getByRole('region', { name: 'Lieux à proximité' });
+  await expect(offer.getByRole('listitem')).toHaveText(['Pré · 60 m · 2 plantes Y ajouter Ortie dioïque']);
+  await dialog.getByRole('button', { name: 'Nouveau lieu ici' }).click();
+  await expect(toast).toContainText('Ortie dioïque noté ici (nouveau lieu)');
+  await expect.poll(names).toEqual([['', 1], ['Loin', 0], ['Parcours du matin', 0], ['Pré', 2]]);
+
+  // A new lieu's editor: the same lieux (its own plant's lieu opened, « Pré » to add it to), never the parcours.
+  await app.go(`#/collection/new?kind=place&plant=${ortie}`);
+  offer = page.locator('gf-spot-editor').getByRole('region', { name: 'Lieux à proximité' });
+  await expect(offer.getByRole('listitem')).toHaveText(['Ortie dioïque · 0 m · 1 plante Ouvrir ce lieu', 'Pré · 60 m · 2 plantes Y ajouter Ortie dioïque']);
+
+  // An activity's sheet (Rencontres): « Noter ici » over the activity, the address unchanged; « Fermer », still there.
+  await app.go(`#/discover?p=${ortie}`);
+  await expect.poll(() => page.evaluate(() => location.hash)).toMatch(new RegExp(`^#/app/rencontres/[a-z]+\\?p=${ortie}&fiche=1$`));
+  const there = await page.evaluate(() => location.hash);
+  const sheet = page.locator('ma-plant-sheet');
+  await expect(sheet.locator('.action-bar .act[data-key="map"]')).toHaveCount(0);
+  await sheet.locator('.action-bar .act[data-key="spot"] > button').first().click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('.chosen')).toContainText('Ortie dioïque');
+  expect(await page.evaluate(() => location.hash)).toBe(there);
+  // « Autre plante »: the list, its search field focused.
+  await dialog.getByRole('button', { name: 'Autre plante' }).click();
+  await expect(dialog.getByRole('searchbox', { name: 'Chercher une plante' })).toBeFocused();
+  await dialog.getByRole('button', { name: 'Fermer' }).click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe(there);
+  await expect(sheet).toHaveCount(1);
 });
 
 test('Éditeur d’un lieu, mode cueillette éteint : l’ail des ours ouvert montre le colchique, pas la qualité', async ({ app, page }) => {

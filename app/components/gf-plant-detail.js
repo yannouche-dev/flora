@@ -364,7 +364,10 @@ export class GfPlantDetail extends LitElement {
     subheading: { type: Boolean },
     /** The plant waiting under the swiped card (Flore): not the page's plant yet, so it leaves the title alone. */
     preview: { type: Boolean },
-    /** Opened in a scenario played as an app of its own (the Parcours): no action leading out of it (Carte, Noter ici). */
+    /**
+     * Opened in an activity, alone on the screen: no action leading out of it (Carte); « Noter ici » opens its dialog
+     * over it (gf-capture, the address unchanged).
+     */
     scoped: { type: Boolean },
     /** The panes of the tree only, not the sheet (Découvrir: the panes its steps add, beside the cards). */
     panesOnly: { type: Boolean, attribute: 'panes-only' },
@@ -1617,9 +1620,10 @@ export class GfPlantDetail extends LitElement {
         return html`<button type="button" ?inert=${king} title=${'Ajouter à « ' + current.name + ' »'} @click=${() => this.#addCurrent(plant, current)}>
           ${icon(current.kind === 'place' ? 'geo-alt-fill' : 'plus-lg')}<span class="short">${current.name}</span></button>`;
       },
-      spot: () => html`<a class="button" ?inert=${king} href=${href.newSpot(plant.id)}>${icon('geo-alt-fill')}<span>Noter ici</span></a>`
+      // The one « Noter ici » (gf-capture), this plant chosen: over the page, an activity too.
+      spot: () => html`<button type="button" ?inert=${king} @click=${() => this.#noteHere(plant)}>${icon('geo-alt-fill')}<span>Noter ici</span></button>`
     };
-    const keys = subOrder(v, 'actions').filter(k => buttons[k] && !(this.scoped && (k === 'map' || k === 'spot'))
+    const keys = subOrder(v, 'actions').filter(k => buttons[k] && !(this.scoped && k === 'map')
       && (king || (!isSubHidden(v, 'actions', k) && (k !== 'addCurrent' || this.#currentCollection(plant)))));
     if (!keys.length && !crown) return nothing;
     return html`<nav class="action-bar ${king ? 'king' : ''}" aria-label="Actions">
@@ -1636,6 +1640,11 @@ export class GfPlantDetail extends LitElement {
         title=${king ? 'Personnaliser la fiche : toucher pour terminer' : 'Personnaliser la fiche : ses blocs, leur ordre, ses panneaux, pour chaque mode'}
         @click=${() => { if (king) closeKing(); else openKing(/** @type {string} */ (this.sheet)); }}>${icon('crown')}</button></span>` : nothing}</div>
     </nav>`;
+  }
+
+  /** « Noter ici » with this plant chosen: the app's one dialog (gf-app opens gf-capture). @param {any} plant */
+  #noteHere(plant) {
+    this.dispatchEvent(new CustomEvent('open-capture', { bubbles: true, composed: true, detail: { plant } }));
   }
 
   /** The current collection or place (context.js), when this plant is not in it yet. @param {any} plant */
