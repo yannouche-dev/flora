@@ -158,6 +158,41 @@ test('Mosaïque : la grille des photos, « En fleur maintenant », une image tou
   await expect(page.locator('ma-plant-sheet')).toHaveCount(0);
 });
 
+test('Mosaïque, Matchs : « Retirer » reprend le favori que le match a ajouté, et dit quand un favori reste', async ({ app, page }) => {
+  const ail = plantId('Allium ursinum'), pissenlit = plantId('Taraxacum officinale');
+  /** The favourites, with the activity that made each (none: null). */
+  const favourites = () => page.evaluate(async () => {
+    const fav = (await (await import('/app/core/collections.js')).listCollections()).find((/** @type {any} */ c) => c.id === 'favorites');
+    return Object.fromEntries((fav?.properties.plants ?? []).map((/** @type {any} */ e) => [e.plantId, e.origin?.app ?? null]));
+  });
+  await app.open('#/');
+  // The dandelion, a favourite of before the game: the user's.
+  await page.evaluate(async id => {
+    const db = await import('/app/core/db.js');
+    await (await import('/app/core/collections.js')).toggleFavorite(await db.get('plants', id));
+  }, pissenlit);
+  await app.go('#/app/mosaique');
+  await toCards(page, 'mosaique');
+  const list = page.locator('ma-around-list');
+  await list.getByRole('tab', { name: 'Rencontres' }).click();
+  const top = page.locator('ma-deck .swipe-card.top');
+  await expect(top).toHaveAttribute('data-id', String(ail));
+  await page.locator('ma-deck .round.like').click();
+  await expect(top).toHaveAttribute('data-id', String(pissenlit));
+  await page.locator('ma-deck .round.like').click();
+  await expect.poll(favourites).toEqual({ [pissenlit]: null, [ail]: 'mosaique' });
+  await list.getByRole('tab', { name: /^Matchs/ }).click();
+  // The dandelion: out of the matches, still a favourite — said.
+  await list.getByRole('button', { name: 'Retirer Pissenlit officinal des matchs' }).click();
+  await expect(page.locator('.gf-brief-toast')).toHaveText('Retiré des matchs. Il reste dans vos favoris.');
+  await expect(list.getByRole('button', { name: 'Retirer Pissenlit officinal des matchs' })).toHaveCount(0);
+  expect(await favourites()).toEqual({ [pissenlit]: null, [ail]: 'mosaique' });
+  // The wild garlic: the favourite its match added goes with it.
+  await list.getByRole('button', { name: 'Retirer Ail des ours des matchs' }).click();
+  await expect.poll(favourites).toEqual({ [pissenlit]: null });
+  await expect.poll(async () => (await kept(page, 'mosaique'))?.matches).toEqual([]);
+});
+
 test('chacune la sienne : « Recommencer » la Cueillette ne touche ni Rencontres ni la Mosaïque ; vide après rechargement', async ({ app, page }) => {
   await app.open('#/discover');
   for (const id of ['rencontres', 'mosaique', 'cueillette']) {

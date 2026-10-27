@@ -17,7 +17,7 @@ import { readFile } from 'node:fs/promises';
 const db = await import('../../app/core/db.js');
 const { store } = await import('../../app/core/store.js');
 const { lookalikesOf } = await import('../../app/core/lookalikes.js');
-const { listCollections, toggleFavorite } = await import('../../app/core/collections.js');
+const { listCollections, newCollection, savePlace, setInCollection, toggleFavorite } = await import('../../app/core/collections.js');
 const { MiniApp } = await import('../../app/miniapp/runtime.js');
 const { sessionOf } = await import('../../app/miniapp/kit/session.js');
 const cueillette = (await import('../../app/miniapps/cueillette.js')).default;
@@ -133,4 +133,54 @@ test('Cueillette prudente : toutes les plantes lues et triées avant d’en gard
   assert.deepEqual(s.avoidCards, [saffron, hemlock]);
   for (let i = 0; i < 100 && !(await favourites()).includes(ail.id); i++) await tick();
   assert.deepEqual(await favourites(), [cigue.id, ail.id], 'la colchique jamais dans les favoris, la ciguë seulement par l’utilisateur');
+});
+
+test('Cueillette prudente : ↺ et « Retirer » ne reprennent que le favori que la partie a ajouté, encore le sien', async t => {
+  t.after(answering([[ail, 800]]));
+  /** The favourites: plant id → [origin, from] (none: null). */
+  const own = async () => Object.fromEntries(((await listCollections()).find(c => c.id === 'favorites')?.properties.plants ?? [])
+    .map((/** @type {any} */ e) => [e.plantId, [e.origin?.app ?? null, e.from?.app ?? null]]));
+  /** Waits for `ok` (the favourites are written after the swipe), at most 2 s. @param {() => Promise<boolean>} ok */
+  const until = async ok => { for (let i = 0; i < 100 && !(await ok()); i++) await tick(); };
+  // The favourites the tests before left: gone.
+  for (const id of await favourites()) await toggleFavorite(plants.find((/** @type {any} */ p) => p.id === id));
+  assert.deepEqual(await favourites(), []);
+  const app = new MiniApp(cueillette, { saved: null });
+  t.after(() => app.dispose());
+  // Another place than the tests before: iNaturalist's answers are kept by place (core/nearby.js).
+  app.set({ point: [4.83, 45.76], radius: 20000 });
+  const s = sessionOf(app);
+  await s.load(true);
+  const garlic = /** @type {import('../../app/miniapp/kit/cards.js').Card} */ (s.cards?.find(c => c.plant.id === ail.id));
+
+  // A heart, then ↺: the favourite it added goes.
+  assert.equal(s.swiped(garlic, true), true);
+  await until(async () => (await favourites()).includes(ail.id));
+  s.rewind();
+  await until(async () => !(await favourites()).includes(ail.id));
+  assert.deepEqual(await own(), {});
+
+  // A heart, the wild garlic then put in a list (the user's now), then ↺: the match undone, the favourite stays.
+  assert.equal(s.swiped(garlic, true), true);
+  await until(async () => (await favourites()).includes(ail.id));
+  const list = await savePlace(newCollection('list', { name: 'Cuisine' }));
+  await setInCollection(list.id, ail, true);
+  s.rewind();
+  for (let i = 0; i < 5; i++) await tick();
+  assert.deepEqual(app.c.matches, []);
+  assert.deepEqual(await own(), { [ail.id]: [null, 'cueillette'] }, 'à vous : gardé, d’où il vient dit');
+
+  // A favourite of the user's (set before), matched, then « Retirer »: out of the matches, still a favourite.
+  await toggleFavorite(ail);
+  await toggleFavorite(ail);
+  assert.deepEqual(await own(), { [ail.id]: [null, null] });
+  assert.equal(s.swiped(garlic, true), false, 'un favori déjà : le match ne l’ajoute pas');
+  assert.equal(await s.unmatch(garlic), 'kept');
+  assert.deepEqual({ matches: app.c.matches, favourites: await own() }, { matches: [], favourites: { [ail.id]: [null, null] } });
+
+  // The match's own favourite, then « Retirer »: both go.
+  await toggleFavorite(ail);
+  assert.equal(s.swiped(garlic, true), true);
+  assert.equal(await s.unmatch(garlic), null);
+  assert.deepEqual({ matches: app.c.matches, favourites: await own() }, { matches: [], favourites: {} });
 });

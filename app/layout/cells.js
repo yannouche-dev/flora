@@ -42,7 +42,7 @@ import { verdictOf } from '../core/alerts.js';
 import { thumbCredit } from '../core/credit.js';
 import { cachedThumb, thumbUrl } from '../core/thumb.js';
 import { hintView, takeHint } from '../core/hints.js';
-import { isFavorite, toggleFavorite } from '../core/collections.js';
+import { addFavorite, forgetFavoriteEntry, isFavorite } from '../core/collections.js';
 import { ui } from '../styles/ui.js';
 import { DISTANCES, distanceAt, distanceEvents, distanceKey } from '../miniapp/kit/cards.js';
 import { pushHash } from '../core/history.js';
@@ -1296,7 +1296,11 @@ class DeckSession extends EventTarget {
     /** @type {Card[]} */ this.cards = [];
     /** @type {number | null} */ this.top = null;
     /** @type {{ matches: number[], passed: number[], radius: number }} */ this.c = { matches: [], passed: [], radius: 0 };
-    /** @type {{ id: number, liked: boolean, fav: boolean }[]} */ this.history = [];
+    /**
+     * ↺: the last swipes, to undo — a heart's `entry`, the favourite it added (null: a favourite already, or not
+     * written): ↺ takes back only that one, as it left it. @type {{ id: number, liked: boolean, entry: Promise<import('../core/collections.js').PlantEntry | null> | null }[]}
+     */
+    this.history = [];
     this.burst = 0;
     this.hinted = false;
   }
@@ -1416,13 +1420,15 @@ export class DlDeck extends LitElement {
     this.#session.changed();
   }
 
-  /** A card swiped: a heart (a favourite), or passed; the next one on top is the current plant. @param {{ card: Card, liked: boolean }} d */
+  /**
+   * A card swiped: a heart (a favourite — added only if it is not one: a heart never removes a favourite), or passed;
+   * the next one on top is the current plant. @param {{ card: Card, liked: boolean }} d
+   */
   #decide({ card, liked }) {
     const ses = this.#session, id = card.plant.id;
-    const fav = liked && !isFavorite(id);
-    ses.history = [...ses.history, { id, liked, fav }].slice(-30);
+    const entry = liked && !isFavorite(id) ? addFavorite(card.plant).catch(() => null) : null;
+    ses.history = [...ses.history, { id, liked, entry }].slice(-30);
     ses.c = liked ? { ...ses.c, matches: [...ses.c.matches, id] } : { ...ses.c, passed: [...ses.c.passed, id] };
-    if (fav) toggleFavorite(card.plant).catch(() => {});
     if (liked) { ses.burst++; setTimeout(() => { ses.burst = 0; ses.changed(); }, 900); }
     ses.top = null;
     const next = ses.deck[0];
@@ -1430,14 +1436,16 @@ export class DlDeck extends LitElement {
     ses.changed();
   }
 
-  /** ↺: the last card swiped back on top (a heart that made a favourite: out of the favourites again). */
+  /**
+   * ↺: the last card swiped back on top — a heart that made a favourite: out of the favourites again, only that entry
+   * and only as it left it (a note, a rating, a harvest given since: the user's, kept).
+   */
   #undo() {
     const ses = this.#session, last = ses.history[ses.history.length - 1];
     if (!last) return;
     ses.history = ses.history.slice(0, -1);
     ses.c = { ...ses.c, matches: ses.c.matches.filter(x => x !== last.id), passed: ses.c.passed.filter(x => x !== last.id) };
-    const card = ses.cards.find(c => c.plant.id === last.id);
-    if (last.fav && card && isFavorite(last.id)) toggleFavorite(card.plant).catch(() => {});
+    last.entry?.then(e => e && forgetFavoriteEntry(e.id, e));
     if (this.#writes) this.state?.pick(last.id, { how: 'replace' });
     ses.changed();
   }

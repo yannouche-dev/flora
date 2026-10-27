@@ -408,6 +408,26 @@ export async function toggleFavorite(plant, origin) {
   return on;
 }
 
+/**
+ * A heart (a match, the deck of a layout): the plant put in the favourites when it is not there — never taken out (a
+ * heart in a tab whose ♥ is stale, set or removed in another one, never removes a favourite). `origin`: the mini-app
+ * whose match adds it (« Recommencer » it, and it goes). Resolves with the entry added, or null (a favourite already).
+ * @param {any} plant TAXREF record or search summary @param {import('./place-model.js').Origin} [origin]
+ * @returns {Promise<PlantEntry | null>}
+ */
+export async function addFavorite(plant, origin) {
+  /** @type {PlantEntry | null} */
+  let added = null;
+  await updatePlace(FAVORITES_ID, current => {
+    added = null;
+    if (findEntry(current, plant.id)) return current;
+    const next = withPlant(current, plant, undefined, { origin });
+    added = lastEntry(next);
+    return next;
+  }, { by: origin?.app });
+  return added;
+}
+
 // ── What a mini-app made ──────────────────────────────────────────────────
 
 /**
@@ -433,12 +453,36 @@ export async function promoteFavorites(plantIds) {
 }
 
 /**
- * A favourite a mini-app made, taken back — never one the user made, or made their own (promoteFavorite).
- * @param {number} plantId @param {string} app
+ * A favourite a mini-app made, taken back (↺ on its heart, « Retirer » a match, a toxic look-alike matched) — read as
+ * stored, never one the user made, or made their own since (promoted: filed, annotated…). No favourites: nothing
+ * written. Resolves with whether it went.
+ * @param {number} plantId @param {string} app @returns {Promise<boolean>}
  */
 export async function forgetFavoriteMadeBy(plantId, app) {
-  if (!isFavorite(plantId)) return;
-  await updatePlace(FAVORITES_ID, c => findEntry(c, plantId)?.origin?.app === app ? withoutPlant(c, plantId) : c).catch(() => {});
+  let gone = false;
+  await updatePlace(FAVORITES_ID, c => {
+    const plants = c.properties.plants.filter(e => !(e.plantId === plantId && e.origin?.app === app));
+    gone = plants.length < c.properties.plants.length;
+    return gone ? withPlants(c, plants) : c;
+  }, { by: app, create: false }).catch(() => { gone = false; });
+  return gone;
+}
+
+/**
+ * The favourite a heart added, taken back (↺ in the deck of a layout: no mini-app, no origin) — only while it is there
+ * as that heart left it: a note, a rating, an abundance or a harvest given since, it is the user's and stays. Resolves
+ * with whether it went. @param {string} entryId @param {PlantEntry} made the entry as added (addFavorite)
+ * @returns {Promise<boolean>}
+ */
+export async function forgetFavoriteEntry(entryId, made) {
+  const said = (/** @type {PlantEntry} */ e) => JSON.stringify([e.notes, e.rating, e.abundance, e.harvests]);
+  let gone = false;
+  await updatePlace(FAVORITES_ID, c => {
+    const e = c.properties.plants.find(x => x.id === entryId);
+    gone = Boolean(e) && said(/** @type {PlantEntry} */ (e)) === said(made);
+    return gone ? withoutPlant(c, entryId) : c;
+  }, { create: false }).catch(() => { gone = false; });
+  return gone;
 }
 
 /** What a mini-app made in Mes plantes (place-model.js#madeBy): its favourites, its collections. @param {string} app */

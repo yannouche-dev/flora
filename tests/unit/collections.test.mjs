@@ -26,9 +26,11 @@ async function favouritesOf(list) {
   for (const [id, app] of list) await C.toggleFavorite(plant(id), app ? { app } : undefined);
 }
 
-test('rien à promouvoir sans favoris : aucun favori créé pour rien', async () => {
+test('rien à promouvoir ni à reprendre sans favoris : aucun favori créé pour rien', async () => {
   await C.promoteFavorites([1, 2]);
   await C.promotePlace(C.FAVORITES_ID);
+  assert.equal(await C.forgetFavoriteMadeBy(1, 'rencontres'), false);
+  assert.equal(await C.forgetFavoriteEntry('e1', /** @type {any} */ ({ notes: '', rating: 0, abundance: 'moyen', harvests: [] })), false);
   assert.equal(await C.getPlace(C.FAVORITES_ID), undefined);
   // A list of the user's with plants, the favourites never made: still none.
   await C.savePlace(C.withPlant(C.newCollection('list', { name: 'Vide de favoris' }), plant(1)));
@@ -76,4 +78,28 @@ test('un favori de partie annoté, noté ou récolté dans les Favoris est à vo
   await C.promotePlace(C.FAVORITES_ID);
   await C.promoteFavorites([1, 2, 3]);
   assert.equal((await C.getPlace(C.FAVORITES_ID))?.properties.updatedAt, before);
+});
+
+test('un cœur n’enlève jamais un favori ; reprendre celui d’une partie, ou celui d’un cœur tel qu’il l’a laissé', async () => {
+  await favouritesOf([[4, null]]);
+  // A heart on a favourite already (a stale ♥ in this tab): nothing added, nothing removed.
+  assert.equal(await C.addFavorite(plant(4), { app: 'rencontres' }), null);
+  assert.deepEqual(await favourites(), { 4: [null, null] });
+  const added = await C.addFavorite(plant(5), { app: 'rencontres' });
+  assert.equal(added?.plantId, 5);
+  assert.equal(await C.addFavorite(plant(5), { app: 'rencontres' }), null, 'une fois');
+  assert.deepEqual(await favourites(), { 4: [null, null], 5: ['rencontres', null] });
+  // Taken back by its game only, while it is the game's.
+  assert.equal(await C.forgetFavoriteMadeBy(4, 'rencontres'), false, 'un favori à vous reste');
+  assert.equal(await C.forgetFavoriteMadeBy(5, 'mosaique'), false, 'une autre partie ne le reprend pas');
+  assert.equal(await C.forgetFavoriteMadeBy(5, 'rencontres'), true);
+  assert.deepEqual(await favourites(), { 4: [null, null] });
+  // The deck of a layout (no origin): ↺ takes back the entry its heart added, as it left it — rated since, it stays.
+  const one = /** @type {any} */ (await C.addFavorite(plant(6)));
+  const two = /** @type {any} */ (await C.addFavorite(plant(7)));
+  await C.updatePlace(C.FAVORITES_ID, c => C.withEntry(c, two.id, { rating: 3 }));
+  assert.equal(await C.forgetFavoriteEntry(one.id, one), true);
+  assert.equal(await C.forgetFavoriteEntry(two.id, two), false);
+  assert.equal(await C.forgetFavoriteEntry(one.id, one), false, 'déjà repris');
+  assert.deepEqual(await favourites(), { 4: [null, null], 7: [null, null] });
 });
