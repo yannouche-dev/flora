@@ -3,17 +3,21 @@
 // it gathers (Pl@ntNet, Observation.org, the national inventory, the botanical conservatories, herbaria…). A layout
 // (layout/state.js) asks for a zone's observations with global filters, the same for every source: each one put in
 // the source's own words where it has them, applied by the app where it has not (GBIF: the rank, a free photo, wild
-// plants), or said not to apply (GBIF has no quality grade); the answers merged into one list of points — GBIF's copy
-// of iNaturalist's left out, the same plant at the same spot on the same day once —, the most recent first. A source
-// that fails is said, the others shown.
-//   OBS_DEFAULTS, readObsFilters(params), obsParams(filters), obsKey(filters): the filters and the address (sources=,
-//     qualite=, taxon=, photos=, sauvages=, jeux=);
-//   inatQuery(f), gbifQuery(f, periode), gbifKeep(record, f), APPLIES: what each source does of each filter;
+// plants), or said not to apply (GBIF has no quality grade); every observation they give by default (both sources, every
+// quality, every dataset: a map shows all that is there — but a source switched off in Réglages › Modules); the answers
+// merged into one list of points — GBIF's copy of iNaturalist's left out, the same plant at the same spot on the same
+// day once —, the most recent first. A source that fails is said, the others shown.
+//   OBS_DEFAULTS, defaultSources(), readObsFilters(params), obsParams(filters), obsKey(filters): the filters and the
+//     address (sources=, qualite=, taxon=, photos=, sauvages=, jeux=, sansjeux=);
+//   inatQuery(f), inatGrades(qualite), gbifQuery(f, periode), gbifKeep(record, f), APPLIES: what each source does of
+//     each filter;
 //   zoneObservations(center, radius, { filters, periode, taxon, precise, signal }) → { points, totals, failed, datasets }
 //     (every source failing: an ObsError, which says each one's failure) — GBIF asked in two requests, its datasets
-//     first, then their occurrences (never its copy of iNaturalist's); `taxon`: one group of plants only (a family:
+//     first, then their occurrences (never its copy of iNaturalist's, nor the datasets left out); `taxon`: one group of
+//     plants only (a family:
 //     Orchidaceae), in each source's own numbers; `precise`: only the points that are where the plant was, at this
-//     radius (the others counted: `vague`); sourcesText(sources), failedText(failed), obsNotes(counts): in words.
+//     radius (vagueAt(point, radius): the others, counted: `vague`); sourcesText(sources), failedText(failed),
+//     obsNotes(counts): in words.
 // The filters and their translation are pure, tested under Node (tests/unit/observations.test.mjs).
 
 import * as cache from './cache.js';
@@ -25,8 +29,12 @@ import { FREE_MEDIA } from '../../lib/plant-sources.mjs';
 
 /**
  * @typedef {'inat' | 'gbif'} ObsSource
- * @typedef {'recherche' | 'verifiables' | 'toutes'} ObsQuality
- * @typedef {{ sources: ObsSource[], qualite: ObsQuality, taxon: 'tous' | 'espece', photos: 'toutes' | 'avec' | 'libre', sauvages: boolean, jeux: string[] }} ObsFilters
+ * @typedef {'recherche' | 'aidentifier' | 'occasionnelles'} ObsGrade  iNaturalist's quality grades: research (verified), needs
+ *   ID, casual (cultivated or captive, without a photo, a date or a precise place)
+ * @typedef {{ sources: ObsSource[], qualite: ObsGrade[], taxon: 'tous' | 'espece', photos: 'toutes' | 'avec' | 'libre', sauvages: boolean,
+ *   jeux: string[], sansjeux: string[] }} ObsFilters
+ *   `qualite`: the grades shown (one at least); `jeux`: GBIF's datasets asked alone (none: every one of the zone);
+ *   `sansjeux`: those left out
  * @typedef {import('./around3d.js').Obs3d} Obs
  * @typedef {{ name: string, off: boolean }} ObsFailure  a source that did not answer (`off`: its module is)
  * @typedef {{ points: Obs[], totals: { inat: number | null, gbif: number | null }, failed: ObsFailure[], datasets: { key: string, count: number }[],
@@ -88,12 +96,50 @@ export class ObsError extends Error {
 }
 
 /** The filters' values, in their order. */
-export const QUALITIES = /** @type {const} */ (['recherche', 'verifiables', 'toutes']);
+export const GRADES = /** @type {const} */ (['recherche', 'aidentifier', 'occasionnelles']);
 export const TAXA = /** @type {const} */ (['tous', 'espece']);
 export const PHOTOS = /** @type {const} */ (['toutes', 'avec', 'libre']);
 
-/** Every filter as the app has always shown observations: iNaturalist's research grade, whatever its rank and photos. */
-export const OBS_DEFAULTS = /** @type {Readonly<ObsFilters>} */ (Object.freeze({ sources: ['inat'], qualite: 'recherche', taxon: 'tous', photos: 'toutes', sauvages: false, jeux: [] }));
+/** Each grade in iNaturalist's words. */
+const GRADE_WORDS = { recherche: 'research', aidentifier: 'needs_id', occasionnelles: 'casual' };
+
+/**
+ * The quality's words of before (one choice of three: verified; to identify too; all), each the grades it says — still
+ * read, and written when the grades are theirs (an address keeps its old words).
+ * @type {Readonly<Record<string, readonly ObsGrade[]>>}
+ */
+const QUALITY_WORDS = Object.freeze({ recherche: ['recherche'], verifiables: ['recherche', 'aidentifier'], toutes: GRADES });
+
+/**
+ * Every observation available: both sources, every quality grade, rank, photo and dataset, cultivated plants too —
+ * what a map shows unless told otherwise (the games' cards ask for verified ones on their own).
+ */
+export const OBS_DEFAULTS = /** @type {Readonly<ObsFilters>} */ (Object.freeze({ sources: ['inat', 'gbif'], qualite: [...GRADES], taxon: 'tous', photos: 'toutes', sauvages: false, jeux: [], sansjeux: [] }));
+
+/** Each source's module (Réglages › Modules: core/modules.js). */
+const SOURCE_MODULES = /** @type {const} */ ({ inat: 'inaturalist', gbif: 'gbif' });
+
+/** Is this source's module on? @param {ObsSource} source */
+export const sourceOn = source => moduleOn(SOURCE_MODULES[source]);
+
+/**
+ * The sources a layout asks when neither its maps (src=) nor the address (sources=) say them: OBS_DEFAULTS' but one
+ * whose module is switched off (never asked, so never said missing on every map); both off, both (the zone says so).
+ * @returns {ObsSource[]}
+ */
+export function defaultSources() {
+  const on = OBS_DEFAULTS.sources.filter(sourceOn);
+  return on.length ? on : [...OBS_DEFAULTS.sources];
+}
+
+/**
+ * The grades as the address writes them: the word of before when they are its (recherche, verifiables, toutes), else
+ * their list (« aidentifier,occasionnelles »). @param {readonly ObsGrade[]} grades
+ */
+export function qualityWord(grades) {
+  const list = GRADES.filter(g => grades.includes(g)).join(',');
+  return Object.keys(QUALITY_WORDS).find(w => QUALITY_WORDS[w].join(',') === list) ?? list;
+}
 
 /** A GBIF dataset's key (a UUID), or the like. */
 const DATASET = /^[\w-]{1,64}$/;
@@ -109,8 +155,9 @@ export function readObsFilters(params) {
   const list = (/** @type {string} */ k) => (params.get(k) || '').split(',').map(s => s.trim()).filter(Boolean);
   const sources = list('sources').filter(s => /** @type {readonly string[]} */ (SOURCES).includes(s));
   if (sources.length) f.sources = /** @type {ObsSource[]} */ ([...new Set(sources)].sort((a, b) => SOURCES.indexOf(/** @type {ObsSource} */ (a)) - SOURCES.indexOf(/** @type {ObsSource} */ (b))));
-  const qualite = params.get('qualite');
-  if (qualite && /** @type {readonly string[]} */ (QUALITIES).includes(qualite)) f.qualite = /** @type {ObsQuality} */ (qualite);
+  // The quality: a word of before, or a list of grades (each word its grades).
+  const grades = list('qualite').flatMap(w => /** @type {readonly string[]} */ (Object.hasOwn(QUALITY_WORDS, w) ? QUALITY_WORDS[w] : GRADES.filter(g => g === w)));
+  if (grades.length) f.qualite = GRADES.filter(g => grades.includes(g));
   const taxon = params.get('taxon');
   if (taxon && /** @type {readonly string[]} */ (TAXA).includes(taxon)) f.taxon = /** @type {ObsFilters['taxon']} */ (taxon);
   const photos = params.get('photos');
@@ -119,6 +166,8 @@ export function readObsFilters(params) {
   if (sauvages === '1' || sauvages === '0') f.sauvages = sauvages === '1';
   const jeux = list('jeux').filter(k => DATASET.test(k));
   if (jeux.length) f.jeux = [...new Set(jeux)].sort();
+  const sansjeux = list('sansjeux').filter(k => DATASET.test(k));
+  if (sansjeux.length) f.sansjeux = [...new Set(sansjeux)].sort();
   return Object.keys(f).length ? Object.freeze(f) : null;
 }
 
@@ -131,11 +180,12 @@ export function obsParams(f) {
   /** @type {[string, string][]} */
   const out = [];
   if (f.sources?.length) out.push(['sources', f.sources.join(',')]);
-  if (f.qualite) out.push(['qualite', f.qualite]);
+  if (f.qualite?.length) out.push(['qualite', qualityWord(f.qualite)]);
   if (f.taxon) out.push(['taxon', f.taxon]);
   if (f.photos) out.push(['photos', f.photos]);
   if (f.sauvages != null) out.push(['sauvages', f.sauvages ? '1' : '0']);
   if (f.jeux?.length) out.push(['jeux', f.jeux.join(',')]);
+  if (f.sansjeux?.length) out.push(['sansjeux', f.sansjeux.join(',')]);
   return out;
 }
 
@@ -150,11 +200,12 @@ export function obsChanges(f, defaults) {
   /** @type {Partial<ObsFilters>} */
   const out = {};
   if (f.sources.join() !== defaults.sources.join()) out.sources = f.sources;
-  if (f.qualite !== defaults.qualite) out.qualite = f.qualite;
+  if (qualityWord(f.qualite) !== qualityWord(defaults.qualite)) out.qualite = GRADES.filter(g => f.qualite.includes(g));
   if (f.taxon !== defaults.taxon) out.taxon = f.taxon;
   if (f.photos !== defaults.photos) out.photos = f.photos;
   if (f.sauvages !== defaults.sauvages) out.sauvages = f.sauvages;
   if (f.jeux.join() !== defaults.jeux.join()) out.jeux = f.jeux;
+  if (f.sansjeux.join() !== defaults.sansjeux.join()) out.sansjeux = f.sansjeux;
   return Object.keys(out).length ? Object.freeze(out) : null;
 }
 
@@ -173,15 +224,24 @@ export const APPLIES = Object.freeze({
 });
 
 /**
+ * The quality grades in iNaturalist's words: none when every one is shown (or none said), else their list
+ * (« &quality_grade=research,casual »).
+ * @param {readonly ObsGrade[]} qualite @returns {string}
+ */
+export function inatGrades(qualite) {
+  const grades = GRADES.filter(g => qualite.includes(g));
+  return grades.length && grades.length < GRADES.length ? '&quality_grade=' + grades.map(g => GRADE_WORDS[g]).join(',') : '';
+}
+
+/**
  * The filters in iNaturalist's words (API v1 /observations), after the circle and `iconic_taxa=Plantae`: its quality
- * grade (research; research and needs ID; any), the rank (species or lower: `hrank`), a photo (any; under a free
- * licence: CC0, CC BY, CC BY-SA), wild only (`captive=false` — research grade is wild already).
+ * grades (inatGrades: every one, none said), the rank (species or lower: `hrank`), a photo (any; under a free licence:
+ * CC0, CC BY, CC BY-SA), wild only (`captive=false` — research grade is wild already). The current plant's points and
+ * the tiles of a map of France or of the world take them too (layout/state.js, layout/map-options.js inatTiles).
  * @param {ObsFilters} f @returns {string}
  */
 export function inatQuery(f) {
-  const q = [];
-  if (f.qualite === 'recherche') q.push('quality_grade=research');
-  else if (f.qualite === 'verifiables') q.push('quality_grade=research,needs_id');
+  const q = [inatGrades(f.qualite).replace(/^&/, '')].filter(Boolean);
   if (f.taxon === 'espece') q.push('hrank=species');
   if (f.photos === 'avec') q.push('photos=true');
   else if (f.photos === 'libre') q.push('photo_license=cc0,cc-by,cc-by-sa');
@@ -192,7 +252,8 @@ export function inatQuery(f) {
 /**
  * The filters in GBIF's words (/v1/occurrence/search), after the circle and the plants: the period (`year`, `month`),
  * a photo (`mediaType=StillImage`; its licence checked by gbifKeep), the datasets chosen (`datasetKey`, repeated) —
- * and the datasets of the zone counted (a facet, as if none were chosen: `facetMultiselect`).
+ * and the datasets of the zone counted (a facet, as if none were chosen: `facetMultiselect`). GBIF has no word to
+ * leave a dataset out: those left out (`sansjeux`) are not asked for their occurrences (gbifZone).
  * @param {ObsFilters} f @param {string | null} [periode] @returns {string}
  */
 export function gbifQuery(f, periode = null) {
@@ -242,7 +303,8 @@ const gbifName = o => o.species || (o.taxonRank === 'GENUS' && o.genus) || (o.ta
  * GBIF's plant occurrences in the circle, as the filters say, cached a day — in two requests: the zone's count and its
  * datasets first (counted as if none were chosen), then the occurrences of the datasets chosen, else of every one of
  * the zone but GBIF's copy of iNaturalist's (never its records in GBIF's page of 300: they are iNaturalist's own, asked
- * of it). An answer without the facet (an older GBIF): one page as before, the copy left out after. What the filters
+ * of it) — those left out (`sansjeux`) never, their records not counted. An answer without the facet (an older GBIF):
+ * one page as before, the copy and those left out taken off after. What the filters
  * need of each record is kept (rank, media, establishment), and how far its point may be from where the plant was (its
  * coordinate uncertainty), the rest left. `taxon`: the plants under GBIF's key only (else every plant: taxonKey=6).
  * @param {[number, number]} center @param {number} radius @param {ObsFilters} f @param {string | null} periode @param {AbortSignal} [signal]
@@ -255,23 +317,34 @@ async function gbifZone([lon, lat], radius, f, periode, signal, taxon = null) {
   const query = gbifQuery(f, periode);
   const base = `https://api.gbif.org/v1/occurrence/search?taxonKey=${taxon?.gbif ?? 6}&hasCoordinate=true&hasGeospatialIssue=false&occurrenceStatus=PRESENT`
     + `&geoDistance=${encodeURIComponent(where)}`;
+  /** The datasets left out; one asked (none chosen: every one, else those chosen). */
+  const left = new Set(f.sansjeux), asked = (/** @type {string} */ k) => !f.jeux.length || f.jeux.includes(k);
   // « around-zone… »: forgotten with the zone's other failures (layout/state.js retryScope); « gbif2 »: in two requests;
-  // a group of plants, its key in it (the plants' answer kept apart).
-  const found = await cache.cached(`around-zone-gbif2:${where}${query}${taxon ? '|t' + taxon.gbif : ''}`, async () => {
-    const head = await fetchJson(`${base}${query}&limit=0&facet=datasetKey&facetMultiselect=true&datasetKey.facetLimit=${GBIF_DATASETS}`,
-      { signal, expect: d => typeof d.count === 'number' });
-    const facet = (Array.isArray(head.facets) ? head.facets : []).find((/** @type {any} */ x) => /dataset/i.test(String(x?.field)));
-    const counts = (facet?.counts || []).filter((/** @type {any} */ c) => DATASET.test(String(c?.name)))
-      .map((/** @type {any} */ c) => ({ key: String(c.name), count: Number(c.count) || 0 }));
+  // a group of plants, its key in it (the plants' answer kept apart); the datasets left out, theirs.
+  const zone = `${where}${query}${taxon ? '|t' + taxon.gbif : ''}`;
+  const found = await cache.cached(`around-zone-gbif2:${zone}${left.size ? '|sans=' + f.sansjeux.join(',') : ''}`, async () => {
+    // The zone's count and datasets kept apart: the same whichever are left out (one ticked or not: only the
+    // occurrences asked again). `facet`: GBIF counted them (an older one does not).
+    const head = await cache.cached(`around-zone-gbif2-head:${zone}`, async () => {
+      const d = await fetchJson(`${base}${query}&limit=0&facet=datasetKey&facetMultiselect=true&datasetKey.facetLimit=${GBIF_DATASETS}`,
+        { signal, expect: x => typeof x.count === 'number' });
+      const facet = (Array.isArray(d.facets) ? d.facets : []).find((/** @type {any} */ x) => /dataset/i.test(String(x?.field)));
+      /** @type {{ key: string, count: number }[]} */
+      const counts = (facet?.counts || []).filter((/** @type {any} */ c) => DATASET.test(String(c?.name)))
+        .map((/** @type {any} */ c) => ({ key: String(c.name), count: Number(c.count) || 0 }));
+      return { count: /** @type {number} */ (d.count), facet: Boolean(facet), counts };
+    }, { ttl: 24 * 3600 * 1000, signal });
+    const { facet, counts } = head;
     const datasets = counts.filter(c => c.key !== INAT_DATASET);
-    // The datasets whose occurrences are asked: those chosen, else the zone's — never GBIF's copy of iNaturalist's.
-    const keys = (f.jeux.length ? f.jeux : datasets.map(d => d.key)).filter(k => k !== INAT_DATASET);
+    // The datasets whose occurrences are asked: those chosen, else the zone's — never GBIF's copy of iNaturalist's,
+    // nor one left out.
+    const keys = (f.jeux.length ? f.jeux : datasets.map(d => d.key)).filter(k => k !== INAT_DATASET && !left.has(k));
     const url = !facet ? `${base}${query}&limit=${GBIF_MAX}`
       : head.count > 0 && keys.length ? `${base}${gbifQuery({ ...f, jeux: keys }, periode)}&limit=${GBIF_MAX}` : null;
     const data = url ? await fetchJson(url, { signal, expect: d => Array.isArray(d.results) }) : { results: [], count: 0 };
     const records = [];
     for (const o of data.results) {
-      if (typeof o.decimalLatitude !== 'number' || typeof o.decimalLongitude !== 'number' || o.datasetKey === INAT_DATASET) continue;
+      if (typeof o.decimalLatitude !== 'number' || typeof o.decimalLongitude !== 'number' || o.datasetKey === INAT_DATASET || left.has(o.datasetKey)) continue;
       records.push({
         key: o.key, coordinates: [o.decimalLongitude, o.decimalLatitude], sci: clip(gbifName(o), 120), common: clip(o.vernacularName, 80) || null,
         uncertainty: Number(o.coordinateUncertaintyInMeters) > 0 ? Number(o.coordinateUncertaintyInMeters) : null,
@@ -281,9 +354,11 @@ async function gbifZone([lon, lat], radius, f, periode, signal, taxon = null) {
         source: gbifSource(o.datasetName || o.institutionCode)
       });
     }
-    // GBIF's count holds its copy of iNaturalist's (its dataset's, as the facet counts it): not GBIF's own.
-    const copies = !f.jeux.length || f.jeux.includes(INAT_DATASET) ? counts.find(c => c.key === INAT_DATASET)?.count ?? 0 : 0;
-    const count = facet ? head.count : typeof data.count === 'number' ? data.count : records.length;
+    // GBIF's count holds its copy of iNaturalist's (its dataset's, as the facet counts it): not GBIF's own; nor are
+    // the records of the datasets left out (as the facet counts them: those past its 50 never are).
+    const copies = asked(INAT_DATASET) ? counts.find(c => c.key === INAT_DATASET)?.count ?? 0 : 0;
+    const out = counts.filter(c => left.has(c.key) && c.key !== INAT_DATASET && asked(c.key)).reduce((n, c) => n + c.count, 0);
+    const count = facet ? head.count - out : typeof data.count === 'number' ? data.count : records.length;
     return { records, total: Math.max(records.length, count - copies), datasets };
   }, { ttl: 24 * 3600 * 1000, signal });
   /** @type {Obs[]} */
@@ -301,6 +376,13 @@ async function gbifZone([lon, lat], radius, f, periode, signal, taxon = null) {
 const SAME_SPOT = 25;
 
 /**
+ * A point that may not be where the plant was, in a circle of `radius` metres (a site): iNaturalist's hidden one
+ * (obscured: drawn at random in a cell of some 20 km) or one whose accuracy is wider than the circle; one that says
+ * nothing of it is not. @param {{ obscured?: boolean, accuracy?: number }} p @param {number} radius
+ */
+export const vagueAt = (p, radius) => Boolean(p.obscured) || (p.accuracy ?? 0) > radius;
+
+/**
  * The zone's observations from the sources the filters keep (each with its module on), merged: iNaturalist's `max`
  * most recent, GBIF's (300) — its copy of iNaturalist's left out, and any of its records that is an iNaturalist
  * observation already (the same plant, the same day, within 25 m) —, GBIF's given the photo and name its plant has on
@@ -308,8 +390,8 @@ const SAME_SPOT = 25;
  * (`failed`); every one failing, an ObsError thrown (each one's failure). `taxon`: one group of plants only (an
  * activity's: the orchids of a site), each source asked for it in its own numbers. `precise` (a small circle: a site):
  * only the points that are where the plant was — iNaturalist's hidden ones (obscured: drawn at random in a cell of some
- * 20 km, wherever the plant was) and any whose accuracy is wider than the circle left out, counted (`vague`); a point
- * that says nothing of it kept.
+ * 20 km, wherever the plant was) and any whose accuracy is wider than the circle left out (vagueAt), counted (`vague`);
+ * a point that says nothing of it kept.
  * @param {[number, number]} center @param {number} radius
  * @param {{ filters: ObsFilters, periode?: string | null, max?: number, taxon?: ObsTaxon | null, precise?: boolean, signal?: AbortSignal }} o
  * @returns {Promise<ObsResult>}
@@ -328,6 +410,9 @@ export async function zoneObservations(center, radius, { filters: f, periode = n
     useInat ? observationPointsMany(center, radius, max, signal, periode, inatQuery(f) + (taxon ? '&taxon_id=' + taxon.inat : '')).catch(fail('inat')) : null,
     useGbif ? gbifZone(center, radius, f, periode, signal, taxon).catch(fail('gbif')) : null
   ]);
+  // Said in the sources' order, whichever failed first (« iNaturalist et GBIF ne répondent pas »).
+  const order = SOURCES.map(x => /** @type {string} */ (SOURCE_NAMES[x]));
+  failed.sort((a, b) => order.indexOf(a.name) - order.indexOf(b.name));
   if (!inat && !gbif) throw new ObsError(failed, first);
   /** @type {Obs[]} */
   const points = (inat?.points || []).map((p, i) => ({ ...p, id: 'i' + (p.url?.match(/(\d+)$/)?.[1] ?? i), kind: /** @type {const} */ ('inat'), url: p.url || null, source: 'iNaturalist' }));
@@ -346,7 +431,7 @@ export async function zoneObservations(center, radius, { filters: f, periode = n
   }
   points.sort((a, b) => String(b.date ?? '').localeCompare(String(a.date ?? '')));
   const all = inCircle(points, center, radius);
-  const kept = precise ? all.filter(p => !p.obscured && !((p.accuracy ?? 0) > radius)) : all;
+  const kept = precise ? all.filter(p => !vagueAt(p, radius)) : all;
   return {
     points: kept,
     totals: { inat: inat ? inat.total : null, gbif: gbif ? gbif.total : null },

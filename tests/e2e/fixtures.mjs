@@ -51,14 +51,23 @@ const NAMES = ['Urtica dioica', 'Allium ursinum', 'Conium maculatum', 'Geum urba
 const COUNTS = [12, 80, 5, 40, 66, 3, 25, 9, 51, 30, 18, 7];
 const ARTICLE = 'La plante est une espèce vivace.\n\n== Phytonymie ==\n\n=== Étymologie ===\nSon nom vient du latin ursus, l’ours.\n\n== Description ==\nFeuilles larges.';
 
+/** GBIF's answer to a zone's first question (its count and datasets: core/observations.js gbifZone): nothing there. */
+const GBIF_NONE = { count: 0, results: [], facets: [{ field: 'DATASET_KEY', counts: [] }] };
+
 /**
  * Rencontres' services answered (Découvrir, the mini-app): iNaturalist's plants around (12, Allium ursinum the
- * most observed), 30 observations on the map, Wikidata and Wikipédia's article of each.
+ * most observed), 30 observations on the map, Wikidata and Wikipédia's article of each. And GBIF's count of a layout's
+ * zone (every plant, taxonKey=6, its datasets counted: a zone asks both sources by default): none, nothing more asked.
  * @param {import('@playwright/test').BrowserContext} context
  */
 export async function answerAround(context) {
   /** @type {(route: import('@playwright/test').Route, body: any) => Promise<void>} */
   const json = (route, body) => route.fulfill({ contentType: 'application/json', body: JSON.stringify(body) });
+  await context.route(/^https:\/\/api\.gbif\.org\/v1\/occurrence\/search\?/, route => {
+    const q = new URL(route.request().url()).searchParams;
+    if (q.get('taxonKey') !== '6' || !q.get('geoDistance') || q.get('facet') !== 'datasetKey') return route.fallback();
+    return route.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' }, body: JSON.stringify(GBIF_NONE) });
+  });
   await context.route(/^https:\/\/(api\.inaturalist\.org|www\.wikidata\.org|fr\.wikipedia\.org)\//, route => {
     const url = new URL(route.request().url());
     if (url.host === 'api.inaturalist.org' && /species_counts/.test(url.pathname)) {
@@ -77,12 +86,35 @@ export async function answerAround(context) {
 }
 
 /**
+ * GBIF's occurrences of a layout's zone (every plant, taxonKey=6, around the point asked: core/observations.js gbifZone):
+ * `gbif` of them (the first plants above, one each, in the CBN's dataset, counted in its facet); false, GBIF does not
+ * answer. `seen`: the addresses asked.
+ * @param {import('@playwright/test').Page} page @param {number | false} gbif @param {{ seen?: string[] }} [o]
+ */
+export async function answerZoneGbif(page, gbif, { seen } = {}) {
+  await page.route(/^https:\/\/api\.gbif\.org\/v1\/occurrence\/search\?/, route => {
+    const q = new URL(route.request().url()).searchParams;
+    if (q.get('taxonKey') !== '6' || !q.get('geoDistance')) return route.fallback();
+    seen?.push(route.request().url());
+    if (gbif === false) return route.fulfill({ status: 503, body: '' });
+    const [lat, lng] = String(q.get('geoDistance')).split(',').map(Number);
+    const results = q.get('limit') === '0' ? [] : NAMES.slice(0, gbif).map((name, i) => ({ key: 7000 + i, decimalLatitude: lat - 0.002, decimalLongitude: lng + (i - 5.5) * 0.0008,
+      species: name, scientificName: name + ' L.', taxonRank: 'SPECIES', eventDate: '2025-06-1' + (i % 10), datasetKey: 'cbn-mc', datasetName: 'Inventaire du CBN Massif central' }));
+    return route.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' },
+      body: JSON.stringify({ count: gbif, results, ...(q.get('facet') ? { facets: [{ field: 'DATASET_KEY', counts: gbif ? [{ name: 'cbn-mc', count: gbif }] : [] }] } : {}) }) });
+  });
+}
+
+/**
  * A layout's zone (app/layout/state.js: the zone's latest observations, their plants the list): iNaturalist's
  * observations around the point asked, `each` of each of the 12 plants above (taxa 1000…1011, the most observed
- * first) — a plant's own (taxon_id) left to the routes before (answerAround's). `seen`: the addresses asked.
- * @param {import('@playwright/test').Page} page @param {{ each?: number, seen?: string[] }} [o]
+ * first) — a plant's own (taxon_id) left to the routes before (answerAround's). `seen`: the addresses asked. `gbif`:
+ * GBIF's occurrences of the zone (answerZoneGbif) — none by default (answerAround's answer, if any); a number, that
+ * many; false, GBIF does not answer.
+ * @param {import('@playwright/test').Page} page @param {{ each?: number, seen?: string[], gbif?: number | false }} [o]
  */
-export async function answerZone(page, { each = 2, seen } = {}) {
+export async function answerZone(page, { each = 2, seen, gbif } = {}) {
+  if (gbif !== undefined) await answerZoneGbif(page, gbif);
   await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?/, route => {
     const q = new URL(route.request().url()).searchParams;
     if (q.get('taxon_id')) return route.fallback();

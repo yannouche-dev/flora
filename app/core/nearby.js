@@ -17,6 +17,13 @@ import { AROUND_STOPS as RADII } from './distance.js';
 const API = 'https://api.inaturalist.org/v1';
 /** Results kept a day (offline: an older copy is better than nothing). */
 const TTL = 24 * 3600 * 1000;
+/**
+ * iNaturalist's observations as a few lists ask for them unless told otherwise: research grade (verified — « Autour »,
+ * the games' cards); a map asks for its filters' (core/observations.js inatQuery: every grade by default).
+ */
+const RESEARCH = '&quality_grade=research';
+/** A query's filters in a cache key: research grade, nothing; every observation, « toutes »; else themselves. @param {string} filters */
+const filtersKey = filters => filters === RESEARCH ? '' : '|' + (filters || 'toutes');
 
 // Radii offered, in metres (core/distance.js AROUND_STOPS): a radius kept must be one of them (savedRadius).
 export { RADII };
@@ -158,18 +165,21 @@ export async function speciesAround(point, radius, signal, periode = null) {
 }
 
 /**
- * Where one species was observed in the circle (up to 200 most recent observations).
+ * Where one species was observed in the circle (up to 600 most recent observations): research grade, unless `filters`
+ * say otherwise (iNaturalist's own words, core/observations.js inatQuery: a layout's zone; '' every observation: a
+ * sheet's map).
  * @param {number} taxonId
  * @param {[number, number]} point
  * @param {number} radius
  * @param {AbortSignal} [signal]
+ * @param {string} [filters]
  * @returns {Promise<NearbyObservation[]>}
  */
-export function observationsAround(taxonId, point, radius, signal) {
+export function observationsAround(taxonId, point, radius, signal, filters = RESEARCH) {
   if (!moduleOn('inaturalist')) return Promise.reject(new ModuleOffError('inaturalist'));
   let partial = false;
-  return cached(`around-obs2:${taxonId}:${area(point, radius)}`, async () => {
-    const page = await paged(`taxon_id=${taxonId}&${area(point, radius)}&quality_grade=research&order_by=observed_on`, 600, signal);
+  return cached(`around-obs2:${taxonId}:${area(point, radius)}${filtersKey(filters)}`, async () => {
+    const page = await paged(`taxon_id=${taxonId}&${area(point, radius)}${filters}&order_by=observed_on`, 600, signal);
     partial = page.partial;
     return page.results.map(toObservation);
   }, () => partial);
@@ -411,14 +421,12 @@ export async function findPhotos(points, { max = 40 } = {}) {
   return found.some(Boolean);
 }
 
-/** iNaturalist's observations as the app shows them unless told otherwise: research grade (core/observations.js inatQuery). */
-const RESEARCH = '&quality_grade=research';
-
 /**
  * More of them, for a map that draws hundreds (the 3D view of the observations around, components/gf-map-obs3d.js; a
  * layout's map, whose plants make its list: core/observations.js): up to `max` of the most recent (200 a page), the
  * same points — of a period (periodQuery: this year, this month), as the filters say (`filters`: iNaturalist's own
- * words, core/observations.js inatQuery; research grade by default). Cached a day; a page missing, a few minutes.
+ * words, core/observations.js inatQuery; '' every observation; research grade by default). Cached a day; a page
+ * missing, a few minutes.
  * @param {[number, number]} point @param {number} radius @param {number} max @param {AbortSignal} [signal]
  * @param {string | null} [periode] @param {string} [filters]
  * @returns {Promise<{ points: AroundPoint[], total: number }>}
@@ -427,7 +435,7 @@ export function observationPointsMany(point, radius, max, signal, periode = null
   if (!moduleOn('inaturalist')) return Promise.reject(new ModuleOffError('inaturalist'));
   const when = periodQuery(periode);
   let partial = false;
-  return cached(`around-many2:${max}:${area(point, radius)}${when}${filters === RESEARCH ? '' : '|' + (filters || 'toutes')}`, async () => {
+  return cached(`around-many2:${max}:${area(point, radius)}${when}${filtersKey(filters)}`, async () => {
     const page = await paged(`${area(point, radius)}&iconic_taxa=Plantae${filters}&locale=fr&order_by=observed_on${when}`, max, signal);
     partial = page.partial;
     return { points: page.results.map(aroundPoint), total: page.total };

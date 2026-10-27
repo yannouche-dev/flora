@@ -1,18 +1,24 @@
-// app/core/observations.js: one layer over the sources of observations — the filters read from an address and written
-// back (only what differs from a layout's defaults), each filter in iNaturalist's and GBIF's words, what GBIF cannot
-// filter applied by the app, what each source does of each filter; the zone's observations merged (GBIF's copy of
-// iNaturalist's left out, the same plant at the same spot on the same day once, the most recent first), a source that
-// fails said and the others shown; their plants (core/nearby.js speciesOf: one plant once, whichever source saw it —
-// the flora's, from an IndexedDB in memory; the services answered by a fetch of this file's).
+// app/core/observations.js: one layer over the sources of observations — every observation by default (both sources,
+// every quality grade, every GBIF dataset); the filters read from an address and written back (only what differs from
+// a layout's defaults; the quality's words of before still read and written), each filter in iNaturalist's and GBIF's
+// words, what GBIF cannot filter applied by the app, what each source does of each filter; the zone's observations
+// merged (GBIF's copy of iNaturalist's left out, the datasets left out never asked nor counted, the same plant at the
+// same spot on the same day once, the most recent first), a source that fails said and the others shown; their plants
+// (core/nearby.js speciesOf: one plant once, whichever source saw it — the flora's, from an IndexedDB in memory; the
+// services answered by a fetch of this file's); the current plant's own points and a map of France's tiles as the
+// zone's filters say (core/nearby.js observationsAround, layout/map-options.js inatTiles); the zone's GBIF count and
+// datasets asked once, whichever are left out.
 import 'fake-indexeddb/auto';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 const {
-  APPLIES, OBS_DEFAULTS, ObsError, failedText, gbifKeep, gbifQuery, inatQuery, obsChanges, obsKey, obsNotes, obsParams, readObsFilters, sourcesText, zoneObservations
+  APPLIES, GRADES, OBS_DEFAULTS, ObsError, failedText, gbifKeep, gbifQuery, inatGrades, inatQuery, obsChanges, obsKey, obsNotes, obsParams, qualityWord, readObsFilters,
+  sourcesText, vagueAt, zoneObservations
 } = await import('../../app/core/observations.js');
 const { INAT_DATASET } = await import('../../app/core/around3d.js');
-const { plantCounts, plantOfPoint, plantsIn, speciesOf } = await import('../../app/core/nearby.js');
+const { observationsAround, plantCounts, plantOfPoint, plantsIn, speciesOf } = await import('../../app/core/nearby.js');
+const { inatTiles } = await import('../../app/layout/map-options.js');
 const { setModule } = await import('../../app/core/modules.js');
 const db = await import('../../app/core/db.js');
 
@@ -26,37 +32,72 @@ await db.replacePlants(FLORA, { version: 'test' });
 /** The filters, every one said. @param {Partial<import('../../app/core/observations.js').ObsFilters>} [more] */
 const filters = (more = {}) => ({ ...OBS_DEFAULTS, ...more });
 
+test('par défaut, toutes les observations : les deux sources, toutes les qualités, tous les jeux, les plantes cultivées aussi', () => {
+  assert.deepEqual({ ...OBS_DEFAULTS }, { sources: ['inat', 'gbif'], qualite: ['recherche', 'aidentifier', 'occasionnelles'], taxon: 'tous', photos: 'toutes',
+    sauvages: false, jeux: [], sansjeux: [] });
+  assert.deepEqual(GRADES, ['recherche', 'aidentifier', 'occasionnelles']);
+  assert.equal(inatQuery(filters()), '', 'iNaturalist asked without a quality grade');
+  assert.equal(gbifQuery(filters()), '', 'GBIF, every dataset');
+});
+
 test('les filtres dans l’adresse : lus (les mauvais laissés), écrits dans un ordre fixe, gardés seulement quand ils diffèrent des réglages de la disposition', () => {
-  const read = readObsFilters(new URLSearchParams('sources=gbif,inat,ebird&qualite=verifiables&taxon=espece&photos=libre&sauvages=1&jeux=b-2,a_1,a_1,<x>'));
-  assert.deepEqual(read, { sources: ['inat', 'gbif'], qualite: 'verifiables', taxon: 'espece', photos: 'libre', sauvages: true, jeux: ['a_1', 'b-2'] });
+  const read = readObsFilters(new URLSearchParams('sources=gbif,inat,ebird&qualite=verifiables&taxon=espece&photos=libre&sauvages=1&jeux=b-2,a_1,a_1,<x>&sansjeux=c,<y>,c'));
+  assert.deepEqual(read, { sources: ['inat', 'gbif'], qualite: ['recherche', 'aidentifier'], taxon: 'espece', photos: 'libre', sauvages: true, jeux: ['a_1', 'b-2'], sansjeux: ['c'] });
   assert.ok(Object.isFrozen(read));
-  assert.deepEqual(obsParams(read), [['sources', 'inat,gbif'], ['qualite', 'verifiables'], ['taxon', 'espece'], ['photos', 'libre'], ['sauvages', '1'], ['jeux', 'a_1,b-2']]);
-  assert.equal(obsKey(read), 'sources=inat,gbif&qualite=verifiables&taxon=espece&photos=libre&sauvages=1&jeux=a_1,b-2');
+  assert.deepEqual(obsParams(read), [['sources', 'inat,gbif'], ['qualite', 'verifiables'], ['taxon', 'espece'], ['photos', 'libre'], ['sauvages', '1'], ['jeux', 'a_1,b-2'], ['sansjeux', 'c']]);
+  assert.equal(obsKey(read), 'sources=inat,gbif&qualite=verifiables&taxon=espece&photos=libre&sauvages=1&jeux=a_1,b-2&sansjeux=c');
   // Nothing said, or only wrong values: none.
   assert.equal(readObsFilters(new URLSearchParams('q=ortie&photo=avec')), null, 'Flore’s own keys are not these');
-  assert.equal(readObsFilters(new URLSearchParams('sources=x&qualite=bof&taxon=genre&photos=peut-etre&sauvages=oui&jeux=<x>')), null);
+  assert.equal(readObsFilters(new URLSearchParams('sources=x&qualite=bof&taxon=genre&photos=peut-etre&sauvages=oui&jeux=<x>&sansjeux=<x>')), null);
+  assert.equal(readObsFilters(new URLSearchParams('qualite=constructor,toString')), null, 'not a word of the quality');
   assert.deepEqual(readObsFilters(new URLSearchParams('sauvages=0')), { sauvages: false });
   assert.deepEqual(obsParams(null), []);
   assert.equal(obsKey(null), '');
-  // Against the defaults (a layout whose maps say GBIF too): only what differs; nothing: null.
-  const both = filters({ sources: ['inat', 'gbif'] });
-  assert.equal(obsChanges(both, both), null);
-  assert.deepEqual(obsChanges(filters({ photos: 'avec' }), both), { sources: ['inat'], photos: 'avec' });
-  assert.deepEqual(obsChanges(filters({ sources: ['inat', 'gbif'], jeux: ['a'], sauvages: true }), both), { sauvages: true, jeux: ['a'] });
+  // Against the defaults: only what differs; nothing: null — and a layout whose maps say iNaturalist alone (src=inat).
+  assert.equal(obsChanges(filters(), OBS_DEFAULTS), null);
+  const inat = filters({ sources: ['inat'] });
+  assert.deepEqual(obsChanges(filters({ photos: 'avec' }), inat), { sources: ['inat', 'gbif'], photos: 'avec' });
+  assert.deepEqual(obsChanges(filters({ jeux: ['a'], sauvages: true }), OBS_DEFAULTS), { sauvages: true, jeux: ['a'] });
+  assert.deepEqual(obsChanges(filters({ sansjeux: ['b'], qualite: ['occasionnelles', 'recherche'] }), OBS_DEFAULTS), { qualite: ['recherche', 'occasionnelles'], sansjeux: ['b'] });
+});
+
+test('la qualité : un ensemble de notes (vérifiées, à identifier, occasionnelles) ; les mots d’avant lus, et écrits quand ils disent les mêmes', () => {
+  const quality = (/** @type {string} */ q) => readObsFilters(new URLSearchParams('qualite=' + q))?.qualite ?? null;
+  // The words of before: each its grades, as they meant (one choice of three).
+  assert.deepEqual(quality('recherche'), ['recherche']);
+  assert.deepEqual(quality('verifiables'), ['recherche', 'aidentifier']);
+  assert.deepEqual(quality('toutes'), ['recherche', 'aidentifier', 'occasionnelles']);
+  // A list of grades (in any order, twice, among wrong words), and the words of before among them.
+  assert.deepEqual(quality('occasionnelles,aidentifier,aidentifier,bof'), ['aidentifier', 'occasionnelles']);
+  assert.deepEqual(quality('verifiables,occasionnelles'), ['recherche', 'aidentifier', 'occasionnelles']);
+  assert.equal(quality('bof'), null);
+  // Written: the word of before when the grades are its, else their list, in their order.
+  assert.deepEqual([qualityWord(['recherche']), qualityWord(['aidentifier', 'recherche']), qualityWord(['occasionnelles', 'aidentifier', 'recherche'])],
+    ['recherche', 'verifiables', 'toutes']);
+  assert.deepEqual([qualityWord(['aidentifier']), qualityWord(['occasionnelles', 'recherche']), qualityWord(['occasionnelles', 'aidentifier'])],
+    ['aidentifier', 'recherche,occasionnelles', 'aidentifier,occasionnelles']);
+  // Read and written back: the same address.
+  for (const q of ['recherche', 'verifiables', 'toutes', 'aidentifier', 'recherche,occasionnelles', 'aidentifier,occasionnelles', 'occasionnelles']) {
+    assert.equal(obsKey(readObsFilters(new URLSearchParams('qualite=' + q))), 'qualite=' + q, q);
+  }
+  // In iNaturalist's words: every grade, none said; else their list.
+  assert.deepEqual([inatGrades(GRADES), inatGrades([]), inatGrades(['recherche']), inatGrades(['recherche', 'aidentifier']), inatGrades(['occasionnelles', 'aidentifier'])],
+    ['', '', '&quality_grade=research', '&quality_grade=research,needs_id', '&quality_grade=needs_id,casual']);
 });
 
 test('chaque filtre dans les mots d’iNaturalist et de GBIF ; ce que GBIF ne sait pas filtrer, l’app le fait ; ce que chaque source fait de chaque filtre', () => {
-  // iNaturalist: as the app always asked by default (research grade), each filter its own parameter.
-  assert.equal(inatQuery(filters()), '&quality_grade=research');
-  assert.equal(inatQuery(filters({ qualite: 'verifiables' })), '&quality_grade=research,needs_id');
-  assert.equal(inatQuery(filters({ qualite: 'toutes' })), '');
-  assert.equal(inatQuery(filters({ qualite: 'toutes', taxon: 'espece', photos: 'avec', sauvages: true })), '&hrank=species&photos=true&captive=false');
-  assert.equal(inatQuery(filters({ photos: 'libre' })), '&quality_grade=research&photo_license=cc0,cc-by,cc-by-sa');
+  // iNaturalist: by default every observation (no quality grade), each filter its own parameter.
+  assert.equal(inatQuery(filters({ qualite: ['recherche'] })), '&quality_grade=research');
+  assert.equal(inatQuery(filters({ qualite: ['recherche', 'aidentifier'] })), '&quality_grade=research,needs_id');
+  assert.equal(inatQuery(filters({ qualite: ['recherche', 'occasionnelles'] })), '&quality_grade=research,casual');
+  assert.equal(inatQuery(filters({ taxon: 'espece', photos: 'avec', sauvages: true })), '&hrank=species&photos=true&captive=false');
+  assert.equal(inatQuery(filters({ qualite: ['recherche'], photos: 'libre' })), '&quality_grade=research&photo_license=cc0,cc-by,cc-by-sa');
   // GBIF: the period, a photo, the datasets (repeated).
   const now = new Date();
   assert.equal(gbifQuery(filters()), '');
   assert.equal(gbifQuery(filters(), 'annee'), `&year=${now.getFullYear()}`);
   assert.equal(gbifQuery(filters({ photos: 'libre', jeux: ['a_1', 'b-2'] }), 'mois'), `&month=${now.getMonth() + 1}&mediaType=StillImage&datasetKey=a_1&datasetKey=b-2`);
+  assert.equal(gbifQuery(filters({ sansjeux: ['c'] })), '', 'GBIF has no word to leave one out: never asked for its occurrences instead');
   // What GBIF cannot filter: the rank, a free licence, wild plants — kept or not by the app.
   const record = { taxonRank: 'SPECIES', media: [{ type: 'StillImage', license: 'http://creativecommons.org/licenses/by/4.0/' }], establishmentMeans: null, degreeOfEstablishment: null };
   assert.ok(gbifKeep(record, filters({ taxon: 'espece', photos: 'libre', sauvages: true })));
@@ -130,13 +171,21 @@ const occurrence = (c, key, species, m, more = {}) => {
     datasetKey: 'cbn', datasetName: 'Inventaire du CBN', locality: 'Royat', media: [], ...more };
 };
 
-test('les observations de la zone : iNaturalist seul comme toujours, puis iNaturalist et GBIF fusionnés — la copie et les doublons écartés, les filtres de l’app appliqués, les plus récentes d’abord', async t => {
+test('les observations de la zone : toutes par défaut, iNaturalist seul en qualité recherche, puis iNaturalist et GBIF fusionnés — la copie et les doublons écartés, les filtres de l’app appliqués, les plus récentes d’abord', async t => {
   const fetch = globalThis.fetch;
   t.after(() => { globalThis.fetch = fetch; });
   /** @type {string[]} */ const asked = [];
   globalThis.fetch = /** @type {any} */ (answerZone(asked));
-  // iNaturalist alone, the defaults: its research grade, as the app always asked; GBIF not asked.
-  const alone = await zoneObservations(C, 2000, { filters: filters(), max: 200 });
+  // The defaults: both sources, iNaturalist without a quality grade, GBIF's datasets of the zone (none here: its count
+  // asked, nothing more).
+  const every = await zoneObservations(C, 2000, { filters: filters(), max: 200 });
+  const first = new URL(/** @type {string} */ (asked.find(u => u.includes('api.inaturalist.org/v1/observations?')))).searchParams;
+  assert.deepEqual([first.get('quality_grade'), first.get('iconic_taxa')], [null, 'Plantae']);
+  assert.deepEqual(asked.filter(u => u.includes('api.gbif.org')).map(u => [new URL(u).searchParams.get('limit'), new URL(u).searchParams.get('facet')]), [['0', 'datasetKey']]);
+  assert.deepEqual([every.points.length, every.totals, every.failed], [3, { inat: 3, gbif: 0 }, []]);
+  // iNaturalist alone, its research grade (a layout whose maps say src=inat, qualite=recherche): GBIF not asked.
+  asked.length = 0;
+  const alone = await zoneObservations(C, 2000, { filters: filters({ sources: ['inat'], qualite: ['recherche'] }), max: 200 });
   const inatUrl = new URL(/** @type {string} */ (asked.find(u => u.includes('api.inaturalist.org/v1/observations?'))));
   assert.equal(inatUrl.searchParams.get('quality_grade'), 'research');
   assert.equal(inatUrl.searchParams.get('iconic_taxa'), 'Plantae');
@@ -163,7 +212,7 @@ test('les observations de la zone : iNaturalist seul comme toujours, puis iNatur
     count: 120,
     facets: [{ name: INAT_DATASET, count: 90 }, { name: 'cbn', count: 25 }, { name: 'plantnet', count: 5 }, { name: '<bad>', count: 1 }]
   }));
-  const f = filters({ sources: ['inat', 'gbif'], qualite: 'verifiables', taxon: 'espece', photos: 'libre', sauvages: true, jeux: ['cbn', 'plantnet'] });
+  const f = filters({ qualite: ['recherche', 'aidentifier'], taxon: 'espece', photos: 'libre', sauvages: true, jeux: ['cbn', 'plantnet'] });
   const both = await zoneObservations(c2, 2000, { filters: f, periode: 'annee', max: 200 });
   const q = new URL(/** @type {string} */ (asked.find(u => u.includes('api.inaturalist.org/v1/observations?')))).searchParams;
   assert.deepEqual([q.get('quality_grade'), q.get('hrank'), q.get('photo_license'), q.get('captive'), q.get('year')],
@@ -194,6 +243,81 @@ test('les observations de la zone : iNaturalist seul comme toujours, puis iNatur
   assert.deepEqual(all.points.map(p => p.id), ['g1']);
   // Its occurrences asked of the zone's datasets but the copy: GBIF's page never spent on iNaturalist's records.
   assert.deepEqual(new URL(asked.filter(u => u.includes('api.gbif.org'))[1]).searchParams.getAll('datasetKey'), ['cbn']);
+});
+
+test('les jeux GBIF laissés (sansjeux=) : jamais demandés, leurs occurrences retirées du compte ; avec jeux=, parmi ceux-là ; sans facette, écartés après', async t => {
+  const fetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = fetch; });
+  /** @type {string[]} */ const asked = [];
+  const gbifAsked = () => asked.filter(u => u.includes('api.gbif.org')).map(u => new URL(u).searchParams);
+  const c = /** @type {[number, number]} */ ([4.1, 46.7]);
+  const facets = [{ name: INAT_DATASET, count: 90 }, { name: 'cbn', count: 25 }, { name: 'plantnet', count: 5 }, { name: 'obsorg', count: 10 }];
+  /** GBIF's occurrences around a centre: the CBN's, Pl@ntNet's, Observation.org's. @param {[number, number]} at */
+  const around = at => [occurrence(at, 1, 'Bellis perennis', 400), occurrence(at, 2, 'Hedera helix', 500, { datasetKey: 'plantnet' }),
+    occurrence(at, 3, 'Urtica dioica', 600, { datasetKey: 'obsorg' })];
+  const gbif = around(c);
+  globalThis.fetch = /** @type {any} */ (answerZone(asked, { gbif, count: 130, facets }));
+  // Pl@ntNet left out: its count asked as always (every dataset counted), its occurrences never — the zone's others'.
+  const left = await zoneObservations(c, 2000, { filters: filters({ sources: ['gbif'], sansjeux: ['plantnet'] }) });
+  const [head, occ] = gbifAsked();
+  assert.deepEqual([head.getAll('datasetKey'), head.get('facet'), occ.getAll('datasetKey')], [[], 'datasetKey', ['cbn', 'obsorg']]);
+  assert.deepEqual(left.points.map(p => p.id).sort(), ['g1', 'g3']);
+  // Its records not counted, nor the copy of iNaturalist's: 130 − 90 − 5.
+  assert.equal(left.totals.gbif, 35);
+  assert.deepEqual(left.datasets.map(d => d.key), ['cbn', 'plantnet', 'obsorg'], 'every dataset of the zone still listed (to tick it again)');
+  // Two left out: asked anew (not the answer kept for one), neither asked — the zone's count and datasets, the same
+  // whichever are left out, not asked again: its occurrences alone.
+  asked.length = 0;
+  const two = await zoneObservations(c, 2000, { filters: filters({ sources: ['gbif'], sansjeux: ['obsorg', 'plantnet'] }) });
+  assert.deepEqual(gbifAsked().map(q => [q.get('limit'), q.getAll('datasetKey')]), [['300', ['cbn']]]);
+  assert.deepEqual([two.points.map(p => p.id), two.totals.gbif], [['g1'], 25]);
+  assert.deepEqual(two.datasets.map(d => d.key), ['cbn', 'plantnet', 'obsorg']);
+  // Every one ticked again: their occurrences alone asked (the zone's count and datasets kept), every one counted.
+  asked.length = 0;
+  const every = await zoneObservations(c, 2000, { filters: filters({ sources: ['gbif'] }) });
+  assert.deepEqual([gbifAsked().map(q => q.get('limit')), every.points.map(p => p.id).sort(), every.totals.gbif], [['300'], ['g1', 'g2', 'g3'], 40]);
+  // Those asked alone (jeux=) and one of them left out: the others of them only, as counted for them.
+  asked.length = 0;
+  const c2 = /** @type {[number, number]} */ ([4.2, 46.8]);
+  globalThis.fetch = /** @type {any} */ (answerZone(asked, { gbif: around(c2), count: 40, facets }));
+  const both = await zoneObservations(c2, 2000, { filters: filters({ sources: ['gbif'], jeux: ['cbn', 'plantnet'], sansjeux: ['plantnet', 'obsorg'] }) });
+  assert.deepEqual(gbifAsked()[1].getAll('datasetKey'), ['cbn']);
+  assert.equal(both.totals.gbif, 35, 'GBIF’s count of those asked (40), Pl@ntNet’s 5 taken off; the Observation.org’s 10 not among them');
+  // An answer without the facet: one page, the records of those left out taken off after.
+  asked.length = 0;
+  const c3 = /** @type {[number, number]} */ ([4.3, 46.9]);
+  globalThis.fetch = /** @type {any} */ (answerZone(asked, { gbif: around(c3), noFacets: true }));
+  const plain = await zoneObservations(c3, 2000, { filters: filters({ sources: ['gbif'], sansjeux: ['plantnet'] }) });
+  assert.deepEqual(plain.points.map(p => p.id).sort(), ['g1', 'g3']);
+});
+
+test('les points de la plante choisie et les cartes de France : la qualité dite (qualité recherche sans elle : « Autour », les jeux) ; chaque demande gardée à part', async t => {
+  const fetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = fetch; });
+  /** @type {string[]} */ const asked = [];
+  globalThis.fetch = /** @type {any} */ (answerZone(asked));
+  const c = /** @type {[number, number]} */ ([4.5, 47.1]);
+  const grade = () => new URL(asked[asked.length - 1]).searchParams.get('quality_grade');
+  // Unsaid: research grade, as « Autour » and the games' cards ask (verified identifications).
+  const research = await observationsAround(50, c, 1000);
+  assert.deepEqual([grade(), new URL(asked[asked.length - 1]).searchParams.get('taxon_id'), research.length], ['research', '50', 3]);
+  // A layout's filters (inatQuery): every grade by default — asked anew, not the research grade's answer.
+  await observationsAround(50, c, 1000, undefined, inatQuery(filters()));
+  assert.equal(asked.length, 2);
+  assert.equal(grade(), null);
+  await observationsAround(50, c, 1000, undefined, inatQuery(filters({ qualite: ['aidentifier'], sauvages: true })));
+  assert.deepEqual([grade(), new URL(asked[asked.length - 1]).searchParams.get('captive')], ['needs_id', 'false']);
+  // Each kept a day: asked once.
+  await observationsAround(50, c, 1000, undefined, '');
+  assert.equal(asked.length, 3);
+  // A map of France: iNaturalist's tiles as the zone's filters say (every grade: none said; the cultivated plants left
+  // out: captive=false) — the grid, the points, the current plant's.
+  const tiles = (/** @type {string} */ query) => inatTiles([1000], '&year=2026', 1001, query).map(l => new URL(l.url.replace(/\{[xyz]\}/g, '0')).searchParams);
+  assert.deepEqual(tiles(inatQuery(filters())).map(q => [q.get('taxon_id'), q.get('quality_grade'), q.get('captive'), q.get('year')]),
+    [['1000', null, null, '2026'], ['1000', null, null, '2026'], ['1001', null, null, '2026']]);
+  assert.deepEqual(tiles(inatQuery(filters({ qualite: ['recherche'] }))).map(q => q.get('quality_grade')), ['research', 'research', 'research']);
+  assert.deepEqual(tiles(inatQuery(filters({ sauvages: true }))).map(q => [q.get('quality_grade'), q.get('captive')]), [[null, 'false'], [null, 'false'], [null, 'false']]);
+  assert.equal(inatGrades(['recherche', 'occasionnelles']), '&quality_grade=research,casual');
 });
 
 test('GBIF en deux temps : sans facette, une page comme avant (la copie écartée) ; la copie seule, rien de plus demandé ; choisie, jamais demandée', async t => {
@@ -236,7 +360,7 @@ test('un groupe de plantes seul (une famille : les orchidées) : chaque source l
   /** @type {string[]} */ const asked = [];
   const c = /** @type {[number, number]} */ ([3.111, 45.869]);
   globalThis.fetch = /** @type {any} */ (answerZone(asked, { gbif: [occurrence(c, 1, 'Bellis perennis', 400)], count: 1, facets: [{ name: 'cbn', count: 1 }] }));
-  const f = filters({ sources: ['inat', 'gbif'], qualite: 'toutes' });
+  const f = filters();
   await zoneObservations(c, 500, { filters: f, taxon: { inat: 47217, gbif: 7689 } });
   const inat = new URL(/** @type {string} */ (asked.find(u => u.includes('api.inaturalist.org/v1/observations?')))).searchParams;
   assert.deepEqual([inat.get('taxon_id'), inat.get('iconic_taxa'), inat.get('quality_grade')], ['47217', 'Plantae', null]);
@@ -264,7 +388,7 @@ test('un lieu (un petit cercle) : seuls les points où était la plante, ceux ma
       occurrence(c, 3, 'Bellis perennis', 120, { coordinateUncertaintyInMeters: 200 }), above(4, 'GENUS', 'Ophrys L.', 180), above(5, 'FAMILY', 'Orchidaceae Juss.', 190)],
     facets: [{ name: 'cbn', count: 5 }]
   }));
-  const f = filters({ sources: ['inat', 'gbif'], qualite: 'toutes' });
+  const f = filters();
   const site = await zoneObservations(c, 500, { filters: f, precise: true });
   assert.deepEqual(site.points.map(p => p.id).sort(), ['g1', 'g3', 'g4', 'g5', 'i901', 'i903']);
   assert.equal(site.vague, 2, 'the obscured nettle, the daisy within 5 km');
@@ -275,6 +399,8 @@ test('un lieu (un petit cercle) : seuls les points où était la plante, ceux ma
   // A circle wider than the daisy's 5 km: it is in it; the obscured nettle never.
   const wide = await zoneObservations(c, 10000, { filters: f, precise: true });
   assert.deepEqual([wide.points.some(p => p.id === 'g2'), wide.points.some(p => p.id === 'i902'), wide.vague], [true, false, 1]);
+  // Approximate at a radius (vagueAt): hidden, or rougher than the circle; within it, or saying nothing, not.
+  assert.deepEqual([vagueAt({ obscured: true }, 50000), vagueAt({ accuracy: 600 }, 500), vagueAt({ accuracy: 500 }, 500), vagueAt({}, 500)], [true, true, false, false]);
 });
 
 test('une source en panne : dite, les autres montrées ; toutes en panne : une erreur qui dit chacune ; un module coupé : dit comme tel', async t => {
@@ -292,8 +418,9 @@ test('une source en panne : dite, les autres montrées ; toutes en panne : une e
   const c2 = /** @type {[number, number]} */ ([3.5, 46.1]);
   await assert.rejects(zoneObservations(c2, 2000, { filters: filters({ sources: ['inat', 'gbif'] }), max: 200 }), error => {
     assert.ok(error instanceof ObsError);
-    assert.deepEqual(error.failed.map(x => x.name).sort(), ['GBIF', 'iNaturalist']);
+    assert.deepEqual(error.failed.map(x => x.name), ['iNaturalist', 'GBIF'], 'in the sources’ order, whichever failed first');
     assert.equal(error.message, failedText(error.failed));
+    assert.equal(error.message, 'iNaturalist et GBIF ne répondent pas');
     return true;
   });
 

@@ -12,7 +12,7 @@
 //    into MapLibre markers — each effect of map.css applies, and gf-map's code (its cards, the « kin » it lights) finds
 //    them where they are; a click, a hover or Enter on one is handed to its Leaflet marker;
 //  - the small circles (points): discs; the lines and areas (the circle « Autour », an outline, a group's threads, my
-//    position's accuracy): one GeoJSON source, draped on the relief;
+//    position's accuracy, an observation's margin): one GeoJSON source, draped on the relief;
 //  - the camera: the 3D map follows the mirror's moves (gf-map's flights, frames, « me localiser »), and gives it its
 //    own (pan, zoom) once they end — those it makes by itself (the observations' flights and turns, « Tourner ») never
 //    stopped by the mirror resized meanwhile (its page laid out again). Tilt and rotation are the 3D map's alone.

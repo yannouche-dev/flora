@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 const db = await import('../../app/core/db.js');
 const { store } = await import('../../app/core/store.js');
 const { LayoutState } = await import('../../app/layout/state.js');
+const { setModule } = await import('../../app/core/modules.js');
 
 const AIL = { id: 81541, scientificName: 'Allium ursinum', vernacularNames: ['Ail des ours'] };
 const ORTIE = { id: 128268, scientificName: 'Urtica dioica', vernacularNames: ['Ortie dioïque'] };
@@ -167,4 +168,43 @@ test('ce que montre une carte de la zone : la liste gardée à ses plantes, la r
   await ready();
   assert.equal(kept.at(-1)?.within, null);
   s.dispose();
+});
+
+test('une source coupée dans Réglages › Modules : laissée des sources par défaut, jamais demandée ni dite manquante sur la carte ; demandée par l’adresse, dite ; les deux coupées : les deux, comme avant', async t => {
+  const fetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = fetch; setModule('gbif', true); setModule('inaturalist', true); });
+  const AT = /** @type {[number, number]} */ ([2.35, 48.85]);
+  /** @type {string[]} */
+  const asked = [];
+  globalThis.fetch = /** @type {any} */ (async (/** @type {string} */ input) => {
+    const host = new URL(String(input)).host;
+    asked.push(host);
+    return host === 'api.inaturalist.org'
+      ? new Response(JSON.stringify({ total_results: 1, results: [{ id: 9, uri: 'https://www.inaturalist.org/observations/9', geojson: { type: 'Point', coordinates: AT },
+        observed_on: '2026-05-02', place_guess: 'Paris', taxon: { id: AIL.id + 1, name: AIL.scientificName, preferred_common_name: null } }] }), { headers: { 'content-type': 'application/json' } })
+      : new Response('', { status: 503 });
+  });
+  const channel = /** @type {any} */ ({ query: {}, results: {}, setQuery() {}, run() {}, setScope() {}, addEventListener() {}, removeEventListener() {} });
+  /** @param {InstanceType<typeof LayoutState>} s */
+  const ready = async s => { for (let i = 0; i < 100 && s.speciesState !== 'ready'; i++) await tick(); assert.equal(s.speciesState, 'ready'); };
+  setModule('gbif', false);
+  const s = new LayoutState({ radius: 1000, channel });
+  // GBIF off: iNaturalist alone by default — GBIF never asked, nothing said missing (cells.js: the map's « État »).
+  assert.deepEqual(s.filters.sources, ['inat']);
+  s.set({ at: AT }, 'none');
+  await ready(s);
+  assert.deepEqual([s.failed, s.species?.list.map(x => x.plantId)], [[], [AIL.id]]);
+  assert.ok(asked.includes('api.inaturalist.org') && !asked.includes('api.gbif.org'));
+  // The address asks GBIF (sources=inat,gbif): asked, its module said off — honest, it was asked.
+  s.set({ filtres: { sources: ['inat', 'gbif'] } }, 'none');
+  await tick();
+  await ready(s);
+  assert.deepEqual(s.failed, [{ name: 'GBIF', off: true }]);
+  s.dispose();
+  // iNaturalist off alone: GBIF; both off: both, as before (the zone says neither is on).
+  setModule('gbif', true);
+  setModule('inaturalist', false);
+  assert.deepEqual(new LayoutState({ channel }).filters.sources, ['gbif']);
+  setModule('gbif', false);
+  assert.deepEqual(new LayoutState({ channel }).filters.sources, ['inat', 'gbif']);
 });

@@ -11,8 +11,8 @@
 // plant's tab brought and lit; twelve columns: the menu scrolls, the tab shown in sight, the smooth scroll too; a
 // finger swiped on a panel: the neighbour, never on the map), a window too narrow for its columns (their tabs named
 // beside their icons where they have the room), Réglages' presets. And what went wrong once: a first visit (the plant cells drawn while the flora downloads: never a
-// false « Plante introuvable », their heads named once it is there), the deck when iNaturalist fails (said, « Réessayer »,
-// never « Les cartes arrivent… » for good), a radius between two of the slider's stops (r=3km: shown between them), the
+// false « Plante introuvable », their heads named once it is there), the deck when iNaturalist fails, GBIF answering
+// with nothing (said, « Réessayer », never « Les cartes arrivent… » for good nor the deck's end), a radius between two of the slider's stops (r=3km: shown between them), the
 // search's bar in a narrow cell and every preset without a cell overflowing (1280 px and a phone), the grid's Photo
 // column and its filter's badge. iNaturalist answered here: the zone's observations, two of each of its 12 plants
 // (their plants the list: state.js), those of 3 within 500 m; and 3 of a plant asked alone.
@@ -247,10 +247,13 @@ test.describe('un grand écran', () => {
   test('les cartes de Rencontres quand iNaturalist ne répond pas : elles le disent, « Réessayer » les fait venir', async ({ app, page }) => {
     let down = true;
     await page.route(/^https:\/\/api\.inaturalist\.org\//, route => down ? route.fulfill({ status: 503, body: '' }) : route.fallback());
+    // Both sources asked (the default): GBIF answers, with no plant of its own here (answerAround) — the deck still
+    // says iNaturalist's failure, never its end (« toutes les plantes du coin »).
     await app.open(`#/layout/[map(r=500m),deck,plant.status]?${AT}`);
     const said = page.locator('dl-deck .empty');
     // Said, with what to do — never « Les cartes arrivent… » for cards that will not come.
     await expect(said).toContainText('iNaturalist ne répond pas');
+    await expect(said).toContainText('GBIF n’a vu aucune plante dans la zone ; sans iNaturalist, pas de cartes pour l’instant.');
     await expect(said).not.toContainText('Les cartes arrivent');
     await expect(page.locator('dl-deck ma-deck')).toHaveCount(0);
     // iNaturalist back: « Réessayer » (its failure, remembered a few minutes, forgotten), the cards come.

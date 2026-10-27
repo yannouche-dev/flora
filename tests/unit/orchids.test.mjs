@@ -1,8 +1,10 @@
 // Les orchidées de la colline de Mirabel (app/miniapps/orchidees.js; what is pure about it: app/miniapp/kit/orchids.js),
 // against an IndexedDB in memory (fake-indexeddb) holding the reduced flora, iNaturalist and GBIF answered here: the
 // circle as it starts (the hill, 500 m), only the orchids asked of each source (iNaturalist's taxon 47217, GBIF's key
-// 7689; every quality grade, the plants grown left out, the points not where the plant was too: obscured, rougher than
-// the circle), the observations' orchids (one plant once, whichever source saw it; a genus named by both sources once,
+// 7689; every observation by default: every quality grade, the plants grown, the points not where the plant was —
+// obscured, rougher than the circle — marked; the choices of « Sur cette carte »: a source alone, the wild ones only,
+// the approximate positions left out and counted, each in the data's key), the observations' orchids (one plant once,
+// whichever source saw it; a genus named by both sources once,
 // without its author; a name above the genus counted as « Genre non précisé »; a plant the flora says is not an orchid
 // left out),
 // what protects each one at Mirabel (Auvergne, Puy-de-Dôme — a regional protection elsewhere is not one here; the
@@ -20,7 +22,7 @@ const db = await import('../../app/core/db.js');
 const { store } = await import('../../app/core/store.js');
 const { territoryAt } = await import('../../app/core/territory.js');
 const { MiniApp, storageKey } = await import('../../app/miniapp/runtime.js');
-const { NO_GENUS, ORCHIDACEAE, RADIUS, SITE, askedKey, factsOf, filterOrchids, filtering, genusWord, nameRank, sameSpot } = await import('../../app/miniapp/kit/orchids.js');
+const { NO_GENUS, ORCHIDACEAE, ORCHID_FILTERS, RADIUS, SITE, asked: askedOf, askedKey, factsOf, filterOrchids, filtering, genusWord, markVague, nameRank, orchidFilters, sameSpot, sourcesOf } = await import('../../app/miniapp/kit/orchids.js');
 const { obsNotes } = await import('../../app/core/observations.js');
 const orchidees = (await import('../../app/miniapps/orchidees.js')).default;
 
@@ -117,50 +119,71 @@ test('Orchidées de Mirabel : seules les orchidées demandées aux deux sources,
   const app = new MiniApp(orchidees, { saved: null });
   t.after(() => { app.dispose(); localStorage.removeItem(storageKey('orchidees', 'state')); });
   assert.deepEqual([app.step.id, app.c.point, app.c.radius, app.c.genera, app.c.marks, app.c.query], ['start', SITE, 500, [], [], '']);
+  // « Sur cette carte »: every choice ticked at first.
+  assert.deepEqual([app.c.sources, app.c.cultivated, app.c.approximate], [['inat', 'gbif'], true, true]);
   assert.ok(app.go('map'));
   const found = await answered(app);
   assert.equal(found.error, null);
 
-  // iNaturalist: the family alone, every quality grade, no plant grown; GBIF: its key, the plants (6) never asked.
+  // iNaturalist: the family alone, every quality grade, the plants grown too; GBIF: its key, the plants (6) never asked.
   const inat = new URL(/** @type {string} */ (asked.find(u => u.includes('api.inaturalist.org/v1/observations?')))).searchParams;
   assert.deepEqual([inat.get('taxon_id'), inat.get('lat'), inat.get('lng'), inat.get('radius'), inat.get('quality_grade'), inat.get('captive')],
-    [String(ORCHIDACEAE.inat), '45.86900', '3.11100', '0.50', null, 'false']);
+    [String(ORCHIDACEAE.inat), '45.86900', '3.11100', '0.50', null, null]);
   const gbif = asked.filter(u => u.includes('api.gbif.org/v1/occurrence/search?')).map(u => new URL(u).searchParams);
   assert.ok(gbif.length && gbif.every(g => g.get('taxonKey') === String(ORCHIDACEAE.gbif)));
   assert.equal(gbif[0].get('geoDistance'), '45.8690,3.1110,0.50km');
 
   // The orchids, the most observed first: one plant once whichever source saw it — the genus Ophrys too, iNaturalist's
   // « Ophrys » and GBIF's « Ophrys L. » —; the nettle left out; the obscured Traunsteinère and the Dactylorhize within
-  // 2 km left out, counted.
+  // 2 km on the map, marked approximate (their margin drawn), counted.
   assert.deepEqual(found.orchids.map((/** @type {any} */ o) => [o.name, o.genus, o.rank, o.inat, o.gbif, Boolean(o.plant)]), [
     ['Ophrys', 'Ophrys', 'genus', 2, 1, false],
+    ['Traunsteinera globosa', 'Traunsteinera', 'species', 3, 0, true],
+    ['Dactylorhiza brennensis', 'Dactylorhiza', 'species', 0, 2, true],
     ['Ophrys holosericea', 'Ophrys', 'species', 1, 1, true],
-    ['Traunsteinera globosa', 'Traunsteinera', 'species', 2, 0, true],
-    ['Dactylorhiza brennensis', 'Dactylorhiza', 'species', 0, 1, true],
     ['Orchidaceae', null, 'higher', 1, 0, false]
   ]);
   assert.equal(obsNotes(new Map([[0, found.orchids[0]]]), ['inat', 'gbif']).get(0)?.text, '3 obs. (2 iNat., 1 GBIF)');
   assert.equal(new Set(found.points.filter((/** @type {any} */ p) => /^Ophrys$/.test(p.sci)).map((/** @type {any} */ p) => p.orchid)).size, 1, 'one key on the map');
-  assert.equal(found.points.length, 9);
-  assert.equal(found.vague, 2);
+  assert.equal(found.points.length, 11);
+  assert.deepEqual([found.vague, found.hidden], [2, 0]);
+  assert.deepEqual(found.points.filter((/** @type {any} */ p) => p.approx).map((/** @type {any} */ p) => [p.id, p.accuracy]).sort(), [['g14', 2000], ['i8', 28000]]);
   assert.ok(!found.points.some((/** @type {any} */ p) => /Urtica/.test(p.sci)));
   const traun = found.orchids.find((/** @type {any} */ o) => o.name === 'Traunsteinera globosa');
   assert.deepEqual(traun.facts, { here: 'Auvergne', red: 'vulnérable (Auvergne)', endemic: false });
   assert.equal(traun.common, 'Traunsteinère globuleuse', 'le nom français de la flore');
 
   // The filters, as the screen applies them (the manifest's `shown`).
-  assert.deepEqual(app.c.shown.genera.map((/** @type {any} */ g) => [g.label, g.count]), [['Ophrys', 5], ['Traunsteinera', 2], ['Dactylorhiza', 1], ['Genre non précisé', 1]]);
-  assert.deepEqual(app.c.shown.marks.map((/** @type {any} */ m) => [m.label, m.count]), [['Protégée ici', 2], ['Liste rouge', 3], ['Endémique', 1]]);
+  assert.deepEqual(app.c.shown.genera.map((/** @type {any} */ g) => [g.label, g.count]), [['Ophrys', 5], ['Traunsteinera', 3], ['Dactylorhiza', 2], ['Genre non précisé', 1]]);
+  assert.deepEqual(app.c.shown.marks.map((/** @type {any} */ m) => [m.label, m.count]), [['Protégée ici', 3], ['Liste rouge', 5], ['Endémique', 2]]);
   app.set({ genera: ['Ophrys'] });
   assert.deepEqual([app.c.shown.points.length, app.c.shown.orchids.map((/** @type {any} */ o) => o.name)], [5, ['Ophrys', 'Ophrys holosericea']]);
   // A mark chosen: an orchid outside the flora (no status) goes; the genera counted among the protected ones.
   app.set({ genera: [], marks: ['protegee'] });
   assert.deepEqual(app.c.shown.orchids.map((/** @type {any} */ o) => o.name), ['Traunsteinera globosa']);
-  assert.deepEqual(app.c.shown.genera.map((/** @type {any} */ g) => [g.label, g.count]), [['Traunsteinera', 2]]);
+  assert.deepEqual(app.c.shown.genera.map((/** @type {any} */ g) => [g.label, g.count]), [['Traunsteinera', 3]]);
   // A name, case and accents aside, its French name too.
   app.set({ marks: [], query: 'TRAUNSTEINERE glob' });
   assert.deepEqual(app.c.shown.orchids.map((/** @type {any} */ o) => o.name), ['Traunsteinera globosa']);
   app.set({ query: '' });
+
+  app.set({ marks: [] });
+
+  // « Positions approximatives » unticked: the two left out, counted; « Cultivées ou plantées » unticked: the wild ones
+  // only (iNaturalist's captive=false); iNaturalist alone: GBIF never asked — each choice in the data's key, kept.
+  app.set({ approximate: false });
+  const precise = await answered(app);
+  assert.deepEqual([precise.points.length, precise.vague, precise.hidden, precise.points.some((/** @type {any} */ p) => p.approx)], [9, 0, 2, false]);
+  assert.deepEqual(precise.orchids.map((/** @type {any} */ o) => [o.name, o.inat, o.gbif]).filter((/** @type {any} */ o) => /Traun|Dacty/.test(o[0])), [['Traunsteinera globosa', 2, 0], ['Dactylorhiza brennensis', 0, 1]]);
+  asked.length = 0;
+  app.set({ cultivated: false, sources: ['inat'] });
+  const wild = await answered(app);
+  assert.equal(new URL(/** @type {string} */ (asked.find(u => u.includes('api.inaturalist.org/v1/observations?')))).searchParams.get('captive'), 'false');
+  assert.ok(!asked.some(u => u.includes('api.gbif.org')), 'GBIF décoché : pas demandé');
+  assert.deepEqual([wild.totals.gbif, wild.points.every((/** @type {any} */ p) => p.kind === 'inat'), wild.hidden], [null, true, 1]);
+  const kept = app.saved().ctx;
+  assert.deepEqual([kept.sources, kept.cultivated, kept.approximate], [['inat'], false, false], 'gardés dans le contexte');
+  app.set({ sources: ['inat', 'gbif'], cultivated: true, approximate: true });
 
   // Moved and widened: asked again around the new centre.
   asked.length = 0;
@@ -168,6 +191,26 @@ test('Orchidées de Mirabel : seules les orchidées demandées aux deux sources,
   await answered(app);
   const again = new URL(/** @type {string} */ (asked.find(u => u.includes('api.inaturalist.org/v1/observations?')))).searchParams;
   assert.deepEqual([again.get('lat'), again.get('lng'), again.get('radius')], ['45.87000', '3.12000', '1.00']);
+});
+
+test('« Sur cette carte » : les sources (les deux si aucune), les cultivées, les positions approximatives — dans la clé des données ; marquées approximatives', () => {
+  // The choices as they start, and as asked: the filters and the key.
+  const c = { point: SITE, radius: 500, retry: 0, sources: ['gbif', 'inat'], cultivated: true, approximate: true };
+  assert.deepEqual(askedOf(c), [SITE, 500, 0, ['inat', 'gbif'], true, true]);
+  assert.equal(askedKey(c), JSON.stringify([SITE, 500, 0, ['inat', 'gbif'], true, true]));
+  assert.notEqual(askedKey({ ...c, approximate: false }), askedKey(c));
+  assert.notEqual(askedKey({ ...c, cultivated: false }), askedKey(c));
+  assert.notEqual(askedKey({ ...c, sources: ['gbif'] }), askedKey(c));
+  // None kept (or a choice kept wrong): both; a state from before the choices: every one ticked.
+  assert.deepEqual([sourcesOf({ sources: [] }), sourcesOf({ sources: ['x'] }), sourcesOf({}), sourcesOf({ sources: ['gbif'] })], [['inat', 'gbif'], ['inat', 'gbif'], ['inat', 'gbif'], ['gbif']]);
+  assert.deepEqual(askedOf({ point: SITE, radius: 500, retry: 0 }).slice(3), [['inat', 'gbif'], true, true]);
+  // Every quality grade, the plants grown too, unless unticked.
+  assert.deepEqual([ORCHID_FILTERS.sources, ORCHID_FILTERS.qualite, ORCHID_FILTERS.sauvages], [['inat', 'gbif'], ['recherche', 'aidentifier', 'occasionnelles'], false]);
+  assert.deepEqual(orchidFilters(['gbif'], false), { ...ORCHID_FILTERS, sources: ['gbif'], sauvages: true });
+  // Hidden by its observer, or rougher than the circle: approximate; within it, or saying nothing: not.
+  const points = /** @type {any[]} */ ([{ id: 'a', obscured: true, accuracy: 28000 }, { id: 'b', accuracy: 2000 }, { id: 'c', accuracy: 30 }, { id: 'd' }, { id: 'e', obscured: true }]);
+  assert.deepEqual(markVague(points, 500).map(p => [p.id, Boolean(p.approx)]), [['a', true], ['b', true], ['c', false], ['d', false], ['e', true]]);
+  assert.equal(markVague(points, 5000).find(p => p.id === 'b')?.approx, undefined, 'plus étroite que le cercle : précise');
 });
 
 test('les filtres : un genre, une protection, un nom ; chaque choix compté parmi ce que gardent les autres ; un choix sans observation gardé s’il est choisi', () => {

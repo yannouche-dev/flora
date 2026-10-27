@@ -3,8 +3,11 @@
 // and a filter keeps both to its plants; the period is every cell's (periode= in the address: the zone's observations
 // that month, their plants the results); a map of France and one of the world (portee=) show where the same plants
 // were observed (iNaturalist's tiles, their taxa), the current plant's on top; a plant chosen outside the zone's list
-// still has its observations in the zone (its taxon found by its name). iNaturalist answered here: 12 plants around.
-import { test, expect, plantId } from './fixtures.mjs';
+// still has its observations in the zone (its taxon found by its name). The zone's filters say which observations, every
+// one by default (no quality grade): the zone's, the current plant's, the tiles of France and the world alike.
+// iNaturalist answered here: 12 plants around; GBIF: nothing of its own in the zone (both sources asked by default).
+import { test, expect, plantId, answerZoneGbif } from './fixtures.mjs';
+import { mapState } from './quiet.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
 
@@ -21,11 +24,12 @@ const MONTH = String(now.getMonth() + 1);
 /**
  * iNaturalist: the zone's observations — two of each of its 12 plants (this month, 6 of them), and one of a plant the
  * flora does not know —, and a plant's own when asked for (taxon_id: two each); a name looked up (/taxa): its taxon;
- * tiles: a transparent pixel. Every address asked kept.
+ * tiles: a transparent pixel. Every address asked kept. GBIF: its count of the zone, none.
  * @param {Page} page @returns {Promise<string[]>}
  */
 async function answer(page) {
   /** @type {string[]} */ const asked = [];
+  await answerZoneGbif(page, 0);
   const PIXEL = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
   await page.route(/^https:\/\/api\.inaturalist\.org\//, route => {
     const url = new URL(route.request().url());
@@ -60,6 +64,8 @@ async function answer(page) {
 }
 
 const mapAt = (/** @type {Page} */ page, /** @type {number} */ i) => page.locator('dl-map').nth(i).locator('gf-map');
+/** No source said to be failing on a map (both answered). @param {Page} page @param {number} i */
+const answered = async (page, i) => expect((await mapState(mapAt(page, i))).filter(t => /ne répond/.test(t))).toEqual([]);
 /** The taxa of a map's points. @param {Page} page @param {number} i */
 const taxaOn = (page, i) => mapAt(page, i).evaluate(m => [...new Set((/** @type {any} */ (m).area?.points ?? []).map((/** @type {any} */ p) => p.taxonId))].sort());
 const param = (/** @type {Page} */ page, /** @type {string} */ key) => page.evaluate(k => new URLSearchParams(location.hash.split('?')[1] || '').get(k), key);
@@ -75,6 +81,7 @@ test.describe('un grand écran', () => {
     await expect.poll(() => taxaOn(page, 0)).toEqual(NAMES.map((_, i) => 1000 + i));
     expect(asked.some(u => /\/v1\/observations\?.*iconic_taxa=Plantae/.test(u) && !u.includes('taxon_id='))).toBe(true);
     expect(asked.some(u => u.includes('species_counts'))).toBe(false);
+    await answered(page, 0);
     // A search: its plant alone, on the map too.
     await page.locator('dl-search gf-plant-search input').fill('ortie');
     await expect.poll(() => app.state('results.total')).toBe(1);
@@ -109,9 +116,12 @@ test.describe('un grand écran', () => {
     const ids = NAMES.map((_, i) => 1000 + i).join('%2C');
     for (const i of [1, 2]) {
       await expect.poll(async () => (await tiles(i)).find(u => u.includes('/v1/grid/')) ?? '').toContain(`taxon_id=${ids.replace(/%2C/g, ',')}`);
+      // Every observation, as the zone's: no quality grade, the cultivated plants too.
+      expect((await tiles(i)).filter(u => /quality_grade|captive/.test(u))).toEqual([]);
       // No circle of its own framed: the zone's drawn where it is.
       expect(await mapAt(page, i).evaluate(m => /** @type {any} */ (m).area?.fit)).toBe(false);
     }
+    await answered(page, 0);
     // The world goes further out.
     expect(await mapAt(page, 2).getAttribute('min-zoom')).toBe('1');
     // A filter: the same plants on every map.
@@ -122,6 +132,12 @@ test.describe('un grand écran', () => {
     // The current plant: its own points on top, on the wide maps.
     await app.go(`#/layout/[map(r=1km),map(france),map(monde),results]?${AT}&p=${plantId('Urtica dioica')}&q=ortie`);
     await expect.poll(async () => (await tiles(2)).filter(u => u.includes('/v1/points/') && u.includes('taxon_id=1000&') && u.includes('e0245e')).length).toBe(1);
+    // The zone's filters: the tiles the same — the verified ones only, the wild plants only.
+    await app.go(`#/layout/[map(r=1km),map(france),map(monde),results]?${AT}&p=${plantId('Urtica dioica')}&q=ortie&qualite=recherche&sauvages=1`);
+    for (const i of [1, 2]) {
+      await expect.poll(async () => (await tiles(i)).map(u => { const q = new URL(u.replace(/\{[xyz]\}/g, '0')).searchParams; return [q.get('quality_grade'), q.get('captive')]; }))
+        .toEqual([['research', 'false'], ['research', 'false'], ['research', 'false']]);
+    }
   });
 
   test('les liens dans le constructeur : une pastille par lien ; touchée, la case se détache ou se relie (le réglage écrit)', async ({ app, page }) => {
@@ -161,5 +177,11 @@ test.describe('un grand écran', () => {
     await expect.poll(() => asked.some(u => u.includes('/v1/taxa?q=Acanthus'))).toBe(true);
     await expect.poll(() => asked.some(u => /\/v1\/observations\?taxon_id=5555&/.test(u))).toBe(true);
     expect(await param(page, 'p')).toBe(String(acanthe));
+    // As the zone's filters say: every observation by default (no quality grade); the verified ones when they say so.
+    const own = () => asked.filter(u => /\/v1\/observations\?taxon_id=5555&/.test(u)).map(u => new URL(u).searchParams.get('quality_grade'));
+    expect(own().length).toBeGreaterThan(0);
+    expect(own().every(g => g === null)).toBe(true);
+    await app.go(`#/layout/[map(r=1km),results]?${AT}&p=${acanthe}&qualite=recherche`);
+    await expect.poll(() => own().at(-1)).toBe('research');
   });
 });

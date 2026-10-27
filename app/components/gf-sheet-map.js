@@ -337,7 +337,8 @@ export class GfSheetMap extends LitElement {
     const useInat = (c.near === 'inat' || c.near === 'both') && this.inatId && moduleOn('inaturalist');
     const [gbif, inat] = await Promise.all([
       useGbif ? sources.gbifNear(this.gbifKey, point, radius, undefined, 30).catch(() => null) : null,
-      useInat ? observationsAround(/** @type {number} */ (this.inatId), point, radius).catch(() => null) : null
+      // iNaturalist's of every quality grade (no quality_grade): all that is there, as GBIF's.
+      useInat ? observationsAround(/** @type {number} */ (this.inatId), point, radius, undefined, '').catch(() => null) : null
     ]);
     if (this.plant !== plant) return;
     // Each the plant's observation, whatever its source (drawn alike: #occurrences), its card saying when, where and

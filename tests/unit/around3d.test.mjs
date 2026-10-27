@@ -263,6 +263,9 @@ test('GBIF seul, ou avec iNaturalist : la même photo pour la même plante — c
   // iNaturalist's observations too: every GBIF point the same photo, name and credit as with GBIF alone.
   const both = await observations3d(C, 2000, { inat: true, gbif: true });
   assert.equal(both.points.filter(p => p.kind === 'inat').length, 2);
+  // Every one of iNaturalist's, whatever its grade: no quality_grade asked.
+  const inatAsked = asked.filter(u => /\/v1\/observations\?/.test(u)).map(u => new URL(u).searchParams);
+  assert.ok(inatAsked.length && inatAsked.every(q => !q.has('quality_grade')));
   const g2 = by(both.points);
   for (const sci of Object.keys(g)) {
     const pick = (/** @type {any} */ p) => ({ photo: p.photo, common: p.common, credit: p.credit });

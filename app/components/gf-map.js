@@ -81,10 +81,10 @@ function pinIcon(spot, selected, movable = false) {
 
 /** A marker of the map style (map-style.js: renderer-agnostic) as a Leaflet icon, anchored at its middle. @param {MarkerSpec} d */
 const divIcon = d => L.divIcon({ className: d.className, iconSize: d.size, iconAnchor: [d.size[0] / 2, d.size[1] / 2], html: d.html });
-/** @param {number} delay */
-const leafIcon = delay => divIcon(leafMarker(delay));
-/** @param {string} photo @param {number} delay */
-const photoIcon = (photo, delay) => divIcon(photoMarker(photo, delay));
+/** @param {number} delay @param {string} [extra] more classes */
+const leafIcon = (delay, extra) => divIcon(leafMarker(delay, extra));
+/** @param {string} photo @param {number} delay @param {string} [extra] more classes */
+const photoIcon = (photo, delay, extra) => divIcon(photoMarker(photo, delay, extra));
 /** @param {string | null | undefined} photo @param {number} delay @param {number} [size] @param {string} [extra] */
 const chosenIcon = (photo, delay, size, extra) => divIcon(chosenMarker(photo, delay, size, extra));
 /** @param {string | null} photo @param {number} n @param {number} size @param {boolean} [still] */
@@ -276,7 +276,10 @@ const movesCount = (/** @type {Moves} */ m) => (m.pin ? 1 : 0) + m.places.size +
  *  - area: {center, radius, points?, fit?, photo?} — a circle (metres) and observation dots inside it ("Autour"); `fit`: the
  *    view frames the circle, whatever the map's size (again when it is resized); `photo`: the points are one plant's,
  *    each shows its photo; `smooth` with `ring` ({x, y, r}, px): the circle still on the screen, the map zooming under it
- *    to the distance, the points kept in place (`loading`: dimmed) — the games' step « map »
+ *    to the distance, the points kept in place (`loading`: dimmed) — the games' step « map »; a point `approx` (its
+ *    position approximate: hidden by its observer, or rougher than the circle) drawn apart, with its margin (`accuracy`,
+ *    metres: a dashed circle, unfilled, one for the points that share it), its card saying « Position approximative
+ *    (± 27 km) »
  *  Plants' points (observations, the plant chosen's, the plants of places), hovered or touched, light their kin: the
  *  other points of the same plant. A plant selected lights its other markers (in other places) too. The other points
  *  never change: only the plant aimed at and its occurrences are set off.
@@ -1559,12 +1562,23 @@ export class GfMap extends LitElement {
     /** @type {{ point: any, key: string }[]} */
     const fresh = [];
     for (const point of area?.points || []) {
-      const p = point, key = JSON.stringify([p.url, p.coordinates, p.title, p.photo, p.common, p.sci, p.date]);
+      const p = point, key = JSON.stringify([p.url, p.coordinates, p.title, p.photo, p.common, p.sci, p.date, p.approx ? p.accuracy ?? true : null]);
       if (dots.has(key)) continue;
       const dot = was.get(key);
       if (dot) { was.delete(key); dots.set(key, dot); } else { fresh.push({ point, key }); dots.set(key, /** @type {any} */ (null)); }
     }
-    const kept = new Set(dots.values());
+    // The margins of the points placed roughly (`approx`, their `accuracy`, metres): where the plant may be — one per
+    // position and accuracy, however many points share it (a grid's or a commune's centre), a dashed line without a
+    // fill (many, often wider than the view, would hide the map). Not a target (the point is); drawn alike in 3D
+    // (gl-style.js pathStyle). Those already drawn kept.
+    /** @type {Map<string, L.Circle | null>} */
+    const margins = new Map();
+    for (const p of area?.points || []) {
+      if (!p.approx || !(p.accuracy > 0)) continue;
+      const key = JSON.stringify([p.coordinates, p.accuracy]), had = this.#margins.get(key);
+      if (!margins.has(key)) margins.set(key, had && layer.hasLayer(had) ? had : null);
+    }
+    const kept = new Set([...dots.values(), ...margins.values()]);
     kept.delete(/** @type {any} */ (null));
     for (const l of layer.getLayers()) {
       if (kept.has(l)) continue;
@@ -1574,6 +1588,12 @@ export class GfMap extends LitElement {
     }
     for (const dot of kept) { const el = /** @type {any} */ (dot).getElement?.(); if (el) resumeImages(el); }
     this.#areaDots = area ? { sig, dots } : null;
+    this.#margins = new Map();
+    for (const [key, had] of margins) {
+      const [[x, y], radius] = JSON.parse(key);
+      this.#margins.set(key, had ?? L.circle([y, x], { radius, className: 'gf-obs-margin', interactive: false, color: '#d97706', weight: 1.5, opacity: 0.9,
+        dashArray: '5 5', fill: false }).addTo(layer));
+    }
     // No area: no handle left on the map (its circle gone).
     if (!area) { this.#areaCircles = []; this.#syncHandle(); return; }
     const [lon, lat] = area.center;
@@ -1727,19 +1747,23 @@ export class GfMap extends LitElement {
 
   /** The points of a (not smooth) area drawn, by what they show, and how they were drawn. @type {{ sig: string, dots: Map<string, L.Layer> } | null} */
   #areaDots = null;
+  /** The margins of its approximate points drawn, by their position and accuracy (#syncArea). @type {Map<string, L.Circle>} */
+  #margins = new Map();
 
   /**
    * One observation of the area: a leaf, or its plant's photo (`leaves`), the photo of the plant chosen (`photo`), else
-   * a dot; popping in after `delay` ms. Its card (or name) on hover, its click, its kin lit with it.
+   * a dot; popping in after `delay` ms. Its card (or name) on hover, its click, its kin lit with it. One whose position
+   * is approximate (`approx`: hidden by its observer, or rougher than the circle) set apart (gf-obs-approx: a dashed
+   * ring; its margin drawn by #syncArea), its card says it.
    * @param {any} area @param {any} point @param {number} delay @returns {L.Layer}
    */
   #areaDot(area, point, delay) {
     const [x, y] = point.coordinates;
-    const p = point, fancy = Boolean(area.leaves), chosen = area.photo;
+    const p = point, fancy = Boolean(area.leaves), chosen = area.photo, apart = p.approx ? 'gf-obs-approx' : '';
     const dot = fancy
-      ? L.marker([y, x], { icon: p.photo ? photoIcon(p.photo, delay) : leafIcon(delay), keyboard: Boolean(area.smooth), bubblingMouseEvents: false })
-      : chosen ? L.marker([y, x], { icon: chosenIcon(chosen, Math.min(delay, 750), this.#chosenSize(40)), keyboard: false, bubblingMouseEvents: false, riseOnHover: true })
-      : L.circleMarker([y, x], { radius: 6, className: 'gf-obs', bubblingMouseEvents: false });
+      ? L.marker([y, x], { icon: p.photo ? photoIcon(p.photo, delay, apart) : leafIcon(delay, apart), keyboard: Boolean(area.smooth), bubblingMouseEvents: false })
+      : chosen ? L.marker([y, x], { icon: chosenIcon(chosen, Math.min(delay, 750), this.#chosenSize(40), apart), keyboard: false, bubblingMouseEvents: false, riseOnHover: true })
+      : L.circleMarker([y, x], { radius: 6, className: `gf-obs ${apart}`.trim(), bubblingMouseEvents: false });
     /** @type {any} */ (dot).gfName = [p.common || p.title, p.sci].filter(Boolean).join(', ');
     /** @type {any} */ (dot).gfPoint = p;
     // With a photo: a small card of the plant on hover (a first touch, on a touch screen); else its name.

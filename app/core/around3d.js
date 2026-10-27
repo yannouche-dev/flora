@@ -3,8 +3,8 @@
 // it, where they come from, and the shapes the 3D map draws with them. No DOM here.
 //   around3dPrefs(scope) / setAround3dPrefs(scope, patch): shown or not, the radius, the sources, the density view —
 //     one record per map (its scope: the page or block it is in), stored as the Carte's own layers are;
-//   observations3d(center, radius, { inat, gbif }, signal) → the points in the circle: iNaturalist's research-grade
-//     observations (up to 400, each its plant's photo, core/nearby.js) and GBIF's plant occurrences (up to 300,
+//   observations3d(center, radius, { inat, gbif }, signal) → the points in the circle: iNaturalist's observations, of
+//     every quality grade (up to 400, each its plant's photo, core/nearby.js) and GBIF's plant occurrences (up to 300,
 //     without iNaturalist's, which GBIF holds too), cached a day (offline: the copy kept) — each source on with its
 //     module (« iNaturalist », « GBIF »). A GBIF occurrence is shown as an iNaturalist observation is, whichever
 //     sources are on: its plant's photo and French name — its taxon's on iNaturalist under a free licence (the
@@ -187,7 +187,8 @@ export async function observations3d(center, radius, sources, signal) {
   /** @type {string[]} */ const failed = [];
   const fail = (/** @type {string} */ name) => (/** @type {any} */ error) => { if (error?.name === 'AbortError') throw error; failed.push(name); return null; };
   const [inat, gbif, taxa] = await Promise.all([
-    useInat ? observationPointsMany(center, radius, INAT_MAX, signal).catch(fail('iNaturalist')) : null,
+    // Every observation of iNaturalist's, whatever its grade (no quality_grade): all that is there, as GBIF's.
+    useInat ? observationPointsMany(center, radius, INAT_MAX, signal, null, '').catch(fail('iNaturalist')) : null,
     useGbif ? gbifAround(center, radius, signal).catch(fail('GBIF')) : null,
     // The plants iNaturalist knows in the circle (one call, cached a day, shared with « Autour »): each its taxon's
     // photo under a free licence and its French name — what an iNaturalist observation of it shows —, for GBIF's
