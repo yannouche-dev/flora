@@ -43,7 +43,7 @@ export class MaWalkMap extends LitElement {
     if (!s || !t) return nothing;
     const markers = plantMarkers([t]);
     const lit = s.sel != null ? markers.filter(m => m.plantId === s.sel) : [];
-    const shown = lit.length ? lit.map(m => m.coordinates) : [t.geometry.coordinates, ...markers.map(m => m.coordinates)].filter(Boolean);
+    const shown = lit.length ? lit.map(m => m.coordinates) : [t.geometry?.coordinates, ...markers.map(m => m.coordinates)].filter(Boolean);
     const points = lit.length && s.fix ? [...shown, s.fix.coordinates] : shown;
     // A new frame each time (the map zooms once per key, and tries again while it has no size yet).
     const frame = { key: 'trail:' + t.id + ':' + (s.sel ?? '') + ':' + shown.map(c => c.join(',')).join(';'), maxZoom: lit.length ? 19 : 17, points, ease: true };

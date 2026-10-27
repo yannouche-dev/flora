@@ -6,7 +6,7 @@ import { getPlant } from '../core/plants.js';
 import { GeoController } from '../core/geo.js';
 import { moduleOn } from '../core/modules.js';
 import { href } from '../core/router.js';
-import { back, replaceHash, replaceView } from '../core/history.js';
+import { back, openView, replaceHash, replaceView } from '../core/history.js';
 import {
   ABUNDANCE, defaultPlantPosition, deletePlace, distance, entryInSeason, entryName, entryPosition, exportGeoJSON, findEntry,
   formatDistance, getPlace, lastHarvest, matchCollections, plantMarkers,
@@ -28,6 +28,7 @@ import './gf-place-insights.js';
 import { map3dProblem, openMap3d } from './gf-map3d.js';
 import { briefToast } from '../core/toast.js';
 import { hintView, takeHint } from '../core/hints.js';
+import { continueWalk } from '../miniapp/kit/trail-store.js';
 
 /** Existing places closer than this are offered instead of creating a duplicate. */
 const NEARBY_RADIUS = 100;
@@ -1063,8 +1064,20 @@ export class GfSpotEditor extends LitElement {
   }
 
   /**
-   * « Vue 3D » of the place (a parcours: its walk too); when it cannot open here (no WebGL2, the module off), why: a
-   * brief toast above its button (the user asked), its own words read out — and the button's title says it too.
+   * « Continuer le parcours » (a parcours of Mes plantes, here or in the Carte's panel): what was typed saved, then the
+   * Parcours, on this walk under way (its recap left).
+   */
+  async #continueWalk() {
+    if (!this._place) return;
+    await this.#flush();
+    continueWalk(this._place.id);
+    openView(href.app('parcours', 'walk'));
+  }
+
+  /**
+   * « Vue 3D » of the place (a parcours: its walk and its start too; any other lieu: its plants on the relief); when it
+   * cannot open here (no WebGL2, the module off), why: a brief toast above its button (the user asked), its own words
+   * read out — and the button's title says it too.
    * @param {Event} e
    */
   #open3d = async (/** @type {Event} */ e) => {
@@ -1143,6 +1156,7 @@ export class GfSpotEditor extends LitElement {
 
         ${this.#isNew ? nothing : html`
           <div class="toolbar">
+            ${p.walk && place.geometry ? html`<button type="button" class="continue" @click=${this.#continueWalk}>${icon('flag-fill')} Continuer le parcours</button>` : nothing}
             ${p.plants.length && !this.#isNew ? html`<a class="button" href=${href.inFlore(/** @type {any} */ (this._place).id)}>${icon('leaf')} Voir dans Flore</a>` : nothing}
             ${p.plants.length ? html`<button type="button" @click=${this.#share}>Partager</button>` : nothing}
             <button type="button" @click=${this.#export}>Exporter (GeoJSON)</button>

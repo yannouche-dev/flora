@@ -1,7 +1,8 @@
 // @ts-check
 // The game of the Parcours botanique, shared by its kit (the start, ma-walk and its parts, ma-trail-recap): one per
-// activity open, a new one after « Recommencer » (trailSessionOf). The walk under way, those to continue and the one
-// just ended (read from the device: kit/trail-store.js, and Mes plantes), where I am (followed while walking), the
+// activity open, a new one after « Recommencer » (trailSessionOf). The walk under way and the one just ended (their ids
+// kept on the device: kit/trail-store.js), those to continue (the parcours of Mes plantes: every place marked a walk,
+// received ones too, the last changed first), where I am (followed while walking), the
 // plant touched, the word said after an action (« Annuler »). Its actions: start here (the app's action `locate`) or
 // from a commune, take one up again, add a plant where I stand, take one out, rename, share, end (its recap), start
 // another. Each walk is written as it is stored now (collections.js updatePlace, by the Parcours: it stays its own
@@ -9,14 +10,14 @@
 
 import { FIX_MAX_AGE, geoProblem, takeFix, watchLocation, whenGranted } from '../../core/geo.js';
 import { atPlace, placeNameAt } from '../../core/geoservices.js';
-import { entriesOf, getPlace, lastEntry, newPlace, promotePlace, refreshMembership, savePlace, spotEvents, updatePlace, withPlant, withoutPlant } from '../../core/collections.js';
+import { entriesOf, getPlace, lastEntry, listCollections, newPlace, promotePlace, refreshMembership, savePlace, spotEvents, updatePlace, withPlant, withoutPlant } from '../../core/collections.js';
 import { fillAltitudes } from '../../core/altitude.js';
 import { getPlant } from '../../core/plants.js';
 import { href } from '../../core/router.js';
 import { encodeCollection, share } from '../../core/share.js';
 import { ACTION_TOAST_MS, TOAST_MS } from '../../core/toast.js';
 import { readJSON, writeJSON } from '../../core/prefs.js';
-import { DONE, KEY, LIST, NAMED, countOf } from './trail-store.js';
+import { DONE, KEY, NAMED, countOf } from './trail-store.js';
 
 /** @typedef {import('../runtime.js').MiniApp} MiniApp */
 
@@ -90,8 +91,12 @@ export class TrailSession extends EventTarget {
       // Its altitudes, for its profile (a walk noted offline, or before they were kept): saved again once found.
       else fillAltitudes(this.done.id, getPlace, updatePlace);
     } else if (!trail) this.done = null;
-    const ids = /** @type {string[]} */ (readJSON(LIST, []));
-    this.past = /** @type {any[]} */ ((await Promise.all(ids.filter(x => x !== id).map(x => getPlace(x).catch(() => undefined)))).filter(Boolean));
+    // Those to continue: the parcours of Mes plantes (a place marked a walk — received ones too —, its point kept), the
+    // last changed first; 20 at most.
+    this.past = (await listCollections().catch(() => /** @type {any[]} */ ([])))
+      .filter(c => c.properties.walk && c.geometry && c.id !== id)
+      .sort((a, b) => b.properties.updatedAt.localeCompare(a.properties.updatedAt))
+      .slice(0, 20);
     this.known = true;
     // Gone meanwhile (deleted from Mes plantes, in another tab): its step left for the start.
     const step = this.app.step.id;
@@ -164,7 +169,6 @@ export class TrailSession extends EventTarget {
       await savePlace(place);
       this.leaveRecap();
       writeJSON(KEY, place.id);
-      writeJSON(LIST, [place.id, ...(/** @type {string[]} */ (readJSON(LIST, []))).filter(x => x !== place.id)].slice(0, 20));
       await refreshMembership().catch(() => {});
       this.trail = place;
       if (found) this.#nameAfter(place.id, found);
@@ -177,7 +181,7 @@ export class TrailSession extends EventTarget {
     }
   }
 
-  /** A walk continued (« Continuer un parcours », « Le continuer »): on to it. @param {any} place */
+  /** A walk continued (« Continuer un parcours », « Le continuer »; from Mes plantes: trail-store.js#continueWalk): on to it. @param {any} place */
   resume(place) {
     this.app.cancel('locate');
     this.leaveRecap();

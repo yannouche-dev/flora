@@ -1,19 +1,21 @@
 // @ts-check
-// The Parcours botanique, what it keeps on the device and what is pure about it: the walk under way (its place id),
-// the walks to take up again, the one just ended (its recap, until left); a walk's plants grouped (each plant once,
-// its occurrences together), counted; its recap's numbers are trail-recap.js's (with the walk and the altitudes: not
-// at the start of the app). Tested under Node (tests/unit/trail.test.mjs). A walk itself is a place of Mes plantes
-// (core/collections.js).
+// The Parcours botanique, what it keeps on the device and what is pure about it: the walk under way (its place id), the
+// one just ended (its recap, until left); a walk's plants grouped (each plant once, its occurrences together), counted;
+// its recap's numbers are trail-recap.js's (with the walk and the altitudes: not at the start of the app). Tested under
+// Node (tests/unit/trail.test.mjs). A walk itself is a place of Mes plantes marked a walk (core/place-model.js `walk`):
+// those to continue are read there (trail-session.js), not kept here — the list this device kept before (LIST) is only
+// read at start (main.js).
 
 import { config } from '../../config.js';
-import { readJSON } from '../../core/prefs.js';
+import { readJSON, writeJSON } from '../../core/prefs.js';
 
 // What a parcours holds, in words (« 9 plantes, notées 12 fois »): pure, with the shape of a collection.
 export { countOf } from '../../core/place-model.js';
 
 /**
- * The parcours being walked (its place id), those walked before, and the one just ended (its recap, until left); none
- * (null): the key removed — a parcours never opened, or played again, leaves none behind.
+ * The parcours being walked (its place id) and the one just ended (its recap, until left); none (null): the key removed
+ * — a parcours never opened, or played again, leaves none behind. LIST: the walks this device kept to take up again,
+ * before they were read from Mes plantes (obsolete: no longer written; gone with 3.2).
  */
 export const KEY = config.storageKeys.trail, LIST = config.storageKeys.trails, DONE = config.storageKeys.trailDone;
 
@@ -25,6 +27,12 @@ export const walkOn = () => readJSON(KEY, null);
 export const walkDone = () => readJSON(DONE, null);
 /** The parcours this device kept (to take up again, just ended): theirs before origins were recorded. @returns {string[]} */
 export const keptWalks = () => [...(/** @type {string[]} */ (readJSON(LIST, []))), readJSON(DONE, null)].filter(x => typeof x === 'string');
+
+/** A parcours of Mes plantes continued from its lieu (« Continuer le parcours »): the one under way, no recap shown. @param {string} id */
+export function continueWalk(id) {
+  writeJSON(KEY, id);
+  writeJSON(DONE, null);
+}
 
 /** A new parcours' name, until the place where it starts is known (« Mon parcours botanique en forêt de … »). */
 export const NAMED = 'Mon parcours botanique';

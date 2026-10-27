@@ -1,5 +1,6 @@
-// « Vue 3D » (gf-map3d.js): the recap of a parcours (and a place of Mes plantes) opens its walk on the relief — the app's
-// one map, gf-map, set to 3D (map-3d="on": its MapLibre renderer, gf-map-gl.js), MapLibre loaded on demand only.
+// « Vue 3D » (gf-map3d.js): the recap of a parcours (and a place of Mes plantes) opens its walk on the relief (a lieu that
+// is no parcours: its plants only, no line) — the app's one map, gf-map, set to 3D (map-3d="on": its MapLibre renderer,
+// gf-map-gl.js), MapLibre loaded on demand only.
 // Headless Chromium has WebGL2 here (SwiftShader, software); --enable-unsafe-swiftshader keeps it so where newer
 // releases would stop falling back to it. The real path is tested: MapLibre loaded, the map drawn, its plants (the
 // same markers as every map), the walk, its start, a plant's altitude, Échap, the focus given back; the tiles come
@@ -37,7 +38,7 @@ async function seedWalk(page) {
   const steps = STEPS.map(s => ({ ...s, id: plantId(s.name) }));
   return page.evaluate(async ({ start, steps }) => {
     const c = await import('/app/core/collections.js');
-    let p = c.newPlace(start, { name: 'Vers le lac Blanc', notes: 'Parcours botanique' });
+    let p = c.newPlace(start, { name: 'Vers le lac Blanc', notes: 'Parcours botanique', walk: true });
     /** @type {any} */ (p.properties).startedHere = true;
     /** @type {any} */ (p.properties).altitude = { m: 1877, at: start };
     steps.forEach((s, i) => {
@@ -225,7 +226,7 @@ test('hors ligne : pas de relief demandé, la vue à plat', async ({ app, page, 
   expect(seen.problems).toEqual([]);
 });
 
-test('module « Vue 3D (relief) » désactivé, photos coupées : le bouton l’explique ; Mes plantes ouvre la vue sans photo', async ({ app, page }) => {
+test('module « Vue 3D (relief) » désactivé, photos coupées : le bouton l’explique ; Mes plantes ouvre la vue sans photo — sans trait pour un lieu qui n’est pas un parcours', async ({ app, page }) => {
   test.slow();
   const seen = await watch(page);
   await answerTiles(page);
@@ -252,6 +253,23 @@ test('module « Vue 3D (relief) » désactivé, photos coupées : le bouton l’
   await expect(map).toHaveAttribute('data-renderer', '3d', { timeout: 30_000 });
   await expect(map.locator('.gf-gl-mk .gf-plant')).toHaveCount(3);
   await expect(map.locator('.gf-gl-mk .gf-plant img')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('dialog.gf-map3d')).not.toHaveAttribute('open', '');
+
+  // A lieu that is no parcours: its plants on the relief, and no line drawn through them, no start.
+  const plain = await page.evaluate(async ({ start, steps }) => {
+    const c = await import('/app/core/collections.js');
+    let p = c.newPlace(start, { name: 'Pré du lac' });
+    for (const s of steps) p = c.withPlant(p, { id: s.id, scientificName: s.name }, { coordinates: s.at, accuracy: 5 }, { again: true });
+    return (await c.savePlace(p)).id;
+  }, { start: START, steps: STEPS.slice(0, 2).map(s => ({ ...s, id: plantId(s.name) })) });
+  await app.go(`#/spot/${plain}`);
+  await expect(open3d).toBeVisible();
+  await open3d.click();
+  await expect(map).toHaveAttribute('data-renderer', '3d', { timeout: 30_000 });
+  await expect(map.locator('.gf-gl-mk .gf-plant')).toHaveCount(2);
+  await expect(map.locator('.gf-gl-dot.gf-obs-start')).toHaveCount(0);
+  expect((await glState(map)).paths).toBe(0);
   await page.keyboard.press('Escape');
   await expect(page.locator('dialog.gf-map3d')).not.toHaveAttribute('open', '');
   expect(seen.problems).toEqual([]);

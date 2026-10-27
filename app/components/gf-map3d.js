@@ -1,8 +1,9 @@
 // @ts-check
 // « Vue 3D »: a parcours (or a place of Mes plantes) on the relief, read-only, in a modal dialog over the app. Not a map
 // of its own: the app's one map, gf-map, set to show in 3D whatever Réglages › Cartes say (map-3d="on": its MapLibre
-// renderer, gf-map-gl.js) — its plants as on every map (their photo in a ring), the walk from plant to plant
-// (gf-map's `line`), its start; a plant touched: its name and altitude (the IGN's, kept with it).
+// renderer, gf-map-gl.js) — its plants as on every map (their photo in a ring); a parcours (marked `walk`) also its
+// walk from plant to plant (gf-map's `line`) and its start — another lieu, its plants only; a plant touched: its name
+// and altitude (the IGN's, kept with it).
 //   openMap3d(place, opener) → null when the view opened, else why not (« 3D indisponible sur cet appareil »…),
 //   for the button to say. One view at a time (one element, in the body); its map goes when it closes.
 // The relief (module « Vue 3D (relief) »), the photos, offline and failures: as on every map in 3D (flat, said).
@@ -28,7 +29,7 @@ export function map3dProblem() {
 }
 
 /**
- * Opens the 3D view of a place (a parcours: its walk too). Resolves once the view is up (null), or with why it could
+ * Opens the 3D view of a place (a parcours: its walk and its start too). Resolves once the view is up (null), or with why it could
  * not open — then nothing stays open. `opener` gets the focus back when the view closes.
  * @param {any} place @param {HTMLElement | null} [opener]
  * @returns {Promise<string | null>}
@@ -80,9 +81,12 @@ export class GfMap3d extends LitElement {
     </dialog>`;
   }
 
-  /** The app's map, in 3D: the place's plants, its walk, its start (a point named « Départ », with its altitude). @param {any} place */
+  /**
+   * The app's map, in 3D: the place's plants; a parcours' walk and its start too (a point named « Départ », with its
+   * altitude) — never a line drawn through the plants of a lieu that is no walk. @param {any} place
+   */
   #map(place) {
-    const { line, start } = walkOf(place);
+    const { line, start } = place.properties.walk ? walkOf(place) : { line: [], start: null };
     const plants = plantMarkers([place]);
     const points = [...plants.map(p => p.coordinates), ...(start ? [start] : [])].filter(Boolean);
     const m = start ? altitudeOf(place.properties, start) : null;

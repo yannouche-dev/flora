@@ -212,6 +212,7 @@ test('Parcours : en marche puis « Recommencer » ; le parcours enregistré quit
   await replay(page, 'l’activité en cours');
   await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/app/parcours/start');
   await expect(page.locator('gf-miniapp .go')).toBeVisible();
+  // The walks to continue are read from Mes plantes: no list of them on the device.
   const owned = () => page.evaluate(() => ['geoflora.trail', 'geoflora.trails', 'geoflora.trailDone'].map(k => localStorage.getItem(k)));
   expect(await owned()).toEqual([null, null, null]);
   // The walk it saved in Mes plantes is its own: gone too.
