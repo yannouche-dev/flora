@@ -7,7 +7,7 @@
 
 import { config } from '../config.js';
 import * as db from './db.js';
-import { FAVORITES_ID, madeBy, mergeCollections, newEntryId, normalizeEntry, normalizeCollection, plantIdsOf, promoted, promotedEntry, promoteTouched, rebase, sameContent, tagLegacy, userChange, walkMarked, withoutMadeBy } from './place-model.js';
+import { FAVORITES_ID, joinEntry, locationLoss, madeBy, mergeCollections, newEntryId, normalizeEntry, normalizeCollection, plantIdsOf, plantKey, promoted, promotedEntry, promoteTouched, rebase, sameContent, tagLegacy, userChange, walkMarked, withoutMadeBy } from './place-model.js';
 import { store } from './store.js';
 import { FORMAT_VERSION, toPortable } from './portable.js';
 import { encodePortable } from './share.js';
@@ -140,6 +140,61 @@ export function withLocation(collection, coordinates, accuracy = null) {
   // Plants without their own position start at the place's point.
   const plants = collection.properties.plants.map(e => e.coordinates ? e : { ...e, coordinates: point, accuracy: null });
   return { ...collection, geometry: { type: 'Point', coordinates: point }, properties: { ...collection.properties, kind: 'place', accuracy, plants } };
+}
+
+/**
+ * What « Retirer la position » asks of a lieu (as stored: the editor reads it again first). When the list it would
+ * become loses something (place-model.js locationLoss: a plant's own position, the other times a plant is noted, a
+ * parcours' walk), it is refused — « Copier en liste » offered instead (copyAsList); otherwise confirmed first, its
+ * harvest logs said to stay, though only a lieu shows them. Pure. @param {Collection} c
+ * @returns {{ refused: true, title: string, text: string } | { refused: false, title: string, text: string, yes: string }}
+ */
+export function locationQuestion(c) {
+  const { placed, repeats, walk } = locationLoss(c);
+  const lost = [
+    placed > 1 ? `les positions de ${placed} plantes` : placed ? 'la position d’une plante' : '',
+    repeats > 1 ? `les autres fois où ${repeats} plantes sont notées` : repeats ? 'les autres fois où une plante est notée' : '',
+    walk ? 'le tracé du parcours' : ''
+  ].filter(Boolean);
+  if (lost.length) {
+    return { refused: true, title: 'Le lieu garde sa position', text: 'Une liste n’a pas de position et ne note chaque plante qu’une fois : '
+      + `retirer la position effacerait ${joined(lost)}. « Copier en liste » crée une liste de ses plantes ; le lieu garde ses positions.` };
+  }
+  const harvests = c.properties.plants.some(e => e.harvests.length);
+  return { refused: false, title: 'Retirer la position ?', yes: 'Retirer la position',
+    text: 'Le lieu devient une liste de plantes.' + (harvests ? ' Ses journaux de récolte restent, mais ne s’affichent que dans un lieu.' : '') };
+}
+
+/**
+ * A lieu's plants as a new list (« Copier en liste »): each plant once — its first noting, with a new id, its date, no
+ * position, no harvest log (the lieu keeps them; a list shows none), no origin —, the notes, the rating and the
+ * abundance of its other notings joined to it (place-model.js joinEntry; notes that would pass what a note holds stay
+ * in the lieu only). The list is the user's: no origin, no parcours mark. The lieu is not changed. Pure but for the new
+ * ids. @param {Collection} place @param {string} name @returns {Collection}
+ */
+export function asList(place, name) {
+  /** @type {Map<number | string, PlantEntry>} */
+  const once = new Map();
+  for (const e of place.properties.plants) {
+    const had = once.get(plantKey(e));
+    if (had) { once.set(plantKey(e), joinEntry(had, { ...e, harvests: [] }) ?? had); continue; }
+    const { origin, from, ...rest } = e;
+    void origin; void from;
+    once.set(plantKey(e), { ...rest, id: newEntryId(), coordinates: null, accuracy: null, altitude: null, harvests: [] });
+  }
+  return withPlants(newCollection('list', { name }), [...once.values()]);
+}
+
+/**
+ * « Copier en liste » (offered where « Retirer la position » would lose what a lieu says): a new list of the lieu's
+ * plants (asList), « {lieu} (liste) », saved as the user's (savePlace: the favourites of its plants theirs too); the lieu
+ * as it was. Resolves with the list as stored; the lieu deleted meanwhile: GoneError.
+ * @param {string} id @returns {Promise<Collection>}
+ */
+export async function copyAsList(id) {
+  const place = await getPlace(id);
+  if (!place) throw new GoneError();
+  return savePlace(asList(place, `${placeTitle(place)} (liste)`));
 }
 
 /** Plants are offered the GPS position only when standing near the place (else: the place's point). */
@@ -891,8 +946,12 @@ export function backupSummary() {
  */
 export function backupContents(s) {
   const count = (/** @type {number} */ n, /** @type {string} */ one, many = one + 's') => `${n} ${n > 1 ? many : one}`;
-  const items = [s.favorites ? `vos favoris (${plantCount(s.favorites)})` : '', s.lists ? count(s.lists, 'liste') : '',
-    s.places ? count(s.places, 'lieu', 'lieux') : '', s.notes ? count(s.notes, 'note de fiche', 'notes de fiche') : ''].filter(Boolean);
+  return joined([s.favorites ? `vos favoris (${plantCount(s.favorites)})` : '', s.lists ? count(s.lists, 'liste') : '',
+    s.places ? count(s.places, 'lieu', 'lieux') : '', s.notes ? count(s.notes, 'note de fiche', 'notes de fiche') : ''].filter(Boolean));
+}
+
+/** Things said in one breath: « a, b et c » ('' for none). @param {string[]} items */
+function joined(items) {
   return items.length > 1 ? `${items.slice(0, -1).join(', ')} et ${items.at(-1)}` : items[0] ?? '';
 }
 

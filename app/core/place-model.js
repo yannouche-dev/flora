@@ -57,7 +57,9 @@ const isNumber = (/** @type {unknown} */ n) => typeof n === 'number' && Number.i
 
 /** The origin of an entry or a collection, as stored or read from a file: { app } with a mini-app's id, else none. @param {any} o @returns {Origin | null} */
 export const validOrigin = o => o && typeof o === 'object' && typeof o.app === 'string' && /^[a-z][a-z0-9-]{1,23}$/.test(o.app) ? { app: o.app } : null;
-const text = (/** @type {unknown} */ v, max = 5000) => typeof v === 'string' ? v.slice(0, max) : '';
+/** What a note holds: more is cut on read (normalizeEntry). */
+const NOTES_MAX = 5000;
+const text = (/** @type {unknown} */ v, max = NOTES_MAX) => typeof v === 'string' ? v.slice(0, max) : '';
 
 /** @param {any[]} list @returns {Harvest[]} */
 export const normalizeHarvests = list => (Array.isArray(list) ? list : [])
@@ -213,6 +215,13 @@ export function countOf(t) {
 const same = (/** @type {unknown} */ a, /** @type {unknown} */ b) => JSON.stringify(a) === JSON.stringify(b);
 const harvestKey = (/** @type {Harvest} */ h) => JSON.stringify([h.date, h.quantity || '', h.note || '']);
 const newestFirst = (/** @type {Harvest[]} */ list) => list.sort((a, b) => b.date.localeCompare(a.date));
+/** The harvest logs of two notings of a plant, each harvest once, the newest first. @param {Harvest[]} a @param {Harvest[]} b */
+function unitedHarvests(a, b) {
+  const harvests = [...a];
+  const have = new Set(harvests.map(harvestKey));
+  for (const h of b) if (!have.has(harvestKey(h))) { harvests.push(h); have.add(harvestKey(h)); }
+  return newestFirst(harvests);
+}
 
 /** The fields of a collection that are not edited (kept by the store, or derived). */
 const DERIVED = new Set(['plants', 'plantIds', 'createdAt', 'updatedAt']);
@@ -333,10 +342,7 @@ export function mergeCollections(local, incoming) {
   const plants = win.properties.plants.map(e => {
     const other = partner(e);
     if (!other) return e;
-    const harvests = [...e.harvests];
-    const have = new Set(harvests.map(harvestKey));
-    for (const h of other.harvests) if (!have.has(harvestKey(h))) { harvests.push(h); have.add(harvestKey(h)); }
-    return owned({ ...e, notes: e.notes || other.notes, addedAt: noted(e, other), harvests: newestFirst(harvests) }, other);
+    return owned({ ...e, notes: e.notes || other.notes, addedAt: noted(e, other), harvests: unitedHarvests(e.harvests, other.harvests) }, other);
   });
   for (const e of lose.properties.plants) {
     if (used.has(e)) continue;
@@ -357,6 +363,43 @@ const canonical = v => JSON.stringify(v, (_key, x) => x && typeof x === 'object'
 /** The same content, the dates of change and the order of the fields aside. @param {Collection} a @param {Collection} b */
 export const sameContent = (a, b) =>
   canonical({ ...a, properties: { ...a.properties, updatedAt: '' } }) === canonical({ ...b, properties: { ...b.properties, updatedAt: '' } });
+
+// ── A plant noted twice made one, a lieu made a list ────────────────────────
+
+/** What makes notings the same plant: its TAXREF id, else (a plant unknown to the flora) its name. @param {PlantEntry} e */
+export const plantKey = e => e.plantId ?? 'sci:' + e.scientificName.toLowerCase();
+
+/**
+ * Two notings of a plant made one (a lieu copied as a list, a new lieu's plants added to a list or a lieu that has
+ * them): `a` kept — its id, its position, its date, its origin —, `b`'s note after its own (unless one of its paragraphs
+ * says it already: joined again and again, a note is never repeated), the harvest logs of both, the higher rating, the
+ * abundance said (`a`'s, unless « moyen »). null when the notes joined would pass what a note holds: read back, they
+ * would be cut (normalizeEntry). Pure. @param {PlantEntry} a @param {PlantEntry} b @returns {PlantEntry | null}
+ */
+export function joinEntry(a, b) {
+  const mine = a.notes.trim(), theirs = b.notes.trim();
+  const notes = !theirs || `\n\n${mine}\n\n`.includes(`\n\n${theirs}\n\n`) ? a.notes : mine ? `${mine}\n\n${theirs}` : theirs;
+  if (notes.length > NOTES_MAX) return null;
+  return { ...a, notes, harvests: unitedHarvests(a.harvests, b.harvests), rating: Math.max(a.rating, b.rating),
+    abundance: a.abundance !== 'moyen' ? a.abundance : b.abundance };
+}
+
+/**
+ * What a lieu would lose as a list (« Retirer la position »: a list has no position, and notes each plant once): its
+ * plants noted away from its point (`placed`: their own position, more than 1e-6° off ≈ 0.1 m — one on the point with
+ * only an accuracy loses nothing else), its plants noted more than once (`repeats`), a parcours' walk (`walk`).
+ * Nothing without a point. Pure. @param {Collection} c @returns {{ placed: number, repeats: number, walk: boolean }}
+ */
+export function locationLoss(c) {
+  const at = c.geometry?.coordinates;
+  if (!at) return { placed: 0, repeats: 0, walk: false };
+  const plants = c.properties.plants;
+  const placed = plants.filter(e => e.coordinates && (Math.abs(e.coordinates[0] - at[0]) > 1e-6 || Math.abs(e.coordinates[1] - at[1]) > 1e-6)).length;
+  /** @type {Map<number | string, number>} */
+  const times = new Map();
+  for (const e of plants) times.set(plantKey(e), (times.get(plantKey(e)) ?? 0) + 1);
+  return { placed, repeats: [...times.values()].filter(n => n > 1).length, walk: Boolean(c.properties.walk) };
+}
 
 // ── What a mini-app made ────────────────────────────────────────────────────
 // A mini-app marks what it makes in Mes plantes (`origin`): a favourite of a match (its entry in the favourites), a

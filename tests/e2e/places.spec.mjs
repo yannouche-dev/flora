@@ -43,3 +43,65 @@ test('Flore « Voir dans Flore » d’une collection : exactement ses plantes', 
   await expect.poll(() => app.state('results.total')).toBe(1);
   expect((await app.state('results.items'))[0].id).toBe(plantId('Allium ursinum'));
 });
+
+/** Every collection, as the user sees it (kind, point, plants and their positions). @param {import('@playwright/test').Page} page */
+const dump = page => page.evaluate(async () => (await (await import('/app/core/collections.js')).listCollections())
+  .map((/** @type {any} */ c) => ({ id: c.id, name: c.properties.name, kind: c.properties.kind, at: c.geometry?.coordinates ?? null,
+    plants: c.properties.plants.map((/** @type {any} */ e) => [e.plantId, e.coordinates]) })));
+
+test('Retirer la position : refusée quand des plantes ont leur position, « Copier en liste » à la place', async ({ app, page }) => {
+  await app.open('#/');
+  const [ail, ortie] = [plantId('Allium ursinum'), plantId('Urtica dioica')];
+  const id = await page.evaluate(async ids => {
+    const c = await import('/app/core/collections.js');
+    const db = await import('/app/core/db.js');
+    const [a, o] = await Promise.all(ids.map(i => db.get('plants', i)));
+    let place = c.newPlace([2.351, 48.851], { name: 'Bois' });
+    place = c.withPlant(c.withPlant(place, a, { coordinates: [2.3512, 48.8511], accuracy: 4 }), o, { coordinates: [2.3508, 48.8509], accuracy: 5 });
+    return (await c.savePlace(place)).id;
+  }, [ail, ortie]);
+  await app.go(`#/map?spot=${id}`);
+  await page.locator('gf-spot-editor').getByRole('button', { name: 'Retirer la position' }).click();
+  const ask = page.getByRole('alertdialog', { name: 'Le lieu garde sa position' });
+  await expect(ask).toContainText('retirer la position effacerait les positions de 2 plantes.');
+  await expect(ask.getByRole('button', { name: 'Annuler' })).toBeFocused();
+  await ask.getByRole('button', { name: 'Copier en liste' }).click();
+
+  // The new list, opened: each plant once, no position; said.
+  await expect.poll(() => page.evaluate(() => location.hash)).toMatch(/^#\/collection\/[^?]+$/);
+  const editor = page.locator('gf-spot-editor');
+  await expect(editor.getByRole('textbox', { name: 'Nom de la liste' })).toHaveValue('Bois (liste)');
+  await expect(editor.locator('.entries > li')).toHaveCount(2);
+  await expect(page.locator('.gf-brief-toast')).toHaveText('Liste « Bois (liste) » créée. Le lieu garde ses positions.');
+  // The lieu as it was: its point, both plants at theirs.
+  const all = await dump(page);
+  expect(all.find((/** @type {any} */ c) => c.id === id)).toEqual({ id, name: 'Bois', kind: 'place', at: [2.351, 48.851],
+    plants: [[ail, [2.3512, 48.8511]], [ortie, [2.3508, 48.8509]]] });
+  expect(all.find((/** @type {any} */ c) => c.name === 'Bois (liste)')).toMatchObject({ kind: 'list', at: null, plants: [[ail, null], [ortie, null]] });
+});
+
+test('Retirer la position sans rien perdre : demandée, puis faite ; la liste s’ouvre', async ({ app, page }) => {
+  await app.open('#/');
+  const id = await page.evaluate(async i => {
+    const c = await import('/app/core/collections.js');
+    const db = await import('/app/core/db.js');
+    // « Noter ici »: the plant on the lieu's point, with the fix's accuracy.
+    const place = c.withPlant(c.newPlace([2.351, 48.851], { name: 'Clairière' }), await db.get('plants', i), { coordinates: [2.351, 48.851], accuracy: 6 });
+    return (await c.savePlace(place)).id;
+  }, plantId('Allium ursinum'));
+  await app.go(`#/map?spot=${id}`);
+  const editor = page.locator('gf-spot-editor');
+  await editor.getByRole('button', { name: 'Retirer la position' }).click();
+  const ask = page.getByRole('alertdialog', { name: 'Retirer la position ?' });
+  await expect(ask).toContainText('Le lieu devient une liste de plantes.');
+  // Annuler: nothing changes.
+  await ask.getByRole('button', { name: 'Annuler' }).click();
+  await expect(ask).toHaveCount(0);
+  expect((await dump(page))[0]).toMatchObject({ kind: 'place', at: [2.351, 48.851] });
+  await editor.getByRole('button', { name: 'Retirer la position' }).click();
+  await page.getByRole('alertdialog', { name: 'Retirer la position ?' }).getByRole('button', { name: 'Retirer la position' }).click();
+  // The list, in its own page (the Carte shows only lieux).
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe(`#/collection/${id}`);
+  await expect(page.locator('gf-spot-editor').getByRole('textbox', { name: 'Nom de la liste' })).toHaveValue('Clairière');
+  expect(await dump(page)).toEqual([{ id, name: 'Clairière', kind: 'list', at: null, plants: [[plantId('Allium ursinum'), null]] }]);
+});

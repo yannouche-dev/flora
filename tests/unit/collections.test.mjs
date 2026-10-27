@@ -15,6 +15,7 @@ globalThis.fetch = /** @type {any} */ (async (/** @type {any} */ input, /** @typ
 
 const db = await import('../../app/core/db.js');
 const C = await import('../../app/core/collections.js');
+const { normalizeCollection } = await import('../../app/core/place-model.js');
 
 const plant = (/** @type {number} */ id) => ({ id, scientificName: 'Planta ' + id, vernacularNames: ['Plante ' + id] });
 /** The favourites: plant id → [origin, from] (none: null). */
@@ -114,4 +115,56 @@ test('« Revoir les premiers pas » : les favoris des parties nommées deviennen
   // Adopted: « Recommencer » the game takes nothing back.
   assert.equal(await C.forgetMadeBy('rencontres'), 0);
   assert.equal(await C.adoptMadeBy(['rencontres', 'cueillette', 'mosaique']), 0, 'rien de plus');
+});
+
+// ── « Retirer la position » : demandée, ou refusée avec « Copier en liste » ──
+
+const AT = /** @type {[number, number]} */ ([2.35, 48.85]);
+/** A lieu « Bois » at AT holding these plants (normalized as stored). @param {any[]} plants @param {any} [more] */
+const bois = (plants, more = {}) => /** @type {any} */ (normalizeCollection({ type: 'Feature', id: 'bois', geometry: { type: 'Point', coordinates: AT },
+  properties: { name: 'Bois', createdAt: '2026-05-01T10:00:00.000Z', updatedAt: '2026-05-01T10:00:00.000Z', plants, ...more } }));
+
+test('locationQuestion : refusée quand la liste perdrait quelque chose, chaque texte ; sinon demandée', () => {
+  const refused = (/** @type {string} */ parts) => ({ refused: true, title: 'Le lieu garde sa position',
+    text: `Une liste n’a pas de position et ne note chaque plante qu’une fois : retirer la position effacerait ${parts}. « Copier en liste » crée une liste de ses plantes ; le lieu garde ses positions.` });
+  const away = (/** @type {number} */ id, /** @type {any} */ more = {}) => ({ id: 'e' + id + (more.id ?? ''), plantId: id, coordinates: [2.351, 48.85], ...more });
+  assert.deepEqual(C.locationQuestion(bois([away(1)])), refused('la position d’une plante'));
+  assert.deepEqual(C.locationQuestion(bois([away(1), away(2)])), refused('les positions de 2 plantes'));
+  assert.deepEqual(C.locationQuestion(bois([{ plantId: 1 }, { plantId: 1, id: 'b' }])), refused('les autres fois où une plante est notée'));
+  assert.deepEqual(C.locationQuestion(bois([{ plantId: 1 }, { plantId: 1, id: 'b' }, { plantId: 2 }, { plantId: 2, id: 'c' }])), refused('les autres fois où 2 plantes sont notées'));
+  assert.deepEqual(C.locationQuestion(bois([], { walk: true })), refused('le tracé du parcours'));
+  assert.deepEqual(C.locationQuestion(bois([away(1), away(2), { plantId: 2, id: 'x' }], { walk: true })),
+    refused('les positions de 2 plantes, les autres fois où une plante est notée et le tracé du parcours'));
+  // Nothing lost: asked, its harvest logs said to stay when there are some.
+  assert.deepEqual(C.locationQuestion(bois([{ plantId: 1, coordinates: AT, accuracy: 6 }])),
+    { refused: false, title: 'Retirer la position ?', yes: 'Retirer la position', text: 'Le lieu devient une liste de plantes.' });
+  assert.equal(C.locationQuestion(bois([{ plantId: 1, harvests: [{ date: '2026-05-02' }] }])).text,
+    'Le lieu devient une liste de plantes. Ses journaux de récolte restent, mais ne s’affichent que dans un lieu.');
+});
+
+test('asList puis copyAsList : chaque plante une fois, notes réunies, ni position, ni récolte, ni origine ; le lieu inchangé', async () => {
+  const place = bois([
+    { id: 'o1', plantId: 1, notes: 'Près du ruisseau', rating: 2, coordinates: [2.351, 48.85], accuracy: 4, addedAt: '2026-05-02T08:00:00.000Z', harvests: [{ date: '2026-05-02' }] },
+    { id: 'o2', plantId: 1, notes: 'Sous les frênes', rating: 5, abundance: 'abondant', coordinates: [2.352, 48.85], harvests: [{ date: '2026-06-02' }] },
+    { id: 'o3', plantId: 2, notes: '', coordinates: AT, accuracy: 6, origin: { app: 'parcours' }, from: { app: 'parcours' } }
+  ], { walk: true, startedHere: true, from: { app: 'parcours' }, notes: 'Accès par le pont' });
+  const before = structuredClone(place);
+  const list = C.asList(place, 'Bois (liste)');
+  assert.deepEqual(list.properties.plants.map((/** @type {any} */ e) => [e.plantId, e.notes, e.rating, e.abundance, e.coordinates, e.accuracy, e.harvests, e.origin, e.from, e.addedAt]), [
+    [1, 'Près du ruisseau\n\nSous les frênes', 5, 'abondant', null, null, [], undefined, undefined, '2026-05-02T08:00:00.000Z'],
+    [2, '', 0, 'moyen', null, null, [], undefined, undefined, '2026-05-01T10:00:00.000Z']
+  ]);
+  assert.ok(list.properties.plants.every((/** @type {any} */ e) => !['o1', 'o2', 'o3'].includes(e.id)), 'de nouveaux identifiants');
+  assert.deepEqual([list.geometry, list.properties.kind, list.properties.name, list.properties.notes, list.properties.walk, list.properties.startedHere,
+    list.properties.origin, list.properties.from], [null, 'list', 'Bois (liste)', '', undefined, undefined, undefined, undefined]);
+  assert.deepEqual(place, before, 'le lieu n’est pas touché');
+
+  // Saved, against the base: the list « Bois (liste) » made, the lieu as it was.
+  const stored = await C.savePlace(place);
+  const copy = await C.copyAsList(stored.id);
+  assert.equal(copy.properties.name, 'Bois (liste)');
+  assert.deepEqual((await C.getPlace(copy.id))?.properties.plantIds, [1, 2]);
+  assert.deepEqual(await C.getPlace(stored.id), stored);
+  await db.remove('spots', stored.id);
+  await assert.rejects(C.copyAsList(stored.id), { name: 'GoneError' });
 });

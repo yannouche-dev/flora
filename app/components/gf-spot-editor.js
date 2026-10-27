@@ -8,8 +8,8 @@ import { moduleOn } from '../core/modules.js';
 import { href } from '../core/router.js';
 import { back, openView, replaceHash, replaceView } from '../core/history.js';
 import {
-  ABUNDANCE, defaultPlantPosition, deletePlace, distance, entryInSeason, entryName, entryPosition, exportGeoJSON, findEntry,
-  formatDistance, getPlace, lastHarvest, matchCollections, plantMarkers,
+  ABUNDANCE, copyAsList, defaultPlantPosition, deletePlace, distance, entryInSeason, entryName, entryPosition, exportGeoJSON, findEntry,
+  formatDistance, getPlace, lastHarvest, locationQuestion, matchCollections, plantMarkers,
   nearbyPlaces, newCollection, newPlace, placeTitle, plantCount, promotePlace, savePatch, savePlace, spotEvents, updatePlace, withEntry, withLocation, withoutPlant, withPlant, entriesOf, lastEntry } from '../core/collections.js';
 import { encodeCollection, share } from '../core/share.js';
 import { StoreController, whenReady } from '../core/store.js';
@@ -23,6 +23,7 @@ import './gf-status.js';
 import './gf-thumb.js';
 import { icon, kindIcon } from '../core/icons.js';
 import { askHarvest } from './gf-harvest-warning.js';
+import { ask, confirmAsk } from './gf-ask.js';
 import './gf-plant-pick-list.js';
 import './gf-place-insights.js';
 import { map3dProblem, openMap3d } from './gf-map3d.js';
@@ -620,11 +621,58 @@ export class GfSpotEditor extends LitElement {
     this.#changed();
   }
 
-  #removeLocation() {
-    if (!this._place || !confirm('Retirer la position ? Le lieu redevient une simple liste de plantes.')) return;
-    this._place = withLocation(this._place, null);
-    this._editPos = false;
-    this.#changed();
+  /**
+   * « Retirer la position »: asked of the lieu as stored (what was typed saved first; another tab, « Noter ici » may have
+   * placed a plant since). When the list would lose something (collections.js locationQuestion: a plant's own position,
+   * the other times a plant is noted, a parcours' walk), refused — « Copier en liste » offered: a new list of its
+   * plants, opened, the lieu as it was. Otherwise confirmed first, then written as stored now, the rule checked again in
+   * the same transaction (refused then: said). On the Carte, which shows only lieux, the list opens in its own page.
+   */
+  async #removeLocation() {
+    if (!this._place) return;
+    const id = this._place.id;
+    await this.#flush();
+    // Not saved (said): nothing is asked of a lieu that is not what the editor shows.
+    if (this.#dirty) return;
+    try {
+      const stored = await getPlace(id);
+      if (!stored) { this._error = this.#goneText(); return; }
+      const q = locationQuestion(stored);
+      // `=== true`: tsc tells the two questions apart so (jsconfig: no strictNullChecks).
+      if (q.refused === true) {
+        if (await ask({ title: q.title, text: q.text, choices: [{ value: 'copy', label: 'Copier en liste', primary: true }] }) === 'copy') this.#copyAsList(id);
+        return;
+      }
+      if (!await confirmAsk(q)) return;
+      let lossy = false;
+      const saved = await updatePlace(id, current => {
+        lossy = locationQuestion(current).refused;
+        return lossy ? current : withLocation(current, null);
+      });
+      if (lossy) { await this.#removeLocation(); return; }
+      this.#base = saved;
+      this.#savedAt = saved.properties.updatedAt;
+      this._todayFor = new Map();
+      this._place = saved;
+      this._editPos = false;
+      this._error = null;
+      if (this.embedded) openView(href.spot(id));
+    } catch (error) {
+      console.error(error);
+      this._error = /** @type {Error} */ (error).name === 'GoneError' ? this.#goneText() : 'Enregistrement impossible : ' + /** @type {Error} */ (error).message;
+    }
+  }
+
+  /** « Copier en liste »: the new list opened, said; the lieu as it was. @param {string} id the lieu */
+  async #copyAsList(id) {
+    try {
+      const list = await copyAsList(id);
+      openView(href.spot(list.id));
+      briefToast(`Liste « ${list.properties.name} » créée. Le lieu garde ses positions.`);
+    } catch (error) {
+      console.error(error);
+      this._error = /** @type {Error} */ (error).name === 'GoneError' ? this.#goneText() : 'Copie impossible : ' + /** @type {Error} */ (error).message;
+    }
   }
 
   async #share() {

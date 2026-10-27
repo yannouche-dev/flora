@@ -4,13 +4,14 @@
 // focus — then the choices. Échap, a touch outside the box and Back are « Annuler » (core/history.js openModal: a step
 // in history). Never the browser's confirm(), which a phone shows bare and an automated test answers by itself.
 // ask() resolves with the value of the choice (null: Annuler), confirmAsk() with whether it was confirmed — once the
-// dialog's step has left history (afterDialogSteps), so a caller may open another view at once. Added to the page's
+// dialog's own step has left history (afterStep), so a caller may open another view at once; asked over another dialog
+// (« Ajouter à… »), whose step stays, it answers at once too. Added to the page's
 // body while it asks (as askHarvest, gf-harvest-warning.js), removed once answered. Its texts go through fr() (French
 // spacing).
 
 import { LitElement, html, css } from 'lit';
 import { fr } from '../core/fr.js';
-import { afterDialogSteps, openModal } from '../core/history.js';
+import { afterStep, openModal } from '../core/history.js';
 import { ui } from '../styles/ui.js';
 import { askStyles } from './ui-kit.js';
 
@@ -42,8 +43,11 @@ export class GfAsk extends LitElement {
   /** The choice made, said when the dialog closes (Échap, Back, a touch outside: null). @type {string | null} */
   #choice = null;
 
+  /** Its step in history (openModal): the answer waits until it is left. @type {number | undefined} */
+  step = undefined;
+
   firstUpdated() {
-    openModal(/** @type {HTMLDialogElement} */ (this.renderRoot.querySelector('dialog')));
+    this.step = openModal(/** @type {HTMLDialogElement} */ (this.renderRoot.querySelector('dialog')));
   }
 
   /** @param {string | null} value */
@@ -73,7 +77,7 @@ customElements.define('gf-ask', GfAsk);
 
 /**
  * Asks, in a modal dialog: resolves with the value of the choice made, or null (« Annuler », Échap, a touch outside,
- * Back), once the dialog's step has left history.
+ * Back), once the dialog's own step has left history.
  * @param {{ title: string, text: string, choices: AskChoice[], cancel?: string }} q @returns {Promise<string | null>}
  */
 export function ask({ title, text, choices, cancel = 'Annuler' }) {
@@ -86,7 +90,7 @@ export function ask({ title, text, choices, cancel = 'Annuler' }) {
     el.addEventListener('ask-choice', async e => {
       const { choice } = /** @type {CustomEvent} */ (e).detail;
       el.remove();
-      await afterDialogSteps();
+      await afterStep(el.step);
       resolve(choice);
     }, { once: true });
     document.body.append(el);

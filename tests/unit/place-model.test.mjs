@@ -153,3 +153,41 @@ test('walkMarked : un parcours d’avant la marque, marqué sans rien changer d�
   assert.equal(M.walkMarked(rec(M.FAVORITES_ID, {}, null), { walks: [M.FAVORITES_ID] }), null);
   assert.equal(M.walkMarked(null, known), null);
 });
+
+test('locationLoss : ce qu’un lieu perdrait en liste — la position d’une plante, les autres fois qu’elle est notée, un tracé', () => {
+  const lieu = (/** @type {any[]} */ plants, /** @type {any} */ more = {}, geometry = /** @type {any} */ ({ type: 'Point', coordinates: [2.35, 48.85] })) =>
+    /** @type {M.Collection} */ (M.normalizeCollection({ type: 'Feature', id: 'l', geometry, properties: { name: 'Bois', createdAt: DATE, plants, ...more } }));
+  // « Noter ici »: the plant on the lieu's point, with the accuracy of the fix — nothing lost but that.
+  assert.deepEqual(M.locationLoss(lieu([{ plantId: 1, coordinates: [2.35, 48.85], accuracy: 6 }])), { placed: 0, repeats: 0, walk: false });
+  // One plant 20 m away (≈ 0.00018° of latitude); 0.05 m away is the point still.
+  assert.deepEqual(M.locationLoss(lieu([{ plantId: 1, coordinates: [2.35, 48.85018] }, { plantId: 2, coordinates: [2.35, 48.8500004] }])), { placed: 1, repeats: 0, walk: false });
+  // The nettle noted twice at the point; a plant unknown to the flora twice too (by its name).
+  assert.deepEqual(M.locationLoss(lieu([{ plantId: 1, id: 'a' }, { plantId: 1, id: 'b' }, { plantId: null, scientificName: 'Rubus sp.', id: 'c' },
+    { plantId: null, scientificName: 'rubus SP.', id: 'd' }, { plantId: 3 }])), { placed: 0, repeats: 2, walk: false });
+  assert.deepEqual(M.locationLoss(lieu([], { walk: true })), { placed: 0, repeats: 0, walk: true });
+  // A list: nothing to lose.
+  assert.deepEqual(M.locationLoss(lieu([{ plantId: 1 }, { plantId: 1, id: 'b' }], { kind: 'list' }, null)), { placed: 0, repeats: 0, walk: false });
+});
+
+test('joinEntry : deux fois la même plante réunies — notes une fois chacune, récoltes réunies, la meilleure note ; refusé au-delà de 5 000 caractères', () => {
+  const entry = (/** @type {any} */ e) => M.normalizeEntry(e, DATE, [2.35, 48.85]);
+  const a = entry({ id: 'a', plantId: 1, notes: 'Au bord du chemin', rating: 2, coordinates: [2.351, 48.85], accuracy: 5, addedAt: '2026-05-02T08:00:00.000Z', origin: { app: 'parcours' },
+    harvests: [{ date: '2026-05-02', quantity: '200 g' }] });
+  const b = entry({ id: 'b', plantId: 1, notes: '  Sous les frênes ', rating: 4, abundance: 'rare', coordinates: [2.352, 48.85],
+    harvests: [{ date: '2026-05-02', quantity: '200 g' }, { date: '2026-06-01' }] });
+  const one = /** @type {M.PlantEntry} */ (M.joinEntry(a, b));
+  assert.equal(one.notes, 'Au bord du chemin\n\nSous les frênes');
+  assert.deepEqual(one.harvests.map(h => h.date), ['2026-06-01', '2026-05-02'], 'chaque récolte une fois, la plus récente d’abord');
+  assert.equal(one.rating, 4);
+  assert.equal(one.abundance, 'rare', 'une abondance dite l’emporte sur « moyen »');
+  // a's own: its id, its position, its date, its origin.
+  assert.deepEqual([one.id, one.coordinates, one.accuracy, one.addedAt, one.origin], ['a', [2.351, 48.85], 5, '2026-05-02T08:00:00.000Z', { app: 'parcours' }]);
+  // Joined again and again: never a note twice.
+  assert.equal(M.joinEntry(/** @type {any} */ (M.joinEntry(one, b)), a)?.notes, 'Au bord du chemin\n\nSous les frênes');
+  assert.equal(M.joinEntry(entry({ plantId: 1, abundance: 'abondant' }), b)?.abundance, 'abondant');
+  assert.equal(M.joinEntry(entry({ plantId: 1 }), b)?.notes, 'Sous les frênes', 'sans note : celle de l’autre');
+  assert.equal(M.joinEntry(a, entry({ plantId: 1, notes: '   ' }))?.notes, 'Au bord du chemin');
+  // Past what a note holds (it would be cut on read): not joined.
+  assert.equal(M.joinEntry(entry({ plantId: 1, notes: 'x'.repeat(4000) }), entry({ plantId: 1, notes: 'y'.repeat(999) })), null);
+  assert.equal(M.joinEntry(entry({ plantId: 1, notes: 'x'.repeat(4000) }), entry({ plantId: 1, notes: 'y'.repeat(998) }))?.notes.length, 5000);
+});
