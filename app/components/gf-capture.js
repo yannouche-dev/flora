@@ -7,8 +7,8 @@ import { watchLocation } from '../core/geo.js';
 import { href } from '../core/router.js';
 import { openModal } from '../core/history.js';
 import {
-  deletePlace, distance, listPlaces, nearbyPlaces, newPlace, placeTitle, recentPlants, rememberPlant,
-  saveCollection, updatePlace, withEntry, withPlant, withoutPlant, entriesOf, lastEntry } from '../core/collections.js';
+  GoneError, NEAR_PLACE, distance, getPlace, listPlaces, newPlace, placeTitle, placesNear, recentPlants, rememberPlant,
+  saveCollection, undoNewPlace, updatePlace, withEntry, withPlant, withoutPlant, entriesOf, lastEntry } from '../core/collections.js';
 import { store, StoreController } from '../core/store.js';
 import { lookalikeWarning } from '../core/lookalikes.js';
 import { verdictOf } from '../core/alerts.js';
@@ -23,9 +23,8 @@ import { voiceAvailable } from '../core/voice.js';
 import { takeToastSlot } from '../core/toast.js';
 import './gf-plant-pick-list.js';
 import './gf-harvest-warning.js';
+import './gf-nearby-places.js';
 
-/** A plant tapped within this distance of an existing place joins it instead of creating a new one. */
-const JOIN_RADIUS = 30;
 /** Plants of places within this distance are suggested first. */
 const AROUND_RADIUS = 200;
 
@@ -35,9 +34,10 @@ const today = () => {
 };
 
 /**
- * "Noter ici": one tap on a plant records it at the current GPS position — in the nearest place
- * within 30 m, or in a new place. Suggestions first: plants around you, favorites, recent.
- * Opened with `open()`; shows an undo toast afterwards.
+ * "Noter ici": one tap on a plant records it at the current GPS position. A lieu within NEAR_PLACE is offered first
+ * (gf-nearby-places, the same offer as a new lieu's editor: collections.js placesNear, never a parcours) — « Y ajouter »
+ * one of them, or « Nouveau lieu ici »; none near, a new lieu at once. Suggestions first: plants around you, favorites,
+ * recent. Opened with `open()`; shows an undo toast afterwards.
  */
 
 /** Within this distance (m), the plant noted again is the same occurrence; farther, another one. */
@@ -50,6 +50,8 @@ export class GfCapture extends LitElement {
     _query: { state: true },
     _harvestToday: { state: true },
     _confirm: { state: true },
+    _where: { state: true },
+    _error: { state: true },
     _busy: { state: true },
     _toast: { state: true }
   };
@@ -106,6 +108,8 @@ export class GfCapture extends LitElement {
     footer { padding: 10px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--gf-border); display: flex; align-items: center; gap: 10px; }
     footer label { display: flex; align-items: center; gap: 8px; flex: 1; font-size: 0.9rem; }
     p.muted { font-size: 0.9rem; }
+    p.error { color: var(--gf-danger); font-size: 0.9rem; margin: 8px 0; }
+    .where { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
     .toast {
       position: fixed;
       z-index: 2000;
@@ -141,6 +145,13 @@ export class GfCapture extends LitElement {
     this._harvestToday = false;
     /** The plant whose harvest waits for its warning to be answered (gf-harvest-warning: danger.js#harvestStop). @type {{ plant: any, verdict: import('../core/danger.js').Verdict } | null} */
     this._confirm = null;
+    /**
+     * The lieux near, offered before the plant is noted (its harvest decided already, the position they were measured
+     * from: the one saved). @type {{ plant: any, harvest: boolean, near: { place: import('../core/collections.js').Place, distance: number }[], fix: import('../core/geo.js').Fix } | null}
+     */
+    this._where = null;
+    /** Why the last note could not be saved (said in the sheet, until the next try). @type {string | null} */
+    this._error = null;
     this._busy = false;
     /** @type {{ text: string, undo: () => Promise<void>, details: string, warning?: string | null, lookalike?: { toxic: boolean, text: string, unread?: boolean } | null, plantId?: number } | null} */
     this._toast = null;
@@ -151,6 +162,8 @@ export class GfCapture extends LitElement {
   open() {
     this._query = '';
     this._confirm = null;
+    this._where = null;
+    this._error = null;
     // Unticked at each opening: a harvest asked for one plant is never carried over to the next one noted.
     this._harvestToday = false;
     openModal(this.#dialog);
@@ -219,25 +232,31 @@ export class GfCapture extends LitElement {
     /** @type {HTMLInputElement | null} */ (this.renderRoot.querySelector('.ask input'))?.focus();
   }
 
-  /** Typed or dictated: the list below follows (gf-plant-pick-list). @param {string} q */
+  /** Typed or dictated: the list below follows (gf-plant-pick-list) — back from the lieux offered. @param {string} q */
   #find(q) {
     this._query = q;
+    this._where = null;
   }
 
   /**
    * Records the plant here. With today's harvest (mode cueillette, box ticked), a plant our sources say is toxic, whose
    * toxicity data cannot be read, or protected where you stand, first shows a warning that must be answered (its
-   * verdict here, core/danger.js; `confirmed`: the user chose).
-   * @param {any} summaryOrPlant @param {{ harvest?: boolean }} [confirmed] the harvest the user chose after the warning
+   * verdict here, core/danger.js). Then, a lieu within NEAR_PLACE (placesNear): offered first, nothing saved until one is
+   * chosen (`into`) or « Nouveau lieu ici » (`into: null`).
+   * @param {any} summaryOrPlant
+   * @param {{ harvest?: boolean, into?: string | null }} [chosen] `harvest`: the user chose, after the warning (or with
+   *   the offer); `into`: the lieu chosen in the offer (null: a new one; undefined: not offered yet)
    */
-  async #capture(summaryOrPlant, confirmed) {
-    const fix = this._fix;
+  async #capture(summaryOrPlant, { harvest: chosen, into } = {}) {
+    // Chosen in the offer: saved where it was measured from (the distances said are those of where the plant goes).
+    const fix = into !== undefined && this._where ? this._where.fix : this._fix;
     if (!fix || this._busy) return;
     this._busy = true;
+    this._error = null;
     try {
       const plant = summaryOrPlant.vernacularNames ? summaryOrPlant : await db.get('plants', summaryOrPlant.id);
       const asked = this.#store.state.harvestMode && this._harvestToday;
-      if (asked && !confirmed) {
+      if (asked && chosen === undefined) {
         // Its statuses: a search summary has none (the protection is read from the record).
         const record = plant.statuses ? plant : await getPlant(plant.id) ?? plant;
         const verdict = await verdictOf(record, { at: fix.coordinates });
@@ -247,9 +266,18 @@ export class GfCapture extends LitElement {
         }
       }
       this._confirm = null;
-      const harvest = confirmed ? Boolean(confirmed.harvest) : asked;
-      const [nearest] = await nearbyPlaces(fix.coordinates, JOIN_RADIUS);
-      const before = nearest?.place ? structuredClone(nearest.place) : null;
+      const harvest = chosen ?? asked;
+      // The lieux near (never a parcours): offered first, nothing saved yet.
+      if (into === undefined) {
+        const near = await placesNear(fix.coordinates);
+        if (near.length) {
+          this._where = { plant, harvest, near, fix };
+          return;
+        }
+      }
+      this._where = null;
+      const before = into ? await getPlace(into) : null;
+      if (into && !before) throw new GoneError();
       // The plant is noted exactly where you stand; the place keeps its own point.
       const here = { coordinates: fix.coordinates, accuracy: Math.round(fix.accuracy) };
       // Already noted right here (within a few metres): the same occurrence (today's harvest goes on it);
@@ -258,6 +286,8 @@ export class GfCapture extends LitElement {
       const did = { entry: /** @type {string | null} */ (null), harvestOn: /** @type {string | null} */ (null) };
       /** The plant noted in `place` (and today's harvest). @param {import('../core/collections.js').Place} place */
       const note = place => {
+        // It lost its point meanwhile (another tab): never put in a list unsaid — nothing written.
+        if (!place.geometry) throw new Error('Ce lieu n’a plus de position : rien n’a été enregistré.');
         did.entry = did.harvestOn = null;
         const same = entriesOf(place, plant.id).find(e => e.coordinates && distance(e.coordinates, here.coordinates) <= SAME_SPOT);
         let next = same ? place : withPlant(place, plant, here, { again: true });
@@ -290,8 +320,9 @@ export class GfCapture extends LitElement {
         text: before ? `${name} ajouté au lieu « ${placeTitle(before)} »${harvest ? ' · récolte notée' : ''}` : `${name} noté ici (nouveau lieu)${harvest ? ' · récolte notée' : ''}`,
         details: href.spot(saved.id),
         undo: async () => {
-          // Only this note undone (the place's other changes since stay).
-          if (!before) await deletePlace(saved.id);
+          // Only this note undone (the place's other changes since stay); the lieu it made goes with it only if
+          // nothing else is in it now (no plant, name or notes: undoNewPlace).
+          if (!before) await undoNewPlace(saved.id, /** @type {string} */ (did.entry));
           else if (did.entry) await updatePlace(before.id, current => withoutPlant(current, /** @type {string} */ (did.entry)));
           else if (did.harvestOn) {
             const id = did.harvestOn;
@@ -305,7 +336,7 @@ export class GfCapture extends LitElement {
       });
     } catch (error) {
       console.error(error);
-      this._gpsError = 'Enregistrement impossible : ' + /** @type {Error} */ (error).message;
+      this._error = 'Enregistrement impossible : ' + /** @type {Error} */ (error).message;
     } finally {
       this._busy = false;
     }
@@ -330,6 +361,11 @@ export class GfCapture extends LitElement {
   updated(changed) {
     // The toast gone (its time, Annuler, Détails, another one): its place given back.
     if (changed.has('_toast') && !this._toast) { this.#releaseSlot?.(); this.#releaseSlot = null; }
+    // The lieux near offered: the focus on the nearest one's « Y ajouter ».
+    if (changed.has('_where') && this._where) {
+      const offer = /** @type {HTMLElement & { updateComplete?: Promise<unknown> } | null} */ (this.renderRoot.querySelector('gf-nearby-places'));
+      offer?.updateComplete?.then(() => offer.focus());
+    }
   }
 
   async #undo() {
@@ -356,6 +392,20 @@ export class GfCapture extends LitElement {
     const c = /** @type {NonNullable<GfCapture['_confirm']>} */ (this._confirm);
     return html`<gf-harvest-warning .plant=${c.plant} .verdict=${c.verdict} ?busy=${this._busy}
       @harvest-choice=${(/** @type {CustomEvent} */ e) => { if (e.detail.choice) this.#capture(c.plant, { harvest: e.detail.choice === 'harvest' }); else this._confirm = null; }}></gf-harvest-warning>`;
+  }
+
+  /**
+   * The lieux near (gf-nearby-places, as a new lieu's editor offers them): « Y ajouter » one, or « Nouveau lieu ici »;
+   * « Annuler », back to the list — nothing saved until then.
+   */
+  #whereView() {
+    const w = /** @type {NonNullable<GfCapture['_where']>} */ (this._where);
+    return html`<gf-nearby-places mode="note" .rows=${w.near} .plant=${{ id: w.plant.id, name: nameOf(w.plant) }} ?disabled=${this._busy}
+        @nearby-pick=${(/** @type {CustomEvent} */ e) => this.#capture(w.plant, { harvest: w.harvest, into: e.detail.id })}></gf-nearby-places>
+      <div class="where">
+        <button class="primary" type="button" ?disabled=${this._busy} @click=${() => this.#capture(w.plant, { harvest: w.harvest, into: null })}>Nouveau lieu ici</button>
+        <button class="link" type="button" ?disabled=${this._busy} @click=${() => { this._where = null; }}>Annuler</button>
+      </div>`;
   }
 
   #gps() {
@@ -387,18 +437,19 @@ export class GfCapture extends LitElement {
           </div>
         </header>
         <div class="body">
-          ${this._confirm ? this.#warning() : this._query.trim().length >= 2 ? html`<gf-plant-pick-list .query=${this._query} ?disabled=${!this._fix || this._busy}
+          ${this._error ? html`<p class="error" role="alert">${this._error}</p>` : nothing}
+          ${this._confirm ? this.#warning() : this._where ? this.#whereView() : this._query.trim().length >= 2 ? html`<gf-plant-pick-list .query=${this._query} ?disabled=${!this._fix || this._busy}
               @plant-pick=${e => this.#capture(e.detail.plant)}></gf-plant-pick-list>`
             : html`
               ${this.#chips('Autour de vous', around)}
               ${this.#chips('Favoris', favorites)}
               ${this.#chips('Récemment notées', recent)}
               ${!around.length && !favorites.length && !recent.length
-                ? html`<p class="muted">Tapez le nom de la plante. Elle sera notée à votre position, dans le lieu le plus proche (moins de ${JOIN_RADIUS} m) ou dans un nouveau lieu.</p>`
+                ? html`<p class="muted">Tapez le nom de la plante. Elle sera notée à votre position : dans un lieu à moins de ${NEAR_PLACE} m si vous le choisissez, sinon dans un nouveau lieu.</p>`
                 : nothing}`}
         </div>
         <footer>
-          ${harvestMode ? html`<label><input type="checkbox" .checked=${this._harvestToday}
+          ${harvestMode ? html`<label><input type="checkbox" .checked=${this._harvestToday} ?disabled=${Boolean(this._confirm || this._where)}
             @change=${e => { this._harvestToday = e.target.checked; }} /> Noter aussi une récolte aujourd’hui</label>` : html`<span style="flex:1"></span>`}
           <button type="button" @click=${() => this.#close()}>Fermer</button>
         </footer>

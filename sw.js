@@ -215,6 +215,7 @@ const SHELL = [
   'app/components/gf-calendar.js',
   'app/components/gf-capture.js',
   'app/components/gf-harvest-warning.js',
+  'app/components/gf-nearby-places.js',
   'app/components/gf-collections.js',
   'app/components/gf-facet.js',
   'app/components/gf-filter-panel.js',

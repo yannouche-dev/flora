@@ -155,7 +155,9 @@ test('Noter ici : la récolte d’une plante toxique seulement après « J’ai 
   await expect(box).not.toBeChecked();
   await box.check();
   await pick(dialog, 'Pâquerette', 'Pâquerette');
-  await expect(page.locator('gf-capture .toast')).toContainText('récolte notée');
+  // The ciguë's lieu is right here: offered first, nothing noted until it is chosen (the harvest decided already).
+  await dialog.getByRole('region', { name: 'Lieux à proximité' }).getByRole('button', { name: 'Y ajouter Pâquerette vivace' }).click();
+  await expect(page.locator('gf-capture .toast')).toContainText(/Pâquerette vivace ajouté au lieu « .+ » · récolte notée/);
   await expect(dialog.getByRole('alertdialog')).toHaveCount(0);
   expect(await harvestsOf(page, plantId('Bellis perennis'))).toEqual([1]);
 });
@@ -169,6 +171,32 @@ test('Noter ici, mode cueillette éteint : l’ail des ours noté rappelle le co
   await expect(toast).not.toContainText('récolte notée');
   await expect(toast.getByRole('alert').filter({ hasText: /Ne pas confondre avec : Colchique \(mortel\)/ })).toBeVisible();
   expect(await harvestsOf(page, plantId('Allium ursinum'))).toEqual([0]);
+});
+
+test('Noter ici, « Annuler » : la note retirée, et le nouveau lieu avec elle seulement s’il est resté vide', async ({ app, page }) => {
+  const places = () => page.evaluate(async () => (await (await import('/app/core/collections.js')).listPlaces())
+    .map((/** @type {any} */ p) => [p.properties.name, p.properties.plantIds.length]));
+  let dialog = await openCapture(page, app, false);
+  await pick(dialog, 'Pâquerette', 'Pâquerette');
+  const toast = page.locator('gf-capture .toast');
+  await expect(toast).toContainText('Pâquerette vivace noté ici (nouveau lieu)');
+  await toast.getByRole('button', { name: 'Annuler' }).click();
+  await expect(toast).toHaveCount(0);
+  await expect.poll(places).toEqual([]);
+
+  // Again, the lieu named meanwhile (its editor, another tab): « Annuler » takes the plant only, the lieu stays.
+  await page.evaluate(() => document.querySelector('gf-app')?.dispatchEvent(new Event('open-capture')));
+  dialog = page.locator('gf-capture dialog');
+  await expect(dialog.getByText(/Position GPS/)).toBeVisible();
+  await pick(dialog, 'Pâquerette', 'Pâquerette');
+  await expect(toast).toContainText('Pâquerette vivace noté ici (nouveau lieu)');
+  await page.evaluate(async () => {
+    const c = await import('/app/core/collections.js');
+    const [place] = await c.listPlaces();
+    await c.updatePlace(place.id, p => ({ ...p, properties: { ...p.properties, name: 'Mon coin' } }));
+  });
+  await toast.getByRole('button', { name: 'Annuler' }).click();
+  await expect.poll(places).toEqual([['Mon coin', 0]]);
 });
 
 test('Éditeur d’un lieu, mode cueillette éteint : l’ail des ours ouvert montre le colchique, pas la qualité', async ({ app, page }) => {

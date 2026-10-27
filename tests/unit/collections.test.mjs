@@ -3,7 +3,8 @@
 // altitudes the app asks for (updatePlace: the collection, an entry changed, a plant filed in a list or noted in a
 // lieu; savePlace: a list or a lieu of the user's; promotePlace: the favourites shared or exported alone). And what the
 // app asks before it erases or lets something leave the device: « Retirer la position » (refused, « Copier en liste »),
-// a plant taken out, a link, a file — each text as said.
+// a plant taken out, a link, a file — each text as said. And « Noter ici »: the lieux near, offered before a new one is
+// made (never a parcours), and its « Annuler », which takes away the note only.
 import 'fake-indexeddb/auto';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -260,4 +261,66 @@ test('shareCollection : la position demandée d’abord ; refusée, rien ne part
   assert.equal(asked.length, 2);
   await db.remove('spots', walk.id);
   await db.remove('spots', list.id);
+});
+
+// ── « Noter ici » : les lieux proches, offerts avant ; « Annuler » ne retire que la note ──
+
+/** Far from the lieux of the tests above. */
+const HERE = /** @type {[number, number]} */ ([5.72, 45.19]);
+/** `m` metres north of HERE. @param {number} m @returns {[number, number]} */
+const north = m => [HERE[0], HERE[1] + m / 111195];
+
+test('placesNear : les lieux à moins de 100 m, les trois plus proches d’abord ; jamais un parcours, ni le lieu exclu', async () => {
+  assert.equal(C.NEAR_PLACE, 100);
+  const save = (/** @type {string} */ name, /** @type {number} */ m, more = {}) => C.savePlace(C.newPlace(north(m), { name, ...more }));
+  const kept = await save('Lisière', 99.5), out = await save('Trop loin', 101);
+  // Stored to 1e-7° (about 1 cm): the distances as stored, first.
+  assert.ok(C.distance(HERE, /** @type {any} */ (kept.geometry).coordinates) <= 100);
+  assert.ok(C.distance(HERE, /** @type {any} */ (out.geometry).coordinates) > 100);
+  // Two parcours closer still (one made by the Parcours, one received marked): their point is only where they started.
+  const walks = [await save('Parcours du matin', 10, { origin: { app: 'parcours' } }), await save('Parcours reçu', 20, { walk: true })];
+  const names = async (/** @type {string | undefined} */ exclude) => (await C.placesNear(HERE, exclude)).map(r => r.place.properties.name);
+  assert.deepEqual(await names(), ['Lisière']);
+  const pre = await save('Pré', 30), others = [await save('Haie', 60), await save('Mare', 80)];
+  const near = await C.placesNear(HERE);
+  assert.deepEqual(near.map(r => [r.place.properties.name, Math.round(r.distance)]), [['Pré', 30], ['Haie', 60], ['Mare', 80]], 'les trois plus proches');
+  assert.deepEqual(await names(pre.id), ['Haie', 'Mare', 'Lisière'], 'sans le lieu exclu');
+  for (const c of [kept, out, ...walks, pre, ...others]) await db.remove('spots', c.id);
+});
+
+test('undoNewPlace : la note seule retirée ; le lieu qu’elle a créé supprimé seulement s’il est resté vide', async () => {
+  /** A new lieu « Noter ici » made, and the entry it noted. @returns {Promise<[any, string]>} */
+  const noted = async () => {
+    const place = C.withPlant(C.newPlace(HERE, { accuracy: 8 }), plant(7), { coordinates: HERE, accuracy: 8 });
+    return [await C.savePlace(place), /** @type {any} */ (C.lastEntry(place)).id];
+  };
+  let [p, e] = await noted();
+  await C.undoNewPlace(p.id, e);
+  assert.equal(await C.getPlace(p.id), undefined, 'resté vide : supprimé');
+  // Named, or given notes, meanwhile (its editor, another tab): kept, without the plant.
+  [p, e] = await noted();
+  await C.updatePlace(p.id, c => ({ ...c, properties: { ...c.properties, name: 'Mon coin' } }));
+  await C.undoNewPlace(p.id, e);
+  assert.deepEqual([(await C.getPlace(p.id))?.properties.name, (await C.getPlace(p.id))?.properties.plantIds], ['Mon coin', []]);
+  await db.remove('spots', p.id);
+  [p, e] = await noted();
+  await C.updatePlace(p.id, c => ({ ...c, properties: { ...c.properties, notes: 'Accès par le pont' } }));
+  await C.undoNewPlace(p.id, e);
+  assert.equal((await C.getPlace(p.id))?.properties.notes, 'Accès par le pont');
+  await db.remove('spots', p.id);
+  // Another plant noted in it meanwhile: kept, with it.
+  [p, e] = await noted();
+  await C.updatePlace(p.id, c => C.withPlant(c, plant(8)));
+  await C.undoNewPlace(p.id, e);
+  assert.deepEqual((await C.getPlace(p.id))?.properties.plantIds, [8]);
+  // Undone twice: the second changes nothing.
+  const before = await C.getPlace(p.id);
+  await C.undoNewPlace(p.id, e);
+  assert.deepEqual(await C.getPlace(p.id), before);
+  await db.remove('spots', p.id);
+  // Deleted already: nothing thrown, nothing made again.
+  [p, e] = await noted();
+  await C.deletePlace(p.id);
+  await C.undoNewPlace(p.id, e);
+  assert.equal(await C.getPlace(p.id), undefined);
 });

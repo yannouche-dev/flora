@@ -10,7 +10,7 @@ import { back, openView, replaceHash, replaceView } from '../core/history.js';
 import {
   ABUNDANCE, copyAsList, defaultPlantPosition, deletePlace, distance, entryInSeason, entryName, entryPosition, exportGeoJSON, findEntry,
   formatDistance, getPlace, lastHarvest, locationQuestion, matchCollections, plantMarkers, removeQuestion,
-  nearbyPlaces, newCollection, newPlace, placeTitle, plantCount, savePatch, savePlace, shareCollection, spotEvents, updatePlace, withEntry, withLocation, withoutPlant, withPlant, entriesOf, lastEntry } from '../core/collections.js';
+  newCollection, newPlace, placesNear, placeTitle, plantCount, savePatch, savePlace, shareCollection, spotEvents, updatePlace, withEntry, withLocation, withoutPlant, withPlant, entriesOf, lastEntry } from '../core/collections.js';
 import { joinEntry } from '../core/place-model.js';
 import { StoreController, whenReady } from '../core/store.js';
 import { addressAt, altitudeAt, formatCoordinates } from '../core/geoservices.js';
@@ -26,13 +26,11 @@ import { askHarvest } from './gf-harvest-warning.js';
 import { ask, confirmAsk } from './gf-ask.js';
 import './gf-plant-pick-list.js';
 import './gf-place-insights.js';
+import './gf-nearby-places.js';
 import { map3dProblem, openMap3d } from './gf-map3d.js';
 import { briefToast } from '../core/toast.js';
 import { hintView, takeHint } from '../core/hints.js';
 import { continueWalk } from '../miniapp/kit/trail-store.js';
-
-/** Existing places closer than this are offered instead of creating a duplicate. */
-const NEARBY_RADIUS = 100;
 
 const today = () => {
   const d = new Date();
@@ -144,17 +142,6 @@ export class GfSpotEditor extends LitElement {
     .gps .where { flex-basis: 100%; font-size: 0.85rem; }
     .gps .coords { font-variant-numeric: tabular-nums; color: var(--gf-text-muted); }
     .gps button { margin-left: auto; }
-    .nearby {
-      border-color: var(--gf-accent);
-      background: var(--gf-accent-soft);
-      font-size: 0.9rem;
-      display: grid;
-      gap: 8px;
-    }
-    .nearby ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-    .nearby li { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    .nearby li span { flex: 1; min-width: 140px; }
-    .nearby small { color: var(--gf-text-muted); }
     textarea { min-height: 64px; }
     .chips { display: flex; gap: 8px; flex-wrap: wrap; }
     .stars button {
@@ -544,7 +531,7 @@ export class GfSpotEditor extends LitElement {
   async #findNearby() {
     if (!this.#isNew || !this._place) return;
     try {
-      this._nearby = await nearbyPlaces(this._place.geometry.coordinates, NEARBY_RADIUS);
+      this._nearby = await placesNear(this._place.geometry.coordinates, this._place.id);
     } catch { this._nearby = []; }
   }
 
@@ -824,11 +811,13 @@ export class GfSpotEditor extends LitElement {
     return matchCollections(others, p.name);
   }
 
-  /** Adds the plant being recorded to an existing nearby place instead of creating a new one. */
-  /** @param {import('../core/collections.js').Place} target */
-  #useExisting(target) {
+  /**
+   * A lieu offered nearby, chosen instead of a new one (gf-nearby-places): it opens, the plant being recorded added to
+   * it. @param {string} id
+   */
+  #useExisting(id) {
     const first = this._place?.properties.plants[0];
-    replaceView(href.spot(target.id, first?.plantId ?? undefined));
+    replaceView(href.spot(id, first?.plantId ?? undefined));
   }
 
   /** @param {SubmitEvent} event */
@@ -933,22 +922,12 @@ export class GfSpotEditor extends LitElement {
     </div>`;
   }
 
+  /** The lieux nearby, offered before this new one is saved (gf-nearby-places: the same offer as « Noter ici »). */
   #nearbyBanner() {
     if (!this.#isNew || !this._nearby.length || !this._place) return nothing;
     const first = this._place.properties.plants[0];
-    return html`
-      <div class="nearby card" role="region" aria-label="Lieux à proximité">
-        <strong>Vous êtes près d’un lieu déjà enregistré</strong>
-        <ul>
-          ${this._nearby.slice(0, 3).map(({ place, distance }) => html`
-            <li>
-              <span>${placeTitle(place)} <small>· ${formatDistance(distance)} · ${plantCount(place.properties.plants.length)}</small></span>
-              <button type="button" @click=${() => this.#useExisting(place)}>
-                ${first && !findEntry(place, first.plantId) ? `Y ajouter ${entryName(first)}` : 'Ouvrir ce lieu'}
-              </button>
-            </li>`)}
-        </ul>
-      </div>`;
+    return html`<gf-nearby-places mode="open" .rows=${this._nearby} .plant=${first ? { id: first.plantId, name: entryName(first) } : null}
+      @nearby-pick=${(/** @type {CustomEvent} */ e) => this.#useExisting(e.detail.id)}></gf-nearby-places>`;
   }
 
   /** Where this plant grows: distance from the place's point, GPS, show on map. */

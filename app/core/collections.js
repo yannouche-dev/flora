@@ -198,8 +198,11 @@ export async function copyAsList(id) {
   return savePlace(asList(place, `${placeTitle(place)} (liste)`));
 }
 
-/** Plants are offered the GPS position only when standing near the place (else: the place's point). */
-const NEAR_PLACE = 100;
+/**
+ * Near a lieu (m): a lieu this close is offered before a new one is made (« Noter ici », a new lieu's editor:
+ * placesNear), and a plant added to it takes your position (defaultPlantPosition; else the lieu's point).
+ */
+export const NEAR_PLACE = 100;
 
 /**
  * Default position of a plant added to a place: the current GPS fix if within 100 m of the place,
@@ -852,15 +855,40 @@ export { distance };
 export { formatDistance } from './distance.js';
 
 /**
- * Existing places within `radius` metres, nearest first.
- * @param {[number, number]} coordinates @param {number} radius @param {string} [excludeId]
+ * The lieux offered before a new one is made, the same everywhere (« Noter ici », a new lieu's editor:
+ * gf-nearby-places): those within NEAR_PLACE of `coordinates`, nearest first, the three nearest — never a parcours (its
+ * point is only where it started), nor `excludeId` (the lieu being made).
+ * @param {[number, number]} coordinates @param {string} [excludeId]
+ * @returns {Promise<{ place: Place, distance: number }[]>}
  */
-export async function nearbyPlaces(coordinates, radius, excludeId) {
+export async function placesNear(coordinates, excludeId) {
   return (await listPlaces())
-    .filter(place => place.id !== excludeId)
+    .filter(place => place.id !== excludeId && !place.properties.walk)
     .map(place => ({ place, distance: distance(coordinates, place.geometry.coordinates) }))
-    .filter(row => row.distance <= radius)
-    .sort((a, b) => a.distance - b.distance);
+    .filter(row => row.distance <= NEAR_PLACE)
+    .sort((a, b) => a.distance - b.distance)
+    .slice(0, 3);
+}
+
+/**
+ * « Annuler » a note that made a new lieu (« Noter ici »): that plant taken out (`entryId`), and the lieu deleted only
+ * when nothing else is in it now — no plant, no name, no notes. Read as stored, in one transaction: a lieu named or
+ * given a plant meanwhile (its editor, another tab) is never deleted. Gone already: nothing done. The backup copy and
+ * the other tabs follow. @param {string} id @param {string} entryId
+ */
+export async function undoNewPlace(id, entryId) {
+  const done = await db.update('spots', id, record => {
+    const current = read(record);
+    if (!current) return undefined;
+    const next = withoutPlant(current, entryId);
+    const p = next.properties;
+    if (!p.plants.length && !p.name.trim() && !p.notes.trim()) return db.DELETE;
+    return p.plants.length < current.properties.plants.length ? stamped(next) : undefined;
+  });
+  if (done === undefined) return;
+  // A deliberate deletion may leave nothing: the backup must follow, not keep the lieu.
+  if (done === db.DELETE) allowEmptyBackup = true;
+  await changed();
 }
 
 /** Link handing the place to the phone's navigation app. @param {Place} place */
