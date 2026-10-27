@@ -56,7 +56,7 @@ import { nearestStop } from '../core/distance.js';
 import { cellIcon, distanceLabel } from './registry.js';
 import { COMPACT_WIDTH, MAP_INTENTS, MAP_LANDMARKS, MAP_LAYERS, WIDE_FRAMES, catalogLayers, inatTiles, inWhen, layersOf, mapControls, opacitiesOf, opacText, overlaysOf, snapRadius, uiMode, viewOf, viewText } from './map-options.js';
 import { periodQuery, plantOfPoint, taxonIdOf } from '../core/nearby.js';
-import { OBS_DEFAULTS, SOURCES, SOURCE_NAMES, failedText, inatQuery, obsNotes, sourcesText } from '../core/observations.js';
+import { OBS_DEFAULTS, SOURCES, SOURCE_NAMES, defaultSources, failedText, inatQuery, obsNotes, sourcesText } from '../core/observations.js';
 import { obsId } from './state.js';
 import { speciesKey } from '../components/map-style.js';
 import '../components/gf-map.js';
@@ -140,14 +140,16 @@ export function scopeWords(state) {
   return at ? `${distanceLabel(state.radius)} autour ${place ? 'de ' + place : 'du point choisi'}` : 'Toute la France';
 }
 
+/** The layout's period (state.js) in words, after « dans la zone »: the plants of the zone that year, that month. @param {LayoutState} state */
+const periodWords = state => state.periode === 'annee' ? ' cette année' : state.periode === 'mois' ? ' ce mois-ci' : '';
+
 /** What the scope says of the plants: their count, coming, or why it does not filter. @param {LayoutState} state */
 function scopeNote(state) {
   if (!state.live.at) return '';
   if (state.speciesState === 'loading') return 'Observations de la zone : recherche…';
   if (state.speciesState === 'error') return state.speciesError ?? '';
   const n = state.species?.list.length ?? 0;
-  // The layout's period (state.js): the plants of the zone that year, that month.
-  const when = state.periode === 'annee' ? ' cette année' : state.periode === 'mois' ? ' ce mois-ci' : '';
+  const when = periodWords(state);
   // The plants of the zone's latest observations (the map's: state.js), as the flora knows them — and from where.
   const from = sourcesText(state.filters.sources.filter(x => !state.failed.some(f => f.name === SOURCE_NAMES[x])));
   return n ? `${n.toLocaleString('fr-FR')} plante${n > 1 ? 's' : ''} dans les observations de la zone${when} (${from})` : `Aucune plante de la flore dans les observations de la zone${when} (${from}).`;
@@ -362,7 +364,7 @@ export class DlMap extends LitElement {
     return {
       // The period: the layout's, shared by every cell (the address' periode=, else a map's when=: state.js). The
       // sources of its points: those it says among its group's (core/observations.js), else all of them.
-      src: /** @type {string[]} */ (p.src ?? this.state?.filters.sources ?? OBS_DEFAULTS.sources), when: /** @type {string} */ (this.state?.periode ?? p.when ?? 'toujours'), suit: p.suit !== false,
+      src: /** @type {string[]} */ (p.src ?? this.state?.filters.sources ?? defaultSources()), when: /** @type {string} */ (this.state?.periode ?? p.when ?? 'toujours'), suit: p.suit !== false,
       plante: /** @type {string} */ (p.plante ?? 'grand'),
       toucher: /** @type {string} */ (p.toucher ?? 'plante'), pts: /** @type {string} */ (p.pts ?? 'photo'),
       portee: /** @type {'zone' | 'france' | 'monde'} */ (p.portee ?? 'zone'),
@@ -818,7 +820,8 @@ export class DlMap extends LitElement {
     map.busy('scope', Boolean(s.live.at) && s.speciesState === 'loading', 'Plantes de la zone : recherche');
     map.setStatus('scope', s.live.at && s.speciesState === 'error' ? s.speciesError : '', { level: 'warn' });
     // A source of the zone that failed, the others shown (core/observations.js): said on the map — every one failing
-    // is the scope's error above.
+    // is the scope's error above. One whose module is off fails only when a map or the address asks it: the layout's
+    // own sources leave it out (state.js defaultSources).
     const partial = s.live.at && s.speciesState === 'ready' && s.failed.length ? s.failed : [];
     map.setStatus('sources', partial.length ? `${failedText(partial)} : ${partial.length > 1 ? 'leurs' : 'ses'} observations manquent sur la carte et dans la liste.` : '', { level: 'warn' });
     const said = s.live.at && s.speciesState !== 'loading' && s.speciesState !== 'error' ? scopeNote(s) : '';
@@ -1458,16 +1461,17 @@ export class DlDeck extends LitElement {
     const ses = this.#session;
     if (s.speciesState === 'error') return this.#failed(s);
     if (this._loading && !ses.cards.length) return html`<p class="empty" role="status">Les cartes arrivent…</p>`;
-    // A source failing, the others' plants none (GBIF's own, often none where iNaturalist's are): said as a failure,
-    // never the deck's end (« toutes les plantes du coin »).
+    // A source failing, no card from the others (no plant — GBIF's own, often none where iNaturalist's are —, or none
+    // the search keeps): said as a failure, never the deck's end (« toutes les plantes du coin »).
     if (s.speciesState === 'ready' && s.failed.length && !ses.cards.length) return this.#failed(s);
     return html`<ma-deck active .session=${ses} .cards=${ses.deck} .c=${ses.c}></ma-deck>`;
   }
 
   /**
    * The scope's plants could not be had (its sources down, offline, their modules off) — or only some of its sources
-   * answered, with no plant (`ready`: those that failed named, the others said to have none): no cards — said, with
-   * what to do (« Réessayer », or the module turned on), instead of cards of another scope or a wait without end.
+   * answered, with no card (`ready`: those that failed named; the others said to have seen no plant, or none that the
+   * search keeps — its words, its filters): no cards — said, with what to do (« Réessayer », or the module turned on),
+   * instead of cards of another scope or a wait without end.
    * @param {LayoutState} s
    */
   #failed(s) {
@@ -1481,9 +1485,12 @@ export class DlDeck extends LitElement {
     const why = s.speciesFailure === 'offline' ? `Hors ligne : ${names} ${many ? 'sont injoignables' : 'est injoignable'}.` : `${failedText(s.failed)}.`;
     const seen = `${/^[aeiouy]/i.test(names) ? 'qu’' : 'que '}${names} ${many ? 'ont vues dans la zone : sans eux' : 'a vues dans la zone : sans lui'}`;
     const later = off ? '' : ' pour l’instant';
+    // The others' plants: none seen (in the period), or none that the search keeps (the cards are its plants of the zone).
+    const them = sourcesText(others), plural = others.length > 1, when = periodWords(s);
+    const none = !s.species?.list.length ? `${them} ${plural ? 'n’ont' : 'n’a'} vu aucune plante dans la zone${when}`
+      : `Aucune des plantes ${/^[aeiouy]/i.test(them) ? 'qu’' : 'que '}${them} ${plural ? 'ont' : 'a'} vues dans la zone${when} ne correspond à la recherche`;
     return html`<div class="empty" role="status"><p class="big warn">${icon('exclamation-triangle-fill')}</p><p><b>${why}</b></p>
-      <p>${partial ? `${sourcesText(others)} ${others.length > 1 ? 'n’ont' : 'n’a'} vu aucune plante dans la zone ; sans ${names}, pas de cartes${later}.`
-        : `Les cartes sont les plantes ${seen}, pas de cartes${later}.`}</p>
+      <p>${partial ? `${none} ; sans ${names}, pas de cartes${later}.` : `Les cartes sont les plantes ${seen}, pas de cartes${later}.`}</p>
       ${off ? html`<p><a href=${href.settings()}>Réglages › Modules</a></p>`
         : html`<button class="primary" type="button" @click=${() => s.retryScope()}>${icon('arrow-counterclockwise')} Réessayer</button>`}</div>`;
   }

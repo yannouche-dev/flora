@@ -7,7 +7,9 @@
 // titles and counts (iNaturalist's copy left out), « Tout cocher » (the focus kept); an address of before naming those
 // asked alone (jeux=): those ticked, one ticked more added to them; a plant seen by GBIF alone in the list and on the
 // map; reloaded, the same; « effacer »: the layout's own again; the plants' origin, the « Statut en France » below; a
-// source that fails said, the other shown.
+// source that fails said, the other shown; a source whose module is off left out by default (never said missing on
+// the map), said when the address asks it; the zone's only dataset said so; the deck, iNaturalist down, when the search
+// leaves none of GBIF's plants.
 // iNaturalist answered here: 24 observations of the 12 plants of the zone (fixtures answerZone); GBIF: the elder
 // (Sambucus nigra, which iNaturalist did not see) twice, in two datasets, and a copy of iNaturalist's.
 import { test, expect, answerAround, answerZone, plantId } from './fixtures.mjs';
@@ -26,10 +28,11 @@ const TITLES = { 'cbn-mc': 'Inventaire du CBN Massif central', plantnet: 'Pl@ntN
 
 /**
  * GBIF answered as it does (its occurrences around the point asked, the datasets chosen only — none with limit=0; its
- * datasets counted as if none were, when asked; their titles). `seen`: the addresses of its occurrences asked.
- * @param {Page} page @param {{ seen?: string[] }} [o]
+ * datasets counted as if none were, when asked; their titles). `seen`: the addresses of its occurrences asked; `only`:
+ * the zone's datasets but those (and its copy of iNaturalist's).
+ * @param {Page} page @param {{ seen?: string[], only?: string[] }} [o]
  */
-async function answerGbif(page, { seen } = {}) {
+async function answerGbif(page, { seen, only } = {}) {
   await page.route(/^https:\/\/api\.gbif\.org\/v1\/occurrence\/search\?/, route => {
     const url = new URL(route.request().url());
     seen?.push(url.href);
@@ -37,10 +40,11 @@ async function answerGbif(page, { seen } = {}) {
     const media = [{ type: 'StillImage', license: 'http://creativecommons.org/licenses/by/4.0/' }];
     const row = (/** @type {number} */ key, /** @type {string} */ species, /** @type {string} */ datasetKey, /** @type {number} */ d) => ({ key, decimalLatitude: lat + d, decimalLongitude: lng + d,
       species, scientificName: species + ' L.', taxonRank: 'SPECIES', eventDate: '2026-06-0' + (key % 9 + 1), datasetKey, datasetName: TITLES[datasetKey] ?? 'iNaturalist', media });
-    const all = [row(5001, 'Sambucus nigra', 'cbn-mc', 0.001), row(5002, 'Sambucus nigra', 'plantnet', -0.001), row(5003, 'Urtica dioica', INAT_DATASET, 0.002)];
+    const zone = (/** @type {string} */ key) => !only || only.includes(key) || key === INAT_DATASET;
+    const all = [row(5001, 'Sambucus nigra', 'cbn-mc', 0.001), row(5002, 'Sambucus nigra', 'plantnet', -0.001), row(5003, 'Urtica dioica', INAT_DATASET, 0.002)].filter(r => zone(r.datasetKey));
     const chosen = url.searchParams.getAll('datasetKey');
     const results = url.searchParams.get('limit') === '0' ? [] : chosen.length ? all.filter(r => chosen.includes(r.datasetKey)) : all;
-    const counts = [{ name: INAT_DATASET, count: 100 }, { name: 'cbn-mc', count: 30 }, { name: 'plantnet', count: 12 }];
+    const counts = [{ name: INAT_DATASET, count: 100 }, { name: 'cbn-mc', count: 30 }, { name: 'plantnet', count: 12 }].filter(c => zone(c.name));
     const count = counts.filter(c => !chosen.length || chosen.includes(c.name)).reduce((n, c) => n + c.count, 0);
     return route.fulfill({ contentType: 'application/json', headers: { 'access-control-allow-origin': '*' },
       body: JSON.stringify({ count, results, ...(url.searchParams.get('facet') ? { facets: [{ field: 'DATASET_KEY', counts }] } : {}) }) });
@@ -254,4 +258,50 @@ test('une source en panne : dite dans la section et sur la carte, l’autre mont
   await expect(section(page).getByRole('group', { name: 'Sources des observations' }).locator('li').nth(1)).toContainText('ne répond pas');
   await expect.poll(async () => (await names(page)).length).toBe(12);
   await expect(page.locator('dl-search dl-results .scope')).toContainText('(iNaturalist)');
+});
+
+test('un module coupé (Réglages › Modules) : sa source laissée par défaut, jamais demandée ni dite manquante sur la carte ; demandée par l’adresse, dite', async ({ app, page }) => {
+  /** @type {string[]} */ const gbif = [];
+  await page.addInitScript(() => localStorage.setItem('geoflora.modules', JSON.stringify({ gbif: false })));
+  await answerZone(page);
+  await answerGbif(page, { seen: gbif });
+  await app.open(`${LAYOUT}?${AT}`);
+  const sources = section(page).getByRole('group', { name: 'Sources des observations' });
+  await expect(sources.locator('li').first()).toContainText('24');
+  await expect(sources.getByRole('checkbox', { name: /GBIF/ })).not.toBeChecked();
+  await expect(sources.locator('li').nth(1)).toContainText('module désactivé');
+  await expect(page.locator('dl-search dl-results .scope')).toContainText('12 plantes dans les observations de la zone (iNaturalist)');
+  const map = page.locator('dl-map gf-map');
+  expect((await mapState(map)).filter(l => /manquent/.test(l))).toEqual([]);
+  expect([gbif, await param(page, 'sources')]).toEqual([[], null]);
+  // The address asks GBIF: its module said off, as before — it was asked.
+  await app.go(`${LAYOUT}?${AT}&sources=inat,gbif`);
+  await expect.poll(() => mapState(map)).toContain('Le module GBIF est désactivé : ses observations manquent sur la carte et dans la liste.');
+});
+
+test('le seul jeu GBIF de la zone : sa case grisée, dit ; « décochez GBIF » seulement quand sa case peut l’être', async ({ app, page }) => {
+  await answerZone(page);
+  await answerGbif(page, { only: ['plantnet'] });
+  await app.open(`${LAYOUT}?${AT}`);
+  const plantnet = section(page).getByRole('group', { name: 'Jeux de données GBIF' }).getByRole('checkbox', { name: /Pl@ntNet/ });
+  await expect(plantnet).toBeDisabled();
+  await expect(plantnet).toHaveAccessibleDescription('Le seul jeu de la zone : décochez GBIF pour ne pas le voir.');
+  // GBIF alone (its box off): said plainly, without what cannot be done.
+  const sources = section(page).getByRole('group', { name: 'Sources des observations' });
+  await sources.getByRole('checkbox', { name: /iNaturalist/ }).uncheck();
+  await expect(sources.getByRole('checkbox', { name: /GBIF/ })).toBeDisabled();
+  await expect(plantnet).toHaveAccessibleDescription('Le seul jeu de la zone.');
+});
+
+test('les cartes de Rencontres, iNaturalist en panne : les plantes de GBIF que la recherche écarte dites comme telles, jamais « GBIF n’a vu aucune plante »', async ({ app, page }) => {
+  await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?/, route => route.fulfill({ status: 503, body: '' }));
+  await answerGbif(page);
+  // The search (ortie) keeps none of the plants GBIF saw here (the elder).
+  await app.open(`#/layout/[map,deck]?${AT}&q=ortie`);
+  const said = page.locator('dl-deck .empty');
+  await expect(said).toContainText('iNaturalist ne répond pas');
+  await expect(said).toContainText('Aucune des plantes que GBIF a vues dans la zone ne correspond à la recherche ; sans iNaturalist, pas de cartes pour l’instant.');
+  // Without the search: the elder, a card.
+  await app.go(`#/layout/[map,deck]?${AT}`);
+  await expect(page.locator('dl-deck ma-deck .swipe-card.top')).toHaveAttribute('data-id', String(plantId('Sambucus nigra')));
 });

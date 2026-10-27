@@ -3,10 +3,12 @@
 // cell's, the filters cell: gf-filter-panel `lead`), its header stacked with the facets' (gf-facet facetStyles). Where
 // the observations come from and which of them count — the map's points and the list's plants (layout/state.js,
 // core/observations.js):
-//  - the sources: iNaturalist, GBIF — each one's count in the zone, or why it failed; one at least;
+//  - the sources: iNaturalist, GBIF — each one's count in the zone, or why it failed; one at least; one whose module
+//    is off not ticked by default (core/observations.js defaultSources), said;
 //  - GBIF's datasets in the zone (Pl@ntNet, Observation.org, the botanical conservatories…), their titles and counts:
 //    every one ticked, one at least, « Tout cocher » when some are not (the focus then on the first one; those left
-//    out: sansjeux=; an address that names those asked alone, jeux=: those);
+//    out: sansjeux=; an address that names those asked alone, jeux=: those); the zone's only one: said so, and how to
+//    hide it (GBIF unticked) when GBIF can be;
 //  - the rank (any; the species or below), the quality grades (verified, to identify, casual — every one ticked, one
 //    at least; iNaturalist's alone: GBIF has none), a photo (any; one; one under a free licence), the cultivated or
 //    captive plants (ticked: shown — sauvages=1 when not; iNaturalist's are among its casual ones, said when those
@@ -22,7 +24,7 @@ import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 import { facetStyles } from '../components/gf-facet.js';
 import { gbifDatasetTitle } from '../core/sources.js';
-import { APPLIES, GRADES, OBS_DEFAULTS, SOURCES, SOURCE_NAMES, obsChanges } from '../core/observations.js';
+import { APPLIES, GRADES, OBS_DEFAULTS, SOURCES, SOURCE_NAMES, obsChanges, sourceOn } from '../core/observations.js';
 
 /**
  * @typedef {import('./state.js').LayoutState} LayoutState
@@ -173,11 +175,12 @@ export class DlObsFilters extends LitElement {
   }
 
   /**
-   * A source's count in the zone, or why it gave none: being counted, failed (its module off, or not answering).
+   * A source's count in the zone, or why it gave none: being counted, failed (its module off, or not answering); not
+   * asked, its module off (why it is not ticked by default).
    * @param {LayoutState} s @param {'inat' | 'gbif'} source
    */
   #count(s, source) {
-    if (!s.filters.sources.includes(source)) return nothing;
+    if (!s.filters.sources.includes(source)) return sourceOn(source) ? nothing : html`<span class="count">module désactivé</span>`;
     const failed = s.failed.find(f => f.name === SOURCE_NAMES[source]);
     if (failed) return html`<span class="count warn">${failed.off ? 'module désactivé' : 'ne répond pas'}</span>`;
     const n = s.totals[source];
@@ -260,7 +263,8 @@ export class DlObsFilters extends LitElement {
   /**
    * GBIF's datasets in the zone (counted as if none were chosen), the most records first, those the address names but
    * not in it after; their titles as found. Every one ticked, but those left out (or, an address naming those asked
-   * alone: those); one at least; « Tout cocher » when some are not. @param {LayoutState} s @param {Readonly<ObsFilters>} f
+   * alone: those); one at least; « Tout cocher » when some are not. The zone's only one: its box off, said why — and
+   * GBIF to untick, only when its box can be (iNaturalist ticked too). @param {LayoutState} s @param {Readonly<ObsFilters>} f
    */
   #datasets(s, f) {
     const known = new Set(s.datasets.map(d => d.key));
@@ -284,7 +288,7 @@ export class DlObsFilters extends LitElement {
         })}
       </ul>
       ${kept === 1 ? html`<p class="note" id="obs-one-set">${all.length > 1 ? 'Un jeu au moins : cochez-en un autre pour décocher celui-ci.'
-        : 'Un jeu au moins : décochez GBIF, plus haut, pour ne pas le voir.'}</p>` : nothing}
+        : f.sources.length > 1 ? 'Le seul jeu de la zone : décochez GBIF pour ne pas le voir.' : 'Le seul jeu de la zone.'}</p>` : nothing}
       ${all.length > shown.length ? html`<button class="link more" type="button" @click=${() => { this._all = true; }}>Voir plus (${all.length - shown.length})</button>` : nothing}
       ${this._all && all.length > SHOWN ? html`<button class="link more" type="button" @click=${() => { this._all = false; }}>Voir moins</button>` : nothing}`}
     </div>`;

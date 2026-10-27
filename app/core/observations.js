@@ -4,11 +4,11 @@
 // (layout/state.js) asks for a zone's observations with global filters, the same for every source: each one put in
 // the source's own words where it has them, applied by the app where it has not (GBIF: the rank, a free photo, wild
 // plants), or said not to apply (GBIF has no quality grade); every observation they give by default (both sources, every
-// quality, every dataset: a map shows all that is there); the answers merged into one list of points — GBIF's copy
-// of iNaturalist's left out, the same plant at the same spot on the same day once —, the most recent first. A source
-// that fails is said, the others shown.
-//   OBS_DEFAULTS, readObsFilters(params), obsParams(filters), obsKey(filters): the filters and the address (sources=,
-//     qualite=, taxon=, photos=, sauvages=, jeux=, sansjeux=);
+// quality, every dataset: a map shows all that is there — but a source switched off in Réglages › Modules); the answers
+// merged into one list of points — GBIF's copy of iNaturalist's left out, the same plant at the same spot on the same
+// day once —, the most recent first. A source that fails is said, the others shown.
+//   OBS_DEFAULTS, defaultSources(), readObsFilters(params), obsParams(filters), obsKey(filters): the filters and the
+//     address (sources=, qualite=, taxon=, photos=, sauvages=, jeux=, sansjeux=);
 //   inatQuery(f), inatGrades(qualite), gbifQuery(f, periode), gbifKeep(record, f), APPLIES: what each source does of
 //     each filter;
 //   zoneObservations(center, radius, { filters, periode, taxon, precise, signal }) → { points, totals, failed, datasets }
@@ -115,6 +115,22 @@ const QUALITY_WORDS = Object.freeze({ recherche: ['recherche'], verifiables: ['r
  * what a map shows unless told otherwise (the games' cards ask for verified ones on their own).
  */
 export const OBS_DEFAULTS = /** @type {Readonly<ObsFilters>} */ (Object.freeze({ sources: ['inat', 'gbif'], qualite: [...GRADES], taxon: 'tous', photos: 'toutes', sauvages: false, jeux: [], sansjeux: [] }));
+
+/** Each source's module (Réglages › Modules: core/modules.js). */
+const SOURCE_MODULES = /** @type {const} */ ({ inat: 'inaturalist', gbif: 'gbif' });
+
+/** Is this source's module on? @param {ObsSource} source */
+export const sourceOn = source => moduleOn(SOURCE_MODULES[source]);
+
+/**
+ * The sources a layout asks when neither its maps (src=) nor the address (sources=) say them: OBS_DEFAULTS' but one
+ * whose module is switched off (never asked, so never said missing on every map); both off, both (the zone says so).
+ * @returns {ObsSource[]}
+ */
+export function defaultSources() {
+  const on = OBS_DEFAULTS.sources.filter(sourceOn);
+  return on.length ? on : [...OBS_DEFAULTS.sources];
+}
 
 /**
  * The grades as the address writes them: the word of before when they are its (recherche, verifiables, toutes), else

@@ -21,7 +21,8 @@
 //   &sources=inat,gbif&qualite=…&taxon=espece&photos=avec|libre&sauvages=1&jeux=…&sansjeux=<GBIF datasets>
 //                                      the zone's observations: their sources and the filters every source applies
 //                                      (core/observations.js); not said, the defaults — the sources a map says (src=),
-//                                      else both, every observation (every quality, every dataset);
+//                                      else both (but one switched off in Réglages › Modules: defaultSources), every
+//                                      observation (every quality, every dataset);
 //   &q=…&family=…&sort=…               the search itself: Flore's (core/query.js — the same words as #/?q=…), kept in the
 //                                      store, so the search cell is Flore's own bar, filters and list.
 // A layout's other groups (a cell's groupe=b: its own zone, plant, period and search, apart from the others) have
@@ -39,7 +40,7 @@ import { findPlace } from '../core/geoservices.js';
 import { errorKind } from '../core/net.js';
 import { observationsAround, plantCounts, plantsIn, speciesOf, taxonIdOf } from '../core/nearby.js';
 import { boxHolds, circleBox } from '../core/around3d.js';
-import { OBS_DEFAULTS, SOURCE_NAMES, failedText, inatQuery, obsKey, obsParams, readObsFilters, sourcesText, zoneObservations } from '../core/observations.js';
+import { OBS_DEFAULTS, SOURCE_NAMES, defaultSources, failedText, inatQuery, obsKey, obsParams, readObsFilters, sourcesText, zoneObservations } from '../core/observations.js';
 import { fromHash, toHash } from '../core/query.js';
 import { searchWhole } from '../core/search.js';
 import { APP } from '../core/search-channel.js';
@@ -170,8 +171,11 @@ export class LayoutState extends EventTarget {
     this.defaultRadius = defaults.radius ?? DEFAULT_RADIUS;
     /** The layout's own period (a map's when=), until the address says one. @type {Period} */
     this.defaultPeriode = 'toujours';
-    /** The layout's own sources of observations (its maps' src=), until the address says them. @type {ObsFilters['sources']} */
-    this.defaultSources = OBS_DEFAULTS.sources;
+    /**
+     * The layout's own sources of observations (its maps' src=; none said: both, but one whose module is off —
+     * core/observations.js defaultSources), until the address says them. @type {ObsFilters['sources']}
+     */
+    this.defaultSources = defaultSources();
     this.find = defaults.find ?? findPlace;
     /** A place to find (place= without at=): being found, or why it was not (in French; null: none to find, or found). */
     /** @type {'idle' | 'finding' | 'failed'} */
