@@ -87,8 +87,10 @@ export const config = {
     mediaRatio: 'geoflora.mediaRatio',
     // When the sources' cache was last purged (core/cache.js), ms.
     cachePurgedAt: 'geoflora.cachePurgedAt',
-    // The Parcours botanique (miniapp/kit/trail-store.js): the walk under way, those to take up again, the one ended.
+    // The Parcours botanique (miniapp/kit/trail-store.js): the walk under way, the one ended.
     trail: 'geoflora.trail',
+    // Obsolete: the walks to take up again, read from Mes plantes since 2.8 — read once at start (main.js), forgotten once
+    // they are marked (collections.js#markWalks); gone with 3.2.
     trails: 'geoflora.trails',
     trailDone: 'geoflora.trailDone',
     // Between tabs, where BroadcastChannel is missing (core/sync.js).

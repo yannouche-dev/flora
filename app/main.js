@@ -9,8 +9,8 @@ import { fromHash, startUrlSync } from './core/query.js';
 import { context } from './core/context.js';
 import { parse } from './core/router.js';
 import { loadIndex, runSearch } from './core/search.js';
-import { anyHarvest, hasSpots, holdIfEmptied, refreshMembership, requestPersistence, restoreAfterRepair, restoreReason, spotEvents, tagLegacyOrigins,
-  writeBackup } from './core/collections.js';
+import { anyHarvest, hasSpots, holdIfEmptied, markWalks, refreshMembership, requestPersistence, restoreAfterRepair, restoreReason, spotEvents,
+  tagLegacyOrigins, writeBackup } from './core/collections.js';
 import { openDb, storageError } from './core/db.js';
 import { keptWalks, walkOn } from './miniapp/kit/trail-store.js';
 import { followHarvests, harvestModeChosen, store } from './core/store.js';
@@ -40,8 +40,13 @@ async function start() {
     // A first launch: the worker already searches on the flora it is storing; a local copy: its index built from it.
     if (!stored) await loadIndex();
     await refreshMembership().catch(error => console.error(error));
-    // What the mini-apps made before its origin was recorded, tagged once (their « Recommencer » takes it away).
-    tagLegacyOrigins({ walks: keptWalks(), walk: walkOn() }).catch(error => console.error(error));
+    // What the mini-apps made before its origin was recorded, tagged once (their « Recommencer » takes it away); then the
+    // parcours of before their mark, marked once — not while a restore waits (the base is empty: the next start does it,
+    // the copy put back) — and only then the list of them this device kept forgotten (failed or not run: kept for the
+    // next start, nothing lost).
+    tagLegacyOrigins(knownWalks)
+      .then(() => restoring ? undefined : markWalks(knownWalks).then(() => forgetObsolete([config.storageKeys.trails])))
+      .catch(error => console.error(error));
     // Collections saved before the backup existed get one now (an empty database never erases it), with the notes.
     notes.then(() => writeBackup()).catch(error => console.error(error));
     // The harvest mode never chosen (« auto »): on with the harvests the device holds — and those that arrive (below:
@@ -201,6 +206,9 @@ if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   if (controlled) registerWorker();
 }
 
+// The parcours this device kept (to continue, the recap, the one under way), read once: they are marked in Mes plantes
+// (start, above), then the list is forgotten.
+const knownWalks = { walks: keptWalks(), walk: walkOn() };
 forgetObsolete(config.obsoleteKeys);
 startUrlSync();
 start();

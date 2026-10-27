@@ -3,8 +3,8 @@
 // as before (never pick without a certain identification, the look-alikes, the deadliest first, toxicity) — a deadly
 // plant seen once among more than 120 is in its deck, a toxic look-alike is never a match nor a favourite (« à ne pas
 // cueillir »), an empty list says one thing; Mosaïque's photo grid; the old addresses of Découvrir; the session the
-// three shared before handed over to each; « Recommencer » in one leaving the others as they were. Rencontres' services
-// answered here.
+// three shared before handed over to each; « Recommencer » in one leaving the others as they were; the parcours of
+// before their mark, marked once (collections.js#markWalks). Rencontres' services answered here.
 import { readFileSync } from 'node:fs';
 import { test, expect, plantId, answerAround, fixturePlants } from './fixtures.mjs';
 
@@ -258,4 +258,46 @@ test.describe('la partie partagée d’avant', () => {
     expect(await kept(page, 'rencontres')).toBe(null);
     await expect(page.getByRole('group', { name: 'Continuer' })).toContainText('Autour de Paris');
   });
+});
+
+test('les parcours d’avant la marque deviennent des parcours, une fois ; la liste de l’appareil oubliée, la copie de secours suivie', async ({ app, page }) => {
+  await app.open('#/');
+  // As an older version kept them: a walk started « ici », one in the device's list of walks to continue, and a lieu
+  // of the user's (its notes say « Parcours botanique »: nothing is guessed from a text) — no mark, no origin.
+  const ids = await page.evaluate(async id => {
+    const c = await import('/app/core/collections.js');
+    const db = await import('/app/core/db.js');
+    const ortie = await db.get('plants', id);
+    const here = c.withPlant(c.newPlace([2.35, 48.85], { name: 'Départ ici', startedHere: true }), ortie);
+    const listed = c.withPlant(c.newPlace([2.36, 48.85], { name: 'Dans la liste' }), ortie);
+    const own = c.withPlant(c.newPlace([2.37, 48.85], { name: 'Jardin à moi', notes: 'Parcours botanique' }), ortie);
+    for (const p of [here, listed, own]) await c.savePlace(p);
+    localStorage.setItem('geoflora.trails', JSON.stringify([listed.id]));
+    await db.remove('meta', 'origins');
+    await db.remove('meta', 'walks');
+    return [here.id, listed.id, own.id];
+  }, plantId('Urtica dioica'));
+  const state = () => page.evaluate(async ids => {
+    const db = await import('/app/core/db.js');
+    const backup = new Map((JSON.parse(localStorage.getItem('geoflora.backup') || 'null')?.features || []).map((/** @type {any} */ f) => [f.id, f.properties]));
+    const raw = await Promise.all(ids.map(id => db.get('spots', id)));
+    return { done: Boolean(await db.get('meta', 'walks')), list: localStorage.getItem('geoflora.trails'),
+      walk: raw.map(r => r.properties.walk ?? null), backup: ids.map(id => backup.get(id)?.walk ?? null), updatedAt: raw.map(r => r.properties.updatedAt) };
+  }, ids);
+  await page.reload();
+  await app.ready();
+  await expect.poll(async () => { const s = await state(); return [s.done, s.list, s.walk, s.backup]; })
+    .toEqual([true, null, [true, true, null], [true, true, null]]);
+  // Offered to continue, as every parcours of Mes plantes; the lieu of the user's, not.
+  await app.go('#/app/parcours');
+  const offered = page.getByRole('group', { name: 'Continuer un parcours' });
+  await expect(offered.getByRole('button')).toHaveCount(2);
+  await expect(offered).toContainText('Départ ici');
+  await expect(offered).toContainText('Dans la liste');
+  // Once: the next start writes nothing.
+  const before = await state();
+  await page.reload();
+  await app.ready();
+  await page.waitForTimeout(1500);
+  expect(await state()).toEqual(before);
 });

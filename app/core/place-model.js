@@ -444,3 +444,20 @@ export function tagLegacy(collections, { walks, walk = null }) {
   }
   return out;
 }
+
+/**
+ * A walk of before the mark, marked (once, collections.js#markWalks): the record as stored, `walk: true` added and
+ * nothing else changed — its date of change kept (the mark is no change by the user: the start list's date stays true,
+ * and a merge elsewhere sees no newer copy). null when it needs none: marked already, without a point, or no walk —
+ * neither made by the Parcours (normalizeCollection reads it so), nor started « ici », nor kept by the Parcours of this
+ * device (`walks`: its list to continue and the recap shown; `walk`: the one under way). Pure.
+ * @param {any} record @param {{ walks: string[], walk?: string | null }} known @returns {any}
+ */
+export function walkMarked(record, { walks, walk = null }) {
+  if (!record || record.properties?.walk === true) return null;
+  const c = normalizeCollection(record);
+  if (!c?.geometry) return null;
+  const p = c.properties;
+  if (!(p.walk || p.startedHere || c.id === walk || walks.includes(c.id))) return null;
+  return { ...record, properties: { ...record.properties, walk: true } };
+}

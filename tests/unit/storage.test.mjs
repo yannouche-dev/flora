@@ -132,6 +132,41 @@ test('import : fusion par collection, plantes des deux côtés gardées (STO-13)
   assert.equal((await C.importPortable(incoming)).unchanged, 1);
 });
 
+test('markWalks : les parcours d’avant la marque, marqués une fois, la copie de secours suivie, rien d’autre écrit', async () => {
+  const at = /** @type {[number, number]} */ ([2.35, 48.85]);
+  const old = '2026-06-01T08:00:00.000Z';
+  // As an older version stored them: no mark (savePlace stamps the date: put back as it was).
+  const store = async (/** @type {any} */ c) => {
+    const saved = await C.savePlace(c);
+    await db.put('spots', { ...saved, properties: { ...saved.properties, updatedAt: old } });
+    return c.id;
+  };
+  const here = await store(C.withPlant(C.newPlace(at, { name: 'Départ ici', startedHere: true }), plant(11)));
+  const listed = await store(C.withPlant(C.newPlace(at, { name: 'Dans la liste' }), plant(12)));
+  const made = await store(C.newPlace(at, { name: 'En cours', origin: { app: 'parcours' } }));
+  const own = await store(C.withPlant(C.newPlace(at, { name: 'Jardin à moi' }), plant(13)));
+  const list = await store(C.withPlant(C.newCollection('list', { name: 'Liste listée' }), plant(14)));
+  await db.remove('meta', 'walks');
+  const known = { walks: [listed, list], walk: null };
+  const raw = async (/** @type {string} */ id) => (await db.get('spots', id)).properties;
+
+  assert.equal(await C.markWalks(known), 3);
+  for (const id of [here, listed, made]) {
+    assert.equal((await raw(id)).walk, true, 'marqué dans la base');
+    assert.equal((await raw(id)).updatedAt, old, 'sa date de modification gardée');
+  }
+  for (const id of [own, list]) assert.equal((await raw(id)).walk, undefined, 'ni un lieu à soi, ni une liste');
+  assert.ok(await db.get('meta', 'walks'));
+  // The backup copy follows.
+  const backup = new Map(C.readBackup()?.features.map(f => [f.id, f.properties]));
+  assert.deepEqual([here, listed, made, own].map(id => backup.get(id)?.walk ?? null), [true, true, true, null]);
+  // Run again: nothing written (done), even with its mark gone.
+  assert.equal(await C.markWalks(known), 0);
+  await db.remove('meta', 'walks');
+  assert.equal(await C.markWalks(known), 0, 'tous déjà marqués : rien à écrire');
+  assert.equal((await raw(here)).updatedAt, old);
+});
+
 test('sync : un message d’un autre onglet est relayé, ceux de cet onglet partent sur le canal', async () => {
   const other = new BroadcastChannel('geoflora');
   try {

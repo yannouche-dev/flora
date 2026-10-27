@@ -7,7 +7,7 @@
 
 import { config } from '../config.js';
 import * as db from './db.js';
-import { FAVORITES_ID, madeBy, mergeCollections, newEntryId, normalizeEntry, normalizeCollection, plantIdsOf, promoted, promotedEntry, rebase, sameContent, tagLegacy, userChange, withoutMadeBy } from './place-model.js';
+import { FAVORITES_ID, madeBy, mergeCollections, newEntryId, normalizeEntry, normalizeCollection, plantIdsOf, promoted, promotedEntry, rebase, sameContent, tagLegacy, userChange, walkMarked, withoutMadeBy } from './place-model.js';
 import { store } from './store.js';
 import { FORMAT_VERSION, toPortable } from './portable.js';
 import { encodePortable } from './share.js';
@@ -466,6 +466,31 @@ export async function tagLegacyOrigins(known) {
     await changed();
   }
   await db.put('meta', { at: new Date().toISOString() }, 'origins');
+}
+
+/**
+ * The parcours of before the mark, marked once (place-model.js#walkMarked): those made by the Parcours (read as walks
+ * already), started « ici », or kept by the Parcours of this device (`known`: its list to continue, the recap shown, the
+ * walk under way — the list read before it is forgotten, main.js). Only `walk: true` is written, each record read again
+ * in the same transaction, its date of change kept (no change by the user); the backup copy and the other tabs follow.
+ * Done once (meta « walks »): run again, it writes nothing. Resolves with how many were marked.
+ * @param {{ walks: string[], walk?: string | null }} known @returns {Promise<number>}
+ */
+export async function markWalks(known) {
+  if (await db.get('meta', 'walks').catch(() => null)) return 0;
+  const keys = (await db.getAll('spots')).filter(record => walkMarked(record, known)).map(record => record.id);
+  let marked = 0;
+  if (keys.length) {
+    await db.updateMany('spots', keys, record => {
+      // As stored now (another tab may have written meanwhile): marked only if it still needs it.
+      const next = walkMarked(record, known);
+      if (next) marked++;
+      return next ?? undefined;
+    });
+  }
+  if (marked) await changed();
+  await db.put('meta', { at: new Date().toISOString() }, 'walks');
+  return marked;
 }
 
 /**

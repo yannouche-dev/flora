@@ -3,8 +3,8 @@
 // one just ended (its recap, until left); a walk's plants grouped (each plant once, its occurrences together), counted;
 // its recap's numbers are trail-recap.js's (with the walk and the altitudes: not at the start of the app). Tested under
 // Node (tests/unit/trail.test.mjs). A walk itself is a place of Mes plantes marked a walk (core/place-model.js `walk`):
-// those to continue are read there (trail-session.js), not kept here — the list this device kept before (LIST) is only
-// read at start (main.js).
+// those to continue are read there (trail-session.js), not kept here — the list this device kept before (LIST) is read
+// once at start, to mark them (main.js, collections.js#markWalks), then forgotten.
 
 import { config } from '../../config.js';
 import { readJSON, writeJSON } from '../../core/prefs.js';
@@ -15,7 +15,7 @@ export { countOf } from '../../core/place-model.js';
 /**
  * The parcours being walked (its place id) and the one just ended (its recap, until left); none (null): the key removed
  * — a parcours never opened, or played again, leaves none behind. LIST: the walks this device kept to take up again,
- * before they were read from Mes plantes (obsolete: no longer written; gone with 3.2).
+ * before they were read from Mes plantes (obsolete: no longer written, forgotten once marked; gone with 3.2).
  */
 export const KEY = config.storageKeys.trail, LIST = config.storageKeys.trails, DONE = config.storageKeys.trailDone;
 
@@ -25,7 +25,7 @@ export const walkUnderWay = () => Boolean(readJSON(KEY, null));
 export const walkOn = () => readJSON(KEY, null);
 /** The parcours just ended, whose recap shows (its place id), if any. @returns {string | null} */
 export const walkDone = () => readJSON(DONE, null);
-/** The parcours this device kept (to take up again, just ended): theirs before origins were recorded. @returns {string[]} */
+/** The parcours this device kept (to take up again, just ended): theirs before origins and the mark were recorded. @returns {string[]} */
 export const keptWalks = () => [...(/** @type {string[]} */ (readJSON(LIST, []))), readJSON(DONE, null)].filter(x => typeof x === 'string');
 
 /** A parcours of Mes plantes continued from its lieu (« Continuer le parcours »): the one under way, no recap shown. @param {string} id */
