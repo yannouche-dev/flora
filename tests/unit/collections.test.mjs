@@ -4,7 +4,8 @@
 // lieu; savePlace: a list or a lieu of the user's; promotePlace: the favourites shared or exported alone). And what the
 // app asks before it erases or lets something leave the device: « Retirer la position » (refused, « Copier en liste »),
 // a plant taken out, a link, a file — each text as said. And « Noter ici »: the lieux near, offered before a new one is
-// made (never a parcours), and its « Annuler », which takes away the note only.
+// made (never a parcours), and its « Annuler », which takes away the note only; « Ajouter à… » puts a plant at your
+// position near a lieu (else at its point), and says which.
 import 'fake-indexeddb/auto';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -323,4 +324,32 @@ test('undoNewPlace : la note seule retirée ; le lieu qu’elle a créé supprim
   await C.deletePlace(p.id);
   await C.undoNewPlace(p.id, e);
   assert.equal(await C.getPlace(p.id), undefined);
+});
+
+test('setInCollection : dans un lieu, la plante à votre position à moins de 100 m, sinon à son point ; addedTo le dit', async () => {
+  const place = await C.savePlace(C.newPlace(HERE, { name: 'Bois' }));
+  const list = await C.savePlace(C.newCollection('list', { name: 'Cuisine' }));
+  const fix = (/** @type {number} */ m) => ({ coordinates: north(m), accuracy: 7.6, timestamp: Date.now() });
+  /** Where plant `id` is in collection `c`, and its accuracy. @param {string} c @param {number} id */
+  const where = async (c, id) => {
+    const e = (await C.getPlace(c))?.properties.plants.find(x => x.plantId === id);
+    return [e?.coordinates, e?.accuracy];
+  };
+  const rounded = (/** @type {[number, number]} */ at) => at.map(n => Math.round(n * 1e7) / 1e7);
+  let saved = await C.setInCollection(place.id, plant(1), true, fix(40));
+  assert.deepEqual(await where(place.id, 1), [rounded(north(40)), 8]);
+  assert.equal(C.addedTo(saved, fix(40)), 'Ajoutée à « Bois », à votre position.');
+  saved = await C.setInCollection(place.id, plant(2), true, fix(150));
+  assert.deepEqual(await where(place.id, 2), [HERE, null]);
+  assert.equal(C.addedTo(saved, fix(150)), 'Ajoutée à « Bois », au point du lieu.');
+  // No recent position: its point, said so.
+  saved = await C.setInCollection(place.id, plant(3), true);
+  assert.deepEqual(await where(place.id, 3), [HERE, null]);
+  assert.equal(C.addedTo(saved, null), 'Ajoutée à « Bois », au point du lieu.');
+  // A list: no position, whatever the fix.
+  saved = await C.setInCollection(list.id, plant(1), true, fix(40));
+  assert.deepEqual(await where(list.id, 1), [null, null]);
+  assert.equal(C.addedTo(saved, fix(40)), 'Ajoutée à « Cuisine ».');
+  await db.remove('spots', place.id);
+  await db.remove('spots', list.id);
 });

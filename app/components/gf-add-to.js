@@ -1,6 +1,7 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
-import { FAVORITES_ID, getMembership, getPlace, matchCollections, newCollection, removeQuestion, saveCollection, setInCollection, withPlant } from '../core/collections.js';
+import { FAVORITES_ID, addedTo, getMembership, getPlace, matchCollections, newCollection, removeQuestion, saveCollection, setInCollection, withPlant } from '../core/collections.js';
+import { recentFix } from '../core/geo.js';
 import { href } from '../core/router.js';
 import { setContext } from '../core/context.js';
 import { openModal } from '../core/history.js';
@@ -12,8 +13,10 @@ import { confirmAsk } from './gf-ask.js';
 
 /**
  * "Ajouter à…" sheet: check the lists and places a plant belongs to, create a list on the fly,
- * or start a new place here. Call `open()`; the plant comes from the `plant` property. Unticked, a list, a lieu or the
- * favourites asks first when the plant's note, its harvest log or its other notings would go (as the lieu's editor).
+ * or start a new place here. Call `open()`; the plant comes from the `plant` property. Ticked, a lieu takes it at your
+ * position when you stand near it (a position from the last minute: geo.js recentFix; never asked for here), else at
+ * its point — said under the list (addedTo). Unticked, a list, a lieu or the favourites asks first when the plant's
+ * note, its harvest log or its other notings would go (as the lieu's editor).
  */
 
 export class GfAddTo extends LitElement {
@@ -21,7 +24,9 @@ export class GfAddTo extends LitElement {
     plant: { attribute: false },
     _creating: { state: true },
     _query: { state: true },
-    _busy: { state: true }
+    _busy: { state: true },
+    /** Where the plant just added went (addedTo), said above « Terminé ». */
+    _said: { state: true }
   };
 
   static styles = [ui, sheetStyles, css`
@@ -49,6 +54,7 @@ export class GfAddTo extends LitElement {
     .row { display: flex; gap: 8px; flex-wrap: wrap; }
     .row > * { flex: 1; }
     .suggest { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 0.85rem; color: var(--gf-text-muted); }
+    .said { margin: 0; font-size: 0.85rem; color: var(--gf-text-muted); }
   `];
 
   #store = new StoreController(this);
@@ -60,11 +66,14 @@ export class GfAddTo extends LitElement {
     this._creating = false;
     this._query = '';
     this._busy = false;
+    /** @type {string | null} */
+    this._said = null;
   }
 
   open() {
     this._creating = false;
     this._query = '';
+    this._said = null;
     openModal(/** @type {HTMLDialogElement} */ (this.renderRoot.querySelector('dialog')));
   }
 
@@ -85,7 +94,9 @@ export class GfAddTo extends LitElement {
         const q = current && removeQuestion(current, this.plant.id);
         if (q && !await confirmAsk(q)) { box.checked = true; return; }
       }
-      await setInCollection(id, this.plant, on);
+      const fix = on ? recentFix() : null;
+      const saved = await setInCollection(id, this.plant, on, fix);
+      this._said = on ? addedTo(saved, fix) : null;
       // The last collection a plant was put in becomes the current one (« Ajouter à … » on the sheet).
       if (on && id !== FAVORITES_ID) setContext({ collection: id });
     } finally { this._busy = false; }
@@ -115,7 +126,8 @@ export class GfAddTo extends LitElement {
   async #addToExisting(id) {
     this._busy = true;
     try {
-      await setInCollection(id, this.plant, true);
+      const fix = recentFix();
+      this._said = addedTo(await setInCollection(id, this.plant, true, fix), fix);
       setContext({ collection: id });
       this._creating = false;
       this._query = '';
@@ -168,6 +180,7 @@ export class GfAddTo extends LitElement {
               <button type="button" @click=${() => { this._creating = true; }}>${icon('plus-lg')} Nouvelle liste</button>
               <a class="button" href=${href.newSpot(plant?.id)} @click=${() => this.#close()}>${icon('geo-alt-fill')} Nouveau lieu ici</a>
             </div>`}
+          ${this._said ? html`<p class="said" role="status">${this._said}</p>` : nothing}
           <button class="primary" type="button" @click=${() => this.#close()}>Terminé</button>
         </footer>
       </dialog>

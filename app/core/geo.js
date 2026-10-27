@@ -141,6 +141,13 @@ export const lastFix = () => state.fix;
 export const FIX_MAX_AGE = 60_000;
 
 /**
+ * The last fix, when it is recent enough (`maxAge` ms at most), else null — without asking the browser for a position
+ * (« Ajouter à… », the current list or lieu: a plant added near a lieu takes it; none, the lieu's point).
+ * @param {number} [maxAge] @returns {Fix | null}
+ */
+export const recentFix = (maxAge = FIX_MAX_AGE) => state.fix && Date.now() - state.fix.timestamp <= maxAge ? state.fix : null;
+
+/**
  * @typedef {Fix | { error: string, code: GeoCode | null } | null} OneFix  a position; why there is none (state.error's
  *   words, and its code); or null: given up (`timeout`) or dropped (`signal`)
  */

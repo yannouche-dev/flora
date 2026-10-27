@@ -5,9 +5,9 @@ import * as db from '../core/db.js';
 import { commonOf, nameOf } from '../core/plants.js';
 import { lastSearchHash } from '../core/query.js';
 import { StoreController, arrange, arrangedMode, closeKing, openKing, whenReady } from '../core/store.js';
-import { formatDistance, getMembership, promoteFavorites, setInCollection, toggleFavorite } from '../core/collections.js';
+import { addedTo, formatDistance, getMembership, promoteFavorites, setInCollection, toggleFavorite } from '../core/collections.js';
 import { context } from '../core/context.js';
-import { lastFix, oneFix } from '../core/geo.js';
+import { lastFix, oneFix, recentFix } from '../core/geo.js';
 import { savedRadius } from '../core/nearby.js';
 import { href } from '../core/router.js';
 import { share } from '../core/share.js';
@@ -1656,11 +1656,14 @@ export class GfPlantDetail extends LitElement {
     return summary;
   }
 
-  /** @param {any} plant @param {{ id: string, name: string, kind: string }} current */
+  /**
+   * Into the current list or lieu, in one tap: a lieu takes it at your position when you stand near it (a position from
+   * the last minute), else at its point — said (addedTo). @param {any} plant @param {{ id: string, name: string, kind: string }} current
+   */
   async #addCurrent(plant, current) {
     try {
-      await setInCollection(current.id, plant, true);
-      this._shareNote = `Ajoutée à « ${current.name} ».`;
+      const fix = recentFix();
+      this._shareNote = addedTo(await setInCollection(current.id, plant, true, fix), fix);
     } catch (error) {
       this._shareNote = 'Ajout impossible : ' + /** @type {Error} */ (error).message;
     }

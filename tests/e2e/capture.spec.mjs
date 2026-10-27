@@ -239,6 +239,18 @@ test('Noter ici : la même offre partout — l’en-tête, la fiche, un nouveau 
   await dialog.getByRole('button', { name: 'Nouveau lieu ici' }).click();
   await expect(toast).toContainText('Ortie dioïque noté ici (nouveau lieu)');
   await expect.poll(names).toEqual([['', 1], ['Loin', 0], ['Parcours du matin', 0], ['Pré', 2]]);
+  // « Ajouter à… » on the same sheet, said where it goes: « Pré » (60 m) at your position (one of the last minute),
+  // « Loin » (150 m) at its point; « Pré » unticked, nothing said.
+  await page.locator('.action-bar .act[data-key="addTo"] > button').first().click();
+  const addTo = page.getByRole('dialog', { name: 'Ajouter à une liste ou un lieu' });
+  await addTo.getByRole('checkbox', { name: /Pré/ }).check();
+  await expect(addTo.getByRole('status')).toHaveText('Ajoutée à « Pré », à votre position.');
+  await addTo.getByRole('checkbox', { name: /Loin/ }).check();
+  await expect(addTo.getByRole('status')).toHaveText('Ajoutée à « Loin », au point du lieu.');
+  await addTo.getByRole('checkbox', { name: /Pré/ }).uncheck();
+  await expect(addTo.getByRole('status')).toHaveCount(0);
+  await addTo.getByRole('button', { name: 'Terminé' }).click();
+  await expect.poll(names).toEqual([['', 1], ['Loin', 1], ['Parcours du matin', 0], ['Pré', 2]]);
 
   // A new lieu's editor: the same lieux (its own plant's lieu opened, « Pré » to add it to), never the parcours.
   await app.go(`#/collection/new?kind=place&plant=${ortie}`);

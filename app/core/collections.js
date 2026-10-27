@@ -204,6 +204,20 @@ export async function copyAsList(id) {
  */
 export const NEAR_PLACE = 100;
 
+/** Standing within NEAR_PLACE of the lieu (`fix`: where you are; none, never). @param {Collection} c @param {{ coordinates: [number, number] } | null | undefined} fix */
+const nearPlace = (c, fix) => Boolean(fix && c.geometry && distance(fix.coordinates, c.geometry.coordinates) <= NEAR_PLACE);
+
+/**
+ * Where a plant added to a collection went, said (« Ajouter à… », the current list or lieu): in a lieu, at your position
+ * (within NEAR_PLACE of it: defaultPlantPosition) or at its point. Pure.
+ * @param {Collection} c the collection as saved @param {{ coordinates: [number, number] } | null | undefined} fix
+ */
+export function addedTo(c, fix) {
+  const name = `« ${placeTitle(c)} »`;
+  if (!c.geometry) return `Ajoutée à ${name}.`;
+  return nearPlace(c, fix) ? `Ajoutée à ${name}, à votre position.` : `Ajoutée à ${name}, au point du lieu.`;
+}
+
 /**
  * Default position of a plant added to a place: the current GPS fix if within 100 m of the place,
  * otherwise the place's point (e.g. when adding from home).
@@ -212,7 +226,7 @@ export const NEAR_PLACE = 100;
  */
 export function defaultPlantPosition(place, fix) {
   if (!place.geometry) return { coordinates: null, accuracy: null };
-  if (fix && distance(fix.coordinates, place.geometry.coordinates) <= NEAR_PLACE) {
+  if (nearPlace(place, fix)) {
     return { coordinates: roundCoordinates(fix.coordinates), accuracy: Math.round(fix.accuracy) };
   }
   return { coordinates: place.geometry.coordinates, accuracy: null };
@@ -714,14 +728,16 @@ export async function markWalks(known) {
 }
 
 /**
- * Adds or removes a plant from a collection.
+ * Adds or removes a plant from a collection. Added to a lieu: at `fix` when it is within NEAR_PLACE of it (where you
+ * stand), else at its point (defaultPlantPosition; addedTo says which).
  * @param {string} collectionId @param {any} plant @param {boolean} on
+ * @param {{ coordinates: [number, number], accuracy: number } | null} [fix] where you are (geo.js recentFix)
  */
-export async function setInCollection(collectionId, plant, on) {
+export async function setInCollection(collectionId, plant, on, fix = null) {
   // A favourite of a game put in a list or a lieu: the user's own now (updatePlace).
   try {
-    return await updatePlace(collectionId, current =>
-      Boolean(findEntry(current, plant.id)) === on ? current : on ? withPlant(current, plant) : withoutPlant(current, plant.id));
+    return await updatePlace(collectionId, current => Boolean(findEntry(current, plant.id)) === on ? current
+      : on ? withPlant(current, plant, defaultPlantPosition(current, fix)) : withoutPlant(current, plant.id));
   } catch (error) {
     if (error instanceof GoneError) throw new Error('Liste ou lieu introuvable.', { cause: error });
     throw error;
