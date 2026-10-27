@@ -6,8 +6,9 @@ import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 
 /**
- * One icon button per display mode: Épuré · Standard · Scientifique, then the modes made from them. For the app-wide mode, or for one surface (grid,
- * plant sheet) that may override it: then a dot marks the override and ↺ goes back to the app mode.
+ * One icon button per display mode: Épuré · Standard · Scientifique, then the modes made from them. For the app-wide mode, or for what may
+ * differ from it (the results grid; the mode arranged in the sheet's bar « Mise en page de la fiche », King): then a dot marks the
+ * difference and ↺ goes back to the app mode.
  * Fires `mode-change` with `{ mode }` (null: follow the app mode).
  */
 export class GfModeSwitch extends LitElement {
@@ -15,8 +16,10 @@ export class GfModeSwitch extends LitElement {
     value: {},
     /** Set for a surface overriding the app mode. */
     overridden: { type: Boolean },
-    /** What the switch applies to, for the labels (« la grille », « la fiche »). */
-    scope: {}
+    /** What the switch applies to, for the labels (« la grille », « la mise en page »). */
+    scope: {},
+    /** Finger-sized buttons (the sheet's bar « Mise en page de la fiche »). */
+    large: { type: Boolean, reflect: true }
   };
 
   static styles = [ui, css`
@@ -34,6 +37,14 @@ export class GfModeSwitch extends LitElement {
       height: 6px;
       border-radius: 50%;
       background: var(--gf-accent);
+    }
+    /* Large (a bar that wraps): many modes go on another line rather than past the edge; ↺ too. */
+    :host([large]) { flex-wrap: wrap; max-width: 100%; }
+    :host([large]) .segmented { flex-wrap: wrap; max-width: 100%; }
+    @media (pointer: coarse) {
+      :host([large]) .segmented { border-radius: 22px; }
+      :host([large]) .segmented > button { min-height: 44px; min-width: 44px; }
+      :host([large]) .reset { width: 44px; height: 44px; }
     }
   `];
 

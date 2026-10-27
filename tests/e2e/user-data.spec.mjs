@@ -1,7 +1,7 @@
 // The user's data (audit, chantier « Données utilisateur »): the plant sheet's notes moved from localStorage to
-// IndexedDB without loss, in the GeoJSON export and back (STO-6); a write refused for lack of room said on screen,
-// never a false « Enregistré » (STO-5, STO-4); two tabs: a deletion is not undone by the other (GAP1-2), a module
-// switched off in one stays off when the other changes another (GAP1-7).
+// IndexedDB without loss, in the GeoJSON export and back (STO-6), alone too (the transfer link names them); a write
+// refused for lack of room said on screen, never a false « Enregistré » (STO-5, STO-4); two tabs: a deletion is not
+// undone by the other (GAP1-2), a module switched off in one stays off when the other changes another (GAP1-7).
 import { readFileSync } from 'node:fs';
 import { test, expect, plantId } from './fixtures.mjs';
 
@@ -57,6 +57,29 @@ test('notes de fiche : dans l’export GeoJSON de Réglages, et de retour sur un
   expect(await noteText(other.page, ortie)).toBe('En soupe au printemps');
   // The block was made there too, under its title.
   expect(await other.app.state('sheetLayout.notes')).toEqual([NOTE]);
+});
+
+test('notes de fiche seules, sans favori, liste ni lieu : exportées, transférées, et le lien les nomme', async ({ app, page, context, newDevice }) => {
+  const ortie = plantId('Urtica dioica');
+  await seedOldNotes(context, { [ortie]: 'En soupe au printemps' });
+  await app.open('#/');
+  await expect.poll(() => noteText(page, ortie)).toBe('En soupe au printemps');
+  await app.go('#/settings');
+  const exportButton = page.getByRole('button', { name: 'Exporter (fichier GeoJSON)' });
+  await expect(exportButton).toBeEnabled();
+  const [download] = await Promise.all([page.waitForEvent('download'), exportButton.click()]);
+  const exported = JSON.parse(readFileSync(/** @type {string} */ (await download.path()), 'utf8'));
+  expect(exported.features).toEqual([]);
+  expect(exported.sheetNotes).toEqual([{ id: NOTE.id, title: NOTE.title, texts: { [ortie]: { text: 'En soupe au printemps', updatedAt: expect.any(String) } } }]);
+
+  await expect(page.getByRole('button', { name: 'Créer le lien de transfert' })).toBeEnabled();
+  const { url } = await page.evaluate(async () => (await import('/app/core/collections.js')).transferLink({ personal: true }));
+  const other = await newDevice();
+  await other.app.open(url);
+  await expect(other.page.locator('gf-shared h1')).toHaveText('1 note de fiche');
+  await other.page.locator('gf-shared').getByRole('button', { name: 'Importer' }).click();
+  await expect(other.page.locator('gf-shared p[role=status]')).toHaveText('Importé : 0 ajouté, 0 mis à jour, 0 déjà à jour, 1 note de fiche.');
+  expect(await noteText(other.page, ortie)).toBe('En soupe au printemps');
 });
 
 test('stockage plein : la note n’est pas dite enregistrée, un bandeau dit quoi faire (STO-5)', async ({ app, page, context }) => {

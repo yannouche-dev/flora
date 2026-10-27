@@ -1,6 +1,6 @@
 // @ts-check
 // What the data says about a plant, as the questions one asks in front of it. Services (Réglages › Modules)
-// and the plant sheet's blocks (Mode King) are grouped by these categories, whoever provides the data:
+// and the plant sheet's blocks (King: their tag, « Ranger par catégorie ») are grouped by these categories, whoever provides the data:
 // GBIF, for one, feeds names, images, distribution and ecology.
 
 /**

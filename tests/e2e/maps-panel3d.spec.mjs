@@ -4,7 +4,7 @@
 // « 3D » chosen there swaps that map to MapLibre and is stored for every map (Réglages › Cartes show it); « 2D » there
 // brings it back. The maps that always stay one way show the choice disabled, with why: « Jusqu’où part
 // l’expédition ? » (from above), a second map of a plant sheet (one WebGL map per sheet). The map block's form of the
-// plant sheet (mode King, ⚙) no longer has it, nor the background and IGN's layers: its panel ▦ does. Real WebGL
+// plant sheet (personalised: King, ⚙) no longer has it, nor the background and IGN's layers: its panel ▦ does. Real WebGL
 // (SwiftShader), every tile made here (tiles.mjs).
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
@@ -130,9 +130,9 @@ test('fiche plante : sa carte en 3D depuis son panneau ; une carte ajoutée rest
   await expect(panel).toContainText('Une seule carte en 3D par fiche plante');
   await panel.getByRole('button', { name: 'Fermer' }).click();
 
-  // Mode King: the map block's form (⚙) keeps its subject, its layers, its framing, its height and its actions; its
+  // The sheet personalised: the map block's form (⚙) keeps its subject, its layers, its framing, its height and its actions; its
   // background, IGN's layers and 2D / 3D are its panel ▦'s — said.
-  await page.evaluate(async () => { (await import('/app/core/store.js')).setKingMode(true); });
+  await app.king();
   await page.getByRole('button', { name: 'Configurer la carte « Carte »' }).click();
   const form = page.locator('gf-plant-detail .map-form').first();
   await expect(form.getByRole('combobox', { name: 'La carte montre' })).toBeVisible();

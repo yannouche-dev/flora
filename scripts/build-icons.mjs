@@ -28,7 +28,7 @@ const NAMES = [
 
 // Drawn for the app, in the same 16 × 16 grid, where Bootstrap Icons has none.
 const EXTRA = {
-  // « Mode King » (no crown in Bootstrap Icons 1.13).
+  // « Personnaliser la fiche » (no crown in Bootstrap Icons 1.13).
   crown: '<path d="M1 4.5 4.6 7.6 8 2l3.4 5.6L15 4.5 13.6 12H2.4zM2.4 13h11.2v1.5H2.4z"/>',
   // Plant parts (Médias): a cluster of berries on a stem, and a piece of bark.
   fruit: '<path d="M8 1c.3 1.4 1.3 2.4 3 2.7-.9.5-2 .5-3-.1V5.5h-1V1z"/><circle cx="5" cy="8.5" r="2.6"/><circle cx="10.6" cy="8.2" r="2.6"/><circle cx="7.8" cy="12.4" r="2.6"/>',

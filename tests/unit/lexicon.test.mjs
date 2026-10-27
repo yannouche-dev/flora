@@ -1,8 +1,8 @@
 // @ts-check
 // One name per concept (docs/LEXIQUE.md: « L'interface dit toujours le mot de gauche ; le code garde le sien »): no
 // text of app/ says a word the lexicon replaced. Every string and template of app/**/*.js is read (acorn: a comment is
-// not a string), css`` templates left out; identifiers, paths and storage keys say none of these words. The Mode King
-// is not one of them yet: it keeps its name until « Personnaliser la fiche » replaces it.
+// not a string), css`` templates left out; identifiers, paths and storage keys say none of these words. « King » stays
+// a code name only (store.js `king`, `openKing`…): the interface says « Personnaliser la fiche ».
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
@@ -29,7 +29,8 @@ const REPLACED = [
   [word('mes collections|collection courante'), '« Mes plantes », « liste ou lieu en cours »'],
   [word('sosies? dangereux'), '« sosie toxique »'],
   [word('quitter le plein écran'), '« Sortir du plein écran »'],
-  [word('mode (?:de )?modification|mode d[’\']édition'), '« la modification » (« Terminé » la termine)']
+  [word('mode (?:de )?modification|mode d[’\']édition'), '« la modification » (« Terminé » la termine)'],
+  [word('mode king'), '« Personnaliser la fiche » (« King » n’est qu’un nom de code)']
 ];
 /** The console's prefix, never shown: `mini-app ${id}: …` (define.js, gf-miniapp.js, runtime.js). */
 const DEVELOPER = new Set(['mini-app ']);
@@ -62,18 +63,21 @@ test('l’interface ne dit aucun des mots que le lexique a remplacés', () => {
   for (const file of files) for (const { line, text } of strings(file)) {
     read++;
     if (DEVELOPER.has(text)) continue;
-    for (const [said, say] of REPLACED) if (said.test(text)) found.push(`${relative(ROOT, file)}:${line} « ${text.replace(/\s+/g, ' ').trim().slice(0, 80)} » → ${say}`);
+    // As read on screen: a template that wraps between two words still shows them side by side.
+    const shown = text.replace(/\s+/g, ' ');
+    for (const [said, say] of REPLACED) if (said.test(shown)) found.push(`${relative(ROOT, file)}:${line} « ${text.replace(/\s+/g, ' ').trim().slice(0, 80)} » → ${say}`);
   }
   assert.ok(files.length > 150 && read > 10000, `app/ lu en entier (${files.length} fichiers, ${read} textes)`);
   assert.deepEqual(found, []);
 });
 
 test('le lexique reconnaît les mots qu’il remplace, pas leurs voisins', () => {
-  const caught = (/** @type {string} */ text) => REPLACED.filter(([said]) => said.test(text)).map(([, say]) => say);
+  const caught = (/** @type {string} */ text) => REPLACED.filter(([said]) => said.test(text.replace(/\s+/g, ' '))).map(([, say]) => say);
   for (const text of ['Jouer : Rencontres', 'Rejouer', 'Reprendre la partie', 'Scénarios', 'Pour cette mini-application seulement',
     'Recommencer la découverte', 'Créer un endroit ici', 'Direction votre herbier', 'Dans mes collections', 'J’ai des sosies dangereux (2)',
-    'Quitter le plein écran', 'En mode modification']) assert.equal(caught(text).length, 1, text);
+    'Quitter le plein écran', 'En mode modification', 'Quitter le mode King', 'Entrer en mode King', 'Titre caché hors mode King',
+    'Chacun s’arrange ensuite en mode\n        King', 'Quitter le plein\n  écran']) assert.equal(caught(text).length, 1, text);
   for (const text of ['Commencer : Rencontres', 'déjouer le piège', 'il reprend sa place', 'Planche d’herbier', 'Spécimens d’herbier',
-    'Créer un lieu ici', 'J’ai des sosies toxiques (2)', 'Sortir du plein écran', 'Quitter le mode King', 'Entrer en mode King',
-    'geoflora.app.rencontres.state', 'gf-scenarios', 'open-scenarios']) assert.deepEqual(caught(text), [], text);
+    'Créer un lieu ici', 'J’ai des sosies toxiques (2)', 'Sortir du plein écran', 'Personnaliser la fiche', 'Mise en page de la fiche',
+    'geoflora.app.rencontres.state', 'gf-scenarios', 'open-scenarios', 'openKing', 'king-bar', 'geoflora.kingMode']) assert.deepEqual(caught(text), [], text);
 });

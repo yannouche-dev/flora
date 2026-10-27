@@ -367,7 +367,7 @@ test('fiche plante : sa carte principale en 3D, une carte ajoutée reste en 2D (
   await settings(page, { renderer: '3d', buildings: false, hillshade: false, pitch: 30 });
   await app.open('#/collections');
   await seedPlaces(page);
-  // A second map block in the sheet (Mode King's « + Carte »).
+  // A second map block in the sheet (the sheet's « Bloc Carte », King).
   await page.evaluate(async () => { (await import('/app/core/sheet-blocks.js')).createMap('Ma carte'); });
   await app.go(`#/plant/${plantId('Urtica dioica')}`);
   const maps = page.locator('gf-sheet-map gf-map');

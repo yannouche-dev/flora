@@ -1,19 +1,22 @@
 // @ts-check
 // The plant sheet is made of titled blocks, the same ones in every display mode (each mode shows them its own
-// way: compact in Épuré, complete in Scientifique), some made of sub-blocks (buttons, fact rows, links). In
-// « Mode King » each mode gets its own order of blocks and sub-blocks and its own folded ones; blocks can be
-// renamed, and « Note » blocks created (free text per plant) and deleted. A block that shows a service is folded
+// way: compact in Épuré, complete in Scientifique), some made of sub-blocks (buttons, fact rows, links). It is
+// personalised on the sheet itself (« Personnaliser la fiche », King in the code): each mode gets its own order of
+// blocks and sub-blocks, its own folded ones, styles, titles and tree of panes; blocks can be renamed, and « Note »
+// blocks (free text per plant) and « Carte » blocks created and deleted. A block that shows a service is folded
 // while that module is off (Réglages › Modules, a choice for the whole device, whatever the mode): there is nothing
-// to show. Folding or showing a block never switches a module.
-// The layout can be exported to a file and imported back.
+// to show. Folding or showing a block never switches a module. Plantes à confondre and Usages (its Prudence first)
+// are safety: never folded, in any mode, whatever a stored or imported layout says (LOCKED).
+// The layout can be exported to a file and imported back: the layout and the modes made here, never the Note blocks'
+// texts (they travel with Mes plantes: GeoJSON export, transfer link, backup copy) nor this device's settings.
 
 import { config } from '../config.js';
 import { MODULES, moduleOn } from './modules.js';
 import { baseOf, importModes, modeKeys, ownModes } from './modes.js';
 import { emptyLayout, migratePlaces, migrateTree, store } from './store.js';
-import { allNoteTexts, deleteNoteTexts, fromPortable, mergeNoteTexts, noteText as storedText, notesWithText, portableNotes, setNoteText as storeText } from './sheet-notes.js';
+import { deleteNoteTexts, fromPortable, mergeNoteTexts, noteText as storedText, portableNotes, setNoteText as storeText } from './sheet-notes.js';
 import { writeJSON, writeText } from './prefs.js';
-import { cleanMapSettings, cleanOwnLook, mapSettings, mapSettingsDiff, setMapSettings } from './map-settings.js';
+import { cleanOwnLook } from './map-settings.js';
 import { SHEET, dock, normalize, patchStack, setSizes, sheetInRow, stackOf, undock, validTree } from './pane-tree.js';
 
 /** @typedef {import('./modes.js').Mode} Mode */
@@ -92,7 +95,7 @@ export const SUBS = {
 
 const TABLE_LIST = [{ key: 'table', title: 'Tableau' }, { key: 'list', title: 'Liste' }];
 /**
- * Blocks shown in more than one style, chosen per mode in Mode King: the first style is the default, except
+ * Blocks shown in more than one style, chosen per mode (King): the first style is the default, except
  * where the mode's own default is given.
  * @type {Record<string, { styles: { key: string, title: string }[], defaults?: Partial<Record<Mode, string>> }>}
  */
@@ -118,19 +121,32 @@ const DEFAULTS = {
 };
 
 /**
- * Blocks a mode leaves folded until shown (Mode King), its list once changed being kept whole: « Médias »
+ * Blocks a mode leaves folded until shown (King), its list once changed being kept whole: « Médias »
  * (every image, in a viewer) takes the place of « Photos » and « Médias GBIF » in Standard and Scientifique;
  * Épuré keeps its large photo (touching it opens the viewer).
  * @type {Record<Mode, string[]>}
  */
 const DEFAULT_HIDDEN = { epure: ['media', 'web'], standard: ['photos', 'gbifMedia', 'web'], scientific: ['photos', 'gbifMedia', 'web'] };
 
+/**
+ * Safety first: blocks never folded, in any mode — whatever a layout stored, imported or copied says (read so). A pane
+ * holding them (a tab behind another, folded, bare) is no folding: they are there, the rubric says where.
+ */
+export const LOCKED = ['lookalikes', 'uses'];
+/** Sub-blocks never left out, first in their block: Prudence, which « Usages rapportés » refers to. @type {Record<string, string[]>} */
+const LOCKED_SUBS = { uses: ['safety'] };
+/** @param {string} key */
+export const isLocked = key => LOCKED.includes(key);
+/** @param {string} block @param {string} key */
+export const isSubLocked = (block, key) => Boolean(LOCKED_SUBS[block]?.includes(key));
+
 /** The blocks folded by hand (or by default) in a view. @param {Mode} view @returns {string[]} */
-const hiddenList = view => layout().hidden[view] ?? DEFAULT_HIDDEN[baseOf(view)] ?? [];
+const hiddenList = view => (layout().hidden[view] ?? DEFAULT_HIDDEN[baseOf(view)] ?? []).filter(k => !isLocked(k));
 
 /**
- * Folded by hand (or by default) in this view, whatever its service: the block's own choice, which Mode King's
- * « Réafficher » and Réglages' block lists change. @param {Mode} view @param {string} key
+ * Folded by hand (or by default) in this view, whatever its service: the block's own choice, which the sheet's
+ * trash and ↺ change (King), and « Garder « X » masqué dans ce mode » for a block whose service is off.
+ * @param {Mode} view @param {string} key
  */
 export const foldedByHand = (view, key) => hiddenList(view).includes(key);
 
@@ -256,7 +272,7 @@ export function modulesOffFor(key) {
 export const serviceOff = key => modulesOffFor(key).length > 0;
 
 /**
- * What a block folded for its service says (Mode King, Réglages): « service GBIF coupé pour tout l’appareil »; null
+ * What a block folded for its service says (King: beside the block's title): « service GBIF coupé pour tout l’appareil »; null
  * when its services are on. @param {string} key
  */
 export function serviceOffNote(key) {
@@ -279,6 +295,7 @@ export const isHidden = (view, key) => foldedByHand(view, key) || serviceOff(key
  * @param {Mode} view @param {string} key @param {boolean} hidden
  */
 export function setHidden(view, key, hidden) {
+  if (hidden && isLocked(key)) return;
   const keys = new Set(hiddenList(view));
   if (hidden) keys.add(key); else keys.delete(key);
   writeHidden(view, keys);
@@ -289,12 +306,14 @@ export function setHidden(view, key, hidden) {
 /** Title of a sub-block. @param {string} block @param {string} key */
 export const subTitle = (block, key) => SUBS[block]?.find(s => s.key === key)?.title || key;
 
-/** The sub-block keys of a block in a view, in order. @param {Mode} view @param {string} block */
-export const subOrder = (view, block) =>
-  merge(layout().subOrder[view]?.[block] || [], (SUBS[block] || []).map(s => s.key));
+/** The sub-block keys of a block in a view, in order (a locked one first: LOCKED_SUBS). @param {Mode} view @param {string} block */
+export function subOrder(view, block) {
+  const order = merge(layout().subOrder[view]?.[block] || [], (SUBS[block] || []).map(s => s.key));
+  return [...order.filter(k => isSubLocked(block, k)), ...order.filter(k => !isSubLocked(block, k))];
+}
 
 /**
- * Sub-blocks a mode leaves out until shown in Mode King (a block's list, once changed, is kept whole).
+ * Sub-blocks a mode leaves out until shown again (King; a block's list, once changed, is kept whole).
  * @type {Record<Mode, Record<string, string[]>>}
  */
 const SUB_HIDDEN = {
@@ -303,8 +322,8 @@ const SUB_HIDDEN = {
   scientific: {}
 };
 
-/** The sub-blocks a view leaves out of a block. @param {Mode} view @param {string} block @returns {string[]} */
-const hiddenSubs = (view, block) => layout().subHidden[view]?.[block] ?? SUB_HIDDEN[baseOf(view)]?.[block] ?? [];
+/** The sub-blocks a view leaves out of a block (never a locked one). @param {Mode} view @param {string} block @returns {string[]} */
+const hiddenSubs = (view, block) => (layout().subHidden[view]?.[block] ?? SUB_HIDDEN[baseOf(view)]?.[block] ?? []).filter(k => !isSubLocked(block, k));
 
 /** @param {Mode} view @param {string} block @param {string} key */
 export const isSubHidden = (view, block, key) => hiddenSubs(view, block).includes(key);
@@ -323,6 +342,7 @@ export function setSubOrder(view, block, keys) {
 
 /** @param {Mode} view @param {string} block @param {string} key @param {boolean} hidden */
 export function setSubHidden(view, block, key, hidden) {
+  if (hidden && isSubLocked(block, key)) return;
   const all = { ...layout().subHidden };
   const mine = { ...all[view] };
   const keys = new Set(hiddenSubs(view, block));
@@ -360,7 +380,7 @@ export function setBlockStyle(view, block, style) {
 /** Blocks read without a title unless asked: the name, the actions, the photos, the Wikipédia summary (its source line names it). */
 const UNTITLED = ['name', 'actions', 'media', 'photos', 'wikipedia'];
 
-/** Does this block show its title in this view (outside Mode King)? @param {Mode} view @param {string} key */
+/** Does this block show its title in this view, when read (outside King)? @param {Mode} view @param {string} key */
 export function isTitleShown(view, key) {
   const chosen = layout().titleShown?.[view]?.[key];
   return typeof chosen === 'boolean' ? chosen : !UNTITLED.includes(key);
@@ -464,15 +484,6 @@ export const isOnEdge = (view, key) => Boolean(paneOf(view, key));
 /** Panes beside the sheet (in a row): the plant pane is made wider to hold them. @param {Mode} view */
 export const hasColumns = view => sheetInRow(treeOf(view));
 
-/**
- * From a list (Réglages): back in the sheet, or a new pane on a side of the sheet.
- * @param {Mode} view @param {string} key @param {'left' | 'right' | 'top' | 'bottom' | null} side
- */
-export function setPlace(view, key, side) {
-  if (!side) toSheet(view, key);
-  else dockBlock(view, key, 'sheet', side);
-}
-
 // ── Left out when empty ────────────────────────────────────────────────────
 
 /**
@@ -488,7 +499,7 @@ const EMPTY_HIDDEN = ['wikipedia', 'names', 'gbifProfile', 'literature'];
 /** Can this block be left out when empty? (note blocks too: no text for this plant) @param {string} key */
 export const canBeEmpty = key => CAN_BE_EMPTY.includes(key) || isNote(key);
 
-/** Is this block left out of this view when it has nothing for the plant (outside Mode King)? @param {Mode} view @param {string} key */
+/** Is this block left out of this view when it has nothing for the plant, when read (outside King)? @param {Mode} view @param {string} key */
 export function hidesEmpty(view, key) {
   if (!canBeEmpty(key)) return false;
   const chosen = layout().hideEmpty?.[view]?.[key];
@@ -532,13 +543,9 @@ export function createNote(title) {
   return 'note:' + id;
 }
 
-
-/** A deleted block leaves every mode's places. @param {string} key */
-const unplace = key => Object.fromEntries(Object.entries(layout().place || {}).map(([v, per]) => {
-  const rest = { ...per };
-  delete rest[key];
-  return [v, rest];
-}).filter(([, per]) => Object.keys(per).length));
+/** A deleted block leaves every mode's tree of panes (a pane it held alone goes). @param {string} key */
+const untree = key => Object.fromEntries(Object.entries(/** @type {Record<string, PaneNode>} */ (layout().tree || {}))
+  .map(([v, t]) => [v, undock(t, key)]).filter(([, t]) => t.t !== 'sheet'));
 
 /** Delete a note block everywhere, with what was written in it. @param {string} key */
 export function deleteNote(key) {
@@ -546,7 +553,7 @@ export function deleteNote(key) {
   const strip = (/** @type {Partial<Record<Mode, string[]>>} */ per) =>
     Object.fromEntries(Object.entries(per).map(([v, keys]) => [v, (keys || []).filter(k => k !== key)]));
   deleteNoteTexts(id).catch(error => console.error(error));
-  save({ notes: layout().notes.filter(n => n.id !== id), order: strip(layout().order), hidden: strip(layout().hidden), place: unplace(key) });
+  save({ notes: layout().notes.filter(n => n.id !== id), order: strip(layout().order), hidden: strip(layout().hidden), tree: untree(key) });
 }
 
 // ── Map blocks ─────────────────────────────────────────────────────────────
@@ -622,7 +629,7 @@ export function deleteMap(key) {
     Object.fromEntries(Object.entries(per).map(([v, keys]) => [v, (keys || []).filter(k => k !== key)]));
   const maps = { ...(layout().maps || {}) };
   delete maps[key];
-  save({ mapBlocks: (layout().mapBlocks || []).filter(m => m.id !== id), maps, order: strip(layout().order), hidden: strip(layout().hidden), place: unplace(key) });
+  save({ mapBlocks: (layout().mapBlocks || []).filter(m => m.id !== id), maps, order: strip(layout().order), hidden: strip(layout().hidden), tree: untree(key) });
 }
 
 /** The text of a note block for a plant (sheet-notes.js). @param {string} key @param {number} plantId */
@@ -654,36 +661,60 @@ export async function importNotes(list) {
 // ── Reset, export, import ──────────────────────────────────────────────────
 
 /**
- * Back to the mode's defaults: order, folded blocks and sub-blocks, styles, titles shown, blocks left out when empty.
- * Titles and notes stay; so do the services (Réglages › Modules): a block whose module is off stays folded.
+ * Back to the mode's defaults: order, folded blocks and sub-blocks, styles, titles shown, blocks left out when empty,
+ * panes (the sheet alone). Titles and notes stay; so do the services (Réglages › Modules): a block whose module is off
+ * stays folded.
  * @param {Mode} view
  */
 export function resetBlocks(view) {
   const l = layout();
   const without = (/** @type {any} */ per) => { const next = { ...per }; delete next[view]; return next; };
-  save({ order: without(l.order), hidden: without(l.hidden), subOrder: without(l.subOrder), subHidden: without(l.subHidden), styles: without(l.styles || {}), titleShown: without(l.titleShown || {}), hideEmpty: without(l.hideEmpty || {}), place: without(l.place || {}), edges: without(l.edges || {}) });
-}
-
-/** Everything back to the defaults, note blocks and titles included (the notes' texts are deleted); services stay. */
-export function resetAll() {
-  for (const n of layout().notes) deleteNote('note:' + n.id);
-  save(emptyLayout());
-  for (const view of modeKeys()) resetBlocks(view);
+  save({ order: without(l.order), hidden: without(l.hidden), subOrder: without(l.subOrder), subHidden: without(l.subHidden), styles: without(l.styles || {}), titleShown: without(l.titleShown || {}), hideEmpty: without(l.hideEmpty || {}), tree: without(l.tree || {}) });
 }
 
 /**
- * The layout as a file: blocks, sub-blocks, titles, note blocks and their texts, the modes made here. Not the services
- * (Réglages › Modules): they are this device's.
+ * Everything back to the defaults but the Note blocks (their title and texts: what the user wrote), back at the end of
+ * every mode, shown; added Carte blocks, titles, panes go. The services (Réglages › Modules) and Réglages › Cartes stay.
+ */
+export function resetAll() {
+  save({ ...emptyLayout(), notes: layout().notes });
+}
+
+/**
+ * What a layout file carries, and nothing else (an allowlist: no key of an earlier version, no setting of this device):
+ * per mode, the order, folded blocks and sub-blocks (never a locked one), styles, titles shown, blocks left out when
+ * empty and the tree of panes (sound: no block that is gone, no bare sheet); the titles, the Note and Carte blocks (no
+ * text), the maps' settings.
+ */
+function portableLayout() {
+  const l = layout();
+  const per = (/** @type {Partial<Record<Mode, any>>} */ all, /** @type {(view: Mode, value: any) => any} */ clean = (_, v) => v) =>
+    Object.fromEntries(Object.entries(all || {}).map(([view, v]) => [view, clean(/** @type {Mode} */ (view), v)]));
+  /** @type {Partial<Record<Mode, import('./pane-tree.js').PaneNode>>} */
+  const tree = {};
+  for (const view of /** @type {Mode[]} */ (Object.keys(l.tree || {}))) { const t = treeOf(view); if (t.t !== 'sheet') tree[view] = t; }
+  return {
+    order: per(l.order),
+    hidden: per(l.hidden, (_, keys) => keys.filter((/** @type {string} */ k) => !isLocked(k))),
+    subOrder: per(l.subOrder),
+    subHidden: per(l.subHidden, (_, blocks) => Object.fromEntries(Object.entries(blocks).map(([block, keys]) => [block, keys.filter((/** @type {string} */ k) => !isSubLocked(block, k))]))),
+    styles: per(l.styles),
+    titleShown: per(l.titleShown),
+    hideEmpty: per(l.hideEmpty),
+    tree,
+    titles: { ...l.titles },
+    notes: l.notes.map(n => ({ id: n.id, title: n.title })),
+    mapBlocks: (l.mapBlocks || []).map(m => ({ id: m.id, title: m.title })),
+    maps: Object.fromEntries(Object.entries(l.maps || {}).map(([k, c]) => [k, cleanMap(c)]))
+  };
+}
+
+/**
+ * The layout as a file: the layout (portableLayout) and the modes made here. Not the Note blocks' texts (they travel
+ * with Mes plantes), nor what is this device's: the services (Réglages › Modules), Réglages › Cartes.
  */
 export function exportLayout() {
-  return JSON.stringify({
-    app: 'geoflora', kind: 'sheet-layout', version: 2,
-    layout: layout(),
-    notes: allNoteTexts(),
-    modes: ownModes(),
-    // Réglages › Cartes (2D or 3D, the 3D options): what differs from the defaults.
-    maps3d: mapSettingsDiff(mapSettings())
-  }, null, 2);
+  return JSON.stringify({ app: 'geoflora', kind: 'sheet-layout', version: 2, layout: portableLayout(), modes: ownModes() }, null, 2);
 }
 
 /** @param {any} v */
@@ -694,9 +725,10 @@ const perView = (v, ok) => v && typeof v === 'object' && !Array.isArray(v) && Ob
 const perBlock = v => v && typeof v === 'object' && !Array.isArray(v) && Object.entries(v).every(([block, keys]) => block in SUBS && isKeyList(keys));
 
 /**
- * Applies a layout file. Throws (and changes nothing) when it is not one. Its note texts are added to this device's,
- * never over them (a layout shared by someone else does not erase what was written here), and the note blocks that
- * hold a text here stay. The layout is applied at once; the promise resolves once the texts are stored.
+ * Applies a layout file. Throws (and changes nothing) when it is not one. Every Note block of this device stays (after
+ * the file's: those it does not have). A file of before carries note texts: they are added to this device's, never over
+ * them (a layout shared by someone else does not erase what was written here). The layout is applied at once; the
+ * promise resolves once the texts are stored.
  * @param {string} text @returns {Promise<number>} how many texts were added
  */
 export function importLayout(text) {
@@ -722,14 +754,12 @@ export function importLayout(text) {
     && (!l.maps || (typeof l.maps === 'object' && !Array.isArray(l.maps) && Object.keys(l.maps).every(k => k === 'map' || /^map:[a-z0-9]{1,24}$/.test(k))))
     && (!data.notes || (typeof data.notes === 'object' && Object.values(data.notes).every(byPlant => byPlant && typeof byPlant === 'object' && Object.values(byPlant).every(t => typeof t === 'string'))));
   // `modulesOff` (files of earlier versions: the services folded with their blocks, per mode) is left aside: services
-  // are this device's, chosen in Réglages › Modules, and a layout never switches one.
+  // are this device's, chosen in Réglages › Modules, and a layout never switches one. So is `maps3d` (Réglages ›
+  // Cartes, which files of before carried): this device's too.
   if (!valid) throw new Error('Mise en page illisible ou incomplète.');
   importModes(data.modes || []);
-  // Réglages › Cartes, when the file has them (an older one has not: they stay as they are here).
-  if (data.maps3d && typeof data.maps3d === 'object') setMapSettings(cleanMapSettings(data.maps3d));
-  // Note blocks holding a text on this device are kept, after the file's.
-  const written = new Set(notesWithText());
-  const kept = layout().notes.filter(n => written.has(n.id) && !l.notes.some((/** @type {any} */ m) => m.id === n.id));
+  // This device's Note blocks the file has not are kept, after the file's (with or without a text yet).
+  const kept = layout().notes.filter(n => !l.notes.some((/** @type {any} */ m) => m.id === n.id));
   const texts = Object.entries(data.notes || {}).flatMap(([note, byPlant]) => Object.entries(/** @type {Record<string, string>} */ (byPlant))
     .map(([plantId, t]) => ({ key: '', note, plantId: Number(plantId), text: t, updatedAt: '' })));
   save({ ...emptyLayout(), order: l.order || {}, hidden: l.hidden || {}, subOrder: l.subOrder || {}, subHidden: l.subHidden || {}, styles: l.styles || {}, titleShown: l.titleShown || {}, hideEmpty: l.hideEmpty || {}, tree: l.tree || {}, titles: l.titles, notes: [...l.notes, ...kept],

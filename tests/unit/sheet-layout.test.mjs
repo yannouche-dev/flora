@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import * as SB from '../../app/core/sheet-blocks.js';
 import * as M from '../../app/core/modules.js';
 import { leaves } from '../../app/core/pane-tree.js';
+import { store } from '../../app/core/store.js';
 import { random } from './support/random.mjs';
 
 const KEYS = SB.BLOCKS.map(b => b.key).filter(k => !['name', 'actions', 'web'].includes(k));
@@ -76,35 +77,77 @@ test('undockAlone : les volets que les étapes guidées d’avant avaient posés
   SB.dockBlock('standard', 'wikipedia', /** @type {any} */ (SB.paneOf('standard', 'media')).id, 'bottom');
   SB.dockBlock('standard', 'uses', 'root', 'right');
   SB.dockBlock('standard', 'lookalikes', /** @type {any} */ (SB.paneOf('standard', 'uses')).id, 'center');
+  SB.dockBlock('standard', 'calendar', /** @type {any} */ (SB.paneOf('standard', 'uses')).id, 'center');
   // … one the user then gave another block.
   SB.dockBlock('standard', 'names', /** @type {any} */ (SB.paneOf('standard', 'wikipedia')).id, 'center');
-  SB.setHidden('standard', 'uses', true);
+  // (Usages is always shown: a block of the fork's that can be folded.)
+  SB.setHidden('standard', 'calendar', true);
   SB.undockAlone('standard', [['media'], ['wikipedia'], ['uses', 'lookalikes', 'calendar']]);
-  assert.deepEqual(['media', 'uses', 'lookalikes'].map(k => SB.isOnEdge('standard', k)), [false, false, false]);
+  assert.deepEqual(['media', 'uses', 'lookalikes', 'calendar'].map(k => SB.isOnEdge('standard', k)), [false, false, false, false]);
   assert.deepEqual(SB.paneOf('standard', 'wikipedia')?.tabs, ['wikipedia', 'names'], 'with a block of the user’s: kept');
-  assert.ok(SB.foldedByHand('standard', 'uses'), 'a block folded stays folded');
+  assert.ok(SB.foldedByHand('standard', 'calendar'), 'a block folded stays folded');
   SB.resetAll();
 });
 
-test('le fichier de mise en page emporte Réglages › Cartes (2D / 3D et options), et les rend à l’import', async () => {
+test('le fichier n’emporte plus Réglages › Cartes ; celui d’un fichier ancien est ignoré', async () => {
   const MS = await import('../../app/core/map-settings.js');
   SB.resetAll();
   MS.setMapSettings({ renderer: '3d', globe: true, exaggeration: 2 });
   const text = SB.exportLayout();
-  assert.deepEqual(JSON.parse(text).maps3d, { renderer: '3d', exaggeration: 2, globe: true });
+  assert.equal('maps3d' in JSON.parse(text), false);
+  const before = JSON.stringify(MS.mapSettings());
+  // A file of before carried them: this device's stay as they are, a readable value or not.
+  SB.importLayout(JSON.stringify({ ...JSON.parse(text), maps3d: { renderer: '2d', globe: false, exaggeration: 1 } }));
+  assert.equal(JSON.stringify(MS.mapSettings()), before);
+  SB.importLayout(JSON.stringify({ ...JSON.parse(text), maps3d: { renderer: 'holo', pitch: 400 } }));
+  assert.equal(JSON.stringify(MS.mapSettings()), before);
   MS.resetMapSettings();
-  SB.importLayout(text);
-  assert.equal(MS.mapSettings().renderer, '3d');
-  assert.equal(MS.mapSettings().globe, true);
-  // A file of before (no maps3d): the settings here stay; a broken value is made valid.
-  const old = JSON.parse(text);
-  delete old.maps3d;
-  SB.importLayout(JSON.stringify(old));
-  assert.equal(MS.mapSettings().exaggeration, 2);
-  SB.importLayout(JSON.stringify({ ...old, maps3d: { renderer: 'holo', pitch: 400 } }));
-  assert.equal(MS.mapSettings().renderer, '2d');
-  assert.equal(MS.mapSettings().pitch, 85);
-  MS.resetMapSettings();
+  SB.resetAll();
+});
+
+test('« Par défaut » (resetBlocks) retire aussi les panneaux du mode, et seulement les siens', () => {
+  SB.resetAll();
+  SB.dockBlock('standard', 'map', 'sheet', 'right');
+  SB.dockBlock('epure', 'calendar', 'sheet', 'left');
+  SB.setHidden('standard', 'taxonomy', true);
+  assert.ok(SB.isCustom('standard'));
+  SB.resetBlocks('standard');
+  assert.equal(SB.treeOf('standard').t, 'sheet');
+  assert.equal(SB.isCustom('standard'), false);
+  assert.ok(SB.paneOf('epure', 'calendar'), 'Épuré garde ses panneaux');
+  SB.resetAll();
+});
+
+test('Plantes à confondre et Usages (Prudence) toujours affichés : ni masqués, ni importés masqués, ni copiés masqués', () => {
+  SB.resetAll();
+  assert.deepEqual(SB.LOCKED, ['lookalikes', 'uses']);
+  assert.ok(SB.isLocked('uses') && !SB.isLocked('taxonomy') && SB.isSubLocked('uses', 'safety') && !SB.isSubLocked('uses', 'parts'));
+  SB.setHidden('standard', 'lookalikes', true);
+  SB.setHidden('standard', 'uses', true);
+  SB.setSubHidden('standard', 'uses', 'safety', true);
+  assert.equal(SB.isCustom('standard'), false, 'rien n’a changé');
+  assert.ok(!SB.isHidden('standard', 'lookalikes') && !SB.isHidden('standard', 'uses') && !SB.isSubHidden('standard', 'uses', 'safety'));
+  // A file (or a layout of before) that hides them: shown all the same; the rest of its choices apply.
+  const file = JSON.parse(SB.exportLayout());
+  file.layout.hidden = { standard: ['lookalikes', 'uses', 'taxonomy'] };
+  file.layout.subHidden = { standard: { uses: ['safety', 'parts'] } };
+  SB.importLayout(JSON.stringify(file));
+  assert.deepEqual(['lookalikes', 'uses', 'taxonomy'].map(k => SB.isHidden('standard', k)), [false, false, true]);
+  assert.deepEqual(SB.shownSubs('standard', 'uses'), ['safety', 'uses', 'kitchen', 'links']);
+  // Exported without them.
+  const out = JSON.parse(SB.exportLayout());
+  assert.deepEqual(out.layout.hidden, { standard: ['taxonomy'] });
+  assert.deepEqual(out.layout.subHidden, { standard: { uses: ['parts'] } });
+  // A mode made from it: the same.
+  SB.copyLayout('standard', 'mtest');
+  assert.deepEqual(['lookalikes', 'uses', 'taxonomy'].map(k => SB.isHidden(/** @type {any} */ ('mtest'), k)), [false, false, true]);
+  assert.ok(!SB.isSubHidden(/** @type {any} */ ('mtest'), 'uses', 'safety'));
+  SB.dropLayout(/** @type {any} */ ('mtest'));
+  // Prudence first, whatever order is stored (« Usages rapportés » refers to it).
+  SB.setSubOrder('standard', 'uses', ['uses', 'parts', 'kitchen', 'links', 'safety']);
+  assert.equal(SB.subOrder('standard', 'uses')[0], 'safety');
+  assert.deepEqual(SB.subOrder('standard', 'uses'), ['safety', 'uses', 'parts', 'kitchen', 'links']);
+  SB.resetAll();
 });
 
 test('les blocs Carte : leur propre fond (MapConfig.look) ; ceux d’avant, leur fond et leurs couches IGN repris une fois', () => {
@@ -214,6 +257,14 @@ test('le fichier de mise en page n’emporte pas les services ; ceux d’un fich
   M.setModule('gbif', false);
   const text = SB.exportLayout();
   assert.equal('modulesOff' in JSON.parse(text), false);
+  // The layout and the modes, nothing else: no note text, no Réglages › Cartes, no key of an earlier version.
+  assert.deepEqual(Object.keys(JSON.parse(text)), ['app', 'kind', 'version', 'layout', 'modes']);
+  assert.deepEqual(Object.keys(JSON.parse(text).layout),
+    ['order', 'hidden', 'subOrder', 'subHidden', 'styles', 'titleShown', 'hideEmpty', 'tree', 'titles', 'notes', 'mapBlocks', 'maps']);
+  // A layout read from an earlier version's keys, left in memory: none of them in the file.
+  store.set({ sheetLayout: /** @type {any} */ ({ ...store.state.sheetLayout, place: { standard: { map: 'right' } }, edges: { standard: { right: { size: 'm' } } } }) });
+  const stray = JSON.parse(SB.exportLayout()).layout;
+  assert.ok(!('place' in stray) && !('edges' in stray));
   const before = JSON.stringify(M.modulesState());
   const old = { ...JSON.parse(text), modulesOff: { standard: ['photos', 'wikipedia'], epure: [] } };
   assert.doesNotThrow(() => SB.importLayout(JSON.stringify(old)));

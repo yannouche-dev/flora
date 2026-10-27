@@ -1,7 +1,7 @@
 // Réglages › Modules: each online service is a permission of the device, one switch whatever the display mode
 // (core/modules.js). Switched off there, its data leaves the plant sheet in every mode and nothing is asked of it;
-// hiding a block in mode King never switches its service (core/sheet-blocks.js setHidden), and a block whose service
-// is off says so, with the way to Réglages › Modules instead of « Réafficher ».
+// hiding a block while personalising the sheet (King) never switches its service (core/sheet-blocks.js setHidden),
+// and a block whose service is off says so, with the way to Réglages › Modules instead of « Réafficher ».
 import { test, expect, plantId } from './fixtures.mjs';
 
 const GBIF = /api\.gbif\.org\//;
@@ -44,11 +44,10 @@ test('GBIF coupé dans les Réglages : ses données quittent la fiche, quel que 
   expect(asked, 'GBIF jamais appelé').toBe(0);
 });
 
-test('mode King : masquer les blocs GBIF ne coupe pas GBIF ; coupé dans les Réglages, son bloc le dit et y mène', async ({ app, page }) => {
-  await app.open('#/settings');
-  await page.getByRole('button', { name: 'Entrer en mode King' }).click();
-  await app.go(`#/plant/${plantId('Urtica dioica')}`);
+test('Personnaliser la fiche : masquer les blocs GBIF ne coupe pas GBIF ; coupé dans les Réglages, son bloc le dit et y mène', async ({ app, page }) => {
+  await app.open(`#/plant/${plantId('Urtica dioica')}`);
   await expect(page.getByRole('heading', { level: 1, name: 'Ortie dioïque' })).toBeVisible();
+  await app.king();
   const sheet = sheetOf(page);
   // Every GBIF block of the sheet hidden (Médias GBIF is by default): the last one used to switch GBIF off.
   for (const title of ['Descriptions', 'Occurrences et répartition', 'Habitat et écologie (GBIF)', 'Publications (GBIF)']) {

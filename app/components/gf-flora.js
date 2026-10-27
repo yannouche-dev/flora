@@ -6,7 +6,7 @@ import { activeFilterCount, clearFilters, lastSearchHash } from '../core/query.j
 import { href } from '../core/router.js';
 import { backTo, depth, entryValue, markEntry, openModal, openView, renewBehind, replaceView } from '../core/history.js';
 import { setContext } from '../core/context.js';
-import { StoreController, whenReady } from '../core/store.js';
+import { StoreController, arrangedMode, whenReady } from '../core/store.js';
 import { PaneSizer, splitStyles } from '../core/panes.js';
 import { ui } from '../styles/ui.js';
 import { sheetStyles } from './ui-kit.js';
@@ -396,7 +396,7 @@ export class GfFlora extends LitElement {
       ?inert=${id === under} aria-hidden=${id === under ? 'true' : 'false'}
       @touchstart=${touch ? this.#onTouchStart : null} @touchmove=${touch ? this.#onTouchMove : null} @touchend=${touch ? this.#onTouchEnd : null}
       @touchcancel=${touch ? () => { const s = this.#touch; this.#touch = null; if (s?.el.classList.contains('dragging')) this.#settle(s.el); } : null}
-      ><gf-plant-detail embedded ?preview=${id === under} plant-id=${id} view=${view} .inPane=${id === this.#plantId ? this.#pane : null}></gf-plant-detail></div>`)}</div>`;
+      ><gf-plant-detail embedded sheet="flore" ?preview=${id === under} plant-id=${id} view=${view} .inPane=${id === this.#plantId ? this.#pane : null}></gf-plant-detail></div>`)}</div>`;
   }
 
 
@@ -556,7 +556,8 @@ export class GfFlora extends LitElement {
   /** The pane: its bar (block, plant, full screen, close) and the block alone. @param {boolean} phone */
   #paneSection(phone) {
     const id = this.#plantId, key = /** @type {string} */ (this.#pane);
-    const view = this.#store.state.mode;
+    // The block as the sheet beside shows it: in the mode arranged there while it is personalised.
+    const view = arrangedMode('flore', this.#store.state.mode);
     const route = /** @type {any} */ (this.route);
     return html`<section class=${phone ? 'sheet-pane' : `pane block-pane ${this._paneFull ? 'full' : ''}`} aria-label=${blockTitle(key)}
         @media-index=${this.#mediaIndex} @media-close=${this.#closePane}>
@@ -595,7 +596,7 @@ export class GfFlora extends LitElement {
    * (the sheet and its pinned map side by side). @param {'filters' | 'plant'} pane @returns {'filters' | 'plant' | 'plantPinned'}
    */
   #key(pane) {
-    return pane === 'plant' && hasColumns(this.#store.state.mode) ? 'plantPinned' : pane;
+    return pane === 'plant' && hasColumns(arrangedMode('flore', this.#store.state.mode)) ? 'plantPinned' : pane;
   }
 
   /** @param {'filters' | 'plant'} pane */

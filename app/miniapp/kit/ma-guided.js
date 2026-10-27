@@ -7,7 +7,7 @@
 // adds its pane — its encyclopedia, a fork (picking: its uses, look-alikes and season; or science: maps, distribution,
 // climate, classification), the plants around under the map —, the last one leaves for the whole app on that plant,
 // as it is. The panes are the plant's sheet (gf-plant-detail panes-only) in a tree of panes of the game's own (the
-// context's `panes`: a grip dragged, a tab, a fold, a block moved in Mode King stay in it, « Recommencer » forgets them) —
+// context's `panes`: a grip dragged, a tab, a fold stay in it, « Recommencer » forgets them) —
 // never the layout of the mode, which Flore keeps as the user made it; each step docks its own blocks there once, as it
 // is accepted (a module off: as it is switched back on, `leftOut`); the image of its « Médias » is the address's &m=.
 // Its end changes nothing by itself: at the last step, the way chosen at the fork is offered for the whole app, by a
@@ -292,7 +292,7 @@ export class MaGuided extends LitElement {
       return;
     }
     // A module switched back on (Réglages, another tab): the blocks its steps had left out docked now. Nothing else is
-    // docked on an update: a block the user moved (Mode King: « Déplacer vers… », a drag) stays where it was put.
+    // docked on an update: a block moved in an earlier version stays where it was put.
     const back = /** @type {string[]} */ (this.app.c.leftOut ?? []).filter(k => this.#stepKeys.includes(k) && !serviceOff(k));
     if (back.length) this.#dockSteps(this.#tree, back, step, branch);
   }

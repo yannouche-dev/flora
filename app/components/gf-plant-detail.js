@@ -4,7 +4,7 @@ import { STATUS_LABELS } from '../config.js';
 import * as db from '../core/db.js';
 import { commonOf, nameOf } from '../core/plants.js';
 import { lastSearchHash } from '../core/query.js';
-import { StoreController, whenReady } from '../core/store.js';
+import { StoreController, arrange, arrangedMode, closeKing, openKing, whenReady } from '../core/store.js';
 import { formatDistance, getMembership, promoteFavorite, setInCollection, toggleFavorite } from '../core/collections.js';
 import { context } from '../core/context.js';
 import { lastFix, oneFix } from '../core/geo.js';
@@ -13,7 +13,7 @@ import { href } from '../core/router.js';
 import { share } from '../core/share.js';
 import * as sources from '../core/sources.js';
 import { moduleOn, modulesSignature } from '../core/modules.js';
-import { baseOf } from '../core/modes.js';
+import { baseOf, modeLabel } from '../core/modes.js';
 import './gf-attribution.js';
 import './gf-plant-spots.js';
 import './gf-calendar.js';
@@ -26,11 +26,12 @@ import { ownWords } from './gf-map-options.js';
 import { lookFor } from '../core/map-settings.js';
 import { ONE_GL_PER_SHEET } from './map3d-options.js';
 import { ui } from '../styles/ui.js';
-import { icon } from '../core/icons.js';
+import { icon, modeIcon } from '../core/icons.js';
+import './gf-mode-switch.js';
 import {
   STYLES, SUBS, canBeEmpty, hidesEmpty, setHidesEmpty, isMap, isAddedMap, mapConfig, setMapConfig, createMap, deleteMap, blockModuleName, blockOrder, blockStyle, blockTitle, isTitleShown, setBlockStyle, setTitleShown, createNote, deleteNote, isHidden, isNote, isSubHidden, noteText, renameBlock,
   foldedByHand, serviceOff, serviceOffNote, setBlockOrder, setHidden, setNoteText, setSubHidden, setSubOrder, shownSubs, subOrder, subTitle,
-  isOnEdge, placeOf, orderByCategory, treeOf, paneOf, dockBlock, toSheet, setPaneSizes, setStackState
+  isOnEdge, placeOf, orderByCategory, treeOf, paneOf, dockBlock, toSheet, setPaneSizes, setStackState, isCustom, isLocked, isSubLocked, resetBlocks
 } from '../core/sheet-blocks.js';
 import { leaves as paneLeaves, stackOf, setSizes as treeSizes, patchStack, dock, undock } from '../core/pane-tree.js';
 import { pressDock } from '../core/dock-drag.js';
@@ -379,6 +380,11 @@ export class GfPlantDetail extends LitElement {
     tree: { attribute: false },
     /** Épuré (photo and one-tap actions), standard (general public), scientific (every data). */
     view: { reflect: true },
+    /**
+     * The host's sheet (`flore`, `collections`): « Personnaliser la fiche » (its crown, at the end of the action bar)
+     * opens there only — never on a card underneath, a block alone, panes alone, a host's own tree, an activity.
+     */
+    sheet: {},
     _wiki: { state: true },
     /** Wikipédia: the sections read whole, the themes opened in its block. */
     _wikiOpen: { state: true },
@@ -412,8 +418,10 @@ export class GfPlantDetail extends LitElement {
     /** The sheet is wide enough for its panes beside it (else bands above and under it). */
     /** The edge shown over the whole plant pane for now (Échap or its button puts it back). */
     _maxEdge: { state: true },
-    /** Said to screen readers: the last move of a block (Mode King). */
+    /** Said to screen readers: the last move of a block (King). */
     _said: { state: true },
+    /** The safety block whose padlock was touched: why it is always shown, written under its title. */
+    _lockTip: { state: true },
     /** The sheet is wide enough for columns on its left and right edges (else they are bands at the top). */
     _wideSheet: { state: true },
     _error: { state: true },
@@ -468,10 +476,17 @@ export class GfPlantDetail extends LitElement {
     .blocks { display: flex; flex-direction: column; }
     .block { margin-top: 20px; border-radius: var(--gf-radius); transition: box-shadow 0.15s, background 0.15s, opacity 0.15s; }
     .block-title { display: flex; align-items: center; gap: 2px; margin: 0 0 8px; }
-    /* « Mode King »: the title is a handle. */
-    .king .block-title { margin-left: -6px; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; }
+    /* Personalised: the title is a handle for the mouse; a finger drags by the grip ⠿ only (on the title it scrolls the
+       sheet, #press). Its tools wrap under the name when the row is short. */
+    .king .block-title { position: relative; flex-wrap: wrap; row-gap: 2px; margin-left: -6px; cursor: grab; user-select: none; -webkit-user-select: none; }
+    .king .grip { touch-action: none; }
+    /* Its rows are as narrow as the list (a sheet squeezed by its panes, a pane's column), not as the whole sheet. */
+    .blocks.king, .edge.king .edge-body { container-type: inline-size; }
+    /* « Déplacer vers… » hangs from the end of the title row: a picker wrapped to its start would push the menu out. */
+    .king .block-title .place-pick { position: static; }
     .block-title .name { flex: 1; min-width: 0; }
-    /* Mode King: the block's category (what the data says about the plant). */
+    .king .block-title .name { min-width: min(11em, calc(100% - 52px)); }
+    /* King: the block's category (what the data says about the plant). */
     .block-title .cat { flex: none; padding: 0 8px; border-radius: var(--gf-radius-pill); background: var(--gf-surface-2); color: var(--gf-text-muted); font-size: 0.66rem; font-weight: 600; text-transform: none; letter-spacing: 0; margin-right: 2px; }
     @container (max-width: 420px) { .block-title .cat { display: none; } }
     .off-note { flex: none; font-size: 0.7rem; text-transform: none; letter-spacing: 0; font-weight: 400; }
@@ -494,6 +509,10 @@ export class GfPlantDetail extends LitElement {
     .block-title .tool { cursor: pointer; }
     .grip:hover, .grip:focus-visible, .block-title .tool:hover, .block-title .tool:focus-visible { opacity: 1; background: var(--gf-surface-2); color: var(--gf-text); }
     .grip:focus-visible, .block-title .tool:focus-visible { outline: none; box-shadow: var(--gf-focus); }
+    /* A safety block's padlock (no trash): touched, it says why, under the title. */
+    .block-title .tool.lock { cursor: help; font-size: 0.85rem; }
+    .lock-tip { margin: -4px 0 8px; font-size: 0.8rem; color: var(--gf-text-muted); }
+    .lock-tip:empty { display: none; }
     /* The action bar: docked at the bottom of the sheet (above the tab bar on a phone), equal buttons. */
     .action-bar {
       position: sticky;
@@ -530,11 +549,30 @@ export class GfPlantDetail extends LitElement {
     .action-bar .act > button:hover, .action-bar .act > a.button:hover { background: var(--gf-surface-2); }
     .action-bar .fav[aria-pressed='true'] { color: var(--gf-fav); }
     .action-bar .share-note { position: absolute; left: 50%; bottom: calc(100% + 6px); transform: translateX(-50%); margin: 0; padding: 4px 10px; border-radius: var(--gf-radius-pill); background: var(--gf-text); color: var(--gf-surface); white-space: nowrap; }
-    /* Mode King: every action, each with its ☑; an action hidden in this view is faded and does nothing. */
+    /* King: every action, each with its ☑ — the one target there, the action inert under it until « Terminé » (no two
+       targets on top of each other: WCAG 2.5.8); an action hidden in this view is faded too. */
     .action-bar .act-toggle { position: absolute; top: 0; right: 2px; display: grid; place-items: center; width: 22px; height: 22px; cursor: pointer; }
     .action-bar .act-toggle input { margin: 0; width: 16px; height: 16px; }
     .action-bar .act.off > button, .action-bar .act.off > a.button { opacity: 0.4; text-decoration: line-through; pointer-events: none; }
-    /* The name and the actions read without a title (Mode King titles them, to move them like the others). */
+    /* « Personnaliser la fiche »: the crown, last, an icon at a finger's size; gold while open. */
+    .action-bar .act.crown { flex: none; width: 44px; }
+    .action-bar .act.crown > button { min-height: 44px; place-content: center; color: var(--gf-text-muted); }
+    .action-bar .act.crown > button[aria-pressed='true'] { color: var(--gf-crown); background: color-mix(in srgb, #f5c518 18%, var(--gf-surface)); }
+    /* « Mise en page de la fiche »: the mode arranged and its tools, stuck at the top (above the panes when there are). */
+    .king-bar { position: sticky; top: 0; z-index: 8; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 -16px; padding: 6px 16px;
+      border-bottom: 2px solid #d4a017; background: color-mix(in srgb, #f5c518 10%, var(--gf-surface)); font-size: 0.85rem; }
+    :host([embedded]) .king-bar { margin: 0 -14px; padding: 6px 14px; }
+    :host([edged]) .king-bar { position: static; flex: none; margin: 0; }
+    /* Stuck over a sheet without panes: a block reached, or read, is the one right below it (#offset), never beneath it. */
+    :host(:not([edged])) .blocks.king > .block { scroll-margin-top: var(--kb-h, 0px); }
+    .king-bar .kb-mode { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+    .king-bar .kb-mode > svg:first-child { color: #b8860b; font-size: 1.1rem; }
+    .king-bar .kb-tools { display: inline-flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+    /* « Barre d’actions »: its list on a line of its own, scrolling when tall (the sheet stays in view). */
+    .king-actions { flex: 1 1 100%; max-height: min(45vh, 360px); overflow-y: auto; overscroll-behavior: contain; padding: 6px 8px; border: 1px dashed var(--gf-border);
+      border-radius: var(--gf-radius); background: var(--gf-surface); }
+    .king-actions p { margin: 0 0 6px; color: var(--gf-text-muted); font-size: 0.8rem; }
+    /* The name and the actions read without a title (King titles them, to move them like the others). */
     .block.headless { margin-top: 8px; }
     .block.headless:first-child { margin-top: 0; }
     .block[data-key='name'] :is(h1, h2.h1) { margin-top: 4px; }
@@ -544,8 +582,8 @@ export class GfPlantDetail extends LitElement {
     .names-list .sep, .names .sep { font-style: normal; opacity: 0.5; padding: 0 0.3em; }
     .block-title input.rename { flex: 1; min-width: 0; font: inherit; text-transform: none; letter-spacing: 0; padding: 2px 6px; border: 1px solid var(--gf-accent); border-radius: var(--gf-radius-sm); background: var(--gf-surface); color: var(--gf-text); }
     .block-title .tool[aria-expanded='true'], .block-title .tool[aria-pressed='true'] { opacity: 1; color: var(--gf-accent); }
-    /* Mode King: a title hidden outside the mode reads faded and struck. */
-    .block.untitled > .block-title .name { opacity: 0.55; text-decoration: line-through; }
+    /* King: a title hidden when read is drawn struck and slanted (not faded: its contrast kept). */
+    .block.untitled > .block-title .name { font-style: italic; text-decoration: line-through; }
     .block-title .styles { display: inline-flex; flex: none; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill); overflow: hidden; margin-right: 4px; }
     .block-title .styles button { min-height: 0; padding: 2px 8px; border: 0; border-radius: 0; background: var(--gf-surface); color: var(--gf-text-muted); font-size: 0.7rem; text-transform: none; letter-spacing: 0; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
     .block-title .styles button[aria-pressed='true'] { background: var(--gf-accent-soft); color: var(--gf-accent); }
@@ -561,8 +599,6 @@ export class GfPlantDetail extends LitElement {
     .note-text { width: 100%; font: inherit; padding: 8px 10px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius); background: var(--gf-surface); color: var(--gf-text); resize: vertical; }
     .note-text:focus-visible { outline: none; border-color: var(--gf-accent); box-shadow: var(--gf-focus); }
     .new-note { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0; }
-    /* Mode King: room at the end so the crown, floating at the bottom, never covers the last controls. */
-    .blocks.king ~ .new-note { padding-bottom: 80px; }
     .new-note input { flex: 1; min-width: 160px; }
     /* Folded away: the title only, faded; ↺ brings it back. */
     .block.off { opacity: 0.45; }
@@ -800,8 +836,8 @@ export class GfPlantDetail extends LitElement {
     .focus-hint { font-size: 0.75rem; color: var(--gf-text-muted); margin: 6px 0 0; }
 
     /*
-     * Edges of the plant pane (Mode King › Position): blocks stuck to the top, left, right or bottom; the
-     * sheet scrolls between them. Bands S / M / L high (or dragged), columns S / M / L wide.
+     * The plant pane's tree of panes (King: « Déplacer vers… », a drag): panes on the top, left, right or bottom
+     * of the sheet, which scrolls between them. Bands S / M / L high (or dragged), columns S / M / L wide.
      */
     :host { container-type: inline-size; }
     :host([edged]) { overflow: hidden; display: flex; flex-direction: column; padding: 0; }
@@ -821,7 +857,9 @@ export class GfPlantDetail extends LitElement {
     :host([embedded]) .frame.edged .main { padding: 0 14px; }
     /* Narrow: the panes as bands above and under the sheet, sharing the height left to it. */
     .frame.edged.narrow { flex-direction: column; }
-    .band-cell { flex: none; height: min(calc(var(--host-h, 80vh) * 0.45), calc((var(--host-h, 80vh) - 220px) / var(--bands, 1))); border-bottom: 1px solid var(--gf-border); }
+    /* (Personalising, the bar « Mise en page de la fiche » above the frame takes its share first: --kb-h.) */
+    .band-cell { flex: none; height: min(calc((var(--host-h, 80vh) - var(--kb-h, 0px)) * 0.45), calc((var(--host-h, 80vh) - var(--kb-h, 0px) - 220px) / var(--bands, 1)));
+      border-bottom: 1px solid var(--gf-border); }
     .band-cell.folded { height: auto; }
     /* A narrow sheet: the media's band too keeps the room its viewer needs. */
     .band-cell:not(.folded):has(gf-media-viewer:not([compact])) { min-height: 400px; }
@@ -867,7 +905,7 @@ export class GfPlantDetail extends LitElement {
     .edge-body { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; padding: 4px 12px 10px; overscroll-behavior: contain; }
     .edge.bare .edge-body { padding: 0; }
     .edge.bare .edge-body > .block { margin: 0; }
-    /* The bar names the edge's blocks: no second title (Mode King shows the block's tools). */
+    /* The bar names the edge's blocks: no second title (King shows the block's tools). */
     .edge:not(.king) .edge-body > .block > h2.block-title, .edge:not(.king) .edge-body > .block > .to-pane { display: none; }
     .edge-body > .block { margin-top: 0; }
     .edge-body > .block.map-block, .edge-body > .block[data-key='media'] { flex: 1 0 200px; display: flex; flex-direction: column; min-height: 0; }
@@ -884,10 +922,12 @@ export class GfPlantDetail extends LitElement {
     .edge.col.folded .edge-tabs { flex-direction: column; overflow: visible; }
     .edge.col.folded .tab-name { display: none; }
     .edge.col .edge-tabs .tab-name { overflow: hidden; text-overflow: ellipsis; }
+    /* Personalising: a folded pane drawn open, its bar saying so. */
+    .edge-bar .fold-note { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.7rem; color: var(--gf-text-muted); }
     /* Without title or frame: the block fills the edge; its tabs and « agrandir » float over it. */
     .edge-float { position: absolute; top: 6px; left: 6px; z-index: 3; display: flex; gap: 4px; padding: 2px; border-radius: var(--gf-radius-sm); background: color-mix(in srgb, var(--gf-surface) 85%, transparent); box-shadow: var(--gf-shadow); }
     .edge-float .tab-name { display: none; }
-    /* Mode King: « Déplacer vers… » a block — the sheet, a new pane on a side, a tab of a pane. */
+    /* King: « Déplacer vers… » a block — the sheet, a new pane on a side, a tab of a pane. */
     .place-pick { position: relative; flex: none; }
     .place-pick > summary { list-style: none; display: inline-grid; place-items: center; cursor: pointer; }
     .place-pick > summary::-webkit-details-marker { display: none; }
@@ -898,7 +938,7 @@ export class GfPlantDetail extends LitElement {
     .move-menu button:hover:not(:disabled), .move-menu button:focus-visible { background: var(--gf-accent-soft); outline: none; }
     .move-menu button:disabled { opacity: 0.45; cursor: default; }
     .said { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
-    /* Mode King: the blocks to add, as chips to drag. */
+    /* King: the blocks to add, as chips to drag. */
     .palette { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 0 0 10px; padding: 8px 10px; border: 1px dashed var(--gf-border); border-radius: var(--gf-radius); }
     .palette .pal-title { font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gf-text-muted); display: inline-flex; gap: 4px; align-items: center; }
     .palette .chip { display: inline-flex; gap: 5px; align-items: center; min-height: 28px; padding: 2px 10px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-pill);
@@ -951,7 +991,7 @@ export class GfPlantDetail extends LitElement {
     :host([stack='full']) .blocks.rubrics { --room-stack: calc(var(--count, 1) * var(--rub-h)); --room-gap: 120px; }
     :host(:not([edged])) .blocks.rubrics::after, .frame.edged .main[data-drop-node='sheet'] .blocks.rubrics::after { content: ''; display: block; flex: none;
       height: max(0px, calc(var(--sheet-h, 100vh) - var(--room-stack) - var(--bar-h, 0px) - var(--room-gap))); }
-    /* Mode King: the plain list — any block can come under the top (room after the last one). */
+    /* King: the plain list — any block can come under the top (room after the last one). */
     .frame.edged .main[data-drop-node='sheet']:has(.blocks.king)::after { content: ''; display: block; height: max(0px, calc(100% - 160px)); }
     /* The table of contents: over everything (the top layer), under the header touched. */
     .toc { position: fixed; inset: auto; margin: 0; width: min(300px, calc(100vw - 16px)); max-height: min(70vh, 560px); overflow-y: auto; padding: 8px; box-sizing: border-box;
@@ -981,6 +1021,20 @@ export class GfPlantDetail extends LitElement {
     .block[data-flash] { animation: flash 1.2s ease-out; }
     @keyframes flash { from { box-shadow: 0 0 0 3px var(--gf-accent); } to { box-shadow: 0 0 0 3px transparent; } }
     @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } .block[data-flash], .rub-head[data-flash] { animation: none; } }
+    /* Personalising a narrow list (a phone, a sheet squeezed by its panes, a pane): the grip and the name on the first
+       line, the tools under; « Déplacer vers… » across the title row. */
+    @container (max-width: 420px) {
+      .king .block-title :is(.name, input.rename) { flex: 1 0 calc(100% - 52px); }
+      .king .block-title .off-note { flex: 1 1 100%; }
+      .king .block-title .move-menu { left: 0; right: 0; min-width: 0; }
+    }
+    /* A finger: every target of the personalised sheet at 44 px (last: over the sizes above). */
+    @media (pointer: coarse) {
+      .grip, .block-title .tool, .place-pick > summary { width: 44px; height: 44px; }
+      .block-title .styles button { min-height: 44px; }
+      .action-bar .act-toggle { width: 44px; height: 44px; top: 0; right: 0; }
+      .king-bar button, .palette .chip, .move-menu button { min-height: 44px; }
+    }
   `, gripStyles];
 
   constructor() {
@@ -998,21 +1052,29 @@ export class GfPlantDetail extends LitElement {
     /** @type {string | null} */
     this._shareNote = null;
     this.view = 'standard';
+    /** @type {string | null} */
+    this.sheet = null;
+    this.preview = false;
+    this.scoped = false;
+    /** @type {string | null} */
+    this.only = null;
     /** Block being dragged, and the order shown meanwhile (else the saved one). @type {string | null} */
     this._dragKey = null;
     /** @type {string[] | null} */
     this._dragOrder = null;
     this._dragY = 0;
-    /** King mode: the block being renamed, the blocks showing their sub-blocks list, naming a new note block. @type {string | null} */
+    /** King: the block being renamed, the blocks showing their sub-blocks list, naming a new note block. @type {string | null} */
     this._renaming = null;
     // Panels opened on the previous plant stay open on this one (sheet-session.js).
     /** @type {Set<string>} */
     this._subsOpen = sheetSession.subsOpen;
-    /** King mode: the map blocks showing their settings. @type {Set<string>} */
+    /** King: the map blocks showing their settings. @type {Set<string>} */
     this._mapsOpen = sheetSession.mapsOpen;
     /** @type {string | null} */
     this._maxEdge = sheetSession.maxEdge;
     this._said = '';
+    /** @type {string | null} */
+    this._lockTip = null;
     /** @type {import('../core/danger.js').Verdict | null} */
     this._verdict = null;
     this.panesOnly = false;
@@ -1104,7 +1166,7 @@ export class GfPlantDetail extends LitElement {
     const pre = this.#preFocus;
     this.#preFocus = null;
     if (!(el instanceof Element) || this.#appFocus) return;
-    const stuck = el.closest('.rub-head, .block-title, .wiki-theme > summary, .action-bar');
+    const stuck = el.closest('.rub-head, .block-title, .wiki-theme > summary, .action-bar, .king-bar');
     const scroller = this.#sheetScroller, now = scroller.scrollTop;
     // Where it was: noted at the key or pointer down; else where its last scroll left it (the browser's own scroll
     // to the focus has not been told yet).
@@ -1117,7 +1179,7 @@ export class GfPlantDetail extends LitElement {
     const hit = r.height && r.top >= s.top && r.bottom <= s.bottom ? /** @type {any} */ (this.renderRoot).elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
     if (!hit || !stuck.contains(hit)) scroller.scrollTop = now;
   };
-  /** Where the sheet was when a key or a pointer went down (before the browser scrolls to what gets the focus). @type {{ st: number, at: number } | null} */
+  /** Where the sheet was when a key or a pointer went down (before the browser scrolls to what gets the focus), until it scrolls otherwise (#onScroll). @type {{ st: number, at: number } | null} */
   #preFocus = null;
   /** Where the sheet's last scroll left it (or the app, at once). @type {number | null} */
   #lastTop = null;
@@ -1152,13 +1214,16 @@ export class GfPlantDetail extends LitElement {
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
     if (changed.has('preview') && changed.get('preview') === true && !this.preview) this.#promoted = true;
-    // Another view or Mode King reorders the sheet: the place read now is reached again once drawn (#placeAgain).
-    const king = Boolean(this.#store.state.kingMode);
-    if (this.#placed && this._plant && !this.preview && !this.only && !this.panesOnly && ((changed.has('view') && changed.get('view') !== undefined) || king !== this.#king)) {
+    // Another view (the host's, or the one arranged here) or King opened or closed here reorders the sheet: the place
+    // read now is reached again once drawn (#placeAgain).
+    const king = this.#kingHere, view = this.#view;
+    const viewChanged = view !== this.#lastView;
+    if (this.#placed && this._plant && !this.preview && !this.only && !this.panesOnly && ((viewChanged && this.#lastView !== null) || king !== this.#king)) {
       const { cat, block, wiki } = this.#readPlace();
       if (cat || block) this.#rePlace = { cat, block, wiki };
     }
     this.#king = king;
+    this.#lastView = view;
     // The panels opened follow to the next plant (not from a preview card, which is not read).
     if (!this.preview && !this.only) {
       if (changed.has('_subsOpen')) sheetSession.subsOpen = this._subsOpen;
@@ -1175,13 +1240,14 @@ export class GfPlantDetail extends LitElement {
     const hiddenChanged = hidden !== this.#hidden;
     this.#signature = signature;
     this.#hidden = hidden;
-    if (changed.has('plantId')) this.#load(this.plantId);
+    if (changed.has('plantId')) { this.#load(this.plantId); return; }
     // The card underneath became the sheet.
-    else if (changed.has('preview') && !this.preview) this.#title();
+    if (changed.has('preview') && !this.preview) this.#title();
     // A module switched on or off (Réglages › Modules): its data comes or goes.
-    else if (modulesChanged) this.#refresh();
-    else if (hiddenChanged && this._plant && this._details !== undefined) this.#loadExtras(this._plant, this._details, this.#abort?.signal);
-    else if (changed.has('view') && this._plant && this._details !== undefined) this.#loadExtras(this._plant, this._details, this.#abort?.signal);
+    if (modulesChanged) this.#refresh();
+    // Blocks folded or shown, another view (the card underneath come on top in the mode arranged here too): what it
+    // shows now (each load once per plant).
+    else if ((hiddenChanged || viewChanged) && this._plant && this._details !== undefined) this.#loadExtras(this._plant, this._details, this.#abort?.signal);
   }
 
   disconnectedCallback() {
@@ -1191,6 +1257,8 @@ export class GfPlantDetail extends LitElement {
     this.#touching = this.#buttonDown = false;
     unregisterWebPane(this);
     this.#resize.disconnect();
+    this.#barSize.disconnect();
+    this.#barSeen = null;
     this.#abort?.abort();
     this.#letGo();
     clearTimeout(this.#readTimer);
@@ -1341,7 +1409,7 @@ export class GfPlantDetail extends LitElement {
    * @param {any} plant @param {any} details @param {AbortSignal} [signal]
    */
   #loadExtras(plant, details, signal) {
-    const v = this.view;
+    const v = this.#view;
     // In a pane: that block's data only.
     const shown = (/** @type {string} */ key) => this.only ? key === this.only : !isHidden(v, key);
     const qid = plant.identifiers?.wikidata || details?.identifiers?.wikidata?.id;
@@ -1441,7 +1509,7 @@ export class GfPlantDetail extends LitElement {
    * @param {(key: string) => boolean} shown
    */
   #loadGbif(plant, details, signal, settle, once, shown) {
-    const v = this.view;
+    const v = this.#view;
     if (details === undefined) return;
     const key = details?.identifiers?.gbif?.id ?? null;
     const sub = (/** @type {string} */ block, /** @type {string} */ k) => shown(block) && !isSubHidden(v, block, k);
@@ -1476,7 +1544,7 @@ export class GfPlantDetail extends LitElement {
   /** Names of the top sources and of the areas the plant is found in (each fetched once, then cached). @param {any} stats @param {AbortSignal} [signal] */
   #loadTitles(stats, signal) {
     if (!stats) return;
-    const v = this.view;
+    const v = this.#view;
     const shown = (/** @type {string} */ k) => !isHidden(v, 'occurrences') && !isSubHidden(v, 'occurrences', k);
     /** @type {[string, Promise<string | null>][]} */
     const wanted = [];
@@ -1498,45 +1566,62 @@ export class GfPlantDetail extends LitElement {
 
   #store = new StoreController(this);
 
+  /** A host's sheet, read as such: « Personnaliser la fiche » can open here (its crown). */
+  get #crownable() { return Boolean(this.sheet) && !this.preview && !this.only && !this.panesOnly && !this.tree && !this.scoped; }
+
+  /** « Personnaliser la fiche » (code name: King) open on this sheet. */
+  get #kingHere() { return this.#crownable && this.#store.state.king?.sheet === this.sheet; }
+
   /**
-   * The parts of a block this view shows, in the order chosen for it (Mode King › Sous-blocs). `parts`: sub-block
+   * The mode shown: the one arranged here while King is open (its bar), else the host's view. The card underneath
+   * (Flore's next plant) is drawn and loaded in the mode arranged on its sheet too, without King's tools: on top, it
+   * stays as it is. @returns {string}
+   */
+  get #view() {
+    const arranged = this.#kingHere || (this.preview && this.#store.state.king?.sheet === this.sheet && Boolean(this.sheet)
+      && !this.only && !this.panesOnly && !this.tree && !this.scoped);
+    return arranged ? arrangedMode(/** @type {string} */ (this.sheet), this.view) : this.view;
+  }
+
+  /**
+   * The parts of a block this view shows, in the order chosen for it (King › Sous-blocs). `parts`: sub-block
    * key → its markup, or nothing when this view or this plant has none.
    * @param {string} block @param {Record<string, () => unknown>} parts
    */
   #subs(block, parts) {
-    return shownSubs(this.view, block).map(k => parts[k]?.() ?? nothing).filter(x => x !== nothing);
+    return shownSubs(this.#view, block).map(k => parts[k]?.() ?? nothing).filter(x => x !== nothing);
   }
 
   /**
    * The action bar, docked at the bottom of the sheet (above the tab bar on a phone): the actions this view
-   * shows, in its order. Mode King shows them all, each with its ☑ (shown or not in this view).
+   * shows, in its order. King shows them all, each with its ☑ (shown or not in this view), the actions inert meanwhile.
    * @param {any} plant
    */
   #actionBar(plant) {
-    const v = this.view;
-    const king = this.#store.state.kingMode;
+    const v = this.#view;
+    const king = this.#kingHere, crown = this.#crownable;
     const fav = this.#store.state.favorites.has(plant.id);
     const name = nameOf(plant);
     /** @type {Record<string, () => unknown>} */
     const buttons = {
-      fav: () => html`<button type="button" class="fav" aria-pressed=${fav ? 'true' : 'false'} @click=${() => toggleFavorite(plant)}>
+      fav: () => html`<button type="button" class="fav" ?inert=${king} aria-pressed=${fav ? 'true' : 'false'} @click=${() => toggleFavorite(plant)}>
         ${icon(fav ? 'heart-fill' : 'heart')}<span>Favori</span></button>`,
-      addTo: () => html`<button type="button" @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-add-to'))?.open()}>${icon('plus-lg')}<span>Ajouter à…</span></button>`,
-      share: () => html`<button type="button" @click=${() => this.#share(plant, name)}>${icon('share')}<span>Partager</span></button>`,
+      addTo: () => html`<button type="button" ?inert=${king} @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-add-to'))?.open()}>${icon('plus-lg')}<span>Ajouter à…</span></button>`,
+      share: () => html`<button type="button" ?inert=${king} @click=${() => this.#share(plant, name)}>${icon('share')}<span>Partager</span></button>`,
       // The Carte filtered on this plant (its places, its GBIF distribution).
-      map: () => html`<a class="button" href=${href.map({ plant: plant.id })}>${icon('map')}<span>Carte</span></a>`,
+      map: () => html`<a class="button" ?inert=${king} href=${href.map({ plant: plant.id })}>${icon('map')}<span>Carte</span></a>`,
       // In one tap, into the collection or place last opened (context.js), when it is not there yet.
       addCurrent: () => {
         const current = this.#currentCollection(plant);
         if (!current) return king ? html`<button type="button" disabled title="Ouvrez une liste ou un lieu : vous y ajouterez d’un geste">${icon('plus-lg')}<span>Liste ou lieu en cours</span></button>` : nothing;
-        return html`<button type="button" title=${'Ajouter à « ' + current.name + ' »'} @click=${() => this.#addCurrent(plant, current)}>
+        return html`<button type="button" ?inert=${king} title=${'Ajouter à « ' + current.name + ' »'} @click=${() => this.#addCurrent(plant, current)}>
           ${icon(current.kind === 'place' ? 'geo-alt-fill' : 'plus-lg')}<span class="short">${current.name}</span></button>`;
       },
-      spot: () => html`<a class="button" href=${href.newSpot(plant.id)}>${icon('geo-alt-fill')}<span>Noter ici</span></a>`
+      spot: () => html`<a class="button" ?inert=${king} href=${href.newSpot(plant.id)}>${icon('geo-alt-fill')}<span>Noter ici</span></a>`
     };
     const keys = subOrder(v, 'actions').filter(k => buttons[k] && !(this.scoped && (k === 'map' || k === 'spot'))
       && (king || (!isSubHidden(v, 'actions', k) && (k !== 'addCurrent' || this.#currentCollection(plant)))));
-    if (!keys.length) return nothing;
+    if (!keys.length && !crown) return nothing;
     return html`<nav class="action-bar ${king ? 'king' : ''}" aria-label="Actions">
       ${this._shareNote ? html`<p class="share-note" role="status">${this._shareNote}</p>` : nothing}
       <div class="acts">${keys.map(k => {
@@ -1547,7 +1632,9 @@ export class GfPlantDetail extends LitElement {
             <input type="checkbox" .checked=${!off} aria-label=${`« ${subTitle('actions', k)} » dans la barre d’actions`}
               @change=${e => setSubHidden(v, 'actions', k, !e.target.checked)} /></label>` : nothing}
         </span>`;
-      })}</div>
+      })}${crown ? html`<span class="act crown"><button type="button" aria-pressed=${king ? 'true' : 'false'} aria-label="Personnaliser la fiche"
+        title=${king ? 'Personnaliser la fiche : toucher pour terminer' : 'Personnaliser la fiche : ses blocs, leur ordre, ses panneaux, pour chaque mode'}
+        @click=${() => { if (king) closeKing(); else openKing(/** @type {string} */ (this.sheet)); }}>${icon('crown')}</button></span>` : nothing}</div>
     </nav>`;
   }
 
@@ -1595,15 +1682,16 @@ export class GfPlantDetail extends LitElement {
 
     const ctx = this.#context(plant);
     if (this.only) return this.#onlyBlock(this.only, ctx);
-    // What a move did (Mode King: « Déplacer vers… », a drag), said — in the panes alone too (Découvrir).
-    const said = this._said ? html`<p class="said" aria-live="polite">${this._said}</p>` : nothing;
+    // What a move did (King: « Déplacer vers… », a drag, « Par défaut »), said — in the panes alone too (Découvrir). The
+    // region is there before its first message (one born with its text is seldom read out).
+    const said = html`<p class="said" aria-live="polite">${this._said}</p>`;
     if (this.panesOnly) return html`${this.#panesOnlyView(ctx)}${said}`;
     const pane = this._paneDialog;
-    return html`${baseOf(this.view) === 'epure' ? this.#epure(ctx) : this.#full(ctx)}${said}${pane ? html`
+    return html`${baseOf(this.#view) === 'epure' ? this.#epure(ctx) : this.#full(ctx)}${said}${pane ? html`
       <dialog class="pane" aria-label=${blockTitle(pane.key)} @close=${() => { this._paneDialog = null; }}>
         <div class="pane-bar"><h2>${blockTitle(pane.key)} — <i>${plant.scientificName}</i></h2>
           <button class="icon-btn" type="button" aria-label="Fermer" title="Fermer" @click=${(/** @type {Event} */ e) => /** @type {HTMLElement} */ (e.currentTarget).closest('dialog')?.close()}>${icon('x-lg')}</button></div>
-        <gf-plant-detail embedded only=${pane.key} plant-id=${plant.id} view=${this.view} .paneStart=${pane.url}
+        <gf-plant-detail embedded only=${pane.key} plant-id=${plant.id} view=${this.#view} .paneStart=${pane.url}
           @media-close=${(/** @type {Event} */ e) => /** @type {HTMLElement} */ (e.currentTarget).closest('dialog')?.close()}></gf-plant-detail>
       </dialog>` : nothing}`;
   }
@@ -1638,11 +1726,11 @@ export class GfPlantDetail extends LitElement {
   #onlyBlock(key, ctx) {
     if (key === 'media') {
       return ctx.photosOff ? html`<p class="muted only-pad">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`
-        : html`<gf-media-viewer plant-id=${ctx.plant.id} presentation=${blockStyle(this.view, 'media')} .index=${this.paneAt ?? 0} .startUrl=${this.paneStart ?? null}></gf-media-viewer>`;
+        : html`<gf-media-viewer plant-id=${ctx.plant.id} presentation=${blockStyle(this.#view, 'media')} .index=${this.paneAt ?? 0} .startUrl=${this.paneStart ?? null}></gf-media-viewer>`;
     }
-    const empty = this.titled && hidesEmpty(this.view, key);
+    const empty = this.titled && hidesEmpty(this.#view, key);
     if (empty && this.#emptyHere(key, ctx)) return nothing;
-    const title = this.titled && isTitleShown(this.view, key) ? html`<h3 class="block-title"><span class="name">${blockTitle(key)}</span></h3>` : nothing;
+    const title = this.titled && isTitleShown(this.#view, key) ? html`<h3 class="block-title"><span class="name">${blockTitle(key)}</span></h3>` : nothing;
     return html`<div class="only-pad ${isMap(key) ? 'fill' : ''}"><section class="block only ${empty ? 'hide-empty' : ''} ${isMap(key) ? 'map-block' : ''}" data-key=${key}>${title}<div class="content">${this.#content(key, ctx)}</div></section></div>`;
   }
 
@@ -1699,7 +1787,7 @@ export class GfPlantDetail extends LitElement {
     return html`
       ${this.#heading(name)}
       <div class="sci"><i>${plant.scientificName}</i> <span class="author">${plant.author}</span></div>
-      ${baseOf(this.view) === 'epure' ? html`<p class="meta">${plant.family}</p>` : nothing}`;
+      ${baseOf(this.#view) === 'epure' ? html`<p class="meta">${plant.family}</p>` : nothing}`;
   }
 
   /** @param {any} ctx */
@@ -1835,19 +1923,19 @@ export class GfPlantDetail extends LitElement {
   /** @param {any} ctx */
   #blocks(ctx) {
     // Blocks stuck to an edge are there, not in the flow.
-    // Outside « Mode King », folded blocks are not there at all.
+    // Outside King, folded blocks are not there at all.
     // Outside it too, a block with nothing for this plant (no other name, no Wikipédia article).
-    if (this.#store.state.kingMode) {
-      // Mode King arranges the blocks one by one: their plain list, each with its handle.
-      const order = this._dragOrder || blockOrder(this.view);
+    if (this.#kingHere) {
+      // King arranges the blocks one by one: their plain list, each with its handle.
+      const order = this._dragOrder || blockOrder(this.#view);
       const sorting = Boolean(this._dragOrder);
-      const keys = blockOrder(this.view).filter(k => !isOnEdge(this.view, k) && this.#visible(k, ctx));
+      const keys = blockOrder(this.#view).filter(k => !isOnEdge(this.#view, k) && this.#visible(k, ctx));
       return html`${this.#palette()}<div class="blocks king ${sorting ? 'sorting' : ''}">${repeat(keys, k => k, k => this.#block(k, ctx, sorting ? order.indexOf(k) : null))}</div>
         ${sorting ? nothing : this.#newNote()}`;
     }
     // Read: the name, then the blocks gathered by rubric, each rubric under its header (#rubric).
     const rubrics = this.#rubrics(ctx);
-    const name = !isOnEdge(this.view, 'name') && this.#visible('name', ctx) ? this.#plainBlock('name', ctx) : nothing;
+    const name = !isOnEdge(this.#view, 'name') && this.#visible('name', ctx) ? this.#plainBlock('name', ctx) : nothing;
     return html`<div class="blocks rubrics" style=${`--count:${rubrics.length}`}>${name}${repeat(rubrics, g => g.cat, (g, i) => this.#rubric(g, i, ctx))}</div>
       ${this.preview ? nothing : this.#toc(ctx)}`;
   }
@@ -1861,12 +1949,12 @@ export class GfPlantDetail extends LitElement {
   #rubrics(ctx) {
     /** @type {Map<string, { cat: string, keys: string[], pane: string[] }>} */
     const by = new Map();
-    for (const k of blockOrder(this.view)) {
-      if (k === 'name' || isHidden(this.view, k) || (k === 'web' && !this.#paneOf('web'))) continue;
+    for (const k of blockOrder(this.#view)) {
+      if (k === 'name' || isHidden(this.#view, k) || (k === 'web' && !this.#paneOf('web'))) continue;
       const cat = blockCategory(k);
       const g = by.get(cat) || { cat, keys: [], pane: [] };
       by.set(cat, g);
-      if (isOnEdge(this.view, k)) { if (this.#visible(k, ctx)) g.pane.push(k); }
+      if (isOnEdge(this.#view, k)) { if (this.#visible(k, ctx)) g.pane.push(k); }
       else if (this.#visible(k, ctx)) g.keys.push(k);
     }
     return [...by.values()];
@@ -2048,47 +2136,100 @@ export class GfPlantDetail extends LitElement {
     this.#appFocus = false;
   }
 
-  /** Shown here: everything in Mode King; outside it, not folded, not left out for being empty. @param {string} k @param {any} ctx */
+  /** Shown here: everything in King; outside it, not folded, not left out for being empty. @param {string} k @param {any} ctx */
   #visible(k, ctx) {
-    // « Page web » works in a pane only: elsewhere, Mode King alone shows it (to be placed).
-    if (k === 'web') return this.#store.state.kingMode || Boolean(this.#paneOf('web'));
-    return this.#store.state.kingMode || (!this.#folded(k) && !(hidesEmpty(this.view, k) && this.#emptyHere(k, ctx)));
+    // « Page web » works in a pane only: elsewhere, King alone shows it (to be placed).
+    if (k === 'web') return this.#kingHere || Boolean(this.#paneOf('web'));
+    return this.#kingHere || (!this.#folded(k) && !(hidesEmpty(this.#view, k) && this.#emptyHere(k, ctx)));
   }
 
   /**
    * Folded: by hand in the mode, or its service off. A block a host's own tree puts in a pane (Rencontres' guided way)
    * is the host's: only its service off folds it. @param {string} k
    */
-  #folded(k) { return this.tree && stackOf(this.tree, k) ? serviceOff(k) : isHidden(this.view, k); }
+  #folded(k) { return this.tree && stackOf(this.tree, k) ? serviceOff(k) : isHidden(this.#view, k); }
 
   /** Does the sheet show a map (in the flow or pinned)? Its data can then be touched to show on it. */
   get #hasMap() {
-    return blockOrder(this.view).some(k => isMap(k) && !isHidden(this.view, k));
+    return blockOrder(this.#view).some(k => isMap(k) && !isHidden(this.#view, k));
   }
 
   /**
-   * Mode King, keyboard and touch way to arrange the panes: « Déplacer vers… » — back in the sheet, a new pane on
+   * King, keyboard and touch way to arrange the panes: « Déplacer vers… » — back in the sheet, a new pane on
    * a side of the sheet, or a tab of a pane already there. (Dragging does the same with the pointer.)
    * @param {string} key
    */
   #placePicker(key) {
     const title = blockTitle(key);
     const tree = this.#tree(), here = this.#paneOf(key);
+    // After the move (or a refusal), the focus on the block where it is now: its grip, else its tab.
     const move = (/** @type {Event} */ e, /** @type {() => unknown} */ fn, /** @type {string} */ said) => {
       /** @type {HTMLDetailsElement | null} */ ((/** @type {HTMLElement} */ (e.currentTarget)).closest('details'))?.removeAttribute('open');
       this._said = `« ${title} » : ${fn() === false ? TOO_DEEP : said}`;
+      this.#focusMoved(key);
     };
     const panes = /** @type {import('../core/pane-tree.js').StackNode[]} */ (paneLeaves(tree).filter(n => n.t === 'stack' && n !== here));
     const sides = /** @type {const} */ ([['right', 'à droite', 'chevron-bar-right'], ['left', 'à gauche', 'chevron-bar-left'], ['top', 'en haut', 'chevron-up'], ['bottom', 'en bas', 'chevron-down']]);
-    return html`<details class="place-pick" @keydown=${(/** @type {KeyboardEvent} */ e) => { if (e.key === 'Escape') { e.stopPropagation(); /** @type {HTMLDetailsElement} */ (e.currentTarget).removeAttribute('open'); } }}>
+    // Opened: the focus on its first choice (↑ ↓ Début Fin among them, #menuKey; Tab leaves them all at once); Échap
+    // closes it, back on its button; the focus gone elsewhere (Tab) closes it too: nothing is left open over the tools
+    // the focus reaches. « Page web » works in a pane only: no « Dans la fiche » (its trash takes it out).
+    return html`<details class="place-pick" @toggle=${this.#onPickToggle} @keydown=${(/** @type {KeyboardEvent} */ e) => {
+        if (e.key !== 'Escape') return;
+        e.stopPropagation();
+        const d = /** @type {HTMLDetailsElement} */ (e.currentTarget);
+        d.removeAttribute('open');
+        /** @type {HTMLElement | null} */ (d.querySelector('summary'))?.focus();
+      }} @focusout=${(/** @type {FocusEvent} */ e) => {
+        const d = /** @type {HTMLDetailsElement} */ (e.currentTarget), to = /** @type {Node | null} */ (e.relatedTarget);
+        if (to && !d.contains(to)) d.removeAttribute('open');
+      }}>
       <summary class="tool" title="Déplacer vers…" aria-label=${`Déplacer « ${title} » vers…`}>${icon('arrows-angle-expand')}</summary>
-      <div class="move-menu" role="menu" aria-label=${'Déplacer « ' + title + ' » vers'}>
-        <button type="button" role="menuitem" ?disabled=${!here} @click=${(/** @type {Event} */ e) => move(e, () => this.#toSheet(key), 'dans la fiche')}>${icon('list-ul')} Dans la fiche</button>
-        ${sides.map(([side, label, ic]) => html`<button type="button" role="menuitem" @click=${(/** @type {Event} */ e) => move(e, () => this.#dock(key, 'sheet', side), 'nouveau panneau ' + label + ' de la fiche')}>${icon(ic)} Nouveau panneau ${label}</button>`)}
-        ${panes.map(p => html`<button type="button" role="menuitem" @click=${(/** @type {Event} */ e) => move(e, () => this.#dock(key, p.id, 'center'), 'onglet de « ' + blockTitle(/** @type {string} */ (p.active)) + ' »')}>
+      <div class="move-menu" role="menu" aria-label=${'Déplacer « ' + title + ' » vers'} @keydown=${this.#menuKey}>
+        ${key === 'web' ? nothing
+          : html`<button type="button" role="menuitem" tabindex="-1" ?disabled=${!here} @click=${(/** @type {Event} */ e) => move(e, () => this.#toSheet(key), 'dans la fiche')}>${icon('list-ul')} Dans la fiche</button>`}
+        ${sides.map(([side, label, ic]) => html`<button type="button" role="menuitem" tabindex="-1" @click=${(/** @type {Event} */ e) => move(e, () => this.#dock(key, 'sheet', side), 'nouveau panneau ' + label + ' de la fiche')}>${icon(ic)} Nouveau panneau ${label}</button>`)}
+        ${panes.map(p => html`<button type="button" role="menuitem" tabindex="-1" @click=${(/** @type {Event} */ e) => move(e, () => this.#dock(key, p.id, 'center'), 'onglet de « ' + blockTitle(/** @type {string} */ (p.active)) + ' »')}>
           ${icon('collection')} Onglet de « ${blockTitle(/** @type {string} */ (p.active))} »</button>`)}
       </div>
     </details>`;
+  }
+
+  /**
+   * « Déplacer vers… » opened (`toggle` does not bubble: on the details itself): the focus on its first choice — without
+   * scrolling anything (the menu hangs from the button just touched; a menu wider than a narrow sheet would else
+   * scroll the panes around it sideways).
+   * @param {Event} e
+   */
+  #onPickToggle = e => {
+    const d = /** @type {HTMLDetailsElement} */ (e.currentTarget);
+    if (d.open) /** @type {HTMLElement | null} */ (d.querySelector('[role="menuitem"]:not([disabled])'))?.focus({ preventScroll: true });
+  };
+
+  /** ↑ ↓ (round), Début, Fin among the choices of « Déplacer vers… » that can be taken. @param {KeyboardEvent} e */
+  #menuKey = e => {
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(e.key)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const items = /** @type {HTMLElement[]} */ ([.../** @type {HTMLElement} */ (e.currentTarget).querySelectorAll('[role="menuitem"]:not([disabled])')]);
+    if (!items.length) return;
+    const i = items.indexOf(/** @type {any} */ (this.renderRoot).activeElement);
+    const last = items.length - 1;
+    const next = e.key === 'Home' ? 0 : e.key === 'End' ? last
+      : e.key === 'ArrowDown' ? (i < 0 || i === last ? 0 : i + 1) : (i <= 0 ? last : i - 1);
+    items[next].focus();
+  };
+
+  /** After a move: the focus on the block where it is now — its grip (the sheet, a pane's tab shown), else its tab. @param {string} key */
+  async #focusMoved(key) {
+    const k = CSS.escape(key);
+    const find = () => /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(`.block[data-key="${k}"] .grip`) || this.renderRoot.querySelector(`.edge-tabs [data-drag-key="${k}"]`));
+    await this.updateComplete;
+    find()?.focus();
+    // A pane beside the sheet widens the host (Flore), which may draw the sheet again, wide: the focus lost with the
+    // old nodes follows the block, once settled (never taken from where the hand put it).
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await this.updateComplete;
+    if (!(/** @type {ShadowRoot} */ (this.renderRoot).activeElement)) find()?.focus();
   }
 
   /**
@@ -2097,15 +2238,16 @@ export class GfPlantDetail extends LitElement {
    * @param {any} ctx @param {import('../core/pane-tree.js').StackNode} node @param {string[]} keys @param {'row' | 'col' | null} dir
    */
   #pane(ctx, node, keys, dir) {
-    const king = this.#store.state.kingMode;
+    const king = this.#kingHere;
     const tab = keys.includes(/** @type {string} */ (node.active)) ? /** @type {string} */ (node.active) : keys[0];
     const column = dir === 'row';
     const max = this._maxEdge === node.id;
-    const folded = Boolean(node.folded) && !max;
+    const folded = this.#foldedNow(node);
     const bare = Boolean(node.bare) && !king && !max;
     const where = '« ' + blockTitle(tab) + ' »';
+    // A tab chosen while personalising is the one read first (the fold, a setting then, stays as it is).
     const tabs = html`<span class="edge-tabs" role="tablist" aria-label=${'Blocs du panneau ' + where}>${keys.map(k => html`<button type="button" role="tab" data-drag-key=${k}
-      aria-selected=${k === tab ? 'true' : 'false'} title=${blockTitle(k)} @click=${() => this.#setStack(node.id, { active: k, folded: false })}
+      aria-selected=${k === tab ? 'true' : 'false'} title=${blockTitle(k)} @click=${() => this.#setStack(node.id, king ? { active: k } : { active: k, folded: false })}
       @pointerdown=${king ? (/** @type {PointerEvent} */ e) => this.#press(e, k) : null}>
       ${icon(k === 'web' ? 'globe-europe-africa' : categoryOf(blockCategory(k)).icon)}<span class="tab-name">${blockTitle(k)}</span></button>`)}</span>`;
     return html`<aside class="edge ${column ? 'col' : 'band'} ${folded ? 'folded' : ''} ${bare ? 'bare' : ''} ${max ? 'max' : ''} ${king ? 'king' : ''}"
@@ -2114,6 +2256,7 @@ export class GfPlantDetail extends LitElement {
           <button class="edge-btn" type="button" title="Agrandir à tout le panneau" aria-label=${'Agrandir le panneau ' + where} @click=${() => { this._maxEdge = node.id; }}>${icon('arrows-fullscreen')}</button></div>`
         : html`<div class="edge-bar">
         ${tabs}
+        ${king && node.folded ? html`<span class="fold-note" title="Replié à la lecture : sa barre seule, il s’ouvre au toucher (⚙ pour changer)">replié à la lecture</span>` : nothing}
         ${tab === 'media' && !folded ? this.#mediaControls() : nothing}
         ${king ? this.#placePicker(tab) : nothing}
         ${folded ? nothing : html`<details class="edge-opts">
@@ -2125,12 +2268,19 @@ export class GfPlantDetail extends LitElement {
         </details>`}
         <button class="edge-btn" type="button" title=${max ? 'Remettre à sa place (Échap)' : 'Agrandir à tout le panneau'}
           aria-label=${(max ? 'Remettre le panneau ' : 'Agrandir le panneau ') + where} @click=${() => { this._maxEdge = max ? null : node.id; }}>${icon(max ? 'fullscreen-exit' : 'arrows-fullscreen')}</button>
-        ${max ? nothing : html`<button class="edge-btn" type="button" aria-expanded=${folded ? 'false' : 'true'} aria-label=${(folded ? 'Déplier le panneau ' : 'Replier le panneau ') + where}
+        ${max || king ? nothing : html`<button class="edge-btn" type="button" aria-expanded=${folded ? 'false' : 'true'} aria-label=${(folded ? 'Déplier le panneau ' : 'Replier le panneau ') + where}
           @click=${() => this.#setStack(node.id, { folded: !node.folded })}>${icon(folded ? 'chevron-down' : 'chevron-up')}</button>`}
       </div>`}
       ${folded ? nothing : html`<div class="edge-body">${repeat([tab], k => k, k => king ? this.#block(k, ctx, null) : this.#plainBlock(k, ctx))}</div>`}
     </aside>`;
   }
+
+  /**
+   * A pane drawn folded (its bar only): folded in the layout, not shown over the whole plant pane, and not while the
+   * sheet is personalised — its blocks are then drawn, to be arranged (« Replié », in its ⚙, stays the setting).
+   * @param {import('../core/pane-tree.js').StackNode} node
+   */
+  #foldedNow(node) { return Boolean(node.folded) && this._maxEdge !== node.id && !this.#kingHere; }
 
   /** The media's controls (type, part of the plant, count) in its pane's header: one line less. */
   #mediaControls() {
@@ -2141,26 +2291,26 @@ export class GfPlantDetail extends LitElement {
   // ── The tree of panes: the mode's (sheetLayout), or the host's own (`tree`, handed back as pane-sizes) ──────────
 
   /** The tree of panes shown: the host's, else the mode's. @returns {import('../core/pane-tree.js').PaneNode} */
-  #tree() { return this.tree ?? treeOf(this.view); }
+  #tree() { return this.tree ?? treeOf(this.#view); }
 
   /** The pane holding a block. @param {string} key */
-  #paneOf(key) { return this.tree ? stackOf(this.tree, key) : paneOf(this.view, key); }
+  #paneOf(key) { return this.tree ? stackOf(this.tree, key) : paneOf(this.#view, key); }
 
   /** The host's tree changed: back to it, the mode's layout left alone. @param {import('../core/pane-tree.js').PaneNode} next */
   #handBack(next) { if (next !== this.tree) this.dispatchEvent(new CustomEvent('pane-sizes', { detail: next })); }
 
   /** New shares for a split's children. @param {string} id @param {number[]} sizes */
-  #setSizes(id, sizes) { if (this.tree) this.#handBack(treeSizes(this.tree, id, sizes)); else setPaneSizes(this.view, id, sizes); }
+  #setSizes(id, sizes) { if (this.tree) this.#handBack(treeSizes(this.tree, id, sizes)); else setPaneSizes(this.#view, id, sizes); }
 
   /** A pane's state (its tab, folded, bare). @param {string} id @param {Partial<import('../core/pane-tree.js').StackNode>} patch */
-  #setStack(id, patch) { if (this.tree) this.#handBack(patchStack(this.tree, id, patch)); else setStackState(this.view, id, patch); }
+  #setStack(id, patch) { if (this.tree) this.#handBack(patchStack(this.tree, id, patch)); else setStackState(this.#view, id, patch); }
 
   /**
    * A block docked (a new pane, a tab); false: not moved (too many panes nested).
    * @param {string} key @param {string} target @param {import('../core/pane-tree.js').Zone} zone
    */
   #dock(key, target, zone) {
-    if (!this.tree) return dockBlock(this.view, key, target, zone);
+    if (!this.tree) return dockBlock(this.#view, key, target, zone);
     const next = dock(this.tree, key, target, zone);
     if (next === this.tree) return false;
     this.#handBack(next);
@@ -2170,11 +2320,11 @@ export class GfPlantDetail extends LitElement {
   /** A block back in the sheet. @param {string} key @param {string | null} [beforeKey] */
   #toSheet(key, beforeKey = null) {
     if (this.tree) this.#handBack(undock(this.tree, key));
-    else toSheet(this.view, key, beforeKey);
+    else toSheet(this.#view, key, beforeKey);
   }
 
   /**
-   * The blocks a pane shows here (Mode King: all; else not folded, not empty for this plant); a pane with none
+   * The blocks a pane shows here (King: all; else not folded, not empty for this plant); a pane with none
    * is left out (its split closes over it). @param {any} ctx @param {import('../core/pane-tree.js').PaneNode} node
    * @returns {import('../core/pane-tree.js').PaneNode | null}
    */
@@ -2200,7 +2350,7 @@ export class GfPlantDetail extends LitElement {
     const set = (/** @type {number[]} */ sizes) => this.#setSizes(node.id, sizes);
     return html`<div class="split ${node.dir}" data-split=${node.id}>${repeat(node.kids, k => k.id, (k, i) => html`
       ${i ? shareGrip({ dir: node.dir, sizes: node.sizes, i, set, label: `Redimensionner ${this.#nodeName(node.kids[i - 1])} et ${this.#nodeName(k)}`, controls: 'cell-' + node.kids[i - 1].id }) : nothing}
-      <div class="cell ${k.t === 'stack' && k.folded && this._maxEdge !== k.id ? 'folded' : ''}" id=${'cell-' + k.id} style=${`flex:${node.sizes[i] / total} 1 0`}>${this.#node(ctx, k, sheet, node.dir)}</div>`)}</div>`;
+      <div class="cell ${k.t === 'stack' && this.#foldedNow(k) ? 'folded' : ''}" id=${'cell-' + k.id} style=${`flex:${node.sizes[i] / total} 1 0`}>${this.#node(ctx, k, sheet, node.dir)}</div>`)}</div>`;
   }
 
   /** What a grip's name says of a side: « la fiche », a pane by its block shown, a split by its first pane. @param {import('../core/pane-tree.js').PaneNode} n @returns {string} */
@@ -2217,7 +2367,7 @@ export class GfPlantDetail extends LitElement {
 
   /** The blocks of the sheet a category leads to, in order (flow, pinned, in the pane). @param {any} ctx @param {string} cat */
   #categoryBlocks(ctx, cat) {
-    return blockOrder(this.view).filter(k => blockCategory(k) === cat && k !== 'name' && this.#visible(k, ctx) && !isHidden(this.view, k));
+    return blockOrder(this.#view).filter(k => blockCategory(k) === cat && k !== 'name' && this.#visible(k, ctx) && !isHidden(this.#view, k));
   }
 
   /**
@@ -2229,9 +2379,9 @@ export class GfPlantDetail extends LitElement {
       const c = categoryOf(g.cat);
       return {
         key: g.cat, label: c.label, question: c.question, icon: c.icon, badge: this.#badge(g.cat),
-        blocks: this.#categoryBlocks(ctx, g.cat).map(k => ({ key: k, title: blockTitle(k), note: placeOf(this.view, k) ? 'dans un panneau' : undefined,
+        blocks: this.#categoryBlocks(ctx, g.cat).map(k => ({ key: k, title: blockTitle(k), note: placeOf(this.#view, k) ? 'dans un panneau' : undefined,
           // The article's themes, each to its anchor in the Wikipédia block.
-          subs: k === 'wikipedia' && !placeOf(this.view, k) ? this.#wikiThemes.map(t => ({ key: 'wiki:' + t, title: WIKI_THEMES[t][0] })) : undefined }))
+          subs: k === 'wikipedia' && !placeOf(this.#view, k) ? this.#wikiThemes.map(t => ({ key: 'wiki:' + t, title: WIKI_THEMES[t][0] })) : undefined }))
       };
     });
   }
@@ -2291,7 +2441,7 @@ export class GfPlantDetail extends LitElement {
       if (first && this.#paneOf(first) && !mark.parentElement?.querySelector(':scope > .block')) this.#goTo(first);
       return;
     }
-    // Mode King (no rubrics): its first block.
+    // King (no rubrics): its first block.
     if (first) this.#goTo(first);
   }
 
@@ -2431,7 +2581,8 @@ export class GfPlantDetail extends LitElement {
   #padTo(el) {
     let top = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
     if (el.classList.contains('rub-mark')) top += this.#rubH();
-    else if (el.classList.contains('block') && !el.classList.contains('headless')) top += this.#titleH();
+    // (A block's title sticks in its rubric only: personalising, it scrolls with the block.)
+    else if (el.matches('.rubric > .block:not(.headless)')) top += this.#titleH();
     else if (el.matches('.wiki-theme[open]')) top += el.querySelector(':scope > summary')?.getBoundingClientRect().height || 0;
     const full = this.getAttribute('stack') === 'full';
     const stack = parseFloat(getComputedStyle(el).getPropertyValue('--stack')) || 0;
@@ -2463,16 +2614,18 @@ export class GfPlantDetail extends LitElement {
     this.#pad(0, (full ? this.#rubCount() * this.#rubH() : 0) + this.#barH());
   }
 
-  /** @param {number} top @param {number} bottom */
+  /** @param {number} top @param {number} bottom (personalising, the bar « Mise en page de la fiche » stuck above, at least) */
   #pad(top, bottom) {
     const s = this.#sheetScroller.style;
-    const t = Math.max(0, Math.round(top)) + 'px', b = Math.max(0, Math.round(bottom)) + 'px';
+    const t = Math.max(0, Math.round(top), this.#kingBarH()) + 'px', b = Math.max(0, Math.round(bottom)) + 'px';
     if (s.scrollPaddingTop !== t) s.scrollPaddingTop = t;
     if (s.scrollPaddingBottom !== b) s.scrollPaddingBottom = b;
   }
 
   #rubH() { return parseFloat(getComputedStyle(this).getPropertyValue('--rub-h')) || 30; }
   #barH() { return parseFloat(this.style.getPropertyValue('--bar-h')) || 0; }
+  /** The bar « Mise en page de la fiche » stuck over the sheet (none with panes: it stands above them). */
+  #kingBarH() { return this.hasAttribute('edged') ? 0 : Math.round(parseFloat(this.style.getPropertyValue('--kb-h')) || 0); }
   #titleH() { return parseFloat(this.style.getPropertyValue('--title-h')) || 38; }
   #rubCount() { return this.renderRoot.querySelectorAll('.blocks > .rubric').length; }
 
@@ -2514,6 +2667,9 @@ export class GfPlantDetail extends LitElement {
     const scroller = this.#sheetScroller;
     if (e.composedPath()[0] !== scroller) return;
     this.#lastTop = scroller.scrollTop;
+    // Where the sheet was at the last key or pointer down is past: it scrolled since (a grip moved into view, the
+    // hand…). The browser's scroll to a focus is told only after its focusin: never this one (#onFocusIn).
+    this.#preFocus = null;
     // A scroll the place kept did not write (the scrollbar's thumb, the page's search, a finger whose events went
     // elsewhere): the hand has the sheet.
     const kept = this.#kept;
@@ -2550,7 +2706,7 @@ export class GfPlantDetail extends LitElement {
     const past = (/** @type {Element} */ el) => this.#offset(el, scroller) <= 2;
     /** @type {HTMLElement | null} */ let mark = null;
     for (const m of /** @type {NodeListOf<HTMLElement>} */ (this.renderRoot.querySelectorAll('.blocks .rub-mark'))) { if (past(m)) mark = m; else break; }
-    // Mode King has no rubrics: the block at the top.
+    // King has no rubrics: the block at the top.
     const blocks = /** @type {HTMLElement[]} */ ([...(mark ? mark.parentElement?.querySelectorAll(':scope > .block') || [] : this.renderRoot.querySelectorAll('.blocks > .block'))]);
     /** @type {HTMLElement | null} */ let block = null;
     for (const b of blocks) { if (past(b)) block = b; else break; }
@@ -2581,7 +2737,7 @@ export class GfPlantDetail extends LitElement {
   }
 
   /**
-   * The view or Mode King changed the sheet's order: the place read before is reached again, quietly (its block,
+   * The view or King changed the sheet's order: the place read before is reached again, quietly (its block,
    * its theme, else its rubric). @param {{ cat: string | null, block: string | null, wiki: string | null }} p
    */
   #placeAgain(p) {
@@ -2591,35 +2747,128 @@ export class GfPlantDetail extends LitElement {
         || /** @type {HTMLElement | undefined} */ ([...this.renderRoot.querySelectorAll('.blocks > .block')].find(b => blockCategory(/** @type {HTMLElement} */ (b).dataset.key || '') === p.cat)))) || null;
     if (el) this.#arrive(el, { quiet: true });
   }
-  /** The place read when the view or Mode King changes, to reach again once drawn. @type {{ cat: string | null, block: string | null, wiki: string | null } | null} */
+  /** The place read when the view or King changes, to reach again once drawn. @type {{ cat: string | null, block: string | null, wiki: string | null } | null} */
   #rePlace = null;
-  /** Mode King at the last update. */
+  /** King open here at the last update. */
   #king = false;
+  /** The view shown at the last update (#view). @type {string | null} */
+  #lastView = null;
   /** The plant was placed (#place). */
   #placed = false;
   /** The card underneath just came on top. */
   #promoted = false;
+  /** The bar « Mise en page de la fiche » stuck over the sheet, as the sheet's padding last counted it (#kingBarH). */
+  #padKing = 0;
+  /** The bar « Mise en page de la fiche » drawn, its size followed (its mode switch draws its buttons after it). */
+  #barSize = new ResizeObserver(() => { this.#kingBarSized(); this.#keepFix?.(); });
+  /** @type {Element | null} */ #barSeen = null;
 
   /**
-   * The sheet in its tree of panes (Mode King arranges it): splits in rows and columns, panes of tabs, the sheet
+   * The bar « Mise en page de la fiche », personalising, above the frame: its height (--kb-h), for the bands of a
+   * narrow sheet to share what is left. Stuck over a sheet without panes, the blocks are reached and read under it
+   * (their scroll margin) and the keyboard's focus never lands under it (the sheet's padding, #pad).
+   */
+  #kingBarSized() {
+    const kb = /** @type {HTMLElement | null} */ (this.#barSeen)?.offsetHeight || 0;
+    if (this.style.getPropertyValue('--kb-h') === kb + 'px' && this.#padKing === this.#kingBarH()) return;
+    this.style.setProperty('--kb-h', kb + 'px');
+    this.#padKing = this.#kingBarH();
+    if (this._plant && !this.only && !this.panesOnly) { const read = this.#readPlace().el; if (read) this.#padTo(read); else this.#padBase(); }
+  }
+
+  /**
+   * The sheet in its tree of panes (King arranges it): splits in rows and columns, panes of tabs, the sheet
    * alone scrolling among them. On a narrow sheet the panes are bands above and under the sheet, in the tree's
    * order (the tree itself does not change).
    * @param {any} ctx @param {unknown} article
    */
   #docked(ctx, article) {
     const sheet = html`${article}${this.#actionBar(ctx.plant)}`;
+    // King open here: its bar above the sheet and its panes (stuck at the top of a sheet without panes) — the same
+    // node whatever the tree below it: a mode with panes chosen in it keeps the focus there.
+    const bar = this.#kingHere ? this.#kingBar() : nothing;
+    return html`${bar}${this.#frame(ctx, sheet)}`;
+  }
+
+  /** The sheet alone, or in its frame of panes (#docked). @param {any} ctx @param {unknown} sheet */
+  #frame(ctx, sheet) {
     const tree = this.#shownNode(ctx, this.#tree()) || { t: 'sheet', id: 'sheet' };
     if (tree.t === 'sheet') return sheet;
     const wide = this._wideSheet !== false;
     if (!wide) {
       const list = paneLeaves(tree);
-      const bands = list.filter(n => n.t === 'stack' && !n.folded).length || 1;
+      const bands = list.filter(n => n.t === 'stack' && !this.#foldedNow(n)).length || 1;
       return html`<div class="frame edged narrow ${this._maxEdge ? 'maxed' : ''}" style=${`--bands:${bands}`}>${repeat(list, n => n.id, n => n.t === 'sheet'
         ? html`<div class="main" data-drop-node="sheet">${sheet}</div>`
-        : html`<div class="cell band-cell ${n.folded ? 'folded' : ''}">${this.#pane(ctx, /** @type {any} */ (n), /** @type {any} */ (n).tabs, 'col')}</div>`)}</div>`;
+        : html`<div class="cell band-cell ${this.#foldedNow(/** @type {any} */ (n)) ? 'folded' : ''}">${this.#pane(ctx, /** @type {any} */ (n), /** @type {any} */ (n).tabs, 'col')}</div>`)}</div>`;
     }
     return html`<div class="frame edged ${this._maxEdge ? 'maxed' : ''}" data-drop-node="root">${this.#node(ctx, tree, sheet)}</div>`;
   }
+
+  /**
+   * « Mise en page de la fiche »: the mode arranged on this sheet, named and switched here — the app's mode stays as
+   * it is (none picked: the app's, and it follows it) —, « Barre d’actions » (its list: tick, order), « Par défaut »
+   * (this mode back to its own layout), « Ranger par catégorie », and « Terminé » (the sheet read again; the focus
+   * back on the crown).
+   */
+  #kingBar() {
+    const m = this.#view;
+    const label = modeLabel(m);
+    // Open from one plant to the next, like the sub-blocks' lists (sheet-session.js).
+    const actionsOpen = this._subsOpen.has('actions');
+    return html`<section class="king-bar" aria-label="Mise en page de la fiche">
+      <span class="kb-mode">${icon('crown')} Mise en page : ${modeIcon(m)} <b>${label}</b></span>
+      <gf-mode-switch large .value=${m} ?overridden=${m !== this.view} scope="la mise en page"
+        @mode-change=${(/** @type {CustomEvent} */ e) => { e.stopPropagation(); arrange(e.detail.mode, this.view); this.#modeFocus(); }}></gf-mode-switch>
+      <span class="kb-tools">
+        <button type="button" class="small kb-actions" aria-expanded=${actionsOpen ? 'true' : 'false'} aria-controls="king-actions"
+          title="Les actions de la barre du bas dans ce mode : les cocher, les ordonner"
+          @click=${() => { const open = new Set(this._subsOpen); if (actionsOpen) open.delete('actions'); else open.add('actions'); this._subsOpen = open; }}>${icon('three-dots')} Barre d’actions</button>
+        <button type="button" class="small" ?disabled=${!isCustom(m)} title=${`Remettre la mise en page de « ${label} » par défaut`}
+          @click=${() => this.#resetMode(m)}>${icon('arrow-counterclockwise')} Par défaut</button>
+        <button type="button" class="small" title="Les blocs d’une même catégorie ensemble (Noms, Images, Savoirs…), dans ce mode"
+          @click=${() => orderByCategory(m, k => CATEGORIES.findIndex(c => c.key === blockCategory(k)))}>${icon('list-nested')} Ranger par catégorie</button>
+        <button type="button" class="small primary" @click=${this.#endKing}>Terminé</button>
+      </span>
+      ${actionsOpen ? html`<div class="king-actions" id="king-actions">
+        <p>Cochez les actions de « ${label} » ; glissez-les, ou ↑ ↓ sur leur poignée, pour les ordonner.</p>
+        <gf-sortable-list label="Barre d’actions"
+          .items=${subOrder(m, 'actions').map(k => ({ key: k, label: subTitle('actions', k), checked: !isSubHidden(m, 'actions', k) }))}
+          @reorder=${(/** @type {CustomEvent} */ e) => setSubOrder(m, 'actions', e.detail.keys)}
+          @toggle=${(/** @type {CustomEvent} */ e) => setSubHidden(m, 'actions', e.detail.key, !e.detail.on)}></gf-sortable-list>
+      </div>` : nothing}
+    </section>`;
+  }
+
+  /**
+   * « Par défaut »: the mode arranged back to its own layout — order, hidden blocks and sub-blocks, styles, titles
+   * shown or not, « masqué si vide », panes, its action bar —, once confirmed; the names given to blocks, the Note and
+   * Carte blocks stay. The focus goes to « Barre d’actions » (the button pressed is now greyed). @param {string} m
+   */
+  async #resetMode(m) {
+    const label = modeLabel(m);
+    if (!confirm(`Remettre « ${label} » par défaut ? Ordre, blocs et sous-blocs masqués, styles, titres affichés ou cachés, « masqué si vide », panneaux et barre d’actions de ce mode reviennent par défaut ; les noms donnés aux blocs, les blocs Note et Carte restent.`)) return;
+    resetBlocks(m);
+    this._maxEdge = null;
+    this._said = `« ${label} » : mise en page par défaut`;
+    await this.updateComplete;
+    /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.king-bar .kb-actions'))?.focus();
+  }
+
+  /** A mode chosen in the bar: the focus, if it went with the button pressed (↺, gone once back), on the mode now arranged. */
+  async #modeFocus() {
+    await this.updateComplete;
+    const modes = /** @type {any} */ (this.renderRoot.querySelector('.king-bar gf-mode-switch'));
+    await modes?.updateComplete;
+    if (modes && !modes.shadowRoot.activeElement) /** @type {HTMLElement | null} */ (modes.shadowRoot.querySelector('.segmented > [aria-pressed="true"]'))?.focus();
+  }
+
+  /** « Terminé »: King closed, the focus back on the crown that opened it. */
+  #endKing = async () => {
+    closeKing();
+    await this.updateComplete;
+    /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.act.crown > button'))?.focus({ preventScroll: true });
+  };
 
   /** A page arrived for the « Page web » pane: its tab shown, unfolded. */
   revealWeb() {
@@ -2635,6 +2884,14 @@ export class GfPlantDetail extends LitElement {
     // The action bar's height: the rubrics stacked at the bottom wait above it.
     const bar = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.action-bar'))?.offsetHeight || 0;
     if (this.style.getPropertyValue('--bar-h') !== bar + 'px') this.style.setProperty('--bar-h', bar + 'px');
+    // The bar « Mise en page de la fiche » (personalising): measured now, and again as it grows (#barSize).
+    const kingBar = this.renderRoot.querySelector('.king-bar');
+    if (kingBar !== this.#barSeen) {
+      if (this.#barSeen) this.#barSize.unobserve(this.#barSeen);
+      if (kingBar) this.#barSize.observe(kingBar);
+      this.#barSeen = kingBar;
+    }
+    this.#kingBarSized();
     // A block's title, stuck under the rubrics: the article's theme read sticks under it.
     const title = this.renderRoot.querySelector('.rubric > .block:not(.headless) > .block-title');
     const th = title ? Math.round(title.getBoundingClientRect().height) : 0;
@@ -2676,14 +2933,14 @@ export class GfPlantDetail extends LitElement {
     if (was && !this.#handAt && place?.el.isConnected && !this.#keeper) requestAnimationFrame(() => { if (place.el.isConnected && !this.#handAt) this.#arrive(place.el, { quiet: true, prefer: place.prefer }); });
   }
 
-  /** A block read without its title (Mode King › title on/off, per view). @param {string} key */
-  #headless = key => !isTitleShown(this.view, key);
+  /** A block read without its title (King › title on/off, per view). @param {string} key */
+  #headless = key => !isTitleShown(this.#view, key);
 
-  /** A block as read outside « Mode King »: its title, its content. @param {string} key @param {any} ctx */
+  /** A block as read outside King: its title, its content. @param {string} key @param {any} ctx */
   #plainBlock(key, ctx) {
     // A component that hides itself when it has nothing (protection, look-alikes, calendar): the block goes with it (CSS).
     const headless = this.#headless(key);
-    return html`<section class="block ${headless ? 'headless' : ''} ${hidesEmpty(this.view, key) ? 'hide-empty' : ''} ${isMap(key) ? 'map-block' : ''}" data-key=${key}>
+    return html`<section class="block ${headless ? 'headless' : ''} ${hidesEmpty(this.#view, key) ? 'hide-empty' : ''} ${isMap(key) ? 'map-block' : ''}" data-key=${key}>
       ${headless ? this.#paneButton(key) : html`<h2 class="block-title"><span class="name">${blockTitle(key)}</span>${this.#paneButton(key)}</h2>`}
       <div class="content">${this.inPane === key ? this.#shownInPane(key) : this.#content(key, ctx)}</div>
     </section>`;
@@ -2707,47 +2964,59 @@ export class GfPlantDetail extends LitElement {
   /** @param {string} key @param {any} ctx @param {number | null} slot  place shown while dragging (CSS order: the nodes do not move) */
   #block(key, ctx, slot) {
     const title = blockTitle(key);
-    const off = isHidden(this.view, key);
+    const off = isHidden(this.#view, key);
     const module = blockModuleName(key);
     // Its service off for the whole device: folded, nothing to show; only Réglages › Modules brings it back.
     const cut = serviceOffNote(key);
     const dragging = this._dragKey === key;
     const subsOpen = this._subsOpen.has(key);
     const style = slot === null ? '' : `order:${slot}${dragging ? `;transform:translateY(${this._dragY}px)` : ''}`;
-    const titled = isTitleShown(this.view, key);
+    const titled = isTitleShown(this.#view, key);
+    // Safety (Plantes à confondre, Usages and its Prudence): a padlock instead of the trash; touched, it says why.
+    const lockWhy = `« ${title} » ne se masque dans aucun mode : sécurité`;
     return html`<section class="block ${off ? 'off' : ''} ${dragging ? 'dragging' : ''} ${titled ? '' : 'untitled'} ${isMap(key) ? 'map-block' : ''}" data-key=${key} style=${style}>
       <h2 class="block-title" title="Glisser pour déplacer" @pointerdown=${e => this.#press(e, key)}>
         <button class="grip" type="button" aria-label="Déplacer le bloc « ${title} »" title="Glisser pour déplacer (↑ ↓ au clavier)"
           @keydown=${e => this.#gripKey(e, key)}>${icon('grip-vertical')}</button>
         ${this._renaming === key
           ? html`<input class="rename" aria-label="Nouveau nom du bloc « ${title} »" .value=${title} maxlength="60"
-              @keydown=${e => { if (e.key === 'Enter') this.#rename(key, e.target.value); else if (e.key === 'Escape') this._renaming = null; }}
+              @keydown=${e => {
+                if (e.key !== 'Enter' && e.key !== 'Escape') return;
+                // (No keypress left: « Renommer », focused by then, would take this Entrée and open the field again.)
+                e.preventDefault();
+                if (e.key === 'Enter') this.#rename(key, e.target.value); else this._renaming = null;
+                // Ended at the keyboard: the focus back on « Renommer » (a click elsewhere keeps it where it went).
+                this.#toolFocus(key, 'rename');
+              }}
               @blur=${e => this.#rename(key, e.target.value)} />`
           : html`<span class="name">${title}</span>`}
         <span class="cat" title=${categoryOf(blockCategory(key)).question}>${categoryOf(blockCategory(key)).label}</span>
         ${cut ? html`<small class="off-note">${cut} (Réglages › Modules)</small>` : nothing}
-        <button class="tool" type="button" aria-pressed=${titled ? 'true' : 'false'} aria-label=${(titled ? 'Masquer' : 'Montrer') + ` le titre « ${title} » hors mode King`}
-          title=${titled ? 'Titre affiché (toucher pour le cacher)' : 'Titre caché hors mode King (toucher pour l’afficher)'}
-          @click=${() => setTitleShown(this.view, key, !titled)}>${icon('type-h2')}</button>
-        ${canBeEmpty(key) ? html`<button class="tool" type="button" aria-pressed=${hidesEmpty(this.view, key) ? 'true' : 'false'}
-          aria-label=${hidesEmpty(this.view, key) ? `Afficher « ${title} » même vide, hors mode King` : `Ne pas afficher « ${title} » s’il est vide, hors mode King`}
-          title=${hidesEmpty(this.view, key) ? 'Masqué quand il est vide (toucher pour l’afficher quand même)' : 'Affiché même vide (toucher pour le masquer quand il est vide)'}
-          @click=${() => setHidesEmpty(this.view, key, !hidesEmpty(this.view, key))}>${icon('eye-slash')}</button>` : nothing}
-        ${GfPlantDetail.NO_PANE.includes(key) && key !== 'media' ? nothing : this.#placePicker(key)}
-        ${this._renaming === key ? nothing : html`<button class="tool" type="button" aria-label="Renommer le bloc « ${title} »" title=${isNote(key) ? 'Renommer' : 'Renommer (vide : nom d’origine)'}
+        <button class="tool" type="button" aria-pressed=${titled ? 'true' : 'false'} aria-label=${(titled ? 'Masquer' : 'Montrer') + ` le titre « ${title} » à la lecture`}
+          title=${titled ? 'Titre affiché (toucher pour le cacher)' : 'Titre caché à la lecture (toucher pour l’afficher)'}
+          @click=${() => setTitleShown(this.#view, key, !titled)}>${icon('type-h2')}</button>
+        ${canBeEmpty(key) ? html`<button class="tool" type="button" aria-pressed=${hidesEmpty(this.#view, key) ? 'true' : 'false'}
+          aria-label=${hidesEmpty(this.#view, key) ? `Afficher « ${title} » même vide, à la lecture` : `Ne pas afficher « ${title} » s’il est vide, à la lecture`}
+          title=${hidesEmpty(this.#view, key) ? 'Masqué quand il est vide (toucher pour l’afficher quand même)' : 'Affiché même vide (toucher pour le masquer quand il est vide)'}
+          @click=${() => setHidesEmpty(this.#view, key, !hidesEmpty(this.#view, key))}>${icon('eye-slash')}</button>` : nothing}
+        ${['name', 'actions'].includes(key) ? nothing : this.#placePicker(key)}
+        ${this._renaming === key ? nothing : html`<button class="tool" type="button" data-tool="rename" aria-label="Renommer le bloc « ${title} »" title=${isNote(key) ? 'Renommer' : 'Renommer (vide : nom d’origine)'}
           @click=${() => this.#startRename(key)}>${icon('pencil')}</button>`}
-        ${STYLES[key] && !off ? html`<span class="styles" role="group" aria-label="Style du bloc « ${title} »">${STYLES[key].styles.map(st => html`
-          <button type="button" aria-pressed=${blockStyle(this.view, key) === st.key ? 'true' : 'false'} title=${'Style : ' + st.title}
-            @click=${() => setBlockStyle(this.view, key, st.key)}>${icon(/** @type {any} */ ({ list: 'list-ul', graph: 'diagram-3', scene: 'image', mosaic: 'images', slideshow: 'arrows-fullscreen' })[st.key] || 'table')} ${st.title}</button>`)}</span>` : nothing}
-        ${SUBS[key] && !off ? html`<button class="tool" type="button" aria-expanded=${subsOpen ? 'true' : 'false'} aria-label="Sous-blocs de « ${title} »" title="Sous-blocs : ordre et présence"
+        ${STYLES[key] ? html`<span class="styles" role="group" aria-label="Style du bloc « ${title} »">${STYLES[key].styles.map(st => html`
+          <button type="button" aria-pressed=${blockStyle(this.#view, key) === st.key ? 'true' : 'false'} title=${'Style : ' + st.title}
+            @click=${() => setBlockStyle(this.#view, key, st.key)}>${icon(/** @type {any} */ ({ list: 'list-ul', graph: 'diagram-3', scene: 'image', mosaic: 'images', slideshow: 'arrows-fullscreen' })[st.key] || 'table')} ${st.title}</button>`)}</span>` : nothing}
+        ${SUBS[key] ? html`<button class="tool" type="button" aria-expanded=${subsOpen ? 'true' : 'false'} aria-label="Sous-blocs de « ${title} »" title="Sous-blocs : ordre et présence"
           @click=${() => { const open = new Set(this._subsOpen); if (subsOpen) open.delete(key); else open.add(key); this._subsOpen = open; }}>${icon('list-nested')}</button>` : nothing}
-        ${cut
-          ? html`<a class="tool" href=${href.settings()} aria-label=${`Réglages › Modules : ${cut}`} title="Réglages › Modules">${icon('gear')}</a>`
+        ${cut ? this.#cutTools(key, title, cut)
+          : isLocked(key)
+          ? html`<button class="tool lock" type="button" aria-label=${lockWhy} title="Ne se masque dans aucun mode : sécurité"
+              @click=${() => { this._lockTip = this._lockTip === key ? null : key; }}>${icon('lock-fill')}</button>`
+          // Each swapped for the other: the focus goes to it.
           : off
-          ? html`<button class="tool" type="button" aria-label="Réafficher le bloc « ${title} »" title="Réafficher"
-              @click=${() => setHidden(this.view, key, false)}>${icon('arrow-counterclockwise')}</button>`
-          : html`<button class="tool" type="button" aria-label="Masquer le bloc « ${title} »" title=${module ? `Masquer dans ce mode (le service ${module} reste utilisé)` : 'Masquer'}
-              @click=${() => setHidden(this.view, key, true)}>${icon('trash3')}</button>`}
+          ? html`<button class="tool" type="button" data-tool="show" aria-label="Réafficher le bloc « ${title} »" title="Réafficher"
+              @click=${() => { setHidden(this.#view, key, false); this.#toolFocus(key, 'hide'); }}>${icon('arrow-counterclockwise')}</button>`
+          : html`<button class="tool" type="button" data-tool="hide" aria-label="Masquer le bloc « ${title} »" title=${module ? `Masquer dans ce mode (le service ${module} reste utilisé)` : 'Masquer'}
+              @click=${() => { if (key === 'web' && this.#paneOf('web')) this.#putAwayWeb(); else setHidden(this.#view, key, true); this.#toolFocus(key, 'show'); }}>${icon('trash3')}</button>`}
         ${isMap(key) && !off ? html`<button class="tool" type="button" aria-expanded=${this._mapsOpen.has(key) ? 'true' : 'false'} aria-label="Configurer la carte « ${title} »" title="Ce que la carte montre et permet"
           @click=${() => { const open = new Set(this._mapsOpen); if (open.has(key)) open.delete(key); else open.add(key); this._mapsOpen = open; }}>${icon('gear')}</button>` : nothing}
         ${isNote(key) ? html`<button class="tool" type="button" aria-label="Supprimer le bloc « ${title} »" title="Supprimer le bloc et ses textes"
@@ -2755,15 +3024,44 @@ export class GfPlantDetail extends LitElement {
         ${isAddedMap(key) ? html`<button class="tool" type="button" aria-label="Supprimer le bloc « ${title} »" title="Supprimer cette carte"
           @click=${() => { if (confirm(`Supprimer la carte « ${title} » ?`)) deleteMap(key); }}>${icon('x-lg')}</button>` : nothing}
       </h2>
-      ${subsOpen && !off ? html`<div class="subs-editor">
+      ${isLocked(key) ? html`<p class="lock-tip" role="status">${this._lockTip === key ? lockWhy : nothing}</p>` : nothing}
+      ${subsOpen && SUBS[key] ? html`<div class="subs-editor">
         <gf-sortable-list label=${'Sous-blocs de ' + title}
-          .items=${subOrder(this.view, key).map(k => ({ key: k, label: subTitle(key, k), checked: !isSubHidden(this.view, key, k) }))}
-          @reorder=${e => setSubOrder(this.view, key, e.detail.keys)}
-          @toggle=${e => setSubHidden(this.view, key, e.detail.key, !e.detail.on)}></gf-sortable-list>
+          .items=${subOrder(this.#view, key).map(k => ({ key: k, label: subTitle(key, k), checked: !isSubHidden(this.#view, key, k), locked: isSubLocked(key, k) }))}
+          @reorder=${e => setSubOrder(this.#view, key, e.detail.keys)}
+          @toggle=${e => setSubHidden(this.#view, key, e.detail.key, !e.detail.on)}></gf-sortable-list>
       </div>` : nothing}
       ${isMap(key) && !off && this._mapsOpen.has(key) ? this.#mapForm(key) : nothing}
       ${off ? nothing : html`<div class="content">${this.#content(key, ctx)}</div>`}
     </section>`;
+  }
+
+  /**
+   * A block whose service is off (Réglages › Modules): the way there, and its own choice in this mode — kept hidden
+   * when the service comes back, or back with it (named « Garder… », not « Réafficher »: the service decides now).
+   * @param {string} key @param {string} title @param {string} cut what is off, said
+   */
+  #cutTools(key, title, cut) {
+    const kept = foldedByHand(this.#view, key);
+    return html`<a class="tool" href=${href.settings()} aria-label=${`Réglages › Modules : ${cut}`} title="Réglages › Modules">${icon('gear')}</a>
+      <button class="tool" type="button" aria-pressed=${kept ? 'true' : 'false'} aria-label=${`Garder « ${title} » masqué dans ce mode`}
+        title=${kept ? 'Restera masqué dans ce mode quand le service reviendra' : 'Reviendra dans ce mode avec son service'}
+        @click=${() => setHidden(this.#view, key, !kept)}>${icon('trash3')}</button>`;
+  }
+
+  /** « Page web » taken out of its pane: hidden (it shows in a pane only; its chip in « Ajouter » puts it in one again). */
+  #putAwayWeb() {
+    this.#toSheet('web');
+    setHidden(this.#view, 'web', true);
+  }
+
+  /**
+   * A block's tool swapped for another (Masquer ↔ Réafficher, the name field back to « Renommer »): the focus on that
+   * one, once drawn — in the sheet (a block put away from its pane comes back there). @param {string} key @param {string} tool
+   */
+  async #toolFocus(key, tool) {
+    await this.updateComplete;
+    /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(`.block[data-key="${CSS.escape(key)}"] .block-title [data-tool="${tool}"]`))?.focus();
   }
 
   /** @param {string} key */
@@ -2782,7 +3080,7 @@ export class GfPlantDetail extends LitElement {
     renameBlock(key, title);
   }
 
-  /** King mode, after the blocks: a new « Note » block. */
+  /** King, after the blocks: a new « Note » block. */
   #newNote() {
     return this._newNote
       ? html`<form class="new-note" @submit=${e => {
@@ -2805,9 +3103,7 @@ export class GfPlantDetail extends LitElement {
           this._mapsOpen = new Set([...this._mapsOpen, key]);
           await this.updateComplete;
           this.renderRoot.querySelector(`.block[data-key="${key}"]`)?.scrollIntoView({ block: 'center' });
-        }}>${icon('plus-lg')} Bloc Carte</button>
-        <button type="button" title="Les blocs d’une même catégorie ensemble (Noms, Images, Savoirs…), dans ce mode"
-          @click=${() => orderByCategory(this.view, k => CATEGORIES.findIndex(c => c.key === blockCategory(k)))}>${icon('list-nested')} Ranger par catégorie</button></p>`;
+        }}>${icon('plus-lg')} Bloc Carte</button></p>`;
   }
 
   /**
@@ -2827,7 +3123,7 @@ export class GfPlantDetail extends LitElement {
   }
 
   /**
-   * Mode King: what a map block shows and lets do (the same in every mode). Its background, IGN's layers and 2D / 3D:
+   * King: what a map block shows and lets do (the same in every mode). Its background, IGN's layers and 2D / 3D:
    * its panel ▦, as on every map (gf-map-options.js) — said here.
    * @param {string} key
    */
@@ -2907,7 +3203,7 @@ export class GfPlantDetail extends LitElement {
   }
 
   /**
-   * A block with nothing to show for this plant, left out outside Mode King: Noms with no other name, Wikipédia
+   * A block with nothing to show for this plant, left out outside King: Noms with no other name, Wikipédia
    * with no article (or not yet: it appears when the summary arrives).
    * @param {string} key @param {any} ctx
    */
@@ -2918,7 +3214,7 @@ export class GfPlantDetail extends LitElement {
 
   /** The block has no data for this plant (whatever the reason). @param {string} key @param {any} ctx */
   #nothingHere(key, ctx) {
-    const v = this.view;
+    const v = this.#view;
     const g = this._gbif;
     const loaded = (/** @type {any} */ x) => x !== undefined;
     if (isNote(key)) return !noteText(key, ctx.plant.id);
@@ -2949,7 +3245,7 @@ export class GfPlantDetail extends LitElement {
   /** The Noms block has nothing to show here. @param {any} ctx */
   #namesEmpty(ctx) {
     if (this.#otherFrench(ctx).length || this.#wikiSections(['names']).length) return false;
-    return blockStyle(this.view, 'names') === 'list' || baseOf(this.view) !== 'scientific' || !otherNames(this._gbif).length;
+    return blockStyle(this.#view, 'names') === 'list' || baseOf(this.#view) !== 'scientific' || !otherNames(this._gbif).length;
   }
 
   /**
@@ -2966,7 +3262,7 @@ export class GfPlantDetail extends LitElement {
 
   /** @param {string} key @param {any} ctx @param {boolean} down a source of the block failed: no « nothing known » line */
   #blockContent(key, ctx, down) {
-    const v = this.view;
+    const v = this.#view;
     const { plant, details, loading } = ctx;
     const pending = html`<p class="muted">chargement…</p>`;
     const empty = (/** @type {string} */ text) => down ? nothing : html`<p class="muted">${text}</p>`;
@@ -2983,7 +3279,7 @@ export class GfPlantDetail extends LitElement {
         // when it has the focus).
         const edged = Boolean(this.#paneOf('media'));
         return html`<gf-media-viewer ?prefer-photos=${this.panesOnly} ?showcase=${this.panesOnly} ?bar-out=${edged} ?compact=${!edged} ?local=${edged} plant-id=${plant.id} .index=${this.mediaAt ?? 0}
-            presentation=${blockStyle(this.view, 'media')} .label=${isTitleShown(this.view, 'media') ? null : blockTitle('media')}
+            presentation=${blockStyle(this.#view, 'media')} .label=${isTitleShown(this.#view, 'media') ? null : blockTitle('media')}
             @open-pane=${(/** @type {CustomEvent} */ e) => { e.stopPropagation(); this.#openPane('media', e.detail.url); }}></gf-media-viewer>`;
       }
       case 'photos': {
@@ -3067,7 +3363,7 @@ export class GfPlantDetail extends LitElement {
   #taxonomy({ plant, wikidata, status, inat }) {
     const sci = this._science;
     const chain = [...(sci?.classification || [])].reverse();
-    const gbifSyn = shownSubs(this.view, 'taxonomy').includes('gbifSynonyms') ? gbifSynonyms(plant, this._gbif) : [];
+    const gbifSyn = shownSubs(this.#view, 'taxonomy').includes('gbifSynonyms') ? gbifSynonyms(plant, this._gbif) : [];
     return html`
       <dl class="facts">${this.#subs('taxonomy', {
         chain: () => html`<dt>Classification</dt>
@@ -3136,7 +3432,7 @@ export class GfPlantDetail extends LitElement {
    * @param {string} head @param {{ label: unknown, count: number }[]} rows @param {number} total
    */
   #counts(head, rows, total) {
-    if (blockStyle(this.view, 'occurrences') === 'list') return html`<ul class="counts">${rows.map(r => html`
+    if (blockStyle(this.#view, 'occurrences') === 'list') return html`<ul class="counts">${rows.map(r => html`
       <li>${r.label}<b>${r.count.toLocaleString('fr-FR')}</b><small>${percent(r.count, total)}</small></li>`)}</ul>`;
     const max = Math.max(1, ...rows.map(r => r.count));
     return html`<table class="data counts-table">
@@ -3154,7 +3450,7 @@ export class GfPlantDetail extends LitElement {
     const places = distributions(g);
     const pending = html`<span class="muted">chargement…</span>`;
     const search = 'https://www.gbif.org/occurrence/search?country=FR&occurrence_status=present&has_geospatial_issue=false&taxon_key=' + key;
-    const statsShown = ['gbif', 'months', 'years', 'regions', 'basis', 'datasets'].some(k => shownSubs(this.view, 'occurrences').includes(k));
+    const statsShown = ['gbif', 'months', 'years', 'regions', 'basis', 'datasets'].some(k => shownSubs(this.#view, 'occurrences').includes(k));
     return html`${this.#subs('occurrences', {
       inat: () => html`<dl class="facts"><dt>Observations iNaturalist</dt><dd>${inat?.observationsCount != null ? inat.observationsCount.toLocaleString('fr-FR') : details === undefined ? pending : '—'}</dd></dl>`,
       gbif: () => html`<dl class="facts"><dt>Occurrences GBIF en France</dt><dd>${stats?.count != null
@@ -3237,7 +3533,7 @@ export class GfPlantDetail extends LitElement {
     const head = html`<h3>Régions et départements</h3>
       <p>Occurrences dans <strong>${departments.length}</strong> département${departments.length > 1 ? 's' : ''} et <strong>${regions.length}</strong> région${regions.length > 1 ? 's' : ''}.</p>`;
     const credit = html`<p class="credit">Découpage administratif : GADM, via GBIF.</p>`;
-    if (blockStyle(this.view, 'occurrences') !== 'list') {
+    if (blockStyle(this.#view, 'occurrences') !== 'list') {
       const label = (/** @type {any} */ a) => this.#focusable({ kind: 'filter', label: t[a.gid] ?? a.gid, params: { gadmGid: a.gid } }, html`<span>${t[a.gid] ?? '…'}</span>`);
       return html`${head}
         ${regions.length ? html`<h4>Régions</h4>${this.#counts('Région', regions.map((/** @type {any} */ r) => ({ label: label(r), count: r.count })), stats.count)}` : nothing}
@@ -3329,7 +3625,7 @@ export class GfPlantDetail extends LitElement {
     if (!p.habitats.length && !p.forms.length && !p.invasive.length) return html`<p class="muted">Aucun profil d’espèce exploitable sur GBIF.</p>`;
     const key = this._details?.identifiers?.gbif?.id;
     const credit = html`<p class="credit">Source : <a href=${'https://www.gbif.org/species/' + key} target="_blank" rel="noopener">GBIF.org</a> — profils d’espèce de ${p.sources} liste${p.sources > 1 ? 's' : ''} de référence.</p>`;
-    if (blockStyle(this.view, 'gbifProfile') === 'list') return html`<ul class="plain">
+    if (blockStyle(this.#view, 'gbifProfile') === 'list') return html`<ul class="plain">
         ${p.habitats.length ? html`<li><b>Milieu :</b> ${p.habitats.map(([h]) => h).join(' · ')}</li>` : nothing}
         ${p.forms.length ? html`<li><b>Port :</b> ${p.forms.map(([f]) => f).join(' · ')}</li>` : nothing}
         ${p.invasive.length ? html`<li><b>Signalée envahissante :</b> ${p.invasive.slice(0, 4).join(' · ')}${p.invasive.length > 4 ? ` et ${p.invasive.length - 4} autres listes` : ''}</li>` : nothing}
@@ -3349,7 +3645,7 @@ export class GfPlantDetail extends LitElement {
     if (!l?.items?.length) return html`<p class="muted">Aucune publication citant des données GBIF sur cette espèce.</p>`;
     const key = details?.identifiers?.gbif?.id;
     const authors = (/** @type {any} */ r) => r.authors.slice(0, 3).join(', ') + (r.authors.length > 3 ? ' et al.' : '');
-    if (blockStyle(this.view, 'literature') !== 'list') return html`<table class="data papers-table">
+    if (blockStyle(this.#view, 'literature') !== 'list') return html`<table class="data papers-table">
         <thead><tr><th scope="col">Titre</th><th scope="col">Auteurs</th><th scope="col">Revue</th><th scope="col" class="num">Année</th></tr></thead>
         <tbody>${l.items.map((/** @type {any} */ r) => html`<tr>
           <td>${safeUrl(r.url) ? html`<a href=${safeUrl(r.url)} target="_blank" rel="noopener">${r.title}</a>` : r.title}</td>
@@ -3420,7 +3716,7 @@ export class GfPlantDetail extends LitElement {
   /** « Usages et cuisine sauvage »: safety first, then sourced uses, parts and products, dishes and recipes. @param {any} ctx */
   #uses({ plant }) {
     const o = this._open;
-    const style = blockStyle(this.view, 'uses');
+    const style = blockStyle(this.#view, 'uses');
     const { verdict, items: danger } = this.#danger(plant);
     const wd = o.wdUses;
     const ansmA = (/** @type {any[]} */ (o.safety?.ansm || [])).filter(a => a.list === 'A');
@@ -3485,9 +3781,9 @@ export class GfPlantDetail extends LitElement {
     const data = this._open.interactions;
     if (data === undefined) return html`<p class="muted">chargement…</p>`;
     if (!data?.roles?.length) return html`<p class="muted">Aucune interaction connue de GloBI pour cette espèce.</p>`;
-    const keys = shownSubs(this.view, 'interactions');
+    const keys = shownSubs(this.#view, 'interactions');
     const roles = data.roles.filter((/** @type {any} */ r) => keys.includes(r.key));
-    const style = blockStyle(this.view, 'interactions');
+    const style = blockStyle(this.#view, 'interactions');
     const globi = safeUrl(data.url) || 'https://www.globalbioticinteractions.org/';
     const credit = html`<p class="credit">Source : <a href=${globi} target="_blank" rel="noopener">GloBI — Global Biotic Interactions</a> :
       ${data.total.toLocaleString('fr-FR')} mention${data.total > 1 ? 's' : ''} tirées de ${data.studies.toLocaleString('fr-FR')} étude${data.studies > 1 ? 's' : ''} ou jeu${data.studies > 1 ? 'x' : ''} de données (CC BY selon les sources).</p>`;
@@ -3509,7 +3805,7 @@ export class GfPlantDetail extends LitElement {
 
   /** « Climat et pollen » (Open-Meteo × GBIF): today's pollen of the plant, its climate niche, my position on it. @param {any} ctx */
   #climate({ plant }) {
-    const v = this.view;
+    const v = this.#view;
     const here = this._open.here;
     const pollen = openData.pollenOf(plant);
     const ask = (/** @type {string} */ label) => html`<p><button type="button" class="here-ask" @click=${() => this.#findHere()}>${icon('crosshair')} ${label}</button></p>
@@ -3579,9 +3875,9 @@ export class GfPlantDetail extends LitElement {
       powo: ['POWO', claims?.powo, claims?.powo ? 'https://powo.science.kew.org/taxon/' + claims.powo : null],
       trefle: ['Trefle', details?.identifiers?.trefle?.id, details?.identifiers?.trefle?.slug ? 'https://trefle.io/species/' + details.identifiers.trefle.slug : null]
     };
-    const ids = shownSubs(this.view, 'ids').map(k => all[k]).filter(row => row?.[1]);
+    const ids = shownSubs(this.#view, 'ids').map(k => all[k]).filter(row => row?.[1]);
     const value = (/** @type {any} */ id, /** @type {any} */ url) => url ? html`<a href=${url} target="_blank" rel="noopener">${id}</a>` : id;
-    if (blockStyle(this.view, 'ids') === 'list') return html`<ul class="inline ids">${ids.map(([label, id, url]) => html`<li><span class="muted">${label}</span> ${value(id, url)}</li>`)}</ul>`;
+    if (blockStyle(this.#view, 'ids') === 'list') return html`<ul class="inline ids">${ids.map(([label, id, url]) => html`<li><span class="muted">${label}</span> ${value(id, url)}</li>`)}</ul>`;
     return html`<table class="data ids"><tbody>${ids.map(([label, id, url]) => html`<tr><th scope="row">${label}</th><td>${value(id, url)}</td></tr>`)}</tbody></table>`;
   }
 
@@ -3606,24 +3902,32 @@ export class GfPlantDetail extends LitElement {
     return next;
   }
 
-  /** ↑ ↓ on a focused grip: one place up or down, saved; the grip keeps the focus. @param {KeyboardEvent} e @param {string} key */
+  /**
+   * ↑ ↓ on a focused grip: one place up or down, saved; the grip keeps the focus, in view (never under the bar stuck
+   * above: the sheet's scroll padding, #pad). @param {KeyboardEvent} e @param {string} key
+   */
   async #gripKey(e, key) {
     if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
     e.preventDefault();
-    const order = this.#moved(key, e.key === 'ArrowUp' ? -1 : 1, blockOrder(this.view).filter(k => !isOnEdge(this.view, k)));
+    const order = this.#moved(key, e.key === 'ArrowUp' ? -1 : 1, blockOrder(this.#view).filter(k => !isOnEdge(this.#view, k)));
     if (!order) return;
-    setBlockOrder(this.view, this.#withPinned(this.view, order));
+    setBlockOrder(this.#view, this.#withPinned(this.#view, order));
     await this.updateComplete;
-    /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(`.block[data-key="${key}"] .grip`))?.focus();
+    const grip = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(`.block[data-key="${key}"] .grip`));
+    grip?.focus();
+    grip?.scrollIntoView({ block: 'nearest' });
   }
 
   /**
-   * Mode King: dragging a block (its title, its tab, a chip of the palette) arranges the tree of panes —
+   * King: dragging a block (its title, its tab, a chip of the palette) arranges the tree of panes —
    * dock-drag.js shows where it lands: a new pane on a side, a tab, back in the sheet between two blocks.
    * @param {PointerEvent} e @param {string} key @param {(() => string) | null} [make] a new block made on the drop (palette « Nouvelle carte »)
    */
   #press(e, key, make = null) {
-    if (e.button !== 0 || /** @type {Element} */ (e.target).closest('button:not(.grip):not([data-drag-key]), a[href], summary, details, input, textarea, select')) return;
+    const el = /** @type {Element} */ (e.target);
+    if (e.button !== 0 || el.closest('button:not(.grip):not([data-drag-key]), a[href], summary, details, input, textarea, select')) return;
+    // A finger on a block's title scrolls the sheet: it drags by the grip ⠿ only (tabs and chips drag as they are).
+    if (e.pointerType === 'touch' && el.closest('.block-title') && !el.closest('.grip')) return;
     pressDock(e, {
       root: /** @type {ShadowRoot} */ (this.renderRoot), key, label: make ? key : blockTitle(key),
       sheetFallback: this.renderRoot.querySelector('article'),
@@ -3631,6 +3935,8 @@ export class GfPlantDetail extends LitElement {
       onEnd: () => this.toggleAttribute('docking', false),
       onDrop: ({ target, zone, beforeKey }) => {
         const k = make ? make() : key;
+        // « Page web » shows in a pane only: dropped in the sheet, it is put away (its chip brings it back).
+        if (k === 'web' && zone === 'sheet') { this.#putAwayWeb(); this._said = `« ${blockTitle(k)} » : masqué (il ne s’affiche que dans un panneau)`; return; }
         const moved = zone === 'sheet' ? (this.#toSheet(k, beforeKey), true) : this.#dock(k, target, zone);
         this._said = `« ${blockTitle(k)} » : ${!moved ? TOO_DEEP : zone === 'sheet' ? 'dans la fiche' : typeof zone === 'object' || zone === 'center' ? 'onglet d’un panneau' : 'nouveau panneau'}`;
       }
@@ -3638,15 +3944,20 @@ export class GfPlantDetail extends LitElement {
   }
 
   /**
-   * Mode King: the blocks to add — those folded in this mode (not those folded only because their service is off:
+   * King: the blocks to add — those folded in this mode (not those folded only because their service is off:
    * Réglages › Modules brings them back), and new map and note blocks; dragged to a place (or touched: back in the sheet).
    */
   #palette() {
-    const hidden = blockOrder(this.view).filter(k => foldedByHand(this.view, k) && k !== 'actions');
+    const hidden = blockOrder(this.#view).filter(k => foldedByHand(this.#view, k) && k !== 'actions');
     return html`<div class="palette" aria-label="Ajouter un bloc : glisser vers la fiche ou un panneau">
       <span class="pal-title">${icon('plus-lg')} Ajouter</span>
-      ${hidden.map(k => html`<button type="button" class="chip" data-drag-key=${k} title="Glisser vers un panneau, ou toucher pour l’afficher dans la fiche"
-        @pointerdown=${(/** @type {PointerEvent} */ e) => this.#press(e, k)} @click=${() => this.#toSheet(k)}>${icon(categoryOf(blockCategory(k)).icon)} ${blockTitle(k)}</button>`)}
+      ${hidden.map(k => k === 'web'
+        // « Page web » shows in a pane only: touched (or Entrée), a new pane on the right of the sheet.
+        ? html`<button type="button" class="chip" data-drag-key=${k} title="Toucher : dans un nouveau panneau à droite ; ou glisser vers un panneau"
+            @pointerdown=${(/** @type {PointerEvent} */ e) => this.#press(e, k)}
+            @click=${() => { this._said = `« ${blockTitle(k)} » : ${this.#dock(k, 'sheet', 'right') === false ? TOO_DEEP : 'nouveau panneau à droite de la fiche'}`; this.#focusMoved(k); }}>${icon(categoryOf(blockCategory(k)).icon)} ${blockTitle(k)}</button>`
+        : html`<button type="button" class="chip" data-drag-key=${k} title="Glisser vers un panneau, ou toucher pour l’afficher dans la fiche"
+            @pointerdown=${(/** @type {PointerEvent} */ e) => this.#press(e, k)} @click=${() => this.#toSheet(k)}>${icon(categoryOf(blockCategory(k)).icon)} ${blockTitle(k)}</button>`)}
       <button type="button" class="chip new" data-drag-key="new-map" title="Glisser une nouvelle carte vers un panneau"
         @pointerdown=${(/** @type {PointerEvent} */ e) => this.#press(e, 'Nouvelle carte', () => createMap('Carte'))}>${icon('map')} Nouvelle carte</button>
     </div>`;
@@ -3666,7 +3977,7 @@ export class GfPlantDetail extends LitElement {
   /** Standard (for everyone) and Scientifique (everything the app holds or can fetch, each with its source). @param {any} ctx */
   #full(ctx) {
     return this.#layout(ctx, html`
-      <article class=${baseOf(this.view) === 'scientific' ? 'science' : ''}>
+      <article class=${baseOf(this.#view) === 'scientific' ? 'science' : ''}>
         <a class="back link" href=${lastSearchHash()}>${icon('arrow-left')} Recherche</a>
         <gf-add-to .plant=${ctx.plant}></gf-add-to>
         ${this._error ? html`<p class="muted">${this._error}</p>` : nothing}

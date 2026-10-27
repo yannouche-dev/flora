@@ -9,7 +9,7 @@ import {
   keptContents, listCollections, missingFromBackup, placeTitle, plantCount, plantMarkers, restoreBackup, restorePending, restoreReason, soon, spotEvents, findEntry,
   downloadBackup, readBackup } from '../core/collections.js';
 import { config } from '../config.js';
-import { StoreController, whenReady } from '../core/store.js';
+import { StoreController, arrangedMode, whenReady } from '../core/store.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
 import { back, openView, replaceView } from '../core/history.js';
 import './gf-map.js';
@@ -528,7 +528,7 @@ export class GfCollections extends LitElement {
   }
 
   /** The plant pane keeps a wider width when the mode has pinned blocks (the sheet and its pinned map side by side). */
-  get #plantKey() { return hasColumns(this.#store.state.mode) ? 'plantPinned' : 'plant'; }
+  get #plantKey() { return hasColumns(arrangedMode('collections', this.#store.state.mode)) ? 'plantPinned' : 'plant'; }
 
   /** The place open, when it has coordinates (its map is shown). */
   get #place() {
@@ -595,7 +595,7 @@ export class GfCollections extends LitElement {
             <h2>Plante</h2>
             <a class="icon-btn" href=${href.plant(plantId)} title="Ouvrir la fiche dans Flore" aria-label="Ouvrir la fiche dans Flore">${icon('arrows-angle-expand')}</a>
           </div>
-          <div class="pane-body"><gf-plant-detail embedded plant-id=${plantId} view=${this.#store.state.mode}></gf-plant-detail>${this.#pager(plantId, true)}</div>
+          <div class="pane-body"><gf-plant-detail embedded sheet="collections" plant-id=${plantId} view=${this.#store.state.mode}></gf-plant-detail>${this.#pager(plantId, true)}</div>
         </section>` : nothing}`;
     }
     // List | place map | plant, as in Flore: each pane resizable and foldable. The list keeps its width
@@ -638,7 +638,7 @@ export class GfCollections extends LitElement {
                 <a class="icon-btn" href=${href.plant(plantId)} title="Ouvrir la fiche dans Flore" aria-label="Ouvrir la fiche dans Flore">${icon('arrows-angle-expand')}</a>
                 <button class="icon-btn" type="button" title="Fermer la fiche" aria-label="Fermer la fiche"
                   @click=${() => replaceView(href.collections({ open: this.route.open }))}>${icon('x-lg')}</button>`, true)}
-              <div class="pane-body"><gf-plant-detail embedded plant-id=${plantId} view=${this.#store.state.mode}></gf-plant-detail>${this.#pager(plantId, false)}</div>
+              <div class="pane-body"><gf-plant-detail embedded sheet="collections" plant-id=${plantId} view=${this.#store.state.mode}></gf-plant-detail>${this.#pager(plantId, false)}</div>
             </section>`) : nothing}
         </div>
       </div>

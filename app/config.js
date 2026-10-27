@@ -31,7 +31,6 @@ export const config = {
     sheetHidden: 'geoflora.sheetHidden',
     sheetLayout: 'geoflora.sheetLayout',
     plantNotes: 'geoflora.plantNotes',
-    kingMode: 'geoflora.kingMode',
     mapLayer: 'geoflora.mapLayer',
     /** The layers of IGN's whole catalogue added to the maps (their definitions, so they show at once, offline too). */
     ignLayers: 'geoflora.ignLayers',
@@ -103,9 +102,10 @@ export const config = {
    * Keys of settings the app no longer has, removed at start (core/prefs.js#forgetObsolete): the plant sheet's own
    * mode (it follows the app's), the one-tap target of the Épuré sheet (never read), the harvest mode as the app
    * once wrote it by itself — at the first launch, or as Cueillette prudente began — never told from the user's own
-   * choice: « auto » again (storageKeys.harvestMode).
+   * choice: « auto » again (storageKeys.harvestMode), King (« Personnaliser la fiche ») kept until left: it
+   * now lasts for the visit (core/store.js KingState).
    */
-  obsoleteKeys: ['geoflora.plantView', 'geoflora.target', 'geoflora.harvestMode'],
+  obsoleteKeys: ['geoflora.plantView', 'geoflora.target', 'geoflora.harvestMode', 'geoflora.kingMode'],
 
   /**
    * The keys of the panes' widths (core/panes.js), one per screen: the first steps (core/discover.js) never read

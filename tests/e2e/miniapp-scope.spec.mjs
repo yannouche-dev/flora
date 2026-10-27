@@ -165,9 +165,10 @@ test.describe('premier lancement', () => {
     });
   }
 
-  test('mode King : le bloc d’une étape remis dans la fiche y reste, comme il est annoncé ; l’étape suivante pose le sien', async ({ app, page }) => {
+  test('la fiche d’une activité ne se personnalise pas : ni couronne ni barre de mise en page, même ouverte dans Flore ; la mise en page du mode intacte', async ({ app, page }) => {
     await app.open('#/app/rencontres');
-    await page.evaluate(async () => (await import('/app/core/store.js')).setKingMode(true));
+    // « Personnaliser la fiche » open on Flore's sheet: Flore's only.
+    await page.evaluate(async () => (await import('/app/core/store.js')).openKing('flore'));
     const layout = await stored(page, 'geoflora.sheetLayout');
     const g = page.locator('ma-guided');
     const detail = g.locator('gf-plant-detail');
@@ -177,27 +178,13 @@ test.describe('premier lancement', () => {
     await page.keyboard.press('ArrowRight');
     await expect(g.locator('.g-steps li.on .l')).toHaveText('Photos');
     await expect.poll(async () => (await panes(page)).flatMap(p => p.tabs)).toEqual(['media']);
-
-    // « Déplacer vers… › Dans la fiche »: the photos leave the game's panes, as said — and stay out.
-    await detail.locator('.edge-bar summary[aria-label="Déplacer « Médias » vers…"]').click();
-    await detail.locator('details[open] .move-menu').getByRole('menuitem', { name: 'Dans la fiche' }).click();
-    await expect(detail.locator('.said')).toHaveText('« Médias » : dans la fiche');
-    await expect(detail.locator('[data-pane]')).toHaveCount(0);
-    await expect(g.locator('.g-empty')).toBeVisible();
-    await expect.poll(() => panes(page)).toEqual([]);
-
-    // The next step accepted docks its own block, the encyclopedia: the photos stay in the sheet — after a reload too.
-    await g.locator('.g-steps [data-step="wiki"]').click();
-    await expect(g.locator('.g-steps li.on .l')).toHaveText('Encyclopédie');
     await expect(detail.locator('[data-pane]')).toHaveCount(1);
-    await expect(detail.locator('gf-media-viewer')).toHaveCount(0);
-    await expect.poll(async () => (await panes(page)).flatMap(p => p.tabs)).toEqual(['wikipedia']);
-    await page.reload();
-    await app.ready();
-    await expect(g.locator('.g-steps li.on .l')).toHaveText('Encyclopédie');
-    await expect(detail.locator('[data-pane]')).toHaveCount(1);
-    await expect(detail.locator('gf-media-viewer')).toHaveCount(0);
-    expect((await panes(page)).flatMap(p => p.tabs)).toEqual(['wikipedia']);
+    // The game's panes: read, not arranged — no crown, no bar, no « Déplacer vers… », no block tools.
+    await expect(detail.locator('.act.crown')).toHaveCount(0);
+    await expect(detail.locator('.king-bar')).toHaveCount(0);
+    await expect(detail.locator('.place-pick')).toHaveCount(0);
+    await expect(detail.locator('.block-title .grip')).toHaveCount(0);
+    expect(await app.state('king')).toEqual({ sheet: 'flore', mode: null });
     // The mode's layout never touched.
     expect(await stored(page, 'geoflora.sheetLayout')).toBe(layout);
   });

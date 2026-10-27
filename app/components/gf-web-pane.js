@@ -10,7 +10,7 @@ import { ui } from '../styles/ui.js';
 
 export class GfWebPane extends LitElement {
   static properties = {
-    /** Not in a pane (Mode King, in the flow): it says where it works (the links go to a pane only). */
+    /** Not in a pane (King, in the flow): it says where it works (the links go to a pane only). */
     inactive: { type: Boolean },
     _at: { state: true }
   };

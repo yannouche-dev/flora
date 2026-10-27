@@ -43,6 +43,8 @@
   --gf-season: #fde047;
   --gf-season-text: #422006;
   --gf-star: #f59e0b;
+  /* « Personnaliser la fiche » on: the crown's gold, 3:1 at least over its pressed button (4.8:1 here). */
+  --gf-crown: #8b6508;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -60,6 +62,7 @@
     --gf-danger: #f08a80;
     --gf-deadly: #ffb3ab;
     --gf-deadly-contrast: #2a0906;
+    --gf-crown: #b8860b;
     --gf-shadow: none;
     --gf-shadow-float: 0 4px 16px rgb(0 0 0 / 55%);
   }
