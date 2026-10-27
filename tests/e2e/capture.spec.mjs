@@ -276,6 +276,21 @@ test('Noter ici : la même offre partout — l’en-tête, la fiche, un nouveau 
   await expect(sheet).toHaveCount(1);
 });
 
+test('Noter ici depuis le 📍 d’une plante des résultats : le même dialogue, la plante choisie, sans quitter la liste', async ({ app, page }) => {
+  // The results' grid (its 📍 column): a computer's.
+  test.skip(app.phone, 'la grille des résultats : ordinateur');
+  await app.open('#/?q=ail%20des%20ours');
+  const before = await page.evaluate(() => location.hash);
+  await page.getByRole('link', { name: 'Noter où je la trouve : Ail des ours' }).click();
+  const dialog = page.locator('gf-capture dialog');
+  await expect(dialog).toBeVisible();
+  await expect(dialog.locator('.chosen')).toContainText('Ail des ours');
+  expect(await page.evaluate(() => location.hash)).toBe(before);
+  await dialog.getByRole('button', { name: 'Noter ici', exact: true }).click();
+  await expect(page.locator('gf-capture .toast')).toContainText('Ail des ours noté ici (nouveau lieu)');
+  expect(await page.evaluate(() => location.hash)).toBe(before);
+});
+
 test('Éditeur d’un lieu, mode cueillette éteint : l’ail des ours ouvert montre le colchique, pas la qualité', async ({ app, page }) => {
   await app.open('#/');
   const id = await page.evaluate(async plant => {
