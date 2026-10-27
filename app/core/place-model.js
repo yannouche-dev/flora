@@ -20,7 +20,8 @@
  * @property {[number, number] | null} coordinates   where this plant grows [lon, lat]; null outside places
  * @property {number | null} accuracy    GPS accuracy (m) when recorded
  * @property {Altitude | null} altitude  the ground's altitude where it grows (none yet: asked of the IGN when online)
- * @property {Origin} [origin]           made by a mini-app (a favourite of a match): « Recommencer » it, and it goes
+ * @property {Origin} [origin]           made by a mini-app (a favourite of a match: in the favourites only): « Recommencer »
+ *                                       it, and it goes (an entry of a parcours carries none: it goes with its parcours)
  * @property {Origin} [from]             made by a mini-app, then made the user's own (promoted): « Recommencer » keeps it
  * @typedef {{ app: string }} Origin     the mini-app that made an entry or a collection (app/miniapps/<app>.js)
  * @typedef {{ m: number | null, at: [number, number] }} Altitude   metres (RGE ALTI®; null: no data there) at the
@@ -358,10 +359,13 @@ export const sameContent = (a, b) =>
   canonical({ ...a, properties: { ...a.properties, updatedAt: '' } }) === canonical({ ...b, properties: { ...b.properties, updatedAt: '' } });
 
 // ── What a mini-app made ────────────────────────────────────────────────────
-// A mini-app marks what it makes in Mes plantes (`origin`): a favourite of a match, a parcours and its plants.
-// « Recommencer » it, and that goes — unless the user made it their own meanwhile (« promoted »: its origin dropped,
-// `from` kept to say where it came from): a parcours finished with plants, or renamed, edited or added to from Mes
-// plantes, shared or exported; a favourite then put in a collection or given a note.
+// A mini-app marks what it makes in Mes plantes (`origin`): a favourite of a match (its entry in the favourites), a
+// parcours (the collection: its plants go with it, and carry none). « Recommencer » it, and that goes — unless the user
+// made it their own meanwhile (« promoted »: its origin dropped, `from` kept to say where it came from), by one rule
+// (collections.js#updatePlace): anything the user changes — not the mini-app itself, not the altitudes the app asks for
+// — is theirs. A parcours finished with plants, or renamed, edited or added to from Mes plantes, shared or exported; a
+// favourite then annotated, rated, given a harvest (in the favourites too), put in a list or noted in a lieu, given a
+// note on its sheet, or in the favourites shared or exported alone, or kept by « Revoir les premiers pas ».
 
 /**
  * @typedef {{ favorites: PlantEntry[], collections: { id: string, name: string, plants: number }[], kept: { favorites: number, collections: number } }} Made
@@ -382,6 +386,27 @@ export function promotedEntry(e) {
   return origin ? { ...rest, from: { app: origin.app } } : e;
 }
 
+/** An entry as the user sees it: all of it but the altitude the app asks for in the background. */
+const shown = (/** @type {PlantEntry} */ { altitude, ...e }) => { void altitude; return canonical(e); };
+
+/**
+ * The entries a mini-app made that the user changed (`before` → `after`: the same entry id, anything but its altitude
+ * changed — a note, a rating, an abundance, a harvest, a position) made the user's own (promotedEntry); a new entry is
+ * no change. The same object when none was. Pure.
+ * @param {Collection} before @param {Collection} after @returns {Collection}
+ */
+export function promoteTouched(before, after) {
+  const was = new Map(before.properties.plants.map(e => [e.id, e]));
+  let touched = false;
+  const plants = after.properties.plants.map(e => {
+    const old = e.origin && was.get(e.id);
+    if (!old || shown(old) === shown(e)) return e;
+    touched = true;
+    return promotedEntry(e);
+  });
+  return touched ? { ...after, properties: { ...after.properties, plants } } : after;
+}
+
 /**
  * A change to a collection by the user (not by the mini-app that made it): anything but the altitudes the app asks for
  * in the background — its name, its notes, its plants and what is said of them. Pure.
@@ -396,8 +421,8 @@ export function userChange(before, after) {
 /**
  * What a mini-app made in Mes plantes, still its own (« Recommencer » takes it away, the confirmation says it): the
  * favourites its matches added (entries of the favourites with its origin — not a favourite set elsewhere, nor one
- * already there before the match), and the collections it made (a parcours under way); and what came from it but the
- * user made their own (kept: counted for the confirmation). Pure.
+ * already there before the match), and the collections it made (a parcours under way, with every plant in it); and what
+ * came from it but the user made their own (kept: counted for the confirmation). Exactly what withoutMadeBy takes. Pure.
  * @param {Collection[]} collections @param {string} app @returns {Made}
  */
 export function madeBy(collections, app) {
@@ -413,12 +438,14 @@ export function madeBy(collections, app) {
 }
 
 /**
- * A collection without what a mini-app made: null when it made the collection itself (to delete), else the
- * collection without the entries it added (the same object when there is none). Pure.
+ * A collection without what a mini-app made: null when it made the collection itself (to delete); the favourites
+ * without the entries its matches added; any other collection as it is (the same object: what it holds is the
+ * user's, or goes with it — an entry of a parcours tagged by an earlier version, in a parcours the user made their own,
+ * is theirs too). The same object when nothing goes. Pure.
  * @param {Collection} c @param {string} app @returns {Collection | null}
  */
 export function withoutMadeBy(c, app) {
-  if (c.id !== FAVORITES_ID && c.properties.origin?.app === app) return null;
+  if (c.id !== FAVORITES_ID) return c.properties.origin?.app === app ? null : c;
   const plants = c.properties.plants.filter(e => e.origin?.app !== app);
   return plants.length === c.properties.plants.length ? c : { ...c, properties: { ...c.properties, plants, plantIds: plantIdsOf(plants) } };
 }

@@ -5,7 +5,7 @@ import * as db from '../core/db.js';
 import { commonOf, nameOf } from '../core/plants.js';
 import { lastSearchHash } from '../core/query.js';
 import { StoreController, arrange, arrangedMode, closeKing, openKing, whenReady } from '../core/store.js';
-import { formatDistance, getMembership, promoteFavorite, setInCollection, toggleFavorite } from '../core/collections.js';
+import { formatDistance, getMembership, promoteFavorites, setInCollection, toggleFavorite } from '../core/collections.js';
 import { context } from '../core/context.js';
 import { lastFix, oneFix } from '../core/geo.js';
 import { savedRadius } from '../core/nearby.js';
@@ -3178,7 +3178,7 @@ export class GfPlantDetail extends LitElement {
           this._noteFailed = stored ? null : key;
           if (!stored) return;
           // A favourite of a game, given a note: the user's own now (« Recommencer » the game keeps it).
-          if (text.trim()) promoteFavorite(plant.id);
+          if (text.trim()) promoteFavorites([plant.id]);
           this._noteSaved = key;
           setTimeout(() => { if (this._noteSaved === key) this._noteSaved = null; }, 1500);
         }, 400);

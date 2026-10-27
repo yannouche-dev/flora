@@ -9,11 +9,12 @@
 // under way (geoflora.trail), the recap shown (geoflora.trailDone), the width of its side column
 // (geoflora.trailLayout), its state and layout
 // (geoflora.app.parcours.*: runtime.js#replay); in memory, its session (a new one: trail-session.js#trailSessionOf); in
-// Mes plantes, the walk under way, or one left empty — places with its origin — with every plant in it
-// (core/collections.js#forgetMadeBy).
+// Mes plantes, the walk under way, or one left empty — places with its origin — with every plant in it (its plants
+// carry no origin of their own: they go with it; core/collections.js#forgetMadeBy).
 // Shares (never cleared, the user's whole app): the walks made the user's own — finished with plants, or renamed,
-// edited, added to from Mes plantes, shared, exported alone: their origin dropped (place-model.js#promoted) —, the
-// other places and their plants, the favourites, the settings, the answers of the online services kept in cache.
+// edited, added to from Mes plantes, shared, exported alone, received: their origin dropped (place-model.js#promoted),
+// with every plant in them, those added once continued too —, the other places and their plants, the favourites, the
+// settings, the answers of the online services kept in cache.
 
 import { config } from '../config.js';
 import { forgetMadeBy } from '../core/collections.js';

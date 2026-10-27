@@ -278,11 +278,58 @@ test('Rencontres : un favori de match rangé dans une liste est gardé, un favor
   await page.locator('gf-miniapp .quit').click();
   await list(page).getByRole('button', { name: 'Recommencer : Rencontres' }).click();
   const dialog = list(page).locator('dialog.ask');
-  await expect(dialog).toContainText('Seront supprimés : 1 favori ajouté par Rencontres, la partie en cours. Cette action est définitive. Votre favori venu de cette activité, rangé ou annoté depuis, est conservé.');
+  await expect(dialog).toContainText('Seront supprimés : 1 favori ajouté par Rencontres, la partie en cours. Cette action est définitive. Votre favori venu de Rencontres, devenu le vôtre, est conservé.');
   await dialog.getByRole('button', { name: 'Recommencer' }).click();
   await atStart(page, 'rencontres');
   expect(await favourites(page)).toEqual({ [plantId('Allium ursinum')]: null });
   await page.reload();
   await app.ready();
   expect(await favourites(page)).toEqual({ [plantId('Allium ursinum')]: null });
+});
+
+test('Rencontres : un favori de match annoté dans les Favoris est à vous, gardé', async ({ app, page }) => {
+  await app.open('#/discover');
+  await list(page).getByRole('button', { name: 'Commencer : Rencontres', exact: true }).click();
+  await play(page, 'rencontres');
+  await page.locator('gf-miniapp .quit').click();
+  // Mes plantes › Favoris: a note on the wild garlic (the editor's own field).
+  await app.go('#/collection/favorites');
+  const editor = page.locator('gf-spot-editor');
+  await editor.locator('li.entry .head').filter({ hasText: 'Ail des ours' }).click();
+  await editor.getByLabel('Notes sur cette plante').fill('Au bord du ruisseau');
+  await expect.poll(() => favourites(page)).toEqual({ [plantId('Allium ursinum')]: null });
+  await app.go('#/discover');
+  await list(page).getByRole('button', { name: 'Recommencer : Rencontres' }).click();
+  const dialog = list(page).locator('dialog.ask');
+  await expect(dialog).toContainText('Seront supprimés : la partie en cours. Cette action est définitive. Votre favori venu de Rencontres, devenu le vôtre, est conservé.');
+  await dialog.getByRole('button', { name: 'Recommencer' }).click();
+  await atStart(page, 'rencontres');
+  expect(await favourites(page)).toEqual({ [plantId('Allium ursinum')]: null });
+});
+
+test('Parcours : un parcours continué après « Terminer » garde ses nouvelles plantes', async ({ app, page }) => {
+  await app.open('#/discover');
+  await list(page).getByRole('button', { name: 'Commencer : Parcours botanique', exact: true }).click();
+  await play(page, 'parcours');
+  const box = page.locator('gf-miniapp');
+  await box.locator('.end').click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Parcours terminé' })).toBeVisible();
+  await expect.poll(() => walksNamed(page, 'Chemin du lavoir')).toEqual([{ origin: null, from: { app: 'parcours' }, walk: true }]);
+  // « Le continuer »: a nettle further on — the user's, as the walk is.
+  await box.getByRole('button', { name: 'Le continuer' }).click();
+  await expect.poll(() => hash(page)).toBe('#/app/parcours/walk');
+  await box.locator('.search input').fill('ortie dioique');
+  await box.locator('.hit').filter({ hasText: 'Urtica dioica' }).locator('.add').click();
+  await expect(box.locator('.mine > li')).toHaveCount(1);
+  /** The walk's plants, each with its origin (none: null). */
+  const plants = () => page.evaluate(async () => (await (await import('/app/core/collections.js')).listCollections())
+    .find((/** @type {any} */ c) => c.properties.name === 'Chemin du lavoir')?.properties.plants.map((/** @type {any} */ e) => e.origin?.app ?? null));
+  await expect.poll(plants).toEqual([null, null]);
+  await box.locator('.more summary').click();
+  await box.locator('.menu').getByRole('button', { name: 'Recommencer' }).click();
+  const dialog = box.getByRole('dialog');
+  await expect(dialog).toContainText('Seront supprimés : l’activité en cours. Cette action est définitive. Votre parcours enregistré dans Mes plantes est conservé.');
+  await dialog.getByRole('button', { name: 'Recommencer' }).click();
+  await atStart(page, 'parcours');
+  expect(await plants()).toEqual([null, null]);
 });

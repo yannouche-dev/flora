@@ -216,8 +216,9 @@ export class TrailSession extends EventTarget {
     if (!trail) return false;
     const plant = await getPlant(hit.id) || { id: hit.id, scientificName: hit.scientificName, vernacularName: hit.vernacularName };
     const position = this.fix ? { coordinates: this.fix.coordinates, accuracy: Math.round(this.fix.accuracy) } : undefined;
-    // Added to the walk as stored now (another add, another tab, the altitudes may have written meanwhile).
-    const next = await this.update(trail.id, current => withPlant(current, plant, position, { again: true, origin: { app: 'parcours' } }));
+    // Added to the walk as stored now (another add, another tab, the altitudes may have written meanwhile). No origin of
+    // its own: it goes with its walk while the walk is the Parcours', and is the user's once the walk is theirs.
+    const next = await this.update(trail.id, current => withPlant(current, plant, position, { again: true }));
     if (!next) return false;
     const added = /** @type {any} */ (lastEntry(next)).id;
     this.fresh = added;

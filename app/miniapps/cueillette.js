@@ -14,8 +14,9 @@
 //  - in memory: the cards found, the observations, what Wikipédia says, the undo stack, the deck's order, the view
 //    chosen, the swipe hint shown (kit/session.js: a new session, forgetGame).
 //  - in Mes plantes, the favourites its matches added (their origin, core/collections.js#forgetMadeBy) — not one
-//    that was a favourite before the match, nor one set elsewhere, nor one the user then put in a collection or
-//    gave a note (made their own: place-model.js#promoted).
+//    that was a favourite before the match, nor one set elsewhere, nor one the user then made their own (filed in a
+//    list or noted in a lieu, annotated, rated or given a harvest in the favourites, given a note on its sheet, in the
+//    favourites shared or exported alone, kept by « Revoir les premiers pas »: place-model.js#promoted).
 // Shares (never cleared, the user's whole app): Mes plantes but for those favourites, the places, the first
 // steps of the app, the settings (read, never written), the answers of the online services kept in cache.
 

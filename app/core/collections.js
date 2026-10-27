@@ -7,7 +7,7 @@
 
 import { config } from '../config.js';
 import * as db from './db.js';
-import { FAVORITES_ID, madeBy, mergeCollections, newEntryId, normalizeEntry, normalizeCollection, plantIdsOf, promoted, promotedEntry, rebase, sameContent, tagLegacy, userChange, walkMarked, withoutMadeBy } from './place-model.js';
+import { FAVORITES_ID, madeBy, mergeCollections, newEntryId, normalizeEntry, normalizeCollection, plantIdsOf, promoted, promotedEntry, promoteTouched, rebase, sameContent, tagLegacy, userChange, walkMarked, withoutMadeBy } from './place-model.js';
 import { store } from './store.js';
 import { FORMAT_VERSION, toPortable } from './portable.js';
 import { encodePortable } from './share.js';
@@ -270,12 +270,15 @@ async function afterSave(saved) {
 /**
  * Stores a whole collection as given: a new one (created here), or one put back as it was (« Annuler »). A change
  * to a collection that exists goes through updatePlace, which starts from the stored record.
+ * A list or a lieu of the user's (no mini-app made it: « Noter ici », a link saved, a list made in « Ajouter à… »):
+ * the favourites of its plants a game made are theirs now (promoteFavorites) — « Recommencer » the game keeps them.
  * @param {Collection} place
  */
 export async function savePlace(place) {
   const saved = stamped(place);
   await db.put('spots', saved);
   await afterSave(saved);
+  if (saved.id !== FAVORITES_ID && !saved.properties.origin) await promoteFavorites(plantIdsOf(saved.properties.plants));
   return saved;
 }
 export const saveCollection = savePlace;
@@ -284,28 +287,42 @@ export const saveCollection = savePlace;
  * Changes a stored collection atomically: `change` gets it as stored now (read in the same transaction as the write,
  * so nothing written meanwhile — by another tab, the altitudes, « Noter ici » — is lost) and returns it changed, or
  * the same object to leave it as it is. A collection deleted meanwhile is not made again: GoneError (except the
- * favorites, created on first use).
- * A collection a mini-app made (its origin), changed by the user — anyone but that mini-app (`by`), anything but the
- * altitudes —, becomes the user's own (place-model.js#promoted): « Recommencer » the mini-app keeps it.
- * @param {string} id @param {(current: Collection) => Collection} change @param {{ by?: string }} [opts] `by`: the mini-app writing
+ * favorites, created on first use — unless `create` is false: nothing written then, GoneError too).
+ * What a mini-app made, changed by the user — anyone but that mini-app (`by`), anything but the altitudes —, becomes
+ * the user's own (place-model.js#promoted): « Recommencer » the mini-app keeps it. One rule, three ways:
+ *  - a collection it made (a parcours), changed in anything: the collection and all it holds;
+ *  - an entry it made (a favourite of a match), changed (a note, a rating, a harvest…: place-model.js#promoteTouched);
+ *  - a plant put in a list or a lieu (a new entry: noted again in a lieu counts too): its favourite (promoteFavorites).
+ * @param {string} id @param {(current: Collection) => Collection} change
+ * @param {{ by?: string, create?: boolean }} [opts] `by`: the mini-app writing; `create`: the favourites made if missing
  * @returns {Promise<Collection>} as stored
  */
-export async function updatePlace(id, change, { by } = {}) {
+export async function updatePlace(id, change, { by, create = true } = {}) {
   /** @type {Collection | null} */
   let saved = null;
   let wrote = false;
+  /** @type {number[]} */
+  let gained = [];
   await db.update('spots', id, record => {
-    const current = read(record) || (id === FAVORITES_ID ? newCollection('favorites') : undefined);
+    const current = read(record) || (id === FAVORITES_ID && create ? newCollection('favorites') : undefined);
     if (!current) return undefined;
     let next = change(current);
     if (next === current && record) { saved = current; return undefined; }
     const app = current.properties.origin?.app;
     if (app && app !== by && userChange(current, next)) next = promoted(next);
+    if (!by) {
+      next = promoteTouched(current, next);
+      const had = new Set(current.properties.plants.map(e => e.id));
+      gained = id === FAVORITES_ID ? [] : plantIdsOf(next.properties.plants.filter(e => !had.has(e.id)));
+    }
     wrote = true;
     return saved = stamped(next);
   });
   if (!saved) throw new GoneError();
-  if (wrote) await afterSave(saved);
+  if (wrote) {
+    await afterSave(saved);
+    await promoteFavorites(gained);
+  }
   return saved;
 }
 
@@ -394,21 +411,25 @@ export async function toggleFavorite(plant, origin) {
 // ── What a mini-app made ──────────────────────────────────────────────────
 
 /**
- * A collection made the user's own (a parcours finished with plants, shared, exported alone): its mini-app's
- * « Recommencer » keeps it. Nothing made by a mini-app (or gone): nothing done. @param {string} id
+ * A collection made the user's own (a parcours finished with plants, shared, exported alone; the favourites shared or
+ * exported alone: the favourites of matches in them): its mini-app's « Recommencer » keeps it. Nothing made by a
+ * mini-app (or gone): nothing done. @param {string} id
  */
 export async function promotePlace(id) {
-  await updatePlace(id, c => c.properties.origin ? promoted(c) : c).catch(() => {});
+  await updatePlace(id, c => c.properties.origin || c.properties.plants.some(e => e.origin) ? promoted(c) : c, { create: false }).catch(() => {});
 }
 
 /**
- * A favourite made the user's own (put in a collection, given a note): its mini-app's « Recommencer » keeps it.
- * @param {number} plantId
+ * The favourites of these plants made the user's own (put in a list or a lieu, given a note on the sheet): their
+ * mini-app's « Recommencer » keeps them. One write, only when one of them is a game's (read as stored: never an
+ * in-memory guess); no favourites: nothing written. @param {number[]} plantIds
  */
-export async function promoteFavorite(plantId) {
-  if (!isFavorite(plantId)) return;
-  await updatePlace(FAVORITES_ID, c => c.properties.plants.some(e => e.plantId === plantId && e.origin)
-    ? withPlants(c, c.properties.plants.map(e => e.plantId === plantId ? promotedEntry(e) : e)) : c).catch(() => {});
+export async function promoteFavorites(plantIds) {
+  if (!plantIds.length) return;
+  const ids = new Set(plantIds);
+  const mine = (/** @type {PlantEntry} */ e) => Boolean(e.origin) && e.plantId !== null && ids.has(e.plantId);
+  await updatePlace(FAVORITES_ID, c => c.properties.plants.some(mine)
+    ? withPlants(c, c.properties.plants.map(e => mine(e) ? promotedEntry(e) : e)) : c, { create: false }).catch(() => {});
 }
 
 /**
@@ -498,8 +519,7 @@ export async function markWalks(known) {
  * @param {string} collectionId @param {any} plant @param {boolean} on
  */
 export async function setInCollection(collectionId, plant, on) {
-  // A favourite of a game put in a collection: the user's own now.
-  if (on && collectionId !== FAVORITES_ID) await promoteFavorite(plant.id);
+  // A favourite of a game put in a list or a lieu: the user's own now (updatePlace).
   try {
     return await updatePlace(collectionId, current =>
       Boolean(findEntry(current, plant.id)) === on ? current : on ? withPlant(current, plant) : withoutPlant(current, plant.id));
@@ -880,8 +900,8 @@ export async function protectStorage() {
  * @param {Collection[]} [only]
  */
 export async function exportGeoJSON(only) {
-  // One collection exported (its own file): the user's own now, whatever made it.
-  if (only) for (const c of only) if (c.properties.origin) await promotePlace(c.id);
+  // One collection exported (its own file): the user's own now, whatever made it (the favourites: their matches').
+  if (only) for (const c of only) if (c.properties.origin || c.properties.plants.some(e => e.origin)) await promotePlace(c.id);
   const features = (only || await listCollections()).sort((a, b) => a.properties.createdAt.localeCompare(b.properties.createdAt));
   // Everything (not one collection): the plant sheet's notes with it, so the file restores them too.
   const collection = toPortable(features, { name: only?.length === 1 ? 'GeoFlora — ' + placeTitle(only[0]) : 'GeoFlora — mes plantes', sheetNotes: only ? undefined : exportNotes() });

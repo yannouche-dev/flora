@@ -6,7 +6,7 @@ import { GeoController } from '../core/geo.js';
 import { href } from '../core/router.js';
 import {
   FAVORITES_ID, discardMissingBackup, distance, exportGeoJSON, formatDistance, inSeason, lastExportDate,
-  keptContents, listCollections, missingFromBackup, placeTitle, plantCount, plantMarkers, restoreBackup, restorePending, restoreReason, soon, spotEvents, findEntry,
+  keptContents, listCollections, missingFromBackup, placeTitle, plantCount, plantMarkers, promotePlace, restoreBackup, restorePending, restoreReason, soon, spotEvents, findEntry,
   downloadBackup, readBackup } from '../core/collections.js';
 import { config } from '../config.js';
 import { StoreController, arrangedMode, whenReady } from '../core/store.js';
@@ -420,6 +420,8 @@ export class GfCollections extends LitElement {
     if (p.kind === 'place' && !confirm('Le lien contiendra la position exacte de ce lieu. Partager ?')) return;
     const title = placeTitle(c);
     const result = await share({ title: title + ' — GeoFlora', text: `${title} · ${plantCount(p.plants.length)}`, url: href.shared(await encodeCollection(c)) });
+    // Shared, copied or shown to copy: the user's own now, whatever made it (a parcours; the favourites of matches).
+    if (result !== 'cancelled') promotePlace(c.id);
     if (result !== 'copied') return;
     this._shareNote = { id: c.id, text: 'Lien copié.' };
     setTimeout(() => { if (this._shareNote?.id === c.id) this._shareNote = null; }, 2500);
