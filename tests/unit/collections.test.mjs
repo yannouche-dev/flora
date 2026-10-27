@@ -168,3 +168,42 @@ test('asList puis copyAsList : chaque plante une fois, notes réunies, ni positi
   await db.remove('spots', stored.id);
   await assert.rejects(C.copyAsList(stored.id), { name: 'GoneError' });
 });
+
+// ── Retirer une plante : ce qui part, dit avant ──
+
+test('removeQuestion : la note, le journal de récolte, les autres fois notées — dits, chaque texte ; rien à dire, rien demandé', () => {
+  const ask = (/** @type {string} */ title, /** @type {string} */ text) => ({ title, text, yes: 'Retirer', danger: true });
+  const one = (/** @type {any} */ e) => bois([{ id: 'o1', plantId: 1, vernacularName: 'Ortie dioïque', ...e }, { id: 'a1', plantId: 2, vernacularName: 'Ail des ours' }]);
+  const harvest = [{ date: '2026-05-02', quantity: '1 kg' }];
+  assert.deepEqual(C.removeQuestion(one({ notes: 'Jeunes pousses', harvests: harvest }), 'o1'),
+    ask('Retirer Ortie dioïque de ce lieu ?', 'Sa note et son journal de récolte seront effacés.'));
+  assert.deepEqual(C.removeQuestion(one({ notes: 'Jeunes pousses' }), 1), ask('Retirer Ortie dioïque de ce lieu ?', 'Sa note sera effacée.'));
+  assert.deepEqual(C.removeQuestion(one({ harvests: harvest }), 'o1'), ask('Retirer Ortie dioïque de ce lieu ?', 'Son journal de récolte sera effacé.'));
+  assert.equal(C.removeQuestion(one({ notes: '  ' }), 'o1'), null, 'rien que sa présence');
+  assert.equal(C.removeQuestion(one({}), 'inconnue'), null);
+
+  // Noted twice in a lieu: unticked (its plant id), every noting goes — and their positions.
+  const twice = (/** @type {any} */ e) => bois([{ id: 'o1', plantId: 1, vernacularName: 'Ortie dioïque' }, { id: 'o2', plantId: 1, vernacularName: 'Ortie dioïque', ...e }]);
+  assert.deepEqual(C.removeQuestion(twice({}), 1), ask('Retirer Ortie dioïque, notée 2 fois, de ce lieu ?', 'Ses 2 positions seront effacées.'));
+  assert.deepEqual(C.removeQuestion(twice({ notes: 'n' }), 1), ask('Retirer Ortie dioïque, notée 2 fois, de ce lieu ?', 'Ses 2 positions et ses notes seront effacées.'));
+  assert.deepEqual(C.removeQuestion(twice({ harvests: harvest }), 1), ask('Retirer Ortie dioïque, notée 2 fois, de ce lieu ?', 'Ses 2 positions et ses journaux de récolte seront effacés.'));
+  assert.deepEqual(C.removeQuestion(twice({ notes: 'n', harvests: harvest }), 1),
+    ask('Retirer Ortie dioïque, notée 2 fois, de ce lieu ?', 'Ses 2 positions, ses notes et ses journaux de récolte seront effacés.'));
+  // One of them (its entry id, the editor's ✕): which one, as the editor numbers them.
+  assert.deepEqual(C.removeQuestion(twice({ notes: 'n' }), 'o2'), ask('Retirer Ortie dioïque n° 2 de ce lieu ?', 'Sa note sera effacée.'));
+  assert.equal(C.removeQuestion(twice({ notes: 'n' }), 'o1'), null);
+
+  // A list, the favourites: no position; said where.
+  const list = /** @type {any} */ (normalizeCollection({ type: 'Feature', id: 'l', geometry: null, properties: { kind: 'list', name: 'Cuisine',
+    plants: [{ plantId: 1, vernacularName: 'Ortie dioïque', notes: 'soupe' }, { plantId: 2, vernacularName: 'Ail des ours' }] } }));
+  assert.deepEqual(C.removeQuestion(list, 1), ask('Retirer Ortie dioïque de cette liste ?', 'Sa note sera effacée.'));
+  assert.equal(C.removeQuestion(list, 2), null);
+  const favourites = /** @type {any} */ (normalizeCollection({ type: 'Feature', id: C.FAVORITES_ID, geometry: null,
+    properties: { plants: [{ plantId: 2, vernacularName: 'Ail des ours', harvests: harvest }] } }));
+  assert.deepEqual(C.removeQuestion(favourites, 2), ask('Retirer Ail des ours des favoris ?', 'Son journal de récolte sera effacé.'));
+  // A list holding a plant twice (from before): its notes said, no positions.
+  const doubled = /** @type {any} */ (normalizeCollection({ type: 'Feature', id: 'd', geometry: null, properties: { kind: 'list',
+    plants: [{ id: 'x', plantId: 1, vernacularName: 'Ortie dioïque', notes: 'a' }, { id: 'y', plantId: 1, vernacularName: 'Ortie dioïque' }] } }));
+  assert.deepEqual(C.removeQuestion(doubled, 1), ask('Retirer Ortie dioïque, notée 2 fois, de cette liste ?', 'Ses notes seront effacées.'));
+  assert.equal(C.removeQuestion({ ...doubled, properties: { ...doubled.properties, plants: doubled.properties.plants.map((/** @type {any} */ e) => ({ ...e, notes: '' })) } }, 1), null);
+});

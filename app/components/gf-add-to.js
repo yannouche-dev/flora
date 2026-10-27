@@ -1,6 +1,6 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
-import { FAVORITES_ID, getMembership, matchCollections, newCollection, saveCollection, setInCollection, withPlant } from '../core/collections.js';
+import { FAVORITES_ID, getMembership, getPlace, matchCollections, newCollection, removeQuestion, saveCollection, setInCollection, withPlant } from '../core/collections.js';
 import { href } from '../core/router.js';
 import { setContext } from '../core/context.js';
 import { openModal } from '../core/history.js';
@@ -8,10 +8,12 @@ import { StoreController } from '../core/store.js';
 import { ui } from '../styles/ui.js';
 import { sheetStyles } from './ui-kit.js';
 import { icon, kindIcon } from '../core/icons.js';
+import { confirmAsk } from './gf-ask.js';
 
 /**
  * "Ajouter à…" sheet: check the lists and places a plant belongs to, create a list on the fly,
- * or start a new place here. Call `open()`; the plant comes from the `plant` property.
+ * or start a new place here. Call `open()`; the plant comes from the `plant` property. Unticked, a list, a lieu or the
+ * favourites asks first when the plant's note, its harvest log or its other notings would go (as the lieu's editor).
  */
 
 export class GfAddTo extends LitElement {
@@ -72,9 +74,17 @@ export class GfAddTo extends LitElement {
 
   /** @param {string} id @param {Event} event */
   async #toggle(id, event) {
-    const on = /** @type {HTMLInputElement} */ (event.target).checked;
+    const box = /** @type {HTMLInputElement} */ (event.target);
+    const on = box.checked;
     this._busy = true;
     try {
+      if (!on) {
+        // What would go with it, read as stored (collections.js removeQuestion): asked first. Kept: ticked again (its
+        // membership did not change, so the view would not).
+        const current = await getPlace(id);
+        const q = current && removeQuestion(current, this.plant.id);
+        if (q && !await confirmAsk(q)) { box.checked = true; return; }
+      }
       await setInCollection(id, this.plant, on);
       // The last collection a plant was put in becomes the current one (« Ajouter à … » on the sheet).
       if (on && id !== FAVORITES_ID) setContext({ collection: id });

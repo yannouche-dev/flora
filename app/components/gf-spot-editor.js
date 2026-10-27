@@ -9,8 +9,9 @@ import { href } from '../core/router.js';
 import { back, openView, replaceHash, replaceView } from '../core/history.js';
 import {
   ABUNDANCE, copyAsList, defaultPlantPosition, deletePlace, distance, entryInSeason, entryName, entryPosition, exportGeoJSON, findEntry,
-  formatDistance, getPlace, lastHarvest, locationQuestion, matchCollections, plantMarkers,
+  formatDistance, getPlace, lastHarvest, locationQuestion, matchCollections, plantMarkers, removeQuestion,
   nearbyPlaces, newCollection, newPlace, placeTitle, plantCount, promotePlace, savePatch, savePlace, spotEvents, updatePlace, withEntry, withLocation, withoutPlant, withPlant, entriesOf, lastEntry } from '../core/collections.js';
+import { joinEntry } from '../core/place-model.js';
 import { encodeCollection, share } from '../core/share.js';
 import { StoreController, whenReady } from '../core/store.js';
 import { addressAt, altitudeAt, formatCoordinates } from '../core/geoservices.js';
@@ -712,11 +713,16 @@ export class GfSpotEditor extends LitElement {
     this.#changed();
   }
 
-  /** This occurrence out of the place (the plant's others stay). @param {string} key its entry id */
-  #removePlant(key) {
+  /**
+   * This noting out of the collection (the plant's others stay): asked first when its note or its harvest log would go
+   * (collections.js removeQuestion — « Récolté aujourd’hui » counts), in a dialog, never confirm().
+   * @param {string} key its entry id
+   */
+  async #removePlant(key) {
     if (!this._place) return;
-    const entry = findEntry(this._place, key);
-    if (entry?.harvests.length && !confirm(`Retirer ${entryName(entry)} de ce lieu, avec son journal de récolte ?`)) return;
+    const q = removeQuestion(this.#payload(), key);
+    if (q && !await confirmAsk(q)) return;
+    if (!this._place) return;
     this._place = withoutPlant(this._place, key);
     const todayFor = new Map(this._todayFor);
     todayFor.delete(key);
@@ -760,11 +766,19 @@ export class GfSpotEditor extends LitElement {
 
   /**
    * The name typed for a new collection is an existing one's: put this draft's plants (with their notes,
-   * abundance, harvests and, place to place, their own positions) into it, drop the draft, open it.
+   * abundance, harvests and, place to place, their own positions) into it, drop the draft, open it. A plant already
+   * there is joined to it (place-model.js joinEntry: its notes after the other's, the harvest logs of both). A new lieu
+   * with plants put into a list (no position) asks first: its point and their positions are not kept. Notes that would
+   * pass what a note holds once joined: nothing written, said, the draft kept.
    * @param {string} targetId
    */
   async #mergeInto(targetId) {
     if (!this._place) return;
+    if (this._place.geometry && this._place.properties.plants.length) {
+      const into = await getPlace(targetId).catch(() => undefined);
+      if (into && !into.geometry && !await confirmAsk({ title: `Ajouter à la liste « ${placeTitle(into)} » ?`, yes: 'Ajouter à la liste',
+        text: 'Une liste ne garde pas de position : le point de ce nouveau lieu et les positions de ses plantes ne seront pas gardés.' })) return;
+    }
     clearTimeout(this.#saveTimer);
     this.#dirty = false;
     await this.#saving;
@@ -778,9 +792,15 @@ export class GfSpotEditor extends LitElement {
           const own = draft.geometry && e.coordinates ? { coordinates: e.coordinates, accuracy: e.accuracy } : null;
           // Already there: in a list, the plant; in a place, this plant at this very spot (else another occurrence).
           const there = target.geometry && own
-            ? entriesOf(target, e.plantId).some(t => t.coordinates && distance(t.coordinates, own.coordinates) < 1)
-            : Boolean(findEntry(target, e.plantId));
-          if (there) continue;
+            ? entriesOf(target, e.plantId).find(t => t.coordinates && distance(t.coordinates, own.coordinates) < 1)
+            : findEntry(target, e.plantId);
+          if (there) {
+            const one = joinEntry(there, e);
+            // Thrown in the transaction: nothing written.
+            if (!one) throw new Error(`Les notes de ${entryName(e)} dépasseraient 5 000 caractères une fois réunies.`);
+            target = withEntry(target, there.id, one);
+            continue;
+          }
           const position = target.geometry ? own || defaultPlantPosition(target, this.#geo.state.fix) : undefined;
           target = withPlant(target, { id: e.plantId, scientificName: e.scientificName, vernacularName: e.vernacularName }, position, { again: true });
           target = withEntry(target, /** @type {any} */ (lastEntry(target)).id, { abundance: e.abundance, rating: e.rating, notes: e.notes, harvests: e.harvests });
@@ -792,6 +812,8 @@ export class GfSpotEditor extends LitElement {
       // In place of this draft: Back does not return to it.
       replaceView(href.spot(targetId));
     } catch (error) {
+      // The draft kept: what it holds still to be saved (a new list's, as you go).
+      if (this.#autosave) this.#dirty = true;
       this._error = 'Ajout impossible : ' + /** @type {Error} */ (error).message;
     }
   }

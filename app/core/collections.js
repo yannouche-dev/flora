@@ -303,6 +303,34 @@ export const withoutPlant = (place, ref) => withPlants(place, place.properties.p
 export const withEntry = (place, ref, patch) =>
   withPlants(place, place.properties.plants.map(e => matches(e, ref) ? { ...e, ...patch, id: e.id } : e));
 
+/**
+ * What taking a plant out of a collection would erase, asked first (the lieu's editor, « Ajouter à… » unticked): `ref`
+ * an entry id (that noting: « Retirer le n° 2 du lieu ») or a plant id (every noting of it: unticked). Its note, its
+ * harvest log; noted several times in a lieu, the position of each too. null when only its being there goes: one noting
+ * without note nor harvest log, or (no positions) a plant of a list or of the favourites without them. Pure.
+ * @param {Collection} c @param {string | number | null} ref
+ * @returns {{ title: string, text: string, yes: string, danger: boolean } | null}
+ */
+export function removeQuestion(c, ref) {
+  const gone = c.properties.plants.filter(e => matches(e, ref));
+  if (!gone.length) return null;
+  const notes = gone.some(e => e.notes.trim()), harvests = gone.some(e => e.harvests.length);
+  const where = c.id === FAVORITES_ID ? 'des favoris' : c.geometry ? 'de ce lieu' : 'de cette liste';
+  const asked = { yes: 'Retirer', danger: true };
+  if (gone.length === 1) {
+    if (!notes && !harvests) return null;
+    // One of the plant's notings in a lieu: which one (« n° 2 », as the editor numbers them).
+    const all = c.geometry ? entriesOf(c, gone[0].plantId) : [];
+    const name = entryName(gone[0]) + (all.length > 1 ? ` n° ${all.indexOf(gone[0]) + 1}` : '');
+    return { ...asked, title: `Retirer ${name} ${where} ?`,
+      text: notes && harvests ? 'Sa note et son journal de récolte seront effacés.' : notes ? 'Sa note sera effacée.' : 'Son journal de récolte sera effacé.' };
+  }
+  const what = joined([c.geometry ? `ses ${gone.length} positions` : '', notes ? 'ses notes' : '', harvests ? 'ses journaux de récolte' : ''].filter(Boolean));
+  if (!what) return null;
+  return { ...asked, title: `Retirer ${entryName(gone[0])}, notée ${gone.length} fois, ${where} ?`,
+    text: `${what[0].toUpperCase()}${what.slice(1)} seront ${harvests ? 'effacés' : 'effacées'}.` };
+}
+
 /** @param {Place} place @param {PlantEntry[]} plants @returns {Place} */
 const withPlants = (place, plants) => ({ ...place, properties: { ...place.properties, plants, plantIds: plantIdsOf(plants) } });
 
