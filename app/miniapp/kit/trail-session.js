@@ -10,14 +10,13 @@
 
 import { FIX_MAX_AGE, geoProblem, takeFix, watchLocation, whenGranted } from '../../core/geo.js';
 import { atPlace, placeNameAt } from '../../core/geoservices.js';
-import { entriesOf, getPlace, lastEntry, listCollections, newPlace, promotePlace, refreshMembership, savePlace, spotEvents, updatePlace, withPlant, withoutPlant } from '../../core/collections.js';
+import { entriesOf, getPlace, lastEntry, listCollections, newPlace, promotePlace, refreshMembership, savePlace, shareCollection, spotEvents, updatePlace, withPlant, withoutPlant } from '../../core/collections.js';
 import { fillAltitudes } from '../../core/altitude.js';
 import { getPlant } from '../../core/plants.js';
-import { href } from '../../core/router.js';
-import { encodeCollection, share } from '../../core/share.js';
+import { confirmAsk } from '../../components/gf-ask.js';
 import { ACTION_TOAST_MS, TOAST_MS } from '../../core/toast.js';
 import { readJSON, writeJSON } from '../../core/prefs.js';
-import { DONE, KEY, NAMED, countOf } from './trail-store.js';
+import { DONE, KEY, NAMED } from './trail-store.js';
 
 /** @typedef {import('../runtime.js').MiniApp} MiniApp */
 
@@ -319,17 +318,16 @@ export class TrailSession extends EventTarget {
   }
 
   /**
-   * The walk shared: a link carrying it (its plants and their places), by the system's sheet or copied — the user's
-   * own from then on (« Recommencer » the Parcours keeps it). @param {any} [place] the walk ended (its recap), else the one walked
+   * The walk shared: a link carrying it (its plants and their places), by the system's sheet or copied — its position
+   * asked first (« Partager le parcours ? », its start where the walker stood said: collections.js shareCollection);
+   * shared, the user's own from then on (« Recommencer » the Parcours keeps it); refused or cancelled, still the
+   * Parcours'. @param {any} [place] the walk ended (its recap), else the one walked
    */
   async share(place) {
     await this.flushName();
     const t = place || this.trail;
     if (!t) return;
-    const url = href.shared(await encodeCollection(t));
-    promotePlace(t.id);
-    const result = await share({ title: t.properties.name + ' — GeoFlora', text: `${t.properties.name} · ${countOf(t)}`, url });
-    if (result === 'copied') this.say('Lien du parcours copié : collez-le où vous voulez');
+    if (await shareCollection(t, confirmAsk) === 'copied') this.say('Lien du parcours copié : collez-le où vous voulez');
   }
 
   /**

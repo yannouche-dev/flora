@@ -7,10 +7,11 @@
 
 import { config } from '../config.js';
 import * as db from './db.js';
-import { FAVORITES_ID, joinEntry, locationLoss, madeBy, mergeCollections, newEntryId, normalizeEntry, normalizeCollection, plantIdsOf, plantKey, promoted, promotedEntry, promoteTouched, rebase, sameContent, tagLegacy, userChange, walkMarked, withoutMadeBy } from './place-model.js';
+import { FAVORITES_ID, countOf, joinEntry, locationLoss, madeBy, mergeCollections, newEntryId, normalizeEntry, normalizeCollection, plantIdsOf, plantKey, promoted, promotedEntry, promoteTouched, rebase, sameContent, tagLegacy, userChange, walkMarked, withoutMadeBy } from './place-model.js';
 import { store } from './store.js';
 import { FORMAT_VERSION, toPortable } from './portable.js';
-import { encodePortable } from './share.js';
+import { encodeCollection, encodePortable, share } from './share.js';
+import { href } from './router.js';
 import { publish, subscribe } from './sync.js';
 import { exportNotes, importNotes } from './sheet-blocks.js';
 import { notesEvents, notesLoaded } from './sheet-notes.js';
@@ -519,7 +520,55 @@ export async function addFavorite(plant, origin) {
  * mini-app (or gone): nothing done. @param {string} id
  */
 export async function promotePlace(id) {
-  await updatePlace(id, c => c.properties.origin || c.properties.plants.some(e => e.origin) ? promoted(c) : c, { create: false }).catch(() => {});
+  await updatePlace(id, c => madeHere(c) ? promoted(c) : c, { create: false }).catch(() => {});
+}
+
+/** Whether a mini-app made this collection, or something in it (a favourite of a match). @param {Collection} c */
+const madeHere = c => Boolean(c.properties.origin || c.properties.plants.some(e => e.origin));
+
+// ── Shared, exported: what leaves the device, said first ─────────────────
+
+/**
+ * The positions a link or a file carries of a lieu, counted: « la position exacte de ce lieu et de ses 2 plantes »
+ * (« de ce parcours » ; « et de sa plante, notée 3 fois » ; « et de ses 2 plantes, notées 3 fois »). Pure.
+ * @param {Collection} c a collection with a point
+ */
+export function positionWords(c) {
+  const plants = c.properties.plants;
+  const n = plants.length, species = new Set(plants.map(plantKey)).size;
+  const them = !n ? '' : species > 1 ? ` et de ses ${species} plantes` : ' et de sa plante';
+  const times = n > species ? `, notée${species > 1 ? 's' : ''} ${n} fois` : '';
+  return `la position exacte ${c.properties.walk ? 'de ce parcours' : 'de ce lieu'}${them}${times}`;
+}
+
+/**
+ * What a link to this collection asks before it carries a position (shareCollection): a lieu's, a parcours' (and its
+ * start, where the walker stood: said). null without a point (a list, the favourites): nothing to ask. Pure.
+ * @param {Collection} c @returns {{ title: string, text: string, yes: string } | null}
+ */
+export function positionQuestion(c) {
+  if (!c.geometry) return null;
+  const walk = Boolean(c.properties.walk);
+  return { title: walk ? 'Partager le parcours ?' : 'Partager ce lieu ?', yes: 'Partager',
+    text: `Le lien contiendra ${positionWords(c)}.` + (walk && c.properties.startedHere ? ' Son départ est la position où vous étiez quand vous l’avez commencé.' : '') };
+}
+
+/**
+ * « Partager » a list, a lieu, a parcours or the favourites (the lieu's editor, Mes plantes, the Parcours): a link that
+ * carries it (share.js encodeCollection: its plants, a lieu's positions — never notes nor harvest logs), by the system's
+ * share sheet or copied. A position is asked first (`ask`: gf-ask.js confirmAsk, given by the screen — this module
+ * starts with the app, the dialog does not): refused, nothing goes. Shared, copied, or shown to copy by hand: the
+ * user's own from then on (promotePlace: « Recommencer » keeps it); cancelled or refused, nothing changes.
+ * @param {Collection} c @param {(q: { title: string, text: string, yes: string }) => Promise<boolean>} ask
+ * @returns {Promise<'shared' | 'copied' | 'cancelled' | 'failed' | 'refused'>}
+ */
+export async function shareCollection(c, ask) {
+  const q = positionQuestion(c);
+  if (q && !await ask(q)) return 'refused';
+  const title = placeTitle(c);
+  const result = await share({ title: title + ' — GeoFlora', text: `${title} · ${countOf(c)}`, url: href.shared(await encodeCollection(c)) });
+  if (result !== 'cancelled') await promotePlace(c.id);
+  return result;
 }
 
 /**
@@ -1047,13 +1096,29 @@ export async function protectStorage() {
 // ── GeoJSON export / import ───────────────────────────────────────────────
 
 /**
- * Exports every collection (or only `only`) as a GeoJSON FeatureCollection file.
- * @param {Collection[]} [only]
+ * What a file of these collections says of the user, before it goes to the phone's share sheet: their positions
+ * (positionWords), their notes, their harvest logs. null when it says none of these. Pure.
+ * @param {Collection[]} cs @returns {{ title: string, text: string, yes: string } | null}
  */
-export async function exportGeoJSON(only) {
-  // One collection exported (its own file): the user's own now, whatever made it (the favourites: their matches').
-  if (only) for (const c of only) if (c.properties.origin || c.properties.plants.some(e => e.origin)) await promotePlace(c.id);
-  const features = (only || await listCollections()).sort((a, b) => a.properties.createdAt.localeCompare(b.properties.createdAt));
+export function fileQuestion(cs) {
+  const parts = cs.filter(c => c.geometry).map(positionWords);
+  if (cs.some(c => c.properties.notes.trim() || c.properties.plants.some(e => e.notes.trim()))) parts.push('vos notes');
+  if (cs.some(c => c.properties.plants.some(e => e.harvests.length))) parts.push('vos journaux de récolte');
+  return parts.length ? { title: 'Envoyer ce fichier ?', text: `Le fichier contient ${joined(parts)}.`, yes: 'Envoyer' } : null;
+}
+
+/**
+ * Exports every collection (or only `only`) as a GeoJSON FeatureCollection file: downloaded, or (a phone) handed to its
+ * share sheet. One collection exported (its own file, `only`) is written as the user's own (no origin: on another
+ * device, « Recommencer » takes nothing of it), and is theirs once the file went out (promotePlace) — the favourites:
+ * their matches'. Handed to the share sheet, what it says of the user is asked first (`ask`: gf-ask.js confirmAsk;
+ * fileQuestion); a download is not asked. Refused or cancelled: nothing changes. Everything (Réglages): as stored, the
+ * origins with it (another device's « Recommencer » counts them).
+ * @param {Collection[]} [only] @param {{ ask?: (q: { title: string, text: string, yes: string }) => Promise<boolean> }} [options]
+ */
+export async function exportGeoJSON(only, { ask } = {}) {
+  const features = (only ? only.map(c => madeHere(c) ? promoted(c) : c) : await listCollections())
+    .sort((a, b) => a.properties.createdAt.localeCompare(b.properties.createdAt));
   // Everything (not one collection): the plant sheet's notes with it, so the file restores them too.
   const collection = toPortable(features, { name: only?.length === 1 ? 'GeoFlora — ' + placeTitle(only[0]) : 'GeoFlora — mes plantes', sheetNotes: only ? undefined : exportNotes() });
   const date = new Date().toISOString().slice(0, 10);
@@ -1062,17 +1127,23 @@ export async function exportGeoJSON(only) {
     : 'mes-plantes';
   const file = new File([JSON.stringify(collection)], `geoflora-${slug}-${date}.geojson`, { type: 'application/geo+json' });
 
+  const sheet = navigator.canShare?.({ files: [file] }) && matchMedia('(pointer: coarse)').matches;
+  const cancelled = { count: features.length, kept: keptContents(features), cancelled: true };
+  if (sheet && only && ask) {
+    const q = fileQuestion(features);
+    if (q && !await ask(q)) return cancelled;
+  }
   try {
-    if (navigator.canShare?.({ files: [file] }) && matchMedia('(pointer: coarse)').matches) {
-      await navigator.share({ files: [file], title: 'Lieux de récolte GeoFlora' });
-    } else {
-      download(file);
-    }
+    if (sheet) await navigator.share({ files: [file], title: 'Lieux de récolte GeoFlora' });
+    else download(file);
   } catch (error) {
-    if (/** @type {Error} */ (error).name === 'AbortError') return { count: features.length, kept: keptContents(features), cancelled: true };
+    if (/** @type {Error} */ (error).name === 'AbortError') return cancelled;
     download(file);
   }
-  if (!only) {
+  if (only) {
+    // Gone out (shared, downloaded): the user's own here too.
+    for (const c of only) if (madeHere(c)) await promotePlace(c.id);
+  } else {
     writeText(config.storageKeys.lastExport, new Date().toISOString());
   }
   return { count: features.length, kept: keptContents(features), cancelled: false };

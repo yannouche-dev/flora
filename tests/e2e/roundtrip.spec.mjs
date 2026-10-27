@@ -170,3 +170,106 @@ test('mise en page de la fiche : exportée puis réimportée depuis Réglages', 
     return [sb.isOnEdge('standard', 'calendar'), sb.isOnEdge('standard', 'uses')];
   })).toEqual([true, true]);
 });
+
+/** No share sheet: the link is copied, and kept here (window.__copied). @param {import('@playwright/test').Page} page */
+const copyHere = page => page.addInitScript(() => {
+  /** @type {any} */ (window).__copied = [];
+  Object.defineProperty(navigator, 'share', { configurable: true, value: undefined });
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (/** @type {string} */ t) => { /** @type {any} */ (window).__copied.push(t); } } });
+});
+const copiedOn = (/** @type {import('@playwright/test').Page} */ page) => page.evaluate(() => /** @type {any} */ (window).__copied);
+
+test('Partager un lieu demande avant sa position : l’éditeur et Mes plantes', async ({ app, page }) => {
+  await copyHere(page);
+  await app.open('#/');
+  await seed(page);
+  const id = await page.evaluate(async () => (await (await import('/app/core/collections.js')).listCollections())
+    .find((/** @type {any} */ c) => c.properties.name === 'Lisière nord')?.id);
+  await app.go(`#/map?spot=${id}`);
+  await page.locator('gf-spot-editor').getByRole('button', { name: 'Partager', exact: true }).click();
+  const ask = page.getByRole('alertdialog', { name: 'Partager ce lieu ?' });
+  await expect(ask).toContainText('Le lien contiendra la position exacte de ce lieu et de ses 2 plantes.');
+  await ask.getByRole('button', { name: 'Annuler' }).click();
+  await expect(ask).toHaveCount(0);
+  expect(await copiedOn(page)).toEqual([]);
+
+  // Mes plantes: the same question, then the link copied.
+  await app.go('#/collections');
+  await page.locator('gf-collections').getByRole('button', { name: 'Partager « Lisière nord »' }).click();
+  await page.getByRole('alertdialog', { name: 'Partager ce lieu ?' }).getByRole('button', { name: 'Partager' }).click();
+  await expect(page.locator('gf-collections .share-note')).toHaveText('Lien copié.');
+  const links = await copiedOn(page);
+  expect(links).toHaveLength(1);
+  expect(links[0]).toMatch(/#\/shared\?d=z/);
+});
+
+test('Partager un parcours en cours : demandé, son départ dit ; refusé, il reste au Parcours ; partagé, il est à vous', async ({ app, page, newDevice }) => {
+  await copyHere(page);
+  await app.open('#/app/parcours');
+  const trail = page.locator('gf-miniapp');
+  await trail.locator('.go').click();
+  await trail.locator('.card input.name').fill('Chemin du lavoir');
+  await trail.locator('.card input.name').press('Enter');
+  // No plant yet: nothing to share (never where the walker stands alone).
+  await expect(trail.locator('.card .end')).toBeVisible();
+  await expect(trail.locator('.card .share')).toHaveCount(0);
+  await trail.locator('.search input').fill('ortie dioique');
+  await trail.locator('.hit').filter({ hasText: 'Urtica dioica' }).locator('.add').click();
+  await expect(trail.locator('.mine > li')).toHaveCount(1);
+  const owner = () => page.evaluate(async () => {
+    const c = (await (await import('/app/core/collections.js')).listCollections()).find((/** @type {any} */ x) => x.properties.name === 'Chemin du lavoir');
+    return [c?.properties.origin?.app ?? null, c?.properties.from?.app ?? null];
+  });
+
+  await trail.locator('.card .share').click();
+  const ask = page.getByRole('alertdialog', { name: 'Partager le parcours ?' });
+  await expect(ask).toContainText('Le lien contiendra la position exacte de ce parcours et de sa plante. Son départ est la position où vous étiez quand vous l’avez commencé.');
+  await ask.getByRole('button', { name: 'Annuler' }).click();
+  await expect(ask).toHaveCount(0);
+  expect(await copiedOn(page)).toEqual([]);
+  expect(await owner()).toEqual(['parcours', null]);
+
+  await trail.locator('.card .share').click();
+  await page.getByRole('alertdialog', { name: 'Partager le parcours ?' }).getByRole('button', { name: 'Partager' }).click();
+  await expect(page.locator('.gf-brief-toast')).toContainText('Lien du parcours copié : collez-le où vous voulez');
+  await expect.poll(owner).toEqual([null, 'parcours']);
+  const [link] = await copiedOn(page);
+
+  const other = await newDevice();
+  await other.page.goto(link);
+  await expect(other.page.locator('gf-shared .kicker')).toHaveText('Parcours partagé');
+  await expect(other.page.locator('gf-shared h1')).toHaveText('Chemin du lavoir');
+});
+
+test('Exporter (GeoJSON) un lieu : sur téléphone, le fichier annoncé avant la feuille de partage ; sur ordinateur, téléchargé', async ({ app, page }) => {
+  // A phone's share sheet: it takes files, and keeps the names of those it was given.
+  await page.addInitScript(() => {
+    /** @type {any} */ (window).__sent = [];
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => true });
+    Object.defineProperty(navigator, 'share', { configurable: true, value: async (/** @type {any} */ data) => { /** @type {any} */ (window).__sent.push(...data.files.map((/** @type {File} */ f) => f.name)); } });
+  });
+  await app.open('#/');
+  await seed(page);
+  const id = await page.evaluate(async () => (await (await import('/app/core/collections.js')).listCollections())
+    .find((/** @type {any} */ c) => c.properties.name === 'Lisière nord')?.id);
+  await app.go(`#/map?spot=${id}`);
+  const exportButton = page.locator('gf-spot-editor').getByRole('button', { name: 'Exporter (GeoJSON)' });
+  const sent = () => page.evaluate(() => /** @type {any} */ (window).__sent);
+  if (app.phone) {
+    await exportButton.click();
+    const ask = page.getByRole('alertdialog', { name: 'Envoyer ce fichier ?' });
+    await expect(ask).toContainText('Le fichier contient la position exacte de ce lieu et de ses 2 plantes, vos notes et vos journaux de récolte.');
+    await ask.getByRole('button', { name: 'Annuler' }).click();
+    await expect(ask).toHaveCount(0);
+    expect(await sent()).toEqual([]);
+    await exportButton.click();
+    await page.getByRole('alertdialog', { name: 'Envoyer ce fichier ?' }).getByRole('button', { name: 'Envoyer' }).click();
+    await expect.poll(sent).toEqual([expect.stringMatching(/^geoflora-lisiere-nord-\d{4}-\d{2}-\d{2}\.geojson$/)]);
+  } else {
+    // A computer: downloaded at once, nothing asked.
+    const [download] = await Promise.all([page.waitForEvent('download'), exportButton.click()]);
+    expect(download.suggestedFilename()).toMatch(/^geoflora-lisiere-nord-/);
+    await expect(page.getByRole('alertdialog')).toHaveCount(0);
+    expect(await sent()).toEqual([]);
+  }
+});

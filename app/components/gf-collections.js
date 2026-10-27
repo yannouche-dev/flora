@@ -6,7 +6,7 @@ import { GeoController } from '../core/geo.js';
 import { href } from '../core/router.js';
 import {
   FAVORITES_ID, discardMissingBackup, distance, exportGeoJSON, formatDistance, inSeason, lastExportDate,
-  keptContents, listCollections, missingFromBackup, placeTitle, plantCount, plantMarkers, promotePlace, restoreBackup, restorePending, restoreReason, soon, spotEvents, findEntry,
+  keptContents, listCollections, missingFromBackup, placeTitle, plantCount, plantMarkers, restoreBackup, restorePending, restoreReason, shareCollection, soon, spotEvents, findEntry,
   downloadBackup, readBackup } from '../core/collections.js';
 import { config } from '../config.js';
 import { StoreController, arrangedMode, whenReady } from '../core/store.js';
@@ -17,7 +17,7 @@ import './gf-plant-detail.js';
 import './gf-pager.js';
 import { ui } from '../styles/ui.js';
 import { icon, kindIcon } from '../core/icons.js';
-import { encodeCollection, share } from '../core/share.js';
+import { confirmAsk } from './gf-ask.js';
 import { hasColumns } from '../core/sheet-blocks.js';
 import { PaneSizer, paneStyles } from '../core/panes.js';
 import { readJSON, readText, writeJSON, writeText } from '../core/prefs.js';
@@ -414,15 +414,13 @@ export class GfCollections extends LitElement {
     this._plants = plants;
   }
 
-  /** A link that carries the collection (its plants, and a place's positions): the share sheet, or copied. @param {import('../core/collections.js').Collection} c */
+  /**
+   * A link that carries the collection (its plants, and a place's positions — asked first): the share sheet, or copied.
+   * Shared, copied or shown to copy: the user's own now, whatever made it (collections.js shareCollection).
+   * @param {import('../core/collections.js').Collection} c
+   */
   async #share(c) {
-    const p = c.properties;
-    if (p.kind === 'place' && !confirm('Le lien contiendra la position exacte de ce lieu. Partager ?')) return;
-    const title = placeTitle(c);
-    const result = await share({ title: title + ' — GeoFlora', text: `${title} · ${plantCount(p.plants.length)}`, url: href.shared(await encodeCollection(c)) });
-    // Shared, copied or shown to copy: the user's own now, whatever made it (a parcours; the favourites of matches).
-    if (result !== 'cancelled') promotePlace(c.id);
-    if (result !== 'copied') return;
+    if (await shareCollection(c, confirmAsk) !== 'copied') return;
     this._shareNote = { id: c.id, text: 'Lien copié.' };
     setTimeout(() => { if (this._shareNote?.id === c.id) this._shareNote = null; }, 2500);
   }

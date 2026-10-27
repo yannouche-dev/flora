@@ -1,7 +1,9 @@
 // What the activities made in Mes plantes, and whose it is (app/core/collections.js), against an IndexedDB in memory
 // (fake-indexeddb): one rule makes it the user's — anything the user changes, not the activity itself nor the
 // altitudes the app asks for (updatePlace: the collection, an entry changed, a plant filed in a list or noted in a
-// lieu; savePlace: a list or a lieu of the user's; promotePlace: the favourites shared or exported alone).
+// lieu; savePlace: a list or a lieu of the user's; promotePlace: the favourites shared or exported alone). And what the
+// app asks before it erases or lets something leave the device: « Retirer la position » (refused, « Copier en liste »),
+// a plant taken out, a link, a file — each text as said.
 import 'fake-indexeddb/auto';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -206,4 +208,56 @@ test('removeQuestion : la note, le journal de récolte, les autres fois notées 
     plants: [{ id: 'x', plantId: 1, vernacularName: 'Ortie dioïque', notes: 'a' }, { id: 'y', plantId: 1, vernacularName: 'Ortie dioïque' }] } }));
   assert.deepEqual(C.removeQuestion(doubled, 1), ask('Retirer Ortie dioïque, notée 2 fois, de cette liste ?', 'Ses notes seront effacées.'));
   assert.equal(C.removeQuestion({ ...doubled, properties: { ...doubled.properties, plants: doubled.properties.plants.map((/** @type {any} */ e) => ({ ...e, notes: '' })) } }, 1), null);
+});
+
+// ── Partager, exporter : la position, les notes et les récoltes, dites avant ──
+
+test('positionQuestion, fileQuestion : la position comptée, le départ d’un parcours ; ce qu’un fichier dit de vous', () => {
+  const link = (/** @type {string} */ text) => ({ title: 'Partager ce lieu ?', yes: 'Partager', text });
+  assert.deepEqual(C.positionQuestion(bois([{ plantId: 1 }])), link('Le lien contiendra la position exacte de ce lieu et de sa plante.'));
+  assert.deepEqual(C.positionQuestion(bois([{ plantId: 1 }, { plantId: 2 }, { plantId: 3 }])), link('Le lien contiendra la position exacte de ce lieu et de ses 3 plantes.'));
+  assert.deepEqual(C.positionQuestion(bois([{ plantId: 1 }, { plantId: 1, id: 'b' }, { plantId: 1, id: 'c' }])),
+    link('Le lien contiendra la position exacte de ce lieu et de sa plante, notée 3 fois.'));
+  assert.deepEqual(C.positionQuestion(bois([{ plantId: 1 }, { plantId: 1, id: 'b' }, { plantId: 2 }])),
+    link('Le lien contiendra la position exacte de ce lieu et de ses 2 plantes, notées 3 fois.'));
+  assert.deepEqual(C.positionQuestion(bois([])), link('Le lien contiendra la position exacte de ce lieu.'));
+  // A parcours started where the walker stood: its start said.
+  assert.deepEqual(C.positionQuestion(bois([{ plantId: 1 }, { plantId: 2 }], { walk: true, startedHere: true })), { title: 'Partager le parcours ?', yes: 'Partager',
+    text: 'Le lien contiendra la position exacte de ce parcours et de ses 2 plantes. Son départ est la position où vous étiez quand vous l’avez commencé.' });
+  assert.equal(C.positionQuestion(bois([{ plantId: 1 }], { walk: true })).text, 'Le lien contiendra la position exacte de ce parcours et de sa plante.');
+  // No point: nothing to ask.
+  const list = /** @type {any} */ (normalizeCollection({ type: 'Feature', id: 'l', geometry: null, properties: { kind: 'list', name: 'Cuisine', plants: [{ plantId: 1 }] } }));
+  const favourites = /** @type {any} */ (normalizeCollection({ type: 'Feature', id: C.FAVORITES_ID, geometry: null, properties: { plants: [{ plantId: 2, notes: 'Au jardin' }] } }));
+  assert.equal(C.positionQuestion(list), null);
+  assert.equal(C.positionQuestion(favourites), null);
+
+  const file = (/** @type {string} */ text) => ({ title: 'Envoyer ce fichier ?', yes: 'Envoyer', text });
+  assert.deepEqual(C.fileQuestion([bois([{ plantId: 1, notes: 'Jeunes pousses', harvests: [{ date: '2026-05-02' }] }])]),
+    file('Le fichier contient la position exacte de ce lieu et de sa plante, vos notes et vos journaux de récolte.'));
+  assert.deepEqual(C.fileQuestion([bois([{ plantId: 1 }], { notes: 'Accès par le pont' })]), file('Le fichier contient la position exacte de ce lieu et de sa plante et vos notes.'));
+  assert.equal(C.fileQuestion([list]), null, 'une liste sans notes ne dit rien de vous');
+  assert.deepEqual(C.fileQuestion([favourites]), file('Le fichier contient vos notes.'));
+});
+
+test('shareCollection : la position demandée d’abord ; refusée, rien ne part ni ne change ; partagée, à vous', async () => {
+  /** @type {string[]} */
+  const copied = [];
+  Object.defineProperty(globalThis.navigator, 'clipboard', { configurable: true, value: { writeText: async (/** @type {string} */ t) => { copied.push(t); } } });
+  const walk = await C.savePlace(C.withPlant(C.newPlace(AT, { name: 'Chemin du lavoir', walk: true, startedHere: true, origin: { app: 'parcours' } }), plant(1)));
+  /** @type {any[]} */
+  const asked = [];
+  const answer = (/** @type {boolean} */ yes) => async (/** @type {any} */ q) => { asked.push(q); return yes; };
+  assert.equal(await C.shareCollection(walk, answer(false)), 'refused');
+  assert.equal(asked[0].title, 'Partager le parcours ?');
+  assert.deepEqual([copied, (await C.getPlace(walk.id))?.properties.origin], [[], { app: 'parcours' }], 'refusé : rien copié, toujours au Parcours');
+  assert.equal(await C.shareCollection(walk, answer(true)), 'copied');
+  assert.match(copied[0], /#\/shared\?d=z/);
+  const shared = await C.getPlace(walk.id);
+  assert.deepEqual([shared?.properties.origin, shared?.properties.from], [undefined, { app: 'parcours' }], 'partagé : à vous');
+  // A list: no position, nothing asked.
+  const list = await C.savePlace(C.withPlant(C.newCollection('list', { name: 'Cuisine' }), plant(2)));
+  assert.equal(await C.shareCollection(list, answer(false)), 'copied');
+  assert.equal(asked.length, 2);
+  await db.remove('spots', walk.id);
+  await db.remove('spots', list.id);
 });

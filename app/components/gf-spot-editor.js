@@ -10,9 +10,8 @@ import { back, openView, replaceHash, replaceView } from '../core/history.js';
 import {
   ABUNDANCE, copyAsList, defaultPlantPosition, deletePlace, distance, entryInSeason, entryName, entryPosition, exportGeoJSON, findEntry,
   formatDistance, getPlace, lastHarvest, locationQuestion, matchCollections, plantMarkers, removeQuestion,
-  nearbyPlaces, newCollection, newPlace, placeTitle, plantCount, promotePlace, savePatch, savePlace, spotEvents, updatePlace, withEntry, withLocation, withoutPlant, withPlant, entriesOf, lastEntry } from '../core/collections.js';
+  nearbyPlaces, newCollection, newPlace, placeTitle, plantCount, savePatch, savePlace, shareCollection, spotEvents, updatePlace, withEntry, withLocation, withoutPlant, withPlant, entriesOf, lastEntry } from '../core/collections.js';
 import { joinEntry } from '../core/place-model.js';
-import { encodeCollection, share } from '../core/share.js';
 import { StoreController, whenReady } from '../core/store.js';
 import { addressAt, altitudeAt, formatCoordinates } from '../core/geoservices.js';
 import { BP } from '../core/media.js';
@@ -676,22 +675,21 @@ export class GfSpotEditor extends LitElement {
     }
   }
 
+  /**
+   * « Partager »: what was typed saved, then a link (collections.js shareCollection: a lieu's position asked first; shared,
+   * the user's own — « Recommencer » keeps it).
+   */
   async #share() {
     if (!this._place) return;
     await this.#flush();
-    const place = this.#payload();
-    if (place.properties.kind === 'place' && !confirm('Le lien contiendra la position exacte de ce lieu. Partager ?')) return;
-    const data = await encodeCollection(place);
-    // Shared: the user's own now, whatever made it (a parcours: « Recommencer » the Parcours keeps it).
-    promotePlace(place.id);
-    const result = await share({ title: placeTitle(place) + ' — GeoFlora', text: `${placeTitle(place)} · ${plantCount(place.properties.plants.length)}`, url: href.shared(data) });
-    if (result === 'copied') { this._saveState = ''; this._error = null; this._note = 'Lien copié.'; setTimeout(() => { this._note = null; }, 2500); }
+    if (await shareCollection(this.#payload(), confirmAsk) === 'copied') { this._saveState = ''; this._error = null; this._note = 'Lien copié.'; setTimeout(() => { this._note = null; }, 2500); }
   }
 
+  /** « Exporter (GeoJSON) »: its own file — on a phone, what it says of you asked before the share sheet. */
   async #export() {
     if (!this._place) return;
     await this.#flush();
-    await exportGeoJSON([this.#payload()]);
+    await exportGeoJSON([this.#payload()], { ask: confirmAsk });
   }
 
   /** @param {Event} event */
