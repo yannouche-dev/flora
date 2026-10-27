@@ -8,6 +8,9 @@
 import { config } from '../../config.js';
 import { readJSON } from '../../core/prefs.js';
 
+// What a parcours holds, in words (« 9 plantes, notées 12 fois »): pure, with the shape of a collection.
+export { countOf } from '../../core/place-model.js';
+
 /**
  * The parcours being walked (its place id), those walked before, and the one just ended (its recap, until left); none
  * (null): the key removed — a parcours never opened, or played again, leaves none behind.
@@ -25,16 +28,6 @@ export const keptWalks = () => [...(/** @type {string[]} */ (readJSON(LIST, []))
 
 /** A new parcours' name, until the place where it starts is known (« Mon parcours botanique en forêt de … »). */
 export const NAMED = 'Mon parcours botanique';
-
-/**
- * « 9 plantes, notées 12 fois » (a plant met several times counts once among the plants).
- * @param {{ properties: { plants: { plantId: number | null }[] } }} t
- */
-export function countOf(t) {
-  const n = t.properties.plants.length, species = new Set(t.properties.plants.map(e => e.plantId)).size;
-  if (!n) return 'Aucune plante encore';
-  return n > species ? `${species} plante${species > 1 ? 's' : ''}, notée${species > 1 ? 's' : ''} ${n} fois` : `${n} plante${n > 1 ? 's' : ''}`;
-}
 
 /**
  * The plants of the parcours, each once — its occurrences together, in the order met — the last met first.

@@ -209,20 +209,24 @@ test('la liste avec une activité en cours (captures)', async ({ app, page }, in
   if (process.env.SHOTS) await page.screenshot({ path: `${process.env.SHOTS}/launcher-underway-${info.project.name}.png`, fullPage: false });
 });
 
-/** The places of Mes plantes named so, with their origin (who made them, still theirs) and where they came from. @param {import('@playwright/test').Page} page @param {string} name */
+/**
+ * The places of Mes plantes named so, with their origin (who made them, still theirs), where they came from, and their
+ * mark of a parcours (kept once made the user's own). @param {import('@playwright/test').Page} page @param {string} name
+ */
 const walksNamed = (page, name) => page.evaluate(async n => (await (await import('/app/core/collections.js')).listCollections())
-  .filter((/** @type {any} */ c) => c.properties.name === n).map((/** @type {any} */ c) => ({ origin: c.properties.origin ?? null, from: c.properties.from ?? null })), name);
+  .filter((/** @type {any} */ c) => c.properties.name === n)
+  .map((/** @type {any} */ c) => ({ origin: c.properties.origin ?? null, from: c.properties.from ?? null, walk: c.properties.walk ?? null })), name);
 
 test('Parcours : un parcours terminé avec ses plantes reste dans Mes plantes, le sien désormais', async ({ app, page }) => {
   await app.open('#/discover');
   await list(page).getByRole('button', { name: 'Commencer : Parcours botanique', exact: true }).click();
   await play(page, 'parcours');
-  expect(await walksNamed(page, 'Chemin du lavoir')).toEqual([{ origin: { app: 'parcours' }, from: null }]);
+  expect(await walksNamed(page, 'Chemin du lavoir')).toEqual([{ origin: { app: 'parcours' }, from: null, walk: true }]);
   // A plant touched first (its occurrences lit), then « Terminer »: the recap, and it stays.
   await page.locator('gf-miniapp .mine .pick').first().click();
   await page.locator('gf-miniapp .end').click();
   await expect(page.getByRole('heading', { level: 1, name: 'Parcours terminé' })).toBeVisible();
-  await expect.poll(() => walksNamed(page, 'Chemin du lavoir')).toEqual([{ origin: null, from: { app: 'parcours' } }]);
+  await expect.poll(() => walksNamed(page, 'Chemin du lavoir')).toEqual([{ origin: null, from: { app: 'parcours' }, walk: true }]);
   // Still the recap once its promotion is written (no stale reload brings the walk back).
   await page.waitForTimeout(800);
   await expect(page.getByRole('heading', { level: 1, name: 'Parcours terminé' })).toBeVisible();
@@ -233,7 +237,7 @@ test('Parcours : un parcours terminé avec ses plantes reste dans Mes plantes, l
   await expect(dialog).toContainText('Seront supprimés : l’activité en cours. Cette action est définitive. Votre parcours enregistré dans Mes plantes est conservé.');
   await dialog.getByRole('button', { name: 'Recommencer' }).click();
   await atStart(page, 'parcours');
-  expect(await walksNamed(page, 'Chemin du lavoir')).toEqual([{ origin: null, from: { app: 'parcours' } }]);
+  expect(await walksNamed(page, 'Chemin du lavoir')).toEqual([{ origin: null, from: { app: 'parcours' }, walk: true }]);
 });
 
 test('Parcours : un parcours en cours renommé depuis Mes plantes est gardé ; Annuler ne supprime rien', async ({ app, page }) => {
@@ -245,14 +249,14 @@ test('Parcours : un parcours en cours renommé depuis Mes plantes est gardé ; A
   // Mes plantes: the walk's editor, its name changed.
   await app.go(`#/collection/${id}`);
   await page.locator('gf-spot-editor input').first().fill('Le lavoir, à moi');
-  await expect.poll(() => walksNamed(page, 'Le lavoir, à moi')).toEqual([{ origin: null, from: { app: 'parcours' } }]);
+  await expect.poll(() => walksNamed(page, 'Le lavoir, à moi')).toEqual([{ origin: null, from: { app: 'parcours' }, walk: true }]);
   await app.go('#/discover');
   await list(page).getByRole('button', { name: 'Recommencer : Parcours botanique' }).click();
   const dialog = list(page).locator('dialog.ask');
   await expect(dialog).toContainText('Seront supprimés : l’activité en cours. Cette action est définitive. Votre parcours enregistré dans Mes plantes est conservé.');
   await dialog.getByRole('button', { name: 'Recommencer' }).click();
   await atStart(page, 'parcours');
-  expect(await walksNamed(page, 'Le lavoir, à moi')).toEqual([{ origin: null, from: { app: 'parcours' } }]);
+  expect(await walksNamed(page, 'Le lavoir, à moi')).toEqual([{ origin: null, from: { app: 'parcours' }, walk: true }]);
 });
 
 test('Rencontres : un favori de match rangé dans une liste est gardé, un favori de match simple supprimé', async ({ app, page }) => {

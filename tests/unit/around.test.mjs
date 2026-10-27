@@ -243,10 +243,13 @@ test('provenance : l’origine d’une entrée ou d’un lieu gardée, relue d�
   assert.deepEqual(fav.properties.plants.map(e => e.origin ?? null), [{ app: 'rencontres' }, null]);
   const walk = col({ type: 'Feature', id: 'w', geometry: { type: 'Point', coordinates: [2, 48] }, properties: { name: 'Chemin', origin: { app: 'parcours' }, plants: [] } });
   assert.deepEqual(walk.properties.origin, { app: 'parcours' });
-  // Exported, read again: the same origins (the backup and the files keep them).
+  // Made by the Parcours, with a point: a parcours (its mark read from its origin).
+  assert.equal(walk.properties.walk, true);
+  // Exported, read again: the same origins (the backup and the files keep them), and the mark.
   const back = toPortable([fav, walk]).features.map(f => col(f));
   assert.deepEqual(back[0].properties.plants.map(e => e.origin ?? null), [{ app: 'rencontres' }, null]);
   assert.deepEqual(back[1].properties.origin, { app: 'parcours' });
+  assert.equal(back[1].properties.walk, true);
 });
 
 test('Recommencer : ce que l’activité a fait et qui est encore le sien, et seulement cela', () => {

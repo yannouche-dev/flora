@@ -57,19 +57,45 @@ test('normalizeCollection : format 1 (une plante par point), liste, favoris, ent
   assert.equal(placeWithoutPoint?.properties.kind, 'list');
 });
 
+test('normalizeCollection : un parcours, marqué ou fait par le Parcours ; jamais sans point, jamais deviné', () => {
+  const at = { type: 'Point', coordinates: [2, 48] };
+  const walk = (/** @type {any} */ geometry, /** @type {any} */ properties) =>
+    M.normalizeCollection({ type: 'Feature', id: 'w', geometry, properties: { plants: [], ...properties } })?.properties.walk;
+  assert.equal(walk(at, { walk: true }), true);
+  assert.equal(walk(at, { origin: { app: 'parcours' } }), true, 'en cours, d’avant la marque (un fichier, une copie, un lien)');
+  assert.equal(walk(at, { from: { app: 'parcours' } }), true, 'terminé, d’avant la marque');
+  assert.equal(walk(at, { origin: { app: 'rencontres' } }), undefined);
+  assert.equal(walk(at, { notes: 'Parcours botanique', startedHere: true }), undefined, 'ni d’après un texte, ni d’après son départ');
+  assert.equal(walk(at, { walk: 'oui' }), undefined);
+  assert.equal(walk(null, { walk: true, origin: { app: 'parcours' } }), undefined, 'une liste n’est pas un parcours');
+  assert.equal(walk(null, { kind: 'place', walk: true }), undefined);
+});
+
 test('toPortable : seulement ce que l’utilisateur a saisi ; sans le personnel sur demande', () => {
   const place = /** @type {M.Collection} */ (M.normalizeCollection({ type: 'Feature', id: 'p', geometry: { type: 'Point', coordinates: [2.35, 48.85] }, properties: {
-    kind: 'place', name: 'Bois', notes: 'secret', createdAt: DATE, updatedAt: DATE,
+    kind: 'place', name: 'Bois', notes: 'secret', createdAt: DATE, updatedAt: DATE, walk: true, startedHere: true,
     plants: [
       { plantId: 1, abundance: 'rare', notes: 'cueilli', harvests: [{ date: '2026-05-02', quantity: '1 kg' }], coordinates: [2.3501, 48.8501], accuracy: 4 },
-      { plantId: 2, coordinates: [2.35, 48.85], accuracy: 30 }
+      { plantId: 2, coordinates: [2.35, 48.85], accuracy: 30, addedAt: '2026-05-01T10:20:00.000Z' }
     ] } }));
   const full = toPortable([place]);
+  assert.equal(full.formatVersion, 6);
   assert.equal(full.formatVersion, FORMAT_VERSION);
   const [f] = full.features;
   assert.equal(f.properties.notes, 'secret');
+  // A parcours, started where the walker stood: said (format 6), and read back.
+  assert.equal(f.properties.walk, true);
+  assert.equal(f.properties.startedHere, true);
+  assert.deepEqual([M.normalizeCollection(f)?.properties.walk, M.normalizeCollection(f)?.properties.startedHere], [true, true]);
   assert.deepEqual(f.properties.plants[0], { plantId: 1, abundance: 'rare', coordinates: [2.3501, 48.8501], accuracy: 4, notes: 'cueilli', harvests: [{ date: '2026-05-02', quantity: '1 kg' }] });
-  assert.deepEqual(f.properties.plants[1], { plantId: 2 }, 'au point du lieu, abondance par défaut : rien d’autre');
+  // The day it was noted kept (the order a walk met its plants), but the creation's, which a reader falls back on.
+  assert.deepEqual(f.properties.plants[1], { plantId: 2, addedAt: '2026-05-01T10:20:00.000Z' }, 'au point du lieu, abondance par défaut : sa date seule');
+  assert.equal(M.normalizeCollection(f)?.properties.plants[1].addedAt, '2026-05-01T10:20:00.000Z');
+  assert.equal(M.normalizeCollection(f)?.properties.plants[0].addedAt, DATE);
+  // A list is no parcours: neither mark is written.
+  const list = /** @type {M.Collection} */ (M.normalizeCollection({ type: 'Feature', id: 'l', geometry: null, properties: { kind: 'list', name: 'L', walk: true, startedHere: true, plants: [] } }));
+  assert.deepEqual([list.properties.walk, list.properties.startedHere], [undefined, undefined]);
+  assert.deepEqual(Object.keys(toPortable([list]).features[0].properties), ['name', 'createdAt', 'updatedAt', 'plants']);
   assert.ok(hasPersonal(full));
   const shared = toPortable([place], { personal: false });
   assert.equal(shared.features[0].properties.notes, undefined);
@@ -87,14 +113,22 @@ test('propriété : normalizeCollection(toPortable(c)) rend la collection (300 c
       abundance: pick(['rare', 'moyen', 'abondant']), rating: rnd(6), notes: rnd(2) ? '' : 'note ' + i + ' « été » 🌿',
       harvests: rnd(3) ? [] : [{ date: '2026-0' + (1 + rnd(9)) + '-1' + rnd(10), quantity: '', note: 'x' }],
       coordinates: kind === 'place' && rnd(2) ? [at[0] + rnd(1000) / 1e6, at[1] - rnd(1000) / 1e6] : null,
-      accuracy: rnd(2) ? 1 + rnd(50) : null
+      accuracy: rnd(2) ? 1 + rnd(50) : null,
+      // When it was noted: none (its collection's creation), the creation itself, or a day of its own.
+      ...(rnd(3) ? { addedAt: rnd(4) ? '2026-0' + (5 + rnd(5)) + '-1' + rnd(10) + 'T0' + rnd(10) + ':' + rnd(6) + '0:00.000Z' : DATE } : {}),
+      ...(rnd(4) ? {} : { origin: { app: pick(['rencontres', 'parcours']) } }),
+      ...(rnd(4) ? {} : { from: { app: pick(['cueillette', 'parcours']) } })
     }));
     const raw = { type: 'Feature', id: kind === 'favorites' ? M.FAVORITES_ID : 'c' + run, geometry: kind === 'place' ? { type: 'Point', coordinates: at } : null,
-      properties: { kind, name: kind === 'favorites' ? '' : 'Collection ' + run, notes: rnd(2) ? 'n' : '', accuracy: kind === 'place' ? rnd(30) || null : null, createdAt: DATE, updatedAt: DATE, plants } };
+      properties: { kind, name: kind === 'favorites' ? '' : 'Collection ' + run, notes: rnd(2) ? 'n' : '', accuracy: kind === 'place' ? rnd(30) || null : null,
+        ...(rnd(3) ? {} : { startedHere: true }), ...(rnd(3) ? {} : { walk: true }),
+        ...(rnd(3) ? {} : { origin: { app: pick(['parcours', 'rencontres']) } }), ...(rnd(3) ? {} : { from: { app: pick(['parcours', 'mosaique']) } }),
+        createdAt: DATE, updatedAt: DATE, plants } };
     const original = /** @type {M.Collection} */ (M.normalizeCollection(raw));
     const back = M.normalizeCollection(toPortable([original]).features[0]);
-    // What the file leaves out on purpose: the names (filled again from the flora), the dates the plants were added.
-    const comparable = (/** @type {any} */ c) => ({ ...c, properties: { ...c.properties, plants: c.properties.plants.map((/** @type {any} */ e) => ({ ...e, scientificName: e.plantId === null ? e.scientificName : '', vernacularName: null, addedAt: '' })) } });
+    // What the file leaves out on purpose: the names (filled again from the flora). The days the plants were noted,
+    // a parcours' marks and who made what come back (format 6).
+    const comparable = (/** @type {any} */ c) => ({ ...c, properties: { ...c.properties, plants: c.properties.plants.map((/** @type {any} */ e) => ({ ...e, scientificName: e.plantId === null ? e.scientificName : '', vernacularName: null })) } });
     assert.deepEqual(comparable(back), comparable(original), `run ${run}`);
   }
 });

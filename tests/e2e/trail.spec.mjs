@@ -2,11 +2,11 @@
 // fresh first answer), see them on the map. Migrated from trail.cjs, trail2.cjs, trailname.cjs, trailsearch/.
 import { test, expect, plantId } from './fixtures.mjs';
 
-/** The walk's saved collection, by name. @param {import('@playwright/test').Page} page @param {string} name */
+/** The walk's saved collection, by name (a parcours: its mark). @param {import('@playwright/test').Page} page @param {string} name */
 const saved = (page, name) => page.evaluate(async n => {
   const { listCollections } = await import('/app/core/collections.js');
   const c = (await listCollections()).find((/** @type {any} */ x) => x.properties.name === n);
-  return c ? { kind: c.properties.kind, plants: c.properties.plants.map((/** @type {any} */ e) => e.plantId) } : null;
+  return c ? { kind: c.properties.kind, plants: c.properties.plants.map((/** @type {any} */ e) => e.plantId), walk: c.properties.walk === true } : null;
 }, name);
 
 test('un parcours : nommé, des plantes ajoutées par la recherche, enregistré et sur la carte', async ({ app, page }) => {
@@ -17,7 +17,7 @@ test('un parcours : nommé, des plantes ajoutées par la recherche, enregistré 
   await expect(name).toBeVisible();
   await name.fill('Bord du canal');
   await name.press('Enter');
-  await expect.poll(() => saved(page, 'Bord du canal')).toMatchObject({ plants: [] });
+  await expect.poll(() => saved(page, 'Bord du canal')).toMatchObject({ plants: [], walk: true });
 
   // Every answer of the flora: Prunus spinosa among « prunus ».
   const search = trail.locator('.search input');

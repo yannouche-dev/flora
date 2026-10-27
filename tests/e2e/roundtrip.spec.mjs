@@ -112,6 +112,39 @@ test('lien de partage d’un lieu : aperçu puis « Enregistrer dans Mes plantes
     .toEqual([['Lisière nord', 'place', [4.8357, 45.7641], [plantId('Allium ursinum'), plantId('Urtica dioica')]]]);
 });
 
+test('lien de partage d’un parcours : « Parcours partagé », sa marche tracée, enregistré en parcours (son départ, ses plantes dans l’ordre)', async ({ app, page, newDevice }) => {
+  await app.open('#/');
+  const [ortie, ail] = [plantId('Urtica dioica'), plantId('Allium ursinum')];
+  // A walk started « ici »: the wild garlic listed first, but met after the nettle.
+  const link = await page.evaluate(async ids => {
+    const c = await import('/app/core/collections.js');
+    const db = await import('/app/core/db.js');
+    const s = await import('/app/core/share.js');
+    const [nettle, garlic] = await Promise.all(ids.map(id => db.get('plants', id)));
+    let walk = c.newPlace([4.8357, 45.7641], { name: 'Chemin du lavoir', notes: 'Parcours botanique', walk: true, startedHere: true });
+    walk = c.withPlant(walk, garlic, { coordinates: [4.8366, 45.7649], accuracy: 4 }, { again: true });
+    walk = c.withPlant(walk, nettle, { coordinates: [4.8361, 45.7645], accuracy: 5 }, { again: true });
+    walk = c.withEntry(walk, walk.properties.plants[0].id, { addedAt: '2026-10-13T09:30:00.000Z' });
+    walk = c.withEntry(walk, walk.properties.plants[1].id, { addedAt: '2026-10-13T09:10:00.000Z' });
+    return '#/shared?d=' + await s.encodeCollection(await c.savePlace(walk));
+  }, [ortie, ail]);
+
+  const other = await newDevice();
+  await other.app.open(link);
+  const shared = other.page.locator('gf-shared');
+  await expect(shared.locator('.kicker')).toHaveText('Parcours partagé');
+  await expect(shared.locator('h1')).toHaveText('Chemin du lavoir');
+  await expect(shared).toContainText('L’enregistrement crée un nouveau parcours dans Mes plantes ; rien n’est envoyé.');
+  // Its walk on the preview's map: from its start, then plant to plant.
+  await expect(shared.locator('gf-map path.gf-walk')).toHaveCount(1);
+  await shared.getByRole('button', { name: 'Enregistrer dans Mes plantes' }).click();
+  const walks = () => other.page.evaluate(async () => (await (await import('/app/core/collections.js')).listCollections())
+    .map((/** @type {any} */ c) => ({ name: c.properties.name, walk: c.properties.walk ?? null, startedHere: c.properties.startedHere ?? null,
+      origin: c.properties.origin ?? null, plants: c.properties.plants.map((/** @type {any} */ e) => e.plantId) })));
+  // Received: a parcours of the user's own (no activity made it here), its plants in the order met.
+  await expect.poll(walks).toEqual([{ name: 'Chemin du lavoir', walk: true, startedHere: true, origin: null, plants: [ortie, ail] }]);
+});
+
 test('mise en page de la fiche : exportée puis réimportée depuis Réglages', async ({ app, page }) => {
   await app.open('#/');
   await page.evaluate(async () => {

@@ -154,8 +154,9 @@ export class TrailSession extends EventTarget {
     this.changed();
     try {
       const name = where ? `${NAMED} ${atPlace({ name: where, kind: 'commune', commune: '' })}` : NAMED;
-      // Made by the Parcours (its origin): « Recommencer » it, and the walk goes with every plant in it.
-      const place = newPlace(at, { name: name.slice(0, 80), notes: 'Parcours botanique', origin: { app: 'parcours' } });
+      // Made by the Parcours (its origin): « Recommencer » it, and the walk goes with every plant in it. A parcours
+      // (its mark): its line in the « Vue 3D », « Continuer », whoever owns it later.
+      const place = newPlace(at, { name: name.slice(0, 80), notes: 'Parcours botanique', origin: { app: 'parcours' }, walk: true });
       // Started where I stand: its point is the walk's first step (the recap's distance counts from it).
       if (!where) /** @type {any} */ (place.properties).startedHere = true;
       // Asked at once; given once the walk is saved (it may answer first: from the cache).

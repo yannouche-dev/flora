@@ -33,6 +33,9 @@
  * @property {number | null} accuracy    GPS accuracy (m) when recorded
  * @property {Altitude | null} altitude  the place's point's
  * @property {boolean} [startedHere]     a parcours started where the walker stood: its point is the walk's first step
+ * @property {boolean} [walk]            a walk of the Parcours (a parcours): its plants in the order met, its line in the
+ *                                       « Vue 3D », « Continuer » — read so from a Parcours origin too (files, copies and
+ *                                       links of before the mark); like startedHere, only with a point
  * @property {Origin} [origin]           made by a mini-app (a parcours): « Recommencer » it, and it goes
  * @property {Origin} [from]             made by a mini-app, then made the user's own (a parcours finished, renamed…): kept
  * @property {string} createdAt
@@ -182,6 +185,8 @@ export function normalizeCollection(feature) {
       accuracy: geometry && isNumber(p.accuracy) ? p.accuracy : null,
       altitude: validAltitude(p.altitude, placePoint),
       ...(geometry && p.startedHere === true ? { startedHere: true } : {}),
+      // A walk: marked so, or made by the Parcours (a file, a copy, a link of before the mark, a tab of the old code).
+      ...(geometry && (p.walk === true || validOrigin(p.origin)?.app === 'parcours' || validOrigin(p.from)?.app === 'parcours') ? { walk: true } : {}),
       ...(kind !== 'favorites' && validOrigin(p.origin) ? { origin: /** @type {Origin} */ (validOrigin(p.origin)) } : {}),
       ...(kind !== 'favorites' && validOrigin(p.from) ? { from: /** @type {Origin} */ (validOrigin(p.from)) } : {}),
       createdAt,
@@ -190,6 +195,16 @@ export function normalizeCollection(feature) {
       plantIds: plantIdsOf(plants)
     }
   };
+}
+
+/**
+ * « 9 plantes, notées 12 fois » (a plant met several times counts once among the plants): what a parcours holds.
+ * @param {{ properties: { plants: { plantId: number | null }[] } }} t
+ */
+export function countOf(t) {
+  const n = t.properties.plants.length, species = new Set(t.properties.plants.map(e => e.plantId)).size;
+  if (!n) return 'Aucune plante encore';
+  return n > species ? `${species} plante${species > 1 ? 's' : ''}, notée${species > 1 ? 's' : ''} ${n} fois` : `${n} plante${n > 1 ? 's' : ''}`;
 }
 
 // ── Two copies of a collection ──────────────────────────────────────────────
@@ -269,10 +284,28 @@ export function rebase(base, mine, theirs) {
 }
 
 /**
+ * Who owns what two copies say (a collection's properties, or a plant of both): when both say a mini-app made it
+ * (`origin`), it still does; when one copy no longer says so, the user made it their own on that device — the merge
+ * never gives the origin back, and keeps where it came from (`from`). The same object when nothing changes. Pure.
+ * @template {{ origin?: Origin, from?: Origin }} T @param {T} win @param {T} lose @returns {T}
+ */
+function owned(win, lose) {
+  if (win.origin && lose.origin) return win;
+  const from = win.from ?? lose.from ?? win.origin ?? lose.origin;
+  if (!win.origin && (win.from || !from)) return win;
+  const { origin, ...rest } = win;
+  void origin;
+  return /** @type {T} */ ({ ...rest, ...(from ? { from: { app: from.app } } : {}) });
+}
+
+/**
  * Two copies of the same collection from two devices (an import, a transfer link, the backup copy): the newer
  * one's fields, and the plants of both — none is dropped for being missing from the other copy. A plant both have
- * (the same occurrence; in a list, the same plant) takes the newer copy's details, its harvest logs joined and its
- * notes kept where the newer copy has none (a link shared without them).
+ * (the same occurrence; in a list, the same plant) takes the newer copy's details, its harvest logs joined, its
+ * notes kept where the newer copy has none (a link shared without them), and the day it was noted where only one copy
+ * knows it (a file of before format 6 gives a plant its collection's creation). A parcours stays one (`walk`, and its
+ * start `startedHere`, kept from either copy while the newer has a point); what one copy made the user's own (no
+ * `origin` left) stays the user's (owned).
  * @param {Collection} local @param {Collection} incoming @returns {Collection}
  */
 export function mergeCollections(local, incoming) {
@@ -293,13 +326,16 @@ export function mergeCollections(local, incoming) {
     if (other) used.add(other);
     return other;
   };
+  // The day a plant was noted: the copy that knows it (not its collection's creation, a file's fallback), the newer first.
+  const noted = (/** @type {PlantEntry} */ e, /** @type {PlantEntry} */ other) =>
+    e.addedAt !== win.properties.createdAt ? e.addedAt : other.addedAt !== lose.properties.createdAt ? other.addedAt : e.addedAt;
   const plants = win.properties.plants.map(e => {
     const other = partner(e);
     if (!other) return e;
     const harvests = [...e.harvests];
     const have = new Set(harvests.map(harvestKey));
     for (const h of other.harvests) if (!have.has(harvestKey(h))) { harvests.push(h); have.add(harvestKey(h)); }
-    return { ...e, notes: e.notes || other.notes, harvests: newestFirst(harvests) };
+    return owned({ ...e, notes: e.notes || other.notes, addedAt: noted(e, other), harvests: newestFirst(harvests) }, other);
   });
   for (const e of lose.properties.plants) {
     if (used.has(e)) continue;
@@ -308,12 +344,18 @@ export function mergeCollections(local, incoming) {
     const point = win.geometry?.coordinates;
     plants.push(!point ? { ...e, coordinates: null, accuracy: null, altitude: null } : e.coordinates ? e : { ...e, coordinates: point });
   }
-  return consistent({ ...win, properties: { ...win.properties, notes: win.properties.notes || lose.properties.notes, plants, plantIds: plantIdsOf(plants) } });
+  const w = win.properties, l = lose.properties;
+  const marks = list ? {} : { ...(w.walk || l.walk ? { walk: true } : {}), ...(w.startedHere || l.startedHere ? { startedHere: true } : {}) };
+  return consistent({ ...win, properties: { ...owned(w, l), ...marks, notes: w.notes || l.notes, plants, plantIds: plantIdsOf(plants) } });
 }
 
-/** The same content, the dates of change aside. @param {Collection} a @param {Collection} b */
+/** Sorted keys: the same content written in another order is the same. @param {unknown} v */
+const canonical = v => JSON.stringify(v, (_key, x) => x && typeof x === 'object' && !Array.isArray(x)
+  ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : x);
+
+/** The same content, the dates of change and the order of the fields aside. @param {Collection} a @param {Collection} b */
 export const sameContent = (a, b) =>
-  same({ ...a, properties: { ...a.properties, updatedAt: '' } }, { ...b, properties: { ...b.properties, updatedAt: '' } });
+  canonical({ ...a, properties: { ...a.properties, updatedAt: '' } }) === canonical({ ...b, properties: { ...b.properties, updatedAt: '' } });
 
 // ── What a mini-app made ────────────────────────────────────────────────────
 // A mini-app marks what it makes in Mes plantes (`origin`): a favourite of a match, a parcours and its plants.
