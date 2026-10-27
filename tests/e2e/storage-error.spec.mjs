@@ -221,6 +221,33 @@ test('la base vidée par le navigateur avant le lancement, une copie de secours 
   expect(backup.features.map((/** @type {any} */ f) => f.id).sort()).toEqual(['favorites', 'printemps', 'vincennes']);
 });
 
+test('la base vidée avant le lancement, un parcours d’avant la marque dans la copie : marqué au lancement suivant, une fois remis — la liste de l’appareil gardée jusque-là', async ({ app, page, context }) => {
+  const at = '2026-05-01T08:00:00.000Z';
+  // A walk known only by the device's list (no origin, not started « ici »): its mark depends on that list.
+  const backup = { savedAt: '2026-10-12T16:04:00.000Z', features: [{ type: 'Feature', id: 'ancien', geometry: { type: 'Point', coordinates: [2.36, 48.85] },
+    properties: { name: 'Mon ancien parcours', createdAt: at, updatedAt: at, plants: [{ plantId: plantId('Urtica dioica') }] } }] };
+  await context.addInitScript(json => {
+    if (sessionStorage.getItem('seeded')) return;
+    sessionStorage.setItem('seeded', '1');
+    localStorage.setItem('geoflora.backup', json);
+    localStorage.setItem('geoflora.trails', JSON.stringify(['ancien']));
+  }, JSON.stringify(backup));
+  const state = () => page.evaluate(async () => {
+    const db = await import('/app/core/db.js');
+    return { origins: Boolean(await db.get('meta', 'origins')), walks: Boolean(await db.get('meta', 'walks')),
+      list: localStorage.getItem('geoflora.trails'), walk: (await db.get('spots', 'ancien'))?.properties.walk ?? null };
+  });
+  await app.open('#/collections');
+  await expect(page.locator('gf-collections')).toContainText('Mon ancien parcours');
+  // The base was empty, the copy waiting: the pass is not done on it — the list kept, nothing marked, not « done ».
+  await expect.poll(async () => (await state()).origins).toBe(true);
+  expect(await state()).toEqual({ origins: true, walks: false, list: '["ancien"]', walk: null });
+  // The next start, the copy back: marked, then the list forgotten.
+  await page.reload();
+  await app.ready();
+  await expect.poll(state).toEqual({ origins: true, walks: true, list: null, walk: true });
+});
+
 test('la base vidée sous la page ouverte, puis un ♥ : la copie de secours tenue, dit, et remise après le rechargement', async ({ app, page, context, baseURL }) => {
   const ortie = plantId('Urtica dioica'), ail = plantId('Allium ursinum');
   await app.open('#/');

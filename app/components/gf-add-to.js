@@ -85,21 +85,32 @@ export class GfAddTo extends LitElement {
   async #toggle(id, event) {
     const box = /** @type {HTMLInputElement} */ (event.target);
     const on = box.checked;
+    if (!on) {
+      // What would go with it, read as stored (collections.js removeQuestion): asked first — the box left enabled
+      // meanwhile, so the focus comes back to it when the question closes. Kept: ticked again (its membership did not
+      // change, so the view would not).
+      const current = await getPlace(id);
+      const q = current && removeQuestion(current, this.plant.id);
+      if (q && !await confirmAsk(q)) { box.checked = true; this.#refocus(box); return; }
+    }
     this._busy = true;
     try {
-      if (!on) {
-        // What would go with it, read as stored (collections.js removeQuestion): asked first. Kept: ticked again (its
-        // membership did not change, so the view would not).
-        const current = await getPlace(id);
-        const q = current && removeQuestion(current, this.plant.id);
-        if (q && !await confirmAsk(q)) { box.checked = true; return; }
-      }
       const fix = on ? recentFix() : null;
       const saved = await setInCollection(id, this.plant, on, fix);
       this._said = on ? addedTo(saved, fix) : null;
       // The last collection a plant was put in becomes the current one (« Ajouter à … » on the sheet).
       if (on && id !== FAVORITES_ID) setContext({ collection: id });
-    } finally { this._busy = false; }
+    } finally {
+      this._busy = false;
+      // Disabled while it was written, the box lost the focus: given back.
+      await this.updateComplete;
+      this.#refocus(box);
+    }
+  }
+
+  /** The focus back on this box when it was lost (a question closed, the box disabled meanwhile) — never taken from elsewhere. @param {HTMLInputElement} box */
+  #refocus(box) {
+    if (box.isConnected && !box.disabled && (!document.activeElement || document.activeElement === document.body)) box.focus();
   }
 
   /** @param {SubmitEvent} event */

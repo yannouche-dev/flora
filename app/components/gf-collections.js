@@ -11,7 +11,7 @@ import {
 import { config } from '../config.js';
 import { StoreController, arrangedMode, whenReady } from '../core/store.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
-import { back, openView, replaceView } from '../core/history.js';
+import { back, modalOpen, openView, replaceView } from '../core/history.js';
 import './gf-map.js';
 import './gf-plant-detail.js';
 import './gf-pager.js';
@@ -362,7 +362,8 @@ export class GfCollections extends LitElement {
 
   /** ← → : the previous / next plant of the list (not while typing). @param {KeyboardEvent} e */
   #onKey = e => {
-    if ((e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || e.altKey || e.ctrlKey || e.metaKey || !this.route.plant) return;
+    // A dialog over the page (« Noter ici », « Ajouter à… », a question): its keys, never the plant behind it changed.
+    if ((e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || e.altKey || e.ctrlKey || e.metaKey || !this.route.plant || modalOpen()) return;
     const t = /** @type {HTMLElement} */ (e.composedPath()[0]);
     if (t?.closest?.('input, textarea, select, [contenteditable]')) return;
     const pager = /** @type {any} */ (this.renderRoot.querySelector('gf-pager'));

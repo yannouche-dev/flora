@@ -165,6 +165,16 @@ test('markWalks : les parcours d’avant la marque, marqués une fois, la copie 
   await db.remove('meta', 'walks');
   assert.equal(await C.markWalks(known), 0, 'tous déjà marqués : rien à écrire');
   assert.equal((await raw(here)).updatedAt, old);
+  // Done once: a lieu started « ici » stored since (imported from a format-5 file, say) is not marked by a later start.
+  const since = await store(C.withPlant(C.newPlace(at, { name: 'Commencé ici depuis', startedHere: true }), plant(15)));
+  const at0 = (await db.get('meta', 'walks')).at;
+  assert.equal(await C.markWalks({ walks: [since], walk: since }), 0, 'déjà fait : rien n’est relu');
+  assert.equal((await raw(since)).walk, undefined);
+  assert.equal((await db.get('meta', 'walks')).at, at0);
+  // Only its mark gone (never in the app): marked then.
+  await db.remove('meta', 'walks');
+  assert.equal(await C.markWalks(known), 1);
+  assert.equal((await raw(since)).walk, true);
 });
 
 test('sync : un message d’un autre onglet est relayé, ceux de cet onglet partent sur le canal', async () => {

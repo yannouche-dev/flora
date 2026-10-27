@@ -139,6 +139,11 @@ test('locationQuestion : refusée quand la liste perdrait quelque chose, chaque 
   assert.deepEqual(C.locationQuestion(bois([], { walk: true })), refused('le tracé du parcours'));
   assert.deepEqual(C.locationQuestion(bois([away(1), away(2), { plantId: 2, id: 'x' }], { walk: true })),
     refused('les positions de 2 plantes, les autres fois où une plante est notée et le tracé du parcours'));
+  // Each position counted, and the plants they are: the nettle at two spots and a daisy at a third are 2 plants.
+  assert.deepEqual(C.locationQuestion(bois([away(1), { ...away(1), id: 'b', coordinates: [AT[0] + 0.0003, AT[1]] }, away(2)])),
+    refused('les 3 positions de 2 plantes et les autres fois où une plante est notée'));
+  assert.deepEqual(C.locationQuestion(bois([away(1), { ...away(1), id: 'b', coordinates: [AT[0] + 0.0003, AT[1]] }])),
+    refused('les 2 positions d’une plante et les autres fois où une plante est notée'));
   // Nothing lost: asked, its harvest logs said to stay when there are some.
   assert.deepEqual(C.locationQuestion(bois([{ plantId: 1, coordinates: AT, accuracy: 6 }])),
     { refused: false, title: 'Retirer la position ?', yes: 'Retirer la position', text: 'Le lieu devient une liste de plantes.' });
@@ -352,4 +357,103 @@ test('setInCollection : dans un lieu, la plante à votre position à moins de 10
   assert.equal(C.addedTo(saved, fix(40)), 'Ajoutée à « Cuisine ».');
   await db.remove('spots', place.id);
   await db.remove('spots', list.id);
+});
+
+// ── Relecture : ce qui partait sans un mot ──
+
+test('♥ ôté : un favori annoté ou récolté demandé d’abord, refusé il reste ; sans rien d’écrit, il part à l’instant', async () => {
+  await favouritesOf([[1, null], [2, 'rencontres']]);
+  await C.updatePlace(C.FAVORITES_ID, c => C.withEntry(c, 1, { notes: 'Coin humide derrière le lavoir', rating: 4 }));
+  /** @type {any[]} */
+  const asked = [];
+  const answer = (/** @type {boolean} */ yes) => async (/** @type {any} */ q) => { asked.push(q); return yes; };
+  assert.equal(await C.toggleFavorite(plant(1), undefined, answer(false)), true, 'refusé : toujours un favori');
+  assert.deepEqual(asked.map(q => [q.title, q.text, q.yes]), [['Retirer Plante 1 des favoris ?', 'Sa note sera effacée.', 'Retirer']]);
+  assert.equal(C.findEntry(/** @type {any} */ (await C.getPlace(C.FAVORITES_ID)), 1)?.notes, 'Coin humide derrière le lavoir', 'sa note gardée');
+  assert.equal(await C.toggleFavorite(plant(1), undefined, answer(true)), false);
+  assert.deepEqual(Object.keys(await favourites()), ['2']);
+  // Nothing written on it: no question, gone at once; without `ask` (an activity's own), never asked.
+  assert.equal(await C.toggleFavorite(plant(2), undefined, answer(false)), false);
+  assert.equal(asked.length, 2);
+  assert.deepEqual(await favourites(), {});
+});
+
+test('un parcours terminé, ou laissé pour un autre, est à vous avec les favoris de ses plantes ; vide, il reste au Parcours', async () => {
+  await favouritesOf([[1, 'rencontres'], [2, 'rencontres'], [3, 'rencontres']]);
+  const by = { by: 'parcours' };
+  const walk = await C.savePlace(C.newPlace(AT, { name: 'Chemin du lavoir', walk: true, origin: { app: 'parcours' } }));
+  // Noted on the walk under way (the Parcours' own): nothing is the user's yet — « Recommencer » would take the walk.
+  await C.updatePlace(walk.id, c => C.withPlant(c, plant(1), undefined, { again: true }), by);
+  assert.deepEqual((await favourites())[1], ['rencontres', null]);
+  // Ended (« Terminer », or another walk continued in its place): the walk and the favourites of its plants are theirs.
+  await C.walkEnded(walk.id);
+  assert.deepEqual([(await C.getPlace(walk.id))?.properties.origin, (await C.getPlace(walk.id))?.properties.from], [undefined, { app: 'parcours' }]);
+  assert.deepEqual((await favourites())[1], [null, 'rencontres'], 'noté dans un lieu à vous : à vous');
+  // Continued after « Terminer » (the user's walk): a plant the Parcours adds now is the user's at once, its favourite too.
+  await C.updatePlace(walk.id, c => C.withPlant(c, plant(2), undefined, { again: true }), by);
+  assert.deepEqual((await favourites())[2], [null, 'rencontres']);
+  // Left empty: still the Parcours' (« Recommencer » takes it).
+  const empty = await C.savePlace(C.newPlace(AT, { name: 'Vide', walk: true, origin: { app: 'parcours' } }));
+  await C.walkEnded(empty.id);
+  assert.deepEqual((await C.getPlace(empty.id))?.properties.origin, { app: 'parcours' });
+  assert.deepEqual((await favourites())[3], ['rencontres', null]);
+  for (const c of [walk, empty]) await db.remove('spots', c.id);
+});
+
+test('une liste venue d’un parcours qui reprend une position est un lieu, pas un parcours — lue, enregistrée, exportée', async () => {
+  // A list of before the mark that was a walk (« Retirer la position » allowed it then): its origin says parcours.
+  const list = await C.savePlace(C.withPlant(C.newCollection('list', { name: 'Ancien parcours', from: { app: 'parcours' } }), plant(4)));
+  const placed = C.withLocation(/** @type {any} */ (await C.getPlace(list.id)), AT, 5);
+  assert.equal(placed.properties.walk, false);
+  const saved = await C.savePatch(/** @type {any} */ (await C.getPlace(list.id)), placed);
+  assert.deepEqual([saved.properties.kind, saved.properties.walk], ['place', false]);
+  assert.equal((await C.getPlace(list.id))?.properties.walk, false, 'relu : un lieu');
+  assert.equal(normalizeCollection((await import('../../app/core/portable.js')).toPortable([saved]).features[0])?.properties.walk, false, 'son fichier aussi');
+  // A plain list given a point says nothing; a walk moved keeps its mark.
+  assert.equal(C.withLocation(C.newCollection('list', { name: 'À moi' }), AT).properties.walk, undefined);
+  const walk = C.newPlace(AT, { name: 'Parcours', walk: true, origin: { app: 'parcours' } });
+  assert.equal(C.withLocation(walk, [AT[0] + 0.001, AT[1]]).properties.walk, true);
+  await db.remove('spots', list.id);
+});
+
+test('Exporter (GeoJSON) une collection vers la feuille de partage : demandé ; refusé, rien ne change ; parti, sans origine et à vous', async () => {
+  await favouritesOf([[5, 'rencontres'], [6, null]]);
+  /** @type {string[]} */
+  const sent = [];
+  const nav = /** @type {any} */ (globalThis.navigator);
+  const was = { canShare: nav.canShare, share: nav.share, matchMedia: /** @type {any} */ (globalThis).matchMedia };
+  Object.defineProperty(nav, 'canShare', { configurable: true, value: () => true });
+  Object.defineProperty(nav, 'share', { configurable: true, value: async (/** @type {any} */ data) => { for (const f of data.files) sent.push(await f.text()); } });
+  /** @type {any} */ (globalThis).matchMedia = () => ({ matches: true });
+  try {
+    const walk = await C.savePlace(C.withPlant(C.newPlace(AT, { name: 'Chemin du lavoir', walk: true, origin: { app: 'parcours' } }), plant(5)));
+    /** @type {any[]} */
+    const asked = [];
+    const answer = (/** @type {boolean} */ yes) => async (/** @type {any} */ q) => { asked.push(q); return yes; };
+    const r = await C.exportGeoJSON([walk], { ask: answer(false) });
+    assert.equal(r.cancelled, true);
+    assert.equal(asked[0].title, 'Envoyer ce fichier ?');
+    assert.deepEqual([sent, (await C.getPlace(walk.id))?.properties.origin], [[], { app: 'parcours' }], 'refusé : rien ne part, toujours au Parcours');
+    await C.exportGeoJSON([walk], { ask: answer(true) });
+    const [file] = sent.map(t => JSON.parse(t));
+    assert.deepEqual([file.features[0].properties.origin, file.features[0].properties.from, file.features[0].properties.walk], [undefined, { app: 'parcours' }, true]);
+    assert.deepEqual([(await C.getPlace(walk.id))?.properties.origin, (await C.getPlace(walk.id))?.properties.from], [undefined, { app: 'parcours' }], 'parti : à vous');
+    assert.deepEqual((await favourites())[5], [null, 'rencontres'], 'le favori de sa plante aussi');
+    // The favourites alone: the match favourites in the file carry no origin, and are the user's once it went.
+    await favouritesOf([[5, 'rencontres'], [6, null]]);
+    // A note of the user's in them: the file says something of them, asked first.
+    const favs = await C.updatePlace(C.FAVORITES_ID, c => C.withEntry(c, 6, { notes: 'Au jardin' }));
+    await C.exportGeoJSON([favs], { ask: answer(false) });
+    assert.equal(asked[asked.length - 1].text, 'Le fichier contient vos notes.');
+    assert.deepEqual((await favourites())[5], ['rencontres', null], 'refusé : toujours au jeu');
+    await C.exportGeoJSON([favs], { ask: answer(true) });
+    const shared = JSON.parse(sent[sent.length - 1]);
+    assert.ok(shared.features.every((/** @type {any} */ f) => !f.properties.origin && f.properties.plants.every((/** @type {any} */ e) => !e.origin)), 'aucune origine dans le fichier');
+    assert.deepEqual(await favourites(), { 5: [null, 'rencontres'], 6: [null, null] });
+    await db.remove('spots', walk.id);
+  } finally {
+    Object.defineProperty(nav, 'canShare', { configurable: true, value: was.canShare });
+    Object.defineProperty(nav, 'share', { configurable: true, value: was.share });
+    /** @type {any} */ (globalThis).matchMedia = was.matchMedia;
+  }
 });

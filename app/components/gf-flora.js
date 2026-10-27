@@ -4,7 +4,7 @@ import { config } from '../config.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
 import { activeFilterCount, clearFilters, lastSearchHash } from '../core/query.js';
 import { href } from '../core/router.js';
-import { backTo, depth, entryValue, markEntry, openModal, openView, renewBehind, replaceView } from '../core/history.js';
+import { backTo, depth, entryValue, markEntry, modalOpen, openModal, openView, renewBehind, replaceView } from '../core/history.js';
 import { setContext } from '../core/context.js';
 import { StoreController, arrangedMode, whenReady } from '../core/store.js';
 import { PaneSizer, splitStyles } from '../core/panes.js';
@@ -300,7 +300,8 @@ export class GfFlora extends LitElement {
   /** ← → on the keyboard, when not typing. @param {KeyboardEvent} e */
   #onKey = e => {
     // The media viewer takes ← → while it has the focus (it stops them there); elsewhere they go to the plants.
-    if (this.#plantId === null || e.altKey || e.ctrlKey || e.metaKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+    // A dialog over the page (« Noter ici », the filters, a question): its keys, never the plant behind it changed.
+    if (this.#plantId === null || e.altKey || e.ctrlKey || e.metaKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || modalOpen()) return;
     const target = /** @type {HTMLElement} */ (e.composedPath()[0]);
     if (target?.closest?.('input, textarea, select, [contenteditable], gf-map') || target?.isContentEditable) return;
     e.preventDefault();

@@ -161,11 +161,15 @@ export class GfPlantCard extends LitElement {
   /** Photos en ligne used on this device (Réglages › Modules). */
   get #photos() { return this.#store.state.modules.photos; }
 
-  /** @param {Event} event */
+  /**
+   * ♥: a favourite added, or taken out — asked first when its note or its harvest log would go (toggleFavorite; the
+   * question's dialog loaded then: not at the start of the app). @param {Event} event
+   */
   async #toggleFavorite(event) {
     event.preventDefault();
     event.stopPropagation();
-    try { await toggleFavorite(this.plant); } catch (error) { console.error(error); }
+    const ask = async (/** @type {{ title: string, text: string, yes: string, danger?: boolean }} */ q) => (await import('./gf-ask.js')).confirmAsk(q);
+    try { await toggleFavorite(this.plant, undefined, ask); } catch (error) { console.error(error); }
   }
 
   constructor() {

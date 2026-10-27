@@ -18,6 +18,7 @@ import { hideImg, showImg } from '../../core/img.js';
 import { creditText } from '../../core/credit.js';
 import { moduleEvents } from '../../core/modules.js';
 import { StoreController } from '../../core/store.js';
+import { modalOpen } from '../../core/history.js';
 import { floweringMonths } from '../../core/plants.js';
 import { ui } from '../../styles/ui.js';
 import { bio, distLabel, nameOf, nextDistance } from './cards.js';
@@ -180,7 +181,8 @@ export class MaDeck extends LitElement {
   #photo(url) { return url && this.#store.state.modules.photos ? url : null; }
 
   #onKey = (/** @type {KeyboardEvent} */ e) => {
-    if (e.altKey || e.ctrlKey || e.metaKey || !this.active) return;
+    // A dialog over the cards (« Noter ici », a question, a match): never a match by mistake under it.
+    if (e.altKey || e.ctrlKey || e.metaKey || !this.active || modalOpen()) return;
     // ← passes, → matches, ↑ its sheet — when the deck has the focus, or nothing has (the page itself). Elsewhere
     // (a tab, a button, a field, the map, a slider) the arrows keep their own meaning: never a match by mistake.
     const t0 = /** @type {HTMLElement} */ (e.composedPath()[0]);

@@ -28,10 +28,17 @@ export const walkDone = () => readJSON(DONE, null);
 /** The parcours this device kept (to take up again, just ended): theirs before origins and the mark were recorded. @returns {string[]} */
 export const keptWalks = () => [...(/** @type {string[]} */ (readJSON(LIST, []))), readJSON(DONE, null)].filter(x => typeof x === 'string');
 
-/** A parcours of Mes plantes continued from its lieu (« Continuer le parcours »): the one under way, no recap shown. @param {string} id */
+/**
+ * A parcours put under way — continued (« Continuer le parcours » from Mes plantes, « Continuer un parcours », « Le
+ * continuer »), or just made —, no recap shown. Returns the one under way until then, left for it (null: none, or this one) — ended by the
+ * caller as « Terminer » ends one (collections.js walkEnded: with plants, the user's), never left the Parcours' unsaid.
+ * @param {string} id @returns {string | null}
+ */
 export function continueWalk(id) {
+  const was = walkOn();
   writeJSON(KEY, id);
   writeJSON(DONE, null);
+  return was && was !== id ? was : null;
 }
 
 /** A new parcours' name, until the place where it starts is known (« Mon parcours botanique en forêt de … »). */

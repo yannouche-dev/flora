@@ -111,3 +111,40 @@ test('« Revoir les premiers pas » : demandé d’abord ; les favoris venus des
   expect(await page.evaluate(async () => (await import('/app/core/collections.js')).forgetMadeBy('rencontres'))).toBe(0);
   expect(await favourite()).toEqual([null, 'rencontres']);
 });
+
+test('« Revoir les premiers pas » quand les favoris ne s’écrivent pas : rien n’est oublié, et c’est dit sous le bouton', async ({ app, page }) => {
+  const ail = plantId('Allium ursinum');
+  await app.open('#/');
+  await page.evaluate(async id => {
+    const c = await import('/app/core/collections.js');
+    await c.addFavorite(await (await import('/app/core/db.js')).get('plants', id), { app: 'rencontres' });
+  }, ail);
+  const favourite = () => page.evaluate(async id => {
+    const e = (await (await import('/app/core/collections.js')).getPlace('favorites'))?.properties.plants.find((/** @type {any} */ x) => x.plantId === id);
+    return e ? [e.origin?.app ?? null, e.from?.app ?? null] : null;
+  }, ail);
+  await app.go('#/settings');
+  await page.getByRole('button', { name: 'Tout montrer maintenant' }).click();
+  // The browser's store gives way: a write into the collections throws.
+  await page.evaluate(() => {
+    const put = IDBObjectStore.prototype.put;
+    /** @type {any} */ (window).__put = put;
+    IDBObjectStore.prototype.put = function (...args) {
+      if (this.name === 'spots') throw new DOMException('The operation failed for reasons unrelated to the database itself.', 'UnknownError');
+      return put.apply(this, args);
+    };
+  });
+  const again = page.getByRole('button', { name: 'Revoir les premiers pas' });
+  await again.click();
+  await page.getByRole('alertdialog', { name: 'Revoir les premiers pas ?' }).getByRole('button', { name: 'Revoir les premiers pas' }).click();
+  await expect(page.locator('gf-settings').getByRole('alert')).toHaveText('Impossible de lire vos favoris : rien n’a été changé. Réessayez dans un moment.');
+  expect(await page.evaluate(() => location.hash)).toBe('#/settings');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('geoflora.discover') || '{}').done)).toBe(true);
+  // Mended, tried again: done, the line gone.
+  await page.evaluate(() => { IDBObjectStore.prototype.put = /** @type {any} */ (window).__put; });
+  expect(await favourite()).toEqual(['rencontres', null]);
+  await again.click();
+  await page.getByRole('alertdialog', { name: 'Revoir les premiers pas ?' }).getByRole('button', { name: 'Revoir les premiers pas' }).click();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/discover');
+  expect(await favourite()).toEqual([null, 'rencontres']);
+});

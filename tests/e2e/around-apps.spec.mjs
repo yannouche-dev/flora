@@ -329,10 +329,22 @@ test('les parcours d’avant la marque deviennent des parcours, une fois ; la li
   await expect(offered.getByRole('button')).toHaveCount(2);
   await expect(offered).toContainText('Départ ici');
   await expect(offered).toContainText('Dans la liste');
-  // Once: the next start writes nothing.
+  // Once: the next start writes nothing — not even for a lieu started « ici » stored since (a format-5 file, say), its
+  // id put back in the device's list (never written by the app now).
+  const since = await page.evaluate(async () => (await (await import('/app/core/collections.js'))
+    .savePlace((await import('/app/core/collections.js')).newPlace([2.38, 48.85], { name: 'Commencé ici depuis', startedHere: true }))).id);
+  const raw = () => page.evaluate(async id => {
+    const db = await import('/app/core/db.js');
+    return { at: (await db.get('meta', 'walks'))?.at ?? null, walk: (await db.get('spots', id))?.properties.walk ?? null };
+  }, since);
+  const done = await raw();
   const before = await state();
+  await page.evaluate(id => localStorage.setItem('geoflora.trails', JSON.stringify([id])), since);
   await page.reload();
   await app.ready();
-  await page.waitForTimeout(1500);
+  // The list forgotten: the start's pass is over (it runs before).
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('geoflora.trails'))).toBeNull();
   expect(await state()).toEqual(before);
+  expect(await raw()).toEqual(done);
+  expect(done.walk).toBeNull();
 });

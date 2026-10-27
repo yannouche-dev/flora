@@ -10,8 +10,8 @@ import { back, openView, replaceHash, replaceView } from '../core/history.js';
 import {
   ABUNDANCE, copyAsList, defaultPlantPosition, deletePlace, distance, entryInSeason, entryName, entryPosition, exportGeoJSON, findEntry,
   formatDistance, getPlace, lastHarvest, locationQuestion, matchCollections, plantMarkers, removeQuestion,
-  newCollection, newPlace, placesNear, placeTitle, plantCount, savePatch, savePlace, shareCollection, spotEvents, updatePlace, withEntry, withLocation, withoutPlant, withPlant, entriesOf, lastEntry } from '../core/collections.js';
-import { joinEntry } from '../core/place-model.js';
+  newCollection, newPlace, placesNear, placeTitle, plantCount, savePatch, savePlace, shareCollection, spotEvents, updatePlace, walkEnded, withEntry, withLocation, withoutPlant, withPlant, entriesOf, lastEntry } from '../core/collections.js';
+import { joinEntry, joinNotes } from '../core/place-model.js';
 import { StoreController, whenReady } from '../core/store.js';
 import { addressAt, altitudeAt, formatCoordinates } from '../core/geoservices.js';
 import { BP } from '../core/media.js';
@@ -643,7 +643,13 @@ export class GfSpotEditor extends LitElement {
       this._place = saved;
       this._editPos = false;
       this._error = null;
+      // Said (the lieu rewritten), and the focus kept on the form: its button is gone with the point.
+      briefToast('Position retirée : le lieu est maintenant une liste.');
       if (this.embedded) openView(href.spot(id));
+      else {
+        await this.updateComplete;
+        /** @type {HTMLInputElement | null} */ (this.renderRoot.querySelector('#place-form label.field input'))?.focus();
+      }
     } catch (error) {
       console.error(error);
       this._error = /** @type {Error} */ (error).name === 'GoneError' ? this.#goneText() : 'Enregistrement impossible : ' + /** @type {Error} */ (error).message;
@@ -751,10 +757,11 @@ export class GfSpotEditor extends LitElement {
 
   /**
    * The name typed for a new collection is an existing one's: put this draft's plants (with their notes,
-   * abundance, harvests and, place to place, their own positions) into it, drop the draft, open it. A plant already
-   * there is joined to it (place-model.js joinEntry: its notes after the other's, the harvest logs of both). A new lieu
-   * with plants put into a list (no position) asks first: its point and their positions are not kept. Notes that would
-   * pass what a note holds once joined: nothing written, said, the draft kept.
+   * abundance, harvests and, place to place, their own positions) into it, and its own notes after the other's
+   * (place-model.js joinNotes), drop the draft, open it. A plant already there is joined to it (place-model.js
+   * joinEntry: its notes after the other's, the harvest logs of both). A new lieu with plants put into a list (no
+   * position) asks first: its point and their positions are not kept. Notes that would pass what a note holds once
+   * joined: nothing written, said, the draft kept.
    * @param {string} targetId
    */
   async #mergeInto(targetId) {
@@ -790,7 +797,10 @@ export class GfSpotEditor extends LitElement {
           target = withPlant(target, { id: e.plantId, scientificName: e.scientificName, vernacularName: e.vernacularName }, position, { again: true });
           target = withEntry(target, /** @type {any} */ (lastEntry(target)).id, { abundance: e.abundance, rating: e.rating, notes: e.notes, harvests: e.harvests });
         }
-        return target;
+        // The draft's own notes (« Pour les tisanes de l'hiver »): kept, after the target's — never dropped with it.
+        const notes = joinNotes(target.properties.notes, draft.properties.notes);
+        if (notes === null) throw new Error('Les notes dépasseraient 5 000 caractères une fois réunies.');
+        return notes === target.properties.notes ? target : { ...target, properties: { ...target.properties, notes } };
       }).catch(error => { throw error.name === 'GoneError' ? new Error('Liste ou lieu introuvable.', { cause: error }) : error; });
       if (this.#persisted && this.#createdHere) await deletePlace(draft.id);
       this.#persisted = false;
@@ -1112,12 +1122,14 @@ export class GfSpotEditor extends LitElement {
 
   /**
    * « Continuer le parcours » (a parcours of Mes plantes, here or in the Carte's panel): what was typed saved, then the
-   * Parcours, on this walk under way (its recap left).
+   * Parcours, on this walk under way (its recap left) — the one under way until then ended, as by « Terminer »
+   * (collections.js walkEnded: with plants, the user's).
    */
   async #continueWalk() {
     if (!this._place) return;
     await this.#flush();
-    continueWalk(this._place.id);
+    const left = continueWalk(this._place.id);
+    if (left) await walkEnded(left);
     openView(href.app('parcours', 'walk'));
   }
 

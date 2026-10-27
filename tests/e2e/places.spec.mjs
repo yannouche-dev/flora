@@ -100,10 +100,19 @@ test('Retirer la position sans rien perdre : demandée, puis faite ; la liste s�
   expect((await dump(page))[0]).toMatchObject({ kind: 'place', at: [2.351, 48.851] });
   await editor.getByRole('button', { name: 'Retirer la position' }).click();
   await page.getByRole('alertdialog', { name: 'Retirer la position ?' }).getByRole('button', { name: 'Retirer la position' }).click();
-  // The list, in its own page (the Carte shows only lieux).
+  // The list, in its own page (the Carte shows only lieux); said.
   await expect.poll(() => page.evaluate(() => location.hash)).toBe(`#/collection/${id}`);
   await expect(page.locator('gf-spot-editor').getByRole('textbox', { name: 'Nom de la liste' })).toHaveValue('Clairière');
+  await expect(page.locator('.gf-brief-toast')).toHaveText('Position retirée : le lieu est maintenant une liste.');
   expect(await dump(page)).toEqual([{ id, name: 'Clairière', kind: 'list', at: null, plants: [[plantId('Allium ursinum'), null]] }]);
+  // From its own page: said too, and the focus kept in the form (its button gone with the point), on the name.
+  await editor.getByRole('button', { name: 'Ajouter des coordonnées GPS (la liste devient un lieu)' }).click();
+  await expect(editor.getByRole('button', { name: 'Retirer la position' })).toBeVisible();
+  await editor.getByRole('button', { name: 'Retirer la position' }).click();
+  await page.getByRole('alertdialog', { name: 'Retirer la position ?' }).getByRole('button', { name: 'Retirer la position' }).click();
+  await expect(editor.getByRole('textbox', { name: 'Nom de la liste' })).toBeFocused();
+  await expect(page.locator('.gf-brief-toast')).toHaveText('Position retirée : le lieu est maintenant une liste.');
+  await expect.poll(async () => (await dump(page))[0].kind).toBe('list');
 });
 
 test('Ajouter à… : décocher un lieu demande avant d’effacer le journal de récolte de la plante ; « Annuler » la laisse cochée', async ({ app, page }) => {
@@ -128,12 +137,15 @@ test('Ajouter à… : décocher un lieu demande avant d’effacer le journal de 
   await ask.getByRole('button', { name: 'Annuler' }).click();
   await expect(ask).toHaveCount(0);
   await expect(box).toBeChecked();
+  // The focus back on the box (never thrown out of the list).
+  await expect(box).toBeFocused();
   await expect(sheet).toBeVisible();
   expect(await plants()).toEqual([ail]);
   // Again, « Retirer »: out of the lieu, at once (« Ajouter à… » stays open under the question).
   await box.click();
   await page.getByRole('alertdialog', { name: 'Retirer Ail des ours de ce lieu ?' }).getByRole('button', { name: 'Retirer' }).click();
   await expect(box).not.toBeChecked();
+  await expect(box).toBeFocused();
   await expect.poll(plants).toEqual([]);
   await expect(sheet).toBeVisible();
 });
@@ -167,4 +179,106 @@ test('Nouveau lieu ajouté à une liste existante : demandé d’abord ; la plan
   await expect.poll(() => page.evaluate(() => location.hash)).toBe(`#/collection/${listId}`);
   // Once in the list, its notes joined; no lieu made.
   await expect.poll(list).toEqual([['liste', [[ail, 'En sous-bois\n\nFleurs en avril']]]]);
+});
+
+test('L’éditeur d’un lieu : retirer une plante annotée demande d’abord, « Annuler » la garde ; sans rien d’écrit, elle part sans question', async ({ app, page }) => {
+  await app.open('#/');
+  const [ail, ortie] = [plantId('Allium ursinum'), plantId('Urtica dioica')];
+  const id = await page.evaluate(async ids => {
+    const c = await import('/app/core/collections.js');
+    const db = await import('/app/core/db.js');
+    const [a, o] = await Promise.all(ids.map(i => db.get('plants', i)));
+    const place = c.withPlant(c.withPlant(c.newPlace([2.351, 48.851], { name: 'Bois' }), a), o);
+    return (await c.savePlace(c.withEntry(place, ids[0], { notes: 'Coin humide derrière le lavoir' }))).id;
+  }, [ail, ortie]);
+  const plants = () => page.evaluate(async i => (await (await import('/app/core/collections.js')).getPlace(i))?.properties.plantIds, id);
+  await app.go(`#/collection/${id}`);
+  const editor = page.locator('gf-spot-editor');
+  const entry = (/** @type {string} */ name) => editor.locator('.entries > li').filter({ hasText: name });
+  await entry('Ail des ours').locator('button.head').click();
+  await entry('Ail des ours').getByRole('button', { name: 'Retirer cette plante du lieu' }).click();
+  const ask = page.getByRole('alertdialog', { name: 'Retirer Ail des ours de ce lieu ?' });
+  await expect(ask).toContainText('Sa note sera effacée.');
+  await expect(ask.getByRole('button', { name: 'Annuler' })).toBeFocused();
+  await ask.getByRole('button', { name: 'Annuler' }).click();
+  await expect(ask).toHaveCount(0);
+  await expect(entry('Ail des ours')).toHaveCount(1);
+  expect(await plants()).toEqual([ail, ortie]);
+  await entry('Ail des ours').getByRole('button', { name: 'Retirer cette plante du lieu' }).click();
+  await page.getByRole('alertdialog', { name: 'Retirer Ail des ours de ce lieu ?' }).getByRole('button', { name: 'Retirer' }).click();
+  await expect(entry('Ail des ours')).toHaveCount(0);
+  await expect.poll(plants).toEqual([ortie]);
+  // Nothing written on it: gone at once, nothing asked.
+  await entry('Ortie dioïque').locator('button.head').click();
+  await entry('Ortie dioïque').getByRole('button', { name: 'Retirer cette plante du lieu' }).click();
+  await expect(entry('Ortie dioïque')).toHaveCount(0);
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
+  await expect.poll(plants).toEqual([]);
+});
+
+test('Nouvelle liste versée dans une liste existante : ses notes la suivent, le brouillon supprimé', async ({ app, page }) => {
+  await app.open('#/');
+  const [ail, ortie] = [plantId('Allium ursinum'), plantId('Urtica dioica')];
+  const listId = await page.evaluate(async i => {
+    const c = await import('/app/core/collections.js');
+    const db = await import('/app/core/db.js');
+    return (await c.savePlace(c.withPlant(c.newCollection('list', { name: 'Tisanes', notes: 'Récoltes de printemps' }), await db.get('plants', i)))).id;
+  }, ail);
+  await app.go(`#/collection/new?kind=list&plant=${ortie}`);
+  const editor = page.locator('gf-spot-editor');
+  await editor.getByRole('textbox', { name: 'Notes', exact: true }).fill('Pour les tisanes de l’hiver');
+  await editor.getByRole('textbox', { name: 'Nom de la liste' }).fill('Tisa');
+  await editor.getByRole('group', { name: 'Listes et lieux existants' }).getByRole('button', { name: /Tisanes/ }).click();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe(`#/collection/${listId}`);
+  // One list: its plants and the draft's, its notes and then the draft's; the draft gone.
+  await expect.poll(() => page.evaluate(async () => (await (await import('/app/core/collections.js')).listCollections())
+    .map((/** @type {any} */ c) => [c.properties.name, c.properties.notes, c.properties.plantIds])))
+    .toEqual([['Tisanes', 'Récoltes de printemps\n\nPour les tisanes de l’hiver', [ail, ortie]]]);
+});
+
+test('♥ ôté d’un favori annoté (sa fiche, sa carte dans Flore) : demandé d’abord, « Annuler » le garde ; sans rien d’écrit, ôté à l’instant', async ({ app, page }) => {
+  await app.open('#/');
+  const [ail, ortie] = [plantId('Allium ursinum'), plantId('Urtica dioica')];
+  await page.evaluate(async ids => {
+    const c = await import('/app/core/collections.js');
+    const db = await import('/app/core/db.js');
+    for (const i of ids) await c.toggleFavorite(await db.get('plants', i));
+    await c.updatePlace(c.FAVORITES_ID, f => c.withEntry(f, ids[0], { notes: 'Coin humide derrière le lavoir', rating: 4 }));
+  }, [ail, ortie]);
+  const favourites = () => page.evaluate(async () => ((await (await import('/app/core/collections.js')).getPlace('favorites'))?.properties.plants ?? [])
+    .map((/** @type {any} */ e) => [e.plantId, e.notes]));
+  await app.go(`#/plant/${ail}`);
+  const heart = page.locator('.action-bar .act[data-key="fav"] > button').first();
+  await expect(heart).toHaveAttribute('aria-pressed', 'true');
+  await heart.click();
+  const ask = page.getByRole('alertdialog', { name: 'Retirer Ail des ours des favoris ?' });
+  await expect(ask).toContainText('Sa note sera effacée.');
+  await ask.getByRole('button', { name: 'Annuler' }).click();
+  await expect(ask).toHaveCount(0);
+  await expect(heart).toHaveAttribute('aria-pressed', 'true');
+  expect(await favourites()).toEqual([[ail, 'Coin humide derrière le lavoir'], [ortie, '']]);
+  await heart.click();
+  await page.getByRole('alertdialog', { name: 'Retirer Ail des ours des favoris ?' }).getByRole('button', { name: 'Retirer' }).click();
+  await expect(heart).toHaveAttribute('aria-pressed', 'false');
+  await expect.poll(favourites).toEqual([[ortie, '']]);
+  // A plant card's ♥ in Flore, the nettle annotated meanwhile: asked the same way.
+  await page.evaluate(async i => {
+    const c = await import('/app/core/collections.js');
+    await c.updatePlace(c.FAVORITES_ID, f => c.withEntry(f, i, { notes: 'En soupe' }));
+  }, ortie);
+  await app.go('#/?q=ortie');
+  await page.getByRole('button', { name: 'Retirer des favoris : Ortie dioïque' }).first().click();
+  const again = page.getByRole('alertdialog', { name: 'Retirer Ortie dioïque des favoris ?' });
+  await expect(again).toContainText('Sa note sera effacée.');
+  await again.getByRole('button', { name: 'Annuler' }).click();
+  await expect(again).toHaveCount(0);
+  expect(await favourites()).toEqual([[ortie, 'En soupe']]);
+  // Nothing written on it: gone at once.
+  await page.evaluate(async i => {
+    const c = await import('/app/core/collections.js');
+    await c.updatePlace(c.FAVORITES_ID, f => c.withEntry(f, i, { notes: '' }));
+  }, ortie);
+  await page.getByRole('button', { name: 'Retirer des favoris : Ortie dioïque' }).first().click();
+  await expect.poll(favourites).toEqual([]);
+  await expect(page.getByRole('alertdialog')).toHaveCount(0);
 });

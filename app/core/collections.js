@@ -140,7 +140,11 @@ export function withLocation(collection, coordinates, accuracy = null) {
   const point = roundCoordinates(coordinates);
   // Plants without their own position start at the place's point.
   const plants = collection.properties.plants.map(e => e.coordinates ? e : { ...e, coordinates: point, accuracy: null });
-  return { ...collection, geometry: { type: 'Point', coordinates: point }, properties: { ...collection.properties, kind: 'place', accuracy, plants } };
+  // A list that came from a parcours (made a list before the mark) given a point: a lieu — said, or its origin would
+  // make it a parcours again when read (place-model.js walkMark).
+  const p = collection.properties;
+  const lieu = !collection.geometry && p.walk !== true && (p.origin?.app === 'parcours' || p.from?.app === 'parcours') ? { walk: false } : {};
+  return { ...collection, geometry: { type: 'Point', coordinates: point }, properties: { ...p, kind: 'place', accuracy, plants, ...lieu } };
 }
 
 /**
@@ -151,9 +155,11 @@ export function withLocation(collection, coordinates, accuracy = null) {
  * @returns {{ refused: true, title: string, text: string } | { refused: false, title: string, text: string, yes: string }}
  */
 export function locationQuestion(c) {
-  const { placed, repeats, walk } = locationLoss(c);
+  const { placed, placedPlants, repeats, walk } = locationLoss(c);
+  // Each noting away from the point counted, and the plants they are (a plant noted at 3 spots is one plant).
+  const positions = placed > placedPlants ? `les ${placed} positions` : 'les positions';
   const lost = [
-    placed > 1 ? `les positions de ${placed} plantes` : placed ? 'la position d’une plante' : '',
+    placedPlants > 1 ? `${positions} de ${placedPlants} plantes` : placed > 1 ? `${positions} d’une plante` : placed ? 'la position d’une plante' : '',
     repeats > 1 ? `les autres fois où ${repeats} plantes sont notées` : repeats ? 'les autres fois où une plante est notée' : '',
     walk ? 'le tracé du parcours' : ''
   ].filter(Boolean);
@@ -393,7 +399,9 @@ export const saveCollection = savePlace;
  * the user's own (place-model.js#promoted): « Recommencer » the mini-app keeps it. One rule, three ways:
  *  - a collection it made (a parcours), changed in anything: the collection and all it holds;
  *  - an entry it made (a favourite of a match), changed (a note, a rating, a harvest…: place-model.js#promoteTouched);
- *  - a plant put in a list or a lieu (a new entry: noted again in a lieu counts too): its favourite (promoteFavorites).
+ *  - a plant put in a list or a lieu (a new entry: noted again in a lieu counts too): its favourite (promoteFavorites) —
+ *    put there by an activity too, once the collection is the user's (a plant added to a parcours continued after
+ *    « Terminer »); in a parcours under way, once it is theirs (promotePlace).
  * @param {string} id @param {(current: Collection) => Collection} change
  * @param {{ by?: string, create?: boolean }} [opts] `by`: the mini-app writing; `create`: the favourites made if missing
  * @returns {Promise<Collection>} as stored
@@ -411,10 +419,11 @@ export async function updatePlace(id, change, { by, create = true } = {}) {
     if (next === current && record) { saved = current; return undefined; }
     const app = current.properties.origin?.app;
     if (app && app !== by && userChange(current, next)) next = promoted(next);
-    if (!by) {
-      next = promoteTouched(current, next);
+    if (!by) next = promoteTouched(current, next);
+    // A list or a lieu of the user's gaining plants (by them; by an activity, once it is theirs: a parcours continued).
+    if (id !== FAVORITES_ID && (!by || !next.properties.origin)) {
       const had = new Set(current.properties.plants.map(e => e.id));
-      gained = id === FAVORITES_ID ? [] : plantIdsOf(next.properties.plants.filter(e => !had.has(e.id)));
+      gained = plantIdsOf(next.properties.plants.filter(e => !had.has(e.id)));
     }
     wrote = true;
     return saved = stamped(next);
@@ -496,17 +505,27 @@ export const isFavorite = plantId => membership.favorites.has(plantId);
 
 /**
  * Adds or removes a plant from the favorites (created on first use). `origin`: the mini-app adding it (a match),
- * whose « Recommencer » takes it away again.
+ * whose « Recommencer » takes it away again. A favourite whose note or harvest log would go (removeQuestion, read as
+ * stored) is asked first when `ask` is given (the ♥ of a sheet, of a plant card: gf-ask.js confirmAsk), as « Ajouter
+ * à… » unticked asks: refused, it stays; confirmed, it goes as stored then. Nothing written on it: it goes at once.
  * @param {any} plant TAXREF record or search summary @param {import('./place-model.js').Origin} [origin]
+ * @param {(q: { title: string, text: string, yes: string, danger?: boolean }) => Promise<boolean>} [ask]
  * @returns {Promise<boolean>} new state
  */
-export async function toggleFavorite(plant, origin) {
+export async function toggleFavorite(plant, origin, ask) {
   let on = false;
+  /** @type {{ title: string, text: string, yes: string, danger: boolean } | null} */
+  let asked = null;
   await updatePlace(FAVORITES_ID, current => {
     on = !findEntry(current, plant.id);
-    return on ? withPlant(current, plant, undefined, { origin }) : withoutPlant(current, plant.id);
+    asked = !on && ask ? removeQuestion(current, plant.id) : null;
+    return on ? withPlant(current, plant, undefined, { origin }) : asked ? current : withoutPlant(current, plant.id);
   });
-  return on;
+  const q = /** @type {{ title: string, text: string, yes: string, danger: boolean } | null} */ (asked);
+  if (!q || !ask) return on;
+  if (!await ask(q)) return true;
+  await updatePlace(FAVORITES_ID, c => withoutPlant(c, plant.id), { create: false }).catch(() => {});
+  return false;
 }
 
 /**
@@ -533,12 +552,22 @@ export async function addFavorite(plant, origin) {
 
 /**
  * A collection made the user's own (a parcours finished with plants, shared, exported alone; the favourites shared or
- * exported alone: the favourites of matches in them): its mini-app's « Recommencer » keeps it. Nothing made by a
- * mini-app (or gone): nothing done. @param {string} id
+ * exported alone: the favourites of matches in them): its mini-app's « Recommencer » keeps it. A list or a lieu of the
+ * user's — a parcours now theirs —: the favourites of its plants are theirs too, as noted in any lieu of theirs
+ * (promoteFavorites). Nothing made by a mini-app (or gone): nothing done; `empty: false`, nor when it holds no plant.
+ * @param {string} id @param {{ empty?: boolean }} [opts]
  */
-export async function promotePlace(id) {
-  await updatePlace(id, c => madeHere(c) ? promoted(c) : c, { create: false }).catch(() => {});
+export async function promotePlace(id, { empty = true } = {}) {
+  const saved = await updatePlace(id, c => madeHere(c) && (empty || c.properties.plants.length) ? promoted(c) : c, { create: false }).catch(() => null);
+  if (saved && saved.id !== FAVORITES_ID && !saved.properties.origin) await promoteFavorites(plantIdsOf(saved.properties.plants));
 }
+
+/**
+ * A parcours no longer under way (« Terminer »; another one continued in its place: trail-store.js continueWalk): with
+ * plants, the user's own, the favourites of its plants with it (promotePlace) — « Recommencer » the Parcours keeps it;
+ * empty, still the Parcours' (it goes with it). @param {string} id
+ */
+export const walkEnded = id => promotePlace(id, { empty: false });
 
 /** Whether a mini-app made this collection, or something in it (a favourite of a match). @param {Collection} c */
 const madeHere = c => Boolean(c.properties.origin || c.properties.plants.some(e => e.origin));

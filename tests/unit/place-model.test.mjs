@@ -69,6 +69,14 @@ test('normalizeCollection : un parcours, marqué ou fait par le Parcours ; jamai
   assert.equal(walk(at, { walk: 'oui' }), undefined);
   assert.equal(walk(null, { walk: true, origin: { app: 'parcours' } }), undefined, 'une liste n’est pas un parcours');
   assert.equal(walk(null, { kind: 'place', walk: true }), undefined);
+  // Said not to be one (a list that came from a walk, given a point again): a lieu, though the Parcours made it.
+  assert.equal(walk(at, { walk: false, from: { app: 'parcours' } }), false);
+  assert.equal(walk(at, { walk: false, origin: { app: 'parcours' } }), false);
+  assert.equal(walk(at, { walk: false }), undefined, 'sans origine du Parcours, rien à dire');
+  assert.equal(walk(null, { walk: false, from: { app: 'parcours' } }), undefined);
+  // Never marked once by the pass of 2.8 (markWalks) either.
+  const said = { type: 'Feature', id: 'w', geometry: at, properties: { walk: false, from: { app: 'parcours' }, startedHere: true, plants: [] } };
+  assert.equal(M.walkMarked(said, { walks: ['w'], walk: 'w' }), null);
 });
 
 test('toPortable : seulement ce que l’utilisateur a saisi ; sans le personnel sur demande', () => {
@@ -121,7 +129,7 @@ test('propriété : normalizeCollection(toPortable(c)) rend la collection (300 c
     }));
     const raw = { type: 'Feature', id: kind === 'favorites' ? M.FAVORITES_ID : 'c' + run, geometry: kind === 'place' ? { type: 'Point', coordinates: at } : null,
       properties: { kind, name: kind === 'favorites' ? '' : 'Collection ' + run, notes: rnd(2) ? 'n' : '', accuracy: kind === 'place' ? rnd(30) || null : null,
-        ...(rnd(3) ? {} : { startedHere: true }), ...(rnd(3) ? {} : { walk: true }),
+        ...(rnd(3) ? {} : { startedHere: true }), ...(rnd(3) ? {} : { walk: pick([true, true, false]) }),
         ...(rnd(3) ? {} : { origin: { app: pick(['parcours', 'rencontres']) } }), ...(rnd(3) ? {} : { from: { app: pick(['parcours', 'mosaique']) } }),
         createdAt: DATE, updatedAt: DATE, plants } };
     const original = /** @type {M.Collection} */ (M.normalizeCollection(raw));
@@ -158,15 +166,18 @@ test('locationLoss : ce qu’un lieu perdrait en liste — la position d’une p
   const lieu = (/** @type {any[]} */ plants, /** @type {any} */ more = {}, geometry = /** @type {any} */ ({ type: 'Point', coordinates: [2.35, 48.85] })) =>
     /** @type {M.Collection} */ (M.normalizeCollection({ type: 'Feature', id: 'l', geometry, properties: { name: 'Bois', createdAt: DATE, plants, ...more } }));
   // « Noter ici »: the plant on the lieu's point, with the accuracy of the fix — nothing lost but that.
-  assert.deepEqual(M.locationLoss(lieu([{ plantId: 1, coordinates: [2.35, 48.85], accuracy: 6 }])), { placed: 0, repeats: 0, walk: false });
+  assert.deepEqual(M.locationLoss(lieu([{ plantId: 1, coordinates: [2.35, 48.85], accuracy: 6 }])), { placed: 0, placedPlants: 0, repeats: 0, walk: false });
   // One plant 20 m away (≈ 0.00018° of latitude); 0.05 m away is the point still.
-  assert.deepEqual(M.locationLoss(lieu([{ plantId: 1, coordinates: [2.35, 48.85018] }, { plantId: 2, coordinates: [2.35, 48.8500004] }])), { placed: 1, repeats: 0, walk: false });
+  assert.deepEqual(M.locationLoss(lieu([{ plantId: 1, coordinates: [2.35, 48.85018] }, { plantId: 2, coordinates: [2.35, 48.8500004] }])), { placed: 1, placedPlants: 1, repeats: 0, walk: false });
+  // The nettle noted at two spots away from the point, a daisy at a third: 3 positions, 2 plants.
+  assert.deepEqual(M.locationLoss(lieu([{ plantId: 1, id: 'a', coordinates: [2.35, 48.8502] }, { plantId: 1, id: 'b', coordinates: [2.3503, 48.85] },
+    { plantId: 2, id: 'c', coordinates: [2.35, 48.8497] }])), { placed: 3, placedPlants: 2, repeats: 1, walk: false });
   // The nettle noted twice at the point; a plant unknown to the flora twice too (by its name).
   assert.deepEqual(M.locationLoss(lieu([{ plantId: 1, id: 'a' }, { plantId: 1, id: 'b' }, { plantId: null, scientificName: 'Rubus sp.', id: 'c' },
-    { plantId: null, scientificName: 'rubus SP.', id: 'd' }, { plantId: 3 }])), { placed: 0, repeats: 2, walk: false });
-  assert.deepEqual(M.locationLoss(lieu([], { walk: true })), { placed: 0, repeats: 0, walk: true });
+    { plantId: null, scientificName: 'rubus SP.', id: 'd' }, { plantId: 3 }])), { placed: 0, placedPlants: 0, repeats: 2, walk: false });
+  assert.deepEqual(M.locationLoss(lieu([], { walk: true })), { placed: 0, placedPlants: 0, repeats: 0, walk: true });
   // A list: nothing to lose.
-  assert.deepEqual(M.locationLoss(lieu([{ plantId: 1 }, { plantId: 1, id: 'b' }], { kind: 'list' }, null)), { placed: 0, repeats: 0, walk: false });
+  assert.deepEqual(M.locationLoss(lieu([{ plantId: 1 }, { plantId: 1, id: 'b' }], { kind: 'list' }, null)), { placed: 0, placedPlants: 0, repeats: 0, walk: false });
 });
 
 test('joinEntry : deux fois la même plante réunies — notes une fois chacune, récoltes réunies, la meilleure note ; refusé au-delà de 5 000 caractères', () => {
@@ -190,4 +201,10 @@ test('joinEntry : deux fois la même plante réunies — notes une fois chacune,
   // Past what a note holds (it would be cut on read): not joined.
   assert.equal(M.joinEntry(entry({ plantId: 1, notes: 'x'.repeat(4000) }), entry({ plantId: 1, notes: 'y'.repeat(999) })), null);
   assert.equal(M.joinEntry(entry({ plantId: 1, notes: 'x'.repeat(4000) }), entry({ plantId: 1, notes: 'y'.repeat(998) }))?.notes.length, 5000);
+  // A collection's notes, the same way (a new list's added to the one it joins).
+  assert.equal(M.joinNotes('Coin humide', 'Pour les tisanes'), 'Coin humide\n\nPour les tisanes');
+  assert.equal(M.joinNotes('', 'Pour les tisanes'), 'Pour les tisanes');
+  assert.equal(M.joinNotes('Coin humide\n\nPour les tisanes', ' Pour les tisanes '), 'Coin humide\n\nPour les tisanes', 'déjà là : pas répétée');
+  assert.equal(M.joinNotes('Coin humide', ''), 'Coin humide');
+  assert.equal(M.joinNotes('x'.repeat(4000), 'y'.repeat(999)), null);
 });

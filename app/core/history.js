@@ -178,6 +178,13 @@ export function openModal(dialog) {
 }
 
 /**
+ * Whether a dialog opened through openModal is open (a question, « Noter ici », « Ajouter à… »…): the keys the page
+ * listens to on the window (an activity's sheet, the cards, Flore's ← →) are the dialog's meanwhile, never the page's
+ * under it.
+ */
+export const modalOpen = () => [...open.values()].some(d => d.open && d.isConnected);
+
+/**
  * Resolves once the step of dialog `id` (openModal) is no longer the current entry: its dialog closed has taken it out,
  * or Back has — at once when it is not. Another dialog's step under it stays (a question asked over « Ajouter à… »):
  * waiting for none at all (afterDialogSteps) would hold every answer there for the fallback's second.

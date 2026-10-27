@@ -311,3 +311,82 @@ test('Éditeur d’un lieu, mode cueillette éteint : l’ail des ours ouvert mo
   // The harvest log stays the mode's.
   await expect(entry.getByRole('radiogroup', { name: 'Qualité' })).toHaveCount(0);
 });
+
+/** The element that has the focus, through the shadow roots: its name (aria-label, else its text) and its tag. @param {import('@playwright/test').Page} page */
+const focused = page => page.evaluate(() => {
+  let a = document.activeElement;
+  while (a?.shadowRoot?.activeElement) a = a.shadowRoot.activeElement;
+  return a === document.body || !a ? 'body' : (a.getAttribute('aria-label') || a.textContent || '').trim() || a.tagName.toLowerCase();
+});
+
+test('Noter ici : le focus là où l’on commence, chaque lieu proposé nommé, et rien ne change derrière le dialogue', async ({ app, page }) => {
+  const ortie = plantId('Urtica dioica');
+  await app.open('#/');
+  await page.evaluate(async () => {
+    const c = await import('/app/core/collections.js');
+    const north = (/** @type {number} */ m) => /** @type {[number, number]} */ ([2.35, 48.85 + m / 111195]);
+    await c.savePlace(c.newPlace(north(60), { name: 'Pré communal' }));
+    await c.savePlace(c.newPlace(north(80), { name: 'Bois' }));
+  });
+  // The header's: the search field.
+  let dialog = await openCapture(page, app, false);
+  const search = dialog.getByRole('searchbox', { name: 'Chercher une plante' });
+  await expect(search).toBeFocused();
+  // Two lieux near: each choice says where it goes, the focus on the nearest one.
+  await pick(dialog, 'Pâquerette', 'Pâquerette');
+  const offer = dialog.getByRole('region', { name: 'Lieux à proximité' });
+  await expect(offer.getByRole('button')).toHaveText(['Y ajouter Pâquerette vivace', 'Y ajouter Pâquerette vivace']);
+  const near = offer.getByRole('button', { name: 'Y ajouter Pâquerette vivace — « Pré communal », à 60 m' });
+  await expect(near).toBeFocused();
+  await expect(offer.getByRole('button', { name: 'Y ajouter Pâquerette vivace — « Bois », à 80 m' })).toHaveCount(1);
+  // « Annuler » the offer: back to the list, the focus in its search field.
+  await dialog.getByRole('button', { name: 'Annuler', exact: true }).click();
+  await expect(offer).toHaveCount(0);
+  await expect(search).toBeFocused();
+  await dialog.getByRole('button', { name: 'Fermer' }).click();
+  await expect(dialog).toBeHidden();
+
+  // A plant's sheet: the plant chosen, the focus on its « Noter ici » (« Autre plante » until the position comes).
+  await app.go(`#/plant/${ortie}`);
+  await page.locator('.action-bar .act[data-key="spot"] > button').first().click();
+  dialog = page.locator('gf-capture dialog');
+  await expect(dialog.locator('.chosen')).toContainText('Ortie dioïque');
+  await expect.poll(() => focused(page)).toMatch(/^(Noter ici|Autre plante)$/);
+  // The offer's « Annuler »: back to the plant chosen, the focus with it.
+  await dialog.getByRole('button', { name: 'Noter ici', exact: true }).click();
+  await expect(dialog.getByRole('region', { name: 'Lieux à proximité' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Annuler', exact: true }).click();
+  await expect.poll(() => focused(page)).toBe('Noter ici');
+  await dialog.getByRole('button', { name: 'Fermer' }).click();
+  await expect(dialog).toBeHidden();
+  // The header's again, after a plant chosen: the list and its search field, never the page.
+  await page.evaluate(() => document.querySelector('gf-app')?.dispatchEvent(new Event('open-capture')));
+  await expect(dialog.getByRole('searchbox', { name: 'Chercher une plante' })).toBeFocused();
+  await dialog.getByRole('button', { name: 'Fermer' }).click();
+
+  // Over an activity's sheet (Rencontres): Échap closes the dialog only — the sheet, its plant and the address stay.
+  await app.go(`#/discover?p=${ortie}`);
+  await expect.poll(() => page.evaluate(() => location.hash)).toMatch(new RegExp(`^#/app/rencontres/[a-z]+\\?p=${ortie}&fiche=1$`));
+  const there = await page.evaluate(() => location.hash);
+  const sheet = page.locator('ma-plant-sheet');
+  await sheet.locator('.action-bar .act[data-key="spot"] > button').first().click();
+  await expect(dialog).toBeVisible();
+  await expect.poll(() => focused(page)).toMatch(/^(Noter ici|Autre plante)$/);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect(sheet).toHaveCount(1);
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe(there);
+  // ← → in the dialog: its own, the plant behind never changed (the dialog would name another one than the page).
+  await sheet.locator('.action-bar .act[data-key="spot"] > button').first().click();
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowLeft');
+  // The same with the focus fallen to the page (a click outside the box's buttons, on its text).
+  await dialog.locator('.chosen').click();
+  await page.keyboard.press('ArrowRight');
+  await expect(dialog.locator('.chosen')).toContainText('Ortie dioïque');
+  expect(await page.evaluate(() => location.hash)).toBe(there);
+  await page.keyboard.press('Escape');
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe(there);
+});

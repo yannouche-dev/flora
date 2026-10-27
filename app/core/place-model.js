@@ -36,7 +36,8 @@
  * @property {boolean} [startedHere]     a parcours started where the walker stood: its point is the walk's first step
  * @property {boolean} [walk]            a walk of the Parcours (a parcours): its plants in the order met, its line in the
  *                                       « Vue 3D », « Continuer » — read so from a Parcours origin too (files, copies and
- *                                       links of before the mark); like startedHere, only with a point
+ *                                       links of before the mark), unless `false` (a list that came from a walk, given a
+ *                                       point again: a lieu); like startedHere, only with a point
  * @property {Origin} [origin]           made by a mini-app (a parcours): « Recommencer » it, and it goes
  * @property {Origin} [from]             made by a mini-app, then made the user's own (a parcours finished, renamed…): kept
  * @property {string} createdAt
@@ -188,8 +189,9 @@ export function normalizeCollection(feature) {
       accuracy: geometry && isNumber(p.accuracy) ? p.accuracy : null,
       altitude: validAltitude(p.altitude, placePoint),
       ...(geometry && p.startedHere === true ? { startedHere: true } : {}),
-      // A walk: marked so, or made by the Parcours (a file, a copy, a link of before the mark, a tab of the old code).
-      ...(geometry && (p.walk === true || validOrigin(p.origin)?.app === 'parcours' || validOrigin(p.from)?.app === 'parcours') ? { walk: true } : {}),
+      // A walk: marked so, or made by the Parcours (a file, a copy, a link of before the mark, a tab of the old code) —
+      // unless it says it is not one (walkMark).
+      ...(geometry ? walkMark(p) : {}),
       ...(kind !== 'favorites' && validOrigin(p.origin) ? { origin: /** @type {Origin} */ (validOrigin(p.origin)) } : {}),
       ...(kind !== 'favorites' && validOrigin(p.from) ? { from: /** @type {Origin} */ (validOrigin(p.from)) } : {}),
       createdAt,
@@ -198,6 +200,19 @@ export function normalizeCollection(feature) {
       plantIds: plantIdsOf(plants)
     }
   };
+}
+
+/**
+ * A collection's parcours mark, as read (with a point): `walk: true` when marked so, or made by the Parcours (its
+ * origin, or `from` once the user's: files, copies and links of before the mark); `walk: false` when it says it is not
+ * one though the Parcours made it — a list of before the mark that came from a walk (« Retirer la position » allowed it
+ * then), given a point again (collections.js withLocation): a lieu, never made a parcours again behind the user's back.
+ * Pure. @param {any} p the properties as stored or read from a file @returns {{ walk?: boolean }}
+ */
+function walkMark(p) {
+  const parcours = validOrigin(p.origin)?.app === 'parcours' || validOrigin(p.from)?.app === 'parcours';
+  if (p.walk === true || (parcours && p.walk !== false)) return { walk: true };
+  return parcours && p.walk === false ? { walk: false } : {};
 }
 
 /**
@@ -370,6 +385,18 @@ export const sameContent = (a, b) =>
 export const plantKey = e => e.plantId ?? 'sci:' + e.scientificName.toLowerCase();
 
 /**
+ * Two notes made one (two notings of a plant; a new list's or lieu's notes added to the one it joins): `b` after `a`,
+ * unless one of `a`'s paragraphs says it already (joined again and again, a note is never repeated). null when they
+ * would pass what a note holds: read back, they would be cut (normalizeEntry). Pure.
+ * @param {string} a @param {string} b @returns {string | null}
+ */
+export function joinNotes(a, b) {
+  const mine = a.trim(), theirs = b.trim();
+  const notes = !theirs || `\n\n${mine}\n\n`.includes(`\n\n${theirs}\n\n`) ? a : mine ? `${mine}\n\n${theirs}` : theirs;
+  return notes.length > NOTES_MAX ? null : notes;
+}
+
+/**
  * Two notings of a plant made one (a lieu copied as a list, a new lieu's plants added to a list or a lieu that has
  * them): `a` kept — its id, its position, its date, its origin —, `b`'s note after its own (unless one of its paragraphs
  * says it already: joined again and again, a note is never repeated), the harvest logs of both, the higher rating, the
@@ -377,28 +404,29 @@ export const plantKey = e => e.plantId ?? 'sci:' + e.scientificName.toLowerCase(
  * would be cut (normalizeEntry). Pure. @param {PlantEntry} a @param {PlantEntry} b @returns {PlantEntry | null}
  */
 export function joinEntry(a, b) {
-  const mine = a.notes.trim(), theirs = b.notes.trim();
-  const notes = !theirs || `\n\n${mine}\n\n`.includes(`\n\n${theirs}\n\n`) ? a.notes : mine ? `${mine}\n\n${theirs}` : theirs;
-  if (notes.length > NOTES_MAX) return null;
+  const notes = joinNotes(a.notes, b.notes);
+  if (notes === null) return null;
   return { ...a, notes, harvests: unitedHarvests(a.harvests, b.harvests), rating: Math.max(a.rating, b.rating),
     abundance: a.abundance !== 'moyen' ? a.abundance : b.abundance };
 }
 
 /**
  * What a lieu would lose as a list (« Retirer la position »: a list has no position, and notes each plant once): its
- * plants noted away from its point (`placed`: their own position, more than 1e-6° off ≈ 0.1 m — one on the point with
- * only an accuracy loses nothing else), its plants noted more than once (`repeats`), a parcours' walk (`walk`).
- * Nothing without a point. Pure. @param {Collection} c @returns {{ placed: number, repeats: number, walk: boolean }}
+ * notings away from its point (`placed`: their own position, more than 1e-6° off ≈ 0.1 m — one on the point with only
+ * an accuracy loses nothing else) and how many plants they are (`placedPlants`: a plant noted at 3 spots is one), its
+ * plants noted more than once (`repeats`), a parcours' walk (`walk`). Nothing without a point. Pure.
+ * @param {Collection} c @returns {{ placed: number, placedPlants: number, repeats: number, walk: boolean }}
  */
 export function locationLoss(c) {
   const at = c.geometry?.coordinates;
-  if (!at) return { placed: 0, repeats: 0, walk: false };
+  if (!at) return { placed: 0, placedPlants: 0, repeats: 0, walk: false };
   const plants = c.properties.plants;
-  const placed = plants.filter(e => e.coordinates && (Math.abs(e.coordinates[0] - at[0]) > 1e-6 || Math.abs(e.coordinates[1] - at[1]) > 1e-6)).length;
+  const away = plants.filter(e => e.coordinates && (Math.abs(e.coordinates[0] - at[0]) > 1e-6 || Math.abs(e.coordinates[1] - at[1]) > 1e-6));
   /** @type {Map<number | string, number>} */
   const times = new Map();
   for (const e of plants) times.set(plantKey(e), (times.get(plantKey(e)) ?? 0) + 1);
-  return { placed, repeats: [...times.values()].filter(n => n > 1).length, walk: Boolean(c.properties.walk) };
+  return { placed: away.length, placedPlants: new Set(away.map(plantKey)).size, repeats: [...times.values()].filter(n => n > 1).length,
+    walk: Boolean(c.properties.walk) };
 }
 
 // ── What a mini-app made ────────────────────────────────────────────────────
@@ -524,7 +552,8 @@ export function tagLegacy(collections, { walks, walk = null }) {
  * @param {any} record @param {{ walks: string[], walk?: string | null }} known @returns {any}
  */
 export function walkMarked(record, { walks, walk = null }) {
-  if (!record || record.properties?.walk === true) return null;
+  // Marked, or said not to be one (`walk: false`: a lieu given its point again, walkMark).
+  if (!record || typeof record.properties?.walk === 'boolean') return null;
   const c = normalizeCollection(record);
   if (!c?.geometry) return null;
   const p = c.properties;

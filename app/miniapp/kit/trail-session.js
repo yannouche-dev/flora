@@ -10,13 +10,13 @@
 
 import { FIX_MAX_AGE, geoProblem, takeFix, watchLocation, whenGranted } from '../../core/geo.js';
 import { atPlace, placeNameAt } from '../../core/geoservices.js';
-import { entriesOf, getPlace, lastEntry, listCollections, newPlace, promotePlace, refreshMembership, savePlace, shareCollection, spotEvents, updatePlace, withPlant, withoutPlant } from '../../core/collections.js';
+import { entriesOf, getPlace, lastEntry, listCollections, newPlace, refreshMembership, savePlace, shareCollection, spotEvents, updatePlace, walkEnded, withPlant, withoutPlant } from '../../core/collections.js';
 import { fillAltitudes } from '../../core/altitude.js';
 import { getPlant } from '../../core/plants.js';
 import { confirmAsk } from '../../components/gf-ask.js';
 import { ACTION_TOAST_MS, TOAST_MS } from '../../core/toast.js';
 import { readJSON, writeJSON } from '../../core/prefs.js';
-import { DONE, KEY, NAMED } from './trail-store.js';
+import { DONE, KEY, NAMED, continueWalk } from './trail-store.js';
 
 /** @typedef {import('../runtime.js').MiniApp} MiniApp */
 
@@ -166,8 +166,10 @@ export class TrailSession extends EventTarget {
       // Asked at once; given once the walk is saved (it may answer first: from the cache).
       const found = where ? null : this.#placeName(at, accuracy > 250);
       await savePlace(place);
-      this.leaveRecap();
-      writeJSON(KEY, place.id);
+      // Under way, the recap left — and a walk under way until now (the start reached by Back) ended, never dropped.
+      this.done = null;
+      const left = continueWalk(place.id);
+      if (left) walkEnded(left);
       await refreshMembership().catch(() => {});
       this.trail = place;
       if (found) this.#nameAfter(place.id, found);
@@ -180,11 +182,16 @@ export class TrailSession extends EventTarget {
     }
   }
 
-  /** A walk continued (« Continuer un parcours », « Le continuer »; from Mes plantes: trail-store.js#continueWalk): on to it. @param {any} place */
+  /**
+   * A walk continued (« Continuer un parcours », « Le continuer »; from Mes plantes: trail-store.js#continueWalk): on to
+   * it — the one under way until then ended, as by « Terminer » (with plants, the user's: « Recommencer » keeps it).
+   * @param {any} place
+   */
   resume(place) {
     this.app.cancel('locate');
-    this.leaveRecap();
-    writeJSON(KEY, place.id);
+    this.done = null;
+    const left = continueWalk(place.id);
+    if (left) walkEnded(left);
     this.trail = place;
     this.sel = null; this.selEntry = null;
     this.follow(true);
@@ -332,8 +339,8 @@ export class TrailSession extends EventTarget {
 
   /**
    * « Terminer »: the walk stays in Mes plantes; its recap shows; another one can start. With plants, it is the
-   * user's own now: « Recommencer » the Parcours keeps it (collections.js#promotePlace) — promoted once it is no
-   * longer under way (the reload its change brings finds the recap).
+   * user's own now, and the favourites of its plants too: « Recommencer » the Parcours (or a game) keeps them
+   * (collections.js#walkEnded) — promoted once it is no longer under way (the reload its change brings finds the recap).
    */
   async end() {
     await this.flushName();
@@ -341,7 +348,7 @@ export class TrailSession extends EventTarget {
     writeJSON(KEY, null);
     writeJSON(DONE, ended?.id ?? null);
     this.stop();
-    if (ended?.properties.plants.length) promotePlace(ended.id);
+    if (ended) walkEnded(ended.id);
     this.done = ended;
     this.trail = null; this.sel = null; this.selEntry = null; this.toast = null; this.fix = null;
     this.app.go('done');

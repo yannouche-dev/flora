@@ -21,6 +21,7 @@ import './gf-status.js';
 import './gf-lookalikes.js';
 import { emergency } from '../core/poison.js';
 import './gf-add-to.js';
+import { confirmAsk } from './gf-ask.js';
 import './gf-sheet-map.js';
 import { ownWords } from './gf-map-options.js';
 import { lookFor } from '../core/map-settings.js';
@@ -1607,7 +1608,8 @@ export class GfPlantDetail extends LitElement {
     const name = nameOf(plant);
     /** @type {Record<string, () => unknown>} */
     const buttons = {
-      fav: () => html`<button type="button" class="fav" ?inert=${king} aria-pressed=${fav ? 'true' : 'false'} @click=${() => toggleFavorite(plant)}>
+      // A favourite with a note or a harvest log taken out: asked first, as « Ajouter à… » does (toggleFavorite).
+      fav: () => html`<button type="button" class="fav" ?inert=${king} aria-pressed=${fav ? 'true' : 'false'} @click=${() => toggleFavorite(plant, undefined, confirmAsk)}>
         ${icon(fav ? 'heart-fill' : 'heart')}<span>Favori</span></button>`,
       addTo: () => html`<button type="button" ?inert=${king} @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-add-to'))?.open()}>${icon('plus-lg')}<span>Ajouter à…</span></button>`,
       share: () => html`<button type="button" ?inert=${king} @click=${() => this.#share(plant, name)}>${icon('share')}<span>Partager</span></button>`,

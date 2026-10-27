@@ -45,7 +45,8 @@ export class GfSettings extends LitElement {
     _regionNote: { state: true },
     _transfer: { state: true },
     _layoutNote: { state: true },
-    _modeNote: { state: true }
+    _modeNote: { state: true },
+    _firstStepsError: { state: true }
   };
 
   static styles = [ui, css`
@@ -61,6 +62,7 @@ export class GfSettings extends LitElement {
     :host { display: block; overflow-y: auto; padding: 16px; }
     article { max-width: 720px; margin: 0 auto; }
     .back { font-size: 0.9rem; }
+    p.error { color: var(--gf-danger); font-size: 0.9rem; }
     h1 { font-size: 1.4rem; }
     h2 { font-size: 1rem; margin-top: 28px; }
     dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 16px; }
@@ -195,6 +197,8 @@ export class GfSettings extends LitElement {
   constructor() {
     super();
     this._saved = false;
+    /** Why « Revoir les premiers pas » did nothing (said under its button). @type {string | null} */
+    this._firstStepsError = null;
     /** What the last export / import / reset did. @type {string | null} */
     this._layoutNote = null;
     this._spotCount = 0;
@@ -443,18 +447,21 @@ export class GfSettings extends LitElement {
         : `Tous les outils sont là. « Revoir les premiers pas » repart du début (Découvrir, une astuce à la fois, les onglets qui arrivent un à un) : ${FIRST_STEPS_AGAIN}`}</p>
       <p>${on ? html`<button class="secondary" type="button" @click=${() => finishDiscover()}>Tout montrer maintenant</button>`
         : html`<button class="secondary" type="button" @click=${() => this.#restartFirstSteps()}>Revoir les premiers pas</button>`}</p>
+      ${this._firstStepsError ? html`<p class="error" role="alert">${this._firstStepsError}</p>` : nothing}
       ${this.#showSteps()}`;
   }
 
   /**
    * « Revoir les premiers pas », confirmed: the first steps and the three activities around a place started again
    * (core/discover.js#restartDiscover), the maps' first-use hints too, then Découvrir — and the favourites that became
-   * the user's, said. Nothing changes when it is cancelled, or when the favourites could not be read.
+   * the user's, said. Nothing changes when it is cancelled, or when the favourites could not be read — said then, under
+   * the button (the question answered, the user is told why nothing happened).
    */
   async #restartFirstSteps() {
+    this._firstStepsError = null;
     if (!await confirmAsk({ title: 'Revoir les premiers pas ?', text: FIRST_STEPS_AGAIN[0].toUpperCase() + FIRST_STEPS_AGAIN.slice(1), yes: 'Revoir les premiers pas' })) return;
     const adopted = await restartDiscover().catch(error => { console.error(error); return null; });
-    if (adopted === null) return;
+    if (adopted === null) { this._firstStepsError = 'Impossible de lire vos favoris : rien n’a été changé. Réessayez dans un moment.'; return; }
     forgetHints();
     openView('#/discover');
     if (adopted) briefToast(adopted > 1 ? `Vos ${adopted} favoris venus des activités sont désormais à vous.` : 'Votre favori venu des activités est désormais à vous.');

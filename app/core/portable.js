@@ -89,8 +89,10 @@ export function toPortable(collections, { personal = true, name = 'GeoFlora — 
       if (m !== null) props.altitude = m;
       if (p.origin) props.origin = p.origin;
       if (p.from) props.from = p.from;
-      // A parcours (its line, « Continuer »), and its start where the walker stood: a place's only.
-      if (at && p.walk) props.walk = true;
+      // A parcours (its line, « Continuer »), and its start where the walker stood: a place's only. A lieu that says it
+      // is none though the Parcours made it (place-model.js walkMark: a list of before the mark given a point again):
+      // said too, or its origin would make it one again when read back.
+      if (at && typeof p.walk === 'boolean') props.walk = p.walk;
       if (at && p.startedHere) props.startedHere = true;
       props.createdAt = p.createdAt;
       props.updatedAt = p.updatedAt;

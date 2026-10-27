@@ -70,6 +70,41 @@ test('un parcours terminé se continue depuis Mes plantes (« Continuer le parco
   await expect.poll(async () => (await saved(page, 'Chemin des saules'))?.plants.sort()).toEqual([plantId('Prunus spinosa'), plantId('Urtica dioica')].sort());
 });
 
+test('« Continuer le parcours » d’un autre : celui en marche terminé, à vous avec ses plantes — « Recommencer » le garde', async ({ app, page }) => {
+  await app.open('#/');
+  // An older walk of Mes plantes, the user's.
+  const older = await page.evaluate(async id => {
+    const c = await import('/app/core/collections.js');
+    const db = await import('/app/core/db.js');
+    const walk = c.withPlant(c.newPlace([2.43, 48.83], { name: 'Mon parcours botanique au bois de Vincennes', walk: true, from: { app: 'parcours' } }), await db.get('plants', id));
+    return (await c.savePlace(walk)).id;
+  }, plantId('Prunus spinosa'));
+  // A walk under way, with a plant.
+  await app.go('#/app/parcours');
+  const trail = page.locator('gf-miniapp');
+  await trail.locator('.go').click();
+  await trail.locator('.card input.name').fill('Chemin des saules');
+  await trail.locator('.card input.name').press('Enter');
+  await trail.locator('.search input').fill('ortie dioique');
+  await trail.locator('.hit').filter({ hasText: 'Urtica dioica' }).locator('.add').click();
+  await expect(trail.locator('.mine > li')).toHaveCount(1);
+  /** Who owns « Chemin des saules », and its plants. */
+  const walked = () => page.evaluate(async () => {
+    const c = (await (await import('/app/core/collections.js')).listCollections()).find((/** @type {any} */ x) => x.properties.name === 'Chemin des saules');
+    return c ? [c.properties.origin?.app ?? null, c.properties.from?.app ?? null, c.properties.plantIds] : null;
+  });
+  expect(await walked()).toEqual(['parcours', null, [plantId('Urtica dioica')]]);
+  // The older one continued from its lieu on the Carte: the one under way is ended, never dropped the Parcours'.
+  await app.go(`#/map?spot=${older}`);
+  await page.locator('gf-spot-editor').getByRole('button', { name: 'Continuer le parcours' }).click();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/app/parcours/walk');
+  await expect(page.locator('gf-miniapp .card input.name')).toHaveValue('Mon parcours botanique au bois de Vincennes');
+  await expect.poll(walked).toEqual([null, 'parcours', [plantId('Urtica dioica')]]);
+  // « Recommencer » the Parcours: it takes nothing of it.
+  await page.evaluate(async () => (await import('/app/core/collections.js')).forgetMadeBy('parcours'));
+  expect(await walked()).toEqual([null, 'parcours', [plantId('Urtica dioica')]]);
+});
+
 test('« Continuer un parcours » : les parcours de Mes plantes, pas les autres lieux', async ({ app, page }) => {
   await app.open('#/');
   // A walk this device never listed (received, imported, or kept before the list went), and a lieu that is no walk.

@@ -3,7 +3,8 @@
 // (collections.js placesNear: within NEAR_PLACE, the three nearest, never a parcours): « Noter ici » (gf-capture, mode
 // `note`: « Y ajouter {plante} » in each) and a new lieu's editor (gf-spot-editor, mode `open`: « Y ajouter {plante} »
 // when it is not there yet, else « Ouvrir ce lieu »). A choice fires `nearby-pick` { id } on the element; nothing to
-// offer, nothing drawn. Its focus goes to its first choice (delegatesFocus).
+// offer, nothing drawn. Its focus goes to its first choice (delegatesFocus); each choice names its lieu and its distance
+// (« Y ajouter Pâquerette — « Pré », à 60 m »: read alone, it says where it goes).
 
 import { LitElement, html, css, nothing } from 'lit';
 import { findEntry, formatDistance, placeTitle, plantCount } from '../core/collections.js';
@@ -63,7 +64,7 @@ export class GfNearbyPlaces extends LitElement {
       <ul>${this.rows.map(({ place, distance }) => html`
         <li>
           <span>${placeTitle(place)} <small>· ${formatDistance(distance)} · ${plantCount(place.properties.plants.length)}</small></span>
-          <button type="button" ?disabled=${this.disabled}
+          <button type="button" ?disabled=${this.disabled} aria-label=${`${this.#label(place)} — « ${placeTitle(place)} », à ${formatDistance(distance)}`}
             @click=${() => this.dispatchEvent(new CustomEvent('nearby-pick', { detail: { id: place.id } }))}>${this.#label(place)}</button>
         </li>`)}
       </ul>

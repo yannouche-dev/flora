@@ -168,10 +168,11 @@ export class GfCapture extends LitElement {
 
   /**
    * Opens the sheet; `plant` (a record or a search summary): chosen already — a summary is replaced by its record once
-   * read (its names, its photo).
+   * read (its names, its photo). Drawn first, then shown, the focus where it starts (#focusStart): never on the view
+   * the last opening left, which the drawing would remove under it (the focus fallen to the page).
    * @param {{ plant?: any }} [options]
    */
-  open({ plant } = {}) {
+  async open({ plant } = {}) {
     this._query = '';
     this._confirm = null;
     this._where = null;
@@ -182,7 +183,9 @@ export class GfCapture extends LitElement {
     }
     // Unticked at each opening: a harvest asked for one plant is never carried over to the next one noted.
     this._harvestToday = false;
+    await this.updateComplete;
     openModal(this.#dialog);
+    this.#focusStart();
     this.#unwatch ??= watchLocation(({ fix, error }) => {
       const firstFix = !this._fix && fix;
       this._fix = fix;
@@ -194,6 +197,28 @@ export class GfCapture extends LitElement {
 
   #close() {
     this.#dialog.close();
+  }
+
+  /** The focus where the sheet starts: the plant chosen, its « Noter ici » (« Autre plante » until the position comes); else the search field. */
+  #focusStart() {
+    const at = this._chosen ? this.renderRoot.querySelector('.body .where button:not([disabled])') : this.renderRoot.querySelector('.ask input');
+    /** @type {HTMLElement | null} */ (at)?.focus();
+  }
+
+  /** « Annuler » the lieux offered: back to the plant chosen or the list, the focus with it (its button is gone). */
+  async #leaveOffer() {
+    this._where = null;
+    await this.updateComplete;
+    this.#focusStart();
+  }
+
+  /**
+   * The keys the page behind would take (an activity's sheet: Échap closes it, ← → change its plant; the cards: → a
+   * match), kept in the sheet: its own Échap still closes it (the dialog's default), never the page under it.
+   * @param {KeyboardEvent} e
+   */
+  #keepKeys(e) {
+    if (e.key === 'Escape' || e.key.startsWith('Arrow')) e.stopPropagation();
   }
 
   #onClosed() {
@@ -420,7 +445,7 @@ export class GfCapture extends LitElement {
         @nearby-pick=${(/** @type {CustomEvent} */ e) => this.#capture(w.plant, { harvest: w.harvest, into: e.detail.id })}></gf-nearby-places>
       <div class="where">
         <button class="primary" type="button" ?disabled=${this._busy} @click=${() => this.#capture(w.plant, { harvest: w.harvest, into: null })}>Nouveau lieu ici</button>
-        <button class="link" type="button" ?disabled=${this._busy} @click=${() => { this._where = null; }}>Annuler</button>
+        <button class="link" type="button" ?disabled=${this._busy} @click=${this.#leaveOffer}>Annuler</button>
       </div>`;
   }
 
@@ -458,7 +483,7 @@ export class GfCapture extends LitElement {
     const harvestMode = this.#store.state.harvestMode;
     const t = this._toast;
     return html`
-      <dialog aria-label="Noter une plante ici" @close=${this.#onClosed}
+      <dialog aria-label="Noter une plante ici" @close=${this.#onClosed} @keydown=${this.#keepKeys}
         @click=${e => { if (e.target === e.currentTarget) this.#close(); }}>
         <header>
           <h2>Noter ici</h2>
