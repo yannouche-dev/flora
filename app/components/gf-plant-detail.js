@@ -1179,7 +1179,7 @@ export class GfPlantDetail extends LitElement {
     const hit = r.height && r.top >= s.top && r.bottom <= s.bottom ? /** @type {any} */ (this.renderRoot).elementFromPoint(r.left + r.width / 2, r.top + r.height / 2) : null;
     if (!hit || !stuck.contains(hit)) scroller.scrollTop = now;
   };
-  /** Where the sheet was when a key or a pointer went down (before the browser scrolls to what gets the focus). @type {{ st: number, at: number } | null} */
+  /** Where the sheet was when a key or a pointer went down (before the browser scrolls to what gets the focus), until it scrolls otherwise (#onScroll). @type {{ st: number, at: number } | null} */
   #preFocus = null;
   /** Where the sheet's last scroll left it (or the app, at once). @type {number | null} */
   #lastTop = null;
@@ -2667,6 +2667,9 @@ export class GfPlantDetail extends LitElement {
     const scroller = this.#sheetScroller;
     if (e.composedPath()[0] !== scroller) return;
     this.#lastTop = scroller.scrollTop;
+    // Where the sheet was at the last key or pointer down is past: it scrolled since (a grip moved into view, the
+    // hand…). The browser's scroll to a focus is told only after its focusin: never this one (#onFocusIn).
+    this.#preFocus = null;
     // A scroll the place kept did not write (the scrollbar's thumb, the page's search, a finger whose events went
     // elsewhere): the hand has the sheet.
     const kept = this.#kept;
