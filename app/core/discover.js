@@ -12,9 +12,9 @@
 // played last.
 
 import { config } from '../config.js';
-import { clearAroundGames, migrateDiscover } from './around-sessions.js';
-import { listCollections, spotEvents, FAVORITES_ID } from './collections.js';
-import { onStorage } from './sync.js';
+import { AROUND_APPS, clearAroundGames, migrateDiscover } from './around-sessions.js';
+import { adoptMadeBy, listCollections, spotEvents, FAVORITES_ID } from './collections.js';
+import { onStorage, publish } from './sync.js';
 import { readJSON, storedKeys, writeJSON } from './prefs.js';
 
 const KEY = config.storageKeys.discover;
@@ -128,22 +128,33 @@ export function plantSeen(id) {
 /**
  * Rencontres started again (its « Recommencer », which empties its own place, distance and cards): the steps
  * of its guided way and the fork forgotten. Not the first steps of the app (the tabs that came, the tips, the plants
- * seen), nor the favourites: they are the user's.
+ * seen), nor the favourites: they are the user's. Applied to the state as stored now: the first steps started again in
+ * another tab (restartDiscover, which empties an open game here too) are never written back with this tab's older copy.
  */
-export const replayMeet = () => save({ step: 0, firstMatch: false, branch: null });
+export function replayMeet() {
+  state = read();
+  save({ step: 0, firstMatch: false, branch: null });
+}
 
 /** Everything at once (« Tout montrer »). */
 export function finishDiscover() { save({ done: true, step: LAST_STEP }); }
 
 /**
- * The first steps again (Réglages › « Revoir les premiers pas »): every choice and all progress forgotten — the
- * steps and the fork, the tabs that had come, and the activities around a place (Rencontres, Cueillette prudente,
- * Mosaïque: their place, distance, cards and matches). (The favourites stay: they are the user's.) The maps' first-use
- * hints are forgotten by its caller (gf-settings.js: core/hints.js, not at the start of the app).
+ * The first steps again (Réglages › « Revoir les premiers pas », asked first): every choice and all progress
+ * forgotten — the steps and the fork, the tabs that had come, and the activities around a place (Rencontres,
+ * Cueillette prudente, Mosaïque: their place, distance, cards and matches), here and in the other tabs (one open there
+ * is emptied as by its « Recommencer »). The favourites stay, and those their matches added become the user's first
+ * (adoptMadeBy: no « Recommencer » takes them later) — nothing is forgotten if that fails. The maps' first-use hints are
+ * forgotten by its caller (gf-settings.js: core/hints.js, not at the start of the app). Resolves with how many
+ * favourites became the user's.
+ * @returns {Promise<number>}
  */
-export function restartDiscover() {
+export async function restartDiscover() {
+  const adopted = await adoptMadeBy(AROUND_APPS);
   clearAroundGames();
   save({ done: false, unlocked: [], tips: [], seen: [], step: 0, firstMatch: false, branch: null });
+  for (const id of AROUND_APPS) publish('miniapp', { id, op: 'replay' });
+  return adopted;
 }
 
 // Changed in another tab (a game played again there): read again, never overwritten with this tab's older copy.

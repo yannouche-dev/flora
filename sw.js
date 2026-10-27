@@ -210,6 +210,7 @@ const SHELL = [
   'app/components/gf-voice-button.js',
   'app/components/gf-active-filters.js',
   'app/components/gf-add-to.js',
+  'app/components/gf-ask.js',
   'app/components/gf-attribution.js',
   'app/components/gf-calendar.js',
   'app/components/gf-capture.js',

@@ -19,6 +19,8 @@ import { ui } from '../styles/ui.js';
 import { discoverEvents, discovering, finishDiscover, restartDiscover } from '../core/discover.js';
 import { forgetHints } from '../core/hints.js';
 import { openView } from '../core/history.js';
+import { briefToast } from '../core/toast.js';
+import { confirmAsk } from './gf-ask.js';
 import { resetMapLook, resetMapSettings } from '../core/map-settings.js';
 import { notesEvents, notesWithText } from '../core/sheet-notes.js';
 import './gf-map-options.js';
@@ -26,6 +28,9 @@ import { PRESETS } from '../layout/presets.js';
 
 /** French names of the icons a mode can have. */
 const ICON_NAMES = { image: 'Photo', 'list-ul': 'Liste', table: 'Tableau', images: 'Médias', map: 'Carte', leaf: 'Feuille', flower1: 'Fleur', 'diagram-3': 'Réseau', star: 'Étoile', layers: 'Couches', search: 'Loupe', crown: 'Couronne' };
+
+/** What « Revoir les premiers pas » does, said under it and in its question. */
+const FIRST_STEPS_AGAIN = 'les étapes et ce que gardent Rencontres, Cueillette prudente et Mosaïque (lieu, distance, cartes, matchs) sont oubliés. Vos favoris restent, et ceux venus de ces activités deviennent les vôtres.';
 
 export class GfSettings extends LitElement {
   static properties = {
@@ -428,17 +433,31 @@ export class GfSettings extends LitElement {
 
   /**
    * « Premiers pas »: the guided start (Découvrir), on or over; « Revoir les premiers pas » empties the three
-   * activities around a place too (core/discover.js#restartDiscover), said under it.
+   * activities around a place too, and makes the favourites their matches added the user's (core/discover.js
+   * #restartDiscover) — said under it, and asked first.
    */
   #firstSteps() {
     const on = discovering();
     return html`<h2 id="first-steps">Premiers pas</h2>
       <p class="muted">${on ? 'Les premiers pas sont en cours : les onglets arrivent à mesure qu’ils servent, avec une astuce à la fois.'
-        : 'Tous les outils sont là. Les premiers pas (Découvrir, une astuce à la fois, les onglets qui arrivent un à un) peuvent être revus.'}</p>
+        : `Tous les outils sont là. « Revoir les premiers pas » repart du début (Découvrir, une astuce à la fois, les onglets qui arrivent un à un) : ${FIRST_STEPS_AGAIN}`}</p>
       <p>${on ? html`<button class="secondary" type="button" @click=${() => finishDiscover()}>Tout montrer maintenant</button>`
-        : html`<button class="secondary" type="button" @click=${() => { restartDiscover(); forgetHints(); openView('#/discover'); }}>Revoir les premiers pas</button>`}</p>
-      ${on ? nothing : html`<p class="muted">Rencontres, Cueillette prudente et Mosaïque repartent alors de zéro ; vos favoris restent.</p>`}
+        : html`<button class="secondary" type="button" @click=${() => this.#restartFirstSteps()}>Revoir les premiers pas</button>`}</p>
       ${this.#showSteps()}`;
+  }
+
+  /**
+   * « Revoir les premiers pas », confirmed: the first steps and the three activities around a place started again
+   * (core/discover.js#restartDiscover), the maps' first-use hints too, then Découvrir — and the favourites that became
+   * the user's, said. Nothing changes when it is cancelled, or when the favourites could not be read.
+   */
+  async #restartFirstSteps() {
+    if (!await confirmAsk({ title: 'Revoir les premiers pas ?', text: FIRST_STEPS_AGAIN[0].toUpperCase() + FIRST_STEPS_AGAIN.slice(1), yes: 'Revoir les premiers pas' })) return;
+    const adopted = await restartDiscover().catch(error => { console.error(error); return null; });
+    if (adopted === null) return;
+    forgetHints();
+    openView('#/discover');
+    if (adopted) briefToast(adopted > 1 ? `Vos ${adopted} favoris venus des activités sont désormais à vous.` : 'Votre favori venu des activités est désormais à vous.');
   }
 
   /** « Afficher les étapes » of the activities (Rencontres, Parcours…): the first time each one is done, always, never. */

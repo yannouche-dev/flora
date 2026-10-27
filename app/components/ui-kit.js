@@ -1,6 +1,6 @@
 // @ts-check
 // Templates and styles shared by the app's screens, written once: a sheet from the bottom (dialog.drawer: Flore's
-// filters, « Ajouter à… », the map's panel, the harvest warning), a modal question (dialog.ask), « Recommencer : tout
+// filters, « Ajouter à… », the map's panel, the harvest warning), a modal question (dialog.ask; gf-ask.js asks any), « Recommencer : tout
 // effacer ? » (the list of Découvrir, gf-launcher.js, and an activity's box, gf-miniapp.js, ask it the same way) and a plant's
 // verdict as a chip (core/danger.js: the sheet, the cards of the games, the harvest warning, the confusions).
 

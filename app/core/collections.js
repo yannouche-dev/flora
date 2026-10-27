@@ -485,6 +485,26 @@ export async function forgetFavoriteEntry(entryId, made) {
   return gone;
 }
 
+/**
+ * The favourites these mini-apps' matches added, made the user's own at once (« Revoir les premiers pas »: their games
+ * forgotten, their favourites kept — never taken by a later « Recommencer »), in one write. No favourites: nothing
+ * written. Resolves with how many became the user's.
+ * @param {readonly string[]} apps @returns {Promise<number>}
+ */
+export async function adoptMadeBy(apps) {
+  let n = 0;
+  await updatePlace(FAVORITES_ID, c => {
+    const theirs = (/** @type {PlantEntry} */ e) => Boolean(e.origin && apps.includes(e.origin.app));
+    n = c.properties.plants.filter(theirs).length;
+    return n ? withPlants(c, c.properties.plants.map(e => theirs(e) ? promotedEntry(e) : e)) : c;
+  }, { create: false }).catch(error => {
+    n = 0;
+    // No favourites: none to adopt. Anything else: said to the caller (the first steps are not started again).
+    if (!(error instanceof GoneError)) throw error;
+  });
+  return n;
+}
+
 /** What a mini-app made in Mes plantes (place-model.js#madeBy): its favourites, its collections. @param {string} app */
 export const madeByApp = async app => madeBy(await listCollections(), app);
 

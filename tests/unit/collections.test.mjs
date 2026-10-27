@@ -30,6 +30,7 @@ test('rien à promouvoir ni à reprendre sans favoris : aucun favori créé pour
   await C.promoteFavorites([1, 2]);
   await C.promotePlace(C.FAVORITES_ID);
   assert.equal(await C.forgetFavoriteMadeBy(1, 'rencontres'), false);
+  assert.equal(await C.adoptMadeBy(['rencontres']), 0);
   assert.equal(await C.forgetFavoriteEntry('e1', /** @type {any} */ ({ notes: '', rating: 0, abundance: 'moyen', harvests: [] })), false);
   assert.equal(await C.getPlace(C.FAVORITES_ID), undefined);
   // A list of the user's with plants, the favourites never made: still none.
@@ -102,4 +103,15 @@ test('un cœur n’enlève jamais un favori ; reprendre celui d’une partie, ou
   assert.equal(await C.forgetFavoriteEntry(two.id, two), false);
   assert.equal(await C.forgetFavoriteEntry(one.id, one), false, 'déjà repris');
   assert.deepEqual(await favourites(), { 4: [null, null], 7: [null, null] });
+});
+
+test('« Revoir les premiers pas » : les favoris des parties nommées deviennent les vôtres, en une fois, et pas les autres', async () => {
+  await favouritesOf([[1, 'rencontres'], [2, 'cueillette'], [3, 'faux-amis'], [4, null]]);
+  assert.equal(await C.adoptMadeBy(['rencontres']), 1);
+  assert.deepEqual(await favourites(), { 1: [null, 'rencontres'], 2: ['cueillette', null], 3: ['faux-amis', null], 4: [null, null] });
+  assert.equal(await C.adoptMadeBy(['rencontres', 'cueillette', 'mosaique']), 1);
+  assert.deepEqual(await favourites(), { 1: [null, 'rencontres'], 2: [null, 'cueillette'], 3: ['faux-amis', null], 4: [null, null] });
+  // Adopted: « Recommencer » the game takes nothing back.
+  assert.equal(await C.forgetMadeBy('rencontres'), 0);
+  assert.equal(await C.adoptMadeBy(['rencontres', 'cueillette', 'mosaique']), 0, 'rien de plus');
 });
