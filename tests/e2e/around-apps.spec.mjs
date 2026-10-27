@@ -180,8 +180,13 @@ test('Mosaïque, Matchs : « Retirer » reprend le favori que le match a ajouté
   await page.locator('ma-deck .round.like').click();
   await expect(top).toHaveAttribute('data-id', String(pissenlit));
   await page.locator('ma-deck .round.like').click();
+  // The second match decided: its card flies off first (260 ms, across the tabs on a phone), and the dandelion, a
+  // favourite already, changes nothing in the favourites — only the tab's count says it.
+  const matchs = list.getByRole('tab', { name: /^Matchs/ });
+  await expect(matchs).toHaveText('Matchs · 2');
   await expect.poll(favourites).toEqual({ [pissenlit]: null, [ail]: 'mosaique' });
-  await list.getByRole('tab', { name: /^Matchs/ }).click();
+  await matchs.click();
+  await expect(matchs).toHaveAttribute('aria-selected', 'true');
   // The dandelion: out of the matches, still a favourite — said.
   await list.getByRole('button', { name: 'Retirer Pissenlit officinal des matchs' }).click();
   await expect(page.locator('.gf-brief-toast')).toHaveText('Retiré des matchs. Il reste dans vos favoris.');
