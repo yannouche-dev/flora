@@ -2,7 +2,8 @@
 // place — past the plants gone through with ‹ ›, never adding an entry; opened from elsewhere (another tab, a link, the
 // start), the list takes its place. A block's pane closes the same way, onto the plant it was opened from
 // (core/history.js sheetMark, closeTo). On both widths the sheet's head has its × « Fermer la fiche », and Échap closes
-// it (Flore: its pane first). « Annuler » goes back, never a step more: a new place's, a dialog's.
+// it (Flore: its pane first). « Annuler » goes back, never a step more: a new place's, a dialog's; a share's « Ignorer »
+// too, and a share saved takes the preview's place.
 import { test, expect, plantId } from './fixtures.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
@@ -241,6 +242,40 @@ test('Un dialogue « Annuler » : l’historique comme avant', async ({ app, pag
   expect(await depthOf(page)).toBe(at);
   await page.goBack();
   await expect.poll(() => hash(page)).toBe('#/settings');
+});
+
+test('Partage : « Enregistrer dans Mes plantes » prend la place de l’aperçu ; « Ignorer » revient en arrière', async ({ app, page, newDevice }) => {
+  await app.open('#/');
+  const id = await seedPlace(page);
+  const link = await page.evaluate(async i => '#/shared?d=' + await (await import('/app/core/share.js'))
+    .encodeCollection(await (await import('/app/core/collections.js')).getPlace(i)), id);
+  const other = await newDevice();
+  await other.app.open('#/');
+  await other.app.go(link);
+  const shared = other.page.locator('gf-shared');
+  await expect(shared.locator('h1')).toHaveText('Bois de la Source');
+  let n = await entries(other.page);
+  // Saved: the new place on the Carte, in the preview's place; Back does not open the preview again.
+  await shared.getByRole('button', { name: 'Enregistrer dans Mes plantes' }).click();
+  await expect.poll(() => hash(other.page)).toMatch(/^#\/map\?spot=/);
+  expect(await entries(other.page)).toBe(n);
+  await other.page.goBack();
+  await expect.poll(() => hash(other.page)).toBe('#/');
+  await expect(shared).toHaveCount(0);
+  // « Ignorer »: back to where the link was opened.
+  await other.app.go(link);
+  await expect(shared.locator('h1')).toHaveText('Bois de la Source');
+  await shared.getByRole('button', { name: 'Ignorer' }).click();
+  await expect.poll(() => hash(other.page)).toBe('#/');
+  // A link that cannot be read: « Voir Mes plantes » in its place.
+  await other.app.go('#/shared?d=zzz');
+  await expect(shared.getByRole('alert')).toBeVisible();
+  n = await entries(other.page);
+  await shared.getByRole('link', { name: 'Voir Mes plantes' }).click();
+  await expect.poll(() => hash(other.page)).toBe('#/collections');
+  expect(await entries(other.page)).toBe(n);
+  await other.page.goBack();
+  await expect.poll(() => hash(other.page)).toBe('#/');
 });
 
 /**

@@ -11,7 +11,7 @@ import './gf-map.js';
 import './gf-thumb.js';
 import { ui } from '../styles/ui.js';
 import { kindIcon } from '../core/icons.js';
-import { openView } from '../core/history.js';
+import { back, replaceView } from '../core/history.js';
 
 /**
  * Preview of a collection received by link (#/shared?d=…), with « Enregistrer dans Mes plantes »: a list, a lieu, or a
@@ -126,13 +126,17 @@ export class GfShared extends LitElement {
         if (collection !== before && row.abundance) collection = withEntry(collection, /** @type {any} */ (lastEntry(collection)).id, { abundance: /** @type {any} */ (row.abundance) });
       }
       const saved = await saveCollection(collection);
-      openView(href.spot(saved.id));
+      // Saved, in the preview's place: Back does not open it again (a place: its editor goes on to the Carte, in place).
+      replaceView(href.spot(saved.id));
     } catch (error) {
       this._error = 'Enregistrement impossible : ' + /** @type {Error} */ (error).message;
     } finally {
       this._busy = false;
     }
   }
+
+  /** « Voir Mes plantes » (the transfer imported, a link that cannot be read): Mes plantes in this page's place. @param {Event} e */
+  #toMine = e => { e.preventDefault(); replaceView(href.collections()); };
 
   async #importPortable() {
     this._busy = true;
@@ -167,10 +171,10 @@ export class GfShared extends LitElement {
         <ul class="names">${features.map(f => html`<li>${label(f)} <span class="muted">${f.properties?.plants?.length || 0}</span></li>`)}</ul>
         ${this._done ? html`
           <p role="status"><strong>Importé :</strong> ${this._done}</p>
-          <div class="actions"><a class="link muted" href=${href.collections()}>Voir Mes plantes</a></div>` : html`
+          <div class="actions"><a class="link muted" href=${href.collections()} @click=${this.#toMine}>Voir Mes plantes</a></div>` : html`
           <div class="actions">
             <button class="primary large" type="button" ?disabled=${this._busy} @click=${this.#importPortable}>Importer</button>
-            <a class="link muted" href=${href.collections()}>Ignorer</a>
+            <button class="link muted" type="button" @click=${() => back(href.collections())}>Ignorer</button>
           </div>
           <p class="muted">Vos favoris, listes et lieux déjà présents sur cet appareil sont mis à jour (la version la plus récente l’emporte), sans doublon ; rien n’est envoyé sur Internet.</p>`}
       </div>`;
@@ -204,7 +208,7 @@ export class GfShared extends LitElement {
     if (this._portable && !this._error) return this.#portableView();
     if (this._error) {
       return html`<div class="wrap"><h1>Lien de partage</h1><p class="error" role="alert">${this._error}</p>
-        <a href=${href.collections()}>Mes plantes</a></div>`;
+        <a href=${href.collections()} @click=${this.#toMine}>Voir Mes plantes</a></div>`;
     }
     const shared = this._shared;
     if (!shared) return html`<div class="wrap"><p class="muted">Ouverture du partage…</p></div>`;
@@ -234,7 +238,7 @@ export class GfShared extends LitElement {
         </ul>
         <div class="actions">
           <button class="primary large" type="button" ?disabled=${this._busy || !this._plants.length} @click=${this.#save}>Enregistrer dans Mes plantes</button>
-          <a class="link muted" href=${href.collections()}>Ignorer</a>
+          <button class="link muted" type="button" @click=${() => back(href.collections())}>Ignorer</button>
         </div>
         <p class="muted">${shared.walk ? 'L’enregistrement crée un nouveau parcours dans Mes plantes ; rien n’est envoyé.'
           : `L’enregistrement crée ${shared.kind === 'place' ? 'un nouveau lieu' : 'une nouvelle liste'} sur cet appareil ; rien n’est envoyé.`}</p>
