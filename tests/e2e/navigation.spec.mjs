@@ -1,6 +1,7 @@
-// Navigation: « Fermer la fiche » goes back to the view the sheet was opened from — past the plants gone through with
-// ‹ › —, never adding an entry; opened from elsewhere (another tab, a link, the start), the list takes its place.
-// A block's pane closes the same way, onto the plant it was opened from (core/history.js sheetMark, closeTo).
+// Navigation: « Fermer la fiche » goes back to the view the sheet was opened from — Flore's list, Mes plantes' list or
+// place — past the plants gone through with ‹ ›, never adding an entry; opened from elsewhere (another tab, a link, the
+// start), the list takes its place. A block's pane closes the same way, onto the plant it was opened from
+// (core/history.js sheetMark, closeTo).
 import { test, expect, plantId } from './fixtures.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
@@ -99,4 +100,50 @@ test('Flore : un panneau, puis ‹ › ; un panneau après un rechargement', asy
   expect(await entries(page)).toBe(n);
   await page.goBack();
   await expect.poll(() => hash(page)).toBe('#/?family=Rosaceae');
+});
+
+/** A place with three plants (Mes plantes). @param {Page} page @returns {Promise<string>} its id */
+const seedPlace = page => page.evaluate(async ids => {
+  const c = await import('/app/core/collections.js');
+  const db = await import('/app/core/db.js');
+  const plants = await Promise.all(ids.map(id => db.get('plants', id)));
+  const place = plants.reduce((p, plant) => c.withPlant(p, plant), c.newPlace([2.351, 48.851], { name: 'Bois de la Source' }));
+  return (await c.savePlace(place)).id;
+}, [plantId('Allium ursinum'), plantId('Urtica dioica'), plantId('Geum urbanum')]);
+
+/** Mes plantes' plant sheet closed: its ✕ (desktop), its phone head. @param {import('./app.mjs').App} app @param {Page} page */
+const closeMine = (app, page) => (app.phone
+  ? page.locator('gf-collections .sheet-plant .pane-head').getByRole('button', { name: 'Mes plantes' })
+  : page.locator('gf-collections #mine-plant .pane-head').getByRole('button', { name: 'Fermer la fiche' })).click();
+
+test('Mes plantes : la fiche fermée revient au lieu, en passant les plantes parcourues', async ({ app, page }) => {
+  await app.open('#/');
+  const id = await seedPlace(page);
+  await app.go('#/collections');
+  const mine = page.locator('gf-collections');
+  await mine.locator('button.main', { hasText: 'Bois de la Source' }).click();
+  await expect.poll(() => hash(page)).toBe(`#/collections?c=${id}`);
+  await mine.locator('ul.plants a').first().click();
+  await expect.poll(() => hash(page)).toBe(`#/collections?c=${id}&plant=${plantId('Allium ursinum')}`);
+  for (const next of ['Urtica dioica', 'Geum urbanum']) {
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(() => hash(page)).toBe(`#/collections?c=${id}&plant=${plantId(next)}`);
+  }
+  const n = await entries(page);
+  await closeMine(app, page);
+  await expect.poll(() => hash(page)).toBe(`#/collections?c=${id}`);
+  expect(await entries(page)).toBe(n);
+  await page.goBack();
+  await expect.poll(() => hash(page)).toBe('#/collections');
+  if (app.phone) return;
+  // The place's map closed beside the plant, then the plant: Mes plantes without the map.
+  await page.goForward();
+  await expect.poll(() => hash(page)).toBe(`#/collections?c=${id}`);
+  await mine.locator('ul.plants a').first().click();
+  await expect.poll(() => hash(page)).toMatch(/&plant=/);
+  await mine.getByRole('button', { name: 'Fermer la carte' }).click();
+  await expect.poll(() => hash(page)).toBe(`#/collections?plant=${plantId('Allium ursinum')}`);
+  await closeMine(app, page);
+  await expect.poll(() => hash(page)).toBe('#/collections');
+  await expect(page.locator('gf-collections section[aria-label="Carte du lieu"]')).toHaveCount(0);
 });

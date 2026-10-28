@@ -11,7 +11,7 @@ import {
 import { config } from '../config.js';
 import { StoreController, arrangedMode, whenReady } from '../core/store.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
-import { back, modalOpen, openView, replaceView } from '../core/history.js';
+import { closeTo, depth, modalOpen, openView, replaceView, sheetMark } from '../core/history.js';
 import './gf-map.js';
 import './gf-plant-detail.js';
 import './gf-pager.js';
@@ -182,6 +182,7 @@ export class GfCollections extends LitElement {
   #tablet = new MediaController(this, '(max-width: 1099px)');
   #store = new StoreController(this);
   #onChange = () => this.#load();
+  /** Where the open plant's sheet closes to (core/history.js sheetMark). @type {import('../core/history.js').SheetMark | null} */ #sheet = null;
 
   constructor() {
     super();
@@ -210,6 +211,12 @@ export class GfCollections extends LitElement {
 
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
+    if (changed.has('route')) {
+      const before = changed.get('route');
+      // Its place in history: the list or place it was opened from; the plant stepped from (‹ ›, ← →); else elsewhere.
+      this.#sheet = this.route.plant == null ? null : sheetMark('gfSheetFrom', () =>
+        before && before.plant == null ? depth() - 1 : before?.plant != null ? this.#sheet : null);
+    }
     // Arriving on a collection (link, Back): it is unfolded.
     if (changed.has('route') && this.route.open && !this._open.has(this.route.open)) {
       this._open = new Set([...this._open, this.route.open]);
@@ -310,7 +317,12 @@ export class GfCollections extends LitElement {
     if (open && this.route.open !== c.id && isPlace) { openView(href.collections({ open: c.id })); return; }
     this.#toggle(c.id);
     if (!open && isPlace) openView(href.collections({ open: c.id }));
-    else if (open && this.route.open === c.id) replaceView(href.collections({ plant: this.route.plant }));
+    else if (open && this.route.open === c.id) replaceView(href.collections({ plant: this.route.plant }), ['gfSheetFrom']);
+  }
+
+  /** « Fermer la fiche » (× on both widths, Échap): back to Mes plantes as the sheet left it. */
+  #closePlant() {
+    if (this.#sheet) closeTo(this.#sheet, href.collections({ open: this.route.open }));
   }
 
   /** A place on its map: the place and each of its plants; a plant opens beside. @param {import('../core/collections.js').Collection} place */
@@ -592,7 +604,7 @@ export class GfCollections extends LitElement {
         <section class="list-pane phone" aria-label="Mes plantes">${this.#list(true)}</section>
         ${plantId ? html`<section class="sheet-plant" aria-label="Plante">
           <div class="pane-head">
-            <button class="link back" type="button" @click=${() => back(href.collections({ open: this.route.open }))}>${icon('arrow-left')} Mes plantes</button>
+            <button class="link back" type="button" @click=${() => this.#closePlant()}>${icon('arrow-left')} Mes plantes</button>
             <h2>Plante</h2>
             <a class="icon-btn" href=${href.plant(plantId)} title="Ouvrir la fiche dans Flore" aria-label="Ouvrir la fiche dans Flore">${icon('arrows-angle-expand')}</a>
           </div>
@@ -628,7 +640,7 @@ export class GfCollections extends LitElement {
             ${p.head('map', placeTitle(place), html`
               <a class="icon-btn" href=${href.map({ spot: place.id })} title="Ouvrir sur la Carte" aria-label="Ouvrir sur la Carte">${icon('arrows-angle-expand')}</a>
               <button class="icon-btn" type="button" title="Fermer la carte" aria-label="Fermer la carte"
-                @click=${() => replaceView(href.collections({ plant: plantId }))}>${icon('x-lg')}</button>`)}
+                @click=${() => replaceView(href.collections({ plant: plantId }), ['gfSheetFrom'])}>${icon('x-lg')}</button>`)}
             <div class="pane-body">${this.#placeMap(place)}</div>
           </section>`) : nothing}
           ${plantId ? (plantFolded ? p.rail('plant', true) : html`
@@ -638,7 +650,7 @@ export class GfCollections extends LitElement {
               ${p.head('plant', 'Plante', html`
                 <a class="icon-btn" href=${href.plant(plantId)} title="Ouvrir la fiche dans Flore" aria-label="Ouvrir la fiche dans Flore">${icon('arrows-angle-expand')}</a>
                 <button class="icon-btn" type="button" title="Fermer la fiche" aria-label="Fermer la fiche"
-                  @click=${() => replaceView(href.collections({ open: this.route.open }))}>${icon('x-lg')}</button>`, true)}
+                  @click=${() => this.#closePlant()}>${icon('x-lg')}</button>`, true)}
               <div class="pane-body"><gf-plant-detail embedded sheet="collections" plant-id=${plantId} view=${this.#store.state.mode}></gf-plant-detail>${this.#pager(plantId, false)}</div>
             </section>`) : nothing}
         </div>
