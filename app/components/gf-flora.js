@@ -4,7 +4,7 @@ import { config } from '../config.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
 import { activeFilterCount, clearFilters, lastSearchHash } from '../core/query.js';
 import { href } from '../core/router.js';
-import { backTo, depth, entryValue, markEntry, modalOpen, openModal, openView, renewBehind, replaceView } from '../core/history.js';
+import { closeTo, depth, entryValue, modalOpen, openModal, openView, renewBehind, replaceHash, replaceView, sheetMark } from '../core/history.js';
 import { setContext } from '../core/context.js';
 import { StoreController, arrangedMode, whenReady } from '../core/store.js';
 import { PaneSizer, splitStyles } from '../core/panes.js';
@@ -223,8 +223,8 @@ export class GfFlora extends LitElement {
     const grid = entry.contentRect.width >= GRID_MIN && !this.#phone.matches;
     if (grid !== this._grid) this._grid = grid;
   });
-  /** Depth in history of the list the plant was opened from (null: opened from elsewhere). @type {number | null} */
-  #listDepth = null;
+  /** Where the open plant's sheet closes to (core/history.js sheetMark). @type {import('../core/history.js').SheetMark | null} */ #sheet = null;
+  /** Where the block's pane closes to: the plant without it, it was opened from; else in place. @type {import('../core/history.js').SheetMark | null} */ #paneMark = null;
   /** The list's address as the plant found it, then as its filters and sort change beside the plant. */
   #listHash = '';
 
@@ -269,7 +269,7 @@ export class GfFlora extends LitElement {
     const id = to ?? this.#position()?.[dir];
     if (!id) return;
     const card = this.#card;
-    // Each plant is a view: Back returns to the one before (« Résultats » goes straight to the list).
+    // Each plant is a view: Back returns to the one before (« Fermer la fiche » goes straight to the list).
     // The pane stays open (the next plant's map, media…).
     const go = () => { openView(this.#paneInUrl ? href.plantPane(id, /** @type {string} */ (/** @type {any} */ (this.route).pane)) : href.plant(id)); };
     if (!card || this.#reducedMotion.matches) { this._under = null; go(); return; }
@@ -405,14 +405,15 @@ export class GfFlora extends LitElement {
   willUpdate(changed) {
     if (changed.has('route')) {
       const before = changed.get('route');
-      // The list's place in history: from the search to a plant, kept while stepping plant to plant, and in the
-      // plant's entry (gfList) for this view made again on it (a reload, Back from another tab).
       if (this.route.name === 'plant') {
-        const kept = entryValue('gfList');
-        this.#listDepth = before?.name === 'search' ? depth() - 1 : before?.name === 'plant' ? this.#listDepth
-          : !before && Number.isInteger(kept) && kept >= 0 && kept < depth() ? kept : null;
-        if (this.#listDepth !== null) markEntry({ gfList: this.#listDepth });
-      }
+        // Where the sheet closes to, kept in its entry: the list just left; the sheet stepped from (‹ ›); a plant entry of an
+        // earlier version (gfList: its list's depth); else opened from elsewhere (a link, a tab, the start).
+        const legacy = entryValue('gfList');
+        this.#sheet = sheetMark('gfSheetFrom', () => before?.name === 'search' ? depth() - 1 : before?.name === 'plant' ? this.#sheet
+          : !before && Number.isInteger(legacy) ? /** @type {number} */ (legacy) : null);
+        const same = before?.name === 'plant' && before.id === this.route.id;
+        this.#paneMark = this.route.pane ? sheetMark('gfPaneFrom', () => same && !before.pane ? depth() - 1 : same ? this.#paneMark : null) : null;
+      } else { this.#sheet = null; this.#paneMark = null; }
       if (this.route.name === 'plant' && before?.name !== 'plant') this.#listHash = lastSearchHash();
       // A plant opened from the list: the search field lets go of the keys (← → then go from plant to plant).
       if (this.route.name === 'plant' && before?.name !== 'plant') {
@@ -431,8 +432,8 @@ export class GfFlora extends LitElement {
         deck?.style.removeProperty('--p');
       }
       if (this.route.name === 'search') document.title = 'GeoFlora — flore de France';
-      // Pane closed (Back): not full screen any more; a pane opened by a link is not ours to go back from.
-      if (!this.#paneInUrl) { this.#panePushed = false; this.#paneStart = null; }
+      // Pane closed: no image to open at.
+      if (!this.#paneInUrl) this.#paneStart = null;
       if (this.#pane === null) this._paneFull = false;
       // Phone: the sheet that opens over the list takes the focus; closed, the focus goes back to the plant's row.
       if (this.#phone.matches) {
@@ -447,7 +448,7 @@ export class GfFlora extends LitElement {
     if (list !== this.#listHash) {
       this.#listHash = list;
       setContext({ query: list });
-      if (this.#listDepth !== null) renewBehind(this.#listDepth, list);
+      if (this.#sheet?.from != null) renewBehind(this.#sheet.from, list);
     }
   }
 
@@ -522,8 +523,6 @@ export class GfFlora extends LitElement {
 
   /** The image touched on the sheet, for the media viewer to open at. @type {string | null} */
   #paneStart = null;
-  /** The pane was opened from the sheet (a step in history: closing it goes back). */
-  #panePushed = false;
 
   /** ⤢ on a block, or a photo touched. @param {CustomEvent} e */
   #openPane = e => {
@@ -533,8 +532,8 @@ export class GfFlora extends LitElement {
     const key = e.detail.key;
     this.#paneStart = e.detail.url || null;
     if (this.#pane === key && this.#paneInUrl) { this.requestUpdate(); return; }
-    if (this.#paneInUrl) { replaceView(href.plantPane(id, key)); return; }
-    this.#panePushed = true;
+    // Another block in the pane: the same pane (its marks kept); else a new view (Back closes it).
+    if (this.#paneInUrl) { replaceView(href.plantPane(id, key), ['gfSheetFrom', 'gfPaneFrom']); return; }
     openView(href.plantPane(id, key));
   };
 
@@ -543,15 +542,18 @@ export class GfFlora extends LitElement {
     const id = this.#plantId;
     if (id === null || !this.#paneInUrl || this.#pane !== 'media') return;
     const url = href.plantPane(id, 'media', e.detail.index);
-    if (location.hash !== url) history.replaceState(history.state, '', url);
+    if (location.hash !== url) replaceHash(url);
   };
 
+  /**
+   * « Fermer le panneau »: back to the plant it was opened from, without it; opened by a link, or the plant changed
+   * since (‹ ›): the plant shown, without it, in place.
+   */
   #closePane = () => {
     const id = this.#plantId;
     this._paneFull = false;
     this.#paneStart = null;
-    if (this.#panePushed) { this.#panePushed = false; history.back(); }
-    else if (id !== null) replaceView(href.plant(id));
+    if (id !== null && this.#paneMark) closeTo(this.#paneMark, href.plant(id), { keep: ['gfSheetFrom'] });
   };
 
   /** The pane: its bar (block, plant, full screen, close) and the block alone. @param {boolean} phone */
@@ -586,8 +588,8 @@ export class GfFlora extends LitElement {
   #fold(pane, folded) { this.#sizer.fold(pane, folded); }
 
   #closePlant() {
-    // Back to the list (past the plants browsed with ‹ ›), else to the search as a new view.
-    backTo(this.#listDepth, lastSearchHash());
+    // Back to the list it was opened from (past the plants browsed with ‹ ›); opened elsewhere: the list in the sheet's place.
+    if (this.#sheet) closeTo(this.#sheet, this.#listHash);
   }
 
   // ── Resizing ───────────────────────────────────────────────────────────────
