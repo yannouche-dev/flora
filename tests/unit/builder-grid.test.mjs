@@ -1,10 +1,12 @@
-// A free layout as boxes (app/layout/builder-grid.js, the cross of « Modifier la disposition »): read from and written
+// A free layout as boxes (app/layout/builder-grid.js, the cross of a screen being modified): read from and written
 // to a layout, cut towards a side,
 // a place taken out — any cell kept as the address writes it, an empty place (`slot`) new.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { boxOf, specOf, split, remove, canSplit, placesOf } from '../../app/layout/builder-grid.js';
-import { GRIDS } from '../../app/layout/gf-builder-grids.js';
+import { MODELS } from '../../app/layout/models.js';
+
+const GRIDS = MODELS.filter(m => m.kind === 'grille');
 
 test('les trois grilles : lues, chaque part dite, réécrites telles quelles', () => {
   for (const g of GRIDS) {

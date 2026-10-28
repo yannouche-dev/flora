@@ -82,11 +82,10 @@ export function parse(hash) {
   if (was) return { name: 'app', id: was, step: was !== 'parcours' && params.has('p') ? 'cards' : null, plant: number('p'), view: null, media: null, sheet: was === 'rencontres' && params.has('p') };
   // « Découvrir »: the list of the activities (any other old ?s=, Scientifique's ?s=science among them: the list too).
   if (path === 'discover') return { name: 'discover' };
-  // « Disposition libre » (app/layout): #/layout/<layout>?<state> — the layout as written (app/layout/grammar.js),
-  // its live state (plant, scope, search) read by the layout itself (app/layout/state.js).
-  // « Créer une app » (app/layout/gf-builder.js): #/builder[/<grid>][?g=<layout>&<state>] — the free layout being built
-  // (g=: its text, grammar.js; else the grid named, resolved by the builder: gf-builder-grids.js#builderSpec; neither:
-  // the builder's start), and the layout's live state beside it (p, at, r, q…: state.js), as #/layout has it.
+  // « Écran sur mesure » (app/layout/gf-layout.js): #/layout/<layout>?<state>[&edit=1] — the layout as written
+  // (grammar.js), its live state (state.js) read by the screen itself; edit=1: being modified, its tools shown. #/layout
+  // alone: the home (« Composer un écran »). « Créer une app »'s old addresses, #/builder[/<grid>][?g=<layout>&<state>],
+  // still parse: gf-layout puts the screen they name in their place, being modified (until 3.1).
   const builder = /^builder(?:\/([a-z][a-z0-9-]{0,23}))?$/.exec(path);
   if (builder) {
     const grid = builder[1] ?? null;
@@ -171,17 +170,20 @@ export const href = {
     return '#/app/' + id + (step ? '/' + step : '') + (search ? '?' + search : '');
   },
   /**
-   * A free layout (« Disposition libre »): its text (app/layout/grammar.js; brackets, parentheses, « @ » and « = » kept
-   * as they are, anything else an address may not hold encoded) and its state (app/layout/state.js, already encoded).
-   * @param {string} spec @param {string} [search]
-   */
-  /**
    * « Créer une app »: its start (no `spec`), or a layout being built (its text, g=: brackets, parentheses, « @ », « = »
    * kept, anything else an address may not hold encoded — « + » and « & » among them) and the layout's state (already
    * encoded). @param {string | null} [spec] @param {string} [search]
    */
   builder: (spec = null, search = '') => '#/builder' + (spec === null ? '' : '?g=' + spec.replace(/[^\w\-.~!$'()*,;:@[\]]/g, c => encodeURIComponent(c)) + (search ? '&' + search : '')),
-  layout: (spec, search = '') => '#/layout/' + spec.replace(/[^\w\-.~!$&'()*+,;=:@[\]]/g, c => encodeURIComponent(c)) + (search ? '?' + search : '')
+  /**
+   * A screen of one's own (« Écran sur mesure »): its layout's text (grammar.js; brackets, parentheses, « @ » and « = »
+   * kept as they are, anything else an address may not hold encoded), its state (state.js, already encoded) and, being
+   * modified, edit=1 (last). No text: the home, #/layout. @param {string} spec @param {string} [search] @param {boolean} [edit]
+   */
+  layout: (spec, search = '', edit = false) => {
+    const query = [search, edit ? 'edit=1' : ''].filter(Boolean).join('&');
+    return '#/layout' + (spec ? '/' + spec.replace(/[^\w\-.~!$&'()*+,;=:@[\]]/g, c => encodeURIComponent(c)) : '') + (query ? '?' + query : '');
+  }
 };
 
 /** Lit ReactiveController exposing the current route and re-rendering on navigation. */

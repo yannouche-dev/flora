@@ -8,9 +8,8 @@ import assert from 'node:assert/strict';
 import * as G from '../../app/layout/grammar.js';
 import { cellIcon, cellMark, cellName, COMPONENTS, distanceText, menuLooks, names, parseDistance, resolve, resolveTree } from '../../app/layout/registry.js';
 import { cleanText, liveSearch, readLive, readQuery } from '../../app/layout/state.js';
-import { PRESETS } from '../../app/layout/presets.js';
+import { MODELS, modelSpec } from '../../app/layout/models.js';
 import { href, parse as route } from '../../app/core/router.js';
-import { builderSpec } from '../../app/layout/gf-builder-grids.js';
 import { fromHash } from '../../app/core/query.js';
 import { random } from './support/random.mjs';
 
@@ -160,11 +159,16 @@ test('chaque nom du registre se lit, et les modèles sont des dispositions sans 
     assert.deepEqual([...r.errors, ...r.problems], [], n);
   }
   assert.ok(COMPONENTS.every(c => c.title && c.icon && c.about && (c.reads.length || c.empty) && c.min.w > 0));
-  for (const p of PRESETS) {
-    const r = read(p.spec);
-    assert.deepEqual([...r.errors, ...r.problems], [], p.id);
-    assert.equal(r.text, p.spec, `${p.id} : écrit sous sa forme canonique`);
+  // The grids and the models (models.js): each read without a remark, written as it is; one id each; a grid holds only
+  // empty places.
+  for (const m of MODELS) {
+    const r = read(m.spec);
+    assert.deepEqual([...r.errors, ...r.problems], [], m.id);
+    assert.equal(r.text, m.spec, `${m.id} : écrit sous sa forme canonique`);
+    if (m.kind === 'grille') assert.ok(G.cells(G.parse(m.spec).tree).every(c => c.cell.name === 'slot'), `${m.id} : des emplacements seulement`);
   }
+  assert.equal(new Set(MODELS.map(m => m.id)).size, MODELS.length, 'un identifiant chacun');
+  assert.deepEqual(MODELS.map(m => m.kind), ['grille', 'grille', 'grille', 'modele', 'modele', 'modele', 'modele', 'modele'], 'les grilles d’abord');
 });
 
 test('le menu des colonnes (téléphone) : l’icône de chaque case, chaque bloc de la fiche le sien ; une présentation, un oui ou un non choisis, leur marque ; son nom entier', () => {
@@ -333,26 +337,29 @@ test('le routeur : #/layout/<disposition>?<état>, aller-retour par href.layout'
   assert.deepEqual(route(url), { name: 'layout', spec, search: 'p=1&q=ortie' });
   assert.deepEqual(route('#/layout'), { name: 'layout', spec: '', search: '' });
   assert.deepEqual(route('#/layout/'), { name: 'layout', spec: '', search: '' });
+  // No text: the home, #/layout. Being modified: edit=1, last; the state reads past it.
+  assert.equal(href.layout(''), '#/layout');
+  assert.equal(href.layout(spec, 'p=1', true), '#/layout/' + spec + '?p=1&edit=1');
+  assert.equal(href.layout(spec, '', true), '#/layout/' + spec + '?edit=1');
+  assert.deepEqual(route(href.layout(spec, 'p=1', true)), { name: 'layout', spec, search: 'p=1&edit=1' });
+  assert.equal(readLive('p=1&edit=1').plant, 1);
+  assert.equal(readQuery('q=ortie&edit=1').q, 'ortie');
   // What an address may not hold is encoded, and read back.
   const odd = href.layout('[carte(r=2 km),médias]');
   assert.equal(odd, '#/layout/[carte(r=2%20km),m%C3%A9dias]');
   assert.equal(read(/** @type {any} */ (route(odd)).spec).text, '[map(r=2km),media]');
 });
 
-test('le routeur : « Créer une app », #/builder[/<grille>][?g=<disposition>&<état>], aller-retour par href.builder', () => {
+test('le routeur : l’ancienne adresse #/builder[/<grille>][?g=<disposition>&<état>], lue telle quelle (gf-layout met l’écran qu’elle nomme à sa place)', () => {
   assert.deepEqual(route('#/builder'), { name: 'builder', grid: null, spec: null, search: '' });
-  assert.equal(href.builder(), '#/builder');
-  // A layout with « + » and « & » in it, its state beside it.
+  // A layout with « + » and « & » in it (g=, encoded), its state beside it.
   const spec = '[map(layers=znieff+n2000,lieu=A&B),slot]';
-  const url = href.builder(spec, 'p=1&at=48.85,2.35');
-  assert.equal(url, '#/builder?g=[map(layers%3Dznieff%2Bn2000,lieu%3DA%26B),slot]&p=1&at=48.85,2.35', 'crochets, parenthèses et @ lisibles ; = + & encodés');
-  assert.deepEqual(route(url), { name: 'builder', grid: null, spec, search: 'p=1&at=48.85,2.35' });
-  // The old links: a grid by its name (resolved by the builder: gf-builder-grids.js#builderSpec); g= wins.
+  assert.deepEqual(route('#/builder?g=[map(layers%3Dznieff%2Bn2000,lieu%3DA%26B),slot]&p=1&at=48.85,2.35'), { name: 'builder', grid: null, spec, search: 'p=1&at=48.85,2.35' });
+  // A grid by its name (models.js#modelSpec); g= wins.
   assert.deepEqual(route('#/builder/trois'), { name: 'builder', grid: 'trois', spec: null, search: '' });
-  assert.equal(builderSpec(route('#/builder/trois')), '[slot@30,slot@35,slot]');
-  assert.equal(builderSpec(route('#/builder/trois?g=[slot,slot]')), '[slot,slot]');
-  assert.equal(builderSpec(route('#/builder/inconnue')), null);
-  assert.equal(builderSpec(route('#/builder')), null);
+  assert.equal(modelSpec('trois'), '[slot@30,slot@35,slot]');
+  assert.equal(modelSpec('inconnue'), null);
+  assert.equal(modelSpec(null), null);
   assert.deepEqual(route('#/builder/trois?g=[slot,slot]&r=2km'), { name: 'builder', grid: 'trois', spec: '[slot,slot]', search: 'r=2km' });
   assert.deepEqual(route('#/builder/inconnue'), { name: 'builder', grid: 'inconnue', spec: null, search: '' });
 });

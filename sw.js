@@ -73,6 +73,7 @@ const SHELL = [
   'app/layout/cells.js',
   'app/layout/obs-filters.js',
   'app/layout/sizes.js',
+  'app/layout/models.js',
   'app/layout/presets.js',
   'app/layout/gf-builder.js',
   'app/layout/gf-builder-grids.js',
