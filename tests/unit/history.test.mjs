@@ -1,8 +1,9 @@
 // app/core/history.js: where a sheet closes to (sheetMark, closeTo) — back to the entry it was opened from, past the
-// plants gone through, or in place when nothing of this visit is under it — and a view replaced keeping the keys it says.
+// plants gone through, or in place when nothing of this visit is under it —, a view replaced keeping the keys it says,
+// and a launch with no address given its first view (startAt).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { closeTo, depth, replaceView, sheetMark } from '../../app/core/history.js';
+import { closeTo, depth, replaceView, sheetMark, startAt } from '../../app/core/history.js';
 
 /** The current entry: at depth `d`, with `extra` in its state. @param {number} d @param {Record<string, unknown>} [extra] */
 const at = (d, extra = {}) => history.replaceState({ ...extra, gfDepth: d }, '', '#/plant/1');
@@ -87,4 +88,14 @@ test('replaceView(hash, keep) : la même profondeur, et seules les clés dites',
   replaceView('#/plant/3');
   assert.equal(history.state.gfSheetFrom, undefined);
   assert.equal(depth(), 2);
+});
+
+test('startAt : lancée sans adresse (l’icône), sa première vue à sa place ; une adresse donnée reste', () => {
+  at(0);
+  startAt('#/?family=Rosaceae');
+  assert.equal(location.hash, '#/plant/1');
+  location.hash = '';
+  startAt('#/?family=Rosaceae');
+  assert.equal(location.hash, '#/?family=Rosaceae');
+  assert.equal(depth(), 0);
 });

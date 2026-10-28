@@ -22,6 +22,11 @@ addEventListener('hashchange', () => {
   last = depth();
 });
 
+/** A launch with no address (the installed app's icon): its first view put at `hash`, in place (depth 0), before anything routes. @param {string} hash */
+export function startAt(hash) {
+  if (!location.hash && hash) history.replaceState(history.state, '', hash);
+}
+
 // A link to the view shown (a tab touched again, the logo on Flore as it was left, Réglages' gear on Réglages): nothing.
 // Followed, the browser would still navigate to it: a popstate for no move (Chromium), or, where the entry that takes
 // this one's place is given no state (the same address: no hashchange to stamp it), its depth and what the views kept

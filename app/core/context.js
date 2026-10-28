@@ -7,6 +7,7 @@
 
 import { config } from '../config.js';
 import { readJSON, writeJSON } from './prefs.js';
+import { startAt } from './history.js';
 import { href, parse } from './router.js';
 import { store } from './store.js';
 import { tabShown } from './discover.js';
@@ -85,6 +86,9 @@ function follow() {
 }
 
 store.set({ context: read() });
+// Launched from the installed app's icon (start_url './', no address): Flore as it was left — not an empty search that
+// would erase it. Before anything routes (gf-app imports this module first) or records it (follow, below).
+startAt(floreHref());
 addEventListener('hashchange', follow);
 addEventListener('popstate', follow);
 addEventListener('gf-location', follow);

@@ -290,6 +290,23 @@ test('« Passer » après « Revoir les premiers pas » garde la recherche de Fl
   await expect.poll(() => app.state('query.filters.family')).toEqual(['Rosaceae']);
 });
 
+/** The app launched from its icon: its address without a hash (the manifest's start_url, './'). @param {import('./app.mjs').App} app @param {Page} page */
+async function launch(app, page) {
+  await page.goto(new URL('./', page.url()).href);
+  await app.ready();
+}
+
+test('Lancée depuis son icône, sans adresse : Flore là où on l’avait laissée', async ({ app, page }) => {
+  await app.open('#/?family=Rosaceae');
+  await app.go('#/settings');
+  await launch(app, page);
+  await expect.poll(() => hash(page)).toBe('#/?family=Rosaceae');
+  expect(await depthOf(page)).toBe(0);
+  // Never an empty search in its place: the saved one is the list's.
+  await expect.poll(() => app.state('query.filters.family')).toEqual(['Rosaceae']);
+  expect(await app.state('context.query')).toBe('#/?family=Rosaceae');
+});
+
 test.describe('pendant les premiers pas', () => {
   test.use({ firstVisit: true });
 
@@ -303,5 +320,12 @@ test.describe('pendant les premiers pas', () => {
     await expect(page.getByText('Page introuvable.').getByRole('link', { name: 'Aller à Découvrir' })).toHaveAttribute('href', '#/discover');
     await app.go('#/settings');
     await expect(page.locator('gf-settings').getByRole('link', { name: 'Aller à Découvrir' })).toHaveAttribute('href', '#/discover');
+  });
+
+  test('lancée depuis son icône, sans adresse : Découvrir', async ({ app, page }) => {
+    await app.open('#/');
+    await launch(app, page);
+    await expect.poll(() => hash(page)).toBe('#/discover');
+    expect(await depthOf(page)).toBe(0);
   });
 });
