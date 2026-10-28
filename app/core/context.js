@@ -7,8 +7,9 @@
 
 import { config } from '../config.js';
 import { readJSON, writeJSON } from './prefs.js';
-import { parse } from './router.js';
+import { href, parse } from './router.js';
 import { store } from './store.js';
+import { tabShown } from './discover.js';
 import { walkOn } from '../miniapp/kit/trail-store.js';
 
 /**
@@ -63,6 +64,11 @@ export function tabHref(tab, current = false) {
   if (tab === 'mine') return (current ? null : c.mine) || '#/collections';
   return (current ? null : c.map) || '#/map';
 }
+
+/** Flore as it was left — its search, the plant open: the Flore tab, the logo, the ways back into the app. Découvrir until Flore has come. */
+export const floreHref = () => tabShown('flore') ? tabHref('flore') : href.discover();
+/** Its name, for the links that lead there (« Aller à Flore »). */
+export const floreName = () => tabShown('flore') ? 'Flore' : 'Découvrir';
 
 /** The current view, recorded as it is reached (links, Back, tabs). */
 function follow() {

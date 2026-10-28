@@ -2,11 +2,12 @@
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { config } from '../config.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
-import { activeFilterCount, clearFilters, lastSearchHash } from '../core/query.js';
+import { activeFilterCount, clearFilters, fromHash, lastSearchHash, toHash } from '../core/query.js';
 import { href } from '../core/router.js';
 import { closeTo, depth, entryValue, modalOpen, openModal, openView, renewBehind, replaceHash, replaceView, sheetMark } from '../core/history.js';
-import { setContext } from '../core/context.js';
-import { StoreController, arrangedMode, whenReady } from '../core/store.js';
+import { context, setContext } from '../core/context.js';
+import { StoreController, arrangedMode, store, whenReady } from '../core/store.js';
+import { runSearch } from '../core/search.js';
 import { PaneSizer, splitStyles } from '../core/panes.js';
 import { ui } from '../styles/ui.js';
 import { sheetStyles } from './ui-kit.js';
@@ -415,6 +416,7 @@ export class GfFlora extends LitElement {
     if (changed.has('route')) {
       const before = changed.get('route');
       if (this.route.name === 'plant') {
+        if (!before) this.#restoreSearch();
         // Where the sheet closes to, kept in its entry: the list just left; the sheet stepped from (‹ ›); a plant entry of an
         // earlier version (gfList: its list's depth); else opened from elsewhere (a link, a tab, the start).
         const legacy = entryValue('gfList');
@@ -459,6 +461,18 @@ export class GfFlora extends LitElement {
       setContext({ query: list });
       if (this.#sheet?.from != null) renewBehind(this.#sheet.from, list);
     }
+  }
+
+  /**
+   * Mounted on a plant (another tab, a link, a reload, Back): the search under the sheet is Flore's own, kept in the
+   * context — not the one the store may hold from elsewhere (a free layout's first group). Before anything reads it
+   * (#listHash, the pager); run once the flora is ready (main.js runs the start's).
+   */
+  #restoreSearch() {
+    const saved = fromHash(context().query || '#/');
+    if (toHash(saved) === toHash(this.#store.state.query)) return;
+    store.set({ query: saved });
+    if (store.state.status === 'ready') runSearch();
   }
 
   updated() {

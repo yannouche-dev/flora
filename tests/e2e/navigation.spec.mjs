@@ -187,3 +187,17 @@ test('Échap ferme la fiche de Mes plantes', async ({ app, page }) => {
   expect(await entries(page)).toBe(n);
   await expect(mine.locator('#mine-plant, .sheet-plant')).toHaveCount(0);
 });
+
+test('Une seule recherche : une disposition libre ne change pas celle de Flore', async ({ app, page }) => {
+  await app.open('#/?family=Rosaceae');
+  // The layout's first group shares the app's live search (here: ortie), never kept as Flore's.
+  await app.go('#/layout/[search(list=0),results(list)]?q=ortie');
+  await expect.poll(() => app.state('query.q')).toBe('ortie');
+  await app.go(`#/plant/${plantId('Geum urbanum')}`);
+  await expect.poll(() => app.state('query.q')).toBe('');
+  expect(await app.state('query.filters.family')).toEqual(['Rosaceae']);
+  expect(await app.state('context.query')).toBe('#/?family=Rosaceae');
+  await closeFlore(app, page);
+  await expect.poll(() => hash(page)).toBe('#/?family=Rosaceae');
+  await expect.poll(() => app.state('results.total')).toBeGreaterThan(3);
+});
