@@ -26,6 +26,12 @@ const param = (page, key) => page.evaluate(k => new URLSearchParams(location.has
 const builder = (spec, state = AT) => `#/builder?g=${encodeURIComponent(spec)}${state ? '&' + state : ''}`;
 const cell = (/** @type {Page} */ page) => page.locator('dl-map');
 const mapOf = (/** @type {Page} */ page) => page.locator('dl-map gf-map');
+/** « Vue 3D » (the cell's control) below the map's own buttons, the binoculars among them — never over them. @param {Page} page */
+const clearOfButtons = page => expect.poll(async () => {
+  const [v, b] = await Promise.all([cell(page).locator('.ctl.tr').getByRole('button', { name: 'Vue 3D' }).boundingBox(),
+    mapOf(page).getByRole('button', { name: 'Observations autour', exact: true }).boundingBox()]);
+  return Boolean(v && b && v.y >= b.y + b.height);
+}).toBe(true);
 
 test.describe('un grand écran', () => {
   test.skip(({ isMobile }) => isMobile, 'a wide screen');
@@ -172,6 +178,7 @@ test('en 3D, les jumelles (« Observations autour ») allumées ou éteintes : g
   await app.open('#/layout/[map(r=2km;3d=1),results]?at=45.7772,3.087');
   const map = mapOf(page);
   await expect(map).toHaveAttribute('data-renderer', '3d', { timeout: 30_000 });
+  await clearOfButtons(page);
   const binoculars = map.getByRole('button', { name: 'Observations autour', exact: true });
   await expect(binoculars).toHaveAttribute('aria-pressed', 'false');
   await binoculars.click();
@@ -182,6 +189,7 @@ test('en 3D, les jumelles (« Observations autour ») allumées ou éteintes : g
   await app.ready();
   await expect(map).toHaveAttribute('data-renderer', '3d', { timeout: 30_000 });
   await expect(map.getByRole('button', { name: 'Observations autour', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await clearOfButtons(page);
   await map.getByRole('button', { name: 'Observations autour', exact: true }).click();
   await expect.poll(() => layoutOf(page)).toBe('[map(r=2km,3d=1),results]');
 });
