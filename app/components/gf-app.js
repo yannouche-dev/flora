@@ -67,7 +67,10 @@ const loadToast = () => (toastModule ??= import('../core/toast.js').then(m => { 
 
 /** How long the announcement of tabs that came shows (ms); with its « Voir » hovered or focused, until left. */
 const ANNOUNCE_MS = 9000;
-/** Shown less than this (ms) — another message took its place —, it is announced again once that one has gone. */
+/**
+ * Shown less than this (ms), the window in sight — another message took its place, a dialog covered it, the window was
+ * hidden —, it is announced again once that has passed.
+ */
 const ANNOUNCE_READ_MS = 2000;
 /** Tab names joined as said: « Carte et Mes plantes ». */
 const AND = new Intl.ListFormat('fr', { type: 'conjunction' });
@@ -202,13 +205,22 @@ export class GfApp extends LitElement {
    * read (2 s), it is done; else it comes back once the dialog has closed (its step gone back: popstate).
    */
   #underModal = () => this.#announcing?.hide();
+  /**
+   * The window hidden (another tab of the browser, another app, the phone locked) while the announcement shows: let go as
+   * under a dialog — read (2 s in sight), it is done; else it comes back on the first screen in sight. Never left to run
+   * its time out of sight, then counted read. In sight again: looked at.
+   */
+  #onVisibility = () => {
+    if (document.visibilityState !== 'visible') this.#announcing?.hide();
+    this.#announceSoon();
+  };
 
   connectedCallback() {
     super.connectedCallback();
     discoverEvents.addEventListener('change', this.#onDiscover);
     window.addEventListener('popstate', this.#announceSoon);
     window.addEventListener('gf-modal', this.#underModal);
-    document.addEventListener('visibilitychange', this.#announceSoon);
+    document.addEventListener('visibilitychange', this.#onVisibility);
     toast?.toastEvents.addEventListener('free', this.#announceSoon);
     window.visualViewport?.addEventListener('resize', this.#onKeyboard);
     window.visualViewport?.addEventListener('scroll', this.#onKeyboard);
@@ -220,7 +232,7 @@ export class GfApp extends LitElement {
     discoverEvents.removeEventListener('change', this.#onDiscover);
     window.removeEventListener('popstate', this.#announceSoon);
     window.removeEventListener('gf-modal', this.#underModal);
-    document.removeEventListener('visibilitychange', this.#announceSoon);
+    document.removeEventListener('visibilitychange', this.#onVisibility);
     toast?.toastEvents.removeEventListener('free', this.#announceSoon);
     clearTimeout(this.#announceTimer);
     this.#announceTimer = 0;
@@ -341,8 +353,9 @@ export class GfApp extends LitElement {
    * outside an activity, the app ready, no dialog open, this window in sight (the other tabs of the browser show
    * nothing), the toast place free (a capture's « Annuler », a safety warning, a map's word first) — all in one toast,
    * said to screen readers, their tabs lit meanwhile. « Voir » for one tab that is not the screen's own (one come with
-   * the address shown has none). Cut short by another message before it could be read: announced again once that one
-   * has gone; else, or its « Voir » taken: announced, here and in the other tabs.
+   * the address shown has none). Cut short before it could be read (2 s, the window in sight) — by another message, a
+   * dialog, the window hidden —: announced again once that has passed; else, or its « Voir » taken: announced, here and
+   * in the other tabs.
    */
   #announce() {
     if (this.#announcing || !this.isConnected) return;

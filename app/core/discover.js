@@ -18,7 +18,7 @@
 
 import { config } from '../config.js';
 import { AROUND_APPS, clearAroundGames, migrateDiscover } from './around-sessions.js';
-import { adoptMadeBy, getMembership, listCollections, spotEvents } from './collections.js';
+import { adoptMadeBy, backupSummary, getMembership, listCollections, spotEvents } from './collections.js';
 import { onStorage, publish } from './sync.js';
 import { readJSON, storedKeys, writeJSON } from './prefs.js';
 
@@ -174,14 +174,24 @@ export function recomputeUnlocks({ quiet = false, summaries = getMembership().co
  * At the start (main.js, the base open): the tabs the device's listes and lieux bring, quietly — the one the address
  * brought as the page opened (context.js follow(), before the base is read) too when they bring it: a device of before
  * opened on Mes plantes says nothing either. A tab that came before this page opened still waits for its announcement.
+ * A repair's restore waiting (`restoring`: the base empty), they are those the backup copy puts back: the address's tab
+ * they bring is quiet all the same (the repair reloads on Mes plantes), before anything is announced; the tabs
+ * themselves come with them, quietly (main.js restoreAfter).
+ * @param {boolean} [restoring]
  */
-export async function unlocksAtStart() {
+export async function unlocksAtStart(restoring = false) {
   if (state.done) return;
-  const all = await listCollections();
-  const summaries = all.map(c => ({ kind: c.properties.kind, count: c.properties.plants.length }));
-  recomputeUnlocks({ quiet: true, summaries });
-  const held = unlocksFrom({ ...holdingsOf(summaries), seen: state.seen.length });
-  const brought = pendingUnlocks().filter(t => held.includes(t) && !atOpen.includes(t));
+  /** @type {{ favorites: number, lists: number, places: number }} */
+  let held;
+  if (restoring) held = backupSummary() ?? holdingsOf([]);
+  else {
+    const all = await listCollections();
+    const summaries = all.map(c => ({ kind: c.properties.kind, count: c.properties.plants.length }));
+    recomputeUnlocks({ quiet: true, summaries });
+    held = holdingsOf(summaries);
+  }
+  const tabs = unlocksFrom({ ...held, seen: state.seen.length });
+  const brought = pendingUnlocks().filter(t => tabs.includes(t) && !atOpen.includes(t));
   if (brought.length) markAnnounced(brought);
 }
 

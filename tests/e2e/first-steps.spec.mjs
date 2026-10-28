@@ -4,9 +4,10 @@
 // Découvrir, and Découvrir, the activities, Réglages and its screens bring none. The tabs follow what the device holds
 // (a favourite, a list or a lieu: Mes plantes; a lieu: the Carte): at the start, after an import (a file, a transfer
 // link), a restore of the backup copy and « Revoir les premiers pas ». Each tab that comes is announced once — never
-// in an activity nor under a dialog, on the first screen outside, said to screen readers, its tab lit; kept across a
-// reload and the other tabs of the browser —, but those of the start (the one its address brought too), of « Revoir »
-// and of a restore after a repair. « Nothing said » is counted (countSaid), never a toast looked for once it may be gone.
+// in an activity, under a dialog nor out of sight, on the first screen outside, said to screen readers, its tab lit; kept across a
+// reload and the other tabs of the browser —, but those of the start and of a restore after a repair (the one the
+// address brought too), and of « Revoir ». « Nothing said » is counted (countSaid), never a toast looked for once it may
+// be gone.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 import { App } from './app.mjs';
 import { writeFileSync } from 'node:fs';
@@ -54,6 +55,15 @@ const openDialog = page => page.evaluate(async () => {
 });
 /** @param {Page} page */
 const closeDialog = page => page.evaluate(() => /** @type {HTMLDialogElement} */ (document.getElementById('question')).close());
+/**
+ * The window hidden (another tab of the browser, the phone locked) or in sight again, as the browser says it.
+ * @param {Page} page @param {boolean} hidden
+ */
+const setHidden = (page, hidden) => page.evaluate(h => {
+  Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => h ? 'hidden' : 'visible' });
+  Object.defineProperty(document, 'hidden', { configurable: true, get: () => h });
+  document.dispatchEvent(new Event('visibilitychange'));
+}, hidden);
 /** A list saved in Mes plantes (Mes plantes comes, to be announced). @param {Page} page */
 const saveList = page => page.evaluate(async () => {
   const c = await import('/app/core/collections.js');
@@ -224,26 +234,31 @@ test('la copie de secours restaurée fait venir la Carte', async ({ app, page })
   await expect.poll(() => app.tabs()).toEqual(bar(app, ['Carte', 'Mes plantes']));
 });
 
-test('la réparation du stockage remet les onglets de vos listes et de vos lieux, sans annonce', async ({ app, page, context }) => {
-  // The base emptied by the browser before the launch, the backup copy there (storage-error.spec.mjs): once.
-  const at = '2026-05-01T08:00:00.000Z';
-  await context.addInitScript(json => {
-    if (sessionStorage.getItem('seeded')) return;
-    sessionStorage.setItem('seeded', '1');
-    localStorage.setItem('geoflora.backup', json);
-    localStorage.setItem('geoflora.discover', JSON.stringify({ done: false, unlocked: [] }));
-  }, JSON.stringify({ savedAt: '2026-10-12T16:04:00.000Z', features: [
-    { type: 'Feature', id: 'bois', geometry: null, properties: { name: 'Bois', createdAt: at, updatedAt: at, plants: [] } },
-    { type: 'Feature', id: 'lisiere', geometry: { type: 'Point', coordinates: [4.8357, 45.7641] }, properties: { name: 'Lisière nord', createdAt: at, updatedAt: at, plants: [] } }
-  ] }));
-  await countSaid(page);
-  await app.open('#/discover');
-  await expect(page.locator('gf-app').getByRole('status').filter({ hasText: 'vidé' })).toContainText('Le navigateur avait vidé le stockage de GeoFlora');
-  await expect.poll(() => app.tabs()).toEqual(bar(app, ['Carte', 'Mes plantes']));
-  // They were the user's before: nothing to announce.
-  expect(await pending(page)).toEqual([]);
-  expect(await saidCount(page)).toBe(0);
-});
+// Opened on Découvrir, or on Mes plantes (where a repair reloads), whose tab the address brings first — quiet too: the
+// backup copy brings it.
+for (const address of ['#/discover', '#/collections']) {
+  test(`la réparation du stockage remet les onglets de vos listes et de vos lieux, sans annonce : ${address}`, async ({ app, page, context }) => {
+    // The base emptied by the browser before the launch, the backup copy there (storage-error.spec.mjs): once.
+    const at = '2026-05-01T08:00:00.000Z';
+    await context.addInitScript(json => {
+      if (sessionStorage.getItem('seeded')) return;
+      sessionStorage.setItem('seeded', '1');
+      localStorage.setItem('geoflora.backup', json);
+      localStorage.setItem('geoflora.discover', JSON.stringify({ done: false, unlocked: [] }));
+    }, JSON.stringify({ savedAt: '2026-10-12T16:04:00.000Z', features: [
+      { type: 'Feature', id: 'bois', geometry: null, properties: { name: 'Bois', createdAt: at, updatedAt: at, plants: [] } },
+      { type: 'Feature', id: 'lisiere', geometry: { type: 'Point', coordinates: [4.8357, 45.7641] }, properties: { name: 'Lisière nord', createdAt: at, updatedAt: at, plants: [] } }
+    ] }));
+    await countSaid(page);
+    await app.open(address);
+    // What came back (gf-app's banner; Mes plantes says it waits until then).
+    await expect(page.locator('gf-app').getByRole('status').filter({ hasText: 'a remis' })).toContainText('Le navigateur avait vidé le stockage de GeoFlora');
+    await expect.poll(() => app.tabs()).toEqual(bar(app, ['Carte', 'Mes plantes']));
+    // They were the user's before: nothing to announce.
+    expect(await pending(page)).toEqual([]);
+    expect(await saidCount(page)).toBe(0);
+  });
+}
 
 test('« Revoir les premiers pas » garde les onglets de vos listes et de vos lieux', async ({ app, page }) => {
   await app.open('#/discover');
@@ -374,4 +389,34 @@ test('coupée par un message plus important avant d’être lue, l’annonce rev
   // Gone: the announcement comes back.
   await page.evaluate(() => /** @type {any} */ (window).__free());
   await expect(said(page)).toContainText('Nouveau : Mes plantes');
+});
+
+test('la fenêtre cachée pendant l’annonce : pas encore lue, elle revient quand la fenêtre se montre ; lue, jamais plus', async ({ app, page }) => {
+  await countSaid(page);
+  // The service worker blocked here (playwright.config.mjs) gives no registration, which main.js asks for a deploy as
+  // the window comes back in sight: one that looks for nothing.
+  await page.addInitScript(() => { navigator.serviceWorker.register = async () => /** @type {any} */ ({ update: async () => {} }); });
+  await app.open('#/settings');
+  await saveList(page);
+  await expect(said(page)).toContainText('Nouveau : Mes plantes');
+  // Another tab of the browser, the phone locked: at once, before it could be read. Never counted read out of sight,
+  // even once its time is out.
+  await setHidden(page, true);
+  await expect(said(page)).toHaveCount(0, { timeout: 12_000 });
+  expect((await discover(page)).announced).not.toContain('mine');
+  expect(await pending(page)).toEqual(['mine']);
+  // Nothing while the window is hidden.
+  expect(await saidCount(page)).toBe(1);
+  // In sight again: it comes back.
+  await setHidden(page, false);
+  await expect(said(page)).toContainText('Nouveau : Mes plantes');
+  await expect(lit(app)).toHaveText(['Mes plantes']);
+  // Read in sight (2 s), then the window hidden: announced, never again.
+  await page.waitForTimeout(2500);
+  await setHidden(page, true);
+  await expect.poll(async () => (await discover(page)).announced, { timeout: 12_000 }).toContain('mine');
+  await expect(said(page)).toHaveCount(0);
+  await setHidden(page, false);
+  expect(await saidCount(page)).toBe(2);
+  expect(await pending(page)).toEqual([]);
 });

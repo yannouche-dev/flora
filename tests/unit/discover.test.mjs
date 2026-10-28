@@ -222,6 +222,36 @@ test('unlocksAtStart : l’onglet venu avec l’adresse à l’ouverture, que l�
   d.markAnnounced(['map']);
 });
 
+test('unlocksAtStart, une restauration en attente : l’onglet venu avec l’adresse, que la copie de secours fait venir, sans annonce', async () => {
+  const BACKUP = 'geoflora.backup';
+  const before = localStorage.getItem(BACKUP);
+  /** The page reloaded on Mes plantes after a repair (the base empty), its tab come with the address. */
+  const reloaded = () => {
+    localStorage.setItem(KEY, JSON.stringify({ done: false, unlocked: [], seen: [], step: 0 }));
+    d.recomputeUnlocks({ summaries: [] });
+    d.arrivedAt('collections');
+    assert.deepEqual(d.pendingUnlocks(), ['mine']);
+  };
+  try {
+    // The backup copy holds a liste: Mes plantes, quiet; the tabs come with the restore, not from the base.
+    localStorage.setItem(BACKUP, JSON.stringify({ savedAt: '2026-10-12T16:04:00.000Z', features: [
+      { type: 'Feature', id: 'bois', geometry: null, properties: { kind: 'list', name: 'Bois', plants: [] } }] }));
+    reloaded();
+    await d.unlocksAtStart(true);
+    assert.deepEqual(d.discoverState().unlocked, ['mine']);
+    assert.deepEqual(d.pendingUnlocks(), []);
+    // Nothing in the copy: announced (the base, empty after a repair, is not read — its liste and lieu here neither).
+    localStorage.removeItem(BACKUP);
+    reloaded();
+    await d.unlocksAtStart(true);
+    assert.deepEqual(d.discoverState().unlocked, ['mine']);
+    assert.deepEqual(d.pendingUnlocks(), ['mine']);
+    d.markAnnounced(['mine']);
+  } finally {
+    if (before === null) localStorage.removeItem(BACKUP); else localStorage.setItem(BACKUP, before);
+  }
+});
+
 test('markAnnounced : un onglet repris entre-temps (« Revoir les premiers pas » pendant son annonce) est annoncé quand il revient', async () => {
   for (const each of await c.listCollections()) if (each.id !== c.FAVORITES_ID) await c.deletePlace(each.id);
   await d.restartDiscover();

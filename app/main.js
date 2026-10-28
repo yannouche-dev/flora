@@ -35,9 +35,10 @@ async function start() {
     await openDb();
     const restoring = holdIfEmptied();
     // The first steps' tabs from what the device holds — a favourite, a liste, a lieu: Mes plantes; a lieu: the Carte —,
-    // quietly (lists and lieux of before this version, settings cleared, a « Revoir les premiers pas » of before). Not
-    // while a restore waits: the base is empty, and what it puts back brings them.
-    if (!restoring) unlocksAtStart().catch(error => console.error(error));
+    // quietly (lists and lieux of before this version, settings cleared, a « Revoir les premiers pas » of before). While a
+    // restore waits the base is empty: what it puts back brings them (restoreAfter), and the tab the address brought
+    // stays quiet when the backup copy brings it too.
+    unlocksAtStart(restoring).catch(error => console.error(error));
     // The plant sheet's notes (moved from localStorage on the first launch of version 6 of the database).
     const notes = loadNotes().catch(error => console.error(error));
     const { meta, offline, update, stored } = await syncDataset(({ phase }) => store.set({ statusText: PHASES[phase] }));
