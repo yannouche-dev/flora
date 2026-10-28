@@ -9,7 +9,9 @@
 // lieu, Flore after a few plants discovered. They are worked out from what the device holds and the plants met
 // (unlocksFrom): at the start, on each change of Mes plantes (an import, a transfer link, a restore included) and after
 // « Revoir les premiers pas ». The first steps hide a tab, never an address: a screen shown brings its tab (arrivedAt).
-// Someone who already used the app starts with everything.
+// Each tab that comes is announced once, on the first screen outside an activity (`announced`, pendingUnlocks,
+// markAnnounced: gf-app), but those that come at the start, after « Revoir les premiers pas » or a repair's restore:
+// there at once, quietly. Someone who already used the app starts with everything.
 // The games around a place (Rencontres, Cueillette prudente, Mosaïque) keep their own place, distance and cards, each
 // with its mini-app (core/around-sessions.js); the session they shared here before is handed over once, to the one
 // played last.
@@ -37,7 +39,7 @@ const TABS = /** @type {Unlockable[]} */ (Object.keys(UNLOCKS));
 const tabsIn = v => Array.isArray(v) ? TABS.filter(t => v.includes(t)) : [];
 
 /**
- * @typedef {{ done: boolean, unlocked: Unlockable[], seen: number[],
+ * @typedef {{ done: boolean, unlocked: Unlockable[], announced: Unlockable[], seen: number[],
  *   step: number, firstMatch: boolean, branch: 'harvest' | 'science' | null }} DiscoverState
  */
 /** What the games around a place kept here before (handed over to them: around-sessions.js#migrateDiscover). */
@@ -55,7 +57,7 @@ function usedBefore() {
 /** @returns {DiscoverState} */
 function read() {
   /** @type {DiscoverState} */
-  const fresh = { done: false, unlocked: [], seen: [], step: 0, firstMatch: false, branch: null };
+  const fresh = { done: false, unlocked: [], announced: [], seen: [], step: 0, firstMatch: false, branch: null };
   const saved = readJSON(KEY, null);
   if (saved && typeof saved === 'object') {
     // The session of the games around a place, kept here before: theirs now (once; written back without it).
@@ -64,10 +66,11 @@ function read() {
       for (const k of HANDED) delete saved[k];
       writeJSON(KEY, saved);
     }
-    // The tips of before (never read) dropped; the tabs only those that come.
+    // The tips of before (never read) dropped; the tabs only those that come. No `announced` (before this version):
+    // the tabs of before were announced then.
     const kept = { ...saved };
     delete kept.tips;
-    return { ...fresh, ...kept, unlocked: tabsIn(saved.unlocked) };
+    return { ...fresh, ...kept, unlocked: tabsIn(saved.unlocked), announced: tabsIn(Array.isArray(saved.announced) ? saved.announced : saved.unlocked) };
   }
   return usedBefore() ? { ...fresh, done: true } : fresh;
 }
@@ -78,7 +81,7 @@ let state = read();
 /** This tab's last state not written (the storage full or switched off): it holds for this visit (stored()). */
 let unsaved = !writeJSON(KEY, state);
 
-/** Fires `change` (detail: the state) and `unlock` (detail: the tab). */
+/** Fires `change` (detail: the state). */
 export const discoverEvents = new EventTarget();
 
 /** @param {Partial<DiscoverState>} patch */
@@ -108,17 +111,18 @@ let hushed = 0;
 
 /**
  * The tabs there now (`unlocked`, the ones there before first), written when one comes — all three: the first steps
- * are over — then each new one announced (`unlock`), unless quiet. Its callers read the state as stored first (stored()).
+ * are over (the one that ends them still announced). Each new one waits to be announced (pendingUnlocks: gf-app), unless
+ * quiet — the start, « Revoir les premiers pas », a repair's restore (quietly()): there at once, never announced. Its
+ * callers read the state as stored first (stored()).
  * @param {Unlockable[]} unlocked @param {boolean} quiet
  */
 function grant(unlocked, quiet) {
   const added = unlocked.filter(t => !state.unlocked.includes(t));
   if (!added.length) return;
-  save({ unlocked, done: TABS.every(t => unlocked.includes(t)) });
-  if (!quiet && !hushed) for (const tab of added) discoverEvents.dispatchEvent(new CustomEvent('unlock', { detail: tab }));
+  save({ unlocked, done: TABS.every(t => unlocked.includes(t)), ...(quiet || hushed ? { announced: tabsIn([...state.announced, ...added]) } : {}) });
 }
 
-/** A tool comes (once), announced — also the tests' way to give one (miniapp-scope.spec.mjs). @param {Unlockable} tab */
+/** A tool comes (once), to be announced — also the tests' way to give one (miniapp-scope.spec.mjs). @param {Unlockable} tab */
 export function unlock(tab) {
   if (tabShown(tab)) return;
   stored();
@@ -178,20 +182,35 @@ export async function quietly(work) {
 const TAB_OF = /** @type {Partial<Record<string, Unlockable>>} */ ({ search: 'flore', plant: 'flore', map: 'map', collections: 'mine', spot: 'mine', 'spot-new': 'mine', shared: 'mine' });
 
 /**
- * A screen shown — a link, a bookmark, a shared link, a link of the app, Back —: its tab comes with it. The first steps
- * hide a tab, never an address. The start (`#/` alone) is Découvrir's: its caller leaves it out. Called first by
- * context.js#follow, before anything draws the screen. Nothing is read while its tab is there: a search typed calls it
- * at each key. @param {string} screen a route's name (core/router.js)
+ * A screen shown — a link, a bookmark, a shared link, a link of the app, Back —: its tab comes with it, announced on
+ * that screen (without « Voir »: it is there — gf-app). The first steps hide a tab, never an address. The start (`#/`
+ * alone) is Découvrir's: its caller leaves it out. Called first by context.js#follow, before anything draws the screen.
+ * Nothing is read while its tab is there: a search typed calls it at each key. @param {string} screen a route's name
+ * (core/router.js)
  */
 export function arrivedAt(screen) {
   const tab = TAB_OF[screen];
   if (!tab || tabShown(tab)) return;
   stored();
-  if (!tabShown(tab)) grant([...state.unlocked, tab], true);
+  if (!tabShown(tab)) grant([...state.unlocked, tab], false);
 }
 
 /** Plants still to meet before Flore comes (« Encore N plantes… »): 0 once it is there. */
 export const plantsBeforeFlore = () => tabShown('flore') ? 0 : Math.max(0, PLANTS_BEFORE_FLORE - state.seen.length);
+
+/** The bar's order: the announcement names the tabs in it. */
+const BAR = /** @type {Unlockable[]} */ (['flore', 'map', 'mine']);
+/** The tabs that came and are not announced yet (gf-app announces them, outside an activity), in the bar's order. */
+export const pendingUnlocks = () => BAR.filter(t => state.unlocked.includes(t) && !state.announced.includes(t));
+/**
+ * Tabs announced (read, or their « Voir » taken): never again, here or in another tab. Added to those announced as
+ * stored now (stored()); nothing written when they all were. @param {readonly Unlockable[]} tabs
+ */
+export function markAnnounced(tabs) {
+  stored();
+  const announced = tabsIn([...state.announced, ...tabs]);
+  if (announced.length > state.announced.length) save({ announced });
+}
 
 /** The last step of the discovery reached (see the top). @param {number} step */
 export function setStep(step) {
@@ -237,8 +256,14 @@ export function replayMeet() {
   save({ step: 0, firstMatch: false, branch: null });
 }
 
-/** Everything at once (« Tout montrer »). */
-export function finishDiscover() { save({ done: true, step: LAST_STEP }); }
+/**
+ * Everything at once (« Passer », « Tout montrer maintenant », the last guided step): nothing is announced — the tabs
+ * waiting for it neither (an announcement showing ends on its own). The tabs come as stored now (stored()).
+ */
+export function finishDiscover() {
+  stored();
+  save({ done: true, step: LAST_STEP, announced: [...state.unlocked] });
+}
 
 /**
  * The first steps again (Réglages › « Revoir les premiers pas », asked first): every choice and all progress
@@ -253,7 +278,7 @@ export function finishDiscover() { save({ done: true, step: LAST_STEP }); }
 export async function restartDiscover() {
   const adopted = await adoptMadeBy(AROUND_APPS);
   clearAroundGames();
-  save({ done: false, unlocked: [], seen: [], step: 0, firstMatch: false, branch: null });
+  save({ done: false, unlocked: [], announced: [], seen: [], step: 0, firstMatch: false, branch: null });
   // The tabs the favourites, listes and lieux kept still bring (Mes plantes, the Carte): there at once, not announced.
   recomputeUnlocks({ quiet: true });
   for (const id of AROUND_APPS) publish('miniapp', { id, op: 'replay' });
