@@ -70,6 +70,22 @@ test('Flore : → puis Échap aussitôt, la fiche se ferme sans ouvrir la plante
   await expect(page.locator('gf-flora gf-plant-detail')).toHaveCount(0);
 });
 
+test('Flore : → puis Retour aussitôt, la plante suivante ne s’ouvre pas', async ({ app, page }) => {
+  await app.open('#/settings');
+  await app.go('#/?family=Rosaceae');
+  await expect.poll(() => app.state('results.total')).toBeGreaterThan(3);
+  await page.locator('gf-flora gf-plant-list gf-plant-card a.row').first().click();
+  await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+$/);
+  await expect(page.locator('gf-flora gf-plant-detail:not([preview])').first()).toBeVisible();
+  // While the card moves to the next plant, Back (the browser's, the phone's): the sheet gone, the move let go.
+  await page.keyboard.press('ArrowRight');
+  await page.evaluate(() => history.back());
+  await expect.poll(() => hash(page)).toBe('#/?family=Rosaceae');
+  await page.waitForTimeout(1000);
+  expect(await hash(page)).toBe('#/?family=Rosaceae');
+  await expect(page.locator('gf-flora gf-plant-detail')).toHaveCount(0);
+});
+
 test('Flore : une fiche ouverte d’ailleurs se ferme sur la liste de Flore, à sa place ; Retour ramène d’où elle venait', async ({ app, page }) => {
   await app.open('#/?family=Rosaceae');
   await app.go('#/settings');
@@ -513,6 +529,7 @@ test('Quitter une activité ouverte par un lien, et « Page introuvable », ram�
   // An activity that does not exist: the same way out.
   await other.go('#/app/nope');
   await expect(tab.locator('gf-miniapp .missing').getByRole('link', { name: 'Aller à Flore' })).toHaveAttribute('href', '#/?family=Rosaceae');
+  await expect(tab.locator('gf-miniapp .quit')).toHaveAccessibleName('Quitter l’activité');
   await tab.close();
 });
 

@@ -377,7 +377,7 @@ export class GfMiniapp extends LitElement {
   #closeMenu(e) { /** @type {HTMLElement} */ (e.currentTarget).closest('details')?.removeAttribute('open'); }
 
   render() {
-    if (this._error) return html`<div class="bar"><button class="quit" type="button" title="Fermer" aria-label="Fermer" @click=${() => backTo(this.#from, floreHref())}>${icon('x-lg')}<span class="lbl"> Fermer</span></button></div>
+    if (this._error) return html`<div class="bar"><button class="quit" type="button" title="Quitter l’activité" aria-label="Quitter l’activité" @click=${() => backTo(this.#from, floreHref())}>${icon('x-lg')}<span class="lbl">Quitter l’activité</span></button></div>
       <p class="missing" role="alert">${this._error} <a href=${floreHref()}>Aller à ${floreName()}</a></p>`;
     const app = this._app;
     if (!app) return html`<div class="bar"></div><p class="missing" role="status">Chargement…</p>`;

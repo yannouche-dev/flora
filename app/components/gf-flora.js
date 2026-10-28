@@ -270,8 +270,8 @@ export class GfFlora extends LitElement {
     if (!id) return;
     const card = this.#card;
     // Each plant is a view: Back returns to the one before (« Fermer la fiche » goes straight to the list).
-    // The pane stays open (the next plant's map, media…). The sheet or its pane closed while the move plays (Échap, ×
-    // right after): it goes nowhere (#cancelStep).
+    // The pane stays open (the next plant's map, media…). The sheet or its pane closed while the move plays (Échap, ×,
+    // Back right after, another tab): it goes nowhere (#cancelStep).
     const run = this.#steps;
     const go = () => {
       if (run !== this.#steps) return;
@@ -306,7 +306,10 @@ export class GfFlora extends LitElement {
   /** The moves let go (#cancelStep): one still playing from before goes nowhere. */
   #steps = 0;
 
-  /** The sheet or its pane closed while a move plays: the move let go, the card back in place, nothing waiting under it. */
+  /**
+   * The sheet or its pane closed while a move plays (its ×, Échap, Back, another tab): the move let go, the card back in
+   * place, nothing waiting under it.
+   */
   #cancelStep() {
     if (!this.#moving) return;
     this.#steps++;
@@ -447,6 +450,8 @@ export class GfFlora extends LitElement {
   willUpdate(changed) {
     if (changed.has('route')) {
       const before = changed.get('route');
+      // The sheet gone another way while a move plays (Back, another tab): the move let go.
+      if (before?.name === 'plant' && this.route.name !== 'plant') this.#cancelStep();
       if (this.route.name === 'plant') {
         if (!before) this.#restoreSearch();
         // Where the sheet closes to, kept in its entry: the list just left; the sheet stepped from (‹ ›); a plant entry of an
@@ -565,6 +570,7 @@ export class GfFlora extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     removeEventListener('keydown', this.#onKey);
+    this.#cancelStep();
     this.#resultsObserver.disconnect();
     this.#observed = null;
   }
