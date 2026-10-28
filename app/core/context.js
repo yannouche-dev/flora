@@ -8,9 +8,9 @@
 import { config } from '../config.js';
 import { readJSON, writeJSON } from './prefs.js';
 import { startAt } from './history.js';
-import { href, parse } from './router.js';
+import { href, isStart, parse } from './router.js';
 import { store } from './store.js';
-import { tabShown } from './discover.js';
+import { arrivedAt, tabShown } from './discover.js';
 import { walkOn } from '../miniapp/kit/trail-store.js';
 
 /**
@@ -76,6 +76,8 @@ export const floreName = () => tabShown('flore') ? 'Flore' : 'Découvrir';
 function follow() {
   const hash = location.hash || '#/';
   const route = parse(hash);
+  // The first steps hide a tab, never an address: the screen shown brings its tab (not the start, `#/` alone: Découvrir).
+  if (!isStart(hash)) arrivedAt(route.name);
   switch (route.name) {
     case 'search': setContext({ flore: hash, query: hash }); break;
     case 'plant': setContext({ flore: hash }); break;

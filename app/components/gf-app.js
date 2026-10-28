@@ -2,7 +2,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { floreHref, floreName, tabHref } from '../core/context.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
-import { href, RouterController } from '../core/router.js';
+import { href, isStart, RouterController } from '../core/router.js';
 import { setMode, store, StoreController, whenReady } from '../core/store.js';
 import { backupContents, downloadBackup, exportGeoJSON, readBackup, restorePending } from '../core/collections.js';
 import './gf-flora.js';
@@ -298,9 +298,10 @@ export class GfApp extends LitElement {
   willUpdate() {
     const route = this.#router.route;
     this.toggleAttribute('boxed', route.name === 'app');
-    // The start page during the first steps is Découvrir's list: at its own address, so that an activity left
+    // The start page during the first steps is Découvrir's list — the start alone (`#/`, router.js isStart): any other
+    // Flore address has brought Flore (discover.js arrivedAt) — at its own address, so that an activity left
     // (« Quitter l’activité », back to here) finds the list again, even once Flore — the start page then — has come.
-    if (route.name === 'search' && !tabShown('flore') && /^#?\/?$/.test(location.hash)) replaceView(href.discover());
+    if (route.name === 'search' && !tabShown('flore') && isStart(location.hash)) replaceView(href.discover());
   }
 
   updated() {

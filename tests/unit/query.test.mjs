@@ -3,7 +3,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { activeFilterCount, fromHash, toHash } from '../../app/core/query.js';
-import { href, parse } from '../../app/core/router.js';
+import { href, isStart, parse } from '../../app/core/router.js';
 
 test('fromHash ↔ toHash : aller-retour stable, filtres multiples et tri', () => {
   const q = fromHash('#/?q=ortie&family=Urticaceae,Rosaceae&status=I,J&photo=avec&sort=sci');
@@ -90,6 +90,11 @@ test('une activité : l’adresse dit tout l’écran (la plante, la vue, l’im
   const odd = /** @type {any} */ (parse('#/app/rencontres/cards?p=x&v=<b>&m=-1&fiche=yes'));
   assert.deepEqual([odd.plant, odd.view, odd.media, odd.sheet], [null, null, null, false]);
   assert.equal(/** @type {any} */ (parse('#/app/rencontres/cards?m=0')).media, null, 'la première image : rien à dire');
+});
+
+test('isStart : l’adresse de départ, `#/` seule (une recherche qui ne demande rien) — jamais une autre adresse de Flore', () => {
+  for (const hash of ['', '#', '#/', '#/?']) assert.equal(isStart(hash), true, hash);
+  for (const hash of ['#/?q=ortie', '#/?family=Rosaceae', '#/?mine=favorites', '#/discover', '#/plant/12', '#/map', '#/settings']) assert.equal(isStart(hash), false, hash);
 });
 
 test('href et parse s’accordent', () => {
