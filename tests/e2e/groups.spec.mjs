@@ -1,7 +1,7 @@
 // « Écran sur mesure » : groups (registry.js FRAME groupe). The cells of one group share a zone, a plant, a period and a
 // search; another group's are apart — two lists, two maps that do not follow each other on one screen. The first group
 // (a) keeps the address' keys as before; another's are after its letter (b.q=, b.at=, b.p=…). Each search its own
-// (core/search-channel.js), the first the app's (Flore's); reloaded, the same; in the builder, a cell's group chosen in
+// (core/search-channel.js), the first the app's (Flore's); reloaded, the same; being modified, a cell's group chosen in
 // « Liens » of its picker, a letter in its colour on each head. iNaturalist answered here: the zone's observations,
 // of 12 plants (their plants the list).
 import { test, expect, answerAround, answerZone } from './fixtures.mjs';

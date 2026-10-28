@@ -14,7 +14,7 @@
 // (annee=2016,noms=0;3d=0). Every tile made here (tiles.mjs: see-through but for their lines), real WebGL for 3D.
 import { test, expect, answerAround, plantId } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
-import { screen } from './app.mjs';
+import { layoutOf, screen } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page @typedef {import('@playwright/test').Locator} Locator */
 
@@ -55,8 +55,6 @@ async function ticked(panel) {
 }
 /** « Couches affichées » of a panel: « Noms et réseaux » there, from the top. @param {Locator} panel */
 const stacked = panel => panel.locator('gf-layer-stack ul.marks li');
-/** The layout of the address, decoded. @param {Page} page */
-const layoutOf = page => page.evaluate(() => decodeURIComponent(location.hash.split('?')[0].replace(/^#\/layout\//, '')));
 /** What a map shows of its look (its own over the common one). @param {Locator} map */
 const lookOf = map => map.evaluate(m => { const l = /** @type {any} */ (m).lookShown; return { base: l.base, landmarks: l.landmarks }; });
 /** The common look as kept (the key of before). @param {Page} page */

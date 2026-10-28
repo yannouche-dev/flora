@@ -75,7 +75,7 @@ test('hors des crans : chacun garde sa façon (mesurée arrondie, rayon tel quel
   assert.equal(formatDistance(9951), '10 km');
   assert.equal(formatDistance(12345), '12 km');
   assert.equal(formatDistance(1234567), '1 235 km');
-  assert.equal(radiusLabel(2500), '2,5 km', 'une disposition libre entre deux crans (r=2.5km)');
+  assert.equal(radiusLabel(2500), '2,5 km', 'un écran sur mesure entre deux crans (r=2.5km)');
   assert.equal(radiusLabel(1234), '1,234 km');
   assert.equal(radiusLabel(150), '150 m');
   assert.equal(radiusWords(2500), '2,5 kilomètres');

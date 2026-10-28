@@ -12,6 +12,7 @@
 // is chosen (kept when unticked, never written down: a cell's layers=estompage too). The plant sheet's map ⚙ no longer has the
 // background, the layers nor 2D / 3D. Every tile made here (tiles.mjs), real WebGL for 3D.
 import { test, expect, answerAround, plantId } from './fixtures.mjs';
+import { layoutOf } from './app.mjs';
 import { answerTiles } from './tiles.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page @typedef {import('@playwright/test').Locator} Locator */
@@ -25,8 +26,6 @@ test.beforeEach(async ({ context, page }) => {
 const AT = 'at=48.85,2.35';
 const SLOW = { timeout: 30_000 };
 
-/** The layout of the address, decoded. @param {Page} page */
-const layoutOf = page => page.evaluate(() => decodeURIComponent(location.hash.split('?')[0].replace(/^#\/layout\//, '')));
 /** The free layout's maps. @param {Page} page */
 const maps = page => page.locator('dl-map gf-map');
 /** What a map shows: its background and overlays (its own look over the common one). @param {Locator} map */

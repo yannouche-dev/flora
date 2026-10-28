@@ -1,4 +1,4 @@
-// « Disposition libre » : the list of the map's results (app/layout/cells.js DlResults, gf-plant-list): each plant's
+// « Écran sur mesure » : the list of the map's results (app/layout/cells.js DlResults, gf-plant-list): each plant's
 // observations in the zone on its row (core/nearby.js plantCounts, core/observations.js obsNotes), the sort « Plus
 // observées » (workers/search-core.js `observed`) — in the sort menu and the grid's « Observations » column, written in
 // the address (sort=obs) — and never in Flore, which has no zone; the cross hover (state.js hover): a row hovered or

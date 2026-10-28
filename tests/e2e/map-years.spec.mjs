@@ -9,7 +9,7 @@
 // here (tiles.mjs), real WebGL for 3D.
 import { test, expect, answerAround } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
-import { screen } from './app.mjs';
+import { layoutOf, screen } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page @typedef {import('@playwright/test').Locator} Locator */
 
@@ -28,8 +28,6 @@ const SLOW = { timeout: 30_000 };
 
 /** The WMTS layers asked so far, once each. */
 const asked = () => [...new Set(seen.filter(u => u.includes('REQUEST=GetTile')).map(u => new URL(u).searchParams.get('LAYER')))];
-/** The layout of the address, decoded. @param {Page} page */
-const layoutOf = page => page.evaluate(() => decodeURIComponent(location.hash.split('?')[0].replace(/^#\/layout\//, '')));
 /** The background a map shows (its own over the common one). @param {Locator} map */
 const baseOf = map => map.evaluate(m => /** @type {any} */ (m).lookShown.base);
 /** The common background as kept (the key of before). @param {Page} page */

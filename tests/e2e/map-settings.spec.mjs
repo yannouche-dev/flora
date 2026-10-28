@@ -1,4 +1,4 @@
-// « Disposition libre » : the map cell's settings (registry.js `map`, map-options.js, cells.js dl-map), written in the
+// « Écran sur mesure » : the map cell's settings (registry.js `map`, map-options.js, cells.js dl-map), written in the
 // layout's address. Où: its own scope while the address has none (lieu=: the place found as ?place= is; autour: around
 // me), the address' always winning. Fond: the background, the 3D (map-3d on the map, its 3D adapter told) — written,
 // the cell's own (gf-map `look`), else the maps' common ones. Couches: the

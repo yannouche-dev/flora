@@ -1,4 +1,4 @@
-// « Disposition libre » : the controls drawn over a map cell (ctl=, map-options.js MAP_CONTROLS; cells.js dl-map), each
+// « Écran sur mesure » : the controls drawn over a map cell (ctl=, map-options.js MAP_CONTROLS; cells.js dl-map), each
 // in its fixed place. The radius' handle on the circle (gf-map radiusHandle): dragged — by a mouse, by a finger — the
 // circle follows, the distance in a bubble, snapped to the slider's stops near it, the map never panned; let go, the
 // zone's radius changed as the slider changes it (r= in the address); its keys from stop to stop. The current plant's

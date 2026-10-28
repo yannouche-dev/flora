@@ -1,4 +1,4 @@
-// « Disposition libre » : the zone's observations, one layer over iNaturalist and GBIF (core/observations.js), and their
+// « Écran sur mesure » : the zone's observations, one layer over iNaturalist and GBIF (core/observations.js), and their
 // filters first in the list's (layout/obs-filters.js « Observations de la zone », slotted in gf-filter-panel): shown
 // once the group has a zone; every one ticked by default (both sources, every quality grade, every dataset, the
 // cultivated plants), one at least kept of each list (the last box off, why said); each setting written in the address (sources=, sansjeux=,

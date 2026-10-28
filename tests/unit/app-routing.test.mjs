@@ -1,4 +1,4 @@
-// « Créer une app » : what is done in a cell is kept in the layout (registry.js#withParam, map-options.js) — a setting
+// « Écran sur mesure » : what is done in a cell is kept in the layout (registry.js#withParam, map-options.js) — a setting
 // changed by the cell's own controls written as the editor writes it (left out when it is the cell's value without
 // it), a map's layers in the order drawn with any layer of IGN's catalogue, their opacity, its binoculars, the view it
 // starts on, a cell folded: each read, written short, read back the same.
@@ -120,7 +120,7 @@ test('ce que règlent les commandes de la case n’est pas dans « Affiner » du
   for (const k of ['base', '3d', 'layers', 'when']) assert.ok(keys.includes(k), k);
 });
 
-test('les liens d’une case (le constructeur) : ce qu’elle suit et change, et le réglage qui l’en détache', async () => {
+test('les liens d’une case (en modification) : ce qu’elle suit et change, et le réglage qui l’en détache', async () => {
   const { linksOf, CURRENT } = await import('../../app/layout/registry.js');
   const links = (/** @type {string} */ text) => linksOf(resolve(cellOf(text))).map(l => [l.link, l.on, l.toggle]);
   assert.deepEqual(links('map'), [['zone', true, { portee: 'france' }], ['recherche', true, { suit: false }], ['periode', true, null], ['plante', true, { plante: 'non' }],

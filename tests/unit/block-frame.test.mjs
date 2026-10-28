@@ -1,4 +1,4 @@
-// « Disposition libre » : the frame every cell shares (registry.js#FRAME) — its head (tete, titre), the actions of its
+// « Écran sur mesure » : the frame every cell shares (registry.js#FRAME) — its head (tete, titre), the actions of its
 // head, its empty state, its links (plante, zone, toucher, ecrit) — read in French and English, accents and case free,
 // written back after the component's own parameters, never when default, in a stable order; which component honours
 // which (FRAME_OF: never a setting that does nothing), and what touching a plant does (touchOf).

@@ -1,4 +1,4 @@
-// « Disposition libre » (app/layout): the grammar of a layout written in the address (grammar.js), what its cells are
+// « Écran sur mesure » (app/layout): the grammar of a layout written in the address (grammar.js), what its cells are
 // (registry.js: names in English or French, parameters checked, an unknown component a placeholder, never a throw;
 // each cell's icon, mark and name in a phone's menu of columns, and how its columns look there), the live state beside
 // it (state.js: plant, scope, search), and the router's route. A layout read and written back is the same; whatever is
