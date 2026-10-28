@@ -13,6 +13,8 @@
 // injected already written with role=status (read out unreliably).
 // A toast with an action (a walk's « Annuler ») is a word, not a failure: it lasts longer (ACTION_TOAST_MS), stays
 // while it is hovered or holds the focus, and outweighs a map's word (a failed « Me localiser » does not take its place).
+// The announcement of the tabs that came during the first steps (gf-app) is a word (weight 1) shown only when the place
+// is free (`toastSlotFree`, `toastEvents` 'free'): it never hides a capture's « Annuler » nor a safety warning.
 
 /** How long a toast shows (ms): under 3 s. */
 export const TOAST_MS = 2800;
@@ -50,20 +52,31 @@ function liveIn(host) {
 /** The one toast shown in the app now: how to let it go, and its weight. @type {{ hide: () => void, weight: number } | null} */
 let slot = null;
 
+/** Fires `free` when the app's one toast place is let go (an announcement waiting for it: gf-app). */
+export const toastEvents = new EventTarget();
+/** No toast holds the app's one place now. */
+export const toastSlotFree = () => slot === null;
+
 /**
  * Takes the app's one toast place for a toast (`hide` lets it go). A toast shown with more weight keeps it: null then
- * (the newcomer is not shown — its words still said by its caller). Otherwise the one shown is let go, and the
- * function returned gives the place back.
- * @param {() => void} hide @param {number} [weight] 1: a word (a map's failure); 2: a toast with an action (a walk's
- *   « Annuler », the capture's « Annuler / Détails »); 3: a safety warning (the capture's)
+ * (the newcomer is not shown — its words still said by its caller). Otherwise the one shown is let go (the place
+ * already the newcomer's: never free meanwhile), and the function returned gives the place back.
+ * @param {() => void} hide @param {number} [weight] 1: a word (a map's failure, the announcement of the tabs that
+ *   came); 2: a toast with an action (a walk's « Annuler », the capture's « Annuler / Détails »); 3: a safety warning
+ *   (the capture's)
  * @returns {(() => void) | null}
  */
 export function takeToastSlot(hide, weight = 1) {
   if (slot && slot.hide !== hide && slot.weight > weight) return null;
-  if (slot && slot.hide !== hide) slot.hide();
+  const before = slot;
   const mine = { hide, weight };
   slot = mine;
-  return () => { if (slot === mine) slot = null; };
+  if (before && before.hide !== hide) before.hide();
+  return () => {
+    if (slot !== mine) return;
+    slot = null;
+    toastEvents.dispatchEvent(new Event('free'));
+  };
 }
 
 /** @type {HTMLElement | null} */ let el = null;
@@ -106,17 +119,18 @@ function place(toast, near, at, offset) {
 /**
  * Shows the brief toast. Returns a handle to let it go before its time (`ms: 0`: it stays until then — a caller that
  * times it itself, told by `onHold` while it is hovered or focused), or null when it was not shown (the same words
- * showing already, a weightier toast in the place). A toast with an action lasts ACTION_TOAST_MS by default.
+ * showing already, a weightier toast in the place). A toast with an action lasts ACTION_TOAST_MS by default. `weight`:
+ * its place's weight (takeToastSlot) — by default 2 with an action, else 1.
  * @param {string} words
- * @param {{ near?: Element | null, at?: 'top' | 'bottom' | 'above', offset?: number, ms?: number, live?: boolean,
+ * @param {{ near?: Element | null, at?: 'top' | 'bottom' | 'above', offset?: number, ms?: number, live?: boolean, weight?: number,
  *   action?: { label: string, run: () => void } | null, onHide?: () => void, onHold?: (held: boolean) => void }} [o]
  * @returns {{ hide: () => void } | null}
  */
-export function briefToast(words, { near = null, at = 'top', offset = 10, ms, live = true, action = null, onHide, onHold } = {}) {
+export function briefToast(words, { near = null, at = 'top', offset = 10, ms, live = true, weight, action = null, onHide, onHold } = {}) {
   ms ??= action ? ACTION_TOAST_MS : TOAST_MS;
   if (!words || typeof document === 'undefined') return null;
   if (el?.isConnected && text === words) return null;
-  const take = takeToastSlot(hide, action ? 2 : 1);
+  const take = takeToastSlot(hide, weight ?? (action ? 2 : 1));
   if (!take) return null;
   hide();
   release = take;
