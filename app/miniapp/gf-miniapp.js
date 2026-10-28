@@ -26,7 +26,7 @@
 //    other tabs (core/sync.js), and it starts again at its first step.
 
 import { LitElement, html, css, nothing, repeat } from 'lit';
-import { backTo, depth, entryValue, markEntry, openModal, pushHash, replaceHash } from '../core/history.js';
+import { backTo, closeTo, depth, entryValue, markEntry, openModal, pushHash, replaceHash, sheetMark } from '../core/history.js';
 import { href } from '../core/router.js';
 import { StoreController } from '../core/store.js';
 import { plantSeen } from '../core/discover.js';
@@ -135,13 +135,11 @@ export class GfMiniapp extends LitElement {
 
   #scenarios = () => { /** @type {any} */ (this.renderRoot.querySelector('gf-scenarios'))?.open(); };
 
-  /** The depth of the entry before the plant was opened here (closing it goes back to it), else none: opened by a link. @type {number | null} */
-  #sheetFrom = null;
-
   /**
    * A plant opened by a component, or closed (null). Rencontres: the plant chosen, its sheet open — or its sheet
-   * closed, the plant still chosen. The others: the plant open (its sheet) — or closed: back to the entry it was
-   * opened from (however many plants its sheet went through since), else the address without it.
+   * closed, the plant still chosen. The others: the plant open (its sheet). Closed: back to the entry it was opened
+   * from (kept in the entries: gfSheetFrom, core/history.js), past the plants its sheet went through; opened by a link:
+   * the address without it.
    * @param {number | null} id
    */
   #plant(id) {
@@ -149,13 +147,13 @@ export class GfMiniapp extends LitElement {
     if (!app || !('focus' in app.m.context)) return;
     const chooses = 'sheet' in app.m.context;
     if (id == null) {
-      if (chooses) app.set({ sheet: false });
-      else if (this.#sheetFrom != null && this.#sheetFrom < depth()) history.go(this.#sheetFrom - depth());
-      else app.set({ focus: null, mediaAt: null });
-      this.#sheetFrom = null;
+      // Back to the screen it was opened from, past the plants its sheet went through (Rencontres: the plant last shown
+      // stays chosen); opened by a link: closed in place (the address without it), no entry added.
+      const shut = chooses ? { sheet: false } : { focus: null, mediaAt: null };
+      closeTo(sheetMark('gfSheetFrom', () => null), this.#href({ ...app.c, ...shut }),
+        { instead: () => { app.set(shut); markEntry({ gfSheetFrom: null }); } });
       return;
     }
-    if (!chooses && app.c.focus == null) this.#sheetFrom = depth();
     app.set({ focus: id, ...(app.c.focus !== id ? { mediaAt: null } : {}), ...(chooses ? { sheet: true } : {}) });
   }
 
@@ -259,7 +257,6 @@ export class GfMiniapp extends LitElement {
     if ('sheet' in ctx) patch.sheet = Boolean(route.sheet);
     this.#following = true;
     try { app.set(patch); } finally { this.#following = false; }
-    if (route.plant == null) this.#sheetFrom = null;
     // An app ported whole leads its own steps: the address only says them.
     // (The step of the address meanwhile, until it says its own: the bar does not jump back to the start.)
     if (app.m.driven) { if (!route.step || !app.reached(route.step)) this.#syncUrl(); return; }
@@ -270,10 +267,13 @@ export class GfMiniapp extends LitElement {
     else if (!route.step || opening) this.#syncUrl();
   }
 
-  /** The address of the screen now: its step and the context's keys the address carries (router.js, AppRoute). */
-  #href() {
+  /**
+   * The address of the screen now (or with the context `c`): its step and the context's keys the address carries
+   * (router.js, AppRoute). @param {Record<string, any>} [c]
+   */
+  #href(c = /** @type {MiniApp} */ (this._app).c) {
     const app = /** @type {MiniApp} */ (this._app);
-    const ctx = app.m.context, c = app.c;
+    const ctx = app.m.context;
     const num = (/** @type {unknown} */ v) => typeof v === 'number' ? v : null;
     // Rencontres' start screen shows no plant: the one kept with the game is not in its address (unless its sheet is
     // open over it: a link).
@@ -303,12 +303,23 @@ export class GfMiniapp extends LitElement {
         const now = new URLSearchParams(location.hash.split('?')[1] || ''), next = new URLSearchParams(want.split('?')[1] || '');
         const newPlant = next.has('p') && next.get('p') !== now.get('p');
         const sheetOpened = next.get('fiche') === '1' && now.get('fiche') !== '1';
-        if (newPlant || sheetOpened) pushHash(want, { gfAppFrom: this.#from });
+        if (newPlant || sheetOpened) pushHash(want, { gfAppFrom: this.#from, ...this.#sheetCarry(want) });
         else replaceHash(want);
       }
     }
     this.requestUpdate();
   };
+
+  /**
+   * The sheet mark the entry of `want` carries, its sheet open: opened now (this entry is under it) or kept open (this
+   * entry's mark goes on: « Suivante », ‹ ›, a step). @param {string} want
+   */
+  #sheetCarry(want) {
+    const sheet = 'sheet' in /** @type {MiniApp} */ (this._app).m.context;
+    const open = (/** @type {string} */ h) => { const p = new URLSearchParams(h.split('?')[1] || ''); return sheet ? p.get('fiche') === '1' : p.has('p'); };
+    if (!open(want)) return {};
+    return { gfSheetFrom: open(location.hash) ? sheetMark('gfSheetFrom', () => null) : { from: depth(), start: depth() + 1 } };
+  }
 
   /** A plant seen in the activity: one more for the first steps of the app. @param {Event} e */
   #onSeen = e => { plantSeen(/** @type {CustomEvent} */ (e).detail); };
@@ -318,7 +329,7 @@ export class GfMiniapp extends LitElement {
     if (!app) return;
     const { replace } = /** @type {CustomEvent} */ (e).detail || {};
     const want = this.#href();
-    if (location.hash !== want) { if (replace) replaceHash(want); else pushHash(want, { gfAppFrom: this.#from }); }
+    if (location.hash !== want) { if (replace) replaceHash(want); else pushHash(want, { gfAppFrom: this.#from, ...this.#sheetCarry(want) }); }
     const at = app.path.length, all = app.m.steps.length;
     this._said = fr(`Étape ${at} sur ${all} : ${app.step.label}`);
   };
