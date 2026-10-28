@@ -64,13 +64,18 @@ export function openView(hash) {
   location.hash = hash;
 }
 
-/** The current view replaced by the one at `hash` (no new entry: Back skips it); the router follows it. @param {string} hash */
-export function replaceView(hash) {
+/**
+ * The current view replaced by the one at `hash` (no new entry: Back skips it); the router follows it.
+ * @param {string} hash @param {string[]} [keep] keys of this entry's state the new view keeps (the same sheet: its marks)
+ */
+export function replaceView(hash, keep = []) {
   const at = depth();
+  const carried = Object.fromEntries(keep.filter(k => state()[k] !== undefined).map(k => [k, state()[k]]));
   location.replace(hash);
   // location.replace leaves the entry no state, as a link's new one (the hashchange would count it a step deeper and
-  // forget the views ahead): it keeps its depth and the URLs kept for the others, not what the view replaced kept in it.
-  history.replaceState({ gfDepth: at, ...kept() }, '');
+  // forget the views ahead): it keeps its depth and the URLs kept for the others, not what the view replaced kept in
+  // it — but the keys it says (`keep`).
+  history.replaceState({ ...carried, gfDepth: at, ...kept() }, '');
 }
 
 /** This page is a reload of its entry: the entry's state was written by the page just on it (not by one long ago). */
@@ -125,6 +130,50 @@ export function backTo(target, fallback) {
 export function back(fallback) {
   if (depth() > 0) history.back();
   else replaceView(fallback);
+}
+
+/**
+ * Where a sheet shown over a view closes to (a plant's sheet, a block's pane), kept in its entries: `from` the depth of
+ * the entry it was opened from (null: a link, a tab, the start — nothing of this visit under it), `start` the depth of
+ * the first entry it showed on (the plants gone through with ‹ › come after it).
+ * @typedef {{ from: number | null, start: number }} SheetMark
+ */
+
+/** A mark read from a state, checked against this entry (a depth not behind it: none). @param {unknown} v @returns {SheetMark | null} */
+function readMark(v) {
+  const m = /** @type {any} */ (v);
+  if (!m || typeof m !== 'object' || !Number.isInteger(m.start) || m.start < 0 || m.start > depth()) return null;
+  return { from: Number.isInteger(m.from) && m.from >= 0 && m.from < m.start ? m.from : null, start: m.start };
+}
+
+/**
+ * This entry's sheet mark (`key` in its state): kept since the entry first showed the sheet (a reload, Back, Forward
+ * read it back), else decided now and kept — `opened()` gives the depth it was opened from (the list just left), the
+ * mark of the sheet it goes on from (‹ ›: the same sheet, another plant), or null (a link, a tab, the start).
+ * @param {string} key @param {() => number | SheetMark | null} opened @returns {SheetMark}
+ */
+export function sheetMark(key, opened) {
+  const known = readMark(state()[key]);
+  if (known) return known;
+  const o = opened();
+  const mark = typeof o === 'number' ? { from: o >= 0 && o < depth() ? o : null, start: depth() } : readMark(o) ?? { from: null, start: depth() };
+  markEntry({ [key]: mark });
+  return mark;
+}
+
+/**
+ * A sheet closed (its ×, Échap): back to the entry it was opened from — past the plants gone through since —, that
+ * entry given `href` (the view under the sheet as it is now: renewBehind); opened by a link, a tab or at the start: back
+ * to the first entry it showed on, which takes `href` — or, that entry being this one, this one replaced by `href`
+ * (keeping its `keep` keys), or by `instead` (an activity: its own address keeps its state). No entry is added.
+ * Not backTo: « Quitter » and a place closed on the Carte go back to their view or open it anew; a sheet never adds one.
+ * @param {SheetMark} mark @param {string} href @param {{ keep?: string[], instead?: () => void }} [options]
+ */
+export function closeTo(mark, href, { keep = [], instead } = {}) {
+  const to = mark.from ?? mark.start;
+  if (to < depth()) { renewBehind(to, href); history.go(to - depth()); }
+  else if (instead) instead();
+  else replaceView(href, keep);
 }
 
 // ── Dialogs: open one = a history entry (same URL); Back closes it ─────────────────────────────────────────

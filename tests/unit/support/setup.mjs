@@ -15,7 +15,11 @@ globalThis.addEventListener ??= events.addEventListener.bind(events);
 globalThis.removeEventListener ??= events.removeEventListener.bind(events);
 globalThis.dispatchEvent ??= events.dispatchEvent.bind(events);
 
-const location = { hash: '#/', href: 'http://localhost/#/', origin: 'http://localhost', pathname: '/', search: '' };
+const location = {
+  hash: '#/', href: 'http://localhost/#/', origin: 'http://localhost', pathname: '/', search: '',
+  // A browser's location.replace leaves the entry with no state.
+  replace(/** @type {string} */ url) { go(null, url); }
+};
 /** @type {any} */ (globalThis).location ??= location;
 let state = null;
 const go = (/** @type {any} */ s, /** @type {string | URL | undefined} */ url) => {
