@@ -767,6 +767,21 @@ export class GfMap extends LitElement {
     return plant.coordinates;
   }
 
+  /**
+   * Échap while the positions are edited: « Terminé » — the focus on the map, on its bar, or nowhere —, before the
+   * page's own Échap (the plant's sheet under the full-screen map closed, a layout's cell let go). Not the panel's, a
+   * field's or a dialog's (their own); a question pending on the map: its root lets it go first (#onKey). On the map
+   * (a page's handler on its way to the window), and on the document (the focus nowhere).
+   * @param {KeyboardEvent} e
+   */
+  #onEditKey = e => {
+    if (e.key !== 'Escape' || !this.editing || e.defaultPrevented) return;
+    if (e.composedPath().some(n => n instanceof Element && n.matches('gf-map-panel, .gf-opacity, .gf-o3-bar, input, textarea, select, dialog'))) return;
+    e.preventDefault();
+    e.stopPropagation();
+    this.#setEditing(false);
+  };
+
   /** @param {boolean} on */
   #setEditing(on) {
     if (on === this.editing) return;
@@ -1247,6 +1262,8 @@ export class GfMap extends LitElement {
     super.connectedCallback();
     moduleEvents.addEventListener('change', this.#onModules);
     mapLookEvents.addEventListener('change', this.#onCommonLook);
+    this.addEventListener('keydown', this.#onEditKey);
+    document.addEventListener('keydown', this.#onEditKey);
     // Back in the page: the common look may have changed meanwhile.
     if (this.#map) this.#showLook();
     if (this.#map) { this.#resized?.observe(this.#root); this.#syncTracking(); }
@@ -1257,6 +1274,8 @@ export class GfMap extends LitElement {
     super.disconnectedCallback();
     moduleEvents.removeEventListener('change', this.#onModules);
     mapLookEvents.removeEventListener('change', this.#onCommonLook);
+    this.removeEventListener('keydown', this.#onEditKey);
+    document.removeEventListener('keydown', this.#onEditKey);
     this.#resized?.disconnect();
     clearTimeout(this.#areasTimer);
     clearTimeout(this.#busyTimer);

@@ -9,7 +9,7 @@ import {
   keptContents, listCollections, missingFromBackup, placeTitle, plantCount, plantMarkers, restoreBackup, restorePending, restoreReason, shareCollection, soon, spotEvents, findEntry,
   downloadBackup, readBackup } from '../core/collections.js';
 import { config } from '../config.js';
-import { StoreController, arrangedMode, whenReady } from '../core/store.js';
+import { StoreController, arrangedMode, closeKing, whenReady } from '../core/store.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
 import { closeTo, depth, entryValue, modalOpen, openView, replaceView, sheetMark } from '../core/history.js';
 import './gf-map.js';
@@ -215,6 +215,8 @@ export class GfCollections extends LitElement {
       // Its place in history: the list or place it was opened from; the plant stepped from (‹ ›, ← →); else elsewhere.
       this.#sheet = this.route.plant == null ? null : sheetMark('gfSheetFrom', () =>
         before && before.plant == null ? depth() - 1 : before?.plant != null ? this.#sheet : null);
+      // The sheet closed: the focus, gone with it, back on its plant (updated).
+      if (before?.plant != null && this.route.plant == null) this.#focusPlant = before.plant;
     }
     // Arriving on a collection (link, Back): it is unfolded.
     if (changed.has('route') && this.route.open && !this._open.has(this.route.open)) {
@@ -324,6 +326,23 @@ export class GfCollections extends LitElement {
     if (this.#sheet) closeTo(this.#sheet, href.collections({ open: this.route.open }));
   }
 
+  /** The plant whose sheet just closed: its link in the list takes the focus back. @type {number | null} */
+  #focusPlant = null;
+
+  updated() {
+    if (this.#focusPlant === null) return;
+    const id = this.#focusPlant;
+    this.#focusPlant = null;
+    // Only when the focus went with the sheet (its ×, Échap inside it): never taken from where it is. Its link in the
+    // collection shown, else in another one unfolded, else the collection's head.
+    if (document.activeElement && document.activeElement !== document.body) return;
+    const open = this.route.open ? CSS.escape('plants-' + this.route.open) : null;
+    const to = /** @type {HTMLElement | null} */ ((open && this.renderRoot.querySelector(`#${open} a[href$="plant=${id}"]`))
+      || this.renderRoot.querySelector(`ul.plants a[href$="plant=${id}"]`)
+      || (open && this.renderRoot.querySelector(`button.main[aria-controls="${open}"]`)));
+    to?.focus({ preventScroll: true });
+  }
+
   /** A place on its map: the place and each of its plants; a plant opens beside. @param {import('../core/collections.js').Collection} place */
   #placeMap(place) {
     const plants = plantMarkers([/** @type {any} */ (place)], () => true, this.#store.state.harvestMode);
@@ -379,7 +398,11 @@ export class GfCollections extends LitElement {
       const t = /** @type {HTMLElement} */ (e.composedPath()[0]);
       if (t?.closest?.('input, textarea, select, [contenteditable]') || t?.isContentEditable) return;
       e.preventDefault();
-      this.#closePlant();
+      // « Personnaliser la fiche » open on it: Échap is its « Terminé » (the focus back on its crown), the sheet stays.
+      if (this.#store.state.king?.sheet === 'collections') {
+        const sheet = /** @type {any} */ (this.renderRoot.querySelector('gf-plant-detail'));
+        if (sheet?.endKing) sheet.endKing(); else closeKing();
+      } else this.#closePlant();
       return;
     }
     if ((e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || e.altKey || e.ctrlKey || e.metaKey || !this.route.plant || modalOpen()) return;

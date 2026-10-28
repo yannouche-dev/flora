@@ -890,9 +890,10 @@ export class GfMapPage extends LitElement {
         ${rows.map(({ place, dist }) => {
           const last = placeLastHarvest(place);
           const names = place.properties.plants.map(entryName);
+          // The place opened with the Carte's filters, as a marker opens it: closed (✕), the Carte comes back with them.
           return html`
             <li>
-              <a href=${href.map({ spot: place.id })} @click=${() => { this._view = 'map'; }}>
+              <a href=${href.map({ spot: place.id, plants: this._plants, season: this.route.season })} @click=${() => { this._view = 'map'; }}>
                 <span class="dot" style="--c:${PIN_COLORS[placeAbundance(place)]}"></span>
                 <span class="title">${placeTitle(place)}</span>
                 <span class="dist">${dist !== null ? formatDistance(dist) : ''}</span>

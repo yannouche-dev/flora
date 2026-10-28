@@ -2880,6 +2880,9 @@ export class GfPlantDetail extends LitElement {
     /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.act.crown > button'))?.focus({ preventScroll: true });
   };
 
+  /** « Terminé » asked by the sheet's host: Échap there (gf-flora, gf-collections) ends King, never closes the sheet. */
+  endKing() { return this.#endKing(); }
+
   /** A page arrived for the « Page web » pane: its tab shown, unfolded. */
   revealWeb() {
     const pane = this.#paneOf('web');

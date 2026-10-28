@@ -13,6 +13,12 @@ const hash = (/** @type {Page} */ page) => page.evaluate(() => location.hash);
 const entries = page => page.evaluate(() => history.length);
 /** The depth of the current entry in this visit (core/history.js). @param {Page} page */
 const depthOf = page => page.evaluate(() => history.state?.gfDepth);
+/** What has the focus, through the shadow roots: a link's address, else its name — 'body' when nothing has it. @param {Page} page */
+const focused = page => page.evaluate(() => {
+  let el = document.activeElement;
+  while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement;
+  return !el || el === document.body ? 'body' : el.getAttribute('href') ?? el.getAttribute('aria-label') ?? el.localName;
+});
 
 /** Flore's plant sheet closed: the × of its head (the phone's sheet, the desktop's pane). @param {import('./app.mjs').App} app @param {Page} page */
 const closeFlore = (app, page) => page.locator(app.phone ? 'gf-flora .sheet-plant .pane-head' : 'gf-flora #flore-plant .pane-head')
@@ -34,13 +40,34 @@ test('Flore : « Fermer la fiche » revient à la liste d’où elle a été ouv
   await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+$/);
   await nextPlant(page);
   await nextPlant(page);
+  const plant = await hash(page);
   const n = await entries(page);
   await closeFlore(app, page);
   await expect.poll(() => hash(page)).toBe('#/?family=Rosaceae');
   expect(await entries(page)).toBe(n);
   expect(await depthOf(page)).toBe(1);
+  // The focus, gone with the sheet, back on the plant's row (a phone: the list under the sheet; a computer: beside it).
+  await expect.poll(() => focused(page)).toBe(plant);
   await page.goBack();
   await expect.poll(() => hash(page)).toBe('#/settings');
+});
+
+test('Flore : → puis Échap aussitôt, la fiche se ferme sans ouvrir la plante suivante', async ({ app, page }) => {
+  await app.open('#/settings');
+  await app.go('#/?family=Rosaceae');
+  await expect.poll(() => app.state('results.total')).toBeGreaterThan(3);
+  await page.locator('gf-flora gf-plant-list gf-plant-card a.row').first().click();
+  await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+$/);
+  await expect(page.locator('gf-flora gf-plant-detail:not([preview])').first()).toBeVisible();
+  const n = await entries(page);
+  // While the card moves to the next plant (its animation), Échap: the sheet closed, the move let go.
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('Escape');
+  await expect.poll(() => hash(page)).toBe('#/?family=Rosaceae');
+  await page.waitForTimeout(1000);
+  expect(await hash(page)).toBe('#/?family=Rosaceae');
+  expect(await entries(page)).toBe(n);
+  await expect(page.locator('gf-flora gf-plant-detail')).toHaveCount(0);
 });
 
 test('Flore : une fiche ouverte d’ailleurs se ferme sur la liste de Flore, à sa place ; Retour ramène d’où elle venait', async ({ app, page }) => {
@@ -133,6 +160,8 @@ test('Mes plantes : la fiche fermée revient au lieu, en passant les plantes par
   await closeMine(app, page);
   await expect.poll(() => hash(page)).toBe(`#/collections?c=${id}`);
   expect(await entries(page)).toBe(n);
+  // The focus, gone with the sheet, back on the plant's link in the place.
+  await expect.poll(() => focused(page)).toBe(`#/collections?c=${id}&plant=${plantId('Geum urbanum')}`);
   await page.goBack();
   await expect.poll(() => hash(page)).toBe('#/collections');
   if (app.phone) return;
@@ -156,15 +185,24 @@ test('Échap ferme le panneau, puis la fiche', async ({ app, page }) => {
   await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+$/);
   const plant = await hash(page);
   await expect(page.locator('gf-flora #flore-plant').getByRole('button', { name: 'Fermer la fiche' })).toHaveAttribute('title', 'Fermer la fiche (Échap)');
+  // Typing in the search beside the plant: Échap is the field's, the plant stays.
+  let n = await entries(page);
+  await page.locator('gf-flora input[type="search"]').first().focus();
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(250);
+  expect(await hash(page)).toBe(plant);
+  expect(await entries(page)).toBe(n);
   await page.locator('gf-flora #flore-plant gf-plant-detail:not([preview]) button.to-pane').first().click();
   await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+\?pane=/);
-  const n = await entries(page);
+  n = await entries(page);
   await page.keyboard.press('Escape');
   await expect.poll(() => hash(page)).toBe(plant);
   await expect(page.locator('gf-flora .block-pane')).toHaveCount(0);
   await page.keyboard.press('Escape');
   await expect.poll(() => hash(page)).toBe('#/?family=Rosaceae');
   expect(await entries(page)).toBe(n);
+  // The focus, gone with the sheet, on the plant's row beside it.
+  await expect.poll(() => focused(page)).toBe(plant);
   // No plant open: Échap does nothing.
   await page.keyboard.press('Escape');
   await page.goBack();
@@ -187,6 +225,46 @@ test('Échap ferme la fiche de Mes plantes', async ({ app, page }) => {
   await expect.poll(() => hash(page)).toBe(`#/collections?c=${id}`);
   expect(await entries(page)).toBe(n);
   await expect(mine.locator('#mine-plant, .sheet-plant')).toHaveCount(0);
+  await expect.poll(() => focused(page)).toBe(`#/collections?c=${id}&plant=${plantId('Allium ursinum')}`);
+});
+
+test('Échap termine « Personnaliser la fiche » et « Modifier les positions », la fiche reste', async ({ app, page }) => {
+  await app.open('#/');
+  const id = await seedPlace(page);
+  const geum = plantId('Geum urbanum');
+  const king = page.getByRole('region', { name: 'Mise en page de la fiche' });
+  const crown = page.locator('gf-plant-detail[sheet]:not([preview]) .action-bar').getByRole('button', { name: 'Personnaliser la fiche', exact: true });
+  for (const sheet of [`#/plant/${geum}`, `#/collections?c=${id}&plant=${geum}`]) {
+    await app.go(sheet);
+    await expect(page.locator('gf-plant-detail[sheet]:not([preview])').first()).toBeVisible();
+    // « Personnaliser la fiche »: Échap is its « Terminé », the focus back on its crown.
+    await app.king();
+    const n = await entries(page);
+    await page.keyboard.press('Escape');
+    await expect(king).toHaveCount(0);
+    expect(await app.state('king')).toBeNull();
+    expect(await hash(page)).toBe(sheet);
+    expect(await entries(page)).toBe(n);
+    await expect(crown).toHaveAttribute('aria-pressed', 'false');
+    await expect.poll(() => focused(page)).toBe('Personnaliser la fiche');
+  }
+  // The sheet's map, its positions edited (full screen): Échap is « Terminé » — the focus on « Terminé », or nowhere.
+  await app.go(`#/plant/${geum}`);
+  const map = page.locator('gf-flora gf-plant-detail:not([preview]) gf-sheet-map gf-map').first();
+  await map.evaluate(el => el.scrollIntoView({ block: 'center' }));
+  const bar = map.locator('.gf-map-editbar');
+  for (const where of ['Terminé', 'body']) {
+    await map.getByRole('button', { name: 'Modifier les positions' }).click();
+    await expect(bar).toBeVisible();
+    if (where === 'Terminé') await bar.getByRole('button', { name: 'Terminé' }).focus();
+    else await page.evaluate(() => /** @type {HTMLElement | null} */ (document.activeElement)?.blur());
+    const n = await entries(page);
+    await page.keyboard.press('Escape');
+    await expect(bar).toHaveCount(0);
+    await expect(map).not.toHaveAttribute('editing', '');
+    expect(await hash(page), where).toBe(`#/plant/${geum}`);
+    expect(await entries(page)).toBe(n);
+  }
 });
 
 /** « Annuler » of a new place (its editor's footer). @param {Page} page */
@@ -329,6 +407,22 @@ test('Carte : le filtre de plantes dans l’adresse', async ({ app, page }) => {
     (await import('/app/core/store.js')).setHarvestMode(true);
   }, [id, a]);
   await changedBeside(`#/map?plants=${a}`, () => page.locator('gf-map-page .bar').getByRole('button', { name: /^En saison/ }).click(), `#/map?plants=${a}&season=1`);
+
+  // A place opened from the Carte's « Liste », closed: the Carte as it was, its filter and « En saison » with it — the
+  // same as Back.
+  for (const from of [`#/map?plants=${a}`, `#/map?plants=${a}&season=1`]) {
+    await app.go('#/settings');
+    await app.go(from);
+    await page.locator('gf-map-page .segmented').getByRole('button', { name: 'Liste', exact: true }).click();
+    await page.locator('gf-map-page ul.list').getByRole('link', { name: /Bois de la Source/ }).click();
+    await expect(page.locator('gf-map-page gf-spot-editor')).toHaveCount(1);
+    expect(await hash(page)).toBe(from.replace('#/map?', `#/map?spot=${id}&`));
+    await page.locator('gf-map-page .panel-head').getByRole('button', { name: 'Fermer', exact: true }).click();
+    await expect.poll(() => hash(page)).toBe(from);
+    await expect(plants).toContainText('Plantes · 1');
+    await page.goBack();
+    await expect.poll(() => hash(page)).toBe('#/settings');
+  }
 });
 
 /**
@@ -431,6 +525,21 @@ test('« Passer » après « Revoir les premiers pas » garde la recherche de Fl
   await page.getByRole('link', { name: 'Passer : montrer toute l’application' }).click();
   await expect.poll(() => hash(page)).toBe('#/?family=Rosaceae');
   await expect.poll(() => app.state('query.filters.family')).toEqual(['Rosaceae']);
+});
+
+test('« Passer » de l’écran de départ de Rencontres, pendant les premiers pas, garde la recherche de Flore', async ({ app, page }) => {
+  await app.open('#/?family=Rosaceae');
+  await app.go('#/settings');
+  await page.getByRole('button', { name: 'Revoir les premiers pas' }).click();
+  await page.getByRole('alertdialog', { name: 'Revoir les premiers pas ?' }).getByRole('button', { name: 'Revoir les premiers pas' }).click();
+  await expect.poll(() => hash(page)).toBe('#/discover');
+  await app.go('#/app/rencontres');
+  const skip = page.locator('gf-miniapp .start .leave');
+  await expect(skip).toHaveText('Passer : montrer toute l’application');
+  await skip.click();
+  await expect.poll(() => hash(page)).toBe('#/?family=Rosaceae');
+  await expect.poll(() => app.state('query.filters.family')).toEqual(['Rosaceae']);
+  expect(await app.state('context.query')).toBe('#/?family=Rosaceae');
 });
 
 /** The app launched from its icon: its address without a hash (the manifest's start_url, './'). @param {import('./app.mjs').App} app @param {Page} page */

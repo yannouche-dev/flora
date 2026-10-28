@@ -6,7 +6,7 @@ import { activeFilterCount, clearFilters, fromHash, lastSearchHash, toHash } fro
 import { href } from '../core/router.js';
 import { closeTo, depth, entryValue, modalOpen, openModal, openView, renewBehind, replaceHash, replaceView, sheetMark } from '../core/history.js';
 import { context, setContext } from '../core/context.js';
-import { StoreController, arrangedMode, store, whenReady } from '../core/store.js';
+import { StoreController, arrangedMode, closeKing, store, whenReady } from '../core/store.js';
 import { runSearch } from '../core/search.js';
 import { PaneSizer, splitStyles } from '../core/panes.js';
 import { ui } from '../styles/ui.js';
@@ -270,8 +270,14 @@ export class GfFlora extends LitElement {
     if (!id) return;
     const card = this.#card;
     // Each plant is a view: Back returns to the one before (« Fermer la fiche » goes straight to the list).
-    // The pane stays open (the next plant's map, media…).
-    const go = () => { openView(this.#paneInUrl ? href.plantPane(id, /** @type {string} */ (/** @type {any} */ (this.route).pane)) : href.plant(id)); };
+    // The pane stays open (the next plant's map, media…). The sheet or its pane closed while the move plays (Échap, ×
+    // right after): it goes nowhere (#cancelStep).
+    const run = this.#steps;
+    const go = () => {
+      if (run !== this.#steps) return;
+      this.#moving = false;
+      openView(this.#paneInUrl ? href.plantPane(id, /** @type {string} */ (/** @type {any} */ (this.route).pane)) : href.plant(id));
+    };
     if (!card || this.#reducedMotion.matches) { this._under = null; go(); return; }
     if (this.#moving) return;
     this.#moving = true;
@@ -281,9 +287,10 @@ export class GfFlora extends LitElement {
       // Fade in only once the next sheet has its plant (it reads it from the local database).
       await this.updateComplete;
       const next = /** @type {any} */ (deck.querySelector('.swipe.under gf-plant-detail'));
-      for (let i = 0; i < 20 && next && next._plant === undefined; i++) await new Promise(r => setTimeout(r, 15));
+      for (let i = 0; i < 20 && next && next._plant === undefined && run === this.#steps; i++) await new Promise(r => setTimeout(r, 15));
+      if (run !== this.#steps) return;
       deck.classList.add('go');
-      setTimeout(() => { this.#moving = false; go(); }, 340);
+      setTimeout(go, 340);
       return;
     }
     deck?.classList.add('easing');
@@ -291,11 +298,25 @@ export class GfFlora extends LitElement {
     card.classList.remove('dragging', 'settle');
     card.classList.add('fly-' + dir);
     // The card underneath (same element, its sheet loaded) becomes the sheet; the deck is reset as it does.
-    setTimeout(() => { this.#moving = false; go(); }, 300);
+    setTimeout(go, 300);
   }
 
   /** A move to the previous / next plant is playing. */
   #moving = false;
+  /** The moves let go (#cancelStep): one still playing from before goes nowhere. */
+  #steps = 0;
+
+  /** The sheet or its pane closed while a move plays: the move let go, the card back in place, nothing waiting under it. */
+  #cancelStep() {
+    if (!this.#moving) return;
+    this.#steps++;
+    this.#moving = false;
+    this._under = null;
+    const deck = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.deck'));
+    deck?.classList.remove('easing', 'go');
+    deck?.style.removeProperty('--p');
+    this.#card?.classList.remove('fly-next', 'fly-prev');
+  }
 
   /** ← → on the keyboard, when not typing; Échap. @param {KeyboardEvent} e */
   #onKey = e => {
@@ -309,13 +330,24 @@ export class GfFlora extends LitElement {
     this.#step(e.key === 'ArrowLeft' ? 'prev' : 'next');
   };
 
-  /** Échap: the pane closed, else the plant's sheet — not while typing, nor under a dialog (its step: its own Échap). @param {KeyboardEvent} e */
+  /**
+   * Échap: the pane closed; else « Personnaliser la fiche » ended (its « Terminé »: the sheet stays); else the plant's
+   * sheet — not while typing, nor under a dialog (its step: its own Échap). @param {KeyboardEvent} e
+   */
   #onEscape(e) {
     if (this.#plantId === null || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || entryValue('gfModal') || modalOpen()) return;
     const t = /** @type {HTMLElement} */ (e.composedPath()[0]);
     if (t?.closest?.('input, textarea, select, [contenteditable]') || t?.isContentEditable) return;
     e.preventDefault();
-    if (this.#pane !== null) this.#closePane(); else this.#closePlant();
+    if (this.#pane !== null) this.#closePane();
+    else if (this.#store.state.king?.sheet === 'flore') this.#endKing();
+    else this.#closePlant();
+  }
+
+  /** « Personnaliser la fiche » ended by Échap: its sheet's « Terminé » (the focus back on its crown). */
+  #endKing() {
+    const sheet = /** @type {any} */ (this.renderRoot.querySelector('.swipe:not(.under) gf-plant-detail'));
+    if (sheet?.endKing) sheet.endKing(); else closeKing();
   }
 
   /** Swipe: a mostly horizontal stroke on the sheet, not started on a map, a field or something that scrolls sideways. */
@@ -446,11 +478,10 @@ export class GfFlora extends LitElement {
       // Pane closed: no image to open at.
       if (!this.#paneInUrl) this.#paneStart = null;
       if (this.#pane === null) this._paneFull = false;
-      // Phone: the sheet that opens over the list takes the focus; closed, the focus goes back to the plant's row.
-      if (this.#phone.matches) {
-        if (this.route.name === 'plant' && before?.name !== 'plant') this.#focusSheet = true;
-        if (before?.name === 'plant' && this.route.name !== 'plant') this.#focusRow = before.id;
-      }
+      // Phone: the sheet that opens over the list takes the focus. Closed, the focus goes back to the plant's row, when it
+      // went with the sheet (#backToRow).
+      if (this.#phone.matches && this.route.name === 'plant' && before?.name !== 'plant') this.#focusSheet = true;
+      if (before?.name === 'plant' && this.route.name !== 'plant') this.#focusRow = before.id;
     }
     // A plant open beside the list (desktop, tablet): the filters and the sort changed there (the Filtres pane, the
     // drawer) are the list's, not written in the plant's address — closing the plant, Back, the Flore tab or a reload
@@ -488,7 +519,7 @@ export class GfFlora extends LitElement {
 
   /** Phone: a plant just opened (its sheet takes the focus). */
   #focusSheet = false;
-  /** Phone: the plant whose sheet just closed (its row takes the focus back). @type {number | null} */
+  /** The plant whose sheet just closed (its row takes the focus back). @type {number | null} */
   #focusRow = null;
 
   /**
@@ -512,12 +543,20 @@ export class GfFlora extends LitElement {
     }
   }
 
-  /** Phone: the sheet closed, the focus back on the plant's row in the list (when it is drawn). @param {number} id */
+  /**
+   * The sheet closed, the focus back on the plant's row in the list (when it is drawn) — when the focus went with the
+   * sheet (its ×, Échap or Back from inside it; a phone: the list was under it, inert), never taken from where it is
+   * (the search field, a filter). Once the list has its room back: beside the sheet, the results come back as a grid,
+   * their rows made anew. @param {number} id
+   */
   async #backToRow(id) {
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await this.updateComplete;
     const list = /** @type {any} */ (this.renderRoot.querySelector('gf-plant-list'));
     await list?.updateComplete;
     const card = /** @type {any} */ ([...(list?.renderRoot?.querySelectorAll('gf-plant-card') || [])].find(c => /** @type {any} */ (c).plant?.id === id));
     await card?.updateComplete;
+    if (document.activeElement && document.activeElement !== document.body) return;
     /** @type {HTMLElement | null | undefined} */ (card?.renderRoot?.querySelector('a.row'))?.focus({ preventScroll: true });
   }
 
@@ -576,6 +615,7 @@ export class GfFlora extends LitElement {
     const id = this.#plantId;
     this._paneFull = false;
     this.#paneStart = null;
+    this.#cancelStep();
     if (id !== null && this.#paneMark) closeTo(this.#paneMark, href.plant(id), { keep: ['gfSheetFrom'] });
   };
 
@@ -612,6 +652,7 @@ export class GfFlora extends LitElement {
 
   #closePlant() {
     // Back to the list it was opened from (past the plants browsed with ‹ ›); opened elsewhere: the list in the sheet's place.
+    this.#cancelStep();
     if (this.#sheet) closeTo(this.#sheet, this.#listHash);
   }
 

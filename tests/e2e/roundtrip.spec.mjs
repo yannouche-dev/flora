@@ -143,6 +143,8 @@ test('lien de partage d’un parcours : « Parcours partagé », sa marche trac�
       origin: c.properties.origin ?? null, plants: c.properties.plants.map((/** @type {any} */ e) => e.plantId) })));
   // Received: a parcours of the user's own (no activity made it here), its plants in the order met.
   await expect.poll(walks).toEqual([{ name: 'Chemin du lavoir', walk: true, startedHere: true, origin: null, plants: [ortie, ail] }]);
+  // Shown on the Carte first (the editor's own step, after the save): else it would land on the Parcours, in its place.
+  await expect.poll(() => other.page.evaluate(() => location.hash)).toMatch(/^#\/map\?spot=/);
   // Its Parcours offers to continue it.
   await other.app.go('#/app/parcours');
   await expect(other.page.getByRole('group', { name: 'Continuer un parcours' })).toContainText('Chemin du lavoir');
