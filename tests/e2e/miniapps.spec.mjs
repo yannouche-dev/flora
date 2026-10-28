@@ -34,7 +34,7 @@ test('Découvrir (l’icône film) ouvre une activité seule à l’écran ; « 
   await expect(page.locator('gf-miniapp .go')).toBeVisible();
   // Alone: no header, no tab bar (« Noter ici »'s dialog is there, closed: its own header unseen).
   await expect(page.locator('gf-app header:visible')).toHaveCount(0);
-  await expect(page.getByRole('link', { name: 'GeoFlora — accueil' })).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'GeoFlora — aller à Flore' })).toHaveCount(0);
   await expect(page.locator('gf-tabbar')).toHaveCount(0);
   // The one way out, named on a phone too (its word hidden there).
   await expect(page.locator('gf-miniapp .quit')).toHaveAccessibleName('Quitter l’activité');
@@ -135,7 +135,7 @@ test('« Recommencer » dans Découvrir de l’activité à l’écran : son pre
   await expect.poll(hash).toBe('#/collections');
 });
 
-test('ouverte sans rien derrière, une activité, et celle lancée depuis elle, ramènent à l’accueil', async ({ app, page }) => {
+test('ouverte sans rien derrière, une activité, et celle lancée depuis elle, ramènent à Flore', async ({ app, page }) => {
   const hash = () => page.evaluate(() => location.hash);
   await app.open('#/app/parcours');
   const box = page.locator('gf-miniapp');

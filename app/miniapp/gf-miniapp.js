@@ -16,8 +16,8 @@
 //    plant chosen and its sheet open, or its sheet closed (the plant stays chosen); the others, the plant open (?p=:
 //    its sheet), or closed — back to the entry it was opened from. Over a start screen, the plant of a link (?p=)
 //    shows in a sheet of its own (ma-plant-sheet).
-//  - The way out: exit.confirm(c) asks first if it says something; then back to where it was opened from (else the
-//    start page). An activity launched from another (Découvrir over its box: its film icon, « Autres activités »)
+//  - The way out: exit.confirm(c) asks first if it says something; then back to where it was opened from (else Flore
+//    as it was left: context.js floreHref). An activity launched from another (Découvrir over its box: its film icon, « Autres activités »)
 //    takes that one's starting point, so « Quitter » leaves both; Back still returns to it. Doing or leaving it
 //    changes nothing else in the app (no mode, no setting, no layout of the sheet).
 //  - The plants seen in it (the event `seen` of the runtime: a card swiped, a plant opened, chosen or noted), in any
@@ -28,6 +28,7 @@
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { backTo, closeTo, depth, entryValue, markEntry, openModal, pushHash, replaceHash, sheetMark } from '../core/history.js';
 import { href } from '../core/router.js';
+import { floreHref, floreName } from '../core/context.js';
 import { StoreController } from '../core/store.js';
 import { plantSeen } from '../core/discover.js';
 import { subscribe } from '../core/sync.js';
@@ -159,7 +160,7 @@ export class GfMiniapp extends LitElement {
 
   /**
    * The depth of the entry it was opened from, or the one the activity it was launched from had (Quitter goes back to
-   * it); null: nothing behind (the start page then). @type {number | null}
+   * it); null: nothing behind (Flore as it was left then). @type {number | null}
    */
   #from = null;
   /** @type {(() => void) | null} */ #unsync = null;
@@ -340,7 +341,7 @@ export class GfMiniapp extends LitElement {
     const text = app.m.exit.confirm?.(app.c);
     if (text && !(await this.#ask('leave', text))) return;
     app.flush();
-    backTo(this.#from, '#/');
+    backTo(this.#from, floreHref());
   };
 
   /** « Recommencer », once confirmed. */
@@ -376,8 +377,8 @@ export class GfMiniapp extends LitElement {
   #closeMenu(e) { /** @type {HTMLElement} */ (e.currentTarget).closest('details')?.removeAttribute('open'); }
 
   render() {
-    if (this._error) return html`<div class="bar"><button class="quit" type="button" title="Fermer" aria-label="Fermer" @click=${() => backTo(this.#from, '#/')}>${icon('x-lg')}<span class="lbl"> Fermer</span></button></div>
-      <p class="missing" role="alert">${this._error} <a href="#/">Aller à l’accueil</a></p>`;
+    if (this._error) return html`<div class="bar"><button class="quit" type="button" title="Fermer" aria-label="Fermer" @click=${() => backTo(this.#from, floreHref())}>${icon('x-lg')}<span class="lbl"> Fermer</span></button></div>
+      <p class="missing" role="alert">${this._error} <a href=${floreHref()}>Aller à ${floreName()}</a></p>`;
     const app = this._app;
     if (!app) return html`<div class="bar"></div><p class="missing" role="status">Chargement…</p>`;
     const step = app.step, m = app.m;

@@ -15,11 +15,12 @@
 
 import { LitElement, html, css, nothing } from 'lit';
 import { icon } from '../core/icons.js';
-import { afterDialogSteps, entryValue, openModal, pushHash } from '../core/history.js';
+import { afterDialogSteps, entryValue, openModal, openView, pushHash } from '../core/history.js';
 import { href, parse } from '../core/router.js';
 import { scene, sceneStyles } from '../core/scenes.js';
 import { leftAt } from '../core/around-sessions.js';
 import { discoverEvents, discovering, finishDiscover } from '../core/discover.js';
+import { floreHref } from '../core/context.js';
 import { MINIAPPS } from '../miniapps/index.js';
 import { madeByApp } from '../core/collections.js';
 import { ui } from '../styles/ui.js';
@@ -223,7 +224,8 @@ export class GfLauncher extends LitElement {
         <p class="intro">Des activités pour découvrir la flore, chacune avec les outils qu’il lui faut. On peut en changer quand on veut.</p>
       </header>
       ${list}
-      ${discovering() ? html`<p class="skip"><a class="link muted" href=${href.search()} @click=${() => finishDiscover()}>Passer : montrer toute l’application</a></p>` : nothing}
+      ${discovering() ? html`<p class="skip"><a class="link muted" href=${href.search()}
+        @click=${(/** @type {Event} */ e) => { e.preventDefault(); finishDiscover(); openView(floreHref()); }}>Passer : montrer toute l’application</a></p>` : nothing}
     </section>`;
   }
 }

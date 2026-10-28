@@ -201,3 +201,65 @@ test('Une seule recherche : une disposition libre ne change pas celle de Flore',
   await expect.poll(() => hash(page)).toBe('#/?family=Rosaceae');
   await expect.poll(() => app.state('results.total')).toBeGreaterThan(3);
 });
+
+test('Le logo ramène à Flore là où on l’avait laissée', async ({ app, page }) => {
+  await app.open('#/?family=Rosaceae');
+  await expect.poll(() => app.state('results.total')).toBeGreaterThan(3);
+  await page.locator('gf-flora gf-plant-list gf-plant-card a.row').first().click();
+  await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+$/);
+  const plant = await hash(page);
+  await app.go('#/map');
+  await expect(page.locator('gf-map-page')).toBeVisible();
+  const logo = page.getByRole('link', { name: 'GeoFlora — aller à Flore' });
+  await expect(logo).toHaveAttribute('href', plant);
+  await logo.click();
+  await expect.poll(() => hash(page)).toBe(plant);
+  expect(await app.state('query.filters.family')).toEqual(['Rosaceae']);
+  // Réglages' way back: Flore too, the plant included.
+  await app.go('#/settings');
+  await expect(page.locator('gf-settings').getByRole('link', { name: 'Aller à Flore' })).toHaveAttribute('href', plant);
+});
+
+test('Quitter une activité ouverte par un lien, et « Page introuvable », ramènent à Flore là où on l’avait laissée', async ({ app, page, context }) => {
+  await app.open('#/?family=Rosaceae');
+  // A link to the activity, opened in a new tab: nothing of this visit behind it.
+  const { App } = await import('./app.mjs');
+  const tab = await context.newPage();
+  const other = new App(tab);
+  await other.open('#/app/mosaique');
+  await tab.locator('gf-miniapp .quit').click();
+  await expect.poll(() => hash(tab)).toBe('#/?family=Rosaceae');
+  await other.go('#/nope');
+  await expect(tab.getByText('Page introuvable.').getByRole('link', { name: 'Aller à Flore' })).toHaveAttribute('href', '#/?family=Rosaceae');
+  // An activity that does not exist: the same way out.
+  await other.go('#/app/nope');
+  await expect(tab.locator('gf-miniapp .missing').getByRole('link', { name: 'Aller à Flore' })).toHaveAttribute('href', '#/?family=Rosaceae');
+  await tab.close();
+});
+
+test('« Passer » après « Revoir les premiers pas » garde la recherche de Flore', async ({ app, page }) => {
+  await app.open('#/?family=Rosaceae');
+  await app.go('#/settings');
+  await page.getByRole('button', { name: 'Revoir les premiers pas' }).click();
+  await page.getByRole('alertdialog', { name: 'Revoir les premiers pas ?' }).getByRole('button', { name: 'Revoir les premiers pas' }).click();
+  await expect.poll(() => hash(page)).toBe('#/discover');
+  await page.getByRole('link', { name: 'Passer : montrer toute l’application' }).click();
+  await expect.poll(() => hash(page)).toBe('#/?family=Rosaceae');
+  await expect.poll(() => app.state('query.filters.family')).toEqual(['Rosaceae']);
+});
+
+test.describe('pendant les premiers pas', () => {
+  test.use({ firstVisit: true });
+
+  test('le logo, « Page introuvable » et Réglages mènent à Découvrir', async ({ app, page }) => {
+    await app.open('#/');
+    await expect.poll(() => hash(page)).toBe('#/discover');
+    const logo = page.locator('gf-app a.brand');
+    await expect(logo).toHaveAttribute('href', '#/discover');
+    await expect(logo).toHaveAttribute('aria-label', 'GeoFlora — aller à Découvrir');
+    await app.go('#/nope');
+    await expect(page.getByText('Page introuvable.').getByRole('link', { name: 'Aller à Découvrir' })).toHaveAttribute('href', '#/discover');
+    await app.go('#/settings');
+    await expect(page.locator('gf-settings').getByRole('link', { name: 'Aller à Découvrir' })).toHaveAttribute('href', '#/discover');
+  });
+});
