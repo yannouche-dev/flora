@@ -1,4 +1,4 @@
-// « Disposition libre » : the frame every cell shares (registry.js#FRAME), written in its parameters. Its head (tete=non:
+// « Écran sur mesure » : the frame every cell shares (registry.js#FRAME), written in its parameters. Its head (tete=non:
 // none, the content taking the room; tete=simple: its title alone), a title of its own (titre=: its head, its tab on a
 // phone), the actions of its head (agrandir: over the layout, Échap returns; replier: folded to its head, its share to
 // the others; partager: a link to a layout of this cell alone, with the same state, copied), its empty state
@@ -7,6 +7,7 @@
 // nothing), and the editor's « Cadre » writing them in the address. iNaturalist answered as in free-layout.spec.mjs:
 // 12 plants around.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
+import { layoutOf, screen } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
 
@@ -138,7 +139,7 @@ test.describe('un grand écran', () => {
     // ✕ (the same button) as well.
     await acts.locator('[data-act="agrandir"]').click();
     await expect(sheet).toHaveClass(/maxed/);
-    await acts.getByRole('button', { name: /Revenir à la disposition/ }).click();
+    await acts.getByRole('button', { name: /Revenir à l’écran/ }).click();
     await expect(sheet).not.toHaveClass(/maxed/);
     // Replier: its head alone, its share to the results; kept in the layout (etat=replie), as the app is sent.
     const before = (await box(results)).width;
@@ -172,10 +173,10 @@ test.describe('un grand écran', () => {
     await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+/);
   });
 
-  test('« Créer une app » : « Cadre » et « Liens » dans le choix du contenu, écrits dans l’adresse ; l’app les montre', async ({ app, page }) => {
-    await app.open(`#/builder?g=[results(list),plant.wikipedia]&p=${plantId(ORTIE)}`);
+  test('en modification : « Cadre » et « Liens » dans le choix du contenu, écrits dans l’adresse ; l’écran en usage les montre', async ({ app, page }) => {
+    await app.open(screen('[results(list),plant.wikipedia]', `p=${plantId(ORTIE)}`, true));
     const p = page.locator('gf-block-picker:not([inline])');
-    await page.locator('gf-builder gf-layout section.cell[data-comp="plant.wikipedia"] .cell-head .pick').click();
+    await page.locator('gf-layout section.cell[data-comp="plant.wikipedia"] .cell-head .pick').click();
     await expect(p.locator('.row')).toHaveText([/Réglages/, /Cadre/, /Liens/]);
     await p.locator('.row[data-group="Cadre"]').click();
     await p.locator('[data-param="tete"] button[data-value="simple"]').click();
@@ -189,14 +190,15 @@ test.describe('un grand écran', () => {
     await p.locator('[data-param="plante"] [data-act="fix"]').click();
     await shot(page, 'editeur-cadre');
     const spec = `[results(view=list),plant.wikipedia(tete=simple,actions=agrandir,vide=masque,plante=${plantId(ORTIE)},titre=Article le mien)]`;
-    await expect.poll(() => page.evaluate(() => new URLSearchParams(location.hash.split('?')[1] || '').get('g'))).toBe(spec);
+    await expect.poll(() => layoutOf(page)).toBe(spec);
     await page.keyboard.press('Escape');
-    await page.locator('gf-builder [data-act="open-app"]').click();
+    // « Terminé »: the screen in use, the same layout and state.
+    await page.locator('gf-layout [data-act="modifier"]').click();
     await expect.poll(() => hash(page)).toBe(`#/layout/${spec}?p=${plantId(ORTIE)}`);
     await expect(cellOf(page, 'plant.wikipedia').locator('.cell-head h2')).toHaveText('Article le mien');
     // A component that cannot be empty has no « Sans rien à montrer »; the results, not the plant links but the zone.
     await page.locator('gf-layout [data-act="modifier"]').click();
-    await page.locator('gf-builder gf-layout section.cell[data-comp="results"] .cell-head .pick').click();
+    await page.locator('gf-layout section.cell[data-comp="results"] .cell-head .pick').click();
     await p.locator('.row[data-group="Cadre"]').click();
     await expect(p.locator('[data-param="vide"]')).toHaveCount(1);
     await p.locator('.back').click();

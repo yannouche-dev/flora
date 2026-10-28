@@ -9,6 +9,7 @@
 // here (tiles.mjs), real WebGL for 3D.
 import { test, expect, answerAround } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
+import { screen } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page @typedef {import('@playwright/test').Locator} Locator */
 
@@ -292,18 +293,18 @@ test('la vignette de l’autre fond, le fond commun étant SPOT : le plan, puis 
   expect(await stored(page)).toBe('spot:2025');
 });
 
-test('« Créer une app » : la date du fond, les seules années de son fond, la plus récente d’abord ; puis la 2D écrite après elle', async ({ app, page, isMobile }) => {
+test('en modification : la date du fond, les seules années de son fond, la plus récente d’abord ; puis la 2D écrite après elle', async ({ app, page, isMobile }) => {
   test.skip(isMobile, 'the picker docked: a wide screen');
-  await app.open(`#/builder?g=${encodeURIComponent('[map(r=1km,base=spot)]')}&${AT}`);
-  await page.locator('gf-builder gf-layout section.cell[data-cell="0"] .cell-head .pick').click();
+  await app.open(screen('[map(r=1km,base=spot)]', AT, true));
+  await page.locator('gf-layout section.cell[data-cell="0"] .cell-head .pick').click();
   const p = page.locator('gf-block-picker:not([inline])');
   await p.locator('.row[data-group="Fond"]').click();
   const date = p.locator('[data-param="annee"] select');
   await expect(date.locator('option')).toHaveText(['Par défaut', '2025', '2024', '2023', '2022', '2021', '2020', '2019', '2018', '2017', '2016', '2015', '2014', '2013']);
-  const grid = () => page.evaluate(() => new URLSearchParams(location.hash.split('?')[1] || '').get('g'));
+  const grid = () => layoutOf(page);
   await date.selectOption('2016');
   await expect.poll(grid).toBe('[map(r=1km,base=spot,annee=2016)]');
-  await expect.poll(() => page.locator('gf-builder dl-map gf-map').evaluate(m => /** @type {any} */ (m).lookShown.base)).toBe('spot:2016');
+  await expect.poll(() => page.locator('gf-layout dl-map gf-map').evaluate(m => /** @type {any} */ (m).lookShown.base)).toBe('spot:2016');
   // The photos: their years, periods, historical ones (the most recent first); SPOT's 2025 no more.
   await p.locator('[data-param="base"] button[data-value="photo"]').click();
   await expect.poll(grid).toBe('[map(r=1km,base=photo,annee=2016)]');

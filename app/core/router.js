@@ -170,12 +170,6 @@ export const href = {
     return '#/app/' + id + (step ? '/' + step : '') + (search ? '?' + search : '');
   },
   /**
-   * « Créer une app »: its start (no `spec`), or a layout being built (its text, g=: brackets, parentheses, « @ », « = »
-   * kept, anything else an address may not hold encoded — « + » and « & » among them) and the layout's state (already
-   * encoded). @param {string | null} [spec] @param {string} [search]
-   */
-  builder: (spec = null, search = '') => '#/builder' + (spec === null ? '' : '?g=' + spec.replace(/[^\w\-.~!$'()*,;:@[\]]/g, c => encodeURIComponent(c)) + (search ? '&' + search : '')),
-  /**
    * A screen of one's own (« Écran sur mesure »): its layout's text (grammar.js; brackets, parentheses, « @ » and « = »
    * kept as they are, anything else an address may not hold encoded), its state (state.js, already encoded) and, being
    * modified, edit=1 (last). No text: the home, #/layout. @param {string} spec @param {string} [search] @param {boolean} [edit]

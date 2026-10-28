@@ -14,6 +14,7 @@
 // (annee=2016,noms=0;3d=0). Every tile made here (tiles.mjs: see-through but for their lines), real WebGL for 3D.
 import { test, expect, answerAround, plantId } from './fixtures.mjs';
 import { answerTiles } from './tiles.mjs';
+import { screen } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page @typedef {import('@playwright/test').Locator} Locator */
 
@@ -483,10 +484,10 @@ test('une case de disposition : noms= une liste (ceux-là seuls, chacun à sa pl
   await expect(legend).not.toContainText('Noms et réseaux');
 });
 
-test('« Créer une app » : « Noms et réseaux » dans Fond, une pastille par couche ; aucune écrit noms=0 avant la 3D (« ; » entre deux chiffres), les trois habituelles noms=1, Par défaut le retire', async ({ app, page, isMobile }) => {
+test('en modification : « Noms et réseaux » dans Fond, une pastille par couche ; aucune écrit noms=0 avant la 3D (« ; » entre deux chiffres), les trois habituelles noms=1, Par défaut le retire', async ({ app, page, isMobile }) => {
   test.skip(isMobile, 'the picker docked: a wide screen');
-  await app.open(`#/builder?g=${encodeURIComponent('[map(r=1km,base=photo,annee=2016;3d=0)]')}&${AT}`);
-  await page.locator('gf-builder gf-layout section.cell[data-cell="0"] .cell-head .pick').click();
+  await app.open(screen('[map(r=1km,base=photo,annee=2016;3d=0)]', AT, true));
+  await page.locator('gf-layout section.cell[data-cell="0"] .cell-head .pick').click();
   const p = page.locator('gf-block-picker:not([inline])');
   await p.locator('.row[data-group="Fond"]').click();
   const noms = p.locator('[data-param="noms"]');
@@ -494,8 +495,8 @@ test('« Créer une app » : « Noms et réseaux » dans Fond, une pastille par 
   await expect(noms).toContainText('aucune choisie : selon les réglages communs (sur les photos et SPOT)');
   await expect(noms.locator('button.chip')).toHaveText(['Noms de lieux', 'Routes', 'Cours d’eau', 'Voies ferrées', 'Bâtiments', 'Limites administratives']);
   await expect(noms.locator('[data-act="default"]')).toHaveCount(0);
-  const grid = () => page.evaluate(() => new URLSearchParams(location.hash.split('?')[1] || '').get('g'));
-  const look = () => lookOf(page.locator('gf-builder dl-map gf-map'));
+  const grid = () => layoutOf(page);
+  const look = () => lookOf(page.locator('gf-layout dl-map gf-map'));
   // One chosen: that one alone, written.
   await noms.locator('button[data-value="rail"]').click();
   await expect.poll(grid).toBe('[map(r=1km,base=photo,annee=2016,noms=rail,3d=0)]');

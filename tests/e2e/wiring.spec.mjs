@@ -8,6 +8,7 @@
 // iNaturalist answered here: 12 plants around; GBIF: nothing of its own in the zone (both sources asked by default).
 import { test, expect, plantId, answerZoneGbif } from './fixtures.mjs';
 import { mapState } from './quiet.mjs';
+import { layoutOf, screen } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
 
@@ -140,12 +141,12 @@ test.describe('un grand écran', () => {
     }
   });
 
-  test('les liens dans le constructeur : une pastille par lien ; touchée, la case se détache ou se relie (le réglage écrit)', async ({ app, page }) => {
+  test('les liens en modification : une pastille par lien ; touchée, la case se détache ou se relie (le réglage écrit)', async ({ app, page }) => {
     await answer(page);
     const ortie = plantId('Urtica dioica');
-    await app.open(`#/builder?g=${encodeURIComponent('[map(r=1km),results,plant.wikipedia]')}&${AT}&p=${ortie}`);
-    const grid = () => page.evaluate(() => new URLSearchParams(location.hash.split('?')[1] || '').get('g'));
-    const chips = (/** @type {string} */ comp) => page.locator(`gf-builder section.cell[data-comp="${comp}"] .cell-links`);
+    await app.open(screen('[map(r=1km),results,plant.wikipedia]', `${AT}&p=${ortie}`, true));
+    const grid = () => layoutOf(page);
+    const chips = (/** @type {string} */ comp) => page.locator(`gf-layout section.cell[data-comp="${comp}"] .cell-links`);
     await expect(chips('map').locator('.link-chip')).toHaveCount(5);
     // The map's points: every plant of the zone, not only the search's.
     await chips('map').locator('[data-link="recherche"]').click();

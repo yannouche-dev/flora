@@ -10,6 +10,7 @@
 // settings by group, a change written in the address. iNaturalist answered here: 12 plants around, 24 observations of
 // three dates (this month, May of this year, this month two years ago); GBIF: 8 occurrences.
 import { test, expect, answerAround, plantId } from './fixtures.mjs';
+import { screen } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
 
@@ -218,9 +219,9 @@ test('où : un lieu de départ trouvé comme ?place= l’est, tant que l’adres
   expect(asked).toHaveLength(1);
 });
 
-test('« Créer une app » : les réglages de la carte par groupe, un choix écrit dans l’adresse', async ({ app, page }) => {
-  await app.open(`#/builder?g=[map(terrain;r=1km),plant]&${AT}`);
-  await page.locator('gf-builder gf-layout section.cell[data-comp="map"] .cell-head .pick').click();
+test('en modification : les réglages de la carte par groupe, un choix écrit dans l’adresse', async ({ app, page }) => {
+  await app.open(screen('[map(terrain;r=1km),plant]', AT, true));
+  await page.locator('gf-layout section.cell[data-comp="map"] .cell-head .pick').click();
   const p = page.locator('gf-block-picker:not([inline])');
   await expect(p.locator('.row b')).toHaveText(['Que montre-t-il ?', /^Où/, 'Fond', 'Couches', 'Points', 'Liens', 'Interface', 'Cadre']);
   // What the intent gives, said as such.
@@ -233,5 +234,5 @@ test('« Créer une app » : les réglages de la carte par groupe, un choix écr
   await p.locator('.back').click();
   await p.locator('.row[data-group="Couches"]').click();
   await p.locator('[data-param="layers"] button[data-value="znieff"]').click();
-  await expect.poll(() => page.evaluate(() => new URLSearchParams(location.hash.split('?')[1] || '').get('g'))).toBe('[map(terrain,r=1km,layers=znieff,toucher=fiche),plant]');
+  await expect.poll(() => layoutOf(page).then(l => l.replace(/^#\/layout\//, ''))).toBe('[map(terrain,r=1km,layers=znieff,toucher=fiche),plant]');
 });
