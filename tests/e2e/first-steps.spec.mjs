@@ -1,8 +1,11 @@
 // Premiers pas : un lien ouvre toujours son écran ; les onglets suivent ce que l'appareil garde. During the first
 // steps a tab not come yet is only missing from the bar: an address — a shared link, a bookmark, a link of the app,
 // Back — opens its screen, and its tab comes with it (core/discover.js arrivedAt); the start alone (`#/`) leads to
-// Découvrir, and Découvrir, the activities, Réglages and its screens bring none.
+// Découvrir, and Découvrir, the activities, Réglages and its screens bring none. The tabs follow what the device holds
+// (a favourite, a list or a lieu: Mes plantes; a lieu: the Carte): at the start, after an import (a file, a transfer
+// link), a restore of the backup copy and « Revoir les premiers pas ».
 import { test, expect, plantId } from './fixtures.mjs';
+import { writeFileSync } from 'node:fs';
 
 test.use({ firstVisit: true });
 
@@ -88,4 +91,81 @@ test('Flore venue par son adresse : le logo y mène, et l’icône l’ouvre là
   await app.ready();
   await expect.poll(() => hash(page)).toBe('#/?family=Rosaceae');
   await expect.poll(() => app.tabs()).toContain('Flore');
+});
+
+test('au démarrage, les listes et les lieux de l’appareil font venir Mes plantes et la Carte', async ({ app, page }) => {
+  await app.open('#/discover');
+  await page.evaluate(async () => {
+    const c = await import('/app/core/collections.js');
+    await c.saveCollection(c.newCollection('list', { name: 'Bois' }));
+    await c.saveCollection(c.newPlace([4.8357, 45.7641], { name: 'Lisière nord' }));
+    // A device of before: its lists and lieux, no tab come.
+    localStorage.setItem('geoflora.discover', JSON.stringify({ done: false, unlocked: [], seen: [], step: 0 }));
+  });
+  await page.goto('about:blank');
+  await app.open('#/discover');
+  await expect.poll(() => app.tabs()).toEqual(bar(app, ['Carte', 'Mes plantes']));
+  expect((await discover(page)).done).toBe(false);
+});
+
+test('un fichier importé dans Réglages fait venir Mes plantes et la Carte', async ({ app, page }, info) => {
+  const file = info.outputPath('lieux.geojson');
+  writeFileSync(file, JSON.stringify({ type: 'FeatureCollection', features: [
+    { type: 'Feature', id: 'bois', geometry: null, properties: { kind: 'list', name: 'Bois', plants: [] } },
+    { type: 'Feature', id: 'lisiere', geometry: { type: 'Point', coordinates: [4.8357, 45.7641] }, properties: { kind: 'place', name: 'Lisière nord', plants: [] } }
+  ] }));
+  await app.open('#/settings');
+  expect(await app.tabs()).toEqual(bar(app, []));
+  await page.locator('gf-settings input[type=file][accept*="geojson"]').setInputFiles(file);
+  await expect.poll(() => app.tabs()).toEqual(bar(app, ['Carte', 'Mes plantes']));
+});
+
+test('un lien de transfert pendant les premiers pas : Mes plantes avec l’aperçu, la Carte avec l’import', async ({ app, page, newDevice }) => {
+  await app.open('#/discover');
+  await seed(page);
+  const { url } = await page.evaluate(async () => (await import('/app/core/collections.js')).transferLink({ personal: true }));
+  const other = await newDevice();
+  // The other device in its first steps, none of its tabs come (once: a reload keeps what it has).
+  await other.page.addInitScript(() => {
+    if (sessionStorage.getItem('first-steps')) return;
+    sessionStorage.setItem('first-steps', '1');
+    localStorage.setItem('geoflora.discover', JSON.stringify({ done: false, unlocked: [] }));
+  });
+  await other.app.open(url);
+  await expect(other.page.locator('gf-shared h1')).toHaveText('Vos favoris (1 plante), 1 liste et 1 lieu');
+  // The preview, not saved yet: its address brought Mes plantes.
+  await expect.poll(() => other.app.tabs()).toEqual(bar(other.app, ['Mes plantes']));
+  await other.page.locator('gf-shared').getByRole('button', { name: 'Importer' }).click();
+  await expect.poll(() => other.app.tabs()).toEqual(bar(other.app, ['Carte', 'Mes plantes']));
+});
+
+test('la copie de secours restaurée fait venir la Carte', async ({ app, page }) => {
+  await app.open('#/discover');
+  await seed(page);
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('geoflora.backup') || 'null')?.features.length)).toBe(3);
+  await page.evaluate(async () => {
+    const db = await import('/app/core/db.js');
+    for (const c of await db.getAll('spots')) await db.remove('spots', c.id);
+    localStorage.setItem('geoflora.discover', JSON.stringify({ done: false, unlocked: [] }));
+  });
+  await page.goto('about:blank');
+  await app.open('#/collections');
+  // The address brought Mes plantes; the base holds nothing.
+  await expect.poll(() => app.tabs()).toEqual(bar(app, ['Mes plantes']));
+  await page.locator('gf-collections .notice.restore').getByRole('button', { name: 'Restaurer' }).click();
+  await expect.poll(() => app.tabs()).toEqual(bar(app, ['Carte', 'Mes plantes']));
+});
+
+test('« Revoir les premiers pas » garde les onglets de vos listes et de vos lieux', async ({ app, page }) => {
+  await app.open('#/discover');
+  await seed(page);
+  await app.go('#/settings');
+  await page.getByRole('button', { name: 'Tout montrer maintenant' }).click();
+  await page.getByRole('button', { name: 'Revoir les premiers pas' }).click();
+  await page.getByRole('alertdialog', { name: 'Revoir les premiers pas ?' }).getByRole('button', { name: 'Revoir les premiers pas' }).click();
+  await expect.poll(() => hash(page)).toBe('#/discover');
+  // There at once; Flore waits for 5 new plants.
+  await expect.poll(() => app.tabs()).toEqual(bar(app, ['Carte', 'Mes plantes']));
+  const state = await discover(page);
+  expect({ done: state.done, unlocked: state.unlocked }).toEqual({ done: false, unlocked: ['mine', 'map'] });
 });
