@@ -112,11 +112,20 @@ test.describe('premier lancement', () => {
     await expect(discover.locator('.swipe-card.top')).toHaveAttribute('data-id', String(plantId('Allium ursinum')));
     await page.keyboard.press('ArrowRight');
     await expect.poll(() => page.evaluate(async () => (await import('/app/core/discover.js')).discoverState().unlocked)).toContain('mine');
+    // Nothing over the activity.
+    await expect(page.locator('.gf-brief-toast')).toHaveCount(0);
 
     await page.locator('gf-miniapp .quit').click();
     await expect.poll(() => hash(page)).toBe('#/discover');
     await expect(list(page).getByRole('button', { name: 'Continuer : Rencontres' })).toBeVisible();
     await expect.poll(() => app.tabs()).toContain('Mes plantes');
     expect(await app.tabs()).not.toContain('Flore');
+    // Announced on the first screen outside the activity, once.
+    const said = page.locator('.gf-brief-toast');
+    await expect(said).toContainText('Nouveau : Mes plantes — vos favoris, vos listes et vos lieux, gardés sur l’appareil.');
+    await expect(page.locator('body > .gf-toast-live')).toContainText('Nouveau : Mes plantes');
+    await said.getByRole('button', { name: 'Voir' }).click();
+    await expect.poll(() => hash(page)).toBe('#/collections');
+    expect(await page.evaluate(async () => (await import('/app/core/discover.js')).pendingUnlocks())).toEqual([]);
   });
 });

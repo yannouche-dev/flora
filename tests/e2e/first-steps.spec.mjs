@@ -3,8 +3,11 @@
 // Back — opens its screen, and its tab comes with it (core/discover.js arrivedAt); the start alone (`#/`) leads to
 // Découvrir, and Découvrir, the activities, Réglages and its screens bring none. The tabs follow what the device holds
 // (a favourite, a list or a lieu: Mes plantes; a lieu: the Carte): at the start, after an import (a file, a transfer
-// link), a restore of the backup copy and « Revoir les premiers pas ».
+// link), a restore of the backup copy and « Revoir les premiers pas ». Each tab that comes is announced once — never
+// in an activity nor under a dialog, on the first screen outside, said to screen readers, its tab lit; kept across a
+// reload and the other tabs of the browser —, but those of the start, of « Revoir » and of a restore after a repair.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
+import { App } from './app.mjs';
 import { writeFileSync } from 'node:fs';
 
 test.use({ firstVisit: true });
@@ -15,6 +18,19 @@ const hash = (/** @type {Page} */ page) => page.evaluate(() => location.hash);
 const discover = page => page.evaluate(() => JSON.parse(localStorage.getItem('geoflora.discover') || '{}'));
 /** The bar's tabs, Réglages on a phone. @param {import('./app.mjs').App} app @param {string[]} tabs */
 const bar = (app, tabs) => ['Découvrir', ...tabs, ...(app.phone ? ['Réglages'] : [])];
+/** The tabs that came and wait for their announcement (core/discover.js). @param {Page} page */
+const pending = page => page.evaluate(async () => (await import('/app/core/discover.js')).pendingUnlocks());
+/** The announcement (core/toast.js's brief toast). @param {Page} page */
+const said = page => page.locator('.gf-brief-toast');
+/** The toasts' live region, where it is said to screen readers. @param {Page} page */
+const live = page => page.locator('body > .gf-toast-live');
+/** The tabs lit, in the bar (phone) or the header. @param {import('./app.mjs').App} app */
+const lit = app => app.phone ? app.page.locator('gf-tabbar a.new') : app.page.locator('gf-app nav.tabs a.new');
+/** A list saved in Mes plantes (Mes plantes comes, to be announced). @param {Page} page */
+const saveList = page => page.evaluate(async () => {
+  const c = await import('/app/core/collections.js');
+  await c.saveCollection(c.newCollection('list', { name: 'Bois' }));
+});
 
 /** Favourites, a list and a place with notes, a harvest and a plant off the place's point (roundtrip.spec.mjs). @param {Page} page */
 const seed = page => page.evaluate(async ids => {
@@ -108,6 +124,11 @@ test('au démarrage, les listes et les lieux de l’appareil font venir Mes plan
   await app.open('#/discover');
   await expect.poll(() => app.tabs()).toEqual(bar(app, ['Carte', 'Mes plantes']));
   expect((await discover(page)).done).toBe(false);
+  // Quiet: announced at once, nothing said.
+  expect(await pending(page)).toEqual([]);
+  expect((await discover(page)).announced).toEqual(['mine', 'map']);
+  await page.waitForTimeout(1200);
+  await expect(said(page)).toHaveCount(0);
 });
 
 test('un fichier importé dans Réglages fait venir Mes plantes et la Carte', async ({ app, page }, info) => {
@@ -120,6 +141,11 @@ test('un fichier importé dans Réglages fait venir Mes plantes et la Carte', as
   expect(await app.tabs()).toEqual(bar(app, []));
   await page.locator('gf-settings input[type=file][accept*="geojson"]').setInputFiles(file);
   await expect.poll(() => app.tabs()).toEqual(bar(app, ['Carte', 'Mes plantes']));
+  // Both announced together, in the bar's order, without « Voir ».
+  await expect(said(page)).toHaveText('Nouveaux onglets : Carte et Mes plantes.');
+  await expect(said(page).locator('button')).toHaveCount(0);
+  await expect(live(page)).toContainText('Nouveaux onglets : Carte et Mes plantes.');
+  await expect(lit(app)).toHaveText(['Carte', 'Mes plantes']);
 });
 
 test('un lien de transfert pendant les premiers pas : Mes plantes avec l’aperçu, la Carte avec l’import', async ({ app, page, newDevice }) => {
@@ -170,6 +196,8 @@ test('« Revoir les premiers pas » garde les onglets de vos listes et de vos li
   await expect.poll(() => app.tabs()).toEqual(bar(app, ['Carte', 'Mes plantes']));
   const state = await discover(page);
   expect({ done: state.done, unlocked: state.unlocked }).toEqual({ done: false, unlocked: ['mine', 'map'] });
+  // Quiet: nothing to announce.
+  expect(await pending(page)).toEqual([]);
 });
 
 test('« Encore N plantes… » jusqu’à ce que Flore soit là, même venue par un lien', async ({ app, page, context }) => {
@@ -186,4 +214,87 @@ test('« Encore N plantes… » jusqu’à ce que Flore soit là, même venue pa
   await app.go('#/app/mosaique/cards');
   await expect(src).toBeVisible();
   await expect(src).not.toContainText('Encore');
+});
+
+test('un onglet venu avec son adresse, annoncé là, sans « Voir »', async ({ app, page }) => {
+  await app.open('#/map');
+  await expect(said(page)).toHaveText('Nouveau : Carte — vos lieux, les plantes notées et ce qui pousse autour.');
+  await expect(said(page).locator('button')).toHaveCount(0);
+  await expect(live(page)).toContainText('Nouveau : Carte');
+  await expect(lit(app)).toHaveText(['Carte']);
+  // Read (its time out): announced, never again — the tab no longer lit.
+  await expect(said(page)).toHaveCount(0, { timeout: 12_000 });
+  await expect(lit(app)).toHaveCount(0);
+  expect(await pending(page)).toEqual([]);
+  expect((await discover(page)).announced).toEqual(['map']);
+});
+
+test('un onglet venu pendant une activité : rien dedans, même rechargée ; annoncé une fois en sortant, ni au rechargement ni dans un autre onglet', async ({ app, page, context }) => {
+  await app.open('#/app/parcours');
+  await page.locator('gf-miniapp .go').click();
+  // A parcours under way: a lieu (Mes plantes, the Carte), to be announced.
+  await expect.poll(async () => (await discover(page)).unlocked).toEqual(expect.arrayContaining(['map', 'mine']));
+  await page.waitForTimeout(1200);
+  await expect(said(page)).toHaveCount(0);
+  // Reloaded in the middle of the activity: still waiting, still silent.
+  await page.reload();
+  await app.ready();
+  expect(await hash(page)).toMatch(/^#\/app\/parcours/);
+  await page.waitForTimeout(1200);
+  await expect(said(page)).toHaveCount(0);
+  expect(await pending(page)).toEqual(['map', 'mine']);
+  // Out of the activity: both said, once.
+  await page.locator('gf-miniapp .quit').click();
+  await expect.poll(() => hash(page)).toBe('#/discover');
+  await expect(said(page)).toHaveText('Nouveaux onglets : Carte et Mes plantes.');
+  await expect(lit(app)).toHaveText(['Carte', 'Mes plantes']);
+  await expect(said(page)).toHaveCount(0, { timeout: 12_000 });
+  expect(await pending(page)).toEqual([]);
+  // Never again: not after a reload, not in another tab of the browser.
+  await page.reload();
+  await app.ready();
+  const other = new App(await context.newPage());
+  await other.open('#/discover');
+  await other.page.waitForTimeout(1200);
+  await expect(said(page)).toHaveCount(0);
+  await expect(said(other.page)).toHaveCount(0);
+  expect(await other.tabs()).toEqual(bar(other, ['Carte', 'Mes plantes']));
+});
+
+test('rien sous un dialogue ; annoncé quand il se ferme, avec « Voir »', async ({ app, page }) => {
+  await app.open('#/settings');
+  await page.evaluate(async () => {
+    const { openModal } = await import('/app/core/history.js');
+    const dialog = Object.assign(document.createElement('dialog'), { id: 'question', textContent: 'Une question ?' });
+    document.body.append(dialog);
+    openModal(dialog);
+  });
+  await saveList(page);
+  await expect.poll(async () => (await discover(page)).unlocked).toContain('mine');
+  await page.waitForTimeout(1200);
+  await expect(said(page)).toHaveCount(0);
+  await page.evaluate(() => /** @type {HTMLDialogElement} */ (document.getElementById('question')).close());
+  await expect(said(page).locator('span')).toHaveText('Nouveau : Mes plantes — vos favoris, vos listes et vos lieux, gardés sur l’appareil.');
+  await expect(live(page)).toContainText('Nouveau : Mes plantes');
+  await expect(lit(app)).toHaveText(['Mes plantes']);
+  // « Voir »: its tab, announced.
+  await said(page).getByRole('button', { name: 'Voir' }).click();
+  await expect.poll(() => hash(page)).toBe('#/collections');
+  await expect(said(page)).toHaveCount(0);
+  expect(await pending(page)).toEqual([]);
+});
+
+test('coupée par un message plus important avant d’être lue, l’annonce revient', async ({ app, page }) => {
+  await app.open('#/settings');
+  await saveList(page);
+  await expect(said(page)).toContainText('Nouveau : Mes plantes');
+  // A weightier message takes the place at once (a capture's « Annuler »).
+  await page.evaluate(async () => { /** @type {any} */ (window).__free = (await import('/app/core/toast.js')).takeToastSlot(() => {}, 2); });
+  await expect(said(page)).toHaveCount(0);
+  expect((await discover(page)).announced).not.toContain('mine');
+  await page.waitForTimeout(1200);
+  await expect(said(page)).toHaveCount(0);
+  // Gone: the announcement comes back.
+  await page.evaluate(() => /** @type {any} */ (window).__free());
+  await expect(said(page)).toContainText('Nouveau : Mes plantes');
 });
