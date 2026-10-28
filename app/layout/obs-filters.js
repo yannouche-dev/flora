@@ -211,7 +211,7 @@ export class DlObsFilters extends LitElement {
           Observations de la zone
           ${changed ? html`<span class="badge" title=${`${changed} réglage${changed > 1 ? 's' : ''} changé${changed > 1 ? 's' : ''}`}>${changed}</span>` : nothing}
         </button>
-        ${changed ? html`<button class="link clear" type="button" title="Les réglages de la disposition" @click=${() => s.set({ filtres: null }, 'replace')}>effacer</button>` : nothing}
+        ${changed ? html`<button class="link clear" type="button" title="Les réglages de l’écran" @click=${() => s.set({ filtres: null }, 'replace')}>effacer</button>` : nothing}
       </div>
       ${this.open ? html`<div class="body" id="obs-body">
         <ul role="group" aria-label="Sources des observations">

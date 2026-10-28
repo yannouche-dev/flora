@@ -101,7 +101,7 @@ test('un réglage commun changé dans le panneau ▦ d’une carte : toutes les 
   const choice = panel3d.getByRole('group', { name: 'Carte en 2D ou en 3D' });
   await expect(choice.getByRole('radio', { name: /^3D/ })).toBeChecked();
   await expect(choice.getByRole('radio', { name: /^2D/ })).toBeDisabled();
-  await expect(panel3d).toContainText('Cette carte de la disposition est en 3D (3d=1 dans son adresse');
+  await expect(panel3d).toContainText('Cette carte de l’écran est en 3D (3d=1 dans son adresse');
   await panel3d.getByRole('button', { name: 'Suivre le réglage commun' }).click();
   await expect.poll(() => layoutOf(page)).toBe('[map(r=2km),map(r=2km)]');
   await expect(in3d).toHaveAttribute('data-renderer', '2d');
@@ -168,7 +168,7 @@ test('une intention qui met la carte en 3D : son panneau ▦ le dit, sans « Sui
   const map = maps(page).nth(0);
   await expect(map).toHaveAttribute('data-renderer', '3d', SLOW);
   const panel = await openPanel(map);
-  await expect(panel).toContainText('Cette carte de la disposition est en 3D (son intention « Relief »');
+  await expect(panel).toContainText('Cette carte de l’écran est en 3D (son intention « Relief »');
   await expect(panel).not.toContainText('3d=1');
   await expect(panel.getByRole('group', { name: 'Carte en 2D ou en 3D' }).getByRole('radio', { name: /^2D/ })).toBeDisabled();
   await expect(panel.getByRole('button', { name: 'Suivre le réglage commun' })).toHaveCount(0);
@@ -180,7 +180,7 @@ test('une intention qui donne les couches : son panneau ▦ le dit, sans « Reve
   const map = maps(page).nth(0);
   await expect.poll(async () => (await shown(map)).overlays).toContain('parcs');
   const panel = await openPanel(map);
-  await expect(panel.locator('.scope')).toContainText('Cette carte a ses propres couches (son intention « Espaces protégés » dans la disposition)');
+  await expect(panel.locator('.scope')).toContainText('Cette carte a ses propres couches (son intention « Espaces protégés » dans l’écran)');
   await expect(panel.getByRole('button', { name: 'Revenir aux réglages communs' })).toHaveCount(0);
   await expect(panel.getByRole('checkbox', { name: /Parcs nationaux/ })).toBeChecked();
 });
@@ -195,7 +195,7 @@ test('une intention qui donne le fond, des couches écrites en plus : « Revenir
   await expect.poll(() => shown(map)).toEqual({ base: 'photo', overlays: [] });
   // Left with the intent's photos alone: said so, no way back.
   panel = await openPanel(map);
-  await expect(panel.locator('.scope')).toContainText('(son intention « Sur le terrain » dans la disposition)');
+  await expect(panel.locator('.scope')).toContainText('(son intention « Sur le terrain » dans l’écran)');
   await expect(panel.getByRole('button', { name: 'Revenir aux réglages communs' })).toHaveCount(0);
 });
 

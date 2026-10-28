@@ -8,7 +8,7 @@
 // asked again); the picker closed by « Terminé » and by Back; « Avancé » (the text typed, what is wrong said, a
 // component unknown shown and replaced through ✎; emptied: still modified); the title (the bar's heading); the phone
 // preview (390 px: the layout's own tabs); Partager (the link in use); ⋯; an address that cannot be read; the home
-// leaves Flore's search alone; a phone (the toggle's word shown).
+// leaves Flore's search alone; a phone (the toggle's word shown); no tab of the app lit, on either width.
 import { test, expect, answerAround } from './fixtures.mjs';
 import { editing, layoutOf, screen } from './app.mjs';
 
@@ -396,4 +396,20 @@ test.describe('un téléphone', () => {
     await expect(toggle(page)).toHaveText('Terminé');
     await expect(toggle(page)).toHaveAttribute('aria-pressed', 'true');
   });
+});
+
+test('aucun onglet allumé : l’accueil, l’écran, sa modification', async ({ app, page }) => {
+  // The tab bar's (a phone) and the header's (a computer).
+  const lit = page.locator('gf-tabbar a[aria-current="page"], gf-app nav.tabs a[aria-current="page"]');
+  await app.open('#/discover');
+  await expect(lit).toHaveCount(1);
+  await app.go('#/layout');
+  await expect(page.getByRole('heading', { level: 1, name: 'Composer un écran' })).toBeVisible();
+  await expect(lit).toHaveCount(0);
+  await app.go(screen('[search,results]', AT));
+  await expect(toggle(page)).toHaveText('Modifier');
+  await expect(lit).toHaveCount(0);
+  await toggle(page).click();
+  await expect(toggle(page)).toHaveText('Terminé');
+  await expect(lit).toHaveCount(0);
 });

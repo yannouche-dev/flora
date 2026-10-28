@@ -94,10 +94,11 @@ function screenReady(name, then) {
   return false;
 }
 
-/** @param {string} name */
+/** The tab a screen lights; '': none (a screen of one's own, its home and « Créer une app »'s old addresses). @param {string} name */
 const tabOf = name => name === 'map' ? 'map' : name === 'discover' ? 'discover'
   : ['collections', 'spot', 'spot-new', 'shared'].includes(name) ? 'mine'
-  : name === 'settings' || name === 'legal' || name === 'layout' || name === 'builder' ? 'more' : 'flore';
+  : name === 'settings' || name === 'legal' ? 'more'
+  : name === 'layout' || name === 'builder' ? '' : 'flore';
 
 /** App shell: header + route outlet + (phone) bottom tab bar. */
 export class GfApp extends LitElement {

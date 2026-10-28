@@ -1,6 +1,6 @@
 // @ts-check
-// What each cell of a free layout shows (« Disposition libre »): the app's own pieces, wired to the layout's shared
-// state (state.js) rather than to the address — one adapter per component of the registry (registry.js):
+// What each cell of a screen of one's own shows (« Écran sur mesure »): the app's own pieces, wired to the layout's
+// shared state (state.js) rather than to the address — one adapter per component of the registry (registry.js):
 //  - map: the mother map (gf-map; 3D as Réglages › Cartes says): the scope's circle, the latest observations of the
 //    plants found in it (those the search keeps), the current plant's own observations lit, the observation chosen.
 //    A point touched: its plant is the current one; a long press: the scope moves there. Over it, the scope: its place,
@@ -21,8 +21,8 @@
 // What is done in a cell with its own controls is kept in the layout (`cell-param` {key: value…}, gf-layout.js: the
 // address is the app, sent as it is): a map's 3D, background, layers (their order, IGN's catalogue, their opacity),
 // period, « Seule », legend, binoculars (« Observations autour » in 3D), its points' sources and the current plant's
-// (« Sur cette carte » of its panel ▦), and, in « Créer une app », its view; the search's filters opened; the results
-// as a list or a grid.
+// (« Sur cette carte » of its panel ▦), and, while the screen is modified, its view; the search's filters opened; the
+// results as a list or a grid.
 // A link to a plant's sheet anywhere in a cell (a result, a look-alike) makes it the current plant (gf-layout.js).
 // The frame every cell shares (registry.js#FRAME: its head, its actions, its empty state) is gf-layout.js'; its links
 // are honoured here: a plant of its own (plante=: renderCell), the whole flora instead of the zone (results zone=0:
@@ -227,8 +227,8 @@ export class DlMap extends LitElement {
     state: { attribute: false }, params: { attribute: false },
     /** The search of its group (core/search-channel.js: a layout's group b, c); none: the app's. */
     channel: { attribute: false },
-    /** In « Créer une app »: the map moved there is the view it starts on (vue=). */
-    building: { attribute: false },
+    /** While modified: the map moved there is the view it starts on (vue=). */
+    editing: { attribute: false },
     _busy: { state: true }, _narrow: { state: true }, _zone: { state: true }, _thumb: { state: true }
   };
 
@@ -342,7 +342,7 @@ export class DlMap extends LitElement {
     this._busy = false;
     /** Narrower than COMPACT_WIDTH (ui=auto: compact controls). */
     this._narrow = false;
-    this.building = false;
+    this.editing = false;
     /** The compact zone's pill opened. */
     this._zone = false;
     /** The current plant's photo, once found (core/thumb.js): its id and address. @type {{ id: number, url: string | null } | null} */ this._thumb = null;
@@ -676,11 +676,11 @@ export class DlMap extends LitElement {
   /** @type {{ text: string, value: import('./map-options.js').MapView | null } | null} */ #viewMemo = null;
 
   /**
-   * The map moved by hand: the list kept to what it shows (liste=vue: state.js setView) — in « Créer une app », the
-   * view it starts on too (vue=). @param {CustomEvent} e
+   * The map moved by hand: the list kept to what it shows (liste=vue: state.js setView) — while the screen is modified,
+   * the view it starts on too (vue=). @param {CustomEvent} e
    */
   #onView(e) {
-    if (this.building) this.#set({ vue: viewText(e.detail) });
+    if (this.editing) this.#set({ vue: viewText(e.detail) });
     if (this.#leads && e.detail.bounds) this.state?.setView(e.detail.bounds, { kinds: this.#p.src, by: this });
   }
 
@@ -815,9 +815,9 @@ export class DlMap extends LitElement {
     this.#defaultScope();
     // No longer leading the list (liste=zone, France or the world now): it shows the whole zone again.
     if (s.view?.by === this && !this.#leads) s.setView(null);
-    // The zone moved while building: the view kept was the old zone's — framed on the new one.
+    // The zone moved while modified: the view kept was the old zone's — framed on the new one.
     const zone = s.live.at ? s.live.at.join(',') + ':' + s.radius : '';
-    if (this.building && this.params?.vue && this.#zoneWas !== undefined && zone !== this.#zoneWas) this.#set({ vue: null });
+    if (this.editing && this.params?.vue && this.#zoneWas !== undefined && zone !== this.#zoneWas) this.#set({ vue: null });
     this.#zoneWas = zone;
     const d3 = this.#d3;
     if (d3 !== this.#was3d) { if (this.#was3d !== undefined) map.gl?.recheck(); this.#was3d = d3; }
@@ -926,7 +926,7 @@ export class DlMap extends LitElement {
     const around = ctl.on.has('gps') ? html`<div class="row"><button type="button" class=${this._busy ? 'busy' : ''} ?disabled=${this._busy} aria-busy=${String(this._busy)}
       title="Autour de moi" @click=${() => this.#locate()}>${icon('geo-alt')} <span class="words">Autour de moi</span></button></div>` : nothing;
     if (!ctl.compact) {
-      return html`<div class="panel ${low ? '' : 'top'}" role="group" aria-label="Zone de la disposition">
+      return html`<div class="panel ${low ? '' : 'top'}" role="group" aria-label="Zone de l’écran">
         ${where(s)}
         ${s.live.at ? radiusSlider(s) : nothing}
         ${around}
@@ -934,7 +934,7 @@ export class DlMap extends LitElement {
     }
     const failed = Boolean(s.placeError && !s.live.at);
     const label = s.live.at ? distanceLabel(s.radius) : failed ? 'Lieu introuvable' : 'Zone';
-    return html`<div class="zone ${low ? 'low' : ''}" role="group" aria-label="Zone de la disposition">
+    return html`<div class="zone ${low ? 'low' : ''}" role="group" aria-label="Zone de l’écran">
       <button type="button" class=${failed ? 'error' : ''} aria-expanded=${String(this._zone)} aria-controls="zone-drop" title=${scopeWords(s)}
         @click=${() => { this._zone = !this._zone; }}>${failed ? icon('exclamation-triangle-fill') : nothing}${label} ${icon('caret-down-fill')}</button>
       ${failed && !this._zone ? html`<span class="visually-hidden" role="alert">${scopeWords(s)}</span>` : nothing}
@@ -948,11 +948,11 @@ export class DlMap extends LitElement {
   }
 
   /**
-   * Top right, under the map's own buttons: the 2D / 3D switch, the other background's thumbnail — and, in « Créer une
-   * app » once the map was moved (vue=), « Recadrer sur la zone ». @param {Set<string>} on
+   * Top right, under the map's own buttons: the 2D / 3D switch, the other background's thumbnail — and, while the screen
+   * is modified once the map was moved (vue=), « Recadrer sur la zone ». @param {Set<string>} on
    */
   #topRight(on) {
-    const reframe = this.building && Boolean(this.params?.vue);
+    const reframe = this.editing && Boolean(this.params?.vue);
     if (!on.has('3d') && !on.has('fond') && !reframe) return nothing;
     const map = this.#map;
     const in3d = this.#d3 ?? Boolean(map?.gl?.wanted);
@@ -1053,14 +1053,14 @@ export class DlMap extends LitElement {
     const intended = this.#intended, intent = `son intention « ${MAP_INTENTS[this.params?.intent ?? '']?.label} »`;
     const own3d = d3 !== null && !('3d' in intended);
     const why3d = d3 === null ? nothing : !own3d && d3 === (intended['3d'] === '1')
-      ? `Cette carte de la disposition ${d3 ? 'est en 3D' : 'reste en 2D'} (${intent} ; le choix vaut pour elle seule).`
-      : `Cette carte de la disposition ${d3 ? 'est en 3D (3d=1' : 'reste en 2D (3d=0'} dans son adresse, ou sa bascule 2D / 3D ; le choix vaut pour elle seule).`;
+      ? `Cette carte de l’écran ${d3 ? 'est en 3D' : 'reste en 2D'} (${intent} ; le choix vaut pour elle seule).`
+      : `Cette carte de l’écran ${d3 ? 'est en 3D (3d=1' : 'reste en 2D (3d=0'} dans son adresse, ou sa bascule 2D / 3D ; le choix vaut pour elle seule).`;
     // Its own look given by its intent alone (map(protege): its layers; map(terrain): the photos): said so, no way back
     // either. A part written by its address too (map(terrain,layers=parcs)): « Revenir » takes that part back.
     const p = this.params ?? {};
     const written = Boolean(p.opac) || (p.base ?? null) !== (intended.base ?? null) || p.annee != null || p.noms != null
       || (p.layers != null && p.layers.join('+') !== intended.layers);
-    const lookWhy = ('base' in intended || 'layers' in intended) && !written ? intent + ' dans la disposition' : '';
+    const lookWhy = ('base' in intended || 'layers' in intended) && !written ? intent + ' dans l’écran' : '';
     return html`${!s.live.at && this.#pressHint ? hintView(press, () => { this.#pressHint = false; this.requestUpdate(); }, 'press-hint') : nothing}
       <div class="stage"><gf-map no-create press="zone" point-click=${P.toucher === 'rien' ? 'none' : 'pick'} map-3d=${d3 === null ? nothing : d3 ? 'on' : 'off'}
         map-3d-why=${why3d} .own3d=${own3d}
@@ -1515,7 +1515,7 @@ customElements.define('dl-deck', DlDeck);
 /**
  * What a cell shows: its component's piece, given the state; an unknown component: what is wrong and how to fix it.
  * @param {Resolved} r @param {{ state: LayoutState, view: string, plant: number | null, first: { id: number, name: string } | null,
- *   building?: boolean, channel?: import('../core/search-channel.js').Channel | null }} ctx  `building`: in « Créer une app »; `channel`:
+ *   editing?: boolean, channel?: import('../core/search-channel.js').Channel | null }} ctx  `editing`: the screen being modified; `channel`:
  *   the search of the cell's group (none: the app's)
  */
 export function renderCell(r, ctx) {
@@ -1525,12 +1525,12 @@ export function renderCell(r, ctx) {
       <p><b>Composant inconnu : « ${u.name} »</b></p>
       <p>${u.suggestion ? html`Vouliez-vous dire <code>${u.suggestion}</code> ? ` : nothing}Les composants : <code>map</code>, <code>search</code>, <code>filters</code>,
         <code>results</code>, <code>plant</code> (ou <code>plant.wikipedia</code>, <code>plant.calendar</code>…), <code>media</code>, <code>deck</code>, <code>place</code>.</p>
-      <p>« Modifier la disposition » pour le corriger.</p></div>`;
+      <p>« Modifier », puis ${icon('sliders')} « Choisir le contenu » sur cette case, pour le corriger.</p></div>`;
   }
   const { state } = ctx;
   const id = r.spec.id;
   const channel = ctx.channel ?? null;
-  if (id === 'map') return html`<dl-map .state=${state} .params=${r.params} .channel=${channel} .building=${Boolean(ctx.building)}></dl-map>`;
+  if (id === 'map') return html`<dl-map .state=${state} .params=${r.params} .channel=${channel} .editing=${Boolean(ctx.editing)}></dl-map>`;
   if (id === 'place') return html`<dl-place .state=${state}></dl-place>`;
   if (id === 'search') return html`<dl-search .state=${state} .params=${r.params} .channel=${channel}></dl-search>`;
   if (id === 'results') return html`<dl-results .state=${state} .params=${r.params} .channel=${channel}></dl-results>`;

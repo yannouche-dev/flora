@@ -58,7 +58,7 @@ export class GfTabbar extends LitElement {
 
   constructor() {
     super();
-    /** 'discover' | 'flore' | 'map' | 'mine' | 'more' */
+    /** 'discover' | 'flore' | 'map' | 'mine' | 'more' | '' (none: a screen of one's own) */
     this.current = 'flore';
     /** The tabs announced now (gf-app), lit meanwhile. @type {string[]} */
     this.lit = [];

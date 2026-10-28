@@ -236,7 +236,7 @@ export class GfLayout extends LitElement {
       border-radius: var(--gf-radius-pill); font-size: 0.7rem; font-weight: 700; color: var(--gf-accent-contrast); background: var(--gf-accent); }
     .cell-head .cell-group[data-group='b'] { color: #fff; background: #1d4ed8; }
     .cell-head .cell-group[data-group='c'] { color: #fff; background: #6d28d9; }
-    /* How a cell is wired (while building): a chip a link, lit when it follows the others. */
+    /* How a cell is wired (being modified): a chip a link, lit when it follows the others. */
     .cell-head .cell-links { flex: none; display: inline-flex; gap: 2px; }
     .cell-head .link-chip { width: 24px; height: 24px; min-height: 0; padding: 0; display: inline-grid; place-items: center; border-radius: 50%; font-size: 0.72rem;
       border: 1px dashed var(--gf-border); background: none; color: var(--gf-text-muted); }
@@ -1172,13 +1172,13 @@ export class GfLayout extends LitElement {
       ${head === 'non' ? nothing : head === 'simple' ? html`<header class="cell-head"><h2>${title}</h2><span class="spacer"></span>${pick}${actions}</header>`
         : html`<header class="cell-head"><h2>${icon(cellIcon(r))} ${title}${mark ? html`<b class="cell-mark" aria-hidden="true" title=${mark.label} data-mark=${mark.short}></b>` : nothing}</h2><span class="sub">${sub}</span>
         ${badge}${links}${views}${pick}${actions}</header>`}
-      <div class="cell-body" ?hidden=${folded}>${empty ? this.#slot(key) : renderCell(r, { state: s, channel: group === 'a' ? null : channel, view: this.#store.state.mode, plant: s.live.plant, first, building: editing })}
+      <div class="cell-body" ?hidden=${folded}>${empty ? this.#slot(key) : renderCell(r, { state: s, channel: group === 'a' ? null : channel, view: this.#store.state.mode, plant: s.live.plant, first, editing })}
         ${crossed ? this.#cross(path, title) : nothing}</div>
     </section>`;
   }
 
   /**
-   * How a cell is wired to the others (registry.js#linksOf), in its head while building: a chip each — the zone, the
+   * How a cell is wired to the others (registry.js#linksOf), in its head being modified: a chip each — the zone, the
    * search, the period, the current plant —, lit when it follows (and changes) it; touched, it detaches the cell or
    * attaches it again (the setting that does it, written). One that cannot be changed is said, never a switch.
    * @param {string} key @param {Resolved} r @param {string} title

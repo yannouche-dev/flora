@@ -1,5 +1,5 @@
 // @ts-check
-// The live state a free layout's cells share (« Disposition libre », gf-layout.js): one small store, an EventTarget,
+// The live state a free layout's cells share (« Écran sur mesure », gf-layout.js): one small store, an EventTarget,
 // that every cell reads and writes — never one cell to another. What it holds, and the address beside the layout:
 //   ?title=<words>                     the screen's own title (its heading, the page's title, the share's): plain
 //                                      text, 80 characters at most, written first;

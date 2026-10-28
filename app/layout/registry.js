@@ -1,5 +1,5 @@
 // @ts-check
-// The components a free layout (« Disposition libre », grammar.js) puts in its cells: what each one is — its id, its
+// The components a free layout (« Écran sur mesure », grammar.js) puts in its cells: what each one is — its id, its
 // French title, its icon, its sub-views (a plant's single blocks: plant.wikipedia), its parameters (each with its kind,
 // its default, its French words), what it reads of the layout's shared state and what it writes there — and how a
 // cell as written resolves to it. Pure (the rendering is cells.js'), tested under Node.
@@ -130,8 +130,8 @@ const MAP_PARAMS = {
   r: { ...RADIUS, group: 'Où' },
   lieu: { kind: 'text', label: 'Lieu de départ', def: null, group: 'Où', words: ['place', 'commune', 'ville', 'adresse'] },
   autour: { kind: 'bool', label: 'Autour de moi au départ', def: false, group: 'Où', words: ['around', 'moi', 'gps', 'position'] },
-  // The view it starts on (its centre, its zoom; in 3D its tilt and turn), the map moved in « Créer une app »: else
-  // framed on the zone.
+  // The view it starts on (its centre, its zoom; in 3D its tilt and turn), the map moved while the screen is
+  // modified: else framed on the zone.
   vue: { kind: 'text', label: 'Cadrage de départ', def: null, group: 'Où', own: true, named: true, max: 60, read: readView, words: ['view', 'cadrage', 'camera'] },
   // Fond: the maps' common look (core/map-settings.js) unless it says one (its own then, kept by the cell: base=, and
   // annee= its photos' year or period, SPOT's year — core/backgrounds.js; without it the most recent; noms= « Noms et
@@ -802,7 +802,7 @@ export const LINKS = { zone: 'Zone', recherche: 'Recherche', periode: 'Période'
 /**
  * How a cell is wired to the others — what of the layout's shared state it follows and changes (the zone, the
  * search, the period, the current plant), and the setting that detaches it from one, or attaches it again: the
- * builder's chips in each cell's head. A place to build in, an unknown component: none.
+ * chips in each cell's head, being modified. A place to build in, an unknown component: none.
  * @param {Resolved} r @returns {Link[]}
  */
 export function linksOf(r) {
