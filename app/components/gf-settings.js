@@ -442,8 +442,8 @@ export class GfSettings extends LitElement {
   #firstSteps() {
     const on = discovering();
     return html`<h2 id="first-steps">Premiers pas</h2>
-      <p class="muted">${on ? 'Les premiers pas sont en cours : les onglets arrivent à mesure qu’ils servent, avec une astuce à la fois.'
-        : `Tous les outils sont là. « Revoir les premiers pas » repart du début (Découvrir, une astuce à la fois, les onglets qui arrivent un à un) : ${FIRST_STEPS_AGAIN}`}</p>
+      <p class="muted">${on ? 'Les premiers pas sont en cours : les onglets arrivent à mesure qu’ils servent, et restent. Un lien ouvre toujours son écran, et son onglet vient avec lui.'
+        : `Tous les outils sont là. « Revoir les premiers pas » repart du début (Découvrir, puis les onglets un à un — Mes plantes reste si vous avez des favoris, des listes ou des lieux, la Carte si vous avez des lieux) : ${FIRST_STEPS_AGAIN}`}</p>
       <p>${on ? html`<button class="secondary" type="button" @click=${() => finishDiscover()}>Tout montrer maintenant</button>`
         : html`<button class="secondary" type="button" @click=${() => this.#restartFirstSteps()}>Revoir les premiers pas</button>`}</p>
       ${this._firstStepsError ? html`<p class="error" role="alert">${this._firstStepsError}</p>` : nothing}

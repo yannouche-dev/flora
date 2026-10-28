@@ -25,7 +25,7 @@ import { LitElement, html, css, nothing } from 'lit';
 import { icon } from '../../core/icons.js';
 import { hideImg, showImg } from '../../core/img.js';
 import { creditText } from '../../core/credit.js';
-import { discoverEvents, discoverState, discovering, firstMatchShown, PLANTS_BEFORE_FLORE } from '../../core/discover.js';
+import { discoverEvents, discoverState, discovering, firstMatchShown, plantsBeforeFlore } from '../../core/discover.js';
 import { UNREAD_LOOKALIKES } from '../../core/lookalikes.js';
 import { moduleEvents, moduleOn } from '../../core/modules.js';
 import { openModal } from '../../core/history.js';
@@ -505,7 +505,7 @@ export class MaAroundList extends LitElement {
     const view = this.#view;
     const month = MONTH[new Date().getMonth()];
     const km = distLabel(c.radius);
-    const ds = discoverState();
+    const left = plantsBeforeFlore();
     const matchCards = s.matchCards, matches = matchCards.length;
     const further = nextDistance(c.radius);
     // Rencontres: the plant chosen, when it is not the card on top (a heart, a tile, a point of the map chose it): named
@@ -547,7 +547,7 @@ export class MaAroundList extends LitElement {
       ${cards && view === 'all' && !harvestEmpty ? this.#allView(cards) : nothing}
       ${cards ? html`
         <p class="src">Observations confirmées d’iNaturalist ; noms, floraison et alertes de la flore embarquée (TAXREF, Baseflor, INPN, ANSM, Anses).
-          ${ds.done ? nothing : html`<br />Encore ${Math.max(0, PLANTS_BEFORE_FLORE - ds.seen.length)} plante${PLANTS_BEFORE_FLORE - ds.seen.length > 1 ? 's' : ''} à rencontrer avant la flore complète.`}</p>` : nothing}
+          ${left ? html`<br />Encore ${left} plante${left > 1 ? 's' : ''} à rencontrer avant la flore complète.` : nothing}</p>` : nothing}
     </section>${this.#mediaView()}</div>
     <p class="visually-hidden" role="status">${this._said || ''}</p>
     ${this._match ? this.#matchView(this._match) : nothing}

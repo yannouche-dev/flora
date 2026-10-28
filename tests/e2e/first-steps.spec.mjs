@@ -4,7 +4,7 @@
 // Découvrir, and Découvrir, the activities, Réglages and its screens bring none. The tabs follow what the device holds
 // (a favourite, a list or a lieu: Mes plantes; a lieu: the Carte): at the start, after an import (a file, a transfer
 // link), a restore of the backup copy and « Revoir les premiers pas ».
-import { test, expect, plantId } from './fixtures.mjs';
+import { test, expect, plantId, answerAround } from './fixtures.mjs';
 import { writeFileSync } from 'node:fs';
 
 test.use({ firstVisit: true });
@@ -77,6 +77,8 @@ test('un lien de l’application mène à l’écran de son onglet : « Voir ses
 
 test('un lien de l’application mène à l’écran de son onglet : Réglages › « Personnaliser la fiche »', async ({ app, page }) => {
   await app.open('#/settings');
+  await expect(page.locator('gf-settings')).toContainText('Les premiers pas sont en cours : les onglets arrivent à mesure qu’ils servent, et restent. '
+    + 'Un lien ouvre toujours son écran, et son onglet vient avec lui.');
   await page.locator('gf-settings').getByRole('button', { name: 'Personnaliser la fiche', exact: true }).click();
   await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+/);
   await expect.poll(() => app.tabs()).toContain('Flore');
@@ -168,4 +170,20 @@ test('« Revoir les premiers pas » garde les onglets de vos listes et de vos li
   await expect.poll(() => app.tabs()).toEqual(bar(app, ['Carte', 'Mes plantes']));
   const state = await discover(page);
   expect({ done: state.done, unlocked: state.unlocked }).toEqual({ done: false, unlocked: ['mine', 'map'] });
+});
+
+test('« Encore N plantes… » jusqu’à ce que Flore soit là, même venue par un lien', async ({ app, page, context }) => {
+  await answerAround(context);
+  await app.open('#/app/mosaique');
+  await page.getByRole('button', { name: 'Autour de moi' }).click();
+  await expect.poll(() => hash(page)).toBe('#/app/mosaique/map');
+  await page.locator('ma-distance').getByRole('button', { name: 'Qui pousse par ici ?' }).click();
+  await expect.poll(() => hash(page)).toBe('#/app/mosaique/cards');
+  const src = page.locator('ma-around-list p.src');
+  await expect(src).toContainText('Encore 5 plantes à rencontrer avant la flore complète.');
+  await app.go('#/?q=ortie');
+  await expect.poll(() => app.tabs()).toContain('Flore');
+  await app.go('#/app/mosaique/cards');
+  await expect(src).toBeVisible();
+  await expect(src).not.toContainText('Encore');
 });

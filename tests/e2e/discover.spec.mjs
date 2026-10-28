@@ -51,7 +51,7 @@ test('« Passer » montre toute l’application ; « Revoir les premiers pas » 
   expect(await page.evaluate(async () => (await import('/app/core/discover.js')).discoverState().done)).toBe(true);
   await app.go('#/settings');
   // What it empties too, and what it keeps, said under it; asked first.
-  await expect(page.getByText('« Revoir les premiers pas » repart du début (Découvrir, une astuce à la fois, les onglets qui arrivent un à un) : '
+  await expect(page.getByText('« Revoir les premiers pas » repart du début (Découvrir, puis les onglets un à un — Mes plantes reste si vous avez des favoris, des listes ou des lieux, la Carte si vous avez des lieux) : '
     + 'les étapes et ce que gardent Rencontres, Cueillette prudente et Mosaïque (lieu, distance, cartes, matchs) sont oubliés. '
     + 'Vos favoris restent, et ceux venus de ces activités deviennent les vôtres.')).toBeVisible();
   await page.getByRole('button', { name: 'Revoir les premiers pas' }).click();
