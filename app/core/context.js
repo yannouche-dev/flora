@@ -54,15 +54,15 @@ export function setContext(patch) {
 }
 
 /**
- * Where a tab goes: back to where it was left; when it is the tab already shown, to its start (the search list,
- * Mes plantes, the whole Carte), so there is always a way back.
- * @param {'flore' | 'mine' | 'map'} tab @param {boolean} [current]
+ * Where a tab goes: back to where it was left — the tab shown: its own address (touching it does nothing: history.js).
+ * A view under a tab (a place's editor, a share under Mes plantes) leads back to the tab as it was left.
+ * @param {'flore' | 'mine' | 'map'} tab
  */
-export function tabHref(tab, current = false) {
+export function tabHref(tab) {
   const c = context();
-  if (tab === 'flore') return (current ? c.query : c.flore || c.query) || '#/';
-  if (tab === 'mine') return (current ? null : c.mine) || '#/collections';
-  return (current ? null : c.map) || '#/map';
+  if (tab === 'flore') return c.flore || c.query || '#/';
+  if (tab === 'mine') return c.mine || '#/collections';
+  return c.map || '#/map';
 }
 
 /** Flore as it was left — its search, the plant open: the Flore tab, the logo, the ways back into the app. Découvrir until Flore has come. */

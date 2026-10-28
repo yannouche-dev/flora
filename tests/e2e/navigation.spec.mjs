@@ -188,6 +188,46 @@ test('Échap ferme la fiche de Mes plantes', async ({ app, page }) => {
   await expect(mine.locator('#mine-plant, .sheet-plant')).toHaveCount(0);
 });
 
+/**
+ * What `touch` does to the view shown: nothing — the same address, depth and number of entries, not even a popstate
+ * or a hashchange for no move (core/history.js: a link to the view shown is not followed).
+ * @param {Page} page @param {() => Promise<unknown>} touch @param {string} [what]
+ */
+async function expectNothing(page, touch, what) {
+  const now = () => page.evaluate(() => ({ hash: location.hash, entries: history.length, depth: history.state?.gfDepth, moves: /** @type {any} */ (window).__moves }));
+  await page.evaluate(() => {
+    const w = /** @type {any} */ (window);
+    if (w.__moves === undefined) for (const type of ['popstate', 'hashchange']) addEventListener(type, () => { w.__moves++; });
+    w.__moves = 0;
+  });
+  const was = await now();
+  await touch();
+  await page.waitForTimeout(250);
+  expect(await now(), what).toEqual(was);
+}
+
+/** A tab, as touched: the phone's bar, the computer's header (Réglages: its gear there). @param {import('./app.mjs').App} app @param {Page} page @param {string} name */
+const tabLink = (app, page, name) => app.phone ? page.locator('gf-tabbar').getByRole('link', { name, exact: true })
+  : name === 'Réglages' ? page.locator('gf-app a.settings') : page.locator('gf-app nav.tabs').getByRole('link', { name, exact: true });
+
+test('Un onglet touché quand on y est : rien ne change', async ({ app, page }) => {
+  await app.open('#/discover');
+  const id = await seedPlace(page);
+  const plant = plantId('Allium ursinum');
+  /** @type {[string, string][]} */
+  const tabs = [['Flore', `#/plant/${plant}`], ['Mes plantes', `#/collections?c=${id}&plant=${plant}`], ['Carte', `#/map?spot=${id}`], ['Réglages', '#/settings']];
+  for (const [name, route] of tabs) {
+    await app.go(route);
+    await expect.poll(() => depthOf(page), name).toBe(1);
+    const tab = tabLink(app, page, name);
+    // Each tab leads back to where it was left: here, the view shown.
+    await expect.poll(async () => (await tab.getAttribute('href')) === await hash(page), name).toBe(true);
+    await expectNothing(page, () => tab.click(), name);
+    await page.goBack();
+    await expect.poll(() => hash(page), name).toBe('#/discover');
+  }
+});
+
 test('Une seule recherche : une disposition libre ne change pas celle de Flore', async ({ app, page }) => {
   await app.open('#/?family=Rosaceae');
   // The layout's first group shares the app's live search (here: ortie), never kept as Flore's.
@@ -215,6 +255,8 @@ test('Le logo ramène à Flore là où on l’avait laissée', async ({ app, pag
   await logo.click();
   await expect.poll(() => hash(page)).toBe(plant);
   expect(await app.state('query.filters.family')).toEqual(['Rosaceae']);
+  // Touched again on Flore as it was left (a computer: on a phone the sheet covers the header): nothing.
+  if (!app.phone) await expectNothing(page, () => logo.click());
   // Réglages' way back: Flore too, the plant included.
   await app.go('#/settings');
   await expect(page.locator('gf-settings').getByRole('link', { name: 'Aller à Flore' })).toHaveAttribute('href', plant);

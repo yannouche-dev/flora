@@ -87,9 +87,9 @@ export class GfTabbar extends LitElement {
     return html`
       <nav aria-label="Navigation principale">
         ${tab('discover', href.discover(), 'binoculars', 'binoculars-fill', 'Découvrir')}
-        ${tab('flore', tabHref('flore', this.current === 'flore'), 'leaf', 'leaf-fill', 'Flore')}
-        ${tab('map', tabHref('map', this.current === 'map'), 'map', 'map-fill', 'Carte')}
-        ${tab('mine', tabHref('mine', this.current === 'mine'), 'collection', 'collection-fill', 'Mes plantes')}
+        ${tab('flore', tabHref('flore'), 'leaf', 'leaf-fill', 'Flore')}
+        ${tab('map', tabHref('map'), 'map', 'map-fill', 'Carte')}
+        ${tab('mine', tabHref('mine'), 'collection', 'collection-fill', 'Mes plantes')}
         ${tab('more', href.settings(), 'gear', 'gear-fill', 'Réglages')}
       </nav>
     `;

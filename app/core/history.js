@@ -22,6 +22,18 @@ addEventListener('hashchange', () => {
   last = depth();
 });
 
+// A link to the view shown (a tab touched again, the logo on Flore as it was left, Réglages' gear on Réglages): nothing.
+// Followed, the browser would still navigate to it: a popstate for no move (Chromium), or, where the entry that takes
+// this one's place is given no state (the same address: no hashchange to stamp it), its depth and what the views kept
+// in it (gfBehind, the sheet marks, gfMapBase, gfAppFrom) lost. At the window, as it bubbles: a component's own
+// handler runs first (and may take the click itself).
+addEventListener('click', e => {
+  const m = /** @type {MouseEvent} */ (e);
+  if (m.defaultPrevented || m.button !== 0 || m.metaKey || m.ctrlKey || m.shiftKey || m.altKey) return;
+  const a = /** @type {HTMLAnchorElement | undefined} */ (m.composedPath().find(n => n instanceof HTMLAnchorElement && n.hasAttribute('href')));
+  if (a && !a.target && !a.hasAttribute('download') && a.href === location.href) m.preventDefault();
+});
+
 /** Updates the URL of the current view (no new entry), keeping its place in history. @param {string} hash */
 export function replaceHash(hash) {
   history.replaceState({ ...state(), gfDepth: depth() }, '', hash);
