@@ -172,6 +172,11 @@ test.describe('un grand écran', () => {
     await onPlant(page, RENONCULE, { media: true });
     // Further back, through the entries: the plant of the last heart, then the deck's card on top before any heart.
     expect(afterHearts).toBe(`#/app/rencontres/cards?p=${plantId(BENOITE)}`);
+    // The sheet closed went back past the sheets it showed (the screen under them took its plant): Back again is the
+    // heart before them, never a sheet opened again.
+    await page.goBack();
+    await expect.poll(() => hash(page)).toBe(`#/app/rencontres/cards?p=${plantId(PISSENLIT)}`);
+    expect(await hash(page)).not.toMatch(/fiche=1/);
   });
 
   test('↺ d’un cœur revient à la plante choisie avant ; « Matchs » : une plante touchée est choisie', async ({ app, page }) => {

@@ -63,10 +63,12 @@ const when = iso => new Date(iso).toLocaleString('fr-FR', { dateStyle: 'long', t
 
 /**
  * The page reloaded (at `hash`, if given), the dialog's step in history left out (core/history.js openModal: a step whose
- * dialog is gone would be skipped by Back). @param {string} [hash]
+ * dialog is gone would be skipped by Back). The same view reloaded keeps what it kept in its entry (a sheet's marks:
+ * where « Fermer la fiche » goes); another one starts with nothing of it. @param {string} [hash]
  */
 function reload(hash) {
-  history.replaceState({ gfDepth: depth() }, '', hash);
+  const view = { ...(history.state || {}) }; delete view.gfModal;
+  history.replaceState(hash ? { gfDepth: depth() } : { ...view, gfDepth: depth() }, '', hash);
   location.reload();
 }
 

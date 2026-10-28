@@ -3,7 +3,6 @@ import { LitElement, html, css, nothing, repeat } from 'lit';
 import { STATUS_LABELS } from '../config.js';
 import * as db from '../core/db.js';
 import { commonOf, nameOf } from '../core/plants.js';
-import { lastSearchHash } from '../core/query.js';
 import { StoreController, arrange, arrangedMode, closeKing, openKing, whenReady } from '../core/store.js';
 import { addedTo, formatDistance, getMembership, promoteFavorites, setInCollection, toggleFavorite } from '../core/collections.js';
 import { context } from '../core/context.js';
@@ -460,9 +459,7 @@ export class GfPlantDetail extends LitElement {
     article { max-width: 920px; margin: 0 auto; }
     :host([embedded]) { padding: 0 14px; }
     :host([embedded]) article { padding-top: 4px; }
-    :host([embedded]) .back { display: none; }
     :host([embedded]) :is(h1, h2.h1) { margin-top: 4px; }
-    .back { font-size: 0.9rem; }
     /* The name, an h1, or an h2 under a screen's own title that looks the same (not as a block's title). */
     :is(h1, h2.h1) { margin: 8px 0 0; font-size: 1.6rem; line-height: 1.2; font-weight: 700; text-transform: none; letter-spacing: normal; color: var(--gf-text); }
     .sci { font-family: var(--gf-font-serif); font-size: 1.2rem; }
@@ -1614,7 +1611,7 @@ export class GfPlantDetail extends LitElement {
       addTo: () => html`<button type="button" ?inert=${king} @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-add-to'))?.open()}>${icon('plus-lg')}<span>Ajouter à…</span></button>`,
       share: () => html`<button type="button" ?inert=${king} @click=${() => this.#share(plant, name)}>${icon('share')}<span>Partager</span></button>`,
       // The Carte filtered on this plant (its places, its GBIF distribution).
-      map: () => html`<a class="button" ?inert=${king} href=${href.map({ plant: plant.id })}>${icon('map')}<span>Carte</span></a>`,
+      map: () => html`<a class="button" ?inert=${king} href=${href.map({ plants: [plant.id] })}>${icon('map')}<span>Carte</span></a>`,
       // In one tap, into the collection or place last opened (context.js), when it is not there yet.
       addCurrent: () => {
         const current = this.#currentCollection(plant);
@@ -1684,14 +1681,13 @@ export class GfPlantDetail extends LitElement {
     if (plant === undefined) return html`<article><div class="skeleton"></div></article>`;
     if (plant?.failed) {
       return html`<article>
-        <a class="back link" href=${lastSearchHash()}>${icon('arrow-left')} Recherche</a>
         ${this.#heading('Impossible de lire la flore locale')}
         <p class="muted">${plant.failed}</p>
         <p><button class="primary" type="button" @click=${() => this.#load(this.plantId)}>Réessayer</button></p>
       </article>`;
     }
     if (plant === null) {
-      return html`<article><a class="back link" href=${lastSearchHash()}>${icon('arrow-left')} Recherche</a>${this.#heading('Plante introuvable')}</article>`;
+      return html`<article>${this.#heading('Plante introuvable')}</article>`;
     }
 
     const ctx = this.#context(plant);
@@ -2884,6 +2880,9 @@ export class GfPlantDetail extends LitElement {
     /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.act.crown > button'))?.focus({ preventScroll: true });
   };
 
+  /** « Terminé » asked by the sheet's host: Échap there (gf-flora, gf-collections) ends King, never closes the sheet. */
+  endKing() { return this.#endKing(); }
+
   /** A page arrived for the « Page web » pane: its tab shown, unfolded. */
   revealWeb() {
     const pane = this.#paneOf('web');
@@ -3992,7 +3991,6 @@ export class GfPlantDetail extends LitElement {
   #full(ctx) {
     return this.#layout(ctx, html`
       <article class=${baseOf(this.#view) === 'scientific' ? 'science' : ''}>
-        <a class="back link" href=${lastSearchHash()}>${icon('arrow-left')} Recherche</a>
         <gf-add-to .plant=${ctx.plant}></gf-add-to>
         ${this._error ? html`<p class="muted">${this._error}</p>` : nothing}
         ${this.#blocks(ctx)}

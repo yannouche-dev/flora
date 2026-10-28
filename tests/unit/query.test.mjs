@@ -55,10 +55,15 @@ test('parse : chaque écran de l’app et ses paramètres', () => {
   assert.deepEqual(parse('#/discover?s=../x'), { name: 'discover' });
   assert.deepEqual(parse('#/collection/new?kind=list'), { name: 'spot-new', plant: null, kind: 'list', at: null });
   assert.deepEqual(parse('#/spot/new?at=48.85,2.35').at, [2.35, 48.85], 'ancien lien spot/');
-  assert.deepEqual(parse('#/map?plant=12&season=1'), { name: 'map', spot: null, plant: 12, focus: null, season: true, add: null, pick: false });
+  assert.deepEqual(parse('#/map?plant=12&season=1'), { name: 'map', spot: null, plants: [12], focus: null, season: true, add: null, pick: false });
   // An older link of Flore's results (« from=flore »): the Carte, on what else it says.
   assert.deepEqual(parse('#/map?plant=12&from=flore'), parse('#/map?plant=12'));
-  assert.equal(parse('#/map?plant=x').plant, null);
+  assert.deepEqual(parse('#/map?plant=x').plants, []);
+  // The Carte's plant filter in its address: each plant once, in the order given; plants= over an older plant=.
+  assert.deepEqual(parse('#/map?plants=12,7,12,x').plants, [12, 7]);
+  assert.deepEqual(parse('#/map?plants=7&plant=12').plants, [7]);
+  assert.equal(href.map({ plants: [12, 7], season: true }), '#/map?plants=12,7&season=1');
+  assert.equal(href.map({ spot: 'p1', plants: [] }), '#/map?spot=p1');
   assert.deepEqual(parse('#/shared?d=zABC'), { name: 'shared', data: 'zABC' });
   assert.equal(parse('#/nope').name, 'not-found');
   assert.equal(parse('#/plant/abc').name, 'not-found');

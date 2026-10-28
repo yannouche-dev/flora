@@ -7,8 +7,10 @@
 
 import { config } from '../config.js';
 import { readJSON, writeJSON } from './prefs.js';
-import { parse } from './router.js';
+import { startAt } from './history.js';
+import { href, parse } from './router.js';
 import { store } from './store.js';
+import { tabShown } from './discover.js';
 import { walkOn } from '../miniapp/kit/trail-store.js';
 
 /**
@@ -17,25 +19,26 @@ import { walkOn } from '../miniapp/kit/trail-store.js';
  * @property {string | null} query       last search (text, filters, sort), as a hash
  * @property {string | null} collection  current collection or place: the last one opened, or a plant put in
  * @property {string | null} mine        Mes plantes as last seen ('#/collections…')
- * @property {string | null} map         the Carte as last seen ('#/map…')
- * @property {number[]} mapPlants        the Carte's plant filter
+ * @property {string | null} map         the Carte as last seen ('#/map…', its plant filter in it)
  */
 
 /** @type {Context} */
-const EMPTY = { flore: null, query: null, collection: null, mine: null, map: null, mapPlants: [] };
+const EMPTY = { flore: null, query: null, collection: null, mine: null, map: null };
 
 /** @returns {Context} */
 function read() {
   const saved = readJSON(config.storageKeys.context, null);
   if (!saved || typeof saved !== 'object') return { ...EMPTY };
   const str = (/** @type {any} */ v, /** @type {string} */ prefix) => typeof v === 'string' && v.startsWith(prefix) ? v : null;
+  // The Carte's plant filter, kept apart before it was in its address (mapPlants): folded into it once.
+  const map = str(saved.map, '#/map');
+  const old = Array.isArray(saved.mapPlants) ? saved.mapPlants.filter(Number.isInteger) : [];
   return {
     flore: str(saved.flore, '#/'),
     query: str(saved.query, '#/'),
     collection: typeof saved.collection === 'string' ? saved.collection : null,
     mine: str(saved.mine, '#/collections'),
-    map: str(saved.map, '#/map'),
-    mapPlants: Array.isArray(saved.mapPlants) ? saved.mapPlants.filter(Number.isInteger) : []
+    map: old.length && !/[?&]plants?=/.test(map ?? '') ? (map ?? '#/map') + ((map ?? '').includes('?') ? '&' : '?') + 'plants=' + old.join(',') : map
   };
 }
 
@@ -53,16 +56,21 @@ export function setContext(patch) {
 }
 
 /**
- * Where a tab goes: back to where it was left; when it is the tab already shown, to its start (the search list,
- * Mes plantes, the whole Carte), so there is always a way back.
- * @param {'flore' | 'mine' | 'map'} tab @param {boolean} [current]
+ * Where a tab goes: back to where it was left — the tab shown: its own address (touching it does nothing: history.js).
+ * A view under a tab (a place's editor, a share under Mes plantes) leads back to the tab as it was left.
+ * @param {'flore' | 'mine' | 'map'} tab
  */
-export function tabHref(tab, current = false) {
+export function tabHref(tab) {
   const c = context();
-  if (tab === 'flore') return (current ? c.query : c.flore || c.query) || '#/';
-  if (tab === 'mine') return (current ? null : c.mine) || '#/collections';
-  return (current ? null : c.map) || '#/map';
+  if (tab === 'flore') return c.flore || c.query || '#/';
+  if (tab === 'mine') return c.mine || '#/collections';
+  return c.map || '#/map';
 }
+
+/** Flore as it was left — its search, the plant open: the Flore tab, the logo, the ways back into the app. Découvrir until Flore has come. */
+export const floreHref = () => tabShown('flore') ? tabHref('flore') : href.discover();
+/** Its name, for the links that lead there (« Aller à Flore »). */
+export const floreName = () => tabShown('flore') ? 'Flore' : 'Découvrir';
 
 /** The current view, recorded as it is reached (links, Back, tabs). */
 function follow() {
@@ -79,6 +87,9 @@ function follow() {
 }
 
 store.set({ context: read() });
+// Launched from the installed app's icon (start_url './', no address): Flore as it was left — not an empty search that
+// would erase it. Before anything routes (gf-app imports this module first) or records it (follow, below).
+startAt(floreHref());
 addEventListener('hashchange', follow);
 addEventListener('popstate', follow);
 addEventListener('gf-location', follow);

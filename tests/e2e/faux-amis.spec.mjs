@@ -1,11 +1,12 @@
 // Faux amis (#/app/faux-amis): six pairs of data/lookalikes.json — four criteria to attribute (« À qui est cet indice ? »),
 // two pairs the sources give no criterion at all for (« Je ne cueille pas ») —; each answer says whose the criterion was,
 // the look-alike and how dangerous (the TPPT base named for « très toxique »), the pair's other plants, the part, the
-// sources; the recap: the score, the six pairs, each plant's sheet (beside it on a wide screen, Back closing it), the
-// emergency numbers, « Nouvelle partie ». A game under way comes back after a reload, and its start screen offers it
-// first; one the file no longer gives (a criterion corrected since) is said, and dealt again; the file unreadable: said,
-// no game — or, a game kept, « Réessayer » reads it again and keeps it. A photo that does not load: neither shown nor
-// credited. Never « comestible » in its own words (the sources' titles are quoted as they are). One h1 a view (axe).
+// sources; the recap: the score, the six pairs, each plant's sheet (beside it on a wide screen, Back closing it; closed,
+// back to the recap it was opened from, after a reload too), the emergency numbers, « Nouvelle partie ». A game under
+// way comes back after a reload, and its start screen offers it first; one the file no longer gives (a criterion
+// corrected since) is said, and dealt again; the file unreadable: said, no game — or, a game kept, « Réessayer » reads
+// it again and keeps it. A photo that does not load: neither shown nor credited. Never « comestible » in its own words
+// (the sources' titles are quoted as they are). One h1 a view (axe).
 import { readFileSync } from 'node:fs';
 import { test, expect } from './fixtures.mjs';
 import { AXE, TAGS } from '../../tools/axe-rules.mjs';
@@ -148,6 +149,43 @@ test('sur grand écran, la fiche s’ouvre à côté du bilan : les autres plant
   await expect(game(page).locator('.count')).toHaveText('Carte 1 sur 6');
   await expect(page.locator('ma-plant-sheet .sheet')).toHaveCount(0);
   expect(await hash(page)).toBe('#/app/faux-amis/play');
+  await page.goBack();
+  await expect.poll(() => hash(page)).toBe('#/app/faux-amis/start');
+});
+
+test('sur grand écran, la fiche se ferme vers le bilan d’où elle a été ouverte : après un rechargement, après Retour puis Suivant', async ({ app, page }) => {
+  test.skip(app.phone, 'sur téléphone, la fiche couvre l’écran');
+  await app.open('#/app/faux-amis');
+  await playAll(page, await deal(page));
+  const sheet = page.locator('ma-plant-sheet .sheet');
+  // Two sheets, the page reloaded on the second: Échap goes back past both, to the recap; Back, the start screen —
+  // never a sheet opened again.
+  await game(page).locator('button.plant-link').first().click();
+  await expect.poll(() => hash(page)).toMatch(/\?p=\d+$/);
+  const first = await hash(page);
+  await game(page).locator('.rows > li').last().locator('button.plant-link').last().click();
+  await expect.poll(() => hash(page)).not.toBe(first);
+  await page.reload();
+  await app.ready();
+  await expect(sheet).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect.poll(() => hash(page)).toBe('#/app/faux-amis/play');
+  await expect(sheet).toHaveCount(0);
+  await page.goBack();
+  await expect.poll(() => hash(page)).toBe('#/app/faux-amis/start');
+  await expect(sheet).toHaveCount(0);
+  // A sheet, Back, Forward onto it, Échap: back to the recap (not the recap again in its place); Back, the start screen.
+  await page.goForward();
+  await expect.poll(() => hash(page)).toBe('#/app/faux-amis/play');
+  await game(page).locator('button.plant-link').first().click();
+  await expect.poll(() => hash(page)).toMatch(/\?p=\d+$/);
+  await page.goBack();
+  await expect.poll(() => hash(page)).toBe('#/app/faux-amis/play');
+  await page.goForward();
+  await expect.poll(() => hash(page)).toMatch(/\?p=\d+$/);
+  await expect(sheet).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect.poll(() => hash(page)).toBe('#/app/faux-amis/play');
   await page.goBack();
   await expect.poll(() => hash(page)).toBe('#/app/faux-amis/start');
 });

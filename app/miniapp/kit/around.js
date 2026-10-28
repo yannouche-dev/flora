@@ -6,6 +6,8 @@
 
 import { FIX_MAX_AGE, geoProblem, takeFix } from '../../core/geo.js';
 import { discoverState, discovering, finishDiscover, LAST_STEP } from '../../core/discover.js';
+import { floreHref } from '../../core/context.js';
+import { openView } from '../../core/history.js';
 import { href } from '../../core/router.js';
 import { distLabel } from './cards.js';
 import { sessionOf } from './session.js';
@@ -119,7 +121,7 @@ export function aroundStart(c, app, kind) {
         meta: distLabel(c.radius || 1000), run: () => { stop(); app.go('map'); } }] }
     ],
     exit: kind === 'meet' && discovering()
-      ? { label: 'Passer : montrer toute l’application', href: href.search(), run: () => finishDiscover() }
+      ? { label: 'Passer : montrer toute l’application', href: href.search(), run: (/** @type {Event | undefined} */ e) => { e?.preventDefault(); finishDiscover(); openView(floreHref()); } }
       : { icon: 'camera-reels', label: 'Autres activités', run: () => { stop(); app.scenarios(); } }
   };
 }

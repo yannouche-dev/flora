@@ -1,6 +1,6 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
-import { tabHref } from '../core/context.js';
+import { floreHref, floreName, tabHref } from '../core/context.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
 import { href, RouterController } from '../core/router.js';
 import { setMode, store, StoreController, whenReady } from '../core/store.js';
@@ -260,11 +260,11 @@ export class GfApp extends LitElement {
       <header ?inert=${covered}>
         <div class="side">${phone ? nothing : html`<nav class="tabs segmented" aria-label="Sections">
           <a href=${href.discover()} aria-current=${tab === 'discover' ? 'page' : 'false'}>Découvrir</a>
-          ${tabShown('flore') ? html`<a href=${tabHref('flore', tab === 'flore')} aria-current=${route.name === 'search' || route.name === 'plant' ? 'page' : 'false'}>Flore</a>` : nothing}
-          ${tabShown('map') ? html`<a href=${tabHref('map', tab === 'map')} aria-current=${route.name === 'map' ? 'page' : 'false'}>Carte</a>` : nothing}
-          ${tabShown('mine') ? html`<a href=${tabHref('mine', tab === 'mine')} aria-current=${['collections', 'spot', 'spot-new', 'shared'].includes(route.name) ? 'page' : 'false'}>Mes plantes</a>` : nothing}
+          ${tabShown('flore') ? html`<a href=${tabHref('flore')} aria-current=${route.name === 'search' || route.name === 'plant' ? 'page' : 'false'}>Flore</a>` : nothing}
+          ${tabShown('map') ? html`<a href=${tabHref('map')} aria-current=${route.name === 'map' ? 'page' : 'false'}>Carte</a>` : nothing}
+          ${tabShown('mine') ? html`<a href=${tabHref('mine')} aria-current=${['collections', 'spot', 'spot-new', 'shared'].includes(route.name) ? 'page' : 'false'}>Mes plantes</a>` : nothing}
         </nav>`}</div>
-        <a class="brand" href=${href.search()} aria-label="GeoFlora — accueil">${brand}</a>
+        <a class="brand" href=${floreHref()} aria-label=${'GeoFlora — aller à ' + floreName()}>${brand}</a>
         <div class="side end">${phone ? html`<gf-scenarios class="phone-scenarios"></gf-scenarios>` : html`
         ${tabShown('flore') ? html`<gf-mode-switch class="mode" scope="toute l’application" value=${this.#store.state.mode}
           @mode-change=${e => setMode(e.detail.mode || 'standard')}></gf-mode-switch>` : nothing}
@@ -351,7 +351,7 @@ export class GfApp extends LitElement {
   #unlockedView(key) {
     const u = UNLOCKS[key];
     if (!u) return nothing;
-    const link = key === 'flore' ? '#/' : key === 'mine' ? href.collections() : href.map();
+    const link = key === 'flore' ? floreHref() : key === 'mine' ? href.collections() : href.map();
     return html`<div class="unlocked" role="status">${icon('star-fill')}<span><b>Nouveau : ${u.label}</b> — ${u.text}.</span>
       <a href=${link} @click=${() => { this._unlocked = null; }}>Voir</a>
       <button type="button" aria-label="Fermer" @click=${() => { this._unlocked = null; this.requestUpdate(); }}>${icon('x-lg')}</button></div>`;
@@ -400,7 +400,7 @@ export class GfApp extends LitElement {
         // « Disposition libre » (app/layout): its layout and its state in the address.
         return html`<gf-layout .route=${route}></gf-layout>`;
       default:
-        return html`<div class="banner">Page introuvable. <a href=${href.search()}>Aller à la recherche</a></div>`;
+        return html`<div class="banner">Page introuvable. <a href=${floreHref()}>Aller à ${floreName()}</a></div>`;
     }
   }
 }

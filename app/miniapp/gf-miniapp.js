@@ -16,8 +16,8 @@
 //    plant chosen and its sheet open, or its sheet closed (the plant stays chosen); the others, the plant open (?p=:
 //    its sheet), or closed — back to the entry it was opened from. Over a start screen, the plant of a link (?p=)
 //    shows in a sheet of its own (ma-plant-sheet).
-//  - The way out: exit.confirm(c) asks first if it says something; then back to where it was opened from (else the
-//    start page). An activity launched from another (Découvrir over its box: its film icon, « Autres activités »)
+//  - The way out: exit.confirm(c) asks first if it says something; then back to where it was opened from (else Flore
+//    as it was left: context.js floreHref). An activity launched from another (Découvrir over its box: its film icon, « Autres activités »)
 //    takes that one's starting point, so « Quitter » leaves both; Back still returns to it. Doing or leaving it
 //    changes nothing else in the app (no mode, no setting, no layout of the sheet).
 //  - The plants seen in it (the event `seen` of the runtime: a card swiped, a plant opened, chosen or noted), in any
@@ -26,8 +26,9 @@
 //    other tabs (core/sync.js), and it starts again at its first step.
 
 import { LitElement, html, css, nothing, repeat } from 'lit';
-import { backTo, depth, entryValue, markEntry, openModal, pushHash, replaceHash } from '../core/history.js';
+import { backTo, closeTo, depth, entryValue, markEntry, openModal, pushHash, replaceHash, sheetMark } from '../core/history.js';
 import { href } from '../core/router.js';
+import { floreHref, floreName } from '../core/context.js';
 import { StoreController } from '../core/store.js';
 import { plantSeen } from '../core/discover.js';
 import { subscribe } from '../core/sync.js';
@@ -135,13 +136,11 @@ export class GfMiniapp extends LitElement {
 
   #scenarios = () => { /** @type {any} */ (this.renderRoot.querySelector('gf-scenarios'))?.open(); };
 
-  /** The depth of the entry before the plant was opened here (closing it goes back to it), else none: opened by a link. @type {number | null} */
-  #sheetFrom = null;
-
   /**
    * A plant opened by a component, or closed (null). Rencontres: the plant chosen, its sheet open — or its sheet
-   * closed, the plant still chosen. The others: the plant open (its sheet) — or closed: back to the entry it was
-   * opened from (however many plants its sheet went through since), else the address without it.
+   * closed, the plant still chosen. The others: the plant open (its sheet). Closed: back to the entry it was opened
+   * from (kept in the entries: gfSheetFrom, core/history.js), past the plants its sheet went through; opened by a link:
+   * the address without it.
    * @param {number | null} id
    */
   #plant(id) {
@@ -149,19 +148,19 @@ export class GfMiniapp extends LitElement {
     if (!app || !('focus' in app.m.context)) return;
     const chooses = 'sheet' in app.m.context;
     if (id == null) {
-      if (chooses) app.set({ sheet: false });
-      else if (this.#sheetFrom != null && this.#sheetFrom < depth()) history.go(this.#sheetFrom - depth());
-      else app.set({ focus: null, mediaAt: null });
-      this.#sheetFrom = null;
+      // Back to the screen it was opened from, past the plants its sheet went through (Rencontres: the plant last shown
+      // stays chosen); opened by a link: closed in place (the address without it), no entry added.
+      const shut = chooses ? { sheet: false } : { focus: null, mediaAt: null };
+      closeTo(sheetMark('gfSheetFrom', () => null), this.#href({ ...app.c, ...shut }),
+        { instead: () => { app.set(shut); markEntry({ gfSheetFrom: null }); } });
       return;
     }
-    if (!chooses && app.c.focus == null) this.#sheetFrom = depth();
     app.set({ focus: id, ...(app.c.focus !== id ? { mediaAt: null } : {}), ...(chooses ? { sheet: true } : {}) });
   }
 
   /**
    * The depth of the entry it was opened from, or the one the activity it was launched from had (Quitter goes back to
-   * it); null: nothing behind (the start page then). @type {number | null}
+   * it); null: nothing behind (Flore as it was left then). @type {number | null}
    */
   #from = null;
   /** @type {(() => void) | null} */ #unsync = null;
@@ -259,7 +258,6 @@ export class GfMiniapp extends LitElement {
     if ('sheet' in ctx) patch.sheet = Boolean(route.sheet);
     this.#following = true;
     try { app.set(patch); } finally { this.#following = false; }
-    if (route.plant == null) this.#sheetFrom = null;
     // An app ported whole leads its own steps: the address only says them.
     // (The step of the address meanwhile, until it says its own: the bar does not jump back to the start.)
     if (app.m.driven) { if (!route.step || !app.reached(route.step)) this.#syncUrl(); return; }
@@ -270,10 +268,13 @@ export class GfMiniapp extends LitElement {
     else if (!route.step || opening) this.#syncUrl();
   }
 
-  /** The address of the screen now: its step and the context's keys the address carries (router.js, AppRoute). */
-  #href() {
+  /**
+   * The address of the screen now (or with the context `c`): its step and the context's keys the address carries
+   * (router.js, AppRoute). @param {Record<string, any>} [c]
+   */
+  #href(c = /** @type {MiniApp} */ (this._app).c) {
     const app = /** @type {MiniApp} */ (this._app);
-    const ctx = app.m.context, c = app.c;
+    const ctx = app.m.context;
     const num = (/** @type {unknown} */ v) => typeof v === 'number' ? v : null;
     // Rencontres' start screen shows no plant: the one kept with the game is not in its address (unless its sheet is
     // open over it: a link).
@@ -303,12 +304,23 @@ export class GfMiniapp extends LitElement {
         const now = new URLSearchParams(location.hash.split('?')[1] || ''), next = new URLSearchParams(want.split('?')[1] || '');
         const newPlant = next.has('p') && next.get('p') !== now.get('p');
         const sheetOpened = next.get('fiche') === '1' && now.get('fiche') !== '1';
-        if (newPlant || sheetOpened) pushHash(want, { gfAppFrom: this.#from });
+        if (newPlant || sheetOpened) pushHash(want, { gfAppFrom: this.#from, ...this.#sheetCarry(want) });
         else replaceHash(want);
       }
     }
     this.requestUpdate();
   };
+
+  /**
+   * The sheet mark the entry of `want` carries, its sheet open: opened now (this entry is under it) or kept open (this
+   * entry's mark goes on: « Suivante », ‹ ›, a step). @param {string} want
+   */
+  #sheetCarry(want) {
+    const sheet = 'sheet' in /** @type {MiniApp} */ (this._app).m.context;
+    const open = (/** @type {string} */ h) => { const p = new URLSearchParams(h.split('?')[1] || ''); return sheet ? p.get('fiche') === '1' : p.has('p'); };
+    if (!open(want)) return {};
+    return { gfSheetFrom: open(location.hash) ? sheetMark('gfSheetFrom', () => null) : { from: depth(), start: depth() + 1 } };
+  }
 
   /** A plant seen in the activity: one more for the first steps of the app. @param {Event} e */
   #onSeen = e => { plantSeen(/** @type {CustomEvent} */ (e).detail); };
@@ -318,7 +330,7 @@ export class GfMiniapp extends LitElement {
     if (!app) return;
     const { replace } = /** @type {CustomEvent} */ (e).detail || {};
     const want = this.#href();
-    if (location.hash !== want) { if (replace) replaceHash(want); else pushHash(want, { gfAppFrom: this.#from }); }
+    if (location.hash !== want) { if (replace) replaceHash(want); else pushHash(want, { gfAppFrom: this.#from, ...this.#sheetCarry(want) }); }
     const at = app.path.length, all = app.m.steps.length;
     this._said = fr(`Étape ${at} sur ${all} : ${app.step.label}`);
   };
@@ -329,7 +341,7 @@ export class GfMiniapp extends LitElement {
     const text = app.m.exit.confirm?.(app.c);
     if (text && !(await this.#ask('leave', text))) return;
     app.flush();
-    backTo(this.#from, '#/');
+    backTo(this.#from, floreHref());
   };
 
   /** « Recommencer », once confirmed. */
@@ -365,8 +377,8 @@ export class GfMiniapp extends LitElement {
   #closeMenu(e) { /** @type {HTMLElement} */ (e.currentTarget).closest('details')?.removeAttribute('open'); }
 
   render() {
-    if (this._error) return html`<div class="bar"><button class="quit" type="button" title="Fermer" aria-label="Fermer" @click=${() => backTo(this.#from, '#/')}>${icon('x-lg')}<span class="lbl"> Fermer</span></button></div>
-      <p class="missing" role="alert">${this._error} <a href="#/">Aller à l’accueil</a></p>`;
+    if (this._error) return html`<div class="bar"><button class="quit" type="button" title="Quitter l’activité" aria-label="Quitter l’activité" @click=${() => backTo(this.#from, floreHref())}>${icon('x-lg')}<span class="lbl">Quitter l’activité</span></button></div>
+      <p class="missing" role="alert">${this._error} <a href=${floreHref()}>Aller à ${floreName()}</a></p>`;
     const app = this._app;
     if (!app) return html`<div class="bar"></div><p class="missing" role="status">Chargement…</p>`;
     const step = app.step, m = app.m;

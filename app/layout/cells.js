@@ -355,8 +355,12 @@ export class DlMap extends LitElement {
     this.#placeControls();
   });
 
+  /** The map's own buttons, watched: one coming or going (the binoculars when the map turns 3D, a stack rebuilt) moves the controls under them. */
+  #stack = new ResizeObserver(() => this.#placeControls());
+  /** @type {Element | null} */ #stackSeen = null;
+
   connectedCallback() { super.connectedCallback(); this.#resize.observe(this); }
-  disconnectedCallback() { super.disconnectedCallback(); this.#resize.disconnect(); }
+  disconnectedCallback() { super.disconnectedCallback(); this.#resize.disconnect(); this.#stack.disconnect(); this.#stackSeen = null; }
 
   /** The map's settings (registry.js), their defaults when none were given. */
   get #p() {
@@ -843,6 +847,7 @@ export class DlMap extends LitElement {
     const stage = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.stage')), map = this.#map;
     const buttons = map?.querySelector('.gf-map-buttons');
     if (!stage || !buttons) return;
+    if (buttons !== this.#stackSeen) { this.#stack.disconnect(); this.#stack.observe(buttons); this.#stackSeen = buttons; }
     const box = stage.getBoundingClientRect();
     if (!box.height) return;
     const set = (/** @type {string} */ name, /** @type {number} */ px) => { if (stage.style.getPropertyValue(name) !== px + 'px') stage.style.setProperty(name, px + 'px'); };

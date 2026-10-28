@@ -37,7 +37,7 @@ import './gf-place-search.js';
  * @typedef {{ kind: 'link', label: string, icon?: IconName, run?: () => void, href?: string }} StartLink   a place to go (href: a real link), or an action
  * @typedef {StartPlace | StartQuery | StartChoices | StartLink} StartAlternative
  *
- * @typedef {{ label: string, icon?: IconName, run?: () => void, href?: string }} StartExit
+ * @typedef {{ label: string, icon?: IconName, run?: (e?: Event) => void, href?: string }} StartExit
  *
  * @typedef {object} StartSpec
  * @property {string} id                     the activity's key (data-start)
@@ -88,8 +88,8 @@ function alternative(a, i) {
 
 /** @param {StartExit} x */
 const exitLink = x => x.href
-  ? html`<a class="leave link muted" href=${x.href} @click=${() => x.run?.()}>${x.icon ? icon(x.icon) : nothing}${fr(x.label)}</a>`
-  : html`<button class="leave link muted" type="button" @click=${() => x.run?.()}>${x.icon ? icon(x.icon) : nothing}${fr(x.label)}</button>`;
+  ? html`<a class="leave link muted" href=${x.href} @click=${(/** @type {Event} */ e) => x.run?.(e)}>${x.icon ? icon(x.icon) : nothing}${fr(x.label)}</a>`
+  : html`<button class="leave link muted" type="button" @click=${(/** @type {Event} */ e) => x.run?.(e)}>${x.icon ? icon(x.icon) : nothing}${fr(x.label)}</button>`;
 
 /** An activity's first screen. @param {StartSpec} o */
 export function startScreen(o) {

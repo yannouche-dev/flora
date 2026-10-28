@@ -1230,7 +1230,9 @@ export class GfSpotEditor extends LitElement {
           ${this.#autosave
             ? html`${this.#saveStatus()}<button class="primary large" type="submit">Terminé</button>`
             : html`<button class="primary large ${weak ? 'weak' : ''}" type="submit">Enregistrer</button>
-                <a class="link muted" href=${this.plantId ? href.plant(this.plantId) : href.map()}>Annuler</a>`}
+                <!-- « Annuler »: back to the view it was opened from, no step more (from « Ajouter à… »: the closed dialog's step
+                  is skipped); opened by a link, at the start: its plant, else the Carte, in its place. -->
+                <button class="link muted" type="button" @click=${() => back(this.plantId ? href.plant(this.plantId) : href.map())}>Annuler</button>`}
           ${isFavorites || this.#isNew ? nothing : html`<button class="danger" type="button" @click=${this.#delete}>Supprimer</button>`}
         </div>
       </form>

@@ -1,9 +1,8 @@
 // @ts-check
 import { LitElement, html, css, nothing } from 'lit';
-import { lastSearchHash } from '../core/query.js';
 import { href, parse } from '../core/router.js';
 import { harvestModeChosen, openKing, setHarvestMode, setMode, setShowSteps, StoreController } from '../core/store.js';
-import { context } from '../core/context.js';
+import { context, floreHref, floreName } from '../core/context.js';
 import { MODE_ICON_CHOICES, modeLabel } from '../core/modes.js';
 import { createMode, deleteMode, editMode } from '../core/mode-admin.js';
 import './gf-mode-switch.js';
@@ -16,7 +15,7 @@ import { share } from '../core/share.js';
 import { myRegion, setMyRegion, territories, territoryAt } from '../core/territory.js';
 import { exportLayout, importLayout, resetAll } from '../core/sheet-blocks.js';
 import { ui } from '../styles/ui.js';
-import { discoverEvents, discovering, finishDiscover, restartDiscover } from '../core/discover.js';
+import { discoverEvents, discovering, finishDiscover, restartDiscover, tabShown } from '../core/discover.js';
 import { forgetHints } from '../core/hints.js';
 import { openView } from '../core/history.js';
 import { briefToast } from '../core/toast.js';
@@ -492,7 +491,7 @@ export class GfSettings extends LitElement {
     const { meta, offline } = this.#store.state;
     return html`
       <article>
-        <a class="back link" href=${lastSearchHash()}>${icon('arrow-left')} Recherche</a>
+        <a class="back link" href=${floreHref()}>${icon(tabShown('flore') ? 'leaf' : 'binoculars')} Aller à ${floreName()}</a>
         <h1>À propos et réglages</h1>
         <p class="muted"><a href=${href.legal()}>${icon('shield-check')} Mentions légales et confidentialité</a> : qui publie GeoFlora, ce qui reste sur cet appareil, ce que reçoit chaque service en ligne (votre position surtout).</p>
         <a class="builder" href=${href.builder()}>${icon('window-desktop')}<span><b>Créer une app</b>
