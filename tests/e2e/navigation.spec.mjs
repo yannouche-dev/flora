@@ -2,7 +2,7 @@
 // place — past the plants gone through with ‹ ›, never adding an entry; opened from elsewhere (another tab, a link, the
 // start), the list takes its place. A block's pane closes the same way, onto the plant it was opened from
 // (core/history.js sheetMark, closeTo). On both widths the sheet's head has its × « Fermer la fiche », and Échap closes
-// it (Flore: its pane first).
+// it (Flore: its pane first). « Annuler » goes back, never a step more: a new place's, a dialog's.
 import { test, expect, plantId } from './fixtures.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
@@ -186,6 +186,61 @@ test('Échap ferme la fiche de Mes plantes', async ({ app, page }) => {
   await expect.poll(() => hash(page)).toBe(`#/collections?c=${id}`);
   expect(await entries(page)).toBe(n);
   await expect(mine.locator('#mine-plant, .sheet-plant')).toHaveCount(0);
+});
+
+/** « Annuler » of a new place (its editor's footer). @param {Page} page */
+const cancelNewPlace = page => page.locator('gf-spot-editor .actions.footer').getByRole('button', { name: 'Annuler', exact: true }).click();
+/** Whether the current entry is a dialog's step (core/history.js openModal). @param {Page} page */
+const onStep = page => page.evaluate(() => Boolean(history.state?.gfModal));
+
+test('« Annuler » d’un nouveau lieu revient en arrière, sans étape de plus', async ({ app, page }) => {
+  const id = plantId('Geum urbanum');
+  const newPlace = `#/collection/new?kind=place&plant=${id}`;
+  // From Flore's sheet: the sheet again, on its own entry; Back: the list it was opened from.
+  await app.open('#/?family=Rosaceae');
+  await app.go(`#/plant/${id}`);
+  await expect(page.locator('gf-flora gf-plant-detail:not([preview])').first()).toBeVisible();
+  const at = await depthOf(page);
+  await app.go(newPlace);
+  await cancelNewPlace(page);
+  await expect.poll(() => hash(page)).toBe(`#/plant/${id}`);
+  expect(await depthOf(page)).toBe(at);
+  // From « Ajouter à… » › « Nouveau lieu ici »: the closed dialog's step skipped, the sheet again.
+  await page.locator('.action-bar .act[data-key="addTo"] > button').first().click();
+  await page.getByRole('dialog', { name: 'Ajouter à une liste ou un lieu' }).getByRole('link', { name: 'Nouveau lieu ici' }).click();
+  await expect.poll(() => hash(page)).toBe(newPlace);
+  await cancelNewPlace(page);
+  await expect.poll(() => hash(page)).toBe(`#/plant/${id}`);
+  await expect.poll(() => onStep(page)).toBe(false);
+  expect(await depthOf(page)).toBe(at);
+  await page.goBack();
+  await expect.poll(() => hash(page)).toBe('#/?family=Rosaceae');
+  // From Mes plantes' sheet: the same.
+  await app.go(`#/collections?plant=${id}`);
+  await expect(page.locator('gf-collections gf-plant-detail:not([preview])').first()).toBeVisible();
+  await app.go(newPlace);
+  await cancelNewPlace(page);
+  await expect.poll(() => hash(page)).toBe(`#/collections?plant=${id}`);
+  expect(await depthOf(page)).toBe(at);
+  await page.goBack();
+  await expect.poll(() => hash(page)).toBe('#/?family=Rosaceae');
+});
+
+test('Un dialogue « Annuler » : l’historique comme avant', async ({ app, page }) => {
+  await app.open('#/settings');
+  await app.go('#/app/parcours');
+  const box = page.locator('gf-miniapp');
+  await box.locator('.more summary').click();
+  const at = await depthOf(page);
+  await box.locator('.menu').getByRole('button', { name: 'Recommencer' }).click();
+  const dialog = box.getByRole('dialog');
+  await expect(dialog).toContainText('Recommencer : tout effacer ?');
+  await dialog.getByRole('button', { name: 'Annuler' }).click();
+  await expect(dialog).toBeHidden();
+  await expect.poll(() => onStep(page)).toBe(false);
+  expect(await depthOf(page)).toBe(at);
+  await page.goBack();
+  await expect.poll(() => hash(page)).toBe('#/settings');
 });
 
 /**
