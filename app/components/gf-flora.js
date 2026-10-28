@@ -154,7 +154,6 @@ export class GfFlora extends LitElement {
       animation: slide-in 0.2s ease-out;
     }
     .sheet-plant .pane-head { padding-left: 4px; }
-    .sheet-plant .back { font-weight: 600; }
     .sheet-plant:focus { outline: none; }
     @keyframes slide-in { from { transform: translateX(30%); opacity: 0; } }
     @media (prefers-reduced-motion: reduce) { .sheet-plant { animation: none; } }
@@ -297,8 +296,9 @@ export class GfFlora extends LitElement {
   /** A move to the previous / next plant is playing. */
   #moving = false;
 
-  /** ← → on the keyboard, when not typing. @param {KeyboardEvent} e */
+  /** ← → on the keyboard, when not typing; Échap. @param {KeyboardEvent} e */
   #onKey = e => {
+    if (e.key === 'Escape') { this.#onEscape(e); return; }
     // The media viewer takes ← → while it has the focus (it stops them there); elsewhere they go to the plants.
     // A dialog over the page (« Noter ici », the filters, a question): its keys, never the plant behind it changed.
     if (this.#plantId === null || e.altKey || e.ctrlKey || e.metaKey || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || modalOpen()) return;
@@ -307,6 +307,15 @@ export class GfFlora extends LitElement {
     e.preventDefault();
     this.#step(e.key === 'ArrowLeft' ? 'prev' : 'next');
   };
+
+  /** Échap: the pane closed, else the plant's sheet — not while typing, nor under a dialog (its step: its own Échap). @param {KeyboardEvent} e */
+  #onEscape(e) {
+    if (this.#plantId === null || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || entryValue('gfModal') || modalOpen()) return;
+    const t = /** @type {HTMLElement} */ (e.composedPath()[0]);
+    if (t?.closest?.('input, textarea, select, [contenteditable]') || t?.isContentEditable) return;
+    e.preventDefault();
+    if (this.#pane !== null) this.#closePane(); else this.#closePlant();
+  }
 
   /** Swipe: a mostly horizontal stroke on the sheet, not started on a map, a field or something that scrolls sideways. */
   #touch = /** @type {{ x: number, y: number, t: number, el: HTMLElement } | null} */ (null);
@@ -738,7 +747,7 @@ export class GfFlora extends LitElement {
             ${this.#head('plant', 'Plante', html`
               <a class="icon-btn" href=${'#/plant/' + plantId} title="Ouvrir la fiche seule" aria-label="Ouvrir la fiche seule"
                 @click=${e => { e.preventDefault(); this.#fold('results', true); }}>${icon('arrows-angle-expand')}</a>
-              <button class="icon-btn" type="button" title="Fermer la fiche" aria-label="Fermer la fiche" @click=${() => this.#closePlant()}>${icon('x-lg')}</button>`)}
+              <button class="icon-btn" type="button" title="Fermer la fiche (Échap)" aria-label="Fermer la fiche" @click=${() => this.#closePlant()}>${icon('x-lg')}</button>`)}
             <div class="pane-body">${this.#swipe(plantId, plantView)}${this.#pager(false)}</div>
           </section>`) : nothing}
       </div>
@@ -746,7 +755,7 @@ export class GfFlora extends LitElement {
       ${phone && plantId !== null ? html`
         <section class="sheet-plant" aria-label="Plante" tabindex="-1" ?inert=${this.#pane !== null} @open-pane=${this.#openPane}>
           <div class="pane-head">
-            <button class="link back" type="button" aria-label="Retour aux résultats" @click=${() => this.#closePlant()}>${icon('arrow-left')}</button>
+            <button class="icon-btn" type="button" aria-label="Fermer la fiche" title="Fermer (Échap)" @click=${() => this.#closePlant()}>${icon('x-lg')}</button>
             <div class="title">Plante</div>
           </div>
           <div class="pane-body" style="display:flex;flex-direction:column;overflow:hidden;background:var(--gf-surface-2)">${this.#swipe(plantId, plantView, true)}${this.#pager(true)}</div>

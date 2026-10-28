@@ -1,7 +1,8 @@
 // Navigation: « Fermer la fiche » goes back to the view the sheet was opened from — Flore's list, Mes plantes' list or
 // place — past the plants gone through with ‹ ›, never adding an entry; opened from elsewhere (another tab, a link, the
 // start), the list takes its place. A block's pane closes the same way, onto the plant it was opened from
-// (core/history.js sheetMark, closeTo).
+// (core/history.js sheetMark, closeTo). On both widths the sheet's head has its × « Fermer la fiche », and Échap closes
+// it (Flore: its pane first).
 import { test, expect, plantId } from './fixtures.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
@@ -12,10 +13,9 @@ const entries = page => page.evaluate(() => history.length);
 /** The depth of the current entry in this visit (core/history.js). @param {Page} page */
 const depthOf = page => page.evaluate(() => history.state?.gfDepth);
 
-/** Flore's plant sheet closed: its ✕ (desktop), its phone head. @param {import('./app.mjs').App} app @param {Page} page */
-const closeFlore = (app, page) => (app.phone
-  ? page.locator('gf-flora .sheet-plant .pane-head').getByRole('button', { name: 'Retour aux résultats' })
-  : page.locator('gf-flora #flore-plant .pane-head').getByRole('button', { name: 'Fermer la fiche' })).click();
+/** Flore's plant sheet closed: the × of its head (the phone's sheet, the desktop's pane). @param {import('./app.mjs').App} app @param {Page} page */
+const closeFlore = (app, page) => page.locator(app.phone ? 'gf-flora .sheet-plant .pane-head' : 'gf-flora #flore-plant .pane-head')
+  .getByRole('button', { name: 'Fermer la fiche' }).click();
 
 /** ← → to the next plant of the results, once the address shows it. @param {Page} page */
 async function nextPlant(page) {
@@ -111,10 +111,9 @@ const seedPlace = page => page.evaluate(async ids => {
   return (await c.savePlace(place)).id;
 }, [plantId('Allium ursinum'), plantId('Urtica dioica'), plantId('Geum urbanum')]);
 
-/** Mes plantes' plant sheet closed: its ✕ (desktop), its phone head. @param {import('./app.mjs').App} app @param {Page} page */
-const closeMine = (app, page) => (app.phone
-  ? page.locator('gf-collections .sheet-plant .pane-head').getByRole('button', { name: 'Mes plantes' })
-  : page.locator('gf-collections #mine-plant .pane-head').getByRole('button', { name: 'Fermer la fiche' })).click();
+/** Mes plantes' plant sheet closed: the × of its head (the phone's sheet, the desktop's pane). @param {import('./app.mjs').App} app @param {Page} page */
+const closeMine = (app, page) => page.locator(app.phone ? 'gf-collections .sheet-plant .pane-head' : 'gf-collections #mine-plant .pane-head')
+  .getByRole('button', { name: 'Fermer la fiche' }).click();
 
 test('Mes plantes : la fiche fermée revient au lieu, en passant les plantes parcourues', async ({ app, page }) => {
   await app.open('#/');
@@ -146,4 +145,45 @@ test('Mes plantes : la fiche fermée revient au lieu, en passant les plantes par
   await closeMine(app, page);
   await expect.poll(() => hash(page)).toBe('#/collections');
   await expect(page.locator('gf-collections section[aria-label="Carte du lieu"]')).toHaveCount(0);
+});
+
+test('Échap ferme le panneau, puis la fiche', async ({ app, page }) => {
+  test.skip(app.phone, 'the pane beside the sheet, a keyboard: a wide screen');
+  await app.open('#/settings');
+  await app.go('#/?family=Rosaceae');
+  await page.locator('gf-flora gf-plant-list gf-plant-card a.row').first().click();
+  await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+$/);
+  const plant = await hash(page);
+  await expect(page.locator('gf-flora #flore-plant').getByRole('button', { name: 'Fermer la fiche' })).toHaveAttribute('title', 'Fermer la fiche (Échap)');
+  await page.locator('gf-flora #flore-plant gf-plant-detail:not([preview]) button.to-pane').first().click();
+  await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+\?pane=/);
+  const n = await entries(page);
+  await page.keyboard.press('Escape');
+  await expect.poll(() => hash(page)).toBe(plant);
+  await expect(page.locator('gf-flora .block-pane')).toHaveCount(0);
+  await page.keyboard.press('Escape');
+  await expect.poll(() => hash(page)).toBe('#/?family=Rosaceae');
+  expect(await entries(page)).toBe(n);
+  // No plant open: Échap does nothing.
+  await page.keyboard.press('Escape');
+  await page.goBack();
+  await expect.poll(() => hash(page)).toBe('#/settings');
+});
+
+test('Échap ferme la fiche de Mes plantes', async ({ app, page }) => {
+  await app.open('#/');
+  const id = await seedPlace(page);
+  await app.go('#/collections');
+  const mine = page.locator('gf-collections');
+  await mine.locator('button.main', { hasText: 'Bois de la Source' }).click();
+  await expect.poll(() => hash(page)).toBe(`#/collections?c=${id}`);
+  await mine.locator('ul.plants a').first().click();
+  await expect.poll(() => hash(page)).toMatch(/&plant=/);
+  const head = mine.locator(app.phone ? '.sheet-plant .pane-head' : '#mine-plant .pane-head');
+  await expect(head.getByRole('button', { name: 'Fermer la fiche' })).toHaveAttribute('title', app.phone ? 'Fermer (Échap)' : 'Fermer la fiche (Échap)');
+  const n = await entries(page);
+  await page.keyboard.press('Escape');
+  await expect.poll(() => hash(page)).toBe(`#/collections?c=${id}`);
+  expect(await entries(page)).toBe(n);
+  await expect(mine.locator('#mine-plant, .sheet-plant')).toHaveCount(0);
 });

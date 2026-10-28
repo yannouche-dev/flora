@@ -11,7 +11,7 @@ import {
 import { config } from '../config.js';
 import { StoreController, arrangedMode, whenReady } from '../core/store.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
-import { closeTo, depth, modalOpen, openView, replaceView, sheetMark } from '../core/history.js';
+import { closeTo, depth, entryValue, modalOpen, openView, replaceView, sheetMark } from '../core/history.js';
 import './gf-map.js';
 import './gf-plant-detail.js';
 import './gf-pager.js';
@@ -82,7 +82,6 @@ export class GfCollections extends LitElement {
     .pane-body gf-pager { flex: none; }
     /* Phone: the plant slides over the page, down to the tab bar. */
     .sheet-plant { position: fixed; inset: 0 0 calc(61px + env(safe-area-inset-bottom)) 0; z-index: 900; display: flex; flex-direction: column; background: var(--gf-surface); animation: slide-in 0.2s ease-out; }
-    .sheet-plant .back { font-weight: 600; }
     @keyframes slide-in { from { transform: translateX(30%); opacity: 0; } }
     @media (prefers-reduced-motion: reduce) { .sheet-plant { animation: none; } }
     .inline-map { position: relative; height: 220px; margin: 0 12px 10px; border-radius: var(--gf-radius); overflow: hidden; border: 1px solid var(--gf-border); }
@@ -372,9 +371,17 @@ export class GfCollections extends LitElement {
       @page=${(/** @type {CustomEvent} */ e) => { openView(href.collections({ open: this.route.open || c.id, plant: ids[e.detail.index] })); }}></gf-pager>`;
   }
 
-  /** ← → : the previous / next plant of the list (not while typing). @param {KeyboardEvent} e */
+  /** ← → : the previous / next plant of the list (not while typing); Échap: the sheet closed. @param {KeyboardEvent} e */
   #onKey = e => {
     // A dialog over the page (« Noter ici », « Ajouter à… », a question): its keys, never the plant behind it changed.
+    if (e.key === 'Escape') {
+      if (!this.route.plant || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || entryValue('gfModal') || modalOpen()) return;
+      const t = /** @type {HTMLElement} */ (e.composedPath()[0]);
+      if (t?.closest?.('input, textarea, select, [contenteditable]') || t?.isContentEditable) return;
+      e.preventDefault();
+      this.#closePlant();
+      return;
+    }
     if ((e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') || e.altKey || e.ctrlKey || e.metaKey || !this.route.plant || modalOpen()) return;
     const t = /** @type {HTMLElement} */ (e.composedPath()[0]);
     if (t?.closest?.('input, textarea, select, [contenteditable]')) return;
@@ -604,7 +611,7 @@ export class GfCollections extends LitElement {
         <section class="list-pane phone" aria-label="Mes plantes">${this.#list(true)}</section>
         ${plantId ? html`<section class="sheet-plant" aria-label="Plante">
           <div class="pane-head">
-            <button class="link back" type="button" @click=${() => this.#closePlant()}>${icon('arrow-left')} Mes plantes</button>
+            <button class="icon-btn" type="button" aria-label="Fermer la fiche" title="Fermer (Échap)" @click=${() => this.#closePlant()}>${icon('x-lg')}</button>
             <h2>Plante</h2>
             <a class="icon-btn" href=${href.plant(plantId)} title="Ouvrir la fiche dans Flore" aria-label="Ouvrir la fiche dans Flore">${icon('arrows-angle-expand')}</a>
           </div>
@@ -649,7 +656,7 @@ export class GfCollections extends LitElement {
               style=${plantFills || this.#tablet.matches ? '' : `width:${Math.min(p.width(this.#plantKey), Math.max(360, this.#max('plant')))}px`}>
               ${p.head('plant', 'Plante', html`
                 <a class="icon-btn" href=${href.plant(plantId)} title="Ouvrir la fiche dans Flore" aria-label="Ouvrir la fiche dans Flore">${icon('arrows-angle-expand')}</a>
-                <button class="icon-btn" type="button" title="Fermer la fiche" aria-label="Fermer la fiche"
+                <button class="icon-btn" type="button" title="Fermer la fiche (Échap)" aria-label="Fermer la fiche"
                   @click=${() => this.#closePlant()}>${icon('x-lg')}</button>`, true)}
               <div class="pane-body"><gf-plant-detail embedded sheet="collections" plant-id=${plantId} view=${this.#store.state.mode}></gf-plant-detail>${this.#pager(plantId, false)}</div>
             </section>`) : nothing}
