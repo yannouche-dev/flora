@@ -22,6 +22,7 @@ import { moduleOn } from '../../core/modules.js';
 import { fr } from '../../core/fr.js';
 import { PaneSizer, splitStyles } from '../../core/panes.js';
 import { whenReady } from '../../core/store.js';
+import { modalOpen } from '../../core/history.js';
 import { ui } from '../../styles/ui.js';
 import { nameOf } from './cards.js';
 import '../../components/gf-plant-detail.js';
@@ -127,7 +128,8 @@ export class MaPlantSheet extends LitElement {
   }
 
   #onKey = (/** @type {KeyboardEvent} */ e) => {
-    if (e.altKey || e.ctrlKey || e.metaKey || e.defaultPrevented || this.open == null) return;
+    // A dialog over the page (« Noter ici » from this sheet, a question): its keys, not the sheet's under it.
+    if (e.altKey || e.ctrlKey || e.metaKey || e.defaultPrevented || this.open == null || modalOpen()) return;
     const t = /** @type {HTMLElement} */ (e.composedPath()[0]);
     if (t?.closest?.('input, textarea, select, [contenteditable]')) return;
     const arrow = e.key === 'ArrowRight' || e.key === 'ArrowLeft';

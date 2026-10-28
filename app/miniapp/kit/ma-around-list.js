@@ -29,6 +29,7 @@ import { discoverEvents, discoverState, discovering, firstMatchShown, PLANTS_BEF
 import { UNREAD_LOOKALIKES } from '../../core/lookalikes.js';
 import { moduleEvents, moduleOn } from '../../core/modules.js';
 import { openModal } from '../../core/history.js';
+import { briefToast } from '../../core/toast.js';
 import { config } from '../../config.js';
 import { PaneSizer, splitStyles } from '../../core/panes.js';
 import { sheetSession } from '../../core/sheet-session.js';
@@ -354,6 +355,16 @@ export class MaAroundList extends LitElement {
     this.#closeFull();
   };
 
+  /**
+   * « Retirer » a match (Matchs): out of the matches, and out of the favourites if this game added it (still its own:
+   * kit/session.js#unmatch); a favourite that stays (the user's) is said, by the list — the match's tile is gone.
+   * @param {Card} card
+   */
+  async #unmatch(card) {
+    if (await this.#s.unmatch(card) !== 'kept') return;
+    briefToast('Retiré des matchs. Il reste dans vos favoris.', { near: this.renderRoot.querySelector('section.list') });
+  }
+
   // ── Rencontres: the photos of the first match ─────────────────────────
 
   /** What the game keeps of its photos: the plant whose heart brought them, the pane closed — none: not yet. @returns {{ by?: number, closed: boolean } | null} */
@@ -530,8 +541,8 @@ export class MaAroundList extends LitElement {
           ?photos=${this.#photosButton} @deck-decide=${this.#onDecide} @deck-undo=${this.#onUndo} @deck-photos=${this.#onPhotos}
           @deck-open=${(/** @type {CustomEvent} */ e) => this.#openPlant(e.detail.id, s.deck.map(x => x.plant.id))}></ma-deck>` : nothing}
       ${cards && view === 'matches' && !harvestEmpty ? (matches ? html`<div class="grid">${matchCards.map(x => html`<div class="mwrap">${this.#card(x, matchCards.map(m => m.plant.id), this.media && this.#mediaState ? () => this.#chooseShown(x.plant.id) : null)}
-          <button class="unmatch" type="button" title="Retirer ce match (et des favoris)" aria-label=${'Retirer ' + nameOf(x.plant) + ' des matchs'}
-            @click=${() => s.unmatch(x)}>${icon('x-lg')} Retirer</button></div>`)}</div>`
+          <button class="unmatch" type="button" title="Retirer ce match (et le favori qu’il a ajouté)" aria-label=${'Retirer ' + nameOf(x.plant) + ' des matchs'}
+            @click=${() => this.#unmatch(x)}>${icon('x-lg')} Retirer</button></div>`)}</div>`
         : html`<p class="muted empty">Pas encore de match. Glissez à droite une plante qui vous plaît dans « Rencontres ».</p>`) : nothing}
       ${cards && view === 'all' && !harvestEmpty ? this.#allView(cards) : nothing}
       ${cards ? html`

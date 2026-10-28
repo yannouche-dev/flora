@@ -1,7 +1,7 @@
 // @ts-check
-// A parcours (or a place) as a walk: its plants in the order they were added, and the line from one to the next.
-// Shared by the parcours' recap (app/miniapp/kit/trail-store.js: distance, profile) and the « Vue 3D »
-// (gf-map3d.js), so both draw the same walk. Pure: no DOM, no storage.
+// A parcours (a place marked `walk`, core/place-model.js) as a walk: its plants in the order they were added, and the
+// line from one to the next. Shared by the parcours' recap (app/miniapp/kit/trail-recap.js: distance, profile) and the
+// « Vue 3D » (gf-map3d.js: a parcours only), so both draw the same walk. Pure: no DOM, no storage.
 
 /** @typedef {[number, number]} LngLat */
 

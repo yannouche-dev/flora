@@ -13,7 +13,10 @@ import { ui } from '../styles/ui.js';
 import { kindIcon } from '../core/icons.js';
 import { openView } from '../core/history.js';
 
-/** Preview of a collection received by link (#/shared?d=…), with « Enregistrer dans Mes plantes ». */
+/**
+ * Preview of a collection received by link (#/shared?d=…), with « Enregistrer dans Mes plantes »: a list, a lieu, or a
+ * parcours (« Parcours partagé »: its line, its plants in the order met, its start) — saved as one, the user's own.
+ */
 export class GfShared extends LitElement {
   static properties = {
     data: {},
@@ -98,7 +101,7 @@ export class GfShared extends LitElement {
       const records = await getPlants(ids);
       this._plants = records;
       this._shared = shared;
-      document.title = (shared.name || (shared.kind === 'place' ? 'Lieu partagé' : 'Liste partagée')) + ' — GeoFlora';
+      document.title = (shared.name || sharedKind(shared)) + ' — GeoFlora';
     } catch (error) {
       this._error = /** @type {Error} */ (error).message;
     }
@@ -109,8 +112,9 @@ export class GfShared extends LitElement {
     if (!shared) return;
     this._busy = true;
     try {
+      // A parcours stays one (its line, « Continuer »); received, it is the user's own (no origin).
       let collection = shared.kind === 'place' && shared.coordinates
-        ? newPlace(shared.coordinates, { name: shared.name })
+        ? newPlace(shared.coordinates, { name: shared.name, ...(shared.walk ? { walk: true } : {}), ...(shared.startedHere ? { startedHere: true } : {}) })
         : newCollection('list', { name: shared.name });
       // Every shared occurrence (a walk may note the same plant several times, each at its spot).
       const byId = new Map(this._plants.map(p => [p.id, p]));
@@ -174,7 +178,8 @@ export class GfShared extends LitElement {
 
   /**
    * The shared place on its map: its point and every plant where it was noted — framed on all of them (a walk
-   * shared shows the whole walk).
+   * shared shows the whole walk, and its line: from its start when it began « ici », through each plant noted at a
+   * position of its own, in the order met — walk.js's rule).
    * @param {import('../core/share.js').SharedCollection} shared @param {any[]} rows @param {Map<number, any>} byId
    */
   #map(shared, rows, byId) {
@@ -191,7 +196,8 @@ export class GfShared extends LitElement {
     const frame = { key: 'shared:' + points.map(c => c.join(',')).join(';'), points, maxZoom: 18 };
     const spot = { type: 'Feature', id: 'shared', geometry: { type: 'Point', coordinates: origin },
       properties: { kind: 'place', name: shared.name, plants: rows.map(() => ({ abundance: 'moyen', harvests: [] })), plantIds: [] } };
-    return html`<gf-map no-search no-create .spots=${[spot]} .plants=${plants} plant-zoom="0" .frame=${frame}></gf-map>`;
+    const line = shared.walk ? { key: 'shared', coordinates: [...(shared.startedHere ? [origin] : []), ...rows.filter(r => r.coordinates).map(r => r.coordinates)] } : null;
+    return html`<gf-map no-search no-create .spots=${[spot]} .plants=${plants} plant-zoom="0" .frame=${frame} .line=${line}></gf-map>`;
   }
 
   render() {
@@ -214,7 +220,7 @@ export class GfShared extends LitElement {
 
     return html`
       <div class="wrap">
-        <span class="kicker">${shared.kind === 'place' ? 'Lieu partagé' : 'Liste partagée'}</span>
+        <span class="kicker">${sharedKind(shared)}</span>
         <h1>${shared.name || 'Sans nom'}</h1>
         <p class="muted">${count}${missing > 0 ? ` (${missing} inconnue${missing > 1 ? 's' : ''} de cette version de la flore)` : ''}</p>
         ${shared.coordinates ? this.#map(shared, rows, byId) : nothing}
@@ -230,10 +236,14 @@ export class GfShared extends LitElement {
           <button class="primary large" type="button" ?disabled=${this._busy || !this._plants.length} @click=${this.#save}>Enregistrer dans Mes plantes</button>
           <a class="link muted" href=${href.collections()}>Ignorer</a>
         </div>
-        <p class="muted">L’enregistrement crée ${shared.kind === 'place' ? 'un nouveau lieu' : 'une nouvelle liste'} sur cet appareil ; rien n’est envoyé.</p>
+        <p class="muted">${shared.walk ? 'L’enregistrement crée un nouveau parcours dans Mes plantes ; rien n’est envoyé.'
+          : `L’enregistrement crée ${shared.kind === 'place' ? 'un nouveau lieu' : 'une nouvelle liste'} sur cet appareil ; rien n’est envoyé.`}</p>
       </div>
     `;
   }
 }
+
+/** What was shared, in words. @param {import('../core/share.js').SharedCollection} shared */
+const sharedKind = shared => shared.walk ? 'Parcours partagé' : shared.kind === 'place' ? 'Lieu partagé' : 'Liste partagée';
 
 customElements.define('gf-shared', GfShared);

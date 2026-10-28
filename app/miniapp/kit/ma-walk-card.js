@@ -1,7 +1,8 @@
 // @ts-check
 // The walk under way, small, at the top of its column: its name in full (on two lines at most), always editable and
 // kept as it is typed (Échap brings back the one before); what it counts and my position; two discreet icons,
-// « Partager » and « Terminer » (a walk is not ended by mistake). A plant touched (in the list or on the map): its
+// « Partager » (once it has a plant, as on its recap: never where the walker stands alone; its position asked first)
+// and « Terminer » (a walk is not ended by mistake). A plant touched (in the list or on the map): its
 // name, « Ajouter ici » under the thumb (once more, where I stand) and ✕ (the occurrence touched on the map, else
 // its last) — the game does it (kit/trail-session.js).
 
@@ -86,7 +87,7 @@ export class MaWalkCard extends LitElement {
         ${icon('pencil')}
       </label>
       <span class="acts">
-        <button class="share" type="button" aria-label="Partager le parcours" title="Partager le parcours : un lien avec sa carte et ses plantes" @click=${() => s.share()}>${icon('share')}</button>
+        ${t.properties.plants.length ? html`<button class="share" type="button" aria-label="Partager le parcours" title="Partager le parcours : un lien avec sa carte et ses plantes" @click=${() => s.share()}>${icon('share')}</button>` : nothing}
         <button class="end" type="button" aria-label="Terminer le parcours" title="Terminer le parcours (il reste dans Mes plantes)" @click=${() => s.end()}>${icon('flag-fill')}</button>
       </span>
       <span class="meta"><span>${countOf(t)}</span><span class="gps ${s.fix ? '' : 'off'}">${gps}</span></span>

@@ -52,23 +52,32 @@ const canCompress = () => typeof CompressionStream === 'function' && typeof Deco
  * @property {string} name
  * @property {'list' | 'place'} kind
  * @property {[number, number] | null} coordinates
- * @property {{ plantId: number, abundance?: string, coordinates?: [number, number] }[]} plants
+ * @property {{ plantId: number, abundance?: string, coordinates?: [number, number] }[]} plants  a parcours': in the order met
+ * @property {boolean} [walk]           a parcours (a place's only)
+ * @property {boolean} [startedHere]    started where the walker stood: its point is the walk's first step
  */
 
 /**
- * Encodes a collection for a link. Prefix "z" = compressed, "j" = plain JSON.
+ * Encodes a collection for a link. Prefix "z" = compressed, "j" = plain JSON. A parcours says so (`w`), and its start
+ * where the walker stood (`s`); its plants go in the order met. Still `v: 1`: an older app reads it as a plain lieu
+ * (it ignores what it does not know, and would refuse a v 2).
  * @param {import('./collections.js').Collection} collection
  * @returns {Promise<string>}
  */
 export async function encodeCollection(collection) {
   const p = collection.properties;
   const isPlace = p.kind === 'place' && collection.geometry;
+  const walk = Boolean(isPlace && p.walk);
+  // Inlined (walk.js byAddedAt): this module is in the app's start, walk.js is not.
+  const plants = walk ? [...p.plants].sort((a, b) => String(a.addedAt).localeCompare(String(b.addedAt))) : p.plants;
   const compact = {
     v: 1,
     n: p.kind === 'favorites' ? 'Favoris partagés' : p.name,
     k: isPlace ? 'place' : 'list',
     ...(isPlace ? { c: collection.geometry?.coordinates } : {}),
-    p: p.plants.filter(e => e.plantId !== null).map(e => {
+    ...(walk ? { w: 1 } : {}),
+    ...(isPlace && p.startedHere ? { s: 1 } : {}),
+    p: plants.filter(e => e.plantId !== null).map(e => {
       if (!isPlace) return [e.plantId];
       // Plant position as an offset from the place, in 1e-6 degrees (≈ 0.1 m): short integers.
       const origin = /** @type {[number, number]} */ (collection.geometry?.coordinates);
@@ -127,11 +136,14 @@ export async function decodeCollection(data) {
       return plant;
     });
 
+  const kind = json.k === 'place' && c ? 'place' : 'list';
   return {
     name: typeof json.n === 'string' ? json.n.slice(0, 300) : '',
-    kind: json.k === 'place' && c ? 'place' : 'list',
+    kind,
     coordinates: json.k === 'place' ? c : null,
-    plants
+    plants,
+    ...(kind === 'place' && json.w === 1 ? { walk: true } : {}),
+    ...(kind === 'place' && json.s === 1 ? { startedHere: true } : {})
   };
 }
 

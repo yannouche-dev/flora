@@ -32,8 +32,9 @@ test('Découvrir (l’icône film) ouvre une activité seule à l’écran ; « 
   await page.getByRole('dialog', { name: 'Découvrir' }).locator('li[data-app="parcours"]').getByRole('button', { name: 'Commencer : Parcours botanique', exact: true }).click();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/app/parcours/start');
   await expect(page.locator('gf-miniapp .go')).toBeVisible();
-  // Alone: no header, no tab bar.
-  await expect(page.locator('gf-app header')).toHaveCount(0);
+  // Alone: no header, no tab bar (« Noter ici »'s dialog is there, closed: its own header unseen).
+  await expect(page.locator('gf-app header:visible')).toHaveCount(0);
+  await expect(page.getByRole('link', { name: 'GeoFlora — accueil' })).toHaveCount(0);
   await expect(page.locator('gf-tabbar')).toHaveCount(0);
   // The one way out, named on a phone too (its word hidden there).
   await expect(page.locator('gf-miniapp .quit')).toHaveAccessibleName('Quitter l’activité');
@@ -212,6 +213,7 @@ test('Parcours : en marche puis « Recommencer » ; le parcours enregistré quit
   await replay(page, 'l’activité en cours');
   await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/app/parcours/start');
   await expect(page.locator('gf-miniapp .go')).toBeVisible();
+  // The walks to continue are read from Mes plantes: no list of them on the device.
   const owned = () => page.evaluate(() => ['geoflora.trail', 'geoflora.trails', 'geoflora.trailDone'].map(k => localStorage.getItem(k)));
   expect(await owned()).toEqual([null, null, null]);
   // The walk it saved in Mes plantes is its own: gone too.

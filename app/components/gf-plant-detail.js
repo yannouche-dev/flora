@@ -5,9 +5,9 @@ import * as db from '../core/db.js';
 import { commonOf, nameOf } from '../core/plants.js';
 import { lastSearchHash } from '../core/query.js';
 import { StoreController, arrange, arrangedMode, closeKing, openKing, whenReady } from '../core/store.js';
-import { formatDistance, getMembership, promoteFavorite, setInCollection, toggleFavorite } from '../core/collections.js';
+import { addedTo, formatDistance, getMembership, promoteFavorites, setInCollection, toggleFavorite } from '../core/collections.js';
 import { context } from '../core/context.js';
-import { lastFix, oneFix } from '../core/geo.js';
+import { lastFix, oneFix, recentFix } from '../core/geo.js';
 import { savedRadius } from '../core/nearby.js';
 import { href } from '../core/router.js';
 import { share } from '../core/share.js';
@@ -21,6 +21,7 @@ import './gf-status.js';
 import './gf-lookalikes.js';
 import { emergency } from '../core/poison.js';
 import './gf-add-to.js';
+import { confirmAsk } from './gf-ask.js';
 import './gf-sheet-map.js';
 import { ownWords } from './gf-map-options.js';
 import { lookFor } from '../core/map-settings.js';
@@ -364,7 +365,10 @@ export class GfPlantDetail extends LitElement {
     subheading: { type: Boolean },
     /** The plant waiting under the swiped card (Flore): not the page's plant yet, so it leaves the title alone. */
     preview: { type: Boolean },
-    /** Opened in a scenario played as an app of its own (the Parcours): no action leading out of it (Carte, Noter ici). */
+    /**
+     * Opened in an activity, alone on the screen: no action leading out of it (Carte); « Noter ici » opens its dialog
+     * over it (gf-capture, the address unchanged).
+     */
     scoped: { type: Boolean },
     /** The panes of the tree only, not the sheet (Découvrir: the panes its steps add, beside the cards). */
     panesOnly: { type: Boolean, attribute: 'panes-only' },
@@ -1604,7 +1608,8 @@ export class GfPlantDetail extends LitElement {
     const name = nameOf(plant);
     /** @type {Record<string, () => unknown>} */
     const buttons = {
-      fav: () => html`<button type="button" class="fav" ?inert=${king} aria-pressed=${fav ? 'true' : 'false'} @click=${() => toggleFavorite(plant)}>
+      // A favourite with a note or a harvest log taken out: asked first, as « Ajouter à… » does (toggleFavorite).
+      fav: () => html`<button type="button" class="fav" ?inert=${king} aria-pressed=${fav ? 'true' : 'false'} @click=${() => toggleFavorite(plant, undefined, confirmAsk)}>
         ${icon(fav ? 'heart-fill' : 'heart')}<span>Favori</span></button>`,
       addTo: () => html`<button type="button" ?inert=${king} @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-add-to'))?.open()}>${icon('plus-lg')}<span>Ajouter à…</span></button>`,
       share: () => html`<button type="button" ?inert=${king} @click=${() => this.#share(plant, name)}>${icon('share')}<span>Partager</span></button>`,
@@ -1617,9 +1622,10 @@ export class GfPlantDetail extends LitElement {
         return html`<button type="button" ?inert=${king} title=${'Ajouter à « ' + current.name + ' »'} @click=${() => this.#addCurrent(plant, current)}>
           ${icon(current.kind === 'place' ? 'geo-alt-fill' : 'plus-lg')}<span class="short">${current.name}</span></button>`;
       },
-      spot: () => html`<a class="button" ?inert=${king} href=${href.newSpot(plant.id)}>${icon('geo-alt-fill')}<span>Noter ici</span></a>`
+      // The one « Noter ici » (gf-capture), this plant chosen: over the page, an activity too.
+      spot: () => html`<button type="button" ?inert=${king} @click=${() => this.#noteHere(plant)}>${icon('geo-alt-fill')}<span>Noter ici</span></button>`
     };
-    const keys = subOrder(v, 'actions').filter(k => buttons[k] && !(this.scoped && (k === 'map' || k === 'spot'))
+    const keys = subOrder(v, 'actions').filter(k => buttons[k] && !(this.scoped && k === 'map')
       && (king || (!isSubHidden(v, 'actions', k) && (k !== 'addCurrent' || this.#currentCollection(plant)))));
     if (!keys.length && !crown) return nothing;
     return html`<nav class="action-bar ${king ? 'king' : ''}" aria-label="Actions">
@@ -1638,6 +1644,11 @@ export class GfPlantDetail extends LitElement {
     </nav>`;
   }
 
+  /** « Noter ici » with this plant chosen: the app's one dialog (gf-app opens gf-capture). @param {any} plant */
+  #noteHere(plant) {
+    this.dispatchEvent(new CustomEvent('open-capture', { bubbles: true, composed: true, detail: { plant } }));
+  }
+
   /** The current collection or place (context.js), when this plant is not in it yet. @param {any} plant */
   #currentCollection(plant) {
     const id = context().collection;
@@ -1647,11 +1658,14 @@ export class GfPlantDetail extends LitElement {
     return summary;
   }
 
-  /** @param {any} plant @param {{ id: string, name: string, kind: string }} current */
+  /**
+   * Into the current list or lieu, in one tap: a lieu takes it at your position when you stand near it (a position from
+   * the last minute), else at its point — said (addedTo). @param {any} plant @param {{ id: string, name: string, kind: string }} current
+   */
   async #addCurrent(plant, current) {
     try {
-      await setInCollection(current.id, plant, true);
-      this._shareNote = `Ajoutée à « ${current.name} ».`;
+      const fix = recentFix();
+      this._shareNote = addedTo(await setInCollection(current.id, plant, true, fix), fix);
     } catch (error) {
       this._shareNote = 'Ajout impossible : ' + /** @type {Error} */ (error).message;
     }
@@ -3178,7 +3192,7 @@ export class GfPlantDetail extends LitElement {
           this._noteFailed = stored ? null : key;
           if (!stored) return;
           // A favourite of a game, given a note: the user's own now (« Recommencer » the game keeps it).
-          if (text.trim()) promoteFavorite(plant.id);
+          if (text.trim()) promoteFavorites([plant.id]);
           this._noteSaved = key;
           setTimeout(() => { if (this._noteSaved === key) this._noteSaved = null; }, 1500);
         }, 400);

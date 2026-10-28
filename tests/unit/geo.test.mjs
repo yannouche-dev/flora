@@ -1,7 +1,7 @@
 // app/core/geo.js: one position, once, from the shared watch (takeFix, oneFix) — a fix young enough (maxAge: from the
 // call), why there is none (the watch's words and code), null past the timeout or once dropped (signal); told at once
 // when the watch already holds such a fix (within the call, as the screens' own copies did), told once only, and the
-// watch stopped after. The browser's geolocation is a fake one here, which hands out positions when told to; the
+// watch stopped after. And the last fix while it is recent (recentFix), never asked of the browser. The browser's geolocation is a fake one here, which hands out positions when told to; the
 // module keeps its state from one test to the next (as in a page), so the tests run in order.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -19,7 +19,7 @@ const geo = {
 };
 Object.defineProperty(globalThis.navigator, 'geolocation', { value: geo, configurable: true });
 
-const { FIX_MAX_AGE, oneFix, takeFix, watchLocation } = await import('../../app/core/geo.js');
+const { FIX_MAX_AGE, oneFix, recentFix, takeFix, watchLocation } = await import('../../app/core/geo.js');
 
 /** The device finds itself at [lon, lat] (`ago` ms ago). @param {number} lon @param {number} lat @param {number} [ago] */
 const found = (lon, lat, ago = 0) => {
@@ -122,6 +122,17 @@ test('signal : abandonné, null ; ni la position ni le délai ne parlent après'
   found(5, 47);
   await new Promise(resolve => setTimeout(resolve, 40));
   assert.deepEqual(told, [null], 'une fois seulement');
+  assert.equal(geo.watches.size, 0);
+});
+
+test('recentFix : la dernière position si elle a moins d’une minute (ou de maxAge), sans rien demander au navigateur', async () => {
+  await holding(4, 46, 30_000);
+  const started = geo.started;
+  assert.deepEqual(recentFix()?.coordinates, [4, 46]);
+  await holding(4.1, 46.1, 2 * 60_000);
+  assert.equal(recentFix(), null, 'celle d’il y a deux minutes : aucune');
+  assert.deepEqual(recentFix(3 * 60_000)?.coordinates, [4.1, 46.1]);
+  assert.equal(geo.started, started + 1, 'seul holding a démarré le suivi');
   assert.equal(geo.watches.size, 0);
 });
 

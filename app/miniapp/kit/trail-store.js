@@ -1,16 +1,21 @@
 // @ts-check
-// The Parcours botanique, what it keeps on the device and what is pure about it: the walk under way (its place id),
-// the walks to take up again, the one just ended (its recap, until left); a walk's plants grouped (each plant once,
-// its occurrences together), counted; its recap's numbers are trail-recap.js's (with the walk and the altitudes: not
-// at the start of the app). Tested under Node (tests/unit/trail.test.mjs). A walk itself is a place of Mes plantes
-// (core/collections.js).
+// The Parcours botanique, what it keeps on the device and what is pure about it: the walk under way (its place id), the
+// one just ended (its recap, until left); a walk's plants grouped (each plant once, its occurrences together), counted;
+// its recap's numbers are trail-recap.js's (with the walk and the altitudes: not at the start of the app). Tested under
+// Node (tests/unit/trail.test.mjs). A walk itself is a place of Mes plantes marked a walk (core/place-model.js `walk`):
+// those to continue are read there (trail-session.js), not kept here — the list this device kept before (LIST) is read
+// once at start, to mark them (main.js, collections.js#markWalks), then forgotten.
 
 import { config } from '../../config.js';
-import { readJSON } from '../../core/prefs.js';
+import { readJSON, writeJSON } from '../../core/prefs.js';
+
+// What a parcours holds, in words (« 9 plantes, notées 12 fois »): pure, with the shape of a collection.
+export { countOf } from '../../core/place-model.js';
 
 /**
- * The parcours being walked (its place id), those walked before, and the one just ended (its recap, until left); none
- * (null): the key removed — a parcours never opened, or played again, leaves none behind.
+ * The parcours being walked (its place id) and the one just ended (its recap, until left); none (null): the key removed
+ * — a parcours never opened, or played again, leaves none behind. LIST: the walks this device kept to take up again,
+ * before they were read from Mes plantes (obsolete: no longer written, forgotten once marked; gone with 3.2).
  */
 export const KEY = config.storageKeys.trail, LIST = config.storageKeys.trails, DONE = config.storageKeys.trailDone;
 
@@ -20,21 +25,24 @@ export const walkUnderWay = () => Boolean(readJSON(KEY, null));
 export const walkOn = () => readJSON(KEY, null);
 /** The parcours just ended, whose recap shows (its place id), if any. @returns {string | null} */
 export const walkDone = () => readJSON(DONE, null);
-/** The parcours this device kept (to take up again, just ended): theirs before origins were recorded. @returns {string[]} */
+/** The parcours this device kept (to take up again, just ended): theirs before origins and the mark were recorded. @returns {string[]} */
 export const keptWalks = () => [...(/** @type {string[]} */ (readJSON(LIST, []))), readJSON(DONE, null)].filter(x => typeof x === 'string');
+
+/**
+ * A parcours put under way — continued (« Continuer le parcours » from Mes plantes, « Continuer un parcours », « Le
+ * continuer »), or just made —, no recap shown. Returns the one under way until then, left for it (null: none, or this one) — ended by the
+ * caller as « Terminer » ends one (collections.js walkEnded: with plants, the user's), never left the Parcours' unsaid.
+ * @param {string} id @returns {string | null}
+ */
+export function continueWalk(id) {
+  const was = walkOn();
+  writeJSON(KEY, id);
+  writeJSON(DONE, null);
+  return was && was !== id ? was : null;
+}
 
 /** A new parcours' name, until the place where it starts is known (« Mon parcours botanique en forêt de … »). */
 export const NAMED = 'Mon parcours botanique';
-
-/**
- * « 9 plantes, notées 12 fois » (a plant met several times counts once among the plants).
- * @param {{ properties: { plants: { plantId: number | null }[] } }} t
- */
-export function countOf(t) {
-  const n = t.properties.plants.length, species = new Set(t.properties.plants.map(e => e.plantId)).size;
-  if (!n) return 'Aucune plante encore';
-  return n > species ? `${species} plante${species > 1 ? 's' : ''}, notée${species > 1 ? 's' : ''} ${n} fois` : `${n} plante${n > 1 ? 's' : ''}`;
-}
 
 /**
  * The plants of the parcours, each once — its occurrences together, in the order met — the last met first.

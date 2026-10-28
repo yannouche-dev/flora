@@ -27,6 +27,29 @@ test('lieu : nom, point, abondances et positions (≈ 0,1 m) survivent au lien',
   assert.equal(back.plants[1].coordinates, undefined, 'au point du lieu : pas de décalage');
 });
 
+test('parcours : il le reste (son départ « ici » aussi), ses plantes dans l’ordre rencontré ; un lieu, non', async () => {
+  const at = (/** @type {number} */ m) => `2026-10-13T09:${String(m).padStart(2, '0')}:00.000Z`;
+  const walk = { ...place, properties: { ...place.properties, name: 'Chemin du lavoir', walk: true, startedHere: true, plants: [
+    { plantId: 128268, abundance: 'rare', coordinates: [2.3502, 48.8503], addedAt: at(30) },
+    { plantId: 81541, abundance: 'moyen', coordinates: [2.3501, 48.8501], addedAt: at(10) },
+    { plantId: 100225, abundance: 'moyen', coordinates: [2.35, 48.85], addedAt: at(20) }
+  ] } };
+  const back = await decodeCollection(await encodeCollection(/** @type {any} */ (walk)));
+  assert.deepEqual([back.kind, back.walk, back.startedHere], ['place', true, true]);
+  assert.deepEqual(back.plants.map(p => p.plantId), [81541, 100225, 128268], 'dans l’ordre rencontré');
+  // A lieu (or a list) is neither — not even one given the marks by hand.
+  const plain = await decodeCollection(await encodeCollection(place));
+  assert.deepEqual([plain.walk, plain.startedHere], [undefined, undefined]);
+  assert.deepEqual(plain.plants.map(p => p.plantId), [81541, 100225, 128268], 'un lieu : dans son ordre');
+  const list = { ...walk, geometry: null, properties: { ...walk.properties, kind: 'list' } };
+  const asList = await decodeCollection(await encodeCollection(/** @type {any} */ (list)));
+  assert.deepEqual([asList.kind, asList.walk, asList.startedHere], ['list', undefined, undefined]);
+  // A list's link that says it is a walk is read as a list.
+  const forged = { v: 1, n: 'x', k: 'list', w: 1, s: 1, p: [[1]] };
+  const read = await decodeCollection('j' + Buffer.from(JSON.stringify(forged)).toString('base64url'));
+  assert.deepEqual([read.kind, read.walk, read.startedHere], ['list', undefined, undefined]);
+});
+
 test('liste et favoris : sans point, les favoris partagés sous un nom à eux', async () => {
   const fav = { type: 'Feature', id: 'favorites', geometry: null, properties: { kind: 'favorites', name: 'Favoris', plants: [{ plantId: 1 }, { plantId: 2 }] } };
   const back = await decodeCollection(await encodeCollection(/** @type {any} */ (fav)));

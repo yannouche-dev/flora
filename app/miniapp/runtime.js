@@ -39,8 +39,8 @@ export const storageKey = (id, part) => config.storageKeys.appPrefix + id + '.' 
  * What « Recommencer » will delete, said in its confirmation — the favourites its matches added, each collection it
  * made in Mes plantes still its own (« le parcours en cours (4 plantes) »), its session (as the manifest says it,
  * owns.label: « la partie en cours » of a game, Orchidées de Mirabel's circle and filters; else « l’activité en
- * cours ») — and what it keeps of what came from it (the user's own: a parcours finished, a favourite put in a
- * collection). Pure.
+ * cours ») — and what it keeps of what came from it (the user's own: a parcours finished, a favourite filed, annotated,
+ * kept by « Revoir les premiers pas »…: place-model.js, « What a mini-app made »). Pure.
  * @param {Manifest} m @param {import('../core/place-model.js').Made} made @returns {{ gone: string[], kept: string[] }}
  */
 export function replayItems(m, made) {
@@ -56,7 +56,7 @@ export function replayItems(m, made) {
     ],
     kept: [
       ...(made.kept.collections && m.owns.made ? [count(m.owns.made.kept, made.kept.collections)] : []),
-      ...(made.kept.favorites ? [count(['Votre favori venu de cette activité, rangé ou annoté depuis, est conservé.', 'Vos {n} favoris venus de cette activité, rangés ou annotés depuis, sont conservés.'], made.kept.favorites)] : [])
+      ...(made.kept.favorites ? [count([`Votre favori venu de ${m.title}, devenu le vôtre, est conservé.`, `Vos {n} favoris venus de ${m.title}, devenus les vôtres, sont conservés.`], made.kept.favorites)] : [])
     ]
   };
 }

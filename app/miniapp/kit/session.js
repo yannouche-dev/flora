@@ -16,7 +16,7 @@ import { addressAt } from '../../core/geoservices.js';
 import { verdictOf } from '../../core/alerts.js';
 import { lookalikesOf } from '../../core/lookalikes.js';
 import { discovering } from '../../core/discover.js';
-import { forgetFavoriteMadeBy, isFavorite, toggleFavorite } from '../../core/collections.js';
+import { addFavorite, forgetFavoriteMadeBy, isFavorite } from '../../core/collections.js';
 import { thumbCredit } from '../../core/credit.js';
 import * as sources from '../../core/sources.js';
 import { whenReady } from '../../core/store.js';
@@ -104,6 +104,13 @@ export class AroundSession extends EventTarget {
     if (this.keptFromBefore) app.set({ guided: discovering() });
     app.addEventListener('dispose', () => this.dispose(), { once: true });
   }
+
+  /**
+   * The favourites the hearts of this game asked for, by plant id: the entry each one added (null: a favourite
+   * already, or not written) — ↺ and « Retirer » wait for it, and ↺ takes back only that one.
+   * @type {Map<number, Promise<import('../../core/collections.js').PlantEntry | null>>}
+   */
+  #writes = new Map();
 
   /** The app's context: the place, the distance, the swipes. @returns {any} */
   get c() { return this.app.c; }
@@ -379,8 +386,9 @@ export class AroundSession extends EventTarget {
     this.app.set(avoided ? avoid(this.c, id) : { ...swipe(this.c, id, match), ...(choose && this.c.focus !== id ? { focus: id, mediaAt: null } : {}) });
     this.app.seen(id);
     if (match) {
-      // A favourite of this game (its origin): « Recommencer » takes it away again.
-      if (fav) toggleFavorite(card.plant, { app: this.app.m.id }).catch(() => {});
+      // A favourite of this game (its origin): « Recommencer » takes it away again. Added only if it is not one (a
+      // heart never removes a favourite, whatever this tab believes).
+      if (fav) this.#writes.set(id, addFavorite(card.plant, { app: this.app.m.id }).catch(() => null));
       if (matchMedia('(pointer: coarse)').matches) navigator.vibrate?.(30);
     }
     this.changed();
@@ -396,7 +404,10 @@ export class AroundSession extends EventTarget {
     this.changed();
   }
 
-  /** ↺: the last card swiped comes back on top (a match undone: out of the favourites too, if it put it there). */
+  /**
+   * ↺: the last card swiped comes back on top — a match undone: out of the favourites too, if its heart put it there
+   * and it is still this game's (not filed, annotated… since: collections.js#forgetFavoriteMadeBy).
+   */
   rewind() {
     const last = this.history[this.history.length - 1];
     if (!last) return;
@@ -404,18 +415,32 @@ export class AroundSession extends EventTarget {
     // The heart that chose the plant undone: the plant chosen before it (none: the card on top again).
     const back = last.liked && this.chooses && 'was' in last && this.c.focus === last.id ? { focus: last.was ?? null, mediaAt: null } : {};
     this.app.set({ ...unswipe(this.c, last.id), ...back });
-    const card = (this.cards || []).find(c => c.plant.id === last.id);
-    if (last.fav && card && isFavorite(last.id)) toggleFavorite(card.plant).catch(() => {});
+    if (last.fav) this.#forget(last.id);
     this.changed();
+  }
+
+  /** The favourite this game's heart added to `id`, taken back once written (none added: nothing). @param {number} id */
+  async #forget(id) {
+    const write = this.#writes.get(id);
+    this.#writes.delete(id);
+    if (write && await write) await forgetFavoriteMadeBy(id, this.app.m.id);
   }
 
   /** A card back in the deck (on top: a plant touched on the map or in the list around). @param {number} id */
   unswipe(id) { this.app.set(unswipe(this.c, id)); }
 
-  /** A match taken back: out of the matches and the favourites. @param {Card} c */
-  unmatch(c) {
-    this.app.set(unswipe(this.c, c.plant.id));
-    if (isFavorite(c.plant.id)) toggleFavorite(c.plant).catch(() => {});
+  /**
+   * A match taken back (Matchs, « Retirer »): out of the matches, and out of the favourites if this game added it and
+   * it is still its own. Resolves 'kept' when the plant stays a favourite (one of the user's: set before, elsewhere,
+   * or made theirs since), else null. @param {Card} c @returns {Promise<'kept' | null>}
+   */
+  async unmatch(c) {
+    const id = c.plant.id;
+    this.app.set(unswipe(this.c, id));
+    await this.#writes.get(id);
+    this.#writes.delete(id);
+    await forgetFavoriteMadeBy(id, this.app.m.id);
+    return isFavorite(id) ? 'kept' : null;
   }
 
   /** The cards passed (and those recognised to avoid, Cueillette prudente), to see them again. */

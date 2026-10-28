@@ -244,6 +244,41 @@ test.describe('un grand écran', () => {
     await expect(page.locator('gf-layout .empty li')).toHaveCount(5);
   });
 
+  test('les cartes de Rencontres, ↺ : reprend le favori que son cœur a ajouté, tel qu’il l’a laissé — jamais un favori annoté depuis, ni un d’avant', async ({ app, page }) => {
+    await app.open(`#/layout/[map(r=500m),deck,plant.status]?${AT}`);
+    const top = page.locator('dl-deck ma-deck .swipe-card.top');
+    const ail = plantId(AIL);
+    await expect(top).toHaveAttribute('data-id', String(ail));
+    const favourite = () => page.evaluate(async id => {
+      const e = (await (await import('/app/core/collections.js')).getPlace('favorites'))?.properties.plants.find((/** @type {any} */ x) => x.plantId === id);
+      return e ? e.rating : null;
+    }, ail);
+    const like = page.locator('dl-deck ma-deck .round.like'), undo = page.locator('dl-deck ma-deck .round.undo');
+    // A heart, then ↺: the favourite it added goes, the card back on top.
+    await like.click();
+    await expect.poll(favourite).toBe(0);
+    await undo.click();
+    await expect(top).toHaveAttribute('data-id', String(ail));
+    await expect.poll(favourite).toBe(null);
+    // A heart, the favourite rated since (its sheet, Mes plantes): ↺ leaves it, the user's.
+    await like.click();
+    await expect.poll(favourite).toBe(0);
+    await page.evaluate(async id => {
+      const c = await import('/app/core/collections.js');
+      await c.updatePlace(c.FAVORITES_ID, f => c.withEntry(f, id, { rating: 4 }));
+    }, ail);
+    await undo.click();
+    await expect(top).toHaveAttribute('data-id', String(ail));
+    // Read after ↺'s write (IndexedDB runs them in turn): kept.
+    expect(await favourite()).toBe(4);
+    // A favourite before the heart: the heart adds nothing, ↺ takes nothing.
+    await like.click();
+    await expect(top).not.toHaveAttribute('data-id', String(ail));
+    await undo.click();
+    await expect(top).toHaveAttribute('data-id', String(ail));
+    await expect.poll(favourite).toBe(4);
+  });
+
   test('les cartes de Rencontres quand iNaturalist ne répond pas : elles le disent, « Réessayer » les fait venir', async ({ app, page }) => {
     let down = true;
     await page.route(/^https:\/\/api\.inaturalist\.org\//, route => down ? route.fulfill({ status: 503, body: '' }) : route.fallback());

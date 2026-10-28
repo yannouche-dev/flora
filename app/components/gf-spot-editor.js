@@ -6,12 +6,12 @@ import { getPlant } from '../core/plants.js';
 import { GeoController } from '../core/geo.js';
 import { moduleOn } from '../core/modules.js';
 import { href } from '../core/router.js';
-import { back, replaceHash, replaceView } from '../core/history.js';
+import { back, openView, replaceHash, replaceView } from '../core/history.js';
 import {
-  ABUNDANCE, defaultPlantPosition, deletePlace, distance, entryInSeason, entryName, entryPosition, exportGeoJSON, findEntry,
-  formatDistance, getPlace, lastHarvest, matchCollections, plantMarkers,
-  nearbyPlaces, newCollection, newPlace, placeTitle, plantCount, promotePlace, savePatch, savePlace, spotEvents, updatePlace, withEntry, withLocation, withoutPlant, withPlant, entriesOf, lastEntry } from '../core/collections.js';
-import { encodeCollection, share } from '../core/share.js';
+  ABUNDANCE, copyAsList, defaultPlantPosition, deletePlace, distance, entryInSeason, entryName, entryPosition, exportGeoJSON, findEntry,
+  formatDistance, getPlace, lastHarvest, locationQuestion, matchCollections, plantMarkers, removeQuestion,
+  newCollection, newPlace, placesNear, placeTitle, plantCount, savePatch, savePlace, shareCollection, spotEvents, updatePlace, walkEnded, withEntry, withLocation, withoutPlant, withPlant, entriesOf, lastEntry } from '../core/collections.js';
+import { joinEntry, joinNotes } from '../core/place-model.js';
 import { StoreController, whenReady } from '../core/store.js';
 import { addressAt, altitudeAt, formatCoordinates } from '../core/geoservices.js';
 import { BP } from '../core/media.js';
@@ -23,14 +23,14 @@ import './gf-status.js';
 import './gf-thumb.js';
 import { icon, kindIcon } from '../core/icons.js';
 import { askHarvest } from './gf-harvest-warning.js';
+import { ask, confirmAsk } from './gf-ask.js';
 import './gf-plant-pick-list.js';
 import './gf-place-insights.js';
+import './gf-nearby-places.js';
 import { map3dProblem, openMap3d } from './gf-map3d.js';
 import { briefToast } from '../core/toast.js';
 import { hintView, takeHint } from '../core/hints.js';
-
-/** Existing places closer than this are offered instead of creating a duplicate. */
-const NEARBY_RADIUS = 100;
+import { continueWalk } from '../miniapp/kit/trail-store.js';
 
 const today = () => {
   const d = new Date();
@@ -142,17 +142,6 @@ export class GfSpotEditor extends LitElement {
     .gps .where { flex-basis: 100%; font-size: 0.85rem; }
     .gps .coords { font-variant-numeric: tabular-nums; color: var(--gf-text-muted); }
     .gps button { margin-left: auto; }
-    .nearby {
-      border-color: var(--gf-accent);
-      background: var(--gf-accent-soft);
-      font-size: 0.9rem;
-      display: grid;
-      gap: 8px;
-    }
-    .nearby ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-    .nearby li { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-    .nearby li span { flex: 1; min-width: 140px; }
-    .nearby small { color: var(--gf-text-muted); }
     textarea { min-height: 64px; }
     .chips { display: flex; gap: 8px; flex-wrap: wrap; }
     .stars button {
@@ -542,7 +531,7 @@ export class GfSpotEditor extends LitElement {
   async #findNearby() {
     if (!this.#isNew || !this._place) return;
     try {
-      this._nearby = await nearbyPlaces(this._place.geometry.coordinates, NEARBY_RADIUS);
+      this._nearby = await placesNear(this._place.geometry.coordinates, this._place.id);
     } catch { this._nearby = []; }
   }
 
@@ -619,29 +608,81 @@ export class GfSpotEditor extends LitElement {
     this.#changed();
   }
 
-  #removeLocation() {
-    if (!this._place || !confirm('Retirer la position ? Le lieu redevient une simple liste de plantes.')) return;
-    this._place = withLocation(this._place, null);
-    this._editPos = false;
-    this.#changed();
+  /**
+   * « Retirer la position »: asked of the lieu as stored (what was typed saved first; another tab, « Noter ici » may have
+   * placed a plant since). When the list would lose something (collections.js locationQuestion: a plant's own position,
+   * the other times a plant is noted, a parcours' walk), refused — « Copier en liste » offered: a new list of its
+   * plants, opened, the lieu as it was. Otherwise confirmed first, then written as stored now, the rule checked again in
+   * the same transaction (refused then: said). On the Carte, which shows only lieux, the list opens in its own page.
+   */
+  async #removeLocation() {
+    if (!this._place) return;
+    const id = this._place.id;
+    await this.#flush();
+    // Not saved (said): nothing is asked of a lieu that is not what the editor shows.
+    if (this.#dirty) return;
+    try {
+      const stored = await getPlace(id);
+      if (!stored) { this._error = this.#goneText(); return; }
+      const q = locationQuestion(stored);
+      // `=== true`: tsc tells the two questions apart so (jsconfig: no strictNullChecks).
+      if (q.refused === true) {
+        if (await ask({ title: q.title, text: q.text, choices: [{ value: 'copy', label: 'Copier en liste', primary: true }] }) === 'copy') this.#copyAsList(id);
+        return;
+      }
+      if (!await confirmAsk(q)) return;
+      let lossy = false;
+      const saved = await updatePlace(id, current => {
+        lossy = locationQuestion(current).refused;
+        return lossy ? current : withLocation(current, null);
+      });
+      if (lossy) { await this.#removeLocation(); return; }
+      this.#base = saved;
+      this.#savedAt = saved.properties.updatedAt;
+      this._todayFor = new Map();
+      this._place = saved;
+      this._editPos = false;
+      this._error = null;
+      // Said (the lieu rewritten), and the focus kept on the form: its button is gone with the point.
+      briefToast('Position retirée : le lieu est maintenant une liste.');
+      if (this.embedded) openView(href.spot(id));
+      else {
+        await this.updateComplete;
+        /** @type {HTMLInputElement | null} */ (this.renderRoot.querySelector('#place-form label.field input'))?.focus();
+      }
+    } catch (error) {
+      console.error(error);
+      this._error = /** @type {Error} */ (error).name === 'GoneError' ? this.#goneText() : 'Enregistrement impossible : ' + /** @type {Error} */ (error).message;
+    }
   }
 
+  /** « Copier en liste »: the new list opened, said; the lieu as it was. @param {string} id the lieu */
+  async #copyAsList(id) {
+    try {
+      const list = await copyAsList(id);
+      openView(href.spot(list.id));
+      briefToast(`Liste « ${list.properties.name} » créée. Le lieu garde ses positions.`);
+    } catch (error) {
+      console.error(error);
+      this._error = /** @type {Error} */ (error).name === 'GoneError' ? this.#goneText() : 'Copie impossible : ' + /** @type {Error} */ (error).message;
+    }
+  }
+
+  /**
+   * « Partager »: what was typed saved, then a link (collections.js shareCollection: a lieu's position asked first; shared,
+   * the user's own — « Recommencer » keeps it).
+   */
   async #share() {
     if (!this._place) return;
     await this.#flush();
-    const place = this.#payload();
-    if (place.properties.kind === 'place' && !confirm('Le lien contiendra la position exacte de ce lieu. Partager ?')) return;
-    const data = await encodeCollection(place);
-    // Shared: the user's own now, whatever made it (a parcours: « Recommencer » the Parcours keeps it).
-    promotePlace(place.id);
-    const result = await share({ title: placeTitle(place) + ' — GeoFlora', text: `${placeTitle(place)} · ${plantCount(place.properties.plants.length)}`, url: href.shared(data) });
-    if (result === 'copied') { this._saveState = ''; this._error = null; this._note = 'Lien copié.'; setTimeout(() => { this._note = null; }, 2500); }
+    if (await shareCollection(this.#payload(), confirmAsk) === 'copied') { this._saveState = ''; this._error = null; this._note = 'Lien copié.'; setTimeout(() => { this._note = null; }, 2500); }
   }
 
+  /** « Exporter (GeoJSON) »: its own file — on a phone, what it says of you asked before the share sheet. */
   async #export() {
     if (!this._place) return;
     await this.#flush();
-    await exportGeoJSON([this.#payload()]);
+    await exportGeoJSON([this.#payload()], { ask: confirmAsk });
   }
 
   /** @param {Event} event */
@@ -663,11 +704,16 @@ export class GfSpotEditor extends LitElement {
     this.#changed();
   }
 
-  /** This occurrence out of the place (the plant's others stay). @param {string} key its entry id */
-  #removePlant(key) {
+  /**
+   * This noting out of the collection (the plant's others stay): asked first when its note or its harvest log would go
+   * (collections.js removeQuestion — « Récolté aujourd’hui » counts), in a dialog, never confirm().
+   * @param {string} key its entry id
+   */
+  async #removePlant(key) {
     if (!this._place) return;
-    const entry = findEntry(this._place, key);
-    if (entry?.harvests.length && !confirm(`Retirer ${entryName(entry)} de ce lieu, avec son journal de récolte ?`)) return;
+    const q = removeQuestion(this.#payload(), key);
+    if (q && !await confirmAsk(q)) return;
+    if (!this._place) return;
     this._place = withoutPlant(this._place, key);
     const todayFor = new Map(this._todayFor);
     todayFor.delete(key);
@@ -711,11 +757,20 @@ export class GfSpotEditor extends LitElement {
 
   /**
    * The name typed for a new collection is an existing one's: put this draft's plants (with their notes,
-   * abundance, harvests and, place to place, their own positions) into it, drop the draft, open it.
+   * abundance, harvests and, place to place, their own positions) into it, and its own notes after the other's
+   * (place-model.js joinNotes), drop the draft, open it. A plant already there is joined to it (place-model.js
+   * joinEntry: its notes after the other's, the harvest logs of both). A new lieu with plants put into a list (no
+   * position) asks first: its point and their positions are not kept. Notes that would pass what a note holds once
+   * joined: nothing written, said, the draft kept.
    * @param {string} targetId
    */
   async #mergeInto(targetId) {
     if (!this._place) return;
+    if (this._place.geometry && this._place.properties.plants.length) {
+      const into = await getPlace(targetId).catch(() => undefined);
+      if (into && !into.geometry && !await confirmAsk({ title: `Ajouter à la liste « ${placeTitle(into)} » ?`, yes: 'Ajouter à la liste',
+        text: 'Une liste ne garde pas de position : le point de ce nouveau lieu et les positions de ses plantes ne seront pas gardés.' })) return;
+    }
     clearTimeout(this.#saveTimer);
     this.#dirty = false;
     await this.#saving;
@@ -729,20 +784,31 @@ export class GfSpotEditor extends LitElement {
           const own = draft.geometry && e.coordinates ? { coordinates: e.coordinates, accuracy: e.accuracy } : null;
           // Already there: in a list, the plant; in a place, this plant at this very spot (else another occurrence).
           const there = target.geometry && own
-            ? entriesOf(target, e.plantId).some(t => t.coordinates && distance(t.coordinates, own.coordinates) < 1)
-            : Boolean(findEntry(target, e.plantId));
-          if (there) continue;
+            ? entriesOf(target, e.plantId).find(t => t.coordinates && distance(t.coordinates, own.coordinates) < 1)
+            : findEntry(target, e.plantId);
+          if (there) {
+            const one = joinEntry(there, e);
+            // Thrown in the transaction: nothing written.
+            if (!one) throw new Error(`Les notes de ${entryName(e)} dépasseraient 5 000 caractères une fois réunies.`);
+            target = withEntry(target, there.id, one);
+            continue;
+          }
           const position = target.geometry ? own || defaultPlantPosition(target, this.#geo.state.fix) : undefined;
           target = withPlant(target, { id: e.plantId, scientificName: e.scientificName, vernacularName: e.vernacularName }, position, { again: true });
           target = withEntry(target, /** @type {any} */ (lastEntry(target)).id, { abundance: e.abundance, rating: e.rating, notes: e.notes, harvests: e.harvests });
         }
-        return target;
+        // The draft's own notes (« Pour les tisanes de l'hiver »): kept, after the target's — never dropped with it.
+        const notes = joinNotes(target.properties.notes, draft.properties.notes);
+        if (notes === null) throw new Error('Les notes dépasseraient 5 000 caractères une fois réunies.');
+        return notes === target.properties.notes ? target : { ...target, properties: { ...target.properties, notes } };
       }).catch(error => { throw error.name === 'GoneError' ? new Error('Liste ou lieu introuvable.', { cause: error }) : error; });
       if (this.#persisted && this.#createdHere) await deletePlace(draft.id);
       this.#persisted = false;
       // In place of this draft: Back does not return to it.
       replaceView(href.spot(targetId));
     } catch (error) {
+      // The draft kept: what it holds still to be saved (a new list's, as you go).
+      if (this.#autosave) this.#dirty = true;
       this._error = 'Ajout impossible : ' + /** @type {Error} */ (error).message;
     }
   }
@@ -755,11 +821,13 @@ export class GfSpotEditor extends LitElement {
     return matchCollections(others, p.name);
   }
 
-  /** Adds the plant being recorded to an existing nearby place instead of creating a new one. */
-  /** @param {import('../core/collections.js').Place} target */
-  #useExisting(target) {
+  /**
+   * A lieu offered nearby, chosen instead of a new one (gf-nearby-places): it opens, the plant being recorded added to
+   * it. @param {string} id
+   */
+  #useExisting(id) {
     const first = this._place?.properties.plants[0];
-    replaceView(href.spot(target.id, first?.plantId ?? undefined));
+    replaceView(href.spot(id, first?.plantId ?? undefined));
   }
 
   /** @param {SubmitEvent} event */
@@ -864,22 +932,12 @@ export class GfSpotEditor extends LitElement {
     </div>`;
   }
 
+  /** The lieux nearby, offered before this new one is saved (gf-nearby-places: the same offer as « Noter ici »). */
   #nearbyBanner() {
     if (!this.#isNew || !this._nearby.length || !this._place) return nothing;
     const first = this._place.properties.plants[0];
-    return html`
-      <div class="nearby card" role="region" aria-label="Lieux à proximité">
-        <strong>Vous êtes près d’un lieu déjà enregistré</strong>
-        <ul>
-          ${this._nearby.slice(0, 3).map(({ place, distance }) => html`
-            <li>
-              <span>${placeTitle(place)} <small>· ${formatDistance(distance)} · ${plantCount(place.properties.plants.length)}</small></span>
-              <button type="button" @click=${() => this.#useExisting(place)}>
-                ${first && !findEntry(place, first.plantId) ? `Y ajouter ${entryName(first)}` : 'Ouvrir ce lieu'}
-              </button>
-            </li>`)}
-        </ul>
-      </div>`;
+    return html`<gf-nearby-places mode="open" .rows=${this._nearby} .plant=${first ? { id: first.plantId, name: entryName(first) } : null}
+      @nearby-pick=${(/** @type {CustomEvent} */ e) => this.#useExisting(e.detail.id)}></gf-nearby-places>`;
   }
 
   /** Where this plant grows: distance from the place's point, GPS, show on map. */
@@ -1063,8 +1121,22 @@ export class GfSpotEditor extends LitElement {
   }
 
   /**
-   * « Vue 3D » of the place (a parcours: its walk too); when it cannot open here (no WebGL2, the module off), why: a
-   * brief toast above its button (the user asked), its own words read out — and the button's title says it too.
+   * « Continuer le parcours » (a parcours of Mes plantes, here or in the Carte's panel): what was typed saved, then the
+   * Parcours, on this walk under way (its recap left) — the one under way until then ended, as by « Terminer »
+   * (collections.js walkEnded: with plants, the user's).
+   */
+  async #continueWalk() {
+    if (!this._place) return;
+    await this.#flush();
+    const left = continueWalk(this._place.id);
+    if (left) await walkEnded(left);
+    openView(href.app('parcours', 'walk'));
+  }
+
+  /**
+   * « Vue 3D » of the place (a parcours: its walk and its start too; any other lieu: its plants on the relief); when it
+   * cannot open here (no WebGL2, the module off), why: a brief toast above its button (the user asked), its own words
+   * read out — and the button's title says it too.
    * @param {Event} e
    */
   #open3d = async (/** @type {Event} */ e) => {
@@ -1143,6 +1215,7 @@ export class GfSpotEditor extends LitElement {
 
         ${this.#isNew ? nothing : html`
           <div class="toolbar">
+            ${p.walk && place.geometry ? html`<button type="button" class="continue" @click=${this.#continueWalk}>${icon('flag-fill')} Continuer le parcours</button>` : nothing}
             ${p.plants.length && !this.#isNew ? html`<a class="button" href=${href.inFlore(/** @type {any} */ (this._place).id)}>${icon('leaf')} Voir dans Flore</a>` : nothing}
             ${p.plants.length ? html`<button type="button" @click=${this.#share}>Partager</button>` : nothing}
             <button type="button" @click=${this.#export}>Exporter (GeoJSON)</button>

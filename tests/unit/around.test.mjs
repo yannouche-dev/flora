@@ -243,10 +243,13 @@ test('provenance : l’origine d’une entrée ou d’un lieu gardée, relue d�
   assert.deepEqual(fav.properties.plants.map(e => e.origin ?? null), [{ app: 'rencontres' }, null]);
   const walk = col({ type: 'Feature', id: 'w', geometry: { type: 'Point', coordinates: [2, 48] }, properties: { name: 'Chemin', origin: { app: 'parcours' }, plants: [] } });
   assert.deepEqual(walk.properties.origin, { app: 'parcours' });
-  // Exported, read again: the same origins (the backup and the files keep them).
+  // Made by the Parcours, with a point: a parcours (its mark read from its origin).
+  assert.equal(walk.properties.walk, true);
+  // Exported, read again: the same origins (the backup and the files keep them), and the mark.
   const back = toPortable([fav, walk]).features.map(f => col(f));
   assert.deepEqual(back[0].properties.plants.map(e => e.origin ?? null), [{ app: 'rencontres' }, null]);
   assert.deepEqual(back[1].properties.origin, { app: 'parcours' });
+  assert.equal(back[1].properties.walk, true);
 });
 
 test('Recommencer : ce que l’activité a fait et qui est encore le sien, et seulement cela', () => {
@@ -292,6 +295,33 @@ test('Recommencer : ce que l’activité a fait et qui est encore le sien, et se
   // Its session as it says it (Orchidées de Mirabel: its circle and its filters).
   const site = defineMiniApp({ ...parcours, id: 'orchidees', title: 'Orchidées', owns: { label: 'le cercle et les filtres choisis' } });
   assert.deepEqual(replayItems(site, { favorites: [], collections: [], kept: { favorites: 0, collections: 0 } }), { gone: ['le cercle et les filtres choisis'], kept: [] });
+});
+
+test('à vous : un parcours fait sien garde toutes ses plantes ; un favori annoté est à vous, pas pour une altitude ; ce que Recommencer dit garder', () => {
+  // A walk the user made theirs, continued after « Terminer » by an earlier version: its new plant tagged by the Parcours.
+  const walk = col({ type: 'Feature', id: 'w', geometry: { type: 'Point', coordinates: [2, 48] }, properties: { name: 'Chemin', from: { app: 'parcours' },
+    plants: [{ id: 'e1', plantId: 4, scientificName: 'D', from: { app: 'parcours' } }, { id: 'e2', plantId: 5, scientificName: 'E', origin: { app: 'parcours' } }] } });
+  assert.equal(M.withoutMadeBy(walk, 'parcours'), walk, 'le parcours à vous, toutes ses plantes : rien ne part');
+  assert.deepEqual(M.madeBy([walk], 'parcours'), { favorites: [], collections: [], kept: { favorites: 0, collections: 1 } });
+  // A favourite of a match: a note makes it the user's; its altitude (asked by the app) does not.
+  const fav = col({ type: 'Feature', id: 'favorites', geometry: null, properties: { plants: [
+    { id: 'f1', plantId: 1, scientificName: 'A', origin: { app: 'rencontres' } }, { id: 'f2', plantId: 2, scientificName: 'B', origin: { app: 'rencontres' } }] } });
+  const noted = { ...fav, properties: { ...fav.properties, plants: fav.properties.plants.map(e => e.id === 'f1' ? { ...e, notes: 'Au bord du ruisseau' } : e) } };
+  assert.deepEqual(M.promoteTouched(fav, noted).properties.plants.map(e => [e.id, e.origin ?? null, e.from ?? null]),
+    [['f1', null, { app: 'rencontres' }], ['f2', { app: 'rencontres' }, null]]);
+  const high = { ...walk, properties: { ...walk.properties, plants: walk.properties.plants.map(e => ({ ...e, altitude: { m: 120, at: /** @type {[number, number]} */ ([2, 48]) } })) } };
+  assert.equal(M.promoteTouched(walk, high), high, 'une altitude seule : rien n’est à vous de plus');
+  assert.equal(M.promoteTouched(fav, fav), fav);
+  // A new entry is no change of one.
+  const more = { ...fav, properties: { ...fav.properties, plants: [...fav.properties.plants, { ...fav.properties.plants[0], id: 'f3', plantId: 3 }] } };
+  assert.equal(M.promoteTouched(fav, more), more);
+  // Said in the confirmation: the favourites kept, one or several, the activity named.
+  const meet = defineMiniApp({ id: 'rencontres', title: 'Rencontres', icon: 'heart', exit: { label: 'Quitter' }, columns: [{ id: 'main', base: 'fill', min: 300, rank: 1 }],
+    owns: { label: 'la partie en cours' }, steps: [{ id: 'start', kind: 'start', label: 'Départ', start: () => ({}) }] });
+  assert.deepEqual(replayItems(meet, { favorites: [], collections: [], kept: { favorites: 1, collections: 0 } }).kept,
+    ['Votre favori venu de Rencontres, devenu le vôtre, est conservé.']);
+  assert.deepEqual(replayItems(meet, { favorites: [], collections: [], kept: { favorites: 3, collections: 0 } }).kept,
+    ['Vos 3 favoris venus de Rencontres, devenus les vôtres, sont conservés.']);
 });
 
 test('avant les origines : le parcours en cours et les vides tagués ; les parcours terminés et tous les favoris, déjà à soi', () => {

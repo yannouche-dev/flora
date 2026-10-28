@@ -219,19 +219,23 @@ export class GfApp extends LitElement {
   };
 
   /**
-   * « Noter ici » opened: at once once its module is there (it is, past the first moments: loaded while idle), else as
-   * soon as it comes — drawn first (its dialog), never opened half-made. None in a boxed mini-app's template: nothing.
+   * « Noter ici » opened — the same dialog from everywhere (the header, the Carte's +, Mes plantes, a plant's sheet and
+   * its map, a plant card, an activity's sheet: `open-capture`, its `plant` chosen already when it comes from a plant):
+   * at once once its module is there (it is, past the first moments: loaded while idle), else as soon as it comes —
+   * drawn first (its dialog), never opened half-made.
+   * @param {any} [plant]
    */
-  #openCapture() {
+  #openCapture(plant) {
     const c = /** @type {any} */ (this.renderRoot.querySelector('gf-capture'));
     if (!c) return;
-    if (c.hasUpdated) { c.open(); return; }
-    loadCapture().then(() => customElements.whenDefined('gf-capture')).then(() => c.updateComplete).then(() => { if (c.isConnected) c.open(); });
+    if (c.hasUpdated) { c.open({ plant }); return; }
+    loadCapture().then(() => customElements.whenDefined('gf-capture')).then(() => c.updateComplete).then(() => { if (c.isConnected) c.open({ plant }); });
   }
 
   constructor() {
     super();
-    this.addEventListener('open-capture', () => this.#openCapture());
+    // A plain Event (no detail): the list to choose from.
+    this.addEventListener('open-capture', e => this.#openCapture(/** @type {CustomEvent} */ (e).detail?.plant));
     this.addEventListener('open-scenarios', () => /** @type {any} */ ([...this.renderRoot.querySelectorAll('gf-scenarios')].find(s => s.getClientRects().length))?.open());
   }
 
@@ -246,17 +250,13 @@ export class GfApp extends LitElement {
     // Phone: a plant's sheet covers the header (gf-flora): out of reach until it closes; the tab bar stays.
     const covered = phone && route.name === 'plant';
 
-    if (boxed) {
-      return html`<main>
+    const page = boxed ? html`<main>
         ${updateReady ? html`<div class="banner" role="status">Nouvelle version de GeoFlora disponible.
           <button class="link" type="button" @click=${() => location.reload()}>Recharger</button></div>` : nothing}
         ${status === 'loading' ? html`<div class="banner over" role="status">${statusText || 'Chargement…'}</div>` : nothing}
         ${status === 'error' ? this.#errorBanner() : nothing}
         ${this.#outlet(route)}
-      </main>`;
-    }
-
-    return html`
+      </main>` : html`
       <header ?inert=${covered}>
         <div class="side">${phone ? nothing : html`<nav class="tabs segmented" aria-label="Sections">
           <a href=${href.discover()} aria-current=${tab === 'discover' ? 'page' : 'false'}>Découvrir</a>
@@ -289,8 +289,10 @@ export class GfApp extends LitElement {
         <div><button class="primary" type="button" @click=${() => exportGeoJSON().catch(error => console.error(error))}>Exporter mes plantes</button>
           <button class="link" type="button" @click=${() => store.set({ storageFull: false })}>Fermer</button></div></div>` : nothing}
       ${this._unlocked ? this.#unlockedView(/** @type {keyof typeof UNLOCKS} */ (this._unlocked)) : nothing}
-      <gf-capture></gf-capture>
     `;
+    // « Noter ici » after either: one element for the whole app, kept on entering or leaving an activity (its toast never
+    // cut short), which an activity's sheet opens too.
+    return html`${page}<gf-capture></gf-capture>`;
   }
 
   willUpdate() {

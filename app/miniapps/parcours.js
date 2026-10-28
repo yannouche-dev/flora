@@ -6,14 +6,15 @@
 // session (trail-session.js) leads the steps — Départ › En marche › Bilan —, each one an address (#/app/parcours/walk),
 // Back the one before. Opened with no step named, the walk under way (or its recap) comes back at once (resumeAt).
 // Owns — everything « Recommencer » empties, here and in the other tabs, as if never opened: the walk
-// under way (geoflora.trail), the list of walks to continue (geoflora.trails), the recap shown
-// (geoflora.trailDone), the width of its side column (geoflora.trailLayout), its state and layout
+// under way (geoflora.trail), the recap shown (geoflora.trailDone), the width of its side column
+// (geoflora.trailLayout), its state and layout
 // (geoflora.app.parcours.*: runtime.js#replay); in memory, its session (a new one: trail-session.js#trailSessionOf); in
-// Mes plantes, the walk under way, or one left empty — places with its origin — with every plant in it
-// (core/collections.js#forgetMadeBy).
+// Mes plantes, the walk under way, or one left empty — places with its origin — with every plant in it (its plants
+// carry no origin of their own: they go with it; core/collections.js#forgetMadeBy).
 // Shares (never cleared, the user's whole app): the walks made the user's own — finished with plants, or renamed,
-// edited, added to from Mes plantes, shared, exported alone: their origin dropped (place-model.js#promoted) —, the
-// other places and their plants, the favourites, the settings, the answers of the online services kept in cache.
+// edited, added to from Mes plantes, shared, exported alone, received: their origin dropped (place-model.js#promoted),
+// with every plant in them, those added once continued too —, the other places and their plants, the favourites, the
+// settings, the answers of the online services kept in cache.
 
 import { config } from '../config.js';
 import { forgetMadeBy } from '../core/collections.js';
@@ -29,7 +30,7 @@ export default defineMiniApp({
   scene: 'trail',
   pitch: 'Marchez, nommez les plantes que vous croisez : chacune prend sa place sur la carte de votre parcours.',
   exit: { label: 'Quitter l’activité' },
-  owns: { keys: [config.storageKeys.trail, config.storageKeys.trails, config.storageKeys.trailDone, config.storageKeys.trailLayout], reset: () => forgetMadeBy('parcours'),
+  owns: { keys: [config.storageKeys.trail, config.storageKeys.trailDone, config.storageKeys.trailLayout], reset: () => forgetMadeBy('parcours'),
     made: { label: 'le parcours en cours', kept: ['Votre parcours enregistré dans Mes plantes est conservé.', 'Vos {n} parcours enregistrés dans Mes plantes sont conservés.'] } },
   shared: ['Mes plantes (sauf les parcours qu’il y a enregistrés)', 'favoris', 'réglages'],
   // « Commencer ici »: located, the walk created there (its game: trail-session.js).

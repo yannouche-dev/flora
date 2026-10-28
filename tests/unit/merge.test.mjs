@@ -102,3 +102,59 @@ test('mergeCollections : une copie plus ancienne n’apporte que ce qui manque',
   assert.ok(sameContent(out, local));
   assert.deepEqual(ids(mergeCollections(local, place({ updatedAt: T0, plants: [entry('a', 1), entry('b', 2)] }))), ['a', 'b']);
 });
+
+test('mergeCollections : un parcours le reste, son départ « ici » aussi, quelle que soit la copie la plus récente', () => {
+  const local = place({ walk: true, startedHere: true, plants: [entry('a', 1)] });
+  const incoming = place({ name: 'Chemin (autre appareil)', updatedAt: T2, plants: [entry('a', 1)] });
+  const out = mergeCollections(local, incoming);
+  assert.equal(out.properties.name, 'Chemin (autre appareil)');
+  assert.deepEqual([out.properties.walk, out.properties.startedHere], [true, true]);
+  assert.deepEqual([mergeCollections(incoming, local).properties.walk, mergeCollections(incoming, local).properties.startedHere], [true, true]);
+  // Without a point (made a list on the newer copy): neither.
+  const list = mergeCollections(local, place({ kind: 'list', updatedAt: T2 }, null));
+  assert.deepEqual([list.properties.kind, list.properties.walk, list.properties.startedHere], ['list', undefined, undefined]);
+});
+
+test('mergeCollections : ce qu’une copie a fait sien ne redevient jamais celui d’une activité', () => {
+  // A favourite made one's own here (`from`); the other device, newer, still has it as the game's.
+  const local = place({ kind: 'list', plants: [entry('e1', 1, { from: { app: 'rencontres' } }), entry('e2', 2, { origin: { app: 'rencontres' } })] }, null);
+  const incoming = place({ kind: 'list', updatedAt: T2, plants: [entry('x1', 1, { origin: { app: 'rencontres' } }), entry('x2', 2, { origin: { app: 'rencontres' } })] }, null);
+  const out = mergeCollections(local, incoming).properties.plants;
+  assert.deepEqual(out.map(e => [e.plantId, e.origin ?? null, e.from ?? null]), [[1, null, { app: 'rencontres' }], [2, { app: 'rencontres' }, null]]);
+  // A parcours finished here (promoted); a newer copy from a device where it was still under way.
+  const done = place({ walk: true, from: { app: 'parcours' } });
+  const underWay = place({ walk: true, origin: { app: 'parcours' }, updatedAt: T2, plants: [entry('b', 2, { origin: { app: 'parcours' } })] });
+  const walk = mergeCollections(done, underWay);
+  assert.deepEqual([walk.properties.origin ?? null, walk.properties.from, walk.properties.walk], [null, { app: 'parcours' }, true]);
+  assert.deepEqual(walk.properties.plants.map(e => e.origin), [{ app: 'parcours' }], 'une plante que seule l’autre copie a : telle quelle');
+  // Both still say the activity made it: it still did.
+  const both = mergeCollections(place({ origin: { app: 'parcours' } }), place({ origin: { app: 'parcours' }, updatedAt: T2 }));
+  assert.deepEqual([both.properties.origin, both.properties.from ?? null], [{ app: 'parcours' }, null]);
+  // An old file without origins (format 4): a walk under way becomes the user's own — the safe side.
+  const old = mergeCollections(place({ origin: { app: 'parcours' } }), place({ updatedAt: T2 }));
+  assert.deepEqual([old.properties.origin ?? null, old.properties.from], [null, { app: 'parcours' }]);
+});
+
+test('mergeCollections : une plante garde le jour où elle a été notée (une copie d’avant le format 6 n’a que la création)', () => {
+  const noted = '2026-05-01T10:40:00.000Z';
+  const local = place({ walk: true, plants: [entry('a', 1, { addedAt: noted })] });
+  // Format 5: the entry read with its collection's creation.
+  const incoming = place({ walk: true, updatedAt: T2, plants: [entry('a', 1, { abundance: 'rare' })] });
+  assert.equal(incoming.properties.plants[0].addedAt, T0);
+  const out = mergeCollections(local, incoming).properties.plants[0];
+  assert.deepEqual([out.abundance, out.addedAt], ['rare', noted]);
+  assert.equal(mergeCollections(incoming, local).properties.plants[0].addedAt, noted);
+  // Both know it: the newer copy's.
+  const later = '2026-05-01T11:00:00.000Z';
+  assert.equal(mergeCollections(local, place({ updatedAt: T2, plants: [entry('a', 1, { addedAt: later })] })).properties.plants[0].addedAt, later);
+});
+
+test('sameContent : les mêmes champs dans un autre ordre, c’est le même contenu', () => {
+  const a = place({ walk: true, from: { app: 'parcours' }, plants: [entry('a', 1, { from: { app: 'parcours' } })] });
+  const { from, walk, ...rest } = a.properties;
+  const e = a.properties.plants[0];
+  const { from: f, ...entryRest } = e;
+  const b = { ...a, properties: { ...rest, plants: [{ ...entryRest, from: f }], from, walk, updatedAt: T2 } };
+  assert.ok(sameContent(a, /** @type {any} */ (b)));
+  assert.ok(!sameContent(a, /** @type {any} */ ({ ...b, properties: { ...b.properties, name: 'Autre' } })));
+});

@@ -155,11 +155,11 @@ function leave(id) {
 
 /**
  * Shows a modal dialog as a step in history: Back closes it; closing it otherwise (✕, Esc, a choice) takes the
- * step back out, so history is as before.
- * @param {HTMLDialogElement | null | undefined} dialog
+ * step back out, so history is as before. Returns the step's id (afterStep), none when it was not opened.
+ * @param {HTMLDialogElement | null | undefined} dialog @returns {number | undefined}
  */
 export function openModal(dialog) {
-  if (!dialog || dialog.open) return;
+  if (!dialog || dialog.open) return undefined;
   dialog.showModal();
   const id = ++modals;
   open.set(id, dialog);
@@ -174,6 +174,31 @@ export function openModal(dialog) {
       else stepUrls.delete(id);
     });
   }, { once: true });
+  return id;
+}
+
+/**
+ * Whether a dialog opened through openModal is open (a question, « Noter ici », « Ajouter à… »…): the keys the page
+ * listens to on the window (an activity's sheet, the cards, Flore's ← →) are the dialog's meanwhile, never the page's
+ * under it.
+ */
+export const modalOpen = () => [...open.values()].some(d => d.open && d.isConnected);
+
+/**
+ * Resolves once the step of dialog `id` (openModal) is no longer the current entry: its dialog closed has taken it out,
+ * or Back has — at once when it is not. Another dialog's step under it stays (a question asked over « Ajouter à… »):
+ * waiting for none at all (afterDialogSteps) would hold every answer there for the fallback's second.
+ * @param {number | undefined} id @returns {Promise<void>}
+ */
+export function afterStep(id) {
+  if (id === undefined || state().gfModal !== id) return Promise.resolve();
+  return new Promise(resolve => {
+    const done = () => { removeEventListener('popstate', check); clearTimeout(timer); resolve(); };
+    const check = () => { if (state().gfModal !== id) done(); };
+    addEventListener('popstate', check);
+    // A step left in place (it should not be) does not hold the caller back.
+    const timer = setTimeout(done, 1000);
+  });
 }
 
 /**
