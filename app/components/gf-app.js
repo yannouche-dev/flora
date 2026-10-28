@@ -138,8 +138,10 @@ export class GfApp extends LitElement {
     nav.tabs a { color: var(--gf-text); text-decoration: none; white-space: nowrap; display: inline-flex; align-items: center; }
     /* The page's tab, on the accent: its contrasting text (the rule above outweighs the .segmented one of ui.js). */
     nav.tabs a[aria-current='page'] { color: var(--gf-accent-contrast); }
-    /* A tab that came, lit while it is announced (first steps). */
-    nav.tabs a.new { box-shadow: inset 0 0 0 2px var(--gf-warn); }
+    /* A tab that came, lit while it is announced (first steps): a ring parted from the tab by the surface — seen on the
+       page's tab too, on the accent —, its focus ring kept. */
+    nav.tabs a.new { box-shadow: inset 0 0 0 2px var(--gf-warn), inset 0 0 0 4px var(--gf-surface); }
+    nav.tabs a.new:focus-visible { box-shadow: inset 0 0 0 2px var(--gf-warn), inset 0 0 0 4px var(--gf-surface), var(--gf-focus); }
     .note, .mode { flex: none; }
     gf-map-page, gf-spot-editor, gf-collections, gf-shared, gf-flora, gf-miniapp, gf-launcher, gf-layout, gf-builder { flex: 1; min-height: 0; }
     /* Storage full: over everything (a plant's sheet covers the page on a phone), until closed. */
@@ -195,11 +197,17 @@ export class GfApp extends LitElement {
   #announceSoon = () => {
     if (!this.#announceTimer) this.#announceTimer = setTimeout(() => { this.#announceTimer = 0; this.#announce(); }, 600);
   };
+  /**
+   * A dialog opened over the announcement (core/history.js openModal) covers it: let go as on entering an activity —
+   * read (2 s), it is done; else it comes back once the dialog has closed (its step gone back: popstate).
+   */
+  #underModal = () => this.#announcing?.hide();
 
   connectedCallback() {
     super.connectedCallback();
     discoverEvents.addEventListener('change', this.#onDiscover);
     window.addEventListener('popstate', this.#announceSoon);
+    window.addEventListener('gf-modal', this.#underModal);
     document.addEventListener('visibilitychange', this.#announceSoon);
     toast?.toastEvents.addEventListener('free', this.#announceSoon);
     window.visualViewport?.addEventListener('resize', this.#onKeyboard);
@@ -211,6 +219,7 @@ export class GfApp extends LitElement {
     super.disconnectedCallback();
     discoverEvents.removeEventListener('change', this.#onDiscover);
     window.removeEventListener('popstate', this.#announceSoon);
+    window.removeEventListener('gf-modal', this.#underModal);
     document.removeEventListener('visibilitychange', this.#announceSoon);
     toast?.toastEvents.removeEventListener('free', this.#announceSoon);
     clearTimeout(this.#announceTimer);

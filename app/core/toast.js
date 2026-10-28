@@ -9,8 +9,8 @@
 // carries actions and safety warnings, outweighs a map's word — that word is then not shown, only said). Never for a background failure (a
 // tile source, iNaturalist, the relief): that is a map's state (gf-map setStatus), in its panel, said once.
 // What it says reaches screen readers once: by the caller's live region when it has one (`live: false`: gf-map's), else
-// by a live region made once where the toast goes (the body, an open dialog) whose text changes — never a toast
-// injected already written with role=status (read out unreliably).
+// by a live region made once where the toast goes (the body, an open dialog) whose text changes — its first words a
+// moment after it is made —, never a toast injected already written with role=status (read out unreliably).
 // A toast with an action (a walk's « Annuler ») is a word, not a failure: it lasts longer (ACTION_TOAST_MS), stays
 // while it is hovered or holds the focus, and outweighs a map's word (a failed « Me localiser » does not take its place).
 // The announcement of the tabs that came during the first steps (gf-app) is a word (weight 1) shown only when the place
@@ -34,19 +34,28 @@ export function sayIn(live, words) {
   setTimeout(() => line.remove(), 20_000);
 }
 
-/** The toasts' own live region where they go (the body, an open dialog): made once there, kept. @param {Element} host */
-function liveIn(host) {
-  let live = /** @type {HTMLElement | null} */ ([...host.children].find(c => c.classList.contains('gf-toast-live')) || null);
-  if (!live) {
-    live = document.createElement('div');
-    live.className = 'gf-toast-live';
-    live.setAttribute('aria-live', 'polite');
-    live.setAttribute('aria-relevant', 'additions');
-    // Visually hidden (inline: the region may be in a dialog of a shadow root, out of app.css's reach).
-    live.style.cssText = 'position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap';
-    host.append(live);
+/** How long the first words wait in a live region just made (ms): screen readers follow a region already there. */
+const FIRST_WORDS_MS = 250;
+
+/**
+ * Says `words` in the toasts' own live region where they go (the body, an open dialog), made once there, kept — the
+ * first ones a moment after it is made (FIRST_WORDS_MS): a region made with its words is not read out.
+ * @param {Element} host @param {string} words
+ */
+function sayHere(host, words) {
+  const kept = /** @type {HTMLElement | undefined} */ ([...host.children].find(c => c.classList.contains('gf-toast-live')));
+  if (kept) {
+    sayIn(kept, words);
+    return;
   }
-  return live;
+  const live = document.createElement('div');
+  live.className = 'gf-toast-live';
+  live.setAttribute('aria-live', 'polite');
+  live.setAttribute('aria-relevant', 'additions');
+  // Visually hidden (inline: the region may be in a dialog of a shadow root, out of app.css's reach).
+  live.style.cssText = 'position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap';
+  host.append(live);
+  setTimeout(() => sayIn(live, words), FIRST_WORDS_MS);
 }
 
 /** The one toast shown in the app now: how to let it go, and its weight. @type {{ hide: () => void, weight: number } | null} */
@@ -156,7 +165,7 @@ export function briefToast(words, { near = null, at = 'top', offset = 10, ms, li
   // In the open dialog the element is in (its inert outside would hide it from screen readers), else in the body.
   const host = near?.closest('dialog[open]') || document.body;
   host.append(toast);
-  if (live) sayIn(liveIn(host), words);
+  if (live) sayHere(host, words);
   try { toast.showPopover(); } catch { /* no popover: fixed, high (app.css) */ }
   place(toast, near, at, offset);
   requestAnimationFrame(() => toast.classList.add('on'));

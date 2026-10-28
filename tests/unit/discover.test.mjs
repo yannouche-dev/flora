@@ -203,6 +203,66 @@ test('unlocksAtStart : au démarrage, les listes et les lieux de l’appareil fo
   assert.deepEqual(d.pendingUnlocks(), []);
 });
 
+test('unlocksAtStart : l’onglet venu avec l’adresse à l’ouverture, que l’appareil fait venir aussi, sans annonce ; un onglet d’avant l’ouverture attend la sienne', async () => {
+  // A device of before (its list and lieu kept) opened on Mes plantes' address: its tab came first (context.js follow()).
+  localStorage.setItem(KEY, JSON.stringify({ done: false, unlocked: [], seen: [], step: 0 }));
+  d.recomputeUnlocks({ summaries: [] });
+  assert.deepEqual(d.discoverState().unlocked, []);
+  d.arrivedAt('collections');
+  assert.deepEqual(d.pendingUnlocks(), ['mine']);
+  await d.unlocksAtStart();
+  assert.deepEqual(d.discoverState().unlocked, ['mine', 'map']);
+  assert.deepEqual(d.pendingUnlocks(), []);
+  // The Carte there as this page opened (the state of before, at the top), still to be announced (an activity
+  // reloaded): it still is; Mes plantes comes quietly.
+  localStorage.setItem(KEY, JSON.stringify({ done: false, unlocked: ['map'], announced: [], seen: [], step: 0 }));
+  await d.unlocksAtStart();
+  assert.deepEqual(d.discoverState().unlocked, ['map', 'mine']);
+  assert.deepEqual(d.pendingUnlocks(), ['map']);
+  d.markAnnounced(['map']);
+});
+
+test('markAnnounced : un onglet repris entre-temps (« Revoir les premiers pas » pendant son annonce) est annoncé quand il revient', async () => {
+  for (const each of await c.listCollections()) if (each.id !== c.FAVORITES_ID) await c.deletePlace(each.id);
+  await d.restartDiscover();
+  // The Carte come with its address, its announcement showing.
+  d.arrivedAt('map');
+  assert.deepEqual(d.pendingUnlocks(), ['map']);
+  d.finishDiscover();
+  await d.restartDiscover();
+  // The announcement gone after « Revoir »: nothing noted.
+  d.markAnnounced(['map']);
+  assert.deepEqual(d.discoverState().announced, []);
+  assert.deepEqual(stored().announced, []);
+  // A lieu saved: both come, both to be announced.
+  await c.saveCollection(c.newPlace([4.8357, 45.7641], { name: 'Lisière nord' }));
+  assert.deepEqual(d.discoverState().unlocked, ['mine', 'map']);
+  assert.deepEqual(d.pendingUnlocks(), ['map', 'mine']);
+  d.markAnnounced(['map', 'mine']);
+});
+
+test('« Recommencer » de Rencontres sur un état qui n’a pas pu s’écrire (stockage plein) : ses onglets restent', async () => {
+  for (const each of await c.listCollections()) if (each.id !== c.FAVORITES_ID) await c.deletePlace(each.id);
+  await d.restartDiscover();
+  assert.deepEqual(d.discoverState().unlocked, []);
+  const set = localStorage.setItem;
+  localStorage.setItem = (k, v) => { if (k === KEY) throw new DOMException('Plein', 'QuotaExceededError'); set.call(localStorage, k, v); };
+  try {
+    d.arrivedAt('collections');
+    d.arrivedAt('map');
+    d.replayMeet();
+    assert.deepEqual(d.discoverState().unlocked, ['mine', 'map']);
+  } finally {
+    localStorage.setItem = set;
+  }
+  assert.deepEqual(stored().unlocked, []);
+  // Written at last: the tabs with it.
+  d.replayMeet();
+  assert.deepEqual(stored().unlocked, ['mine', 'map']);
+  d.markAnnounced(['mine', 'map']);
+  assert.deepEqual(d.pendingUnlocks(), []);
+});
+
 test('unlock : un onglet donné, à annoncer (les tests s’en servent)', async () => {
   d.unlock('flore');
   assert.equal(d.discoverState().done, true);

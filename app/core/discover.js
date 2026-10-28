@@ -76,6 +76,11 @@ function read() {
 }
 
 let state = read();
+/**
+ * The tabs there as this page opened, before its address brought one (context.js follow()): unlocksAtStart tells the
+ * address's tab from those that came before (an activity reloaded, still to be announced).
+ */
+const atOpen = state.unlocked;
 // Written at once: on the next visit, the app's other settings no longer mean « used before » (not written: kept for
 // this visit).
 /** This tab's last state not written (the storage full or switched off): it holds for this visit (stored()). */
@@ -165,11 +170,19 @@ export function recomputeUnlocks({ quiet = false, summaries = getMembership().co
   grant(unlocksFrom({ ...holdingsOf(summaries), seen: state.seen.length }, state.unlocked), quiet);
 }
 
-/** At the start (main.js, the base open): the tabs the device's listes and lieux bring, quietly. */
+/**
+ * At the start (main.js, the base open): the tabs the device's listes and lieux bring, quietly — the one the address
+ * brought as the page opened (context.js follow(), before the base is read) too when they bring it: a device of before
+ * opened on Mes plantes says nothing either. A tab that came before this page opened still waits for its announcement.
+ */
 export async function unlocksAtStart() {
   if (state.done) return;
   const all = await listCollections();
-  recomputeUnlocks({ quiet: true, summaries: all.map(c => ({ kind: c.properties.kind, count: c.properties.plants.length })) });
+  const summaries = all.map(c => ({ kind: c.properties.kind, count: c.properties.plants.length }));
+  recomputeUnlocks({ quiet: true, summaries });
+  const held = unlocksFrom({ ...holdingsOf(summaries), seen: state.seen.length });
+  const brought = pendingUnlocks().filter(t => held.includes(t) && !atOpen.includes(t));
+  if (brought.length) markAnnounced(brought);
 }
 
 /** `work` done, the tabs it brings coming quietly (the collections put back after a repair: main.js). @template T @param {() => Promise<T>} work */
@@ -204,11 +217,13 @@ const BAR = /** @type {Unlockable[]} */ (['flore', 'map', 'mine']);
 export const pendingUnlocks = () => BAR.filter(t => state.unlocked.includes(t) && !state.announced.includes(t));
 /**
  * Tabs announced (read, or their « Voir » taken): never again, here or in another tab. Added to those announced as
- * stored now (stored()); nothing written when they all were. @param {readonly Unlockable[]} tabs
+ * stored now (stored()), only those still there: one taken away meanwhile (« Revoir les premiers pas » while its
+ * announcement showed, here or in another tab) is announced again when it comes back. Nothing written when they all
+ * were. @param {readonly Unlockable[]} tabs
  */
 export function markAnnounced(tabs) {
   stored();
-  const announced = tabsIn([...state.announced, ...tabs]);
+  const announced = tabsIn([...state.announced, ...tabs.filter(t => state.unlocked.includes(t))]);
   if (announced.length > state.announced.length) save({ announced });
 }
 
@@ -248,11 +263,12 @@ export function plantSeen(id) {
 /**
  * Rencontres started again (its « Recommencer », which empties its own place, distance and cards): the steps
  * of its guided way and the fork forgotten. Not the first steps of the app (the tabs that came, the plants seen),
- * nor the favourites: they are the user's. Applied to the state as stored now: the first steps started again in
- * another tab (restartDiscover, which empties an open game here too) are never written back with this tab's older copy.
+ * nor the favourites: they are the user's. Applied to the state as stored now (stored()): the first steps started again
+ * in another tab (restartDiscover, which empties an open game here too) are never written back with this tab's older
+ * copy, and the tabs this tab could not write (the storage full) stay.
  */
 export function replayMeet() {
-  state = read();
+  stored();
   save({ step: 0, firstMatch: false, branch: null });
 }
 

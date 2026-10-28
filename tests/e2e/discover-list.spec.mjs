@@ -112,8 +112,10 @@ test.describe('premier lancement', () => {
     await expect(discover.locator('.swipe-card.top')).toHaveAttribute('data-id', String(plantId('Allium ursinum')));
     await page.keyboard.press('ArrowRight');
     await expect.poll(() => page.evaluate(async () => (await import('/app/core/discover.js')).discoverState().unlocked)).toContain('mine');
-    // Nothing over the activity.
-    await expect(page.locator('.gf-brief-toast')).toHaveCount(0);
+    // Nothing over the activity: looked for once an announcement would have come (two looks 600 ms apart around the
+    // toast's module loading), not waited out.
+    await page.waitForTimeout(2500);
+    expect(await page.locator('.gf-brief-toast').count()).toBe(0);
 
     await page.locator('gf-miniapp .quit').click();
     await expect.poll(() => hash(page)).toBe('#/discover');
