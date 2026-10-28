@@ -5,7 +5,7 @@ import './history.js';
 
 /**
  * @typedef {{ name: 'search' } | { name: 'plant', id: number, pane: string | null, at: number | null } | { name: 'settings' } | { name: 'legal' } | { name: 'collections', open: string | null, plant: number | null }
- *   | { name: 'map', spot: string | null, plant: number | null, focus: string | null, season: boolean, add: number | null, pick: boolean }
+ *   | { name: 'map', spot: string | null, plants: number[], focus: string | null, season: boolean, add: number | null, pick: boolean }
  *   | { name: 'spot-new', plant: number | null, kind: 'list' | 'place', at: [number, number] | null }
  *   | { name: 'spot', id: string, add: number | null, pick: boolean }
  *   | { name: 'shared', data: string } | { name: 'discover' }
@@ -44,8 +44,11 @@ export function parse(hash) {
   }
 
   if (path === 'map') {
+    // The plant filter (plants=12,34; plant=12: older links): each plant once, in the order given.
+    const listed = (params.get('plants') || '').split(',').filter(v => /^\d+$/.test(v)).map(Number);
+    const plants = params.has('plants') ? [...new Set(listed)] : number('plant') !== null ? [/** @type {number} */ (number('plant'))] : [];
     return {
-      name: 'map', spot: params.get('spot'), plant: number('plant'), focus: focusParam(params.get('focus')), season: params.get('season') === '1',
+      name: 'map', spot: params.get('spot'), plants, focus: focusParam(params.get('focus')), season: params.get('season') === '1',
       add: number('add'), pick: params.get('pick') === '1'
     };
   }
@@ -118,18 +121,18 @@ export const href = {
   },
   /**
    * `focus`: a plant of the selected place (its marker highlighted, its details open); `add` pre-adds a plant
-   * to the selected place, `pick` opens its plant picker.
+   * to the selected place, `pick` opens its plant picker; `plants` the plant filter (plants=12,34: commas as they are).
    */
-  map: (/** @type {{ spot?: string, plant?: number, focus?: string | number, season?: boolean, add?: number, pick?: boolean }} */ options = {}) => {
+  map: (/** @type {{ spot?: string, plants?: number[], focus?: string | number, season?: boolean, add?: number, pick?: boolean }} */ options = {}) => {
     const params = new URLSearchParams();
     if (options.spot) params.set('spot', options.spot);
     if (options.spot && options.add) params.set('add', String(options.add));
     if (options.spot && options.pick) params.set('pick', '1');
     if (options.focus) params.set('focus', String(options.focus));
-    if (options.plant) params.set('plant', String(options.plant));
+    if (options.plants?.length) params.set('plants', [...new Set(options.plants)].join(','));
     if (options.season) params.set('season', '1');
     const search = params.toString();
-    return '#/map' + (search ? '?' + search : '');
+    return '#/map' + (search ? '?' + search.replace(/%2C/g, ',') : '');
   },
   /**
    * New place (GPS, or `at` [lon, lat] picked on the map), optionally with a first plant.

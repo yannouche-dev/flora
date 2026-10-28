@@ -3,7 +3,7 @@
 // start), the list takes its place. A block's pane closes the same way, onto the plant it was opened from
 // (core/history.js sheetMark, closeTo). On both widths the sheet's head has its × « Fermer la fiche », and Échap closes
 // it (Flore: its pane first). « Annuler » goes back, never a step more: a new place's, a dialog's; a share's « Ignorer »
-// too, and a share saved takes the preview's place.
+// too, and a share saved takes the preview's place. The Carte's plant filter is in its address (plants=).
 import { test, expect, plantId } from './fixtures.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
@@ -276,6 +276,59 @@ test('Partage : « Enregistrer dans Mes plantes » prend la place de l’aperçu
   expect(await entries(other.page)).toBe(n);
   await other.page.goBack();
   await expect.poll(() => hash(other.page)).toBe('#/');
+});
+
+test('Carte : le filtre de plantes dans l’adresse', async ({ app, page }) => {
+  await app.open('#/');
+  const id = await seedPlace(page);
+  const [a, b] = [plantId('Allium ursinum'), plantId('Urtica dioica')];
+  const plants = page.locator('gf-map-page .bar').getByRole('button', { name: /^Plantes/ });
+  /** A plant of the « Plantes » menu ticked or unticked (its menu opened first). @param {RegExp} name */
+  const tick = async name => {
+    if (await page.locator('gf-map-page .plant-menu').count() === 0) await plants.click();
+    await page.locator('gf-map-page .plant-menu').getByRole('checkbox', { name }).click();
+  };
+  await app.go('#/map');
+  await tick(/Ail des ours/);
+  await tick(/Ortie/);
+  await expect.poll(() => hash(page)).toBe(`#/map?plants=${a},${b}`);
+  // Reloaded: the same filter, the address's.
+  await page.reload();
+  await app.ready();
+  expect(await hash(page)).toBe(`#/map?plants=${a},${b}`);
+  await expect(plants).toContainText('Plantes · 2');
+  // The Carte tab: the Carte as it was left, its filter with it.
+  await app.go('#/settings');
+  await tabLink(app, page, 'Carte').click();
+  await expect.poll(() => hash(page)).toBe(`#/map?plants=${a},${b}`);
+  await expect(plants).toContainText('Plantes · 2');
+  // A link of before (plant=): its plant filtered.
+  await app.go(`#/map?plant=${a}`);
+  await expect(plants).toContainText('Plantes · 1');
+
+  // A place open, the filter changed beside it: the place closes onto the Carte filtered as now — never as it was
+  // before the place opened; Back does not open the place again.
+  /** @param {string} from the Carte, filtered @param {() => Promise<unknown>} change @param {string} now its address after */
+  const changedBeside = async (from, change, now) => {
+    await app.go('#/settings');
+    await app.go(from);
+    await app.go(from.replace('#/map?', `#/map?spot=${id}&`));
+    await expect(page.locator('gf-map-page gf-spot-editor')).toHaveCount(1);
+    await change();
+    await expect.poll(() => hash(page)).toBe(now);
+    await expect(page.locator('gf-map-page gf-spot-editor')).toHaveCount(0);
+    await page.goBack();
+    await expect.poll(() => hash(page)).toBe('#/settings');
+  };
+  await changedBeside(`#/map?plants=${a},${b}`, () => tick(/Ortie/), `#/map?plants=${a}`);
+  await changedBeside(`#/map?plant=${a}`, () => tick(/Ortie/), `#/map?plants=${a},${b}`);
+  // « En saison » (the harvest journal on), the same.
+  await page.evaluate(async ([i, p]) => {
+    const c = await import('/app/core/collections.js');
+    await c.updatePlace(i, place => c.withEntry(place, p, { harvests: [{ date: new Date().toISOString().slice(0, 10), quantity: '', note: '' }] }));
+    (await import('/app/core/store.js')).setHarvestMode(true);
+  }, [id, a]);
+  await changedBeside(`#/map?plants=${a}`, () => page.locator('gf-map-page .bar').getByRole('button', { name: /^En saison/ }).click(), `#/map?plants=${a}&season=1`);
 });
 
 /**

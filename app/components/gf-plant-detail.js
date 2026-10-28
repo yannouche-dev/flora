@@ -1611,7 +1611,7 @@ export class GfPlantDetail extends LitElement {
       addTo: () => html`<button type="button" ?inert=${king} @click=${() => /** @type {any} */ (this.renderRoot.querySelector('gf-add-to'))?.open()}>${icon('plus-lg')}<span>Ajouter à…</span></button>`,
       share: () => html`<button type="button" ?inert=${king} @click=${() => this.#share(plant, name)}>${icon('share')}<span>Partager</span></button>`,
       // The Carte filtered on this plant (its places, its GBIF distribution).
-      map: () => html`<a class="button" ?inert=${king} href=${href.map({ plant: plant.id })}>${icon('map')}<span>Carte</span></a>`,
+      map: () => html`<a class="button" ?inert=${king} href=${href.map({ plants: [plant.id] })}>${icon('map')}<span>Carte</span></a>`,
       // In one tap, into the collection or place last opened (context.js), when it is not there yet.
       addCurrent: () => {
         const current = this.#currentCollection(plant);

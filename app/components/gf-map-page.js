@@ -2,7 +2,7 @@
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { GeoController } from '../core/geo.js';
 import { href, parse } from '../core/router.js';
-import { backTo, depth, entryValue, markEntry, pushHash, replaceHash } from '../core/history.js';
+import { backTo, depth, entryValue, markEntry, pushHash, renewBehind, replaceHash } from '../core/history.js';
 import { findEntry,
   directionsUrl, entryPosition, plantMarkers, distance, entryName, formatDistance, inSeason, listPlaces,
   placeAbundance, placeLastHarvest, placeTitle, plantCount, spotEvents, updatePlace, withEntry
@@ -22,7 +22,6 @@ import { gbifTaxon } from '../core/sources.js';
 import { mapDistribution, setMapDistribution } from '../core/map-settings.js';
 import { moduleOn } from '../core/modules.js';
 import { definePref } from '../core/prefs.js';
-import { context, setContext } from '../core/context.js';
 import { MediaController } from '../core/media.js';
 import { PaneSizer, paneStyles } from '../core/panes.js';
 import { config } from '../config.js';
@@ -239,16 +238,15 @@ export class GfMapPage extends LitElement {
   constructor() {
     super();
     /** @type {any} */
-    this.route = { name: 'map', spot: null, plant: null, season: false };
+    this.route = { name: 'map', spot: null, plants: [], season: false };
     /** @type {import('../core/collections.js').Place[]} */
     this._spots = [];
     /** @type {string | null} */
     this._error = null;
     /** @type {'map' | 'list'} */
     this._view = 'map';
-    /** @type {number[]} */
-    // The plant filter as left (context.js), unless the page is opened on a plant or a place.
-    this._plants = [...context().mapPlants];
+    /** The plant filter: the address's (plants=). @type {number[]} */
+    this._plants = [];
     /** One plant filtered: its GBIF distribution, offered in the Carte panel. @type {{ key: number, label: string } | null} */
     this._distribution = null;
     /** The places read once (before: no « no place yet » hint). */
@@ -585,10 +583,7 @@ export class GfMapPage extends LitElement {
 
   /** @param {Map<string, any>} changed */
   updated(changed) {
-    if (changed.has('_plants')) {
-      this.#findDistribution();
-      setContext({ mapPlants: [...this._plants] });
-    }
+    if (changed.has('_plants')) this.#findDistribution();
     // What the map says (the quiet-map rule): Autour's plants or points coming — its thin line past 400 ms; the places
     // unreadable — its state (and the bar's « Réessayer »); my places hidden — its state too.
     const map = this.#map, a = this._around;
@@ -630,12 +625,10 @@ export class GfMapPage extends LitElement {
       this.#parentRoute = this.route;
       this.#ownRoute = null;
     }
-    if (changed.has('route') && this.route.plant && !this._plants.includes(this.route.plant)) {
-      this._plants = [this.route.plant];
-    }
+    // The plant filter is the address's: a link, Back, Forward, a reload, the Carte tab give theirs.
+    if (changed.has('route') && !this.#internalRoute && this.route.plants.join() !== this._plants.join()) this._plants = [...this.route.plants];
     // Arriving on a place from elsewhere (Mes plantes, the editor, a link): frame it with all its plants.
     if (changed.has('route') && !this.#internalRoute && this.route.spot) {
-      if (!this.route.plant) this._plants = [];
       if (this.route.add || this.route.pick) this.#arrival = { spot: this.route.spot, add: this.route.add, pick: this.route.pick };
       this.#frameKey = this.route.spot + ':' + (++this.#frames);
     }
@@ -713,13 +706,14 @@ export class GfMapPage extends LitElement {
       spot: next.spot || undefined,
       focus: next.spot && next.focus ? next.focus : undefined,
       season: next.season,
-      plant: this._plants.length === 1 ? this._plants[0] : undefined
+      plants: this._plants
     });
     const opened = (next.spot || null) !== (this.route.spot || null);
-    // The map's entry before the first place opened: closing a place goes back there.
+    // The map's entry before the first place opened: closing a place goes back there — given the filters as they are
+    // now (its URL would otherwise undo « En saison » and the plant filter changed beside the place).
     const base = entryValue('gfMapBase');
     if (opened && next.spot) pushHash(hash, { gfMapBase: typeof base === 'number' ? base : depth() }, false);
-    else if (opened && typeof base === 'number') backTo(base, hash);
+    else if (opened && typeof base === 'number') { renewBehind(base, hash); backTo(base, hash); }
     else replaceHash(hash);
     if (next.spot !== this.#arrival?.spot) this.#arrival = null;
     // Every place selected is framed with all its plants (above its sheet).

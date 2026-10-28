@@ -19,25 +19,26 @@ import { walkOn } from '../miniapp/kit/trail-store.js';
  * @property {string | null} query       last search (text, filters, sort), as a hash
  * @property {string | null} collection  current collection or place: the last one opened, or a plant put in
  * @property {string | null} mine        Mes plantes as last seen ('#/collections…')
- * @property {string | null} map         the Carte as last seen ('#/map…')
- * @property {number[]} mapPlants        the Carte's plant filter
+ * @property {string | null} map         the Carte as last seen ('#/map…', its plant filter in it)
  */
 
 /** @type {Context} */
-const EMPTY = { flore: null, query: null, collection: null, mine: null, map: null, mapPlants: [] };
+const EMPTY = { flore: null, query: null, collection: null, mine: null, map: null };
 
 /** @returns {Context} */
 function read() {
   const saved = readJSON(config.storageKeys.context, null);
   if (!saved || typeof saved !== 'object') return { ...EMPTY };
   const str = (/** @type {any} */ v, /** @type {string} */ prefix) => typeof v === 'string' && v.startsWith(prefix) ? v : null;
+  // The Carte's plant filter, kept apart before it was in its address (mapPlants): folded into it once.
+  const map = str(saved.map, '#/map');
+  const old = Array.isArray(saved.mapPlants) ? saved.mapPlants.filter(Number.isInteger) : [];
   return {
     flore: str(saved.flore, '#/'),
     query: str(saved.query, '#/'),
     collection: typeof saved.collection === 'string' ? saved.collection : null,
     mine: str(saved.mine, '#/collections'),
-    map: str(saved.map, '#/map'),
-    mapPlants: Array.isArray(saved.mapPlants) ? saved.mapPlants.filter(Number.isInteger) : []
+    map: old.length && !/[?&]plants?=/.test(map ?? '') ? (map ?? '#/map') + ((map ?? '').includes('?') ? '&' : '?') + 'plants=' + old.join(',') : map
   };
 }
 
