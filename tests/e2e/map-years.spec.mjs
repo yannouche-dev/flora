@@ -39,6 +39,15 @@ const tileLayers = map => map.evaluate(m => [...m.querySelectorAll('.leaflet-til
 /** The filter of the most recent photos under a year's: greyed and pale (map.css). */
 const PALE = 'grayscale(1) contrast(0.36) brightness(1.25)';
 
+/**
+ * A map's panel ▦ closed, and its step in history gone: closing a dialog goes back a step after a timer (core/history.js
+ * openModal), which would undo an address set meanwhile. @param {Page} page @param {Locator} panel
+ */
+async function closePanel(page, panel) {
+  await panel.getByRole('button', { name: 'Fermer' }).click();
+  await expect.poll(() => page.evaluate(() => history.state?.gfModal ?? null)).toBe(null);
+}
+
 /** A map's panel ▦, open. @param {Locator} map */
 async function openPanel(map) {
   await map.evaluate(m => /** @type {any} */ (m).openPanel());
@@ -178,7 +187,7 @@ test('une case de disposition : base=spot,annee=2020 la sienne, gardée de son p
   await panel.getByRole('button', { name: 'Revenir aux réglages communs' }).click();
   await expect.poll(() => layoutOf(page)).toBe('[map(r=1km)]');
   await expect.poll(() => baseOf(map)).toBe('photo');
-  await panel.getByRole('button', { name: 'Fermer' }).click();
+  await closePanel(page, panel);
 
   // annee= alone: the photos of that period; the thumbnail of the other background (the plan) writes base=plan, no year.
   seen.length = 0;
