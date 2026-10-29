@@ -159,6 +159,15 @@ const seedPlace = page => page.evaluate(async ids => {
 const closeMine = (app, page) => page.locator(app.phone ? 'gf-collections .sheet-plant .pane-head' : 'gf-collections #mine-plant .pane-head')
   .getByRole('button', { name: 'Fermer la fiche' }).click();
 
+/**
+ * Mes plantes as one sees it before going on — the place shown (lit in the list), a plant's sheet (its name): the address
+ * changes at once, the view follows it a moment later (hashchange), and a key or a click meanwhile acts on the view before
+ * (→ finds no plant to go on from; a sheet, a map closed as they were). @param {Page} page @param {string} name
+ */
+const minePlace = (page, name) => expect(page.locator('gf-collections li.item.selected')).toContainText(name);
+/** @param {Page} page @param {string} name */
+const mineShows = (page, name) => expect(page.locator('gf-collections gf-plant-detail').getByRole('heading', { level: 1, name })).toBeVisible();
+
 test('Mes plantes : la fiche fermée revient au lieu, en passant les plantes parcourues', async ({ app, page }) => {
   await app.open('#/');
   const id = await seedPlace(page);
@@ -166,12 +175,15 @@ test('Mes plantes : la fiche fermée revient au lieu, en passant les plantes par
   const mine = page.locator('gf-collections');
   await mine.locator('button.main', { hasText: 'Bois de la Source' }).click();
   await expect.poll(() => hash(page)).toBe(`#/collections?c=${id}`);
+  await minePlace(page, 'Bois de la Source');
   await mine.locator('ul.plants a').first().click();
   await expect.poll(() => hash(page)).toBe(`#/collections?c=${id}&plant=${plantId('Allium ursinum')}`);
-  for (const next of ['Urtica dioica', 'Geum urbanum']) {
+  for (const [name, next] of [['Ail des ours', 'Urtica dioica'], ['Ortie dioïque', 'Geum urbanum']]) {
+    await mineShows(page, name);
     await page.keyboard.press('ArrowRight');
     await expect.poll(() => hash(page)).toBe(`#/collections?c=${id}&plant=${plantId(next)}`);
   }
+  await mineShows(page, 'Benoîte des villes');
   const n = await entries(page);
   await closeMine(app, page);
   await expect.poll(() => hash(page)).toBe(`#/collections?c=${id}`);
@@ -184,10 +196,13 @@ test('Mes plantes : la fiche fermée revient au lieu, en passant les plantes par
   // The place's map closed beside the plant, then the plant: Mes plantes without the map.
   await page.goForward();
   await expect.poll(() => hash(page)).toBe(`#/collections?c=${id}`);
+  await minePlace(page, 'Bois de la Source');
   await mine.locator('ul.plants a').first().click();
   await expect.poll(() => hash(page)).toMatch(/&plant=/);
+  await mineShows(page, 'Ail des ours');
   await mine.getByRole('button', { name: 'Fermer la carte' }).click();
   await expect.poll(() => hash(page)).toBe(`#/collections?plant=${plantId('Allium ursinum')}`);
+  await expect(page.locator('gf-collections section[aria-label="Carte du lieu"]')).toHaveCount(0);
   await closeMine(app, page);
   await expect.poll(() => hash(page)).toBe('#/collections');
   await expect(page.locator('gf-collections section[aria-label="Carte du lieu"]')).toHaveCount(0);
