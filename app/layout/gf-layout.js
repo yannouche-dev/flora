@@ -352,11 +352,13 @@ export class GfLayout extends LitElement {
     .g { display: flex; flex: 1; min-width: 0; min-height: 0; gap: 4px; }
     .g.row { flex-direction: row; } .g.col { flex-direction: column; }
     .g i { flex: 1; min-width: 0; min-height: 0; border-radius: 3px; background: color-mix(in srgb, var(--gf-accent) 22%, transparent); }
-    /* Narrow: the bar's other words go (its buttons keep their names); the heading and the toggle's word stay. The
-       preview goes too: on a phone, it is the screen itself. */
-    @container (max-width: 699px) {
-      .bar .lbl, .edit .preview { display: none; } .bar { padding-left: 10px; gap: 6px; }
-      .stage.phone { width: auto; border: 0; border-radius: 0; }
+    /* Narrow: the bar's other words go (its buttons keep their names); the heading and the toggle's word stay. */
+    @container (max-width: 699px) { .bar .lbl { display: none; } .bar { padding-left: 10px; gap: 6px; } }
+    /* A phone (the window's width, not the room the docked picker leaves): no preview, it is the screen itself — its
+       whole width, outlined as modified. */
+    @media (max-width: 699px) {
+      .edit .preview { display: none; }
+      .stage.phone { width: auto; align-self: stretch; border: 0; border-radius: 0; outline: 2px dashed color-mix(in srgb, var(--gf-accent) 45%, transparent); outline-offset: -2px; }
     }
   `];
 
@@ -430,6 +432,11 @@ export class GfLayout extends LitElement {
     });
     // Échap: the cell made large (agrandir) back in its place.
     this.addEventListener('keydown', e => { if (e.key === 'Escape' && this._max !== null && !e.defaultPrevented) { e.preventDefault(); this.#maximize(null); } });
+    // ⋯ closed when touching elsewhere on the screen (a cell, the strip, the bar's other buttons).
+    this.addEventListener('pointerdown', e => {
+      const menu = this.renderRoot?.querySelector('.more-menu[open]');
+      if (menu && !e.composedPath().includes(menu)) menu.removeAttribute('open');
+    }, { capture: true });
     // A column's funnel (a results grid): its filter shown, in a search's filters or a filters cell.
     this.addEventListener('focus-facet', e => { e.stopPropagation(); this.#revealFacet(/** @type {CustomEvent} */ (e).detail.facet); });
     // ⤢ on a block of a sheet, a photo touched: a cell that shows that block flashes instead of a dialog.
@@ -466,6 +473,8 @@ export class GfLayout extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    // A text still resting in « Avancé » dropped: the address is another view's now.
+    clearTimeout(this.#typing); this.#typing = 0;
     this.#size.disconnect();
     this.#observed = null;
     this.#state.dispose();
@@ -665,9 +674,15 @@ export class GfLayout extends LitElement {
 
   updated() {
     if (this.#narrow) { this.#nameRoom(); this.#tabInSight(); }
-    // The room the cells have: the stage's (drawn anew with the home and back: observed again).
+    // The room the cells have: the stage's (drawn anew with the home and back: observed again). No stage (the home, an
+    // old address replaced): no room either — the next screen waits for its own, never drawn at the last one's.
     const stage = this.renderRoot.querySelector('.stage');
-    if (stage !== this.#observed) { this.#size.disconnect(); if (stage) this.#size.observe(stage); this.#observed = stage; }
+    if (stage !== this.#observed) { this.#size.disconnect(); if (stage) this.#size.observe(stage); else this._w = 0; this.#observed = stage; }
+    // « Voir et corriger » landed: the focus where the remarks are (the text unfolded, else their list).
+    if (this.#toRemarks && this.editing) {
+      this.#toRemarks = false;
+      /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(this._advanced ? '#layout-text' : '.edit ul.problems') ?? this.renderRoot.querySelector('.bar .toggle'))?.focus();
+    }
     const page = this.pageTitle;
     if (page && document.title !== page) document.title = page;
     else if (!page && this.#titled) document.title = this.#pageName;
@@ -714,6 +729,8 @@ export class GfLayout extends LitElement {
     this.#aliasing = false;
     this.#home = false;
     if (this.editing && !editing) this.#leaveEditing();
+    // ⋯ open across the toggle (« Modifier », « Terminé », Back): closed — its items are the other state's now.
+    if (this.editing !== editing) this.renderRoot.querySelector('.more-menu[open]')?.removeAttribute('open');
     this.editing = editing;
     // Being modified: where « Terminé » goes back to — kept in the entry (a reload, Back, Forward read it back).
     this.#editMark = editing ? sheetMark('gfEditFrom', () => null) : null;
@@ -841,7 +858,8 @@ export class GfLayout extends LitElement {
 
   /** The address follows the screen: a new entry, the same one, or not at all. @param {import('./state.js').How} how */
   #write(how) {
-    if (how === 'none' || !this.route || this.#home || this.#aliasing) return;
+    // Left (Back, a link): the address is another view's, never written from here.
+    if (how === 'none' || !this.route || this.#home || this.#aliasing || !this.isConnected) return;
     // Being modified, a layout left with no cell (« Avancé » emptied) is not written: the address keeps the last one.
     if (this.editing && !this.#layout.tree.kids.length) return;
     const url = this.#href();
@@ -1349,8 +1367,13 @@ export class GfLayout extends LitElement {
   /** « Modifier »: this screen, being modified — one entry (Back leaves it), marked with the depth it was entered from. @param {{ advanced?: boolean }} [o] */
   #modify({ advanced = false } = {}) {
     if (advanced && this.#layout.errors.length) this._advanced = true;
+    // « Voir et corriger » (advanced): its line gives way to the strip; the focus goes to the remarks (updated()).
+    this.#toRemarks = advanced;
     pushHash(href.layout(this.#written, this.#search(), true), { gfEditFrom: { from: depth(), start: depth() + 1 } });
   }
+
+  /** « Voir et corriger » touched, the screen not modified yet: the focus to give to its remarks once it is. */
+  #toRemarks = false;
 
   /** « Terminé »: a text still resting applied, then back to where « Modifier » was touched; opened modified: replaced in place. */
   #done() {
@@ -1411,7 +1434,7 @@ export class GfLayout extends LitElement {
   /**
    * ⋯, the screen's options: in use, « Composer un écran » (the home); being modified, « Changer de modèle » (the home:
    * Back gives this screen back), « Tailles par défaut », « Avancé : texte ». Échap closes it, its button focused again;
-   * an item closes it.
+   * an item closes it, so do the focus leaving it, a touch elsewhere (the constructor) and the toggle (#follow).
    */
   #more() {
     const close = (/** @type {Event} */ e) => /** @type {HTMLElement} */ (e.currentTarget).closest('details')?.removeAttribute('open');
@@ -1422,11 +1445,18 @@ export class GfLayout extends LitElement {
       d.removeAttribute('open');
       d.querySelector('summary')?.focus();
     };
-    return html`<details class="more-menu" @keydown=${esc}><summary aria-label="Plus d’options" title="Plus d’options">${icon('three-dots')}</summary>
+    const away = (/** @type {FocusEvent} */ e) => {
+      const d = /** @type {HTMLDetailsElement} */ (e.currentTarget), to = /** @type {Node | null} */ (e.relatedTarget);
+      if (to && !d.contains(to)) d.removeAttribute('open');
+    };
+    return html`<details class="more-menu" @keydown=${esc} @focusout=${away}><summary aria-label="Plus d’options" title="Plus d’options">${icon('three-dots')}</summary>
       <div class="menu" role="group" aria-label="Options de l’écran">${!this.editing
         ? html`<a href=${href.layout('')} @click=${close}>${icon('plus-lg')} Composer un écran</a>`
         : html`<a href=${href.layout('')} title="Partir d’une autre grille ou d’un autre modèle" @click=${close}>${icon('arrow-counterclockwise')} Changer de modèle</a>
-          <button type="button" data-act="sizes" @click=${(/** @type {Event} */ e) => { close(e); this.#resetSizes(); }}>${icon('arrows-collapse')} Tailles par défaut</button>
+          <button type="button" data-act="sizes" @click=${(/** @type {Event} */ e) => {
+            close(e); this.#resetSizes();
+            /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.more-menu summary'))?.focus();
+          }}>${icon('arrows-collapse')} Tailles par défaut</button>
           <button type="button" data-act="text" aria-pressed=${String(this._advanced)} @click=${(/** @type {Event} */ e) => { close(e); this.#toggleAdvanced(); }}>${icon('list-nested')} Avancé : texte</button>`}</div>
     </details>`;
   }
@@ -1455,7 +1485,7 @@ export class GfLayout extends LitElement {
       </div>
       <p class="hint">${icon('sliders')} choisit le bloc d’une case et le règle ; ${icon('tools')} la divise, la déplace ou la retire ; les poignées règlent les tailles.</p>
       ${empty ? html`<p class="problems" role="alert">Disposition vide : écrivez au moins une case (par exemple <code>[map,search]</code>), ou partez d’un modèle (⋯ › « Changer de modèle »).</p>` : nothing}
-      ${problems.length ? html`<ul class="problems" role="alert">${problems.map(p => html`<li>${p}</li>`)}</ul>` : nothing}
+      ${problems.length ? html`<ul class="problems" role="alert" tabindex="-1">${problems.map(p => html`<li>${p}</li>`)}</ul>` : nothing}
       ${this._advanced ? this.#advanced() : nothing}
     </div>`;
   }

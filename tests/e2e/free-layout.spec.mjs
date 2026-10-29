@@ -526,6 +526,10 @@ test.describe('le titre et un lieu en mots dans l’adresse', () => {
     const h1 = page.locator('gf-layout .bar h1');
     await expect(h1).toHaveText('Mes plantes');
     await expect(h1).toBeVisible();
+    // Its words drawn, not only there (a text clipped to 1 px would still be read and « visible »).
+    const words = page.locator('gf-layout .bar h1 > span');
+    expect((await box(words)).width).toBeGreaterThan(40);
+    expect(await words.evaluate(s => s.scrollWidth)).toBeGreaterThan(1);
     const bar = await box(h1);
     const menu = await box(page.getByRole('tablist', { name: 'Colonnes' }));
     expect(bar.y + bar.height).toBeLessThanOrEqual(menu.y + 1);

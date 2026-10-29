@@ -7,8 +7,12 @@
 // modified; opened modified, « Terminé » replaces it in place); the cells kept across the toggle (the same map, no tile
 // asked again); the picker closed by « Terminé » and by Back; « Avancé » (the text typed, what is wrong said, a
 // component unknown shown and replaced through ✎; emptied: still modified); the title (the bar's heading); the phone
-// preview (390 px: the layout's own tabs); Partager (the link in use); ⋯; an address that cannot be read; the home
-// leaves Flore's search alone; a phone (the toggle's word shown); no tab of the app lit, on either width.
+// preview (390 px: the layout's own tabs; still a phone beside the docked picker; a narrow window: the screen itself);
+// Partager (the link in use); ⋯ (« Tailles par défaut »; closed by the toggle, Back, a touch elsewhere, the focus
+// leaving it); « Terminé » with remarks, « Voir et corriger » (the focus on them); an address that cannot be read; a
+// text still resting in « Avancé » never written once the screen is left; a screen opened after another waits for its
+// own width; the home leaves Flore's search alone; a phone (the toggle's word and the title drawn); no tab of the app
+// lit, on either width.
 import { test, expect, answerAround } from './fixtures.mjs';
 import { editing, layoutOf, screen } from './app.mjs';
 
@@ -163,6 +167,14 @@ test.describe('un grand écran', () => {
     await grip.focus();
     await page.keyboard.press('ArrowRight');
     await expect.poll(async () => Number(/^\[slot@([\d.]+)/.exec(await layoutOf(page))?.[1] ?? 0)).toBeGreaterThan(30);
+    // ⋯ › « Tailles par défaut » (the keyboard): every share back to the default, no new entry; the menu closed, its
+    // button focused again.
+    const entries = await page.evaluate(() => history.length);
+    await (await more(page)).locator('[data-act="sizes"]').press('Enter');
+    await expect.poll(() => layoutOf(page)).toBe('[slot,slot,slot]');
+    expect(await page.evaluate(() => history.length)).toBe(entries);
+    await expect(page.locator('gf-layout .more-menu[open]')).toHaveCount(0);
+    await expect(page.locator('gf-layout .more-menu summary')).toBeFocused();
   });
 
   test('Modifier ⇄ Terminé : une étape, Terminé revient d’où l’on vient', async ({ app, page }) => {
@@ -277,6 +289,17 @@ test.describe('un grand écran', () => {
     await expect(page.locator('gf-layout section.cell[data-comp="plant.calendar"]')).toBeVisible();
     // Kept in the address as typed, to be corrected.
     await expect.poll(() => layoutOf(page)).toBe('[mpa,search(filtres),[plant.wiki,plant.calendrier]');
+    // « Terminé » with remarks: allowed; the screen in use says them, as typed. « Voir et corriger » (the keyboard):
+    // modified again, the text unfolded and focused.
+    await expect(toggle(page)).toBeEnabled();
+    await toggle(page).click();
+    await expect.poll(() => param(page, 'edit')).toBe(null);
+    expect(await layoutOf(page)).toBe('[mpa,search(filtres),[plant.wiki,plant.calendrier]');
+    await expect(page.locator('gf-layout .remarks')).toContainText(/\b2 remarques sur cet écran\./);
+    await page.locator('gf-layout .remarks').getByRole('button', { name: 'Voir et corriger' }).press('Enter');
+    await expect.poll(() => param(page, 'edit')).toBe('1');
+    await expect(field).toHaveValue('[mpa,search(filtres),[plant.wiki,plant.calendrier]');
+    await expect(field).toBeFocused();
     // ✎ on the unknown one: a map; the text written as the address writes it.
     await cellAt(page, '0').locator('.pick').click();
     await page.locator('gf-block-picker:not([inline]) .tile[data-comp="map"]').click();
@@ -288,6 +311,7 @@ test.describe('un grand écran', () => {
     await page.keyboard.press('Escape');
     await page.locator('gf-layout .advanced').getByRole('button', { name: 'Fermer le texte' }).click();
     await expect(field).toHaveCount(0);
+    await expect(page.locator('gf-layout .more-menu summary')).toBeFocused();
     await app.go(screen('[map,search', AT, true));
     await expect(field).toHaveValue('[map,search');
   });
@@ -348,9 +372,16 @@ test.describe('un grand écran', () => {
     await expect(toggle(page)).toBeVisible();
     await expect(page.locator('gf-layout .placeholder')).toContainText('Aucune case lisible dans cet écran.');
     await expect(page.getByRole('heading', { name: 'Composer un écran' })).toHaveCount(0);
-    // « Voir et corriger »: modified, the text unfolded.
+    // « Voir et corriger »: modified, the text unfolded, focused.
     await page.locator('gf-layout .remarks').getByRole('button', { name: 'Voir et corriger' }).click();
     await expect(page.locator('gf-layout #layout-text')).toHaveValue('[');
+    await expect(page.locator('gf-layout #layout-text')).toBeFocused();
+    // A text read whole, a cell to correct: the list of what is wrong focused (« Avancé » stays folded).
+    await app.go(screen('[map,serch]', AT));
+    await page.locator('gf-layout .remarks').getByRole('button', { name: 'Voir et corriger' }).press('Enter');
+    await expect(page.locator('gf-layout .edit ul.problems')).toBeFocused();
+    await expect(page.locator('gf-layout .edit ul.problems')).toContainText('Composant inconnu « serch »');
+    await expect(page.locator('gf-layout #layout-text')).toHaveCount(0);
   });
 
   test('l’accueil ne touche pas la recherche de Flore', async ({ app, page }) => {
@@ -371,6 +402,89 @@ test.describe('un grand écran', () => {
     await (await more(page)).getByRole('link', { name: 'Composer un écran' }).click();
     await expect.poll(() => hash(page)).toBe('#/layout');
   });
+
+  test('⋯ se ferme à la bascule, au Retour, en touchant ailleurs et quand le focus le quitte', async ({ app, page }) => {
+    await app.open(screen('[map(r=1km),results]', AT));
+    const open = page.locator('gf-layout .more-menu[open]');
+    await more(page);
+    await expect(open).toHaveCount(1);
+    await toggle(page).click();
+    await expect(toggle(page)).toHaveText('Terminé');
+    await expect(open).toHaveCount(0);
+    // Being modified, opened, then Back (no hand on the page): closed — never the other state's items shown unasked.
+    await more(page);
+    await expect(open.locator('[data-act="sizes"]')).toBeVisible();
+    await page.goBack();
+    await expect(toggle(page)).toHaveText('Modifier');
+    await expect(open).toHaveCount(0);
+    // A cell touched: closed.
+    await more(page);
+    await cellAt(page, '0').locator('.cell-head h2').click();
+    await expect(open).toHaveCount(0);
+    // The focus leaving it (Tab past its item): closed.
+    await more(page);
+    await page.keyboard.press('Tab');
+    await expect(open.getByRole('link', { name: 'Composer un écran' })).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(open).toHaveCount(0);
+  });
+
+  test('un texte encore en frappe dans « Avancé » ne s’écrit pas dans l’adresse de la vue suivante', async ({ app, page }) => {
+    await app.open('#/discover');
+    const before = await hash(page);
+    await app.go(screen('[map,search]', AT, true));
+    await (await more(page)).locator('[data-act="text"]').click();
+    await page.locator('gf-layout #layout-text').fill('[map,results]');
+    // Back before the keys rest (300 ms): Découvrir, and its address stays its own.
+    await page.goBack();
+    await expect.poll(() => hash(page)).toBe(before);
+    await page.waitForTimeout(700);
+    expect(await hash(page)).toBe(before);
+  });
+
+  test('l’aperçu « Téléphone » le reste quand le choix du contenu serre l’écran ; une fenêtre étroite : l’écran lui-même', async ({ app, page }) => {
+    await page.setViewportSize({ width: 1000, height: 800 });
+    await app.open(screen('[map(r=2km),results,plant]', AT, true));
+    // The screen's own stage (a cell may hold one of its own: the photos').
+    const stage = page.locator('gf-layout .stage').first();
+    const width = async () => Math.round((await stage.boundingBox())?.width ?? 0);
+    await page.locator('gf-layout [data-preview="phone"]').click();
+    await expect.poll(width).toBe(390);
+    // The picker docked on the right (the screen narrower than 700 px beside it): still the phone, Aperçu still there.
+    await cellAt(page, '0').locator('.pick').click();
+    await expect(page.locator('gf-block-picker:not([inline])')).toBeVisible();
+    await expect.poll(width).toBe(390);
+    await expect(page.locator('gf-layout [data-preview="computer"]')).toBeVisible();
+    await cellAt(page, '0').locator('.pick').click();
+    await expect(page.locator('gf-block-picker:not([inline])')).toHaveCount(0);
+    // A window as narrow as a phone's: the screen itself, its whole width, no Aperçu.
+    await page.setViewportSize({ width: 650, height: 800 });
+    const host = page.locator('gf-layout');
+    await expect.poll(async () => (await width()) - Math.round((await host.boundingBox())?.width ?? 0)).toBe(0);
+    await expect(page.locator('gf-layout [data-preview="computer"]')).toBeHidden();
+  });
+
+  test('un écran ouvert après un autre attend sa propre largeur : aucun onglet un instant, une seule carte construite', async ({ app, page }) => {
+    await app.open(screen('[map(r=1km),results]', AT, true));
+    await page.locator('gf-layout [data-preview="phone"]').click();
+    await expect(page.getByRole('tablist', { name: 'Colonnes' })).toBeVisible();
+    await (await more(page)).getByRole('link', { name: 'Changer de modèle' }).click();
+    await expect(page.locator('gf-layout a[data-model]')).toHaveCount(5);
+    // What the screen draws from now on: every map and every menu of columns put on the page.
+    await page.evaluate(() => {
+      /** @param {Document | ShadowRoot} root @returns {Element | null} */
+      const find = root => root.querySelector('gf-layout') ?? [...root.querySelectorAll('*')].reduce((/** @type {Element | null} */ f, el) => f ?? (el.shadowRoot ? find(el.shadowRoot) : null), null);
+      const seen = /** @type {any} */ (window).__seen = { maps: 0, tabs: 0 };
+      const count = (/** @type {Element} */ n, /** @type {string} */ sel) => (n.matches(sel) ? 1 : 0) + n.querySelectorAll(sel).length;
+      new MutationObserver(records => {
+        for (const r of records) for (const n of r.addedNodes) if (n instanceof Element) { seen.maps += count(n, 'dl-map'); seen.tabs += count(n, '[role="tablist"]'); }
+      }).observe(/** @type {ShadowRoot} */ (find(document)?.shadowRoot), { childList: true, subtree: true });
+    });
+    await page.locator('gf-layout a[data-model="carte-recherche-fiche"]').click();
+    await expect(cellAt(page, '0').locator('gf-map')).toHaveCount(1);
+    await expect(page.locator('gf-layout section.cell')).toHaveCount(3);
+    expect(await page.evaluate(() => /** @type {any} */ (window).__seen)).toEqual({ maps: 1, tabs: 0 });
+  });
 });
 
 test.describe('un téléphone', () => {
@@ -386,15 +500,23 @@ test.describe('un téléphone', () => {
     await expect.poll(() => layoutOf(page)).toBe('[[results,slot],slot]');
   });
 
-  test('la bascule montre son mot, le titre de l’écran aussi', async ({ app, page }) => {
+  test('la bascule montre son mot, le titre de l’écran aussi ; ⋯ ouvert, « Modifier » le ferme', async ({ app, page }) => {
     await app.open(screen('[map,results]', AT + '&title=Mes%20plantes'));
-    await expect(toggle(page)).toBeVisible();
+    // Drawn, not only there (a text clipped to 1 px would still be read and « visible »).
+    const drawn = async (/** @type {import('@playwright/test').Locator} */ l) => (await l.boundingBox())?.width ?? 0;
+    const word = toggle(page).locator('span'), title = page.locator('gf-layout .bar h1 > span');
     await expect(toggle(page)).toHaveText('Modifier');
-    await expect(page.locator('gf-layout .bar h1')).toBeVisible();
+    expect(await drawn(word)).toBeGreaterThan(30);
     await expect(page.locator('gf-layout .bar h1')).toHaveText('Mes plantes');
+    expect(await drawn(title)).toBeGreaterThan(40);
+    await page.locator('gf-layout .more-menu summary').tap();
+    await expect(page.locator('gf-layout .more-menu[open]')).toHaveCount(1);
     await toggle(page).tap();
     await expect(toggle(page)).toHaveText('Terminé');
     await expect(toggle(page)).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('gf-layout .more-menu[open]')).toHaveCount(0);
+    expect(await drawn(word)).toBeGreaterThan(30);
+    expect(await drawn(title)).toBeGreaterThan(40);
   });
 });
 
