@@ -3,7 +3,7 @@
 // the look-alike and how dangerous (the TPPT base named for « très toxique »), the pair's other plants, the part, the
 // sources; the recap: the score, the six pairs, each plant's sheet (beside it on a wide screen, Back closing it; closed,
 // back to the recap it was opened from, after a reload too), the emergency numbers, « Nouvelle partie ». A game under
-// way comes back after a reload, and its start screen offers it first; one the file no longer gives (a criterion
+// way comes back after a reload (an answer too, the page reloaded or hidden at once), and its start screen offers it first; one the file no longer gives (a criterion
 // corrected since) is said, and dealt again; the file unreadable: said, no game — or, a game kept, « Réessayer » reads
 // it again and keeps it. A photo that does not load: neither shown nor credited. Never « comestible » in its own words
 // (the sources' titles are quoted as they are). One h1 a view (axe).
@@ -20,7 +20,7 @@ const pairBy = key => DATA.pairs.find((/** @type {any} */ p) => `${p.toxic.map((
 
 /** @param {import('@playwright/test').Page} page */
 const hash = page => page.evaluate(() => location.hash);
-/** The game kept on the device (written 300 ms after a change). @param {import('@playwright/test').Page} page @returns {Promise<any>} */
+/** The game kept on the device (written 300 ms after a change, at once when the page is left). @param {import('@playwright/test').Page} page @returns {Promise<any>} */
 const kept = page => page.evaluate(k => JSON.parse(localStorage.getItem(k) || 'null')?.ctx?.game ?? null, KEY);
 /** @param {import('@playwright/test').Page} page */
 const game = page => page.locator('ma-faux-amis');
@@ -226,6 +226,25 @@ test('une partie en cours revient après un rechargement, et d’abord sur l’�
   await expect(game(page)).not.toContainText('(avant)');
   await game(page).getByRole('button', { name: 'Nouvelle partie' }).click();
   await expect(game(page).locator('.count')).toHaveText('Carte 1 sur 6');
+});
+
+test('une réponse, la page rechargée ou cachée aussitôt : gardée, écrite en quittant la page sans attendre', async ({ app, page }) => {
+  await app.open('#/app/faux-amis');
+  const cards = await deal(page);
+  // Answered, the page reloaded at once (before the 300 ms the state waits for): the answer is still there.
+  await answer(page, cards[0]);
+  await page.reload();
+  await app.ready();
+  await expect(game(page).locator('.count')).toHaveText('Carte 2 sur 6');
+  expect((await kept(page)).cards.filter((/** @type {any} */ k) => k.answer).length).toBe(1);
+  // Answered, the tab hidden at once (the phone locked, another app over it: the page may never be shown again):
+  // written as it hides. Playwright cannot hide a tab; the browser's own event, its state said hidden.
+  await answer(page, cards[1]);
+  expect(await page.evaluate(k => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    return JSON.parse(localStorage.getItem(k) || 'null')?.ctx?.game?.cards.filter((/** @type {any} */ c) => c.answer).length;
+  }, KEY)).toBe(2);
 });
 
 test('une photo qui ne vient pas : ni montrée, ni créditée', async ({ app, page }) => {
