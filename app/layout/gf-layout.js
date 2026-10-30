@@ -26,8 +26,8 @@
 //    (`gfEditFrom`: the depth it was entered from); every change then replaces the address and is given to that entry
 //    (history.js#renewBehind: Back keeps the changes); « Terminé » goes back there (history.js#closeTo), or, opened being
 //    modified, replaces this entry by the screen in use. Partager always gives the screen in use (no edit=1).
-//  - The home (#/layout, no layout): « Partir d’une grille », « Ou d’un modèle » (models.js), each drawn small, each
-//    opened being modified. It never touches the search (Flore's stays as it is).
+//  - The home (#/layout, no layout): Mes écrans (screen-list.js), then « Partir d’une grille », « Ou d’un modèle »
+//    (models.js), each drawn small, each opened being modified. It never touches the search (Flore's stays as it is).
 //  - « Mes écrans » (screens.js): a screen in use whose layout can be read is kept on this device once it has rested a
 //    moment (its address in use, its title, its cells' names) — never the home, never while modified; modified, the
 //    screen « Terminé » (or Back) gives replaces the record it was entered from.
@@ -66,7 +66,8 @@ import { APP, SearchChannel } from '../core/search-channel.js';
 import { SOURCES, defaultSources } from '../core/observations.js';
 import { forgetShares, savedShares, saveShares } from './sizes.js';
 import { MODELS, modelSpec } from './models.js';
-import { rememberScreen, screenKey } from './screens.js';
+import { rememberScreen, screenEvents, screenKey, screens } from './screens.js';
+import { screenList, screenListStyles } from './screen-list.js';
 import { renderCell, revealFacet, scopeWords } from './cells.js';
 import { cellOf, cellText } from './picker-model.js';
 import { pickerBounds } from './gf-block-picker.js';
@@ -159,7 +160,7 @@ export class GfLayout extends LitElement {
     _copied: { state: true }
   };
 
-  static styles = [ui, gripStyles, css`
+  static styles = [ui, gripStyles, screenListStyles, css`
     :host { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--gf-bg); container-type: inline-size; }
     /* « Choisir le contenu »: in the head; with a mouse, shown on hover or focus (always on a touch screen). */
     .cell-head .pick { flex: none; width: 30px; height: 30px; min-height: 0; padding: 0; font-size: 0.9rem; }
@@ -457,6 +458,7 @@ export class GfLayout extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    screenEvents.addEventListener('change', this.#onScreens);
     // The stage observed again once drawn (updated()), the page named again once the address is followed.
     this.#observed = null;
     this.#named = null;
@@ -479,6 +481,7 @@ export class GfLayout extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    screenEvents.removeEventListener('change', this.#onScreens);
     // A text still resting in « Avancé » dropped: the address is another view's now. A screen not kept yet: left
     // before it rested (Mes écrans).
     clearTimeout(this.#typing); this.#typing = 0;
@@ -704,9 +707,9 @@ export class GfLayout extends LitElement {
 
   // ── Mes écrans (screens.js) ────────────────────────────────────────────────────────────────────────────
 
-  /** The screen's address last kept in Mes écrans, and the one waiting to be (its timer). @type {string | null} */
+  /** The screen's address last kept in Mes écrans. @type {string | null} */
   #kept = null;
-  /** @type {string | null} */
+  /** The address waiting to be kept, and its timer (KEEP_AFTER). @type {string | null} */
   #keeping = null;
   #keepTimer = 0;
   /** The record the screen being modified was entered from (screenKey), replaced by the screen « Terminé » gives. @type {string | null} */
@@ -723,6 +726,9 @@ export class GfLayout extends LitElement {
 
   /** This screen's record in Mes écrans: its layout and its title. */
   #screenKey() { return screenKey({ href: this.#usageHref(), title: this.#state.live.title }); }
+
+  /** Mes écrans changed (a screen kept, one taken out, another tab): the home shows it again. */
+  #onScreens = () => { if (this.#home) this.requestUpdate(); };
 
   /** An untitled screen's name in Mes écrans: its cells'. */
   #label() { return [...this.#layout.cells.values()].map(r => r.title).join(' · ').slice(0, 80); }
@@ -1579,13 +1585,20 @@ export class GfLayout extends LitElement {
     return this.editing ? nothing : html`<div class="placeholder quiet" role="note"><p>Aucune case lisible dans cet écran.</p></div>`;
   }
 
-  /** The home (#/layout): what a screen of one's own is, then a grid or a model to start from, each drawn small, each opened being modified. */
+  /** The home's Mes écrans (screens.js): the screens last opened in use here, newest first; none, nothing. */
+  #mine() {
+    const list = screens();
+    return list.length ? html`<section aria-labelledby="mine"><h2 id="mine">Mes écrans</h2>${screenList(list, 'mine')}</section>` : nothing;
+  }
+
+  /** The home (#/layout): what a screen of one's own is, Mes écrans, then a grid or a model to start from, each drawn small, each opened being modified. */
   #homeView() {
     const card = (/** @type {import('./models.js').Model} */ m) => html`<a class="choice" href=${href.layout(m.spec, '', true)}
       data-grid=${m.kind === 'grille' ? m.id : nothing} data-model=${m.kind === 'modele' ? m.id : nothing}><span class="thumb" aria-hidden="true">${thumb(parse(m.spec).tree, 0)}</span><b>${m.icon ? icon(m.icon) : nothing} ${m.title}</b><small>${m.about}</small></a>`;
     return html`<div class="home"><div>
       <header><h1>${icon('window-desktop')} Composer un écran</h1>
         <p>Les outils de GeoFlora côte à côte — la carte, la recherche, la fiche ou un seul de ses blocs, les photos, les cartes à swiper —, tous reliés : une plante choisie dans l’un s’affiche dans les autres. Chaque écran s’écrit dans son adresse : un lien le partage tel quel.</p></header>
+      ${this.#mine()}
       <section aria-labelledby="grids"><h2 id="grids">Partir d’une grille</h2><div class="choices">${MODELS.filter(m => m.kind === 'grille').map(card)}</div></section>
       <section aria-labelledby="models"><h2 id="models">Ou d’un modèle</h2><div class="choices">${MODELS.filter(m => m.kind === 'modele').map(card)}</div></section>
     </div></div>`;

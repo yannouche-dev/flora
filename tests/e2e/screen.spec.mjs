@@ -535,3 +535,118 @@ test('aucun onglet allumé : l’accueil, l’écran, sa modification', async ({
   await expect(toggle(page)).toHaveText('Terminé');
   await expect(lit).toHaveCount(0);
 });
+
+test.describe('Mes écrans', () => {
+  /** The screens kept on the device (layout/screens.js), newest first. @param {Page} page @returns {Promise<{ href: string, title: string | null, label: string }[]>} */
+  const kept = page => page.evaluate(() => JSON.parse(localStorage.getItem('geoflora.screens') || '[]'));
+  /** The layouts of the screens kept, decoded. @param {Page} page */
+  const keptLayouts = page => kept(page).then(l => l.map(s => decodeURIComponent(s.href.split('?')[0].replace('#/layout/', ''))));
+  /** The names a list of Mes écrans shows. @param {Page} page @param {string} where */
+  const names = (page, where) => page.locator(`${where} ul.screens li b`);
+
+  test('deux écrans ouverts par leur lien, le plus récent d’abord ; × en retire un ; rechargé, la liste reste — l’accueil et Réglages les mêmes', async ({ app, page }) => {
+    await app.open('#/layout');
+    await expect(page.getByRole('heading', { level: 1, name: 'Composer un écran' })).toBeVisible();
+    await expect(page.locator('gf-layout ul.screens')).toHaveCount(0);
+    // Two shared links opened in use, each kept once its address rests.
+    await app.go(screen('[search,results]', 'title=Orties&q=ortie'));
+    await expect.poll(() => kept(page).then(l => l.length)).toBe(1);
+    const first = await page.evaluate(() => location.hash);
+    await app.go(screen('[map(r=1km),results]', AT));
+    await expect.poll(() => kept(page).then(l => l.length)).toBe(2);
+    const second = await page.evaluate(() => location.hash);
+    // The home: Mes écrans first, the newest first — its title, else its cells' names; its layout; a link in use.
+    await app.go('#/layout');
+    const home = page.locator('gf-layout');
+    await expect(home.getByRole('heading', { level: 2 })).toHaveText(['Mes écrans', 'Partir d’une grille', 'Ou d’un modèle']);
+    await expect(home.getByRole('list', { name: 'Mes écrans' })).toBeVisible();
+    await expect(names(page, 'gf-layout')).toHaveText(['Carte · Résultats', 'Orties']);
+    await expect(home.locator('ul.screens li small')).toHaveText(['[map(r=1km),results]', '[search,results]']);
+    expect(await home.locator('ul.screens li a').evaluateAll(as => as.map(a => a.getAttribute('href')))).toEqual([second, first]);
+    // Réglages, under « Composer un écran »: the same.
+    await app.go('#/settings');
+    const card = page.locator('gf-settings .builder');
+    await expect(card.getByRole('list', { name: 'Mes écrans' })).toBeVisible();
+    await expect(names(page, 'gf-settings .builder')).toHaveText(['Carte · Résultats', 'Orties']);
+    // × : taken out; the focus stays in the list (the next one's ×).
+    await card.getByRole('button', { name: 'Retirer « Carte · Résultats » de Mes écrans' }).click();
+    await expect(names(page, 'gf-settings .builder')).toHaveText(['Orties']);
+    await expect(card.getByRole('button', { name: 'Retirer « Orties » de Mes écrans' })).toBeFocused();
+    expect((await kept(page)).map(s => s.title)).toEqual(['Orties']);
+    // Reloaded: still there, on the home too.
+    await page.reload();
+    await app.ready();
+    await expect(names(page, 'gf-settings .builder')).toHaveText(['Orties']);
+    await app.go('#/layout');
+    await expect(names(page, 'gf-layout')).toHaveText(['Orties']);
+    // Its link: the screen in use.
+    await home.locator('ul.screens a').first().click();
+    await expect.poll(() => page.evaluate(() => location.hash)).toBe(first);
+    await expect(page.locator('gf-layout .bar h1')).toHaveText('Orties');
+    expect(await editing(page)).toBe(false);
+    // The last one taken out: no list, on the home.
+    await app.go('#/layout');
+    await home.getByRole('button', { name: 'Retirer « Orties » de Mes écrans' }).click();
+    await expect(home.locator('ul.screens')).toHaveCount(0);
+    await expect(home.getByRole('heading', { level: 2 })).toHaveText(['Partir d’une grille', 'Ou d’un modèle']);
+    expect(await page.evaluate(() => localStorage.getItem('geoflora.screens'))).toBe(null);
+  });
+
+  test('Modifier puis Terminé, ou Retour : l’écran modifié remplace celui d’où l’on est parti ; rien n’est gardé pendant la modification', async ({ app, page }) => {
+    await app.open(screen('[search,results]', 'q=ortie'));
+    await expect.poll(() => kept(page).then(l => l.length)).toBe(1);
+    await app.go(screen('[slot,slot]', 'title=Atelier&' + AT));
+    await expect.poll(() => keptLayouts(page)).toEqual(['[slot,slot]', '[search,results]']);
+    await toggle(page).click();
+    await expect.poll(() => param(page, 'edit')).toBe('1');
+    await cellAt(page, '0').locator('gf-block-picker[inline] .tile[data-comp="results"]').click();
+    await expect.poll(() => layoutOf(page)).toBe('[results,slot]');
+    // Being modified: nothing kept, however long it rests.
+    await page.waitForTimeout(1500);
+    expect(await keptLayouts(page)).toEqual(['[slot,slot]', '[search,results]']);
+    // « Terminé »: the screen modified in the place of the one it was entered from — as many screens.
+    await toggle(page).click();
+    await expect.poll(() => param(page, 'edit')).toBe(null);
+    await expect.poll(() => keptLayouts(page)).toEqual(['[results,slot]', '[search,results]']);
+    expect((await kept(page))[0]).toMatchObject({ title: 'Atelier', label: 'Résultats · Emplacement', href: await page.evaluate(() => location.hash) });
+    // Back while modified: the same.
+    await toggle(page).click();
+    await expect.poll(() => param(page, 'edit')).toBe('1');
+    await cellAt(page, '0').locator('.build').click();
+    await cellAt(page, '0').locator('[data-act="remove"]').click();
+    await expect.poll(() => layoutOf(page)).toBe('[slot]');
+    await page.goBack();
+    await expect.poll(() => param(page, 'edit')).toBe(null);
+    await expect.poll(() => keptLayouts(page)).toEqual(['[slot]', '[search,results]']);
+    // Modified again, then « Changer de modèle » (the home) and Back: still the screen it was entered from that goes.
+    await toggle(page).click();
+    await expect.poll(() => param(page, 'edit')).toBe('1');
+    await (await more(page)).getByRole('link', { name: 'Changer de modèle' }).click();
+    await expect.poll(() => hash(page)).toBe('#/layout');
+    await page.goBack();
+    await expect.poll(() => param(page, 'edit')).toBe('1');
+    await cellAt(page, '0').locator('gf-block-picker[inline] .tile[data-comp="results"]').click();
+    await expect.poll(() => layoutOf(page)).toBe('[results]');
+    await toggle(page).click();
+    await expect.poll(() => param(page, 'edit')).toBe(null);
+    await expect.poll(() => keptLayouts(page)).toEqual(['[results]', '[search,results]']);
+  });
+
+  test('ni une adresse illisible, ni l’accueil, ni un écran ouvert en modification — jusqu’à « Terminé »', async ({ app, page }) => {
+    await app.open('#/layout/[');
+    await expect(page.locator('gf-layout .remarks')).toBeVisible();
+    await page.waitForTimeout(1500);
+    expect(await kept(page)).toEqual([]);
+    await app.go('#/layout');
+    await expect(page.getByRole('heading', { level: 1, name: 'Composer un écran' })).toBeVisible();
+    // A grid of the home: opened being modified, kept once « Terminé ».
+    await page.locator('gf-layout a[data-grid="trois"]').click();
+    await expect(toggle(page)).toHaveText('Terminé');
+    await page.waitForTimeout(1500);
+    expect(await kept(page)).toEqual([]);
+    await toggle(page).click();
+    await expect.poll(() => param(page, 'edit')).toBe(null);
+    await expect.poll(() => keptLayouts(page)).toEqual(['[slot@30,slot@35,slot]']);
+    expect((await kept(page))[0].href).toBe(await page.evaluate(() => location.hash));
+  });
+});
