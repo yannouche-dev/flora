@@ -73,7 +73,7 @@ export const config = {
     datasetQuota: 'geoflora.datasetQuota',
     // The media viewer, wide: the width of « À propos de l’image » beside the image.
     mediaLayout: 'geoflora.mediaLayout',
-    // « Disposition libre » (app/layout): the shares given to the columns and rows of each layout, by its shape.
+    // « Écran sur mesure » (app/layout): the shares given to the columns and rows of each layout, by its shape.
     freeLayout: 'geoflora.freeLayout',
     // The first-use hints of the maps already shown on this device (core/hints.js): never shown again.
     hints: 'geoflora.hints',

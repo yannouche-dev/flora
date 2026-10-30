@@ -1,4 +1,4 @@
-// « Disposition libre » : the map cell's settings (registry.js `map`, map-options.js), written in the layout's
+// « Écran sur mesure » : the map cell's settings (registry.js `map`, map-options.js), written in the layout's
 // grammar. Each parameter read (its words, its values' other spellings, French, accents folded), a bare value given to
 // the parameter that reads it (a distance, an intent, a background, a word for 3D or 2D, a list of layers), a list's
 // unknown words said and left out, an intent's bundle with a setting written beside it winning, and the address

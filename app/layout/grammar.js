@@ -1,5 +1,5 @@
 // @ts-check
-// « Disposition libre »: a screen written in its address, #/layout/<layout>?<state> (gf-layout.js). This module is the
+// « Écran sur mesure »: a screen written in its address, #/layout/<layout>?<state> (gf-layout.js). This module is the
 // grammar of <layout> only — pure (no DOM, no registry: names are words here, registry.js says what they are), tested
 // under Node (tests/unit/layout-grammar.test.mjs).
 //
@@ -23,7 +23,7 @@
 // list too deep flattened, cells past MAX_CELLS left out, an empty one dropped.
 //
 // The editor's operations (replace a cell, move it among its siblings, give a split its shares) work on this tree too,
-// each returning a new, normalized one; « Modifier la disposition » splits and removes cells as boxes (builder-grid.js).
+// each returning a new, normalized one; a screen being modified splits and removes cells as boxes (builder-grid.js).
 
 /**
  * @typedef {{ key: string | null, value: string }} Param

@@ -15,6 +15,8 @@ import { modalOpen, openView, replaceView } from '../core/history.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 
+/** « Écran sur mesure »: a screen of one's own, and « Créer une app »'s old addresses, which it replaces (one module). */
+const layoutScreen = () => import('../layout/gf-layout.js');
 /**
  * The screens other than Flore and Découvrir, each loaded the first time it shows: the start of the app — the search —
  * loads a third less code. A screen is drawn only once its module is there (its element upgraded before it gets its
@@ -30,8 +32,8 @@ const SCREENS = {
   settings: () => import('./gf-settings.js'),
   legal: () => import('./gf-legal.js'),
   app: () => import('../miniapp/gf-miniapp.js'),
-  layout: () => import('../layout/gf-layout.js'),
-  builder: () => import('../layout/gf-builder.js')
+  layout: layoutScreen,
+  builder: layoutScreen
 };
 /**
  * « Noter ici » (gf-capture and what it brings: the plants, their alerts, the position…), out of the start: loaded once
@@ -75,7 +77,7 @@ const ANNOUNCE_READ_MS = 2000;
 /** Tab names joined as said: « Carte et Mes plantes ». */
 const AND = new Intl.ListFormat('fr', { type: 'conjunction' });
 
-/** The screens asked for, and those loaded. @type {Set<string>} */
+/** The screens' modules asked for, and those loaded, by their loader (two routes, one module: loaded once for both). @type {Set<() => Promise<unknown>>} */
 const asked = new Set(), loaded = new Set();
 /**
  * Whether a screen can be drawn now; if not, its module is asked for (once) and `then` runs when it has come (a
@@ -83,18 +85,20 @@ const asked = new Set(), loaded = new Set();
  * @param {string} name @param {() => void} then
  */
 function screenReady(name, then) {
-  if (!SCREENS[name] || loaded.has(name)) return true;
-  if (!asked.has(name)) {
-    asked.add(name);
-    SCREENS[name]().then(() => { loaded.add(name); then(); }, error => { asked.delete(name); console.error(error); });
+  const load = SCREENS[name];
+  if (!load || loaded.has(load)) return true;
+  if (!asked.has(load)) {
+    asked.add(load);
+    load().then(() => { loaded.add(load); then(); }, error => { asked.delete(load); console.error(error); });
   }
   return false;
 }
 
-/** @param {string} name */
+/** The tab a screen lights; '': none (a screen of one's own, its home and « Créer une app »'s old addresses). @param {string} name */
 const tabOf = name => name === 'map' ? 'map' : name === 'discover' ? 'discover'
   : ['collections', 'spot', 'spot-new', 'shared'].includes(name) ? 'mine'
-  : name === 'settings' || name === 'legal' || name === 'layout' || name === 'builder' ? 'more' : 'flore';
+  : name === 'settings' || name === 'legal' ? 'more'
+  : name === 'layout' || name === 'builder' ? '' : 'flore';
 
 /** App shell: header + route outlet + (phone) bottom tab bar. */
 export class GfApp extends LitElement {
@@ -146,7 +150,7 @@ export class GfApp extends LitElement {
     nav.tabs a.new { box-shadow: inset 0 0 0 2px var(--gf-warn), inset 0 0 0 4px var(--gf-surface); }
     nav.tabs a.new:focus-visible { box-shadow: inset 0 0 0 2px var(--gf-warn), inset 0 0 0 4px var(--gf-surface), var(--gf-focus); }
     .note, .mode { flex: none; }
-    gf-map-page, gf-spot-editor, gf-collections, gf-shared, gf-flora, gf-miniapp, gf-launcher, gf-layout, gf-builder { flex: 1; min-height: 0; }
+    gf-map-page, gf-spot-editor, gf-collections, gf-shared, gf-flora, gf-miniapp, gf-launcher, gf-layout { flex: 1; min-height: 0; }
     /* Storage full: over everything (a plant's sheet covers the page on a phone), until closed. */
     .full { position: fixed; z-index: 1004; left: 50%; transform: translateX(-50%); top: calc(8px + env(safe-area-inset-top, 0px)); width: min(520px, calc(100vw - 24px));
       box-sizing: border-box; padding: 10px 14px; border-radius: 14px; background: var(--gf-surface); color: var(--gf-text); border: 2px solid var(--gf-danger); box-shadow: var(--gf-shadow); font-size: 0.9rem; }
@@ -468,10 +472,9 @@ export class GfApp extends LitElement {
       case 'app':
         return html`<gf-miniapp .route=${route}></gf-miniapp>`;
       case 'builder':
-        // « Créer une app » (app/layout/gf-builder.js): a grid or a model, then the free layout built on it, live.
-        return html`<gf-builder .route=${route}></gf-builder>`;
       case 'layout':
-        // « Disposition libre » (app/layout): its layout and its state in the address.
+        // « Écran sur mesure » (app/layout/gf-layout.js): its home (#/layout), a screen and its state, being modified
+        // (edit=1); « Créer une app »'s old addresses (#/builder…) too, which it replaces by the screen they name.
         return html`<gf-layout .route=${route}></gf-layout>`;
       default:
         return html`<div class="banner">Page introuvable. <a href=${floreHref()}>Aller à ${floreName()}</a></div>`;

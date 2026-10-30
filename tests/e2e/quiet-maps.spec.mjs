@@ -338,7 +338,7 @@ test.describe('la carte d’une fiche plante', () => {
   });
 });
 
-test.describe('la Disposition libre', () => {
+test.describe('l’Écran sur mesure', () => {
   test('la carte sans zone : l’appui long dit une fois ; zone injoignable : l’état dans le panneau ; un point hors flore : un message bref', async ({ app, page }) => {
     await app.open('#/layout/[map,search]');
     const cell = page.locator('dl-map');

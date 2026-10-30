@@ -1,16 +1,16 @@
-// « Disposition libre » (app/layout, #/layout/<layout>?<state>): a screen written in its address — columns, a column
+// « Écran sur mesure » (app/layout, #/layout/<layout>?<state>): a screen written in its address — columns, a column
 // split into rows, each cell a piece of the app — every cell wired to one shared state. Here: the layout read (columns,
 // rows, shares), its grips (keyboard: the shares written in the address and kept for the layout on this device, found
 // again on a reload and for the same layout opened without them), the wiring (a search keeps the results, whose
 // points the map shows; a result touched is the current plant, every plant cell shows it, the address says it, Back
 // returns to the one before; the scope's radius keeps the results to the plants observed in it; a point of the map
-// touched: its plant), the deck (its top card the current plant, a heart a favourite), « Modifier » (« Créer une app »:
-// builder.spec.mjs), each cell's head (the icon and mark of its tab in a
+// touched: its plant), the deck (its top card the current plant, a heart a favourite), « Modifier » (screen.spec.mjs),
+// each cell's head (the icon and mark of its tab in a
 // phone's menu, its name alone read), a phone (the columns as a menu of icons on top: one
 // per column, its icons and marks, its whole name; what looked alike once, told apart; tapped, ← → Début Fin; the
 // plant's tab brought and lit; twelve columns: the menu scrolls, the tab shown in sight, the smooth scroll too; a
 // finger swiped on a panel: the neighbour, never on the map), a window too narrow for its columns (their tabs named
-// beside their icons where they have the room), Réglages' presets. And what went wrong once: a first visit (the plant cells drawn while the flora downloads: never a
+// beside their icons where they have the room), Réglages' card and a model of the home. And what went wrong once: a first visit (the plant cells drawn while the flora downloads: never a
 // false « Plante introuvable », their heads named once it is there), the deck when iNaturalist fails, GBIF answering
 // with nothing (said, « Réessayer », never « Les cartes arrivent… » for good nor the deck's end), a radius between two of the slider's stops (r=3km: shown between them), the
 // search's bar in a narrow cell and every preset without a cell overflowing (1280 px and a phone), the grid's Photo
@@ -18,7 +18,7 @@
 // (their plants the list: state.js), those of 3 within 500 m; and 3 of a plant asked alone.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 import { swipe } from './touch.mjs';
-import { PRESETS } from '../../app/layout/presets.js';
+import { MODELS } from '../../app/layout/models.js';
 import { parse } from '../../app/layout/grammar.js';
 
 /** @typedef {import('@playwright/test').Page} Page */
@@ -235,13 +235,14 @@ test.describe('un grand écran', () => {
     await app.open('#/layout/[carte,fiche(nuit),foo,[plant.wiki');
     await expect(page.locator('gf-layout section.cell')).toHaveCount(4);
     await expect(cellOf(page, 'unknown')).toContainText('Composant inconnu : « foo »');
-    await expect(page.locator('gf-layout .remarks')).toContainText('4 remarques');
+    await expect(page.locator('gf-layout .remarks')).toContainText('4 remarques sur cet écran');
     // Two brackets left open, a mode unknown, a component unknown. Written as typed until it is corrected (nothing lost).
     expect(await hash(page)).toBe('#/layout/[carte,fiche(nuit),foo,[plant.wiki');
-    // An empty layout: the presets.
+    // No layout: the home, its grids and models.
     await app.go('#/layout');
-    await expect(page.getByRole('heading', { name: 'Composez votre écran' })).toBeVisible();
-    await expect(page.locator('gf-layout .empty li')).toHaveCount(5);
+    await expect(page.getByRole('heading', { level: 1, name: 'Composer un écran' })).toBeVisible();
+    await expect(page.locator('gf-layout a[data-model]')).toHaveCount(5);
+    await expect(page.locator('gf-layout a[data-grid]')).toHaveCount(3);
   });
 
   test('les cartes de Rencontres, ↺ : reprend le favori que son cœur a ajouté, tel qu’il l’a laissé — jamais un favori annoté depuis, ni un d’avant', async ({ app, page }) => {
@@ -444,8 +445,8 @@ test.describe('le titre et un lieu en mots dans l’adresse', () => {
     await expect(page.locator('dl-map .where')).toContainText('Puy de Mirabel (Ménétrol)');
     // The requests: the commune first, then the places of that name around its centre.
     expect(asked.map(p => p.toString())).toEqual(['q=menetrol&index=address&type=municipality&limit=20', 'q=mirabel&index=poi&limit=20&lon=3.12440&lat=45.87110']);
-    // The title: the page's heading (above the bar), the tab's title.
-    await expect(page.locator('gf-layout .titlebar h1')).toHaveText(TITLE);
+    // The title: the page's heading (the bar's), the tab's title.
+    await expect(page.locator('gf-layout .bar h1')).toHaveText(TITLE);
     await expect(page.getByRole('heading', { level: 1, name: TITLE })).toBeVisible();
     await expect(page).toHaveTitle(`${TITLE} · GeoFlora`);
     // Reloaded: the address has the point, the geocoder is not asked again.
@@ -520,12 +521,18 @@ test.describe('le titre et un lieu en mots dans l’adresse', () => {
     expect(await param(page, 'place')).toBe('Ménétrol');
   });
 
-  test('sur téléphone, le titre au-dessus du menu des colonnes', async ({ app, page }) => {
+  test('sur téléphone, le titre dans la barre, au-dessus du menu des colonnes', async ({ app, page }) => {
     await app.open(`#/layout/${LAYOUT}?title=Mes%20plantes&${AT}`);
-    const bar = await box(page.locator('gf-layout .titlebar'));
+    const h1 = page.locator('gf-layout .bar h1');
+    await expect(h1).toHaveText('Mes plantes');
+    await expect(h1).toBeVisible();
+    // Its words drawn, not only there (a text clipped to 1 px would still be read and « visible »).
+    const words = page.locator('gf-layout .bar h1 > span');
+    expect((await box(words)).width).toBeGreaterThan(40);
+    expect(await words.evaluate(s => s.scrollWidth)).toBeGreaterThan(1);
+    const bar = await box(h1);
     const menu = await box(page.getByRole('tablist', { name: 'Colonnes' }));
     expect(bar.y + bar.height).toBeLessThanOrEqual(menu.y + 1);
-    await expect(page.locator('gf-layout .titlebar h1')).toHaveText('Mes plantes');
   });
 });
 
@@ -542,7 +549,7 @@ test('les modèles : aucune case ne déborde, ni la page de côté — même la 
   // The desktop also at 720 px high: the rows lower than the search's bar there (« Étude », « Grille et photos »).
   for (const height of vp.width > 600 ? [vp.height, 720] : [vp.height]) {
     await page.setViewportSize({ width: vp.width, height });
-    for (const preset of PRESETS) {
+    for (const preset of MODELS.filter(m => m.kind === 'modele')) {
       // A search with chips (a filter, a family), « Filtrer par » (the genus Allium), the scope: the bar at its fullest.
       await app.go(`#/layout/${preset.spec}?${AT}&q=allium&photo=avec&family=Amaryllidaceae`);
       await expect(cellOf(page, 'search').locator('gf-results-bar .suggestions')).toHaveCount(await cellOf(page, 'search').count());
@@ -813,10 +820,11 @@ test.describe('un téléphone', () => {
   });
 });
 
-test('Réglages › Disposition libre : un modèle ouvre sa disposition', async ({ app, page }) => {
+test('Réglages › Écran sur mesure : « Composer un écran », puis un modèle s’ouvre en modification', async ({ app, page }) => {
   await app.open('#/settings');
-  await expect(page.getByRole('heading', { name: 'Disposition libre' })).toBeVisible();
+  await page.locator('gf-settings .builder').getByRole('link', { name: 'Composer un écran' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Composer un écran' })).toBeVisible();
   await page.getByRole('link', { name: /Carte, résultats, Wikipédia et calendrier/ }).click();
-  await expect.poll(() => hash(page)).toBe('#/layout/[map(r=2km),search,[plant.wikipedia,plant.calendar]]');
+  await expect.poll(() => hash(page)).toBe('#/layout/[map(r=2km),search,[plant.wikipedia,plant.calendar]]?edit=1');
   await expect(cellOf(page, 'plant.calendar')).toBeAttached();
 });

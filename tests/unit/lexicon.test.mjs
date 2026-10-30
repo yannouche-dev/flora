@@ -29,7 +29,9 @@ const REPLACED = [
   [word('mes collections|collection courante'), '« Mes plantes », « liste ou lieu en cours »'],
   [word('sosies? dangereux'), '« sosie toxique »'],
   [word('quitter le plein écran'), '« Sortir du plein écran »'],
-  [word('mode (?:de )?modification|mode d[’\']édition'), '« la modification » (« Terminé » la termine)'],
+  [word('mode (?:de )?modification|mode (?:d[’\'])?édition'), '« la modification » (« Terminé » la termine)'],
+  [word('dispositions? libres?'), '« écran sur mesure »'],
+  [word('créer une app|ouvrir l[’\']app'), '« Composer un écran », « Terminé »'],
   [word('mode king'), '« Personnaliser la fiche » (« King » n’est qu’un nom de code)']
 ];
 /** The console's prefix, never shown: `mini-app ${id}: …` (define.js, gf-miniapp.js, runtime.js). */
@@ -76,8 +78,11 @@ test('le lexique reconnaît les mots qu’il remplace, pas leurs voisins', () =>
   for (const text of ['Jouer : Rencontres', 'Rejouer', 'Reprendre la partie', 'Scénarios', 'Pour cette mini-application seulement',
     'Recommencer la découverte', 'Créer un endroit ici', 'Direction votre herbier', 'Dans mes collections', 'J’ai des sosies dangereux (2)',
     'Quitter le plein écran', 'En mode modification', 'Quitter le mode King', 'Entrer en mode King', 'Titre caché hors mode King',
-    'Chacun s’arrange ensuite en mode\n        King', 'Quitter le plein\n  écran']) assert.equal(caught(text).length, 1, text);
+    'Chacun s’arrange ensuite en mode\n        King', 'Quitter le plein\n  écran', 'Disposition libre', 'les dispositions libres', 'Créer une app',
+    'Ouvrir l’app', 'En mode édition']) assert.equal(caught(text).length, 1, text);
   for (const text of ['Commencer : Rencontres', 'déjouer le piège', 'il reprend sa place', 'Planche d’herbier', 'Spécimens d’herbier',
     'Créer un lieu ici', 'J’ai des sosies toxiques (2)', 'Sortir du plein écran', 'Personnaliser la fiche', 'Mise en page de la fiche',
-    'geoflora.app.rencontres.state', 'gf-scenarios', 'open-scenarios', 'openKing', 'king-bar', 'geoflora.kingMode']) assert.deepEqual(caught(text), [], text);
+    'geoflora.app.rencontres.state', 'gf-scenarios', 'open-scenarios', 'openKing', 'king-bar', 'geoflora.kingMode', 'Écran sur mesure',
+    'Composer un écran', 'la disposition des panneaux', 'Avancé : le texte de la disposition', 'Changer de modèle', 'geoflora.freeLayout',
+    'gf-layout']) assert.deepEqual(caught(text), [], text);
 });

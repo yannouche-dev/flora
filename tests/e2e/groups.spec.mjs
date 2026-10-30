@@ -1,10 +1,11 @@
-// « Disposition libre » : groups (registry.js FRAME groupe). The cells of one group share a zone, a plant, a period and a
+// « Écran sur mesure » : groups (registry.js FRAME groupe). The cells of one group share a zone, a plant, a period and a
 // search; another group's are apart — two lists, two maps that do not follow each other on one screen. The first group
 // (a) keeps the address' keys as before; another's are after its letter (b.q=, b.at=, b.p=…). Each search its own
-// (core/search-channel.js), the first the app's (Flore's); reloaded, the same; in the builder, a cell's group chosen in
+// (core/search-channel.js), the first the app's (Flore's); reloaded, the same; being modified, a cell's group chosen in
 // « Liens » of its picker, a letter in its colour on each head. iNaturalist answered here: the zone's observations,
 // of 12 plants (their plants the list).
 import { test, expect, answerAround, answerZone } from './fixtures.mjs';
+import { layoutOf, screen } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
 
@@ -46,13 +47,13 @@ test.describe('un grand écran', () => {
     await expect.poll(async () => (await names(page, '3')).every(n => /^Allium/.test(n)) && (await names(page, '3')).length > 0).toBe(true);
   });
 
-  test('dans le constructeur : le groupe d’une case choisi dans « Liens » de son contenu', async ({ app, page }) => {
-    await app.open(`#/builder?g=${encodeURIComponent('[results,results]')}&q=ortie`);
-    await page.locator('gf-builder section.cell[data-cell="1"] .cell-head .pick').click();
+  test('en modification : le groupe d’une case choisi dans « Liens » de son contenu', async ({ app, page }) => {
+    await app.open(screen('[results,results]', 'q=ortie', true));
+    await page.locator('gf-layout section.cell[data-cell="1"] .cell-head .pick').click();
     const picker = page.locator('gf-block-picker:not([inline])');
     await picker.locator('.row[data-group="Liens"]').click();
     await picker.locator('[data-param="groupe"] button[data-value="b"]').click();
-    await expect.poll(() => page.evaluate(() => new URLSearchParams(location.hash.split('?')[1] || '').get('g'))).toBe('[results,results(groupe=b)]');
-    await expect(page.locator('gf-builder section.cell[data-cell="1"] .cell-group')).toHaveText('B');
+    await expect.poll(() => layoutOf(page)).toBe('[results,results(groupe=b)]');
+    await expect(page.locator('gf-layout section.cell[data-cell="1"] .cell-group')).toHaveText('B');
   });
 });

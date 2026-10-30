@@ -1,5 +1,5 @@
 // @ts-check
-// The map cell's settings (« Disposition libre », registry.js `map`) that need words of their own: its IGN layers by
+// The map cell's settings (« Écran sur mesure », registry.js `map`) that need words of their own: its IGN layers by
 // short names (layers=znieff+n2000), its « Noms et réseaux » (noms=lieux+routes), its intents (one word, a bundle of
 // settings: map(terrain)), the dates its points keep (when=mois), its controls by the cell's width (ui=auto). Pure (no
 // DOM, no Leaflet), tested under Node; the rendering is cells.js' (dl-map).

@@ -23,7 +23,6 @@ import { confirmAsk } from './gf-ask.js';
 import { resetMapLook, resetMapSettings } from '../core/map-settings.js';
 import { notesEvents, notesWithText } from '../core/sheet-notes.js';
 import './gf-map-options.js';
-import { PRESETS } from '../layout/presets.js';
 
 /** French names of the icons a mode can have. */
 const ICON_NAMES = { image: 'Photo', 'list-ul': 'Liste', table: 'Tableau', images: 'Médias', map: 'Carte', leaf: 'Feuille', flower1: 'Fleur', 'diagram-3': 'Réseau', star: 'Étoile', layers: 'Couches', search: 'Loupe', crown: 'Couronne' };
@@ -79,17 +78,13 @@ export class GfSettings extends LitElement {
     details { margin-top: 10px; }
     summary { cursor: pointer; }
     label.file { position: relative; }
-    /* « Créer une app », first on the page: a card that leads to the builder's start (its grids, its models). */
-    .builder { display: flex; align-items: center; gap: 12px; margin: 12px 0 18px; padding: 14px 16px; border: 1px solid var(--gf-accent); border-radius: var(--gf-radius-lg);
-      background: color-mix(in srgb, var(--gf-accent) 8%, var(--gf-surface)); color: var(--gf-text); text-decoration: none; }
-    .builder:hover { background: color-mix(in srgb, var(--gf-accent) 14%, var(--gf-surface)); }
-    .builder > .bi { flex: none; font-size: 1.6rem; color: var(--gf-accent); }
-    .builder span { flex: 1; display: grid; gap: 2px; min-width: 0; }
+    /* « Écran sur mesure », first on the page: the home of screens of one's own, and Mes écrans. */
+    .builder { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 8px 12px; margin: 12px 0 18px; padding: 14px 16px; border: 1px solid var(--gf-accent);
+      border-radius: var(--gf-radius-lg); background: color-mix(in srgb, var(--gf-accent) 8%, var(--gf-surface)); color: var(--gf-text); }
+    .builder > .bi { font-size: 1.6rem; color: var(--gf-accent); }
+    .builder > span { display: grid; gap: 2px; min-width: 0; }
     .builder small { color: var(--gf-text-muted); }
-    .layouts { list-style: none; margin: 8px 0; padding: 0; display: grid; gap: 6px; }
-    .layouts a { display: grid; gap: 2px; padding: 8px 12px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius-sm); background: var(--gf-surface); text-decoration: none; }
-    .layouts a:hover { border-color: var(--gf-accent); }
-    .layouts small { color: var(--gf-text-muted); }
+    @media (max-width: 520px) { .builder { grid-template-columns: auto 1fr; } .builder > .button { grid-column: 1 / -1; justify-self: start; } }
     label.file input { position: absolute; width: 1px; height: 1px; opacity: 0; }
     label.file:focus-within { box-shadow: var(--gf-focus); }
     .mode-line { display: flex; align-items: center; gap: 10px; }
@@ -423,9 +418,9 @@ export class GfSettings extends LitElement {
   #maps() {
     return html`<h2 id="cartes">Cartes</h2>
       <div class="maps-card">
-        <p class="muted">Réglages communs à toutes les cartes : la Carte, la carte de la fiche plante, Mes plantes, Parcours, Rencontres, le partage, les cartes des dispositions libres. Chaque carte les propose aussi dans son panneau ▦ (les mêmes réglages, changés pour toutes).
+        <p class="muted">Réglages communs à toutes les cartes : la Carte, la carte de la fiche plante, Mes plantes, Parcours, Rencontres, le partage, les cartes des écrans sur mesure. Chaque carte les propose aussi dans son panneau ▦ (les mêmes réglages, changés pour toutes).
           Le fond : le plan IGN, les photos aériennes — les plus récentes, ou celles d’une année, d’une période, les photos historiques — ou les images satellite SPOT d’une année ; sur les photos et SPOT, les noms et réseaux par-dessus toutes les couches (noms de lieux, routes et cours d’eau par défaut ; voies ferrées, bâtiments, limites administratives au choix) — le plan IGN a les siens. Les couches de l’IGN, rangées par thème : relief ; forêts, haies et zones humides ; espaces protégés et propriété ; puis tout le catalogue.
-          Une carte qui a son propre fond le garde — une case de disposition libre dont l’adresse dit son fond (base=, annee=), ses noms et réseaux (noms=) ou ses couches (layers=), une carte de fiche réglée avant —, et son panneau ▦ propose de revenir aux réglages communs.</p>
+          Une carte qui a son propre fond le garde — une carte d’écran sur mesure dont l’adresse dit son fond (base=, annee=), ses noms et réseaux (noms=) ou ses couches (layers=), une carte de fiche réglée avant —, et son panneau ▦ propose de revenir aux réglages communs.</p>
         <gf-map-options scope="defaults"></gf-map-options>
         <p class="muted">En 3D : glisser du clic droit, ou à deux doigts, pour tourner et incliner ; Maj + flèches au clavier ; la boussole revient au nord. La 3D se télécharge à sa première ouverture (environ 1,6 Mo), en ligne.
           L’étape « Jusqu’où part l’expédition ? » reste vue de dessus ; sur une fiche plante, les cartes ajoutées en plus de la carte principale restent en 2D ; pendant la modification des positions, la carte repasse en 2D le temps de l’édition.</p>
@@ -477,16 +472,6 @@ export class GfSettings extends LitElement {
     </fieldset>
     <p class="muted">Le menu ⋯ d’une activité en décide pour elle seule, jusqu’à ce qu’on la recommence.</p>`;
   }
-  /** « Disposition libre » (app/layout): the ready-made layouts, and one of one's own. */
-  #layouts() {
-    return html`<h2 id="disposition">Disposition libre</h2>
-      <p class="muted">Un écran à composer avec les outils de GeoFlora côte à côte — la carte, la recherche, la fiche ou un seul de ses blocs, les photos,
-        les cartes à swiper —, tous reliés : une plante choisie dans l’un s’affiche dans tous les autres, la zone choisie sur la carte filtre la recherche.
-        Colonnes et lignes se redimensionnent ; la disposition s’écrit dans l’adresse, un lien la partage telle quelle.</p>
-      <ul class="layouts">${PRESETS.map(p => html`<li><a href=${href.layout(p.spec)}><b>${p.title}</b><small>${p.about}</small></a></li>`)}</ul>
-      <p><a class="button" href=${href.layout('')}>${icon('pencil')} Composer la mienne</a></p>`;
-  }
-
   render() {
     const { meta, offline } = this.#store.state;
     return html`
@@ -494,10 +479,10 @@ export class GfSettings extends LitElement {
         <a class="back link" href=${floreHref()}>${icon(tabShown('flore') ? 'leaf' : 'binoculars')} Aller à ${floreName()}</a>
         <h1>À propos et réglages</h1>
         <p class="muted"><a href=${href.legal()}>${icon('shield-check')} Mentions légales et confidentialité</a> : qui publie GeoFlora, ce qui reste sur cet appareil, ce que reçoit chaque service en ligne (votre position surtout).</p>
-        <a class="builder" href=${href.builder()}>${icon('window-desktop')}<span><b>Créer une app</b>
-          <small>Une grille à diviser à volonté, puis un bloc dans chaque emplacement (carte, recherche, fiche…) : votre écran, partageable par un lien.</small></span>${icon('chevron-right')}</a>
+        <div class="builder">${icon('window-desktop')}<span><b>Écran sur mesure</b>
+          <small>Les outils de GeoFlora côte à côte — carte, recherche, fiche, photos… —, reliés entre eux et composés à votre idée ; un lien le partage tel quel.</small></span>
+          <a class="button" href=${href.layout('')}>${icon('plus-lg')} Composer un écran</a></div>
         ${this.#firstSteps()}
-        ${this.#layouts()}
         ${this.#sheetLayout()}
 
         <h2>Données</h2>

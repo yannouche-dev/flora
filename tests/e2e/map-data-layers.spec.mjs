@@ -7,6 +7,7 @@
 // points' sources (src=: GBIF's fetched for the whole group) and the current plant's (plante=), written in the address
 // and read from it. Réglages › Cartes has none. Every service answered here (fixtures.mjs, tiles.mjs).
 import { test, expect, answerAround, answerPlantNear, answerZoneGbif, plantId } from './fixtures.mjs';
+import { layoutOf } from './app.mjs';
 import { answerTiles } from './tiles.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page @typedef {import('@playwright/test').Locator} Locator */
@@ -44,8 +45,6 @@ const onThisMap = panel => panel.getByRole('group', { name: 'Sur cette carte' })
 /** A key kept on the device. @param {Page} page @param {string} key */
 const kept = (page, key) => page.evaluate(k => JSON.parse(localStorage.getItem(k) || 'null'), key);
 
-/** The layout of the address, decoded. @param {Page} page */
-const layoutOf = page => page.evaluate(() => decodeURIComponent(location.hash.split('?')[0].replace(/^#\/layout\//, '')));
 
 /** A plant sheet's map block's settings as kept (core/sheet-blocks.js mapConfig). @param {Page} page */
 const sheetConfig = page => page.evaluate(async () => (await import('/app/core/sheet-blocks.js')).mapConfig('map'));

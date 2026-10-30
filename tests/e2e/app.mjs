@@ -2,6 +2,24 @@
 // components render in open shadow roots, which Playwright's CSS locators pierce: specs mostly use page.locator.
 import { expect } from '@playwright/test';
 
+/** @typedef {import('@playwright/test').Page} Page */
+
+/** The layout of a screen of one's own in the address (#/layout/<layout>?…), decoded. @param {Page} page */
+export const layoutOf = page => page.evaluate(() => decodeURIComponent(location.hash.split('?')[0].replace(/^#\/layout\/?/, '')));
+
+/**
+ * A screen of one's own's address, as the app writes it (router.js href.layout: brackets, parentheses, « @ » and « = »
+ * kept, anything else an address may not hold encoded): its layout, its state, being modified (edit=1, last).
+ * @param {string} spec @param {string} [state] @param {boolean} [edit]
+ */
+export const screen = (spec, state = '', edit = false) => {
+  const query = [state, edit ? 'edit=1' : ''].filter(Boolean).join('&');
+  return '#/layout/' + spec.replace(/[^\w\-.~!$&'()*+,;=:@[\]]/g, c => encodeURIComponent(c)) + (query ? '?' + query : '');
+};
+
+/** Whether the screen of one's own is being modified (gf-layout[editing]). @param {Page} page */
+export const editing = page => page.locator('gf-layout[editing]').count().then(n => n > 0);
+
 export class App {
   /** @param {import('@playwright/test').Page} page */
   constructor(page) {
