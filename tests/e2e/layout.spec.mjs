@@ -35,12 +35,17 @@ test('Personnaliser la fiche : « Déplacer vers… » un nouveau volet, puis de
 
 test('TEST-6 / GAP3-10 : un volet de trop est refusé et annoncé, la mise en page se réimporte', async ({ app, page }) => {
   await kingSheet(app);
-  // Six panes nested, alternately right and under the sheet: the deepest the import reads.
+  // Six panes nested, alternately right and under the sheet: the deepest the import reads. Answered a task later, the
+  // sheet redrawn: an answer given amid the redraw it starts can be lost — Chromium 141's V8 holds the evaluation's
+  // promise weakly, a garbage collection meanwhile and CDP says « Promise was collected », which Playwright reports as
+  // « Execution context was destroyed, most likely because of a navigation » (none happens).
   const built = await page.evaluate(async () => {
     const sb = await import('/app/core/sheet-blocks.js');
     const { store } = await import('/app/core/store.js');
     const view = store.state.mode;
-    return ['calendar', 'names', 'uses', 'ids', 'mine', 'status'].map((k, i) => sb.dockBlock(view, k, 'sheet', i % 2 ? 'bottom' : 'right'));
+    const docked = ['calendar', 'names', 'uses', 'ids', 'mine', 'status'].map((k, i) => sb.dockBlock(view, k, 'sheet', i % 2 ? 'bottom' : 'right'));
+    await new Promise(resolve => setTimeout(resolve));
+    return docked;
   });
   expect(built).toEqual([true, true, true, true, true, true]);
   const before = await page.evaluate(async () => (await import('/app/core/sheet-blocks.js')).exportLayout());
@@ -53,7 +58,10 @@ test('TEST-6 / GAP3-10 : un volet de trop est refusé et annoncé, la mise en pa
     const text = sb.exportLayout();
     sb.resetAll();
     sb.importLayout(text);
-    return { text, again: sb.exportLayout() };
+    const again = sb.exportLayout();
+    // Answered once the sheet has redrawn, as above.
+    await new Promise(resolve => setTimeout(resolve));
+    return { text, again };
   });
   expect(after.text).toBe(before);
   expect(JSON.parse(after.again).layout.tree).toEqual(JSON.parse(before).layout.tree);

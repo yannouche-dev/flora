@@ -13,7 +13,8 @@ import { discoverEvents, tabShown } from '../core/discover.js';
  */
 export class GfTabbar extends LitElement {
   static properties = {
-    current: {}
+    current: {},
+    lit: { attribute: false }
   };
 
   static styles = css`
@@ -24,7 +25,8 @@ export class GfTabbar extends LitElement {
       padding-bottom: env(safe-area-inset-bottom);
     }
     nav { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; align-items: center; height: 60px; }
-    a.new .icon { animation: arrive 1.2s ease-out 2; }
+    /* A tab that came, lit while it is announced (gf-app): a ring, and a pulse but with reduced motion. */
+    a.new .icon { box-shadow: inset 0 0 0 2px var(--gf-warn); animation: arrive 1.2s ease-out 2; }
     @keyframes arrive { 30% { background: #fdf3c4; transform: scale(1.15); } }
     a {
       display: grid;
@@ -58,23 +60,20 @@ export class GfTabbar extends LitElement {
     super();
     /** 'discover' | 'flore' | 'map' | 'mine' | 'more' */
     this.current = 'flore';
+    /** The tabs announced now (gf-app), lit meanwhile. @type {string[]} */
+    this.lit = [];
   }
 
-  /** The tab that just came, for a moment. @type {string | null} */
-  #fresh = null;
   #onChange = () => this.requestUpdate();
-  #onUnlock = (/** @type {Event} */ e) => { this.#fresh = /** @type {CustomEvent} */ (e).detail; this.requestUpdate(); setTimeout(() => { this.#fresh = null; this.requestUpdate(); }, 4000); };
 
   connectedCallback() {
     super.connectedCallback();
     discoverEvents.addEventListener('change', this.#onChange);
-    discoverEvents.addEventListener('unlock', this.#onUnlock);
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     discoverEvents.removeEventListener('change', this.#onChange);
-    discoverEvents.removeEventListener('unlock', this.#onUnlock);
   }
 
   render() {
@@ -82,7 +81,7 @@ export class GfTabbar extends LitElement {
     const tab = (/** @type {string} */ id, /** @type {string} */ link, /** @type {IconName} */ name, /** @type {IconName} */ active, /** @type {string} */ label) => {
       if (!tabShown(id)) return '';
       const current = this.current === id;
-      return html`<a class=${this.#fresh === id ? 'new' : ''} href=${link} aria-current=${current ? 'page' : 'false'}><span class="icon" aria-hidden="true">${icon(current ? active : name)}</span><span>${label}</span></a>`;
+      return html`<a class=${this.lit.includes(id) ? 'new' : ''} href=${link} aria-current=${current ? 'page' : 'false'}><span class="icon" aria-hidden="true">${icon(current ? active : name)}</span><span>${label}</span></a>`;
     };
     return html`
       <nav aria-label="Navigation principale">

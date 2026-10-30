@@ -7,6 +7,7 @@ import { syncDataset } from './core/dataset.js';
 import { schedulePurge } from './core/cache.js';
 import { fromHash, startUrlSync } from './core/query.js';
 import { context } from './core/context.js';
+import { quietly, unlocksAtStart } from './core/discover.js';
 import { parse } from './core/router.js';
 import { loadIndex, runSearch } from './core/search.js';
 import { anyHarvest, hasSpots, holdIfEmptied, markWalks, refreshMembership, requestPersistence, restoreAfterRepair, restoreReason, spotEvents,
@@ -33,6 +34,11 @@ async function start() {
     // holds something): the copy held before anything is written into the new base, and put back (restoreAfter, below).
     await openDb();
     const restoring = holdIfEmptied();
+    // The first steps' tabs from what the device holds — a favourite, a liste, a lieu: Mes plantes; a lieu: the Carte —,
+    // quietly (lists and lieux of before this version, settings cleared, a « Revoir les premiers pas » of before). While a
+    // restore waits the base is empty: what it puts back brings them (restoreAfter), and the tab the address brought
+    // stays quiet when the backup copy brings it too.
+    unlocksAtStart(restoring).catch(error => console.error(error));
     // The plant sheet's notes (moved from localStorage on the first launch of version 6 of the database).
     const notes = loadNotes().catch(error => console.error(error));
     const { meta, offline, update, stored } = await syncDataset(({ phase }) => store.set({ statusText: PHASES[phase] }));
@@ -107,7 +113,8 @@ async function restoreAfter(stored) {
   }
   const reason = restoreReason();
   try {
-    store.set({ restore: { done: true, reason, contents: await restoreAfterRepair() } });
+    // The tabs its lists and lieux bring come quietly: they were the user's before the repair.
+    store.set({ restore: { done: true, reason, contents: await quietly(restoreAfterRepair) } });
   } catch (error) {
     console.error(error);
     const e = /** @type {Error} */ (error);

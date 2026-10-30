@@ -731,7 +731,10 @@ test('Réglages › « Tout rétablir » : tout revient par défaut, dans tous l
     sb.dockBlock('standard', 'status', 'sheet', 'right');
     sb.setSubHidden('standard', 'actions', 'share', true);
     sb.createMap('Carte des lieux');
-    return { note: key, mode: createMode('Terrain', 'standard') };
+    const made = createMode('Terrain', 'standard');
+    // Answered once the sheet has redrawn (layout.spec: an answer given amid the redraw it starts can be lost).
+    await new Promise(resolve => setTimeout(resolve));
+    return { note: key, mode: made };
   }, ORTIE);
   const layout = () => page.evaluate(async () => (await import('/app/core/sheet-blocks.js')).exportLayout());
   const saved = await layout();

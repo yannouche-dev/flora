@@ -2,7 +2,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { floreHref, floreName, tabHref } from '../core/context.js';
 import { MediaController, PHONE_QUERY } from '../core/media.js';
-import { href, RouterController } from '../core/router.js';
+import { href, isStart, RouterController } from '../core/router.js';
 import { setMode, store, StoreController, whenReady } from '../core/store.js';
 import { backupContents, downloadBackup, exportGeoJSON, readBackup, restorePending } from '../core/collections.js';
 import './gf-flora.js';
@@ -10,8 +10,8 @@ import './gf-tabbar.js';
 import './gf-mode-switch.js';
 import './gf-scenarios.js';
 import './gf-launcher.js';
-import { discoverEvents, tabShown, UNLOCKS } from '../core/discover.js';
-import { replaceView } from '../core/history.js';
+import { discoverEvents, markAnnounced, pendingUnlocks, tabShown, UNLOCKS } from '../core/discover.js';
+import { modalOpen, openView, replaceView } from '../core/history.js';
 import { ui } from '../styles/ui.js';
 import { icon } from '../core/icons.js';
 
@@ -54,6 +54,26 @@ let storageModule = null;
 /** It could not be loaded: the one line is all there is (then announced). */
 let storageModuleFailed = false;
 const loadStorageError = () => (storageModule ??= import('./gf-storage-error.js').catch(error => { storageModuleFailed = true; console.error(error); }));
+
+/**
+ * The brief toast (core/toast.js), out of the start: loaded the first time a tab that came is to be announced (the
+ * first steps only), then kept.
+ * @type {Promise<typeof import('../core/toast.js') | void> | null}
+ */
+let toastModule = null;
+/** @type {typeof import('../core/toast.js') | null} */
+let toast = null;
+const loadToast = () => (toastModule ??= import('../core/toast.js').then(m => { toast = m; return m; }, error => { toastModule = null; console.error(error); }));
+
+/** How long the announcement of tabs that came shows (ms); with its « Voir » hovered or focused, until left. */
+const ANNOUNCE_MS = 9000;
+/**
+ * Shown less than this (ms), the window in sight — another message took its place, a dialog covered it, the window was
+ * hidden —, it is announced again once that has passed.
+ */
+const ANNOUNCE_READ_MS = 2000;
+/** Tab names joined as said: « Carte et Mes plantes ». */
+const AND = new Intl.ListFormat('fr', { type: 'conjunction' });
 
 /** The screens asked for, and those loaded. @type {Set<string>} */
 const asked = new Set(), loaded = new Set();
@@ -121,18 +141,12 @@ export class GfApp extends LitElement {
     nav.tabs a { color: var(--gf-text); text-decoration: none; white-space: nowrap; display: inline-flex; align-items: center; }
     /* The page's tab, on the accent: its contrasting text (the rule above outweighs the .segmented one of ui.js). */
     nav.tabs a[aria-current='page'] { color: var(--gf-accent-contrast); }
+    /* A tab that came, lit while it is announced (first steps): a ring parted from the tab by the surface — seen on the
+       page's tab too, on the accent —, its focus ring kept. */
+    nav.tabs a.new { box-shadow: inset 0 0 0 2px var(--gf-warn), inset 0 0 0 4px var(--gf-surface); }
+    nav.tabs a.new:focus-visible { box-shadow: inset 0 0 0 2px var(--gf-warn), inset 0 0 0 4px var(--gf-surface), var(--gf-focus); }
     .note, .mode { flex: none; }
     gf-map-page, gf-spot-editor, gf-collections, gf-shared, gf-flora, gf-miniapp, gf-launcher, gf-layout, gf-builder { flex: 1; min-height: 0; }
-    /* A tool that just came (first steps): announced once. */
-    .unlocked { position: fixed; z-index: 1003; left: 50%; transform: translateX(-50%); bottom: calc(24px + env(safe-area-inset-bottom, 0px)); width: min(440px, calc(100vw - 24px));
-      display: flex; align-items: center; gap: 10px; padding: 12px 14px; border-radius: 14px; background: #1f2a1f; color: #fff; box-shadow: 0 10px 30px rgb(0 0 0 / 35%); animation: up 0.3s ease-out; }
-    :host([phone]) .unlocked { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
-    .unlocked span { flex: 1; font-size: 0.9rem; }
-    .unlocked b { color: #f5c518; }
-    .unlocked a { color: #f5c518; font-weight: 700; }
-    .unlocked button { background: none; border: 0; color: #cfd8cf; font: inherit; cursor: pointer; min-height: 32px; }
-    @keyframes up { from { transform: translate(-50%, 20px); opacity: 0; } }
-    @media (prefers-reduced-motion: reduce) { .unlocked { animation: none; } }
     /* Storage full: over everything (a plant's sheet covers the page on a phone), until closed. */
     .full { position: fixed; z-index: 1004; left: 50%; transform: translateX(-50%); top: calc(8px + env(safe-area-inset-top, 0px)); width: min(520px, calc(100vw - 24px));
       box-sizing: border-box; padding: 10px 14px; border-radius: 14px; background: var(--gf-surface); color: var(--gf-text); border: 2px solid var(--gf-danger); box-shadow: var(--gf-shadow); font-size: 0.9rem; }
@@ -172,23 +186,42 @@ export class GfApp extends LitElement {
   #store = new StoreController(this);
   #phone = new MediaController(this, PHONE_QUERY);
 
-  /** A tool that just came, announced. @type {string | null} */
-  _unlocked = null;
   #onDiscover = () => this.requestUpdate();
-  #onUnlock = (/** @type {Event} */ e) => {
-    // Discovering: no « Nouveau : … » over the steps — the tab just appears in the bar.
-    if (this.#tab(this.#router.route) === 'discover') return;
-    this._unlocked = /** @type {CustomEvent} */ (e).detail;
-    this.requestUpdate();
-    clearTimeout(this.#unlockTimer);
-    this.#unlockTimer = setTimeout(() => { this._unlocked = null; this.requestUpdate(); }, 9000);
+
+  /** The tabs announced now, lit in the bar and the header meanwhile. @type {string[]} */
+  _lit = [];
+  /** The announcement shown (core/toast.js), or null. @type {{ hide: () => void } | null} */
+  #announcing = null;
+  /** @type {any} */ #announceTimer = 0;
+  /**
+   * The tabs that came, looked at again in a moment: a screen drawn, a dialog closed (its step gone back: popstate), the
+   * window shown again, the toast place let go. Throttled, not put off: the store's frequent renders never hold it back.
+   */
+  #announceSoon = () => {
+    if (!this.#announceTimer) this.#announceTimer = setTimeout(() => { this.#announceTimer = 0; this.#announce(); }, 600);
   };
-  /** @type {any} */ #unlockTimer = 0;
+  /**
+   * A dialog opened over the announcement (core/history.js openModal) covers it: let go as on entering an activity —
+   * read (2 s), it is done; else it comes back once the dialog has closed (its step gone back: popstate).
+   */
+  #underModal = () => this.#announcing?.hide();
+  /**
+   * The window hidden (another tab of the browser, another app, the phone locked) while the announcement shows: let go as
+   * under a dialog — read (2 s in sight), it is done; else it comes back on the first screen in sight. Never left to run
+   * its time out of sight, then counted read. In sight again: looked at.
+   */
+  #onVisibility = () => {
+    if (document.visibilityState !== 'visible') this.#announcing?.hide();
+    this.#announceSoon();
+  };
 
   connectedCallback() {
     super.connectedCallback();
     discoverEvents.addEventListener('change', this.#onDiscover);
-    discoverEvents.addEventListener('unlock', this.#onUnlock);
+    window.addEventListener('popstate', this.#announceSoon);
+    window.addEventListener('gf-modal', this.#underModal);
+    document.addEventListener('visibilitychange', this.#onVisibility);
+    toast?.toastEvents.addEventListener('free', this.#announceSoon);
     window.visualViewport?.addEventListener('resize', this.#onKeyboard);
     window.visualViewport?.addEventListener('scroll', this.#onKeyboard);
     window.addEventListener('fit-keyboard', this.#onKeyboard);
@@ -197,7 +230,12 @@ export class GfApp extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     discoverEvents.removeEventListener('change', this.#onDiscover);
-    discoverEvents.removeEventListener('unlock', this.#onUnlock);
+    window.removeEventListener('popstate', this.#announceSoon);
+    window.removeEventListener('gf-modal', this.#underModal);
+    document.removeEventListener('visibilitychange', this.#onVisibility);
+    toast?.toastEvents.removeEventListener('free', this.#announceSoon);
+    clearTimeout(this.#announceTimer);
+    this.#announceTimer = 0;
     window.visualViewport?.removeEventListener('resize', this.#onKeyboard);
     window.visualViewport?.removeEventListener('scroll', this.#onKeyboard);
     window.removeEventListener('fit-keyboard', this.#onKeyboard);
@@ -260,9 +298,9 @@ export class GfApp extends LitElement {
       <header ?inert=${covered}>
         <div class="side">${phone ? nothing : html`<nav class="tabs segmented" aria-label="Sections">
           <a href=${href.discover()} aria-current=${tab === 'discover' ? 'page' : 'false'}>Découvrir</a>
-          ${tabShown('flore') ? html`<a href=${tabHref('flore')} aria-current=${route.name === 'search' || route.name === 'plant' ? 'page' : 'false'}>Flore</a>` : nothing}
-          ${tabShown('map') ? html`<a href=${tabHref('map')} aria-current=${route.name === 'map' ? 'page' : 'false'}>Carte</a>` : nothing}
-          ${tabShown('mine') ? html`<a href=${tabHref('mine')} aria-current=${['collections', 'spot', 'spot-new', 'shared'].includes(route.name) ? 'page' : 'false'}>Mes plantes</a>` : nothing}
+          ${tabShown('flore') ? html`<a class=${this._lit.includes('flore') ? 'new' : ''} href=${tabHref('flore')} aria-current=${route.name === 'search' || route.name === 'plant' ? 'page' : 'false'}>Flore</a>` : nothing}
+          ${tabShown('map') ? html`<a class=${this._lit.includes('map') ? 'new' : ''} href=${tabHref('map')} aria-current=${route.name === 'map' ? 'page' : 'false'}>Carte</a>` : nothing}
+          ${tabShown('mine') ? html`<a class=${this._lit.includes('mine') ? 'new' : ''} href=${tabHref('mine')} aria-current=${['collections', 'spot', 'spot-new', 'shared'].includes(route.name) ? 'page' : 'false'}>Mes plantes</a>` : nothing}
         </nav>`}</div>
         <a class="brand" href=${floreHref()} aria-label=${'GeoFlora — aller à ' + floreName()}>${brand}</a>
         <div class="side end">${phone ? html`<gf-scenarios class="phone-scenarios"></gf-scenarios>` : html`
@@ -282,13 +320,12 @@ export class GfApp extends LitElement {
           : datasetDeferred && status === 'ready' && route.name === 'search' ? html`<div class="banner" role="status">Mise à jour de la flore reportée — recherche sur la copie locale.</div>` : nothing}
         ${this.#outlet(route)}
       </main>
-      ${phone ? html`<gf-tabbar current=${tab}></gf-tabbar>` : html`<span></span>`}
+      ${phone ? html`<gf-tabbar current=${tab} .lit=${this._lit}></gf-tabbar>` : html`<span></span>`}
       ${storageFull && status !== 'error' ? html`<div class="full" role="alert">
         <p><strong>Espace de stockage plein</strong> : GeoFlora n’a pas pu enregistrer une modification sur cet appareil.
           Exportez vos plantes pour ne rien perdre, puis libérez de l’espace (fichiers, applications, données d’autres sites) et rechargez la page.</p>
         <div><button class="primary" type="button" @click=${() => exportGeoJSON().catch(error => console.error(error))}>Exporter mes plantes</button>
           <button class="link" type="button" @click=${() => store.set({ storageFull: false })}>Fermer</button></div></div>` : nothing}
-      ${this._unlocked ? this.#unlockedView(/** @type {keyof typeof UNLOCKS} */ (this._unlocked)) : nothing}
     `;
     // « Noter ici » after either: one element for the whole app, kept on entering or leaving an activity (its toast never
     // cut short), which an activity's sheet opens too.
@@ -298,13 +335,60 @@ export class GfApp extends LitElement {
   willUpdate() {
     const route = this.#router.route;
     this.toggleAttribute('boxed', route.name === 'app');
-    // The start page during the first steps is Découvrir's list: at its own address, so that an activity left
+    // Nothing over an activity: an announcement read (2 s) is done, else it waits for the way out.
+    if (route.name === 'app') this.#announcing?.hide();
+    // The start page during the first steps is Découvrir's list — the start alone (`#/`, router.js isStart): any other
+    // Flore address has brought Flore (discover.js arrivedAt) — at its own address, so that an activity left
     // (« Quitter l’activité », back to here) finds the list again, even once Flore — the start page then — has come.
-    if (route.name === 'search' && !tabShown('flore') && /^#?\/?$/.test(location.hash)) replaceView(href.discover());
+    if (route.name === 'search' && !tabShown('flore') && isStart(location.hash)) replaceView(href.discover());
   }
 
   updated() {
     this.toggleAttribute('phone', this.#phone.matches);
+    this.#announceSoon();
+  }
+
+  /**
+   * The tabs that came during the first steps (core/discover.js pendingUnlocks), announced once: on the first screen
+   * outside an activity, the app ready, no dialog open, this window in sight (the other tabs of the browser show
+   * nothing), the toast place free (a capture's « Annuler », a safety warning, a map's word first) — all in one toast,
+   * said to screen readers, their tabs lit meanwhile. « Voir » for one tab that is not the screen's own (one come with
+   * the address shown has none). Cut short before it could be read (2 s, the window in sight) — by another message, a
+   * dialog, the window hidden —: announced again once that has passed; else, or its « Voir » taken: announced, here and
+   * in the other tabs.
+   */
+  #announce() {
+    if (this.#announcing || !this.isConnected) return;
+    const tabs = pendingUnlocks();
+    const route = this.#router.route;
+    if (!tabs.length || route.name === 'app' || this.#store.state.status !== 'ready' || modalOpen() || document.visibilityState !== 'visible') return;
+    // The toast's module, the first time (out of the start): looked at again once it has come.
+    if (!toast) {
+      loadToast().then(m => {
+        if (!m || !this.isConnected) return;
+        m.toastEvents.addEventListener('free', this.#announceSoon);
+        this.#announceSoon();
+      });
+      return;
+    }
+    if (!toast.toastSlotFree()) return;
+    const one = tabs.length === 1 ? tabs[0] : null;
+    const words = one ? `Nouveau : ${UNLOCKS[one].label} — ${UNLOCKS[one].text}.` : `Nouveaux onglets : ${AND.format(tabs.map(t => UNLOCKS[t].label))}.`;
+    const to = one && one !== this.#tab(route) ? (one === 'flore' ? floreHref() : one === 'mine' ? href.collections() : href.map()) : null;
+    const phone = this.#phone.matches;
+    const shown = Date.now();
+    this.#announcing = toast.briefToast(words, {
+      near: this.renderRoot.querySelector(phone ? 'gf-tabbar' : 'main'), at: phone ? 'above' : 'bottom', offset: phone ? 8 : 24,
+      ms: ANNOUNCE_MS, weight: 1,
+      action: to ? { label: 'Voir', run: () => { markAnnounced(tabs); openView(to); } } : null,
+      onHide: () => {
+        this.#announcing = null;
+        this._lit = [];
+        this.requestUpdate();
+        if (Date.now() - shown >= ANNOUNCE_READ_MS) markAnnounced(tabs); else this.#announceSoon();
+      }
+    });
+    if (this.#announcing) { this._lit = tabs; this.requestUpdate(); }
   }
 
   /** The tab of a view; the start page is « Découvrir » until Flore has come. @param {import('../core/router.js').Route} route */
@@ -345,16 +429,6 @@ export class GfApp extends LitElement {
     return html`<div class="banner" role="status">${r.contents
       ? `${what} : la copie de secours de cet appareil a remis ${backupContents(r.contents)}.`
       : `${what} : la copie de secours de cet appareil n’avait rien à remettre.`} ${close}</div>`;
-  }
-
-  /** @param {keyof typeof UNLOCKS} key */
-  #unlockedView(key) {
-    const u = UNLOCKS[key];
-    if (!u) return nothing;
-    const link = key === 'flore' ? floreHref() : key === 'mine' ? href.collections() : href.map();
-    return html`<div class="unlocked" role="status">${icon('star-fill')}<span><b>Nouveau : ${u.label}</b> — ${u.text}.</span>
-      <a href=${link} @click=${() => { this._unlocked = null; }}>Voir</a>
-      <button type="button" aria-label="Fermer" @click=${() => { this._unlocked = null; this.requestUpdate(); }}>${icon('x-lg')}</button></div>`;
   }
 
   /** Découvrir: the list of the activities (gf-launcher, as in Découvrir's dialog under the film icon). */

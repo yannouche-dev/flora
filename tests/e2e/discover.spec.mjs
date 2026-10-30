@@ -51,7 +51,7 @@ test('« Passer » montre toute l’application ; « Revoir les premiers pas » 
   expect(await page.evaluate(async () => (await import('/app/core/discover.js')).discoverState().done)).toBe(true);
   await app.go('#/settings');
   // What it empties too, and what it keeps, said under it; asked first.
-  await expect(page.getByText('« Revoir les premiers pas » repart du début (Découvrir, une astuce à la fois, les onglets qui arrivent un à un) : '
+  await expect(page.getByText('« Revoir les premiers pas » repart du début (Découvrir, puis les onglets un à un — Mes plantes reste si vous avez des favoris, des listes ou des lieux, la Carte si vous avez des lieux) : '
     + 'les étapes et ce que gardent Rencontres, Cueillette prudente et Mosaïque (lieu, distance, cartes, matchs) sont oubliés. '
     + 'Vos favoris restent, et ceux venus de ces activités deviennent les vôtres.')).toBeVisible();
   await page.getByRole('button', { name: 'Revoir les premiers pas' }).click();
@@ -83,6 +83,8 @@ test('« Revoir les premiers pas » : demandé d’abord ; les favoris venus des
   await page.keyboard.press('ArrowRight');
   await expect.poll(favourite).toEqual(['rencontres', null]);
   await app.go('#/settings');
+  // Mes plantes came with the match: announced out of the activity.
+  await expect(page.locator('.gf-brief-toast')).toContainText('Nouveau : Mes plantes');
   await page.getByRole('button', { name: 'Tout montrer maintenant' }).click();
   const again = page.getByRole('button', { name: 'Revoir les premiers pas' });
   const dialog = page.getByRole('alertdialog', { name: 'Revoir les premiers pas ?' });
@@ -104,6 +106,10 @@ test('« Revoir les premiers pas » : demandé d’abord ; les favoris venus des
   await again.click();
   await dialog.getByRole('button', { name: 'Revoir les premiers pas' }).click();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe('#/discover');
+  // The adopted favourite keeps Mes plantes, there at once, not announced again; Flore waits for 5 new plants.
+  await expect.poll(() => app.tabs()).toContain('Mes plantes');
+  expect(await app.tabs()).not.toContain('Flore');
+  expect(await page.evaluate(async () => (await import('/app/core/discover.js')).pendingUnlocks())).toEqual([]);
   await expect(page.locator('.gf-brief-toast')).toHaveText('Votre favori venu des activités est désormais à vous.');
   expect(await favourite()).toEqual([null, 'rencontres']);
   expect(await page.evaluate(() => localStorage.getItem('geoflora.app.rencontres.state'))).toBe(null);

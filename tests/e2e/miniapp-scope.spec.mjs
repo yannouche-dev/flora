@@ -230,7 +230,12 @@ test.describe('premier lancement', () => {
     await page.keyboard.press('Escape');
 
     // Every tab arrives meanwhile (the first steps over, elsewhere): the game keeps its way, here and after a reload.
-    await page.evaluate(async () => { const d = await import('/app/core/discover.js'); for (const t of /** @type {const} */ (['mine', 'map', 'flore'])) d.unlock(t); });
+    // Answered once the app has redrawn (layout.spec: an answer given amid the redraw it starts can be lost).
+    await page.evaluate(async () => {
+      const d = await import('/app/core/discover.js');
+      for (const t of /** @type {const} */ (['mine', 'map', 'flore'])) d.unlock(t);
+      await new Promise(resolve => setTimeout(resolve));
+    });
     expect((await discover(page)).done).toBe(true);
     await page.locator('ma-guided .g-steps [data-step="go"]').click();
     await expect(page.locator('ma-guided .swipe-card.top')).toBeVisible();
@@ -293,7 +298,12 @@ test.describe('premier lancement', () => {
     expect(await page.evaluate(() => JSON.parse(localStorage.getItem('geoflora.sheetLayout') || '{}').tree?.standard ?? null)).toBe(null);
 
     // Every tab arrives meanwhile (the first steps over): the game keeps its way.
-    await page.evaluate(async () => { const d = await import('/app/core/discover.js'); for (const t of /** @type {const} */ (['mine', 'map', 'flore'])) d.unlock(t); });
+    // Answered once the app has redrawn (layout.spec: an answer given amid the redraw it starts can be lost).
+    await page.evaluate(async () => {
+      const d = await import('/app/core/discover.js');
+      for (const t of /** @type {const} */ (['mine', 'map', 'flore'])) d.unlock(t);
+      await new Promise(resolve => setTimeout(resolve));
+    });
     expect((await discover(page)).done).toBe(true);
     await expect(g.locator('.g-steps li.on .l')).toHaveText('Encyclopédie');
     await expect(page.locator('ma-around-list')).toHaveCount(0);

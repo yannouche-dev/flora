@@ -64,9 +64,10 @@ test.describe('premier lancement', () => {
     await expect(page.locator('gf-launcher li[data-app="rencontres"]').getByRole('button', { name: 'Commencer : Rencontres', exact: true })).toBeVisible();
     expect(await app.tabs()).toContain('Découvrir');
     expect(await app.tabs()).not.toContain('Flore');
-    // An address of the flora still opens it (a shared link): the discovery never locks one out.
+    // An address of the flora opens it (a shared link), and Flore's tab comes with it: the first steps hide a tab, never an address.
     await app.go(`#/plant/${plantId('Allium ursinum')}`);
     await expect(page.getByRole('heading', { level: 1, name: 'Ail des ours' })).toBeVisible();
+    await expect.poll(() => app.tabs()).toContain('Flore');
   });
 });
 

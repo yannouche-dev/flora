@@ -10,7 +10,9 @@
 //    start leads straight to m.full. The bar is the setting of all (Réglages › Premiers pas), unless the activity's
 //    ⋯ menu chose for it alone (`ownSteps`, kept with its state).
 //  - Kept under geoflora.app.<id>.state: { v, path, ctx (the persist keys), finished, ownSteps? }, written 300 ms
-//    after a change. The start is always shown first; the path kept is offered as « Continuer ».
+//    after a change — at once when the box leaves, or the page (pagehide, or hidden: a reload, the tab closed or
+//    put away within those 300 ms loses nothing). The start is always shown first; the path kept is offered as
+//    « Continuer ».
 //  - Events: 'change' (anything to render again), 'navigate' (detail { step, replace? }: a step reached, for the
 //    address), 'exit' (the way out asked), 'scenarios' (Découvrir asked for, over the app), 'seen' (detail: a
 //    plant's id — a card swiped, a plant noted, a new plant opened or chosen, the context's `focus`: the box counts it
@@ -138,6 +140,8 @@ export class MiniApp extends EventTarget {
     /** The last plant opened or chosen (the context's `focus`) said `seen`: the one kept with the game already was. */
     this.#focusSeen = this.c.focus ?? null;
     this.ctx.subscribe(() => this.#changed());
+    globalThis.addEventListener?.('pagehide', this.#leave);
+    globalThis.document?.addEventListener('visibilitychange', this.#leave);
     this.#load();
   }
 
@@ -335,9 +339,10 @@ export class MiniApp extends EventTarget {
       && Object.entries(ctx).every(([k, v]) => JSON.stringify(v) === JSON.stringify(this.m.context[k].init));
   }
 
-  /** Written now (the box leaving), not 300 ms later; nothing to keep, nothing written (the key removed). */
+  /** Written now (the box leaving, the page too), not 300 ms later; nothing to keep, nothing written (the key removed). */
   flush() {
     clearTimeout(this.saveTimer);
+    this.saveTimer = 0;
     const key = storageKey(this.m.id, 'state');
     writeJSON(key, this.pristine ? null : this.saved()); // not written: not kept
   }
@@ -346,9 +351,17 @@ export class MiniApp extends EventTarget {
   dispose() {
     for (const l of this.loads.values()) { clearTimeout(l.timer); l.abort?.abort(); }
     for (const a of this.running.values()) a.abort();
+    globalThis.removeEventListener?.('pagehide', this.#leave);
+    globalThis.document?.removeEventListener('visibilitychange', this.#leave);
     this.flush();
     this.#emit('dispose');
   }
+
+  /**
+   * The page left (pagehide: a reload, the tab closed) or hidden (the phone locked, another app over it: it may never
+   * be shown again): a save waiting, written now. @param {Event} e
+   */
+  #leave = e => { if (this.saveTimer && (e.type === 'pagehide' || document.visibilityState === 'hidden')) this.flush(); };
 
   /** @param {string[]} path */
   #walk(path) {

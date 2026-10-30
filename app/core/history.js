@@ -221,7 +221,8 @@ function leave(id) {
 
 /**
  * Shows a modal dialog as a step in history: Back closes it; closing it otherwise (✕, Esc, a choice) takes the
- * step back out, so history is as before. Returns the step's id (afterStep), none when it was not opened.
+ * step back out, so history is as before. Fires `gf-modal` on the window once it is open (what shows under it gives
+ * way: gf-app's announcement of the tabs that came). Returns the step's id (afterStep), none when it was not opened.
  * @param {HTMLDialogElement | null | undefined} dialog @returns {number | undefined}
  */
 export function openModal(dialog) {
@@ -231,6 +232,7 @@ export function openModal(dialog) {
   open.set(id, dialog);
   history.pushState({ ...state(), gfModal: id }, '');
   stepUrls.set(id, { depth: depth(), href: location.href });
+  dispatchEvent(new Event('gf-modal'));
   dialog.addEventListener('close', () => {
     open.delete(id);
     // Closed by the app or the user, not by Back: remove the step it added — after the click that closed it,

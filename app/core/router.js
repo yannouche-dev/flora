@@ -98,6 +98,15 @@ export function parse(hash) {
   return { name: 'not-found' };
 }
 
+/**
+ * The app's start: `#/` alone (also '', '#', '#/?': a search asking nothing) — Découvrir during the first steps
+ * (gf-app), never Flore's address (discover.js arrivedAt). @param {string} hash
+ */
+export function isStart(hash) {
+  const [path, query = ''] = hash.replace(/^#?\/?/, '').split('?');
+  return path === '' && !new URLSearchParams(query).toString();
+}
+
 export const href = {
   search: () => '#/',
   /** Flore filtered on the plants of a collection or place (the « Mes plantes » facet). */
