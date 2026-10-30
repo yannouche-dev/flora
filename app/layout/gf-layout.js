@@ -28,6 +28,9 @@
 //    modified, replaces this entry by the screen in use. Partager always gives the screen in use (no edit=1).
 //  - The home (#/layout, no layout): « Partir d’une grille », « Ou d’un modèle » (models.js), each drawn small, each
 //    opened being modified. It never touches the search (Flore's stays as it is).
+//  - « Mes écrans » (screens.js): a screen in use whose layout can be read is kept on this device once it has rested a
+//    moment (its address in use, its title, its cells' names) — never the home, never while modified; modified, the
+//    screen « Terminé » (or Back) gives replaces the record it was entered from.
 //  - « Créer une app »'s old addresses (#/builder…, router.js): the screen they name (g=, else their grid), being
 //    modified, in their place (the same entry; neither: the home).
 //  - A title (?title=, state.js): the bar's heading (« Écran sur mesure » without one; on a phone too, cut by « … »), the
@@ -45,7 +48,7 @@
 //    in the block picker (« Cadre », « Liens »).
 
 import { LitElement, html, css, nothing, repeat } from 'lit';
-import { closeTo, depth, pushHash, renewBehind, replaceHash, replaceView, sheetMark } from '../core/history.js';
+import { closeTo, depth, entryValue, pushHash, renewBehind, replaceHash, replaceView, sheetMark } from '../core/history.js';
 import { href } from '../core/router.js';
 import { toHash } from '../core/query.js';
 import { getPlant, nameOf } from '../core/plants.js';
@@ -63,6 +66,7 @@ import { APP, SearchChannel } from '../core/search-channel.js';
 import { SOURCES, defaultSources } from '../core/observations.js';
 import { forgetShares, savedShares, saveShares } from './sizes.js';
 import { MODELS, modelSpec } from './models.js';
+import { rememberScreen, screenKey } from './screens.js';
 import { renderCell, revealFacet, scopeWords } from './cells.js';
 import { cellOf, cellText } from './picker-model.js';
 import { pickerBounds } from './gf-block-picker.js';
@@ -90,6 +94,8 @@ const FOLLOWS_PLANT = new Set(['plant', 'media', 'deck']);
 const EMPTY_LIVE = readLive('');
 /** Being modified, in the address (router.js href.layout: last). */
 const EDITING = /(?:^|&)edit=1(?:&|$)/;
+/** Mes écrans: how long a screen in use rests (its address unchanged) before it is kept (ms). */
+const KEEP_AFTER = 800;
 
 /** A layout as text, read and resolved: what the screen shows. @param {string} text @returns {Shown} */
 function show(text) {
@@ -473,8 +479,10 @@ export class GfLayout extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    // A text still resting in « Avancé » dropped: the address is another view's now.
+    // A text still resting in « Avancé » dropped: the address is another view's now. A screen not kept yet: left
+    // before it rested (Mes écrans).
     clearTimeout(this.#typing); this.#typing = 0;
+    clearTimeout(this.#keepTimer); this.#keepTimer = 0; this.#keeping = null;
     this.#size.disconnect();
     this.#observed = null;
     this.#state.dispose();
@@ -691,6 +699,55 @@ export class GfLayout extends LitElement {
     if (!this.#ready) return;
     const q = toHash(store.state.query);
     if (q !== this.#lastQuery) { this.#lastQuery = q; this.#write('replace'); }
+    this.#keep();
+  }
+
+  // ── Mes écrans (screens.js) ────────────────────────────────────────────────────────────────────────────
+
+  /** The screen's address last kept in Mes écrans, and the one waiting to be (its timer). @type {string | null} */
+  #kept = null;
+  /** @type {string | null} */
+  #keeping = null;
+  #keepTimer = 0;
+  /** The record the screen being modified was entered from (screenKey), replaced by the screen « Terminé » gives. @type {string | null} */
+  #editKey = null;
+
+  /**
+   * What Mes écrans may keep now: a screen in use (never the home, an old address being replaced, nor modified), its
+   * layout read whole with a cell at least, the flora ready (the search the address'; before, the app's may stand in).
+   */
+  #keepable() {
+    return this.#ready && this.route?.name === 'layout' && !this.#home && !this.#aliasing && !this.editing
+      && !this.#layout.errors.length && this.#layout.tree.kids.length > 0;
+  }
+
+  /** This screen's record in Mes écrans: its layout and its title. */
+  #screenKey() { return screenKey({ href: this.#usageHref(), title: this.#state.live.title }); }
+
+  /** An untitled screen's name in Mes écrans: its cells'. */
+  #label() { return [...this.#layout.cells.values()].map(r => r.title).join(' · ').slice(0, 80); }
+
+  /**
+   * The screen in use kept in Mes écrans once its address has rested a moment (Back and Forward walked through, a
+   * search typed: only where it stops), first in the list; modified, it replaces the record it was entered from.
+   */
+  #keep() {
+    if (!this.#keepable()) { clearTimeout(this.#keepTimer); this.#keepTimer = 0; this.#keeping = null; return; }
+    const url = this.#usageHref();
+    // As kept already (« Terminé » with nothing changed among them): nothing to replace either.
+    if (url === this.#kept) { this.#editKey = null; return; }
+    if (url === this.#keeping) return;
+    clearTimeout(this.#keepTimer);
+    this.#keeping = url;
+    this.#keepTimer = setTimeout(() => {
+      this.#keepTimer = 0; this.#keeping = null;
+      if (!this.isConnected || !this.#keepable()) return;
+      const now = this.#usageHref();
+      if (now === this.#kept) return;
+      rememberScreen({ href: now, title: this.#state.live.title, label: this.#label() }, this.#editKey);
+      this.#kept = now;
+      this.#editKey = null;
+    }, KEEP_AFTER);
   }
 
   /** The home (#/layout): no layout, no state, no search, no address written. */
@@ -728,7 +785,8 @@ export class GfLayout extends LitElement {
     }
     this.#aliasing = false;
     this.#home = false;
-    if (this.editing && !editing) this.#leaveEditing();
+    const entering = editing && !this.editing, leaving = this.editing && !editing;
+    if (leaving) this.#leaveEditing();
     // ⋯ open across the toggle (« Modifier », « Terminé », Back): closed — its items are the other state's now.
     if (this.editing !== editing) this.renderRoot.querySelector('.more-menu[open]')?.removeAttribute('open');
     this.editing = editing;
@@ -736,6 +794,11 @@ export class GfLayout extends LitElement {
     this.#editMark = editing ? sheetMark('gfEditFrom', () => null) : null;
     const next = show(route.spec);
     const fresh = next.text !== this.#layout.text || next.errors.length !== this.#layout.errors.length;
+    // Mes écrans: modified through « Modifier », the record the screen had in use (kept in the entry: a reload, Back
+    // from the home find it) — what « Terminé » or Back gives replaces it; opened modified by a link, none. Another
+    // layout followed in use: forgotten.
+    if (entering) { const key = entryValue('gfEditKey'); this.#editKey = typeof key === 'string' ? key : null; }
+    else if (fresh && !leaving) this.#editKey = null;
     if (fresh) {
       this.#layout = next;
       this.#raw = decodeSpec(route.spec);
@@ -1364,12 +1427,15 @@ export class GfLayout extends LitElement {
 
   // ── In use or being modified: the bar, the edit strip; the home ─────────────────────────────────────────────
 
-  /** « Modifier »: this screen, being modified — one entry (Back leaves it), marked with the depth it was entered from. @param {{ advanced?: boolean }} [o] */
+  /**
+   * « Modifier »: this screen, being modified — one entry (Back leaves it), marked with the depth it was entered from
+   * and the record this screen has in Mes écrans (`gfEditKey`: the screen modified replaces it). @param {{ advanced?: boolean }} [o]
+   */
   #modify({ advanced = false } = {}) {
     if (advanced && this.#layout.errors.length) this._advanced = true;
     // « Voir et corriger » (advanced): its line gives way to the strip; the focus goes to the remarks (updated()).
     this.#toRemarks = advanced;
-    pushHash(href.layout(this.#written, this.#search(), true), { gfEditFrom: { from: depth(), start: depth() + 1 } });
+    pushHash(href.layout(this.#written, this.#search(), true), { gfEditFrom: { from: depth(), start: depth() + 1 }, gfEditKey: this.#screenKey() });
   }
 
   /** « Voir et corriger » touched, the screen not modified yet: the focus to give to its remarks once it is. */
