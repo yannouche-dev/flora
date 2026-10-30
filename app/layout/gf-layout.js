@@ -353,7 +353,7 @@ export class GfLayout extends LitElement {
     .g.row { flex-direction: row; } .g.col { flex-direction: column; }
     .g i { flex: 1; min-width: 0; min-height: 0; border-radius: 3px; background: color-mix(in srgb, var(--gf-accent) 22%, transparent); }
     /* Narrow: the bar's other words go (its buttons keep their names); the heading and the toggle's word stay. */
-    @container (max-width: 699px) { .bar .lbl { display: none; } .bar { padding-left: 10px; gap: 6px; } }
+    @container (max-width: 699px) { .bar { padding-left: 10px; gap: 6px; } }
     /* A phone (the window's width, not the room the docked picker leaves): no preview, it is the screen itself — its
        whole width, outlined as modified. */
     @media (max-width: 699px) {
