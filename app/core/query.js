@@ -91,6 +91,12 @@ const kept = channel => {
 export const heldSuggestions = (channel = APP) => kept(channel)?.list || null;
 
 /**
+ * Another search given to it from elsewhere (an address: Back, a link): the suggestions kept from the text of the one
+ * before go with it. @param {Channel} channel
+ */
+export const letGoSuggestions = channel => { helds.delete(channel); };
+
+/**
  * Genera only make sense inside the selected families: those of other families let go (a family chosen in its
  * filter, or by « Filtrer par »). @param {import('./store.js').Filters} filters
  */
@@ -152,7 +158,7 @@ export function startUrlSync() {
     const query = fromHash(location.hash);
     if (toHash(query) === toHash(store.state.query)) return;
     // Another search: the suggestions kept from the text of this one go with it.
-    helds.delete(APP);
+    letGoSuggestions(APP);
     store.set({ query });
     if (store.state.status === 'ready') runSearch();
   };

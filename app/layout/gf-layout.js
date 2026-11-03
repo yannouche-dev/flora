@@ -57,7 +57,7 @@
 import { LitElement, html, css, nothing, repeat } from 'lit';
 import { closeTo, depth, entryValue, markEntry, openView, pushHash, renewBehind, replaceHash, replaceView, sheetMark } from '../core/history.js';
 import { href } from '../core/router.js';
-import { toHash } from '../core/query.js';
+import { letGoSuggestions, toHash } from '../core/query.js';
 import { getPlant, nameOf } from '../core/plants.js';
 import { spotEvents } from '../core/collections.js';
 import { store, StoreController, whenReady } from '../core/store.js';
@@ -847,7 +847,8 @@ export class GfLayout extends LitElement {
       if (this.editing && next.errors.length) this._advanced = true;
     }
     // Each group, the first too: its state and its search (its own, never Flore's) — the first's keys as they are,
-    // another's after its letter (b.p=, b.q=…). A search never run yet (made just now, here or by #defaults) runs.
+    // another's after its letter (b.p=, b.q=…). A search never run yet (made just now, here or by #defaults) runs;
+    // another one from the address (Back, a link) lets go of the « Filtrer par » suggestions kept from the one before.
     const groups = this.#groups(next);
     for (const g of [...this.#made.keys()]) if (!groups.includes(g)) this.#dropGroup(g);
     for (const g of groups) {
@@ -856,7 +857,7 @@ export class GfLayout extends LitElement {
       if (!sameLive(glive, state.live)) state.set(glive, 'none');
       else if (fresh || !had) state.follow();
       const gq = readQuery(route.search, groupPrefix(g));
-      if (toHash(gq) !== toHash(channel.query) || !channel.ran) { channel.query = gq; channel.run(); }
+      if (toHash(gq) !== toHash(channel.query) || !channel.ran) { letGoSuggestions(channel); channel.query = gq; channel.run(); }
     }
     this.#namePage();
     // Written as the app writes it (canonical names, its own order of words), unless it could not be read whole.

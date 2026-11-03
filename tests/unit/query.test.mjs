@@ -2,7 +2,7 @@
 // bookmarks or shares, read back the same.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { activeFilterCount, applySuggestion, clearFilters, fromHash, heldSuggestions, toHash, toggleValue } from '../../app/core/query.js';
+import { activeFilterCount, applySuggestion, clearFilters, fromHash, heldSuggestions, letGoSuggestions, toHash, toggleValue } from '../../app/core/query.js';
 import { href, isStart, parse } from '../../app/core/router.js';
 
 test('fromHash ↔ toHash : aller-retour stable, filtres multiples et tri', () => {
@@ -138,4 +138,11 @@ test('« Filtrer par » : les suggestions gardées à chaque recherche (Flore, c
   // « Tout effacer »: for good, its text not given back.
   clearFilters(b);
   assert.deepEqual([b.query.q, b.query.filters.genus, heldSuggestions(b)], ['', [], null]);
+  // Another search given from the address (Back, a link): those kept let go, even with their filter back on.
+  b.query = { ...b.query, q: 'rosa' };
+  applySuggestion('genus', 'Rosa', b);
+  assert.deepEqual(heldSuggestions(b), b.results.suggestions);
+  letGoSuggestions(b);
+  assert.equal(heldSuggestions(b), null);
+  assert.deepEqual(b.query.filters.genus, ['Rosa']);
 });
