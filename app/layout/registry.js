@@ -306,7 +306,7 @@ export const COMPONENTS = [
   },
   {
     id: 'search', title: 'Recherche', icon: 'search', aliases: ['recherche', 'chercher', 'flore'],
-    about: 'La recherche de Flore : le texte, le tri, les filtres (familles, statuts, protection…) et la liste des plantes trouvées dans la zone.',
+    about: 'La recherche de l’écran : le texte, le tri, les filtres (familles, statuts, protection…) et la liste des plantes trouvées dans la zone.',
     params: {
       filters: { kind: 'bool', label: 'Filtres ouverts', def: false, words: ['filtres', 'facettes'] },
       list: { kind: 'bool', label: 'Liste des résultats', def: true, words: ['liste', 'resultats', 'results'] }
