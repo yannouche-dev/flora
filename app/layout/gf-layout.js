@@ -28,7 +28,8 @@
 //    modified, replaces this entry by the screen in use. Partager always gives the screen in use (no edit=1).
 //  - Its search, its own: each group's (a, b, c: core/search-channel.js), written in the address (q=, b.q=…) — Flore's
 //    is never emptied nor changed by a screen. It runs again as Flore's does (main.js): « Mes plantes » changed, a new
-//    flora.
+//    flora. « Ouvrir dans Flore » (⋯ in use: the first group's; a search cell's head: its group's) takes it there, a new
+//    entry: its text, filters and sort, never its zone nor its plant.
 //  - The home (#/layout, no layout): Mes écrans (screen-list.js), then « Partir d’une grille », « Ou d’un modèle »
 //    (models.js), each drawn small, each opened being modified. It never touches a search.
 //  - « Mes écrans » (screens.js): a screen in use whose layout can be read (a cell known at least) is kept on this device
@@ -54,7 +55,7 @@
 //    in the block picker (« Cadre », « Liens »).
 
 import { LitElement, html, css, nothing, repeat } from 'lit';
-import { closeTo, depth, entryValue, markEntry, pushHash, renewBehind, replaceHash, replaceView, sheetMark } from '../core/history.js';
+import { closeTo, depth, entryValue, markEntry, openView, pushHash, renewBehind, replaceHash, replaceView, sheetMark } from '../core/history.js';
 import { href } from '../core/router.js';
 import { toHash } from '../core/query.js';
 import { getPlant, nameOf } from '../core/plants.js';
@@ -103,6 +104,8 @@ const EMPTY_LIVE = readLive('');
 const EDITING = /(?:^|&)edit=1(?:&|$)/;
 /** Mes écrans: how long a screen in use rests (its address unchanged) before it is kept (ms). */
 const KEEP_AFTER = 800;
+/** « Ouvrir dans Flore »: what it does (⋯ in use, a search cell's head). */
+const TO_FLORE = 'Ouvrir cette recherche dans Flore (sans la zone)';
 
 /** A layout as text, read and resolved: what the screen shows. @param {string} text @returns {Shown} */
 function show(text) {
@@ -186,7 +189,7 @@ export class GfLayout extends LitElement {
     .bar a.btn:hover { border-color: var(--gf-accent); }
     /* « Modifier ⇄ Terminé »: one button, pressed while modified; its word always shown. */
     .bar .toggle { gap: 6px; }
-    /* ⋯: the screen's options (« Composer un écran »; modified: « Changer de modèle », « Tailles par défaut », « Avancé »). */
+    /* ⋯: the screen's options (« Composer un écran », « Ouvrir dans Flore »; modified: « Changer de modèle », « Tailles par défaut », « Avancé »). */
     .more-menu { position: relative; }
     .more-menu summary { list-style: none; display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border-radius: 50%; cursor: pointer; color: var(--gf-text-muted); font-size: 1.1rem; }
     .more-menu summary::-webkit-details-marker { display: none; }
@@ -552,8 +555,9 @@ export class GfLayout extends LitElement {
   #onStore = () => { if (store.state.meta !== this.#meta) { this.#meta = store.state.meta; this.#rerun(); } };
 
   /**
-   * For the tests and tools: a group's search, never Flore's — its query, the plants it found (their count, the
-   * zone's apart while a map's view keeps the list: inZone); null: no such group on screen. @param {string} [g]
+   * For the tests and tools: a group's search, never Flore's — its query, the plants it found (their count; the zone's
+   * apart while a map's view keeps the list: inZone; those it lists: items); null: no such group on screen.
+   * @param {string} [g]
    */
   searchOf(g = 'a') {
     const channel = this.#made.get(g)?.channel;
@@ -1274,7 +1278,11 @@ export class GfLayout extends LitElement {
     const badge = r.known && !r.spec.empty && this.#groups().length > 1
       ? html`<span class="cell-group" data-group=${group} title=${`Groupe ${group.toUpperCase()} : sa zone, sa plante, sa période et sa recherche`}
           aria-label=${'Groupe ' + group.toUpperCase()}>${group.toUpperCase()}</span>` : nothing;
-    const actions = acts.length ? html`<span class="cell-acts" role="group" aria-label=${'Actions de « ' + title + ' »'}>
+    // A search cell in use: « Ouvrir dans Flore », its group's search taken there.
+    const flore = id === 'search' && !editing && head !== 'non';
+    const actions = acts.length || flore ? html`<span class="cell-acts" role="group" aria-label=${'Actions de « ' + title + ' »'}>
+        ${flore ? html`<button class="icon-btn" type="button" data-act="flore" title=${TO_FLORE} aria-label="Ouvrir dans Flore"
+          @click=${() => this.#toFlore(channel)}>${icon('leaf')}</button>` : nothing}
         ${acts.includes('partager') ? html`<button class="icon-btn" type="button" data-act="partager" title=${this._cellCopied === key ? 'Lien copié' : 'Partager cette case seule (le même état)'}
           aria-label=${this._cellCopied === key ? 'Lien copié' : `Partager « ${title} » seule`} @click=${() => this.#shareCell(n, key, r)}>${icon(this._cellCopied === key ? 'check-lg' : 'share')}</button>` : nothing}
         ${acts.includes('replier') && !max ? html`<button class="icon-btn" type="button" data-act="replier" aria-expanded=${folded ? 'false' : 'true'} title=${folded ? 'Déplier' : 'Replier'}
@@ -1535,9 +1543,20 @@ export class GfLayout extends LitElement {
   }
 
   /**
-   * ⋯, the screen's options: in use, « Composer un écran » (the home); being modified, « Changer de modèle » (the home:
-   * Back gives this screen back), « Tailles par défaut », « Avancé : texte ». Échap closes it, its button focused again;
-   * an item closes it, so do the focus leaving it, a touch elsewhere (the constructor) and the toggle (#follow).
+   * « Ouvrir dans Flore »: a group's search taken to Flore, a new entry (Back returns to the screen) — its text, filters
+   * and sort (« Plus observées » is a zone's only: Flore takes its own), never its zone nor its plant.
+   * @param {SearchChannel} channel
+   */
+  #toFlore(channel) {
+    const q = channel.query;
+    openView(toHash({ ...q, sort: /^-?obs$/.test(q.sort) ? '' : q.sort }));
+  }
+
+  /**
+   * ⋯, the screen's options: in use, « Composer un écran » (the home), « Ouvrir dans Flore » (the first group's search);
+   * being modified, « Changer de modèle » (the home: Back gives this screen back), « Tailles par défaut », « Avancé :
+   * texte ». Échap closes it, its button focused again; an item closes it, so do the focus leaving it, a touch elsewhere
+   * (the constructor) and the toggle (#follow).
    */
   #more() {
     const close = (/** @type {Event} */ e) => /** @type {HTMLElement} */ (e.currentTarget).closest('details')?.removeAttribute('open');
@@ -1554,7 +1573,8 @@ export class GfLayout extends LitElement {
     };
     return html`<details class="more-menu" @keydown=${esc} @focusout=${away}><summary aria-label="Plus d’options" title="Plus d’options">${icon('three-dots')}</summary>
       <div class="menu" role="group" aria-label="Options de l’écran">${!this.editing
-        ? html`<a href=${href.layout('')} @click=${close}>${icon('plus-lg')} Composer un écran</a>`
+        ? html`<a href=${href.layout('')} @click=${close}>${icon('plus-lg')} Composer un écran</a>
+          <button type="button" data-act="flore" title=${TO_FLORE} @click=${(/** @type {Event} */ e) => { close(e); this.#toFlore(this.#group('a').channel); }}>${icon('leaf')} Ouvrir dans Flore</button>`
         : html`<a href=${href.layout('')} title="Partir d’une autre grille ou d’un autre modèle" @click=${close}>${icon('arrow-counterclockwise')} Changer de modèle</a>
           <button type="button" data-act="sizes" @click=${(/** @type {Event} */ e) => {
             close(e); this.#resetSizes();
