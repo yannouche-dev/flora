@@ -46,6 +46,7 @@ test.describe('un grand écran', () => {
     await page.reload();
     await app.ready();
     await expect.poll(async () => (await screenSearch(page, 'a'))?.query.q).toBe('ortie');
+    await expect.poll(async () => (await screenSearch(page, 'b'))?.query.q).toBe('allium');
     expect(await app.state('query.q')).toBe('');
     await expect(cellOf(page, '2').locator('gf-plant-search input')).toHaveValue('allium');
     await expect.poll(async () => (await names(page, '3')).every(n => /^Allium/.test(n)) && (await names(page, '3')).length > 0).toBe(true);

@@ -11,10 +11,11 @@
 // Partager (the link in use); ⋯ (« Tailles par défaut »; closed by the toggle, Back, a touch elsewhere, the focus
 // leaving it); « Ouvrir dans Flore » (⋯, a search cell's head: the screen's search taken to Flore, a new entry); « Filtrer
 // par » kept to each search (group b's: its text given back there only); a sheet's map about « Les résultats », its
-// group's; « Terminé » with remarks, « Voir et corriger » (the focus on them); an address that cannot be read; a text
-// still resting in « Avancé » never written once the screen is left; a screen opened after another waits for its own
-// width; the home leaves Flore's search alone; a phone (the toggle's word and the title drawn); no tab of the app lit,
-// on either width.
+// group's; Flore's search never emptied nor changed by a screen's (‹ › on its sheet: its own list); ♥ in a screen's
+// sheet, its search's « Mes plantes » following; « Terminé » with remarks, « Voir et corriger » (the focus on them); an
+// address that cannot be read; a text still resting in « Avancé » never written once the screen is left; a screen
+// opened after another waits for its own width; the home leaves Flore's search alone; a phone (the toggle's word and
+// the title drawn); no tab of the app lit, on either width.
 import { test, expect, answerAround, plantId } from './fixtures.mjs';
 import { editing, layoutOf, screen, screenSearch } from './app.mjs';
 
@@ -501,6 +502,50 @@ test.describe('un grand écran', () => {
     await expect.poll(async () => (await screenSearch(page, 'b'))?.total).not.toBe(b.total);
     await expect(count).toHaveText(String((await screenSearch(page, 'b'))?.total));
     expect([(await screenSearch(page, 'a'))?.query.q, await app.state('results.total')]).toEqual(['ortie', flore]);
+  });
+
+  test('Flore n’est ni vidée ni changée : un écran, sa recherche tapée, puis l’onglet Flore — sa famille, sa liste et ‹ › sur une fiche, les mêmes', async ({ app, page }) => {
+    await app.open('#/?family=Rosaceae');
+    await expect.poll(() => app.state('results.total')).toBeGreaterThan(3);
+    /** The plants Flore lists, in its order. */
+    const listed = () => page.evaluate(async () => (await import('/app/core/store.js')).store.state.results.items.map((/** @type {any} */ p) => p.id));
+    const ids = await listed();
+    await app.go(screen('[search,results]', 'q=ortie'));
+    await expect.poll(async () => (await screenSearch(page))?.query.q).toBe('ortie');
+    await cellAt(page, '0').getByRole('combobox', { name: 'Rechercher une plante' }).fill('chêne');
+    await expect.poll(() => param(page, 'q')).toBe('chêne');
+    await expect.poll(async () => (await screenSearch(page))?.items.map((/** @type {any} */ p) => p.scientificName)).toContain('Quercus robur');
+    await page.locator('gf-app nav.tabs').getByRole('link', { name: 'Flore', exact: true }).click();
+    await expect.poll(() => hash(page)).toBe('#/?family=Rosaceae');
+    expect([await app.state('query.q'), await app.state('query.filters.family'), (await app.state('results.inZone')) ?? null]).toEqual(['', ['Rosaceae'], null]);
+    expect([await app.state('query.sort'), await app.state('results.sort')]).not.toContain('obs');
+    expect(await listed()).toEqual(ids);
+    // A sheet of it: ‹ › walk the same list.
+    await page.locator('gf-flora gf-plant-list gf-plant-card a.row').first().click();
+    await expect.poll(() => hash(page)).toBe(`#/plant/${ids[0]}`);
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(() => hash(page)).toBe(`#/plant/${ids[1]}`);
+    await page.keyboard.press('ArrowLeft');
+    await expect.poll(() => hash(page)).toBe(`#/plant/${ids[0]}`);
+  });
+
+  test('♥ dans la fiche d’un écran : la facette « Mes plantes » de sa recherche suit — cochée, sa liste aussi ; jamais celle de Flore', async ({ app, page }) => {
+    await app.open(screen('[search(filters=1),plant]', `q=ortie&p=${plantId('Urtica dioica')}`));
+    await expect.poll(async () => (await screenSearch(page))?.query.q).toBe('ortie');
+    const heart = cellAt(page, '1').locator('.action-bar button.fav');
+    await heart.click();
+    await expect(heart).toHaveAttribute('aria-pressed', 'true');
+    const favorites = cellAt(page, '0').locator('gf-facet[name="mine"] label', { hasText: 'Favoris' });
+    await expect(favorites.locator('.count')).toHaveText('1');
+    await favorites.click();
+    await expect.poll(() => param(page, 'mine')).not.toBe(null);
+    await expect.poll(async () => (await screenSearch(page))?.total).toBe(1);
+    expect(await app.state('query.filters.mine')).toEqual([]);
+    // Taken out of the favourites: its search follows again.
+    await heart.click();
+    await expect(heart).toHaveAttribute('aria-pressed', 'false');
+    await expect.poll(async () => (await screenSearch(page))?.total).toBe(0);
+    await expect(favorites.locator('.count')).toHaveText('0');
   });
 
   test('un texte encore en frappe dans « Avancé » ne s’écrit pas dans l’adresse de la vue suivante', async ({ app, page }) => {

@@ -2,10 +2,10 @@
 // none, the content taking the room; tete=simple: its title alone), a title of its own (titre=: its head, its tab on a
 // phone), the actions of its head (agrandir: over the layout, Échap returns; replier: folded to its head, its share to
 // the others; partager: a link to a layout of this cell alone, with the same state, copied), its empty state
-// (vide=masque: a plant block hidden until a plant is chosen), its links (plante=: a plant of its own, whatever the
-// current one; results zone=0: the whole flora whatever the zone; toucher=fiche: a result opens its sheet; toucher=rien:
-// nothing), and the editor's « Cadre » writing them in the address. iNaturalist answered as in free-layout.spec.mjs:
-// 12 plants around.
+// (vide=masque: a plant block hidden until a plant is chosen; results hidden only once its search has answered, none
+// found), its links (plante=: a plant of its own, whatever the current one; results zone=0: the whole flora whatever the
+// zone; toucher=fiche: a result opens its sheet; toucher=rien: nothing), and the editor's « Cadre » writing them in the
+// address. iNaturalist answered as in free-layout.spec.mjs: 12 plants around.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 import { layoutOf, screen, screenSearch } from './app.mjs';
 
@@ -81,6 +81,31 @@ test.describe('un grand écran', () => {
     await page.goBack();
     await expect.poll(() => param(page, 'p')).toBe(null);
     await expect(wiki).toBeHidden();
+  });
+
+  test('results(vide=masque) n’est jamais caché avant sa première réponse : rien n’est dit vide avant que sa recherche ait répondu', async ({ app, page }) => {
+    // From the screen's first frame, every change of its parts: a results cell hidden even once is counted.
+    await page.addInitScript(() => {
+      const w = /** @type {any} */ (window);
+      w.__resultsHidden = 0;
+      const watch = () => {
+        const root = document.querySelector('gf-app')?.shadowRoot?.querySelector('gf-layout')?.shadowRoot;
+        if (!root) { requestAnimationFrame(watch); return; }
+        const check = () => { for (const part of root.querySelectorAll('.part[hidden]')) if (part.querySelector('section.cell[data-comp="results"]')) w.__resultsHidden++; };
+        new MutationObserver(check).observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden'] });
+        w.__watching = true;
+        check();
+      };
+      watch();
+    });
+    await app.open('#/layout/[results(list,vide=masque),plant.calendar]?q=ortie');
+    await expect.poll(() => page.evaluate(() => /** @type {any} */ (window).__watching)).toBe(true);
+    await expect(cellOf(page, 'results').locator('gf-plant-card a.row').first()).toBeVisible();
+    expect((await screenSearch(page))?.total).toBeGreaterThan(0);
+    expect(await page.evaluate(() => /** @type {any} */ (window).__resultsHidden)).toBe(0);
+    // Nothing found, once answered: hidden, its share to the other.
+    await page.evaluate(() => { location.hash = '#/layout/[results(list,vide=masque),plant.calendar]?q=zzzz'; });
+    await expect(cellOf(page, 'results')).toBeHidden();
   });
 
   test('plante=<id> : un bloc à sa plante, quelle que soit la plante courante', async ({ app, page }) => {
