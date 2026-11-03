@@ -56,7 +56,7 @@ export class GfActiveFilters extends LitElement {
   `];
 
   static properties = {
-    /** The search whose filters it shows (core/search-channel.js: a free layout's group); none: the app's. */
+    /** The search whose filters it shows (core/search-channel.js: a screen's group); none: the app's. */
     channel: { attribute: false }
   };
 

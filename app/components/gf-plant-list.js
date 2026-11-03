@@ -79,7 +79,7 @@ export class GfPlantList extends LitElement {
     current: { type: Number },
     /** The plants to list instead of the search's (a free layout's results over the whole flora: results(zone=0)); null: the search's. */
     items: { attribute: false },
-    /** The search it lists (core/search-channel.js: a free layout's group); none: the app's. */
+    /** The search it lists (core/search-channel.js: a screen's group); none: the app's. */
     channel: { attribute: false },
     /**
      * Each plant's observations in a free layout's zone, by id (core/observations.js obsNotes: its words): its rows say

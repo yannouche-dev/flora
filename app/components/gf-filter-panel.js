@@ -22,7 +22,7 @@ const HEAD = 40;
  */
 export class GfFilterPanel extends LitElement {
   static properties = {
-    /** The search it filters (core/search-channel.js: a free layout's group); none: the app's. */
+    /** The search it filters (core/search-channel.js: a screen's group); none: the app's. */
     channel: { attribute: false },
     /** The headers of the groups slotted before the facets (slot="lead"): the facets' stack after them. */
     lead: { type: Number }

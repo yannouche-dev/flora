@@ -11,7 +11,7 @@
 //    edge that drags its radius, the address search, « Me localiser », the layers, 2D / 3D, the other background's
 //    thumbnail, the current plant's chip, the period's chips, the count, the legend, the zoom: map-options.js);
 //  - place: the scope alone — « Autour de moi », a commune (gf-place-search), the radius;
-//  - search: Flore's search bar (gf-results-bar: text, sort, filters chosen, « Filtrer par »), its filters (gf-filter-
+//  - search: a search bar as Flore's (gf-results-bar: text, sort, filters chosen, « Filtrer par »), its filters (gf-filter-
 //    panel, opened by the funnel) and its list; filters and results: each part alone. They read and write the search
 //    of their group (its channel, core/search-channel.js: the screen's own, never Flore's); the scope keeps it to its
 //    plants (state.js);
