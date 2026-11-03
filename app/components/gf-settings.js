@@ -22,6 +22,8 @@ import { briefToast } from '../core/toast.js';
 import { confirmAsk } from './gf-ask.js';
 import { resetMapLook, resetMapSettings } from '../core/map-settings.js';
 import { notesEvents, notesWithText } from '../core/sheet-notes.js';
+import { screenEvents, screens } from '../layout/screens.js';
+import { screenList, screenListStyles } from '../layout/screen-list.js';
 import './gf-map-options.js';
 
 /** French names of the icons a mode can have. */
@@ -47,7 +49,7 @@ export class GfSettings extends LitElement {
     _firstStepsError: { state: true }
   };
 
-  static styles = [ui, css`
+  static styles = [ui, screenListStyles, css`
     .maps-card { display: grid; gap: 8px; }
     .steps-choice { display: grid; gap: 6px; margin: 4px 0 12px; padding: 10px 14px; border: 1px solid var(--gf-border); border-radius: var(--gf-radius); }
     .steps-choice legend { padding: 0 4px; font-weight: 600; }
@@ -85,6 +87,8 @@ export class GfSettings extends LitElement {
     .builder > span { display: grid; gap: 2px; min-width: 0; }
     .builder small { color: var(--gf-text-muted); }
     @media (max-width: 520px) { .builder { grid-template-columns: auto 1fr; } .builder > .button { grid-column: 1 / -1; justify-self: start; } }
+    .builder > .mine { grid-column: 1 / -1; display: grid; gap: 6px; margin-top: 4px; min-width: 0; }
+    .builder > .mine > span { font-weight: 600; font-size: 0.9rem; }
     label.file input { position: absolute; width: 1px; height: 1px; opacity: 0; }
     label.file:focus-within { box-shadow: var(--gf-focus); }
     .mode-line { display: flex; align-items: center; gap: 10px; }
@@ -114,12 +118,15 @@ export class GfSettings extends LitElement {
   #onDiscover = () => this.requestUpdate();
   /** The Note blocks' texts read or changed: they too are exported and transferred (with Mes plantes). */
   #onNotes = () => this.requestUpdate();
+  /** Mes écrans changed (a screen kept, one taken out, another tab). */
+  #onScreens = () => this.requestUpdate();
 
   connectedCallback() {
     super.connectedCallback();
     spotEvents.addEventListener('change', this.#onSpots);
     discoverEvents.addEventListener('change', this.#onDiscover);
     notesEvents.addEventListener('change', this.#onNotes);
+    screenEvents.addEventListener('change', this.#onScreens);
     this.#countSpots();
   }
 
@@ -128,6 +135,7 @@ export class GfSettings extends LitElement {
     spotEvents.removeEventListener('change', this.#onSpots);
     discoverEvents.removeEventListener('change', this.#onDiscover);
     notesEvents.removeEventListener('change', this.#onNotes);
+    screenEvents.removeEventListener('change', this.#onScreens);
   }
 
   async #countSpots() {
@@ -481,7 +489,8 @@ export class GfSettings extends LitElement {
         <p class="muted"><a href=${href.legal()}>${icon('shield-check')} Mentions légales et confidentialité</a> : qui publie GeoFlora, ce qui reste sur cet appareil, ce que reçoit chaque service en ligne (votre position surtout).</p>
         <div class="builder">${icon('window-desktop')}<span><b>Écran sur mesure</b>
           <small>Les outils de GeoFlora côte à côte — carte, recherche, fiche, photos… —, reliés entre eux et composés à votre idée ; un lien le partage tel quel.</small></span>
-          <a class="button" href=${href.layout('')}>${icon('plus-lg')} Composer un écran</a></div>
+          <a class="button" href=${href.layout('')}>${icon('plus-lg')} Composer un écran</a>
+          ${screens().length ? html`<div class="mine"><span id="mine">Mes écrans</span>${screenList(screens(), 'mine', '.builder > .button')}</div>` : nothing}</div>
         ${this.#firstSteps()}
         ${this.#sheetLayout()}
 

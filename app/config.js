@@ -94,7 +94,9 @@ export const config = {
     trails: 'geoflora.trails',
     trailDone: 'geoflora.trailDone',
     // Between tabs, where BroadcastChannel is missing (core/sync.js).
-    sync: 'geoflora.sync'
+    sync: 'geoflora.sync',
+    /** « Mes écrans »: the last screens of one's own opened in use (layout/screens.js), newest first — their addresses, titles, when. */
+    screens: 'geoflora.screens'
   },
 
   /** Every key above starts so (core/prefs.js#storedKeys: the app's own, among a shared origin's). */

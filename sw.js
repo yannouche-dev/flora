@@ -74,6 +74,8 @@ const SHELL = [
   'app/layout/obs-filters.js',
   'app/layout/sizes.js',
   'app/layout/models.js',
+  'app/layout/screens.js',
+  'app/layout/screen-list.js',
   'app/layout/builder-grid.js',
   'app/layout/gf-block-picker.js',
   'app/layout/picker-model.js',

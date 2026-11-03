@@ -48,9 +48,10 @@ const HANDED = ['point', 'place', 'radius', 'matches', 'passed'];
 /** Someone who already used the app (any setting of it): no first steps. */
 function usedBefore() {
   // Not the keys every visit writes by itself (where the user is, the modules' defaults), nor those of a layout or a
-  // mini-app: a new visitor who drags a separator or opens a mini-app keeps the first steps. No storage: first steps
-  // every time, harmless.
-  const own = [KEY, config.storageKeys.modules, config.storageKeys.context, config.storageKeys.showSteps, ...config.paneLayouts];
+  // mini-app, nor the screens one opened (Mes écrans: a link to a screen is not a returning visitor): a new visitor who
+  // drags a separator, opens a mini-app or a shared screen keeps the first steps. No storage: first steps every time,
+  // harmless.
+  const own = [KEY, config.storageKeys.modules, config.storageKeys.context, config.storageKeys.showSteps, config.storageKeys.screens, ...config.paneLayouts];
   return storedKeys(config.storagePrefix).some(k => !k.startsWith(config.storageKeys.appPrefix) && !own.includes(k));
 }
 

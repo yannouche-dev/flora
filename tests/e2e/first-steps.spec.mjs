@@ -118,6 +118,23 @@ test('les autres adresses ne font venir aucun onglet ; `#/` seule mène à Déco
   expect((await discover(page)).unlocked).toEqual([]);
 });
 
+test('Mes écrans ne fait pas un habitué : un écran gardé, rien d’autre, les premiers pas restent ; un écran ouvert y entre, ils continuent', async ({ app, page }) => {
+  // A device that holds only a screen of one's own, the first steps' state not written yet (core/discover.js usedBefore).
+  await page.addInitScript(() => {
+    if (!localStorage.getItem('geoflora.discover')) localStorage.setItem('geoflora.screens', JSON.stringify([{ href: '#/layout/[map]', title: 'Ma carte', label: 'Carte', at: 1 }]));
+  });
+  await app.open('#/discover');
+  expect((await discover(page)).done).toBe(false);
+  await expect.poll(() => app.tabs()).toEqual(bar(app, []));
+  // A shared screen opened on this first visit: kept, and nothing else changes.
+  await app.go('#/layout/[search,results]?q=ortie');
+  await expect(page.locator('gf-layout section.cell')).toHaveCount(2);
+  await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem('geoflora.screens') || '[]').length)).toBe(2);
+  expect((await discover(page)).done).toBe(false);
+  expect((await discover(page)).unlocked).toEqual([]);
+  expect(await app.tabs()).toEqual(bar(app, []));
+});
+
 test('un lien de l’application mène à l’écran de son onglet : « Voir ses plantes dans Flore »', async ({ app, page }) => {
   await app.open('#/discover');
   await seed(page);

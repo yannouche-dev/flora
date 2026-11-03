@@ -26,8 +26,14 @@
 //    (`gfEditFrom`: the depth it was entered from); every change then replaces the address and is given to that entry
 //    (history.js#renewBehind: Back keeps the changes); « Terminé » goes back there (history.js#closeTo), or, opened being
 //    modified, replaces this entry by the screen in use. Partager always gives the screen in use (no edit=1).
-//  - The home (#/layout, no layout): « Partir d’une grille », « Ou d’un modèle » (models.js), each drawn small, each
-//    opened being modified. It never touches the search (Flore's stays as it is).
+//  - The home (#/layout, no layout): Mes écrans (screen-list.js), then « Partir d’une grille », « Ou d’un modèle »
+//    (models.js), each drawn small, each opened being modified. It never touches the search (Flore's stays as it is).
+//  - « Mes écrans » (screens.js): a screen in use whose layout can be read (a cell known at least) is kept on this device
+//    once it has rested a moment (its address in use, its title, its cells' names) — never the home, never while
+//    modified. The same screen changed replaces its record (`gfReplaces`, in its entry — carried to the new entry of a
+//    plant or a zone chosen before it rests): modified, what « Terminé » (or Back) gives replaces the record it was
+//    entered from; in use, a gesture that rewrites its layout (folded, a separator moved, a map's layers) replaces the
+//    record it had.
 //  - « Créer une app »'s old addresses (#/builder…, router.js): the screen they name (g=, else their grid), being
 //    modified, in their place (the same entry; neither: the home).
 //  - A title (?title=, state.js): the bar's heading (« Écran sur mesure » without one; on a phone too, cut by « … »), the
@@ -45,7 +51,7 @@
 //    in the block picker (« Cadre », « Liens »).
 
 import { LitElement, html, css, nothing, repeat } from 'lit';
-import { closeTo, depth, pushHash, renewBehind, replaceHash, replaceView, sheetMark } from '../core/history.js';
+import { closeTo, depth, entryValue, markEntry, pushHash, renewBehind, replaceHash, replaceView, sheetMark } from '../core/history.js';
 import { href } from '../core/router.js';
 import { toHash } from '../core/query.js';
 import { getPlant, nameOf } from '../core/plants.js';
@@ -63,6 +69,8 @@ import { APP, SearchChannel } from '../core/search-channel.js';
 import { SOURCES, defaultSources } from '../core/observations.js';
 import { forgetShares, savedShares, saveShares } from './sizes.js';
 import { MODELS, modelSpec } from './models.js';
+import { labelOf, rememberScreen, screenEvents, screenKey, screens } from './screens.js';
+import { screenList, screenListStyles } from './screen-list.js';
 import { renderCell, revealFacet, scopeWords } from './cells.js';
 import { cellOf, cellText } from './picker-model.js';
 import { pickerBounds } from './gf-block-picker.js';
@@ -90,6 +98,8 @@ const FOLLOWS_PLANT = new Set(['plant', 'media', 'deck']);
 const EMPTY_LIVE = readLive('');
 /** Being modified, in the address (router.js href.layout: last). */
 const EDITING = /(?:^|&)edit=1(?:&|$)/;
+/** Mes écrans: how long a screen in use rests (its address unchanged) before it is kept (ms). */
+const KEEP_AFTER = 800;
 
 /** A layout as text, read and resolved: what the screen shows. @param {string} text @returns {Shown} */
 function show(text) {
@@ -153,7 +163,7 @@ export class GfLayout extends LitElement {
     _copied: { state: true }
   };
 
-  static styles = [ui, gripStyles, css`
+  static styles = [ui, gripStyles, screenListStyles, css`
     :host { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--gf-bg); container-type: inline-size; }
     /* « Choisir le contenu »: in the head; with a mouse, shown on hover or focus (always on a touch screen). */
     .cell-head .pick { flex: none; width: 30px; height: 30px; min-height: 0; padding: 0; font-size: 0.9rem; }
@@ -451,6 +461,7 @@ export class GfLayout extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    screenEvents.addEventListener('change', this.#onScreens);
     // The stage observed again once drawn (updated()), the page named again once the address is followed.
     this.#observed = null;
     this.#named = null;
@@ -473,8 +484,11 @@ export class GfLayout extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    // A text still resting in « Avancé » dropped: the address is another view's now.
+    screenEvents.removeEventListener('change', this.#onScreens);
+    // A text still resting in « Avancé » dropped: the address is another view's now. A screen not kept yet: left
+    // before it rested (Mes écrans).
     clearTimeout(this.#typing); this.#typing = 0;
+    clearTimeout(this.#keepTimer); this.#keepTimer = 0; this.#keeping = null;
     this.#size.disconnect();
     this.#observed = null;
     this.#state.dispose();
@@ -691,6 +705,74 @@ export class GfLayout extends LitElement {
     if (!this.#ready) return;
     const q = toHash(store.state.query);
     if (q !== this.#lastQuery) { this.#lastQuery = q; this.#write('replace'); }
+    this.#keep();
+  }
+
+  // ── Mes écrans (screens.js) ────────────────────────────────────────────────────────────────────────────
+
+  /** The screen's address last kept in Mes écrans. @type {string | null} */
+  #kept = null;
+  /** The address waiting to be kept, and its timer (KEEP_AFTER). @type {string | null} */
+  #keeping = null;
+  #keepTimer = 0;
+
+  /**
+   * What Mes écrans may keep now: a screen in use (never the home, an old address being replaced, nor modified), its
+   * layout read whole with a cell it knows at least (a mistyped link only asks « vouliez-vous dire … ? »), the flora
+   * ready (the search the address'; before, the app's may stand in).
+   */
+  #keepable() {
+    return this.#ready && this.route?.name === 'layout' && !this.#home && !this.#aliasing && !this.editing
+      && !this.#layout.errors.length && [...this.#layout.cells.values()].some(r => r.known);
+  }
+
+  /** This screen's record in Mes écrans: its layout and its title. */
+  #screenKey() { return screenKey({ href: this.#usageHref(), title: this.#state.live.title }); }
+
+  /**
+   * The record in Mes écrans the screen of this entry replaces once kept (a screenKey, `gfReplaces` in the entry: Back,
+   * Forward and a reload find it; another entry, another screen, has its own or none — but a new entry the screen makes
+   * before it rests, a plant or a zone chosen, takes it: #write): the one it was modified from, or the one it had before
+   * a gesture rewrote its layout in use. None: it is kept beside the others.
+   */
+  #replaces() {
+    const key = entryValue('gfReplaces');
+    return typeof key === 'string' ? key : null;
+  }
+
+  /** In use, a gesture of a cell rewrites the layout (folded, a separator moved…): the same screen — its record replaced once kept. */
+  #rewriting() {
+    if (!this.editing && !this.#replaces()) markEntry({ gfReplaces: this.#screenKey() });
+  }
+
+  /** Mes écrans changed (a screen kept, one taken out, another tab): the home shows it again. */
+  #onScreens = () => { if (this.#home) this.requestUpdate(); };
+
+  /** An untitled screen's name in Mes écrans: its cells' (screens.js#labelOf). */
+  #label() { return labelOf([...this.#layout.cells.values()].map(r => r.title)); }
+
+  /**
+   * The screen in use kept in Mes écrans once its address has rested a moment (Back and Forward walked through, a
+   * search typed: only where it stops), first in the list, in the place of the record it replaces (#replaces).
+   */
+  #keep() {
+    if (!this.#keepable()) { clearTimeout(this.#keepTimer); this.#keepTimer = 0; this.#keeping = null; return; }
+    const url = this.#usageHref();
+    // As kept already (« Terminé » with nothing changed among them): nothing to replace either.
+    if (url === this.#kept) { if (this.#replaces()) markEntry({ gfReplaces: null }); return; }
+    if (url === this.#keeping) return;
+    clearTimeout(this.#keepTimer);
+    this.#keeping = url;
+    this.#keepTimer = setTimeout(() => {
+      this.#keepTimer = 0; this.#keeping = null;
+      if (!this.isConnected || !this.#keepable()) return;
+      const now = this.#usageHref();
+      if (now === this.#kept) return;
+      const replaces = this.#replaces();
+      rememberScreen({ href: now, title: this.#state.live.title, label: this.#label() }, replaces);
+      this.#kept = now;
+      if (replaces) markEntry({ gfReplaces: null });
+    }, KEEP_AFTER);
   }
 
   /** The home (#/layout): no layout, no state, no search, no address written. */
@@ -720,6 +802,8 @@ export class GfLayout extends LitElement {
       this.editing = false;
       this.#editMark = null;
       this.#home = true;
+      // Mes écrans: whatever screen comes next is opened again — kept anew (moved first; taken out by × meanwhile, back).
+      this.#kept = null;
       this.#layout = show(''); this.#raw = ''; this._max = null; this.#said.clear();
       if (!sameLive(EMPTY_LIVE, this.#state.live)) this.#state.set(EMPTY_LIVE, 'none');
       for (const g of [...this.#others.keys()]) this.#dropGroup(g);
@@ -813,6 +897,8 @@ export class GfLayout extends LitElement {
 
   /** The layout's text set (the edit strip's « Avancé », a cell's cross, the picker): shown, and written in the address (no new entry). @param {string} text */
   #setText(text) {
+    // In use (an « Emplacement » filled): the same screen, rewritten.
+    this.#rewriting();
     this.#raw = text;
     this.#layout = show(text);
     this.#shown = this.#layout;
@@ -863,8 +949,17 @@ export class GfLayout extends LitElement {
     // Being modified, a layout left with no cell (« Avancé » emptied) is not written: the address keeps the last one.
     if (this.editing && !this.#layout.tree.kids.length) return;
     const url = this.#href();
-    // Being modified, nothing is a new entry: a plant or a zone chosen replaces the address too.
-    if (location.hash !== url) { if (how === 'push' && !this.editing) pushHash(url, {}, false); else replaceHash(url); }
+    // Being modified, nothing is a new entry: a plant or a zone chosen replaces the address too. In use, a new entry is
+    // the same screen: the record it replaces once kept (#replaces) goes with it — the entry left keeps none (replaced
+    // once, where the screen rests).
+    if (location.hash !== url) {
+      if (how !== 'push' || this.editing) replaceHash(url);
+      else {
+        const replaces = this.#replaces();
+        if (replaces) markEntry({ gfReplaces: null });
+        pushHash(url, replaces ? { gfReplaces: replaces } : {}, false);
+      }
+    }
     // Being modified: the entry it was entered from gets the screen as it is now (Back, « Terminé »).
     if (this.editing && this.#editMark?.from != null) renewBehind(this.#editMark.from, this.#usageHref());
   }
@@ -915,6 +1010,7 @@ export class GfLayout extends LitElement {
   /** A split given new shares: kept for the layout's shape, and written in the address (a link has them). @param {number[]} path @param {number[]} sizes */
   #setShares(path, sizes) {
     saveShares(this.#layout.shape, path.join('.'), sizes);
+    this.#rewriting();
     this.#layout = show(serialize(setShares(this.#layout.tree, path, sizes)));
     this.#shown = this.#layout;
     this.#write('replace');
@@ -937,6 +1033,7 @@ export class GfLayout extends LitElement {
     for (const [key, v] of Object.entries(values ?? {})) n = withParam(/** @type {CellNode} */ (n), key, v);
     const text = serialize(replaceAt(tree, path, n));
     if (text === this.#layout.text) return;
+    this.#rewriting();
     this.#layout = show(text);
     this.#shown = this.#layout;
     if (this.#defaults(this.#layout)) this.#state.follow();
@@ -1364,11 +1461,17 @@ export class GfLayout extends LitElement {
 
   // ── In use or being modified: the bar, the edit strip; the home ─────────────────────────────────────────────
 
-  /** « Modifier »: this screen, being modified — one entry (Back leaves it), marked with the depth it was entered from. @param {{ advanced?: boolean }} [o] */
+  /**
+   * « Modifier »: this screen, being modified — one entry (Back leaves it), marked with the depth it was entered from.
+   * The entry in use it leaves keeps the record this screen has in Mes écrans (`gfReplaces`: the screen « Terminé » or
+   * Back lands on there replaces it) — the one it still replaces when not kept yet (« Terminé » a moment ago, or with
+   * remarks: « Voir et corriger »). @param {{ advanced?: boolean }} [o]
+   */
   #modify({ advanced = false } = {}) {
     if (advanced && this.#layout.errors.length) this._advanced = true;
     // « Voir et corriger » (advanced): its line gives way to the strip; the focus goes to the remarks (updated()).
     this.#toRemarks = advanced;
+    markEntry({ gfReplaces: this.#replaces() ?? this.#screenKey() });
     pushHash(href.layout(this.#written, this.#search(), true), { gfEditFrom: { from: depth(), start: depth() + 1 } });
   }
 
@@ -1513,14 +1616,24 @@ export class GfLayout extends LitElement {
     return this.editing ? nothing : html`<div class="placeholder quiet" role="note"><p>Aucune case lisible dans cet écran.</p></div>`;
   }
 
-  /** The home (#/layout): what a screen of one's own is, then a grid or a model to start from, each drawn small, each opened being modified. */
+  /**
+   * The home's Mes écrans (screens.js): the screens last opened in use here, newest first; none, nothing (× on the last
+   * one: the focus to « Partir d’une grille », what comes next).
+   */
+  #mine() {
+    const list = screens();
+    return list.length ? html`<section aria-labelledby="mine"><h2 id="mine">Mes écrans</h2>${screenList(list, 'mine', '#grids')}</section>` : nothing;
+  }
+
+  /** The home (#/layout): what a screen of one's own is, Mes écrans, then a grid or a model to start from, each drawn small, each opened being modified. */
   #homeView() {
     const card = (/** @type {import('./models.js').Model} */ m) => html`<a class="choice" href=${href.layout(m.spec, '', true)}
       data-grid=${m.kind === 'grille' ? m.id : nothing} data-model=${m.kind === 'modele' ? m.id : nothing}><span class="thumb" aria-hidden="true">${thumb(parse(m.spec).tree, 0)}</span><b>${m.icon ? icon(m.icon) : nothing} ${m.title}</b><small>${m.about}</small></a>`;
     return html`<div class="home"><div>
       <header><h1>${icon('window-desktop')} Composer un écran</h1>
         <p>Les outils de GeoFlora côte à côte — la carte, la recherche, la fiche ou un seul de ses blocs, les photos, les cartes à swiper —, tous reliés : une plante choisie dans l’un s’affiche dans les autres. Chaque écran s’écrit dans son adresse : un lien le partage tel quel.</p></header>
-      <section aria-labelledby="grids"><h2 id="grids">Partir d’une grille</h2><div class="choices">${MODELS.filter(m => m.kind === 'grille').map(card)}</div></section>
+      ${this.#mine()}
+      <section aria-labelledby="grids"><h2 id="grids" tabindex="-1">Partir d’une grille</h2><div class="choices">${MODELS.filter(m => m.kind === 'grille').map(card)}</div></section>
       <section aria-labelledby="models"><h2 id="models">Ou d’un modèle</h2><div class="choices">${MODELS.filter(m => m.kind === 'modele').map(card)}</div></section>
     </div></div>`;
   }
