@@ -30,9 +30,10 @@
 //    (models.js), each drawn small, each opened being modified. It never touches the search (Flore's stays as it is).
 //  - « Mes écrans » (screens.js): a screen in use whose layout can be read (a cell known at least) is kept on this device
 //    once it has rested a moment (its address in use, its title, its cells' names) — never the home, never while
-//    modified. The same screen changed replaces its record (`gfReplaces`, in its entry): modified, what « Terminé » (or
-//    Back) gives replaces the record it was entered from; in use, a gesture that rewrites its layout (folded, a
-//    separator moved, a map's layers) replaces the record it had.
+//    modified. The same screen changed replaces its record (`gfReplaces`, in its entry — carried to the new entry of a
+//    plant or a zone chosen before it rests): modified, what « Terminé » (or Back) gives replaces the record it was
+//    entered from; in use, a gesture that rewrites its layout (folded, a separator moved, a map's layers) replaces the
+//    record it had.
 //  - « Créer une app »'s old addresses (#/builder…, router.js): the screen they name (g=, else their grid), being
 //    modified, in their place (the same entry; neither: the home).
 //  - A title (?title=, state.js): the bar's heading (« Écran sur mesure » without one; on a phone too, cut by « … »), the
@@ -730,8 +731,9 @@ export class GfLayout extends LitElement {
 
   /**
    * The record in Mes écrans the screen of this entry replaces once kept (a screenKey, `gfReplaces` in the entry: Back,
-   * Forward and a reload find it; another entry, another screen, has its own or none): the one it was modified from,
-   * or the one it had before a gesture rewrote its layout in use. None: it is kept beside the others.
+   * Forward and a reload find it; another entry, another screen, has its own or none — but a new entry the screen makes
+   * before it rests, a plant or a zone chosen, takes it: #write): the one it was modified from, or the one it had before
+   * a gesture rewrote its layout in use. None: it is kept beside the others.
    */
   #replaces() {
     const key = entryValue('gfReplaces');
@@ -947,8 +949,17 @@ export class GfLayout extends LitElement {
     // Being modified, a layout left with no cell (« Avancé » emptied) is not written: the address keeps the last one.
     if (this.editing && !this.#layout.tree.kids.length) return;
     const url = this.#href();
-    // Being modified, nothing is a new entry: a plant or a zone chosen replaces the address too.
-    if (location.hash !== url) { if (how === 'push' && !this.editing) pushHash(url, {}, false); else replaceHash(url); }
+    // Being modified, nothing is a new entry: a plant or a zone chosen replaces the address too. In use, a new entry is
+    // the same screen: the record it replaces once kept (#replaces) goes with it — the entry left keeps none (replaced
+    // once, where the screen rests).
+    if (location.hash !== url) {
+      if (how !== 'push' || this.editing) replaceHash(url);
+      else {
+        const replaces = this.#replaces();
+        if (replaces) markEntry({ gfReplaces: null });
+        pushHash(url, replaces ? { gfReplaces: replaces } : {}, false);
+      }
+    }
     // Being modified: the entry it was entered from gets the screen as it is now (Back, « Terminé »).
     if (this.editing && this.#editMark?.from != null) renewBehind(this.#editMark.from, this.#usageHref());
   }

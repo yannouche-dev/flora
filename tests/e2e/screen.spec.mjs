@@ -701,6 +701,32 @@ test.describe('Mes écrans', () => {
     await expect.poll(() => keptLayouts(page)).toEqual(['[search,results]']);
   });
 
+  test('« Terminé » puis une plante choisie aussitôt, une nouvelle entrée : l’écran modifié remplace toujours celui d’où l’on est parti', async ({ app, page }) => {
+    await app.open(screen('[search,results]', 'title=Orties&q=ortie'));
+    await expect.poll(() => keptLayouts(page)).toEqual(['[search,results]']);
+    const d0 = await depthOf(page);
+    await toggle(page).click();
+    await expect.poll(() => param(page, 'edit')).toBe('1');
+    await (await more(page)).locator('[data-act="text"]').click();
+    await page.locator('gf-layout #layout-text').fill('[results,search]');
+    await expect.poll(() => layoutOf(page)).toBe('[results,search]');
+    const row = cellAt(page, '0').locator('gf-plant-card a.row').first();
+    const id = /\d+/.exec(String(await row.getAttribute('href')))?.[0];
+    // « Terminé », then a plant chosen before the screen rests: a new entry, the same screen.
+    await toggle(page).click();
+    await expect(page.locator('gf-layout[editing]')).toHaveCount(0);
+    await row.click();
+    await expect.poll(() => param(page, 'p')).toBe(id);
+    expect(await depthOf(page)).toBe(d0 + 1);
+    // Kept where it rests (the plant chosen), in the place of the one it was entered from: one screen.
+    await expect.poll(() => keptLayouts(page)).toEqual(['[results,search]']);
+    expect((await kept(page))[0]).toMatchObject({ title: 'Orties', href: await page.evaluate(() => location.hash) });
+    // Back: the screen without the plant, the same record.
+    await page.goBack();
+    await expect.poll(() => param(page, 'p')).toBe(null);
+    await expect.poll(() => kept(page).then(l => l.map(s => s.href))).toEqual([await page.evaluate(() => location.hash)]);
+  });
+
   test('de la modification, deux pas en arrière d’un coup : vers un autre écran, celui qu’on modifiait reste ; vers celui d’où l’on est parti, il est remplacé', async ({ app, page }) => {
     await app.open(screen('[search,results]', 'title=C&q=ortie'));
     await expect.poll(() => keptLayouts(page)).toEqual(['[search,results]']);
@@ -755,6 +781,13 @@ test.describe('Mes écrans', () => {
     await page.waitForTimeout(1500);
     expect(await keptLayouts(page)).toEqual([await layoutOf(page), '[map(r=1km),results]']);
     expect((await kept(page)).map(s => s.title)).toEqual(['Orties', null]);
+    // Moved back, then a plant chosen before the screen rests (a new entry): still one, kept where it rests.
+    await page.keyboard.press('ArrowLeft');
+    await cellAt(page, '1').locator('gf-plant-card a.row').first().click();
+    await expect.poll(() => param(page, 'p')).not.toBe(null);
+    const moved = await layoutOf(page);
+    await expect.poll(() => keptLayouts(page)).toEqual([moved, '[map(r=1km),results]']);
+    expect((await kept(page))[0].href).toBe(await page.evaluate(() => location.hash));
     // An « Emplacement » filled in use: the same screen too.
     await app.go(screen('[slot,slot]', 'title=Atelier&' + AT));
     await expect.poll(() => kept(page).then(l => l.length)).toBe(3);
