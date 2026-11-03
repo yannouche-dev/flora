@@ -490,7 +490,7 @@ export class GfSettings extends LitElement {
         <div class="builder">${icon('window-desktop')}<span><b>Écran sur mesure</b>
           <small>Les outils de GeoFlora côte à côte — carte, recherche, fiche, photos… —, reliés entre eux et composés à votre idée ; un lien le partage tel quel.</small></span>
           <a class="button" href=${href.layout('')}>${icon('plus-lg')} Composer un écran</a>
-          ${screens().length ? html`<div class="mine"><span id="mine">Mes écrans</span>${screenList(screens(), 'mine')}</div>` : nothing}</div>
+          ${screens().length ? html`<div class="mine"><span id="mine">Mes écrans</span>${screenList(screens(), 'mine', '.builder > .button')}</div>` : nothing}</div>
         ${this.#firstSteps()}
         ${this.#sheetLayout()}
 

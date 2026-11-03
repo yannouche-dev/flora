@@ -21,6 +21,22 @@ export const usageOf = href => href.replace(/([?&])edit=1(&|$)/, (_, a, b) => b 
 export const screenKey = s => s.href.split('?')[0] + '\n' + (s.title ?? '');
 
 /**
+ * An untitled screen's name: its cells' names, « · » between them — too long, cut after a whole one, « … » saying the
+ * others are left out (never half a word: a screen reader reads it as it is). @param {string[]} names
+ */
+export function labelOf(names) {
+  const all = names.join(' · ');
+  if (all.length <= LONGEST) return all;
+  let out = '';
+  for (const n of names) {
+    const next = out ? `${out} · ${n}` : n;
+    if (next.length + 2 > LONGEST) break;
+    out = next;
+  }
+  return out ? `${out} …` : `${names[0].slice(0, LONGEST - 1)}…`;
+}
+
+/**
  * What was stored, as screens: each an address of a screen (#/layout/<layout>, in use), a title or none, a name, a
  * date — anything else dropped; one per layout and title (the first: the newest); 10 at most.
  * @param {unknown} stored @returns {Screen[]}

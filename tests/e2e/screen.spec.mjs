@@ -563,6 +563,9 @@ test.describe('Mes écrans', () => {
     await expect(names(page, 'gf-layout')).toHaveText(['Carte · Résultats', 'Orties']);
     await expect(home.locator('ul.screens li small')).toHaveText(['[map(r=1km),results]', '[search,results]']);
     expect(await home.locator('ul.screens li a').evaluateAll(as => as.map(a => a.getAttribute('href')))).toEqual([second, first]);
+    // Each link named by its name alone, its layout its description (× too: two of the same name told apart).
+    await expect(home.getByRole('link', { name: 'Orties', exact: true })).toHaveAccessibleDescription('[search,results]');
+    await expect(home.getByRole('button', { name: 'Retirer « Carte · Résultats » de Mes écrans' })).toHaveAccessibleDescription('[map(r=1km),results]');
     // Réglages, under « Composer un écran »: the same.
     await app.go('#/settings');
     const card = page.locator('gf-settings .builder');
@@ -637,6 +640,15 @@ test.describe('Mes écrans', () => {
     await expect(page.locator('gf-layout .remarks')).toBeVisible();
     await page.waitForTimeout(1500);
     expect(await kept(page)).toEqual([]);
+    // A cell, but a text that cannot be read whole; every cell unknown (a mistyped link): not kept either.
+    await app.go(screen('[map,', AT));
+    await expect(page.locator('gf-layout .remarks')).toBeVisible();
+    await page.waitForTimeout(1500);
+    expect(await kept(page)).toEqual([]);
+    await app.go(screen('[mpa,serch]', AT));
+    await expect(page.locator('gf-layout section.cell[data-comp="unknown"]').first()).toBeVisible();
+    await page.waitForTimeout(1500);
+    expect(await kept(page)).toEqual([]);
     await app.go('#/layout');
     await expect(page.getByRole('heading', { level: 1, name: 'Composer un écran' })).toBeVisible();
     // A grid of the home: opened being modified, kept once « Terminé ».
@@ -648,5 +660,132 @@ test.describe('Mes écrans', () => {
     await expect.poll(() => param(page, 'edit')).toBe(null);
     await expect.poll(() => keptLayouts(page)).toEqual(['[slot@30,slot@35,slot]']);
     expect((await kept(page))[0].href).toBe(await page.evaluate(() => location.hash));
+  });
+
+  test('« Terminé » puis « Modifier » aussitôt, ou « Terminé » avec des remarques puis « Voir et corriger » : l’écran d’où l’on est parti est remplacé', async ({ app, page }) => {
+    await app.open(screen('[slot,slot]', 'title=Atelier&' + AT));
+    await expect.poll(() => keptLayouts(page)).toEqual(['[slot,slot]']);
+    await toggle(page).click();
+    await expect.poll(() => param(page, 'edit')).toBe('1');
+    await cellAt(page, '0').locator('gf-block-picker[inline] .tile[data-comp="results"]').click();
+    await expect.poll(() => layoutOf(page)).toBe('[results,slot]');
+    // « Terminé », « Modifier » again before the screen rests (a double touch on the toggle), then « Terminé »: one.
+    await toggle(page).click();
+    await expect.poll(() => param(page, 'edit')).toBe(null);
+    await toggle(page).click();
+    await expect.poll(() => param(page, 'edit')).toBe('1');
+    await (await more(page)).locator('[data-act="text"]').click();
+    const field = page.locator('gf-layout #layout-text');
+    await field.fill('[results,search]');
+    await expect.poll(() => layoutOf(page)).toBe('[results,search]');
+    await toggle(page).click();
+    await expect.poll(() => param(page, 'edit')).toBe(null);
+    await expect.poll(() => keptLayouts(page)).toEqual(['[results,search]']);
+    // « Terminé » with remarks: not kept; « Voir et corriger », corrected, « Terminé »: still the one it was entered from.
+    await toggle(page).click();
+    await expect.poll(() => param(page, 'edit')).toBe('1');
+    await (await more(page)).locator('[data-act="text"]').click();
+    await field.fill('[results,search');
+    await expect.poll(() => layoutOf(page)).toBe('[results,search');
+    await toggle(page).click();
+    await expect.poll(() => param(page, 'edit')).toBe(null);
+    await expect(page.locator('gf-layout .remarks')).toBeVisible();
+    await page.waitForTimeout(1500);
+    expect(await keptLayouts(page)).toEqual(['[results,search]']);
+    await page.locator('gf-layout .remarks').getByRole('button', { name: 'Voir et corriger' }).click();
+    await expect.poll(() => param(page, 'edit')).toBe('1');
+    await field.fill('[search,results]');
+    await expect.poll(() => layoutOf(page)).toBe('[search,results]');
+    await toggle(page).click();
+    await expect.poll(() => param(page, 'edit')).toBe(null);
+    await expect.poll(() => keptLayouts(page)).toEqual(['[search,results]']);
+  });
+
+  test('de la modification, deux pas en arrière d’un coup : vers un autre écran, celui qu’on modifiait reste ; vers celui d’où l’on est parti, il est remplacé', async ({ app, page }) => {
+    await app.open(screen('[search,results]', 'title=C&q=ortie'));
+    await expect.poll(() => keptLayouts(page)).toEqual(['[search,results]']);
+    await app.go(screen('[slot,slot]', 'title=A&' + AT));
+    await expect.poll(() => keptLayouts(page)).toEqual(['[slot,slot]', '[search,results]']);
+    await toggle(page).click();
+    await expect.poll(() => param(page, 'edit')).toBe('1');
+    await cellAt(page, '0').locator('gf-block-picker[inline] .tile[data-comp="results"]').click();
+    await expect.poll(() => layoutOf(page)).toBe('[results,slot]');
+    // Two steps back at once (the long-pressed Back's menu): C, which replaces nothing — A stays.
+    await page.evaluate(() => history.go(-2));
+    await expect.poll(() => layoutOf(page)).toBe('[search,results]');
+    await page.waitForTimeout(1500);
+    expect(await keptLayouts(page)).toEqual(['[search,results]', '[slot,slot]']);
+    // Forward to the entry A was modified from: A as modified, in A's place.
+    await page.goForward();
+    await expect.poll(() => layoutOf(page)).toBe('[results,slot]');
+    await expect.poll(() => keptLayouts(page)).toEqual(['[results,slot]', '[search,results]']);
+    // Modified again, « Changer de modèle » (the home), then two steps back at once to the screen it was entered from.
+    await toggle(page).click();
+    await expect.poll(() => param(page, 'edit')).toBe('1');
+    await (await more(page)).locator('[data-act="text"]').click();
+    await page.locator('gf-layout #layout-text').fill('[results,search]');
+    await expect.poll(() => layoutOf(page)).toBe('[results,search]');
+    await (await more(page)).getByRole('link', { name: 'Changer de modèle' }).click();
+    await expect.poll(() => hash(page)).toBe('#/layout');
+    await page.evaluate(() => history.go(-2));
+    await expect.poll(() => layoutOf(page)).toBe('[results,search]');
+    await expect.poll(() => keptLayouts(page)).toEqual(['[results,search]', '[search,results]']);
+  });
+
+  test('un geste en usage qui réécrit la disposition (replier, une poignée, un emplacement rempli) : le même écran, une entrée', async ({ app, page, isMobile }) => {
+    test.skip(isMobile, 'the grips: a wide screen');
+    await app.open(screen('[map(r=1km),results]', AT));
+    await expect.poll(() => keptLayouts(page)).toEqual(['[map(r=1km),results]']);
+    await app.go(screen('[search,results(actions=replier)]', 'title=Orties&q=ortie'));
+    await expect.poll(() => keptLayouts(page)).toEqual(['[search,results(actions=replier)]', '[map(r=1km),results]']);
+    // Folded, unfolded: the layout of the address changes; its record follows it.
+    await cellAt(page, '1').locator('[data-act="replier"]').click();
+    await expect.poll(() => layoutOf(page)).toBe('[search,results(actions=replier,etat=replie)]');
+    await expect.poll(() => keptLayouts(page)).toEqual(['[search,results(actions=replier,etat=replie)]', '[map(r=1km),results]']);
+    await cellAt(page, '1').locator('[data-act="replier"]').click();
+    await expect.poll(() => layoutOf(page)).toBe('[search,results(actions=replier)]');
+    await expect.poll(() => keptLayouts(page)).toEqual(['[search,results(actions=replier)]', '[map(r=1km),results]']);
+    // A separator moved (the keyboard), twice: still one.
+    const grip = page.locator('gf-layout [role="separator"]').first();
+    await grip.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(() => layoutOf(page)).toMatch(/^\[search@[\d.]+,/);
+    await expect.poll(async () => (await keptLayouts(page))[0]).toBe(await layoutOf(page));
+    await page.keyboard.press('ArrowRight');
+    await page.waitForTimeout(1500);
+    expect(await keptLayouts(page)).toEqual([await layoutOf(page), '[map(r=1km),results]']);
+    expect((await kept(page)).map(s => s.title)).toEqual(['Orties', null]);
+    // An « Emplacement » filled in use: the same screen too.
+    await app.go(screen('[slot,slot]', 'title=Atelier&' + AT));
+    await expect.poll(() => kept(page).then(l => l.length)).toBe(3);
+    await cellAt(page, '0').locator('gf-block-picker[inline] .tile[data-comp="results"]').click();
+    await expect.poll(() => layoutOf(page)).toBe('[results,slot]');
+    await expect.poll(async () => (await keptLayouts(page))[0]).toBe('[results,slot]');
+    expect((await kept(page)).map(s => s.title)).toEqual(['Atelier', 'Orties', null]);
+  });
+
+  test('× sur le dernier : le focus à ce qui suit, jamais à la page (l’accueil, Réglages) ; Retour vers l’écran retiré l’y remet', async ({ app, page }) => {
+    await app.open(screen('[search,results]', 'title=Orties&q=ortie'));
+    await expect.poll(() => kept(page).then(l => l.length)).toBe(1);
+    // The home (the same element as the screen): × by the keyboard; the focus to « Partir d’une grille ».
+    await app.go('#/layout');
+    const home = page.locator('gf-layout');
+    await home.getByRole('button', { name: 'Retirer « Orties » de Mes écrans' }).focus();
+    await page.keyboard.press('Enter');
+    await expect(home.locator('ul.screens')).toHaveCount(0);
+    await expect(home.getByRole('heading', { level: 2, name: 'Partir d’une grille' })).toBeFocused();
+    expect(await kept(page)).toEqual([]);
+    // Back to the screen taken out: opened again, kept again.
+    await page.goBack();
+    await expect(page.locator('gf-layout .bar h1')).toHaveText('Orties');
+    await expect.poll(() => kept(page).then(l => l.map(s => s.title))).toEqual(['Orties']);
+    // Réglages: the focus to « Composer un écran ».
+    await app.go('#/settings');
+    const card = page.locator('gf-settings .builder');
+    await card.getByRole('button', { name: 'Retirer « Orties » de Mes écrans' }).focus();
+    await page.keyboard.press('Enter');
+    await expect(card.locator('ul.screens')).toHaveCount(0);
+    await expect(page.locator('gf-settings .builder > .button')).toBeFocused();
+    expect(await kept(page)).toEqual([]);
   });
 });

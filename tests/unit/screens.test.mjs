@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { config } from '../../app/config.js';
 
 const KEY = config.storageKeys.screens;
-const { clean, forgetScreen, rememberScreen, screenEvents, screenKey, screens, usageOf } = await import('../../app/layout/screens.js');
+const { clean, forgetScreen, labelOf, rememberScreen, screenEvents, screenKey, screens, usageOf } = await import('../../app/layout/screens.js');
 
 /** A screen as stored. @param {string} href @param {string | null} [title] @param {number} [at] */
 const s = (href, title = null, at = 1) => ({ href, title, label: 'Carte · Résultats', at });
@@ -27,6 +27,27 @@ test('screenKey : la disposition (le chemin) et le titre, pas l’état', () => 
   assert.equal(screenKey(s('#/layout/[map,results]?p=1&at=45.1,3.2', 'Mon coin')), '#/layout/[map,results]\nMon coin');
   assert.equal(screenKey(s('#/layout/[map,results]?p=2', 'Mon coin')), screenKey(s('#/layout/[map,results]', 'Mon coin')));
   assert.notEqual(screenKey(s('#/layout/[map,results]')), screenKey(s('#/layout/[map,results]', 'Mon coin')));
+});
+
+test('labelOf : le nom de ses cases ; trop long, coupé après une case entière, « … » ; jamais au-delà de 80', () => {
+  assert.equal(labelOf(['Carte', 'Résultats']), 'Carte · Résultats');
+  assert.equal(labelOf([]), '');
+  // The « Étude d’une plante » model: six cells, the last ones left out — never half a word.
+  const etude = labelOf(['Recherche', 'Résultats', 'Classification', 'Occurrences et répartition', 'Carte', 'Photos']);
+  assert.equal(etude, 'Recherche · Résultats · Classification · Occurrences et répartition · Carte …');
+  assert.ok(etude.length <= 80);
+  // « Tableau de bord »: seven slots.
+  const slots = labelOf(Array(7).fill('Emplacement'));
+  assert.equal(slots, Array(5).fill('Emplacement').join(' · ') + ' …');
+  assert.equal(clean([s('#/layout/[slot]', null)].map(x => ({ ...x, label: slots })))[0].label, slots);
+  // Exactly 80: whole, no « … ».
+  const eighty = labelOf(['a'.repeat(40), 'b'.repeat(37)]);
+  assert.equal(eighty.length, 80);
+  assert.ok(!eighty.endsWith('…'));
+  // One name longer than all: itself cut, « … » after.
+  const one = labelOf(['x'.repeat(100), 'Carte']);
+  assert.equal(one.length, 80);
+  assert.ok(one.endsWith('x…'));
 });
 
 test('clean : ce qui n’est pas un écran est retiré ; un par disposition et titre, le plus récent ; 10 au plus', () => {
