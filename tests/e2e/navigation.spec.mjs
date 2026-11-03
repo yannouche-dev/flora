@@ -5,6 +5,7 @@
 // it (Flore: its pane first). « Annuler » goes back, never a step more: a new place's, a dialog's; a share's « Ignorer »
 // too, and a share saved takes the preview's place. The Carte's plant filter is in its address (plants=).
 import { test, expect, plantId } from './fixtures.mjs';
+import { screenSearch } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
 
@@ -498,9 +499,11 @@ test('Un onglet touché quand on y est : rien ne change', async ({ app, page }) 
 
 test('Une seule recherche : une disposition libre ne change pas celle de Flore', async ({ app, page }) => {
   await app.open('#/?family=Rosaceae');
-  // The layout's first group shares the app's live search (here: ortie), never kept as Flore's.
+  // The screen's search is its own (here: ortie): Flore's stays as it was, never emptied nor changed.
   await app.go('#/layout/[search(list=0),results(list)]?q=ortie');
-  await expect.poll(() => app.state('query.q')).toBe('ortie');
+  await expect.poll(async () => (await screenSearch(page, 'a'))?.query.q).toBe('ortie');
+  expect(await app.state('query.q')).toBe('');
+  expect(await app.state('query.filters.family')).toEqual(['Rosaceae']);
   await app.go(`#/plant/${plantId('Geum urbanum')}`);
   await expect.poll(() => app.state('query.q')).toBe('');
   expect(await app.state('query.filters.family')).toEqual(['Rosaceae']);

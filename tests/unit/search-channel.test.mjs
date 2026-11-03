@@ -1,7 +1,7 @@
 // A search of its own (app/core/search-channel.js, SearchChannel: each group of a screen of one's own), against a
 // worker the test answers (core/search.js posts to it): its search run once the flora is there, published — an older
 // run's answer, come last, dropped —, or fetched without being published; nothing said found before its first answer
-// (`answered`); kept to the plants of a zone, then to the whole flora again.
+// (`answered`); kept to the plants of a zone, then to the whole flora again. The app's (Flore's: APP) never is.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -25,7 +25,8 @@ let answer = async () => found(0);
   }
 };
 
-const { SearchChannel, emptyQuery } = await import('../../app/core/search-channel.js');
+const { APP, SearchChannel, emptyQuery } = await import('../../app/core/search-channel.js');
+const { runSearch } = await import('../../app/core/search.js');
 const { store } = await import('../../app/core/store.js');
 
 /** The worker's answer: `total` plants found. @param {number} total */
@@ -85,4 +86,15 @@ test('gardée aux plantes d’une zone : le moteur les reçoit, avec leurs obser
   await ch.run();
   const whole = asked.at(-1);
   assert.deepEqual([whole.only, whole.observed, whole.within], [null, null, null]);
+});
+
+test('la recherche de l’app (Flore) n’est jamais gardée à une zone : rien pour l’y garder, toute la flore demandée', async () => {
+  assert.equal('setScope' in APP, false);
+  answer = async () => found(300);
+  store.set({ query: { ...emptyQuery(), q: 'chêne' } });
+  await runSearch();
+  const sent = asked.at(-1);
+  assert.equal(sent.q, 'chêne');
+  assert.deepEqual(['only', 'observed', 'within'].filter(k => sent[k] != null), []);
+  assert.equal(store.state.results.total, 300);
 });

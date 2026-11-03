@@ -20,6 +20,17 @@ export const screen = (spec, state = '', edit = false) => {
 /** Whether the screen of one's own is being modified (gf-layout[editing]). @param {Page} page */
 export const editing = page => page.locator('gf-layout[editing]').count().then(n => n > 0);
 
+/**
+ * A group's search on the screen of one's own (gf-layout searchOf), never Flore's (the store's: App#state): its query,
+ * its count (`total`), the zone's plants while a map's view keeps the list (`inZone`), the plants it lists (`items`);
+ * null: no such group, or no screen. @param {Page} page @param {string} [group]
+ * @returns {Promise<{ query: { q: string, filters: Record<string, string[]>, sort: string }, total: number, inZone: number[] | null, items: any[] } | null>}
+ */
+export const screenSearch = (page, group = 'a') => page.evaluate(g => {
+  const layout = /** @type {any} */ (document.querySelector('gf-app')?.shadowRoot?.querySelector('gf-layout'));
+  return layout?.searchOf(g) ?? null;
+}, group);
+
 export class App {
   /** @param {import('@playwright/test').Page} page */
   constructor(page) {

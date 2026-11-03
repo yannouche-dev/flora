@@ -7,8 +7,8 @@
 //                                      results and the deck light it, the map lights its observations in the scope;
 //   &at=<lat>,<lon>&r=<500m|2km>&place=<name>   the scope: a circle; its observations (iNaturalist's latest, of the
 //                                      period: the map's points) and their plants (matched to the flora: core/nearby.js),
-//                                      which keep the search to them (core/search.js#setSearchScope) — the list is the
-//                                      map's plants, the map those of the list;
+//                                      which keep its search to them (its channel's setScope: core/search-channel.js)
+//                                      — the list is the map's plants, the map those of the list;
 //   &place=<words> without at=         a place to find: the IGN geocoder asked (core/geoservices.js#findPlace:
 //                                      « mirabel, menetrol, 63 »), the scope set there and the address replaced by its
 //                                      at= and the label found (r= kept, else the layout's); not found, offline or the
@@ -23,8 +23,8 @@
 //                                      (core/observations.js); not said, the defaults — the sources a map says (src=),
 //                                      else both (but one switched off in Réglages › Modules: defaultSources), every
 //                                      observation (every quality, every dataset);
-//   &q=…&family=…&sort=…               the search itself: Flore's (core/query.js — the same words as #/?q=…), kept in the
-//                                      store, so the search cell is Flore's own bar, filters and list.
+//   &q=…&family=…&sort=…               the search itself: the screen's own (core/query.js — the same words as #/?q=…),
+//                                      never Flore's.
 // A layout's other groups (a cell's groupe=b: its own zone, plant, period and search, apart from the others) have
 // the same keys after their letter: &b.p=…&b.at=…&b.r=…&b.q=…&b.family=… (the first group, a, none: its links as before).
 // A link with them gives the same screen; Back and Forward walk the plants and places chosen (a new entry each), while
@@ -43,7 +43,7 @@ import { boxHolds, circleBox } from '../core/around3d.js';
 import { OBS_DEFAULTS, SOURCE_NAMES, defaultSources, failedText, inatQuery, obsKey, obsParams, readObsFilters, sourcesText, zoneObservations } from '../core/observations.js';
 import { fromHash, toHash } from '../core/query.js';
 import { searchWhole } from '../core/search.js';
-import { APP } from '../core/search-channel.js';
+import { SearchChannel } from '../core/search-channel.js';
 import { whenReady } from '../core/store.js';
 import { DISTANCE, distanceText, parseDistance } from './registry.js';
 
@@ -159,13 +159,14 @@ export const sameLive = (a, b) => a.title === b.title && a.plant === b.plant && 
 /** The live state of a layout on screen, and what it loads for it. Fires `change` (detail: { how, keys }), and `hover` when the plant hovered changes. */
 export class LayoutState extends EventTarget {
   /**
-   * @param {{ radius?: number | null, find?: typeof findPlace, channel?: import('../core/search-channel.js').Channel }} [defaults] the
+   * @param {{ radius?: number | null, find?: typeof findPlace, channel?: SearchChannel }} [defaults] the
    *   layout's own default radius (a map or a place cell's r=); `find`: how a place typed is found (the IGN geocoder;
-   *   tests give their own); `channel`: the search its zone keeps to its plants (core/search-channel.js; the app's)
+   *   tests give their own); `channel`: the search its zone keeps to its plants (core/search-channel.js; none: one of
+   *   its own — never Flore's)
    */
   constructor(defaults = {}) {
     super();
-    this.channel = defaults.channel ?? APP;
+    this.channel = defaults.channel ?? new SearchChannel();
     /** @type {Live} */
     this.live = EMPTY;
     this.defaultRadius = defaults.radius ?? DEFAULT_RADIUS;
@@ -214,7 +215,7 @@ export class LayoutState extends EventTarget {
     this.plantObs = null;
     /** The current plant's names (the cells' heads). @type {{ id: number, name: string, sci: string } | null} */
     this.plantInfo = null;
-    /** The search is kept to the scope's plants (core/search.js): taken off when the layout goes. */
+    /** Its search is kept to the scope's plants (its channel's setScope): taken off when the layout goes. */
     this.scoped = false;
     /** @type {AbortController | null} */ this.abort = null;
     /** @type {any} */ this.timer = 0;
@@ -553,12 +554,15 @@ export class LayoutState extends EventTarget {
     this.#changed();
   }
 
-  /** The layout gone: its loads stopped, nothing hovered, the search back to the whole flora. */
+  /**
+   * The layout gone: its loads stopped, nothing hovered, its search kept to no zone — never run again: it goes with the
+   * screen (Flore's was never touched).
+   */
   dispose() {
     this.hover = null;
     clearTimeout(this.timer);
     this.abort?.abort();
     this.findAbort?.abort();
-    if (this.scoped) { this.scoped = false; this.channel.setScope(null); whenReady().then(() => this.channel.run()); }
+    if (this.scoped) { this.scoped = false; this.channel.setScope(null); }
   }
 }

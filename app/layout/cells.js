@@ -12,8 +12,9 @@
 //    thumbnail, the current plant's chip, the period's chips, the count, the legend, the zoom: map-options.js);
 //  - place: the scope alone — « Autour de moi », a commune (gf-place-search), the radius;
 //  - search: Flore's search bar (gf-results-bar: text, sort, filters chosen, « Filtrer par »), its filters (gf-filter-
-//    panel, opened by the funnel) and its list; filters and results: each part alone. They read and write the store's
-//    query, as in Flore; the scope keeps the search to its plants (state.js);
+//    panel, opened by the funnel) and its list; filters and results: each part alone. They read and write the search
+//    of their group (its channel, core/search-channel.js: the screen's own, never Flore's); the scope keeps it to its
+//    plants (state.js);
 //  - plant: the plant sheet (gf-plant-detail), whole or one block (plant.wikipedia: its `only`); media: the photos'
 //    viewer (gf-media-viewer). Each shows the current plant;
 //  - deck: Rencontres' cards (miniapp/kit/ma-deck.js) for the plants found in the scope, the one on top the current
@@ -225,7 +226,7 @@ async function namesToTaxa(names) {
 export class DlMap extends LitElement {
   static properties = {
     state: { attribute: false }, params: { attribute: false },
-    /** The search of its group (core/search-channel.js: a layout's group b, c); none: the app's. */
+    /** The search of its group (core/search-channel.js: the screen's own); none: the app's. */
     channel: { attribute: false },
     /** While modified: the map moved there is the view it starts on (vue=). */
     editing: { attribute: false },
@@ -1268,7 +1269,7 @@ export class DlSearch extends LitElement {
 customElements.define('dl-search', DlSearch);
 
 /**
- * The filters of a layout's search: Flore's (gf-filter-panel), « Observations de la zone » first when its group has a
+ * The filters of a layout's search: Flore's panel (gf-filter-panel), « Observations de la zone » first when its group has a
  * zone (obs-filters.js: where its observations come from, which of them count). @param {LayoutState | null} state
  * @param {import('../core/search-channel.js').Channel | null} channel
  */
@@ -1516,7 +1517,7 @@ customElements.define('dl-deck', DlDeck);
  * What a cell shows: its component's piece, given the state; an unknown component: what is wrong and how to fix it.
  * @param {Resolved} r @param {{ state: LayoutState, view: string, plant: number | null, first: { id: number, name: string } | null,
  *   editing?: boolean, channel?: import('../core/search-channel.js').Channel | null }} ctx  `editing`: the screen being modified; `channel`:
- *   the search of the cell's group (none: the app's)
+ *   the search of the cell's group (its own, never Flore's)
  */
 export function renderCell(r, ctx) {
   if (!r.known) {

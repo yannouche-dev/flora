@@ -501,8 +501,8 @@ export class GfFlora extends LitElement {
 
   /**
    * Mounted on a plant (another tab, a link, a reload, Back): the search under the sheet is Flore's own, kept in the
-   * context — not the one the store may hold from elsewhere (a free layout's first group). Before anything reads it
-   * (#listHash, the pager); run once the flora is ready (main.js runs the start's).
+   * context — not the one the store may hold from elsewhere. Before anything reads it (#listHash, the pager); run once
+   * the flora is ready (main.js runs the start's).
    */
   #restoreSearch() {
     const saved = fromHash(context().query || '#/');

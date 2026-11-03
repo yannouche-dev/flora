@@ -8,7 +8,7 @@
 // iNaturalist answered here: 12 plants around; GBIF: nothing of its own in the zone (both sources asked by default).
 import { test, expect, plantId, answerZoneGbif } from './fixtures.mjs';
 import { mapState } from './quiet.mjs';
-import { layoutOf, screen } from './app.mjs';
+import { layoutOf, screen, screenSearch } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
 
@@ -17,6 +17,8 @@ test.use({ reducedMotion: 'reduce' });
 const NAMES = ['Urtica dioica', 'Allium ursinum', 'Conium maculatum', 'Geum urbanum', 'Taraxacum officinale', 'Quercus robur', 'Hedera helix',
   'Galium aparine', 'Plantago lanceolata', 'Bellis perennis', 'Ranunculus acris', 'Trifolium repens'];
 const AT = 'at=48.85,2.35';
+/** How many plants the screen's search found (its first group's: gf-layout searchOf, never Flore's). @param {Page} page */
+const found = page => screenSearch(page).then(s => s?.total);
 /** iNaturalist's taxon of a plant the flora does not know, observed in the zone. */
 const UNKNOWN = 7777;
 const now = new Date();
@@ -78,14 +80,14 @@ test.describe('un grand écran', () => {
     const asked = await answer(page);
     await app.open(`#/layout/[map(r=1km),search]?${AT}`);
     // The zone's observations asked (its plants, not each plant's): their 12 plants of the flora, the list.
-    await expect.poll(() => app.state('results.total')).toBe(12);
+    await expect.poll(() => found(page)).toBe(12);
     await expect.poll(() => taxaOn(page, 0)).toEqual(NAMES.map((_, i) => 1000 + i));
     expect(asked.some(u => /\/v1\/observations\?.*iconic_taxa=Plantae/.test(u) && !u.includes('taxon_id='))).toBe(true);
     expect(asked.some(u => u.includes('species_counts'))).toBe(false);
     await answered(page, 0);
     // A search: its plant alone, on the map too.
     await page.locator('dl-search gf-plant-search input').fill('ortie');
-    await expect.poll(() => app.state('results.total')).toBe(1);
+    await expect.poll(() => found(page)).toBe(1);
     await expect.poll(() => taxaOn(page, 0)).toEqual([1000]);
     // A map that does not follow the search: every observation of the zone, the plant the flora does not know too.
     await app.go(`#/layout/[map(r=1km,suit=0),search]?${AT}&q=ortie`);
@@ -95,24 +97,24 @@ test.describe('un grand écran', () => {
   test('la période est celle de toutes les cases : ce mois-ci, les plantes de la zone ce mois-ci, la liste et la carte ; dans l’adresse', async ({ app, page }) => {
     const asked = await answer(page);
     await app.open(`#/layout/[map(r=1km;ctl=rayon+periode),results]?${AT}`);
-    await expect.poll(() => app.state('results.total')).toBe(12);
+    await expect.poll(() => found(page)).toBe(12);
     await page.locator('dl-map').getByRole('group', { name: 'Période des observations' }).getByRole('button', { name: 'Ce mois-ci' }).click();
     await expect.poll(() => param(page, 'periode')).toBe('mois');
     // The zone's observations of this month: their plants the results, the map theirs.
     await expect.poll(() => asked.some(u => /\/v1\/observations\?/.test(u) && u.includes(`month=${MONTH}`))).toBe(true);
-    await expect.poll(() => app.state('results.total')).toBe(6);
+    await expect.poll(() => found(page)).toBe(6);
     await expect.poll(() => taxaOn(page, 0)).toEqual([1000, 1001, 1002, 1003, 1004, 1005]);
     // Reloaded: the same period.
     await page.reload();
     await app.ready();
-    await expect.poll(() => app.state('results.total')).toBe(6);
+    await expect.poll(() => found(page)).toBe(6);
     await expect(page.locator('dl-map').getByRole('button', { name: 'Ce mois-ci' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   test('trois cartes : la zone, la France, le monde — les mêmes plantes, les observations de la France et du monde en carreaux d’iNaturalist', async ({ app, page }) => {
     await answer(page);
     await app.open(`#/layout/[map(r=1km),map(france),map(monde),results]?${AT}`);
-    await expect.poll(() => app.state('results.total')).toBe(12);
+    await expect.poll(() => found(page)).toBe(12);
     const tiles = (/** @type {number} */ i) => mapAt(page, i).evaluate(m => (/** @type {any} */ (m).tiles ?? []).map((/** @type {any} */ t) => t.url));
     const ids = NAMES.map((_, i) => 1000 + i).join('%2C');
     for (const i of [1, 2]) {
@@ -127,7 +129,7 @@ test.describe('un grand écran', () => {
     expect(await mapAt(page, 2).getAttribute('min-zoom')).toBe('1');
     // A filter: the same plants on every map.
     await app.go(`#/layout/[map(r=1km),map(france),map(monde),results]?${AT}&q=ortie`);
-    await expect.poll(() => app.state('results.total')).toBe(1);
+    await expect.poll(() => found(page)).toBe(1);
     await expect.poll(async () => (await tiles(1)).find(u => u.includes('/v1/grid/')) ?? '').toContain('taxon_id=1000&');
     await expect.poll(() => taxaOn(page, 0)).toEqual([1000]);
     // The current plant: its own points on top, on the wide maps.

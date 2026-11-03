@@ -13,6 +13,7 @@
 // iNaturalist answered here: 24 observations of the 12 plants of the zone (fixtures answerZone); GBIF: the elder
 // (Sambucus nigra, which iNaturalist did not see) twice, in two datasets, and a copy of iNaturalist's.
 import { test, expect, answerAround, answerZone, plantId } from './fixtures.mjs';
+import { screenSearch } from './app.mjs';
 import { mapState } from './quiet.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
@@ -59,11 +60,8 @@ async function answerGbif(page, { seen, only } = {}) {
 const param = (page, key) => page.evaluate(k => new URLSearchParams(location.hash.split('?')[1] || '').get(k), key);
 /** The section « Observations de la zone ». @param {Page} page */
 const section = page => page.locator('dl-obs-filters');
-/** The names the list holds (the store's results: the list draws only the rows in view). @param {Page} page */
-const names = page => page.evaluate(async () => {
-  const { store } = await import('/app/core/store.js');
-  return store.state.results.items.map((/** @type {any} */ p) => p.scientificName);
-});
+/** The names the list holds (the screen's search: the list draws only the rows in view). @param {Page} page */
+const names = async page => ((await screenSearch(page))?.items ?? []).map(p => p.scientificName);
 /** The map's points: their kinds and names. @param {Page} page */
 const mapPoints = page => page.locator('dl-map gf-map').evaluate(m => (/** @type {any} */ (m).area?.points ?? []).map((/** @type {any} */ p) => ({ kind: p.kind, sci: p.sci })));
 /** The last address asked of a service, its parameters. @param {string[]} seen */

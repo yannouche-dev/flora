@@ -7,7 +7,7 @@
 // nothing), and the editor's « Cadre » writing them in the address. iNaturalist answered as in free-layout.spec.mjs:
 // 12 plants around.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
-import { layoutOf, screen } from './app.mjs';
+import { layoutOf, screen, screenSearch } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
 
@@ -103,7 +103,7 @@ test.describe('un grand écran', () => {
 
   test('zone=0 : des résultats sur toute la France, à côté d’une recherche gardée à la zone', async ({ app, page }) => {
     await app.open(`#/layout/[place(r=1km),search(list=0),results(list,france)]?${AT}`);
-    await expect.poll(() => app.state('results.total')).toBe(12);
+    await expect.poll(async () => (await screenSearch(page))?.total).toBe(12);
     await expect(cellOf(page, 'search').locator('.sub')).toHaveText('12 espèces');
     const whole = cellOf(page, 'results');
     await expect(whole.locator('.sub')).toHaveText('300 espèces · toute la France');
