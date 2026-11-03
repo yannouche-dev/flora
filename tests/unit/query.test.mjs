@@ -2,7 +2,7 @@
 // bookmarks or shares, read back the same.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { activeFilterCount, fromHash, toHash } from '../../app/core/query.js';
+import { activeFilterCount, applySuggestion, clearFilters, fromHash, heldSuggestions, toHash, toggleValue } from '../../app/core/query.js';
 import { href, isStart, parse } from '../../app/core/router.js';
 
 test('fromHash ↔ toHash : aller-retour stable, filtres multiples et tri', () => {
@@ -104,4 +104,38 @@ test('href et parse s’accordent', () => {
     const hash = /** @type {() => string} */ (fn)();
     assert.notEqual(parse(hash).name, 'not-found', `href.${name}() → ${hash}`);
   }
+});
+
+/**
+ * A search of its own (core/search-channel.js › Channel), its query and the « Filtrer par » suggestions of its text:
+ * one the test changes by hand (it runs nothing). @param {string} q @param {any[]} suggestions
+ */
+function search(q, suggestions) {
+  return {
+    query: { ...fromHash('#/'), q }, results: { suggestions },
+    /** @param {any} query */ setQuery(query) { this.query = query; },
+    run() {}, addEventListener() {}, removeEventListener() {}
+  };
+}
+
+test('« Filtrer par » : les suggestions gardées à chaque recherche (Flore, chaque groupe d’un écran) — jamais offertes dans une autre, ni son texte rendu ailleurs', () => {
+  const a = search('urtica', [{ type: 'genus', name: 'Urtica', count: 2 }, { type: 'family', name: 'Urticaceae', count: 3 }]);
+  const b = search('rosa', [{ type: 'genus', name: 'Rosa', count: 4 }]);
+  applySuggestion('genus', 'Urtica', a);
+  assert.deepEqual([a.query.q, a.query.filters.genus], ['', ['Urtica']]);
+  assert.deepEqual(heldSuggestions(a), a.results.suggestions, 'les autres restent offertes');
+  assert.equal(heldSuggestions(b), null);
+  assert.equal(heldSuggestions(), null, 'ni dans Flore');
+  applySuggestion('genus', 'Rosa', b);
+  assert.deepEqual(heldSuggestions(b), b.results.suggestions);
+  assert.deepEqual(heldSuggestions(a), a.results.suggestions, 'celles de a, gardées');
+  // The filter taken off by hand (its ✕): its text back — in its own search only.
+  toggleValue('genus', 'Urtica', a);
+  assert.deepEqual([a.query.q, a.query.filters.genus], ['urtica', []]);
+  assert.equal(heldSuggestions(a), null);
+  assert.deepEqual([b.query.q, b.query.filters.genus], ['', ['Rosa']]);
+  assert.deepEqual(heldSuggestions(b), b.results.suggestions);
+  // « Tout effacer »: for good, its text not given back.
+  clearFilters(b);
+  assert.deepEqual([b.query.q, b.query.filters.genus, heldSuggestions(b)], ['', [], null]);
 });

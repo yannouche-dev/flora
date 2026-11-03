@@ -27,7 +27,7 @@ export class GfResultsBar extends LitElement {
     grid: { type: Boolean },
     /** The count is shown just above the bar, by its host (a free layout's cell head: « Recherche · 66 espèces »). */
     countAbove: { type: Boolean, attribute: 'count-above' },
-    /** The search it shows and changes (core/search-channel.js: a free layout's group); none: the app's. */
+    /** The search it shows and changes (core/search-channel.js: a screen's group); none: the app's. */
     channel: { attribute: false }
   };
 
@@ -122,7 +122,7 @@ export class GfResultsBar extends LitElement {
   #suggestions(query) {
     // A genus outside the families chosen: none of its plants left (the Genre filter does not list it either).
     const families = query.filters.family;
-    const list = ((!query.q && !this.channel && heldSuggestions()) || this.#store.state.results.suggestions)
+    const list = ((!query.q && heldSuggestions(this.#store.channel)) || this.#store.state.results.suggestions)
       .filter((/** @type {any} */ s) => s.type !== 'genus' || !families.length || families.includes(genusFamily.get(s.name) || ''));
     if (!list.length) return nothing;
     return html`<div class="suggestions">

@@ -9,10 +9,11 @@
 // component unknown shown and replaced through ✎; emptied: still modified); the title (the bar's heading); the phone
 // preview (390 px: the layout's own tabs; still a phone beside the docked picker; a narrow window: the screen itself);
 // Partager (the link in use); ⋯ (« Tailles par défaut »; closed by the toggle, Back, a touch elsewhere, the focus
-// leaving it); « Ouvrir dans Flore » (⋯, a search cell's head: the screen's search taken to Flore, a new entry); « Terminé » with remarks, « Voir et corriger » (the focus on them); an address that cannot be read; a
-// text still resting in « Avancé » never written once the screen is left; a screen opened after another waits for its
-// own width; the home leaves Flore's search alone; a phone (the toggle's word and the title drawn); no tab of the app
-// lit, on either width.
+// leaving it); « Ouvrir dans Flore » (⋯, a search cell's head: the screen's search taken to Flore, a new entry); « Filtrer
+// par » kept to each search (group b's: its text given back there only); « Terminé » with remarks, « Voir et corriger »
+// (the focus on them); an address that cannot be read; a text still resting in « Avancé » never written once the
+// screen is left; a screen opened after another waits for its own width; the home leaves Flore's search alone; a phone
+// (the toggle's word and the title drawn); no tab of the app lit, on either width.
 import { test, expect, answerAround, plantId } from './fixtures.mjs';
 import { editing, layoutOf, screen, screenSearch } from './app.mjs';
 
@@ -460,6 +461,27 @@ test.describe('un grand écran', () => {
     await cellAt(page, '1').locator('.cell-acts [data-act="flore"]').click();
     await expect.poll(() => hash(page)).toBe('#/?q=allium&family=Amaryllidaceae');
     await expect.poll(() => app.state('query.filters.family')).toEqual(['Amaryllidaceae']);
+  });
+
+  test('« Filtrer par » dans le groupe b : les autres suggestions restent, le filtre retiré à la main rend son texte — à b seul, ni au groupe a ni à Flore', async ({ app, page }) => {
+    await app.open('#/?q=rosa');
+    await app.go(screen('[search,search(groupe=b)]', 'b.q=urtica'));
+    await expect.poll(async () => (await screenSearch(page, 'b'))?.query.q).toBe('urtica');
+    const a = cellAt(page, '0').locator('gf-results-bar'), b = cellAt(page, '1').locator('gf-results-bar');
+    await b.getByRole('button', { name: /^Urtica · genre/ }).click();
+    await expect.poll(() => param(page, 'b.genus')).toBe('Urtica');
+    expect(await param(page, 'b.q')).toBe(null);
+    // Kept in b: the one chosen on, the others still offered; never in a's, nor in Flore's.
+    await expect(b.getByRole('button', { name: /^Urtica · genre/ })).toHaveAttribute('aria-pressed', 'true');
+    await expect(b.getByRole('button', { name: /^Urticaceae · famille/ })).toBeVisible();
+    await expect(a.locator('.suggestions')).toHaveCount(0);
+    // Its ✕: the text back in b.
+    await b.getByRole('button', { name: 'Retirer le filtre Genre : Urtica' }).click();
+    await expect.poll(() => param(page, 'b.q')).toBe('urtica');
+    expect(await param(page, 'b.genus')).toBe(null);
+    await expect(b.getByRole('combobox', { name: 'Rechercher une plante' })).toHaveValue('urtica');
+    expect([(await screenSearch(page, 'a'))?.query.q, await param(page, 'q')]).toEqual(['', null]);
+    expect(await app.state('query.q')).toBe('rosa');
   });
 
   test('un texte encore en frappe dans « Avancé » ne s’écrit pas dans l’adresse de la vue suivante', async ({ app, page }) => {

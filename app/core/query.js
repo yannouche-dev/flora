@@ -51,14 +51,14 @@ export const lastSearchHash = () => toHash(store.state.query);
 const timers = new WeakMap();
 
 /**
- * Updates the query, mirrors it in the URL and re-runs the search — the app's, or another's (`channel`: a free
- * layout's second group; its layout writes its address).
+ * Updates the query, mirrors it in the URL and re-runs the search — the app's, or another's (`channel`: a group of
+ * a screen of one's own; its screen writes its address).
  * @param {Partial<Query>} patch
  * @param {{ debounce?: number, channel?: Channel }} [options]
  */
 export function setQuery(patch, { debounce = 0, channel = APP } = {}) {
   // Something typed: the suggestions kept from the text before give way to the new ones.
-  if (patch.q && channel === APP) held = null;
+  if (patch.q) helds.delete(channel);
   const query = { ...channel.query, ...patch };
   channel.setQuery(query);
   // replaceState (not push): the back button leaves the list instead of undoing filters one by one.
@@ -71,19 +71,24 @@ export function setQuery(patch, { debounce = 0, channel = APP } = {}) {
 /**
  * The « Filtrer par » suggestions of the text typed, kept once one is chosen (the text gives way to the filter):
  * the others stay offered, the one chosen shown on; removing every filter they made gives the text back
- * (unless something else was typed since).
- * @type {{ q: string, list: { type: Facet, name: string, count: number }[] } | null}
+ * (unless something else was typed since). Each search its own (Flore's, each group's of a screen): those of one
+ * are never offered in another, nor its text given back there.
+ * @type {WeakMap<Channel, { q: string, list: { type: Facet, name: string, count: number }[] }>}
  */
-let held = null;
+const helds = new WeakMap();
 
 /**
- * The suggestions kept from the text (see `held`) while a filter they made is on: the search emptied or replaced
- * from elsewhere (« Tout effacer », an address), they are let go — never shown, nor their text given back, after.
+ * A search's suggestions kept from its text (see `helds`) while a filter they made is on: the search emptied or
+ * replaced from elsewhere (« Tout effacer », an address), they are let go — never shown, nor their text given back,
+ * after. @param {Channel} channel
  */
-const kept = () => held?.list.some(x => store.state.query.filters[x.type]?.includes(x.name)) ? held : null;
+const kept = channel => {
+  const held = helds.get(channel);
+  return held?.list.some(x => channel.query.filters[x.type]?.includes(x.name)) ? held : null;
+};
 
-/** The suggestions kept from the text (see `held`), or null. */
-export const heldSuggestions = () => kept()?.list || null;
+/** A search's suggestions kept from its text (see `helds`; none given: Flore's), or null. @param {Channel} [channel] */
+export const heldSuggestions = (channel = APP) => kept(channel)?.list || null;
 
 /**
  * Genera only make sense inside the selected families: those of other families let go (a family chosen in its
@@ -99,7 +104,7 @@ const inFamilies = filters => filters.family.length
  */
 export function applySuggestion(facet, value, channel = APP) {
   const { q, filters } = channel.query;
-  if (q && channel === APP) held = { q, list: /** @type {any} */ (store.state.results.suggestions) };
+  if (q) helds.set(channel, { q, list: channel.results.suggestions });
   if (filters[facet].includes(value)) return setFacet(facet, filters[facet].filter(v => v !== value), channel);
   setQuery({ q: '', filters: inFamilies({ ...filters, [facet]: [...filters[facet], value] }) }, { channel });
 }
@@ -115,12 +120,12 @@ export function setFacet(facet, values, channel = APP, { erase = false } = {}) {
   // Every filter the « Filtrer par » suggestions made from the search text gone: they are let go. The text comes back
   // when the last of them was taken off by hand (unticked, its ✕, the suggestion touched again) — not when the facet
   // was erased, nor when a value chosen put it out (a family not its genus's), nor if something else was typed since.
-  const made = channel === APP ? kept() : null;
+  const made = kept(channel);
   if (made && !made.list.some(x => filters[x.type]?.includes(x.name))) {
-    held = null;
+    helds.delete(channel);
     const removed = made.list.some(x => x.type === facet && before.includes(x.name) && !values.includes(x.name));
     const added = values.some(v => !before.includes(v));
-    if (removed && !added && !erase && !store.state.query.q) return setQuery({ q: made.q, filters });
+    if (removed && !added && !erase && !channel.query.q) return setQuery({ q: made.q, filters }, { channel });
   }
   setQuery({ filters }, { channel });
 }
@@ -136,7 +141,7 @@ export function toggleValue(facet, value, channel = APP) {
  * A click's handler calls it with no argument (its event is not a channel). @param {Channel} [channel]
  */
 export function clearFilters(channel = APP) {
-  if (channel === APP) held = null;
+  helds.delete(channel);
   setQuery({ filters: emptyFilters() }, { channel });
 }
 
@@ -147,7 +152,7 @@ export function startUrlSync() {
     const query = fromHash(location.hash);
     if (toHash(query) === toHash(store.state.query)) return;
     // Another search: the suggestions kept from the text of this one go with it.
-    held = null;
+    helds.delete(APP);
     store.set({ query });
     if (store.state.status === 'ready') runSearch();
   };
