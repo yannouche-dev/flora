@@ -39,6 +39,8 @@ export class SearchChannel extends EventTarget {
     /** The plants it is kept to (a zone's), null: the whole flora, and what comes with them. @type {number[] | null} */ this.scope = null;
     /** @type {ScopeExtra} */ this.extra = {};
     this.ran = 0;
+    /** Its results are an answer (one published): until then « nothing found » is never said. */
+    this.answered = false;
   }
 
   /** @param {Query} query */
@@ -47,15 +49,19 @@ export class SearchChannel extends EventTarget {
   /** @param {number[] | null} ids @param {ScopeExtra} [extra] */
   setScope(ids, extra = {}) { this.scope = ids ? [...ids] : null; this.extra = ids ? extra : {}; }
 
-  /** Its search run in the worker (once the flora is there), the answer of an older query dropped. */
-  async run() {
+  /** Its search run in the worker (once the flora is there), published; an older run's answer dropped. @returns {Promise<void>} */
+  async run() { const found = await this.fetch(); if (found) this.publish(found); }
+
+  /** Its search run, not published: the answer, or null (a newer run started meanwhile, or it failed). */
+  async fetch() {
     const run = ++this.ran;
     await whenReady();
     const found = await searchIn(this.query, this.scope, this.extra).catch(() => null);
-    if (!found || run !== this.ran) return;
-    this.results = found;
-    this.#changed();
+    return found && run === this.ran ? found : null;
   }
+
+  /** An answer published: its results, answered, `change`. @param {any} found */
+  publish(found) { this.results = found; this.answered = true; this.#changed(); }
 
   #changed() { this.dispatchEvent(new Event('change')); }
 }
