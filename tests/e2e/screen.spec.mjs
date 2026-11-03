@@ -10,10 +10,11 @@
 // preview (390 px: the layout's own tabs; still a phone beside the docked picker; a narrow window: the screen itself);
 // Partager (the link in use); ⋯ (« Tailles par défaut »; closed by the toggle, Back, a touch elsewhere, the focus
 // leaving it); « Ouvrir dans Flore » (⋯, a search cell's head: the screen's search taken to Flore, a new entry); « Filtrer
-// par » kept to each search (group b's: its text given back there only); « Terminé » with remarks, « Voir et corriger »
-// (the focus on them); an address that cannot be read; a text still resting in « Avancé » never written once the
-// screen is left; a screen opened after another waits for its own width; the home leaves Flore's search alone; a phone
-// (the toggle's word and the title drawn); no tab of the app lit, on either width.
+// par » kept to each search (group b's: its text given back there only); a sheet's map about « Les résultats », its
+// group's; « Terminé » with remarks, « Voir et corriger » (the focus on them); an address that cannot be read; a text
+// still resting in « Avancé » never written once the screen is left; a screen opened after another waits for its own
+// width; the home leaves Flore's search alone; a phone (the toggle's word and the title drawn); no tab of the app lit,
+// on either width.
 import { test, expect, answerAround, plantId } from './fixtures.mjs';
 import { editing, layoutOf, screen, screenSearch } from './app.mjs';
 
@@ -482,6 +483,24 @@ test.describe('un grand écran', () => {
     await expect(b.getByRole('combobox', { name: 'Rechercher une plante' })).toHaveValue('urtica');
     expect([(await screenSearch(page, 'a'))?.query.q, await param(page, 'q')]).toEqual(['', null]);
     expect(await app.state('query.q')).toBe('rosa');
+  });
+
+  test('la carte d’une fiche dans un écran : « Les résultats », ceux de la recherche de son groupe — jamais ceux de Flore', async ({ app, page }) => {
+    await app.open('#/?family=Rosaceae');
+    await expect.poll(() => app.state('results.total')).toBeGreaterThan(0);
+    const flore = await app.state('results.total');
+    await app.go(screen('[search,search(groupe=b),plant.map(groupe=b)]', `q=ortie&b.q=allium&b.p=${plantId('Urtica dioica')}`));
+    await expect.poll(async () => (await screenSearch(page, 'b'))?.query.q).toBe('allium');
+    const count = cellAt(page, '2').locator('gf-sheet-map [data-subject="results"] small');
+    const b = /** @type {any} */ (await screenSearch(page, 'b'));
+    expect(b.total).not.toBe(flore);
+    await expect(count).toHaveText(String(b.total));
+    // Its group's search changed (typed in its search cell): it follows; group a's, nor Flore's, never.
+    await cellAt(page, '1').getByRole('combobox', { name: 'Rechercher une plante' }).fill('urtica');
+    await expect.poll(() => param(page, 'b.q')).toBe('urtica');
+    await expect.poll(async () => (await screenSearch(page, 'b'))?.total).not.toBe(b.total);
+    await expect(count).toHaveText(String((await screenSearch(page, 'b'))?.total));
+    expect([(await screenSearch(page, 'a'))?.query.q, await app.state('results.total')]).toEqual(['ortie', flore]);
   });
 
   test('un texte encore en frappe dans « Avancé » ne s’écrit pas dans l’adresse de la vue suivante', async ({ app, page }) => {

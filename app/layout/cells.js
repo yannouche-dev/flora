@@ -15,8 +15,9 @@
 //    panel, opened by the funnel) and its list; filters and results: each part alone. They read and write the search
 //    of their group (its channel, core/search-channel.js: the screen's own, never Flore's); the scope keeps it to its
 //    plants (state.js);
-//  - plant: the plant sheet (gf-plant-detail), whole or one block (plant.wikipedia: its `only`); media: the photos'
-//    viewer (gf-media-viewer). Each shows the current plant;
+//  - plant: the plant sheet (gf-plant-detail), whole or one block (plant.wikipedia: its `only`) — its maps about
+//    « Les résultats », those of its group's search; media: the photos' viewer (gf-media-viewer). Each shows the
+//    current plant;
 //  - deck: Rencontres' cards (miniapp/kit/ma-deck.js) for the plants found in the scope, the one on top the current
 //    plant; a heart: a favourite.
 // What is done in a cell with its own controls is kept in the layout (`cell-param` {key: value…}, gf-layout.js: the
@@ -1550,6 +1551,6 @@ export function renderCell(r, ctx) {
       : html`<p class="placeholder quiet">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`;
   }
   return r.view
-    ? html`<gf-plant-detail embedded subheading only=${r.view.key} plant-id=${plant} view=${view}></gf-plant-detail>`
-    : html`<gf-plant-detail embedded subheading plant-id=${plant} view=${view}></gf-plant-detail>`;
+    ? html`<gf-plant-detail embedded subheading only=${r.view.key} plant-id=${plant} view=${view} .channel=${channel}></gf-plant-detail>`
+    : html`<gf-plant-detail embedded subheading plant-id=${plant} view=${view} .channel=${channel}></gf-plant-detail>`;
 }

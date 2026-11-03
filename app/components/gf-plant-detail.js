@@ -414,6 +414,11 @@ export class GfPlantDetail extends LitElement {
     mediaAt: { attribute: false },
     /** The block shown in the pane beside this sheet (Flore): only a line here, not twice. */
     inPane: { attribute: false },
+    /**
+     * The search its maps about « Les résultats » read (core/search-channel.js), the block it opens over the page too:
+     * in a screen, its cell's group's (cells.js); none: Flore's.
+     */
+    channel: { attribute: false },
     /** A block opened over the page (outside Flore, where there is no pane): its key and the image it starts at. */
     _paneDialog: { state: true },
     /** The plant's verdict (core/danger.js, read by alerts.js): the Alertes rubric's badge, its count and colour. */
@@ -1059,6 +1064,8 @@ export class GfPlantDetail extends LitElement {
     this.scoped = false;
     /** @type {string | null} */
     this.only = null;
+    /** @type {import('../core/search-channel.js').Channel | null} */
+    this.channel = null;
     /** Block being dragged, and the order shown meanwhile (else the saved one). @type {string | null} */
     this._dragKey = null;
     /** @type {string[] | null} */
@@ -1701,7 +1708,7 @@ export class GfPlantDetail extends LitElement {
       <dialog class="pane" aria-label=${blockTitle(pane.key)} @close=${() => { this._paneDialog = null; }}>
         <div class="pane-bar"><h2>${blockTitle(pane.key)} — <i>${plant.scientificName}</i></h2>
           <button class="icon-btn" type="button" aria-label="Fermer" title="Fermer" @click=${(/** @type {Event} */ e) => /** @type {HTMLElement} */ (e.currentTarget).closest('dialog')?.close()}>${icon('x-lg')}</button></div>
-        <gf-plant-detail embedded only=${pane.key} plant-id=${plant.id} view=${this.#view} .paneStart=${pane.url}
+        <gf-plant-detail embedded only=${pane.key} plant-id=${plant.id} view=${this.#view} .paneStart=${pane.url} .channel=${this.channel}
           @media-close=${(/** @type {Event} */ e) => /** @type {HTMLElement} */ (e.currentTarget).closest('dialog')?.close()}></gf-plant-detail>
       </dialog>` : nothing}`;
   }
@@ -3129,7 +3136,7 @@ export class GfPlantDetail extends LitElement {
     const fill = Boolean(this.#paneOf(key)) || this.only === key;
     if (this.preview) return html`<div class="map-placeholder ${fill ? 'fill' : ''}" style=${`height:${{ s: 180, m: 260, l: 380 }[config.height]}px`}></div>`;
     // One WebGL map per sheet: the main « Carte » block may show in 3D, the map blocks added stay in 2D (gf-map-gl.js).
-    return html`<gf-sheet-map .plant=${plant} .gbifKey=${details?.identifiers?.gbif?.id ?? null} .inatId=${inat?.id ?? null}
+    return html`<gf-sheet-map .plant=${plant} .gbifKey=${details?.identifiers?.gbif?.id ?? null} .inatId=${inat?.id ?? null} .channel=${this.channel}
       map-3d=${key === 'map' ? 'auto' : 'off'} map-3d-why=${ONE_GL_PER_SHEET} .config=${config} ?fill=${fill} .mapFocus=${this._focus}
       @map-config=${(/** @type {CustomEvent} */ e) => setMapConfig(key, e.detail)}
       @focus-clear=${(/** @type {CustomEvent} */ e) => { this._focus = { ...this._focus, [e.detail.kind]: null }; }}></gf-sheet-map>`;
