@@ -20,7 +20,7 @@ const NAMES = {
 };
 
 /** The filter groups' names (gf-filter-panel), so a chip's button says which filter it removes. */
-const GROUPS = { mine: 'Mes plantes', status: 'Statut', legal: 'Protection', family: 'Famille', genus: 'Genre', photo: 'Photo', french: 'Nom français' };
+const GROUPS = { mine: 'Mes plantes', status: 'Statut', legal: 'Protection', family: 'Famille', genus: 'Genre', photo: 'Plante avec photo', french: 'Nom français' };
 
 /** A chip's label: its name, a place's or the favourites' icon before it, a genus in italics. @param {import('../core/query.js').Facet} facet @param {string} v */
 const label = (facet, v) => facet === 'genus' ? html`<i>${v}</i>`

@@ -76,7 +76,7 @@ test('les puces : ✕ en retire une (nommée en clair), « Tout effacer » toute
   await expect.poll(() => hash(page)).toBe('#/?status=P&family=Urticaceae&photo=avec');
   await said(page, count(p => p.family === 'Urticaceae' && p.status?.france === 'P' && p.thumbnail?.url));
   await expect(chips.getByRole('button', { name: 'Retirer le filtre Statut : Indigène' })).toBeVisible();
-  await expect(chips.getByRole('button', { name: 'Retirer le filtre Photo : Avec photo' })).toBeVisible();
+  await expect(chips.getByRole('button', { name: 'Retirer le filtre Plante avec photo : Avec photo' })).toBeVisible();
   await chips.getByRole('button', { name: 'Tout effacer' }).click();
   await expect.poll(() => hash(page)).toBe('#/');
   await expect.poll(() => app.state('query.filters')).toEqual(NONE);
@@ -192,7 +192,7 @@ test('une plante ouverte à côté de la liste : les filtres effacés à côté 
   await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+$/);
   await page.reload();
   await app.ready();
-  await page.locator('gf-flora .pane.filters gf-facet[name="photo"]').getByRole('button', { name: 'Effacer le filtre Photo' }).click();
+  await page.locator('gf-flora .pane.filters gf-facet[name="photo"]').getByRole('button', { name: 'Effacer le filtre Plante avec photo' }).click();
   await expect.poll(() => app.state('context.query')).toBe('#/');
   const entries = await page.evaluate(() => history.length);
   await page.getByRole('button', { name: 'Fermer la fiche' }).click();
@@ -229,7 +229,7 @@ test('les filtres effacés à côté d’une plante, puis Retour d’un coup ava
   // still gives the list as left.
   await page.goForward();
   await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+$/);
-  await page.locator('gf-flora .pane.filters gf-facet[name="photo"]').getByRole('button', { name: 'Effacer le filtre Photo' }).click();
+  await page.locator('gf-flora .pane.filters gf-facet[name="photo"]').getByRole('button', { name: 'Effacer le filtre Plante avec photo' }).click();
   await expect.poll(() => app.state('context.query')).toBe('#/');
   await page.evaluate(() => history.go(-2));
   await expect.poll(() => hash(page)).toBe('#/settings');
@@ -282,7 +282,7 @@ test('Retour d’un coup avant la liste, la fiche fermée dans Mes plantes (sur 
   // The plant again, the photo cleared beside it, Back to Mes plantes at once: Mes plantes, not the list's URL.
   await page.goForward();
   await expect.poll(() => hash(page)).toMatch(/^#\/plant\/\d+$/);
-  await page.locator('gf-flora .pane.filters gf-facet[name="photo"]').getByRole('button', { name: 'Effacer le filtre Photo' }).click();
+  await page.locator('gf-flora .pane.filters gf-facet[name="photo"]').getByRole('button', { name: 'Effacer le filtre Plante avec photo' }).click();
   await expect.poll(() => app.state('context.query')).toBe('#/');
   await page.evaluate(() => history.go(-2));
   await expect.poll(() => hash(page)).toBe('#/collections');
@@ -369,7 +369,7 @@ test('le focus d’un bouton effacé ne tombe pas sur la page : puce voisine, no
   // A chip's ✕: the chip now in its place; the last one's: the one before; none left: the list's count.
   await press(chips.getByRole('button', { name: 'Retirer le filtre Statut : Indigène' }));
   await expect.poll(() => focused(page)).toMatchObject({ name: 'Retirer le filtre Famille : Rosaceae' });
-  await press(chips.getByRole('button', { name: 'Retirer le filtre Photo : Avec photo' }));
+  await press(chips.getByRole('button', { name: 'Retirer le filtre Plante avec photo : Avec photo' }));
   await expect.poll(() => focused(page)).toMatchObject({ name: 'Retirer le filtre Famille : Rosaceae' });
   await press(chips.getByRole('button', { name: 'Retirer le filtre Famille : Rosaceae' }));
   await expect.poll(() => focused(page)).toMatchObject({ cls: 'count' });
@@ -382,9 +382,9 @@ test('le focus d’un bouton effacé ne tombe pas sur la page : puce voisine, no
   // A group's « effacer »: its header.
   await app.go('#/?family=Rosaceae&photo=avec');
   const { panel, head } = await openFilters(app, page);
-  await press(panel.locator('gf-facet[name="photo"]').getByRole('button', { name: 'Effacer le filtre Photo' }));
+  await press(panel.locator('gf-facet[name="photo"]').getByRole('button', { name: 'Effacer le filtre Plante avec photo' }));
   await expect.poll(() => hash(page)).toBe('#/?family=Rosaceae');
-  await expect.poll(() => focused(page)).toMatchObject({ cls: 'toggle', name: 'Photo' });
+  await expect.poll(() => focused(page)).toMatchObject({ cls: 'toggle', name: 'Plante avec photo' });
   // The title's « Tout effacer »: the pane's first filter; in the sheet, « Voir N espèces », and the new count said.
   await press(head.getByRole('button', { name: 'Tout effacer' }));
   await expect.poll(() => hash(page)).toBe('#/');
