@@ -724,6 +724,19 @@ test.describe('un grand écran', () => {
     expect([searches.ortie, searches.allium]).toEqual([1, 1]);
   });
 
+  test('une réponse de la recherche venue entre un lien et le changement d’écran ne réécrit jamais l’adresse de l’écran quitté', async ({ app, page }) => {
+    await app.open(screen('[search(list=0),results(list)]', 'q=ortie'));
+    await expect.poll(async () => (await screenSearch(page))?.total).toBeGreaterThan(0);
+    // Another screen in the address and, in the same moment (before its hashchange), the search telling a change.
+    await page.evaluate(() => {
+      const results = /** @type {any} */ (document.querySelector('gf-app')?.shadowRoot?.querySelector('gf-layout')?.shadowRoot?.querySelector('dl-results'));
+      location.hash = '#/layout/[results(list)]?q=ail';
+      results.channel.dispatchEvent(new Event('change'));
+    });
+    await expect.poll(async () => (await screenSearch(page))?.query.q).toBe('ail');
+    expect(await hash(page)).toBe('#/layout/[results(view=list)]?q=ail');
+  });
+
   test('un texte encore en frappe dans « Avancé » ne s’écrit pas dans l’adresse de la vue suivante', async ({ app, page }) => {
     await app.open('#/discover');
     const before = await hash(page);

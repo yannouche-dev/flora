@@ -828,9 +828,17 @@ export class GfLayout extends LitElement {
   /** Being modified: where « Terminé » goes back to (history.js#sheetMark, `gfEditFrom` in the entry). @type {import('../core/history.js').SheetMark | null} */
   #editMark = null;
 
+  /**
+   * The address this screen last followed or wrote: another one in the bar (a link, Back, Forward — its hashchange
+   * still to come, the screen not yet following it) is never written over (#write). null: none yet.
+   * @type {string | null}
+   */
+  #at = null;
+
   /** The address followed (a link, Back, Forward, a reload): the home, or a screen — its layout, its state, its search. */
   #follow() {
     const route = /** @type {any} */ (this.route);
+    this.#at = location.hash;
     // « Créer une app »'s old address: the screen it names (g=, else its grid), being modified, in its place (the same
     // depth); nothing of it read here — its spec may be null. Neither: the home.
     if (route.name === 'builder') {
@@ -988,8 +996,10 @@ export class GfLayout extends LitElement {
 
   /** The address follows the screen: a new entry, the same one, or not at all. @param {import('./state.js').How} how */
   #write(how) {
-    // Left (Back, a link): the address is another view's, never written from here.
+    // Left (Back, a link): the address is another view's, never written from here — nor one put there a moment ago,
+    // before this screen follows it (a search answering in between: never the screen left written back).
     if (how === 'none' || !this.route || this.#home || this.#aliasing || !this.isConnected) return;
+    if (this.#at !== null && location.hash !== this.#at) return;
     // Being modified, a layout left with no cell (« Avancé » emptied) is not written: the address keeps the last one.
     if (this.editing && !this.#layout.tree.kids.length) return;
     const url = this.#href();
@@ -1004,6 +1014,7 @@ export class GfLayout extends LitElement {
         pushHash(url, replaces ? { gfReplaces: replaces } : {}, false);
       }
     }
+    this.#at = location.hash;
     // Being modified: the entry it was entered from gets the screen as it is now (Back, « Terminé »).
     if (this.editing && this.#editMark?.from != null) renewBehind(this.#editMark.from, this.#usageHref());
   }
