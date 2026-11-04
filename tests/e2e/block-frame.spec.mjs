@@ -5,7 +5,8 @@
 // (vide=masque: a plant block hidden until a plant is chosen; results hidden only once its search has answered, none
 // found — a screen's search never answering for another's: a slowed worker, nothing hidden, counted « 0 espèce » nor
 // said empty before its own answer, at a first load, from one screen to the next, through the home; nor a deck hidden or
-// at its end, nor results zone=0 « Aucune plante… », its grid sorted from the keyboard keeping its focus and headers), its links (plante=: a plant of its own, whatever the current one; results zone=0: the whole flora whatever the
+// at its end, nor results zone=0 « Aucune plante… », its grid sorted from the keyboard keeping its focus, headers and rows —
+// another screen's rows never shown), its links (plante=: a plant of its own, whatever the current one; results zone=0: the whole flora whatever the
 // zone; toucher=fiche: a result opens its sheet; toucher=rien: nothing), and the editor's « Cadre » writing them in the
 // address. iNaturalist answered as in free-layout.spec.mjs: 12 plants around.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
@@ -77,6 +78,36 @@ async function watchOrtie(page) {
 }
 /** Nothing seen (watchOrtie). */
 const NONE = { hidden: 0, zero: 0, empty: 0, deckHidden: 0, deckEnd: 0 };
+
+/**
+ * The worker's searches slowed, and, at every frame, what a results(zone=0) cell lists while its search over the whole
+ * flora has not answered the one on screen (state.js wholeOf): no row though it had an answer (`bare`), or the nettle's
+ * rows while the screen's first group searches « ail » (`foreign`: another screen's). Returns what was seen so far.
+ * @param {Page} page
+ */
+async function watchWhole(page) {
+  await page.addInitScript(() => {
+    const w = /** @type {any} */ (window);
+    const post = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (/** @type {any} */ message, /** @type {any} */ options) {
+      if (message?.type === 'search') setTimeout(() => post.call(this, message, options), 400);
+      else post.call(this, message, options);
+    };
+    w.__whole = { bare: 0, foreign: 0 };
+    const watch = () => {
+      const layout = /** @type {any} */ (document.querySelector('gf-app')?.shadowRoot?.querySelector('gf-layout'));
+      for (const el of layout?.shadowRoot?.querySelectorAll('section.cell[data-comp="results"] dl-results') ?? []) {
+        const s = /** @type {any} */ (el).state;
+        const cards = [...(el.shadowRoot?.querySelector('gf-plant-list')?.shadowRoot?.querySelectorAll('gf-plant-card') ?? [])];
+        if (s?.whole && s.whole.key !== s.wholeFor && !cards.length) w.__whole.bare++;
+        if (layout.searchOf?.('a')?.query.q === 'ail' && cards.some(c => /^Urtica/.test(/** @type {any} */ (c).plant?.scientificName ?? ''))) w.__whole.foreign++;
+      }
+      requestAnimationFrame(watch);
+    };
+    watch();
+  });
+  return () => page.evaluate(() => /** @type {any} */ (window).__whole);
+}
 /** A results(zone=0) cell's search over the whole flora (state.js#wholeOf): the sort it asks, answered or not. @param {import('@playwright/test').Locator} cell */
 const wholeSearch = cell => cell.locator('dl-results').evaluate(el => {
   const s = /** @type {any} */ (el).state;
@@ -238,12 +269,29 @@ test.describe('un grand écran', () => {
     await expect.poll(async () => (await wholeSearch(whole)).sort).toBe('photo');
     await expect(sort).toBeFocused();
     await expect(head).toBeVisible();
-    // Answered: the same, its rows back, sorted.
+    // Answered: the same, its rows (kept meanwhile) sorted.
     await expect.poll(async () => (await wholeSearch(whole)).answered).toBe(true);
     await expect(list.locator('gf-plant-card').first()).toBeVisible();
     await expect(sort).toBeFocused();
     await expect(head.locator('[role="columnheader"]').first()).toHaveAttribute('aria-sort', 'ascending');
     expect(await seen()).toEqual(NONE);
+  });
+
+  test('results(grid,zone=0) : pendant la réponse d’une autre recherche, ses lignes d’avant restent ; un autre écran ne montre jamais celles du précédent', async ({ app, page }) => {
+    const seen = await watchWhole(page);
+    await app.open(`#/layout/[results(grid,zone=0)]?${AT}&q=ortie`);
+    const whole = cellOf(page, 'results'), list = whole.locator('gf-plant-list');
+    await expect(list.locator('gf-plant-card').first()).toBeVisible();
+    // Sorted from its header (the worker slowed): asked again, its rows kept until the answer.
+    await list.locator('.head[role="row"] button.sort').first().press('Enter');
+    await expect.poll(async () => (await wholeSearch(whole)).sort).toBe('photo');
+    await expect.poll(async () => (await wholeSearch(whole)).answered).toBe(true);
+    await expect(list.locator('gf-plant-card').first()).toBeVisible();
+    // Another screen, another search: never the nettle's rows while its own come.
+    await app.go(`#/layout/[plant.calendar,results(list,zone=0)]?${AT}&q=ail`);
+    await expect.poll(async () => (await wholeSearch(cellOf(page, 'results'))).answered).toBe(true);
+    await expect(cellOf(page, 'results').locator('gf-plant-card').first()).toBeVisible();
+    expect(await seen()).toEqual({ bare: 0, foreign: 0 });
   });
 
   test('plante=<id> : un bloc à sa plante, quelle que soit la plante courante', async ({ app, page }) => {

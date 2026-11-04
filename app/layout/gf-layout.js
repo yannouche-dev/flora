@@ -883,6 +883,8 @@ export class GfLayout extends LitElement {
     for (const g of [...this.#made.keys()]) if (!groups.includes(g)) this.#dropGroup(g);
     for (const g of groups) {
       const had = this.#made.has(g), { state, channel } = this.#group(g);
+      // Another screen: the rows a results(zone=0) cell of the last one listed never shown for this one's.
+      if (fresh) state.forgetWhole();
       const glive = readLive(route.search, groupPrefix(g));
       if (!sameLive(glive, state.live)) state.set(glive, 'none');
       else if (fresh || !had) state.follow();

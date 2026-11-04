@@ -595,6 +595,15 @@ export class LayoutState extends EventTarget {
   }
 
   /**
+   * Another screen (another layout followed): its search over the whole flora forgotten — never its rows shown for
+   * this one's, which a new answer of the same screen keeps until it comes — and asked again (wholeOf).
+   */
+  forgetWhole() {
+    this.whole = null;
+    this.wholeFor = '';
+  }
+
+  /**
    * The current plant: its observations in the scope (#plantObs), its names (the cells' heads). Its names are read
    * once the flora is in the database: on a first visit the layout is drawn while it downloads, and a plant read then
    * (?p= in the address) would be none — its heads empty for good, since the same plant is never read twice.

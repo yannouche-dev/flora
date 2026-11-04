@@ -1227,12 +1227,13 @@ export class DlResults extends LitElement {
     if (!s) return nothing;
     const grid = this.grid;
     // zone=0: the search over the whole flora, whatever the zone (state.js#wholeOf, asked by the layout), said so — its
-    // plants once it answered the search on screen (until then, none and « Aucune plante… » never said; the list stays,
-    // its headers and its focus with it).
+    // plants once it answered the search on screen; until then, the rows of its answer before (another text, another
+    // sort: the list stays, its rows, its headers and its focus with it; another screen's never: state.js forgetWhole),
+    // and « Aucune plante… » never said.
     if (this.params.zone === false) {
       const whole = s.whole, answered = whole?.key === s.wholeFor;
       return html`${s.live.at ? html`<div class="scope" role="note">${icon('globe-europe-africa')}<span>Toute la France : cette case ne suit pas la zone.</span></div>` : nothing}
-        <gf-plant-list ?grid=${grid} .current=${s.live.plant} .items=${answered ? whole.items : []} .answered=${answered} .channel=${this.channel}
+        <gf-plant-list ?grid=${grid} .current=${s.live.plant} .items=${whole?.items ?? []} .answered=${answered} .channel=${this.channel}
           .lit=${s.hover?.plant ?? null} @plant-hover=${(/** @type {CustomEvent} */ e) => this.#onHover(e)}></gf-plant-list>`;
     }
     const note = s.live.at ? scopeNote(s) : '';
