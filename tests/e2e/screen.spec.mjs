@@ -458,6 +458,24 @@ test.describe('un grand écran', () => {
     await expect(menu.getByRole('link', { name: 'Composer un écran' })).toBeVisible();
   });
 
+  test('⋯ reste ouvert quand le bloc Photos de la fiche (plant.media) se dessine de lui-même : il ne prend pas le focus non plus', async ({ app, page }) => {
+    /** @type {() => void} */
+    let release = () => {};
+    const held = new Promise(done => { release = () => done(undefined); });
+    await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?/, async route => { await held; await route.fallback(); });
+    await app.open(screen('[deck,plant.media]', `${AT}&r=1km`));
+    await expect(cellAt(page, '1').locator('gf-media-viewer')).toHaveCount(0);
+    const menu = await more(page);
+    await expect(menu.getByRole('link', { name: 'Composer un écran' })).toBeVisible();
+    release();
+    // The deck's first card, the current plant: the sheet's photos block drawn — the focus left where it was, ⋯ open.
+    const viewer = cellAt(page, '1').locator('gf-plant-detail gf-media-viewer');
+    await expect(viewer).toHaveAttribute('plant-id', /\d+/);
+    await expect(viewer.locator('.bar')).toBeAttached();
+    await expect(page.locator('gf-layout .more-menu summary')).toBeFocused();
+    await expect(menu.getByRole('link', { name: 'Composer un écran' })).toBeVisible();
+  });
+
   test('⋯ « Ouvrir dans Flore » seulement quand le premier groupe a une recherche à emporter : ni sur un paquet et sa carte, ni la recherche de Flore touchée', async ({ app, page }) => {
     await app.open('#/?family=Rosaceae');
     await expect.poll(() => app.state('query.filters.family')).toEqual(['Rosaceae']);

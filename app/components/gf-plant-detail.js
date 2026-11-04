@@ -362,6 +362,11 @@ export class GfPlantDetail extends LitElement {
     embedded: { type: Boolean, reflect: true },
     /** Under a screen's own title (a mini-app, a layout's cell): its name a heading of level 2, never a second h1. */
     subheading: { type: Boolean },
+    /**
+     * Among the cells of a screen (layout/cells.js), never alone in a pane: its block of its own (only=media) drawn by
+     * itself never takes the focus from where it is, and has nothing to close (gf-media-viewer local).
+     */
+    local: { type: Boolean },
     /** The plant waiting under the swiped card (Flore): not the page's plant yet, so it leaves the title alone. */
     preview: { type: Boolean },
     /**
@@ -1087,6 +1092,7 @@ export class GfPlantDetail extends LitElement {
     this._verdict = null;
     this.panesOnly = false;
     this.subheading = false;
+    this.local = false;
     this.titled = false;
     /** @type {string[] | null} */
     this.paneKeys = null;
@@ -1737,13 +1743,14 @@ export class GfPlantDetail extends LitElement {
   }
 
   /**
-   * One block at full size (a pane): the media viewer fills it, any other block scrolls in it. Titled (a block among
-   * others): its title as the view shows it, nothing when the view leaves it out empty. @param {string} key @param {any} ctx
+   * One block at full size (a pane, a screen's cell): the media viewer fills it — alone in a pane, the keys its at once;
+   * among a screen's cells (local), never the focus —, any other block scrolls in it. Titled (a block among others): its
+   * title as the view shows it, nothing when the view leaves it out empty. @param {string} key @param {any} ctx
    */
   #onlyBlock(key, ctx) {
     if (key === 'media') {
       return ctx.photosOff ? html`<p class="muted only-pad">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`
-        : html`<gf-media-viewer plant-id=${ctx.plant.id} presentation=${blockStyle(this.#view, 'media')} .index=${this.paneAt ?? 0} .startUrl=${this.paneStart ?? null}></gf-media-viewer>`;
+        : html`<gf-media-viewer ?local=${this.local} plant-id=${ctx.plant.id} presentation=${blockStyle(this.#view, 'media')} .index=${this.paneAt ?? 0} .startUrl=${this.paneStart ?? null}></gf-media-viewer>`;
     }
     const empty = this.titled && hidesEmpty(this.#view, key);
     if (empty && this.#emptyHere(key, ctx)) return nothing;

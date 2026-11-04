@@ -1608,7 +1608,8 @@ export function renderCell(r, ctx) {
       ? html`<gf-media-viewer local plant-id=${plant} presentation=${r.params.style ?? blockStyle(/** @type {any} */ (view), 'media')}></gf-media-viewer>`
       : html`<p class="placeholder quiet">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`;
   }
+  // Among the cells (local): its photos block (plant.media) drawn by itself never takes the focus either.
   return r.view
-    ? html`<gf-plant-detail embedded subheading only=${r.view.key} plant-id=${plant} view=${view} .channel=${channel}></gf-plant-detail>`
-    : html`<gf-plant-detail embedded subheading plant-id=${plant} view=${view} .channel=${channel}></gf-plant-detail>`;
+    ? html`<gf-plant-detail embedded subheading local only=${r.view.key} plant-id=${plant} view=${view} .channel=${channel}></gf-plant-detail>`
+    : html`<gf-plant-detail embedded subheading local plant-id=${plant} view=${view} .channel=${channel}></gf-plant-detail>`;
 }
