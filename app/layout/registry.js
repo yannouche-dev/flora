@@ -762,7 +762,9 @@ export function cellName(r) {
 }
 
 /**
- * @typedef {{ name: string, icon: import('../core/icons.js').IconName, mark: string | null }} MenuCell  a cell, in the menu of columns
+ * @typedef {{ name: string, icon: import('../core/icons.js').IconName, mark: string | null, group?: string | null }} MenuCell  a cell, in
+ *   the menu of columns; `group`: its group's letter (gf-layout.js: a dot of its colour on the tab), null: none (a place
+ *   to build in, an unknown component)
  * @typedef {{ label: string, glyphs: { icon: import('../core/icons.js').IconName, mark: string | null }[], more: number, nth: number }} MenuItem
  */
 

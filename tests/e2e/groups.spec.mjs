@@ -2,9 +2,11 @@
 // search; another group's are apart — two lists, two maps that do not follow each other on one screen. The first group
 // (a) keeps the address' keys as before; another's are after its letter (b.q=, b.at=, b.p=…). Each search its own
 // (core/search-channel.js), the first's too — never Flore's; reloaded, the same; being modified, a cell's group chosen in
-// « Liens » of its picker, a letter in its colour on each head. iNaturalist answered here: the zone's observations,
-// of 12 plants (their plants the list).
-import { test, expect, answerAround, answerZone } from './fixtures.mjs';
+// « Liens » of its picker, a letter in its colour on each head, the colour down each cell's edge, a dot of it on a
+// phone's tabs. A cell talks to its group alone: a plant chosen in b brings a tab of b's; a b cell's « Plante » chip and
+// « Fixer la plante courante » take b's plant. iNaturalist answered here: the zone's observations, of 12 plants (their
+// plants the list).
+import { test, expect, answerAround, answerZone, plantId } from './fixtures.mjs';
 import { layoutOf, screen, screenSearch } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
@@ -60,5 +62,58 @@ test.describe('un grand écran', () => {
     await picker.locator('[data-param="groupe"] button[data-value="b"]').click();
     await expect.poll(() => layoutOf(page)).toBe('[results,results(groupe=b)]');
     await expect(page.locator('gf-layout section.cell[data-cell="1"] .cell-group')).toHaveText('B');
+  });
+
+  test('les groupes se voient : une couleur par groupe le long de chaque case, avec ou sans en-tête ; un seul groupe, aucune', async ({ app, page }) => {
+    await app.open('#/layout/[results(list),results(list,groupe=b,tete=simple),plant(groupe=b,tete=non)]?q=ortie&b.q=ail');
+    await expect(cellOf(page, '0')).toHaveAttribute('data-group', 'a');
+    await expect(cellOf(page, '1')).toHaveAttribute('data-group', 'b');
+    await expect(cellOf(page, '2')).toHaveAttribute('data-group', 'b');
+    // Its letter in a head of its title alone too; its colour down its edge, a's the accent's, b's its own.
+    await expect(cellOf(page, '1').locator('.cell-head .cell-group')).toHaveText('B');
+    const edge = (/** @type {string} */ path) => cellOf(page, path).evaluate(el => getComputedStyle(el, '::before').backgroundColor);
+    expect(await edge('1')).toBe('rgb(29, 78, 216)');
+    expect(await edge('2')).toBe('rgb(29, 78, 216)');
+    expect(await edge('0')).not.toBe(await edge('1'));
+    // One group: no letter, no colour.
+    await app.go('#/layout/[results(list),plant]?q=ortie');
+    await expect(page.locator('gf-layout section.cell[data-group]')).toHaveCount(0);
+    await expect(page.locator('gf-layout .cell-group')).toHaveCount(0);
+  });
+
+  test('en modification, une case du groupe b : sa pastille « Plante » et « Fixer la plante courante » prennent la plante de b, jamais celle de a', async ({ app, page }) => {
+    const ail = plantId('Allium ursinum'), ortie = plantId('Urtica dioica');
+    await app.open(screen('[plant.calendar,plant.status(groupe=b)]', `p=${ail}&b.p=${ortie}`, true));
+    const b = cellOf(page, '1');
+    await b.locator('.cell-head .link-chip[data-link="plante"]').click();
+    await expect.poll(() => layoutOf(page)).toBe(`[plant.calendar,plant.status(plante=${ortie},groupe=b)]`);
+    // Attached again, then fixed from its picker: b's plant again.
+    await b.locator('.cell-head .link-chip[data-link="plante"]').click();
+    await expect.poll(() => layoutOf(page)).toBe('[plant.calendar,plant.status(groupe=b)]');
+    await b.locator('.cell-head .pick').click();
+    const picker = page.locator('gf-block-picker:not([inline])');
+    await picker.locator('.row[data-group="Liens"]').click();
+    await picker.locator('[data-param="plante"] [data-act="fix"]').click();
+    await expect.poll(() => layoutOf(page)).toBe(`[plant.calendar,plant.status(plante=${ortie},groupe=b)]`);
+  });
+});
+
+test.describe('un téléphone', () => {
+  test.skip(({ isMobile }) => !isMobile, 'a phone: the columns as tabs');
+
+  test('une plante choisie dans le groupe b amène l’onglet d’une fiche de b, jamais celle de a ; chaque onglet a un point par groupe de ses cases, et le dit', async ({ app, page }) => {
+    await app.open('#/layout/[results(list,groupe=b),plant.calendar,plant.status(groupe=b)]?b.q=ortie');
+    const tabs = page.getByRole('tablist', { name: 'Colonnes' }).getByRole('tab');
+    await expect(tabs.nth(0).locator('.dots i')).toHaveCount(1);
+    await expect(tabs.nth(0).locator('.dots i[data-group="b"]')).toHaveCount(1);
+    await expect(tabs.nth(1).locator('.dots i[data-group="a"]')).toHaveCount(1);
+    await expect(tabs.nth(0)).toHaveAccessibleName(/ — groupe B$/);
+    await expect(tabs.nth(0)).toHaveAttribute('title', / — groupe B$/);
+    await expect(tabs.nth(1)).toHaveAccessibleName(/ — groupe A$/);
+    await cellOf(page, '0').locator('gf-plant-card a.row').first().click();
+    await expect.poll(() => param(page, 'b.p')).not.toBe(null);
+    expect(await param(page, 'p')).toBe(null);
+    await expect(tabs.nth(2)).toHaveAttribute('aria-selected', 'true');
+    await expect(cellOf(page, '2').locator('gf-plant-detail')).toHaveAttribute('plant-id', /** @type {string} */ (await param(page, 'b.p')));
   });
 });

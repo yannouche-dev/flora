@@ -14,8 +14,11 @@
 //    once, three at most, then « +n »; a presentation chosen, plant(epure), its mark: É), its whole name read and shown
 //    on hover — on screen too, beside them, where each has the room (a window, a tablet: not a phone's); as wide as one
 //    another while they fit, else the menu scrolls sideways, the tab shown kept in sight. A plant chosen in one tab
-//    brings the tab of a plant cell (its icon lit a moment); a finger swiped sideways on a panel, where nothing moves
-//    sideways itself, its neighbour.
+//    brings the tab of a plant cell of its group (its icon lit a moment); a finger swiped sideways on a panel, where
+//    nothing moves sideways itself, its neighbour.
+//  - Its groups (a cell's groupe=: a, b, c — each its zone, plant, period and search): a cell talks to its group alone
+//    (the tab a plant brings, the plant its « Liens » chip and its picker fix). Several in the layout, each is seen: its
+//    letter in its colour in the cells' heads, its colour down each cell's edge, a dot of it on each tab of its cells.
 //  - In use or being modified (edit=1, the bar's « Modifier ⇄ Terminé »): the same element, the same cells (never
 //    rebuilt: maps stay loaded). Modified, each cell has its tools — its content (✎: the block picker,
 //    gf-block-picker.js, docked on the right; a bottom sheet on a phone), its cross (builder-grid.js: cut in two towards
@@ -172,7 +175,8 @@ export class GfLayout extends LitElement {
   };
 
   static styles = [ui, gripStyles, screenListStyles, css`
-    :host { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--gf-bg); container-type: inline-size; }
+    :host { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--gf-bg); container-type: inline-size;
+      --group-a: var(--gf-accent); --group-b: #1d4ed8; --group-c: #6d28d9; }
     /* « Choisir le contenu »: in the head; with a mouse, shown on hover or focus (always on a touch screen). */
     .cell-head .pick { flex: none; width: 30px; height: 30px; min-height: 0; padding: 0; font-size: 0.9rem; }
     .cell-head .pick[aria-expanded='true'] { color: var(--gf-accent); background: var(--gf-accent-soft); }
@@ -257,11 +261,16 @@ export class GfLayout extends LitElement {
       .cell-head .cell-acts .icon-btn { position: relative; }
       .cell-head .cell-acts .icon-btn::before { content: ''; position: absolute; inset: -8px; }
     }
-    /* Its group (several in the layout): its letter in its colour. */
+    /* Its group (several in the layout): its letter in its colour, in its head; a line of that colour down its left
+       edge (at every width, with a head or none); a dot of each group of a column on its tab (narrow). */
     .cell-head .cell-group { flex: none; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; display: inline-grid; place-items: center;
-      border-radius: var(--gf-radius-pill); font-size: 0.7rem; font-weight: 700; color: var(--gf-accent-contrast); background: var(--gf-accent); }
-    .cell-head .cell-group[data-group='b'] { color: #fff; background: #1d4ed8; }
-    .cell-head .cell-group[data-group='c'] { color: #fff; background: #6d28d9; }
+      border-radius: var(--gf-radius-pill); font-size: 0.7rem; font-weight: 700; color: var(--gf-accent-contrast); background: var(--group-a); }
+    .cell-head .cell-group[data-group='b'] { color: #fff; background: var(--group-b); }
+    .cell-head .cell-group[data-group='c'] { color: #fff; background: var(--group-c); }
+    .cell { position: relative; }
+    .cell[data-group]::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--group-a); z-index: 5; pointer-events: none; }
+    .cell[data-group='b']::before { background: var(--group-b); }
+    .cell[data-group='c']::before { background: var(--group-c); }
     /* How a cell is wired (being modified): a chip a link, lit when it follows the others. */
     .cell-head .cell-links { flex: none; display: inline-flex; gap: 2px; }
     .cell-head .link-chip { width: 24px; height: 24px; min-height: 0; padding: 0; display: inline-grid; place-items: center; border-radius: 50%; font-size: 0.72rem;
@@ -339,6 +348,11 @@ export class GfLayout extends LitElement {
     /* Two columns that would still look alike (what differs hidden past their three icons): numbered, on the corner. */
     .nth { position: absolute; top: 5px; right: 6px; font: 700 10px/1 var(--gf-font); color: var(--ink); }
     .nth::before { content: attr(data-nth); }
+    /* Its cells' groups (several in the layout): a dot each, in their colours, on the corner opposite the number. */
+    .dots { position: absolute; top: 6px; left: 6px; display: inline-flex; gap: 2px; pointer-events: none; }
+    .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--group-a); box-shadow: 0 0 0 1px var(--under); }
+    .dots i[data-group='b'] { background: var(--group-b); }
+    .dots i[data-group='c'] { background: var(--group-c); }
     /* Brought by a plant chosen in another tab: lit a moment. */
     .tab.brought { animation: brought 1.2s ease-out; }
     .tab.brought .glyphs { animation: nudge 0.5s ease-out; }
@@ -988,19 +1002,22 @@ export class GfLayout extends LitElement {
     if (this.editing && this.#editMark?.from != null) renewBehind(this.#editMark.from, this.#usageHref());
   }
 
-  /** The state changed: the address follows; narrow, a plant chosen brings a tab that shows it. @param {Event} e */
+  /** A group's state changed: the address follows; narrow, a plant chosen brings a tab that shows it. @param {Event} e */
   #onState = e => {
     const { how, keys } = /** @type {CustomEvent} */ (e).detail;
     this.#write(how);
-    if (this.#narrow && how === 'push' && keys.includes('plant')) this.#toPlantTab();
+    if (this.#narrow && how === 'push' && keys.includes('plant')) this.#toPlantTab(/** @type {LayoutState} */ (e.target));
     this.requestUpdate();
   };
 
-  /** Narrow: the first tab with a cell showing the plant, unless the one shown has one. */
-  #toPlantTab() {
+  /**
+   * Narrow: the first tab with a cell of that group showing the plant, unless the one shown has one — never another
+   * group's (its plant is another). @param {LayoutState} state the group's whose plant was chosen
+   */
+  #toPlantTab(state) {
     const tabOf = (/** @type {string} */ p) => Number(p.split('.')[0]);
     // Not a cell with a plant of its own (plante=): it does not show the plant chosen.
-    const tabs = [...this.#shown.cells].filter(([, r]) => r.known && FOLLOWS_PLANT.has(r.spec.id) && !r.params.plante).map(([p]) => tabOf(p));
+    const tabs = [...this.#shown.cells].filter(([, r]) => r.known && FOLLOWS_PLANT.has(r.spec.id) && !r.params.plante && this.#stateOf(r) === state).map(([p]) => tabOf(p));
     if (tabs.length && !tabs.includes(this.#active)) this.#broughtTo(tabs[0]);
   }
 
@@ -1200,19 +1217,23 @@ export class GfLayout extends LitElement {
   /** The layout changed by the picker: written at once (no new entry). @param {(t: ListNode) => ListNode} fn */
   #pickEdit(fn) { this.#setText(serialize(fn(this.#layout.tree))); }
 
-  /** The picker of the cell open: its changes written at once, the cell keeping its share. */
+  /**
+   * The picker of the cell open: its changes written at once, the cell keeping its share. « Fixer la plante courante »:
+   * its group's plant.
+   */
   #picker() {
     const key = this._pick;
     if (key === null) return nothing;
     const tree = this.#shown.tree;
     const path = key.split('.').map(Number);
     const n = nodeAt(tree, path);
-    if (!n || n.t !== 'cell') return nothing;
+    const r = this.#shown.cells.get(key);
+    if (!n || n.t !== 'cell' || !r) return nothing;
     const all = cellsOf(tree);
     const index = all.findIndex(c => c.path.join('.') === key);
     // Docked to the screen's height (under the app's header; a phone: above its bottom bar).
     return html`<gf-block-picker style=${pickerBounds(this)} .cell=${cellText(n)} .label=${'Case ' + (index + 1)} .room=${this.#pickRoom}
-      .others=${all.filter(c => c.path.join('.') !== key).map(c => cellText(c.cell))} .plant=${this.#state.live.plant}
+      .others=${all.filter(c => c.path.join('.') !== key).map(c => cellText(c.cell))} .plant=${this.#stateOf(r).live.plant}
       clear-label="Changer de bloc"
       @change=${(/** @type {CustomEvent} */ e) => {
         const next = cellOf(e.detail.text);
@@ -1299,13 +1320,16 @@ export class GfLayout extends LitElement {
     const empty = r.known && r.spec.empty;
     const views = r.known && r.spec.id === 'results' && head === 'oui' ? this.#viewSwitch(key, r, title) : nothing;
     const links = editing ? this.#links(key, r, title) : nothing;
-    // Its group, when the layout has several: a letter in its colour (the cells of one group share zone, plant, search).
-    const badge = r.known && !r.spec.empty && this.#groups().length > 1
+    // Its group, when the layout has several: a letter in its colour in its head, a line of it down its edge (the cells
+    // of one group share zone, plant, search).
+    const many = this.#groups().length > 1;
+    const grouped = many && r.known && !r.spec.empty;
+    const badge = grouped
       ? html`<span class="cell-group" data-group=${group} title=${`Groupe ${group.toUpperCase()} : sa zone, sa plante, sa période et sa recherche`}
           aria-label=${'Groupe ' + group.toUpperCase()}>${group.toUpperCase()}</span>` : nothing;
     // A search cell in use: « Ouvrir dans Flore », its group's search taken there (which one, named when there are several).
     const flore = id === 'search' && !editing && head !== 'non';
-    const toFlore = this.#groups().length > 1 ? 'Ouvrir dans Flore : la recherche du groupe ' + group.toUpperCase() : 'Ouvrir dans Flore';
+    const toFlore = many ? 'Ouvrir dans Flore : la recherche du groupe ' + group.toUpperCase() : 'Ouvrir dans Flore';
     const actions = acts.length || flore ? html`<span class="cell-acts" role="group" aria-label=${'Actions de « ' + title + ' »'}>
         ${flore ? html`<button class="icon-btn" type="button" data-act="flore" title=${TO_FLORE} aria-label=${toFlore}
           @click=${() => this.#toFlore(channel)}>${icon('leaf')}</button>` : nothing}
@@ -1317,8 +1341,8 @@ export class GfLayout extends LitElement {
           aria-label=${(max ? 'Revenir à l’écran depuis « ' : 'Agrandir « ') + title + ' »'} @click=${() => this.#maximize(max ? null : key)}>${icon(max ? 'fullscreen-exit' : 'arrows-fullscreen')}</button>` : nothing}
       </span>` : nothing;
     return html`<section class="cell ${this._flash === key ? 'flash' : ''} ${max ? 'maxed' : ''} ${folded ? 'folded' : ''} ${picking ? 'picked' : ''}" data-cell=${key} data-comp=${r.known ? r.spec.id + (r.view ? '.' + r.view.key : '') : 'unknown'}
-      data-head=${head} aria-label=${title}>
-      ${head === 'non' ? nothing : head === 'simple' ? html`<header class="cell-head"><h2>${title}</h2><span class="spacer"></span>${pick}${actions}</header>`
+      data-head=${head} data-group=${grouped ? group : nothing} aria-label=${title}>
+      ${head === 'non' ? nothing : head === 'simple' ? html`<header class="cell-head"><h2>${title}</h2>${badge}<span class="spacer"></span>${pick}${actions}</header>`
         : html`<header class="cell-head"><h2>${icon(cellIcon(r))} ${title}${mark ? html`<b class="cell-mark" aria-hidden="true" title=${mark.label} data-mark=${mark.short}></b>` : nothing}</h2><span class="sub">${sub}</span>
         ${badge}${links}${views}${pick}${actions}</header>`}
       <div class="cell-body" ?hidden=${folded} aria-busy=${busy ? 'true' : nothing}>${empty ? this.#slot(key) : renderCell(r, { state: s, channel, view: this.#store.state.mode, plant: s.live.plant, first, editing })}
@@ -1329,14 +1353,14 @@ export class GfLayout extends LitElement {
   /**
    * How a cell is wired to the others (registry.js#linksOf), in its head being modified: a chip each — the zone, the
    * search, the period, the current plant —, lit when it follows (and changes) it; touched, it detaches the cell or
-   * attaches it again (the setting that does it, written). One that cannot be changed is said, never a switch.
-   * @param {string} key @param {Resolved} r @param {string} title
+   * attaches it again (the setting that does it, written: a plant cell fixed on its group's plant). One that cannot be
+   * changed is said, never a switch. @param {string} key @param {Resolved} r @param {string} title
    */
   #links(key, r, title) {
     const all = linksOf(r);
     if (!all.length) return nothing;
     const ICONS = /** @type {const} */ ({ zone: 'geo-alt', recherche: 'search', periode: 'sun-fill', plante: 'flower1', liste: 'list-ul' });
-    const plant = this.#state.live.plant;
+    const plant = this.#stateOf(r).live.plant;
     return html`<span class="cell-links" role="group" aria-label=${'Liens de « ' + title + ' »'}>${all.map(l => {
       const words = `${LINKS[l.link]} : ${l.on ? 'reliée' : 'détachée'} — ${l.why}`;
       if (!l.toggle) return html`<span class="link-chip" data-link=${l.link} data-on=${String(l.on)} role="img" aria-label=${words} title=${words}>${icon(ICONS[l.link])}</span>`;
@@ -1381,13 +1405,13 @@ export class GfLayout extends LitElement {
 
   /**
    * A column's cells in reading order (left to right, top to bottom), each with its whole name, its icon and its mark
-   * (registry.js: « Fiche (Épuré) », card-text, É; « Fiche › Carte », pin-map).
+   * (registry.js: « Fiche (Épuré) », card-text, É; « Fiche › Carte », pin-map), and its group's letter.
    * @param {LayoutNode} n @param {number[]} path @returns {import('./registry.js').MenuCell[]}
    */
   #cellsOf(n, path) {
     if (n.t === 'list') return n.kids.flatMap((k, j) => this.#cellsOf(k, [...path, j]));
     const r = /** @type {Resolved} */ (this.#shown.cells.get(path.join('.')));
-    return [{ name: cellName(r), icon: cellIcon(r), mark: cellMark(r)?.short ?? null }];
+    return [{ name: cellName(r), icon: cellIcon(r), mark: cellMark(r)?.short ?? null, group: r.known && !r.spec.empty ? this.#groupOf(r) : null }];
   }
 
   /** The tab shown (narrow), as last drawn: the one asked, within the columns there are. */
@@ -1397,8 +1421,9 @@ export class GfLayout extends LitElement {
    * Narrow: the columns as a menu of icons on top — each its cells' icons (registry.js#menuLooks), its whole name read
    * (the text of the tab, hidden on a phone's menu, beside the icons where there is room) and shown on hover (title) —
    * and as tab panels, each one's rows one under the other. The tab's only text is its name: the marks, « +n » and a
-   * number are drawn by the style (data-…), so the title, the same words, is never read again as a description.
-   * @param {ListNode} tree
+   * number are drawn by the style (data-…), so the title, the same words, is never read again as a description. Several
+   * groups in the layout: a dot each of its cells' groups, their letters read after its name (« — groupe B », « —
+   * groupes A et B »), in its title too. @param {ListNode} tree
    */
   #tabs(tree) {
     const n = tree.kids.length;
@@ -1407,10 +1432,14 @@ export class GfLayout extends LitElement {
     const columns = tree.kids.map((k, j) => this.#cellsOf(k, [j]));
     const items = menuLooks(columns);
     const named = this._named;
+    const many = this.#groups().length > 1;
     return html`<div class="tabs ${named ? 'named' : ''}" role="tablist" aria-label="Colonnes" @scroll=${(/** @type {Event} */ e) => edges(/** @type {HTMLElement} */ (e.currentTarget))}>${items.map((m, j) => {
+      const groups = many ? [...new Set(columns[j].map(c => c.group).filter(g => g !== null))].sort() : [];
+      const letters = groups.map(g => g.toUpperCase());
+      const ofGroups = !groups.length ? '' : ` — groupe${groups.length > 1 ? 's' : ''} ${letters.length > 1 ? letters.slice(0, -1).join(', ') + ' et ' + letters[letters.length - 1] : letters[0]}`;
       return html`<button type="button" role="tab" class="tab ${this._brought === j ? 'brought' : ''}" id=${'tab-' + j} aria-controls=${'panel-' + j}
-        aria-selected=${j === active ? 'true' : 'false'} tabindex=${j === active ? '0' : '-1'} title=${m.label} data-icons=${columns[j].map(c => c.icon).join(' ')}
-        @click=${() => { this._tab = j; }} @keydown=${(/** @type {KeyboardEvent} */ e) => this.#tabKey(e, j, n)}><span class="glyphs ${m.glyphs.length + (m.more ? 1 : 0) > 1 ? 'many' : ''}" aria-hidden="true">${m.glyphs.map(g => html`<span class="glyph ${g.mark ? 'marked' : ''}" style=${g.mark ? `--chars: ${g.mark.length}` : nothing} data-icon=${g.icon}>${icon(g.icon)}${g.mark ? html`<b class="mark" data-mark=${g.mark}></b>` : nothing}</span>`)}${m.more ? html`<span class="more" data-more=${m.more}></span>` : nothing}</span><span class="name ${named ? '' : 'visually-hidden'}">${m.label}</span>${m.nth ? html`<b class="nth" aria-hidden="true" data-nth=${m.nth}></b>` : nothing}</button>`;
+        aria-selected=${j === active ? 'true' : 'false'} tabindex=${j === active ? '0' : '-1'} title=${m.label + ofGroups} data-icons=${columns[j].map(c => c.icon).join(' ')}
+        @click=${() => { this._tab = j; }} @keydown=${(/** @type {KeyboardEvent} */ e) => this.#tabKey(e, j, n)}><span class="glyphs ${m.glyphs.length + (m.more ? 1 : 0) > 1 ? 'many' : ''}" aria-hidden="true">${m.glyphs.map(g => html`<span class="glyph ${g.mark ? 'marked' : ''}" style=${g.mark ? `--chars: ${g.mark.length}` : nothing} data-icon=${g.icon}>${icon(g.icon)}${g.mark ? html`<b class="mark" data-mark=${g.mark}></b>` : nothing}</span>`)}${m.more ? html`<span class="more" data-more=${m.more}></span>` : nothing}</span><span class="name ${named ? '' : 'visually-hidden'}">${m.label}${ofGroups ? html`<span class="visually-hidden">${ofGroups}</span>` : nothing}</span>${m.nth ? html`<b class="nth" aria-hidden="true" data-nth=${m.nth}></b>` : nothing}${groups.length ? html`<span class="dots" aria-hidden="true">${groups.map(g => html`<i data-group=${g}></i>`)}</span>` : nothing}</button>`;
     })}</div>
       ${repeat(tree.kids, (k, j) => (k.t === 'list' ? 'l:' : 'c:') + j + (k.t === 'cell' ? ':' + k.name + '.' + (k.view ?? '') : ''), (k, j) => html`<div class="tabpanel" role="tabpanel" id=${'panel-' + j} aria-labelledby=${'tab-' + j} ?hidden=${j !== active}
           @touchstart=${swipe} @touchend=${swipe} @touchcancel=${swipe}>
