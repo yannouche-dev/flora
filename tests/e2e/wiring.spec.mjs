@@ -4,7 +4,8 @@
 // that month, their plants the results) — while they come, the map, the list and their counts kept, dimmed (« Mise à
 // jour… »), then replaced together; another circle's map never the old one's points; a map of France and one of the
 // world (portee=) show where the same plants were observed (iNaturalist's tiles, their taxa), the current plant's on
-// top; a plant chosen outside the zone's list still has its observations in the zone (its taxon found by its name). The
+// top; a plant chosen outside the zone's list still has its observations in the zone (its taxon found by its name); the
+// plant chosen stays chosen when another search no longer finds it (« hors du résultat »), Back takes it away. The
 // zone's filters say which observations, every one by default (no quality grade): the zone's, the current plant's, the
 // tiles of France and the world alike.
 // iNaturalist answered here: 12 plants around; GBIF: nothing of its own in the zone (both sources asked by default).
@@ -210,6 +211,30 @@ test.describe('un grand écran', () => {
     // The map: France instead of the zone.
     await chips('map').locator('[data-link="zone"]').click();
     await expect.poll(grid).toBe('[map(portee=france,r=1km,suit=0),results(zone=0),plant.wikipedia]');
+  });
+
+  test('la plante choisie est un choix, jamais un filtre : une autre recherche ne la trouve plus, elle reste choisie — « hors du résultat » sur la carte et dans l’en-tête de la fiche ; Retour l’enlève', async ({ app, page }) => {
+    await answer(page);
+    await app.open(`#/layout/[map(r=1km),search,plant.status]?${AT}`);
+    await expect.poll(() => found(page)).toBe(12);
+    const said = page.locator('dl-map .ctl.bl .outside'), head = page.locator('gf-layout section.cell[data-comp="plant.status"] .cell-head .sub');
+    await page.locator('dl-search gf-plant-card').filter({ hasText: 'Ortie dioïque' }).locator('a.row').click();
+    await expect.poll(() => param(page, 'p')).toBe(String(plantId('Urtica dioica')));
+    await expect(head).toContainText('Ortie dioïque');
+    await expect(said).toHaveCount(0);
+    await expect(head).not.toContainText('hors du résultat');
+    // Another search, the nettle not in it: still chosen — the map's chip, the sheet's head say it.
+    await page.locator('dl-search gf-plant-search input').fill('chêne');
+    await expect.poll(() => found(page)).toBe(1);
+    expect(await param(page, 'p')).toBe(String(plantId('Urtica dioica')));
+    await expect(said).toHaveText('Ortie dioïque : hors du résultat');
+    await expect(said).toHaveAttribute('title', 'La plante choisie n’est pas parmi les plantes trouvées : elle reste choisie (Retour l’enlève)');
+    await expect(head).toContainText('Ortie dioïque · Urtica dioica · hors du résultat');
+    await expect(page.locator('dl-map .chip .name')).toHaveText('Ortie dioïque');
+    // Back: the entry before the choice — no plant, nothing said.
+    await page.goBack();
+    await expect.poll(() => param(page, 'p')).toBe(null);
+    await expect(said).toHaveCount(0);
   });
 
   test('une plante hors de la liste de la zone : son taxon trouvé par son nom, ses observations dans la zone demandées', async ({ app, page }) => {

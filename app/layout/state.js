@@ -246,7 +246,8 @@ export class LayoutState extends EventTarget {
     /** @type {string} */ this.wholeFor = '';
     /**
      * The plant hovered — a list's row (under the mouse, or the keyboard's focus), a map's point (under the mouse) —,
-     * lit by the other cells; null: none. Never in the address. @type {{ plant: number, from: 'list' | 'map' } | null}
+     * lit by the other cells (`by`: the map hovered, which lights it itself; null: a list's); null: none. Never in the
+     * address. @type {{ plant: number, from: 'list' | 'map', by: object | null } | null}
      */
     this.hover = null;
     /**
@@ -309,24 +310,37 @@ export class LayoutState extends EventTarget {
   setScope(at, place = null, how = 'push') { this.set({ at, place: at ? place : null, obs: null }, how); }
 
   /**
-   * A plant hovered (a list's row, a map's point): the other cells light it. Its own event, `hover` — never `change`:
-   * nothing written in the address, only the cells that light it drawn again. @param {number} plant @param {'list' | 'map'} from
+   * A plant hovered (a list's row, a map's point): the other cells light it — every list, and every map but the one
+   * hovered (`by`), which lights it itself. Its own event, `hover` — never `change`: nothing written in the address,
+   * only the cells that light it drawn again. @param {number} plant @param {'list' | 'map'} from @param {object | null} [by]
    */
-  hoverOn(plant, from) {
-    if (this.hover?.plant === plant && this.hover.from === from) return;
-    this.hover = { plant, from };
+  hoverOn(plant, from, by = null) {
+    if (this.hover?.plant === plant && this.hover.from === from && this.hover.by === by) return;
+    this.hover = { plant, from, by };
     this.dispatchEvent(new CustomEvent('hover'));
   }
 
   /**
-   * Hovered no more: `plant` (null: whichever `from` lit) — another plant hovered meanwhile, or from elsewhere, stays.
-   * @param {number | null} plant @param {'list' | 'map'} from
+   * Hovered no more: `plant` (null: whichever `from` lit — the map `by`, when said) — another plant hovered meanwhile,
+   * or from elsewhere (another map), stays. @param {number | null} plant @param {'list' | 'map'} from @param {object | null} [by]
    */
-  hoverOff(plant, from) {
+  hoverOff(plant, from, by = null) {
     const h = this.hover;
-    if (!h || h.from !== from || (plant != null && h.plant !== plant)) return;
+    if (!h || h.from !== from || (plant != null && h.plant !== plant) || (by !== null && h.by !== by)) return;
     this.hover = null;
     this.dispatchEvent(new CustomEvent('hover'));
+  }
+
+  /**
+   * The current plant is a choice, never a filter: chosen, it stays chosen when its group's search no longer finds it
+   * (another text, other filters, another zone) — said « hors du résultat » (the map's chip, the plant cells' heads).
+   * Not before the search has answered; the zone's plants (inZone), not only what a map's view keeps.
+   */
+  get outside() {
+    const id = this.live.plant, ch = this.channel;
+    if (id == null || !ch.answered) return false;
+    const results = ch.results;
+    return results.inZone ? !results.inZone.includes(id) : !results.items.some((/** @type {{ id: number }} */ p) => p.id === id);
   }
 
   /**

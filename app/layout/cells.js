@@ -311,6 +311,9 @@ export class DlMap extends LitElement {
     .chip button { flex: none; min-height: 32px; min-width: 32px; padding: 0 8px; border-radius: var(--gf-radius-pill); font-size: 0.78rem; }
     .chip button[aria-pressed='true'] { background: var(--gf-accent); color: var(--gf-accent-contrast); border-color: transparent; }
     :host([ctl-compact]) .chip .name { max-width: 9em; }
+    /* The current plant no longer found by the search (state.js outside): still chosen, said above its chip. */
+    .outside { max-width: 100%; box-sizing: border-box; padding: 3px 10px; border-radius: var(--gf-radius-pill); font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      background: color-mix(in srgb, var(--gf-warn-bg, var(--gf-surface)) 96%, transparent); box-shadow: 0 1px 3px rgb(0 0 0 / 14%); }
     /* The legend (legende): its button, its lines once opened. */
     .legend > button { min-height: 32px; padding: 2px 12px; border-radius: var(--gf-radius-pill); font-size: 0.8rem; box-shadow: var(--gf-shadow); background: color-mix(in srgb, var(--gf-surface) 95%, transparent); }
     .legend ul { list-style: none; margin: 6px 0 0; padding: 8px 10px; display: grid; gap: 4px; border-radius: 12px; font-size: 0.8rem;
@@ -705,8 +708,11 @@ export class DlMap extends LitElement {
     else if (this.#leads && (!s.view || s.view.by === this)) s.setView(bounds, { kinds: this.#p.src, by: this });
   }
 
-  /** It leads the list (what it shows of the zone, once moved): a map of the zone (portee=zone), liste=vue, a zone. */
-  get #leads() { return this.#p.portee === 'zone' && this.params?.liste !== 'zone' && Boolean(this.state?.live.at); }
+  /**
+   * It leads the list (what it shows of the zone, once moved): a map of the zone (portee=zone), liste=vue, a zone — not
+   * one that shows the current plant alone (plante=seule: its points are not the list's).
+   */
+  get #leads() { return this.#p.portee === 'zone' && this.params?.liste !== 'zone' && this.#p.plante !== 'seule' && Boolean(this.state?.live.at); }
 
   /** The cell's map (gf-map: what the cell says goes through it — the quiet-map rule). @returns {any} */
   get #map() { return this.renderRoot.querySelector('gf-map'); }
@@ -725,23 +731,26 @@ export class DlMap extends LitElement {
     s.pick(id, { obs: p.url ? obsId(p.url) : null });
   }
 
-  /** A point under the mouse, or none (gf-map `point-hover`): its plant's row lit in the lists (state.js hover). @param {CustomEvent} e */
+  /**
+   * A point under the mouse, or none (gf-map `point-hover`): its plant's row lit in the lists, its points on the other
+   * maps (state.js hover, by this map). @param {CustomEvent} e
+   */
   #onHover(e) {
     const s = /** @type {LayoutState} */ (this.state);
     const p = e.detail.point;
     const id = p ? this.#plantOf(p) ?? p.plantId ?? null : null;
-    if (id == null) s.hoverOff(null, 'map');
-    else s.hoverOn(id, 'map');
+    if (id == null) s.hoverOff(null, 'map', this);
+    else s.hoverOn(id, 'map', this);
   }
 
   /**
-   * A plant hovered in a list (state.js hover): its points lit as the map's own hover lights them — set on the map,
-   * the cell not drawn again. Hovered on a map: that map lights it itself.
+   * A plant hovered in a list or on another map of the group (state.js hover): its points lit as the map's own hover
+   * lights them — set on the map, the cell not drawn again. Hovered on this map: it lights it itself (gf-kin).
    */
   #lightHovered() {
     const map = this.#map, h = this.state?.hover;
     if (!map) return;
-    const keys = h?.from === 'list' ? this.#keysOf(h.plant) : null;
+    const keys = h && h.by !== this ? this.#keysOf(h.plant) : null;
     map.litKeys = keys?.size ? keys : null;
   }
 
@@ -824,7 +833,7 @@ export class DlMap extends LitElement {
     this.toggleAttribute('updating', Boolean(s?.updating));
     if (!s || !map) return;
     this.#defaultScope();
-    // No longer leading the list (liste=zone, France or the world now): it shows the whole zone again.
+    // No longer leading the list (liste=zone, plante=seule, France or the world now): it shows the whole zone again.
     if (s.view?.by === this && !this.#leads) s.setView(null);
     // The zone moved while modified: the view kept was the old zone's — framed on the new one.
     const zone = s.live.at ? s.live.at.join(',') + ':' + s.radius : '';
@@ -984,13 +993,18 @@ export class DlMap extends LitElement {
     </div>`;
   }
 
-  /** Bottom left, over the zoom: the current plant's chip, the legend. @param {LayoutState} s @param {Set<string>} on */
+  /**
+   * Bottom left, over the zoom: the current plant's chip — and, above it, « hors du résultat » when its group's search
+   * no longer finds it (state.js outside: it stays chosen) —, the legend. @param {LayoutState} s @param {Set<string>} on
+   */
   #bottomLeft(s, on) {
     const id = s.live.plant, info = s.plantInfo;
     const chip = on.has('plante') && id != null && info?.id === id;
     if (!chip && !on.has('legende')) return nothing;
+    const name = chip ? /** @type {{ name: string }} */ (info).name : '';
     return html`<div class="ctl bl">
-      ${chip ? this.#chip(id, /** @type {{ name: string }} */ (info).name) : nothing}
+      ${chip && s.outside ? html`<span class="outside" role="note" title="La plante choisie n’est pas parmi les plantes trouvées : elle reste choisie (Retour l’enlève)">${name} : hors du résultat</span>` : nothing}
+      ${chip ? this.#chip(id, name) : nothing}
       ${on.has('legende') ? this.#legendView(s) : nothing}
     </div>`;
   }

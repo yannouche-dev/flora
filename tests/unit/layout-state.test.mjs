@@ -92,19 +92,22 @@ test('une plante survolée (une ligne, un point) : son propre événement, jamai
   s.addEventListener('hover', () => hovers++);
   const live = s.live;
   s.hoverOn(AIL.id, 'list');
-  assert.deepEqual(s.hover, { plant: AIL.id, from: 'list' });
+  assert.deepEqual(s.hover, { plant: AIL.id, from: 'list', by: null });
   // The same again: nothing said.
   s.hoverOn(AIL.id, 'list');
   assert.equal(hovers, 1);
   // Another row left (its leave told after the next row's enter), the map letting go: it stays lit.
   s.hoverOff(ORTIE.id, 'list');
   s.hoverOff(null, 'map');
-  assert.deepEqual(s.hover, { plant: AIL.id, from: 'list' });
-  // A point of the map hovered: its plant, from the map — the list letting go of what it lit takes nothing.
-  s.hoverOn(ORTIE.id, 'map');
+  assert.deepEqual(s.hover, { plant: AIL.id, from: 'list', by: null });
+  // A point of a map hovered: its plant, from that map (the others light it, not it) — the list letting go of what it
+  // lit takes nothing, nor another map letting go of its own.
+  const map = {}, other = {};
+  s.hoverOn(ORTIE.id, 'map', map);
   s.hoverOff(null, 'list');
-  assert.deepEqual(s.hover, { plant: ORTIE.id, from: 'map' });
-  s.hoverOff(null, 'map');
+  s.hoverOff(null, 'map', other);
+  assert.deepEqual(s.hover, { plant: ORTIE.id, from: 'map', by: map });
+  s.hoverOff(null, 'map', map);
   assert.equal(s.hover, null);
   assert.equal(hovers, 3);
   // Never a change: nothing written in the address.
@@ -371,5 +374,24 @@ test('les gros points de la plante choisie : de la zone, les siens parmi ses obs
   assert.equal(own.length, 1);
   const q = new URL(own[0]).searchParams;
   assert.deepEqual([q.get('taxon_id'), q.get('quality_grade'), q.get('year')], [String(ORTIE.id + 1), null, String(new Date().getFullYear())]);
+  s.dispose();
+});
+
+test('la plante courante est un choix, jamais un filtre : choisie, elle reste choisie quand la recherche de son groupe ne la trouve plus — « hors du résultat », jamais avant sa réponse', () => {
+  const channel = { ...fakeChannel(), answered: false, results: { total: 1, items: [{ id: AIL.id }], inZone: null } };
+  const s = new LayoutState({ channel });
+  // None chosen, or its search not answered yet: nothing said.
+  assert.equal(s.outside, false);
+  s.pick(ORTIE.id, { how: 'none' });
+  assert.equal(s.outside, false);
+  channel.answered = true;
+  assert.deepEqual([s.live.plant, s.outside], [ORTIE.id, true]);
+  s.pick(AIL.id, { how: 'none' });
+  assert.equal(s.outside, false);
+  // A map's view keeping the list to a part of the zone: the zone's plants count (inZone), not only what it lists.
+  channel.results = { total: 0, items: [], inZone: [AIL.id] };
+  assert.equal(s.outside, false);
+  channel.results = { total: 1, items: [{ id: AIL.id }], inZone: [ORTIE.id] };
+  assert.equal(s.outside, true);
   s.dispose();
 });

@@ -824,11 +824,14 @@ export function linksOf(r) {
     add('periode', true, 'Ses points : ceux de la période de toutes les cases');
     add('plante', p.plante !== 'non', p.plante === 'non' ? 'La plante courante n’y est pas montrée' : 'La plante courante en grand ; toucher un point la choisit',
       { plante: p.plante === 'non' ? null : 'non' });
-    // The list: what it shows of the zone, once moved by hand — never a map of France or the world's.
-    const leads = zone && p.liste !== 'zone';
+    // The list: what it shows of the zone, once moved by hand — never a map of France or the world's, nor one that
+    // shows the current plant alone (plante=seule: its points are not the list's).
+    const alone = p.plante === 'seule';
+    const leads = zone && p.liste !== 'zone' && !alone;
     add('liste', leads, !zone ? 'La liste reste celle de toute la zone (une carte de la France ou du monde ne la mène pas)'
+      : alone ? 'Ne mène pas la liste : la carte ne montre que la plante courante'
       : leads ? 'La liste : les plantes de ce qu’elle montre, une fois déplacée à la main' : 'La liste : toute la zone, où que soit la carte',
-    zone ? { liste: leads ? 'zone' : null } : null);
+    zone && !alone ? { liste: leads ? 'zone' : null } : null);
   } else if (id === 'place') {
     add('zone', true, 'Choisit la zone de toutes les cases');
   } else if (id === 'search' || id === 'filters') {

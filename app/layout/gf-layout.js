@@ -1296,13 +1296,15 @@ export class GfLayout extends LitElement {
     // A new answer of its zone coming (another period, other filters, another circle, none: state.js `updating`): what
     // its map, list and deck show stays, dimmed, until the answer replaces all of it at once; its counts « Mise à jour… ».
     const busy = s.updating && (id === 'map' || id === 'deck' || (id === 'results' && !whole));
+    // The current plant, chosen, no longer found by its group's search (state.js outside): still shown, said so.
+    const outside = !fixed && (id === 'plant' || id === 'media') && s.outside;
     const sub = !r.known ? 'à corriger'
       : id === 'map' ? scopeWords(s) + (s.updating ? ' · Mise à jour…' : '')
       : id === 'place' ? scopeWords(s)
       : whole ? (s.whole?.key === s.wholeFor && s.whole ? count(s.whole.total) + ' · toute la France' : '')
       : id === 'search' || id === 'results' || id === 'filters' ? (this.#store.state.status === 'ready' && channel.answered
         ? s.updating ? 'Mise à jour…' : count(results.total) + (results.inZone ? ' · dans la vue' : '') : '')
-      : info ? html`${fixed ? html`<span class="pin" title=${`Plante fixée (plante=${fixed}) : cette case ne suit pas la plante courante`}>${icon('pin-angle-fill')}<span class="visually-hidden">Plante fixée :</span></span> ` : nothing}${info.name}${info.name !== info.sci ? html` · <i>${info.sci}</i>` : nothing}` : '';
+      : info ? html`${fixed ? html`<span class="pin" title=${`Plante fixée (plante=${fixed}) : cette case ne suit pas la plante courante`}>${icon('pin-angle-fill')}<span class="visually-hidden">Plante fixée :</span></span> ` : nothing}${info.name}${info.name !== info.sci ? html` · <i>${info.sci}</i>` : nothing}${outside ? ' · hors du résultat' : nothing}` : '';
     // The frame (registry.js#FRAME): its head whole, its title alone, or none (but while editing: the tools are there);
     // the actions of its head; large over the layout, folded to its head, hidden while it has nothing to show.
     const editing = this.editing;
