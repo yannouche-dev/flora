@@ -6,7 +6,8 @@
 // found — a screen's search never answering for another's: a slowed worker, nothing hidden, counted « 0 espèce » nor
 // said empty before its own answer, at a first load, from one screen to the next, through the home; nor a deck hidden or
 // at its end, nor results zone=0 « Aucune plante… », its grid sorted from the keyboard keeping its focus, headers and rows —
-// another screen's rows never shown), its links (plante=: a plant of its own, whatever the current one; results zone=0: the whole flora whatever the
+// twice before its answer, reversed; another screen's rows never shown; nor « Aucune plante… » of an empty search said of
+// the next one before its answer), its links (plante=: a plant of its own, whatever the current one; results zone=0: the whole flora whatever the
 // zone; toucher=fiche: a result opens its sheet; toucher=rien: nothing), and the editor's « Cadre » writing them in the
 // address. iNaturalist answered as in free-layout.spec.mjs: 12 plants around.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
@@ -275,6 +276,22 @@ test.describe('un grand écran', () => {
     await expect(sort).toBeFocused();
     await expect(head.locator('[role="columnheader"]').first()).toHaveAttribute('aria-sort', 'ascending');
     expect(await seen()).toEqual(NONE);
+  });
+
+  test('la grille triée deux fois au clavier avant la réponse : l’ordre inverse, comme deux fois après', async ({ app, page }) => {
+    await watchOrtie(page);
+    await app.open(`#/layout/[results(grid,zone=0)]?${AT}&q=ortie`);
+    const whole = cellOf(page, 'results'), list = whole.locator('gf-plant-list');
+    await expect(list.locator('gf-plant-card').first()).toBeVisible();
+    const sort = list.locator('.head[role="row"] button.sort').first();
+    await expect(sort).toHaveText('Photo');
+    // Twice in a row (the worker slowed: the first answer not come): the second reverses the first.
+    await sort.press('Enter');
+    await sort.press('Enter');
+    await expect.poll(() => param(page, 'sort')).toBe('-photo');
+    await expect.poll(async () => (await wholeSearch(whole)).sort).toBe('-photo');
+    await expect.poll(async () => (await wholeSearch(whole)).answered).toBe(true);
+    await expect(list.locator('[role="columnheader"]').first()).toHaveAttribute('aria-sort', 'descending');
   });
 
   test('« Aucune plante… » d’une recherche vide ne reste pas sur la suivante : retenu tant que sa réponse n’est pas venue', async ({ app, page }) => {

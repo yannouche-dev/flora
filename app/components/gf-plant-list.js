@@ -262,9 +262,14 @@ export class GfPlantList extends LitElement {
     this._scrollTop = this.scrollTop;
   }
 
-  /** Header click: sort by the column, again to reverse. @param {string} key */
+  /**
+   * Header click: sort by the column, again to reverse — the sort asked while its answer is coming (a screen's search,
+   * pending: pressed twice before it answers, reversed), else the one shown (its answer's: a sort asked that the list
+   * does not have, « Plus observées » without a zone, is the French name's). @param {string} key
+   */
   #sortBy(key) {
-    const sort = this.#store.state.results.sort;
+    const { query, results } = this.#store.state;
+    const sort = this.#store.pending ? query.sort || results.sort : results.sort;
     setQuery({ sort: sort === key ? '-' + key : key }, { channel: this.#store.channel });
   }
 
