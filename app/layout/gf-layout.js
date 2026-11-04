@@ -112,6 +112,16 @@ const TO_FLORE = 'Ouvrir cette recherche dans Flore (sans la zone)';
 /** The cells that show their group's search itself: « Ouvrir dans Flore » in ⋯ has one to take there. */
 const SEARCHED = new Set(['search', 'filters', 'results']);
 
+/**
+ * A layout's text without its maps' views (vue=: in use, the leading map's, rewritten as it is moved by hand) — the
+ * same screen whatever they are (#follow). @param {ListNode} tree
+ */
+function unviewed(tree) {
+  /** @param {LayoutNode} n @returns {LayoutNode} */
+  const walk = n => n.t === 'list' ? { ...n, kids: n.kids.map(walk) } : n.name === 'map' ? { ...n, params: n.params.filter(p => p.key !== 'vue') } : n;
+  return serialize(/** @type {ListNode} */ (walk(tree)));
+}
+
 /** A layout as text, read and resolved: what the screen shows. @param {string} text @returns {Shown} */
 function show(text) {
   const parsed = parse(text);
@@ -894,7 +904,11 @@ export class GfLayout extends LitElement {
     // Being modified: where « Terminé » goes back to — kept in the entry (a reload, Back, Forward read it back).
     this.#editMark = editing ? sheetMark('gfEditFrom', () => null) : null;
     const next = show(route.spec);
-    const fresh = next.text !== this.#layout.text || next.errors.length !== this.#layout.errors.length;
+    // In use, the same screen but for its maps' views (Back or Forward to an entry of it — a plant or a zone chosen
+    // since, the map moved by hand after): not a step of its own — the view shown now kept, the entry given it.
+    const viewed = !editing && !next.errors.length && !this.#layout.errors.length && next.text !== this.#layout.text
+      && unviewed(next.tree) === unviewed(this.#layout.tree);
+    const fresh = !viewed && (next.text !== this.#layout.text || next.errors.length !== this.#layout.errors.length);
     if (fresh) {
       this.#layout = next;
       this.#raw = decodeSpec(route.spec);
@@ -927,8 +941,9 @@ export class GfLayout extends LitElement {
       }
     }
     this.#namePage();
-    // Written as the app writes it (canonical names, its own order of words), unless it could not be read whole.
-    if (!next.errors.length && fresh) queueMicrotask(() => this.#write('replace'));
+    // Written as the app writes it (canonical names, its own order of words), unless it could not be read whole — the
+    // same screen, with the view shown now.
+    if (!next.errors.length && (fresh || viewed)) queueMicrotask(() => this.#write('replace'));
   }
 
   /** The page named again when the home gives way to a screen, or a screen to the home (a sheet in a cell may name it meanwhile). */
