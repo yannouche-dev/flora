@@ -229,7 +229,7 @@ export class DlObsFilters extends LitElement {
           ${gbif && f.taxon !== 'tous' ? html`<p class="note">${APPLIES.taxon.why}.</p>` : nothing}</div>
         <div class="group"><span class="label">Qualité</span>${this.#grades(f, !inat)}
           ${gbif ? html`<p class="note">${inat ? 'iNaturalist seulement : ' : ''}${APPLIES.qualite.why}.</p>` : nothing}</div>
-        <div class="group"><span class="label">Photo</span>${this.#choices('photos', 'Photo', f.photos)}
+        <div class="group"><span class="label">Observation avec photo</span>${this.#choices('photos', 'Observation avec photo', f.photos)}
           ${gbif && f.photos === 'libre' ? html`<p class="note">${APPLIES.photos.why}.</p>` : nothing}</div>
         <ul class="group">
           <li><label title="Cultivées ou captives (iNaturalist) ; gérées, cultivées, captives ou relâchées (GBIF). Décochées : les plantes sauvages seulement">

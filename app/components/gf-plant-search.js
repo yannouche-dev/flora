@@ -10,7 +10,7 @@ import { voiceAvailable } from '../core/voice.js';
 /** Plant search (top of the results), with a recent-searches menu (shown when focused and empty). */
 export class GfPlantSearch extends LitElement {
   static properties = {
-    /** The search it types in (core/search-channel.js: a free layout's group); none: the app's. */
+    /** The search it types in (core/search-channel.js: a screen's group); none: the app's. */
     channel: { attribute: false },
     _open: { state: true },
     _active: { state: true }

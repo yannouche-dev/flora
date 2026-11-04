@@ -2,7 +2,7 @@
 import { LitElement, html, css, nothing } from 'lit';
 import { href } from '../core/router.js';
 import { collectionsForPlant, formatDistance, listCollections, plantMarkers, spotEvents, updatePlace, withEntry } from '../core/collections.js';
-import { store } from '../core/store.js';
+import { APP } from '../core/search-channel.js';
 import { lastFix, oneFix } from '../core/geo.js';
 import { FRANCE_BOUNDS, WORLD_BOUNDS } from '../core/ign.js';
 import { moduleOn } from '../core/modules.js';
@@ -91,6 +91,11 @@ export class GfSheetMap extends LitElement {
     fill: { type: Boolean, reflect: true },
     /** What the sheet's data asks it to show: a GBIF filter, a point, a plant to compare (map-focus.js). */
     mapFocus: { attribute: false },
+    /**
+     * The search whose results it may be about (« Les résultats »; core/search-channel.js): in a screen, its cell's
+     * group's (gf-plant-detail, from cells.js); none: Flore's.
+     */
+    channel: { attribute: false },
     _spots: { state: true },
     _near: { state: true },
     _compare: { state: true },
@@ -141,12 +146,27 @@ export class GfSheetMap extends LitElement {
   `];
 
   #onChange = () => { this.#loadSpots(); this.#loadCollections(); };
-  /** The results changed (the search, its filters): a map about them follows. */
-  #onStore = () => {
-    const items = store.state.results.items;
-    if (items !== this.#items) { this.#items = items; if (this.config.subject === 'results') this.#loadSpots(); }
+  /** The results changed (the search, its filters): their count (« Les résultats ») follows, a map about them too. */
+  #onResults = () => {
+    const items = this.#search.results.items;
+    if (items === this.#items) return;
+    this.#items = items;
+    this.requestUpdate();
+    if (this.config.subject === 'results') this.#loadSpots();
   };
   /** @type {any} */ #items = null;
+  /** The search it reads: its own (`channel`), else Flore's. */
+  get #search() { return this.channel ?? APP; }
+  /** The search listened to, while it is connected. @type {import('../core/search-channel.js').Channel | null} */
+  #heard = null;
+  /** The search it reads followed (`change`): given after it was made, or changed, the one before let go. */
+  #listen() {
+    const ch = this.isConnected ? this.#search : null;
+    if (ch === this.#heard) return;
+    this.#heard?.removeEventListener('change', this.#onResults);
+    this.#heard = ch;
+    ch?.addEventListener('change', this.#onResults);
+  }
   /** Which plants of a place are shown (the plant, the results', the collection's). @type {(e: any) => boolean} */
   #keep = () => true;
 
@@ -163,6 +183,8 @@ export class GfSheetMap extends LitElement {
     this.fill = false;
     /** @type {import('../core/map-focus.js').SheetFocus} */
     this.mapFocus = noFocus();
+    /** @type {import('../core/search-channel.js').Channel | null} */
+    this.channel = null;
     /** The compared plant's GBIF key: { taxon, key } (key null: not in GBIF; undefined: looking). @type {any} */
     this._compare = null;
     /** Extent of the filtered occurrences, for a place filter: { id, points } (points empty: none). @type {any} */
@@ -178,8 +200,8 @@ export class GfSheetMap extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     spotEvents.addEventListener('change', this.#onChange);
-    store.addEventListener('change', this.#onStore);
-    this.#items = store.state.results.items;
+    this.#listen();
+    this.#items = this.#search.results.items;
     this.#findRegion();
     this.#loadCollections();
   }
@@ -225,12 +247,14 @@ export class GfSheetMap extends LitElement {
   disconnectedCallback() {
     super.disconnectedCallback();
     spotEvents.removeEventListener('change', this.#onChange);
-    store.removeEventListener('change', this.#onStore);
+    this.#listen();
   }
 
   /** @param {Map<string, any>} changed */
   willUpdate(changed) {
     if (changed.has('_near')) this.#findRegion();
+    // Another search (its cell's group given): its results.
+    if (changed.has('channel') && this.isConnected) { this.#listen(); this.#onResults(); }
     if (changed.has('plant')) { this._near = undefined; this.#loadSpots(); this.#loadLookalikes(); }
     else if (changed.has('config') && (changed.get('config')?.subject !== this.config.subject || changed.get('config')?.collection !== this.config.collection)) this.#loadSpots();
     if (changed.has('mapFocus') || changed.has('gbifKey')) this.#loadFocus();
@@ -297,7 +321,7 @@ export class GfSheetMap extends LitElement {
         const isPlace = (/** @type {any} */ x) => x.properties.kind === 'place' && x.geometry;
         /** @type {Set<number>} */ let ids;
         const chosen = c.subject === 'collection' ? all.find(x => x.id === c.collection) : null;
-        if (c.subject === 'results') ids = new Set(store.state.results.items.map((/** @type {any} */ i) => i.id));
+        if (c.subject === 'results') ids = new Set(this.#search.results.items.map((/** @type {any} */ i) => i.id));
         else ids = new Set((chosen?.properties.plants || []).map((/** @type {any} */ e) => e.plantId));
         if (chosen && isPlace(chosen)) { places = [chosen]; this.#keep = () => true; }
         else { places = all.filter(x => isPlace(x) && x.properties.plants.some((/** @type {any} */ e) => ids.has(e.plantId))); this.#keep = e => ids.has(e.plantId); }
@@ -641,7 +665,8 @@ export class GfSheetMap extends LitElement {
     const r = near?.radius || savedRadius();
     const showRadius = c.frame === 'me' || c.near !== 'off';
     const about = this.#aboutPlant;
-    const count = store.state.results.total ?? store.state.results.items.length;
+    const { results } = this.#search;
+    const count = results.total ?? results.items.length;
     const places = this._collections?.filter((/** @type {any} */ x) => x.count) || [];
     return html`<div class="scope" role="group" aria-label="Ce que la carte montre">
       <b>Sujet</b><div class="row">

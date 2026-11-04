@@ -8,6 +8,7 @@
 // in its tab and the list in another. iNaturalist answered here: the zone's observations of 12 plants, each a
 // different number of times (1 to 12), each plant's in a column of its own (the first plant's the westmost).
 import { test, expect, answerAround } from './fixtures.mjs';
+import { screenSearch } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
 
@@ -39,11 +40,8 @@ test.beforeEach(async ({ context, page }) => {
 
 /** A parameter of the state in the address. @param {Page} page @param {string} key */
 const param = (page, key) => page.evaluate(k => new URLSearchParams(location.hash.split('?')[1] || '').get(k), key);
-/** The names the list holds, in its order (the store's results: the list draws only the rows in view). @param {Page} page */
-const names = page => page.evaluate(async () => {
-  const { store } = await import('/app/core/store.js');
-  return store.state.results.items.map((/** @type {any} */ p) => p.scientificName);
-});
+/** The names the list holds, in its order (the screen's search: the list draws only the rows in view). @param {Page} page */
+const names = async page => ((await screenSearch(page))?.items ?? []).map(p => p.scientificName);
 /** What the layout's map shows now, [west, south, east, north] (gf-map bounds). @param {Page} page @returns {Promise<number[]>} */
 const bounds = page => page.locator('dl-map gf-map').evaluate(el => /** @type {any} */ (el).bounds());
 /** The plants with a point in a box (where the route above puts them), sorted. @param {number[]} box */

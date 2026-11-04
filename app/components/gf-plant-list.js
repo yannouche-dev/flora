@@ -79,7 +79,9 @@ export class GfPlantList extends LitElement {
     current: { type: Number },
     /** The plants to list instead of the search's (a free layout's results over the whole flora: results(zone=0)); null: the search's. */
     items: { attribute: false },
-    /** The search it lists (core/search-channel.js: a free layout's group); none: the app's. */
+    /** Whether the plants given (items) answer their search (results(zone=0): until then, never « Aucune plante… »); null: given, they do. */
+    answered: { attribute: false },
+    /** The search it lists (core/search-channel.js: a screen's group); none: the app's. */
     channel: { attribute: false },
     /**
      * Each plant's observations in a free layout's zone, by id (core/observations.js obsNotes: its words): its rows say
@@ -188,6 +190,8 @@ export class GfPlantList extends LitElement {
     this.current = null;
     /** @type {any[] | null} */
     this.items = null;
+    /** @type {boolean | null} */
+    this.answered = null;
     /** @type {import('../core/search-channel.js').Channel | null} */
     this.channel = null;
     /** @type {Map<number, { n: number, text: string, detail: string, title: string }> | null} */
@@ -307,7 +311,9 @@ export class GfPlantList extends LitElement {
     const columns = this.#columns();
     if (this.grid) this.style.setProperty('--gf-cols', columns.map(k => columnWidth(k, gridView)).join(' '));
     const header = this.grid ? this.#header(columns) : nothing;
-    if (status === 'ready' && !items.length) {
+    // Nothing found, said once its search has answered (a screen's, core/search-channel.js answered; Flore's always has;
+    // the plants given, `answered`): until then, an empty list.
+    if (status === 'ready' && !items.length && (this.answered ?? (this.items != null || this.#store.answered))) {
       return html`${header}<p class="empty">${this.empty ?? 'Aucune plante ne correspond à cette recherche.'}</p>`;
     }
 

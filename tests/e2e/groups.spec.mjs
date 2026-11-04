@@ -1,11 +1,11 @@
 // « Écran sur mesure » : groups (registry.js FRAME groupe). The cells of one group share a zone, a plant, a period and a
 // search; another group's are apart — two lists, two maps that do not follow each other on one screen. The first group
 // (a) keeps the address' keys as before; another's are after its letter (b.q=, b.at=, b.p=…). Each search its own
-// (core/search-channel.js), the first the app's (Flore's); reloaded, the same; being modified, a cell's group chosen in
+// (core/search-channel.js), the first's too — never Flore's; reloaded, the same; being modified, a cell's group chosen in
 // « Liens » of its picker, a letter in its colour on each head. iNaturalist answered here: the zone's observations,
 // of 12 plants (their plants the list).
 import { test, expect, answerAround, answerZone } from './fixtures.mjs';
-import { layoutOf, screen } from './app.mjs';
+import { layoutOf, screen, screenSearch } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
 
@@ -25,8 +25,9 @@ test.describe('un grand écran', () => {
     // A letter on each head: two groups.
     await expect(cellOf(page, '0').locator('.cell-group')).toHaveText('A');
     await expect(cellOf(page, '2').locator('.cell-group')).toHaveText('B');
-    // The first: Flore's search (ortie), the whole flora; the second: the 12 plants of its zone, no text.
-    await expect.poll(() => app.state('query.q')).toBe('ortie');
+    // The first: its own search (ortie), the whole flora — Flore's untouched; the second: the 12 plants of its zone, no text.
+    await expect.poll(async () => (await screenSearch(page, 'a'))?.query.q).toBe('ortie');
+    expect(await app.state('query.q')).toBe('');
     await expect.poll(async () => (await names(page, '1')).every(n => /Urtica/.test(n)) && (await names(page, '1')).length > 0).toBe(true);
     await expect.poll(async () => (await names(page, '3')).length).toBe(12);
     // Typed in the second's search: its list and its keys only.
@@ -34,7 +35,9 @@ test.describe('un grand écran', () => {
     await expect.poll(() => param(page, 'b.q')).toBe('allium');
     await expect.poll(async () => (await names(page, '3')).every(n => /^Allium/.test(n))).toBe(true);
     expect(await param(page, 'q')).toBe('ortie');
-    expect(await app.state('query.q')).toBe('ortie');
+    expect((await screenSearch(page, 'a'))?.query.q).toBe('ortie');
+    expect((await screenSearch(page, 'b'))?.query.q).toBe('allium');
+    expect(await app.state('query.q')).toBe('');
     // A plant chosen in the first: its p=, never the second's.
     await cellOf(page, '1').locator('gf-plant-card a.row').first().click();
     await expect.poll(() => param(page, 'p')).not.toBe(null);
@@ -42,7 +45,9 @@ test.describe('un grand écran', () => {
     // Reloaded: the same two searches.
     await page.reload();
     await app.ready();
-    await expect.poll(() => app.state('query.q')).toBe('ortie');
+    await expect.poll(async () => (await screenSearch(page, 'a'))?.query.q).toBe('ortie');
+    await expect.poll(async () => (await screenSearch(page, 'b'))?.query.q).toBe('allium');
+    expect(await app.state('query.q')).toBe('');
     await expect(cellOf(page, '2').locator('gf-plant-search input')).toHaveValue('allium');
     await expect.poll(async () => (await names(page, '3')).every(n => /^Allium/.test(n)) && (await names(page, '3')).length > 0).toBe(true);
   });

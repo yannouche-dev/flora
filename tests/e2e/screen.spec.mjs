@@ -9,12 +9,18 @@
 // component unknown shown and replaced through ✎; emptied: still modified); the title (the bar's heading); the phone
 // preview (390 px: the layout's own tabs; still a phone beside the docked picker; a narrow window: the screen itself);
 // Partager (the link in use); ⋯ (« Tailles par défaut »; closed by the toggle, Back, a touch elsewhere, the focus
-// leaving it); « Terminé » with remarks, « Voir et corriger » (the focus on them); an address that cannot be read; a
-// text still resting in « Avancé » never written once the screen is left; a screen opened after another waits for its
-// own width; the home leaves Flore's search alone; a phone (the toggle's word and the title drawn); no tab of the app
-// lit, on either width.
-import { test, expect, answerAround } from './fixtures.mjs';
-import { editing, layoutOf, screen } from './app.mjs';
+// leaving it — never by a Photos cell drawn meanwhile: it takes no focus); « Ouvrir dans Flore » (⋯, a search cell's
+// head: the screen's search taken to Flore, a new entry; in ⋯ only
+// when the first group has a search to take, « sans la zone » written; two groups, each head's naming its own; during
+// the first steps, Flore itself; a finger's 44 px target); « Filtrer par » kept to each search (group b's: its text
+// given back there only; let go of when the address brings another search); a sheet's map about « Les résultats », its
+// group's; Flore's search never emptied nor changed by a screen's (‹ › on its sheet: its own list); ♥ in a screen's
+// sheet, its search's « Mes plantes » following; a new flora, the screen's search run again (the home: none; a screen opened before the flora: one search per group); « Terminé » with remarks, « Voir et corriger » (the focus on them); an
+// address that cannot be read; a text still resting in « Avancé » never written once the screen is left; a screen
+// opened after another waits for its own width; the home leaves Flore's search alone; a phone (the toggle's word and
+// the title drawn); no tab of the app lit, on either width.
+import { test, expect, answerAround, plantId } from './fixtures.mjs';
+import { editing, layoutOf, screen, screenSearch } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
 
@@ -392,10 +398,13 @@ test.describe('un grand écran', () => {
     expect(await app.state('query.q')).toBe('ortie');
   });
 
-  test('⋯ en usage : « Composer un écran » ; Échap le ferme', async ({ app, page }) => {
+  test('⋯ en usage : « Composer un écran », « Ouvrir dans Flore » (« sans la zone » écrit, un doigt ne voit pas le titre) ; Échap le ferme', async ({ app, page }) => {
     await app.open(screen('[map,results]', AT));
     const item = (await more(page)).getByRole('link', { name: 'Composer un écran' });
     await expect(item).toBeVisible();
+    const flore = page.locator('gf-layout .more-menu .menu').getByRole('button', { name: 'Ouvrir dans Flore' });
+    await expect(flore).toHaveAttribute('title', 'Ouvrir cette recherche dans Flore (sans la zone)');
+    await expect(flore).toHaveText(/^\s*Ouvrir dans Flore\s+sans la zone\s*$/);
     await page.keyboard.press('Escape');
     await expect(item).toBeHidden();
     await expect(page.locator('gf-layout .more-menu summary')).toBeFocused();
@@ -421,12 +430,254 @@ test.describe('un grand écran', () => {
     await more(page);
     await cellAt(page, '0').locator('.cell-head h2').click();
     await expect(open).toHaveCount(0);
-    // The focus leaving it (Tab past its item): closed.
+    // The focus leaving it (Tab past its items): closed.
     await more(page);
     await page.keyboard.press('Tab');
     await expect(open.getByRole('link', { name: 'Composer un écran' })).toBeFocused();
     await page.keyboard.press('Tab');
+    await expect(open.getByRole('button', { name: 'Ouvrir dans Flore' })).toBeFocused();
+    await page.keyboard.press('Tab');
     await expect(open).toHaveCount(0);
+  });
+
+  test('⋯ reste ouvert quand une case Photos se dessine d’elle-même (la plante des Rencontres venue) : elle ne prend pas le focus', async ({ app, page }) => {
+    // The zone's observations held: the deck has no card yet, the photos cell no plant — until ⋯ is open.
+    /** @type {() => void} */
+    let release = () => {};
+    const held = new Promise(done => { release = () => done(undefined); });
+    await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?/, async route => { await held; await route.fallback(); });
+    await app.open(screen('[deck,media]', `${AT}&r=1km`));
+    await expect(cellAt(page, '1').locator('gf-media-viewer')).toHaveCount(0);
+    const menu = await more(page);
+    await expect(menu.getByRole('link', { name: 'Composer un écran' })).toBeVisible();
+    release();
+    // The deck's first card, the current plant: its photos drawn — the focus left where it was, ⋯ open.
+    await expect(cellAt(page, '1').locator('gf-media-viewer')).toHaveAttribute('plant-id', /\d+/);
+    await expect(cellAt(page, '1').locator('gf-media-viewer .bar')).toBeAttached();
+    await expect(page.locator('gf-layout .more-menu summary')).toBeFocused();
+    await expect(menu.getByRole('link', { name: 'Composer un écran' })).toBeVisible();
+  });
+
+  test('⋯ « Ouvrir dans Flore » seulement quand le premier groupe a une recherche à emporter : ni sur un paquet et sa carte, ni la recherche de Flore touchée', async ({ app, page }) => {
+    await app.open('#/?family=Rosaceae');
+    await expect.poll(() => app.state('query.filters.family')).toEqual(['Rosaceae']);
+    // Rencontres' model: a place, a map, the deck, photos, a sheet's block — no search shown, none in the address.
+    await app.go(screen('[[place@22,map],deck,[media,plant.status]]', `${AT}&r=1km`));
+    const menu = await more(page);
+    await expect(menu.getByRole('link', { name: 'Composer un écran' })).toBeVisible();
+    await expect(menu.locator('[data-act="flore"]')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    // Its search in the address (a link): offered, without the zone.
+    await app.go(screen('[[place@22,map],deck,[media,plant.status]]', `${AT}&r=1km&q=ortie`));
+    await expect((await more(page)).locator('[data-act="flore"]')).toHaveText(/Ouvrir dans Flore\s+sans la zone/);
+    await page.keyboard.press('Escape');
+    // A search cell of group b only: group a has none to take; that cell's head takes b's.
+    await app.go(screen('[map,search(groupe=b)]', `${AT}&b.q=allium`));
+    await expect((await more(page)).locator('[data-act="flore"]')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    await expect(cellAt(page, '1').locator('.cell-acts [data-act="flore"]')).toHaveCount(1);
+    // A results cell, no zone: offered, nothing more said.
+    await app.go(screen('[results,plant]', 'q=ortie'));
+    await expect((await more(page)).locator('[data-act="flore"]')).toHaveText(/^\s*Ouvrir dans Flore\s*$/);
+    expect(await app.state('query.filters.family')).toEqual(['Rosaceae']);
+  });
+
+  test('« Ouvrir dans Flore » : la recherche de l’écran dans Flore, une nouvelle entrée — son texte, ses filtres, son tri sans « Plus observées », ni la zone ni la plante ; celle d’une case Recherche, de son groupe', async ({ app, page }) => {
+    await app.open('#/?family=Rosaceae');
+    await app.go(screen('[map(r=1km),search,plant]', `${AT}&p=${plantId('Urtica dioica')}&q=ortie&sort=obs`));
+    await expect.poll(async () => (await screenSearch(page))?.query).toMatchObject({ q: 'ortie', sort: 'obs' });
+    expect(await app.state('query.filters.family')).toEqual(['Rosaceae']);
+    // The search cell's head has one too (its group's search); the other cells, none.
+    await expect(cellAt(page, '1').locator('.cell-acts [data-act="flore"]')).toHaveAttribute('aria-label', 'Ouvrir dans Flore');
+    await expect(page.locator('gf-layout section.cell [data-act="flore"]')).toHaveCount(1);
+    const d0 = await depthOf(page);
+    await (await more(page)).getByRole('button', { name: 'Ouvrir dans Flore' }).click();
+    await expect.poll(() => hash(page)).toBe('#/?q=ortie');
+    expect(await depthOf(page)).toBe(d0 + 1);
+    await expect.poll(() => app.state('query.q')).toBe('ortie');
+    expect([await app.state('query.filters.family'), await app.state('query.sort')]).toEqual([[], '']);
+    await expect(page.getByRole('combobox', { name: 'Rechercher une plante' })).toHaveValue('ortie');
+    // Back: the screen as it was.
+    await page.goBack();
+    await expect.poll(() => param(page, 'sort')).toBe('obs');
+    expect(await param(page, 'p')).toBe(String(plantId('Urtica dioica')));
+    // A search cell's head: its group's search (b), « Plus observées » the other way round dropped too; being modified, none.
+    await app.go(screen('[search,search(groupe=b)]', 'q=ortie&b.q=allium&b.family=Amaryllidaceae&b.sort=-obs'));
+    await expect.poll(async () => (await screenSearch(page, 'b'))?.query.q).toBe('allium');
+    await toggle(page).click();
+    await expect(page.locator('gf-layout section.cell [data-act="flore"]')).toHaveCount(0);
+    await toggle(page).click();
+    // Two groups: each head's names its own (A, B) for a screen reader.
+    await expect(cellAt(page, '0').locator('.cell-acts [data-act="flore"]')).toHaveAttribute('aria-label', 'Ouvrir dans Flore : la recherche du groupe A');
+    await expect(cellAt(page, '1').locator('.cell-acts [data-act="flore"]')).toHaveAttribute('aria-label', 'Ouvrir dans Flore : la recherche du groupe B');
+    await cellAt(page, '1').getByRole('button', { name: 'Ouvrir dans Flore : la recherche du groupe B' }).click();
+    await expect.poll(() => hash(page)).toBe('#/?q=allium&family=Amaryllidaceae');
+    await expect.poll(() => app.state('query.filters.family')).toEqual(['Amaryllidaceae']);
+  });
+
+  test('« Ouvrir dans Flore » pendant les premiers pas, rien de cherché : Flore, jamais Découvrir — son onglet vient', async ({ app, page }) => {
+    await page.addInitScript(() => localStorage.setItem('geoflora.discover', JSON.stringify({ done: false, unlocked: [] })));
+    await app.open(screen('[search,results]'));
+    await expect.poll(async () => (await screenSearch(page))?.total).toBeGreaterThan(0);
+    await cellAt(page, '0').locator('.cell-acts [data-act="flore"]').click();
+    await expect.poll(() => hash(page)).toBe('#/');
+    await expect(page.locator('gf-flora')).toBeVisible();
+    await expect(page.locator('gf-launcher[page]')).toHaveCount(0);
+    await expect(page.locator('gf-app nav.tabs').getByRole('link', { name: 'Flore', exact: true })).toBeVisible();
+  });
+
+  test('« Filtrer par » dans le groupe b : les autres suggestions restent, le filtre retiré à la main rend son texte — à b seul, ni au groupe a ni à Flore', async ({ app, page }) => {
+    await app.open('#/?q=rosa');
+    await app.go(screen('[search,search(groupe=b)]', 'b.q=urtica'));
+    await expect.poll(async () => (await screenSearch(page, 'b'))?.query.q).toBe('urtica');
+    const a = cellAt(page, '0').locator('gf-results-bar'), b = cellAt(page, '1').locator('gf-results-bar');
+    await b.getByRole('button', { name: /^Urtica · genre/ }).click();
+    await expect.poll(() => param(page, 'b.genus')).toBe('Urtica');
+    expect(await param(page, 'b.q')).toBe(null);
+    // Kept in b: the one chosen on, the others still offered; never in a's, nor in Flore's.
+    await expect(b.getByRole('button', { name: /^Urtica · genre/ })).toHaveAttribute('aria-pressed', 'true');
+    await expect(b.getByRole('button', { name: /^Urticaceae · famille/ })).toBeVisible();
+    await expect(a.locator('.suggestions')).toHaveCount(0);
+    // Its ✕: the text back in b.
+    await b.getByRole('button', { name: 'Retirer le filtre Genre : Urtica' }).click();
+    await expect.poll(() => param(page, 'b.q')).toBe('urtica');
+    expect(await param(page, 'b.genus')).toBe(null);
+    await expect(b.getByRole('combobox', { name: 'Rechercher une plante' })).toHaveValue('urtica');
+    expect([(await screenSearch(page, 'a'))?.query.q, await param(page, 'q')]).toEqual(['', null]);
+    expect(await app.state('query.q')).toBe('rosa');
+    // Chosen again, then another search from the address (a link taken just after): b lets go of the suggestions kept —
+    // none offered, and its ✕ gives no text back.
+    await b.getByRole('button', { name: /^Urtica · genre/ }).click();
+    await expect.poll(() => param(page, 'b.genus')).toBe('Urtica');
+    await app.go(screen('[search,search(groupe=b)]', 'b.genus=Urtica&b.status=P'));
+    await expect.poll(async () => (await screenSearch(page, 'b'))?.query.filters.status).toEqual(['P']);
+    await expect(b.getByRole('button', { name: 'Retirer le filtre Genre : Urtica' })).toBeVisible();
+    await expect(b.locator('.suggestions')).toHaveCount(0);
+    await b.getByRole('button', { name: 'Retirer le filtre Genre : Urtica' }).click();
+    await expect.poll(() => param(page, 'b.genus')).toBe(null);
+    expect([await param(page, 'b.q'), await param(page, 'b.status')]).toEqual([null, 'P']);
+  });
+
+  test('la carte d’une fiche dans un écran : « Les résultats », ceux de la recherche de son groupe — jamais ceux de Flore', async ({ app, page }) => {
+    await app.open('#/?family=Rosaceae');
+    await expect.poll(() => app.state('results.total')).toBeGreaterThan(0);
+    const flore = await app.state('results.total');
+    await app.go(screen('[search,search(groupe=b),plant.map(groupe=b)]', `q=ortie&b.q=allium&b.p=${plantId('Urtica dioica')}`));
+    await expect.poll(async () => (await screenSearch(page, 'b'))?.query.q).toBe('allium');
+    const count = cellAt(page, '2').locator('gf-sheet-map [data-subject="results"] small');
+    const b = /** @type {any} */ (await screenSearch(page, 'b'));
+    expect(b.total).not.toBe(flore);
+    await expect(count).toHaveText(String(b.total));
+    // Its group's search changed (typed in its search cell): it follows; group a's, nor Flore's, never.
+    await cellAt(page, '1').getByRole('combobox', { name: 'Rechercher une plante' }).fill('urtica');
+    await expect.poll(() => param(page, 'b.q')).toBe('urtica');
+    await expect.poll(async () => (await screenSearch(page, 'b'))?.total).not.toBe(b.total);
+    await expect(count).toHaveText(String((await screenSearch(page, 'b'))?.total));
+    expect([(await screenSearch(page, 'a'))?.query.q, await app.state('results.total')]).toEqual(['ortie', flore]);
+  });
+
+  test('Flore n’est ni vidée ni changée : un écran, sa recherche tapée, puis l’onglet Flore — sa famille, sa liste et ‹ › sur une fiche, les mêmes', async ({ app, page }) => {
+    await app.open('#/?family=Rosaceae');
+    await expect.poll(() => app.state('results.total')).toBeGreaterThan(3);
+    /** The plants Flore lists, in its order. */
+    const listed = () => page.evaluate(async () => (await import('/app/core/store.js')).store.state.results.items.map((/** @type {any} */ p) => p.id));
+    const ids = await listed();
+    await app.go(screen('[search,results]', 'q=ortie'));
+    await expect.poll(async () => (await screenSearch(page))?.query.q).toBe('ortie');
+    await cellAt(page, '0').getByRole('combobox', { name: 'Rechercher une plante' }).fill('chêne');
+    await expect.poll(() => param(page, 'q')).toBe('chêne');
+    await expect.poll(async () => (await screenSearch(page))?.items.map((/** @type {any} */ p) => p.scientificName)).toContain('Quercus robur');
+    await page.locator('gf-app nav.tabs').getByRole('link', { name: 'Flore', exact: true }).click();
+    await expect.poll(() => hash(page)).toBe('#/?family=Rosaceae');
+    expect([await app.state('query.q'), await app.state('query.filters.family'), (await app.state('results.inZone')) ?? null]).toEqual(['', ['Rosaceae'], null]);
+    expect([await app.state('query.sort'), await app.state('results.sort')]).not.toContain('obs');
+    expect(await listed()).toEqual(ids);
+    // A sheet of it: ‹ › walk the same list.
+    await page.locator('gf-flora gf-plant-list gf-plant-card a.row').first().click();
+    await expect.poll(() => hash(page)).toBe(`#/plant/${ids[0]}`);
+    await page.keyboard.press('ArrowRight');
+    await expect.poll(() => hash(page)).toBe(`#/plant/${ids[1]}`);
+    await page.keyboard.press('ArrowLeft');
+    await expect.poll(() => hash(page)).toBe(`#/plant/${ids[0]}`);
+  });
+
+  test('♥ dans la fiche d’un écran : la facette « Mes plantes » de sa recherche suit — cochée, sa liste aussi ; jamais celle de Flore', async ({ app, page }) => {
+    await app.open(screen('[search(filters=1),plant]', `q=ortie&p=${plantId('Urtica dioica')}`));
+    await expect.poll(async () => (await screenSearch(page))?.query.q).toBe('ortie');
+    const heart = cellAt(page, '1').locator('.action-bar button.fav');
+    await heart.click();
+    await expect(heart).toHaveAttribute('aria-pressed', 'true');
+    const favorites = cellAt(page, '0').locator('gf-facet[name="mine"] label', { hasText: 'Favoris' });
+    await expect(favorites.locator('.count')).toHaveText('1');
+    await favorites.click();
+    await expect.poll(() => param(page, 'mine')).not.toBe(null);
+    await expect.poll(async () => (await screenSearch(page))?.total).toBe(1);
+    expect(await app.state('query.filters.mine')).toEqual([]);
+    // Taken out of the favourites: its search follows again.
+    await heart.click();
+    await expect(heart).toHaveAttribute('aria-pressed', 'false');
+    await expect.poll(async () => (await screenSearch(page))?.total).toBe(0);
+    await expect(favorites.locator('.count')).toHaveText('0');
+  });
+
+  test('une nouvelle flore : la recherche de l’écran cherche à nouveau, celle de Flore inchangée ; l’accueil ne cherche rien', async ({ app, page }) => {
+    await app.open('#/?family=Rosaceae');
+    await expect.poll(() => app.state('results.total')).toBeGreaterThan(0);
+    await app.go(screen('[search,results]', 'q=ortie'));
+    await expect.poll(async () => (await screenSearch(page))?.total).toBeGreaterThan(0);
+    // The searches asked of the worker, counted; the screen's answer kept as it is now.
+    await page.evaluate(() => {
+      const w = /** @type {any} */ (window);
+      const layout = /** @type {any} */ (document.querySelector('gf-app')?.shadowRoot?.querySelector('gf-layout'));
+      w.__items = layout.searchOf('a').items;
+      w.__searches = 0;
+      const post = Worker.prototype.postMessage;
+      Worker.prototype.postMessage = function (/** @type {any} */ message, /** @type {any} */ options) {
+        if (message?.type === 'search') w.__searches++;
+        post.call(this, message, options);
+      };
+    });
+    /** A new flora installed (main.js followUpdate: its meta in the store), then a moment for the searches it brings. */
+    const newFlora = () => page.evaluate(async () => {
+      const { store } = await import('/app/core/store.js');
+      store.set({ meta: { ...store.state.meta } });
+      await new Promise(resolve => setTimeout(resolve, 200));
+      return /** @type {any} */ (window).__searches;
+    });
+    expect(await newFlora()).toBe(1);
+    await expect.poll(() => page.evaluate(() => {
+      const layout = /** @type {any} */ (document.querySelector('gf-app')?.shadowRoot?.querySelector('gf-layout'));
+      return layout.searchOf('a').items !== /** @type {any} */ (window).__items && layout.searchOf('a').total > 0;
+    })).toBe(true);
+    expect([await app.state('query.q'), await app.state('query.filters.family')]).toEqual(['', ['Rosaceae']]);
+    // The home: no search of a screen kept, none run for nothing.
+    await app.go('#/layout');
+    await expect(page.getByRole('heading', { level: 1, name: 'Composer un écran' })).toBeVisible();
+    expect(await newFlora()).toBe(1);
+  });
+
+  test('un écran ouvert avant la flore : une seule recherche par groupe, aucune refaite quand la flore arrive', async ({ app, page }) => {
+    // The flora's files answered late: the screen follows its address while it loads (its meta set later, main.js).
+    await page.route(/\/data\/(plants|meta)\.json(\?|$)/, async route => {
+      await new Promise(resolve => setTimeout(resolve, 800));
+      await route.fallback();
+    });
+    // Every search asked of the worker, counted by its text.
+    await page.addInitScript(() => {
+      const w = /** @type {any} */ (window);
+      w.__searches = {};
+      const post = Worker.prototype.postMessage;
+      Worker.prototype.postMessage = function (/** @type {any} */ message, /** @type {any} */ options) {
+        if (message?.type === 'search') w.__searches[message.q] = (w.__searches[message.q] ?? 0) + 1;
+        post.call(this, message, options);
+      };
+    });
+    await app.open('#/layout/[search(list=0),results(list),search(list=0,groupe=b),results(list,groupe=b)]?q=ortie&b.q=allium');
+    await expect.poll(async () => (await screenSearch(page, 'a'))?.total).toBeGreaterThan(0);
+    await expect.poll(async () => (await screenSearch(page, 'b'))?.total).toBeGreaterThan(0);
+    await page.waitForTimeout(300);
+    const searches = await page.evaluate(() => /** @type {any} */ (window).__searches);
+    expect([searches.ortie, searches.allium]).toEqual([1, 1]);
   });
 
   test('un texte encore en frappe dans « Avancé » ne s’écrit pas dans l’adresse de la vue suivante', async ({ app, page }) => {
@@ -517,6 +768,20 @@ test.describe('un téléphone', () => {
     await expect(page.locator('gf-layout .more-menu[open]')).toHaveCount(0);
     expect(await drawn(word)).toBeGreaterThan(30);
     expect(await drawn(title)).toBeGreaterThan(40);
+  });
+
+  test('« Ouvrir dans Flore » dans l’en-tête d’une case Recherche : 44 px sous le doigt, l’en-tête pas plus haut', async ({ app, page }) => {
+    await app.open(screen('[search,results]', 'q=ortie'));
+    await expect.poll(async () => (await screenSearch(page))?.total).toBeGreaterThan(0);
+    const button = cellAt(page, '0').locator('.cell-acts [data-act="flore"]');
+    const b = /** @type {{ x: number, y: number, width: number, height: number }} */ (await button.boundingBox());
+    expect([b.width, b.height]).toEqual([30, 30]);
+    expect((await cellAt(page, '0').locator('.cell-head').boundingBox())?.height).toBeLessThanOrEqual(36);
+    // Its area: 44 px from its border's edge (7 px past it on each side).
+    expect(await button.evaluate(el => { const s = getComputedStyle(el, '::before'); return [s.width, s.height]; })).toEqual(['44px', '44px']);
+    // Touched just beside it (6 px to its left): Flore.
+    await page.touchscreen.tap(b.x - 6, b.y + b.height / 2);
+    await expect.poll(() => hash(page)).toBe('#/?q=ortie');
   });
 });
 

@@ -11,11 +11,13 @@
 //    edge that drags its radius, the address search, « Me localiser », the layers, 2D / 3D, the other background's
 //    thumbnail, the current plant's chip, the period's chips, the count, the legend, the zoom: map-options.js);
 //  - place: the scope alone — « Autour de moi », a commune (gf-place-search), the radius;
-//  - search: Flore's search bar (gf-results-bar: text, sort, filters chosen, « Filtrer par »), its filters (gf-filter-
-//    panel, opened by the funnel) and its list; filters and results: each part alone. They read and write the store's
-//    query, as in Flore; the scope keeps the search to its plants (state.js);
-//  - plant: the plant sheet (gf-plant-detail), whole or one block (plant.wikipedia: its `only`); media: the photos'
-//    viewer (gf-media-viewer). Each shows the current plant;
+//  - search: a search bar as Flore's (gf-results-bar: text, sort, filters chosen, « Filtrer par »), its filters (gf-filter-
+//    panel, opened by the funnel) and its list; filters and results: each part alone. They read and write the search
+//    of their group (its channel, core/search-channel.js: the screen's own, never Flore's); the scope keeps it to its
+//    plants (state.js);
+//  - plant: the plant sheet (gf-plant-detail), whole or one block (plant.wikipedia: its `only`) — its maps about
+//    « Les résultats », those of its group's search; media: the photos' viewer (gf-media-viewer). Each shows the
+//    current plant;
 //  - deck: Rencontres' cards (miniapp/kit/ma-deck.js) for the plants found in the scope, the one on top the current
 //    plant; a heart: a favourite.
 // What is done in a cell with its own controls is kept in the layout (`cell-param` {key: value…}, gf-layout.js: the
@@ -225,7 +227,7 @@ async function namesToTaxa(names) {
 export class DlMap extends LitElement {
   static properties = {
     state: { attribute: false }, params: { attribute: false },
-    /** The search of its group (core/search-channel.js: a layout's group b, c); none: the app's. */
+    /** The search of its group (core/search-channel.js: the screen's own); none: the app's. */
     channel: { attribute: false },
     /** While modified: the map moved there is the view it starts on (vue=). */
     editing: { attribute: false },
@@ -1176,11 +1178,13 @@ export class DlResults extends LitElement {
     const s = this.state;
     if (!s) return nothing;
     const grid = this.grid;
-    // zone=0: the search over the whole flora, whatever the zone (state.js#wholeOf, asked by the layout), said so.
+    // zone=0: the search over the whole flora, whatever the zone (state.js#wholeOf, asked by the layout), said so — its
+    // plants once it answered the search on screen (until then, none and « Aucune plante… » never said; the list stays,
+    // its headers and its focus with it).
     if (this.params.zone === false) {
-      const whole = s.whole;
+      const whole = s.whole, answered = whole?.key === s.wholeFor;
       return html`${s.live.at ? html`<div class="scope" role="note">${icon('globe-europe-africa')}<span>Toute la France : cette case ne suit pas la zone.</span></div>` : nothing}
-        <gf-plant-list ?grid=${grid} .current=${s.live.plant} .items=${whole?.items ?? []} .channel=${this.channel}
+        <gf-plant-list ?grid=${grid} .current=${s.live.plant} .items=${answered ? whole.items : []} .answered=${answered} .channel=${this.channel}
           .lit=${s.hover?.plant ?? null} @plant-hover=${(/** @type {CustomEvent} */ e) => this.#onHover(e)}></gf-plant-list>`;
     }
     const note = s.live.at ? scopeNote(s) : '';
@@ -1268,7 +1272,7 @@ export class DlSearch extends LitElement {
 customElements.define('dl-search', DlSearch);
 
 /**
- * The filters of a layout's search: Flore's (gf-filter-panel), « Observations de la zone » first when its group has a
+ * The filters of a layout's search: Flore's panel (gf-filter-panel), « Observations de la zone » first when its group has a
  * zone (obs-filters.js: where its observations come from, which of them count). @param {LayoutState | null} state
  * @param {import('../core/search-channel.js').Channel | null} channel
  */
@@ -1373,12 +1377,13 @@ export class DlDeck extends LitElement {
 
   /**
    * Whether the deck has cards to show: none without a zone, nor when the zone's plants could not be had, nor when the
-   * zone has none; while they come, not empty. The cards swiped do not count: the deck's end is something to show.
+   * zone has none; while they come — its search not answered yet too —, not empty. The cards swiped do not count: the
+   * deck's end is something to show.
    */
   updated() {
     const s = this.state;
     if (!s) return;
-    const empty = !s.live.at || s.speciesState === 'error' || (s.speciesState === 'ready' && !this._loading && !this.#session.cards.length);
+    const empty = !s.live.at || s.speciesState === 'error' || (s.speciesState === 'ready' && this.#store.answered && !this._loading && !this.#session.cards.length);
     if (empty === this.#empty) return;
     this.#empty = empty;
     this.dispatchEvent(new CustomEvent('cell-empty', { detail: { empty }, bubbles: true, composed: true }));
@@ -1473,7 +1478,8 @@ export class DlDeck extends LitElement {
     }
     const ses = this.#session;
     if (s.speciesState === 'error') return this.#failed(s);
-    if (this._loading && !ses.cards.length) return html`<p class="empty" role="status">Les cartes arrivent…</p>`;
+    // Its search not answered yet: the cards still coming, never the deck's end.
+    if ((this._loading || !this.#store.answered) && !ses.cards.length) return html`<p class="empty" role="status">Les cartes arrivent…</p>`;
     // A source failing, no card from the others (no plant — GBIF's own, often none where iNaturalist's are —, or none
     // the search keeps): said as a failure, never the deck's end (« toutes les plantes du coin »).
     if (s.speciesState === 'ready' && s.failed.length && !ses.cards.length) return this.#failed(s);
@@ -1516,7 +1522,7 @@ customElements.define('dl-deck', DlDeck);
  * What a cell shows: its component's piece, given the state; an unknown component: what is wrong and how to fix it.
  * @param {Resolved} r @param {{ state: LayoutState, view: string, plant: number | null, first: { id: number, name: string } | null,
  *   editing?: boolean, channel?: import('../core/search-channel.js').Channel | null }} ctx  `editing`: the screen being modified; `channel`:
- *   the search of the cell's group (none: the app's)
+ *   the search of the cell's group (its own, never Flore's)
  */
 export function renderCell(r, ctx) {
   if (!r.known) {
@@ -1544,11 +1550,13 @@ export function renderCell(r, ctx) {
   }
   const view = r.params.mode ?? ctx.view;
   if (id === 'media') {
+    // A block of its own among the cells (local): drawn by itself (its plant come), it never takes the focus from where
+    // it is (⋯ open, a search being typed); nothing to close.
     return moduleOn('photos')
-      ? html`<gf-media-viewer plant-id=${plant} presentation=${r.params.style ?? blockStyle(/** @type {any} */ (view), 'media')}></gf-media-viewer>`
+      ? html`<gf-media-viewer local plant-id=${plant} presentation=${r.params.style ?? blockStyle(/** @type {any} */ (view), 'media')}></gf-media-viewer>`
       : html`<p class="placeholder quiet">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`;
   }
   return r.view
-    ? html`<gf-plant-detail embedded subheading only=${r.view.key} plant-id=${plant} view=${view}></gf-plant-detail>`
-    : html`<gf-plant-detail embedded subheading plant-id=${plant} view=${view}></gf-plant-detail>`;
+    ? html`<gf-plant-detail embedded subheading only=${r.view.key} plant-id=${plant} view=${view} .channel=${channel}></gf-plant-detail>`
+    : html`<gf-plant-detail embedded subheading plant-id=${plant} view=${view} .channel=${channel}></gf-plant-detail>`;
 }

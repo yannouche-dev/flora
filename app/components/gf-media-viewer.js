@@ -110,7 +110,7 @@ export class GfMediaViewer extends LitElement {
     startUrl: { attribute: 'start-url' },
     /** In the sheet: a block among the others (the wheel scrolls the sheet). */
     compact: { type: Boolean, reflect: true },
-    /** Stuck to an edge of the plant pane. */
+    /** Stuck to an edge of the plant pane, or a screen's Photos cell (layout/cells.js): never takes the focus, nothing to close. */
     local: { type: Boolean, reflect: true },
     /** Photos first (photos, then observation photos; herbarium sheets last), whatever the sheet chose (Découvrir). */
     preferPhotos: { type: Boolean, attribute: 'prefer-photos' },

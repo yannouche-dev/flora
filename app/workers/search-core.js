@@ -341,7 +341,7 @@ const facetValue = (entry, facet, mine) => facet === 'mine' ? (mine[entry.summar
 const matchesFacet = (value, set) => Array.isArray(value) ? value.some(v => set.has(v)) : set.has(value);
 
 /**
- * `only`: the plants the search is kept to (a free layout's scope: those observed around a place, app/layout), every
+ * `only`: the plants the search is kept to (a screen's scope: those observed around a place, app/layout), every
  * count and facet within them; none: the whole flora. `observed`: each plant's observations there, by id — the sort
  * `obs` (« Plus observées »: the most observed first, then by French name); without them, that sort is the French
  * name's, and said so (`sort`). `counted`: they were given. `within`: those of the part of the zone a map shows —

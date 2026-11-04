@@ -22,7 +22,7 @@ const HEAD = 40;
  */
 export class GfFilterPanel extends LitElement {
   static properties = {
-    /** The search it filters (core/search-channel.js: a free layout's group); none: the app's. */
+    /** The search it filters (core/search-channel.js: a screen's group); none: the app's. */
     channel: { attribute: false },
     /** The headers of the groups slotted before the facets (slot="lead"): the facets' stack after them. */
     lead: { type: Number }
@@ -128,7 +128,7 @@ export class GfFilterPanel extends LitElement {
           { value: 'menacee', label: 'Menacée en France', title: 'Liste rouge nationale : quasi menacée à en danger critique (INPN)', count: count('legal', 'menacee') }
         ]}
       ></gf-facet>
-      <gf-facet name="photo" stack=${lead + 4} label="Photo" .selected=${filters.photo}
+      <gf-facet name="photo" stack=${lead + 4} label="Plante avec photo" .selected=${filters.photo}
         .options=${[
           { value: 'avec', label: 'Avec photo', count: count('photo', 'avec') },
           { value: 'sans', label: 'Sans photo', count: count('photo', 'sans') }

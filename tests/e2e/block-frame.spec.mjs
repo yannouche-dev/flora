@@ -2,12 +2,14 @@
 // none, the content taking the room; tete=simple: its title alone), a title of its own (titre=: its head, its tab on a
 // phone), the actions of its head (agrandir: over the layout, Échap returns; replier: folded to its head, its share to
 // the others; partager: a link to a layout of this cell alone, with the same state, copied), its empty state
-// (vide=masque: a plant block hidden until a plant is chosen), its links (plante=: a plant of its own, whatever the
-// current one; results zone=0: the whole flora whatever the zone; toucher=fiche: a result opens its sheet; toucher=rien:
-// nothing), and the editor's « Cadre » writing them in the address. iNaturalist answered as in free-layout.spec.mjs:
-// 12 plants around.
+// (vide=masque: a plant block hidden until a plant is chosen; results hidden only once its search has answered, none
+// found — a screen's search never answering for another's: a slowed worker, nothing hidden, counted « 0 espèce » nor
+// said empty before its own answer, at a first load, from one screen to the next, through the home; nor a deck hidden or
+// at its end, nor results zone=0 « Aucune plante… », its grid sorted from the keyboard keeping its focus and headers), its links (plante=: a plant of its own, whatever the current one; results zone=0: the whole flora whatever the
+// zone; toucher=fiche: a result opens its sheet; toucher=rien: nothing), and the editor's « Cadre » writing them in the
+// address. iNaturalist answered as in free-layout.spec.mjs: 12 plants around.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
-import { layoutOf, screen } from './app.mjs';
+import { layoutOf, screen, screenSearch } from './app.mjs';
 
 /** @typedef {import('@playwright/test').Page} Page */
 
@@ -38,6 +40,48 @@ const cellOf = (page, comp) => page.locator(`gf-layout section.cell[data-comp="$
 const box = async l => /** @type {{ x: number, y: number, width: number, height: number }} */ (await l.boundingBox());
 /** A screenshot for the report, when asked (SHOTS_DIR). @param {Page} page @param {string} name */
 const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png` }); };
+
+/**
+ * The worker's searches slowed (a phone's: longer than a frame), and, at every frame while the screen's first group
+ * searches « ortie » (from the moment the screen follows its address), what its cells show: a results cell hidden, its
+ * head's count at 0, its list's « Aucune plante… »; a deck hidden, its end (« toutes les plantes du coin »). Returns
+ * what was seen so far. @param {Page} page
+ */
+async function watchOrtie(page) {
+  await page.addInitScript(() => {
+    const w = /** @type {any} */ (window);
+    const post = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (/** @type {any} */ message, /** @type {any} */ options) {
+      if (message?.type === 'search') setTimeout(() => post.call(this, message, options), 400);
+      else post.call(this, message, options);
+    };
+    w.__seen = { hidden: 0, zero: 0, empty: 0, deckHidden: 0, deckEnd: 0 };
+    const watch = () => {
+      const layout = /** @type {any} */ (document.querySelector('gf-app')?.shadowRoot?.querySelector('gf-layout'));
+      if (layout?.shadowRoot && layout.searchOf?.('a')?.query.q === 'ortie') {
+        for (const cell of layout.shadowRoot.querySelectorAll('section.cell[data-comp="results"]')) {
+          if (cell.closest('.part[hidden]')) w.__seen.hidden++;
+          if (/^0 espèce/.test(cell.querySelector('.cell-head .sub')?.textContent?.trim() ?? '')) w.__seen.zero++;
+          if (cell.querySelector('dl-results')?.shadowRoot?.querySelector('gf-plant-list')?.shadowRoot?.querySelector('.empty')) w.__seen.empty++;
+        }
+        for (const cell of layout.shadowRoot.querySelectorAll('section.cell[data-comp="deck"]')) {
+          if (cell.closest('.part[hidden]')) w.__seen.deckHidden++;
+          if (cell.querySelector('dl-deck')?.shadowRoot?.querySelector('ma-deck')?.shadowRoot?.querySelector('.deck-end')) w.__seen.deckEnd++;
+        }
+      }
+      requestAnimationFrame(watch);
+    };
+    watch();
+  });
+  return () => page.evaluate(() => /** @type {any} */ (window).__seen);
+}
+/** Nothing seen (watchOrtie). */
+const NONE = { hidden: 0, zero: 0, empty: 0, deckHidden: 0, deckEnd: 0 };
+/** A results(zone=0) cell's search over the whole flora (state.js#wholeOf): the sort it asks, answered or not. @param {import('@playwright/test').Locator} cell */
+const wholeSearch = cell => cell.locator('dl-results').evaluate(el => {
+  const s = /** @type {any} */ (el).state;
+  return { sort: new URLSearchParams(s.wholeFor.split('?')[1] || '').get('sort'), answered: s.whole?.key === s.wholeFor };
+});
 
 test.describe('un grand écran', () => {
   test.skip(({ isMobile }) => isMobile, 'a wide screen');
@@ -83,6 +127,125 @@ test.describe('un grand écran', () => {
     await expect(wiki).toBeHidden();
   });
 
+  test('results(vide=masque) n’est jamais caché avant sa première réponse : rien n’est dit vide avant que sa recherche ait répondu', async ({ app, page }) => {
+    // From the screen's first frame, every change of its parts: a results cell hidden even once is counted.
+    await page.addInitScript(() => {
+      const w = /** @type {any} */ (window);
+      w.__resultsHidden = 0;
+      const watch = () => {
+        const root = document.querySelector('gf-app')?.shadowRoot?.querySelector('gf-layout')?.shadowRoot;
+        if (!root) { requestAnimationFrame(watch); return; }
+        const check = () => { for (const part of root.querySelectorAll('.part[hidden]')) if (part.querySelector('section.cell[data-comp="results"]')) w.__resultsHidden++; };
+        new MutationObserver(check).observe(root, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden'] });
+        w.__watching = true;
+        check();
+      };
+      watch();
+    });
+    await app.open('#/layout/[results(list,vide=masque),plant.calendar]?q=ortie');
+    await expect.poll(() => page.evaluate(() => /** @type {any} */ (window).__watching)).toBe(true);
+    await expect(cellOf(page, 'results').locator('gf-plant-card a.row').first()).toBeVisible();
+    expect((await screenSearch(page))?.total).toBeGreaterThan(0);
+    expect(await page.evaluate(() => /** @type {any} */ (window).__resultsHidden)).toBe(0);
+    // Nothing found, once answered: hidden, its share to the other.
+    await page.evaluate(() => { location.hash = '#/layout/[results(list,vide=masque),plant.calendar]?q=zzzz'; });
+    await expect(cellOf(page, 'results')).toBeHidden();
+  });
+
+  test('la recherche d’un écran ne répond jamais pour une autre : rien de caché, de compté « 0 espèce » ni de dit vide avant sa propre réponse — au premier chargement, d’un écran à l’autre, par l’accueil', async ({ app, page }) => {
+    const seen = await watchOrtie(page);
+    const listed = () => expect(cellOf(page, 'results').locator('gf-plant-card a.row').first()).toBeVisible();
+    // Its first load: the flora ready, its search not answered yet.
+    await app.open('#/layout/[results(list,vide=masque),plant.calendar]?q=ortie');
+    await listed();
+    expect(await seen()).toEqual(NONE);
+    // After a screen that found nothing (hidden there): another screen, another search.
+    await app.go('#/layout/[results(list,vide=masque),plant.calendar]?q=zzzz');
+    await expect(cellOf(page, 'results')).toBeHidden();
+    await app.go('#/layout/[plant.calendar,results(list,vide=masque)]?q=ortie');
+    await listed();
+    expect(await seen()).toEqual(NONE);
+    // The same through the home.
+    await app.go('#/layout/[results(list,vide=masque),plant.calendar]?q=zzzz');
+    await expect(cellOf(page, 'results')).toBeHidden();
+    await app.go('#/layout');
+    await expect(page.getByRole('heading', { level: 1, name: 'Composer un écran' })).toBeVisible();
+    await app.go('#/layout/[results(list,vide=masque),plant.calendar]?q=ortie');
+    await listed();
+    expect(await seen()).toEqual(NONE);
+    expect(await cellOf(page, 'results').locator('.cell-head .sub').textContent()).toMatch(/^\d+ espèces?$/);
+  });
+
+  test('deck(vide=masque) n’est jamais caché ni au bout de ses cartes avant la réponse de sa recherche — au premier chargement, d’un écran à l’autre, par l’accueil', async ({ app, page }) => {
+    const seen = await watchOrtie(page);
+    const deck = cellOf(page, 'deck');
+    const dealt = () => expect(deck.locator('ma-deck .swipe-card.top')).toBeVisible();
+    // Its first load: the flora ready, its search not answered yet.
+    await app.open(`#/layout/[deck(vide=masque),plant.status]?${AT}&r=1km&q=ortie`);
+    await dealt();
+    expect(await seen()).toEqual(NONE);
+    // After a screen whose deck had no card (hidden there): another screen, another search.
+    await app.go(`#/layout/[deck(vide=masque),plant.status]?${AT}&r=1km&q=zzzz`);
+    await expect(deck).toBeHidden();
+    await app.go(`#/layout/[plant.status,deck(vide=masque)]?${AT}&r=1km&q=ortie`);
+    await dealt();
+    expect(await seen()).toEqual(NONE);
+    // The same through the home.
+    await app.go(`#/layout/[deck(vide=masque),plant.status]?${AT}&r=1km&q=zzzz`);
+    await expect(deck).toBeHidden();
+    await app.go('#/layout');
+    await expect(page.getByRole('heading', { level: 1, name: 'Composer un écran' })).toBeVisible();
+    await app.go(`#/layout/[deck(vide=masque),plant.status]?${AT}&r=1km&q=ortie`);
+    await dealt();
+    expect(await seen()).toEqual(NONE);
+  });
+
+  test('results(zone=0) ne dit jamais « Aucune plante… » avant la réponse de sa recherche sur toute la flore — au premier chargement, d’un écran à l’autre, par l’accueil', async ({ app, page }) => {
+    const seen = await watchOrtie(page);
+    const whole = cellOf(page, 'results');
+    const listed = () => expect(whole.locator('gf-plant-card a.row').first()).toBeVisible();
+    // Its first load: the flora ready, its search over the whole flora not answered yet.
+    await app.open(`#/layout/[results(list,zone=0,vide=masque),plant.calendar]?${AT}&q=ortie`);
+    await listed();
+    expect(await seen()).toEqual(NONE);
+    // After a screen that found nothing (hidden there): another screen, another search.
+    await app.go(`#/layout/[results(list,zone=0,vide=masque),plant.calendar]?${AT}&q=zzzz`);
+    await expect(whole).toBeHidden();
+    await app.go(`#/layout/[plant.calendar,results(list,zone=0,vide=masque)]?${AT}&q=ortie`);
+    await listed();
+    expect(await seen()).toEqual(NONE);
+    // The same through the home.
+    await app.go(`#/layout/[results(list,zone=0,vide=masque),plant.calendar]?${AT}&q=zzzz`);
+    await expect(whole).toBeHidden();
+    await app.go('#/layout');
+    await expect(page.getByRole('heading', { level: 1, name: 'Composer un écran' })).toBeVisible();
+    await app.go(`#/layout/[results(list,zone=0,vide=masque),plant.calendar]?${AT}&q=ortie`);
+    await listed();
+    expect(await seen()).toEqual(NONE);
+    expect(await whole.locator('.cell-head .sub').textContent()).toMatch(/^\d+ espèces? · toute la France$/);
+  });
+
+  test('results(grid,zone=0) trié au clavier : le focus reste sur son bouton, la grille garde ses en-têtes pendant la réponse de sa recherche', async ({ app, page }) => {
+    const seen = await watchOrtie(page);
+    await app.open(`#/layout/[results(grid,zone=0)]?${AT}&q=ortie`);
+    const whole = cellOf(page, 'results'), list = whole.locator('gf-plant-list');
+    await expect(list.locator('gf-plant-card').first()).toBeVisible();
+    const head = list.locator('.head[role="row"]'), sort = head.locator('button.sort').first();
+    await expect(sort).toHaveText('Photo');
+    await sort.focus();
+    await sort.press('Enter');
+    // Its search over the whole flora asked again, sorted (the worker slowed): the button keeps the focus, the grid its headers.
+    await expect.poll(async () => (await wholeSearch(whole)).sort).toBe('photo');
+    await expect(sort).toBeFocused();
+    await expect(head).toBeVisible();
+    // Answered: the same, its rows back, sorted.
+    await expect.poll(async () => (await wholeSearch(whole)).answered).toBe(true);
+    await expect(list.locator('gf-plant-card').first()).toBeVisible();
+    await expect(sort).toBeFocused();
+    await expect(head.locator('[role="columnheader"]').first()).toHaveAttribute('aria-sort', 'ascending');
+    expect(await seen()).toEqual(NONE);
+  });
+
   test('plante=<id> : un bloc à sa plante, quelle que soit la plante courante', async ({ app, page }) => {
     const ortie = plantId(ORTIE), ail = plantId(AIL);
     await app.open(`#/layout/[results(list),plant.status(plante=${ail}),plant.calendar]?p=${ortie}&q=allium`);
@@ -103,7 +266,7 @@ test.describe('un grand écran', () => {
 
   test('zone=0 : des résultats sur toute la France, à côté d’une recherche gardée à la zone', async ({ app, page }) => {
     await app.open(`#/layout/[place(r=1km),search(list=0),results(list,france)]?${AT}`);
-    await expect.poll(() => app.state('results.total')).toBe(12);
+    await expect.poll(async () => (await screenSearch(page))?.total).toBe(12);
     await expect(cellOf(page, 'search').locator('.sub')).toHaveText('12 espèces');
     const whole = cellOf(page, 'results');
     await expect(whole.locator('.sub')).toHaveText('300 espèces · toute la France');

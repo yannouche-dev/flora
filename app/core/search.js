@@ -81,33 +81,20 @@ export async function plantFromWorker(id) {
 let searchRun = 0;
 
 /**
- * The plants the search is kept to: a free layout's scope (app/layout/state.js: the plants observed around its place),
- * set while it is on screen and taken off when it goes; null: the whole flora. @type {number[] | null}
- */
-let scope = null;
-/** What comes with the scope: each plant's observations in it (the sort « Plus observées »), those a map shows of it. @type {ScopeExtra} */
-let scopeExtra = {};
-
-/**
  * @typedef {{ observed?: Record<number, number> | null, within?: number[] | null }} ScopeExtra
- *   `observed`: each plant's observations in the zone, by id (workers/search-core.js: the sort `obs`); `within`: the
- *   plants of the part of the zone a map shows (the results kept to them, the zone's said apart: `inZone`)
+ *   what comes with the plants a search is kept to (searchIn: a screen's zone): `observed`, each plant's observations
+ *   in the zone, by id (workers/search-core.js: the sort `obs`); `within`, the plants of the part of the zone a map
+ *   shows (the results kept to them, the zone's said apart: `inZone`)
  */
 
-/**
- * Keeps the search to these plants (null: the whole flora), with what comes with them; the next runSearch() follows.
- * @param {Iterable<number> | null} ids @param {ScopeExtra} [extra]
- */
-export function setSearchScope(ids, extra = {}) { scope = ids ? [...ids] : null; scopeExtra = ids ? extra : {}; }
-
-/** Runs the search for the current store query and publishes results, facets and suggestions. */
+/** Runs the search for the current store query (Flore's: over the whole flora, never a screen's zone) and publishes results, facets and suggestions. */
 export async function runSearch() {
   const { q, filters, sort } = store.state.query;
   const run = ++searchRun;
   let response;
   try {
-    response = await call({ type: 'search', q, filters, sort, membership: mineValues(filters), only: scope, observed: scopeExtra.observed ?? null,
-      within: scopeExtra.within ?? null });
+    // Nothing it is kept to (only, observed, within): workers/search-core.js takes none as the whole flora.
+    response = await call({ type: 'search', q, filters, sort, membership: mineValues(filters) });
   } catch (error) {
     console.error(error);
     if (run === searchRun) store.set({ status: 'error', statusText: 'Recherche impossible : ' + /** @type {Error} */ (error).message });
@@ -121,8 +108,8 @@ export async function runSearch() {
 }
 
 /**
- * The search of a query over the whole flora, whatever scope the search on screen is kept to (setSearchScope): a free
- * layout's results cell that leaves the zone (results(zone=0)). The store is left alone.
+ * The search of a query over the whole flora, whatever the screen: a screen's results cell that leaves the zone
+ * (results(zone=0)). The store is left alone.
  * @param {import('./store.js').Query} query @returns {Promise<{ total: number, items: any[] }>}
  */
 export async function searchWhole({ q, filters, sort }) {
@@ -131,9 +118,9 @@ export async function searchWhole({ q, filters, sort }) {
 }
 
 /**
- * The search of a query kept to these plants (null: the whole flora), with what comes with them (setSearchScope), its
+ * The search of a query kept to these plants (null: the whole flora), with what comes with them (ScopeExtra), its
  * whole answer — results, facets, suggestions —, the store left alone: a search of its own beside the app's
- * (core/search-channel.js: a free layout's second group).
+ * (core/search-channel.js: each group of a screen of one's own).
  * @param {import('./store.js').Query} query @param {number[] | null} only @param {ScopeExtra} [extra]
  */
 export async function searchIn({ q, filters, sort }, only, extra = {}) {

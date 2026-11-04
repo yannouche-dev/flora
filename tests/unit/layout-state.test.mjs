@@ -1,7 +1,8 @@
 // A free layout's live state (app/layout/state.js, LayoutState) against an IndexedDB in memory (fake-indexeddb): what it
 // reads of the flora waits for the flora. On a first visit the layout is drawn while the flora downloads; a plant in the
 // address (?p=) read then was « none » for good — its names never read again (the cells' heads empty) — and a plant
-// left before its names came was never read when chosen again.
+// left before its names came was never read when chosen again. Its search is its own (a SearchChannel), never Flore's:
+// its zone keeps it to its plants, the store's query stays as it is, and it goes with the screen (never run again).
 import 'fake-indexeddb/auto';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,6 +13,7 @@ import assert from 'node:assert/strict';
 const db = await import('../../app/core/db.js');
 const { store } = await import('../../app/core/store.js');
 const { LayoutState } = await import('../../app/layout/state.js');
+const { APP, SearchChannel, emptyQuery } = await import('../../app/core/search-channel.js');
 const { setModule } = await import('../../app/core/modules.js');
 
 const AIL = { id: 81541, scientificName: 'Allium ursinum', vernacularNames: ['Ail des ours'] };
@@ -207,4 +209,37 @@ test('une source coupée dans Réglages › Modules : laissée des sources par d
   assert.deepEqual(new LayoutState({ channel }).filters.sources, ['gbif']);
   setModule('gbif', false);
   assert.deepEqual(new LayoutState({ channel }).filters.sources, ['inat', 'gbif']);
+});
+
+test('sans recherche donnée, la sienne (SearchChannel), jamais celle de Flore : sa zone la garde à ses plantes, la recherche de l’app reste telle quelle ; partie, plus gardée ni relancée', async t => {
+  const fetch = globalThis.fetch;
+  t.after(() => { globalThis.fetch = fetch; });
+  const AT = /** @type {[number, number]} */ ([4.81, 45.76]);
+  const row = (/** @type {number} */ id, /** @type {any} */ plant) => ({ id, uri: `https://www.inaturalist.org/observations/${id}`,
+    geojson: { type: 'Point', coordinates: AT }, observed_on: '2026-05-02', place_guess: 'Lyon', taxon: { id: plant.id + 1, name: plant.scientificName, preferred_common_name: null } });
+  globalThis.fetch = /** @type {any} */ (async (/** @type {string} */ input) => new URL(String(input)).host === 'api.inaturalist.org'
+    ? new Response(JSON.stringify({ total_results: 2, results: [row(1, AIL), row(2, ORTIE)] }), { headers: { 'content-type': 'application/json' } })
+    : new Response('', { status: 503 }));
+  // Flore's search, as it was left.
+  const flore = { ...emptyQuery(), filters: { ...emptyQuery().filters, family: ['Rosaceae'] } };
+  store.set({ query: flore });
+  const s = new LayoutState({ radius: 1000 });
+  assert.ok(s.channel instanceof SearchChannel);
+  assert.notEqual(/** @type {any} */ (s.channel), APP);
+  // Another screen's (another group's): apart.
+  assert.notEqual(new LayoutState().channel, s.channel);
+  // Its runs counted (the worker answers nothing here).
+  let runs = 0;
+  s.channel.run = async () => { runs++; };
+  s.set({ at: AT }, 'none');
+  for (let i = 0; i < 100 && (s.speciesState !== 'ready' || !runs); i++) await tick();
+  assert.deepEqual([s.speciesState, s.scoped, [...(s.channel.scope ?? [])].sort((a, b) => a - b)], ['ready', true, [AIL.id, ORTIE.id].sort((a, b) => a - b)]);
+  assert.ok(runs > 0);
+  assert.equal(store.state.query, flore);
+  // Gone with its screen: kept to no zone, never run again.
+  const ran = runs;
+  s.dispose();
+  await tick();
+  assert.deepEqual([s.scoped, s.channel.scope, runs], [false, null, ran]);
+  assert.equal(store.state.query, flore);
 });

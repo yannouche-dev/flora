@@ -18,6 +18,7 @@
 // (their plants the list: state.js), those of 3 within 500 m; and 3 of a plant asked alone.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
 import { swipe } from './touch.mjs';
+import { screenSearch } from './app.mjs';
 import { MODELS } from '../../app/layout/models.js';
 import { parse } from '../../app/layout/grammar.js';
 
@@ -58,6 +59,8 @@ test.beforeEach(async ({ context, page }) => {
 });
 
 const hash = (/** @type {Page} */ page) => page.evaluate(() => decodeURIComponent(location.hash));
+/** How many plants the screen's search found (its first group's: gf-layout searchOf, never Flore's). @param {Page} page */
+const found = page => screenSearch(page).then(s => s?.total);
 /** A parameter of the state in the address. @param {Page} page @param {string} key */
 const param = (page, key) => page.evaluate(k => new URLSearchParams(location.hash.split('?')[1] || '').get(k), key);
 /** A cell, by its component (data-comp: map, search, plant.wikipedia…). @param {Page} page @param {string} comp */
@@ -140,12 +143,12 @@ test.describe('un grand écran', () => {
   test('le câblage : la recherche garde les résultats, la carte leurs points ; un résultat est la plante de toutes les cases et de l’adresse ; Retour', async ({ app, page }) => {
     await app.open(`#/layout/${LAYOUT}?${AT}`);
     // The map shows the zone's 24 observations; the search is kept to their 12 plants.
-    await expect.poll(() => app.state('results.total')).toBe(12);
+    await expect.poll(() => found(page)).toBe(12);
     await expect(cellOf(page, 'search').locator('.sub')).toHaveText('12 espèces');
     await expect(dots(page)).toHaveCount(24);
     // A search: one plant, its points — its two among the zone's; the address says it.
     await page.locator('dl-search gf-plant-search input').fill('ortie');
-    await expect.poll(() => app.state('results.total')).toBe(1);
+    await expect.poll(() => found(page)).toBe(1);
     await expect(dots(page)).toHaveCount(2);
     await expect.poll(() => param(page, 'q')).toBe('ortie');
     // No plant yet: the plant cells say how to choose one.
@@ -171,20 +174,21 @@ test.describe('un grand écran', () => {
     await page.reload();
     await app.ready();
     await expect(cellOf(page, 'plant.wikipedia').locator('gf-plant-detail')).toHaveAttribute('plant-id', String(id));
-    await expect.poll(() => app.state('query.q')).toBe('ortie');
-    await expect.poll(() => app.state('results.total')).toBe(1);
+    await expect.poll(async () => (await screenSearch(page))?.query.q).toBe('ortie');
+    expect(await app.state('query.q')).toBe('');
+    await expect.poll(() => found(page)).toBe(1);
     await expect(page.locator('dl-search gf-plant-search input')).toHaveValue('ortie');
   });
 
   test('la zone : le rayon change, les résultats suivent ; un point de la carte touché : sa plante ; « Toute la France »', async ({ app, page }) => {
     await app.open(`#/layout/[map(r=1km),results,plant.status]?${AT}`);
-    await expect.poll(() => app.state('results.total')).toBe(12);
+    await expect.poll(() => found(page)).toBe(12);
     // 500 m: three plants left (the slider, one step down), the address says it.
     const slider = page.locator('dl-map input[type="range"]');
     await slider.focus();
     await page.keyboard.press('ArrowLeft');
     await expect.poll(() => param(page, 'r')).toBe('500m');
-    await expect.poll(() => app.state('results.total')).toBe(3);
+    await expect.poll(() => found(page)).toBe(3);
     await expect(cellOf(page, 'map').locator('.sub')).toHaveText('500 m autour du point choisi');
     await expect(dots(page)).toHaveCount(6);
     // A point of the map: its plant is the current one, with this observation.
@@ -196,7 +200,7 @@ test.describe('un grand écran', () => {
     // No scope: the whole flora again.
     await page.locator('dl-map').getByRole('button', { name: 'Toute la France (sans zone)' }).click();
     await expect.poll(() => param(page, 'at')).toBe(null);
-    await expect.poll(() => app.state('results.total')).toBe(300);
+    await expect.poll(() => found(page)).toBe(300);
   });
 
   test('les cartes de Rencontres : celle du dessus est la plante de toutes les cases ; un cœur, un favori, et la suivante', async ({ app, page }) => {
@@ -493,7 +497,7 @@ test.describe('le titre et un lieu en mots dans l’adresse', () => {
     const points = () => page.locator('dl-map gf-map').evaluate(m => (/** @type {any} */ (m).area?.points ?? []).map((/** @type {any} */ p) => p.taxonId));
     await app.open(`#/layout/[map(r=1km),results]?${AT}&family=Amaryllidaceae`);
     // The garlic alone, in the list and on the map; only the zone's observations asked.
-    await expect.poll(() => app.state('results.total')).toBe(1);
+    await expect.poll(() => found(page)).toBe(1);
     await expect.poll(points).toEqual([51, 51, 51]);
     expect(asked.every(a => a === 'all')).toBe(true);
   });
@@ -508,7 +512,7 @@ test.describe('le titre et un lieu en mots dans l’adresse', () => {
     await expect(cellOf(page, 'place').locator('.sub')).toHaveText('Lieu introuvable : zzyzx');
     expect(await circle(page)).toBe(null);
     expect([await param(page, 'place'), await param(page, 'at')]).toEqual(['zzyzx', null]);
-    await expect.poll(() => app.state('results.total')).toBe(300);
+    await expect.poll(() => found(page)).toBe(300);
     expect(asked.map(p => p.get('index')).sort()).toEqual(['address', 'poi']);
     // ✕: no place to find any more.
     await page.locator('dl-place').getByRole('button', { name: 'Toute la France (sans zone)' }).click();
@@ -554,7 +558,7 @@ test('les modèles : aucune case ne déborde, ni la page de côté — même la 
       await app.go(`#/layout/${preset.spec}?${AT}&q=allium&photo=avec&family=Amaryllidaceae`);
       await expect(cellOf(page, 'search').locator('gf-results-bar .suggestions')).toHaveCount(await cellOf(page, 'search').count());
       await expect(page.locator('gf-layout section.cell')).toHaveCount(cellsOf(preset.spec));
-      await expect.poll(() => app.state('results.total')).toBeGreaterThan(0);
+      await expect.poll(() => found(page)).toBeGreaterThan(0);
       const tabs = page.locator('gf-layout [role="tablist"] [role="tab"]');
       const panes = Math.max(1, await tabs.count());
       for (let i = 0; i < panes; i++) {
@@ -678,7 +682,7 @@ test.describe('un téléphone', () => {
     await expect(cellOf(page, 'plant.calendar')).toBeVisible();
     await tabs.nth(1).tap();
     // A plant chosen in the search: the tab of its sheet comes, its icon lit a moment.
-    await expect.poll(() => app.state('results.total')).toBe(12);
+    await expect.poll(() => found(page)).toBe(12);
     await page.locator('dl-search gf-plant-card a.row').first().click();
     await expect(tabs.nth(2)).toHaveAttribute('aria-selected', 'true');
     await expect(tabs.nth(2)).toHaveClass(/\bbrought\b/);
@@ -766,7 +770,7 @@ test.describe('un téléphone', () => {
     await expect.poll(() => inSight(page, 0)).toBe(true);
     await expect.poll(scroll).toMatchObject({ left: 0, before: false });
     // A plant chosen in the first column: the sheet's tab, the last, comes into sight, lit.
-    await expect.poll(() => app.state('results.total')).toBe(12);
+    await expect.poll(() => found(page)).toBe(12);
     await page.locator('dl-results gf-plant-card a.row').first().click();
     await expect(tabs.nth(11)).toHaveAttribute('aria-selected', 'true');
     await expect(tabs.nth(11)).toHaveClass(/\bbrought\b/);
