@@ -1178,12 +1178,13 @@ export class DlResults extends LitElement {
     const s = this.state;
     if (!s) return nothing;
     const grid = this.grid;
-    // zone=0: the search over the whole flora, whatever the zone (state.js#wholeOf, asked by the layout), said so.
+    // zone=0: the search over the whole flora, whatever the zone (state.js#wholeOf, asked by the layout), said so — its
+    // list once it answered the search on screen (until then, « Aucune plante… » is never said).
     if (this.params.zone === false) {
       const whole = s.whole;
       return html`${s.live.at ? html`<div class="scope" role="note">${icon('globe-europe-africa')}<span>Toute la France : cette case ne suit pas la zone.</span></div>` : nothing}
-        <gf-plant-list ?grid=${grid} .current=${s.live.plant} .items=${whole?.items ?? []} .channel=${this.channel}
-          .lit=${s.hover?.plant ?? null} @plant-hover=${(/** @type {CustomEvent} */ e) => this.#onHover(e)}></gf-plant-list>`;
+        ${whole?.key === s.wholeFor ? html`<gf-plant-list ?grid=${grid} .current=${s.live.plant} .items=${whole.items} .channel=${this.channel}
+          .lit=${s.hover?.plant ?? null} @plant-hover=${(/** @type {CustomEvent} */ e) => this.#onHover(e)}></gf-plant-list>` : nothing}`;
     }
     const note = s.live.at ? scopeNote(s) : '';
     // Kept to what a map shows of the zone (moved by hand: state.js setView): said, with the way back.
@@ -1375,12 +1376,13 @@ export class DlDeck extends LitElement {
 
   /**
    * Whether the deck has cards to show: none without a zone, nor when the zone's plants could not be had, nor when the
-   * zone has none; while they come, not empty. The cards swiped do not count: the deck's end is something to show.
+   * zone has none; while they come — its search not answered yet too —, not empty. The cards swiped do not count: the
+   * deck's end is something to show.
    */
   updated() {
     const s = this.state;
     if (!s) return;
-    const empty = !s.live.at || s.speciesState === 'error' || (s.speciesState === 'ready' && !this._loading && !this.#session.cards.length);
+    const empty = !s.live.at || s.speciesState === 'error' || (s.speciesState === 'ready' && this.#store.answered && !this._loading && !this.#session.cards.length);
     if (empty === this.#empty) return;
     this.#empty = empty;
     this.dispatchEvent(new CustomEvent('cell-empty', { detail: { empty }, bubbles: true, composed: true }));
@@ -1475,7 +1477,8 @@ export class DlDeck extends LitElement {
     }
     const ses = this.#session;
     if (s.speciesState === 'error') return this.#failed(s);
-    if (this._loading && !ses.cards.length) return html`<p class="empty" role="status">Les cartes arrivent…</p>`;
+    // Its search not answered yet: the cards still coming, never the deck's end.
+    if ((this._loading || !this.#store.answered) && !ses.cards.length) return html`<p class="empty" role="status">Les cartes arrivent…</p>`;
     // A source failing, no card from the others (no plant — GBIF's own, often none where iNaturalist's are —, or none
     // the search keeps): said as a failure, never the deck's end (« toutes les plantes du coin »).
     if (s.speciesState === 'ready' && s.failed.length && !ses.cards.length) return this.#failed(s);

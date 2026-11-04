@@ -555,9 +555,10 @@ export class GfLayout extends LitElement {
 
   /**
    * Every group's search run again, as main.js runs Flore's: « Mes plantes » changed (its facet, its counts), a new
-   * flora. Each stays kept to its zone; one never run (the home's first group) is not searched for nothing.
+   * flora. Each stays kept to its zone; one never run (the home's first group) is not searched for nothing; none
+   * before the flora is ready (a run waits for it: the flora that comes then is the one it searches).
    */
-  #rerun = () => { for (const { channel } of this.#made.values()) if (channel.ran) channel.run(); };
+  #rerun = () => { if (store.state.status !== 'ready') return; for (const { channel } of this.#made.values()) if (channel.ran) channel.run(); };
 
   /** The flora last seen (store.state.meta). @type {any} */
   #meta = null;

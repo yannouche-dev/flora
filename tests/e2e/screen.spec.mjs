@@ -14,7 +14,7 @@
 // the first steps, Flore itself; a finger's 44 px target); « Filtrer par » kept to each search (group b's: its text
 // given back there only; let go of when the address brings another search); a sheet's map about « Les résultats », its
 // group's; Flore's search never emptied nor changed by a screen's (‹ › on its sheet: its own list); ♥ in a screen's
-// sheet, its search's « Mes plantes » following; a new flora, the screen's search run again (the home: none); « Terminé » with remarks, « Voir et corriger » (the focus on them); an
+// sheet, its search's « Mes plantes » following; a new flora, the screen's search run again (the home: none; a screen opened before the flora: one search per group); « Terminé » with remarks, « Voir et corriger » (the focus on them); an
 // address that cannot be read; a text still resting in « Avancé » never written once the screen is left; a screen
 // opened after another waits for its own width; the home leaves Flore's search alone; a phone (the toggle's word and
 // the title drawn); no tab of the app lit, on either width.
@@ -635,6 +635,30 @@ test.describe('un grand écran', () => {
     await app.go('#/layout');
     await expect(page.getByRole('heading', { level: 1, name: 'Composer un écran' })).toBeVisible();
     expect(await newFlora()).toBe(1);
+  });
+
+  test('un écran ouvert avant la flore : une seule recherche par groupe, aucune refaite quand la flore arrive', async ({ app, page }) => {
+    // The flora's files answered late: the screen follows its address while it loads (its meta set later, main.js).
+    await page.route(/\/data\/(plants|meta)\.json(\?|$)/, async route => {
+      await new Promise(resolve => setTimeout(resolve, 800));
+      await route.fallback();
+    });
+    // Every search asked of the worker, counted by its text.
+    await page.addInitScript(() => {
+      const w = /** @type {any} */ (window);
+      w.__searches = {};
+      const post = Worker.prototype.postMessage;
+      Worker.prototype.postMessage = function (/** @type {any} */ message, /** @type {any} */ options) {
+        if (message?.type === 'search') w.__searches[message.q] = (w.__searches[message.q] ?? 0) + 1;
+        post.call(this, message, options);
+      };
+    });
+    await app.open('#/layout/[search(list=0),results(list),search(list=0,groupe=b),results(list,groupe=b)]?q=ortie&b.q=allium');
+    await expect.poll(async () => (await screenSearch(page, 'a'))?.total).toBeGreaterThan(0);
+    await expect.poll(async () => (await screenSearch(page, 'b'))?.total).toBeGreaterThan(0);
+    await page.waitForTimeout(300);
+    const searches = await page.evaluate(() => /** @type {any} */ (window).__searches);
+    expect([searches.ortie, searches.allium]).toEqual([1, 1]);
   });
 
   test('un texte encore en frappe dans « Avancé » ne s’écrit pas dans l’adresse de la vue suivante', async ({ app, page }) => {

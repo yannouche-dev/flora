@@ -4,7 +4,8 @@
 // the others; partager: a link to a layout of this cell alone, with the same state, copied), its empty state
 // (vide=masque: a plant block hidden until a plant is chosen; results hidden only once its search has answered, none
 // found — a screen's search never answering for another's: a slowed worker, nothing hidden, counted « 0 espèce » nor
-// said empty before its own answer, at a first load, from one screen to the next, through the home), its links (plante=: a plant of its own, whatever the current one; results zone=0: the whole flora whatever the
+// said empty before its own answer, at a first load, from one screen to the next, through the home; nor a deck hidden or
+// at its end, nor results zone=0 « Aucune plante… »), its links (plante=: a plant of its own, whatever the current one; results zone=0: the whole flora whatever the
 // zone; toucher=fiche: a result opens its sheet; toucher=rien: nothing), and the editor's « Cadre » writing them in the
 // address. iNaturalist answered as in free-layout.spec.mjs: 12 plants around.
 import { test, expect, plantId, answerAround } from './fixtures.mjs';
@@ -39,6 +40,43 @@ const cellOf = (page, comp) => page.locator(`gf-layout section.cell[data-comp="$
 const box = async l => /** @type {{ x: number, y: number, width: number, height: number }} */ (await l.boundingBox());
 /** A screenshot for the report, when asked (SHOTS_DIR). @param {Page} page @param {string} name */
 const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: `${SHOTS}/${name}.png` }); };
+
+/**
+ * The worker's searches slowed (a phone's: longer than a frame), and, at every frame while the screen's first group
+ * searches « ortie » (from the moment the screen follows its address), what its cells show: a results cell hidden, its
+ * head's count at 0, its list's « Aucune plante… »; a deck hidden, its end (« toutes les plantes du coin »). Returns
+ * what was seen so far. @param {Page} page
+ */
+async function watchOrtie(page) {
+  await page.addInitScript(() => {
+    const w = /** @type {any} */ (window);
+    const post = Worker.prototype.postMessage;
+    Worker.prototype.postMessage = function (/** @type {any} */ message, /** @type {any} */ options) {
+      if (message?.type === 'search') setTimeout(() => post.call(this, message, options), 400);
+      else post.call(this, message, options);
+    };
+    w.__seen = { hidden: 0, zero: 0, empty: 0, deckHidden: 0, deckEnd: 0 };
+    const watch = () => {
+      const layout = /** @type {any} */ (document.querySelector('gf-app')?.shadowRoot?.querySelector('gf-layout'));
+      if (layout?.shadowRoot && layout.searchOf?.('a')?.query.q === 'ortie') {
+        for (const cell of layout.shadowRoot.querySelectorAll('section.cell[data-comp="results"]')) {
+          if (cell.closest('.part[hidden]')) w.__seen.hidden++;
+          if (/^0 espèce/.test(cell.querySelector('.cell-head .sub')?.textContent?.trim() ?? '')) w.__seen.zero++;
+          if (cell.querySelector('dl-results')?.shadowRoot?.querySelector('gf-plant-list')?.shadowRoot?.querySelector('.empty')) w.__seen.empty++;
+        }
+        for (const cell of layout.shadowRoot.querySelectorAll('section.cell[data-comp="deck"]')) {
+          if (cell.closest('.part[hidden]')) w.__seen.deckHidden++;
+          if (cell.querySelector('dl-deck')?.shadowRoot?.querySelector('ma-deck')?.shadowRoot?.querySelector('.deck-end')) w.__seen.deckEnd++;
+        }
+      }
+      requestAnimationFrame(watch);
+    };
+    watch();
+  });
+  return () => page.evaluate(() => /** @type {any} */ (window).__seen);
+}
+/** Nothing seen (watchOrtie). */
+const NONE = { hidden: 0, zero: 0, empty: 0, deckHidden: 0, deckEnd: 0 };
 
 test.describe('un grand écran', () => {
   test.skip(({ isMobile }) => isMobile, 'a wide screen');
@@ -110,43 +148,18 @@ test.describe('un grand écran', () => {
   });
 
   test('la recherche d’un écran ne répond jamais pour une autre : rien de caché, de compté « 0 espèce » ni de dit vide avant sa propre réponse — au premier chargement, d’un écran à l’autre, par l’accueil', async ({ app, page }) => {
-    // The worker's searches slowed (a phone's: longer than a frame), and, at every frame while the screen's first group
-    // searches « ortie » (from the moment the screen follows its address), what its results cells show: hidden, their
-    // head's count at 0, their list's « Aucune plante… ».
-    await page.addInitScript(() => {
-      const w = /** @type {any} */ (window);
-      const post = Worker.prototype.postMessage;
-      Worker.prototype.postMessage = function (/** @type {any} */ message, /** @type {any} */ options) {
-        if (message?.type === 'search') setTimeout(() => post.call(this, message, options), 400);
-        else post.call(this, message, options);
-      };
-      w.__seen = { hidden: 0, zero: 0, empty: 0 };
-      const watch = () => {
-        const layout = /** @type {any} */ (document.querySelector('gf-app')?.shadowRoot?.querySelector('gf-layout'));
-        if (layout?.shadowRoot && layout.searchOf?.('a')?.query.q === 'ortie') {
-          for (const cell of layout.shadowRoot.querySelectorAll('section.cell[data-comp="results"]')) {
-            if (cell.closest('.part[hidden]')) w.__seen.hidden++;
-            if (/^0 espèce/.test(cell.querySelector('.cell-head .sub')?.textContent?.trim() ?? '')) w.__seen.zero++;
-            if (cell.querySelector('dl-results')?.shadowRoot?.querySelector('gf-plant-list')?.shadowRoot?.querySelector('.empty')) w.__seen.empty++;
-          }
-        }
-        requestAnimationFrame(watch);
-      };
-      watch();
-    });
-    const seen = () => page.evaluate(() => /** @type {any} */ (window).__seen);
-    const none = { hidden: 0, zero: 0, empty: 0 };
+    const seen = await watchOrtie(page);
     const listed = () => expect(cellOf(page, 'results').locator('gf-plant-card a.row').first()).toBeVisible();
     // Its first load: the flora ready, its search not answered yet.
     await app.open('#/layout/[results(list,vide=masque),plant.calendar]?q=ortie');
     await listed();
-    expect(await seen()).toEqual(none);
+    expect(await seen()).toEqual(NONE);
     // After a screen that found nothing (hidden there): another screen, another search.
     await app.go('#/layout/[results(list,vide=masque),plant.calendar]?q=zzzz');
     await expect(cellOf(page, 'results')).toBeHidden();
     await app.go('#/layout/[plant.calendar,results(list,vide=masque)]?q=ortie');
     await listed();
-    expect(await seen()).toEqual(none);
+    expect(await seen()).toEqual(NONE);
     // The same through the home.
     await app.go('#/layout/[results(list,vide=masque),plant.calendar]?q=zzzz');
     await expect(cellOf(page, 'results')).toBeHidden();
@@ -154,8 +167,57 @@ test.describe('un grand écran', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Composer un écran' })).toBeVisible();
     await app.go('#/layout/[results(list,vide=masque),plant.calendar]?q=ortie');
     await listed();
-    expect(await seen()).toEqual(none);
+    expect(await seen()).toEqual(NONE);
     expect(await cellOf(page, 'results').locator('.cell-head .sub').textContent()).toMatch(/^\d+ espèces?$/);
+  });
+
+  test('deck(vide=masque) n’est jamais caché ni au bout de ses cartes avant la réponse de sa recherche — au premier chargement, d’un écran à l’autre, par l’accueil', async ({ app, page }) => {
+    const seen = await watchOrtie(page);
+    const deck = cellOf(page, 'deck');
+    const dealt = () => expect(deck.locator('ma-deck .swipe-card.top')).toBeVisible();
+    // Its first load: the flora ready, its search not answered yet.
+    await app.open(`#/layout/[deck(vide=masque),plant.status]?${AT}&r=1km&q=ortie`);
+    await dealt();
+    expect(await seen()).toEqual(NONE);
+    // After a screen whose deck had no card (hidden there): another screen, another search.
+    await app.go(`#/layout/[deck(vide=masque),plant.status]?${AT}&r=1km&q=zzzz`);
+    await expect(deck).toBeHidden();
+    await app.go(`#/layout/[plant.status,deck(vide=masque)]?${AT}&r=1km&q=ortie`);
+    await dealt();
+    expect(await seen()).toEqual(NONE);
+    // The same through the home.
+    await app.go(`#/layout/[deck(vide=masque),plant.status]?${AT}&r=1km&q=zzzz`);
+    await expect(deck).toBeHidden();
+    await app.go('#/layout');
+    await expect(page.getByRole('heading', { level: 1, name: 'Composer un écran' })).toBeVisible();
+    await app.go(`#/layout/[deck(vide=masque),plant.status]?${AT}&r=1km&q=ortie`);
+    await dealt();
+    expect(await seen()).toEqual(NONE);
+  });
+
+  test('results(zone=0) ne dit jamais « Aucune plante… » avant la réponse de sa recherche sur toute la flore — au premier chargement, d’un écran à l’autre, par l’accueil', async ({ app, page }) => {
+    const seen = await watchOrtie(page);
+    const whole = cellOf(page, 'results');
+    const listed = () => expect(whole.locator('gf-plant-card a.row').first()).toBeVisible();
+    // Its first load: the flora ready, its search over the whole flora not answered yet.
+    await app.open(`#/layout/[results(list,zone=0,vide=masque),plant.calendar]?${AT}&q=ortie`);
+    await listed();
+    expect(await seen()).toEqual(NONE);
+    // After a screen that found nothing (hidden there): another screen, another search.
+    await app.go(`#/layout/[results(list,zone=0,vide=masque),plant.calendar]?${AT}&q=zzzz`);
+    await expect(whole).toBeHidden();
+    await app.go(`#/layout/[plant.calendar,results(list,zone=0,vide=masque)]?${AT}&q=ortie`);
+    await listed();
+    expect(await seen()).toEqual(NONE);
+    // The same through the home.
+    await app.go(`#/layout/[results(list,zone=0,vide=masque),plant.calendar]?${AT}&q=zzzz`);
+    await expect(whole).toBeHidden();
+    await app.go('#/layout');
+    await expect(page.getByRole('heading', { level: 1, name: 'Composer un écran' })).toBeVisible();
+    await app.go(`#/layout/[results(list,zone=0,vide=masque),plant.calendar]?${AT}&q=ortie`);
+    await listed();
+    expect(await seen()).toEqual(NONE);
+    expect(await whole.locator('.cell-head .sub').textContent()).toMatch(/^\d+ espèces? · toute la France$/);
   });
 
   test('plante=<id> : un bloc à sa plante, quelle que soit la plante courante', async ({ app, page }) => {
