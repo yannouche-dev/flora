@@ -246,6 +246,9 @@ export class DlMap extends LitElement {
        over it, in use (its zoom, its buttons, its address search, the radius being dragged). */
     gf-map .leaflet-map-pane, gf-map .maplibregl-canvas { transition: opacity 0.2s; }
     :host([updating]) gf-map .leaflet-map-pane, :host([updating]) gf-map .maplibregl-canvas { opacity: 0.55; transition: opacity 0.2s 0.15s; }
+    /* Its count too (« n observations · k espèces »): the old answer's, replaced with it. */
+    .ctl .count { transition: opacity 0.2s; }
+    :host([updating]) .ctl .count { opacity: 0.55; transition: opacity 0.2s 0.15s; }
     .press-hint { flex: none; margin: 6px 8px; box-shadow: none; background: var(--gf-surface-2); }
     /* Under the map's own address search (whose place picked moves the scope too: its point, below). */
     .panel { position: absolute; z-index: 500; left: 8px; top: 60px; width: min(300px, calc(100% - 64px)); display: grid; gap: 6px; padding: 8px 10px; border-radius: 12px;

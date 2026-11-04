@@ -668,7 +668,10 @@ export class LayoutState extends EventTarget {
       // iNaturalist not among the group's sources (GBIF's alone): never asked — none of its observations in the zone.
       this.plantObs = { key, points: [], outside: true };
     } else {
-      this.plantObs = null;
+      // The same plant outside the same circle's plants (another period, other filters): its points kept, dimmed with
+      // the rest, until iNaturalist's answer replaces them — never a map without them meanwhile.
+      const same = key && this.plantObs?.outside && this.plantObs.key.startsWith(id + '@' + this.#circle + ':');
+      if (!same) this.plantObs = null;
       if (id && key) this.#plantAround(id, key);
     }
     if (draw && (had || this.plantObs)) this.#changed();
