@@ -4,7 +4,7 @@
 // that month, their plants the results) — while they come, the map, the list and their counts kept, dimmed (« Mise à
 // jour… »), then replaced together; another circle's map never the old one's points; a map of France and one of the
 // world (portee=) show where the same plants were observed (iNaturalist's tiles, their taxa), the current plant's on
-// top; a plant chosen outside the zone's list still has its observations in the zone (its taxon found by its name); the
+// top — and say what they leave out (without a zone, too many plants: every one; names iNaturalist has not); a plant chosen outside the zone's list still has its observations in the zone (its taxon found by its name); the
 // plant chosen stays chosen when another search no longer finds it (« hors du résultat »), Back takes it away. The
 // zone's filters say which observations, every one by default (no quality grade): the zone's, the current plant's, the
 // tiles of France and the world alike.
@@ -181,6 +181,21 @@ test.describe('un grand écran', () => {
       await expect.poll(async () => (await tiles(i)).map(u => { const q = new URL(u.replace(/\{[xyz]\}/g, '0')).searchParams; return [q.get('quality_grade'), q.get('captive')]; }))
         .toEqual([['research', 'false'], ['research', 'false'], ['research', 'false']]);
     }
+  });
+
+  test('une carte de la France sans zone dit ce qu’elle montre : trop de plantes, toutes montrées ; quelques-unes, chacune par son nom — celles qu’iNaturalist n’a pas, dites', async ({ app, page }) => {
+    await answer(page);
+    // iNaturalist does not know the nettle by its name.
+    await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/taxa\?q=Urtica%20dioica&/, route => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ results: [] }) }));
+    await app.open('#/layout/[map(france),results]');
+    await expect.poll(() => found(page)).toBe(300);
+    const map = mapAt(page, 0);
+    const TOO_MANY = 'Trop de plantes (300) pour cette carte : toutes montrées. Cherchez ou filtrez pour n’en voir que certaines.';
+    await expect.poll(() => mapState(map)).toContain(TOO_MANY);
+    // A few: each found by its name, the nettle not — absent, said; every plant no more.
+    await app.go('#/layout/[map(france),results]?q=ortie');
+    await expect.poll(() => mapState(map)).toContain('1 plante sans équivalent iNaturalist : absente de cette carte.');
+    expect(await mapState(map)).not.toContain(TOO_MANY);
   });
 
   test('les liens en modification : une pastille par lien ; touchée, la case se détache ou se relie (le réglage écrit)', async ({ app, page }) => {

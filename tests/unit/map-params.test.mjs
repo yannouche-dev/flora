@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as G from '../../app/layout/grammar.js';
 import { cellMark, cellName, resolve, resolveTree, withParam } from '../../app/layout/registry.js';
-import { MAP_CONTROLS, MAP_INTENTS, MAP_LANDMARKS, MAP_LAYERS, catalogLayers, defaultControls, inWhen, landmarksText, layersOf, mapControls, opacText, opacitiesOf, overlaysOf, snapRadius, uiMode } from '../../app/layout/map-options.js';
+import { MAP_CONTROLS, MAP_INTENTS, MAP_LANDMARKS, MAP_LAYERS, catalogLayers, defaultControls, inWhen, landmarksText, layersOf, mapControls, opacText, opacitiesOf, overlaysOf, snapRadius, uiMode, wideWords } from '../../app/layout/map-options.js';
 import { CATALOG_ROWS, LANDMARKS } from '../../app/core/map-layers.js';
 import { DEFAULT_OPACITY, defaultOpacity } from '../../app/core/ign-layers.js';
 
@@ -425,4 +425,16 @@ test('la poignée du rayon : aimantée aux crans du curseur à quelques % près,
   assert.equal(snapRadius(40, stops), 100);
   assert.equal(snapRadius(90_000, stops), 50_000);
   assert.equal(snapRadius(48_000, stops), 50_000);
+});
+
+test('une carte de la France ou du monde dit ce qu’elle montre des plantes : toutes quand il y en a trop, les 400 premières de la liste, les noms qu’iNaturalist n’a pas', () => {
+  assert.deepEqual(wideWords({}), { wide: '', cut: '', names: '' });
+  // Without a zone: a few (40 at most) found one by one; more, every plant — said.
+  assert.equal(wideWords({ many: 40 }).wide, '');
+  assert.equal(wideWords({ many: 300 }).wide, 'Trop de plantes (300) pour cette carte : toutes montrées. Cherchez ou filtrez pour n’en voir que certaines.');
+  // With a zone: the first 400 of its list.
+  assert.equal(wideWords({ listed: 400 }).cut, '');
+  assert.equal(wideWords({ listed: 612 }).cut, 'Les 400 premières plantes de la liste sur cette carte (sur 612).');
+  assert.equal(wideWords({ missing: 1 }).names, '1 plante sans équivalent iNaturalist : absente de cette carte.');
+  assert.equal(wideWords({ missing: 3 }).names, '3 plantes sans équivalent iNaturalist : absentes de cette carte.');
 });

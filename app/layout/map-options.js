@@ -144,6 +144,27 @@ export const PLANTAE = 47126;
 /** What a map of France or of the world frames once (portee=): [lon, lat] corners. */
 export const WIDE_FRAMES = { france: [[-5.14, 41.33], [9.56, 51.09]], monde: [[-170, -56], [180, 75]] };
 
+/** A map of France or of the world: the plants of the zone's list it shows at most (their taxa in one tile address). */
+export const WIDE_MAX = 400;
+/** …without a zone: the plants of the search it finds one by one by name at most (more: every plant). */
+export const WIDE_FEW = 40;
+
+/**
+ * What a map of France or of the world says in its « État » of the plants it shows: without a zone, every plant when
+ * the search keeps more than WIDE_FEW and filters by no family nor genus (`many`: how many it keeps); with one, the
+ * first WIDE_MAX of the zone's list (`listed`: its plants iNaturalist knows); the plants iNaturalist has no taxon for,
+ * absent from its tiles (`missing`). '': nothing to say.
+ * @param {{ many?: number, listed?: number, missing?: number }} counts @returns {{ wide: string, cut: string, names: string }}
+ */
+export function wideWords({ many = 0, listed = 0, missing = 0 }) {
+  const n = (/** @type {number} */ v) => v.toLocaleString('fr-FR');
+  return {
+    wide: many > WIDE_FEW ? `Trop de plantes (${n(many)}) pour cette carte : toutes montrées. Cherchez ou filtrez pour n’en voir que certaines.` : '',
+    cut: listed > WIDE_MAX ? `Les ${WIDE_MAX} premières plantes de la liste sur cette carte (sur ${n(listed)}).` : '',
+    names: missing > 0 ? `${n(missing)} plante${missing > 1 ? 's' : ''} sans équivalent iNaturalist : absente${missing > 1 ? 's' : ''} de cette carte.` : ''
+  };
+}
+
 /**
  * A map of France or of the world (portee=): where these plants were observed, iNaturalist's tiles — squares far out
  * (grid, to zoom 9), points closer —, of a period (`when`: core/nearby.js periodQuery), as the zone's filters say

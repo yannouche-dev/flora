@@ -56,7 +56,7 @@ import { loadCatalog } from '../core/ign-catalog.js';
 import { RADII_3D } from '../core/around3d.js';
 import { nearestStop } from '../core/distance.js';
 import { cellIcon, distanceLabel } from './registry.js';
-import { COMPACT_WIDTH, MAP_INTENTS, MAP_LANDMARKS, MAP_LAYERS, WIDE_FRAMES, catalogLayers, inatTiles, inWhen, layersOf, mapControls, opacitiesOf, opacText, overlaysOf, snapRadius, uiMode, viewOf, viewText } from './map-options.js';
+import { COMPACT_WIDTH, MAP_INTENTS, MAP_LANDMARKS, MAP_LAYERS, WIDE_FEW, WIDE_FRAMES, WIDE_MAX, catalogLayers, inatTiles, inWhen, layersOf, mapControls, opacitiesOf, opacText, overlaysOf, snapRadius, uiMode, viewOf, viewText, wideWords } from './map-options.js';
 import { periodQuery, plantOfPoint, taxonIdOf } from '../core/nearby.js';
 import { OBS_DEFAULTS, SOURCES, SOURCE_NAMES, defaultSources, failedText, inatQuery, obsNotes, sourcesText } from '../core/observations.js';
 import { obsId } from './state.js';
@@ -474,33 +474,46 @@ export class DlMap extends LitElement {
 
   /**
    * A map of France or of the world (portee=): the iNaturalist taxa of the plants it shows — the plants found in the
-   * zone (the zone's list, as the search keeps it); without a zone, those the search keeps: its families and genera
-   * when it filters by them, else its plants when they are few (40 at most), each name found once on iNaturalist
-   * (core/nearby.js#taxonIdOf); else every plant (null). undefined: still being found; []: none found.
+   * zone (the zone's list, as the search keeps it: its first WIDE_MAX); without a zone, those the search keeps: its
+   * families and genera when it filters by them, else its plants when they are few (WIDE_FEW at most), each name found
+   * once on iNaturalist (core/nearby.js#taxonIdOf); else every plant (null). undefined: still being found; []: none
+   * found. What it leaves out is counted for its « État » (#wideSaid, map-options.js wideWords).
    * @returns {number[] | null | undefined}
    */
   #wideTaxa() {
     const s = /** @type {LayoutState} */ (this.state), P = this.#p;
     const list = s.species?.list;
+    this.#wideSaid = {};
     if (s.live.at && list) {
       const found = this.#found;
       // iNaturalist's tiles: the plants it knows here (a plant seen by GBIF alone has no taxon of it).
-      return /** @type {number[]} */ ((P.suit ? list.filter(x => found.has(/** @type {number} */ (x.plantId))) : list).map(x => x.taxonId).filter(t => t != null).slice(0, 400));
+      const kept = P.suit ? list.filter(x => found.has(/** @type {number} */ (x.plantId))) : list;
+      const taxa = /** @type {number[]} */ (kept.map(x => x.taxonId).filter(t => t != null));
+      this.#wideSaid = { listed: taxa.length, missing: kept.length - taxa.length };
+      return taxa.slice(0, WIDE_MAX);
     }
     if (!P.suit) return null;
     const st = this.#store.state;
     const facets = [...st.query.filters.family, ...st.query.filters.genus];
-    const few = st.results.total > 0 && st.results.total <= 40 && st.results.items.length === st.results.total;
+    const few = st.results.total > 0 && st.results.total <= WIDE_FEW && st.results.items.length === st.results.total;
     const names = facets.length ? facets : few ? st.results.items.map(i => i.scientificName) : [];
-    if (!names.length) return st.results.total === 0 && st.status === 'ready' && (st.query.q || facets.length) ? [] : null;
+    if (!names.length) {
+      // Every plant: more than a few kept, none by family or genus — said, without a zone (its plants still coming: not yet).
+      if (!s.live.at && st.status === 'ready' && this.#store.answered) this.#wideSaid = { many: st.results.total };
+      return st.results.total === 0 && st.status === 'ready' && (st.query.q || facets.length) ? [] : null;
+    }
     const key = names.join('|');
     if (this.#named?.key !== key) {
-      const named = this.#named = { key, ids: /** @type {number[] | undefined} */ (undefined) };
-      namesToTaxa(names).then(ids => { if (this.#named === named) { named.ids = ids; this.requestUpdate(); } });
+      const named = this.#named = { key, ids: /** @type {number[] | undefined} */ (undefined), missing: 0 };
+      // The plants' names not found on iNaturalist: absent from its tiles, said (a family or a genus not found: not).
+      namesToTaxa(names).then(ids => { if (this.#named === named) { named.ids = ids; named.missing = facets.length ? 0 : names.length - ids.length; this.requestUpdate(); } });
     }
+    this.#wideSaid = { missing: this.#named.missing };
     return this.#named.ids;
   }
-  /** @type {{ key: string, ids: number[] | undefined } | null} */ #named = null;
+  /** @type {{ key: string, ids: number[] | undefined, missing: number } | null} */ #named = null;
+  /** What a map of France or of the world leaves out, as last drawn (map-options.js wideWords). @type {{ many?: number, listed?: number, missing?: number }} */
+  #wideSaid = {};
 
   /** The current plant's iNaturalist taxon (its points over a map of France or the world), found once by its name. */
   get #plantTaxon() {
@@ -857,6 +870,12 @@ export class DlMap extends LitElement {
     const name = obs && s.plantInfo?.id === s.live.plant ? s.plantInfo.name : null;
     map.setStatus('plant', !obs || !name ? '' : !obs.points.length ? `${name} : aucune observation dans la zone`
       : obs.outside ? `${name} : hors des observations de la zone (iNaturalist seul)` : '');
+    // A map of France or of the world: what it shows of the plants, when not those of the list one by one — every plant
+    // (too many to find by name), the zone's list cut, the names iNaturalist has not (#wideTaxa).
+    const wide = wideWords(this.#p.portee === 'zone' ? {} : this.#wideSaid);
+    map.setStatus('wide', wide.wide);
+    map.setStatus('cut', wide.cut);
+    map.setStatus('names', wide.names);
     this.#placeControls();
     // Once the map's own controls are drawn (a frame later: a rebuilt search pill, the 3D map's controls).
     requestAnimationFrame(() => this.#placeControls());
