@@ -18,7 +18,7 @@
 //    nothing moves sideways itself, its neighbour.
 //  - Its groups (a cell's groupe=: a, b, c — each its zone, plant, period and search): a cell talks to its group alone
 //    (the tab a plant brings, the plant its « Liens » chip and its picker fix). Several in the layout, each is seen: its
-//    letter in its colour in the cells' heads, its colour down each cell's edge, a dot of it on each tab of its cells.
+//    letter in its colour in the cells' heads, its colour down each cell's edge, its letter on each tab of its cells.
 //  - In use or being modified (edit=1, the bar's « Modifier ⇄ Terminé »): the same element, the same cells (never
 //    rebuilt: maps stay loaded). Modified, each cell has its tools — its content (✎: the block picker,
 //    gf-block-picker.js, docked on the right; a bottom sheet on a phone), its cross (builder-grid.js: cut in two towards
@@ -177,6 +177,8 @@ export class GfLayout extends LitElement {
   static styles = [ui, gripStyles, screenListStyles, css`
     :host { display: flex; flex-direction: column; min-height: 0; min-width: 0; background: var(--gf-bg); container-type: inline-size;
       --group-a: var(--gf-accent); --group-b: #1d4ed8; --group-c: #6d28d9; }
+    /* Dark: lighter shades, 3:1 at least on a cell and on a tab (the one shown too), their letters dark on them. */
+    @media (prefers-color-scheme: dark) { :host { --group-b: #7ea6ff; --group-c: #b79cff; } }
     /* « Choisir le contenu »: in the head; with a mouse, shown on hover or focus (always on a touch screen). */
     .cell-head .pick { flex: none; width: 30px; height: 30px; min-height: 0; padding: 0; font-size: 0.9rem; }
     .cell-head .pick[aria-expanded='true'] { color: var(--gf-accent); background: var(--gf-accent-soft); }
@@ -262,15 +264,21 @@ export class GfLayout extends LitElement {
       .cell-head .cell-acts .icon-btn::before { content: ''; position: absolute; inset: -8px; }
     }
     /* Its group (several in the layout): its letter in its colour, in its head; a line of that colour down its left
-       edge (at every width, with a head or none); a dot of each group of a column on its tab (narrow). */
+       edge (at every width, with a head or none) — without a head, its letter on the line's top; a letter of each
+       group of a column on its tab (narrow). Never the colour alone: the letter says it. */
     .cell-head .cell-group { flex: none; min-width: 20px; height: 20px; padding: 0 5px; box-sizing: border-box; display: inline-grid; place-items: center;
       border-radius: var(--gf-radius-pill); font-size: 0.7rem; font-weight: 700; color: var(--gf-accent-contrast); background: var(--group-a); }
-    .cell-head .cell-group[data-group='b'] { color: #fff; background: var(--group-b); }
-    .cell-head .cell-group[data-group='c'] { color: #fff; background: var(--group-c); }
+    .cell-head .cell-group[data-group='b'] { background: var(--group-b); }
+    .cell-head .cell-group[data-group='c'] { background: var(--group-c); }
     .cell { position: relative; }
     .cell[data-group]::before { content: ''; position: absolute; inset: 0 auto 0 0; width: 3px; background: var(--group-a); z-index: 5; pointer-events: none; }
     .cell[data-group='b']::before { background: var(--group-b); }
     .cell[data-group='c']::before { background: var(--group-c); }
+    .cell[data-head='non'][data-group]::after { content: attr(data-group); position: absolute; top: 0; left: 0; z-index: 5; pointer-events: none; min-width: 14px; height: 14px;
+      padding: 0 3px; box-sizing: border-box; border-bottom-right-radius: 6px; font: 700 9px/14px var(--gf-font); text-align: center; text-transform: uppercase;
+      color: var(--gf-accent-contrast); background: var(--group-a); }
+    .cell[data-head='non'][data-group='b']::after { background: var(--group-b); }
+    .cell[data-head='non'][data-group='c']::after { background: var(--group-c); }
     /* How a cell is wired (being modified): a chip a link, lit when it follows the others. */
     .cell-head .cell-links { flex: none; display: inline-flex; gap: 2px; }
     .cell-head .link-chip { width: 24px; height: 24px; min-height: 0; padding: 0; display: inline-grid; place-items: center; border-radius: 50%; font-size: 0.72rem;
@@ -292,10 +300,12 @@ export class GfLayout extends LitElement {
     .cell-head .cell-mark::before { content: attr(data-mark); }
     .cell-head .sub { flex: 1; min-width: 0; font-size: 0.8rem; color: var(--gf-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .cell-head .sub i { font-family: var(--gf-font-serif); }
-    .cell-body { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; transition: opacity 0.2s; }
-    /* A new answer of the zone coming (state.js updating): what the cell shows, dimmed until it is replaced — after a
-       moment: a quick one never flashes. A map dims its own (dl-map: the map, never the controls in use over it). */
-    .cell:not([data-comp='map']) > .cell-body[aria-busy='true'] { opacity: 0.55; transition: opacity 0.2s 0.15s; }
+    /* The current plant no longer found by its group's search (state.js outside): a flag of its own after its names. */
+    .cell-head .off { flex: none; padding: 1px 8px; border-radius: var(--gf-radius-pill); font-size: 0.74rem; white-space: nowrap; color: var(--gf-text); background: var(--gf-warn-bg); }
+    /* A new answer of the zone coming (state.js updating): the body busy (aria-busy); each cell dims what the answer
+       replaces — the map its tiles and points, the list its rows, the deck its cards —, never what says the wait nor
+       the controls in use (dl-map, dl-results, dl-deck). */
+    .cell-body { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }
     .cell-body > * { flex: 1; min-height: 0; }
     .cell-body gf-plant-detail { overflow-y: auto; }
     .cell-body .scroll { overflow-y: auto; }
@@ -348,9 +358,11 @@ export class GfLayout extends LitElement {
     /* Two columns that would still look alike (what differs hidden past their three icons): numbered, on the corner. */
     .nth { position: absolute; top: 5px; right: 6px; font: 700 10px/1 var(--gf-font); color: var(--ink); }
     .nth::before { content: attr(data-nth); }
-    /* Its cells' groups (several in the layout): a dot each, in their colours, on the corner opposite the number. */
-    .dots { position: absolute; top: 6px; left: 6px; display: inline-flex; gap: 2px; pointer-events: none; }
-    .dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--group-a); box-shadow: 0 0 0 1px var(--under); }
+    /* Its cells' groups (several in the layout): a letter each, on its colour, on the corner opposite the number. */
+    .dots { position: absolute; top: 4px; left: 4px; display: inline-flex; gap: 2px; pointer-events: none; }
+    .dots i { min-width: 11px; height: 11px; padding: 0 2px; box-sizing: border-box; border-radius: 3px; font: 700 8px/11px var(--gf-font); font-style: normal; text-align: center;
+      text-transform: uppercase; color: var(--gf-accent-contrast); background: var(--group-a); box-shadow: 0 0 0 1px var(--under); }
+    .dots i::before { content: attr(data-group); }
     .dots i[data-group='b'] { background: var(--group-b); }
     .dots i[data-group='c'] { background: var(--group-c); }
     /* Brought by a plant chosen in another tab: lit a moment. */
@@ -480,12 +492,20 @@ export class GfLayout extends LitElement {
       const menu = this.renderRoot?.querySelector('.more-menu[open]');
       if (menu && !e.composedPath().includes(menu)) menu.removeAttribute('open');
     }, { capture: true });
-    // A column's funnel (a results grid): its filter shown, in a search's filters or a filters cell.
-    this.addEventListener('focus-facet', e => { e.stopPropagation(); this.#revealFacet(/** @type {CustomEvent} */ (e).detail.facet); });
-    // ⤢ on a block of a sheet, a photo touched: a cell that shows that block flashes instead of a dialog.
+    // A column's funnel (a results grid): its filter shown, in a search's filters or a filters cell — of its group (a
+    // cell talks only to its group: another group's filters are another search's).
+    this.addEventListener('focus-facet', e => {
+      e.stopPropagation();
+      const from = this.#cellOf(e);
+      this.#revealFacet(/** @type {CustomEvent} */ (e).detail.facet, from ? this.#groupOf(from) : null);
+    });
+    // ⤢ on a block of a sheet, a photo touched: a cell that shows that block flashes instead of a dialog — one of its
+    // group showing the same plant (another group's, or one fixed on another plant, shows another: the dialog then).
     this.addEventListener('open-pane', e => {
-      const key = /** @type {CustomEvent} */ (e).detail?.key;
-      const shown = [...this.#shown.cells].find(([, r]) => r.known && ((r.spec.id === 'plant' && r.view?.key === key) || (key === 'media' && r.spec.id === 'media')));
+      const { key, plantId } = /** @type {CustomEvent} */ (e).detail ?? {};
+      const from = this.#cellOf(e);
+      const shown = [...this.#shown.cells].find(([, r]) => r.known && ((r.spec.id === 'plant' && r.view?.key === key) || (key === 'media' && r.spec.id === 'media'))
+        && (!from || this.#groupOf(r) === this.#groupOf(from)) && (plantId == null || this.#plantOf(r) === plantId));
       if (!shown) return;
       e.preventDefault();
       this.#bring(shown[0]);
@@ -1057,10 +1077,22 @@ export class GfLayout extends LitElement {
     setTimeout(() => { if (this._flash === path) this._flash = null; }, 1300);
   }
 
-  /** @param {string} facet */
-  async #revealFacet(facet) {
-    for (const s of /** @type {NodeListOf<any>} */ (this.renderRoot.querySelectorAll('dl-search'))) if (await s.revealFacet(facet)) return;
-    for (const p of this.renderRoot.querySelectorAll('gf-filter-panel')) if (await revealFacet(p, facet)) return;
+  /**
+   * A facet brought into view: in a search cell's filters, else a filters cell — of that group (null: any).
+   * @param {string} facet @param {string | null} group
+   */
+  async #revealFacet(facet, group) {
+    const keys = [...this.#shown.cells].filter(([, r]) => r.known && (group === null || this.#groupOf(r) === group)).map(([k]) => k);
+    /** @param {string} sel @returns {any[]} */
+    const inCells = sel => keys.flatMap(k => [...this.renderRoot.querySelectorAll(`section.cell[data-cell="${k}"] ${sel}`)]);
+    for (const s of inCells('dl-search')) if (await s.revealFacet(facet)) return;
+    for (const p of inCells('gf-filter-panel')) if (await revealFacet(p, facet)) return;
+  }
+
+  /** The cell an event comes from (its path through the shadows), resolved; none: from outside the cells. @param {Event} e @returns {Resolved | undefined} */
+  #cellOf(e) {
+    const at = /** @type {HTMLElement | undefined} */ (e.composedPath().find(n => n instanceof HTMLElement && n.matches('section.cell[data-cell]')));
+    return at ? this.#shown.cells.get(/** @type {string} */ (at.dataset.cell)) : undefined;
   }
 
   // ── Sizes ────────────────────────────────────────────────────────────────────────────────────────────────
@@ -1318,10 +1350,13 @@ export class GfLayout extends LitElement {
     const sub = !r.known ? 'à corriger'
       : id === 'map' ? scopeWords(s) + (s.updating ? ' · Mise à jour…' : '')
       : id === 'place' ? scopeWords(s)
-      : whole ? (s.whole?.key === s.wholeFor && s.whole ? count(s.whole.total) + ' · toute la France' : '')
+      // (Its count kept with its rows while a new answer comes — another text, another sort —, as the other heads'.)
+      : whole ? (s.whole ? count(s.whole.total) + ' · toute la France' : '')
       : id === 'search' || id === 'results' || id === 'filters' ? (this.#store.state.status === 'ready' && channel.answered
         ? s.updating ? 'Mise à jour…' : count(results.total) + (results.inZone ? ' · dans la vue' : '') : '')
-      : info ? html`${fixed ? html`<span class="pin" title=${`Plante fixée (plante=${fixed}) : cette case ne suit pas la plante courante`}>${icon('pin-angle-fill')}<span class="visually-hidden">Plante fixée :</span></span> ` : nothing}${info.name}${info.name !== info.sci ? html` · <i>${info.sci}</i>` : nothing}${outside ? ' · hors du résultat' : nothing}` : '';
+      : info ? html`${fixed ? html`<span class="pin" title=${`Plante fixée (plante=${fixed}) : cette case ne suit pas la plante courante`}>${icon('pin-angle-fill')}<span class="visually-hidden">Plante fixée :</span></span> ` : nothing}${info.name}${info.name !== info.sci ? html` · <i>${info.sci}</i>` : nothing}` : '';
+    // Said after its names, never cut with them (a phone's narrow head: « Ortie dioïque · Urtica di… », the flag whole).
+    const off = outside && info ? html`<span class="off" title="La plante choisie n’est pas parmi les plantes trouvées : elle reste choisie (Retour l’enlève)"><span class="visually-hidden">· </span>hors du résultat</span>` : nothing;
     // The frame (registry.js#FRAME): its head whole, its title alone, or none (but while editing: the tools are there);
     // the actions of its head; large over the layout, folded to its head, hidden while it has nothing to show.
     const editing = this.editing;
@@ -1344,8 +1379,8 @@ export class GfLayout extends LitElement {
     const many = this.#groups().length > 1;
     const grouped = many && r.known && !r.spec.empty;
     const badge = grouped
-      ? html`<span class="cell-group" data-group=${group} title=${`Groupe ${group.toUpperCase()} : sa zone, sa plante, sa période et sa recherche`}
-          aria-label=${'Groupe ' + group.toUpperCase()}>${group.toUpperCase()}</span>` : nothing;
+      ? html`<span class="cell-group" data-group=${group} role="img" aria-label=${'Groupe ' + group.toUpperCase()}
+          title=${`Groupe ${group.toUpperCase()} : sa zone, sa plante, sa période et sa recherche`}>${group.toUpperCase()}</span>` : nothing;
     // A search cell in use: « Ouvrir dans Flore », its group's search taken there (which one, named when there are several).
     const flore = id === 'search' && !editing && head !== 'non';
     const toFlore = many ? 'Ouvrir dans Flore : la recherche du groupe ' + group.toUpperCase() : 'Ouvrir dans Flore';
@@ -1360,9 +1395,9 @@ export class GfLayout extends LitElement {
           aria-label=${(max ? 'Revenir à l’écran depuis « ' : 'Agrandir « ') + title + ' »'} @click=${() => this.#maximize(max ? null : key)}>${icon(max ? 'fullscreen-exit' : 'arrows-fullscreen')}</button>` : nothing}
       </span>` : nothing;
     return html`<section class="cell ${this._flash === key ? 'flash' : ''} ${max ? 'maxed' : ''} ${folded ? 'folded' : ''} ${picking ? 'picked' : ''}" data-cell=${key} data-comp=${r.known ? r.spec.id + (r.view ? '.' + r.view.key : '') : 'unknown'}
-      data-head=${head} data-group=${grouped ? group : nothing} aria-label=${title}>
+      data-head=${head} data-group=${grouped ? group : nothing} aria-label=${grouped ? `${title} — groupe ${group.toUpperCase()}` : title}>
       ${head === 'non' ? nothing : head === 'simple' ? html`<header class="cell-head"><h2>${title}</h2>${badge}<span class="spacer"></span>${pick}${actions}</header>`
-        : html`<header class="cell-head"><h2>${icon(cellIcon(r))} ${title}${mark ? html`<b class="cell-mark" aria-hidden="true" title=${mark.label} data-mark=${mark.short}></b>` : nothing}</h2><span class="sub">${sub}</span>
+        : html`<header class="cell-head"><h2>${icon(cellIcon(r))} ${title}${mark ? html`<b class="cell-mark" aria-hidden="true" title=${mark.label} data-mark=${mark.short}></b>` : nothing}</h2><span class="sub">${sub}</span>${off}
         ${badge}${links}${views}${pick}${actions}</header>`}
       <div class="cell-body" ?hidden=${folded} aria-busy=${busy ? 'true' : nothing}>${empty ? this.#slot(key) : renderCell(r, { state: s, channel, view: this.#store.state.mode, plant: s.live.plant, first, editing })}
         ${crossed ? this.#cross(path, title) : nothing}</div>
@@ -1441,7 +1476,7 @@ export class GfLayout extends LitElement {
    * (the text of the tab, hidden on a phone's menu, beside the icons where there is room) and shown on hover (title) —
    * and as tab panels, each one's rows one under the other. The tab's only text is its name: the marks, « +n » and a
    * number are drawn by the style (data-…), so the title, the same words, is never read again as a description. Several
-   * groups in the layout: a dot each of its cells' groups, their letters read after its name (« — groupe B », « —
+   * groups in the layout: a letter each of its cells' groups, their letters read after its name (« — groupe B », « —
    * groupes A et B »), in its title too. @param {ListNode} tree
    */
   #tabs(tree) {

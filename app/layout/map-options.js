@@ -150,18 +150,32 @@ export const WIDE_MAX = 400;
 export const WIDE_FEW = 40;
 
 /**
+ * A map of France or of the world over a zone: the iNaturalist taxa of the zone's plants it shows (`kept`: the list,
+ * as the search keeps it), the first WIDE_MAX — and what it says of them (wideWords): how many iNaturalist knows
+ * (`listed`), how many GBIF alone saw in the zone (`gbif`: no iNaturalist taxon of theirs here, absent from its tiles).
+ * @param {{ taxonId?: number | null }[]} kept @returns {{ taxa: number[], said: { listed: number, gbif: number } }}
+ */
+export function zoneTaxa(kept) {
+  const taxa = /** @type {number[]} */ (kept.map(x => x.taxonId).filter(t => t != null));
+  return { taxa: taxa.slice(0, WIDE_MAX), said: { listed: taxa.length, gbif: kept.length - taxa.length } };
+}
+
+/**
  * What a map of France or of the world says in its « État » of the plants it shows: without a zone, every plant when
  * the search keeps more than WIDE_FEW and filters by no family nor genus (`many`: how many it keeps); with one, the
- * first WIDE_MAX of the zone's list (`listed`: its plants iNaturalist knows); the plants iNaturalist has no taxon for,
- * absent from its tiles (`missing`). '': nothing to say.
- * @param {{ many?: number, listed?: number, missing?: number }} counts @returns {{ wide: string, cut: string, names: string }}
+ * first WIDE_MAX of the zone's list (`listed`: its plants iNaturalist knows), those GBIF alone saw there (`gbif`); the
+ * names iNaturalist does not have (`missing`: looked up, not found — never one it did not answer for). All absent from
+ * its tiles. '': nothing to say.
+ * @param {{ many?: number, listed?: number, missing?: number, gbif?: number }} counts @returns {{ wide: string, cut: string, names: string, gbif: string }}
  */
-export function wideWords({ many = 0, listed = 0, missing = 0 }) {
+export function wideWords({ many = 0, listed = 0, missing = 0, gbif = 0 }) {
   const n = (/** @type {number} */ v) => v.toLocaleString('fr-FR');
+  const s = (/** @type {number} */ v) => v > 1 ? 's' : '';
   return {
     wide: many > WIDE_FEW ? `Trop de plantes (${n(many)}) pour cette carte : toutes montrées. Cherchez ou filtrez pour n’en voir que certaines.` : '',
     cut: listed > WIDE_MAX ? `Les ${WIDE_MAX} premières plantes de la liste sur cette carte (sur ${n(listed)}).` : '',
-    names: missing > 0 ? `${n(missing)} plante${missing > 1 ? 's' : ''} sans équivalent iNaturalist : absente${missing > 1 ? 's' : ''} de cette carte.` : ''
+    names: missing > 0 ? `${n(missing)} plante${s(missing)} sans équivalent iNaturalist : absente${s(missing)} de cette carte.` : '',
+    gbif: gbif > 0 ? `${n(gbif)} plante${s(gbif)} vue${s(gbif)} par GBIF seul dans la zone : absente${s(gbif)} de cette carte.` : ''
   };
 }
 

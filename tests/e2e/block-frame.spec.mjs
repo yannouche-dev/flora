@@ -83,7 +83,8 @@ const NONE = { hidden: 0, zero: 0, empty: 0, deckHidden: 0, deckEnd: 0 };
 /**
  * The worker's searches slowed, and, at every frame, what a results(zone=0) cell lists while its search over the whole
  * flora has not answered the one on screen (state.js wholeOf): no row though it had an answer (`bare`), or the nettle's
- * rows while the screen's first group searches « ail » (`foreign`: another screen's). Returns what was seen so far.
+ * rows while the screen's first group searches « ail » (`foreign`: another screen's); its head's count gone while it
+ * has rows (`blank`). Returns what was seen so far.
  * @param {Page} page
  */
 async function watchWhole(page) {
@@ -94,13 +95,15 @@ async function watchWhole(page) {
       if (message?.type === 'search') setTimeout(() => post.call(this, message, options), 400);
       else post.call(this, message, options);
     };
-    w.__whole = { bare: 0, foreign: 0 };
+    w.__whole = { bare: 0, foreign: 0, blank: 0 };
     const watch = () => {
       const layout = /** @type {any} */ (document.querySelector('gf-app')?.shadowRoot?.querySelector('gf-layout'));
       for (const el of layout?.shadowRoot?.querySelectorAll('section.cell[data-comp="results"] dl-results') ?? []) {
         const s = /** @type {any} */ (el).state;
         const cards = [...(el.shadowRoot?.querySelector('gf-plant-list')?.shadowRoot?.querySelectorAll('gf-plant-card') ?? [])];
         if (s?.whole && s.whole.key !== s.wholeFor && !cards.length) w.__whole.bare++;
+        const sub = el.closest('section.cell')?.querySelector('.cell-head .sub')?.textContent?.trim();
+        if (s?.whole && cards.length && !sub) w.__whole.blank++;
         if (layout.searchOf?.('a')?.query.q === 'ail' && cards.some(c => /^Urtica/.test(/** @type {any} */ (c).plant?.scientificName ?? ''))) w.__whole.foreign++;
       }
       requestAnimationFrame(watch);
@@ -306,7 +309,7 @@ test.describe('un grand écran', () => {
     await expect(empty).toHaveCount(0);
   });
 
-  test('results(grid,zone=0) : pendant la réponse d’une autre recherche, ses lignes d’avant restent ; un autre écran ne montre jamais celles du précédent', async ({ app, page }) => {
+  test('results(grid,zone=0) : pendant la réponse d’une autre recherche, ses lignes d’avant restent, son nombre dans l’en-tête aussi ; un autre écran ne montre jamais celles du précédent', async ({ app, page }) => {
     const seen = await watchWhole(page);
     await app.open(`#/layout/[results(grid,zone=0)]?${AT}&q=ortie`);
     const whole = cellOf(page, 'results'), list = whole.locator('gf-plant-list');
@@ -320,7 +323,11 @@ test.describe('un grand écran', () => {
     await app.go(`#/layout/[plant.calendar,results(list,zone=0)]?${AT}&q=ail`);
     await expect.poll(async () => (await wholeSearch(cellOf(page, 'results'))).answered).toBe(true);
     await expect(cellOf(page, 'results').locator('gf-plant-card').first()).toBeVisible();
-    expect(await seen()).toEqual({ bare: 0, foreign: 0 });
+    // Another text (a new answer coming): its rows and its count kept meanwhile.
+    await app.go(`#/layout/[plant.calendar,results(list,zone=0)]?${AT}&q=allium`);
+    await expect.poll(async () => (await wholeSearch(cellOf(page, 'results'))).answered).toBe(true);
+    await expect(cellOf(page, 'results').locator('.cell-head .sub')).toHaveText(/^\d+ espèces? · toute la France$/);
+    expect(await seen()).toEqual({ bare: 0, foreign: 0, blank: 0 });
   });
 
   test('plante=<id> : un bloc à sa plante, quelle que soit la plante courante', async ({ app, page }) => {

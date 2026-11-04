@@ -125,6 +125,11 @@ test('liens : toutes les plantes de la zone (suit=0), la plante courante seule o
   await expect.poll(async () => (await given(page)).highlight).toBe(6);
   await expect.poll(async () => ((await given(page)).points ?? []).map(p => `${p.kind}:${p.taxonId}`).sort())
     .toEqual(['gbif:1000', 'gbif:1000', 'gbif:1000', 'gbif:1000', 'inat:1000', 'inat:1000']);
+  // Its large points those of the sources this map shows (src=), the group's both (sources=): iNaturalist's two, GBIF's four.
+  await app.go(`#/layout/[map(r=1km;src=inat;plante=seule),plant]?${AT}&p=${ortie}&sources=inat,gbif`);
+  await expect.poll(async () => (await given(page)).highlight).toBe(2);
+  await app.go(`#/layout/[map(r=1km;src=gbif;plante=seule),plant]?${AT}&p=${ortie}&sources=inat,gbif`);
+  await expect.poll(async () => (await given(page)).highlight).toBe(4);
   // Not shown: no large points.
   await app.go(`#/layout/[map(r=1km;plante=non),plant]?${AT}&p=${ortie}`);
   await expect.poll(async () => (await given(page)).highlight).toBe(null);

@@ -648,19 +648,30 @@ test.describe('un grand écran', () => {
     await expect(heart).toHaveAttribute('aria-pressed', 'true');
     await expect(whole.locator('gf-plant-card')).toHaveCount(1);
     await expect(whole.locator('.cell-head .sub')).toHaveText('1 espèce · toute la France');
-    // A new flora: asked again, what it lists kept meanwhile.
+    // A new flora: asked again (its answer slowed), what it lists kept meanwhile — at every frame, its row there.
     await page.evaluate(() => {
       const w = /** @type {any} */ (window);
-      w.__searches = 0;
+      Object.assign(w, { __searches: 0, __held: false, __bare: 0 });
       const post = Worker.prototype.postMessage;
       Worker.prototype.postMessage = function (/** @type {any} */ message, /** @type {any} */ options) {
         // The search over the whole flora (core/search.js searchWhole): neither kept to plants nor counting them.
-        if (message?.type === 'search' && !('observed' in message)) w.__searches++;
-        post.call(this, message, options);
+        if (message?.type !== 'search' || 'observed' in message) return post.call(this, message, options);
+        w.__searches++;
+        w.__held = true;
+        setTimeout(() => { post.call(this, message, options); setTimeout(() => { w.__held = false; }, 200); }, 400);
       };
+      const watch = () => {
+        const list = /** @type {any} */ (document.querySelector('gf-app')?.shadowRoot?.querySelector('gf-layout'))?.shadowRoot
+          ?.querySelector('section.cell[data-cell="0"] dl-results')?.shadowRoot?.querySelector('gf-plant-list');
+        if (w.__held && !list?.shadowRoot?.querySelectorAll('gf-plant-card').length) w.__bare++;
+        requestAnimationFrame(watch);
+      };
+      watch();
     });
     await page.evaluate(async () => { const { store } = await import('/app/core/store.js'); store.set({ meta: { ...store.state.meta } }); });
     await expect.poll(() => page.evaluate(() => /** @type {any} */ (window).__searches)).toBe(1);
+    await expect.poll(() => page.evaluate(() => /** @type {any} */ (window).__held)).toBe(false);
+    expect(await page.evaluate(() => /** @type {any} */ (window).__bare)).toBe(0);
     await expect(whole.locator('gf-plant-card')).toHaveCount(1);
   });
 

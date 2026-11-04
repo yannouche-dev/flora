@@ -264,8 +264,9 @@ test('les gros points de la plante choisie : ses observations de la zone — tou
   for (const [i, [q, sci]] of [['ortie', 'Urtica dioica'], ['sureau', 'Sambucus nigra']].entries()) {
     const at = `${LAYOUT}?${AT}&qualite=toutes&q=${q}`;
     await (i ? app.go(at) : app.open(at));
-    // Its row's count (a card's « 3 obs. », the grid's column: its title says it whole).
-    const row = page.locator('dl-search gf-plant-card').first();
+    // Its row's count (a card's « 3 obs. », the grid's column: its title says it whole) — its own row: the search
+    // before's stay until the new answer.
+    const row = page.locator('dl-search gf-plant-card').filter({ has: page.locator(`a.row[href="#/plant/${plantId(sci)}"]`) });
     await expect(row.locator('.obs')).toHaveAttribute('title', /^\d+ observations? dans la zone/);
     const n = Number((await row.locator('.obs').getAttribute('title'))?.match(/^\d+/)?.[0]);
     expect(n).toBe(i ? 2 : 3);
@@ -274,6 +275,19 @@ test('les gros points de la plante choisie : ses observations de la zone — tou
     await expect(big).toHaveCount(n);
   }
   expect(own).toEqual([]);
+});
+
+test('une carte de la France sur la zone : les plantes de la liste qu’iNaturalist y a vues, celles vues par GBIF seul dites absentes — jamais « sans équivalent iNaturalist »', async ({ app, page }) => {
+  await answerZone(page);
+  await answerGbif(page);
+  await app.open(`#/layout/[map,map(france),search]?${AT}`);
+  await expect.poll(async () => (await names(page)).includes('Sambucus nigra')).toBe(true);
+  const zone = page.locator('dl-map').nth(0).locator('gf-map'), france = page.locator('dl-map').nth(1).locator('gf-map');
+  // The elder, seen by GBIF alone in the zone: no iNaturalist taxon of it here, absent from the tiles — said so.
+  await expect.poll(() => mapState(france)).toContain('1 plante vue par GBIF seul dans la zone : absente de cette carte.');
+  expect((await mapState(france)).filter(t => /sans équivalent iNaturalist/.test(t))).toEqual([]);
+  // The zone's map says nothing of it.
+  expect((await mapState(zone)).filter(t => /GBIF seul|sans équivalent|premières plantes/.test(t))).toEqual([]);
 });
 
 test('une source en panne : dite dans la section et sur la carte, l’autre montrée', async ({ app, page }) => {

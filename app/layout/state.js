@@ -334,11 +334,13 @@ export class LayoutState extends EventTarget {
   /**
    * The current plant is a choice, never a filter: chosen, it stays chosen when its group's search no longer finds it
    * (another text, other filters, another zone) — said « hors du résultat » (the map's chip, the plant cells' heads).
-   * Not before the search has answered; the zone's plants (inZone), not only what a map's view keeps.
+   * Not before the search has answered; the zone's plants (inZone), not only what a map's view keeps — nor when the
+   * group's search over the whole flora (a results(zone=0) cell: wholeOf) lists it, the rows shown.
    */
   get outside() {
     const id = this.live.plant, ch = this.channel;
     if (id == null || !ch.answered) return false;
+    if (this.whole?.items.some((/** @type {{ id: number }} */ p) => p.id === id)) return false;
     const results = ch.results;
     return results.inZone ? !results.inZone.includes(id) : !results.items.some((/** @type {{ id: number }} */ p) => p.id === id);
   }
@@ -448,10 +450,12 @@ export class LayoutState extends EventTarget {
 
   /**
    * No zone any more: its search over the whole flora again, its answer published with the cells told (the list
-   * dimmed meanwhile) — a zone again meanwhile publishes its own. One never kept to a zone: nothing to do.
+   * dimmed meanwhile) — a zone again meanwhile publishes its own (or, failing, asks the whole flora's again:
+   * #loadScope). One never kept to a zone, and no answer owed (pending: one dropped for a zone gone again before its
+   * own came): nothing to do.
    */
   async #unscope() {
-    if (!this.scoped) return;
+    if (!this.scoped && !this.channel.pending) return;
     this.scoped = false;
     this.channel.setScope(null);
     this.updating = true;
@@ -550,7 +554,9 @@ export class LayoutState extends EventTarget {
       const said = /** @type {{ failed?: import('../core/observations.js').ObsFailure[] }} */ (error).failed;
       const failed = said?.length ? said : sources.map(x => ({ name: SOURCE_NAMES[x], off: false }));
       const failure = failed.every(f => f.off) ? 'off' : navigator.onLine ? 'unreachable' : 'offline';
-      if (this.scoped) {
+      // Kept to a zone — or the whole flora's answer still owed (pending: the zone let go, its answer dropped for this
+      // one, #unscope): the whole flora's asked, never the old zone's plants left under « la zone ne filtre pas ».
+      if (this.scoped || this.channel.pending) {
         this.scoped = false;
         this.channel.setScope(null);
         results = await this.channel.fetch();
@@ -641,20 +647,26 @@ export class LayoutState extends EventTarget {
    * its id and their scope; another key, they go at once). A plant of the zone's: its own among the zone's points —
    * the same sources, period, filters and datasets, as many as its row's « n obs. » —, nothing asked. Another (chosen
    * elsewhere: the whole flora's results, a fixed plant): iNaturalist's alone (#plantAround), said so on the map
-   * (`outside`). None without a zone, or before its plants are known. Drawn at once, unless `draw` is false
+   * (`outside`) — none, nothing asked, when its group's sources leave iNaturalist out. None without a zone, or before
+   * its plants are known (every source failing: those shown go). Drawn at once, unless `draw` is false
    * (#loadScope gives them with the rest). @param {boolean} [draw]
    */
   #plantObs(draw = true) {
     // The zone's plants of this circle: another circle's, still shown while its own come, give it none.
     const id = this.live.plant, s = this.species?.key.startsWith(this.#circle + ':') ? this.species : null;
     const key = id && s && this.live.at ? id + '@' + s.key : '';
-    if (key === this.obsFor) return;
+    // The same key: kept (another period, other filters still coming) — but never under none (no plant, no zone's
+    // plants: every source failed), whose big points would be another plant's, or another answer's.
+    if (key === this.obsFor && (key || !this.plantObs)) return;
     this.obsFor = key;
     this.plantAbort?.abort();
     this.plantAbort = null;
     const had = this.plantObs !== null;
     if (key && id && s?.byPlant.has(id)) {
       this.plantObs = { key, points: this.points.filter(p => plantOfPoint(s.plantOf, p) === id), outside: false };
+    } else if (id && key && !this.filters.sources.includes('inat')) {
+      // iNaturalist not among the group's sources (GBIF's alone): never asked — none of its observations in the zone.
+      this.plantObs = { key, points: [], outside: true };
     } else {
       this.plantObs = null;
       if (id && key) this.#plantAround(id, key);
