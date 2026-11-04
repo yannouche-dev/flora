@@ -9,7 +9,8 @@
 // component unknown shown and replaced through ✎; emptied: still modified); the title (the bar's heading); the phone
 // preview (390 px: the layout's own tabs; still a phone beside the docked picker; a narrow window: the screen itself);
 // Partager (the link in use); ⋯ (« Tailles par défaut »; closed by the toggle, Back, a touch elsewhere, the focus
-// leaving it); « Ouvrir dans Flore » (⋯, a search cell's head: the screen's search taken to Flore, a new entry; in ⋯ only
+// leaving it — never by a Photos cell drawn meanwhile: it takes no focus); « Ouvrir dans Flore » (⋯, a search cell's
+// head: the screen's search taken to Flore, a new entry; in ⋯ only
 // when the first group has a search to take, « sans la zone » written; two groups, each head's naming its own; during
 // the first steps, Flore itself; a finger's 44 px target); « Filtrer par » kept to each search (group b's: its text
 // given back there only; let go of when the address brings another search); a sheet's map about « Les résultats », its
@@ -437,6 +438,24 @@ test.describe('un grand écran', () => {
     await expect(open.getByRole('button', { name: 'Ouvrir dans Flore' })).toBeFocused();
     await page.keyboard.press('Tab');
     await expect(open).toHaveCount(0);
+  });
+
+  test('⋯ reste ouvert quand une case Photos se dessine d’elle-même (la plante des Rencontres venue) : elle ne prend pas le focus', async ({ app, page }) => {
+    // The zone's observations held: the deck has no card yet, the photos cell no plant — until ⋯ is open.
+    /** @type {() => void} */
+    let release = () => {};
+    const held = new Promise(done => { release = () => done(undefined); });
+    await page.route(/^https:\/\/api\.inaturalist\.org\/v1\/observations\?/, async route => { await held; await route.fallback(); });
+    await app.open(screen('[deck,media]', `${AT}&r=1km`));
+    await expect(cellAt(page, '1').locator('gf-media-viewer')).toHaveCount(0);
+    const menu = await more(page);
+    await expect(menu.getByRole('link', { name: 'Composer un écran' })).toBeVisible();
+    release();
+    // The deck's first card, the current plant: its photos drawn — the focus left where it was, ⋯ open.
+    await expect(cellAt(page, '1').locator('gf-media-viewer')).toHaveAttribute('plant-id', /\d+/);
+    await expect(cellAt(page, '1').locator('gf-media-viewer .bar')).toBeAttached();
+    await expect(page.locator('gf-layout .more-menu summary')).toBeFocused();
+    await expect(menu.getByRole('link', { name: 'Composer un écran' })).toBeVisible();
   });
 
   test('⋯ « Ouvrir dans Flore » seulement quand le premier groupe a une recherche à emporter : ni sur un paquet et sa carte, ni la recherche de Flore touchée', async ({ app, page }) => {

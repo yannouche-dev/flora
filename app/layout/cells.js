@@ -1550,8 +1550,10 @@ export function renderCell(r, ctx) {
   }
   const view = r.params.mode ?? ctx.view;
   if (id === 'media') {
+    // A block of its own among the cells (local): drawn by itself (its plant come), it never takes the focus from where
+    // it is (⋯ open, a search being typed); nothing to close.
     return moduleOn('photos')
-      ? html`<gf-media-viewer plant-id=${plant} presentation=${r.params.style ?? blockStyle(/** @type {any} */ (view), 'media')}></gf-media-viewer>`
+      ? html`<gf-media-viewer local plant-id=${plant} presentation=${r.params.style ?? blockStyle(/** @type {any} */ (view), 'media')}></gf-media-viewer>`
       : html`<p class="placeholder quiet">Photos en ligne désactivées (<a href=${href.settings()}>Réglages › Modules</a>).</p>`;
   }
   return r.view
